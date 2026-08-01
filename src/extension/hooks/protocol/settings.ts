@@ -1,6 +1,6 @@
-import type { PilotDeckHookEvent } from "./events.js";
+import type { SatiHookEvent } from "./events.js";
 
-export type PilotDeckHookCommand =
+export type SatiHookCommand =
   | {
       type: "command";
       command: string;
@@ -47,12 +47,12 @@ export type PilotDeckHookCommand =
       statusMessage?: string;
     };
 
-export type PilotDeckHookMatcher = {
+export type SatiHookMatcher = {
   matcher?: string;
-  hooks: PilotDeckHookCommand[];
+  hooks: SatiHookCommand[];
   pluginName?: string;
   pluginId?: string;
   pluginRoot?: string;
 };
 
-export type PilotDeckHooksSettings = Partial<Record<PilotDeckHookEvent, PilotDeckHookMatcher[]>>;
+export type SatiHooksSettings = Partial<Record<SatiHookEvent, SatiHookMatcher[]>>;

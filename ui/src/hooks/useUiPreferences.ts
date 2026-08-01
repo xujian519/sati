@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useReducer, useRef } from "react";
 
 type UiPreferences = {
   autoExpandTools: boolean;
@@ -13,25 +13,22 @@ type UiPreferences = {
 type UiPreferenceKey = keyof UiPreferences;
 
 type SetPreferenceAction = {
-  type: 'set';
+  type: "set";
   key: UiPreferenceKey;
   value: unknown;
 };
 
 type SetManyPreferencesAction = {
-  type: 'set_many';
+  type: "set_many";
   value?: Partial<Record<UiPreferenceKey, unknown>>;
 };
 
 type ResetPreferencesAction = {
-  type: 'reset';
+  type: "reset";
   value?: Partial<UiPreferences>;
 };
 
-type UiPreferencesAction =
-  | SetPreferenceAction
-  | SetManyPreferencesAction
-  | ResetPreferencesAction;
+type UiPreferencesAction = SetPreferenceAction | SetManyPreferencesAction | ResetPreferencesAction;
 
 const DEFAULTS: UiPreferences = {
   autoExpandTools: false,
@@ -45,7 +42,7 @@ const DEFAULTS: UiPreferences = {
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];
 const VALID_KEYS = new Set<UiPreferenceKey>(PREFERENCE_KEYS); // prevents unknown keys from being written
-const SYNC_EVENT = 'ui-preferences:sync';
+const SYNC_EVENT = "ui-preferences:sync";
 
 type SyncEventDetail = {
   storageKey: string;
@@ -54,13 +51,13 @@ type SyncEventDetail = {
 };
 
 const parseBoolean = (value: unknown, fallback: boolean): boolean => {
-  if (typeof value === 'boolean') {
+  if (typeof value === "boolean") {
     return value;
   }
 
-  if (typeof value === 'string') {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
+  if (typeof value === "string") {
+    if (value === "true") return true;
+    if (value === "false") return false;
   }
 
   return fallback;
@@ -80,7 +77,7 @@ const readLegacyPreference = (key: UiPreferenceKey, fallback: boolean): boolean 
 };
 
 const readInitialPreferences = (storageKey: string): UiPreferences => {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return DEFAULTS;
   }
 
@@ -89,28 +86,34 @@ const readInitialPreferences = (storageKey: string): UiPreferences => {
 
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         const parsedRecord = parsed as Record<string, unknown>;
 
-        return PREFERENCE_KEYS.reduce((acc, key) => {
-          acc[key] = parseBoolean(parsedRecord[key], DEFAULTS[key]);
-          return acc;
-        }, { ...DEFAULTS });
+        return PREFERENCE_KEYS.reduce(
+          (acc, key) => {
+            acc[key] = parseBoolean(parsedRecord[key], DEFAULTS[key]);
+            return acc;
+          },
+          { ...DEFAULTS },
+        );
       }
     }
   } catch {
     // Fall back to legacy keys when unified key is missing or invalid.
   }
 
-  return PREFERENCE_KEYS.reduce((acc, key) => {
-    acc[key] = readLegacyPreference(key, DEFAULTS[key]);
-    return acc;
-  }, { ...DEFAULTS });
+  return PREFERENCE_KEYS.reduce(
+    (acc, key) => {
+      acc[key] = readLegacyPreference(key, DEFAULTS[key]);
+      return acc;
+    },
+    { ...DEFAULTS },
+  );
 };
 
 function reducer(state: UiPreferences, action: UiPreferencesAction): UiPreferences {
   switch (action.type) {
-    case 'set': {
+    case "set": {
       const { key, value } = action;
       if (!VALID_KEYS.has(key)) {
         return state;
@@ -123,7 +126,7 @@ function reducer(state: UiPreferences, action: UiPreferencesAction): UiPreferenc
 
       return { ...state, [key]: nextValue };
     }
-    case 'set_many': {
+    case "set_many": {
       const updates = action.value || {};
       let changed = false;
       const nextState = { ...state };
@@ -141,23 +144,19 @@ function reducer(state: UiPreferences, action: UiPreferencesAction): UiPreferenc
 
       return changed ? nextState : state;
     }
-    case 'reset':
+    case "reset":
       return { ...DEFAULTS, ...(action.value || {}) };
     default:
       return state;
   }
 }
 
-export function useUiPreferences(storageKey = 'uiPreferences') {
+export function useUiPreferences(storageKey = "uiPreferences") {
   const instanceIdRef = useRef(`ui-preferences-${Math.random().toString(36).slice(2)}`);
-  const [state, dispatch] = useReducer(
-    reducer,
-    storageKey,
-    readInitialPreferences
-  );
+  const [state, dispatch] = useReducer(reducer, storageKey, readInitialPreferences);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -170,20 +169,20 @@ export function useUiPreferences(storageKey = 'uiPreferences') {
           sourceId: instanceIdRef.current,
           value: state,
         },
-      })
+      }),
     );
   }, [state, storageKey]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
     const applyExternalUpdate = (value: unknown) => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
         return;
       }
-      dispatch({ type: 'set_many', value: value as Partial<Record<UiPreferenceKey, unknown>> });
+      dispatch({ type: "set_many", value: value as Partial<Record<UiPreferenceKey, unknown>> });
     };
 
     const handleStorageChange = (event: StorageEvent) => {
@@ -209,25 +208,25 @@ export function useUiPreferences(storageKey = 'uiPreferences') {
       applyExternalUpdate(detail.value);
     };
 
-    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener("storage", handleStorageChange);
     window.addEventListener(SYNC_EVENT, handleSyncEvent as EventListener);
 
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener(SYNC_EVENT, handleSyncEvent as EventListener);
     };
   }, [storageKey]);
 
   const setPreference = (key: UiPreferenceKey, value: unknown) => {
-    dispatch({ type: 'set', key, value });
+    dispatch({ type: "set", key, value });
   };
 
   const setPreferences = (value: Partial<Record<UiPreferenceKey, unknown>>) => {
-    dispatch({ type: 'set_many', value });
+    dispatch({ type: "set_many", value });
   };
 
   const resetPreferences = (value?: Partial<UiPreferences>) => {
-    dispatch({ type: 'reset', value });
+    dispatch({ type: "reset", value });
   };
 
   return {

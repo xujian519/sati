@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import LlmConfigurationStep from './LlmConfigurationStep';
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import LlmConfigurationStep from "./LlmConfigurationStep";
 
 const mocks = vi.hoisted(() => ({
   authenticatedFetch: vi.fn(),
@@ -9,19 +9,19 @@ const mocks = vi.hoisted(() => ({
   fetchRemoteDefaultModels: vi.fn(),
 }));
 
-vi.mock('../../../../utils/api', () => ({
+vi.mock("../../../../utils/api", () => ({
   authenticatedFetch: mocks.authenticatedFetch,
 }));
 
-vi.mock('../../../../shared/modelListApi', () => ({
+vi.mock("../../../../shared/modelListApi", () => ({
   fetchProviderModels: mocks.fetchProviderModels,
   fetchRemoteDefaultModels: mocks.fetchRemoteDefaultModels,
 }));
 
-describe('LlmConfigurationStep', () => {
+describe("LlmConfigurationStep", () => {
   beforeEach(() => {
     mocks.authenticatedFetch.mockImplementation(async (url: string) => {
-      if (url === '/api/config/provider') {
+      if (url === "/api/config/provider") {
         return { ok: true, json: async () => ({ exists: false, provider: null }) };
       }
       return { ok: true, json: async () => ({}) };
@@ -35,29 +35,31 @@ describe('LlmConfigurationStep', () => {
     vi.clearAllMocks();
   });
 
-  it('fetches Ollama models through the no-key provider path without also running catalog fallback', async () => {
+  it("fetches Ollama models through the no-key provider path without also running catalog fallback", async () => {
     render(<LlmConfigurationStep onSaved={vi.fn()} />);
 
     await waitFor(() => {
-      expect(mocks.fetchRemoteDefaultModels).toHaveBeenCalledWith('openrouter');
+      expect(mocks.fetchRemoteDefaultModels).toHaveBeenCalledWith("openrouter");
     });
 
     mocks.fetchRemoteDefaultModels.mockClear();
     mocks.fetchProviderModels.mockClear();
-    mocks.fetchProviderModels.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    mocks.fetchProviderModels.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
-    fireEvent.click(screen.getByRole('button', { name: /^Ollama$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Ollama$/ }));
 
     await waitFor(() => {
       expect(mocks.fetchProviderModels).toHaveBeenCalledTimes(1);
     });
 
-    expect(mocks.fetchProviderModels).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: 'ollama',
-      protocol: 'openai',
-      baseUrl: 'http://localhost:11434/v1',
-      apiKey: '',
-    }));
+    expect(mocks.fetchProviderModels).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "ollama",
+        protocol: "openai",
+        baseUrl: "http://localhost:11434/v1",
+        apiKey: "",
+      }),
+    );
     expect(mocks.fetchRemoteDefaultModels).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(screen.getByText(/Using bundled model list\. Local model list unavailable: ECONNREFUSED/)).toBeTruthy();

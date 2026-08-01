@@ -6,11 +6,7 @@ import type { AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
 import { WorkCycleStore } from "../storage/WorkCycleStore.js";
 import type { ChannelLeaseRegistry } from "./ChannelLeaseRegistry.js";
-import {
-  acquireDiscoveryLock,
-  DiscoveryFire,
-  releaseDiscoveryLock,
-} from "./DiscoveryFire.js";
+import { acquireDiscoveryLock, DiscoveryFire, releaseDiscoveryLock } from "./DiscoveryFire.js";
 import { evaluateAlwaysOnDiscoveryGates } from "./DiscoveryGates.js";
 import { SignalWatcher } from "./SignalWatcher.js";
 
@@ -180,7 +176,7 @@ export class DiscoveryScheduler {
       onSignal: () => {
         void this.handleSignal();
       },
-      onError: (error) => {
+      onError: error => {
         this.deps.logger.warn("always-on signal watcher error", { error: error.message });
         this.disposeWatcher();
       },

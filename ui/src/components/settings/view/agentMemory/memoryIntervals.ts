@@ -19,24 +19,14 @@ export function toDisplayUnit(
   return { value: Math.max(0, resolved), unit: "minutes" };
 }
 
-export function toMinutes(
-  value: number | undefined,
-  unit: IntervalUnit,
-): number {
-  const safe =
-    typeof value === "number" && Number.isFinite(value)
-      ? Math.max(0, Math.floor(value))
-      : 0;
+export function toMinutes(value: number | undefined, unit: IntervalUnit): number {
+  const safe = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   return unit === "hours" ? safe * 60 : safe;
 }
 
-export function resolveEnabledMemoryIntervals(
-  memory: MemoryIntervals | undefined,
-): Required<MemoryIntervals> {
+export function resolveEnabledMemoryIntervals(memory: MemoryIntervals | undefined): Required<MemoryIntervals> {
   return {
-    autoIndexIntervalMinutes:
-      memory?.autoIndexIntervalMinutes ?? DEFAULT_INDEX_MINUTES,
-    autoDreamIntervalMinutes:
-      memory?.autoDreamIntervalMinutes ?? DEFAULT_DREAM_MINUTES,
+    autoIndexIntervalMinutes: memory?.autoIndexIntervalMinutes ?? DEFAULT_INDEX_MINUTES,
+    autoDreamIntervalMinutes: memory?.autoDreamIntervalMinutes ?? DEFAULT_DREAM_MINUTES,
   };
 }

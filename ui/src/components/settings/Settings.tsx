@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PilotDeckConfigProvider } from "../../hooks/usePilotDeckConfig";
+import { SatiConfigProvider } from "../../hooks/useSatiConfig";
 import { authenticatedFetch } from "../../utils/api";
 import type { SettingsProps } from "./shared/types";
 import type { SettingsMenuKey } from "./types";
@@ -41,23 +41,11 @@ function normalizeWebVersionResult(payload: any): DesktopVersionCheckResult {
   };
 }
 
-function SettingsInner({
-  isOpen,
-  onClose,
-  projects = [],
-  initialTab,
-}: SettingsProps) {
-  const isDesktopApp =
-    typeof window !== "undefined" && !!(window as any).pilotdeckDesktop;
-  const initialKey = useMemo(
-    () => mapInitialTabToMenuKey(initialTab),
-    [initialTab],
-  );
-  const [selectedKey, setSelectedKey] =
-    useState<SettingsMenuKey>(initialKey);
-  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(
-    initialKey === "general",
-  );
+function SettingsInner({ isOpen, onClose, projects = [], initialTab }: SettingsProps) {
+  const isDesktopApp = typeof window !== "undefined" && !!(window as any).satiDesktop;
+  const initialKey = useMemo(() => mapInitialTabToMenuKey(initialTab), [initialTab]);
+  const [selectedKey, setSelectedKey] = useState<SettingsMenuKey>(initialKey);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(initialKey === "general");
   const [versionInfo, setVersionInfo] = useState<DesktopVersionCheckResult>({
     mode: isDesktopApp ? "desktop" : "web",
     hasUpdate: false,
@@ -83,13 +71,9 @@ function SettingsInner({
         throw new Error("Failed to check version");
       }
       const data = await res.json();
-      setVersionInfo(
-        isDesktopApp
-          ? normalizeDesktopVersionResult(data)
-          : normalizeWebVersionResult(data),
-      );
+      setVersionInfo(isDesktopApp ? normalizeDesktopVersionResult(data) : normalizeWebVersionResult(data));
     } catch {
-      setVersionInfo((prev) => ({
+      setVersionInfo(prev => ({
         ...prev,
         hasUpdate: false,
         checkUnavailable: true,
@@ -143,8 +127,8 @@ function SettingsInner({
 
 export default function Settings(props: SettingsProps) {
   return (
-    <PilotDeckConfigProvider>
+    <SatiConfigProvider>
       <SettingsInner {...props} />
-    </PilotDeckConfigProvider>
+    </SatiConfigProvider>
   );
 }

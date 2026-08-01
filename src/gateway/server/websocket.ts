@@ -14,7 +14,7 @@ export class TextWebSocketConnection {
   private readonly closeHandlers: Array<() => void> = [];
 
   constructor(private readonly socket: Socket) {
-    socket.on("data", (chunk) => this.handleData(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    socket.on("data", chunk => this.handleData(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
     socket.on("close", () => this.emitClose());
     socket.on("error", () => this.emitClose());
   }

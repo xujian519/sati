@@ -110,17 +110,14 @@ export const BILLING_PATTERN =
 export const MODEL_NOT_FOUND_PATTERN =
   /is not a valid model|invalid model|model not found|model_not_found|does not exist|no such model|unknown model|unsupported model/i;
 
-export const IMAGE_TOO_LARGE_PATTERN =
-  /image exceeds|image too large|image_too_large|image size exceeds/i;
+export const IMAGE_TOO_LARGE_PATTERN = /image exceeds|image too large|image_too_large|image size exceeds/i;
 
 export const RATE_LIMIT_MESSAGE_PATTERN =
   /rate limit|rate_limit|too many requests|throttled|requests per minute|tokens per minute|resource_exhausted/i;
 
-export const TRANSIENT_USAGE_SIGNAL_PATTERN =
-  /try again|retry|resets at|reset in|wait|requests remaining|window/i;
+export const TRANSIENT_USAGE_SIGNAL_PATTERN = /try again|retry|resets at|reset in|wait|requests remaining|window/i;
 
-export const USAGE_LIMIT_PATTERN =
-  /usage limit|quota|limit exceeded|key limit exceeded/i;
+export const USAGE_LIMIT_PATTERN = /usage limit|quota|limit exceeded|key limit exceeded/i;
 
 export const NETWORK_TIMEOUT_PATTERN =
   /fetch failed|terminated|socket hang up|ETIMEDOUT|ECONNRESET|ECONNREFUSED|network error|request timeout|stream idle timeout|no data received|client disconnected/i;

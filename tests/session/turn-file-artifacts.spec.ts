@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import type { AgentEvent } from "../../src/agent/protocol/events.js";
 import type { AgentTurnResult } from "../../src/agent/protocol/result.js";
 import type { AgentLoop, AgentLoopInput, AgentLoopRunResult } from "../../src/agent/loop/AgentLoop.js";
@@ -11,7 +10,7 @@ import { TurnRunner } from "../../src/agent/turn/TurnRunner.js";
 import { InMemoryTranscriptWriter } from "../../src/session/transcript/InMemoryTranscriptWriter.js";
 
 test("TurnRunner emits and persists file artifacts before completing the turn", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-turn-artifacts-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-turn-artifacts-"));
   try {
     const result: AgentTurnResult = {
       type: "success",
@@ -29,9 +28,9 @@ test("TurnRunner emits and persists file artifacts before completing the turn", 
         await mkdir(join(projectRoot, "app"), { recursive: true });
         await writeFile(join(projectRoot, "app", "page.tsx"), "export default function Page() {}\n");
         await writeFile(join(projectRoot, "app", "globals.css"), "body { margin: 0; }\n");
-        await mkdir(join(projectRoot, ".pilotdeck", "work", input.sessionId, input.turnId), { recursive: true });
+        await mkdir(join(projectRoot, ".sati", "work", input.sessionId, input.turnId), { recursive: true });
         await writeFile(
-          join(projectRoot, ".pilotdeck", "work", input.sessionId, input.turnId, "builder.mjs"),
+          join(projectRoot, ".sati", "work", input.sessionId, input.turnId, "builder.mjs"),
           "// internal\n",
         );
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
@@ -61,15 +60,13 @@ test("TurnRunner emits and persists file artifacts before completing the turn", 
 
     assert.ok(eventTypes.indexOf("file_artifacts") > -1);
     assert.ok(eventTypes.indexOf("file_artifacts") < eventTypes.indexOf("turn_completed"));
-    const artifactEntryIndex = transcript.entries.findIndex((entry) => entry.type === "file_artifacts");
-    const resultEntryIndex = transcript.entries.findIndex((entry) => entry.type === "turn_result");
+    const artifactEntryIndex = transcript.entries.findIndex(entry => entry.type === "file_artifacts");
+    const resultEntryIndex = transcript.entries.findIndex(entry => entry.type === "turn_result");
     assert.ok(artifactEntryIndex > -1);
     assert.ok(artifactEntryIndex < resultEntryIndex);
     const artifactEntry = transcript.entries[artifactEntryIndex];
     assert.deepEqual(
-      artifactEntry.type === "file_artifacts"
-        ? artifactEntry.artifacts.map((artifact) => artifact.path)
-        : undefined,
+      artifactEntry.type === "file_artifacts" ? artifactEntry.artifacts.map(artifact => artifact.path) : undefined,
       ["app/globals.css", "app/page.tsx"],
     );
   } finally {
@@ -78,7 +75,7 @@ test("TurnRunner emits and persists file artifacts before completing the turn", 
 });
 
 test("TurnRunner does not collect generated files when artifacts are disabled", async () => {
-  const generalRoot = await mkdtemp(join(tmpdir(), "pilotdeck-general-no-artifacts-"));
+  const generalRoot = await mkdtemp(join(tmpdir(), "sati-general-no-artifacts-"));
   try {
     const result: AgentTurnResult = {
       type: "success",
@@ -121,7 +118,10 @@ test("TurnRunner does not collect generated files when artifacts are disabled", 
     }
 
     assert.equal(eventTypes.includes("file_artifacts"), false);
-    assert.equal(transcript.entries.some((entry) => entry.type === "file_artifacts"), false);
+    assert.equal(
+      transcript.entries.some(entry => entry.type === "file_artifacts"),
+      false,
+    );
   } finally {
     await rm(generalRoot, { recursive: true, force: true });
   }

@@ -36,19 +36,14 @@ export function collectToolResultIds(messages: CanonicalMessage[]): Set<string> 
  * Remove tool_call blocks from assistant messages whose id is NOT in `pairedIds`.
  * Messages that become empty after filtering are dropped entirely.
  */
-export function stripUnpairedToolCalls(
-  messages: CanonicalMessage[],
-  pairedIds: Set<string>,
-): CanonicalMessage[] {
-  return messages.map((message) => {
-    if (message.role !== "assistant") return message;
-    const filtered = message.content.filter(
-      (block) => block.type !== "tool_call" || pairedIds.has(block.id),
-    );
-    return filtered.length === message.content.length
-      ? message
-      : { ...message, content: filtered };
-  }).filter((m) => m.content.length > 0);
+export function stripUnpairedToolCalls(messages: CanonicalMessage[], pairedIds: Set<string>): CanonicalMessage[] {
+  return messages
+    .map(message => {
+      if (message.role !== "assistant") return message;
+      const filtered = message.content.filter(block => block.type !== "tool_call" || pairedIds.has(block.id));
+      return filtered.length === message.content.length ? message : { ...message, content: filtered };
+    })
+    .filter(m => m.content.length > 0);
 }
 
 /**
@@ -56,27 +51,21 @@ export function stripUnpairedToolCalls(
  * toolCallId is NOT in `pairedIds`.
  * Messages that become empty after filtering are dropped entirely.
  */
-export function stripUnpairedToolResults(
-  messages: CanonicalMessage[],
-  pairedIds: Set<string>,
-): CanonicalMessage[] {
-  return messages.map((message) => {
-    if (message.role !== "user") return message;
-    const filtered = message.content.filter(
-      (block) =>
-        (!isDirectToolResultBlock(block) && !isMediaReferenceWithId(block)) ||
-        pairedIds.has(block.toolCallId),
-    );
-    return filtered.length === message.content.length
-      ? message
-      : { ...message, content: filtered };
-  }).filter((m) => m.content.length > 0);
+export function stripUnpairedToolResults(messages: CanonicalMessage[], pairedIds: Set<string>): CanonicalMessage[] {
+  return messages
+    .map(message => {
+      if (message.role !== "user") return message;
+      const filtered = message.content.filter(
+        block => (!isDirectToolResultBlock(block) && !isMediaReferenceWithId(block)) || pairedIds.has(block.toolCallId),
+      );
+      return filtered.length === message.content.length ? message : { ...message, content: filtered };
+    })
+    .filter(m => m.content.length > 0);
 }
 
-function isDirectToolResultBlock(block: CanonicalContentBlock): block is Extract<
-  CanonicalContentBlock,
-  { type: "tool_result" | "tool_result_reference" }
-> {
+function isDirectToolResultBlock(
+  block: CanonicalContentBlock,
+): block is Extract<CanonicalContentBlock, { type: "tool_result" | "tool_result_reference" }> {
   return block.type === "tool_result" || block.type === "tool_result_reference";
 }
 
@@ -86,22 +75,16 @@ function isMediaReferenceWithId(
   return block.type === "media_reference" && typeof block.toolCallId === "string" && block.toolCallId.length > 0;
 }
 
-const CONTINUATION_TEXT =
-  "[system: the conversation above has been compacted. please continue with the current task.]";
+const CONTINUATION_TEXT = "[system: the conversation above has been compacted. please continue with the current task.]";
 
 /**
  * If the last message is role=assistant, append a sentinel user message so
  * providers that reject assistant-message prefill (e.g. Amazon Bedrock) do
  * not return 400.  No-op when messages is empty or already ends with user.
  */
-export function ensureTrailingUserMessage(
-  messages: CanonicalMessage[],
-): CanonicalMessage[] {
+export function ensureTrailingUserMessage(messages: CanonicalMessage[]): CanonicalMessage[] {
   if (messages.length === 0) return messages;
   const last = messages[messages.length - 1];
   if (last.role !== "assistant") return messages;
-  return [
-    ...messages,
-    { role: "user", content: [{ type: "text", text: CONTINUATION_TEXT }] },
-  ];
+  return [...messages, { role: "user", content: [{ type: "text", text: CONTINUATION_TEXT }] }];
 }

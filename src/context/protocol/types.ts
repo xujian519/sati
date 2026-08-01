@@ -1,8 +1,4 @@
-import type {
-  CanonicalMessage,
-  CanonicalModelError,
-  CanonicalToolSchema,
-} from "../../model/index.js";
+import type { CanonicalMessage, CanonicalModelError, CanonicalToolSchema } from "../../model/index.js";
 
 /** Diagnostic produced by context runtime; non-fatal except for `severity:"fatal"`. */
 export type ContextDiagnostic = {

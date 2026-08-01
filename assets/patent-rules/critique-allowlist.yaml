@@ -1,0 +1,168 @@
+# 批评门控配置 — 定义工具的 AI 后执行审查规则
+# 移植自 XiaoNuo constitutional/critique-allowlist.yaml
+
+critique_config:
+  # ── 全局设置 ──
+  global:
+    max_rounds: 2
+    min_confidence_for_pass: 0.8
+    require_human_after_timeout: true
+
+  # ── 按工具配置 ──
+  per_tool:
+
+    # --- 关键领域：深度批评 ---
+    - tool: patent-oa-response-drafter
+      critique_type: full
+      max_rounds: 3
+      checks:
+        - legal_compliance
+        - argument_coherence
+        - evidence_quality
+      human_required_after: 3
+      priority: critical
+
+    - tool: provision-novelty
+      critique_type: full
+      max_rounds: 3
+      checks:
+        - novelty_analysis_structure
+        - prior_art_citation
+        - legal_basis
+      human_required_after: 2
+      priority: critical
+
+    - tool: provision-inventiveness
+      critique_type: full
+      max_rounds: 3
+      checks:
+        - three_step_method
+        - distinguishing_features
+        - technical_motivation
+        - unexpected_effect
+      human_required_after: 2
+      priority: critical
+
+    - tool: provision-disclosure
+      critique_type: full
+      max_rounds: 2
+      checks:
+        - disclosure_completeness
+        - enablement_analysis
+      human_required_after: 2
+      priority: critical
+
+    - tool: provision-claims-clarity
+      critique_type: full
+      max_rounds: 2
+      checks:
+        - clarity_analysis
+        - support_analysis
+      human_required_after: 2
+      priority: critical
+
+    # --- 中等领域：常规批评 ---
+    - tool: patent-technical-analyzer
+      critique_type: standard
+      max_rounds: 2
+      checks:
+        - technical_deconstruction
+        - feature_extraction
+      priority: high
+
+    - tool: patent-search-planner
+      critique_type: standard
+      max_rounds: 2
+      checks:
+        - search_strategy_completeness
+        - keyword_coverage
+      priority: high
+
+    - tool: patent-slop-cleaner
+      critique_type: standard
+      max_rounds: 1
+      checks:
+        - slop_patterns
+      priority: medium
+
+    # --- 简单领域：轻量检查 ---
+    - tool: project-probe
+      critique_type: lightweight
+      max_rounds: 1
+      checks:
+        - file_integrity
+      priority: low
+
+    - tool: rule-explorer
+      critique_type: lightweight
+      max_rounds: 1
+      checks:
+        - provision_mapping
+      priority: low
+
+    # --- 分析领域：质量审查（移植自 BCIP）---
+    - tool: comparison_report
+      critique_type: quality
+      max_rounds: 2
+      checks:
+        - evidence_traceability
+        - conclusion_soundness
+        - coverage_completeness
+
+    - tool: infringement_analysis
+      critique_type: quality
+      max_rounds: 2
+      checks:
+        - all_elements_rule
+        - equivalents_analysis
+        - defense_consideration
+
+    - tool: specification_drafter
+      critique_type: full
+      max_rounds: 3
+      checks:
+        - disclosure_completeness
+        - section_structure
+        - forbidden_content
+      human_required_after: 3
+      priority: critical
+
+  # ── 裁决与动作 ──
+  verdicts:
+    pass:
+      description: "通过审查，直接返回"
+      next_action: return
+    revise:
+      description: "需要修改后重新审查"
+      next_action: revise_and_recritique
+      max_retry: 2
+    block:
+      description: "阻止输出，需要人工介入"
+      next_action: flag_for_human
+      notify_user: true
+    require_human:
+      description: "需要人工审查和确认"
+      next_action: pause_and_wait
+
+  # ── 审查结果格式 ──
+  report_format:
+    title: "宪法合规审查报告"
+    sections:
+      - tool_name: "工具名称"
+      - verdict: "裁决结论"
+      - checks: "逐项检查结果"
+      - violations: "违规详情"
+      - revision_suggestions: "修改建议"
+      - confidence: "总体置信度"
+
+  # ── 例外处理 ──
+  overrides:
+    - condition: user_role == "senior_patent_attorney"
+      override: relax_rounds_1
+      description: "资深代理人可减少审查轮次"
+    - condition: mode == "draft"
+      override: skip_non_critical
+      description: "草稿模式跳过非关键审查"
+    - condition: mode == "final"
+      override: enforce_full
+      description: "终稿模式强制执行全部审查"

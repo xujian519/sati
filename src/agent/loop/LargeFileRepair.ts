@@ -1,7 +1,5 @@
-import type {
-  CanonicalToolCall,
-} from "../../model/index.js";
-import type { PilotDeckToolResult } from "../../tool/index.js";
+import type { CanonicalToolCall } from "../../model/index.js";
+import type { SatiToolResult } from "../../tool/index.js";
 
 export type LargeFileRepairDecision =
   | { type: "continue"; prompt: string; purpose: string; strip?: "assistant" | "error_pair" }
@@ -54,7 +52,7 @@ export class LargeFileRepair {
   }
 
   analyzeToolResults(
-    results: PilotDeckToolResult[],
+    results: SatiToolResult[],
     context: LargeFileRepairToolContext,
   ): LargeFileRepairDecision | undefined {
     this.recordWrites(results);
@@ -62,10 +60,7 @@ export class LargeFileRepair {
     if (this.wroteFile) {
       const risk = hasPostDraftRisk(results, context, this.pendingLargeFileRepair);
       if (!risk) {
-        if (
-          results.every((result) => result.type === "success") ||
-          results.some(isSuccessfulFileWrite)
-        ) {
+        if (results.every(result => result.type === "success") || results.some(isSuccessfulFileWrite)) {
           this.pendingLargeFileRepair = false;
         }
         return undefined;
@@ -83,7 +78,7 @@ export class LargeFileRepair {
   }
 
   recoverFromRepairedTruncation(toolCalls: CanonicalToolCall[]): LargeFileRepairDecision | undefined {
-    if (!toolCalls.some((call) => FILE_WRITE_TOOLS.has(call.name))) {
+    if (!toolCalls.some(call => FILE_WRITE_TOOLS.has(call.name))) {
       return undefined;
     }
     if (this.truncationRecoveries >= MAX_TRUNCATION_RECOVERIES) {
@@ -97,10 +92,7 @@ export class LargeFileRepair {
     return this.truncationRecovery("large_file_repaired_truncation", "pre");
   }
 
-  private truncationRecovery(
-    purpose: string,
-    phase: "pre" | "post",
-  ): LargeFileRepairDecision {
+  private truncationRecovery(purpose: string, phase: "pre" | "post"): LargeFileRepairDecision {
     if (phase === "post") {
       return {
         type: "continue",
@@ -121,8 +113,7 @@ export class LargeFileRepair {
     if (this.preDraftAttempts >= MAX_PRE_DRAFT_REPAIR_ATTEMPTS) {
       return {
         type: "stop",
-        reason:
-          `Large file repair failed before any workspace file was created after ${this.preDraftAttempts} attempts.`,
+        reason: `Large file repair failed before any workspace file was created after ${this.preDraftAttempts} attempts.`,
       };
     }
     this.preDraftAttempts++;
@@ -138,8 +129,7 @@ export class LargeFileRepair {
     if (this.postDraftAttempts >= MAX_POST_DRAFT_REPAIR_ATTEMPTS) {
       return {
         type: "stop",
-        reason:
-          `Large file repair stopped after ${this.postDraftAttempts} post-draft attempts. A workspace file already exists; report the current file path and remaining gap.`,
+        reason: `Large file repair stopped after ${this.postDraftAttempts} post-draft attempts. A workspace file already exists; report the current file path and remaining gap.`,
       };
     }
     this.postDraftAttempts++;
@@ -150,7 +140,7 @@ export class LargeFileRepair {
     };
   }
 
-  private recordWrites(results: PilotDeckToolResult[]): void {
+  private recordWrites(results: SatiToolResult[]): void {
     for (const result of results) {
       if (result.type !== "success" || !FILE_WRITE_TOOLS.has(result.toolName)) {
         continue;
@@ -158,10 +148,7 @@ export class LargeFileRepair {
       this.wroteFile = true;
       const filePath = readResultFilePath(result.data);
       if (filePath) {
-        this.recentFilePaths = [
-          filePath,
-          ...this.recentFilePaths.filter((path) => path !== filePath),
-        ].slice(0, 5);
+        this.recentFilePaths = [filePath, ...this.recentFilePaths.filter(path => path !== filePath)].slice(0, 5);
       }
     }
   }
@@ -187,14 +174,19 @@ function preDraftPrompt(attempt: number): string {
     "5. Do not attempt to generate the complete artifact in one oversized call.",
     "",
     "Prefer write_file for the initial skeleton. Avoid shell heredocs or echo for this recovery step.",
-    lastAttempt ? "Final recovery attempt: write the smallest viable skeleton, even if it only establishes the file structure." : "",
-  ].filter(Boolean).join("\n");
+    lastAttempt
+      ? "Final recovery attempt: write the smallest viable skeleton, even if it only establishes the file structure."
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function postDraftPrompt(filePaths: string[], attempt: number): string {
-  const fileText = filePaths.length > 0
-    ? `Recent file path context for orientation only: ${filePaths.join(", ")}.`
-    : "A workspace draft already exists.";
+  const fileText =
+    filePaths.length > 0
+      ? `Recent file path context for orientation only: ${filePaths.join(", ")}.`
+      : "A workspace draft already exists.";
   const lastAttempt = attempt >= MAX_POST_DRAFT_REPAIR_ATTEMPTS;
   return [
     INTERNAL_RECOVERY_HINT,
@@ -211,15 +203,16 @@ function postDraftPrompt(filePaths: string[], attempt: number): string {
     "5. Ask the user only for a real blocker that cannot be resolved from the workspace or the original task.",
     "",
     "Use a focused edit_file replacement or insertion point such as a continuation marker when available.",
-    lastAttempt ? "Final recovery attempt: make one focused edit, run/verify if applicable, or explain the concrete blocker." : "",
-  ].filter(Boolean).join("\n");
+    lastAttempt
+      ? "Final recovery attempt: make one focused edit, run/verify if applicable, or explain the concrete blocker."
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-function hasPreDraftLargeFileRisk(
-  results: PilotDeckToolResult[],
-  context: LargeFileRepairToolContext,
-): boolean {
-  return results.some((result) => {
+function hasPreDraftLargeFileRisk(results: SatiToolResult[], context: LargeFileRepairToolContext): boolean {
+  return results.some(result => {
     if (result.type !== "error") {
       return false;
     }
@@ -227,13 +220,10 @@ function hasPreDraftLargeFileRisk(
       return false;
     }
     const issues = readIssues(result);
-    if (
-      result.toolName === "write_file" &&
-      issues.some((issue) => issue.code === "required")
-    ) {
+    if (result.toolName === "write_file" && issues.some(issue => issue.code === "required")) {
       return true;
     }
-    if (context.outputTruncated && issues.some((issue) => issue.code === "required")) {
+    if (context.outputTruncated && issues.some(issue => issue.code === "required")) {
       return true;
     }
     return looksLikeLargeFileError(result.error.message);
@@ -241,16 +231,14 @@ function hasPreDraftLargeFileRisk(
 }
 
 function hasPostDraftRisk(
-  results: PilotDeckToolResult[],
+  results: SatiToolResult[],
   context: LargeFileRepairToolContext,
   pendingLargeFileRepair: boolean,
 ): boolean {
   const hasExplicitTruncationEvidence =
-    context.outputTruncated ||
-    context.repairedToolCalls ||
-    context.finishReason === "length";
+    context.outputTruncated || context.repairedToolCalls || context.finishReason === "length";
 
-  return results.some((result) => {
+  return results.some(result => {
     if (result.type !== "error") {
       return false;
     }
@@ -273,11 +261,11 @@ function hasPostDraftRisk(
   });
 }
 
-function isSuccessfulFileWrite(result: PilotDeckToolResult): boolean {
+function isSuccessfulFileWrite(result: SatiToolResult): boolean {
   return result.type === "success" && FILE_WRITE_TOOLS.has(result.toolName);
 }
 
-function readIssues(result: PilotDeckToolResult): { path: string; code: string }[] {
+function readIssues(result: SatiToolResult): { path: string; code: string }[] {
   if (result.type !== "error") {
     return [];
   }
@@ -285,7 +273,7 @@ function readIssues(result: PilotDeckToolResult): { path: string; code: string }
   if (!Array.isArray(issues)) {
     return [];
   }
-  return issues.flatMap((issue) => {
+  return issues.flatMap(issue => {
     if (!isRecord(issue)) {
       return [];
     }
@@ -294,7 +282,6 @@ function readIssues(result: PilotDeckToolResult): { path: string; code: string }
     return [{ path, code }];
   });
 }
-
 
 function readResultFilePath(data: unknown): string | undefined {
   if (!isRecord(data)) {
@@ -305,7 +292,9 @@ function readResultFilePath(data: unknown): string | undefined {
 }
 
 function looksLikeLargeFileError(message: string): boolean {
-  return /(?:output token|truncated|too large|large file|large artifact|max_output|missing required parameter `content`|required parameter `content` is missing)/iu.test(message);
+  return /(?:output token|truncated|too large|large file|large artifact|max_output|missing required parameter `content`|required parameter `content` is missing)/iu.test(
+    message,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

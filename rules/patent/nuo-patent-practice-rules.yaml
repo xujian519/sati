@@ -1,0 +1,357 @@
+# 由 scripts/port-nuo-rules.ts 从 XiaoNuo Agent patent-practice-rules.yaml 转换生成
+# 原始文件完整内容见 assets/patent-rules/patent-practice-rules.yaml（含 LLM 评估型规则与指导字段）
+# 转换语义: pattern_analysis(期望模式)→structural_analysis 单 element；severity warning→major；info→minor
+version: "1.0"
+rules:
+  - id: PR-SPEC-001
+    name: 说明书—技术问题与技术方案对应
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章2.2.4
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: problem_solution_match
+          patterns:
+            - 技术问题
+            - 要解决
+            - 存在的技术问题
+        - element: solution_content
+          patterns:
+            - 技术方案
+            - 为实现
+            - 采用
+        - element: effect_match
+          patterns:
+            - 有益效果
+            - 技术效果
+            - 优点
+  - id: PR-SPEC-002
+    name: 说明书—背景技术客观描述
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章2.2.3
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 说明书—背景技术客观描述
+          patterns:
+            - 现有技术
+            - 已有
+            - 不足
+            - 缺陷
+      minConfidence: 1
+  - id: PR-SPEC-003
+    name: 说明书—实施例数量充足性
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第26条第3款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 说明书—实施例数量充足性
+          patterns:
+            - 实施例
+            - 具体实施方式
+      minConfidence: 1
+  - id: PR-SPEC-004
+    name: 说明书—技术效果描述具体化
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章2.2.4
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 说明书—技术效果描述具体化
+          patterns:
+            - 技术效果
+            - 有益效果
+            - 提高
+            - 降低
+            - 改善
+      minConfidence: 1
+  - id: PR-SPEC-005
+    name: 说明书—术语定义统一
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章2.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 说明书—术语定义统一
+          patterns:
+            - 本文中
+            - 本说明书中
+            - 定义为
+            - 是指
+            - 指的是
+      minConfidence: 1
+  - id: PR-CLM-001
+    name: 权利要求撰写—独立权利要求布局
+    domain: patent_claims
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法实施细则第20条第2款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: preamble
+          patterns:
+            - 一种
+            - 一种装置
+            - 一种方法
+            - 一种系统
+            - 一种设备
+        - element: characterizing
+          patterns:
+            - 其特征在于
+            - 特征在于
+  - id: PR-CLM-002
+    name: 权利要求撰写—多层次防御体系
+    domain: patent_claims
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利代理实务
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: independent_claim
+          patterns:
+            - 独立权利要求
+            - 权1
+            - 权利要求1
+        - element: dependent_claims
+          patterns:
+            - 从属权利要求
+            - 权2
+            - 权3
+  - id: PR-CLM-003
+    name: 权利要求撰写—方法权利要求步骤编号
+    domain: patent_claims
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章3.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权利要求撰写—方法权利要求步骤编号
+          patterns:
+            - 步骤
+            - S1
+            - S2
+            - 第一步
+            - 第二步
+      minConfidence: 1
+  - id: PR-CLM-004
+    name: 权利要求撰写—功能性限定使用规范
+    domain: patent_claims
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章3.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权利要求撰写—功能性限定使用规范
+          patterns:
+            - 用于
+            - 配置为
+            - 被配置
+            - 适合于
+            - 能够
+      minConfidence: 1
+  - id: PR-CLM-005
+    name: 权利要求撰写—避免纯功能性限定
+    domain: patent_claims
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第二章3.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权利要求撰写—避免纯功能性限定
+          patterns:
+            - means for
+            - step for
+            - 手段
+            - 方式
+      minConfidence: 1
+  - id: PR-CLM-006
+    name: 权利要求撰写—马库什结构表达
+    domain: patent_claims
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第十章
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权利要求撰写—马库什结构表达
+          patterns:
+            - 选自
+            - 其中R
+            - 取代基
+            - 通式
+      minConfidence: 1
+  - id: PR-OA-001
+    name: OA答复—逐点回应所有审查意见
+    domain: patent_oa_response
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 审查指南第二部分第八章4.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: oa_mapping
+          patterns:
+            - 审查意见
+            - 审查员认为
+            - 指出
+            - 通知
+        - element: response_points
+          patterns:
+            - 答复
+            - 意见陈述
+            - 争辩
+            - 不同意
+        - element: conclusion_request
+          patterns:
+            - 请求
+            - 恳请
+            - 建议
+  - id: PR-OA-002
+    name: OA答复—修改权利要求时的超范围检查
+    domain: patent_oa_response
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第33条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: OA答复—修改权利要求时的超范围检查
+          patterns:
+            - 修改
+            - 权利要求
+      minConfidence: 1
+  - id: PR-OA-003
+    name: OA答复—争辩创造性时的三步法回应
+    domain: patent_oa_response
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第四章3.2
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: prior_art_analysis
+          patterns:
+            - 最接近
+            - 现有技术
+            - 对比文件
+        - element: distinguishing_analysis
+          patterns:
+            - 区别技术特征
+            - 区别特征
+        - element: motivation_refutation
+          patterns:
+            - 技术启示
+            - 显而易见
+            - 结合启示
+  - id: PR-OA-004
+    name: OA答复—争辩新颖性时的单独对比原则
+    domain: patent_oa_response
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第22条第2款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: OA答复—争辩新颖性时的单独对比原则
+          patterns:
+            - 单独对比
+            - 未被公开
+            - 未记载
+            - 区别
+      minConfidence: 1
+  - id: PR-INV-002
+    name: 无效宣告—证据组织规范
+    domain: patent_procedure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第四部分第三章3.3
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: evidence_list
+          patterns:
+            - 证据
+            - 对比文件
+            - 附件
+        - element: evidence_content
+          patterns:
+            - 公开内容
+            - 公开了
+            - 记载了
+  - id: PR-FMT-002
+    name: 申请文件—附图规范要求
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章2.3
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 申请文件—附图规范要求
+          patterns:
+            - 附图
+            - 图1
+            - 示意图
+      minConfidence: 1
+  - id: PR-FMT-003
+    name: 申请文件—权利要求编号连续性
+    domain: patent_claims
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章3.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 申请文件—权利要求编号连续性
+          patterns:
+            - 权利要求1
+            - 权利要求2
+            - "1."
+            - "2."
+      minConfidence: 1

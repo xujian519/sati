@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, FolderOpen, FolderPlus, Loader2, Plus, X } from 'lucide-react';
-import { Button, Input } from '../../../shared/view/ui';
-import { browseFilesystemFolders, createFolderInFilesystem } from '../data/workspaceApi';
-import { getParentPath, joinFolderPath } from '../utils/pathUtils';
-import { isImeEnterEvent } from '../../../utils/ime';
-import type { FolderSuggestion } from '../types';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Eye, EyeOff, FolderOpen, FolderPlus, Loader2, Plus, X } from "lucide-react";
+import { Button, Input } from "../../../shared/view/ui";
+import { browseFilesystemFolders, createFolderInFilesystem } from "../data/workspaceApi";
+import { getParentPath, joinFolderPath } from "../utils/pathUtils";
+import { isImeEnterEvent } from "../../../utils/ime";
+import type { FolderSuggestion } from "../types";
 
 type FolderBrowserModalProps = {
   isOpen: boolean;
@@ -19,12 +19,12 @@ export default function FolderBrowserModal({
   onClose,
   onFolderSelected,
 }: FolderBrowserModalProps) {
-  const [currentPath, setCurrentPath] = useState('~');
+  const [currentPath, setCurrentPath] = useState("~");
   const [folders, setFolders] = useState<FolderSuggestion[]>([]);
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [showHiddenFolders, setShowHiddenFolders] = useState(false);
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderName, setNewFolderName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +37,7 @@ export default function FolderBrowserModal({
       setCurrentPath(result.path);
       setFolders(result.suggestions);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load folders');
+      setError(loadError instanceof Error ? loadError.message : "Failed to load folders");
     } finally {
       setLoadingFolders(false);
     }
@@ -47,13 +47,13 @@ export default function FolderBrowserModal({
     if (!isOpen) {
       return;
     }
-    loadFolders('~');
+    loadFolders("~");
   }, [isOpen, loadFolders]);
 
   const visibleFolders = useMemo(
     () =>
       folders
-        .filter((folder) => showHiddenFolders || !folder.name.startsWith('.'))
+        .filter(folder => showHiddenFolders || !folder.name.startsWith("."))
         .sort((firstFolder, secondFolder) =>
           firstFolder.name.toLowerCase().localeCompare(secondFolder.name.toLowerCase()),
         ),
@@ -61,13 +61,13 @@ export default function FolderBrowserModal({
   );
 
   const isWindowsDrivePicker = useMemo(
-    () => currentPath === '/' && folders.some((folder) => /^[A-Za-z]:\\$/.test(folder.path)),
+    () => currentPath === "/" && folders.some(folder => /^[A-Za-z]:\\$/.test(folder.path)),
     [currentPath, folders],
   );
 
   const resetNewFolderState = () => {
     setShowNewFolderInput(false);
-    setNewFolderName('');
+    setNewFolderName("");
   };
 
   const handleClose = () => {
@@ -94,7 +94,7 @@ export default function FolderBrowserModal({
       resetNewFolderState();
       await loadFolders(createdPath);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : 'Failed to create folder');
+      setError(createError instanceof Error ? createError.message : "Failed to create folder");
     } finally {
       setCreatingFolder(false);
     }
@@ -119,22 +119,26 @@ export default function FolderBrowserModal({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowHiddenFolders((previous) => !previous)}
+              onClick={() => setShowHiddenFolders(previous => !previous)}
               className={`rounded-md p-2 transition-colors ${
                 showHiddenFolders
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
-              title={showHiddenFolders ? 'Hide hidden folders' : 'Show hidden folders'}
+              title={showHiddenFolders ? "Hide hidden folders" : "Show hidden folders"}
             >
-              {showHiddenFolders ? <Eye className="h-5 w-5" strokeWidth={1.75} /> : <EyeOff className="h-5 w-5" strokeWidth={1.75} />}
+              {showHiddenFolders ? (
+                <Eye className="h-5 w-5" strokeWidth={1.75} />
+              ) : (
+                <EyeOff className="h-5 w-5" strokeWidth={1.75} />
+              )}
             </button>
             <button
-              onClick={() => setShowNewFolderInput((previous) => !previous)}
+              onClick={() => setShowNewFolderInput(previous => !previous)}
               className={`rounded-md p-2 transition-colors ${
                 showNewFolderInput
-                  ? 'bg-accent text-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
               title="Create new folder"
               disabled={isWindowsDrivePicker}
@@ -157,28 +161,24 @@ export default function FolderBrowserModal({
               <Input
                 type="text"
                 value={newFolderName}
-                onChange={(event) => setNewFolderName(event.target.value)}
+                onChange={event => setNewFolderName(event.target.value)}
                 placeholder="New folder name"
                 className="flex-1"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
+                onKeyDown={event => {
+                  if (event.key === "Enter") {
                     if (isImeEnterEvent(event)) {
                       return;
                     }
                     handleCreateFolder();
                   }
-                  if (event.key === 'Escape') {
+                  if (event.key === "Escape") {
                     resetNewFolderState();
                   }
                 }}
                 autoFocus
               />
-              <Button
-                size="sm"
-                onClick={handleCreateFolder}
-                disabled={!newFolderName.trim() || creatingFolder}
-              >
-                {creatingFolder ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create'}
+              <Button size="sm" onClick={handleCreateFolder} disabled={!newFolderName.trim() || creatingFolder}>
+                {creatingFolder ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
               </Button>
               <Button size="sm" variant="ghost" onClick={resetNewFolderState}>
                 Cancel
@@ -211,20 +211,16 @@ export default function FolderBrowserModal({
               )}
 
               {visibleFolders.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground">
-                  No subfolders found
-                </div>
+                <div className="py-8 text-center text-muted-foreground">No subfolders found</div>
               ) : (
-                visibleFolders.map((folder) => (
+                visibleFolders.map(folder => (
                   <div key={folder.path} className="flex items-center gap-2">
                     <button
                       onClick={() => loadFolders(folder.path)}
                       className="flex flex-1 items-center gap-3 rounded-lg px-4 py-3 text-left hover:bg-accent hover:text-accent-foreground"
                     >
                       <FolderPlus className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} />
-                      <span className="font-medium text-foreground">
-                        {folder.name}
-                      </span>
+                      <span className="font-medium text-foreground">{folder.name}</span>
                     </button>
                     <Button
                       variant="ghost"
@@ -244,9 +240,7 @@ export default function FolderBrowserModal({
         <div className="border-t border-border">
           <div className="flex items-center gap-2 bg-muted/40 px-4 py-3">
             <span className="text-sm text-muted-foreground">Path:</span>
-            <code className="flex-1 truncate font-mono text-sm text-foreground">
-              {currentPath}
-            </code>
+            <code className="flex-1 truncate font-mono text-sm text-foreground">{currentPath}</code>
           </div>
           <div className="flex items-center justify-end gap-2 p-4">
             <Button variant="outline" onClick={handleClose}>

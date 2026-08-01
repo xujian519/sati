@@ -1,14 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { buildToolErrorRecovery } from "../../src/tool/execution/errorRecovery.js";
-import type { PilotDeckToolValidationIssue } from "../../src/tool/protocol/schema.js";
+import type { SatiToolValidationIssue } from "../../src/tool/protocol/schema.js";
 
-function recovery(options: {
-  toolName: string;
-  message: string;
-  issues?: PilotDeckToolValidationIssue[];
-}) {
+function recovery(options: { toolName: string; message: string; issues?: SatiToolValidationIssue[] }) {
   return buildToolErrorRecovery({
     code: "invalid_tool_input",
     toolName: options.toolName,
@@ -22,12 +17,15 @@ function recovery(options: {
 test("write_file freshness error tells the model to read the file first", () => {
   const text = recovery({
     toolName: "write_file",
-    message: "write_file failed due to the following issue:\nFile has not been read yet. Read it first before writing to it.",
-    issues: [{
-      path: "file_path",
-      code: "invalid_schema",
-      message: "File has not been read yet. Read it first before writing to it.",
-    }],
+    message:
+      "write_file failed due to the following issue:\nFile has not been read yet. Read it first before writing to it.",
+    issues: [
+      {
+        path: "file_path",
+        code: "invalid_schema",
+        message: "File has not been read yet. Read it first before writing to it.",
+      },
+    ],
   });
 
   assert.match(text, /Summary: File has not been read yet\. Read it first before writing to it\./);
@@ -102,7 +100,8 @@ test("bash missing command reports the required command parameter", () => {
 test("bash timeout over max keeps foreground and task_wait guidance", () => {
   const text = recovery({
     toolName: "bash",
-    message: "Foreground bash timeout 900000ms exceeds the maximum of 600000ms. Use timeout=600000 or less for foreground bash. If the command must run in the background, use task_create and then task_wait to block for completion; use task_output only for progress checks and task_stop to clean up long-lived processes.",
+    message:
+      "Foreground bash timeout 900000ms exceeds the maximum of 600000ms. Use timeout=600000 or less for foreground bash. If the command must run in the background, use task_create and then task_wait to block for completion; use task_output only for progress checks and task_stop to clean up long-lived processes.",
   });
 
   assert.match(text, /Summary: Foreground bash timeout 900000ms exceeds the maximum of 600000ms/);
@@ -114,7 +113,8 @@ test("bash timeout over max keeps foreground and task_wait guidance", () => {
 test("bash background rejection keeps background-specific guidance", () => {
   const text = recovery({
     toolName: "bash",
-    message: "This command appears to start background work. Use timeout=600000 or less for foreground bash. If the command must run in the background, use task_create and then task_wait to block for completion; use task_output only for progress checks and task_stop to clean up long-lived processes.",
+    message:
+      "This command appears to start background work. Use timeout=600000 or less for foreground bash. If the command must run in the background, use task_create and then task_wait to block for completion; use task_output only for progress checks and task_stop to clean up long-lived processes.",
   });
 
   assert.match(text, /Summary: This command appears to start background work/);

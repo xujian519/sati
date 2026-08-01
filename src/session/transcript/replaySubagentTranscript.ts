@@ -11,14 +11,9 @@
  */
 
 import { readTranscript } from "./TranscriptReader.js";
-import {
-  replayTranscriptEntries,
-  type AgentTranscriptReplayResult,
-} from "./TranscriptReplay.js";
+import { replayTranscriptEntries, type AgentTranscriptReplayResult } from "./TranscriptReplay.js";
 
-export async function replaySubagentTranscript(
-  path: string,
-): Promise<AgentTranscriptReplayResult> {
+export async function replaySubagentTranscript(path: string): Promise<AgentTranscriptReplayResult> {
   const { entries, diagnostics } = await readTranscript(path);
   const replay = replayTranscriptEntries(entries);
   return { ...replay, diagnostics: [...diagnostics, ...replay.diagnostics] };

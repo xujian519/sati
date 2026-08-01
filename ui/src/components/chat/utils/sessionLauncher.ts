@@ -1,6 +1,6 @@
-import type { Project, ProjectSession } from '../../../types/app';
-import type { ChatAttachment, ChatRunMode, PilotDeckSettings, PermissionMode } from '../types/types';
-import { getPilotDeckSettings, safeLocalStorage } from './chatStorage';
+import type { Project, ProjectSession } from "../../../types/app";
+import type { ChatAttachment, ChatRunMode, SatiSettings, PermissionMode } from "../types/types";
+import { getSatiSettings, safeLocalStorage } from "./chatStorage";
 
 type StartSessionOptions = {
   sendMessage: (message: unknown) => void;
@@ -15,7 +15,7 @@ type StartSessionOptions = {
   model?: string;
   thinking?: unknown;
   sessionSummary?: string | null;
-  toolsSettings?: PilotDeckSettings;
+  toolsSettings?: SatiSettings;
   images?: unknown[];
   attachments?: ChatAttachment[];
   alwaysOnPlanId?: string;
@@ -24,14 +24,10 @@ type StartSessionOptions = {
   forceStart?: boolean;
 };
 
-const VALID_PERMISSION_MODES = new Set<PermissionMode>([
-  'default',
-  'bypassPermissions',
-  'plan',
-]);
+const VALID_PERMISSION_MODES = new Set<PermissionMode>(["default", "bypassPermissions", "plan"]);
 
 export const isTemporarySessionId = (sessionId: string | null | undefined) =>
-  Boolean(sessionId && sessionId.startsWith('new-session-'));
+  Boolean(sessionId && sessionId.startsWith("new-session-"));
 
 export function createTemporarySessionId(): string {
   return `new-session-${Date.now()}`;
@@ -41,30 +37,23 @@ export function getNotificationSessionSummary(
   selectedSession: ProjectSession | null,
   fallbackInput: string,
 ): string | null {
-  const sessionSummary =
-    selectedSession?.summary || selectedSession?.name || selectedSession?.title;
-  if (typeof sessionSummary === 'string' && sessionSummary.trim()) {
-    const normalized = sessionSummary.replace(/\s+/g, ' ').trim();
-    return normalized.length > 80
-      ? `${normalized.slice(0, 77)}...`
-      : normalized;
+  const sessionSummary = selectedSession?.summary || selectedSession?.name || selectedSession?.title;
+  if (typeof sessionSummary === "string" && sessionSummary.trim()) {
+    const normalized = sessionSummary.replace(/\s+/g, " ").trim();
+    return normalized.length > 80 ? `${normalized.slice(0, 77)}...` : normalized;
   }
 
-  const normalizedFallback = fallbackInput.replace(/\s+/g, ' ').trim();
+  const normalizedFallback = fallbackInput.replace(/\s+/g, " ").trim();
   if (!normalizedFallback) {
     return null;
   }
 
-  return normalizedFallback.length > 80
-    ? `${normalizedFallback.slice(0, 77)}...`
-    : normalizedFallback;
+  return normalizedFallback.length > 80 ? `${normalizedFallback.slice(0, 77)}...` : normalizedFallback;
 }
 
-export function getStoredPermissionMode(
-  selectedSession: ProjectSession | null,
-): PermissionMode {
+export function getStoredPermissionMode(selectedSession: ProjectSession | null): PermissionMode {
   if (!selectedSession?.id) {
-    return 'default';
+    return "default";
   }
 
   const stored = safeLocalStorage.getItem(`permissionMode-${selectedSession.id}`);
@@ -72,11 +61,11 @@ export function getStoredPermissionMode(
     return stored as PermissionMode;
   }
 
-  return 'default';
+  return "default";
 }
 
 export function getSelectedProjectPath(selectedProject: Project): string {
-  return selectedProject.fullPath || selectedProject.path || '';
+  return selectedProject.fullPath || selectedProject.path || "";
 }
 
 export function startSessionCommand({
@@ -86,13 +75,13 @@ export function startSessionCommand({
   userVisibleInput,
   sessionId,
   temporarySessionId,
-  permissionMode = 'default',
+  permissionMode = "default",
   basePermissionMode,
   runMode,
   model,
   thinking,
   sessionSummary,
-  toolsSettings = getPilotDeckSettings(),
+  toolsSettings = getSatiSettings(),
   images,
   attachments,
   alwaysOnPlanId,
@@ -100,12 +89,11 @@ export function startSessionCommand({
   workspaceCwd,
   forceStart,
 }: StartSessionOptions): string {
-  const sessionToActivate =
-    sessionId || temporarySessionId || createTemporarySessionId();
+  const sessionToActivate = sessionId || temporarySessionId || createTemporarySessionId();
   const resolvedProjectPath = getSelectedProjectPath(selectedProject);
 
   sendMessage({
-    type: 'pilotdeck-command',
+    type: "sati-command",
     command,
     options: {
       ...(sessionId ? { sessionId, resume: true } : {}),
@@ -118,7 +106,7 @@ export function startSessionCommand({
       ...(model ? { model } : {}),
       ...(thinking ? { thinking } : {}),
       sessionSummary,
-      ...(typeof userVisibleInput === 'string' && userVisibleInput.trim()
+      ...(typeof userVisibleInput === "string" && userVisibleInput.trim()
         ? { userVisibleInput: userVisibleInput.trim() }
         : {}),
       ...(alwaysOnPlanId ? { alwaysOnPlanId } : {}),

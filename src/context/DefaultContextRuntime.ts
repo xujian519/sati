@@ -65,7 +65,7 @@ export type DefaultContextRuntimeOptions = {
   snipEngine?: SnipEngine;
   /** Reactive overflow recovery (prompt_too_long → truncate head). */
   overflowRecovery?: ContextOverflowRecovery;
-  /** PILOTDECK.md instruction file discovery (multi-scope hierarchy). */
+  /** SATI.md instruction file discovery (multi-scope hierarchy). */
   instructionDiscovery?: InstructionDiscovery;
   /** Project root forwarded to MemoryResolver.retrieve. */
   projectRoot?: string;
@@ -218,15 +218,15 @@ export class DefaultContextRuntime implements ContextRuntime {
           });
           parts.push(
             `<project-instructions>\nProject instructions are shown below. Adhere to these instructions. ` +
-            `IMPORTANT: These instructions OVERRIDE any default behavior.\n\n` +
-            `${blocks.join("\n\n")}\n</project-instructions>`,
+              `IMPORTANT: These instructions OVERRIDE any default behavior.\n\n` +
+              `${blocks.join("\n\n")}\n</project-instructions>`,
           );
         }
       } catch {
         diagnostics.push({
           code: "instruction_discovery_failed",
           severity: "warning",
-          message: "Failed to discover PILOTDECK.md instruction files.",
+          message: "Failed to discover SATI.md instruction files.",
         });
       }
     }
@@ -262,11 +262,9 @@ export class DefaultContextRuntime implements ContextRuntime {
         supplementalMessages = await Promise.all(
           supplementalMessages.map(async ({ toolCallId, message }) => ({
             toolCallId,
-            message: await this.toolResultBudget!.applyToSupplementalMessage(
-              message,
-              toolCallId,
-              { turnId: input.turnId },
-            ),
+            message: await this.toolResultBudget!.applyToSupplementalMessage(message, toolCallId, {
+              turnId: input.turnId,
+            }),
           })),
         );
       } catch (error) {
@@ -288,7 +286,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       await this.memoryResolver.captureTurn({
         sessionId: input.sessionId,
         projectRoot: this.projectRoot ?? "",
-        messages: input.messages.filter((message) => !message.metadata?.forkCarryover),
+        messages: input.messages.filter(message => !message.metadata?.forkCarryover),
         errored: input.errored,
       });
     } catch {
@@ -324,11 +322,13 @@ export class DefaultContextRuntime implements ContextRuntime {
     const evaluateBudget = (candidate: CanonicalMessage[], lastUsage?: CanonicalUsage) =>
       input.budgetEvaluator
         ? input.budgetEvaluator(candidate, lastUsage)
-        : Promise.resolve(this.tokenBudget!.evaluate(candidate, effectiveMaxContextTokens, {
-            usePadding: true,
-            ...budgetOptions,
-            lastUsage,
-          }));
+        : Promise.resolve(
+            this.tokenBudget!.evaluate(candidate, effectiveMaxContextTokens, {
+              usePadding: true,
+              ...budgetOptions,
+              lastUsage,
+            }),
+          );
     const initialSnapshot = await evaluateBudget(messages, input.lastUsage);
     const decision = this.autoCompactionPolicy.evaluateSnapshot(initialSnapshot);
     if (decision.type !== "trigger") {
@@ -448,7 +448,7 @@ function isAlwaysOnSession(sessionId: string): boolean {
     "always-on/execute:",
     "always-on/report:",
     "always-on/apply:",
-  ].some((prefix) => sessionId.startsWith(prefix));
+  ].some(prefix => sessionId.startsWith(prefix));
 }
 
 function instructionScopeDescription(scope: InstructionScope): string {

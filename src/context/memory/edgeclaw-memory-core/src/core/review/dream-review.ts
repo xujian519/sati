@@ -6,7 +6,6 @@ import type {
   MemoryCandidate,
   MemoryFileRecord,
   MemoryManifestEntry,
-  MemoryUserSummary,
   ProjectMetaRecord,
   RetrievalTraceDetail,
   TraceI18nText,
@@ -17,7 +16,6 @@ import {
   type LlmGeneralProjectMetaMergeGroup,
   type LlmDreamCluster,
   type LlmDreamClusterHeaderInput,
-  type LlmDreamClusterPlanOutput,
   type LlmDreamFileProjectMetaInput,
   type LlmDreamFileRecordInput,
 } from "../skills/llm-extraction.js";
@@ -81,19 +79,14 @@ function kvDetail(
     label,
     ...(labelI18n ? { labelI18n } : {}),
     kind: "kv",
-    entries: entries.map((entry) => ({
+    entries: entries.map(entry => ({
       label: entry.label,
       value: String(entry.value ?? ""),
     })),
   };
 }
 
-function listDetail(
-  key: string,
-  label: string,
-  items: string[],
-  labelI18n?: TraceI18nText,
-): RetrievalTraceDetail {
+function listDetail(key: string, label: string, items: string[], labelI18n?: TraceI18nText): RetrievalTraceDetail {
   return {
     key,
     label,
@@ -109,22 +102,15 @@ function normalizeDreamRelativePath(relativePath: string): string {
 
 function isDreamUserProfilePath(relativePath: string): boolean {
   const normalized = normalizeDreamRelativePath(relativePath);
-  return normalized === INTERNAL_USER_PROFILE_RELATIVE_PATH
-    || normalized === EXPOSED_USER_PROFILE_RELATIVE_PATH;
+  return normalized === INTERNAL_USER_PROFILE_RELATIVE_PATH || normalized === EXPOSED_USER_PROFILE_RELATIVE_PATH;
 }
 
 function isDreamUserNotePath(relativePath: string): boolean {
   const normalized = normalizeDreamRelativePath(relativePath);
-  return normalized.startsWith(INTERNAL_USER_NOTE_PREFIX)
-    || normalized.startsWith(EXPOSED_USER_NOTE_PREFIX);
+  return normalized.startsWith(INTERNAL_USER_NOTE_PREFIX) || normalized.startsWith(EXPOSED_USER_NOTE_PREFIX);
 }
 
-function jsonDetail(
-  key: string,
-  label: string,
-  json: unknown,
-  labelI18n?: TraceI18nText,
-): RetrievalTraceDetail {
+function jsonDetail(key: string, label: string, json: unknown, labelI18n?: TraceI18nText): RetrievalTraceDetail {
   return {
     key,
     label,
@@ -226,7 +212,13 @@ function normalizeWhitespace(value: string | undefined): string {
 }
 
 function previewMarkdown(markdown: string, maxLength = 220): string {
-  return truncate(markdown.replace(/^#+\s+/gm, "").replace(/\s+/g, " ").trim(), maxLength);
+  return truncate(
+    markdown
+      .replace(/^#+\s+/gm, "")
+      .replace(/\s+/g, " ")
+      .trim(),
+    maxLength,
+  );
 }
 
 function sortEntries(entries: MemoryManifestEntry[]): MemoryManifestEntry[] {
@@ -396,24 +388,32 @@ function validateExclusiveClusters(
   const isGenericSameProjectReason = (reason: string): boolean => {
     const normalized = normalizeWhitespace(reason);
     if (!normalized) return false;
-    return sameProjectReasonPatterns.some((pattern) => pattern.test(normalized))
-      && !semanticReasonPatterns.some((pattern) => pattern.test(normalized));
+    return (
+      sameProjectReasonPatterns.some(pattern => pattern.test(normalized)) &&
+      !semanticReasonPatterns.some(pattern => pattern.test(normalized))
+    );
   };
   for (const cluster of clusters) {
-    const uniqueMembers = Array.from(new Set(
-      cluster.memberRelativePaths
-        .map((item) => normalizeWhitespace(item))
-        .filter((item) => item && allowedRelativePaths.has(item)),
-    ));
+    const uniqueMembers = Array.from(
+      new Set(
+        cluster.memberRelativePaths
+          .map(item => normalizeWhitespace(item))
+          .filter(item => item && allowedRelativePaths.has(item)),
+      ),
+    );
     if (uniqueMembers.length < 2) {
-      droppedWarnings.push(`Dropped cluster because it had fewer than 2 valid files: ${cluster.reason || uniqueMembers.join(", ")}`);
+      droppedWarnings.push(
+        `Dropped cluster because it had fewer than 2 valid files: ${cluster.reason || uniqueMembers.join(", ")}`,
+      );
       continue;
     }
     if (uniqueMembers.length > maxFiles) {
-      droppedWarnings.push(`Dropped cluster because it exceeded the ${maxFiles}-file limit: ${uniqueMembers.join(", ")}`);
+      droppedWarnings.push(
+        `Dropped cluster because it exceeded the ${maxFiles}-file limit: ${uniqueMembers.join(", ")}`,
+      );
       continue;
     }
-    if (uniqueMembers.some((item) => used.has(item))) {
+    if (uniqueMembers.some(item => used.has(item))) {
       droppedWarnings.push(`Dropped overlapping cluster: ${uniqueMembers.join(", ")}`);
       continue;
     }
@@ -423,7 +423,7 @@ function validateExclusiveClusters(
       );
       continue;
     }
-    uniqueMembers.forEach((item) => used.add(item));
+    uniqueMembers.forEach(item => used.add(item));
     accepted.push({
       memberRelativePaths: uniqueMembers,
       reason: cluster.reason,
@@ -446,15 +446,20 @@ function selectUserNoteWindow(records: MemoryFileRecord[]): {
   for (const record of sorted) {
     if (selected.length >= DREAM_USER_NOTE_MAX_FILES) break;
     const nextChars = chars + record.content.length;
-    if (nextChars > DREAM_USER_NOTE_CHAR_BUDGET) break;
+    if (nextChars > DREAM_USER_NOTE_CHAR_BUDGET) {
+      // A single oversized newest note must not starve the whole window:
+      // skip it and keep filling with older notes that fit the budget.
+      // (The oversized note stays in keptRecords and is not deleted.)
+      continue;
+    }
     selected.push(record);
     chars = nextChars;
   }
-  const selectedIds = new Set(selected.map((record) => record.relativePath));
+  const selectedIds = new Set(selected.map(record => record.relativePath));
   return {
     selectedRecords: selected,
     selectedChars: chars,
-    keptRecords: sorted.filter((record) => !selectedIds.has(record.relativePath)),
+    keptRecords: sorted.filter(record => !selectedIds.has(record.relativePath)),
   };
 }
 
@@ -484,7 +489,7 @@ function validateGeneralProjectMergeGroups(input: {
   metas: ProjectMetaRecord[];
   groups: LlmGeneralProjectMetaMergeGroup[];
 }): { acceptedGroups: LlmGeneralProjectMetaMergeGroup[]; droppedWarnings: string[] } {
-  const projectById = new Map(input.metas.map((meta) => [meta.projectId, meta] as const));
+  const projectById = new Map(input.metas.map(meta => [meta.projectId, meta] as const));
   const usedProjectIds = new Set<string>();
   const acceptedGroups: LlmGeneralProjectMetaMergeGroup[] = [];
   const droppedWarnings: string[] = [];
@@ -492,14 +497,14 @@ function validateGeneralProjectMergeGroups(input: {
   for (const [index, group] of input.groups.entries()) {
     const groupLabel = `group ${index + 1}`;
     const keeperProjectId = normalizeWhitespace(group.keeperProjectId);
-    const duplicateProjectIds = Array.from(new Set(
-      group.duplicateProjectIds.map((projectId) => normalizeWhitespace(projectId)).filter(Boolean),
-    ));
+    const duplicateProjectIds = Array.from(
+      new Set(group.duplicateProjectIds.map(projectId => normalizeWhitespace(projectId)).filter(Boolean)),
+    );
     if (!projectById.has(keeperProjectId)) {
       droppedWarnings.push(`Dropped ${groupLabel}: unknown keeper project id ${keeperProjectId || "(empty)"}.`);
       continue;
     }
-    const unknownDuplicate = duplicateProjectIds.find((projectId) => !projectById.has(projectId));
+    const unknownDuplicate = duplicateProjectIds.find(projectId => !projectById.has(projectId));
     if (unknownDuplicate) {
       droppedWarnings.push(`Dropped ${groupLabel}: unknown duplicate project id ${unknownDuplicate}.`);
       continue;
@@ -513,12 +518,14 @@ function validateGeneralProjectMergeGroups(input: {
       continue;
     }
     const allProjectIds = [keeperProjectId, ...duplicateProjectIds];
-    const reusedProjectId = allProjectIds.find((projectId) => usedProjectIds.has(projectId));
+    const reusedProjectId = allProjectIds.find(projectId => usedProjectIds.has(projectId));
     if (reusedProjectId) {
-      droppedWarnings.push(`Dropped ${groupLabel}: project id ${reusedProjectId} was already used in another merge group.`);
+      droppedWarnings.push(
+        `Dropped ${groupLabel}: project id ${reusedProjectId} was already used in another merge group.`,
+      );
       continue;
     }
-    allProjectIds.forEach((projectId) => usedProjectIds.add(projectId));
+    allProjectIds.forEach(projectId => usedProjectIds.add(projectId));
     acceptedGroups.push({
       keeperProjectId,
       duplicateProjectIds,
@@ -554,9 +561,7 @@ export class DreamRewriteRunner {
     const clusterPlanKind = kind === "project" ? "project_cluster_plan" : "feedback_cluster_plan";
     const refineKind = kind === "project" ? "project_cluster_refine" : "feedback_cluster_refine";
     const categoryLabel = kind === "project" ? "Project" : "Feedback";
-    const scopedCategoryLabel = projectMeta
-      ? `${categoryLabel} · ${projectMeta.projectName}`
-      : categoryLabel;
+    const scopedCategoryLabel = projectMeta ? `${categoryLabel} · ${projectMeta.projectName}` : categoryLabel;
 
     pushStep(
       trace,
@@ -573,24 +578,25 @@ export class DreamRewriteRunner {
           `${categoryLabel} Header Scan`,
         ),
         details: [
-          kvDetail(
-            `${kind}-header-summary`,
-            `${categoryLabel} Header Summary`,
-            [
-              ...(projectMeta
-                ? [{ label: "projectId", value: projectMeta.projectId }, { label: "projectName", value: projectMeta.projectName }]
-                : []),
-              { label: "inputFiles", value: entries.length },
-              { label: "scannedHeaders", value: sortedEntries.length },
-              { label: "headerScanLimit", value: DREAM_HEADER_SCAN_LIMIT },
-            ],
-          ),
+          kvDetail(`${kind}-header-summary`, `${categoryLabel} Header Summary`, [
+            ...(projectMeta
+              ? [
+                  { label: "projectId", value: projectMeta.projectId },
+                  { label: "projectName", value: projectMeta.projectName },
+                ]
+              : []),
+            { label: "inputFiles", value: entries.length },
+            { label: "scannedHeaders", value: sortedEntries.length },
+            { label: "headerScanLimit", value: DREAM_HEADER_SCAN_LIMIT },
+          ]),
           ...(sortedEntries.length > 0
-            ? [listDetail(
-                `${kind}-headers`,
-                `${categoryLabel} Headers`,
-                sortedEntries.map((entry) => `${entry.relativePath} | ${entry.name} | ${entry.updatedAt}`),
-              )]
+            ? [
+                listDetail(
+                  `${kind}-headers`,
+                  `${categoryLabel} Headers`,
+                  sortedEntries.map(entry => `${entry.relativePath} | ${entry.name} | ${entry.updatedAt}`),
+                ),
+              ]
             : []),
         ],
       },
@@ -623,13 +629,13 @@ export class DreamRewriteRunner {
     const rawPlan = await this.extractor.planDreamClusters({
       kind,
       headers,
-      debugTrace: (debug) => {
+      debugTrace: debug => {
         clusterPlanDebug = debug;
       },
     });
     const { clusters, droppedWarnings } = validateExclusiveClusters(
       rawPlan.clusters,
-      new Set(sortedEntries.map((entry) => entry.relativePath)),
+      new Set(sortedEntries.map(entry => entry.relativePath)),
       DREAM_CLUSTER_MAX_FILES,
     );
 
@@ -650,29 +656,24 @@ export class DreamRewriteRunner {
           `${categoryLabel} Cluster Plan`,
         ),
         details: [
-          kvDetail(
-            `${kind}-cluster-summary`,
-            `${categoryLabel} Cluster Summary`,
-            [
-              ...(projectMeta
-                ? [{ label: "projectId", value: projectMeta.projectId }, { label: "projectName", value: projectMeta.projectName }]
-                : []),
-              { label: "plannerClusters", value: rawPlan.clusters.length },
-              { label: "acceptedClusters", value: clusters.length },
-              { label: "droppedClusters", value: droppedWarnings.length },
-              { label: "clusterMaxFiles", value: DREAM_CLUSTER_MAX_FILES },
-            ],
-          ),
-          jsonDetail(
-            `${kind}-cluster-plan-output`,
-            `${categoryLabel} Cluster Plan Output`,
-            {
-              summary: rawPlan.summary,
-              plannerClusters: rawPlan.clusters,
-              acceptedClusters: clusters,
-              droppedWarnings,
-            },
-          ),
+          kvDetail(`${kind}-cluster-summary`, `${categoryLabel} Cluster Summary`, [
+            ...(projectMeta
+              ? [
+                  { label: "projectId", value: projectMeta.projectId },
+                  { label: "projectName", value: projectMeta.projectName },
+                ]
+              : []),
+            { label: "plannerClusters", value: rawPlan.clusters.length },
+            { label: "acceptedClusters", value: clusters.length },
+            { label: "droppedClusters", value: droppedWarnings.length },
+            { label: "clusterMaxFiles", value: DREAM_CLUSTER_MAX_FILES },
+          ]),
+          jsonDetail(`${kind}-cluster-plan-output`, `${categoryLabel} Cluster Plan Output`, {
+            summary: rawPlan.summary,
+            plannerClusters: rawPlan.clusters,
+            acceptedClusters: clusters,
+            droppedWarnings,
+          }),
         ],
         ...(clusterPlanDebug ? { promptDebug: clusterPlanDebug } : {}),
       },
@@ -682,7 +683,7 @@ export class DreamRewriteRunner {
     let deletedFiles = 0;
     for (const [index, cluster] of clusters.entries()) {
       const clusterRecords = cluster.memberRelativePaths
-        .map((relativePath) => recordsByPath.get(relativePath))
+        .map(relativePath => recordsByPath.get(relativePath))
         .filter((record): record is MemoryFileRecord => Boolean(record));
       if (clusterRecords.length < 2) {
         droppedWarnings.push(`Skipped ${kind} cluster ${index + 1} because fewer than 2 files could be loaded.`);
@@ -692,8 +693,8 @@ export class DreamRewriteRunner {
       let refineDebug: DreamTraceStep["promptDebug"];
       const refined = await this.extractor.refineDreamCluster({
         kind,
-        records: clusterRecords.map((record) => toDreamRecordInput(this.repository.getFileMemoryStore(), record)),
-        debugTrace: (debug) => {
+        records: clusterRecords.map(record => toDreamRecordInput(this.repository.getFileMemoryStore(), record)),
+        debugTrace: debug => {
           refineDebug = debug;
         },
       });
@@ -712,17 +713,11 @@ export class DreamRewriteRunner {
               `${categoryLabel} Cluster Refine`,
             ),
             details: [
-              jsonDetail(
-                `${kind}-cluster-${index + 1}`,
-                `${categoryLabel} Cluster`,
-                {
-                  ...(projectMeta
-                    ? { projectId: projectMeta.projectId, projectName: projectMeta.projectName }
-                    : {}),
-                  members: cluster.memberRelativePaths,
-                  reason: cluster.reason,
-                },
-              ),
+              jsonDetail(`${kind}-cluster-${index + 1}`, `${categoryLabel} Cluster`, {
+                ...(projectMeta ? { projectId: projectMeta.projectId, projectName: projectMeta.projectName } : {}),
+                members: cluster.memberRelativePaths,
+                reason: cluster.reason,
+              }),
             ],
             ...(refineDebug ? { promptDebug: refineDebug } : {}),
           },
@@ -738,21 +733,21 @@ export class DreamRewriteRunner {
         markdown: refined.file.markdown,
         sourceRecord,
       });
-      const scopedCandidate = projectMeta
-        ? { ...candidate, projectId: projectMeta.projectId }
-        : candidate;
+      const scopedCandidate = projectMeta ? { ...candidate, projectId: projectMeta.projectId } : candidate;
 
       this.repository.deleteMemoryEntries(cluster.memberRelativePaths);
       for (const relativePath of cluster.memberRelativePaths) {
         trace.mutations.push(mutation("delete", relativePath));
       }
       const writtenRecord = this.repository.getFileMemoryStore().upsertCandidate(scopedCandidate);
-      trace.mutations.push(mutation("write", writtenRecord.relativePath, {
-        candidateType: kind,
-        name: writtenRecord.name,
-        description: writtenRecord.description,
-        preview: previewMarkdown(writtenRecord.content),
-      }));
+      trace.mutations.push(
+        mutation("write", writtenRecord.relativePath, {
+          candidateType: kind,
+          name: writtenRecord.name,
+          description: writtenRecord.description,
+          preview: previewMarkdown(writtenRecord.content),
+        }),
+      );
 
       refinedClusters += 1;
       deletedFiles += cluster.memberRelativePaths.length;
@@ -770,19 +765,13 @@ export class DreamRewriteRunner {
             `${categoryLabel} Cluster Refine`,
           ),
           details: [
-            jsonDetail(
-                `${kind}-cluster-${index + 1}`,
-                `${categoryLabel} Cluster`,
-                {
-                  ...(projectMeta
-                    ? { projectId: projectMeta.projectId, projectName: projectMeta.projectName }
-                    : {}),
-                  members: cluster.memberRelativePaths,
-                  reason: cluster.reason,
-                  newFile: writtenRecord.relativePath,
-                deletedFiles: cluster.memberRelativePaths,
-              },
-            ),
+            jsonDetail(`${kind}-cluster-${index + 1}`, `${categoryLabel} Cluster`, {
+              ...(projectMeta ? { projectId: projectMeta.projectId, projectName: projectMeta.projectName } : {}),
+              members: cluster.memberRelativePaths,
+              reason: cluster.reason,
+              newFile: writtenRecord.relativePath,
+              deletedFiles: cluster.memberRelativePaths,
+            }),
           ],
           ...(refineDebug ? { promptDebug: refineDebug } : {}),
         },
@@ -806,9 +795,7 @@ export class DreamRewriteRunner {
       mergedProjects: 0,
       deletedProjects: 0,
       relinkedFiles: 0,
-      planSummary: metas.length < 2
-        ? "Fewer than two General project nodes were available for merge planning."
-        : "",
+      planSummary: metas.length < 2 ? "Fewer than two General project nodes were available for merge planning." : "",
       droppedWarnings: [],
       groups: [],
     };
@@ -820,7 +807,7 @@ export class DreamRewriteRunner {
       try {
         const plan = await this.extractor.planGeneralProjectMetaMerges({
           projectMetas: metas.map(toDreamMetaInput),
-          debugTrace: (debug) => {
+          debugTrace: debug => {
             mergePlanDebug = debug;
           },
         });
@@ -839,12 +826,12 @@ export class DreamRewriteRunner {
       }
     }
 
-    const projectById = new Map(metas.map((meta) => [meta.projectId, meta] as const));
+    const projectById = new Map(metas.map(meta => [meta.projectId, meta] as const));
     for (const group of acceptedPlannerGroups) {
       const keeper = projectById.get(group.keeperProjectId);
       if (!keeper) continue;
       const duplicates = group.duplicateProjectIds
-        .map((projectId) => projectById.get(projectId))
+        .map(projectId => projectById.get(projectId))
         .filter((meta): meta is ProjectMetaRecord => Boolean(meta));
       if (duplicates.length === 0) continue;
       const relinkedFiles: string[] = [];
@@ -872,7 +859,7 @@ export class DreamRewriteRunner {
       result.groups.push({
         keeperProjectId: keeper.projectId,
         keeperProjectName: keeper.projectName,
-        mergedProjectIds: duplicates.map((item) => item.projectId),
+        mergedProjectIds: duplicates.map(item => item.projectId),
         reason: group.reason,
         relinkedFiles,
       });
@@ -918,39 +905,40 @@ export class DreamRewriteRunner {
     projectMeta: ProjectMetaRecord;
   }): Promise<{ updated: boolean; reason: string }> {
     const { trace, workspaceStore, projectMeta } = input;
-    const currentEntriesAfterRefine = projectMeta.sourceKind === "workspace_external_mirror"
-      ? this.repository.listReadableProjectEntries(projectMeta.projectId, {
-          kinds: ["project", "feedback"],
-          includeDeprecated: false,
-        })
-      : this.repository.listMemoryEntries({
-          kinds: ["project", "feedback"],
-          scope: "project",
-          projectId: projectMeta.projectId,
-          includeDeprecated: false,
-          limit: 5000,
-        });
-    const recentProjectEntries = sortEntries(
-      currentEntriesAfterRefine.filter((entry) => entry.type === "project"),
-    ).slice(0, DREAM_META_PROJECT_CONTEXT_LIMIT);
+    const currentEntriesAfterRefine =
+      projectMeta.sourceKind === "workspace_external_mirror"
+        ? this.repository.listReadableProjectEntries(projectMeta.projectId, {
+            kinds: ["project", "feedback"],
+            includeDeprecated: false,
+          })
+        : this.repository.listMemoryEntries({
+            kinds: ["project", "feedback"],
+            scope: "project",
+            projectId: projectMeta.projectId,
+            includeDeprecated: false,
+            limit: 5000,
+          });
+    const recentProjectEntries = sortEntries(currentEntriesAfterRefine.filter(entry => entry.type === "project")).slice(
+      0,
+      DREAM_META_PROJECT_CONTEXT_LIMIT,
+    );
     const recentFeedbackEntries = sortEntries(
-      currentEntriesAfterRefine.filter((entry) => entry.type === "feedback"),
+      currentEntriesAfterRefine.filter(entry => entry.type === "feedback"),
     ).slice(0, DREAM_META_FEEDBACK_CONTEXT_LIMIT);
     const projectMetaReviewIds = [
-      ...recentProjectEntries.map((entry) => entry.relativePath),
-      ...recentFeedbackEntries.map((entry) => entry.relativePath),
+      ...recentProjectEntries.map(entry => entry.relativePath),
+      ...recentFeedbackEntries.map(entry => entry.relativePath),
     ];
-    const projectMetaReviewRecords = projectMetaReviewIds.length > 0
-      ? this.repository.getMemoryRecordsByIds(projectMetaReviewIds, 5000)
-      : [];
+    const projectMetaReviewRecords =
+      projectMetaReviewIds.length > 0 ? this.repository.getMemoryRecordsByIds(projectMetaReviewIds, 5000) : [];
     const projectMetaReviewMap = new Map(
-      projectMetaReviewRecords.map((record) => [record.relativePath, record] as const),
+      projectMetaReviewRecords.map(record => [record.relativePath, record] as const),
     );
     const recentProjectRecords = recentProjectEntries
-      .map((entry) => projectMetaReviewMap.get(entry.relativePath))
+      .map(entry => projectMetaReviewMap.get(entry.relativePath))
       .filter((record): record is MemoryFileRecord => Boolean(record));
     const recentFeedbackRecords = recentFeedbackEntries
-      .map((entry) => projectMetaReviewMap.get(entry.relativePath))
+      .map(entry => projectMetaReviewMap.get(entry.relativePath))
       .filter((record): record is MemoryFileRecord => Boolean(record));
 
     let metaUpdated = false;
@@ -960,17 +948,17 @@ export class DreamRewriteRunner {
     if (recentProjectRecords.length > 0 || recentFeedbackRecords.length > 0) {
       const metaReview = await this.extractor.reviewDreamProjectMeta({
         currentMeta: toDreamMetaInput(currentProjectMeta),
-        recentProjectRecords: recentProjectRecords.map((record) => toDreamRecordInput(workspaceStore, record)),
-        recentFeedbackRecords: recentFeedbackRecords.map((record) => toDreamRecordInput(workspaceStore, record)),
-        debugTrace: (debug) => {
+        recentProjectRecords: recentProjectRecords.map(record => toDreamRecordInput(workspaceStore, record)),
+        recentFeedbackRecords: recentFeedbackRecords.map(record => toDreamRecordInput(workspaceStore, record)),
+        debugTrace: debug => {
           metaReviewDebug = debug;
         },
       });
-      const shouldUpdate = metaReview.shouldUpdate && (
-        metaReview.projectMeta.projectName !== currentProjectMeta.projectName
-        || metaReview.projectMeta.description !== currentProjectMeta.description
-        || metaReview.projectMeta.status !== currentProjectMeta.status
-      );
+      const shouldUpdate =
+        metaReview.shouldUpdate &&
+        (metaReview.projectMeta.projectName !== currentProjectMeta.projectName ||
+          metaReview.projectMeta.description !== currentProjectMeta.description ||
+          metaReview.projectMeta.status !== currentProjectMeta.status);
       if (shouldUpdate) {
         const nextMeta = workspaceStore.upsertProjectMeta({
           projectId: currentProjectMeta.projectId,
@@ -978,13 +966,17 @@ export class DreamRewriteRunner {
           description: metaReview.projectMeta.description,
           status: metaReview.projectMeta.status,
           ...(currentProjectMeta.sourceKind ? { sourceKind: currentProjectMeta.sourceKind } : {}),
-          ...(currentProjectMeta.sourceWorkspacePath ? { sourceWorkspacePath: currentProjectMeta.sourceWorkspacePath } : {}),
+          ...(currentProjectMeta.sourceWorkspacePath
+            ? { sourceWorkspacePath: currentProjectMeta.sourceWorkspacePath }
+            : {}),
           ...(currentProjectMeta.sourceProjectId ? { sourceProjectId: currentProjectMeta.sourceProjectId } : {}),
           dreamUpdatedAt: nowIso(),
         });
-        trace.mutations.push(mutation("write", nextMeta.relativePath, {
-          preview: `${nextMeta.projectName} | ${nextMeta.status}`,
-        }));
+        trace.mutations.push(
+          mutation("write", nextMeta.relativePath, {
+            preview: `${nextMeta.projectName} | ${nextMeta.status}`,
+          }),
+        );
         metaUpdated = true;
       }
       metaReviewReason = metaReview.reason || metaReviewReason;
@@ -994,7 +986,11 @@ export class DreamRewriteRunner {
       trace,
       "project_meta_review",
       `Project Meta Review · ${currentProjectMeta.projectName}`,
-      metaUpdated ? "success" : recentProjectRecords.length > 0 || recentFeedbackRecords.length > 0 ? "skipped" : "skipped",
+      metaUpdated
+        ? "success"
+        : recentProjectRecords.length > 0 || recentFeedbackRecords.length > 0
+          ? "skipped"
+          : "skipped",
       `${recentProjectRecords.length} project files + ${recentFeedbackRecords.length} feedback files`,
       metaUpdated ? metaReviewReason : metaReviewReason,
       {
@@ -1009,8 +1005,8 @@ export class DreamRewriteRunner {
           ]),
           jsonDetail("project-meta-review-input", "Project Meta Review Input", {
             currentMeta: currentProjectMeta,
-            recentProjectFiles: recentProjectEntries.map((entry) => entry.relativePath),
-            recentFeedbackFiles: recentFeedbackEntries.map((entry) => entry.relativePath),
+            recentProjectFiles: recentProjectEntries.map(entry => entry.relativePath),
+            recentFeedbackFiles: recentFeedbackEntries.map(entry => entry.relativePath),
           }),
         ],
         ...(metaReviewDebug ? { promptDebug: metaReviewDebug } : {}),
@@ -1034,12 +1030,12 @@ export class DreamRewriteRunner {
       includeDeprecated: false,
       limit: 5000,
     });
-    const projectEntries = workspaceEntries.filter((entry) => entry.type === "project");
-    const feedbackEntries = workspaceEntries.filter((entry) => entry.type === "feedback");
+    const projectEntries = workspaceEntries.filter(entry => entry.type === "project");
+    const feedbackEntries = workspaceEntries.filter(entry => entry.type === "feedback");
     const isGeneralMode = workspaceStore.isGeneralMode();
     const projectMeta = isGeneralMode
       ? undefined
-      : workspaceStore.getProjectMeta() ?? workspaceStore.ensureProjectMeta();
+      : (workspaceStore.getProjectMeta() ?? workspaceStore.ensureProjectMeta());
     const generalProjectMetas = isGeneralMode ? sortProjectMetas(workspaceStore.listProjectMetas()) : [];
     const userSummary = this.repository.getUserSummary();
     const rawGlobalUserEntries = this.repository.listMemoryEntries({
@@ -1049,20 +1045,28 @@ export class DreamRewriteRunner {
       limit: 5000,
     });
     const skippedProtectedUserEntries = rawGlobalUserEntries
-      .filter((entry) => isDreamUserProfilePath(entry.relativePath) || !isDreamUserNotePath(entry.relativePath))
-      .map((entry) => `${entry.relativePath} | ${entry.updatedAt}`);
-    const userNoteEntries = rawGlobalUserEntries.filter((entry) => (
-      isDreamUserNotePath(entry.relativePath) && !isDreamUserProfilePath(entry.relativePath)
-    ));
-    const workspaceRecords = workspaceEntries.length > 0
-      ? this.repository.getMemoryRecordsByIds(workspaceEntries.map((entry) => entry.relativePath), 5000)
-      : [];
-    const recordsByPath = new Map<string, MemoryFileRecord>(
-      workspaceRecords.map((record) => [record.relativePath, record] as const),
+      .filter(entry => isDreamUserProfilePath(entry.relativePath) || !isDreamUserNotePath(entry.relativePath))
+      .map(entry => `${entry.relativePath} | ${entry.updatedAt}`);
+    const userNoteEntries = rawGlobalUserEntries.filter(
+      entry => isDreamUserNotePath(entry.relativePath) && !isDreamUserProfilePath(entry.relativePath),
     );
-    const userNoteRecords = userNoteEntries.length > 0
-      ? this.repository.getMemoryRecordsByIds(userNoteEntries.map((entry) => entry.relativePath), 5000)
-      : [];
+    const workspaceRecords =
+      workspaceEntries.length > 0
+        ? this.repository.getMemoryRecordsByIds(
+            workspaceEntries.map(entry => entry.relativePath),
+            5000,
+          )
+        : [];
+    const recordsByPath = new Map<string, MemoryFileRecord>(
+      workspaceRecords.map(record => [record.relativePath, record] as const),
+    );
+    const userNoteRecords =
+      userNoteEntries.length > 0
+        ? this.repository.getMemoryRecordsByIds(
+            userNoteEntries.map(entry => entry.relativePath),
+            5000,
+          )
+        : [];
 
     trace.snapshotSummary = {
       projectMetaPresent: isGeneralMode ? generalProjectMetas.length > 0 : Boolean(projectMeta),
@@ -1087,70 +1091,92 @@ export class DreamRewriteRunner {
       trace,
       "snapshot_loaded",
       "Snapshot Loaded",
-      workspaceEntries.length > 0 || userSummary.files.length > 0 || userNoteRecords.length > 0 || generalProjectMetas.length > 0 ? "success" : "warning",
+      workspaceEntries.length > 0 ||
+        userSummary.files.length > 0 ||
+        userNoteRecords.length > 0 ||
+        generalProjectMetas.length > 0
+        ? "success"
+        : "warning",
       `${workspaceEntries.length} project files, ${userNoteRecords.length} user notes`,
-      workspaceEntries.length > 0 || userSummary.files.length > 0 || userNoteRecords.length > 0 || generalProjectMetas.length > 0
+      workspaceEntries.length > 0 ||
+        userSummary.files.length > 0 ||
+        userNoteRecords.length > 0 ||
+        generalProjectMetas.length > 0
         ? "Current project memory is ready for staged Dream processing."
         : "No file-based memory exists yet, so Dream had nothing to organize.",
       {
         titleI18n: traceI18n("trace.step.snapshot_loaded", "Snapshot Loaded"),
         details: [
-          kvDetail("snapshot-summary", "Snapshot Summary", [
-            { label: "projectMetaPresent", value: trace.snapshotSummary.projectMetaPresent ? "yes" : "no" },
-            ...(isGeneralMode ? [{ label: "generalProjects", value: generalProjectMetas.length }] : []),
-            { label: "projectFiles", value: trace.snapshotSummary.projectFileCount },
-            { label: "feedbackFiles", value: trace.snapshotSummary.feedbackFileCount },
-            { label: "hasUserProfile", value: trace.snapshotSummary.hasUserProfile ? "yes" : "no" },
-            { label: "userNotes", value: userNoteRecords.length },
-          ], traceI18n("trace.detail.snapshot_summary", "Snapshot Summary")),
+          kvDetail(
+            "snapshot-summary",
+            "Snapshot Summary",
+            [
+              { label: "projectMetaPresent", value: trace.snapshotSummary.projectMetaPresent ? "yes" : "no" },
+              ...(isGeneralMode ? [{ label: "generalProjects", value: generalProjectMetas.length }] : []),
+              { label: "projectFiles", value: trace.snapshotSummary.projectFileCount },
+              { label: "feedbackFiles", value: trace.snapshotSummary.feedbackFileCount },
+              { label: "hasUserProfile", value: trace.snapshotSummary.hasUserProfile ? "yes" : "no" },
+              { label: "userNotes", value: userNoteRecords.length },
+            ],
+            traceI18n("trace.detail.snapshot_summary", "Snapshot Summary"),
+          ),
           ...(!isGeneralMode
-            ? [jsonDetail("project-meta", "Project Meta", projectMeta, traceI18n("trace.detail.project_meta", "Project Meta"))]
+            ? [
+                jsonDetail(
+                  "project-meta",
+                  "Project Meta",
+                  projectMeta,
+                  traceI18n("trace.detail.project_meta", "Project Meta"),
+                ),
+              ]
             : []),
           ...(isGeneralMode && generalProjectMetas.length > 0
-            ? [jsonDetail(
-                "general-project-meta",
-                "General Project Meta",
-                generalProjectMetas.map((entry) => ({
-                  projectId: entry.projectId,
-                  projectName: entry.projectName,
-                  sourceKind: entry.sourceKind ?? "general_local",
-                  sourceWorkspacePath: entry.sourceWorkspacePath ?? null,
-                  sourceProjectId: entry.sourceProjectId ?? null,
-                  updatedAt: entry.updatedAt,
-                })),
-              )]
+            ? [
+                jsonDetail(
+                  "general-project-meta",
+                  "General Project Meta",
+                  generalProjectMetas.map(entry => ({
+                    projectId: entry.projectId,
+                    projectName: entry.projectName,
+                    sourceKind: entry.sourceKind ?? "general_local",
+                    sourceWorkspacePath: entry.sourceWorkspacePath ?? null,
+                    sourceProjectId: entry.sourceProjectId ?? null,
+                    updatedAt: entry.updatedAt,
+                  })),
+                ),
+              ]
             : []),
           ...(workspaceEntries.length > 0
-            ? [listDetail(
-                "snapshot-files",
-                "Current Project Files",
-                sortEntries(workspaceEntries).map((entry) => `${entry.relativePath} | ${entry.updatedAt}`),
-                traceI18n("trace.detail.loaded_files", "Loaded Files"),
-              )]
+            ? [
+                listDetail(
+                  "snapshot-files",
+                  "Current Project Files",
+                  sortEntries(workspaceEntries).map(entry => `${entry.relativePath} | ${entry.updatedAt}`),
+                  traceI18n("trace.detail.loaded_files", "Loaded Files"),
+                ),
+              ]
             : []),
           ...(userNoteEntries.length > 0
-            ? [listDetail(
-                "snapshot-user-notes",
-                "User Notes",
-                sortEntries(userNoteEntries).map((entry) => `${entry.relativePath} | ${entry.updatedAt}`),
-              )]
+            ? [
+                listDetail(
+                  "snapshot-user-notes",
+                  "User Notes",
+                  sortEntries(userNoteEntries).map(entry => `${entry.relativePath} | ${entry.updatedAt}`),
+                ),
+              ]
             : []),
           ...(skippedProtectedUserEntries.length > 0
-            ? [listDetail(
-                "snapshot-protected-user-paths",
-                "Protected User Paths Skipped",
-                skippedProtectedUserEntries,
-              )]
+            ? [listDetail("snapshot-protected-user-paths", "Protected User Paths Skipped", skippedProtectedUserEntries)]
             : []),
         ],
       },
     );
 
     if (
-      workspaceEntries.length === 0
-      && userSummary.files.length === 0
-      && userNoteRecords.length === 0
-      && (!isGeneralMode || generalProjectMetas.length === 0)
+      workspaceEntries.length === 0 &&
+      userSummary.files.length === 0 &&
+      userNoteRecords.length === 0 &&
+      (!isGeneralMode || generalProjectMetas.length === 0)
     ) {
       const finishedAt = nowIso();
       const summary = "No file-based memory exists yet, so Dream had nothing to organize.";
@@ -1218,13 +1244,17 @@ export class DreamRewriteRunner {
           includeDeprecated: false,
           limit: 5000,
         });
-        const currentProjectEntries = currentEntries.filter((entry) => entry.type === "project");
-        const currentFeedbackEntries = currentEntries.filter((entry) => entry.type === "feedback");
-        const currentRecords = currentEntries.length > 0
-          ? this.repository.getMemoryRecordsByIds(currentEntries.map((entry) => entry.relativePath), 5000)
-          : [];
+        const currentProjectEntries = currentEntries.filter(entry => entry.type === "project");
+        const currentFeedbackEntries = currentEntries.filter(entry => entry.type === "feedback");
+        const currentRecords =
+          currentEntries.length > 0
+            ? this.repository.getMemoryRecordsByIds(
+                currentEntries.map(entry => entry.relativePath),
+                5000,
+              )
+            : [];
         const currentRecordsByPath = new Map<string, MemoryFileRecord>(
-          currentRecords.map((record) => [record.relativePath, record] as const),
+          currentRecords.map(record => [record.relativePath, record] as const),
         );
 
         const nextProjectDream = await this.runCategoryDream({
@@ -1285,7 +1315,7 @@ export class DreamRewriteRunner {
     }
 
     const userNoteWindow = selectUserNoteWindow(userNoteRecords);
-    const selectedUserCandidates = userNoteWindow.selectedRecords.map((record) => globalUserStore.toCandidate(record));
+    const selectedUserCandidates = userNoteWindow.selectedRecords.map(record => globalUserStore.toCandidate(record));
     let userProfileUpdated = false;
     let userRewriteDebug: DreamTraceStep["promptDebug"];
     let absorbedUserNoteIds: string[] = [];
@@ -1297,26 +1327,33 @@ export class DreamRewriteRunner {
         const rewrittenUser = await this.extractor.rewriteUserProfile({
           existingProfile: userSummary,
           candidates: selectedUserCandidates,
-          debugTrace: (debug) => {
+          debugTrace: debug => {
             userRewriteDebug = debug;
           },
         });
-        if (rewrittenUser?.body?.trim()) {
+        if (rewrittenUser?.candidate?.body?.trim()) {
           const previousProfileBody = (userSummary.files[0]?.content ?? "").trim();
-          const nextProfileBody = rewrittenUser.body.trim();
+          const nextProfileBody = rewrittenUser.candidate.body.trim();
           if (previousProfileBody !== nextProfileBody) {
-            globalUserStore.upsertUserProfile(rewrittenUser);
+            globalUserStore.upsertUserProfile(rewrittenUser.candidate);
             userProfileUpdated = true;
             trace.mutations.push({
               mutationId: `mutation_${hashText(`rewrite_user_profile:${userProfileRelativePath}:${Date.now()}`)}`,
               action: "rewrite_user_profile",
               relativePath: userProfileRelativePath ?? "global/UserIdentity/user-profile.md",
             });
-            const requestedAbsorbedUserNoteIds = userNoteWindow.selectedRecords.map((record) => record.relativePath);
-            absorbedUserNoteIds = requestedAbsorbedUserNoteIds.filter((relativePath) => (
-              isDreamUserNotePath(relativePath) && !isDreamUserProfilePath(relativePath)
-            ));
-            protectedUserPathsSkipped = requestedAbsorbedUserNoteIds.filter((relativePath) => !absorbedUserNoteIds.includes(relativePath));
+            // Only delete notes the model explicitly reported as absorbed.
+            // Notes excluded by the rewrite rules (reply preferences, style,
+            // collaboration rules, progress, ...) or not reported at all
+            // must be kept — hard-deleting unverified content loses memory.
+            const absorbedNoteIndexes = new Set(rewrittenUser.absorbedNoteIndexes);
+            absorbedUserNoteIds = userNoteWindow.selectedRecords
+              .filter((_record, index) => absorbedNoteIndexes.has(index))
+              .map(record => record.relativePath)
+              .filter(relativePath => isDreamUserNotePath(relativePath) && !isDreamUserProfilePath(relativePath));
+            protectedUserPathsSkipped = userNoteWindow.selectedRecords
+              .map(record => record.relativePath)
+              .filter(relativePath => !absorbedUserNoteIds.includes(relativePath));
             if (absorbedUserNoteIds.length > 0) {
               this.repository.deleteMemoryEntries(absorbedUserNoteIds);
               for (const relativePath of absorbedUserNoteIds) {
@@ -1324,10 +1361,12 @@ export class DreamRewriteRunner {
               }
             }
           } else {
-            userRewriteKeptNotesMessage = "Dream kept the selected user notes because the rewritten profile matched the existing profile.";
+            userRewriteKeptNotesMessage =
+              "Dream kept the selected user notes because the rewritten profile matched the existing profile.";
           }
         } else {
-          userRewriteFailureMessage = "Dream skipped user profile rewrite because the model returned no valid rewritten profile.";
+          userRewriteFailureMessage =
+            "Dream skipped user profile rewrite because the model returned no valid rewritten profile.";
         }
       } catch (error) {
         userRewriteFailureMessage = `Dream skipped user profile rewrite because the rewrite request failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -1339,14 +1378,20 @@ export class DreamRewriteRunner {
       trace,
       "user_profile_rewritten",
       "User Profile Rewritten",
-      userProfileUpdated || absorbedUserNoteIds.length > 0 ? "success" : selectedUserCandidates.length > 0 ? "warning" : "skipped",
+      userProfileUpdated || absorbedUserNoteIds.length > 0
+        ? "success"
+        : selectedUserCandidates.length > 0
+          ? "warning"
+          : "skipped",
       `${userSummary.files.length} profile files, ${userNoteRecords.length} user notes`,
       userProfileUpdated
         ? `Dream updated the global user profile and absorbed ${absorbedUserNoteIds.length} user notes.`
         : absorbedUserNoteIds.length > 0
           ? `Dream absorbed ${absorbedUserNoteIds.length} user notes without changing the current profile summary.`
           : selectedUserCandidates.length > 0
-            ? userRewriteFailureMessage || userRewriteKeptNotesMessage || "Dream could not absorb the selected user notes into the global profile."
+            ? userRewriteFailureMessage ||
+              userRewriteKeptNotesMessage ||
+              "Dream could not absorb the selected user notes into the global profile."
             : "Dream found no user notes within the current processing window.",
       {
         titleI18n: traceI18n("trace.step.user_profile_rewritten", "User Profile Rewritten"),
@@ -1361,39 +1406,39 @@ export class DreamRewriteRunner {
             { label: "notesAbsorbed", value: absorbedUserNoteIds.length },
           ]),
           ...(userNoteWindow.selectedRecords.length > 0
-            ? [listDetail(
-                "selected-user-notes",
-                "Selected User Notes",
-                userNoteWindow.selectedRecords.map((record) => `${record.relativePath} | ${record.updatedAt}`),
-              )]
+            ? [
+                listDetail(
+                  "selected-user-notes",
+                  "Selected User Notes",
+                  userNoteWindow.selectedRecords.map(record => `${record.relativePath} | ${record.updatedAt}`),
+                ),
+              ]
             : []),
           ...(userNoteWindow.keptRecords.length > 0
-            ? [listDetail(
-                "kept-user-notes",
-                "Kept User Notes",
-                userNoteWindow.keptRecords.map((record) => `${record.relativePath} | ${record.updatedAt}`),
-              )]
+            ? [
+                listDetail(
+                  "kept-user-notes",
+                  "Kept User Notes",
+                  userNoteWindow.keptRecords.map(record => `${record.relativePath} | ${record.updatedAt}`),
+                ),
+              ]
             : []),
           ...(protectedUserPathsSkipped.length > 0
-            ? [listDetail(
-                "protected-user-paths-skipped",
-                "Protected User Paths Skipped",
-                protectedUserPathsSkipped,
-              )]
+            ? [listDetail("protected-user-paths-skipped", "Protected User Paths Skipped", protectedUserPathsSkipped)]
             : []),
           ...(userRewriteFailureMessage
-            ? [kvDetail(
-                "user-rewrite-warning",
-                "User Rewrite Warning",
-                [{ label: "message", value: userRewriteFailureMessage }],
-              )]
+            ? [
+                kvDetail("user-rewrite-warning", "User Rewrite Warning", [
+                  { label: "message", value: userRewriteFailureMessage },
+                ]),
+              ]
             : []),
           ...(userRewriteKeptNotesMessage
-            ? [kvDetail(
-                "user-rewrite-kept-notes",
-                "User Notes Kept",
-                [{ label: "message", value: userRewriteKeptNotesMessage }],
-              )]
+            ? [
+                kvDetail("user-rewrite-kept-notes", "User Notes Kept", [
+                  { label: "message", value: userRewriteKeptNotesMessage },
+                ]),
+              ]
             : []),
         ],
         ...(userRewriteDebug ? { promptDebug: userRewriteDebug } : {}),
@@ -1411,10 +1456,15 @@ export class DreamRewriteRunner {
       {
         titleI18n: traceI18n("trace.step.manifests_repaired", "Manifests Repaired"),
         details: [
-          kvDetail("manifest-repair", "Manifest Repair", [
-            { label: "changed", value: repaired.changed },
-            { label: "memoryFileCount", value: repaired.memoryFileCount },
-          ], traceI18n("trace.detail.manifest_scan", "Manifest Scan")),
+          kvDetail(
+            "manifest-repair",
+            "Manifest Repair",
+            [
+              { label: "changed", value: repaired.changed },
+              { label: "memoryFileCount", value: repaired.memoryFileCount },
+            ],
+            traceI18n("trace.detail.manifest_scan", "Manifest Scan"),
+          ),
         ],
       },
     );
@@ -1425,13 +1475,16 @@ export class DreamRewriteRunner {
     const conflictTopicCount = projectDream.droppedWarnings.length + feedbackDream.droppedWarnings.length;
     const duplicateTopicCount = projectDream.plannedClusters + feedbackDream.plannedClusters;
     const metaUpdated = metaUpdatedCount > 0;
-    const summary = [
-      deletedProjects > 0 ? `Merged ${deletedProjects} duplicate General project nodes.` : "",
-      rewrittenProjects > 0 ? `Refined ${rewrittenProjects} dream clusters.` : "",
-      deletedFiles > 0 ? `Deleted ${deletedFiles} absorbed source files.` : "",
-      userProfileUpdated ? "Updated the global user profile." : "",
-      metaUpdated ? `Reviewed and updated ${metaUpdatedCount} project metadata records.` : "",
-    ].filter(Boolean).join(" ") || "Dream completed without requiring any memory changes.";
+    const summary =
+      [
+        deletedProjects > 0 ? `Merged ${deletedProjects} duplicate General project nodes.` : "",
+        rewrittenProjects > 0 ? `Refined ${rewrittenProjects} dream clusters.` : "",
+        deletedFiles > 0 ? `Deleted ${deletedFiles} absorbed source files.` : "",
+        userProfileUpdated ? "Updated the global user profile." : "",
+        metaUpdated ? `Reviewed and updated ${metaUpdatedCount} project metadata records.` : "",
+      ]
+        .filter(Boolean)
+        .join(" ") || "Dream completed without requiring any memory changes.";
     const outcome: DreamTraceOutcome = {
       rewrittenProjects,
       deletedProjects,
@@ -1442,7 +1495,8 @@ export class DreamRewriteRunner {
 
     trace.finishedAt = finishedAt;
     trace.status = "completed";
-    trace.isNoOp = rewrittenProjects === 0 && deletedFiles === 0 && deletedProjects === 0 && !userProfileUpdated && !metaUpdated;
+    trace.isNoOp =
+      rewrittenProjects === 0 && deletedFiles === 0 && deletedProjects === 0 && !userProfileUpdated && !metaUpdated;
     trace.displayStatus = trace.isNoOp ? "No-op" : "Completed";
     trace.outcome = outcome;
     pushStep(

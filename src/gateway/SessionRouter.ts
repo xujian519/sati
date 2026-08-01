@@ -155,10 +155,9 @@ export class SessionRouter {
         return {
           sessionId: snapshot.sessionId,
           sessionKey,
-          summary: snapshot.messages
-            .flatMap((message) => message.content)
-            .find((block) => block.type === "text")
-            ?.text ?? sessionKey,
+          summary:
+            snapshot.messages.flatMap(message => message.content).find(block => block.type === "text")?.text ??
+            sessionKey,
           lastModified: record.lastUsedAt,
         };
       }),
@@ -251,10 +250,7 @@ function snapshotEvictedSession(sessionKey: string, record: SessionRecord): Sess
   };
 }
 
-function mergeSessionContext(
-  current: GatewaySessionContext,
-  next: GatewaySessionContext,
-): GatewaySessionContext {
+function mergeSessionContext(current: GatewaySessionContext, next: GatewaySessionContext): GatewaySessionContext {
   return {
     sessionKey: next.sessionKey,
     channelKey: next.channelKey || current.channelKey,

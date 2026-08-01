@@ -1,7 +1,4 @@
-import type {
-  CatalogModel,
-  CatalogProvider,
-} from "../../../../../shared/catalogProviders";
+import type { CatalogModel, CatalogProvider } from "../../../../../shared/catalogProviders";
 
 export type ActiveModelCapabilities = {
   ref: string;

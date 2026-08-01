@@ -56,7 +56,7 @@ export type RouterAutoOrchestrateConfig = {
 export type RouterStatsConfig = {
   enabled: boolean;
   modelPricing?: RouterModelPricingMap;
-  /** Override the default ~/.pilotdeck/router/stats.json path (useful for tests). */
+  /** Override the default ~/.sati/router/stats.json path (useful for tests). */
   filePath?: string;
   /** Provider/model ref used as the "no-router" baseline for savedCost calculation. */
   baselineModel?: { provider: string; model: string };
@@ -111,7 +111,8 @@ export const DEFAULT_TIER_DESCRIPTIONS: Record<string, string> = {
   simple: "Simple greetings, confirmations, single-step Q&A, trivial file writes, remembering rules",
   medium: "Single tool call, short text generation, 1-2 file read/write, code generation",
   complex: "Needs sub-agent orchestration: parallel workstreams, delegation to specialized agents",
-  reasoning: "Deep single-agent work: multi-file operations, data analysis, multi-step workflows, web research, structured reports from many sources",
+  reasoning:
+    "Deep single-agent work: multi-file operations, data analysis, multi-step workflows, web research, structured reports from many sources",
 };
 
 export const DEFAULT_TIER_RULES: string[] = [
@@ -122,14 +123,8 @@ export const DEFAULT_TIER_RULES: string[] = [
 ];
 
 export const DEFAULT_TIER_NAME = "medium";
-export const DEFAULT_ALLOWED_TOOLS = [
-  "agent", "read_file", "grep", "glob", "read_skill",
-];
-export const DEFAULT_BLOCKED_TOOLS = [
-  "mcp__browser-use__",
-  "web_search",
-  "web_fetch",
-];
+export const DEFAULT_ALLOWED_TOOLS = ["agent", "read_file", "grep", "glob", "read_skill"];
+export const DEFAULT_BLOCKED_TOOLS = ["mcp__browser-use__", "web_search", "web_fetch"];
 
 export const DEFAULT_ORCHESTRATION_PROMPT = `# Orchestrator mode — plan and delegate
 

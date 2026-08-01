@@ -1,0 +1,406 @@
+# 专利实务规则集
+# 来源：data/wiki/专利实务/ （吴观乐/张荣彦/黄敏/张清奎/崔国斌/尹新天，600+页）
+# 覆盖：说明书撰写、权利要求撰写、审查意见答复、无效宣告、申请文件形式
+#
+# 规则 ID 前缀：
+#   PR-SPEC-* — 说明书撰写规范
+#   PR-CLM-*  — 权利要求撰写
+#   PR-OA-*   — 审查意见答复
+#   PR-INV-*  — 无效宣告
+#   PR-FMT-*  — 申请文件形式
+
+rules:
+
+  # ================================================================
+  # 说明书撰写规范
+  # ================================================================
+
+  - id: PR-SPEC-001
+    name: "说明书—技术问题与技术方案对应"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.2.4"
+    fix_suggestion: "发明内容中所述的技术问题、技术方案和有益效果应当相互对应。技术方案应能解决所述技术问题，有益效果应是该技术方案带来的"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: problem_solution_match
+          patterns: ["技术问题", "要解决", "存在的技术问题"]
+        - element: solution_content
+          patterns: ["技术方案", "为实现", "采用"]
+        - element: effect_match
+          patterns: ["有益效果", "技术效果", "优点"]
+      message: "说明书中的技术问题、技术方案和有益效果应当一一对应，形成完整的逻辑链条"
+
+  - id: PR-SPEC-002
+    name: "说明书—背景技术客观描述"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.2.3"
+    fix_suggestion: "背景技术部分应客观描述与本发明相关的现有技术，指出其存在的不足。避免过度批评现有技术，也避免过度夸大本发明优势"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "现有技术"
+        - "已有"
+        - "不足"
+        - "缺陷"
+      antiPatterns:
+        - "世界领先"
+        - "行业首创"
+        - "革命性"
+      message: "背景技术应客观描述现有技术的不足，避免使用商业宣传用语"
+
+  - id: PR-SPEC-003
+    name: "说明书—实施例数量充足性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "专利法第26条第3款"
+    fix_suggestion: "实施例数量应足以支持权利要求的保护范围。对于数值范围，应至少提供范围两端的实施例和至少一个中间实施例。对于马库什结构，应提供足够的代表性实施例"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "实施例"
+        - "具体实施方式"
+      antiPatterns:
+        - "仅有一个实施例"
+      message: "实施例数量应足以支持权利要求的保护范围，特别是涉及数值范围和马库什结构时"
+
+  - id: PR-SPEC-004
+    name: "说明书—技术效果描述具体化"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.2.4"
+    fix_suggestion: "技术效果应尽量量化描述（如效率提高XX%，成本降低XX%），避免笼统声称'效率高''成本低'等模糊表述"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "技术效果"
+        - "有益效果"
+        - "提高"
+        - "降低"
+        - "改善"
+      antiPatterns:
+        - "效果好"
+        - "性能优"
+        - "很高效"
+      message: "技术效果应尽量量化描述，避免笼统的效果声称"
+
+  - id: PR-SPEC-005
+    name: "说明书—术语定义统一"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.2.1"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "本文中"
+        - "本说明书中"
+        - "定义为"
+        - "是指"
+        - "指的是"
+      message: "说明书中应统一定义和使用的术语，避免同一概念使用不同表述"
+
+  # ================================================================
+  # 权利要求撰写
+  # ================================================================
+
+  - id: PR-CLM-001
+    name: "权利要求撰写—独立权利要求布局"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法实施细则第20条第2款"
+    fix_suggestion: "独立权利要求应包含前序部分和特征部分。前序部分写明主题名称和与现有技术共有的技术特征，特征部分以'其特征在于'引导写明区别技术特征"
+    fix_examples:
+      - "✅ 一种数据处理装置，包括处理器和存储器，其特征在于，所述处理器被配置为..."
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: preamble
+          patterns: ["一种", "一种装置", "一种方法", "一种系统", "一种设备"]
+        - element: characterizing
+          patterns: ["其特征在于", "特征在于"]
+      message: "独立权利要求应包含前序部分（主题名称+共有特征）和特征部分（'其特征在于'+区别特征）"
+
+  - id: PR-CLM-002
+    name: "权利要求撰写—多层次防御体系"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利代理实务"
+    fix_suggestion: "应构建多层次权利要求防御体系：(1)最宽泛的独立权利要求 (2)若干中间范围的从属权利要求 (3)最窄的具体实施方式权利要求。确保即使独立权利要求被无效，仍有一些从属权利要求可以存活"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: independent_claim
+          patterns: ["独立权利要求", "权1", "权利要求1"]
+        - element: dependent_claims
+          patterns: ["从属权利要求", "权2", "权3"]
+      message: "应构建多层次权利要求防御体系：宽泛独立权利要求 → 中间从属权利要求 → 窄范围从属权利要求"
+
+  - id: PR-CLM-003
+    name: "权利要求撰写—方法权利要求步骤编号"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第二章3.2.1"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "步骤"
+        - "S1"
+        - "S2"
+        - "第一步"
+        - "第二步"
+      antiPatterns:
+        - "首先"
+        - "然后"
+        - "接着"
+        - "最后"
+      message: "方法权利要求中的步骤建议使用编号（S1, S2...）以保持清晰，避免使用模糊的顺序词"
+
+  - id: PR-CLM-004
+    name: "权利要求撰写—功能性限定使用规范"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第二章3.2.1"
+    fix_suggestion: "功能性限定应当：(1)在说明书中提供足够的具体实施方式 (2)本领域技术人员能够明了足够多的实施方式 (3)尽量结合结构特征描述。纯功能性限定会导致保护范围不确定"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "用于"
+        - "配置为"
+        - "被配置"
+        - "适合于"
+        - "能够"
+      antiPatterns:
+        - "包括"
+        - "包含"
+        - "具有"
+        - "设有"
+      message: "功能性限定（'用于'、'配置为'等）应结合结构特征使用，并在说明书中提供足够的具体实施方式"
+
+  - id: PR-CLM-005
+    name: "权利要求撰写—避免纯功能性限定"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第二章3.2.1"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "means for"
+        - "step for"
+        - "手段"
+        - "方式"
+      message: "注意：纯功能性限定（means plus function）在侵权诉讼中可能被限制为说明书中公开的具体实施方式及其等同"
+
+  - id: PR-CLM-006
+    name: "权利要求撰写—马库什结构表达"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第十章"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "选自"
+        - "其中R"
+        - "取代基"
+        - "通式"
+      message: "马库什结构的权利要求中各取代基应当具有共同的性质或活性，否则可能面临单一性挑战"
+
+  # ================================================================
+  # 审查意见答复
+  # ================================================================
+
+  - id: PR-OA-001
+    name: "OA答复—逐点回应所有审查意见"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_oa_response
+    legal_basis: "审查指南第二部分第八章4.1"
+    fix_suggestion: "答复应逐条回应审查意见通知书中的每一条审查意见。对于每条意见：(1)复述审查员的观点 (2)表明同意或不同意 (3)提供理由和/或修改方案"
+    fix_examples:
+      - "✅ 关于审查意见第1点（创造性问题）：审查员认为对比文件1+2结合破坏了权利要求1的创造性。申请人认为..."
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: oa_mapping
+          patterns: ["审查意见", "审查员认为", "指出", "通知"]
+        - element: response_points
+          patterns: ["答复", "意见陈述", "争辩", "不同意"]
+        - element: conclusion_request
+          patterns: ["请求", "恳请", "建议"]
+      message: "审查意见答复必须逐点回应：审查意见映射 → 争辩理由/修改方案 → 最终请求"
+
+  - id: PR-OA-002
+    name: "OA答复—修改权利要求时的超范围检查"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_oa_response
+    legal_basis: "专利法第33条"
+    fix_suggestion: "修改权利要求时应确保：(1)新增限定来自原说明书和权利要求书记载的内容 (2)不能将说明书中仅作为背景技术描述的内容加入权利要求 (3)数值范围的修改不得引入新的范围端值"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "修改"
+        - "权利要求"
+      antiPatterns:
+        - "新增内容"
+        - "超出"
+      message: "答复中修改权利要求不得超出原申请文件记载的范围，应引用说明书中具体段落作为修改依据"
+
+  - id: PR-OA-003
+    name: "OA答复—争辩创造性时的三步法回应"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_oa_response
+    legal_basis: "审查指南第二部分第四章3.2"
+    fix_suggestion: "争辩创造性时应按三步法结构：(1)分析审查员选择的最接近现有技术是否合适 (2)分析区别技术特征和实际解决的技术问题 (3)论证现有技术未给出技术启示"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: prior_art_analysis
+          patterns: ["最接近", "现有技术", "对比文件"]
+        - element: distinguishing_analysis
+          patterns: ["区别技术特征", "区别特征"]
+        - element: motivation_refutation
+          patterns: ["技术启示", "显而易见", "结合启示"]
+      message: "争辩创造性时应按三步法结构回应，论证审查员的结合是否存在技术启示"
+
+  - id: PR-OA-004
+    name: "OA答复—争辩新颖性时的单独对比原则"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_oa_response
+    legal_basis: "专利法第22条第2款"
+    fix_suggestion: "争辩新颖性时应指出：(1)审查员是否违反了单独对比原则 (2)对比文件中哪些技术特征未被公开 (3)权利要求与对比文件的区别"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "单独对比"
+        - "未被公开"
+        - "未记载"
+        - "区别"
+      message: "争辩新颖性时必须强调单独对比原则，指出对比文件未公开的技术特征"
+
+  # ================================================================
+  # 无效宣告
+  # ================================================================
+
+  - id: PR-INV-001
+    name: "无效宣告—无效理由选择策略"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法第45条；审查指南第四部分第三章"
+    fix_suggestion: "无效宣告请求应选择最有力的无效理由。常见理由包括：新颖性（A22.2）、创造性（A22.3）、充分公开（A26.3）、权利要求以说明书为依据（A26.4）、修改超范围（A33）"
+    check:
+      type: category_detection
+      categories:
+        - name: novelty_ground
+          keywords: ["新颖性", "22条第2款", "A22.2"]
+        - name: inventiveness_ground
+          keywords: ["创造性", "22条第3款", "A22.3"]
+        - name: disclosure_ground
+          keywords: ["充分公开", "26条第3款", "A26.3"]
+        - name: support_ground
+          keywords: ["说明书为依据", "26条第4款", "A26.4"]
+        - name: amendment_ground
+          keywords: ["修改超范围", "第33条", "A33"]
+      minCategories: 1
+      message: "无效宣告请求应明确具体无效理由及其对应法条，至少选择一个以上的无效理由"
+
+  - id: PR-INV-002
+    name: "无效宣告—证据组织规范"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "审查指南第四部分第三章3.3"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: evidence_list
+          patterns: ["证据", "对比文件", "附件"]
+        - element: evidence_content
+          patterns: ["公开内容", "公开了", "记载了"]
+      message: "无效宣告请求应附具证据清单，并在请求书中具体说明每份证据的公开内容和拟证明的事实"
+
+  # ================================================================
+  # 申请文件形式
+  # ================================================================
+
+  - id: PR-FMT-001
+    name: "申请文件—摘要撰写规范"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.4"
+    check:
+      type: section_structure
+      sectionName: "摘要"
+      requiredElements:
+        - "技术领域"
+        - "技术方案要点"
+        - "用途"
+      message: "摘要应简明说明发明的技术领域、技术方案要点和主要用途，字数不超过300字"
+
+  - id: PR-FMT-002
+    name: "申请文件—附图规范要求"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.3"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "附图"
+        - "图1"
+        - "示意图"
+      antiPatterns:
+        - "尺寸线"
+        - "虚线表示"
+      message: "附图应使用制图工具绘制，不得使用铅笔、蜡笔或圆珠笔绘制，图中不得有不必要的文字说明"
+
+  - id: PR-FMT-003
+    name: "申请文件—权利要求编号连续性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第二章3.1"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "权利要求1"
+        - "权利要求2"
+        - "1."
+        - "2."
+      message: "权利要求应按阿拉伯数字顺序编号，从1开始连续编号"

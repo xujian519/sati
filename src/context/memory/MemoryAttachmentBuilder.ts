@@ -1,9 +1,5 @@
 import type { CanonicalMessage } from "../../model/index.js";
-import type {
-  MemoryDiagnostic,
-  MemoryResolver,
-  MemoryRetrieveInput,
-} from "./MemoryResolver.js";
+import type { MemoryDiagnostic, MemoryResolver, MemoryRetrieveInput } from "./MemoryResolver.js";
 
 export type MemoryAttachmentBuilderResult = {
   attachments: CanonicalMessage[];
@@ -31,9 +27,10 @@ export class MemoryAttachmentBuilder {
     const controller = new AbortController();
     const detachAbort = forwardAbort(input.signal, controller);
     const timeoutMs = input.timeoutMs;
-    const timer = timeoutMs && timeoutMs > 0
-      ? setTimeout(() => controller.abort(new Error(`Memory retrieval timed out after ${timeoutMs}ms.`)), timeoutMs)
-      : undefined;
+    const timer =
+      timeoutMs && timeoutMs > 0
+        ? setTimeout(() => controller.abort(new Error(`Memory retrieval timed out after ${timeoutMs}ms.`)), timeoutMs)
+        : undefined;
     try {
       const result = await Promise.race([
         this.resolver.retrieve({ ...input, signal: controller.signal }),
@@ -61,13 +58,16 @@ export class MemoryAttachmentBuilder {
         }
         return {
           attachments: [],
-          diagnostics: [{
-            code: "memory_provider_error",
-            severity: "warning",
-            message: timeoutMs && timeoutMs > 0
-              ? `MemoryResolver.retrieve timed out after ${timeoutMs}ms.`
-              : "MemoryResolver.retrieve was aborted.",
-          }],
+          diagnostics: [
+            {
+              code: "memory_provider_error",
+              severity: "warning",
+              message:
+                timeoutMs && timeoutMs > 0
+                  ? `MemoryResolver.retrieve timed out after ${timeoutMs}ms.`
+                  : "MemoryResolver.retrieve was aborted.",
+            },
+          ],
         };
       }
       return {

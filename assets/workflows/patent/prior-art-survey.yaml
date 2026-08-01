@@ -1,0 +1,103 @@
+# 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
+template_id: prior-art-survey
+name: 现有技术调查
+description: 案卷探查 → 规则 → 发明 CAP02 解构 → 检索 → 质量门 → CAP02 现有技术对比
+intent: 现有技术检索与 CAP02 深度技术分析（支撑新颖性/创造性判断）
+steps:
+  - id: probe
+    name: 案卷探查
+    description: 读取 xiaonuo.md 与 source 目录，确认意图与 artifacts
+    worker: project-probe
+    input_template: |
+      案卷目录：{{case_dir}}
+      读取 xiaonuo.md 与 source/ 下文件，输出：意图、provision_ids、关键文件摘要、推荐 worker 链。
+    has_checkpoint: true
+    checkpoint_title: 确认案卷上下文（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+
+  - id: rules
+    name: 规则探查
+    description: 确定适用 provision_ids 与 generatedPrompt
+    worker: rule-explorer
+    depends_on: [probe]
+    input_template: |
+      基于案卷 {{case_dir}} 的 xiaonuo.md，探查现有技术调查适用的规则与 provision_ids（含 P-A01/P-A02）。
+      输出 generatedPrompt 供后续 worker 使用。
+
+  - id: tech-deconstruct
+    name: 本方案 CAP02 解构
+    description: 本申请/技术方案七维解构（检索前必步）
+    worker: patent-technical-analyzer
+    depends_on: [rules]
+    has_checkpoint: true
+    checkpoint_title: 确认本方案技术特征（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：现有技术调查 — 检索前先完成本方案 CAP02 七维解构。
+
+      输出 technical-deconstruction-target.md、technical-analysis-report.md；
+      检索规划须引用其中特征、IPC 与关键词。
+
+  - id: search-plan
+    name: 检索规划
+    description: 制定专利/非专利文献检索策略
+    worker: patent-search-planner
+    depends_on: [tech-deconstruct]
+    input_template: |
+      案卷：{{case_dir}}
+      读取 technical-deconstruction-target.md，制定检索策略（关键词、分类号、数据库）。
+      artifacts 写入 data/cases/{{case_id}}/outputs/
+
+  - id: search-exec
+    name: 检索执行
+    description: 执行检索并整理对比文件清单
+    worker: patent-search-executor
+    depends_on: [search-plan]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **必经步骤**：按 search-plan.md 执行检索。
+      至少使用 2 个检索源：
+      1. Google Patents（通过 google-patents-search skill）
+      2. CNIPA 公布公告（通过 cnipa-query skill）
+      每篇对比文件标注：专利号、标题、公开日、相关度（X/Y/A）、覆盖的权利要求、可引用段落（至少 3 段）。
+      输出路径：data/cases/{{case_id}}/outputs/search-results.md
+
+  - id: search-qual
+    name: 检索结果质量检查
+    description: 对检索结果进行质量验证，满足门槛后方可进入下游
+    worker: bcip-retrieval (quality check phase)
+    depends_on: [search-exec]
+    has_checkpoint: true
+    checkpoint_title: 确认对比文件列表与相关性（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **质量门槛**（以下条件必须全部满足）：
+      1. 对比文件 ≥ 3 篇
+      2. 每篇标注了相关度和覆盖的权利要求
+      3. 至少 2 篇获取了全文（PDF→Markdown 转换）
+      4. 检索式包含布尔逻辑和 IPC 限定
+      
+      不满足时：退回 search-exec 重新执行。
+      满足时：人工确认对比文件列表后再进入技术分析。
+
+  - id: tech-compare
+    name: CAP02 现有技术对比
+    description: 本方案 vs 检索结果的深度对比（新颖性/创造性支撑）
+    worker: patent-technical-analyzer
+    depends_on: [search-qual]
+    has_checkpoint: true
+    checkpoint_title: 审核技术分析与区别特征结论（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：现有技术调查 — **CAP02 四级对比矩阵**（新颖性/创造性判断的核心依据）。
+
+      1. 对检索到的对比文件逐篇七维解构
+      2. 四级对比矩阵 + 区别特征四层 + 技术启示初步判断
+      3. tech-graph 因果链对比（≥3 特征时必做）
+      4. HITL：确认区别特征与检索充分性
+
+      必须写入：technical-comparison-matrix.md、distinctive-features.md、
+                technical-analysis-report.md（供后续无效/审查意见 workflow 复用）

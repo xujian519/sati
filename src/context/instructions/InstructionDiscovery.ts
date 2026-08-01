@@ -1,31 +1,26 @@
 /**
- * PILOTDECK.md instruction file discovery — multi-scope instruction hierarchy.
+ * SATI.md instruction file discovery — multi-scope instruction hierarchy.
  *
  * Files are loaded in the following order (later = higher priority, model pays
  * more attention to content that appears later in the system prompt):
  *
- *   1. Managed     — $PILOTDECK_MANAGED_CONFIG/PILOTDECK.md
- *   2. User        — ~/.pilotdeck/PILOTDECK.md
- *   3. User rules  — ~/.pilotdeck/rules/*.md
+ *   1. Managed     — $SATI_MANAGED_CONFIG/SATI.md
+ *   2. User        — ~/.sati/SATI.md
+ *   3. User rules  — ~/.sati/rules/*.md
  *   4. Project     — per directory from projectRoot toward cwd:
- *                      <dir>/PILOTDECK.md
- *                      <dir>/.pilotdeck/PILOTDECK.md
- *                      <dir>/.pilotdeck/rules/*.md
- *   5. Local       — <dir>/PILOTDECK.local.md  (private, not committed)
+ *                      <dir>/SATI.md
+ *                      <dir>/.sati/SATI.md
+ *                      <dir>/.sati/rules/*.md
+ *   5. Local       — <dir>/SATI.local.md  (private, not committed)
  *
  * Design mirrors the legacy upstream instruction-file discovery, adapted to
- * PilotDeck path conventions (~/.pilotdeck/, .pilotdeck/).
+ * Sati path conventions (~/.sati/, .sati/).
  */
 
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-export type InstructionScope =
-  | "managed"
-  | "user"
-  | "project"
-  | "project-rules"
-  | "local";
+export type InstructionScope = "managed" | "user" | "project" | "project-rules" | "local";
 
 export type InstructionLayer = {
   scope: InstructionScope;
@@ -44,23 +39,23 @@ export class InstructionDiscovery {
     const layers: InstructionLayer[] = [];
     const seen = new Set<string>();
 
-    // 1. Managed (administrator-level, e.g. /etc/pilotdeck/)
-    const managedDir = process.env.PILOTDECK_MANAGED_CONFIG;
+    // 1. Managed (administrator-level, e.g. /etc/sati/)
+    const managedDir = process.env.SATI_MANAGED_CONFIG;
     if (managedDir) {
-      await this.tryAdd(layers, seen, "managed", join(managedDir, "PILOTDECK.md"));
+      await this.tryAdd(layers, seen, "managed", join(managedDir, "SATI.md"));
     }
 
     // 2. User-level
-    await this.tryAdd(layers, seen, "user", join(this.pilotHome, "PILOTDECK.md"));
+    await this.tryAdd(layers, seen, "user", join(this.pilotHome, "SATI.md"));
     await this.tryAddRulesDir(layers, seen, "user", join(this.pilotHome, "rules"));
 
     // 3–5. Project + Local — from root toward cwd (root first = lower priority)
     const dirs = this.collectDirectoryChain();
     for (const dir of dirs) {
-      await this.tryAdd(layers, seen, "project", join(dir, "PILOTDECK.md"));
-      await this.tryAdd(layers, seen, "project", join(dir, ".pilotdeck", "PILOTDECK.md"));
-      await this.tryAddRulesDir(layers, seen, "project-rules", join(dir, ".pilotdeck", "rules"));
-      await this.tryAdd(layers, seen, "local", join(dir, "PILOTDECK.local.md"));
+      await this.tryAdd(layers, seen, "project", join(dir, "SATI.md"));
+      await this.tryAdd(layers, seen, "project", join(dir, ".sati", "SATI.md"));
+      await this.tryAddRulesDir(layers, seen, "project-rules", join(dir, ".sati", "rules"));
+      await this.tryAdd(layers, seen, "local", join(dir, "SATI.local.md"));
     }
 
     return layers;

@@ -1,14 +1,13 @@
 import type {
   CanonicalContentBlock,
   CanonicalMessage,
+  InputModality,
+  MultimodalConstraints,
 } from "../../model/index.js";
-import type { InputModality, MultimodalConstraints } from "../../model/index.js";
 
 const MEDIA_MODALITY_ORDER: InputModality[] = ["image", "pdf", "audio"];
 
-export function collectRequiredInputModalities(
-  messages: CanonicalMessage[],
-): InputModality[] {
+export function collectRequiredInputModalities(messages: CanonicalMessage[]): InputModality[] {
   const required = new Set<InputModality>();
 
   for (const message of messages) {
@@ -17,7 +16,7 @@ export function collectRequiredInputModalities(
     }
   }
 
-  return MEDIA_MODALITY_ORDER.filter((modality) => required.has(modality));
+  return MEDIA_MODALITY_ORDER.filter(modality => required.has(modality));
 }
 
 export function missingInputModalities(
@@ -28,7 +27,7 @@ export function missingInputModalities(
     return [];
   }
   const supported = new Set<InputModality>(constraints.input);
-  return required.filter((modality) => !supported.has(modality));
+  return required.filter(modality => !supported.has(modality));
 }
 
 export function supportsRequiredModalities(
@@ -38,10 +37,7 @@ export function supportsRequiredModalities(
   return missingInputModalities(constraints, required).length === 0;
 }
 
-function collectFromBlock(
-  block: CanonicalContentBlock,
-  required: Set<InputModality>,
-): void {
+function collectFromBlock(block: CanonicalContentBlock, required: Set<InputModality>): void {
   switch (block.type) {
     case "image":
       required.add("image");

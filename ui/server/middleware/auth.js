@@ -1,6 +1,6 @@
-import jwt from 'jsonwebtoken';
-import { userDb, appConfigDb } from '../database/db.js';
-import { IS_PLATFORM, DISABLE_LOCAL_AUTH } from '../constants/config.js';
+import jwt from "jsonwebtoken";
+import { userDb, appConfigDb } from "../database/db.js";
+import { IS_PLATFORM, DISABLE_LOCAL_AUTH } from "../constants/config.js";
 
 // Use env var if set, otherwise auto-generate a unique secret per installation
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
@@ -11,10 +11,10 @@ const validateApiKey = (req, res, next) => {
   if (!process.env.API_KEY) {
     return next();
   }
-  
-  const apiKey = req.headers['x-api-key'];
+
+  const apiKey = req.headers["x-api-key"];
   if (apiKey !== process.env.API_KEY) {
-    return res.status(401).json({ error: 'Invalid API key' });
+    return res.status(401).json({ error: "Invalid API key" });
   }
   next();
 };
@@ -26,14 +26,11 @@ function extractDashboardRefererToken(req) {
   }
 
   try {
-    const refererUrl = new URL(
-      refererHeader,
-      `${req.protocol}://${req.get('host')}`,
-    );
-    if (!refererUrl.pathname.startsWith('/memory-dashboard')) {
+    const refererUrl = new URL(refererHeader, `${req.protocol}://${req.get("host")}`);
+    if (!refererUrl.pathname.startsWith("/memory-dashboard")) {
       return null;
     }
-    return refererUrl.searchParams.get('token');
+    return refererUrl.searchParams.get("token");
   } catch {
     return null;
   }
@@ -46,19 +43,19 @@ const authenticateToken = async (req, res, next) => {
     try {
       const user = userDb.getFirstUser();
       if (!user) {
-        return res.status(500).json({ error: 'No user found in database (restart server after DB init)' });
+        return res.status(500).json({ error: "No user found in database (restart server after DB init)" });
       }
       req.user = user;
       return next();
     } catch (error) {
-      console.error('Auth bypass mode error:', error);
-      return res.status(500).json({ error: 'Failed to fetch user' });
+      console.error("Auth bypass mode error:", error);
+      return res.status(500).json({ error: "Failed to fetch user" });
     }
   }
 
   // Normal OSS JWT validation
-  const authHeader = req.headers['authorization'];
-  let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const authHeader = req.headers["authorization"];
+  let token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
 
   // Also check query param for SSE endpoints (EventSource can't set headers)
   if (!token && req.query.token) {
@@ -71,7 +68,7 @@ const authenticateToken = async (req, res, next) => {
   }
 
   if (!token) {
-    return res.status(401).json({ error: 'Access denied. No token provided.' });
+    return res.status(401).json({ error: "Access denied. No token provided." });
   }
 
   try {
@@ -80,7 +77,7 @@ const authenticateToken = async (req, res, next) => {
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid token. User not found.' });
+      return res.status(401).json({ error: "Invalid token. User not found." });
     }
 
     // Auto-refresh: if token is past halfway through its lifetime, issue a new one
@@ -89,32 +86,32 @@ const authenticateToken = async (req, res, next) => {
       const halfLife = (decoded.exp - decoded.iat) / 2;
       if (now > decoded.iat + halfLife) {
         const newToken = generateToken(user);
-        res.setHeader('X-Refreshed-Token', newToken);
+        res.setHeader("X-Refreshed-Token", newToken);
       }
     }
 
     req.user = user;
     next();
   } catch (error) {
-    console.error('Token verification error:', error);
-    return res.status(403).json({ error: 'Invalid token' });
+    console.error("Token verification error:", error);
+    return res.status(403).json({ error: "Invalid token" });
   }
 };
 
 // Generate JWT token
-const generateToken = (user) => {
+const generateToken = user => {
   return jwt.sign(
     {
       userId: user.id,
-      username: user.username
+      username: user.username,
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: "7d" },
   );
 };
 
 // WebSocket authentication function
-const authenticateWebSocket = (token) => {
+const authenticateWebSocket = token => {
   // Platform mode: bypass token validation, return first user
   if (IS_PLATFORM || DISABLE_LOCAL_AUTH) {
     try {
@@ -124,7 +121,7 @@ const authenticateWebSocket = (token) => {
       }
       return null;
     } catch (error) {
-      console.error('Platform mode WebSocket error:', error);
+      console.error("Platform mode WebSocket error:", error);
       return null;
     }
   }
@@ -143,15 +140,9 @@ const authenticateWebSocket = (token) => {
     }
     return { userId: user.id, username: user.username };
   } catch (error) {
-    console.error('WebSocket token verification error:', error);
+    console.error("WebSocket token verification error:", error);
     return null;
   }
 };
 
-export {
-  validateApiKey,
-  authenticateToken,
-  generateToken,
-  authenticateWebSocket,
-  JWT_SECRET
-};
+export { validateApiKey, authenticateToken, generateToken, authenticateWebSocket, JWT_SECRET };

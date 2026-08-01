@@ -9,7 +9,7 @@
 
 import { promises as fs } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { homedir } from "node:os";
+import { resolvePilotHome } from "../../pilot/paths.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -134,8 +134,8 @@ async function readJsonlEntries(filePath: string): Promise<Array<Record<string, 
   }
   return raw
     .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .map((line) => {
+    .filter(line => line.trim())
+    .map(line => {
       try {
         return JSON.parse(line) as Record<string, unknown>;
       } catch {
@@ -198,9 +198,7 @@ function mergeRunEvent(record: RunRecord, event: RunEvent): RunRecord {
     outputLog: record.outputLog,
     createdAt: record.createdAt,
   };
-  const outputParts = [record.outputLog, event.output, event.error ? `Error: ${event.error}` : ""].filter(
-    Boolean,
-  );
+  const outputParts = [record.outputLog, event.output, event.error ? `Error: ${event.error}` : ""].filter(Boolean);
   next.outputLog = outputParts.join("\n\n").slice(-OUTPUT_LOG_MAX_CHARS);
   if (event.error) next.error = event.error;
   return next;
@@ -261,7 +259,10 @@ function getRecordRelativeTranscriptPath(record: RunRecord): string | undefined 
   return join(parentSessionId, "subagents", transcriptFilename);
 }
 
-function createBackgroundSessionId(parentSessionId: string | undefined, relativeTranscriptPath: string | undefined): string | undefined {
+function createBackgroundSessionId(
+  parentSessionId: string | undefined,
+  relativeTranscriptPath: string | undefined,
+): string | undefined {
   const safeParent = normalizeString(parentSessionId).replace(/[^a-zA-Z0-9._-]/g, "-");
   const transcriptName = basename(normalizeString(relativeTranscriptPath));
   const safeTranscript = transcriptName.replace(/\.jsonl$/i, "").replace(/[^a-zA-Z0-9._-]/g, "-");
@@ -281,14 +282,15 @@ function getRecordSessionId(record: RunRecord): string | undefined {
 // ---------------------------------------------------------------------------
 
 function getProjectStoreDir(projectName: string): string {
-  return projectName ? join(homedir(), ".pilotdeck", "projects", projectName) : "";
+  // 与项目其他路径解析一致：遵循 SATI_HOME（勿硬编码 ~/.sati）
+  return projectName ? join(resolvePilotHome(), "projects", projectName) : "";
 }
 
 function extractContentText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .map((part) => {
+      .map(part => {
         if (typeof part === "string") return part;
         if (typeof part?.text === "string") return part.text;
         if (typeof part?.content === "string") return part.content;
@@ -310,7 +312,9 @@ function getTaskNotificationContent(entry: Record<string, unknown>): string {
   return extractContentText((entry?.message as Record<string, unknown>)?.content);
 }
 
-function parseTaskNotificationContent(content: string): { taskId: string; outputFile: string; status: string; summary: string } | null {
+function parseTaskNotificationContent(
+  content: string,
+): { taskId: string; outputFile: string; status: string; summary: string } | null {
   if (!content?.trim()) return null;
   const match = content.match(TASK_NOTIFICATION_REGEX);
   if (!match) return null;
@@ -400,7 +404,7 @@ function isTimestampNearRun(record: RunRecord, timestamps: number[]): boolean {
   const runFinish = Date.parse(record.finishedAt || record.updatedAt || "");
   const anchors = [runStart, runFinish].filter(Number.isFinite);
   if (anchors.length === 0) return false;
-  return timestamps.some((ts) => anchors.some((anchor) => Math.abs(ts - anchor) <= RECOVERY_MATCH_WINDOW_MS));
+  return timestamps.some(ts => anchors.some(anchor => Math.abs(ts - anchor) <= RECOVERY_MATCH_WINDOW_MS));
 }
 
 async function recoverFromSubagents(record: RunRecord, projectName: string) {
@@ -416,22 +420,26 @@ async function recoverFromSubagents(record: RunRecord, projectName: string) {
     return null;
   }
 
-  const candidates: Array<{ distance: number; parentSessionId: string; relativeTranscriptPath: string; transcriptKey: string; sessionId: string | undefined }> = [];
+  const candidates: Array<{
+    distance: number;
+    parentSessionId: string;
+    relativeTranscriptPath: string;
+    transcriptKey: string;
+    sessionId: string | undefined;
+  }> = [];
   for (const entry of entries) {
     if (!entry.isFile() || !CRON_TRANSCRIPT_FILENAME_REGEX.test(entry.name)) continue;
     const transcriptPath = join(subagentsDir, entry.name);
     const transcriptEntries = await readJsonlEntries(transcriptPath);
     const timestamps = transcriptEntries
-      .map((item) => Date.parse((item?.timestamp as string) || ""))
+      .map(item => Date.parse((item?.timestamp as string) || ""))
       .filter(Number.isFinite);
     if (!isTimestampNearRun(record, timestamps)) continue;
     const info = getTranscriptInfoFromPath(projectDir, transcriptPath);
     if (info) {
       candidates.push({
         ...info,
-        distance: Math.min(
-          ...timestamps.map((ts) => Math.abs(ts - (Date.parse(record.startedAt || "") || ts))),
-        ),
+        distance: Math.min(...timestamps.map(ts => Math.abs(ts - (Date.parse(record.startedAt || "") || ts)))),
       });
     }
   }
@@ -446,7 +454,10 @@ async function recoverRecordSessionInfo(record: RunRecord, projectName: string) 
       sessionId: getRecordSessionId(record),
       parentSessionId: getRecordParentSessionId(record),
       relativeTranscriptPath: getRecordRelativeTranscriptPath(record),
-      transcriptKey: (record.transcriptKey as string) || normalizeString((record.metadata as Record<string, unknown>)?.transcriptKey) || undefined,
+      transcriptKey:
+        (record.transcriptKey as string) ||
+        normalizeString((record.metadata as Record<string, unknown>)?.transcriptKey) ||
+        undefined,
     };
   }
   return (
@@ -455,7 +466,10 @@ async function recoverRecordSessionInfo(record: RunRecord, projectName: string) 
       sessionId: undefined,
       parentSessionId: getRecordParentSessionId(record),
       relativeTranscriptPath: getRecordRelativeTranscriptPath(record),
-      transcriptKey: (record.transcriptKey as string) || normalizeString((record.metadata as Record<string, unknown>)?.transcriptKey) || undefined,
+      transcriptKey:
+        (record.transcriptKey as string) ||
+        normalizeString((record.metadata as Record<string, unknown>)?.transcriptKey) ||
+        undefined,
     }
   );
 }
@@ -469,9 +483,7 @@ function formatMessageForLog(entry: Record<string, unknown>): string {
     (entry?.message as Record<string, unknown>)?.role || entry?.type || entry?.role,
     "message",
   );
-  const content = extractContentText(
-    (entry?.message as Record<string, unknown>)?.content ?? entry?.content,
-  ).trim();
+  const content = extractContentText((entry?.message as Record<string, unknown>)?.content ?? entry?.content).trim();
   if (!content) return "";
   const timestamp = toIsoTimestamp(entry?.timestamp as string);
   const prefix = timestamp ? `[${timestamp}] ${role}` : role;
@@ -556,10 +568,7 @@ export class AlwaysOnRunHistoryService {
         const event = normalizeRunEvent(JSON.parse(line));
         if (!event) continue;
         const existing = recordsById.get(event.runId);
-        recordsById.set(
-          event.runId,
-          existing ? mergeRunEvent(existing, event) : createRecordFromEvent(event),
-        );
+        recordsById.set(event.runId, existing ? mergeRunEvent(existing, event) : createRecordFromEvent(event));
       } catch {
         // corrupt line
       }
@@ -584,14 +593,14 @@ export class AlwaysOnRunHistoryService {
     projectRoot: string,
     options: { limit?: number; projectName?: string } = {},
   ): Promise<{ runs: RunHistoryEntry[] }> {
-    const records = (await this.readRecords(projectRoot)).filter((r) => r.status !== "unknown");
+    const records = (await this.readRecords(projectRoot)).filter(r => r.status !== "unknown");
     const safeLimit =
       Number.isFinite(options.limit) && (options.limit as number) > 0
         ? (options.limit as number)
         : RUN_HISTORY_MAX_ITEMS;
     const sliced = records.slice(0, safeLimit);
     const entries = await Promise.all(
-      sliced.map(async (record) =>
+      sliced.map(async record =>
         toHistoryEntry(
           record,
           options.projectName ? await recoverRecordSessionInfo(record, options.projectName) : null,
@@ -607,7 +616,7 @@ export class AlwaysOnRunHistoryService {
     options: { projectName?: string } = {},
   ): Promise<RunHistoryDetailEntry> {
     const records = await this.readRecords(projectRoot);
-    const record = records.find((r) => r.runId === runId);
+    const record = records.find(r => r.runId === runId);
     if (!record) {
       const error = new Error("Run history entry not found") as Error & { code: string };
       error.code = "NOT_FOUND";

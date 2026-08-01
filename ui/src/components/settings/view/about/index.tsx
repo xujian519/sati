@@ -5,10 +5,7 @@ import { authenticatedFetch } from "../../../../utils/api";
 import { cn } from "../../../../lib/utils";
 import type { DesktopVersionCheckResult } from "../../Settings";
 import { SettingsCard } from "../../shared/view";
-import {
-  launchDesktopInstaller,
-  readWebUpdateTerminalStatus,
-} from "./updateActions";
+import { launchDesktopInstaller, readWebUpdateTerminalStatus } from "./updateActions";
 
 type AboutSectionsProps = {
   title: string;
@@ -16,19 +13,8 @@ type AboutSectionsProps = {
   checkingVersion: boolean;
 };
 
-type LocalUpdateResult =
-  | "downloaded"
-  | "installerLaunched"
-  | "failed"
-  | "webUpdated"
-  | "webUpToDate"
-  | null;
-type VersionStatus =
-  | "checking"
-  | "updateAvailable"
-  | "installerLaunched"
-  | "upToDate"
-  | "unavailable";
+type LocalUpdateResult = "downloaded" | "installerLaunched" | "failed" | "webUpdated" | "webUpToDate" | null;
+type VersionStatus = "checking" | "updateAvailable" | "installerLaunched" | "upToDate" | "unavailable";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "-";
@@ -40,11 +26,7 @@ function formatDateTime(value: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function AboutSections({
-  title,
-  versionInfo,
-  checkingVersion,
-}: AboutSectionsProps) {
+export default function AboutSections({ title, versionInfo, checkingVersion }: AboutSectionsProps) {
   const { t } = useTranslation("settings");
   const [downloading, setDownloading] = useState(false);
   const [webUpdating, setWebUpdating] = useState(false);
@@ -96,7 +78,7 @@ export default function AboutSections({
           setDownloading(false);
           return;
         }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       setLocalUpdateResult("failed");
@@ -119,11 +101,7 @@ export default function AboutSections({
       }
       const terminalStatus = await readWebUpdateTerminalStatus(res.body);
       setLocalUpdateResult(
-        terminalStatus === "error"
-          ? "failed"
-          : terminalStatus === "up-to-date"
-            ? "webUpToDate"
-            : "webUpdated",
+        terminalStatus === "error" ? "failed" : terminalStatus === "up-to-date" ? "webUpToDate" : "webUpdated",
       );
     } catch {
       setLocalUpdateResult("failed");
@@ -157,14 +135,10 @@ export default function AboutSections({
     }
   };
 
-  const showDownloadButton =
-    isDesktop && status === "updateAvailable" && localUpdateResult !== "downloaded";
+  const showDownloadButton = isDesktop && status === "updateAvailable" && localUpdateResult !== "downloaded";
   const showRestartInstallButton = isDesktop && localUpdateResult === "downloaded";
   const showWebUpdateButton =
-    !isDesktop
-    && versionInfo.hasUpdate
-    && localUpdateResult !== "webUpdated"
-    && localUpdateResult !== "webUpToDate";
+    !isDesktop && versionInfo.hasUpdate && localUpdateResult !== "webUpdated" && localUpdateResult !== "webUpToDate";
   const showWebRestartButton = !isDesktop && localUpdateResult === "webUpdated";
   const statusBadgeClass = cn(
     "inline-flex items-center rounded-md border px-2 py-0.5 text-sm font-medium leading-5",
@@ -185,9 +159,7 @@ export default function AboutSections({
       <SettingsCard className="overflow-hidden">
         <div className="grid min-h-[64px] grid-cols-[1fr_auto_auto] items-center gap-4 px-5 py-4">
           <div className="min-w-0 text-sm text-foreground">
-            <span className="font-medium">
-              {t("settingsPage.about.versionStatus")}
-            </span>
+            <span className="font-medium">{t("settingsPage.about.versionStatus")}</span>
             <span className={cn("ml-2", statusBadgeClass)}>
               {status === "updateAvailable" ? (
                 <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-blue-600" />
@@ -232,9 +204,7 @@ export default function AboutSections({
               disabled={installing || webUpdating}
               className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {installing
-                ? t("settingsPage.about.restartingAndInstalling")
-                : t("about.restartToApply")}
+              {installing ? t("settingsPage.about.restartingAndInstalling") : t("about.restartToApply")}
             </button>
           ) : showRestartInstallButton ? (
             <button
@@ -243,9 +213,7 @@ export default function AboutSections({
               disabled={installing || downloading}
               className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {installing
-                ? t("settingsPage.about.launchingInstaller")
-                : t("settingsPage.about.installUpdate")}
+              {installing ? t("settingsPage.about.launchingInstaller") : t("settingsPage.about.installUpdate")}
             </button>
           ) : (
             <div />

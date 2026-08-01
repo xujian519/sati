@@ -3,16 +3,15 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import { ToolResultBudget } from "../../src/context/budget/ToolResultBudget.js";
 import { PermissionRuntime } from "../../src/permission/index.js";
 import { createBashTool } from "../../src/tool/builtin/bash.js";
-import type { PilotDeckCommandRunner } from "../../src/tool/builtin/bash/commandRunner.js";
+import type { SatiCommandRunner } from "../../src/tool/builtin/bash/commandRunner.js";
 import { ToolRuntime } from "../../src/tool/execution/ToolRuntime.js";
 import { ToolRegistry } from "../../src/tool/registry/ToolRegistry.js";
 import { toCanonicalToolResultBlock } from "../../src/tool/protocol/result.js";
 
-function createRuntime(runner: PilotDeckCommandRunner): ToolRuntime {
+function createRuntime(runner: SatiCommandRunner): ToolRuntime {
   const registry = new ToolRegistry();
   registry.register(createBashTool({ runner }));
   return new ToolRuntime(registry, new PermissionRuntime());
@@ -49,10 +48,7 @@ test("bash success result is formatted with assertions, stdout, and stderr", asy
     },
   });
 
-  const result = await runtime.execute(
-    { id: "call-bash", name: "bash", input: { command: "echo hello" } },
-    context(),
-  );
+  const result = await runtime.execute({ id: "call-bash", name: "bash", input: { command: "echo hello" } }, context());
 
   assert.equal(result.type, "success");
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
@@ -64,7 +60,7 @@ test("bash success result is formatted with assertions, stdout, and stderr", asy
 });
 
 test("bash failure tool result includes raw stdout and stderr tail for UI and model", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-bash-error-budget-"));
+  const dir = await mkdtemp(join(tmpdir(), "sati-bash-error-budget-"));
   const stderrTail = "TAIL ROOT CAUSE: missing package @example/pkg";
   try {
     const runtime = createRuntime({
@@ -79,10 +75,7 @@ test("bash failure tool result includes raw stdout and stderr tail for UI and mo
       },
     });
 
-    const result = await runtime.execute(
-      { id: "call-bash", name: "bash", input: { command: "npm test" } },
-      context(),
-    );
+    const result = await runtime.execute({ id: "call-bash", name: "bash", input: { command: "npm test" } }, context());
 
     assert.equal(result.type, "error");
     const text = result.content[0]?.type === "text" ? result.content[0].text : "";
@@ -102,12 +95,15 @@ test("bash failure tool result includes raw stdout and stderr tail for UI and mo
       maxResultSizeTokens: 2_000,
       previewBytes: 2_000,
     });
-    const applied = await budget.applyToMessage({
-      role: "user",
-      content: [toCanonicalToolResultBlock(result)],
-    }, { turnId: "turn-1" });
+    const applied = await budget.applyToMessage(
+      {
+        role: "user",
+        content: [toCanonicalToolResultBlock(result)],
+      },
+      { turnId: "turn-1" },
+    );
 
-    const ref = applied.content.find((block) => block.type === "tool_result_reference");
+    const ref = applied.content.find(block => block.type === "tool_result_reference");
     assert.ok(ref, "expected large bash error output to be persisted for read_file");
     assert.equal(ref.isError, true);
     const persisted = await readFile(ref.path, "utf8");
@@ -144,7 +140,7 @@ test("bash failure diagnostic extracts Python traceback location and exception",
 });
 
 test("bash success keeps full output for ToolResultBudget persistence", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-bash-budget-"));
+  const dir = await mkdtemp(join(tmpdir(), "sati-bash-budget-"));
   const tail = "TAIL IMPORTANT SUCCESS MARKER";
   try {
     const runtime = createRuntime({
@@ -176,12 +172,15 @@ test("bash success keeps full output for ToolResultBudget persistence", async ()
       maxResultSizeTokens: 2_000,
       previewBytes: 2_000,
     });
-    const applied = await budget.applyToMessage({
-      role: "user",
-      content: [toCanonicalToolResultBlock(result)],
-    }, { turnId: "turn-1" });
+    const applied = await budget.applyToMessage(
+      {
+        role: "user",
+        content: [toCanonicalToolResultBlock(result)],
+      },
+      { turnId: "turn-1" },
+    );
 
-    const ref = applied.content.find((block) => block.type === "tool_result_reference");
+    const ref = applied.content.find(block => block.type === "tool_result_reference");
     assert.ok(ref, "expected large bash output to be persisted for read_file");
     const persisted = await readFile(ref.path, "utf8");
     assert.match(persisted, /stdout start/);

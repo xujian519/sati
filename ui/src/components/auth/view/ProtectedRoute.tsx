@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react';
-import { useAuth } from '../context/AuthContext';
-import Onboarding from '../../onboarding/view/Onboarding';
-import AuthLoadingScreen from './AuthLoadingScreen';
-import LoginForm from './LoginForm';
-import SetupForm from './SetupForm';
+import type { ReactNode } from "react";
+import { useAuth } from "../context/AuthContext";
+import Onboarding from "../../onboarding/view/Onboarding";
+import AuthLoadingScreen from "./AuthLoadingScreen";
+import LoginForm from "./LoginForm";
+import SetupForm from "./SetupForm";
 
 type ProtectedRouteProps = {
   children: ReactNode;

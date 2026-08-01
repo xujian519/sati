@@ -1,14 +1,14 @@
-import type { PilotDeckMarketplaceReference } from "./manifest.js";
+import type { SatiMarketplaceReference } from "./manifest.js";
 
-export type PilotDeckPluginMarketplaceStatus = "resolved" | "deferred";
+export type SatiPluginMarketplaceStatus = "resolved" | "deferred";
 
-export type PilotDeckMarketplaceResolution = {
-  status: PilotDeckPluginMarketplaceStatus;
-  reference: PilotDeckMarketplaceReference;
+export type SatiMarketplaceResolution = {
+  status: SatiPluginMarketplaceStatus;
+  reference: SatiMarketplaceReference;
   reason?: string;
 };
 
-export function resolveMarketplaceReference(reference: PilotDeckMarketplaceReference): PilotDeckMarketplaceResolution {
+export function resolveMarketplaceReference(reference: SatiMarketplaceReference): SatiMarketplaceResolution {
   if (reference.source === "git" || reference.source === "zip" || reference.source === "mcpb") {
     return {
       status: "deferred",

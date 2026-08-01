@@ -6,10 +6,7 @@ import {
   stripUnpairedToolCalls,
   stripUnpairedToolResults,
 } from "./toolPairIntegrity.js";
-import {
-  collectProtectedTurnIndexes,
-  protectedToolNameSet,
-} from "./protectedContext.js";
+import { collectProtectedTurnIndexes, protectedToolNameSet } from "./protectedContext.js";
 
 export type SnipEngineOptions = {
   /** Number of head turns to keep (default 2). */
@@ -78,7 +75,7 @@ export function isSnipBoundaryMessage(message: CanonicalMessage): boolean {
  *   S6 `projectSnippedView` filters the input to head+boundary+tail in one
  *      call, used by callers that don't need the dangling-tool report.
  *   S7 Disabled engine returns input unchanged (intentional_difference: legacy
- *      uses an explicit SnipTool; PilotDeck uses an automatic policy).
+ *      uses an explicit SnipTool; Sati uses an automatic policy).
  */
 export class SnipEngine {
   private readonly keepHeadTurns: number;
@@ -106,7 +103,11 @@ export class SnipEngine {
     for (let index = 0; index < Math.min(this.keepHeadTurns, turns.length); index += 1) {
       keepIndexes.add(index);
     }
-    for (let index = Math.max(this.keepHeadTurns, turns.length - this.keepTailTurns); index < turns.length; index += 1) {
+    for (
+      let index = Math.max(this.keepHeadTurns, turns.length - this.keepTailTurns);
+      index < turns.length;
+      index += 1
+    ) {
       keepIndexes.add(index);
     }
     for (const index of collectProtectedTurnIndexes(messages, {
@@ -128,7 +129,7 @@ export class SnipEngine {
     const pairedToolCallIds = collectToolCallIds(withoutDanglingCalls);
     const cleaned = stripUnpairedToolResults(withoutDanglingCalls, pairedToolCallIds);
 
-    const dangling = Array.from(toolCallIds).filter((id) => !toolResultIds.has(id));
+    const dangling = Array.from(toolCallIds).filter(id => !toolResultIds.has(id));
 
     return {
       messages: ensureTrailingUserMessage(cleaned),
@@ -144,10 +145,7 @@ export class SnipEngine {
  * always returns *some* projection — even if no snip happened, the input
  * is returned verbatim.
  */
-export function projectSnippedView(
-  messages: CanonicalMessage[],
-  options: SnipEngineOptions = {},
-): CanonicalMessage[] {
+export function projectSnippedView(messages: CanonicalMessage[], options: SnipEngineOptions = {}): CanonicalMessage[] {
   return new SnipEngine(options).snip(messages).messages;
 }
 
@@ -199,7 +197,7 @@ function stitchKeptTurnsWithBoundaries(
 function isToolResultOnly(message: CanonicalMessage): boolean {
   if (message.content.length === 0) return false;
   return message.content.every(
-    (block) =>
+    block =>
       block.type === "tool_result" ||
       block.type === "tool_result_reference" ||
       (block.type === "media_reference" && typeof block.toolCallId === "string" && block.toolCallId.length > 0),

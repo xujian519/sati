@@ -12,7 +12,10 @@ export type ReadTranscriptOptions = {
   maxBytes?: number;
 };
 
-export async function readTranscript(path: string, options: ReadTranscriptOptions = {}): Promise<AgentTranscriptReadResult> {
+export async function readTranscript(
+  path: string,
+  options: ReadTranscriptOptions = {},
+): Promise<AgentTranscriptReadResult> {
   let content: string;
   try {
     const fileStat = await stat(path);

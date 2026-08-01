@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import { ToolResultBudget } from "../../src/context/budget/ToolResultBudget.js";
 import { buildAnthropicRequest } from "../../src/model/providers/anthropic/request.js";
 import { buildGoogleRequest } from "../../src/model/providers/google/request.js";
@@ -43,7 +42,7 @@ function requestWith(message: CanonicalMessage, toolCallId = "call-large-error")
 }
 
 test("tool text under token budget remains inline even when over legacy byte threshold", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-tool-result-inline-token-"));
+  const dir = await mkdtemp(join(tmpdir(), "sati-tool-result-inline-token-"));
   try {
     const budget = new ToolResultBudget({
       toolResultsDir: dir,
@@ -54,14 +53,19 @@ test("tool text under token budget remains inline even when over legacy byte thr
     const body = `search output start\n${"x".repeat(60_000)}\nsearch output tail`;
     assert.ok(Buffer.byteLength(body, "utf8") > 50_000, "fixture should exceed the old 50KB threshold");
 
-    const applied = await budget.applyToMessage({
-      role: "user",
-      content: [{
-        type: "tool_result",
-        toolCallId: "call-large-but-inline",
-        content: [{ type: "text", text: body }],
-      }],
-    }, { turnId: "turn-1" });
+    const applied = await budget.applyToMessage(
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "call-large-but-inline",
+            content: [{ type: "text", text: body }],
+          },
+        ],
+      },
+      { turnId: "turn-1" },
+    );
 
     assert.equal(applied.content[0]?.type, "tool_result");
   } finally {
@@ -70,7 +74,7 @@ test("tool text under token budget remains inline even when over legacy byte thr
 });
 
 test("tool text over token budget is persisted with expanded grep-first preview", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-tool-result-token-ref-"));
+  const dir = await mkdtemp(join(tmpdir(), "sati-tool-result-token-ref-"));
   try {
     const budget = new ToolResultBudget({
       toolResultsDir: dir,
@@ -78,25 +82,36 @@ test("tool text over token budget is persisted with expanded grep-first preview"
       maxResultSizeTokens: 10_000,
       previewBytes: 12_000,
     });
-    const body = Array.from({ length: 20_000 }, (_, index) => `candidate ${index}: unique evidence token ${index}`).join("\n");
+    const body = Array.from(
+      { length: 20_000 },
+      (_, index) => `candidate ${index}: unique evidence token ${index}`,
+    ).join("\n");
 
-    const applied = await budget.applyToMessage({
-      role: "user",
-      content: [{
-        type: "tool_result",
-        toolCallId: "call-over-token-budget",
-        content: [{ type: "text", text: body }],
-      }],
-    }, { turnId: "turn-1" });
+    const applied = await budget.applyToMessage(
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "call-over-token-budget",
+            content: [{ type: "text", text: body }],
+          },
+        ],
+      },
+      { turnId: "turn-1" },
+    );
 
-    const ref = applied.content.find((block) => block.type === "tool_result_reference");
+    const ref = applied.content.find(block => block.type === "tool_result_reference");
     assert.ok(ref, "expected a persisted tool_result_reference");
     assert.match(ref.readFilePath ?? "", /refs\/result-0001\.txt$/);
     assert.ok(Buffer.byteLength(ref.preview, "utf8") > 8_000, "expected a substantially larger preview");
 
     const openai = buildOpenAIRequest(requestWith({ ...applied, content: [ref] }, "call-over-token-budget"), model);
-    const openaiTool = openai.messages.find((message) => message.role === "tool");
-    assert.match(String(openaiTool?.content), /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt", output_mode: "content", head_limit: 20 \}/);
+    const openaiTool = openai.messages.find(message => message.role === "tool");
+    assert.match(
+      String(openaiTool?.content),
+      /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt", output_mode: "content", head_limit: 20 \}/,
+    );
     assert.match(String(openaiTool?.content), /Avoid paging through the whole file from offset 1/);
     assert.match(String(openaiTool?.content), /search candidates/);
   } finally {
@@ -105,27 +120,40 @@ test("tool text over token budget is persisted with expanded grep-first preview"
 });
 
 test("large tool error references preserve error semantics for model replay", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-tool-result-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "sati-tool-result-test-"));
   try {
-    const budget = new ToolResultBudget({ toolResultsDir: dir, maxResultSizeChars: 120, maxResultSizeTokens: 20, previewBytes: 80 });
-    const applied = await budget.applyToMessage({
-      role: "user",
-      content: [{
-        type: "tool_result",
-        toolCallId: "call-large-error",
-        isError: true,
-        content: [{ type: "text", text: `failure-start\n${"x".repeat(300)}\nfailure-tail` }],
-      }],
-    }, { turnId: "turn-1" });
+    const budget = new ToolResultBudget({
+      toolResultsDir: dir,
+      maxResultSizeChars: 120,
+      maxResultSizeTokens: 20,
+      previewBytes: 80,
+    });
+    const applied = await budget.applyToMessage(
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "call-large-error",
+            isError: true,
+            content: [{ type: "text", text: `failure-start\n${"x".repeat(300)}\nfailure-tail` }],
+          },
+        ],
+      },
+      { turnId: "turn-1" },
+    );
 
-    const ref = applied.content.find((block) => block.type === "tool_result_reference");
+    const ref = applied.content.find(block => block.type === "tool_result_reference");
     assert.ok(ref, "expected a persisted tool_result_reference");
     assert.equal(ref.isError, true);
 
     const openai = buildOpenAIRequest(requestWith(applied), model);
-    const openaiTool = openai.messages.find((message) => message.role === "tool");
+    const openaiTool = openai.messages.find(message => message.role === "tool");
     assert.match(String(openaiTool?.content), /Tool result preview only/);
-    assert.match(String(openaiTool?.content), /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt", output_mode: "content", head_limit: 20 \}/);
+    assert.match(
+      String(openaiTool?.content),
+      /grep\(\{ pattern: "<keyword>", path: ".*refs\/result-0001\.txt", output_mode: "content", head_limit: 20 \}/,
+    );
     assert.match(String(openaiTool?.content), /read_file\(\{ file_path: ".*refs\/result-0001\.txt"/);
 
     const anthropic = buildAnthropicRequest(requestWith(applied), model);
@@ -144,25 +172,35 @@ test("large tool error references preserve error semantics for model replay", as
 });
 
 test("multibyte truncated tool result references advertise read_file access", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-tool-result-multibyte-"));
+  const dir = await mkdtemp(join(tmpdir(), "sati-tool-result-multibyte-"));
   try {
-    const budget = new ToolResultBudget({ toolResultsDir: dir, maxResultSizeChars: 80, maxResultSizeTokens: 20, previewBytes: 40 });
-    const applied = await budget.applyToMessage({
-      role: "user",
-      content: [{
-        type: "tool_result",
-        toolCallId: "call-large-error",
-        content: [{ type: "text", text: "错误原因：" + "模型输出过长".repeat(20) }],
-      }],
-    }, { turnId: "turn-1" });
+    const budget = new ToolResultBudget({
+      toolResultsDir: dir,
+      maxResultSizeChars: 80,
+      maxResultSizeTokens: 20,
+      previewBytes: 40,
+    });
+    const applied = await budget.applyToMessage(
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "call-large-error",
+            content: [{ type: "text", text: "错误原因：" + "模型输出过长".repeat(20) }],
+          },
+        ],
+      },
+      { turnId: "turn-1" },
+    );
 
-    const ref = applied.content.find((block) => block.type === "tool_result_reference");
+    const ref = applied.content.find(block => block.type === "tool_result_reference");
     assert.ok(ref, "expected a persisted tool_result_reference");
     assert.equal(ref.hasMore, true);
     assert.ok(Buffer.byteLength(ref.preview, "utf8") < ref.originalBytes);
 
     const openai = buildOpenAIRequest(requestWith({ ...applied, content: [ref] }), model);
-    const openaiTool = openai.messages.find((message) => message.role === "tool");
+    const openaiTool = openai.messages.find(message => message.role === "tool");
     assert.match(String(openaiTool?.content), /grep/);
     assert.match(String(openaiTool?.content), /read_file/);
     assert.match(String(openaiTool?.content), /refs\/result-0001\.txt/);

@@ -589,6 +589,7 @@ export type RetrievalTraceStepKind =
   | "project_shortlist_built"
   | "project_selected"
   | "manifest_scanned"
+  | "semantic_recall"
   | "manifest_selected"
   | "files_loaded"
   | "context_rendered"

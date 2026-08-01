@@ -1,5 +1,5 @@
 import { isAbsolute, relative, resolve } from "node:path";
-import type { PilotDeckToolDefinition, PilotDeckToolRuntimeContext } from "../../tool/index.js";
+import type { SatiToolDefinition, SatiToolRuntimeContext } from "../../tool/index.js";
 import { buildPlanModeViolationMessage, buildPlanModeBashViolationMessage } from "../../tool/planModeConstraints.js";
 import { matchPermissionRule } from "../policy/matchPermissionRule.js";
 import type {
@@ -13,14 +13,14 @@ import type {
 
 export class PermissionRuntime {
   async decide(
-    tool: PilotDeckToolDefinition,
+    tool: SatiToolDefinition,
     input: unknown,
-    context: PilotDeckToolRuntimeContext,
+    context: SatiToolRuntimeContext,
     toolCallId: string,
   ): Promise<PermissionDecision> {
     const permissionContext = context.permissionContext;
     const sessionAllowRule = findMatchingRule(
-      permissionContext.rules.allow.filter((rule) => rule.source === "session"),
+      permissionContext.rules.allow.filter(rule => rule.source === "session"),
       tool.name,
       input,
       permissionContext,
@@ -124,9 +124,9 @@ export class PermissionRuntime {
   }
 
   private async allowSessionRule(
-    tool: PilotDeckToolDefinition,
+    tool: SatiToolDefinition,
     input: unknown,
-    context: PilotDeckToolRuntimeContext,
+    context: SatiToolRuntimeContext,
     toolCallId: string,
     rule: PermissionRule,
   ): Promise<PermissionDecision> {
@@ -146,7 +146,7 @@ export class PermissionRuntime {
 
 function normalizeToolPermission(
   result: PermissionResult | undefined,
-  tool: PilotDeckToolDefinition,
+  tool: SatiToolDefinition,
   input: unknown,
   toolCallId: string,
   context: PermissionContext,
@@ -177,7 +177,7 @@ function normalizeToolPermission(
 }
 
 function decideByMode(
-  tool: PilotDeckToolDefinition,
+  tool: SatiToolDefinition,
   input: unknown,
   toolCallId: string,
   context: PermissionContext,
@@ -227,7 +227,7 @@ function findMatchingRule(
   input: unknown,
   context: PermissionContext,
 ): PermissionRule | undefined {
-  return rules.find((rule) => matchPermissionRule(rule, toolName, input, context));
+  return rules.find(rule => matchPermissionRule(rule, toolName, input, context));
 }
 
 function allow(reason: PermissionDecisionReason): PermissionDecision {
@@ -248,7 +248,7 @@ function denyFromRule(rule: PermissionRule): PermissionDecision {
 }
 
 function askFromRule(
-  tool: PilotDeckToolDefinition,
+  tool: SatiToolDefinition,
   input: unknown,
   toolCallId: string,
   rule: PermissionRule,
@@ -262,7 +262,7 @@ function askFromRule(
 }
 
 function ask(
-  tool: PilotDeckToolDefinition,
+  tool: SatiToolDefinition,
   input: unknown,
   toolCallId: string,
   reason: PermissionDecisionReason,
@@ -275,7 +275,7 @@ function ask(
 }
 
 function createPermissionRequest(
-  tool: PilotDeckToolDefinition,
+  tool: SatiToolDefinition,
   input: unknown,
   toolCallId: string,
   reason: PermissionDecisionReason,
@@ -337,15 +337,11 @@ function summarizeInput(input: unknown): string {
 
 /**
  * Returns true when a filesystem write tool (write_file / edit_file) targets
- * a markdown file under the project-local `.pilotdeck/plans` directory.
+ * a markdown file under the project-local `.sati/plans` directory.
  * Resolves relative paths against the permission context cwd so `./foo.md`
  * and the absolute path both match.
  */
-function isPlanDirectoryWrite(
-  tool: PilotDeckToolDefinition,
-  input: unknown,
-  context: PermissionContext,
-): boolean {
+function isPlanDirectoryWrite(tool: SatiToolDefinition, input: unknown, context: PermissionContext): boolean {
   if (tool.kind !== "filesystem" || !context.planDirectoryPath) return false;
   const record = input as Record<string, unknown> | null;
   const filePath = record?.file_path ?? record?.filePath;
@@ -356,10 +352,10 @@ function isPlanDirectoryWrite(
   }
   const relativeToPlanDir = relative(context.planDirectoryPath, absolute);
   return (
-    relativeToPlanDir !== ""
-    && !isAbsolute(relativeToPlanDir)
-    && !relativeToPlanDir.startsWith("..")
-    && !relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+    relativeToPlanDir !== "" &&
+    !isAbsolute(relativeToPlanDir) &&
+    !relativeToPlanDir.startsWith("..") &&
+    !relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
   );
 }
 

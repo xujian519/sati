@@ -1,6 +1,6 @@
-import { AlertTriangle, RefreshCw, X } from 'lucide-react';
-import type { ReactNode } from 'react';
-import type { CodeEditorFile } from '../../types/types';
+import { AlertTriangle, RefreshCw, X } from "lucide-react";
+import type { ReactNode } from "react";
+import type { CodeEditorFile } from "../../types/types";
 
 type CodeEditorLoadErrorProps = {
   file: CodeEditorFile;
@@ -36,13 +36,9 @@ export default function CodeEditorLoadError({
         <AlertTriangle className="h-5 w-5" strokeWidth={1.75} />
       </div>
       <div className="space-y-1">
-        <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-          {labels.title}
-        </h3>
+        <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{labels.title}</h3>
         <p className="text-xs text-neutral-600 dark:text-neutral-400">{labels.description}</p>
-        <p className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">
-          {file.path}
-        </p>
+        <p className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">{file.path}</p>
       </div>
       <pre className="max-h-32 w-full overflow-auto whitespace-pre-wrap rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-mono text-xxs text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
         {errorMessage}

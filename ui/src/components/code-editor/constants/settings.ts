@@ -1,9 +1,9 @@
 export const CODE_EDITOR_STORAGE_KEYS = {
-  theme: 'codeEditorTheme',
-  wordWrap: 'codeEditorWordWrap',
-  showMinimap: 'codeEditorShowMinimap',
-  lineNumbers: 'codeEditorLineNumbers',
-  fontSize: 'codeEditorFontSize',
+  theme: "codeEditorTheme",
+  wordWrap: "codeEditorWordWrap",
+  showMinimap: "codeEditorShowMinimap",
+  lineNumbers: "codeEditorLineNumbers",
+  fontSize: "codeEditorFontSize",
 } as const;
 
 export const CODE_EDITOR_DEFAULTS = {
@@ -11,7 +11,7 @@ export const CODE_EDITOR_DEFAULTS = {
   wordWrap: false,
   minimapEnabled: true,
   showLineNumbers: true,
-  fontSize: '12',
+  fontSize: "12",
 } as const;
 
-export const CODE_EDITOR_SETTINGS_CHANGED_EVENT = 'codeEditorSettingsChanged';
+export const CODE_EDITOR_SETTINGS_CHANGED_EVENT = "codeEditorSettingsChanged";

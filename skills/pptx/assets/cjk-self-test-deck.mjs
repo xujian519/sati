@@ -5,7 +5,7 @@ export default async function build({ createDeck, layouts, resolveDesignTokens }
     density: 'presentation',
   });
   const pptx = await createDeck({
-    title: 'PilotDeck 中文排版回归测试',
+    title: 'Sati 中文排版回归测试',
     subject: '验证中文、中英混排、表格和图表的原生 PowerPoint 输出',
     lang: 'zh-CN',
     tokens,
@@ -15,7 +15,7 @@ export default async function build({ createDeck, layouts, resolveDesignTokens }
     eyebrow: '跨平台排版基线',
     title: '中文演示文稿也要保持可读、可改、可验证',
     subtitle: '覆盖中文换行、中英混排、百分比、数字与 PowerPoint 字体替换。',
-    meta: 'PilotDeck · macOS / Windows · 2026',
+    meta: 'Sati · macOS / Windows · 2026',
   });
 
   layouts.twoColumnSlide(pptx, tokens, {
@@ -43,7 +43,7 @@ export default async function build({ createDeck, layouts, resolveDesignTokens }
       ['关键内容覆盖', '11 / 9 / 7', '通过'],
       ['重复单位检测样例', '差距 −5元 元', '需复核'],
     ],
-    source: 'PilotDeck self-test fixture',
+    source: 'Sati self-test fixture',
     page: 3,
   });
 

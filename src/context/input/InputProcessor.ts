@@ -93,10 +93,10 @@ export class InputProcessor {
   }
 
   private findCommand(name: string): ContributedCommand | undefined {
-    return this.extension.listCommands().find((command) => command.name === name);
+    return this.extension.listCommands().find(command => command.name === name);
   }
 }
 
 function cloneBlocks(blocks: CanonicalContentBlock[]): CanonicalContentBlock[] {
-  return blocks.map((block) => ({ ...block }));
+  return blocks.map(block => ({ ...block }));
 }

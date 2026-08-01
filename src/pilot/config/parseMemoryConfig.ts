@@ -5,7 +5,9 @@ import {
   type PilotConfigDiagnostic,
   type PilotMemoryApiType,
   type PilotMemoryConfig,
+  type PilotMemoryEmbeddingConfig,
   type PilotMemoryReasoningMode,
+  type PilotMemoryRerankConfig,
   type PilotMemoryScheduleConfig,
 } from "./types.js";
 
@@ -44,14 +46,25 @@ export function parseMemoryConfig(
   }
 
   const memoryModel = parseMemoryModelRef(rawMemory.model, diagnostics, modelConfig);
-  const schedule = parseMemorySchedule(rawMemory.schedule, diagnostics)
-    ?? buildScheduleFromFlatFields(rawMemory);
+  const schedule = parseMemorySchedule(rawMemory.schedule, diagnostics) ?? buildScheduleFromFlatFields(rawMemory);
+  const embedding = parseMemoryEmbeddingConfig(rawMemory.embedding, diagnostics, modelConfig);
 
   const KNOWN_FIELDS = new Set([
-    "enabled", "provider", "rootDir", "captureStrategy", "includeAssistant",
-    "maxMessageChars", "retrievalTimeoutMs", "model", "apiType", "schedule",
+    "enabled",
+    "provider",
+    "rootDir",
+    "captureStrategy",
+    "includeAssistant",
+    "maxMessageChars",
+    "retrievalTimeoutMs",
+    "model",
+    "apiType",
+    "schedule",
     "heartbeatBatchSize",
-    "reasoningMode", "autoIndexIntervalMinutes", "autoDreamIntervalMinutes",
+    "reasoningMode",
+    "autoIndexIntervalMinutes",
+    "autoDreamIntervalMinutes",
+    "embedding",
   ]);
   for (const key of Object.keys(rawMemory)) {
     if (!KNOWN_FIELDS.has(key)) {
@@ -72,15 +85,157 @@ export function parseMemoryConfig(
     captureStrategy: readCaptureStrategy(rawMemory.captureStrategy),
     includeAssistant: readBoolean(rawMemory.includeAssistant, true, "memory.includeAssistant"),
     maxMessageChars: readOptionalPositiveNumber(rawMemory.maxMessageChars, "memory.maxMessageChars"),
-    retrievalTimeoutMs: readOptionalPositiveInteger(
-      rawMemory.retrievalTimeoutMs,
-      "memory.retrievalTimeoutMs",
-    ),
+    retrievalTimeoutMs: readOptionalPositiveInteger(rawMemory.retrievalTimeoutMs, "memory.retrievalTimeoutMs"),
     model: memoryModel,
     apiType: readMemoryApiType(rawMemory.apiType),
     schedule,
     heartbeatBatchSize: readOptionalPositiveInteger(rawMemory.heartbeatBatchSize, "memory.heartbeatBatchSize"),
+    embedding,
   };
+}
+
+const MEMORY_EMBEDDING_KNOWN_FIELDS = new Set([
+  "enabled",
+  "provider",
+  "model",
+  "baseUrl",
+  "apiKey",
+  "dimensions",
+  "timeoutMs",
+  "batchSize",
+  "indexMemory",
+  "indexWiki",
+  "rerank",
+]);
+
+const MEMORY_RERANK_KNOWN_FIELDS = new Set(["enabled", "provider", "model", "baseUrl", "apiKey", "timeoutMs", "topN"]);
+
+function parseMemoryRerankConfig(
+  value: unknown,
+  diagnostics: PilotConfigDiagnostic[],
+  modelConfig?: ModelConfig,
+): PilotMemoryRerankConfig | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", "memory.embedding.rerank must be an object.");
+  }
+
+  const provider = readOptionalString(value.provider, "memory.embedding.rerank.provider");
+  const baseUrl = readOptionalString(value.baseUrl, "memory.embedding.rerank.baseUrl");
+  if (!provider && !baseUrl) {
+    throw new PilotConfigError(
+      "CONFIG_MEMORY_RERANK_INVALID",
+      "memory.embedding.rerank requires either provider or baseUrl.",
+    );
+  }
+  if (provider && modelConfig && !modelConfig.providers[provider]) {
+    diagnostics.push({
+      code: "CONFIG_MEMORY_RERANK_PROVIDER_NOT_FOUND",
+      severity: "warning",
+      message: `memory.embedding.rerank references unknown provider ${provider}.`,
+      path: "memory.embedding.rerank.provider",
+      recoverable: true,
+    });
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!MEMORY_RERANK_KNOWN_FIELDS.has(key)) {
+      diagnostics.push({
+        code: "CONFIG_MEMORY_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown memory.embedding.rerank field ${key}.`,
+        path: `memory.embedding.rerank.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+
+  const rerank: PilotMemoryRerankConfig = {
+    enabled: readBoolean(value.enabled, true, "memory.embedding.rerank.enabled"),
+  };
+  if (provider) rerank.provider = provider;
+  if (baseUrl) rerank.baseUrl = baseUrl;
+  const model = readOptionalString(value.model, "memory.embedding.rerank.model");
+  if (model !== undefined) rerank.model = model;
+  const apiKey = readOptionalString(value.apiKey, "memory.embedding.rerank.apiKey");
+  if (apiKey !== undefined) rerank.apiKey = apiKey;
+  const timeoutMs = readOptionalPositiveInteger(value.timeoutMs, "memory.embedding.rerank.timeoutMs");
+  if (timeoutMs !== undefined) rerank.timeoutMs = timeoutMs;
+  const topN = readOptionalPositiveInteger(value.topN, "memory.embedding.rerank.topN");
+  if (topN !== undefined) rerank.topN = topN;
+
+  return rerank;
+}
+
+function parseMemoryEmbeddingConfig(
+  value: unknown,
+  diagnostics: PilotConfigDiagnostic[],
+  modelConfig?: ModelConfig,
+): PilotMemoryEmbeddingConfig | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", "memory.embedding must be an object.");
+  }
+
+  const provider = readOptionalString(value.provider, "memory.embedding.provider");
+  const baseUrl = readOptionalString(value.baseUrl, "memory.embedding.baseUrl");
+  const model = readOptionalString(value.model, "memory.embedding.model");
+
+  if (!provider && !baseUrl) {
+    throw new PilotConfigError(
+      "CONFIG_MEMORY_EMBEDDING_INVALID",
+      "memory.embedding requires either provider or baseUrl.",
+    );
+  }
+  if (!model) {
+    throw new PilotConfigError("CONFIG_MEMORY_EMBEDDING_INVALID", "memory.embedding requires model.");
+  }
+  if (provider && modelConfig && !modelConfig.providers[provider]) {
+    diagnostics.push({
+      code: "CONFIG_MEMORY_EMBEDDING_PROVIDER_NOT_FOUND",
+      severity: "warning",
+      message: `memory.embedding references unknown provider ${provider}.`,
+      path: "memory.embedding.provider",
+      recoverable: true,
+    });
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!MEMORY_EMBEDDING_KNOWN_FIELDS.has(key)) {
+      diagnostics.push({
+        code: "CONFIG_MEMORY_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown memory.embedding field ${key}.`,
+        path: `memory.embedding.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+
+  const embedding: PilotMemoryEmbeddingConfig = {
+    enabled: readBoolean(value.enabled, true, "memory.embedding.enabled"),
+    model,
+    indexMemory: readBoolean(value.indexMemory, true, "memory.embedding.indexMemory"),
+    indexWiki: readBoolean(value.indexWiki, true, "memory.embedding.indexWiki"),
+  };
+  if (provider) embedding.provider = provider;
+  if (baseUrl) embedding.baseUrl = baseUrl;
+  const apiKey = readOptionalString(value.apiKey, "memory.embedding.apiKey");
+  if (apiKey !== undefined) embedding.apiKey = apiKey;
+  const dimensions = readOptionalPositiveInteger(value.dimensions, "memory.embedding.dimensions");
+  if (dimensions !== undefined) embedding.dimensions = dimensions;
+  const timeoutMs = readOptionalPositiveInteger(value.timeoutMs, "memory.embedding.timeoutMs");
+  if (timeoutMs !== undefined) embedding.timeoutMs = timeoutMs;
+  const batchSize = readOptionalPositiveInteger(value.batchSize, "memory.embedding.batchSize");
+  if (batchSize !== undefined) embedding.batchSize = batchSize;
+  const rerank = parseMemoryRerankConfig(value.rerank, diagnostics, modelConfig);
+  if (rerank !== undefined) embedding.rerank = rerank;
+
+  return embedding;
 }
 
 function parseMemorySchedule(
@@ -149,17 +304,11 @@ function parseMemoryModelRef(
     return undefined;
   }
   if (typeof value !== "string") {
-    throw new PilotConfigError(
-      "CONFIG_MEMORY_MODEL_INVALID",
-      'memory.model must be a "provider/model" string.',
-    );
+    throw new PilotConfigError("CONFIG_MEMORY_MODEL_INVALID", 'memory.model must be a "provider/model" string.');
   }
   const sep = value.indexOf("/");
   if (sep < 0) {
-    throw new PilotConfigError(
-      "CONFIG_MEMORY_MODEL_INVALID",
-      'memory.model must use "provider/model" format.',
-    );
+    throw new PilotConfigError("CONFIG_MEMORY_MODEL_INVALID", 'memory.model must use "provider/model" format.');
   }
   if (modelConfig) {
     const providerId = value.slice(0, sep);
@@ -190,11 +339,11 @@ function readMemoryApiType(value: unknown): PilotMemoryApiType | undefined {
     return undefined;
   }
   if (
-    value === "openai-responses"
-    || value === "responses"
-    || value === "openai-completions"
-    || value === "anthropic"
-    || value === "google"
+    value === "openai-responses" ||
+    value === "responses" ||
+    value === "openai-completions" ||
+    value === "anthropic" ||
+    value === "google"
   ) {
     return value;
   }
@@ -224,7 +373,10 @@ function readCaptureStrategy(value: unknown): PilotMemoryConfig["captureStrategy
   if (value === "last_turn" || value === "full_session") {
     return value;
   }
-  throw new PilotConfigError("CONFIG_MEMORY_CAPTURE_INVALID", "memory.captureStrategy must be last_turn or full_session.");
+  throw new PilotConfigError(
+    "CONFIG_MEMORY_CAPTURE_INVALID",
+    "memory.captureStrategy must be last_turn or full_session.",
+  );
 }
 
 function readString(value: unknown, fallback: string, path: string): string {

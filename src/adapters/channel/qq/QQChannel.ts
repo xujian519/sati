@@ -1,8 +1,13 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
-import { QQBotGateway, type QQBotCredentials, type QQGroupMessageEvent, type QQC2CMessageEvent } from "./qqbot-gateway.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import {
+  QQBotGateway,
+  type QQBotCredentials,
+  type QQGroupMessageEvent,
+  type QQC2CMessageEvent,
+} from "./qqbot-gateway.js";
 import { QQSessionMapper, type QQSessionMapperState } from "./QQSessionMapper.js";
 import { renderQQEvent } from "./qq-render.js";
 
@@ -88,7 +93,9 @@ export class QQChannel implements ChannelAdapter {
     });
 
     this.botGateway.on("group_message", (event: QQGroupMessageEvent) => {
-      this.logger?.info?.(`qq: [group_msg] group=${event.group_openid} user=${event.author.member_openid} content="${event.content}"`);
+      this.logger?.info?.(
+        `qq: [group_msg] group=${event.group_openid} user=${event.author.member_openid} content="${event.content}"`,
+      );
       void this.handleGroupMessage(event);
     });
 
@@ -375,10 +382,13 @@ export class QQChannel implements ChannelAdapter {
 
   private parseEnvList(value: string | undefined): string[] | undefined {
     if (!value) return undefined;
-    return value.split(",").map((s) => s.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

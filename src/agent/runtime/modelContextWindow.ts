@@ -9,9 +9,7 @@ export type ResolveRoutedModelMaxContextTokensInput = {
   model: string;
 };
 
-export function resolveRoutedModelMaxContextTokens(
-  input: ResolveRoutedModelMaxContextTokensInput,
-): number | undefined {
+export function resolveRoutedModelMaxContextTokens(input: ResolveRoutedModelMaxContextTokensInput): number | undefined {
   if (
     input.agentMaxContextTokens !== undefined &&
     input.provider === input.agentModel.provider &&

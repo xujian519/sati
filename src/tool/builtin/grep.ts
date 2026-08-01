@@ -1,14 +1,9 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
-import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
-import {
-  isIgnoredPath,
-  normalizeRelativePath,
-  runRipgrep,
-  splitRipgrepLines,
-} from "./filesystem/ripgrep.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
+import { resolveSatiWorkspacePath } from "./filesystem/pathSafety.js";
+import { isIgnoredPath, normalizeRelativePath, runRipgrep, splitRipgrepLines } from "./filesystem/ripgrep.js";
 
 export type GrepInput = {
   pattern: string;
@@ -29,18 +24,9 @@ export type GrepInput = {
 
 const DEFAULT_HEAD_LIMIT = 250;
 const MAX_COLUMNS = 500;
-const EXCLUDED_DIRECTORY_GLOBS = [
-  "!.git",
-  "!.svn",
-  "!.hg",
-  "!.bzr",
-  "!.jj",
-  "!.sl",
-  "!node_modules",
-  "!dist",
-] as const;
+const EXCLUDED_DIRECTORY_GLOBS = ["!.git", "!.svn", "!.hg", "!.bzr", "!.jj", "!.sl", "!node_modules", "!dist"] as const;
 
-export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
+export function createGrepTool(): SatiToolDefinition<GrepInput> {
   return {
     name: "grep",
     aliases: ["Grep"],
@@ -62,8 +48,7 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
         },
         glob: {
           type: "string",
-          description:
-            "Glob pattern to filter files (for example '*.js' or '*.{ts,tsx}'). Maps to ripgrep's --glob.",
+          description: "Glob pattern to filter files (for example '*.js' or '*.{ts,tsx}'). Maps to ripgrep's --glob.",
         },
         output_mode: {
           type: "string",
@@ -98,8 +83,7 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
         },
         type: {
           type: "string",
-          description:
-            "File type to search (for example 'js', 'ts', 'py'). Maps to ripgrep's --type filter.",
+          description: "File type to search (for example 'js', 'ts', 'py'). Maps to ripgrep's --type filter.",
         },
         head_limit: {
           type: "integer",
@@ -112,8 +96,7 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
         },
         multiline: {
           type: "boolean",
-          description:
-            "When true, enable multiline mode where . matches newlines and patterns can span lines.",
+          description: "When true, enable multiline mode where . matches newlines and patterns can span lines.",
         },
       },
     },
@@ -121,9 +104,9 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context) => {
-      const resolved = resolvePilotDeckWorkspacePath(input.path ?? ".", context, { mustExist: true });
+      const resolved = resolveSatiWorkspacePath(input.path ?? ".", context, { mustExist: true });
       if (!resolved.ok) {
-        throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+        throw new SatiToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
       const mode = input.output_mode ?? "files_with_matches";
@@ -138,21 +121,21 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
 
       if (mode === "content") {
         const parsedLines = splitRipgrepLines(stdout)
-          .map((line) => parseContentLine(line))
-          .filter((line) => line.type === "separator" || !isIgnoredPath(line.file));
-        const renderedLines = parsedLines.map((line) =>
-          line.type === "separator"
-            ? line.raw
-            : formatContentLine(line, target.workspaceBaseDir, input["-n"] ?? true),
+          .map(line => parseContentLine(line))
+          .filter(line => line.type === "separator" || !isIgnoredPath(line.file));
+        const renderedLines = parsedLines.map(line =>
+          line.type === "separator" ? line.raw : formatContentLine(line, target.workspaceBaseDir, input["-n"] ?? true),
         );
         const page = paginate(renderedLines, input.head_limit, input.offset);
         const files = uniqueSorted(
           parsedLines
             .filter((line): line is Extract<ParsedContentLine, { type: "content" }> => line.type === "content")
-            .map((line) => toWorkspaceFile(line.file, target.workspaceBaseDir)),
+            .map(line => toWorkspaceFile(line.file, target.workspaceBaseDir)),
         );
         return {
-          content: [{ type: "text", text: formatPagedTextResult(page.items.join("\n"), page, parsedLines.length, input) }],
+          content: [
+            { type: "text", text: formatPagedTextResult(page.items.join("\n"), page, parsedLines.length, input) },
+          ],
           data: {
             mode,
             files,
@@ -165,20 +148,30 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
 
       if (mode === "count") {
         const countEntries = splitRipgrepLines(stdout)
-          .map((line) => parseCountEntry(line))
+          .map(line => parseCountEntry(line))
           .filter((entry): entry is ParsedCountEntry => entry !== undefined && !isIgnoredPath(entry.file))
           .sort((left, right) => left.file.localeCompare(right.file));
         const totalMatches = countEntries.reduce((sum, entry) => sum + entry.count, 0);
-        const renderedEntries = countEntries.map((entry) => ({
+        const renderedEntries = countEntries.map(entry => ({
           file: toWorkspaceFile(entry.file, target.workspaceBaseDir),
           text: `${toWorkspaceFile(entry.file, target.workspaceBaseDir)}:${entry.count}`,
         }));
         const page = paginate(renderedEntries, input.head_limit, input.offset);
         return {
-          content: [{ type: "text", text: formatPagedTextResult(page.items.map((entry) => entry.text).join("\n"), page, countEntries.length, input) }],
+          content: [
+            {
+              type: "text",
+              text: formatPagedTextResult(
+                page.items.map(entry => entry.text).join("\n"),
+                page,
+                countEntries.length,
+                input,
+              ),
+            },
+          ],
           data: {
             mode,
-            files: page.items.map((entry) => entry.file),
+            files: page.items.map(entry => entry.file),
             count: totalMatches,
             truncated: page.truncated,
           },
@@ -188,12 +181,14 @@ export function createGrepTool(): PilotDeckToolDefinition<GrepInput> {
 
       const rawFiles = splitRipgrepLines(stdout)
         .map(normalizeRelativePath)
-        .filter((file) => !isIgnoredPath(file));
+        .filter(file => !isIgnoredPath(file));
       const sortedFiles = await sortFilesByModifiedTime(rawFiles, target.cwd);
-      const workspaceFiles = sortedFiles.map((file) => toWorkspaceFile(file, target.workspaceBaseDir));
+      const workspaceFiles = sortedFiles.map(file => toWorkspaceFile(file, target.workspaceBaseDir));
       const page = paginate(workspaceFiles, input.head_limit, input.offset);
       return {
-        content: [{ type: "text", text: formatPagedTextResult(page.items.join("\n"), page, workspaceFiles.length, input) }],
+        content: [
+          { type: "text", text: formatPagedTextResult(page.items.join("\n"), page, workspaceFiles.length, input) },
+        ],
         data: {
           mode,
           files: page.items,
@@ -226,7 +221,10 @@ type ParsedCountEntry = {
   count: number;
 };
 
-async function resolveSearchTarget(absolutePath: string, relativePath: string): Promise<{
+async function resolveSearchTarget(
+  absolutePath: string,
+  relativePath: string,
+): Promise<{
   cwd: string;
   target: string;
   workspaceBaseDir: string;
@@ -248,11 +246,7 @@ async function resolveSearchTarget(absolutePath: string, relativePath: string): 
   };
 }
 
-function buildRipgrepArgs(
-  input: GrepInput,
-  mode: NonNullable<GrepInput["output_mode"]>,
-  target: string,
-): string[] {
+function buildRipgrepArgs(input: GrepInput, mode: NonNullable<GrepInput["output_mode"]>, target: string): string[] {
   const args = ["--hidden", "--max-columns", String(MAX_COLUMNS)];
   for (const excluded of EXCLUDED_DIRECTORY_GLOBS) {
     args.push("--glob", excluded);
@@ -325,10 +319,7 @@ function parseContentLine(line: string): ParsedContentLine {
   }
   const match = line.match(/^(.*?)([:-])(\d+)([:-])(.*)$/);
   if (!match) {
-    throw new PilotDeckToolRuntimeError(
-      "tool_execution_failed",
-      `Unexpected ripgrep content output: ${line}`,
-    );
+    throw new SatiToolRuntimeError("tool_execution_failed", `Unexpected ripgrep content output: ${line}`);
   }
   return {
     type: "content",
@@ -367,18 +358,17 @@ function parseCountEntry(line: string): ParsedCountEntry | undefined {
 }
 
 async function sortFilesByModifiedTime(files: string[], cwd: string): Promise<string[]> {
-  const stats = await Promise.allSettled(files.map((file) => stat(path.join(cwd, file))));
+  const stats = await Promise.allSettled(files.map(file => stat(path.join(cwd, file))));
   return files
     .map((file, index) => ({
       file,
-      modifiedAt:
-        stats[index]?.status === "fulfilled" ? (stats[index].value.mtimeMs ?? 0) : 0,
+      modifiedAt: stats[index]?.status === "fulfilled" ? (stats[index].value.mtimeMs ?? 0) : 0,
     }))
     .sort((left, right) => {
       const delta = right.modifiedAt - left.modifiedAt;
       return delta !== 0 ? delta : left.file.localeCompare(right.file);
     })
-    .map((entry) => entry.file);
+    .map(entry => entry.file);
 }
 
 function paginate<T>(
@@ -419,7 +409,9 @@ function formatPagedTextResult(
     `[grep pagination] returned=${page.items.length} total=${totalEntries} offset=${page.offset}${page.limit !== undefined ? ` limit=${page.limit}` : ""} truncated=${page.truncated}`,
   );
   if (page.truncated && page.nextOffset !== undefined) {
-    lines.push(`More results are available. Call grep again with offset=${page.nextOffset}${input.head_limit !== undefined ? ` and head_limit=${input.head_limit}` : ""}.`);
+    lines.push(
+      `More results are available. Call grep again with offset=${page.nextOffset}${input.head_limit !== undefined ? ` and head_limit=${input.head_limit}` : ""}.`,
+    );
   }
   return lines.join("\n");
 }

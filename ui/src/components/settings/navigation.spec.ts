@@ -3,9 +3,7 @@ import { mapInitialTabToMenuKey } from "./navigation";
 
 describe("mapInitialTabToMenuKey", () => {
   it("routes the Office preview deep link to its dedicated page", () => {
-    expect(mapInitialTabToMenuKey("config:officePreview")).toBe(
-      "officePreview",
-    );
+    expect(mapInitialTabToMenuKey("config:officePreview")).toBe("officePreview");
   });
 
   it("routes legacy config sections to their dedicated pages", () => {

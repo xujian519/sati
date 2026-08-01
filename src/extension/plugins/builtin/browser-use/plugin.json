@@ -5,11 +5,7 @@
   "mcpServers": {
     "browser-use": {
       "command": "/usr/local/bin/playwright-mcp",
-      "args": [
-        "--browser",
-        "chromium",
-        "--allow-unrestricted-file-access"
-      ],
+      "args": ["--browser", "chromium", "--allow-unrestricted-file-access"],
       "perSession": true
     }
   }

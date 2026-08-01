@@ -1,7 +1,7 @@
-import { ExternalLink, KeyRound, X } from 'lucide-react';
-import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
-import { IS_PLATFORM } from '../../../constants/config';
-import type { CliProvider } from '../types';
+import { ExternalLink, KeyRound, X } from "lucide-react";
+import StandaloneShell from "../../standalone-shell/view/StandaloneShell";
+import { IS_PLATFORM } from "../../../constants/config";
+import type { CliProvider } from "../types";
 
 type LoginModalProject = {
   name?: string;
@@ -34,36 +34,36 @@ const getProviderCommand = ({
     return customCommand;
   }
 
-  if (provider === 'pilotdeck') {
-    return 'pilotdeck --dangerously-skip-permissions /login';
+  if (provider === "sati") {
+    return "sati --dangerously-skip-permissions /login";
   }
 
-  if (provider === 'claude') {
-    return 'claude --dangerously-skip-permissions /login';
+  if (provider === "claude") {
+    return "claude --dangerously-skip-permissions /login";
   }
 
-  if (provider === 'cursor') {
-    return 'cursor-agent login';
+  if (provider === "cursor") {
+    return "cursor-agent login";
   }
 
-  if (provider === 'codex') {
-    return IS_PLATFORM ? 'codex login --device-auth' : 'codex login';
+  if (provider === "codex") {
+    return IS_PLATFORM ? "codex login --device-auth" : "codex login";
   }
 
-  return 'gemini status';
+  return "gemini status";
 };
 
 const getProviderTitle = (provider: CliProvider) => {
-  if (provider === 'pilotdeck') return 'OpenBMB PilotDeck API Login';
-  if (provider === 'claude') return 'Anthropic API Login';
-  if (provider === 'cursor') return 'Cursor CLI Login';
-  if (provider === 'codex') return 'Codex CLI Login';
-  return 'Gemini CLI Configuration';
+  if (provider === "sati") return "Sati API Login";
+  if (provider === "claude") return "Anthropic API Login";
+  if (provider === "cursor") return "Cursor CLI Login";
+  if (provider === "codex") return "Codex CLI Login";
+  return "Gemini CLI Configuration";
 };
 
 const normalizeProject = (project?: LoginModalProject | null) => {
-  const normalizedName = project?.name || 'default';
-  const normalizedFullPath = project?.fullPath ?? project?.path ?? (IS_PLATFORM ? '/workspace' : '');
+  const normalizedName = project?.name || "default";
+  const normalizedFullPath = project?.fullPath ?? project?.path ?? (IS_PLATFORM ? "/workspace" : "");
 
   return {
     name: normalizedName,
@@ -76,7 +76,7 @@ const normalizeProject = (project?: LoginModalProject | null) => {
 export default function ProviderLoginModal({
   isOpen,
   onClose,
-  provider = 'pilotdeck',
+  provider = "sati",
   project = null,
   onComplete,
   customCommand,
@@ -110,7 +110,7 @@ export default function ProviderLoginModal({
         </div>
 
         <div className="flex-1 overflow-hidden">
-          {provider === 'gemini' ? (
+          {provider === "gemini" ? (
             <div className="flex h-full flex-col items-center justify-center bg-gray-50 p-8 text-center dark:bg-gray-900/50">
               <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
                 <KeyRound className="h-8 w-8 text-blue-600 dark:text-blue-400" />

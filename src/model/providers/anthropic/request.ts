@@ -47,20 +47,19 @@ type AnthropicTool = {
  */
 export const ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME = "__output__";
 
-export function buildAnthropicRequest(
-  request: CanonicalModelRequest,
-  model: ModelDefinition,
-): AnthropicRequestBody {
-  const thinkingPlan = resolveThinkingPlan(request.thinking, { id: "anthropic", protocol: "anthropic", url: "", apiKey: "", headers: {}, models: {} }, model);
+export function buildAnthropicRequest(request: CanonicalModelRequest, model: ModelDefinition): AnthropicRequestBody {
+  const thinkingPlan = resolveThinkingPlan(
+    request.thinking,
+    { id: "anthropic", protocol: "anthropic", url: "", apiKey: "", headers: {}, models: {} },
+    model,
+  );
   throwIfUnsupportedThinkingPlan(thinkingPlan, request);
   // A3: lower outputSchema → forced hidden tool. This goes BEFORE the
   // user-supplied tools so the dispatch order is stable, but Anthropic
   // does not actually care about ordering. We force `tool_choice` to point
   // at it unless `outputSchema.strict === false`.
   const baseTools = request.tools?.map(toAnthropicTool) ?? [];
-  const outputTool = request.outputSchema
-    ? toAnthropicStructuredOutputTool(request.outputSchema)
-    : null;
+  const outputTool = request.outputSchema ? toAnthropicStructuredOutputTool(request.outputSchema) : null;
 
   let toolChoice: Record<string, unknown> | undefined;
   if (outputTool && request.outputSchema?.strict !== false) {
@@ -79,9 +78,7 @@ export function buildAnthropicRequest(
       ? request.cacheBreakpoints.slice(-MAX_MESSAGE_BREAKPOINTS)
       : request.cacheBreakpoints
     : null;
-  const cacheBreakpoints = trimmedBreakpoints
-    ? new Set(trimmedBreakpoints)
-    : null;
+  const cacheBreakpoints = trimmedBreakpoints ? new Set(trimmedBreakpoints) : null;
 
   return {
     model: request.model,
@@ -97,25 +94,23 @@ export function buildAnthropicRequest(
     tools: tools.length > 0 ? tools : undefined,
     tool_choice: toolChoice,
     temperature: request.temperature,
-    thinking: thinkingPlan.enabled && thinkingPlan.thinkingType
-      ? {
-          type: thinkingPlan.thinkingType === "adaptive" ? "adaptive" : "enabled",
-          ...(thinkingPlan.thinkingType === "enabled" && thinkingPlan.budgetTokens !== undefined
-            ? { budget_tokens: thinkingPlan.budgetTokens }
-            : {}),
-        }
-      : undefined,
-    output_config: thinkingPlan.useAnthropicOutputEffort && thinkingPlan.effort
-      ? { effort: thinkingPlan.effort }
-      : undefined,
+    thinking:
+      thinkingPlan.enabled && thinkingPlan.thinkingType
+        ? {
+            type: thinkingPlan.thinkingType === "adaptive" ? "adaptive" : "enabled",
+            ...(thinkingPlan.thinkingType === "enabled" && thinkingPlan.budgetTokens !== undefined
+              ? { budget_tokens: thinkingPlan.budgetTokens }
+              : {}),
+          }
+        : undefined,
+    output_config:
+      thinkingPlan.useAnthropicOutputEffort && thinkingPlan.effort ? { effort: thinkingPlan.effort } : undefined,
     stream: request.stream,
     metadata: toAnthropicMetadata(request.metadata),
   };
 }
 
-function toAnthropicStructuredOutputTool(
-  schema: CanonicalModelRequest["outputSchema"] & object,
-): AnthropicTool {
+function toAnthropicStructuredOutputTool(schema: CanonicalModelRequest["outputSchema"] & object): AnthropicTool {
   return {
     name: ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME,
     description:
@@ -125,10 +120,7 @@ function toAnthropicStructuredOutputTool(
   };
 }
 
-function toAnthropicMessage(
-  message: CanonicalMessage,
-  markCacheBreakpoint: boolean,
-): AnthropicMessage {
+function toAnthropicMessage(message: CanonicalMessage, markCacheBreakpoint: boolean): AnthropicMessage {
   const content = messageContent(message).map(toAnthropicContentBlock);
 
   // A4: attach `cache_control: { type: "ephemeral" }` to the LAST content
@@ -197,10 +189,12 @@ function toAnthropicContentBlock(block: CanonicalContentBlock): unknown {
       return {
         type: "tool_result",
         tool_use_id: block.toolCallId,
-        content: [{
-          type: "text",
-          text: formatToolResultReferenceText(block),
-        }],
+        content: [
+          {
+            type: "text",
+            text: formatToolResultReferenceText(block),
+          },
+        ],
         is_error: block.isError,
       };
     case "media_reference":

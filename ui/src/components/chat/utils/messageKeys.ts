@@ -1,7 +1,7 @@
-import type { ChatMessage } from '../types/types';
+import type { ChatMessage } from "../types/types";
 
 const toMessageKeyPart = (value: unknown): string | null => {
-  if (typeof value !== 'string' && typeof value !== 'number') {
+  if (typeof value !== "string" && typeof value !== "number") {
     return null;
   }
 
@@ -32,7 +32,7 @@ export const getIntrinsicMessageKey = (message: ChatMessage): string | null => {
     return null;
   }
 
-  const contentPreview = typeof message.content === 'string' ? message.content.slice(0, 48) : '';
-  const toolName = typeof message.toolName === 'string' ? message.toolName : '';
+  const contentPreview = typeof message.content === "string" ? message.content.slice(0, 48) : "";
+  const toolName = typeof message.toolName === "string" ? message.toolName : "";
   return `message-${message.type}-${timestamp}-${toolName}-${contentPreview}`;
 };

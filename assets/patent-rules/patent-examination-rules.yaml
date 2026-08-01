@@ -1,0 +1,760 @@
+# 专利审查指南规则集
+# 来源：data/wiki/审查指南/ （审查指南2023版，86张卡片）
+# 覆盖：不授予主题、说明书、权利要求、新颖性、创造性、实用性、计算机程序、化学领域
+#
+# 规则 ID 前缀：
+#   EX-SEL-* — 法25条不授予专利权的主题
+#   EX-DIS-* — 说明书充分公开
+#   EX-SPEC-* — 说明书撰写规范
+#   EX-CLM-* — 权利要求
+#   EX-NOV-* — 新颖性
+#   EX-INV-* — 创造性
+#   EX-UTL-* — 实用性
+#   EX-CMP-* — 计算机程序发明
+#   EX-CHM-* — 化学领域发明
+#   EX-PRC-* — 审查程序
+
+rules:
+
+  # ================================================================
+  # 法25条：不授予专利权的主题
+  # ================================================================
+
+  - id: EX-SEL-001
+    name: "不授权—智力活动的规则和方法"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第25条第1款第(二)项；审查指南第二部分第一章3.1"
+    fix_suggestion: "检查权利要求是否仅涉及智力活动的规则和方法（如游戏规则、交通规则、比赛规则）。若是，需加入技术特征使其构成技术方案"
+    fix_examples:
+      - "❌ 一种扑克牌游戏的计分方法 → ✅ 一种电子游戏设备中基于扑克牌规则的计分处理方法"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "智力活动"
+        - "规则和方法"
+        - "组织"
+        - "比赛"
+        - "游戏规则"
+      antiPatterns:
+        - "技术特征"
+        - "技术方案"
+        - "技术效果"
+      message: "智力活动的规则和方法不授予专利权，需检查是否包含技术特征以构成技术方案"
+
+  - id: EX-SEL-002
+    name: "不授权—疾病诊断和治疗方法"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第25条第1款第(三)项；审查指南第二部分第一章4.1-4.4"
+    fix_suggestion: "疾病诊断方法指为识别或确定疾病而采取的措施。治疗方法指为使疾病好转或延缓而采取的措施。可改为制药用途权利要求或医疗器械权利要求"
+    fix_examples:
+      - "❌ 一种治疗心脏病的方法 → ✅ 一种化合物X在制备治疗心脏病药物中的用途"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "诊断"
+        - "治疗"
+        - "疾病"
+        - "外科"
+        - "给药"
+      antiPatterns:
+        - "制药用途"
+        - "药物制备"
+        - "医疗器械"
+        - "体外"
+      message: "疾病诊断和治疗方法不授予专利权，应考虑改写为制药用途或产品权利要求"
+
+  - id: EX-SEL-003
+    name: "不授权—计算机程序与商业方法排除"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第25条第1款第(二)项；审查指南第二部分第九章2.0"
+    fix_suggestion: "单纯的计算机程序和商业方法不授予专利权。需将算法与技术方案结合，解决技术问题，产生技术效果"
+    fix_examples:
+      - "❌ 一种股票交易策略 → ✅ 一种基于机器学习的工业设备故障预测系统及方法"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "商业方法"
+        - "经营"
+        - "管理方法"
+        - "算法"
+      antiPatterns:
+        - "技术方案"
+        - "技术效果"
+        - "技术问题"
+        - "数据处理"
+        - "控制方法"
+      message: "单纯的商业方法和算法不授予专利权，需与技术方案结合解决技术问题"
+
+  - id: EX-SEL-004
+    name: "不授权—违反法律与公序良俗"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第5条；审查指南第二部分第一章3.1.1"
+    fix_suggestion: "检查发明是否违反法律或公序良俗。若涉及敏感领域，需确认技术方案具有正当合法用途"
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan:
+        - "克隆人"
+        - "人体胚胎"
+        - "赌博"
+        - "造假"
+        - "窃听"
+        - "毒品"
+      message: "违反法律、社会公德或妨害公共利益的发明创造不授予专利权"
+
+  - id: EX-SEL-005
+    name: "不授权—动物和植物品种"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第25条第1款第(四)项；审查指南第二部分第一章4.4"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "动物品种"
+        - "植物品种"
+      antiPatterns:
+        - "微生物"
+        - "基因"
+        - "转基因方法"
+        - "植物细胞"
+      message: "动物和植物品种不授予专利权，但微生物和植物细胞培养方法可以授予专利权"
+
+  # ================================================================
+  # 说明书：充分公开
+  # ================================================================
+
+  - id: EX-DIS-001
+    name: "说明书—五部分结构完整性"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "专利法实施细则第17条；审查指南第二部分第二章2.2"
+    fix_suggestion: "说明书应包含五个部分：技术领域、背景技术、发明内容、附图说明、具体实施方式。发明内容应包含：技术问题、技术方案、有益效果"
+    fix_examples:
+      - "✅ 技术领域：本发明涉及... 背景技术：现有技术存在...问题 发明内容：为解决上述问题... 附图说明：图1为... 具体实施方式：下面结合..."
+    check:
+      type: specification_analysis
+      requiredSections:
+        - "技术领域"
+        - "背景技术"
+        - "发明内容"
+        - "附图说明"
+        - "具体实施方式"
+      message: "说明书应包含完整的五部分结构：技术领域、背景技术、发明内容、附图说明、具体实施方式"
+
+  - id: EX-DIS-002
+    name: "说明书—发明内容三要素"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.2.4"
+    fix_suggestion: "发明内容部分应包含：(1)要解决的技术问题 (2)技术方案 (3)有益效果。三者缺一不可"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: technical_problem
+          patterns: ["技术问题", "要解决", "存在的技术问题", "待解决"]
+        - element: technical_solution
+          patterns: ["技术方案", "为实现上述目的", "解决上述技术问题"]
+        - element: beneficial_effect
+          patterns: ["有益效果", "技术效果", "优点", "有益的"]
+      message: "发明内容部分必须包含：要解决的技术问题、技术方案、有益效果"
+
+  - id: EX-DIS-003
+    name: "说明书—实施例充分性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "专利法第26条第3款；审查指南第二部分第二章2.2.6"
+    fix_suggestion: "说明书应提供足够数量的实施例，使本领域技术人员能够实现。关键参数应给出具体数值或范围"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "实施例"
+        - "具体实施"
+      antiPatterns:
+        - "仅描述功能"
+        - "仅提供原理"
+      message: "说明书应提供充分的实施例，使本领域技术人员能够实现技术方案"
+
+  - id: EX-DIS-004
+    name: "说明书—附图说明规范"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.2.5"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "附图"
+        - "图1"
+        - "示意图"
+        - "流程图"
+        - "结构图"
+      antiPatterns:
+        - "广告"
+        - "宣传"
+      message: "附图说明应简明说明各附图的内容，附图不得包含商业宣传性文字"
+
+  # ================================================================
+  # 权利要求
+  # ================================================================
+
+  - id: EX-CLM-001
+    name: "权利要求—清楚性要求"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法第26条第4款；审查指南第二部分第二章3.2.1"
+    fix_suggestion: "权利要求应当清楚、简要：(1)不得使用含糊不清的词语 (2)不得使用'大约''左右''优选'等不确定词语 (3)技术术语应前后一致 (4)数值范围应明确"
+    fix_examples:
+      - "❌ 一种温度大约在50-100°C的方法 → ✅ 一种温度为50-100°C的方法"
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan:
+        - "大约"
+        - "左右"
+        - "优选地"
+        - "最好是"
+        - "大概是"
+      message: "权利要求中不得使用'大约''左右''优选'等不确定词语，应使用确定的表述"
+
+  - id: EX-CLM-002
+    name: "权利要求—以说明书为依据"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法第26条第4款；审查指南第二部分第二章3.2.1"
+    fix_suggestion: "引用说明书具体段落说明权利要求的技术方案如何从说明书公开内容中得出或概括"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: claim_support
+          patterns: ["以说明书为依据", "说明书记载", "说明书公开", "实施例"]
+      message: "权利要求应当以说明书为依据，权利要求限定的技术方案应是本领域技术人员从说明书公开内容中得出或概括出的"
+
+  - id: EX-CLM-003
+    name: "权利要求—必要技术特征完整性"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法实施细则第20条第2款；审查指南第二部分第二章3.1.1"
+    fix_suggestion: "独立权利要求应记载解决技术问题的全部必要技术特征。检查：是否缺少实现发明目的所必需的特征"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - essential_features
+      message: "独立权利要求应当从整体上反映发明的技术方案，记载解决技术问题的必要技术特征"
+
+  - id: EX-CLM-004
+    name: "权利要求—从属权利要求引用规范"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第二章3.1.2"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "根据权利要求"
+        - "如权利要求"
+        - "按照权利要求"
+      antiPatterns:
+        - "多项从属权利要求作为多项从属权利要求的基础"
+      message: "从属权利要求只能引用在前的权利要求，多项从属权利要求不得作为另一多项从属权利要求的基础"
+
+  - id: EX-CLM-005
+    name: "权利要求—功能性限定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第二章3.2.1"
+    fix_suggestion: "功能性限定应当理解为覆盖所有能够实现该功能的实施方式。若说明书仅公开有限实施方式，可能因得不到说明书支持而被驳回"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "功能性限定"
+        - "功能"
+        - "配置为"
+        - "用于"
+        - "被配置"
+      antiPatterns:
+        - "结构特征"
+        - "连接"
+        - "包含"
+        - "具有"
+      message: "纯功能性限定可能导致保护范围不确定，应尽量结合结构特征描述"
+
+  - id: EX-CLM-006
+    name: "权利要求—开放式与封闭式表达"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第二章3.3"
+    check:
+      type: category_detection
+      categories:
+        - name: open_ended
+          keywords: ["包含", "包括", "含有", " comprising"]
+        - name: closed_ended
+          keywords: ["由…组成", "由……组成", " consisting of"]
+        - name: semi_open
+          keywords: ["基本上由", "主要包含"]
+      minCategories: 1
+      message: "注意权利要求中开放式（包含/包括）与封闭式（由…组成）表达对保护范围的不同影响"
+
+  # ================================================================
+  # 新颖性
+  # ================================================================
+
+  - id: EX-NOV-001
+    name: "新颖性—现有技术公开方式"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "专利法第22条第5款；审查指南第二部分第三章2.1"
+    check:
+      type: category_detection
+      categories:
+        - name: publication
+          keywords: ["出版物公开", "公开发表", "公开出版"]
+        - name: use
+          keywords: ["使用公开", "公开使用", "公开展出"]
+        - name: other
+          keywords: ["其他方式公开", "口头公开"]
+      minCategories: 1
+      message: "现有技术包括出版物公开、使用公开和其他方式公开，分析中应明确对比文件的公开方式"
+
+  - id: EX-NOV-002
+    name: "新颖性—相同与实质相同判断"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "审查指南第二部分第三章3.1-3.2"
+    fix_suggestion: "相同内容发明指技术领域、要解决的技术问题、技术方案、预期效果实质上相同。需逐项对比全部技术特征"
+    check:
+      type: patent_novelty
+      singleComparison: true
+      requiredElements:
+        - "相同"
+        - "实质相同"
+        - "技术特征"
+        - "对比"
+      message: "新颖性判断应对比权利要求与对比文件的技术特征是否相同或实质相同"
+
+  - id: EX-NOV-003
+    name: "新颖性—上位概念与下位概念"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "审查指南第二部分第三章3.2.1"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "上位概念"
+        - "下位概念"
+        - "具体"
+        - "概括"
+      message: "上位概念破坏下位概念的新颖性（反之不成立），分析时应注意概念的上下位关系"
+
+  - id: EX-NOV-004
+    name: "新颖性—数值和数值范围"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "审查指南第二部分第三章3.2.2"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "数值范围"
+        - "端值"
+        - "重叠"
+        - "交叉"
+      message: "数值范围的新颖性判断：对比文件公开的数值范围与权利要求有重叠时破坏新颖性"
+
+  - id: EX-NOV-005
+    name: "新颖性—包含性能参数的产品"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "审查指南第二部分第三章5"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "性能参数"
+        - "参数限定"
+        - "产品"
+      message: "用性能参数限定的产品权利要求的新颖性，应判断参数是否隐含产品具有某种特定结构或组成"
+
+  # ================================================================
+  # 创造性
+  # ================================================================
+
+  - id: EX-INV-001
+    name: "创造性—三步法框架完整性"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；审查指南第二部分第四章3.2"
+    fix_suggestion: "三步法分析必须按顺序完成：(1)确定最接近的现有技术 (2)确定区别技术特征和实际解决的技术问题 (3)判断现有技术是否给出技术启示"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: closest_prior_art
+          patterns: ["最接近", "现有技术", "对比文件"]
+        - element: distinguishing_features
+          patterns: ["区别技术特征", "区别特征", "不同"]
+        - element: technical_problem
+          patterns: ["实际解决的技术问题", "技术问题", "改善"]
+        - element: technical_motivation
+          patterns: ["技术启示", "显而易见", "结合"]
+      message: "创造性分析必须遵循三步法：确定最接近现有技术 → 区别特征和实际解决的技术问题 → 技术启示"
+
+  - id: EX-INV-002
+    name: "创造性—最接近现有技术选择标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "审查指南第二部分第四章3.2.1"
+    fix_suggestion: "最接近现有技术应从以下方面选择：(1)技术领域相同或相近 (2)要解决的技术问题相同或相近 (3)技术方案最接近 (4)公开的技术特征最多"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "技术领域", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示"]
+      message: "选择最接近现有技术时应综合考虑技术领域、技术问题和技术方案的接近程度"
+
+  - id: EX-INV-003
+    name: "创造性—实际解决的技术问题确定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "审查指南第二部分第四章3.2.1.1"
+    fix_suggestion: "实际解决的技术问题基于区别技术特征确定，不应包含指向解决方案的暗示。表述为'如何实现某种效果/改善某种性能'而非'如何使用特征X'"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征", "实际解决的技术问题"]
+        step3: ["技术启示"]
+      message: "实际解决的技术问题应基于区别技术特征客观确定，不应包含对技术方案的暗示"
+
+  - id: EX-INV-004
+    name: "创造性—技术启示判断因素"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "审查指南第二部分第四章3.2.1.1"
+    check:
+      type: category_detection
+      categories:
+        - name: explicit_disclosure
+          keywords: ["公开", "记载", "描述"]
+        - name: motivation
+          keywords: ["技术启示", "教导", "结合启示", "改进动机"]
+        - name: common_knowledge
+          keywords: ["公知常识", "惯用手段", "常规技术"]
+      minCategories: 1
+      message: "技术启示可来自：(1)对比文件明确公开 (2)对比文件给出教导或暗示 (3)属于公知常识"
+
+  - id: EX-INV-005
+    name: "创造性—公知常识举证要求"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "审查指南第二部分第四章3.2.1.1"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "公知常识"
+      antiPatterns:
+        - "教科书"
+        - "技术手册"
+        - "工具书"
+        - "证据"
+        - "举证"
+      message: "主张公知常识时应提供证据（教科书、技术手册等）或充分说理，不得仅以'属于公知常识'为由否定创造性"
+
+  - id: EX-INV-006
+    name: "创造性—预料不到的技术效果"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "审查指南第二部分第四章5.3"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "预料不到"
+        - "意想不到"
+        - "超出预期"
+        - "技术效果"
+        - "协同"
+      message: "预料不到的技术效果可作为创造性成立的有力佐证，特别是选择发明和组合发明"
+
+  - id: EX-INV-007
+    name: "创造性—避免事后诸葛亮"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "审查指南第二部分第四章5.4"
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan:
+        - "事后诸葛亮"
+        - "hindsight"
+        - "ex post facto"
+      message: "创造性分析应站在申请日前的本领域技术人员视角判断，避免事后诸葛亮"
+
+  # ================================================================
+  # 实用性
+  # ================================================================
+
+  - id: EX-UTL-001
+    name: "实用性—无实用性的典型情形"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_utility
+    legal_basis: "审查指南第二部分第五章3"
+    check:
+      type: category_detection
+      categories:
+        - name: no_reproduction
+          keywords: ["不可再现", "无法再现", "偶然"]
+        - name: violates_natural_law
+          keywords: ["违背自然规律", "永动机", "不可能"]
+        - name: no_use
+          keywords: ["不能制造", "不能使用", "无任何用途"]
+        - name: non_technical
+          keywords: ["非治疗目的", "外科手术", "美容"]
+      minCategories: 1
+      message: "无实用性的情形包括：不可再现、违背自然规律、不能制造或使用、非治疗目的的外科手术方法等"
+
+  # ================================================================
+  # 计算机程序发明
+  # ================================================================
+
+  - id: EX-CMP-001
+    name: "计算机程序—技术方案判断"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "审查指南第二部分第九章2.0"
+    fix_suggestion: "计算机程序发明要获得专利权，必须解决技术问题、采用技术手段、获得技术效果。纯算法或商业方法不构成技术方案"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: technical_problem
+          patterns: ["技术问题"]
+        - element: technical_means
+          patterns: ["技术手段", "技术特征", "数据处理", "控制"]
+        - element: technical_effect
+          patterns: ["技术效果"]
+      message: "计算机程序发明必须构成技术方案：解决技术问题 + 采用技术手段 + 获得技术效果"
+
+  - id: EX-CMP-002
+    name: "计算机程序—说明书撰写要求"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第九章3.0"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: algorithm_description
+          patterns: ["算法", "流程图", "步骤"]
+        - element: code_or_pseudocode
+          patterns: ["源代码", "伪代码", "程序代码"]
+      message: "涉及计算机程序的发明说明书应充分公开算法及其实现方式，最好提供流程图和关键代码"
+
+  - id: EX-CMP-003
+    name: "计算机程序—权利要求撰写规范"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "审查指南第二部分第九章3.2.1"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "装置"
+        - "模块"
+        - "单元"
+        - "步骤"
+        - "流程"
+      antiPatterns:
+        - "单纯的程序"
+        - "源代码"
+      message: "计算机程序发明的权利要求应写成方法权利要求或装置权利要求，不得仅写程序代码"
+
+  # ================================================================
+  # 审查程序
+  # ================================================================
+
+  - id: EX-PRC-001
+    name: "审查程序—修改不得超范围"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法第33条；审查指南第二部分第八章5.2.1"
+    fix_suggestion: "修改应限于：(1)删除权利要求 (2)缩小权利要求保护范围 (3)澄清模糊表述 (4)更正明显错误。所有修改内容必须能从原申请文件中直接、毫无疑义地确定"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "修改"
+        - "原始记载"
+        - "超范围"
+      antiPatterns:
+        - "新增内容"
+        - "原始未记载"
+      message: "修改不得超出原说明书和权利要求书记载的范围，所有修改内容须从原申请直接、毫无疑义地确定"
+
+  - id: EX-PRC-002
+    name: "审查程序—分案申请条件"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法实施细则第42条；审查指南第二部分第六章"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "分案"
+        - "单一性"
+        - "总的发明构思"
+      message: "不符合单一性的申请应进行分案，分案申请不得超出原申请记载的范围"
+
+  - id: EX-PRC-003
+    name: "审查程序—答复审查意见期限与要求"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_oa_response
+    legal_basis: "审查指南第二部分第八章4"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: oa_mapping
+          patterns: ["审查意见", "审查员认为", "指出"]
+        - element: response_points
+          patterns: ["答复", "意见陈述", "争辩", "修改"]
+      message: "答复审查意见应：(1)逐点回应审查员提出的所有问题 (2)说明修改依据或不修改理由 (3)修改后的权利要求应在说明书中得到支持"
+
+  # ================================================================
+  # 检索
+  # ================================================================
+
+  - id: EX-SRC-001
+    name: "检索—对比文件来源标注"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "审查指南第二部分第七章"
+    check:
+      type: regex_pattern
+      requireAny:
+        - "CN\\d{6,}"
+        - "US\\d{7,}"
+        - "WO\\d{4}/\\d+"
+        - "EP\\d{7,}"
+        - "JP\\d{4}-\\d+"
+        - "公开号"
+        - "专利号"
+      antiPatterns:
+        - "对比文件D0"
+        - "文献X"
+        - "某专利"
+      message: "引用对比文件应使用规范的公开号（如CN103456789A），不得使用模糊代号"
+
+  # ================================================================
+  # 说明书记载范围
+  # ================================================================
+
+  - id: EX-SPEC-001
+    name: "说明书—技术背景描述要求"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.2.3"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: prior_art_description
+          patterns: ["现有技术", "已有技术", "传统方法", "传统技术"]
+        - element: problem_description
+          patterns: ["不足", "缺陷", "问题", "缺点"]
+      message: "背景技术部分应客观描述现有技术的状况，指出其存在的不足或问题"
+
+  - id: EX-SPEC-002
+    name: "说明书—核苷酸和氨基酸序列"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.2.7"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "核苷酸序列"
+        - "氨基酸序列"
+        - "序列表"
+      message: "涉及核苷酸或氨基酸序列的发明，应提交符合规定的序列表"
+
+  - id: EX-SPEC-003
+    name: "说明书—摘要撰写规范"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "审查指南第二部分第二章2.4"
+    check:
+      type: section_structure
+      sectionName: "摘要"
+      requiredElements:
+        - "技术领域"
+        - "技术方案"
+        - "用途"
+      message: "摘要应简明说明发明所属技术领域、技术方案和主要用途，字数不超过300字"

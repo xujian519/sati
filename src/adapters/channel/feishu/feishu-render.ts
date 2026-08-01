@@ -32,7 +32,8 @@ export function renderFeishuLiveCard(options: FeishuLiveCardOptions): Record<str
 
   return {
     config: { wide_screen_mode: false, update_multi: true },
-    elements: elements.length > 0 ? elements : [markdownElement(options.fallbackText ?? DEFAULT_LIVE_CARD_FALLBACK_TEXT)],
+    elements:
+      elements.length > 0 ? elements : [markdownElement(options.fallbackText ?? DEFAULT_LIVE_CARD_FALLBACK_TEXT)],
   };
 }
 
@@ -84,9 +85,10 @@ export function renderFeishuEvent(event: GatewayEvent): string | undefined {
       if (!event.ok) {
         const name = event.toolName ?? event.toolCallId;
         if (name === "send_attachment") return "";
-        const detail = typeof event.resultPreview === "string" && event.resultPreview.trim()
-          ? `${event.resultPreview.trim()}\n`
-          : "";
+        const detail =
+          typeof event.resultPreview === "string" && event.resultPreview.trim()
+            ? `${event.resultPreview.trim()}\n`
+            : "";
         return `\n⚠️ ${name} 执行失败\n${detail}`;
       }
       return "";

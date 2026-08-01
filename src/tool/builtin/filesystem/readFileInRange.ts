@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import type { Stats } from "node:fs";
 import { createInterface } from "node:readline";
 import { readFile, stat } from "node:fs/promises";
-import { PilotDeckToolRuntimeError } from "../../protocol/errors.js";
+import { SatiToolRuntimeError } from "../../protocol/errors.js";
 
 export type ReadFileRangeResult = {
   content: string;
@@ -29,12 +29,12 @@ export async function readFileInRange(
   throwIfAborted(signal);
   const fileStat = await stat(filePath).catch((error: unknown) => {
     if (isNodeError(error) && error.code === "ENOENT") {
-      throw new PilotDeckToolRuntimeError("file_not_found", `File ${filePath} does not exist.`);
+      throw new SatiToolRuntimeError("file_not_found", `File ${filePath} does not exist.`);
     }
     throw error;
   });
   if (!fileStat.isFile()) {
-    throw new PilotDeckToolRuntimeError("file_conflict", `${filePath} is not a regular file.`);
+    throw new SatiToolRuntimeError("file_conflict", `${filePath} is not a regular file.`);
   }
 
   if (limit !== undefined) {
@@ -48,7 +48,7 @@ export async function readFileInRange(
     throw error;
   });
   if (buffer.includes(0)) {
-    throw new PilotDeckToolRuntimeError("invalid_tool_input", `${filePath} appears to be a binary file.`);
+    throw new SatiToolRuntimeError("invalid_tool_input", `${filePath} appears to be a binary file.`);
   }
 
   const text = stripBom(buffer.toString("utf8"));
@@ -56,9 +56,8 @@ export async function readFileInRange(
   const normalizedStart = Math.max(1, startLine);
   const startIndex = normalizedStart - 1;
   const normalizedLimit = limit === undefined ? undefined : Math.max(0, limit);
-  const selected = normalizedLimit === undefined
-    ? lines.slice(startIndex)
-    : lines.slice(startIndex, startIndex + normalizedLimit);
+  const selected =
+    normalizedLimit === undefined ? lines.slice(startIndex) : lines.slice(startIndex, startIndex + normalizedLimit);
   const content = selected.join("\n");
   const actualStart = selected.length > 0 ? normalizedStart : Math.min(normalizedStart, lines.length + 1);
   const actualEnd = selected.length > 0 ? actualStart + selected.length - 1 : actualStart - 1;
@@ -95,6 +94,7 @@ async function readFileLineRange(
   let aborted = false;
 
   const stream = createReadStream(filePath, { encoding: "utf8" });
+  // eslint-disable-next-line prefer-const -- assigned once later; stopReading closes over the binding before assignment
   let rl: ReturnType<typeof createInterface> | undefined;
   const stopReading = () => {
     rl?.close();
@@ -135,7 +135,7 @@ async function readFileLineRange(
   }
 
   if (sawNul) {
-    throw new PilotDeckToolRuntimeError("invalid_tool_input", `${filePath} appears to be a binary file.`);
+    throw new SatiToolRuntimeError("invalid_tool_input", `${filePath} appears to be a binary file.`);
   }
 
   const content = selected.join("\n");
@@ -169,6 +169,6 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
-function abortedReadError(): PilotDeckToolRuntimeError {
-  return new PilotDeckToolRuntimeError("tool_aborted", "File reading was aborted.");
+function abortedReadError(): SatiToolRuntimeError {
+  return new SatiToolRuntimeError("tool_aborted", "File reading was aborted.");
 }

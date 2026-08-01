@@ -1,5 +1,5 @@
 /**
- * Enumerate PilotDeck projects.
+ * Enumerate Sati projects.
  *
  * Source of truth: the `projects/` directory under `pilotHome`.
  * Each subdirectory is a project ID; we surface its derived name + the
@@ -8,7 +8,8 @@
  */
 
 import { readdir, readFile, stat } from "node:fs/promises";
-import { resolve, basename } from "node:path";
+import { homedir } from "node:os";
+import { resolve, basename, join } from "node:path";
 import { listProjectSessions } from "../../session/index.js";
 import { createProjectId } from "../../pilot/index.js";
 import type { WebListProjectsResult, WebProjectSummary } from "../client/protocol.js";
@@ -17,17 +18,22 @@ export type ListWebProjectsOptions = {
   pilotHome: string;
 };
 
-export async function listWebProjects(
-  options: ListWebProjectsOptions,
-): Promise<WebListProjectsResult> {
+export async function listWebProjects(options: ListWebProjectsOptions): Promise<WebListProjectsResult> {
   const projects: WebProjectSummary[] = [];
 
-  const projectsDir = resolve(options.pilotHome, "projects");
+  let projectsDir = resolve(options.pilotHome, "projects");
   let projectIds: string[] = [];
   try {
     projectIds = await readdir(projectsDir);
   } catch {
-    projectIds = [];
+    // rebrand 前旧 home 回退：~/.pilotdeck/projects 的项目升级后仍可见可恢复
+    const legacyProjectsDir = join(homedir(), ".pilotdeck", "projects");
+    try {
+      projectIds = await readdir(legacyProjectsDir);
+      projectsDir = legacyProjectsDir;
+    } catch {
+      projectIds = [];
+    }
   }
 
   for (const id of projectIds) {
@@ -66,10 +72,7 @@ export async function describeWebProject(
   return summarizeProject(projectKey, options);
 }
 
-async function summarizeProject(
-  projectRoot: string,
-  options: ListWebProjectsOptions,
-): Promise<WebProjectSummary> {
+async function summarizeProject(projectRoot: string, options: ListWebProjectsOptions): Promise<WebProjectSummary> {
   let sessionCount = 0;
   let lastActivity: number | undefined;
   try {

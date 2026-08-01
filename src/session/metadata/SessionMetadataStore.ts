@@ -63,18 +63,17 @@ export class SessionMetadataStore {
    */
   async reappendTail(turnId = "metadata-reappend"): Promise<void> {
     const snapshot = this.getSnapshot();
-    const hasValues = Object.values(snapshot).some((value) => value !== undefined);
+    const hasValues = Object.values(snapshot).some(value => value !== undefined);
     if (!hasValues) {
       return;
     }
     if (!this.options.transcript.recordSessionMetadata) {
       return;
     }
-    await this.options.transcript.recordSessionMetadata(
-      this.options.sessionId,
-      turnId,
-      { ...snapshot, updatedAt: this.now().toISOString() },
-    );
+    await this.options.transcript.recordSessionMetadata(this.options.sessionId, turnId, {
+      ...snapshot,
+      updatedAt: this.now().toISOString(),
+    });
   }
 
   async record(turnId: string, metadata: SessionMetadataValue): Promise<void> {

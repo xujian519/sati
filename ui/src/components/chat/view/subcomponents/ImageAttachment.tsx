@@ -1,33 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 const MIME_FRIENDLY_LABELS: Record<string, string> = {
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
-  'application/msword': 'DOC',
-  'application/vnd.ms-excel': 'XLS',
-  'application/vnd.ms-powerpoint': 'PPT',
-  'application/pdf': 'PDF',
-  'application/zip': 'ZIP',
-  'application/x-tar': 'TAR',
-  'application/gzip': 'GZ',
-  'text/plain': 'TXT',
-  'text/csv': 'CSV',
-  'text/markdown': 'MD',
-  'application/json': 'JSON',
-  'application/xml': 'XML',
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
+  "application/msword": "DOC",
+  "application/vnd.ms-excel": "XLS",
+  "application/vnd.ms-powerpoint": "PPT",
+  "application/pdf": "PDF",
+  "application/zip": "ZIP",
+  "application/x-tar": "TAR",
+  "application/gzip": "GZ",
+  "text/plain": "TXT",
+  "text/csv": "CSV",
+  "text/markdown": "MD",
+  "application/json": "JSON",
+  "application/xml": "XML",
 };
 
 function getFileTypeLabel(file: File): string {
-  const ext = file.name.includes('.') ? file.name.split('.').pop()?.toUpperCase() : undefined;
+  const ext = file.name.includes(".") ? file.name.split(".").pop()?.toUpperCase() : undefined;
   if (ext && ext !== file.name.toUpperCase()) return ext;
   const friendly = MIME_FRIENDLY_LABELS[file.type.toLowerCase()];
   if (friendly) return friendly;
-  if (file.type.includes('/')) {
-    const sub = file.type.split('/').pop() || '';
-    if (sub.length <= 10 && !sub.includes('.')) return sub.toUpperCase();
+  if (file.type.includes("/")) {
+    const sub = file.type.split("/").pop() || "";
+    if (sub.length <= 10 && !sub.includes(".")) return sub.toUpperCase();
   }
-  return 'FILE';
+  return "FILE";
 }
 
 interface ImageAttachmentProps {
@@ -39,8 +39,8 @@ interface ImageAttachmentProps {
 
 const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachmentProps) => {
   const [preview, setPreview] = useState<string | undefined>(undefined);
-  const isImage = file.type.startsWith('image/');
-  
+  const isImage = file.type.startsWith("image/");
+
   useEffect(() => {
     if (!isImage) {
       setPreview(undefined);
@@ -50,7 +50,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file, isImage]);
-  
+
   return (
     <div className="group relative">
       {isImage ? (
@@ -65,9 +65,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
           </div>
           <div className="min-w-0">
             <div className="truncate text-xs font-medium">{file.name}</div>
-            <div className="mt-0.5 text-[11px] uppercase text-neutral-500">
-              {getFileTypeLabel(file)}
-            </div>
+            <div className="mt-0.5 text-[11px] uppercase text-neutral-500">{getFileTypeLabel(file)}</div>
           </div>
         </div>
       )}
@@ -98,5 +96,3 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
 };
 
 export default ImageAttachment;
-
-

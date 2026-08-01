@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../../../utils/api';
-import { useAuth } from '../../auth/context/AuthContext';
-import { useWebSocket } from '../../../contexts/WebSocketContext';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { api } from "../../../utils/api";
+import { useAuth } from "../../auth/context/AuthContext";
+import { useWebSocket } from "../../../contexts/WebSocketContext";
 import type {
   TaskMasterContextError,
   TaskMasterContextValue,
@@ -11,7 +11,7 @@ import type {
   TaskMasterProjectInput,
   TaskMasterTask,
   TaskMasterWebSocketMessage,
-} from '../types';
+} from "../types";
 
 const TaskMasterContext = createContext<TaskMasterContextValue | null>(null);
 
@@ -28,14 +28,14 @@ function enrichProject(project: TaskMasterProject): TaskMasterProject {
   return {
     ...project,
     taskMasterConfigured: project.taskmaster?.hasTaskmaster ?? false,
-    taskMasterStatus: project.taskmaster?.status ?? 'not-configured',
+    taskMasterStatus: project.taskmaster?.status ?? "not-configured",
     taskCount: Number(project.taskmaster?.metadata?.taskCount ?? 0),
     completedCount: Number(project.taskmaster?.metadata?.completed ?? 0),
   };
 }
 
 function getNextTask(tasks: TaskMasterTask[]): TaskMasterTask | null {
-  return tasks.find((task) => task.status === 'pending' || task.status === 'in-progress') ?? null;
+  return tasks.find(task => task.status === "pending" || task.status === "in-progress") ?? null;
 }
 
 function isTaskMasterMessage(
@@ -45,13 +45,13 @@ function isTaskMasterMessage(
     return false;
   }
 
-  return message.type.startsWith('taskmaster-');
+  return message.type.startsWith("taskmaster-");
 }
 
 export function useTaskMaster() {
   const context = useContext(TaskMasterContext);
   if (!context) {
-    throw new Error('useTaskMaster must be used within a TaskMasterProvider');
+    throw new Error("useTaskMaster must be used within a TaskMasterProvider");
   }
   return context;
 }
@@ -112,14 +112,14 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoading(true);
       clearError();
 
-      const response = await api.get('/projects');
+      const response = await api.get("/projects");
       if (!response.ok) {
         throw new Error(`Failed to fetch projects: ${response.status}`);
       }
 
       const data = (await response.json()) as unknown;
       const loadedProjects = Array.isArray(data) ? (data as TaskMasterProject[]) : [];
-      const enrichedProjects = loadedProjects.map((project) => enrichProject(project));
+      const enrichedProjects = loadedProjects.map(project => enrichProject(project));
 
       setProjects(enrichedProjects);
 
@@ -128,11 +128,11 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
         return;
       }
 
-      const matchingProject = enrichedProjects.find((project) => project.name === currentProjectName) ?? null;
+      const matchingProject = enrichedProjects.find(project => project.name === currentProjectName) ?? null;
       setCurrentProjectState(matchingProject);
       setProjectTaskMaster(matchingProject?.taskmaster ?? null);
     } catch (caughtError) {
-      handleError('load projects', caughtError);
+      handleError("load projects", caughtError);
     } finally {
       setIsLoading(false);
     }
@@ -154,7 +154,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       const response = await api.get(`/taskmaster/tasks/${encodeURIComponent(projectName)}`);
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
-        throw new Error(errorPayload.message ?? 'Failed to load tasks');
+        throw new Error(errorPayload.message ?? "Failed to load tasks");
       }
 
       const data = (await response.json()) as { tasks?: TaskMasterTask[] };
@@ -163,7 +163,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setTasks(loadedTasks);
       setNextTask(getNextTask(loadedTasks));
     } catch (caughtError) {
-      handleError('load tasks', caughtError);
+      handleError("load tasks", caughtError);
       setTasks([]);
       setNextTask(null);
     } finally {
@@ -181,7 +181,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoadingMCP(true);
       clearError();
 
-      const response = await api.get('/mcp-utils/taskmaster-server');
+      const response = await api.get("/mcp-utils/taskmaster-server");
       if (!response.ok) {
         throw new Error(`Failed to load MCP status: ${response.status}`);
       }
@@ -189,7 +189,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       const status = (await response.json()) as TaskMasterMcpStatus;
       setMcpServerStatus(status);
     } catch (caughtError) {
-      handleError('check MCP server status', caughtError);
+      handleError("check MCP server status", caughtError);
       setMcpServerStatus(null);
     } finally {
       setIsLoadingMCP(false);
@@ -215,17 +215,17 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    if (message.type === 'taskmaster-project-updated' && message.projectName) {
+    if (message.type === "taskmaster-project-updated" && message.projectName) {
       void refreshProjects();
       return;
     }
 
-    if (message.type === 'taskmaster-tasks-updated' && message.projectName === currentProject?.name) {
+    if (message.type === "taskmaster-tasks-updated" && message.projectName === currentProject?.name) {
       void refreshTasks();
       return;
     }
 
-    if (message.type === 'taskmaster-mcp-status-changed') {
+    if (message.type === "taskmaster-mcp-status-changed") {
       void refreshMCPStatus();
     }
   }, [currentProject?.name, latestMessage, refreshMCPStatus, refreshProjects, refreshTasks]);

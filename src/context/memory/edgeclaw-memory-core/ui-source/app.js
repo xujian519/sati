@@ -115,7 +115,8 @@ const UI_STRINGS = {
     "trace.meta.started": "开始",
     "trace.meta.finished": "结束",
     "trace.sourceLabel": "来源：{0} · 状态：{1}。说明：{2}",
-    "trace.index.explanation": "Index 追踪展示的是 Dream 前的 append-only 产物；主视图展示的是当前文件状态，可能已经被 Dream 合并。",
+    "trace.index.explanation":
+      "Index 追踪展示的是 Dream 前的 append-only 产物；主视图展示的是当前文件状态，可能已经被 Dream 合并。",
     "trace.dream.explanation": "Dream 追踪展示的是合并、重写和删除过程；主视图展示的是 Dream 完成后的当前文件状态。",
     "route.user": "用户",
     "route.project": "项目",
@@ -192,11 +193,15 @@ const UI_STRINGS = {
     "settings.snapshot.ready": "可回滚",
     "settings.snapshot.stale": "快照已失效",
     "settings.snapshot.meta": "快照：{0} · 来源：{1} · {2}",
-    "confirm.importCurrentProject": "导入将覆盖当前项目记忆，但不会影响其他项目，也不会修改工作区代码文件。确认继续吗？",
-    "confirm.importCurrentProject.general": "导入将覆盖当前通用记忆，但不会影响其他项目，也不会修改工作区代码文件。确认继续吗？",
+    "confirm.importCurrentProject":
+      "导入将覆盖当前项目记忆，但不会影响其他项目，也不会修改工作区代码文件。确认继续吗？",
+    "confirm.importCurrentProject.general":
+      "导入将覆盖当前通用记忆，但不会影响其他项目，也不会修改工作区代码文件。确认继续吗？",
     "confirm.importAllProjects": "导入将覆盖全部项目记忆和全局用户画像，但不会修改工作区代码文件。确认继续吗？",
-    "confirm.rollbackLastDream": "回滚将恢复上一次 Dream 前的记忆快照，并覆盖当前项目记忆与全局用户画像中的 Dream 结果。不会修改工作区代码文件。确认继续吗？",
-    "confirm.rollbackLastDream.general": "回滚将恢复上一次 Dream 前的记忆快照，并覆盖当前通用记忆与全局用户画像中的 Dream 结果。不会修改工作区代码文件。确认继续吗？",
+    "confirm.rollbackLastDream":
+      "回滚将恢复上一次 Dream 前的记忆快照，并覆盖当前项目记忆与全局用户画像中的 Dream 结果。不会修改工作区代码文件。确认继续吗？",
+    "confirm.rollbackLastDream.general":
+      "回滚将恢复上一次 Dream 前的记忆快照，并覆盖当前通用记忆与全局用户画像中的 Dream 结果。不会修改工作区代码文件。确认继续吗？",
     "confirm.deleteMemory": "确认删除 {0}？",
     "confirm.clearProject": "确认清空当前项目的全部记忆吗？这不会删除全局用户身份背景。",
     "confirm.clearProject.general": "确认清空当前通用空间的全部记忆吗？这不会删除全局用户身份背景。",
@@ -234,11 +239,13 @@ const UI_STRINGS = {
     "actions.back": "← 返回",
     "error.authRequired": "需要登录后才能访问当前项目的 Memory Dashboard。",
     "error.missingProjectPath": "缺少 projectPath，无法加载当前项目的 Memory Dashboard。",
-    "error.bundleDownloadReturnedHtml": "导出接口返回了 HTML 页面，而不是记忆 JSON。通常是服务未重启或路由未生效，请重启 PilotDeck 后重新导出。",
+    "error.bundleDownloadReturnedHtml":
+      "导出接口返回了 HTML 页面，而不是记忆 JSON。通常是服务未重启或路由未生效，请重启 Sati 后重新导出。",
     "error.bundleDownloadInvalidJson": "导出接口返回的不是合法 JSON，无法生成记忆导出文件。",
     "error.apiReturnedHtml": "接口返回了 HTML 页面，而不是预期的 JSON。通常是服务未重启或路由未生效。",
     "error.apiReturnedInvalidJson": "接口返回的不是合法 JSON。",
-    "error.importFileIsHtml": "你选择的文件不是记忆导出包，而是一页 HTML 页面。通常是之前导出时服务未重启或路由未生效，请重新导出后再导入。",
+    "error.importFileIsHtml":
+      "你选择的文件不是记忆导出包，而是一页 HTML 页面。通常是之前导出时服务未重启或路由未生效，请重新导出后再导入。",
     "error.importFileInvalidJson": "你选择的文件不是合法的记忆 JSON 导出包。",
   },
   en: {
@@ -339,8 +346,10 @@ const UI_STRINGS = {
     "trace.meta.started": "Started",
     "trace.meta.finished": "Finished",
     "trace.sourceLabel": "Source: {0} · Status: {1}. Note: {2}",
-    "trace.index.explanation": "Index traces show append-only artifacts before Dream; the main board shows the current file state, which may already have been merged by Dream.",
-    "trace.dream.explanation": "Dream traces show merge, rewrite, and deletion steps; the main board shows the current file state after Dream completes.",
+    "trace.index.explanation":
+      "Index traces show append-only artifacts before Dream; the main board shows the current file state, which may already have been merged by Dream.",
+    "trace.dream.explanation":
+      "Dream traces show merge, rewrite, and deletion steps; the main board shows the current file state after Dream completes.",
     "route.user": "User",
     "route.project": "Project",
     "route.project.general": "General",
@@ -416,14 +425,21 @@ const UI_STRINGS = {
     "settings.snapshot.ready": "Rollback ready",
     "settings.snapshot.stale": "Snapshot stale",
     "settings.snapshot.meta": "Snapshot: {0} · Source: {1} · {2}",
-    "confirm.importCurrentProject": "Importing will overwrite the current project's memory, but it will not affect other projects or modify workspace code files. Continue?",
-    "confirm.importCurrentProject.general": "Importing will overwrite the current general memory, but it will not affect other projects or modify workspace code files. Continue?",
-    "confirm.importAllProjects": "Importing will overwrite all project memory and the global user profile, but it will not modify workspace code files. Continue?",
-    "confirm.rollbackLastDream": "Rollback will restore the memory snapshot from before the last Dream and overwrite the current project's Dream results plus the global user profile updates. It will not modify workspace code files. Continue?",
-    "confirm.rollbackLastDream.general": "Rollback will restore the memory snapshot from before the last Dream and overwrite the current general memory plus the global user profile updates. It will not modify workspace code files. Continue?",
+    "confirm.importCurrentProject":
+      "Importing will overwrite the current project's memory, but it will not affect other projects or modify workspace code files. Continue?",
+    "confirm.importCurrentProject.general":
+      "Importing will overwrite the current general memory, but it will not affect other projects or modify workspace code files. Continue?",
+    "confirm.importAllProjects":
+      "Importing will overwrite all project memory and the global user profile, but it will not modify workspace code files. Continue?",
+    "confirm.rollbackLastDream":
+      "Rollback will restore the memory snapshot from before the last Dream and overwrite the current project's Dream results plus the global user profile updates. It will not modify workspace code files. Continue?",
+    "confirm.rollbackLastDream.general":
+      "Rollback will restore the memory snapshot from before the last Dream and overwrite the current general memory plus the global user profile updates. It will not modify workspace code files. Continue?",
     "confirm.deleteMemory": "Delete {0}?",
-    "confirm.clearProject": "Clear all memory for the current project? This will not delete global user identity background.",
-    "confirm.clearProject.general": "Clear all memory for the current general space? This will not delete global user identity background.",
+    "confirm.clearProject":
+      "Clear all memory for the current project? This will not delete global user identity background.",
+    "confirm.clearProject.general":
+      "Clear all memory for the current general space? This will not delete global user identity background.",
     "confirm.clearAll": "Clear all memory? This will delete all project memory and global user identity background.",
     "prompt.editMemoryName": "Update memory name",
     "prompt.editMemoryDescription": "Update memory description",
@@ -458,11 +474,15 @@ const UI_STRINGS = {
     "actions.back": "← Back",
     "error.authRequired": "Sign in to access the Memory Dashboard for the current project.",
     "error.missingProjectPath": "Missing projectPath; unable to load the Memory Dashboard for the current project.",
-    "error.bundleDownloadReturnedHtml": "The export endpoint returned an HTML page instead of a memory JSON bundle. This usually means the service was not restarted or the route is not active. Restart PilotDeck and export again.",
-    "error.bundleDownloadInvalidJson": "The export endpoint did not return valid JSON, so the memory export file could not be created.",
-    "error.apiReturnedHtml": "The endpoint returned an HTML page instead of the expected JSON. This usually means the service was not restarted or the route is not active.",
+    "error.bundleDownloadReturnedHtml":
+      "The export endpoint returned an HTML page instead of a memory JSON bundle. This usually means the service was not restarted or the route is not active. Restart Sati and export again.",
+    "error.bundleDownloadInvalidJson":
+      "The export endpoint did not return valid JSON, so the memory export file could not be created.",
+    "error.apiReturnedHtml":
+      "The endpoint returned an HTML page instead of the expected JSON. This usually means the service was not restarted or the route is not active.",
     "error.apiReturnedInvalidJson": "The endpoint did not return valid JSON.",
-    "error.importFileIsHtml": "The selected file is not a memory export bundle. It is an HTML page, usually because the earlier export hit an old or inactive route. Export again and retry the import.",
+    "error.importFileIsHtml":
+      "The selected file is not a memory export bundle. It is an HTML page, usually because the earlier export hit an old or inactive route. Export again and retry the import.",
     "error.importFileInvalidJson": "The selected file is not a valid memory JSON export bundle.",
   },
 };
@@ -786,11 +806,7 @@ function handleSettingsUnitChange(fieldKey) {
   const config = SETTINGS_FIELD_CONFIG[fieldKey];
   if (!config || !config.inputEl || !config.unitEl) return;
   const previousUnit = normalizeSettingsUnit(config.unitEl.dataset.prevUnit);
-  const currentMinutes = parseIntervalInputValue(
-    config.inputEl.value,
-    getSettingsFieldMinutes(fieldKey),
-    previousUnit,
-  );
+  const currentMinutes = parseIntervalInputValue(config.inputEl.value, getSettingsFieldMinutes(fieldKey), previousUnit);
   const nextUnit = normalizeSettingsUnit(config.unitEl.value);
   writeSettingsUnitPreference(fieldKey, nextUnit);
   config.unitEl.dataset.prevUnit = nextUnit;
@@ -798,15 +814,15 @@ function handleSettingsUnitChange(fieldKey) {
 }
 
 function applyStaticTranslations() {
-  document.querySelectorAll("[data-i18n]").forEach((node) => {
+  document.querySelectorAll("[data-i18n]").forEach(node => {
     const key = node.getAttribute("data-i18n");
     if (key) node.textContent = t(key);
   });
-  document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(node => {
     const key = node.getAttribute("data-i18n-placeholder");
     if (key) node.setAttribute("placeholder", t(key));
   });
-  document.querySelectorAll("[data-i18n-title]").forEach((node) => {
+  document.querySelectorAll("[data-i18n-title]").forEach(node => {
     const key = node.getAttribute("data-i18n-title");
     if (key) node.setAttribute("title", t(key));
   });
@@ -826,14 +842,16 @@ function applyScopedTranslations() {
     "editor.project.name",
     "editor.project.description",
     "editor.project.status",
-  ].forEach((key) => {
-    document.querySelectorAll(`[data-i18n="${key}"]`).forEach((node) => {
+  ].forEach(key => {
+    document.querySelectorAll(`[data-i18n="${key}"]`).forEach(node => {
       node.textContent = ts(key);
     });
   });
 }
 
-function setActivity(msg = DEFAULT_ACTIVITY) { activityTextEl.textContent = msg || DEFAULT_ACTIVITY; }
+function setActivity(msg = DEFAULT_ACTIVITY) {
+  activityTextEl.textContent = msg || DEFAULT_ACTIVITY;
+}
 
 function updateAppScrim() {
   const open = state.detailOpen || state.settingsOpen || state.editorOpen;
@@ -844,13 +862,29 @@ function updateAppScrim() {
 function formatProjectStatusLabel(status) {
   const normalized = String(status || "").trim();
   if (!normalized) return t("editor.status.in_progress");
-  return t(`editor.status.${normalized}`) === `editor.status.${normalized}` ? normalized : t(`editor.status.${normalized}`);
+  return t(`editor.status.${normalized}`) === `editor.status.${normalized}`
+    ? normalized
+    : t(`editor.status.${normalized}`);
 }
 
 function setStatus(message, kind = "info") {
-  if (!message) { statusBarEl.classList.add("hidden"); statusBarEl.textContent = ""; setActivity(DEFAULT_ACTIVITY); return; }
-  if (kind === "error") { statusBarEl.classList.remove("hidden"); statusBarEl.textContent = message; statusBarEl.dataset.kind = kind; setActivity(t("status.errorOccurred")); return; }
-  statusBarEl.classList.add("hidden"); statusBarEl.textContent = ""; delete statusBarEl.dataset.kind; setActivity(message);
+  if (!message) {
+    statusBarEl.classList.add("hidden");
+    statusBarEl.textContent = "";
+    setActivity(DEFAULT_ACTIVITY);
+    return;
+  }
+  if (kind === "error") {
+    statusBarEl.classList.remove("hidden");
+    statusBarEl.textContent = message;
+    statusBarEl.dataset.kind = kind;
+    setActivity(t("status.errorOccurred"));
+    return;
+  }
+  statusBarEl.classList.add("hidden");
+  statusBarEl.textContent = "";
+  delete statusBarEl.dataset.kind;
+  setActivity(message);
 }
 
 function setMaintenanceBusy(next) {
@@ -909,7 +943,9 @@ function formatTraceDisplayStatus(record) {
   }
 }
 
-function headers(extra = {}) { return state.token ? { Authorization: `Bearer ${state.token}`, ...extra } : { ...extra }; }
+function headers(extra = {}) {
+  return state.token ? { Authorization: `Bearer ${state.token}`, ...extra } : { ...extra };
+}
 
 function withProjectPath(url) {
   const next = new URL(url, window.location.origin);
@@ -919,11 +955,17 @@ function withProjectPath(url) {
 
 function parseJsonText(raw) {
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function looksLikeHtmlDocument(raw) {
-  const trimmed = String(raw || "").trimStart().toLowerCase();
+  const trimmed = String(raw || "")
+    .trimStart()
+    .toLowerCase();
   return trimmed.startsWith("<!doctype html") || trimmed.startsWith("<html");
 }
 
@@ -939,7 +981,8 @@ function isRecoverableLegacyRouteError(error) {
 
 async function requestText(url, options = {}) {
   const response = await fetch(withProjectPath(url), {
-    method: options.method || "GET", headers: headers(options.headers),
+    method: options.method || "GET",
+    headers: headers(options.headers),
     ...(options.body ? { body: JSON.stringify({ ...options.body, projectPath: state.projectPath }) } : {}),
   });
   const raw = await response.text();
@@ -991,13 +1034,36 @@ async function postJsonExpectJson(url, body) {
   return data;
 }
 
-function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (typeof text === "string") n.textContent = text; return n; }
-function clearNode(n) { while (n.firstChild) n.removeChild(n.firstChild); }
-function renderEmpty(t, text) { clearNode(t); t.append(el("div", "empty-state", text)); }
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (typeof text === "string") n.textContent = text;
+  return n;
+}
+function clearNode(n) {
+  while (n.firstChild) n.removeChild(n.firstChild);
+}
+function renderEmpty(t, text) {
+  clearNode(t);
+  t.append(el("div", "empty-state", text));
+}
 
-function formatDateTime(v) { if (!v) return "—"; const d = new Date(v); if (Number.isNaN(d.getTime())) return v; return d.toLocaleString(DATE_TIME_LOCALE); }
-function stringifyDetail(v) { return typeof v === "string" ? v : JSON.stringify(v, null, 2); }
-function basename(v) { const s = String(v || "").replace(/[\\/]+$/, "").split(/[\\/]/).filter(Boolean); return s[s.length - 1] || v || ts("project.currentProject"); }
+function formatDateTime(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return d.toLocaleString(DATE_TIME_LOCALE);
+}
+function stringifyDetail(v) {
+  return typeof v === "string" ? v : JSON.stringify(v, null, 2);
+}
+function basename(v) {
+  const s = String(v || "")
+    .replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .filter(Boolean);
+  return s[s.length - 1] || v || ts("project.currentProject");
+}
 
 function formatEntryType(type) {
   switch (type) {
@@ -1021,19 +1087,19 @@ function getGeneralProjects() {
 }
 
 function getVisibleGeneralProjects() {
-  return getGeneralProjects().filter((project) => project?.sourceType !== "workspace_external");
+  return getGeneralProjects().filter(project => project?.sourceType !== "workspace_external");
 }
 
 function syncSelectedProjectIdFromWorkspace() {
   if (isGeneralWorkspace()) {
     const visibleProjects = getVisibleGeneralProjects();
-    const selectedFromWorkspace = typeof state.workspace?.selectedProjectId === "string"
-      ? state.workspace.selectedProjectId
-      : "";
-    const nextSelectedProject = visibleProjects.find((project) => project.logicalProjectId === selectedFromWorkspace)
-      || visibleProjects.find((project) => project.logicalProjectId === state.selectedProjectId)
-      || visibleProjects[0]
-      || null;
+    const selectedFromWorkspace =
+      typeof state.workspace?.selectedProjectId === "string" ? state.workspace.selectedProjectId : "";
+    const nextSelectedProject =
+      visibleProjects.find(project => project.logicalProjectId === selectedFromWorkspace) ||
+      visibleProjects.find(project => project.logicalProjectId === state.selectedProjectId) ||
+      visibleProjects[0] ||
+      null;
     const nextSelectedProjectId = nextSelectedProject?.logicalProjectId || "";
     const changed = nextSelectedProjectId !== (selectedFromWorkspace || state.selectedProjectId || "");
     state.selectedProjectId = nextSelectedProjectId;
@@ -1100,13 +1166,14 @@ function renderMemoryAutoStatus() {
   const autoBuildEnabled = scheduler?.enabled === true && scheduler?.running === true;
 
   memoryAutoStatusEl.classList.toggle("is-failed", !autoBuildEnabled);
-  memoryAutoStatusEl.textContent = autoBuildEnabled
-    ? t("topbar.autoStatus.enabled")
-    : t("topbar.autoStatus.failed");
+  memoryAutoStatusEl.textContent = autoBuildEnabled ? t("topbar.autoStatus.enabled") : t("topbar.autoStatus.failed");
 }
 
 function updateCounts() {
-  navLastIndexedEl.textContent = formatDateTime(state.overview?.lastIndexedAt || "") === "—" ? t("status.waitingForIndex") : formatDateTime(state.overview?.lastIndexedAt || "");
+  navLastIndexedEl.textContent =
+    formatDateTime(state.overview?.lastIndexedAt || "") === "—"
+      ? t("status.waitingForIndex")
+      : formatDateTime(state.overview?.lastIndexedAt || "");
   renderMemoryAutoStatus();
   syncMaintenanceActionState();
 }
@@ -1120,19 +1187,26 @@ function applyPageChrome() {
   userBoardEl.classList.toggle("board-active", state.activePage === "user" && !isDetail);
   traceBoardEl.classList.toggle("board-active", state.activePage === "trace" && !isDetail);
   memoryDetailBoardEl.classList.toggle("board-active", isDetail);
-  boardNavTabs.forEach((b) => b.classList.toggle("active", b.dataset.page === state.activePage && !isDetail));
+  boardNavTabs.forEach(b => b.classList.toggle("active", b.dataset.page === state.activePage && !isDetail));
 }
 
-function setActivePage(page) { if (!PAGE_CONFIG[page]) return; state.activePage = page; applyPageChrome(); }
+function setActivePage(page) {
+  if (!PAGE_CONFIG[page]) return;
+  state.activePage = page;
+  applyPageChrome();
+}
 
 function applyTraceTabChrome() {
-  traceSubTabs.forEach((b) => b.classList.toggle("active", b.dataset.trace === state.activeTraceTab));
+  traceSubTabs.forEach(b => b.classList.toggle("active", b.dataset.trace === state.activeTraceTab));
   recallPanelEl.classList.toggle("trace-panel-active", state.activeTraceTab === "recall");
   indexPanelEl.classList.toggle("trace-panel-active", state.activeTraceTab === "index");
   dreamPanelEl.classList.toggle("trace-panel-active", state.activeTraceTab === "dream");
 }
 
-function setActiveTraceTab(tab) { state.activeTraceTab = tab; applyTraceTabChrome(); }
+function setActiveTraceTab(tab) {
+  state.activeTraceTab = tab;
+  applyTraceTabChrome();
+}
 
 /* ── Settings Drawer ── */
 
@@ -1152,8 +1226,16 @@ function closeSettingsDrawer() {
 
 /* ── Detail Drawer ── */
 
-function openDetailDrawer() { state.detailOpen = true; detailDrawerEl.classList.remove("hidden"); updateAppScrim(); }
-function closeDetailDrawer() { state.detailOpen = false; detailDrawerEl.classList.add("hidden"); updateAppScrim(); }
+function openDetailDrawer() {
+  state.detailOpen = true;
+  detailDrawerEl.classList.remove("hidden");
+  updateAppScrim();
+}
+function closeDetailDrawer() {
+  state.detailOpen = false;
+  detailDrawerEl.classList.add("hidden");
+  updateAppScrim();
+}
 
 function showDetail({ meta = "", title = "", description = "", content = "", actions = [] }) {
   detailMetaEl.textContent = meta;
@@ -1161,7 +1243,7 @@ function showDetail({ meta = "", title = "", description = "", content = "", act
   detailDescriptionEl.textContent = description;
   detailContentEl.textContent = content;
   clearNode(detailActionsEl);
-  actions.forEach((a) => {
+  actions.forEach(a => {
     const btn = el("button", "tool-btn", a.label);
     if (a.variant === "danger") btn.classList.add("danger");
     btn.addEventListener("click", a.onClick);
@@ -1192,7 +1274,7 @@ function populateProjectStatusOptions(currentStatus) {
   if (!options.includes(normalizedCurrent)) {
     options.push(normalizedCurrent);
   }
-  options.forEach((status) => {
+  options.forEach(status => {
     const option = document.createElement("option");
     option.value = status;
     option.textContent = formatProjectStatusLabel(status);
@@ -1218,9 +1300,10 @@ function openEditorModal(session) {
     populateProjectStatusOptions(session.status);
     editorProjectNameEl.focus();
   } else {
-    editorModalTitleEl.textContent = session.record.type === "project"
-      ? ts("editor.memory.title.project")
-      : t(`editor.memory.title.${session.record.type}`);
+    editorModalTitleEl.textContent =
+      session.record.type === "project"
+        ? ts("editor.memory.title.project")
+        : t(`editor.memory.title.${session.record.type}`);
     editorModalSubtitleEl.textContent = t("editor.memory.subtitle");
     editorSaveBtn.textContent = t("editor.memory.save");
     editorMemoryNameEl.value = session.record.name || "";
@@ -1247,9 +1330,8 @@ function renderProjectContext() {
   clearNode(projectContextSectionEl);
   if (isGeneralWorkspace()) {
     const projects = getVisibleGeneralProjects();
-    const selectedProject = projects.find((project) => project.logicalProjectId === state.selectedProjectId)
-      || projects[0]
-      || null;
+    const selectedProject =
+      projects.find(project => project.logicalProjectId === state.selectedProjectId) || projects[0] || null;
 
     if (!projects.length) {
       const header = el("div", "project-context-head");
@@ -1279,7 +1361,7 @@ function renderProjectContext() {
     topicSelect.className = "project-topic-select";
     topicSelect.setAttribute("aria-label", t("project.general.select"));
     topicSelect.title = t("project.general.select");
-    projects.forEach((project) => {
+    projects.forEach(project => {
       const option = document.createElement("option");
       option.value = project.logicalProjectId;
       option.textContent = project.projectName;
@@ -1307,7 +1389,9 @@ function renderProjectContext() {
       t("project.context.statusChip", formatProjectStatusLabel(selectedProject.status || "in_progress")),
       ts("project.context.pathChip", basename(selectedProject.workspacePath || state.projectPath)),
       selectedProject.readOnly ? t("project.general.readOnly") : "",
-    ].filter(Boolean).forEach((text) => meta.append(el("span", "context-chip", text)));
+    ]
+      .filter(Boolean)
+      .forEach(text => meta.append(el("span", "context-chip", text)));
     selectedCard.append(meta);
     projectContextSectionEl.append(selectedCard);
     return;
@@ -1332,7 +1416,7 @@ function renderProjectContext() {
   [
     t("project.context.statusChip", formatProjectStatusLabel(pm?.status || "in_progress")),
     ts("project.context.pathChip", basename(state.projectPath)),
-  ].forEach((text) => meta.append(el("span", "context-chip", text)));
+  ].forEach(text => meta.append(el("span", "context-chip", text)));
   projectContextSectionEl.append(meta);
 }
 
@@ -1344,15 +1428,19 @@ function renderUserSummary() {
   const identityBackground = summary?.identityBackground || [];
   if (!summary || !identityBackground.length) {
     userSummaryEl.append(el("div", "empty-state", t("user.emptySummary")));
-    updateCounts(); applyPageChrome(); return;
+    updateCounts();
+    applyPageChrome();
+    return;
   }
-  const card = el("div", "entry-card"); card.dataset.kind = "feedback";
+  const card = el("div", "entry-card");
+  card.dataset.kind = "feedback";
   card.append(el("h4", "", t("user.identityBackground")));
   const list = el("ul", "");
-  identityBackground.forEach((item) => list.append(el("li", "", item)));
+  identityBackground.forEach(item => list.append(el("li", "", item)));
   card.append(list);
   userSummaryEl.append(card);
-  updateCounts(); applyPageChrome();
+  updateCounts();
+  applyPageChrome();
 }
 
 /* ── Memory Entry CRUD ── */
@@ -1360,7 +1448,10 @@ function renderUserSummary() {
 async function openMemoryDetail(id) {
   const records = await fetchJson(`/api/memory/memory/get?ids=${encodeURIComponent(id)}`);
   const record = Array.isArray(records) ? records[0] : null;
-  if (!record) { setStatus(t("status.notFoundMemory"), "error"); return; }
+  if (!record) {
+    setStatus(t("status.notFoundMemory"), "error");
+    return;
+  }
   showMemoryDetailPage(record);
 }
 
@@ -1382,7 +1473,7 @@ function showMemoryDetailPage(record) {
   } else {
     actions.push({ label: t("actions.deprecate"), onClick: () => void toggleDeprecation(record) });
   }
-  actions.forEach((a) => {
+  actions.forEach(a => {
     const btn = el("button", "tool-btn", a.label);
     if (a.variant === "danger") btn.classList.add("danger");
     btn.addEventListener("click", a.onClick);
@@ -1406,14 +1497,26 @@ async function editEntry(record) {
 }
 
 async function toggleDeprecation(record) {
-  await fetchJson("/api/memory/memory/actions", { method: "POST", headers: { "Content-Type": "application/json" }, body: { action: record.deprecated ? "restore_entries" : "deprecate_entries", ids: [record.relativePath] } });
-  setStatus(record.deprecated ? t("status.memoryRestored") : t("status.memoryDeprecated")); await loadWorkspace(); await openMemoryDetail(record.relativePath);
+  await fetchJson("/api/memory/memory/actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { action: record.deprecated ? "restore_entries" : "deprecate_entries", ids: [record.relativePath] },
+  });
+  setStatus(record.deprecated ? t("status.memoryRestored") : t("status.memoryDeprecated"));
+  await loadWorkspace();
+  await openMemoryDetail(record.relativePath);
 }
 
 async function deleteEntry(record) {
   if (!window.confirm(t("confirm.deleteMemory", record.name))) return;
-  await fetchJson("/api/memory/memory/actions", { method: "POST", headers: { "Content-Type": "application/json" }, body: { action: "delete_entries", ids: [record.relativePath] } });
-  setStatus(t("status.memoryDeleted")); await loadWorkspace(); closeMemoryDetailPage();
+  await fetchJson("/api/memory/memory/actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: { action: "delete_entries", ids: [record.relativePath] },
+  });
+  setStatus(t("status.memoryDeleted"));
+  await loadWorkspace();
+  closeMemoryDetailPage();
 }
 
 function buildEntryCard(record) {
@@ -1421,11 +1524,25 @@ function buildEntryCard(record) {
   card.dataset.kind = record.deprecated ? "deprecated" : record.type;
   const head = el("div", "entry-head");
   head.append(el("h4", "", record.name));
-  const badge = el("span", "entry-badge", record.deprecated ? t("record.badge.deprecated") : record.type === "feedback" ? t("record.badge.feedback") : ts("record.badge.project"));
+  const badge = el(
+    "span",
+    "entry-badge",
+    record.deprecated
+      ? t("record.badge.deprecated")
+      : record.type === "feedback"
+        ? t("record.badge.feedback")
+        : ts("record.badge.project"),
+  );
   badge.dataset.kind = record.deprecated ? "deprecated" : record.type;
   head.append(badge);
   card.append(head);
-  card.append(el("div", "entry-meta", `${formatDateTime(record.updatedAt)} · ${formatEntrySource(record)} · ${record.relativePath}`));
+  card.append(
+    el(
+      "div",
+      "entry-meta",
+      `${formatDateTime(record.updatedAt)} · ${formatEntrySource(record)} · ${record.relativePath}`,
+    ),
+  );
   card.append(el("div", "", record.description || t("detail.noDescription")));
   card.addEventListener("click", () => void openMemoryDetail(record.relativePath));
   return card;
@@ -1435,20 +1552,22 @@ function renderWorkspace() {
   const ws = state.workspace;
   applyScopedTranslations();
   renderProjectContext();
-  const pe = ws?.projectEntries || [], fe = ws?.feedbackEntries || [];
+  const pe = ws?.projectEntries || [],
+    fe = ws?.feedbackEntries || [];
   const de = [...(ws?.deprecatedProjectEntries || []), ...(ws?.deprecatedFeedbackEntries || [])];
   clearNode(projectEntriesEl);
   if (!pe.length) renderEmpty(projectEntriesEl, ts("workspace.empty.project"));
-  else pe.forEach((r) => projectEntriesEl.append(buildEntryCard(r)));
+  else pe.forEach(r => projectEntriesEl.append(buildEntryCard(r)));
   feedbackEntriesSectionEl.classList.toggle("hidden", !fe.length && !state.workspaceQuery);
   clearNode(feedbackEntriesEl);
   if (!fe.length) renderEmpty(feedbackEntriesEl, t("workspace.empty.feedback"));
-  else fe.forEach((r) => feedbackEntriesEl.append(buildEntryCard(r)));
+  else fe.forEach(r => feedbackEntriesEl.append(buildEntryCard(r)));
   deprecatedEntriesSectionEl.classList.toggle("hidden", !de.length);
   clearNode(deprecatedEntriesEl);
   if (!de.length) renderEmpty(deprecatedEntriesEl, t("workspace.empty.deprecated"));
-  else de.forEach((r) => deprecatedEntriesEl.append(buildEntryCard(r)));
-  updateCounts(); applyPageChrome();
+  else de.forEach(r => deprecatedEntriesEl.append(buildEntryCard(r)));
+  updateCounts();
+  applyPageChrome();
 }
 
 /* ══════════════════════════════════════════
@@ -1462,9 +1581,15 @@ function buildTimelineStep(stepNum, step) {
   wrapper.append(dot);
 
   const card = el("div", "tl-card");
-  const titleText = renderTraceI18nText(step.title, step.titleI18n, state.locale, TRACE_LOCALES) || step.title || `Step ${stepNum}`;
+  const titleText =
+    renderTraceI18nText(step.title, step.titleI18n, state.locale, TRACE_LOCALES) || step.title || `Step ${stepNum}`;
   const inputSummaryText = renderTraceI18nText(step.inputSummary, step.inputSummaryI18n, state.locale, TRACE_LOCALES);
-  const outputSummaryText = renderTraceI18nText(step.outputSummary, step.outputSummaryI18n, state.locale, TRACE_LOCALES);
+  const outputSummaryText = renderTraceI18nText(
+    step.outputSummary,
+    step.outputSummaryI18n,
+    state.locale,
+    TRACE_LOCALES,
+  );
 
   const head = el("div", "tl-head");
   head.append(el("span", "tl-title", titleText));
@@ -1525,18 +1650,18 @@ function buildTimelineStep(stepNum, step) {
 
   if (step.details && Array.isArray(step.details) && step.details.length) {
     body.append(el("div", "tl-section-title", t("timeline.details")));
-    step.details.forEach((d) => {
+    step.details.forEach(d => {
       const detailLabel = renderTraceI18nText(d.label, d.labelI18n, state.locale, TRACE_LOCALES) || d.label;
       if (detailLabel) body.append(el("div", "tl-section-title", detailLabel));
       if (d.kind === "text" || d.kind === "note") {
         body.append(el("pre", "tl-code", d.text || ""));
       } else if (d.kind === "list" && d.items) {
         const ul = el("ul", "");
-        d.items.forEach((item) => ul.append(el("li", "", item)));
+        d.items.forEach(item => ul.append(el("li", "", item)));
         body.append(ul);
       } else if (d.kind === "kv" && d.entries) {
         const table = el("table", "tl-kv-table");
-        d.entries.forEach((entry) => {
+        d.entries.forEach(entry => {
           const tr = el("tr", "");
           tr.append(el("td", "", entry.key || ""));
           tr.append(el("td", "", typeof entry.value === "string" ? entry.value : JSON.stringify(entry.value)));
@@ -1549,7 +1674,9 @@ function buildTimelineStep(stepNum, step) {
     });
   } else if (step.details && !Array.isArray(step.details)) {
     body.append(el("div", "tl-section-title", t("timeline.details")));
-    body.append(el("pre", "tl-code", typeof step.details === "string" ? step.details : JSON.stringify(step.details, null, 2)));
+    body.append(
+      el("pre", "tl-code", typeof step.details === "string" ? step.details : JSON.stringify(step.details, null, 2)),
+    );
   }
 
   if (step.promptDebug) {
@@ -1593,12 +1720,16 @@ function renderTimeline(containerEl, steps) {
 
 function renderRecallCaseList() {
   clearNode(recallCaseSelectEl);
-  const def = el("option", "", t("trace.selectRecallCase")); def.value = ""; recallCaseSelectEl.append(def);
-  state.caseTraces.forEach((c) => {
+  const def = el("option", "", t("trace.selectRecallCase"));
+  def.value = "";
+  recallCaseSelectEl.append(def);
+  state.caseTraces.forEach(c => {
     const opt = el("option", "", `${c.query} — ${c.sessionKey} · ${formatDateTime(c.startedAt)}`);
-    opt.value = c.caseId; recallCaseSelectEl.append(opt);
+    opt.value = c.caseId;
+    recallCaseSelectEl.append(opt);
   });
-  recallDetailEl.classList.add("hidden"); recallEmptyEl.classList.remove("hidden");
+  recallDetailEl.classList.add("hidden");
+  recallEmptyEl.classList.remove("hidden");
 }
 
 function buildKvCell(label, value) {
@@ -1609,10 +1740,15 @@ function buildKvCell(label, value) {
 }
 
 async function loadRecallDetail(caseId) {
-  if (!caseId) { recallDetailEl.classList.add("hidden"); recallEmptyEl.classList.remove("hidden"); return; }
+  if (!caseId) {
+    recallDetailEl.classList.add("hidden");
+    recallEmptyEl.classList.remove("hidden");
+    return;
+  }
   try {
     const r = await fetchJson(`/api/memory/cases/${encodeURIComponent(caseId)}`);
-    recallEmptyEl.classList.add("hidden"); recallDetailEl.classList.remove("hidden");
+    recallEmptyEl.classList.add("hidden");
+    recallDetailEl.classList.remove("hidden");
 
     clearNode(recallMetaTableEl);
     recallMetaTableEl.append(buildKvCell(t("trace.meta.query"), r.query || "—"));
@@ -1620,7 +1756,9 @@ async function loadRecallDetail(caseId) {
     recallMetaTableEl.append(buildKvCell(t("trace.meta.mode"), formatRecallRoute(r.retrieval?.intent || "auto")));
     recallMetaTableEl.append(buildKvCell(t("trace.meta.reason"), formatRecallRoute(r.retrieval?.intent || "none")));
     recallMetaTableEl.append(buildKvCell(t("trace.meta.status"), r.status || "—"));
-    recallMetaTableEl.append(buildKvCell(t("trace.meta.injected"), r.retrieval?.injected ? t("status.yes") : t("status.no")));
+    recallMetaTableEl.append(
+      buildKvCell(t("trace.meta.injected"), r.retrieval?.injected ? t("status.yes") : t("status.no")),
+    );
     recallMetaTableEl.append(buildKvCell(t("trace.meta.started"), formatDateTime(r.startedAt)));
     recallMetaTableEl.append(buildKvCell(t("trace.meta.finished"), formatDateTime(r.finishedAt)));
 
@@ -1628,7 +1766,7 @@ async function loadRecallDetail(caseId) {
 
     clearNode(recallToolEventsEl);
     if (r.toolEvents?.length) {
-      r.toolEvents.forEach((evt) => {
+      r.toolEvents.forEach(evt => {
         const block = el("div", "");
         block.append(el("strong", "", evt.summary || evt.toolName || "tool"));
         if (evt.paramsPreview) block.append(el("pre", "tl-code", evt.paramsPreview));
@@ -1643,71 +1781,116 @@ async function loadRecallDetail(caseId) {
 
     const steps = r.retrieval?.trace?.steps || [];
     renderTimeline(recallStepsEl, steps);
-  } catch (err) { setStatus(err instanceof Error ? err.message : String(err), "error"); }
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : String(err), "error");
+  }
 }
 
 /* ── Index / Dream Trace Rendering ── */
 
 function renderIndexTraceSelect() {
   clearNode(indexTraceSelectEl);
-  const def = el("option", "", t("trace.selectIndexTrace")); def.value = ""; indexTraceSelectEl.append(def);
-  state.indexTraces.forEach((t) => {
+  const def = el("option", "", t("trace.selectIndexTrace"));
+  def.value = "";
+  indexTraceSelectEl.append(def);
+  state.indexTraces.forEach(t => {
     const opt = el(
       "option",
       "",
       `${t.indexTraceId} · ${formatTraceTrigger(t.trigger)} · ${formatTraceDisplayStatus(t)} · ${formatDateTime(t.startedAt)}`,
     );
-    opt.value = t.indexTraceId; indexTraceSelectEl.append(opt);
+    opt.value = t.indexTraceId;
+    indexTraceSelectEl.append(opt);
   });
-  indexDetailEl.classList.add("hidden"); indexEmptyEl.classList.remove("hidden");
+  indexDetailEl.classList.add("hidden");
+  indexEmptyEl.classList.remove("hidden");
 }
 
 function renderDreamTraceSelect() {
   clearNode(dreamTraceSelectEl);
-  const def = el("option", "", t("trace.selectDreamTrace")); def.value = ""; dreamTraceSelectEl.append(def);
-  state.dreamTraces.forEach((t) => {
+  const def = el("option", "", t("trace.selectDreamTrace"));
+  def.value = "";
+  dreamTraceSelectEl.append(def);
+  state.dreamTraces.forEach(t => {
     const opt = el(
       "option",
       "",
       `${t.dreamTraceId} · ${formatTraceTrigger(t.trigger)} · ${formatTraceDisplayStatus(t)} · ${formatDateTime(t.startedAt)}`,
     );
-    opt.value = t.dreamTraceId; dreamTraceSelectEl.append(opt);
+    opt.value = t.dreamTraceId;
+    dreamTraceSelectEl.append(opt);
   });
-  dreamDetailEl.classList.add("hidden"); dreamEmptyEl.classList.remove("hidden");
+  dreamDetailEl.classList.add("hidden");
+  dreamEmptyEl.classList.remove("hidden");
 }
 
 async function loadIndexDetail(traceId) {
-  if (!traceId) { indexDetailEl.classList.add("hidden"); indexEmptyEl.classList.remove("hidden"); return; }
+  if (!traceId) {
+    indexDetailEl.classList.add("hidden");
+    indexEmptyEl.classList.remove("hidden");
+    return;
+  }
   try {
     const r = await fetchJson(`/api/memory/index-traces/${encodeURIComponent(traceId)}`);
-    indexEmptyEl.classList.add("hidden"); indexDetailEl.classList.remove("hidden");
+    indexEmptyEl.classList.add("hidden");
+    indexDetailEl.classList.remove("hidden");
     renderTimeline(indexStepsEl, r.steps || []);
-    indexStepsEl.prepend(el(
-      "div",
-      "tl-summary",
-      t("trace.sourceLabel", formatTraceTrigger(r.trigger), formatTraceDisplayStatus(r), t("trace.index.explanation")),
-    ));
-  } catch (err) { setStatus(err instanceof Error ? err.message : String(err), "error"); }
+    indexStepsEl.prepend(
+      el(
+        "div",
+        "tl-summary",
+        t(
+          "trace.sourceLabel",
+          formatTraceTrigger(r.trigger),
+          formatTraceDisplayStatus(r),
+          t("trace.index.explanation"),
+        ),
+      ),
+    );
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : String(err), "error");
+  }
 }
 
 async function loadDreamDetail(traceId) {
-  if (!traceId) { dreamDetailEl.classList.add("hidden"); dreamEmptyEl.classList.remove("hidden"); return; }
+  if (!traceId) {
+    dreamDetailEl.classList.add("hidden");
+    dreamEmptyEl.classList.remove("hidden");
+    return;
+  }
   try {
     const r = await fetchJson(`/api/memory/dream-traces/${encodeURIComponent(traceId)}`);
-    dreamEmptyEl.classList.add("hidden"); dreamDetailEl.classList.remove("hidden");
+    dreamEmptyEl.classList.add("hidden");
+    dreamDetailEl.classList.remove("hidden");
     renderTimeline(dreamStepsEl, r.steps || []);
-    dreamStepsEl.prepend(el(
-      "div",
-      "tl-summary",
-      t("trace.sourceLabel", formatTraceTrigger(r.trigger), formatTraceDisplayStatus(r), t("trace.dream.explanation")),
-    ));
-  } catch (err) { setStatus(err instanceof Error ? err.message : String(err), "error"); }
+    dreamStepsEl.prepend(
+      el(
+        "div",
+        "tl-summary",
+        t(
+          "trace.sourceLabel",
+          formatTraceTrigger(r.trigger),
+          formatTraceDisplayStatus(r),
+          t("trace.dream.explanation"),
+        ),
+      ),
+    );
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : String(err), "error");
+  }
 }
 
 /* ── Data Loading ── */
 
-async function loadOverview() { state.overview = await fetchJson("/api/memory/overview"); updateCounts(); applyPageChrome(); }
-async function loadSettings() { state.settings = await fetchJson("/api/memory/settings"); updateCounts(); }
+async function loadOverview() {
+  state.overview = await fetchJson("/api/memory/overview");
+  updateCounts();
+  applyPageChrome();
+}
+async function loadSettings() {
+  state.settings = await fetchJson("/api/memory/settings");
+  updateCounts();
+}
 async function loadWorkspace() {
   state.workspace = await fetchJson(buildWorkspaceRequestPath("/api/memory/workspace?limit=200"));
   const selectionChanged = syncSelectedProjectIdFromWorkspace();
@@ -1717,11 +1900,23 @@ async function loadWorkspace() {
   }
   renderWorkspace();
 }
-async function loadUserSummary() { state.userSummary = await fetchJson("/api/memory/memory/user-summary"); renderUserSummary(); }
-async function loadCaseTraces() { const c = await fetchJson("/api/memory/cases?limit=12"); state.caseTraces = Array.isArray(c) ? c : []; renderRecallCaseList(); updateCounts(); }
+async function loadUserSummary() {
+  state.userSummary = await fetchJson("/api/memory/memory/user-summary");
+  renderUserSummary();
+}
+async function loadCaseTraces() {
+  const c = await fetchJson("/api/memory/cases?limit=12");
+  state.caseTraces = Array.isArray(c) ? c : [];
+  renderRecallCaseList();
+  updateCounts();
+}
 async function loadTraces() {
-  const [it, dt] = await Promise.all([fetchJson("/api/memory/index-traces?limit=10"), fetchJson("/api/memory/dream-traces?limit=10")]);
-  state.indexTraces = Array.isArray(it) ? it : []; state.dreamTraces = Array.isArray(dt) ? dt : [];
+  const [it, dt] = await Promise.all([
+    fetchJson("/api/memory/index-traces?limit=10"),
+    fetchJson("/api/memory/dream-traces?limit=10"),
+  ]);
+  state.indexTraces = Array.isArray(it) ? it : [];
+  state.dreamTraces = Array.isArray(dt) ? dt : [];
   renderIndexTraceSelect();
   renderDreamTraceSelect();
   updateCounts();
@@ -1754,10 +1949,24 @@ function applyDashboardSnapshot(snapshot) {
 }
 
 async function loadDashboard() {
-  if (!state.projectPath) { setStatus(t("error.missingProjectPath"), "error"); return; }
+  if (!state.projectPath) {
+    setStatus(t("error.missingProjectPath"), "error");
+    return;
+  }
   setStatus(t("status.refreshing"));
-  try { await Promise.all([loadOverview(), loadSettings(), loadWorkspace(), loadUserSummary(), loadCaseTraces(), loadTraces()]); setStatus(DEFAULT_ACTIVITY); }
-  catch (err) { setStatus(err instanceof Error ? err.message : String(err), "error"); }
+  try {
+    await Promise.all([
+      loadOverview(),
+      loadSettings(),
+      loadWorkspace(),
+      loadUserSummary(),
+      loadCaseTraces(),
+      loadTraces(),
+    ]);
+    setStatus(DEFAULT_ACTIVITY);
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : String(err), "error");
+  }
 }
 
 /* ── Actions ── */
@@ -1788,11 +1997,9 @@ function buildDownloadName(prefix) {
 
 function buildImportStatusMessage(successKey, response) {
   const warnings = Array.isArray(response?.warnings)
-    ? response.warnings.filter((warning) => typeof warning === "string" && warning.trim())
+    ? response.warnings.filter(warning => typeof warning === "string" && warning.trim())
     : [];
-  return warnings.length > 0
-    ? `${t(successKey)} ${warnings.join(" ")}`
-    : t(successKey);
+  return warnings.length > 0 ? `${t(successKey)} ${warnings.join(" ")}` : t(successKey);
 }
 
 function parseBundleFileText(raw) {
@@ -1897,12 +2104,7 @@ async function rollbackLastDream() {
   if (!window.confirm(ts("confirm.rollbackLastDream"))) return;
   closeSettingsDrawer();
   try {
-    await runAction(
-      t("actions.rollbackLastDream"),
-      "/api/memory/dream/rollback-last",
-      {},
-      { maintenance: true },
-    );
+    await runAction(t("actions.rollbackLastDream"), "/api/memory/dream/rollback-last", {}, { maintenance: true });
     setStatus(t("status.lastDreamRolledBack"));
   } catch {
     // runAction already surfaced the error
@@ -2006,27 +2208,44 @@ async function saveSettings() {
     setStatus(t("status.settingsSaved"));
     await loadSettings();
     syncSettingsInputsFromState();
-  } catch (err) { setStatus(err instanceof Error ? err.message : String(err), "error"); }
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : String(err), "error");
+  }
 }
 
 /* ── Event Bindings ── */
 
-boardNavTabs.forEach((b) => b.addEventListener("click", () => { closeSettingsDrawer(); state.memoryDetailOpen = false; setActivePage(b.dataset.page || "project"); }));
-traceSubTabs.forEach((b) => b.addEventListener("click", () => setActiveTraceTab(b.dataset.trace || "recall")));
+boardNavTabs.forEach(b =>
+  b.addEventListener("click", () => {
+    closeSettingsDrawer();
+    state.memoryDetailOpen = false;
+    setActivePage(b.dataset.page || "project");
+  }),
+);
+traceSubTabs.forEach(b => b.addEventListener("click", () => setActiveTraceTab(b.dataset.trace || "recall")));
 recallCaseSelectEl.addEventListener("change", () => void loadRecallDetail(recallCaseSelectEl.value));
 indexTraceSelectEl.addEventListener("change", () => void loadIndexDetail(indexTraceSelectEl.value));
 dreamTraceSelectEl.addEventListener("change", () => void loadDreamDetail(dreamTraceSelectEl.value));
-settingsToggleBtn?.addEventListener("click", () => { if (state.settingsOpen) closeSettingsDrawer(); else openSettingsDrawer(); });
+settingsToggleBtn?.addEventListener("click", () => {
+  if (state.settingsOpen) closeSettingsDrawer();
+  else openSettingsDrawer();
+});
 settingsCloseBtn?.addEventListener("click", () => closeSettingsDrawer());
 saveSettingsBtn?.addEventListener("click", () => void saveSettings());
 settingAutoIndexUnitEl?.addEventListener("change", () => handleSettingsUnitChange("autoIndex"));
 settingAutoDreamUnitEl?.addEventListener("change", () => handleSettingsUnitChange("autoDream"));
 editorCloseBtn.addEventListener("click", () => closeEditorModal());
 editorCancelBtn.addEventListener("click", () => closeEditorModal());
-editorFormEl.addEventListener("submit", (event) => void handleEditorSubmit(event));
+editorFormEl.addEventListener("submit", event => void handleEditorSubmit(event));
 refreshBtn.addEventListener("click", () => void loadDashboard());
-indexBtn.addEventListener("click", () => void runAction(t("actions.index"), "/api/memory/index/run", {}, { maintenance: true }));
-dreamBtn.addEventListener("click", () => void runAction(t("actions.dream"), "/api/memory/dream/run", {}, { maintenance: true }));
+indexBtn.addEventListener(
+  "click",
+  () => void runAction(t("actions.index"), "/api/memory/index/run", {}, { maintenance: true }),
+);
+dreamBtn.addEventListener(
+  "click",
+  () => void runAction(t("actions.dream"), "/api/memory/dream/run", {}, { maintenance: true }),
+);
 exportCurrentProjectBtn?.addEventListener("click", () => void exportCurrentProjectMemory());
 importCurrentProjectBtn?.addEventListener("click", () => importCurrentProjectInput?.click());
 rollbackLastDreamBtn?.addEventListener("click", () => void rollbackLastDream());
@@ -2035,12 +2254,25 @@ importAllProjectsBtn?.addEventListener("click", () => importAllProjectsInput?.cl
 clearProjectBtn?.addEventListener("click", () => void clearCurrentProjectMemory());
 clearAllBtn?.addEventListener("click", () => void clearAllMemory());
 
-workspaceSearchEl.addEventListener("input", () => { state.workspaceQuery = workspaceSearchEl.value.trim(); if (state.activePage === "project") void loadWorkspace(); });
-workspaceSearchEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); state.workspaceQuery = workspaceSearchEl.value.trim(); void loadWorkspace(); } });
-workspaceSearchBtn.addEventListener("click", () => { state.workspaceQuery = workspaceSearchEl.value.trim(); void loadWorkspace(); });
+workspaceSearchEl.addEventListener("input", () => {
+  state.workspaceQuery = workspaceSearchEl.value.trim();
+  if (state.activePage === "project") void loadWorkspace();
+});
+workspaceSearchEl.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    state.workspaceQuery = workspaceSearchEl.value.trim();
+    void loadWorkspace();
+  }
+});
+workspaceSearchBtn.addEventListener("click", () => {
+  state.workspaceQuery = workspaceSearchEl.value.trim();
+  void loadWorkspace();
+});
 
-importCurrentProjectInput?.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0]; if (!file) return;
+importCurrentProjectInput?.addEventListener("change", async e => {
+  const file = e.target.files?.[0];
+  if (!file) return;
   try {
     await importBundle(
       file,
@@ -2048,20 +2280,36 @@ importCurrentProjectInput?.addEventListener("change", async (e) => {
       scopedKey("confirm.importCurrentProject"),
       scopedKey("status.currentProjectMemoryImported"),
     );
+  } finally {
+    importCurrentProjectInput.value = "";
   }
-  finally { importCurrentProjectInput.value = ""; }
 });
 
-importAllProjectsInput?.addEventListener("change", async (e) => {
-  const file = e.target.files?.[0]; if (!file) return;
-  try { await importBundle(file, "/api/memory/import/all-projects", "confirm.importAllProjects", "status.allProjectsMemoryImported"); }
-  finally { importAllProjectsInput.value = ""; }
+importAllProjectsInput?.addEventListener("change", async e => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    await importBundle(
+      file,
+      "/api/memory/import/all-projects",
+      "confirm.importAllProjects",
+      "status.allProjectsMemoryImported",
+    );
+  } finally {
+    importAllProjectsInput.value = "";
+  }
 });
 
 detailBackBtn.addEventListener("click", () => closeMemoryDetailPage());
 detailCloseBtn.addEventListener("click", () => closeDetailDrawer());
-settingsModalEl?.addEventListener("click", (e) => { if (e.target === settingsModalEl) closeSettingsDrawer(); });
-appScrimEl.addEventListener("click", () => { closeSettingsDrawer(); closeDetailDrawer(); closeEditorModal(); });
+settingsModalEl?.addEventListener("click", e => {
+  if (e.target === settingsModalEl) closeSettingsDrawer();
+});
+appScrimEl.addEventListener("click", () => {
+  closeSettingsDrawer();
+  closeDetailDrawer();
+  closeEditorModal();
+});
 
 /* ── Init ── */
 

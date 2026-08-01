@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from "react";
 import {
   Activity,
   AlertCircle,
@@ -11,8 +11,8 @@ import {
   Terminal,
   Wrench,
   type LucideIcon,
-} from 'lucide-react';
-import { AgentTimeline } from './AgentTimeline';
+} from "lucide-react";
+import { AgentTimeline } from "./AgentTimeline";
 
 export type ProcessTraceMetric = {
   key: string;
@@ -44,13 +44,7 @@ type ProcessTraceProps = {
   className?: string;
 };
 
-export function ProcessRunHeader({
-  label,
-  className = '',
-}: {
-  label: string;
-  className?: string;
-}) {
+export function ProcessRunHeader({ label, className = "" }: { label: string; className?: string }) {
   return (
     <div
       role="status"
@@ -69,7 +63,7 @@ export function ProcessLiveStatus({
   defaultExpanded = false,
   expanded: controlledExpanded,
   onExpandedChange,
-  className = '',
+  className = "",
 }: {
   step: ProcessTraceStep;
   children?: ReactNode;
@@ -82,23 +76,21 @@ export function ProcessLiveStatus({
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
   const expanded = controlledExpanded ?? uncontrolledExpanded;
   const setExpanded = (nextExpanded: boolean | ((value: boolean) => boolean)) => {
-    const resolvedExpanded = typeof nextExpanded === 'function'
-      ? nextExpanded(expanded)
-      : nextExpanded;
+    const resolvedExpanded = typeof nextExpanded === "function" ? nextExpanded(expanded) : nextExpanded;
     if (controlledExpanded === undefined) {
       setUncontrolledExpanded(resolvedExpanded);
     }
     onExpandedChange?.(resolvedExpanded);
   };
   const Icon = getStepIcon(step);
-  const title = step.title || step.toolName || 'Working';
-  const isRunning = step.state !== 'failed' && step.state !== 'completed' && step.state !== 'cancelled';
+  const title = step.title || step.toolName || "Working";
+  const isRunning = step.state !== "failed" && step.state !== "completed" && step.state !== "cancelled";
   const hasDetails = Boolean(children);
   const statusContent = (
     <>
       <Icon
         className={`mt-[0.28rem] h-3.5 w-3.5 shrink-0 ${getStepIconClass(step)} ${
-          Icon === Loader2 && isRunning ? 'animate-spin' : ''
+          Icon === Loader2 && isRunning ? "animate-spin" : ""
         }`}
         strokeWidth={1.8}
       />
@@ -124,40 +116,36 @@ export function ProcessLiveStatus({
     <div
       role="status"
       aria-live="polite"
-      className={`process-live-status ${compact ? 'py-0' : 'pb-1'} text-[14px] leading-relaxed text-neutral-400 dark:text-neutral-500 ${className}`}
+      className={`process-live-status ${compact ? "py-0" : "pb-1"} text-[14px] leading-relaxed text-neutral-400 dark:text-neutral-500 ${className}`}
     >
       {hasDetails ? (
         <button
           type="button"
           aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
+          onClick={() => setExpanded(value => !value)}
           className={`group inline-flex min-w-0 max-w-full items-start gap-2 text-left transition hover:text-neutral-600 dark:hover:text-neutral-300 ${
-            isRunning ? 'animate-pulse' : ''
+            isRunning ? "animate-pulse" : ""
           }`}
         >
           {statusContent}
         </button>
       ) : (
-        <div className={`inline-flex min-w-0 max-w-full items-start gap-2 ${isRunning ? 'animate-pulse' : ''}`}>
+        <div className={`inline-flex min-w-0 max-w-full items-start gap-2 ${isRunning ? "animate-pulse" : ""}`}>
           {statusContent}
         </div>
       )}
-      {expanded && hasDetails ? (
-        <div className="mt-1.5 space-y-1.5 pl-5">
-          {children}
-        </div>
-      ) : null}
+      {expanded && hasDetails ? <div className="mt-1.5 space-y-1.5 pl-5">{children}</div> : null}
     </div>
   );
 }
 
 function getStepIcon(step: ProcessTraceStep): LucideIcon {
-  const haystack = `${step.phase || ''} ${step.toolName || ''} ${step.title || ''}`.toLowerCase();
+  const haystack = `${step.phase || ""} ${step.toolName || ""} ${step.title || ""}`.toLowerCase();
 
-  if (step.state === 'failed' || step.severity === 'error' || step.severity === 'warning') {
+  if (step.state === "failed" || step.severity === "error" || step.severity === "warning") {
     return AlertCircle;
   }
-  if (step.phase === 'rag' || /search|grep|glob|find|检索|搜索/.test(haystack)) {
+  if (step.phase === "rag" || /search|grep|glob|find|检索|搜索/.test(haystack)) {
     return Search;
   }
   if (/edit|write|patch|update|create|modify|修改|编辑|写入|创建/.test(haystack)) {
@@ -166,45 +154,45 @@ function getStepIcon(step: ProcessTraceStep): LucideIcon {
   if (/bash|shell|terminal|command|exec|run|命令|运行/.test(haystack)) {
     return Terminal;
   }
-  if (step.phase === 'tool' || step.phase === 'subtask' || step.toolName) {
+  if (step.phase === "tool" || step.phase === "subtask" || step.toolName) {
     return Wrench;
   }
-  if (step.state === 'completed') {
+  if (step.state === "completed") {
     return CheckCircle2;
   }
-  if (step.state === 'running') {
+  if (step.state === "running") {
     return Loader2;
   }
   return Activity;
 }
 
 function getStepIconClass(step: ProcessTraceStep): string {
-  if (step.state === 'failed' || step.severity === 'error') {
-    return 'text-amber-600 dark:text-amber-400';
+  if (step.state === "failed" || step.severity === "error") {
+    return "text-amber-600 dark:text-amber-400";
   }
-  if (step.severity === 'warning') {
-    return 'text-amber-500 dark:text-amber-400';
+  if (step.severity === "warning") {
+    return "text-amber-500 dark:text-amber-400";
   }
-  if (step.state === 'running') {
-    return 'text-neutral-400 dark:text-neutral-500';
+  if (step.state === "running") {
+    return "text-neutral-400 dark:text-neutral-500";
   }
-  return 'text-neutral-400 dark:text-neutral-500';
+  return "text-neutral-400 dark:text-neutral-500";
 }
 
 function ProcessTraceLine({ step }: { step: ProcessTraceStep }) {
   const Icon = getStepIcon(step);
-  const isRunning = step.state === 'running';
-  const title = step.title || step.toolName || 'Step';
+  const isRunning = step.state === "running";
+  const title = step.title || step.toolName || "Step";
 
   return (
     <div
       className={`inline-flex min-w-0 max-w-full items-start gap-2 text-[14px] leading-relaxed text-neutral-400 dark:text-neutral-500 ${
-        isRunning ? 'animate-pulse' : ''
+        isRunning ? "animate-pulse" : ""
       }`}
     >
       <Icon
         className={`mt-[0.28rem] h-3.5 w-3.5 shrink-0 ${getStepIconClass(step)} ${
-          Icon === Loader2 && isRunning ? 'animate-spin' : ''
+          Icon === Loader2 && isRunning ? "animate-spin" : ""
         }`}
         strokeWidth={1.9}
       />
@@ -224,7 +212,7 @@ export function ProcessTrace({
   label,
   collapsedDetail,
   statusLabel,
-  status = 'completed',
+  status = "completed",
   metrics = [],
   steps = [],
   children,
@@ -232,14 +220,12 @@ export function ProcessTrace({
   expanded: controlledExpanded,
   onExpandedChange,
   live = false,
-  className = '',
+  className = "",
 }: ProcessTraceProps) {
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
   const expanded = controlledExpanded ?? uncontrolledExpanded;
   const setExpanded = (nextExpanded: boolean | ((value: boolean) => boolean)) => {
-    const resolvedExpanded = typeof nextExpanded === 'function'
-      ? nextExpanded(expanded)
-      : nextExpanded;
+    const resolvedExpanded = typeof nextExpanded === "function" ? nextExpanded(expanded) : nextExpanded;
     if (controlledExpanded === undefined) {
       setUncontrolledExpanded(resolvedExpanded);
     }
@@ -249,12 +235,12 @@ export function ProcessTrace({
   const visibleCollapsedDetail = !expanded && collapsedDetail;
   const summaryIconStep = steps[0] || { title: label, state: status };
   const SummaryIcon = getStepIcon(summaryIconStep);
-  const isRunning = status === 'running';
+  const isRunning = status === "running";
 
   return (
     <div
-      role={live ? 'status' : undefined}
-      aria-live={live ? 'polite' : undefined}
+      role={live ? "status" : undefined}
+      aria-live={live ? "polite" : undefined}
       className={`process-trace py-0 ${className}`}
     >
       <button
@@ -262,17 +248,17 @@ export function ProcessTrace({
         aria-expanded={hasDetails ? expanded : undefined}
         onClick={() => {
           if (hasDetails) {
-            setExpanded((value) => !value);
+            setExpanded(value => !value);
           }
         }}
         disabled={!hasDetails}
         className={`group inline-flex min-w-0 max-w-full items-center gap-2 text-left text-[14px] leading-relaxed text-neutral-400 transition hover:text-neutral-600 disabled:cursor-default disabled:hover:text-neutral-400 dark:text-neutral-500 dark:hover:text-neutral-300 dark:disabled:hover:text-neutral-500 ${
-          isRunning ? 'animate-pulse' : ''
+          isRunning ? "animate-pulse" : ""
         }`}
       >
         <SummaryIcon
           className={`h-3.5 w-3.5 shrink-0 ${getStepIconClass(summaryIconStep)} ${
-            SummaryIcon === Loader2 && isRunning ? 'animate-spin' : ''
+            SummaryIcon === Loader2 && isRunning ? "animate-spin" : ""
           }`}
           strokeWidth={1.8}
         />
@@ -284,9 +270,15 @@ export function ProcessTrace({
         ) : null}
         {hasDetails ? (
           expanded ? (
-            <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400 transition group-hover:text-neutral-500 dark:text-neutral-500 dark:group-hover:text-neutral-300" strokeWidth={1.8} />
+            <ChevronDown
+              className="h-4 w-4 shrink-0 text-neutral-400 transition group-hover:text-neutral-500 dark:text-neutral-500 dark:group-hover:text-neutral-300"
+              strokeWidth={1.8}
+            />
           ) : (
-            <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400 transition group-hover:text-neutral-500 dark:text-neutral-500 dark:group-hover:text-neutral-300" strokeWidth={1.8} />
+            <ChevronRight
+              className="h-4 w-4 shrink-0 text-neutral-400 transition group-hover:text-neutral-500 dark:text-neutral-500 dark:group-hover:text-neutral-300"
+              strokeWidth={1.8}
+            />
           )
         ) : null}
       </button>
@@ -297,7 +289,7 @@ export function ProcessTrace({
             <AgentTimeline steps={steps} />
           ) : (
             steps.map((step, index) => (
-              <ProcessTraceLine key={step.id || `${step.title || 'process-step'}-${index}`} step={step} />
+              <ProcessTraceLine key={step.id || `${step.title || "process-step"}-${index}`} step={step} />
             ))
           )}
           {children ? <div className="space-y-1.5 pt-0.5">{children}</div> : null}
@@ -307,14 +299,8 @@ export function ProcessTrace({
   );
 }
 
-export function StreamingThinkingPreview({
-  content,
-  maxLines = 10,
-}: {
-  content: string;
-  maxLines?: number;
-}) {
-  const lines = content.split('\n');
+export function StreamingThinkingPreview({ content, maxLines = 10 }: { content: string; maxLines?: number }) {
+  const lines = content.split("\n");
   const visibleLines = lines.slice(-maxLines);
   const hasOverflow = lines.length > maxLines;
 
@@ -324,15 +310,15 @@ export function StreamingThinkingPreview({
       style={
         hasOverflow
           ? {
-              maskImage: 'linear-gradient(to bottom, transparent 0%, black 25%)',
-              WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 25%)',
+              maskImage: "linear-gradient(to bottom, transparent 0%, black 25%)",
+              WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 25%)",
             }
           : undefined
       }
     >
       {visibleLines.map((line, i) => (
         <div key={i} className="whitespace-pre-wrap break-words">
-          {line || '\u00A0'}
+          {line || "\u00A0"}
         </div>
       ))}
     </div>

@@ -47,7 +47,7 @@ export class SignalWatcher {
       this.watcher = watchFn(this.options.projectRoot, { recursive: true }, (_event, filename) => {
         this.handleEvent(toUtf8(filename));
       });
-      this.watcher.on("error", (error) => {
+      this.watcher.on("error", error => {
         this.options.onError?.(error instanceof Error ? error : new Error(String(error)));
       });
     } catch (error) {
@@ -77,12 +77,15 @@ export class SignalWatcher {
     if (this.stopped) return;
     if (this.shouldIgnore(filename)) return;
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => {
-      this.timer = undefined;
-      if (!this.stopped) {
-        this.options.onSignal();
-      }
-    }, Math.max(0, this.options.debounceMs));
+    this.timer = setTimeout(
+      () => {
+        this.timer = undefined;
+        if (!this.stopped) {
+          this.options.onSignal();
+        }
+      },
+      Math.max(0, this.options.debounceMs),
+    );
   }
 
   private shouldIgnore(filename: string): boolean {

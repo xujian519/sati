@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import { CRON_SCHEDULE_SCHEMA } from "../../../src/cron/tool/CronSchemas.js";
 import { buildModelRequest } from "../../../src/model/index.js";
 import type {

@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Download,
-  Loader2,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, Loader2, Trash2, Upload } from "lucide-react";
 import { Button } from "../../../../shared/view/ui";
 import { cn } from "../../../../lib/utils";
 import { authenticatedFetch } from "../../../../utils/api";
@@ -36,10 +29,7 @@ function memoryProjectPath(project: SettingsProject): string {
   return (project.fullPath || project.path || "").trim();
 }
 
-function memoryProjectLabel(
-  project: SettingsProject,
-  fallback: string,
-): string {
+function memoryProjectLabel(project: SettingsProject, fallback: string): string {
   const direct = (project.displayName || project.name || "").trim();
   if (direct) return direct;
 
@@ -78,11 +68,7 @@ function parseMemoryJson(raw: string): Record<string, unknown> | null {
   return null;
 }
 
-function memoryApiErrorMessage(
-  response: Response,
-  raw: string,
-  body: Record<string, unknown> | null,
-): string {
+function memoryApiErrorMessage(response: Response, raw: string, body: Record<string, unknown> | null): string {
   const bodyError = typeof body?.error === "string" ? body.error : "";
   return bodyError || raw || `Request failed: ${response.status}`;
 }
@@ -107,9 +93,7 @@ function safeDownloadToken(value: string): string {
   );
 }
 
-export default function MemoryDataSection({
-  projects,
-}: MemoryDataSectionProps) {
+export default function MemoryDataSection({ projects }: MemoryDataSectionProps) {
   const { t } = useTranslation("settings");
   const importInputRef = useRef<HTMLInputElement>(null);
   const [memoryAction, setMemoryAction] = useState<MemoryActionState>({
@@ -118,9 +102,7 @@ export default function MemoryDataSection({
 
   const projectTargets = useMemo(() => {
     const seen = new Set<string>();
-    const fallback = t(
-      "pilotDeckConfig.panels.memory.data.target.projectFallback",
-    );
+    const fallback = t("satiConfig.panels.memory.data.target.projectFallback");
     return projects.reduce<MemoryProjectTarget[]>((items, project) => {
       const path = memoryProjectPath(project);
       if (!path || seen.has(path)) return items;
@@ -134,49 +116,35 @@ export default function MemoryDataSection({
     }, []);
   }, [projects, t]);
 
-  const [selectedMemoryTarget, setSelectedMemoryTarget] = useState(
-    () => projectTargets[0]?.value ?? MEMORY_ALL_TARGET,
-  );
+  const [selectedMemoryTarget, setSelectedMemoryTarget] = useState(() => projectTargets[0]?.value ?? MEMORY_ALL_TARGET);
 
   const memoryTargetOptions = useMemo(
     () => [
-      ...projectTargets.map((target) => ({
+      ...projectTargets.map(target => ({
         value: target.value,
         label: target.label,
       })),
       {
         value: MEMORY_ALL_TARGET,
-        label: t("pilotDeckConfig.panels.memory.data.target.all"),
+        label: t("satiConfig.panels.memory.data.target.all"),
       },
     ],
     [projectTargets, t],
   );
 
   useEffect(() => {
-    if (
-      !memoryTargetOptions.some(
-        (option) => option.value === selectedMemoryTarget,
-      )
-    ) {
-      setSelectedMemoryTarget(
-        projectTargets[0]?.value ?? MEMORY_ALL_TARGET,
-      );
+    if (!memoryTargetOptions.some(option => option.value === selectedMemoryTarget)) {
+      setSelectedMemoryTarget(projectTargets[0]?.value ?? MEMORY_ALL_TARGET);
     }
   }, [memoryTargetOptions, projectTargets, selectedMemoryTarget]);
 
   const targetIsAllMemory = selectedMemoryTarget === MEMORY_ALL_TARGET;
-  const selectedProjectPath = targetIsAllMemory
-    ? ""
-    : memoryProjectPathFromTarget(selectedMemoryTarget);
-  const selectedProjectTarget =
-    projectTargets.find((target) => target.path === selectedProjectPath) ??
-    null;
-  const dashboardProjectPath =
-    selectedProjectPath || projectTargets[0]?.path || "";
+  const selectedProjectPath = targetIsAllMemory ? "" : memoryProjectPathFromTarget(selectedMemoryTarget);
+  const selectedProjectTarget = projectTargets.find(target => target.path === selectedProjectPath) ?? null;
+  const dashboardProjectPath = selectedProjectPath || projectTargets[0]?.path || "";
   const selectedTargetLabel = targetIsAllMemory
-    ? t("pilotDeckConfig.panels.memory.data.target.all")
-    : selectedProjectTarget?.label ??
-      t("pilotDeckConfig.panels.memory.data.target.projectFallback");
+    ? t("satiConfig.panels.memory.data.target.all")
+    : (selectedProjectTarget?.label ?? t("satiConfig.panels.memory.data.target.projectFallback"));
   const actionBusy = memoryAction.kind === "busy";
   const canManageTarget = targetIsAllMemory || Boolean(selectedProjectPath);
 
@@ -198,10 +166,7 @@ export default function MemoryDataSection({
 
   const setActionSuccess = (messageKey: string, warnings?: unknown) => {
     const warningList = Array.isArray(warnings)
-      ? warnings.filter(
-          (warning): warning is string =>
-            typeof warning === "string" && warning.trim().length > 0,
-        )
+      ? warnings.filter((warning): warning is string => typeof warning === "string" && warning.trim().length > 0)
       : [];
     setMemoryAction({
       kind: "success",
@@ -222,35 +187,26 @@ export default function MemoryDataSection({
     if (!canManageTarget) {
       setMemoryAction({
         kind: "error",
-        message: t(
-          "pilotDeckConfig.panels.memory.data.errors.missingProject",
-        ),
+        message: t("satiConfig.panels.memory.data.errors.missingProject"),
       });
       return;
     }
 
-    setActionBusy("pilotDeckConfig.panels.memory.data.status.exporting");
+    setActionBusy("satiConfig.panels.memory.data.status.exporting");
     try {
       const url = targetIsAllMemory
         ? "/api/memory/export/all-projects"
-        : withMemoryProjectPath(
-            "/api/memory/export/current-project",
-            selectedProjectPath,
-          );
+        : withMemoryProjectPath("/api/memory/export/current-project", selectedProjectPath);
       const response = await authenticatedFetch(url, {
         suppressServerErrorToast: true,
       });
       const { raw, body } = await readMemoryResponse(response);
       if (!body) {
-        throw new Error(
-          t("pilotDeckConfig.panels.memory.data.errors.invalidExport"),
-        );
+        throw new Error(t("satiConfig.panels.memory.data.errors.invalidExport"));
       }
-      const prefix = targetIsAllMemory
-        ? "pilotdeck-memory-all"
-        : `pilotdeck-memory-${safeDownloadToken(selectedTargetLabel)}`;
+      const prefix = targetIsAllMemory ? "sati-memory-all" : `sati-memory-${safeDownloadToken(selectedTargetLabel)}`;
       downloadMemoryText(raw, `${prefix}-${Date.now()}.json`);
-      setActionSuccess("pilotDeckConfig.panels.memory.data.status.exported");
+      setActionSuccess("satiConfig.panels.memory.data.status.exported");
     } catch (error) {
       setActionError(error);
     }
@@ -261,9 +217,7 @@ export default function MemoryDataSection({
     if (!canManageTarget) {
       setMemoryAction({
         kind: "error",
-        message: t(
-          "pilotDeckConfig.panels.memory.data.errors.missingProject",
-        ),
+        message: t("satiConfig.panels.memory.data.errors.missingProject"),
       });
       return;
     }
@@ -277,38 +231,30 @@ export default function MemoryDataSection({
     if (!payload) {
       setMemoryAction({
         kind: "error",
-        message: t(
-          "pilotDeckConfig.panels.memory.data.errors.invalidImport",
-        ),
+        message: t("satiConfig.panels.memory.data.errors.invalidImport"),
       });
       return;
     }
 
     const confirmKey = targetIsAllMemory
-      ? "pilotDeckConfig.panels.memory.data.confirm.importAll"
-      : "pilotDeckConfig.panels.memory.data.confirm.importProject";
+      ? "satiConfig.panels.memory.data.confirm.importAll"
+      : "satiConfig.panels.memory.data.confirm.importProject";
     if (!window.confirm(t(confirmKey, { target: selectedTargetLabel }))) {
       return;
     }
 
-    setActionBusy("pilotDeckConfig.panels.memory.data.status.importing");
+    setActionBusy("satiConfig.panels.memory.data.status.importing");
     try {
       const url = targetIsAllMemory
         ? "/api/memory/import/all-projects"
-        : withMemoryProjectPath(
-            "/api/memory/import/current-project",
-            selectedProjectPath,
-          );
+        : withMemoryProjectPath("/api/memory/import/current-project", selectedProjectPath);
       const response = await authenticatedFetch(url, {
         method: "POST",
         body: JSON.stringify(payload),
         suppressServerErrorToast: true,
       });
       const { body } = await readMemoryResponse(response);
-      setActionSuccess(
-        "pilotDeckConfig.panels.memory.data.status.imported",
-        body?.warnings,
-      );
+      setActionSuccess("satiConfig.panels.memory.data.status.imported", body?.warnings);
     } catch (error) {
       setActionError(error);
     }
@@ -318,21 +264,19 @@ export default function MemoryDataSection({
     if (!canManageTarget) {
       setMemoryAction({
         kind: "error",
-        message: t(
-          "pilotDeckConfig.panels.memory.data.errors.missingProject",
-        ),
+        message: t("satiConfig.panels.memory.data.errors.missingProject"),
       });
       return;
     }
 
     const confirmKey = targetIsAllMemory
-      ? "pilotDeckConfig.panels.memory.data.confirm.clearAll"
-      : "pilotDeckConfig.panels.memory.data.confirm.clearProject";
+      ? "satiConfig.panels.memory.data.confirm.clearAll"
+      : "satiConfig.panels.memory.data.confirm.clearProject";
     if (!window.confirm(t(confirmKey, { target: selectedTargetLabel }))) {
       return;
     }
 
-    setActionBusy("pilotDeckConfig.panels.memory.data.status.clearing");
+    setActionBusy("satiConfig.panels.memory.data.status.clearing");
     try {
       const response = await authenticatedFetch("/api/memory/clear", {
         method: "POST",
@@ -340,9 +284,7 @@ export default function MemoryDataSection({
           targetIsAllMemory
             ? {
                 scope: "all_memory",
-                ...(dashboardProjectPath
-                  ? { projectPath: dashboardProjectPath }
-                  : {}),
+                ...(dashboardProjectPath ? { projectPath: dashboardProjectPath } : {}),
               }
             : {
                 scope: "current_project",
@@ -352,7 +294,7 @@ export default function MemoryDataSection({
         suppressServerErrorToast: true,
       });
       await readMemoryResponse(response);
-      setActionSuccess("pilotDeckConfig.panels.memory.data.status.cleared");
+      setActionSuccess("satiConfig.panels.memory.data.status.cleared");
     } catch (error) {
       setActionError(error);
     }
@@ -367,20 +309,18 @@ export default function MemoryDataSection({
 
   return (
     <SettingsSection
-      title={t("pilotDeckConfig.panels.memory.data.title")}
-      description={t("pilotDeckConfig.panels.memory.data.description")}
+      title={t("satiConfig.panels.memory.data.title")}
+      description={t("satiConfig.panels.memory.data.description")}
     >
       <SettingsCard divided>
         <FormRow
-          label={t("pilotDeckConfig.panels.memory.data.target.label")}
-          description={t(
-            "pilotDeckConfig.panels.memory.data.target.description",
-          )}
+          label={t("satiConfig.panels.memory.data.target.label")}
+          description={t("satiConfig.panels.memory.data.target.description")}
         >
           <Select
             value={selectedMemoryTarget}
             options={memoryTargetOptions}
-            onChange={(value) => {
+            onChange={value => {
               setSelectedMemoryTarget(value);
               setMemoryAction({ kind: "idle" });
             }}
@@ -397,7 +337,7 @@ export default function MemoryDataSection({
               onClick={() => void handleExportMemory()}
             >
               <Download className="mr-1.5 h-3.5 w-3.5" />
-              {t("pilotDeckConfig.panels.memory.data.actions.export")}
+              {t("satiConfig.panels.memory.data.actions.export")}
             </Button>
             <Button
               type="button"
@@ -408,7 +348,7 @@ export default function MemoryDataSection({
               onClick={() => importInputRef.current?.click()}
             >
               <Upload className="mr-1.5 h-3.5 w-3.5" />
-              {t("pilotDeckConfig.panels.memory.data.actions.import")}
+              {t("satiConfig.panels.memory.data.actions.import")}
             </Button>
             <Button
               type="button"
@@ -419,7 +359,7 @@ export default function MemoryDataSection({
               onClick={() => void handleClearMemory()}
             >
               <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-              {t("pilotDeckConfig.panels.memory.data.actions.clear")}
+              {t("satiConfig.panels.memory.data.actions.clear")}
             </Button>
           </div>
           <input
@@ -427,13 +367,11 @@ export default function MemoryDataSection({
             type="file"
             accept="application/json,.json"
             className="hidden"
-            onChange={(event) => {
+            onChange={event => {
               const input = event.currentTarget;
-              void handleImportMemoryFile(input.files?.[0] ?? null).finally(
-                () => {
-                  input.value = "";
-                },
-              );
+              void handleImportMemoryFile(input.files?.[0] ?? null).finally(() => {
+                input.value = "";
+              });
             }}
           />
           {memoryAction.kind !== "idle" && memoryAction.message && (
@@ -443,15 +381,9 @@ export default function MemoryDataSection({
                 memoryActionTone,
               )}
             >
-              {memoryAction.kind === "busy" && (
-                <Loader2 className="mt-0.5 h-3.5 w-3.5 animate-spin" />
-              )}
-              {memoryAction.kind === "success" && (
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5" />
-              )}
-              {memoryAction.kind === "error" && (
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5" />
-              )}
+              {memoryAction.kind === "busy" && <Loader2 className="mt-0.5 h-3.5 w-3.5 animate-spin" />}
+              {memoryAction.kind === "success" && <CheckCircle2 className="mt-0.5 h-3.5 w-3.5" />}
+              {memoryAction.kind === "error" && <AlertCircle className="mt-0.5 h-3.5 w-3.5" />}
               <span>{memoryAction.message}</span>
             </div>
           )}

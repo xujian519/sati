@@ -1,24 +1,21 @@
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import { DatabaseSync } from 'node:sqlite';
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
+import { DatabaseSync } from "node:sqlite";
 import {
   ALL_PROJECTS_MEMORY_EXPORT_FORMAT_VERSION,
   EdgeClawMemoryService,
   MemoryBundleValidationError,
   hashText,
-} from '../../../src/context/memory/edgeclaw-memory-core/lib/index.js';
-import { extractProjectDirectory } from '../projects.js';
-import {
-  buildMemoryDefaults,
-  readPilotDeckConfigFile,
-} from './pilotdeckConfig.js';
+} from "../../../src/context/memory/edgeclaw-memory-core/lib/index.js";
+import { extractProjectDirectory } from "../projects.js";
+import { buildMemoryDefaults, readSatiConfigFile } from "./satiConfig.js";
 
-const MEMORY_ROOT_DIR = path.join(process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck'), 'memory');
-const MEMORY_WORKSPACES_ROOT = path.join(MEMORY_ROOT_DIR, 'workspaces');
-const MEMORY_GLOBAL_ROOT = path.join(MEMORY_ROOT_DIR, 'global');
+const MEMORY_ROOT_DIR = path.join(process.env.SATI_HOME || path.join(os.homedir(), ".sati"), "memory");
+const MEMORY_WORKSPACES_ROOT = path.join(MEMORY_ROOT_DIR, "workspaces");
+const MEMORY_GLOBAL_ROOT = path.join(MEMORY_ROOT_DIR, "global");
 const MEMORY_SCHEDULER_INTERVAL_MS = 60_000;
-const GLOBAL_MAINTENANCE_TASK_KEY = '__edgeclaw_memory_global_maintenance__';
+const GLOBAL_MAINTENANCE_TASK_KEY = "__edgeclaw_memory_global_maintenance__";
 
 const servicesByDataDir = new Map();
 const workspaceTaskChains = new Map();
@@ -27,9 +24,7 @@ let schedulerTimer = null;
 let schedulerCyclePromise = null;
 
 function normalizePath(projectPath) {
-  return typeof projectPath === 'string' && projectPath.trim()
-    ? path.resolve(projectPath.trim())
-    : '';
+  return typeof projectPath === "string" && projectPath.trim() ? path.resolve(projectPath.trim()) : "";
 }
 
 function resolveWorkspaceDataDir(projectPath) {
@@ -39,16 +34,16 @@ function resolveWorkspaceDataDir(projectPath) {
 function buildServiceForDataDir(dataDir, workspaceDir = dataDir) {
   let memoryDefaults = {};
   try {
-    memoryDefaults = buildMemoryDefaults(readPilotDeckConfigFile().config);
+    memoryDefaults = buildMemoryDefaults(readSatiConfigFile().config);
   } catch {
     memoryDefaults = {};
   }
   const service = new EdgeClawMemoryService({
     workspaceDir,
     rootDir: MEMORY_ROOT_DIR,
-    dbPath: path.join(dataDir, 'control.sqlite'),
-    memoryDir: path.join(dataDir, 'memory'),
-    source: 'pilotdeck',
+    dbPath: path.join(dataDir, "control.sqlite"),
+    memoryDir: path.join(dataDir, "memory"),
+    source: "sati",
     ...memoryDefaults,
   });
   if (memoryDefaults.defaultIndexingSettings) {
@@ -58,20 +53,16 @@ function buildServiceForDataDir(dataDir, workspaceDir = dataDir) {
 }
 
 function readWorkspaceDirFromDataDir(dataDir) {
-  const dbPath = path.join(dataDir, 'control.sqlite');
+  const dbPath = path.join(dataDir, "control.sqlite");
   try {
     const db = new DatabaseSync(dbPath);
     try {
-      const row = db.prepare(
-        'SELECT state_json FROM pipeline_state WHERE state_key = ?',
-      ).get('workspaceDir');
-      if (!row || typeof row.state_json !== 'string') {
+      const row = db.prepare("SELECT state_json FROM pipeline_state WHERE state_key = ?").get("workspaceDir");
+      if (!row || typeof row.state_json !== "string") {
         return null;
       }
       const parsed = JSON.parse(row.state_json);
-      return typeof parsed === 'string' && parsed.trim()
-        ? path.resolve(parsed.trim())
-        : null;
+      return typeof parsed === "string" && parsed.trim() ? path.resolve(parsed.trim()) : null;
     } finally {
       db.close();
     }
@@ -97,7 +88,7 @@ function getOrCreateServiceForDataDir(dataDir, workspaceDir = dataDir) {
 function getOrCreateServiceForProjectPath(projectPath) {
   const normalizedProjectPath = normalizePath(projectPath);
   if (!normalizedProjectPath) {
-    throw new Error('projectPath is required');
+    throw new Error("projectPath is required");
   }
   const dataDir = resolveWorkspaceDataDir(normalizedProjectPath);
   const existing = servicesByDataDir.get(path.resolve(dataDir));
@@ -116,19 +107,18 @@ function getOrCreateServiceForProjectPath(projectPath) {
 }
 
 function enqueueTaskWithKeys(keys, task) {
-  const normalizedKeys = Array.from(new Set(
-    keys
-      .map((key) => String(key || '').trim())
-      .filter(Boolean),
-  ));
+  const normalizedKeys = Array.from(new Set(keys.map(key => String(key || "").trim()).filter(Boolean)));
   const previous = Promise.all(
-    normalizedKeys.map((key) => (workspaceTaskChains.get(key) ?? Promise.resolve()).catch(() => undefined)),
+    normalizedKeys.map(key => (workspaceTaskChains.get(key) ?? Promise.resolve()).catch(() => undefined)),
   );
   const next = previous.then(task);
-  const sentinel = next.then(() => undefined, () => undefined);
-  normalizedKeys.forEach((key) => workspaceTaskChains.set(key, sentinel));
+  const sentinel = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  normalizedKeys.forEach(key => workspaceTaskChains.set(key, sentinel));
   sentinel.finally(() => {
-    normalizedKeys.forEach((key) => {
+    normalizedKeys.forEach(key => {
       if (workspaceTaskChains.get(key) === sentinel) {
         workspaceTaskChains.delete(key);
       }
@@ -155,23 +145,23 @@ async function pathExists(targetPath) {
 }
 
 function normalizeSnapshotRelativePath(relativePath, label) {
-  if (typeof relativePath !== 'string' || !relativePath.trim()) {
+  if (typeof relativePath !== "string" || !relativePath.trim()) {
     throw new MemoryBundleValidationError(`Invalid ${label}.relativePath`);
   }
 
-  const segments = relativePath.replace(/\\/g, '/').split('/').filter(Boolean);
-  if (segments.length === 0 || segments.some((segment) => segment === '.' || segment === '..')) {
+  const segments = relativePath.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (segments.length === 0 || segments.some(segment => segment === "." || segment === "..")) {
     throw new MemoryBundleValidationError(`Invalid ${label}.relativePath`);
   }
 
-  return segments.join('/');
+  return segments.join("/");
 }
 
 function normalizeSnapshotFileRecord(value, label) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new MemoryBundleValidationError(`Invalid ${label}`);
   }
-  if (typeof value.content !== 'string') {
+  if (typeof value.content !== "string") {
     throw new MemoryBundleValidationError(`Invalid ${label}.content`);
   }
   return {
@@ -200,10 +190,10 @@ async function listSnapshotFiles(rootDir) {
       if (!entry.isFile()) {
         continue;
       }
-      const relativePath = path.relative(rootDir, absolutePath).replace(/\\/g, '/');
+      const relativePath = path.relative(rootDir, absolutePath).replace(/\\/g, "/");
       files.push({
         relativePath,
-        content: await fs.readFile(absolutePath, 'utf8'),
+        content: await fs.readFile(absolutePath, "utf8"),
       });
     }
   }
@@ -220,15 +210,11 @@ async function replaceSnapshotFiles(rootDir, files) {
     const record = normalizeSnapshotFileRecord(files[index], `files[${index}]`);
     const absolutePath = path.resolve(rootDir, record.relativePath);
     const relativeCheck = path.relative(rootDir, absolutePath);
-    if (
-      !relativeCheck
-      || relativeCheck.startsWith('..')
-      || path.isAbsolute(relativeCheck)
-    ) {
+    if (!relativeCheck || relativeCheck.startsWith("..") || path.isAbsolute(relativeCheck)) {
       throw new MemoryBundleValidationError(`Invalid files[${index}].relativePath`);
     }
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-    await fs.writeFile(absolutePath, record.content, 'utf8');
+    await fs.writeFile(absolutePath, record.content, "utf8");
   }
 }
 
@@ -255,19 +241,19 @@ function addTransferCounts(total, partial) {
 }
 
 function normalizeAllProjectsBundle(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new MemoryBundleValidationError('Invalid all-projects memory bundle');
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new MemoryBundleValidationError("Invalid all-projects memory bundle");
   }
   if (value.formatVersion !== ALL_PROJECTS_MEMORY_EXPORT_FORMAT_VERSION) {
     throw new MemoryBundleValidationError(
       `Unsupported all-projects memory bundle formatVersion. Expected ${ALL_PROJECTS_MEMORY_EXPORT_FORMAT_VERSION}.`,
     );
   }
-  if (value.scope !== 'all_projects') {
-    throw new MemoryBundleValidationError('Unsupported all-projects memory bundle scope.');
+  if (value.scope !== "all_projects") {
+    throw new MemoryBundleValidationError("Unsupported all-projects memory bundle scope.");
   }
   if (!Array.isArray(value.projects)) {
-    throw new MemoryBundleValidationError('Invalid all-projects memory bundle projects.');
+    throw new MemoryBundleValidationError("Invalid all-projects memory bundle projects.");
   }
 
   const globalFiles = Array.isArray(value.globalFiles)
@@ -283,7 +269,7 @@ function normalizeAllProjectsBundle(value) {
 
   const seenProjectPaths = new Set();
   const projects = value.projects.map((project, index) => {
-    if (!project || typeof project !== 'object' || Array.isArray(project)) {
+    if (!project || typeof project !== "object" || Array.isArray(project)) {
       throw new MemoryBundleValidationError(`Invalid projects[${index}]`);
     }
 
@@ -296,25 +282,27 @@ function normalizeAllProjectsBundle(value) {
     }
     seenProjectPaths.add(projectPath);
 
-    if (!project.bundle || typeof project.bundle !== 'object' || Array.isArray(project.bundle)) {
+    if (!project.bundle || typeof project.bundle !== "object" || Array.isArray(project.bundle)) {
       throw new MemoryBundleValidationError(`Invalid projects[${index}].bundle`);
     }
 
     return {
       projectPath,
-      projectName: typeof project.projectName === 'string' && project.projectName.trim()
-        ? project.projectName.trim()
-        : path.basename(projectPath),
+      projectName:
+        typeof project.projectName === "string" && project.projectName.trim()
+          ? project.projectName.trim()
+          : path.basename(projectPath),
       bundle: project.bundle,
     };
   });
 
   return {
     formatVersion: ALL_PROJECTS_MEMORY_EXPORT_FORMAT_VERSION,
-    scope: 'all_projects',
-    exportedAt: typeof value.exportedAt === 'string' && value.exportedAt.trim()
-      ? value.exportedAt.trim()
-      : new Date().toISOString(),
+    scope: "all_projects",
+    exportedAt:
+      typeof value.exportedAt === "string" && value.exportedAt.trim()
+        ? value.exportedAt.trim()
+        : new Date().toISOString(),
     projects,
     globalFiles,
   };
@@ -327,8 +315,8 @@ async function listWorkspaceDataDirs() {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const dataDir = path.join(MEMORY_WORKSPACES_ROOT, entry.name);
-      const hasDb = await pathExists(path.join(dataDir, 'control.sqlite'));
-      const hasMemoryDir = await pathExists(path.join(dataDir, 'memory'));
+      const hasDb = await pathExists(path.join(dataDir, "control.sqlite"));
+      const hasMemoryDir = await pathExists(path.join(dataDir, "memory"));
       if (hasDb && hasMemoryDir) {
         dirs.push(dataDir);
       }
@@ -341,7 +329,7 @@ async function listWorkspaceDataDirs() {
 
 async function executeScheduledMaintenanceForDataDir(dataDir) {
   const { service } = getOrCreateServiceForDataDir(dataDir);
-  return enqueueMaintenanceTask(dataDir, async () => service.runDueScheduledMaintenance('scheduled:server_scheduler'));
+  return enqueueMaintenanceTask(dataDir, async () => service.runDueScheduledMaintenance("scheduled:server_scheduler"));
 }
 
 export async function resolveProjectPathFromRequest(req) {
@@ -355,14 +343,15 @@ export async function resolveProjectPathFromRequest(req) {
     return bodyProjectPath;
   }
 
-  const projectName = typeof req.query?.projectName === 'string'
-    ? req.query.projectName.trim()
-    : typeof req.params?.projectName === 'string'
-      ? req.params.projectName.trim()
-      : '';
+  const projectName =
+    typeof req.query?.projectName === "string"
+      ? req.query.projectName.trim()
+      : typeof req.params?.projectName === "string"
+        ? req.params.projectName.trim()
+        : "";
 
   if (!projectName) {
-    throw new Error('projectPath or projectName is required');
+    throw new Error("projectPath or projectName is required");
   }
 
   return path.resolve(await extractProjectDirectory(projectName));
@@ -374,15 +363,17 @@ export async function getMemoryServiceForRequest(req) {
 }
 
 export async function runManualMemoryFlush(service, dataDir, options = {}) {
-  return enqueueMaintenanceTask(dataDir, async () => service.flush({
-    reason: options.reason ?? 'manual',
-    ...(typeof options.batchSize === 'number' ? { batchSize: options.batchSize } : {}),
-    ...(Array.isArray(options.sessionKeys) ? { sessionKeys: options.sessionKeys } : {}),
-  }));
+  return enqueueMaintenanceTask(dataDir, async () =>
+    service.flush({
+      reason: options.reason ?? "manual",
+      ...(typeof options.batchSize === "number" ? { batchSize: options.batchSize } : {}),
+      ...(Array.isArray(options.sessionKeys) ? { sessionKeys: options.sessionKeys } : {}),
+    }),
+  );
 }
 
 export async function runManualMemoryDream(service, dataDir) {
-  return enqueueMaintenanceTask(dataDir, async () => service.dream('manual'));
+  return enqueueMaintenanceTask(dataDir, async () => service.dream("manual"));
 }
 
 export async function rollbackLastMemoryDream(service, dataDir) {
@@ -391,7 +382,7 @@ export async function rollbackLastMemoryDream(service, dataDir) {
 
 export async function runMemorySchedulerCycle() {
   try {
-    if (!readPilotDeckConfigFile().config.memory?.enabled) {
+    if (!readSatiConfigFile().config.memory?.enabled) {
       return null;
     }
   } catch {
@@ -420,7 +411,7 @@ export async function runMemorySchedulerCycle() {
 
 export function startMemoryScheduler() {
   try {
-    if (!readPilotDeckConfigFile().config.memory?.enabled) {
+    if (!readSatiConfigFile().config.memory?.enabled) {
       return;
     }
   } catch {
@@ -435,7 +426,7 @@ export function startMemoryScheduler() {
     void runMemorySchedulerCycle();
   }, MEMORY_SCHEDULER_INTERVAL_MS);
 
-  if (typeof schedulerTimer.unref === 'function') {
+  if (typeof schedulerTimer.unref === "function") {
     schedulerTimer.unref();
   }
 
@@ -453,7 +444,7 @@ export function getMemorySchedulerStatus() {
   let enabled = true;
   let configError = null;
   try {
-    enabled = readPilotDeckConfigFile().config.memory?.enabled !== false;
+    enabled = readSatiConfigFile().config.memory?.enabled !== false;
   } catch (error) {
     configError = error instanceof Error ? error.message : String(error);
   }
@@ -495,7 +486,7 @@ export async function clearAllMemoryData() {
   await fs.mkdir(MEMORY_GLOBAL_ROOT, { recursive: true });
 
   return {
-    scope: 'all_memory',
+    scope: "all_memory",
     clearedAt: new Date().toISOString(),
     cleared: {
       l0Sessions: 0,
@@ -523,7 +514,7 @@ export async function exportAllProjectsMemoryBundle() {
 
   return {
     formatVersion: ALL_PROJECTS_MEMORY_EXPORT_FORMAT_VERSION,
-    scope: 'all_projects',
+    scope: "all_projects",
     exportedAt: new Date().toISOString(),
     globalFiles: await listSnapshotFiles(MEMORY_GLOBAL_ROOT),
     projects,
@@ -542,7 +533,7 @@ export async function importAllProjectsMemoryBundle(bundle) {
     const result = service.importBundle(project.bundle);
     addTransferCounts(imported, result.imported);
     if (Array.isArray(result.warnings) && result.warnings.length > 0) {
-      warnings.push(...result.warnings.map((warning) => `[${project.projectName}] ${warning}`));
+      warnings.push(...result.warnings.map(warning => `[${project.projectName}] ${warning}`));
     }
   }
 
@@ -550,7 +541,7 @@ export async function importAllProjectsMemoryBundle(bundle) {
 
   return {
     formatVersion: ALL_PROJECTS_MEMORY_EXPORT_FORMAT_VERSION,
-    scope: 'all_projects',
+    scope: "all_projects",
     importedAt: new Date().toISOString(),
     projectCount: normalized.projects.length,
     imported,

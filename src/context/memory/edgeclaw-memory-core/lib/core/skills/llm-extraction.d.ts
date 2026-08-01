@@ -212,7 +212,10 @@ export declare class LlmMemoryExtractor {
         agentId?: string;
         timeoutMs?: number;
         debugTrace?: PromptDebugSink;
-    }): Promise<MemoryCandidate | null>;
+    }): Promise<{
+        candidate: MemoryCandidate;
+        absorbedNoteIndexes: number[];
+    } | null>;
     classifyMemoryTurn(input: {
         timestamp: string;
         sessionKey?: string;

@@ -9,9 +9,7 @@ import { normalizeAnthropicUsage } from "../../response/normalizeUsage.js";
 
 export function parseAnthropicResponse(raw: unknown): CanonicalModelResponse {
   const response = asRecord(raw);
-  const content = Array.isArray(response.content)
-    ? response.content.flatMap(toCanonicalContentBlock)
-    : [];
+  const content = Array.isArray(response.content) ? response.content.flatMap(toCanonicalContentBlock) : [];
 
   return {
     role: "assistant",
@@ -54,9 +52,7 @@ function toCanonicalContentBlock(block: unknown): CanonicalContentBlock[] {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function readString(value: unknown): string | undefined {

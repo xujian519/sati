@@ -1,5 +1,5 @@
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
 
 export type GetCurrentTimeInput = {
   timezone?: string;
@@ -14,11 +14,12 @@ export type GetCurrentTimeOutput = {
   unixMs: number;
 };
 
-export function createGetCurrentTimeTool(): PilotDeckToolDefinition<GetCurrentTimeInput, GetCurrentTimeOutput> {
+export function createGetCurrentTimeTool(): SatiToolDefinition<GetCurrentTimeInput, GetCurrentTimeOutput> {
   return {
     name: "get_current_time",
     title: "Get Current Time",
-    description: "Return the current local time for a timezone. Use this before creating cron_create tasks with absolute dates/times such as tonight, tomorrow morning, or next Monday. For simple relative delays like 'in 10 minutes', prefer cron_create with schedule.type='delay' instead of calling this tool.",
+    description:
+      "Return the current local time for a timezone. Use this before creating cron_create tasks with absolute dates/times such as tonight, tomorrow morning, or next Monday. For simple relative delays like 'in 10 minutes', prefer cron_create with schedule.type='delay' instead of calling this tool.",
     kind: "custom",
     inputSchema: {
       type: "object",
@@ -56,10 +57,7 @@ function assertValidTimezone(timezone: string): void {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
   } catch {
-    throw new PilotDeckToolRuntimeError(
-      "tool_execution_failed",
-      `Invalid timezone: ${timezone}`,
-    );
+    throw new SatiToolRuntimeError("tool_execution_failed", `Invalid timezone: ${timezone}`);
   }
 }
 
@@ -91,15 +89,11 @@ function formatWeekday(date: Date, timezone: string): string {
   return values.weekday ?? "";
 }
 
-function dateParts(
-  date: Date,
-  timezone: string,
-  options: Intl.DateTimeFormatOptions,
-): Record<string, string> {
+function dateParts(date: Date, timezone: string, options: Intl.DateTimeFormatOptions): Record<string, string> {
   return Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", { timeZone: timezone, ...options })
       .formatToParts(date)
-      .map((part) => [part.type, part.value]),
+      .map(part => [part.type, part.value]),
   );
 }
 
@@ -107,7 +101,9 @@ function formatOffset(date: Date, timezone: string): string {
   const value = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     timeZoneName: "longOffset",
-  }).formatToParts(date).find((part) => part.type === "timeZoneName")?.value;
+  })
+    .formatToParts(date)
+    .find(part => part.type === "timeZoneName")?.value;
   const match = value?.match(/GMT([+-]\d{2}:\d{2})/);
   return match?.[1] ?? "+00:00";
 }

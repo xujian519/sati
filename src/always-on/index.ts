@@ -141,7 +141,12 @@ export {
   type CreateAlwaysOnWorkspaceToolOptions,
 } from "./tool/AlwaysOnWorkspaceTool.js";
 export { createApplyHandler, type CreateApplyHandlerDeps } from "./runtime/createApplyHandler.js";
-export type { WorkspaceProvider, WorkspaceProviderId, WorkspacePrepareInput, WorkspacePublishOutput } from "./workspace/WorkspaceProvider.js";
+export type {
+  WorkspaceProvider,
+  WorkspaceProviderId,
+  WorkspacePrepareInput,
+  WorkspacePublishOutput,
+} from "./workspace/WorkspaceProvider.js";
 
 // Web-facing presentation & lifecycle services (shared by UI/CLI/SDK)
 export {
@@ -161,9 +166,19 @@ export {
   type WebPlanContextRefs,
   type WebPlanStatus,
 } from "./web/DiscoveryPlanStatus.js";
-export { DiscoveryPlanService, normalizeDiscoveryPlanRecord, type DiscoveryPlanServiceDeps, type StateManager } from "./web/DiscoveryPlanService.js";
+export {
+  DiscoveryPlanService,
+  normalizeDiscoveryPlanRecord,
+  type DiscoveryPlanServiceDeps,
+  type StateManager,
+} from "./web/DiscoveryPlanService.js";
 export { buildDiscoveryContext, type DiscoveryContextDeps } from "./web/DiscoveryPlanContext.js";
-export { AlwaysOnRunHistoryService, type AlwaysOnRunHistoryServiceDeps, type RunHistoryEntry, type RunHistoryDetailEntry } from "./web/AlwaysOnRunHistoryService.js";
+export {
+  AlwaysOnRunHistoryService,
+  type AlwaysOnRunHistoryServiceDeps,
+  type RunHistoryEntry,
+  type RunHistoryDetailEntry,
+} from "./web/AlwaysOnRunHistoryService.js";
 export { GitWorktreeProvider, type GitWorktreeProviderOptions } from "./workspace/GitWorktreeProvider.js";
 export { SnapshotCopyProvider, type SnapshotCopyProviderOptions } from "./workspace/SnapshotCopyProvider.js";
 export { WorkspaceProviderRegistry } from "./workspace/WorkspaceProviderRegistry.js";

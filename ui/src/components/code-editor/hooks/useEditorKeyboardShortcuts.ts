@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect } from "react";
 
 type UseEditorKeyboardShortcutsParams = {
   onSave: () => void;
@@ -21,7 +21,7 @@ export const useEditorKeyboardShortcuts = ({
     if (!enabled) return undefined;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
         if (canGoBack && onGoBack) {
           onGoBack();
@@ -31,7 +31,7 @@ export const useEditorKeyboardShortcuts = ({
         return;
       }
 
-      if (event.key === 'Backspace' && event.altKey && canGoBack && onGoBack) {
+      if (event.key === "Backspace" && event.altKey && canGoBack && onGoBack) {
         event.preventDefault();
         onGoBack();
         return;
@@ -41,15 +41,15 @@ export const useEditorKeyboardShortcuts = ({
         return;
       }
 
-      if (event.key.toLowerCase() === 's') {
+      if (event.key.toLowerCase() === "s") {
         event.preventDefault();
         onSave();
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [canGoBack, dependency, enabled, onClose, onGoBack, onSave]);
 };

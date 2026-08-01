@@ -8,7 +8,7 @@ import {
   type WorkflowContext,
   type WorkflowManifest,
   type WorkflowStage,
-} from "../../src/patent/workflow.js";
+} from "../../src/patent/index.js";
 
 function okExecutor(stage: WorkflowStage, ctx: WorkflowContext): Promise<string> {
   return Promise.resolve(`[${stage.id}] 完成。输入: ${ctx.input ?? ""}`);

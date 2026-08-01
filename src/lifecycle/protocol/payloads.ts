@@ -1,11 +1,11 @@
 import type { CanonicalMessage } from "../../model/index.js";
-import type { PilotDeckHookEvent } from "../../extension/hooks/protocol/events.js";
-import type { PilotDeckHookBaseInput } from "../../extension/hooks/protocol/input.js";
-import type { PilotDeckHookEffect, PilotDeckLifecycleError } from "./effects.js";
+import type { SatiHookEvent } from "../../extension/hooks/protocol/events.js";
+import type { SatiHookBaseInput } from "../../extension/hooks/protocol/input.js";
+import type { SatiHookEffect, SatiLifecycleError } from "./effects.js";
 
 export type LifecycleDispatchInput = {
-  event: PilotDeckHookEvent;
-  baseInput: PilotDeckHookBaseInput;
+  event: SatiHookEvent;
+  baseInput: SatiHookBaseInput;
   payload?: Record<string, unknown>;
   matchQuery?: string;
   signal?: AbortSignal;
@@ -13,11 +13,11 @@ export type LifecycleDispatchInput = {
 };
 
 export type LifecycleDispatchResult = {
-  effects: PilotDeckHookEffect[];
+  effects: SatiHookEffect[];
   messages: CanonicalMessage[];
   events: unknown[];
-  blockingErrors: PilotDeckLifecycleError[];
-  nonBlockingErrors: PilotDeckLifecycleError[];
+  blockingErrors: SatiLifecycleError[];
+  nonBlockingErrors: SatiLifecycleError[];
 };
 
 export function emptyLifecycleDispatchResult(): LifecycleDispatchResult {

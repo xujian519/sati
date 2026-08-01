@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type { SessionConfigOverrides } from "../../always-on/runtime/SessionConfigOverrides.js";
 import type { Gateway } from "../../gateway/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
-import type { PilotDeckToolDefinition } from "../../tool/index.js";
+import type { SatiToolDefinition } from "../../tool/index.js";
 import type { CronConfig } from "../config/parseCronConfig.js";
 import type {
   CronCreateInput,
@@ -21,7 +21,6 @@ import type {
   CronStopResult,
   CronTask,
 } from "../protocol/types.js";
-import { resolveCronPaths } from "../storage/CronPaths.js";
 import { createCronCreateTool } from "../tool/CronCreateTool.js";
 import { createCronDeleteTool } from "../tool/CronDeleteTool.js";
 import { createCronListTool } from "../tool/CronListTool.js";
@@ -46,7 +45,7 @@ export class CronManager {
   private readonly pilotHome: string;
   private readonly runtimes = new Map<string, CronRuntime>();
   private readonly starting = new Map<string, Promise<void>>();
-  private readonly tools: PilotDeckToolDefinition[];
+  private readonly tools: SatiToolDefinition[];
   private gateway?: Gateway;
   private started = false;
 
@@ -61,7 +60,7 @@ export class CronManager {
     ];
   }
 
-  getTools(): PilotDeckToolDefinition[] {
+  getTools(): SatiToolDefinition[] {
     return this.config.enabled ? [...this.tools] : [];
   }
 
@@ -94,7 +93,7 @@ export class CronManager {
 
   async stop(): Promise<void> {
     this.started = false;
-    await Promise.all([...this.starting.values()].map((pending) => pending.catch(() => undefined)));
+    await Promise.all([...this.starting.values()].map(pending => pending.catch(() => undefined)));
     for (const runtime of this.runtimes.values()) {
       await runtime.stop();
     }
@@ -203,19 +202,14 @@ export class CronManager {
     return count;
   }
 
-  private async resolveTaskRuntime(
-    taskId: string,
-    projectKey?: string,
-  ): Promise<CronRuntime | undefined> {
+  private async resolveTaskRuntime(taskId: string, projectKey?: string): Promise<CronRuntime | undefined> {
     if (projectKey) {
       const runtime = await this.ensureRuntime(projectKey);
-      return (await runtime.listTasks()).tasks.some((task) => task.taskId === taskId)
-        ? runtime
-        : undefined;
+      return (await runtime.listTasks()).tasks.some(task => task.taskId === taskId) ? runtime : undefined;
     }
     const matches: CronRuntime[] = [];
     for (const runtime of this.runtimes.values()) {
-      if ((await runtime.listTasks()).tasks.some((task) => task.taskId === taskId)) {
+      if ((await runtime.listTasks()).tasks.some(task => task.taskId === taskId)) {
         matches.push(runtime);
       }
     }
@@ -232,9 +226,11 @@ export class CronManager {
     const matches: CronRuntime[] = [];
     for (const runtime of this.runtimes.values()) {
       const tasks = (await runtime.listTasks()).tasks;
-      if (tasks.some((task) =>
-        (input.taskId && task.taskId === input.taskId)
-        || (input.runId && task.lastRunId === input.runId))) {
+      if (
+        tasks.some(
+          task => (input.taskId && task.taskId === input.taskId) || (input.runId && task.lastRunId === input.runId),
+        )
+      ) {
         matches.push(runtime);
       }
     }
@@ -256,10 +252,7 @@ function requireProjectKey(projectKey: string | undefined): string {
   return resolve(projectKey);
 }
 
-async function discoverCronProjectKeys(
-  pilotHome: string,
-  logger?: CronRuntimeLogger,
-): Promise<string[]> {
+async function discoverCronProjectKeys(pilotHome: string, logger?: CronRuntimeLogger): Promise<string[]> {
   const projectsDir = resolve(pilotHome, "cron", "projects");
   let entries: Dirent<string>[];
   try {

@@ -1,5 +1,6 @@
 packages:
   - 'ui'
+  - 'apps/desktop'
 
 allowBuilds:
   '@google/genai': true
@@ -18,6 +19,8 @@ onlyBuiltDependencies:
   - '@google/genai'
   - bcrypt
   - better-sqlite3
+  - electron
+  - electron-winstaller
   - esbuild
   - node-pty
   - protobufjs

@@ -70,7 +70,11 @@ export function buildOpenAIResponsesRequest(
   model: ModelDefinition,
   _provider?: ProviderConfig,
 ): OpenAIResponsesRequestBody {
-  const thinkingPlan = resolveThinkingPlan(request.thinking, _provider ?? { id: "openai", protocol: "openai-responses", url: "", apiKey: "", headers: {}, models: {} }, model);
+  const thinkingPlan = resolveThinkingPlan(
+    request.thinking,
+    _provider ?? { id: "openai", protocol: "openai-responses", url: "", apiKey: "", headers: {}, models: {} },
+    model,
+  );
   throwIfUnsupportedThinkingPlan(thinkingPlan, request);
   const body: OpenAIResponsesRequestBody = {
     model: request.model,
@@ -82,9 +86,7 @@ export function buildOpenAIResponsesRequest(
     temperature: request.temperature,
     stream: request.stream,
     metadata: request.metadata
-      ? Object.fromEntries(
-          Object.entries(request.metadata).map(([key, value]) => [key, String(value)]),
-        )
+      ? Object.fromEntries(Object.entries(request.metadata).map(([key, value]) => [key, String(value)]))
       : undefined,
     store: false,
   };
@@ -117,7 +119,7 @@ function toResponsesInputItems(message: CanonicalMessage): OpenAIResponsesInputI
 
   const flushContent = () => {
     if (normalContent.length === 0) return;
-    const content = normalContent.flatMap((block) => toResponsesContentPart(block));
+    const content = normalContent.flatMap(block => toResponsesContentPart(block));
     if (content.length > 0) {
       items.push({ role: message.role, content });
     }
@@ -143,13 +145,13 @@ function toResponsesInputItems(message: CanonicalMessage): OpenAIResponsesInputI
         call_id: block.toolCallId,
         output: flattenToolResultBlockText(block),
       });
-      const visualContent = block.content.filter((part) => part.type === "image" || part.type === "pdf");
+      const visualContent = block.content.filter(part => part.type === "image" || part.type === "pdf");
       if (visualContent.length > 0) {
         items.push({
           role: "user",
           content: [
             { type: "input_text", text: "[Visual content from tool result]" },
-            ...visualContent.flatMap((part) => toResponsesContentPart(part)),
+            ...visualContent.flatMap(part => toResponsesContentPart(part)),
           ],
         });
       }
@@ -180,17 +182,21 @@ function toResponsesContentPart(block: CanonicalContentBlock): Record<string, un
     case "thinking":
       return [{ type: "input_text", text: block.text }];
     case "image":
-      return [{
-        type: "input_image",
-        image_url: block.source === "url" ? block.data : `data:${block.mimeType};base64,${block.data}`,
-        detail: block.detail,
-      }];
+      return [
+        {
+          type: "input_image",
+          image_url: block.source === "url" ? block.data : `data:${block.mimeType};base64,${block.data}`,
+          detail: block.detail,
+        },
+      ];
     case "pdf":
-      return [{
-        type: "input_file",
-        filename: "document.pdf",
-        file_data: `data:${block.mimeType};base64,${block.data}`,
-      }];
+      return [
+        {
+          type: "input_file",
+          filename: "document.pdf",
+          file_data: `data:${block.mimeType};base64,${block.data}`,
+        },
+      ];
     case "audio":
       return block.source === "url"
         ? [{ type: "input_text", text: `[Audio URL: ${block.data}]` }]

@@ -7,14 +7,9 @@ type ModelRefInputProps = {
   placeholder?: string;
 };
 
-export default function ModelRefInput({
-  value,
-  onChange,
-  options,
-  placeholder,
-}: ModelRefInputProps) {
+export default function ModelRefInput({ value, onChange, options, placeholder }: ModelRefInputProps) {
   const selected = value ?? "";
-  const hasSelected = !selected || options.some((opt) => opt.value === selected);
+  const hasSelected = !selected || options.some(opt => opt.value === selected);
   const selectOptions = [
     { value: "", label: placeholder ?? "Select a configured model" },
     ...options,

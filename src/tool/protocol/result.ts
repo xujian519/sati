@@ -1,37 +1,34 @@
-import type {
-  CanonicalToolResultBlock,
-  CanonicalToolResultContentBlock,
-} from "../../model/index.js";
-import type { PilotDeckToolError } from "./errors.js";
-import type { PilotDeckToolResultContent, PilotDeckToolSupplementalMessage } from "./types.js";
+import type { CanonicalToolResultBlock, CanonicalToolResultContentBlock } from "../../model/index.js";
+import type { SatiToolError } from "./errors.js";
+import type { SatiToolResultContent, SatiToolSupplementalMessage } from "./types.js";
 
-export type PilotDeckToolSuccessResult = {
+export type SatiToolSuccessResult = {
   type: "success";
   toolCallId: string;
   toolName: string;
-  content: PilotDeckToolResultContent[];
-  supplementalMessages?: PilotDeckToolSupplementalMessage[];
+  content: SatiToolResultContent[];
+  supplementalMessages?: SatiToolSupplementalMessage[];
   data?: unknown;
   metadata?: Record<string, unknown>;
   startedAt: string;
   completedAt: string;
 };
 
-export type PilotDeckToolErrorResult = {
+export type SatiToolErrorResult = {
   type: "error";
   toolCallId: string;
   toolName: string;
-  error: PilotDeckToolError;
-  content: PilotDeckToolResultContent[];
-  supplementalMessages?: PilotDeckToolSupplementalMessage[];
+  error: SatiToolError;
+  content: SatiToolResultContent[];
+  supplementalMessages?: SatiToolSupplementalMessage[];
   metadata?: Record<string, unknown>;
   startedAt: string;
   completedAt: string;
 };
 
-export type PilotDeckToolResult = PilotDeckToolSuccessResult | PilotDeckToolErrorResult;
+export type SatiToolResult = SatiToolSuccessResult | SatiToolErrorResult;
 
-export type PilotDeckToolResultSizeMetadata = {
+export type SatiToolResultSizeMetadata = {
   truncated?: boolean;
   originalBytes?: number;
   returnedBytes?: number;
@@ -40,7 +37,7 @@ export type PilotDeckToolResultSizeMetadata = {
 
 const EMPTY_TOOL_OUTPUT = "Tool completed with no output.";
 
-export function contentToText(content: PilotDeckToolResultContent): string {
+export function contentToText(content: SatiToolResultContent): string {
   switch (content.type) {
     case "text":
       return content.text;
@@ -57,7 +54,7 @@ export function contentToText(content: PilotDeckToolResultContent): string {
   }
 }
 
-export function toCanonicalToolResultBlock(result: PilotDeckToolResult): CanonicalToolResultBlock {
+export function toCanonicalToolResultBlock(result: SatiToolResult): CanonicalToolResultBlock {
   const contentBlocks = result.content.map(toCanonicalToolResultContentBlock);
 
   return {
@@ -69,13 +66,13 @@ export function toCanonicalToolResultBlock(result: PilotDeckToolResult): Canonic
   };
 }
 
-function sanitizeToolResultRaw(result: PilotDeckToolResult): unknown {
+function sanitizeToolResultRaw(result: SatiToolResult): unknown {
   return {
     ...result,
     content: result.content.map(sanitizeRawContent),
     ...(result.supplementalMessages
       ? {
-          supplementalMessages: result.supplementalMessages.map((message) => ({
+          supplementalMessages: result.supplementalMessages.map(message => ({
             ...message,
             content: message.content.map(sanitizeRawContent),
           })),
@@ -84,7 +81,7 @@ function sanitizeToolResultRaw(result: PilotDeckToolResult): unknown {
   };
 }
 
-function sanitizeRawContent(content: PilotDeckToolResultContent): unknown {
+function sanitizeRawContent(content: SatiToolResultContent): unknown {
   const kind = (content as { type?: unknown }).type;
   if (kind === "image" || kind === "pdf" || kind === "audio") {
     const { data: _omitted, ...rest } = content as Record<string, unknown>;
@@ -94,9 +91,7 @@ function sanitizeRawContent(content: PilotDeckToolResultContent): unknown {
   return content;
 }
 
-function toCanonicalToolResultContentBlock(
-  content: PilotDeckToolResultContent,
-): CanonicalToolResultContentBlock {
+function toCanonicalToolResultContentBlock(content: SatiToolResultContent): CanonicalToolResultContentBlock {
   if (content.type === "image") {
     return {
       type: "image",
@@ -125,7 +120,7 @@ function toCanonicalToolResultContentBlock(
   };
 }
 
-export function estimateResultContentBytes(content: PilotDeckToolResultContent[]): number {
+export function estimateResultContentBytes(content: SatiToolResultContent[]): number {
   return content.reduce((total, item) => {
     switch (item.type) {
       case "image":
@@ -138,14 +133,14 @@ export function estimateResultContentBytes(content: PilotDeckToolResultContent[]
 }
 
 export function applyResultSizeLimit(
-  content: PilotDeckToolResultContent[],
+  content: SatiToolResultContent[],
   maxBytes: number | undefined,
-): { content: PilotDeckToolResultContent[]; metadata?: PilotDeckToolResultSizeMetadata } {
+): { content: SatiToolResultContent[]; metadata?: SatiToolResultSizeMetadata } {
   if (maxBytes === undefined || maxBytes < 0) {
     return { content };
   }
 
-  if (content.some((item) => item.type === "image" || item.type === "pdf")) {
+  if (content.some(item => item.type === "image" || item.type === "pdf")) {
     return {
       content,
       metadata: {
@@ -182,7 +177,10 @@ function truncateUtf8(value: string, maxBytes: number): string {
     return value;
   }
 
-  return bytes.subarray(0, maxBytes).toString("utf8").replace(/\uFFFD$/u, "");
+  return bytes
+    .subarray(0, maxBytes)
+    .toString("utf8")
+    .replace(/\uFFFD$/u, "");
 }
 
 function headTailTruncateUtf8(value: string, maxBytes: number): string {
@@ -213,5 +211,8 @@ function truncateUtf8FromEnd(value: string, maxBytes: number): string {
   while (start < bytes.byteLength && (bytes[start] & 0b11000000) === 0b10000000) {
     start += 1;
   }
-  return bytes.subarray(start).toString("utf8").replace(/^\uFFFD/u, "");
+  return bytes
+    .subarray(start)
+    .toString("utf8")
+    .replace(/^\uFFFD/u, "");
 }

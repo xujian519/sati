@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type { Gateway } from "../../gateway/index.js";
-import type { PilotDeckToolDefinition } from "../../tool/index.js";
+import type { SatiToolDefinition } from "../../tool/index.js";
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import { resolveAlwaysOnPaths, type AlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
 import { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
@@ -13,24 +13,18 @@ import {
   createAlwaysOnDiscoveryPlanTool,
   type CreateAlwaysOnDiscoveryPlanToolOptions,
 } from "../tool/AlwaysOnDiscoveryPlanTool.js";
-import {
-  createAlwaysOnReportTool,
-} from "../tool/AlwaysOnReportTool.js";
-import {
-  createAlwaysOnWorkspaceTool,
-} from "../tool/AlwaysOnWorkspaceTool.js";
-import {
-  createAlwaysOnChatHistoryTool,
-} from "../tool/AlwaysOnChatHistoryTool.js";
+import { createAlwaysOnReportTool } from "../tool/AlwaysOnReportTool.js";
+import { createAlwaysOnWorkspaceTool } from "../tool/AlwaysOnWorkspaceTool.js";
+import { createAlwaysOnChatHistoryTool } from "../tool/AlwaysOnChatHistoryTool.js";
 import { GitWorktreeProvider } from "../workspace/GitWorktreeProvider.js";
 import { SnapshotCopyProvider } from "../workspace/SnapshotCopyProvider.js";
 import { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
 import { ChannelLeaseRegistry } from "./ChannelLeaseRegistry.js";
 import { DiscoveryFire, type DiscoveryFireDependencies } from "./DiscoveryFire.js";
 import { DiscoveryScheduler } from "./DiscoveryScheduler.js";
 import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
-import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type AlwaysOnRuntimeLogger = {
   info: (message: string, data?: Record<string, unknown>) => void;
@@ -75,7 +69,7 @@ const NOOP_LOGGER: AlwaysOnRuntimeLogger = {
 /**
  * AlwaysOnRuntime is the lifecycle owner for the entire Always-On module.
  *
- * Wiring sequence (see `02-pilotdeck-always-on-rewrite-plan.md` §1, §5):
+ * Wiring sequence (see `02-sati-always-on-rewrite-plan.md` §1, §5):
  *   1. Construct via `createAlwaysOnRuntime(...)` before the Gateway is built.
  *   2. Pull tools via `runtime.getTools()` and feed them into the per-project
  *      ToolRegistry that the Gateway uses.
@@ -106,7 +100,7 @@ export class AlwaysOnRuntime {
   private readonly logger: AlwaysOnRuntimeLogger;
   private readonly now: () => Date;
   private readonly uuid: () => string;
-  private readonly tools: PilotDeckToolDefinition[];
+  private readonly tools: SatiToolDefinition[];
   private readonly isSessionInFlight: () => boolean;
   private readonly onWorktreeCreated?: (runId: string, cwd: string) => void;
   private readonly onWorktreeRemoved?: (cwd: string) => void;
@@ -167,7 +161,7 @@ export class AlwaysOnRuntime {
         ];
   }
 
-  getTools(): PilotDeckToolDefinition[] {
+  getTools(): SatiToolDefinition[] {
     return [...this.tools];
   }
 
@@ -183,10 +177,7 @@ export class AlwaysOnRuntime {
     return this.runContexts;
   }
 
-  bindGateway(
-    gateway: Gateway,
-    hooks?: { isSessionInFlight?: () => boolean },
-  ): void {
+  bindGateway(gateway: Gateway, hooks?: { isSessionInFlight?: () => boolean }): void {
     if (this.gateway) {
       throw new Error("AlwaysOnRuntime.bindGateway already called.");
     }
@@ -242,14 +233,12 @@ export class AlwaysOnRuntime {
     await this.scheduler?.stop();
     this.scheduler = undefined;
     this.fire = undefined;
-    this.runContexts.list().forEach((ctx) => this.runContexts.unregister(ctx.sessionKey));
+    this.runContexts.list().forEach(ctx => this.runContexts.unregister(ctx.sessionKey));
     this.sessionOverrides.deletePrefix("always-on/");
     this.logger.info("always-on runtime stopped", { projectKey: this.projectKey });
   }
 
-  async rerunPlan(input: {
-    planId: string;
-  }): Promise<{ runId: string; error?: { code: string; message: string } }> {
+  async rerunPlan(input: { planId: string }): Promise<{ runId: string; error?: { code: string; message: string } }> {
     if (!this.fire) {
       return { runId: "", error: { code: "not_ready", message: "AlwaysOnRuntime.bindGateway not called" } };
     }
@@ -269,13 +258,16 @@ export class AlwaysOnRuntime {
     }
     const cycle = await this.cycleStore.getRecord(input.workCycleId);
     if (!cycle) {
-      return { sessionKey: "", error: { code: "cycle_not_found", message: `Work cycle ${input.workCycleId} not found` } };
+      return {
+        sessionKey: "",
+        error: { code: "cycle_not_found", message: `Work cycle ${input.workCycleId} not found` },
+      };
     }
 
     const planIndex = await this.planStore.readIndex();
     const cyclePlans = planIndex.plans
-      .filter((p) => cycle.planIds.includes(p.id))
-      .map((p) => ({ id: p.id, title: p.title }));
+      .filter(p => cycle.planIds.includes(p.id))
+      .map(p => ({ id: p.id, title: p.title }));
 
     const runId = this.uuid();
     const result = await this.fire.runApplyPhase({

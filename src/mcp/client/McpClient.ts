@@ -21,31 +21,24 @@
  *   Cache is invalidated on reconnect.
  *
  * Errors raised by `callTool` / `listTools` always carry one of the
- * PilotDeck-style `mcp_*` error codes via the `code` field on the thrown
- * error, so the caller can map them back to `PilotDeckToolErrorCode`.
+ * Sati-style `mcp_*` error codes via the `code` field on the thrown
+ * error, so the caller can map them back to `SatiToolErrorCode`.
  */
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { recursivelySanitizeUnicode } from "../runtime/sanitize.js";
 import { truncateMcpToolDescription } from "../runtime/truncate.js";
 import { buildMcpToolWireName } from "../runtime/wireName.js";
 import { networkFetch } from "../../network/fetch.js";
-import type {
-  PilotDeckMcpServerSpec,
-  PilotDeckMcpStatus,
-  PilotDeckMcpToolSpec,
-} from "../protocol/types.js";
+import type { SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
 
-const DEFAULT_CALL_TIMEOUT_MS = parseInt(
-  process.env.PILOTDECK_MCP_TOOL_TIMEOUT_MS ?? "60000",
-  10,
-);
+const DEFAULT_CALL_TIMEOUT_MS = parseInt(process.env.SATI_MCP_TOOL_TIMEOUT_MS ?? "60000", 10);
 const LIST_TOOLS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type McpClientOptions = {
@@ -53,7 +46,7 @@ export type McpClientOptions = {
   /** Connect handshake timeout. Default 10s. */
   handshakeTimeoutMs?: number;
   /** Optional override for testing — supply a pre-built Transport instance. */
-  transportFactory?: (spec: PilotDeckMcpServerSpec) => Transport;
+  transportFactory?: (spec: SatiMcpServerSpec) => Transport;
   /** Optional fetch override for testing streamable HTTP transports. */
   fetch?: typeof fetch;
 };
@@ -76,13 +69,13 @@ export class McpClientError extends Error {
 
 type ListToolsCache = {
   expiresAt: number;
-  tools: PilotDeckMcpToolSpec[];
+  tools: SatiMcpToolSpec[];
 };
 
 export class McpClient {
   private client: Client | null = null;
   private transport: Transport | null = null;
-  private status: PilotDeckMcpStatus = "idle";
+  private status: SatiMcpStatus = "idle";
   private listToolsCache: ListToolsCache | null = null;
   private serverInstructions = "";
   private connectPromise: Promise<void> | null = null;
@@ -90,11 +83,11 @@ export class McpClient {
   private perSessionDir: string | null = null;
 
   constructor(
-    public readonly spec: PilotDeckMcpServerSpec,
+    public readonly spec: SatiMcpServerSpec,
     private readonly options: McpClientOptions = {},
   ) {}
 
-  getStatus(): PilotDeckMcpStatus {
+  getStatus(): SatiMcpStatus {
     return this.status;
   }
 
@@ -117,10 +110,7 @@ export class McpClient {
   private async runConnect(): Promise<void> {
     this.status = "connecting";
     const transport = this.buildTransport();
-    const client = new Client(
-      { name: "pilotdeck", version: "0.1.0" },
-      { capabilities: { elicitation: {} } },
-    );
+    const client = new Client({ name: "sati", version: "0.1.0" }, { capabilities: { elicitation: {} } });
     const handshakeMs = this.options.handshakeTimeoutMs ?? 10_000;
     try {
       await withTimeout(
@@ -137,26 +127,17 @@ export class McpClient {
       this.status = "error";
       throw err instanceof McpClientError
         ? err
-        : new McpClientError(
-            `MCP handshake failed: ${(err as Error).message}`,
-            "mcp_handshake_failed",
-            this.spec.id,
-          );
+        : new McpClientError(`MCP handshake failed: ${(err as Error).message}`, "mcp_handshake_failed", this.spec.id);
     }
     this.client = client;
     this.transport = transport;
     this.status = "ready";
-    const instructions = (client.getServerCapabilities() as { instructions?: string } | undefined)
-      ?.instructions;
-    this.serverInstructions =
-      typeof instructions === "string"
-        ? instructions
-        : (this.peekInstructions(client) ?? "");
+    const instructions = (client.getServerCapabilities() as { instructions?: string } | undefined)?.instructions;
+    this.serverInstructions = typeof instructions === "string" ? instructions : (this.peekInstructions(client) ?? "");
   }
 
   private peekInstructions(client: Client): string | undefined {
-    const raw = (client as unknown as { _serverInstructions?: string })
-      ._serverInstructions;
+    const raw = (client as unknown as { _serverInstructions?: string })._serverInstructions;
     return typeof raw === "string" ? raw : undefined;
   }
 
@@ -167,7 +148,7 @@ export class McpClient {
     if (this.spec.transport === "stdio") {
       let args = this.spec.args;
       if (this.spec.perSession) {
-        const dir = mkdtempSync(join(tmpdir(), `pilotdeck-mcp-${this.spec.id}-`));
+        const dir = mkdtempSync(join(tmpdir(), `sati-mcp-${this.spec.id}-`));
         this.perSessionDir = dir;
         args = [...(args ?? []), `--user-data-dir=${dir}`];
       }
@@ -186,9 +167,10 @@ export class McpClient {
           const method = String(init?.method ?? "GET").toUpperCase();
           const fetchImpl = this.options.fetch;
           return (fetchImpl ?? networkFetch)(input as RequestInfo, init, {
-            timeoutMs: method === "POST"
-              ? this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS
-              : this.options.handshakeTimeoutMs ?? 10_000,
+            timeoutMs:
+              method === "POST"
+                ? (this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS)
+                : (this.options.handshakeTimeoutMs ?? 10_000),
             retry: {
               maxRetries: 1,
               baseDelayMs: 500,
@@ -198,7 +180,7 @@ export class McpClient {
         },
       });
     }
-    const fallback = this.spec as PilotDeckMcpServerSpec;
+    const fallback = this.spec as SatiMcpServerSpec;
     throw new McpClientError(
       `Unsupported transport: ${(fallback as { transport: string }).transport}`,
       "mcp_unsupported_transport",
@@ -207,7 +189,7 @@ export class McpClient {
   }
 
   /** M6 — LRU-cached tools/list. */
-  async listTools(): Promise<PilotDeckMcpToolSpec[]> {
+  async listTools(): Promise<SatiMcpToolSpec[]> {
     const cached = this.listToolsCache;
     if (cached && cached.expiresAt > Date.now()) return cached.tools;
 
@@ -239,14 +221,10 @@ export class McpClient {
     }
     const timeoutMs = options.timeoutMs ?? this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
     const result = await this.callWithReconnect(() =>
-      this.client!.callTool(
-        { name: toolName, arguments: (args ?? {}) as Record<string, unknown> },
-        undefined,
-        {
-          timeout: timeoutMs,
-          signal: options.signal,
-        },
-      ),
+      this.client!.callTool({ name: toolName, arguments: (args ?? {}) as Record<string, unknown> }, undefined, {
+        timeout: timeoutMs,
+        signal: options.signal,
+      }),
     );
     return {
       content: recursivelySanitizeUnicode(result.content),
@@ -359,17 +337,19 @@ export class McpClient {
     if (this.perSessionDir) {
       try {
         rmSync(this.perSessionDir, { recursive: true, force: true });
-      } catch { /* best effort cleanup */ }
+      } catch {
+        /* best effort cleanup */
+      }
       this.perSessionDir = null;
     }
   }
 
-  private toToolSpec(raw: unknown): PilotDeckMcpToolSpec {
+  private toToolSpec(raw: unknown): SatiMcpToolSpec {
     const sanitized = recursivelySanitizeUnicode(raw) as {
       name: string;
       description?: string;
       inputSchema?: unknown;
-      annotations?: PilotDeckMcpToolSpec["annotations"];
+      annotations?: SatiMcpToolSpec["annotations"];
       _meta?: Record<string, unknown>;
     };
     const wireName = buildMcpToolWireName(this.spec.id, sanitized.name);
@@ -385,19 +365,15 @@ export class McpClient {
   }
 }
 
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  errorFactory: () => Error,
-): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorFactory: () => Error): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(errorFactory()), timeoutMs);
     promise.then(
-      (v) => {
+      v => {
         clearTimeout(timer);
         resolve(v);
       },
-      (e) => {
+      e => {
         clearTimeout(timer);
         reject(e);
       },

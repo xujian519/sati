@@ -2,7 +2,7 @@ import { AlwaysOnError } from "../protocol/errors.js";
 
 /**
  * PlanContract enforces the markdown shape described in
- * `docs/always-on/02-pilotdeck-always-on-rewrite-plan.md` §7.
+ * `docs/always-on/02-sati-always-on-rewrite-plan.md` §7.
  *
  * Required sections, in order:
  *   1. ## Summary           single short paragraph (≤ 200 chars)
@@ -56,10 +56,7 @@ const DEFAULT_MAX_RESULT_SIZE_CHARS = 100_000;
 const DEFAULT_SUMMARY_MAX = 200;
 const DEFAULT_FUZZY_TODOS: RegExp[] = [/^\s*TODO\b/i, /^\s*待补充\b/];
 
-export function parsePlanMarkdown(
-  content: string,
-  options: PlanContractOptions = {},
-): PlanParseResult {
+export function parsePlanMarkdown(content: string, options: PlanContractOptions = {}): PlanParseResult {
   const max = options.maxResultSizeChars ?? DEFAULT_MAX_RESULT_SIZE_CHARS;
   const summaryMax = options.summaryMaxChars ?? DEFAULT_SUMMARY_MAX;
   const fuzzyPatterns = options.fuzzyTodoPatterns ?? DEFAULT_FUZZY_TODOS;
@@ -72,10 +69,7 @@ export function parsePlanMarkdown(
     throw new AlwaysOnError("plan_invalid", "plan content is empty.");
   }
   if (normalized.length > max) {
-    throw new AlwaysOnError(
-      "plan_invalid",
-      `plan content exceeds maxResultSizeChars (${max}).`,
-    );
+    throw new AlwaysOnError("plan_invalid", `plan content exceeds maxResultSizeChars (${max}).`);
   }
 
   const lines = normalized.split("\n");
@@ -106,10 +100,7 @@ export function parsePlanMarkdown(
     cursor += 1;
   }
   if (metadataLines.length === 0) {
-    throw new AlwaysOnError(
-      "plan_invalid",
-      "plan must include a metadata blockquote immediately after the title.",
-    );
+    throw new AlwaysOnError("plan_invalid", "plan must include a metadata blockquote immediately after the title.");
   }
   if (metadataLines[0].trim() !== PLAN_METADATA_FIRST_LINE) {
     throw new AlwaysOnError(
@@ -120,10 +111,7 @@ export function parsePlanMarkdown(
   const metadata = parseMetadataLines(metadataLines.slice(1));
   for (const key of PLAN_METADATA_KEYS) {
     if (metadata[key].length === 0) {
-      throw new AlwaysOnError(
-        "plan_invalid",
-        `plan metadata is missing required key "${key}".`,
-      );
+      throw new AlwaysOnError("plan_invalid", `plan metadata is missing required key "${key}".`);
     }
   }
 
@@ -154,10 +142,7 @@ export function parsePlanMarkdown(
         throw new AlwaysOnError("plan_invalid", "plan section heading must not be empty.");
       }
       if (seenSections.has(sectionName)) {
-        throw new AlwaysOnError(
-          "plan_invalid",
-          `plan contains duplicate section "${sectionName}".`,
-        );
+        throw new AlwaysOnError("plan_invalid", `plan contains duplicate section "${sectionName}".`);
       }
       seenSections.add(sectionName);
       currentSection = sectionName;
@@ -165,10 +150,7 @@ export function parsePlanMarkdown(
       continue;
     }
     if (line.startsWith("# ")) {
-      throw new AlwaysOnError(
-        "plan_invalid",
-        "plan must contain exactly one level-1 heading at the top.",
-      );
+      throw new AlwaysOnError("plan_invalid", "plan must contain exactly one level-1 heading at the top.");
     }
     if (currentSection !== null) {
       currentLines.push(line);
@@ -222,18 +204,12 @@ function parseMetadataLines(lines: string[]): Record<keyof PlanMetadata, string>
     if (trimmed.length === 0) continue;
     const colonIndex = trimmed.indexOf(":");
     if (colonIndex === -1) {
-      throw new AlwaysOnError(
-        "plan_invalid",
-        `plan metadata line "${line}" is not in "key: value" form.`,
-      );
+      throw new AlwaysOnError("plan_invalid", `plan metadata line "${line}" is not in "key: value" form.`);
     }
     const key = trimmed.slice(0, colonIndex).trim();
     const value = trimmed.slice(colonIndex + 1).trim();
     if (!(key in result)) {
-      throw new AlwaysOnError(
-        "plan_invalid",
-        `plan metadata contains unknown key "${key}".`,
-      );
+      throw new AlwaysOnError("plan_invalid", `plan metadata contains unknown key "${key}".`);
     }
     result[key] = value;
   }
@@ -251,10 +227,7 @@ function nonEmptyTextOrThrow(lines: string[], section: string): string {
 function validateSummary(lines: string[], summaryMax: number): void {
   const text = nonEmptyTextOrThrow(lines, "Summary");
   if (text.length > summaryMax) {
-    throw new AlwaysOnError(
-      "plan_invalid",
-      `plan Summary exceeds ${summaryMax} characters.`,
-    );
+    throw new AlwaysOnError("plan_invalid", `plan Summary exceeds ${summaryMax} characters.`);
   }
   if (text.split(/\n\s*\n/).length > 1) {
     throw new AlwaysOnError("plan_invalid", "plan Summary must be a single paragraph.");
@@ -266,12 +239,9 @@ function validateRationale(lines: string[]): void {
 }
 
 function validateContextSignals(lines: string[]): void {
-  const items = lines.filter((line) => /^\s*-\s+/.test(line));
+  const items = lines.filter(line => /^\s*-\s+/.test(line));
   if (items.length === 0) {
-    throw new AlwaysOnError(
-      "plan_invalid",
-      "plan Context Signals must contain at least one unordered list item.",
-    );
+    throw new AlwaysOnError("plan_invalid", "plan Context Signals must contain at least one unordered list item.");
   }
 }
 
@@ -279,21 +249,15 @@ function validateProposedChange(lines: string[], fuzzyPatterns: RegExp[]): void 
   const text = nonEmptyTextOrThrow(lines, "Proposed Change");
   for (const pattern of fuzzyPatterns) {
     if (pattern.test(text)) {
-      throw new AlwaysOnError(
-        "plan_invalid",
-        `plan Proposed Change must not be fuzzy ("${pattern.source}").`,
-      );
+      throw new AlwaysOnError("plan_invalid", `plan Proposed Change must not be fuzzy ("${pattern.source}").`);
     }
   }
 }
 
 function validateExecutionSteps(lines: string[]): void {
-  const stripped = lines.map((line) => line.trim()).filter((line) => line.length > 0);
+  const stripped = lines.map(line => line.trim()).filter(line => line.length > 0);
   if (stripped.length === 0) {
-    throw new AlwaysOnError(
-      "plan_invalid",
-      "plan Execution Steps must contain at least one ordered list item.",
-    );
+    throw new AlwaysOnError("plan_invalid", "plan Execution Steps must contain at least one ordered list item.");
   }
   let ordered = 0;
   for (const line of stripped) {
@@ -302,26 +266,17 @@ function validateExecutionSteps(lines: string[]): void {
       continue;
     }
     if (/^[-*+]\s+/.test(line)) {
-      throw new AlwaysOnError(
-        "plan_invalid",
-        "plan Execution Steps must use an ordered list (no unordered items).",
-      );
+      throw new AlwaysOnError("plan_invalid", "plan Execution Steps must use an ordered list (no unordered items).");
     }
   }
   if (ordered === 0) {
-    throw new AlwaysOnError(
-      "plan_invalid",
-      "plan Execution Steps must contain at least one ordered list item.",
-    );
+    throw new AlwaysOnError("plan_invalid", "plan Execution Steps must contain at least one ordered list item.");
   }
 }
 
 function validateVerification(lines: string[]): void {
-  const items = lines.filter((line) => /^\s*-\s+/.test(line));
+  const items = lines.filter(line => /^\s*-\s+/.test(line));
   if (items.length === 0) {
-    throw new AlwaysOnError(
-      "plan_invalid",
-      "plan Verification must contain at least one unordered list item.",
-    );
+    throw new AlwaysOnError("plan_invalid", "plan Verification must contain at least one unordered list item.");
   }
 }

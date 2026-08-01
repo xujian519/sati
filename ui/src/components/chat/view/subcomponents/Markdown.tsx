@@ -1,11 +1,11 @@
-import React, { useMemo, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import type { Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import { normalizeInlineCodeFences } from '../../utils/chatFormatting';
-import { resolveMarkdownFileHref } from '../../utils/resolveMarkdownFileHref';
+import React, { useMemo, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { normalizeInlineCodeFences } from "../../utils/chatFormatting";
+import { resolveMarkdownFileHref } from "../../utils/resolveMarkdownFileHref";
 
 type MarkdownProps = {
   children: React.ReactNode;
@@ -19,7 +19,7 @@ const streamingPlugins = [remarkGfm];
 const fullRemarkPlugins = [remarkGfm, remarkMath];
 const fullRehypePlugins = [rehypeKatex];
 
-const linkClassName = 'text-blue-600 hover:underline dark:text-blue-400';
+const linkClassName = "text-blue-600 hover:underline dark:text-blue-400";
 
 function createMarkdownComponents(onFileOpen?: (filePath: string) => void): Components {
   return {
@@ -30,7 +30,7 @@ function createMarkdownComponents(onFileOpen?: (filePath: string) => void): Comp
           <a
             href={href}
             className={`${linkClassName} cursor-pointer`}
-            onClick={(event) => {
+            onClick={event => {
               event.preventDefault();
               onFileOpen(filePath);
             }}
@@ -46,7 +46,7 @@ function createMarkdownComponents(onFileOpen?: (filePath: string) => void): Comp
         <a
           href={href}
           className={linkClassName}
-          {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+          {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
           {...props}
         >
           {children}
@@ -57,15 +57,9 @@ function createMarkdownComponents(onFileOpen?: (filePath: string) => void): Comp
 }
 
 export function Markdown({ children, className, isStreaming, onFileOpen }: MarkdownProps) {
-  const content = useMemo(
-    () => normalizeInlineCodeFences(String(children ?? '')),
-    [children],
-  );
+  const content = useMemo(() => normalizeInlineCodeFences(String(children ?? "")), [children]);
 
-  const components = useMemo(
-    () => (onFileOpen ? createMarkdownComponents(onFileOpen) : undefined),
-    [onFileOpen],
-  );
+  const components = useMemo(() => (onFileOpen ? createMarkdownComponents(onFileOpen) : undefined), [onFileOpen]);
 
   // Only apply streaming-fade-in on the initial mount while streaming.
   // Once streaming ends, never re-apply it — prevents old content from
@@ -75,7 +69,7 @@ export function Markdown({ children, className, isStreaming, onFileOpen }: Markd
   const showFadeIn = isStreaming && wasStreamingRef.current;
 
   return (
-    <div className={`${className || ''} ${showFadeIn ? 'streaming-fade-in' : ''}`.trim()}>
+    <div className={`${className || ""} ${showFadeIn ? "streaming-fade-in" : ""}`.trim()}>
       <ReactMarkdown
         remarkPlugins={isStreaming ? streamingPlugins : fullRemarkPlugins}
         rehypePlugins={isStreaming ? undefined : fullRehypePlugins}

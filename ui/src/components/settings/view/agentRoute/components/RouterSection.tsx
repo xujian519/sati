@@ -4,22 +4,10 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "../../../../../lib/utils";
 import { FormRow, NumberInput, Select } from "../../../shared/components/Inputs";
 import { patch } from "../../modelPool/utils/patch";
-import type { PilotDeckConfig } from "../../modelPool/types";
-import {
-  buildModelRefOptions,
-  ensureModelRefConfigured,
-} from "../../agentModel/utils/modelRefs";
-import {
-  PageSectionHeader,
-  SettingsCard,
-  SettingsRow,
-  SettingsToggle,
-} from "../../../shared/view";
-import {
-  DEFAULT_RULES,
-  DEFAULT_TIERS,
-  ROUTER_TIER_KEYS,
-} from "../utils/router";
+import type { SatiConfig } from "../../modelPool/types";
+import { buildModelRefOptions, ensureModelRefConfigured } from "../../agentModel/utils/modelRefs";
+import { PageSectionHeader, SettingsCard, SettingsRow, SettingsToggle } from "../../../shared/view";
+import { DEFAULT_RULES, DEFAULT_TIERS, ROUTER_TIER_KEYS } from "../utils/router";
 import ModelPricingEditor from "./ModelPricingEditor";
 import RouterFallbackEditor from "./RouterFallbackEditor";
 import RouterLevelEditor from "./RouterLevelEditor";
@@ -27,8 +15,8 @@ import TokenSaverRulesEditor from "./TokenSaverRulesEditor";
 import TokenSaverTierEditor from "./TokenSaverTierEditor";
 
 type RouterSectionProps = {
-  config: PilotDeckConfig;
-  onChange: (next: PilotDeckConfig) => void;
+  config: SatiConfig;
+  onChange: (next: SatiConfig) => void;
 };
 
 export default function RouterSection({ config, onChange }: RouterSectionProps) {
@@ -49,14 +37,13 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
   const autoOrchestrateEnabled = ao.enabled !== false;
   const availableTierNames = Object.keys(ts.tiers ?? {});
 
-  const getDefaultModel = (base: PilotDeckConfig) =>
-    (typeof base.router?.scenarios?.default === "string" &&
-      base.router.scenarios.default.trim()) ||
+  const getDefaultModel = (base: SatiConfig) =>
+    (typeof base.router?.scenarios?.default === "string" && base.router.scenarios.default.trim()) ||
     (typeof base.agent?.model === "string" && base.agent.model.trim()) ||
     modelOpts[0]?.value ||
     "";
 
-  const seedRouterDefaults = (base: PilotDeckConfig) => {
+  const seedRouterDefaults = (base: SatiConfig) => {
     let next = base;
     const defaultModel = getDefaultModel(next);
     next = ensureModelRefConfigured(next, defaultModel);
@@ -64,7 +51,7 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
     if (defaultModel && !next.router?.scenarios?.default) {
       next = patch(next, ["router", "scenarios", "default"], defaultModel);
     }
-    if (defaultModel && !(next.router?.fallback?.default?.length)) {
+    if (defaultModel && !next.router?.fallback?.default?.length) {
       next = patch(next, ["router", "fallback", "default"], [defaultModel]);
     }
     if (next.router?.zeroUsageRetry?.enabled !== true) {
@@ -122,16 +109,16 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
 
   return (
     <div className="space-y-4 pb-6">
-      <PageSectionHeader description={t("pilotDeckConfig.panels.router.description")} />
+      <PageSectionHeader description={t("satiConfig.panels.router.description")} />
       <SettingsCard divided>
         <SettingsRow
-          label={t("pilotDeckConfig.panels.router.enabled.label")}
-          description={t("pilotDeckConfig.panels.router.enabled.description")}
+          label={t("satiConfig.panels.router.enabled.label")}
+          description={t("satiConfig.panels.router.enabled.description")}
         >
           <SettingsToggle
             checked={enabled}
-            ariaLabel={t("pilotDeckConfig.panels.router.enabled.label")}
-            onChange={(v) => {
+            ariaLabel={t("satiConfig.panels.router.enabled.label")}
+            onChange={v => {
               let next = patch(config, ["router", "enabled"], v);
               if (v) next = seedRouterDefaults(next);
               onChange(next);
@@ -146,14 +133,12 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
 
           <button
             type="button"
-            onClick={() => setShowAdvanced((prev) => !prev)}
+            onClick={() => setShowAdvanced(prev => !prev)}
             aria-expanded={showAdvanced}
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <ChevronDown
-              className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-180")}
-            />
-            {t("pilotDeckConfig.panels.router.advancedToggle")}
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-180")} />
+            {t("satiConfig.panels.router.advancedToggle")}
           </button>
 
           {showAdvanced && (
@@ -162,30 +147,24 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
 
               <SettingsCard divided>
                 <SettingsRow
-                  label={t("pilotDeckConfig.panels.router.zeroUsageRetry.label")}
-                  description={t("pilotDeckConfig.panels.router.zeroUsageRetry.description")}
+                  label={t("satiConfig.panels.router.zeroUsageRetry.label")}
+                  description={t("satiConfig.panels.router.zeroUsageRetry.description")}
                 >
                   <SettingsToggle
                     checked={zeroUsageEnabled}
-                    ariaLabel={t("pilotDeckConfig.panels.router.zeroUsageRetry.label")}
-                    onChange={(v) =>
-                      onChange(patch(config, ["router", "zeroUsageRetry", "enabled"], v))
-                    }
+                    ariaLabel={t("satiConfig.panels.router.zeroUsageRetry.label")}
+                    onChange={v => onChange(patch(config, ["router", "zeroUsageRetry", "enabled"], v))}
                   />
                 </SettingsRow>
                 {zeroUsageEnabled && (
                   <FormRow
-                    label={t("pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.label")}
-                    description={t(
-                      "pilotDeckConfig.panels.router.zeroUsageRetry.maxAttempts.description",
-                    )}
+                    label={t("satiConfig.panels.router.zeroUsageRetry.maxAttempts.label")}
+                    description={t("satiConfig.panels.router.zeroUsageRetry.maxAttempts.description")}
                   >
                     <NumberInput
                       value={zr.maxAttempts}
                       placeholder="2"
-                      onChange={(v) =>
-                        onChange(patch(config, ["router", "zeroUsageRetry", "maxAttempts"], v))
-                      }
+                      onChange={v => onChange(patch(config, ["router", "zeroUsageRetry", "maxAttempts"], v))}
                     />
                   </FormRow>
                 )}
@@ -193,59 +172,45 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
 
               <SettingsCard className="space-y-4 p-4">
                 <SettingsRow
-                  label={t("pilotDeckConfig.panels.router.transientRetry.label")}
-                  description={t("pilotDeckConfig.panels.router.transientRetry.description")}
+                  label={t("satiConfig.panels.router.transientRetry.label")}
+                  description={t("satiConfig.panels.router.transientRetry.description")}
                 >
                   <SettingsToggle
                     checked={transientRetryEnabled}
-                    onChange={(v) =>
-                      onChange(patch(config, ["router", "transientRetry", "enabled"], v))
-                    }
-                    ariaLabel={t("pilotDeckConfig.panels.router.transientRetry.label")}
+                    onChange={v => onChange(patch(config, ["router", "transientRetry", "enabled"], v))}
+                    ariaLabel={t("satiConfig.panels.router.transientRetry.label")}
                   />
                 </SettingsRow>
                 {transientRetryEnabled && (
                   <>
                     <FormRow
-                      label={t("pilotDeckConfig.panels.router.transientRetry.maxAttempts.label")}
-                      description={t(
-                        "pilotDeckConfig.panels.router.transientRetry.maxAttempts.description",
-                      )}
+                      label={t("satiConfig.panels.router.transientRetry.maxAttempts.label")}
+                      description={t("satiConfig.panels.router.transientRetry.maxAttempts.description")}
                     >
                       <NumberInput
                         value={tr.maxAttempts}
                         placeholder="5"
-                        onChange={(v) =>
-                          onChange(patch(config, ["router", "transientRetry", "maxAttempts"], v))
-                        }
+                        onChange={v => onChange(patch(config, ["router", "transientRetry", "maxAttempts"], v))}
                       />
                     </FormRow>
                     <FormRow
-                      label={t("pilotDeckConfig.panels.router.transientRetry.baseDelayMs.label")}
-                      description={t(
-                        "pilotDeckConfig.panels.router.transientRetry.baseDelayMs.description",
-                      )}
+                      label={t("satiConfig.panels.router.transientRetry.baseDelayMs.label")}
+                      description={t("satiConfig.panels.router.transientRetry.baseDelayMs.description")}
                     >
                       <NumberInput
                         value={tr.baseDelayMs}
                         placeholder="1000"
-                        onChange={(v) =>
-                          onChange(patch(config, ["router", "transientRetry", "baseDelayMs"], v))
-                        }
+                        onChange={v => onChange(patch(config, ["router", "transientRetry", "baseDelayMs"], v))}
                       />
                     </FormRow>
                     <FormRow
-                      label={t("pilotDeckConfig.panels.router.transientRetry.maxDelayMs.label")}
-                      description={t(
-                        "pilotDeckConfig.panels.router.transientRetry.maxDelayMs.description",
-                      )}
+                      label={t("satiConfig.panels.router.transientRetry.maxDelayMs.label")}
+                      description={t("satiConfig.panels.router.transientRetry.maxDelayMs.description")}
                     >
                       <NumberInput
                         value={tr.maxDelayMs}
                         placeholder="30000"
-                        onChange={(v) =>
-                          onChange(patch(config, ["router", "transientRetry", "maxDelayMs"], v))
-                        }
+                        onChange={v => onChange(patch(config, ["router", "transientRetry", "maxDelayMs"], v))}
                       />
                     </FormRow>
                   </>
@@ -256,16 +221,16 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-semibold text-foreground">
-                      {t("pilotDeckConfig.panels.router.tokenSaver.title")}
+                      {t("satiConfig.panels.router.tokenSaver.title")}
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
-                      {t("pilotDeckConfig.panels.router.tokenSaver.description")}
+                      {t("satiConfig.panels.router.tokenSaver.description")}
                     </div>
                   </div>
                   <SettingsToggle
                     checked={tokenSaverEnabled}
-                    ariaLabel={t("pilotDeckConfig.panels.router.tokenSaver.title")}
-                    onChange={(v) => {
+                    ariaLabel={t("satiConfig.panels.router.tokenSaver.title")}
+                    onChange={v => {
                       let next = patch(config, ["router", "tokenSaver", "enabled"], v);
                       if (v) next = seedRouterDefaults(next);
                       onChange(next);
@@ -277,45 +242,37 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
                   <div className="space-y-4 border-t border-border pt-4">
                     <div>
                       <label className="mb-1 block text-xs font-medium text-foreground">
-                        {t("pilotDeckConfig.panels.router.tokenSaver.defaultTier")}
+                        {t("satiConfig.panels.router.tokenSaver.defaultTier")}
                       </label>
                       <Select
                         value={ts.defaultTier ?? "medium"}
                         options={
                           availableTierNames.length > 0
-                            ? availableTierNames.map((tier) => ({
+                            ? availableTierNames.map(tier => ({
                                 value: tier,
                                 label: tier,
                               }))
-                            : ROUTER_TIER_KEYS.map((tier) => ({
+                            : ROUTER_TIER_KEYS.map(tier => ({
                                 value: tier,
                                 label: tier,
                               }))
                         }
-                        onChange={(v) =>
-                          onChange(patch(config, ["router", "tokenSaver", "defaultTier"], v))
-                        }
+                        onChange={v => onChange(patch(config, ["router", "tokenSaver", "defaultTier"], v))}
                       />
                     </div>
                     <FormRow
-                      label={t("pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.label")}
-                      description={t(
-                        "pilotDeckConfig.panels.router.tokenSaver.judgeTimeout.description",
-                      )}
+                      label={t("satiConfig.panels.router.tokenSaver.judgeTimeout.label")}
+                      description={t("satiConfig.panels.router.tokenSaver.judgeTimeout.description")}
                     >
                       <NumberInput
                         value={ts.judgeTimeoutMs}
                         placeholder="15000"
-                        onChange={(v) =>
-                          onChange(patch(config, ["router", "tokenSaver", "judgeTimeoutMs"], v))
-                        }
+                        onChange={v => onChange(patch(config, ["router", "tokenSaver", "judgeTimeoutMs"], v))}
                       />
                     </FormRow>
                     <FormRow
-                      label={t("pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.label")}
-                      description={t(
-                        "pilotDeckConfig.panels.router.tokenSaver.subagentPolicy.description",
-                      )}
+                      label={t("satiConfig.panels.router.tokenSaver.subagentPolicy.label")}
+                      description={t("satiConfig.panels.router.tokenSaver.subagentPolicy.description")}
                     >
                       <Select
                         value={ts.subagent?.policy ?? "judge"}
@@ -323,11 +280,7 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
                           { value: "judge", label: "judge" },
                           { value: "skip", label: "skip" },
                         ]}
-                        onChange={(v) =>
-                          onChange(
-                            patch(config, ["router", "tokenSaver", "subagent", "policy"], v),
-                          )
-                        }
+                        onChange={v => onChange(patch(config, ["router", "tokenSaver", "subagent", "policy"], v))}
                       />
                     </FormRow>
 
@@ -341,18 +294,16 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-semibold text-foreground">
-                      {t("pilotDeckConfig.panels.router.autoOrchestrate.title")}
+                      {t("satiConfig.panels.router.autoOrchestrate.title")}
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
-                      {t("pilotDeckConfig.panels.router.autoOrchestrate.description")}
+                      {t("satiConfig.panels.router.autoOrchestrate.description")}
                     </div>
                   </div>
                   <SettingsToggle
                     checked={autoOrchestrateEnabled}
-                    ariaLabel={t("pilotDeckConfig.panels.router.autoOrchestrate.title")}
-                    onChange={(v) =>
-                      onChange(patch(config, ["router", "autoOrchestrate", "enabled"], v))
-                    }
+                    ariaLabel={t("satiConfig.panels.router.autoOrchestrate.title")}
+                    onChange={v => onChange(patch(config, ["router", "autoOrchestrate", "enabled"], v))}
                   />
                 </div>
 
@@ -360,13 +311,10 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
                   <div className="space-y-3 border-t border-border pt-4">
                     <div>
                       <label className="mb-1 block text-xs font-medium text-foreground">
-                        {t("pilotDeckConfig.panels.router.autoOrchestrate.triggerTiers")}
+                        {t("satiConfig.panels.router.autoOrchestrate.triggerTiers")}
                       </label>
                       <div className="mt-1 flex flex-wrap gap-2">
-                        {(availableTierNames.length > 0
-                          ? availableTierNames
-                          : [...ROUTER_TIER_KEYS]
-                        ).map((tier) => {
+                        {(availableTierNames.length > 0 ? availableTierNames : [...ROUTER_TIER_KEYS]).map(tier => {
                           const active = (ao.triggerTiers ?? ["complex"]).includes(tier);
                           return (
                             <button
@@ -380,12 +328,8 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
                               )}
                               onClick={() => {
                                 const prev = ao.triggerTiers ?? ["complex"];
-                                const next = active
-                                  ? prev.filter((value) => value !== tier)
-                                  : [...prev, tier];
-                                onChange(
-                                  patch(config, ["router", "autoOrchestrate", "triggerTiers"], next),
-                                );
+                                const next = active ? prev.filter(value => value !== tier) : [...prev, tier];
+                                onChange(patch(config, ["router", "autoOrchestrate", "triggerTiers"], next));
                               }}
                             >
                               {tier}
@@ -395,19 +339,13 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
                       </div>
                     </div>
                     <SettingsRow
-                      label={t("pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label")}
-                      description={t(
-                        "pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.description",
-                      )}
+                      label={t("satiConfig.panels.router.autoOrchestrate.slimPrompt.label")}
+                      description={t("satiConfig.panels.router.autoOrchestrate.slimPrompt.description")}
                     >
                       <SettingsToggle
                         checked={ao.slimSystemPrompt !== false}
-                        ariaLabel={t(
-                          "pilotDeckConfig.panels.router.autoOrchestrate.slimPrompt.label",
-                        )}
-                        onChange={(v) =>
-                          onChange(patch(config, ["router", "autoOrchestrate", "slimSystemPrompt"], v))
-                        }
+                        ariaLabel={t("satiConfig.panels.router.autoOrchestrate.slimPrompt.label")}
+                        onChange={v => onChange(patch(config, ["router", "autoOrchestrate", "slimSystemPrompt"], v))}
                       />
                     </SettingsRow>
                   </div>
@@ -416,13 +354,13 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
 
               <SettingsCard divided>
                 <SettingsRow
-                  label={t("pilotDeckConfig.panels.router.stats.label")}
-                  description={t("pilotDeckConfig.panels.router.stats.description")}
+                  label={t("satiConfig.panels.router.stats.label")}
+                  description={t("satiConfig.panels.router.stats.description")}
                 >
                   <SettingsToggle
                     checked={statsEnabled}
-                    ariaLabel={t("pilotDeckConfig.panels.router.stats.label")}
-                    onChange={(v) => onChange(patch(config, ["router", "stats", "enabled"], v))}
+                    ariaLabel={t("satiConfig.panels.router.stats.label")}
+                    onChange={v => onChange(patch(config, ["router", "stats", "enabled"], v))}
                   />
                 </SettingsRow>
               </SettingsCard>

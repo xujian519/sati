@@ -1,18 +1,18 @@
 import { randomUUID } from "node:crypto";
-import type { Gateway, GatewayEvent } from "../../gateway/index.js";
+import type { Gateway } from "../../gateway/index.js";
 import type { AlwaysOnApplyInput, AlwaysOnApplyResult } from "../../gateway/protocol/types.js";
 import { resolveAlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
 import { DiscoveryPlanStore } from "../storage/DiscoveryPlanStore.js";
 import { WorkCycleStore } from "../storage/WorkCycleStore.js";
-import { DiscoveryFire, type DiscoveryFireDependencies } from "./DiscoveryFire.js";
-import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
 import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import { AlwaysOnEventStore } from "../storage/AlwaysOnEventStore.js";
 import { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
-import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
 import { defaultAlwaysOnConfig, type AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
+import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
+import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
+import { DiscoveryFire, type DiscoveryFireDependencies } from "./DiscoveryFire.js";
 
 export type CreateApplyHandlerDeps = {
   gateway: Gateway;
@@ -32,7 +32,7 @@ export type CreateApplyHandlerDeps = {
 export function createApplyHandler(
   deps: CreateApplyHandlerDeps,
 ): (input: AlwaysOnApplyInput) => Promise<AlwaysOnApplyResult> {
-  return async (input) => {
+  return async input => {
     const paths = resolveAlwaysOnPaths({
       pilotHome: deps.pilotHome,
       projectKey: input.projectKey,
@@ -57,8 +57,8 @@ export function createApplyHandler(
     const planStore = new DiscoveryPlanStore(paths);
     const planIndex = await planStore.readIndex();
     const cyclePlans = planIndex.plans
-      .filter((p) => cycle.planIds.includes(p.id))
-      .map((p) => ({ id: p.id, title: p.title }));
+      .filter(p => cycle.planIds.includes(p.id))
+      .map(p => ({ id: p.id, title: p.title }));
 
     const baseConfig = deps.alwaysOnConfig ?? defaultAlwaysOnConfig();
     const minimalDeps: DiscoveryFireDependencies = {

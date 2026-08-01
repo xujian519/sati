@@ -2,9 +2,7 @@ import { existsSync, watch, type FSWatcher } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import { getPilotExtensionPaths } from "../pilot/index.js";
 
-export type ExtensionWatchScope =
-  | { kind: "global" }
-  | { kind: "project"; projectRoot: string };
+export type ExtensionWatchScope = { kind: "global" } | { kind: "project"; projectRoot: string };
 
 export type ExtensionWatchEvent = {
   scope: ExtensionWatchScope;
@@ -103,7 +101,7 @@ export class ExtensionWatchManager {
       ];
     }
     const paths = getPilotExtensionPaths(scope.projectRoot, this.options.pilotHome);
-    return [resolve(scope.projectRoot, ".pilotdeck", "mcp.json"), paths.projectPluginsDir, paths.projectSkillsDir];
+    return [resolve(scope.projectRoot, ".sati", "mcp.json"), paths.projectPluginsDir, paths.projectSkillsDir];
   }
 
   private createWatchers(scope: ExtensionWatchScope, watchedPaths: string[]): FSWatcher[] {

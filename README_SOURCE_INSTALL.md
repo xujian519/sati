@@ -1,72 +1,91 @@
-# Source Installation Guide
+# 源码安装指南
 
-This guide is for developers who want to run PilotDeck directly from source instead of using the one-line installer or Docker.
+本文档适合希望直接从源码运行 Sati 的开发者。如果只是想快速体验，建议优先使用一键安装脚本。
 
-## Prerequisites
+## 环境要求
 
-PilotDeck requires:
+Sati 需要：
 
-- Node.js v22.13.0 or newer within the Node.js 22 line, with the built-in `node:sqlite` runtime.
-- Git.
-- Git LFS is optional for source installs. It is only needed if you want to download large demo media assets with `git lfs pull`.
-- Native build tools for npm packages such as `node-pty`, `better-sqlite3`, `bcrypt`, and `sharp`: Python 3, `make`, and a C/C++ compiler.
-- `ripgrep` (`rg`) for built-in file/search tools.
+- Node.js v22.13.0 或更新的 Node.js 22 版本，并且支持内置 `node:sqlite` 运行时。
+- Git。
+- Git LFS 对源码安装是可选项。只有需要下载大型演示媒体文件时，才需要通过 `git lfs pull` 获取。
+- Node 原生依赖（如 `node-pty`、`better-sqlite3`、`bcrypt`、`sharp`）所需的编译工具：Python 3、`make` 和 C/C++ 编译器。
+- `ripgrep` (`rg`)，内置文件/搜索工具会用到。
 
-## Install System Dependencies
+## 安装系统依赖
 
-### macOS
+### 中国大陆网络建议
 
-Xcode Command Line Tools are required if native packages fall back to source builds. Install them if `xcrun --find clang` fails, or if dependency installation reports missing compiler tools while building native packages:
-
-```bash
-xcode-select --install
-```
-
-If you use Homebrew, install Git LFS, ripgrep, and Node.js:
+如果访问 GitHub、npm 或 Node.js 官方下载源较慢，可以先配置国内镜像。下面配置只影响当前用户的 npm 包下载：
 
 ```bash
-brew install git-lfs ripgrep node
+npm config set registry https://registry.npmmirror.com
 ```
 
-Make sure Node.js is new enough:
-
-```bash
-node --version
-```
-
-If your Homebrew Node.js is older than v22.13.0, install a newer Node.js with your preferred Node version manager.
-
-On Intel Macs, make sure your Node.js runtime is the Intel/x64 build, not an Apple Silicon arm64 build launched through Rosetta or copied from another machine. Check both the Node version and architecture before installing dependencies:
-
-```bash
-node --version          # must be v22.13.0 or newer, and below v23
-node -p "process.arch" # should print x64 on Intel Macs
-```
-
-If `process.arch` does not match the Mac you are deploying on, reinstall Node.js 22 for the correct architecture, remove the old dependency folders, and rerun the pnpm install step below. Native packages such as `better-sqlite3`, `node-pty`, `bcrypt`, and `sharp` are architecture-specific, so copying `node_modules` between Apple Silicon and Intel Macs is not supported.
-
-Some Python distributions, especially Python 3.12 installed through package managers, may not include `distutils`, which older `node-gyp` versions still need when native packages compile from source. The one-line installer tries to auto-select a Python that provides `distutils`. If you run npm commands manually and see `ModuleNotFoundError: No module named 'distutils'`, use a Python that provides it, for example:
-
-```bash
-PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile
-```
-
-A CLT-only installation is enough; full Xcode is not required. If the tools are installed but `xcrun --find clang` fails, run `sudo xcode-select --reset` or reinstall Xcode Command Line Tools before retrying.
-
-If cloning from GitHub or downloading Git LFS files is slow or fails with network errors such as `fetch-pack: unexpected disconnect`, retry or use a stable network proxy. The source install flow below skips large Git LFS demo media by default.
-
-If you install dependencies with `pnpm`, you can set the pnpm registry directly:
+如果使用 `pnpm` 安装依赖，也可以直接设置 pnpm registry：
 
 ```bash
 pnpm config set registry https://registry.npmmirror.com
 ```
 
-When native dependencies such as `node-pty` or `better-sqlite3` fall back to source builds, `node-gyp` also downloads Node.js headers. If downloads from the official Node.js host time out, set a Node.js headers mirror for the current shell:
+当 `node-pty`、`better-sqlite3` 等原生依赖回退到源码编译时，`node-gyp` 还会下载 Node.js headers。如果访问 Node.js 官方源超时，可为当前 shell 指定 Node.js headers 镜像：
 
 ```bash
 export npm_config_disturl=https://npmmirror.com/mirrors/node
 ```
 
+如需恢复 npm 官方源：
+
+```bash
+npm config delete registry
+```
+
+使用 `fnm` 安装 Node.js 时，可临时指定 Node.js 下载镜像：
+
+```bash
+FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 22
+```
+
+Linux 系统包安装较慢时，建议先按发行版文档切换 apt/dnf/pacman 软件源镜像。克隆 GitHub 仓库或下载 Git LFS 文件较慢、出现 `fetch-pack: unexpected disconnect` 等网络错误时，请重试或优先使用稳定的网络代理。下面的源码安装流程默认跳过 Git LFS 管理的大型演示媒体文件。
+
+### macOS
+
+当原生依赖回退到源码编译时，需要可用的 Xcode Command Line Tools。如果 `xcrun --find clang` 失败，或依赖安装在编译原生包时报缺少编译工具，请安装：
+
+```bash
+xcode-select --install
+```
+
+如果使用 Homebrew，可安装 Git LFS、ripgrep 和 Node.js：
+
+```bash
+brew install git-lfs ripgrep node
+```
+
+确认 Node.js 版本足够新：
+
+```bash
+node --version
+```
+
+如果 Homebrew 安装的 Node.js 低于 v22.13.0，请使用你偏好的 Node 版本管理器安装更新版本。
+
+在 Intel Mac 上，请确认 Node.js 是 Intel/x64 架构版本，而不是从 Apple Silicon 机器复制来的 arm64 版本，或在 Rosetta 环境里混用的版本。安装依赖前同时检查 Node 版本和架构：
+
+```bash
+node --version          # 必须为 v22.13.0 或更新版本，且低于 v23
+node -p "process.arch" # Intel Mac 上应输出 x64
+```
+
+如果 `process.arch` 和当前 Mac 架构不一致，请重新安装对应架构的 Node.js 22，删除旧的依赖目录，然后重新执行下面的 pnpm 安装步骤。`better-sqlite3`、`node-pty`、`bcrypt`、`sharp` 等原生依赖都和 CPU 架构相关，不支持在 Apple Silicon 和 Intel Mac 之间直接复制 `node_modules`。
+
+某些 Python 发行版（尤其是通过包管理器安装的 Python 3.12）可能不包含 `distutils`，而旧版 `node-gyp` 在源码编译原生包时仍会用到它。一键安装脚本会尝试自动选择带 `distutils` 的 Python。如果你手动运行 npm 命令并看到 `ModuleNotFoundError: No module named 'distutils'`，请使用带 `distutils` 的 Python，例如：
+
+```bash
+PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile
+```
+
+只安装 CLT 即可，不需要完整 Xcode。如果已安装但 `xcrun --find clang` 仍失败，请运行 `sudo xcode-select --reset`，或重新安装 Xcode Command Line Tools 后重试。
 
 ### Debian / Ubuntu
 
@@ -75,17 +94,17 @@ sudo apt-get update
 sudo apt-get install -y git git-lfs ripgrep build-essential python3
 ```
 
-Install Node.js v22.13.0 or newer within the Node.js 22 line. One common option is `fnm`:
+安装 Node.js v22.13.0 或更新的 Node.js 22 版本。常见方式之一是使用 `fnm`：
 
 ```bash
 curl -fsSL https://fnm.vercel.app/install | bash
-# Restart your shell, then:
-fnm install 22
+# 重启 shell 后执行：
+FNM_NODE_DIST_MIRROR=https://npmmirror.com/mirrors/node fnm install 22
 fnm use 22
 node --version
 ```
 
-If you do not have sudo access, or do not want to modify the system Node.js installation, install the official Node.js binary into a user directory. This example installs into `~/.local` and only affects the current user and shell:
+如果没有 sudo 权限，或不希望修改系统 Node.js，也可以把官方 Node.js 二进制包安装到用户目录。下面示例安装到 `~/.local`，只影响当前用户和当前 shell：
 
 ```bash
 NODE_VERSION=22.13.1
@@ -106,7 +125,7 @@ pnpm --version
 sudo dnf install -y git git-lfs ripgrep gcc gcc-c++ make python3
 ```
 
-Then install Node.js v22.13.0 or newer within the Node.js 22 line using your preferred package source or Node version manager.
+然后通过你偏好的软件源或 Node 版本管理器安装 Node.js v22.13.0 或更新的 Node.js 22 版本。
 
 ### Arch Linux
 
@@ -114,20 +133,19 @@ Then install Node.js v22.13.0 or newer within the Node.js 22 line using your pre
 sudo pacman -Sy --needed git git-lfs ripgrep base-devel python nodejs npm
 ```
 
-Make sure `node --version` reports v22.13.0 or newer, and below v23.
+确认 `node --version` 显示 v22.13.0 或更新版本，且低于 v23。
 
 ### Windows
 
-Windows supports several source-deployment paths. You do **not** need to install every tool for every path.
+Windows 支持多种源码部署路径。你不需要为每条路径安装所有工具。
 
-| Path | Install on Windows | Best for |
+| 路径 | 需要在 Windows 安装 | 适合场景 |
 |---|---|---|
-| WSL2 Ubuntu | WSL2, Ubuntu, then Linux build tools inside Ubuntu | Source deployment and development |
-| Docker Desktop | Docker Desktop with WSL2 backend, Git for Windows | Running PilotDeck without local Node/native build setup |
-| Native Windows | Node.js, Git LFS, Python, Visual Studio C++ Build Tools, ripgrep | PowerShell-only development |
-| Portable Node | Official Node.js zip, Git for Windows, Git LFS, ripgrep | Verifying deployment without changing system Node settings |
+| WSL2 Ubuntu | WSL2、Ubuntu，然后在 Ubuntu 内安装 Linux 编译工具 | 源码部署和开发 |
+| 原生 Windows | Node.js、Git LFS、Python、Visual Studio C++ Build Tools、ripgrep | 只用 PowerShell 进行开发 |
+| Portable Node | 官方 Node.js zip、Git for Windows、Git LFS、ripgrep | 不修改系统 Node 设置，先验证部署流程 |
 
-Quick prerequisite check in PowerShell:
+先在 PowerShell 中快速检查依赖：
 
 ```powershell
 node --version
@@ -136,45 +154,26 @@ git --version
 git lfs version
 python --version
 rg --version
-docker --version
-docker compose version
 wsl --status
 ```
 
-Missing commands mean the corresponding tool still needs to be installed or added to `PATH`. After installing tools, close and reopen PowerShell before checking again. Git for Windows includes Git Bash; PilotDeck uses Git Bash as the default Windows terminal shell when it is available, and falls back to PowerShell only when Git Bash cannot be found.
+缺少命令说明对应工具还没有安装，或还没有加入 `PATH`。安装工具后，请关闭并重新打开 PowerShell 再检查。Git for Windows 会包含 Git Bash；Sati 在 Windows 上会优先使用 Git Bash 作为默认终端 shell，只有找不到 Git Bash 时才回退到 PowerShell。
 
-#### WSL2 Ubuntu (recommended)
+#### WSL2 Ubuntu（推荐）
 
-Install WSL2 and Ubuntu from an elevated PowerShell window:
+在管理员 PowerShell 中安装 WSL2 和 Ubuntu：
 
 ```powershell
 wsl --install -d Ubuntu
 ```
 
-Restart Windows if prompted, finish Ubuntu first-run setup, then follow the Debian / Ubuntu instructions inside the Ubuntu shell.
+如果系统提示重启，请重启 Windows；完成 Ubuntu 首次用户设置后，在 Ubuntu shell 中按 Debian / Ubuntu 小节安装依赖。
 
-#### Docker Desktop
+#### 原生 Windows PowerShell
 
-Install Docker Desktop and enable the WSL2 backend:
+原生 Windows 适合希望直接在 PowerShell 中开发的用户，但它比 WSL2 更容易受到 native npm 依赖编译环境影响。
 
-```powershell
-winget install Docker.DockerDesktop
-```
-
-Start Docker Desktop once after installation, wait until the engine is running, then verify:
-
-```powershell
-docker --version
-docker compose version
-```
-
-Use the Docker instructions in `README_DOCKER.md` if you choose this path. Docker builds use Node.js 22 and the committed pnpm lockfile inside the container, so they do not depend on the host Node.js architecture.
-
-#### Native Windows PowerShell
-
-Native Windows is useful if you want to develop directly from PowerShell. It is more sensitive to native npm dependency compilation than WSL2.
-
-Install prerequisites with `winget`:
+使用 `winget` 安装依赖：
 
 ```powershell
 winget install OpenJS.NodeJS.LTS
@@ -185,30 +184,30 @@ winget install BurntSushi.ripgrep.MSVC
 winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 ```
 
-Then open a new PowerShell window and run:
+然后打开新的 PowerShell 窗口并运行：
 
 ```powershell
 git lfs install
-node --version   # must be v22.13.0 or newer, and below v23
-node -p "process.arch" # native Windows source installs should print x64
+node --version   # 必须为 v22.13.0 或更新版本，且低于 v23
+node -p "process.arch" # 原生 Windows 源码安装应输出 x64
 npm --version
 python --version
 rg --version
 ```
 
-`OpenJS.NodeJS.LTS` may move to a newer major Node.js release over time. If `node --version` is not `v22.x`, switch to Portable Node or a Node version manager before installing dependencies.
+`OpenJS.NodeJS.LTS` 可能会随时间切换到更新的 Node.js 大版本。如果 `node --version` 不是 `v22.x`，请先切换到 Portable Node 或 Node 版本管理器，再安装依赖。
 
-Native Windows source installs are tested on x64 Node.js. If `node -p "process.arch"` does not print `x64`, switch to the official x64 Node.js 22 zip or another x64 Node.js runtime before installing dependencies.
+原生 Windows 源码安装按 x64 Node.js 验证。如果 `node -p "process.arch"` 不是 `x64`，请先切换到官方 x64 Node.js 22 zip，或其他 x64 Node.js 运行时，再安装依赖。
 
-Use separate PowerShell lines instead of Bash-style chained commands when following the prerequisite commands above. For PilotDeck's in-app terminal, Git Bash is preferred automatically after Git for Windows is installed. If PowerShell blocks `npm.ps1`, call `npm.cmd` instead of `npm`.
+执行上面的前置依赖检查命令时，请使用分开的 PowerShell 命令行，不要使用 Bash 风格的链式命令。安装 Git for Windows 后，Sati 内置终端会自动优先使用 Git Bash。如果 PowerShell 拦截 `npm.ps1`，请改用 `npm.cmd`。
 
-#### Portable Node for verification
+#### Portable Node 验证路径
 
-If you want to test PilotDeck before installing Node.js globally, use the official Windows Node.js zip for the current terminal session only:
+如果想在全局安装 Node.js 前先验证 Sati，可只在当前 PowerShell 会话中使用官方 Windows Node.js zip：
 
 ```powershell
 $NodeVersion = '22.23.1'
-$WorkDir = Join-Path $PWD '.pilotdeck-node'
+$WorkDir = Join-Path $PWD '.sati-node'
 $ZipPath = Join-Path $WorkDir "node-v$NodeVersion-win-x64.zip"
 $NodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"
 
@@ -225,98 +224,98 @@ node --version
 npm.cmd --version
 ```
 
-With portable Node, keep using the source install commands below: `corepack pnpm install --frozen-lockfile`, `corepack pnpm run build`, and `corepack pnpm --prefix ui run build`. Use `npm.cmd` only when you need to invoke npm directly and PowerShell blocks `npm.ps1`.
+使用 Portable Node 时，仍然请按下面的源码安装命令执行：`corepack pnpm install --frozen-lockfile`、`corepack pnpm run build` 和 `corepack pnpm --prefix ui run build`。只有在确实需要直接调用 npm 且 PowerShell 拦截 `npm.ps1` 时，才改用 `npm.cmd`。
 
-## Clone the Repository
+## 克隆仓库
 
-Clone the source code without downloading large Git LFS demo media:
+克隆源码，默认不下载 Git LFS 管理的大型演示媒体文件：
 
 ```bash
-GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
-cd PilotDeck
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/xujian519/sati.git
+cd Sati
 ```
 
-If you need the demo videos/GIFs later, download them after cloning:
+如果之后需要演示视频/GIF，可在克隆后下载：
 
 ```bash
 git lfs pull
 ```
 
-## Install Node Dependencies
+## 安装 Node 依赖
 
 ```bash
-node --version          # must be v22.13.0 or newer, and below v23
-corepack enable         # enables the pinned pnpm version from package.json
+node --version          # 必须为 v22.13.0 或更新版本，且低于 v23
+corepack enable         # 启用 package.json 中固定的 pnpm 版本
 corepack pnpm install --frozen-lockfile
 ```
 
-If Corepack is unavailable, or if you are using a user-directory Portable Node installation, install the pinned pnpm version globally instead:
+如果当前环境没有 Corepack，或正在使用用户目录安装的 Portable Node，可改用固定版本的全局 pnpm：
 
 ```bash
 npm install -g pnpm@10.32.1
 pnpm install --frozen-lockfile
 ```
 
-Use the committed `pnpm-lock.yaml` for source installs. Do not replace this step with `npm install`; the lockfile and workspace build settings are maintained for pnpm, and pnpm is the path tested by the one-line installer.
+源码安装请使用仓库提交的 `pnpm-lock.yaml`。不要把这一步替换成 `npm install`；当前 lockfile 和 workspace 构建配置按 pnpm 维护，一键安装脚本验证的也是这条路径。
 
-The app uses `better-sqlite3` and Node.js 22's built-in `node:sqlite`. It does not require the legacy `sqlite` or `sqlite3` npm packages.
+当前应用使用 `better-sqlite3` 和 Node.js 22 内置的 `node:sqlite`，不需要旧的 `sqlite` 或 `sqlite3` npm 包。
 
-ClawHub CLI is optional, but recommended for skill marketplace features:
+ClawHub CLI 是可选项，但如果需要使用技能市场功能，建议安装：
 
 ```bash
 npm install -g clawhub
 clawhub --version
 ```
 
-On Windows, use `npm.cmd install -g clawhub` if PowerShell blocks `npm.ps1`. With Portable Node, this installs `clawhub` into the portable Node prefix, so keep that Node directory on `PATH` when running PilotDeck.
+在 Windows 上，如果 PowerShell 拦截 `npm.ps1`，请使用 `npm.cmd install -g clawhub`。如果使用 Portable Node，`clawhub` 会安装到当前 portable Node 前缀下；运行 Sati 时需要继续保留该 Node 目录在 `PATH` 中。
 
-## First-Run Onboarding
+## 首次 Onboarding
 
-PilotDeck reads `~/.pilotdeck/pilotdeck.yaml`. If you do not already have a config file, prepare the Web UI onboarding flow before starting in production mode:
+Sati 读取 `~/.sati/sati.yaml`。如果本机还没有配置文件，生产模式启动前请先准备 Web UI 的首次 onboarding 流程：
 
 ```bash
-node scripts/bootstrap-pilotdeck-config.mjs
+node scripts/bootstrap-sati-config.mjs
 ```
 
-This initializes `~/.pilotdeck/pilotdeck.yaml` for first-run onboarding so the Gateway can boot. Then open the Web UI and finish provider/API key setup in the onboarding/settings panel.
+该命令会初始化 `~/.sati/sati.yaml`，让 Gateway 可以启动并进入首次 onboarding。随后打开 Web UI，在 onboarding/设置面板中完成 Provider 和 API Key 配置。
 
-Note: the generated first-run config is a placeholder. It contains `_placeholder/_placeholder`, `https://placeholder.invalid`, and `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE`. Its purpose is to let the Gateway and Web UI boot; the UI still routes to onboarding until you provide a real provider, API key, and model.
+注意：首次生成的配置只是占位配置，包含 `_placeholder/_placeholder`、`https://placeholder.invalid` 和 `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE`。它的作用是让 Gateway 和 Web UI 可以启动；在填写真实 Provider、API Key 和模型前，UI 仍会进入 onboarding，这是预期行为。
 
-## Start PilotDeck
+## 启动 Sati
 
-Development mode with HMR:
+开发模式，支持 HMR：
 
 ```bash
 cd ui
 npm run dev
 ```
 
-Open <http://localhost:5173>.
+打开 <http://localhost:5173>。
 
-Production mode:
+生产模式：
 
 ```bash
 cd ui
 npm run start
 ```
 
-Open <http://localhost:3001>.
+打开 <http://localhost:3001>。
 
-If the default ports are already in use, change them with environment variables, for example:
+如果默认端口已被占用，可以通过环境变量换端口，例如：
 
 ```bash
-SERVER_PORT=3002 PILOTDECK_GATEWAY_PORT=18790 PILOTDECK_GATEWAY_URL=ws://127.0.0.1:18790/ws npm run start
+SERVER_PORT=3002 SATI_GATEWAY_PORT=18790 SATI_GATEWAY_URL=ws://127.0.0.1:18790/ws npm run start
 ```
 
-## Troubleshooting
+## 常见问题
 
-- `Node.js >=22.13.0 and <23 is required`: switch to Node.js 22.13.0 or newer within the Node.js 22 line, then reinstall dependencies.
-- Native package build errors: make sure Python 3, `make`, and a C/C++ compiler are installed, then rerun `corepack pnpm install --frozen-lockfile`.
-- Linux `node-pty` or `better-sqlite3` builds time out while downloading `node-v*-headers.tar.gz`: run `export npm_config_disturl=https://npmmirror.com/mirrors/node`, then reinstall dependencies.
-- `pnpm install --frozen-lockfile` times out while downloading npm packages: run `pnpm config set registry https://registry.npmmirror.com`, then retry.
-- `ModuleNotFoundError: No module named 'distutils'` on macOS: the one-line installer tries to auto-select a compatible Python; for manual npm commands, retry with `PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile`, or use another Python that includes `distutils`.
-- Missing compiler tools on macOS: full Xcode is not required, but `xcrun --find clang` must work. Reinstall Xcode Command Line Tools with `xcode-select --install`, or run `sudo xcode-select --reset` if CLT is already installed.
-- `EADDRINUSE` on startup: the default `3001` or `18789` port is already in use. Set `SERVER_PORT`, `PILOTDECK_GATEWAY_PORT`, and `PILOTDECK_GATEWAY_URL`, then retry.
-- `~/.pilotdeck/pilotdeck.yaml` exists but the UI still opens onboarding: check whether the config still contains `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE` or `_placeholder/_placeholder`; replace them with a real provider, API key, and model.
-- Missing demo images/videos: install Git LFS and run `git lfs pull` from the repo root.
-- `rg` not found: install ripgrep for full file/search tool support.
+- 出现 `Node.js >=22.13.0 and <23 is required`：切换到 Node.js 22.13.0 或更新的 Node.js 22 版本，并重新安装依赖。
+- 原生包编译失败：确认已安装 Python 3、`make` 和 C/C++ 编译器，然后重新运行 `corepack pnpm install --frozen-lockfile`。
+- Linux 上 `node-pty`、`better-sqlite3` 编译时下载 `node-v*-headers.tar.gz` 超时：先运行 `export npm_config_disturl=https://npmmirror.com/mirrors/node`，再重新安装依赖。
+- `pnpm install --frozen-lockfile` 下载 npm 包超时：运行 `pnpm config set registry https://registry.npmmirror.com` 后重试。
+- macOS 出现 `ModuleNotFoundError: No module named 'distutils'`：一键安装脚本会尝试自动选择兼容 Python；手动运行 npm 命令时，可用 `PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile` 重试，或切换到其他带 `distutils` 的 Python。
+- macOS 缺少编译工具：不需要完整 Xcode，但 `xcrun --find clang` 必须可用。可运行 `xcode-select --install` 重新安装 Xcode Command Line Tools；如果已安装但状态异常，可运行 `sudo xcode-select --reset` 后重试。
+- 启动时报 `EADDRINUSE`：默认 `3001` 或 `18789` 已被占用，设置 `SERVER_PORT`、`SATI_GATEWAY_PORT` 和 `SATI_GATEWAY_URL` 后重试。
+- 已有 `~/.sati/sati.yaml` 但仍进入 onboarding：检查配置里是否仍是 `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE` 或 `_placeholder/_placeholder`，需要替换为真实 Provider、API Key 和模型。
+- 缺少演示图片/视频：安装 Git LFS 后，在仓库根目录运行 `git lfs pull`。
+- 提示找不到 `rg`：安装 ripgrep 以启用完整的文件/搜索工具能力。

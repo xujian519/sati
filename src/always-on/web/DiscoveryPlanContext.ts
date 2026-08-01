@@ -12,14 +12,9 @@
 
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { join, relative } from "node:path";
 import { spawn } from "node:child_process";
-import {
-  normalizeString,
-  toIsoTimestamp,
-  toTimestampValue,
-  truncateText,
-} from "./DiscoveryPlanStatus.js";
+import { normalizeString, toIsoTimestamp, toTimestampValue, truncateText } from "./DiscoveryPlanStatus.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -35,14 +30,8 @@ const MAX_ITEMS = 8;
 export type DiscoveryContextDeps = {
   projectName: string;
   projectRoot: string;
-  getProjectCronJobsOverview: (
-    projectName: string,
-  ) => Promise<{ jobs: CronJobOverview[] }>;
-  getSessions: (
-    projectName: string,
-    limit: number,
-    offset: number,
-  ) => Promise<{ sessions: SessionRecord[] }>;
+  getProjectCronJobsOverview: (projectName: string) => Promise<{ jobs: CronJobOverview[] }>;
+  getSessions: (projectName: string, limit: number, offset: number) => Promise<{ sessions: SessionRecord[] }>;
   extractProjectDirectory: (name: string) => Promise<string>;
 };
 
@@ -86,10 +75,9 @@ export async function buildDiscoveryContext(deps: DiscoveryContextDeps) {
 
   const recentChats = Array.isArray(sessionResult?.sessions)
     ? sessionResult.sessions
-        .filter((s) => s?.sessionKind !== "background_task")
+        .filter(s => s?.sessionKind !== "background_task")
         .filter(
-          (s) =>
-            (toTimestampValue(s?.lastActivity || s?.updated_at || s?.createdAt || s?.created_at) ?? 0) >= cutoff,
+          s => (toTimestampValue(s?.lastActivity || s?.updated_at || s?.createdAt || s?.created_at) ?? 0) >= cutoff,
         )
         .sort(
           (a, b) =>
@@ -106,9 +94,7 @@ export async function buildDiscoveryContext(deps: DiscoveryContextDeps) {
     workspace: { projectName, projectRoot, signals: workspaceSignals },
     memory: [],
     existingPlans: [] as unknown[],
-    cronJobs: Array.isArray(cronOverview?.jobs)
-      ? cronOverview.jobs.slice(0, MAX_ITEMS).map(buildCronContextItem)
-      : [],
+    cronJobs: Array.isArray(cronOverview?.jobs) ? cronOverview.jobs.slice(0, MAX_ITEMS).map(buildCronContextItem) : [],
     recentChats,
   };
 }
@@ -118,7 +104,7 @@ export async function buildDiscoveryContext(deps: DiscoveryContextDeps) {
 // ---------------------------------------------------------------------------
 
 async function runCommand(command: string, args: string[], cwd: string): Promise<string> {
-  return new Promise((done) => {
+  return new Promise(done => {
     const child = spawn(command, args, {
       cwd,
       env: process.env,
@@ -129,18 +115,14 @@ async function runCommand(command: string, args: string[], cwd: string): Promise
       stdout += chunk.toString("utf8");
     });
     child.on("error", () => done(""));
-    child.on("close", (code) => done(code === 0 ? stdout.trim() : ""));
+    child.on("close", code => done(code === 0 ? stdout.trim() : ""));
   });
 }
 
 async function collectWorkspaceSignals(projectRoot: string): Promise<string[]> {
   const [gitStatus, recentCommit] = await Promise.all([
     runCommand("git", ["-C", projectRoot, "status", "--short"], projectRoot),
-    runCommand(
-      "git",
-      ["-C", projectRoot, "log", "-1", "--stat", "--oneline", "--decorate=no"],
-      projectRoot,
-    ),
+    runCommand("git", ["-C", projectRoot, "log", "-1", "--stat", "--oneline", "--decorate=no"], projectRoot),
   ]);
 
   const signals: string[] = [];
@@ -168,7 +150,7 @@ async function walkDirectory(rootDir: string, visit: (path: string) => Promise<v
   }
 
   await Promise.all(
-    entries.map(async (entry) => {
+    entries.map(async entry => {
       const entryPath = join(rootDir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name === "node_modules" || entry.name === ".git") return;
@@ -181,10 +163,10 @@ async function walkDirectory(rootDir: string, visit: (path: string) => Promise<v
 }
 
 async function collectMemorySignals(projectName: string) {
-  const projectStoreDir = join(homedir(), ".pilotdeck", "projects", projectName);
+  const projectStoreDir = join(homedir(), ".sati", "projects", projectName);
   const candidates: { entryPath: string; modifiedAt: string }[] = [];
 
-  await walkDirectory(projectStoreDir, async (entryPath) => {
+  await walkDirectory(projectStoreDir, async entryPath => {
     const normalized = entryPath.replace(/\\/g, "/");
     const isSessionMemorySummary = normalized.endsWith("/session-memory/summary.md");
     const isAutoMemoryFile = normalized.includes("/memory/") && normalized.endsWith(".md");
@@ -198,13 +180,11 @@ async function collectMemorySignals(projectName: string) {
     }
   });
 
-  candidates.sort(
-    (a, b) => (toTimestampValue(b.modifiedAt) ?? 0) - (toTimestampValue(a.modifiedAt) ?? 0),
-  );
+  candidates.sort((a, b) => (toTimestampValue(b.modifiedAt) ?? 0) - (toTimestampValue(a.modifiedAt) ?? 0));
 
   const selected = candidates.slice(0, MAX_ITEMS);
   return Promise.all(
-    selected.map(async (candidate) => {
+    selected.map(async candidate => {
       const raw = await fs.readFile(candidate.entryPath, "utf8").catch(() => "");
       return {
         path: relative(projectStoreDir, candidate.entryPath).replace(/\\/g, "/"),
@@ -230,9 +210,7 @@ function buildRecentChatEntry(session: SessionRecord) {
   return {
     id: session.id,
     summary: summarizeSession(session),
-    lastActivity: toIsoTimestamp(
-      session.lastActivity || session.updated_at || session.createdAt || session.created_at,
-    ),
+    lastActivity: toIsoTimestamp(session.lastActivity || session.updated_at || session.createdAt || session.created_at),
     lastUserMessage: truncateText(session.lastUserMessage, 220),
     lastAssistantMessage: truncateText(session.lastAssistantMessage, 220),
   };

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
-import { pilotDeckDarkBlueTheme } from "./theme.js";
+import { satiDarkBlueTheme } from "./theme.js";
 
 export function ToolOutputViewer({
   content,
@@ -25,19 +25,19 @@ export function ToolOutputViewer({
       return;
     }
     if (input === "j" || key.downArrow) {
-      setOffset((o) => Math.min(maxOffset, o + 1));
+      setOffset(o => Math.min(maxOffset, o + 1));
       return;
     }
     if (input === "k" || key.upArrow) {
-      setOffset((o) => Math.max(0, o - 1));
+      setOffset(o => Math.max(0, o - 1));
       return;
     }
     if (key.pageDown) {
-      setOffset((o) => Math.min(maxOffset, o + viewport));
+      setOffset(o => Math.min(maxOffset, o + viewport));
       return;
     }
     if (key.pageUp) {
-      setOffset((o) => Math.max(0, o - viewport));
+      setOffset(o => Math.max(0, o - viewport));
       return;
     }
     if (input === "G") {
@@ -55,9 +55,10 @@ export function ToolOutputViewer({
 
   return (
     <Box flexDirection="column" height={termRows}>
-      <Box borderStyle="single" borderColor={pilotDeckDarkBlueTheme.border ?? pilotDeckDarkBlueTheme.subtle}>
-        <Text bold color={pilotDeckDarkBlueTheme.brand}>
-          {" "}{title}{" "}
+      <Box borderStyle="single" borderColor={satiDarkBlueTheme.border ?? satiDarkBlueTheme.subtle}>
+        <Text bold color={satiDarkBlueTheme.brand}>
+          {" "}
+          {title}{" "}
         </Text>
         <Text dimColor> j/k PgUp/Dn g/G q:close </Text>
       </Box>
@@ -69,7 +70,8 @@ export function ToolOutputViewer({
         ))}
       </Box>
       <Text dimColor>
-        {" "}Line {offset + 1}-{endLine} of {lines.length}{" "}
+        {" "}
+        Line {offset + 1}-{endLine} of {lines.length}{" "}
       </Text>
     </Box>
   );

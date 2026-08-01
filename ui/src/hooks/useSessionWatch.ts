@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from "react";
 
 type UseSessionWatchArgs = {
   sessionId: string | null | undefined;
@@ -7,7 +7,7 @@ type UseSessionWatchArgs = {
 };
 
 function normalizeSessionId(value: string | null | undefined): string | null {
-  if (typeof value !== 'string') return null;
+  if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 }
@@ -22,12 +22,12 @@ export function useSessionWatch({ sessionId, ws, sendMessage }: UseSessionWatchA
     const socketChanged = watchedSocketRef.current !== ws;
 
     if (previousSessionId && previousSessionId !== nextSessionId) {
-      sendMessage({ type: 'unwatch-session', sessionId: previousSessionId });
+      sendMessage({ type: "unwatch-session", sessionId: previousSessionId });
     }
 
     if (nextSessionId && ws?.readyState === WebSocket.OPEN) {
       if (socketChanged || previousSessionId !== nextSessionId) {
-        sendMessage({ type: 'watch-session', sessionId: nextSessionId });
+        sendMessage({ type: "watch-session", sessionId: nextSessionId });
       }
     }
 
@@ -35,10 +35,13 @@ export function useSessionWatch({ sessionId, ws, sendMessage }: UseSessionWatchA
     watchedSocketRef.current = ws;
   }, [sessionId, ws, sendMessage]);
 
-  useEffect(() => () => {
-    const sessionToUnwatch = watchedSessionRef.current;
-    if (sessionToUnwatch) {
-      sendMessage({ type: 'unwatch-session', sessionId: sessionToUnwatch });
-    }
-  }, [sendMessage]);
+  useEffect(
+    () => () => {
+      const sessionToUnwatch = watchedSessionRef.current;
+      if (sessionToUnwatch) {
+        sendMessage({ type: "unwatch-session", sessionId: sessionToUnwatch });
+      }
+    },
+    [sendMessage],
+  );
 }

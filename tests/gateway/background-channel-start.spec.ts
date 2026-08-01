@@ -3,20 +3,19 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
-import { startPilotDeckServer } from "../../src/cli/pilotdeckServer.js";
+import { startSatiServer } from "../../src/cli/satiServer.js";
 import type { ChannelAdapter } from "../../src/adapters/index.js";
 import type { Gateway } from "../../src/gateway/index.js";
 
-test("startPilotDeckServer listens before a background channel finishes starting", async (t) => {
-  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-channel-start-"));
-  const previousPilotHome = process.env.PILOT_HOME;
-  process.env.PILOT_HOME = pilotHome;
+test("startSatiServer listens before a background channel finishes starting", async t => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-channel-start-"));
+  const previousSatiHome = process.env.SATI_HOME;
+  process.env.SATI_HOME = pilotHome;
   t.after(async () => {
-    if (previousPilotHome === undefined) {
-      delete process.env.PILOT_HOME;
+    if (previousSatiHome === undefined) {
+      delete process.env.SATI_HOME;
     } else {
-      process.env.PILOT_HOME = previousPilotHome;
+      process.env.SATI_HOME = previousSatiHome;
     }
     await rm(pilotHome, { recursive: true, force: true });
   });
@@ -26,7 +25,7 @@ test("startPilotDeckServer listens before a background channel finishes starting
     start: async () => new Promise(() => undefined),
   };
 
-  const server = await startPilotDeckServer({
+  const server = await startSatiServer({
     gateway: {} as Gateway,
     port: 0,
     channels: [stuckChannel],

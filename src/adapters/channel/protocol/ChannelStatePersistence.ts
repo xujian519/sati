@@ -9,7 +9,7 @@ export type ChannelStatePersistenceOptions = {
 
 /**
  * Persists IM channel session-mapper state to disk so that active sessions
- * and project bindings survive PilotDeck restarts.
+ * and project bindings survive Sati restarts.
  *
  * Each channel gets its own `<channelKey>.state.json` file under `stateDir`.
  * Writes are debounced to avoid excessive I/O during high-frequency messaging.
@@ -59,7 +59,7 @@ export class ChannelStatePersistence {
       this.pending.delete(key);
     }
     const keys = new Set([...this.dirty.keys(), ...this.inFlight.keys()]);
-    await Promise.all([...keys].map((key) => this.ensureWrite(key)));
+    await Promise.all([...keys].map(key => this.ensureWrite(key)));
   }
 
   private ensureWrite(channelKey: string): Promise<void> {

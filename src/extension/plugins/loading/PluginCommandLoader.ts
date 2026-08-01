@@ -15,10 +15,9 @@ export async function loadPluginCommands(options: {
 }): Promise<LoadedPluginCommand[]> {
   const files = await collectMarkdownFiles(options.baseDir);
   return Promise.all(
-    files.map((filePath) => loadMarkdownContribution(
-      filePath,
-      getPluginCommandName(options.pluginName, filePath, options.baseDir),
-    )),
+    files.map(filePath =>
+      loadMarkdownContribution(filePath, getPluginCommandName(options.pluginName, filePath, options.baseDir)),
+    ),
   );
 }
 
@@ -30,12 +29,9 @@ export async function loadPluginCommands(options: {
  * `loadPluginCommands` would both derive a bogus `..` namespace for the root
  * file and expose reference markdown files as additional skills.
  */
-export async function loadStandaloneSkill(options: {
-  name: string;
-  skillDir: string;
-}): Promise<LoadedPluginCommand> {
+export async function loadStandaloneSkill(options: { name: string; skillDir: string }): Promise<LoadedPluginCommand> {
   const entries = await readdir(options.skillDir);
-  const skillFileName = entries.find((entry) => /^skill\.md$/iu.test(entry));
+  const skillFileName = entries.find(entry => /^skill\.md$/iu.test(entry));
   if (!skillFileName) {
     throw new Error(`Standalone skill '${options.name}' has no SKILL.md.`);
   }
@@ -46,13 +42,9 @@ export function getPluginCommandName(pluginName: string, filePath: string, baseD
   const skillFile = isSkillFile(filePath);
   const contributionDir = dirname(filePath);
   const baseName = skillFile ? basename(contributionDir) : basename(filePath).replace(/\.md$/iu, "");
-  const namespaceRoot = skillFile && relative(baseDir, contributionDir) !== ""
-    ? dirname(contributionDir)
-    : contributionDir;
-  const namespace = relative(baseDir, namespaceRoot)
-    .split(/[\\/]/u)
-    .filter(Boolean)
-    .join(":");
+  const namespaceRoot =
+    skillFile && relative(baseDir, contributionDir) !== "" ? dirname(contributionDir) : contributionDir;
+  const namespace = relative(baseDir, namespaceRoot).split(/[\\/]/u).filter(Boolean).join(":");
 
   return namespace ? `${pluginName}:${namespace}:${baseName}` : `${pluginName}:${baseName}`;
 }
@@ -61,10 +53,7 @@ function isSkillFile(filePath: string): boolean {
   return /^skill\.md$/iu.test(basename(filePath));
 }
 
-async function loadMarkdownContribution(
-  filePath: string,
-  name: string,
-): Promise<LoadedPluginCommand> {
+async function loadMarkdownContribution(filePath: string, name: string): Promise<LoadedPluginCommand> {
   const raw = await readFile(filePath, "utf8");
   const parsed = parseMarkdownFrontmatter(raw);
   return {
@@ -94,7 +83,7 @@ async function collectMarkdownFiles(directory: string): Promise<string[]> {
       continue;
     }
     if (entryStat.isDirectory()) {
-      output.push(...await collectMarkdownFiles(fullPath));
+      output.push(...(await collectMarkdownFiles(fullPath)));
     } else if (/\.md$/iu.test(entry)) {
       output.push(fullPath);
     }

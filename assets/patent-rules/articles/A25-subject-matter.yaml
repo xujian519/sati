@@ -1,0 +1,28 @@
+# 授权客体判断框架 (A25)
+# Layer 1 — 法条级原子单元
+
+articleId: "A25"
+name: "授权客体判断"
+lawRef: "专利法第25条"
+guidelineRef: "审查指南第二部分第一章"
+
+steps:
+  - id: "A25_step_1"
+    order: 1
+    name: "判断是否属于不授予专利权的客体"
+    ruleRef: "专利法第25条 + 审查指南第二部分第一章"
+    inputHint: "权利要求的技术方案"
+    outputSchema:
+      claimSummary: "string — 权利要求的技术方案概要"
+      excludedCategory: "string — 是否属于科学发现、智力活动规则、疾病诊断治疗方法等"
+      technicalMeans: "string — 是否包含技术手段"
+      conclusion: "string — 是否属于授权客体"
+
+conclusionSchema:
+  patentable: "boolean — 是否属于授权客体"
+  confidence: "'high' | 'medium' | 'low'"
+  keyRationale: "string — 核心理由"
+
+applicableTo:
+  - patentability
+  - invalidity

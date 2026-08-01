@@ -55,7 +55,7 @@ function cleanSchemaForGoogleWithDefs(
     return schema;
   }
   if (Array.isArray(schema)) {
-    return schema.map((item) => cleanSchemaForGoogleWithDefs(item, defs, refStack));
+    return schema.map(item => cleanSchemaForGoogleWithDefs(item, defs, refStack));
   }
 
   const obj = schema as Record<string, unknown>;
@@ -127,17 +127,14 @@ function cleanSchemaForGoogleWithDefs(
 }
 
 function flattenTopLevelObjectUnion(schema: Record<string, unknown>): Record<string, unknown> {
-  const variantKey = Array.isArray(schema.anyOf)
-    ? "anyOf"
-    : Array.isArray(schema.oneOf)
-      ? "oneOf"
-      : null;
+  const variantKey = Array.isArray(schema.anyOf) ? "anyOf" : Array.isArray(schema.oneOf) ? "oneOf" : null;
   if (!variantKey) {
     return schema;
   }
 
-  const variants = (schema[variantKey] as unknown[])
-    .filter((variant) => isRecord(variant) && isRecord(variant.properties)) as Record<string, unknown>[];
+  const variants = (schema[variantKey] as unknown[]).filter(
+    variant => isRecord(variant) && isRecord(variant.properties),
+  ) as Record<string, unknown>[];
   if (variants.length === 0) {
     return schema;
   }
@@ -146,9 +143,7 @@ function flattenTopLevelObjectUnion(schema: Record<string, unknown>): Record<str
   const requiredCounts = new Map<string, number>();
   for (const variant of variants) {
     for (const [key, value] of Object.entries(variant.properties as Record<string, unknown>)) {
-      mergedProperties[key] = key in mergedProperties
-        ? mergePropertySchemas(mergedProperties[key], value)
-        : value;
+      mergedProperties[key] = key in mergedProperties ? mergePropertySchemas(mergedProperties[key], value) : value;
     }
     const required = Array.isArray(variant.required) ? variant.required : [];
     for (const key of required) {
@@ -161,18 +156,14 @@ function flattenTopLevelObjectUnion(schema: Record<string, unknown>): Record<str
   const baseRequired = Array.isArray(schema.required)
     ? schema.required.filter((key): key is string => typeof key === "string")
     : undefined;
-  const required = baseRequired && baseRequired.length > 0
-    ? baseRequired
-    : Array.from(requiredCounts.entries())
-        .filter(([, count]) => count === variants.length)
-        .map(([key]) => key);
+  const required =
+    baseRequired && baseRequired.length > 0
+      ? baseRequired
+      : Array.from(requiredCounts.entries())
+          .filter(([, count]) => count === variants.length)
+          .map(([key]) => key);
 
-  const {
-    anyOf: _anyOf,
-    oneOf: _oneOf,
-    required: _required,
-    ...baseSchema
-  } = schema;
+  const { anyOf: _anyOf, oneOf: _oneOf, required: _required, ...baseSchema } = schema;
 
   return {
     ...baseSchema,
@@ -187,16 +178,12 @@ function simplifyUnion(
   defs: SchemaDefs | undefined,
   refStack: Set<string> | undefined,
 ): unknown {
-  const variants = Array.isArray(obj.anyOf)
-    ? obj.anyOf
-    : Array.isArray(obj.oneOf)
-      ? obj.oneOf
-      : undefined;
+  const variants = Array.isArray(obj.anyOf) ? obj.anyOf : Array.isArray(obj.oneOf) ? obj.oneOf : undefined;
   if (!variants) {
     return undefined;
   }
 
-  const nonNullVariants = variants.filter((variant) => !isNullSchema(variant));
+  const nonNullVariants = variants.filter(variant => !isNullSchema(variant));
   const flattened = tryFlattenLiteralUnion(nonNullVariants);
   if (flattened) {
     const result: Record<string, unknown> = flattened;
@@ -240,9 +227,7 @@ function cleanRequired(required: unknown, properties: unknown): string[] {
   if (!Array.isArray(required) || !isRecord(properties)) {
     return [];
   }
-  return required.filter(
-    (key): key is string => typeof key === "string" && key in properties,
-  );
+  return required.filter((key): key is string => typeof key === "string" && key in properties);
 }
 
 function mergePropertySchemas(existing: unknown, incoming: unknown): unknown {
@@ -251,9 +236,8 @@ function mergePropertySchemas(existing: unknown, incoming: unknown): unknown {
   if (existingValues || incomingValues) {
     const values = Array.from(new Set([...(existingValues ?? []), ...(incomingValues ?? [])]));
     const result: Record<string, unknown> = { enum: values };
-    const type = values.length > 0 && values.every((value) => typeof value === typeof values[0])
-      ? typeof values[0]
-      : undefined;
+    const type =
+      values.length > 0 && values.every(value => typeof value === typeof values[0]) ? typeof values[0] : undefined;
     if (type) {
       result.type = type;
     }
@@ -298,15 +282,11 @@ function extractEnumValues(schema: unknown): unknown[] | undefined {
   if ("const" in schema) {
     return [schema.const];
   }
-  const variants = Array.isArray(schema.anyOf)
-    ? schema.anyOf
-    : Array.isArray(schema.oneOf)
-      ? schema.oneOf
-      : undefined;
+  const variants = Array.isArray(schema.anyOf) ? schema.anyOf : Array.isArray(schema.oneOf) ? schema.oneOf : undefined;
   if (!variants) {
     return undefined;
   }
-  const values = variants.flatMap((variant) => extractEnumValues(variant) ?? []);
+  const values = variants.flatMap(variant => extractEnumValues(variant) ?? []);
   return values.length > 0 ? values : undefined;
 }
 
@@ -314,11 +294,12 @@ function extractSingleEnumValue(schema: unknown): { type: string; value: unknown
   if (!isRecord(schema)) {
     return undefined;
   }
-  const value = "const" in schema
-    ? schema.const
-    : Array.isArray(schema.enum) && schema.enum.length === 1
-      ? schema.enum[0]
-      : undefined;
+  const value =
+    "const" in schema
+      ? schema.const
+      : Array.isArray(schema.enum) && schema.enum.length === 1
+        ? schema.enum[0]
+        : undefined;
   const type = typeof schema.type === "string" ? schema.type : typeof value;
   return value !== undefined && type !== "undefined" ? { type, value } : undefined;
 }
@@ -327,7 +308,7 @@ function normalizeType(value: unknown): unknown {
   if (!Array.isArray(value)) {
     return value === "null" ? undefined : value;
   }
-  const withoutNull = value.filter((entry) => entry !== "null");
+  const withoutNull = value.filter(entry => entry !== "null");
   return withoutNull.length === 1 ? withoutNull[0] : withoutNull;
 }
 
@@ -341,10 +322,7 @@ function isNullSchema(value: unknown): boolean {
   return Array.isArray(value.enum) && value.enum.length === 1 && value.enum[0] === null;
 }
 
-function extendSchemaDefs(
-  defs: SchemaDefs | undefined,
-  schema: Record<string, unknown>,
-): SchemaDefs | undefined {
+function extendSchemaDefs(defs: SchemaDefs | undefined, schema: Record<string, unknown>): SchemaDefs | undefined {
   const entries = [
     isRecord(schema.$defs) ? schema.$defs : undefined,
     isRecord(schema.definitions) ? schema.definitions : undefined,

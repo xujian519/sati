@@ -1,0 +1,39 @@
+# 清楚支持判断框架 (A26.4)
+# Layer 1 — 法条级原子单元
+
+articleId: "A26.4"
+name: "清楚支持判断"
+lawRef: "专利法第26条第4款"
+guidelineRef: "审查指南第二部分第二章 3.2"
+
+steps:
+  - id: "A26.4_step_1"
+    order: 1
+    name: "检查权利要求是否清楚"
+    ruleRef: "审查指南第二部分第二章 3.2.2"
+    inputHint: "权利要求书"
+    outputSchema:
+      unclearTerms: "string[] — 含义不明确的术语"
+      ambiguousScope: "string[] — 保护范围不清楚的表述"
+      clarityIssues: "string[] — 全部清楚性问题"
+
+  - id: "A26.4_step_2"
+    order: 2
+    name: "检查权利要求是否得到说明书支持"
+    ruleRef: "审查指南第二部分第二章 3.2.1"
+    inputHint: "权利要求 + 说明书"
+    outputSchema:
+      unsupportedClaims: "string[] — 未得到支持的权利要求或其部分"
+      supportEvidence: "string[] — 对应的说明书段落"
+      overbreadthAnalysis: "string — 是否概括过宽的分析"
+
+conclusionSchema:
+  clear: "boolean — 是否清楚"
+  supported: "boolean — 是否得到支持"
+  confidence: "'high' | 'medium' | 'low'"
+  keyRationale: "string — 核心理由"
+
+applicableTo:
+  - invalidity
+  - validity
+  - drafting

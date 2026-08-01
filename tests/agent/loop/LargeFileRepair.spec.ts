@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import { LargeFileRepair } from "../../../src/agent/loop/LargeFileRepair.js";
-import type { PilotDeckToolResult } from "../../../src/tool/index.js";
+import type { SatiToolResult } from "../../../src/tool/index.js";
 
 const NO_TRUNCATION = {
   outputTruncated: false,
@@ -10,7 +9,7 @@ const NO_TRUNCATION = {
   finishReason: "tool_call",
 };
 
-function success(toolName: string, data?: unknown): PilotDeckToolResult {
+function success(toolName: string, data?: unknown): SatiToolResult {
   return {
     type: "success",
     toolCallId: `call-${toolName}`,
@@ -29,7 +28,7 @@ function failure(
     code?: "invalid_tool_input" | "result_too_large" | "permission_denied" | "permission_cancelled";
     details?: Record<string, unknown>;
   } = {},
-): PilotDeckToolResult {
+): SatiToolResult {
   return {
     type: "error",
     toolCallId: `call-${toolName}`,
@@ -49,19 +48,13 @@ test("ordinary edit failures after a successful write do not enter large-file re
   const repair = new LargeFileRepair();
 
   assert.equal(
-    repair.analyzeToolResults(
-      [success("write_file", { filePath: "/workspace/report.xlsx" })],
-      NO_TRUNCATION,
-    ),
+    repair.analyzeToolResults([success("write_file", { filePath: "/workspace/report.xlsx" })], NO_TRUNCATION),
     undefined,
   );
 
   for (let attempt = 0; attempt < 6; attempt++) {
     assert.equal(
-      repair.analyzeToolResults(
-        [failure("edit_file", "String to replace not found in file.")],
-        NO_TRUNCATION,
-      ),
+      repair.analyzeToolResults([failure("edit_file", "String to replace not found in file.")], NO_TRUNCATION),
       undefined,
     );
   }
@@ -71,10 +64,7 @@ test("ordinary edit failures after a successful write do not enter large-file re
 
 test("an explicit post-draft large-file failure starts bounded recovery", () => {
   const repair = new LargeFileRepair();
-  repair.analyzeToolResults(
-    [success("write_file", { filePath: "/workspace/report.xlsx" })],
-    NO_TRUNCATION,
-  );
+  repair.analyzeToolResults([success("write_file", { filePath: "/workspace/report.xlsx" })], NO_TRUNCATION);
 
   for (let attempt = 1; attempt <= 5; attempt++) {
     const decision = repair.analyzeToolResults(
@@ -97,19 +87,18 @@ test("successful focused write clears an active large-file repair episode", () =
   const repair = new LargeFileRepair();
 
   const started = repair.analyzeToolResults(
-    [failure("write_file", "The required parameter `content` is missing", {
-      details: { issues: [{ path: "$.content", code: "required" }] },
-    })],
+    [
+      failure("write_file", "The required parameter `content` is missing", {
+        details: { issues: [{ path: "$.content", code: "required" }] },
+      }),
+    ],
     NO_TRUNCATION,
   );
   assert.equal(started?.type, "continue");
   assert.equal(repair.hasPendingRepair, true);
 
   const completed = repair.analyzeToolResults(
-    [
-      success("write_file", { filePath: "/workspace/report.xlsx" }),
-      failure("bash", "verification command failed"),
-    ],
+    [success("write_file", { filePath: "/workspace/report.xlsx" }), failure("bash", "verification command failed")],
     NO_TRUNCATION,
   );
   assert.equal(completed, undefined);
@@ -118,16 +107,13 @@ test("successful focused write clears an active large-file repair episode", () =
 
 test("permission failures are never reclassified as large-file recovery", () => {
   const repair = new LargeFileRepair();
-  repair.analyzeToolResults(
-    [success("write_file", { filePath: "/workspace/report.xlsx" })],
-    NO_TRUNCATION,
-  );
+  repair.analyzeToolResults([success("write_file", { filePath: "/workspace/report.xlsx" })], NO_TRUNCATION);
 
   assert.equal(
-    repair.analyzeToolResults(
-      [failure("edit_file", "Permission denied", { code: "permission_denied" })],
-      { ...NO_TRUNCATION, outputTruncated: true },
-    ),
+    repair.analyzeToolResults([failure("edit_file", "Permission denied", { code: "permission_denied" })], {
+      ...NO_TRUNCATION,
+      outputTruncated: true,
+    }),
     undefined,
   );
   assert.equal(

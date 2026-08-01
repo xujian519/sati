@@ -47,13 +47,10 @@ type SettingsSidebarProps = {
   mobileVisible?: boolean;
 };
 
-const isItemActive = (
-  item: SettingsMenuItemI18n,
-  selectedKey: SettingsMenuKey,
-): boolean => {
+const isItemActive = (item: SettingsMenuItemI18n, selectedKey: SettingsMenuKey): boolean => {
   if (item.key === selectedKey) return true;
   if (!item.children || item.children.length === 0) return false;
-  return item.children.some((child) => child.key === selectedKey);
+  return item.children.some(child => child.key === selectedKey);
 };
 
 export default function SettingsSidebar({
@@ -86,7 +83,7 @@ export default function SettingsSidebar({
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-5">
           <ul className="space-y-3">
-            {MENU_ITEMS.map((item) => {
+            {MENU_ITEMS.map(item => {
               const active = isItemActive(item, selectedKey);
               const hasChildren = Boolean(item.children?.length);
               return (
@@ -117,7 +114,7 @@ export default function SettingsSidebar({
 
                   {item.children && item.children.length > 0 ? (
                     <ul className="space-y-1">
-                      {item.children.map((child) => (
+                      {item.children.map(child => (
                         <li key={child.key}>
                           <button
                             type="button"

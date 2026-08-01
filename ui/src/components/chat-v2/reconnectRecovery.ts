@@ -12,9 +12,9 @@ export function shouldRefreshSessionOnReconnect({
 
 export function buildReconnectStatusMessage(sessionId: string) {
   return {
-    type: 'check-session-status',
+    type: "check-session-status",
     sessionId,
-    provider: 'pilotdeck',
+    provider: "sati",
     includeActiveTurnMessages: true,
   };
 }
@@ -23,6 +23,6 @@ export async function refreshSessionAfterReconnect(refresh: () => Promise<unknow
   try {
     await refresh();
   } catch (error) {
-    console.error('Error refreshing session after WebSocket reconnect:', error);
+    console.error("Error refreshing session after WebSocket reconnect:", error);
   }
 }

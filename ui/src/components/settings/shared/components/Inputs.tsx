@@ -1,34 +1,14 @@
-import {
-  createContext,
-  type KeyboardEvent,
-  type ReactNode,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import { createContext, type KeyboardEvent, type ReactNode, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../../lib/utils";
-import {
-  isMaskedSecret,
-  secretDisplayValue,
-} from "../utils/secret";
+import { isMaskedSecret, secretDisplayValue } from "../utils/secret";
 
 type InputSaveMode = "explicit" | "immediate";
 
 const InputSaveModeContext = createContext<InputSaveMode>("explicit");
 
-export function FieldSaveModeProvider({
-  mode,
-  children,
-}: {
-  mode: InputSaveMode;
-  children: ReactNode;
-}) {
-  return (
-    <InputSaveModeContext.Provider value={mode}>
-      {children}
-    </InputSaveModeContext.Provider>
-  );
+export function FieldSaveModeProvider({ mode, children }: { mode: InputSaveMode; children: ReactNode }) {
+  return <InputSaveModeContext.Provider value={mode}>{children}</InputSaveModeContext.Provider>;
 }
 
 function CommitButtons({
@@ -133,11 +113,7 @@ function EditableInputShell({
       </div>
       <div className="shrink-0">
         {editing ? (
-          <CommitButtons
-            onSave={save}
-            onCancel={cancel}
-            canSave={isCommitAllowed && draft !== value}
-          />
+          <CommitButtons onSave={save} onCancel={cancel} canSave={isCommitAllowed && draft !== value} />
         ) : (
           <button
             type="button"
@@ -174,7 +150,7 @@ export function TextInput({
         <input
           type={type}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={e => setDraft(e.target.value)}
           onKeyDown={onEditKeyDown}
           placeholder={placeholder}
           spellCheck={false}
@@ -216,10 +192,7 @@ export function SecretTextInput({
       type="password"
       value={secretDisplayValue(value)}
       placeholder={
-        placeholder ??
-        (masked
-          ? maskedPlaceholder ?? "Existing key kept — type to replace"
-          : emptyPlaceholder)
+        placeholder ?? (masked ? (maskedPlaceholder ?? "Existing key kept — type to replace") : emptyPlaceholder)
       }
       monospace={monospace}
       className={className}
@@ -241,8 +214,8 @@ export function NumberInput({
   return (
     <EditableInputShell
       value={stringValue}
-      canCommit={(s) => s === "" || Number.isFinite(Number(s))}
-      onCommit={(s) => {
+      canCommit={s => s === "" || Number.isFinite(Number(s))}
+      onCommit={s => {
         if (s === "") {
           onChange(undefined);
           return;
@@ -255,7 +228,7 @@ export function NumberInput({
         <input
           type="number"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={e => setDraft(e.target.value)}
           onKeyDown={onEditKeyDown}
           placeholder={placeholder}
           readOnly={!editing}
@@ -297,7 +270,7 @@ export function TextAreaInput({
       <textarea
         value={readonlyValue}
         placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         spellCheck={false}
         className={cn(
           "min-h-[100px] w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs leading-5 text-foreground outline-none focus:ring-1 focus:ring-ring",
@@ -322,11 +295,7 @@ export function TextAreaInput({
       cancel();
       return;
     }
-    if (
-      event.key === "Enter" &&
-      (event.ctrlKey || event.metaKey) &&
-      !event.shiftKey
-    ) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.shiftKey) {
       event.preventDefault();
       save();
     }
@@ -337,7 +306,7 @@ export function TextAreaInput({
       <textarea
         value={editing ? draft : readonlyValue}
         placeholder={placeholder}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={e => setDraft(e.target.value)}
         onKeyDown={handleKeyDown}
         readOnly={!editing}
         spellCheck={false}
@@ -351,11 +320,7 @@ export function TextAreaInput({
       />
       <div className="shrink-0">
         {editing ? (
-          <CommitButtons
-            onSave={save}
-            onCancel={cancel}
-            canSave={draft !== readonlyValue}
-          />
+          <CommitButtons onSave={save} onCancel={cancel} canSave={draft !== readonlyValue} />
         ) : (
           <button
             type="button"
@@ -381,16 +346,14 @@ export function Select({
   options: Array<{ value: string; label: string; disabled?: boolean }>;
   disabled?: boolean;
 }) {
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedOption = options.find(opt => opt.value === value);
   const selectedLabel = selectedOption?.label ?? "";
   return (
     <div className="relative min-w-0">
       <div
         className={cn(
           "pointer-events-none flex w-full min-w-0 items-center rounded-md border border-border bg-background px-2 py-1.5 pr-8 text-[13px] leading-5",
-          selectedOption?.disabled || disabled
-            ? "bg-muted/40 text-muted-foreground"
-            : "text-foreground",
+          selectedOption?.disabled || disabled ? "bg-muted/40 text-muted-foreground" : "text-foreground",
         )}
       >
         <span className="block min-w-0 truncate" title={selectedLabel}>
@@ -402,15 +365,12 @@ export function Select({
       </span>
       <select
         value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         disabled={disabled}
-        className={cn(
-          "absolute inset-0 h-full w-full opacity-0",
-          disabled ? "cursor-default" : "cursor-pointer",
-        )}
+        className={cn("absolute inset-0 h-full w-full opacity-0", disabled ? "cursor-default" : "cursor-pointer")}
         aria-label={selectedLabel}
       >
-        {options.map((opt) => (
+        {options.map(opt => (
           <option key={opt.value} value={opt.value} disabled={opt.disabled}>
             {opt.label}
           </option>
@@ -432,14 +392,8 @@ export function FormRow({
   return (
     <div className="grid grid-cols-1 items-start gap-2 px-4 py-2.5 sm:grid-cols-[180px_1fr] sm:gap-4">
       <div className="min-w-0">
-        <div className="text-[13px] font-medium leading-5 text-foreground">
-          {label}
-        </div>
-        {description && (
-          <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
-            {description}
-          </div>
-        )}
+        <div className="text-[13px] font-medium leading-5 text-foreground">{label}</div>
+        {description && <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{description}</div>}
       </div>
       <div className="min-w-0">{children}</div>
     </div>

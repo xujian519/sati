@@ -15,10 +15,7 @@ export function createZeroUsageState(): ZeroUsageState {
   };
 }
 
-export function observeEventForZeroUsage(
-  state: ZeroUsageState,
-  event: CanonicalModelEvent,
-): void {
+export function observeEventForZeroUsage(state: ZeroUsageState, event: CanonicalModelEvent): void {
   if (event.type === "text_delta" && event.text.length > 0) {
     state.observedAnyText = true;
   } else if (event.type === "tool_call_delta" && event.delta.length > 0) {

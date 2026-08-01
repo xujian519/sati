@@ -1,0 +1,77 @@
+# 新颖性规则
+# 基于：专利法第22条第2款、审查指南第二部分第三章
+# 来源：BCIP CON-301, CON-302 + 审查指南
+
+rules:
+  - ruleId: NOV-001
+    name: 独立权利要求新颖性
+    description: 独立权利要求是否包含区别于所有现有技术的技术特征
+    legalBasis: 专利法第22条第2款
+    domain: patent_novelty
+    severity: critical
+    action: block
+    check:
+      type: feature_comparison
+      method: separate_comparison
+      principles:
+        - "单独对比原则：每篇对比文件单独与申请比较"
+        - "不得将多篇对比文件组合起来评价新颖性"
+        - "四相同标准：技术领域、技术问题、技术方案、技术效果全部相同→不具备新颖性"
+        - "下位概念破坏上位概念的新颖性"
+    assessment:
+      hasDistinctiveFeature: pass
+      allFeaturesMatched: fail
+
+  - ruleId: NOV-002
+    name: 抵触申请检查
+    description: 是否存在申请日在前的相同主题申请（抵触申请）
+    legalBasis: 专利法第22条第2款（抵触申请部分）
+    domain: patent_novelty
+    severity: critical
+    action: block
+    check:
+      type: conflicting_application
+      scope:
+        - "任何单位或个人在申请日前申请、申请日后公布的同样的发明或实用新型"
+        - "2020年修正后包括申请人自己"
+      assessment:
+        conflictingFound: fail
+        noConflict: pass
+
+  - ruleId: NOV-003
+    name: 不丧失新颖性的宽限期
+    description: 申请日前6个月内的特定公开不丧失新颖性
+    legalBasis: 专利法第24条
+    domain: patent_novelty
+    severity: major
+    action: review
+    check:
+      type: grace_period
+      conditions:
+        - "在中国政府主办或承认的国际展览会上首次展出"
+        - "在规定的学术会议或技术会议上首次发表"
+        - "他人未经申请人同意而泄露"
+      requirements:
+        - "公开日距申请日不超过6个月"
+        - "需在请求书中声明"
+        - "需在2个月内提交证明"
+      assessment:
+        conditionsMet: pass_with_note
+        notApplicable: pass
+        conditionsNotMet: warn
+
+  - ruleId: NOV-004
+    name: 惯用手段的直接置换
+    description: 区别仅为所属技术领域的惯用手段的直接置换且功能/效果相同→不具备新颖性
+    legalBasis: 审查指南第二部分第三章3.2
+    domain: patent_novelty
+    severity: major
+    action: review
+    check:
+      type: common_means_substitution
+      conditions:
+        - "区别特征属于该领域的惯用手段（螺栓→铆接、螺纹→卡扣）"
+        - "置换前后的功能/效果相同"
+      assessment:
+        isSubstitution: fail
+        notSubstitution: pass

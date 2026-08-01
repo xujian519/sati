@@ -133,8 +133,7 @@ function repairToolResultPairing(
 
     // Strip orphaned tool result blocks (their tool_call was truncated away).
     const hasOrphans =
-      [...seen].some((id) => !pendingSet.has(id)) ||
-      [...mediaRefs].some((id) => !visibleToolCallIds.has(id));
+      [...seen].some(id => !pendingSet.has(id)) || [...mediaRefs].some(id => !visibleToolCallIds.has(id));
     let cleanedMessage = message;
     if (hasOrphans) {
       const kept: CanonicalContentBlock[] = [];
@@ -153,7 +152,7 @@ function repairToolResultPairing(
       if (kept.length === 0) {
         // Entire message was orphaned tool_results; skip it.
         // Remove matched ones from pending before continuing.
-        for (const id of seen) pendingToolCallIds = pendingToolCallIds.filter((pid) => pid !== id);
+        for (const id of seen) pendingToolCallIds = pendingToolCallIds.filter(pid => pid !== id);
         continue;
       }
       cleanedMessage = { ...message, content: kept };
@@ -161,8 +160,8 @@ function repairToolResultPairing(
 
     // Check for unmatched tool_calls — they'll be flushed as placeholders
     // when the *next* assistant message arrives or at the end.
-    const matched = [...seen].filter((id) => pendingSet.has(id));
-    pendingToolCallIds = pendingToolCallIds.filter((id) => !matched.includes(id));
+    const matched = [...seen].filter(id => pendingSet.has(id));
+    pendingToolCallIds = pendingToolCallIds.filter(id => !matched.includes(id));
 
     output.push(cleanedMessage);
   }
@@ -180,7 +179,7 @@ function injectPlaceholderResults(
   output: CanonicalMessage[],
   warnings: MessageProjectorResult["warnings"],
 ): void {
-  const blocks: CanonicalContentBlock[] = toolCallIds.map((id) => ({
+  const blocks: CanonicalContentBlock[] = toolCallIds.map(id => ({
     type: "tool_result" as const,
     toolCallId: id,
     content: [{ type: "text" as const, text: "[result truncated]" }],
@@ -196,26 +195,26 @@ function injectPlaceholderResults(
 
 function collectToolCallIds(message: CanonicalMessage): string[] {
   return message.content
-    .filter((block): block is { type: "tool_call"; id: string; name: string; input: unknown } =>
-      block.type === "tool_call",
+    .filter(
+      (block): block is { type: "tool_call"; id: string; name: string; input: unknown } => block.type === "tool_call",
     )
-    .map((block) => block.id);
+    .map(block => block.id);
 }
 
 function hasToolCalls(message: CanonicalMessage): boolean {
-  return message.content.some((block) => block.type === "tool_call");
+  return message.content.some(block => block.type === "tool_call");
 }
 
 function isToolResultOnly(message: CanonicalMessage): boolean {
-  return message.content.length > 0 && message.content.every(
-    (block) => isDirectToolResultBlock(block) || isMediaReferenceWithId(block),
+  return (
+    message.content.length > 0 &&
+    message.content.every(block => isDirectToolResultBlock(block) || isMediaReferenceWithId(block))
   );
 }
 
-function isDirectToolResultBlock(block: CanonicalContentBlock): block is Extract<
-  CanonicalContentBlock,
-  { type: "tool_result" | "tool_result_reference" }
-> {
+function isDirectToolResultBlock(
+  block: CanonicalContentBlock,
+): block is Extract<CanonicalContentBlock, { type: "tool_result" | "tool_result_reference" }> {
   return block.type === "tool_result" || block.type === "tool_result_reference";
 }
 

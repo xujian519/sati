@@ -25,10 +25,7 @@ type FeishuChannelSectionProps = {
   onSaved: () => void;
 };
 
-export default function FeishuChannelSection({
-  status,
-  onSaved,
-}: FeishuChannelSectionProps) {
+export default function FeishuChannelSection({ status, onSaved }: FeishuChannelSectionProps) {
   const { t } = useTranslation("settings");
   const [setupMode, setSetupMode] = useState<FeishuSetupMode>("choose");
   const [expanded, setExpanded] = useState(!status.enabled);
@@ -177,13 +174,9 @@ export default function FeishuChannelSection({
             <div className="flex items-center gap-2.5">
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
               <div>
-                <div className="text-[13px] font-medium text-foreground">
-                  {t("gateway.feishu.label")}
-                </div>
+                <div className="text-[13px] font-medium text-foreground">{t("gateway.feishu.label")}</div>
                 <div className="text-xs text-muted-foreground">
-                  {status.enabled
-                    ? `${t("gateway.connected")} · ${status.appId}`
-                    : t("gateway.notConfigured")}
+                  {status.enabled ? `${t("gateway.connected")} · ${status.appId}` : t("gateway.notConfigured")}
                 </div>
               </div>
             </div>
@@ -195,11 +188,7 @@ export default function FeishuChannelSection({
                 </span>
               )}
               {!expanded && (
-                <Button
-                  variant={status.enabled ? "ghost" : "outline"}
-                  size="sm"
-                  onClick={() => setExpanded(true)}
-                >
+                <Button variant={status.enabled ? "ghost" : "outline"} size="sm" onClick={() => setExpanded(true)}>
                   {status.enabled ? t("gateway.edit") : t("gateway.setup")}
                 </Button>
               )}
@@ -208,9 +197,7 @@ export default function FeishuChannelSection({
 
           {expanded && setupMode === "choose" && (
             <div className="space-y-3 border-t border-border pt-4">
-              <p className="text-xs text-muted-foreground">
-                {t("gateway.feishu.chooseMethod")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("gateway.feishu.chooseMethod")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -218,12 +205,8 @@ export default function FeishuChannelSection({
                   className="flex flex-col items-center gap-2 rounded-lg border border-border p-4 text-center transition-colors hover:border-ring hover:bg-accent/30"
                 >
                   <QrCode className="h-6 w-6 text-muted-foreground" />
-                  <span className="text-[13px] font-medium text-foreground">
-                    {t("gateway.feishu.qrScan")}
-                  </span>
-                  <span className="text-[11px] leading-4 text-muted-foreground">
-                    {t("gateway.feishu.qrScanDesc")}
-                  </span>
+                  <span className="text-[13px] font-medium text-foreground">{t("gateway.feishu.qrScan")}</span>
+                  <span className="text-[11px] leading-4 text-muted-foreground">{t("gateway.feishu.qrScanDesc")}</span>
                 </button>
                 <button
                   type="button"
@@ -231,9 +214,7 @@ export default function FeishuChannelSection({
                   className="flex flex-col items-center gap-2 rounded-lg border border-border p-4 text-center transition-colors hover:border-ring hover:bg-accent/30"
                 >
                   <KeyRound className="h-6 w-6 text-muted-foreground" />
-                  <span className="text-[13px] font-medium text-foreground">
-                    {t("gateway.feishu.manualInput")}
-                  </span>
+                  <span className="text-[13px] font-medium text-foreground">{t("gateway.feishu.manualInput")}</span>
                   <span className="text-[11px] leading-4 text-muted-foreground">
                     {t("gateway.feishu.manualInputDesc")}
                   </span>
@@ -241,12 +222,7 @@ export default function FeishuChannelSection({
               </div>
               <div className="flex items-center gap-2">
                 {status.enabled && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-600"
-                    onClick={handleDisable}
-                  >
+                  <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={handleDisable}>
                     {t("gateway.disable")}
                   </Button>
                 )}
@@ -262,22 +238,14 @@ export default function FeishuChannelSection({
               {qrPhase === "idle" && (
                 <div className="space-y-3">
                   <label className="block space-y-1">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {t("gateway.feishu.domain")}
-                    </span>
+                    <span className="text-xs font-medium text-muted-foreground">{t("gateway.feishu.domain")}</span>
                     <select
                       value={qrDomain}
-                      onChange={(e) =>
-                        setQrDomain(e.target.value as "feishu" | "lark")
-                      }
+                      onChange={e => setQrDomain(e.target.value as "feishu" | "lark")}
                       className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
                     >
-                      <option value="feishu">
-                        {t("gateway.feishu.domainOptions.feishu")}
-                      </option>
-                      <option value="lark">
-                        {t("gateway.feishu.domainOptions.lark")}
-                      </option>
+                      <option value="feishu">{t("gateway.feishu.domainOptions.feishu")}</option>
+                      <option value="lark">{t("gateway.feishu.domainOptions.lark")}</option>
                     </select>
                   </label>
                   <div className="flex items-center gap-2">
@@ -285,11 +253,7 @@ export default function FeishuChannelSection({
                       <QrCode className="mr-1.5 h-3 w-3" />
                       {t("gateway.feishu.startQr")}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSetupMode("choose")}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => setSetupMode("choose")}>
                       {t("gateway.cancel")}
                     </Button>
                   </div>
@@ -328,12 +292,7 @@ export default function FeishuChannelSection({
                 <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-400">
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                   {t("gateway.feishu.qrSuccess")}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="ml-auto text-xs"
-                    onClick={closeExpanded}
-                  >
+                  <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={closeExpanded}>
                     {t("gateway.dismiss")}
                   </Button>
                 </div>
@@ -349,11 +308,7 @@ export default function FeishuChannelSection({
                     <Button variant="ghost" size="sm" onClick={() => setQrPhase("idle")}>
                       {t("gateway.feishu.retry")}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSetupMode("choose")}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => setSetupMode("choose")}>
                       {t("gateway.cancel")}
                     </Button>
                   </div>
@@ -366,17 +321,13 @@ export default function FeishuChannelSection({
             <div className="space-y-3 border-t border-border pt-4">
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t("gateway.feishu.domain")}
-                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">{t("gateway.feishu.domain")}</span>
                   <select
                     value={domain}
-                    onChange={(e) => setDomain(e.target.value as "feishu" | "lark")}
+                    onChange={e => setDomain(e.target.value as "feishu" | "lark")}
                     className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
                   >
-                    <option value="feishu">
-                      {t("gateway.feishu.domainOptions.feishu")}
-                    </option>
+                    <option value="feishu">{t("gateway.feishu.domainOptions.feishu")}</option>
                     <option value="lark">{t("gateway.feishu.domainOptions.lark")}</option>
                   </select>
                 </label>
@@ -386,7 +337,7 @@ export default function FeishuChannelSection({
                   </span>
                   <select
                     value={mode}
-                    onChange={(e) => setMode(e.target.value as "stream" | "webhook")}
+                    onChange={e => setMode(e.target.value as "stream" | "webhook")}
                     className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
                   >
                     <option value="stream">Stream (WebSocket)</option>
@@ -400,7 +351,7 @@ export default function FeishuChannelSection({
                 <input
                   type="text"
                   value={appId}
-                  onChange={(e) => setAppId(e.target.value.trim())}
+                  onChange={e => setAppId(e.target.value.trim())}
                   placeholder="cli_xxxxxxxxxxxx"
                   className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
@@ -411,7 +362,7 @@ export default function FeishuChannelSection({
                 <input
                   type="password"
                   value={appSecret}
-                  onChange={(e) => setAppSecret(e.target.value.trim())}
+                  onChange={e => setAppSecret(e.target.value.trim())}
                   placeholder="••••••••"
                   className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
@@ -436,32 +387,15 @@ export default function FeishuChannelSection({
               )}
 
               <div className="flex items-center gap-2 pt-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTest}
-                  disabled={!appId || !appSecret || testing}
-                >
-                  {testing ? (
-                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                  ) : (
-                    <Radio className="mr-1.5 h-3 w-3" />
-                  )}
+                <Button variant="outline" size="sm" onClick={handleTest} disabled={!appId || !appSecret || testing}>
+                  {testing ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Radio className="mr-1.5 h-3 w-3" />}
                   {t("gateway.testConnection")}
                 </Button>
                 <Button size="sm" onClick={handleSave} disabled={!appId || !appSecret || saving}>
-                  {saving ? (
-                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                  ) : (
-                    <Check className="mr-1.5 h-3 w-3" />
-                  )}
+                  {saving ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Check className="mr-1.5 h-3 w-3" />}
                   {t("gateway.save")}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSetupMode("choose")}
-                >
+                <Button variant="ghost" size="sm" onClick={() => setSetupMode("choose")}>
                   {t("gateway.cancel")}
                 </Button>
               </div>

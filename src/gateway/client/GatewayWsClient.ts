@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { GatewayEvent } from "../protocol/types.js";
-import type { GatewayWsClientName, WsEventFrame, WsGatewayMethod, WsHelloOk, WsNotificationFrame, WsResponseFrame } from "../protocol/frames.js";
-import { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
+import type {
+  GatewayWsClientName,
+  WsEventFrame,
+  WsGatewayMethod,
+  WsHelloOk,
+  WsNotificationFrame,
+  WsResponseFrame,
+} from "../protocol/frames.js";
+import { SATI_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
 
 export type GatewayWsNotificationHandler = (name: string, payload: unknown) => void;
 
@@ -18,7 +25,11 @@ export type GatewayWsNotificationHandler = (name: string, payload: unknown) => v
  */
 export class GatewayRequestError extends Error {
   public readonly validation?: unknown;
-  constructor(public readonly code: string, message: string, extra?: { validation?: unknown }) {
+  constructor(
+    public readonly code: string,
+    message: string,
+    extra?: { validation?: unknown },
+  ) {
     super(message);
     this.name = "GatewayRequestError";
     if (extra?.validation !== undefined) {
@@ -57,12 +68,12 @@ export class GatewayWsClient {
     const ws = new WebSocket(this.options.url);
     this.ws = ws;
     await waitForOpen(ws);
-    ws.addEventListener("message", (event) => this.handleMessage(String(event.data ?? "")));
+    ws.addEventListener("message", event => this.handleMessage(String(event.data ?? "")));
     ws.addEventListener("close", () => this.closePending(new Error("Gateway WebSocket closed.")));
     ws.send(
       JSON.stringify({
         type: "hello",
-        protocolVersion: this.options.protocolVersion ?? PILOTDECK_GATEWAY_PROTOCOL_VERSION,
+        protocolVersion: this.options.protocolVersion ?? SATI_GATEWAY_PROTOCOL_VERSION,
         clientName: this.options.clientName ?? "cli",
         clientVersion: this.options.clientVersion ?? "0.1.0",
         token: this.options.token,
@@ -140,7 +151,9 @@ export class GatewayWsClient {
       for (const handler of this.notificationHandlers) {
         try {
           handler(frame.name, frame.payload);
-        } catch { /* notification handlers must not crash the client */ }
+        } catch {
+          /* notification handlers must not crash the client */
+        }
       }
       return;
     }

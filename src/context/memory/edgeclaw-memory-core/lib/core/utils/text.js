@@ -21,7 +21,7 @@ export function decodeEscapedUnicodeText(text, decodeCommonEscapes = false) {
             .replace(/\\r/g, "\r")
             .replace(/\\n/g, "\n")
             .replace(/\\t/g, "\t")
-            .replace(/\\"/g, "\"")
+            .replace(/\\"/g, '"')
             .replace(/\\\\/g, "\\");
     }
     return next;
@@ -31,7 +31,7 @@ export function decodeEscapedUnicodeValue(value, decodeCommonEscapes = false) {
         return decodeEscapedUnicodeText(value, decodeCommonEscapes);
     }
     if (Array.isArray(value)) {
-        return value.map((item) => decodeEscapedUnicodeValue(item, decodeCommonEscapes));
+        return value.map(item => decodeEscapedUnicodeValue(item, decodeCommonEscapes));
     }
     if (!value || typeof value !== "object")
         return value;
@@ -63,7 +63,7 @@ export function scoreMatch(query, text) {
         if (t.includes(word))
             hits += 1;
     }
-    const wordScore = hits / qWords.length * 0.7;
+    const wordScore = (hits / qWords.length) * 0.7;
     const qCompact = q.replace(/\s+/g, "");
     const tCompact = t.replace(/\s+/g, "");
     if (qCompact.length < 2 || tCompact.length < 2)

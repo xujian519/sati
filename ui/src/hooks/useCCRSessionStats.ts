@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { authenticatedFetch } from '../utils/api';
-import type { TokenBucket } from './useRouterSettings';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { authenticatedFetch } from "../utils/api";
+import type { TokenBucket } from "./useRouterSettings";
 
 export type CCRSessionStats = {
   sessionId: string;

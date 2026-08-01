@@ -4,10 +4,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveGatewayTokenPath } from "../gateway/server/authToken.js";
-import type {
-  TelemetryDeploymentMode,
-  TelemetryRuntimeContext,
-} from "./types.js";
+import type { TelemetryDeploymentMode, TelemetryRuntimeContext } from "./types.js";
 
 type ResolveRuntimeContextInput = {
   env?: Record<string, string | undefined>;
@@ -16,9 +13,7 @@ type ResolveRuntimeContextInput = {
 
 const runtimeContextCache = new Map<string, TelemetryRuntimeContext>();
 
-export function resolveTelemetryRuntimeContext(
-  input: ResolveRuntimeContextInput = {},
-): TelemetryRuntimeContext {
+export function resolveTelemetryRuntimeContext(input: ResolveRuntimeContextInput = {}): TelemetryRuntimeContext {
   const env = input.env ?? process.env;
   const cacheKey = buildRuntimeContextCacheKey(input.pilotHome, env);
   const cached = runtimeContextCache.get(cacheKey);
@@ -38,10 +33,7 @@ export function resolveTelemetryRuntimeContext(
   return runtimeContext;
 }
 
-function resolveInstallationId(
-  pilotHome: string | undefined,
-  env: Record<string, string | undefined>,
-): string {
+function resolveInstallationId(pilotHome: string | undefined, env: Record<string, string | undefined>): string {
   const tokenPath = resolveGatewayTokenPath({ pilotHome, env });
   if (existsSync(tokenPath)) {
     const token = readFileSync(tokenPath, "utf8").trim();
@@ -58,7 +50,7 @@ function resolveInstanceId(
   env: Record<string, string | undefined>,
   deploymentMode: TelemetryDeploymentMode,
 ): string {
-  const resolvedPilotHome = pilotHome ?? env.PILOT_HOME ?? "unknown-pilot-home";
+  const resolvedPilotHome = pilotHome ?? env.SATI_HOME ?? "unknown-pilot-home";
   const executablePath = process.execPath || "unknown-exec";
   const entrypoint = process.argv[1] ?? "unknown-entry";
   const seed = `${resolve(resolvedPilotHome)}|${resolve(executablePath)}|${resolve(entrypoint)}|${deploymentMode}`;
@@ -66,7 +58,6 @@ function resolveInstanceId(
 }
 
 function resolveDeploymentMode(env: Record<string, string | undefined>): TelemetryDeploymentMode {
-  if (looksLikeDocker(env)) return "docker";
   if (looksLikeDesktopInstaller()) return "desktop_installer";
   if (looksLikeSourceCheckout()) return "source";
   if (looksLikeCurlInstaller()) return "curl_installer";
@@ -74,21 +65,10 @@ function resolveDeploymentMode(env: Record<string, string | undefined>): Telemet
   return "unknown";
 }
 
-function looksLikeDocker(env: Record<string, string | undefined>): boolean {
-  if (env.DOCKER_CONTAINER === "1" || env.KUBERNETES_SERVICE_HOST) return true;
-  if (existsSync("/.dockerenv")) return true;
-  try {
-    const cgroup = readFileSync("/proc/1/cgroup", "utf8");
-    return /(docker|containerd|kubepods|podman)/i.test(cgroup);
-  } catch {
-    return false;
-  }
-}
-
 function looksLikeDesktopInstaller(): boolean {
   if (process.versions.electron) return true;
   const execLower = process.execPath.toLowerCase();
-  return execLower.includes("pilotdeck.app") || execLower.endsWith("pilotdeck.exe");
+  return execLower.includes("sati.app") || execLower.endsWith("sati.exe");
 }
 
 function looksLikeSourceCheckout(): boolean {
@@ -106,10 +86,7 @@ function looksLikeSourceCheckout(): boolean {
 
 function looksLikeCurlInstaller(): boolean {
   const entry = (process.argv[1] ?? "").toLowerCase();
-  return (
-    entry.includes("/.local/bin/pilotdeck") ||
-    entry.includes("/usr/local/bin/pilotdeck")
-  );
+  return entry.includes("/.local/bin/sati") || entry.includes("/usr/local/bin/sati");
 }
 
 function looksLikeNpmBinary(env: Record<string, string | undefined>): boolean {
@@ -119,7 +96,7 @@ function looksLikeNpmBinary(env: Record<string, string | undefined>): boolean {
 }
 
 function resolveAppVersion(env: Record<string, string | undefined>): string {
-  const fromEnv = env.PILOTDECK_VERSION ?? env.npm_package_version;
+  const fromEnv = env.SATI_VERSION ?? env.npm_package_version;
   if (fromEnv) return fromEnv;
   try {
     const file = resolve(dirname(fileURLToPath(import.meta.url)), "../../../package.json");
@@ -134,7 +111,7 @@ function resolveAppVersion(env: Record<string, string | undefined>): string {
 }
 
 function resolveAppCommitHash(env: Record<string, string | undefined>): string {
-  const fromEnv = env.COMMIT_HASH ?? env.GIT_COMMIT ?? env.PILOTDECK_GIT_SHA ?? env.GIT_SHA;
+  const fromEnv = env.COMMIT_HASH ?? env.GIT_COMMIT ?? env.SATI_GIT_SHA ?? env.GIT_SHA;
   if (fromEnv) {
     return fromEnv;
   }
@@ -159,14 +136,11 @@ export function hashTelemetryId(input: string): string {
   return hashStableId(input);
 }
 
-function buildRuntimeContextCacheKey(
-  pilotHome: string | undefined,
-  env: Record<string, string | undefined>,
-): string {
+function buildRuntimeContextCacheKey(pilotHome: string | undefined, env: Record<string, string | undefined>): string {
   return [
-    pilotHome ?? env.PILOT_HOME ?? "default",
-    env.COMMIT_HASH ?? env.GIT_COMMIT ?? env.PILOTDECK_GIT_SHA ?? env.GIT_SHA ?? "",
-    env.PILOTDECK_VERSION ?? env.npm_package_version ?? "",
+    pilotHome ?? env.SATI_HOME ?? "default",
+    env.COMMIT_HASH ?? env.GIT_COMMIT ?? env.SATI_GIT_SHA ?? env.GIT_SHA ?? "",
+    env.SATI_VERSION ?? env.npm_package_version ?? "",
     process.execPath,
     process.argv[1] ?? "",
   ].join("|");

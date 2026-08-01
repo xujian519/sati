@@ -26,7 +26,7 @@ export function cloneContentBlock(block: CanonicalContentBlock): CanonicalConten
     const tr = block as CanonicalToolResultBlock;
     return {
       ...tr,
-      content: tr.content.map((item) => ({ ...item })),
+      content: tr.content.map(item => ({ ...item })),
     };
   }
   if (block.type === "tool_call") {

@@ -3,11 +3,11 @@ import type { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { resolve } from "node:path";
 import type { Gateway } from "../protocol/types.js";
+import { handleWebApiRequest } from "../../adapters/web/httpRouter.js";
 import { createWebSocketAcceptValue, TextWebSocketConnection } from "./websocket.js";
 import { GatewayWsConnection } from "./GatewayWsConnection.js";
 import { ensureGatewayAuthToken } from "./authToken.js";
 import { serveStaticAsset } from "./staticAssets.js";
-import { handleWebApiRequest } from "../../adapters/web/httpRouter.js";
 
 export type GatewayServerOptions = {
   gateway: Gateway;
@@ -38,22 +38,18 @@ export async function startGatewayServer(options: GatewayServerOptions): Promise
   if (host !== "127.0.0.1" && host !== "localhost") {
     throw new Error("GatewayServer only supports localhost binding in the first phase.");
   }
-  const auth = options.token
-    ? { token: options.token, tokenPath: undefined }
-    : await ensureGatewayAuthToken();
+  const auth = options.token ? { token: options.token, tokenPath: undefined } : await ensureGatewayAuthToken();
 
   const connections = new Set<GatewayWsConnection>();
 
   const server = createServer((request, response) => {
     void handleHttpRequest(request, response, options, auth.token);
   });
-  server.on("upgrade", (request, socket) =>
-    handleUpgrade(request, socket, options, auth.token, connections),
-  );
+  server.on("upgrade", (request, socket) => handleUpgrade(request, socket, options, auth.token, connections));
 
   await listen(server, options.port ?? 18789, host);
   const address = server.address();
-  const port = typeof address === "object" && address ? address.port : options.port ?? 18789;
+  const port = typeof address === "object" && address ? address.port : (options.port ?? 18789);
   return {
     url: `http://${host}:${port}`,
     wsUrl: `ws://${host}:${port}/ws`,
@@ -158,7 +154,7 @@ function listen(server: Server, port: number, host: string): Promise<void> {
 
 function close(server: Server): Promise<void> {
   return new Promise((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
+    server.close(error => (error ? reject(error) : resolve()));
   });
 }
 

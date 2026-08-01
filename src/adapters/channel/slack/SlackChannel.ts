@@ -7,7 +7,6 @@ import { renderSlackEvent } from "./slack-render.js";
 
 let BoltApp: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   BoltApp = require("@slack/bolt").App;
 } catch {
   // @slack/bolt not installed — start() will warn
@@ -91,7 +90,11 @@ export class SlackChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`slack: stopping (${reason ?? "no reason"})`);
         if (this.app) {
-          try { await this.app.stop(); } catch { /* best effort */ }
+          try {
+            await this.app.stop();
+          } catch {
+            /* best effort */
+          }
           this.app = null;
         }
         this.botUserId = null;
@@ -110,7 +113,9 @@ export class SlackChannel implements ChannelAdapter {
     const channelId = event.channel as string | undefined;
     if (!channelId) return;
 
-    const text = String(event.text ?? "").replace(/<@[^>]+>/g, "").trim();
+    const text = String(event.text ?? "")
+      .replace(/<@[^>]+>/g, "")
+      .trim();
     const threadTs = (event.thread_ts as string | undefined) ?? undefined;
     const ts = event.ts as string | undefined;
 
@@ -203,10 +208,7 @@ export class SlackChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(
-    ctx: { channelId: string; threadTs?: string },
-    text: string,
-  ): Promise<void> {
+  private async sendReply(ctx: { channelId: string; threadTs?: string }, text: string): Promise<void> {
     if (!this.app) return;
     const formatted = formatSlackMrkdwn(text);
     const chunks = chunkText(formatted, MAX_MESSAGE_LENGTH);

@@ -1,62 +1,54 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  LocaleType,
-  LogLevel,
-  mergeLocales,
-  Univer,
-  type IWorkbookData,
-} from '@univerjs/core';
-import { FUniver } from '@univerjs/core/facade';
-import DesignEnUS from '@univerjs/design/locale/en-US';
-import DesignZhCN from '@univerjs/design/locale/zh-CN';
-import { UniverDocsPlugin } from '@univerjs/docs';
-import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
-import DocsUIEnUS from '@univerjs/docs-ui/locale/en-US';
-import DocsUIZhCN from '@univerjs/docs-ui/locale/zh-CN';
-import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
-import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
-import { UniverSheetsPlugin } from '@univerjs/sheets';
-import '@univerjs/sheets/facade';
-import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
-import '@univerjs/sheets-formula/facade';
-import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
-import SheetsFormulaUIEnUS from '@univerjs/sheets-formula-ui/locale/en-US';
-import SheetsFormulaUIZhCN from '@univerjs/sheets-formula-ui/locale/zh-CN';
-import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
-import '@univerjs/sheets-numfmt/facade';
-import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
-import SheetsNumfmtUIEnUS from '@univerjs/sheets-numfmt-ui/locale/en-US';
-import SheetsNumfmtUIZhCN from '@univerjs/sheets-numfmt-ui/locale/zh-CN';
-import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
-import '@univerjs/sheets-ui/facade';
-import SheetsUIEnUS from '@univerjs/sheets-ui/locale/en-US';
-import SheetsUIZhCN from '@univerjs/sheets-ui/locale/zh-CN';
-import SheetsEnUS from '@univerjs/sheets/locale/en-US';
-import SheetsZhCN from '@univerjs/sheets/locale/zh-CN';
-import { UniverUIPlugin } from '@univerjs/ui';
-import '@univerjs/ui/facade';
-import UIEnUS from '@univerjs/ui/locale/en-US';
-import UIZhCN from '@univerjs/ui/locale/zh-CN';
-import { useTranslation } from 'react-i18next';
+import { useEffect, useRef, useState } from "react";
+import { LocaleType, LogLevel, mergeLocales, Univer, type IWorkbookData } from "@univerjs/core";
+import { FUniver } from "@univerjs/core/facade";
+import DesignEnUS from "@univerjs/design/locale/en-US";
+import DesignZhCN from "@univerjs/design/locale/zh-CN";
+import { UniverDocsPlugin } from "@univerjs/docs";
+import { UniverDocsUIPlugin } from "@univerjs/docs-ui";
+import DocsUIEnUS from "@univerjs/docs-ui/locale/en-US";
+import DocsUIZhCN from "@univerjs/docs-ui/locale/zh-CN";
+import { UniverFormulaEnginePlugin } from "@univerjs/engine-formula";
+import { UniverRenderEnginePlugin } from "@univerjs/engine-render";
+import { UniverSheetsPlugin } from "@univerjs/sheets";
+import "@univerjs/sheets/facade";
+import { UniverSheetsFormulaPlugin } from "@univerjs/sheets-formula";
+import "@univerjs/sheets-formula/facade";
+import { UniverSheetsFormulaUIPlugin } from "@univerjs/sheets-formula-ui";
+import SheetsFormulaUIEnUS from "@univerjs/sheets-formula-ui/locale/en-US";
+import SheetsFormulaUIZhCN from "@univerjs/sheets-formula-ui/locale/zh-CN";
+import { UniverSheetsNumfmtPlugin } from "@univerjs/sheets-numfmt";
+import "@univerjs/sheets-numfmt/facade";
+import { UniverSheetsNumfmtUIPlugin } from "@univerjs/sheets-numfmt-ui";
+import SheetsNumfmtUIEnUS from "@univerjs/sheets-numfmt-ui/locale/en-US";
+import SheetsNumfmtUIZhCN from "@univerjs/sheets-numfmt-ui/locale/zh-CN";
+import { UniverSheetsUIPlugin } from "@univerjs/sheets-ui";
+import "@univerjs/sheets-ui/facade";
+import SheetsUIEnUS from "@univerjs/sheets-ui/locale/en-US";
+import SheetsUIZhCN from "@univerjs/sheets-ui/locale/zh-CN";
+import SheetsEnUS from "@univerjs/sheets/locale/en-US";
+import SheetsZhCN from "@univerjs/sheets/locale/zh-CN";
+import { UniverUIPlugin } from "@univerjs/ui";
+import "@univerjs/ui/facade";
+import UIEnUS from "@univerjs/ui/locale/en-US";
+import UIZhCN from "@univerjs/ui/locale/zh-CN";
+import { useTranslation } from "react-i18next";
 import {
   createCellRangeContentReference,
   createImageRegionContentReference,
   type CellRangeSnapshot,
   type ContentReferenceSelectionMode,
   type ReferenceCapabilities,
-} from '../../../../types/contentReference';
-import ContentReferenceMenu from './ContentReferenceMenu';
-import RegionSelectionOverlay, { type CapturedRegion } from './RegionSelectionOverlay';
-import {
-  floatingSelectionSingleActionClassName,
-} from './floatingSelectionAction';
+} from "../../../../types/contentReference";
+import ContentReferenceMenu from "./ContentReferenceMenu";
+import RegionSelectionOverlay, { type CapturedRegion } from "./RegionSelectionOverlay";
+import { floatingSelectionSingleActionClassName } from "./floatingSelectionAction";
 
-import '@univerjs/design/lib/index.css';
-import '@univerjs/ui/lib/index.css';
-import '@univerjs/docs-ui/lib/index.css';
-import '@univerjs/sheets-ui/lib/index.css';
-import '@univerjs/sheets-formula-ui/lib/index.css';
-import '@univerjs/sheets-numfmt-ui/lib/index.css';
+import "@univerjs/design/lib/index.css";
+import "@univerjs/ui/lib/index.css";
+import "@univerjs/docs-ui/lib/index.css";
+import "@univerjs/sheets-ui/lib/index.css";
+import "@univerjs/sheets-formula-ui/lib/index.css";
+import "@univerjs/sheets-numfmt-ui/lib/index.css";
 
 type SpreadsheetInteractivePreviewProps = {
   workbook: IWorkbookData;
@@ -130,7 +122,7 @@ function getSheetIndex(sheetId: string) {
 
 function getColumnName(column: number) {
   let value = column + 1;
-  let name = '';
+  let name = "";
   while (value > 0) {
     value -= 1;
     name = String.fromCharCode(65 + (value % 26)) + name;
@@ -150,15 +142,13 @@ export default function SpreadsheetInteractivePreview({
   onActiveSheetChange,
   onError,
 }: SpreadsheetInteractivePreviewProps) {
-  const { t, i18n } = useTranslation('codeEditor');
-  const univerLocale = i18n.resolvedLanguage?.toLowerCase().startsWith('zh')
-    ? LocaleType.ZH_CN
-    : LocaleType.EN_US;
+  const { t, i18n } = useTranslation("codeEditor");
+  const univerLocale = i18n.resolvedLanguage?.toLowerCase().startsWith("zh") ? LocaleType.ZH_CN : LocaleType.EN_US;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const runtimeRef = useRef<UniverRuntime | null>(null);
   const [selectedCell, setSelectedCell] = useState<SelectedCell>({
-    address: 'A1',
-    value: '',
+    address: "A1",
+    value: "",
   });
   const [selectionDraft, setSelectionDraft] = useState<SpreadsheetSelectionDraft | null>(null);
   const [referenceMode, setReferenceMode] = useState<ContentReferenceSelectionMode | null>(null);
@@ -225,23 +215,20 @@ export default function SpreadsheetInteractivePreview({
         selectionPopup?.dispose();
         selectionPopup = null;
       };
-      const popupComponentKey = `pilotdeck-cell-reference-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const popupComponent = api.registerComponent(
-        popupComponentKey,
-        () => (
-          <button
-            type="button"
-            className={floatingSelectionSingleActionClassName}
-            onPointerDown={(event) => event.stopPropagation()}
-            onPointerUp={(event) => event.stopPropagation()}
-            onClick={() => addCellReferenceRef.current()}
-          >
-            {t('selection.chatInPilotDeck')}
-          </button>
-        ),
-      );
+      const popupComponentKey = `sati-cell-reference-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const popupComponent = api.registerComponent(popupComponentKey, () => (
+        <button
+          type="button"
+          className={floatingSelectionSingleActionClassName}
+          onPointerDown={event => event.stopPropagation()}
+          onPointerUp={event => event.stopPropagation()}
+          onClick={() => addCellReferenceRef.current()}
+        >
+          {t("selection.chatInSati")}
+        </button>
+      ));
       const updateSelectedCell = (
-        worksheet: ReturnType<NonNullable<typeof fWorkbook>['getActiveSheet']>,
+        worksheet: ReturnType<NonNullable<typeof fWorkbook>["getActiveSheet"]>,
         row = 0,
         column = 0,
       ) => {
@@ -253,7 +240,7 @@ export default function SpreadsheetInteractivePreview({
         });
       };
       const syncSelection = (
-        worksheet: ReturnType<NonNullable<typeof fWorkbook>['getActiveSheet']>,
+        worksheet: ReturnType<NonNullable<typeof fWorkbook>["getActiveSheet"]>,
         selections: Array<{
           startRow: number;
           endRow: number;
@@ -269,12 +256,8 @@ export default function SpreadsheetInteractivePreview({
           disposeSelectionPopup();
           return;
         }
-        updateSelectedCell(
-          worksheet,
-          selection.startRow,
-          selection.startColumn,
-        );
-        const cells = selections.map((selectedRange) => {
+        updateSelectedCell(worksheet, selection.startRow, selection.startColumn);
+        const cells = selections.map(selectedRange => {
           const range = worksheet.getRange(selectedRange);
           const rowCount = selectedRange.endRow - selectedRange.startRow + 1;
           const columnCount = selectedRange.endColumn - selectedRange.startColumn + 1;
@@ -301,32 +284,26 @@ export default function SpreadsheetInteractivePreview({
           selection.endColumn - selection.startColumn + 1,
           MAX_REFERENCE_CONTEXT_COLUMNS,
         );
-        const headers = headerRowCount > 0
-          ? worksheet.getRange(
-            selection.startRow - headerRowCount,
-            selection.startColumn,
-            headerRowCount,
-            headerColumnCount,
-          ).getDisplayValues()
-          : undefined;
+        const headers =
+          headerRowCount > 0
+            ? worksheet
+                .getRange(selection.startRow - headerRowCount, selection.startColumn, headerRowCount, headerColumnCount)
+                .getDisplayValues()
+            : undefined;
         const contextStartRow = Math.max(0, selection.startRow - 1);
         const contextStartColumn = Math.max(0, selection.startColumn - 1);
-        const surroundingValues = worksheet.getRange(
-          contextStartRow,
-          contextStartColumn,
-          Math.min(
-            selection.endRow - contextStartRow + 2,
-            MAX_REFERENCE_CONTEXT_ROWS,
-          ),
-          Math.min(
-            selection.endColumn - contextStartColumn + 2,
-            MAX_REFERENCE_CONTEXT_COLUMNS,
-          ),
-        ).getDisplayValues();
+        const surroundingValues = worksheet
+          .getRange(
+            contextStartRow,
+            contextStartColumn,
+            Math.min(selection.endRow - contextStartRow + 2, MAX_REFERENCE_CONTEXT_ROWS),
+            Math.min(selection.endColumn - contextStartColumn + 2, MAX_REFERENCE_CONTEXT_COLUMNS),
+          )
+          .getDisplayValues();
         const nextDraft = {
           sheetId: worksheet.getSheetId(),
           sheetName: worksheet.getSheetName(),
-          ranges: cells.map((cell) => cell.range),
+          ranges: cells.map(cell => cell.range),
           activeRange: cells[0]?.range || `${getColumnName(selection.startColumn)}${selection.startRow + 1}`,
           cells,
           headers,
@@ -335,22 +312,24 @@ export default function SpreadsheetInteractivePreview({
         selectionDraftRef.current = nextDraft;
         setSelectionDraft(nextDraft);
 
-        if (!showPopup || referenceModeRef.current === 'region') return;
+        if (!showPopup || referenceModeRef.current === "region") return;
         disposeSelectionPopup();
-        selectionPopup = worksheet.getRange(selection).attachRangePopup({
-          componentKey: popupComponentKey,
-          direction: 'top-center',
-          offset: [0, -8],
-        }) || null;
+        selectionPopup =
+          worksheet.getRange(selection).attachRangePopup({
+            componentKey: popupComponentKey,
+            direction: "top-center",
+            offset: [0, -8],
+          }) || null;
       };
       const syncCurrentSelection = (
-        worksheet: ReturnType<NonNullable<typeof fWorkbook>['getActiveSheet']>,
+        worksheet: ReturnType<NonNullable<typeof fWorkbook>["getActiveSheet"]>,
         showPopup: boolean,
       ) => {
-        const selections = worksheet
-          .getSelection()
-          ?.getActiveRangeList()
-          .map((range) => range.getRange()) || [];
+        const selections =
+          worksheet
+            .getSelection()
+            ?.getActiveRangeList()
+            .map(range => range.getRange()) || [];
         syncSelection(worksheet, selections, showPopup);
       };
       if (fWorkbook) {
@@ -359,53 +338,34 @@ export default function SpreadsheetInteractivePreview({
         void fWorkbook.getWorkbookPermission().setReadOnly();
         updateSelectedCell(fWorkbook.getActiveSheet());
       }
-      const activeSheetListener = api.addEvent(
-        api.Event.ActiveSheetChanged,
-        ({ activeSheet }) => {
-          const nextIndex = getSheetIndex(activeSheet.getSheetId());
-          if (nextIndex !== null) onActiveSheetChangeRef.current(nextIndex);
-          updateSelectedCell(activeSheet);
-          selectionDraftRef.current = null;
-          setSelectionDraft(null);
-          disposeSelectionPopup();
-        },
-      );
-      const selectionListener = api.addEvent(
-        api.Event.SelectionChanged,
-        ({ worksheet, selections }) => {
-          syncSelection(
-            worksheet,
-            selections,
-            userInteractedRef.current && !selectionMovingRef.current,
-          );
-        },
-      );
-      const selectionMoveStartListener = api.addEvent(
-        api.Event.SelectionMoveStart,
-        () => {
-          userInteractedRef.current = true;
-          selectionMovingRef.current = true;
-          disposeSelectionPopup();
-        },
-      );
-      const selectionMoveEndListener = api.addEvent(
-        api.Event.SelectionMoveEnd,
-        ({ worksheet, selections }) => {
-          userInteractedRef.current = true;
-          selectionMovingRef.current = false;
-          syncSelection(worksheet, selections, true);
-        },
-      );
-      const cellClickListener = api.addEvent(
-        api.Event.CellClicked,
-        ({ worksheet }) => {
-          userInteractedRef.current = true;
-          window.requestAnimationFrame(() => {
-            if (disposed) return;
-            syncCurrentSelection(worksheet, true);
-          });
-        },
-      );
+      const activeSheetListener = api.addEvent(api.Event.ActiveSheetChanged, ({ activeSheet }) => {
+        const nextIndex = getSheetIndex(activeSheet.getSheetId());
+        if (nextIndex !== null) onActiveSheetChangeRef.current(nextIndex);
+        updateSelectedCell(activeSheet);
+        selectionDraftRef.current = null;
+        setSelectionDraft(null);
+        disposeSelectionPopup();
+      });
+      const selectionListener = api.addEvent(api.Event.SelectionChanged, ({ worksheet, selections }) => {
+        syncSelection(worksheet, selections, userInteractedRef.current && !selectionMovingRef.current);
+      });
+      const selectionMoveStartListener = api.addEvent(api.Event.SelectionMoveStart, () => {
+        userInteractedRef.current = true;
+        selectionMovingRef.current = true;
+        disposeSelectionPopup();
+      });
+      const selectionMoveEndListener = api.addEvent(api.Event.SelectionMoveEnd, ({ worksheet, selections }) => {
+        userInteractedRef.current = true;
+        selectionMovingRef.current = false;
+        syncSelection(worksheet, selections, true);
+      });
+      const cellClickListener = api.addEvent(api.Event.CellClicked, ({ worksheet }) => {
+        userInteractedRef.current = true;
+        window.requestAnimationFrame(() => {
+          if (disposed) return;
+          syncCurrentSelection(worksheet, true);
+        });
+      });
       runtimeRef.current = {
         univer,
         api,
@@ -447,30 +407,26 @@ export default function SpreadsheetInteractivePreview({
   }, [activeSheetIndex, zoom]);
 
   const capabilities: ReferenceCapabilities = {
-    text: { state: 'unavailable', reason: 'NO_TEXT_LAYER' },
-    cells: runtimeRef.current
-      ? { state: 'available' }
-      : { state: 'loading', reason: 'SURFACE_NOT_READY' },
-    region: runtimeRef.current
-      ? { state: 'available' }
-      : { state: 'loading', reason: 'SURFACE_NOT_READY' },
-    recommendedMode: 'cells',
+    text: { state: "unavailable", reason: "NO_TEXT_LAYER" },
+    cells: runtimeRef.current ? { state: "available" } : { state: "loading", reason: "SURFACE_NOT_READY" },
+    region: runtimeRef.current ? { state: "available" } : { state: "loading", reason: "SURFACE_NOT_READY" },
+    recommendedMode: "cells",
   };
 
   const addCellReference = () => {
     const draft = selectionDraftRef.current;
     if (!draft) return;
     const reference = createCellRangeContentReference({
-      selectionMode: 'cells',
+      selectionMode: "cells",
       source: {
         projectName,
         relativePath: filePath,
         fileName,
         ...(revision ? { revision: { id: revision } } : {}),
       },
-      renderer: { id: 'xlsx', backend: 'builtin', locatorQuality: 'semantic' },
+      renderer: { id: "xlsx", backend: "builtin", locatorQuality: "semantic" },
       locator: {
-        surface: 'sheet',
+        surface: "sheet",
         sheetId: draft.sheetId,
         sheetName: draft.sheetName,
         ranges: draft.ranges,
@@ -480,7 +436,7 @@ export default function SpreadsheetInteractivePreview({
       headers: draft.headers,
       surroundingValues: draft.surroundingValues,
     });
-    window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', { detail: reference }));
+    window.dispatchEvent(new CustomEvent("sati:add-chat-reference", { detail: reference }));
     selectionDraftRef.current = null;
     setSelectionDraft(null);
     runtimeRef.current?.disposeSelectionPopup?.();
@@ -488,7 +444,7 @@ export default function SpreadsheetInteractivePreview({
   addCellReferenceRef.current = addCellReference;
 
   useEffect(() => {
-    if (referenceMode === 'region') {
+    if (referenceMode === "region") {
       runtimeRef.current?.disposeSelectionPopup?.();
     }
   }, [referenceMode]);
@@ -498,16 +454,16 @@ export default function SpreadsheetInteractivePreview({
     const sheetId = activeSheet?.getSheetId() || `sheet-${activeSheetIndex}`;
     const sheetName = activeSheet?.getSheetName() || sheetId;
     const reference = createImageRegionContentReference({
-      selectionMode: 'region',
+      selectionMode: "region",
       source: {
         projectName,
         relativePath: filePath,
         fileName,
         ...(revision ? { revision: { id: revision } } : {}),
       },
-      renderer: { id: 'xlsx', backend: 'builtin', locatorQuality: 'visual' },
+      renderer: { id: "xlsx", backend: "builtin", locatorQuality: "visual" },
       locator: {
-        surface: 'sheet',
+        surface: "sheet",
         sheetId,
         sheetName,
         rect: capture.rect,
@@ -515,13 +471,13 @@ export default function SpreadsheetInteractivePreview({
       },
       image: {
         name: `reference-${fileName}-${sheetName}-${Date.now()}.png`,
-        mimeType: 'image/png',
+        mimeType: "image/png",
         width: capture.width,
         height: capture.height,
         dataUrl: capture.dataUrl,
       },
     });
-    window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', { detail: reference }));
+    window.dispatchEvent(new CustomEvent("sati:add-chat-reference", { detail: reference }));
     setReferenceMode(null);
   };
 
@@ -529,7 +485,7 @@ export default function SpreadsheetInteractivePreview({
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white">
       <div className="flex h-9 shrink-0 items-center border-b border-border bg-background text-sm">
         <div
-          aria-label={t('contentReference.spreadsheet.currentCell')}
+          aria-label={t("contentReference.spreadsheet.currentCell")}
           className="w-20 shrink-0 border-r border-border px-3 font-medium text-foreground"
         >
           {selectedCell.address}
@@ -541,7 +497,7 @@ export default function SpreadsheetInteractivePreview({
           fx
         </div>
         <input
-          aria-label={t('contentReference.spreadsheet.cellValue')}
+          aria-label={t("contentReference.spreadsheet.cellValue")}
           className="min-w-0 flex-1 bg-transparent px-3 text-foreground outline-none"
           readOnly
           value={selectedCell.value}
@@ -549,7 +505,7 @@ export default function SpreadsheetInteractivePreview({
         <ContentReferenceMenu
           capabilities={capabilities}
           activeMode={referenceMode}
-          onSelectMode={(mode) => setReferenceMode(mode === 'region' ? mode : null)}
+          onSelectMode={mode => setReferenceMode(mode === "region" ? mode : null)}
           onCancelMode={() => setReferenceMode(null)}
           compact
         />
@@ -562,7 +518,7 @@ export default function SpreadsheetInteractivePreview({
         />
       </div>
       <RegionSelectionOverlay
-        active={referenceMode === 'region'}
+        active={referenceMode === "region"}
         hostRef={containerRef}
         resolveTarget={() => {
           const element = containerRef.current;
@@ -570,7 +526,7 @@ export default function SpreadsheetInteractivePreview({
           const activeSheet = runtimeRef.current?.api.getActiveWorkbook()?.getActiveSheet();
           return {
             element,
-            surface: 'sheet',
+            surface: "sheet",
             sheetId: activeSheet?.getSheetId() || `sheet-${activeSheetIndex}`,
             sheetName: activeSheet?.getSheetName() || `Sheet ${activeSheetIndex + 1}`,
             anchorRange: selectionDraft?.activeRange,

@@ -1,0 +1,39 @@
+# 新颖性判断框架 (A22.2)
+# Layer 1 — 法条级原子单元
+
+articleId: "A22.2"
+name: "新颖性判断"
+lawRef: "专利法第22条第2款"
+guidelineRef: "审查指南第二部分第三章"
+
+steps:
+  - id: "A22.2_step_1"
+    order: 1
+    name: "确定对比文件中公开的技术特征"
+    ruleRef: "审查指南第二部分第三章 3.1"
+    inputHint: "reasoning_chain 中 nodeType=Case 的节点 + 对比文件全文"
+    outputSchema:
+      document: "string — 对比文件号"
+      disclosedFeatures: "string[] — 对比文件公开的全部技术特征"
+      disclosureBasis: "string — 各特征在对比文件中的公开位置"
+
+  - id: "A22.2_step_2"
+    order: 2
+    name: "逐一对比权利要求与对比文件"
+    ruleRef: "审查指南第二部分第三章 3.1"
+    inputHint: "权利要求的技术特征 + 对比文件公开的特征"
+    outputSchema:
+      claimFeatures: "string[] — 权利要求的技术特征列表"
+      matchingResult: "object[] — 每个特征是否被公开及证据"
+      overallConclusion: "string — 是否全部特征被公开（单独对比原则）"
+
+conclusionSchema:
+  novel: "boolean — 是否具备新颖性"
+  confidence: "'high' | 'medium' | 'low'"
+  keyRationale: "string — 核心理由"
+
+applicableTo:
+  - patentability
+  - invalidity
+  - validity
+  - novelty_search

@@ -138,16 +138,13 @@ function normalizeState(value: unknown, now: Date): AlwaysOnDiscoveryState {
   return {
     schemaVersion: 1,
     lastFireStartedAt: typeof candidate.lastFireStartedAt === "string" ? candidate.lastFireStartedAt : undefined,
-    lastFireCompletedAt:
-      typeof candidate.lastFireCompletedAt === "string" ? candidate.lastFireCompletedAt : undefined,
+    lastFireCompletedAt: typeof candidate.lastFireCompletedAt === "string" ? candidate.lastFireCompletedAt : undefined,
     lastFireOutcome: normalizeOutcome(candidate.lastFireOutcome),
     lastPlanId: typeof candidate.lastPlanId === "string" ? candidate.lastPlanId : undefined,
     lastRunId: typeof candidate.lastRunId === "string" ? candidate.lastRunId : undefined,
     todayKey: typeof candidate.todayKey === "string" ? candidate.todayKey : getDayKey(now),
     todayRunCount:
-      typeof candidate.todayRunCount === "number" && candidate.todayRunCount >= 0
-        ? candidate.todayRunCount
-        : 0,
+      typeof candidate.todayRunCount === "number" && candidate.todayRunCount >= 0 ? candidate.todayRunCount : 0,
     consecutiveFailures:
       typeof candidate.consecutiveFailures === "number" && candidate.consecutiveFailures >= 0
         ? candidate.consecutiveFailures
@@ -181,12 +178,7 @@ function normalizeWorkspaceStrategy(value: unknown): WorkspaceStrategyId | undef
 }
 
 function normalizeOutcome(value: unknown): AlwaysOnDiscoveryState["lastFireOutcome"] {
-  if (
-    value === "executed" ||
-    value === "no_plan" ||
-    value === "failed" ||
-    value === "aborted"
-  ) {
+  if (value === "executed" || value === "no_plan" || value === "failed" || value === "aborted") {
     return value;
   }
   return undefined;
@@ -207,10 +199,7 @@ function normalizeDormant(value: unknown): AlwaysOnDiscoveryState["dormant"] {
   };
 }
 
-function resetDailyBudgetIfNeeded(
-  state: AlwaysOnDiscoveryState,
-  now: Date,
-): AlwaysOnDiscoveryState {
+function resetDailyBudgetIfNeeded(state: AlwaysOnDiscoveryState, now: Date): AlwaysOnDiscoveryState {
   const today = getDayKey(now);
   if (state.todayKey === today) {
     return state;

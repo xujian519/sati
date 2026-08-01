@@ -1,6 +1,6 @@
+import { readFile } from "node:fs/promises";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
-import { readFile } from "node:fs/promises";
 import type { Gateway, GatewayMode, GatewaySessionInfo } from "../../../../gateway/index.js";
 import { readPermissionSettings, writePermissionSettings } from "../../../../permission/settings.js";
 import { defaultTuiSessionKey } from "../TuiChannel.js";
@@ -14,7 +14,7 @@ import { SessionSidebar, MIN_SIDEBAR_COLS } from "./SessionSidebar.js";
 import { ToolOutputViewer } from "./ToolOutputViewer.js";
 import { computeSmartCollapse, groupSessions, flattenSidebarRows } from "./sidebar-helpers.js";
 import { applyGatewayEventToTuiState, type TuiAppState, type TuiMessage } from "./types.js";
-import { pilotDeckDarkBlueTheme } from "./theme.js";
+import { satiDarkBlueTheme } from "./theme.js";
 
 export type TuiAppProps = {
   gateway: Gateway;
@@ -40,7 +40,8 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
 
   const [state, setState] = useState<TuiAppState>(() => {
     const perm = readPermissionSettings();
-    return {      connection: props.connection,
+    return {
+      connection: props.connection,
       activeSessionKey: initialSessionKey,
       sessions: [],
       messages: [],
@@ -66,7 +67,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
   useEffect(() => {
     void props.gateway
       .listSessions({ projectKey: props.projectKey, limit: 8 })
-      .then((result) => setState((current) => ({ ...current, sessions: result.sessions })))
+      .then(result => setState(current => ({ ...current, sessions: result.sessions })))
       .catch(() => undefined);
   }, [props.gateway, props.projectKey]);
 
@@ -76,23 +77,23 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       if (Date.now() < suppressUntilRef.current) {
         return;
       }
-      setState((current) => ({ ...current, input: next, focusedIndex: null }));
+      setState(current => ({ ...current, input: next, focusedIndex: null }));
     });
   }, []);
 
   const openViewer = useCallback((content: string, title: string) => {
-    setState((current) => ({ ...current, viewerContent: content, viewerTitle: title }));
+    setState(current => ({ ...current, viewerContent: content, viewerTitle: title }));
   }, []);
 
   const closeViewer = useCallback(() => {
-    setState((current) => ({ ...current, viewerContent: null, viewerTitle: "" }));
+    setState(current => ({ ...current, viewerContent: null, viewerTitle: "" }));
   }, []);
 
   const openSidebar = useCallback(async () => {
     const cols = stdout?.columns ?? 80;
     try {
       const result = await props.gateway.listSessions({ projectKey: props.projectKey, limit: 20 });
-      setState((current) => {
+      setState(current => {
         const groups = groupSessions(result.sessions, current.sidebarGroupBy);
         const smartCollapse = computeSmartCollapse(groups, current.activeSessionKey);
         return {
@@ -106,7 +107,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
     } catch {
       // if fetch fails, use cached sessions
       const groups = groupSessions(state.sessions, state.sidebarGroupBy);
-      setState((current) => {
+      setState(current => {
         const smartCollapse = computeSmartCollapse(groups, current.activeSessionKey);
         return {
           ...current,
@@ -121,7 +122,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
   const switchToSession = useCallback(
     async (sessionKey: string, summary?: string) => {
       void props.gateway.resumeSession({ sessionKey });
-      setState((c) => ({
+      setState(c => ({
         ...c,
         activeSessionKey: sessionKey,
         dashboardMode: "closed",
@@ -159,12 +160,13 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
             tuiMessages.push({ role: "error", text: msg.text ?? "error" });
           }
         }
-        setState((c) => ({
+        setState(c => ({
           ...c,
-          messages: tuiMessages.length > 0 ? tuiMessages : [{ role: "system", text: `Session: ${summary || sessionKey}` }],
+          messages:
+            tuiMessages.length > 0 ? tuiMessages : [{ role: "system", text: `Session: ${summary || sessionKey}` }],
         }));
       } catch {
-        setState((c) => ({
+        setState(c => ({
           ...c,
           messages: [{ role: "system", text: `Switched to session: ${summary || sessionKey}` }],
         }));
@@ -197,13 +199,13 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
   const handleSubmit = useCallback(
     async (raw: string) => {
       const trimmed = raw.trim();
-      setState((current) => ({ ...current, input: "" }));
+      setState(current => ({ ...current, input: "" }));
 
       if (!trimmed) {
         if (!state.isRunning && state.focusedIndex !== null) {
           const focused = state.messages[state.focusedIndex];
           if (focused?.role === "tool") {
-            setState((current) => {
+            setState(current => {
               const msgs = [...current.messages];
               const msg = msgs[state.focusedIndex!];
               if (msg?.role === "tool") {
@@ -215,9 +217,11 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
           }
         }
         if (!state.isRunning) {
-          const lastTool = [...state.messages].reverse().find(
-            (m) => m.role === "tool" && ((m.lineCount ?? 0) > 4 || m.resultPath),
-          ) as Extract<TuiMessage, { role: "tool" }> | undefined;
+          const lastTool = [...state.messages]
+            .reverse()
+            .find(m => m.role === "tool" && ((m.lineCount ?? 0) > 4 || m.resultPath)) as
+            | Extract<TuiMessage, { role: "tool" }>
+            | undefined;
           if (lastTool) {
             void openToolOutput(lastTool);
           }
@@ -245,14 +249,17 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
           return;
         }
       } catch (error) {
-        setState((c) => ({
+        setState(c => ({
           ...c,
-          messages: [...c.messages, { role: "error", text: `Command failed: ${error instanceof Error ? error.message : String(error)}` }],
+          messages: [
+            ...c.messages,
+            { role: "error", text: `Command failed: ${error instanceof Error ? error.message : String(error)}` },
+          ],
         }));
         return;
       }
 
-      setState((current) => ({
+      setState(current => ({
         ...current,
         messages: [...current.messages, { role: "user", text: trimmed }],
         isRunning: true,
@@ -268,7 +275,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
           message: trimmed,
           mode: state.mode,
         })) {
-          setState((current) => {
+          setState(current => {
             const partial = applyGatewayEventToTuiState(current, event);
             return {
               ...current,
@@ -278,7 +285,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
           });
         }
       } catch (error) {
-        setState((current) => ({
+        setState(current => ({
           ...current,
           isRunning: false,
           messages: [
@@ -288,7 +295,21 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         }));
       }
     },
-    [exit, props.gateway, props.projectKey, openToolOutput, openViewer, openSidebar, switchToSession, state.activeSessionKey, state.isRunning, state.messages, state.mode, state.focusedIndex, state.pendingPermissions],
+    [
+      exit,
+      props.gateway,
+      props.projectKey,
+      openToolOutput,
+      openViewer,
+      openSidebar,
+      switchToSession,
+      state.activeSessionKey,
+      state.isRunning,
+      state.messages,
+      state.mode,
+      state.focusedIndex,
+      state.pendingPermissions,
+    ],
   );
 
   const scrollPage = Math.max(1, Math.floor(rows / 2));
@@ -337,7 +358,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       }
       if (key.escape) {
         void props.gateway.abortTurn({ sessionKey: state.activeSessionKey });
-        setState((c) => ({ ...c, pendingPermissions: [] }));
+        setState(c => ({ ...c, pendingPermissions: [] }));
         return;
       }
       return;
@@ -348,7 +369,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       const tabOrder: Array<"shortcuts" | "settings" | "about"> = ["shortcuts", "settings", "about"];
       if (key.rightArrow || (key.tab && !key.shift)) {
         if (state.helpTab !== "settings") {
-          setState((c) => {
+          setState(c => {
             const idx = tabOrder.indexOf(c.helpTab);
             return { ...c, helpTab: tabOrder[(idx + 1) % tabOrder.length]! };
           });
@@ -357,7 +378,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       }
       if (key.leftArrow || (key.shift && key.tab)) {
         if (state.helpTab !== "settings") {
-          setState((c) => {
+          setState(c => {
             const idx = tabOrder.indexOf(c.helpTab);
             return { ...c, helpTab: tabOrder[(idx - 1 + tabOrder.length) % tabOrder.length]! };
           });
@@ -367,15 +388,15 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       if (state.helpTab === "settings") {
         const SETTINGS_COUNT = 3;
         if (key.upArrow) {
-          setState((c) => ({ ...c, settingsCursor: Math.max(0, c.settingsCursor - 1) }));
+          setState(c => ({ ...c, settingsCursor: Math.max(0, c.settingsCursor - 1) }));
           return;
         }
         if (key.downArrow) {
-          setState((c) => ({ ...c, settingsCursor: Math.min(SETTINGS_COUNT - 1, c.settingsCursor + 1) }));
+          setState(c => ({ ...c, settingsCursor: Math.min(SETTINGS_COUNT - 1, c.settingsCursor + 1) }));
           return;
         }
         if (key.return || input === " ") {
-          setState((c) => {
+          setState(c => {
             if (c.settingsCursor === 0) {
               const modes: Array<"default" | "plan" | "bypassPermissions"> = ["default", "plan", "bypassPermissions"];
               const idx = modes.indexOf(c.mode as "default" | "plan" | "bypassPermissions");
@@ -393,19 +414,19 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         }
       }
       if (input === "1") {
-        setState((c) => ({ ...c, helpTab: "shortcuts" }));
+        setState(c => ({ ...c, helpTab: "shortcuts" }));
         return;
       }
       if (input === "2") {
-        setState((c) => ({ ...c, helpTab: "settings", settingsCursor: 0 }));
+        setState(c => ({ ...c, helpTab: "settings", settingsCursor: 0 }));
         return;
       }
       if (input === "3") {
-        setState((c) => ({ ...c, helpTab: "about" }));
+        setState(c => ({ ...c, helpTab: "about" }));
         return;
       }
       if (key.escape || input === "q") {
-        setState((c) => ({ ...c, helpOpen: false }));
+        setState(c => ({ ...c, helpOpen: false }));
         return;
       }
       return;
@@ -417,17 +438,17 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       const rows = flattenSidebarRows(groups, state.sidebarCollapsed);
 
       if (key.escape || (key.ctrl && input === "c")) {
-        setState((c) => ({ ...c, dashboardMode: "closed" }));
+        setState(c => ({ ...c, dashboardMode: "closed" }));
         return;
       }
       if (key.ctrl && input === "e") {
         suppressUntilRef.current = Date.now() + 100;
-        setState((c) => ({ ...c, dashboardMode: "closed" }));
+        setState(c => ({ ...c, dashboardMode: "closed" }));
         return;
       }
       if (key.ctrl && input === "s") {
         suppressUntilRef.current = Date.now() + 100;
-        setState((c) => {
+        setState(c => {
           const next: "project" | "status" = c.sidebarGroupBy === "project" ? "status" : "project";
           const newGroups = groupSessions(c.sessions, next);
           return {
@@ -440,14 +461,14 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         return;
       }
       if (key.upArrow && state.input.length === 0) {
-        setState((c) => ({
+        setState(c => ({
           ...c,
           sidebarCursorIndex: Math.max(0, c.sidebarCursorIndex - 1),
         }));
         return;
       }
       if (key.downArrow && state.input.length === 0) {
-        setState((c) => ({
+        setState(c => ({
           ...c,
           sidebarCursorIndex: Math.min(rows.length - 1, c.sidebarCursorIndex + 1),
         }));
@@ -459,7 +480,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         } else {
           const row = rows[state.sidebarCursorIndex];
           if (row?.kind === "header") {
-            setState((c) => {
+            setState(c => {
               const next = new Set(c.sidebarCollapsed);
               if (next.has(row.groupKey)) next.delete(row.groupKey);
               else next.add(row.groupKey);
@@ -475,7 +496,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       if (key.rightArrow && state.input.length === 0) {
         const row = rows[state.sidebarCursorIndex];
         if (row?.kind === "header" && row.collapsed) {
-          setState((c) => {
+          setState(c => {
             const next = new Set(c.sidebarCollapsed);
             next.delete(row.groupKey);
             return { ...c, sidebarCollapsed: next };
@@ -489,17 +510,15 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       if (key.leftArrow && state.input.length === 0) {
         const row = rows[state.sidebarCursorIndex];
         if (row?.kind === "header" && !row.collapsed) {
-          setState((c) => {
+          setState(c => {
             const next = new Set(c.sidebarCollapsed);
             next.add(row.groupKey);
             return { ...c, sidebarCollapsed: next };
           });
         } else if (row?.kind === "session") {
-          const headerIdx = rows.findIndex(
-            (r) => r.kind === "header" && r.groupKey === row.groupKey,
-          );
+          const headerIdx = rows.findIndex(r => r.kind === "header" && r.groupKey === row.groupKey);
           if (headerIdx >= 0) {
-            setState((c) => ({ ...c, sidebarCursorIndex: headerIdx }));
+            setState(c => ({ ...c, sidebarCursorIndex: headerIdx }));
           }
         }
         return;
@@ -530,25 +549,23 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         return;
       }
       if (state.helpOpen) {
-        setState((c) => ({ ...c, helpOpen: false }));
+        setState(c => ({ ...c, helpOpen: false }));
         return;
       }
       if (state.scrollOffset > 0 || state.focusedIndex !== null) {
-        setState((c) => ({ ...c, scrollOffset: 0, focusedIndex: null }));
+        setState(c => ({ ...c, scrollOffset: 0, focusedIndex: null }));
         return;
       }
       return;
     }
     if (input === "?" && state.input.length === 0) {
-      setState((current) => ({ ...current, helpOpen: !current.helpOpen }));
+      setState(current => ({ ...current, helpOpen: !current.helpOpen }));
       return;
     }
 
     if (key.tab && state.input.length === 0) {
-      setState((current) => {
-        const toolIndices = current.messages
-          .map((m, i) => (m.role === "tool" ? i : -1))
-          .filter((i) => i >= 0);
+      setState(current => {
+        const toolIndices = current.messages.map((m, i) => (m.role === "tool" ? i : -1)).filter(i => i >= 0);
         if (toolIndices.length === 0) return current;
 
         if (key.shift) {
@@ -571,7 +588,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
     }
 
     if (key.pageUp || (key.shift && key.upArrow)) {
-      setState((current) => {
+      setState(current => {
         const maxOffset = Math.max(0, current.messages.length - 1);
         return { ...current, scrollOffset: Math.min(maxOffset, current.scrollOffset + scrollPage) };
       });
@@ -579,7 +596,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
     }
 
     if (key.pageDown || (key.shift && key.downArrow)) {
-      setState((current) => ({
+      setState(current => ({
         ...current,
         scrollOffset: Math.max(0, current.scrollOffset - scrollPage),
       }));
@@ -588,13 +605,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
   });
 
   if (state.viewerContent !== null) {
-    return (
-      <ToolOutputViewer
-        content={state.viewerContent}
-        title={state.viewerTitle}
-        onClose={closeViewer}
-      />
-    );
+    return <ToolOutputViewer content={state.viewerContent} title={state.viewerTitle} onClose={closeViewer} />;
   }
 
   const showSidebar = state.dashboardMode === "sidebar";
@@ -614,7 +625,9 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         <HelpDialog
           activeTab={state.helpTab}
           mode={state.mode}
-          connection={state.connection === "remote" ? (props.serverUrl ? `remote (${props.serverUrl})` : "remote") : "local"}
+          connection={
+            state.connection === "remote" ? (props.serverUrl ? `remote (${props.serverUrl})` : "remote") : "local"
+          }
           sessionKey={state.activeSessionKey}
           model={props.model}
           settingsCursor={state.settingsCursor}
@@ -677,7 +690,7 @@ async function handleCommand(
   switch (name) {
     case "/new": {
       const result = await gateway.newSession({ channelKey: "tui", projectKey });
-      setState((current) => ({
+      setState(current => ({
         ...current,
         activeSessionKey: result.sessionKey,
         messages: [{ role: "system", text: `New session: ${result.sessionKey}` }],
@@ -694,7 +707,7 @@ async function handleCommand(
           const target = result.sessions[n - 1];
           if (target) {
             const sessionKey = target.sessionKey ?? target.sessionId;
-            setState((c) => ({ ...c, sessions: result.sessions }));
+            setState(c => ({ ...c, sessions: result.sessions }));
             void switchToSession(sessionKey, target.summary);
             return true;
           }
@@ -712,12 +725,12 @@ async function handleCommand(
           `allow: ${current.allowedTools.length === 0 ? "(none)" : current.allowedTools.join(", ")}`,
           `deny: ${current.disallowedTools.length === 0 ? "(none)" : current.disallowedTools.join(", ")}`,
         ];
-        setState((c) => ({ ...c, messages: [...c.messages, { role: "system", text: lines.join("\n") }] }));
+        setState(c => ({ ...c, messages: [...c.messages, { role: "system", text: lines.join("\n") }] }));
         return true;
       }
       const entry = args.slice(1).join(" ").trim();
       if (!entry && sub !== "bypass") {
-        setState((c) => ({
+        setState(c => ({
           ...c,
           messages: [
             ...c.messages,
@@ -731,32 +744,32 @@ async function handleCommand(
       }
       if (sub === "allow" && entry) {
         writePermissionSettings({ allowedTools: [...current.allowedTools, entry] });
-        setState((c) => ({ ...c, messages: [...c.messages, { role: "system", text: `Added allow: ${entry}` }] }));
+        setState(c => ({ ...c, messages: [...c.messages, { role: "system", text: `Added allow: ${entry}` }] }));
         return true;
       }
       if (sub === "deny" && entry) {
         writePermissionSettings({ disallowedTools: [...current.disallowedTools, entry] });
-        setState((c) => ({ ...c, messages: [...c.messages, { role: "system", text: `Added deny: ${entry}` }] }));
+        setState(c => ({ ...c, messages: [...c.messages, { role: "system", text: `Added deny: ${entry}` }] }));
         return true;
       }
       if (sub === "clear" && entry) {
         writePermissionSettings({
-          allowedTools: current.allowedTools.filter((e) => e !== entry),
-          disallowedTools: current.disallowedTools.filter((e) => e !== entry),
+          allowedTools: current.allowedTools.filter(e => e !== entry),
+          disallowedTools: current.disallowedTools.filter(e => e !== entry),
         });
-        setState((c) => ({ ...c, messages: [...c.messages, { role: "system", text: `Cleared: ${entry}` }] }));
+        setState(c => ({ ...c, messages: [...c.messages, { role: "system", text: `Cleared: ${entry}` }] }));
         return true;
       }
       if (sub === "bypass") {
         writePermissionSettings({ skipPermissions: true });
-        setState((c) => ({
+        setState(c => ({
           ...c,
           mode: "bypassPermissions",
           messages: [...c.messages, { role: "system", text: "Permissions bypassed globally (skipPermissions=true)." }],
         }));
         return true;
       }
-      setState((c) => ({
+      setState(c => ({
         ...c,
         messages: [...c.messages, { role: "error", text: `Unknown /permissions subcommand: ${sub}` }],
       }));
@@ -765,9 +778,7 @@ async function handleCommand(
     case "/mode": {
       const requestedMode = args[0];
       const mode = (
-        requestedMode === "plan" || requestedMode === "bypassPermissions"
-          ? requestedMode
-          : "default"
+        requestedMode === "plan" || requestedMode === "bypassPermissions" ? requestedMode : "default"
       ) as GatewayMode;
       if (mode === "bypassPermissions") {
         writePermissionSettings({ skipPermissions: true });
@@ -777,7 +788,7 @@ async function handleCommand(
           writePermissionSettings({ skipPermissions: false });
         }
       }
-      setState((current) => ({
+      setState(current => ({
         ...current,
         mode,
         messages: [...current.messages, { role: "system", text: `Mode: ${mode}` }],
@@ -791,29 +802,27 @@ async function handleCommand(
           m.role === "tool" && ((m.lineCount ?? 0) > 4 || !!m.resultPath || !!m.fullText),
       );
       if (tools.length === 0) {
-        setState((current) => ({
+        setState(current => ({
           ...current,
           messages: [...current.messages, { role: "system", text: "No tool output to view." }],
         }));
         return true;
       }
-      const target = !isNaN(n) && n >= 1 && n <= tools.length
-        ? tools[n - 1]!
-        : tools[tools.length - 1]!;
+      const target = !isNaN(n) && n >= 1 && n <= tools.length ? tools[n - 1]! : tools[tools.length - 1]!;
       void openToolOutput(target);
       return true;
     }
     case "/clear":
-      setState((current) => ({ ...current, messages: [], focusedIndex: null }));
+      setState(current => ({ ...current, messages: [], focusedIndex: null }));
       return true;
     case "/help":
-      setState((current) => ({ ...current, helpOpen: !current.helpOpen }));
+      setState(current => ({ ...current, helpOpen: !current.helpOpen }));
       return true;
     case "/exit":
       exit();
       return true;
     default:
-      setState((current) => ({
+      setState(current => ({
         ...current,
         messages: [...current.messages, { role: "error", text: `Unknown command ${name}` }],
       }));
@@ -837,8 +846,8 @@ function SessionHint({ sessions }: { sessions: GatewaySessionInfo[] }): React.Re
   }
   const count = sessions.length;
   return (
-    <Text color={pilotDeckDarkBlueTheme.subtle} dimColor>
-      {count} session{count > 1 ? "s" : ""}  ·  Ctrl+E sidebar  ·  /switch N
+    <Text color={satiDarkBlueTheme.subtle} dimColor>
+      {count} session{count > 1 ? "s" : ""} · Ctrl+E sidebar · /switch N
     </Text>
   );
 }

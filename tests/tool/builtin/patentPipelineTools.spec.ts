@@ -5,7 +5,7 @@ import {
   runWorkflow,
   validateWorkflowManifest,
   WorkflowError,
-} from "../../../src/patent/workflow.js";
+} from "../../../src/patent/index.js";
 import { PlanTaskStateMachine, replanTasks, syncPlanToTasks, hashStep } from "../../../src/patent/plantask.js";
 import { WorkerRegistry, validateWorkerOutput, defaultPatentWorkers } from "../../../src/patent/worker-contract.js";
 import { createPatentWorkflowTool } from "../../../src/tool/builtin/patentWorkflowTool.js";

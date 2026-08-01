@@ -1,4 +1,4 @@
-// Service Worker for PilotDeck PWA
+// Service Worker for Sati PWA
 // Cache only manifest (needed for PWA install). HTML and JS are never pre-cached
 // so a rebuild + refresh always picks up the latest assets.
 // Bump this token whenever a cached asset's contents change (icons, manifest).
@@ -82,7 +82,7 @@ self.addEventListener('push', event => {
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: 'PilotDeck', body: event.data.text() };
+    payload = { title: 'Sati', body: event.data.text() };
   }
 
   const options = {
@@ -95,7 +95,7 @@ self.addEventListener('push', event => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'PilotDeck', options)
+    self.registration.showNotification(payload.title || 'Sati', options)
   );
 });
 

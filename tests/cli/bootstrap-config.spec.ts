@@ -6,16 +6,16 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 test("config bootstrap does not copy bundled skills into user storage", () => {
-  const pilotHome = mkdtempSync(join(tmpdir(), "pilotdeck-bootstrap-"));
+  const pilotHome = mkdtempSync(join(tmpdir(), "sati-bootstrap-"));
   try {
-    const result = spawnSync(process.execPath, [join(process.cwd(), "scripts", "bootstrap-pilotdeck-config.mjs")], {
+    const result = spawnSync(process.execPath, [join(process.cwd(), "scripts", "bootstrap-sati-config.mjs")], {
       cwd: process.cwd(),
-      env: { ...process.env, PILOT_HOME: pilotHome },
+      env: { ...process.env, SATI_HOME: pilotHome },
       encoding: "utf8",
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(existsSync(join(pilotHome, "pilotdeck.yaml")), true);
+    assert.equal(existsSync(join(pilotHome, "sati.yaml")), true);
     assert.equal(existsSync(join(pilotHome, "skills")), false);
   } finally {
     rmSync(pilotHome, { recursive: true, force: true });

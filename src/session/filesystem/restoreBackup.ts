@@ -25,9 +25,7 @@ export type RestoreBackupResult = {
  *   - non-null & backup file absent (manually deleted, etc.) → return
  *     `missing` so the caller can `warn` rather than throw (F13 graceful).
  */
-export async function restoreBackup(
-  options: RestoreBackupOptions,
-): Promise<RestoreBackupResult> {
+export async function restoreBackup(options: RestoreBackupOptions): Promise<RestoreBackupResult> {
   const { filePath, backup, backupDir } = options;
   if (backup.backupFileName === null) {
     try {
@@ -54,7 +52,5 @@ export async function restoreBackup(
 }
 
 function isNotFoundError(err: unknown): boolean {
-  return Boolean(
-    err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "ENOENT",
-  );
+  return Boolean(err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "ENOENT");
 }

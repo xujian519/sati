@@ -23,9 +23,7 @@ export function expandMcpConfig(value: unknown): unknown {
   if (typeof value === "string") return expandMcpString(value);
   if (Array.isArray(value)) return value.map(expandMcpConfig);
   if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([k, v]) => [k, expandMcpConfig(v)]),
-    );
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, expandMcpConfig(v)]));
   }
   return value;
 }

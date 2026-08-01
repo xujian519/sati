@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../utils/api';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { api } from "../utils/api";
 
 const TasksSettingsContext = createContext({
   tasksEnabled: true,
@@ -8,13 +8,13 @@ const TasksSettingsContext = createContext({
   isTaskMasterInstalled: null,
   isTaskMasterReady: null,
   installationStatus: null,
-  isCheckingInstallation: true
+  isCheckingInstallation: true,
 });
 
 export const useTasksSettings = () => {
   const context = useContext(TasksSettingsContext);
   if (!context) {
-    throw new Error('useTasksSettings must be used within a TasksSettingsProvider');
+    throw new Error("useTasksSettings must be used within a TasksSettingsProvider");
   }
   return context;
 };
@@ -22,10 +22,10 @@ export const useTasksSettings = () => {
 export const TasksSettingsProvider = ({ children }) => {
   const [tasksEnabled, setTasksEnabled] = useState(() => {
     // Load from localStorage on initialization
-    const saved = localStorage.getItem('tasks-enabled');
+    const saved = localStorage.getItem("tasks-enabled");
     return saved !== null ? JSON.parse(saved) : true; // Default to true
   });
-  
+
   const [isTaskMasterInstalled, setIsTaskMasterInstalled] = useState(null);
   const [isTaskMasterReady, setIsTaskMasterReady] = useState(null);
   const [installationStatus, setInstallationStatus] = useState(null);
@@ -33,33 +33,33 @@ export const TasksSettingsProvider = ({ children }) => {
 
   // Save to localStorage whenever tasksEnabled changes
   useEffect(() => {
-    localStorage.setItem('tasks-enabled', JSON.stringify(tasksEnabled));
+    localStorage.setItem("tasks-enabled", JSON.stringify(tasksEnabled));
   }, [tasksEnabled]);
 
   // Check TaskMaster installation status asynchronously on component mount
   useEffect(() => {
     const checkInstallation = async () => {
       try {
-        const response = await api.get('/taskmaster/installation-status');
+        const response = await api.get("/taskmaster/installation-status");
         if (response.ok) {
           const data = await response.json();
           setInstallationStatus(data);
           setIsTaskMasterInstalled(data.installation?.isInstalled || false);
           setIsTaskMasterReady(data.isReady || false);
-          
+
           // If TaskMaster is not installed and user hasn't explicitly enabled tasks,
           // disable tasks automatically
-          const userEnabledTasks = localStorage.getItem('tasks-enabled');
+          const userEnabledTasks = localStorage.getItem("tasks-enabled");
           if (!data.installation?.isInstalled && !userEnabledTasks) {
             setTasksEnabled(false);
           }
         } else {
-          console.error('Failed to check TaskMaster installation status');
+          console.error("Failed to check TaskMaster installation status");
           setIsTaskMasterInstalled(false);
           setIsTaskMasterReady(false);
         }
       } catch (error) {
-        console.error('Error checking TaskMaster installation:', error);
+        console.error("Error checking TaskMaster installation:", error);
         setIsTaskMasterInstalled(false);
         setIsTaskMasterReady(false);
       } finally {
@@ -82,14 +82,10 @@ export const TasksSettingsProvider = ({ children }) => {
     isTaskMasterInstalled,
     isTaskMasterReady,
     installationStatus,
-    isCheckingInstallation
+    isCheckingInstallation,
   };
 
-  return (
-    <TasksSettingsContext.Provider value={contextValue}>
-      {children}
-    </TasksSettingsContext.Provider>
-  );
+  return <TasksSettingsContext.Provider value={contextValue}>{children}</TasksSettingsContext.Provider>;
 };
 
 export default TasksSettingsContext;

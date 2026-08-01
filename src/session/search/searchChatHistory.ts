@@ -183,16 +183,13 @@ type Matcher = {
   findIndex: (text: string) => number;
 };
 
-function buildMatcher(
-  query: string,
-  options: { caseSensitive: boolean; regex: boolean },
-): Matcher {
+function buildMatcher(query: string, options: { caseSensitive: boolean; regex: boolean }): Matcher {
   if (options.regex) {
     const flags = options.caseSensitive ? "" : "i";
     const pattern = new RegExp(query, flags);
     return {
-      test: (text) => pattern.test(text),
-      findIndex: (text) => {
+      test: text => pattern.test(text),
+      findIndex: text => {
         pattern.lastIndex = 0;
         const match = pattern.exec(text);
         return match?.index ?? -1;
@@ -202,11 +199,11 @@ function buildMatcher(
 
   const needle = options.caseSensitive ? query : query.toLowerCase();
   return {
-    test: (text) => {
+    test: text => {
       const haystack = options.caseSensitive ? text : text.toLowerCase();
       return haystack.includes(needle);
     },
-    findIndex: (text) => {
+    findIndex: text => {
       const haystack = options.caseSensitive ? text : text.toLowerCase();
       return haystack.indexOf(needle);
     },
@@ -225,10 +222,12 @@ async function collectSessionFiles(options: {
     if (!options.includeInternal && isInternalSession(options.sessionId)) {
       return [];
     }
-    return [{
-      path: join(chatDir, `${sanitizeSessionIdForPath(options.sessionId)}.jsonl`),
-      projectKey: projectRoot,
-    }];
+    return [
+      {
+        path: join(chatDir, `${sanitizeSessionIdForPath(options.sessionId)}.jsonl`),
+        projectKey: projectRoot,
+      },
+    ];
   }
 
   if (options.projectRoot) {
@@ -247,7 +246,7 @@ async function collectSessionFiles(options: {
   const files: SessionFileTarget[] = [];
   for (const projectId of projectIds) {
     const chatDir = join(projectsDir, projectId, "chats");
-    files.push(...await listJsonlFiles(chatDir, projectId, options.includeInternal));
+    files.push(...(await listJsonlFiles(chatDir, projectId, options.includeInternal)));
   }
   return files;
 }
@@ -280,15 +279,20 @@ async function listJsonlFiles(
 async function buildSessionTitleIndex(files: SessionFileTarget[]): Promise<Map<string, string>> {
   const titles = new Map<string, string>();
 
-  await Promise.all(files.map(async (file) => {
-    const sessionId = file.path.split(/[\\/]/).pop()?.replace(/\.jsonl$/, "");
-    if (!sessionId) return;
-    const lite = await readSessionLite(file.path);
-    if (!lite) return;
-    const info = parseSessionInfoFromLite(sessionId, lite, file.projectKey);
-    if (!info) return;
-    titles.set(`${file.projectKey ?? ""}:${sessionId}`, formatSessionTitle(info));
-  }));
+  await Promise.all(
+    files.map(async file => {
+      const sessionId = file.path
+        .split(/[\\/]/)
+        .pop()
+        ?.replace(/\.jsonl$/, "");
+      if (!sessionId) return;
+      const lite = await readSessionLite(file.path);
+      if (!lite) return;
+      const info = parseSessionInfoFromLite(sessionId, lite, file.projectKey);
+      if (!info) return;
+      titles.set(`${file.projectKey ?? ""}:${sessionId}`, formatSessionTitle(info));
+    }),
+  );
 
   return titles;
 }

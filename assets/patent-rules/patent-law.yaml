@@ -1,0 +1,273 @@
+rules:
+  # ===========================================================================
+  # 保护客体 — 专利法第2条、第5条、第25条
+  # ===========================================================================
+
+  - id: CON-101
+    name: "发明定义-技术方案三要素"
+    legal_basis: "专利法第二条第二款"
+    domain: patent_general
+    severity: critical
+    action: block
+    phases: [pre_execution, post_execution]
+    check:
+      type: structural_analysis
+      requires_all:
+        - element: technical_means
+          patterns: ["装置", "设备", "机构", "系统", "单元", "模块", "组件", "步骤", "方法"]
+        - element: technical_problem
+          patterns: ["技术问题", "解决", "克服", "改善"]
+        - element: technical_effect
+          patterns: ["技术效果", "有益效果", "优点", "提高", "降低", "增强"]
+      message: "技术方案必须包含技术手段、技术问题和技术效果三要素"
+
+  - id: CON-102
+    name: "禁止编造对比文件"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    tools: ["knowledge_search", "patent_search"]
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan: ["编造", "虚构", "杜撰", "捏造"]
+      message: "输出中包含禁止编造内容的指示词"
+
+  - id: CON-103
+    name: "新颖性分析必须引用法律依据"
+    legal_basis: "专利法第二十二条"
+    domain: patent_novelty
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    tools: ["provision-novelty"]
+    check:
+      type: pattern_analysis
+      patterns: ["第二十二条", "新颖性", "现有技术", "单独对比"]
+      message: "新颖性分析应引用专利法第二十二条"
+
+  - id: CON-104
+    name: "创造性三步法结构检查"
+    legal_basis: "专利法第二十二条第三款"
+    domain: patent_inventiveness
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    tools: ["provision-inventiveness"]
+    check:
+      type: structural_analysis
+      requires_all:
+        - element: closest_prior_art
+          patterns: ["最接近的现有技术", "对比文件"]
+        - element: distinguishing_features
+          patterns: ["区别技术特征", "区别特征", "不同之处"]
+        - element: technical_problem
+          patterns: ["实际解决的技术问题"]
+        - element: technical_motivation
+          patterns: ["技术启示", "结合启示", "显而易见", "容易想到"]
+      message: "创造性分析应遵循三步法结构"
+
+  # ===========================================================================
+  # 充分公开 — 专利法第26条第3款
+  # ===========================================================================
+
+  - id: CON-201
+    name: "充分公开-能够实现"
+    legal_basis: "专利法第二十六条第三款"
+    domain: patent_disclosure
+    severity: critical
+    action: block
+    phases: [post_execution]
+    tools: ["provision-disclosure"]
+    check:
+      type: structural_analysis
+      requires_all:
+        - element: clear_description
+          patterns: ["技术方案", "具体实施方式", "实施例"]
+        - element: reproducible
+          patterns: ["本领域技术人员", "能够实现", "按照"]
+      message: "说明书应当对发明作出清楚、完整的说明，以所属技术领域的技术人员能够实现为准"
+
+  - id: CON-202
+    name: "说明书公开内容完整"
+    legal_basis: "专利法第二十六条第三款、专利法实施细则第十七条"
+    domain: patent_disclosure
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    check:
+      type: specification_analysis
+      required_sections: ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"]
+      message: "说明书应包含技术领域、背景技术、发明内容、附图说明和具体实施方式"
+
+  # ===========================================================================
+  # 权利要求 — 专利法第26条第4款
+  # ===========================================================================
+
+  - id: CON-301
+    name: "权利要求清楚"
+    legal_basis: "专利法第二十六条第四款"
+    domain: patent_claims
+    severity: critical
+    action: block
+    phases: [post_execution]
+    tools: ["provision-claims-clarity"]
+    check:
+      type: pattern_analysis
+      patterns: ["清楚", "简要", "限定", "必要技术特征"]
+      message: "权利要求书应当以说明书为依据，清楚、简要地限定要求专利保护的范围"
+
+  - id: CON-302
+    name: "权利要求以说明书为依据"
+    legal_basis: "专利法第二十六条第四款"
+    domain: patent_claims
+    severity: critical
+    action: block
+    phases: [post_execution]
+    check:
+      type: structural_analysis
+      requires_all:
+        - element: spec_support
+          patterns: ["说明书", "实施例", "具体实施方式"]
+        - element: claim_scope
+          patterns: ["保护范围", "限定", "技术特征"]
+      message: "权利要求书应当以说明书为依据"
+
+  - id: CON-303
+    name: "独立权利要求记载必要技术特征"
+    legal_basis: "专利法实施细则第二十条第二款"
+    domain: patent_claims
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    check:
+      type: structural_analysis
+      requires_all:
+        - element: essential_features
+          patterns: ["必要技术特征", "必要特征", "必不可少"]
+      message: "独立权利要求应当从整体上反映发明或实用新型的技术方案，记载解决技术问题的必要技术特征"
+
+  - id: CON-304
+    name: "从属权利要求引用关系正确"
+    legal_basis: "专利法实施细则第二十一条"
+    domain: patent_claims
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    check:
+      type: category_detection
+      categories:
+        - name: dependent_claim
+          patterns: ["根据权利要求", "如权利要求"]
+        - name: reference_mark
+          patterns: ["所述", "其特征在于"]
+      message: "从属权利要求应当用附加的技术特征，对引用的权利要求作进一步限定"
+
+  # ===========================================================================
+  # 创造性 — 专利法第22条第3款
+  # ===========================================================================
+
+  - id: CON-401
+    name: "创造性非显而易见性判断"
+    legal_basis: "专利法第二十二条第三款"
+    domain: patent_inventiveness
+    severity: critical
+    action: block
+    phases: [post_execution]
+    check:
+      type: pattern_analysis
+      patterns: ["显而易见", "容易想到", "常规技术手段", "惯用技术手段"]
+      context_patterns: ["不是", "并非", "不具有", "不具备"]
+      message: "创造性的判断应当基于所属技术领域的技术人员的知识和能力"
+
+  - id: CON-402
+    name: "预料不到的技术效果"
+    legal_basis: "专利法第二十二条第三款"
+    domain: patent_inventiveness
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    check:
+      type: pattern_analysis
+      patterns: ["预料不到", "意想不到", "出人意料", "意外效果"]
+      message: "预料不到的技术效果是创造性判断的辅助因素"
+
+  # ===========================================================================
+  # 修改 — 专利法第33条
+  # ===========================================================================
+
+  - id: CON-501
+    name: "修改不超范围"
+    legal_basis: "专利法第三十三条"
+    domain: patent_procedure
+    severity: critical
+    action: block
+    phases: [post_execution]
+    tools: ["provision-amendment"]
+    check:
+      type: pattern_analysis
+      patterns: ["原说明书", "原权利要求书", "原申请", "原始公开"]
+      context_patterns: ["超出", "超范围", "新增加", "未记载"]
+      message: "对发明和实用新型专利申请文件的修改不得超出原说明书和权利要求书记载的范围"
+
+  - id: CON-502
+    name: "权利要求修改不得扩大保护范围"
+    legal_basis: "专利法实施细则第五十一条第三款"
+    domain: patent_procedure
+    severity: critical
+    action: block
+    phases: [post_execution]
+    check:
+      type: pattern_analysis
+      patterns: ["扩大", "保护范围", "修改"]
+      context_patterns: ["不得", "不允许", "禁止"]
+      message: "权利要求的修改不得扩大原专利的保护范围"
+
+  # ===========================================================================
+  # 实用新型 — 专利法第22条
+  # ===========================================================================
+
+  - id: CON-601
+    name: "实用新型创造性标准"
+    legal_basis: "专利法第二十二条第三款"
+    domain: patent_inventiveness
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    check:
+      type: pattern_analysis
+      patterns: ["实质性特点", "进步"]
+      context_patterns: ["实用新型"]
+      message: "实用新型的创造性标准为具有实质性特点和进步"
+
+  # ===========================================================================
+  # 答复 — 审查意见答复流程规则
+  # ===========================================================================
+
+  - id: CON-701
+    name: "答复期限"
+    legal_basis: "专利法第三十七条"
+    domain: patent_oa_response
+    severity: warning
+    action: warn
+    phases: [pre_execution]
+    check:
+      type: pattern_analysis
+      patterns: ["答复", "期限", "四个月", "两个月", "指定期限"]
+      message: "发明专利申请人应当在收到驳回决定之日起三个月内提出复审请求"
+
+  - id: CON-702
+    name: "意见陈述书逐条回应"
+    domain: patent_oa_response
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    tools: ["patent-oa-response-drafter"]
+    check:
+      type: structural_analysis
+      requires_all:
+        - element: respond_to_rejections
+          patterns: ["审查意见", "驳回理由", "审查员指出"]
+        - element: legal_arguments
+          patterns: ["专利法", "专利审查指南", "根据"]
+      message: "意见陈述书应逐条回应审查意见，并引用法律依据"

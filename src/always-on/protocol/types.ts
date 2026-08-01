@@ -1,16 +1,12 @@
 /**
- * Always-On protocol types. See `docs/always-on/02-pilotdeck-always-on-rewrite-plan.md`.
+ * Always-On protocol types. See `docs/always-on/02-sati-always-on-rewrite-plan.md`.
  *
  * These types are storage-shaped and runtime-shaped; they describe what gets
  * serialized to disk and what flows through the runtime modules. They should
  * not depend on agent/model/tool internals.
  */
 
-export type AlwaysOnDiscoveryOutcome =
-  | "executed"
-  | "no_plan"
-  | "failed"
-  | "aborted";
+export type AlwaysOnDiscoveryOutcome = "executed" | "no_plan" | "failed" | "aborted";
 
 export type AlwaysOnDormantState = {
   since: string;
@@ -53,13 +49,7 @@ export type AlwaysOnChannelLease = {
   lastUserMsgAt?: string | null;
 };
 
-export type DiscoveryPlanStatus =
-  | "ready"
-  | "executing"
-  | "completed"
-  | "completed_no_report"
-  | "failed"
-  | "archived";
+export type DiscoveryPlanStatus = "ready" | "executing" | "completed" | "completed_no_report" | "failed" | "archived";
 
 export type WorkCycleStatus = "active" | "applying" | "applied" | "archived";
 
@@ -146,9 +136,7 @@ export type GateBlockReason =
   | "lock_busy"
   | "cycle_full";
 
-export type GateResult =
-  | { ok: true; lease?: AlwaysOnChannelLease }
-  | { ok: false; reason: GateBlockReason };
+export type GateResult = { ok: true; lease?: AlwaysOnChannelLease } | { ok: false; reason: GateBlockReason };
 
 export type AlwaysOnEventPhase =
   | "discovery_started"

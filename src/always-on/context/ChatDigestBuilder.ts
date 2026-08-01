@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/paths.js";
-import { listProjectSessions, type SessionInfo } from "../../session/storage/SessionList.js";
+import { listProjectSessions } from "../../session/storage/SessionList.js";
 import { readSessionLite } from "../../session/storage/SessionLiteReader.js";
 
 export type ChatSessionDigest = {
@@ -39,9 +39,7 @@ const DIGEST_EXCLUDED_PREFIXES = ["always-on-execute:"];
  * into the Always-On discovery prompt. Uses the lightweight head+tail
  * reader so it never reads more than 128 KB per session file.
  */
-export async function buildChatDigest(
-  options: BuildChatDigestOptions,
-): Promise<ChatDigest> {
+export async function buildChatDigest(options: BuildChatDigestOptions): Promise<ChatDigest> {
   const maxSessions = options.maxSessions ?? DEFAULT_MAX_SESSIONS;
   const maxPrompts = options.maxPromptsPerSession ?? DEFAULT_MAX_PROMPTS_PER_SESSION;
   const maxLen = options.maxPromptLength ?? DEFAULT_MAX_PROMPT_LENGTH;
@@ -52,9 +50,7 @@ export async function buildChatDigest(
     pilotHome: options.pilotHome,
     includeInternal: false,
   });
-  const sessions = allSessions.filter(
-    (s) => !DIGEST_EXCLUDED_PREFIXES.some((p) => s.sessionId.startsWith(p)),
-  );
+  const sessions = allSessions.filter(s => !DIGEST_EXCLUDED_PREFIXES.some(p => s.sessionId.startsWith(p)));
 
   const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
   const digests: ChatSessionDigest[] = [];
@@ -98,11 +94,7 @@ export async function buildChatDigest(
  *
  * We deduplicate by text identity (head and tail may overlap for small files).
  */
-export function extractAllUserPrompts(
-  source: string,
-  maxPrompts: number,
-  maxLength: number,
-): string[] {
+export function extractAllUserPrompts(source: string, maxPrompts: number, maxLength: number): string[] {
   const seen = new Set<string>();
   const prompts: string[] = [];
 
@@ -112,11 +104,12 @@ export function extractAllUserPrompts(
       const entry = JSON.parse(line) as {
         messages?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
       };
-      const texts = entry.messages
-        ?.flatMap((m) => m.content ?? [])
-        .filter((b): b is { type: string; text: string } => b.type === "text" && typeof b.text === "string")
-        .map((b) => b.text.trim())
-        .filter((t) => t.length > 0) ?? [];
+      const texts =
+        entry.messages
+          ?.flatMap(m => m.content ?? [])
+          .filter((b): b is { type: string; text: string } => b.type === "text" && typeof b.text === "string")
+          .map(b => b.text.trim())
+          .filter(t => t.length > 0) ?? [];
 
       for (const text of texts) {
         if (seen.has(text)) continue;

@@ -6,12 +6,12 @@ import { parseModelConfig } from "../../model/config/parseModelConfig.js";
 import { isRecord } from "../../model/config/schema.js";
 import { ModelConfigError } from "../../model/protocol/errors.js";
 import { getPilotConfigFilePath, getPilotMemoryRootDir, resolvePilotHome } from "../paths.js";
+import { parseRouterConfig } from "../../router/config/parseRouterConfig.js";
 import { sha256, stableStringify } from "./hash.js";
 import { mergeConfigSources } from "./merge.js";
 import { parseMemoryConfig } from "./parseMemoryConfig.js";
 import { parseAdaptersConfig, parseGatewayConfig } from "./parseGatewayConfig.js";
 import { parseToolsConfig } from "./parseToolsConfig.js";
-import { parseRouterConfig } from "../../router/config/parseRouterConfig.js";
 import { redactConfig } from "./redact.js";
 import {
   PilotConfigError,
@@ -28,9 +28,7 @@ import {
 } from "./types.js";
 
 const SUPPORTED_SCHEMA_VERSION = 1;
-const ENV_CONFIG_OVERRIDES = [
-  ["PILOT_AGENT_MODEL", ["agent", "model"]],
-] as const;
+const ENV_CONFIG_OVERRIDES = [["PILOT_AGENT_MODEL", ["agent", "model"]]] as const;
 
 export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConfigSnapshot {
   const env = options.env ?? process.env;
@@ -39,15 +37,6 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   const sources: PilotConfigSource[] = [];
 
   const pilotHome = resolvePilotHome(env);
-  if (env.PILOT_HOME) {
-    sources.push({
-      kind: "env",
-      phase: "bootstrap",
-      priority: 30,
-      loadedAt,
-      contentHash: sha256("PILOT_HOME=<redacted-path>"),
-    });
-  }
 
   const defaultConfigPath = getPilotConfigFilePath(pilotHome);
   const defaultConfig = readYamlSource(defaultConfigPath, "default", 10, loadedAt, diagnostics, sources);
@@ -100,7 +89,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
     // Soft-recover instead of crashing: many users update agent.model through
     // onboarding/UI without touching the router block, leaving the two out of
     // sync. Treating that as fatal locks them out of the gateway entirely
-    // (see issue: customer reinstall doesn't help because pilotdeck.yaml
+    // (see issue: customer reinstall doesn't help because sati.yaml
     // survives the wipe). Auto-align router.scenarios.default to agent.model
     // and warn — agent.model is the canonical source of truth.
     const previousId = router.scenarios.default.id;
@@ -211,7 +200,7 @@ function readYamlSource(
         message: `Failed to parse ${kind} config YAML.`,
         path,
         source: { kind, path },
-        hint: document.errors.map((yamlError) => yamlError.message).join("; "),
+        hint: document.errors.map(yamlError => yamlError.message).join("; "),
         recoverable: false,
       });
       return undefined;
@@ -289,7 +278,7 @@ function validateTopLevel(rawConfig: PilotRawConfig, diagnostics: PilotConfigDia
     diagnostics.push({
       code: "CONFIG_PILOT_SECTION_FORBIDDEN",
       severity: "fatal",
-      message: "YAML config must not contain a pilot section. Use PILOT_HOME for PilotHome.",
+      message: "YAML config must not contain a pilot section. Use SATI_HOME for the Sati home directory.",
       path: "pilot",
       recoverable: false,
     });
@@ -308,9 +297,9 @@ function validateTopLevel(rawConfig: PilotRawConfig, diagnostics: PilotConfigDia
     "cron",
     "tools",
     "proxy",
-    // Reserved namespace for ui/server (Web UI Express bridge). The PilotDeck
+    // Reserved namespace for ui/server (Web UI Express bridge). The Sati
     // gateway does not parse `webui.*` itself but tolerates it so a single
-    // ~/.pilotdeck/pilotdeck.yaml can carry both gateway-side and ui-side
+    // ~/.sati/sati.yaml can carry both gateway-side and ui-side
     // config without producing diagnostic noise.
     "webui",
     "telemetry",
@@ -472,10 +461,7 @@ function parseAgentModelSelection(
   };
 }
 
-function parseSchemaVersion(
-  value: unknown,
-  diagnostics: PilotConfigDiagnostic[],
-): number {
+function parseSchemaVersion(value: unknown, diagnostics: PilotConfigDiagnostic[]): number {
   if (value === undefined) {
     diagnostics.push({
       code: "CONFIG_SCHEMA_VERSION_MISSING",
@@ -501,11 +487,7 @@ function parseSchemaVersion(
   return SUPPORTED_SCHEMA_VERSION;
 }
 
-function parseModel(
-  rawModel: unknown,
-  env: Record<string, string | undefined>,
-  diagnostics: PilotConfigDiagnostic[],
-) {
+function parseModel(rawModel: unknown, env: Record<string, string | undefined>, diagnostics: PilotConfigDiagnostic[]) {
   try {
     return parseModelConfig(rawModel, { env });
   } catch (error) {
@@ -608,13 +590,9 @@ function readOptionalPositiveInteger(value: unknown, path: string): number | und
 }
 
 function throwConfigErrorIfFatal(diagnostics: PilotConfigDiagnostic[]): void {
-  const fatalDiagnostics = diagnostics.filter((diagnostic) => diagnostic.severity === "fatal");
+  const fatalDiagnostics = diagnostics.filter(diagnostic => diagnostic.severity === "fatal");
   if (fatalDiagnostics.length > 0) {
-    throw new PilotConfigError(
-      fatalDiagnostics[0].code,
-      fatalDiagnostics[0].message,
-      diagnostics,
-    );
+    throw new PilotConfigError(fatalDiagnostics[0].code, fatalDiagnostics[0].message, diagnostics);
   }
 }
 
@@ -661,7 +639,7 @@ function parseProxyConfig(
           severity: "info",
           message:
             "webui.runtime.httpsProxy has been migrated to the top-level proxy.url field. " +
-            "Please update your pilotdeck.yaml to use proxy.url instead.",
+            "Please update your sati.yaml to use proxy.url instead.",
           path: "webui.runtime.httpsProxy",
           recoverable: true,
         });

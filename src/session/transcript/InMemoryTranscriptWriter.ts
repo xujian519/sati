@@ -1,9 +1,8 @@
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
-import type { AgentControlBoundaryTranscriptEntry, SessionMetadataValue } from "./TranscriptEntry.js";
-import type { AgentStatusMessageInput } from "./TranscriptWriter.js";
-import type { AgentTranscriptWriter, AgentTranscriptWriterState } from "./TranscriptWriter.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
+import type { AgentControlBoundaryTranscriptEntry, SessionMetadataValue } from "./TranscriptEntry.js";
+import type { AgentStatusMessageInput, AgentTranscriptWriter, AgentTranscriptWriterState } from "./TranscriptWriter.js";
 
 export type InMemoryTranscriptEntry =
   | {
@@ -14,7 +13,7 @@ export type InMemoryTranscriptEntry =
       metadata?: Record<string, unknown>;
     }
   | { type: "durable_message"; sessionId: string; turnId: string; message: CanonicalMessage }
-  | { type: "agent_status_message"; sessionId: string; turnId: string } & AgentStatusMessageInput
+  | ({ type: "agent_status_message"; sessionId: string; turnId: string } & AgentStatusMessageInput)
   | { type: "file_artifacts"; sessionId: string; turnId: string; artifacts: FileArtifact[] }
   | { type: "turn_result"; sessionId: string; turnId: string; result: AgentTurnResult }
   | { type: "session_metadata"; sessionId: string; turnId: string; metadata: SessionMetadataValue }

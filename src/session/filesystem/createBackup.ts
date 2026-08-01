@@ -31,9 +31,7 @@ export type CreateBackupResult = {
  *   4. `copyFile` (async) to `<backupDir>/<sha16(filePath)>@v<version>`.
  *   5. Preserve the original mode via explicit `chmod` (F10).
  */
-export async function createBackup(
-  options: CreateBackupOptions,
-): Promise<CreateBackupResult> {
+export async function createBackup(options: CreateBackupOptions): Promise<CreateBackupResult> {
   const now = options.now ?? (() => new Date());
   let stat;
   try {
@@ -78,7 +76,5 @@ export async function createBackup(
 }
 
 function isNotFoundError(err: unknown): boolean {
-  return Boolean(
-    err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "ENOENT",
-  );
+  return Boolean(err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "ENOENT");
 }

@@ -1,16 +1,16 @@
-import React from 'react';
-import { useTranslation } from 'react-i18next';
-import type { PendingPermissionRequest } from '../../types/types';
-import { buildPilotDeckToolPermissionEntry, formatToolInputForDisplay } from '../../utils/chatPermissions';
-import { getPilotDeckSettings } from '../../utils/chatStorage';
-import { getPermissionPanel, registerPermissionPanel } from '../../tools/configs/permissionPanelRegistry';
-import { AskUserQuestionPanel, ExitPlanModePanel } from '../../tools/components/InteractiveRenderers';
+import React from "react";
+import { useTranslation } from "react-i18next";
+import type { PendingPermissionRequest } from "../../types/types";
+import { buildSatiToolPermissionEntry, formatToolInputForDisplay } from "../../utils/chatPermissions";
+import { getSatiSettings } from "../../utils/chatStorage";
+import { getPermissionPanel, registerPermissionPanel } from "../../tools/configs/permissionPanelRegistry";
+import { AskUserQuestionPanel, ExitPlanModePanel } from "../../tools/components/InteractiveRenderers";
 
-registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
-registerPermissionPanel('ask_user_question', AskUserQuestionPanel);
-registerPermissionPanel('ExitPlanMode', ExitPlanModePanel);
-registerPermissionPanel('exit_plan_mode', ExitPlanModePanel);
-registerPermissionPanel('ExitPlanModeV2', ExitPlanModePanel);
+registerPermissionPanel("AskUserQuestion", AskUserQuestionPanel);
+registerPermissionPanel("ask_user_question", AskUserQuestionPanel);
+registerPermissionPanel("ExitPlanMode", ExitPlanModePanel);
+registerPermissionPanel("exit_plan_mode", ExitPlanModePanel);
+registerPermissionPanel("ExitPlanModeV2", ExitPlanModePanel);
 
 interface PermissionRequestsBannerProps {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -28,7 +28,7 @@ export default function PermissionRequestsBanner({
   handleGrantToolPermission,
   onPlanExecutionApproved,
 }: PermissionRequestsBannerProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation("chat");
 
   if (!pendingPermissionRequests.length) {
     return null;
@@ -43,7 +43,7 @@ export default function PermissionRequestsBanner({
       continue;
     }
     const rawInput = formatToolInputForDisplay(request.input);
-    const entry = buildPilotDeckToolPermissionEntry(request.toolName, rawInput) ?? request.requestId;
+    const entry = buildSatiToolPermissionEntry(request.toolName, rawInput) ?? request.requestId;
     const group = grouped.get(entry);
     if (group) {
       group.push(request);
@@ -54,7 +54,7 @@ export default function PermissionRequestsBanner({
 
   return (
     <div className="mb-3 space-y-2">
-      {customPanelRequests.map((request) => {
+      {customPanelRequests.map(request => {
         const CustomPanel = getPermissionPanel(request.toolName)!;
         return (
           <CustomPanel
@@ -68,12 +68,12 @@ export default function PermissionRequestsBanner({
 
       {Array.from(grouped.entries()).map(([entry, requests]) => {
         const first = requests[0];
-        const allIds = requests.map((r) => r.requestId);
+        const allIds = requests.map(r => r.requestId);
         const rawInput = formatToolInputForDisplay(first.input);
-        const permissionEntry = buildPilotDeckToolPermissionEntry(first.toolName, rawInput);
-        const settings = getPilotDeckSettings();
+        const permissionEntry = buildSatiToolPermissionEntry(first.toolName, rawInput);
+        const settings = getSatiSettings();
         const alreadyAllowed = permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
-        const rememberLabel = alreadyAllowed ? t('permissionBanner.allowSaved') : t('permissionBanner.allowRemember');
+        const rememberLabel = alreadyAllowed ? t("permissionBanner.allowSaved") : t("permissionBanner.allowRemember");
 
         return (
           <div
@@ -84,16 +84,16 @@ export default function PermissionRequestsBanner({
               <div>
                 <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
                   {requests.length > 1
-                    ? t('permissionBanner.titleCount', { count: requests.length })
-                    : t('permissionBanner.title')}
+                    ? t("permissionBanner.titleCount", { count: requests.length })
+                    : t("permissionBanner.title")}
                 </div>
                 <div className="text-xs text-amber-800 dark:text-amber-200">
-                  {t('permissionBanner.tool')} <span className="font-mono">{first.toolName}</span>
+                  {t("permissionBanner.tool")} <span className="font-mono">{first.toolName}</span>
                 </div>
               </div>
               {permissionEntry && (
                 <div className="text-xs text-amber-700 dark:text-amber-300">
-                  {t('permissionBanner.allowRule')} <span className="font-mono">{permissionEntry}</span>
+                  {t("permissionBanner.allowRule")} <span className="font-mono">{permissionEntry}</span>
                 </div>
               )}
             </div>
@@ -101,7 +101,7 @@ export default function PermissionRequestsBanner({
             {requests.length <= 1 && rawInput && (
               <details className="mt-2">
                 <summary className="cursor-pointer text-xs text-amber-800 hover:text-amber-900 dark:text-amber-200 dark:hover:text-amber-100">
-                  {t('permissionBanner.viewToolInput')}
+                  {t("permissionBanner.viewToolInput")}
                 </summary>
                 <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-amber-200/60 bg-white/80 p-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-gray-900/60 dark:text-amber-100">
                   {rawInput}
@@ -112,13 +112,16 @@ export default function PermissionRequestsBanner({
             {requests.length > 1 && (
               <details className="mt-2">
                 <summary className="cursor-pointer text-xs text-amber-800 hover:text-amber-900 dark:text-amber-200 dark:hover:text-amber-100">
-                  {t('permissionBanner.viewToolInputs', { count: requests.length })}
+                  {t("permissionBanner.viewToolInputs", { count: requests.length })}
                 </summary>
                 <div className="mt-2 space-y-1">
-                  {requests.map((r) => {
+                  {requests.map(r => {
                     const inp = formatToolInputForDisplay(r.input);
                     return inp ? (
-                      <pre key={r.requestId} className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md border border-amber-200/60 bg-white/80 p-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-gray-900/60 dark:text-amber-100">
+                      <pre
+                        key={r.requestId}
+                        className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md border border-amber-200/60 bg-white/80 p-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-gray-900/60 dark:text-amber-100"
+                      >
                         {inp}
                       </pre>
                     ) : null;
@@ -133,7 +136,7 @@ export default function PermissionRequestsBanner({
                 onClick={() => handlePermissionDecision(allIds, { allow: true })}
                 className="inline-flex items-center gap-2 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700"
               >
-                {t('permissionBanner.allowOnce')}
+                {t("permissionBanner.allowOnce")}
               </button>
               <button
                 type="button"
@@ -145,8 +148,8 @@ export default function PermissionRequestsBanner({
                 }}
                 className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
                   permissionEntry
-                    ? 'border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/30'
-                    : 'cursor-not-allowed border-gray-300 text-gray-400'
+                    ? "border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/30"
+                    : "cursor-not-allowed border-gray-300 text-gray-400"
                 }`}
                 disabled={!permissionEntry}
               >
@@ -154,10 +157,10 @@ export default function PermissionRequestsBanner({
               </button>
               <button
                 type="button"
-                onClick={() => handlePermissionDecision(allIds, { allow: false, message: 'User denied tool use' })}
+                onClick={() => handlePermissionDecision(allIds, { allow: false, message: "User denied tool use" })}
                 className="inline-flex items-center gap-2 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/30"
               >
-                {t('permissionBanner.deny')}
+                {t("permissionBanner.deny")}
               </button>
             </div>
           </div>

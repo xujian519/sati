@@ -1,17 +1,9 @@
-import { Fragment, useEffect, useRef } from 'react';
-import type { CSSProperties } from 'react';
-import { useTranslation } from 'react-i18next';
-import {
-  Box,
-  ChevronRight,
-  FolderGit2,
-  LayoutGrid,
-  Pin,
-  Sparkles,
-  User,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { cn } from '../../../../lib/utils.js';
+import { Fragment, useEffect, useRef } from "react";
+import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
+import { Box, ChevronRight, FolderGit2, LayoutGrid, Pin, Sparkles, User } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { cn } from "../../../../lib/utils.js";
 
 type CommandMenuCommand = {
   name: string;
@@ -46,36 +38,34 @@ const namespaceIcons: Record<string, LucideIcon> = {
 };
 
 const getCommandKey = (command: CommandMenuCommand) =>
-  `${command.name}::${command.namespace || command.type || 'other'}::${command.path || ''}`;
+  `${command.name}::${command.namespace || command.type || "other"}::${command.path || ""}`;
 
-const getNamespace = (command: CommandMenuCommand) =>
-  command.namespace || command.type || 'other';
+const getNamespace = (command: CommandMenuCommand) => command.namespace || command.type || "other";
 
-const getNamespaceLabel = (namespace: string) =>
-  namespace.charAt(0).toUpperCase() + namespace.slice(1);
+const getNamespaceLabel = (namespace: string) => namespace.charAt(0).toUpperCase() + namespace.slice(1);
 
 // Anchor the menu to the textarea: above on desktop, full-bleed bottom sheet on
 // mobile. Returns inline styles so we can mix calculated coords with Tailwind
 // classes for visual treatment.
 const getMenuPosition = (position: { top: number; left: number; bottom?: number }): CSSProperties => {
-  if (typeof window === 'undefined') {
-    return { position: 'fixed', top: '16px', left: '16px' };
+  if (typeof window === "undefined") {
+    return { position: "fixed", top: "16px", left: "16px" };
   }
   if (window.innerWidth < 640) {
     return {
-      position: 'fixed',
+      position: "fixed",
       bottom: `${position.bottom ?? 90}px`,
-      left: '16px',
-      right: '16px',
-      maxHeight: 'min(50vh, 320px)',
+      left: "16px",
+      right: "16px",
+      maxHeight: "min(50vh, 320px)",
     };
   }
   return {
-    position: 'fixed',
+    position: "fixed",
     top: `${Math.max(16, Math.min(position.top, window.innerHeight - 336))}px`,
     left: `${position.left}px`,
-    width: 'min(420px, calc(100vw - 32px))',
-    maxHeight: '320px',
+    width: "min(420px, calc(100vw - 32px))",
+    maxHeight: "320px",
   };
 };
 
@@ -87,7 +77,7 @@ export default function CommandMenu({
   position = { top: 0, left: 0 },
   isOpen = false,
 }: CommandMenuProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation("chat");
   const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const menuPosition = getMenuPosition(position);
@@ -104,8 +94,8 @@ export default function CommandMenu({
         onClose();
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen, onClose]);
 
   useEffect(() => {
@@ -115,7 +105,7 @@ export default function CommandMenu({
     const menuRect = menuRef.current.getBoundingClientRect();
     const itemRect = selectedItemRef.current.getBoundingClientRect();
     if (itemRect.bottom > menuRect.bottom || itemRect.top < menuRect.top) {
-      selectedItemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      selectedItemRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }, [selectedIndex]);
 
@@ -124,18 +114,18 @@ export default function CommandMenu({
   }
 
   const containerClass = cn(
-    'overflow-y-auto rounded-lg border bg-white shadow-lg',
-    'border-neutral-200 dark:border-neutral-800 dark:bg-neutral-900',
+    "overflow-y-auto rounded-lg border bg-white shadow-lg",
+    "border-neutral-200 dark:border-neutral-800 dark:bg-neutral-900",
   );
 
   if (commands.length === 0) {
     return (
       <div
         ref={menuRef}
-        className={cn(containerClass, 'px-4 py-5 text-center text-[13px] text-neutral-500 dark:text-neutral-400')}
+        className={cn(containerClass, "px-4 py-5 text-center text-[13px] text-neutral-500 dark:text-neutral-400")}
         style={{ ...menuPosition, zIndex: 1000 }}
       >
-        {t('commandMenu.empty', { defaultValue: 'No commands available' })}
+        {t("commandMenu.empty", { defaultValue: "No commands available" })}
       </div>
     );
   }
@@ -147,7 +137,7 @@ export default function CommandMenu({
       ref={menuRef}
       role="listbox"
       aria-label="Available commands"
-      className={cn(containerClass, 'p-1')}
+      className={cn(containerClass, "p-1")}
       style={{ ...menuPosition, zIndex: 1000 }}
     >
       {commands.map((command, commandIndex) => {
@@ -161,8 +151,8 @@ export default function CommandMenu({
             {showHeader ? (
               <div
                 className={cn(
-                  'px-2 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400',
-                  commandIndex > 0 && 'mt-1 border-t border-neutral-100 pt-2 dark:border-neutral-800',
+                  "px-2 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400",
+                  commandIndex > 0 && "mt-1 border-t border-neutral-100 pt-2 dark:border-neutral-800",
                 )}
               >
                 {t(`commandMenu.groups.${namespace}`, {
@@ -175,19 +165,14 @@ export default function CommandMenu({
               role="option"
               aria-selected={isSelected}
               className={cn(
-                'group relative flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-2 transition-colors',
-                isSelected
-                  ? 'bg-neutral-100 dark:bg-neutral-800'
-                  : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/60',
+                "group relative flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-2 transition-colors",
+                isSelected ? "bg-neutral-100 dark:bg-neutral-800" : "hover:bg-neutral-50 dark:hover:bg-neutral-800/60",
               )}
               onMouseEnter={() => onSelect?.(command, commandIndex, true)}
               onClick={() => onSelect?.(command, commandIndex, false)}
-              onMouseDown={(event) => event.preventDefault()}
+              onMouseDown={event => event.preventDefault()}
             >
-              <Icon
-                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-neutral-400"
-                strokeWidth={1.75}
-              />
+              <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-neutral-400" strokeWidth={1.75} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[13px] font-medium text-neutral-900 dark:text-neutral-100">

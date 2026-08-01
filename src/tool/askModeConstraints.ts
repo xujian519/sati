@@ -3,7 +3,7 @@
  * `default` or `bypassPermissions`, but it must not grant write access.
  */
 
-import type { PilotDeckToolDefinition } from "./protocol/types.js";
+import type { SatiToolDefinition } from "./protocol/types.js";
 import { isReadOnlyShellCommand } from "./builtin/bash/permissions.js";
 
 export const ASK_MODE_ALLOWED_TOOLS = new Set([
@@ -26,13 +26,15 @@ export const ASK_MODE_ALLOWED_TOOLS = new Set([
 
 export const ASK_MODE_DESCRIPTION_SUFFIX: Record<string, string> = {
   bash: "\n\n[ASK MODE] READ-ONLY commands only. Write/modify/delete commands will be rejected.",
-  agent: "\n\n[ASK MODE] Subagents inherit ask mode and the same permission setting. They can read and search, but cannot modify files.",
-  execute_code: "\n\n[ASK MODE] READ-ONLY Python scripts only. Scripts that call write_file, edit_file, or non-read-only bash commands will be rejected.",
+  agent:
+    "\n\n[ASK MODE] Subagents inherit ask mode and the same permission setting. They can read and search, but cannot modify files.",
+  execute_code:
+    "\n\n[ASK MODE] READ-ONLY Python scripts only. Scripts that call write_file, edit_file, or non-read-only bash commands will be rejected.",
 };
 
 const ASK_MODE_VIOLATION_HEADER = "[ASK_MODE_VIOLATION]";
 
-export function isAskModeAllowedTool(tool: PilotDeckToolDefinition): boolean {
+export function isAskModeAllowedTool(tool: SatiToolDefinition): boolean {
   if (tool.kind === "mcp") {
     return tool.isReadOnly({} as never);
   }
@@ -58,10 +60,7 @@ export function buildAskModeBashViolationMessage(command: string): string {
   ].join("\n");
 }
 
-export function getAskModeViolation(
-  tool: PilotDeckToolDefinition,
-  input: unknown,
-): string | undefined {
+export function getAskModeViolation(tool: SatiToolDefinition, input: unknown): string | undefined {
   if (!isAskModeAllowedTool(tool)) {
     return buildAskModeViolationMessage(tool.name);
   }

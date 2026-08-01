@@ -70,7 +70,7 @@ export async function convertWithLibreOffice(inputPath, options = {}) {
   const format = String(options.format || '').toLocaleLowerCase();
   if (!format) throw new Error('Conversion format is required');
   await fs.mkdir(outputDir, { recursive: true });
-  const profileRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pilotdeck-pptx-convert-profile-'));
+  const profileRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'sati-pptx-convert-profile-'));
   try {
     const filter = options.filter ? `${format}:${options.filter}` : format;
     run(soffice, [
@@ -95,7 +95,7 @@ async function atomicCopy(source, output, force) {
   await fs.mkdir(path.dirname(destination), { recursive: true });
   const staging = path.join(
     path.dirname(destination),
-    `.${path.basename(destination)}.pilotdeck-${process.pid}-${Date.now()}`,
+    `.${path.basename(destination)}.sati-${process.pid}-${Date.now()}`,
   );
   try {
     await fs.copyFile(source, staging);
@@ -129,7 +129,7 @@ export async function convertLegacyPpt(inputPath, outputPath, options = {}) {
     report: reportFile,
   };
   await fs.mkdir(qaDir, { recursive: true });
-  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'pilotdeck-ppt-convert-'));
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'sati-ppt-convert-'));
   try {
     if (path.extname(output).toLocaleLowerCase() !== '.pptx') {
       throw new Error('Legacy PowerPoint conversion output must use the .pptx extension');

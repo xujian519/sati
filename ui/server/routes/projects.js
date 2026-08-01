@@ -1,12 +1,9 @@
-import express from 'express';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { spawn } from 'child_process';
-import os from 'os';
-import {
-  addProjectManually,
-  extractProjectDirectory,
-} from '../projects.js';
+import express from "express";
+import { promises as fs } from "fs";
+import path from "path";
+import { spawn } from "child_process";
+import os from "os";
+import { addProjectManually, extractProjectDirectory } from "../projects.js";
 import {
   getProjectDiscoveryContext,
   getProjectDiscoveryPlansOverview,
@@ -15,13 +12,13 @@ import {
   getProjectWorkCycles,
   applyWorkCycle,
   archiveWorkCycle,
-} from '../discovery-plans.js';
+} from "../discovery-plans.js";
 
 const router = express.Router();
 
 function sanitizeGitError(message, token) {
   if (!message || !token) return message;
-  return message.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '***');
+  return message.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "***");
 }
 
 // Default root used by the folder browser when no path is provided.
@@ -30,33 +27,33 @@ export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 // System-critical paths that should never be used as workspace directories
 export const FORBIDDEN_PATHS = [
   // Unix
-  '/',
-  '/etc',
-  '/bin',
-  '/sbin',
-  '/usr',
-  '/dev',
-  '/proc',
-  '/sys',
-  '/var',
-  '/boot',
-  '/root',
-  '/lib',
-  '/lib64',
-  '/opt',
-  '/run',
+  "/",
+  "/etc",
+  "/bin",
+  "/sbin",
+  "/usr",
+  "/dev",
+  "/proc",
+  "/sys",
+  "/var",
+  "/boot",
+  "/root",
+  "/lib",
+  "/lib64",
+  "/opt",
+  "/run",
   // Windows
-  'C:\\Windows',
-  'C:\\Program Files',
-  'C:\\Program Files (x86)',
-  'C:\\ProgramData',
-  'C:\\System Volume Information',
-  'C:\\$Recycle.Bin'
+  "C:\\Windows",
+  "C:\\Program Files",
+  "C:\\Program Files (x86)",
+  "C:\\ProgramData",
+  "C:\\System Volume Information",
+  "C:\\$Recycle.Bin",
 ];
 
 function isForbiddenWorkspacePath(inputPath) {
   const normalizedPath = path.normalize(path.resolve(inputPath));
-  if (normalizedPath === '/' || FORBIDDEN_PATHS.includes(normalizedPath)) {
+  if (normalizedPath === "/" || FORBIDDEN_PATHS.includes(normalizedPath)) {
     return true;
   }
 
@@ -64,8 +61,8 @@ function isForbiddenWorkspacePath(inputPath) {
     if (normalizedPath === forbidden || normalizedPath.startsWith(forbidden + path.sep)) {
       // Exception: allow user-accessible temporary folders under /var.
       if (
-        forbidden === '/var' &&
-        (normalizedPath.startsWith('/var/tmp') || normalizedPath.startsWith('/var/folders'))
+        forbidden === "/var" &&
+        (normalizedPath.startsWith("/var/tmp") || normalizedPath.startsWith("/var/folders"))
       ) {
         continue;
       }
@@ -90,7 +87,7 @@ export async function validateWorkspacePath(requestedPath) {
     if (isForbiddenWorkspacePath(absolutePath)) {
       return {
         valid: false,
-        error: 'Cannot create workspace in system-critical directories'
+        error: "Cannot create workspace in system-critical directories",
       };
     }
 
@@ -101,7 +98,7 @@ export async function validateWorkspacePath(requestedPath) {
       await fs.access(absolutePath);
       realPath = await fs.realpath(absolutePath);
     } catch (error) {
-      if (error.code === 'ENOENT') {
+      if (error.code === "ENOENT") {
         // Path doesn't exist yet - check parent directory
         let parentPath = path.dirname(absolutePath);
         try {
@@ -110,7 +107,7 @@ export async function validateWorkspacePath(requestedPath) {
           // Reconstruct the full path with real parent
           realPath = path.join(parentRealPath, path.basename(absolutePath));
         } catch (parentError) {
-          if (parentError.code === 'ENOENT') {
+          if (parentError.code === "ENOENT") {
             // Parent doesn't exist either - use the absolute path as-is
             // We'll validate it's within allowed root
             realPath = absolutePath;
@@ -127,7 +124,7 @@ export async function validateWorkspacePath(requestedPath) {
     if (isForbiddenWorkspacePath(realPath)) {
       return {
         valid: false,
-        error: 'Resolved path points to a system-critical directory'
+        error: "Resolved path points to a system-critical directory",
       };
     }
 
@@ -145,12 +142,12 @@ export async function validateWorkspacePath(requestedPath) {
         if (isForbiddenWorkspacePath(realTarget)) {
           return {
             valid: false,
-            error: 'Symlink target points to a system-critical directory'
+            error: "Symlink target points to a system-critical directory",
           };
         }
       }
     } catch (error) {
-      if (error.code !== 'ENOENT') {
+      if (error.code !== "ENOENT") {
         throw error;
       }
       // Path doesn't exist - that's fine for new workspace creation
@@ -158,19 +155,18 @@ export async function validateWorkspacePath(requestedPath) {
 
     return {
       valid: true,
-      resolvedPath: realPath
+      resolvedPath: realPath,
     };
-
   } catch (error) {
     return {
       valid: false,
-      error: `Path validation failed: ${error.message}`
+      error: `Path validation failed: ${error.message}`,
     };
   }
 }
 
 function getTrimmedParam(value) {
-  return typeof value === 'string' ? value.trim() : '';
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function getDiscoveryPlanErrorMessage(error, fallback) {
@@ -181,16 +177,16 @@ function getDiscoveryPlanErrorMessage(error, fallback) {
 }
 
 function getDiscoveryPlanErrorStatus(error) {
-  if (error?.code === 'NOT_FOUND') {
+  if (error?.code === "NOT_FOUND") {
     return 404;
   }
-  if (error?.code === 'UNSUPPORTED_STRATEGY') {
+  if (error?.code === "UNSUPPORTED_STRATEGY") {
     return 400;
   }
-  if (error?.code === 'INVALID_STATE' || error?.code === 'MISSING_PLAN_BODY' || error?.code === 'MISSING_WORKSPACE') {
+  if (error?.code === "INVALID_STATE" || error?.code === "MISSING_PLAN_BODY" || error?.code === "MISSING_WORKSPACE") {
     return 409;
   }
-  if (error?.code === 'ALREADY_RUNNING') {
+  if (error?.code === "ALREADY_RUNNING") {
     return 409;
   }
   return 500;
@@ -200,7 +196,7 @@ export async function handleGetProjectDiscoveryPlans(req, res) {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
     if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
+      return res.status(400).json({ error: "projectName is required" });
     }
 
     const overview = await getProjectDiscoveryPlansOverview(projectName);
@@ -214,7 +210,7 @@ export async function handleGetProjectDiscoveryContext(req, res) {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
     if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
+      return res.status(400).json({ error: "projectName is required" });
     }
 
     const context = await getProjectDiscoveryContext(projectName);
@@ -229,83 +225,83 @@ export async function handleExecuteProjectDiscoveryPlan(req, res) {
     const projectName = getTrimmedParam(req.params?.projectName);
     const planId = getTrimmedParam(req.params?.planId);
     if (!projectName) {
-      return res.status(400).json({ error: 'projectName is required' });
+      return res.status(400).json({ error: "projectName is required" });
     }
     if (!planId) {
-      return res.status(400).json({ error: 'planId is required' });
+      return res.status(400).json({ error: "planId is required" });
     }
 
     const result = await rerunDiscoveryPlan(projectName, planId);
     return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to rerun discovery plan')
+      error: getDiscoveryPlanErrorMessage(error, "Failed to rerun discovery plan"),
     });
   }
 }
 
-router.get('/:projectName/discovery-context', handleGetProjectDiscoveryContext);
-router.get('/:projectName/discovery-plans', handleGetProjectDiscoveryPlans);
-router.post('/:projectName/discovery-plans/:planId/execute', handleExecuteProjectDiscoveryPlan);
+router.get("/:projectName/discovery-context", handleGetProjectDiscoveryContext);
+router.get("/:projectName/discovery-plans", handleGetProjectDiscoveryPlans);
+router.post("/:projectName/discovery-plans/:planId/execute", handleExecuteProjectDiscoveryPlan);
 
-router.get('/:projectName/discovery-plans/:planId/report', async (req, res) => {
+router.get("/:projectName/discovery-plans/:planId/report", async (req, res) => {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
     const planId = getTrimmedParam(req.params?.planId);
-    if (!projectName) return res.status(400).json({ error: 'projectName is required' });
-    if (!planId) return res.status(400).json({ error: 'planId is required' });
+    if (!projectName) return res.status(400).json({ error: "projectName is required" });
+    if (!planId) return res.status(400).json({ error: "planId is required" });
 
     const result = await getProjectDiscoveryPlanReport(projectName, planId);
     return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to read discovery plan report')
+      error: getDiscoveryPlanErrorMessage(error, "Failed to read discovery plan report"),
     });
   }
 });
 
-router.get('/:projectName/work-cycles', async (req, res) => {
+router.get("/:projectName/work-cycles", async (req, res) => {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
-    if (!projectName) return res.status(400).json({ error: 'projectName is required' });
+    if (!projectName) return res.status(400).json({ error: "projectName is required" });
 
     const result = await getProjectWorkCycles(projectName);
     return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to get work cycles')
+      error: getDiscoveryPlanErrorMessage(error, "Failed to get work cycles"),
     });
   }
 });
 
-router.post('/:projectName/work-cycles/:cycleId/apply', async (req, res) => {
+router.post("/:projectName/work-cycles/:cycleId/apply", async (req, res) => {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
     const cycleId = getTrimmedParam(req.params?.cycleId);
-    if (!projectName) return res.status(400).json({ error: 'projectName is required' });
-    if (!cycleId) return res.status(400).json({ error: 'cycleId is required' });
+    if (!projectName) return res.status(400).json({ error: "projectName is required" });
+    if (!cycleId) return res.status(400).json({ error: "cycleId is required" });
 
     const result = await applyWorkCycle(projectName, cycleId);
     return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to apply work cycle')
+      error: getDiscoveryPlanErrorMessage(error, "Failed to apply work cycle"),
     });
   }
 });
 
-router.post('/:projectName/work-cycles/:cycleId/archive', async (req, res) => {
+router.post("/:projectName/work-cycles/:cycleId/archive", async (req, res) => {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
     const cycleId = getTrimmedParam(req.params?.cycleId);
-    if (!projectName) return res.status(400).json({ error: 'projectName is required' });
-    if (!cycleId) return res.status(400).json({ error: 'cycleId is required' });
+    if (!projectName) return res.status(400).json({ error: "projectName is required" });
+    if (!cycleId) return res.status(400).json({ error: "cycleId is required" });
 
     const result = await archiveWorkCycle(projectName, cycleId);
     return res.json(result);
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
-      error: getDiscoveryPlanErrorMessage(error, 'Failed to archive work cycle')
+      error: getDiscoveryPlanErrorMessage(error, "Failed to archive work cycle"),
     });
   }
 });
@@ -321,16 +317,16 @@ router.post('/:projectName/work-cycles/:cycleId/archive', async (req, res) => {
  * - githubTokenId?: number (optional, ID of stored token)
  * - newGithubToken?: string (optional, one-time token)
  */
-router.post('/create-workspace', async (req, res) => {
+router.post("/create-workspace", async (req, res) => {
   try {
     const { workspaceType, path: workspacePath, githubUrl, githubTokenId, newGithubToken } = req.body;
 
     // Validate required fields
     if (!workspaceType || !workspacePath) {
-      return res.status(400).json({ error: 'workspaceType and path are required' });
+      return res.status(400).json({ error: "workspaceType and path are required" });
     }
 
-    if (!['existing', 'new'].includes(workspaceType)) {
+    if (!["existing", "new"].includes(workspaceType)) {
       return res.status(400).json({ error: 'workspaceType must be "existing" or "new"' });
     }
 
@@ -338,26 +334,26 @@ router.post('/create-workspace', async (req, res) => {
     const validation = await validateWorkspacePath(workspacePath);
     if (!validation.valid) {
       return res.status(400).json({
-        error: 'Invalid workspace path',
-        details: validation.error
+        error: "Invalid workspace path",
+        details: validation.error,
       });
     }
 
     const absolutePath = validation.resolvedPath;
 
     // Handle existing workspace
-    if (workspaceType === 'existing') {
+    if (workspaceType === "existing") {
       // Check if the path exists
       try {
         await fs.access(absolutePath);
         const stats = await fs.stat(absolutePath);
 
         if (!stats.isDirectory()) {
-          return res.status(400).json({ error: 'Path exists but is not a directory' });
+          return res.status(400).json({ error: "Path exists but is not a directory" });
         }
       } catch (error) {
-        if (error.code === 'ENOENT') {
-          return res.status(404).json({ error: 'Workspace path does not exist' });
+        if (error.code === "ENOENT") {
+          return res.status(404).json({ error: "Workspace path does not exist" });
         }
         throw error;
       }
@@ -368,12 +364,12 @@ router.post('/create-workspace', async (req, res) => {
       return res.json({
         success: true,
         project,
-        message: 'Existing workspace added successfully'
+        message: "Existing workspace added successfully",
       });
     }
 
     // Handle new workspace creation
-    if (workspaceType === 'new') {
+    if (workspaceType === "new") {
       // Create the directory if it doesn't exist
       await fs.mkdir(absolutePath, { recursive: true });
 
@@ -388,7 +384,7 @@ router.post('/create-workspace', async (req, res) => {
           if (!token) {
             // Clean up created directory
             await fs.rm(absolutePath, { recursive: true, force: true });
-            return res.status(404).json({ error: 'GitHub token not found' });
+            return res.status(404).json({ error: "GitHub token not found" });
           }
           githubToken = token.github_token;
         } else if (newGithubToken) {
@@ -396,16 +392,16 @@ router.post('/create-workspace', async (req, res) => {
         }
 
         // Extract repo name from URL for the clone destination
-        const normalizedUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
-        const repoName = normalizedUrl.split('/').pop() || 'repository';
+        const normalizedUrl = githubUrl.replace(/\/+$/, "").replace(/\.git$/, "");
+        const repoName = normalizedUrl.split("/").pop() || "repository";
         const clonePath = path.join(absolutePath, repoName);
 
         // Check if clone destination already exists to prevent data loss
         try {
           await fs.access(clonePath);
           return res.status(409).json({
-            error: 'Directory already exists',
-            details: `The destination path "${clonePath}" already exists. Please choose a different location or remove the existing directory.`
+            error: "Directory already exists",
+            details: `The destination path "${clonePath}" already exists. Please choose a different location or remove the existing directory.`,
           });
         } catch (err) {
           // Directory doesn't exist, which is what we want
@@ -433,7 +429,7 @@ router.post('/create-workspace', async (req, res) => {
         return res.json({
           success: true,
           project,
-          message: 'New workspace created and repository cloned successfully'
+          message: "New workspace created and repository cloned successfully",
         });
       }
 
@@ -443,15 +439,14 @@ router.post('/create-workspace', async (req, res) => {
       return res.json({
         success: true,
         project,
-        message: 'New workspace created successfully'
+        message: "New workspace created successfully",
       });
     }
-
   } catch (error) {
-    console.error('Error creating workspace:', error);
+    console.error("Error creating workspace:", error);
     res.status(500).json({
-      error: error.message || 'Failed to create workspace',
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message || "Failed to create workspace",
+      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 });
@@ -460,17 +455,17 @@ router.post('/create-workspace', async (req, res) => {
  * Helper function to get GitHub token from database
  */
 async function getGithubTokenById(tokenId, userId) {
-  const { db } = await import('../database/db.js');
+  const { db } = await import("../database/db.js");
 
-  const credential = db.prepare(
-    'SELECT * FROM user_credentials WHERE id = ? AND user_id = ? AND credential_type = ? AND is_active = 1'
-  ).get(tokenId, userId, 'github_token');
+  const credential = db
+    .prepare("SELECT * FROM user_credentials WHERE id = ? AND user_id = ? AND credential_type = ? AND is_active = 1")
+    .get(tokenId, userId, "github_token");
 
   // Return in the expected format (github_token field for compatibility)
   if (credential) {
     return {
       ...credential,
-      github_token: credential.credential_value
+      github_token: credential.credential_value,
     };
   }
 
@@ -481,12 +476,12 @@ async function getGithubTokenById(tokenId, userId) {
  * Clone repository with progress streaming (SSE)
  * GET /api/projects/clone-progress
  */
-router.get('/clone-progress', async (req, res) => {
+router.get("/clone-progress", async (req, res) => {
   const { path: workspacePath, githubUrl, githubTokenId, newGithubToken } = req.query;
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
   const sendEvent = (type, data) => {
@@ -495,14 +490,14 @@ router.get('/clone-progress', async (req, res) => {
 
   try {
     if (!workspacePath || !githubUrl) {
-      sendEvent('error', { message: 'workspacePath and githubUrl are required' });
+      sendEvent("error", { message: "workspacePath and githubUrl are required" });
       res.end();
       return;
     }
 
     const validation = await validateWorkspacePath(workspacePath);
     if (!validation.valid) {
-      sendEvent('error', { message: validation.error });
+      sendEvent("error", { message: validation.error });
       res.end();
       return;
     }
@@ -516,7 +511,7 @@ router.get('/clone-progress', async (req, res) => {
       const token = await getGithubTokenById(parseInt(githubTokenId), req.user.id);
       if (!token) {
         await fs.rm(absolutePath, { recursive: true, force: true });
-        sendEvent('error', { message: 'GitHub token not found' });
+        sendEvent("error", { message: "GitHub token not found" });
         res.end();
         return;
       }
@@ -525,14 +520,16 @@ router.get('/clone-progress', async (req, res) => {
       githubToken = newGithubToken;
     }
 
-    const normalizedUrl = githubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
-    const repoName = normalizedUrl.split('/').pop() || 'repository';
+    const normalizedUrl = githubUrl.replace(/\/+$/, "").replace(/\.git$/, "");
+    const repoName = normalizedUrl.split("/").pop() || "repository";
     const clonePath = path.join(absolutePath, repoName);
 
     // Check if clone destination already exists to prevent data loss
     try {
       await fs.access(clonePath);
-      sendEvent('error', { message: `Directory "${repoName}" already exists. Please choose a different location or remove the existing directory.` });
+      sendEvent("error", {
+        message: `Directory "${repoName}" already exists. Please choose a different location or remove the existing directory.`,
+      });
       res.end();
       return;
     } catch (err) {
@@ -544,86 +541,85 @@ router.get('/clone-progress', async (req, res) => {
       try {
         const url = new URL(githubUrl);
         url.username = githubToken;
-        url.password = '';
+        url.password = "";
         cloneUrl = url.toString();
       } catch (error) {
         // SSH URL or invalid - use as-is
       }
     }
 
-    sendEvent('progress', { message: `Cloning into '${repoName}'...` });
+    sendEvent("progress", { message: `Cloning into '${repoName}'...` });
 
-    const gitProcess = spawn('git', ['clone', '--progress', cloneUrl, clonePath], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+    const gitProcess = spawn("git", ["clone", "--progress", cloneUrl, clonePath], {
+      stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
-        GIT_TERMINAL_PROMPT: '0'
+        GIT_TERMINAL_PROMPT: "0",
       },
-      windowsHide: process.platform === 'win32'
+      windowsHide: process.platform === "win32",
     });
 
-    let lastError = '';
+    let lastError = "";
 
-    gitProcess.stdout.on('data', (data) => {
+    gitProcess.stdout.on("data", data => {
       const message = data.toString().trim();
       if (message) {
-        sendEvent('progress', { message });
+        sendEvent("progress", { message });
       }
     });
 
-    gitProcess.stderr.on('data', (data) => {
+    gitProcess.stderr.on("data", data => {
       const message = data.toString().trim();
       lastError = message;
       if (message) {
-        sendEvent('progress', { message });
+        sendEvent("progress", { message });
       }
     });
 
-    gitProcess.on('close', async (code) => {
+    gitProcess.on("close", async code => {
       if (code === 0) {
         try {
           const project = await addProjectManually(clonePath);
-          sendEvent('complete', { project, message: 'Repository cloned successfully' });
+          sendEvent("complete", { project, message: "Repository cloned successfully" });
         } catch (error) {
-          sendEvent('error', { message: `Clone succeeded but failed to add project: ${error.message}` });
+          sendEvent("error", { message: `Clone succeeded but failed to add project: ${error.message}` });
         }
       } else {
         const sanitizedError = sanitizeGitError(lastError, githubToken);
-        let errorMessage = 'Git clone failed';
-        if (lastError.includes('Authentication failed') || lastError.includes('could not read Username')) {
-          errorMessage = 'Authentication failed. Please check your credentials.';
-        } else if (lastError.includes('Repository not found')) {
-          errorMessage = 'Repository not found. Please check the URL and ensure you have access.';
-        } else if (lastError.includes('already exists')) {
-          errorMessage = 'Directory already exists';
+        let errorMessage = "Git clone failed";
+        if (lastError.includes("Authentication failed") || lastError.includes("could not read Username")) {
+          errorMessage = "Authentication failed. Please check your credentials.";
+        } else if (lastError.includes("Repository not found")) {
+          errorMessage = "Repository not found. Please check the URL and ensure you have access.";
+        } else if (lastError.includes("already exists")) {
+          errorMessage = "Directory already exists";
         } else if (sanitizedError) {
           errorMessage = sanitizedError;
         }
         try {
           await fs.rm(clonePath, { recursive: true, force: true });
         } catch (cleanupError) {
-          console.error('Failed to clean up after clone failure:', sanitizeGitError(cleanupError.message, githubToken));
+          console.error("Failed to clean up after clone failure:", sanitizeGitError(cleanupError.message, githubToken));
         }
-        sendEvent('error', { message: errorMessage });
+        sendEvent("error", { message: errorMessage });
       }
       res.end();
     });
 
-    gitProcess.on('error', (error) => {
-      if (error.code === 'ENOENT') {
-        sendEvent('error', { message: 'Git is not installed or not in PATH' });
+    gitProcess.on("error", error => {
+      if (error.code === "ENOENT") {
+        sendEvent("error", { message: "Git is not installed or not in PATH" });
       } else {
-        sendEvent('error', { message: error.message });
+        sendEvent("error", { message: error.message });
       }
       res.end();
     });
 
-    req.on('close', () => {
+    req.on("close", () => {
       gitProcess.kill();
     });
-
   } catch (error) {
-    sendEvent('error', { message: error.message });
+    sendEvent("error", { message: error.message });
     res.end();
   }
 });
@@ -639,45 +635,45 @@ function cloneGitHubRepository(githubUrl, destinationPath, githubToken = null) {
       try {
         const url = new URL(githubUrl);
         url.username = githubToken;
-        url.password = '';
+        url.password = "";
         cloneUrl = url.toString();
       } catch (error) {
         // SSH URL - use as-is
       }
     }
 
-    const gitProcess = spawn('git', ['clone', '--progress', cloneUrl, destinationPath], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+    const gitProcess = spawn("git", ["clone", "--progress", cloneUrl, destinationPath], {
+      stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
-        GIT_TERMINAL_PROMPT: '0'
+        GIT_TERMINAL_PROMPT: "0",
       },
-      windowsHide: process.platform === 'win32'
+      windowsHide: process.platform === "win32",
     });
 
-    let stdout = '';
-    let stderr = '';
+    let stdout = "";
+    let stderr = "";
 
-    gitProcess.stdout.on('data', (data) => {
+    gitProcess.stdout.on("data", data => {
       stdout += data.toString();
     });
 
-    gitProcess.stderr.on('data', (data) => {
+    gitProcess.stderr.on("data", data => {
       stderr += data.toString();
     });
 
-    gitProcess.on('close', (code) => {
+    gitProcess.on("close", code => {
       if (code === 0) {
         resolve({ stdout, stderr });
       } else {
-        let errorMessage = 'Git clone failed';
+        let errorMessage = "Git clone failed";
 
-        if (stderr.includes('Authentication failed') || stderr.includes('could not read Username')) {
-          errorMessage = 'Authentication failed. Please check your GitHub token.';
-        } else if (stderr.includes('Repository not found')) {
-          errorMessage = 'Repository not found. Please check the URL and ensure you have access.';
-        } else if (stderr.includes('already exists')) {
-          errorMessage = 'Directory already exists';
+        if (stderr.includes("Authentication failed") || stderr.includes("could not read Username")) {
+          errorMessage = "Authentication failed. Please check your GitHub token.";
+        } else if (stderr.includes("Repository not found")) {
+          errorMessage = "Repository not found. Please check the URL and ensure you have access.";
+        } else if (stderr.includes("already exists")) {
+          errorMessage = "Directory already exists";
         } else if (stderr) {
           errorMessage = stderr;
         }
@@ -686,9 +682,9 @@ function cloneGitHubRepository(githubUrl, destinationPath, githubToken = null) {
       }
     });
 
-    gitProcess.on('error', (error) => {
-      if (error.code === 'ENOENT') {
-        reject(new Error('Git is not installed or not in PATH'));
+    gitProcess.on("error", error => {
+      if (error.code === "ENOENT") {
+        reject(new Error("Git is not installed or not in PATH"));
       } else {
         reject(error);
       }

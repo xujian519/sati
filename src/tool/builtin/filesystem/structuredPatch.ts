@@ -15,13 +15,15 @@ export function buildStructuredPatch(oldContent: string | null, newContent: stri
   if (oldContent === null) {
     const addedLines = splitLines(newContent);
     if (addedLines.length === 0) return [];
-    return [{
-      oldStart: 1,
-      oldLines: 0,
-      newStart: 1,
-      newLines: addedLines.length,
-      lines: addedLines.map((text) => ({ type: "add" as const, text })),
-    }];
+    return [
+      {
+        oldStart: 1,
+        oldLines: 0,
+        newStart: 1,
+        newLines: addedLines.length,
+        lines: addedLines.map(text => ({ type: "add" as const, text })),
+      },
+    ];
   }
 
   if (oldContent === newContent) {
@@ -37,9 +39,9 @@ export function buildStructuredPatch(oldContent: string | null, newContent: stri
 
   let suffix = 0;
   while (
-    suffix < oldLines.length - prefix
-    && suffix < newLines.length - prefix
-    && oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+    suffix < oldLines.length - prefix &&
+    suffix < newLines.length - prefix &&
+    oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
   ) {
     suffix += 1;
   }
@@ -66,13 +68,15 @@ export function buildStructuredPatch(oldContent: string | null, newContent: stri
     lines.push({ type: "context", text });
   }
 
-  return [{
-    oldStart: oldContextStart + 1,
-    oldLines: oldContextEnd - oldContextStart,
-    newStart: newContextStart + 1,
-    newLines: newContextEnd - newContextStart,
-    lines,
-  }];
+  return [
+    {
+      oldStart: oldContextStart + 1,
+      oldLines: oldContextEnd - oldContextStart,
+      newStart: newContextStart + 1,
+      newLines: newContextEnd - newContextStart,
+      lines,
+    },
+  ];
 }
 
 export function buildUnifiedDiff(filePath: string, oldContent: string | null, newContent: string): string {
@@ -83,11 +87,13 @@ export function buildUnifiedDiff(filePath: string, oldContent: string | null, ne
 
   const fromPath = oldContent === null ? "/dev/null" : `a/${filePath}`;
   const toPath = `b/${filePath}`;
-  const body = hunks.map((hunk) => {
-    const header = `@@ -${formatRange(hunk.oldStart, hunk.oldLines)} +${formatRange(hunk.newStart, hunk.newLines)} @@`;
-    const lines = hunk.lines.map((line) => `${prefixFor(line.type)}${line.text}`);
-    return [header, ...lines].join("\n");
-  }).join("\n");
+  const body = hunks
+    .map(hunk => {
+      const header = `@@ -${formatRange(hunk.oldStart, hunk.oldLines)} +${formatRange(hunk.newStart, hunk.newLines)} @@`;
+      const lines = hunk.lines.map(line => `${prefixFor(line.type)}${line.text}`);
+      return [header, ...lines].join("\n");
+    })
+    .join("\n");
   return `--- ${fromPath}\n+++ ${toPath}${body ? `\n${body}` : ""}`;
 }
 

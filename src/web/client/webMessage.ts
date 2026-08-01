@@ -6,8 +6,8 @@
  * "live vs history" code paths.
  */
 
-import type { WebGatewayEvent } from "./protocol.js";
 import { isVisibleFailureStatusDetail } from "../../status/agentStatus.js";
+import type { WebGatewayEvent } from "./protocol.js";
 
 function normalizeToolDisplayName(name: string): string {
   const aliases: Record<string, string> = {
@@ -67,18 +67,9 @@ const ERROR_AGENT_STATUS_EVENTS = new Set([
   "unknown_finish_reason",
 ]);
 
-const STATUS_AGENT_STATUS_EVENTS = new Set([
-  "structured_output_completed",
-  "turn_aborted",
-]);
+const STATUS_AGENT_STATUS_EVENTS = new Set(["structured_output_completed", "turn_aborted"]);
 
-export type WebMessageRole =
-  | "user"
-  | "assistant"
-  | "tool"
-  | "system"
-  | "permission"
-  | "error";
+export type WebMessageRole = "user" | "assistant" | "tool" | "system" | "permission" | "error";
 
 export type WebMessageKind =
   | "text"
@@ -100,7 +91,7 @@ export type WebMessage = {
   sessionKey: string;
   projectKey?: string;
   createdAt: string;
-  provider: "pilotdeck" | (string & {});
+  provider: "sati" | (string & {});
   role: WebMessageRole;
   kind: WebMessageKind;
   toolCallId?: string;
@@ -117,7 +108,7 @@ export type WebMessage = {
   }>;
   artifacts?: import("../../session/artifacts/FileArtifact.js").FileArtifact[];
   /**
-   * `PilotDeckToolErrorCode` of the underlying failure when
+   * `SatiToolErrorCode` of the underlying failure when
    * `kind === 'tool_result'` and `ok === false`. Empty for non-error or
    * non-tool-result frames. See `chatPermissions.ts` for how the host UI
    * uses this.
@@ -199,10 +190,8 @@ export function applyWebGatewayEvent(
       if (state.currentAssistantId) {
         return {
           ...state,
-          messages: state.messages.map((m) =>
-            m.id === state.currentAssistantId
-              ? { ...m, text: `${m.text ?? ""}${event.text}` }
-              : m,
+          messages: state.messages.map(m =>
+            m.id === state.currentAssistantId ? { ...m, text: `${m.text ?? ""}${event.text}` } : m,
           ),
         };
       }
@@ -212,7 +201,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "assistant",
         kind: "text",
         text: event.text,
@@ -232,10 +221,8 @@ export function applyWebGatewayEvent(
       if (state.currentThinkingId) {
         return {
           ...state,
-          messages: state.messages.map((m) =>
-            m.id === state.currentThinkingId
-              ? { ...m, text: `${m.text ?? ""}${event.text}` }
-              : m,
+          messages: state.messages.map(m =>
+            m.id === state.currentThinkingId ? { ...m, text: `${m.text ?? ""}${event.text}` } : m,
           ),
         };
       }
@@ -245,7 +232,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "assistant",
         kind: "thinking",
         text: event.text,
@@ -265,7 +252,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "assistant",
         kind: "file_artifacts",
         artifacts: event.artifacts,
@@ -281,7 +268,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "tool",
         kind: "tool_use",
         toolCallId: event.toolCallId,
@@ -304,7 +291,7 @@ export function applyWebGatewayEvent(
       const normalizedErrorCode = normalizeToolErrorCode(event.errorCode, event.resultPreview);
       const eventImages =
         Array.isArray(event.images) && event.images.length > 0
-          ? event.images.map((image) => ({
+          ? event.images.map(image => ({
               data: `data:${image.mimeType};base64,${image.data}`,
               mimeType: image.mimeType,
             }))
@@ -313,7 +300,7 @@ export function applyWebGatewayEvent(
       if (matchedId) {
         return {
           ...state,
-          messages: state.messages.map((m) =>
+          messages: state.messages.map(m =>
             m.id === matchedId
               ? {
                   ...m,
@@ -333,7 +320,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "tool",
         kind: "tool_result",
         toolCallId: event.toolCallId,
@@ -356,7 +343,7 @@ export function applyWebGatewayEvent(
       }
       return {
         ...state,
-        messages: state.messages.map((m) =>
+        messages: state.messages.map(m =>
           m.id === matchedId
             ? {
                 ...m,
@@ -374,7 +361,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "permission",
         kind: "permission_request",
         requestId: event.requestId,
@@ -396,7 +383,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "system",
         kind: "elicitation_request",
         requestId: event.requestId,
@@ -419,7 +406,7 @@ export function applyWebGatewayEvent(
     case "elicitation_cancelled":
       return {
         ...state,
-        messages: state.messages.map((m) =>
+        messages: state.messages.map(m =>
           m.kind === "elicitation_request" && m.requestId === event.requestId
             ? { ...m, kind: "status", role: "system", text: "elicitation cancelled" }
             : m,
@@ -433,7 +420,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "system",
         kind: "structured_output",
         payload: event.payload,
@@ -449,7 +436,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "system",
         kind: "status",
         text: `mode → ${event.mode}`,
@@ -465,7 +452,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "system",
         kind: "complete",
         usage: event.usage,
@@ -487,18 +474,19 @@ export function applyWebGatewayEvent(
       }
       const detail = event.detail ?? {};
       const kind = isErrorStatus ? "error" : "status";
-      const text = typeof detail.message === "string" && detail.message.length > 0
-        ? detail.message
-        : kind === "error"
-          ? "The model stream ended unexpectedly, so the response may be incomplete."
-          : "This turn ended before producing a standard assistant response.";
+      const text =
+        typeof detail.message === "string" && detail.message.length > 0
+          ? detail.message
+          : kind === "error"
+            ? "The model stream ended unexpectedly, so the response may be incomplete."
+            : "This turn ended before producing a standard assistant response.";
       const id = newId();
       const message: WebMessage = {
         id,
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: kind === "error" ? "error" : "system",
         kind,
         text,
@@ -518,8 +506,7 @@ export function applyWebGatewayEvent(
         messages: [...state.messages, message],
         currentAssistantId: undefined,
         currentThinkingId: undefined,
-        hasVisibleFailureStatus: state.hasVisibleFailureStatus
-          || (kind === "error" && detail.visible !== false),
+        hasVisibleFailureStatus: state.hasVisibleFailureStatus || (kind === "error" && detail.visible !== false),
       };
     }
 
@@ -537,7 +524,7 @@ export function applyWebGatewayEvent(
         sessionKey: options.sessionKey,
         projectKey: options.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "error",
         kind: "error",
         text: event.message,
@@ -562,8 +549,7 @@ export function applyWebGatewayEvent(
 
 function defaultNewId(): string {
   // Browsers + Node 25 both expose `crypto.randomUUID`.
-  const c =
-    typeof globalThis !== "undefined" && (globalThis as unknown as { crypto?: Crypto }).crypto;
+  const c = typeof globalThis !== "undefined" && (globalThis as unknown as { crypto?: Crypto }).crypto;
   if (c && typeof c.randomUUID === "function") {
     return c.randomUUID();
   }
@@ -571,9 +557,7 @@ function defaultNewId(): string {
 }
 
 function isI18nDescriptor(value: unknown): value is { key: string; params?: Record<string, unknown> } {
-  return typeof value === "object"
-    && value !== null
-    && typeof (value as { key?: unknown }).key === "string";
+  return typeof value === "object" && value !== null && typeof (value as { key?: unknown }).key === "string";
 }
 
 function isErrorAgentStatusEvent(event: WebGatewayEvent & { type: "agent_status" }): boolean {

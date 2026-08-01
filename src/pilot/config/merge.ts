@@ -17,10 +17,7 @@ export function mergeConfigSources(...configs: unknown[]): Record<string, unknow
   return output;
 }
 
-function deepMerge(
-  base: Record<string, unknown>,
-  override: Record<string, unknown>,
-): Record<string, unknown> {
+function deepMerge(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
   const output: Record<string, unknown> = { ...base };
 
   for (const [key, value] of Object.entries(override)) {

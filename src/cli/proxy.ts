@@ -15,11 +15,12 @@ type DispatcherState =
 
 /**
  * Read the active proxy URL from environment variables.
- * Priority: PILOTDECK_PROXY > https_proxy > HTTPS_PROXY > http_proxy > HTTP_PROXY
+ * Priority: SATI_PROXY > PILOTDECK_PROXY(legacy) > https_proxy > HTTPS_PROXY > http_proxy > HTTP_PROXY
  */
 export function getProxyUrl(env: EnvLike = process.env): string | undefined {
   return (
-    env.PILOTDECK_PROXY ||
+    env.SATI_PROXY ||
+    env.PILOTDECK_PROXY || // rebrand 前环境变量兼容
     env.https_proxy ||
     env.HTTPS_PROXY ||
     env.http_proxy ||
@@ -61,19 +62,11 @@ export async function installGlobalProxy(explicitUrl?: string, extraNoProxy?: st
   }
 
   const source: ProxyInstallSource = explicitUrl ? "config" : "env";
-  if (
-    source === "config" &&
-    dispatcherState?.mode === "proxy" &&
-    dispatcherState.source === "env"
-  ) {
+  if (source === "config" && dispatcherState?.mode === "proxy" && dispatcherState.source === "env") {
     return undefined;
   }
 
-  if (
-    dispatcherState?.mode === "proxy" &&
-    dispatcherState.source === source &&
-    dispatcherState.proxyUrl === proxyUrl
-  ) {
+  if (dispatcherState?.mode === "proxy" && dispatcherState.source === source && dispatcherState.proxyUrl === proxyUrl) {
     return undefined;
   }
 
@@ -162,7 +155,5 @@ export function createLongTimeoutOptions(): {
 
 function buildNoProxy(extraNoProxy?: string): string {
   const userNoProxy = process.env.no_proxy || process.env.NO_PROXY || "";
-  return [userNoProxy, extraNoProxy, "127.0.0.1", "localhost"]
-    .filter(Boolean)
-    .join(",");
+  return [userNoProxy, extraNoProxy, "127.0.0.1", "localhost"].filter(Boolean).join(",");
 }

@@ -1,20 +1,20 @@
-import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync } from 'fs';
-import { rm } from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync } from "fs";
+import { rm } from "fs/promises";
+import os from "os";
+import path from "path";
+import { fileURLToPath } from "url";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
-const DEFAULT_REPOSITORY = 'openbmb/PilotDeck';
+const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..");
+const DEFAULT_REPOSITORY = "openbmb/Sati";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const USER_AGENT = 'PilotDeck-Updater/1.0';
+const USER_AGENT = "Sati-Updater/1.0";
 
 let cachedStatus = null;
 let downloadJob = createIdleDownloadJob();
@@ -36,23 +36,26 @@ export function compareVersions(current, latest) {
 }
 
 export function parseVersionParts(value) {
-  const normalized = String(value || '')
+  const normalized = String(value || "")
     .trim()
-    .replace(/^pilotdeck[-_ ]?/i, '')
-    .replace(/^desktop[-_ ]?/i, '')
-    .replace(/^v/i, '');
+    .replace(/^sati[-_ ]?/i, "")
+    .replace(/^desktop[-_ ]?/i, "")
+    .replace(/^v/i, "");
   const matches = normalized.match(/\d+/g);
-  return matches?.map((part) => Number.parseInt(part, 10)).filter(Number.isFinite) ?? [0];
+  return matches?.map(part => Number.parseInt(part, 10)).filter(Number.isFinite) ?? [0];
 }
 
 export function normalizeRepository(value) {
-  const raw = String(value || '').trim();
+  const raw = String(value || "").trim();
   if (!raw) return DEFAULT_REPOSITORY;
 
   if (/^https?:\/\//i.test(raw)) {
     try {
       const url = new URL(raw);
-      const parts = url.pathname.replace(/^\/+/, '').replace(/\.git$/, '').split('/');
+      const parts = url.pathname
+        .replace(/^\/+/, "")
+        .replace(/\.git$/, "")
+        .split("/");
       if (parts.length >= 2 && parts[0] && parts[1]) {
         return `${parts[0]}/${parts[1]}`;
       }
@@ -61,15 +64,15 @@ export function normalizeRepository(value) {
     }
   }
 
-  const match = raw.replace(/\.git$/, '').match(/^([^/\s]+)\/([^/\s]+)$/);
+  const match = raw.replace(/\.git$/, "").match(/^([^/\s]+)\/([^/\s]+)$/);
   return match ? `${match[1]}/${match[2]}` : DEFAULT_REPOSITORY;
 }
 
 export function mapGitHubRelease(release) {
-  const tagName = String(release?.tag_name || '').trim();
-  const version = tagName.replace(/^v/i, '') || String(release?.name || '').trim();
+  const tagName = String(release?.tag_name || "").trim();
+  const version = tagName.replace(/^v/i, "") || String(release?.name || "").trim();
   const assets = Array.isArray(release?.assets)
-    ? release.assets.map((asset) => ({
+    ? release.assets.map(asset => ({
         id: asset.id,
         name: asset.name,
         size: asset.size,
@@ -85,8 +88,8 @@ export function mapGitHubRelease(release) {
     tagName,
     version,
     name: release?.name || tagName,
-    body: release?.body || '',
-    htmlUrl: release?.html_url || '',
+    body: release?.body || "",
+    htmlUrl: release?.html_url || "",
     publishedAt: release?.published_at || release?.created_at || null,
     prerelease: Boolean(release?.prerelease),
     draft: Boolean(release?.draft),
@@ -99,11 +102,11 @@ export function selectDesktopAsset(release, options = {}) {
   const arch = options.arch || process.arch;
   const assets = Array.isArray(release?.assets) ? release.assets : [];
   const scored = assets
-    .map((asset) => ({
+    .map(asset => ({
       asset,
       score: scoreAsset(asset, platform, arch),
     }))
-    .filter((entry) => entry.score > 0)
+    .filter(entry => entry.score > 0)
     .sort((left, right) => right.score - left.score);
 
   return scored[0]?.asset ?? null;
@@ -119,17 +122,17 @@ export async function getCurrentDesktopVersion(options = {}) {
   return {
     version:
       firstNonEmpty(
-        env.PILOTDECK_DESKTOP_VERSION,
-        env.PILOTDECK_VERSION,
+        env.SATI_DESKTOP_VERSION,
+        env.SATI_VERSION,
         env.APP_VERSION,
         env.npm_package_version,
         packageVersion,
-      ) || '0.0.0',
+      ) || "0.0.0",
     buildTime,
     commit,
     platform: process.platform,
     arch: process.arch,
-    desktop: env.PILOTDECK_DESKTOP === '1' || Boolean(env.PILOTDECK_DESKTOP_VERSION),
+    desktop: env.SATI_DESKTOP === "1" || Boolean(env.SATI_DESKTOP_VERSION),
   };
 }
 
@@ -143,7 +146,7 @@ export async function getDesktopUpdateStatus(options = {}) {
   }
 
   const current = await getCurrentDesktopVersion({ env, projectRoot: options.projectRoot });
-  const repository = normalizeRepository(env.PILOTDECK_UPDATE_REPOSITORY || env.PILOTDECK_RELEASE_REPOSITORY);
+  const repository = normalizeRepository(env.SATI_UPDATE_REPOSITORY || env.SATI_RELEASE_REPOSITORY);
 
   try {
     const latest = await fetchLatestRelease({ env, repository, includePrerelease: shouldIncludePrerelease(env) });
@@ -154,10 +157,10 @@ export async function getDesktopUpdateStatus(options = {}) {
     const comparison = compareVersions(current.version, latest.version || latest.tagName);
     const hasUpdate = comparison < 0;
     const status = {
-      source: 'github-releases',
-      scope: 'desktop',
+      source: "github-releases",
+      scope: "desktop",
       repository,
-      status: hasUpdate ? 'update-available' : 'up-to-date',
+      status: hasUpdate ? "update-available" : "up-to-date",
       hasUpdate,
       updateAvailable: hasUpdate,
       checkUnavailable: false,
@@ -173,10 +176,10 @@ export async function getDesktopUpdateStatus(options = {}) {
     return status;
   } catch (error) {
     const status = {
-      source: 'github-releases',
-      scope: 'desktop',
+      source: "github-releases",
+      scope: "desktop",
       repository,
-      status: 'unavailable',
+      status: "unavailable",
       hasUpdate: false,
       updateAvailable: false,
       checkUnavailable: true,
@@ -192,7 +195,7 @@ export async function getDesktopUpdateStatus(options = {}) {
 
 export async function listDesktopReleases(options = {}) {
   const env = options.env || process.env;
-  const repository = normalizeRepository(env.PILOTDECK_UPDATE_REPOSITORY || env.PILOTDECK_RELEASE_REPOSITORY);
+  const repository = normalizeRepository(env.SATI_UPDATE_REPOSITORY || env.SATI_RELEASE_REPOSITORY);
   const limit = clampInteger(options.limit, 1, 30, 10);
   const releases = await fetchReleases({
     env,
@@ -201,8 +204,8 @@ export async function listDesktopReleases(options = {}) {
     includePrerelease: options.includePrerelease ?? shouldIncludePrerelease(env),
   });
   return {
-    source: 'github-releases',
-    scope: 'desktop',
+    source: "github-releases",
+    scope: "desktop",
     repository,
     releases,
   };
@@ -213,35 +216,35 @@ export function getDesktopDownloadStatus() {
 }
 
 export async function startDesktopUpdateDownload(options = {}) {
-  if (downloadJob.state === 'downloading') {
-    const error = new Error('Desktop update download already in progress.');
+  if (downloadJob.state === "downloading") {
+    const error = new Error("Desktop update download already in progress.");
     error.statusCode = 409;
     throw error;
   }
 
-  const status = options.status || await getDesktopUpdateStatus({ force: options.force });
+  const status = options.status || (await getDesktopUpdateStatus({ force: options.force }));
   if (status.checkUnavailable || !status.latest) {
-    const error = new Error(status.message || 'Unable to resolve the latest desktop release.');
+    const error = new Error(status.message || "Unable to resolve the latest desktop release.");
     error.statusCode = 503;
     throw error;
   }
 
   const asset = resolveDownloadAsset(status.latest, options);
   if (!asset?.downloadUrl) {
-    const error = new Error('No compatible desktop installer asset was found for this platform.');
+    const error = new Error("No compatible desktop installer asset was found for this platform.");
     error.statusCode = 404;
     throw error;
   }
 
   const destinationDir = getUpdateCacheDir(options.env || process.env, status.latest.tagName || status.latest.version);
   mkdirSync(destinationDir, { recursive: true });
-  const destinationPath = path.join(destinationDir, sanitizeFilename(asset.name || 'pilotdeck-update'));
+  const destinationPath = path.join(destinationDir, sanitizeFilename(asset.name || "sati-update"));
   const partialPath = `${destinationPath}.download`;
 
   downloadAbortController = new AbortController();
   downloadJob = {
     id: `${Date.now()}`,
-    state: 'downloading',
+    state: "downloading",
     progress: 0,
     receivedBytes: 0,
     totalBytes: asset.size ?? null,
@@ -259,10 +262,10 @@ export async function startDesktopUpdateDownload(options = {}) {
   };
 
   runDownload(asset.downloadUrl, partialPath, destinationPath, downloadAbortController.signal)
-    .then((result) => {
+    .then(result => {
       downloadJob = {
         ...downloadJob,
-        state: 'downloaded',
+        state: "downloaded",
         progress: 1,
         receivedBytes: result.receivedBytes,
         totalBytes: result.totalBytes ?? downloadJob.totalBytes,
@@ -270,10 +273,10 @@ export async function startDesktopUpdateDownload(options = {}) {
       };
       downloadAbortController = null;
     })
-    .catch((error) => {
+    .catch(error => {
       downloadJob = {
         ...downloadJob,
-        state: error?.name === 'AbortError' ? 'cancelled' : 'failed',
+        state: error?.name === "AbortError" ? "cancelled" : "failed",
         error: error instanceof Error ? error.message : String(error),
         completedAt: new Date().toISOString(),
       };
@@ -285,7 +288,7 @@ export async function startDesktopUpdateDownload(options = {}) {
 }
 
 export function cancelDesktopUpdateDownload() {
-  if (downloadJob.state !== 'downloading' || !downloadAbortController) {
+  if (downloadJob.state !== "downloading" || !downloadAbortController) {
     return { cancelled: false, download: getDesktopDownloadStatus() };
   }
   downloadAbortController.abort();
@@ -295,7 +298,7 @@ export function cancelDesktopUpdateDownload() {
 export function launchDownloadedDesktopUpdate(options = {}) {
   const filePath = options.filePath || downloadJob.filePath;
   if (!filePath || !existsSync(filePath)) {
-    const error = new Error('No downloaded desktop update installer is available.');
+    const error = new Error("No downloaded desktop update installer is available.");
     error.statusCode = 404;
     throw error;
   }
@@ -303,8 +306,8 @@ export function launchDownloadedDesktopUpdate(options = {}) {
   const cacheRoot = getUpdateCacheRoot(options.env || process.env);
   const resolvedPath = path.resolve(filePath);
   const relativeToCache = path.relative(path.resolve(cacheRoot), resolvedPath);
-  if (relativeToCache.startsWith('..') || path.isAbsolute(relativeToCache)) {
-    const error = new Error('Installer path is outside the PilotDeck update cache.');
+  if (relativeToCache.startsWith("..") || path.isAbsolute(relativeToCache)) {
+    const error = new Error("Installer path is outside the Sati update cache.");
     error.statusCode = 400;
     throw error;
   }
@@ -312,15 +315,15 @@ export function launchDownloadedDesktopUpdate(options = {}) {
   const { command, args } = getOpenFileSpawnCommand(resolvedPath);
   const child = execFile(command, args, {
     cwd: path.dirname(resolvedPath),
-    windowsHide: process.platform === 'win32',
+    windowsHide: process.platform === "win32",
   });
-  child.on('error', () => {});
+  child.on("error", () => {});
 
   return {
     launched: true,
     filePath: resolvedPath,
     needsRestart: true,
-    message: 'Installer launched. Complete the installer flow, then restart PilotDeck.',
+    message: "Installer launched. Complete the installer flow, then restart Sati.",
   };
 }
 
@@ -333,8 +336,8 @@ export function resetDesktopUpdateStateForTesting() {
 async function fetchLatestRelease(options) {
   if (options.includePrerelease) {
     const releases = await fetchReleases({ ...options, limit: 10 });
-    const release = releases.find((item) => !item.draft);
-    if (!release) throw new Error('No GitHub releases are available.');
+    const release = releases.find(item => !item.draft);
+    if (!release) throw new Error("No GitHub releases are available.");
     return release;
   }
 
@@ -346,18 +349,18 @@ async function fetchReleases(options) {
   const url = `https://api.github.com/repos/${options.repository}/releases?per_page=${options.limit}`;
   const releases = await fetchJson(url, options.env);
   if (!Array.isArray(releases)) {
-    throw new Error('GitHub releases response was not a list.');
+    throw new Error("GitHub releases response was not a list.");
   }
 
   return releases
     .map(mapGitHubRelease)
-    .filter((release) => !release.draft)
-    .filter((release) => options.includePrerelease || !release.prerelease)
+    .filter(release => !release.draft)
+    .filter(release => options.includePrerelease || !release.prerelease)
     .slice(0, options.limit);
 }
 
 async function fetchJson(url, env) {
-  const timeoutMs = clampInteger(env.PILOTDECK_UPDATE_TIMEOUT_MS, 1_000, 120_000, DEFAULT_TIMEOUT_MS);
+  const timeoutMs = clampInteger(env.SATI_UPDATE_TIMEOUT_MS, 1_000, 120_000, DEFAULT_TIMEOUT_MS);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -377,30 +380,30 @@ async function fetchJson(url, env) {
 }
 
 function createGitHubHeaders(env) {
-  const token = firstNonEmpty(env.PILOTDECK_GITHUB_TOKEN, env.GITHUB_TOKEN);
+  const token = firstNonEmpty(env.SATI_GITHUB_TOKEN, env.GITHUB_TOKEN);
   return {
-    Accept: 'application/vnd.github+json',
-    'User-Agent': USER_AGENT,
+    Accept: "application/vnd.github+json",
+    "User-Agent": USER_AGENT,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
 
 async function runDownload(url, partialPath, destinationPath, signal) {
   const response = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
+    headers: { "User-Agent": USER_AGENT },
     signal,
   });
   if (!response.ok) {
     throw new Error(`Installer download failed (${response.status} ${response.statusText})`);
   }
   if (!response.body) {
-    throw new Error('Installer download response did not include a body.');
+    throw new Error("Installer download response did not include a body.");
   }
 
-  const totalBytes = Number.parseInt(response.headers.get('content-length') || '', 10);
+  const totalBytes = Number.parseInt(response.headers.get("content-length") || "", 10);
   const writer = createWriteStream(partialPath);
   let writeError = null;
-  writer.on('error', (error) => {
+  writer.on("error", error => {
     writeError = error;
   });
   let receivedBytes = 0;
@@ -409,8 +412,8 @@ async function runDownload(url, partialPath, destinationPath, signal) {
     for await (const chunk of response.body) {
       if (writeError) throw writeError;
       if (signal.aborted) {
-        const error = new Error('Download cancelled.');
-        error.name = 'AbortError';
+        const error = new Error("Download cancelled.");
+        error.name = "AbortError";
         throw error;
       }
 
@@ -419,9 +422,7 @@ async function runDownload(url, partialPath, destinationPath, signal) {
         ...downloadJob,
         receivedBytes,
         totalBytes: Number.isFinite(totalBytes) ? totalBytes : downloadJob.totalBytes,
-        progress: Number.isFinite(totalBytes) && totalBytes > 0
-          ? Math.min(receivedBytes / totalBytes, 0.999)
-          : 0,
+        progress: Number.isFinite(totalBytes) && totalBytes > 0 ? Math.min(receivedBytes / totalBytes, 0.999) : 0,
       };
 
       if (!writer.write(chunk)) {
@@ -444,9 +445,9 @@ async function runDownload(url, partialPath, destinationPath, signal) {
 
 function finishWriter(writer) {
   return new Promise((resolve, reject) => {
-    writer.once('error', reject);
+    writer.once("error", reject);
     writer.end(() => {
-      writer.off('error', reject);
+      writer.off("error", reject);
       resolve();
     });
   });
@@ -455,41 +456,41 @@ function finishWriter(writer) {
 function waitForDrain(writer) {
   return new Promise((resolve, reject) => {
     const onDrain = () => {
-      writer.off('error', onError);
+      writer.off("error", onError);
       resolve();
     };
-    const onError = (error) => {
-      writer.off('drain', onDrain);
+    const onError = error => {
+      writer.off("drain", onDrain);
       reject(error);
     };
-    writer.once('drain', onDrain);
-    writer.once('error', onError);
+    writer.once("drain", onDrain);
+    writer.once("error", onError);
   });
 }
 
 function getOpenFileSpawnCommand(filePath, platform = process.platform) {
-  if (platform === 'win32') {
-    return { command: 'cmd.exe', args: ['/d', '/s', '/c', `start "" "${filePath.replace(/"/g, '""')}"`] };
+  if (platform === "win32") {
+    return { command: "cmd.exe", args: ["/d", "/s", "/c", `start "" "${filePath.replace(/"/g, '""')}"`] };
   }
-  if (platform === 'darwin') {
-    return { command: 'open', args: [filePath] };
+  if (platform === "darwin") {
+    return { command: "open", args: [filePath] };
   }
-  return { command: 'xdg-open', args: [filePath] };
+  return { command: "xdg-open", args: [filePath] };
 }
 
 function resolveDownloadAsset(release, options) {
   if (options.assetId) {
     const id = Number(options.assetId);
-    return release.assets.find((asset) => Number(asset.id) === id) ?? null;
+    return release.assets.find(asset => Number(asset.id) === id) ?? null;
   }
   if (options.assetName) {
-    return release.assets.find((asset) => asset.name === options.assetName) ?? null;
+    return release.assets.find(asset => asset.name === options.assetName) ?? null;
   }
   return release.selectedAsset || selectDesktopAsset(release, options);
 }
 
 function scoreAsset(asset, platform, arch) {
-  const name = String(asset?.name || '').toLowerCase();
+  const name = String(asset?.name || "").toLowerCase();
   if (!name || /\.(?:blockmap|yml|yaml|sha256|sha512|sig|asc|txt)$/i.test(name)) return 0;
   if (/source[ -_]?code/.test(name)) return 0;
 
@@ -500,15 +501,15 @@ function scoreAsset(asset, platform, arch) {
 }
 
 function scorePlatform(name, platform) {
-  if (platform === 'darwin') {
+  if (platform === "darwin") {
     if (/(mac|macos|darwin|osx|\.dmg$|\.pkg$)/.test(name)) return 100;
     return 0;
   }
-  if (platform === 'win32') {
+  if (platform === "win32") {
     if (/(win|windows|setup|installer|\.exe$|\.msi$)/.test(name)) return 100;
     return 0;
   }
-  if (platform === 'linux') {
+  if (platform === "linux") {
     if (/(linux|appimage|\.deb$|\.rpm$|\.tar\.gz$)/.test(name)) return 100;
     return 0;
   }
@@ -517,24 +518,37 @@ function scorePlatform(name, platform) {
 
 function scoreExtension(name, platform) {
   const priorities = {
-    darwin: [['.dmg', 40], ['.pkg', 35], ['.zip', 10]],
-    win32: [['.exe', 40], ['.msi', 35], ['.zip', 10]],
-    linux: [['.appimage', 40], ['.deb', 35], ['.rpm', 30], ['.tar.gz', 10]],
+    darwin: [
+      [".dmg", 40],
+      [".pkg", 35],
+      [".zip", 10],
+    ],
+    win32: [
+      [".exe", 40],
+      [".msi", 35],
+      [".zip", 10],
+    ],
+    linux: [
+      [".appimage", 40],
+      [".deb", 35],
+      [".rpm", 30],
+      [".tar.gz", 10],
+    ],
   };
   return priorities[platform]?.find(([extension]) => name.endsWith(extension))?.[1] ?? 0;
 }
 
 function scoreArch(name, arch) {
   if (/(universal|all)/.test(name)) return 20;
-  if (arch === 'arm64') return /(arm64|aarch64)/.test(name) ? 25 : 0;
-  if (arch === 'x64') return /(x64|x86_64|amd64)/.test(name) ? 25 : 0;
-  if (arch === 'ia32') return /(ia32|x86|i386)/.test(name) ? 25 : 0;
+  if (arch === "arm64") return /(arm64|aarch64)/.test(name) ? 25 : 0;
+  if (arch === "x64") return /(x64|x86_64|amd64)/.test(name) ? 25 : 0;
+  if (arch === "ia32") return /(ia32|x86|i386)/.test(name) ? 25 : 0;
   return 0;
 }
 
 function readPackageVersion(projectRoot) {
   try {
-    const parsed = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+    const parsed = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     return parsed.version || null;
   } catch {
     return null;
@@ -542,11 +556,11 @@ function readPackageVersion(projectRoot) {
 }
 
 async function getCurrentCommit(projectRoot, env) {
-  const fromEnv = firstNonEmpty(env.PILOTDECK_COMMIT_SHA, env.GIT_COMMIT, env.VERCEL_GIT_COMMIT_SHA);
+  const fromEnv = firstNonEmpty(env.SATI_COMMIT_SHA, env.GIT_COMMIT, env.VERCEL_GIT_COMMIT_SHA);
   if (fromEnv) return fromEnv;
 
   try {
-    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot });
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: projectRoot });
     return stdout.trim() || null;
   } catch {
     return null;
@@ -555,15 +569,15 @@ async function getCurrentCommit(projectRoot, env) {
 
 async function getBuildTime(projectRoot, env) {
   const fromEnv = firstNonEmpty(
-    env.PILOTDECK_DESKTOP_BUILD_TIME,
-    env.PILOTDECK_BUILD_TIME,
+    env.SATI_DESKTOP_BUILD_TIME,
+    env.SATI_BUILD_TIME,
     env.BUILD_TIME,
     env.npm_package_build_time,
   );
   if (fromEnv) return fromEnv;
 
   try {
-    const { stdout } = await execFileAsync('git', ['log', '-1', '--format=%cI', 'HEAD'], { cwd: projectRoot });
+    const { stdout } = await execFileAsync("git", ["log", "-1", "--format=%cI", "HEAD"], { cwd: projectRoot });
     return stdout.trim() || null;
   } catch {
     return null;
@@ -571,26 +585,30 @@ async function getBuildTime(projectRoot, env) {
 }
 
 function shouldIncludePrerelease(env) {
-  return env.PILOTDECK_UPDATE_INCLUDE_PRERELEASE === '1'
-    || env.PILOTDECK_UPDATE_CHANNEL === 'beta'
-    || env.PILOTDECK_UPDATE_CHANNEL === 'nightly';
+  return (
+    env.SATI_UPDATE_INCLUDE_PRERELEASE === "1" ||
+    env.SATI_UPDATE_CHANNEL === "beta" ||
+    env.SATI_UPDATE_CHANNEL === "nightly"
+  );
 }
 
 function getUpdateCacheRoot(env) {
-  return env.PILOTDECK_UPDATE_CACHE_DIR
-    ? path.resolve(env.PILOTDECK_UPDATE_CACHE_DIR)
-    : path.join(os.homedir(), '.pilotdeck', 'updates');
+  return env.SATI_UPDATE_CACHE_DIR
+    ? path.resolve(env.SATI_UPDATE_CACHE_DIR)
+    : path.join(os.homedir(), ".sati", "updates");
 }
 
 function getUpdateCacheDir(env, releaseName) {
-  return path.join(getUpdateCacheRoot(env), sanitizeFilename(releaseName || 'latest'));
+  return path.join(getUpdateCacheRoot(env), sanitizeFilename(releaseName || "latest"));
 }
 
 function sanitizeFilename(value) {
-  return String(value || 'download')
-    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
-    .replace(/^\.+$/, 'download')
-    .trim() || 'download';
+  return (
+    String(value || "download")
+      .replace(/[\\/:*?"<>|\x00-\x1f]/g, "_")
+      .replace(/^\.+$/, "download")
+      .trim() || "download"
+  );
 }
 
 function clampInteger(value, min, max, fallback) {
@@ -600,13 +618,13 @@ function clampInteger(value, min, max, fallback) {
 }
 
 function firstNonEmpty(...values) {
-  return values.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim();
+  return values.find(value => typeof value === "string" && value.trim().length > 0)?.trim();
 }
 
 function createIdleDownloadJob() {
   return {
     id: null,
-    state: 'idle',
+    state: "idle",
     progress: 0,
     receivedBytes: 0,
     totalBytes: null,

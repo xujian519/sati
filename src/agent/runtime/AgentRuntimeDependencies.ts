@@ -1,19 +1,20 @@
 import type { CanonicalMessage, CanonicalModelEvent, CanonicalModelRequest } from "../../model/index.js";
 import type {
-  PilotDeckElicitationChannel,
-  PilotDeckToolAuditRecorder,
-  PilotDeckFileUpdateNotifier,
-  PilotDeckToolFileHistorySink,
-  PilotDeckToolScheduler,
+  SatiElicitationChannel,
+  SatiToolAuditRecorder,
+  SatiFileUpdateNotifier,
+  SatiToolFileHistorySink,
+  SatiToolScheduler,
   ToolRegistry,
 } from "../../tool/index.js";
 import type { PlanFileManager } from "../../tool/builtin/planFile.js";
-import type { PlanTodoStateManager } from "./PlanTodoState.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { TokenAccountingRuntime } from "../../context/index.js";
 import type { RouterRuntime } from "../../router/index.js";
 import type { AgentEvent, AgentEventEmitter } from "../protocol/events.js";
+import type { DoomLoop } from "../loop/doomLoop.js";
+import type { PlanTodoStateManager } from "./PlanTodoState.js";
 
 /**
  * Narrow view of the router that the agent loop actually consumes. Tests can
@@ -85,7 +86,7 @@ export type AgentSubagentTranscriptHooks = {
 export type AgentRuntimeDependencies = {
   router: AgentRouterRuntime;
   tools: {
-    scheduler: PilotDeckToolScheduler;
+    scheduler: SatiToolScheduler;
     registry: ToolRegistry;
   };
   context?: AgentContextRuntime;
@@ -103,39 +104,48 @@ export type AgentRuntimeDependencies = {
    * the selected model already receives from the catalog.
    */
   getModelMaxOutputTokens?: (provider: string, model: string) => number | undefined;
-  getModelTokenLimits?: (provider: string, model: string) => { maxContextTokens: number; maxOutputTokens: number } | undefined;
+  getModelTokenLimits?: (
+    provider: string,
+    model: string,
+  ) => { maxContextTokens: number; maxOutputTokens: number } | undefined;
   now?: () => Date;
   uuid?: () => string;
-  auditRecorder?: PilotDeckToolAuditRecorder;
+  auditRecorder?: SatiToolAuditRecorder;
   lifecycle?: LifecycleRuntime;
   /** C3 sidechain transcript hooks (optional). */
   subagentTranscript?: AgentSubagentTranscriptHooks;
   /**
-   * Elicitation channel — wired into the per-tool `PilotDeckToolRuntimeContext`
+   * Elicitation channel — wired into the per-tool `SatiToolRuntimeContext`
    * so `ask_user_question` (B1) can drive the gateway. When omitted, the
    * tool returns a `mcp_unavailable` error instead of crashing.
    */
-  elicitation?: PilotDeckElicitationChannel;
+  elicitation?: SatiElicitationChannel;
   /**
    * File-history sink — wired into the per-tool runtime context so
    * `edit_file` / `write_file` (C4) snapshot the file before mutation.
    * `FileHistoryStore` directly satisfies this contract.
    */
-  fileHistory?: PilotDeckToolFileHistorySink;
+  fileHistory?: SatiToolFileHistorySink;
   /**
    * Optional sink for propagating successful file writes to editor / LSP
    * integrations. When absent, write_file still succeeds and performs no
    * post-write host notifications.
    */
-  fileUpdateNotifier?: PilotDeckFileUpdateNotifier;
+  fileUpdateNotifier?: SatiFileUpdateNotifier;
   /**
-   * Plan file manager — resolves the project-local `.pilotdeck/plans`
+   * Plan file manager — resolves the project-local `.sati/plans`
    * directory and reads explicitly submitted plan documents for
    * `enter_plan_mode` / `exit_plan_mode`. Absent in headless / test runtimes.
    */
   planFileManager?: PlanFileManager;
   /** Session-scoped state tracking required `todo_write` calls after plan approval. */
   planTodoManager?: PlanTodoStateManager;
+  /**
+   * DoomLoop 死循环检测器（可选）。注入后 agent 循环在每次模型输出/工具执行
+   * 后观测，命中信号发射 `doomloop_signal` 事件；fatal 信号（受 DoomLoop
+   * 开关约束）终止当前 turn。未注入时零开销。
+   */
+  doomLoop?: DoomLoop;
   eventEmitter?: AgentEventEmitter;
   drainEvents?: () => AgentEvent[];
 };

@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { PilotDeckToolRuntimeError } from "../../protocol/errors.js";
+import { SatiToolRuntimeError } from "../../protocol/errors.js";
 
 type NotebookCell = {
   cell_type?: string;
@@ -26,7 +26,7 @@ export type NotebookReadResult = {
 export async function readNotebook(filePath: string): Promise<NotebookReadResult> {
   const raw = await readFile(filePath, "utf8").catch((error: unknown) => {
     if (isNodeError(error) && error.code === "ENOENT") {
-      throw new PilotDeckToolRuntimeError("file_not_found", `File ${filePath} does not exist.`);
+      throw new SatiToolRuntimeError("file_not_found", `File ${filePath} does not exist.`);
     }
     throw error;
   });
@@ -35,11 +35,9 @@ export async function readNotebook(filePath: string): Promise<NotebookReadResult
   try {
     notebook = JSON.parse(raw) as NotebookFile;
   } catch (error) {
-    throw new PilotDeckToolRuntimeError(
-      "invalid_tool_input",
-      `Notebook ${filePath} is not valid JSON.`,
-      { cause: error instanceof Error ? error.message : String(error) },
-    );
+    throw new SatiToolRuntimeError("invalid_tool_input", `Notebook ${filePath} is not valid JSON.`, {
+      cause: error instanceof Error ? error.message : String(error),
+    });
   }
 
   const cells = notebook.cells ?? [];

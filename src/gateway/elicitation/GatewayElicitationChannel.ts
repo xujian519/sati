@@ -25,12 +25,12 @@
 
 import { randomUUID } from "node:crypto";
 import type {
-  PilotDeckElicitationAnswer,
-  PilotDeckElicitationChannel,
-  PilotDeckElicitationRequest,
-} from "../../tool/elicitation/PilotDeckElicitationChannel.js";
-import type { GatewayElicitationBus } from "./GatewayElicitationBus.js";
+  SatiElicitationAnswer,
+  SatiElicitationChannel,
+  SatiElicitationRequest,
+} from "../../tool/elicitation/SatiElicitationChannel.js";
 import type { GatewayEvent } from "../protocol/types.js";
+import type { GatewayElicitationBus } from "./GatewayElicitationBus.js";
 
 export type GatewayElicitationChannelOptions = {
   sessionKey: string;
@@ -47,25 +47,25 @@ export type GatewayElicitationChannelOptions = {
   emitAgentEvent?: (type: "elicitation_requested", payload: { requestId: string; toolName: string }) => void;
 };
 
-export class GatewayElicitationChannel implements PilotDeckElicitationChannel {
+export class GatewayElicitationChannel implements SatiElicitationChannel {
   private readonly uuid: () => string;
 
   constructor(private readonly options: GatewayElicitationChannelOptions) {
     this.uuid = options.uuid ?? randomUUID;
   }
 
-  askUser(request: PilotDeckElicitationRequest): Promise<PilotDeckElicitationAnswer> {
+  askUser(request: SatiElicitationRequest): Promise<SatiElicitationAnswer> {
     const requestId = this.uuid();
     const { bus, emit, sessionKey } = this.options;
 
-    return new Promise<PilotDeckElicitationAnswer>((resolve, reject) => {
+    return new Promise<SatiElicitationAnswer>((resolve, reject) => {
       let abortHandler: (() => void) | undefined;
 
       const pending = {
         requestId,
         toolCallId: request.toolCallId,
         toolName: request.toolName,
-        resolve: (answer: PilotDeckElicitationAnswer) => {
+        resolve: (answer: SatiElicitationAnswer) => {
           if (abortHandler && request.signal) {
             request.signal.removeEventListener("abort", abortHandler);
           }
@@ -93,7 +93,11 @@ export class GatewayElicitationChannel implements PilotDeckElicitationChannel {
         questions: request.questions,
         metadata: request.metadata,
       });
-      this.options.dispatchHook?.("Elicitation", { requestId, toolName: request.toolName, toolCallId: request.toolCallId });
+      this.options.dispatchHook?.("Elicitation", {
+        requestId,
+        toolName: request.toolName,
+        toolCallId: request.toolCallId,
+      });
       this.options.emitAgentEvent?.("elicitation_requested", { requestId, toolName: request.toolName });
 
       if (request.signal) {

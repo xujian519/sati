@@ -1,0 +1,52 @@
+# 由 scripts/port-nuo-rules.ts 从 XiaoNuo Agent compliance-enforceable.yaml 转换生成
+# 原始文件完整内容见 assets/patent-rules/compliance-enforceable.yaml（含 LLM 评估型规则与指导字段）
+# 转换语义: pattern_analysis(期望模式)→structural_analysis 单 element；severity warning→major；info→minor
+version: "1.0"
+rules:
+  - id: CON-COMP-0101
+    name: 禁止编造占位专利号
+    domain: patent_general
+    phase: post_execution
+    severity: critical
+    action: block
+    check:
+      type: keyword_blocklist
+      keywords:
+        - CNXXXXXX
+        - CNxxxxxx
+        - (20XX)
+        - (20xx)
+        - USXXXXXXX
+        - WO20XX/
+  - id: CON-COMP-0104
+    name: 禁止编造审查指南内容
+    domain: patent_general
+    phase: post_execution
+    severity: critical
+    action: block
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 禁止编造审查指南内容
+          patterns:
+            - 审查指南
+      minConfidence: 1
+  - id: CON-COMP-0105
+    name: 禁止商业宣传用语
+    domain: patent_general
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章2.2.6
+    check:
+      type: keyword_blocklist
+      keywords:
+        - 世界领先
+        - 行业首创
+        - 独一无二
+        - 前所未有
+        - 最先进
+        - 革命性
+        - 颠覆性
+        - 突破性

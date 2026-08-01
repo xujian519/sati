@@ -29,8 +29,7 @@ function normalizeOpenAISchemaNode(node: unknown): unknown {
   }
 
   const typeField = normalized.type;
-  const allowsArray = typeField === "array"
-    || (Array.isArray(typeField) && typeField.includes("array"));
+  const allowsArray = typeField === "array" || (Array.isArray(typeField) && typeField.includes("array"));
   if (allowsArray && !("items" in normalized)) {
     normalized.items = {};
   }
@@ -49,7 +48,7 @@ function inferLiteralSchemaType(node: Record<string, unknown>): string | undefin
   }
 
   const types = enumValues.map(schemaTypeForLiteral);
-  if (types.some((type) => !type)) {
+  if (types.some(type => !type)) {
     return undefined;
   }
 

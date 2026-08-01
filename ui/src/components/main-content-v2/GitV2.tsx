@@ -1,17 +1,9 @@
-import { useMemo, useState } from 'react';
-import {
-  AlertCircle,
-  Check,
-  GitBranch,
-  Loader2,
-  RefreshCw,
-  Upload,
-  Wand2,
-} from 'lucide-react';
-import type { Project } from '../../types/app';
-import { useGitPanelController } from '../git-panel/hooks/useGitPanelController';
-import type { FileOpenHandler } from '../git-panel/types/types';
-import { cn } from '../../lib/utils.js';
+import { useMemo, useState } from "react";
+import { AlertCircle, Check, GitBranch, Loader2, RefreshCw, Upload, Wand2 } from "lucide-react";
+import type { Project } from "../../types/app";
+import { useGitPanelController } from "../git-panel/hooks/useGitPanelController";
+import type { FileOpenHandler } from "../git-panel/types/types";
+import { cn } from "../../lib/utils.js";
 
 type GitV2Props = {
   selectedProject: Project | null;
@@ -20,25 +12,25 @@ type GitV2Props = {
 
 type ChangeRow = {
   path: string;
-  status: 'M' | 'A' | 'D' | 'U';
-  group: 'modified' | 'added' | 'deleted' | 'untracked';
+  status: "M" | "A" | "D" | "U";
+  group: "modified" | "added" | "deleted" | "untracked";
 };
 
-const STATUS_COLOR: Record<ChangeRow['status'], string> = {
-  M: 'text-amber-500',
-  A: 'text-emerald-600',
-  D: 'text-red-500',
-  U: 'text-blue-500',
+const STATUS_COLOR: Record<ChangeRow["status"], string> = {
+  M: "text-amber-500",
+  A: "text-emerald-600",
+  D: "text-red-500",
+  U: "text-blue-500",
 };
 
 export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
   const controller = useGitPanelController({
     selectedProject,
-    activeView: 'changes',
+    activeView: "changes",
     onFileOpen,
   });
 
-  const [commitMessage, setCommitMessage] = useState('');
+  const [commitMessage, setCommitMessage] = useState("");
   const [isCommitting, setIsCommitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -46,25 +38,25 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
     const status = controller.gitStatus;
     if (!status) return { stagedRows: [] as ChangeRow[], changeRows: [] as ChangeRow[] };
 
-    const modified: ChangeRow[] = (status.modified ?? []).map((path) => ({
+    const modified: ChangeRow[] = (status.modified ?? []).map(path => ({
       path,
-      status: 'M',
-      group: 'modified',
+      status: "M",
+      group: "modified",
     }));
-    const added: ChangeRow[] = (status.added ?? []).map((path) => ({
+    const added: ChangeRow[] = (status.added ?? []).map(path => ({
       path,
-      status: 'A',
-      group: 'added',
+      status: "A",
+      group: "added",
     }));
-    const deleted: ChangeRow[] = (status.deleted ?? []).map((path) => ({
+    const deleted: ChangeRow[] = (status.deleted ?? []).map(path => ({
       path,
-      status: 'D',
-      group: 'deleted',
+      status: "D",
+      group: "deleted",
     }));
-    const untracked: ChangeRow[] = (status.untracked ?? []).map((path) => ({
+    const untracked: ChangeRow[] = (status.untracked ?? []).map(path => ({
       path,
-      status: 'U',
-      group: 'untracked',
+      status: "U",
+      group: "untracked",
     }));
 
     // Legacy panel does not expose a distinct "staged" list; we show everything under Changes
@@ -76,10 +68,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
     };
   }, [controller.gitStatus]);
 
-  const allChangeFiles = useMemo(
-    () => [...stagedRows, ...changeRows].map((row) => row.path),
-    [changeRows, stagedRows],
-  );
+  const allChangeFiles = useMemo(() => [...stagedRows, ...changeRows].map(row => row.path), [changeRows, stagedRows]);
 
   if (!selectedProject) {
     return (
@@ -111,7 +100,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
     setIsCommitting(true);
     try {
       const ok = await controller.commitChanges(commitMessage.trim(), allChangeFiles);
-      if (ok) setCommitMessage('');
+      if (ok) setCommitMessage("");
     } finally {
       setIsCommitting(false);
     }
@@ -121,9 +110,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
     <div className="flex h-full flex-col bg-white dark:bg-neutral-950">
       <div className="text-xxs flex h-10 shrink-0 items-center border-b border-neutral-200 px-6 dark:border-neutral-800">
         <GitBranch className="mr-2 h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" strokeWidth={1.75} />
-        <span className="font-medium text-neutral-900 dark:text-neutral-100">
-          {controller.currentBranch || 'main'}
-        </span>
+        <span className="font-medium text-neutral-900 dark:text-neutral-100">{controller.currentBranch || "main"}</span>
         <span className="ml-2 text-neutral-500 dark:text-neutral-400">
           ↑{ahead} ↓{behind}
         </span>
@@ -133,10 +120,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
           disabled={controller.isFetching}
           className="text-xxs ml-auto inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
         >
-          <RefreshCw
-            className={cn('h-3.5 w-3.5', controller.isFetching && 'animate-spin')}
-            strokeWidth={1.75}
-          />
+          <RefreshCw className={cn("h-3.5 w-3.5", controller.isFetching && "animate-spin")} strokeWidth={1.75} />
           <span>Fetch</span>
         </button>
       </div>
@@ -163,12 +147,8 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
           </div>
         ) : (
           <div className="space-y-5">
-            {stagedRows.length > 0 ? (
-              <ChangeList title="Staged" rows={stagedRows} onFileOpen={onFileOpen} />
-            ) : null}
-            {changeRows.length > 0 ? (
-              <ChangeList title="Changes" rows={changeRows} onFileOpen={onFileOpen} />
-            ) : null}
+            {stagedRows.length > 0 ? <ChangeList title="Staged" rows={stagedRows} onFileOpen={onFileOpen} /> : null}
+            {changeRows.length > 0 ? <ChangeList title="Changes" rows={changeRows} onFileOpen={onFileOpen} /> : null}
           </div>
         )}
       </div>
@@ -176,7 +156,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
       <div className="shrink-0 border-t border-neutral-200 p-4 dark:border-neutral-800">
         <textarea
           value={commitMessage}
-          onChange={(event) => setCommitMessage(event.target.value)}
+          onChange={event => setCommitMessage(event.target.value)}
           placeholder="Commit message"
           rows={2}
           disabled={isCommitting || allChangeFiles.length === 0}
@@ -241,36 +221,22 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
   );
 }
 
-function ChangeList({
-  title,
-  rows,
-  onFileOpen,
-}: {
-  title: string;
-  rows: ChangeRow[];
-  onFileOpen?: FileOpenHandler;
-}) {
+function ChangeList({ title, rows, onFileOpen }: { title: string; rows: ChangeRow[]; onFileOpen?: FileOpenHandler }) {
   return (
     <div>
       <div className="text-xxs mb-2 uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         {title} · {rows.length}
       </div>
       <div className="space-y-1">
-        {rows.map((row) => (
+        {rows.map(row => (
           <button
             key={`${row.group}:${row.path}`}
             type="button"
             onClick={() => onFileOpen?.(row.path)}
             className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-900"
           >
-            <span
-              className={cn('w-4 font-mono text-xxs', STATUS_COLOR[row.status])}
-            >
-              {row.status}
-            </span>
-            <span className="flex-1 truncate text-[13px] text-neutral-800 dark:text-neutral-200">
-              {row.path}
-            </span>
+            <span className={cn("w-4 font-mono text-xxs", STATUS_COLOR[row.status])}>{row.status}</span>
+            <span className="flex-1 truncate text-[13px] text-neutral-800 dark:text-neutral-200">{row.path}</span>
           </button>
         ))}
       </div>

@@ -1,7 +1,1 @@
-export type PilotDeckExtensionContributionKind =
-  | "command"
-  | "hook"
-  | "tool"
-  | "prompt"
-  | "mcp"
-  | "permission_rule";
+export type SatiExtensionContributionKind = "command" | "hook" | "tool" | "prompt" | "mcp" | "permission_rule";

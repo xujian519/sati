@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import type { Project, ProjectSession } from '../types/app';
-import { stripDocumentSelectionPromptBlock } from '../types/documentSelection';
+import { useEffect, useState } from "react";
+import type { Project, ProjectSession } from "../types/app";
+import { stripDocumentSelectionPromptBlock } from "../types/documentSelection";
 
 /**
  * UI-only rename overlay for project + session display names.
@@ -16,9 +16,9 @@ import { stripDocumentSelectionPromptBlock } from '../types/documentSelection';
  * via `useCustomNamesVersion()`.
  */
 
-const PROJECT_KEY = 'pilotdeck:customProjectNames';
-const SESSION_KEY = 'pilotdeck:customSessionTitles';
-const CHANGE_EVENT = 'customnames:changed';
+const PROJECT_KEY = "sati:customProjectNames";
+const SESSION_KEY = "sati:customSessionTitles";
+const CHANGE_EVENT = "customnames:changed";
 
 type NameMap = Record<string, string>;
 
@@ -27,7 +27,7 @@ function readMap(key: string): NameMap {
     const raw = localStorage.getItem(key);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as NameMap) : {};
+    return parsed && typeof parsed === "object" ? (parsed as NameMap) : {};
   } catch {
     return {};
   }
@@ -45,7 +45,7 @@ function writeMap(key: string, map: NameMap): void {
 
 export function getProjectCustomName(name: string): string | null {
   const value = readMap(PROJECT_KEY)[name];
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 /**
@@ -65,18 +65,14 @@ export function setProjectCustomName(name: string, override: string | null): voi
 
 /** Read the label any UI surface should show for a project row/breadcrumb. */
 export function projectDisplayName(project: Project): string {
-  return (
-    getProjectCustomName(project.name) ||
-    project.displayName ||
-    project.name
-  );
+  return getProjectCustomName(project.name) || project.displayName || project.name;
 }
 
 // ── Session titles ───────────────────────────────────────────────────────
 
 export function getSessionCustomTitle(sessionId: string): string | null {
   const value = readMap(SESSION_KEY)[sessionId];
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 export function setSessionCustomTitle(sessionId: string, override: string | null): void {
@@ -92,7 +88,7 @@ export function setSessionCustomTitle(sessionId: string, override: string | null
 
 /** Built-in fallback chain for the original session title. */
 function cleanSessionTitleCandidate(value: unknown): string {
-  if (typeof value !== 'string') return '';
+  if (typeof value !== "string") return "";
   return stripDocumentSelectionPromptBlock(value).trim();
 }
 
@@ -119,15 +115,15 @@ export function sessionDisplayTitle(session: ProjectSession): string {
 export function useCustomNamesVersion(): number {
   const [version, setVersion] = useState(0);
   useEffect(() => {
-    const handler = () => setVersion((v) => v + 1);
+    const handler = () => setVersion(v => v + 1);
     const storageHandler = (event: StorageEvent) => {
       if (event.key === PROJECT_KEY || event.key === SESSION_KEY) handler();
     };
     window.addEventListener(CHANGE_EVENT, handler);
-    window.addEventListener('storage', storageHandler);
+    window.addEventListener("storage", storageHandler);
     return () => {
       window.removeEventListener(CHANGE_EVENT, handler);
-      window.removeEventListener('storage', storageHandler);
+      window.removeEventListener("storage", storageHandler);
     };
   }, []);
   return version;

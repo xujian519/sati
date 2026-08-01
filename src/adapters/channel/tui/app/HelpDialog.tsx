@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
-import { pilotDeckDarkBlueTheme as t } from "./theme.js";
 import type { GatewayMode } from "../../../../gateway/index.js";
+import { satiDarkBlueTheme as t } from "./theme.js";
 
 export type HelpTab = "shortcuts" | "settings" | "about";
 
@@ -44,7 +44,10 @@ function TabBar({ active }: { active: HelpTab }) {
           </Text>
         );
       })}
-      <Text color={t.subtle} dimColor>  Tab/←→ switch  q/Esc close</Text>
+      <Text color={t.subtle} dimColor>
+        {" "}
+        Tab/←→ switch q/Esc close
+      </Text>
     </Box>
   );
 }
@@ -52,7 +55,9 @@ function TabBar({ active }: { active: HelpTab }) {
 function ShortcutsTab(): React.ReactNode {
   return (
     <Box flexDirection="column">
-      <Text bold color={t.brand}>Commands</Text>
+      <Text bold color={t.brand}>
+        Commands
+      </Text>
       <Row keys="/new" desc="Start a new session" />
       <Row keys="/sessions" desc="Open session sidebar" />
       <Row keys="/switch [N]" desc="Switch to session N (or open sidebar)" />
@@ -61,11 +66,13 @@ function ShortcutsTab(): React.ReactNode {
       <Row keys="/permissions" desc="View/edit permission rules" />
       <Row keys="/view [N]" desc="View tool output block" />
       <Row keys="/clear" desc="Clear transcript" />
-      <Row keys="/exit" desc="Quit PilotDeck" />
+      <Row keys="/exit" desc="Quit Sati" />
 
       <Separator />
 
-      <Text bold color={t.brand}>Keyboard</Text>
+      <Text bold color={t.brand}>
+        Keyboard
+      </Text>
       <Row keys="Enter" desc="Send message" />
       <Row keys="Ctrl+E" desc="Toggle session sidebar" />
       <Row keys="Esc" desc="Interrupt agent / close panel" />
@@ -76,7 +83,9 @@ function ShortcutsTab(): React.ReactNode {
 
       <Separator />
 
-      <Text bold color={t.brand}>Sidebar</Text>
+      <Text bold color={t.brand}>
+        Sidebar
+      </Text>
       <Row keys="↑↓" desc="Navigate (when input empty)" />
       <Row keys="Enter" desc="Select session / toggle group" />
       <Row keys="←→" desc="Collapse / expand group" />
@@ -85,7 +94,9 @@ function ShortcutsTab(): React.ReactNode {
 
       <Separator />
 
-      <Text bold color={t.brand}>Output Viewer</Text>
+      <Text bold color={t.brand}>
+        Output Viewer
+      </Text>
       <Row keys="j / k" desc="Scroll line" />
       <Row keys="PgUp / PgDn" desc="Scroll page" />
       <Row keys="g / G" desc="Top / bottom" />
@@ -94,7 +105,13 @@ function ShortcutsTab(): React.ReactNode {
   );
 }
 
-function SettingsTab({ mode, connection, sessionKey, model, cursor }: {
+function SettingsTab({
+  mode,
+  connection,
+  sessionKey,
+  model,
+  cursor,
+}: {
   mode: GatewayMode;
   connection: string;
   sessionKey: string;
@@ -128,8 +145,12 @@ function SettingsTab({ mode, connection, sessionKey, model, cursor }: {
 
   return (
     <Box flexDirection="column">
-      <Text bold color={t.brand}>Settings</Text>
-      <Text color={t.subtle} dimColor>↑↓ navigate  Enter toggle  1-3 switch tab</Text>
+      <Text bold color={t.brand}>
+        Settings
+      </Text>
+      <Text color={t.subtle} dimColor>
+        ↑↓ navigate Enter toggle 1-3 switch tab
+      </Text>
       <Text> </Text>
       {settings.map((s, i) => {
         const sel = i === cursor;
@@ -143,7 +164,9 @@ function SettingsTab({ mode, connection, sessionKey, model, cursor }: {
               {` ${s.value} `}
             </Text>
             {s.editable && sel && s.hint ? (
-              <Text color={t.subtle} dimColor>{s.hint}</Text>
+              <Text color={t.subtle} dimColor>
+                {s.hint}
+              </Text>
             ) : null}
           </Box>
         );
@@ -163,7 +186,9 @@ function SettingsTab({ mode, connection, sessionKey, model, cursor }: {
 function AboutTab(): React.ReactNode {
   return (
     <Box flexDirection="column">
-      <Text bold color={t.brand}>PilotDeck</Text>
+      <Text bold color={t.brand}>
+        Sati
+      </Text>
       <Text> </Text>
       <Text color={t.text}>AI agent runtime with multi-session terminal interface.</Text>
       <Text> </Text>
@@ -189,19 +214,19 @@ export function HelpDialog({
   settingsCursor,
 }: HelpDialogProps): React.ReactNode {
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={t.border}
-      paddingX={2}
-      paddingY={1}
-    >
+    <Box flexDirection="column" borderStyle="round" borderColor={t.border} paddingX={2} paddingY={1}>
       <TabBar active={activeTab} />
       <Text> </Text>
 
       {activeTab === "shortcuts" && <ShortcutsTab />}
       {activeTab === "settings" && (
-        <SettingsTab mode={mode} connection={connection} sessionKey={sessionKey} model={model} cursor={settingsCursor} />
+        <SettingsTab
+          mode={mode}
+          connection={connection}
+          sessionKey={sessionKey}
+          model={model}
+          cursor={settingsCursor}
+        />
       )}
       {activeTab === "about" && <AboutTab />}
     </Box>

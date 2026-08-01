@@ -48,9 +48,7 @@ export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentT
   let permissionDenials: AgentPermissionDenial[] = [];
   let lastCompactBoundary: (AgentTranscriptEntry & { type: "control_boundary" }) | undefined;
 
-  const completedTurnIds = new Set(
-    entries.filter((entry) => entry.type === "turn_result").map((entry) => entry.turnId),
-  );
+  const completedTurnIds = new Set(entries.filter(entry => entry.type === "turn_result").map(entry => entry.turnId));
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
@@ -146,8 +144,8 @@ function cloneTurnResult(result: AgentTurnResult): AgentTurnResult {
   return {
     ...result,
     usage: { ...result.usage },
-    permissionDenials: result.permissionDenials.map((denial) => ({ ...denial })),
-    errors: result.errors?.map((error) => ({ ...error })),
+    permissionDenials: result.permissionDenials.map(denial => ({ ...denial })),
+    errors: result.errors?.map(error => ({ ...error })),
   };
 }
 

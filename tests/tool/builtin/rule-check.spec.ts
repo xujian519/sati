@@ -13,7 +13,7 @@ test("rule_check returns no violation for clean text", async () => {
 
 test("rule_check reports violations with rule id and legal basis", async () => {
   const tool = createRuleCheckTool();
-  const result = await tool.execute({ text: "本专利结论：不构成侵权。依据专利法第99条。" }, {} as never);
+  const result = await tool.execute({ text: "本专利结论：存在侵权风险。依据专利法第99条。" }, {} as never);
   const text = result.content.map(c => (c.type === "text" ? c.text : "")).join("");
   assert.match(text, /发现 \d+ 条违规/);
   assert.match(text, /PAT-RISK-001/);

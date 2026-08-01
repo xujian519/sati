@@ -1,27 +1,15 @@
 /**
  * `web_fetch` builtin tool — full-fat parity port. See
- * `docs/pilotdeck-deferred-feature-implementation-guide.md` §5.2 (B2) for
+ * `docs/sati-deferred-feature-implementation-guide.md` §5.2 (B2) for
  * the 13-behaviour alignment checklist this implementation tracks.
  */
 
-import type {
-  CanonicalModelError,
-  CanonicalModelRequest,
-  CanonicalUsage,
-} from "../../model/index.js";
+import type { CanonicalModelError, CanonicalModelRequest, CanonicalUsage } from "../../model/index.js";
 import type { PermissionResult } from "../../permission/index.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
-import type {
-  PilotDeckToolDefinition,
-  PilotDeckToolExecutionOutput,
-  PilotDeckToolModelClient,
-  PilotDeckToolRuntimeContext,
-} from "../protocol/types.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
+import type { SatiToolDefinition, SatiToolExecutionOutput, SatiToolModelClient } from "../protocol/types.js";
 import { isPreapprovedUrl } from "./web/preapprovedHosts.js";
-import {
-  makeSecondaryModelPrompt,
-  WEB_FETCH_DESCRIPTION,
-} from "./web/secondaryPrompt.js";
+import { makeSecondaryModelPrompt, WEB_FETCH_DESCRIPTION } from "./web/secondaryPrompt.js";
 import {
   getURLMarkdownContent,
   MAX_MARKDOWN_LENGTH,
@@ -32,9 +20,7 @@ import {
 } from "./web/urlFetcher.js";
 import { validateURL } from "./web/urlValidation.js";
 
-function isRedirectInfo(
-  result: WebFetchHttpResult,
-): result is RedirectInfo {
+function isRedirectInfo(result: WebFetchHttpResult): result is RedirectInfo {
   return (result as RedirectInfo).type === "redirect";
 }
 
@@ -68,7 +54,7 @@ export type CreateWebFetchToolOptions = {
    * `mode: "llm"` returns an `unsupported_tool` error with a `mode: "raw"`
    * fallback hint.
    */
-  model?: PilotDeckToolModelClient;
+  model?: SatiToolModelClient;
   /** Provider id used for the secondary model call. Default: openrouter. */
   provider?: string;
   /** Model id used for the secondary model call. Default: kimi/k2.6. */
@@ -95,9 +81,7 @@ function isTruncated(rawLength: number): boolean {
 }
 
 function buildHttpFetchErrorMessage(error: WebFetchHttpError): string {
-  const statusLabel = error.statusText
-    ? `${error.status} ${error.statusText}`
-    : String(error.status);
+  const statusLabel = error.statusText ? `${error.status} ${error.statusText}` : String(error.status);
   const lines = [`web_fetch HTTP fetch failed with status ${statusLabel} for ${error.url}.`];
   if (isTransientHttpStatus(error.status)) {
     lines.push(
@@ -154,9 +138,7 @@ function isCanonicalModelError(value: unknown): value is CanonicalModelError {
 }
 
 function definedDetails(values: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(values).filter(([, value]) => value !== undefined),
-  );
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
 }
 
 function readStringProperty(value: unknown, key: string): string | undefined {
@@ -189,7 +171,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function createWebFetchTool(
   options: CreateWebFetchToolOptions = {},
-): PilotDeckToolDefinition<WebFetchInput, WebFetchOutput> {
+): SatiToolDefinition<WebFetchInput, WebFetchOutput> {
   return {
     name: "web_fetch",
     aliases: ["WebFetch"],
@@ -243,7 +225,7 @@ export function createWebFetchTool(
         ],
       },
     }),
-    validateInput: async (input) => {
+    validateInput: async input => {
       if (!input || typeof input !== "object") {
         return {
           ok: false,
@@ -287,13 +269,13 @@ export function createWebFetchTool(
       }
       return { ok: true, input };
     },
-    execute: async (input, context): Promise<PilotDeckToolExecutionOutput<WebFetchOutput>> => {
+    execute: async (input, context): Promise<SatiToolExecutionOutput<WebFetchOutput>> => {
       const { url } = input;
       const mode = resolveMode(input.mode);
       const prompt = input.prompt ?? "";
       const signal = context.abortSignal ?? new AbortController().signal;
       if (mode === "llm" && prompt.length === 0) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "invalid_tool_input",
           'web_fetch prompt is required when mode is "llm". Use mode "raw" to fetch markdown without a secondary model.',
         );
@@ -305,7 +287,7 @@ export function createWebFetchTool(
         httpResult = await fetchUrl(url, signal);
       } catch (err) {
         if (err instanceof WebFetchHttpError) {
-          throw new PilotDeckToolRuntimeError(
+          throw new SatiToolRuntimeError(
             "tool_execution_failed",
             buildHttpFetchErrorMessage(err),
             definedDetails({
@@ -320,11 +302,9 @@ export function createWebFetchTool(
           );
         }
         const message = err instanceof Error ? err.message : String(err);
-        throw new PilotDeckToolRuntimeError(
-          "tool_execution_failed",
-          `web_fetch failed: ${message}`,
-          { stage: "http_fetch" },
-        );
+        throw new SatiToolRuntimeError("tool_execution_failed", `web_fetch failed: ${message}`, {
+          stage: "http_fetch",
+        });
       }
 
       if (isRedirectInfo(httpResult)) {
@@ -373,7 +353,7 @@ export function createWebFetchTool(
 
       const model = options.model ?? context.model;
       if (!model) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "unsupported_tool",
           'web_fetch secondary model is not available. Retry with mode "raw" to fetch markdown without LLM processing.',
           { stage: "secondary_model", url, mode },
@@ -401,10 +381,7 @@ export function createWebFetchTool(
       try {
         for await (const event of model.stream(request, signal)) {
           if (signal.aborted) {
-            throw new PilotDeckToolRuntimeError(
-              "tool_aborted",
-              "web_fetch aborted before completion.",
-            );
+            throw new SatiToolRuntimeError("tool_aborted", "web_fetch aborted before completion.");
           }
           switch (event.type) {
             case "text_delta":
@@ -414,7 +391,7 @@ export function createWebFetchTool(
               _usage = event.usage;
               break;
             case "error":
-              throw new PilotDeckToolRuntimeError(
+              throw new SatiToolRuntimeError(
                 "tool_execution_failed",
                 `web_fetch secondary model error: ${event.error.message}`,
                 secondaryModelErrorDetails(event.error),
@@ -424,10 +401,10 @@ export function createWebFetchTool(
           }
         }
       } catch (err) {
-        if (err instanceof PilotDeckToolRuntimeError) throw err;
+        if (err instanceof SatiToolRuntimeError) throw err;
         const message = err instanceof Error ? err.message : String(err);
         const modelError = extractCanonicalModelError(err);
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "tool_execution_failed",
           `web_fetch secondary model failed: ${message}`,
           modelError
@@ -445,7 +422,7 @@ export function createWebFetchTool(
       }
 
       if (modelText.trim().length === 0) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "tool_execution_failed",
           'web_fetch secondary model returned no visible text. Retry with mode "raw" to inspect the fetched markdown, or try again later.',
           { stage: "secondary_model", url, mode },

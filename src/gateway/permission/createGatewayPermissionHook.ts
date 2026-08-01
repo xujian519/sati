@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { CallbackHookHandler } from "../../extension/hooks/execution/CallbackHookExecutor.js";
-import type { PilotDeckHookSyncOutput } from "../../extension/hooks/protocol/output.js";
+import type { SatiHookSyncOutput } from "../../extension/hooks/protocol/output.js";
 import type { PermissionRule } from "../../permission/protocol/types.js";
 import type { GatewayEvent } from "../protocol/types.js";
 import type { GatewayPermissionBus, GatewayPermissionDecision } from "./GatewayPermissionBus.js";
 
-export const GATEWAY_PERMISSION_CALLBACK_NAME = "pilotdeck.gateway.permission";
+export const GATEWAY_PERMISSION_CALLBACK_NAME = "sati.gateway.permission";
 
 export type CreateGatewayPermissionHookOptions = {
-  /** PilotDeck session this hook owns. Used to scope bus pending entries. */
+  /** Sati session this hook owns. Used to scope bus pending entries. */
   sessionKey: string;
   /** Shared permission bus where decisions arrive from the Web UI. */
   bus: GatewayPermissionBus;
@@ -56,21 +56,16 @@ export type CreateGatewayPermissionHookOptions = {
  * mean nobody can see the banner), the hook denies immediately — better
  * a clean denial than a silent hang.
  */
-export function createGatewayPermissionHook(
-  options: CreateGatewayPermissionHookOptions,
-): CallbackHookHandler {
+export function createGatewayPermissionHook(options: CreateGatewayPermissionHookOptions): CallbackHookHandler {
   return async ({ hookInput, signal }) => {
     const toolName = typeof hookInput.toolName === "string" ? hookInput.toolName : "UnknownTool";
-    const toolCallId = typeof hookInput.toolCallId === "string"
-      ? hookInput.toolCallId
-      : typeof hookInput.toolUseId === "string"
-        ? hookInput.toolUseId
-        : "";
-    const payload = "toolInput" in hookInput
-      ? hookInput.toolInput
-      : "input" in hookInput
-        ? hookInput.input
-        : {};
+    const toolCallId =
+      typeof hookInput.toolCallId === "string"
+        ? hookInput.toolCallId
+        : typeof hookInput.toolUseId === "string"
+          ? hookInput.toolUseId
+          : "";
+    const payload = "toolInput" in hookInput ? hookInput.toolInput : "input" in hookInput ? hookInput.input : {};
     const requestId = options.uuid ? options.uuid() : randomUUID();
 
     const delivered = options.emit({
@@ -90,7 +85,7 @@ export function createGatewayPermissionHook(
             message: "Permission prompt could not be delivered to the Web UI.",
           },
         },
-      } satisfies PilotDeckHookSyncOutput;
+      } satisfies SatiHookSyncOutput;
     }
 
     let onAbort: (() => void) | undefined;
@@ -119,16 +114,13 @@ export function createGatewayPermissionHook(
       // so the next tool.checkPermissions() / decide() in this same turn
       // walks the allow branch instead of asking again.
       const rules = extractSessionAllowRules(hookInput.permissionSuggestions, toolName);
-      const rulesToRemember = rules.length > 0
-        ? rules
-        : [{ source: "session" as const, behavior: "allow" as const, toolName }];
+      const rulesToRemember =
+        rules.length > 0 ? rules : [{ source: "session" as const, behavior: "allow" as const, toolName }];
 
       for (const rule of rulesToRemember) {
         const alreadyAllowed = options.permissionRules.some(
-          (existing) =>
-            existing.behavior === "allow"
-            && existing.toolName === rule.toolName
-            && existing.pattern === rule.pattern,
+          existing =>
+            existing.behavior === "allow" && existing.toolName === rule.toolName && existing.pattern === rule.pattern,
         );
         if (!alreadyAllowed) {
           options.permissionRules.push(rule);
@@ -141,33 +133,32 @@ export function createGatewayPermissionHook(
       specific: {
         hookEventName: "PermissionRequest",
         decision:
-          decision.decision === "allow"
-            ? { behavior: "allow" }
-            : { behavior: "deny", message: decision.reason },
+          decision.decision === "allow" ? { behavior: "allow" } : { behavior: "deny", message: decision.reason },
       },
-    } satisfies PilotDeckHookSyncOutput;
+    } satisfies SatiHookSyncOutput;
   };
 }
 
 function extractSessionAllowRules(value: unknown, fallbackToolName: string): PermissionRule[] {
   if (!Array.isArray(value)) return [];
-  const allowSession = value.find((option) =>
-    isRecord(option) && option.id === "allow_session" && Array.isArray(option.rules)
+  const allowSession = value.find(
+    option => isRecord(option) && option.id === "allow_session" && Array.isArray(option.rules),
   );
   if (!isRecord(allowSession) || !Array.isArray(allowSession.rules)) return [];
 
-  return allowSession.rules.flatMap((candidate) => {
+  return allowSession.rules.flatMap(candidate => {
     if (!isRecord(candidate)) return [];
-    const toolName = typeof candidate.toolName === "string" && candidate.toolName
-      ? candidate.toolName
-      : fallbackToolName;
+    const toolName =
+      typeof candidate.toolName === "string" && candidate.toolName ? candidate.toolName : fallbackToolName;
     if (!toolName) return [];
-    return [{
-      source: "session" as const,
-      behavior: "allow" as const,
-      toolName,
-      ...(typeof candidate.pattern === "string" && candidate.pattern ? { pattern: candidate.pattern } : {}),
-    }];
+    return [
+      {
+        source: "session" as const,
+        behavior: "allow" as const,
+        toolName,
+        ...(typeof candidate.pattern === "string" && candidate.pattern ? { pattern: candidate.pattern } : {}),
+      },
+    ];
   });
 }
 

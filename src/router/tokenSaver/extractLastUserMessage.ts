@@ -8,7 +8,7 @@ export function extractLastUserMessage(messages: CanonicalMessage[]): string | u
     }
     const text = message.content
       .filter((block): block is import("../../model/index.js").CanonicalTextBlock => block.type === "text")
-      .map((block) => block.text)
+      .map(block => block.text)
       .join("\n")
       .trim();
     if (text.length > 0) {

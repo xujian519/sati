@@ -21,8 +21,6 @@ import {
   pickLatestIsoTimestamp,
   sortDiscoveryPlans,
   toIsoTimestamp,
-  toTimestampValue,
-  truncateText,
   type WebPlanContextRefs,
   type WebPlanRecord,
   type WebPlanSession,
@@ -57,20 +55,9 @@ const EMPTY_STORE: PlanIndex = { version: INDEX_VERSION, plans: [] };
 
 /** Emits run-history events + run log lines. */
 export type RunEventSink = {
-  appendRunEvent(
-    projectRoot: string,
-    event: Record<string, unknown>,
-  ): Promise<unknown>;
-  appendRunLog(
-    projectRoot: string,
-    runId: string,
-    lines: string[],
-  ): Promise<void>;
-  appendRunLogEvent(
-    projectRoot: string,
-    runId: string,
-    event: Record<string, unknown>,
-  ): Promise<void>;
+  appendRunEvent(projectRoot: string, event: Record<string, unknown>): Promise<unknown>;
+  appendRunLog(projectRoot: string, runId: string, lines: string[]): Promise<void>;
+  appendRunLogEvent(projectRoot: string, runId: string, event: Record<string, unknown>): Promise<void>;
   formatLogLine(entry: Record<string, unknown>): string;
 };
 
@@ -96,11 +83,7 @@ export type WorkspaceManager = {
     workspaceCwd: string,
     projectRoot: string,
   ): Promise<{ applied: boolean; diff?: string; error?: string }>;
-  disposeWorkspace(
-    strategy: string,
-    cwd: string,
-    projectRoot: string,
-  ): Promise<void>;
+  disposeWorkspace(strategy: string, cwd: string, projectRoot: string): Promise<void>;
 };
 
 export type StateManager = {
@@ -171,17 +154,20 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
 
   const fallbackId = `plan-${randomUUID().slice(0, 8)}`;
   const id = normalizeString(record?.id, fallbackId);
-  const sourceId = normalizeString(
-    (record?.sourceDiscoverySessionId as string) || (record?.sourceRunId as string),
-  );
+  const sourceId = normalizeString((record?.sourceDiscoverySessionId as string) || (record?.sourceRunId as string));
   const gatewayStatus = normalizeString(record?.status, "ready");
   const mappedStatus =
-    gatewayStatus === "executing" ? "running" :
-    gatewayStatus === "superseded" ? "archived" :
-    gatewayStatus === "applying" ? "completed" :
-    gatewayStatus === "applied" ? "archived" :
-    gatewayStatus === "apply_failed" ? "completed" :
-    gatewayStatus;
+    gatewayStatus === "executing"
+      ? "running"
+      : gatewayStatus === "superseded"
+        ? "archived"
+        : gatewayStatus === "applying"
+          ? "completed"
+          : gatewayStatus === "applied"
+            ? "archived"
+            : gatewayStatus === "apply_failed"
+              ? "completed"
+              : gatewayStatus;
 
   return {
     id,
@@ -201,16 +187,13 @@ export function normalizeDiscoveryPlanRecord(record: Record<string, unknown> | n
     contextRefs,
     planFilePath: normalizeString(record?.planFilePath, relativePlanPath(id)),
     reportFilePath: normalizeString(record?.reportFilePath) || undefined,
-    structureVersion:
-      typeof record?.structureVersion === "number" ? record.structureVersion : STRUCTURE_VERSION,
+    structureVersion: typeof record?.structureVersion === "number" ? record.structureVersion : STRUCTURE_VERSION,
     workCycleId: normalizeString(record?.workCycleId) || undefined,
     workspace: normalizeWorkspaceRef(record?.workspace),
   };
 }
 
-function normalizeWorkspaceRef(
-  raw: unknown,
-): { strategy: string; cwd: string } | undefined {
+function normalizeWorkspaceRef(raw: unknown): { strategy: string; cwd: string } | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const obj = raw as Record<string, unknown>;
   const strategy = typeof obj.strategy === "string" ? obj.strategy : "";
@@ -238,7 +221,7 @@ async function readPlanStore(projectDir: string): Promise<PlanIndex> {
           : INDEX_VERSION;
     return {
       version,
-      plans: (parsed.plans as unknown[]).map((p) => normalizeDiscoveryPlanRecord(p as Record<string, unknown>)),
+      plans: (parsed.plans as unknown[]).map(p => normalizeDiscoveryPlanRecord(p as Record<string, unknown>)),
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
@@ -272,7 +255,7 @@ async function readRawPlanRecord(projectDir: string, planId: string): Promise<Re
     const raw = await fs.readFile(indexPath(projectDir), "utf8");
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.plans)) return null;
-    return (parsed.plans as Record<string, unknown>[]).find((p) => p.id === planId) ?? null;
+    return (parsed.plans as Record<string, unknown>[]).find(p => p.id === planId) ?? null;
   } catch {
     return null;
   }
@@ -340,10 +323,10 @@ export class DiscoveryPlanService {
     const isActive = (id: string) => this.deps.activity.isSessionActive(id);
 
     const cycleIndex = await readCycleIndex(projectDir);
-    const cycleWorkspaceMap = new Map(cycleIndex.cycles.map((c) => [c.id, c.workspace]));
+    const cycleWorkspaceMap = new Map(cycleIndex.cycles.map(c => [c.id, c.workspace]));
 
     const plans = await Promise.all(
-      store.plans.map(async (plan) => {
+      store.plans.map(async plan => {
         const body = await readPlanBody(projectDir, plan.planFilePath);
         const session = plan.executionSessionId
           ? (sessionsById.get(plan.executionSessionId) as WebPlanSession) || null
@@ -367,7 +350,7 @@ export class DiscoveryPlanService {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
     const projectDir = this.projectDir(projectRoot);
     const cycleIndex = await readCycleIndex(projectDir);
-    const cycle = cycleIndex.cycles.find((c) => c.id === cycleId);
+    const cycle = cycleIndex.cycles.find(c => c.id === cycleId);
     if (!cycle) throw makeError("Work cycle not found", "NOT_FOUND");
 
     if (cycle.status === "applying") {
@@ -376,11 +359,7 @@ export class DiscoveryPlanService {
 
     if (cycle.workspace?.cwd && this.deps.workspace) {
       try {
-        await this.deps.workspace.disposeWorkspace(
-          cycle.workspace.strategy,
-          cycle.workspace.cwd,
-          projectRoot,
-        );
+        await this.deps.workspace.disposeWorkspace(cycle.workspace.strategy, cycle.workspace.cwd, projectRoot);
       } catch {
         // Best effort — workspace may already be gone.
       }
@@ -420,28 +399,20 @@ export class DiscoveryPlanService {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
     const projectDir = this.projectDir(projectRoot);
     const cycleIndex = await readCycleIndex(projectDir);
-    const cycle = cycleIndex.cycles.find((c) => c.id === cycleId);
+    const cycle = cycleIndex.cycles.find(c => c.id === cycleId);
     if (!cycle) throw makeError("Work cycle not found", "NOT_FOUND");
 
     if (cycle.status !== "active") {
-      throw makeError(
-        `Cycle must be in active status to apply (current: ${cycle.status})`,
-        "INVALID_STATE",
-      );
+      throw makeError(`Cycle must be in active status to apply (current: ${cycle.status})`, "INVALID_STATE");
     }
 
     if (!cycle.workspace?.cwd) {
-      throw makeError(
-        "Cycle has no associated workspace to apply",
-        "MISSING_WORKSPACE",
-      );
+      throw makeError("Cycle has no associated workspace to apply", "MISSING_WORKSPACE");
     }
 
     const store = await readPlanStore(projectDir);
-    const cyclePlans = store.plans.filter((p) => cycle.planIds.includes(p.id));
-    const hasCompleted = cyclePlans.some(
-      (p) => p.status === "completed" || p.status === "completed_no_report",
-    );
+    const cyclePlans = store.plans.filter(p => cycle.planIds.includes(p.id));
+    const hasCompleted = cyclePlans.some(p => p.status === "completed" || p.status === "completed_no_report");
     if (!hasCompleted) {
       throw makeError("Cycle has no completed plans to apply", "INVALID_STATE");
     }
@@ -456,7 +427,7 @@ export class DiscoveryPlanService {
       runId: executionToken,
       kind: "cycle-apply",
       sourceId: cycle.id,
-      title: `Apply cycle: ${cyclePlans.map((p) => p.title).join(", ")}`,
+      title: `Apply cycle: ${cyclePlans.map(p => p.title).join(", ")}`,
       status: "queued",
       timestamp: now,
       startedAt: now,
@@ -481,7 +452,7 @@ export class DiscoveryPlanService {
     const projectRoot = await this.deps.paths.extractProjectDirectory(projectName);
     const projectDir = this.projectDir(projectRoot);
     const cycleIndex = await readCycleIndex(projectDir);
-    const cycle = cycleIndex.cycles.find((c) => c.id === cycleId);
+    const cycle = cycleIndex.cycles.find(c => c.id === cycleId);
     if (!cycle) throw makeError("Work cycle not found", "NOT_FOUND");
 
     const normalizedStatus = updates.status;
@@ -492,11 +463,7 @@ export class DiscoveryPlanService {
 
       if (finalStatus === "applied" && cycle.workspace?.cwd && this.deps.workspace) {
         try {
-          await this.deps.workspace.disposeWorkspace(
-            cycle.workspace.strategy,
-            cycle.workspace.cwd,
-            projectRoot,
-          );
+          await this.deps.workspace.disposeWorkspace(cycle.workspace.strategy, cycle.workspace.cwd, projectRoot);
         } catch {
           // Best effort cleanup.
         }
@@ -550,13 +517,15 @@ export class DiscoveryPlanService {
     const rawRecord = await readRawPlanRecord(projectDir, planId);
     if (!rawRecord) throw makeError("Discovery plan not found", "NOT_FOUND");
 
-    let reportPath = typeof rawRecord.reportFilePath === "string" ? rawRecord.reportFilePath : "";
+    const reportPath = typeof rawRecord.reportFilePath === "string" ? rawRecord.reportFilePath : "";
 
     if (!reportPath) {
       const runId =
-        typeof rawRecord.sourceDiscoverySessionId === "string" ? rawRecord.sourceDiscoverySessionId
-        : typeof rawRecord.sourceRunId === "string" ? rawRecord.sourceRunId
-        : "";
+        typeof rawRecord.sourceDiscoverySessionId === "string"
+          ? rawRecord.sourceDiscoverySessionId
+          : typeof rawRecord.sourceRunId === "string"
+            ? rawRecord.sourceRunId
+            : "";
       if (runId) {
         const inferred = join("reports", `${runId}.md`);
         const inferredContent = await readPlanBody(projectDir, inferred);

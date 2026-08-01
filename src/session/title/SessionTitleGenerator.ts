@@ -36,9 +36,7 @@ export type CreateSessionTitleGeneratorOptions = {
   timeoutMs?: number;
 };
 
-export function createSessionTitleGenerator(
-  options: CreateSessionTitleGeneratorOptions,
-): SessionTitleGenerator {
+export function createSessionTitleGenerator(options: CreateSessionTitleGeneratorOptions): SessionTitleGenerator {
   const timeoutMs = options.timeoutMs ?? SESSION_TITLE_TIMEOUT_MS;
   return async ({ text, sessionId, turnId, signal }) => {
     const prompt = normalizeSessionTitleInput(text);
@@ -92,8 +90,8 @@ export function normalizeSessionTitleInput(text: string): string | null {
 
 function parseGeneratedTitle(content: Awaited<ReturnType<ModelRuntime["complete"]>>["content"]): string | null {
   const text = content
-    .filter((block) => block.type === "text")
-    .map((block) => (block.type === "text" ? block.text : ""))
+    .filter(block => block.type === "text")
+    .map(block => (block.type === "text" ? block.text : ""))
     .join("")
     .trim();
   if (!text) {
@@ -109,11 +107,7 @@ function parseGeneratedTitle(content: Awaited<ReturnType<ModelRuntime["complete"
     return null;
   }
 
-  if (
-    typeof parsed !== "object"
-    || parsed === null
-    || typeof (parsed as { title?: unknown }).title !== "string"
-  ) {
+  if (typeof parsed !== "object" || parsed === null || typeof (parsed as { title?: unknown }).title !== "string") {
     logSessionTitleFailure("missing_title");
     return null;
   }

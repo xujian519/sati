@@ -13,10 +13,7 @@ export default function ImChannelsSection() {
   if (loading || !status) {
     return (
       <div className="space-y-2">
-        <PageSectionHeader
-          title={t("gateway.title")}
-          description={t("gateway.description")}
-        />
+        <PageSectionHeader title={t("gateway.title")} description={t("gateway.description")} />
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
@@ -26,10 +23,7 @@ export default function ImChannelsSection() {
 
   return (
     <div className="space-y-8">
-      <PageSectionHeader
-        title={t("gateway.title")}
-        description={t("gateway.description")}
-      />
+      <PageSectionHeader title={t("gateway.title")} description={t("gateway.description")} />
       <FeishuChannelSection status={status.feishu} onSaved={refresh} />
       <WeixinChannelSection status={status.weixin} onSaved={refresh} />
       <WeComChannelSection status={status.wecom} onSaved={refresh} />

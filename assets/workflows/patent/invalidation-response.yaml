@@ -1,0 +1,135 @@
+# 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
+template_id: invalidation-response
+name: 无效/复审答复
+description: 案卷探查 → 规则探查 → 检索 → 质量门 → CAP02 → 新颖性/创造性 → 反套话
+intent: 无效宣告或复审案件：CAP02 深度技术分析后的新颖性/创造性判断
+steps:
+  - id: probe
+    name: 案卷探查
+    description: 读取无效/复审/审查意见案卷材料
+    worker: project-probe
+    input_template: |
+      案卷目录：{{case_dir}}
+      识别无效请求书、审查意见、对比文件、本专利文本与已有答复草稿，输出 intent 与 provision_ids。
+
+  - id: rules
+    name: 规则探查
+    description: 确定新颖性/创造性相关 provision_ids
+    worker: rule-explorer
+    depends_on: [probe]
+    input_template: |
+      针对无效/复审/审查意见答复场景，探查 P-A01（新颖性）、P-A02（创造性）相关规则与 generatedPrompt。
+
+  - id: search-plan
+    name: 检索规划
+    description: 补充检索或验证对比文件
+    worker: patent-search-planner
+    depends_on: [rules]
+    input_template: |
+      基于已有对比文件、审查意见引用文献与无效理由，规划补充检索（如有必要）。
+
+  - id: search-exec
+    name: 检索执行
+    description: 执行检索并更新对比文件集
+    worker: patent-search-executor
+    depends_on: [search-plan]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **必经步骤**：按 search-plan.md 执行检索。
+      至少使用 2 个检索源：
+      1. Google Patents（通过 google-patents-search skill）
+      2. CNIPA 公布公告（通过 cnipa-query skill）
+      每篇对比文件标注：专利号、标题、公开日、相关度（X/Y/A）、覆盖的权利要求、可引用段落（至少 3 段）。
+      执行检索规划，更新对比文件清单至 data/cases/{{case_id}}/outputs/
+
+  - id: search-qual
+    name: 检索结果质量检查
+    description: 对检索结果进行质量验证，满足门槛后方可进入下游
+    worker: bcip-retrieval (quality check phase)
+    depends_on: [search-exec]
+    has_checkpoint: true
+    checkpoint_title: 确认对比文件列表与相关性（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **质量门槛**（以下条件必须全部满足）：
+      1. 对比文件 ≥ 3 篇
+      2. 每篇标注了相关度和覆盖的权利要求
+      3. 至少 2 篇获取了全文（PDF→Markdown 转换）
+      4. 检索式包含布尔逻辑和 IPC 限定
+      
+      不满足时：退回 search-exec 重新执行。
+      满足时：人工确认对比文件列表后再进入技术分析。
+
+  - id: tech-analyze
+    name: CAP02 技术分析
+    description: 目标专利与对比文件三级分析、矩阵与因果图（新颖性/创造性前置必步）
+    worker: patent-technical-analyzer
+    depends_on: [search-qual]
+    has_checkpoint: true
+    checkpoint_title: 确认技术解构与区别特征清单（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：无效/复审/审查意见答复 — **新颖性与创造性分析的前置必步**，不可跳过。
+
+      执行 CAP02 三级技术分析：
+      1. 读取 xiaonuo.md、converted/、审查意见 PDF/MD 及对比文件材料
+      2. 对**本专利/申请**完成七维解构（写入 technical-deconstruction-target.md）
+      3. 对审查意见/无效理由引用的**每篇对比文件 D1/D2…** 完成七维解构（technical-deconstruction-d1.md 等）
+      4. 完成四级对比矩阵、四层区别特征、技术启示初步判断
+      5. ≥3 特征或存在因果链时：tech-graph-spec.json + tech-graph-analyze.py → tech-graph-report.md
+      6. HITL：区别特征清单确认后再进入新颖性/创造性步骤
+
+      综合报告：data/cases/{{case_id}}/outputs/technical-analysis-report.md
+      下游 provision-novelty / provision-inventiveness **必须**引用 distinctive-features.md 与本报告。
+
+  - id: novelty
+    name: 新颖性分析
+    description: 单独对比分析新颖性（基于 CAP02 产出）
+    worker: provision-novelty
+    depends_on: [tech-analyze]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **前置依赖**（必须先读取）：
+      - data/cases/{{case_id}}/outputs/technical-analysis-report.md
+      - data/cases/{{case_id}}/outputs/distinctive-features.md
+      - data/cases/{{case_id}}/outputs/technical-comparison-matrix.md
+
+      对权利要求与对比文件进行单独对比，输出新颖性结论与法律依据。
+      不得脱离 CAP02 区别特征清单自行认定特征。
+
+  - id: inventiveness
+    name: 创造性分析
+    description: 三步法创造性判断（基于 CAP02 产出）
+    worker: provision-inventiveness
+    depends_on: [novelty]
+    has_checkpoint: true
+    checkpoint_title: 审核创造性结论（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **前置依赖**（必须先读取）：
+      - data/cases/{{case_id}}/outputs/technical-analysis-report.md
+      - data/cases/{{case_id}}/outputs/distinctive-features.md
+      - data/cases/{{case_id}}/outputs/tech-graph-report.md（如有）
+      - data/cases/{{case_id}}/outputs/ 下新颖性分析结论
+
+      按三步法分析创造性，引用具体法条与审查指南规则；技术启示判断须与 CAP02 矩阵一致。
+      报告：data/cases/{{case_id}}/outputs/inventiveness-analysis.md
+
+  - id: slop-clean
+    name: 反套话润色+评分
+    description: stop-patent-slop 规则后处理 + 5维评分，清理答复书中的空洞套话
+    worker: patent-slop-cleaner
+    depends_on: [inventiveness]
+    input_template: |
+      案卷：{{case_dir}}
+
+      对 outputs/inventiveness-analysis.md（及新颖性分析结论）应用 stop-patent-slop 规则：
+      1. 删除填充词与无证据套话
+      2. 运行 slop-scorer.ts 5维评分，总分 < 35 必须修订
+      3. 输出 inventiveness-analysis-clean.md
+      4. 输出 invalidation-response-slop-changelog.md（列出变更 + 评分报告）

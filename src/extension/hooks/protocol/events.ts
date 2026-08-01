@@ -1,4 +1,4 @@
-export const PILOTDECK_HOOK_EVENTS = [
+export const SATI_HOOK_EVENTS = [
   "PreToolUse",
   "PostToolUse",
   "PostToolUseFailure",
@@ -41,16 +41,11 @@ export const PILOTDECK_HOOK_EVENTS = [
   "ElicitationResult",
 ] as const;
 
-export const PILOTDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS = [
-  "TeammateIdle",
-  "TaskCreated",
-  "TaskCompleted",
-] as const;
+export const SATI_NOT_APPLICABLE_LEGACY_HOOK_EVENTS = ["TeammateIdle", "TaskCreated", "TaskCompleted"] as const;
 
-export type PilotDeckHookEvent = (typeof PILOTDECK_HOOK_EVENTS)[number];
-export type PilotDeckNotApplicableLegacyHookEvent =
-  (typeof PILOTDECK_NOT_APPLICABLE_LEGACY_HOOK_EVENTS)[number];
+export type SatiHookEvent = (typeof SATI_HOOK_EVENTS)[number];
+export type SatiNotApplicableLegacyHookEvent = (typeof SATI_NOT_APPLICABLE_LEGACY_HOOK_EVENTS)[number];
 
-export function isPilotDeckHookEvent(value: string): value is PilotDeckHookEvent {
-  return (PILOTDECK_HOOK_EVENTS as readonly string[]).includes(value);
+export function isSatiHookEvent(value: string): value is SatiHookEvent {
+  return (SATI_HOOK_EVENTS as readonly string[]).includes(value);
 }

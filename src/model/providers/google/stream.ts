@@ -1,8 +1,5 @@
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
-import {
-  normalizeGoogleFinishReason,
-  normalizeGoogleUsage,
-} from "./response.js";
+import { normalizeGoogleFinishReason, normalizeGoogleUsage } from "./response.js";
 
 type GoogleStreamToolCallState = {
   baseId: string;
@@ -135,7 +132,12 @@ function readParts(candidate: Record<string, unknown>): unknown[] {
 }
 
 function safeToolCallIdPart(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "google";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "google"
+  );
 }
 
 function readString(value: unknown): string | undefined {
@@ -143,7 +145,5 @@ function readString(value: unknown): string | undefined {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }

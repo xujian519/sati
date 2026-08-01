@@ -79,9 +79,7 @@ function truncate(text, maxLength) {
     return `${text.slice(0, maxLength)}...`;
 }
 function asRecord(value) {
-    return value && typeof value === "object" && !Array.isArray(value)
-        ? value
-        : undefined;
+    return value && typeof value === "object" && !Array.isArray(value) ? value : undefined;
 }
 function pushUniqueText(target, value) {
     const normalized = value.trim();
@@ -169,7 +167,7 @@ function compactWhitespace(text) {
     const lines = text
         .replace(/\r/g, "")
         .split("\n")
-        .map((line) => line.trimEnd());
+        .map(line => line.trimEnd());
     const compact = [];
     let previousEmpty = false;
     for (const line of lines) {
@@ -201,7 +199,7 @@ function countPluginStateMarkers(text) {
 }
 function startsWithPluginStateLine(text) {
     const normalized = normalizePluginNoiseProbe(text);
-    return PLUGIN_STATE_LINE_PATTERNS.some((pattern) => pattern.test(normalized));
+    return PLUGIN_STATE_LINE_PATTERNS.some(pattern => pattern.test(normalized));
 }
 function lineLooksLikePluginNoise(text) {
     const normalized = normalizePluginNoiseProbe(text);
@@ -218,9 +216,9 @@ function paragraphLooksLikePluginNoise(text) {
     const lines = text
         .replace(/\r/g, "")
         .split("\n")
-        .map((line) => normalizePluginNoiseProbe(line))
+        .map(line => normalizePluginNoiseProbe(line))
         .filter(Boolean);
-    const noisyLines = lines.filter((line) => startsWithPluginStateLine(line) || countPluginStateMarkers(line) >= 3).length;
+    const noisyLines = lines.filter(line => startsWithPluginStateLine(line) || countPluginStateMarkers(line) >= 3).length;
     const markerCount = countPluginStateMarkers(normalized);
     if (/session status/i.test(normalized) && markerCount >= 2)
         return true;
@@ -232,7 +230,7 @@ function stripPluginStateScaffolding(text) {
         return "";
     const paragraphs = normalized
         .split(/\n\s*\n/)
-        .map((part) => part.trim())
+        .map(part => part.trim())
         .filter(Boolean);
     while (paragraphs.length > 0 && paragraphLooksLikePluginNoise(paragraphs[0])) {
         paragraphs.shift();
@@ -289,9 +287,7 @@ function collectSenderHints(text) {
 function stripUntrustedSenderMetadata(text) {
     const codeFencePattern = /(?:Conversation info|Sender)\s*\(untrusted metadata\)\s*:\s*```(?:json)?[\s\S]*?```\s*/gi;
     const inlineJsonPattern = /(?:Conversation info|Sender)\s*\(untrusted metadata\)\s*:\s*\{[\s\S]*?\}\s*/gi;
-    return text
-        .replace(codeFencePattern, "")
-        .replace(inlineJsonPattern, "");
+    return text.replace(codeFencePattern, "").replace(inlineJsonPattern, "");
 }
 function stripQuotedContextBlocks(text) {
     return text
@@ -309,9 +305,7 @@ function stripLeadingTimestampPrefix(text) {
     return text.replace(/^\s*\[[^\]\n]*(?:\d{4}-\d{1,2}-\d{1,2}|GMT|UTC)[^\]\n]*\]\s*/i, "");
 }
 function stripAttachmentScaffolding(text) {
-    let cleaned = text
-        .replace(/^\[media attached:[^\n]*\]\s*/gim, "")
-        .replace(/^To send an image back,[^\n]*$/gim, "");
+    let cleaned = text.replace(/^\[media attached:[^\n]*\]\s*/gim, "").replace(/^To send an image back,[^\n]*$/gim, "");
     const fileTagIndex = cleaned.search(/\n<file\b/i);
     if (fileTagIndex >= 0) {
         cleaned = cleaned.slice(0, fileTagIndex);
@@ -328,7 +322,8 @@ function looksLikeOpaqueSenderLabel(label) {
     const trimmed = label.trim();
     if (!trimmed || trimmed.length > 120)
         return false;
-    if (/^[A-Za-z0-9_.@()\- ]+$/.test(trimmed) && (/[0-9_]/.test(trimmed) || /^[A-Za-z][A-Za-z0-9_.@()\- ]{4,}$/.test(trimmed))) {
+    if (/^[A-Za-z0-9_.@()\- ]+$/.test(trimmed) &&
+        (/[0-9_]/.test(trimmed) || /^[A-Za-z][A-Za-z0-9_.@()\- ]{4,}$/.test(trimmed))) {
         return true;
     }
     return false;
@@ -405,17 +400,13 @@ function stripUserNoise(text) {
     return compactWhitespace(cleaned);
 }
 function stripAssistantThinking(text) {
-    const withoutLeadingThink = text
-        .replace(/^[\s\S]*?<\/think>/i, "")
-        .replace(/^[\s\S]*?<\/thinking>/i, "");
+    const withoutLeadingThink = text.replace(/^[\s\S]*?<\/think>/i, "").replace(/^[\s\S]*?<\/thinking>/i, "");
     const withoutThink = withoutLeadingThink
         .replace(/<think>[\s\S]*?<\/think>/gi, "")
         .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
         .replace(/<\/?think[^>]*>/gi, "")
         .replace(/<\/?thinking[^>]*>/gi, "");
-    const lines = withoutThink
-        .split("\n")
-        .map((line) => line.trimEnd());
+    const lines = withoutThink.split("\n").map(line => line.trimEnd());
     const compact = [];
     let previousEmpty = false;
     for (const line of lines) {
@@ -426,12 +417,15 @@ function stripAssistantThinking(text) {
         previousEmpty = empty;
     }
     const normalized = compact.join("\n").trim();
-    const paragraphs = normalized.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+    const paragraphs = normalized
+        .split(/\n\s*\n/)
+        .map(part => part.trim())
+        .filter(Boolean);
     if (paragraphs.length >= 2) {
         const first = paragraphs[0] ?? "";
-        const looksLikeMetaReasoning = ((/^用户/.test(first) && /(需要|应该|这是|表达|分享|说明|记录)/.test(first))
-            || (/^搜索结果/.test(first) && /(需要|无法|不太理想)/.test(first))
-            || (/^这搜索/.test(first) && /不太全|看不到|找不到/.test(first)));
+        const looksLikeMetaReasoning = (/^用户/.test(first) && /(需要|应该|这是|表达|分享|说明|记录)/.test(first)) ||
+            (/^搜索结果/.test(first) && /(需要|无法|不太理想)/.test(first)) ||
+            (/^这搜索/.test(first) && /不太全|看不到|找不到/.test(first));
         if (looksLikeMetaReasoning) {
             return stripPluginStateScaffolding(paragraphs.slice(1).join("\n\n").trim());
         }
@@ -439,22 +433,18 @@ function stripAssistantThinking(text) {
     return stripPluginStateScaffolding(normalized);
 }
 function hasToolCallContent(content) {
-    return Array.isArray(content) && content.some((block) => {
-        if (!block || typeof block !== "object")
-            return false;
-        const type = block.type;
-        return type === "toolCall"
-            || type === "toolResult"
-            || type === "tool_use"
-            || type === "tool_result";
-    });
+    return (Array.isArray(content) &&
+        content.some(block => {
+            if (!block || typeof block !== "object")
+                return false;
+            const type = block.type;
+            return type === "toolCall" || type === "toolResult" || type === "tool_use" || type === "tool_result";
+        }));
 }
 function shouldSkipUserMessage(content) {
     if (!content)
         return true;
-    return isSessionStartupMarkerText(content)
-        || isCommandOnlyUserText(content)
-        || content.startsWith(SLUG_PROMPT_PREFIX);
+    return (isSessionStartupMarkerText(content) || isCommandOnlyUserText(content) || content.startsWith(SLUG_PROMPT_PREFIX));
 }
 function parseLeadingSlashCommand(text) {
     const trimmed = compactWhitespace(text);
@@ -482,9 +472,9 @@ export function isSessionStartupMarkerText(text) {
     const normalized = compactWhitespace(stripUserNoise(text));
     if (!normalized)
         return false;
-    return normalized.includes(SESSION_START_PREFIX)
-        || (normalized.includes("A new session was started via /new or /reset.")
-            && SESSION_START_SEQUENCE_PATTERN.test(normalized));
+    return (normalized.includes(SESSION_START_PREFIX) ||
+        (normalized.includes("A new session was started via /new or /reset.") &&
+            SESSION_START_SEQUENCE_PATTERN.test(normalized)));
 }
 export function isCommandOnlyUserText(text) {
     const normalized = compactWhitespace(stripUserNoise(text));
@@ -498,11 +488,7 @@ export function inspectTranscriptMessage(raw) {
     }
     const msg = raw;
     const nestedMessage = asRecord(msg.message);
-    const role = typeof msg.role === "string"
-        ? msg.role
-        : typeof nestedMessage?.role === "string"
-            ? nestedMessage.role
-            : "";
+    const role = typeof msg.role === "string" ? msg.role : typeof nestedMessage?.role === "string" ? nestedMessage.role : "";
     const normalizedRole = role === "user" || role === "assistant" ? role : undefined;
     const rawContent = msg.content ?? nestedMessage?.content;
     const rawText = extractTextFromContent(rawContent).trim();
@@ -528,8 +514,8 @@ function shouldSkipAssistantMessage(rawContent, content) {
         return true;
     if (!content.includes("\n")) {
         const compact = content.trim();
-        if ((/^用户/.test(compact) && /(需要|应该|这是|表达|分享|记录)/.test(compact))
-            || (/^搜索结果/.test(compact) && /(需要|无法|不太理想)/.test(compact))) {
+        if ((/^用户/.test(compact) && /(需要|应该|这是|表达|分享|记录)/.test(compact)) ||
+            (/^搜索结果/.test(compact) && /(需要|无法|不太理想)/.test(compact))) {
             return true;
         }
     }
@@ -540,12 +526,12 @@ function normalizeSingleMessage(raw, options) {
         return undefined;
     const msg = raw;
     const nestedMessage = asRecord(msg.message);
-    if (msg.type === "user"
-        && (msg.toolUseResult !== undefined && msg.toolUseResult !== null
-            || Boolean(msg.isMeta)
-            || Boolean(msg.isVisibleInTranscriptOnly)
-            || Boolean(msg.isCompactSummary)
-            || Boolean(msg.isVirtual))) {
+    if (msg.type === "user" &&
+        ((msg.toolUseResult !== undefined && msg.toolUseResult !== null) ||
+            Boolean(msg.isMeta) ||
+            Boolean(msg.isVisibleInTranscriptOnly) ||
+            Boolean(msg.isCompactSummary) ||
+            Boolean(msg.isVirtual))) {
         return undefined;
     }
     const info = inspectTranscriptMessage(raw);
@@ -566,11 +552,7 @@ function normalizeSingleMessage(raw, options) {
         role,
         content: truncate(content, options.maxMessageChars),
     };
-    const rawId = typeof msg.id === "string"
-        ? msg.id
-        : typeof nestedMessage?.id === "string"
-            ? nestedMessage.id
-            : undefined;
+    const rawId = typeof msg.id === "string" ? msg.id : typeof nestedMessage?.id === "string" ? nestedMessage.id : undefined;
     if (rawId) {
         normalized.msgId = rawId;
     }
@@ -598,5 +580,5 @@ export function normalizeMessages(rawMessages, options) {
     }
     if (lastUser >= 0)
         return all.slice(lastUser);
-    return all.some((message) => message.role === "user") ? [] : all.slice(-2);
+    return all.some(message => message.role === "user") ? [] : all.slice(-2);
 }

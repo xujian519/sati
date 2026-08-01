@@ -3,7 +3,7 @@
 All command examples assume the turn-scoped paths below. Keep every builder, candidate, conversion, render, and report under `WORKSPACE`; only `FINAL_PPTX` is user-facing.
 
 ```bash
-WORKSPACE="${PILOTDECK_WORK_DIR:-$PWD/.pilotdeck/work/manual/<task-slug>}/pptx"
+WORKSPACE="${SATI_WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/pptx"
 FINAL_PPTX="$PWD/<requested-output>.pptx"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
@@ -52,7 +52,7 @@ bash "$PPTX" deliver --builder "$WORKSPACE/tmp/deck.mjs" --out "$FINAL_PPTX" --q
 
 - `createDeck(options)`: create a themed wide-screen presentation.
 - `resolveDesignTokens(options)`: select locale, platform, and density-aware typography tokens.
-- `layouts`: the 12 PilotDeck core layout functions.
+- `layouts`: the 12 Sati core layout functions.
 - `tokens`: canvas, palette, typography, and spacing values.
 - `pptxgenjs`: the PptxGenJS constructor and enum holder; access `pptx.ShapeType` and `pptx.ChartType` from the created instance when possible.
 - `imageSizingCrop(path, x, y, w, h)`: prepare a centered crop.

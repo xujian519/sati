@@ -15,14 +15,11 @@ export type LegacySessionPresentation = {
 const CRON_SESSION_PREFIX = "cron:";
 const CRON_TITLE_PREFIX = "[Cron] ";
 
-export function mapLegacySessionPresentation(
-  session: SessionPresentationInput,
-): LegacySessionPresentation {
+export function mapLegacySessionPresentation(session: SessionPresentationInput): LegacySessionPresentation {
   const baseLabel = session.summary || session.firstPrompt || session.sessionId;
   const isCronSession = session.sessionId.startsWith(CRON_SESSION_PREFIX);
-  const label = isCronSession && !baseLabel.startsWith(CRON_TITLE_PREFIX)
-    ? `${CRON_TITLE_PREFIX}${baseLabel}`
-    : baseLabel;
+  const label =
+    isCronSession && !baseLabel.startsWith(CRON_TITLE_PREFIX) ? `${CRON_TITLE_PREFIX}${baseLabel}` : baseLabel;
 
   return {
     title: label,

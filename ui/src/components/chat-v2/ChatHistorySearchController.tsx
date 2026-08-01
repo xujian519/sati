@@ -1,14 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type RegisteredSearchControls = {
   openSearch: () => void;
@@ -87,37 +78,29 @@ export function ChatHistorySearchControllerProvider({ children }: { children: Re
     controlsRef.current?.closeSearch();
   }, []);
 
-  const value = useMemo<ChatHistorySearchControllerValue>(() => ({
-    available,
-    isOpen,
-    presentation,
-    openSearch,
-    closeSearch,
-    registerControls,
-    reportOpenState,
-    reportPresentation,
-  }), [
-    available,
-    closeSearch,
-    isOpen,
-    openSearch,
-    presentation,
-    registerControls,
-    reportOpenState,
-    reportPresentation,
-  ]);
+  const value = useMemo<ChatHistorySearchControllerValue>(
+    () => ({
+      available,
+      isOpen,
+      presentation,
+      openSearch,
+      closeSearch,
+      registerControls,
+      reportOpenState,
+      reportPresentation,
+    }),
+    [available, closeSearch, isOpen, openSearch, presentation, registerControls, reportOpenState, reportPresentation],
+  );
 
   return (
-    <ChatHistorySearchControllerContext.Provider value={value}>
-      {children}
-    </ChatHistorySearchControllerContext.Provider>
+    <ChatHistorySearchControllerContext.Provider value={value}>{children}</ChatHistorySearchControllerContext.Provider>
   );
 }
 
 export function useChatHistorySearchController(): ChatHistorySearchControllerValue {
   const controller = useContext(ChatHistorySearchControllerContext);
   if (!controller) {
-    throw new Error('useChatHistorySearchController must be used within ChatHistorySearchControllerProvider');
+    throw new Error("useChatHistorySearchController must be used within ChatHistorySearchControllerProvider");
   }
   return controller;
 }
@@ -153,20 +136,14 @@ export function useRegisterChatHistorySearchControls({
   useEffect(() => {
     reportPresentation?.({
       query,
-      onQueryChange: (value) => presentationActionsRef.current.setQuery(value),
+      onQueryChange: value => presentationActionsRef.current.setQuery(value),
       matchCount: matches.length,
       activeMatchIndex,
       onPrevious: () => presentationActionsRef.current.goToPrevious(),
       onNext: () => presentationActionsRef.current.goToNext(),
       inputRef,
     });
-  }, [
-    activeMatchIndex,
-    inputRef,
-    matches.length,
-    query,
-    reportPresentation,
-  ]);
+  }, [activeMatchIndex, inputRef, matches.length, query, reportPresentation]);
 
   return Boolean(controller);
 }

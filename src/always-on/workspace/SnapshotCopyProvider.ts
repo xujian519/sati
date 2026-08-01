@@ -11,17 +11,11 @@ export type SnapshotCopyProviderOptions = {
   baseDir: string;
   /** Hard cap on source size in bytes. Default 1 GiB. */
   maxBytes: number;
-  /** Defaults: `.git/`, `node_modules/`, `dist/`, `.pilotdeck/`, `.pilotdeck-always-on/`. */
+  /** Defaults: `.git/`, `node_modules/`, `dist/`, `.sati/`, `.sati-always-on/`. */
   ignorePaths?: string[];
 };
 
-const DEFAULT_IGNORES = [
-  ".git",
-  "node_modules",
-  "dist",
-  ".pilotdeck",
-  ".pilotdeck-always-on",
-];
+const DEFAULT_IGNORES = [".git", "node_modules", "dist", ".sati", ".sati-always-on"];
 
 export class SnapshotCopyProvider implements WorkspaceProvider {
   readonly id = "snapshot-copy" as const;
@@ -94,7 +88,7 @@ export class SnapshotCopyProvider implements WorkspaceProvider {
     }
     await cp(source, target, {
       recursive: true,
-      filter: (src) => !isIgnored(src, source, ignores),
+      filter: src => !isIgnored(src, source, ignores),
       errorOnExist: false,
     });
     return "fs.cp";
@@ -104,13 +98,13 @@ export class SnapshotCopyProvider implements WorkspaceProvider {
 async function tryClonefile(source: string, target: string): Promise<boolean> {
   // `cp -c` triggers macOS clonefile when source/target live on the same APFS volume.
   return runCommand("cp", ["-c", "-R", source, target])
-    .then((result) => result.exitCode === 0 && existsSync(target))
+    .then(result => result.exitCode === 0 && existsSync(target))
     .catch(() => false);
 }
 
 async function tryReflinkCopy(source: string, target: string): Promise<boolean> {
   return runCommand("cp", ["--reflink=auto", "-R", source, target])
-    .then((result) => result.exitCode === 0 && existsSync(target))
+    .then(result => result.exitCode === 0 && existsSync(target))
     .catch(() => false);
 }
 
@@ -136,7 +130,7 @@ async function estimateSize(root: string, ignores: Set<string>): Promise<number>
     return estimateSizeWindows(root, ignores);
   }
   return runCommand("du", ["-sk", root])
-    .then((result) => {
+    .then(result => {
       if (result.exitCode !== 0) return 0;
       const tokens = result.stdout.trim().split(/\s+/);
       const kb = Number.parseInt(tokens[0], 10);
@@ -148,7 +142,7 @@ async function estimateSize(root: string, ignores: Set<string>): Promise<number>
 async function estimateSizeWindows(root: string, _ignores: Set<string>): Promise<number> {
   const script = `(Get-ChildItem -Path '${root.replace(/'/g, "''")}' -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum`;
   return runCommand("powershell", ["-NoProfile", "-Command", script])
-    .then((result) => {
+    .then(result => {
       if (result.exitCode !== 0) return 0;
       const bytes = Number.parseInt(result.stdout.trim(), 10);
       return Number.isFinite(bytes) ? bytes : 0;
@@ -159,20 +153,20 @@ async function estimateSizeWindows(root: string, _ignores: Set<string>): Promise
 type CommandResult = { exitCode: number; stdout: string; stderr: string };
 
 async function runCommand(bin: string, args: string[]): Promise<CommandResult> {
-  return new Promise<CommandResult>((resolvePromise) => {
+  return new Promise<CommandResult>(resolvePromise => {
     const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
-    child.stdout?.on("data", (chunk) => {
+    child.stdout?.on("data", chunk => {
       stdout += chunk.toString("utf-8");
     });
-    child.stderr?.on("data", (chunk) => {
+    child.stderr?.on("data", chunk => {
       stderr += chunk.toString("utf-8");
     });
-    child.on("error", (error) => {
+    child.on("error", error => {
       resolvePromise({ exitCode: -1, stdout, stderr: error.message });
     });
-    child.on("close", (code) => {
+    child.on("close", code => {
       resolvePromise({ exitCode: code ?? -1, stdout, stderr });
     });
   });

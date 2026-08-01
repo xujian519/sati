@@ -61,11 +61,7 @@ export type ReportRunContext = {
   report?: { markdown: string; filePath: string; finishedAt: Date };
 };
 
-export type AlwaysOnRunContext =
-  | DiscoveryRunContext
-  | WorkspaceRunContext
-  | ExecutionRunContext
-  | ReportRunContext;
+export type AlwaysOnRunContext = DiscoveryRunContext | WorkspaceRunContext | ExecutionRunContext | ReportRunContext;
 
 /**
  * Single-process, mutable registry that maps `sessionKey` -> in-flight

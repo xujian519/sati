@@ -20,9 +20,7 @@ export function buildDiscoveryPromptZh(input: BuildDiscoveryPromptInput): string
         "此工作区是项目的隔离快照——可在其中自由使用 read_file / glob / bash。",
         `请勿 cd 到工作区外部的项目根目录 (${input.projectRoot})。`,
       ]
-    : [
-        `可使用 read_file / glob / bash 自由读取项目根目录: ${input.projectRoot}`,
-      ];
+    : [`可使用 read_file / glob / bash 自由读取项目根目录: ${input.projectRoot}`];
 
   const headerLine = input.workspace
     ? `你正在为项目执行自主 Always-On 发现任务: ${input.projectRoot} (当前在隔离工作区中: ${input.workspace.cwd})`
@@ -73,9 +71,7 @@ export function buildDiscoveryPromptZh(input: BuildDiscoveryPromptInput): string
 
 function formatChatDigestSectionZh(digest?: ChatDigest): string[] {
   if (!digest || digest.sessions.length === 0) {
-    return [
-      "未找到近期用户对话。请浏览工作区内容以发现有价值的任务。",
-    ];
+    return ["未找到近期用户对话。请浏览工作区内容以发现有价值的任务。"];
   }
 
   const lines: string[] = [
@@ -105,10 +101,7 @@ function formatExistingPlansSectionZh(plans?: ExistingPlanSummary[]): string[] {
     return [];
   }
 
-  const lines: string[] = [
-    "## 已有 Always-On 计划 (请勿重复这些主题)",
-    "",
-  ];
+  const lines: string[] = ["## 已有 Always-On 计划 (请勿重复这些主题)", ""];
 
   for (const plan of plans) {
     lines.push(`- [${plan.status}] "${plan.title}" (dedupeKey: ${plan.dedupeKey})`);
@@ -234,11 +227,7 @@ export function buildApplyPromptZh(input: BuildApplyPromptInput): string {
       diff.diff,
     );
   } else {
-    lines.push(
-      `变更内容 (${diff.fileCount} 个文件):`,
-      "",
-      diff.diff,
-    );
+    lines.push(`变更内容 (${diff.fileCount} 个文件):`, "", diff.diff);
   }
 
   return lines.join("\n");

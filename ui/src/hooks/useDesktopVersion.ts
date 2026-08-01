@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { authenticatedFetch } from '../utils/api';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { authenticatedFetch } from "../utils/api";
 
 export type DesktopVersionInfo = {
   currentVersion: string;
@@ -18,7 +18,7 @@ export type DesktopVersionInfo = {
 };
 
 export type DesktopDownloadStatus = {
-  state: 'idle' | 'downloading' | 'downloaded' | 'failed' | 'cancelled';
+  state: "idle" | "downloading" | "downloaded" | "failed" | "cancelled";
   progress: number;
   receivedBytes: number;
   totalBytes: number | null;
@@ -43,15 +43,15 @@ export function useDesktopVersion() {
   const fetchStatus = useCallback(async () => {
     setChecking(true);
     try {
-      const res = await authenticatedFetch('/api/update/desktop/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await authenticatedFetch("/api/update/desktop/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
-      if (!res.ok) throw new Error('Failed to check desktop version');
+      if (!res.ok) throw new Error("Failed to check desktop version");
       const data = await res.json();
 
       setInfo({
-        currentVersion: data.current?.version ?? 'unknown',
+        currentVersion: data.current?.version ?? "unknown",
         latestVersion: data.latest?.version ?? null,
         latestTagName: data.latest?.tagName ?? null,
         hasUpdate: Boolean(data.hasUpdate),
@@ -63,7 +63,7 @@ export function useDesktopVersion() {
       setError(null);
     } catch (e) {
       setInfo({
-        currentVersion: 'unknown',
+        currentVersion: "unknown",
         latestVersion: null,
         latestTagName: null,
         hasUpdate: false,
@@ -84,27 +84,27 @@ export function useDesktopVersion() {
 
   const triggerDownload = useCallback(async () => {
     try {
-      const res = await authenticatedFetch('/api/update/desktop/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await authenticatedFetch("/api/update/desktop/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ force: true }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || 'Failed to start download');
+        throw new Error(body.message || "Failed to start download");
       }
       const data = await res.json();
       setDownload(data.download ?? null);
 
       pollRef.current = setInterval(async () => {
         try {
-          const pollRes = await authenticatedFetch('/api/update/desktop/download/status');
+          const pollRes = await authenticatedFetch("/api/update/desktop/download/status");
           if (!pollRes.ok) return;
           const pollData = await pollRes.json();
           const dl = pollData.download;
           setDownload(dl ?? null);
 
-          if (dl && (dl.state === 'downloaded' || dl.state === 'failed' || dl.state === 'cancelled')) {
+          if (dl && (dl.state === "downloaded" || dl.state === "failed" || dl.state === "cancelled")) {
             stopPolling();
           }
         } catch {
@@ -114,7 +114,7 @@ export function useDesktopVersion() {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setDownload({
-        state: 'failed',
+        state: "failed",
         progress: 0,
         receivedBytes: 0,
         totalBytes: null,
@@ -126,14 +126,14 @@ export function useDesktopVersion() {
 
   const triggerInstall = useCallback(async () => {
     try {
-      const res = await authenticatedFetch('/api/update/desktop/install', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await authenticatedFetch("/api/update/desktop/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filePath: download?.filePath }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || 'Failed to launch installer');
+        throw new Error(body.message || "Failed to launch installer");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -143,8 +143,8 @@ export function useDesktopVersion() {
   const cancelDownload = useCallback(async () => {
     stopPolling();
     try {
-      await authenticatedFetch('/api/update/desktop/download/cancel', {
-        method: 'POST',
+      await authenticatedFetch("/api/update/desktop/download/cancel", {
+        method: "POST",
       });
     } catch {
       // best-effort

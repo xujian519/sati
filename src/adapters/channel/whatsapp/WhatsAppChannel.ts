@@ -49,9 +49,7 @@ export class WhatsAppChannel implements ChannelAdapter {
   constructor(options: WhatsAppChannelOptions = {}) {
     this.mapper = options.mapper ?? new WhatsAppSessionMapper();
     this.bridgePath = (options.bridgePath ?? process.env.WHATSAPP_BRIDGE_PATH ?? "").trim();
-    this.bridgeUrl = normalizeBaseUrl(
-      options.bridgeUrl ?? process.env.WHATSAPP_BRIDGE_URL ?? DEFAULT_BRIDGE_URL,
-    );
+    this.bridgeUrl = normalizeBaseUrl(options.bridgeUrl ?? process.env.WHATSAPP_BRIDGE_URL ?? DEFAULT_BRIDGE_URL);
   }
 
   async start(deps: ChannelStartDeps): Promise<ChannelHandle> {
@@ -79,14 +77,12 @@ export class WhatsAppChannel implements ChannelAdapter {
       this.child.stderr?.on("data", (d: Buffer) => {
         this.logger?.warn?.(`whatsapp[bridge]: ${d.toString().trimEnd()}`);
       });
-      this.child.on("error", (err) => {
+      this.child.on("error", err => {
         this.logger?.error?.(`whatsapp: bridge spawn error: ${err}`);
       });
       this.child.on("exit", (code, sig) => {
         if (this.running) {
-          this.logger?.error?.(
-            `whatsapp: bridge exited (code=${code}, signal=${sig ?? "none"})`,
-          );
+          this.logger?.error?.(`whatsapp: bridge exited (code=${code}, signal=${sig ?? "none"})`);
         }
       });
 
@@ -146,7 +142,7 @@ export class WhatsAppChannel implements ChannelAdapter {
       } catch {
         // bridge still starting
       }
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 400));
     }
     return false;
   }
@@ -301,7 +297,7 @@ export class WhatsAppChannel implements ChannelAdapter {
     this.child = null;
     try {
       proc.kill("SIGTERM");
-      await new Promise<void>((resolve) => {
+      await new Promise<void>(resolve => {
         const t = setTimeout(() => {
           try {
             proc.kill("SIGKILL");

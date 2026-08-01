@@ -1,3 +1,1 @@
-export type {
-  PilotDeckHookEvent as PilotDeckLifecycleHookEvent,
-} from "../../extension/hooks/protocol/events.js";
+export type { SatiHookEvent as SatiLifecycleHookEvent } from "../../extension/hooks/protocol/events.js";

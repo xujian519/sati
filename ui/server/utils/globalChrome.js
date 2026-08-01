@@ -1,11 +1,11 @@
-import { join } from 'path';
-import { homedir } from 'os';
-import { createConnection } from 'net';
-import { spawn, execSync } from 'child_process';
-import fs from 'fs';
+import { join } from "path";
+import { homedir } from "os";
+import { createConnection } from "net";
+import { spawn, execSync } from "child_process";
+import fs from "fs";
 
 const CDP_PORT = 9222;
-const CDP_HOST = '127.0.0.1';
+const CDP_HOST = "127.0.0.1";
 const CDP_HEALTH_TIMEOUT_MS = 15_000;
 const HEALTH_CHECK_INTERVAL_MS = 60_000;
 const HEALTH_CHECK_FAIL_THRESHOLD = 3;
@@ -19,15 +19,20 @@ function _ts() {
 
 function _caller() {
   const stack = new Error().stack;
-  const frames = stack?.split('\n').slice(2, 4).map(l => l.trim()).join(' <- ') ?? '';
+  const frames =
+    stack
+      ?.split("\n")
+      .slice(2, 4)
+      .map(l => l.trim())
+      .join(" <- ") ?? "";
   return frames;
 }
 
-const LOCK_FILE_NAME = 'chrome-cdp.lock';
+const LOCK_FILE_NAME = "chrome-cdp.lock";
 
 function getUserDataDir() {
-  const configDir = process.env.PILOTDECK_CONFIG_DIR ?? join(homedir(), '.pilotdeck');
-  return join(configDir, 'browser-use-profile');
+  const configDir = process.env.SATI_CONFIG_DIR ?? join(homedir(), ".sati");
+  return join(configDir, "browser-use-profile");
 }
 
 function getLockFilePath() {
@@ -39,44 +44,48 @@ function writeLock() {
     const dir = getUserDataDir();
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(getLockFilePath(), JSON.stringify({ pid: process.pid, ts: Date.now() }));
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function removeLock() {
   try {
     const lockPath = getLockFilePath();
     if (!fs.existsSync(lockPath)) return;
-    const content = fs.readFileSync(lockPath, 'utf8').trim();
+    const content = fs.readFileSync(lockPath, "utf8").trim();
     const { pid } = JSON.parse(content);
     if (pid === process.pid) {
       fs.unlinkSync(lockPath);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function findChromePath() {
   const platform = process.platform;
   let candidates;
-  if (platform === 'darwin') {
+  if (platform === "darwin") {
     candidates = [
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     ];
-  } else if (platform === 'win32') {
-    const programFiles = process.env.PROGRAMFILES || 'C:\\Program Files';
-    const programFilesX86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
-    const localAppData = process.env.LOCALAPPDATA || '';
+  } else if (platform === "win32") {
+    const programFiles = process.env.PROGRAMFILES || "C:\\Program Files";
+    const programFilesX86 = process.env["PROGRAMFILES(X86)"] || "C:\\Program Files (x86)";
+    const localAppData = process.env.LOCALAPPDATA || "";
     candidates = [
-      join(programFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-      join(programFilesX86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-      join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-      join(programFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-      join(programFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-      join(programFiles, 'Chromium', 'Application', 'chrome.exe'),
+      join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+      join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+      join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
+      join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+      join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+      join(programFiles, "Chromium", "Application", "chrome.exe"),
     ];
   } else {
-    candidates = ['/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium'];
+    candidates = ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"];
   }
 
   for (const c of candidates) {
@@ -86,15 +95,15 @@ function findChromePath() {
 }
 
 function isCDPPortOpen() {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const socket = createConnection({ host: CDP_HOST, port: CDP_PORT });
     socket.setTimeout(1500);
-    socket.on('connect', () => {
+    socket.on("connect", () => {
       socket.destroy();
       resolve(true);
     });
-    socket.on('error', () => resolve(false));
-    socket.on('timeout', () => {
+    socket.on("error", () => resolve(false));
+    socket.on("timeout", () => {
       socket.destroy();
       resolve(false);
     });
@@ -116,29 +125,35 @@ export async function isCDPHealthy() {
 }
 
 function cleanSingletonLocks(dir) {
-  for (const name of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+  for (const name of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
     const p = join(dir, name);
     try {
       if (fs.existsSync(p)) fs.unlinkSync(p);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 }
 
 function launchChrome(executablePath, userDataDir) {
   cleanSingletonLocks(userDataDir);
-  const proc = spawn(executablePath, [
-    `--remote-debugging-port=${CDP_PORT}`,
-    `--user-data-dir=${userDataDir}`,
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--disable-features=ProfilePicker',
-  ], {
-    stdio: 'ignore',
-    detached: true,
-    windowsHide: process.platform === 'win32',
-  });
+  const proc = spawn(
+    executablePath,
+    [
+      `--remote-debugging-port=${CDP_PORT}`,
+      `--user-data-dir=${userDataDir}`,
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-features=ProfilePicker",
+    ],
+    {
+      stdio: "ignore",
+      detached: true,
+      windowsHide: process.platform === "win32",
+    },
+  );
   proc.unref();
-  proc.on('exit', () => {
+  proc.on("exit", () => {
     if (chromeProcess === proc) chromeProcess = null;
   });
   return proc;
@@ -148,7 +163,7 @@ async function waitForCDP(maxMs = 10_000) {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     if (await isCDPHealthy()) return true;
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise(r => setTimeout(r, 250));
   }
   return false;
 }
@@ -160,36 +175,48 @@ async function killCDPPort() {
   const caller = _caller();
   let pidList = [];
   try {
-    if (process.platform === 'win32') {
-      const raw = execSync(
-        `netstat -ano | findstr "LISTENING" | findstr ":${CDP_PORT} "`,
-        { encoding: 'utf8', windowsHide: true },
-      ).trim();
-      for (const line of raw.split('\n')) {
+    if (process.platform === "win32") {
+      const raw = execSync(`netstat -ano | findstr "LISTENING" | findstr ":${CDP_PORT} "`, {
+        encoding: "utf8",
+        windowsHide: true,
+      }).trim();
+      for (const line of raw.split("\n")) {
         const parts = line.trim().split(/\s+/);
         const pid = Number(parts[parts.length - 1]);
         if (pid && !pidList.includes(pid)) pidList.push(pid);
       }
     } else {
-      const raw = execSync(`lsof -ti :${CDP_PORT} 2>/dev/null`, { encoding: 'utf8' }).trim();
-      if (raw) pidList = raw.split('\n').map(Number).filter(Boolean);
+      const raw = execSync(`lsof -ti :${CDP_PORT} 2>/dev/null`, { encoding: "utf8" }).trim();
+      if (raw) pidList = raw.split("\n").map(Number).filter(Boolean);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   if (pidList.length === 0) {
     chromeProcess = null;
     return;
   }
 
-  console.warn(`[BROWSER ${_ts()}] killCDPPort: sending SIGTERM to pids=${JSON.stringify(pidList)} | caller: ${caller}`);
+  console.warn(
+    `[BROWSER ${_ts()}] killCDPPort: sending SIGTERM to pids=${JSON.stringify(pidList)} | caller: ${caller}`,
+  );
 
-  if (process.platform === 'win32') {
+  if (process.platform === "win32") {
     for (const pid of pidList) {
-      try { execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore', windowsHide: true }); } catch { /* ignore */ }
+      try {
+        execSync(`taskkill /F /T /PID ${pid}`, { stdio: "ignore", windowsHide: true });
+      } catch {
+        /* ignore */
+      }
     }
   } else {
     for (const pid of pidList) {
-      try { process.kill(pid, 'SIGTERM'); } catch { /* ignore */ }
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -199,16 +226,20 @@ async function killCDPPort() {
       chromeProcess = null;
       return;
     }
-    await new Promise((r) => setTimeout(r, CHROME_STOP_POLL_MS));
+    await new Promise(r => setTimeout(r, CHROME_STOP_POLL_MS));
   }
 
-  if (process.platform !== 'win32') {
+  if (process.platform !== "win32") {
     console.warn(`[BROWSER ${_ts()}] killCDPPort: SIGTERM timeout, sending SIGKILL to pids=${JSON.stringify(pidList)}`);
     for (const pid of pidList) {
-      try { process.kill(pid, 'SIGKILL'); } catch { /* ignore */ }
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        /* ignore */
+      }
     }
   }
-  await new Promise((r) => setTimeout(r, 300));
+  await new Promise(r => setTimeout(r, 300));
   chromeProcess = null;
 }
 
@@ -268,7 +299,9 @@ export function startChromeHealthCheck(intervalMs = HEALTH_CHECK_INTERVAL_MS) {
   healthCheckTimer = setInterval(async () => {
     if (!(await isCDPHealthy())) {
       _consecutiveHealthFailures++;
-      console.warn(`[BROWSER ${_ts()}] Health check failed (${_consecutiveHealthFailures}/${HEALTH_CHECK_FAIL_THRESHOLD})`);
+      console.warn(
+        `[BROWSER ${_ts()}] Health check failed (${_consecutiveHealthFailures}/${HEALTH_CHECK_FAIL_THRESHOLD})`,
+      );
       if (_consecutiveHealthFailures >= HEALTH_CHECK_FAIL_THRESHOLD) {
         console.warn(`[BROWSER ${_ts()}] ${HEALTH_CHECK_FAIL_THRESHOLD} consecutive failures, restarting Chrome...`);
         _consecutiveHealthFailures = 0;
@@ -302,7 +335,11 @@ export function shutdownGlobalChrome() {
   stopChromeHealthCheck();
   if (chromeProcess) {
     console.warn(`[BROWSER ${_ts()}] shutdownGlobalChrome: sending SIGTERM to pid=${chromeProcess.pid}`);
-    try { chromeProcess.kill('SIGTERM'); } catch { /* ignore */ }
+    try {
+      chromeProcess.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
     chromeProcess = null;
   }
   removeLock();
@@ -344,7 +381,7 @@ async function getChromeMajorFromCDP() {
  * of attempting connectOverCDP (which hangs on 147+).
  */
 export async function ensureCDPUrl() {
-  if (process.env.CDP_URL && await isCDPHealthy()) {
+  if (process.env.CDP_URL && (await isCDPHealthy())) {
     return process.env.CDP_URL;
   }
 
@@ -359,7 +396,7 @@ export async function ensureCDPUrl() {
       if (major >= CDP_INCOMPATIBLE_CHROME_MAJOR) {
         console.log(
           `[BROWSER ${_ts()}] Chrome ${major} detected — skipping CDP_URL ` +
-          `(connectOverCDP incompatible). Agent will use Playwright-managed launch.`
+            `(connectOverCDP incompatible). Agent will use Playwright-managed launch.`,
         );
         return null;
       }

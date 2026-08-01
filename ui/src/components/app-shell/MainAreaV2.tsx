@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   BarChart3,
   Box,
@@ -12,7 +12,7 @@ import {
   Search,
   Sparkles,
   type LucideIcon,
-} from 'lucide-react';
+} from "lucide-react";
 import type {
   AlwaysOnDashboardEvent,
   AlwaysOnDashboardEventsResponse,
@@ -20,53 +20,50 @@ import type {
   AppTab,
   Project,
   ProjectSession,
-} from '../../types/app';
-import MainContent from '../main-content/view/MainContent';
+} from "../../types/app";
+import MainContent from "../main-content/view/MainContent";
 import {
   ChatHistorySearchControllerProvider,
   useChatHistorySearchController,
-} from '../chat-v2/ChatHistorySearchController';
-import ChatHistorySearchBar from '../chat-v2/ChatHistorySearchBar';
-import type { MainContentProps } from '../main-content/types/types';
-import { cn } from '../../lib/utils.js';
+} from "../chat-v2/ChatHistorySearchController";
+import ChatHistorySearchBar from "../chat-v2/ChatHistorySearchBar";
+import type { MainContentProps } from "../main-content/types/types";
+import { cn } from "../../lib/utils.js";
 import {
   projectDisplayName,
   sessionDisplayTitle,
   setSessionCustomTitle,
   useCustomNamesVersion,
-} from '../../lib/customNames';
-import { isImeEnterEvent } from '../../utils/ime';
-import { api } from '../../utils/api';
+} from "../../lib/customNames";
+import { isImeEnterEvent } from "../../utils/ime";
+import { api } from "../../utils/api";
 
 type Tab = { id: AppTab; labelKey: string; icon: LucideIcon };
 
 // Chat is the shell's default surface rather than a visible destination.
 // Files is the only primary work mode; the remaining management dashboards
 // live behind the compact overflow trigger and open beside the conversation.
-const FILES_TAB: Tab = { id: 'files', labelKey: 'tabs.files', icon: Folder };
+const FILES_TAB: Tab = { id: "files", labelKey: "tabs.files", icon: Folder };
 const DASHBOARD_TABS: Tab[] = [
-  { id: 'skills',    labelKey: 'tabs.skills',    icon: Sparkles },
-  { id: 'dashboard', labelKey: 'tabs.dashboard', icon: BarChart3 },
-  { id: 'memory',    labelKey: 'tabs.memory',    icon: Database },
-  { id: 'always-on', labelKey: 'tabs.alwaysOn',  icon: Radio },
-  { id: 'cron',      labelKey: 'tabs.cron',      icon: Clock },
+  { id: "skills", labelKey: "tabs.skills", icon: Sparkles },
+  { id: "dashboard", labelKey: "tabs.dashboard", icon: BarChart3 },
+  { id: "memory", labelKey: "tabs.memory", icon: Database },
+  { id: "always-on", labelKey: "tabs.alwaysOn", icon: Radio },
+  { id: "cron", labelKey: "tabs.cron", icon: Clock },
 ];
 
 const ACTIVE_TOOL_BUTTON_CLASS =
-  'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-950/70 dark:text-blue-200 dark:hover:bg-blue-900/70';
+  "bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-950/70 dark:text-blue-200 dark:hover:bg-blue-900/70";
 
 const ALWAYS_ON_EVENT_BADGE_POLL_INTERVAL_MS = 15_000;
-const ALWAYS_ON_LAST_VIEWED_MARKER_KEY = 'pilotdeck:always-on-last-viewed-marker';
+const ALWAYS_ON_LAST_VIEWED_MARKER_KEY = "sati:always-on-last-viewed-marker";
 const ALWAYS_ON_EVENT_BADGE_LIMIT = 200;
 
-const BADGE_EVENT_PHASES = new Set<AlwaysOnDashboardEvent['phase']>([
-  'plan_produced',
-  'report_produced',
-]);
+const BADGE_EVENT_PHASES = new Set<AlwaysOnDashboardEvent["phase"]>(["plan_produced", "report_produced"]);
 
 const getBadgeEventMarker = (events: AlwaysOnDashboardEvent[]): string | null => {
   const latestBadgeEvent = events
-    .filter((event) => BADGE_EVENT_PHASES.has(event.phase))
+    .filter(event => BADGE_EVENT_PHASES.has(event.phase))
     .sort((left, right) => right.timestamp.localeCompare(left.timestamp))[0];
 
   return latestBadgeEvent ? `${latestBadgeEvent.timestamp}:${latestBadgeEvent.eventId}` : null;
@@ -84,30 +81,23 @@ type MainAreaV2Props = MainContentProps & {
 
 function MainAreaV2Content(props: MainAreaV2Props) {
   const { t } = useTranslation();
-  const {
-    selectedProject,
-    selectedSession,
-    activeTab,
-    setActiveTab,
-    isSidebarCollapsed,
-    onOpenSidebar,
-  } = props;
-  const [alwaysOnSubTab, setAlwaysOnSubTab] = useState<AlwaysOnSubTab>('dashboard');
+  const { selectedProject, selectedSession, activeTab, setActiveTab, isSidebarCollapsed, onOpenSidebar } = props;
+  const [alwaysOnSubTab, setAlwaysOnSubTab] = useState<AlwaysOnSubTab>("dashboard");
   const [latestAlwaysOnEventMarker, setLatestAlwaysOnEventMarker] = useState<string | null>(null);
-  const [lastViewedAlwaysOnEventMarker, setLastViewedAlwaysOnEventMarker] = useState<string | null>(
-    () => localStorage.getItem(ALWAYS_ON_LAST_VIEWED_MARKER_KEY),
+  const [lastViewedAlwaysOnEventMarker, setLastViewedAlwaysOnEventMarker] = useState<string | null>(() =>
+    localStorage.getItem(ALWAYS_ON_LAST_VIEWED_MARKER_KEY),
   );
   const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
-  const [sessionTitleDraft, setSessionTitleDraft] = useState('');
+  const [sessionTitleDraft, setSessionTitleDraft] = useState("");
   const dashboardMenuRef = useRef<HTMLDivElement | null>(null);
   const dashboardMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const sessionTitleInputRef = useRef<HTMLInputElement | null>(null);
   const chatHistorySearch = useChatHistorySearchController();
 
   useEffect(() => {
-    if (activeTab === 'home') {
-      setActiveTab('chat');
+    if (activeTab === "home") {
+      setActiveTab("chat");
     }
   }, [activeTab, setActiveTab]);
 
@@ -120,17 +110,17 @@ function MainAreaV2Content(props: MainAreaV2Props) {
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         setDashboardMenuOpen(false);
         dashboardMenuButtonRef.current?.focus();
       }
     };
 
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [dashboardMenuOpen]);
 
@@ -172,7 +162,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'always-on' && latestAlwaysOnEventMarker) {
+    if (activeTab === "always-on" && latestAlwaysOnEventMarker) {
       setLastViewedAlwaysOnEventMarker(latestAlwaysOnEventMarker);
       localStorage.setItem(ALWAYS_ON_LAST_VIEWED_MARKER_KEY, latestAlwaysOnEventMarker);
     }
@@ -185,42 +175,37 @@ function MainAreaV2Content(props: MainAreaV2Props) {
   // Header title: session title first, project context second. Project +
   // session strings flow through the customNames overlay so user renames in
   // the sidebar reflect here too.
-  const displayActiveTab = activeTab === 'home' ? 'chat' : activeTab;
-  const activeDashboardTab = DASHBOARD_TABS.find((tab) => tab.id === displayActiveTab) ?? null;
-  const tabLabelKey = displayActiveTab === FILES_TAB.id
-    ? FILES_TAB.labelKey
-    : activeDashboardTab?.labelKey;
+  const displayActiveTab = activeTab === "home" ? "chat" : activeTab;
+  const activeDashboardTab = DASHBOARD_TABS.find(tab => tab.id === displayActiveTab) ?? null;
+  const tabLabelKey = displayActiveTab === FILES_TAB.id ? FILES_TAB.labelKey : activeDashboardTab?.labelKey;
   const tabLabel = tabLabelKey
     ? t(tabLabelKey)
-    : displayActiveTab.startsWith('plugin:')
-      ? displayActiveTab.replace('plugin:', '')
+    : displayActiveTab.startsWith("plugin:")
+      ? displayActiveTab.replace("plugin:", "")
       : displayActiveTab;
-  const sessionSummary = selectedSession ? sessionDisplayTitle(selectedSession) : '';
+  const sessionSummary = selectedSession ? sessionDisplayTitle(selectedSession) : "";
   const projectName = selectedProject
     ? projectDisplayName(selectedProject)
-    : t('navigation.home', { defaultValue: 'Home' });
-  const headerTitle =
-    sessionSummary || (displayActiveTab === FILES_TAB.id ? tabLabel || projectName : projectName);
-  const isRenamingSessionTitle = Boolean(
-    selectedSession && renamingSessionId === selectedSession.id,
-  );
+    : t("navigation.home", { defaultValue: "Home" });
+  const headerTitle = sessionSummary || (displayActiveTab === FILES_TAB.id ? tabLabel || projectName : projectName);
+  const isRenamingSessionTitle = Boolean(selectedSession && renamingSessionId === selectedSession.id);
   const ActiveDashboardIcon = activeDashboardTab?.icon;
   const alwaysOnUnread = Boolean(
     latestAlwaysOnEventMarker &&
-    activeTab !== 'always-on' &&
-    latestAlwaysOnEventMarker !== lastViewedAlwaysOnEventMarker,
+      activeTab !== "always-on" &&
+      latestAlwaysOnEventMarker !== lastViewedAlwaysOnEventMarker,
   );
 
   useEffect(() => {
-    if (chatHistorySearch.isOpen && displayActiveTab !== 'chat') {
+    if (chatHistorySearch.isOpen && displayActiveTab !== "chat") {
       setDashboardMenuOpen(false);
-      setActiveTab('chat');
+      setActiveTab("chat");
     }
   }, [chatHistorySearch.isOpen, displayActiveTab, setActiveTab]);
 
   useEffect(() => {
     setRenamingSessionId(null);
-    setSessionTitleDraft('');
+    setSessionTitleDraft("");
   }, [selectedSession?.id]);
 
   useEffect(() => {
@@ -239,12 +224,12 @@ function MainAreaV2Content(props: MainAreaV2Props) {
     if (!renamingSessionId) return;
     setSessionCustomTitle(renamingSessionId, sessionTitleDraft);
     setRenamingSessionId(null);
-    setSessionTitleDraft('');
+    setSessionTitleDraft("");
   };
 
   const cancelSessionTitleRename = () => {
     setRenamingSessionId(null);
-    setSessionTitleDraft('');
+    setSessionTitleDraft("");
   };
 
   return (
@@ -252,14 +237,14 @@ function MainAreaV2Content(props: MainAreaV2Props) {
       {/* Header: session title left, tool switcher right. */}
       <header className="relative z-[80] flex h-14 shrink-0 items-center overflow-visible border-b border-neutral-100 bg-white px-6 dark:border-neutral-900 dark:bg-neutral-950">
         {isSidebarCollapsed ? (
-          // Just the "expand sidebar" affordance — the PilotDeck logo lives
+          // Just the "expand sidebar" affordance — the Sati logo lives
           // in the sidebar header, so showing a duplicate badge here when
           // the sidebar is collapsed feels redundant.
           <button
             type="button"
             onClick={onOpenSidebar}
-            aria-label={t('sidebar:tooltips.showSidebar', { defaultValue: 'Show sidebar' }) as string}
-            title={t('sidebar:tooltips.showSidebar', { defaultValue: 'Show sidebar' }) as string}
+            aria-label={t("sidebar:tooltips.showSidebar", { defaultValue: "Show sidebar" }) as string}
+            title={t("sidebar:tooltips.showSidebar", { defaultValue: "Show sidebar" }) as string}
             className="mr-4 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
           >
             <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
@@ -270,26 +255,26 @@ function MainAreaV2Content(props: MainAreaV2Props) {
             <input
               ref={sessionTitleInputRef}
               value={sessionTitleDraft}
-              onChange={(event) => setSessionTitleDraft(event.target.value)}
+              onChange={event => setSessionTitleDraft(event.target.value)}
               onBlur={commitSessionTitleRename}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
+              onKeyDown={event => {
+                if (event.key === "Enter") {
                   if (isImeEnterEvent(event)) return;
                   event.preventDefault();
                   commitSessionTitleRename();
-                } else if (event.key === 'Escape') {
+                } else if (event.key === "Escape") {
                   event.preventDefault();
                   cancelSessionTitleRename();
                 }
               }}
-              aria-label={t('sidebar:sessions.renameSession', { defaultValue: 'Rename Session' }) as string}
+              aria-label={t("sidebar:sessions.renameSession", { defaultValue: "Rename Session" }) as string}
               className="h-6 min-w-0 max-w-[34rem] rounded border border-neutral-300 bg-white px-1.5 text-[15px] font-semibold leading-5 text-neutral-950 outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50"
             />
           ) : (
             <div
               className={cn(
-                'min-w-0 max-w-[34rem] truncate text-[15px] font-semibold leading-5 text-neutral-950 dark:text-neutral-50',
-                selectedSession && 'cursor-text',
+                "min-w-0 max-w-[34rem] truncate text-[15px] font-semibold leading-5 text-neutral-950 dark:text-neutral-50",
+                selectedSession && "cursor-text",
               )}
               title={headerTitle}
               onDoubleClick={selectedSession ? beginSessionTitleRename : undefined}
@@ -318,28 +303,30 @@ function MainAreaV2Content(props: MainAreaV2Props) {
         <div className="ml-4 flex h-9 shrink-0 items-center gap-1" aria-label="Tools">
           <button
             type="button"
-            aria-label={t('chatSearch.open', { defaultValue: 'Search current conversation' }) as string}
+            aria-label={t("chatSearch.open", { defaultValue: "Search current conversation" }) as string}
             aria-pressed={chatHistorySearch.isOpen}
             disabled={!chatHistorySearch.available}
-            title={t('chatSearch.openShortcut', {
-              defaultValue: 'Search current conversation (Ctrl/⌘+F)',
-            }) as string}
+            title={
+              t("chatSearch.openShortcut", {
+                defaultValue: "Search current conversation (Ctrl/⌘+F)",
+              }) as string
+            }
             onClick={() => {
               setDashboardMenuOpen(false);
               if (chatHistorySearch.isOpen) {
                 chatHistorySearch.closeSearch();
                 return;
               }
-              if (displayActiveTab !== 'chat') setActiveTab('chat');
+              if (displayActiveTab !== "chat") setActiveTab("chat");
               chatHistorySearch.openSearch();
             }}
             className={cn(
-              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors',
+              "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors",
               chatHistorySearch.isOpen
                 ? ACTIVE_TOOL_BUTTON_CLASS
                 : chatHistorySearch.available
-                  ? 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100'
-                  : 'cursor-not-allowed text-neutral-300 dark:text-neutral-700',
+                  ? "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                  : "cursor-not-allowed text-neutral-300 dark:text-neutral-700",
             )}
           >
             <Search className="h-4 w-4" strokeWidth={1.9} />
@@ -347,17 +334,17 @@ function MainAreaV2Content(props: MainAreaV2Props) {
 
           <button
             type="button"
-            aria-pressed={displayActiveTab === 'files'}
+            aria-pressed={displayActiveTab === "files"}
             onClick={() => {
               setDashboardMenuOpen(false);
               chatHistorySearch.closeSearch();
-              setActiveTab(displayActiveTab === 'files' ? 'chat' : 'files');
+              setActiveTab(displayActiveTab === "files" ? "chat" : "files");
             }}
             className={cn(
-              'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors',
-              displayActiveTab === 'files'
-                ? cn('font-medium', ACTIVE_TOOL_BUTTON_CLASS)
-                : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100',
+              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors",
+              displayActiveTab === "files"
+                ? cn("font-medium", ACTIVE_TOOL_BUTTON_CLASS)
+                : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
             )}
           >
             <Folder className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -369,22 +356,24 @@ function MainAreaV2Content(props: MainAreaV2Props) {
               <button
                 type="button"
                 aria-pressed="true"
-                title={t('dashboardSwitcher.closeActive', {
-                  defaultValue: 'Close {{tool}} dashboard',
-                  tool: t(activeDashboardTab.labelKey),
-                }) as string}
+                title={
+                  t("dashboardSwitcher.closeActive", {
+                    defaultValue: "Close {{tool}} dashboard",
+                    tool: t(activeDashboardTab.labelKey),
+                  }) as string
+                }
                 onClick={() => {
-                  setActiveTab('chat');
+                  setActiveTab("chat");
                   window.requestAnimationFrame(() => dashboardMenuButtonRef.current?.focus());
                 }}
                 className={cn(
-                  'relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium transition-colors',
+                  "relative inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] font-medium transition-colors",
                   ACTIVE_TOOL_BUTTON_CLASS,
                 )}
               >
                 <ActiveDashboardIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
                 <span>{t(activeDashboardTab.labelKey)}</span>
-                {alwaysOnUnread && activeDashboardTab.id !== 'always-on' ? (
+                {alwaysOnUnread && activeDashboardTab.id !== "always-on" ? (
                   <span
                     aria-hidden="true"
                     className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600 ring-2 ring-blue-100 dark:bg-blue-400 dark:ring-blue-950"
@@ -395,10 +384,10 @@ function MainAreaV2Content(props: MainAreaV2Props) {
               <button
                 ref={dashboardMenuButtonRef}
                 type="button"
-                aria-label={t('dashboardSwitcher.open', { defaultValue: 'Open dashboards menu' }) as string}
+                aria-label={t("dashboardSwitcher.open", { defaultValue: "Open dashboards menu" }) as string}
                 aria-haspopup="menu"
                 aria-expanded={dashboardMenuOpen}
-                onClick={() => setDashboardMenuOpen((open) => !open)}
+                onClick={() => setDashboardMenuOpen(open => !open)}
                 className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
               >
                 <MoreHorizontal className="h-4 w-4" strokeWidth={1.9} />
@@ -414,10 +403,10 @@ function MainAreaV2Content(props: MainAreaV2Props) {
             {dashboardMenuOpen && !activeDashboardTab ? (
               <div
                 role="menu"
-                aria-label={t('dashboardSwitcher.menuLabel', { defaultValue: 'Dashboards' }) as string}
+                aria-label={t("dashboardSwitcher.menuLabel", { defaultValue: "Dashboards" }) as string}
                 className="absolute right-0 top-10 z-[90] w-32 overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl shadow-black/10 dark:border-neutral-700 dark:bg-neutral-900"
               >
-                {DASHBOARD_TABS.map((tab) => {
+                {DASHBOARD_TABS.map(tab => {
                   const Icon = tab.icon;
                   return (
                     <button
@@ -433,7 +422,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                     >
                       <Icon className="h-4 w-4 shrink-0 text-neutral-400" strokeWidth={1.75} />
                       <span>{t(tab.labelKey)}</span>
-                      {tab.id === 'always-on' && alwaysOnUnread ? (
+                      {tab.id === "always-on" && alwaysOnUnread ? (
                         <span className="absolute right-2 h-2 w-2 rounded-full bg-blue-500" aria-label="Unread" />
                       ) : null}
                     </button>
@@ -447,11 +436,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
 
       {/* Body */}
       <div className="relative z-0 min-h-0 flex-1 overflow-hidden">
-        <MainContent
-          {...props}
-          alwaysOnSubTab={alwaysOnSubTab}
-          onAlwaysOnSubTabChange={setAlwaysOnSubTab}
-        />
+        <MainContent {...props} alwaysOnSubTab={alwaysOnSubTab} onAlwaysOnSubTabChange={setAlwaysOnSubTab} />
       </div>
     </div>
   );

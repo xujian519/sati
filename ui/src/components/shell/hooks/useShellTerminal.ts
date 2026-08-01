@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MutableRefObject, RefObject } from 'react';
-import { FitAddon } from '@xterm/addon-fit';
-import { WebLinksAddon } from '@xterm/addon-web-links';
-import { WebglAddon } from '@xterm/addon-webgl';
-import { Terminal } from '@xterm/xterm';
-import type { Project } from '../../../types/app';
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { MutableRefObject, RefObject } from "react";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { Terminal } from "@xterm/xterm";
+import type { Project } from "../../../types/app";
 import {
   CODEX_DEVICE_AUTH_URL,
   TERMINAL_INIT_DELAY_MS,
   TERMINAL_OPTIONS,
   TERMINAL_RESIZE_DELAY_MS,
-} from '../constants/constants';
-import { copyTextToClipboard } from '../../../utils/clipboard';
-import { isCodexLoginCommand } from '../utils/auth';
-import { sendSocketMessage } from '../utils/socket';
-import { ensureXtermFocusStyles } from '../utils/terminalStyles';
+} from "../constants/constants";
+import { copyTextToClipboard } from "../../../utils/clipboard";
+import { isCodexLoginCommand } from "../utils/auth";
+import { sendSocketMessage } from "../utils/socket";
+import { ensureXtermFocusStyles } from "../utils/terminalStyles";
 
 type UseShellTerminalOptions = {
   terminalContainerRef: RefObject<HTMLDivElement>;
@@ -53,7 +53,7 @@ export function useShellTerminal({
 }: UseShellTerminalOptions): UseShellTerminalResult {
   const [isInitialized, setIsInitialized] = useState(false);
   const resizeTimeoutRef = useRef<number | null>(null);
-  const selectedProjectKey = selectedProject?.fullPath || selectedProject?.path || '';
+  const selectedProjectKey = selectedProject?.fullPath || selectedProject?.path || "";
   const hasSelectedProject = Boolean(selectedProject);
 
   useEffect(() => {
@@ -66,7 +66,7 @@ export function useShellTerminal({
     }
 
     terminalRef.current.clear();
-    terminalRef.current.write('\x1b[2J\x1b[H');
+    terminalRef.current.write("\x1b[2J\x1b[H");
   }, [terminalRef]);
 
   const disposeTerminal = useCallback(() => {
@@ -99,7 +99,7 @@ export function useShellTerminal({
     try {
       nextTerminal.loadAddon(new WebglAddon());
     } catch {
-      console.warn('[Shell] WebGL renderer unavailable, using Canvas fallback');
+      console.warn("[Shell] WebGL renderer unavailable, using Canvas fallback");
     }
 
     nextTerminal.open(terminalContainerRef.current);
@@ -126,29 +126,27 @@ export function useShellTerminal({
       event.preventDefault();
 
       if (event.clipboardData) {
-        event.clipboardData.setData('text/plain', selection);
+        event.clipboardData.setData("text/plain", selection);
         return;
       }
 
       void copyTextToClipboard(selection);
     };
 
-    terminalContainerRef.current.addEventListener('copy', handleTerminalCopy);
+    terminalContainerRef.current.addEventListener("copy", handleTerminalCopy);
 
-    nextTerminal.attachCustomKeyEventHandler((event) => {
-      const activeAuthUrl = isCodexLoginCommand(initialCommandRef.current)
-        ? CODEX_DEVICE_AUTH_URL
-        : authUrlRef.current;
+    nextTerminal.attachCustomKeyEventHandler(event => {
+      const activeAuthUrl = isCodexLoginCommand(initialCommandRef.current) ? CODEX_DEVICE_AUTH_URL : authUrlRef.current;
 
       if (
-        event.type === 'keydown' &&
+        event.type === "keydown" &&
         minimal &&
         isPlainShellRef.current &&
         activeAuthUrl &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
-        event.key?.toLowerCase() === 'c'
+        event.key?.toLowerCase() === "c"
       ) {
         event.preventDefault();
         event.stopPropagation();
@@ -157,9 +155,9 @@ export function useShellTerminal({
       }
 
       if (
-        event.type === 'keydown' &&
+        event.type === "keydown" &&
         (event.ctrlKey || event.metaKey) &&
-        event.key?.toLowerCase() === 'c' &&
+        event.key?.toLowerCase() === "c" &&
         nextTerminal.hasSelection()
       ) {
         event.preventDefault();
@@ -168,21 +166,17 @@ export function useShellTerminal({
         return false;
       }
 
-      if (
-        event.type === 'keydown' &&
-        (event.ctrlKey || event.metaKey) &&
-        event.key?.toLowerCase() === 'v'
-      ) {
+      if (event.type === "keydown" && (event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === "v") {
         // Block native paste so data is only injected after clipboard-read resolves.
         event.preventDefault();
         event.stopPropagation();
 
-        if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+        if (typeof navigator !== "undefined" && navigator.clipboard?.readText) {
           navigator.clipboard
             .readText()
-            .then((text) => {
+            .then(text => {
               sendSocketMessage(wsRef.current, {
-                type: 'input',
+                type: "input",
                 data: text,
               });
             })
@@ -204,7 +198,7 @@ export function useShellTerminal({
 
       currentFitAddon.fit();
       sendSocketMessage(wsRef.current, {
-        type: 'resize',
+        type: "resize",
         cols: currentTerminal.cols,
         rows: currentTerminal.rows,
       });
@@ -212,9 +206,9 @@ export function useShellTerminal({
 
     setIsInitialized(true);
 
-    const dataSubscription = nextTerminal.onData((data) => {
+    const dataSubscription = nextTerminal.onData(data => {
       sendSocketMessage(wsRef.current, {
-        type: 'input',
+        type: "input",
         data,
       });
     });
@@ -233,7 +227,7 @@ export function useShellTerminal({
 
         currentFitAddon.fit();
         sendSocketMessage(wsRef.current, {
-          type: 'resize',
+          type: "resize",
           cols: currentTerminal.cols,
           rows: currentTerminal.rows,
         });
@@ -243,7 +237,7 @@ export function useShellTerminal({
     resizeObserver.observe(terminalContainerRef.current);
 
     return () => {
-      terminalContainerRef.current?.removeEventListener('copy', handleTerminalCopy);
+      terminalContainerRef.current?.removeEventListener("copy", handleTerminalCopy);
       resizeObserver.disconnect();
       if (resizeTimeoutRef.current !== null) {
         window.clearTimeout(resizeTimeoutRef.current);

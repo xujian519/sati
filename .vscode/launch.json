@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Sati Server (tsx)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--import", "tsx"],
+      "program": "${workspaceFolder}/src/cli/sati.ts",
+      "args": ["server"],
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "sourceMaps": true
+    },
+    {
+      "name": "Sati Dev (launcher)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "program": "${workspaceFolder}/scripts/dev-launcher.mjs",
+      "console": "integratedTerminal",
+      "sourceMaps": true
+    },
+    {
+      "name": "Run Backend Tests (debug)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--test", "--test-force-exit", "--test-timeout=60000"],
+      "program": "${workspaceFolder}/dist/tests/${relativeFile}",
+      "preLaunchTask": "build",
+      "sourceMaps": true
+    }
+  ]
+}

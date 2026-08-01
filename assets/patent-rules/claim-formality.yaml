@@ -1,0 +1,38 @@
+# 权利要求形式检查规则
+# 对应工具：claim-formality-checker (ClaimFormalityCheckerTool)
+version: "1.0.0"
+tool: "claim-formality"
+
+keyword_lists:
+  unclear_terms:
+    description: "模糊表述模式"
+    items:
+      - "大约"
+      - "左右"
+      - "上下"
+      - "等等"
+      - "可能"
+      - "大概"
+      - "约"
+      - "或者其组合"
+  detail_patterns:
+    description: "过多细节模式"
+    items:
+      - "其中所述"
+      - "具体来说"
+      - "优选地"
+      - "更优选地"
+  common_knowledge:
+    description: "常规技术表述"
+    items:
+      - "采用常规技术"
+      - "使用现有技术"
+      - "本领域技术人员熟知"
+
+thresholds:
+  max_independent_claim_length:
+    description: "独立权利要求最大字数"
+    value: 300
+  max_detail_pattern_count:
+    description: "细节模式最大数量"
+    value: 3

@@ -1,23 +1,17 @@
 import { useTranslation } from "react-i18next";
-import {
-  findCatalogProviderById,
-  type CatalogProvider,
-} from "../../../../../shared/catalogProviders";
-import type {
-  ConfigSaveOptions,
-  ConfigSaveResult,
-} from "../../../../../hooks/usePilotDeckConfig";
+import { findCatalogProviderById, type CatalogProvider } from "../../../../../shared/catalogProviders";
+import type { ConfigSaveOptions, ConfigSaveResult } from "../../../../../hooks/useSatiConfig";
 import { patch } from "../utils/patch";
-import type { PilotDeckConfig, V2Provider } from "../types";
+import type { SatiConfig, V2Provider } from "../types";
 import { rewriteProviderRefs } from "../utils/providerRefs";
 import { PageSectionHeader } from "../../../shared/view";
 import CatalogPicker from "./CatalogPicker";
 import ProviderCard from "./ProviderCard";
 
 type ModelsSectionProps = {
-  config: PilotDeckConfig;
+  config: SatiConfig;
   onChange: (
-    next: PilotDeckConfig,
+    next: SatiConfig,
     options?: ConfigSaveOptions,
   ) => void | ConfigSaveResult | Promise<void | ConfigSaveResult>;
 };
@@ -27,10 +21,7 @@ export default function ModelsSection({ config, onChange }: ModelsSectionProps) 
   const providers = config.model?.providers ?? {};
   const ids = Object.keys(providers);
 
-  const applyChange = async (
-    next: PilotDeckConfig,
-    options?: ConfigSaveOptions,
-  ): Promise<ConfigSaveResult> =>
+  const applyChange = async (next: SatiConfig, options?: ConfigSaveOptions): Promise<ConfigSaveResult> =>
     (await onChange(next, options)) ?? { ok: true };
 
   const setProvider = async (id: string, prov: V2Provider) =>
@@ -64,15 +55,13 @@ export default function ModelsSection({ config, onChange }: ModelsSectionProps) 
     const trimmed = newId.trim();
     const renamed = buildRenamedConfig(oldId, trimmed);
     if (!renamed.ok) {
-      return { ok: false, error: t("pilotDeckConfig.panels.models.providerIdDuplicate") };
+      return { ok: false, error: t("satiConfig.panels.models.providerIdDuplicate") };
     }
     const targetId = trimmed || oldId;
     const nextConfig = patch(renamed.config, ["model", "providers", targetId], provider);
     return applyChange(
       nextConfig,
-      targetId !== oldId
-        ? { providerRenames: [{ from: oldId, to: targetId }] }
-        : undefined,
+      targetId !== oldId ? { providerRenames: [{ from: oldId, to: targetId }] } : undefined,
     );
   };
 
@@ -99,20 +88,16 @@ export default function ModelsSection({ config, onChange }: ModelsSectionProps) 
 
   return (
     <div className="space-y-3">
-      <PageSectionHeader description={t("pilotDeckConfig.panels.models.description")} />
+      <PageSectionHeader description={t("satiConfig.panels.models.description")} />
       <div className="flex justify-start">
-        <CatalogPicker
-          existingIds={new Set(ids)}
-          onPick={handleCatalogPick}
-          onCustom={handleCustom}
-        />
+        <CatalogPicker existingIds={new Set(ids)} onPick={handleCatalogPick} onCustom={handleCustom} />
       </div>
       {ids.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-          {t("pilotDeckConfig.panels.models.emptyProviders")}
+          {t("satiConfig.panels.models.emptyProviders")}
         </div>
       )}
-      {ids.map((id) => (
+      {ids.map(id => (
         <ProviderCard
           key={id}
           providerId={id}

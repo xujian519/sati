@@ -21,7 +21,7 @@ export function validateURL(url: string): boolean {
 
   if (parsed.username || parsed.password) return false;
 
-  const parts = parsed.hostname.split(".").filter((p) => p.length > 0);
+  const parts = parsed.hostname.split(".").filter(p => p.length > 0);
   if (parts.length < 2) return false;
 
   return true;

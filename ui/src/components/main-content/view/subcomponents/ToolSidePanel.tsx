@@ -1,6 +1,6 @@
-import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import { X } from 'lucide-react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
+import { X } from "lucide-react";
 
 type ToolSidePanelProps = {
   title: string;
@@ -32,9 +32,9 @@ export default function ToolSidePanel({
   children,
 }: ToolSidePanelProps) {
   const handleResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    onResizeBy(event.key === 'ArrowLeft' ? 24 : -24);
+    onResizeBy(event.key === "ArrowLeft" ? 24 : -24);
   };
 
   return (
@@ -61,8 +61,8 @@ export default function ToolSidePanel({
         aria-label={title}
         className={
           isMobile
-            ? 'absolute inset-0 z-40 flex min-h-0 flex-col bg-white shadow-2xl dark:bg-neutral-950'
-            : 'flex min-h-0 shrink-0 flex-col bg-white dark:bg-neutral-950'
+            ? "absolute inset-0 z-40 flex min-h-0 flex-col bg-white shadow-2xl dark:bg-neutral-950"
+            : "flex min-h-0 shrink-0 flex-col bg-white dark:bg-neutral-950"
         }
         style={isMobile ? undefined : { width }}
       >

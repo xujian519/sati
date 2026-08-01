@@ -64,8 +64,8 @@ export function writePermissionSettings(
 
 export function permissionSettingsToRuleSet(settings: PermissionSettings): PermissionRuleSet {
   return {
-    allow: settings.allowedTools.map((entry) => permissionEntryToRule(entry, "allow")),
-    deny: settings.disallowedTools.map((entry) => permissionEntryToRule(entry, "deny")),
+    allow: settings.allowedTools.map(entry => permissionEntryToRule(entry, "allow")),
+    deny: settings.disallowedTools.map(entry => permissionEntryToRule(entry, "deny")),
     ask: [],
   };
 }

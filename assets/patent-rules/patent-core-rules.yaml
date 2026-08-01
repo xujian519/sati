@@ -1,0 +1,581 @@
+# 专利规则引擎核心规则集
+# 分层结构：
+#   Tier A (P-*)     — 条款级规则：新颖性、创造性、充分公开等
+#   Tier B (I-*)     — 侵权级规则：全面覆盖、等同、抗辩等
+#   Tier C (R-*)     — 程序级规则：修改超范围、单一性、优先权等
+#   Tier X (X-*)     — 交叉规则：反套话、引用完整性、形式规范等
+#
+# 每条规则的 legal_basis 引用专利法/实施细则/审查指南的具体条款
+# domain 字段用于 IPC 路由过滤
+
+rules:
+
+  # ================================================================
+  # Tier A: 条款级规则（与 provision manifest 中的 Tier A 对应）
+  # ================================================================
+
+  # ---------- A01 新颖性 ----------
+  - id: P-NOV-001
+    name: "新颖性—单独对比原则"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "专利法第22条第2款"
+    version: "1.0"
+    fix_suggestion: "将多篇对比文件分开，每篇与权利要求单独对比。逐一列出每篇对比文件公开的技术特征，与权利要求逐项比对，分别给出新颖性结论"
+    fix_examples:
+      - "❌ 将对比文件1和2结合起来评价新颖性 → ✅ 单独使用对比文件1评价新颖性：...；单独使用对比文件2评价新颖性：..."
+    check:
+      type: patent_novelty
+      singleComparison: true
+      requiredElements:
+        - "技术特征拆解"
+        - "单独对比"
+        - "新颖性结论"
+      message: "新颖性分析必须遵循单独对比原则，不得将多份对比文件结合评价"
+
+  - id: P-NOV-002
+    name: "新颖性—现有技术认定标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "专利法第22条第5款"
+    check:
+      type: patent_novelty
+      singleComparison: true
+      requiredElements:
+        - "现有技术"
+        - "公开日"
+        - "申请日"
+      message: "新颖性分析应明确对比文件的公开日，确认是否构成现有技术"
+
+  - id: P-NOV-003
+    name: "新颖性—抵触申请识别"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "专利法第22条第2款"
+    check:
+      type: patent_novelty
+      singleComparison: true
+      requiredElements:
+        - "抵触申请"
+        - "在先申请"
+        - "在后公布"
+      message: "新颖性分析应检查是否存在抵触申请（他人在先申请、在后公布的专利申请）"
+
+  # ---------- A02 创造性 ----------
+  - id: P-INV-001
+    name: "创造性—三步法第一步：确定最接近现有技术"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    fix_suggestion: "从对比文件中选出一篇与本发明技术领域最接近、要解决的技术问题最相关的作为最接近现有技术，明确写出其公开的技术内容"
+    fix_examples:
+      - "✅ 确定最接近的现有技术为对比文件1，其公开了一种..."
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1:
+          - "最接近"
+          - "现有技术"
+        step2:
+          - "区别技术特征"
+          - "实际解决的技术问题"
+        step3:
+          - "技术启示"
+          - "显而易见"
+      message: "创造性三步法第一步必须明确最接近的现有技术"
+
+  - id: P-INV-002
+    name: "创造性—三步法第二步：区别特征与技术问题"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    fix_suggestion: "将权利要求与最接近现有技术逐特征对比，列出区别技术特征，然后基于区别特征确定本发明实际解决的技术问题（不是发明本身要解决的问题，而是现有技术存在的问题）"
+    fix_examples:
+      - "✅ 区别技术特征在于：...。基于该区别特征，本发明实际解决的技术问题是：..."
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1:
+          - "最接近"
+          - "现有技术"
+        step2:
+          - "区别技术特征"
+          - "实际解决的技术问题"
+        step3:
+          - "技术启示"
+      message: "创造性三步法第二步必须确定区别技术特征和实际解决的技术问题"
+
+  - id: P-INV-003
+    name: "创造性—三步法第三步：技术启示判断"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    fix_suggestion: "判断其他对比文件或公知常识是否给出了将区别特征应用到最接近现有技术以解决该技术问题的技术启示。如无启示，则具备创造性"
+    fix_examples:
+      - "✅ 对比文件2中公开了...，且该特征在对比文件2中的作用与在本发明中相同（都是为了解决...问题），因此给出了技术启示"
+      - "✅ 对比文件2虽然公开了...，但其作用不同（在对比文件2中是为了...），因此未给出技术启示"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1:
+          - "最接近"
+          - "现有技术"
+        step2:
+          - "区别技术特征"
+          - "实际解决的技术问题"
+        step3:
+          - "技术启示"
+          - "显而易见"
+          - "结合"
+      message: "创造性三步法第三步必须判断现有技术是否存在技术启示"
+
+  - id: P-INV-004
+    name: "创造性—辅助判断因素"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利审查指南第二部分第四章"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "预料不到的技术效果"
+        - "商业成功"
+        - "技术偏见"
+        - "长期存在需求"
+      message: "创造性分析可考虑辅助判断因素（预料不到的效果、商业成功等）"
+
+  - id: P-INV-005
+    name: "创造性—所属领域技术人员标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；审查指南第二部分第四章3.2.2"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1:
+          - "最接近"
+          - "现有技术"
+        step2:
+          - "区别技术特征"
+        step3:
+          - "显而易见"
+          - "所属领域"
+          - "技术人员"
+      message: "创造性判断应以所属领域技术人员的水平为基准"
+
+  # ---------- A03 实用性 ----------
+  - id: P-UTL-001
+    name: "实用性—能够制造或使用"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_utility
+    legal_basis: "专利法第22条第4款"
+    check:
+      type: patent_disclosure
+      requiredAspects:
+        - "能够制造"
+        - "能够使用"
+        - "产业"
+      message: "实用性分析应说明技术方案能够在产业上制造或使用"
+
+  # ---------- A05 充分公开 ----------
+  - id: P-DIS-001
+    name: "充分公开—清楚完整"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "专利法第26条第3款"
+    fix_suggestion: "说明书应对发明作出清楚、完整的说明，确保所属领域技术人员能够实现。补充实施例、操作步骤或具体参数"
+    check:
+      type: patent_disclosure
+      requiredAspects:
+        - "清楚"
+        - "完整"
+        - "能够实现"
+      message: "说明书必须对发明作出清楚、完整的说明，使所属领域技术人员能够实现"
+
+  - id: P-DIS-002
+    name: "充分公开—实施例"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "专利法第26条第3款"
+    check:
+      type: patent_disclosure
+      requiredAspects:
+        - "实施例"
+        - "具体实施方式"
+      message: "充分公开分析应审查说明书中实施例的数量和质量是否足以支持技术方案"
+
+  # ---------- A06 权利要求清楚支持 ----------
+  - id: P-CLM-001
+    name: "权利要求—清楚"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法第26条第4款"
+    fix_suggestion: "使用明确的技术术语限定权利要求，避免模糊表述。检查是否有'大约''左右'等不确定词语"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - clarity
+      message: "权利要求应当清楚、简要地限定要求专利保护的范围"
+
+  - id: P-CLM-002
+    name: "权利要求—以说明书为依据"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法第26条第4款"
+    fix_suggestion: "权利要求的保护范围应与说明书公开的范围匹配，不得概括过宽。补充说明书中支持该概括的实施例"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - support
+      message: "权利要求应当以说明书为依据，说明要求专利保护的范围"
+
+  - id: P-CLM-003
+    name: "权利要求—必要技术特征"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法实施细则第20条第2款"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - essential_features
+      message: "独立权利要求应当从整体上反映发明的技术方案，记载解决技术问题的必要技术特征"
+
+  # ================================================================
+  # Tier B: 侵权级规则（与 provision manifest 中的 Tier B 对应）
+  # ================================================================
+
+  - id: P-INF-001
+    name: "侵权—全面覆盖原则"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释第7条"
+    fix_suggestion: "列出权利要求的全部技术特征→列出被控侵权方案的全部技术特征→逐项对比→判断是否全部覆盖。缺少任一项则不构成字面侵权"
+    fix_examples:
+      - "✅ 权利要求技术特征：A+B+C。被控方案技术特征：A+B+C。全部覆盖→构成字面侵权"
+      - "✅ 权利要求技术特征：A+B+C。被控方案技术特征：A+B。缺少C→不构成字面侵权"
+    check:
+      type: patent_infringement
+      mode: literal
+      requiredElements:
+        - "全面覆盖"
+        - "技术特征"
+        - "逐项对比"
+      message: "字面侵权分析必须遵循全面覆盖原则，逐项对比被控方案与权利要求的全部技术特征"
+
+  - id: P-INF-002
+    name: "侵权—等同原则三要素"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释第7条"
+    check:
+      type: patent_infringement
+      mode: equivalent
+      requiredElements:
+        - "等同"
+        - "手段"
+        - "功能"
+        - "效果"
+        - "显而易见"
+      message: "等同侵权分析必须从手段、功能、效果三要素进行对比，判断是否属于显而易见替换"
+
+  - id: P-INF-003
+    name: "侵权—禁止反悔原则"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释第6条"
+    check:
+      type: patent_infringement
+      mode: both
+      requiredElements:
+        - "禁止反悔"
+        - "审查历史"
+        - "修改"
+      message: "侵权分析应考虑禁止反悔原则，审查专利权人在授权或无效程序中的修改或陈述"
+
+  - id: P-INF-004
+    name: "侵权—现有技术抗辩"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "专利法第62条（现有技术抗辩）"
+    check:
+      type: patent_infringement
+      mode: both
+      requiredElements:
+        - "现有技术抗辩"
+        - "自由已知技术"
+      message: "侵权分析应考虑是否存在现有技术抗辩的可能"
+
+  - id: P-INF-005
+    name: "侵权—合法来源抗辩"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "专利法第70条"
+    check:
+      type: patent_infringement
+      mode: literal
+      requiredElements:
+        - "合法来源"
+      message: "侵权分析应考虑被控侵权人是否主张合法来源抗辩"
+
+  # ================================================================
+  # Tier C: 程序级规则
+  # ================================================================
+
+  - id: P-PRC-001
+    name: "修改超范围—不得超出原始记载"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法第33条"
+    fix_suggestion: "确保所有修改内容可从原说明书和权利要求书中直接、毫无疑义地确定。标注修改出处"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - consistency
+      message: "修改不得超出原说明书和权利要求书记载的范围"
+
+  - id: P-PRC-002
+    name: "单一性—一个总的发明构思"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法第31条"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - support
+      message: "一件专利申请应当限于一项发明创造，属于一个总的发明构思"
+
+  - id: P-PRC-003
+    name: "优先权—相同主题认定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法第29条"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "优先权"
+        - "相同主题"
+        - "首次申请"
+      message: "优先权分析应认定为相同主题，核实首次申请的完整公开内容"
+
+  - id: P-PRC-004
+    name: "复审程序—驳回理由全面回应"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法实施细则第62条；审查指南第二部分第八章4.1"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: respond_to_rejection
+          patterns: ["驳回决定", "驳回理由", "审查意见"]
+        - element: provide_arguments
+          patterns: ["答复", "争辩", "意见陈述"]
+      message: "复审请求或答复应全面回应驳回决定或审查意见的所有理由"
+
+  # ================================================================
+  # Tier X: 交叉规则
+  # ================================================================
+
+  - id: X-REF-001
+    name: "交叉—法律依据引用完整性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第22条、第26条、第33条"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "专利法"
+        - "第二十二条"
+        - "第二十六条"
+      antiPatterns:
+        - "根据相关法律"
+        - "根据法律规定"
+      message: "法律分析结论必须引用具体的法律条文，禁止使用模糊的法律依据表述"
+
+  - id: X-REF-002
+    name: "交叉—对比文件引用规范"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第26条第4款"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "对比文件"
+        - "公开号"
+        - "CN"
+        - "US"
+        - "WO"
+      antiPatterns:
+        - "对比文件D0"
+        - "文献X"
+      message: "对比文件应使用规范的公开号标识（如 CN103456789A），不得使用模糊代号"
+
+  - id: X-REF-003
+    name: "交叉—禁止编造案例案号"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释"
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan:
+        - "(202X)最高法知民终"
+        - "(202X)京73民初"
+        - "(202X)最高法知行终"
+      message: "禁止编造不存在的判决案号，引用判例须提供可核实的案号"
+
+  - id: X-REF-004
+    name: "交叉—引用法条的具体条款"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第22条、第26条、第33条；专利法实施细则第20条"
+    version: "1.1"
+    check:
+      type: regex_pattern
+      requireAny:
+        - "专利法第[一二三四五六七八九十百零\\d]+条第[一二三四五六七八九十百零\\d]+款"
+        - "专利法第[一二三四五六七八九十百零\\d]+条"
+        - "实施细则第[一二三四五六七八九十百零\\d]+条"
+      message: "引用法条时应精确到条、款（如专利法第22条第2款），使用 regex_pattern 精确匹配"
+
+  - id: X-STR-001
+    name: "交叉—分析结论明确性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第26条第4款、第22条第3款"
+    check:
+      type: category_detection
+      categories:
+        - name: conclusion
+          keywords: ["结论", "综上", "因此", "判断", "认定"]
+        - name: analysis
+          keywords: ["分析", "对比", "评估", "检查", "审查"]
+        - name: law_basis
+          keywords: ["根据", "依据", "按照", "遵照"]
+      minCategories: 2
+      message: "分析报告应包含明确的结论、分析过程和法律依据"
+
+  - id: X-STR-002
+    name: "交叉—避免模糊措辞"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "审查指南第二部分第二章"
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan:
+        - "可能具有"
+        - "可能存在"
+        - "大概"
+        - "也许"
+        - "不确定"
+      message: "法律分析结论应使用确定性语言，避免模糊措辞"
+
+  - id: X-STR-003
+    name: "交叉—IC布局完整性（审查意见答复）"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_oa_response
+    legal_basis: "审查指南第二部分第八章4.1"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: issue_map
+          patterns: ["审查意见", "审查员认为", "指出", "通知"]
+        - element: response
+          patterns: ["答复", "意见陈述", "争辩"]
+        - element: conclusion
+          patterns: ["请求", "恳请", "建议"]
+      message: "审查意见答复应包含：审查意见映射 → 争辩理由 → 最终请求三个部分"
+
+  - id: X-STR-004
+    name: "交叉—技术特征与权利要求锚定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第26条第4款"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "权利要求"
+        - "技术特征"
+        - "权项"
+      antiPatterns:
+        - "该技术"
+        - "本技术"
+      message: "技术特征分析应锚定到具体权利要求项号，使用规范化表述"
+
+  - id: X-QC-001
+    name: "交叉—术语一致性"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "审查指南第二部分第二章"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: consistent_terms
+          patterns:
+            - "权利要求"
+            - "技术特征"
+            - "对比文件"
+      message: "分析报告全文应保持术语一致，不混用不同表述"

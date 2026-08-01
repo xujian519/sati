@@ -1,34 +1,32 @@
-import React, { useMemo, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, ClipboardList, MessageSquareText } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import type { PermissionPanelProps } from '../../configs/permissionPanelRegistry';
-import { MarkdownContent } from '../ContentRenderers/MarkdownContent';
+import React, { useMemo, useState } from "react";
+import { CheckCircle2, ChevronDown, ChevronUp, ClipboardList, MessageSquareText } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { PermissionPanelProps } from "../../configs/permissionPanelRegistry";
+import { MarkdownContent } from "../ContentRenderers/MarkdownContent";
 
-const EXIT_PLAN_MODE_QUESTION = 'What should happen next?';
+const EXIT_PLAN_MODE_QUESTION = "What should happen next?";
 
 function normalizePlanText(text: string): string {
-  return text.replace(/\\n/g, '\n').trim();
+  return text.replace(/\\n/g, "\n").trim();
 }
 
 function stringifyPlanCandidate(value: unknown): string | null {
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const normalized = normalizePlanText(value);
     return normalized || null;
   }
 
   if (Array.isArray(value)) {
-    const parts = value
-      .map((item) => stringifyPlanCandidate(item))
-      .filter((item): item is string => Boolean(item));
-    return parts.length > 0 ? parts.join('\n\n') : null;
+    const parts = value.map(item => stringifyPlanCandidate(item)).filter((item): item is string => Boolean(item));
+    return parts.length > 0 ? parts.join("\n\n") : null;
   }
 
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== "object") {
     return null;
   }
 
   const record = value as Record<string, unknown>;
-  for (const key of ['plan', 'planContent', 'content', 'markdown', 'text', 'body']) {
+  for (const key of ["plan", "planContent", "content", "markdown", "text", "body"]) {
     const candidate = stringifyPlanCandidate(record[key]);
     if (candidate) return candidate;
   }
@@ -41,18 +39,16 @@ export function extractPlanMarkdown(input: unknown): string {
   if (plan) return plan;
 
   if (input === undefined || input === null) {
-    return '';
+    return "";
   }
 
-  if (typeof input === 'object' && !Array.isArray(input)) {
+  if (typeof input === "object" && !Array.isArray(input)) {
     const record = input as Record<string, unknown>;
     const keys = Object.keys(record);
-    const onlyPermissionHints = keys.length === 0 || keys.every((key) => (
-      key === 'allowedPrompts' ||
-      key === 'planFilePath'
-    ));
+    const onlyPermissionHints =
+      keys.length === 0 || keys.every(key => key === "allowedPrompts" || key === "planFilePath");
     if (onlyPermissionHints) {
-      return '';
+      return "";
     }
   }
 
@@ -63,17 +59,13 @@ export function extractPlanMarkdown(input: unknown): string {
   }
 }
 
-export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
-  request,
-  onDecision,
-  onPlanExecutionApproved,
-}) => {
-  const { t } = useTranslation('chat');
-  const [feedback, setFeedback] = useState('');
+export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({ request, onDecision, onPlanExecutionApproved }) => {
+  const { t } = useTranslation("chat");
+  const [feedback, setFeedback] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const plan = useMemo(() => {
     const extracted = extractPlanMarkdown(request.input);
-    return extracted || t('plan.exitMode.syncingPlan');
+    return extracted || t("plan.exitMode.syncingPlan");
   }, [request.input, t]);
 
   const handleExecute = () => {
@@ -82,7 +74,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
       allow: true,
       updatedInput: {
         answers: {
-          [EXIT_PLAN_MODE_QUESTION]: 'execute_plan',
+          [EXIT_PLAN_MODE_QUESTION]: "execute_plan",
         },
       },
     });
@@ -94,7 +86,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
       allow: true,
       updatedInput: {
         answers: {
-          [EXIT_PLAN_MODE_QUESTION]: 'continue_planning',
+          [EXIT_PLAN_MODE_QUESTION]: "continue_planning",
         },
         ...(trimmed
           ? {
@@ -118,17 +110,15 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-neutral-950 dark:text-neutral-50">
-              {t('plan.exitMode.header')}
+              {t("plan.exitMode.header")}
             </div>
-            <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
-              {t('plan.exitMode.subtitle')}
-            </div>
+            <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{t("plan.exitMode.subtitle")}</div>
           </div>
           <button
             type="button"
-            onClick={() => setCollapsed((prev) => !prev)}
+            onClick={() => setCollapsed(prev => !prev)}
             className="ml-auto shrink-0 rounded-md p-1 text-neutral-500 transition hover:bg-neutral-200/60 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-            aria-label={collapsed ? 'Expand plan' : 'Collapse plan'}
+            aria-label={collapsed ? "Expand plan" : "Collapse plan"}
           >
             {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </button>
@@ -146,13 +136,13 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
 
       <div className="border-t border-neutral-100 bg-neutral-50/70 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-950/40">
         <label className="mb-2 block text-xs font-medium text-neutral-600 dark:text-neutral-400">
-          {t('plan.exitMode.feedbackLabel')}
+          {t("plan.exitMode.feedbackLabel")}
         </label>
         <textarea
           value={feedback}
-          onChange={(event) => setFeedback(event.target.value)}
+          onChange={event => setFeedback(event.target.value)}
           rows={3}
-          placeholder={t('plan.exitMode.feedbackPlaceholder')}
+          placeholder={t("plan.exitMode.feedbackPlaceholder")}
           className="block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-blue-700 dark:focus:ring-blue-950"
         />
         <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -162,7 +152,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
             className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
           >
             <MessageSquareText className="h-3.5 w-3.5" strokeWidth={2} />
-            {t('plan.exitMode.continueButton')}
+            {t("plan.exitMode.continueButton")}
           </button>
           <button
             type="button"
@@ -170,7 +160,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({
             className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
           >
             <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
-            {t('plan.exitMode.executeButton')}
+            {t("plan.exitMode.executeButton")}
           </button>
         </div>
       </div>

@@ -29,12 +29,7 @@ export class WorkCycleStore {
     }
     try {
       const parsed = JSON.parse(raw);
-      if (
-        parsed &&
-        typeof parsed === "object" &&
-        parsed.schemaVersion === 1 &&
-        Array.isArray(parsed.cycles)
-      ) {
+      if (parsed && typeof parsed === "object" && parsed.schemaVersion === 1 && Array.isArray(parsed.cycles)) {
         return parsed as WorkCycleIndex;
       }
     } catch {
@@ -45,29 +40,20 @@ export class WorkCycleStore {
 
   async writeIndex(index: WorkCycleIndex): Promise<void> {
     await mkdir(dirname(this.paths.cycleIndexFile), { recursive: true });
-    await writeFile(
-      this.paths.cycleIndexFile,
-      JSON.stringify(index, null, 2),
-      "utf-8",
-    );
+    await writeFile(this.paths.cycleIndexFile, JSON.stringify(index, null, 2), "utf-8");
   }
 
   async getRecord(cycleId: string): Promise<WorkCycleRecord | undefined> {
     const index = await this.readIndex();
-    return index.cycles.find((c) => c.id === cycleId);
+    return index.cycles.find(c => c.id === cycleId);
   }
 
   async getActiveCycle(): Promise<WorkCycleRecord | undefined> {
     const index = await this.readIndex();
-    return index.cycles.find((c) => c.status === "active");
+    return index.cycles.find(c => c.status === "active");
   }
 
-  async create(
-    handle: WorkspaceHandle,
-    runId: string,
-    cycleId: string,
-    now: Date,
-  ): Promise<WorkCycleRecord> {
+  async create(handle: WorkspaceHandle, runId: string, cycleId: string, now: Date): Promise<WorkCycleRecord> {
     const index = await this.readIndex();
     const record: WorkCycleRecord = {
       id: cycleId,
@@ -89,7 +75,7 @@ export class WorkCycleStore {
 
   async addPlan(cycleId: string, planId: string): Promise<void> {
     const index = await this.readIndex();
-    const cycle = index.cycles.find((c) => c.id === cycleId);
+    const cycle = index.cycles.find(c => c.id === cycleId);
     if (!cycle) return;
     if (!cycle.planIds.includes(planId)) {
       cycle.planIds.push(planId);
@@ -130,9 +116,7 @@ export class WorkCycleStore {
     try {
       const planRaw = await readFile(this.paths.planIndexFile, "utf-8");
       const planIndex = JSON.parse(planRaw) as DiscoveryPlanIndex;
-      planIds = planIndex.plans
-        .filter((p) => p.workspace?.cwd === ws.cwd)
-        .map((p) => p.id);
+      planIds = planIndex.plans.filter(p => p.workspace?.cwd === ws.cwd).map(p => p.id);
     } catch {
       // no plans or unreadable — fine
     }
@@ -184,13 +168,9 @@ export class WorkCycleStore {
     return record;
   }
 
-  async updateStatus(
-    cycleId: string,
-    status: WorkCycleStatus,
-    now: Date,
-  ): Promise<WorkCycleRecord | undefined> {
+  async updateStatus(cycleId: string, status: WorkCycleStatus, now: Date): Promise<WorkCycleRecord | undefined> {
     const index = await this.readIndex();
-    const cycle = index.cycles.find((c) => c.id === cycleId);
+    const cycle = index.cycles.find(c => c.id === cycleId);
     if (!cycle) return undefined;
     cycle.status = status;
     if (status === "applied") cycle.appliedAt = now.toISOString();
@@ -203,6 +183,6 @@ export class WorkCycleStore {
 function cloneIndex(index: WorkCycleIndex): WorkCycleIndex {
   return {
     schemaVersion: 1,
-    cycles: index.cycles.map((c) => ({ ...c, planIds: [...c.planIds] })),
+    cycles: index.cycles.map(c => ({ ...c, planIds: [...c.planIds] })),
   };
 }

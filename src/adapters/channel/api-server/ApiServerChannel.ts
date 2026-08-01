@@ -2,17 +2,14 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { createAgentStatusHttpErrorBody, isVisibleFailureStatusDetail } from "../../../status/agentStatus.js";
 import { ApiServerSessionMapper } from "./ApiServerSessionMapper.js";
 import { renderApiServerEvent } from "./api-server-render.js";
-import {
-  createAgentStatusHttpErrorBody,
-  isVisibleFailureStatusDetail,
-} from "../../../status/agentStatus.js";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 8642;
 const MAX_REQUEST_BYTES = 1_000_000;
-const DEFAULT_MODEL_NAME = "pilotdeck-gateway";
+const DEFAULT_MODEL_NAME = "sati-gateway";
 const REQUEST_TIMEOUT_MS = 300_000;
 
 const CORS_HEADERS: Record<string, string> = {
@@ -80,7 +77,7 @@ export class ApiServerChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`api-server: stopping (${reason ?? "no reason"})`);
         if (this.server) {
-          await new Promise<void>((resolve) => {
+          await new Promise<void>(resolve => {
             this.server!.close(() => resolve());
           });
           this.server = null;
@@ -186,13 +183,17 @@ export class ApiServerChannel implements ChannelAdapter {
     try {
       bodyText = await readRequestBody(req, MAX_REQUEST_BYTES);
     } catch (e) {
-      sendJson(res, 413, createApiServerErrorBody({
-        event: "api_request_too_large",
-        message: `Request too large or unreadable: ${e}`,
-        code: "request_too_large",
-        status: 413,
-        userHint: "Reduce the request size and retry.",
-      }));
+      sendJson(
+        res,
+        413,
+        createApiServerErrorBody({
+          event: "api_request_too_large",
+          message: `Request too large or unreadable: ${e}`,
+          code: "request_too_large",
+          status: 413,
+          userHint: "Reduce the request size and retry.",
+        }),
+      );
       return;
     }
 
@@ -200,38 +201,50 @@ export class ApiServerChannel implements ChannelAdapter {
     try {
       body = JSON.parse(bodyText) as Record<string, unknown>;
     } catch {
-      sendJson(res, 400, createApiServerErrorBody({
-        event: "api_invalid_json",
-        message: "Invalid JSON",
-        code: "invalid_json",
-        status: 400,
-        userHint: "Send a valid JSON request body.",
-      }));
+      sendJson(
+        res,
+        400,
+        createApiServerErrorBody({
+          event: "api_invalid_json",
+          message: "Invalid JSON",
+          code: "invalid_json",
+          status: 400,
+          userHint: "Send a valid JSON request body.",
+        }),
+      );
       return;
     }
 
     const messages = body.messages as Array<{ role: string; content: unknown }> | undefined;
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      sendJson(res, 400, createApiServerErrorBody({
-        event: "api_messages_required",
-        message: "messages is required",
-        code: "messages_required",
-        status: 400,
-        userHint: "Send at least one chat message.",
-      }));
+      sendJson(
+        res,
+        400,
+        createApiServerErrorBody({
+          event: "api_messages_required",
+          message: "messages is required",
+          code: "messages_required",
+          status: 400,
+          userHint: "Send at least one chat message.",
+        }),
+      );
       return;
     }
 
     const lastMsg = messages[messages.length - 1];
     const userText = normalizeContent(lastMsg?.content);
     if (!userText) {
-      sendJson(res, 400, createApiServerErrorBody({
-        event: "api_empty_message",
-        message: "Empty message",
-        code: "empty_message",
-        status: 400,
-        userHint: "Send a non-empty user message.",
-      }));
+      sendJson(
+        res,
+        400,
+        createApiServerErrorBody({
+          event: "api_empty_message",
+          message: "Empty message",
+          code: "empty_message",
+          status: 400,
+          userHint: "Send a non-empty user message.",
+        }),
+      );
       return;
     }
 
@@ -241,15 +254,19 @@ export class ApiServerChannel implements ChannelAdapter {
 
     if (this.activeChats.has(chatId)) {
       this.logger?.info?.(`api-server: chat ${chatId} already active, rejecting`);
-      sendJson(res, 429, createApiServerErrorBody({
-        event: "session_busy",
-        message: "Session already processing a request",
-        code: "session_busy",
-        status: 429,
-        type: "rate_limit_error",
-        scope: "session",
-        userHint: "Wait for the current request to finish or start a new session.",
-      }));
+      sendJson(
+        res,
+        429,
+        createApiServerErrorBody({
+          event: "session_busy",
+          message: "Session already processing a request",
+          code: "session_busy",
+          status: 429,
+          type: "rate_limit_error",
+          scope: "session",
+          userHint: "Wait for the current request to finish or start a new session.",
+        }),
+      );
       return;
     }
 
@@ -264,13 +281,17 @@ export class ApiServerChannel implements ChannelAdapter {
       return;
     }
     if (!mapped.message) {
-      sendJson(res, 400, createApiServerErrorBody({
-        event: "api_empty_message",
-        message: "Empty message",
-        code: "empty_message",
-        status: 400,
-        userHint: "Send a non-empty user message.",
-      }));
+      sendJson(
+        res,
+        400,
+        createApiServerErrorBody({
+          event: "api_empty_message",
+          message: "Empty message",
+          code: "empty_message",
+          status: 400,
+          userHint: "Send a non-empty user message.",
+        }),
+      );
       return;
     }
 
@@ -288,15 +309,19 @@ export class ApiServerChannel implements ChannelAdapter {
 
   private async streamTurn(res: ServerResponse, chatId: string, sessionKey: string, message: string): Promise<void> {
     if (!this.gateway) {
-      sendJson(res, 503, createApiServerErrorBody({
-        event: "gateway_unavailable",
-        message: "Gateway not ready",
-        code: "gateway_unavailable",
-        status: 503,
-        type: "server_error",
-        scope: "preflight",
-        userHint: "Start or reconnect the PilotDeck gateway, then retry.",
-      }));
+      sendJson(
+        res,
+        503,
+        createApiServerErrorBody({
+          event: "gateway_unavailable",
+          message: "Gateway not ready",
+          code: "gateway_unavailable",
+          status: 503,
+          type: "server_error",
+          scope: "preflight",
+          userHint: "Start or reconnect the Sati gateway, then retry.",
+        }),
+      );
       return;
     }
 
@@ -309,7 +334,11 @@ export class ApiServerChannel implements ChannelAdapter {
 
     const timeout = setTimeout(() => {
       this.logger?.warn?.(`api-server: stream timeout for ${chatId}`);
-      try { res.end(); } catch { /* best effort */ }
+      try {
+        res.end();
+      } catch {
+        /* best effort */
+      }
     }, REQUEST_TIMEOUT_MS);
 
     try {
@@ -334,33 +363,48 @@ export class ApiServerChannel implements ChannelAdapter {
     } catch (e) {
       this.logger?.error?.(`api-server: stream submitTurn error: ${e}`);
       try {
-        res.write(`data: ${JSON.stringify(createApiServerErrorBody({
-          event: "channel_submit_failed",
-          message: String(e),
-          code: "channel_submit_failed",
-          status: 500,
-          type: "server_error",
-          scope: "channel",
-          userHint: "PilotDeck failed before this API request could finish. Retry the request; if it repeats, check the API server and gateway logs.",
-        }))}\n\n`);
-      } catch { /* best effort */ }
+        res.write(
+          `data: ${JSON.stringify(
+            createApiServerErrorBody({
+              event: "channel_submit_failed",
+              message: String(e),
+              code: "channel_submit_failed",
+              status: 500,
+              type: "server_error",
+              scope: "channel",
+              userHint:
+                "Sati failed before this API request could finish. Retry the request; if it repeats, check the API server and gateway logs.",
+            }),
+          )}\n\n`,
+        );
+      } catch {
+        /* best effort */
+      }
     } finally {
       clearTimeout(timeout);
-      try { res.end(); } catch { /* best effort */ }
+      try {
+        res.end();
+      } catch {
+        /* best effort */
+      }
     }
   }
 
   private async bufferedTurn(res: ServerResponse, chatId: string, sessionKey: string, message: string): Promise<void> {
     if (!this.gateway) {
-      sendJson(res, 503, createApiServerErrorBody({
-        event: "gateway_unavailable",
-        message: "Gateway not ready",
-        code: "gateway_unavailable",
-        status: 503,
-        type: "server_error",
-        scope: "preflight",
-        userHint: "Start or reconnect the PilotDeck gateway, then retry.",
-      }));
+      sendJson(
+        res,
+        503,
+        createApiServerErrorBody({
+          event: "gateway_unavailable",
+          message: "Gateway not ready",
+          code: "gateway_unavailable",
+          status: 503,
+          type: "server_error",
+          scope: "preflight",
+          userHint: "Start or reconnect the Sati gateway, then retry.",
+        }),
+      );
       return;
     }
 
@@ -388,15 +432,20 @@ export class ApiServerChannel implements ChannelAdapter {
     } catch (e) {
       clearTimeout(timeout);
       this.logger?.error?.(`api-server: submitTurn error: ${e}`);
-      sendJson(res, 500, createApiServerErrorBody({
-        event: "channel_submit_failed",
-        message: String(e),
-        code: "channel_submit_failed",
-        status: 500,
-        type: "server_error",
-        scope: "channel",
-        userHint: "PilotDeck failed before this API request could finish. Retry the request; if it repeats, check the API server and gateway logs.",
-      }));
+      sendJson(
+        res,
+        500,
+        createApiServerErrorBody({
+          event: "channel_submit_failed",
+          message: String(e),
+          code: "channel_submit_failed",
+          status: 500,
+          type: "server_error",
+          scope: "channel",
+          userHint:
+            "Sati failed before this API request could finish. Retry the request; if it repeats, check the API server and gateway logs.",
+        }),
+      );
       return;
     }
     clearTimeout(timeout);
@@ -453,7 +502,11 @@ function isVisibleFailureGatewayEvent(event: GatewayEvent): boolean {
 
 function parseCorsOrigins(value: unknown): string[] {
   if (!value) return [];
-  if (typeof value === "string") return value.split(",").map((s) => s.trim()).filter(Boolean);
+  if (typeof value === "string")
+    return value
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
   return [];
 }

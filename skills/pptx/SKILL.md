@@ -41,14 +41,14 @@ PPTX="$PPTX_SKILL_ROOT/scripts/pptx.sh"
 bash "$PPTX" check || bash "$PPTX" fix
 ```
 
-Use the turn-scoped PilotDeck work directory for every intermediate. The host sets `PILOTDECK_WORK_DIR`; the fallback keeps manual runs internal to the project:
+Use the turn-scoped Sati work directory for every intermediate. The host sets `SATI_WORK_DIR`; the fallback keeps manual runs internal to the project:
 
 ```bash
-WORKSPACE="${PILOTDECK_WORK_DIR:-$PWD/.pilotdeck/work/manual/<task-slug>}/pptx"
+WORKSPACE="${SATI_WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/pptx"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
 
-Put the builder, converted inputs, source notes, renders, manifests, maps, candidates, and QA reports in `WORKSPACE`. Put only the requested final deliverables in the project or user-selected output directory. Never create `.pilotdeck_build.mjs`, QA directories, or other intermediates beside the user's files. Do not conceal scratch files with Git ignore changes.
+Put the builder, converted inputs, source notes, renders, manifests, maps, candidates, and QA reports in `WORKSPACE`. Put only the requested final deliverables in the project or user-selected output directory. Never create `.sati_build.mjs`, QA directories, or other intermediates beside the user's files. Do not conceal scratch files with Git ignore changes.
 
 ## Route the request
 
@@ -56,7 +56,7 @@ Choose exactly one route:
 
 1. Legacy `.ppt` input: preserve it, convert it once to a verified temporary `.pptx`, inspect the paired renders, and use only the converted `.pptx` downstream.
 2. Existing PPTX to inspect or answer questions about: inspect the entire deck; do not edit unless requested.
-3. Net-new PPTX without a template: use the PilotDeck layout library unless the user gives explicit visual direction.
+3. Net-new PPTX without a template: use the Sati layout library unless the user gives explicit visual direction.
 4. Net-new PPTX with explicit visual direction: build a custom composition; do not combine it with the default library.
 5. Template-based creation or edit: use only the supplied source deck as the visual system and follow template mode.
 
@@ -106,7 +106,7 @@ Create the executable builder:
 bash "$PPTX" scaffold --out "$WORKSPACE/tmp/deck.mjs"
 ```
 
-Edit the builder so its default export receives the PilotDeck toolkit and returns a PptxGenJS presentation. Use plain `.mjs`; do not add a transpiler. Resolve design tokens for the content language, pass the same tokens to `createDeck` and layout functions, and set PptxGenJS `objectName` values for anything likely to be edited later.
+Edit the builder so its default export receives the Sati toolkit and returns a PptxGenJS presentation. Use plain `.mjs`; do not add a transpiler. Resolve design tokens for the content language, pass the same tokens to `createDeck` and layout functions, and set PptxGenJS `objectName` values for anything likely to be edited later.
 
 Build the PPTX:
 

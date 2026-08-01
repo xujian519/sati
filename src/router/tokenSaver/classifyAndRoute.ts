@@ -1,8 +1,4 @@
-import type {
-  CanonicalMessage,
-  CanonicalModelRequest,
-  ModelRuntime,
-} from "../../model/index.js";
+import type { CanonicalMessage, CanonicalModelRequest, ModelRuntime } from "../../model/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import type { RouterModelRef, RouterTokenSaverConfig } from "../config/schema.js";
 import { extractLastUserMessage } from "./extractLastUserMessage.js";
@@ -27,9 +23,7 @@ export type ClassifyAndRouteInput = {
   telemetry?: TelemetryClient;
 };
 
-export async function classifyAndRoute(
-  input: ClassifyAndRouteInput,
-): Promise<TokenSaverDecision | undefined> {
+export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<TokenSaverDecision | undefined> {
   const { config } = input;
   if (!config.enabled) {
     return undefined;
@@ -84,7 +78,7 @@ export async function classifyAndRoute(
   });
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
-      await new Promise((r) => setTimeout(r, 1_000));
+      await new Promise(r => setTimeout(r, 1_000));
     }
     let timeout: NodeJS.Timeout | undefined;
     try {
@@ -115,8 +109,8 @@ export async function classifyAndRoute(
         `| finishReason=${response.finishReason}`,
       );
       const text = response.content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
+        .filter(block => block.type === "text")
+        .map(block => block.text)
         .join("");
 
       if (!text) {
@@ -169,10 +163,7 @@ export async function classifyAndRoute(
             model: config.judge.model,
           },
         });
-        console.warn(
-          "[token-saver] parseTier failed. Judge text:",
-          JSON.stringify(text).slice(0, 300),
-        );
+        console.warn("[token-saver] parseTier failed. Judge text:", JSON.stringify(text).slice(0, 300));
         return {
           tier: config.defaultTier,
           selection: defaultTier.model,
@@ -285,5 +276,5 @@ export function isShortContinuation(message: string): boolean {
   if (trimmed.length > SHORT_CONTINUATION_MAX_CHARS) {
     return false;
   }
-  return CONTINUATION_PATTERNS.some((pattern) => pattern.test(trimmed));
+  return CONTINUATION_PATTERNS.some(pattern => pattern.test(trimmed));
 }

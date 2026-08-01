@@ -15,15 +15,10 @@ type RequestLike = (
   },
 ) => Promise<{ ok: boolean }>;
 
-function readTerminalStatus(
-  line: string,
-): WebUpdateTerminalStatus | null {
+function readTerminalStatus(line: string): WebUpdateTerminalStatus | null {
   const parsed = JSON.parse(line) as UpdateProgressMessage;
   if (parsed.status === "error") return "error";
-  if (
-    parsed.stage === "complete" &&
-    (parsed.status === "success" || parsed.status === "up-to-date")
-  ) {
+  if (parsed.stage === "complete" && (parsed.status === "success" || parsed.status === "up-to-date")) {
     return parsed.status;
   }
   return null;

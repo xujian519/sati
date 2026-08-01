@@ -1,6 +1,6 @@
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare } from "lucide-react";
 
-const loadingDotAnimationDelays = ['0s', '0.1s', '0.2s'];
+const loadingDotAnimationDelays = ["0s", "0.1s", "0.2s"];
 
 export default function AuthLoadingScreen() {
   return (
@@ -12,10 +12,10 @@ export default function AuthLoadingScreen() {
           </div>
         </div>
 
-        <h1 className="mb-2 text-2xl font-bold text-foreground">PilotDeck</h1>
+        <h1 className="mb-2 text-2xl font-bold text-foreground">Sati</h1>
 
         <div className="flex items-center justify-center space-x-2">
-          {loadingDotAnimationDelays.map((delay) => (
+          {loadingDotAnimationDelays.map(delay => (
             <div
               key={delay}
               className="h-2 w-2 animate-bounce rounded-full bg-blue-500"

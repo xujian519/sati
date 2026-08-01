@@ -1,5 +1,12 @@
-import { canonicalMessagesToMemoryMessages, type MemoryCaptureTurnInput, type MemoryResolver, type MemoryRetrieveInput, type MemoryRetrieveResult, type ContextMemoryMessage } from "./MemoryResolver.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
+import {
+  canonicalMessagesToMemoryMessages,
+  type MemoryCaptureTurnInput,
+  type MemoryResolver,
+  type MemoryRetrieveInput,
+  type MemoryRetrieveResult,
+  type ContextMemoryMessage,
+} from "./MemoryResolver.js";
 
 type EdgeClawCaseTraceRecord = {
   sessionKey: string;
@@ -67,11 +74,14 @@ export type EdgeClawMemoryProviderOptions = {
 
 export class EdgeClawMemoryProvider implements MemoryResolver {
   private readonly now: () => Date;
-  private readonly pendingRetrievals = new Map<string, {
-    query: string;
-    startedAt: string;
-    result: EdgeClawRetrieveContextResult;
-  }>();
+  private readonly pendingRetrievals = new Map<
+    string,
+    {
+      query: string;
+      startedAt: string;
+      result: EdgeClawRetrieveContextResult;
+    }
+  >();
 
   constructor(private readonly options: EdgeClawMemoryProviderOptions) {
     this.now = options.now ?? (() => new Date());
@@ -179,7 +189,7 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
       this.options.service.captureTurn(normalizedMessages, {
         sessionKey: input.sessionId,
         timestamp: this.now().toISOString(),
-        source: this.options.source ?? "pilotdeck",
+        source: this.options.source ?? "sati",
       });
       this.options.telemetry?.trackFeatureLoopStage({
         module: "memory",

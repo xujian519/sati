@@ -1,0 +1,139 @@
+# 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
+template_id: prosecution-draft
+name: 申请撰写辅助
+description: 案卷探查 → 规则 → 发明 CAP02 解构 → 检索 → 质量门 → 现有技术 CAP02 对比 → 充分公开审查 → 反套话
+intent: 从技术交底书到申请文件撰写：CAP02 深度技术分析贯穿检索与撰写
+steps:
+  - id: probe
+    name: 案卷探查
+    description: 读取交底书与技术材料
+    worker: project-probe
+    input_template: |
+      案卷目录：{{case_dir}}
+      识别交底书、附图说明与现有草稿，输出 intent 与 provision_ids。
+
+  - id: rules
+    name: 规则探查
+    description: 确定撰写相关的 provision_ids
+    worker: rule-explorer
+    depends_on: [probe]
+    input_template: |
+      针对申请撰写场景，探查 P-A04（客体）、P-A05（充分公开）、P-D01（撰写规范）相关规则。
+
+  - id: tech-deconstruct
+    name: 发明方案 CAP02 解构
+    description: 交底书/发明七维解构与因果图（撰写与检索的前置必步）
+    worker: patent-technical-analyzer
+    depends_on: [rules]
+    has_checkpoint: true
+    checkpoint_title: 确认发明七维解构与核心特征（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：申请撰写 — **交底书/发明方案 CAP02 解构**（检索与权利要求撰写的前置必步）。
+
+      执行 CAP02 三级技术分析（目标为本发明，暂无对比文件时完成目标侧即可）：
+      1. 对交底书/说明书草稿完成七维解构
+      2. 提取核心发明点、必要技术特征、技术效果与问题-手段-效果链
+      3. ≥3 特征时生成 tech-graph-spec.json 与 tech-graph-report.md
+      4. HITL：确认特征清单与发明点后再进入检索
+
+      输出：data/cases/{{case_id}}/outputs/technical-deconstruction-target.md
+            data/cases/{{case_id}}/outputs/technical-analysis-report.md
+      检索规划 worker 须引用上述文件中的特征与 IPC/关键词。
+
+  - id: search-plan
+    name: 检索规划
+    description: 基于 CAP02 特征制定现有技术检索策略
+    worker: patent-search-planner
+    depends_on: [tech-deconstruct]
+    input_template: |
+      案卷：{{case_dir}}
+
+      读取 data/cases/{{case_id}}/outputs/technical-deconstruction-target.md，
+      基于已识别技术特征、IPC 与发明点制定检索策略，避免与现有技术重复。
+
+  - id: search-exec
+    name: 检索执行
+    description: 执行检索并整理参考文献
+    worker: patent-search-executor
+    depends_on: [search-plan]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **必经步骤**：按 search-plan.md 执行检索。
+      至少使用 2 个检索源：
+      1. Google Patents（通过 google-patents-search skill）
+      2. CNIPA 公布公告（通过 cnipa-query skill）
+      每篇对比文件标注：专利号、标题、公开日、相关度（X/Y/A）、覆盖的权利要求、可引用段落（至少 3 段）。
+      输出至 data/cases/{{case_id}}/outputs/prior-art-for-drafting.md
+
+  - id: search-qual
+    name: 检索结果质量检查
+    description: 对检索结果进行质量验证，满足门槛后方可进入下游
+    worker: bcip-retrieval (quality check phase)
+    depends_on: [search-exec]
+    has_checkpoint: true
+    checkpoint_title: 确认对比文件列表与相关性（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **质量门槛**（以下条件必须全部满足）：
+      1. 对比文件 ≥ 3 篇
+      2. 每篇标注了相关度和覆盖的权利要求
+      3. 至少 2 篇获取了全文（PDF→Markdown 转换）
+      4. 检索式包含布尔逻辑和 IPC 限定
+      
+      不满足时：退回 search-exec 重新执行。
+      满足时：人工确认对比文件列表后再进入技术分析。
+
+  - id: tech-prior-art
+    name: 现有技术 CAP02 对比
+    description: 本发明 vs 检索结果的四级对比矩阵（撰写避重复必步）
+    worker: patent-technical-analyzer
+    depends_on: [search-qual]
+    has_checkpoint: true
+    checkpoint_title: 确认与现有技术的区别特征（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：申请撰写 — **本发明 vs 检索对比文件 CAP02 四级对比**。
+
+      1. 读取 technical-deconstruction-target.md 与 prior-art-for-drafting.md / 检索结果
+      2. 对关键对比文件完成七维解构（technical-deconstruction-d1.md 等）
+      3. 四级对比矩阵 + 区别特征四层分析 + 技术启示（撰写避重复）
+      4. 图分析：本发明与 D1 因果链对比
+      5. HITL：确认可写入权利要求的区别特征
+
+      输出：technical-comparison-matrix.md、distinctive-features.md、technical-analysis-report.md（更新）
+
+  - id: disclosure
+    name: 充分公开审查
+    description: 检查说明书是否充分公开（基于 CAP02 产出）
+    worker: provision-disclosure
+    depends_on: [tech-prior-art]
+    has_checkpoint: true
+    checkpoint_title: 审核充分公开与撰写建议（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **前置依赖**：
+      - data/cases/{{case_id}}/outputs/technical-analysis-report.md
+      - data/cases/{{case_id}}/outputs/distinctive-features.md
+
+      审查说明书/交底书是否充分公开，结合区别特征给出权利要求与说明书撰写改进建议。
+      报告：data/cases/{{case_id}}/outputs/disclosure-review.md
+
+  - id: slop-clean
+    name: 反套话润色+评分
+    description: stop-patent-slop 规则后处理 + 5维评分，清理撰写建议中的空洞套话
+    worker: patent-slop-cleaner
+    depends_on: [disclosure]
+    input_template: |
+      案卷：{{case_dir}}
+
+      对 outputs/disclosure-review.md 应用 stop-patent-slop 规则：
+      1. 删除填充词与无证据套话
+      2. 运行 slop-scorer.ts 5维评分，总分 < 35 必须修订
+      3. 输出 disclosure-review-clean.md
+      4. 输出 disclosure-review-slop-changelog.md（列出变更 + 评分报告）

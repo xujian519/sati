@@ -1,4 +1,9 @@
-import type { CanonicalModelRequest, CanonicalThinkingConfig, ModelDefinition, ProviderConfig } from "../protocol/canonical.js";
+import type {
+  CanonicalModelRequest,
+  CanonicalThinkingConfig,
+  ModelDefinition,
+  ProviderConfig,
+} from "../protocol/canonical.js";
 import { ModelRequestError } from "../protocol/errors.js";
 
 export type ThinkingMode = NonNullable<CanonicalThinkingConfig["mode"]>;
@@ -64,11 +69,13 @@ export function resolveThinkingPlan(
     return { mode, enabled: false };
   }
 
-  const budgetTokens = typeof requestThinking?.budgetTokens === "number" && Number.isFinite(requestThinking.budgetTokens)
-    ? requestThinking.budgetTokens
-    : undefined;
+  const budgetTokens =
+    typeof requestThinking?.budgetTokens === "number" && Number.isFinite(requestThinking.budgetTokens)
+      ? requestThinking.budgetTokens
+      : undefined;
   const isOff = mode === "off";
-  const explicitlyUnsupported = (model.capabilities as { supportsThinkingExplicit?: boolean }).supportsThinkingExplicit === false;
+  const explicitlyUnsupported =
+    (model.capabilities as { supportsThinkingExplicit?: boolean }).supportsThinkingExplicit === false;
 
   if (explicitMode && explicitlyUnsupported) {
     return {
@@ -109,10 +116,7 @@ export function resolveThinkingPlan(
   return { mode, enabled: false };
 }
 
-export function throwIfUnsupportedThinkingPlan(
-  plan: ThinkingPlan,
-  request: CanonicalModelRequest,
-): void {
+export function throwIfUnsupportedThinkingPlan(plan: ThinkingPlan, request: CanonicalModelRequest): void {
   if (!plan.unsupportedReason) return;
   throw new ModelRequestError("unsupported_thinking", plan.unsupportedReason, {
     provider: request.provider,
@@ -143,19 +147,29 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
     return modelId.includes("gpt-5.5")
       ? { mode, enabled: true, effort: "none", useOpenAIReasoning: true }
       : {
-        mode,
-        enabled: false,
-        unsupportedReason: `OpenAI model ${modelId} does not support an explicit off thinking mode. Switch thinking strength back to Default.`,
-      };
+          mode,
+          enabled: false,
+          unsupportedReason: `OpenAI model ${modelId} does not support an explicit off thinking mode. Switch thinking strength back to Default.`,
+        };
   }
   if (modelId.includes("gpt-5.5-pro")) {
     return { mode, enabled: true, effort: clampEffort(mode, ["medium", "high", "xhigh"]), useOpenAIReasoning: true };
   }
   if (modelId.includes("gpt-5.5")) {
-    return { mode, enabled: true, effort: clampEffort(mode, ["none", "low", "medium", "high", "xhigh"]), useOpenAIReasoning: true };
+    return {
+      mode,
+      enabled: true,
+      effort: clampEffort(mode, ["none", "low", "medium", "high", "xhigh"]),
+      useOpenAIReasoning: true,
+    };
   }
   if (modelId.includes("gpt-5")) {
-    return { mode, enabled: true, effort: clampEffort(mode, ["minimal", "low", "medium", "high"]), useOpenAIReasoning: true };
+    return {
+      mode,
+      enabled: true,
+      effort: clampEffort(mode, ["minimal", "low", "medium", "high"]),
+      useOpenAIReasoning: true,
+    };
   }
   if (/^(?:o1|o3|o4)(?:\b|[-_])/.test(modelId)) {
     return { mode, enabled: true, effort: clampEffort(mode, ["low", "medium", "high"]), useOpenAIReasoning: true };
@@ -191,7 +205,12 @@ function googlePlan(mode: ThinkingMode, modelId: string, budgetTokens?: number):
   }
   if (/gemini-?2\.5|gemini.*2\.5/.test(modelId)) {
     if (mode === "off") return { mode, enabled: true, budgetTokens: 0, useGeminiBudget: true };
-    return { mode, enabled: true, budgetTokens: budgetTokens ?? GEMINI_25_BUDGETS[mode] ?? 8192, useGeminiBudget: true };
+    return {
+      mode,
+      enabled: true,
+      budgetTokens: budgetTokens ?? GEMINI_25_BUDGETS[mode] ?? 8192,
+      useGeminiBudget: true,
+    };
   }
   if (mode === "off") return { mode, enabled: false };
   return { mode, enabled: true, budgetTokens, useGeminiBudget: true };
@@ -209,8 +228,8 @@ function glmPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
 }
 
 function qwenPlan(mode: ThinkingMode, modelId: string, providerUrl: string, budgetTokens?: number): ThinkingPlan {
-  const isModelBest = providerUrl.includes("llm-center.ali.modelbest.cn") || /^qwen_/.test(modelId);
-  if (isModelBest) {
+  const isAliLlmCenter = providerUrl.includes("llm-center.ali.modelbest.cn") || /^qwen_/.test(modelId);
+  if (isAliLlmCenter) {
     if (mode === "off") {
       return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true, preserve: true };
     }
@@ -239,11 +258,11 @@ function qwenPlan(mode: ThinkingMode, modelId: string, providerUrl: string, budg
 }
 
 function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
-  const isModelBest = /^deepseek_/.test(modelId);
+  const isAliLlmCenter = /^deepseek_/.test(modelId);
   if (mode === "off" || mode === "minimal") {
     return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true, preserve: true };
   }
-  if (isModelBest) {
+  if (isAliLlmCenter) {
     return {
       mode,
       enabled: true,
@@ -264,9 +283,22 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
 
 function kimiPlan(mode: ThinkingMode, _modelId: string): ThinkingPlan {
   if (mode === "off") {
-    return { mode, enabled: false, thinkingType: "disabled", preserve: true, useOpenAICompatibleThinking: true, omitTemperature: true };
+    return {
+      mode,
+      enabled: false,
+      thinkingType: "disabled",
+      preserve: true,
+      useOpenAICompatibleThinking: true,
+      omitTemperature: true,
+    };
   }
-  return { mode, enabled: mode !== "default", preserve: true, useOpenAICompatibleThinking: false, omitTemperature: true };
+  return {
+    mode,
+    enabled: mode !== "default",
+    preserve: true,
+    useOpenAICompatibleThinking: false,
+    omitTemperature: true,
+  };
 }
 
 function minimaxPlan(mode: ThinkingMode): ThinkingPlan {

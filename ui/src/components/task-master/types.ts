@@ -1,18 +1,10 @@
-import type { Project } from '../../types/app';
+import type { Project } from "../../types/app";
 
 export type TaskId = string | number;
 
-export type TaskStatus =
-  | 'pending'
-  | 'in-progress'
-  | 'done'
-  | 'review'
-  | 'blocked'
-  | 'deferred'
-  | 'cancelled'
-  | string;
+export type TaskStatus = "pending" | "in-progress" | "done" | "review" | "blocked" | "deferred" | "cancelled" | string;
 
-export type TaskPriority = 'high' | 'medium' | 'low' | string;
+export type TaskPriority = "high" | "medium" | "low" | string;
 
 export type TaskMasterTask = {
   id: TaskId;
@@ -112,11 +104,11 @@ export type TaskMasterContextValue = {
   clearError: () => void;
 };
 
-export type TaskBoardView = 'kanban' | 'list' | 'grid';
+export type TaskBoardView = "kanban" | "list" | "grid";
 
-export type TaskBoardSortField = 'id' | 'title' | 'status' | 'priority' | 'updated';
+export type TaskBoardSortField = "id" | "title" | "status" | "priority" | "updated";
 
-export type TaskBoardSortOrder = 'asc' | 'desc';
+export type TaskBoardSortOrder = "asc" | "desc";
 
 export type TaskKanbanColumn = {
   id: string;

@@ -23,7 +23,10 @@ type PendingPermission = {
 };
 
 const noop = async () => {};
-const stub = <T,>(v: T) => async () => v;
+const stub =
+  <T,>(v: T) =>
+  async () =>
+    v;
 
 class MockGateway implements Gateway {
   private pending = new Map<string, PendingPermission>();
@@ -34,9 +37,11 @@ class MockGateway implements Gateway {
     yield { type: "turn_started", runId: "run-1" };
 
     const requestId = `perm-${Date.now()}`;
-    const decisionPromise = new Promise<{ decision: "allow" | "deny"; remember?: boolean; reason?: string }>((resolve) => {
-      this.pending.set(requestId, { resolve });
-    });
+    const decisionPromise = new Promise<{ decision: "allow" | "deny"; remember?: boolean; reason?: string }>(
+      resolve => {
+        this.pending.set(requestId, { resolve });
+      },
+    );
 
     yield {
       type: "permission_request",
@@ -69,7 +74,12 @@ class MockGateway implements Gateway {
     yield { type: "turn_completed", usage: {}, finishReason: "completed" } as GatewayEvent;
   }
 
-  async permissionDecide(input: { requestId: string; decision: "allow" | "deny"; remember?: boolean; reason?: string }): Promise<{ delivered: boolean }> {
+  async permissionDecide(input: {
+    requestId: string;
+    decision: "allow" | "deny";
+    remember?: boolean;
+    reason?: string;
+  }): Promise<{ delivered: boolean }> {
     const entry = this.pending.get(input.requestId);
     if (!entry) return { delivered: false };
     entry.resolve({ decision: input.decision, remember: input.remember, reason: input.reason });
@@ -96,17 +106,31 @@ class MockGateway implements Gateway {
   cronRunNow = stub({ triggered: true }) as unknown as Gateway["cronRunNow"];
   respondElicitation = stub({ delivered: false }) as Gateway["respondElicitation"];
   grantSessionPermission = stub({ granted: false }) as Gateway["grantSessionPermission"];
-  readSessionMessages = stub({ messages: [], hasMore: false, session: {} as any }) as unknown as Gateway["readSessionMessages"];
+  readSessionMessages = stub({
+    messages: [],
+    hasMore: false,
+    session: {} as any,
+  }) as unknown as Gateway["readSessionMessages"];
   readSubagentMessages = stub({ messages: [], total: 0 }) as unknown as Gateway["readSubagentMessages"];
-  forkSession = stub({ newSessionKey: "web:s_fork", prefillText: "", carriedMessageCount: 0 }) as unknown as Gateway["forkSession"];
+  forkSession = stub({
+    newSessionKey: "web:s_fork",
+    prefillText: "",
+    carriedMessageCount: 0,
+  }) as unknown as Gateway["forkSession"];
   listProjects = stub({ projects: [] }) as Gateway["listProjects"];
-  describeProject = stub({ projectKey: "", name: "", root: "", fullPath: "", sessionCount: 0 }) as unknown as Gateway["describeProject"];
+  describeProject = stub({
+    projectKey: "",
+    name: "",
+    root: "",
+    fullPath: "",
+    sessionCount: 0,
+  }) as unknown as Gateway["describeProject"];
 }
 
 // ──────────────── helpers ────────────────
 
 function wait(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise(r => setTimeout(r, ms));
 }
 
 async function typeString(instance: ReturnType<typeof render>, text: string): Promise<void> {
@@ -162,9 +186,7 @@ function fail(name: string, detail: string) {
 function renderTui() {
   const gw = new MockGateway();
   const cwd = process.cwd();
-  const instance = render(
-    <TuiApp gateway={gw} connection="in_process" projectKey={cwd} cwd={cwd} model="mock" />,
-  );
+  const instance = render(<TuiApp gateway={gw} connection="in_process" projectKey={cwd} cwd={cwd} model="mock" />);
   return { instance, gw };
 }
 
@@ -358,21 +380,21 @@ async function main(): Promise<void> {
   }
 
   process.stdout.write("\n═══════════════════════════════════════════════\n");
-  const passed = results.filter((r) => r.pass).length;
-  const failed = results.filter((r) => !r.pass).length;
+  const passed = results.filter(r => r.pass).length;
+  const failed = results.filter(r => !r.pass).length;
   process.stdout.write(` Results: ${passed} passed, ${failed} failed (${results.length} total)\n`);
   process.stdout.write("═══════════════════════════════════════════════\n");
 
   if (failed > 0) {
     process.stdout.write("\nFailed:\n");
-    for (const r of results.filter((r) => !r.pass)) {
+    for (const r of results.filter(r => !r.pass)) {
       process.stdout.write(`  ✗ ${r.name}: ${r.detail}\n`);
     }
     process.exitCode = 1;
   }
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });

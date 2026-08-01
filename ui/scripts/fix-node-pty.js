@@ -9,10 +9,10 @@
  * @module scripts/fix-node-pty
  */
 
-import { promises as fs } from 'fs';
-import path from 'path';
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
+import { promises as fs } from "fs";
+import path from "path";
+import { createRequire } from "module";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,10 +28,10 @@ const require = createRequire(import.meta.url);
  */
 function resolveNodePtyDir() {
   try {
-    const pkgJsonPath = require.resolve('node-pty/package.json');
+    const pkgJsonPath = require.resolve("node-pty/package.json");
     return path.dirname(pkgJsonPath);
   } catch {
-    return path.join(__dirname, '..', 'node_modules', 'node-pty');
+    return path.join(__dirname, "..", "node_modules", "node-pty");
   }
 }
 
@@ -55,17 +55,17 @@ function resolveNodePtyDir() {
  * await fixSpawnHelper();
  */
 async function fixSpawnHelper() {
-  const nodeModulesPath = path.join(resolveNodePtyDir(), 'prebuilds');
+  const nodeModulesPath = path.join(resolveNodePtyDir(), "prebuilds");
 
   // Only run on macOS
-  if (process.platform !== 'darwin') {
+  if (process.platform !== "darwin") {
     return;
   }
 
-  const darwinDirs = ['darwin-arm64', 'darwin-x64'];
+  const darwinDirs = ["darwin-arm64", "darwin-x64"];
 
   for (const dir of darwinDirs) {
-    const spawnHelperPath = path.join(nodeModulesPath, dir, 'spawn-helper');
+    const spawnHelperPath = path.join(nodeModulesPath, dir, "spawn-helper");
 
     try {
       // Check if file exists
@@ -76,7 +76,7 @@ async function fixSpawnHelper() {
       console.log(`[postinstall] Fixed permissions for ${spawnHelperPath}`);
     } catch (err) {
       // File doesn't exist or other error - ignore
-      if (err.code !== 'ENOENT') {
+      if (err.code !== "ENOENT") {
         console.warn(`[postinstall] Warning: Could not fix ${spawnHelperPath}: ${err.message}`);
       }
     }

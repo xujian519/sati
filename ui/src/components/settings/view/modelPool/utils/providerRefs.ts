@@ -1,52 +1,28 @@
 import type { CatalogProvider } from "../../../../../shared/catalogProviders";
-import {
-  hasUsableSecret,
-  isMaskedSecret,
-  secretDisplayValue,
-} from "../../../shared/utils/secret";
-import type { PilotDeckConfig } from "../types";
+import { hasUsableSecret, isMaskedSecret, secretDisplayValue } from "../../../shared/utils/secret";
+import type { SatiConfig } from "../types";
 import { patch } from "./patch";
 
-function rewriteProviderRef(
-  value: unknown,
-  oldProviderId: string,
-  newProviderId: string,
-): unknown {
+function rewriteProviderRef(value: unknown, oldProviderId: string, newProviderId: string): unknown {
   const oldPrefix = `${oldProviderId}/`;
   if (typeof value !== "string" || !value.startsWith(oldPrefix)) return value;
   return `${newProviderId}/${value.slice(oldPrefix.length)}`;
 }
 
-export function rewriteProviderRefs(
-  config: PilotDeckConfig,
-  oldProviderId: string,
-  newProviderId: string,
-): PilotDeckConfig {
+export function rewriteProviderRefs(config: SatiConfig, oldProviderId: string, newProviderId: string): SatiConfig {
   let next = config;
 
-  const agentModel = rewriteProviderRef(
-    next.agent?.model,
-    oldProviderId,
-    newProviderId,
-  );
+  const agentModel = rewriteProviderRef(next.agent?.model, oldProviderId, newProviderId);
   if (agentModel !== next.agent?.model) {
     next = patch(next, ["agent", "model"], agentModel);
   }
 
-  const subagentDefault = rewriteProviderRef(
-    next.agent?.subagents?.default,
-    oldProviderId,
-    newProviderId,
-  );
+  const subagentDefault = rewriteProviderRef(next.agent?.subagents?.default, oldProviderId, newProviderId);
   if (subagentDefault !== next.agent?.subagents?.default) {
     next = patch(next, ["agent", "subagents", "default"], subagentDefault);
   }
 
-  const memoryModel = rewriteProviderRef(
-    next.memory?.model,
-    oldProviderId,
-    newProviderId,
-  );
+  const memoryModel = rewriteProviderRef(next.memory?.model, oldProviderId, newProviderId);
   if (memoryModel !== next.memory?.model) {
     next = patch(next, ["memory", "model"], memoryModel);
   }
@@ -59,9 +35,7 @@ export function rewriteProviderRefs(
         rewriteProviderRef(value, oldProviderId, newProviderId) as string,
       ]),
     );
-    if (
-      Object.entries(scenarios).some(([key, value]) => rewritten[key] !== value)
-    ) {
+    if (Object.entries(scenarios).some(([key, value]) => rewritten[key] !== value)) {
       next = patch(next, ["router", "scenarios"], rewritten);
     }
   }
@@ -71,27 +45,19 @@ export function rewriteProviderRefs(
     const rewritten = Object.fromEntries(
       Object.entries(fallback).map(([key, refs]) => [
         key,
-        refs.map((ref) =>
-          rewriteProviderRef(ref, oldProviderId, newProviderId),
-        ) as string[],
+        refs.map(ref => rewriteProviderRef(ref, oldProviderId, newProviderId)) as string[],
       ]),
     );
     if (
       Object.entries(fallback).some(
-        ([key, refs]) =>
-          refs.length !== rewritten[key].length ||
-          refs.some((ref, idx) => rewritten[key][idx] !== ref),
+        ([key, refs]) => refs.length !== rewritten[key].length || refs.some((ref, idx) => rewritten[key][idx] !== ref),
       )
     ) {
       next = patch(next, ["router", "fallback"], rewritten);
     }
   }
 
-  const judge = rewriteProviderRef(
-    next.router?.tokenSaver?.judge,
-    oldProviderId,
-    newProviderId,
-  );
+  const judge = rewriteProviderRef(next.router?.tokenSaver?.judge, oldProviderId, newProviderId);
   if (judge !== next.router?.tokenSaver?.judge) {
     next = patch(next, ["router", "tokenSaver", "judge"], judge);
   }
@@ -103,19 +69,11 @@ export function rewriteProviderRefs(
         key,
         {
           ...tier,
-          model: rewriteProviderRef(
-            tier.model,
-            oldProviderId,
-            newProviderId,
-          ) as string | undefined,
+          model: rewriteProviderRef(tier.model, oldProviderId, newProviderId) as string | undefined,
         },
       ]),
     );
-    if (
-      Object.entries(tiers).some(
-        ([key, tier]) => rewritten[key].model !== tier.model,
-      )
-    ) {
+    if (Object.entries(tiers).some(([key, tier]) => rewritten[key].model !== tier.model)) {
       next = patch(next, ["router", "tokenSaver", "tiers"], rewritten);
     }
   }
@@ -136,6 +94,6 @@ export function providerDisplayName(
   return normalized
     .split(/[-_\s]+/)
     .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 }

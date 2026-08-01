@@ -21,15 +21,11 @@ export type PilotConfigStore = {
   startWatching(options?: { debounceMs?: number }): () => void;
 };
 
-export async function createPilotConfigStore(
-  options: PilotConfigLoadOptions = {},
-): Promise<PilotConfigStore> {
+export async function createPilotConfigStore(options: PilotConfigLoadOptions = {}): Promise<PilotConfigStore> {
   return createPilotConfigStoreSync(options);
 }
 
-export function createPilotConfigStoreSync(
-  options: PilotConfigLoadOptions = {},
-): PilotConfigStore {
+export function createPilotConfigStoreSync(options: PilotConfigLoadOptions = {}): PilotConfigStore {
   const initialSnapshot = loadPilotConfig(options);
   return new DefaultPilotConfigStore(initialSnapshot, options);
 }

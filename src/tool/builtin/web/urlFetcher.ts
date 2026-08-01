@@ -5,29 +5,21 @@
  * W5 (60 s timeout), W6 (10 redirect hops), W7 (permitted redirect),
  * W8 (LRU cache + TTL), W9 (egress proxy detection — skipped, see notes
  * in §5.2), W10 (binary persistence — minimal stub: persistedPath set to
- * `undefined` because PilotDeck's MCP storage is feature-gated; behaviour
+ * `undefined` because Sati's MCP storage is feature-gated; behaviour
  * intentional_difference recorded in checklist), W11 (HTML→Markdown via
  * turndown), W12 (truncation at 100 KB).
  */
 
-import {
-  type FetchedCacheEntry,
-  URL_CACHE,
-} from "./urlContentCache.js";
-import {
-  isPermittedRedirect,
-  upgradeHttpToHttps,
-  validateURL,
-} from "./urlValidation.js";
 import { parseRetryAfterHeader } from "../../../model/index.js";
 import { networkFetch } from "../../../network/fetch.js";
+import { type FetchedCacheEntry, URL_CACHE } from "./urlContentCache.js";
+import { isPermittedRedirect, upgradeHttpToHttps, validateURL } from "./urlValidation.js";
 
 export const MAX_HTTP_CONTENT_LENGTH = 10 * 1024 * 1024;
 export const FETCH_TIMEOUT_MS = 60_000;
 export const MAX_REDIRECTS = 10;
 export const MAX_MARKDOWN_LENGTH = 100_000;
-export const WEB_FETCH_USER_AGENT =
-  "PilotDeck/0.1 (+https://github.com/pilotdeck) WebFetch";
+export const WEB_FETCH_USER_AGENT = "Sati/0.1 (+https://github.com/xujian519/sati) WebFetch";
 
 export type RedirectInfo = {
   type: "redirect";
@@ -54,9 +46,7 @@ export class WebFetchHttpError extends Error {
   readonly bodyPreview?: string;
 
   constructor(options: WebFetchHttpErrorOptions) {
-    const statusLabel = options.statusText
-      ? `${options.status} ${options.statusText}`
-      : String(options.status);
+    const statusLabel = options.statusText ? `${options.status} ${options.statusText}` : String(options.status);
     super(`HTTP ${statusLabel} while fetching ${options.url}.`);
     this.name = "WebFetchHttpError";
     this.url = options.url;
@@ -75,15 +65,11 @@ type FetchedHttpRaw = {
   buffer: Buffer;
 };
 
-function isRedirectInfoInternal(
-  value: FetchedHttpRaw | RedirectInfo,
-): value is RedirectInfo {
+function isRedirectInfoInternal(value: FetchedHttpRaw | RedirectInfo): value is RedirectInfo {
   return (value as RedirectInfo).type === "redirect";
 }
 
-export type WebFetchHttpResult =
-  | (FetchedCacheEntry & { fromCache: boolean })
-  | RedirectInfo;
+export type WebFetchHttpResult = (FetchedCacheEntry & { fromCache: boolean }) | RedirectInfo;
 
 export type FetchHook = (
   url: string,
@@ -96,20 +82,24 @@ export type FetchHook = (
 }>;
 
 const defaultFetchHook: FetchHook = async (url, init) => {
-  const res = await networkFetch(url, {
-    method: "GET",
-    redirect: "manual",
-    headers: init.headers,
-    signal: init.signal,
-  }, {
-    timeoutMs: FETCH_TIMEOUT_MS,
-    signal: init.signal,
-    retry: {
-      maxRetries: 2,
-      baseDelayMs: 500,
-      maxDelayMs: 5_000,
+  const res = await networkFetch(
+    url,
+    {
+      method: "GET",
+      redirect: "manual",
+      headers: init.headers,
+      signal: init.signal,
     },
-  });
+    {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      signal: init.signal,
+      retry: {
+        maxRetries: 2,
+        baseDelayMs: 500,
+        maxDelayMs: 5_000,
+      },
+    },
+  );
   const headers: Record<string, string> = {};
   res.headers.forEach((v, k) => {
     headers[k.toLowerCase()] = v;
@@ -131,7 +121,7 @@ export function __setWebFetchHookForTesting(hook: FetchHook | null): void {
 let turndownPromise: Promise<{ turndown(html: string): string }> | undefined;
 async function getTurndown(): Promise<{ turndown(html: string): string }> {
   if (!turndownPromise) {
-    turndownPromise = import("turndown").then((mod) => {
+    turndownPromise = import("turndown").then(mod => {
       const Ctor =
         (mod as unknown as { default?: new () => { turndown(html: string): string } }).default ??
         (mod as unknown as new () => { turndown(html: string): string });
@@ -183,10 +173,7 @@ async function fetchWithRedirects(
     };
   }
 
-  if (
-    res.status === 403 &&
-    res.headers["x-proxy-error"] === "blocked-by-allowlist"
-  ) {
+  if (res.status === 403 && res.headers["x-proxy-error"] === "blocked-by-allowlist") {
     const hostname = new URL(url).hostname;
     throw new Error(
       JSON.stringify({
@@ -199,9 +186,7 @@ async function fetchWithRedirects(
 
   const ab = await res.arrayBuffer();
   if (ab.byteLength > MAX_HTTP_CONTENT_LENGTH) {
-    throw new Error(
-      `Response exceeds maximum content length of ${MAX_HTTP_CONTENT_LENGTH} bytes`,
-    );
+    throw new Error(`Response exceeds maximum content length of ${MAX_HTTP_CONTENT_LENGTH} bytes`);
   }
   const buffer = Buffer.from(ab);
   const out: FetchedHttpRaw = {
@@ -222,10 +207,7 @@ function isBinaryContentType(contentType: string): boolean {
   if (lower.includes("application/x-www-form-urlencoded")) return false;
   if (lower.includes("xml") && !lower.includes("octet")) return false;
   return (
-    lower.includes("application/") ||
-    lower.includes("image/") ||
-    lower.includes("audio/") ||
-    lower.includes("video/")
+    lower.includes("application/") || lower.includes("image/") || lower.includes("audio/") || lower.includes("video/")
   );
 }
 
@@ -257,10 +239,7 @@ function buildBodyPreview(buffer: Buffer, contentType: string): string | undefin
   return preview.length > 500 ? `${preview.slice(0, 497).trimEnd()}...` : preview;
 }
 
-export async function getURLMarkdownContent(
-  url: string,
-  signal: AbortSignal,
-): Promise<WebFetchHttpResult> {
+export async function getURLMarkdownContent(url: string, signal: AbortSignal): Promise<WebFetchHttpResult> {
   if (!validateURL(url)) {
     throw new Error("Invalid URL");
   }
@@ -319,7 +298,5 @@ export async function getURLMarkdownContent(
 
 export function truncateMarkdown(markdown: string): string {
   if (markdown.length <= MAX_MARKDOWN_LENGTH) return markdown;
-  return (
-    markdown.slice(0, MAX_MARKDOWN_LENGTH) + "\n\n[Content truncated due to length...]"
-  );
+  return markdown.slice(0, MAX_MARKDOWN_LENGTH) + "\n\n[Content truncated due to length...]";
 }

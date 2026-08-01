@@ -6,7 +6,17 @@ export type TuiMessage =
   | { role: "system"; text: string }
   | { role: "user"; text: string }
   | { role: "assistant"; text: string; thinking?: string }
-  | { role: "tool"; text: string; ok?: boolean; toolCallId?: string; toolName?: string; lineCount?: number; resultPath?: string; fullText?: string; expanded?: boolean }
+  | {
+      role: "tool";
+      text: string;
+      ok?: boolean;
+      toolCallId?: string;
+      toolName?: string;
+      lineCount?: number;
+      resultPath?: string;
+      fullText?: string;
+      expanded?: boolean;
+    }
   | { role: "error"; text: string };
 
 export type TuiActivityItem = {
@@ -45,7 +55,10 @@ export type TuiAppState = {
   sidebarGroupBy: "project" | "status";
 };
 
-export type TuiEventReducerResult = Pick<TuiAppState, "messages" | "activity" | "mode" | "isRunning" | "pendingPermissions">;
+export type TuiEventReducerResult = Pick<
+  TuiAppState,
+  "messages" | "activity" | "mode" | "isRunning" | "pendingPermissions"
+>;
 
 export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event: GatewayEvent): TuiEventReducerResult {
   switch (event.type) {
@@ -64,29 +77,38 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
       const thinkLen = last?.role === "assistant" ? (last.thinking?.length ?? 0) : 0;
       return {
         ...updated,
-        activity: [{ id: `thinking-${thinkLen}`, text: event.text, status: "info" as const }, ...state.activity].slice(0, 8),
+        activity: [{ id: `thinking-${thinkLen}`, text: event.text, status: "info" as const }, ...state.activity].slice(
+          0,
+          8,
+        ),
       };
     }
     case "tool_call_started":
       return {
         ...state,
-        activity: [{ id: event.toolCallId, text: event.name, status: "running" as const }, ...state.activity].slice(0, 8),
+        activity: [{ id: event.toolCallId, text: event.name, status: "running" as const }, ...state.activity].slice(
+          0,
+          8,
+        ),
       };
     case "tool_call_finished": {
       const preview = (event.resultPreview ?? "").trim();
       const text = preview.length > 0 ? preview : event.ok ? "ok" : "error";
       return {
         ...state,
-        messages: [...state.messages, {
-          role: "tool" as const,
-          text,
-          ok: event.ok,
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          lineCount: event.resultLineCount,
-          resultPath: event.resultPath,
-        }],
-        activity: state.activity.filter((item) => item.id !== event.toolCallId),
+        messages: [
+          ...state.messages,
+          {
+            role: "tool" as const,
+            text,
+            ok: event.ok,
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            lineCount: event.resultLineCount,
+            resultPath: event.resultPath,
+          },
+        ],
+        activity: state.activity.filter(item => item.id !== event.toolCallId),
       };
     }
     case "permission_request":
@@ -96,7 +118,10 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
           ...state.pendingPermissions,
           { requestId: event.requestId, toolName: event.toolName, payload: event.payload },
         ],
-        activity: [{ id: event.requestId, text: `permission: ${event.toolName}`, status: "info" as const }, ...state.activity].slice(0, 8),
+        activity: [
+          { id: event.requestId, text: `permission: ${event.toolName}`, status: "info" as const },
+          ...state.activity,
+        ].slice(0, 8),
       };
     case "structured_output":
       return {
@@ -118,7 +143,7 @@ export function applyGatewayEventToTuiState(state: TuiEventReducerResult, event:
     case "tool_result_detail_available":
       return {
         ...state,
-        messages: state.messages.map((m) =>
+        messages: state.messages.map(m =>
           m.role === "tool" && m.toolCallId === event.toolCallId
             ? { ...m, resultPath: event.resultPath ?? m.resultPath, fullText: event.fullText ?? m.fullText }
             : m,
@@ -136,7 +161,10 @@ function appendAssistantText(state: TuiEventReducerResult, text: string): TuiEve
   if (last?.role === "assistant") {
     return {
       ...state,
-      messages: [...state.messages.slice(0, -1), { role: "assistant", text: `${last.text}${text}`, thinking: last.thinking }],
+      messages: [
+        ...state.messages.slice(0, -1),
+        { role: "assistant", text: `${last.text}${text}`, thinking: last.thinking },
+      ],
     };
   }
   return {
@@ -153,7 +181,10 @@ function appendAssistantThinking(state: TuiEventReducerResult, text: string): Tu
   if (last?.role === "assistant") {
     return {
       ...state,
-      messages: [...state.messages.slice(0, -1), { role: "assistant", text: last.text, thinking: `${last.thinking ?? ""}${text}` }],
+      messages: [
+        ...state.messages.slice(0, -1),
+        { role: "assistant", text: last.text, thinking: `${last.thinking ?? ""}${text}` },
+      ],
     };
   }
   return {

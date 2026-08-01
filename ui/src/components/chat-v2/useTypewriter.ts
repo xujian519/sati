@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect } from "react";
 
 /**
  * Progressively reveals text with adaptive speed.
@@ -7,9 +7,7 @@ import { useRef, useState, useCallback, useEffect } from 'react';
  * - When not streaming (e.g. after refresh), shows full text immediately
  */
 export function useTypewriter(fullText: string, isStreaming: boolean, baseCharsPerFrame = 3): string {
-  const [displayLen, setDisplayLen] = useState(() =>
-    isStreaming ? 0 : fullText.length,
-  );
+  const [displayLen, setDisplayLen] = useState(() => (isStreaming ? 0 : fullText.length));
   const rafRef = useRef<number | null>(null);
   const targetLenRef = useRef(fullText.length);
   const baseCharsRef = useRef(baseCharsPerFrame);
@@ -19,7 +17,7 @@ export function useTypewriter(fullText: string, isStreaming: boolean, baseCharsP
 
   const pump = useCallback(() => {
     rafRef.current = null;
-    setDisplayLen((prev) => {
+    setDisplayLen(prev => {
       const target = targetLenRef.current;
       if (prev >= target) return prev;
 

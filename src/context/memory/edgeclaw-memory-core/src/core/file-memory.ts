@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type {
   GeneralProjectSourceKind,
@@ -16,8 +8,6 @@ import type {
   MemoryFileFrontmatter,
   MemoryFileRecord,
   MemoryManifestEntry,
-  MemoryRecordType,
-  MemoryScope,
   MemorySnapshotFileRecord,
   MemoryUserSummary,
   ProjectIdentityHint,
@@ -170,8 +160,10 @@ function parseFrontmatterBlock(raw: string): ParsedMarkdownFile | undefined {
   }
   const type = values.get("type");
   const scope = values.get("scope");
-  if ((type !== "user" && type !== "project" && type !== "feedback" && type !== "general_project_meta")
-    || (scope !== "global" && scope !== "project")) {
+  if (
+    (type !== "user" && type !== "project" && type !== "feedback" && type !== "general_project_meta") ||
+    (scope !== "global" && scope !== "project")
+  ) {
     return undefined;
   }
   return {
@@ -214,7 +206,9 @@ function renderFrontmatter(frontmatter: MemoryFileFrontmatter): string {
     ...(frontmatter.dreamUpdatedAt ? [`dream_updated_at: ${frontmatter.dreamUpdatedAt}`] : []),
     ...(frontmatter.capturedAt ? [`captured_at: ${frontmatter.capturedAt}`] : []),
     ...(frontmatter.sourceSessionKey ? [`source_session_key: ${frontmatter.sourceSessionKey}`] : []),
-    ...(typeof frontmatter.deprecated === "boolean" ? [`deprecated: ${frontmatter.deprecated ? "true" : "false"}`] : []),
+    ...(typeof frontmatter.deprecated === "boolean"
+      ? [`deprecated: ${frontmatter.deprecated ? "true" : "false"}`]
+      : []),
     ...(typeof frontmatter.dreamAttempts === "number" ? [`dream_attempts: ${frontmatter.dreamAttempts}`] : []),
     "---",
     "",
@@ -243,11 +237,7 @@ function parseMarkdownSections(body: string): Map<string, string[]> {
 
 function parseListSection(lines: string[] | undefined): string[] {
   if (!lines) return [];
-  return uniqueStrings(
-    lines
-      .map((line) => line.replace(/^\s*-\s*/, "").trim())
-      .filter(Boolean),
-  );
+  return uniqueStrings(lines.map(line => line.replace(/^\s*-\s*/, "").trim()).filter(Boolean));
 }
 
 function parseParagraphSection(lines: string[] | undefined): string {
@@ -260,14 +250,14 @@ function splitFactText(text: string): string[] {
     text
       .replace(/\r/g, "\n")
       .split(/\n|[，,；;。.!?]/)
-      .map((line) => normalizeWhitespace(line))
-      .filter((line) => line.length >= 2),
+      .map(line => normalizeWhitespace(line))
+      .filter(line => line.length >= 2),
   );
 }
 
 function parseFactSection(lines: string[] | undefined): string[] {
   if (!lines) return [];
-  const facts = lines.flatMap((line) => {
+  const facts = lines.flatMap(line => {
     const stripped = line.replace(/^\s*-\s*/, "").trim();
     if (!stripped) return [];
     return /^\s*-\s*/.test(line) ? [stripped] : splitFactText(stripped);
@@ -278,11 +268,11 @@ function parseFactSection(lines: string[] | undefined): string[] {
 function buildUserBody(candidate: MemoryCandidate): string {
   const identityBackground = uniqueStrings([
     ...splitFactText(candidate.profile || candidate.summary || candidate.description || ""),
-    ...(candidate.relationships ?? []).map((item) => normalizeWhitespace(item)),
+    ...(candidate.relationships ?? []).map(item => normalizeWhitespace(item)),
   ]);
   const lines: string[] = [];
   if (identityBackground.length > 0) {
-    lines.push("## 身份背景", ...identityBackground.map((item) => `- ${item}`), "");
+    lines.push("## 身份背景", ...identityBackground.map(item => `- ${item}`), "");
   }
   if (lines.length === 0) {
     lines.push("## 身份背景", "- 暂无稳定用户画像信息。", "");
@@ -306,7 +296,7 @@ function buildProjectBody(candidate: MemoryCandidate): string {
   for (const [title, values] of sections) {
     const normalized = uniqueStrings(values ?? []);
     if (normalized.length === 0) continue;
-    lines.push(`## ${title}`, ...normalized.map((item) => `- ${item}`), "");
+    lines.push(`## ${title}`, ...normalized.map(item => `- ${item}`), "");
   }
   if (normalizeWhitespace(candidate.summary)) {
     lines.push("## Summary", normalizeWhitespace(candidate.summary), "");
@@ -325,7 +315,7 @@ function buildFeedbackBody(candidate: MemoryCandidate): string {
     lines.push("## How To Apply", normalizeWhitespace(candidate.howToApply), "");
   }
   const notes = uniqueStrings(candidate.notes ?? []);
-  if (notes.length > 0) lines.push("## Notes", ...notes.map((item) => `- ${item}`), "");
+  if (notes.length > 0) lines.push("## Notes", ...notes.map(item => `- ${item}`), "");
   return `${lines.join("\n").trim()}\n`;
 }
 
@@ -346,12 +336,14 @@ function buildGeneralProjectMetaBody(input: {
     "",
   ];
   const sourceNotes = uniqueStrings([
-    input.sourceKind === "workspace_external_mirror" ? "This project mirrors a read-only external workspace project." : "",
+    input.sourceKind === "workspace_external_mirror"
+      ? "This project mirrors a read-only external workspace project."
+      : "",
     input.sourceWorkspacePath ? `Source workspace: ${input.sourceWorkspacePath}` : "",
     input.sourceProjectId ? `Source project id: ${input.sourceProjectId}` : "",
   ]);
   if (sourceNotes.length > 0) {
-    lines.push("## Source", ...sourceNotes.map((item) => `- ${item}`), "");
+    lines.push("## Source", ...sourceNotes.map(item => `- ${item}`), "");
   }
   return `${lines.join("\n").trim()}\n`;
 }
@@ -390,40 +382,53 @@ function candidateDescription(candidate: MemoryCandidate): string {
   }
   return normalizeDescription(
     candidate.description,
-    candidate.summary
-      || candidate.stage
-      || uniqueStrings(candidate.blockers ?? [])[0]
-      || uniqueStrings(candidate.decisions ?? [])[0]
-      || candidate.name,
+    candidate.summary ||
+      candidate.stage ||
+      uniqueStrings(candidate.blockers ?? [])[0] ||
+      uniqueStrings(candidate.decisions ?? [])[0] ||
+      candidate.name,
   );
 }
 
-function buildFrontmatter(candidate: MemoryCandidate, existing?: Partial<MemoryFileFrontmatter>): MemoryFileFrontmatter {
+function buildFrontmatter(
+  candidate: MemoryCandidate,
+  existing?: Partial<MemoryFileFrontmatter>,
+): MemoryFileFrontmatter {
   const scope = candidate.type === "user" ? "global" : candidate.scope || "project";
   return {
     name: normalizeWhitespace(candidate.name) || normalizeWhitespace(existing?.name) || "memory-item",
     description: candidateDescription(candidate) || normalizeWhitespace(existing?.description) || "memory-item",
     type: candidate.type,
     scope,
-    ...(scope === "project" ? { projectId: normalizeWhitespace(candidate.projectId) || normalizeWhitespace(existing?.projectId) || CURRENT_PROJECT_ID } : {}),
-    ...(candidate.type === "general_project_meta" && (candidate as MemoryCandidate & { sourceKind?: GeneralProjectSourceKind }).sourceKind
+    ...(scope === "project"
+      ? {
+          projectId:
+            normalizeWhitespace(candidate.projectId) || normalizeWhitespace(existing?.projectId) || CURRENT_PROJECT_ID,
+        }
+      : {}),
+    ...(candidate.type === "general_project_meta" &&
+    (candidate as MemoryCandidate & { sourceKind?: GeneralProjectSourceKind }).sourceKind
       ? { sourceKind: (candidate as MemoryCandidate & { sourceKind?: GeneralProjectSourceKind }).sourceKind }
       : existing?.sourceKind
         ? { sourceKind: existing.sourceKind }
         : {}),
-    ...(candidate.type === "general_project_meta" && (candidate as MemoryCandidate & { sourceWorkspacePath?: string }).sourceWorkspacePath
+    ...(candidate.type === "general_project_meta" &&
+    (candidate as MemoryCandidate & { sourceWorkspacePath?: string }).sourceWorkspacePath
       ? { sourceWorkspacePath: (candidate as MemoryCandidate & { sourceWorkspacePath?: string }).sourceWorkspacePath }
       : existing?.sourceWorkspacePath
         ? { sourceWorkspacePath: existing.sourceWorkspacePath }
         : {}),
-    ...(candidate.type === "general_project_meta" && (candidate as MemoryCandidate & { sourceProjectId?: string }).sourceProjectId
+    ...(candidate.type === "general_project_meta" &&
+    (candidate as MemoryCandidate & { sourceProjectId?: string }).sourceProjectId
       ? { sourceProjectId: (candidate as MemoryCandidate & { sourceProjectId?: string }).sourceProjectId }
       : existing?.sourceProjectId
         ? { sourceProjectId: existing.sourceProjectId }
         : {}),
     updatedAt: nowIso(),
     ...(existing?.dreamUpdatedAt ? { dreamUpdatedAt: existing.dreamUpdatedAt } : {}),
-    ...(candidate.capturedAt || existing?.capturedAt ? { capturedAt: candidate.capturedAt || existing?.capturedAt } : {}),
+    ...(candidate.capturedAt || existing?.capturedAt
+      ? { capturedAt: candidate.capturedAt || existing?.capturedAt }
+      : {}),
     ...(candidate.sourceSessionKey || existing?.sourceSessionKey
       ? { sourceSessionKey: candidate.sourceSessionKey || existing?.sourceSessionKey }
       : {}),
@@ -496,11 +501,11 @@ function mergeCandidates(primary: MemoryCandidate, incoming: MemoryCandidate): M
 
 function sameOrigin(record: MemoryManifestEntry, candidate: MemoryCandidate): boolean {
   return Boolean(
-    candidate.capturedAt
-    && candidate.sourceSessionKey
-    && record.capturedAt === candidate.capturedAt
-    && record.sourceSessionKey === candidate.sourceSessionKey
-    && record.type === candidate.type,
+    candidate.capturedAt &&
+      candidate.sourceSessionKey &&
+      record.capturedAt === candidate.capturedAt &&
+      record.sourceSessionKey === candidate.sourceSessionKey &&
+      record.type === candidate.type,
   );
 }
 
@@ -519,7 +524,7 @@ function renderManifestSection(
   if (entries.length === 0) return [];
   return [
     `## ${title}`,
-    ...entries.map((entry) => `- [${entry.name}](${linkResolver?.(entry) ?? entry.relativePath}) — ${entry.description}`),
+    ...entries.map(entry => `- [${entry.name}](${linkResolver?.(entry) ?? entry.relativePath}) — ${entry.description}`),
     "",
   ];
 }
@@ -598,16 +603,16 @@ export class FileMemoryStore {
     this.manageProjectFiles = options.manageProjectFiles ?? true;
     this.manageUserProfile = options.manageUserProfile ?? true;
     this.userProfileRelativePath = this.manageUserProfile
-      ? (options.userProfileRelativePath === undefined
+      ? options.userProfileRelativePath === undefined
         ? DEFAULT_USER_PROFILE_RELATIVE_PATH
-        : options.userProfileRelativePath)
+        : options.userProfileRelativePath
       : null;
     this.userNotesRelativeDir = this.manageUserProfile
-      ? (options.userNotesRelativeDir === undefined ? null : options.userNotesRelativeDir)
+      ? options.userNotesRelativeDir === undefined
+        ? null
+        : options.userNotesRelativeDir
       : null;
-    this.appendOnlyUserEntries = this.manageUserProfile
-      ? Boolean(options.appendOnlyUserEntries)
-      : false;
+    this.appendOnlyUserEntries = this.manageUserProfile ? Boolean(options.appendOnlyUserEntries) : false;
     this.enableManifest = options.enableManifest ?? true;
     this.manifestUserEntriesProvider = options.manifestUserEntriesProvider;
     this.ensureLayout();
@@ -703,9 +708,9 @@ export class FileMemoryStore {
     const directory = join(this.rootDir, relativeDir);
     if (!existsSync(directory)) return [];
     return readdirSync(directory, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
-      .filter((entry) => entry.name !== MANIFEST_FILE && entry.name !== PROJECT_META_FILE)
-      .map((entry) => this.buildManifestEntry(join(relativeDir, entry.name)))
+      .filter(entry => entry.isFile() && entry.name.endsWith(".md"))
+      .filter(entry => entry.name !== MANIFEST_FILE && entry.name !== PROJECT_META_FILE)
+      .map(entry => this.buildManifestEntry(join(relativeDir, entry.name)))
       .filter((entry): entry is MemoryManifestEntry => Boolean(entry));
   }
 
@@ -738,9 +743,9 @@ export class FileMemoryStore {
     description: string;
     status: string;
   } {
-    const entries = this.collectAllEntries().filter((entry) => entry.scope === "project" && !entry.deprecated);
-    const firstProject = entries.find((entry) => entry.type === "project");
-    const firstFeedback = entries.find((entry) => entry.type === "feedback");
+    const entries = this.collectAllEntries().filter(entry => entry.scope === "project" && !entry.deprecated);
+    const firstProject = entries.find(entry => entry.type === "project");
+    const firstFeedback = entries.find(entry => entry.type === "feedback");
     const first = firstProject ?? firstFeedback;
     if (!first) {
       return {
@@ -784,8 +789,8 @@ export class FileMemoryStore {
 
   private listGeneralProjectMetaEntries(includeDeprecated = false): MemoryManifestEntry[] {
     return this.collectAllEntries()
-      .filter((entry) => entry.type === "general_project_meta")
-      .filter((entry) => includeDeprecated || !entry.deprecated);
+      .filter(entry => entry.type === "general_project_meta")
+      .filter(entry => includeDeprecated || !entry.deprecated);
   }
 
   upsertGeneralProjectMeta(input: {
@@ -801,11 +806,14 @@ export class FileMemoryStore {
     if (!this.manageProjectMeta || !this.isGeneralMode()) {
       throw new Error("General project metadata is disabled for this store");
     }
-    const normalizedProjectId = normalizeWhitespace(input.projectId) || hashText(
-      `${normalizeWhitespace(input.projectName)}:${normalizeWhitespace(input.sourceWorkspacePath)}:${normalizeWhitespace(input.sourceProjectId)}:${nowIso()}`,
-    ).slice(0, 16);
-    const existing = this.listProjectMetas().find((meta) => meta.projectId === normalizedProjectId);
-    const relativePath = existing?.relativePath ?? this.generalProjectMetaRelativePath(normalizedProjectId, input.projectName);
+    const normalizedProjectId =
+      normalizeWhitespace(input.projectId) ||
+      hashText(
+        `${normalizeWhitespace(input.projectName)}:${normalizeWhitespace(input.sourceWorkspacePath)}:${normalizeWhitespace(input.sourceProjectId)}:${nowIso()}`,
+      ).slice(0, 16);
+    const existing = this.listProjectMetas().find(meta => meta.projectId === normalizedProjectId);
+    const relativePath =
+      existing?.relativePath ?? this.generalProjectMetaRelativePath(normalizedProjectId, input.projectName);
     const frontmatter: MemoryFileFrontmatter = {
       name: normalizeWhitespace(input.projectName) || existing?.projectName || DEFAULT_PROJECT_NAME,
       description: normalizeDescription(input.description, existing?.description || input.projectName),
@@ -840,16 +848,18 @@ export class FileMemoryStore {
     return this.toGeneralProjectMetaRecord(record)!;
   }
 
-  upsertProjectMeta(input: {
-    projectId?: string;
-    projectName?: string;
-    description?: string;
-    status?: string;
-    sourceKind?: GeneralProjectSourceKind;
-    sourceWorkspacePath?: string;
-    sourceProjectId?: string;
-    dreamUpdatedAt?: string;
-  } = {}): ProjectMetaRecord {
+  upsertProjectMeta(
+    input: {
+      projectId?: string;
+      projectName?: string;
+      description?: string;
+      status?: string;
+      sourceKind?: GeneralProjectSourceKind;
+      sourceWorkspacePath?: string;
+      sourceProjectId?: string;
+      dreamUpdatedAt?: string;
+    } = {},
+  ): ProjectMetaRecord {
     if (!this.manageProjectMeta) {
       throw new Error("Project metadata is disabled for this store");
     }
@@ -867,9 +877,7 @@ export class FileMemoryStore {
     }
     const existing = this.readProjectMetaFile();
     const seed = this.buildProjectMetaSeed();
-    const projectName = normalizeWhitespace(input.projectName)
-      || existing?.projectName
-      || seed.projectName;
+    const projectName = normalizeWhitespace(input.projectName) || existing?.projectName || seed.projectName;
     const description = normalizeDescription(
       input.description,
       existing?.description || seed.description || projectName,
@@ -892,15 +900,17 @@ export class FileMemoryStore {
     return next;
   }
 
-  ensureProjectMeta(input: {
-    projectId?: string;
-    projectName?: string;
-    description?: string;
-    status?: string;
-    sourceKind?: GeneralProjectSourceKind;
-    sourceWorkspacePath?: string;
-    sourceProjectId?: string;
-  } = {}): ProjectMetaRecord {
+  ensureProjectMeta(
+    input: {
+      projectId?: string;
+      projectName?: string;
+      description?: string;
+      status?: string;
+      sourceKind?: GeneralProjectSourceKind;
+      sourceWorkspacePath?: string;
+      sourceProjectId?: string;
+    } = {},
+  ): ProjectMetaRecord {
     if (this.isGeneralMode()) {
       const normalizedProjectId = normalizeWhitespace(input.projectId);
       const existing = normalizedProjectId ? this.getProjectMeta(normalizedProjectId) : undefined;
@@ -911,12 +921,12 @@ export class FileMemoryStore {
 
   private findExistingRecordForCandidate(candidate: MemoryCandidate): MemoryManifestEntry | undefined {
     const allEntries = this.collectAllEntries();
-    const sameSource = allEntries.find((entry) => sameOrigin(entry, candidate));
+    const sameSource = allEntries.find(entry => sameOrigin(entry, candidate));
     if (sameSource) return sameSource;
     if (candidate.type === "user") {
       if (this.appendOnlyUserEntries) return undefined;
       return this.manageUserProfile && this.userProfileRelativePath
-        ? allEntries.find((entry) => entry.relativePath === this.userProfileRelativePath)
+        ? allEntries.find(entry => entry.relativePath === this.userProfileRelativePath)
         : undefined;
     }
     return undefined;
@@ -944,13 +954,13 @@ export class FileMemoryStore {
     const projectMeta = this.readProjectMetaFile();
     const generalProjectMetas = this.isGeneralMode() ? this.listProjectMetas() : [];
     const allEntries = this.collectAllEntries();
-    const active = allEntries.filter((entry) => !entry.deprecated);
-    const deprecated = allEntries.filter((entry) => entry.deprecated);
-    const projectEntries = active.filter((entry) => entry.type === "project");
-    const feedbackEntries = active.filter((entry) => entry.type === "feedback");
+    const active = allEntries.filter(entry => !entry.deprecated);
+    const deprecated = allEntries.filter(entry => entry.deprecated);
+    const projectEntries = active.filter(entry => entry.type === "project");
+    const feedbackEntries = active.filter(entry => entry.type === "feedback");
     const userEntries = this.manageUserProfile
-      ? active.filter((entry) => entry.type === "user")
-      : sortEntries((this.manifestUserEntriesProvider?.() ?? []).filter((entry) => !entry.deprecated));
+      ? active.filter(entry => entry.type === "user")
+      : sortEntries((this.manifestUserEntriesProvider?.() ?? []).filter(entry => !entry.deprecated));
     const lines = [
       "# EdgeClaw Memory",
       "",
@@ -966,13 +976,13 @@ export class FileMemoryStore {
       ...(generalProjectMetas.length > 0
         ? [
             "## General Projects",
-            ...generalProjectMetas.map((meta) => `- [${meta.projectName}](${meta.relativePath}) — ${meta.description}`),
+            ...generalProjectMetas.map(meta => `- [${meta.projectName}](${meta.relativePath}) — ${meta.description}`),
             "",
           ]
         : []),
       ...renderManifestSection("Project Memory", projectEntries),
       ...renderManifestSection("Feedback Memory", feedbackEntries),
-      ...renderManifestSection("User Memory", userEntries, (entry) => this.resolveManifestLinkPath(entry)),
+      ...renderManifestSection("User Memory", userEntries, entry => this.resolveManifestLinkPath(entry)),
       ...renderManifestSection("Deprecated", deprecated),
     ];
     return `${lines.join("\n").trim()}\n`;
@@ -1005,31 +1015,33 @@ export class FileMemoryStore {
     };
   }
 
-  listMemoryEntries(options: {
-    kinds?: Array<"user" | "feedback" | "project" | "general_project_meta">;
-    query?: string;
-    limit?: number;
-    offset?: number;
-    scope?: "global" | "project";
-    projectId?: string;
-    includeTmp?: boolean;
-    includeDeprecated?: boolean;
-  } = {}): MemoryManifestEntry[] {
+  listMemoryEntries(
+    options: {
+      kinds?: Array<"user" | "feedback" | "project" | "general_project_meta">;
+      query?: string;
+      limit?: number;
+      offset?: number;
+      scope?: "global" | "project";
+      projectId?: string;
+      includeTmp?: boolean;
+      includeDeprecated?: boolean;
+    } = {},
+  ): MemoryManifestEntry[] {
     const normalizedProjectId = normalizeWhitespace(options.projectId);
     if (normalizedProjectId && !this.isGeneralMode() && normalizedProjectId !== CURRENT_PROJECT_ID) return [];
     const kinds = new Set(options.kinds ?? ["user", "feedback", "project"]);
     const normalizedQuery = normalizeWhitespace(options.query).toLowerCase();
     const filtered = this.collectAllEntries()
-      .filter((entry) => kinds.has(entry.type))
-      .filter((entry) => !options.scope || entry.scope === options.scope)
-      .filter((entry) => {
+      .filter(entry => kinds.has(entry.type))
+      .filter(entry => !options.scope || entry.scope === options.scope)
+      .filter(entry => {
         if (!normalizedProjectId) return true;
         if (entry.type === "general_project_meta") return entry.projectId === normalizedProjectId;
         if (entry.scope !== "project") return true;
         return (entry.projectId || CURRENT_PROJECT_ID) === normalizedProjectId;
       })
-      .filter((entry) => options.includeDeprecated || !entry.deprecated)
-      .filter((entry) => {
+      .filter(entry => options.includeDeprecated || !entry.deprecated)
+      .filter(entry => {
         if (!normalizedQuery) return true;
         const haystack = [entry.name, entry.description, entry.relativePath].join(" ").toLowerCase();
         return haystack.includes(normalizedQuery);
@@ -1039,20 +1051,22 @@ export class FileMemoryStore {
     return filtered.slice(offset, offset + limit);
   }
 
-  countMemoryEntries(options: {
-    kinds?: Array<"user" | "feedback" | "project" | "general_project_meta">;
-    query?: string;
-    scope?: "global" | "project";
-    projectId?: string;
-    includeTmp?: boolean;
-    includeDeprecated?: boolean;
-  } = {}): number {
+  countMemoryEntries(
+    options: {
+      kinds?: Array<"user" | "feedback" | "project" | "general_project_meta">;
+      query?: string;
+      scope?: "global" | "project";
+      projectId?: string;
+      includeTmp?: boolean;
+      includeDeprecated?: boolean;
+    } = {},
+  ): number {
     return this.listMemoryEntries(options).length;
   }
 
   getMemoryRecordsByIds(ids: string[], maxLines = 80): MemoryFileRecord[] {
     return ids
-      .map((id) => {
+      .map(id => {
         const entry = this.buildManifestEntry(id);
         const parsed = entry ? this.readMarkdownFile(entry.relativePath) : undefined;
         if (!entry || !parsed) return undefined;
@@ -1090,13 +1104,16 @@ export class FileMemoryStore {
   upsertUserProfile(candidate: MemoryCandidate): MemoryFileRecord {
     const relativePath = this.requireUserProfileRelativePath();
     const existing = this.buildManifestEntry(relativePath);
-    const frontmatter = buildFrontmatter({
-      ...candidate,
-      type: "user",
-      scope: "global",
-      name: normalizeWhitespace(candidate.name) || "user-profile",
-      description: normalizeDescription(candidate.description, candidate.name || "User profile"),
-    }, existing);
+    const frontmatter = buildFrontmatter(
+      {
+        ...candidate,
+        type: "user",
+        scope: "global",
+        name: normalizeWhitespace(candidate.name) || "user-profile",
+        description: normalizeDescription(candidate.description, candidate.name || "User profile"),
+      },
+      existing,
+    );
     return this.writeRecord({
       relativePath,
       frontmatter,
@@ -1108,8 +1125,9 @@ export class FileMemoryStore {
     let resolvedCandidate = candidate;
     if (candidate.type !== "user" && this.manageProjectMeta) {
       if (this.isGeneralMode()) {
-        const projectId = normalizeWhitespace(candidate.projectId)
-          || this.ensureProjectMeta({
+        const projectId =
+          normalizeWhitespace(candidate.projectId) ||
+          this.ensureProjectMeta({
             projectName: candidate.type === "project" ? candidate.name : candidate.description || candidate.name,
             description: candidate.description,
           }).projectId;
@@ -1135,9 +1153,10 @@ export class FileMemoryStore {
     if (resolvedCandidate.type === "project" && !this.isGeneralMode()) {
       const projectMeta = this.readProjectMetaFile();
       if (projectMeta) {
-        const autoSeedLike = normalizeWhitespace(projectMeta.projectName).toLowerCase() === DEFAULT_PROJECT_NAME.toLowerCase()
-          || /workspace memory$/i.test(projectMeta.description)
-          || normalizeWhitespace(projectMeta.description).toLowerCase() === "current project memory.";
+        const autoSeedLike =
+          normalizeWhitespace(projectMeta.projectName).toLowerCase() === DEFAULT_PROJECT_NAME.toLowerCase() ||
+          /workspace memory$/i.test(projectMeta.description) ||
+          normalizeWhitespace(projectMeta.description).toLowerCase() === "current project memory.";
         this.upsertProjectMeta({
           ...(autoSeedLike ? { projectName: resolvedCandidate.name } : {}),
           ...(autoSeedLike && resolvedCandidate.description ? { description: resolvedCandidate.description } : {}),
@@ -1308,10 +1327,7 @@ export class FileMemoryStore {
     return { mutatedIds, deletedProjectIds: [] };
   }
 
-  reassignProjectEntries(input: {
-    fromProjectId: string;
-    toProjectId: string;
-  }): { mutatedIds: string[] } {
+  reassignProjectEntries(input: { fromProjectId: string; toProjectId: string }): { mutatedIds: string[] } {
     const fromProjectId = normalizeWhitespace(input.fromProjectId);
     const toProjectId = normalizeWhitespace(input.toProjectId);
     if (!fromProjectId || !toProjectId || fromProjectId === toProjectId) {
@@ -1343,20 +1359,20 @@ export class FileMemoryStore {
     return { mutatedIds };
   }
 
-  archiveTmpEntries(_: {
-    relativePaths: string[];
+  archiveTmpEntries(_: { relativePaths: string[]; targetProjectId?: string; newProjectName?: string }): {
+    mutatedIds: string[];
     targetProjectId?: string;
-    newProjectName?: string;
-  }): { mutatedIds: string[]; targetProjectId?: string; createdProjectId?: string } {
+    createdProjectId?: string;
+  } {
     throw new Error("archive_tmp is not supported in EdgeClaw current-project memory mode");
   }
 
   listProjectMetas(_options: { includeTmp?: boolean } = {}): ProjectMetaRecord[] {
     if (!this.manageProjectMeta) return [];
     if (this.isGeneralMode()) {
-      const ids = this.listGeneralProjectMetaEntries().map((entry) => entry.relativePath);
+      const ids = this.listGeneralProjectMetaEntries().map(entry => entry.relativePath);
       return this.getMemoryRecordsByIds(ids, 5000)
-        .map((record) => this.toGeneralProjectMetaRecord(record))
+        .map(record => this.toGeneralProjectMetaRecord(record))
         .filter((record): record is ProjectMetaRecord => Boolean(record));
     }
     const meta = this.readProjectMetaFile();
@@ -1366,7 +1382,7 @@ export class FileMemoryStore {
   listProjectIdentityHints(_options: { includeTmp?: boolean; limit?: number } = {}): ProjectIdentityHint[] {
     if (!this.manageProjectMeta) return [];
     if (this.isGeneralMode()) {
-      return this.listProjectMetas().map((projectMeta) => ({
+      return this.listProjectMetas().map(projectMeta => ({
         identityKey: projectMeta.projectId,
         projectId: projectMeta.projectId,
         projectName: projectMeta.projectName,
@@ -1378,21 +1394,23 @@ export class FileMemoryStore {
     const meta = this.readProjectMetaFile();
     if (!meta) return [];
     const projectMeta = meta;
-    return [{
-      identityKey: CURRENT_PROJECT_ID,
-      projectId: CURRENT_PROJECT_ID,
-      projectName: projectMeta.projectName,
-      description: projectMeta.description,
-      updatedAt: projectMeta.updatedAt,
-      scope: "formal",
-    }];
+    return [
+      {
+        identityKey: CURRENT_PROJECT_ID,
+        projectId: CURRENT_PROJECT_ID,
+        projectName: projectMeta.projectName,
+        description: projectMeta.description,
+        updatedAt: projectMeta.updatedAt,
+        scope: "formal",
+      },
+    ];
   }
 
   getProjectMeta(projectId = CURRENT_PROJECT_ID): ProjectMetaRecord | undefined {
     if (!this.manageProjectMeta) return undefined;
     const normalized = normalizeWhitespace(projectId);
     if (this.isGeneralMode()) {
-      return this.listProjectMetas().find((meta) => meta.projectId === normalized);
+      return this.listProjectMetas().find(meta => meta.projectId === normalized);
     }
     if (normalized && normalized !== CURRENT_PROJECT_ID) return undefined;
     return this.readProjectMetaFile();
@@ -1402,12 +1420,13 @@ export class FileMemoryStore {
     if (!this.manageProjectFiles) return false;
     const normalized = normalizeWhitespace(projectId);
     if (normalized && !this.isGeneralMode() && normalized !== CURRENT_PROJECT_ID) return false;
-    return this.collectAllEntries().some((entry) => (
-      entry.scope === "project"
-      && entry.type !== "general_project_meta"
-      && !entry.deprecated
-      && (!normalized || (entry.projectId || CURRENT_PROJECT_ID) === normalized)
-    ));
+    return this.collectAllEntries().some(
+      entry =>
+        entry.scope === "project" &&
+        entry.type !== "general_project_meta" &&
+        !entry.deprecated &&
+        (!normalized || (entry.projectId || CURRENT_PROJECT_ID) === normalized),
+    );
   }
 
   listTmpEntries(_limit = 500): MemoryManifestEntry[] {
@@ -1460,9 +1479,9 @@ export class FileMemoryStore {
     const projectMetas = this.listProjectMetas();
     return {
       memoryFiles: this.getMemoryRecordsByIds(
-        this.collectAllEntries().map((entry) => entry.relativePath),
+        this.collectAllEntries().map(entry => entry.relativePath),
         5000,
-      ).map((record) => ({
+      ).map(record => ({
         name: record.name,
         description: record.description,
         type: record.type,
@@ -1481,7 +1500,7 @@ export class FileMemoryStore {
         relativePath: record.relativePath,
         content: record.content,
       })),
-      projectMetas: projectMetas.map((projectMeta) => ({
+      projectMetas: projectMetas.map(projectMeta => ({
         projectId: projectMeta.projectId,
         projectName: projectMeta.projectName,
         description: projectMeta.description,
@@ -1501,9 +1520,9 @@ export class FileMemoryStore {
     const files = [
       ...(this.enableManifest ? [MANIFEST_FILE] : []),
       ...(!this.isGeneralMode() && this.readProjectMetaFile() ? [PROJECT_META_FILE] : []),
-      ...this.collectAllEntries().map((entry) => entry.relativePath),
+      ...this.collectAllEntries().map(entry => entry.relativePath),
     ];
-    return files.map((relativePath) => ({
+    return files.map(relativePath => ({
       relativePath,
       content: readFileSync(this.resolveRelativePath(relativePath), "utf8"),
     }));
@@ -1519,16 +1538,16 @@ export class FileMemoryStore {
 
   getOverview(lastDreamAt?: string): FileMemoryOverview {
     const entries = this.collectAllEntries();
-    const activeEntries = entries.filter((entry) => !entry.deprecated);
-    const generalProjectMetas = activeEntries.filter((entry) => entry.type === "general_project_meta");
+    const activeEntries = entries.filter(entry => !entry.deprecated);
+    const generalProjectMetas = activeEntries.filter(entry => entry.type === "general_project_meta");
     const changedFilesSinceLastDream = !lastDreamAt
       ? activeEntries.length
-      : activeEntries.filter((entry) => entry.updatedAt > lastDreamAt).length;
+      : activeEntries.filter(entry => entry.updatedAt > lastDreamAt).length;
     return {
       totalFiles: activeEntries.length,
-      projectMemories: activeEntries.filter((entry) => entry.type === "project").length,
-      feedbackMemories: activeEntries.filter((entry) => entry.type === "feedback").length,
-      userProfiles: activeEntries.filter((entry) => entry.type === "user").length,
+      projectMemories: activeEntries.filter(entry => entry.type === "project").length,
+      feedbackMemories: activeEntries.filter(entry => entry.type === "feedback").length,
+      userProfiles: activeEntries.filter(entry => entry.type === "user").length,
       changedFilesSinceLastDream,
       tmpTotalFiles: 0,
       tmpFeedbackMemories: 0,
@@ -1553,7 +1572,9 @@ export class FileMemoryStore {
     deletedFiles: string[];
   } {
     const groups = new Map<string, MemoryManifestEntry[]>();
-    for (const entry of entries.filter((item) => !item.deprecated && item.type !== "user" && item.type !== "general_project_meta")) {
+    for (const entry of entries.filter(
+      item => !item.deprecated && item.type !== "user" && item.type !== "general_project_meta",
+    )) {
       const key = `${entry.type}:${slugify(entry.name)}`;
       const bucket = groups.get(key) ?? [];
       bucket.push(entry);
@@ -1567,7 +1588,7 @@ export class FileMemoryStore {
     for (const bucket of groups.values()) {
       if (bucket.length < 2) continue;
       const records = this.getMemoryRecordsByIds(
-        bucket.map((entry) => entry.relativePath),
+        bucket.map(entry => entry.relativePath),
         5000,
       ).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
       const primary = records[0];

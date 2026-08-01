@@ -1,5 +1,5 @@
-import React from 'react';
-import { CollapsibleSection } from './CollapsibleSection';
+import React from "react";
+import { CollapsibleSection } from "./CollapsibleSection";
 
 interface CollapsibleDisplayProps {
   toolName: string;
@@ -17,15 +17,15 @@ interface CollapsibleDisplayProps {
 }
 
 const borderColorMap: Record<string, string> = {
-  edit: 'border-l-amber-500 dark:border-l-amber-400',
-  search: 'border-l-gray-400 dark:border-l-gray-500',
-  bash: 'border-l-green-500 dark:border-l-green-400',
-  todo: 'border-l-violet-500 dark:border-l-violet-400',
-  task: 'border-l-violet-500 dark:border-l-violet-400',
-  agent: 'border-l-purple-500 dark:border-l-purple-400',
-  plan: 'border-l-indigo-500 dark:border-l-indigo-400',
-  question: 'border-l-blue-500 dark:border-l-blue-400',
-  default: 'border-l-gray-300 dark:border-l-gray-600',
+  edit: "border-l-amber-500 dark:border-l-amber-400",
+  search: "border-l-gray-400 dark:border-l-gray-500",
+  bash: "border-l-green-500 dark:border-l-green-400",
+  todo: "border-l-violet-500 dark:border-l-violet-400",
+  task: "border-l-violet-500 dark:border-l-violet-400",
+  agent: "border-l-purple-500 dark:border-l-purple-400",
+  plan: "border-l-indigo-500 dark:border-l-indigo-400",
+  question: "border-l-blue-500 dark:border-l-blue-400",
+  default: "border-l-gray-300 dark:border-l-gray-600",
 };
 
 export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
@@ -37,12 +37,12 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
   children,
   showRawParameters = false,
   rawContent,
-  className = '',
+  className = "",
   toolCategory,
-  autoExpandable = true
+  autoExpandable = true,
 }) => {
   // Fall back to default styling for unknown/new categories so className never includes "undefined".
-  const borderColor = borderColorMap[toolCategory || 'default'] || borderColorMap.default;
+  const borderColor = borderColorMap[toolCategory || "default"] || borderColorMap.default;
 
   return (
     <div className={`border-l-2 ${borderColor} my-1 py-0.5 pl-3 ${className}`}>

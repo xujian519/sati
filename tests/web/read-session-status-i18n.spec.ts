@@ -3,13 +3,12 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import { createAgentProjectSessionStorage } from "../../src/session/storage/ProjectSessionStorage.js";
 import { readWebSessionMessages } from "../../src/web/server/readSessionMessages.js";
 
 test("history replay preserves agent status i18n metadata and user hint", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-status-i18n-project-"));
-  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-status-i18n-home-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-status-i18n-project-"));
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-status-i18n-home-"));
   try {
     const sessionKey = "web:s_status_i18n";
     const storage = createAgentProjectSessionStorage({
@@ -36,7 +35,7 @@ test("history replay preserves agent status i18n metadata and user hint", async 
     });
 
     const replay = await readWebSessionMessages({ sessionKey }, { projectRoot, pilotHome });
-    const message = replay.messages.find((item) => item.kind === "error");
+    const message = replay.messages.find(item => item.kind === "error");
 
     assert.ok(message, "expected replayed error status message");
     assert.equal(message.text, "Provider raw error\n\nAction: Check Settings.");
@@ -53,8 +52,8 @@ test("history replay preserves agent status i18n metadata and user hint", async 
 });
 
 test("history token usage restores latest non-empty turn past latest empty turn result", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-token-usage-project-"));
-  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-token-usage-home-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-token-usage-project-"));
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-token-usage-home-"));
   try {
     const sessionKey = "web:s_token_usage_restore";
     const storage = createAgentProjectSessionStorage({
@@ -97,10 +96,7 @@ test("history token usage restores latest non-empty turn past latest empty turn 
       completedAt: "2026-07-09T00:00:04.000Z",
     });
 
-    const replay = await readWebSessionMessages(
-      { sessionKey },
-      { projectRoot, pilotHome, maxContextTokens: 1000 },
-    );
+    const replay = await readWebSessionMessages({ sessionKey }, { projectRoot, pilotHome, maxContextTokens: 1000 });
 
     assert.equal(replay.tokenUsage?.used, 35);
     assert.equal((replay.tokenUsage?.breakdown as { output?: number } | undefined)?.output, 2);
@@ -112,8 +108,8 @@ test("history token usage restores latest non-empty turn past latest empty turn 
 });
 
 test("history token usage prefers persisted context budget snapshot", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-token-budget-project-"));
-  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-token-budget-home-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-token-budget-project-"));
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-token-budget-home-"));
   try {
     const sessionKey = "web:s_token_budget_restore";
     const storage = createAgentProjectSessionStorage({
@@ -150,10 +146,7 @@ test("history token usage prefers persisted context budget snapshot", async () =
       },
     });
 
-    const replay = await readWebSessionMessages(
-      { sessionKey },
-      { projectRoot, pilotHome, maxContextTokens: 1000 },
-    );
+    const replay = await readWebSessionMessages({ sessionKey }, { projectRoot, pilotHome, maxContextTokens: 1000 });
 
     assert.equal(replay.tokenUsage?.used, 60);
     assert.equal(replay.tokenUsage?.displayUsed, 60);

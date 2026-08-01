@@ -52,13 +52,47 @@ export type DraftClaimsOutput = {
 /** 模糊限定词（清楚性规则）。 */
 const VAGUE_TERMS = ["约", "大致", "可能", "优选", "例如", "大约", "左右"];
 
-/** 领域 → 前序部分模板。 */
-const DOMAIN_PREAMBLE: Record<TechDomain, (name: string) => string> = {
-  mechanical: name => `一种${name}，其特征在于，包括：`,
-  electrical: name => `一种${name}，其特征在于，包括：`,
-  chemical: name => `一种${name}，其特征在于，包含：`,
-  software: name => `一种${name}的实现方法，其特征在于，包括以下步骤：`,
-  general: name => `一种${name}，其特征在于，包括：`,
+/**
+ * 领域 → 权利要求结构模板。
+ * - head: 名称部分（"其特征在于"之前的前序头）
+ * - connector: 特征部分引导词（无 prior_art 时）
+ * - withPriorConnector: 特征部分引导词（前序已含共有特征时，用"还"区分区别特征）
+ * - priorConnector: 前序部分引导词（prior_art 插入"其特征在于"之前）
+ */
+const DOMAIN_STRUCT: Record<
+  TechDomain,
+  { head: (name: string) => string; connector: string; withPriorConnector: string; priorConnector: string }
+> = {
+  mechanical: {
+    head: name => `一种${name}，`,
+    connector: "其特征在于，包括：",
+    withPriorConnector: "其特征在于，还包括：",
+    priorConnector: "包括：",
+  },
+  electrical: {
+    head: name => `一种${name}，`,
+    connector: "其特征在于，包括：",
+    withPriorConnector: "其特征在于，还包括：",
+    priorConnector: "包括：",
+  },
+  chemical: {
+    head: name => `一种${name}，`,
+    connector: "其特征在于，包含：",
+    withPriorConnector: "其特征在于，还包含：",
+    priorConnector: "包含：",
+  },
+  software: {
+    head: name => `一种${name}的实现方法，`,
+    connector: "其特征在于，包括以下步骤：",
+    withPriorConnector: "其特征在于，还包括以下步骤：",
+    priorConnector: "包括以下步骤：",
+  },
+  general: {
+    head: name => `一种${name}，`,
+    connector: "其特征在于，包括：",
+    withPriorConnector: "其特征在于，还包括：",
+    priorConnector: "包括：",
+  },
 };
 
 /** 领域关键词 → 自动识别技术领域（draft_claims 与 draft_specification 共享）。 */
@@ -162,22 +196,28 @@ export function draftClaims(input: DraftClaimsInput): DraftClaimsOutput {
 }
 
 function buildIndependentClaim(name: string, domain: TechDomain, features: string[], priorArt: string): string {
-  const preamble = DOMAIN_PREAMBLE[domain](name);
+  const struct = DOMAIN_STRUCT[domain];
   if (features.length === 0) {
-    return `${preamble}（缺少必要技术特征）`;
+    return `${struct.head(name)}${struct.connector}（缺少必要技术特征）`;
   }
   const featurePart = features.join("；");
+  // prior_art（最接近现有技术的共有特征）置于前序部分（"其特征在于"之前），
+  // 特征部分承载区别特征 —— 符合专利撰写规范。所有领域统一组合，术语随领域模板。
+  if (priorArt && priorArt.length > 0) {
+    const normalized = normalizePriorArt(priorArt);
+    return `${struct.head(name)}${struct.priorConnector}${normalized}；${struct.withPriorConnector}${featurePart}。`;
+  }
   if (domain === "software") {
     // 软件领域：步骤化特征
     const steps = features.map((f, i) => `${f}${i < features.length - 1 ? "；" : ""}`).join("");
-    return `一种${name}的实现方法，其特征在于，包括以下步骤：${steps}。`;
+    return `${struct.head(name)}${struct.connector}${steps}。`;
   }
-  // prior_art（最接近现有技术的共有特征）置于前序部分（"其特征在于"之前），
-  // 特征部分承载区别特征 —— 符合专利撰写规范
-  if (priorArt && priorArt.length > 0) {
-    return `一种${name}，包括：${priorArt}；其特征在于，还包括：${featurePart}。`;
-  }
-  return `${preamble}${featurePart}。`;
+  return `${struct.head(name)}${struct.connector}${featurePart}。`;
+}
+
+/** 去除 prior_art 末尾标点，避免前序部分与"；其特征在于"之间出现"。；"拼接。 */
+function normalizePriorArt(priorArt: string): string {
+  return priorArt.replace(/[。；;，,]+$/, "");
 }
 
 function resolveDomain(hint: TechDomain | undefined, name: string, features: string[]): TechDomain {

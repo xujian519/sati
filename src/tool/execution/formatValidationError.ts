@@ -1,4 +1,4 @@
-import type { PilotDeckToolValidationIssue } from "../protocol/schema.js";
+import type { SatiToolValidationIssue } from "../protocol/schema.js";
 
 export type FormatValidationErrorOptions = {
   maxOutputTokens?: number;
@@ -13,7 +13,7 @@ export type FormatValidationErrorOptions = {
  */
 export function formatValidationError(
   toolName: string,
-  issues: PilotDeckToolValidationIssue[],
+  issues: SatiToolValidationIssue[],
   options?: FormatValidationErrorOptions,
 ): string {
   const errorParts: string[] = [];
@@ -47,28 +47,26 @@ export function formatValidationError(
   let message = `${toolName} failed due to the following ${label}:\n${errorParts.join("\n")}`;
 
   const FILE_TOOLS = new Set(["write_file", "edit_file", "edit_notebook", "bash"]);
-  const hasRequiredMissing = issues.some((i) => i.code === "required");
+  const hasRequiredMissing = issues.some(i => i.code === "required");
   const tokenBudget = options?.maxOutputTokens;
   const tokenInfo = tokenBudget ? ` (current max_output_tokens: ${tokenBudget})` : "";
 
   if (hasRequiredMissing && FILE_TOOLS.has(toolName)) {
     if (options?.outputTruncated) {
-      message += `\n\nThis was caused by your output being truncated (output token limit reached${tokenInfo}). `
-        + "Keep each tool call's arguments well within the output token budget.";
+      message +=
+        `\n\nThis was caused by your output being truncated (output token limit reached${tokenInfo}). ` +
+        "Keep each tool call's arguments well within the output token budget.";
     } else {
       message += "\n\nPlease ensure all required parameters are provided in the tool call.";
     }
   }
 
-  if (
-    toolName === "write_file" &&
-    issues.some((i) => i.code === "required" && i.path.includes("content"))
-  ) {
+  if (toolName === "write_file" && issues.some(i => i.code === "required" && i.path.includes("content"))) {
     message +=
-      "\n\nHint: For large files, recover by creating a smaller but valid draft workspace file first. "
-      + "Use write_file with a complete content field that fits comfortably within the output budget. "
-      + "After the draft exists, read it with read_file and extend or patch it using small focused write_file/edit_file calls. "
-      + "Do not use shell heredocs or paths outside the workspace.";
+      "\n\nHint: For large files, recover by creating a smaller but valid draft workspace file first. " +
+      "Use write_file with a complete content field that fits comfortably within the output budget. " +
+      "After the draft exists, read it with read_file and extend or patch it using small focused write_file/edit_file calls. " +
+      "Do not use shell heredocs or paths outside the workspace.";
   }
 
   return message;

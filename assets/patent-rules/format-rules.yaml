@@ -1,0 +1,67 @@
+# CNIPA 专利文档格式校验规则
+# 对应工具：format-rules (FormatRulesTool)
+version: "1.0.0"
+tool: "format-rules"
+
+keyword_lists:
+  vague_terms:
+    description: "模糊用语列表"
+    legal_basis: "审查指南第二部分第二章2.2.6"
+    items:
+      - "最好"
+      - "尤其是"
+      - "大概"
+      - "左右"
+      - "可能"
+      - "也许"
+  ad_terms:
+    description: "商业宣传用语"
+    legal_basis: "审查指南第二部分第二章2.2.6"
+    items:
+      - "最先进"
+      - "世界领先"
+      - "行业首创"
+      - "独一无二"
+      - "前所未有"
+  broad_field_terms:
+    description: "技术领域宽泛前缀"
+    items:
+      - "各"
+      - "所有"
+      - "一切"
+      - "一种"
+  citation_patterns:
+    description: "摘要中禁止的引用模式"
+    legal_basis: "专利法实施细则第17条"
+    items:
+      - "参见"
+      - "参照"
+      - "如说明书中"
+      - "如权利要求"
+  claim_reference_patterns:
+    description: "说明书中禁止引用权利要求的模式"
+    legal_basis: "专利法实施细则第17条"
+    items:
+      - "如权利要求"
+      - "按照权利要求"
+
+thresholds:
+  invention_title_error_length:
+    description: "发明名称最大字数（错误级）"
+    legal_basis: "审查指南第二部分第二章2.2.1"
+    value: 60
+    severity: "error"
+  invention_title_warn_length:
+    description: "发明名称建议字数（警告级）"
+    value: 25
+    severity: "warning"
+  abstract_max_length:
+    description: "摘要最大字数"
+    legal_basis: "专利法实施细则第23条"
+    value: 300
+  embodiment_min_length:
+    description: "具体实施方式最短字数"
+    value: 50
+  claims_count_suggestion:
+    description: "权利要求数量建议上限"
+    value: 10

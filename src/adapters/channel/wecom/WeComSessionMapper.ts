@@ -76,9 +76,7 @@ export class WeComSessionMapper {
 
     if (chatType === "group") {
       const perUser = input.groupSessionsPerUser !== false;
-      return perUser && userId
-        ? `wecom:group=${chatId}:user=${userId}`
-        : `wecom:group=${chatId}`;
+      return perUser && userId ? `wecom:group=${chatId}:user=${userId}` : `wecom:group=${chatId}`;
     }
 
     return `wecom:dm=${userId || chatId}`;

@@ -92,7 +92,7 @@ export class CronScheduler {
   private async tick(): Promise<void> {
     const now = this.deps.now();
     const tasks = await this.deps.store.listTasks();
-    const dueTasks = tasks.filter((task) => isDue(task, now));
+    const dueTasks = tasks.filter(task => isDue(task, now));
     for (const task of dueTasks) {
       if (this.deps.activeRunCount() >= this.deps.config.maxConcurrentRuns) {
         await this.delayTask(task, now);
@@ -113,7 +113,7 @@ export class CronScheduler {
     const now = this.deps.now();
     const tasks = await this.deps.store.listTasks();
     await Promise.all(
-      tasks.map(async (task) => {
+      tasks.map(async task => {
         if (task.schedule.type === "once") {
           if (task.nextRunAt) {
             return;
@@ -130,11 +130,7 @@ export class CronScheduler {
         if (task.scheduleComputationVersion === 2 && task.nextRunAt) {
           return;
         }
-        const timezone = resolveCronTimezone(
-          task.schedule.timezone,
-          task.timezone,
-          this.deps.config.timezone,
-        );
+        const timezone = resolveCronTimezone(task.schedule.timezone, task.timezone, this.deps.config.timezone);
         const schedule = { ...task.schedule, timezone };
         const nextRunAt = computeNextRunAt(schedule, now, timezone)?.toISOString();
         await this.deps.store.putTask({

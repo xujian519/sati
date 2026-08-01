@@ -1,0 +1,49 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules/**",
+      "!**/dist/**",
+      "!**/coverage/**",
+      "!src/context/memory/edgeclaw-memory-core/lib/**",
+      "!.reasonix/**",
+      "!apps/desktop/dist-electron/**",
+      "!**/test-results/**",
+      "!.codegraph/**",
+      "!ui/public/**",
+      "!ui/src/index.css",
+      "!skills/**",
+      "!products/**",
+      "!src/knowledge/patent/wiki/**",
+      "!**/*.map"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "formatWithErrors": false,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "trailingCommas": "all",
+      "semicolons": "always",
+      "arrowParentheses": "asNeeded",
+      "jsxQuoteStyle": "double"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  },
+  "linter": {
+    "enabled": false
+  }
+}

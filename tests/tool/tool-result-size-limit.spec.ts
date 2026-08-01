@@ -1,16 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { applyResultSizeLimit } from "../../src/tool/protocol/result.js";
 
 test("applyResultSizeLimit keeps both head and tail when truncating text output", () => {
   const head = "HEAD: command started";
   const middle = "M".repeat(400);
   const tail = "TAIL: traceback root cause ENOENT missing config";
-  const { content, metadata } = applyResultSizeLimit(
-    [{ type: "text", text: `${head}\n${middle}\n${tail}` }],
-    180,
-  );
+  const { content, metadata } = applyResultSizeLimit([{ type: "text", text: `${head}\n${middle}\n${tail}` }], 180);
 
   assert.equal(metadata?.truncated, true);
   assert.equal(content.length, 1);

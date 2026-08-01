@@ -44,7 +44,11 @@ export class ContextOverflowRecovery {
         };
       }
       if (available < MIN_SAFE_AVAILABLE_OUTPUT_TOKENS && input.hasAttemptedCompact) {
-        return { type: "truncate_head_and_retry", keepRatio: this.second, reason: "provider-available-output-too-small-after-compact" };
+        return {
+          type: "truncate_head_and_retry",
+          keepRatio: this.second,
+          reason: "provider-available-output-too-small-after-compact",
+        };
       }
       return {
         type: "adjust_output_and_retry",

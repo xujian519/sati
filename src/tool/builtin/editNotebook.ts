@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
-import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
+import { resolveSatiWorkspacePath } from "./filesystem/pathSafety.js";
 import { isNotebookPath } from "./filesystem/fileTypeSafety.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
 import {
@@ -53,18 +53,18 @@ export type EditNotebookOutput = {
   error?: string;
 };
 
-export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookInput, EditNotebookOutput> {
+export function createEditNotebookTool(): SatiToolDefinition<EditNotebookInput, EditNotebookOutput> {
   return {
     name: "edit_notebook",
     aliases: ["NotebookEdit"],
     description:
-      "Edit a Jupyter notebook (.ipynb) by replacing, inserting, or deleting a specific cell.\n\nUsage:\n"
-      + "- Use this tool for notebook cell edits instead of edit_file.\n"
-      + "- notebook_path may be relative to the current workspace or absolute, but it must resolve inside the workspace.\n"
-      + "- edit_mode defaults to replace and supports replace, insert, or delete.\n"
-      + "- insert requires cell_type and inserts after the referenced cell, or at the beginning when cell_id is omitted.\n"
-      + "- cell_id may be a real notebook cell id or a synthetic index in the form cell-N.\n"
-      + "- You MUST use read_file on the notebook first; stale notebook edits are rejected.",
+      "Edit a Jupyter notebook (.ipynb) by replacing, inserting, or deleting a specific cell.\n\nUsage:\n" +
+      "- Use this tool for notebook cell edits instead of edit_file.\n" +
+      "- notebook_path may be relative to the current workspace or absolute, but it must resolve inside the workspace.\n" +
+      "- edit_mode defaults to replace and supports replace, insert, or delete.\n" +
+      "- insert requires cell_type and inserts after the referenced cell, or at the beginning when cell_id is omitted.\n" +
+      "- cell_id may be a real notebook cell id or a synthetic index in the form cell-N.\n" +
+      "- You MUST use read_file on the notebook first; stale notebook edits are rejected.",
     kind: "filesystem",
     searchHint: "edit notebook cells in ipynb files",
     inputSchema: {
@@ -98,15 +98,7 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
     },
     outputSchema: {
       type: "object",
-      required: [
-        "notebook_path",
-        "new_source",
-        "cell_type",
-        "language",
-        "edit_mode",
-        "original_file",
-        "updated_file",
-      ],
+      required: ["notebook_path", "new_source", "cell_type", "language", "edit_mode", "original_file", "updated_file"],
       additionalProperties: false,
       properties: {
         notebook_path: { type: "string" },
@@ -124,26 +116,30 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
     isConcurrencySafe: () => false,
     isDestructive: () => false,
     validateInput: async (input, context) => {
-      const resolved = resolvePilotDeckWorkspacePath(input.notebook_path, context, { mustExist: true, forWrite: true });
+      const resolved = resolveSatiWorkspacePath(input.notebook_path, context, { mustExist: true, forWrite: true });
       if (!resolved.ok) {
         return {
           ok: false,
-          issues: [{
-            path: "notebook_path",
-            code: "invalid_schema",
-            message: resolved.error.message,
-          }],
+          issues: [
+            {
+              path: "notebook_path",
+              code: "invalid_schema",
+              message: resolved.error.message,
+            },
+          ],
         };
       }
 
       if (!isNotebookPath(resolved.absolutePath)) {
         return {
           ok: false,
-          issues: [{
-            path: "notebook_path",
-            code: "invalid_schema",
-            message: "File must be a Jupyter notebook (.ipynb file). Use edit_file for non-notebook files.",
-          }],
+          issues: [
+            {
+              path: "notebook_path",
+              code: "invalid_schema",
+              message: "File must be a Jupyter notebook (.ipynb file). Use edit_file for non-notebook files.",
+            },
+          ],
         };
       }
 
@@ -151,29 +147,33 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
       if (editMode === "insert" && !input.cell_type) {
         return {
           ok: false,
-          issues: [{
-            path: "cell_type",
-            code: "invalid_schema",
-            message: "cell_type is required when edit_mode is insert.",
-          }],
+          issues: [
+            {
+              path: "cell_type",
+              code: "invalid_schema",
+              message: "cell_type is required when edit_mode is insert.",
+            },
+          ],
         };
       }
 
       try {
         await validateWriteSnapshotFresh(context, resolved.absolutePath);
       } catch (error) {
-        const normalized = error instanceof PilotDeckToolRuntimeError ? error.message : String(error);
+        const normalized = error instanceof SatiToolRuntimeError ? error.message : String(error);
         if (
-          normalized === "File has not been read yet. Read it first before writing to it."
-          || normalized === "File has changed since the last read. Read it again before writing to it."
+          normalized === "File has not been read yet. Read it first before writing to it." ||
+          normalized === "File has changed since the last read. Read it again before writing to it."
         ) {
           return {
             ok: false,
-            issues: [{
-              path: "notebook_path",
-              code: "invalid_schema",
-              message: normalized,
-            }],
+            issues: [
+              {
+                path: "notebook_path",
+                code: "invalid_schema",
+                message: normalized,
+              },
+            ],
           };
         }
         throw error;
@@ -188,11 +188,13 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
         }
         return {
           ok: false,
-          issues: [{
-            path: "cell_id",
-            code: "invalid_schema",
-            message: "cell_id is required unless edit_mode is insert.",
-          }],
+          issues: [
+            {
+              path: "cell_id",
+              code: "invalid_schema",
+              message: "cell_id is required unless edit_mode is insert.",
+            },
+          ],
         };
       }
 
@@ -202,11 +204,13 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
         if (!canAppendViaReplace) {
           return {
             ok: false,
-            issues: [{
-              path: "cell_id",
-              code: "invalid_schema",
-              message: `Cell ${input.cell_id} does not exist in the notebook.`,
-            }],
+            issues: [
+              {
+                path: "cell_id",
+                code: "invalid_schema",
+                message: `Cell ${input.cell_id} does not exist in the notebook.`,
+              },
+            ],
           };
         }
       }
@@ -214,12 +218,12 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
       return { ok: true, input };
     },
     execute: async (input, context) => {
-      const resolved = resolvePilotDeckWorkspacePath(input.notebook_path, context, { mustExist: true, forWrite: true });
+      const resolved = resolveSatiWorkspacePath(input.notebook_path, context, { mustExist: true, forWrite: true });
       if (!resolved.ok) {
-        throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+        throw new SatiToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
       if (!isNotebookPath(resolved.absolutePath)) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "invalid_tool_input",
           "File must be a Jupyter notebook (.ipynb file). Use edit_file for non-notebook files.",
         );
@@ -227,18 +231,17 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
 
       const freshness = await ensureWriteSnapshotFresh(context, resolved.absolutePath);
       if (context.fileHistory) {
-        await context.fileHistory.trackEdit(
-          resolved.absolutePath,
-          context.messageId ?? context.turnId,
-        );
+        await context.fileHistory.trackEdit(resolved.absolutePath, context.messageId ?? context.turnId);
       }
 
-      const originalContent = freshness.previousContent ?? await readNotebookJson(resolved.absolutePath);
+      const originalContent = freshness.previousContent ?? (await readNotebookJson(resolved.absolutePath));
       const notebook = parseNotebook(originalContent);
       notebook.cells ??= [];
       const cells = notebook.cells;
       const requestedMode = input.edit_mode ?? "replace";
-      const located = input.cell_id ? locateCellIndex(cells, input.cell_id) : { found: false, index: 0, parsedIndex: undefined };
+      const located = input.cell_id
+        ? locateCellIndex(cells, input.cell_id)
+        : { found: false, index: 0, parsedIndex: undefined };
       let cellIndex = input.cell_id ? located.index : 0;
       if (requestedMode === "insert" && input.cell_id) {
         cellIndex += 1;
@@ -253,13 +256,12 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
 
       const language = notebook.metadata?.language_info?.name ?? "python";
       const supportsCellIds = supportsNotebookCellIds(notebook);
-      const resultCellId = effectiveMode === "insert"
-        ? (supportsCellIds ? createNotebookCellId() : input.cell_id)
-        : input.cell_id;
+      const resultCellId =
+        effectiveMode === "insert" ? (supportsCellIds ? createNotebookCellId() : input.cell_id) : input.cell_id;
 
       if (effectiveMode === "delete") {
         if (cellIndex < 0 || cellIndex >= cells.length) {
-          throw new PilotDeckToolRuntimeError(
+          throw new SatiToolRuntimeError(
             "invalid_tool_input",
             `Cell ${input.cell_id ?? `cell-${cellIndex}`} does not exist in the notebook.`,
           );
@@ -270,7 +272,7 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
       } else {
         const targetCell = cells[cellIndex];
         if (!targetCell) {
-          throw new PilotDeckToolRuntimeError(
+          throw new SatiToolRuntimeError(
             "invalid_tool_input",
             `Cell ${input.cell_id ?? `cell-${cellIndex}`} does not exist in the notebook.`,
           );
@@ -313,10 +315,12 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
       };
 
       return {
-        content: [{
-          type: "text",
-          text: buildNotebookResultText(resolved.relativePath, effectiveMode, resultCellId),
-        }],
+        content: [
+          {
+            type: "text",
+            text: buildNotebookResultText(resolved.relativePath, effectiveMode, resultCellId),
+          },
+        ],
         data: output,
         metadata: {
           bytesWritten: Buffer.byteLength(updatedContent, "utf8"),
@@ -330,7 +334,7 @@ export function createEditNotebookTool(): PilotDeckToolDefinition<EditNotebookIn
 async function readNotebookJson(filePath: string): Promise<string> {
   return readFile(filePath, "utf8").catch((error: unknown) => {
     if (isNodeError(error) && error.code === "ENOENT") {
-      throw new PilotDeckToolRuntimeError("file_not_found", `File ${filePath} does not exist.`);
+      throw new SatiToolRuntimeError("file_not_found", `File ${filePath} does not exist.`);
     }
     throw error;
   });
@@ -340,11 +344,9 @@ function parseNotebook(raw: string): NotebookContent {
   try {
     return JSON.parse(raw) as NotebookContent;
   } catch (error) {
-    throw new PilotDeckToolRuntimeError(
-      "invalid_tool_input",
-      "Notebook is not valid JSON.",
-      { cause: error instanceof Error ? error.message : String(error) },
-    );
+    throw new SatiToolRuntimeError("invalid_tool_input", "Notebook is not valid JSON.", {
+      cause: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -359,7 +361,7 @@ function locateCellIndex(
   cells: NotebookCell[],
   cellId: string,
 ): { found: boolean; index: number; parsedIndex?: number } {
-  const byId = cells.findIndex((cell) => cell.id === cellId);
+  const byId = cells.findIndex(cell => cell.id === cellId);
   if (byId !== -1) {
     return { found: true, index: byId };
   }
@@ -380,11 +382,7 @@ function supportsNotebookCellIds(notebook: NotebookContent): boolean {
   return nbformat > 4 || (nbformat === 4 && nbformatMinor >= 5);
 }
 
-function createInsertedCell(
-  cellType: "code" | "markdown",
-  source: string,
-  id: string | undefined,
-): NotebookCell {
+function createInsertedCell(cellType: "code" | "markdown", source: string, id: string | undefined): NotebookCell {
   if (cellType === "markdown") {
     return {
       cell_type: "markdown",

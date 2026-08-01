@@ -9,37 +9,28 @@
  * - worker-contract：Worker 契约注册表与输出校验（defaultPatentWorkers 内置目录）
  */
 
-export { PatentOutputGate } from "./output-gate.js";
-export type {
-  PendingPatentMessage,
-  PatentOutputGateOptions,
-  ProcessedMessageResult,
-} from "./output-gate.js";
-export { extractMessageText } from "./output-gate.js";
 export {
-  ABSOLUTE_PHRASES,
-  PATENT_APPROVAL_KEYWORDS,
-  PATENT_DISCLAIMER,
-  PATENT_RISK_KEYWORDS,
-  processPatentOutput,
-  verifyCitations,
-  formatCitationWarnings,
-} from "./quality-gate.js";
-export type {
-  CitationReport,
-  FlaggedCitation,
-  PatentQualityGateOptions,
-  QualityGateResult,
-} from "./quality-gate.js";
+  PatentOutputGate,
+  type PatentOutputGateOptions,
+  type PendingPatentMessage,
+  type ProcessedMessageResult,
+} from "./output-gate.js";
+export { ABSOLUTE_PHRASES } from "./quality-gate.js";
+export {
+  type ApprovalRecord,
+  type ApprovalVerdict,
+  type ApprovalStore,
+  InMemoryApprovalStore,
+  createApprovalRecord,
+} from "./approval.js";
 
 export {
-  type WorkflowStrategy,
   type WorkflowStage,
-  type WorkflowManifest,
   type WorkflowContext,
-  type StageExecutor,
-  type WorkflowStageResult,
+  type WorkflowManifest,
   type WorkflowRunResult,
+  type WorkflowRunOptions,
+  type WorkflowInterrupt,
   WorkflowError,
   validateWorkflowManifest,
   runWorkflow,
@@ -47,30 +38,64 @@ export {
 } from "./workflow.js";
 
 export {
+  type EvidenceSpan,
+  type EvidenceDirection,
+  type EvidenceConflict,
+  createSpan,
+  isLocatable,
+  Ledger,
+  contentHash,
+  receiptFromToolExecution,
+  ClaimBinding,
+  ConflictDetector,
+  EvidenceExtension,
+} from "./evidence/index.js";
+
+export {
+  type Atom,
+  type AtomCategory,
+  AtomRegistry,
+  AtomRegistryError,
+  globalAtomRegistry,
+  RegisterAtom,
+  LookupAtom,
+  ListAtoms,
+  ListAtomsByCategory,
+  type PipelineState,
+  type StageProvider,
+  type StageExecuteInput,
+  type StageHandler,
+  StageError,
+  InterruptStageError,
+  isInterruptStageError,
+  StageHandlerRegistry,
+  globalStageHandlerRegistry,
+  RegisterStageHandler,
+  LookupStageHandler,
+  registerBuiltinAtoms,
+  searchAtom,
+  SearchHandler,
+  extractAtom,
+  ExtractHandler,
+  compareAtom,
+  CompareHandler,
+  reasoningAtom,
+  ReasoningHandler,
+  approvalGateAtom,
+  ApprovalGateHandler,
+} from "./atoms/index.js";
+
+export {
   type PlanTaskState,
-  type PlanTaskStatus,
   type PlanTask,
-  type PlanTaskSyncResult,
   TRANSITIONS,
-  PlanTaskStateError,
   PlanTaskStateMachine,
-  hashStep,
   syncPlanToTasks,
   replanTasks,
 } from "./plantask.js";
 
 export {
-  type WorkerTier,
-  type ContractLevel,
-  type WorkerInputContract,
-  type WorkerOutputContract,
-  type WorkerContract,
-  type WorkerOutputValidation,
-  type WorkerExecutionRecord,
-  TIER_LABELS,
-  WorkerRegistryError,
   WorkerRegistry,
   validateWorkerOutput,
-  WorkerMonitor,
   defaultPatentWorkers,
 } from "./worker-contract.js";

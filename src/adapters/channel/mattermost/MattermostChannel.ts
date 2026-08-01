@@ -1,13 +1,12 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
-import { MattermostSessionMapper } from "./MattermostSessionMapper.js";
-import { renderMattermostEvent } from "./mattermost-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { MattermostSessionMapper } from "./MattermostSessionMapper.js";
+import { renderMattermostEvent } from "./mattermost-render.js";
 
 let WebSocketImpl: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const wsMod = require("ws");
   WebSocketImpl = wsMod.WebSocket ?? wsMod;
 } catch {
@@ -76,9 +75,7 @@ export class MattermostChannel implements ChannelAdapter {
     this.closed = false;
     const { wsBase, origin } = toWsBase(this.serverUrl);
     this.openWebSocket(wsBase, origin);
-    this.logger?.info?.(
-      `mattermost: connected (REST=${this.apiBase}${this.teamId ? `, team=${this.teamId}` : ""})`,
-    );
+    this.logger?.info?.(`mattermost: connected (REST=${this.apiBase}${this.teamId ? `, team=${this.teamId}` : ""})`);
 
     return {
       stop: async (reason?: string) => {
@@ -89,7 +86,11 @@ export class MattermostChannel implements ChannelAdapter {
           this.reconnectTimer = null;
         }
         if (this.ws) {
-          try { this.ws.close(); } catch { /* best effort */ }
+          try {
+            this.ws.close();
+          } catch {
+            /* best effort */
+          }
           this.ws = null;
         }
         this.botUserId = null;
@@ -155,7 +156,9 @@ export class MattermostChannel implements ChannelAdapter {
 
     const channelId = post.channel_id as string | undefined;
     const rootId = (post.root_id as string) || undefined;
-    const text = String(post.message ?? "").replace(/\r\n/g, "\n").trim();
+    const text = String(post.message ?? "")
+      .replace(/\r\n/g, "\n")
+      .trim();
 
     if (!channelId || !text) return;
 
@@ -248,10 +251,7 @@ export class MattermostChannel implements ChannelAdapter {
     }
   }
 
-  private async sendReply(
-    ctx: { channelId: string; rootId?: string },
-    text: string,
-  ): Promise<void> {
+  private async sendReply(ctx: { channelId: string; rootId?: string }, text: string): Promise<void> {
     const chunks = chunkText(text, MAX_MESSAGE_LENGTH);
     for (const chunk of chunks) {
       try {

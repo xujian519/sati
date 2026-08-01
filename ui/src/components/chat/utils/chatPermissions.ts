@@ -1,71 +1,66 @@
-import { safeJsonParse } from '../../../lib/utils.js';
-import type { ChatMessage, PilotDeckPermissionSuggestion, PermissionGrantResult } from '../types/types.js';
-import {
-  PILOTDECK_SETTINGS_KEY,
-  getPilotDeckSettings,
-  safeLocalStorage,
-  savePilotDeckPermissionSettings,
-} from './chatStorage';
+import { safeJsonParse } from "../../../lib/utils.js";
+import type { ChatMessage, SatiPermissionSuggestion, PermissionGrantResult } from "../types/types.js";
+import { SATI_SETTINGS_KEY, getSatiSettings, safeLocalStorage, saveSatiPermissionSettings } from "./chatStorage";
 
-export function buildPilotDeckToolPermissionEntry(toolName?: string, toolInput?: unknown) {
+export function buildSatiToolPermissionEntry(toolName?: string, toolInput?: unknown) {
   if (!toolName) return null;
   const fileWriteToolName = normalizeFileWriteToolName(toolName);
   if (fileWriteToolName) return buildFileWritePermissionEntry(fileWriteToolName, toolInput);
-  if (toolName !== 'Bash' && toolName !== 'bash') return toolName;
+  if (toolName !== "Bash" && toolName !== "bash") return toolName;
 
   const parsed = parseToolInputRecord(toolInput);
-  const command = typeof parsed?.command === 'string' ? parsed.command.trim() : '';
-  if (!command) return 'bash';
+  const command = typeof parsed?.command === "string" ? parsed.command.trim() : "";
+  if (!command) return "bash";
 
   const tokens = command.split(/\s+/);
   if (tokens.length === 0) return toolName;
 
-  if (tokens[0] === 'git' && tokens[1]) {
+  if (tokens[0] === "git" && tokens[1]) {
     return `bash:${tokens[0]} ${tokens[1]}:*`;
   }
   return `bash:${tokens[0]}:*`;
 }
 
 function normalizeFileWriteToolName(toolName: string) {
-  if (toolName === 'write_file' || toolName === 'Write') return 'write_file';
-  if (toolName === 'edit_file' || toolName === 'Edit') return 'edit_file';
+  if (toolName === "write_file" || toolName === "Write") return "write_file";
+  if (toolName === "edit_file" || toolName === "Edit") return "edit_file";
   return null;
 }
 
-function buildFileWritePermissionEntry(toolName: 'write_file' | 'edit_file', toolInput: unknown) {
+function buildFileWritePermissionEntry(toolName: "write_file" | "edit_file", toolInput: unknown) {
   const parsed = parseToolInputRecord(toolInput);
-  const filePath = typeof parsed?.file_path === 'string' ? parsed.file_path.trim() : '';
+  const filePath = typeof parsed?.file_path === "string" ? parsed.file_path.trim() : "";
   if (!isAbsoluteFilePath(filePath)) return null;
   const parent = dirnameForPermission(filePath);
   if (!parent) return null;
-  return `${toolName}:${parent.endsWith('/') || parent.endsWith('\\') ? `${parent}*` : `${parent}/*`}`;
+  return `${toolName}:${parent.endsWith("/") || parent.endsWith("\\") ? `${parent}*` : `${parent}/*`}`;
 }
 
 function parseToolInputRecord(toolInput: unknown): Record<string, unknown> | null {
-  if (toolInput && typeof toolInput === 'object' && !Array.isArray(toolInput)) {
+  if (toolInput && typeof toolInput === "object" && !Array.isArray(toolInput)) {
     return toolInput as Record<string, unknown>;
   }
   return safeJsonParse(toolInput);
 }
 
 function isAbsoluteFilePath(filePath: string) {
-  return filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath);
+  return filePath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(filePath);
 }
 
 function dirnameForPermission(filePath: string) {
-  const normalized = filePath.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
+  const normalized = filePath.replace(/\\/g, "/").replace(/\/+$/, "") || "/";
   const driveMatch = /^([A-Za-z]:)(\/.*)?$/.exec(normalized);
-  const value = driveMatch ? `${driveMatch[1]}${driveMatch[2] ?? '/'}` : normalized;
-  const index = value.lastIndexOf('/');
-  if (index < 0) return '';
-  if (index === 0) return '/';
+  const value = driveMatch ? `${driveMatch[1]}${driveMatch[2] ?? "/"}` : normalized;
+  const index = value.lastIndexOf("/");
+  if (index < 0) return "";
+  if (index === 0) return "/";
   if (/^[A-Za-z]:\/[^/]*$/.test(value)) return `${value.slice(0, 2)}/`;
   return value.slice(0, index);
 }
 
 export function formatToolInputForDisplay(input: unknown) {
-  if (input === undefined || input === null) return '';
-  if (typeof input === 'string') return input;
+  if (input === undefined || input === null) return "";
+  if (typeof input === "string") return input;
   try {
     return JSON.stringify(input, null, 2);
   } catch {
@@ -73,34 +68,26 @@ export function formatToolInputForDisplay(input: unknown) {
   }
 }
 
-// Backend `PilotDeckToolErrorCode` values that map to "user can fix this by
+// Backend `SatiToolErrorCode` values that map to "user can fix this by
 // granting a permission rule". Anything else (e.g. `tool_execution_failed`,
 // `file_not_found`, `tool_timeout`) is a real failure unrelated to ACL state,
 // and surfacing the "Add to Allowed Tools" CTA for those cases is actively
 // misleading — clicking it adds the rule, but the next retry still fails
 // because the original error was not about permissions.
-const PERMISSION_ERROR_CODES = new Set<string>([
-  'permission_denied',
-  'permission_required',
-  'permission_cancelled',
-]);
+const PERMISSION_ERROR_CODES = new Set<string>(["permission_denied", "permission_required", "permission_cancelled"]);
 
 export function isReadOnlyModeToolDeny(message: ChatMessage | null | undefined): boolean {
   if (!message?.toolResult?.isError) return false;
-  const errorCode = typeof message.toolResult.errorCode === 'string'
-    ? message.toolResult.errorCode
-    : '';
+  const errorCode = typeof message.toolResult.errorCode === "string" ? message.toolResult.errorCode : "";
   if (
-    errorCode === 'plan_mode_violation' ||
-    errorCode === 'plan_mode_denied' ||
-    errorCode === 'ask_mode_violation' ||
-    errorCode === 'ask_mode_denied'
+    errorCode === "plan_mode_violation" ||
+    errorCode === "plan_mode_denied" ||
+    errorCode === "ask_mode_violation" ||
+    errorCode === "ask_mode_denied"
   ) {
     return true;
   }
-  const content = typeof message.toolResult.content === 'string'
-    ? message.toolResult.content
-    : '';
+  const content = typeof message.toolResult.content === "string" ? message.toolResult.content : "";
   return (
     /\[PLAN_MODE_VIOLATION\]/i.test(content) ||
     /plan mode denies side-effecting tool\b/i.test(content) ||
@@ -111,10 +98,10 @@ export function isReadOnlyModeToolDeny(message: ChatMessage | null | undefined):
 
 export const isPlanModeToolDeny = isReadOnlyModeToolDeny;
 
-export function getPilotDeckPermissionSuggestion(
+export function getSatiPermissionSuggestion(
   message: ChatMessage | null | undefined,
   _provider: string,
-): PilotDeckPermissionSuggestion | null {
+): SatiPermissionSuggestion | null {
   // migration every provider routes tool calls through the same gateway
   // PermissionContext, so the "Permission added" affordance is useful
   // regardless of which model is selected.
@@ -129,21 +116,21 @@ export function getPilotDeckPermissionSuggestion(
   if (errorCode && !PERMISSION_ERROR_CODES.has(errorCode)) return null;
 
   const toolName = message?.toolName;
-  const entry = buildPilotDeckToolPermissionEntry(toolName, message.toolInput);
+  const entry = buildSatiToolPermissionEntry(toolName, message.toolInput);
   if (!entry) return null;
 
-  const settings = getPilotDeckSettings();
+  const settings = getSatiSettings();
   const isAllowed = settings.allowedTools.includes(entry);
-  return { toolName: toolName || 'UnknownTool', entry, isAllowed };
+  return { toolName: toolName || "UnknownTool", entry, isAllowed };
 }
 
-export function grantPilotDeckToolPermission(entry: string | null): PermissionGrantResult {
+export function grantSatiToolPermission(entry: string | null): PermissionGrantResult {
   if (!entry) return { success: false };
 
-  const settings = getPilotDeckSettings();
+  const settings = getSatiSettings();
   const alreadyAllowed = settings.allowedTools.includes(entry);
   const nextAllowed = alreadyAllowed ? settings.allowedTools : [...settings.allowedTools, entry];
-  const nextDisallowed = settings.disallowedTools.filter((tool) => tool !== entry);
+  const nextDisallowed = settings.disallowedTools.filter(tool => tool !== entry);
   const updatedSettings = {
     ...settings,
     allowedTools: nextAllowed,
@@ -151,12 +138,12 @@ export function grantPilotDeckToolPermission(entry: string | null): PermissionGr
     lastUpdated: new Date().toISOString(),
   };
 
-  safeLocalStorage.setItem(PILOTDECK_SETTINGS_KEY, JSON.stringify(updatedSettings));
-  savePilotDeckPermissionSettings({
+  safeLocalStorage.setItem(SATI_SETTINGS_KEY, JSON.stringify(updatedSettings));
+  saveSatiPermissionSettings({
     allowedTools: nextAllowed,
     disallowedTools: nextDisallowed,
-  }).catch((error) => {
-    console.error('Failed to persist granted permission to backend:', error);
+  }).catch(error => {
+    console.error("Failed to persist granted permission to backend:", error);
   });
   return { success: true, alreadyAllowed, updatedSettings };
 }

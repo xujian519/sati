@@ -1,4 +1,4 @@
-import type { Gateway, GatewayEvent } from "../../gateway/index.js";
+import type { Gateway } from "../../gateway/index.js";
 import type { CronResultDeliveryHandler, CronRunRecord, CronRunOutcome, CronTask } from "../protocol/types.js";
 import type { CronTaskStore } from "../storage/CronTaskStore.js";
 import { resolveCronTimezone } from "../CronTimezone.js";
@@ -138,53 +138,54 @@ export class CronFire {
         outcome = "stopped";
       }
       this.deps.unregisterActiveRun(runId);
-      if (!startedRun) {
-        return;
-      }
-      const finishedAt = this.deps.now();
-      await this.deps.store
-        .appendRun({
-          schemaVersion: 1,
-          runId,
-          taskId: task.taskId,
-          sessionKey: task.sessionKey,
-          projectKey: task.projectKey,
-          startedAt: startedAt.toISOString(),
-          finishedAt: finishedAt.toISOString(),
-          outcome,
-          error,
-        })
-        .catch((persistError: unknown) => {
-          this.deps.logger?.warn("cron run terminal record write failed", {
-            taskId: task.taskId,
-            runId,
-            error: persistError instanceof Error ? persistError.message : String(persistError),
-          });
-        });
-      this.deps.onPhaseEvent?.({
-        phase: outcome === "completed" ? "cron_completed" : "cron_failed",
+    }
+    // Note: no early `return` inside `finally` — it would swallow the caught error.
+    if (!startedRun) {
+      return;
+    }
+    const finishedAt = this.deps.now();
+    await this.deps.store
+      .appendRun({
+        schemaVersion: 1,
         runId,
         taskId: task.taskId,
+        sessionKey: task.sessionKey,
         projectKey: task.projectKey,
-        timestamp: finishedAt.toISOString(),
-        title: task.message.trimStart().split(/\r?\n/, 1)[0]?.trim().slice(0, 120),
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        outcome,
         error,
-      });
-      await this.deliverResult(task, runId, outcome, assistantText, error).catch((deliveryError: unknown) => {
-        this.deps.logger?.warn("cron result delivery failed", {
+      })
+      .catch((persistError: unknown) => {
+        this.deps.logger?.warn("cron run terminal record write failed", {
           taskId: task.taskId,
           runId,
-          error: deliveryError instanceof Error ? deliveryError.message : String(deliveryError),
+          error: persistError instanceof Error ? persistError.message : String(persistError),
         });
       });
-      await this.updateTaskAfterRun(task, finishedAt, outcome).catch((updateError: unknown) => {
-        this.deps.logger?.warn("cron task post-run update failed", {
-          taskId: task.taskId,
-          runId,
-          error: updateError instanceof Error ? updateError.message : String(updateError),
-        });
+    this.deps.onPhaseEvent?.({
+      phase: outcome === "completed" ? "cron_completed" : "cron_failed",
+      runId,
+      taskId: task.taskId,
+      projectKey: task.projectKey,
+      timestamp: finishedAt.toISOString(),
+      title: task.message.trimStart().split(/\r?\n/, 1)[0]?.trim().slice(0, 120),
+      error,
+    });
+    await this.deliverResult(task, runId, outcome, assistantText, error).catch((deliveryError: unknown) => {
+      this.deps.logger?.warn("cron result delivery failed", {
+        taskId: task.taskId,
+        runId,
+        error: deliveryError instanceof Error ? deliveryError.message : String(deliveryError),
       });
-    }
+    });
+    await this.updateTaskAfterRun(task, finishedAt, outcome).catch((updateError: unknown) => {
+      this.deps.logger?.warn("cron task post-run update failed", {
+        taskId: task.taskId,
+        runId,
+        error: updateError instanceof Error ? updateError.message : String(updateError),
+      });
+    });
   }
 
   private async deliverResult(
@@ -194,9 +195,7 @@ export class CronFire {
     assistantText: string,
     error: CronRunRecord["error"],
   ): Promise<void> {
-    const text = outcome === "completed"
-      ? assistantText.trim()
-      : error?.message?.trim() || "Cron task failed.";
+    const text = outcome === "completed" ? assistantText.trim() : error?.message?.trim() || "Cron task failed.";
     const deliveryText = text || "定时任务已完成，但没有返回内容。";
     await this.deps.onResultDelivery?.({
       taskId: task.taskId,
@@ -221,14 +220,10 @@ export class CronFire {
       }
       return;
     }
-    const timezone = resolveCronTimezone(
-      task.schedule.timezone,
-      task.timezone,
-      this.deps.defaultTimezone,
-    );
+    const timezone = resolveCronTimezone(task.schedule.timezone, task.timezone, this.deps.defaultTimezone);
     const schedule = { ...task.schedule, timezone };
     const nextRunAt = computeNextRunAt(schedule, finishedAt, timezone)?.toISOString();
-    await this.deps.store.updateTask(task.taskId, (current) => ({
+    await this.deps.store.updateTask(task.taskId, current => ({
       ...current,
       schedule,
       timezone,

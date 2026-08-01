@@ -1,0 +1,55 @@
+# 说明书形式检查规则
+# 对应工具：spec-formality (SpecFormalityCheckerTool)
+# 法律依据：专利法第26条、实施细则第17-19条
+version: "1.0.0"
+tool: "spec-formality"
+
+patterns:
+  unclear_expressions:
+    description: "不清楚表述"
+    legal_basis: "专利法第26条第4款"
+    regex: "大约|左右|上下|等等|可能|大概|约|或者其组合"
+  background_deficiency:
+    description: "现有技术不足表述"
+    legal_basis: "专利法第26条第3款"
+    regex: "不足|缺点|缺陷|问题"
+  tech_solution_keywords:
+    description: "技术方案描述关键词"
+    legal_basis: "专利法第26条第3款"
+    regex: "技术方案|解决|采用|包括|设置"
+  utility_model_structure:
+    description: "实用新型结构特征"
+    legal_basis: "专利法第2条第2款"
+    regex: "形状|构造|结构|设置|配置|连接"
+  figure_reference:
+    description: "附图引用格式"
+    legal_basis: "实施细则第18条"
+    regex: "图\\s*\\d+|图\\s*[一二三四五六七八九十]"
+  fig_ref_in_embodiment:
+    description: "具体实施方式中的附图引用"
+    legal_basis: "实施细则第19条"
+    regex: "如图\\s*\\d+|如图\\s*[一二三四五六七八九十]"
+  quote_extraction:
+    description: "引号内容提取"
+    regex: "[\"'「」『』]([^\"'「」『』]{2,})[\"'「」『』]"
+  component_extraction:
+    description: "组件术语提取"
+    regex: "[一-龥a-zA-Z]{2,4}(?:器|件|装置|设备|机构|系统|单元|模块|组件|传感器|控制器|处理器|执行器|驱动器|接收器|发射器|显示器|存储器|计数器|定时器|调节器|变换器|转换器|适配器|连接器|接口|电路|网络|总线|通道|端口)"
+
+thresholds:
+  tech_field_min_chars:
+    description: "技术领域最低字数"
+    legal_basis: "专利法第26条第3款"
+    value: 20
+  max_concise_chars:
+    description: "非实施方式部分最大字数"
+    legal_basis: "专利法第26条第4款"
+    value: 500
+  max_duplication_ratio:
+    description: "最大句子重复率"
+    legal_basis: "专利法第26条第4款"
+    value: 0.3
+  embodiment_min_chars:
+    description: "具体实施方式最低字数"
+    legal_basis: "实施细则第19条"
+    value: 100

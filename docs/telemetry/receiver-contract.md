@@ -28,7 +28,6 @@ type AnalyticsEvent = {
   instanceId: string; // instance-level identity (distinguishes multi-instance same machine)
   deploymentMode:
     | "source"
-    | "docker"
     | "curl_installer"
     | "desktop_installer"
     | "npm_binary"

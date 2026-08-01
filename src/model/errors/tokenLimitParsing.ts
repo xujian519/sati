@@ -22,18 +22,23 @@ function parseOutputLimit(message: string, lower: string): ParsedTokenLimitError
   const range = /range of max_tokens should be\s*\[\s*\d+\s*,\s*(\d+)\s*\]/i.exec(message);
   if (range) return { maxOutputTokens: toPositiveInt(range[1]) };
 
-  const available = /available_tokens[:\s]+(\d+)/i.exec(message)
-    ?? /available\s+tokens[:\s]+(\d+)/i.exec(message);
+  const available = /available_tokens[:\s]+(\d+)/i.exec(message) ?? /available\s+tokens[:\s]+(\d+)/i.exec(message);
   if (available && lower.includes("max_tokens")) {
     return { availableOutputTokens: toPositiveInt(available[1]) };
   }
 
-  const greaterThanContext = /max_tokens[:\s]+\d+\s*>\s*(?:context_window[:\s]+)?(\d+)/i.exec(message)
-    ?? /max_tokens[:\s]+\d+[^.]*?(?:exceeds|exceed|greater than)[^.]*?(?:context window|context_window|context length)[^\d]*(\d+)/i.exec(message);
+  const greaterThanContext =
+    /max_tokens[:\s]+\d+\s*>\s*(?:context_window[:\s]+)?(\d+)/i.exec(message) ??
+    /max_tokens[:\s]+\d+[^.]*?(?:exceeds|exceed|greater than)[^.]*?(?:context window|context_window|context length)[^\d]*(\d+)/i.exec(
+      message,
+    );
   if (greaterThanContext) return { maxOutputTokens: toPositiveInt(greaterThanContext[1]) };
 
-  const atMost = /max_(?:output_)?tokens?\s+(?:must be |should be |is )?(?:at most|<=|less than or equal to)\s*(\d+)/i.exec(message)
-    ?? /max_completion_tokens?\s+(?:must be |should be |is )?(?:at most|<=|less than or equal to)\s*(\d+)/i.exec(message);
+  const atMost =
+    /max_(?:output_)?tokens?\s+(?:must be |should be |is )?(?:at most|<=|less than or equal to)\s*(\d+)/i.exec(
+      message,
+    ) ??
+    /max_completion_tokens?\s+(?:must be |should be |is )?(?:at most|<=|less than or equal to)\s*(\d+)/i.exec(message);
   if (atMost) return { maxOutputTokens: toPositiveInt(atMost[1]) };
 
   const outputTokens = /requested\s+(\d+)\s+output tokens/i.exec(message);
@@ -41,11 +46,13 @@ function parseOutputLimit(message: string, lower: string): ParsedTokenLimitError
     return { availableOutputTokens: estimateAvailableOutputFromContextError(message) };
   }
 
-  const outputPortion = /maximum context length is\s*(\d+)[\s\S]*?(\d+)\s+(?:tokens?\s+)?(?:of|in)\s+(?:the\s+)?output/i.exec(message);
+  const outputPortion =
+    /maximum context length is\s*(\d+)[\s\S]*?(\d+)\s+(?:tokens?\s+)?(?:of|in)\s+(?:the\s+)?output/i.exec(message);
   if (outputPortion) {
     const context = toPositiveInt(outputPortion[1]);
     const outputUsed = toPositiveInt(outputPortion[2]);
-    if (context !== undefined && outputUsed !== undefined) return { availableOutputTokens: Math.max(1, context - outputUsed) };
+    if (context !== undefined && outputUsed !== undefined)
+      return { availableOutputTokens: Math.max(1, context - outputUsed) };
   }
 
   return {};
@@ -56,8 +63,9 @@ function estimateAvailableOutputFromContextError(message: string): number | unde
   if (!context) return undefined;
   const contextTokens = toPositiveInt(context[1]);
   if (contextTokens === undefined) return undefined;
-  const promptTokens = /prompt (?:contains|has)\s+(?:at least\s+)?(\d+)\s+(?:tokens|characters)/i.exec(message)
-    ?? /input_tokens?[:\s]+(\d+)/i.exec(message);
+  const promptTokens =
+    /prompt (?:contains|has)\s+(?:at least\s+)?(\d+)\s+(?:tokens|characters)/i.exec(message) ??
+    /input_tokens?[:\s]+(\d+)/i.exec(message);
   const prompt = promptTokens ? toPositiveInt(promptTokens[1]) : undefined;
   if (prompt === undefined) return undefined;
   return Math.max(1, contextTokens - prompt);

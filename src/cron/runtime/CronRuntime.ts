@@ -5,7 +5,7 @@ import {
   UNATTENDED_SESSION_EXCLUDED_TOOLS,
 } from "../../always-on/runtime/SessionConfigOverrides.js";
 import type { Gateway } from "../../gateway/index.js";
-import type { PilotDeckToolDefinition } from "../../tool/index.js";
+import type { SatiToolDefinition } from "../../tool/index.js";
 import type { CronConfig } from "../config/parseCronConfig.js";
 import type {
   CronCreateInput,
@@ -28,10 +28,10 @@ import { createCronCreateTool } from "../tool/CronCreateTool.js";
 import { createCronDeleteTool } from "../tool/CronDeleteTool.js";
 import { createCronListTool } from "../tool/CronListTool.js";
 import { createCronStopTool } from "../tool/CronStopTool.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 import { CronFire, type CronActiveRun } from "./CronFire.js";
 import { computeNextRunAt } from "./CronSchedule.js";
 import { CronScheduler } from "./CronScheduler.js";
-import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type CronRuntimeLogger = {
   info: (message: string, data?: Record<string, unknown>) => void;
@@ -70,7 +70,7 @@ export class CronRuntime {
   private readonly telemetry?: TelemetryClient;
   private readonly onResultDelivery?: CronResultDeliveryHandler;
   private readonly sessionOverrides: SessionConfigOverrides;
-  private readonly tools: PilotDeckToolDefinition[];
+  private readonly tools: SatiToolDefinition[];
   private readonly activeRuns = new Map<string, CronActiveRun>();
   private readonly sharedActiveRunCount?: () => number;
   private gateway?: Gateway;
@@ -91,15 +91,10 @@ export class CronRuntime {
     this.sharedActiveRunCount = options.activeRunCount;
     this.tools = options.skipToolCreation
       ? []
-      : [
-          createCronCreateTool(this),
-          createCronListTool(this),
-          createCronDeleteTool(this),
-          createCronStopTool(this),
-        ];
+      : [createCronCreateTool(this), createCronListTool(this), createCronDeleteTool(this), createCronStopTool(this)];
   }
 
-  getTools(): PilotDeckToolDefinition[] {
+  getTools(): SatiToolDefinition[] {
     if (!this.config.enabled) return [];
     return [...this.tools];
   }
@@ -114,14 +109,14 @@ export class CronRuntime {
       store: this.store,
       now: this.now,
       logger: this.logger,
-      registerActiveRun: (run) => this.registerActiveRun(run),
-      unregisterActiveRun: (runId) => this.unregisterActiveRun(runId),
-      getActiveRun: (runId) => this.activeRuns.get(runId),
+      registerActiveRun: run => this.registerActiveRun(run),
+      unregisterActiveRun: runId => this.unregisterActiveRun(runId),
+      getActiveRun: runId => this.activeRuns.get(runId),
       runTimeoutMs: this.config.runTimeoutMinutes * 60_000,
       defaultTimezone: this.config.timezone,
-      releaseTaskSession: (task) => this.releaseTaskSession(task),
+      releaseTaskSession: task => this.releaseTaskSession(task),
       onResultDelivery: this.onResultDelivery,
-      onPhaseEvent: (event) => {
+      onPhaseEvent: event => {
         this.telemetry?.trackFeatureLoopStage({
           module: "cron_job",
           loopStage: "module_event",
@@ -183,15 +178,17 @@ export class CronRuntime {
         active.stopRequested = true;
       }
       await Promise.all(
-        activeRuns.map((active) =>
-          this.gateway!
-            .abortTurn({ sessionKey: active.sessionKey, runId: active.runId, reason: "system:cron_shutdown" })
-            .catch(() => undefined),
+        activeRuns.map(active =>
+          this.gateway!.abortTurn({
+            sessionKey: active.sessionKey,
+            runId: active.runId,
+            reason: "system:cron_shutdown",
+          }).catch(() => undefined),
         ),
       );
     }
     const tasks = await this.store.listTasks();
-    await Promise.all(tasks.map((task) => this.releaseTaskSession(task)));
+    await Promise.all(tasks.map(task => this.releaseTaskSession(task)));
   }
 
   getActiveRunCount(): number {
@@ -200,15 +197,13 @@ export class CronRuntime {
 
   async createTask(input: CronCreateInput): Promise<CronCreateResult> {
     if (!this.config.enabled) {
-      throw new Error("Cron is disabled. Enable it in pilotdeck.yaml to create tasks.");
+      throw new Error("Cron is disabled. Enable it in sati.yaml to create tasks.");
     }
     const now = this.now();
     const taskId = this.uuid();
     const sessionKey = buildCronSessionKey(taskId);
     const schedule = normalizeSchedule(input, this.config.timezone, now);
-    const timezone = schedule.type === "cron"
-      ? schedule.timezone
-      : input.timezone ?? this.config.timezone;
+    const timezone = schedule.type === "cron" ? schedule.timezone : (input.timezone ?? this.config.timezone);
     const nextRunAt = computeNextRunAt(schedule, now, timezone);
     if (!nextRunAt) {
       throw new Error("Cron schedule does not produce a valid future run time.");
@@ -304,7 +299,7 @@ export class CronRuntime {
 
   async runTaskNow(input: CronRunNowInput): Promise<CronRunNowResult> {
     const tasks = await this.store.listTasks();
-    const task = tasks.find((t) => t.taskId === input.taskId);
+    const task = tasks.find(t => t.taskId === input.taskId);
     if (!task) return { started: false, reason: "not_found" };
     if (task.status === "running") return { started: false, reason: "already_running", taskId: task.taskId };
 
@@ -406,9 +401,7 @@ export class CronRuntime {
   private async releaseTaskSessionById(taskId: string): Promise<void> {
     const sessionKey = buildCronSessionKey(taskId);
     this.sessionOverrides.delete(sessionKey);
-    await this.gateway
-      ?.closeSession({ sessionKey, reason: "cron/task-removed" })
-      .catch(() => undefined);
+    await this.gateway?.closeSession({ sessionKey, reason: "cron/task-removed" }).catch(() => undefined);
   }
 
   private async recoverInterruptedRuns(): Promise<void> {
@@ -416,8 +409,8 @@ export class CronRuntime {
     const tasks = await this.store.listTasks();
     const terminalRunIds = new Set(
       (await this.store.listRuns(Number.MAX_SAFE_INTEGER))
-        .filter((run) => run.finishedAt && run.outcome)
-        .map((run) => run.runId),
+        .filter(run => run.finishedAt && run.outcome)
+        .map(run => run.runId),
     );
     let recoveredCount = 0;
 
@@ -425,9 +418,7 @@ export class CronRuntime {
       if (task.status !== "running") continue;
       recoveredCount += 1;
       if (task.lastRunId && !terminalRunIds.has(task.lastRunId)) {
-        const startedAt = Number.isNaN(new Date(task.updatedAt).getTime())
-          ? now.toISOString()
-          : task.updatedAt;
+        const startedAt = Number.isNaN(new Date(task.updatedAt).getTime()) ? now.toISOString() : task.updatedAt;
         await this.store.appendRun({
           schemaVersion: 1,
           runId: task.lastRunId,
@@ -450,11 +441,7 @@ export class CronRuntime {
         continue;
       }
 
-      const timezone = resolveCronTimezone(
-        task.schedule.timezone,
-        task.timezone,
-        this.config.timezone,
-      );
+      const timezone = resolveCronTimezone(task.schedule.timezone, task.timezone, this.config.timezone);
       const schedule = { ...task.schedule, timezone };
       await this.store.putTask({
         ...task,
@@ -492,11 +479,7 @@ function normalizeSchedule(input: CronCreateInput, configTimezone: string, now: 
   if (requestedTimezone && !isValidCronTimezone(requestedTimezone)) {
     throw new Error(`Invalid Cron timezone: ${requestedTimezone}`);
   }
-  const timezone = resolveCronTimezone(
-    requestedTimezone,
-    undefined,
-    configTimezone,
-  );
+  const timezone = resolveCronTimezone(requestedTimezone, undefined, configTimezone);
   return {
     type: "cron",
     expression: input.schedule.expression,

@@ -11,13 +11,7 @@ export type GatewayStatus = {
     hasCredentials: boolean;
     accountId: string | null;
     runtime?: {
-      state:
-        | "starting"
-        | "connected"
-        | "waiting_for_login"
-        | "expired"
-        | "failed"
-        | "stopped";
+      state: "starting" | "connected" | "waiting_for_login" | "expired" | "failed" | "stopped";
       message?: string;
       accountId?: string;
       error?: string;

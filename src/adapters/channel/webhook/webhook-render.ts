@@ -1,8 +1,5 @@
 import type { GatewayEvent } from "../../../gateway/index.js";
-import {
-  isVisibleFailureStatusDetail,
-  visibleStatusMessage,
-} from "../../../status/agentStatus.js";
+import { isVisibleFailureStatusDetail, visibleStatusMessage } from "../../../status/agentStatus.js";
 
 const VISIBLE_FAILURE_STATUS_EVENTS = new Set([
   "model_empty_response_exhausted",
@@ -47,6 +44,8 @@ export function renderWebhookEvent(event: GatewayEvent): string | undefined {
 }
 
 function isVisibleFailureAgentStatus(event: GatewayEvent & { type: "agent_status" }): boolean {
-  return event.detail?.visible !== false
-    && (VISIBLE_FAILURE_STATUS_EVENTS.has(event.event) || isVisibleFailureStatusDetail(event.detail));
+  return (
+    event.detail?.visible !== false &&
+    (VISIBLE_FAILURE_STATUS_EVENTS.has(event.event) || isVisibleFailureStatusDetail(event.detail))
+  );
 }

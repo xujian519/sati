@@ -3,21 +3,22 @@ import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "../../../../../shared/view/ui";
 import { isImeEnterEvent } from "../../../../../utils/ime";
-import { buildModelRefOptions, ensureModelRefConfigured, ensureModelRefsConfigured } from "../../agentModel/utils/modelRefs";
+import {
+  buildModelRefOptions,
+  ensureModelRefConfigured,
+  ensureModelRefsConfigured,
+} from "../../agentModel/utils/modelRefs";
 import { patch } from "../../modelPool/utils/patch";
-import type { PilotDeckConfig } from "../../modelPool/types";
+import type { SatiConfig } from "../../modelPool/types";
 import { SettingsCard } from "../../../shared/view";
 import ModelRefInput from "./ModelRefInput";
 
 type RouterFallbackEditorProps = {
-  config: PilotDeckConfig;
-  onChange: (next: PilotDeckConfig) => void;
+  config: SatiConfig;
+  onChange: (next: SatiConfig) => void;
 };
 
-export default function RouterFallbackEditor({
-  config,
-  onChange,
-}: RouterFallbackEditorProps) {
+export default function RouterFallbackEditor({ config, onChange }: RouterFallbackEditorProps) {
   const { t } = useTranslation("settings");
   const fallback = config.router?.fallback ?? {};
   const entries = Object.entries(fallback);
@@ -25,13 +26,7 @@ export default function RouterFallbackEditor({
   const [newKey, setNewKey] = useState("");
 
   const setChain = (scenario: string, chain: string[]) =>
-    onChange(
-      patch(
-        ensureModelRefsConfigured(config, chain),
-        ["router", "fallback", scenario],
-        chain,
-      ),
-    );
+    onChange(patch(ensureModelRefsConfigured(config, chain), ["router", "fallback", scenario], chain));
 
   const removeChain = (scenario: string) => {
     const next = { ...fallback };
@@ -43,45 +38,30 @@ export default function RouterFallbackEditor({
     const key = newKey.trim();
     if (!key || fallback[key]) return;
     const value = modelOpts[0]?.value ?? "";
-    onChange(
-      patch(
-        ensureModelRefConfigured(config, value),
-        ["router", "fallback", key],
-        [value],
-      ),
-    );
+    onChange(patch(ensureModelRefConfigured(config, value), ["router", "fallback", key], [value]));
     setNewKey("");
   };
 
   return (
     <SettingsCard className="space-y-3 p-4">
       <div>
-        <div className="text-sm font-semibold text-foreground">
-          {t("pilotDeckConfig.panels.router.fallback.title")}
-        </div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          {t("pilotDeckConfig.panels.router.fallback.description")}
-        </div>
+        <div className="text-sm font-semibold text-foreground">{t("satiConfig.panels.router.fallback.title")}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">{t("satiConfig.panels.router.fallback.description")}</div>
       </div>
       {entries.length === 0 && (
         <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-          {t("pilotDeckConfig.panels.router.fallback.empty")}
+          {t("satiConfig.panels.router.fallback.empty")}
         </div>
       )}
       {entries.map(([scenario, chain]) => (
-        <div
-          key={scenario}
-          className="space-y-2 rounded-lg border border-border bg-background/50 p-3"
-        >
+        <div key={scenario} className="space-y-2 rounded-lg border border-border bg-background/50 p-3">
           <div className="flex items-center gap-2">
-            <code className="flex-1 truncate rounded bg-muted px-2 py-1 text-xs text-foreground">
-              {scenario}
-            </code>
+            <code className="flex-1 truncate rounded bg-muted px-2 py-1 text-xs text-foreground">{scenario}</code>
             <button
               type="button"
               onClick={() => removeChain(scenario)}
               className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              title={t("pilotDeckConfig.actions.remove")}
+              title={t("satiConfig.actions.remove")}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -96,7 +76,7 @@ export default function RouterFallbackEditor({
                   <ModelRefInput
                     value={model}
                     options={modelOpts}
-                    onChange={(v) => {
+                    onChange={v => {
                       const next = [...chain];
                       next[idx] = v;
                       setChain(scenario, next);
@@ -105,9 +85,14 @@ export default function RouterFallbackEditor({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setChain(scenario, chain.filter((_, i) => i !== idx))}
+                  onClick={() =>
+                    setChain(
+                      scenario,
+                      chain.filter((_, i) => i !== idx),
+                    )
+                  }
                   className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  title={t("pilotDeckConfig.actions.removeModel")}
+                  title={t("satiConfig.actions.removeModel")}
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -119,7 +104,7 @@ export default function RouterFallbackEditor({
               className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
             >
               <Plus className="h-3 w-3" />
-              {t("pilotDeckConfig.panels.router.fallback.addModel")}
+              {t("satiConfig.panels.router.fallback.addModel")}
             </button>
           </div>
         </div>
@@ -128,22 +113,16 @@ export default function RouterFallbackEditor({
         <div className="flex items-center gap-2">
           <input
             value={newKey}
-            onChange={(e) => setNewKey(e.target.value)}
+            onChange={e => setNewKey(e.target.value)}
             placeholder="scenario name (e.g. default)"
             className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => {
+            onKeyDown={e => {
               if (e.key === "Enter" && !isImeEnterEvent(e)) addChain();
             }}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={addChain}
-            disabled={!newKey.trim()}
-          >
+          <Button variant="outline" size="sm" className="shrink-0" onClick={addChain} disabled={!newKey.trim()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
-            {t("pilotDeckConfig.panels.router.fallback.add")}
+            {t("satiConfig.panels.router.fallback.add")}
           </Button>
         </div>
       </div>

@@ -3,10 +3,10 @@
  * Converts NormalizedMessage[] from the session store into ChatMessage[] for the UI.
  */
 
-import type { NormalizedMessage } from '../../../stores/useSessionStore';
-import type { ChatMessage, SubagentChildTool } from '../types/types';
-import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from '../utils/chatFormatting';
-import { parseUserAttachmentNote } from '../utils/attachmentNotes';
+import type { NormalizedMessage } from "../../../stores/useSessionStore";
+import type { ChatMessage, SubagentChildTool } from "../types/types";
+import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from "../utils/chatFormatting";
+import { parseUserAttachmentNote } from "../utils/attachmentNotes";
 
 // Per-message conversion cache keyed by NormalizedMessage reference.
 // When patchMergedStreamingMessage creates a new object for the streaming
@@ -26,21 +26,21 @@ function normalizeAssistantText(content: string): string {
 }
 
 function isEmptyAssistantTextMessage(msg: NormalizedMessage): boolean {
-  if (msg.kind !== 'text' || msg.role !== 'assistant') {
+  if (msg.kind !== "text" || msg.role !== "assistant") {
     return false;
   }
-  return normalizeAssistantText(msg.content || '').trim().length === 0;
+  return normalizeAssistantText(msg.content || "").trim().length === 0;
 }
 
 function isNonRenderableTransportMessage(msg: NormalizedMessage): boolean {
   return (
-    msg.kind === 'tool_result' ||
-    msg.kind === 'stream_end' ||
-    msg.kind === 'complete' ||
-    msg.kind === 'status' ||
-    msg.kind === 'permission_request' ||
-    msg.kind === 'permission_cancelled' ||
-    msg.kind === 'session_created'
+    msg.kind === "tool_result" ||
+    msg.kind === "stream_end" ||
+    msg.kind === "complete" ||
+    msg.kind === "status" ||
+    msg.kind === "permission_request" ||
+    msg.kind === "permission_cancelled" ||
+    msg.kind === "session_created"
   );
 }
 
@@ -59,10 +59,7 @@ function findNeighborRenderableMessage(
   return null;
 }
 
-function shouldPreserveEmptyAssistantShell(
-  messages: NormalizedMessage[],
-  index: number,
-): boolean {
+function shouldPreserveEmptyAssistantShell(messages: NormalizedMessage[], index: number): boolean {
   const msg = messages[index];
   if (!msg || !isEmptyAssistantTextMessage(msg)) {
     return false;
@@ -70,7 +67,7 @@ function shouldPreserveEmptyAssistantShell(
 
   const previous = findNeighborRenderableMessage(messages, index, -1);
   const next = findNeighborRenderableMessage(messages, index, 1);
-  return previous?.kind === 'tool_use' || next?.kind === 'tool_use';
+  return previous?.kind === "tool_use" || next?.kind === "tool_use";
 }
 
 function convertSingleMessage(
@@ -80,36 +77,34 @@ function convertSingleMessage(
   options: ConvertSingleMessageOptions = {},
 ): ChatMessage | null {
   switch (msg.kind) {
-    case 'text': {
-      const parsedUserContent = msg.role === 'user'
-        ? parseUserAttachmentNote(msg.content || '')
-        : { content: msg.content || '', attachments: [] };
+    case "text": {
+      const parsedUserContent =
+        msg.role === "user"
+          ? parseUserAttachmentNote(msg.content || "")
+          : { content: msg.content || "", attachments: [] };
       const content = parsedUserContent.content;
       const storedAttachments = Array.isArray(msg.attachments)
-        ? msg.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
+        ? msg.attachments.filter(attachment => attachment && typeof attachment.name === "string")
         : undefined;
-      const userAttachments = [
-        ...(storedAttachments || []),
-        ...parsedUserContent.attachments,
-      ];
+      const userAttachments = [...(storedAttachments || []), ...parsedUserContent.attachments];
 
-      if (msg.role === 'user') {
+      if (msg.role === "user") {
         const userImages = Array.isArray(msg.images)
-          ? msg.images
-              .filter((d) => typeof d === 'string' && d.length > 0)
-              .map((d) => ({ data: d, name: '' }))
+          ? msg.images.filter(d => typeof d === "string" && d.length > 0).map(d => ({ data: d, name: "" }))
           : undefined;
         if (!content.trim() && userAttachments.length === 0 && (!userImages || userImages.length === 0)) return null;
         return {
           id: msg.id,
           entryId: msg.entryId,
-          type: 'user',
+          type: "user",
           content: unescapeWithMathProtection(decodeHtmlEntities(content)),
           timestamp: msg.timestamp,
-          ...(msg.forkUnsupportedContent ? {
-            forkUnsupportedContent: true,
-            forkUnsupportedReason: msg.forkUnsupportedReason,
-          } : {}),
+          ...(msg.forkUnsupportedContent
+            ? {
+                forkUnsupportedContent: true,
+                forkUnsupportedReason: msg.forkUnsupportedReason,
+              }
+            : {}),
           ...(userImages && userImages.length > 0 ? { images: userImages } : {}),
           ...(userAttachments.length > 0 ? { attachments: userAttachments } : {}),
         };
@@ -119,30 +114,30 @@ function convertSingleMessage(
         return {
           id: msg.id,
           entryId: msg.entryId,
-          type: 'assistant',
+          type: "assistant",
           content: text,
           timestamp: msg.timestamp,
         };
       }
     }
 
-    case 'file_artifacts':
+    case "file_artifacts":
       if (Array.isArray(msg.artifacts) && msg.artifacts.length > 0) {
         return {
           id: msg.id,
           entryId: msg.entryId,
-          type: 'assistant',
-          content: '',
+          type: "assistant",
+          content: "",
           artifacts: msg.artifacts,
           timestamp: msg.timestamp,
         };
       }
       return null;
 
-    case 'tool_use': {
+    case "tool_use": {
       const tr = msg.toolResult || (msg.toolId ? toolResultMap.get(msg.toolId) : null);
-      const normalizedToolName = String(msg.toolName || '').toLowerCase();
-      const isSubagentContainer = normalizedToolName === 'task' || normalizedToolName === 'agent';
+      const normalizedToolName = String(msg.toolName || "").toLowerCase();
+      const isSubagentContainer = normalizedToolName === "task" || normalizedToolName === "agent";
 
       const childTools: SubagentChildTool[] = [];
       if (isSubagentContainer && msg.subagentTools && Array.isArray(msg.subagentTools)) {
@@ -157,44 +152,45 @@ function convertSingleMessage(
         }
       }
 
-      const toolResultImages = tr && Array.isArray((tr as any).toolResultImages)
-        ? ((tr as any).toolResultImages as Array<{ data?: unknown; mimeType?: unknown; name?: unknown }>)
-            .filter((image) => image && typeof image.data === 'string' && image.data.length > 0)
-            .map((image) => ({
-              data: image.data as string,
-              name: typeof image.name === 'string' ? image.name : '',
-              ...(typeof image.mimeType === 'string' ? { mimeType: image.mimeType } : {}),
-            }))
-        : undefined;
+      const toolResultImages =
+        tr && Array.isArray((tr as any).toolResultImages)
+          ? ((tr as any).toolResultImages as Array<{ data?: unknown; mimeType?: unknown; name?: unknown }>)
+              .filter(image => image && typeof image.data === "string" && image.data.length > 0)
+              .map(image => ({
+                data: image.data as string,
+                name: typeof image.name === "string" ? image.name : "",
+                ...(typeof image.mimeType === "string" ? { mimeType: image.mimeType } : {}),
+              }))
+          : undefined;
       const toolResult = tr
         ? {
-            content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+            content: typeof tr.content === "string" ? tr.content : JSON.stringify(tr.content),
             isError: Boolean(tr.isError),
             toolUseResult: (tr as any).toolUseResult,
             errorCode: (tr as any).errorCode,
             resultPath: (tr as any).resultPath,
             ...(toolResultImages && toolResultImages.length > 0 ? { images: toolResultImages } : {}),
-            ...((tr as any).planFilePath ? {
-                planFilePath: (tr as any).planFilePath,
-                planTitle: (tr as any).planTitle,
-                planSummary: (tr as any).planSummary,
-            } : {}),
+            ...((tr as any).planFilePath
+              ? {
+                  planFilePath: (tr as any).planFilePath,
+                  planTitle: (tr as any).planTitle,
+                  planSummary: (tr as any).planSummary,
+                }
+              : {}),
           }
         : null;
 
-      const subagentLink = isSubagentContainer && msg.toolId
-        ? subagentLinks?.get(msg.toolId)
-        : undefined;
-      const msgSubagentId = (msg as Record<string, unknown>).subagentId as string | undefined;
+      const subagentLink = isSubagentContainer && msg.toolId ? subagentLinks?.get(msg.toolId) : undefined;
+      const msgSubagentId = msg.subagentId;
 
       return {
         id: msg.id,
-        type: 'assistant',
-        content: '',
+        type: "assistant",
+        content: "",
         timestamp: msg.timestamp,
         isToolUse: true,
         toolName: msg.toolName,
-        toolInput: typeof msg.toolInput === 'string' ? msg.toolInput : JSON.stringify(msg.toolInput ?? '', null, 2),
+        toolInput: typeof msg.toolInput === "string" ? msg.toolInput : JSON.stringify(msg.toolInput ?? "", null, 2),
         toolId: msg.toolId,
         toolResult,
         isSubagentContainer,
@@ -210,66 +206,66 @@ function convertSingleMessage(
       };
     }
 
-    case 'thinking':
+    case "thinking":
       if (msg.content?.trim()) {
         return {
           id: msg.id,
-          type: 'assistant',
+          type: "assistant",
           content: unescapeWithMathProtection(msg.content),
           timestamp: msg.timestamp,
           isThinking: true,
-          isStreaming: msg.id.startsWith('__streaming_thinking_'),
+          isStreaming: msg.id.startsWith("__streaming_thinking_"),
         };
       }
       return null;
 
-    case 'error':
+    case "error":
       return {
         id: msg.id,
-        type: 'error',
-        content: msg.content || 'Unknown error',
+        type: "error",
+        content: msg.content || "Unknown error",
         timestamp: msg.timestamp,
         ...(msg.userHint ? { userHint: msg.userHint } : {}),
         ...(msg.contentI18n ? { contentI18n: msg.contentI18n } : {}),
         ...(msg.userHintI18n ? { userHintI18n: msg.userHintI18n } : {}),
       };
 
-    case 'interactive_prompt':
+    case "interactive_prompt":
       return {
         id: msg.id,
-        type: 'assistant',
-        content: msg.content || '',
+        type: "assistant",
+        content: msg.content || "",
         timestamp: msg.timestamp,
         isInteractivePrompt: true,
       };
 
-    case 'task_notification':
+    case "task_notification":
       return {
         id: msg.id,
-        type: 'assistant',
-        content: msg.summary || 'Background task update',
+        type: "assistant",
+        content: msg.summary || "Background task update",
         timestamp: msg.timestamp,
         isTaskNotification: true,
-        taskStatus: msg.status || 'completed',
-        taskId: msg.taskId || '',
-        outputFile: msg.outputFile || '',
-        taskResult: msg.taskResult || '',
+        taskStatus: msg.status || "completed",
+        taskId: msg.taskId || "",
+        outputFile: msg.outputFile || "",
+        taskResult: msg.taskResult || "",
       };
 
-    case 'interrupted':
+    case "interrupted":
       return {
         id: msg.id,
-        type: 'system',
-        content: msg.content || '[Request interrupted by user]',
+        type: "system",
+        content: msg.content || "[Request interrupted by user]",
         timestamp: msg.timestamp,
         isInterruptedNotice: true,
       };
 
-    case 'compact_boundary':
+    case "compact_boundary":
       return {
         id: msg.id,
-        type: 'system',
-        content: 'Context compacted',
+        type: "system",
+        content: "Context compacted",
         timestamp: msg.timestamp,
         isCompactBoundary: true,
         compactTrigger: msg.trigger,
@@ -279,11 +275,11 @@ function convertSingleMessage(
         compactStageLabel: msg.compactStageLabel,
       };
 
-    case 'agent_activity':
+    case "agent_activity":
       return {
         id: msg.id,
-        type: 'system',
-        content: msg.title || '',
+        type: "system",
+        content: msg.title || "",
         timestamp: msg.timestamp,
         isAgentActivity: true,
         runId: msg.runId,
@@ -300,11 +296,11 @@ function convertSingleMessage(
         severity: msg.severity,
       };
 
-    case 'agent_activity_summary':
+    case "agent_activity_summary":
       return {
         id: msg.id,
-        type: 'system',
-        content: msg.title || 'Process summary',
+        type: "system",
+        content: msg.title || "Process summary",
         timestamp: msg.timestamp,
         isAgentActivitySummary: true,
         runId: msg.runId,
@@ -325,11 +321,11 @@ function convertSingleMessage(
         keySteps: msg.keySteps,
       };
 
-    case 'stream_delta':
+    case "stream_delta":
       if (msg.content) {
         return {
           id: msg.id,
-          type: 'assistant',
+          type: "assistant",
           content: msg.content,
           timestamp: msg.timestamp,
           isStreaming: true,
@@ -337,13 +333,13 @@ function convertSingleMessage(
       }
       return null;
 
-    case 'stream_end':
-    case 'complete':
-    case 'status':
-    case 'permission_request':
-    case 'permission_cancelled':
-    case 'session_created':
-    case 'tool_result':
+    case "stream_end":
+    case "complete":
+    case "status":
+    case "permission_request":
+    case "permission_cancelled":
+    case "session_created":
+    case "tool_result":
       return null;
 
     default:
@@ -361,7 +357,7 @@ function convertNormalizedMessages(
   // cross-turn reuse of the same toolId (call_0, call_1, …) pairs correctly.
   const toolResultQueues = new Map<string, NormalizedMessage[]>();
   for (const msg of messages) {
-    if (msg.kind === 'tool_result' && msg.toolId) {
+    if (msg.kind === "tool_result" && msg.toolId) {
       const queue = toolResultQueues.get(msg.toolId);
       if (queue) queue.push(msg);
       else toolResultQueues.set(msg.toolId, [msg]);
@@ -372,7 +368,7 @@ function convertNormalizedMessages(
   for (let index = 0; index < messages.length; index += 1) {
     const msg = messages[index];
     // tool_use messages depend on toolResultMap + subagentLinks (external state) so skip cache
-    if (msg.kind === 'tool_use') {
+    if (msg.kind === "tool_use") {
       if (msg.toolId && !msg.toolResult) {
         const queue = toolResultQueues.get(msg.toolId);
         const next = queue?.shift();
@@ -411,17 +407,17 @@ function convertNormalizedMessages(
     let anchorIndex = -1;
     for (let index = grouped.length - 1; index >= 0; index -= 1) {
       const candidate = grouped[index];
-      if (candidate.type === 'user') break;
+      if (candidate.type === "user") break;
       if (
-        candidate.type === 'assistant'
-        && !candidate.isToolUse
-        && !candidate.isThinking
-        && !candidate.isAgentActivity
-        && !candidate.isAgentActivitySummary
-        && !candidate.isSubagentContainer
-        && !candidate.isTaskNotification
-        && typeof candidate.content === 'string'
-        && candidate.content.trim().length > 0
+        candidate.type === "assistant" &&
+        !candidate.isToolUse &&
+        !candidate.isThinking &&
+        !candidate.isAgentActivity &&
+        !candidate.isAgentActivitySummary &&
+        !candidate.isSubagentContainer &&
+        !candidate.isTaskNotification &&
+        typeof candidate.content === "string" &&
+        candidate.content.trim().length > 0
       ) {
         anchorIndex = index;
         break;

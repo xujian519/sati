@@ -2,8 +2,8 @@
 const OPENABLE_FILE_EXTENSION = /\.[a-z0-9]{1,10}$/i;
 
 const looksLikeProjectFilePath = (path: string): boolean => {
-  const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
-  if (!normalized || normalized.includes('..')) return false;
+  const normalized = path.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized || normalized.includes("..")) return false;
   return OPENABLE_FILE_EXTENSION.test(normalized);
 };
 
@@ -16,26 +16,26 @@ const decodePath = (value: string): string => {
 };
 
 const resolveRelativeToFile = (href: string, baseFilePath: string): string => {
-  const baseDir = baseFilePath.replace(/\\/g, '/').split('/').slice(0, -1);
-  const parts = href.replace(/\\/g, '/').split('/');
+  const baseDir = baseFilePath.replace(/\\/g, "/").split("/").slice(0, -1);
+  const parts = href.replace(/\\/g, "/").split("/");
   const resolved = [...baseDir];
   for (const part of parts) {
-    if (!part || part === '.') continue;
-    if (part === '..') {
+    if (!part || part === ".") continue;
+    if (part === "..") {
       resolved.pop();
       continue;
     }
     resolved.push(part);
   }
-  return resolved.join('/');
+  return resolved.join("/");
 };
 
 const resolveProjectPathFromPathname = (pathname: string): string | null => {
-  const normalizedPathname = pathname.replace(/\\/g, '/');
+  const normalizedPathname = pathname.replace(/\\/g, "/");
 
   // Assistant sometimes emits /session/<filename.md> even though /session is
   // reserved for conversation ids.
-  const sessionPrefix = '/session/';
+  const sessionPrefix = "/session/";
   if (normalizedPathname.startsWith(sessionPrefix)) {
     const filePath = normalizedPathname.slice(sessionPrefix.length);
     if (looksLikeProjectFilePath(filePath)) return filePath;
@@ -48,7 +48,7 @@ const resolveProjectPathFromPathname = (pathname: string): string | null => {
     if (looksLikeProjectFilePath(filePath)) return filePath;
   }
 
-  const rootRelativePath = normalizedPathname.replace(/^\/+/, '');
+  const rootRelativePath = normalizedPathname.replace(/^\/+/, "");
   return looksLikeProjectFilePath(rootRelativePath) ? rootRelativePath : null;
 };
 
@@ -65,7 +65,7 @@ export function resolveMarkdownFileHref(
   if (!href) return null;
 
   const trimmed = href.trim();
-  if (!trimmed || trimmed.startsWith('#')) return null;
+  if (!trimmed || trimmed.startsWith("#")) return null;
 
   const hasProtocol = /^([a-z][a-z0-9+.-]*:|\/\/)/i.test(trimmed);
 
@@ -78,23 +78,23 @@ export function resolveMarkdownFileHref(
     }
   }
 
-  if (trimmed.startsWith('/')) {
+  if (trimmed.startsWith("/")) {
     return resolveProjectPathFromPathname(decodePath(trimmed));
   }
 
   // Relative paths (no protocol).
   if (!hasProtocol) {
     const decoded = decodePath(trimmed);
-    const normalized = decoded.replace(/^\.\//, '').replace(/^\/+/, '');
-    const candidate = options?.baseFilePath && !decoded.startsWith('/')
-      ? resolveRelativeToFile(normalized, options.baseFilePath)
-      : normalized;
+    const normalized = decoded.replace(/^\.\//, "").replace(/^\/+/, "");
+    const candidate =
+      options?.baseFilePath && !decoded.startsWith("/")
+        ? resolveRelativeToFile(normalized, options.baseFilePath)
+        : normalized;
     return looksLikeProjectFilePath(candidate) ? candidate : null;
   }
 
   try {
-    const origin =
-      options?.origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
+    const origin = options?.origin ?? (typeof window !== "undefined" ? window.location.origin : "");
     const url = new URL(trimmed, origin || undefined);
     if (origin && url.origin !== origin) return null;
 

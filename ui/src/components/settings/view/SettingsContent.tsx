@@ -102,24 +102,14 @@ export default function SettingsContent({
         ) : selectedKey === "advanced" ? (
           <AdvancedSections title={title} />
         ) : selectedKey === "about" ? (
-          <AboutSections
-            title={title}
-            versionInfo={versionInfo}
-            checkingVersion={checkingVersion}
-          />
+          <AboutSections title={title} versionInfo={versionInfo} checkingVersion={checkingVersion} />
         ) : (
           <>
-            <h2 className="text-2xl font-semibold text-foreground">
-              {title}
-            </h2>
+            <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
             <div className="mt-6 flex min-h-[360px] flex-1 items-center justify-center rounded-xl border border-dashed border-border bg-muted/20">
               <div className="text-center">
-                <p className="text-sm font-medium text-foreground">
-                  {t("settingsPage.contentComingSoon.title")}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("settingsPage.contentComingSoon.description")}
-                </p>
+                <p className="text-sm font-medium text-foreground">{t("settingsPage.contentComingSoon.title")}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t("settingsPage.contentComingSoon.description")}</p>
               </div>
             </div>
           </>

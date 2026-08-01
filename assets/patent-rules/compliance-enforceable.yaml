@@ -1,0 +1,125 @@
+# 合规可执行规则 — ConstitutionalEngine 兼容格式
+# 从 compliance-rules.yaml 提取的可自动执行的检查规则
+# 版本: 1.0.0
+
+rules:
+
+  # ===========================================================================
+  # 生成内容审查 (源自 CON-COMP-01xx)
+  # ===========================================================================
+
+  - id: CON-COMP-0101
+    name: "禁止编造占位专利号"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_general
+    version: "1.0"
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan:
+        - "CNXXXXXX"
+        - "CNxxxxxx"
+        - "(20XX)"
+        - "(20xx)"
+        - "USXXXXXXX"
+        - "WO20XX/"
+      message: "禁止使用占位专利号，引用的专利号必须为真实可验证的编号"
+
+  - id: CON-COMP-0102
+    name: "专利号格式校验"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    version: "1.0"
+    check:
+      type: regex_pattern
+      requireAny:
+        - "CN\\d{6,}([ABUYSC])?\\d*"
+        - "US\\d{7,11}[AB1]"
+        - "WO\\d{4}/\\d{6}"
+        - "EP\\d{7}[AB]"
+        - "JP\\d{4}-\\d+"
+        - "KR\\d{10,}"
+      message: "引用的专利号格式不规范，应使用标准格式（如 CN103456789A）"
+
+  - id: CON-COMP-0103
+    name: "法律条款精确引用"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    version: "1.0"
+    check:
+      type: regex_pattern
+      requireAny:
+        - "专利法第[一二三四五六七八九十百零\\d]+条第[一二三四五六七八九十百零\\d]+款"
+        - "专利法第[一二三四五六七八九十百零\\d]+条"
+        - "专利法实施细则第[一二三四五六七八九十百零\\d]+条"
+      antiPatterns:
+        - "根据相关法律"
+        - "根据法律规定"
+        - "相关法规规定"
+      message: "法律条款引用应精确到条、款（如「专利法第22条第3款」），禁止使用模糊表述"
+
+  - id: CON-COMP-0104
+    name: "禁止编造审查指南内容"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_general
+    version: "1.0"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "审查指南"
+      antiPatterns:
+        - "审查指南第[一二三四]部分"
+        - "审查指南第二部分第四章"
+        - "审查指南第二部分第二章"
+        - "审查指南第二部分第三章"
+        - "审查指南第二部分第八章"
+      message: "引用审查指南时必须指明具体章节（如「审查指南第二部分第四章」），不得笼统引用"
+
+  - id: CON-COMP-0105
+    name: "禁止商业宣传用语"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    version: "1.0"
+    legal_basis: "审查指南第二部分第二章2.2.6"
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan:
+        - "世界领先"
+        - "行业首创"
+        - "独一无二"
+        - "前所未有"
+        - "最先进"
+        - "革命性"
+        - "颠覆性"
+        - "突破性"
+      message: "专利文件中禁止使用商业宣传用语（如「世界领先」「行业首创」等）"
+
+  - id: CON-COMP-0106
+    name: "分析结论必须引用法律依据"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    version: "1.0"
+    check:
+      type: category_detection
+      categories:
+        - name: conclusion
+          keywords: ["结论", "综上", "因此", "判断", "认定"]
+        - name: law_basis
+          keywords: ["根据", "依据", "按照", "遵照", "条规定", "款规定"]
+        - name: fact_basis
+          keywords: ["对比文件", "说明书", "实施例", "证据", "公开"]
+      minCategories: 2
+      message: "分析结论应同时包含结论陈述和法律/事实依据"

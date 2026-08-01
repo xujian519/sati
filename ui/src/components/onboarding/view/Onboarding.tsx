@@ -1,25 +1,25 @@
-import { useState } from 'react';
-import { authenticatedFetch } from '../../../utils/api';
-import LlmConfigurationStep from './subcomponents/LlmConfigurationStep';
+import { useState } from "react";
+import { authenticatedFetch } from "../../../utils/api";
+import LlmConfigurationStep from "./subcomponents/LlmConfigurationStep";
 
 type OnboardingProps = {
   onComplete?: () => void | Promise<void>;
 };
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleSaved = async () => {
-    setErrorMessage('');
+    setErrorMessage("");
     try {
-      const response = await authenticatedFetch('/api/user/complete-onboarding', { method: 'POST' });
+      const response = await authenticatedFetch("/api/user/complete-onboarding", { method: "POST" });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to complete onboarding');
+        throw new Error(data.error || "Failed to complete onboarding");
       }
       await onComplete?.();
     } catch (caughtError) {
-      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Failed to complete onboarding');
+      setErrorMessage(caughtError instanceof Error ? caughtError.message : "Failed to complete onboarding");
     }
   };
 

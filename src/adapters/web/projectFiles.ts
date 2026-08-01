@@ -11,14 +11,7 @@
  * binary metadata) is layered on top of these primitives.
  */
 
-import {
-  readdir,
-  readFile,
-  realpath,
-  stat,
-  writeFile,
-  mkdir,
-} from "node:fs/promises";
+import { readdir, readFile, realpath, stat, writeFile, mkdir } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { dirname, isAbsolute, normalize, relative, resolve } from "node:path";
 

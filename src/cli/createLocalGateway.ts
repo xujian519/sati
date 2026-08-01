@@ -3,6 +3,8 @@ import { dirname, resolve, join as joinPath } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
+import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
+import type { PilotConfigDiagnostic } from "../pilot/config/types.js";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
 import {
   createAgentEventBuffer,
@@ -32,6 +34,8 @@ import {
 import { FileHistoryStore } from "../session/filesystem/FileHistoryStore.js";
 import type { AgentSubagentTranscriptHooks } from "../agent/runtime/AgentRuntimeDependencies.js";
 import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
+import { CompositeMemoryResolver, buildKnowledgeResolvers, resolveKnowledgeDbPaths } from "../knowledge/index.js";
+import type { MemoryResolver } from "../context/index.js";
 import {
   listRegisteredRoleIds,
   registerRoleDefinition,
@@ -93,7 +97,6 @@ import type {
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import { SessionRouterStore } from "../router/session/SessionRouterStore.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
-import type { EdgeClawMemoryProvider } from "../context/index.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 import { SkillManager, migrateLegacyBundledSkillCopies } from "../extension/skills/index.js";
 import { createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
@@ -461,7 +464,7 @@ type ProjectRuntime = {
   /** Per-project background task runtime (shared across sessions). C5. */
   backgroundTasks: BackgroundTaskRuntime;
   /** Memory provider, undefined when memory is disabled in PilotConfig. */
-  memory?: EdgeClawMemoryProvider;
+  memory?: MemoryResolver;
   /** Backing memory service for maintenance / introspection. */
   memoryService?: EdgeClawMemoryService;
   /** Coalesced project-level memory maintenance loop. */
@@ -744,6 +747,25 @@ class ProjectRuntimeRegistry {
       tools.register(tool);
     }
 
+    // 语义检索（可选）：embedding 端点配置解析一次，分发给记忆与知识库。
+    const knowledgePaths = resolveKnowledgeDbPaths();
+    const embeddingDiagnostics: PilotConfigDiagnostic[] = [];
+    const embeddingClient = resolveEmbeddingClient(
+      snapshot.config.memory?.embedding,
+      snapshot.config.model,
+      embeddingDiagnostics,
+    );
+    // 重排（可选，阶段 C）：cross-encoder 对召回候选重新打分
+    const rerankClient = resolveRerankClient(
+      snapshot.config.memory?.embedding?.rerank,
+      snapshot.config.model,
+      embeddingDiagnostics,
+    );
+    for (const diagnostic of embeddingDiagnostics) {
+      console.warn(`[sati] ${diagnostic.path}: ${diagnostic.message}`);
+    }
+    const embeddingDir = joinPath(knowledgePaths.dataDir, "embeddings");
+
     const memory = createEdgeClawMemoryProviderFromConfig({
       config: snapshot.config.memory,
       modelConfig: snapshot.config.model,
@@ -751,7 +773,29 @@ class ProjectRuntimeRegistry {
       projectRoot,
       now: this.options.now,
       telemetry: this.options.telemetry,
+      embeddingClient,
+      embeddingDir,
     });
+
+    // 知识库 MemoryResolver 组装：EdgeClaw 会话记忆 + 专利知识库 + 法律知识库。
+    // 数据库文件缺失/打开失败时自动降级（见 src/knowledge/assemble.ts）。
+    const knowledgeResolvers: Array<MemoryResolver> = [];
+    if (memory?.provider) knowledgeResolvers.push(memory.provider);
+    knowledgeResolvers.push(
+      ...buildKnowledgeResolvers({
+        patentKgDb: knowledgePaths.patentKgDb,
+        lawDb: knowledgePaths.lawDb,
+        wikiDir: knowledgePaths.wikiDir,
+        vectorsDb: knowledgePaths.vectorsDb,
+        embeddingDir,
+        embedding: embeddingClient,
+        rerank: rerankClient,
+        indexWiki: snapshot.config.memory?.embedding?.indexWiki !== false,
+        logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
+      }),
+    );
+    const memoryResolver =
+      knowledgeResolvers.length === 1 ? knowledgeResolvers[0] : new CompositeMemoryResolver(knowledgeResolvers);
 
     const runtime: ProjectRuntime = {
       projectRoot,
@@ -762,7 +806,7 @@ class ProjectRuntimeRegistry {
       pluginRuntime,
       tools,
       backgroundTasks,
-      memory: memory?.provider,
+      memory: memoryResolver,
       memoryService: memory?.service,
       projectStorage: {
         projectRoot,

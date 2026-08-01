@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import { buildModelRequest, parseModelConfig } from "../../src/model/index.js";
 import type { CanonicalModelRequest } from "../../src/model/index.js";
 
@@ -40,9 +39,7 @@ test("Ollama provider builds OpenAI-compatible chat completions body", () => {
     model: "llama3.1:8b",
     stream: true,
     systemPrompt: "You are concise.",
-    messages: [
-      { role: "user", content: [{ type: "text", text: "hello" }] },
-    ],
+    messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
   };
 
   const body = buildModelRequest(request, config) as Record<string, unknown>;

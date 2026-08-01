@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createAgentSession, type AgentSession, type CreateAgentSessionOptions } from "../agent/index.js";
+import { createAgentSession, type CreateAgentSessionOptions } from "../agent/index.js";
 import type { SessionInfo } from "../session/index.js";
 import { listProjectSessions } from "../session/index.js";
 import { InProcessGateway } from "./client/InProcessGateway.js";

@@ -1,6 +1,6 @@
 import { jsonrepair } from "jsonrepair";
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
-import { ModelProviderError, parseRetryAfterFromMessage } from "../../protocol/errors.js";
+import { parseRetryAfterFromMessage } from "../../protocol/errors.js";
 import { normalizeAnthropicFinishReason } from "../../response/normalizeFinishReason.js";
 import { normalizeAnthropicUsage } from "../../response/normalizeUsage.js";
 
@@ -60,9 +60,7 @@ export function normalizeAnthropicStreamEvent(
     case "error": {
       const errObj = asRecord(event.error);
       const errType = readString(errObj.type) ?? "provider_error";
-      const TRANSIENT_ERROR_TYPES = new Set([
-        "overloaded_error", "rate_limit_error", "api_error", "timeout_error",
-      ]);
+      const TRANSIENT_ERROR_TYPES = new Set(["overloaded_error", "rate_limit_error", "api_error", "timeout_error"]);
       const errMessage = readString(errObj.message) ?? "Anthropic stream error.";
       const retryAfterMs = parseRetryAfterFromMessage(errMessage);
       return [
@@ -215,11 +213,7 @@ function contentBlockStopEvents(
  * error code can distinguish truncation (max_output_reached) from a
  * genuine model JSON error (invalid_tool_arguments).
  */
-function flushFailedToolCalls(
-  state: AnthropicStreamState,
-  finishReason: string,
-  raw: unknown,
-): CanonicalModelEvent[] {
+function flushFailedToolCalls(state: AnthropicStreamState, finishReason: string, raw: unknown): CanonicalModelEvent[] {
   if (state.failedToolCalls.length === 0) {
     return [];
   }
@@ -232,12 +226,13 @@ function flushFailedToolCalls(
     : "Anthropic stream tool call arguments are not valid JSON.";
 
   for (const entry of failed) {
-    const preview = entry.rawInput.length > 500
-      ? entry.rawInput.slice(0, 250) + "\n…[truncated]…\n" + entry.rawInput.slice(-250)
-      : entry.rawInput;
+    const preview =
+      entry.rawInput.length > 500
+        ? entry.rawInput.slice(0, 250) + "\n…[truncated]…\n" + entry.rawInput.slice(-250)
+        : entry.rawInput;
     console.error(
-      `[anthropic-stream] ${code} for tool "${entry.name ?? "?"}" (index=${entry.index}, `
-      + `buf_len=${entry.rawInput.length}):\n${preview}`,
+      `[anthropic-stream] ${code} for tool "${entry.name ?? "?"}" (index=${entry.index}, ` +
+        `buf_len=${entry.rawInput.length}):\n${preview}`,
     );
   }
 
@@ -264,9 +259,7 @@ function toolCallIdForIndex(index: number | undefined, state: AnthropicStreamSta
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function readString(value: unknown): string | undefined {

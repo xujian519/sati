@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { TextDecoder } from "node:util";
 
-export type PilotDeckCommandOptions = {
+export type SatiCommandOptions = {
   cwd: string;
   env?: NodeJS.ProcessEnv;
   timeoutMs: number;
@@ -12,7 +12,7 @@ export type PilotDeckCommandOptions = {
   onStderr?: (chunk: string) => void;
 };
 
-export type PilotDeckCommandResult = {
+export type SatiCommandResult = {
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -20,16 +20,16 @@ export type PilotDeckCommandResult = {
   durationMs: number;
 };
 
-export type PilotDeckCommandRunner = {
-  run(command: string, options: PilotDeckCommandOptions): Promise<PilotDeckCommandResult>;
+export type SatiCommandRunner = {
+  run(command: string, options: SatiCommandOptions): Promise<SatiCommandResult>;
 };
 
 type SpawnShell = typeof spawn;
 
-export class NodeShellCommandRunner implements PilotDeckCommandRunner {
+export class NodeShellCommandRunner implements SatiCommandRunner {
   constructor(private readonly spawnShell: SpawnShell = spawn) {}
 
-  run(command: string, options: PilotDeckCommandOptions): Promise<PilotDeckCommandResult> {
+  run(command: string, options: SatiCommandOptions): Promise<SatiCommandResult> {
     const startedAt = Date.now();
     return new Promise((resolve, reject) => {
       const isWindows = process.platform === "win32";
@@ -58,11 +58,21 @@ export class NodeShellCommandRunner implements PilotDeckCommandRunner {
             });
             killer.on("error", () => undefined);
             killer.unref();
-          } catch { /* best-effort */ }
+          } catch {
+            /* best-effort */
+          }
         } else {
-          try { process.kill(-pid, "SIGTERM"); } catch { /* already dead */ }
+          try {
+            process.kill(-pid, "SIGTERM");
+          } catch {
+            /* already dead */
+          }
           setTimeout(() => {
-            try { process.kill(-pid, "SIGKILL"); } catch { /* already dead */ }
+            try {
+              process.kill(-pid, "SIGKILL");
+            } catch {
+              /* already dead */
+            }
           }, 3000).unref();
         }
       }
@@ -82,7 +92,7 @@ export class NodeShellCommandRunner implements PilotDeckCommandRunner {
           resolve({
             exitCode: null,
             stdout,
-            stderr: stderr + "\n[PilotDeck] Process did not exit within 15s after termination; force-resolved.",
+            stderr: stderr + "\n[Sati] Process did not exit within 15s after termination; force-resolved.",
             timedOut: true,
             durationMs: Date.now() - startedAt,
           });
@@ -145,7 +155,7 @@ export class NodeShellCommandRunner implements PilotDeckCommandRunner {
           }
         }
       });
-      child.on("error", (error) => {
+      child.on("error", error => {
         stdout += stdoutDecoder.flush();
         stderr += stderrDecoder.flush();
         cleanup();
@@ -161,7 +171,7 @@ export class NodeShellCommandRunner implements PilotDeckCommandRunner {
         }
         reject(error);
       });
-      child.on("exit", (exitCode) => {
+      child.on("exit", exitCode => {
         if (process.platform !== "win32" || settled || closeFallback) {
           return;
         }
@@ -171,7 +181,7 @@ export class NodeShellCommandRunner implements PilotDeckCommandRunner {
         }, 250);
         closeFallback.unref();
       });
-      child.on("close", (exitCode) => {
+      child.on("close", exitCode => {
         finish(exitCode);
       });
     });
@@ -187,7 +197,7 @@ export function createShellOutputDecoder(): ShellOutputDecoder {
   if (process.platform !== "win32") {
     const decoder = new TextDecoder("utf-8");
     return {
-      decode: (chunk) => decoder.decode(chunk, { stream: true }),
+      decode: chunk => decoder.decode(chunk, { stream: true }),
       flush: () => decoder.decode(),
     };
   }
@@ -210,7 +220,7 @@ function createWindowsShellOutputDecoder(): ShellOutputDecoder {
   let gb18030Decoder: TextDecoder | undefined;
 
   return {
-    decode: (chunk) => {
+    decode: chunk => {
       if (mode === "utf8") {
         return utf8Decoder.decode(chunk, { stream: true });
       }
@@ -258,7 +268,7 @@ function createWindowsShellOutputDecoder(): ShellOutputDecoder {
 }
 
 function hasNonAsciiByte(chunk: Buffer): boolean {
-  return chunk.some((byte) => byte >= 0x80);
+  return chunk.some(byte => byte >= 0x80);
 }
 
 function inspectUtf8(chunk: Buffer): "valid" | "incomplete" | "invalid" {
@@ -297,11 +307,7 @@ function inspectUtf8(chunk: Buffer): "valid" | "incomplete" | "invalid" {
       codePoint = (codePoint << 6) | (continuation & 0x3f);
     }
 
-    if (
-      codePoint < minCodePoint ||
-      codePoint > 0x10ffff ||
-      (codePoint >= 0xd800 && codePoint <= 0xdfff)
-    ) {
+    if (codePoint < minCodePoint || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) {
       return "invalid";
     }
 

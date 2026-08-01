@@ -57,9 +57,9 @@ export const PREAPPROVED_ENTRIES: ReadonlyArray<PreapprovedEntry> = [
   { host: "netlify.com", allowSubdomains: false, pathPrefix: "/docs" },
   // Container / orchestration
   { host: "kubernetes.io", allowSubdomains: false },
-  { host: "docs.docker.com", allowSubdomains: false },
   { host: "helm.sh", allowSubdomains: false },
   { host: "istio.io", allowSubdomains: false },
+  { host: "docs.docker.com", allowSubdomains: false },
   // Languages & runtimes
   { host: "nodejs.org", allowSubdomains: true },
   { host: "deno.land", allowSubdomains: false },
@@ -188,8 +188,7 @@ export const PREAPPROVED_ENTRIES: ReadonlyArray<PreapprovedEntry> = [
 export function isPreapprovedHost(hostname: string, pathname: string): boolean {
   const lower = hostname.toLowerCase();
   for (const entry of PREAPPROVED_ENTRIES) {
-    const hostMatch =
-      lower === entry.host || (entry.allowSubdomains && lower.endsWith(`.${entry.host}`));
+    const hostMatch = lower === entry.host || (entry.allowSubdomains && lower.endsWith(`.${entry.host}`));
     if (!hostMatch) continue;
     if (entry.pathPrefix && !pathname.startsWith(entry.pathPrefix)) continue;
     return true;

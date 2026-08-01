@@ -6,7 +6,7 @@ homepage: https://developer.atlassian.com/cloud/trello/rest/
 
 # Trello Skill
 
-Manage Trello boards, lists, and cards directly from OpenClaw.
+Manage Trello boards, lists, and cards directly from Sati.
 
 ## Setup
 
@@ -89,8 +89,6 @@ curl -s "https://api.trello.com/1/members/me/boards?key=$TRELLO_API_KEY&token=$T
 curl -s "https://api.trello.com/1/boards/{boardId}/cards?key=$TRELLO_API_KEY&token=$TRELLO_TOKEN" | jq '.[] | {name, list: .idList}'
 ```
 
-## PilotDeck Migration Note
+## Sati Migration Note
 
-- Source: /var/folders/27/xyyzc_n172l3jjmnxgqmhhzh0000gn/T/tmp.AyWDWGKoS4/openclaw/skills/trello
-- Review status: candidate for PilotDeck native skills pack.
-- Platform-specific OpenClaw/Hermes metadata was removed or should be ignored during review.
+- Review status: candidate for Sati native skills pack.

@@ -19,17 +19,14 @@ import type {
 } from "../../protocol/canonical.js";
 import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js";
 import { messageContent } from "../../protocol/clone.js";
-import { normalizeGoogleModelId } from "./modelId.js";
-import { cleanSchemaForGoogle, normalizeGoogleToolSchema } from "./schema.js";
 import { resolveThinkingPlan, throwIfUnsupportedThinkingPlan } from "../../thinking/registry.js";
 import { formatToolResultReferenceText } from "../toolResultReferenceText.js";
+import { normalizeGoogleModelId } from "./modelId.js";
+import { cleanSchemaForGoogle, normalizeGoogleToolSchema } from "./schema.js";
 
 export type GoogleRequestBody = GenerateContentParameters;
 
-export function buildGoogleRequest(
-  request: CanonicalModelRequest,
-  model: ModelDefinition,
-): GoogleRequestBody {
+export function buildGoogleRequest(request: CanonicalModelRequest, model: ModelDefinition): GoogleRequestBody {
   const tools = request.tools?.map(toGoogleFunctionDeclaration) ?? [];
   const config: GenerateContentConfig = {
     maxOutputTokens: request.maxOutputTokens ?? model.capabilities.maxOutputTokens,
@@ -86,7 +83,11 @@ function toGoogleThinkingConfig(
   request: CanonicalModelRequest,
   model: ModelDefinition,
 ): GenerateContentConfig["thinkingConfig"] {
-  const thinkingPlan = resolveThinkingPlan(request.thinking, { id: "google", protocol: "google", url: "", apiKey: "", headers: {}, models: {} }, model);
+  const thinkingPlan = resolveThinkingPlan(
+    request.thinking,
+    { id: "google", protocol: "google", url: "", apiKey: "", headers: {}, models: {} },
+    model,
+  );
   throwIfUnsupportedThinkingPlan(thinkingPlan, request);
   if (!thinkingPlan.enabled || !model.capabilities.supportsThinking) {
     return undefined;
@@ -100,9 +101,7 @@ function toGoogleThinkingConfig(
   const budget = thinkingPlan.budgetTokens;
   return {
     includeThoughts: true,
-    ...(typeof budget === "number" && Number.isFinite(budget) && budget >= 0
-      ? { thinkingBudget: budget }
-      : {}),
+    ...(typeof budget === "number" && Number.isFinite(budget) && budget >= 0 ? { thinkingBudget: budget } : {}),
   };
 }
 
@@ -144,10 +143,7 @@ function toGoogleContents(messages: CanonicalMessage[]): Content[] {
   return contents;
 }
 
-function googleRoleForBlock(
-  messageRole: CanonicalMessage["role"],
-  block: CanonicalContentBlock,
-): "user" | "model" {
+function googleRoleForBlock(messageRole: CanonicalMessage["role"], block: CanonicalContentBlock): "user" | "model" {
   if (block.type === "tool_result" || block.type === "tool_result_reference") {
     return "user";
   }
@@ -159,47 +155,53 @@ function toGoogleParts(block: CanonicalContentBlock, toolNamesById: Map<string, 
     case "text":
       return block.text.length > 0 ? [{ text: block.text }] : [];
     case "thinking":
-      return [{
-        text: block.text,
-        thought: true,
-        ...(block.signature ? { thoughtSignature: block.signature } : {}),
-      }];
+      return [
+        {
+          text: block.text,
+          thought: true,
+          ...(block.signature ? { thoughtSignature: block.signature } : {}),
+        },
+      ];
     case "image":
     case "pdf":
     case "audio":
       return [toGoogleMediaPart(block)];
     case "tool_call":
-      return [{
-        functionCall: {
-          id: sanitizeGoogleToolCallId(block.id),
-          name: block.name,
-          args: toGoogleArgs(block.input),
+      return [
+        {
+          functionCall: {
+            id: sanitizeGoogleToolCallId(block.id),
+            name: block.name,
+            args: toGoogleArgs(block.input),
+          },
         },
-      }];
+      ];
     case "tool_result":
-      return [toGoogleFunctionResponsePart(
-        sanitizeGoogleToolCallId(block.toolCallId),
-        toolNamesById.get(sanitizeGoogleToolCallId(block.toolCallId)) ?? block.toolCallId,
-        flattenToolResultBlockText(block),
-        block.isError,
-        block.content,
-      )];
+      return [
+        toGoogleFunctionResponsePart(
+          sanitizeGoogleToolCallId(block.toolCallId),
+          toolNamesById.get(sanitizeGoogleToolCallId(block.toolCallId)) ?? block.toolCallId,
+          flattenToolResultBlockText(block),
+          block.isError,
+          block.content,
+        ),
+      ];
     case "tool_result_reference":
-      return [toGoogleFunctionResponsePart(
-        sanitizeGoogleToolCallId(block.toolCallId),
-        toolNamesById.get(sanitizeGoogleToolCallId(block.toolCallId)) ?? block.toolCallId,
-        formatToolResultReferenceText(block),
-        block.isError,
-        [],
-      )];
+      return [
+        toGoogleFunctionResponsePart(
+          sanitizeGoogleToolCallId(block.toolCallId),
+          toolNamesById.get(sanitizeGoogleToolCallId(block.toolCallId)) ?? block.toolCallId,
+          formatToolResultReferenceText(block),
+          block.isError,
+          [],
+        ),
+      ];
     case "media_reference":
       return [{ text: block.preview }];
   }
 }
 
-function toGoogleMediaPart(
-  block: Extract<CanonicalContentBlock, { type: "image" | "pdf" | "audio" }>,
-): Part {
+function toGoogleMediaPart(block: Extract<CanonicalContentBlock, { type: "image" | "pdf" | "audio" }>): Part {
   if (block.source === "url") {
     return { fileData: { fileUri: block.data, mimeType: block.mimeType } };
   }
@@ -213,9 +215,7 @@ function toGoogleFunctionResponsePart(
   isError: boolean | undefined,
   content: CanonicalToolResultContentBlock[],
 ): Part {
-  const response: Record<string, unknown> = isError
-    ? { error: output || "Tool execution failed." }
-    : { output };
+  const response: Record<string, unknown> = isError ? { error: output || "Tool execution failed." } : { output };
   const parts = content.flatMap(toGoogleFunctionResponseMediaPart);
   return {
     functionResponse: {
@@ -227,9 +227,7 @@ function toGoogleFunctionResponsePart(
   };
 }
 
-function toGoogleFunctionResponseMediaPart(
-  block: CanonicalToolResultContentBlock,
-): FunctionResponsePart[] {
+function toGoogleFunctionResponseMediaPart(block: CanonicalToolResultContentBlock): FunctionResponsePart[] {
   if (block.type === "text") {
     return [];
   }
@@ -276,7 +274,12 @@ function collectToolCallNames(messages: CanonicalMessage[]): Map<string, string>
 }
 
 function sanitizeGoogleToolCallId(id: string): string {
-  return id.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "call";
+  return (
+    id
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "call"
+  );
 }
 
 function toGoogleArgs(input: unknown): Record<string, unknown> {
@@ -286,7 +289,5 @@ function toGoogleArgs(input: unknown): Record<string, unknown> {
 }
 
 function compactObject<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as Partial<T>;
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as Partial<T>;
 }

@@ -1,5 +1,5 @@
-import { jsonrepair } from "jsonrepair";
 import { randomUUID } from "node:crypto";
+import { jsonrepair } from "jsonrepair";
 import type {
   CanonicalContentBlock,
   CanonicalModelResponse,
@@ -23,9 +23,7 @@ export function parseOpenAIResponse(raw: unknown, provider = "openai"): Canonica
   const content: CanonicalContentBlock[] = [];
   const idState = createResponseToolCallIdState(response);
 
-  const reasoningText =
-    readReasoningText(message.reasoning_content) ??
-    readReasoningText(message.reasoning);
+  const reasoningText = readReasoningText(message.reasoning_content) ?? readReasoningText(message.reasoning);
   if (reasoningText) {
     content.push({
       type: "thinking",
@@ -35,7 +33,7 @@ export function parseOpenAIResponse(raw: unknown, provider = "openai"): Canonica
   }
   if (Array.isArray(message.reasoning_details)) {
     const reasoning = message.reasoning_details
-      .map((part) => readReasoningDetailText(asRecord(part)))
+      .map(part => readReasoningDetailText(asRecord(part)))
       .filter((text): text is string => Boolean(text))
       .join("\n");
     if (reasoning.length > 0) {
@@ -59,9 +57,11 @@ export function parseOpenAIResponse(raw: unknown, provider = "openai"): Canonica
   }
 
   if (Array.isArray(message.tool_calls)) {
-    content.push(...message.tool_calls.map((toolCall, toolIndex) =>
-      toCanonicalToolCall(toolCall, provider, idState, choiceIndex, toolIndex)
-    ));
+    content.push(
+      ...message.tool_calls.map((toolCall, toolIndex) =>
+        toCanonicalToolCall(toolCall, provider, idState, choiceIndex, toolIndex),
+      ),
+    );
   }
 
   return {
@@ -132,9 +132,7 @@ function readReasoningText(value: unknown): string | undefined {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function readNonEmptyString(value: unknown): string | undefined {
@@ -154,19 +152,16 @@ function chooseResponseToolCallId(
   choiceIndex: number,
   toolIndex: number,
 ): string {
-  const candidate = incomingId !== undefined && !state.usedToolCallIds.has(incomingId)
-    ? incomingId
-    : generateToolCallId(state, choiceIndex, toolIndex);
+  const candidate =
+    incomingId !== undefined && !state.usedToolCallIds.has(incomingId)
+      ? incomingId
+      : generateToolCallId(state, choiceIndex, toolIndex);
   const id = nextUniqueToolCallId(candidate, state.usedToolCallIds);
   state.usedToolCallIds.add(id);
   return id;
 }
 
-function generateToolCallId(
-  state: OpenAIResponseToolCallIdState,
-  choiceIndex: number,
-  toolIndex: number,
-): string {
+function generateToolCallId(state: OpenAIResponseToolCallIdState, choiceIndex: number, toolIndex: number): string {
   return `call_${state.baseId}_${choiceIndex}_${toolIndex}`;
 }
 
@@ -183,5 +178,10 @@ function nextUniqueToolCallId(id: string, used: Set<string>): string {
 }
 
 function safeToolCallIdPart(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "response";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "response"
+  );
 }

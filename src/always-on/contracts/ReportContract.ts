@@ -1,6 +1,6 @@
 /**
  * ReportContract validates the work-report markdown shape described in
- * `docs/always-on/02-pilotdeck-always-on-rewrite-plan.md` §8.
+ * `docs/always-on/02-sati-always-on-rewrite-plan.md` §8.
  *
  * Unlike PlanContract this contract is forgiving — the runtime will fall back
  * by appending placeholders so downstream tooling (UI, history) can still
@@ -85,10 +85,7 @@ export function buildFallbackReport(input: BuildFallbackReportInput): string {
   return lines.join("\n") + "\n";
 }
 
-export function parseReportMarkdown(
-  content: string,
-  metadata: ReportMetadata,
-): ReportParseResult {
+export function parseReportMarkdown(content: string, metadata: ReportMetadata): ReportParseResult {
   const fallbacks: string[] = [];
   const requiredSet = new Set<string>(REPORT_REQUIRED_SECTIONS);
   const normalized = content.replace(/\r\n/g, "\n");
@@ -181,11 +178,7 @@ export function parseReportMarkdown(
   };
 }
 
-export function rebuildReport(
-  title: string,
-  metadata: ReportMetadata,
-  sections: Record<string, string>,
-): string {
+export function rebuildReport(title: string, metadata: ReportMetadata, sections: Record<string, string>): string {
   const lines = [
     `# ${title}`,
     "",

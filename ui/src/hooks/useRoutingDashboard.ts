@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { authenticatedFetch } from '../utils/api';
-import type { TokenBucket } from './useRouterSettings';
+import { useState, useEffect, useCallback, useRef } from "react";
+import { authenticatedFetch } from "../utils/api";
+import type { TokenBucket } from "./useRouterSettings";
 
 export type RequestLogEntry = {
   ts: number;
-  role: 'main' | 'sub';
+  role: "main" | "sub";
   tier?: string;
   model: string;
   tokens: number;
@@ -88,7 +88,7 @@ export function useRoutingDashboard() {
     const isInitial = !hasFetchedRef.current;
     if (isInitial) setLoading(true);
     try {
-      const res = await authenticatedFetch('/api/ccr/dashboard');
+      const res = await authenticatedFetch("/api/ccr/dashboard");
       if (res.ok) {
         setData(await res.json());
         setError(null);
@@ -97,7 +97,7 @@ export function useRoutingDashboard() {
         setError(body.error || `HTTP ${res.status}`);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch dashboard');
+      setError(err.message || "Failed to fetch dashboard");
     } finally {
       hasFetchedRef.current = true;
       if (isInitial) setLoading(false);

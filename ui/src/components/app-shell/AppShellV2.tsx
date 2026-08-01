@@ -1,19 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMatch, useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import ReactDOM from 'react-dom';
-import { Loader2, Trash2 } from 'lucide-react';
-import { useWebSocket } from '../../contexts/WebSocketContext';
-import { useDeviceSettings } from '../../hooks/useDeviceSettings';
-import { useSessionProtection } from '../../hooks/useSessionProtection';
-import { useProjectsState } from '../../hooks/useProjectsState';
-import Settings from '../settings/Settings';
-import ProjectCreationWizard from '../project-creation-wizard';
-import { normalizeProjectForSettings, type SettingsProject } from '../../lib/projectSettings';
-import {
-  sessionDisplayTitle,
-  setSessionCustomTitle,
-} from '../../lib/customNames';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMatch, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import ReactDOM from "react-dom";
+import { Loader2, Trash2 } from "lucide-react";
+import { useWebSocket } from "../../contexts/WebSocketContext";
+import { useDeviceSettings } from "../../hooks/useDeviceSettings";
+import { useSessionProtection } from "../../hooks/useSessionProtection";
+import { useProjectsState } from "../../hooks/useProjectsState";
+import Settings from "../settings/Settings";
+import ProjectCreationWizard from "../project-creation-wizard";
+import { normalizeProjectForSettings, type SettingsProject } from "../../lib/projectSettings";
+import { sessionDisplayTitle, setSessionCustomTitle } from "../../lib/customNames";
 import {
   getSessionRequestParams,
   isBackgroundTaskSession,
@@ -21,14 +18,14 @@ import {
   type Project,
   type ProjectSession,
   type SessionProvider,
-} from '../../types/app';
-import { api } from '../../utils/api';
-import { resolveMarkdownFileHref } from '../chat/utils/resolveMarkdownFileHref';
-import type { SessionNavigationOptions } from '../main-content/types/types';
-import SidebarV2 from './SidebarV2';
-import MainAreaV2 from './MainAreaV2';
-import { chooseDefaultProject } from './appShellSelection';
-import { ConnectionBanner } from '../ui/ConnectionBanner';
+} from "../../types/app";
+import { api } from "../../utils/api";
+import { resolveMarkdownFileHref } from "../chat/utils/resolveMarkdownFileHref";
+import type { SessionNavigationOptions } from "../main-content/types/types";
+import SidebarV2 from "./SidebarV2";
+import MainAreaV2 from "./MainAreaV2";
+import { chooseDefaultProject } from "./appShellSelection";
+import { ConnectionBanner } from "../ui/ConnectionBanner";
 
 type TypedSettingsProps = {
   isOpen: boolean;
@@ -45,42 +42,34 @@ type DeleteSessionTarget = {
 const SettingsComponent = Settings as unknown as (props: TypedSettingsProps) => JSX.Element;
 
 const UNREAD_IGNORED_MESSAGE_TYPES = new Set([
-  'websocket-reconnected',
-  'pending-permissions-response',
-  'session-status',
+  "websocket-reconnected",
+  "pending-permissions-response",
+  "session-status",
 ]);
 
-const UNREAD_IGNORED_MESSAGE_KINDS = new Set([
-  'session_created',
-  'status',
-  'stream_end',
-]);
+const UNREAD_IGNORED_MESSAGE_KINDS = new Set(["session_created", "status", "stream_end"]);
 
 const getSessionIdFromMessage = (message: unknown): string | null => {
-  if (!message || typeof message !== 'object') return null;
+  if (!message || typeof message !== "object") return null;
   const candidate = message as {
     sessionId?: unknown;
     session_id?: unknown;
     newSessionId?: unknown;
     actualSessionId?: unknown;
   };
-  const value =
-    candidate.sessionId ??
-    candidate.session_id ??
-    candidate.actualSessionId ??
-    candidate.newSessionId;
-  return typeof value === 'string' && value.trim() ? value : null;
+  const value = candidate.sessionId ?? candidate.session_id ?? candidate.actualSessionId ?? candidate.newSessionId;
+  return typeof value === "string" && value.trim() ? value : null;
 };
 
 const isUnreadWorthyMessage = (message: unknown): boolean => {
-  if (!message || typeof message !== 'object') return false;
+  if (!message || typeof message !== "object") return false;
   const candidate = message as { kind?: unknown; type?: unknown };
 
-  if (typeof candidate.kind === 'string') {
+  if (typeof candidate.kind === "string") {
     return !UNREAD_IGNORED_MESSAGE_KINDS.has(candidate.kind);
   }
 
-  if (typeof candidate.type === 'string') {
+  if (typeof candidate.type === "string") {
     return !UNREAD_IGNORED_MESSAGE_TYPES.has(candidate.type);
   }
 
@@ -94,14 +83,12 @@ export default function AppShellV2() {
   const navigate = useNavigate();
   // Match the four V2 URL shapes and hoist params up. A single wildcard route
   // owns this shell so state survives every URL transition.
-  const matchProjectChat = useMatch('/p/:projectName/c/:sessionId');
-  const matchProject = useMatch('/p/:projectName');
-  const matchLegacySession = useMatch('/session/:sessionId');
-  const projectNameParam =
-    matchProjectChat?.params.projectName ?? matchProject?.params.projectName ?? undefined;
-  const sessionId =
-    matchProjectChat?.params.sessionId ?? matchLegacySession?.params.sessionId ?? undefined;
-  useTranslation('common');
+  const matchProjectChat = useMatch("/p/:projectName/c/:sessionId");
+  const matchProject = useMatch("/p/:projectName");
+  const matchLegacySession = useMatch("/session/:sessionId");
+  const projectNameParam = matchProjectChat?.params.projectName ?? matchProject?.params.projectName ?? undefined;
+  const sessionId = matchProjectChat?.params.sessionId ?? matchLegacySession?.params.sessionId ?? undefined;
+  useTranslation("common");
 
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
@@ -158,16 +145,14 @@ export default function AppShellV2() {
     const filePath = resolveMarkdownFileHref(`/session/${sessionId}`);
     if (!filePath) return null;
     if (isLoadingProjects) return filePath;
-    const hasMatchingSession = sidebarSharedProps.projects.some((project) =>
-      (project.sessions ?? []).some((session) => session.id === sessionId),
+    const hasMatchingSession = sidebarSharedProps.projects.some(project =>
+      (project.sessions ?? []).some(session => session.id === sessionId),
     );
     return hasMatchingSession ? null : filePath;
   }, [sessionId, isLoadingProjects, sidebarSharedProps.projects]);
 
   const handleMisroutedFileUrlHandled = useCallback(() => {
-    const target = selectedProject
-      ? `/p/${encodeURIComponent(selectedProject.name)}`
-      : '/';
+    const target = selectedProject ? `/p/${encodeURIComponent(selectedProject.name)}` : "/";
     navigate(target, { replace: true });
   }, [navigate, selectedProject]);
 
@@ -180,20 +165,13 @@ export default function AppShellV2() {
     if (!projectNameParam) return;
     if (sessionId) return;
     if (selectedProject?.name === projectNameParam) return;
-    const target = sidebarSharedProps.projects.find((p) => p.name === projectNameParam);
+    const target = sidebarSharedProps.projects.find(p => p.name === projectNameParam);
     if (target) {
       handleProjectSelect(target);
       // handleProjectSelect unconditionally navigates to '/' — put the URL back.
       navigate(`/p/${encodeURIComponent(projectNameParam)}`, { replace: true });
     }
-  }, [
-    projectNameParam,
-    sessionId,
-    selectedProject?.name,
-    sidebarSharedProps.projects,
-    handleProjectSelect,
-    navigate,
-  ]);
+  }, [projectNameParam, sessionId, selectedProject?.name, sidebarSharedProps.projects, handleProjectSelect, navigate]);
 
   // Default selection: prefer a regular project. General is only the fallback
   // when no regular project exists. Explicit project/session URLs still own
@@ -250,24 +228,24 @@ export default function AppShellV2() {
   // between projects without a manual click.
   const switchProject = useCallback(
     (projectName: string): boolean => {
-      const trimmed = (projectName ?? '').trim();
+      const trimmed = (projectName ?? "").trim();
       if (!trimmed) return false;
 
       const list = sidebarSharedProps.projects;
-      const exact = list.find((p) => p.name === trimmed);
+      const exact = list.find(p => p.name === trimmed);
       const ciExact =
         exact ??
         list.find(
-          (p) =>
+          p =>
             p.name.toLowerCase() === trimmed.toLowerCase() ||
-            (p.displayName ?? '').toLowerCase() === trimmed.toLowerCase(),
+            (p.displayName ?? "").toLowerCase() === trimmed.toLowerCase(),
         );
       const fuzzy =
         ciExact ??
         list.find(
-          (p) =>
+          p =>
             p.name.toLowerCase().includes(trimmed.toLowerCase()) ||
-            (p.displayName ?? '').toLowerCase().includes(trimmed.toLowerCase()),
+            (p.displayName ?? "").toLowerCase().includes(trimmed.toLowerCase()),
         );
       const target = fuzzy;
       if (!target) return false;
@@ -292,7 +270,7 @@ export default function AppShellV2() {
     const selectedSessionId = selectedSession?.id;
     if (!selectedSessionId) return;
 
-    setUnreadSessionIds((previous) => {
+    setUnreadSessionIds(previous => {
       if (!previous.has(selectedSessionId)) return previous;
       const next = new Set(previous);
       next.delete(selectedSessionId);
@@ -301,13 +279,13 @@ export default function AppShellV2() {
   }, [selectedSession?.id]);
 
   useEffect(() => {
-    return subscribe((message) => {
+    return subscribe(message => {
       if (!isUnreadWorthyMessage(message)) return;
 
       const messageSessionId = getSessionIdFromMessage(message);
       if (!messageSessionId || messageSessionId === selectedSession?.id) return;
 
-      setUnreadSessionIds((previous) => {
+      setUnreadSessionIds(previous => {
         if (previous.has(messageSessionId)) return previous;
         const next = new Set(previous);
         next.add(messageSessionId);
@@ -317,31 +295,31 @@ export default function AppShellV2() {
   }, [selectedSession?.id, subscribe]);
 
   useEffect(() => {
-    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
       return undefined;
     }
 
     const handleServiceWorkerMessage = (event: MessageEvent) => {
       const message = event.data;
-      if (!message || message.type !== 'notification:navigate') return;
+      if (!message || message.type !== "notification:navigate") return;
 
       // Provider hint from notifications is no longer stored; all sessions
-      // go through the unified pilotdeck gateway.
+      // go through the unified sati gateway.
 
-      setActiveTab('chat');
+      setActiveTab("chat");
       setSidebarOpen(false);
       void refreshProjectsSilently();
 
-      if (typeof message.sessionId === 'string' && message.sessionId) {
+      if (typeof message.sessionId === "string" && message.sessionId) {
         navigate(`/session/${message.sessionId}`);
         return;
       }
-      navigate('/');
+      navigate("/");
     };
 
-    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
     return () => {
-      navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+      navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
     };
   }, [navigate, refreshProjectsSilently, setActiveTab, setSidebarOpen]);
 
@@ -355,7 +333,7 @@ export default function AppShellV2() {
 
     if (isConnected && selectedSession?.id) {
       sendMessage({
-        type: 'get-pending-permissions',
+        type: "get-pending-permissions",
         sessionId: selectedSession.id,
       });
     }
@@ -376,7 +354,7 @@ export default function AppShellV2() {
   }, []);
 
   useEffect(() => {
-    if (!isMobile && activeTab === 'files') {
+    if (!isMobile && activeTab === "files") {
       setDesktopSidebarOpen(true);
     }
   }, [activeTab, isMobile]);
@@ -386,23 +364,26 @@ export default function AppShellV2() {
   const [showNewProject, setShowNewProject] = useState(false);
   const handleOpenNewProject = useCallback(() => setShowNewProject(true), []);
   const handleCloseNewProject = useCallback(() => setShowNewProject(false), []);
-  const handleProjectCreated = useCallback((project?: Record<string, unknown>) => {
-    setShowNewProject(false);
-    void refreshProjectsSilently();
+  const handleProjectCreated = useCallback(
+    (project?: Record<string, unknown>) => {
+      setShowNewProject(false);
+      void refreshProjectsSilently();
 
-    // Auto-jump into the new project's empty new-conversation screen so the
-    // user doesn't accidentally keep chatting under the previously selected
-    // project (typically "general") after closing the wizard. The wizard
-    // hands back the freshly created project from POST /create-workspace
-    // (and the clone SSE complete event), which is the same `{ name,
-    // displayName, fullPath, path }` shape as the sidebar list entries.
-    const projectName = typeof project?.name === 'string' ? project.name : '';
-    if (!projectName) return;
-    const newProject = project as Project;
-    handleNewSession(newProject);
-    navigate(`/p/${encodeURIComponent(projectName)}`);
-    setActiveTab('chat');
-  }, [handleNewSession, navigate, refreshProjectsSilently, setActiveTab]);
+      // Auto-jump into the new project's empty new-conversation screen so the
+      // user doesn't accidentally keep chatting under the previously selected
+      // project (typically "general") after closing the wizard. The wizard
+      // hands back the freshly created project from POST /create-workspace
+      // (and the clone SSE complete event), which is the same `{ name,
+      // displayName, fullPath, path }` shape as the sidebar list entries.
+      const projectName = typeof project?.name === "string" ? project.name : "";
+      if (!projectName) return;
+      const newProject = project as Project;
+      handleNewSession(newProject);
+      navigate(`/p/${encodeURIComponent(projectName)}`);
+      setActiveTab("chat");
+    },
+    [handleNewSession, navigate, refreshProjectsSilently, setActiveTab],
+  );
 
   // Project deletion (V2): hover-revealed trash button on each row -> confirm dialog
   // -> DELETE /api/projects/:name (force=true). Reuses the shared cleanup callback
@@ -420,9 +401,9 @@ export default function AppShellV2() {
     setDeleteTarget(null);
     setDeleteError(null);
   }, [isDeletingProject]);
-	  const handleConfirmDelete = useCallback(async () => {
-	    if (!deleteTarget) return;
-	    const target = deleteTarget;
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
     setIsDeletingProject(true);
     setDeleteError(null);
     try {
@@ -435,62 +416,59 @@ export default function AppShellV2() {
       await refreshProjectsSilently();
       setDeleteTarget(null);
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete project');
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete project");
     } finally {
       setIsDeletingProject(false);
-	    }
-	  }, [deleteTarget, refreshProjectsSilently, sidebarSharedProps]);
+    }
+  }, [deleteTarget, refreshProjectsSilently, sidebarSharedProps]);
 
-	  const [deleteSessionTarget, setDeleteSessionTarget] = useState<DeleteSessionTarget | null>(null);
-	  const [isDeletingSession, setIsDeletingSession] = useState(false);
-	  const [deleteSessionError, setDeleteSessionError] = useState<string | null>(null);
-	  const handleRequestDeleteSession = useCallback(
-	    (project: Project, session: ProjectSession) => {
-	      setDeleteSessionError(null);
-	      setDeleteSessionTarget({ project, session });
-	    },
-	    [],
-	  );
-	  const handleCancelDeleteSession = useCallback(() => {
-	    if (isDeletingSession) return;
-	    setDeleteSessionTarget(null);
-	    setDeleteSessionError(null);
-	  }, [isDeletingSession]);
-	  const handleConfirmDeleteSession = useCallback(async () => {
-	    if (!deleteSessionTarget) return;
+  const [deleteSessionTarget, setDeleteSessionTarget] = useState<DeleteSessionTarget | null>(null);
+  const [isDeletingSession, setIsDeletingSession] = useState(false);
+  const [deleteSessionError, setDeleteSessionError] = useState<string | null>(null);
+  const handleRequestDeleteSession = useCallback((project: Project, session: ProjectSession) => {
+    setDeleteSessionError(null);
+    setDeleteSessionTarget({ project, session });
+  }, []);
+  const handleCancelDeleteSession = useCallback(() => {
+    if (isDeletingSession) return;
+    setDeleteSessionTarget(null);
+    setDeleteSessionError(null);
+  }, [isDeletingSession]);
+  const handleConfirmDeleteSession = useCallback(async () => {
+    if (!deleteSessionTarget) return;
 
-	    const { project, session } = deleteSessionTarget;
-	    setIsDeletingSession(true);
-	    setDeleteSessionError(null);
+    const { project, session } = deleteSessionTarget;
+    setIsDeletingSession(true);
+    setDeleteSessionError(null);
 
-	    try {
-	      const response = isBackgroundTaskSession(session)
-	        ? await api.deleteSession(project.name, session.id, getSessionRequestParams(session))
-	        : await api.deleteSession(project.name, session.id);
+    try {
+      const response = isBackgroundTaskSession(session)
+        ? await api.deleteSession(project.name, session.id, getSessionRequestParams(session))
+        : await api.deleteSession(project.name, session.id);
 
-	      if (!response.ok) {
-	        const body = (await response.json().catch(() => ({}))) as { error?: string };
-	        throw new Error(body.error || `Failed (HTTP ${response.status})`);
-	      }
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || `Failed (HTTP ${response.status})`);
+      }
 
-	      sidebarSharedProps.onSessionDelete?.(session.id);
-	      setUnreadSessionIds((previous) => {
-	        if (!previous.has(session.id)) return previous;
-	        const next = new Set(previous);
-	        next.delete(session.id);
-	        return next;
-	      });
-	      setSessionCustomTitle(session.id, null);
-	      await refreshProjectsSilently();
-	      setDeleteSessionTarget(null);
-	    } catch (err) {
-	      setDeleteSessionError(err instanceof Error ? err.message : 'Failed to delete conversation');
-	    } finally {
-	      setIsDeletingSession(false);
-	    }
-	  }, [deleteSessionTarget, refreshProjectsSilently, sidebarSharedProps]);
+      sidebarSharedProps.onSessionDelete?.(session.id);
+      setUnreadSessionIds(previous => {
+        if (!previous.has(session.id)) return previous;
+        const next = new Set(previous);
+        next.delete(session.id);
+        return next;
+      });
+      setSessionCustomTitle(session.id, null);
+      await refreshProjectsSilently();
+      setDeleteSessionTarget(null);
+    } catch (err) {
+      setDeleteSessionError(err instanceof Error ? err.message : "Failed to delete conversation");
+    } finally {
+      setIsDeletingSession(false);
+    }
+  }, [deleteSessionTarget, refreshProjectsSilently, sidebarSharedProps]);
 
-	  const handleSelectProject = useCallback(
+  const handleSelectProject = useCallback(
     (project: Project) => {
       handleProjectSelect(project);
       navigate(`/p/${encodeURIComponent(project.name)}`);
@@ -499,13 +477,8 @@ export default function AppShellV2() {
   );
 
   const handleSelectSession = useCallback(
-    (
-      project: Project,
-      sessId: string,
-      fallbackSession?: ProjectSession,
-      options?: SessionNavigationOptions,
-    ) => {
-      setUnreadSessionIds((previous) => {
+    (project: Project, sessId: string, fallbackSession?: ProjectSession, options?: SessionNavigationOptions) => {
+      setUnreadSessionIds(previous => {
         if (!previous.has(sessId)) return previous;
         const next = new Set(previous);
         next.delete(sessId);
@@ -514,7 +487,7 @@ export default function AppShellV2() {
       if (project.name !== selectedProject?.name) {
         handleProjectSelect(project);
       }
-      const target = (project.sessions ?? []).find((s) => s.id === sessId);
+      const target = (project.sessions ?? []).find(s => s.id === sessId);
       if (target) {
         handleSessionSelect(fallbackSession ? { ...target, ...fallbackSession } : target);
       } else if (fallbackSession) {
@@ -523,7 +496,7 @@ export default function AppShellV2() {
         navigate(`/session/${sessId}`);
       }
       if (!options?.preserveActiveTab) {
-        setActiveTab('chat');
+        setActiveTab("chat");
       }
     },
     [handleProjectSelect, handleSessionSelect, navigate, selectedProject?.name, setActiveTab],
@@ -533,15 +506,13 @@ export default function AppShellV2() {
     (tab: AppTab) => {
       // `home` is retained only for old persisted state / links. The Agent
       // surface now owns both the welcome/new-session state and transcripts.
-      if (tab === 'home') {
+      if (tab === "home") {
         setSelectedSession(null);
-        const target = selectedProject
-          ? `/p/${encodeURIComponent(selectedProject.name)}`
-          : '/';
+        const target = selectedProject ? `/p/${encodeURIComponent(selectedProject.name)}` : "/";
         if (window.location.pathname !== target) {
           navigate(target);
         }
-        setActiveTab('chat');
+        setActiveTab("chat");
         return;
       }
       setActiveTab(tab);
@@ -554,14 +525,14 @@ export default function AppShellV2() {
       if (project) {
         handleNewSession(project);
         navigate(`/p/${encodeURIComponent(project.name)}`);
-        setActiveTab(options?.preserveActiveTab ? 'files' : 'chat');
+        setActiveTab(options?.preserveActiveTab ? "files" : "chat");
       } else if (selectedProject) {
         handleNewSession(selectedProject);
-        setActiveTab(options?.preserveActiveTab ? 'files' : 'chat');
+        setActiveTab(options?.preserveActiveTab ? "files" : "chat");
       } else {
         // No project context yet — land on /, MainContent's empty state
         // will prompt the user to create or pick a project.
-        navigate('/');
+        navigate("/");
       }
     },
     [handleNewSession, navigate, selectedProject, setActiveTab],
@@ -600,145 +571,144 @@ export default function AppShellV2() {
       unreadSessionIds={unreadSessionIds}
       onSelectProject={handleSelectProject}
       onSelectSession={handleSelectSession}
-	      onStartNewSession={handleStartNewSession}
-	      onCreateProject={handleOpenNewProject}
-	      onRequestDeleteProject={handleRequestDeleteProject}
-	      onRequestDeleteSession={handleRequestDeleteSession}
-	      onShowSettings={onShowSettings}
-	      onDeselectProject={handleDeselectProject}
-	      onResetProjectSessionPreview={handleResetProjectSessionPreview}
-	      onCollapse={onCollapseSidebar}
-	      onLoadMoreSessions={loadMoreSessions}
-	      loadingMoreProjectIds={loadingMoreProjectIds}
-	    />
+      onStartNewSession={handleStartNewSession}
+      onCreateProject={handleOpenNewProject}
+      onRequestDeleteProject={handleRequestDeleteProject}
+      onRequestDeleteSession={handleRequestDeleteSession}
+      onShowSettings={onShowSettings}
+      onDeselectProject={handleDeselectProject}
+      onResetProjectSessionPreview={handleResetProjectSessionPreview}
+      onCollapse={onCollapseSidebar}
+      onLoadMoreSessions={loadMoreSessions}
+      loadingMoreProjectIds={loadingMoreProjectIds}
+    />
   );
 
   return (
     <div className="ui-v2 fixed inset-0 flex flex-col bg-white font-sans text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <ConnectionBanner />
       <div className="flex min-h-0 flex-1">
-      {!isMobile ? (
-        desktopSidebarOpen ? sidebar : null
-      ) : (
-        <div
-          className={`fixed inset-0 z-50 flex transition-opacity duration-150 ease-out ${
-            sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'
-          }`}
-        >
-          <button
-            type="button"
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close sidebar"
-          />
+        {!isMobile ? (
+          desktopSidebarOpen ? (
+            sidebar
+          ) : null
+        ) : (
           <div
-            className={`relative h-full w-[85vw] max-w-sm transform transition-transform duration-150 ${
-              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            className={`fixed inset-0 z-50 flex transition-opacity duration-150 ease-out ${
+              sidebarOpen ? "visible opacity-100" : "invisible opacity-0"
             }`}
-            onClick={(e) => e.stopPropagation()}
           >
-            {sidebar}
+            <button
+              type="button"
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close sidebar"
+            />
+            <div
+              className={`relative h-full w-[85vw] max-w-sm transform transition-transform duration-150 ${
+                sidebarOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
+              onClick={e => e.stopPropagation()}
+            >
+              {sidebar}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <MainAreaV2
-          projects={sidebarSharedProps.projects}
-          selectedProject={selectedProject}
-          selectedSession={selectedSession}
-          activeTab={activeTab}
-          setActiveTab={handleSelectTab}
-          ws={ws}
-          sendMessage={sendMessage}
-          latestMessage={latestMessage}
-          isMobile={isMobile}
-          onMenuClick={onMenuClick}
-          isLoading={isLoadingProjects}
-          onInputFocusChange={setIsInputFocused}
-          onSessionActive={markSessionAsActive}
-          onSessionInactive={handleSessionInactive}
-          onSessionProcessing={markSessionAsProcessing}
-          onSessionNotProcessing={markSessionAsNotProcessing}
-          onSessionActivityBump={bumpSessionActivity}
-          processingSessions={processingSessions}
-          unreadSessionIds={unreadSessionIds}
-          onReplaceTemporarySession={handleReplaceTemporarySession}
-          onNavigateToSession={(sid: string) => {
-            setSelectedSession((prev) => prev?.id === sid ? prev : { id: sid } as ProjectSession);
-            navigate(`/session/${sid}`);
-          }}
-          onStartNewSession={handleStartNewSession}
-          onSelectSession={handleSelectSession}
-          onShowSettings={onShowSettings}
-          onSelectProjectByName={(name: string) => {
-            const target = sidebarSharedProps.projects.find((p) => p.name === name);
-            if (target) {
-              setSelectedProject(target);
-              setSelectedSession(null);
-              setActiveTab('dashboard');
-              navigate(`/p/${encodeURIComponent(target.name)}`);
-            }
-          }}
-          isSidebarCollapsed={!isMobile && !desktopSidebarOpen}
-          onOpenSidebar={onOpenDesktopSidebar}
-          externalMessageUpdate={externalMessageUpdate}
-          misroutedFileFromUrl={misroutedFileFromUrl}
-          onMisroutedFileUrlHandled={handleMisroutedFileUrlHandled}
-        />
-      </main>
+        <main className="flex min-w-0 flex-1 flex-col">
+          <MainAreaV2
+            projects={sidebarSharedProps.projects}
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
+            activeTab={activeTab}
+            setActiveTab={handleSelectTab}
+            ws={ws}
+            sendMessage={sendMessage}
+            latestMessage={latestMessage}
+            isMobile={isMobile}
+            onMenuClick={onMenuClick}
+            isLoading={isLoadingProjects}
+            onInputFocusChange={setIsInputFocused}
+            onSessionActive={markSessionAsActive}
+            onSessionInactive={handleSessionInactive}
+            onSessionProcessing={markSessionAsProcessing}
+            onSessionNotProcessing={markSessionAsNotProcessing}
+            onSessionActivityBump={bumpSessionActivity}
+            processingSessions={processingSessions}
+            unreadSessionIds={unreadSessionIds}
+            onReplaceTemporarySession={handleReplaceTemporarySession}
+            onNavigateToSession={(sid: string) => {
+              setSelectedSession(prev => (prev?.id === sid ? prev : ({ id: sid } as ProjectSession)));
+              navigate(`/session/${sid}`);
+            }}
+            onStartNewSession={handleStartNewSession}
+            onSelectSession={handleSelectSession}
+            onShowSettings={onShowSettings}
+            onSelectProjectByName={(name: string) => {
+              const target = sidebarSharedProps.projects.find(p => p.name === name);
+              if (target) {
+                setSelectedProject(target);
+                setSelectedSession(null);
+                setActiveTab("dashboard");
+                navigate(`/p/${encodeURIComponent(target.name)}`);
+              }
+            }}
+            isSidebarCollapsed={!isMobile && !desktopSidebarOpen}
+            onOpenSidebar={onOpenDesktopSidebar}
+            externalMessageUpdate={externalMessageUpdate}
+            misroutedFileFromUrl={misroutedFileFromUrl}
+            onMisroutedFileUrlHandled={handleMisroutedFileUrlHandled}
+          />
+        </main>
 
-      {sidebarSharedProps.showSettings
-        ? ReactDOM.createPortal(
-            <SettingsComponent
-              isOpen={sidebarSharedProps.showSettings}
-              onClose={onCloseSettings}
-              projects={sidebarSharedProps.projects.map(normalizeProjectForSettings)}
-              initialTab={sidebarSharedProps.settingsInitialTab || 'appearance'}
-            />,
-            document.body,
-          )
-        : null}
+        {sidebarSharedProps.showSettings
+          ? ReactDOM.createPortal(
+              <SettingsComponent
+                isOpen={sidebarSharedProps.showSettings}
+                onClose={onCloseSettings}
+                projects={sidebarSharedProps.projects.map(normalizeProjectForSettings)}
+                initialTab={sidebarSharedProps.settingsInitialTab || "appearance"}
+              />,
+              document.body,
+            )
+          : null}
 
-      {showNewProject
-        ? ReactDOM.createPortal(
-            <ProjectCreationWizard
-              onClose={handleCloseNewProject}
-              onProjectCreated={handleProjectCreated}
-            />,
-            document.body,
-          )
-        : null}
+        {showNewProject
+          ? ReactDOM.createPortal(
+              <ProjectCreationWizard onClose={handleCloseNewProject} onProjectCreated={handleProjectCreated} />,
+              document.body,
+            )
+          : null}
 
-	      {deleteTarget
-	        ? ReactDOM.createPortal(
-	            <DeleteProjectDialog
-              project={deleteTarget}
-              isDeleting={isDeletingProject}
-              error={deleteError}
-              onCancel={handleCancelDelete}
-              onConfirm={handleConfirmDelete}
-            />,
-	            document.body,
-	          )
-	        : null}
+        {deleteTarget
+          ? ReactDOM.createPortal(
+              <DeleteProjectDialog
+                project={deleteTarget}
+                isDeleting={isDeletingProject}
+                error={deleteError}
+                onCancel={handleCancelDelete}
+                onConfirm={handleConfirmDelete}
+              />,
+              document.body,
+            )
+          : null}
 
-	      {deleteSessionTarget
-	        ? ReactDOM.createPortal(
-	            <DeleteSessionDialog
-	              target={deleteSessionTarget}
-	              isDeleting={isDeletingSession}
-	              error={deleteSessionError}
-	              onCancel={handleCancelDeleteSession}
-	              onConfirm={handleConfirmDeleteSession}
-	            />,
-	            document.body,
-	          )
-	        : null}
-	    </div>
-	    </div>
-	  );
-	}
+        {deleteSessionTarget
+          ? ReactDOM.createPortal(
+              <DeleteSessionDialog
+                target={deleteSessionTarget}
+                isDeleting={isDeletingSession}
+                error={deleteSessionError}
+                onCancel={handleCancelDeleteSession}
+                onConfirm={handleConfirmDeleteSession}
+              />,
+              document.body,
+            )
+          : null}
+      </div>
+    </div>
+  );
+}
 
 type DeleteProjectDialogProps = {
   project: Project;
@@ -748,13 +718,7 @@ type DeleteProjectDialogProps = {
   onConfirm: () => void;
 };
 
-function DeleteProjectDialog({
-  project,
-  isDeleting,
-  error,
-  onCancel,
-  onConfirm,
-}: DeleteProjectDialogProps) {
+function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }: DeleteProjectDialogProps) {
   const sessionCount = project.sessions?.length ?? 0;
   const displayName = project.displayName || project.name;
 
@@ -775,20 +739,20 @@ function DeleteProjectDialog({
 
         <div className="space-y-3 p-5">
           <p className="text-sm text-foreground">
-            This removes the project from PilotDeck and deletes its session metadata.
+            This removes the project from Sati and deletes its session metadata.
             {sessionCount > 0 ? (
               <>
-                {' '}
+                {" "}
                 <span className="font-medium">
-                  {sessionCount} session{sessionCount === 1 ? '' : 's'}
-                </span>{' '}
+                  {sessionCount} session{sessionCount === 1 ? "" : "s"}
+                </span>{" "}
                 will also be removed.
               </>
             ) : null}
           </p>
           <p className="text-xs text-muted-foreground">
-            Files on disk are <span className="font-medium text-foreground">not</span> deleted —
-            only PilotDeck&apos;s reference to them.
+            Files on disk are <span className="font-medium text-foreground">not</span> deleted — only Sati&apos;s
+            reference to them.
           </p>
           {error ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -812,8 +776,12 @@ function DeleteProjectDialog({
             disabled={isDeleting}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60"
           >
-            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" strokeWidth={1.75} />}
-            {isDeleting ? 'Deleting…' : 'Delete project'}
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+            )}
+            {isDeleting ? "Deleting…" : "Delete project"}
           </button>
         </div>
       </div>
@@ -829,13 +797,7 @@ type DeleteSessionDialogProps = {
   onConfirm: () => void;
 };
 
-function DeleteSessionDialog({
-  target,
-  isDeleting,
-  error,
-  onCancel,
-  onConfirm,
-}: DeleteSessionDialogProps) {
+function DeleteSessionDialog({ target, isDeleting, error, onCancel, onConfirm }: DeleteSessionDialogProps) {
   const projectName = target.project.displayName || target.project.name;
   const sessionTitle = sessionDisplayTitle(target.session);
 
@@ -848,9 +810,7 @@ function DeleteSessionDialog({
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-foreground">Delete conversation?</h3>
-            <p className="mt-1 truncate text-sm text-muted-foreground">
-              {sessionTitle}
-            </p>
+            <p className="mt-1 truncate text-sm text-muted-foreground">{sessionTitle}</p>
           </div>
         </div>
 
@@ -881,8 +841,12 @@ function DeleteSessionDialog({
             disabled={isDeleting}
             className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60"
           >
-            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" strokeWidth={1.75} />}
-            {isDeleting ? 'Deleting…' : 'Delete conversation'}
+            {isDeleting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+            )}
+            {isDeleting ? "Deleting…" : "Delete conversation"}
           </button>
         </div>
       </div>

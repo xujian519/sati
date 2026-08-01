@@ -1,13 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
-const API_URL = process.env.PILOTDECK_API_URL;
-const PROJECT_PATH = process.env.PILOTDECK_E2E_PROJECT_PATH;
-const PARENT_SESSION = process.env.PILOTDECK_E2E_PARENT_SESSION;
+const API_URL = process.env.SATI_API_URL;
+const PROJECT_PATH = process.env.SATI_E2E_PROJECT_PATH;
+const PARENT_SESSION = process.env.SATI_E2E_PARENT_SESSION;
 
-test('history fork API carries prior transcript and exposes entryId on user messages', async ({ request }) => {
+test("history fork API carries prior transcript and exposes entryId on user messages", async ({ request }) => {
   test.skip(
     !API_URL || !PROJECT_PATH || !PARENT_SESSION,
-    'Set PILOTDECK_API_URL, PILOTDECK_E2E_PROJECT_PATH, and PILOTDECK_E2E_PARENT_SESSION to run this environment-backed test.',
+    "Set SATI_API_URL, SATI_E2E_PROJECT_PATH, and SATI_E2E_PARENT_SESSION to run this environment-backed test.",
   );
 
   const messagesResponse = await request.get(
@@ -15,23 +15,20 @@ test('history fork API carries prior transcript and exposes entryId on user mess
   );
   expect(messagesResponse.ok()).toBeTruthy();
   const payload = await messagesResponse.json();
-  test.skip(!payload.messages?.length, 'No live session messages available in this environment');
+  test.skip(!payload.messages?.length, "No live session messages available in this environment");
 
-  const userMessage = payload.messages.find((message) => message.role === 'user' && message.entryId);
+  const userMessage = payload.messages.find(message => message.role === "user" && message.entryId);
   expect(userMessage?.entryId).toBeTruthy();
 
-  const forkResponse = await request.post(
-    `${API_URL}/api/sessions/${encodeURIComponent(PARENT_SESSION)}/fork`,
-    {
-      data: {
-        projectPath: PROJECT_PATH,
-        fromEntryId: userMessage.entryId,
-      },
+  const forkResponse = await request.post(`${API_URL}/api/sessions/${encodeURIComponent(PARENT_SESSION)}/fork`, {
+    data: {
+      projectPath: PROJECT_PATH,
+      fromEntryId: userMessage.entryId,
     },
-  );
+  });
   expect(forkResponse.ok()).toBeTruthy();
   const forkPayload = await forkResponse.json();
   expect(forkPayload.newSessionId).toMatch(/^web[:-]s_/);
-  expect(typeof forkPayload.prefillText).toBe('string');
+  expect(typeof forkPayload.prefillText).toBe("string");
   expect(forkPayload.carriedMessageCount).toBeGreaterThan(0);
 });

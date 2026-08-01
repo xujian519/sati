@@ -1,0 +1,131 @@
+# 创造性规则
+# 基于：专利法第22条第3款、审查指南第二部分第四章
+# 来源：BCIP CON-401, CON-402 + 三步法
+
+rules:
+  - ruleId: INV-001
+    name: 最接近现有技术的确定
+    description: 三步法第一步——确定最接近的现有技术
+    legalBasis: 专利法第22条第3款、审查指南第二部分第四章3.2.1.1
+    domain: patent_inventiveness
+    severity: critical
+    action: review
+    check:
+      type: closest_prior_art_selection
+      criteria:
+        - priority: 1
+          name: 技术领域相同或相近
+        - priority: 2
+          name: 解决的技术问题最接近
+        - priority: 3
+          name: 公开的技术特征最多
+      assessment:
+        validSelection: pass
+        invalidSelection: warn + "建议重新选择最接近现有技术"
+
+  - ruleId: INV-002
+    name: 区别特征认定
+    description: 三步法第二步——确定区别技术特征
+    legalBasis: 审查指南第二部分第四章3.2.1.2
+    domain: patent_inventiveness
+    severity: critical
+    action: review
+    check:
+      type: distinguishing_features
+      method: per_feature_comparison
+      rules:
+        - "逐特征对比，以最小技术单元为单位"
+        - "明确列出所有区别技术特征"
+        - "注意：遗漏区别特征会导致后续分析错误"
+      assessment:
+        allFeaturesListed: pass
+        featuresMissing: fail
+
+  - ruleId: INV-003
+    name: 技术问题重新确定
+    description: 基于区别特征的技术效果重新确定实际解决的技术问题
+    legalBasis: 审查指南第二部分第四章3.2.1.2
+    domain: patent_inventiveness
+    severity: critical
+    action: review
+    check:
+      type: technical_problem_reformulation
+      principles:
+        - "基于区别特征在发明中达到的技术效果来重新确定"
+        - "严禁：技术问题中包含对区别特征的指引（防范事后诸葛亮）"
+      assessment:
+        correct: pass
+        containsHint: fail + "技术问题包含对区别特征的指引"
+        noEffectLinked: fail + "技术问题与区别特征的技术效果无对应关系"
+
+  - ruleId: INV-004
+    name: 显而易见性判断
+    description: 三步法第三步——判断区别特征是否显而易见
+    legalBasis: 审查指南第二部分第四章3.2.1.1
+    domain: patent_inventiveness
+    severity: critical
+    action: block
+    check:
+      type: obviousness
+      principles:
+        hasTechnicalTeaching:
+          description: "存在技术启示→不具备创造性"
+          scenarios:
+            - "区别特征为公知常识（教科书/技术词典/手册中的惯用手段）"
+            - "区别特征在同一份对比文件其他部分且作用相同"
+            - "区别特征在另一份对比文件中且作用相同"
+        noTechnicalTeaching:
+          description: "不存在技术启示→具备创造性"
+          scenarios:
+            - "区别特征在现有技术中起的作用不同"
+            - "现有技术给出相反教导"
+            - "结合需克服技术偏见"
+            - "结合产生预料不到的技术效果"
+      assessment:
+        noTeaching: pass
+        hasTeaching: fail
+        uncertain: warn
+
+  - ruleId: INV-005
+    name: 辅助判断因素
+    description: 辅助判断因素对创造性结论的影响
+    legalBasis: 审查指南第二部分第四章5
+    domain: patent_inventiveness
+    severity: major
+    action: review
+    check:
+      type: secondary_indicators
+      factors:
+        - name: 长期未解难题
+          weight: medium
+          requirement: "证明问题长期存在且未解决"
+        - name: 克服技术偏见
+          weight: medium
+          requirement: "证明偏见的普遍性"
+        - name: 预料不到的技术效果
+          weight: high
+          requirement: "效果产生质的变化或量的飞跃"
+        - name: 商业成功
+          weight: low
+          requirement: "成功与技术特征有直接因果关系"
+        - name: 他人仿制
+          weight: low
+          requirement: "他人复制该技术方案"
+      assessment:
+        strongIndicatorsFound: pass_with_note
+        noIndicators: neutral
+
+  - ruleId: INV-006
+    name: 实用新型创造性标准
+    description: 实用新型的创造性标准低于发明
+    legalBasis: 专利法第22条第3款（实用新型部分）
+    domain: patent_inventiveness
+    severity: major
+    action: review
+    check:
+      type: utility_model_standard
+      notes:
+        - "实用新型通常不评价方法特征"
+        - "材料特征在特定条件下可考虑"
+        - "形状/结构特征为主要评价对象"
+        - "在组合对比文件的数量和范围上比发明更宽松"

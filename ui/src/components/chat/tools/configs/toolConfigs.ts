@@ -1,17 +1,17 @@
 /**
  * Centralized tool configuration registry
- * Defines display behavior for all tool types 
+ * Defines display behavior for all tool types
  */
 
 export interface ToolDisplayConfig {
   input: {
-    type: 'one-line' | 'collapsible' | 'hidden';
+    type: "one-line" | "collapsible" | "hidden";
     // One-line config
     icon?: string;
     label?: string;
     getValue?: (input: any) => string;
     getSecondary?: (input: any) => string | undefined;
-    action?: 'copy' | 'open-file' | 'jump-to-results' | 'none';
+    action?: "copy" | "open-file" | "jump-to-results" | "none";
     style?: string;
     wrapText?: boolean;
     colorScheme?: {
@@ -24,18 +24,26 @@ export interface ToolDisplayConfig {
     // Collapsible config
     title?: string | ((input: any) => string);
     defaultOpen?: boolean;
-    contentType?: 'diff' | 'markdown' | 'file-list' | 'todo-list' | 'text' | 'task' | 'question-answer';
+    contentType?: "diff" | "markdown" | "file-list" | "todo-list" | "text" | "task" | "question-answer";
     getContentProps?: (input: any, helpers?: any) => any;
-    actionButton?: 'file-button' | 'none';
+    actionButton?: "file-button" | "none";
   };
   result?: {
     hidden?: boolean;
     hideOnSuccess?: boolean;
-    type?: 'one-line' | 'collapsible' | 'special' | 'card';
+    type?: "one-line" | "collapsible" | "special" | "card";
     title?: string | ((result: any) => string);
     defaultOpen?: boolean;
     // Special result handlers
-    contentType?: 'markdown' | 'file-list' | 'todo-list' | 'text' | 'success-message' | 'task' | 'question-answer' | 'plan-card';
+    contentType?:
+      | "markdown"
+      | "file-list"
+      | "todo-list"
+      | "text"
+      | "success-message"
+      | "task"
+      | "question-answer"
+      | "plan-card";
     getMessage?: (result: any) => string;
     getContentProps?: (result: any) => any;
   };
@@ -44,7 +52,7 @@ export interface ToolDisplayConfig {
 type ParsedTodoItem = {
   id: string;
   content: string;
-  status: 'pending' | 'in_progress' | 'completed';
+  status: "pending" | "in_progress" | "completed";
 };
 
 type SearchToolResultData = {
@@ -57,7 +65,7 @@ type SearchToolResultData = {
 const TODO_LINE_PATTERN = /^\s*[-*]\s+\[( |x|X)\]\s+(.*?)\s*$/u;
 
 function parseTodoMarkdown(markdown: unknown): ParsedTodoItem[] {
-  if (typeof markdown !== 'string' || markdown.trim().length === 0) {
+  if (typeof markdown !== "string" || markdown.trim().length === 0) {
     return [];
   }
 
@@ -68,21 +76,21 @@ function parseTodoMarkdown(markdown: unknown): ParsedTodoItem[] {
     const content = match[2]?.trim();
     if (!content) continue;
     parsed.push({
-      checked: match[1].toLowerCase() === 'x',
+      checked: match[1].toLowerCase() === "x",
       content,
     });
   }
 
   let assignedInProgress = false;
   return parsed.map((todo, index) => {
-    let status: ParsedTodoItem['status'];
+    let status: ParsedTodoItem["status"];
     if (todo.checked) {
-      status = 'completed';
+      status = "completed";
     } else if (!assignedInProgress) {
-      status = 'in_progress';
+      status = "in_progress";
       assignedInProgress = true;
     } else {
-      status = 'pending';
+      status = "pending";
     }
     return {
       id: `todo-${index + 1}`,
@@ -93,22 +101,25 @@ function parseTodoMarkdown(markdown: unknown): ParsedTodoItem[] {
 }
 
 export function getSearchToolResultFiles(result: unknown): unknown[] {
-  const toolData = ((result as { toolUseResult?: SearchToolResultData } | undefined)?.toolUseResult || {}) as SearchToolResultData;
+  const toolData = ((result as { toolUseResult?: SearchToolResultData } | undefined)?.toolUseResult ||
+    {}) as SearchToolResultData;
   if (Array.isArray(toolData.files)) return toolData.files;
   if (Array.isArray(toolData.filenames)) return toolData.filenames;
   return [];
 }
 
 export function getSearchToolResultCount(result: unknown): number {
-  const toolData = ((result as { toolUseResult?: SearchToolResultData } | undefined)?.toolUseResult || {}) as SearchToolResultData;
-  if (typeof toolData.count === 'number') return toolData.count;
-  if (typeof toolData.numFiles === 'number') return toolData.numFiles;
+  const toolData = ((result as { toolUseResult?: SearchToolResultData } | undefined)?.toolUseResult ||
+    {}) as SearchToolResultData;
+  if (typeof toolData.count === "number") return toolData.count;
+  if (typeof toolData.numFiles === "number") return toolData.numFiles;
   return getSearchToolResultFiles(result).length;
 }
 
 export function getSearchToolResultFileCount(result: unknown): number {
-  const toolData = ((result as { toolUseResult?: SearchToolResultData } | undefined)?.toolUseResult || {}) as SearchToolResultData;
-  if (typeof toolData.numFiles === 'number') return toolData.numFiles;
+  const toolData = ((result as { toolUseResult?: SearchToolResultData } | undefined)?.toolUseResult ||
+    {}) as SearchToolResultData;
+  if (typeof toolData.numFiles === "number") return toolData.numFiles;
   return getSearchToolResultFiles(result).length;
 }
 
@@ -119,36 +130,36 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   Bash: {
     input: {
-      type: 'one-line',
-      icon: 'terminal',
-      getValue: (input) => input.command,
-      getSecondary: (input) => input.description,
-      action: 'copy',
-      style: 'terminal',
+      type: "one-line",
+      icon: "terminal",
+      getValue: input => input.command,
+      getSecondary: input => input.description,
+      action: "copy",
+      style: "terminal",
       wrapText: true,
       colorScheme: {
-        primary: 'text-green-400 font-mono',
-        secondary: 'text-gray-400',
-        background: '',
-        border: 'border-green-500 dark:border-green-400',
-        icon: 'text-green-500 dark:text-green-400'
-      }
+        primary: "text-green-400 font-mono",
+        secondary: "text-gray-400",
+        background: "",
+        border: "border-green-500 dark:border-green-400",
+        icon: "text-green-500 dark:text-green-400",
+      },
     },
     result: {
-      type: 'collapsible',
-      title: (data) => {
-        const content = typeof data === 'string' ? data : data?.content;
-        if (!content) return 'Output (empty)';
-        const lines = content.split('\n').length;
-        return `Output (${lines} line${lines > 1 ? 's' : ''})`;
+      type: "collapsible",
+      title: data => {
+        const content = typeof data === "string" ? data : data?.content;
+        if (!content) return "Output (empty)";
+        const lines = content.split("\n").length;
+        return `Output (${lines} line${lines > 1 ? "s" : ""})`;
       },
       defaultOpen: false,
-      contentType: 'text',
-      getContentProps: (data) => {
-        const content = typeof data === 'string' ? data : data?.content || '';
+      contentType: "text",
+      getContentProps: data => {
+        const content = typeof data === "string" ? data : data?.content || "";
         return { content };
-      }
-    }
+      },
+    },
   },
 
   // ============================================================================
@@ -157,89 +168,89 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   Read: {
     input: {
-      type: 'one-line',
-      label: 'Read',
-      getValue: (input) => input.file_path || '',
-      action: 'open-file',
+      type: "one-line",
+      label: "Read",
+      getValue: input => input.file_path || "",
+      action: "open-file",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        background: '',
-        border: 'border-gray-300 dark:border-gray-600',
-        icon: 'text-gray-500 dark:text-gray-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        background: "",
+        border: "border-gray-300 dark:border-gray-600",
+        icon: "text-gray-500 dark:text-gray-400",
+      },
     },
     result: {
-      hidden: true
-    }
+      hidden: true,
+    },
   },
 
   Edit: {
     input: {
-      type: 'collapsible',
-      title: (input) => {
-        const filename = input.file_path?.split('/').pop() || input.file_path || 'file';
+      type: "collapsible",
+      title: input => {
+        const filename = input.file_path?.split("/").pop() || input.file_path || "file";
         return `${filename}`;
       },
       defaultOpen: false,
-      contentType: 'diff',
-      actionButton: 'none',
-      getContentProps: (input) => ({
+      contentType: "diff",
+      actionButton: "none",
+      getContentProps: input => ({
         oldContent: input.old_string,
         newContent: input.new_string,
         filePath: input.file_path,
-        badge: 'Edit',
-        badgeColor: 'gray'
-      })
+        badge: "Edit",
+        badgeColor: "gray",
+      }),
     },
     result: {
-      hideOnSuccess: true
-    }
+      hideOnSuccess: true,
+    },
   },
 
   Write: {
     input: {
-      type: 'collapsible',
-      title: (input) => {
-        const filename = input.file_path?.split('/').pop() || input.file_path || 'file';
+      type: "collapsible",
+      title: input => {
+        const filename = input.file_path?.split("/").pop() || input.file_path || "file";
         return `${filename}`;
       },
       defaultOpen: false,
-      contentType: 'diff',
-      actionButton: 'none',
-      getContentProps: (input) => ({
-        oldContent: '',
+      contentType: "diff",
+      actionButton: "none",
+      getContentProps: input => ({
+        oldContent: "",
         newContent: input.content,
         filePath: input.file_path,
-        badge: 'New',
-        badgeColor: 'green'
-      })
+        badge: "New",
+        badgeColor: "green",
+      }),
     },
     result: {
-      hideOnSuccess: true
-    }
+      hideOnSuccess: true,
+    },
   },
 
   ApplyPatch: {
     input: {
-      type: 'collapsible',
-      title: (input) => {
-        const filename = input.file_path?.split('/').pop() || input.file_path || 'file';
+      type: "collapsible",
+      title: input => {
+        const filename = input.file_path?.split("/").pop() || input.file_path || "file";
         return `${filename}`;
       },
       defaultOpen: false,
-      contentType: 'diff',
-      actionButton: 'none',
-      getContentProps: (input) => ({
+      contentType: "diff",
+      actionButton: "none",
+      getContentProps: input => ({
         oldContent: input.old_string,
         newContent: input.new_string,
         filePath: input.file_path,
-        badge: 'Patch',
-        badgeColor: 'gray'
-      })
+        badge: "Patch",
+        badgeColor: "gray",
+      }),
     },
     result: {
-      hideOnSuccess: true
-    }
+      hideOnSuccess: true,
+    },
   },
 
   // ============================================================================
@@ -248,64 +259,64 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   Grep: {
     input: {
-      type: 'one-line',
-      label: 'Grep',
-      getValue: (input) => input.pattern,
-      getSecondary: (input) => input.path ? `in ${input.path}` : undefined,
-      action: 'jump-to-results',
+      type: "one-line",
+      label: "Grep",
+      getValue: input => input.pattern,
+      getSecondary: input => (input.path ? `in ${input.path}` : undefined),
+      action: "jump-to-results",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        secondary: 'text-gray-500 dark:text-gray-400',
-        background: '',
-        border: 'border-gray-400 dark:border-gray-500',
-        icon: 'text-gray-500 dark:text-gray-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        secondary: "text-gray-500 dark:text-gray-400",
+        background: "",
+        border: "border-gray-400 dark:border-gray-500",
+        icon: "text-gray-500 dark:text-gray-400",
+      },
     },
     result: {
-      type: 'collapsible',
+      type: "collapsible",
       defaultOpen: false,
-      title: (result) => {
+      title: result => {
         const count = getSearchToolResultFileCount(result);
-        return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
+        return `Found ${count} ${count === 1 ? "file" : "files"}`;
       },
-      contentType: 'file-list',
-      getContentProps: (result) => {
+      contentType: "file-list",
+      getContentProps: result => {
         return {
-          files: getSearchToolResultFiles(result)
+          files: getSearchToolResultFiles(result),
         };
-      }
-    }
+      },
+    },
   },
 
   Glob: {
     input: {
-      type: 'one-line',
-      label: 'Glob',
-      getValue: (input) => input.pattern,
-      getSecondary: (input) => input.path ? `in ${input.path}` : undefined,
-      action: 'jump-to-results',
+      type: "one-line",
+      label: "Glob",
+      getValue: input => input.pattern,
+      getSecondary: input => (input.path ? `in ${input.path}` : undefined),
+      action: "jump-to-results",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        secondary: 'text-gray-500 dark:text-gray-400',
-        background: '',
-        border: 'border-gray-400 dark:border-gray-500',
-        icon: 'text-gray-500 dark:text-gray-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        secondary: "text-gray-500 dark:text-gray-400",
+        background: "",
+        border: "border-gray-400 dark:border-gray-500",
+        icon: "text-gray-500 dark:text-gray-400",
+      },
     },
     result: {
-      type: 'collapsible',
+      type: "collapsible",
       defaultOpen: false,
-      title: (result) => {
+      title: result => {
         const count = getSearchToolResultCount(result);
-        return `Found ${count} ${count === 1 ? 'file' : 'files'}`;
+        return `Found ${count} ${count === 1 ? "file" : "files"}`;
       },
-      contentType: 'file-list',
-      getContentProps: (result) => {
+      contentType: "file-list",
+      getContentProps: result => {
         return {
-          files: getSearchToolResultFiles(result)
+          files: getSearchToolResultFiles(result),
         };
-      }
-    }
+      },
+    },
   },
 
   // ============================================================================
@@ -314,66 +325,66 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   TodoWrite: {
     input: {
-      type: 'collapsible',
-      title: 'Updating todo list',
+      type: "collapsible",
+      title: "Updating todo list",
       defaultOpen: false,
-      contentType: 'todo-list',
-      getContentProps: (input) => ({
-        todos: parseTodoMarkdown(input.markdown)
-      })
+      contentType: "todo-list",
+      getContentProps: input => ({
+        todos: parseTodoMarkdown(input.markdown),
+      }),
     },
     result: {
-      type: 'collapsible',
-      contentType: 'success-message',
-      getMessage: () => 'Todo list updated'
-    }
+      type: "collapsible",
+      contentType: "success-message",
+      getMessage: () => "Todo list updated",
+    },
   },
 
   todo_write: {
     input: {
-      type: 'collapsible',
-      title: 'Updating todo list',
+      type: "collapsible",
+      title: "Updating todo list",
       defaultOpen: false,
-      contentType: 'todo-list',
-      getContentProps: (input) => ({
-        todos: parseTodoMarkdown(input.markdown)
-      })
+      contentType: "todo-list",
+      getContentProps: input => ({
+        todos: parseTodoMarkdown(input.markdown),
+      }),
     },
     result: {
-      type: 'collapsible',
-      contentType: 'success-message',
-      getMessage: () => 'Todo list updated'
-    }
+      type: "collapsible",
+      contentType: "success-message",
+      getMessage: () => "Todo list updated",
+    },
   },
 
   TodoRead: {
     input: {
-      type: 'one-line',
-      label: 'TodoRead',
-      getValue: () => 'reading list',
-      action: 'none',
+      type: "one-line",
+      label: "TodoRead",
+      getValue: () => "reading list",
+      action: "none",
       colorScheme: {
-        primary: 'text-gray-500 dark:text-gray-400',
-        border: 'border-violet-400 dark:border-violet-500'
-      }
+        primary: "text-gray-500 dark:text-gray-400",
+        border: "border-violet-400 dark:border-violet-500",
+      },
     },
     result: {
-      type: 'collapsible',
-      contentType: 'todo-list',
-      getContentProps: (result) => {
+      type: "collapsible",
+      contentType: "todo-list",
+      getContentProps: result => {
         try {
-          const content = String(result.content || '');
+          const content = String(result.content || "");
           let todos = null;
-          if (content.startsWith('[')) {
+          if (content.startsWith("[")) {
             todos = JSON.parse(content);
           }
           return { todos, isResult: true };
         } catch (e) {
-          console.warn('Failed to parse todo list content:', e);
+          console.warn("Failed to parse todo list content:", e);
           return { todos: [], isResult: true };
         }
-      }
-    }
+      },
+    },
   },
 
   // ============================================================================
@@ -382,96 +393,94 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   CronCreate: {
     input: {
-      type: 'one-line',
-      label: 'CronCreate',
-      getValue: (input) => input.prompt || 'schedule job',
-      getSecondary: (input) => {
-        const cadence = input.recurring === false ? 'one-shot' : 'recurring';
-        const storage = input.durable ? 'durable' : 'session';
-        return input.cron
-          ? `${input.cron} · ${cadence} · ${storage}`
-          : `${cadence} · ${storage}`;
+      type: "one-line",
+      label: "CronCreate",
+      getValue: input => input.prompt || "schedule job",
+      getSecondary: input => {
+        const cadence = input.recurring === false ? "one-shot" : "recurring";
+        const storage = input.durable ? "durable" : "session";
+        return input.cron ? `${input.cron} · ${cadence} · ${storage}` : `${cadence} · ${storage}`;
       },
-      action: 'none',
+      action: "none",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        secondary: 'text-gray-500 dark:text-gray-400',
-        border: 'border-amber-400 dark:border-amber-500',
-        icon: 'text-amber-500 dark:text-amber-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        secondary: "text-gray-500 dark:text-gray-400",
+        border: "border-amber-400 dark:border-amber-500",
+        icon: "text-amber-500 dark:text-amber-400",
+      },
     },
     result: {
-      type: 'collapsible',
+      type: "collapsible",
       defaultOpen: false,
-      title: (result) => {
+      title: result => {
         const toolData = result?.toolUseResult || {};
         const job = toolData.data || toolData;
-        const id = job.id ? `Scheduled ${job.id}` : 'Scheduled job';
+        const id = job.id ? `Scheduled ${job.id}` : "Scheduled job";
         return job.humanSchedule ? `${id} · ${job.humanSchedule}` : id;
       },
-      contentType: 'text',
-      getContentProps: (result) => ({
-        content: String(result?.content || ''),
-        format: 'plain'
-      })
-    }
+      contentType: "text",
+      getContentProps: result => ({
+        content: String(result?.content || ""),
+        format: "plain",
+      }),
+    },
   },
 
   CronDelete: {
     input: {
-      type: 'one-line',
-      label: 'CronDelete',
-      getValue: (input) => input.id || 'cancel scheduled job',
-      action: 'none',
+      type: "one-line",
+      label: "CronDelete",
+      getValue: input => input.id || "cancel scheduled job",
+      action: "none",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        border: 'border-amber-400 dark:border-amber-500',
-        icon: 'text-amber-500 dark:text-amber-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        border: "border-amber-400 dark:border-amber-500",
+        icon: "text-amber-500 dark:text-amber-400",
+      },
     },
     result: {
-      type: 'collapsible',
+      type: "collapsible",
       defaultOpen: false,
-      title: (result) => {
+      title: result => {
         const toolData = result?.toolUseResult || {};
         const job = toolData.data || toolData;
-        return job.id ? `Cancelled ${job.id}` : 'Cancelled scheduled job';
+        return job.id ? `Cancelled ${job.id}` : "Cancelled scheduled job";
       },
-      contentType: 'text',
-      getContentProps: (result) => ({
-        content: String(result?.content || ''),
-        format: 'plain'
-      })
-    }
+      contentType: "text",
+      getContentProps: result => ({
+        content: String(result?.content || ""),
+        format: "plain",
+      }),
+    },
   },
 
   CronList: {
     input: {
-      type: 'one-line',
-      label: 'CronList',
-      getValue: () => 'listing scheduled jobs',
-      action: 'none',
+      type: "one-line",
+      label: "CronList",
+      getValue: () => "listing scheduled jobs",
+      action: "none",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        border: 'border-amber-400 dark:border-amber-500',
-        icon: 'text-amber-500 dark:text-amber-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        border: "border-amber-400 dark:border-amber-500",
+        icon: "text-amber-500 dark:text-amber-400",
+      },
     },
     result: {
-      type: 'collapsible',
+      type: "collapsible",
       defaultOpen: false,
-      title: (result) => {
+      title: result => {
         const toolData = result?.toolUseResult || {};
         const jobs = toolData.data?.jobs || toolData.jobs || [];
         const count = Array.isArray(jobs) ? jobs.length : 0;
-        return `${count} scheduled ${count === 1 ? 'job' : 'jobs'}`;
+        return `${count} scheduled ${count === 1 ? "job" : "jobs"}`;
       },
-      contentType: 'text',
-      getContentProps: (result) => ({
-        content: String(result?.content || ''),
-        format: 'plain'
-      })
-    }
+      contentType: "text",
+      getContentProps: result => ({
+        content: String(result?.content || ""),
+        format: "plain",
+      }),
+    },
   },
 
   // ============================================================================
@@ -480,89 +489,89 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   TaskCreate: {
     input: {
-      type: 'one-line',
-      label: 'Task',
-      getValue: (input) => input.subject || 'Creating task',
-      getSecondary: (input) => input.status || undefined,
-      action: 'none',
+      type: "one-line",
+      label: "Task",
+      getValue: input => input.subject || "Creating task",
+      getSecondary: input => input.status || undefined,
+      action: "none",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        border: 'border-violet-400 dark:border-violet-500',
-        icon: 'text-violet-500 dark:text-violet-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        border: "border-violet-400 dark:border-violet-500",
+        icon: "text-violet-500 dark:text-violet-400",
+      },
     },
     result: {
-      hideOnSuccess: true
-    }
+      hideOnSuccess: true,
+    },
   },
 
   TaskUpdate: {
     input: {
-      type: 'one-line',
-      label: 'Task',
-      getValue: (input) => {
+      type: "one-line",
+      label: "Task",
+      getValue: input => {
         const parts = [];
         if (input.taskId) parts.push(`#${input.taskId}`);
         if (input.status) parts.push(input.status);
         if (input.subject) parts.push(`"${input.subject}"`);
-        return parts.join(' → ') || 'updating';
+        return parts.join(" → ") || "updating";
       },
-      action: 'none',
+      action: "none",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        border: 'border-violet-400 dark:border-violet-500',
-        icon: 'text-violet-500 dark:text-violet-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        border: "border-violet-400 dark:border-violet-500",
+        icon: "text-violet-500 dark:text-violet-400",
+      },
     },
     result: {
-      hideOnSuccess: true
-    }
+      hideOnSuccess: true,
+    },
   },
 
   TaskList: {
     input: {
-      type: 'one-line',
-      label: 'Tasks',
-      getValue: () => 'listing tasks',
-      action: 'none',
+      type: "one-line",
+      label: "Tasks",
+      getValue: () => "listing tasks",
+      action: "none",
       colorScheme: {
-        primary: 'text-gray-500 dark:text-gray-400',
-        border: 'border-violet-400 dark:border-violet-500',
-        icon: 'text-violet-500 dark:text-violet-400'
-      }
+        primary: "text-gray-500 dark:text-gray-400",
+        border: "border-violet-400 dark:border-violet-500",
+        icon: "text-violet-500 dark:text-violet-400",
+      },
     },
     result: {
-      type: 'collapsible',
+      type: "collapsible",
       defaultOpen: true,
-      title: 'Task list',
-      contentType: 'task',
-      getContentProps: (result) => ({
-        content: String(result?.content || '')
-      })
-    }
+      title: "Task list",
+      contentType: "task",
+      getContentProps: result => ({
+        content: String(result?.content || ""),
+      }),
+    },
   },
 
   TaskGet: {
     input: {
-      type: 'one-line',
-      label: 'Task',
-      getValue: (input) => input.taskId ? `#${input.taskId}` : 'fetching',
-      action: 'none',
+      type: "one-line",
+      label: "Task",
+      getValue: input => (input.taskId ? `#${input.taskId}` : "fetching"),
+      action: "none",
       colorScheme: {
-        primary: 'text-gray-700 dark:text-gray-300',
-        border: 'border-violet-400 dark:border-violet-500',
-        icon: 'text-violet-500 dark:text-violet-400'
-      }
+        primary: "text-gray-700 dark:text-gray-300",
+        border: "border-violet-400 dark:border-violet-500",
+        icon: "text-violet-500 dark:text-violet-400",
+      },
     },
     result: {
-      type: 'collapsible',
+      type: "collapsible",
       defaultOpen: true,
-      title: 'Task details',
-      contentType: 'task',
-      getContentProps: (result) => ({
-        content: String(result?.content || '')
-      })
-    }
+      title: "Task details",
+      contentType: "task",
+      getContentProps: result => ({
+        content: String(result?.content || ""),
+      }),
+    },
   },
 
   // ============================================================================
@@ -571,24 +580,22 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   Task: {
     input: {
-      type: 'collapsible',
-      title: (input) => {
-        const subagentType = input.subagent_type || 'Agent';
-        const description = input.description || 'Running task';
+      type: "collapsible",
+      title: input => {
+        const subagentType = input.subagent_type || "Agent";
+        const description = input.description || "Running task";
         return `Subagent / ${subagentType}: ${description}`;
       },
       defaultOpen: false,
-      contentType: 'markdown',
-      getContentProps: (input) => {
+      contentType: "markdown",
+      getContentProps: input => {
         // If only prompt exists (and required fields), show just the prompt
         // Otherwise show all available fields
-        const hasOnlyPrompt = input.prompt &&
-          !input.model &&
-          !input.resume;
+        const hasOnlyPrompt = input.prompt && !input.model && !input.resume;
 
         if (hasOnlyPrompt) {
           return {
-            content: input.prompt || ''
+            content: input.prompt || "",
           };
         }
 
@@ -608,25 +615,25 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
         }
 
         return {
-          content: parts.join('\n\n')
+          content: parts.join("\n\n"),
         };
       },
       colorScheme: {
-        border: 'border-purple-500 dark:border-purple-400',
-        icon: 'text-purple-500 dark:text-purple-400'
-      }
+        border: "border-purple-500 dark:border-purple-400",
+        icon: "text-purple-500 dark:text-purple-400",
+      },
     },
     result: {
-      type: 'collapsible',
-      title: 'Subagent result',
+      type: "collapsible",
+      title: "Subagent result",
       defaultOpen: false,
-      contentType: 'markdown',
-      getContentProps: (result) => {
+      contentType: "markdown",
+      getContentProps: result => {
         // Handle agent results which may have complex structure
         if (result && result.content) {
           let content = result.content;
           // If content is a JSON string, try to parse it (agent results may arrive serialized)
-          if (typeof content === 'string') {
+          if (typeof content === "string") {
             try {
               const parsed = JSON.parse(content);
               if (Array.isArray(parsed)) {
@@ -640,17 +647,17 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
           // If content is an array (typical for agent responses with multiple text blocks)
           if (Array.isArray(content)) {
             const textContent = content
-              .filter((item: any) => item.type === 'text')
+              .filter((item: any) => item.type === "text")
               .map((item: any) => item.text)
-              .join('\n\n');
-            return { content: textContent || 'No response text' };
+              .join("\n\n");
+            return { content: textContent || "No response text" };
           }
           return { content: String(content) };
         }
         // Fallback to string representation
-        return { content: String(result || 'No response') };
-      }
-    }
+        return { content: String(result || "No response") };
+      },
+    },
   },
 
   // ============================================================================
@@ -659,28 +666,25 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   AskUserQuestion: {
     input: {
-      type: 'collapsible',
+      type: "collapsible",
       title: (input: any, helpers?: any) => {
         const questions = Array.isArray(input.questions) ? input.questions : [];
         const count = questions.length;
         const resultAnswers = helpers?.toolResult?.toolUseResult?.answers;
         const answers = input.answers || resultAnswers;
         const hasAnswers =
-          answers &&
-          typeof answers === 'object' &&
-          !Array.isArray(answers) &&
-          Object.keys(answers).length > 0;
+          answers && typeof answers === "object" && !Array.isArray(answers) && Object.keys(answers).length > 0;
         if (count === 1) {
-          const header = questions[0]?.header || 'Question';
+          const header = questions[0]?.header || "Question";
           return hasAnswers ? `${header} — answered` : header;
         }
         if (count === 0 && input.questions) {
-          return 'Question payload';
+          return "Question payload";
         }
         return hasAnswers ? `${count} questions — answered` : `${count} questions`;
       },
       defaultOpen: true,
-      contentType: 'question-answer',
+      contentType: "question-answer",
       getContentProps: (input: any, helpers?: any) => {
         const resultAnswers = helpers?.toolResult?.toolUseResult?.answers;
         return {
@@ -690,8 +694,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       },
     },
     result: {
-      hideOnSuccess: true
-    }
+      hideOnSuccess: true,
+    },
   },
 
   // ============================================================================
@@ -700,32 +704,32 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   exit_plan_mode: {
     input: {
-      type: 'hidden',
+      type: "hidden",
     },
     result: {
-      type: 'card',
-      contentType: 'plan-card',
+      type: "card",
+      contentType: "plan-card",
       getContentProps: (result: any) => ({
-        planTitle: result.planTitle || 'Implementation Plan',
-        planSummary: result.planSummary || '',
-        planFilePath: result.planFilePath || '',
+        planTitle: result.planTitle || "Implementation Plan",
+        planSummary: result.planSummary || "",
+        planFilePath: result.planFilePath || "",
       }),
-    }
+    },
   },
 
   ExitPlanMode: {
     input: {
-      type: 'hidden',
+      type: "hidden",
     },
     result: {
-      type: 'card',
-      contentType: 'plan-card',
+      type: "card",
+      contentType: "plan-card",
       getContentProps: (result: any) => ({
-        planTitle: result.planTitle || 'Implementation Plan',
-        planSummary: result.planSummary || '',
-        planFilePath: result.planFilePath || '',
+        planTitle: result.planTitle || "Implementation Plan",
+        planSummary: result.planSummary || "",
+        planFilePath: result.planFilePath || "",
       }),
-    }
+    },
   },
 
   // ============================================================================
@@ -734,35 +738,35 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
 
   Default: {
     input: {
-      type: 'collapsible',
-      title: 'Parameters',
+      type: "collapsible",
+      title: "Parameters",
       defaultOpen: false,
-      contentType: 'text',
-      getContentProps: (input) => ({
-        content: typeof input === 'string' ? input : JSON.stringify(input, null, 2),
-        format: 'code'
-      })
+      contentType: "text",
+      getContentProps: input => ({
+        content: typeof input === "string" ? input : JSON.stringify(input, null, 2),
+        format: "code",
+      }),
     },
     result: {
-      type: 'collapsible',
-      contentType: 'text',
-      getContentProps: (result) => ({
-        content: String(result?.content || ''),
-        format: 'plain'
-      })
-    }
-  }
+      type: "collapsible",
+      contentType: "text",
+      getContentProps: result => ({
+        content: String(result?.content || ""),
+        format: "plain",
+      }),
+    },
+  },
 };
 
 const TOOL_NAME_ALIASES: Record<string, string> = {
-  agent: 'Task',
-  ask_user_question: 'AskUserQuestion',
-  bash: 'Bash',
-  edit_file: 'Edit',
-  glob: 'Glob',
-  grep: 'Grep',
-  read_file: 'Read',
-  write_file: 'Write',
+  agent: "Task",
+  ask_user_question: "AskUserQuestion",
+  bash: "Bash",
+  edit_file: "Edit",
+  glob: "Glob",
+  grep: "Grep",
+  read_file: "Read",
+  write_file: "Write",
 };
 
 export function getCanonicalToolName(toolName: string): string {

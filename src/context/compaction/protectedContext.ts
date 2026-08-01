@@ -85,12 +85,14 @@ export function collectProtectedTurnIndexes(
   const protectedIndexes = new Set<number>();
   const turns = splitMessagesIntoTurns(messages);
   for (const turn of turns) {
-    if (turn.messages.some((message) =>
-      isProtectedContextMessage(message, {
-        ...options,
-        toolNamesByCallId,
-      })
-    )) {
+    if (
+      turn.messages.some(message =>
+        isProtectedContextMessage(message, {
+          ...options,
+          toolNamesByCallId,
+        }),
+      )
+    ) {
       protectedIndexes.add(turn.index);
     }
   }
@@ -111,9 +113,10 @@ export function isProtectedContextMessage(
     if (block.type === "tool_call" && protectedNames.has(block.name)) {
       return true;
     }
-    if ((block.type === "tool_result" || block.type === "tool_result_reference")
-      && toolNamesByCallId
-      && isProtectedToolCallId(block.toolCallId, toolNamesByCallId, protectedNames)
+    if (
+      (block.type === "tool_result" || block.type === "tool_result_reference") &&
+      toolNamesByCallId &&
+      isProtectedToolCallId(block.toolCallId, toolNamesByCallId, protectedNames)
     ) {
       return true;
     }
@@ -131,14 +134,10 @@ export function isProtectedToolCallId(
 }
 
 function hasMemoryContext(message: CanonicalMessage): boolean {
-  return message.content.some((block) =>
-    block.type === "text" && block.text.trimStart().startsWith("<memory-context>")
-  );
+  return message.content.some(block => block.type === "text" && block.text.trimStart().startsWith("<memory-context>"));
 }
 
 function isToolResultOnly(message: CanonicalMessage): boolean {
   if (message.content.length === 0) return false;
-  return message.content.every(
-    (block) => block.type === "tool_result" || block.type === "tool_result_reference",
-  );
+  return message.content.every(block => block.type === "tool_result" || block.type === "tool_result_reference");
 }

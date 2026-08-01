@@ -165,9 +165,7 @@ export class AttachmentResolver {
     }
     const text = await readFile(absolute, "utf8");
     return {
-      blocks: [
-        { type: "text", text: `<attachment path="${absolute}">\n${text}\n</attachment>` },
-      ],
+      blocks: [{ type: "text", text: `<attachment path="${absolute}">\n${text}\n</attachment>` }],
       diagnostics: [],
     };
   }
@@ -196,7 +194,7 @@ export class AttachmentResolver {
           {
             code: "attachment_too_large",
             severity: "warning",
-            message: `Image ${absolute} is ${info.size} bytes (limit ${this.maxImageBytes}); skipped (PilotDeck does not resize, intentional_difference §4.5).`,
+            message: `Image ${absolute} is ${info.size} bytes (limit ${this.maxImageBytes}); skipped (Sati does not resize, intentional_difference §4.5).`,
           },
         ],
       };
@@ -268,7 +266,7 @@ export class AttachmentResolver {
         {
           code: "image_no_resize",
           severity: "info",
-          message: "PilotDeck does not resize images; original bytes forwarded (intentional_difference §4.5).",
+          message: "Sati does not resize images; original bytes forwarded (intentional_difference §4.5).",
         },
       ],
     };
@@ -303,7 +301,7 @@ export class AttachmentResolver {
         {
           code: "pdf_size_estimate",
           severity: "info",
-          message: `Estimated ${estimatedPages} pages from ${info.size} bytes (PilotDeck does not invoke pdfinfo, intentional_difference §4.5).`,
+          message: `Estimated ${estimatedPages} pages from ${info.size} bytes (Sati does not invoke pdfinfo, intentional_difference §4.5).`,
         },
       ],
     };
@@ -324,7 +322,8 @@ function detectImageMime(buffer: Buffer): string | undefined {
   if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
   const gifHeader = buffer.subarray(0, 6).toString("ascii");
   if (gifHeader === "GIF87a" || gifHeader === "GIF89a") return "image/gif";
-  if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP")
+    return "image/webp";
   return undefined;
 }
 
@@ -332,10 +331,10 @@ function imageMimeCompatible(declared: string, actual: string): boolean {
   return declared.toLowerCase() === actual.toLowerCase();
 }
 
-async function validateImageForProvider(buffer: Buffer, mimeType: string): Promise<
-  | { ok: true; buffer: Buffer; mimeType: string }
-  | { ok: false; error: string }
-> {
+async function validateImageForProvider(
+  buffer: Buffer,
+  mimeType: string,
+): Promise<{ ok: true; buffer: Buffer; mimeType: string } | { ok: false; error: string }> {
   try {
     const sharpModule = await import("sharp");
     const sharp = sharpModule.default;

@@ -4,6 +4,7 @@ import {
   validateWorkflowManifest,
   type WorkflowManifest,
 } from "../../patent/index.js";
+import { StageHandlerRegistry } from "../../patent/atoms/index.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type PatentWorkflowStageOutput = {
@@ -29,6 +30,10 @@ export type PatentWorkflowInput = {
  * 主代理按 manifest 各阶段（解析→检索→对比→结论→人工确认）逐步完成分析，
  * 将各阶段文本传入本工具做结果组装、完整性校验（degraded 标记）与摘要生成。
  * 确定性执行，无 LLM 调用；用于专利新颖性分析等结构化流程的产物收口。
+ *
+ * 注意：本工具传**空 StageHandlerRegistry**（禁用原子执行）——阶段输出由主代理
+ * 提供、工具只做收口校验；真正需要原子自动执行（handler 内部调 LLM/检索）时，
+ * 调用方应注入已注册内置原子的注册表与 provider（见 src/patent/atoms）。
  */
 export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInput> {
   const manifests = new Map<string, WorkflowManifest>([[patentNoveltyManifest.id, patentNoveltyManifest]]);
@@ -92,7 +97,10 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
       }
 
       const byId = new Map((input.outputs ?? []).map(o => [o.stageId, o.text]));
-      const result = await runWorkflow(manifest, { caseId: input.caseId }, async stage => byId.get(stage.id) ?? "");
+      // 空注册表：禁用原子执行，保持"主代理产出 → 工具收口"语义（无 LLM 调用）。
+      const result = await runWorkflow(manifest, { caseId: input.caseId }, async stage => byId.get(stage.id) ?? "", {
+        handlers: new StageHandlerRegistry(),
+      });
 
       const lines = result.stages.map(s => {
         const flag = s.degraded ? "⚠️ 降级" : "✅";

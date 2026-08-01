@@ -20,12 +20,12 @@ export class CronTaskStore {
   }
 
   async getTask(taskId: string): Promise<CronTask | undefined> {
-    return (await this.listTasks()).find((task) => task.taskId === taskId);
+    return (await this.listTasks()).find(task => task.taskId === taskId);
   }
 
   async putTask(task: CronTask): Promise<void> {
-    await this.mutateTaskFile(async (file) => {
-      const index = file.tasks.findIndex((entry) => entry.taskId === task.taskId);
+    await this.mutateTaskFile(async file => {
+      const index = file.tasks.findIndex(entry => entry.taskId === task.taskId);
       const nextTasks = [...file.tasks];
       if (index >= 0) {
         nextTasks[index] = task;
@@ -37,8 +37,8 @@ export class CronTaskStore {
   }
 
   async replaceTask(task: CronTask): Promise<boolean> {
-    return this.mutateTaskFile(async (file) => {
-      const index = file.tasks.findIndex((entry) => entry.taskId === task.taskId);
+    return this.mutateTaskFile(async file => {
+      const index = file.tasks.findIndex(entry => entry.taskId === task.taskId);
       if (index < 0) {
         return false;
       }
@@ -50,9 +50,9 @@ export class CronTaskStore {
   }
 
   async updateTask(taskId: string, update: (task: CronTask) => CronTask | undefined): Promise<CronTask | undefined> {
-    return this.mutateTaskFile(async (file) => {
+    return this.mutateTaskFile(async file => {
       let updated: CronTask | undefined;
-      const tasks = file.tasks.flatMap((task) => {
+      const tasks = file.tasks.flatMap(task => {
         if (task.taskId !== taskId) {
           return [task];
         }
@@ -65,8 +65,8 @@ export class CronTaskStore {
   }
 
   async deleteTask(taskId: string): Promise<boolean> {
-    return this.mutateTaskFile(async (file) => {
-      const tasks = file.tasks.filter((task) => task.taskId !== taskId);
+    return this.mutateTaskFile(async file => {
+      const tasks = file.tasks.filter(task => task.taskId !== taskId);
       if (tasks.length === file.tasks.length) {
         return false;
       }
@@ -92,8 +92,8 @@ export class CronTaskStore {
     }
     const records = raw
       .split("\n")
-      .filter((line) => line.trim().length > 0)
-      .flatMap((line) => {
+      .filter(line => line.trim().length > 0)
+      .flatMap(line => {
         try {
           const parsed = JSON.parse(line);
           return normalizeRun(parsed) ? [normalizeRun(parsed)!] : [];
@@ -128,7 +128,7 @@ export class CronTaskStore {
       }
       return {
         schemaVersion: 1,
-        tasks: parsed.tasks.flatMap((task) => (normalizeTask(task) ? [normalizeTask(task)!] : [])),
+        tasks: parsed.tasks.flatMap(task => (normalizeTask(task) ? [normalizeTask(task)!] : [])),
       };
     } catch {
       return { schemaVersion: 1, tasks: [] };
@@ -158,10 +158,11 @@ export class CronTaskStore {
   private async mutateTaskFile<T>(mutation: (file: CronTaskFile) => Promise<T>): Promise<T> {
     const key = this.paths.tasksFile;
     const previous = taskFileMutationTails.get(key) ?? Promise.resolve();
-    const operation = previous
-      .catch(() => undefined)
-      .then(async () => mutation(await this.readTaskFile()));
-    const tail = operation.then(() => undefined, () => undefined);
+    const operation = previous.catch(() => undefined).then(async () => mutation(await this.readTaskFile()));
+    const tail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
     taskFileMutationTails.set(key, tail);
     try {
       return await operation;

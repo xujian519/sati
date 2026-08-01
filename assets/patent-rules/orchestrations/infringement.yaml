@@ -1,0 +1,34 @@
+# 侵权分析 — 事务级编排 (Layer 2)
+id: "infringement"
+name: "侵权分析事务"
+caseType: "infringement"
+description: "对被控产品进行专利侵权分析的完整流程"
+
+discoveryStages:
+  - name: "目标专利深度分析"
+    goal: "提取权利要求保护范围，分解技术特征"
+    suggestions: ["CNIPA获取专利全文", "LLM分解权利要求特征树"]
+  - name: "被控产品技术分析"
+    goal: "获取并分析被控产品的技术方案"
+    suggestions: ["用户提供产品说明书/图片/实物描述", "LLM提取技术特征"]
+  - name: "特征对比初筛"
+    goal: "初步判断是否存在全面覆盖或等同可能性"
+    suggestions: ["LLM逐特征对比分析"]
+
+availableArticles:
+  - articleId: "INFR-FC"
+    priority: 1
+    description: "全面覆盖原则 — 全部技术特征逐一对比"
+  - articleId: "equivalence"
+    priority: 2
+    description: "等同原则 — 手段-功能-效果三要素"
+
+executionTemplate:
+  artifactType: "侵权分析报告"
+  sections:
+    - "专利基本信息"
+    - "权利要求保护范围解析"
+    - "被控产品技术方案"
+    - "特征对比表"
+    - "侵权判断结论"
+    - "法律依据"

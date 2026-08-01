@@ -1,8 +1,8 @@
-import type { LucideIcon } from 'lucide-react';
+import type { LucideIcon } from "lucide-react";
 
-export type FileTreeViewMode = 'simple' | 'compact' | 'detailed';
+export type FileTreeViewMode = "simple" | "compact" | "detailed";
 
-export type FileTreeItemType = 'file' | 'directory';
+export type FileTreeItemType = "file" | "directory";
 
 export interface FileTreeNode {
   name: string;

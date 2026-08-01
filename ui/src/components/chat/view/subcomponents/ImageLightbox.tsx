@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface LightboxImage {
   data: string;
@@ -27,42 +27,42 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
   }, [safeStart]);
 
   const showPrev = useCallback(() => {
-    setActiveIndex((index) => (index <= 0 ? images.length - 1 : index - 1));
+    setActiveIndex(index => (index <= 0 ? images.length - 1 : index - 1));
   }, [images.length]);
   const showNext = useCallback(() => {
-    setActiveIndex((index) => (index >= images.length - 1 ? 0 : index + 1));
+    setActiveIndex(index => (index >= images.length - 1 ? 0 : index + 1));
   }, [images.length]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
         onClose();
         return;
       }
       if (images.length <= 1) return;
-      if (event.key === 'ArrowLeft') {
+      if (event.key === "ArrowLeft") {
         event.preventDefault();
         showPrev();
-      } else if (event.key === 'ArrowRight') {
+      } else if (event.key === "ArrowRight") {
         event.preventDefault();
         showNext();
       }
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose, showPrev, showNext, images.length]);
 
   // Prevent the body from scrolling while the lightbox is open.
   useEffect(() => {
     const original = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = original;
     };
   }, []);
 
-  if (typeof document === 'undefined') return null;
+  if (typeof document === "undefined") return null;
   if (images.length === 0) return null;
 
   const active = images[activeIndex];
@@ -71,13 +71,13 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={active?.name || 'Image preview'}
+      aria-label={active?.name || "Image preview"}
       className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/85 backdrop-blur-sm"
       onClick={onClose}
     >
       <button
         type="button"
-        onClick={(event) => {
+        onClick={event => {
           event.stopPropagation();
           onClose();
         }}
@@ -92,7 +92,7 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
       {images.length > 1 ? (
         <button
           type="button"
-          onClick={(event) => {
+          onClick={event => {
             event.stopPropagation();
             showPrev();
           }}
@@ -108,7 +108,7 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
       {images.length > 1 ? (
         <button
           type="button"
-          onClick={(event) => {
+          onClick={event => {
             event.stopPropagation();
             showNext();
           }}
@@ -123,12 +123,12 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
 
       <figure
         className="flex max-h-[92vh] max-w-[92vw] flex-col items-center gap-2"
-        onClick={(event) => event.stopPropagation()}
+        onClick={event => event.stopPropagation()}
       >
         <img
           key={active.data}
           src={active.data}
-          alt={active.name || 'Image preview'}
+          alt={active.name || "Image preview"}
           className="max-h-[88vh] max-w-[92vw] rounded-md object-contain shadow-2xl"
         />
         {active.name || images.length > 1 ? (

@@ -5,7 +5,7 @@ function parseNodeVersion(version) {
   return version
     .replace(/^v/, "")
     .split(".")
-    .map((part) => Number.parseInt(part, 10) || 0);
+    .map(part => Number.parseInt(part, 10) || 0);
 }
 
 function isAtLeastMinimum(version) {
@@ -18,7 +18,7 @@ function isAtLeastMinimum(version) {
 }
 
 function fail(message) {
-  console.error(`[pilotdeck] ${message}`);
+  console.error(`[sati] ${message}`);
   process.exit(1);
 }
 
@@ -34,9 +34,7 @@ process.emitWarning = (warning, typeOrOptions, ...args) => {
 
 const nodeVersion = process.versions.node;
 if (!isAtLeastMinimum(nodeVersion)) {
-  fail(
-    `Node.js >=${minimumNodeVersionLabel} is required because PilotDeck uses node:sqlite. Current: v${nodeVersion}.`,
-  );
+  fail(`Node.js >=${minimumNodeVersionLabel} is required because Sati uses node:sqlite. Current: v${nodeVersion}.`);
 }
 
 try {

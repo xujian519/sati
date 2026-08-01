@@ -20,24 +20,10 @@ type CheckerResult = {
 const MAX_DIAGNOSTICS = 3;
 const CHECKER_TIMEOUT_MS = 2_000;
 const MAX_CHECKER_OUTPUT_BYTES = 16_384;
-const JAVASCRIPT_EXTENSIONS = new Set([
-  ".cjs",
-  ".cts",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".mts",
-  ".ts",
-  ".tsx",
-]);
+const JAVASCRIPT_EXTENSIONS = new Set([".cjs", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]);
 const PYTHON_EXTENSIONS = new Set([".py", ".pyw"]);
 const BASH_EXTENSIONS = new Set([".bash", ".sh"]);
-const BASH_FILENAMES = new Set([
-  ".bash_login",
-  ".bash_profile",
-  ".bashrc",
-  ".profile",
-]);
+const BASH_FILENAMES = new Set([".bash_login", ".bash_profile", ".bashrc", ".profile"]);
 const YAML_EXTENSIONS = new Set([".yaml", ".yml"]);
 const HTML_EXTENSIONS = new Set([".html", ".htm"]);
 const CSV_EXTENSIONS = new Set([".csv", ".tsv"]);
@@ -68,10 +54,7 @@ except ValueError as exc:
     sys.exit(1)
 `.trim();
 
-export async function formatSyntaxDiagnostics(
-  filePath: string,
-  content: string,
-): Promise<string | undefined> {
+export async function formatSyntaxDiagnostics(filePath: string, content: string): Promise<string | undefined> {
   try {
     const diagnostics = await collectSyntaxDiagnostics(filePath, content);
     if (diagnostics.length === 0) {
@@ -79,19 +62,16 @@ export async function formatSyntaxDiagnostics(
     }
     return [
       "Syntax issues detected:",
-      ...diagnostics.slice(0, MAX_DIAGNOSTICS).map((diagnostic) =>
-        `- L${diagnostic.line}:${diagnostic.column} error: ${diagnostic.message}`
-      ),
+      ...diagnostics
+        .slice(0, MAX_DIAGNOSTICS)
+        .map(diagnostic => `- L${diagnostic.line}:${diagnostic.column} error: ${diagnostic.message}`),
     ].join("\n");
   } catch {
     return undefined;
   }
 }
 
-async function collectSyntaxDiagnostics(
-  filePath: string,
-  content: string,
-): Promise<SyntaxDiagnostic[]> {
+async function collectSyntaxDiagnostics(filePath: string, content: string): Promise<SyntaxDiagnostic[]> {
   const extension = path.extname(filePath).toLowerCase();
   const filename = path.basename(filePath).toLowerCase();
   if (extension === ".json") {
@@ -130,10 +110,12 @@ function collectJsonDiagnostics(content: string): SyntaxDiagnostic[] {
     const position = parseJsonErrorPosition(rawMessage) ?? content.length;
     const explicitLocation = parseJsonLineColumn(rawMessage);
     const location = explicitLocation ?? positionToLineColumn(content, position);
-    return [{
-      ...location,
-      message: trimDiagnosticMessage(rawMessage),
-    }];
+    return [
+      {
+        ...location,
+        message: trimDiagnosticMessage(rawMessage),
+      },
+    ];
   }
 }
 
@@ -158,7 +140,7 @@ async function collectTypeScriptDiagnostics(
   const parseDiagnostics =
     (sourceFile as { parseDiagnostics?: readonly import("typescript").Diagnostic[] }).parseDiagnostics ?? [];
 
-  return parseDiagnostics.map((diagnostic) => {
+  return parseDiagnostics.map(diagnostic => {
     const start = typeof diagnostic.start === "number" ? diagnostic.start : 0;
     const location = sourceFile.getLineAndCharacterOfPosition(start);
     return {
@@ -169,10 +151,7 @@ async function collectTypeScriptDiagnostics(
   });
 }
 
-export async function collectPythonSyntaxDiagnostics(
-  filePath: string,
-  content: string,
-): Promise<SyntaxDiagnostic[]> {
+export async function collectPythonSyntaxDiagnostics(filePath: string, content: string): Promise<SyntaxDiagnostic[]> {
   const result = await runChecker("python3", ["-c", PYTHON_SYNTAX_CHECKER, filePath], content);
   if (!result || result.timedOut || result.code === 0) {
     return [];
@@ -181,17 +160,16 @@ export async function collectPythonSyntaxDiagnostics(
   if (!parsed) {
     return [];
   }
-  return [{
-    line: positiveInteger(parsed.line) ?? 1,
-    column: positiveInteger(parsed.column) ?? 1,
-    message: trimDiagnosticMessage(stringValue(parsed.message) ?? "Invalid Python syntax."),
-  }];
+  return [
+    {
+      line: positiveInteger(parsed.line) ?? 1,
+      column: positiveInteger(parsed.column) ?? 1,
+      message: trimDiagnosticMessage(stringValue(parsed.message) ?? "Invalid Python syntax."),
+    },
+  ];
 }
 
-async function collectPythonDiagnostics(
-  filePath: string,
-  content: string,
-): Promise<SyntaxDiagnostic[]> {
+async function collectPythonDiagnostics(filePath: string, content: string): Promise<SyntaxDiagnostic[]> {
   return collectPythonSyntaxDiagnostics(filePath, content);
 }
 
@@ -213,10 +191,8 @@ function collectYamlDiagnostics(content: string): SyntaxDiagnostic[] {
     lineCounter,
     prettyErrors: false,
   });
-  return document.errors.map((error) => {
-    const offset = Array.isArray(error.pos) && typeof error.pos[0] === "number"
-      ? error.pos[0]
-      : 0;
+  return document.errors.map(error => {
+    const offset = Array.isArray(error.pos) && typeof error.pos[0] === "number" ? error.pos[0] : 0;
     const location = lineCounter.linePos(offset);
     return {
       line: location.line,
@@ -230,9 +206,9 @@ function collectHtmlDiagnostics(content: string): SyntaxDiagnostic[] {
   const errors: ParserError[] = [];
   parseHtmlFragment(content, {
     sourceCodeLocationInfo: true,
-    onParseError: (error) => errors.push(error),
+    onParseError: error => errors.push(error),
   });
-  return errors.map((error) => ({
+  return errors.map(error => ({
     line: positiveInteger(error.startLine) ?? 1,
     column: positiveInteger(error.startCol) ?? 1,
     message: trimDiagnosticMessage(`HTML parse error: ${error.code}`),
@@ -249,19 +225,18 @@ function collectCsvDiagnostics(content: string, extension: string): SyntaxDiagno
     return [];
   } catch (error) {
     const record = isRecord(error) ? error : {};
-    return [{
-      line: positiveInteger(record.lines) ?? 1,
-      column: positiveInteger(record.column) ?? 1,
-      message: trimDiagnosticMessage(stringValue(record.message) ?? "Invalid CSV syntax."),
-    }];
+    return [
+      {
+        line: positiveInteger(record.lines) ?? 1,
+        column: positiveInteger(record.column) ?? 1,
+        message: trimDiagnosticMessage(stringValue(record.message) ?? "Invalid CSV syntax."),
+      },
+    ];
   }
 }
 
 function collectMarkdownDiagnostics(content: string): SyntaxDiagnostic[] {
-  return [
-    ...collectMarkdownFrontmatterDiagnostics(content),
-    ...collectMarkdownFenceDiagnostics(content),
-  ];
+  return [...collectMarkdownFrontmatterDiagnostics(content), ...collectMarkdownFenceDiagnostics(content)];
 }
 
 function collectMarkdownFrontmatterDiagnostics(content: string): SyntaxDiagnostic[] {
@@ -270,22 +245,22 @@ function collectMarkdownFrontmatterDiagnostics(content: string): SyntaxDiagnosti
     return [];
   }
 
-  const closingIndex = lines.findIndex((line, index) =>
-    index > 0 && (line.trim() === "---" || line.trim() === "...")
-  );
+  const closingIndex = lines.findIndex((line, index) => index > 0 && (line.trim() === "---" || line.trim() === "..."));
 
   if (closingIndex < 0) {
     const looksLikeFrontmatter = lines
       .slice(1, Math.min(lines.length, 40))
-      .some((line) => /^[A-Za-z0-9_.-]+\s*:/u.test(line.trim()));
+      .some(line => /^[A-Za-z0-9_.-]+\s*:/u.test(line.trim()));
     if (!looksLikeFrontmatter) {
       return [];
     }
-    return [{
-      line: 1,
-      column: 1,
-      message: "YAML frontmatter is opened with --- but no closing delimiter was found.",
-    }];
+    return [
+      {
+        line: 1,
+        column: 1,
+        message: "YAML frontmatter is opened with --- but no closing delimiter was found.",
+      },
+    ];
   }
 
   const frontmatter = lines.slice(1, closingIndex).join("\n");
@@ -299,10 +274,8 @@ function collectMarkdownFrontmatterDiagnostics(content: string): SyntaxDiagnosti
     prettyErrors: false,
   });
 
-  return document.errors.map((error) => {
-    const offset = Array.isArray(error.pos) && typeof error.pos[0] === "number"
-      ? error.pos[0]
-      : 0;
+  return document.errors.map(error => {
+    const offset = Array.isArray(error.pos) && typeof error.pos[0] === "number" ? error.pos[0] : 0;
     const location = lineCounter.linePos(offset);
     return {
       line: location.line + 1,
@@ -347,17 +320,16 @@ function collectMarkdownFenceDiagnostics(content: string): SyntaxDiagnostic[] {
   if (!openFence) {
     return [];
   }
-  return [{
-    line: openFence.line,
-    column: openFence.column,
-    message: "Unclosed Markdown code fence.",
-  }];
+  return [
+    {
+      line: openFence.line,
+      column: openFence.column,
+      message: "Unclosed Markdown code fence.",
+    },
+  ];
 }
 
-function scriptKindForExtension(
-  extension: string,
-  ts: typeof import("typescript"),
-): number {
+function scriptKindForExtension(extension: string, ts: typeof import("typescript")): number {
   switch (extension) {
     case ".jsx":
       return ts.ScriptKind.JSX;
@@ -375,12 +347,13 @@ function scriptKindForExtension(
 }
 
 function diagnosticFromBashStderr(stderr: string): SyntaxDiagnostic {
-  const lines = stderr.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
-  const primary = [...lines].reverse().find((line) => /syntax error/i.test(line)) ?? lines.at(-1) ?? stderr;
+  const lines = stderr
+    .split(/\r?\n/u)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const primary = [...lines].reverse().find(line => /syntax error/i.test(line)) ?? lines.at(-1) ?? stderr;
   const lineMatch = /\bline\s+(\d+)\b/i.exec(primary) ?? /\bline\s+(\d+)\b/i.exec(stderr);
-  const message = primary
-    .replace(/^bash:\s*/u, "")
-    .replace(/^line\s+\d+:\s*/iu, "");
+  const message = primary.replace(/^bash:\s*/u, "").replace(/^line\s+\d+:\s*/iu, "");
   return {
     line: lineMatch ? Number(lineMatch[1]) : 1,
     column: 1,
@@ -388,12 +361,8 @@ function diagnosticFromBashStderr(stderr: string): SyntaxDiagnostic {
   };
 }
 
-async function runChecker(
-  command: string,
-  args: string[],
-  input: string,
-): Promise<CheckerResult | undefined> {
-  return await new Promise((resolve) => {
+async function runChecker(command: string, args: string[], input: string): Promise<CheckerResult | undefined> {
+  return await new Promise(resolve => {
     let settled = false;
     let stdout = "";
     let stderr = "";
@@ -427,7 +396,7 @@ async function runChecker(
     child.stderr.on("data", (chunk: Buffer) => {
       stderr = appendCapped(stderr, chunk);
     });
-    child.on("close", (code) => {
+    child.on("close", code => {
       finish({
         code,
         stdout,

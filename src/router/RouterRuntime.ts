@@ -3,9 +3,9 @@ import type {
   CanonicalModelRequest,
   ModelRuntime,
   ModelProtocol,
+  InputModality,
 } from "../model/index.js";
 import { cloneMessages, downgradeUnsupportedContent, ModelRequestError } from "../model/index.js";
-import type { InputModality } from "../model/index.js";
 import {
   LITELLM_DEFAULT_MAX_RETRIES,
   LITELLM_INITIAL_RETRY_DELAY_MS,
@@ -13,15 +13,9 @@ import {
   LITELLM_RETRY_JITTER,
 } from "../model/streaming/streamModel.js";
 import { buildLiteLLMContinuationRequest } from "../model/streaming/continuationRequest.js";
-import {
-  DEFAULT_SUBAGENT_POLICY,
-  type RouterConfig,
-  type RouterModelRef,
-} from "./config/schema.js";
-import type {
-  PilotDeckCustomRouter,
-  CustomRouterRegistry,
-} from "./customRouter/customRouter.js";
+import type { TelemetryClient } from "../telemetry/index.js";
+import { DEFAULT_SUBAGENT_POLICY, type RouterConfig, type RouterModelRef } from "./config/schema.js";
+import type { SatiCustomRouter, CustomRouterRegistry } from "./customRouter/customRouter.js";
 import { noopCustomRouterRegistry } from "./customRouter/customRouter.js";
 import { isFallbackEligible, planFallback } from "./fallback/runFallbackChain.js";
 import { applyOrchestration } from "./orchestrate/applyOrchestration.js";
@@ -32,26 +26,18 @@ import type {
   RouterMutationsLog,
   RouterScenarioType,
 } from "./protocol/decision.js";
-import type { RouterEvent, RouterEventBus } from "./protocol/events.js";
+import type { RouterEventBus } from "./protocol/events.js";
 import { decideScenario } from "./scenario/decideScenario.js";
 import { stripSubagentTagFromMessages } from "./scenario/subagentDetector.js";
 import { SessionRouterStore } from "./session/SessionRouterStore.js";
 import { SessionUsageCache } from "./session/sessionUsageCache.js";
 import { ProviderHealthTracker } from "./health/ProviderHealthTracker.js";
-import {
-  createZeroUsageState,
-  observeEventForZeroUsage,
-  shouldRetryZeroUsage,
-} from "./retry/zeroUsageRetry.js";
+import { createZeroUsageState, observeEventForZeroUsage, shouldRetryZeroUsage } from "./retry/zeroUsageRetry.js";
 import { TokenStatsCollector } from "./stats/TokenStatsCollector.js";
 import { classifyAndRoute } from "./tokenSaver/classifyAndRoute.js";
 import { countMessagesTokens, countResponseTokens, dispose as disposeTokenizer } from "./utils/countTokens.js";
 import { calculateCacheReadCost, calculateInputCost } from "./utils/modelPricing.js";
-import {
-  collectRequiredInputModalities,
-  missingInputModalities,
-} from "./utils/mediaRequirements.js";
-import type { TelemetryClient } from "../telemetry/index.js";
+import { collectRequiredInputModalities, missingInputModalities } from "./utils/mediaRequirements.js";
 
 export type RouterRuntimeDeps = {
   modelRuntime: ModelRuntime;
@@ -100,10 +86,7 @@ export type RouterRuntime = {
   shutdown(): Promise<void>;
 };
 
-export function createRouterRuntime(
-  config: RouterConfig,
-  deps: RouterRuntimeDeps,
-): RouterRuntime {
+export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDeps): RouterRuntime {
   const enabled = config.enabled !== false;
   const stats = new TokenStatsCollector({
     ...config.stats,
@@ -113,9 +96,11 @@ export function createRouterRuntime(
       : config.stats?.baselineModel,
   });
   const externalStore = !!deps.sessionStore;
-  const sessionStore = deps.sessionStore ?? new SessionRouterStore({
-    now: () => (deps.now?.() ?? new Date()).getTime(),
-  });
+  const sessionStore =
+    deps.sessionStore ??
+    new SessionRouterStore({
+      now: () => (deps.now?.() ?? new Date()).getTime(),
+    });
   const usageCache = new SessionUsageCache();
   const customRouters = deps.customRouterRegistry ?? noopCustomRouterRegistry;
   const judgeRuntime = deps.judgeRuntime ?? deps.modelRuntime;
@@ -131,27 +116,18 @@ export function createRouterRuntime(
     return tracker;
   }
 
-  function missingForModel(
-    ref: RouterModelRef,
-    required: readonly InputModality[],
-  ): InputModality[] {
+  function missingForModel(ref: RouterModelRef, required: readonly InputModality[]): InputModality[] {
     if (required.length === 0) {
       return [];
     }
     try {
-      return missingInputModalities(
-        deps.modelRuntime.getMultimodal(ref.provider, ref.model),
-        required,
-      );
+      return missingInputModalities(deps.modelRuntime.getMultimodal(ref.provider, ref.model), required);
     } catch {
       return [...required];
     }
   }
 
-  function supportsMediaRequirements(
-    ref: RouterModelRef,
-    required: readonly InputModality[],
-  ): boolean {
+  function supportsMediaRequirements(ref: RouterModelRef, required: readonly InputModality[]): boolean {
     return missingForModel(ref, required).length === 0;
   }
 
@@ -160,7 +136,7 @@ export function createRouterRuntime(
     const add = (refs: RouterModelRef[] | undefined) => {
       for (const ref of refs ?? []) {
         const id = ref.id || `${ref.provider}/${ref.model}`;
-        if (!candidates.some((candidate) => candidate.provider === ref.provider && candidate.model === ref.model)) {
+        if (!candidates.some(candidate => candidate.provider === ref.provider && candidate.model === ref.model)) {
           candidates.push({ ...ref, id });
         }
       }
@@ -174,8 +150,7 @@ export function createRouterRuntime(
     scenarioType: RouterScenarioType,
     required: readonly InputModality[],
   ): RouterModelRef | undefined {
-    return fallbackCandidatesFor(scenarioType)
-      .find((ref) => supportsMediaRequirements(ref, required));
+    return fallbackCandidatesFor(scenarioType).find(ref => supportsMediaRequirements(ref, required));
   }
 
   function rerouteDecisionForMedia(
@@ -232,32 +207,18 @@ export function createRouterRuntime(
     const estimatedInputTokens = countMessagesTokens(messages);
     const observedInputTokens = lastUsage?.inputTokens ?? 0;
     const observedCacheReadTokens = lastUsage?.cacheReadTokens ?? 0;
-    const observedCacheHitRatio = observedInputTokens > 0
-      ? Math.min(1, Math.max(0, observedCacheReadTokens / observedInputTokens))
-      : 0;
+    const observedCacheHitRatio =
+      observedInputTokens > 0 ? Math.min(1, Math.max(0, observedCacheReadTokens / observedInputTokens)) : 0;
     if (observedCacheHitRatio <= 0) {
       return { selection: next };
     }
 
     const estimatedCacheReadTokens = Math.floor(estimatedInputTokens * observedCacheHitRatio);
     const estimatedUncachedTokens = Math.max(0, estimatedInputTokens - estimatedCacheReadTokens);
-    const cachedCost = calculateCacheReadCost(
-      estimatedCacheReadTokens,
-      current.provider,
-      current.model,
-      config.stats?.modelPricing,
-    ) + calculateInputCost(
-      estimatedUncachedTokens,
-      current.provider,
-      current.model,
-      config.stats?.modelPricing,
-    );
-    const prefillCost = calculateInputCost(
-      estimatedInputTokens,
-      next.provider,
-      next.model,
-      config.stats?.modelPricing,
-    );
+    const cachedCost =
+      calculateCacheReadCost(estimatedCacheReadTokens, current.provider, current.model, config.stats?.modelPricing) +
+      calculateInputCost(estimatedUncachedTokens, current.provider, current.model, config.stats?.modelPricing);
+    const prefillCost = calculateInputCost(estimatedInputTokens, next.provider, next.model, config.stats?.modelPricing);
 
     const minSavingsRatio = cacheAware?.minSavingsRatio ?? 0;
     const requiredSavings = cachedCost * minSavingsRatio;
@@ -292,15 +253,11 @@ export function createRouterRuntime(
     };
   }
 
-  async function resolveCustom(
-    input: RouterDecisionInput,
-  ): Promise<Partial<RouterDecision> | undefined> {
+  async function resolveCustom(input: RouterDecisionInput): Promise<Partial<RouterDecision> | undefined> {
     if (!config.customRouter) {
       return undefined;
     }
-    const router: PilotDeckCustomRouter | undefined = customRouters.lookupRouter(
-      config.customRouter.extensionId,
-    );
+    const router: SatiCustomRouter | undefined = customRouters.lookupRouter(config.customRouter.extensionId);
     if (!router) {
       return undefined;
     }
@@ -315,7 +272,7 @@ export function createRouterRuntime(
       });
     } catch (error) {
       events.emit({
-        type: "pilotdeck_router_custom_failed",
+        type: "sati_router_custom_failed",
         sessionId: input.sessionId,
         extensionId: config.customRouter.extensionId,
         reason: error instanceof Error ? error.message : String(error),
@@ -352,18 +309,23 @@ export function createRouterRuntime(
     };
 
     const custom = await resolveCustom(inputWithUsage);
-    const scenarioOutcome = decideScenario(inputWithUsage, config.scenarios ?? {} as any);
+    const scenarioOutcome = decideScenario(inputWithUsage, config.scenarios);
 
     let scenarioType: RouterScenarioType = scenarioOutcome.scenarioType;
-    const previousStickySelection = (input.metadata?.previousProvider && input.metadata.previousModel)
-      ? {
-        id: `${input.metadata.previousProvider}/${input.metadata.previousModel}`,
-        provider: input.metadata.previousProvider,
-        model: input.metadata.previousModel,
-      }
-      : sticky?.stickyProvider && sticky.stickyModel
-      ? { id: `${sticky.stickyProvider}/${sticky.stickyModel}`, provider: sticky.stickyProvider, model: sticky.stickyModel }
-      : undefined;
+    const previousStickySelection =
+      input.metadata?.previousProvider && input.metadata.previousModel
+        ? {
+            id: `${input.metadata.previousProvider}/${input.metadata.previousModel}`,
+            provider: input.metadata.previousProvider,
+            model: input.metadata.previousModel,
+          }
+        : sticky?.stickyProvider && sticky.stickyModel
+          ? {
+              id: `${sticky.stickyProvider}/${sticky.stickyModel}`,
+              provider: sticky.stickyProvider,
+              model: sticky.stickyModel,
+            }
+          : undefined;
     let selection: RouterModelRef | undefined =
       custom?.provider && custom.model
         ? { id: `${custom.provider}/${custom.model}`, provider: custom.provider, model: custom.model }
@@ -426,7 +388,7 @@ export function createRouterRuntime(
         if (tokenSaver) {
           if (tokenSaver.failureReason) {
             events.emit({
-              type: "pilotdeck_router_token_saver_failed",
+              type: "sati_router_token_saver_failed",
               sessionId: input.sessionId,
               reason: tokenSaver.failureReason,
               fallbackTier: tokenSaver.tier,
@@ -444,9 +406,10 @@ export function createRouterRuntime(
             selection = cacheAware.selection;
             cacheAwareSwitch = cacheAware.mutation;
           }
-          tokenSaverTier = cacheAwareSwitch?.action === "kept_sticky"
-            ? (sticky?.tokenSaverTier ?? input.metadata?.previousTier ?? tokenSaver.tier)
-            : tokenSaver.tier;
+          tokenSaverTier =
+            cacheAwareSwitch?.action === "kept_sticky"
+              ? (sticky?.tokenSaverTier ?? input.metadata?.previousTier ?? tokenSaver.tier)
+              : tokenSaver.tier;
         }
       }
     }
@@ -528,7 +491,7 @@ export function createRouterRuntime(
     });
 
     events.emit({
-      type: "pilotdeck_router_decision",
+      type: "sati_router_decision",
       sessionId: input.sessionId,
       decision,
     });
@@ -536,21 +499,21 @@ export function createRouterRuntime(
     return decision;
   }
 
-  function applyDecisionToRequest(
-    decision: RouterDecision,
-    request: CanonicalModelRequest,
-  ): CanonicalModelRequest {
+  function applyDecisionToRequest(decision: RouterDecision, request: CanonicalModelRequest): CanonicalModelRequest {
     let messages = decision.requestPatch?.messages ?? request.messages;
     if (decision.mutations.subagentTagStripped) {
       messages = stripSubagentTagFromMessages(messages);
     }
-    return clampMaxOutputTokensToModelCap({
-      ...request,
-      ...decision.requestPatch,
-      provider: decision.provider,
-      model: decision.model,
-      messages,
-    }, deps.modelRuntime);
+    return clampMaxOutputTokensToModelCap(
+      {
+        ...request,
+        ...decision.requestPatch,
+        provider: decision.provider,
+        model: decision.model,
+        messages,
+      },
+      deps.modelRuntime,
+    );
   }
 
   async function* execute(
@@ -595,22 +558,21 @@ export function createRouterRuntime(
       provider: decision.provider,
       model: decision.model,
     };
-    const candidateAttempts: RouterModelRef[] = [
-      requestedAttempt,
-      ...fallbackPlan.attempts,
-    ].filter((attempt, index, all) =>
-      all.findIndex((candidate) =>
-        candidate.provider === attempt.provider && candidate.model === attempt.model
-      ) === index
+    const candidateAttempts: RouterModelRef[] = [requestedAttempt, ...fallbackPlan.attempts].filter(
+      (attempt, index, all) =>
+        all.findIndex(candidate => candidate.provider === attempt.provider && candidate.model === attempt.model) ===
+        index,
     );
-    const nativeAttempts: RouterModelRef[] = candidateAttempts
-      .filter((attempt) => supportsMediaRequirements(attempt, requiredModalities));
-    const downgradedAttempts: RouterModelRef[] = requiredModalities.length > 0
-      ? candidateAttempts.filter((attempt) => !supportsMediaRequirements(attempt, requiredModalities))
-      : [];
+    const nativeAttempts: RouterModelRef[] = candidateAttempts.filter(attempt =>
+      supportsMediaRequirements(attempt, requiredModalities),
+    );
+    const downgradedAttempts: RouterModelRef[] =
+      requiredModalities.length > 0
+        ? candidateAttempts.filter(attempt => !supportsMediaRequirements(attempt, requiredModalities))
+        : [];
     const attemptPlans: AttemptPlan[] = [
-      ...nativeAttempts.map((attempt) => ({ attempt, downgradeUnsupportedMedia: false })),
-      ...downgradedAttempts.map((attempt) => ({ attempt, downgradeUnsupportedMedia: true })),
+      ...nativeAttempts.map(attempt => ({ attempt, downgradeUnsupportedMedia: false })),
+      ...downgradedAttempts.map(attempt => ({ attempt, downgradeUnsupportedMedia: true })),
     ];
     const zeroUsageMax = Math.max(1, config.zeroUsageRetry?.maxAttempts ?? 5);
     const zeroUsageEnabled = config.zeroUsageRetry?.enabled ?? true;
@@ -635,7 +597,7 @@ export function createRouterRuntime(
         protocolForProvider(deps.modelRuntime, requestedAttempt.provider),
       );
       events.emit({
-        type: "pilotdeck_router_execute_failed",
+        type: "sati_router_execute_failed",
         sessionId: ctx.sessionId,
         turnId: ctx.turnId,
         scenarioType: decision.scenarioType,
@@ -685,7 +647,8 @@ export function createRouterRuntime(
               code: "subagent_budget_exceeded",
               message: `Sub-agent budget exceeded (${estimated} estimated tokens > ${budget} limit).`,
               retryable: false,
-              userHint: "Reduce the subagent prompt/context, increase the subagent token budget, or split the task into smaller steps.",
+              userHint:
+                "Reduce the subagent prompt/context, increase the subagent token budget, or split the task into smaller steps.",
             },
           } as CanonicalModelEvent;
           return;
@@ -744,7 +707,7 @@ export function createRouterRuntime(
             if (attemptIndex < attemptPlans.length - 1) {
               const next = attemptPlans[attemptIndex + 1].attempt;
               events.emit({
-                type: "pilotdeck_router_fallback",
+                type: "sati_router_fallback",
                 sessionId: ctx.sessionId,
                 turnId: ctx.turnId,
                 scenarioType: attemptDecision.scenarioType,
@@ -782,14 +745,15 @@ export function createRouterRuntime(
             transientRetryEnabled &&
             transientRetryCount < transientRetryMax
           ) {
-            const delay = outcome.error.retryAfterMs != null
-              ? Math.min(outcome.error.retryAfterMs, transientMaxDelayMs)
-              : calculateLiteLLMRetryDelay(transientRetryCount, transientBaseDelayMs, transientMaxDelayMs);
+            const delay =
+              outcome.error.retryAfterMs != null
+                ? Math.min(outcome.error.retryAfterMs, transientMaxDelayMs)
+                : calculateLiteLLMRetryDelay(transientRetryCount, transientBaseDelayMs, transientMaxDelayMs);
             console.warn(
-              `[PilotDeck] transientRetry: ${outcome.error.code} (attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(delay)}ms)`,
+              `[Sati] transientRetry: ${outcome.error.code} (attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(delay)}ms)`,
             );
             events.emit({
-              type: "pilotdeck_router_transient_retry",
+              type: "sati_router_transient_retry",
               sessionId: ctx.sessionId,
               turnId: ctx.turnId,
               attempt: transientRetryCount + 1,
@@ -799,7 +763,7 @@ export function createRouterRuntime(
               errorCode: outcome.error.code,
             });
             events.emit({
-              type: "pilotdeck_router_retry_progress",
+              type: "sati_router_retry_progress",
               sessionId: ctx.sessionId,
               turnId: ctx.turnId,
               attempt: transientRetryCount + 1,
@@ -836,15 +800,16 @@ export function createRouterRuntime(
           ) {
             const partialText = extractPartialText(outcome.buffered);
             if (partialText.length > 0) {
-              const midDelay = outcome.error.retryAfterMs != null
-                ? Math.min(outcome.error.retryAfterMs, transientMaxDelayMs)
-                : calculateLiteLLMRetryDelay(transientRetryCount, transientBaseDelayMs, transientMaxDelayMs);
+              const midDelay =
+                outcome.error.retryAfterMs != null
+                  ? Math.min(outcome.error.retryAfterMs, transientMaxDelayMs)
+                  : calculateLiteLLMRetryDelay(transientRetryCount, transientBaseDelayMs, transientMaxDelayMs);
               console.warn(
-                `[PilotDeck] midStreamRetry: ${outcome.error.code} after partial content ` +
-                `(attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(midDelay)}ms)`,
+                `[Sati] midStreamRetry: ${outcome.error.code} after partial content ` +
+                  `(attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(midDelay)}ms)`,
               );
               events.emit({
-                type: "pilotdeck_router_retry_progress",
+                type: "sati_router_retry_progress",
                 sessionId: ctx.sessionId,
                 turnId: ctx.turnId,
                 attempt: transientRetryCount + 1,
@@ -867,18 +832,13 @@ export function createRouterRuntime(
           break outer;
         }
 
-        if (
-          !hasYieldedContent &&
-          zeroUsageEnabled &&
-          outcome.shouldRetryZeroUsage &&
-          zeroUsageAttempt < zeroUsageMax
-        ) {
+        if (!hasYieldedContent && zeroUsageEnabled && outcome.shouldRetryZeroUsage && zeroUsageAttempt < zeroUsageMax) {
           console.warn(
-            `[PilotDeck] zeroUsageRetry: empty response from ${attempt.provider}/${attempt.model} ` +
-            `(attempt ${zeroUsageAttempt}/${zeroUsageMax}, session=${ctx.sessionId})`,
+            `[Sati] zeroUsageRetry: empty response from ${attempt.provider}/${attempt.model} ` +
+              `(attempt ${zeroUsageAttempt}/${zeroUsageMax}, session=${ctx.sessionId})`,
           );
           events.emit({
-            type: "pilotdeck_router_zero_usage_retry",
+            type: "sati_router_zero_usage_retry",
             sessionId: ctx.sessionId,
             turnId: ctx.turnId,
             attempt: zeroUsageAttempt,
@@ -886,7 +846,7 @@ export function createRouterRuntime(
             model: attempt.model,
           });
           events.emit({
-            type: "pilotdeck_router_retry_progress",
+            type: "sati_router_retry_progress",
             sessionId: ctx.sessionId,
             turnId: ctx.turnId,
             attempt: zeroUsageAttempt,
@@ -950,7 +910,7 @@ export function createRouterRuntime(
 
     if (lastError && lastAttempt) {
       events.emit({
-        type: "pilotdeck_router_execute_failed",
+        type: "sati_router_execute_failed",
         sessionId: ctx.sessionId,
         turnId: ctx.turnId,
         scenarioType: lastDecision.scenarioType,
@@ -1140,10 +1100,7 @@ async function* streamAttempt(
   modelRuntime: ModelRuntime,
   ctx: RouterExecuteContext,
   events: RouterEventBus,
-): AsyncGenerator<
-  | { kind: "event"; event: CanonicalModelEvent }
-  | { kind: "outcome"; outcome: AttemptOutcome }
-> {
+): AsyncGenerator<{ kind: "event"; event: CanonicalModelEvent } | { kind: "outcome"; outcome: AttemptOutcome }> {
   const buffered: CanonicalModelEvent[] = [];
   const state = createZeroUsageState();
   let providerError: import("../model/index.js").CanonicalModelError | undefined;
@@ -1154,7 +1111,7 @@ async function* streamAttempt(
       signal: abortSignal,
       onRetryProgress(progress) {
         events.emit({
-          type: "pilotdeck_router_retry_progress",
+          type: "sati_router_retry_progress",
           sessionId: ctx.sessionId,
           turnId: ctx.turnId,
           attempt: progress.attempt,
@@ -1182,13 +1139,14 @@ async function* streamAttempt(
     }
     const fromError = (error as { error?: import("../model/index.js").CanonicalModelError })?.error;
     const protocol = protocolForProvider(modelRuntime, request.provider);
-    providerError = fromError ?? canonicalizeModelRequestError(error, request, protocol) ?? {
-      provider: request.provider,
-      protocol,
-      code: classifyNetworkErrorCode(error),
-      message: error instanceof Error ? error.message : String(error),
-      retryable: isNetworkTransient(error),
-    };
+    providerError = fromError ??
+      canonicalizeModelRequestError(error, request, protocol) ?? {
+        provider: request.provider,
+        protocol,
+        code: classifyNetworkErrorCode(error),
+        message: error instanceof Error ? error.message : String(error),
+        retryable: isNetworkTransient(error),
+      };
   }
 
   yield {
@@ -1231,7 +1189,7 @@ function protocolForProvider(modelRuntime: ModelRuntime, providerId: string): Mo
 
 function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
   if (!signal) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
   if (signal.aborted) {
     throwAbortError(signal.reason);
@@ -1289,7 +1247,9 @@ function isMidStreamRateLimitError(error: import("../model/index.js").CanonicalM
   return error.code === "rate_limit_error" || error.code === "overloaded_error";
 }
 
-function classifyRetryReason(errorCode: string): "rate_limit" | "server_error" | "network_error" | "zero_usage" | "overloaded" {
+function classifyRetryReason(
+  errorCode: string,
+): "rate_limit" | "server_error" | "network_error" | "zero_usage" | "overloaded" {
   if (errorCode === "rate_limit_error") return "rate_limit";
   if (errorCode === "overloaded_error") return "overloaded";
   if (errorCode === "server_error") return "server_error";

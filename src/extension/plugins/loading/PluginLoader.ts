@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseHooksConfig } from "../../hooks/config/parseHooksConfig.js";
-import type { PilotDeckPluginManifest } from "../protocol/manifest.js";
-import type { PilotDeckLoadedPlugin, PilotDeckPluginSourceKind } from "../protocol/plugin.js";
+import type { SatiPluginManifest } from "../protocol/manifest.js";
+import type { SatiLoadedPlugin, SatiPluginSourceKind } from "../protocol/plugin.js";
 import { parsePluginManifest } from "../config/parsePluginManifest.js";
 import { loadPluginCommands, loadStandaloneSkill } from "./PluginCommandLoader.js";
 
@@ -10,10 +10,7 @@ import { loadPluginCommands, loadStandaloneSkill } from "./PluginCommandLoader.j
  * Loads a standalone skill directory (containing SKILL.md) as a pseudo-plugin.
  * No plugin.json required — mirrors the legacy standalone skill directory layout.
  */
-export async function loadSkillFromPath(
-  skillDir: string,
-  source: PilotDeckPluginSourceKind,
-): Promise<PilotDeckLoadedPlugin> {
+export async function loadSkillFromPath(skillDir: string, source: SatiPluginSourceKind): Promise<SatiLoadedPlugin> {
   const name = skillDir.split(/[\\/]/u).at(-1) ?? "skill";
   const skill = await loadStandaloneSkill({ name, skillDir });
   return {
@@ -25,10 +22,7 @@ export async function loadSkillFromPath(
   };
 }
 
-export async function loadPluginFromPath(
-  pluginPath: string,
-  source: PilotDeckPluginSourceKind,
-): Promise<PilotDeckLoadedPlugin> {
+export async function loadPluginFromPath(pluginPath: string, source: SatiPluginSourceKind): Promise<SatiLoadedPlugin> {
   const manifestPath = join(pluginPath, "plugin.json");
   const manifest = parsePluginManifest(JSON.parse(await readFile(manifestPath, "utf8")) as unknown);
   const hooksConfig = await loadHooksConfig(pluginPath, manifest);
@@ -50,7 +44,7 @@ export async function loadPluginFromPath(
   };
 }
 
-async function loadHooksConfig(pluginPath: string, manifest: PilotDeckPluginManifest) {
+async function loadHooksConfig(pluginPath: string, manifest: SatiPluginManifest) {
   if (typeof manifest.hooks === "object" && manifest.hooks !== null) {
     return parseHooksConfig(manifest.hooks).settings;
   }
@@ -70,13 +64,11 @@ async function loadConfiguredMarkdown(
 ) {
   const dirs = configured === undefined ? [fallbackDir] : Array.isArray(configured) ? configured : [configured];
   const loaded = await Promise.all(
-    dirs.map((dir) => loadPluginCommands({ pluginName: "", baseDir: join(pluginPath, dir) }).catch(() => [])),
+    dirs.map(dir => loadPluginCommands({ pluginName: "", baseDir: join(pluginPath, dir) }).catch(() => [])),
   );
   const pluginName = pluginPath.split(/[\\/]/u).at(-1) ?? "";
-  return loaded.flat().map((command) => ({
+  return loaded.flat().map(command => ({
     ...command,
-    name: command.name.startsWith(":")
-      ? `${pluginName}${command.name}`
-      : command.name.replace(/^:/u, `${pluginName}:`),
+    name: command.name.startsWith(":") ? `${pluginName}${command.name}` : command.name.replace(/^:/u, `${pluginName}:`),
   }));
 }

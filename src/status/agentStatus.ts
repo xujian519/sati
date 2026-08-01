@@ -1,9 +1,4 @@
-export type AgentStatusScope =
-  | "turn"
-  | "session"
-  | "preflight"
-  | "http"
-  | "channel";
+export type AgentStatusScope = "turn" | "session" | "preflight" | "http" | "channel";
 
 export type AgentStatusSource =
   | "agent"

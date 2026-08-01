@@ -3,23 +3,18 @@ import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-
 import { migrateLegacyBundledSkillCopies } from "../../../src/extension/skills/index.js";
 
 async function writeSkill(root: string, slug: string, body: string): Promise<void> {
   const dir = join(root, slug);
   await mkdir(dir, { recursive: true });
-  await writeFile(
-    join(dir, "SKILL.md"),
-    `---\nname: ${slug}\ndescription: test\n---\n\n${body}\n`,
-    "utf8",
-  );
+  await writeFile(join(dir, "SKILL.md"), `---\nname: ${slug}\ndescription: test\n---\n\n${body}\n`, "utf8");
   await mkdir(join(dir, "references"), { recursive: true });
   await writeFile(join(dir, "references", "notes.md"), `${body}\n`, "utf8");
 }
 
 test("legacy bundled migration backs up only byte-identical bootstrap copies", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pilotdeck-legacy-bundled-"));
+  const root = await mkdtemp(join(tmpdir(), "sati-legacy-bundled-"));
   try {
     const pilotHome = join(root, "pilot-home");
     const builtinSkillsRoot = join(root, "bundled-skills");
@@ -34,17 +29,14 @@ test("legacy bundled migration backs up only byte-identical bootstrap copies", a
     const report = migrateLegacyBundledSkillCopies({ pilotHome, builtinSkillsRoot, backupRoot });
 
     assert.deepEqual(report.failures, []);
-    assert.deepEqual(report.migrated.map((item) => item.slug), ["unchanged"]);
+    assert.deepEqual(
+      report.migrated.map(item => item.slug),
+      ["unchanged"],
+    );
     await assert.rejects(access(join(pilotHome, "skills", "unchanged")));
     assert.match(await readFile(join(backupRoot, "unchanged", "SKILL.md"), "utf8"), /bundled body/);
-    assert.match(
-      await readFile(join(pilotHome, "skills", "customized", "SKILL.md"), "utf8"),
-      /user edited body/,
-    );
-    assert.match(
-      await readFile(join(pilotHome, "skills", "user-only", "SKILL.md"), "utf8"),
-      /user-owned body/,
-    );
+    assert.match(await readFile(join(pilotHome, "skills", "customized", "SKILL.md"), "utf8"), /user edited body/);
+    assert.match(await readFile(join(pilotHome, "skills", "user-only", "SKILL.md"), "utf8"), /user-owned body/);
 
     const secondRun = migrateLegacyBundledSkillCopies({ pilotHome, builtinSkillsRoot, backupRoot });
     assert.deepEqual(secondRun, { migrated: [], failures: [] });
@@ -65,7 +57,7 @@ test("legacy bundled migration backs up only byte-identical bootstrap copies", a
 });
 
 test("legacy bundled migration leaves user skills untouched when the release bundle is missing", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pilotdeck-legacy-missing-bundle-"));
+  const root = await mkdtemp(join(tmpdir(), "sati-legacy-missing-bundle-"));
   try {
     const pilotHome = join(root, "pilot-home");
     await writeSkill(join(pilotHome, "skills"), "user-skill", "keep me");

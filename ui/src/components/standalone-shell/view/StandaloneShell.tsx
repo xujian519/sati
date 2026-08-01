@@ -1,8 +1,8 @@
-import { useCallback, useState } from 'react';
-import type { Project, ProjectSession } from '../../../types/app';
-import Shell from '../../shell/view/Shell';
-import StandaloneShellEmptyState from './subcomponents/StandaloneShellEmptyState';
-import StandaloneShellHeader from './subcomponents/StandaloneShellHeader';
+import { useCallback, useState } from "react";
+import type { Project, ProjectSession } from "../../../types/app";
+import Shell from "../../shell/view/Shell";
+import StandaloneShellEmptyState from "./subcomponents/StandaloneShellEmptyState";
+import StandaloneShellHeader from "./subcomponents/StandaloneShellHeader";
 
 type StandaloneShellProps = {
   project?: Project | null;
@@ -30,7 +30,7 @@ export default function StandaloneShell({
   onComplete = null,
   onClose = null,
   title = null,
-  className = '',
+  className = "",
   showHeader = true,
   compact = false,
   minimal = false,

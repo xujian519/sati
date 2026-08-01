@@ -1,7 +1,7 @@
 import type { PermissionDecision, PermissionDecisionReason, PermissionMode } from "../../permission/index.js";
-import type { PilotDeckToolErrorCode } from "../protocol/errors.js";
+import type { SatiToolErrorCode } from "../protocol/errors.js";
 
-export type PilotDeckPermissionAuditRecord = {
+export type SatiPermissionAuditRecord = {
   type: "permission";
   sessionId: string;
   turnId: string;
@@ -13,20 +13,20 @@ export type PilotDeckPermissionAuditRecord = {
   createdAt: string;
 };
 
-export type PilotDeckToolAuditRecord = {
+export type SatiToolAuditRecord = {
   type: "tool";
   sessionId: string;
   turnId: string;
   toolCallId: string;
   toolName: string;
   status: "success" | "error";
-  errorCode?: PilotDeckToolErrorCode;
+  errorCode?: SatiToolErrorCode;
   startedAt: string;
   completedAt: string;
   durationMs: number;
 };
 
-export type PilotDeckToolAuditRecorder = {
-  recordPermission(record: PilotDeckPermissionAuditRecord): void | Promise<void>;
-  recordTool(record: PilotDeckToolAuditRecord): void | Promise<void>;
+export type SatiToolAuditRecorder = {
+  recordPermission(record: SatiPermissionAuditRecord): void | Promise<void>;
+  recordTool(record: SatiToolAuditRecord): void | Promise<void>;
 };

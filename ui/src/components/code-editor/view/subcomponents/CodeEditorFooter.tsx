@@ -15,7 +15,7 @@ export default function CodeEditorFooter({
     <div className="text-xxs flex flex-shrink-0 items-center justify-between border-t border-neutral-200 bg-neutral-50 px-4 py-1.5 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-center gap-3 text-neutral-500 dark:text-neutral-400">
         <span>
-          {linesLabel} {content.split('\n').length}
+          {linesLabel} {content.split("\n").length}
         </span>
         <span>
           {charactersLabel} {content.length}

@@ -9,11 +9,8 @@ export type ScenarioResolution = {
   subagentModelHint?: string;
 };
 
-export function decideScenario(
-  input: RouterDecisionInput,
-  scenarios: RouterScenariosConfig,
-): ScenarioResolution {
-  const { request, isMainAgent, metadata } = input;
+export function decideScenario(input: RouterDecisionInput, scenarios?: RouterScenariosConfig): ScenarioResolution {
+  const { request, isMainAgent } = input;
   const explicit = readExplicit(input);
   if (explicit) {
     return {
@@ -36,7 +33,7 @@ export function decideScenario(
 
   return {
     scenarioType: "default",
-    selection: scenarios.default,
+    selection: scenarios?.default,
     isSubagent: subagent.isSubagent,
     subagentModelHint: subagent.modelHint,
   };

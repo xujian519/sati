@@ -1,13 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth } from '../components/auth/context/AuthContext';
-import { IS_PLATFORM } from '../constants/config';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "../components/auth/context/AuthContext";
+import { IS_PLATFORM } from "../constants/config";
 
 type WSSubscriber = (msg: any) => void;
 
 export type ReconnectInfo = {
   attempt: number;
   nextRetryMs: number;
-  status: 'connected' | 'disconnected' | 'reconnecting';
+  status: "connected" | "disconnected" | "reconnecting";
 };
 
 type WebSocketContextType = {
@@ -31,13 +31,13 @@ const WebSocketContext = createContext<WebSocketContextType | null>(null);
 export const useWebSocket = () => {
   const context = useContext(WebSocketContext);
   if (!context) {
-    throw new Error('useWebSocket must be used within a WebSocketProvider');
+    throw new Error("useWebSocket must be used within a WebSocketProvider");
   }
   return context;
 };
 
 const buildWebSocketUrl = (token: string | null) => {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   if (IS_PLATFORM || !token) return `${protocol}//${window.location.host}/ws`;
   return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}`;
 };
@@ -48,7 +48,7 @@ const BACKOFF_FACTOR = 2;
 const MAX_QUEUED_MESSAGES = 100;
 
 export function getQueuedMessageKey(message: any): string | null {
-  if (message?.type === 'check-session-status' && typeof message.sessionId === 'string' && message.sessionId.trim()) {
+  if (message?.type === "check-session-status" && typeof message.sessionId === "string" && message.sessionId.trim()) {
     return `check-session-status:${message.sessionId.trim()}`;
   }
   return null;
@@ -61,7 +61,7 @@ export function isQueueableDisconnectedMessage(message: any): boolean {
 export function enqueueDisconnectedMessage(queue: any[], message: any, maxQueuedMessages = MAX_QUEUED_MESSAGES): void {
   const key = getQueuedMessageKey(message);
   if (!key) return;
-  const existingIndex = queue.findIndex((queuedMessage) => getQueuedMessageKey(queuedMessage) === key);
+  const existingIndex = queue.findIndex(queuedMessage => getQueuedMessageKey(queuedMessage) === key);
   if (existingIndex >= 0) {
     queue.splice(existingIndex, 1);
   }
@@ -85,7 +85,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [reconnectInfo, setReconnectInfo] = useState<ReconnectInfo>({
     attempt: 0,
     nextRetryMs: 0,
-    status: 'disconnected',
+    status: "disconnected",
   });
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -95,7 +95,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
   useEffect(() => {
     unmountedRef.current = false;
-    return () => { unmountedRef.current = true; };
+    return () => {
+      unmountedRef.current = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -103,18 +105,21 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
     const connect = () => {
       if (unmountedRef.current || connectIdRef.current !== id) return;
-      setReconnectInfo((prev) => ({ ...prev, status: 'reconnecting' }));
+      setReconnectInfo(prev => ({ ...prev, status: "reconnecting" }));
       try {
         const wsUrl = buildWebSocketUrl(token);
-        if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
+        if (!wsUrl) return console.warn("No authentication token found for WebSocket connection");
 
         const websocket = new WebSocket(wsUrl);
 
         websocket.onopen = () => {
-          if (connectIdRef.current !== id) { websocket.close(); return; }
+          if (connectIdRef.current !== id) {
+            websocket.close();
+            return;
+          }
           setIsConnected(true);
           reconnectAttemptRef.current = 0;
-          setReconnectInfo({ attempt: 0, nextRetryMs: 0, status: 'connected' });
+          setReconnectInfo({ attempt: 0, nextRetryMs: 0, status: "connected" });
           wsRef.current = websocket;
 
           while (queuedMessagesRef.current.length > 0 && websocket.readyState === WebSocket.OPEN) {
@@ -124,17 +129,21 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
           const pingInterval = setInterval(() => {
             if (websocket.readyState === WebSocket.OPEN) {
-              websocket.send(JSON.stringify({ type: 'ping' }));
+              websocket.send(JSON.stringify({ type: "ping" }));
             }
           }, 30_000);
-          websocket.addEventListener('close', () => clearInterval(pingInterval));
+          websocket.addEventListener("close", () => clearInterval(pingInterval));
 
           if (hasConnectedRef.current) {
-            const reconnectMsg = { type: 'websocket-reconnected', timestamp: Date.now() };
+            const reconnectMsg = { type: "websocket-reconnected", timestamp: Date.now() };
             const subs = subscribersRef.current;
             if (subs.size > 0) {
-              subs.forEach((sub) => {
-                try { sub(reconnectMsg); } catch {}
+              subs.forEach(sub => {
+                try {
+                  sub(reconnectMsg);
+                } catch {
+                  /* subscriber errors must not break the reconnect broadcast */
+                }
               });
             }
             setLatestMessage(reconnectMsg);
@@ -142,23 +151,23 @@ const useWebSocketProviderState = (): WebSocketContextType => {
           hasConnectedRef.current = true;
         };
 
-        websocket.onmessage = (event) => {
+        websocket.onmessage = event => {
           if (connectIdRef.current !== id) return;
           try {
             const data = JSON.parse(event.data);
             const subs = subscribersRef.current;
             if (subs.size > 0) {
-              subs.forEach((sub) => {
+              subs.forEach(sub => {
                 try {
                   sub(data);
                 } catch (err) {
-                  console.error('WebSocket subscriber error:', err);
+                  console.error("WebSocket subscriber error:", err);
                 }
               });
             }
             setLatestMessage(data);
           } catch (error) {
-            console.error('Error parsing WebSocket message:', error);
+            console.error("Error parsing WebSocket message:", error);
           }
         };
 
@@ -167,22 +176,19 @@ const useWebSocketProviderState = (): WebSocketContextType => {
           setIsConnected(false);
           wsRef.current = null;
           const attempt = ++reconnectAttemptRef.current;
-          const delay = Math.min(
-            INITIAL_RECONNECT_MS * Math.pow(BACKOFF_FACTOR, attempt - 1),
-            MAX_RECONNECT_MS,
-          );
-          setReconnectInfo({ attempt, nextRetryMs: delay, status: 'disconnected' });
+          const delay = Math.min(INITIAL_RECONNECT_MS * Math.pow(BACKOFF_FACTOR, attempt - 1), MAX_RECONNECT_MS);
+          setReconnectInfo({ attempt, nextRetryMs: delay, status: "disconnected" });
           reconnectTimeoutRef.current = setTimeout(() => {
             if (unmountedRef.current || connectIdRef.current !== id) return;
             connect();
           }, delay);
         };
 
-        websocket.onerror = (error) => {
-          console.error('WebSocket error:', error);
+        websocket.onerror = error => {
+          console.error("WebSocket error:", error);
         };
       } catch (error) {
-        console.error('Error creating WebSocket connection:', error);
+        console.error("Error creating WebSocket connection:", error);
       }
     };
 
@@ -214,40 +220,38 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       socket.send(JSON.stringify(message));
     } else if (isQueueableDisconnectedMessage(message)) {
       enqueueDisconnectedMessage(queuedMessagesRef.current, message);
-      console.warn('WebSocket not connected');
+      console.warn("WebSocket not connected");
     } else {
-      console.warn('WebSocket not connected');
+      console.warn("WebSocket not connected");
     }
   }, []);
 
-  const subscribe = useCallback<WebSocketContextType['subscribe']>((handler) => {
+  const subscribe = useCallback<WebSocketContextType["subscribe"]>(handler => {
     subscribersRef.current.add(handler);
     return () => {
       subscribersRef.current.delete(handler);
     };
   }, []);
 
-  const value: WebSocketContextType = useMemo(() =>
-  ({
-    ws: wsRef.current,
-    sendMessage,
-    latestMessage,
-    isConnected,
-    reconnectInfo,
-    subscribe,
-  }), [sendMessage, latestMessage, isConnected, reconnectInfo, subscribe]);
+  const value: WebSocketContextType = useMemo(
+    () => ({
+      ws: wsRef.current,
+      sendMessage,
+      latestMessage,
+      isConnected,
+      reconnectInfo,
+      subscribe,
+    }),
+    [sendMessage, latestMessage, isConnected, reconnectInfo, subscribe],
+  );
 
   return value;
 };
 
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
   const webSocketData = useWebSocketProviderState();
-  
-  return (
-    <WebSocketContext.Provider value={webSocketData}>
-      {children}
-    </WebSocketContext.Provider>
-  );
+
+  return <WebSocketContext.Provider value={webSocketData}>{children}</WebSocketContext.Provider>;
 };
 
 export default WebSocketContext;

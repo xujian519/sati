@@ -1,6 +1,6 @@
-import type { PilotDeckToolResult } from "../protocol/result.js";
-import type { PilotDeckToolCall, PilotDeckToolRuntimeContext } from "../protocol/types.js";
+import type { SatiToolResult } from "../protocol/result.js";
+import type { SatiToolCall, SatiToolRuntimeContext } from "../protocol/types.js";
 
-export type PilotDeckToolScheduler = {
-  executeAll(calls: PilotDeckToolCall[], context: PilotDeckToolRuntimeContext): Promise<PilotDeckToolResult[]>;
+export type SatiToolScheduler = {
+  executeAll(calls: SatiToolCall[], context: SatiToolRuntimeContext): Promise<SatiToolResult[]>;
 };

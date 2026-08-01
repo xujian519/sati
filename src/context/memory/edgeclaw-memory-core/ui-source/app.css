@@ -1,5 +1,5 @@
 /*
- * Memory dashboard tokens — aligned with the PilotDeck ui shell's neutral palette.
+ * Memory dashboard tokens — aligned with the Sati ui shell's neutral palette.
  * Light/dark backgrounds + borders + text mirror Tailwind `neutral-*` so this
  * iframe blends visually with the parent shell (white / neutral-950 surfaces,
  * neutral-200 / neutral-800 borders, dark-on-light primary actions).
@@ -265,7 +265,9 @@ button:disabled {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-2);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
   white-space: nowrap;
 }
 
@@ -299,7 +301,9 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
   white-space: nowrap;
 }
 
@@ -386,18 +390,28 @@ button:disabled {
   border-radius: 16px;
   border: 1px solid var(--border);
   background: var(--card);
-  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  box-shadow:
+    0 24px 64px -12px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.03);
   overflow: hidden;
   animation: settingsModalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root[data-theme="dark"] .settings-modal-card {
-  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 24px 64px -12px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 @keyframes settingsModalIn {
-  from { opacity: 0; transform: scale(0.95) translateY(10px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .settings-modal-head {
@@ -428,7 +442,9 @@ button:disabled {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   flex-shrink: 0;
   line-height: 1;
 }
@@ -480,7 +496,9 @@ button:disabled {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .settings-data-group:hover {
@@ -573,7 +591,9 @@ button:disabled {
   background: var(--bg-raised);
   font-size: 13px;
   width: 100%;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .settings-input:focus {
@@ -609,7 +629,10 @@ button:disabled {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  transition:
+    background 0.15s,
+    transform 0.1s,
+    box-shadow 0.15s;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -632,7 +655,9 @@ button:disabled {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
   width: 100%;
   text-align: left;
   border: none;
@@ -740,7 +765,9 @@ button:disabled {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-2);
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
   border: none;
   background: none;
   cursor: pointer;
@@ -874,11 +901,21 @@ button:disabled {
   box-shadow: 0 0 0 3px var(--card);
 }
 
-.tl-dot[data-status="success"] { background: var(--status-feedback); }
-.tl-dot[data-status="error"] { background: var(--danger); }
-.tl-dot[data-status="warning"] { background: var(--warning); }
-.tl-dot[data-status="skipped"] { background: var(--status-deprecated); }
-.tl-dot[data-status="info"] { background: var(--accent); }
+.tl-dot[data-status="success"] {
+  background: var(--status-feedback);
+}
+.tl-dot[data-status="error"] {
+  background: var(--danger);
+}
+.tl-dot[data-status="warning"] {
+  background: var(--warning);
+}
+.tl-dot[data-status="skipped"] {
+  background: var(--status-deprecated);
+}
+.tl-dot[data-status="info"] {
+  background: var(--accent);
+}
 
 .tl-card {
   border: 1px solid var(--border);
@@ -1179,7 +1216,10 @@ button:disabled {
   border-radius: var(--radius-md);
   background: var(--card);
   padding: 12px 12px 10px 14px;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.15s;
 }
 
 .entry-card::before,
@@ -1319,7 +1359,9 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
   cursor: pointer;
 }
 

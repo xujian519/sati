@@ -1,24 +1,24 @@
-import path from 'path';
-import { resolvePilotHome, resolveProjectStorageId } from '../utils/pilotPaths.js';
+import path from "path";
+import { resolvePilotHome, resolveProjectStorageId } from "../utils/pilotPaths.js";
 
 export function getAlwaysOnRoot(projectRoot) {
   const pilotHome = resolvePilotHome();
   const projectId = resolveProjectStorageId(path.resolve(projectRoot), pilotHome);
-  return path.join(pilotHome, 'always-on', 'projects', projectId);
+  return path.join(pilotHome, "always-on", "projects", projectId);
 }
 
 export function getAlwaysOnDiscoveryLockPath(projectRoot) {
-  return path.join(getAlwaysOnRoot(projectRoot), 'locks', 'discovery.lock');
+  return path.join(getAlwaysOnRoot(projectRoot), "locks", "discovery.lock");
 }
 
 export function getAlwaysOnDiscoveryStatePath(projectRoot) {
-  return path.join(getAlwaysOnRoot(projectRoot), 'state.json');
+  return path.join(getAlwaysOnRoot(projectRoot), "state.json");
 }
 
 export function getAlwaysOnRunHistoryPath(projectRoot) {
-  return path.join(getAlwaysOnRoot(projectRoot), 'run-history.jsonl');
+  return path.join(getAlwaysOnRoot(projectRoot), "run-history.jsonl");
 }
 
 export function getAlwaysOnRunsDir(projectRoot) {
-  return path.join(getAlwaysOnRoot(projectRoot), 'runs');
+  return path.join(getAlwaysOnRoot(projectRoot), "runs");
 }

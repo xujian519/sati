@@ -1,0 +1,109 @@
+# 审查意见答复规则
+# 基于：专利法第37条、实施细则第5条、审查指南第二部分第八章
+# 来源：BCIP CON-901, CON-902, CON-903, CON-904
+
+rules:
+  - ruleId: RES-001
+    name: 答复期限检查
+    description: 应当在规定的答复期限内提交意见陈述书
+    legalBasis: 专利法第37条、实施细则第5条
+    domain: patent_general
+    severity: critical
+    action: block
+    check:
+      type: deadline
+      deadlines:
+        - scenario: 发明首次审查意见
+          period: 4个月
+          extension: 可请求延长，每次不超过2个月
+        - scenario: 发明后续审查意见
+          period: 2个月
+          extension: 可请求延长，每次不超过2个月
+        - scenario: 实用新型/外观设计审查意见
+          period: 2个月
+      consequences:
+        - "逾期未答复 → 申请被视为撤回"
+        - "收到驳回决定后3个月内可请求复审"
+      assessment:
+        inTime: pass
+        overdue: block + "申请将被视为撤回"
+        approachingDeadline: warn
+
+  - ruleId: RES-002
+    name: 质疑事实认定的策略
+    description: 针对审查员的事实认定错误提出质疑
+    legalBasis: 审查指南第二部分第八章4.10
+    domain: patent_general
+    severity: major
+    action: review
+    check:
+      type: fact_challenge
+      scenarios:
+        - "审查员对对比文件的技术内容理解有误"
+        - "审查员遗漏了申请文件中的技术特征"
+        - "审查员错误认定了最接近的现有技术"
+        - "审查员对技术效果的认定不准确"
+      strategy:
+        - "准确引用对比文件的具体段落/附图"
+        - "清晰说明正确的事实"
+        - "提供本领域公知常识作为佐证"
+      assessment:
+        validChallenge: pass
+        vagueChallenge: warn + "质疑需引用对比文件具体位置"
+
+  - ruleId: RES-003
+    name: 质疑法律适用的策略
+    description: 针对审查员的法律适用错误提出质疑
+    legalBasis: 审查指南第二部分第八章4.10
+    domain: patent_general
+    severity: major
+    action: review
+    check:
+      type: legal_application_challenge
+      scenarios:
+        - "审查员将新颖性问题误判为创造性问题"
+        - "审查员错误适用了公知常识结合标准"
+        - "审查员未正确评价辅助判断因素"
+        - 审查员对'能够实现'的标准要求过高
+      strategy:
+        - "引用正确的法律条款或审查指南规定"
+        - "引用案例或审查实践佐证"
+      assessment:
+        validChallenge: pass
+        unsupportedClaim: warn + "需引用具体法律依据"
+
+  - ruleId: RES-004
+    name: 公知常识举证要求
+    description: 主张公知常识时需提供证据
+    legalBasis: 审查指南第二部分第四章3.2.1.1
+    domain: patent_general
+    severity: major
+    action: review
+    check:
+      type: common_knowledge_evidence
+      principles:
+        - "审查员主张公知常识时，应提供证据（教科书、技术手册等）"
+        - "申请人质疑公知常识时，也应提供反证"
+        - "公知常识包括：教科书、技术词典、技术手册中的内容"
+      assessment:
+        hasEvidence: pass
+        noEvidence: warn + "公知常识主张需提供证据支持"
+
+  - ruleId: RES-005
+    name: 修改方案合法性
+    description: 答复审查意见时提出的修改方案应合法
+    legalBasis: 专利法第33条、实施细则第51条
+    domain: patent_general
+    severity: critical
+    action: block
+    check:
+      type: amendment_legitimacy
+      rules:
+        - "修改只针对审查意见指出的缺陷"
+        - "修改不扩大保护范围"
+        - "修改内容在原申请文件中有记载"
+        - "有多个独立权利要求时，删除的方案说明理由"
+      assessment:
+        legitimate: pass
+        exceeded: block + "修改超出审查意见指出的缺陷范围"
+        expanded: block + "修改扩大了保护范围"

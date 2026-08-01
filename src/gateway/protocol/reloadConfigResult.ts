@@ -14,7 +14,7 @@ export function parseReloadConfigResult(value: unknown): ReloadConfigResult {
   const result: ReloadConfigResult = { reloaded: value.reloaded };
 
   if (value.changedPaths !== undefined) {
-    if (!Array.isArray(value.changedPaths) || value.changedPaths.some((entry) => typeof entry !== "string")) {
+    if (!Array.isArray(value.changedPaths) || value.changedPaths.some(entry => typeof entry !== "string")) {
       throw new Error("Invalid reload_config response: changedPaths must be an array of strings.");
     }
     result.changedPaths = value.changedPaths;
@@ -22,7 +22,7 @@ export function parseReloadConfigResult(value: unknown): ReloadConfigResult {
 
   if (value.reason !== undefined) {
     if (typeof value.reason !== "string" || !RELOAD_CONFIG_REASONS.has(value.reason)) {
-      throw new Error("Invalid reload_config response: reason must be \"unsupported\" or \"unchanged\".");
+      throw new Error('Invalid reload_config response: reason must be "unsupported" or "unchanged".');
     }
     result.reason = value.reason as ReloadConfigResult["reason"];
   }

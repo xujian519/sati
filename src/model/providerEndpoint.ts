@@ -23,14 +23,16 @@ function getPathSegments(baseUrl: string): string[] {
 }
 
 function hasVersionSegment(baseUrl: string): boolean {
-  return getPathSegments(baseUrl).some((segment) => VERSION_SEGMENT_PATTERN.test(segment));
+  return getPathSegments(baseUrl).some(segment => VERSION_SEGMENT_PATTERN.test(segment));
 }
 
 function pathEndsWith(baseUrl: string, suffix: string[]): boolean {
-  const segments = getPathSegments(baseUrl).map((segment) => segment.toLowerCase());
-  const normalizedSuffix = suffix.map((segment) => segment.toLowerCase());
+  const segments = getPathSegments(baseUrl).map(segment => segment.toLowerCase());
+  const normalizedSuffix = suffix.map(segment => segment.toLowerCase());
   if (segments.length < normalizedSuffix.length) return false;
-  return normalizedSuffix.every((segment, index) => segments[segments.length - normalizedSuffix.length + index] === segment);
+  return normalizedSuffix.every(
+    (segment, index) => segments[segments.length - normalizedSuffix.length + index] === segment,
+  );
 }
 
 function baseUrlEndsWithEndpoint(baseUrl: string, endpointPath: string): boolean {
@@ -39,7 +41,7 @@ function baseUrlEndsWithEndpoint(baseUrl: string, endpointPath: string): boolean
   if (pathEndsWith(baseUrl, endpointSegments)) return true;
 
   if (endpointSegments.length === 2 && endpointSegments[0].toLowerCase() === "models") {
-    const segments = getPathSegments(baseUrl).map((segment) => segment.toLowerCase());
+    const segments = getPathSegments(baseUrl).map(segment => segment.toLowerCase());
     const last = segments.at(-1) || "";
     const methodSeparator = endpointSegments[1].indexOf(":");
     const methodSuffix = methodSeparator >= 0 ? endpointSegments[1].slice(methodSeparator).toLowerCase() : "";
@@ -56,10 +58,7 @@ function buildEndpointCandidates(baseUrl: string, defaultVersion: string, endpoi
   const unversionedEndpoint = joinUrl(normalizedBase, normalizedEndpointPath);
   if (hasVersionSegment(normalizedBase)) return [unversionedEndpoint];
   const versionedEndpoint = joinUrl(normalizedBase, [defaultVersion, normalizedEndpointPath].filter(Boolean).join("/"));
-  return uniqueUrls([
-    versionedEndpoint,
-    unversionedEndpoint,
-  ]);
+  return uniqueUrls([versionedEndpoint, unversionedEndpoint]);
 }
 
 function buildVersionedEndpoint(baseUrl: string, defaultVersion: string, endpointPath: string): string {
@@ -110,10 +109,7 @@ export function buildProviderChatEndpointCandidates(input: {
   return buildEndpointCandidates(input.baseUrl, "v1", "chat/completions");
 }
 
-export function buildProviderModelsEndpoint(input: {
-  protocol: ProviderEndpointProtocol;
-  baseUrl: string;
-}): string {
+export function buildProviderModelsEndpoint(input: { protocol: ProviderEndpointProtocol; baseUrl: string }): string {
   return buildProviderModelsEndpointCandidates(input)[0] || "";
 }
 

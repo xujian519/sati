@@ -1,22 +1,22 @@
-import type { PilotDeckHooksSettings } from "../../hooks/protocol/settings.js";
+import type { SatiHooksSettings } from "../../hooks/protocol/settings.js";
 
-export type PilotDeckPluginManifest = {
+export type SatiPluginManifest = {
   name: string;
   version?: string;
   description?: string;
   commands?: string | string[];
   agents?: string | string[];
   skills?: string | string[];
-  hooks?: string | PilotDeckHooksSettings;
+  hooks?: string | SatiHooksSettings;
   mcpServers?: Record<string, unknown>;
   lspServers?: Record<string, unknown>;
   outputStyles?: string | string[];
-  marketplace?: PilotDeckMarketplaceReference;
+  marketplace?: SatiMarketplaceReference;
   mcpb?: string;
   settings?: Record<string, unknown>;
 };
 
-export type PilotDeckMarketplaceReference = {
+export type SatiMarketplaceReference = {
   name: string;
   plugin: string;
   version?: string;

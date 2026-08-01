@@ -1,19 +1,19 @@
-import webPush from 'web-push';
-import { notificationPreferencesDb, pushSubscriptionsDb, sessionNamesDb } from '../database/db.js';
+import webPush from "web-push";
+import { notificationPreferencesDb, pushSubscriptionsDb, sessionNamesDb } from "../database/db.js";
 
 const KIND_TO_PREF_KEY = {
-  action_required: 'actionRequired',
-  stop: 'stop',
-  error: 'error'
+  action_required: "actionRequired",
+  stop: "stop",
+  error: "error",
 };
 
 const PROVIDER_LABELS = {
-  claude: 'Claude',
-  pilotdeck: 'PilotDeck',
-  cursor: 'Cursor',
-  codex: 'Codex',
-  gemini: 'Gemini',
-  system: 'System'
+  claude: "Claude",
+  sati: "Sati",
+  cursor: "Cursor",
+  codex: "Codex",
+  gemini: "Gemini",
+  system: "System",
 };
 
 const recentEventKeys = new Map();
@@ -38,7 +38,9 @@ function shouldSendPush(preferences, event) {
 
 function isDuplicate(event) {
   cleanupOldEventKeys();
-  const key = event.dedupeKey || `${event.provider}:${event.kind || 'info'}:${event.code || 'generic'}:${event.sessionId || 'none'}`;
+  const key =
+    event.dedupeKey ||
+    `${event.provider}:${event.kind || "info"}:${event.code || "generic"}:${event.sessionId || "none"}`;
   if (recentEventKeys.has(key)) {
     return true;
   }
@@ -49,12 +51,12 @@ function isDuplicate(event) {
 function createNotificationEvent({
   provider,
   sessionId = null,
-  kind = 'info',
-  code = 'generic.info',
+  kind = "info",
+  code = "generic.info",
   meta = {},
-  severity = 'info',
+  severity = "info",
   dedupeKey = null,
-  requiresUserAction = false
+  requiresUserAction = false,
 }) {
   return {
     provider,
@@ -65,32 +67,32 @@ function createNotificationEvent({
     severity,
     requiresUserAction,
     dedupeKey,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
 }
 
 function normalizeErrorMessage(error) {
-  if (typeof error === 'string') {
+  if (typeof error === "string") {
     return error;
   }
 
-  if (error && typeof error.message === 'string') {
+  if (error && typeof error.message === "string") {
     return error.message;
   }
 
   if (error == null) {
-    return 'Unknown error';
+    return "Unknown error";
   }
 
   return String(error);
 }
 
 function normalizeSessionName(sessionName) {
-  if (typeof sessionName !== 'string') {
+  if (typeof sessionName !== "string") {
     return null;
   }
 
-  const normalized = sessionName.replace(/\s+/g, ' ').trim();
+  const normalized = sessionName.replace(/\s+/g, " ").trim();
   if (!normalized) {
     return null;
   }
@@ -113,28 +115,28 @@ function resolveSessionName(event) {
 
 function buildPushBody(event) {
   const CODE_MAP = {
-    'permission.required': event.meta?.toolName
+    "permission.required": event.meta?.toolName
       ? `Action Required: Tool "${event.meta.toolName}" needs approval`
-      : 'Action Required: A tool needs your approval',
-    'run.stopped': event.meta?.stopReason || 'Run Stopped: The run has stopped',
-    'run.failed': event.meta?.error ? `Run Failed: ${event.meta.error}` : 'Run Failed: The run encountered an error',
-    'agent.notification': event.meta?.message ? String(event.meta.message) : 'You have a new notification',
-    'push.enabled': 'Push notifications are now enabled!'
+      : "Action Required: A tool needs your approval",
+    "run.stopped": event.meta?.stopReason || "Run Stopped: The run has stopped",
+    "run.failed": event.meta?.error ? `Run Failed: ${event.meta.error}` : "Run Failed: The run encountered an error",
+    "agent.notification": event.meta?.message ? String(event.meta.message) : "You have a new notification",
+    "push.enabled": "Push notifications are now enabled!",
   };
-  const providerLabel = PROVIDER_LABELS[event.provider] || 'Assistant';
+  const providerLabel = PROVIDER_LABELS[event.provider] || "Assistant";
   const sessionName = resolveSessionName(event);
-  const message = CODE_MAP[event.code] || 'You have a new notification';
+  const message = CODE_MAP[event.code] || "You have a new notification";
 
   return {
-    title: sessionName || 'PilotDeck',
+    title: sessionName || "Sati",
     body: `${providerLabel}: ${message}`,
     data: {
       sessionId: event.sessionId || null,
       code: event.code,
       provider: event.provider || null,
       sessionName,
-      tag: `${event.provider || 'assistant'}:${event.sessionId || 'none'}:${event.code}`
-    }
+      tag: `${event.provider || "assistant"}:${event.sessionId || "none"}:${event.code}`,
+    },
   };
 }
 
@@ -145,23 +147,23 @@ async function sendWebPush(userId, event) {
   const payload = JSON.stringify(buildPushBody(event));
 
   const results = await Promise.allSettled(
-    subscriptions.map((sub) =>
+    subscriptions.map(sub =>
       webPush.sendNotification(
         {
           endpoint: sub.endpoint,
           keys: {
             p256dh: sub.keys_p256dh,
-            auth: sub.keys_auth
-          }
+            auth: sub.keys_auth,
+          },
         },
-        payload
-      )
-    )
+        payload,
+      ),
+    ),
   );
 
   // Clean up gone subscriptions (410 Gone or 404)
   results.forEach((result, index) => {
-    if (result.status === 'rejected') {
+    if (result.status === "rejected") {
       const statusCode = result.reason?.statusCode;
       if (statusCode === 410 || statusCode === 404) {
         pushSubscriptionsDb.removeSubscription(subscriptions[index].endpoint);
@@ -183,23 +185,23 @@ function notifyUserIfEnabled({ userId, event }) {
     return;
   }
 
-  sendWebPush(userId, event).catch((err) => {
-    console.error('Web push send error:', err);
+  sendWebPush(userId, event).catch(err => {
+    console.error("Web push send error:", err);
   });
 }
 
-function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
+function notifyRunStopped({ userId, provider, sessionId = null, stopReason = "completed", sessionName = null }) {
   notifyUserIfEnabled({
     userId,
     event: createNotificationEvent({
       provider,
       sessionId,
-      kind: 'stop',
-      code: 'run.stopped',
+      kind: "stop",
+      code: "run.stopped",
       meta: { stopReason, sessionName },
-      severity: 'info',
-      dedupeKey: `${provider}:run:stop:${sessionId || 'none'}:${stopReason}`
-    })
+      severity: "info",
+      dedupeKey: `${provider}:run:stop:${sessionId || "none"}:${stopReason}`,
+    }),
   });
 }
 
@@ -211,18 +213,13 @@ function notifyRunFailed({ userId, provider, sessionId = null, error, sessionNam
     event: createNotificationEvent({
       provider,
       sessionId,
-      kind: 'error',
-      code: 'run.failed',
+      kind: "error",
+      code: "run.failed",
       meta: { error: errorMessage, sessionName },
-      severity: 'error',
-      dedupeKey: `${provider}:run:error:${sessionId || 'none'}:${errorMessage}`
-    })
+      severity: "error",
+      dedupeKey: `${provider}:run:error:${sessionId || "none"}:${errorMessage}`,
+    }),
   });
 }
 
-export {
-  createNotificationEvent,
-  notifyUserIfEnabled,
-  notifyRunStopped,
-  notifyRunFailed
-};
+export { createNotificationEvent, notifyUserIfEnabled, notifyRunStopped, notifyRunFailed };

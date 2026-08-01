@@ -4,14 +4,13 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
-import { SmsSessionMapper } from "./SmsSessionMapper.js";
-import { renderSmsEvent } from "./sms-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { SmsSessionMapper } from "./SmsSessionMapper.js";
+import { renderSmsEvent } from "./sms-render.js";
 
 let twilioFactory: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   twilioFactory = require("twilio");
 } catch {
   // twilio not installed — start() will warn
@@ -110,7 +109,7 @@ export class SmsChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`sms: stopping (${reason ?? "no reason"})`);
         if (this.server) {
-          await new Promise<void>((resolve) => {
+          await new Promise<void>(resolve => {
             this.server!.close(() => resolve());
           });
           this.server = null;
@@ -178,16 +177,10 @@ export class SmsChannel implements ChannelAdapter {
 
     if (!from || !body.trim()) return;
 
-    void this.handleIncoming(from, body).catch((e) =>
-      this.logger?.error?.(`sms: handleIncoming error: ${e}`),
-    );
+    void this.handleIncoming(from, body).catch(e => this.logger?.error?.(`sms: handleIncoming error: ${e}`));
   }
 
-  private validateTwilioSignature(
-    url: string,
-    params: Record<string, string>,
-    signature: string,
-  ): boolean {
+  private validateTwilioSignature(url: string, params: Record<string, string>, signature: string): boolean {
     const keys = Object.keys(params).sort();
     let data = url;
     for (const k of keys) {

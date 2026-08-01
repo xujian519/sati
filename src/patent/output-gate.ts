@@ -1,5 +1,6 @@
 import type { CanonicalContentBlock, CanonicalMessage } from "../model/index.js";
 import { processPatentOutput, type QualityGateResult } from "./quality-gate.js";
+import { createApprovalRecord, type ApprovalStore } from "./approval.js";
 
 /**
  * PatentOutputGate — 把质量门禁接入 Agent 输出流。
@@ -48,6 +49,8 @@ export type PatentOutputGateOptions = {
   onApproved?: (pending: PendingPatentMessage) => void | Promise<void>;
   /** 审批拒绝回调（Discard 后触发）。 */
   onRejected?: (pending: PendingPatentMessage) => void | Promise<void>;
+  /** 审批审计存储（可选）：approve/reject 时追加 ApprovalRecord（决策留痕）。未配置则零开销。 */
+  approvalStore?: ApprovalStore;
 };
 
 export type ProcessedMessageResult = {
@@ -119,6 +122,7 @@ export class PatentOutputGate {
   /**
    * 审批通过：取出并移除挂起消息（消息已在挂起时入库，此处仅完成流程控制；触发 onApproved）。
    * sessionId 提供时校验匹配（防止跨会话越权批准）；不匹配返回 undefined。
+   * 通过后写入审计记录（verdict=adopted）。
    */
   approve(index: number, sessionId?: string): PendingPatentMessage | undefined {
     const pending = this.pending.get(index);
@@ -127,6 +131,7 @@ export class PatentOutputGate {
       return undefined;
     }
     this.pending.delete(index);
+    this.recordApproval(pending, { verdict: "adopted" });
     return pending;
   }
 
@@ -135,16 +140,45 @@ export class PatentOutputGate {
     this.safeInvoke(this.options.onApproved, pending);
   }
 
-  /** 审批拒绝：丢弃挂起消息。sessionId 提供时校验匹配（防止跨会话越权拒绝）。 */
-  reject(index: number, sessionId?: string): boolean {
+  /**
+   * 审批拒绝：丢弃挂起消息。sessionId 提供时校验匹配（防止跨会话越权拒绝）。
+   * feedback 可选（人工拒绝理由，写入审计）。拒绝后写入审计记录（verdict=rejected）。
+   */
+  reject(index: number, sessionId?: string, feedback?: string): boolean {
     const pending = this.pending.get(index);
     if (!pending) return false;
     if (sessionId !== undefined && pending.sessionId !== undefined && pending.sessionId !== sessionId) {
       return false;
     }
     this.pending.delete(index);
+    this.recordApproval(pending, { verdict: "rejected", feedback });
     this.safeInvoke(this.options.onRejected, pending);
     return true;
+  }
+
+  /** 审计留痕（approve/reject 时调用；store 未配置时零开销，不阻塞流程）。 */
+  private recordApproval(
+    pending: PendingPatentMessage,
+    decision: { verdict: "adopted" | "modified" | "rejected"; modifiedOutput?: string; feedback?: string },
+  ): void {
+    const store = this.options.approvalStore;
+    if (!store) return;
+    const record = createApprovalRecord({
+      pendingIndex: pending.index,
+      sessionId: pending.sessionId,
+      turnId: pending.turnId,
+      triggerKeyword: pending.info.approvalKeywordsHit[0] ?? "unknown",
+      originalOutputPreview: extractMessageText(pending.message),
+      verdict: decision.verdict,
+      ...(decision.modifiedOutput !== undefined ? { modifiedOutput: decision.modifiedOutput } : {}),
+      ...(decision.feedback !== undefined ? { feedback: decision.feedback } : {}),
+    });
+    const result = store.saveRecord(record);
+    if (result && typeof (result as Promise<void>).catch === "function") {
+      (result as Promise<void>).catch(err => {
+        console.error("[PatentOutputGate] 审批审计写入失败:", err);
+      });
+    }
   }
 
   /** 写库失败时恢复挂起（避免消息丢失），并重新触发 onPending 让审批端感知。 */

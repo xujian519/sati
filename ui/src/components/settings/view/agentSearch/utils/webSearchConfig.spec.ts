@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  isWebSearchApiKeyRequired,
-  webSearchConfigForProvider,
-} from "./webSearchConfig";
+import { isWebSearchApiKeyRequired, webSearchConfigForProvider } from "./webSearchConfig";
 
 describe("webSearchConfigForProvider", () => {
   const glmEndpoint = "https://api.z.ai/api/paas/v4/web_search";
@@ -23,13 +20,7 @@ describe("webSearchConfigForProvider", () => {
   });
 
   it("restores the GLM default endpoint", () => {
-    expect(
-      webSearchConfigForProvider(
-        { enabled: true, provider: "tavily" },
-        "glm",
-        glmEndpoint,
-      ),
-    ).toEqual({
+    expect(webSearchConfigForProvider({ enabled: true, provider: "tavily" }, "glm", glmEndpoint)).toEqual({
       enabled: true,
       provider: "glm",
       endpoint: glmEndpoint,
@@ -37,9 +28,7 @@ describe("webSearchConfigForProvider", () => {
   });
 
   it("keeps the backwards-compatible implicit enabled state", () => {
-    expect(
-      webSearchConfigForProvider({}, "glm", glmEndpoint),
-    ).toEqual({
+    expect(webSearchConfigForProvider({}, "glm", glmEndpoint)).toEqual({
       provider: "glm",
       endpoint: glmEndpoint,
     });

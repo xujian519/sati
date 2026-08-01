@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { getEditorLoadingStyles } from '../../utils/editorStyles';
+import type { ReactNode } from "react";
+import { getEditorLoadingStyles } from "../../utils/editorStyles";
 
 type CodeEditorLoadingStateProps = {
   isDarkMode: boolean;
@@ -27,17 +27,13 @@ export default function CodeEditorLoadingState({
       {isSidebar ? (
         <div className="flex h-full w-full flex-col bg-white dark:bg-neutral-950">
           {headerPrefix}
-          <div className="flex min-h-0 flex-1 items-center justify-center">
-            {spinner}
-          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center">{spinner}</div>
         </div>
       ) : (
         <div className="fixed inset-0 z-[9999] md:flex md:items-center md:justify-center md:bg-black/40 md:backdrop-blur-sm">
           <div className="code-editor-loading flex h-full w-full flex-col bg-white dark:bg-neutral-950 md:h-[80vh] md:max-h-[80vh] md:max-w-6xl md:rounded-xl md:border md:border-neutral-200 dark:md:border-neutral-800">
             {headerPrefix}
-            <div className="flex min-h-0 flex-1 items-center justify-center p-8">
-              {spinner}
-            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center p-8">{spinner}</div>
           </div>
         </div>
       )}

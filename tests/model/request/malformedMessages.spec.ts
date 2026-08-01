@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import { buildModelRequest, cloneMessages } from "../../../src/model/index.js";
 import type {
   CanonicalMessage,
@@ -8,8 +7,8 @@ import type {
   ModelConfig,
   ModelDefinition,
   ProviderConfig,
+  ModelCapabilities,
 } from "../../../src/model/index.js";
-import type { ModelCapabilities } from "../../../src/model/index.js";
 
 test("model request builders tolerate malformed messages with missing content", () => {
   const malformed = { role: "assistant" } as unknown as CanonicalMessage;

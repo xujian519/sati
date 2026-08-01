@@ -6,7 +6,7 @@
  * Process model:
  *   - `start(spec)` spawns a *detached* child via `spawn(command, { shell:
  *     true, detached: true })` and immediately calls `child.unref()` so the
- *     PilotDeck process can exit without waiting for the child. (T11)
+ *     Sati process can exit without waiting for the child. (T11)
  *   - stdout / stderr are piped into a `TaskOutputStore` (1 MB ring buffer
  *     + optional disk spill). The runtime never blocks on the stream — the
  *     child runs free until either it exits or `stop` is called.
@@ -25,17 +25,17 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { TaskOutputStore } from "../storage/TaskOutputStore.js";
 import type {
-  PilotDeckBackgroundBashTask,
-  PilotDeckBackgroundTaskStatus,
-  PilotDeckBackgroundTaskKind,
-  PilotDeckBackgroundTaskListFilter,
-  PilotDeckTaskOutputSlice,
+  SatiBackgroundBashTask,
+  SatiBackgroundTaskStatus,
+  SatiBackgroundTaskKind,
+  SatiBackgroundTaskListFilter,
+  SatiTaskOutputSlice,
 } from "../protocol/types.js";
 
 export type BackgroundTaskCompletionEvent = {
   sessionId?: string;
   taskId: string;
-  status: Extract<PilotDeckBackgroundTaskStatus, "completed" | "failed" | "cancelled">;
+  status: Extract<SatiBackgroundTaskStatus, "completed" | "failed" | "cancelled">;
   exitCode?: number | null;
   outputPreview: string;
   totalBytes: number;
@@ -66,7 +66,7 @@ export type StartTaskSpec = {
   env?: NodeJS.ProcessEnv;
   sessionId?: string;
   agentId?: string;
-  kind?: PilotDeckBackgroundTaskKind;
+  kind?: SatiBackgroundTaskKind;
 };
 
 export type StopTaskOptions = {
@@ -79,14 +79,14 @@ export type WaitTaskOptions = {
 };
 
 export type WaitTaskResult = {
-  task: PilotDeckBackgroundBashTask;
+  task: SatiBackgroundBashTask;
   timedOut: boolean;
   outcome: "completed" | "timeout" | "aborted";
   waitedMs: number;
 };
 
 type RuntimeEntry = {
-  task: PilotDeckBackgroundBashTask;
+  task: SatiBackgroundBashTask;
   child?: ChildProcess;
   output: TaskOutputStore;
   /** Resolved when the child has fully exited (success, failure, or kill). */
@@ -99,9 +99,7 @@ const DEFAULT_COMPLETION_PREVIEW_BYTES = 4_000;
 
 export class BackgroundTaskRuntime {
   private readonly entries = new Map<string, RuntimeEntry>();
-  private readonly options: Required<
-    Pick<BackgroundTaskRuntimeOptions, "now" | "spawn" | "maxTasks">
-  > &
+  private readonly options: Required<Pick<BackgroundTaskRuntimeOptions, "now" | "spawn" | "maxTasks">> &
     Pick<BackgroundTaskRuntimeOptions, "diskSpillDir" | "onCompletion" | "completionPreviewBytes">;
 
   constructor(options: BackgroundTaskRuntimeOptions = {}) {
@@ -115,8 +113,8 @@ export class BackgroundTaskRuntime {
     };
   }
 
-  list(filter: PilotDeckBackgroundTaskListFilter = {}): PilotDeckBackgroundBashTask[] {
-    const result: PilotDeckBackgroundBashTask[] = [];
+  list(filter: SatiBackgroundTaskListFilter = {}): SatiBackgroundBashTask[] {
+    const result: SatiBackgroundBashTask[] = [];
     for (const entry of this.entries.values()) {
       if (filter.agentId && entry.task.agentId !== filter.agentId) continue;
       if (filter.kind && entry.task.kind !== filter.kind) continue;
@@ -129,7 +127,7 @@ export class BackgroundTaskRuntime {
     return result;
   }
 
-  get(taskId: string): PilotDeckBackgroundBashTask | undefined {
+  get(taskId: string): SatiBackgroundBashTask | undefined {
     return this.entries.get(taskId)?.task;
   }
 
@@ -139,14 +137,15 @@ export class BackgroundTaskRuntime {
 
     const startedAt = Date.now();
     const timeoutMs = Math.max(0, Math.floor(options.timeoutMs ?? 0));
-    const timeoutPromise = timeoutMs > 0
-      ? new Promise<"timeout">((resolve) => {
-          setTimeout(() => resolve("timeout"), timeoutMs).unref?.();
-        })
-      : undefined;
+    const timeoutPromise =
+      timeoutMs > 0
+        ? new Promise<"timeout">(resolve => {
+            setTimeout(() => resolve("timeout"), timeoutMs).unref?.();
+          })
+        : undefined;
     let abortHandler: (() => void) | undefined;
     const abortPromise = options.abortSignal
-      ? new Promise<"aborted">((resolve) => {
+      ? new Promise<"aborted">(resolve => {
           if (options.abortSignal?.aborted) {
             resolve("aborted");
             return;
@@ -164,11 +163,7 @@ export class BackgroundTaskRuntime {
       options.abortSignal?.removeEventListener("abort", abortHandler);
     }
 
-    const outcome = result === "timeout"
-      ? "timeout"
-      : result === "aborted"
-        ? "aborted"
-        : "completed";
+    const outcome = result === "timeout" ? "timeout" : result === "aborted" ? "aborted" : "completed";
     return {
       task: entry.task,
       timedOut: outcome === "timeout" || outcome === "aborted",
@@ -182,16 +177,14 @@ export class BackgroundTaskRuntime {
    * forked (typically <10 ms). `task.status` flips to `running` on spawn
    * and `completed` / `failed` / `cancelled` later via the `exit` listener.
    */
-  async start(spec: StartTaskSpec): Promise<PilotDeckBackgroundBashTask> {
+  async start(spec: StartTaskSpec): Promise<SatiBackgroundBashTask> {
     if (this.entries.size >= this.options.maxTasks) {
-      throw new Error(
-        `BackgroundTaskRuntime: max tasks (${this.options.maxTasks}) exceeded.`,
-      );
+      throw new Error(`BackgroundTaskRuntime: max tasks (${this.options.maxTasks}) exceeded.`);
     }
 
     const taskId = randomUUID();
     const startedAt = this.options.now();
-    const task: PilotDeckBackgroundBashTask = {
+    const task: SatiBackgroundBashTask = {
       taskId,
       type: "local_bash",
       agentId: spec.agentId,
@@ -214,7 +207,7 @@ export class BackgroundTaskRuntime {
     });
 
     let resolveDone!: () => void;
-    const done = new Promise<void>((resolve) => {
+    const done = new Promise<void>(resolve => {
       resolveDone = resolve;
     });
 
@@ -296,7 +289,7 @@ export class BackgroundTaskRuntime {
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       done,
-      new Promise<void>((resolve) => {
+      new Promise<void>(resolve => {
         timer = setTimeout(() => {
           try {
             child.kill("SIGKILL");
@@ -313,33 +306,31 @@ export class BackgroundTaskRuntime {
 
   /** Kill every task created with `agentId`. */
   async killForAgent(agentId: string): Promise<void> {
-    const targets = [...this.entries.values()].filter(
-      (e) => e.task.agentId === agentId && e.task.status === "running",
-    );
-    await Promise.all(targets.map((e) => this.stop(e.task.taskId)));
+    const targets = [...this.entries.values()].filter(e => e.task.agentId === agentId && e.task.status === "running");
+    await Promise.all(targets.map(e => this.stop(e.task.taskId)));
   }
 
   /** Kill every running task (intended for SessionRouter onSessionEnd). */
   async killAll(): Promise<void> {
-    const targets = [...this.entries.values()].filter((e) => e.task.status === "running");
-    await Promise.all(targets.map((e) => this.stop(e.task.taskId)));
+    const targets = [...this.entries.values()].filter(e => e.task.status === "running");
+    await Promise.all(targets.map(e => this.stop(e.task.taskId)));
   }
 
-  getOutput(taskId: string, offset: number, maxBytes?: number): PilotDeckTaskOutputSlice {
+  getOutput(taskId: string, offset: number, maxBytes?: number): SatiTaskOutputSlice {
     const entry = this.entries.get(taskId);
     if (!entry) throw new Error(`Unknown taskId: ${taskId}`);
     return entry.output.readSlice(offset, maxBytes);
   }
 
   /** Convenience used in tests: `await runtime.waitFor(taskId)`. */
-  async waitFor(taskId: string): Promise<PilotDeckBackgroundBashTask> {
+  async waitFor(taskId: string): Promise<SatiBackgroundBashTask> {
     const entry = this.entries.get(taskId);
     if (!entry) throw new Error(`Unknown taskId: ${taskId}`);
     await entry.done;
     return entry.task;
   }
 
-  private notifyCompletion(task: PilotDeckBackgroundBashTask, output: TaskOutputStore): void {
+  private notifyCompletion(task: SatiBackgroundBashTask, output: TaskOutputStore): void {
     if (!this.options.onCompletion || !task.endedAt) {
       return;
     }

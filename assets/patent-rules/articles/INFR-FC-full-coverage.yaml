@@ -1,0 +1,41 @@
+# 全面覆盖原则判断框架 (INFR-FC)
+# Layer 1 — 法条级原子单元
+#
+# 法律依据修正（2026-07）：原引用「专利法第67条」有误——2020 修正版第67条实际是
+# 「专利实施许可合同」，与侵权判定无关。正确依据为专利法第64条第1款（保护范围以
+# 权利要求为准）+ 法释〔2009〕21号第7条（全面覆盖原则）。
+
+articleId: "INFR-FC"
+name: "全面覆盖原则判断"
+lawRef: "专利法第64条第1款 + 法释〔2009〕21号第7条（全面覆盖原则）"
+guidelineRef: "最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释 第7条"
+
+steps:
+  - id: "INFR-FC_step_1"
+    order: 1
+    name: "分解权利要求的技术特征"
+    ruleRef: "最高法司法解释 第7条"
+    inputHint: "目标专利的权利要求书"
+    outputSchema:
+      claims: "object[] — 每条权利要求的特征分解"
+      independentClaims: "object[] — 独立权利要求的特征列表"
+      dependentClaims: "object[] — 从属权利要求的附加特征"
+
+  - id: "INFR-FC_step_2"
+    order: 2
+    name: "逐一对比被控产品与权利要求特征"
+    ruleRef: "全面覆盖原则"
+    inputHint: "被控产品的技术特征 + 专利权利要求特征"
+    outputSchema:
+      featureComparison: "object[] — 每个特征的对比结果"
+      matchedFeatures: "string[] — 被覆盖的特征"
+      missingFeatures: "string[] — 未被覆盖的特征"
+      conclusion: "string — 是否全面覆盖"
+
+conclusionSchema:
+  covered: "boolean — 是否全面覆盖"
+  confidence: "'high' | 'medium' | 'low'"
+  keyRationale: "string — 核心理由"
+
+applicableTo:
+  - infringement

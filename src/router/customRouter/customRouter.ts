@@ -10,13 +10,13 @@ export type CustomRouterDecideInput = RouterDecisionInput & {
   context: CustomRouterContext;
 };
 
-export type PilotDeckCustomRouter = {
+export type SatiCustomRouter = {
   id: string;
   decide(input: CustomRouterDecideInput): Promise<Partial<RouterDecision> | undefined>;
 };
 
 export type CustomRouterRegistry = {
-  lookupRouter(extensionId: string): PilotDeckCustomRouter | undefined;
+  lookupRouter(extensionId: string): SatiCustomRouter | undefined;
 };
 
 export const noopCustomRouterRegistry: CustomRouterRegistry = {

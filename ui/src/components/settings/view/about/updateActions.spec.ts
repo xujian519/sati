@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  launchDesktopInstaller,
-  readWebUpdateTerminalStatus,
-} from "./updateActions";
+import { launchDesktopInstaller, readWebUpdateTerminalStatus } from "./updateActions";
 
 function streamFromChunks(chunks: Uint8Array[]): ReadableStream<Uint8Array> {
   return new ReadableStream({
@@ -45,35 +42,26 @@ describe("readWebUpdateTerminalStatus", () => {
       })}\n`,
     );
 
-    await expect(
-      readWebUpdateTerminalStatus(streamFromChunks([bytes])),
-    ).rejects.toThrow("without a terminal status");
+    await expect(readWebUpdateTerminalStatus(streamFromChunks([bytes]))).rejects.toThrow("without a terminal status");
   });
 
-  it.each(["success", "up-to-date"] as const)(
-    "accepts the %s terminal status",
-    async (status) => {
-      const bytes = new TextEncoder().encode(
-        JSON.stringify({ stage: "complete", status }),
-      );
+  it.each(["success", "up-to-date"] as const)("accepts the %s terminal status", async status => {
+    const bytes = new TextEncoder().encode(JSON.stringify({ stage: "complete", status }));
 
-      await expect(
-        readWebUpdateTerminalStatus(streamFromChunks([bytes])),
-      ).resolves.toBe(status);
-    },
-  );
+    await expect(readWebUpdateTerminalStatus(streamFromChunks([bytes]))).resolves.toBe(status);
+  });
 });
 
 describe("launchDesktopInstaller", () => {
   it("only launches the downloaded installer", async () => {
     const request = vi.fn().mockResolvedValue({ ok: true });
 
-    await launchDesktopInstaller("/tmp/PilotDeck-installer.exe", request);
+    await launchDesktopInstaller("/tmp/Sati-installer.exe", request);
 
     expect(request).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledWith("/api/update/desktop/install", {
       method: "POST",
-      body: JSON.stringify({ filePath: "/tmp/PilotDeck-installer.exe" }),
+      body: JSON.stringify({ filePath: "/tmp/Sati-installer.exe" }),
     });
   });
 });

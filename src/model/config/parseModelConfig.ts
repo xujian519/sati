@@ -1,15 +1,6 @@
-import {
-  ANTHROPIC_DEFAULT_CAPABILITIES,
-  ANTHROPIC_DEFAULT_MULTIMODAL,
-} from "../providers/anthropic/defaults.js";
-import {
-  OPENAI_DEFAULT_CAPABILITIES,
-  OPENAI_DEFAULT_MULTIMODAL,
-} from "../providers/openai/defaults.js";
-import {
-  GOOGLE_DEFAULT_CAPABILITIES,
-  GOOGLE_DEFAULT_MULTIMODAL,
-} from "../providers/google/defaults.js";
+import { ANTHROPIC_DEFAULT_CAPABILITIES, ANTHROPIC_DEFAULT_MULTIMODAL } from "../providers/anthropic/defaults.js";
+import { OPENAI_DEFAULT_CAPABILITIES, OPENAI_DEFAULT_MULTIMODAL } from "../providers/openai/defaults.js";
+import { GOOGLE_DEFAULT_CAPABILITIES, GOOGLE_DEFAULT_MULTIMODAL } from "../providers/google/defaults.js";
 import type {
   ModelConfig,
   ModelDefinition,
@@ -19,11 +10,7 @@ import type {
 } from "../protocol/canonical.js";
 import { mergeCapabilities, type ModelCapabilities } from "../protocol/capabilities.js";
 import { ModelConfigError } from "../protocol/errors.js";
-import {
-  DEFAULT_MULTIMODAL_CONSTRAINTS,
-  isInputModality,
-  type MultimodalConstraints,
-} from "../protocol/multimodal.js";
+import { DEFAULT_MULTIMODAL_CONSTRAINTS, isInputModality, type MultimodalConstraints } from "../protocol/multimodal.js";
 import { lookupCatalogModel, lookupCatalogProvider } from "../catalog/index.js";
 import { resolveApiKey, type CredentialEnv } from "./resolveCredentials.js";
 import {
@@ -70,9 +57,7 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
   const provider = rawProvider as RawProviderConfig;
   const catalogProvider = lookupCatalogProvider(providerId);
 
-  const protocol = isModelProtocol(provider.protocol)
-    ? provider.protocol
-    : catalogProvider?.protocol;
+  const protocol = isModelProtocol(provider.protocol) ? provider.protocol : catalogProvider?.protocol;
   if (!protocol) {
     throw new ModelConfigError("unsupported_protocol", `Provider ${providerId} has unsupported protocol.`, {
       providerId,
@@ -81,9 +66,8 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
   }
 
   const trimmedUrl = typeof provider.url === "string" ? provider.url.trim() : "";
-  const rawUrl = trimmedUrl.length > 0
-    ? trimmedUrl
-    : resolveDefaultProviderUrl(providerId, protocol, catalogProvider?.defaultUrl);
+  const rawUrl =
+    trimmedUrl.length > 0 ? trimmedUrl : resolveDefaultProviderUrl(providerId, protocol, catalogProvider?.defaultUrl);
   if (!rawUrl) {
     throw new ModelConfigError("invalid_config_value", `Provider ${providerId} requires a url.`, { providerId });
   }
@@ -124,9 +108,7 @@ function resolveProviderApiKey(
   }
   const hasBlankString = typeof value === "string" && value.trim().length === 0;
   const hasConfigValue = value !== undefined && value !== null && !hasBlankString;
-  const effectiveValue = hasConfigValue
-    ? value
-    : catalogEnvVar ? `\${${catalogEnvVar}}` : value;
+  const effectiveValue = hasConfigValue ? value : catalogEnvVar ? `\${${catalogEnvVar}}` : value;
   return resolveApiKey(effectiveValue, env);
 }
 
@@ -146,9 +128,14 @@ function parseRetryConfig(raw: unknown): ProviderRetryConfig | undefined {
   if (!isRecord(raw)) return undefined;
   const result: ProviderRetryConfig = {};
   const numFields = [
-    "requestMaxRetries", "streamMaxRetries", "streamIdleTimeoutMs",
-    "maxStreamingDurationMs", "repeatedChunkLimit",
-    "baseDelayMs", "maxDelayMs", "jitter",
+    "requestMaxRetries",
+    "streamMaxRetries",
+    "streamIdleTimeoutMs",
+    "maxStreamingDurationMs",
+    "repeatedChunkLimit",
+    "baseDelayMs",
+    "maxDelayMs",
+    "jitter",
   ] as const;
   for (const key of numFields) {
     const value = raw[key];
@@ -182,9 +169,7 @@ function parseModelDefinition(
 
   return {
     id: modelId,
-    displayName: typeof model.displayName === "string"
-      ? model.displayName
-      : catalogModel?.displayName,
+    displayName: typeof model.displayName === "string" ? model.displayName : catalogModel?.displayName,
     capabilities,
     multimodal,
     aliases: readStringArray(model.aliases, "aliases"),
@@ -247,9 +232,7 @@ function parseCapabilities(
 
   return {
     ...mergeCapabilities(defaults, overrides),
-    ...(capabilities.supportsThinking !== undefined
-      ? { supportsThinkingExplicit: capabilities.supportsThinking }
-      : {}),
+    ...(capabilities.supportsThinking !== undefined ? { supportsThinkingExplicit: capabilities.supportsThinking } : {}),
   } as ModelCapabilities;
 }
 
@@ -279,7 +262,7 @@ function parseMultimodal(
     throw new ModelConfigError("invalid_multimodal_input", "multimodal.input must be a string list.");
   }
 
-  const input = multimodal.input.map((value) => {
+  const input = multimodal.input.map(value => {
     if (!isInputModality(value)) {
       throw new ModelConfigError("invalid_multimodal_input", "multimodal.input contains unsupported modality.", {
         modality: value,
@@ -291,15 +274,9 @@ function parseMultimodal(
   return {
     ...defaults,
     input,
-    maxImagesPerRequest: readOptionalPositiveNumber(
-      multimodal.maxImagesPerRequest,
-      "maxImagesPerRequest",
-    ),
+    maxImagesPerRequest: readOptionalPositiveNumber(multimodal.maxImagesPerRequest, "maxImagesPerRequest"),
     maxImageBytes: readOptionalPositiveNumber(multimodal.maxImageBytes, "maxImageBytes"),
-    supportedImageMimeTypes: readStringArray(
-      multimodal.supportedImageMimeTypes,
-      "supportedImageMimeTypes",
-    ),
+    supportedImageMimeTypes: readStringArray(multimodal.supportedImageMimeTypes, "supportedImageMimeTypes"),
     maxPdfPages: readOptionalPositiveNumber(multimodal.maxPdfPages, "maxPdfPages"),
     maxPdfBytes: readOptionalPositiveNumber(multimodal.maxPdfBytes, "maxPdfBytes"),
     maxAudioSeconds: readOptionalPositiveNumber(multimodal.maxAudioSeconds, "maxAudioSeconds"),
@@ -363,7 +340,7 @@ function readStringArray(value: unknown, key: string): string[] | undefined {
     return undefined;
   }
 
-  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+  if (!Array.isArray(value) || value.some(item => typeof item !== "string")) {
     throw new ModelConfigError("invalid_config_value", `${key} must be a string list.`);
   }
 

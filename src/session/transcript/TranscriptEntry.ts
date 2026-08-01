@@ -215,7 +215,7 @@ export function classifyDurableMessageEntry(message: CanonicalMessage): AgentMes
     return "assistant_message";
   }
 
-  if (message.content.some((block) => block.type === "tool_result")) {
+  if (message.content.some(block => block.type === "tool_result")) {
     return "tool_result_message";
   }
 

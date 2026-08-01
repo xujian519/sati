@@ -22,7 +22,9 @@ export function serveStaticAsset(staticRoot: string, requestPath: string, respon
     return false;
   }
 
-  response.writeHead(200, { "content-type": CONTENT_TYPES[filePath.slice(filePath.lastIndexOf("."))] ?? "application/octet-stream" });
+  response.writeHead(200, {
+    "content-type": CONTENT_TYPES[filePath.slice(filePath.lastIndexOf("."))] ?? "application/octet-stream",
+  });
   createReadStream(filePath).pipe(response);
   return true;
 }

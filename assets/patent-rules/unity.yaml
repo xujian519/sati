@@ -1,0 +1,64 @@
+# 单一性检查规则
+# 对应工具：unity_checker (UnityCheckerTool)
+version: "1.0.0"
+tool: "unity"
+
+thresholds:
+  similarity_threshold:
+    description: "特征对应判定阈值"
+    legal_basis: "专利法实施细则第43条"
+    value: 0.6
+  score_base:
+    description: "有单一性基础分"
+    value: 60
+  score_bonus:
+    description: "技术关联度奖金系数"
+    value: 40
+  score_good:
+    description: "单一性良好阈值"
+    value: 80
+  score_fair:
+    description: "单一性一般阈值"
+    value: 60
+  char_overlap_weight:
+    description: "字符重叠权重"
+    value: 0.2
+  jaccard_weight:
+    description: "Jaccard 权重"
+    value: 0.5
+  cosine_weight:
+    description: "Bigram 余弦权重"
+    value: 0.3
+
+keyword_lists:
+  tech_fields:
+    description: "技术领域分类关键词"
+    items:
+      - "电子|电路|芯片|处理器|控制器|传感器||电子技术"
+      - "机械|装置|设备|机构|结构||机械工程"
+      - "化学|材料|组合物|成分|合成||化学工程"
+      - "软件|算法|数据处理|计算|程序||计算机软件"
+      - "通信|网络|传输|信号||通信技术"
+  feature_types_method:
+    description: "方法类特征推断关键词"
+    items:
+      - "方法"
+      - "工艺"
+      - "步骤"
+      - "流程"
+      - "过程"
+  feature_types_structural:
+    description: "结构类特征推断关键词"
+    items:
+      - "包括"
+      - "包含"
+      - "设有"
+      - "设置"
+      - "配置"
+  feature_types_compositional:
+    description: "组成类特征推断关键词"
+    items:
+      - "由.*组成"
+      - "成分"
+      - "材料"
+      - "组合物"

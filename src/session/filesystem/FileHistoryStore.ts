@@ -39,15 +39,9 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { getBackupFileName } from "./backupNaming.js";
 import { createBackup } from "./createBackup.js";
 import { restoreBackup } from "./restoreBackup.js";
-import type {
-  FileHistoryBackup,
-  FileHistoryDiffStats,
-  FileHistorySnapshot,
-  FileHistoryState,
-} from "./types.js";
+import type { FileHistoryBackup, FileHistoryDiffStats, FileHistorySnapshot, FileHistoryState } from "./types.js";
 
 export type FileHistorySnapshotRecordedEntry = {
   messageId: string;
@@ -139,9 +133,7 @@ export class FileHistoryStore {
         now: this.options.now,
       });
       if (result.oversize) {
-        this.options.warn?.(
-          `file-history: skipping backup for ${absPath} (size > ${this.options.maxFileBytes} bytes)`,
-        );
+        this.options.warn?.(`file-history: skipping backup for ${absPath} (size > ${this.options.maxFileBytes} bytes)`);
       }
       snapshot.trackedFileBackups[absPath] = result.backup;
       this.cacheMtime(absPath);
@@ -179,8 +171,7 @@ export class FileHistoryStore {
           currentMtime = null;
         }
 
-        const previousBackup =
-          snapshot.trackedFileBackups[absPath] ?? previousSnapshot?.trackedFileBackups[absPath];
+        const previousBackup = snapshot.trackedFileBackups[absPath] ?? previousSnapshot?.trackedFileBackups[absPath];
         const previousVersion = previousBackup?.version ?? 0;
         const mtimeChanged = currentMtime !== cachedMtime;
         if (!mtimeChanged && previousBackup) {
@@ -304,9 +295,7 @@ export class FileHistoryStore {
         };
         this.state.trackedFiles.add(filePath);
       }
-      const existingIdx = this.state.snapshots.findIndex(
-        (s) => s.messageId === entry.messageId,
-      );
+      const existingIdx = this.state.snapshots.findIndex(s => s.messageId === entry.messageId);
       const snapshot: FileHistorySnapshot = {
         messageId: entry.messageId,
         trackedFileBackups,
@@ -391,8 +380,8 @@ export class FileHistoryStore {
       // Drop backup files that are not referenced by any remaining snapshot.
       for (const backup of Object.values(evicted.trackedFileBackups)) {
         if (!backup.backupFileName) continue;
-        const stillReferenced = this.state.snapshots.some((s) =>
-          Object.values(s.trackedFileBackups).some((b) => b.backupFileName === backup.backupFileName),
+        const stillReferenced = this.state.snapshots.some(s =>
+          Object.values(s.trackedFileBackups).some(b => b.backupFileName === backup.backupFileName),
         );
         if (stillReferenced) continue;
         const target = path.join(this.options.backupDir, backup.backupFileName);
@@ -418,9 +407,7 @@ export class FileHistoryStore {
 }
 
 function isNotFoundError(err: unknown): boolean {
-  return Boolean(
-    err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "ENOENT",
-  );
+  return Boolean(err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "ENOENT");
 }
 
 async function safeReadText(p: string): Promise<string | null> {

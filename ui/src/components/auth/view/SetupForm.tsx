@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react';
-import type { FormEvent } from 'react';
-import { useAuth } from '../context/AuthContext';
-import pilotdeckLogoDark from '../../../assets/pilotdeck-wordmark-dark.png';
-import pilotdeckLogoLight from '../../../assets/pilotdeck-wordmark-light.png';
-import AuthErrorAlert from './AuthErrorAlert';
-import AuthInputField from './AuthInputField';
-import AuthScreenLayout from './AuthScreenLayout';
+import { useCallback, useState } from "react";
+import type { FormEvent } from "react";
+import { useAuth } from "../context/AuthContext";
+import satiLogoDark from "../../../assets/sati-wordmark-dark.png";
+import satiLogoLight from "../../../assets/sati-wordmark-light.png";
+import AuthErrorAlert from "./AuthErrorAlert";
+import AuthInputField from "./AuthInputField";
+import AuthScreenLayout from "./AuthScreenLayout";
 
 type SetupFormState = {
   username: string;
@@ -14,9 +14,9 @@ type SetupFormState = {
 };
 
 const initialState: SetupFormState = {
-  username: '',
-  password: '',
-  confirmPassword: '',
+  username: "",
+  password: "",
+  confirmPassword: "",
 };
 
 /**
@@ -26,19 +26,19 @@ const initialState: SetupFormState = {
  */
 function validateSetupForm(formState: SetupFormState): string | null {
   if (!formState.username.trim() || !formState.password || !formState.confirmPassword) {
-    return 'Please fill in all fields.';
+    return "Please fill in all fields.";
   }
 
   if (formState.username.trim().length < 3) {
-    return 'Username must be at least 3 characters long.';
+    return "Username must be at least 3 characters long.";
   }
 
   if (formState.password.length < 6) {
-    return 'Password must be at least 6 characters long.';
+    return "Password must be at least 6 characters long.";
   }
 
   if (formState.password !== formState.confirmPassword) {
-    return 'Passwords do not match.';
+    return "Passwords do not match.";
   }
 
   return null;
@@ -54,17 +54,17 @@ export default function SetupForm() {
   const { register } = useAuth();
 
   const [formState, setFormState] = useState<SetupFormState>(initialState);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = useCallback((field: keyof SetupFormState, value: string) => {
-    setFormState((previous) => ({ ...previous, [field]: value }));
+    setFormState(previous => ({ ...previous, [field]: value }));
   }, []);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      setErrorMessage('');
+      setErrorMessage("");
 
       const validationError = validateSetupForm(formState);
       if (validationError) {
@@ -84,20 +84,20 @@ export default function SetupForm() {
 
   return (
     <AuthScreenLayout
-      title="Welcome to PilotDeck"
+      title="Welcome to Sati"
       description="Set up your account to get started"
       footerText="This is a single-user system. Only one account can be created."
       logo={
         <div className="flex items-center justify-center gap-2">
           <img
-            src={pilotdeckLogoLight}
-            alt="PilotDeck"
+            src={satiLogoLight}
+            alt="Sati"
             className="h-14 w-auto max-w-72 select-none object-contain dark:hidden"
             draggable={false}
           />
           <img
-            src={pilotdeckLogoDark}
-            alt="PilotDeck"
+            src={satiLogoDark}
+            alt="Sati"
             className="hidden h-14 w-auto max-w-72 select-none object-contain dark:block"
             draggable={false}
           />
@@ -110,7 +110,7 @@ export default function SetupForm() {
           name="username"
           label="Username"
           value={formState.username}
-          onChange={(value) => updateField('username', value)}
+          onChange={value => updateField("username", value)}
           placeholder="Enter your username"
           isDisabled={isSubmitting}
           autoComplete="username"
@@ -121,7 +121,7 @@ export default function SetupForm() {
           name="password"
           label="Password"
           value={formState.password}
-          onChange={(value) => updateField('password', value)}
+          onChange={value => updateField("password", value)}
           placeholder="Enter your password"
           isDisabled={isSubmitting}
           type="password"
@@ -133,7 +133,7 @@ export default function SetupForm() {
           name="confirmPassword"
           label="Confirm Password"
           value={formState.confirmPassword}
-          onChange={(value) => updateField('confirmPassword', value)}
+          onChange={value => updateField("confirmPassword", value)}
           placeholder="Confirm your password"
           isDisabled={isSubmitting}
           type="password"
@@ -147,7 +147,7 @@ export default function SetupForm() {
           disabled={isSubmitting}
           className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:bg-blue-400"
         >
-          {isSubmitting ? 'Setting up...' : 'Create Account'}
+          {isSubmitting ? "Setting up..." : "Create Account"}
         </button>
       </form>
     </AuthScreenLayout>

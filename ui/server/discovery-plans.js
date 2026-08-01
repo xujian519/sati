@@ -7,28 +7,24 @@
  * commands.
  */
 
-import { isSessionActiveViaGateway as isClaudeSDKSessionActive, getPilotDeckGateway } from './pilotdeck-bridge.js';
-import {
-  extractProjectDirectory,
-  getProjectCronJobsOverview,
-  getSessions,
-} from './projects.js';
-import { appendAlwaysOnRunEvent } from './services/always-on-run-history.js';
+import { isSessionActiveViaGateway as isClaudeSDKSessionActive, getSatiGateway } from "./sati-bridge.js";
+import { extractProjectDirectory, getProjectCronJobsOverview, getSessions } from "./projects.js";
+import { appendAlwaysOnRunEvent } from "./services/always-on-run-history.js";
 import {
   appendAlwaysOnRunLog,
   appendAlwaysOnRunLogEvent,
   formatAlwaysOnPlanLogLine,
-} from './services/always-on-run-logs.js';
-import { resolvePilotHome, resolveProjectStorageId } from './utils/pilotPaths.js';
+} from "./services/always-on-run-logs.js";
+import { resolvePilotHome, resolveProjectStorageId } from "./utils/pilotPaths.js";
 
-import { DiscoveryPlanService } from '../../src/always-on/web/DiscoveryPlanService.js';
-import { buildDiscoveryContext } from '../../src/always-on/web/DiscoveryPlanContext.js';
+import { DiscoveryPlanService } from "../../src/always-on/web/DiscoveryPlanService.js";
+import { buildDiscoveryContext } from "../../src/always-on/web/DiscoveryPlanContext.js";
 import {
   applyWorktreeToProject,
   disposeWorkspace as disposeWorkspaceImpl,
-} from '../../src/always-on/workspace/WorkspaceApply.js';
-import { resolveAlwaysOnPaths } from '../../src/always-on/storage/AlwaysOnPaths.js';
-import { DiscoveryStateStore } from '../../src/always-on/storage/DiscoveryStateStore.js';
+} from "../../src/always-on/workspace/WorkspaceApply.js";
+import { resolveAlwaysOnPaths } from "../../src/always-on/storage/AlwaysOnPaths.js";
+import { DiscoveryStateStore } from "../../src/always-on/storage/DiscoveryStateStore.js";
 
 // ---------------------------------------------------------------------------
 // Wire dependencies for the service
@@ -38,7 +34,7 @@ function getService() {
   const pilotHome = resolvePilotHome();
   return new DiscoveryPlanService({
     pilotHome,
-    resolveProjectId: (projectRoot) => resolveProjectStorageId(projectRoot, pilotHome),
+    resolveProjectId: projectRoot => resolveProjectStorageId(projectRoot, pilotHome),
     paths: { extractProjectDirectory },
     sessions: { getSessions },
     activity: { isSessionActive: isClaudeSDKSessionActive },
@@ -53,7 +49,7 @@ function getService() {
       disposeWorkspace: disposeWorkspaceImpl,
     },
     state: {
-      clearActiveWorkCycleId: async (projectRoot) => {
+      clearActiveWorkCycleId: async projectRoot => {
         const paths = resolveAlwaysOnPaths({
           pilotHome,
           projectKey: projectRoot,
@@ -86,7 +82,7 @@ export async function getProjectDiscoveryPlansOverview(projectName) {
 
 export async function rerunDiscoveryPlan(projectName, planId) {
   const projectRoot = await extractProjectDirectory(projectName);
-  const gw = await getPilotDeckGateway();
+  const gw = await getSatiGateway();
   const result = await gw.alwaysOnRerunPlan({
     projectKey: projectRoot,
     planId,
@@ -115,7 +111,7 @@ export async function archiveWorkCycle(projectName, cycleId) {
 export async function applyWorkCycle(projectName, cycleId) {
   const result = await getService().queueCycleApply(projectName, cycleId);
 
-  const gw = await getPilotDeckGateway();
+  const gw = await getSatiGateway();
 
   let applyResult;
   try {
@@ -126,23 +122,23 @@ export async function applyWorkCycle(projectName, cycleId) {
     });
   } catch (err) {
     await getService().updateCycleExecution(projectName, cycleId, {
-      status: 'failed',
+      status: "failed",
     });
     return {
       cycle: result.cycle,
-      error: { code: 'apply_error', message: (err && err.message) || 'Apply failed' },
+      error: { code: "apply_error", message: (err && err.message) || "Apply failed" },
     };
   }
 
   if (applyResult.error) {
     await getService().updateCycleExecution(projectName, cycleId, {
-      status: 'failed',
+      status: "failed",
     });
     return { cycle: result.cycle, error: applyResult.error };
   }
 
   const finalResult = await getService().updateCycleExecution(projectName, cycleId, {
-    status: 'completed',
+    status: "completed",
     executionSessionId: applyResult.sessionKey,
   });
   return {

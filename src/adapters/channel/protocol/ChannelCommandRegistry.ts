@@ -114,9 +114,9 @@ const commands: ChannelCommand[] = [
       const result = await ctx.gateway.listProjects();
       const lower = arg.toLowerCase();
       const target =
-        result.projects.find((p) => p.name === arg) ??
-        result.projects.find((p) => p.name.toLowerCase() === lower) ??
-        result.projects.find((p) => p.name.toLowerCase().includes(lower));
+        result.projects.find(p => p.name === arg) ??
+        result.projects.find(p => p.name.toLowerCase() === lower) ??
+        result.projects.find(p => p.name.toLowerCase().includes(lower));
 
       if (!target) {
         await ctx.reply(`未找到匹配「${arg}」的项目。\n\n发送 /projects 查看可用项目。`);
@@ -131,7 +131,7 @@ const commands: ChannelCommand[] = [
   {
     name: "update",
     aliases: ["升级", "更新"],
-    description: "Pull latest code, rebuild, and restart PilotDeck",
+    description: "Pull latest code, rebuild, and restart Sati",
     systemLevel: true,
     handler: async (ctx, arg) => {
       const { execFile } = await import("node:child_process");
@@ -153,15 +153,21 @@ const commands: ChannelCommand[] = [
           const currentBranch = branch.trim() || "main";
           await execFileAsync("git", ["fetch", "origin", currentBranch], { cwd: projectRoot });
           const { stdout: localH } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: projectRoot });
-          const { stdout: remoteH } = await execFileAsync("git", ["rev-parse", `origin/${currentBranch}`], { cwd: projectRoot });
+          const { stdout: remoteH } = await execFileAsync("git", ["rev-parse", `origin/${currentBranch}`], {
+            cwd: projectRoot,
+          });
           if (localH.trim() === remoteH.trim()) {
             await ctx.reply(`✅ 已是最新版本 (${localH.trim().slice(0, 8)})，无需更新。`);
           } else {
             const { stdout: countStr } = await execFileAsync(
-              "git", ["rev-list", "--count", `HEAD..origin/${currentBranch}`], { cwd: projectRoot },
+              "git",
+              ["rev-list", "--count", `HEAD..origin/${currentBranch}`],
+              { cwd: projectRoot },
             );
             const { stdout: logStr } = await execFileAsync(
-              "git", ["log", "--oneline", `HEAD..origin/${currentBranch}`, "-5"], { cwd: projectRoot },
+              "git",
+              ["log", "--oneline", `HEAD..origin/${currentBranch}`, "-5"],
+              { cwd: projectRoot },
             );
             const lines = [
               `🆕 有 ${countStr.trim()} 个新提交可用`,
@@ -181,7 +187,7 @@ const commands: ChannelCommand[] = [
       }
 
       // Execute the update
-      await ctx.reply("🚀 开始更新 PilotDeck...\n正在拉取最新代码、重新构建...");
+      await ctx.reply("🚀 开始更新 Sati...\n正在拉取最新代码、重新构建...");
       try {
         const { stdout, stderr } = await execFileAsync("bash", [scriptPath, "--restart"], {
           cwd: projectRoot,
@@ -193,7 +199,7 @@ const commands: ChannelCommand[] = [
         const lastLines = output.split("\n").slice(-5).join("\n");
         await ctx.reply(`✅ 更新完成！\n\n${lastLines}\n\n服务即将重启...`);
 
-        // Exit so the process manager (docker/systemd) restarts us.
+        // Exit so the process manager restarts us.
         // In local dev without a process manager, the user must restart manually.
         setTimeout(() => process.exit(0), 2000);
       } catch (e: unknown) {
@@ -211,7 +217,7 @@ const commands: ChannelCommand[] = [
   {
     name: "status",
     aliases: ["状态"],
-    description: "Show PilotDeck status and version",
+    description: "Show Sati status and version",
     systemLevel: true,
     handler: async (ctx, _arg) => {
       const { execFile } = await import("node:child_process");
@@ -232,7 +238,7 @@ const commands: ChannelCommand[] = [
         const uptimeStr = uptimeH > 0 ? `${uptimeH}h ${uptimeMin % 60}m` : `${uptimeMin}m`;
 
         const lines = [
-          "📊 PilotDeck Status",
+          "📊 Sati Status",
           "",
           `分支: ${branch.trim()}`,
           `提交: ${commit.trim()}`,
@@ -256,9 +262,7 @@ const commands: ChannelCommand[] = [
       const projectRoot = ctx.getProject?.();
       const parsed = arg.trim();
       if (!parsed) {
-        await ctx.reply(
-          "用法：/search <关键词> [--all] [--limit N] [--role user|assistant]\n示例：/search docker 部署",
-        );
+        await ctx.reply("用法：/search <关键词> [--all] [--limit N] [--role user|assistant]\n示例：/search 智能体部署");
         return;
       }
 
@@ -280,7 +284,7 @@ const commands: ChannelCommand[] = [
     handler: async (ctx, _arg) => {
       const lines = ["📋 可用命令：", ""];
       for (const cmd of commands) {
-        const aliases = cmd.aliases?.length ? ` (${cmd.aliases.map((a) => "/" + a).join(", ")})` : "";
+        const aliases = cmd.aliases?.length ? ` (${cmd.aliases.map(a => "/" + a).join(", ")})` : "";
         lines.push(`/${cmd.name}${aliases} — ${cmd.description}`);
       }
       await ctx.reply(lines.join("\n"));
@@ -303,7 +307,7 @@ export function resolveCommand(text: string): { command: ChannelCommand; arg: st
 
   for (const cmd of commands) {
     if (cmd.name === name) return { command: cmd, arg };
-    if (cmd.aliases?.some((a) => a.toLowerCase() === name)) return { command: cmd, arg };
+    if (cmd.aliases?.some(a => a.toLowerCase() === name)) return { command: cmd, arg };
   }
   return undefined;
 }
@@ -317,10 +321,7 @@ export function getRegisteredCommands(): readonly ChannelCommand[] {
  * Execute a system-level command. Returns true if the command was handled,
  * false if it should be forwarded to the gateway.
  */
-export async function executeChannelCommand(
-  text: string,
-  ctx: CommandExecContext,
-): Promise<boolean> {
+export async function executeChannelCommand(text: string, ctx: CommandExecContext): Promise<boolean> {
   const resolved = resolveCommand(text);
   if (!resolved) return false;
   if (!resolved.command.systemLevel) return false;

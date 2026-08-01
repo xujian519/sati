@@ -64,24 +64,14 @@ export default tseslint.config(
       "react-hooks/exhaustive-deps": "warn",
 
       // --- React Refresh (Vite HMR) ---
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
 
       // --- Import ordering & hygiene ---
       "import-x/no-duplicates": "warn",
       "import-x/order": [
         "warn",
         {
-          groups: [
-            "builtin",
-            "external",
-            "internal",
-            "parent",
-            "sibling",
-            "index",
-          ],
+          groups: ["builtin", "external", "internal", "parent", "sibling", "index"],
           "newlines-between": "never",
         },
       ],
@@ -98,5 +88,5 @@ export default tseslint.config(
       "no-control-regex": "off",
       "no-useless-escape": "off",
     },
-  }
+  },
 );

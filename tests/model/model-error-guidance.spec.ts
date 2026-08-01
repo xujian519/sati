@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { formatModelRequestFailureMessage, modelFailureAction } from "../../src/agent/loop/AgentLoop.js";
 import { normalizeModelError } from "../../src/model/errors/normalizeModelError.js";
 import type { CanonicalModelError } from "../../src/model/protocol/errors.js";
@@ -19,7 +18,7 @@ test("model request failure preserves provider raw message before action guidanc
   assert.ok(formatted.startsWith(providerMessage), formatted);
   assert.match(formatted, /Action:/);
   assert.match(formatted, /Settings → Model Provider/);
-  assert.match(formatted, /pilotdeck\.yaml/);
+  assert.match(formatted, /sati\.yaml/);
 });
 
 test("model_not_found guidance points users to local model settings", () => {
@@ -38,7 +37,7 @@ test("model_not_found guidance points users to local model settings", () => {
   const action = modelFailureAction(error);
   assert.equal(action.fixTarget, "settings");
   assert.match(action.userHint, /valid/);
-  assert.match(action.userHint, /pilotdeck\.yaml/);
+  assert.match(action.userHint, /sati\.yaml/);
   assert.equal(action.userHintI18n.key, "chat:agentStatus.modelRequestFailed.actions.modelNotFound");
   assert.equal(action.userHintI18n.params?.provider, "modelbest-openai");
 });

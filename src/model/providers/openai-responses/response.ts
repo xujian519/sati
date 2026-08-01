@@ -1,5 +1,5 @@
-import { jsonrepair } from "jsonrepair";
 import { randomUUID } from "node:crypto";
+import { jsonrepair } from "jsonrepair";
 import type {
   CanonicalContentBlock,
   CanonicalModelResponse,
@@ -13,10 +13,7 @@ type ToolCallIdState = {
   usedToolCallIds: Set<string>;
 };
 
-export function parseOpenAIResponsesResponse(
-  raw: unknown,
-  provider = "openai-responses",
-): CanonicalModelResponse {
+export function parseOpenAIResponsesResponse(raw: unknown, provider = "openai-responses"): CanonicalModelResponse {
   const response = asRecord(raw);
   const content: CanonicalContentBlock[] = [];
   const idState = createToolCallIdState(response);
@@ -75,7 +72,7 @@ function readTextPart(part: Record<string, unknown>): string | undefined {
 function reasoningText(item: Record<string, unknown>): string {
   const summary = Array.isArray(item.summary) ? item.summary : [];
   return summary
-    .map((part) => readTextPart(asRecord(part)))
+    .map(part => readTextPart(asRecord(part)))
     .filter((text): text is string => Boolean(text))
     .join("\n");
 }
@@ -116,7 +113,7 @@ function toCanonicalToolCall(
 }
 
 function normalizeResponsesFinishReason(response: Record<string, unknown>, output: unknown[]) {
-  if (output.some((item) => asRecord(item).type === "function_call")) return "tool_call";
+  if (output.some(item => asRecord(item).type === "function_call")) return "tool_call";
   if (response.status === "completed") return "stop";
   if (response.status === "incomplete") return "length";
   if (response.status === "failed") return "error";
@@ -125,10 +122,7 @@ function normalizeResponsesFinishReason(response: Record<string, unknown>, outpu
   return "unknown";
 }
 
-function dedupeInitialOutputText(
-  content: CanonicalContentBlock[],
-  outputText: unknown,
-): CanonicalContentBlock[] {
+function dedupeInitialOutputText(content: CanonicalContentBlock[], outputText: unknown): CanonicalContentBlock[] {
   if (typeof outputText !== "string" || outputText.length === 0) {
     return content;
   }
@@ -138,7 +132,7 @@ function dedupeInitialOutputText(
   }
   const restText = rest
     .filter((block): block is Extract<CanonicalContentBlock, { type: "text" }> => block.type === "text")
-    .map((block) => block.text)
+    .map(block => block.text)
     .join("\n");
   return restText === outputText ? rest : content;
 }
@@ -151,9 +145,8 @@ function createToolCallIdState(response: Record<string, unknown>): ToolCallIdSta
 }
 
 function chooseToolCallId(state: ToolCallIdState, incomingId: string | undefined, index: number): string {
-  const candidate = incomingId !== undefined && !state.usedToolCallIds.has(incomingId)
-    ? incomingId
-    : `call_${state.baseId}_${index}`;
+  const candidate =
+    incomingId !== undefined && !state.usedToolCallIds.has(incomingId) ? incomingId : `call_${state.baseId}_${index}`;
   const id = nextUniqueToolCallId(candidate, state.usedToolCallIds);
   state.usedToolCallIds.add(id);
   return id;
@@ -176,11 +169,14 @@ function readNonEmptyString(value: unknown): string | undefined {
 }
 
 function safeToolCallIdPart(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "response";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "response"
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }

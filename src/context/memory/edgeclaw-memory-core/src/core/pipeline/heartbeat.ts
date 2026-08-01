@@ -13,10 +13,7 @@ import type {
   RetrievalPromptDebug,
   TraceI18nText,
 } from "../types.js";
-import {
-  LlmMemoryExtractor,
-  type MemoryClassificationLabel,
-} from "../skills/llm-extraction.js";
+import { LlmMemoryExtractor, type MemoryClassificationLabel } from "../skills/llm-extraction.js";
 import { MemoryRepository } from "../storage/sqlite.js";
 import { traceI18n } from "../trace-i18n.js";
 import { buildL0IndexId, hashText, nowIso } from "../utils/id.js";
@@ -24,6 +21,13 @@ import { decodeEscapedUnicodeText, decodeEscapedUnicodeValue } from "../utils/te
 
 const LAST_INDEXED_AT_STATE_KEY = "lastIndexedAt" as const;
 const GENERAL_INDEX_PROJECT_CANDIDATE_LIMIT = 30;
+/**
+ * Max unindexed L0 records processed per session key in a single heartbeat
+ * run. A chatty session can otherwise drain an unbounded backlog (one LLM
+ * classification call per focus turn) in one run; the remainder stays
+ * pending and is picked up by the next heartbeat.
+ */
+const MAX_UNINDEXED_L0_PER_SESSION_KEY_PER_RUN = 200;
 
 export interface HeartbeatOptions {
   batchSize?: number;
@@ -121,15 +125,17 @@ function tokenizeSearchText(value: string): string[] {
     }
     return expanded;
   };
-  return Array.from(new Set(
-    value
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
-      .split(/\s+/)
-      .map((item) => item.trim())
-      .flatMap((item) => expandCjkToken(item))
-      .filter((item) => item.length >= 2),
-  )).filter((item) => !stopwords.has(item));
+  return Array.from(
+    new Set(
+      value
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .map(item => item.trim())
+        .flatMap(item => expandCjkToken(item))
+        .filter(item => item.length >= 2),
+    ),
+  ).filter(item => !stopwords.has(item));
 }
 
 function buildGeneralProjectShortlist(
@@ -138,10 +144,10 @@ function buildGeneralProjectShortlist(
 ): ProjectShortlistCandidate[] {
   const tokens = tokenizeSearchText(text);
   return catalog
-    .map((project) => {
+    .map(project => {
       const haystack = `${project.projectName} ${project.description}`.toLowerCase();
       const exact = text.toLowerCase().includes(project.projectName.toLowerCase()) ? 2 : 0;
-      const matchedTokens = tokens.filter((token) => haystack.includes(token));
+      const matchedTokens = tokens.filter(token => haystack.includes(token));
       const score = exact * 10 + matchedTokens.length;
       return {
         projectId: project.logicalProjectId,
@@ -174,7 +180,9 @@ function buildCandidateRoutingQuery(candidate: MemoryCandidate, focusTurn: Memor
     ...(candidate.constraints ?? []),
     ...(candidate.decisions ?? []),
     ...(candidate.blockers ?? []),
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function buildCandidateMemoryPreview(candidate: MemoryCandidate): string {
@@ -200,9 +208,9 @@ function buildCandidateMemoryPreview(candidate: MemoryCandidate): string {
       ["Notes", candidate.notes],
     ];
     for (const [title, values] of sections) {
-      const normalized = (values ?? []).map((item) => item.trim()).filter(Boolean);
+      const normalized = (values ?? []).map(item => item.trim()).filter(Boolean);
       if (normalized.length === 0) continue;
-      lines.push("", `## ${title}`, ...normalized.map((item) => `- ${item}`));
+      lines.push("", `## ${title}`, ...normalized.map(item => `- ${item}`));
     }
     if (candidate.summary) lines.push("", "## Summary", candidate.summary);
   }
@@ -211,10 +219,7 @@ function buildCandidateMemoryPreview(candidate: MemoryCandidate): string {
   return preview.length <= 3000 ? preview : `${preview.slice(0, 3000)}...`;
 }
 
-function flattenBatchMessages(
-  sessions: L0SessionRecord[],
-  seedMessages: MemoryMessage[] = [],
-): MemoryMessage[] {
+function flattenBatchMessages(sessions: L0SessionRecord[], seedMessages: MemoryMessage[] = []): MemoryMessage[] {
   let previousMessages: MemoryMessage[] = seedMessages;
   for (const session of sessions) {
     previousMessages = mergeSessionMessages(previousMessages, session.messages).mergedMessages;
@@ -267,7 +272,7 @@ function deriveFocusTurns(
     const merged = mergeSessionMessages(cursorMessages, session.messages);
     focusTurns.set(
       session.l0IndexId,
-      merged.newMessages.filter((message) => message.role === "user"),
+      merged.newMessages.filter(message => message.role === "user"),
     );
     cursorMessages = merged.mergedMessages;
   }
@@ -345,7 +350,7 @@ function listDetail(
     label,
     ...(labelI18n ? { labelI18n } : {}),
     kind: "list",
-    items: items.map((item) => decodeEscapedUnicodeText(item, true)),
+    items: items.map(item => decodeEscapedUnicodeText(item, true)),
   };
 }
 
@@ -360,7 +365,7 @@ function kvDetail(
     label,
     ...(labelI18n ? { labelI18n } : {}),
     kind: "kv",
-    entries: entries.map((entry) => ({
+    entries: entries.map(entry => ({
       label: entry.label,
       value: decodeEscapedUnicodeText(String(entry.value ?? ""), true),
     })),
@@ -423,9 +428,16 @@ function createBatchTrace(
   focusUserTurnCount: number,
 ): IndexTraceRecord {
   const startedAt = nowIso();
-  const timestamps = sessions.map((session) => session.timestamp).filter(Boolean).sort();
+  const timestamps = sessions
+    .map(session => session.timestamp)
+    .filter(Boolean)
+    .sort();
   return {
-    indexTraceId: buildIndexTraceId(sessionKey, startedAt, sessions.map((session) => session.l0IndexId)),
+    indexTraceId: buildIndexTraceId(
+      sessionKey,
+      startedAt,
+      sessions.map(session => session.l0IndexId),
+    ),
     sessionKey,
     trigger,
     startedAt,
@@ -433,7 +445,7 @@ function createBatchTrace(
     isNoOp: false,
     displayStatus: "Running",
     batchSummary: {
-      l0Ids: sessions.map((session) => session.l0IndexId),
+      l0Ids: sessions.map(session => session.l0IndexId),
       segmentCount: sessions.length,
       focusUserTurnCount,
       fromTimestamp: timestamps[0] ?? "",
@@ -456,7 +468,7 @@ export class HeartbeatIndexer {
     options: HeartbeatOptions,
   ) {
     this.batchSize = options.batchSize ?? 30;
-    this.source = options.source ?? "openclaw";
+    this.source = options.source ?? "sati";
     this.settings = options.settings;
     this.logger = options.logger;
   }
@@ -490,31 +502,30 @@ export class HeartbeatIndexer {
     const candidatePreview = buildCandidateMemoryPreview(input.candidate);
     const catalog = this.repository
       .listReadableProjectCatalog()
-      .filter((entry) => entry.sourceType !== "workspace_external");
+      .filter(entry => entry.sourceType !== "workspace_external");
     const shortlist = buildGeneralProjectShortlist(catalog, routingText);
     let selectedProject: ReadableProjectCatalogEntry | undefined;
     let selectionDebug: RetrievalPromptDebug | undefined;
     let routingDecision: "attach_existing" | "create_new" = "create_new";
-    let routingReason = shortlist.length > 0
-      ? "No existing General project was clearly selected."
-      : "No existing General projects are available.";
+    let routingReason =
+      shortlist.length > 0
+        ? "No existing General project was clearly selected."
+        : "No existing General projects are available.";
     if (shortlist.length > 0) {
       const selection = await this.extractor.selectIndexProject({
         candidate: input.candidate,
         candidatePreview,
         focusTurn: input.focusTurn,
-        recentUserMessages: input.batchContextMessages.filter((message) => message.role === "user").slice(-4),
+        recentUserMessages: input.batchContextMessages.filter(message => message.role === "user").slice(-4),
         shortlist,
-        debugTrace: (debug) => {
+        debugTrace: debug => {
           selectionDebug = debug;
         },
       });
       routingDecision = selection.decision;
       routingReason = selection.reason ?? routingReason;
       const selectedProjectId = selection.decision === "attach_existing" ? selection.projectId : undefined;
-      selectedProject = selectedProjectId
-        ? this.repository.getReadableProject(selectedProjectId)
-        : undefined;
+      selectedProject = selectedProjectId ? this.repository.getReadableProject(selectedProjectId) : undefined;
       if (selectedProject?.sourceType === "workspace_external") {
         selectedProject = undefined;
         routingDecision = "create_new";
@@ -533,7 +544,8 @@ export class HeartbeatIndexer {
     }
 
     const localProject = store.upsertProjectMeta({
-      projectName: input.candidate.type === "project" ? input.candidate.name : input.candidate.description || input.candidate.name,
+      projectName:
+        input.candidate.type === "project" ? input.candidate.name : input.candidate.description || input.candidate.name,
       description: input.candidate.description,
       status: "in_progress",
       sourceKind: "general_local",
@@ -595,7 +607,10 @@ export class HeartbeatIndexer {
       const previousMessages = previousIndexedSession?.messages ?? [];
       const focusTurnsBySession = deriveFocusTurns(previousMessages, sessions);
       const batchContextMessages = flattenBatchMessages(sessions, previousMessages);
-      const focusUserTurnCount = Array.from(focusTurnsBySession.values()).reduce((count, turns) => count + turns.length, 0);
+      const focusUserTurnCount = Array.from(focusTurnsBySession.values()).reduce(
+        (count, turns) => count + turns.length,
+        0,
+      );
       const trace = createBatchTrace(sessionKey, sessions, normalizeTrigger(options.reason), focusUserTurnCount);
       createStep(
         trace,
@@ -606,7 +621,11 @@ export class HeartbeatIndexer {
         `Preparing batch indexing for ${sessionKey}.`,
         {
           titleI18n: traceI18n("trace.step.index_start", "Index Started"),
-          outputSummaryI18n: traceI18n("trace.text.index_start.output.preparing_batch", "Preparing batch indexing for {0}.", sessionKey),
+          outputSummaryI18n: traceI18n(
+            "trace.text.index_start.output.preparing_batch",
+            "Preparing batch indexing for {0}.",
+            sessionKey,
+          ),
         },
       );
       createStep(
@@ -635,12 +654,17 @@ export class HeartbeatIndexer {
             focusUserTurnCount: trace.batchSummary.focusUserTurnCount,
           },
           details: [
-            kvDetail("batch-summary", "Batch Summary", [
-              { label: "sessionKey", value: sessionKey },
-              { label: "from", value: trace.batchSummary.fromTimestamp || "" },
-              { label: "to", value: trace.batchSummary.toTimestamp || "" },
-              { label: "l0Ids", value: trace.batchSummary.l0Ids.join(", ") || "none" },
-            ], traceI18n("trace.detail.batch_summary", "Batch Summary")),
+            kvDetail(
+              "batch-summary",
+              "Batch Summary",
+              [
+                { label: "sessionKey", value: sessionKey },
+                { label: "from", value: trace.batchSummary.fromTimestamp || "" },
+                { label: "to", value: trace.batchSummary.toTimestamp || "" },
+                { label: "l0Ids", value: trace.batchSummary.l0Ids.join(", ") || "none" },
+              ],
+              traceI18n("trace.detail.batch_summary", "Batch Summary"),
+            ),
             jsonDetail(
               "batch-context",
               "Batch Context",
@@ -670,26 +694,40 @@ export class HeartbeatIndexer {
             "{0} user turns in this batch.",
             trace.batchSummary.focusUserTurnCount,
           ),
-          outputSummaryI18n: trace.batchSummary.focusUserTurnCount > 0
-            ? traceI18n("trace.text.focus_turns_selected.output.classifying", "User turns will be classified one by one.")
-            : traceI18n(
-                "trace.text.focus_turns_selected.output.no_user_turns",
-                "No user turns found; this batch will be marked indexed without storing memory.",
-              ),
+          outputSummaryI18n:
+            trace.batchSummary.focusUserTurnCount > 0
+              ? traceI18n(
+                  "trace.text.focus_turns_selected.output.classifying",
+                  "User turns will be classified one by one.",
+                )
+              : traceI18n(
+                  "trace.text.focus_turns_selected.output.no_user_turns",
+                  "No user turns found; this batch will be marked indexed without storing memory.",
+                ),
           details: [
-            kvDetail("focus-turn-selection-summary", "Focus Selection Summary", [
-              { label: "userTurns", value: String(trace.batchSummary.focusUserTurnCount) },
-              { label: "assistantMessagesInContext", value: String(batchContextMessages.filter((message) => message.role === "assistant").length) },
-              { label: "assistantUsedAsContextOnly", value: "yes" },
-            ], traceI18n("trace.detail.focus_selection_summary", "Focus Selection Summary")),
+            kvDetail(
+              "focus-turn-selection-summary",
+              "Focus Selection Summary",
+              [
+                { label: "userTurns", value: String(trace.batchSummary.focusUserTurnCount) },
+                {
+                  label: "assistantMessagesInContext",
+                  value: String(batchContextMessages.filter(message => message.role === "assistant").length),
+                },
+                { label: "assistantUsedAsContextOnly", value: "yes" },
+              ],
+              traceI18n("trace.detail.focus_selection_summary", "Focus Selection Summary"),
+            ),
             ...sessions
-              .flatMap((session) => focusTurnsBySession.get(session.l0IndexId) ?? [])
-              .map((message, index) => textDetail(
-                `focus-turn-${index + 1}`,
-                `Focus Turn ${index + 1}`,
-                message.content,
-                traceI18n("trace.detail.focus_turn", "Focus Turn {0}", index + 1),
-              )),
+              .flatMap(session => focusTurnsBySession.get(session.l0IndexId) ?? [])
+              .map((message, index) =>
+                textDetail(
+                  `focus-turn-${index + 1}`,
+                  `Focus Turn ${index + 1}`,
+                  message.content,
+                  traceI18n("trace.detail.focus_turn", "Focus Turn {0}", index + 1),
+                ),
+              ),
           ],
         },
       );
@@ -697,13 +735,19 @@ export class HeartbeatIndexer {
 
       const processedIds: string[] = [];
       let sessionHadError = false;
+      let processedInRun = 0;
 
       for (const session of sessions) {
+        // Bound this run: leave the remainder pending for the next
+        // heartbeat instead of draining an unbounded backlog.
+        if (processedInRun >= MAX_UNINDEXED_L0_PER_SESSION_KEY_PER_RUN) break;
         try {
           const focusUserTurns = focusTurnsBySession.get(session.l0IndexId) ?? [];
           if (focusUserTurns.length === 0) {
             processedIds.push(session.l0IndexId);
             stats.capturedSessions += 1;
+            processedInRun += 1;
+            this.repository.markL0Indexed([session.l0IndexId]);
             continue;
           }
 
@@ -716,7 +760,7 @@ export class HeartbeatIndexer {
               focusUserTurn: focusTurn,
               batchContextMessages,
               currentProjectMeta,
-              debugTrace: (debug) => {
+              debugTrace: debug => {
                 classificationPromptDebug = debug;
               },
             });
@@ -727,12 +771,10 @@ export class HeartbeatIndexer {
               "Classification",
               labels.length > 0 ? "success" : "skipped",
               previewText(focusTurn.content, 220),
-              labels.length > 0
-                ? `classified=${labels.map((label) => label.type).join(", ")}`
-                : "classified=none",
+              labels.length > 0 ? `classified=${labels.map(label => label.type).join(", ")}` : "classified=none",
               {
                 refs: {
-                  classification: labels.length > 0 ? labels.map((label) => label.type) : ["none"],
+                  classification: labels.length > 0 ? labels.map(label => label.type) : ["none"],
                 },
                 details: [
                   textDetail(
@@ -741,11 +783,19 @@ export class HeartbeatIndexer {
                     focusTurn.content,
                     traceI18n("trace.detail.focus_user_turn", "Focus User Turn"),
                   ),
-                  kvDetail(`classification-result-${session.l0IndexId}`, "Classification Result", [
-                    { label: "sessionKey", value: session.sessionKey },
-                    { label: "timestamp", value: session.timestamp },
-                    { label: "result", value: labels.length > 0 ? labels.map((label) => label.type).join(", ") : "none" },
-                  ], traceI18n("trace.detail.classification_result", "Classification Result")),
+                  kvDetail(
+                    `classification-result-${session.l0IndexId}`,
+                    "Classification Result",
+                    [
+                      { label: "sessionKey", value: session.sessionKey },
+                      { label: "timestamp", value: session.timestamp },
+                      {
+                        label: "result",
+                        value: labels.length > 0 ? labels.map(label => label.type).join(", ") : "none",
+                      },
+                    ],
+                    traceI18n("trace.detail.classification_result", "Classification Result"),
+                  ),
                   jsonDetail(
                     `classification-labels-${session.l0IndexId}`,
                     "Classification Labels",
@@ -757,44 +807,46 @@ export class HeartbeatIndexer {
               },
             );
 
-            const createdCandidates: Array<{ label: MemoryClassificationLabel; candidate: MemoryCandidate | null }> = [];
+            const createdCandidates: Array<{ label: MemoryClassificationLabel; candidate: MemoryCandidate | null }> =
+              [];
             for (const label of labels) {
               let createPromptDebug: RetrievalPromptDebug | undefined;
-              const candidate = label.type === "user"
-                ? await this.extractor.createUserMemoryNote({
-                    timestamp: session.timestamp,
-                    sessionKey: session.sessionKey,
-                    focusUserTurn: focusTurn,
-                    batchContextMessages,
-                    currentProjectMeta,
-                    classification: label,
-                    debugTrace: (debug) => {
-                      createPromptDebug = debug;
-                    },
-                  })
-                : label.type === "project"
-                  ? await this.extractor.createProjectMemoryNote({
+              const candidate =
+                label.type === "user"
+                  ? await this.extractor.createUserMemoryNote({
                       timestamp: session.timestamp,
                       sessionKey: session.sessionKey,
                       focusUserTurn: focusTurn,
                       batchContextMessages,
                       currentProjectMeta,
                       classification: label,
-                      debugTrace: (debug) => {
+                      debugTrace: debug => {
                         createPromptDebug = debug;
                       },
                     })
-                  : await this.extractor.createFeedbackMemoryNote({
-                      timestamp: session.timestamp,
-                      sessionKey: session.sessionKey,
-                      focusUserTurn: focusTurn,
-                      batchContextMessages,
-                      currentProjectMeta,
-                      classification: label,
-                      debugTrace: (debug) => {
-                        createPromptDebug = debug;
-                      },
-                    });
+                  : label.type === "project"
+                    ? await this.extractor.createProjectMemoryNote({
+                        timestamp: session.timestamp,
+                        sessionKey: session.sessionKey,
+                        focusUserTurn: focusTurn,
+                        batchContextMessages,
+                        currentProjectMeta,
+                        classification: label,
+                        debugTrace: debug => {
+                          createPromptDebug = debug;
+                        },
+                      })
+                    : await this.extractor.createFeedbackMemoryNote({
+                        timestamp: session.timestamp,
+                        sessionKey: session.sessionKey,
+                        focusUserTurn: focusTurn,
+                        batchContextMessages,
+                        currentProjectMeta,
+                        classification: label,
+                        debugTrace: debug => {
+                          createPromptDebug = debug;
+                        },
+                      });
               createdCandidates.push({ label, candidate });
               createStep(
                 trace,
@@ -808,21 +860,17 @@ export class HeartbeatIndexer {
                     candidateType: label.type,
                   },
                   details: [
-                    jsonDetail(
-                      `create-${label.type}-${session.l0IndexId}`,
-                      `${label.type} Create Result`,
-                      {
-                        classification: label,
-                        candidate: candidate
-                          ? {
-                              type: candidate.type,
-                              name: candidate.name,
-                              description: candidate.description,
-                              body: candidate.body ?? "",
-                            }
-                          : null,
-                      },
-                    ),
+                    jsonDetail(`create-${label.type}-${session.l0IndexId}`, `${label.type} Create Result`, {
+                      classification: label,
+                      candidate: candidate
+                        ? {
+                            type: candidate.type,
+                            name: candidate.name,
+                            description: candidate.description,
+                            body: candidate.body ?? "",
+                          }
+                        : null,
+                    }),
                   ],
                   ...(createPromptDebug ? { promptDebug: createPromptDebug } : {}),
                 },
@@ -844,7 +892,8 @@ export class HeartbeatIndexer {
                   candidateName: routed.createdProjectMeta.projectName,
                   scope: "project",
                   projectId: routed.createdProjectMeta.projectId,
-                  sourceKind: routed.selectedProject?.sourceType ?? routed.createdProjectMeta.sourceKind ?? "general_local",
+                  sourceKind:
+                    routed.selectedProject?.sourceType ?? routed.createdProjectMeta.sourceKind ?? "general_local",
                   relativePath: routed.createdProjectMeta.relativePath,
                   storageKind: "general_project_meta",
                 });
@@ -858,19 +907,15 @@ export class HeartbeatIndexer {
                   `Created new General project ${routed.createdProjectMeta.projectName}.`,
                   {
                     details: [
-                      jsonDetail(
-                        `project-route-${session.l0IndexId}-${trace.storedResults.length}`,
-                        "Project Route",
-                        {
-                          decision: routed.routingDecision ?? "create_new",
-                          reason: routed.routingReason ?? null,
-                          candidateType: candidate.type,
-                          candidateName: candidate.name,
-                          selectedProject: routed.selectedProject?.projectName ?? null,
-                          assignedProjectId: routed.createdProjectMeta.projectId,
-                          createdProjectMeta: routed.createdProjectMeta.relativePath,
-                        },
-                      ),
+                      jsonDetail(`project-route-${session.l0IndexId}-${trace.storedResults.length}`, "Project Route", {
+                        decision: routed.routingDecision ?? "create_new",
+                        reason: routed.routingReason ?? null,
+                        candidateType: candidate.type,
+                        candidateName: candidate.name,
+                        selectedProject: routed.selectedProject?.projectName ?? null,
+                        assignedProjectId: routed.createdProjectMeta.projectId,
+                        createdProjectMeta: routed.createdProjectMeta.relativePath,
+                      }),
                     ],
                     ...(routed.selectionDebug ? { promptDebug: routed.selectionDebug } : {}),
                   },
@@ -885,27 +930,24 @@ export class HeartbeatIndexer {
                   `Assigned to ${routed.selectedProject.projectName}.`,
                   {
                     details: [
-                      jsonDetail(
-                        `project-route-${session.l0IndexId}-${candidate.name}`,
-                        "Project Route",
-                        {
-                          decision: routed.routingDecision ?? "attach_existing",
-                          reason: routed.routingReason ?? null,
-                          candidateType: candidate.type,
-                          candidateName: candidate.name,
-                          selectedProject: routed.selectedProject.projectName,
-                          selectedSource: routed.selectedProject.sourceType === "workspace_external" ? "workspace_external" : "general_local",
-                          assignedProjectId: routed.selectedProject.projectId,
-                        },
-                      ),
+                      jsonDetail(`project-route-${session.l0IndexId}-${candidate.name}`, "Project Route", {
+                        decision: routed.routingDecision ?? "attach_existing",
+                        reason: routed.routingReason ?? null,
+                        candidateType: candidate.type,
+                        candidateName: candidate.name,
+                        selectedProject: routed.selectedProject.projectName,
+                        selectedSource:
+                          routed.selectedProject.sourceType === "workspace_external"
+                            ? "workspace_external"
+                            : "general_local",
+                        assignedProjectId: routed.selectedProject.projectId,
+                      }),
                     ],
                     ...(routed.selectionDebug ? { promptDebug: routed.selectionDebug } : {}),
                   },
                 );
               }
-              const targetStore = routed.candidate.type === "user"
-                ? this.repository.getGlobalUserStore()
-                : store;
+              const targetStore = routed.candidate.type === "user" ? this.repository.getGlobalUserStore() : store;
               const record = targetStore.upsertCandidate(routed.candidate);
               if (routed.candidate.type === "user") wroteGlobalUserNote = true;
               persistedRecords.push(record);
@@ -930,30 +972,37 @@ export class HeartbeatIndexer {
               "persist",
               "Persist",
               persistedRecords.length > 0 ? "success" : "skipped",
-              `${createdCandidates.filter((entry) => entry.candidate).length} candidates ready to persist.`,
+              `${createdCandidates.filter(entry => entry.candidate).length} candidates ready to persist.`,
               persistedRecords.length > 0
                 ? `${persistedRecords.length} memory files written.`
                 : "No memory files were written for this turn.",
               {
-                details: [jsonDetail(
-                  `persisted-files-${session.l0IndexId}`,
-                  "Persisted Files",
-                  persistedRecords.map((record) => ({
-                    type: record.type,
-                    name: record.name,
-                    projectId: record.projectId ?? null,
-                    relativePath: exposeStoredRelativePath(record),
-                    storageKind: inferStorageKind(record),
-                  })),
-                  traceI18n("trace.detail.persisted_files", "Persisted Files"),
-                )],
+                details: [
+                  jsonDetail(
+                    `persisted-files-${session.l0IndexId}`,
+                    "Persisted Files",
+                    persistedRecords.map(record => ({
+                      type: record.type,
+                      name: record.name,
+                      projectId: record.projectId ?? null,
+                      relativePath: exposeStoredRelativePath(record),
+                      storageKind: inferStorageKind(record),
+                    })),
+                    traceI18n("trace.detail.persisted_files", "Persisted Files"),
+                  ),
+                ],
               },
             );
           }
           processedIds.push(session.l0IndexId);
           stats.capturedSessions += 1;
+          processedInRun += 1;
           this.repository.setPipelineState(LAST_INDEXED_AT_STATE_KEY, session.timestamp);
           this.repository.setPipelineState(`lastIndexedCursor:${session.sessionKey}`, session.timestamp);
+          // Incremental checkpoint: mark this session indexed immediately so
+          // a crash/interrupt only re-processes the in-flight session, not
+          // the whole backlog. markL0Indexed is idempotent.
+          this.repository.markL0Indexed([session.l0IndexId]);
         } catch (error) {
           stats.failedSessions += 1;
           sessionHadError = true;
@@ -966,29 +1015,27 @@ export class HeartbeatIndexer {
             error instanceof Error ? error.message : String(error),
             {
               titleI18n: traceI18n("trace.text.index_error.title", "Index Error"),
-              details: [noteDetail(
-                `index-error-${session.l0IndexId}`,
-                "Index Error",
-                error instanceof Error ? error.message : String(error),
-                traceI18n("trace.detail.index_error", "Index Error"),
-              )],
+              details: [
+                noteDetail(
+                  `index-error-${session.l0IndexId}`,
+                  "Index Error",
+                  error instanceof Error ? error.message : String(error),
+                  traceI18n("trace.detail.index_error", "Index Error"),
+                ),
+              ],
             },
           );
-          this.logger?.warn?.(`[clawxmemory] heartbeat file-memory extraction failed for ${session.l0IndexId}: ${String(error)}`);
+          this.logger?.warn?.(
+            `[clawxmemory] heartbeat file-memory extraction failed for ${session.l0IndexId}: ${String(error)}`,
+          );
         }
       }
 
-      if (processedIds.length > 0) {
-        this.repository.markL0Indexed(processedIds);
-      }
+      // 每条已在上方增量标记（markL0Indexed 幂等），批量复标冗余
       trace.finishedAt = nowIso();
       trace.status = sessionHadError ? "error" : "completed";
       trace.isNoOp = trace.storedResults.length === 0;
-      trace.displayStatus = sessionHadError
-        ? "Error"
-        : trace.isNoOp
-          ? "No-op"
-          : "Completed";
+      trace.displayStatus = sessionHadError ? "Error" : trace.isNoOp ? "No-op" : "Completed";
       createStep(
         trace,
         "index_finished",
@@ -1002,12 +1049,14 @@ export class HeartbeatIndexer {
             storedResults: trace.storedResults.length,
             failed: sessionHadError ? 1 : 0,
           },
-          details: [jsonDetail(
-            "stored-results",
-            "Stored Results",
-            trace.storedResults,
-            traceI18n("trace.detail.stored_results", "Stored Results"),
-          )],
+          details: [
+            jsonDetail(
+              "stored-results",
+              "Stored Results",
+              trace.storedResults,
+              traceI18n("trace.detail.stored_results", "Stored Results"),
+            ),
+          ],
         },
       );
       this.repository.saveIndexTrace(trace);

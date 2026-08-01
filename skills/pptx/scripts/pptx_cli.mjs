@@ -245,7 +245,7 @@ async function selfTest(args) {
   const keep = Boolean(args.keep || args.out);
   const workspace = args.out
     ? path.resolve(args.out)
-    : await fs.mkdtemp(path.join(os.tmpdir(), 'pilotdeck-pptx-self-test-'));
+    : await fs.mkdtemp(path.join(os.tmpdir(), 'sati-pptx-self-test-'));
   await fs.mkdir(workspace, { recursive: true });
   const result = { status: 'passed', workspace, checks: {} };
   try {

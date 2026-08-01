@@ -1,32 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import type { AgentRuntimeConfig } from "../../../src/agent/runtime/AgentRuntimeConfig.js";
 import type {
   AgentRouterRuntime,
   AgentRuntimeDependencies,
 } from "../../../src/agent/runtime/AgentRuntimeDependencies.js";
-import {
-  SubAgentSession,
-  type SubAgentSessionOptions,
-} from "../../../src/agent/sub/SubAgentSession.js";
-import {
-  SUBAGENT_DEFINITIONS,
-  type SubagentDefinition,
-} from "../../../src/agent/sub/builtinSubagentTypes.js";
-import {
-  PermissionRuntime,
-  createDefaultPermissionContext,
-} from "../../../src/permission/index.js";
+import { SubAgentSession, type SubAgentSessionOptions } from "../../../src/agent/sub/SubAgentSession.js";
+import { SUBAGENT_DEFINITIONS, type SubagentDefinition } from "../../../src/agent/sub/builtinSubagentTypes.js";
+import { PermissionRuntime, createDefaultPermissionContext } from "../../../src/permission/index.js";
 import { createBashTool } from "../../../src/tool/builtin/bash.js";
-import type { PilotDeckCommandRunner } from "../../../src/tool/builtin/bash/commandRunner.js";
+import type { SatiCommandRunner } from "../../../src/tool/builtin/bash/commandRunner.js";
 import { createExecuteCodeTool } from "../../../src/tool/builtin/executeCode.js";
 import { ToolRuntime } from "../../../src/tool/execution/ToolRuntime.js";
-import {
-  ToolRegistry,
-  type PilotDeckToolDefinition,
-  type PilotDeckToolRuntimeContext,
-} from "../../../src/tool/index.js";
+import { ToolRegistry, type SatiToolDefinition, type SatiToolRuntimeContext } from "../../../src/tool/index.js";
 
 const FINAL_REPORT = [
   "Scope: inspected inputs",
@@ -41,10 +27,7 @@ type TestableSubAgentSession = {
   buildConfig(): AgentRuntimeConfig;
 };
 
-function createNoopTool(
-  name: string,
-  isReadOnly: PilotDeckToolDefinition["isReadOnly"],
-): PilotDeckToolDefinition {
+function createNoopTool(name: string, isReadOnly: SatiToolDefinition["isReadOnly"]): SatiToolDefinition {
   return {
     name,
     description: `${name} test tool`,
@@ -105,10 +88,7 @@ function parentConfig(): AgentRuntimeConfig {
   };
 }
 
-function sessionFor(
-  definition: SubagentDefinition,
-  registry: ToolRegistry,
-): TestableSubAgentSession {
+function sessionFor(definition: SubagentDefinition, registry: ToolRegistry): TestableSubAgentSession {
   const options: SubAgentSessionOptions = {
     definition,
     directive: "Inspect the workspace.",
@@ -128,7 +108,7 @@ function sessionFor(
   return new SubAgentSession(options) as unknown as TestableSubAgentSession;
 }
 
-function runtimeContext(config: AgentRuntimeConfig): PilotDeckToolRuntimeContext {
+function runtimeContext(config: AgentRuntimeConfig): SatiToolRuntimeContext {
   return {
     sessionId: "child-session",
     turnId: "child-turn",
@@ -143,14 +123,18 @@ function runtimeContext(config: AgentRuntimeConfig): PilotDeckToolRuntimeContext
 test("explore subagent does not probe tool safety before execution", async () => {
   const readOnlyChecks: string[] = [];
   const registry = new ToolRegistry();
-  registry.register(createNoopTool("execute_code", (input) => {
-    readOnlyChecks.push("execute_code");
-    return (input as { code: string }).code.length === 0;
-  }));
-  registry.register(createNoopTool("read_file", () => {
-    readOnlyChecks.push("read_file");
-    return true;
-  }));
+  registry.register(
+    createNoopTool("execute_code", input => {
+      readOnlyChecks.push("execute_code");
+      return (input as { code: string }).code.length === 0;
+    }),
+  );
+  registry.register(
+    createNoopTool("read_file", () => {
+      readOnlyChecks.push("read_file");
+      return true;
+    }),
+  );
 
   const session = new SubAgentSession({
     definition: SUBAGENT_DEFINITIONS.explore,
@@ -190,24 +174,29 @@ test("explore subagent does not probe tool safety before execution", async () =>
 test("explore registry ignores an unallowed dynamic execute_code tool without probing it", () => {
   const registry = new ToolRegistry();
   registry.register(createExecuteCodeTool());
-  registry.register(createBashTool({
-    runner: {
-      async run() {
-        return { exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 1 };
+  registry.register(
+    createBashTool({
+      runner: {
+        async run() {
+          return { exitCode: 0, stdout: "", stderr: "", timedOut: false, durationMs: 1 };
+        },
       },
-    },
-  }));
+    }),
+  );
 
   const session = sessionFor(SUBAGENT_DEFINITIONS.explore, registry);
   const scoped = session.buildScopedRegistry();
 
-  assert.deepEqual(scoped.list().map((tool) => tool.name), ["bash"]);
+  assert.deepEqual(
+    scoped.list().map(tool => tool.name),
+    ["bash"],
+  );
   assert.equal(session.buildConfig().runMode, "ask");
 });
 
 test("read-only subagent evaluates bash safety from the real command", async () => {
   const commands: string[] = [];
-  const runner: PilotDeckCommandRunner = {
+  const runner: SatiCommandRunner = {
     async run(command) {
       commands.push(command);
       return {
@@ -260,7 +249,7 @@ test("read-only execute_code checks the real code instead of crashing on registr
       id: "write-code",
       name: "execute_code",
       input: {
-        code: "from pilotdeck_tools import write_file\nwrite_file('blocked.txt', 'no')",
+        code: "from sati_tools import write_file\nwrite_file('blocked.txt', 'no')",
       },
     },
     runtimeContext(config),

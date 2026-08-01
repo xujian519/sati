@@ -1,16 +1,16 @@
-import React from 'react';
+import React from "react";
 
 interface TextContentProps {
   content: unknown;
-  format?: 'plain' | 'json' | 'code';
+  format?: "plain" | "json" | "code";
   className?: string;
 }
 
 function stringifyContent(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (content === undefined || content === null) return '';
+  if (typeof content === "string") return content;
+  if (content === undefined || content === null) return "";
   try {
-    return typeof content === 'object' ? JSON.stringify(content, null, 2) : String(content);
+    return typeof content === "object" ? JSON.stringify(content, null, 2) : String(content);
   } catch {
     return String(content);
   }
@@ -20,33 +20,33 @@ function stringifyContent(content: unknown): string {
  * Renders plain text, JSON, or code content
  * Used by: Raw parameters, generic text results, JSON responses
  */
-export const TextContent: React.FC<TextContentProps> = ({
-  content,
-  format = 'plain',
-  className = ''
-}) => {
+export const TextContent: React.FC<TextContentProps> = ({ content, format = "plain", className = "" }) => {
   const safeContent = stringifyContent(content);
 
-  if (format === 'json') {
+  if (format === "json") {
     let formattedJson = safeContent;
     try {
       const parsed = JSON.parse(safeContent);
       formattedJson = JSON.stringify(parsed, null, 2);
     } catch (e) {
       // If parsing fails, use original content
-      console.warn('Failed to parse JSON content:', e);
+      console.warn("Failed to parse JSON content:", e);
     }
 
     return (
-      <pre className={`mt-1 overflow-x-auto rounded bg-gray-900 p-2.5 font-mono text-xs text-gray-100 dark:bg-gray-950 ${className}`}>
+      <pre
+        className={`mt-1 overflow-x-auto rounded bg-gray-900 p-2.5 font-mono text-xs text-gray-100 dark:bg-gray-950 ${className}`}
+      >
         {formattedJson}
       </pre>
     );
   }
 
-  if (format === 'code') {
+  if (format === "code") {
     return (
-      <pre className={`mt-1 overflow-hidden whitespace-pre-wrap break-words rounded border border-gray-200/50 bg-gray-50 p-2 font-mono text-xs text-gray-700 dark:border-gray-700/50 dark:bg-gray-800/50 dark:text-gray-300 ${className}`}>
+      <pre
+        className={`mt-1 overflow-hidden whitespace-pre-wrap break-words rounded border border-gray-200/50 bg-gray-50 p-2 font-mono text-xs text-gray-700 dark:border-gray-700/50 dark:bg-gray-800/50 dark:text-gray-300 ${className}`}
+      >
         {safeContent}
       </pre>
     );

@@ -6,7 +6,7 @@ import { SettingsCard, SettingsRow, SettingsSection, SettingsToggle } from "../.
 import type { StatusBanner } from "../types";
 
 type PermissionControlSectionProps = {
-  fileInputRef: RefObject<HTMLInputElement | null>;
+  fileInputRef: RefObject<HTMLInputElement>;
   onFileChosen: (event: ChangeEvent<HTMLInputElement>) => void;
   onExport: () => void;
   onImportClick: () => void;
@@ -42,21 +42,11 @@ export default function PermissionControlSection({
         onChange={onFileChosen}
       />
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onExport}
-          className="h-8 gap-1.5 text-xs"
-        >
+        <Button variant="outline" size="sm" onClick={onExport} className="h-8 gap-1.5 text-xs">
           <Download className="h-3.5 w-3.5" />
           {t("permissions.export", { defaultValue: "Export" })}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onImportClick}
-          className="h-8 gap-1.5 text-xs"
-        >
+        <Button variant="outline" size="sm" onClick={onImportClick} className="h-8 gap-1.5 text-xs">
           <Upload className="h-3.5 w-3.5" />
           {t("permissions.import", { defaultValue: "Import" })}
         </Button>

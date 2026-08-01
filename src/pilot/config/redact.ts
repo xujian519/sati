@@ -10,7 +10,7 @@ function redactValue(value: unknown, key: string | undefined): unknown {
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => redactValue(item, undefined));
+    return value.map(item => redactValue(item, undefined));
   }
 
   if (value && typeof value === "object") {

@@ -1,11 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { cn } from "../../../../lib/utils";
-import {
-  PageSectionHeader,
-  SettingsCard,
-  SettingsRow,
-  SettingsToggle,
-} from "../../shared/view";
+import { PageSectionHeader, SettingsCard, SettingsRow, SettingsToggle } from "../../shared/view";
 import type { CodeEditorSettingsState } from "../../shared/types";
 
 type CodeEditorSectionProps = {
@@ -30,14 +25,14 @@ function SelectControl({
   return (
     <select
       value={value}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={event => onChange(event.target.value)}
       className={cn(
         "h-9 rounded-lg border border-transparent bg-muted px-3 text-[13px] font-medium text-foreground outline-none transition-colors",
         "hover:bg-accent focus:border-ring focus:bg-card focus:ring-1 focus:ring-ring",
         className,
       )}
     >
-      {options.map((option) => (
+      {options.map(option => (
         <option key={option.value} value={option.value}>
           {option.label}
         </option>
@@ -96,12 +91,10 @@ export default function CodeEditorSection({
           <SelectControl
             value={codeEditorSettings.fontSize}
             onChange={onFontSizeChange}
-            options={["10", "11", "12", "13", "14", "15", "16", "18", "20"].map(
-              (size) => ({
-                value: size,
-                label: `${size}px`,
-              }),
-            )}
+            options={["10", "11", "12", "13", "14", "15", "16", "18", "20"].map(size => ({
+              value: size,
+              label: `${size}px`,
+            }))}
             className="w-32"
           />
         </SettingsRow>

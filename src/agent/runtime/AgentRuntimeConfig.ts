@@ -52,4 +52,11 @@ export type AgentRuntimeConfig = {
    * post-routing compaction pass when the routed window is smaller.
    */
   maxContextTokens?: number;
+  /**
+   * Optional methodology prompt injection. Given the last user message of the
+   * turn, return a prompt addendum (e.g. a reasoning-methodology prompt) to
+   * append to the system prompt, or null to inject nothing. See
+   * `src/methodology/` for the built-in reasoning-methodology registry.
+   */
+  methodologyInjection?: (lastUserMessage: string) => string | null;
 };

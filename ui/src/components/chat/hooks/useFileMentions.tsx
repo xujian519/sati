@@ -1,19 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
-import { api } from '../../../utils/api';
-import { isImeEnterEvent } from '../../../utils/ime';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from "react";
+import { api } from "../../../utils/api";
+import { isImeEnterEvent } from "../../../utils/ime";
 import {
   ADD_WORKSPACE_FILE_MENTION_EVENT,
   hasWorkspaceFileMention,
   insertWorkspaceFileMention,
   isWorkspaceFileMentionRequest,
-} from '../../../utils/workspaceFileMention';
-import { escapeRegExp } from '../utils/chatFormatting';
-import type { Project } from '../../../types/app';
+} from "../../../utils/workspaceFileMention";
+import { escapeRegExp } from "../utils/chatFormatting";
+import type { Project } from "../../../types/app";
 
 interface ProjectFileNode {
   name: string;
-  type: 'file' | 'directory';
+  type: "file" | "directory";
   path?: string;
   children?: ProjectFileNode[];
 }
@@ -32,17 +32,17 @@ interface UseFileMentionsOptions {
   textareaRef: RefObject<HTMLTextAreaElement>;
 }
 
-const flattenFileTree = (files: ProjectFileNode[], basePath = ''): MentionableFile[] => {
+const flattenFileTree = (files: ProjectFileNode[], basePath = ""): MentionableFile[] => {
   let flattened: MentionableFile[] = [];
 
-  files.forEach((file) => {
+  files.forEach(file => {
     const fullPath = basePath ? `${basePath}/${file.name}` : file.name;
-    if (file.type === 'directory' && file.children) {
+    if (file.type === "directory" && file.children) {
       flattened = flattened.concat(flattenFileTree(file.children, fullPath));
       return;
     }
 
-    if (file.type === 'file') {
+    if (file.type === "file") {
       flattened.push({
         name: file.name,
         path: fullPath,
@@ -104,10 +104,10 @@ export function useFileMentions({
       setFileList(flattenFileTree(files));
     } catch (error) {
       // Ignore aborts from rapid project switches / refreshes.
-      if ((error as { name?: string })?.name === 'AbortError') {
+      if ((error as { name?: string })?.name === "AbortError") {
         return;
       }
-      console.error('Error fetching files:', error);
+      console.error("Error fetching files:", error);
     } finally {
       if (inFlightFetchRef.current === abortController) {
         inFlightFetchRef.current = null;
@@ -157,7 +157,7 @@ export function useFileMentions({
 
   useEffect(() => {
     const textBeforeCursor = input.slice(0, cursorPosition);
-    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
 
     if (lastAtIndex === -1) {
       setShowFileDropdown(false);
@@ -166,7 +166,7 @@ export function useFileMentions({
     }
 
     const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
-    if (textAfterAt.includes(' ')) {
+    if (textAfterAt.includes(" ")) {
       setShowFileDropdown(false);
       setAtSymbolPosition(-1);
       return;
@@ -178,7 +178,7 @@ export function useFileMentions({
 
     const matchingFiles = fileList
       .filter(
-        (file) =>
+        file =>
           file.name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
           file.path.toLowerCase().includes(textAfterAt.toLowerCase()),
       )
@@ -191,7 +191,7 @@ export function useFileMentions({
     if (!input || fileMentions.length === 0) {
       return [];
     }
-    return fileMentions.filter((path) => hasWorkspaceFileMention(input, path));
+    return fileMentions.filter(path => hasWorkspaceFileMention(input, path));
   }, [fileMentions, input]);
 
   const sortedFileMentions = useMemo(() => {
@@ -206,22 +206,22 @@ export function useFileMentions({
     if (sortedFileMentions.length === 0) {
       return null;
     }
-    const pattern = sortedFileMentions.map(escapeRegExp).join('|');
-    return new RegExp(`((?<!\\S)(?:${pattern})(?=$|\\s))`, 'g');
+    const pattern = sortedFileMentions.map(escapeRegExp).join("|");
+    return new RegExp(`((?<!\\S)(?:${pattern})(?=$|\\s))`, "g");
   }, [sortedFileMentions]);
 
   const fileMentionSet = useMemo(() => new Set(sortedFileMentions), [sortedFileMentions]);
 
   const focusMention = useCallback(
     (position: number) => {
-      if (textareaRef.current && !textareaRef.current.matches(':focus')) {
+      if (textareaRef.current && !textareaRef.current.matches(":focus")) {
         textareaRef.current.focus();
       }
 
       requestAnimationFrame(() => {
         if (!textareaRef.current) return;
         textareaRef.current.setSelectionRange(position, position);
-        if (!textareaRef.current.matches(':focus')) {
+        if (!textareaRef.current.matches(":focus")) {
           textareaRef.current.focus();
         }
       });
@@ -238,10 +238,8 @@ export function useFileMentions({
         setInput(result.input);
       }
       setCursorPosition(result.cursorPosition);
-      setFileMentions((previousMentions) =>
-        previousMentions.includes(relativePath)
-          ? previousMentions
-          : [...previousMentions, relativePath],
+      setFileMentions(previousMentions =>
+        previousMentions.includes(relativePath) ? previousMentions : [...previousMentions, relativePath],
       );
       focusMention(result.cursorPosition);
     },
@@ -265,7 +263,7 @@ export function useFileMentions({
   const renderInputWithMentions = useCallback(
     (text: string) => {
       if (!text) {
-        return '';
+        return "";
       }
       if (!fileMentionRegex) {
         return text;
@@ -292,15 +290,15 @@ export function useFileMentions({
     (file: MentionableFile) => {
       const textBeforeAt = input.slice(0, atSymbolPosition);
       const textAfterAtQuery = input.slice(atSymbolPosition);
-      const spaceIndex = textAfterAtQuery.indexOf(' ');
-      const textAfterQuery = spaceIndex !== -1 ? textAfterAtQuery.slice(spaceIndex) : '';
+      const spaceIndex = textAfterAtQuery.indexOf(" ");
+      const textAfterQuery = spaceIndex !== -1 ? textAfterAtQuery.slice(spaceIndex) : "";
 
       const newInput = `${textBeforeAt}${file.path} ${textAfterQuery}`;
       const newCursorPosition = textBeforeAt.length + file.path.length + 1;
 
       setInput(newInput);
       setCursorPosition(newCursorPosition);
-      setFileMentions((previousMentions) =>
+      setFileMentions(previousMentions =>
         previousMentions.includes(file.path) ? previousMentions : [...previousMentions, file.path],
       );
 
@@ -313,12 +311,12 @@ export function useFileMentions({
 
   const handleFileMentionsKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if ((event.key === 'Backspace' || event.key === 'Delete') && sortedFileMentions.length > 0) {
+      if ((event.key === "Backspace" || event.key === "Delete") && sortedFileMentions.length > 0) {
         const textarea = textareaRef.current;
         const selectionStart = textarea?.selectionStart ?? cursorPosition;
         const selectionEnd = textarea?.selectionEnd ?? selectionStart;
         if (selectionStart === selectionEnd) {
-          const mentionRanges = sortedFileMentions.flatMap((mention) => {
+          const mentionRanges = sortedFileMentions.flatMap(mention => {
             const ranges: Array<{ mention: string; start: number; end: number }> = [];
             let searchFrom = 0;
             while (searchFrom <= input.length - mention.length) {
@@ -332,27 +330,27 @@ export function useFileMentions({
             }
             return ranges;
           });
-          const range = mentionRanges.find(({ start, end }) => (
-            event.key === 'Backspace'
-              ? selectionStart === end || (selectionStart === end + 1 && /\s/.test(input[end] || ''))
-              : selectionStart === start || (selectionStart + 1 === start && /\s/.test(input[selectionStart] || ''))
-          ));
+          const range = mentionRanges.find(({ start, end }) =>
+            event.key === "Backspace"
+              ? selectionStart === end || (selectionStart === end + 1 && /\s/.test(input[end] || ""))
+              : selectionStart === start || (selectionStart + 1 === start && /\s/.test(input[selectionStart] || "")),
+          );
 
           if (range) {
             event.preventDefault();
             let removeStart = range.start;
             let removeEnd = range.end;
-            if (/\s/.test(input[removeEnd] || '')) {
+            if (/\s/.test(input[removeEnd] || "")) {
               removeEnd += 1;
-            } else if (removeStart > 0 && /\s/.test(input[removeStart - 1] || '')) {
+            } else if (removeStart > 0 && /\s/.test(input[removeStart - 1] || "")) {
               removeStart -= 1;
             }
             const nextInput = `${input.slice(0, removeStart)}${input.slice(removeEnd)}`;
             setInput(nextInput);
             setCursorPosition(removeStart);
-            setFileMentions((mentions) => mentions.filter((mention) => (
-              mention !== range.mention || hasWorkspaceFileMention(nextInput, mention)
-            )));
+            setFileMentions(mentions =>
+              mentions.filter(mention => mention !== range.mention || hasWorkspaceFileMention(nextInput, mention)),
+            );
             focusMention(removeStart);
             setShowFileDropdown(false);
             return true;
@@ -364,23 +362,19 @@ export function useFileMentions({
         return false;
       }
 
-      if (event.key === 'ArrowDown') {
+      if (event.key === "ArrowDown") {
         event.preventDefault();
-        setSelectedFileIndex((previousIndex) =>
-          previousIndex < filteredFiles.length - 1 ? previousIndex + 1 : 0,
-        );
+        setSelectedFileIndex(previousIndex => (previousIndex < filteredFiles.length - 1 ? previousIndex + 1 : 0));
         return true;
       }
 
-      if (event.key === 'ArrowUp') {
+      if (event.key === "ArrowUp") {
         event.preventDefault();
-        setSelectedFileIndex((previousIndex) =>
-          previousIndex > 0 ? previousIndex - 1 : filteredFiles.length - 1,
-        );
+        setSelectedFileIndex(previousIndex => (previousIndex > 0 ? previousIndex - 1 : filteredFiles.length - 1));
         return true;
       }
 
-      if (event.key === 'Tab' || event.key === 'Enter') {
+      if (event.key === "Tab" || event.key === "Enter") {
         if (isImeEnterEvent(event)) {
           return false;
         }
@@ -393,7 +387,7 @@ export function useFileMentions({
         return true;
       }
 
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
         setShowFileDropdown(false);
         return true;

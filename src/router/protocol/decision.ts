@@ -1,14 +1,6 @@
-export type RouterScenarioType =
-  | "default"
-  | "subagent"
-  | "explicit";
+export type RouterScenarioType = "default" | "subagent" | "explicit";
 
-export type RouterDecisionResolution =
-  | "explicit"
-  | "scenario"
-  | "tokenSaver"
-  | "custom"
-  | "fallback";
+export type RouterDecisionResolution = "explicit" | "scenario" | "tokenSaver" | "custom" | "fallback";
 
 export type RouterMutationsLog = {
   systemPromptSlim?: { from: number; to: number; preservedKeywords: string[] };

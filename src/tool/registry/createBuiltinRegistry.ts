@@ -30,6 +30,7 @@ import { createDraftSpecificationTool } from "../builtin/draftSpecification.js";
 import { createValidateSpecificationTool } from "../builtin/validateSpecification.js";
 import { createPatentWorkflowTool } from "../builtin/patentWorkflowTool.js";
 import { createPatentPlanTaskTool } from "../builtin/patentPlanTaskTool.js";
+import { registerBuiltinAtoms } from "../../patent/atoms/index.js";
 import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateTool.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
@@ -170,6 +171,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   registry.register(annotate(createTodoWriteTool(), "session"));
   if (options?.patent !== false) {
+    // 内置 Pipeline 原子（Atom 契约 + StageHandler）装配：幂等，同名覆盖。
+    registerBuiltinAtoms();
     registry.register(annotate(createPatentEvalTool(), "patent"));
     registry.register(annotate(createDraftClaimsTool(), "patent"));
     registry.register(annotate(createDraftSpecificationTool(), "patent"));

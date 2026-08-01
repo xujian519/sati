@@ -1,8 +1,8 @@
 export type WizardStep = 1 | 2 | 3;
 
-export type WorkspaceType = 'existing' | 'new';
+export type WorkspaceType = "existing" | "new";
 
-export type TokenMode = 'stored' | 'new' | 'none';
+export type TokenMode = "stored" | "new" | "none";
 
 export type FolderSuggestion = {
   name: string;

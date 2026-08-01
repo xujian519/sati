@@ -24,15 +24,24 @@ import { DiscoveryReportStore } from "../storage/DiscoveryReportStore.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
 import { WorkCycleStore } from "../storage/WorkCycleStore.js";
 import type { WorkspaceProviderRegistry } from "../workspace/WorkspaceProviderRegistry.js";
-import type { AlwaysOnRunContextRegistry, ExecutionRunContext, DiscoveryRunContext, WorkspaceRunContext, ReportRunContext } from "./AlwaysOnRunContextRegistry.js";
 import { generateWorkspaceDiff } from "../workspace/WorkspaceApply.js";
-import { buildDiscoveryPrompt, buildExecutionPrompt, buildWorkspacePrompt, buildReportPrompt, buildApplyPrompt } from "./discoveryPrompts.js";
-import {
-  UNATTENDED_SESSION_EXCLUDED_TOOLS,
-  type SessionConfigOverrides,
-} from "./SessionConfigOverrides.js";
 import type { PermissionRule } from "../../permission/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
+import type {
+  AlwaysOnRunContextRegistry,
+  ExecutionRunContext,
+  DiscoveryRunContext,
+  WorkspaceRunContext,
+  ReportRunContext,
+} from "./AlwaysOnRunContextRegistry.js";
+import {
+  buildDiscoveryPrompt,
+  buildExecutionPrompt,
+  buildWorkspacePrompt,
+  buildReportPrompt,
+  buildApplyPrompt,
+} from "./discoveryPrompts.js";
+import { UNATTENDED_SESSION_EXCLUDED_TOOLS, type SessionConfigOverrides } from "./SessionConfigOverrides.js";
 
 export type DiscoveryFireDependencies = {
   config: AlwaysOnConfig;
@@ -49,7 +58,10 @@ export type DiscoveryFireDependencies = {
   eventStore: AlwaysOnEventStore;
   uuid: () => string;
   now: () => Date;
-  logger?: { info: (msg: string, data?: Record<string, unknown>) => void; warn: (msg: string, data?: Record<string, unknown>) => void };
+  logger?: {
+    info: (msg: string, data?: Record<string, unknown>) => void;
+    warn: (msg: string, data?: Record<string, unknown>) => void;
+  };
   onTurnEvent?: (sessionKey: string, channelKey: string, event: GatewayEvent) => void;
   telemetry?: TelemetryClient;
 };
@@ -78,7 +90,9 @@ export const ALWAYS_ON_EXECUTION_DENY_RULES: PermissionRule[] = [
   { source: "policy", behavior: "deny", toolName: "bash", pattern: "*git remote*" },
 ];
 
-function toTelemetryAlwaysOnPhase(phase: AlwaysOnEventPhase): "discovery" | "workspace" | "execution" | "report" | "apply" {
+function toTelemetryAlwaysOnPhase(
+  phase: AlwaysOnEventPhase,
+): "discovery" | "workspace" | "execution" | "report" | "apply" {
   if (phase.startsWith("workspace_")) return "workspace";
   if (phase.startsWith("execution_")) return "execution";
   if (phase.startsWith("report_")) return "report";
@@ -111,9 +125,7 @@ export type EnsureActiveWorkCycleResult = {
  * create a new cycle. Always-On runs at most one active cycle (and one
  * workspace) per project; this function is the single source of truth.
  */
-export async function ensureActiveWorkCycle(
-  input: EnsureActiveWorkCycleInput,
-): Promise<EnsureActiveWorkCycleResult> {
+export async function ensureActiveWorkCycle(input: EnsureActiveWorkCycleInput): Promise<EnsureActiveWorkCycleResult> {
   const fileExists = input.fileExists ?? existsSync;
 
   if (input.state.activeWorkCycleId) {
@@ -153,12 +165,7 @@ export async function ensureActiveWorkCycle(
     runId: input.runId,
     planTitle: input.planTitle,
   });
-  const cycle = await input.cycleStore.create(
-    prepared.handle,
-    input.runId,
-    input.cycleId,
-    input.now(),
-  );
+  const cycle = await input.cycleStore.create(prepared.handle, input.runId, input.cycleId, input.now());
   await input.stateStore.setActiveWorkCycleId(cycle.id, input.now());
   return { handle: prepared.handle, cycle, reused: false };
 }
@@ -251,11 +258,7 @@ export class DiscoveryFire {
   }): Promise<{ events: GatewayEvent[]; error?: { code: string; message: string }; sessionKey: string }> {
     const { cycle, projectRoot } = input;
 
-    const diff = await generateWorkspaceDiff(
-      cycle.workspace.strategy,
-      cycle.workspace.cwd,
-      projectRoot,
-    );
+    const diff = await generateWorkspaceDiff(cycle.workspace.strategy, cycle.workspace.cwd, projectRoot);
 
     const sessionKey = DiscoveryFire.deriveApplySessionKey(this.deps.projectKey, input.runId);
     this.emitEvent(input.runId, "apply_started", { outcome: "executed" });
@@ -275,7 +278,7 @@ export class DiscoveryFire {
         message: buildApplyPrompt({
           plan: {
             id: cycle.id,
-            title: input.plans.map((p) => p.title).join("; "),
+            title: input.plans.map(p => p.title).join("; "),
             workspace: { cwd: cycle.workspace.cwd, strategy: cycle.workspace.strategy },
           },
           projectName: input.projectName,
@@ -304,17 +307,11 @@ export class DiscoveryFire {
       };
     } finally {
       this.deps.sessionOverrides.delete(sessionKey);
-      await this.deps.gateway
-        .closeSession({ sessionKey, reason: "always-on/done" })
-        .catch(() => undefined);
+      await this.deps.gateway.closeSession({ sessionKey, reason: "always-on/done" }).catch(() => undefined);
     }
   }
 
-  async rerunPlan(input: {
-    planId: string;
-    runId: string;
-    startedAt: Date;
-  }): Promise<DiscoveryFireResult> {
+  async rerunPlan(input: { planId: string; runId: string; startedAt: Date }): Promise<DiscoveryFireResult> {
     const { planId, runId, startedAt } = input;
 
     const planRecord = await this.deps.planStore.getRecord(planId);
@@ -365,10 +362,27 @@ export class DiscoveryFire {
       const finishedAt = this.deps.now();
       const code = error instanceof AlwaysOnError ? error.code : "workspace_prepare_failed";
       const message = error instanceof Error ? error.message : String(error);
-      this.emitEvent(runId, "run_failed", { planId, error: { code, message }, outcome: "failed", telemetryPhase: "workspace" });
+      this.emitEvent(runId, "run_failed", {
+        planId,
+        error: { code, message },
+        outcome: "failed",
+        telemetryPhase: "workspace",
+      });
       await this.deps.stateStore.markFireCompleted({ outcome: "failed", runId, planId, now: finishedAt });
-      await this.deps.reportStore.appendHistory({ ...baseHistory, outcome: "failed", finishedAt: finishedAt.toISOString(), error: { code, message } });
-      return { outcome: "failed", runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, error: { code, message } };
+      await this.deps.reportStore.appendHistory({
+        ...baseHistory,
+        outcome: "failed",
+        finishedAt: finishedAt.toISOString(),
+        error: { code, message },
+      });
+      return {
+        outcome: "failed",
+        runId,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        planId,
+        error: { code, message },
+      };
     }
 
     this.assertWorkspaceCwdSafe(workspace);
@@ -420,17 +434,48 @@ export class DiscoveryFire {
     } finally {
       this.deps.runContexts.unregister(executionSessionKey);
       this.deps.sessionOverrides.delete(executionSessionKey);
-      await this.deps.gateway.closeSession({ sessionKey: executionSessionKey, reason: "always-on/done" }).catch(() => undefined);
+      await this.deps.gateway
+        .closeSession({ sessionKey: executionSessionKey, reason: "always-on/done" })
+        .catch(() => undefined);
     }
 
     if (executionError) {
-      this.emitEvent(runId, "run_failed", { planId, error: { code: executionError.code ?? "execution_failed", message: executionError.message }, outcome: "failed", telemetryPhase: "execution" });
+      this.emitEvent(runId, "run_failed", {
+        planId,
+        error: { code: executionError.code ?? "execution_failed", message: executionError.message },
+        outcome: "failed",
+        telemetryPhase: "execution",
+      });
       const finishedAt = this.deps.now();
-      const reportFilePath = await this.writeFallbackReport({ runId, plan: planRecord, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), reason: `execution_failed: ${executionError.message}`, workspaceStrategy: workspace.strategy, workspaceHandle: workspace.cwd });
+      const reportFilePath = await this.writeFallbackReport({
+        runId,
+        plan: planRecord,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        reason: `execution_failed: ${executionError.message}`,
+        workspaceStrategy: workspace.strategy,
+        workspaceHandle: workspace.cwd,
+      });
       await this.deps.planStore.updateStatus(planId, { status: "failed", reportFilePath, workCycleId: workCycle.id });
       await this.deps.stateStore.markFireCompleted({ outcome: "failed", runId, planId, now: finishedAt });
-      await this.deps.reportStore.appendHistory({ ...baseHistory, outcome: "failed", finishedAt: finishedAt.toISOString(), workCycleId: workCycle.id, workspace: { strategy: workspace.strategy, handle: workspace.cwd }, error: { code: executionError.code ?? "execution_failed", message: executionError.message } });
-      return { outcome: "failed", runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, workspace, reportFilePath, error: { code: executionError.code ?? "execution_failed", message: executionError.message } };
+      await this.deps.reportStore.appendHistory({
+        ...baseHistory,
+        outcome: "failed",
+        finishedAt: finishedAt.toISOString(),
+        workCycleId: workCycle.id,
+        workspace: { strategy: workspace.strategy, handle: workspace.cwd },
+        error: { code: executionError.code ?? "execution_failed", message: executionError.message },
+      });
+      return {
+        outcome: "failed",
+        runId,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        planId,
+        workspace,
+        reportFilePath,
+        error: { code: executionError.code ?? "execution_failed", message: executionError.message },
+      };
     }
 
     this.emitEvent(runId, "execution_completed", { planId, title: planRecord.title });
@@ -438,7 +483,13 @@ export class DiscoveryFire {
     // Phase 4: Report
     this.emitEvent(runId, "report_started", { planId, title: planRecord.title });
     const reportSessionKey = DiscoveryFire.deriveReportSessionKey(this.deps.projectKey, runId);
-    this.deps.sessionOverrides.set(reportSessionKey, { cwd: workspace.cwd, permissionMode: "bypassPermissions", bypassAvailable: true, canPrompt: false, excludeTools: [...UNATTENDED_SESSION_EXCLUDED_TOOLS] });
+    this.deps.sessionOverrides.set(reportSessionKey, {
+      cwd: workspace.cwd,
+      permissionMode: "bypassPermissions",
+      bypassAvailable: true,
+      canPrompt: false,
+      excludeTools: [...UNATTENDED_SESSION_EXCLUDED_TOOLS],
+    });
 
     const reportCtx: ReportRunContext = {
       kind: "report",
@@ -460,7 +511,13 @@ export class DiscoveryFire {
         sessionKey: reportSessionKey,
         channelKey: REPORT_CHANNEL,
         runId: `${runId}.report`,
-        message: buildReportPrompt({ plan: planRecord, planMarkdown, workspaceCwd: workspace.cwd, workspaceStrategy: workspace.strategy, language: this.deps.config.language }),
+        message: buildReportPrompt({
+          plan: planRecord,
+          planMarkdown,
+          workspaceCwd: workspace.cwd,
+          workspaceStrategy: workspace.strategy,
+          language: this.deps.config.language,
+        }),
         mode: "bypassPermissions",
         persistEvents: true,
       });
@@ -468,7 +525,9 @@ export class DiscoveryFire {
     } finally {
       this.deps.runContexts.unregister(reportSessionKey);
       this.deps.sessionOverrides.delete(reportSessionKey);
-      await this.deps.gateway.closeSession({ sessionKey: reportSessionKey, reason: "always-on/done" }).catch(() => undefined);
+      await this.deps.gateway
+        .closeSession({ sessionKey: reportSessionKey, reason: "always-on/done" })
+        .catch(() => undefined);
     }
 
     const finishedAt = this.deps.now();
@@ -493,7 +552,7 @@ export class DiscoveryFire {
 
     const reportDegraded = !reportCtx.report || !!reportError;
     const outcome: AlwaysOnDiscoveryOutcome = "executed";
-    const planStatus = reportDegraded ? "completed_no_report" as const : "completed" as const;
+    const planStatus = reportDegraded ? ("completed_no_report" as const) : ("completed" as const);
 
     if (!reportDegraded) {
       this.emitEvent(runId, "report_produced", { planId, title: planRecord.title, outcome });
@@ -502,14 +561,38 @@ export class DiscoveryFire {
 
     let reportFilePath = reportCtx.report?.filePath;
     if (!reportCtx.report) {
-      reportFilePath = await this.writeFallbackReport({ runId, plan: planRecord, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), reason: reportError ? `report_failed: ${reportError.message}` : "report_tool_not_invoked", workspaceStrategy: workspace.strategy, workspaceHandle: workspace.cwd });
+      reportFilePath = await this.writeFallbackReport({
+        runId,
+        plan: planRecord,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        reason: reportError ? `report_failed: ${reportError.message}` : "report_tool_not_invoked",
+        workspaceStrategy: workspace.strategy,
+        workspaceHandle: workspace.cwd,
+      });
     }
 
     await this.deps.planStore.updateStatus(planId, { status: planStatus, reportFilePath, workCycleId: workCycle.id });
     await this.deps.stateStore.markFireCompleted({ outcome, runId, planId, now: finishedAt });
-    await this.deps.reportStore.appendHistory({ ...baseHistory, outcome, finishedAt: finishedAt.toISOString(), workCycleId: workCycle.id, workspace: { strategy: workspace.strategy, handle: workspace.cwd }, error: reportError ? { code: reportError.code ?? "report_degraded", message: reportError.message } : undefined });
+    await this.deps.reportStore.appendHistory({
+      ...baseHistory,
+      outcome,
+      finishedAt: finishedAt.toISOString(),
+      workCycleId: workCycle.id,
+      workspace: { strategy: workspace.strategy, handle: workspace.cwd },
+      error: reportError ? { code: reportError.code ?? "report_degraded", message: reportError.message } : undefined,
+    });
 
-    return { outcome, runId, startedAt: startedAt.toISOString(), finishedAt: finishedAt.toISOString(), planId, workspace, reportFilePath, error: reportError ? { code: reportError.code ?? "report_degraded", message: reportError.message } : undefined };
+    return {
+      outcome,
+      runId,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      planId,
+      workspace,
+      reportFilePath,
+      error: reportError ? { code: reportError.code ?? "report_degraded", message: reportError.message } : undefined,
+    };
   }
 
   async run(input: DiscoveryFireRunInput): Promise<DiscoveryFireResult> {
@@ -531,11 +614,16 @@ export class DiscoveryFire {
     const activeCycle = state.activeWorkCycleId
       ? await this.deps.cycleStore.getRecord(state.activeWorkCycleId)
       : undefined;
-    const existingWorkspace = activeCycle && activeCycle.status === "active" && existsSync(activeCycle.workspace.cwd)
-      ? { cwd: activeCycle.workspace.cwd, strategy: activeCycle.workspace.strategy, metadata: activeCycle.workspace.metadata }
-      : state.currentWorkspace && existsSync(state.currentWorkspace.cwd)
-        ? state.currentWorkspace
-        : undefined;
+    const existingWorkspace =
+      activeCycle && activeCycle.status === "active" && existsSync(activeCycle.workspace.cwd)
+        ? {
+            cwd: activeCycle.workspace.cwd,
+            strategy: activeCycle.workspace.strategy,
+            metadata: activeCycle.workspace.metadata,
+          }
+        : state.currentWorkspace && existsSync(state.currentWorkspace.cwd)
+          ? state.currentWorkspace
+          : undefined;
 
     const discoveryCtx: DiscoveryRunContext = {
       kind: "discovery",
@@ -566,7 +654,7 @@ export class DiscoveryFire {
     discoveryCtx.chatSessionAliases = chatDigest.aliasMap;
 
     const planIndex = await this.deps.planStore.readIndex();
-    const existingPlans = planIndex.plans.map((p) => ({
+    const existingPlans = planIndex.plans.map(p => ({
       id: p.id,
       title: p.title,
       dedupeKey: p.dedupeKey,
@@ -768,7 +856,12 @@ export class DiscoveryFire {
         reportFilePath,
         workCycleId: workCycle.id,
       });
-      await this.deps.stateStore.markFireCompleted({ outcome: "failed", runId, planId: planRecord.id, now: finishedAt });
+      await this.deps.stateStore.markFireCompleted({
+        outcome: "failed",
+        runId,
+        planId: planRecord.id,
+        now: finishedAt,
+      });
       await this.deps.reportStore.appendHistory({
         ...baseHistory,
         planId: planRecord.id,
@@ -864,7 +957,7 @@ export class DiscoveryFire {
 
     const reportDegraded = !reportCtx.report || !!reportError;
     const outcome: AlwaysOnDiscoveryOutcome = "executed";
-    const planStatus = reportDegraded ? "completed_no_report" as const : "completed" as const;
+    const planStatus = reportDegraded ? ("completed_no_report" as const) : ("completed" as const);
 
     if (!reportDegraded) {
       this.emitEvent(runId, "report_produced", { planId: planRecord.id, title: planRecord.title, outcome });
@@ -878,9 +971,7 @@ export class DiscoveryFire {
         plan: planRecord,
         startedAt: startedAt.toISOString(),
         finishedAt: finishedAt.toISOString(),
-        reason: reportError
-          ? `report_failed: ${reportError.message}`
-          : "report_tool_not_invoked",
+        reason: reportError ? `report_failed: ${reportError.message}` : "report_tool_not_invoked",
         workspaceStrategy: workspace.strategy,
         workspaceHandle: workspace.cwd,
       });
@@ -997,12 +1088,7 @@ export class DiscoveryFire {
 
     const cycleId = this.deps.uuid();
     if (workspaceCtx.handle) {
-      const cycle = await this.deps.cycleStore.create(
-        workspaceCtx.handle,
-        runId,
-        cycleId,
-        this.deps.now(),
-      );
+      const cycle = await this.deps.cycleStore.create(workspaceCtx.handle, runId, cycleId, this.deps.now());
       await this.deps.stateStore.setActiveWorkCycleId(cycle.id, this.deps.now());
       return { handle: workspaceCtx.handle, cycle };
     }

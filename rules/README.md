@@ -9,8 +9,26 @@
 ```
 rules/
   patent/compliance.yaml   专利域合规规则（内置资产，随包发布）
+  patent/nuo-*.yaml        自 XiaoNuo Agent 移植的确定性规则（96 条，
+                           由 scripts/port-nuo-rules.ts 转换生成，可重新生成）
   README.md                本规范
 ```
+
+### 移植规则说明（nuo-*）
+
+`nuo-*.yaml` 由 `scripts/port-nuo-rules.ts` 从 XiaoNuo Agent 的 `data/rules/` 转换而来，
+采用**双轨策略**：
+
+- **可执行转换**：`check.type` 属于本引擎支持的 4 种确定性检查 → 转换后由 RuleLoader 加载生效。
+  关键语义映射（与 XiaoNuo agent-core 引擎源码核对）：
+  - `keyword_blocklist`（命中即违规）→ 同义直转
+  - `pattern_analysis`（XiaoNuo 语义为"期望模式"，任一命中即通过）→ 转 `structural_analysis` 单 element
+  - `structural_analysis`（requiresAll 全部命中通过）→ 同义直转
+- **原样资产**：全部源规则文件（含 LLM 评估型 `patent_novelty` 等约 213 条，以及 `message`/
+  `fix_suggestion`/`assessment` 等指导字段）原样保存于 `assets/patent-rules/`，
+  不经过 RuleLoader，供 SKILL.md / worker 作为参考知识使用。
+
+新增规则前先用 `pnpm tsx scripts/port-nuo-rules.ts --help` 了解转换脚本行为。
 
 ## 规则格式
 

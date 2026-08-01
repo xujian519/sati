@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { URL } from "node:url";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
-import { BlueBubblesSessionMapper } from "./BlueBubblesSessionMapper.js";
-import { renderBlueBubblesEvent } from "./bluebubbles-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { BlueBubblesSessionMapper } from "./BlueBubblesSessionMapper.js";
+import { renderBlueBubblesEvent } from "./bluebubbles-render.js";
 
 const POLL_MS = 2500;
 const MESSAGE_LIMIT = 50;
@@ -49,9 +49,7 @@ export class BlueBubblesChannel implements ChannelAdapter {
 
   constructor(options: BlueBubblesChannelOptions = {}) {
     this.mapper = options.mapper ?? new BlueBubblesSessionMapper();
-    this.serverUrl = normalizeBaseUrl(
-      options.serverUrl ?? process.env.BLUEBUBBLES_SERVER_URL ?? "",
-    );
+    this.serverUrl = normalizeBaseUrl(options.serverUrl ?? process.env.BLUEBUBBLES_SERVER_URL ?? "");
     this.password = options.password ?? process.env.BLUEBUBBLES_PASSWORD ?? "";
   }
 
@@ -136,9 +134,7 @@ export class BlueBubblesChannel implements ChannelAdapter {
 
     const text = String(o.text ?? o.body ?? o.message ?? "").trim();
     const chatsField = o.chats as any;
-    const chatGuid = String(
-      o.chatGuid ?? o.chat_guid ?? (Array.isArray(chatsField) ? chatsField[0] : "") ?? "",
-    );
+    const chatGuid = String(o.chatGuid ?? o.chat_guid ?? (Array.isArray(chatsField) ? chatsField[0] : "") ?? "");
     if (!chatGuid || !text) return;
 
     if (this.elicitation.hasPending(chatGuid) && this.gateway) {

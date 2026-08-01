@@ -1,9 +1,5 @@
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
-import type {
-  AlwaysOnChannelLease,
-  AlwaysOnDiscoveryState,
-  GateResult,
-} from "../protocol/types.js";
+import type { AlwaysOnChannelLease, AlwaysOnDiscoveryState, GateResult } from "../protocol/types.js";
 
 export type DiscoveryGateInput = {
   projectKey: string;
@@ -17,7 +13,7 @@ export type DiscoveryGateInput = {
 };
 
 /**
- * Pure gate evaluation. Order is fixed per `02-pilotdeck-always-on-rewrite-plan.md` §11;
+ * Pure gate evaluation. Order is fixed per `02-sati-always-on-rewrite-plan.md` §11;
  * first failing gate wins. Lease list is consumed only as a *reverse* signal —
  * an empty lease list never blocks a fire; presence of a busy/recent lease
  * does. Workspace single-instance is enforced by `DiscoveryFire.ensureWorkspace`,
@@ -43,13 +39,13 @@ export function evaluateAlwaysOnDiscoveryGates(input: DiscoveryGateInput): GateR
     return { ok: false, reason: "dormant_no_signal" };
   }
 
-  const fresh = leases.filter((lease) => lease.projectKey === projectKey);
+  const fresh = leases.filter(lease => lease.projectKey === projectKey);
 
   if (input.sessionInFlight === true) {
     return { ok: false, reason: "agent_busy" };
   }
   if (fresh.length > 0) {
-    if (fresh.some((lease) => lease.agentBusy)) {
+    if (fresh.some(lease => lease.agentBusy)) {
       return { ok: false, reason: "agent_busy" };
     }
 
@@ -95,9 +91,6 @@ function pickMostRecentLastUserMsgMs(leases: AlwaysOnChannelLease[]): number | u
   return best;
 }
 
-function pickPreferredLease(
-  leases: AlwaysOnChannelLease[],
-  preferChannel: string,
-): AlwaysOnChannelLease | undefined {
-  return leases.find((lease) => lease.channelKey === preferChannel);
+function pickPreferredLease(leases: AlwaysOnChannelLease[], preferChannel: string): AlwaysOnChannelLease | undefined {
+  return leases.find(lease => lease.channelKey === preferChannel);
 }

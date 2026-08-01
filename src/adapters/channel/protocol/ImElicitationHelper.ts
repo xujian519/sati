@@ -80,7 +80,10 @@ export class ImElicitationHelper {
     const answers: Record<string, string | string[]> = {};
 
     for (const q of entry.questions) {
-      const indices = trimmed.split(/[,，\s]+/).map((s) => Number.parseInt(s, 10)).filter((n) => !Number.isNaN(n));
+      const indices = trimmed
+        .split(/[,，\s]+/)
+        .map(s => Number.parseInt(s, 10))
+        .filter(n => !Number.isNaN(n));
 
       const selected: string[] = [];
       for (const idx of indices) {

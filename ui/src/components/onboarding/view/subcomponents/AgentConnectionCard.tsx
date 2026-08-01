@@ -1,6 +1,6 @@
-import { Check } from 'lucide-react';
-import SessionProviderLogo from '../../../llm-logo-provider/SessionProviderLogo';
-import type { CliProvider, ProviderAuthStatus } from '../types';
+import { Check } from "lucide-react";
+import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
+import type { CliProvider, ProviderAuthStatus } from "../types";
 
 type AgentConnectionCardProps = {
   provider: CliProvider;
@@ -21,13 +21,13 @@ export default function AgentConnectionCard({
   loginButtonClassName,
   onLogin,
 }: AgentConnectionCardProps) {
-  const containerClassName = status.authenticated ? connectedClassName : 'border-border bg-card';
+  const containerClassName = status.authenticated ? connectedClassName : "border-border bg-card";
 
   const statusText = status.loading
-    ? 'Checking...'
+    ? "Checking..."
     : status.authenticated
-      ? status.email || 'Connected'
-      : status.error || 'Not connected';
+      ? status.email || "Connected"
+      : status.error || "Not connected";
 
   return (
     <div className={`rounded-lg border p-4 transition-colors ${containerClassName}`}>

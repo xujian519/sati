@@ -1,7 +1,5 @@
 const IS_WINDOWS =
-  typeof navigator !== "undefined" &&
-  /win/i.test(navigator.userAgent) &&
-  !/darwin/i.test(navigator.userAgent);
+  typeof navigator !== "undefined" && /win/i.test(navigator.userAgent) && !/darwin/i.test(navigator.userAgent);
 
 export const QUICK_ADD_TOOLS = [
   "bash:git log:*",
@@ -28,6 +26,4 @@ const QUICK_BLOCK_TOOLS_WINDOWS = [
   "bash:Start-Process:*",
 ];
 
-export const QUICK_BLOCK_TOOLS = IS_WINDOWS
-  ? QUICK_BLOCK_TOOLS_WINDOWS
-  : QUICK_BLOCK_TOOLS_UNIX;
+export const QUICK_BLOCK_TOOLS = IS_WINDOWS ? QUICK_BLOCK_TOOLS_WINDOWS : QUICK_BLOCK_TOOLS_UNIX;

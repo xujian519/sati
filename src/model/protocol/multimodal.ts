@@ -1,9 +1,5 @@
 import { ModelRequestError } from "./errors.js";
-import type {
-  CanonicalContentBlock,
-  CanonicalMessage,
-  CanonicalToolResultContentBlock,
-} from "./canonical.js";
+import type { CanonicalContentBlock, CanonicalMessage, CanonicalToolResultContentBlock } from "./canonical.js";
 import { messageContent } from "./clone.js";
 
 export const SUPPORTED_INPUT_MODALITIES = ["text", "image", "pdf", "audio"] as const;
@@ -37,10 +33,7 @@ export function isInputModality(value: unknown): value is InputModality {
  * Only tool_result sub-blocks and top-level content blocks are converted;
  * tool_call / thinking blocks are left untouched.
  */
-export function downgradeUnsupportedContent(
-  messages: CanonicalMessage[],
-  constraints: MultimodalConstraints,
-): void {
+export function downgradeUnsupportedContent(messages: CanonicalMessage[], constraints: MultimodalConstraints): void {
   const allowed = new Set<InputModality>(constraints.input);
   if (allowed.has("image") && allowed.has("pdf") && allowed.has("audio")) return;
 
@@ -112,10 +105,8 @@ export function contentBlockToInputModality(block: CanonicalContentBlock): Input
   }
 }
 
-function nestedToolResultModalities(
-  block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
-): InputModality[] {
-  return block.content.flatMap((item) => {
+function nestedToolResultModalities(block: Extract<CanonicalContentBlock, { type: "tool_result" }>): InputModality[] {
+  return block.content.flatMap(item => {
     switch (item.type) {
       case "image":
         return ["image"];
@@ -127,10 +118,7 @@ function nestedToolResultModalities(
   });
 }
 
-export function assertContentSupported(
-  blocks: CanonicalContentBlock[],
-  constraints: MultimodalConstraints,
-): void {
+export function assertContentSupported(blocks: CanonicalContentBlock[], constraints: MultimodalConstraints): void {
   const allowed = new Set<InputModality>(constraints.input);
   let imageCount = 0;
 
@@ -147,10 +135,7 @@ export function assertContentSupported(
       for (const item of block.content) {
         if (item.type === "image") {
           imageCount += 1;
-          if (
-            constraints.supportedImageMimeTypes &&
-            !constraints.supportedImageMimeTypes.includes(item.mimeType)
-          ) {
+          if (constraints.supportedImageMimeTypes && !constraints.supportedImageMimeTypes.includes(item.mimeType)) {
             throw new ModelRequestError(
               "unsupported_image_mime_type",
               `Model does not support image MIME type ${item.mimeType}.`,
@@ -188,10 +173,7 @@ export function assertContentSupported(
     if (block.type === "image") {
       imageCount += 1;
 
-      if (
-        constraints.supportedImageMimeTypes &&
-        !constraints.supportedImageMimeTypes.includes(block.mimeType)
-      ) {
+      if (constraints.supportedImageMimeTypes && !constraints.supportedImageMimeTypes.includes(block.mimeType)) {
         throw new ModelRequestError(
           "unsupported_image_mime_type",
           `Model does not support image MIME type ${block.mimeType}.`,

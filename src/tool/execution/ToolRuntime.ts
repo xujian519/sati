@@ -1,8 +1,8 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import { PermissionRuntime } from "../../permission/index.js";
-import type { LifecycleRuntime, PilotDeckHookEffect } from "../../lifecycle/index.js";
-import { toolError } from "../protocol/errors.js";
-import type { PilotDeckToolErrorCode } from "../protocol/errors.js";
+import type { LifecycleRuntime, SatiHookEffect } from "../../lifecycle/index.js";
+import { toolError, normalizeToolError } from "../protocol/errors.js";
+import type { SatiToolErrorCode } from "../protocol/errors.js";
 import {
   PLAN_MODE_ALLOWED_TOOLS,
   buildPlanModeBashViolationMessage,
@@ -12,17 +12,17 @@ import { getAskModeViolation } from "../askModeConstraints.js";
 import { isReadOnlyShellCommand } from "../builtin/bash/permissions.js";
 import {
   applyResultSizeLimit,
-  type PilotDeckToolErrorResult,
-  type PilotDeckToolResult,
-  type PilotDeckToolSuccessResult,
+  type SatiToolErrorResult,
+  type SatiToolResult,
+  type SatiToolSuccessResult,
 } from "../protocol/result.js";
-import type { PilotDeckToolCall, PilotDeckToolRuntimeContext } from "../protocol/types.js";
+import type { SatiToolCall, SatiToolRuntimeContext, SatiToolResultContent } from "../protocol/types.js";
+import { receiptFromToolExecution } from "../protocol/evidence.js";
 import type { ToolRegistry } from "../registry/ToolRegistry.js";
-import { validateToolInput } from "./validateToolInput.js";
-import { formatValidationError } from "./formatValidationError.js";
-import { normalizeToolError } from "../protocol/errors.js";
 import type { AgentEventEmitter } from "../../agent/protocol/events.js";
 import { requiresPromptCapability } from "../userInteractionConstraints.js";
+import { validateToolInput } from "./validateToolInput.js";
+import { formatValidationError } from "./formatValidationError.js";
 import { buildToolErrorRecovery } from "./errorRecovery.js";
 import { repairToolName } from "./repairToolName.js";
 
@@ -34,24 +34,23 @@ export class ToolRuntime {
     private readonly eventEmitter?: AgentEventEmitter,
   ) {}
 
-  async execute(call: PilotDeckToolCall, context: PilotDeckToolRuntimeContext): Promise<PilotDeckToolResult> {
+  async execute(call: SatiToolCall, context: SatiToolRuntimeContext): Promise<SatiToolResult> {
     const startedAtDate = now(context);
-    const runtimeContext: PilotDeckToolRuntimeContext = context.executeTool
+    const runtimeContext: SatiToolRuntimeContext = context.executeTool
       ? context
       : {
           ...context,
-          executeTool: (nestedCall, contextPatch) =>
-            {
-              runtimeContext.readFileState ??= new Map();
-              runtimeContext.writeSnapshots ??= new Map();
-              return this.execute(nestedCall, {
-                ...runtimeContext,
-                ...contextPatch,
-                readFileState: runtimeContext.readFileState,
-                writeSnapshots: runtimeContext.writeSnapshots,
-                executeTool: runtimeContext.executeTool,
-              });
-            },
+          executeTool: (nestedCall, contextPatch) => {
+            runtimeContext.readFileState ??= new Map();
+            runtimeContext.writeSnapshots ??= new Map();
+            return this.execute(nestedCall, {
+              ...runtimeContext,
+              ...contextPatch,
+              readFileState: runtimeContext.readFileState,
+              writeSnapshots: runtimeContext.writeSnapshots,
+              executeTool: runtimeContext.executeTool,
+            });
+          },
         };
     context = runtimeContext;
     const startedAt = startedAtDate.toISOString();
@@ -65,7 +64,14 @@ export class ToolRuntime {
     const toolName = tool?.name ?? call.name;
 
     if (runtimeContext.abortSignal?.aborted) {
-      return this.errorResult(call.id, toolName, "tool_aborted", "Tool execution was aborted.", startedAt, runtimeContext);
+      return this.errorResult(
+        call.id,
+        toolName,
+        "tool_aborted",
+        "Tool execution was aborted.",
+        startedAt,
+        runtimeContext,
+      );
     }
 
     if (!tool) {
@@ -81,28 +87,12 @@ export class ToolRuntime {
 
     const planModeViolation = getPlanModeViolation(tool.name, call.input, runtimeContext);
     if (planModeViolation) {
-      return this.errorResult(
-        call.id,
-        tool.name,
-        "plan_mode_violation",
-        planModeViolation,
-        startedAt,
-        runtimeContext,
-      );
+      return this.errorResult(call.id, tool.name, "plan_mode_violation", planModeViolation, startedAt, runtimeContext);
     }
 
-    const askModeViolation = runtimeContext.runMode === "ask"
-      ? getAskModeViolation(tool, call.input)
-      : undefined;
+    const askModeViolation = runtimeContext.runMode === "ask" ? getAskModeViolation(tool, call.input) : undefined;
     if (askModeViolation) {
-      return this.errorResult(
-        call.id,
-        tool.name,
-        "ask_mode_violation",
-        askModeViolation,
-        startedAt,
-        runtimeContext,
-      );
+      return this.errorResult(call.id, tool.name, "ask_mode_violation", askModeViolation, startedAt, runtimeContext);
     }
 
     const validation = validateToolInput(call.input, tool.inputSchema);
@@ -134,7 +124,13 @@ export class ToolRuntime {
 
     let executeInput = call.input;
     const preToolResult = await this.dispatchLifecycle("PreToolUse", tool.name, call.id, executeInput, context);
-    this.eventEmitter?.({ type: "pre_tool_execute", sessionId: context.sessionId, turnId: context.turnId, toolCallId: call.id, toolName: tool.name });
+    this.eventEmitter?.({
+      type: "pre_tool_execute",
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+      toolCallId: call.id,
+      toolName: tool.name,
+    });
     const preBlock = findEffect(preToolResult.effects, "block");
     const prePermission = findEffect(preToolResult.effects, "permission_decision");
     const preDeny = prePermission?.behavior === "deny" ? prePermission : undefined;
@@ -160,9 +156,9 @@ export class ToolRuntime {
           `PreToolUse hook produced invalid input for ${tool.name}.
 
 ${formatValidationError(tool.name, updatedValidation.issues, {
-            maxOutputTokens: runtimeContext.maxOutputTokens,
-            outputTruncated: runtimeContext.outputTruncated,
-          })}`,
+  maxOutputTokens: runtimeContext.maxOutputTokens,
+  outputTruncated: runtimeContext.outputTruncated,
+})}`,
           startedAt,
           context,
           { issues: updatedValidation.issues },
@@ -186,27 +182,30 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       );
     }
 
-    const todoGateMessage = context.planTodo?.blockingMessageFor(
-      tool.name,
-      tool.isReadOnly(executeInput),
-    );
+    const todoGateMessage = context.planTodo?.blockingMessageFor(tool.name, tool.isReadOnly(executeInput));
     if (todoGateMessage) {
-      return this.errorResult(
-        call.id,
-        tool.name,
-        "tool_execution_failed",
-        todoGateMessage,
-        startedAt,
-        context,
-      );
+      return this.errorResult(call.id, tool.name, "tool_execution_failed", todoGateMessage, startedAt, context);
     }
 
     let decision = await this.permissionRuntime.decide(tool, executeInput, context, call.id);
     if (decision.type === "ask") {
-      const permissionHookResult = await this.dispatchLifecycle("PermissionRequest", tool.name, call.id, executeInput, context, {
-        permissionSuggestions: decision.request.options,
+      const permissionHookResult = await this.dispatchLifecycle(
+        "PermissionRequest",
+        tool.name,
+        call.id,
+        executeInput,
+        context,
+        {
+          permissionSuggestions: decision.request.options,
+        },
+      );
+      this.eventEmitter?.({
+        type: "permission_requested",
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        toolCallId: call.id,
+        toolName: tool.name,
       });
-      this.eventEmitter?.({ type: "permission_requested", sessionId: context.sessionId, turnId: context.turnId, toolCallId: call.id, toolName: tool.name });
       const permissionRequestResult = findEffect(permissionHookResult.effects, "permission_request_result");
       if (permissionRequestResult?.result.behavior === "allow") {
         decision = {
@@ -217,7 +216,10 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       } else if (permissionRequestResult?.result.behavior === "deny") {
         decision = {
           type: "deny",
-          reason: { type: "runtime", message: permissionRequestResult.result.message ?? `PermissionRequest hook denied ${tool.name}.` },
+          reason: {
+            type: "runtime",
+            message: permissionRequestResult.result.message ?? `PermissionRequest hook denied ${tool.name}.`,
+          },
           message: permissionRequestResult.result.message ?? `PermissionRequest hook denied ${tool.name}.`,
         };
       }
@@ -238,11 +240,17 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       await this.dispatchLifecycle("PermissionDenied", tool.name, call.id, executeInput, context, {
         reason: decision.message,
       });
-      this.eventEmitter?.({ type: "permission_denied", sessionId: context.sessionId, turnId: context.turnId, toolName: tool.name, reason: decision.message });
-      const code: PilotDeckToolErrorCode =
-        decision.reason.type === "runtime" && decision.reason.message.includes("prompt") ?
-          "permission_required" :
-          "permission_denied";
+      this.eventEmitter?.({
+        type: "permission_denied",
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        toolName: tool.name,
+        reason: decision.message,
+      });
+      const code: SatiToolErrorCode =
+        decision.reason.type === "runtime" && decision.reason.message.includes("prompt")
+          ? "permission_required"
+          : "permission_denied";
       return this.errorResult(call.id, tool.name, code, decision.message, startedAt, context);
     }
 
@@ -263,15 +271,15 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
     }
 
     executeInput = decision.updatedInput ?? executeInput;
-    const baseContext: PilotDeckToolRuntimeContext = {
+    const baseContext: SatiToolRuntimeContext = {
       ...context,
       currentToolCallId: call.id,
       currentPermissionDecision: decision,
     };
-    const executeContext: PilotDeckToolRuntimeContext = baseContext.progress
+    const executeContext: SatiToolRuntimeContext = baseContext.progress
       ? {
           ...baseContext,
-          progress: (event) =>
+          progress: event =>
             baseContext.progress!({
               ...event,
               toolCallId: event.toolCallId || call.id,
@@ -284,16 +292,18 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       const maxResultBytes = tool.maxResultBytes ?? context.maxResultBytes;
       const previewLimit = applyResultSizeLimit(output.content, maxResultBytes);
       const completedAt = now(context).toISOString();
-      const postToolLifecycle = await this.dispatchLifecycle(
-        "PostToolUse",
-        tool.name,
-        call.id,
-        executeInput,
-        context,
-        { toolResponse: output.data ?? output.content },
-      );
-      this.eventEmitter?.({ type: "post_tool_execute", sessionId: context.sessionId, turnId: context.turnId, toolCallId: call.id, toolName: tool.name, success: true });
-      const result: PilotDeckToolSuccessResult = {
+      const postToolLifecycle = await this.dispatchLifecycle("PostToolUse", tool.name, call.id, executeInput, context, {
+        toolResponse: output.data ?? output.content,
+      });
+      this.eventEmitter?.({
+        type: "post_tool_execute",
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        toolCallId: call.id,
+        toolName: tool.name,
+        success: true,
+      });
+      const result: SatiToolSuccessResult = {
         type: "success",
         toolCallId: call.id,
         toolName: tool.name,
@@ -313,6 +323,18 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       if (!tool.isReadOnly(executeInput) && tool.name !== "todo_write") {
         context.planTodo?.markToolProgressChanged(tool.name);
       }
+      // 证据闭环自动收集：成功路径记录 Receipt（工具调用账本）。
+      context.evidenceCollector?.recordReceipt(
+        receiptFromToolExecution({
+          toolCallId: call.id,
+          turnId: context.turnId,
+          toolName: tool.name,
+          args: call.input,
+          success: true,
+          startedAt,
+          resultText: flattenToolOutputText(output.content),
+        }),
+      );
       await this.recordToolAudit(result, context, startedAtDate);
       return result;
     } catch (error) {
@@ -321,8 +343,35 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
         error: normalized.message,
         isInterrupt: normalized.code === "tool_aborted",
       });
-      this.eventEmitter?.({ type: "post_tool_execute", sessionId: context.sessionId, turnId: context.turnId, toolCallId: call.id, toolName: tool.name, success: false });
-      const result = this.createErrorResult(call.id, tool.name, normalized.code, normalized.message, startedAt, context, normalized.details);
+      this.eventEmitter?.({
+        type: "post_tool_execute",
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        toolCallId: call.id,
+        toolName: tool.name,
+        success: false,
+      });
+      const result = this.createErrorResult(
+        call.id,
+        tool.name,
+        normalized.code,
+        normalized.message,
+        startedAt,
+        context,
+        normalized.details,
+      );
+      // 证据闭环自动收集：失败路径同样记录 Receipt（成败均有审计价值）。
+      context.evidenceCollector?.recordReceipt(
+        receiptFromToolExecution({
+          toolCallId: call.id,
+          turnId: context.turnId,
+          toolName: tool.name,
+          args: call.input,
+          success: false,
+          startedAt,
+          resultText: normalized.message,
+        }),
+      );
       await this.recordToolAudit(result, context, startedAtDate);
       return result;
     }
@@ -331,12 +380,12 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
   private async errorResult(
     toolCallId: string,
     toolName: string,
-    code: PilotDeckToolErrorCode,
+    code: SatiToolErrorCode,
     message: string,
     startedAt: string,
-    context: PilotDeckToolRuntimeContext,
+    context: SatiToolRuntimeContext,
     details?: Record<string, unknown>,
-  ): Promise<PilotDeckToolErrorResult> {
+  ): Promise<SatiToolErrorResult> {
     const startedAtDate = new Date(startedAt);
     const result = this.createErrorResult(toolCallId, toolName, code, message, startedAt, context, details);
     await this.recordToolAudit(result, context, startedAtDate);
@@ -346,12 +395,12 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
   private createErrorResult(
     toolCallId: string,
     toolName: string,
-    code: PilotDeckToolErrorCode,
+    code: SatiToolErrorCode,
     message: string,
     startedAt: string,
-    context: PilotDeckToolRuntimeContext,
+    context: SatiToolRuntimeContext,
     details?: Record<string, unknown>,
-  ): PilotDeckToolErrorResult {
+  ): SatiToolErrorResult {
     const completedAt = now(context).toISOString();
     const recovery = buildToolErrorRecovery({
       code,
@@ -376,8 +425,8 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
   }
 
   private async recordToolAudit(
-    result: PilotDeckToolResult,
-    context: PilotDeckToolRuntimeContext,
+    result: SatiToolResult,
+    context: SatiToolRuntimeContext,
     startedAt: Date,
   ): Promise<void> {
     await context.auditRecorder?.recordTool({
@@ -399,40 +448,52 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
     toolName: string,
     toolCallId: string,
     toolInput: unknown,
-    context: PilotDeckToolRuntimeContext,
+    context: SatiToolRuntimeContext,
     extraPayload: Record<string, unknown> = {},
   ) {
-    return this.lifecycle?.dispatch({
-      event,
-      baseInput: {
-        sessionId: context.sessionId,
-        transcriptPath: "",
-        cwd: context.cwd,
-        permissionMode: context.permissionMode,
-      },
-      matchQuery: toolName,
-      payload: {
-        toolName,
-        toolInput,
-        toolUseId: toolCallId,
-        ...extraPayload,
-      },
-      signal: context.abortSignal,
-      env: context.env,
-    }) ?? {
-      effects: [],
-      messages: [],
-      events: [],
-      blockingErrors: [],
-      nonBlockingErrors: [],
-    };
+    return (
+      this.lifecycle?.dispatch({
+        event,
+        baseInput: {
+          sessionId: context.sessionId,
+          transcriptPath: "",
+          cwd: context.cwd,
+          permissionMode: context.permissionMode,
+        },
+        matchQuery: toolName,
+        payload: {
+          toolName,
+          toolInput,
+          toolUseId: toolCallId,
+          ...extraPayload,
+        },
+        signal: context.abortSignal,
+        env: context.env,
+      }) ?? {
+        effects: [],
+        messages: [],
+        events: [],
+        blockingErrors: [],
+        nonBlockingErrors: [],
+      }
+    );
   }
 }
 
-function formatToolErrorContent(
-  recoveryMessage: string,
-  details?: Record<string, unknown>,
-): string {
+/** 工具输出内容文本摘录（供证据 Receipt resultText）。 */
+function flattenToolOutputText(content: SatiToolResultContent[]): string {
+  return content
+    .map(block => {
+      if (block.type === "text") return block.text;
+      if (block.type === "json") return JSON.stringify(block.value);
+      if (block.type === "file") return block.path;
+      return "";
+    })
+    .join("\n")
+    .trim();
+}
+
+function formatToolErrorContent(recoveryMessage: string, details?: Record<string, unknown>): string {
   const rawDetails = formatRawToolErrorDetails(details);
   return rawDetails ? `${recoveryMessage}\n\n${rawDetails}` : recoveryMessage;
 }
@@ -479,11 +540,7 @@ function readStringDetail(details: Record<string, unknown>, key: string): string
   return typeof value === "string" ? value : undefined;
 }
 
-function getPlanModeViolation(
-  toolName: string,
-  input: unknown,
-  context: PilotDeckToolRuntimeContext,
-): string | undefined {
+function getPlanModeViolation(toolName: string, input: unknown, context: SatiToolRuntimeContext): string | undefined {
   if (context.permissionMode !== "plan") {
     return undefined;
   }
@@ -522,7 +579,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isPlanMarkdownPath(filePath: string | undefined, context: PilotDeckToolRuntimeContext): boolean {
+function isPlanMarkdownPath(filePath: string | undefined, context: SatiToolRuntimeContext): boolean {
   if (!filePath || !context.planDirectory?.path) {
     return false;
   }
@@ -532,37 +589,37 @@ function isPlanMarkdownPath(filePath: string | undefined, context: PilotDeckTool
   }
   const relativeToPlanDir = relative(context.planDirectory.path, absolute);
   return (
-    relativeToPlanDir !== ""
-    && !isAbsolute(relativeToPlanDir)
-    && !relativeToPlanDir.startsWith("..")
-    && !relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+    relativeToPlanDir !== "" &&
+    !isAbsolute(relativeToPlanDir) &&
+    !relativeToPlanDir.startsWith("..") &&
+    !relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
   );
 }
 
-function findEffect<Type extends PilotDeckHookEffect["type"]>(
-  effects: PilotDeckHookEffect[],
+function findEffect<Type extends SatiHookEffect["type"]>(
+  effects: SatiHookEffect[],
   type: Type,
-): Extract<PilotDeckHookEffect, { type: Type }> | undefined {
-  return effects.find((effect): effect is Extract<PilotDeckHookEffect, { type: Type }> => effect.type === type);
+): Extract<SatiHookEffect, { type: Type }> | undefined {
+  return effects.find((effect): effect is Extract<SatiHookEffect, { type: Type }> => effect.type === type);
 }
 
-function lifecycleMetadata(result: { effects: PilotDeckHookEffect[] }): Record<string, unknown> | undefined {
-  const blocking = result.effects.find((effect) => effect.type === "block");
-  const additionalContext = result.effects.filter((effect) => effect.type === "additional_context");
-  const updatedMcpOutput = result.effects.find((effect) => effect.type === "updated_mcp_tool_output");
+function lifecycleMetadata(result: { effects: SatiHookEffect[] }): Record<string, unknown> | undefined {
+  const blocking = result.effects.find(effect => effect.type === "block");
+  const additionalContext = result.effects.filter(effect => effect.type === "additional_context");
+  const updatedMcpOutput = result.effects.find(effect => effect.type === "updated_mcp_tool_output");
   if (!blocking && additionalContext.length === 0 && !updatedMcpOutput) {
     return undefined;
   }
   return {
     lifecycle: {
       blocked: blocking ? { reason: blocking.reason, stopReason: blocking.stopReason } : undefined,
-      additionalContext: additionalContext.map((effect) => effect.content),
+      additionalContext: additionalContext.map(effect => effect.content),
       updatedMcpToolOutput: updatedMcpOutput?.output,
     },
   };
 }
 
-function now(context: PilotDeckToolRuntimeContext): Date {
+function now(context: SatiToolRuntimeContext): Date {
   return context.now?.() ?? new Date();
 }
 

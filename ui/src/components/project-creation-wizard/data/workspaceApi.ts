@@ -1,4 +1,4 @@
-import { api } from '../../../utils/api';
+import { api } from "../../../utils/api";
 import type {
   BrowseFilesystemResponse,
   CloneProgressEvent,
@@ -8,7 +8,7 @@ import type {
   CredentialsResponse,
   FolderSuggestion,
   TokenMode,
-} from '../types';
+} from "../types";
 
 type CloneWorkspaceParams = {
   workspacePath: string;
@@ -28,14 +28,14 @@ const parseJson = async <T>(response: Response): Promise<T> => {
 };
 
 export const fetchGithubTokenCredentials = async () => {
-  const response = await api.get('/settings/credentials?type=github_token');
+  const response = await api.get("/settings/credentials?type=github_token");
   const data = await parseJson<CredentialsResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to load GitHub tokens');
+    throw new Error(data.error || "Failed to load GitHub tokens");
   }
 
-  return (data.credentials || []).filter((credential) => credential.is_active);
+  return (data.credentials || []).filter(credential => credential.is_active);
 };
 
 export const browseFilesystemFolders = async (pathToBrowse: string) => {
@@ -44,7 +44,7 @@ export const browseFilesystemFolders = async (pathToBrowse: string) => {
   const data = await parseJson<BrowseFilesystemResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to browse filesystem');
+    throw new Error(data.error || "Failed to browse filesystem");
   }
 
   return {
@@ -58,7 +58,7 @@ export const createFolderInFilesystem = async (folderPath: string) => {
   const data = await parseJson<CreateFolderResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.error || 'Failed to create folder');
+    throw new Error(data.error || "Failed to create folder");
   }
 
   return data.path || folderPath;
@@ -69,7 +69,7 @@ export const createWorkspaceRequest = async (payload: CreateWorkspacePayload) =>
   const data = await parseJson<CreateWorkspaceResponse>(response);
 
   if (!response.ok) {
-    throw new Error(data.details || data.error || 'Failed to create workspace');
+    throw new Error(data.details || data.error || "Failed to create workspace");
   }
 
   return data.project;
@@ -87,27 +87,24 @@ const buildCloneProgressQuery = ({
     githubUrl: githubUrl.trim(),
   });
 
-  if (tokenMode === 'stored' && selectedGithubToken) {
-    query.set('githubTokenId', selectedGithubToken);
+  if (tokenMode === "stored" && selectedGithubToken) {
+    query.set("githubTokenId", selectedGithubToken);
   }
 
-  if (tokenMode === 'new' && newGithubToken.trim()) {
-    query.set('newGithubToken', newGithubToken.trim());
+  if (tokenMode === "new" && newGithubToken.trim()) {
+    query.set("newGithubToken", newGithubToken.trim());
   }
 
   // EventSource cannot send custom headers, so the auth token is passed as query.
-  const authToken = localStorage.getItem('auth-token');
+  const authToken = localStorage.getItem("auth-token");
   if (authToken) {
-    query.set('token', authToken);
+    query.set("token", authToken);
   }
 
   return query.toString();
 };
 
-export const cloneWorkspaceWithProgress = (
-  params: CloneWorkspaceParams,
-  handlers: CloneProgressHandlers,
-) =>
+export const cloneWorkspaceWithProgress = (params: CloneWorkspaceParams, handlers: CloneProgressHandlers) =>
   new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
     const query = buildCloneProgressQuery(params);
     const eventSource = new EventSource(`/api/projects/clone-progress?${query}`);
@@ -122,29 +119,29 @@ export const cloneWorkspaceWithProgress = (
       callback();
     };
 
-    eventSource.onmessage = (event) => {
+    eventSource.onmessage = event => {
       try {
         const payload = JSON.parse(event.data) as CloneProgressEvent;
 
-        if (payload.type === 'progress' && payload.message) {
+        if (payload.type === "progress" && payload.message) {
           handlers.onProgress(payload.message);
           return;
         }
 
-        if (payload.type === 'complete') {
+        if (payload.type === "complete") {
           settle(() => resolve(payload.project));
           return;
         }
 
-        if (payload.type === 'error') {
-          settle(() => reject(new Error(payload.message || 'Failed to clone repository')));
+        if (payload.type === "error") {
+          settle(() => reject(new Error(payload.message || "Failed to clone repository")));
         }
       } catch (error) {
-        console.error('Error parsing clone progress event:', error);
+        console.error("Error parsing clone progress event:", error);
       }
     };
 
     eventSource.onerror = () => {
-      settle(() => reject(new Error('Connection lost during clone')));
+      settle(() => reject(new Error("Connection lost during clone")));
     };
   });

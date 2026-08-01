@@ -1,22 +1,24 @@
-import { authenticatedFetch } from '../utils/api';
-import { findCatalogProviderById, type CatalogModel, type CatalogProviderProtocol } from './catalogProviders';
+import { authenticatedFetch } from "../utils/api";
+import { findCatalogProviderById, type CatalogModel, type CatalogProviderProtocol } from "./catalogProviders";
 
-export type ApiModelListItem = Pick<CatalogModel, 'id' | 'displayName'>;
+export type ApiModelListItem = Pick<CatalogModel, "id" | "displayName">;
 
 function normalizeModelListItem(model: unknown): ApiModelListItem | null {
-  if (!model || typeof model !== 'object') return null;
+  if (!model || typeof model !== "object") return null;
   const record = model as Record<string, unknown>;
-  const id = typeof record.id === 'string'
-    ? record.id.trim()
-    : typeof record.name === 'string'
-      ? record.name.replace(/^models\//, '').trim()
-      : '';
+  const id =
+    typeof record.id === "string"
+      ? record.id.trim()
+      : typeof record.name === "string"
+        ? record.name.replace(/^models\//, "").trim()
+        : "";
   if (!id) return null;
-  const displayName = typeof record.displayName === 'string' && record.displayName.trim()
-    ? record.displayName.trim()
-    : typeof record.display_name === 'string' && record.display_name.trim()
-      ? record.display_name.trim()
-      : id;
+  const displayName =
+    typeof record.displayName === "string" && record.displayName.trim()
+      ? record.displayName.trim()
+      : typeof record.display_name === "string" && record.display_name.trim()
+        ? record.display_name.trim()
+        : id;
   return { id, displayName };
 }
 
@@ -38,7 +40,7 @@ export async function fetchRemoteDefaultModels(providerId: string): Promise<ApiM
   return fetchProviderModels({
     protocol: provider.protocol,
     baseUrl: provider.modelListUrl ?? provider.defaultUrl,
-    apiKey: '',
+    apiKey: "",
     providerId,
   });
 }
@@ -54,8 +56,8 @@ export async function fetchProviderModels({
   apiKey?: string;
   providerId?: string;
 }): Promise<ApiModelListItem[]> {
-  const res = await authenticatedFetch('/api/config/models', {
-    method: 'POST',
+  const res = await authenticatedFetch("/api/config/models", {
+    method: "POST",
     body: JSON.stringify({
       providerType: protocol,
       baseUrl,
@@ -65,7 +67,7 @@ export async function fetchProviderModels({
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.ok === false) {
-    throw new Error(data?.error || 'Failed to fetch model list.');
+    throw new Error(data?.error || "Failed to fetch model list.");
   }
   const models = Array.isArray(data?.models) ? data.models : [];
   return normalizeModelList(models);

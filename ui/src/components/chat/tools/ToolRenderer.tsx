@@ -1,8 +1,20 @@
-import React, { memo, useMemo, useCallback } from 'react';
-import type { Project } from '../../../types/app';
-import type { SubagentChildTool } from '../types/types';
-import { getCanonicalToolName, getToolConfig } from './configs/toolConfigs';
-import { OneLineDisplay, CollapsibleDisplay, ToolDiffViewer, MarkdownContent, FileListContent, TodoListContent, TaskListContent, TextContent, QuestionAnswerContent, SubagentContainer, PlanApprovedCard } from './components';
+import React, { memo, useMemo, useCallback } from "react";
+import type { Project } from "../../../types/app";
+import type { SubagentChildTool } from "../types/types";
+import { getCanonicalToolName, getToolConfig } from "./configs/toolConfigs";
+import {
+  OneLineDisplay,
+  CollapsibleDisplay,
+  ToolDiffViewer,
+  MarkdownContent,
+  FileListContent,
+  TodoListContent,
+  TaskListContent,
+  TextContent,
+  QuestionAnswerContent,
+  SubagentContainer,
+  PlanApprovedCard,
+} from "./components";
 
 type DiffLine = {
   type: string;
@@ -15,7 +27,7 @@ interface ToolRendererProps {
   toolInput: any;
   toolResult?: any;
   toolId?: string;
-  mode: 'input' | 'result';
+  mode: "input" | "result";
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   createDiff?: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
@@ -45,7 +57,7 @@ class ToolRendererErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.warn('[ToolRenderer] Failed to render tool block:', {
+    console.warn("[ToolRenderer] Failed to render tool block:", {
       toolName: this.props.toolName,
       toolId: this.props.toolId,
       error,
@@ -54,10 +66,7 @@ class ToolRendererErrorBoundary extends React.Component<
   }
 
   componentDidUpdate(prevProps: { toolName: string; toolId?: string }) {
-    if (
-      this.state.error &&
-      (prevProps.toolName !== this.props.toolName || prevProps.toolId !== this.props.toolId)
-    ) {
+    if (this.state.error && (prevProps.toolName !== this.props.toolName || prevProps.toolId !== this.props.toolId)) {
       this.setState({ error: null });
     }
   }
@@ -85,32 +94,30 @@ function safeCall<T>(label: string, toolName: string, callback: () => T, fallbac
   }
 }
 
-function toDisplayString(value: unknown, fallback = ''): string {
-  if (typeof value === 'string') return value;
+function toDisplayString(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value;
   if (value === undefined || value === null) return fallback;
   try {
-    return typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return typeof value === "object" ? JSON.stringify(value) : String(value);
   } catch {
     return fallback;
   }
 }
 
 function toObject(value: unknown): Record<string, any> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, any>
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, any>) : {};
 }
 
 function getToolCategory(toolName: string): string {
-  if (['Edit', 'Write', 'ApplyPatch'].includes(toolName)) return 'edit';
-  if (['Grep', 'Glob'].includes(toolName)) return 'search';
-  if (toolName === 'Bash') return 'bash';
-  if (['TodoWrite', 'TodoRead', 'todo_write', 'todo_read'].includes(toolName)) return 'todo';
-  if (['TaskCreate', 'TaskUpdate', 'TaskList', 'TaskGet'].includes(toolName)) return 'task';
-  if (toolName === 'Task' || toolName === 'agent' || toolName === 'Agent') return 'agent';
-  if (toolName === 'exit_plan_mode' || toolName === 'ExitPlanMode') return 'plan';
-  if (toolName === 'AskUserQuestion') return 'question';
-  return 'default';
+  if (["Edit", "Write", "ApplyPatch"].includes(toolName)) return "edit";
+  if (["Grep", "Glob"].includes(toolName)) return "search";
+  if (toolName === "Bash") return "bash";
+  if (["TodoWrite", "TodoRead", "todo_write", "todo_read"].includes(toolName)) return "todo";
+  if (["TaskCreate", "TaskUpdate", "TaskList", "TaskGet"].includes(toolName)) return "task";
+  if (toolName === "Task" || toolName === "agent" || toolName === "Agent") return "agent";
+  if (toolName === "exit_plan_mode" || toolName === "ExitPlanMode") return "plan";
+  if (toolName === "AskUserQuestion") return "question";
+  return "default";
 }
 
 /**
@@ -130,51 +137,46 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
   showRawParameters = false,
   rawToolInput,
   isSubagentContainer,
-  subagentState
+  subagentState,
 }) => {
   const canonicalToolName = getCanonicalToolName(toolName);
   const config = getToolConfig(toolName);
-  const displayConfig: any = mode === 'input' ? config.input : config.result;
+  const displayConfig: any = mode === "input" ? config.input : config.result;
 
   const parsedData = useMemo(() => {
     try {
-      const rawData = mode === 'input' ? toolInput : toolResult;
-      return typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      const rawData = mode === "input" ? toolInput : toolResult;
+      return typeof rawData === "string" ? JSON.parse(rawData) : rawData;
     } catch {
-      return mode === 'input' ? toolInput : toolResult;
+      return mode === "input" ? toolInput : toolResult;
     }
   }, [mode, toolInput, toolResult]);
 
   const handleAction = useCallback(() => {
-    if (displayConfig?.action === 'open-file' && onFileOpen) {
-      const value = toDisplayString(
-        safeCall('action value', toolName, () => displayConfig.getValue?.(parsedData), ''),
-      );
+    if (displayConfig?.action === "open-file" && onFileOpen) {
+      const value = toDisplayString(safeCall("action value", toolName, () => displayConfig.getValue?.(parsedData), ""));
       onFileOpen(value);
     }
   }, [displayConfig, parsedData, onFileOpen, toolName]);
 
   // Route subagent containers to dedicated component (after hooks to satisfy Rules of Hooks)
   if (isSubagentContainer && subagentState) {
-    if (mode === 'result') {
+    if (mode === "result") {
       return null;
     }
-    return (
-      <SubagentContainer
-        toolInput={toolInput}
-        toolResult={toolResult}
-        subagentState={subagentState}
-      />
-    );
+    return <SubagentContainer toolInput={toolInput} toolResult={toolResult} subagentState={subagentState} />;
   }
 
   if (!displayConfig) return null;
 
-  if (displayConfig.type === 'one-line') {
-    const value = toDisplayString(
-      safeCall('value getter', toolName, () => displayConfig.getValue?.(parsedData), ''),
+  if (displayConfig.type === "one-line") {
+    const value = toDisplayString(safeCall("value getter", toolName, () => displayConfig.getValue?.(parsedData), ""));
+    const secondaryValue = safeCall(
+      "secondary getter",
+      toolName,
+      () => displayConfig.getSecondary?.(parsedData),
+      undefined,
     );
-    const secondaryValue = safeCall('secondary getter', toolName, () => displayConfig.getSecondary?.(parsedData), undefined);
     const secondary = secondaryValue === undefined ? undefined : toDisplayString(secondaryValue);
 
     return (
@@ -191,45 +193,47 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
         style={displayConfig.style}
         wrapText={displayConfig.wrapText}
         colorScheme={displayConfig.colorScheme}
-        resultId={mode === 'input' ? `tool-result-${toolId}` : undefined}
+        resultId={mode === "input" ? `tool-result-${toolId}` : undefined}
       />
     );
   }
 
-  if (displayConfig.type === 'collapsible') {
+  if (displayConfig.type === "collapsible") {
     const title = toDisplayString(
       safeCall(
-        'title getter',
+        "title getter",
         toolName,
-        () => typeof displayConfig.title === 'function'
-          ? displayConfig.title(parsedData, { toolResult })
-          : displayConfig.title,
-        'Details',
+        () =>
+          typeof displayConfig.title === "function"
+            ? displayConfig.title(parsedData, { toolResult })
+            : displayConfig.title,
+        "Details",
       ),
-      'Details',
+      "Details",
     );
 
-    const defaultOpen = displayConfig.defaultOpen !== undefined
-      ? displayConfig.defaultOpen
-      : autoExpandTools;
+    const defaultOpen = displayConfig.defaultOpen !== undefined ? displayConfig.defaultOpen : autoExpandTools;
 
-    const contentProps = toObject(safeCall(
-      'content props getter',
-      toolName,
-      () => displayConfig.getContentProps?.(parsedData, {
-        selectedProject,
-        createDiff,
-        onFileOpen,
-        toolResult,
-      }),
-      {},
-    ));
+    const contentProps = toObject(
+      safeCall(
+        "content props getter",
+        toolName,
+        () =>
+          displayConfig.getContentProps?.(parsedData, {
+            selectedProject,
+            createDiff,
+            onFileOpen,
+            toolResult,
+          }),
+        {},
+      ),
+    );
 
     // Build the content component based on contentType
     let contentComponent: React.ReactNode = null;
 
     switch (displayConfig.contentType) {
-      case 'diff':
+      case "diff":
         if (createDiff) {
           contentComponent = (
             <ToolDiffViewer
@@ -245,68 +249,51 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
         }
         break;
 
-      case 'markdown':
-        contentComponent = <MarkdownContent content={contentProps.content || ''} onFileOpen={onFileOpen} />;
+      case "markdown":
+        contentComponent = <MarkdownContent content={contentProps.content || ""} onFileOpen={onFileOpen} />;
         break;
 
-      case 'file-list':
+      case "file-list":
         contentComponent = (
-          <FileListContent
-            files={contentProps.files || []}
-            onFileClick={onFileOpen}
-            title={contentProps.title}
-          />
+          <FileListContent files={contentProps.files || []} onFileClick={onFileOpen} title={contentProps.title} />
         );
         break;
 
-      case 'todo-list':
+      case "todo-list":
         if (contentProps.todos?.length > 0) {
-          contentComponent = (
-            <TodoListContent
-              todos={contentProps.todos}
-              isResult={contentProps.isResult}
-            />
-          );
+          contentComponent = <TodoListContent todos={contentProps.todos} isResult={contentProps.isResult} />;
         }
         break;
 
-      case 'task':
-        contentComponent = <TaskListContent content={contentProps.content || ''} />;
+      case "task":
+        contentComponent = <TaskListContent content={contentProps.content || ""} />;
         break;
 
-      case 'question-answer':
+      case "question-answer":
         contentComponent = (
-          <QuestionAnswerContent
-            questions={contentProps.questions || []}
-            answers={contentProps.answers || {}}
-          />
+          <QuestionAnswerContent questions={contentProps.questions || []} answers={contentProps.answers || {}} />
         );
         break;
 
-      case 'text':
-        contentComponent = (
-          <TextContent
-            content={contentProps.content || ''}
-            format={contentProps.format || 'plain'}
-          />
-        );
+      case "text":
+        contentComponent = <TextContent content={contentProps.content || ""} format={contentProps.format || "plain"} />;
         break;
 
-      case 'plan-card':
+      case "plan-card":
         contentComponent = (
           <PlanApprovedCard
-            planTitle={contentProps.planTitle || ''}
-            planSummary={contentProps.planSummary || ''}
-            planFilePath={contentProps.planFilePath || ''}
+            planTitle={contentProps.planTitle || ""}
+            planSummary={contentProps.planSummary || ""}
+            planFilePath={contentProps.planFilePath || ""}
             onViewPlan={() => onFileOpen?.(contentProps.planFilePath)}
           />
         );
         break;
 
-      case 'success-message': {
+      case "success-message": {
         const msg = toDisplayString(
-          safeCall('success message getter', toolName, () => displayConfig.getMessage?.(parsedData), 'Success'),
-          'Success',
+          safeCall("success message getter", toolName, () => displayConfig.getMessage?.(parsedData), "Success"),
+          "Success",
         );
         contentComponent = (
           <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
@@ -321,12 +308,16 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
     }
 
     // For edit tools, make the title (filename) clickable to open the file
-    const handleTitleClick = (canonicalToolName === 'Edit' || canonicalToolName === 'Write' || canonicalToolName === 'ApplyPatch') && contentProps.filePath && onFileOpen
-      ? () => onFileOpen(contentProps.filePath, {
-          old_string: contentProps.oldContent,
-          new_string: contentProps.newContent
-        })
-      : undefined;
+    const handleTitleClick =
+      (canonicalToolName === "Edit" || canonicalToolName === "Write" || canonicalToolName === "ApplyPatch") &&
+      contentProps.filePath &&
+      onFileOpen
+        ? () =>
+            onFileOpen(contentProps.filePath, {
+              old_string: contentProps.oldContent,
+              new_string: contentProps.newContent,
+            })
+        : undefined;
 
     return (
       <CollapsibleDisplay
@@ -335,7 +326,7 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
         title={title}
         defaultOpen={defaultOpen}
         onTitleClick={handleTitleClick}
-        showRawParameters={mode === 'input' && showRawParameters}
+        showRawParameters={mode === "input" && showRawParameters}
         rawContent={rawToolInput}
         toolCategory={getToolCategory(canonicalToolName)}
       >
@@ -344,22 +335,24 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
     );
   }
 
-  if (displayConfig.type === 'card') {
-    const contentProps = toObject(safeCall(
-      'content props getter',
-      toolName,
-      () => displayConfig.getContentProps?.(parsedData, { selectedProject, createDiff, onFileOpen }),
-      {},
-    ));
+  if (displayConfig.type === "card") {
+    const contentProps = toObject(
+      safeCall(
+        "content props getter",
+        toolName,
+        () => displayConfig.getContentProps?.(parsedData, { selectedProject, createDiff, onFileOpen }),
+        {},
+      ),
+    );
 
     let cardComponent: React.ReactNode = null;
     switch (displayConfig.contentType) {
-      case 'plan-card':
+      case "plan-card":
         cardComponent = (
           <PlanApprovedCard
-            planTitle={contentProps.planTitle || ''}
-            planSummary={contentProps.planSummary || ''}
-            planFilePath={contentProps.planFilePath || ''}
+            planTitle={contentProps.planTitle || ""}
+            planSummary={contentProps.planSummary || ""}
+            planFilePath={contentProps.planFilePath || ""}
             onViewPlan={() => onFileOpen?.(contentProps.planFilePath)}
           />
         );
@@ -372,12 +365,12 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
   return null;
 };
 
-ToolRendererInner.displayName = 'ToolRendererInner';
+ToolRendererInner.displayName = "ToolRendererInner";
 
-export const ToolRenderer: React.FC<ToolRendererProps> = memo((props) => (
+export const ToolRenderer: React.FC<ToolRendererProps> = memo(props => (
   <ToolRendererErrorBoundary toolName={props.toolName} toolId={props.toolId}>
     <ToolRendererInner {...props} />
   </ToolRendererErrorBoundary>
 ));
 
-ToolRenderer.displayName = 'ToolRenderer';
+ToolRenderer.displayName = "ToolRenderer";

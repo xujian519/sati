@@ -1,4 +1,4 @@
-import type { CliProvider } from '../../provider-auth/types';
+import type { CliProvider } from "../../provider-auth/types";
 
 export type { CliProvider };
 

@@ -1,38 +1,41 @@
-import { useTranslation } from 'react-i18next';
-import type { Project } from '../../../../types/app';
-import { AUTH_TOKEN_STORAGE_KEY } from '../../../auth/constants';
-import { useTheme } from '../../../../contexts/ThemeContext';
+import { useTranslation } from "react-i18next";
+import type { Project } from "../../../../types/app";
+import { AUTH_TOKEN_STORAGE_KEY } from "../../../auth/constants";
+import { useTheme } from "../../../../contexts/ThemeContext";
 
 type MemoryPanelProps = {
   selectedProject: Project | null;
 };
 
-function normalizeMemoryLocale(language: string | undefined): 'zh' | 'en' {
-  return language === 'zh-CN' ? 'zh' : 'en';
+function normalizeMemoryLocale(language: string | undefined): "zh" | "en" {
+  return language === "zh-CN" ? "zh" : "en";
 }
 
-function normalizeMemoryTheme(isDarkMode: boolean): 'light' | 'dark' {
-  return isDarkMode ? 'dark' : 'light';
+function normalizeMemoryTheme(isDarkMode: boolean): "light" | "dark" {
+  return isDarkMode ? "dark" : "light";
 }
 
-const MEMORY_PANEL_TEXT: Record<'zh' | 'en', {
-  emptyProject: string;
-  unavailable: string;
-  title: string;
-}> = {
+const MEMORY_PANEL_TEXT: Record<
+  "zh" | "en",
+  {
+    emptyProject: string;
+    unavailable: string;
+    title: string;
+  }
+> = {
   zh: {
-    emptyProject: '请选择一个项目查看 Memory。',
-    unavailable: '身份验证和项目上下文准备完成后，Memory 面板才可用。',
-    title: 'Memory 面板',
+    emptyProject: "请选择一个项目查看 Memory。",
+    unavailable: "身份验证和项目上下文准备完成后，Memory 面板才可用。",
+    title: "Memory 面板",
   },
   en: {
-    emptyProject: 'Select a project to inspect memory.',
-    unavailable: 'Memory dashboard is unavailable until auth and project context are ready.',
-    title: 'Memory Dashboard',
+    emptyProject: "Select a project to inspect memory.",
+    unavailable: "Memory dashboard is unavailable until auth and project context are ready.",
+    title: "Memory Dashboard",
   },
 };
 
-function buildMemoryDashboardUrl(project: Project, locale: 'zh' | 'en', theme: 'light' | 'dark'): string | null {
+function buildMemoryDashboardUrl(project: Project, locale: "zh" | "en", theme: "light" | "dark"): string | null {
   const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
   const projectPath = project.fullPath || project.path;
 
@@ -42,7 +45,7 @@ function buildMemoryDashboardUrl(project: Project, locale: 'zh' | 'en', theme: '
 
   const params = new URLSearchParams({ projectPath, locale, theme });
   if (token) {
-    params.set('token', token);
+    params.set("token", token);
   }
 
   return `/memory-dashboard/index.html?${params.toString()}`;
@@ -79,7 +82,7 @@ export default function MemoryPanel({ selectedProject }: MemoryPanelProps) {
   return (
     <div className="h-full w-full bg-white dark:bg-neutral-950">
       <iframe
-        key={`${selectedProject.fullPath || selectedProject.path || 'memory'}:${memoryLocale}:${memoryTheme}`}
+        key={`${selectedProject.fullPath || selectedProject.path || "memory"}:${memoryLocale}:${memoryTheme}`}
         title={text.title}
         src={dashboardUrl}
         className="block h-full w-full border-0 bg-white dark:bg-neutral-950"

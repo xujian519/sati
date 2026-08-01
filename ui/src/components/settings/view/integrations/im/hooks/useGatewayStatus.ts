@@ -3,17 +3,13 @@ import { authenticatedFetch } from "../../../../../../utils/api";
 import type { GatewayStatus } from "../types";
 
 type FetchGatewayStatusOptions = { showLoading?: boolean };
-export type RefreshGatewayStatus = (
-  options?: FetchGatewayStatusOptions,
-) => Promise<GatewayStatus | null>;
+export type RefreshGatewayStatus = (options?: FetchGatewayStatusOptions) => Promise<GatewayStatus | null>;
 
 export function useGatewayStatus() {
   const [status, setStatus] = useState<GatewayStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchStatus = useCallback<RefreshGatewayStatus>(async ({
-    showLoading = false,
-  } = {}) => {
+  const fetchStatus = useCallback<RefreshGatewayStatus>(async ({ showLoading = false } = {}) => {
     if (showLoading) setLoading(true);
     try {
       const res = await authenticatedFetch("/api/gateway/status");

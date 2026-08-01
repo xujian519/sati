@@ -28,7 +28,7 @@ export type TranscriptChainResult = {
 export function buildConversationChain(entries: AgentTranscriptEntry[]): TranscriptChainResult {
   const diagnostics: AgentTranscriptDiagnostic[] = [];
 
-  const hasChainIds = entries.some((entry) => entry.entryId);
+  const hasChainIds = entries.some(entry => entry.entryId);
   if (!hasChainIds) {
     return {
       chain: [...entries],
@@ -76,12 +76,10 @@ export function buildConversationChain(entries: AgentTranscriptEntry[]): Transcr
     }
   }
 
-  const roots = entries.filter(
-    (entry) => entry.entryId && !childIds.has(entry.entryId) && !entry.parentEntryId,
-  );
+  const roots = entries.filter(entry => entry.entryId && !childIds.has(entry.entryId) && !entry.parentEntryId);
   if (roots.length === 0) {
     // Circular or all-orphan: fall back to first entry with entryId.
-    const firstWithId = entries.find((entry) => entry.entryId);
+    const firstWithId = entries.find(entry => entry.entryId);
     if (firstWithId) {
       roots.push(firstWithId);
       diagnostics.push({
@@ -111,7 +109,7 @@ export function buildConversationChain(entries: AgentTranscriptEntry[]): Transcr
   }
 
   // Append orphans at the end (legacy `recoverOrphanedParallelToolResults` concept).
-  const chainSet = new Set(longestPath.map((entry) => entry.entryId));
+  const chainSet = new Set(longestPath.map(entry => entry.entryId));
   for (const orphan of orphans) {
     if (orphan.entryId && !chainSet.has(orphan.entryId)) {
       longestPath.push(orphan);

@@ -21,11 +21,11 @@ Use when:
 
 Do not use when:
 
-- Scheduling OpenClaw tasks or alerts -> use `cron` tool with systemEvent instead
+- Scheduling Sati tasks or alerts -> use `cron` tool with systemEvent instead
 - Calendar events or appointments -> use Apple Calendar
 - Project/work task management -> use Notion, GitHub Issues, or task queue
 - One-time notifications -> use `cron` tool for timed alerts
-- User says "remind me" but means an OpenClaw alert -> clarify first
+- User says "remind me" but means a Sati alert -> clarify first
 
 ## Setup
 
@@ -93,13 +93,11 @@ Accepted by `--due` and date filters:
 
 User: "Remind me to check on the deploy in 2 hours"
 
-**Ask:** "Do you want this in Apple Reminders (syncs to your phone) or as an OpenClaw alert (I'll message you here)?"
+**Ask:** "Do you want this in Apple Reminders (syncs to your phone) or as a Sati alert (I'll message you here)?"
 
 - Apple Reminders -> use this skill
-- OpenClaw alert -> use `cron` tool with systemEvent
+- Sati alert -> use `cron` tool with systemEvent
 
-## PilotDeck Migration Note
+## Sati Migration Note
 
-- Source: /var/folders/27/xyyzc_n172l3jjmnxgqmhhzh0000gn/T/tmp.AyWDWGKoS4/openclaw/skills/apple-reminders
-- Review status: candidate for PilotDeck native skills pack.
-- Platform-specific OpenClaw/Hermes metadata was removed or should be ignored during review.
+- Review status: candidate for Sati native skills pack.

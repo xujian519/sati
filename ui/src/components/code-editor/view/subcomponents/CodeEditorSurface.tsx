@@ -1,8 +1,8 @@
-import CodeMirror from '@uiw/react-codemirror';
-import type { Extension } from '@codemirror/state';
-import { zincDarkTheme, zincLightTheme } from '../../utils/zincThemes';
-import HtmlDocumentPreview from './HtmlDocumentPreview';
-import MarkdownPreview from './markdown/MarkdownPreview';
+import CodeMirror from "@uiw/react-codemirror";
+import type { Extension } from "@codemirror/state";
+import { zincDarkTheme, zincLightTheme } from "../../utils/zincThemes";
+import HtmlDocumentPreview from "./HtmlDocumentPreview";
+import MarkdownPreview from "./markdown/MarkdownPreview";
 
 type CodeEditorSurfaceProps = {
   content: string;
@@ -29,7 +29,7 @@ export default function CodeEditorSurface({
   htmlPreview = false,
   isHtmlFile = false,
   htmlPreviewUrl = null,
-  fileName = '',
+  fileName = "",
   isDarkMode,
   fontSize,
   showLineNumbers,
@@ -60,7 +60,7 @@ export default function CodeEditorSurface({
       height="100%"
       style={{
         fontSize: `${fontSize}px`,
-        height: '100%',
+        height: "100%",
       }}
       basicSetup={{
         lineNumbers: showLineNumbers,

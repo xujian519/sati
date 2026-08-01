@@ -3,14 +3,18 @@ import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import WebSocket from "ws";
 import type { ChannelAttachment, Gateway, GatewayChannelKey, GatewayEvent } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
-import { WeComSessionMapper, type WeComSessionMapperScopeInput, type WeComSessionMapperState } from "./WeComSessionMapper.js";
-import { renderWeComEvent } from "./wecom-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
-import WebSocket from "ws";
+import { renderWeComEvent } from "./wecom-render.js";
+import {
+  WeComSessionMapper,
+  type WeComSessionMapperScopeInput,
+  type WeComSessionMapperState,
+} from "./WeComSessionMapper.js";
 
 const DEFAULT_WS_URL = "wss://openws.work.weixin.qq.com";
 const APP_CMD_SUBSCRIBE = "aibot_subscribe";
@@ -49,17 +53,55 @@ const WECOM_DELIVERABLE_HINT = [
   "[WeCom attachment hint: If the user explicitly asks you to send a generated file to this WeCom chat, save it to an absolute local path and include MEDIA:/absolute/path in your final answer. Do not use MEDIA for files that were only read or analyzed internally.]",
 ].join("");
 const DELIVERABLE_EXTENSIONS = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".svg",
-  ".mp4", ".mov", ".avi", ".mkv", ".webm",
-  ".mp3", ".wav", ".ogg", ".opus", ".m4a", ".flac", ".amr",
-  ".pdf", ".docx", ".doc", ".odt", ".rtf", ".txt", ".md",
-  ".xlsx", ".xls", ".csv", ".tsv", ".json", ".xml", ".yaml", ".yml",
-  ".pptx", ".ppt", ".odp",
-  ".zip", ".tar", ".gz", ".tgz", ".bz2", ".7z",
-  ".html", ".htm",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".bmp",
+  ".tiff",
+  ".svg",
+  ".mp4",
+  ".mov",
+  ".avi",
+  ".mkv",
+  ".webm",
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".opus",
+  ".m4a",
+  ".flac",
+  ".amr",
+  ".pdf",
+  ".docx",
+  ".doc",
+  ".odt",
+  ".rtf",
+  ".txt",
+  ".md",
+  ".xlsx",
+  ".xls",
+  ".csv",
+  ".tsv",
+  ".json",
+  ".xml",
+  ".yaml",
+  ".yml",
+  ".pptx",
+  ".ppt",
+  ".odp",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".tgz",
+  ".bz2",
+  ".7z",
+  ".html",
+  ".htm",
 ]);
 const DELIVERABLE_EXT_PATTERN = Array.from(DELIVERABLE_EXTENSIONS)
-  .map((ext) => ext.slice(1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  .map(ext => ext.slice(1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
   .sort((a, b) => b.length - a.length)
   .join("|");
 const MEDIA_TAG_RE = new RegExp(
@@ -70,20 +112,8 @@ const BARE_DELIVERABLE_RE = new RegExp(
   `(^|[\\s(:：])((?:~/|/)[^\\s\`"',;:)\\]}]+?\\.(?:${DELIVERABLE_EXT_PATTERN}))(?=$|[\\s\`"',;:)\\]}])`,
   "gi",
 );
-const DENIED_BASENAMES = new Set([
-  ".env",
-  "auth.json",
-  "credentials",
-  "server-token",
-  "pilotdeck.yaml",
-]);
-const DENIED_SEGMENTS = new Set([
-  ".git",
-  ".ssh",
-  "node_modules",
-  "mcp-tokens",
-  "pairing",
-]);
+const DENIED_BASENAMES = new Set([".env", "auth.json", "credentials", "server-token", "sati.yaml"]);
+const DENIED_SEGMENTS = new Set([".git", ".ssh", "node_modules", "mcp-tokens", "pairing"]);
 
 type WeComAccessPolicy = "open" | "allowlist" | "disabled" | "pairing";
 type WeComMediaType = "image" | "video" | "voice" | "file";
@@ -195,33 +225,28 @@ export class WeComChannel implements ChannelAdapter {
   constructor(options: WeComChannelOptions = {}) {
     this.mapper = options.mapper ?? new WeComSessionMapper();
     const ex = options.extra ?? {};
-    this.botId = String(
-      options.botKey ?? ex.bot_id ?? ex.botId ?? process.env.WECOM_BOT_ID ?? "",
-    ).trim();
-    this.botSecret = String(
-      ex.botSecret ?? ex.secret ?? process.env.WECOM_SECRET ?? "",
-    ).trim();
-    this.wsUrl = (String(
-      ex.websocket_url ?? ex.websocketUrl ?? process.env.WECOM_WEBSOCKET_URL ?? "",
-    ).trim() || DEFAULT_WS_URL);
+    this.botId = String(options.botKey ?? ex.bot_id ?? ex.botId ?? process.env.WECOM_BOT_ID ?? "").trim();
+    this.botSecret = String(ex.botSecret ?? ex.secret ?? process.env.WECOM_SECRET ?? "").trim();
+    this.wsUrl =
+      String(ex.websocket_url ?? ex.websocketUrl ?? process.env.WECOM_WEBSOCKET_URL ?? "").trim() || DEFAULT_WS_URL;
     this.webSocketCtor = options.webSocketCtor ?? WebSocket;
     this.uuid = options.uuid ?? randomUUID;
     this.reconnectBackoffMs = options.reconnectBackoffMs ?? RECONNECT_BACKOFF_MS;
     this.deviceId = this.uuid().replace(/-/g, "");
     this.dmPolicy = normalizePolicy(ex.dm_policy ?? ex.dmPolicy ?? process.env.WECOM_DM_POLICY ?? "pairing");
     this.allowFrom = coerceList(ex.allow_from ?? ex.allowFrom ?? process.env.WECOM_ALLOWED_USERS ?? "");
-    this.groupPolicy = normalizePolicy(ex.group_policy ?? ex.groupPolicy ?? process.env.WECOM_GROUP_POLICY ?? "pairing");
+    this.groupPolicy = normalizePolicy(
+      ex.group_policy ?? ex.groupPolicy ?? process.env.WECOM_GROUP_POLICY ?? "pairing",
+    );
     this.groupAllowFrom = coerceList(ex.group_allow_from ?? ex.groupAllowFrom);
     this.groups = isRecord(ex.groups) ? ex.groups : {};
-    this.groupSessionsPerUser = typeof ex.group_sessions_per_user === "boolean"
-      ? ex.group_sessions_per_user
-      : typeof ex.groupSessionsPerUser === "boolean"
-        ? ex.groupSessionsPerUser
-        : true;
-    this.textBatchDelayMs = coerceNonNegativeMs(
-      ex.text_batch_delay_ms ?? ex.textBatchDelayMs,
-      TEXT_BATCH_DELAY_MS,
-    );
+    this.groupSessionsPerUser =
+      typeof ex.group_sessions_per_user === "boolean"
+        ? ex.group_sessions_per_user
+        : typeof ex.groupSessionsPerUser === "boolean"
+          ? ex.groupSessionsPerUser
+          : true;
+    this.textBatchDelayMs = coerceNonNegativeMs(ex.text_batch_delay_ms ?? ex.textBatchDelayMs, TEXT_BATCH_DELAY_MS);
     this.textBatchSplitDelayMs = coerceNonNegativeMs(
       ex.text_batch_split_delay_ms ?? ex.textBatchSplitDelayMs,
       TEXT_BATCH_SPLIT_DELAY_MS,
@@ -329,7 +354,11 @@ export class WeComChannel implements ChannelAdapter {
 
   private async cleanupWs(): Promise<void> {
     if (this.ws) {
-      try { this.ws.close(); } catch { /* best effort */ }
+      try {
+        this.ws.close();
+      } catch {
+        /* best effort */
+      }
       this.ws = null;
     }
   }
@@ -358,12 +387,12 @@ export class WeComChannel implements ChannelAdapter {
       }, timeoutMs);
       t.unref?.();
       this.pending.set(reqId, {
-        resolve: (p) => {
+        resolve: p => {
           clearTimeout(t);
           this.pending.delete(reqId);
           resolve(p);
         },
-        reject: (error) => {
+        reject: error => {
           clearTimeout(t);
           this.pending.delete(reqId);
           reject(error);
@@ -405,7 +434,8 @@ export class WeComChannel implements ChannelAdapter {
 
   private scheduleReconnect(): void {
     if (this.intentionalStop || this.reconnectTimer) return;
-    const delay = this.reconnectBackoffMs[Math.min(this.reconnectAttempt, this.reconnectBackoffMs.length - 1)] ?? 60_000;
+    const delay =
+      this.reconnectBackoffMs[Math.min(this.reconnectAttempt, this.reconnectBackoffMs.length - 1)] ?? 60_000;
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
@@ -477,7 +507,7 @@ export class WeComChannel implements ChannelAdapter {
     if (this.dmPolicy === "disabled") return false;
     if (this.dmPolicy === "allowlist") return entryMatches(this.allowFrom, senderId);
     if (this.dmPolicy === "open") return true;
-    this.logger?.warn?.("wecom: dm_policy=pairing is not supported in PilotDeck; DM ignored");
+    this.logger?.warn?.("wecom: dm_policy=pairing is not supported in Sati; DM ignored");
     return false;
   }
 
@@ -485,7 +515,7 @@ export class WeComChannel implements ChannelAdapter {
     if (!chatId) return false;
     if (this.groupPolicy === "disabled") return false;
     if (this.groupPolicy === "pairing") {
-      this.logger?.warn?.("wecom: group_policy=pairing is not supported in PilotDeck; group message ignored");
+      this.logger?.warn?.("wecom: group_policy=pairing is not supported in Sati; group message ignored");
       return false;
     }
     if (this.groupPolicy === "allowlist" && !entryMatches(this.groupAllowFrom, chatId)) {
@@ -529,10 +559,16 @@ export class WeComChannel implements ChannelAdapter {
       gateway: this.gateway,
       chatId,
       channelKey: "wecom",
-      reply: (msg) => this.sendReply(chatId, msg, { chatType, replyToMessageId: messageId }),
-      bindProject: (projectKey) => { this.mapper.bindProject(scopeInput, projectKey); this.onStateChange?.(this.mapper.snapshot()); },
+      reply: msg => this.sendReply(chatId, msg, { chatType, replyToMessageId: messageId }),
+      bindProject: projectKey => {
+        this.mapper.bindProject(scopeInput, projectKey);
+        this.onStateChange?.(this.mapper.snapshot());
+      },
       getProject: () => this.mapper.getProject(scopeInput),
-      resetSession: () => { this.mapper.resolve({ ...scopeInput, text: "/new" }); this.onStateChange?.(this.mapper.snapshot()); },
+      resetSession: () => {
+        this.mapper.resolve({ ...scopeInput, text: "/new" });
+        this.onStateChange?.(this.mapper.snapshot());
+      },
       logger: this.logger,
     });
   }
@@ -666,9 +702,7 @@ export class WeComChannel implements ChannelAdapter {
     const priorTimer = this.pendingTextBatchTimers.get(batch.interactionKey);
     if (priorTimer) clearTimeout(priorTimer);
 
-    const delay = batch.lastChunkLength >= SPLIT_THRESHOLD
-      ? this.textBatchSplitDelayMs
-      : this.textBatchDelayMs;
+    const delay = batch.lastChunkLength >= SPLIT_THRESHOLD ? this.textBatchSplitDelayMs : this.textBatchDelayMs;
     const timer = setTimeout(() => {
       if (this.pendingTextBatchTimers.get(batch.interactionKey) !== timer) return;
       this.pendingTextBatchTimers.delete(batch.interactionKey);
@@ -713,7 +747,9 @@ export class WeComChannel implements ChannelAdapter {
       return;
     }
 
-    if (await this.handleCommandIfNeeded(input.text, input.chatId, input.senderId, input.chatType, input.replyToMessageId)) {
+    if (
+      await this.handleCommandIfNeeded(input.text, input.chatId, input.senderId, input.chatType, input.replyToMessageId)
+    ) {
       return;
     }
     if (!mapped.message) return;
@@ -829,7 +865,10 @@ export class WeComChannel implements ChannelAdapter {
     return refs;
   }
 
-  private async cacheInboundMedia(kind: WeComMediaType, media: Record<string, unknown>): Promise<ChannelAttachment | undefined> {
+  private async cacheInboundMedia(
+    kind: WeComMediaType,
+    media: Record<string, unknown>,
+  ): Promise<ChannelAttachment | undefined> {
     let data: Buffer | undefined;
     if (media.base64) {
       try {
@@ -862,7 +901,7 @@ export class WeComChannel implements ChannelAdapter {
 
     const rawName = String(media.filename ?? media.name ?? `wecom_${kind}${defaultExtForMedia(kind)}`).trim();
     const safeName = safeFileName(rawName || `wecom_${kind}${defaultExtForMedia(kind)}`);
-    const dir = join(tmpdir(), "pilotdeck-wecom-media");
+    const dir = join(tmpdir(), "sati-wecom-media");
     await mkdir(dir, { recursive: true });
     const filePath = join(dir, `${Date.now()}-${this.uuid().replace(/-/g, "")}-${safeName}`);
     await writeFile(filePath, data, { mode: 0o600 });
@@ -911,10 +950,11 @@ export class WeComChannel implements ChannelAdapter {
         }
         if (event.type === "permission_request") {
           const questionText = this.permissions.capture(input.interactionKey, input.sessionKey, event);
-          if (questionText) await this.sendReply(input.chatId, questionText, {
-            chatType: input.chatType,
-            replyToMessageId: input.replyToMessageId,
-          });
+          if (questionText)
+            await this.sendReply(input.chatId, questionText, {
+              chatType: input.chatType,
+              replyToMessageId: input.replyToMessageId,
+            });
           continue;
         }
         await this.sendEventMedia(input.chatId, event, {
@@ -939,7 +979,7 @@ export class WeComChannel implements ChannelAdapter {
       replyToMessageId: input.replyToMessageId,
     };
     const delivery = await extractWeComDeliverables(finalText);
-    const visibleParts = [delivery.text, ...delivery.warnings].map((part) => part.trim()).filter(Boolean);
+    const visibleParts = [delivery.text, ...delivery.warnings].map(part => part.trim()).filter(Boolean);
     const visibleText = visibleParts.join("\n");
     if (visibleText) {
       await this.sendReply(input.chatId, visibleText, context);
@@ -1020,7 +1060,13 @@ export class WeComChannel implements ChannelAdapter {
     return this.sendImage(chatId, imagePath, caption, replyTo);
   }
 
-  async sendDocument(chatId: string, filePath: string, caption?: string, fileName?: string, replyTo?: string): Promise<boolean> {
+  async sendDocument(
+    chatId: string,
+    filePath: string,
+    caption?: string,
+    fileName?: string,
+    replyTo?: string,
+  ): Promise<boolean> {
     return this.sendMediaSource(chatId, filePath, { caption, fileName, replyTo, forceType: "file" });
   }
 
@@ -1153,7 +1199,11 @@ export class WeComChannel implements ChannelAdapter {
     }
   }
 
-  private async uploadMediaBytes(data: Buffer, mediaType: WeComMediaType, filename: string): Promise<Record<string, unknown>> {
+  private async uploadMediaBytes(
+    data: Buffer,
+    mediaType: WeComMediaType,
+    filename: string,
+  ): Promise<Record<string, unknown>> {
     if (data.length === 0) throw new Error("Cannot upload empty media");
     const totalChunks = Math.ceil(data.length / UPLOAD_CHUNK_SIZE);
     if (totalChunks > MAX_UPLOAD_CHUNKS) {
@@ -1192,7 +1242,10 @@ export class WeComChannel implements ChannelAdapter {
     return { ...finishResponse, ...finishBody };
   }
 
-  private async downloadRemoteBytes(url: string, maxBytes: number): Promise<{
+  private async downloadRemoteBytes(
+    url: string,
+    maxBytes: number,
+  ): Promise<{
     data: Buffer;
     contentType: string;
     contentDisposition?: string;
@@ -1202,7 +1255,7 @@ export class WeComChannel implements ChannelAdapter {
       throw new Error(`unsupported media URL protocol: ${parsed.protocol}`);
     }
     const response = await fetch(url, {
-      headers: { "User-Agent": "PilotDeck/1.0", "Accept": "*/*" },
+      headers: { "User-Agent": "Sati/1.0", Accept: "*/*" },
       signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1264,10 +1317,7 @@ export class WeComChannel implements ChannelAdapter {
     return promise;
   }
 
-  private async sendReplyRequest(
-    replyReqId: string,
-    body: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
+  private async sendReplyRequest(replyReqId: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
     const rid = String(replyReqId).trim();
     if (!rid) throw new Error("reply_req_id is required");
     const promise = this.waitForReq(rid, REQUEST_TIMEOUT_MS);
@@ -1306,16 +1356,21 @@ export class WeComChannel implements ChannelAdapter {
 
 function coerceList(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
+    return value.map(item => String(item).trim()).filter(Boolean);
   }
   if (typeof value === "string") {
-    return value.split(",").map((item) => item.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map(item => item.trim())
+      .filter(Boolean);
   }
   return [];
 }
 
 function normalizePolicy(value: unknown): WeComAccessPolicy {
-  const raw = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
   if (raw === "open" || raw === "allowlist" || raw === "disabled" || raw === "pairing") {
     return raw;
   }
@@ -1328,7 +1383,10 @@ function coerceNonNegativeMs(value: unknown, fallback: number): number {
 }
 
 function detectWeComMediaType(contentType: string): WeComMediaType {
-  const normalized = String(contentType || "").split(";", 1)[0].trim().toLowerCase();
+  const normalized = String(contentType || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
   if (normalized.startsWith("image/")) return "image";
   if (normalized.startsWith("video/")) return "video";
   if (normalized.startsWith("audio/") || normalized === "application/ogg") return "voice";
@@ -1341,7 +1399,10 @@ function applyMediaSizeLimits(
   contentType: string,
 ): Pick<PreparedOutboundMedia, "finalType" | "rejected" | "rejectReason" | "downgraded" | "downgradeNote"> {
   const sizeMb = fileSize / (1024 * 1024);
-  const normalizedContentType = String(contentType || "").split(";", 1)[0].trim().toLowerCase();
+  const normalizedContentType = String(contentType || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
 
   if (fileSize > FILE_MAX_BYTES) {
     return {
@@ -1393,7 +1454,10 @@ function applyMediaSizeLimits(
 }
 
 function normalizeContentType(contentType: string, filename: string): string {
-  const normalized = String(contentType || "").split(";", 1)[0].trim().toLowerCase();
+  const normalized = String(contentType || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
   if (normalized && normalized !== "application/octet-stream" && normalized !== "text/plain") return normalized;
   return mimeForExtension(extname(filename).toLowerCase()) || normalized || "application/octet-stream";
 }
@@ -1425,7 +1489,10 @@ function mimeForExtension(ext: string): string | undefined {
 }
 
 function extForMime(mimeType: string): string | undefined {
-  const normalized = String(mimeType || "").split(";", 1)[0].trim().toLowerCase();
+  const normalized = String(mimeType || "")
+    .split(";", 1)[0]
+    .trim()
+    .toLowerCase();
   switch (normalized) {
     case "image/png":
       return ".png";
@@ -1505,10 +1572,9 @@ async function extractWeComDeliverables(text: string): Promise<WeComDeliverableE
   };
 }
 
-async function validateWeComDeliverablePath(rawPath: string): Promise<
-  | { ok: true; deliverable: WeComDeliverable }
-  | { ok: false; reason: string }
-> {
+async function validateWeComDeliverablePath(
+  rawPath: string,
+): Promise<{ ok: true; deliverable: WeComDeliverable } | { ok: false; reason: string }> {
   const normalized = normalizeDeliverablePath(rawPath);
   if (!normalized) return { ok: false, reason: "附件路径为空。" };
   if (/^[a-z][a-z0-9+.-]*:/i.test(normalized) && !normalized.startsWith("file:")) {
@@ -1558,7 +1624,10 @@ async function validateWeComDeliverablePath(rawPath: string): Promise<
 }
 
 function normalizeDeliverablePath(rawPath: string): string {
-  return rawPath.trim().replace(/^["'`]+|["'`]+$/g, "").replace(/[.,;:)\]}]+$/g, "");
+  return rawPath
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/[.,;:)\]}]+$/g, "");
 }
 
 function mediaTypeForDeliverableExt(ext: string): WeComMediaType {
@@ -1571,16 +1640,16 @@ function mediaTypeForDeliverableExt(ext: string): WeComMediaType {
 function isDeniedDeliverablePath(path: string): boolean {
   const normalized = resolve(path);
   const home = homedir();
-  const pilotHome = process.env.PILOT_HOME || join(home, ".pilotdeck");
+  const pilotHome = process.env.SATI_HOME || join(home, ".sati");
   if (pathUnder(normalized, join(home, ".ssh"))) return true;
   if (pathUnder(normalized, join(pilotHome, "server-token"))) return true;
-  if (pathUnder(normalized, join(pilotHome, "pilotdeck.yaml"))) return true;
+  if (pathUnder(normalized, join(pilotHome, "sati.yaml"))) return true;
 
   const lowerBase = basename(normalized).toLowerCase();
   if (DENIED_BASENAMES.has(lowerBase)) return true;
 
-  const segments = normalized.split(/[\\/]+/).map((segment) => segment.toLowerCase());
-  return segments.some((segment) => DENIED_SEGMENTS.has(segment));
+  const segments = normalized.split(/[\\/]+/).map(segment => segment.toLowerCase());
+  return segments.some(segment => DENIED_SEGMENTS.has(segment));
 }
 
 function pathUnder(path: string, root: string): boolean {
@@ -1616,8 +1685,6 @@ function maskRanges(text: string, ranges: Array<[number, number]>): string {
   }
   return chars.join("");
 }
-
-
 
 function safeFileName(value: string): string {
   const name = basename(value || "wecom_media").replace(/[^\w.\-()\u4e00-\u9fff]+/g, "_");
@@ -1663,12 +1730,15 @@ function decryptWeComBytes(encryptedData: Buffer, aesKey: string): Buffer {
 }
 
 function normalizeEntry(value: string): string {
-  return value.trim().toLowerCase().replace(/^wecom:(user|group):/, "");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^wecom:(user|group):/, "");
 }
 
 function entryMatches(entries: string[], value: string): boolean {
   const normalized = normalizeEntry(value);
-  return entries.some((entry) => {
+  return entries.some(entry => {
     const candidate = normalizeEntry(entry);
     return candidate === "*" || candidate === normalized;
   });

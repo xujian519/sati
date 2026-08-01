@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import type { ExtensionResolver } from "../../src/context/extension/ExtensionResolver.js";
 import { PromptAssembler } from "../../src/context/prompt/PromptAssembler.js";
 
@@ -37,11 +36,13 @@ test("default prompt does not advertise web search when the tool is unavailable"
     model: "test-model",
     permissionMode: "bypassPermissions",
     additionalWorkingDirectories: [],
-    tools: [{
-      name: "web_fetch",
-      description: "Fetch a known URL",
-      inputSchema: { type: "object", properties: {} },
-    }],
+    tools: [
+      {
+        name: "web_fetch",
+        description: "Fetch a known URL",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ],
     now: () => new Date("2026-07-21T00:00:00.000Z"),
   }).joined;
 

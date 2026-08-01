@@ -7,9 +7,9 @@ Choose typography in this order:
 1. Explicit user or brand direction.
 2. Theme fonts inherited from a supplied PPTX.
 3. A target-platform profile requested by the user.
-4. A PilotDeck cross-platform profile inferred from the content language.
+4. A Sati cross-platform profile inferred from the content language.
 
-Never replace a supplied template font merely because a PilotDeck default exists.
+Never replace a supplied template font merely because a Sati default exists.
 
 ## Profiles
 

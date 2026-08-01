@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { mapAgentEvent } from "../../src/gateway/client/InProcessGateway.js";
 import type { AgentEvent } from "../../src/agent/protocol/events.js";
 import type { GatewayEvent } from "../../src/gateway/protocol/types.js";
@@ -29,7 +28,7 @@ function toolResultPayload(): Extract<AgentEvent, { type: "tool_result" }>["resu
 
 test("mapAgentEvent bounds live tool result previews at the gateway", () => {
   const frames = mapAgentEvent(textToolResultEvent(), "run-1");
-  const frame = frames.find((event) => event.type === "tool_call_finished");
+  const frame = frames.find(event => event.type === "tool_call_finished");
 
   assert.ok(frame);
   assert.ok(frame.resultPreview);
@@ -44,19 +43,22 @@ test("mapAgentEvent bounds live tool result previews at the gateway", () => {
 test("mapAgentEvent bounds large strings inside successful tool data", () => {
   const baseResult = toolResultPayload();
   assert.equal(baseResult.type, "success");
-  const frames = mapAgentEvent({
-    ...(textToolResultEvent() as Extract<AgentEvent, { type: "tool_result" }>),
-    result: {
-      ...baseResult,
-      data: {
-        command: "cat huge.log",
-        stdout: largeOutput,
-        nested: { stderr: largeOutput },
+  const frames = mapAgentEvent(
+    {
+      ...(textToolResultEvent() as Extract<AgentEvent, { type: "tool_result" }>),
+      result: {
+        ...baseResult,
+        data: {
+          command: "cat huge.log",
+          stdout: largeOutput,
+          nested: { stderr: largeOutput },
+        },
       },
     },
-  }, "run-1");
-  const frame = frames.find((event): event is Extract<GatewayEvent, { type: "tool_call_finished" }> =>
-    event.type === "tool_call_finished"
+    "run-1",
+  );
+  const frame = frames.find(
+    (event): event is Extract<GatewayEvent, { type: "tool_call_finished" }> => event.type === "tool_call_finished",
   );
 
   assert.ok(frame);
@@ -75,16 +77,20 @@ test("mapAgentEvent bounds large strings inside successful tool data", () => {
 });
 
 test("mapAgentEvent bounds subagent tool result content and preview", () => {
-  const frames = mapAgentEvent({
-    type: "subagent_tool_result",
-    sessionId: "session-1",
-    turnId: "turn-1",
-    subagentId: "sub-1",
-    subagentType: "explore",
-    result: toolResultPayload(),
-  }, "run-1");
-  const frame = frames.find((event): event is Extract<GatewayEvent, { type: "agent_status" }> =>
-    event.type === "agent_status" && event.event === "subagent_tool_result"
+  const frames = mapAgentEvent(
+    {
+      type: "subagent_tool_result",
+      sessionId: "session-1",
+      turnId: "turn-1",
+      subagentId: "sub-1",
+      subagentType: "explore",
+      result: toolResultPayload(),
+    },
+    "run-1",
+  );
+  const frame = frames.find(
+    (event): event is Extract<GatewayEvent, { type: "agent_status" }> =>
+      event.type === "agent_status" && event.event === "subagent_tool_result",
   );
 
   assert.ok(frame);

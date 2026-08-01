@@ -1,5 +1,5 @@
-import { jsonrepair } from "jsonrepair";
 import { randomUUID } from "node:crypto";
+import { jsonrepair } from "jsonrepair";
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
 import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeOpenAIUsage } from "../../response/normalizeUsage.js";
@@ -207,8 +207,8 @@ function finishToolCall(toolCall: ToolCallState, raw: unknown): CanonicalModelEv
       input = JSON.parse(jsonrepair(rawArguments));
       wasRepaired = true;
       console.warn(
-        `[openai-responses-stream] repaired invalid JSON for tool "${toolCall.name ?? "?"}" `
-        + `(buf_len=${rawArguments.length})`,
+        `[openai-responses-stream] repaired invalid JSON for tool "${toolCall.name ?? "?"}" ` +
+          `(buf_len=${rawArguments.length})`,
       );
     } catch {
       throw new ModelProviderError({
@@ -248,18 +248,16 @@ function isCompletedToolCall(event: Record<string, unknown>, state: OpenAIRespon
 }
 
 function toolCallKey(event: Record<string, unknown>, item: Record<string, unknown>): string {
-  return readNonEmptyString(event.item_id)
-    ?? readNonEmptyString(item.id)
-    ?? readNonEmptyString(event.call_id)
-    ?? readNonEmptyString(item.call_id)
-    ?? `index:${readNumber(event.output_index) ?? 0}`;
+  return (
+    readNonEmptyString(event.item_id) ??
+    readNonEmptyString(item.id) ??
+    readNonEmptyString(event.call_id) ??
+    readNonEmptyString(item.call_id) ??
+    `index:${readNumber(event.output_index) ?? 0}`
+  );
 }
 
-function ensureStarted(
-  events: CanonicalModelEvent[],
-  state: OpenAIResponsesStreamState,
-  raw: unknown,
-): void {
+function ensureStarted(events: CanonicalModelEvent[], state: OpenAIResponsesStreamState, raw: unknown): void {
   if (state.started) {
     return;
   }
@@ -268,15 +266,18 @@ function ensureStarted(
 }
 
 function isReasoningDelta(type: string): boolean {
-  return type === "response.reasoning_summary_text.delta"
-    || type === "response.reasoning_text.delta"
-    || type === "response.reasoning.delta";
+  return (
+    type === "response.reasoning_summary_text.delta" ||
+    type === "response.reasoning_text.delta" ||
+    type === "response.reasoning.delta"
+  );
 }
 
 function chooseToolCallId(state: OpenAIResponsesStreamState, incomingId: string | undefined): string {
-  const candidate = incomingId !== undefined && !state.usedToolCallIds.has(incomingId)
-    ? incomingId
-    : `call_${safeToolCallIdPart(state.responseId ?? state.streamSyntheticId)}_${state.usedToolCallIds.size}`;
+  const candidate =
+    incomingId !== undefined && !state.usedToolCallIds.has(incomingId)
+      ? incomingId
+      : `call_${safeToolCallIdPart(state.responseId ?? state.streamSyntheticId)}_${state.usedToolCallIds.size}`;
   const id = nextUniqueToolCallId(candidate, state.usedToolCallIds);
   state.usedToolCallIds.add(id);
   return id;
@@ -303,11 +304,14 @@ function readNumber(value: unknown): number | undefined {
 }
 
 function safeToolCallIdPart(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "response";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "response"
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }

@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { IS_PLATFORM, DISABLE_LOCAL_AUTH } from '../../../constants/config';
-import { api } from '../../../utils/api';
-import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from '../constants';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { IS_PLATFORM, DISABLE_LOCAL_AUTH } from "../../../constants/config";
+import { api } from "../../../utils/api";
+import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from "../constants";
 import type {
   AuthContextValue,
   AuthProviderProps,
@@ -10,8 +10,8 @@ import type {
   AuthUser,
   AuthUserPayload,
   OnboardingStatusPayload,
-} from '../types';
-import { parseJsonSafely, resolveApiErrorMessage } from '../utils';
+} from "../types";
+import { parseJsonSafely, resolveApiErrorMessage } from "../utils";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -28,7 +28,7 @@ const clearStoredToken = () => {
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
 
   return context;
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const payload = await parseJsonSafely<OnboardingStatusPayload>(response);
       setHasCompletedOnboarding(Boolean(payload?.hasCompletedOnboarding));
     } catch (caughtError) {
-      console.error('Error checking onboarding status:', caughtError);
+      console.error("Error checking onboarding status:", caughtError);
       // Fail open to avoid blocking access on transient onboarding status errors.
       setHasCompletedOnboarding(true);
     }
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const statusPayload = await parseJsonSafely<AuthStatusPayload>(statusResponse);
 
       if (statusPayload?.authDisabled) {
-        setUser({ username: 'local' });
+        setUser({ username: "local" });
         setNeedsSetup(false);
         await checkOnboardingStatus();
         return;
@@ -115,7 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(userPayload.user);
       await checkOnboardingStatus();
     } catch (caughtError) {
-      console.error('[Auth] Auth status check failed:', caughtError);
+      console.error("[Auth] Auth status check failed:", caughtError);
       setError(AUTH_ERROR_MESSAGES.authStatusCheckFailed);
     } finally {
       setIsLoading(false);
@@ -124,7 +124,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     if (IS_PLATFORM || DISABLE_LOCAL_AUTH) {
-      setUser({ username: DISABLE_LOCAL_AUTH ? 'local-user' : 'platform-user' });
+      setUser({ username: DISABLE_LOCAL_AUTH ? "local-user" : "platform-user" });
       setNeedsSetup(false);
       setIsLoading(true);
       checkOnboardingStatus().finally(() => setIsLoading(false));
@@ -134,7 +134,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     void checkAuthStatus();
   }, [checkAuthStatus, checkOnboardingStatus]);
 
-  const login = useCallback<AuthContextValue['login']>(
+  const login = useCallback<AuthContextValue["login"]>(
     async (username, password) => {
       try {
         setError(null);
@@ -152,7 +152,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await checkOnboardingStatus();
         return { success: true };
       } catch (caughtError) {
-        console.error('Login error:', caughtError);
+        console.error("Login error:", caughtError);
         setError(AUTH_ERROR_MESSAGES.networkError);
         return { success: false, error: AUTH_ERROR_MESSAGES.networkError };
       }
@@ -160,7 +160,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [checkOnboardingStatus, setSession],
   );
 
-  const register = useCallback<AuthContextValue['register']>(
+  const register = useCallback<AuthContextValue["register"]>(
     async (username, password) => {
       try {
         setError(null);
@@ -178,7 +178,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await checkOnboardingStatus();
         return { success: true };
       } catch (caughtError) {
-        console.error('Registration error:', caughtError);
+        console.error("Registration error:", caughtError);
         setError(AUTH_ERROR_MESSAGES.networkError);
         return { success: false, error: AUTH_ERROR_MESSAGES.networkError };
       }
@@ -192,7 +192,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     if (tokenToInvalidate) {
       void api.auth.logout().catch((caughtError: unknown) => {
-        console.error('Logout endpoint error:', caughtError);
+        console.error("Logout endpoint error:", caughtError);
       });
     }
   }, [clearSession, token]);

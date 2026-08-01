@@ -1,4 +1,4 @@
-import { GitBranch, Mail, User } from 'lucide-react';
+import { GitBranch, Mail, User } from "lucide-react";
 
 type GitConfigurationStepProps = {
   gitName: string;
@@ -22,9 +22,7 @@ export default function GitConfigurationStep({
           <GitBranch className="h-8 w-8 text-blue-600 dark:text-blue-400" />
         </div>
         <h2 className="mb-2 text-2xl font-bold text-foreground">Git Configuration</h2>
-        <p className="text-muted-foreground">
-          Configure your git identity to ensure proper attribution for commits.
-        </p>
+        <p className="text-muted-foreground">Configure your git identity to ensure proper attribution for commits.</p>
       </div>
 
       <div className="space-y-4">
@@ -37,7 +35,7 @@ export default function GitConfigurationStep({
             type="text"
             id="gitName"
             value={gitName}
-            onChange={(event) => onGitNameChange(event.target.value)}
+            onChange={event => onGitNameChange(event.target.value)}
             className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="John Doe"
             required
@@ -55,7 +53,7 @@ export default function GitConfigurationStep({
             type="email"
             id="gitEmail"
             value={gitEmail}
-            onChange={(event) => onGitEmailChange(event.target.value)}
+            onChange={event => onGitEmailChange(event.target.value)}
             className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="john@example.com"
             required

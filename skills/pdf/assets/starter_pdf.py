@@ -33,11 +33,11 @@ RULE = colors.HexColor("#D8E0EA")
 def register_document_font() -> tuple[str, bool]:
     """Return a usable font name and whether it supports the sample CJK text."""
     candidates = [
-        ("PilotDeckCJK", "/System/Library/Fonts/PingFang.ttc", 0),
-        ("PilotDeckCJK", "/System/Library/Fonts/STHeiti Light.ttc", 0),
-        ("PilotDeckCJK", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
-        ("PilotDeckCJK", "C:/Windows/Fonts/msyh.ttc", 0),
-        ("PilotDeckSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", None),
+        ("SatiCJK", "/System/Library/Fonts/PingFang.ttc", 0),
+        ("SatiCJK", "/System/Library/Fonts/STHeiti Light.ttc", 0),
+        ("SatiCJK", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+        ("SatiCJK", "C:/Windows/Fonts/msyh.ttc", 0),
+        ("SatiSans", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", None),
     ]
     for name, raw_path, subfont in candidates:
         path = Path(raw_path)
@@ -46,7 +46,7 @@ def register_document_font() -> tuple[str, bool]:
         try:
             kwargs = {} if subfont is None else {"subfontIndex": subfont}
             pdfmetrics.registerFont(TTFont(name, str(path), **kwargs))
-            return name, name == "PilotDeckCJK"
+            return name, name == "SatiCJK"
         except Exception:
             continue
     return "Helvetica", False
@@ -59,7 +59,7 @@ def header_footer(canvas, doc) -> None:
     canvas.line(doc.leftMargin, 18 * mm, A4[0] - doc.rightMargin, 18 * mm)
     canvas.setFillColor(MUTED)
     canvas.setFont(doc.body_font, 8)
-    canvas.drawString(doc.leftMargin, 11 * mm, "PilotDeck PDF starter")
+    canvas.drawString(doc.leftMargin, 11 * mm, "Sati PDF starter")
     canvas.drawRightString(A4[0] - doc.rightMargin, 11 * mm, f"Page {doc.page}")
     canvas.restoreState()
 
@@ -74,8 +74,8 @@ def build_pdf(output: Path) -> None:
         leftMargin=20 * mm,
         topMargin=20 * mm,
         bottomMargin=25 * mm,
-        title="PilotDeck PDF starter",
-        author="PilotDeck",
+        title="Sati PDF starter",
+        author="Sati",
     )
     doc.body_font = font_name
 

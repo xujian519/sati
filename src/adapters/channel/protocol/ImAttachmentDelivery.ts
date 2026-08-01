@@ -73,7 +73,12 @@ export function formatImAttachmentFallback(attachment: GatewayOutboundAttachment
 }
 
 function sanitizeFilename(name: string): string {
-  return name.replace(/[\x00-\x1f\\/:*?"<>|]+/g, "_").trim().slice(0, 180) || "attachment.bin";
+  return (
+    name
+      .replace(/[\x00-\x1f\\/:*?"<>|]+/g, "_")
+      .trim()
+      .slice(0, 180) || "attachment.bin"
+  );
 }
 
 function formatError(error: unknown): string {

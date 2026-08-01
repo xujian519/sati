@@ -13,7 +13,7 @@ import { join, relative, resolve } from "node:path";
 
 /**
  * Tree hashes of repo skills that the old bootstrap script copied into
- * `~/.pilotdeck/skills`. These are one-time migration fingerprints, not a
+ * `~/.sati/skills`. These are one-time migration fingerprints, not a
  * catalogue of the currently bundled skills. Future releases load bundled
  * skills directly and therefore do not need new entries here.
  */
@@ -60,9 +60,7 @@ export function migrateLegacyBundledSkillCopies(
   const pilotHome = resolve(options.pilotHome);
   const builtinSkillsRoot = resolve(options.builtinSkillsRoot);
   const userSkillsRoot = join(pilotHome, "skills");
-  const backupRoot = resolve(
-    options.backupRoot ?? join(pilotHome, "skill-backups", "legacy-bundled-v1"),
-  );
+  const backupRoot = resolve(options.backupRoot ?? join(pilotHome, "skill-backups", "legacy-bundled-v1"));
   const completionMarker = join(pilotHome, ".legacy-bundled-skills-migrated-v1");
   const report: LegacyBundledSkillMigrationReport = { migrated: [], failures: [] };
 
@@ -91,10 +89,8 @@ export function migrateLegacyBundledSkillCopies(
         const sourceHash = hashDirectoryTree(sourcePath);
         const currentBuiltinPath = join(builtinSkillsRoot, slug);
         const matchesCurrent =
-          existsSync(join(currentBuiltinPath, "SKILL.md")) &&
-          sourceHash === hashDirectoryTree(currentBuiltinPath);
-        const matchesLegacy =
-          KNOWN_LEGACY_BUNDLED_SKILL_HASHES[slug]?.includes(sourceHash) ?? false;
+          existsSync(join(currentBuiltinPath, "SKILL.md")) && sourceHash === hashDirectoryTree(currentBuiltinPath);
+        const matchesLegacy = KNOWN_LEGACY_BUNDLED_SKILL_HASHES[slug]?.includes(sourceHash) ?? false;
 
         if (!matchesCurrent && !matchesLegacy) continue;
 
@@ -139,7 +135,7 @@ export function migrateLegacyBundledSkillCopies(
 function hasBundledSkills(root: string): boolean {
   try {
     return readdirSync(root, { withFileTypes: true }).some(
-      (entry) => entry.isDirectory() && existsSync(join(root, entry.name, "SKILL.md")),
+      entry => entry.isDirectory() && existsSync(join(root, entry.name, "SKILL.md")),
     );
   } catch {
     return false;

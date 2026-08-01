@@ -1,5 +1,5 @@
 import { mkdir, stat, writeFile } from "node:fs/promises";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import type { ChannelAttachment } from "../../../gateway/index.js";
 
 export type ImAttachmentStoreOptions = {
@@ -101,16 +101,16 @@ export class ImAttachmentStore {
   }
 
   private safeDir(chatId: string, messageId: string): string {
-    return resolve(
-      this.rootDir,
-      safePathPart(this.channelKey),
-      safePathPart(chatId),
-      safePathPart(messageId),
-    );
+    return resolve(this.rootDir, safePathPart(this.channelKey), safePathPart(chatId), safePathPart(messageId));
   }
 
-  private safeFilename(name: string | undefined, mimeType: string | undefined, type: ChannelAttachment["type"]): string {
-    const fallback = type === "image" ? `image.${extensionForMime(mimeType)}` : `attachment.${extensionForMime(mimeType)}`;
+  private safeFilename(
+    name: string | undefined,
+    mimeType: string | undefined,
+    type: ChannelAttachment["type"],
+  ): string {
+    const fallback =
+      type === "image" ? `image.${extensionForMime(mimeType)}` : `attachment.${extensionForMime(mimeType)}`;
     const raw = basename(name?.trim() || fallback);
     const cleaned = raw.replace(/[\x00-\x1f\\/:*?"<>|]+/g, "_").slice(0, 180) || fallback;
     if (type === "image") {
@@ -131,18 +131,27 @@ function normalizeAttachmentMimeType(
 }
 
 function detectImageMime(buffer: Buffer): string | undefined {
-  if (buffer.length >= 8
-    && buffer[0] === 0x89
-    && buffer[1] === 0x50
-    && buffer[2] === 0x4e
-    && buffer[3] === 0x47
-    && buffer[4] === 0x0d
-    && buffer[5] === 0x0a
-    && buffer[6] === 0x1a
-    && buffer[7] === 0x0a) return "image/png";
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  )
+    return "image/png";
   if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
-  if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a") return "image/gif";
-  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  if (buffer.subarray(0, 6).toString("ascii") === "GIF87a" || buffer.subarray(0, 6).toString("ascii") === "GIF89a")
+    return "image/gif";
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  )
+    return "image/webp";
   return undefined;
 }
 

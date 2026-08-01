@@ -5,8 +5,12 @@ import { join } from "node:path";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAttachment, Gateway } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
-import { executeChannelCommand, resolveCommand } from "../protocol/ChannelCommandRegistry.js";
-import { guessMimeTypeFromName, ImAttachmentDelivery, type PreparedImAttachment } from "../protocol/ImAttachmentDelivery.js";
+import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
+import {
+  guessMimeTypeFromName,
+  ImAttachmentDelivery,
+  type PreparedImAttachment,
+} from "../protocol/ImAttachmentDelivery.js";
 import { ImAttachmentStore } from "../protocol/ImAttachmentStore.js";
 import { ImChatSessionState } from "../protocol/ImChatSessionState.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
@@ -17,9 +21,9 @@ import {
   type ImLiveReplyControllerOptions,
   type ImLiveReplyTransport,
 } from "../protocol/ImLiveReplyController.js";
+import { createVisibleErrorStatusDetail } from "../../../status/agentStatus.js";
 import { FeishuSessionMapper, type FeishuSessionMapperState } from "./FeishuSessionMapper.js";
 import { type FeishuLiveCardActivityKind } from "./feishu-render.js";
-import { createVisibleErrorStatusDetail } from "../../../status/agentStatus.js";
 
 let Lark: any = null;
 let larkLoadAttempted = false;
@@ -84,10 +88,7 @@ export type FeishuChannelOptions = {
    * channel calls Lark Open API directly.
    */
   send?: (message: FeishuOutboundMessage) => Promise<void>;
-  liveReplyOptions?: Omit<
-    ImLiveReplyControllerOptions<FeishuLiveMessageHandle>,
-    "transport" | "onTransportError"
-  >;
+  liveReplyOptions?: Omit<ImLiveReplyControllerOptions<FeishuLiveMessageHandle>, "transport" | "onTransportError">;
   onStateChange?: (state: FeishuSessionMapperState) => void;
 };
 
@@ -150,12 +151,14 @@ export class FeishuChannel implements ChannelAdapter {
   private tokenInflight?: Promise<string>;
   private readonly seenEvents = new Set<string>();
   private readonly activeChats = new Set<string>();
-  private readonly chatState = new ImChatSessionState<QueuedFeishuTurn>({ maxPendingTurns: FEISHU_MAX_PENDING_TURNS_PER_CHAT });
+  private readonly chatState = new ImChatSessionState<QueuedFeishuTurn>({
+    maxPendingTurns: FEISHU_MAX_PENDING_TURNS_PER_CHAT,
+  });
   private readonly inboundBatches = new Map<string, FeishuInboundBatch>();
   private readonly elicitation = new ImElicitationHelper();
   private readonly permissions = new ImPermissionHelper();
   private readonly attachmentStore = new ImAttachmentStore({
-    rootDir: join(homedir(), ".pilotdeck", "im-attachments"),
+    rootDir: join(homedir(), ".sati", "im-attachments"),
     channelKey: "feishu",
     maxBytes: FEISHU_MAX_ATTACHMENT_BYTES,
     fetchTimeoutMs: FEISHU_ATTACHMENT_FETCH_TIMEOUT_MS,
@@ -191,7 +194,7 @@ export class FeishuChannel implements ChannelAdapter {
     if (!this.explicitSend && (!this.appId || !this.appSecret)) {
       this.logger?.warn?.(
         "feishu: appId/appSecret not configured; outbound replies will not be sent. " +
-          "Configure adapters.feishu.appId/appSecret in pilotdeck.yaml.",
+          "Configure adapters.feishu.appId/appSecret in sati.yaml.",
       );
       return { stop: async () => undefined };
     }
@@ -201,7 +204,7 @@ export class FeishuChannel implements ChannelAdapter {
       if (!ok) {
         this.logger?.warn?.(
           "feishu: stream mode failed to start; falling back to webhook-only " +
-            "(set adapters.feishu.connectionMode: webhook in pilotdeck.yaml to silence this).",
+            "(set adapters.feishu.connectionMode: webhook in sati.yaml to silence this).",
         );
       }
     } else {
@@ -214,7 +217,11 @@ export class FeishuChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`feishu: stopping (${reason ?? "no reason"})`);
         if (this.wsClient && typeof this.wsClient.stop === "function") {
-          try { this.wsClient.stop(); } catch { /* best effort */ }
+          try {
+            this.wsClient.stop();
+          } catch {
+            /* best effort */
+          }
         }
         this.wsClient = null;
       },
@@ -243,8 +250,8 @@ export class FeishuChannel implements ChannelAdapter {
 
       const domain =
         this.domainName === "lark"
-          ? sdk.Domain?.Lark ?? "https://open.larksuite.com"
-          : sdk.Domain?.Feishu ?? "https://open.feishu.cn";
+          ? (sdk.Domain?.Lark ?? "https://open.larksuite.com")
+          : (sdk.Domain?.Feishu ?? "https://open.feishu.cn");
 
       this.wsClient = new sdk.WSClient({
         appId: this.appId,
@@ -325,12 +332,15 @@ export class FeishuChannel implements ChannelAdapter {
     const batch = this.inboundBatches.get(input.chatId) ?? { messages: [], draining: false };
     batch.messages.push(input);
     if (batch.timer) clearTimeout(batch.timer);
-    batch.timer = setTimeout(() => {
-      batch.timer = undefined;
-      void this.drainInboundBatch(input.chatId).catch((error: unknown) => {
-        this.logger?.error?.(`feishu: drainInboundBatch error: ${error}`);
-      });
-    }, shouldBatchFeishuMessage(input) ? FEISHU_MULTI_ATTACHMENT_BATCH_MS : 0);
+    batch.timer = setTimeout(
+      () => {
+        batch.timer = undefined;
+        void this.drainInboundBatch(input.chatId).catch((error: unknown) => {
+          this.logger?.error?.(`feishu: drainInboundBatch error: ${error}`);
+        });
+      },
+      shouldBatchFeishuMessage(input) ? FEISHU_MULTI_ATTACHMENT_BATCH_MS : 0,
+    );
     batch.timer.unref?.();
     this.inboundBatches.set(input.chatId, batch);
   }
@@ -394,10 +404,16 @@ export class FeishuChannel implements ChannelAdapter {
     const first = inputs[0];
     if (!first) return;
     const chatId = first.chatId;
-    const attachmentResults = await Promise.all(inputs.map((input) => this.extractIncomingAttachments(input)));
-    const attachments = attachmentResults.flatMap((result) => result.attachments);
-    const diagnostics = attachmentResults.flatMap((result) => result.diagnostics);
-    const text = mergeTextAndDiagnostics(inputs.map((input) => input.text).filter(Boolean).join("\n"), diagnostics);
+    const attachmentResults = await Promise.all(inputs.map(input => this.extractIncomingAttachments(input)));
+    const attachments = attachmentResults.flatMap(result => result.attachments);
+    const diagnostics = attachmentResults.flatMap(result => result.diagnostics);
+    const text = mergeTextAndDiagnostics(
+      inputs
+        .map(input => input.text)
+        .filter(Boolean)
+        .join("\n"),
+      diagnostics,
+    );
     const messageText = text.trim() || (attachments.length > 0 ? "请查看我发送的附件。" : "");
     if (!messageText.trim() && attachments.length === 0) return;
 
@@ -426,12 +442,14 @@ export class FeishuChannel implements ChannelAdapter {
       this.onStateChange?.(this.mapper.snapshot());
       const activeRun = this.chatState.activeRun(chatId);
       this.resetChatInteractionState(chatId);
-      await this.gateway?.abortTurn({
-        sessionKey: activeRun?.sessionKey ?? previousSessionKey,
-        ...(activeRun?.runId ? { runId: activeRun.runId } : {}),
-      }).catch((error: unknown) => {
-        this.logger?.warn?.(`feishu: abort previous session on /new failed: ${formatError(error)}`);
-      });
+      await this.gateway
+        ?.abortTurn({
+          sessionKey: activeRun?.sessionKey ?? previousSessionKey,
+          ...(activeRun?.runId ? { runId: activeRun.runId } : {}),
+        })
+        .catch((error: unknown) => {
+          this.logger?.warn?.(`feishu: abort previous session on /new failed: ${formatError(error)}`);
+        });
       if (!mapped.message) {
         await this.send({ chatId, text: "已创建新会话。" });
         return;
@@ -445,10 +463,16 @@ export class FeishuChannel implements ChannelAdapter {
         gateway: this.gateway,
         chatId,
         channelKey: "feishu",
-        reply: (msg) => this.send({ chatId, text: msg }),
-        bindProject: (projectKey) => { this.mapper.bindProject(chatId, projectKey); this.onStateChange?.(this.mapper.snapshot()); },
+        reply: msg => this.send({ chatId, text: msg }),
+        bindProject: projectKey => {
+          this.mapper.bindProject(chatId, projectKey);
+          this.onStateChange?.(this.mapper.snapshot());
+        },
         getProject: () => this.mapper.getProject(chatId),
-        resetSession: () => { this.mapper.resolve({ chatId, text: "/new" }); this.onStateChange?.(this.mapper.snapshot()); },
+        resetSession: () => {
+          this.mapper.resolve({ chatId, text: "/new" });
+          this.onStateChange?.(this.mapper.snapshot());
+        },
         logger: this.logger as any,
       });
       if (handled) return;
@@ -517,20 +541,26 @@ export class FeishuChannel implements ChannelAdapter {
         },
       });
       const turnTimeoutMs = this.liveReplyOptions?.turnTimeoutMs ?? 600_000;
-      const watchdog = turnTimeoutMs > 0
-        ? setTimeout(() => {
-            if (watchdogSettled) return;
-            watchdogSettled = true;
-            this.logger?.warn?.(`feishu: live reply timed out for chat ${chatId}`);
-            void liveReply.markTimedOut().catch((error: unknown) => {
-              this.logger?.warn?.(`feishu: mark timeout failed: ${error}`);
-            });
-            void this.gateway?.abortTurn({ sessionKey: turn.sessionKey, ...(activeRunId ? { runId: activeRunId } : {}), reason: "system:timeout" })
-              .catch((error: unknown) => {
-                this.logger?.warn?.(`feishu: abort timeout turn failed: ${error}`);
+      const watchdog =
+        turnTimeoutMs > 0
+          ? setTimeout(() => {
+              if (watchdogSettled) return;
+              watchdogSettled = true;
+              this.logger?.warn?.(`feishu: live reply timed out for chat ${chatId}`);
+              void liveReply.markTimedOut().catch((error: unknown) => {
+                this.logger?.warn?.(`feishu: mark timeout failed: ${error}`);
               });
-          }, turnTimeoutMs)
-        : undefined;
+              void this.gateway
+                ?.abortTurn({
+                  sessionKey: turn.sessionKey,
+                  ...(activeRunId ? { runId: activeRunId } : {}),
+                  reason: "system:timeout",
+                })
+                .catch((error: unknown) => {
+                  this.logger?.warn?.(`feishu: abort timeout turn failed: ${error}`);
+                });
+            }, turnTimeoutMs)
+          : undefined;
       watchdog?.unref?.();
       try {
         for await (const event of this.gateway.submitTurn({
@@ -545,7 +575,11 @@ export class FeishuChannel implements ChannelAdapter {
           if (!isCurrentTurn()) break;
           if (event.type === "turn_started") {
             activeRunId = event.runId;
-            this.chatState.setActiveRun(chatId, { sessionKey: turn.sessionKey, runId: activeRunId, generation: turn.generation });
+            this.chatState.setActiveRun(chatId, {
+              sessionKey: turn.sessionKey,
+              runId: activeRunId,
+              generation: turn.generation,
+            });
           }
           if (event.type === "elicitation_request") {
             const questionText = this.elicitation.capture(chatId, turn.sessionKey, event);
@@ -582,7 +616,8 @@ export class FeishuChannel implements ChannelAdapter {
           detail: createVisibleErrorStatusDetail({
             message: "Failed to process this message. Please retry.",
             code: "channel_submit_failed",
-            userHint: "PilotDeck failed before this IM turn could finish. Retry the message; if it repeats, check the channel and gateway logs.",
+            userHint:
+              "Sati failed before this IM turn could finish. Retry the message; if it repeats, check the channel and gateway logs.",
             scope: "channel",
             source: "im_channel",
             detail: {
@@ -610,9 +645,7 @@ export class FeishuChannel implements ChannelAdapter {
   }
 
   async deliverCronResult(delivery: CronResultDelivery): Promise<boolean> {
-    return deliverChatCronResult(delivery, this.channelKey, (chatId, text) =>
-      this.sendTextMessage({ chatId, text }),
-    );
+    return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.sendTextMessage({ chatId, text }));
   }
 
   private createLiveReplyTransport(chatId: string): ImLiveReplyTransport<FeishuLiveMessageHandle> {
@@ -620,11 +653,14 @@ export class FeishuChannel implements ChannelAdapter {
     let liveHandle: FeishuLiveMessageHandle | undefined;
     return {
       maxMessageLength: MAX_TEXT_MESSAGE_LENGTH,
-      send: async (text) => {
-        const result = await this.sendLiveMessage({ chatId, text }, {
-          isFinal: !text.endsWith(liveCursor),
-          activityKind: this.liveActivityKindFromText(text),
-        });
+      send: async text => {
+        const result = await this.sendLiveMessage(
+          { chatId, text },
+          {
+            isFinal: !text.endsWith(liveCursor),
+            activityKind: this.liveActivityKindFromText(text),
+          },
+        );
         if (result === false) return false;
         liveHandle = result ? { messageId: result.messageId, livePost: result.livePost } : undefined;
         return liveHandle;
@@ -643,12 +679,15 @@ export class FeishuChannel implements ChannelAdapter {
     await this.sendTextMessage(message);
   }
 
-  private async sendAttachment(chatId: string, attachment: Parameters<ImAttachmentDelivery["send"]>[0]): Promise<boolean> {
+  private async sendAttachment(
+    chatId: string,
+    attachment: Parameters<ImAttachmentDelivery["send"]>[0],
+  ): Promise<boolean> {
     return new ImAttachmentDelivery({
       maxBytes: FEISHU_MAX_ATTACHMENT_BYTES,
       logger: this.logger,
-      sendTextFallback: (text) => this.send({ chatId, text }),
-      sendPrepared: (prepared) => this.uploadAndSendFeishuAttachment(chatId, prepared),
+      sendTextFallback: text => this.send({ chatId, text }),
+      sendPrepared: prepared => this.uploadAndSendFeishuAttachment(chatId, prepared),
     }).send(attachment);
   }
 
@@ -667,7 +706,11 @@ export class FeishuChannel implements ChannelAdapter {
     const token = await this.getTenantAccessToken();
     const form = new FormData();
     form.set("image_type", "message");
-    form.set("image", new Blob([new Uint8Array(prepared.buffer)], { type: prepared.mimeType ?? "application/octet-stream" }), prepared.name);
+    form.set(
+      "image",
+      new Blob([new Uint8Array(prepared.buffer)], { type: prepared.mimeType ?? "application/octet-stream" }),
+      prepared.name,
+    );
     const res = await fetch(FEISHU_IMAGE_UPLOAD_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -686,7 +729,11 @@ export class FeishuChannel implements ChannelAdapter {
     const form = new FormData();
     form.set("file_type", inferFeishuFileType(prepared.name, prepared.mimeType));
     form.set("file_name", prepared.name);
-    form.set("file", new Blob([new Uint8Array(prepared.buffer)], { type: prepared.mimeType ?? "application/octet-stream" }), prepared.name);
+    form.set(
+      "file",
+      new Blob([new Uint8Array(prepared.buffer)], { type: prepared.mimeType ?? "application/octet-stream" }),
+      prepared.name,
+    );
     const res = await fetch(FEISHU_FILE_UPLOAD_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -707,7 +754,10 @@ export class FeishuChannel implements ChannelAdapter {
     const messageType = input.messageType;
     if (messageType !== "image" && messageType !== "file") {
       if (messageType && !isSupportedFeishuInboundType(messageType)) {
-        return { attachments: [], diagnostics: [`[Attachment diagnostics] 飞书 ${messageType} 消息暂不支持附件解析。`] };
+        return {
+          attachments: [],
+          diagnostics: [`[Attachment diagnostics] 飞书 ${messageType} 消息暂不支持附件解析。`],
+        };
       }
       return { attachments: [], diagnostics: [] };
     }
@@ -778,7 +828,11 @@ export class FeishuChannel implements ChannelAdapter {
     return this.sendRawMessage(message.chatId, "text", { text: message.text });
   }
 
-  private async sendRawMessage(chatId: string, msgType: "text" | "image" | "file", content: Record<string, unknown>): Promise<string | undefined | false> {
+  private async sendRawMessage(
+    chatId: string,
+    msgType: "text" | "image" | "file",
+    content: Record<string, unknown>,
+  ): Promise<string | undefined | false> {
     if (!this.appId || !this.appSecret) {
       this.logger?.warn?.("feishu: cannot send — appId/appSecret missing");
       return false;
@@ -996,7 +1050,12 @@ export class FeishuChannel implements ChannelAdapter {
           headers: { "Content-Type": "application/json; charset=utf-8" },
           body: JSON.stringify({ app_id: this.appId, app_secret: this.appSecret }),
         });
-        const json = (await res.json()) as { code?: number; msg?: string; tenant_access_token?: string; expire?: number };
+        const json = (await res.json()) as {
+          code?: number;
+          msg?: string;
+          tenant_access_token?: string;
+          expire?: number;
+        };
         if (json.code !== 0 || !json.tenant_access_token) {
           throw new Error(`tenant_access_token failed: code=${json.code} msg=${json.msg}`);
         }
@@ -1040,7 +1099,7 @@ export class FeishuChannel implements ChannelAdapter {
     }
 
     if (this.verifyToken) {
-      const token = (raw.token as string | undefined) ?? ((raw.header as { token?: string } | undefined)?.token);
+      const token = (raw.token as string | undefined) ?? (raw.header as { token?: string } | undefined)?.token;
       if (token && token !== this.verifyToken) {
         this.logger?.warn?.("feishu: verifyToken mismatch — ignoring event");
         return { kind: "ignore" };
@@ -1161,7 +1220,7 @@ function parseJsonObject(content: string | undefined): Record<string, unknown> {
   if (!content) return {};
   try {
     const parsed = JSON.parse(content) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -1194,7 +1253,6 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-
 function renderFeishuLivePost(
   text: string,
   options: { isFinal: boolean; activityKind?: FeishuLiveCardActivityKind },
@@ -1212,7 +1270,9 @@ function normalizeLivePostText(
   options: { isFinal: boolean; activityKind?: FeishuLiveCardActivityKind },
 ): string {
   const stripped = text.replace(/\s*▉\s*$/u, "").trim();
-  const body = stripped || (options.isFinal ? "处理完成，但没有可见回复。" : livePostActivityLabel(options.activityKind ?? "thinking"));
+  const body =
+    stripped ||
+    (options.isFinal ? "处理完成，但没有可见回复。" : livePostActivityLabel(options.activityKind ?? "thinking"));
   if (body.length <= MAX_TEXT_MESSAGE_LENGTH) return body;
   return `${body.slice(0, Math.max(0, MAX_TEXT_MESSAGE_LENGTH - 12)).trimEnd()}\n…（已截断）`;
 }

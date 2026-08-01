@@ -1,0 +1,73 @@
+# 说明书质量检查规则
+# 对应工具：spec-quality (SpecQualityCheckerTool)
+version: "1.0.0"
+tool: "spec-quality"
+
+keyword_lists:
+  commercial_terms:
+    description: "商业宣传用语"
+    legal_basis: "审查指南第二部分第二章2.2.6"
+    items:
+      - "最佳"
+      - "最优"
+      - "最好"
+      - "革命性"
+      - "颠覆性"
+      - "突破性"
+      - "世界领先"
+      - "国内首创"
+      - "首创"
+      - "独特"
+  uncertain_terms:
+    description: "不确定用语"
+    legal_basis: "审查指南第二部分第二章2.2.6"
+    items:
+      - "厚"
+      - "薄"
+      - "强"
+      - "弱"
+      - "高温"
+      - "高压"
+      - "很宽范围"
+      - "很大"
+      - "很小"
+  vague_range_terms:
+    description: "范围模糊词"
+    legal_basis: "审查指南第二部分第二章2.2.6"
+    items:
+      - "例如"
+      - "最好是"
+      - "尤其是"
+      - "必要时"
+      - "约"
+      - "接近"
+      - "或类似物"
+  fuzzy_action_terms:
+    description: "模糊操作词"
+    legal_basis: "审查指南第二部分第二章2.2.6"
+    items:
+      - "适当调整"
+      - "合理设置"
+      - "适当选择"
+      - "合理确定"
+      - "根据需要"
+
+patterns:
+  prohibited_references:
+    description: "禁用引用语正则模式"
+    legal_basis: "专利法实施细则第17条"
+    regex: "如权利要求\\d+所述|如上述权利要求所述|如前述权利要求所述"
+  term_extraction:
+    description: "技术术语提取正则"
+    regex: "[一-龥]{2,4}(?:装置|设备|系统|方法|模块|单元)"
+
+thresholds:
+  term_consistency_ratio:
+    description: "术语一致性阈值"
+    value: 0.7
+  enablement_min_words:
+    description: "充分公开最低字数"
+    value: 300
+  background_min_chars:
+    description: "背景技术最低字数"
+    value: 50

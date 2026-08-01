@@ -1,0 +1,108 @@
+# 充分公开规则
+# 基于：专利法第26条第3款、审查指南第二部分第二章
+# 来源：BCIP CON-201 + 审查指南
+
+rules:
+  - ruleId: DIS-001
+    name: 说明书清楚完整
+    description: 说明书应当对发明作出清楚、完整的说明
+    legalBasis: 专利法第26条第3款
+    domain: patent_disclosure
+    severity: critical
+    action: block
+    check:
+      type: specification_clarity
+      dimensions:
+        - dimension: clarity
+          description: 清楚
+          checks:
+            - "技术问题明确"
+            - "技术方案与问题对应"
+            - "技术效果与方案因果关系清晰"
+        - dimension: completeness
+          description: 完整
+          checks:
+            - "技术领域栏存在"
+            - "背景技术栏存在且记载了现有技术"
+            - "发明内容栏存在且公开了技术方案"
+            - "有益效果栏存在且与技术方案对应"
+            - "至少一个具体实施方式（实施例）"
+            - "有附图的必须有附图说明"
+      assessment:
+        allPass: pass
+        oneFail: warn
+        twoOrMoreFail: fail
+
+  - ruleId: DIS-002
+    name: 能够实现（可实施性）
+    description: 本领域技术人员根据说明书的记载能够实现该发明
+    legalBasis: 专利法第26条第3款（能够实现）
+    domain: patent_disclosure
+    severity: critical
+    action: block
+    check:
+      type: enablement
+      rules:
+        - "实施例数量与保护范围匹配（宽范围需多实施例）"
+        - "化学领域需要具体实施例（化合物制备/参数）"
+        - "计算机领域需要有流程图或数据结构"
+        - "参数/方法/步骤具体可操作"
+        - "涉及生物材料的需保藏"
+      assessment:
+        enable: pass
+        notEnable: fail
+        uncertain: warn
+
+  - ruleId: DIS-003
+    name: 技术手段的可实施性
+    description: 说明书记载的技术手段应当使本领域技术人员能够实施
+    legalBasis: 审查指南第二部分第二章2.1.3
+    domain: patent_disclosure
+    severity: critical
+    action: review
+    check:
+      type: means_enablement
+      principles:
+        - 仅给出任务/功能描述而未给出具体技术手段→不充分公开
+        - 手段含糊不清（如'适当调整''合理设置'）→不充分公开
+        - 依赖随机因素或个人技艺→不充分公开
+      assessment:
+        meansClear: pass
+        meansVague: fail
+        meansMissing: fail
+
+  - ruleId: DIS-004
+    name: 实施例充分公开
+    description: 具体实施方式中的实施例应当充分公开
+    legalBasis: 审查指南第二部分第二章2.2.6
+    domain: patent_disclosure
+    severity: major
+    action: review
+    check:
+      type: embodiment_disclosure
+      rules:
+        - "至少包含一个实施例"
+        - "数值范围需要有端点实施例"
+        - "优选方案需要具体实施数据或效果"
+        - "实施例中的参数应明确、可测量"
+      assessment:
+        sufficient: pass
+        insufficient: warn
+
+  - ruleId: DIS-005
+    name: 附图公开充分
+    description: 有附图的专利申请，附图应清楚反映技术方案
+    legalBasis: 审查指南第二部分第二章2.2.7
+    domain: patent_disclosure
+    severity: major
+    action: review
+    check:
+      type: figure_disclosure
+      rules:
+        - "附图中标号与说明书中标号一致"
+        - "附图能反映技术方案的主要结构或步骤"
+        - "附图说明中对每幅图有图名和简要说明"
+      assessment:
+        adequate: pass
+        inconsistent: fail
+        missingDescription: warn

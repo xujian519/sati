@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# PilotDeck one-line installer for macOS and Linux.
+# Sati one-line installer for macOS and Linux.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/xujian519/sati/main/install.sh | bash
 
-REPO_URL="${PILOTDECK_REPO_URL:-https://github.com/OpenBMB/PilotDeck.git}"
-BRANCH="${PILOTDECK_BRANCH:-main}"
-INSTALL_DIR="${PILOTDECK_INSTALL_DIR:-$HOME/.pilotdeck/app}"
-CONFIG_FILE="${PILOTDECK_CONFIG_PATH:-$HOME/.pilotdeck/pilotdeck.yaml}"
-BIN_LINK="${PILOTDECK_BIN_LINK:-/usr/local/bin/pilotdeck}"
-MAX_PORT_TRIES="${PILOTDECK_MAX_PORT_TRIES:-20}"
+REPO_URL="${SATI_REPO_URL:-https://github.com/xujian519/sati.git}"
+BRANCH="${SATI_BRANCH:-main}"
+INSTALL_DIR="${SATI_INSTALL_DIR:-$HOME/.sati/app}"
+CONFIG_FILE="${SATI_CONFIG_PATH:-$HOME/.sati/sati.yaml}"
+BIN_LINK="${SATI_BIN_LINK:-/usr/local/bin/sati}"
+MAX_PORT_TRIES="${SATI_MAX_PORT_TRIES:-20}"
 MIN_NODE_VERSION="22.13.0"
-MAX_NODE_MAJOR="22"
-NODE_INSTALL_VERSION="${PILOTDECK_NODE_VERSION:-22}"
-NODE_FALLBACK_VERSION="${PILOTDECK_NODE_FALLBACK_VERSION:-22.13.0}"
-NODE_DIRECT_INSTALL_ROOT="$HOME/.local/share/pilotdeck-node"
-NODE_DIST_MIRROR="${PILOTDECK_NODE_DIST_MIRROR:-https://nodejs.org/dist}"
-NODE_DIST_FALLBACK_MIRRORS="${PILOTDECK_NODE_DIST_FALLBACK_MIRRORS:-}"
+NODE_INSTALL_VERSION="${SATI_NODE_VERSION:-22}"
+NODE_FALLBACK_VERSION="${SATI_NODE_FALLBACK_VERSION:-22.13.0}"
+NODE_DIRECT_INSTALL_ROOT="$HOME/.local/share/sati-node"
+NODE_DIST_MIRROR="${SATI_NODE_DIST_MIRROR:-https://nodejs.org/dist}"
+NODE_DIST_FALLBACK_MIRRORS="${SATI_NODE_DIST_FALLBACK_MIRRORS:-}"
 APT_UPDATED=0
 # 1 = repo was (re)cloned or its HEAD changed; drives whether we reinstall/rebuild.
 REPO_CHANGED=1
@@ -45,14 +44,14 @@ L() {
 }
 
 # Language for user-facing guidance (en|zh). Resolution order:
-#   1. PILOTDECK_LANG env var (en/zh)
+#   1. SATI_LANG env var (en/zh)
 #   2. Interactive prompt when a terminal is available (works with curl | bash
 #      because we read from /dev/tty, not the piped stdin)
 #   3. Auto-detect from the locale ($LANG / $LC_ALL); default to English.
 PD_LANG="en"
 
 select_language() {
-  case "${PILOTDECK_LANG:-}" in
+  case "${SATI_LANG:-}" in
     zh|cn|zh_CN|zh-CN|中文) PD_LANG="zh"; return ;;
     en|en_US|en-US|english|English) PD_LANG="en"; return ;;
   esac
@@ -100,7 +99,7 @@ print_getting_started_en() {
   echo "==============="
   echo ""
   echo -e "  ${BOLD}1. Configure your model & API key${RESET}"
-  echo -e "     PilotDeck ships with a placeholder config, so your first stop is onboarding."
+  echo -e "     Sati ships with a placeholder config, so your first stop is onboarding."
   echo -e "     Open ${GREEN}${ui_url}${RESET} — it redirects to the onboarding screen where you"
   echo -e "     choose a provider, paste an API key, and pick a model."
   echo -e "     ${DIM}Supported: OpenAI, Anthropic, Google Gemini, DeepSeek, Qwen, Kimi, MiniMax,${RESET}"
@@ -118,15 +117,13 @@ print_getting_started_en() {
   echo -e "       ${DIM}      url: https://api.deepseek.com/v1${RESET}"
   echo -e "       ${DIM}      apiKey: sk-your-api-key${RESET}"
   echo ""
-  echo -e "  ${BOLD}3. Manage PilotDeck from the CLI${RESET}"
-  echo -e "     ${GREEN}pilotdeck${RESET}         start the server"
-  echo -e "     ${GREEN}pilotdeck status${RESET}  show install path, config, and URL"
-  echo -e "     ${GREEN}pilotdeck help${RESET}    list all commands"
+  echo -e "  ${BOLD}3. Manage Sati from the CLI${RESET}"
+  echo -e "     ${GREEN}sati${RESET}         start the server"
+  echo -e "     ${GREEN}sati status${RESET}  show install path, config, and URL"
+  echo -e "     ${GREEN}sati help${RESET}    list all commands"
   echo ""
   echo -e "  ${BOLD}Docs & community${RESET}"
-  echo -e "     Tutorial:  ${DIM}https://pilotdeck.openbmb.cn/pilotdeck.github.io/docs/en/introduction${RESET}"
-  echo -e "     Website:   ${DIM}https://pilotdeck.openbmb.cn${RESET}"
-  echo -e "     Issues:    ${DIM}https://github.com/OpenBMB/PilotDeck/issues${RESET}"
+  echo -e "     Issues:    ${DIM}https://github.com/xujian519/sati/issues${RESET}"
   echo ""
 }
 
@@ -137,7 +134,7 @@ print_getting_started_zh() {
   echo "========"
   echo ""
   echo -e "  ${BOLD}1. 配置模型与 API Key${RESET}"
-  echo -e "     PilotDeck 初始使用占位配置,因此第一步是完成引导配置。"
+  echo -e "     Sati 初始使用占位配置,因此第一步是完成引导配置。"
   echo -e "     打开 ${GREEN}${ui_url}${RESET} — 页面会自动跳转到引导界面,"
   echo -e "     在这里选择服务商、粘贴 API Key 并选择模型。"
   echo -e "     ${DIM}已支持:OpenAI、Anthropic、Google Gemini、DeepSeek、Qwen、Kimi、MiniMax,${RESET}"
@@ -155,19 +152,17 @@ print_getting_started_zh() {
   echo -e "       ${DIM}      url: https://api.deepseek.com/v1${RESET}"
   echo -e "       ${DIM}      apiKey: sk-your-api-key${RESET}"
   echo ""
-  echo -e "  ${BOLD}3. 通过命令行管理 PilotDeck${RESET}"
-  echo -e "     ${GREEN}pilotdeck${RESET}         启动服务"
-  echo -e "     ${GREEN}pilotdeck status${RESET}  查看安装路径、配置和访问地址"
-  echo -e "     ${GREEN}pilotdeck help${RESET}    查看全部命令"
+  echo -e "  ${BOLD}3. 通过命令行管理 Sati${RESET}"
+  echo -e "     ${GREEN}sati${RESET}         启动服务"
+  echo -e "     ${GREEN}sati status${RESET}  查看安装路径、配置和访问地址"
+  echo -e "     ${GREEN}sati help${RESET}    查看全部命令"
   echo ""
   echo -e "  ${BOLD}文档与社区${RESET}"
-  echo -e "     教程:  ${DIM}https://pilotdeck.openbmb.cn/pilotdeck.github.io/docs/en/introduction${RESET}"
-  echo -e "     官网:  ${DIM}https://pilotdeck.openbmb.cn${RESET}"
-  echo -e "     反馈:  ${DIM}https://github.com/OpenBMB/PilotDeck/issues${RESET}"
+  echo -e "     反馈:  ${DIM}https://github.com/xujian519/sati/issues${RESET}"
   echo ""
 }
 
-# Sentinel written by scripts/bootstrap-pilotdeck-config.mjs for an unconfigured install.
+# Sentinel written by scripts/bootstrap-sati-config.mjs for an unconfigured install.
 ONBOARD_SENTINEL="PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE"
 
 # True when the config already holds a real provider/model (not the placeholder).
@@ -178,8 +173,8 @@ config_is_configured() {
   return 0
 }
 
-# Write a minimal, valid pilotdeck.yaml from the collected provider details.
-write_pilotdeck_config() {
+# Write a minimal, valid sati.yaml from the collected provider details.
+write_sati_config() {
   local pid="$1" protocol="$2" url="$3" api_key="$4" model="$5"
   mkdir -p "$(dirname "$CONFIG_FILE")"
   if [[ -f "$CONFIG_FILE" ]]; then
@@ -214,9 +209,9 @@ YAML
 
 # Interactive terminal setup wizard: pick a provider, enter an API key, choose a
 # model, and write the config. Skips cleanly when non-interactive, already
-# configured, or PILOTDECK_SKIP_ONBOARDING=1.
+# configured, or SATI_SKIP_ONBOARDING=1.
 run_onboarding() {
-  if [[ "${PILOTDECK_SKIP_ONBOARDING:-0}" == "1" ]]; then
+  if [[ "${SATI_SKIP_ONBOARDING:-0}" == "1" ]]; then
     return
   fi
   if config_is_configured; then
@@ -300,7 +295,7 @@ run_onboarding() {
     return
   fi
 
-  write_pilotdeck_config "$pid" "$protocol" "$url" "$api_key" "$model"
+  write_sati_config "$pid" "$protocol" "$url" "$api_key" "$model"
   ok "$(L "Saved config for ${pid}/${model} to" "已保存 ${pid}/${model} 的配置到") ${DIM}${CONFIG_FILE}${RESET}"
 }
 
@@ -324,11 +319,6 @@ version_at_least() {
   if (( v_minor > min_minor )); then return 0; fi
   if (( v_minor < min_minor )); then return 1; fi
   (( v_patch >= min_patch ))
-}
-
-node_major() {
-  local version="${1#v}"
-  printf "%s" "${version%%.*}"
 }
 
 expected_node_arch() {
@@ -445,7 +435,7 @@ install_node_tarball() {
 
   if [[ "$downloaded" != "1" ]]; then
     rm -rf "$tmp_dir"
-    fail "$(L "Could not download Node.js. Check your network/proxy, or explicitly set PILOTDECK_NODE_DIST_MIRROR / PILOTDECK_NODE_DIST_FALLBACK_MIRRORS to a trusted reachable Node.js mirror." "无法下载 Node.js。请检查网络/代理，或显式将 PILOTDECK_NODE_DIST_MIRROR / PILOTDECK_NODE_DIST_FALLBACK_MIRRORS 设置为可信且可访问的 Node.js 镜像。")"
+    fail "$(L "Could not download Node.js. Check your network/proxy, or explicitly set SATI_NODE_DIST_MIRROR / SATI_NODE_DIST_FALLBACK_MIRRORS to a trusted reachable Node.js mirror." "无法下载 Node.js。请检查网络/代理，或显式将 SATI_NODE_DIST_MIRROR / SATI_NODE_DIST_FALLBACK_MIRRORS 设置为可信且可访问的 Node.js 镜像。")"
   fi
 
   mkdir -p "$install_root"
@@ -466,19 +456,19 @@ ensure_node_runtime() {
 
   if command -v node >/dev/null 2>&1; then
     node_version="$(node --version)"
-    if version_at_least "$node_version" "$MIN_NODE_VERSION" && [[ "$(node_major "$node_version")" == "$MAX_NODE_MAJOR" ]] && node_supports_sqlite && node_arch_matches_host; then
+    if version_at_least "$node_version" "$MIN_NODE_VERSION" && node_supports_sqlite && node_arch_matches_host; then
       ok "$(L "Node.js ${node_version} found" "已找到 Node.js ${node_version}")"
       return
     fi
-    warn "$(L "Node.js ${node_version} is not the supported Node.js 22 runtime for this machine (need >=${MIN_NODE_VERSION}, <23, node:sqlite, and matching CPU architecture). Installing/using Node.js ${NODE_INSTALL_VERSION}..." "Node.js ${node_version} 不是当前机器支持的 Node.js 22 运行时(需要 >=${MIN_NODE_VERSION} 且 <23、支持 node:sqlite,并匹配 CPU 架构)。正在安装/使用 Node.js ${NODE_INSTALL_VERSION}...")"
+    warn "$(L "Node.js ${node_version} is not the supported Node.js runtime for this machine (need >=${MIN_NODE_VERSION}, node:sqlite, and matching CPU architecture). Installing/using Node.js ${NODE_INSTALL_VERSION}..." "Node.js ${node_version} 不是当前机器支持的 Node.js 运行时(需要 >=${MIN_NODE_VERSION}、支持 node:sqlite,并匹配 CPU 架构)。正在安装/使用 Node.js ${NODE_INSTALL_VERSION}...")"
   else
     warn "$(L "Node.js not found. Installing Node.js ${NODE_FALLBACK_VERSION}..." "未找到 Node.js,正在安装 Node.js ${NODE_FALLBACK_VERSION}...")"
   fi
 
   install_node_runtime
   node_version="$(node --version 2>/dev/null || true)"
-  if [[ -z "$node_version" ]] || ! version_at_least "$node_version" "$MIN_NODE_VERSION" || [[ "$(node_major "$node_version")" != "$MAX_NODE_MAJOR" ]] || ! node_supports_sqlite || ! node_arch_matches_host; then
-    fail "$(L "Node.js >=${MIN_NODE_VERSION} and <23 with node:sqlite and matching CPU architecture is required. Current: ${node_version:-not found}, arch $(node -p "process.arch" 2>/dev/null || printf unknown), host $(uname -m)." "需要带 node:sqlite、且匹配当前 CPU 架构的 Node.js >=${MIN_NODE_VERSION} 且 <23。当前:${node_version:-未找到}, 架构 $(node -p "process.arch" 2>/dev/null || printf unknown), 主机 $(uname -m)。")"
+  if [[ -z "$node_version" ]] || ! version_at_least "$node_version" "$MIN_NODE_VERSION" || ! node_supports_sqlite || ! node_arch_matches_host; then
+    fail "$(L "Node.js >=${MIN_NODE_VERSION} with node:sqlite and matching CPU architecture is required. Current: ${node_version:-not found}, arch $(node -p "process.arch" 2>/dev/null || printf unknown), host $(uname -m)." "需要带 node:sqlite、且匹配当前 CPU 架构的 Node.js >=${MIN_NODE_VERSION}。当前:${node_version:-未找到}, 架构 $(node -p "process.arch" 2>/dev/null || printf unknown), 主机 $(uname -m)。")"
   fi
   ok "$(L "Node.js ${node_version} installed" "已安装 Node.js ${node_version}")"
 }
@@ -563,7 +553,7 @@ check_bootstrap_requirements() {
   print_minimum_requirements
 
   if [[ -z "${BASH_VERSION:-}" ]]; then
-    fail "$(L "This installer must run with bash. Try: curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash" "该安装器必须使用 bash 运行。请尝试:curl -fsSL https://raw.githubusercontent.com/OpenBMB/PilotDeck/main/install.sh | bash")"
+    fail "$(L "This installer must run with bash. Try: curl -fsSL https://raw.githubusercontent.com/xujian519/sati/main/install.sh | bash" "该安装器必须使用 bash 运行。请尝试:curl -fsSL https://raw.githubusercontent.com/xujian519/sati/main/install.sh | bash")"
   fi
 
   if ! command -v curl >/dev/null 2>&1; then
@@ -678,7 +668,7 @@ install_git_lfs() {
   elif [[ "$PLATFORM" == "linux" ]]; then
     install_linux_packages git-lfs
   else
-    fail "$(L "git-lfs is required for PilotDeck assets. On macOS, install Homebrew and run: brew install git-lfs" "PilotDeck 素材需要 git-lfs。在 macOS 上请安装 Homebrew 后运行:brew install git-lfs")"
+    fail "$(L "git-lfs is required for Sati assets. On macOS, install Homebrew and run: brew install git-lfs" "Sati 素材需要 git-lfs。在 macOS 上请安装 Homebrew 后运行:brew install git-lfs")"
   fi
 }
 
@@ -796,21 +786,21 @@ find_free_port() {
 
 resolve_runtime_ports() {
   local server_base="${SERVER_PORT:-3001}"
-  local gateway_base="${PILOTDECK_GATEWAY_PORT:-18789}"
+  local gateway_base="${SATI_GATEWAY_PORT:-18789}"
 
   SERVER_PORT="$(find_free_port "$server_base")" || \
     fail "$(L "Could not find a free UI port within ${MAX_PORT_TRIES} ports from ${server_base}." "从 ${server_base} 起 ${MAX_PORT_TRIES} 个端口内未找到空闲的 UI 端口。")"
-  PILOTDECK_GATEWAY_PORT="$(find_free_port "$gateway_base")" || \
+  SATI_GATEWAY_PORT="$(find_free_port "$gateway_base")" || \
     fail "$(L "Could not find a free gateway port within ${MAX_PORT_TRIES} ports from ${gateway_base}." "从 ${gateway_base} 起 ${MAX_PORT_TRIES} 个端口内未找到空闲的网关端口。")"
-  PILOTDECK_GATEWAY_URL="ws://127.0.0.1:${PILOTDECK_GATEWAY_PORT}/ws"
+  SATI_GATEWAY_URL="ws://127.0.0.1:${SATI_GATEWAY_PORT}/ws"
 
-  export SERVER_PORT PILOTDECK_GATEWAY_PORT PILOTDECK_GATEWAY_URL
+  export SERVER_PORT SATI_GATEWAY_PORT SATI_GATEWAY_URL
 
   if [[ "$SERVER_PORT" != "$server_base" ]]; then
     warn "$(L "UI port ${server_base} is busy; using ${SERVER_PORT} instead." "UI 端口 ${server_base} 被占用,改用 ${SERVER_PORT}。")"
   fi
-  if [[ "$PILOTDECK_GATEWAY_PORT" != "$gateway_base" ]]; then
-    warn "$(L "Gateway port ${gateway_base} is busy; using ${PILOTDECK_GATEWAY_PORT} instead." "网关端口 ${gateway_base} 被占用,改用 ${PILOTDECK_GATEWAY_PORT}。")"
+  if [[ "$SATI_GATEWAY_PORT" != "$gateway_base" ]]; then
+    warn "$(L "Gateway port ${gateway_base} is busy; using ${SATI_GATEWAY_PORT} instead." "网关端口 ${gateway_base} 被占用,改用 ${SATI_GATEWAY_PORT}。")"
   fi
 }
 
@@ -855,7 +845,7 @@ normalize_github_remote() {
 }
 
 clone_without_lfs_smudge() {
-  if [[ "${PILOTDECK_INSTALL_LFS:-0}" == "1" ]]; then
+  if [[ "${SATI_INSTALL_LFS:-0}" == "1" ]]; then
     "$@"
   else
     GIT_LFS_SKIP_SMUDGE=1 "$@"
@@ -902,7 +892,7 @@ checkout_existing_installation() {
   # Fetch from the configured (HTTPS) URL rather than the existing "origin"
   # remote, which may be an SSH URL (git@github.com) that hangs when port 22
   # connectivity is unavailable. Cap the fetch so a bad network can't stall the installer.
-  if run_with_timeout "${PILOTDECK_FETCH_TIMEOUT:-45}" env GIT_LFS_SKIP_SMUDGE=1 git fetch "$REPO_URL" "$BRANCH"; then
+  if run_with_timeout "${SATI_FETCH_TIMEOUT:-45}" env GIT_LFS_SKIP_SMUDGE=1 git fetch "$REPO_URL" "$BRANCH"; then
     GIT_LFS_SKIP_SMUDGE=1 git checkout -B "$BRANCH" FETCH_HEAD || return 1
   else
     warn "$(L "Could not fetch updates (network/SSH issue); keeping the current checkout." "无法拉取更新(网络/SSH 问题),沿用当前已安装的代码。")"
@@ -963,8 +953,8 @@ install_or_update_repo() {
 }
 
 ensure_lfs_assets() {
-  if [[ "${PILOTDECK_INSTALL_LFS:-0}" != "1" ]]; then
-    warn "$(L "Skipping Git LFS media download. Set PILOTDECK_INSTALL_LFS=1 to fetch demo images/videos." "跳过 Git LFS 媒体下载。设置 PILOTDECK_INSTALL_LFS=1 可下载演示图片/视频。")"
+  if [[ "${SATI_INSTALL_LFS:-0}" != "1" ]]; then
+    warn "$(L "Skipping Git LFS media download. Set SATI_INSTALL_LFS=1 to fetch demo images/videos." "跳过 Git LFS 媒体下载。设置 SATI_INSTALL_LFS=1 可下载演示图片/视频。")"
     return
   fi
 
@@ -982,7 +972,7 @@ ensure_lfs_assets() {
   git lfs pull
 
   local pointer_file=""
-  for pointer_file in assets/banner.png ui/public/favicon.png ui/src/assets/pilotdeck-logo.png; do
+  for pointer_file in assets/banner.png ui/public/favicon.png ui/src/assets/sati-logo.png; do
     if [[ -f "$pointer_file" ]] && grep -q "version https://git-lfs.github.com/spec/v1" "$pointer_file"; then
       fail "$(L "Git LFS asset was not downloaded correctly: ${pointer_file}" "Git LFS 素材未正确下载:${pointer_file}")"
     fi
@@ -991,12 +981,12 @@ ensure_lfs_assets() {
 }
 
 # Skip the (slow) npm install + frontend build when nothing changed: repo HEAD
-# unchanged and all build artifacts already present. Force with PILOTDECK_FORCE_DEPS=1.
+# unchanged and all build artifacts already present. Force with SATI_FORCE_DEPS=1.
 deps_up_to_date() {
-  [[ "${PILOTDECK_FORCE_DEPS:-0}" != "1" ]] || return 1
+  [[ "${SATI_FORCE_DEPS:-0}" != "1" ]] || return 1
   [[ "${REPO_CHANGED:-1}" == "0" ]] || return 1
   [[ -d "$INSTALL_DIR/node_modules" ]] || return 1
-  [[ -f "$INSTALL_DIR/dist/src/cli/pilotdeck.js" ]] || return 1
+  [[ -f "$INSTALL_DIR/dist/src/cli/sati.js" ]] || return 1
   [[ -f "$INSTALL_DIR/src/context/memory/edgeclaw-memory-core/lib/index.js" ]] || return 1
   [[ -d "$INSTALL_DIR/ui/node_modules" ]] || return 1
   [[ -d "$INSTALL_DIR/ui/dist" ]] || return 1
@@ -1032,15 +1022,15 @@ has_playwright_chrome_for_testing() {
 }
 
 echo ""
-echo -e "${BOLD}PilotDeck Installer${RESET}"
+echo -e "${BOLD}Sati Installer${RESET}"
 echo "====================="
 
 select_language
 
 # Dry run for testing the "back half" (language + onboarding wizard + guide)
 # without cloning, installing deps, building, or starting the server.
-#   PILOTDECK_DRY_RUN=1 PILOTDECK_CONFIG_PATH=/tmp/pd.yaml bash install.sh
-if [[ "${PILOTDECK_DRY_RUN:-0}" == "1" ]]; then
+#   SATI_DRY_RUN=1 SATI_CONFIG_PATH=/tmp/pd.yaml bash install.sh
+if [[ "${SATI_DRY_RUN:-0}" == "1" ]]; then
   echo ""
   warn "$(L "Dry run: skipping install; testing onboarding + guide only." "试运行:跳过安装,仅测试配置向导与引导。")"
   run_onboarding
@@ -1078,7 +1068,7 @@ fi
 ok "$(L "git found" "已找到 git")"
 echo ""
 
-if [[ "${PILOTDECK_INSTALL_LFS:-0}" == "1" ]]; then
+if [[ "${SATI_INSTALL_LFS:-0}" == "1" ]]; then
   echo "$(L "Checking Git LFS..." "正在检查 Git LFS...")"
   if [[ "${GIT_LFS_SKIP_SMUDGE:-}" == "1" ]]; then
     warn "$(L "GIT_LFS_SKIP_SMUDGE=1 is set; large media assets will be skipped." "已设置 GIT_LFS_SKIP_SMUDGE=1;将跳过大型媒体素材。")"
@@ -1096,7 +1086,7 @@ echo "$(L "Checking ripgrep..." "正在检查 ripgrep...")"
 if command -v rg >/dev/null 2>&1; then
   ok "$(L "ripgrep $(rg --version | head -1) found" "已找到 ripgrep $(rg --version | head -1)")"
 elif ! can_install_optional_system_packages; then
-  warn "$(L "ripgrep not found and sudo is unavailable; continuing because PilotDeck uses its bundled ripgrep dependency." "未找到 ripgrep 且 sudo 不可用;PilotDeck 会使用内置 ripgrep 依赖,继续安装。")"
+  warn "$(L "ripgrep not found and sudo is unavailable; continuing because Sati uses its bundled ripgrep dependency." "未找到 ripgrep 且 sudo 不可用;Sati 会使用内置 ripgrep 依赖,继续安装。")"
 else
   warn "$(L "ripgrep not found. Installing..." "未找到 ripgrep,正在安装...")"
   install_ripgrep
@@ -1122,14 +1112,14 @@ echo "$(L "Checking native build tools..." "正在检查原生编译工具...")"
 ensure_native_build_tools
 echo ""
 
-echo -e "$(L "Installing PilotDeck to" "正在安装 PilotDeck 到") ${DIM}${INSTALL_DIR}${RESET} ..."
+echo -e "$(L "Installing Sati to" "正在安装 Sati 到") ${DIM}${INSTALL_DIR}${RESET} ..."
 install_or_update_repo
 ensure_lfs_assets
 echo ""
 
 if deps_up_to_date; then
   ok "$(L "Dependencies and frontend already up to date; skipping install & build." "依赖与前端已是最新,跳过安装与构建。")"
-  warn "$(L "Set PILOTDECK_FORCE_DEPS=1 to force a full reinstall & rebuild." "如需强制重装并重新构建,请设置 PILOTDECK_FORCE_DEPS=1。")"
+  warn "$(L "Set SATI_FORCE_DEPS=1 to force a full reinstall & rebuild." "如需强制重装并重新构建,请设置 SATI_FORCE_DEPS=1。")"
   echo ""
 else
   echo "$(L "Installing dependencies..." "正在安装依赖...")"
@@ -1142,21 +1132,21 @@ else
 
   echo "$(L "Building frontend..." "正在构建前端...")"
   cd "$INSTALL_DIR"
-  run_pnpm --filter pilotdeck-ui run build
+  run_pnpm --filter sati-ui run build
   ok "$(L "Frontend built" "前端已构建")"
   echo ""
 fi
 
 echo "$(L "Checking Playwright browser for browser-use plugin..." "正在检查 browser-use 插件所需的 Playwright 浏览器...")"
 cd "$INSTALL_DIR"
-BROWSER_INSTALL_TIMEOUT="${PILOTDECK_BROWSER_INSTALL_TIMEOUT:-300}"
+BROWSER_INSTALL_TIMEOUT="${SATI_BROWSER_INSTALL_TIMEOUT:-300}"
 if has_playwright_chrome_for_testing; then
   ok "$(L "Chrome for Testing already installed" "Chrome for Testing 已安装")"
-elif [[ "${PILOTDECK_SKIP_BROWSER_INSTALL:-1}" == "1" ]]; then
+elif [[ "${SATI_SKIP_BROWSER_INSTALL:-1}" == "1" ]]; then
   warn "$(L "Skipping Chrome for Testing download (default) to keep install fast." "默认跳过 Chrome for Testing 下载,以加快安装速度。")"
-  warn "$(L "PilotDeck core features are still available without this optional browser-use dependency." "缺少该可选 browser-use 依赖时,PilotDeck 核心功能仍可正常使用。")"
+  warn "$(L "Sati core features are still available without this optional browser-use dependency." "缺少该可选 browser-use 依赖时,Sati 核心功能仍可正常使用。")"
   warn "$(L "To enable browser-use, run: cd \"$INSTALL_DIR\" && npm run install:browser" "如需启用 browser-use,请运行:cd \"$INSTALL_DIR\" && npm run install:browser")"
-  warn "$(L "Or re-run the installer with PILOTDECK_SKIP_BROWSER_INSTALL=0." "或以 PILOTDECK_SKIP_BROWSER_INSTALL=0 重新运行安装器。")"
+  warn "$(L "Or re-run the installer with SATI_SKIP_BROWSER_INSTALL=0." "或以 SATI_SKIP_BROWSER_INSTALL=0 重新运行安装器。")"
 else
   echo "  $(L "Downloading and extracting Chrome for Testing (timeout: ${BROWSER_INSTALL_TIMEOUT}s)..." "正在下载并解压 Chrome for Testing(超时:${BROWSER_INSTALL_TIMEOUT}s)...")"
   echo "  $(L "This may take a few minutes — the extraction step can appear to stall." "这可能需要几分钟 —— 解压阶段看起来可能像卡住。")"
@@ -1169,9 +1159,9 @@ else
     else
       warn "$(L "Chrome for Testing install failed (exit code $exit_code)." "Chrome for Testing 安装失败(退出码 $exit_code)。")"
     fi
-    warn "$(L "PilotDeck core features are still available." "PilotDeck 核心功能仍可正常使用。")"
+    warn "$(L "Sati core features are still available." "Sati 核心功能仍可正常使用。")"
     warn "$(L "To enable browser-use later, run: cd \"$INSTALL_DIR\" && npm run install:browser" "如需稍后启用 browser-use,请运行:cd \"$INSTALL_DIR\" && npm run install:browser")"
-    warn "$(L "To increase timeout, set PILOTDECK_BROWSER_INSTALL_TIMEOUT=600 and re-run." "如需延长超时,请设置 PILOTDECK_BROWSER_INSTALL_TIMEOUT=600 后重新运行。")"
+    warn "$(L "To increase timeout, set SATI_BROWSER_INSTALL_TIMEOUT=600 and re-run." "如需延长超时,请设置 SATI_BROWSER_INSTALL_TIMEOUT=600 后重新运行。")"
   fi
 fi
 echo ""
@@ -1188,7 +1178,7 @@ echo ""
 
 echo "$(L "Setting up CLI command..." "正在设置 CLI 命令...")"
 WRAPPER_DIR="$INSTALL_DIR/bin"
-CLI_TARGET="$WRAPPER_DIR/pilotdeck"
+CLI_TARGET="$WRAPPER_DIR/sati"
 mkdir -p "$WRAPPER_DIR"
 cat > "$CLI_TARGET" <<'EOF'
 #!/usr/bin/env bash
@@ -1205,17 +1195,16 @@ while [[ -L "$SOURCE" ]]; do
   fi
 done
 INSTALL_DIR="$(cd "$(dirname "$SOURCE")/.." && pwd)"
-CONFIG_FILE="${PILOTDECK_CONFIG_PATH:-$HOME/.pilotdeck/pilotdeck.yaml}"
-MAX_PORT_TRIES="${PILOTDECK_MAX_PORT_TRIES:-20}"
+CONFIG_FILE="${SATI_CONFIG_PATH:-$HOME/.sati/sati.yaml}"
+MAX_PORT_TRIES="${SATI_MAX_PORT_TRIES:-20}"
 MIN_NODE_VERSION="22.13.0"
-MAX_NODE_MAJOR="22"
-NODE_INSTALL_VERSION="${PILOTDECK_NODE_VERSION:-22}"
-NODE_FALLBACK_VERSION="${PILOTDECK_NODE_FALLBACK_VERSION:-22.13.0}"
-NODE_DIRECT_INSTALL_ROOT="$HOME/.local/share/pilotdeck-node"
-NODE_DIST_MIRROR="${PILOTDECK_NODE_DIST_MIRROR:-https://nodejs.org/dist}"
+NODE_INSTALL_VERSION="${SATI_NODE_VERSION:-22}"
+NODE_FALLBACK_VERSION="${SATI_NODE_FALLBACK_VERSION:-22.13.0}"
+NODE_DIRECT_INSTALL_ROOT="$HOME/.local/share/sati-node"
+NODE_DIST_MIRROR="${SATI_NODE_DIST_MIRROR:-https://nodejs.org/dist}"
 
-fail() { printf "pilotdeck: %s\n" "$1" >&2; exit 1; }
-warn() { printf "pilotdeck: %s\n" "$1" >&2; }
+fail() { printf "sati: %s\n" "$1" >&2; exit 1; }
+warn() { printf "sati: %s\n" "$1" >&2; }
 
 version_at_least() {
   local version="${1#v}"
@@ -1237,11 +1226,6 @@ version_at_least() {
   if (( v_minor > min_minor )); then return 0; fi
   if (( v_minor < min_minor )); then return 1; fi
   (( v_patch >= min_patch ))
-}
-
-node_major() {
-  local version="${1#v}"
-  printf "%s" "${version%%.*}"
 }
 
 node_tarball_platform() {
@@ -1320,14 +1304,14 @@ ensure_node_runtime() {
   command -v node >/dev/null 2>&1 || fail "Node.js >=${MIN_NODE_VERSION} is required; re-run install.sh to install it."
   local node_version
   node_version="$(node --version)"
-  if ! version_at_least "$node_version" "$MIN_NODE_VERSION" || [[ "$(node_major "$node_version")" != "$MAX_NODE_MAJOR" ]]; then
-    fail "Node.js >=${MIN_NODE_VERSION} and <23 is required because PilotDeck uses node:sqlite and native packages are tested on Node.js 22. Current: ${node_version}. Re-run install.sh or switch Node with fnm/nvm."
+  if ! version_at_least "$node_version" "$MIN_NODE_VERSION"; then
+    fail "Node.js >=${MIN_NODE_VERSION} is required because Sati uses node:sqlite. Current: ${node_version}. Re-run install.sh or switch Node with fnm/nvm."
   fi
   if ! node -e "import('node:sqlite').then(() => {}, () => process.exit(1))" >/dev/null 2>&1; then
     fail "Current Node.js (${node_version}) does not provide node:sqlite. Re-run install.sh or switch to Node.js 22.13+."
   fi
   if ! node_arch_matches_host; then
-    fail "Node.js architecture must match this machine before native dependencies are used. Current Node arch: $(node -p "process.arch" 2>/dev/null || printf unknown); host: $(uname -m). Re-run install.sh or reinstall Node.js 22 for this Mac."
+    fail "Node.js architecture must match this machine before native dependencies are used. Current Node arch: $(node -p "process.arch" 2>/dev/null || printf unknown); host: $(uname -m). Re-run install.sh or reinstall Node.js 22.13+ for this Mac."
   fi
 }
 
@@ -1404,14 +1388,14 @@ done
 
 if [[ "$COMMAND" == "help" ]]; then
   cat <<HELP
-pilotdeck - start the PilotDeck web UI
+sati - start the Sati web UI
 
 Usage:
-  pilotdeck [start] [--port <port>] [--config <path>]
-  pilotdeck status
-  pilotdeck help
+  sati [start] [--port <port>] [--config <path>]
+  sati status
+  sati help
 
-First run? Start PilotDeck, open the printed URL, and complete onboarding
+First run? Start Sati, open the printed URL, and complete onboarding
 (choose a provider, paste an API key, pick a model). You can also edit the
 config directly at: ${CONFIG_FILE}
 
@@ -1434,24 +1418,24 @@ fi
 ensure_node_runtime
 
 SERVER_BASE="${SERVER_PORT:-3001}"
-GATEWAY_BASE="${PILOTDECK_GATEWAY_PORT:-18789}"
+GATEWAY_BASE="${SATI_GATEWAY_PORT:-18789}"
 SERVER_PORT="$(find_free_port "$SERVER_BASE")" || fail "could not find a free UI port from ${SERVER_BASE}"
-PILOTDECK_GATEWAY_PORT="$(find_free_port "$GATEWAY_BASE")" || fail "could not find a free gateway port from ${GATEWAY_BASE}"
-PILOTDECK_GATEWAY_URL="ws://127.0.0.1:${PILOTDECK_GATEWAY_PORT}/ws"
+SATI_GATEWAY_PORT="$(find_free_port "$GATEWAY_BASE")" || fail "could not find a free gateway port from ${GATEWAY_BASE}"
+SATI_GATEWAY_URL="ws://127.0.0.1:${SATI_GATEWAY_PORT}/ws"
 
-export PILOTDECK_CONFIG_PATH="$CONFIG_FILE"
-export SERVER_PORT PILOTDECK_GATEWAY_PORT PILOTDECK_GATEWAY_URL
+export SATI_CONFIG_PATH="$CONFIG_FILE"
+export SERVER_PORT SATI_GATEWAY_PORT SATI_GATEWAY_URL
 
 if [[ "$SERVER_PORT" != "$SERVER_BASE" ]]; then
   warn "UI port ${SERVER_BASE} is busy; using ${SERVER_PORT} instead."
 fi
-if [[ "$PILOTDECK_GATEWAY_PORT" != "$GATEWAY_BASE" ]]; then
-  warn "Gateway port ${GATEWAY_BASE} is busy; using ${PILOTDECK_GATEWAY_PORT} instead."
+if [[ "$SATI_GATEWAY_PORT" != "$GATEWAY_BASE" ]]; then
+  warn "Gateway port ${GATEWAY_BASE} is busy; using ${SATI_GATEWAY_PORT} instead."
 fi
 
-node "$INSTALL_DIR/scripts/bootstrap-pilotdeck-config.mjs"
+node "$INSTALL_DIR/scripts/bootstrap-sati-config.mjs"
 
-printf "pilotdeck: starting at http://localhost:%s\n" "$SERVER_PORT"
+printf "sati: starting at http://localhost:%s\n" "$SERVER_PORT"
 cd "$INSTALL_DIR/ui"
 exec npm run start:built
 EOF
@@ -1465,7 +1449,7 @@ if [[ -e "$BIN_LINK" || -L "$BIN_LINK" ]]; then
     :
   else
     warn "$(L "Cannot update ${BIN_LINK} without sudo; falling back to user-local bin." "无 sudo 权限,无法更新 ${BIN_LINK};改用用户本地 bin 目录。")"
-    TARGET_BIN="$HOME/.local/bin/pilotdeck"
+    TARGET_BIN="$HOME/.local/bin/sati"
   fi
 fi
 
@@ -1478,16 +1462,16 @@ fi
 
 if [[ "$TARGET_BIN" == "$BIN_LINK" && -d "$TARGET_BIN_DIR" && -w "$TARGET_BIN_DIR" ]]; then
   ln -sf "$CLI_TARGET" "$TARGET_BIN"
-  ok "$(L "pilotdeck command linked to" "pilotdeck 命令已链接到") ${DIM}${TARGET_BIN}${RESET}"
+  ok "$(L "sati command linked to" "sati 命令已链接到") ${DIM}${TARGET_BIN}${RESET}"
 elif sudo -n true 2>/dev/null; then
   sudo mkdir -p "$TARGET_BIN_DIR"
   sudo ln -sf "$CLI_TARGET" "$TARGET_BIN"
-  ok "$(L "pilotdeck command linked to" "pilotdeck 命令已链接到") ${DIM}${TARGET_BIN}${RESET}"
+  ok "$(L "sati command linked to" "sati 命令已链接到") ${DIM}${TARGET_BIN}${RESET}"
 else
   LOCAL_BIN="$HOME/.local/bin"
   mkdir -p "$LOCAL_BIN"
-  ln -sf "$CLI_TARGET" "$LOCAL_BIN/pilotdeck"
-  ok "$(L "pilotdeck command linked to" "pilotdeck 命令已链接到") ${DIM}${LOCAL_BIN}/pilotdeck${RESET}"
+  ln -sf "$CLI_TARGET" "$LOCAL_BIN/sati"
+  ok "$(L "sati command linked to" "sati 命令已链接到") ${DIM}${LOCAL_BIN}/sati${RESET}"
   if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
     PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
     SHELL_RC=""
@@ -1506,9 +1490,9 @@ else
 
     if [[ -n "$SHELL_RC" ]]; then
       if [[ ! -f "$SHELL_RC" ]] || ! grep -qF '.local/bin' "$SHELL_RC" 2>/dev/null; then
-        printf '\n# Added by PilotDeck installer\n%s\n' "$PATH_LINE" >> "$SHELL_RC"
+        printf '\n# Added by Sati installer\n%s\n' "$PATH_LINE" >> "$SHELL_RC"
         ok "$(L "PATH updated in" "已在以下文件更新 PATH:") ${DIM}${SHELL_RC}${RESET}"
-        warn "$(L "Run ${BOLD}source ${SHELL_RC}${RESET} or open a new terminal to use the ${BOLD}pilotdeck${RESET} command" "运行 ${BOLD}source ${SHELL_RC}${RESET} 或新开一个终端即可使用 ${BOLD}pilotdeck${RESET} 命令")"
+        warn "$(L "Run ${BOLD}source ${SHELL_RC}${RESET} or open a new terminal to use the ${BOLD}sati${RESET} command" "运行 ${BOLD}source ${SHELL_RC}${RESET} 或新开一个终端即可使用 ${BOLD}sati${RESET} 命令")"
       else
         ok "$(L "${DIM}${SHELL_RC}${RESET} already contains .local/bin PATH entry" "${DIM}${SHELL_RC}${RESET} 已包含 .local/bin 的 PATH 配置")"
       fi
@@ -1528,7 +1512,7 @@ if [[ "$PD_LANG" == "zh" ]]; then
   echo -e "  配置文件:   ${DIM}${CONFIG_FILE}${RESET}"
   echo -e "  CLI 命令:   ${DIM}${TARGET_BIN}${RESET}"
   echo ""
-  echo "正在启动 PilotDeck..."
+  echo "正在启动 Sati..."
 else
   echo -e "${BOLD}Installation complete!${RESET}"
   echo ""
@@ -1536,14 +1520,14 @@ else
   echo -e "  Config file:    ${DIM}${CONFIG_FILE}${RESET}"
   echo -e "  CLI command:    ${DIM}${TARGET_BIN}${RESET}"
   echo ""
-  echo "Starting PilotDeck..."
+  echo "Starting Sati..."
 fi
 echo ""
-export PILOTDECK_CONFIG_PATH="$CONFIG_FILE"
+export SATI_CONFIG_PATH="$CONFIG_FILE"
 resolve_runtime_ports
-node "$INSTALL_DIR/scripts/bootstrap-pilotdeck-config.mjs"
+node "$INSTALL_DIR/scripts/bootstrap-sati-config.mjs"
 echo -e "  UI:             ${DIM}http://localhost:${SERVER_PORT}${RESET}"
-echo -e "  Gateway:        ${DIM}${PILOTDECK_GATEWAY_URL}${RESET}"
+echo -e "  Gateway:        ${DIM}${SATI_GATEWAY_URL}${RESET}"
 
 print_getting_started "http://localhost:${SERVER_PORT}"
 

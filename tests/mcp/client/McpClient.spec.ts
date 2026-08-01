@@ -15,7 +15,11 @@ test("McpClient constructs streamable_http transport without requiring stdio fie
 
 test("McpClient routes streamable_http fetches with bounded timeouts", async () => {
   const calls: Array<{ input: RequestInfo | URL; init?: RequestInit; timeoutMs?: number }> = [];
-  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit, options?: { timeoutMs?: number }): Promise<Response> => {
+  const fetchImpl = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    options?: { timeoutMs?: number },
+  ): Promise<Response> => {
     calls.push({ input, init, timeoutMs: options?.timeoutMs });
     return new Response("{}");
   };

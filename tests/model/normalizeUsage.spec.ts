@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { normalizeOpenAIUsage } from "../../src/model/response/normalizeUsage.js";
 import { normalizeGoogleUsage } from "../../src/model/providers/google/response.js";
 

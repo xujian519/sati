@@ -150,8 +150,8 @@ function assertSupportedOutput(filePath) {
 
 function createWorkbook() {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "PilotDeck";
-  workbook.lastModifiedBy = "PilotDeck";
+  workbook.creator = "Sati";
+  workbook.lastModifiedBy = "Sati";
   workbook.created = new Date();
   workbook.modified = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
@@ -1501,7 +1501,7 @@ async function prepareWorkbookForRecalculation(inputPath, outputPath) {
 }
 
 async function recalculateWorkbook(inputPath, outputPath) {
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pilotdeck-spreadsheet-recalc-"));
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sati-spreadsheet-recalc-"));
   try {
     const sourceDir = path.join(tempRoot, "source");
     const convertedDir = path.join(tempRoot, "converted");
@@ -1538,7 +1538,7 @@ async function convertLegacyXls(inputPath, outputPath) {
     throw new Error("Legacy conversion requires .xls input and .xlsx output");
   }
   if (path.resolve(inputPath) === path.resolve(outputPath)) throw new Error("Refusing to overwrite the legacy source workbook");
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pilotdeck-spreadsheet-xls-"));
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sati-spreadsheet-xls-"));
   try {
     const sourceDir = path.join(tempRoot, "source");
     const convertedDir = path.join(tempRoot, "converted");
@@ -1658,7 +1658,7 @@ function validateWorkbookForSerialization(workbook, nativeCharts) {
 }
 
 async function buildFromBuilder(builderPath, inputPath) {
-  const builderUrl = `${pathToFileURL(path.resolve(builderPath)).href}?pilotdeck=${Date.now()}`;
+  const builderUrl = `${pathToFileURL(path.resolve(builderPath)).href}?sati=${Date.now()}`;
   const module = await import(builderUrl);
   if (typeof module.default !== "function") throw new Error("The builder must export a default async function");
   const product = await module.default(createToolkit(inputPath));
@@ -1762,7 +1762,7 @@ async function commandBuild(options) {
   }
 
   if (outputExtension === ".csv" || outputExtension === ".tsv") {
-    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pilotdeck-spreadsheet-delimited-build-"));
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sati-spreadsheet-delimited-build-"));
     try {
       const stagedPath = path.join(tempRoot, `candidate${outputExtension}`);
       await exportDelimited(workbook, stagedPath, options.sheet ? String(options.sheet) : sheetName, options.encoding ? String(options.encoding) : "utf8-bom");
@@ -1775,7 +1775,7 @@ async function commandBuild(options) {
     return;
   }
 
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pilotdeck-spreadsheet-build-"));
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sati-spreadsheet-build-"));
   try {
     const rawPath = path.join(tempRoot, "raw.xlsx");
     const stagedPath = path.join(tempRoot, "candidate.xlsx");
@@ -1814,7 +1814,7 @@ async function commandInspect(options) {
   const extension = assertSupportedInput(inputPath, { legacy: true });
   let report;
   if (extension === ".xls") {
-    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pilotdeck-spreadsheet-inspect-xls-"));
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sati-spreadsheet-inspect-xls-"));
     try {
       const convertedPath = path.join(tempRoot, "converted.xlsx");
       await convertLegacyXls(inputPath, convertedPath);
@@ -1970,7 +1970,7 @@ async function convertToXlsxForRender(inputPath, tempRoot) {
 async function renderWorkbook(inputPath, outputDir, { pdfPath, montagePath, perSheet = false } = {}) {
   const renderer = findRenderer();
   if (!renderer) throw new Error("No PDF renderer was found. Install pdftoppm, mutool, or ImageMagick.");
-  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "pilotdeck-spreadsheet-render-"));
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sati-spreadsheet-render-"));
   try {
     const sourceDir = path.join(tempRoot, "source");
     const pdfDir = path.join(tempRoot, "pdf");
@@ -2160,7 +2160,7 @@ async function createSelfTestWorkbook() {
     pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
   summary.mergeCells("A1:D1");
-  summary.getCell("A1").value = "PilotDeck 表格能力自测";
+  summary.getCell("A1").value = "Sati 表格能力自测";
   summary.getCell("A1").font = { size: 18, bold: true, color: { argb: "FF0F172A" } };
   summary.getRow(1).height = 28;
   summary.addRows([
@@ -2227,7 +2227,7 @@ async function createSelfTestWorkbook() {
 }
 
 async function commandSelfTest(options) {
-  const outputDir = options.out ? String(options.out) : path.join(os.tmpdir(), `pilotdeck-spreadsheets-self-test-${Date.now()}`);
+  const outputDir = options.out ? String(options.out) : path.join(os.tmpdir(), `sati-spreadsheets-self-test-${Date.now()}`);
   await fs.mkdir(outputDir, { recursive: true });
   const steps = [];
 
@@ -2307,7 +2307,7 @@ async function commandSelfTest(options) {
 
   const emptyDrawingPath = path.join(outputDir, "empty-drawing-part.xlsx");
   const emptyDrawingZip = await JSZip.loadAsync(await fs.readFile(rawPath));
-  const emptyDrawingRelationshipId = "rIdPilotDeckEmptyDrawing";
+  const emptyDrawingRelationshipId = "rIdSatiEmptyDrawing";
   const emptyDrawingPart = "xl/drawings/drawing999.xml";
   const emptyDrawingSheetPart = "xl/worksheets/sheet1.xml";
   const emptyDrawingSheetRelsPart = "xl/worksheets/_rels/sheet1.xml.rels";
@@ -2462,7 +2462,7 @@ async function commandSelfTest(options) {
   await recalculateWorkbook(editedRawPath, editedPath);
   const sourceAfterEdit = await loadXlsx(finalPath);
   const editedWorkbook = await loadXlsx(editedPath);
-  if (displayCellText(sourceAfterEdit.getWorksheet("汇总").getCell("A1")) !== "PilotDeck 表格能力自测") {
+  if (displayCellText(sourceAfterEdit.getWorksheet("汇总").getCell("A1")) !== "Sati 表格能力自测") {
     throw new Error("Existing-workbook edit overwrote the source file");
   }
   if (editedWorkbook.getWorksheet("汇总").getCell("A1").value !== "Edited workbook") {
@@ -2679,7 +2679,7 @@ async function commandSelfTest(options) {
 }
 
 function printHelp() {
-  process.stdout.write(`PilotDeck spreadsheets skill\n\nCommands:\n  scaffold --out builder.mjs [--requirements-out requirements.json]\n  build --builder builder.mjs --out candidate.xlsx [--input source.xlsx] [--requirements requirements.json]\n  inspect --input book.xlsx [--sheet Sheet1 --range A1:H20 --styles --out report.json]\n  convert-legacy --input source.xls --out converted.xlsx\n  recalculate --input source.xlsx --out recalculated.xlsx\n  audit --input book.xlsx [--requirements requirements.json --out audit.json]\n  render --input book.xlsx --out-dir render [--pdf render.pdf --montage montage.png --per-sheet]\n  deliver --input candidate.xlsx --out final.xlsx --qa-dir qa --requirements requirements.json\n  self-test [--out directory]\n`);
+  process.stdout.write(`Sati spreadsheets skill\n\nCommands:\n  scaffold --out builder.mjs [--requirements-out requirements.json]\n  build --builder builder.mjs --out candidate.xlsx [--input source.xlsx] [--requirements requirements.json]\n  inspect --input book.xlsx [--sheet Sheet1 --range A1:H20 --styles --out report.json]\n  convert-legacy --input source.xls --out converted.xlsx\n  recalculate --input source.xlsx --out recalculated.xlsx\n  audit --input book.xlsx [--requirements requirements.json --out audit.json]\n  render --input book.xlsx --out-dir render [--pdf render.pdf --montage montage.png --per-sheet]\n  deliver --input candidate.xlsx --out final.xlsx --qa-dir qa --requirements requirements.json\n  self-test [--out directory]\n`);
 }
 
 async function main() {

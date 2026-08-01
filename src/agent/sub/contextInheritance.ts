@@ -8,20 +8,20 @@
  * - **S7**: drop the `<project-instructions>` block when `omitProjectInstructions: true`.
  * - **S8**: drop the `<git-status>` block when `omitGitStatus: true`.
  *
- * In PilotDeck the only "context blocks" we have today are encoded as XML-like
+ * In Sati the only "context blocks" we have today are encoded as XML-like
  * sections in the assembled system prompt (`PromptAssembler` output). We
  * implement S7/S8 by post-processing the system prompt string, since that's
  * the simplest cache-stable cut. If/when richer context structures land we'll
  * push the filtering deeper into the assembler.
  */
 
+import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/index.js";
 import type { SubagentDefinition } from "./builtinSubagentTypes.js";
-import type { PilotDeckReadFileStateMap, PilotDeckWriteSnapshotMap } from "../../tool/index.js";
 
 /** Read-file freshness cache contract. Match the shape used by `read_file`. */
-export type ReadFileStateMap = PilotDeckReadFileStateMap;
+export type ReadFileStateMap = SatiReadFileStateMap;
 export type ReadFileStateEntry = ReadFileStateMap extends Map<string, infer T> ? T : never;
-export type WriteSnapshotMap = PilotDeckWriteSnapshotMap;
+export type WriteSnapshotMap = SatiWriteSnapshotMap;
 export type WriteSnapshotEntry = WriteSnapshotMap extends Map<string, infer T> ? T : never;
 
 /** S5 — deep clone the parent's read-file cache. */
@@ -45,10 +45,7 @@ export function cloneWriteSnapshots(parent: WriteSnapshotMap | undefined): Write
 }
 
 /** S7+S8 — drop project-instructions / git-status blocks from the assembled system prompt. */
-export function applySystemPromptFilters(
-  systemPrompt: string,
-  definition: SubagentDefinition,
-): string {
+export function applySystemPromptFilters(systemPrompt: string, definition: SubagentDefinition): string {
   let next = systemPrompt;
   if (definition.omitProjectInstructions) {
     next = stripXmlBlock(next, "agents-md");

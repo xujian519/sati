@@ -20,10 +20,7 @@ export function defaultCronConfig(): CronConfig {
 
 const ALLOWED_KEYS = new Set(["enabled", "timezone", "maxConcurrentRuns", "runTimeoutMinutes"]);
 
-export function parseCronConfig(
-  raw: unknown,
-  diagnostics: PilotConfigDiagnostic[],
-): CronConfig | undefined {
+export function parseCronConfig(raw: unknown, diagnostics: PilotConfigDiagnostic[]): CronConfig | undefined {
   if (raw === undefined) {
     return undefined;
   }
@@ -85,12 +82,7 @@ function booleanField(record: Record<string, unknown>, key: string, fallback: bo
   return typeof value === "boolean" ? value : fallback;
 }
 
-function nonEmptyString(
-  value: unknown,
-  fallback: string,
-  path: string,
-  diagnostics: PilotConfigDiagnostic[],
-): string {
+function nonEmptyString(value: unknown, fallback: string, path: string, diagnostics: PilotConfigDiagnostic[]): string {
   if (value === undefined) return fallback;
   if (typeof value === "string" && value.trim().length > 0) {
     return value.trim();
@@ -105,19 +97,9 @@ function nonEmptyString(
   return fallback;
 }
 
-function positiveInteger(
-  value: unknown,
-  fallback: number,
-  path: string,
-  diagnostics: PilotConfigDiagnostic[],
-): number {
+function positiveInteger(value: unknown, fallback: number, path: string, diagnostics: PilotConfigDiagnostic[]): number {
   if (value === undefined) return fallback;
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    !Number.isInteger(value) ||
-    value <= 0
-  ) {
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
     diagnostics.push({
       code: "CRON_NUMBER_INVALID",
       severity: "warning",

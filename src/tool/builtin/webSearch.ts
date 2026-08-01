@@ -1,15 +1,15 @@
 import type { PermissionResult } from "../../permission/index.js";
 import { NetworkFetchError, networkFetch } from "../../network/fetch.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type {
-  PilotDeckToolAvailabilityContext,
-  PilotDeckToolDefinition,
-  PilotDeckToolExecutionOutput,
-  PilotDeckToolRuntimeContext,
+  SatiToolAvailabilityContext,
+  SatiToolDefinition,
+  SatiToolExecutionOutput,
+  SatiToolRuntimeContext,
 } from "../protocol/types.js";
 
 /**
- * `web_search` is a local PilotDeck tool backed by exactly one configured
+ * `web_search` is a local Sati tool backed by exactly one configured
  * provider. The model still sees one stable tool surface; provider-specific
  * request/response shapes stay behind this adapter.
  */
@@ -77,7 +77,7 @@ const DEFAULT_ORGANIC_LIMIT = 8;
 
 export function createWebSearchTool(
   options: CreateWebSearchToolOptions = {},
-): PilotDeckToolDefinition<WebSearchInput, WebSearchOutput> {
+): SatiToolDefinition<WebSearchInput, WebSearchOutput> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const organicLimit = options.organicLimit ?? DEFAULT_ORGANIC_LIMIT;
@@ -92,7 +92,7 @@ export function createWebSearchTool(
 - Use this tool when API/SDK/framework usage is unknown, version-sensitive, or likely changed since training. Search with package/service name, version, framework, and the specific method/option/error.
 
 Usage notes:
-  - Configure \`tools.webSearch.provider\` as \`glm\`, \`tavily\`, or \`custom\` in \`pilotdeck.yaml\`
+  - Configure \`tools.webSearch.provider\` as \`glm\`, \`tavily\`, or \`custom\` in \`sati.yaml\`
   - Requires \`tools.webSearch.apiKey\`, \`GLM_WEB_SEARCH_API_KEY\`/\`ZAI_API_KEY\`, \`TAVILY_API_KEY\`, or \`CUSTOM_WEB_SEARCH_API_KEY\` unless custom auth is \`none\`
   - The optional \`gl\` parameter is forwarded only by providers that support localization
   - This tool is read-only and does not modify files`,
@@ -104,11 +104,13 @@ Usage notes:
       properties: {
         query: {
           type: "string",
-          description: "Search query string. Be specific, and include versions or the current year when looking for recent documentation, releases, or current events.",
+          description:
+            "Search query string. Be specific, and include versions or the current year when looking for recent documentation, releases, or current events.",
         },
         gl: {
           type: "string",
-          description: 'Optional country code for localized results. Defaults to "us"; use "cn" for China-localized results.',
+          description:
+            'Optional country code for localized results. Defaults to "us"; use "cn" for China-localized results.',
         },
       },
     },
@@ -116,7 +118,7 @@ Usage notes:
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     isOpenWorld: () => true,
-    checkAvailability: (context) => checkWebSearchAvailability(options, context),
+    checkAvailability: context => checkWebSearchAvailability(options, context),
     checkPermissions: async (): Promise<PermissionResult> => ({
       type: "ask",
       reason: {
@@ -144,7 +146,7 @@ Usage notes:
       const apiKey = resolveApiKey(options.apiKey, provider, context);
       const custom = normalizeCustomProviderConfig(options.customProvider);
       if (!apiKey && !(provider === "custom" && custom.auth === "none")) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "setup_required",
           "web_search requires an API key. Please configure it in Settings → Search.",
           { tool: "web_search" },
@@ -152,7 +154,7 @@ Usage notes:
       }
       if (provider === "custom") {
         if (!options.endpoint?.trim()) {
-          throw new PilotDeckToolRuntimeError(
+          throw new SatiToolRuntimeError(
             "setup_required",
             "web_search custom provider requires an endpoint URL. Please configure it in Settings → Search.",
             { tool: "web_search" },
@@ -193,14 +195,11 @@ Usage notes:
   };
 }
 
-function checkWebSearchAvailability(
-  options: CreateWebSearchToolOptions,
-  context: PilotDeckToolAvailabilityContext,
-) {
+function checkWebSearchAvailability(options: CreateWebSearchToolOptions, context: SatiToolAvailabilityContext) {
   const runtimeContext = {
     cwd: context.cwd,
     env: context.env,
-  } as PilotDeckToolRuntimeContext;
+  } as SatiToolRuntimeContext;
   const provider = resolveProvider(options.provider, options.apiKey, runtimeContext);
   const apiKey = resolveApiKey(options.apiKey, provider, runtimeContext);
   const custom = normalizeCustomProviderConfig(options.customProvider);
@@ -226,7 +225,7 @@ function checkWebSearchAvailability(
 function resolveProvider(
   optionProvider: WebSearchProvider | undefined,
   optionApiKey: string | undefined,
-  context: PilotDeckToolRuntimeContext,
+  context: SatiToolRuntimeContext,
 ): WebSearchProvider {
   if (optionProvider) return optionProvider;
   if (optionApiKey?.trim()) return "glm";
@@ -237,7 +236,7 @@ function resolveProvider(
 function resolveApiKey(
   optionApiKey: string | undefined,
   provider: WebSearchProvider,
-  context: PilotDeckToolRuntimeContext,
+  context: SatiToolRuntimeContext,
 ): string | undefined {
   const fromOption = optionApiKey?.trim();
   if (fromOption) {
@@ -266,14 +265,14 @@ function normalizeCustomProviderConfig(
   };
 }
 
-function readEnv(context: PilotDeckToolRuntimeContext, name: string): string | undefined {
+function readEnv(context: SatiToolRuntimeContext, name: string): string | undefined {
   const value = (context.env ?? process.env)[name]?.trim();
   return value && value.length > 0 ? value : undefined;
 }
 
 type PerformTavilySearchInput = {
   input: WebSearchInput;
-  context: PilotDeckToolRuntimeContext;
+  context: SatiToolRuntimeContext;
   apiKey: string;
   endpoint: string;
   fetchImpl: typeof fetch;
@@ -281,16 +280,11 @@ type PerformTavilySearchInput = {
   organicLimit: number;
 };
 
-async function performTavilySearch(
-  args: PerformTavilySearchInput,
-): Promise<PilotDeckToolExecutionOutput<WebSearchOutput>> {
+async function performTavilySearch(args: PerformTavilySearchInput): Promise<SatiToolExecutionOutput<WebSearchOutput>> {
   const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit } = args;
   const query = input.query.trim();
   if (!query) {
-    throw new PilotDeckToolRuntimeError(
-      "invalid_tool_input",
-      "web_search requires a non-empty `query`.",
-    );
+    throw new SatiToolRuntimeError("invalid_tool_input", "web_search requires a non-empty `query`.");
   }
 
   const controller = new AbortController();
@@ -307,28 +301,29 @@ async function performTavilySearch(
 
   let response: Response;
   try {
-    response = await networkFetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
+    response = await networkFetch(
+      endpoint,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
       },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }, {
-      timeoutMs,
-      signal: controller.signal,
-      fetchImpl,
-      retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: true },
-    });
+      {
+        timeoutMs,
+        signal: controller.signal,
+        fetchImpl,
+        retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: true },
+      },
+    );
   } catch (error) {
     if (isLocalTimeout(error, controller.signal, context.abortSignal)) {
-      throw new PilotDeckToolRuntimeError(
-        "tool_timeout",
-        `web_search (tavily) timed out after ${timeoutMs}ms.`,
-      );
+      throw new SatiToolRuntimeError("tool_timeout", `web_search (tavily) timed out after ${timeoutMs}ms.`);
     }
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "tool_execution_failed",
       `web_search (tavily) request failed: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -339,7 +334,7 @@ async function performTavilySearch(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => response.statusText);
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "tool_execution_failed",
       `Tavily API error (${response.status}): ${truncate(detail, 500)}`,
     );
@@ -381,7 +376,7 @@ async function performTavilySearch(
 
 type PerformGlmSearchInput = {
   input: WebSearchInput;
-  context: PilotDeckToolRuntimeContext;
+  context: SatiToolRuntimeContext;
   apiKey: string;
   endpoint: string;
   fetchImpl: typeof fetch;
@@ -389,24 +384,11 @@ type PerformGlmSearchInput = {
   organicLimit: number;
 };
 
-async function performGlmSearch(
-  args: PerformGlmSearchInput,
-): Promise<PilotDeckToolExecutionOutput<WebSearchOutput>> {
-  const {
-    input,
-    context,
-    apiKey,
-    endpoint,
-    fetchImpl,
-    timeoutMs,
-    organicLimit,
-  } = args;
+async function performGlmSearch(args: PerformGlmSearchInput): Promise<SatiToolExecutionOutput<WebSearchOutput>> {
+  const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit } = args;
   const query = input.query.trim();
   if (!query) {
-    throw new PilotDeckToolRuntimeError(
-      "invalid_tool_input",
-      "web_search requires a non-empty `query`.",
-    );
+    throw new SatiToolRuntimeError("invalid_tool_input", "web_search requires a non-empty `query`.");
   }
 
   const body: Record<string, unknown> = {
@@ -422,29 +404,30 @@ async function performGlmSearch(
 
   let response: Response;
   try {
-    response = await networkFetch(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
+    response = await networkFetch(
+      endpoint,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
       },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }, {
-      timeoutMs,
-      signal: controller.signal,
-      fetchImpl,
-      retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: true },
-    });
+      {
+        timeoutMs,
+        signal: controller.signal,
+        fetchImpl,
+        retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: true },
+      },
+    );
   } catch (error) {
     if (isLocalTimeout(error, controller.signal, context.abortSignal)) {
-      throw new PilotDeckToolRuntimeError(
-        "tool_timeout",
-        `web_search timed out after ${timeoutMs}ms.`,
-      );
+      throw new SatiToolRuntimeError("tool_timeout", `web_search timed out after ${timeoutMs}ms.`);
     }
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "tool_execution_failed",
       `web_search (glm) request failed: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -455,7 +438,7 @@ async function performGlmSearch(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => response.statusText);
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "tool_execution_failed",
       `GLM web search error (${response.status}): ${truncate(detail, 500)}`,
     );
@@ -463,18 +446,12 @@ async function performGlmSearch(
 
   const raw = (await response.json()) as Record<string, unknown>;
   if (typeof raw.error === "string" && raw.error.length > 0) {
-    throw new PilotDeckToolRuntimeError(
-      "tool_execution_failed",
-      `GLM web search error: ${raw.error}`,
-    );
+    throw new SatiToolRuntimeError("tool_execution_failed", `GLM web search error: ${raw.error}`);
   }
   const proxyCode = raw.code;
   if (typeof proxyCode === "number" && proxyCode !== 0) {
     const message = typeof raw.msg === "string" ? raw.msg : "search proxy error";
-    throw new PilotDeckToolRuntimeError(
-      "tool_execution_failed",
-      `GLM web search error code=${proxyCode}: ${message}`,
-    );
+    throw new SatiToolRuntimeError("tool_execution_failed", `GLM web search error code=${proxyCode}: ${message}`);
   }
   const organic = parseGlmResults(extractResultItems(raw), organicLimit);
   const output: WebSearchOutput = { query, organic };
@@ -495,7 +472,7 @@ async function performGlmSearch(
 
 type PerformCustomSearchInput = {
   input: WebSearchInput;
-  context: PilotDeckToolRuntimeContext;
+  context: SatiToolRuntimeContext;
   apiKey: string | undefined;
   endpoint: string;
   fetchImpl: typeof fetch;
@@ -504,23 +481,18 @@ type PerformCustomSearchInput = {
   custom: Required<WebSearchCustomProviderConfig>;
 };
 
-async function performCustomSearch(
-  args: PerformCustomSearchInput,
-): Promise<PilotDeckToolExecutionOutput<WebSearchOutput>> {
+async function performCustomSearch(args: PerformCustomSearchInput): Promise<SatiToolExecutionOutput<WebSearchOutput>> {
   const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit, custom } = args;
   const query = input.query.trim();
   if (!query) {
-    throw new PilotDeckToolRuntimeError(
-      "invalid_tool_input",
-      "web_search requires a non-empty `query`.",
-    );
+    throw new SatiToolRuntimeError("invalid_tool_input", "web_search requires a non-empty `query`.");
   }
 
   let url: URL;
   try {
     url = new URL(endpoint);
   } catch {
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "invalid_tool_input",
       `web_search custom provider endpoint is not a valid URL: ${endpoint}`,
     );
@@ -556,25 +528,26 @@ async function performCustomSearch(
 
   let response: Response;
   try {
-    response = await networkFetch(url.toString(), {
-      method,
-      headers,
-      ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
-      signal: controller.signal,
-    }, {
-      timeoutMs,
-      signal: controller.signal,
-      fetchImpl,
-      retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: method === "POST" },
-    });
+    response = await networkFetch(
+      url.toString(),
+      {
+        method,
+        headers,
+        ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
+        signal: controller.signal,
+      },
+      {
+        timeoutMs,
+        signal: controller.signal,
+        fetchImpl,
+        retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: method === "POST" },
+      },
+    );
   } catch (error) {
     if (isLocalTimeout(error, controller.signal, context.abortSignal)) {
-      throw new PilotDeckToolRuntimeError(
-        "tool_timeout",
-        `web_search (custom) timed out after ${timeoutMs}ms.`,
-      );
+      throw new SatiToolRuntimeError("tool_timeout", `web_search (custom) timed out after ${timeoutMs}ms.`);
     }
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "tool_execution_failed",
       `web_search (custom) request failed: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -585,7 +558,7 @@ async function performCustomSearch(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => response.statusText);
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "tool_execution_failed",
       `Custom web search error (${response.status}): ${truncate(detail, 500)}`,
     );
@@ -593,18 +566,12 @@ async function performCustomSearch(
 
   const raw = (await response.json()) as Record<string, unknown>;
   if (typeof raw.error === "string" && raw.error.length > 0) {
-    throw new PilotDeckToolRuntimeError(
-      "tool_execution_failed",
-      `Custom web search error: ${raw.error}`,
-    );
+    throw new SatiToolRuntimeError("tool_execution_failed", `Custom web search error: ${raw.error}`);
   }
   const proxyCode = raw.code;
   if (typeof proxyCode === "number" && proxyCode !== 0) {
     const message = typeof raw.msg === "string" ? raw.msg : "search provider error";
-    throw new PilotDeckToolRuntimeError(
-      "tool_execution_failed",
-      `Custom web search error code=${proxyCode}: ${message}`,
-    );
+    throw new SatiToolRuntimeError("tool_execution_failed", `Custom web search error code=${proxyCode}: ${message}`);
   }
 
   const resultValue = custom.resultsPath ? readPath(raw, custom.resultsPath) : extractResultItems(raw);
@@ -642,12 +609,17 @@ function extractResultItems(value: unknown): unknown[] {
 
 function parseGlmResults(value: unknown, limit: number): WebSearchOrganicResult[] {
   if (!Array.isArray(value)) return [];
-  return (value as Array<Record<string, unknown>>).slice(0, limit).map((entry) => ({
+  return (value as Array<Record<string, unknown>>).slice(0, limit).map(entry => ({
     title: readString(entry.title) ?? readString(entry.name),
     link: readString(entry.url) ?? readString(entry.link) ?? readString(entry.href),
-    snippet: readString(entry.snippet) ?? readString(entry.summary) ?? readString(entry.content) ?? readString(entry.text),
+    snippet:
+      readString(entry.snippet) ?? readString(entry.summary) ?? readString(entry.content) ?? readString(entry.text),
     source: readString(entry.source) ?? readString(entry.site) ?? readString(entry.media),
-    publishedAt: readString(entry.publishedAt) ?? readString(entry.published_at) ?? readString(entry.publish_date) ?? readString(entry.date),
+    publishedAt:
+      readString(entry.publishedAt) ??
+      readString(entry.published_at) ??
+      readString(entry.publish_date) ??
+      readString(entry.date),
   }));
 }
 
@@ -657,7 +629,7 @@ function parseMappedResults(
   mapping: Required<WebSearchCustomProviderConfig>,
 ): WebSearchOrganicResult[] {
   if (!Array.isArray(value)) return [];
-  return (value as Array<Record<string, unknown>>).slice(0, limit).map((entry) => ({
+  return (value as Array<Record<string, unknown>>).slice(0, limit).map(entry => ({
     title: readString(readPath(entry, mapping.titleField)),
     link: readString(readPath(entry, mapping.urlField)),
     snippet: readString(readPath(entry, mapping.snippetField)),

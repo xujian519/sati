@@ -1,0 +1,507 @@
+# 由 scripts/port-nuo-rules.ts 从 XiaoNuo Agent patent-examination-rules.yaml 转换生成
+# 原始文件完整内容见 assets/patent-rules/patent-examination-rules.yaml（含 LLM 评估型规则与指导字段）
+# 转换语义: pattern_analysis(期望模式)→structural_analysis 单 element；severity warning→major；info→minor
+version: "1.0"
+rules:
+  - id: EX-SEL-001
+    name: 不授权—智力活动的规则和方法
+    domain: patent_general
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第25条第1款第(二)项；审查指南第二部分第一章3.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 不授权—智力活动的规则和方法
+          patterns:
+            - 智力活动
+            - 规则和方法
+            - 组织
+            - 比赛
+            - 游戏规则
+      minConfidence: 1
+  - id: EX-SEL-002
+    name: 不授权—疾病诊断和治疗方法
+    domain: patent_general
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第25条第1款第(三)项；审查指南第二部分第一章4.1-4.4
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 不授权—疾病诊断和治疗方法
+          patterns:
+            - 诊断
+            - 治疗
+            - 疾病
+            - 外科
+            - 给药
+      minConfidence: 1
+  - id: EX-SEL-003
+    name: 不授权—计算机程序与商业方法排除
+    domain: patent_general
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第25条第1款第(二)项；审查指南第二部分第九章2.0
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 不授权—计算机程序与商业方法排除
+          patterns:
+            - 商业方法
+            - 经营
+            - 管理方法
+            - 算法
+      minConfidence: 1
+  - id: EX-SEL-004
+    name: 不授权—违反法律与公序良俗
+    domain: patent_general
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第5条；审查指南第二部分第一章3.1.1
+    check:
+      type: keyword_blocklist
+      keywords:
+        - 克隆人
+        - 人体胚胎
+        - 赌博
+        - 造假
+        - 窃听
+        - 毒品
+  - id: EX-SEL-005
+    name: 不授权—动物和植物品种
+    domain: patent_general
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第25条第1款第(四)项；审查指南第二部分第一章4.4
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 不授权—动物和植物品种
+          patterns:
+            - 动物品种
+            - 植物品种
+      minConfidence: 1
+  - id: EX-DIS-002
+    name: 说明书—发明内容三要素
+    domain: patent_disclosure
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 审查指南第二部分第二章2.2.4
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: technical_problem
+          patterns:
+            - 技术问题
+            - 要解决
+            - 存在的技术问题
+            - 待解决
+        - element: technical_solution
+          patterns:
+            - 技术方案
+            - 为实现上述目的
+            - 解决上述技术问题
+        - element: beneficial_effect
+          patterns:
+            - 有益效果
+            - 技术效果
+            - 优点
+            - 有益的
+  - id: EX-DIS-003
+    name: 说明书—实施例充分性
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第26条第3款；审查指南第二部分第二章2.2.6
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 说明书—实施例充分性
+          patterns:
+            - 实施例
+            - 具体实施
+      minConfidence: 1
+  - id: EX-DIS-004
+    name: 说明书—附图说明规范
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章2.2.5
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 说明书—附图说明规范
+          patterns:
+            - 附图
+            - 图1
+            - 示意图
+            - 流程图
+            - 结构图
+      minConfidence: 1
+  - id: EX-CLM-001
+    name: 权利要求—清楚性要求
+    domain: patent_claims
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第26条第4款；审查指南第二部分第二章3.2.1
+    check:
+      type: keyword_blocklist
+      keywords:
+        - 大约
+        - 左右
+        - 优选地
+        - 最好是
+        - 大概是
+  - id: EX-CLM-002
+    name: 权利要求—以说明书为依据
+    domain: patent_claims
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第26条第4款；审查指南第二部分第二章3.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: claim_support
+          patterns:
+            - 以说明书为依据
+            - 说明书记载
+            - 说明书公开
+            - 实施例
+  - id: EX-CLM-004
+    name: 权利要求—从属权利要求引用规范
+    domain: patent_claims
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章3.1.2
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权利要求—从属权利要求引用规范
+          patterns:
+            - 根据权利要求
+            - 如权利要求
+            - 按照权利要求
+      minConfidence: 1
+  - id: EX-CLM-005
+    name: 权利要求—功能性限定
+    domain: patent_claims
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第二章3.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权利要求—功能性限定
+          patterns:
+            - 功能性限定
+            - 功能
+            - 配置为
+            - 用于
+            - 被配置
+      minConfidence: 1
+  - id: EX-NOV-003
+    name: 新颖性—上位概念与下位概念
+    domain: patent_novelty
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第三章3.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 新颖性—上位概念与下位概念
+          patterns:
+            - 上位概念
+            - 下位概念
+            - 具体
+            - 概括
+      minConfidence: 1
+  - id: EX-NOV-004
+    name: 新颖性—数值和数值范围
+    domain: patent_novelty
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第三章3.2.2
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 新颖性—数值和数值范围
+          patterns:
+            - 数值范围
+            - 端值
+            - 重叠
+            - 交叉
+      minConfidence: 1
+  - id: EX-NOV-005
+    name: 新颖性—包含性能参数的产品
+    domain: patent_novelty
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第三章5
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 新颖性—包含性能参数的产品
+          patterns:
+            - 性能参数
+            - 参数限定
+            - 产品
+      minConfidence: 1
+  - id: EX-INV-001
+    name: 创造性—三步法框架完整性
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第22条第3款；审查指南第二部分第四章3.2
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: closest_prior_art
+          patterns:
+            - 最接近
+            - 现有技术
+            - 对比文件
+        - element: distinguishing_features
+          patterns:
+            - 区别技术特征
+            - 区别特征
+            - 不同
+        - element: technical_problem
+          patterns:
+            - 实际解决的技术问题
+            - 技术问题
+            - 改善
+        - element: technical_motivation
+          patterns:
+            - 技术启示
+            - 显而易见
+            - 结合
+  - id: EX-INV-005
+    name: 创造性—公知常识举证要求
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第四章3.2.1.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 创造性—公知常识举证要求
+          patterns:
+            - 公知常识
+      minConfidence: 1
+  - id: EX-INV-006
+    name: 创造性—预料不到的技术效果
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第四章5.3
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 创造性—预料不到的技术效果
+          patterns:
+            - 预料不到
+            - 意想不到
+            - 超出预期
+            - 技术效果
+            - 协同
+      minConfidence: 1
+  - id: EX-INV-007
+    name: 创造性—避免事后诸葛亮
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第四章5.4
+    check:
+      type: keyword_blocklist
+      keywords:
+        - 事后诸葛亮
+        - hindsight
+        - ex post facto
+  - id: EX-CMP-001
+    name: 计算机程序—技术方案判断
+    domain: patent_general
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 审查指南第二部分第九章2.0
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: technical_problem
+          patterns:
+            - 技术问题
+        - element: technical_means
+          patterns:
+            - 技术手段
+            - 技术特征
+            - 数据处理
+            - 控制
+        - element: technical_effect
+          patterns:
+            - 技术效果
+  - id: EX-CMP-002
+    name: 计算机程序—说明书撰写要求
+    domain: patent_disclosure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第九章3.0
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: algorithm_description
+          patterns:
+            - 算法
+            - 流程图
+            - 步骤
+        - element: code_or_pseudocode
+          patterns:
+            - 源代码
+            - 伪代码
+            - 程序代码
+  - id: EX-CMP-003
+    name: 计算机程序—权利要求撰写规范
+    domain: patent_claims
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第九章3.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 计算机程序—权利要求撰写规范
+          patterns:
+            - 装置
+            - 模块
+            - 单元
+            - 步骤
+            - 流程
+      minConfidence: 1
+  - id: EX-PRC-001
+    name: 审查程序—修改不得超范围
+    domain: patent_procedure
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第33条；审查指南第二部分第八章5.2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 审查程序—修改不得超范围
+          patterns:
+            - 修改
+            - 原始记载
+            - 超范围
+      minConfidence: 1
+  - id: EX-PRC-002
+    name: 审查程序—分案申请条件
+    domain: patent_procedure
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 专利法实施细则第42条；审查指南第二部分第六章
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 审查程序—分案申请条件
+          patterns:
+            - 分案
+            - 单一性
+            - 总的发明构思
+      minConfidence: 1
+  - id: EX-PRC-003
+    name: 审查程序—答复审查意见期限与要求
+    domain: patent_oa_response
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第八章4
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: oa_mapping
+          patterns:
+            - 审查意见
+            - 审查员认为
+            - 指出
+        - element: response_points
+          patterns:
+            - 答复
+            - 意见陈述
+            - 争辩
+            - 修改
+  - id: EX-SPEC-001
+    name: 说明书—技术背景描述要求
+    domain: patent_disclosure
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第二章2.2.3
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: prior_art_description
+          patterns:
+            - 现有技术
+            - 已有技术
+            - 传统方法
+            - 传统技术
+        - element: problem_description
+          patterns:
+            - 不足
+            - 缺陷
+            - 问题
+            - 缺点
+  - id: EX-SPEC-002
+    name: 说明书—核苷酸和氨基酸序列
+    domain: patent_disclosure
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第二章2.2.7
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 说明书—核苷酸和氨基酸序列
+          patterns:
+            - 核苷酸序列
+            - 氨基酸序列
+            - 序列表
+      minConfidence: 1

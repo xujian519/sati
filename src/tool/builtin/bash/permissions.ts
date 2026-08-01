@@ -65,17 +65,7 @@ const DANGEROUS_ASK_PATTERNS: RegExp[] = [
   /\bStop-Process\b[^|;&]*-Force\b/i,
 ];
 
-const SIMPLE_READ_COMMANDS = new Set([
-  "cat",
-  "date",
-  "echo",
-  "head",
-  "ls",
-  "printf",
-  "pwd",
-  "wc",
-  "whoami",
-]);
+const SIMPLE_READ_COMMANDS = new Set(["cat", "date", "echo", "head", "ls", "printf", "pwd", "wc", "whoami"]);
 
 const WINDOWS_READ_COMMANDS = new Set([
   "dir",
@@ -98,7 +88,7 @@ const WINDOWS_READ_COMMANDS = new Set([
 const READ_ONLY_GIT_SUBCOMMANDS = new Set(["diff", "log", "show", "status"]);
 
 export function classifyBashPermission(command: string): PermissionResult {
-  if (HARD_DENY_PATTERNS.some((pattern) => pattern.test(command))) {
+  if (HARD_DENY_PATTERNS.some(pattern => pattern.test(command))) {
     return {
       type: "deny",
       reason: { type: "safety", message: "Dangerous shell command denied." },
@@ -106,7 +96,7 @@ export function classifyBashPermission(command: string): PermissionResult {
     };
   }
 
-  if (DANGEROUS_ASK_PATTERNS.some((pattern) => pattern.test(command))) {
+  if (DANGEROUS_ASK_PATTERNS.some(pattern => pattern.test(command))) {
     return askForShellPermission(command);
   }
 
@@ -154,9 +144,9 @@ export function isReadOnlyShellCommand(command: string): boolean {
   if (normalizedCommandName === "git") {
     const subcommand = getGitSubcommand(args);
     return (
-      subcommand !== undefined
-      && READ_ONLY_GIT_SUBCOMMANDS.has(subcommand)
-      && !args.some((arg) => arg === "--output" || arg.startsWith("--output="))
+      subcommand !== undefined &&
+      READ_ONLY_GIT_SUBCOMMANDS.has(subcommand) &&
+      !args.some(arg => arg === "--output" || arg.startsWith("--output="))
     );
   }
 
@@ -171,15 +161,9 @@ export function isReadOnlyShellCommand(command: string): boolean {
   return normalizedCommandName === "sh" && args.length === 2 && args[0] === "-c" && /^exit\s+\d+$/.test(args[1]);
 }
 
-const GIT_GLOBAL_OPTIONS_WITH_VALUE = new Set([
-  "--namespace",
-  "--super-prefix",
-]);
+const GIT_GLOBAL_OPTIONS_WITH_VALUE = new Set(["--namespace", "--super-prefix"]);
 
-const GIT_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES = [
-  "--namespace=",
-  "--super-prefix=",
-];
+const GIT_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES = ["--namespace=", "--super-prefix="];
 
 const GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE = new Set([
   "-C",
@@ -205,8 +189,8 @@ function getGitSubcommand(args: string[]): string | undefined {
       return undefined;
     }
     if (
-      GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE.has(arg)
-      || GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES.some((prefix) => arg.startsWith(prefix))
+      GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE.has(arg) ||
+      GIT_UNSAFE_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES.some(prefix => arg.startsWith(prefix))
     ) {
       return undefined;
     }
@@ -214,7 +198,7 @@ function getGitSubcommand(args: string[]): string | undefined {
       index += 1;
       continue;
     }
-    if (GIT_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES.some((prefix) => arg.startsWith(prefix))) {
+    if (GIT_GLOBAL_OPTIONS_WITH_VALUE_PREFIXES.some(prefix => arg.startsWith(prefix))) {
       continue;
     }
     if (arg.startsWith("-")) {
@@ -280,7 +264,7 @@ const FIND_MUTATING_OR_EXEC_ACTIONS = new Set([
 ]);
 
 function isReadOnlyFindTokens(args: string[]): boolean {
-  return !args.some((token) => FIND_MUTATING_OR_EXEC_ACTIONS.has(token));
+  return !args.some(token => FIND_MUTATING_OR_EXEC_ACTIONS.has(token));
 }
 
 function tokenizeSimpleShell(command: string): string[] | undefined {

@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
+import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
-import type { PilotDeckConfig } from "../modelPool/types";
+import type { SatiConfig } from "../modelPool/types";
 import { ConfigSaveError } from "../../shared/view";
 import CronSection from "./components/CronSection";
 
@@ -12,10 +12,10 @@ type AgentScheduleSectionsProps = {
 
 export default function AgentScheduleSections({ title }: AgentScheduleSectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
+  const { raw, setRaw, save, loading, error } = useSatiConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
 
-  const onFormChange = (next: PilotDeckConfig) => {
+  const onFormChange = (next: SatiConfig) => {
     try {
       setRaw(configToYamlString(next));
       void save();
@@ -28,9 +28,7 @@ export default function AgentScheduleSections({ title }: AgentScheduleSectionsPr
     return (
       <div className="space-y-6">
         <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
-        <div className="py-6 text-xs text-muted-foreground">
-          {t("pilotDeckConfig.loading")}
-        </div>
+        <div className="py-6 text-xs text-muted-foreground">{t("satiConfig.loading")}</div>
       </div>
     );
   }

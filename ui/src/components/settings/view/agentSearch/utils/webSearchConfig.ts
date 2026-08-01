@@ -1,10 +1,8 @@
-import type { PilotDeckConfig } from "../../modelPool/types";
+import type { SatiConfig } from "../../modelPool/types";
 
 export type WebSearchProvider = "glm" | "tavily" | "custom";
 
-type WebSearchConfig = NonNullable<
-  NonNullable<PilotDeckConfig["tools"]>["webSearch"]
->;
+type WebSearchConfig = NonNullable<NonNullable<SatiConfig["tools"]>["webSearch"]>;
 
 export function webSearchConfigForProvider(
   current: WebSearchConfig,
@@ -18,15 +16,7 @@ export function webSearchConfigForProvider(
   };
 }
 
-export function isWebSearchApiKeyRequired(
-  config: WebSearchConfig,
-): boolean {
-  const provider =
-    config.provider === "tavily" || config.provider === "custom"
-      ? config.provider
-      : "glm";
-  return (
-    provider !== "custom" ||
-    (config.customProvider?.auth ?? "bearer") !== "none"
-  );
+export function isWebSearchApiKeyRequired(config: WebSearchConfig): boolean {
+  const provider = config.provider === "tavily" || config.provider === "custom" ? config.provider : "glm";
+  return provider !== "custom" || (config.customProvider?.auth ?? "bearer") !== "none";
 }

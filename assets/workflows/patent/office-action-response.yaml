@@ -1,0 +1,147 @@
+# 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
+template_id: office-action-response
+name: 审查意见答复
+description: 案卷探查 → 规则 → **检索（必经）** → CAP02 → 充分公开/清楚支持 → 答复书撰写 → 反套话评分 → HITL
+intent: 审查意见（一通/二通/补正）答复：检索 + CAP02 技术分析 + 法条论证 + 反套话评分 + 意见陈述书
+steps:
+  - id: probe
+    name: 案卷探查
+    description: 读取审查意见、申请文件与已有答复草稿
+    worker: project-probe
+    input_template: |
+      案卷目录：{{case_dir}}
+      识别审查意见通知书、说明书/权利要求、答复草稿，输出 intent=审查意见答复 与 provision_ids（P-A05/P-A06 等）。
+
+  - id: rules
+    name: 规则探查
+    description: 映射驳回理由到条款簇
+    worker: rule-explorer
+    depends_on: [probe]
+    input_template: |
+      针对审查意见答复场景，解析驳回理由类型（充分公开/清楚/支持/新颖性/创造性等），
+      输出 provision_ids（常见 P-A05、P-A06、P-A01、P-A02）与 generatedPrompt。
+      主题：专利法第26条 审查意见 答复 意见陈述
+
+  - id: search-plan
+    name: 检索策略规划
+    description: 制定检索策略，提取检索要素，构建三层渐进式检索式
+    worker: patent-search-planner
+    depends_on: [rules]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **必经步骤**：从技术方案提取 IPC 分类、关键词、同义词。
+      构建三层检索式：精确层 → 扩展层 → 语义层。
+      输出 search-plan.md，含至少 3 组检索式（布尔表达式 + IPC 限定）。
+      参考 bcip-retrieval skill。
+
+  - id: search-exec
+    name: 检索执行
+    description: 执行双通道检索（Google Patents + CNIPA），获取对比文件
+    worker: patent-search-executor
+    depends_on: [search-plan]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **必经步骤**：按 search-plan.md 执行检索。
+      至少使用 2 个检索源：
+      1. Google Patents（通过 google-patents-search skill）
+      2. CNIPA 公布公告（通过 cnipa-query skill）
+      每篇对比文件标注：专利号、标题、公开日、相关度（X/Y/A）、覆盖的权利要求、可引用段落（至少 3 段）。
+      输出 search-results.md。
+
+  - id: search-qual
+    name: 检索结果质量检查
+    description: 对检索结果进行质量验证，满足门槛后方可进入下游
+    worker: bcip-retrieval (quality check phase)
+    depends_on: [search-exec]
+    has_checkpoint: true
+    checkpoint_title: 确认对比文件列表与相关性（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **质量门槛**（以下条件必须全部满足）：
+      1. 对比文件 ≥ 3 篇
+      2. 每篇标注了相关度和覆盖的权利要求
+      3. 至少 2 篇获取了全文（PDF→Markdown 转换）
+      4. 检索式包含布尔逻辑和 IPC 限定
+      
+      不满足时：退回 search-exec 重新执行。
+      满足时：人工确认对比文件列表后再进入技术分析。
+
+  - id: tech-analyze
+    name: CAP02 技术分析
+    description: 发明方案解构 + 审查意见论点与技术特征映射 + 对比文件对比
+    worker: patent-technical-analyzer
+    depends_on: [search-qual]
+    has_checkpoint: true
+    checkpoint_title: 确认审查意见论点映射与技术解构（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：**审查意见答复** — CAP02 必步。
+
+      1. 对发明方案完成七维解构（technical-deconstruction-target.md）
+      2. 逐条解析审查意见驳回理由，建立「理由 ↔ 技术特征/说明书段落/附图」映射表
+      3. 若涉及对比文件，对 D1 完成解构与四级对比矩阵
+      4. tech-graph 因果链（≥3 特征时必做）
+      5. HITL：确认每条驳回理由的技术映射后再进入条款分析
+
+      前置：search-results.md（含对比文件全文标注）
+      输出：technical-analysis-report.md（含审查意见论点映射表 + 对比文件特征对比矩阵）
+
+  - id: disclosure
+    name: 充分公开分析
+    description: 专利法第26条第3款（常见一通驳回）
+    worker: provision-disclosure
+    depends_on: [tech-analyze]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **前置**：technical-analysis-report.md、审查意见 converted 文本
+
+      针对审查员指出的「不清楚/公开不充分」问题，按 P-A05 分析说明书是否充分公开、本领域能否实现。
+      输出：data/cases/{{case_id}}/outputs/disclosure-analysis.md
+
+  - id: claims-clarity
+    name: 清楚与支持分析
+    description: 专利法第26条第4款
+    worker: provision-claims-clarity
+    depends_on: [tech-analyze]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **前置**：technical-analysis-report.md
+
+      若审查意见涉及权利要求不清楚或不支持，按 P-A06 分析。
+      若无此类驳回，输出简要说明「本回合无第4款驳回」并跳过深度论证。
+      输出：data/cases/{{case_id}}/outputs/claims-support-analysis.md
+
+  - id: draft
+    name: 答复书撰写
+    description: 意见陈述书/审查意见答复书
+    worker: patent-oa-response-drafter
+    depends_on: [disclosure, claims-clarity]
+    has_checkpoint: true
+    checkpoint_title: 审核答复书定稿（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      基于 CAP02 报告、disclosure-analysis.md、claims-support-analysis.md、search-results.md 及已有答复草稿，
+      撰写完整意见陈述书，逐条回应审查意见，禁止 AI 套话与编造事实。
+      所有对比文件引用必须指向 search-results.md 中的具体段落（禁止凭记忆引用）。
+      输出：data/cases/{{case_id}}/outputs/oa-response-statement.md
+
+  - id: slop-clean
+    name: 反套话润色+评分
+    description: stop-patent-slop 规则后处理 + 5维评分，生成 clean 版与变更日志
+    worker: patent-slop-cleaner
+    depends_on: [draft]
+    input_template: |
+      案卷：{{case_dir}}
+
+      对 outputs/oa-response-statement.md 应用 stop-patent-slop 规则：
+      1. 删除填充词与无证据套话
+      2. 运行 slop-scorer.ts 5维评分，总分 < 35 必须修订
+      3. 输出 oa-response-statement-clean.md
+      4. 输出 oa-response-slop-changelog.md（列出变更 + 评分报告）

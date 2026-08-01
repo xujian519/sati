@@ -5,13 +5,13 @@ function isTimeoutError(error) {
     return error instanceof Error && (error.name === "AbortError" || /timeout/i.test(error.message));
 }
 function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 function getErrorStatusCode(error) {
-    if (error
-        && typeof error === "object"
-        && "status" in error
-        && typeof error.status === "number") {
+    if (error &&
+        typeof error === "object" &&
+        "status" in error &&
+        typeof error.status === "number") {
         return error.status;
     }
     return null;
@@ -24,11 +24,10 @@ function isTransientRequestError(error) {
         return true;
     if (!(error instanceof Error))
         return false;
-    return /(fetch failed|network|econnreset|econnrefused|etimedout|socket hang up|temporar|rate limit|too many requests)/i
-        .test(error.message);
+    return /(fetch failed|network|econnreset|econnrefused|etimedout|socket hang up|temporar|rate limit|too many requests)/i.test(error.message);
 }
 function computeRetryDelayMs(attemptIndex) {
-    return DEFAULT_REQUEST_RETRY_BASE_DELAY_MS * (2 ** attemptIndex);
+    return DEFAULT_REQUEST_RETRY_BASE_DELAY_MS * 2 ** attemptIndex;
 }
 function resolveRequestTimeoutMs(timeoutMs) {
     if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs))
@@ -219,10 +218,14 @@ Rules:
 - "identity_background_markdown" must contain only the markdown content that belongs under the "## 身份背景" heading.
 - Do not include the heading itself.
 - Prefer concise bullet-list markdown when possible.
+- For every incoming user note, report whether its durable content was actually incorporated into the rewritten section.
+- Include a "note_absorption" array with one entry per incoming user note, in the same order as "incoming_user_notes". Use the note's index in that array as "note_index".
+- Mark "absorbed": true ONLY when the note's durable content is genuinely represented in "identity_background_markdown". Notes excluded by the rules above (reply preferences, style choices, collaboration rules, progress, deadlines, etc.) must be "absorbed": false.
 
 Use this exact JSON shape:
 {
-  "identity_background_markdown": "- ..."
+  "identity_background_markdown": "- ...",
+  "note_absorption": [{"note_index": 0, "absorbed": true}, {"note_index": 1, "absorbed": false}]
 }
 `.trim();
 const STABLE_FORMAL_PROJECT_ID_PATTERN = /^project_[a-z0-9]+$/;
@@ -509,7 +512,7 @@ function parseModelRef(modelRef, config) {
         if (!isRecord(providerConfig))
             continue;
         const models = Array.isArray(providerConfig.models) ? providerConfig.models : [];
-        const firstModel = models.find((entry) => isRecord(entry) && typeof entry.id === "string" && entry.id.trim());
+        const firstModel = models.find(entry => isRecord(entry) && typeof entry.id === "string" && entry.id.trim());
         if (firstModel && isRecord(firstModel)) {
             return { provider, model: String(firstModel.id).trim() };
         }
@@ -534,8 +537,8 @@ function resolveAgentPrimaryModel(config, agentId) {
 }
 function detectPreferredOutputLanguage(messages) {
     const userText = messages
-        .filter((message) => message.role === "user")
-        .map((message) => message.content)
+        .filter(message => message.role === "user")
+        .map(message => message.content)
         .join("\n");
     if (/[\u4e00-\u9fff]/.test(userText))
         return "Simplified Chinese";
@@ -546,7 +549,7 @@ function buildUserProfileRewritePrompt(input) {
         existing_profile_markdown: input.existingProfile?.files[0]?.content
             ? truncate(input.existingProfile.files[0].content, 3_200)
             : null,
-        incoming_user_notes: input.candidates.map((candidate) => {
+        incoming_user_notes: input.candidates.map(candidate => {
             const noteMarkdown = candidate.body || candidate.profile || candidate.summary || candidate.description;
             return {
                 description: truncateForPrompt(candidate.description, 180),
@@ -558,8 +561,8 @@ function buildUserProfileRewritePrompt(input) {
     }, null, 2);
 }
 function renderIdentityBackgroundMarkdownFromItems(items) {
-    const normalized = uniqueStrings(items.map((item) => stripMarkdownSyntax(item)), 20);
-    return normalized.map((item) => `- ${item}`).join("\n");
+    const normalized = uniqueStrings(items.map(item => stripMarkdownSyntax(item)), 20);
+    return normalized.map(item => `- ${item}`).join("\n");
 }
 function normalizeIdentityBackgroundSectionMarkdown(value) {
     if (typeof value !== "string") {
@@ -605,7 +608,7 @@ function buildRewrittenUserProfileCandidate(input) {
 function buildConversationTurns(messages) {
     const turns = [];
     let current = [];
-    for (const message of messages.filter((item) => item.role === "user" || item.role === "assistant")) {
+    for (const message of messages.filter(item => item.role === "user" || item.role === "assistant")) {
         if (message.role === "user") {
             if (current.length > 0)
                 turns.push(current);
@@ -620,16 +623,16 @@ function buildConversationTurns(messages) {
     return turns;
 }
 function findFocusTurnIndex(turns, focusMessage) {
-    const byReference = turns.findIndex((turn) => turn.some((message) => message === focusMessage));
+    const byReference = turns.findIndex(turn => turn.some(message => message === focusMessage));
     if (byReference >= 0)
         return byReference;
-    const byValue = turns.findIndex((turn) => turn.some((message) => message.role === focusMessage.role && message.content === focusMessage.content));
+    const byValue = turns.findIndex(turn => turn.some(message => message.role === focusMessage.role && message.content === focusMessage.content));
     return byValue;
 }
 function serializeTurnsForPrompt(turns) {
     return turns.map((turn, index) => ({
         turn_index: index + 1,
-        messages: turn.map((message) => ({
+        messages: turn.map(message => ({
             role: message.role,
             content: truncateForPrompt(message.content, 320),
         })),
@@ -638,15 +641,9 @@ function serializeTurnsForPrompt(turns) {
 function buildIndexPromptWindow(input) {
     const turns = buildConversationTurns(input.batchContextMessages);
     const focusTurnIndex = findFocusTurnIndex(turns, input.focusUserTurn);
-    const focusTurn = focusTurnIndex >= 0
-        ? turns[focusTurnIndex]
-        : [input.focusUserTurn];
-    const previousTurns = focusTurnIndex >= 0
-        ? turns.slice(Math.max(0, focusTurnIndex - 2), focusTurnIndex)
-        : [];
-    const nextTurns = focusTurnIndex >= 0
-        ? turns.slice(focusTurnIndex + 1, focusTurnIndex + 3)
-        : [];
+    const focusTurn = focusTurnIndex >= 0 ? turns[focusTurnIndex] : [input.focusUserTurn];
+    const previousTurns = focusTurnIndex >= 0 ? turns.slice(Math.max(0, focusTurnIndex - 2), focusTurnIndex) : [];
+    const nextTurns = focusTurnIndex >= 0 ? turns.slice(focusTurnIndex + 1, focusTurnIndex + 3) : [];
     return JSON.stringify({
         current_project_meta: input.currentProjectMeta
             ? {
@@ -673,9 +670,7 @@ function normalizeClassificationLabels(value) {
     const seen = new Set();
     for (const item of value) {
         const record = isRecord(item) ? item : undefined;
-        const type = record?.type === "user" || record?.type === "project" || record?.type === "feedback"
-            ? record.type
-            : undefined;
+        const type = record?.type === "user" || record?.type === "project" || record?.type === "feedback" ? record.type : undefined;
         if (!type || seen.has(type))
             continue;
         seen.add(type);
@@ -689,9 +684,7 @@ function normalizeClassificationLabels(value) {
 }
 function buildCandidateFromCreatePayload(input) {
     const name = typeof input.payload.name === "string" ? truncateForPrompt(input.payload.name, 80) : "";
-    const description = typeof input.payload.description === "string"
-        ? truncateForPrompt(input.payload.description, 180)
-        : "";
+    const description = typeof input.payload.description === "string" ? truncateForPrompt(input.payload.description, 180) : "";
     const markdown = typeof input.payload.markdown === "string" ? input.payload.markdown.trim() : "";
     if (!name || !description || !markdown)
         return null;
@@ -708,12 +701,10 @@ function buildCandidateFromCreatePayload(input) {
     };
 }
 function buildDreamFileGlobalPlanPrompt(input) {
-    const currentProjectNames = Array.from(new Set(input.currentProjects
-        .map((project) => normalizeWhitespace(project.projectName))
-        .filter(Boolean)));
+    const currentProjectNames = Array.from(new Set(input.currentProjects.map(project => normalizeWhitespace(project.projectName)).filter(Boolean)));
     const observedMemoryLabels = Array.from(new Set(input.records
-        .filter((record) => record.type === "project")
-        .map((record) => normalizeWhitespace(record.name))
+        .filter(record => record.type === "project")
+        .map(record => normalizeWhitespace(record.name))
         .filter(Boolean)));
     return JSON.stringify({
         governance_scope: {
@@ -729,7 +720,7 @@ function buildDreamFileGlobalPlanPrompt(input) {
             keep_multiple_memory_files_within_current_project: true,
             do_not_create_additional_top_level_projects: true,
         },
-        current_projects: input.currentProjects.map((project) => ({
+        current_projects: input.currentProjects.map(project => ({
             project_id: project.projectId,
             project_name: project.projectName,
             description: truncateForPrompt(project.description, 220),
@@ -737,7 +728,7 @@ function buildDreamFileGlobalPlanPrompt(input) {
             updated_at: project.updatedAt,
             dream_updated_at: project.dreamUpdatedAt ?? "",
         })),
-        records: input.records.map((record) => ({
+        records: input.records.map(record => ({
             entry_id: record.entryId,
             relative_path: record.relativePath,
             type: record.type,
@@ -753,12 +744,12 @@ function buildDreamFileGlobalPlanPrompt(input) {
             project: record.project
                 ? {
                     stage: truncateForPrompt(record.project.stage, 220),
-                    decisions: record.project.decisions.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    constraints: record.project.constraints.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    next_steps: record.project.nextSteps.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    blockers: record.project.blockers.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    timeline: record.project.timeline.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    notes: record.project.notes.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
+                    decisions: record.project.decisions.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    constraints: record.project.constraints.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    next_steps: record.project.nextSteps.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    blockers: record.project.blockers.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    timeline: record.project.timeline.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    notes: record.project.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
                 }
                 : undefined,
             feedback: record.feedback
@@ -766,7 +757,7 @@ function buildDreamFileGlobalPlanPrompt(input) {
                     rule: truncateForPrompt(record.feedback.rule, 220),
                     why: truncateForPrompt(record.feedback.why, 220),
                     how_to_apply: truncateForPrompt(record.feedback.howToApply, 220),
-                    notes: record.feedback.notes.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
+                    notes: record.feedback.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
                 }
                 : undefined,
         })),
@@ -799,7 +790,7 @@ function buildDreamFileProjectRewritePrompt(input) {
                 updated_at: input.currentMeta.updatedAt,
             }
             : null,
-        records: input.records.map((record) => ({
+        records: input.records.map(record => ({
             entry_id: record.entryId,
             relative_path: record.relativePath,
             type: record.type,
@@ -810,12 +801,12 @@ function buildDreamFileProjectRewritePrompt(input) {
             project: record.project
                 ? {
                     stage: truncateForPrompt(record.project.stage, 220),
-                    decisions: record.project.decisions.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    constraints: record.project.constraints.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    next_steps: record.project.nextSteps.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    blockers: record.project.blockers.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    timeline: record.project.timeline.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
-                    notes: record.project.notes.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
+                    decisions: record.project.decisions.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    constraints: record.project.constraints.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    next_steps: record.project.nextSteps.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    blockers: record.project.blockers.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    timeline: record.project.timeline.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+                    notes: record.project.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
                 }
                 : undefined,
             feedback: record.feedback
@@ -823,7 +814,7 @@ function buildDreamFileProjectRewritePrompt(input) {
                     rule: truncateForPrompt(record.feedback.rule, 220),
                     why: truncateForPrompt(record.feedback.why, 220),
                     how_to_apply: truncateForPrompt(record.feedback.howToApply, 220),
-                    notes: record.feedback.notes.map((item) => truncateForPrompt(item, 140)).slice(0, 12),
+                    notes: record.feedback.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
                 }
                 : undefined,
         })),
@@ -832,7 +823,7 @@ function buildDreamFileProjectRewritePrompt(input) {
 function buildDreamClusterPlanPrompt(input) {
     return JSON.stringify({
         category: input.kind,
-        headers: input.headers.map((header) => ({
+        headers: input.headers.map(header => ({
             relative_path: header.relativePath,
             name: truncateForPrompt(header.name, 120),
             description: truncateForPrompt(header.description, 220),
@@ -843,7 +834,7 @@ function buildDreamClusterPlanPrompt(input) {
 function buildDreamClusterRefinePrompt(input) {
     return JSON.stringify({
         category: input.kind,
-        records: input.records.map((record) => ({
+        records: input.records.map(record => ({
             entry_id: record.entryId,
             relative_path: record.relativePath,
             type: record.type,
@@ -866,14 +857,14 @@ function buildDreamProjectMetaReviewPrompt(input) {
             updated_at: input.currentMeta.updatedAt,
             dream_updated_at: input.currentMeta.dreamUpdatedAt ?? "",
         },
-        recent_project_files: input.recentProjectRecords.map((record) => ({
+        recent_project_files: input.recentProjectRecords.map(record => ({
             relative_path: record.relativePath,
             name: record.name,
             description: truncateForPrompt(record.description, 220),
             updated_at: record.updatedAt,
             content: record.content,
         })),
-        recent_feedback_files: input.recentFeedbackRecords.map((record) => ({
+        recent_feedback_files: input.recentFeedbackRecords.map(record => ({
             relative_path: record.relativePath,
             name: record.name,
             description: truncateForPrompt(record.description, 220),
@@ -888,9 +879,14 @@ function buildGeneralProjectMetaMergePrompt(input) {
             mode: "general_project_meta_merge_plan",
             primary_truth: "supplied_general_project_meta_only",
             writable_targets: ["GeneralProjects/*.md"],
-            forbidden_outputs: ["new project meta", "project memory rewrite", "feedback memory rewrite", "user profile rewrite"],
+            forbidden_outputs: [
+                "new project meta",
+                "project memory rewrite",
+                "feedback memory rewrite",
+                "user profile rewrite",
+            ],
         },
-        project_metas: input.projectMetas.map((project) => ({
+        project_metas: input.projectMetas.map(project => ({
             project_id: project.projectId,
             project_name: project.projectName,
             description: truncateForPrompt(project.description, 260),
@@ -924,12 +920,12 @@ function extractFirstJsonObject(raw) {
             else if (char === "\\") {
                 escaped = true;
             }
-            else if (char === "\"") {
+            else if (char === '"') {
                 inString = false;
             }
             continue;
         }
-        if (char === "\"") {
+        if (char === '"') {
             inString = true;
             continue;
         }
@@ -963,7 +959,7 @@ function decodeLooseJsonString(value) {
         .replace(/\\n/g, "\n")
         .replace(/\\r/g, "\r")
         .replace(/\\t/g, "\t")
-        .replace(/\\"/g, "\"")
+        .replace(/\\"/g, '"')
         .replace(/\\\\/g, "\\");
 }
 function extractLooseJsonBooleanProperty(source, key) {
@@ -974,7 +970,7 @@ function extractLooseJsonBooleanProperty(source, key) {
 }
 function extractLooseJsonStringProperty(source, key, nextKeys) {
     const escapedKey = escapeRegexLiteral(key);
-    const nextKeyPattern = nextKeys.map((item) => escapeRegexLiteral(item)).join("|");
+    const nextKeyPattern = nextKeys.map(item => escapeRegexLiteral(item)).join("|");
     const pattern = nextKeys.length > 0
         ? new RegExp(`"${escapedKey}"\\s*:\\s*"([\\s\\S]*?)"\\s*,\\s*"(${nextKeyPattern})"\\s*:`, "i")
         : new RegExp(`"${escapedKey}"\\s*:\\s*"([\\s\\S]*)"\\s*}\\s*$`, "i");
@@ -1000,12 +996,17 @@ function tryParseLooseMemoryCreatePayload(raw) {
             ? { markdown: extractLooseJsonStringProperty(envelope, "markdown", []) }
             : {}),
     };
-    return typeof payload.name === "string" && typeof payload.description === "string" && typeof payload.markdown === "string"
+    return typeof payload.name === "string" &&
+        typeof payload.description === "string" &&
+        typeof payload.markdown === "string"
         ? payload
         : null;
 }
 function slugifyKeyPart(value) {
-    const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const normalized = value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
     return normalized || "item";
 }
 function clampConfidence(value, fallback) {
@@ -1024,8 +1025,8 @@ function normalizeDreamFileEntryIds(items, allowedEntryIds, maxItems = 200) {
         return [];
     return Array.from(new Set(items
         .filter((item) => typeof item === "string")
-        .map((item) => normalizeWhitespace(item))
-        .filter((item) => item && allowedEntryIds.has(item)))).slice(0, maxItems);
+        .map(item => normalizeWhitespace(item))
+        .filter(item => item && allowedEntryIds.has(item)))).slice(0, maxItems);
 }
 function normalizeDreamFileProjectStatus(value) {
     const normalized = typeof value === "string" ? normalizeWhitespace(value) : "";
@@ -1053,12 +1054,8 @@ function normalizeDreamFileGlobalPlanProject(item, allowedEntryIds, allowedProje
     const planKey = typeof item.plan_key === "string"
         ? truncate(normalizeWhitespace(item.plan_key), 120)
         : `dream-plan-${fallbackIndex + 1}`;
-    const projectName = typeof item.project_name === "string"
-        ? truncate(normalizeWhitespace(item.project_name), 120)
-        : "";
-    const description = typeof item.description === "string"
-        ? truncate(normalizeWhitespace(item.description), 320)
-        : "";
+    const projectName = typeof item.project_name === "string" ? truncate(normalizeWhitespace(item.project_name), 120) : "";
+    const description = typeof item.description === "string" ? truncate(normalizeWhitespace(item.description), 320) : "";
     if (!projectName || !description)
         return null;
     const targetProjectId = normalizeDreamFileProjectId(item.target_project_id, allowedProjectIds);
@@ -1142,9 +1139,7 @@ function normalizeDreamCluster(item, allowedRelativePaths) {
     const memberRelativePaths = normalizeDreamFileEntryIds(item.member_relative_paths, allowedRelativePaths, 32);
     if (memberRelativePaths.length === 0)
         return null;
-    const reason = typeof item.reason === "string"
-        ? truncate(normalizeWhitespace(item.reason), 320)
-        : "";
+    const reason = typeof item.reason === "string" ? truncate(normalizeWhitespace(item.reason), 320) : "";
     return {
         memberRelativePaths,
         reason,
@@ -1153,17 +1148,13 @@ function normalizeDreamCluster(item, allowedRelativePaths) {
 function normalizeGeneralProjectMetaMergeGroup(item) {
     if (!isRecord(item))
         return null;
-    const keeperProjectId = typeof item.keeper_project_id === "string"
-        ? normalizeWhitespace(item.keeper_project_id)
-        : "";
+    const keeperProjectId = typeof item.keeper_project_id === "string" ? normalizeWhitespace(item.keeper_project_id) : "";
     const duplicateProjectIds = normalizeStringArray(item.duplicate_project_ids, 100)
-        .map((projectId) => normalizeWhitespace(projectId))
+        .map(projectId => normalizeWhitespace(projectId))
         .filter(Boolean);
     if (!keeperProjectId || duplicateProjectIds.length === 0)
         return null;
-    const reason = typeof item.reason === "string"
-        ? truncate(normalizeWhitespace(item.reason), 320)
-        : "";
+    const reason = typeof item.reason === "string" ? truncate(normalizeWhitespace(item.reason), 320) : "";
     return {
         keeperProjectId,
         duplicateProjectIds: Array.from(new Set(duplicateProjectIds)),
@@ -1173,9 +1164,7 @@ function normalizeGeneralProjectMetaMergeGroup(item) {
 function normalizeDreamProjectMetaReview(payload, fallback) {
     return {
         shouldUpdate: normalizeBoolean(payload.should_update, false),
-        reason: typeof payload.reason === "string"
-            ? truncate(normalizeWhitespace(payload.reason), 320)
-            : "",
+        reason: typeof payload.reason === "string" ? truncate(normalizeWhitespace(payload.reason), 320) : "",
         projectMeta: {
             projectName: typeof payload.project_name === "string"
                 ? truncate(normalizeWhitespace(payload.project_name), 120) || fallback.projectName
@@ -1198,7 +1187,7 @@ function recallProjectSourcePriority(project) {
     return 0;
 }
 function chooseBestRecallProjectFallback(shortlist) {
-    return [...shortlist].sort((left, right) => {
+    return ([...shortlist].sort((left, right) => {
         if (right.exact !== left.exact)
             return right.exact - left.exact;
         if (right.score !== left.score)
@@ -1207,7 +1196,7 @@ function chooseBestRecallProjectFallback(shortlist) {
         if (sourcePriorityDelta !== 0)
             return sourcePriorityDelta;
         return right.updatedAt.localeCompare(left.updatedAt);
-    })[0] ?? shortlist[0];
+    })[0] ?? shortlist[0]);
 }
 function normalizeStringArray(items, maxItems) {
     if (typeof items === "string" && items.trim()) {
@@ -1217,14 +1206,12 @@ function normalizeStringArray(items, maxItems) {
         return [];
     return items
         .filter((item) => typeof item === "string")
-        .map((item) => item.trim())
+        .map(item => item.trim())
         .filter(Boolean)
         .slice(0, maxItems);
 }
 function uniqueStrings(items, maxItems) {
-    return Array.from(new Set(items
-        .map((item) => item.trim())
-        .filter(Boolean))).slice(0, maxItems);
+    return Array.from(new Set(items.map(item => item.trim()).filter(Boolean))).slice(0, maxItems);
 }
 function pickLongest(left, right) {
     const a = normalizeWhitespace(left);
@@ -1244,19 +1231,19 @@ function splitPreferenceHints(text) {
         .replace(/[：:]/g, "\n")
         .replace(/[；;]/g, "\n")
         .split("\n")
-        .map((line) => normalizeWhitespace(line))
+        .map(line => normalizeWhitespace(line))
         .filter(Boolean);
     return Array.from(new Set(normalized
-        .map((line) => stripExplicitRememberLead(line))
+        .map(line => stripExplicitRememberLead(line))
         .filter(Boolean)
-        .filter((line) => line.length >= 4))).slice(0, 10);
+        .filter(line => line.length >= 4))).slice(0, 10);
 }
 function splitProfileFacts(text) {
     return uniqueStrings(text
         .replace(/\r/g, "\n")
         .split(/\n|[，,；;。.!?]/)
-        .map((line) => normalizeWhitespace(line))
-        .filter((line) => line.length >= 2), 20);
+        .map(line => normalizeWhitespace(line))
+        .filter(line => line.length >= 2), 20);
 }
 function stripMarkdownSyntax(text) {
     return normalizeWhitespace(text
@@ -1283,7 +1270,7 @@ function canonicalizeUserFact(value) {
         .replace(/\s+/g, "");
 }
 function dedupeFactsAgainstSection(items, excluded) {
-    const excludedKeys = new Set(excluded.map((item) => canonicalizeUserFact(item)).filter(Boolean));
+    const excludedKeys = new Set(excluded.map(item => canonicalizeUserFact(item)).filter(Boolean));
     const seen = new Set();
     const next = [];
     for (const item of items) {
@@ -1304,15 +1291,13 @@ function normalizeUserSectionItems(value, maxItems) {
 }
 function cleanUserIdentitySummary(input) {
     return {
-        identityBackground: uniqueStrings(input.identityBackground.flatMap((item) => splitProfileFacts(stripMarkdownSyntax(item))), 20),
+        identityBackground: uniqueStrings(input.identityBackground.flatMap(item => splitProfileFacts(stripMarkdownSyntax(item))), 20),
     };
 }
 function looksLikeCollaborationRuleText(text) {
     const normalized = normalizeWhitespace(text);
-    return /(以后回答|回答时|回复时|同步进展|代码示例|先给结论|先说完成了什么|不要写成|怎么和我协作|怎么交付|怎么汇报|请你|交付时|汇报|review|评审|写法|输出格式|回复格式|格式化输出)/i
-        .test(normalized)
-        || /((给我|你|请按|每次).{0,12}(交付|输出|回复|汇报).{0,20}(标题|正文|封面文案))|((先给|再给).{0,12}(标题|正文|封面文案))/i
-            .test(normalized);
+    return (/(以后回答|回答时|回复时|同步进展|代码示例|先给结论|先说完成了什么|不要写成|怎么和我协作|怎么交付|怎么汇报|请你|交付时|汇报|review|评审|写法|输出格式|回复格式|格式化输出)/i.test(normalized) ||
+        /((给我|你|请按|每次).{0,12}(交付|输出|回复|汇报).{0,20}(标题|正文|封面文案))|((先给|再给).{0,12}(标题|正文|封面文案))/i.test(normalized));
 }
 function deriveFeedbackCandidateName(text) {
     const normalized = normalizeWhitespace(text);
@@ -1325,23 +1310,19 @@ function deriveFeedbackCandidateName(text) {
     return "collaboration-rule";
 }
 function looksLikeConcreteProjectMemoryText(text) {
-    return /(目标是|当前卡点|里程碑|要出可演示版本|要给团队试用|阶段|进展|deadline|blocker|next step|版本|试用|发布|第一版|只做|先做|不碰|约束|限制|一期范围|当前范围|保留|新增一级|memory tab|当前风险|跨会话召回|project\.meta|当前 project)/i
-        .test(normalizeWhitespace(text));
+    return /(目标是|当前卡点|里程碑|要出可演示版本|要给团队试用|阶段|进展|deadline|blocker|next step|版本|试用|发布|第一版|只做|先做|不碰|约束|限制|一期范围|当前范围|保留|新增一级|memory tab|当前风险|跨会话召回|project\.meta|当前 project)/i.test(normalizeWhitespace(text));
 }
 function looksLikeProjectRiskText(text) {
-    return /(当前风险|风险是|主要风险|核心风险|跨会话召回|project\.meta|当前 project|召回[^。；;\n]*project|召回[^。；;\n]*当前项目)/i
-        .test(normalizeWhitespace(text));
+    return /(当前风险|风险是|主要风险|核心风险|跨会话召回|project\.meta|当前 project|召回[^。；;\n]*project|召回[^。；;\n]*当前项目)/i.test(normalizeWhitespace(text));
 }
 function looksLikeProjectScopeText(text) {
-    return /(一期范围|当前范围|本期范围|替换旧记忆|保留[^。；;\n]*(?:memory_overview|memory_list|memory_search|memory_get|memory_flush|memory_dream)|新增一级[^。；;\n]*memory tab|新增[^。；;\n]*memory tab|memory_overview|memory_list|memory_search|memory_get|memory_flush|memory_dream)/i
-        .test(normalizeWhitespace(text));
+    return /(一期范围|当前范围|本期范围|替换旧记忆|保留[^。；;\n]*(?:memory_overview|memory_list|memory_search|memory_get|memory_flush|memory_dream)|新增一级[^。；;\n]*memory tab|新增[^。；;\n]*memory tab|memory_overview|memory_list|memory_search|memory_get|memory_flush|memory_dream)/i.test(normalizeWhitespace(text));
 }
 function looksLikeProjectFollowUpText(text) {
     const normalized = normalizeWhitespace(stripExplicitRememberLead(text));
     if (!normalized)
         return false;
-    return /(接下来|下一步|下个阶段|最该补|还差|先做|先把|优先|先补|最优先|当前卡点|卡点|阻塞|受众|定位|内容角度|角度|约束|限制|不要碰|别碰|统一成|模板化|目标人群|适合打给|更适合打给|核心约束|镜头顺序|标题锚点|开头三秒)/i
-        .test(normalized);
+    return /(接下来|下一步|下个阶段|最该补|还差|先做|先把|优先|先补|最优先|当前卡点|卡点|阻塞|受众|定位|内容角度|角度|约束|限制|不要碰|别碰|统一成|模板化|目标人群|适合打给|更适合打给|核心约束|镜头顺序|标题锚点|开头三秒)/i.test(normalized);
 }
 function looksLikeProjectNextStepText(text) {
     return /(接下来|下一步|最该补|还差|先做|先把|优先|先补|最优先)/i.test(normalizeWhitespace(text));
@@ -1354,7 +1335,7 @@ function looksLikeProjectBlockerText(text) {
 }
 function extractUniqueBatchProjectName(messages) {
     const names = new Map();
-    for (const message of messages.filter((entry) => entry.role === "user")) {
+    for (const message of messages.filter(entry => entry.role === "user")) {
         const value = extractProjectNameHint(message.content);
         if (!value)
             continue;
@@ -1362,7 +1343,7 @@ function extractUniqueBatchProjectName(messages) {
         if (!names.has(key))
             names.set(key, value);
     }
-    return names.size === 1 ? Array.from(names.values())[0] ?? "" : "";
+    return names.size === 1 ? (Array.from(names.values())[0] ?? "") : "";
 }
 function extractProjectDescriptorHint(text) {
     const patterns = [
@@ -1415,8 +1396,8 @@ function hasGenericProjectAnchor(text) {
 }
 function projectIdentityTerms(project) {
     return uniqueStrings([project.projectName]
-        .map((item) => normalizeWhitespace(item).toLowerCase())
-        .filter((item) => item.length > 0 && item.length <= 80 && !/[。！？!?]/.test(item)), 20);
+        .map(item => normalizeWhitespace(item).toLowerCase())
+        .filter(item => item.length > 0 && item.length <= 80 && !/[。！？!?]/.test(item)), 20);
 }
 function selectKnownProjectHint(text, knownProjects) {
     if (knownProjects.length === 0)
@@ -1424,15 +1405,15 @@ function selectKnownProjectHint(text, knownProjects) {
     const normalized = normalizeWhitespace(text).toLowerCase();
     if (!normalized)
         return undefined;
-    const exactMatches = knownProjects.filter((project) => projectIdentityTerms(project).some((term) => term && normalized.includes(term)));
+    const exactMatches = knownProjects.filter(project => projectIdentityTerms(project).some(term => term && normalized.includes(term)));
     if (exactMatches.length === 1) {
         return exactMatches[0];
     }
-    const projectFollowUpSignal = (hasGenericProjectAnchor(text)
-        || looksLikeProjectFollowUpText(text)
-        || looksLikeConcreteProjectMemoryText(text)
-        || looksLikeProjectRiskText(text)
-        || looksLikeProjectScopeText(text));
+    const projectFollowUpSignal = hasGenericProjectAnchor(text) ||
+        looksLikeProjectFollowUpText(text) ||
+        looksLikeConcreteProjectMemoryText(text) ||
+        looksLikeProjectRiskText(text) ||
+        looksLikeProjectScopeText(text);
     if (knownProjects.length === 1 && projectFollowUpSignal) {
         return knownProjects[0];
     }
@@ -1472,9 +1453,7 @@ function sanitizeProjectDescriptionText(text, projectName) {
     const normalized = normalizeWhitespace(text);
     if (!normalized)
         return "";
-    let next = normalized
-        .replace(/^(?:项目名称|项目名|名称)\s*[:：]\s*/i, "")
-        .replace(/^(?:项目叫|项目是|先叫)\s*/i, "");
+    let next = normalized.replace(/^(?:项目名称|项目名|名称)\s*[:：]\s*/i, "").replace(/^(?:项目叫|项目是|先叫)\s*/i, "");
     if (projectName) {
         const escaped = projectName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         next = next
@@ -1488,9 +1467,9 @@ function extractTimelineHints(text) {
     const lines = text
         .replace(/\r/g, "\n")
         .split(/\n|(?<=[。！？!?])/)
-        .map((line) => normalizeWhitespace(line))
+        .map(line => normalizeWhitespace(line))
         .filter(Boolean);
-    return Array.from(new Set(lines.filter((line) => /\b20\d{2}-\d{2}-\d{2}\b/.test(line)))).slice(0, 10);
+    return Array.from(new Set(lines.filter(line => /\b20\d{2}-\d{2}-\d{2}\b/.test(line)))).slice(0, 10);
 }
 function extractSingleHint(text, pattern) {
     const match = pattern.exec(text);
@@ -1511,7 +1490,7 @@ function sanitizeFeedbackSectionText(value) {
         /keep it in temporary project memory until dream can attach it to the right project/i,
         /apply this rule in the current project context/i,
         /keep this as current-project feedback memory/i,
-    ].some((pattern) => pattern.test(normalized))) {
+    ].some(pattern => pattern.test(normalized))) {
         return "";
     }
     return normalized;
@@ -1523,10 +1502,7 @@ function buildSyntheticProjectFollowUpCandidate(input) {
     const projectName = truncateForPrompt(input.explicitProjectName || input.uniqueBatchProjectName, 80);
     if (!projectName || isGenericProjectCandidateName(projectName))
         return null;
-    const description = truncateForPrompt(input.explicitProjectDescriptor
-        || input.explicitGoal
-        || input.explicitProjectStage
-        || normalizedFocus, 180);
+    const description = truncateForPrompt(input.explicitProjectDescriptor || input.explicitGoal || input.explicitProjectStage || normalizedFocus, 180);
     const projectScopeSignal = looksLikeProjectScopeText(normalizedFocus);
     const projectRiskSignal = looksLikeProjectRiskText(normalizedFocus);
     return {
@@ -1579,7 +1555,7 @@ function uniqueById(items, getId) {
 }
 function fallbackEvidenceNote(lines, fallback = "") {
     const normalized = lines
-        .map((line) => normalizeWhitespace(line))
+        .map(line => normalizeWhitespace(line))
         .filter(Boolean)
         .slice(0, 8);
     const joined = normalized.join("\n");
@@ -1598,7 +1574,7 @@ function extractChatCompletionsText(payload) {
         return content;
     if (Array.isArray(content)) {
         return content
-            .map((item) => (isRecord(item) && typeof item.text === "string" ? item.text : ""))
+            .map(item => (isRecord(item) && typeof item.text === "string" ? item.text : ""))
             .filter(Boolean)
             .join("\n");
     }
@@ -1630,7 +1606,7 @@ function extractAnthropicMessagesText(payload) {
         throw new Error("Invalid Anthropic messages payload");
     }
     const text = payload.content
-        .map((part) => (isRecord(part) && typeof part.text === "string" ? part.text : ""))
+        .map(part => (isRecord(part) && typeof part.text === "string" ? part.text : ""))
         .filter(Boolean)
         .join("\n")
         .trim();
@@ -1721,14 +1697,14 @@ export class LlmMemoryExtractor {
         const modelRef = resolveAgentPrimaryModel(this.config, agentId);
         const parsed = parseModelRef(modelRef, this.config);
         if (!parsed)
-            throw new Error("Could not resolve an OpenClaw model for memory extraction");
+            throw new Error("Could not resolve a model for memory extraction");
         const modelsConfig = isRecord(this.config.models) ? this.config.models : undefined;
         const providers = modelsConfig && isRecord(modelsConfig.providers) ? modelsConfig.providers : undefined;
         const providerConfig = providers && isRecord(providers[parsed.provider])
             ? providers[parsed.provider]
             : undefined;
         const configuredModel = Array.isArray(providerConfig?.models)
-            ? providerConfig.models.find((item) => isRecord(item) && item.id === parsed.model)
+            ? providerConfig.models.find(item => isRecord(item) && item.id === parsed.model)
             : undefined;
         const modelConfig = isRecord(configuredModel) ? configuredModel : undefined;
         const api = typeof modelConfig?.api === "string"
@@ -1759,12 +1735,12 @@ export class LlmMemoryExtractor {
     async resolveApiKey(provider) {
         const modelsConfig = isRecord(this.config.models) ? this.config.models : undefined;
         const providers = modelsConfig && isRecord(modelsConfig.providers) ? modelsConfig.providers : undefined;
-        const providerConfig = providers && isRecord(providers[provider])
-            ? providers[provider]
-            : undefined;
+        const providerConfig = providers && isRecord(providers[provider]) ? providers[provider] : undefined;
         const configured = typeof providerConfig?.apiKey === "string" ? providerConfig.apiKey.trim() : "";
         if (configured) {
-            if (looksLikeEnvVarName(configured) && typeof process.env[configured] === "string" && process.env[configured]?.trim()) {
+            if (looksLikeEnvVarName(configured) &&
+                typeof process.env[configured] === "string" &&
+                process.env[configured]?.trim()) {
                 return process.env[configured].trim();
             }
             return configured;
@@ -1834,9 +1810,7 @@ export class LlmMemoryExtractor {
                 max_tokens: 65536,
                 temperature: 0,
                 system: input.systemPrompt,
-                messages: [
-                    { role: "user", content: input.userPrompt },
-                ],
+                messages: [{ role: "user", content: input.userPrompt }],
             };
         }
         else if (apiType === "google") {
@@ -1845,9 +1819,7 @@ export class LlmMemoryExtractor {
             url = buildGoogleGenerateContentUrl(selection.baseUrl, selection.model);
             body = {
                 systemInstruction: { parts: [{ text: input.systemPrompt }] },
-                contents: [
-                    { role: "user", parts: [{ text: input.userPrompt }] },
-                ],
+                contents: [{ role: "user", parts: [{ text: input.userPrompt }] }],
                 generationConfig: {
                     temperature: 0,
                     responseMimeType: "application/json",
@@ -2010,7 +1982,7 @@ export class LlmMemoryExtractor {
         }
     }
     async rewriteUserProfile(input) {
-        const userCandidates = input.candidates.filter((candidate) => candidate.type === "user");
+        const userCandidates = input.candidates.filter(candidate => candidate.type === "user");
         if (userCandidates.length === 0)
             return null;
         const latestCandidate = userCandidates[userCandidates.length - 1];
@@ -2022,12 +1994,31 @@ export class LlmMemoryExtractor {
                 timeoutMs: input.timeoutMs ?? DEFAULT_USER_PROFILE_REWRITE_TIMEOUT_MS,
                 ...(input.agentId ? { agentId: input.agentId } : {}),
                 ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-                parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+                parse: raw => JSON.parse(extractFirstJsonObject(raw)),
             });
-            return buildRewrittenUserProfileCandidate({
+            const candidate = buildRewrittenUserProfileCandidate({
                 sectionMarkdown: parsed.identity_background_markdown ?? parsed.identity_background ?? "",
                 latestCandidate,
             });
+            if (!candidate)
+                return null;
+            // Only notes the model explicitly reports as absorbed may be deleted
+            // by the caller; an absent/malformed note_absorption keeps every note.
+            const absorbedNoteIndexes = [];
+            if (Array.isArray(parsed.note_absorption)) {
+                for (const entry of parsed.note_absorption) {
+                    if (!entry || entry.absorbed !== true)
+                        continue;
+                    // 显式缺失/空索引一律不吸收（Number(null)===0 会误删笔记 0）
+                    if (entry.note_index === null || entry.note_index === undefined || entry.note_index === "")
+                        continue;
+                    const index = typeof entry.note_index === "number" ? entry.note_index : Number(entry.note_index);
+                    if (Number.isInteger(index) && index >= 0 && index < userCandidates.length) {
+                        absorbedNoteIndexes.push(index);
+                    }
+                }
+            }
+            return { candidate, absorbedNoteIndexes: [...new Set(absorbedNoteIndexes)] };
         }
         catch (error) {
             this.logger?.warn?.(`[clawxmemory] user profile rewrite failed: ${String(error)}`);
@@ -2047,7 +2038,7 @@ export class LlmMemoryExtractor {
                 timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_EXTRACTION_TIMEOUT_MS,
                 ...(input.agentId ? { agentId: input.agentId } : {}),
                 ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-                parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+                parse: raw => JSON.parse(extractFirstJsonObject(raw)),
             });
             const labels = normalizeClassificationLabels(parsed.labels);
             const shouldStore = Boolean(parsed.should_store) && labels.length > 0;
@@ -2156,7 +2147,7 @@ export class LlmMemoryExtractor {
                 clusters: [],
             };
         }
-        const allowedRelativePaths = new Set(input.headers.map((header) => header.relativePath));
+        const allowedRelativePaths = new Set(input.headers.map(header => header.relativePath));
         const parsed = await this.callStructuredJsonWithDebug({
             systemPrompt: buildDreamClusterPlanSystemPrompt(input.kind),
             userPrompt: buildDreamClusterPlanPrompt(input),
@@ -2164,7 +2155,7 @@ export class LlmMemoryExtractor {
             timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_CLUSTER_PLAN_TIMEOUT_MS,
             ...(input.agentId ? { agentId: input.agentId } : {}),
             ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-            parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+            parse: raw => JSON.parse(extractFirstJsonObject(raw)),
         });
         return {
             summary: typeof parsed.summary === "string"
@@ -2172,7 +2163,7 @@ export class LlmMemoryExtractor {
                 : `Dream ${input.kind} cluster plan completed.`,
             clusters: Array.isArray(parsed.clusters)
                 ? parsed.clusters
-                    .map((cluster) => normalizeDreamCluster(cluster, allowedRelativePaths))
+                    .map(cluster => normalizeDreamCluster(cluster, allowedRelativePaths))
                     .filter((cluster) => Boolean(cluster))
                 : [],
         };
@@ -2191,7 +2182,7 @@ export class LlmMemoryExtractor {
             timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_CLUSTER_REFINE_TIMEOUT_MS,
             ...(input.agentId ? { agentId: input.agentId } : {}),
             ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-            parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+            parse: raw => JSON.parse(extractFirstJsonObject(raw)),
         });
         const name = typeof parsed.name === "string" ? truncate(normalizeWhitespace(parsed.name), 120) : "";
         const description = typeof parsed.description === "string" ? truncate(normalizeWhitespace(parsed.description), 320) : "";
@@ -2200,9 +2191,7 @@ export class LlmMemoryExtractor {
             summary: typeof parsed.summary === "string"
                 ? truncate(normalizeWhitespace(parsed.summary), 320)
                 : `Dream ${input.kind} cluster refine completed.`,
-            file: name && description && markdown
-                ? { name, description, markdown }
-                : null,
+            file: name && description && markdown ? { name, description, markdown } : null,
         };
     }
     async planGeneralProjectMetaMerges(input) {
@@ -2219,7 +2208,7 @@ export class LlmMemoryExtractor {
             timeoutMs: input.timeoutMs ?? DEFAULT_GENERAL_PROJECT_META_MERGE_TIMEOUT_MS,
             ...(input.agentId ? { agentId: input.agentId } : {}),
             ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-            parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+            parse: raw => JSON.parse(extractFirstJsonObject(raw)),
         });
         return {
             summary: typeof parsed.summary === "string"
@@ -2227,7 +2216,7 @@ export class LlmMemoryExtractor {
                 : "General project meta merge planning completed.",
             mergeGroups: Array.isArray(parsed.merge_groups)
                 ? parsed.merge_groups
-                    .map((group) => normalizeGeneralProjectMetaMergeGroup(group))
+                    .map(group => normalizeGeneralProjectMetaMergeGroup(group))
                     .filter((group) => Boolean(group))
                 : [],
         };
@@ -2245,7 +2234,7 @@ export class LlmMemoryExtractor {
             timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_PROJECT_META_REVIEW_TIMEOUT_MS,
             ...(input.agentId ? { agentId: input.agentId } : {}),
             ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-            parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+            parse: raw => JSON.parse(extractFirstJsonObject(raw)),
         });
         return normalizeDreamProjectMetaReview(parsed, fallback);
     }
@@ -2260,8 +2249,8 @@ export class LlmMemoryExtractor {
                 deletedEntryIds: [],
             };
         }
-        const allowedEntryIds = new Set(input.records.map((record) => record.entryId));
-        const allowedProjectIds = new Set(input.currentProjects.map((project) => project.projectId));
+        const allowedEntryIds = new Set(input.records.map(record => record.entryId));
+        const allowedProjectIds = new Set(input.currentProjects.map(project => project.projectId));
         const parsed = await this.callStructuredJsonWithDebug({
             systemPrompt: DREAM_FILE_GLOBAL_PLAN_SYSTEM_PROMPT,
             userPrompt: buildDreamFileGlobalPlanPrompt(input),
@@ -2269,7 +2258,7 @@ export class LlmMemoryExtractor {
             timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS,
             ...(input.agentId ? { agentId: input.agentId } : {}),
             ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-            parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+            parse: raw => JSON.parse(extractFirstJsonObject(raw)),
         });
         const projects = Array.isArray(parsed.projects)
             ? parsed.projects
@@ -2277,8 +2266,8 @@ export class LlmMemoryExtractor {
                 .filter((item) => Boolean(item))
             : [];
         const deletedProjectIds = Array.from(new Set(normalizeStringArray(parsed.deleted_project_ids, 200)
-            .map((item) => normalizeWhitespace(item))
-            .filter((item) => allowedProjectIds.has(item))));
+            .map(item => normalizeWhitespace(item))
+            .filter(item => allowedProjectIds.has(item))));
         const deletedEntryIds = normalizeDreamFileEntryIds(parsed.deleted_entry_ids, allowedEntryIds, 400);
         return {
             summary: typeof parsed.summary === "string"
@@ -2295,7 +2284,7 @@ export class LlmMemoryExtractor {
         if (input.records.length === 0) {
             throw new Error("No memory files were supplied for Dream project rewrite.");
         }
-        const allowedEntryIds = new Set(input.records.map((record) => record.entryId));
+        const allowedEntryIds = new Set(input.records.map(record => record.entryId));
         const parsed = await this.callStructuredJsonWithDebug({
             systemPrompt: DREAM_FILE_PROJECT_REWRITE_SYSTEM_PROMPT,
             userPrompt: buildDreamFileProjectRewritePrompt(input),
@@ -2303,11 +2292,11 @@ export class LlmMemoryExtractor {
             timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_FILE_PROJECT_REWRITE_TIMEOUT_MS,
             ...(input.agentId ? { agentId: input.agentId } : {}),
             ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-            parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+            parse: raw => JSON.parse(extractFirstJsonObject(raw)),
         });
         const files = Array.isArray(parsed.files)
             ? parsed.files
-                .map((item) => normalizeDreamFileProjectRewriteFile(item, allowedEntryIds))
+                .map(item => normalizeDreamFileProjectRewriteFile(item, allowedEntryIds))
                 .filter((item) => Boolean(item))
             : [];
         const fallbackMeta = {
@@ -2340,7 +2329,7 @@ export class LlmMemoryExtractor {
                 ].join("\n"),
                 userPrompt: JSON.stringify({
                     query: input.query,
-                    recent_messages: (input.recentMessages ?? []).slice(-4).map((message) => ({
+                    recent_messages: (input.recentMessages ?? []).slice(-4).map(message => ({
                         role: message.role,
                         content: truncateForPrompt(message.content, 220),
                     })),
@@ -2349,7 +2338,7 @@ export class LlmMemoryExtractor {
                 timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_GATE_TIMEOUT_MS,
                 ...(input.agentId ? { agentId: input.agentId } : {}),
                 ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-                parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+                parse: raw => JSON.parse(extractFirstJsonObject(raw)),
             });
             return normalizeMemoryRoute(parsed.route) || "none";
         }
@@ -2393,8 +2382,10 @@ export class LlmMemoryExtractor {
                 ].join("\n"),
                 userPrompt: JSON.stringify({
                     query: input.query,
-                    recent_user_messages: (input.recentUserMessages ?? []).slice(-4).map((message) => truncateForPrompt(message.content, 220)),
-                    shortlist: input.shortlist.map((project) => ({
+                    recent_user_messages: (input.recentUserMessages ?? [])
+                        .slice(-4)
+                        .map(message => truncateForPrompt(message.content, 220)),
+                    shortlist: input.shortlist.map(project => ({
                         project_id: project.projectId,
                         project_name: project.projectName,
                         description: truncateForPrompt(project.description, 180),
@@ -2411,12 +2402,10 @@ export class LlmMemoryExtractor {
                 timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_PROJECT_SELECTION_TIMEOUT_MS,
                 ...(input.agentId ? { agentId: input.agentId } : {}),
                 ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-                parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+                parse: raw => JSON.parse(extractFirstJsonObject(raw)),
             });
-            const selectedProjectId = typeof parsed.selected_project_id === "string"
-                ? parsed.selected_project_id.trim()
-                : "";
-            const matched = input.shortlist.find((project) => project.projectId === selectedProjectId);
+            const selectedProjectId = typeof parsed.selected_project_id === "string" ? parsed.selected_project_id.trim() : "";
+            const matched = input.shortlist.find(project => project.projectId === selectedProjectId);
             if (matched) {
                 return {
                     projectId: matched.projectId,
@@ -2429,7 +2418,11 @@ export class LlmMemoryExtractor {
                 return {
                     ...(typeof parsed.reason === "string" && parsed.reason.trim()
                         ? { reason: truncateForPrompt(parsed.reason, 220) }
-                        : { reason: selectedProjectId ? "Model returned a project id outside the shortlist." : "Model returned no matching project." }),
+                        : {
+                            reason: selectedProjectId
+                                ? "Model returned a project id outside the shortlist."
+                                : "Model returned no matching project.",
+                        }),
                 };
             }
             return {
@@ -2485,17 +2478,19 @@ export class LlmMemoryExtractor {
                         why: input.candidate.why ? truncateForPrompt(input.candidate.why, 220) : null,
                         how_to_apply: input.candidate.howToApply ? truncateForPrompt(input.candidate.howToApply, 220) : null,
                         stage: input.candidate.stage ? truncateForPrompt(input.candidate.stage, 220) : null,
-                        decisions: (input.candidate.decisions ?? []).slice(0, 10).map((item) => truncateForPrompt(item, 160)),
-                        constraints: (input.candidate.constraints ?? []).slice(0, 10).map((item) => truncateForPrompt(item, 160)),
-                        next_steps: (input.candidate.nextSteps ?? []).slice(0, 10).map((item) => truncateForPrompt(item, 160)),
-                        blockers: (input.candidate.blockers ?? []).slice(0, 10).map((item) => truncateForPrompt(item, 160)),
-                        timeline: (input.candidate.timeline ?? []).slice(0, 10).map((item) => truncateForPrompt(item, 160)),
-                        notes: (input.candidate.notes ?? []).slice(0, 10).map((item) => truncateForPrompt(item, 160)),
+                        decisions: (input.candidate.decisions ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+                        constraints: (input.candidate.constraints ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+                        next_steps: (input.candidate.nextSteps ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+                        blockers: (input.candidate.blockers ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+                        timeline: (input.candidate.timeline ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+                        notes: (input.candidate.notes ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
                     },
                     candidate_memory_preview: truncateForPrompt(input.candidatePreview, 1600),
                     focus_user_turn: truncateForPrompt(input.focusTurn.content, 360),
-                    recent_user_messages: (input.recentUserMessages ?? []).slice(-4).map((message) => truncateForPrompt(message.content, 220)),
-                    shortlist: input.shortlist.map((project) => ({
+                    recent_user_messages: (input.recentUserMessages ?? [])
+                        .slice(-4)
+                        .map(message => truncateForPrompt(message.content, 220)),
+                    shortlist: input.shortlist.map(project => ({
                         project_id: project.projectId,
                         project_name: project.projectName,
                         description: truncateForPrompt(project.description, 180),
@@ -2511,16 +2506,12 @@ export class LlmMemoryExtractor {
                 timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_PROJECT_SELECTION_TIMEOUT_MS,
                 ...(input.agentId ? { agentId: input.agentId } : {}),
                 ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-                parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+                parse: raw => JSON.parse(extractFirstJsonObject(raw)),
             });
             const decision = parsed.decision === "attach_existing" ? "attach_existing" : "create_new";
-            const selectedProjectId = typeof parsed.selected_project_id === "string"
-                ? parsed.selected_project_id.trim()
-                : "";
-            const matched = input.shortlist.find((project) => project.projectId === selectedProjectId);
-            const reason = typeof parsed.reason === "string" && parsed.reason.trim()
-                ? truncateForPrompt(parsed.reason, 260)
-                : "";
+            const selectedProjectId = typeof parsed.selected_project_id === "string" ? parsed.selected_project_id.trim() : "";
+            const matched = input.shortlist.find(project => project.projectId === selectedProjectId);
+            const reason = typeof parsed.reason === "string" && parsed.reason.trim() ? truncateForPrompt(parsed.reason, 260) : "";
             if (decision === "attach_existing" && matched) {
                 return {
                     decision: "attach_existing",
@@ -2532,7 +2523,11 @@ export class LlmMemoryExtractor {
                 decision: "create_new",
                 ...(reason
                     ? { reason }
-                    : { reason: decision === "attach_existing" ? "Model selected an invalid project id." : "Model chose to create a new General project." }),
+                    : {
+                        reason: decision === "attach_existing"
+                            ? "Model selected an invalid project id."
+                            : "Model chose to create a new General project.",
+                    }),
             };
         }
         catch (error) {
@@ -2554,7 +2549,9 @@ export class LlmMemoryExtractor {
                 userPrompt: JSON.stringify({
                     query: input.query,
                     route: input.route,
-                    recent_user_messages: (input.recentUserMessages ?? []).slice(-4).map((message) => truncateForPrompt(message.content, 220)),
+                    recent_user_messages: (input.recentUserMessages ?? [])
+                        .slice(-4)
+                        .map(message => truncateForPrompt(message.content, 220)),
                     project: input.projectMeta
                         ? {
                             project_id: input.projectMeta.projectId,
@@ -2563,7 +2560,7 @@ export class LlmMemoryExtractor {
                             status: input.projectMeta.status,
                         }
                         : null,
-                    manifest: input.manifest.slice(0, 200).map((entry) => ({
+                    manifest: input.manifest.slice(0, 200).map(entry => ({
                         id: entry.relativePath,
                         type: entry.type,
                         scope: entry.scope,
@@ -2577,7 +2574,7 @@ export class LlmMemoryExtractor {
                 timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_SELECTION_TIMEOUT_MS,
                 ...(input.agentId ? { agentId: input.agentId } : {}),
                 ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-                parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+                parse: raw => JSON.parse(extractFirstJsonObject(raw)),
             });
             const selected = normalizeStringArray(parsed.selected_ids, Math.max(1, Math.min(5, input.limit ?? 5)));
             return selected;
@@ -2588,15 +2585,13 @@ export class LlmMemoryExtractor {
         }
     }
     async extractFileMemoryCandidates(input) {
-        const focusMessages = input.messages.filter((message) => message.role === "user");
+        const focusMessages = input.messages.filter(message => message.role === "user");
         if (focusMessages.length === 0)
             return [];
-        const batchContextMessages = input.batchContextMessages?.length
-            ? input.batchContextMessages
-            : input.messages;
+        const batchContextMessages = input.batchContextMessages?.length ? input.batchContextMessages : input.messages;
         const focusText = focusMessages
-            .filter((message) => message.role === "user")
-            .map((message) => message.content)
+            .filter(message => message.role === "user")
+            .map(message => message.content)
             .join("\n");
         const explicitProjectName = extractProjectNameHint(focusText);
         const explicitProjectDescriptor = extractProjectDescriptorHint(focusText);
@@ -2611,15 +2606,15 @@ export class LlmMemoryExtractor {
         const projectFollowUpSignal = looksLikeProjectFollowUpText(focusText);
         const projectRiskSignal = looksLikeProjectRiskText(focusText);
         const projectScopeSignal = looksLikeProjectScopeText(focusText);
-        const projectDefinitionSignal = Boolean(explicitProjectName
-            || explicitProjectDescriptor
-            || explicitProjectStage
-            || explicitGoal
-            || explicitBlocker
-            || explicitTimeline.length > 0
-            || projectRiskSignal
-            || projectScopeSignal
-            || looksLikeConcreteProjectMemoryText(focusText));
+        const projectDefinitionSignal = Boolean(explicitProjectName ||
+            explicitProjectDescriptor ||
+            explicitProjectStage ||
+            explicitGoal ||
+            explicitBlocker ||
+            explicitTimeline.length > 0 ||
+            projectRiskSignal ||
+            projectScopeSignal ||
+            looksLikeConcreteProjectMemoryText(focusText));
         const feedbackInstructionSignal = looksLikeCollaborationRuleText(focusText);
         try {
             const parsed = await this.callStructuredJsonWithDebug({
@@ -2658,11 +2653,11 @@ export class LlmMemoryExtractor {
                     "When a transcript names a project, describes what the project is, or states its current stage, emit a project item unless the content is obviously too transient.",
                     "Do not create placeholder project names like overview, project, or memory-item.",
                     "Generic anchors such as '这个项目' only become project memory when the batch context provides a unique project identity.",
-                    "If no durable memory should be saved, return {\"items\":[]}.",
+                    'If no durable memory should be saved, return {"items":[]}.',
                 ].join("\n"),
                 userPrompt: JSON.stringify({
                     timestamp: input.timestamp,
-                    known_projects: (input.knownProjects ?? []).slice(0, 20).map((project) => ({
+                    known_projects: (input.knownProjects ?? []).slice(0, 20).map(project => ({
                         identity_key: project.identityKey,
                         project_id: project.projectId ?? "",
                         project_name: project.projectName,
@@ -2670,11 +2665,11 @@ export class LlmMemoryExtractor {
                         scope: project.scope,
                         updated_at: project.updatedAt,
                     })),
-                    batch_context: batchContextMessages.map((message) => ({
+                    batch_context: batchContextMessages.map(message => ({
                         role: message.role,
                         content: truncateForPrompt(message.content, 260),
                     })),
-                    focus_user_turn: focusMessages.map((message) => ({
+                    focus_user_turn: focusMessages.map(message => ({
                         role: message.role,
                         content: truncateForPrompt(message.content, 320),
                     })),
@@ -2683,16 +2678,18 @@ export class LlmMemoryExtractor {
                 timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_EXTRACTION_TIMEOUT_MS,
                 ...(input.agentId ? { agentId: input.agentId } : {}),
                 ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-                parse: (raw) => JSON.parse(extractFirstJsonObject(raw)),
+                parse: raw => JSON.parse(extractFirstJsonObject(raw)),
             });
             if (!Array.isArray(parsed.items)) {
                 input.decisionTrace?.({
                     parsedItems: [],
                     normalizedCandidates: [],
-                    discarded: [{
+                    discarded: [
+                        {
                             reason: "invalid_schema",
                             summary: "Model output did not contain an items array.",
-                        }],
+                        },
+                    ],
                     finalCandidates: [],
                 });
                 return [];
@@ -2712,42 +2709,32 @@ export class LlmMemoryExtractor {
                 const rawName = typeof item.name === "string" ? truncateForPrompt(item.name, 80) : "";
                 const rawProjectName = typeof item.project_name === "string" ? truncateForPrompt(item.project_name, 80) : "";
                 const rawProjectId = typeof item.project_id === "string" ? truncateForPrompt(item.project_id, 80) : "";
-                const rawContent = typeof item.content === "string"
-                    ? truncateForPrompt(normalizeWhitespace(item.content), 280)
-                    : "";
-                const feedbackRule = typeof item.rule === "string"
-                    ? truncateForPrompt(normalizeWhitespace(item.rule), 220)
-                    : "";
-                const rawDescription = typeof item.description === "string"
-                    ? truncateForPrompt(item.description, 180)
-                    : "";
-                const rawSummary = typeof item.summary === "string"
-                    ? truncateForPrompt(item.summary, 180)
-                    : "";
-                const rawStage = typeof item.stage === "string"
-                    ? truncateForPrompt(item.stage, 220)
-                    : "";
-                const rawGoal = typeof item.goal === "string"
-                    ? truncateForPrompt(normalizeWhitespace(item.goal), 180)
-                    : "";
+                const rawContent = typeof item.content === "string" ? truncateForPrompt(normalizeWhitespace(item.content), 280) : "";
+                const feedbackRule = typeof item.rule === "string" ? truncateForPrompt(normalizeWhitespace(item.rule), 220) : "";
+                const rawDescription = typeof item.description === "string" ? truncateForPrompt(item.description, 180) : "";
+                const rawSummary = typeof item.summary === "string" ? truncateForPrompt(item.summary, 180) : "";
+                const rawStage = typeof item.stage === "string" ? truncateForPrompt(item.stage, 220) : "";
+                const rawGoal = typeof item.goal === "string" ? truncateForPrompt(normalizeWhitespace(item.goal), 180) : "";
                 const rawDecisions = normalizeStringArray(item.decisions, 10);
                 const rawConstraints = normalizeStringArray(item.constraints, 10);
                 const rawNextSteps = normalizeStringArray(item.next_steps, 10);
                 const rawBlockers = normalizeStringArray(item.blockers, 10);
                 const timeline = normalizeStringArray(item.timeline, 10);
                 const rawNotes = normalizeStringArray(item.notes, 10);
-                const structuredProjectSummary = truncateForPrompt(rawDecisions[0]
-                    || rawConstraints[0]
-                    || rawNextSteps[0]
-                    || rawBlockers[0]
-                    || timeline[0]
-                    || rawNotes[0]
-                    || "", 180);
+                const structuredProjectSummary = truncateForPrompt(rawDecisions[0] ||
+                    rawConstraints[0] ||
+                    rawNextSteps[0] ||
+                    rawBlockers[0] ||
+                    timeline[0] ||
+                    rawNotes[0] ||
+                    "", 180);
                 if (type === "feedback" && !feedbackRule) {
                     discarded.push({
                         reason: "invalid_schema",
                         candidateType: type,
-                        ...((rawName || typeof item.name === "string") ? { candidateName: rawName || String(item.name).trim() } : {}),
+                        ...(rawName || typeof item.name === "string"
+                            ? { candidateName: rawName || String(item.name).trim() }
+                            : {}),
                         summary: "Feedback candidate missing a non-empty rule.",
                     });
                     return null;
@@ -2755,16 +2742,16 @@ export class LlmMemoryExtractor {
                 const candidateType = type;
                 const shouldPinToKnownProject = Boolean(selectedKnownProject && !explicitProjectName);
                 const projectNameFallback = candidateType === "project"
-                    ? truncateForPrompt(explicitProjectName
-                        || (shouldPinToKnownProject ? selectedKnownProject?.projectName ?? "" : "")
-                        || rawName
-                        || rawProjectName
-                        || (isLikelyHumanReadableProjectIdentifier(rawProjectId) ? rawProjectId : "")
-                        || extractProjectNameFromContent(rawContent)
-                        || contextProjectName, 80)
+                    ? truncateForPrompt(explicitProjectName ||
+                        (shouldPinToKnownProject ? (selectedKnownProject?.projectName ?? "") : "") ||
+                        rawName ||
+                        rawProjectName ||
+                        (isLikelyHumanReadableProjectIdentifier(rawProjectId) ? rawProjectId : "") ||
+                        extractProjectNameFromContent(rawContent) ||
+                        contextProjectName, 80)
                     : "";
-                const description = rawDescription
-                    || (typeof item.profile === "string"
+                const description = rawDescription ||
+                    (typeof item.profile === "string"
                         ? truncateForPrompt(item.profile, 180)
                         : rawContent
                             ? sanitizeProjectDescriptionText(rawContent, projectNameFallback)
@@ -2783,9 +2770,9 @@ export class LlmMemoryExtractor {
                                                     : explicitProjectStage
                                                         ? truncateForPrompt(explicitProjectStage, 180)
                                                         : structuredProjectSummary);
-                const normalizedProjectDescription = candidateType === "project"
-                    && structuredProjectSummary
-                    && (!description || description === explicitProjectDescriptor || description === explicitGoal)
+                const normalizedProjectDescription = candidateType === "project" &&
+                    structuredProjectSummary &&
+                    (!description || description === explicitProjectDescriptor || description === explicitGoal)
                     ? structuredProjectSummary
                     : description;
                 const name = candidateType === "user"
@@ -2793,12 +2780,8 @@ export class LlmMemoryExtractor {
                     : candidateType === "feedback"
                         ? truncateForPrompt(rawName || deriveFeedbackCandidateName(feedbackRule), 80)
                         : projectNameFallback;
-                const preferences = candidateType === "user"
-                    ? []
-                    : normalizeStringArray(item.preferences, 10);
-                const constraints = candidateType === "user"
-                    ? []
-                    : rawConstraints;
+                const preferences = candidateType === "user" ? [] : normalizeStringArray(item.preferences, 10);
+                const constraints = candidateType === "user" ? [] : rawConstraints;
                 const decisions = candidateType === "project" && projectScopeSignal
                     ? uniqueStrings([...rawDecisions, normalizeWhitespace(stripExplicitRememberLead(focusText))], 10)
                     : rawDecisions;
@@ -2810,16 +2793,16 @@ export class LlmMemoryExtractor {
                     ? rawNotes
                     : uniqueStrings(rawNotes, 10);
                 const relationships = normalizeStringArray(item.relationships, 10);
-                const hasUserPayload = Boolean(normalizedProjectDescription
-                    || rawContent
-                    || (typeof item.profile === "string" && normalizeWhitespace(item.profile))
-                    || (typeof item.summary === "string" && normalizeWhitespace(item.summary))
-                    || relationships.length > 0);
+                const hasUserPayload = Boolean(normalizedProjectDescription ||
+                    rawContent ||
+                    (typeof item.profile === "string" && normalizeWhitespace(item.profile)) ||
+                    (typeof item.summary === "string" && normalizeWhitespace(item.summary)) ||
+                    relationships.length > 0);
                 if (candidateType === "project" && (!name || !description)) {
                     discarded.push({
                         reason: "invalid_schema",
                         candidateType,
-                        ...((name || rawName) ? { candidateName: name || rawName } : {}),
+                        ...(name || rawName ? { candidateName: name || rawName } : {}),
                         summary: "Candidate missing a stable name or description.",
                     });
                     return null;
@@ -2870,12 +2853,12 @@ export class LlmMemoryExtractor {
                     ...(constraints.length > 0 ? { constraints } : {}),
                     ...(relationships.length > 0 ? { relationships } : {}),
                     ...(candidateType === "feedback" && feedbackRule ? { rule: feedbackRule } : {}),
-                    ...(typeof item.why === "string" && sanitizeFeedbackSectionText(item.why)
-                        && candidateType === "feedback"
+                    ...(typeof item.why === "string" && sanitizeFeedbackSectionText(item.why) && candidateType === "feedback"
                         ? { why: truncateForPrompt(sanitizeFeedbackSectionText(item.why), 280) }
                         : {}),
-                    ...(typeof item.how_to_apply === "string" && sanitizeFeedbackSectionText(item.how_to_apply)
-                        && candidateType === "feedback"
+                    ...(typeof item.how_to_apply === "string" &&
+                        sanitizeFeedbackSectionText(item.how_to_apply) &&
+                        candidateType === "feedback"
                         ? { howToApply: truncateForPrompt(sanitizeFeedbackSectionText(item.how_to_apply), 280) }
                         : {}),
                     ...(candidateType === "project" && rawStage ? { stage: rawStage } : {}),
@@ -2887,15 +2870,15 @@ export class LlmMemoryExtractor {
                 };
             })
                 .filter((item) => Boolean(item));
-            const filtered = items.filter((item) => {
-                const hasStructuredProjectEvidence = item.type === "project"
-                    && Boolean(item.stage
-                        || item.constraints?.length
-                        || item.decisions?.length
-                        || item.nextSteps?.length
-                        || item.blockers?.length
-                        || item.timeline?.length
-                        || item.notes?.length);
+            const filtered = items.filter(item => {
+                const hasStructuredProjectEvidence = item.type === "project" &&
+                    Boolean(item.stage ||
+                        item.constraints?.length ||
+                        item.decisions?.length ||
+                        item.nextSteps?.length ||
+                        item.blockers?.length ||
+                        item.timeline?.length ||
+                        item.notes?.length);
                 const text = [
                     item.description,
                     item.summary ?? "",
@@ -2929,13 +2912,13 @@ export class LlmMemoryExtractor {
                         });
                         return false;
                     }
-                    if (genericProjectAnchor
-                        && !projectDefinitionSignal
-                        && contextProjectName
-                        && !hasStructuredProjectEvidence
-                        && !projectFollowUpSignal
-                        && !looksLikeConcreteProjectMemoryText(text)
-                        && !looksLikeProjectFollowUpText(text)) {
+                    if (genericProjectAnchor &&
+                        !projectDefinitionSignal &&
+                        contextProjectName &&
+                        !hasStructuredProjectEvidence &&
+                        !projectFollowUpSignal &&
+                        !looksLikeConcreteProjectMemoryText(text) &&
+                        !looksLikeProjectFollowUpText(text)) {
                         discarded.push({
                             reason: "generic_anchor_without_project_definition",
                             candidateType: item.type,
@@ -2956,13 +2939,13 @@ export class LlmMemoryExtractor {
                 }
                 return true;
             });
-            const syntheticProjectFallback = filtered.length === 0
-                && !feedbackInstructionSignal
-                && contextProjectName
-                && (projectFollowUpSignal
-                    || projectRiskSignal
-                    || projectScopeSignal
-                    || (genericProjectAnchor && looksLikeConcreteProjectMemoryText(focusText)))
+            const syntheticProjectFallback = filtered.length === 0 &&
+                !feedbackInstructionSignal &&
+                contextProjectName &&
+                (projectFollowUpSignal ||
+                    projectRiskSignal ||
+                    projectScopeSignal ||
+                    (genericProjectAnchor && looksLikeConcreteProjectMemoryText(focusText)))
                 ? buildSyntheticProjectFollowUpCandidate({
                     focusText,
                     timestamp: input.timestamp,
@@ -2990,10 +2973,12 @@ export class LlmMemoryExtractor {
             input.decisionTrace?.({
                 parsedItems: [],
                 normalizedCandidates: [],
-                discarded: [{
+                discarded: [
+                    {
                         reason: "extract_error",
                         summary: error instanceof Error ? error.message : String(error),
-                    }],
+                    },
+                ],
                 finalCandidates: [],
             });
             return [];

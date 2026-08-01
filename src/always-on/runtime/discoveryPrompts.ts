@@ -25,7 +25,7 @@ export type BuildDiscoveryPromptInput = {
   runId: string;
   /** ISO timestamp the runtime should embed in the plan metadata. */
   createdAt: string;
-  /** Absolute path of the project's PilotDeck chat transcript directory. */
+  /** Absolute path of the project's Sati chat transcript directory. */
   chatDir: string;
   /** When an isolated workspace from a previous run still exists on disk, discovery runs inside it. */
   workspace?: { cwd: string; strategy: string };
@@ -46,9 +46,7 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
         "This workspace is an isolated snapshot of the project — read / glob / bash freely inside it.",
         `Do NOT cd outside the workspace to the project root (${input.projectRoot}).`,
       ]
-    : [
-        `Read the project root at ${input.projectRoot} using read_file / glob / bash freely.`,
-      ];
+    : [`Read the project root at ${input.projectRoot} using read_file / glob / bash freely.`];
 
   const headerLine = input.workspace
     ? `You are running an autonomous Always-On discovery for project: ${input.projectRoot} (working inside isolated workspace: ${input.workspace.cwd})`
@@ -100,9 +98,7 @@ export function buildDiscoveryPrompt(input: BuildDiscoveryPromptInput): string {
 
 function formatChatDigestSection(digest?: ChatDigest): string[] {
   if (!digest || digest.sessions.length === 0) {
-    return [
-      "No recent user conversations found. Explore the workspace contents to find a worthwhile task.",
-    ];
+    return ["No recent user conversations found. Explore the workspace contents to find a worthwhile task."];
   }
 
   const lines: string[] = [
@@ -132,10 +128,7 @@ function formatExistingPlansSection(plans?: ExistingPlanSummary[]): string[] {
     return [];
   }
 
-  const lines: string[] = [
-    "## Existing Always-On plans (do NOT duplicate these topics)",
-    "",
-  ];
+  const lines: string[] = ["## Existing Always-On plans (do NOT duplicate these topics)", ""];
 
   for (const plan of plans) {
     lines.push(`- [${plan.status}] "${plan.title}" (dedupeKey: ${plan.dedupeKey})`);
@@ -297,11 +290,7 @@ export function buildApplyPrompt(input: BuildApplyPromptInput): string {
       diff.diff,
     );
   } else {
-    lines.push(
-      `Changes (${diff.fileCount} file${diff.fileCount === 1 ? "" : "s"}):`,
-      "",
-      diff.diff,
-    );
+    lines.push(`Changes (${diff.fileCount} file${diff.fileCount === 1 ? "" : "s"}):`, "", diff.diff);
   }
 
   return lines.join("\n");

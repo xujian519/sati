@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text } from "ink";
 import type { TuiAppState } from "./types.js";
-import { pilotDeckDarkBlueTheme } from "./theme.js";
+import { satiDarkBlueTheme } from "./theme.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -16,7 +16,7 @@ export function ActivityLine({ state }: { state: TuiAppState }): React.ReactNode
       return;
     }
     setStartedAt(Date.now());
-    const interval = setInterval(() => setTick((value) => value + 1), 100);
+    const interval = setInterval(() => setTick(value => value + 1), 100);
     return () => clearInterval(interval);
   }, [state.isRunning]);
 
@@ -30,11 +30,11 @@ export function ActivityLine({ state }: { state: TuiAppState }): React.ReactNode
   return (
     <Box paddingX={1}>
       {state.isRunning ? (
-        <Text color={pilotDeckDarkBlueTheme.brandAccent}>
-          {frame} thinking <Text color={pilotDeckDarkBlueTheme.subtle}>· {elapsed}</Text>{" "}
+        <Text color={satiDarkBlueTheme.brandAccent}>
+          {frame} thinking <Text color={satiDarkBlueTheme.subtle}>· {elapsed}</Text>{" "}
         </Text>
       ) : null}
-      {latest.map((item) => (
+      {latest.map(item => (
         <Text key={item.id} color={colorForStatus(item.status)}>
           {item.text}{" "}
         </Text>
@@ -44,8 +44,8 @@ export function ActivityLine({ state }: { state: TuiAppState }): React.ReactNode
 }
 
 function colorForStatus(status: string): string {
-  if (status === "done") return pilotDeckDarkBlueTheme.success;
-  if (status === "error") return pilotDeckDarkBlueTheme.error;
-  if (status === "running") return pilotDeckDarkBlueTheme.brandAccent;
-  return pilotDeckDarkBlueTheme.subtle;
+  if (status === "done") return satiDarkBlueTheme.success;
+  if (status === "error") return satiDarkBlueTheme.error;
+  if (status === "running") return satiDarkBlueTheme.brandAccent;
+  return satiDarkBlueTheme.subtle;
 }

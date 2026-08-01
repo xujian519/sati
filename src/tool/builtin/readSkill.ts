@@ -1,4 +1,4 @@
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type ReadSkillInput = {
   skillName: string;
@@ -9,7 +9,7 @@ export type ReadSkillDeps = {
   lister: () => { name: string; description?: string; path: string }[];
 };
 
-export function createReadSkillTool(deps: ReadSkillDeps): PilotDeckToolDefinition<ReadSkillInput> {
+export function createReadSkillTool(deps: ReadSkillDeps): SatiToolDefinition<ReadSkillInput> {
   return {
     name: "read_skill",
     aliases: ["ReadSkill"],
@@ -34,7 +34,7 @@ export function createReadSkillTool(deps: ReadSkillDeps): PilotDeckToolDefinitio
       const content = await deps.loader(input.skillName);
       const available = deps.lister();
       if (content) {
-        const skill = available.find((entry) => entry.name === input.skillName);
+        const skill = available.find(entry => entry.name === input.skillName);
         if (!skill) {
           return { content: [{ type: "text", text: content }] };
         }
@@ -52,7 +52,7 @@ export function createReadSkillTool(deps: ReadSkillDeps): PilotDeckToolDefinitio
           content: [{ type: "text", text: `Skill '${input.skillName}' not found. No skills are currently loaded.` }],
         };
       }
-      const names = available.map((s) => s.name).join(", ");
+      const names = available.map(s => s.name).join(", ");
       return {
         content: [{ type: "text", text: `Skill '${input.skillName}' not found. Available skills: ${names}` }],
       };

@@ -17,10 +17,7 @@ export type CatalogLookupResult = {
  *  5. Strip vendor prefix:  "anthropic/claude-sonnet-4.6" → "claude-sonnet-4.6"
  *     then repeat steps 3–4
  */
-export function lookupCatalogModel(
-  providerId: string,
-  modelId: string,
-): CatalogLookupResult {
+export function lookupCatalogModel(providerId: string, modelId: string): CatalogLookupResult {
   const provider = PROVIDER_CATALOG[providerId];
 
   // 1. Exact match on the declared provider
@@ -49,7 +46,11 @@ export function lookupCatalogModel(
     const stripped = modelId.slice(slashIndex + 1);
     const strippedResult = searchAllProviders(stripped);
     if (strippedResult) {
-      return { provider: provider ?? strippedResult.provider, model: strippedResult.model, matchType: "cross-provider" };
+      return {
+        provider: provider ?? strippedResult.provider,
+        model: strippedResult.model,
+        matchType: "cross-provider",
+      };
     }
   }
 
@@ -64,9 +65,7 @@ export function lookupCatalogProvider(providerId: string): CatalogProviderEntry 
   return PROVIDER_CATALOG[providerId];
 }
 
-function searchAllProviders(
-  modelId: string,
-): { provider: CatalogProviderEntry; model: CatalogModelEntry } | undefined {
+function searchAllProviders(modelId: string): { provider: CatalogProviderEntry; model: CatalogModelEntry } | undefined {
   for (const catalogProvider of Object.values(PROVIDER_CATALOG)) {
     if (catalogProvider.models[modelId]) {
       return { provider: catalogProvider, model: catalogProvider.models[modelId] };

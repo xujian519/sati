@@ -1,15 +1,15 @@
-import type { TFunction } from 'i18next';
-import type { ChatMessage, ChatRunMode } from '../chat/types/types';
-import { isReadOnlyModeToolDeny } from '../chat/utils/chatPermissions';
-import type { ProcessTraceMetric, ProcessTraceStep } from './ProcessTrace';
-import { formatProcessDuration } from './processTraceUtils';
+import type { TFunction } from "i18next";
+import type { ChatMessage, ChatRunMode } from "../chat/types/types";
+import { isReadOnlyModeToolDeny } from "../chat/utils/chatPermissions";
+import type { ProcessTraceMetric, ProcessTraceStep } from "./ProcessTrace";
+import { formatProcessDuration } from "./processTraceUtils";
 
 export type ProcessAttachmentImage = {
   data: string;
   name?: string;
   mimeType?: string;
   /** Origin of the image — currently always a tool result (e.g. read_file on a PNG). */
-  source: 'tool_result';
+  source: "tool_result";
   /** Source tool's id, useful as a stable React key. */
   toolId?: string;
 };
@@ -95,12 +95,7 @@ type ProcessCounts = {
   toolErrorCount: number;
 };
 
-const USER_VISIBLE_TOOL_NAMES = new Set([
-  'AskUserQuestion',
-  'ExitPlanMode',
-  'ExitPlanModeV2',
-  'exit_plan_mode',
-]);
+const USER_VISIBLE_TOOL_NAMES = new Set(["AskUserQuestion", "ExitPlanMode", "ExitPlanModeV2", "exit_plan_mode"]);
 
 function parseMessageTime(value: unknown): number | null {
   if (!value) return null;
@@ -109,7 +104,7 @@ function parseMessageTime(value: unknown): number | null {
 }
 
 function getActivitySummaryKey(message: ChatMessage, index: number): string {
-  return message.runId || message.id || `${message.startedAt || ''}-${message.endedAt || ''}-${index}`;
+  return message.runId || message.id || `${message.startedAt || ""}-${message.endedAt || ""}-${index}`;
 }
 
 function getStableMessagePart(message: ChatMessage | undefined, fallback: string): string {
@@ -135,7 +130,7 @@ function createMessageTurns(messages: ChatMessage[]): MessageTurn[] {
 
   const starts: number[] = [];
   messages.forEach((message, index) => {
-    if (message.type === 'user') {
+    if (message.type === "user") {
       starts.push(index);
     }
   });
@@ -152,7 +147,7 @@ function createMessageTurns(messages: ChatMessage[]): MessageTurn[] {
 }
 
 function findTurnIndexByPosition(turns: MessageTurn[], index: number): number {
-  return turns.findIndex((turn) => index >= turn.start && index < turn.end);
+  return turns.findIndex(turn => index >= turn.start && index < turn.end);
 }
 
 function findTurnIndexByTime(messages: ChatMessage[], turns: MessageTurn[], timestamp: number): number {
@@ -160,7 +155,7 @@ function findTurnIndexByTime(messages: ChatMessage[], turns: MessageTurn[], time
 
   for (let turnIndex = 0; turnIndex < turns.length; turnIndex += 1) {
     const startMessage = messages[turns[turnIndex].start];
-    if (startMessage?.type !== 'user') {
+    if (startMessage?.type !== "user") {
       continue;
     }
 
@@ -184,25 +179,17 @@ function findTurnIndexByTime(messages: ChatMessage[], turns: MessageTurn[], time
 
 function getSummaryAnchorTime(summary: ChatMessage): number | null {
   return (
-    parseMessageTime(summary.startedAt) ??
-    parseMessageTime(summary.timestamp) ??
-    parseMessageTime(summary.endedAt)
+    parseMessageTime(summary.startedAt) ?? parseMessageTime(summary.timestamp) ?? parseMessageTime(summary.endedAt)
   );
 }
 
 function getSummarySortTime(summary: ChatMessage): number {
   return (
-    parseMessageTime(summary.endedAt) ??
-    parseMessageTime(summary.timestamp) ??
-    parseMessageTime(summary.startedAt) ??
-    0
+    parseMessageTime(summary.endedAt) ?? parseMessageTime(summary.timestamp) ?? parseMessageTime(summary.startedAt) ?? 0
   );
 }
 
-function isNewerSummary(
-  next: ActivitySummaryAttachment,
-  current: ActivitySummaryAttachment | null,
-): boolean {
+function isNewerSummary(next: ActivitySummaryAttachment, current: ActivitySummaryAttachment | null): boolean {
   if (!current) {
     return true;
   }
@@ -223,16 +210,13 @@ function attachSummariesToTurns(messages: ChatMessage[], turns: MessageTurn[]): 
     }
   });
 
-  const summaries = Array.from(summariesByKey.values()).sort(
-    (a, b) => a.originalIndex - b.originalIndex,
-  );
+  const summaries = Array.from(summariesByKey.values()).sort((a, b) => a.originalIndex - b.originalIndex);
 
   for (const summary of summaries) {
     const anchorTime = getSummaryAnchorTime(summary.message);
     const turnIndexFromTime = anchorTime == null ? -1 : findTurnIndexByTime(messages, turns, anchorTime);
-    const turnIndex = turnIndexFromTime >= 0
-      ? turnIndexFromTime
-      : findTurnIndexByPosition(turns, summary.originalIndex);
+    const turnIndex =
+      turnIndexFromTime >= 0 ? turnIndexFromTime : findTurnIndexByPosition(turns, summary.originalIndex);
 
     if (turnIndex < 0) {
       continue;
@@ -246,17 +230,15 @@ function attachSummariesToTurns(messages: ChatMessage[], turns: MessageTurn[]): 
 
 function parseToolInput(value: unknown): Record<string, unknown> {
   if (!value) return {};
-  if (typeof value === 'object' && !Array.isArray(value)) {
+  if (typeof value === "object" && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     return {};
   }
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -264,28 +246,28 @@ function parseToolInput(value: unknown): Record<string, unknown> {
 
 function getToolInputString(message: ChatMessage, key: string): string {
   const value = parseToolInput(message.toolInput)[key];
-  return typeof value === 'string' ? value : '';
+  return typeof value === "string" ? value : "";
 }
 
 export function getToolTarget(message: ChatMessage): string {
   return (
-    getToolInputString(message, 'file_path') ||
-    getToolInputString(message, 'path') ||
-    getToolInputString(message, 'pattern') ||
-    getToolInputString(message, 'query') ||
-    getToolInputString(message, 'command') ||
-    ''
+    getToolInputString(message, "file_path") ||
+    getToolInputString(message, "path") ||
+    getToolInputString(message, "pattern") ||
+    getToolInputString(message, "query") ||
+    getToolInputString(message, "command") ||
+    ""
   );
 }
 
 function getDisplayTarget(target: string): string {
-  if (!target) return '';
-  const normalized = target.replace(/\\/g, '/');
-  return normalized.split('/').filter(Boolean).pop() || target;
+  if (!target) return "";
+  const normalized = target.replace(/\\/g, "/");
+  return normalized.split("/").filter(Boolean).pop() || target;
 }
 
 function hasToolError(message: ChatMessage): boolean {
-  return Boolean(message.toolResult?.isError || message.type === 'error');
+  return Boolean(message.toolResult?.isError || message.type === "error");
 }
 
 function isPermissionToolError(message: ChatMessage): boolean {
@@ -296,35 +278,26 @@ function isPermissionToolError(message: ChatMessage): boolean {
     return false;
   }
 
-  const errorCode = typeof message.toolResult.errorCode === 'string'
-    ? message.toolResult.errorCode
-    : '';
+  const errorCode = typeof message.toolResult.errorCode === "string" ? message.toolResult.errorCode : "";
   if (
-    errorCode === 'permission_denied' ||
-    errorCode === 'permission_required' ||
-    errorCode === 'permission_cancelled'
+    errorCode === "permission_denied" ||
+    errorCode === "permission_required" ||
+    errorCode === "permission_cancelled"
   ) {
     return true;
   }
 
-  const content = typeof message.toolResult.content === 'string'
-    ? message.toolResult.content
-    : '';
+  const content = typeof message.toolResult.content === "string" ? message.toolResult.content : "";
   const lower = content.toLowerCase();
   return (
-    lower.includes('permission') &&
-    (
-      lower.includes('denied') ||
-      lower.includes('not allowed') ||
-      lower.includes('requires') ||
-      lower.includes('grant')
-    )
+    lower.includes("permission") &&
+    (lower.includes("denied") || lower.includes("not allowed") || lower.includes("requires") || lower.includes("grant"))
   );
 }
 
 function isUserVisibleTool(message: ChatMessage): boolean {
   if (!message.isToolUse) return false;
-  const toolName = String(message.toolName || '');
+  const toolName = String(message.toolName || "");
   return USER_VISIBLE_TOOL_NAMES.has(toolName);
 }
 
@@ -332,7 +305,7 @@ export function isProcessMessage(message: ChatMessage): boolean {
   if (message.isAgentActivity || message.isAgentActivitySummary) {
     return false;
   }
-  if (message.type === 'user' || message.type === 'error') {
+  if (message.type === "user" || message.type === "error") {
     return false;
   }
   if (message.isSubagentContainer) {
@@ -346,7 +319,7 @@ export function isProcessMessage(message: ChatMessage): boolean {
       message.isTaskNotification ||
       message.isCompactBoundary ||
       (message.isThinking && !message.isStreaming) ||
-      message.type === 'tool',
+      message.type === "tool",
   );
 }
 
@@ -357,8 +330,8 @@ function isExpandableProcessMessage(message: ChatMessage): boolean {
   if (!message.isToolUse || message.isSubagentContainer || isPermissionToolError(message)) {
     return false;
   }
-  const toolName = String(message.toolName || '');
-  if (!toolName || toolName === 'Task' || USER_VISIBLE_TOOL_NAMES.has(toolName)) {
+  const toolName = String(message.toolName || "");
+  if (!toolName || toolName === "Task" || USER_VISIBLE_TOOL_NAMES.has(toolName)) {
     return false;
   }
   return true;
@@ -366,7 +339,7 @@ function isExpandableProcessMessage(message: ChatMessage): boolean {
 
 function canHostProcessSummary(message: ChatMessage): boolean {
   return (
-    message.type === 'assistant' &&
+    message.type === "assistant" &&
     !message.isAgentActivitySummary &&
     !message.isAgentActivity &&
     !message.isToolUse &&
@@ -374,14 +347,14 @@ function canHostProcessSummary(message: ChatMessage): boolean {
     !message.isSubagentContainer &&
     !message.isTaskNotification &&
     !message.isThinking &&
-    typeof message.content === 'string' &&
+    typeof message.content === "string" &&
     message.content.trim().length > 0
   );
 }
 
 export function isEmptyAssistantShell(message: ChatMessage): boolean {
   return (
-    message.type === 'assistant' &&
+    message.type === "assistant" &&
     !message.isToolUse &&
     !message.isThinking &&
     !message.isStreaming &&
@@ -390,7 +363,7 @@ export function isEmptyAssistantShell(message: ChatMessage): boolean {
     !message.isTaskNotification &&
     !message.isAgentActivity &&
     !message.isAgentActivitySummary &&
-    typeof message.content === 'string' &&
+    typeof message.content === "string" &&
     message.content.trim().length === 0
   );
 }
@@ -409,31 +382,31 @@ function isCollapsibleCompletedProcessMessage(message: ChatMessage): boolean {
 
 export function getProcessToolKind(
   message: ChatMessage,
-): 'edit' | 'read' | 'search' | 'command' | 'subagent' | 'compact' | 'thinking' | 'tool' {
-  if (message.isCompactBoundary) return 'compact';
-  if (message.isThinking) return 'thinking';
-  if (message.isSubagentContainer || message.toolName === 'Task' || message.isTaskNotification) {
-    return 'subagent';
+): "edit" | "read" | "search" | "command" | "subagent" | "compact" | "thinking" | "tool" {
+  if (message.isCompactBoundary) return "compact";
+  if (message.isThinking) return "thinking";
+  if (message.isSubagentContainer || message.toolName === "Task" || message.isTaskNotification) {
+    return "subagent";
   }
 
-  const toolName = String(message.toolName || '').toLowerCase();
+  const toolName = String(message.toolName || "").toLowerCase();
   if (/edit|write|applypatch|patch|update|create|modify|multi_edit|multiedit/.test(toolName)) {
-    return 'edit';
+    return "edit";
   }
   if (/read|cat|view/.test(toolName)) {
-    return 'read';
+    return "read";
   }
-  if (/grep|glob|search|websearch|rag|find|rg/.test(toolName) || message.phase === 'rag') {
-    return 'search';
+  if (/grep|glob|search|websearch|rag|find|rg/.test(toolName) || message.phase === "rag") {
+    return "search";
   }
   if (/bash|shell|terminal|exec|command|run/.test(toolName)) {
-    return 'command';
+    return "command";
   }
-  return 'tool';
+  return "tool";
 }
 
 function uniqueCount(values: string[]): number {
-  const normalized = values.map((value) => value.trim()).filter(Boolean);
+  const normalized = values.map(value => value.trim()).filter(Boolean);
   return normalized.length > 0 ? new Set(normalized).size : values.length;
 }
 
@@ -460,19 +433,19 @@ function collectProcessCounts(messages: ChatMessage[]): ProcessCounts {
     }
 
     const kind = getProcessToolKind(message);
-    if (kind === 'edit') {
+    if (kind === "edit") {
       counts.editedTargets.push(getToolTarget(message));
-    } else if (kind === 'read') {
+    } else if (kind === "read") {
       counts.readTargets.push(getToolTarget(message));
-    } else if (kind === 'search') {
+    } else if (kind === "search") {
       counts.searchCount += 1;
-    } else if (kind === 'command') {
+    } else if (kind === "command") {
       counts.commandCount += 1;
-    } else if (kind === 'subagent') {
+    } else if (kind === "subagent") {
       counts.subagentCount += 1;
-    } else if (kind === 'compact') {
+    } else if (kind === "compact") {
       counts.compactCount += 1;
-    } else if (kind === 'thinking') {
+    } else if (kind === "thinking") {
       counts.thinkingCount += 1;
     } else {
       counts.otherToolCount += 1;
@@ -504,7 +477,7 @@ function getTurnEndIndex(messages: ChatMessage[], turn: MessageTurn): number {
 
 function getTurnRunDurationMs(messages: ChatMessage[], turn: MessageTurn): number | null {
   const summaryDuration = turn.summary?.message.durationMs;
-  if (typeof summaryDuration === 'number' && Number.isFinite(summaryDuration)) {
+  if (typeof summaryDuration === "number" && Number.isFinite(summaryDuration)) {
     return Math.max(0, summaryDuration);
   }
 
@@ -524,7 +497,7 @@ function hasCompletedTurnWork(messages: ChatMessage[], turn: MessageTurn): boole
 
   for (let index = turn.start; index < turn.end; index += 1) {
     const message = messages[index];
-    if (!message || message.isAgentActivity || message.isAgentActivitySummary || message.type === 'user') {
+    if (!message || message.isAgentActivity || message.isAgentActivitySummary || message.type === "user") {
       continue;
     }
     if (canHostProcessSummary(message) || isProcessMessage(message)) {
@@ -537,20 +510,20 @@ function hasCompletedTurnWork(messages: ChatMessage[], turn: MessageTurn): boole
 
 function hasAgentActivitySummaryDetails(message: ChatMessage): boolean {
   const numericDetailFields = [
-    'toolCallCount',
-    'toolErrorCount',
-    'ragSearchCount',
-    'editedFileCount',
-    'exploredFileCount',
-    'commandCount',
-    'subagentCount',
-    'compactCount',
-    'thinkingCount',
-    'otherToolCount',
+    "toolCallCount",
+    "toolErrorCount",
+    "ragSearchCount",
+    "editedFileCount",
+    "exploredFileCount",
+    "commandCount",
+    "subagentCount",
+    "compactCount",
+    "thinkingCount",
+    "otherToolCount",
   ];
-  const hasMetrics = numericDetailFields.some((key) => {
+  const hasMetrics = numericDetailFields.some(key => {
     const value = message[key];
-    return typeof value === 'number' && Number.isFinite(value) && value > 0;
+    return typeof value === "number" && Number.isFinite(value) && value > 0;
   });
   if (hasMetrics) {
     return true;
@@ -560,8 +533,8 @@ function hasAgentActivitySummaryDetails(message: ChatMessage): boolean {
     return true;
   }
 
-  const state = String(message.state || 'completed');
-  return state !== 'completed';
+  const state = String(message.state || "completed");
+  return state !== "completed";
 }
 
 function createSyntheticProcessSummary(
@@ -580,14 +553,14 @@ function createSyntheticProcessSummary(
 
   return {
     id: `process-summary-${attachmentId}`,
-    type: 'system',
-    content: '',
+    type: "system",
+    content: "",
     timestamp: endedAt || new Date().toISOString(),
     isAgentActivitySummary: true,
-    startedAt: startedAt ? String(startedAt) : '',
-    endedAt: endedAt ? String(endedAt) : '',
+    startedAt: startedAt ? String(startedAt) : "",
+    endedAt: endedAt ? String(endedAt) : "",
     durationMs: getDurationMs(startedAt, endedAt),
-    state: counts.toolErrorCount > 0 ? 'failed' : 'completed',
+    state: counts.toolErrorCount > 0 ? "failed" : "completed",
     toolCallCount: counts.toolCallCount,
     toolErrorCount: counts.toolErrorCount,
     ragSearchCount: counts.searchCount,
@@ -608,13 +581,13 @@ function collectToolResultImages(messages: ChatMessage[]): ProcessAttachmentImag
     const list = (message.toolResult?.images ?? []) as Array<{ data?: unknown; name?: unknown; mimeType?: unknown }>;
     if (!Array.isArray(list)) continue;
     for (const image of list) {
-      if (!image || typeof image.data !== 'string' || image.data.length === 0) continue;
+      if (!image || typeof image.data !== "string" || image.data.length === 0) continue;
       images.push({
         data: image.data,
-        name: typeof image.name === 'string' && image.name.length > 0 ? image.name : undefined,
-        mimeType: typeof image.mimeType === 'string' ? image.mimeType : undefined,
-        source: 'tool_result',
-        toolId: typeof message.toolId === 'string' ? message.toolId : undefined,
+        name: typeof image.name === "string" && image.name.length > 0 ? image.name : undefined,
+        mimeType: typeof image.mimeType === "string" ? image.mimeType : undefined,
+        source: "tool_result",
+        toolId: typeof message.toolId === "string" ? message.toolId : undefined,
       });
     }
   }
@@ -646,9 +619,7 @@ function collectCompletedProcessSegments(messages: ChatMessage[], turn: MessageT
 
     const endIndex = beforeOriginalIndex - 1;
     const first = segmentMessages[0];
-    const nextHostIndex = previousHostIndex == null
-      ? findNextHostIndex(messages, turn, beforeOriginalIndex)
-      : null;
+    const nextHostIndex = previousHostIndex == null ? findNextHostIndex(messages, turn, beforeOriginalIndex) : null;
 
     segments.push({
       id: getStableProcessSegmentId(messages, turn, first, segmentStartIndex),
@@ -695,10 +666,10 @@ function collectCompletedProcessSegments(messages: ChatMessage[], turn: MessageT
 
 function pushProcessAttachment(
   item: RenderableMessageItem,
-  placement: 'before' | 'after',
+  placement: "before" | "after",
   attachment: ProcessAttachment,
 ): void {
-  if (placement === 'before') {
+  if (placement === "before") {
     item.beforeProcessAttachments.push(attachment);
   } else {
     item.afterProcessAttachments.push(attachment);
@@ -795,12 +766,10 @@ export function buildRenderableMessageItems(
       };
       const turnStartMessage = messages[turn.start];
       const turnStartItem = itemsByIndex.get(turn.start);
-      if (turnStartMessage?.type === 'user' && turnStartItem) {
+      if (turnStartMessage?.type === "user" && turnStartItem) {
         turnStartItem.afterRunAttachment = runAttachment;
       } else {
-        const firstVisibleItem = items.find((item) =>
-          item.originalIndex >= turn.start && item.originalIndex < turn.end,
-        );
+        const firstVisibleItem = items.find(item => item.originalIndex >= turn.start && item.originalIndex < turn.end);
         if (firstVisibleItem) {
           firstVisibleItem.beforeRunAttachment = runAttachment;
         }
@@ -846,17 +815,13 @@ export function buildRenderableMessageItems(
         endIndex: segment.endIndex,
         inlineImages: collectToolResultImages(segment.messages),
       };
-      const previousHost = segment.previousHostIndex == null
-        ? null
-        : itemsByIndex.get(segment.previousHostIndex);
-      const nextHost = segment.nextHostIndex == null
-        ? null
-        : itemsByIndex.get(segment.nextHostIndex);
+      const previousHost = segment.previousHostIndex == null ? null : itemsByIndex.get(segment.previousHostIndex);
+      const nextHost = segment.nextHostIndex == null ? null : itemsByIndex.get(segment.nextHostIndex);
 
       if (previousHost) {
-        pushProcessAttachment(previousHost, 'after', attachment);
+        pushProcessAttachment(previousHost, "after", attachment);
       } else if (nextHost) {
-        pushProcessAttachment(nextHost, 'before', attachment);
+        pushProcessAttachment(nextHost, "before", attachment);
       } else {
         syntheticItems.push({
           message: summary,
@@ -871,14 +836,13 @@ export function buildRenderableMessageItems(
   });
 
   return [...items, ...syntheticItems]
-    .filter((item) => !collapsedIndices.has(item.originalIndex))
-    .filter((item) => !isEmptyRenderableMessageItem(item))
+    .filter(item => !collapsedIndices.has(item.originalIndex))
+    .filter(item => !isEmptyRenderableMessageItem(item))
     .sort((a, b) => a.originalIndex - b.originalIndex);
 }
 
 export function getLiveProcessDetailMessages(messages: ChatMessage[]): ChatMessage[] {
-  return getLiveProcessGroups(messages, { isAssistantWorking: true })
-    .flatMap((group) => group.detailMessages);
+  return getLiveProcessGroups(messages, { isAssistantWorking: true }).flatMap(group => group.detailMessages);
 }
 
 export function splitLiveProcessGroupDetailMessages(group: LiveProcessGroup): {
@@ -901,7 +865,7 @@ export function getLiveProcessGroups(
     return [];
   }
 
-  const groups: Omit<LiveProcessGroup, 'isRunning'>[] = [];
+  const groups: Omit<LiveProcessGroup, "isRunning">[] = [];
   let previousVisibleIndex = liveTurn.start;
   let groupStartIndex = -1;
   let groupMessages: ChatMessage[] = [];
@@ -913,7 +877,7 @@ export function getLiveProcessGroups(
       return;
     }
 
-    if (groupMessages.every((m) => m.isThinking)) {
+    if (groupMessages.every(m => m.isThinking)) {
       groupStartIndex = -1;
       groupMessages = [];
       return;
@@ -971,42 +935,37 @@ export function getLiveProcessGroups(
 }
 
 export function shouldRenderLiveProcessGroup(group: LiveProcessGroup, runMode: ChatRunMode): boolean {
-  if (runMode !== 'plan') {
+  if (runMode !== "plan") {
     return true;
   }
-  return !group.messages.every((message) => message.isCompactBoundary);
+  return !group.messages.every(message => message.isCompactBoundary);
 }
 
-const WEB_FETCH_TOOL_NAMES = new Set(['web_fetch', 'webfetch']);
+const WEB_FETCH_TOOL_NAMES = new Set(["web_fetch", "webfetch"]);
 
 export function isWebFetchToolMessage(message: ChatMessage): boolean {
-  const normalized = String(message.toolName || '')
+  const normalized = String(message.toolName || "")
     .toLowerCase()
-    .replace(/[\s-]+/g, '_');
+    .replace(/[\s-]+/g, "_");
   return WEB_FETCH_TOOL_NAMES.has(normalized);
 }
 
 function getLatestToolMessage(group: LiveProcessGroup): ChatMessage | undefined {
-  return [...group.messages].reverse().find((message) => message.isToolUse || message.type === 'tool');
+  return [...group.messages].reverse().find(message => message.isToolUse || message.type === "tool");
 }
 
 export function isPendingToolUseMessage(message: ChatMessage): boolean {
-  if (!message.isToolUse && message.type !== 'tool') {
+  if (!message.isToolUse && message.type !== "tool") {
     return false;
   }
   if (!message.toolResult) {
     return true;
   }
-  const content = typeof message.toolResult.content === 'string'
-    ? message.toolResult.content.trim()
-    : '';
+  const content = typeof message.toolResult.content === "string" ? message.toolResult.content.trim() : "";
   return content.length === 0 && !message.toolResult.isError;
 }
 
-export function shouldShowWebFetchWaitingHint(
-  group: LiveProcessGroup,
-  planModeActive: boolean,
-): boolean {
+export function shouldShowWebFetchWaitingHint(group: LiveProcessGroup, planModeActive: boolean): boolean {
   if (!planModeActive || !group.isRunning) {
     return false;
   }
@@ -1015,188 +974,194 @@ export function shouldShowWebFetchWaitingHint(
   return Boolean(latestTool && isWebFetchToolMessage(latestTool) && isPendingToolUseMessage(latestTool));
 }
 
-export function hasPendingWebFetchInRunningGroup(
-  groups: LiveProcessGroup[],
-  planModeActive: boolean,
-): boolean {
+export function hasPendingWebFetchInRunningGroup(groups: LiveProcessGroup[], planModeActive: boolean): boolean {
   if (!planModeActive) {
     return false;
   }
 
-  return groups.some((group) => shouldShowWebFetchWaitingHint(group, planModeActive));
+  return groups.some(group => shouldShowWebFetchWaitingHint(group, planModeActive));
 }
 
-export function getWebFetchWaitingStep(
-  groupId: string,
-  t: TFunction<'chat'>,
-): ProcessTraceStep {
+export function getWebFetchWaitingStep(groupId: string, t: TFunction<"chat">): ProcessTraceStep {
   return {
     id: `${groupId}-web-fetch-waiting`,
-    title: t('working.waitingForWebFetch', { defaultValue: 'Fetching web content...' }),
-    phase: 'tool',
-    state: 'running',
-    toolName: 'web_fetch',
+    title: t("working.waitingForWebFetch", { defaultValue: "Fetching web content..." }),
+    phase: "tool",
+    state: "running",
+    toolName: "web_fetch",
   };
 }
 
 function numberField(message: ChatMessage, key: string): number {
   const value = message[key];
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 export function formatCompletedProcessTitle(
   messageOrMessages: ChatMessage | ChatMessage[],
-  t: TFunction<'chat'>,
+  t: TFunction<"chat">,
 ): string {
   const counts = Array.isArray(messageOrMessages)
     ? collectProcessCounts(messageOrMessages)
     : {
         editedTargets: [],
         readTargets: [],
-        searchCount: numberField(messageOrMessages, 'ragSearchCount'),
-        commandCount: numberField(messageOrMessages, 'commandCount'),
-        subagentCount: numberField(messageOrMessages, 'subagentCount'),
-        compactCount: numberField(messageOrMessages, 'compactCount'),
-        thinkingCount: numberField(messageOrMessages, 'thinkingCount'),
-        otherToolCount: numberField(messageOrMessages, 'otherToolCount'),
-        toolCallCount: numberField(messageOrMessages, 'toolCallCount'),
-        toolErrorCount: numberField(messageOrMessages, 'toolErrorCount'),
+        searchCount: numberField(messageOrMessages, "ragSearchCount"),
+        commandCount: numberField(messageOrMessages, "commandCount"),
+        subagentCount: numberField(messageOrMessages, "subagentCount"),
+        compactCount: numberField(messageOrMessages, "compactCount"),
+        thinkingCount: numberField(messageOrMessages, "thinkingCount"),
+        otherToolCount: numberField(messageOrMessages, "otherToolCount"),
+        toolCallCount: numberField(messageOrMessages, "toolCallCount"),
+        toolErrorCount: numberField(messageOrMessages, "toolErrorCount"),
       };
 
   const editCount = Array.isArray(messageOrMessages)
     ? uniqueCount(counts.editedTargets)
-    : numberField(messageOrMessages, 'editedFileCount');
+    : numberField(messageOrMessages, "editedFileCount");
   const readCount = Array.isArray(messageOrMessages)
     ? uniqueCount(counts.readTargets)
-    : numberField(messageOrMessages, 'exploredFileCount');
+    : numberField(messageOrMessages, "exploredFileCount");
   const labels: string[] = [];
 
   if (editCount > 0) {
-    labels.push(t('process.live.editedFiles', {
-      count: editCount,
-      defaultValue: `Edited ${editCount} ${editCount === 1 ? 'file' : 'files'}`,
-    }));
+    labels.push(
+      t("process.live.editedFiles", {
+        count: editCount,
+        defaultValue: `Edited ${editCount} ${editCount === 1 ? "file" : "files"}`,
+      }),
+    );
   }
   if (readCount > 0) {
-    labels.push(t('process.live.exploredFiles', {
-      count: readCount,
-      defaultValue: `Explored ${readCount} ${readCount === 1 ? 'file' : 'files'}`,
-    }));
+    labels.push(
+      t("process.live.exploredFiles", {
+        count: readCount,
+        defaultValue: `Explored ${readCount} ${readCount === 1 ? "file" : "files"}`,
+      }),
+    );
   }
   if (counts.searchCount > 0) {
-    labels.push(t('process.live.searches', {
-      count: counts.searchCount,
-      defaultValue: `Searched ${counts.searchCount} ${counts.searchCount === 1 ? 'time' : 'times'}`,
-    }));
+    labels.push(
+      t("process.live.searches", {
+        count: counts.searchCount,
+        defaultValue: `Searched ${counts.searchCount} ${counts.searchCount === 1 ? "time" : "times"}`,
+      }),
+    );
   }
   if (counts.commandCount > 0) {
-    labels.push(t('process.live.commands', {
-      count: counts.commandCount,
-      defaultValue: `Ran ${counts.commandCount} ${counts.commandCount === 1 ? 'command' : 'commands'}`,
-    }));
+    labels.push(
+      t("process.live.commands", {
+        count: counts.commandCount,
+        defaultValue: `Ran ${counts.commandCount} ${counts.commandCount === 1 ? "command" : "commands"}`,
+      }),
+    );
   }
   if (counts.subagentCount > 0) {
-    labels.push(t('process.live.subagentCompleted', { defaultValue: 'Subagent finished' }));
+    labels.push(t("process.live.subagentCompleted", { defaultValue: "Subagent finished" }));
   }
   if (counts.compactCount > 0) {
-    labels.push(t('process.live.compactCompleted', { defaultValue: 'Compacted context' }));
+    labels.push(t("process.live.compactCompleted", { defaultValue: "Compacted context" }));
   }
   if (counts.thinkingCount > 0 && labels.length === 0) {
-    labels.push(t('process.live.thoughtCompleted', { defaultValue: 'Thought through next step' }));
+    labels.push(t("process.live.thoughtCompleted", { defaultValue: "Thought through next step" }));
   }
   if (labels.length === 0 && counts.otherToolCount > 0) {
-    labels.push(t('process.live.toolCalls', {
-      count: counts.otherToolCount,
-      defaultValue: `Used ${counts.otherToolCount} ${counts.otherToolCount === 1 ? 'tool' : 'tools'}`,
-    }));
+    labels.push(
+      t("process.live.toolCalls", {
+        count: counts.otherToolCount,
+        defaultValue: `Used ${counts.otherToolCount} ${counts.otherToolCount === 1 ? "tool" : "tools"}`,
+      }),
+    );
   }
   if (counts.toolErrorCount > 0) {
-    labels.push(t('process.live.errors', {
-      count: counts.toolErrorCount,
-      defaultValue: `${counts.toolErrorCount} ${counts.toolErrorCount === 1 ? 'error' : 'errors'}`,
-    }));
+    labels.push(
+      t("process.live.errors", {
+        count: counts.toolErrorCount,
+        defaultValue: `${counts.toolErrorCount} ${counts.toolErrorCount === 1 ? "error" : "errors"}`,
+      }),
+    );
   }
 
-  return labels.join(' ');
+  return labels.join(" ");
 }
 
-export function getRunningProcessTitle(
-  group: LiveProcessGroup,
-  t: TFunction<'chat'>,
-): string {
-  const latestMessage = [...group.messages].reverse().find((message) => isProcessMessage(message));
+export function getRunningProcessTitle(group: LiveProcessGroup, t: TFunction<"chat">): string {
+  const latestMessage = [...group.messages].reverse().find(message => isProcessMessage(message));
   if (!latestMessage) {
-    return t('working.processing', { defaultValue: 'Processing' });
+    return t("working.processing", { defaultValue: "Processing" });
   }
 
   const kind = getProcessToolKind(latestMessage);
   const target = getDisplayTarget(getToolTarget(latestMessage));
-  if (kind === 'edit') {
+  if (kind === "edit") {
     return target
-      ? t('process.live.runningEditTarget', { target, defaultValue: `Editing ${target}` })
-      : t('process.live.runningEdit', { defaultValue: 'Editing file' });
+      ? t("process.live.runningEditTarget", { target, defaultValue: `Editing ${target}` })
+      : t("process.live.runningEdit", { defaultValue: "Editing file" });
   }
-  if (kind === 'read') {
+  if (kind === "read") {
     return target
-      ? t('process.live.runningReadTarget', { target, defaultValue: `Reading ${target}` })
-      : t('process.live.runningRead', { defaultValue: 'Reading file' });
+      ? t("process.live.runningReadTarget", { target, defaultValue: `Reading ${target}` })
+      : t("process.live.runningRead", { defaultValue: "Reading file" });
   }
-  if (kind === 'search') {
+  if (kind === "search") {
     return target
-      ? t('process.live.runningSearchTarget', { target, defaultValue: `Searching ${target}` })
-      : t('process.live.runningSearch', { defaultValue: 'Searching' });
+      ? t("process.live.runningSearchTarget", { target, defaultValue: `Searching ${target}` })
+      : t("process.live.runningSearch", { defaultValue: "Searching" });
   }
-  if (kind === 'command') {
+  if (kind === "command") {
     return target
-      ? t('process.live.runningCommandTarget', { target, defaultValue: `Running ${target}` })
-      : t('process.live.runningCommand', { defaultValue: 'Running command' });
+      ? t("process.live.runningCommandTarget", { target, defaultValue: `Running ${target}` })
+      : t("process.live.runningCommand", { defaultValue: "Running command" });
   }
-  if (kind === 'subagent') {
-    return t('process.live.runningSubagent', { defaultValue: 'Running subagent' });
+  if (kind === "subagent") {
+    return t("process.live.runningSubagent", { defaultValue: "Running subagent" });
   }
-  if (kind === 'compact') {
-    return t('working.compacting', { defaultValue: 'Compacting context...' });
+  if (kind === "compact") {
+    return t("working.compacting", { defaultValue: "Compacting context..." });
   }
-  if (kind === 'thinking') {
-    return t('working.thinking', { defaultValue: 'thinking' });
+  if (kind === "thinking") {
+    return t("working.thinking", { defaultValue: "thinking" });
   }
-  return latestMessage.title || latestMessage.content || latestMessage.toolName || t('working.processing', { defaultValue: 'Processing' });
+  return (
+    latestMessage.title ||
+    latestMessage.content ||
+    latestMessage.toolName ||
+    t("working.processing", { defaultValue: "Processing" })
+  );
 }
 
 export function getLiveProcessGroupStep(
   group: LiveProcessGroup,
-  t: TFunction<'chat'>,
+  t: TFunction<"chat">,
   fallbackRunningStep: ProcessTraceStep | null,
 ): ProcessTraceStep {
-  const fallbackPhase = String(fallbackRunningStep?.phase || '');
-  const canUseFallbackStep = fallbackRunningStep?.title &&
-    !['generation', 'thinking', 'permission'].includes(fallbackPhase);
+  const fallbackPhase = String(fallbackRunningStep?.phase || "");
+  const canUseFallbackStep =
+    fallbackRunningStep?.title && !["generation", "thinking", "permission"].includes(fallbackPhase);
   if (group.isRunning && canUseFallbackStep) {
     return {
       ...fallbackRunningStep,
       id: group.id,
-      state: fallbackRunningStep.state || 'running',
+      state: fallbackRunningStep.state || "running",
     };
   }
 
-  const title = group.isRunning
-    ? getRunningProcessTitle(group, t)
-    : formatCompletedProcessTitle(group.messages, t);
+  const title = group.isRunning ? getRunningProcessTitle(group, t) : formatCompletedProcessTitle(group.messages, t);
   const latestMessage = group.messages[group.messages.length - 1];
-  const kind = latestMessage ? getProcessToolKind(latestMessage) : 'tool';
+  const kind = latestMessage ? getProcessToolKind(latestMessage) : "tool";
 
   return {
     id: group.id,
     title,
-    state: group.isRunning ? 'running' : 'completed',
-    phase: kind === 'search' ? 'rag' : kind === 'command' ? 'tool' : latestMessage?.phase,
+    state: group.isRunning ? "running" : "completed",
+    phase: kind === "search" ? "rag" : kind === "command" ? "tool" : latestMessage?.phase,
     toolName: latestMessage?.toolName,
   };
 }
 
 export function processSummaryToTrace(
   message: ChatMessage,
-  t: TFunction<'chat'>,
+  t: TFunction<"chat">,
 ): {
   label: string;
   collapsedDetail: string;
@@ -1205,65 +1170,61 @@ export function processSummaryToTrace(
   metrics: ProcessTraceMetric[];
   steps: ProcessTraceStep[];
 } {
-  const rawStatus = String(message.state || 'completed');
-  const duration = formatProcessDuration(
-    typeof message.durationMs === 'number' ? message.durationMs : 0,
-  );
-  const label = formatCompletedProcessTitle(message, t) ||
-    t('process.summary.processed', {
+  const rawStatus = String(message.state || "completed");
+  const duration = formatProcessDuration(typeof message.durationMs === "number" ? message.durationMs : 0);
+  const label =
+    formatCompletedProcessTitle(message, t) ||
+    t("process.summary.processed", {
       duration,
       defaultValue: `Processed ${duration}`,
     });
-  const toolCalls = numberField(message, 'toolCallCount');
-  const searches = numberField(message, 'ragSearchCount');
-  const errors = numberField(message, 'toolErrorCount');
-  const status = rawStatus === 'failed' && errors > 0 ? 'completed' : rawStatus;
+  const toolCalls = numberField(message, "toolCallCount");
+  const searches = numberField(message, "ragSearchCount");
+  const errors = numberField(message, "toolErrorCount");
+  const status = rawStatus === "failed" && errors > 0 ? "completed" : rawStatus;
   const metrics: ProcessTraceMetric[] = [
     toolCalls > 0
       ? {
-          key: 'toolCalls',
-          label: t('process.metrics.toolCalls', { count: toolCalls, defaultValue: '{{count}} tool calls' }),
+          key: "toolCalls",
+          label: t("process.metrics.toolCalls", { count: toolCalls, defaultValue: "{{count}} tool calls" }),
         }
       : null,
     searches > 0
       ? {
-          key: 'searches',
-          label: t('process.metrics.searches', { count: searches, defaultValue: '{{count}} searches' }),
+          key: "searches",
+          label: t("process.metrics.searches", { count: searches, defaultValue: "{{count}} searches" }),
         }
       : null,
     errors > 0
       ? {
-          key: 'errors',
-          label: t('process.metrics.errors', { count: errors, defaultValue: '{{count}} errors' }),
+          key: "errors",
+          label: t("process.metrics.errors", { count: errors, defaultValue: "{{count}} errors" }),
         }
       : null,
   ].filter((metric): metric is ProcessTraceMetric => Boolean(metric));
   const steps = Array.isArray(message.keySteps)
     ? message.keySteps
-        .filter((step): step is Record<string, unknown> => Boolean(step) && typeof step === 'object')
-        .map((step) => ({
-          id: typeof step.activityId === 'string'
-            ? step.activityId
-            : typeof step.id === 'string'
-              ? step.id
-              : undefined,
-          title: typeof step.title === 'string' ? step.title : undefined,
-          detail: typeof step.detail === 'string' ? step.detail : undefined,
-          state: typeof step.state === 'string' ? step.state : undefined,
-          severity: typeof step.severity === 'string' ? step.severity : undefined,
-          phase: typeof step.phase === 'string' ? step.phase : undefined,
-          toolName: typeof step.toolName === 'string' ? step.toolName : undefined,
+        .filter((step): step is Record<string, unknown> => Boolean(step) && typeof step === "object")
+        .map(step => ({
+          id: typeof step.activityId === "string" ? step.activityId : typeof step.id === "string" ? step.id : undefined,
+          title: typeof step.title === "string" ? step.title : undefined,
+          detail: typeof step.detail === "string" ? step.detail : undefined,
+          state: typeof step.state === "string" ? step.state : undefined,
+          severity: typeof step.severity === "string" ? step.severity : undefined,
+          phase: typeof step.phase === "string" ? step.phase : undefined,
+          toolName: typeof step.toolName === "string" ? step.toolName : undefined,
         }))
     : [];
 
   return {
     label,
-    collapsedDetail: '',
-    statusLabel: status === 'failed'
-      ? t('process.summary.failed', { defaultValue: 'Process failed' })
-      : status === 'cancelled'
-        ? t('process.summary.cancelled', { defaultValue: 'Process stopped' })
-        : t('process.summary.completed', { defaultValue: 'Process completed' }),
+    collapsedDetail: "",
+    statusLabel:
+      status === "failed"
+        ? t("process.summary.failed", { defaultValue: "Process failed" })
+        : status === "cancelled"
+          ? t("process.summary.cancelled", { defaultValue: "Process stopped" })
+          : t("process.summary.completed", { defaultValue: "Process completed" }),
     status,
     metrics,
     steps,

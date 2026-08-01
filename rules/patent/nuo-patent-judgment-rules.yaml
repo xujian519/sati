@@ -1,0 +1,263 @@
+# 由 scripts/port-nuo-rules.ts 从 XiaoNuo Agent patent-judgment-rules.yaml 转换生成
+# 原始文件完整内容见 assets/patent-rules/patent-judgment-rules.yaml（含 LLM 评估型规则与指导字段）
+# 转换语义: pattern_analysis(期望模式)→structural_analysis 单 element；severity warning→major；info→minor
+version: "1.0"
+rules:
+  - id: JD-INF-003
+    name: 侵权判定—发明点特征等同从严把握
+    domain: patent_infringement
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 司法实践总结（2023）最高法知民终844号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 侵权判定—发明点特征等同从严把握
+          patterns:
+            - 发明点
+            - 申请过程陈述
+            - 技术特征限定
+      minConfidence: 1
+  - id: JD-INF-005
+    name: 侵权判定—禁止以多个特征组合与一个特征比对
+    domain: patent_infringement
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 司法实践总结（2023）最高法知民终405号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 侵权判定—禁止以多个特征组合与一个特征比对
+          patterns:
+            - 一一对应比对
+            - 单一特征比对
+      minConfidence: 1
+  - id: JD-DEF-003
+    name: 抗辩实务—现有技术证据必须完整公开全部特征
+    domain: patent_infringement
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 司法实践总结（2024）最高法知民终370号、（2022）最高法知民终2302号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 抗辩实务—现有技术证据必须完整公开全部特征
+          patterns:
+            - 完整公开
+            - 全部技术特征
+            - 内部结构
+      minConfidence: 1
+  - id: JD-DEF-005
+    name: 抗辩实务—合法来源抗辩证据链完整性
+    domain: patent_infringement
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 司法实践总结（2023）最高法知民终2520号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: purchase_evidence
+          patterns:
+            - 购销合同
+            - 送货单
+            - 物流信息
+            - 付款凭证
+            - 发票
+        - element: evidence_chain
+          patterns:
+            - 相互印证
+            - 完整证据链
+            - 对应关系
+  - id: JD-DEF-008
+    name: 抗辩实务—专门用于的认定标准
+    domain: patent_infringement
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 司法实践总结（2019）最高法知民终87号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 抗辩实务—专门用于的认定标准
+          patterns:
+            - 唯一用途
+            - 实质性非侵权用途
+            - 行业通用
+      minConfidence: 1
+  - id: JD-DMG-002
+    name: 损害赔偿—惩罚性赔偿的双重要件
+    domain: patent_infringement
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第七十一条第一款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 损害赔偿—惩罚性赔偿的双重要件
+          patterns:
+            - 故意侵权
+            - 情节严重
+      minConfidence: 1
+  - id: JD-DMG-003
+    name: 损害赔偿—惩罚性赔偿的重复侵权认定
+    domain: patent_infringement
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 司法实践总结（2022）最高法知民终2920号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 损害赔偿—惩罚性赔偿的重复侵权认定
+          patterns:
+            - 产品结构相同
+            - 技术方案相同
+      minConfidence: 1
+  - id: JD-DMG-004
+    name: 损害赔偿—专利贡献率的举证责任
+    domain: patent_infringement
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 司法实践总结（2019）沪民终136号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 损害赔偿—专利贡献率的举证责任
+          patterns:
+            - 专利贡献率
+            - 举证责任
+            - 被诉侵权人
+      minConfidence: 1
+  - id: JD-PRC-002
+    name: 程序规则—举证妨碍的认定与后果
+    domain: patent_procedure
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 最高人民法院关于民事诉讼证据的若干规定第九十五条；最高人民法院关于知识产权民事诉讼证据的若干规定第十三条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 程序规则—举证妨碍的认定与后果
+          patterns:
+            - 拒不提供
+            - 拒绝配合
+            - 举证妨碍
+      minConfidence: 1
+  - id: JD-PRC-003
+    name: 程序规则—技术鉴定非必经程序
+    domain: patent_procedure
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 司法实践总结（2019）最高法知民终831号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 程序规则—技术鉴定非必经程序
+          patterns:
+            - 技术鉴定
+            - 技术调查官
+            - 自行比对
+      minConfidence: 1
+  - id: JD-PRC-004
+    name: 程序规则—单方委托鉴定意见的审查标准
+    domain: patent_procedure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 司法实践总结（2022）最高法知民终2100号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: qualification
+          patterns:
+            - 资格
+            - 资质
+            - 人民法院诉讼资产网备案
+        - element: method
+          patterns:
+            - 科学方法
+            - 行业规范
+        - element: evidence
+          patterns:
+            - 真实可靠
+            - 一致性
+        - element: logic
+          patterns:
+            - 逻辑性
+            - 科学性
+  - id: JD-PRC-005
+    name: 程序规则—网络证据的真实性认定
+    domain: patent_procedure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 司法实践总结（2020）最高法知民终248号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: website_authority
+          patterns:
+            - 权威性
+            - 知名网站
+            - 审核机制
+        - element: data_integrity
+          patterns:
+            - 数据运行维护规则
+            - 时间不可篡改
+        - element: acquisition_method
+          patterns:
+            - 正常浏览路径
+            - 非直接输入网址
+  - id: JD-OWN-001
+    name: 权属纠纷—离职后一年内相关性认定标准
+    domain: patent_general
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第六条；专利法实施细则第十二条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权属纠纷—离职后一年内相关性认定标准
+          patterns:
+            - 技术领域
+            - 技术主题
+            - 技术构思
+            - 延续性
+            - 传承性
+      minConfidence: 1
+  - id: JD-OWN-002
+    name: 权属纠纷—主要利用本单位物质技术条件的认定
+    domain: patent_general
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第六条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权属纠纷—主要利用本单位物质技术条件的认定
+          patterns:
+            - 全部或大部分利用
+            - 实质性影响
+            - 完成技术方案
+      minConfidence: 1

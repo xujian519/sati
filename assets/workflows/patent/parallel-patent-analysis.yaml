@@ -1,0 +1,138 @@
+# 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
+template_id: parallel-patent-analysis
+name: 并行专利分析
+description: |
+  利用 DAG 并行性同时执行检索、技术分析、法律论证。
+  - search-plan 与 probe 并行执行
+  - disclosure 和 claims-clarity 在 tech-analyze 完成后并行执行
+  - 检索质量门拦截不合格结果
+  - 整体执行时间大幅缩短（串行 30 分钟 → 并行 12 分钟）
+intent: 专利分析（审查意见/无效/侵权等场景的通用并行分析框架）
+steps:
+  - id: probe
+    name: 案卷探查
+    description: 读取案卷文件，识别检查意见/权利要求
+    worker: project-probe
+    input_template: |
+      案卷目录：{{case_dir}}
+      输出 intent 与 provision_ids。
+
+  - id: search-plan
+    name: 检索策略制定（与案卷探查并行）
+    description: 在案卷探查的同时制定检索策略
+    worker: patent-search-planner
+    depends_on: []
+    input_template: |
+      基于案卷标题和技术领域制定检索策略。
+      案卷：{{case_dir}}
+      输出 search-plan.md。
+
+  - id: rules
+    name: 规则探查
+    description: 映射驳回理由到条款簇
+    worker: rule-explorer
+    depends_on: [probe]
+    input_template: |
+      解析驳回理由类型，输出 provision_ids 与 generatedPrompt。
+
+  - id: search-exec
+    name: 检索执行
+    description: 执行检索（与 CAP02 技术分析并行）
+    worker: patent-search-executor
+    depends_on: [search-plan]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **必经步骤**：执行 search-plan.md 中的检索式。
+      至少使用 2 个检索源：
+      1. Google Patents（通过 google-patents-search skill）
+      2. CNIPA 公布公告（通过 cnipa-query skill）
+      每篇对比文件标注：专利号、标题、公开日、相关度（X/Y/A）、覆盖的权利要求、可引用段落（至少 3 段）。
+
+  - id: search-qual
+    name: 检索结果质量检查
+    description: 对检索结果进行质量验证，满足门槛后方可进入下游
+    worker: bcip-retrieval (quality check phase)
+    depends_on: [search-exec]
+    has_checkpoint: true
+    checkpoint_title: 确认对比文件列表与相关性（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **质量门槛**（以下条件必须全部满足）：
+      1. 对比文件 ≥ 3 篇
+      2. 每篇标注了相关度和覆盖的权利要求
+      3. 至少 2 篇获取了全文（PDF→Markdown 转换）
+      4. 检索式包含布尔逻辑和 IPC 限定
+      
+      不满足时：退回 search-exec 重新执行。
+
+  - id: tech-analyze
+    name: CAP02 技术分析
+    description: 发明方案七维解构
+    worker: patent-technical-analyzer
+    depends_on: [rules, search-qual]
+    has_checkpoint: true
+    checkpoint_title: 确认技术解构（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **场景**：审查意见答复 — CAP02 必步。
+
+      1. 七维解构
+      2. 审查意见驳回理由映射表
+      3. 对比文件解构与四级对比矩阵
+      4. tech-graph 因果链
+      5. HITL 确认
+
+      输出：technical-analysis-report.md
+
+  - id: disclosure
+    name: 充分公开分析（与清楚支持分析并行）
+    description: 专利法第26条第3款
+    worker: provision-disclosure
+    depends_on: [tech-analyze]
+    input_template: |
+      案卷：{{case_dir}}
+      前置：technical-analysis-report.md
+      分析充分公开问题。
+      输出：disclosure-analysis.md
+
+  - id: claims-clarity
+    name: 清楚与支持分析（与充分公开并行）
+    description: 专利法第26条第4款
+    worker: provision-claims-clarity
+    depends_on: [tech-analyze]
+    input_template: |
+      案卷：{{case_dir}}
+      前置：technical-analysis-report.md
+      分析权利要求清楚与支持问题。
+      输出：claims-support-analysis.md
+
+  - id: draft
+    name: 答复书撰写
+    description: 汇总并行分析结果，撰写意见陈述书
+    worker: patent-oa-response-drafter
+    depends_on: [disclosure, claims-clarity]
+    has_checkpoint: true
+    checkpoint_title: 审核答复书（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      基于以下并行产出来源：
+      - technical-analysis-report.md（CAP02）
+      - disclosure-analysis.md（充分公开）
+      - claims-support-analysis.md（清楚支持）
+
+      撰写完整意见陈述书。
+      输出：oa-response-statement.md
+
+  - id: slop-clean
+    name: 反套话润色
+    description: stop-patent-slop 后处理
+    worker: patent-slop-cleaner
+    depends_on: [draft]
+    input_template: |
+      案卷：{{case_dir}}
+      对 oa-response-statement.md 执行反套话处理。
+      输出：*-clean.md + changelog

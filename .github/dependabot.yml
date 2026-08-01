@@ -20,10 +20,3 @@ updates:
       time: "09:00"
       timezone: "Asia/Shanghai"
 
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-      timezone: "Asia/Shanghai"

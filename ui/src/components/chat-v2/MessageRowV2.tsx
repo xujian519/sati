@@ -1,36 +1,33 @@
-import { memo, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
-import { AlertTriangle, Check, ChevronRight, Copy, GitBranch, Loader2 } from 'lucide-react';
-import { copyTextToClipboard } from '../../utils/clipboard';
-import { cn } from '../../lib/utils.js';
-import type { Project, SessionProvider } from '../../types/app';
-import {
-  DOCUMENT_SELECTION_ATTACHMENT_KIND,
-  type DocumentSelectionReference,
-} from '../../types/documentSelection';
+import { memo, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { AlertTriangle, Check, ChevronRight, Copy, GitBranch, Loader2 } from "lucide-react";
+import { copyTextToClipboard } from "../../utils/clipboard";
+import { cn } from "../../lib/utils.js";
+import type { Project, SessionProvider } from "../../types/app";
+import { DOCUMENT_SELECTION_ATTACHMENT_KIND, type DocumentSelectionReference } from "../../types/documentSelection";
 import {
   CONTENT_REFERENCE_ATTACHMENT_KIND,
   normalizeContentReference,
   type ContentReference,
-} from '../../types/contentReference';
+} from "../../types/contentReference";
 import type {
   ChatAttachment,
   ChatMessage,
-  PilotDeckPermissionSuggestion,
+  SatiPermissionSuggestion,
   SessionPermissionGrantResult,
-} from '../chat/types/types';
-import MessageComponent from '../chat/view/subcomponents/MessageComponent';
-import ImageLightbox, { type LightboxImage } from '../chat/view/subcomponents/ImageLightbox';
-import { Markdown } from '../chat/view/subcomponents/Markdown';
-import { formatUsageLimitText } from '../chat/utils/chatFormatting';
-import { ProcessTrace } from './ProcessTrace';
-import { processSummaryToTrace, type ProcessAttachment } from './processGrouping';
-import SubagentCard from './SubagentCard';
-import { useTypewriter } from './useTypewriter';
-import DocumentReferenceChip from './DocumentReferenceChip';
-import { linkifyFilePathsOutsideCode } from './linkifyFilePathsOutsideCode';
-import { AgentFileArtifactGroup, UserAttachmentCards } from './MessageFileCards';
+} from "../chat/types/types";
+import MessageComponent from "../chat/view/subcomponents/MessageComponent";
+import ImageLightbox, { type LightboxImage } from "../chat/view/subcomponents/ImageLightbox";
+import { Markdown } from "../chat/view/subcomponents/Markdown";
+import { formatUsageLimitText } from "../chat/utils/chatFormatting";
+import { ProcessTrace } from "./ProcessTrace";
+import { processSummaryToTrace, type ProcessAttachment } from "./processGrouping";
+import SubagentCard from "./SubagentCard";
+import { useTypewriter } from "./useTypewriter";
+import DocumentReferenceChip from "./DocumentReferenceChip";
+import { linkifyFilePathsOutsideCode } from "./linkifyFilePathsOutsideCode";
+import { AgentFileArtifactGroup, UserAttachmentCards } from "./MessageFileCards";
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -38,14 +35,14 @@ function attachmentToDocumentReference(attachment: ChatAttachment): ContentRefer
   const structured = normalizeContentReference(attachment.contentReference);
   if (structured) return structured;
   if (attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND || !attachment.selectedText) return null;
-  const filePath = attachment.filePath || attachment.path || '';
+  const filePath = attachment.filePath || attachment.path || "";
   if (!filePath) return null;
   return normalizeContentReference({
     kind: DOCUMENT_SELECTION_ATTACHMENT_KIND,
-    id: `${filePath}-${attachment.createdAt || ''}-${attachment.occurrenceIndex ?? ''}`,
+    id: `${filePath}-${attachment.createdAt || ""}-${attachment.occurrenceIndex ?? ""}`,
     fileName: attachment.fileName || attachment.name,
     filePath,
-    source: attachment.source === 'pdf' ? 'pdf' : 'office-pdf',
+    source: attachment.source === "pdf" ? "pdf" : "office-pdf",
     pageNumbers: Array.isArray(attachment.pageNumbers) ? attachment.pageNumbers : [],
     selectedText: attachment.selectedText,
     surroundingText: attachment.surroundingText,
@@ -67,7 +64,7 @@ type MessageRowV2Props = {
   onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onShowSettings?: () => void;
   onGrantSessionToolPermission?: (
-    suggestion: PilotDeckPermissionSuggestion,
+    suggestion: SatiPermissionSuggestion,
   ) => SessionPermissionGrantResult | null | undefined;
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
@@ -95,7 +92,7 @@ const shouldDelegate = (message: ChatMessage): boolean => {
   if (message.isInteractivePrompt) return true;
   if (message.isTaskNotification) return true;
   const t = message.type;
-  if (t !== 'user' && t !== 'assistant' && t !== 'error') return true;
+  if (t !== "user" && t !== "assistant" && t !== "error") return true;
   return false;
 };
 
@@ -125,13 +122,10 @@ function MessageRowV2({
   forkDisabled = false,
   showAssistantActions,
 }: MessageRowV2Props) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation("chat");
   const delegate = useMemo(() => shouldDelegate(message), [message]);
 
-  const formattedContent = useMemo(
-    () => formatUsageLimitText(String(message.content ?? '')),
-    [message.content],
-  );
+  const formattedContent = useMemo(() => formatUsageLimitText(String(message.content ?? "")), [message.content]);
   const thinkingDisplayText = useTypewriter(formattedContent, !!message.isStreaming && !!message.isThinking, 4);
   const contentDisplayText = useTypewriter(formattedContent, !!message.isStreaming && !message.isThinking, 6);
   const linkedContentDisplayText = useMemo(
@@ -141,45 +135,47 @@ function MessageRowV2({
   const messageAttachments = useMemo(
     () =>
       Array.isArray(message.attachments)
-        ? message.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
+        ? message.attachments.filter(attachment => attachment && typeof attachment.name === "string")
         : [],
     [message.attachments],
   );
   const documentReferenceAttachments = useMemo(
-    () => messageAttachments
-      .map(attachmentToDocumentReference)
-      .filter((reference): reference is ContentReference => Boolean(reference)),
+    () =>
+      messageAttachments
+        .map(attachmentToDocumentReference)
+        .filter((reference): reference is ContentReference => Boolean(reference)),
     [messageAttachments],
   );
   const referenceImageNames = useMemo(
-    () => new Set(documentReferenceAttachments
-      .filter((reference) => reference.selectionMode === 'region')
-      .map((reference) => reference.image.name)),
+    () =>
+      new Set(
+        documentReferenceAttachments
+          .filter(reference => reference.selectionMode === "region")
+          .map(reference => reference.image.name),
+      ),
     [documentReferenceAttachments],
   );
   const messageImages = useMemo(
     () =>
       Array.isArray(message.images)
-        ? message.images.filter((image) => (
-          image
-          && typeof image.data === 'string'
-          && !referenceImageNames.has(image.name)
-        ))
+        ? message.images.filter(
+            image => image && typeof image.data === "string" && !referenceImageNames.has(image.name),
+          )
         : [],
     [message.images, referenceImageNames],
   );
   const fileAttachments = useMemo(
-    () => messageAttachments.filter((attachment) => (
-      attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND
-      && attachment.kind !== CONTENT_REFERENCE_ATTACHMENT_KIND
-    )),
+    () =>
+      messageAttachments.filter(
+        attachment =>
+          attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND &&
+          attachment.kind !== CONTENT_REFERENCE_ATTACHMENT_KIND,
+      ),
     [messageAttachments],
   );
   const [userImageLightbox, setUserImageLightbox] = useState<number | null>(null);
   const hasForkUnsupportedContent =
-    Boolean(message.forkUnsupportedContent) ||
-    messageImages.length > 0 ||
-    messageAttachments.length > 0;
+    Boolean(message.forkUnsupportedContent) || messageImages.length > 0 || messageAttachments.length > 0;
 
   if (message.isAgentActivitySummary) {
     return (
@@ -199,7 +195,7 @@ function MessageRowV2({
       attachment={attachment}
       renderDetail={(detailMessage, index) => (
         <MessageRowV2
-          key={detailMessage.id || detailMessage.toolId || `${attachment.id || 'process-detail'}-${index}`}
+          key={detailMessage.id || detailMessage.toolId || `${attachment.id || "process-detail"}-${index}`}
           message={detailMessage}
           prevMessage={index > 0 ? attachment.processDetailMessages[index - 1] : null}
           provider={provider}
@@ -238,11 +234,17 @@ function MessageRowV2({
   };
 
   if (message.isSubagentContainer) {
-    const subagentId = typeof message.subagentId === 'string' ? message.subagentId : '';
+    const subagentId = typeof message.subagentId === "string" ? message.subagentId : "";
     const liveActivity = subagentId ? subagentActivityById?.get(subagentId) : undefined;
     const thinkingContent = subagentId ? subagentThinkingById?.get(subagentId) : undefined;
     return withProcessRows(
-      <SubagentCard message={message} liveActivity={liveActivity} onOpenDetail={onOpenSubagentDetail} thinkingContent={thinkingContent} isSessionRunning={isSessionRunning} />,
+      <SubagentCard
+        message={message}
+        liveActivity={liveActivity}
+        onOpenDetail={onOpenSubagentDetail}
+        thinkingContent={thinkingContent}
+        isSessionRunning={isSessionRunning}
+      />,
     );
   }
 
@@ -267,12 +269,12 @@ function MessageRowV2({
     );
   }
 
-  const isUser = message.type === 'user';
-  const isError = message.type === 'error';
+  const isUser = message.type === "user";
+  const isError = message.type === "error";
 
   // User: right-aligned grey bubble.
   if (isUser) {
-    const lightboxImages: LightboxImage[] = messageImages.map((image) => ({
+    const lightboxImages: LightboxImage[] = messageImages.map(image => ({
       data: image.data,
       name: image.name,
       mimeType: image.mimeType,
@@ -283,11 +285,16 @@ function MessageRowV2({
           <ForkMessageButton
             carriedMessageCount={forkCarriedMessageCount}
             disabled={forkDisabled || isSessionRunning || !message.entryId || hasForkUnsupportedContent}
-            disabledReason={hasForkUnsupportedContent
-              ? String(message.forkUnsupportedReason || t('fork.unsupportedAttachments', {
-                  defaultValue: 'Forking messages with attachments or media is not supported yet',
-                }))
-              : undefined}
+            disabledReason={
+              hasForkUnsupportedContent
+                ? String(
+                    message.forkUnsupportedReason ||
+                      t("fork.unsupportedAttachments", {
+                        defaultValue: "Forking messages with attachments or media is not supported yet",
+                      }),
+                  )
+                : undefined
+            }
             onFork={() => {
               if (message.entryId && !hasForkUnsupportedContent) onFork(message, forkCarriedMessageCount);
             }}
@@ -300,42 +307,42 @@ function MessageRowV2({
           ) : (
             <>
               {documentReferenceAttachments.length > 0 ? (
-                <div className={formattedContent || fileAttachments.length > 0 ? 'mb-2 flex flex-wrap gap-2' : 'flex flex-wrap gap-2'}>
-                  {documentReferenceAttachments.map((reference) => (
+                <div
+                  className={
+                    formattedContent || fileAttachments.length > 0
+                      ? "mb-2 flex flex-wrap gap-2"
+                      : "flex flex-wrap gap-2"
+                  }
+                >
+                  {documentReferenceAttachments.map(reference => (
                     <DocumentReferenceChip
                       key={reference.id}
                       reference={reference}
                       summaryLength={100}
                       className="bg-white/80 dark:bg-neutral-900/55"
-                      onOpen={onFileOpen
-                        ? () => onFileOpen(reference.source.relativePath)
-                        : undefined}
+                      onOpen={onFileOpen ? () => onFileOpen(reference.source.relativePath) : undefined}
                     />
                   ))}
                 </div>
               ) : null}
               {fileAttachments.length > 0 ? (
-                <div className={formattedContent ? 'mb-2' : undefined}>
-                  <UserAttachmentCards
-                    attachments={fileAttachments}
-                    project={selectedProject}
-                    onBrowse={onFileOpen}
-                  />
+                <div className={formattedContent ? "mb-2" : undefined}>
+                  <UserAttachmentCards attachments={fileAttachments} project={selectedProject} onBrowse={onFileOpen} />
                 </div>
               ) : null}
               {messageImages.length > 0 ? (
-                <div className={formattedContent ? 'mb-2 grid grid-cols-1 gap-2' : 'grid grid-cols-1 gap-2'}>
+                <div className={formattedContent ? "mb-2 grid grid-cols-1 gap-2" : "grid grid-cols-1 gap-2"}>
                   {messageImages.map((image, index) => (
                     <button
                       type="button"
-                      key={`${image.name || 'image'}-${index}`}
+                      key={`${image.name || "image"}-${index}`}
                       onClick={() => setUserImageLightbox(index)}
                       className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900/40"
-                      aria-label={image.name ? `Preview ${image.name}` : 'Preview image'}
+                      aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
                     >
                       <img
                         src={image.data}
-                        alt={image.name || 'Uploaded image'}
+                        alt={image.name || "Uploaded image"}
                         className="block h-auto max-h-64 w-full cursor-zoom-in object-contain transition-opacity hover:opacity-90"
                         loading="lazy"
                       />
@@ -344,8 +351,13 @@ function MessageRowV2({
                 </div>
               ) : null}
               {formattedContent ? (
-                <Markdown className="prose prose-sm prose-neutral min-w-0 max-w-none break-words [overflow-wrap:anywhere] dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0" projectName={selectedProject?.name}
-          onFileOpen={onFileOpen}>{formattedContent}</Markdown>
+                <Markdown
+                  className="prose prose-sm prose-neutral min-w-0 max-w-none break-words [overflow-wrap:anywhere] dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0"
+                  projectName={selectedProject?.name}
+                  onFileOpen={onFileOpen}
+                >
+                  {formattedContent}
+                </Markdown>
               ) : null}
             </>
           )}
@@ -369,8 +381,9 @@ function MessageRowV2({
           <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1 pt-0.5 text-[14px] leading-relaxed text-red-500">
-          <Markdown projectName={selectedProject?.name}
-          onFileOpen={onFileOpen}>{formattedContent}</Markdown>
+          <Markdown projectName={selectedProject?.name} onFileOpen={onFileOpen}>
+            {formattedContent}
+          </Markdown>
         </div>
       </div>,
     );
@@ -384,24 +397,30 @@ function MessageRowV2({
       // Inline mode: unified <details> with typewriter animation + blue theme
       return withProcessRows(
         <div className="min-w-0 text-[14px] leading-relaxed">
-          <details className="group" open={(isThinkingStreaming ? thinkingDisplayText.length > 12 : false) || undefined}>
+          <details
+            className="group"
+            open={(isThinkingStreaming ? thinkingDisplayText.length > 12 : false) || undefined}
+          >
             <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-blue-600/70 hover:text-blue-700 dark:text-blue-400/70 dark:hover:text-blue-300">
-              {isThinkingStreaming
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-                : <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />}
+              {isThinkingStreaming ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
+              )}
               <span>
                 {isThinkingStreaming
-                  ? t('thinking.title', { defaultValue: 'Thinking...' })
-                  : t('thinking.completed', { defaultValue: 'Thought process' })}
+                  ? t("thinking.title", { defaultValue: "Thinking..." })
+                  : t("thinking.completed", { defaultValue: "Thought process" })}
               </span>
             </summary>
-            <div className={`mt-1.5 max-h-64 overflow-y-auto border-l-2 pl-3 text-[13px] ${
-              isThinkingStreaming
-                ? 'border-blue-400/50 text-neutral-600 dark:border-blue-500/40 dark:text-neutral-300'
-                : 'border-blue-400/30 text-neutral-600 dark:border-blue-500/30 dark:text-neutral-400'
-            }`}>
-              <Markdown projectName={selectedProject?.name}
-          onFileOpen={onFileOpen} isStreaming={isThinkingStreaming}>
+            <div
+              className={`mt-1.5 max-h-64 overflow-y-auto border-l-2 pl-3 text-[13px] ${
+                isThinkingStreaming
+                  ? "border-blue-400/50 text-neutral-600 dark:border-blue-500/40 dark:text-neutral-300"
+                  : "border-blue-400/30 text-neutral-600 dark:border-blue-500/30 dark:text-neutral-400"
+              }`}
+            >
+              <Markdown projectName={selectedProject?.name} onFileOpen={onFileOpen} isStreaming={isThinkingStreaming}>
                 {isThinkingStreaming ? thinkingDisplayText : formattedContent}
               </Markdown>
             </div>
@@ -416,11 +435,12 @@ function MessageRowV2({
         <details className="group">
           <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
-            <span>{t('thinking.completed', { defaultValue: 'Thought process' })}</span>
+            <span>{t("thinking.completed", { defaultValue: "Thought process" })}</span>
           </summary>
           <div className="mt-1.5 max-h-64 overflow-y-auto border-l-2 border-neutral-300 pl-3 text-[13px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-            <Markdown projectName={selectedProject?.name}
-          onFileOpen={onFileOpen}>{formattedContent}</Markdown>
+            <Markdown projectName={selectedProject?.name} onFileOpen={onFileOpen}>
+              {formattedContent}
+            </Markdown>
           </div>
         </details>
       </div>,
@@ -435,42 +455,43 @@ function MessageRowV2({
   const showAssistantCopyButton = resolvedShowAssistantActions && hasAssistantProse;
   const canRenderAssistantForkButton = Boolean(resolvedShowAssistantActions && onFork && hasAssistantProse);
   const shouldRenderAssistantActions = showAssistantCopyButton || canRenderAssistantForkButton;
-  const assistantForkDisabled = Boolean(
-    forkDisabled || isSessionRunning || message.isStreaming || !message.entryId,
-  );
-  const assistantBody = (hasAssistantProse || showStreamingCursor || assistantArtifacts.length > 0) ? (
-    <div className="min-w-0 text-[14px] leading-relaxed text-neutral-900 dark:text-neutral-100">
-      {showStreamingCursor ? (
-        <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
-      ) : (
-        <Markdown className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4" projectName={selectedProject?.name}
-        onFileOpen={onFileOpen} isStreaming={message.isStreaming}>{linkedContentDisplayText}</Markdown>
-      )}
-      {assistantArtifacts.length > 0 ? (
-        <AgentFileArtifactGroup
-          artifacts={assistantArtifacts}
-          project={selectedProject}
-          onBrowse={onFileOpen}
-        />
-      ) : null}
-      {shouldRenderAssistantActions ? (
-        <div className="mt-1.5 flex justify-end gap-1">
-          {canRenderAssistantForkButton ? (
-            <ForkMessageButton
-              carriedMessageCount={forkCarriedMessageCount}
-              disabled={assistantForkDisabled}
-              onFork={() => {
-                if (!assistantForkDisabled && message.entryId) onFork?.(message, forkCarriedMessageCount);
-              }}
-              t={t}
-              variant="action-row"
-            />
-          ) : null}
-          {showAssistantCopyButton ? <CopyMarkdownButton content={formattedContent} /> : null}
-        </div>
-      ) : null}
-    </div>
-  ) : null;
+  const assistantForkDisabled = Boolean(forkDisabled || isSessionRunning || message.isStreaming || !message.entryId);
+  const assistantBody =
+    hasAssistantProse || showStreamingCursor || assistantArtifacts.length > 0 ? (
+      <div className="min-w-0 text-[14px] leading-relaxed text-neutral-900 dark:text-neutral-100">
+        {showStreamingCursor ? (
+          <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
+        ) : (
+          <Markdown
+            className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4"
+            projectName={selectedProject?.name}
+            onFileOpen={onFileOpen}
+            isStreaming={message.isStreaming}
+          >
+            {linkedContentDisplayText}
+          </Markdown>
+        )}
+        {assistantArtifacts.length > 0 ? (
+          <AgentFileArtifactGroup artifacts={assistantArtifacts} project={selectedProject} onBrowse={onFileOpen} />
+        ) : null}
+        {shouldRenderAssistantActions ? (
+          <div className="mt-1.5 flex justify-end gap-1">
+            {canRenderAssistantForkButton ? (
+              <ForkMessageButton
+                carriedMessageCount={forkCarriedMessageCount}
+                disabled={assistantForkDisabled}
+                onFork={() => {
+                  if (!assistantForkDisabled && message.entryId) onFork?.(message, forkCarriedMessageCount);
+                }}
+                t={t}
+                variant="action-row"
+              />
+            ) : null}
+            {showAssistantCopyButton ? <CopyMarkdownButton content={formattedContent} /> : null}
+          </div>
+        ) : null}
+      </div>
+    ) : null;
 
   if (!assistantBody && beforeProcessAttachments.length === 0 && afterProcessAttachments.length === 0) {
     return null;
@@ -496,8 +517,8 @@ function CopyMarkdownButton({ content }: { content: string }) {
       type="button"
       onClick={handleClick}
       className="rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
-      aria-label={copied ? 'Copied' : 'Copy'}
-      title={copied ? 'Copied' : 'Copy'}
+      aria-label={copied ? "Copied" : "Copy"}
+      title={copied ? "Copied" : "Copy"}
     >
       {copied ? <Check className="h-3.5 w-3.5" strokeWidth={2} /> : <Copy className="h-3.5 w-3.5" strokeWidth={2} />}
     </button>
@@ -510,19 +531,21 @@ function ForkMessageButton({
   disabledReason,
   onFork,
   t,
-  variant = 'user-hover',
+  variant = "user-hover",
 }: {
   carriedMessageCount: number;
   disabled?: boolean;
   disabledReason?: string;
   onFork: () => void;
   t: TFunction;
-  variant?: 'user-hover' | 'action-row';
+  variant?: "user-hover" | "action-row";
 }) {
-  const title = disabledReason ?? t('fork.fromHere', {
-    count: carriedMessageCount,
-    defaultValue: `Fork from here · carries ${carriedMessageCount} messages`,
-  });
+  const title =
+    disabledReason ??
+    t("fork.fromHere", {
+      count: carriedMessageCount,
+      defaultValue: `Fork from here · carries ${carriedMessageCount} messages`,
+    });
 
   return (
     <button
@@ -530,13 +553,13 @@ function ForkMessageButton({
       onClick={onFork}
       disabled={disabled}
       className={cn(
-        variant === 'user-hover'
-          ? 'mb-1 rounded-md p-1.5 text-neutral-400 opacity-0 transition-all group-hover/user-msg:opacity-100 focus-visible:opacity-100'
-          : 'rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300',
+        variant === "user-hover"
+          ? "mb-1 rounded-md p-1.5 text-neutral-400 opacity-0 transition-all group-hover/user-msg:opacity-100 focus-visible:opacity-100"
+          : "rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300",
         disabled
-          ? 'cursor-not-allowed opacity-30'
-          : variant === 'user-hover'
-            ? 'hover:bg-neutral-200/80 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200'
+          ? "cursor-not-allowed opacity-30"
+          : variant === "user-hover"
+            ? "hover:bg-neutral-200/80 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
             : undefined,
       )}
       aria-label={title}
@@ -564,14 +587,12 @@ function ProcessSummaryRow({
   renderDetailMessage?: (message: ChatMessage, index: number) => ReactNode;
   isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
   onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
-  t: TFunction<'chat'>;
+  t: TFunction<"chat">;
 }) {
   const trace = useMemo(() => processSummaryToTrace(message, t), [message, t]);
   const detailSteps = detailMessages.length > 0 && renderDetailMessage ? [] : trace.steps;
   const resolvedProcessKey = processKey || message.id || message.runId || message.activityId;
-  const expanded = resolvedProcessKey
-    ? isProcessExpanded?.(resolvedProcessKey, false)
-    : undefined;
+  const expanded = resolvedProcessKey ? isProcessExpanded?.(resolvedProcessKey, false) : undefined;
 
   return (
     <ProcessTrace
@@ -582,14 +603,12 @@ function ProcessSummaryRow({
       metrics={trace.metrics}
       steps={detailSteps}
       expanded={expanded}
-      onExpandedChange={resolvedProcessKey
-        ? (nextExpanded) => onProcessExpandedChange?.(resolvedProcessKey, nextExpanded)
-        : undefined}
+      onExpandedChange={
+        resolvedProcessKey ? nextExpanded => onProcessExpandedChange?.(resolvedProcessKey, nextExpanded) : undefined
+      }
     >
       {detailMessages.length > 0 && renderDetailMessage
-        ? detailMessages.map((detailMessage, index) =>
-            renderDetailMessage(detailMessage, index),
-          )
+        ? detailMessages.map((detailMessage, index) => renderDetailMessage(detailMessage, index))
         : null}
     </ProcessTrace>
   );
@@ -606,12 +625,12 @@ function ProcessAttachmentRow({
   renderDetail: (message: ChatMessage, index: number) => ReactNode;
   isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
   onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
-  t: TFunction<'chat'>;
+  t: TFunction<"chat">;
 }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const lightboxImages: LightboxImage[] = useMemo(
     () =>
-      attachment.inlineImages.map((image) => ({
+      attachment.inlineImages.map(image => ({
         data: image.data,
         name: image.name,
         mimeType: image.mimeType,
@@ -635,14 +654,14 @@ function ProcessAttachmentRow({
           {lightboxImages.map((image, idx) => (
             <button
               type="button"
-              key={`${attachment.inlineImages[idx].toolId || 'tool-image'}-${idx}`}
+              key={`${attachment.inlineImages[idx].toolId || "tool-image"}-${idx}`}
               onClick={() => setLightboxIndex(idx)}
               className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900"
-              aria-label={image.name ? `Preview ${image.name}` : 'Preview image'}
+              aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
             >
               <img
                 src={image.data}
-                alt={image.name || 'Tool result image'}
+                alt={image.name || "Tool result image"}
                 className="block h-auto max-h-72 max-w-xs cursor-zoom-in object-contain"
                 loading="lazy"
               />
@@ -651,11 +670,7 @@ function ProcessAttachmentRow({
         </div>
       ) : null}
       {lightboxIndex !== null && lightboxImages.length > 0 ? (
-        <ImageLightbox
-          images={lightboxImages}
-          startIndex={lightboxIndex}
-          onClose={() => setLightboxIndex(null)}
-        />
+        <ImageLightbox images={lightboxImages} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
       ) : null}
     </div>
   );

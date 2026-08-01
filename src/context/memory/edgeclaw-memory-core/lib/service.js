@@ -1,43 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DreamRewriteRunner, HeartbeatIndexer, LlmMemoryExtractor, MemoryRepository, ReasoningRetriever, hashText, nowIso, } from "./core/index.js";
-import { normalizeMessages, inspectTranscriptMessage, } from "./message-utils.js";
+import { normalizeMessages, inspectTranscriptMessage } from "./message-utils.js";
 const AUTO_INDEX_ANCHOR_AT_STATE_KEY = "autoIndexAnchorAt";
 const AUTO_DREAM_ANCHOR_AT_STATE_KEY = "autoDreamAnchorAt";
 const AUTO_INDEX_PENDING_DIALOGUE_TURN_THRESHOLD = 20;
-const OPENCLAW_CONFIG_PATH = join(homedir(), ".openclaw", "openclaw.json");
-let cachedOpenClawModelConfig;
 function normalizeText(value) {
     return (value ?? "").trim();
-}
-function isRecord(value) {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function getRecord(value, key) {
-    if (!isRecord(value))
-        return undefined;
-    const child = value[key];
-    return isRecord(child) ? child : undefined;
-}
-function getString(value, key) {
-    if (!isRecord(value))
-        return "";
-    const child = value[key];
-    return typeof child === "string" ? child.trim() : "";
-}
-function toStringRecord(value) {
-    if (!isRecord(value))
-        return undefined;
-    const entries = Object.entries(value).flatMap(([key, entryValue]) => {
-        if (typeof entryValue !== "string")
-            return [];
-        const normalizedEntryValue = entryValue.trim();
-        return normalizedEntryValue ? [[key, normalizedEntryValue]] : [];
-    });
-    if (entries.length === 0)
-        return undefined;
-    return Object.fromEntries(entries);
 }
 function parseModelRef(value) {
     const normalized = normalizeText(value);
@@ -53,12 +22,6 @@ function parseModelRef(value) {
         model,
     };
 }
-function withEnvFallback(value, envKey) {
-    const explicit = normalizeText(value);
-    if (explicit)
-        return explicit;
-    return normalizeText(process.env[envKey]);
-}
 function resolveDefaultRootDir(rootDir) {
     return resolve(rootDir ? rootDir : join(homedir(), ".edgeclaw", "memory"));
 }
@@ -67,97 +30,23 @@ function resolveWorkspaceDataDir(workspaceDir, rootDir) {
     const slug = hashText(seed);
     return join(rootDir, "workspaces", slug);
 }
-function resolveOpenClawModelConfig() {
-    if (cachedOpenClawModelConfig !== undefined) {
-        return cachedOpenClawModelConfig;
-    }
-    try {
-        if (!existsSync(OPENCLAW_CONFIG_PATH)) {
-            cachedOpenClawModelConfig = null;
-            return cachedOpenClawModelConfig;
-        }
-        const parsed = JSON.parse(readFileSync(OPENCLAW_CONFIG_PATH, "utf8"));
-        const providers = getRecord(getRecord(parsed, "models"), "providers");
-        if (!providers) {
-            cachedOpenClawModelConfig = null;
-            return cachedOpenClawModelConfig;
-        }
-        const primaryModelRef = getString(getRecord(getRecord(getRecord(parsed, "agents"), "defaults"), "model"), "primary");
-        const parsedPrimary = parseModelRef(primaryModelRef);
-        const availableProviders = Object.entries(providers).flatMap(([providerName, providerValue]) => isRecord(providerValue) ? [[providerName, providerValue]] : []);
-        if (availableProviders.length === 0) {
-            cachedOpenClawModelConfig = null;
-            return cachedOpenClawModelConfig;
-        }
-        const providerEntry = (parsedPrimary.provider
-            ? availableProviders.find(([providerName]) => providerName === parsedPrimary.provider)
-            : undefined) ?? availableProviders[0];
-        if (!providerEntry) {
-            cachedOpenClawModelConfig = null;
-            return cachedOpenClawModelConfig;
-        }
-        const [provider, providerConfig] = providerEntry;
-        const providerModels = Array.isArray(providerConfig["models"])
-            ? providerConfig["models"].filter(isRecord)
-            : [];
-        const selectedModel = (parsedPrimary.model
-            ? providerModels.find(modelEntry => getString(modelEntry, "id") === parsedPrimary.model
-                || getString(modelEntry, "name") === parsedPrimary.model)
-            : undefined) ?? providerModels[0];
-        const model = parsedPrimary.model
-            || getString(selectedModel, "id")
-            || getString(selectedModel, "name");
-        if (!model) {
-            cachedOpenClawModelConfig = null;
-            return cachedOpenClawModelConfig;
-        }
-        const headers = {
-            ...(toStringRecord(providerConfig["headers"]) ?? {}),
-            ...(toStringRecord(selectedModel?.["headers"]) ?? {}),
-        };
-        cachedOpenClawModelConfig = {
-            provider,
-            model,
-            apiType: (getString(selectedModel, "api") || getString(providerConfig, "api") || undefined),
-            baseUrl: getString(selectedModel, "baseUrl") || getString(providerConfig, "baseUrl") || undefined,
-            apiKey: getString(providerConfig, "apiKey") || undefined,
-            ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        };
-    }
-    catch {
-        cachedOpenClawModelConfig = null;
-    }
-    return cachedOpenClawModelConfig;
-}
 function buildLlmConfig(options) {
-    const openClawModel = resolveOpenClawModelConfig();
     const parsedModelRef = parseModelRef(normalizeText(options?.modelRef) || normalizeText(process.env.EDGECLAW_MEMORY_MODEL));
-    const provider = normalizeText(options?.provider)
-        || normalizeText(process.env.EDGECLAW_MEMORY_PROVIDER)
-        || parsedModelRef.provider
-        || openClawModel?.provider
-        || "edgeclaw_memory";
-    const model = normalizeText(options?.model)
-        || parsedModelRef.model
-        || openClawModel?.model
-        || normalizeText(process.env.OPENAI_MODEL);
-    const usingOpenClawSelection = Boolean(openClawModel
-        && provider === openClawModel.provider
-        && model === openClawModel.model);
-    const baseUrl = normalizeText(options?.baseUrl)
-        || normalizeText(process.env.EDGECLAW_MEMORY_BASE_URL)
-        || (usingOpenClawSelection ? normalizeText(openClawModel?.baseUrl) : "")
-        || normalizeText(process.env.OPENAI_BASE_URL);
-    const apiKey = normalizeText(options?.apiKey)
-        || normalizeText(process.env.EDGECLAW_MEMORY_API_KEY)
-        || (usingOpenClawSelection ? normalizeText(openClawModel?.apiKey) : "")
-        || normalizeText(process.env.OPENAI_API_KEY);
-    const apiType = (normalizeText(options?.apiType)
-        || normalizeText(process.env.EDGECLAW_MEMORY_API_TYPE)
-        || (usingOpenClawSelection ? normalizeText(openClawModel?.apiType) : "")
-        || "openai-responses");
+    const provider = normalizeText(options?.provider) ||
+        normalizeText(process.env.EDGECLAW_MEMORY_PROVIDER) ||
+        parsedModelRef.provider ||
+        "edgeclaw_memory";
+    const model = normalizeText(options?.model) || parsedModelRef.model || normalizeText(process.env.OPENAI_MODEL);
+    const baseUrl = normalizeText(options?.baseUrl) ||
+        normalizeText(process.env.EDGECLAW_MEMORY_BASE_URL) ||
+        normalizeText(process.env.OPENAI_BASE_URL);
+    const apiKey = normalizeText(options?.apiKey) ||
+        normalizeText(process.env.EDGECLAW_MEMORY_API_KEY) ||
+        normalizeText(process.env.OPENAI_API_KEY);
+    const apiType = (normalizeText(options?.apiType) ||
+        normalizeText(process.env.EDGECLAW_MEMORY_API_TYPE) ||
+        "openai-responses");
     const headers = {
-        ...(usingOpenClawSelection ? openClawModel?.headers ?? {} : {}),
         ...(options?.headers ?? {}),
     };
     return {
@@ -308,7 +197,7 @@ function parseRawRecallSections(value) {
     return sections;
 }
 function joinRecallBodies(bodies) {
-    const normalizedBodies = bodies.map((body) => body.trim()).filter(Boolean);
+    const normalizedBodies = bodies.map(body => body.trim()).filter(Boolean);
     if (normalizedBodies.length === 0)
         return null;
     return normalizedBodies.join("\n\n---\n\n");
@@ -317,8 +206,7 @@ function looksLikeRawRecallContext(value) {
     const normalized = (value ?? "").trim();
     if (!normalized)
         return false;
-    return /^route=/mu.test(normalized)
-        || /^### \[(user|project_meta|project|feedback)\]/mu.test(normalized);
+    return /^route=/mu.test(normalized) || /^### \[(user|project_meta|project|feedback)\]/mu.test(normalized);
 }
 export function buildMemoryRecallSystemContext(evidenceBlock) {
     const sections = parseRawRecallSections(evidenceBlock.trim());
@@ -369,12 +257,7 @@ export function buildEdgeClawMemoryPromptSection(options = {}) {
     const hasMemoryGet = availableTools.has("memory_get");
     const hasMemoryFlush = availableTools.has("memory_flush");
     const hasMemoryDream = availableTools.has("memory_dream");
-    if (!hasMemoryOverview
-        && !hasMemoryList
-        && !hasMemorySearch
-        && !hasMemoryGet
-        && !hasMemoryFlush
-        && !hasMemoryDream) {
+    if (!hasMemoryOverview && !hasMemoryList && !hasMemorySearch && !hasMemoryGet && !hasMemoryFlush && !hasMemoryDream) {
         return null;
     }
     const lines = [
@@ -382,9 +265,7 @@ export function buildEdgeClawMemoryPromptSection(options = {}) {
         hasMemoryOverview
             ? "Use memory_overview for memory status, freshness, indexing backlog, and runtime health questions."
             : undefined,
-        hasMemoryList
-            ? "Use memory_list to browse file-based user, feedback, and project memory indexes."
-            : undefined,
+        hasMemoryList ? "Use memory_list to browse file-based user, feedback, and project memory indexes." : undefined,
         hasMemorySearch && hasMemoryGet
             ? "For durable preferences, collaboration rules, or project progress across sessions: run memory_search first, then use memory_get only for the exact file ids you need to verify."
             : hasMemorySearch
@@ -450,7 +331,13 @@ export class EdgeClawMemoryService {
         });
         this.retriever = new ReasoningRetriever(this.repository, this.extractor, {
             getSettings: () => this.getSettings(),
+            logger: this.logger,
+            semanticSearch: options.semanticSearch,
         });
+    }
+    /** 运行时注入/替换语义召回路（外部装配，避免构造期循环依赖）。 */
+    setSemanticSearch(fn) {
+        this.retriever.setSemanticSearch(fn);
     }
     close() {
         this.repository.close();
@@ -499,8 +386,7 @@ export class EdgeClawMemoryService {
         const lastIndexedAt = this.getPipelineTimestamp("lastIndexedAt");
         const changedFilesSinceLastDream = this.repository
             .getFileMemoryStore()
-            .getOverview(lastDreamAt)
-            .changedFilesSinceLastDream;
+            .getOverview(lastDreamAt).changedFilesSinceLastDream;
         if (!lastIndexedAt || changedFilesSinceLastDream <= 0) {
             this.setPipelineTimestamp(AUTO_DREAM_ANCHOR_AT_STATE_KEY, undefined);
             return undefined;
@@ -669,24 +555,19 @@ export class EdgeClawMemoryService {
         const indexAnchorAt = this.reconcileAutoIndexAnchor();
         const pendingDialogueTurns = this.repository.countPendingDialogueTurns();
         const shouldIndexByBacklog = pendingDialogueTurns >= AUTO_INDEX_PENDING_DIALOGUE_TURN_THRESHOLD;
-        const shouldIndexByInterval = overview.pendingSessions > 0
-            && hasElapsedMinutes(indexAnchorAt, settings.autoIndexIntervalMinutes, nowMs);
+        const shouldIndexByInterval = overview.pendingSessions > 0 && hasElapsedMinutes(indexAnchorAt, settings.autoIndexIntervalMinutes, nowMs);
         if (shouldIndexByBacklog || shouldIndexByInterval) {
             const scheduledReason = reason.startsWith("scheduled") ? reason : `scheduled:${reason}`;
             indexStats = await this.flush({
-                reason: shouldIndexByBacklog
-                    ? `${scheduledReason}:pending_threshold`
-                    : scheduledReason,
+                reason: shouldIndexByBacklog ? `${scheduledReason}:pending_threshold` : scheduledReason,
             });
             overview = this.overview();
         }
         const changedFilesSinceLastDream = this.repository
             .getFileMemoryStore()
-            .getOverview(overview.lastDreamAt)
-            .changedFilesSinceLastDream;
+            .getOverview(overview.lastDreamAt).changedFilesSinceLastDream;
         const dreamAnchorAt = this.reconcileAutoDreamAnchor();
-        if (changedFilesSinceLastDream > 0
-            && hasElapsedMinutes(dreamAnchorAt, settings.autoDreamIntervalMinutes, nowMs)) {
+        if (changedFilesSinceLastDream > 0 && hasElapsedMinutes(dreamAnchorAt, settings.autoDreamIntervalMinutes, nowMs)) {
             dreamResult = await this.dream("scheduled");
         }
         return {
@@ -733,12 +614,13 @@ export class EdgeClawMemoryService {
         return this.repository.getSnapshotVersion();
     }
     listCaseTraces(limit = 30) {
-        return this.repository.listRecentCaseTraces(limit).map((record) => normalizeCaseTraceContextPreview(record));
+        return this.repository.listRecentCaseTraces(limit).map(record => normalizeCaseTraceContextPreview(record));
     }
     saveCaseTrace(record) {
         const startedAt = record.startedAt || nowIso();
         this.repository.saveCaseTrace({
-            caseId: record.caseId?.trim() || `case_trace_${hashText(`${record.sessionKey}:${record.query}:${startedAt}:${Math.random().toString(36).slice(2, 10)}`)}`,
+            caseId: record.caseId?.trim() ||
+                `case_trace_${hashText(`${record.sessionKey}:${record.query}:${startedAt}:${Math.random().toString(36).slice(2, 10)}`)}`,
             sessionKey: record.sessionKey,
             query: record.query,
             startedAt,
@@ -775,9 +657,7 @@ export class EdgeClawMemoryService {
         return result;
     }
     clear(scope = "current_project") {
-        const result = scope === "all_memory"
-            ? this.repository.clearAllMemoryData()
-            : this.repository.clearCurrentWorkspaceMemoryData();
+        const result = scope === "all_memory" ? this.repository.clearAllMemoryData() : this.repository.clearCurrentWorkspaceMemoryData();
         this.retriever.resetTransientState();
         return result;
     }

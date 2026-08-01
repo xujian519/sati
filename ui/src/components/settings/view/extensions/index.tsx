@@ -10,34 +10,22 @@ import McpServerFormCard from "./components/McpServerFormCard";
 import AdvancedJsonEditor from "./components/AdvancedJsonEditor";
 import type { McpConfigResponse, McpServerForm, Scope } from "./types/mcp";
 import { EMPTY_CONFIG, REMOTE_TEMPLATE, STDIO_TEMPLATE } from "./utils/constants";
-import {
-  formFromRaw,
-  parseServers,
-  stringifyServers,
-} from "./utils/mcpServerForm";
+import { formFromRaw, parseServers, stringifyServers } from "./utils/mcpServerForm";
 
 type McpServersSectionProps = {
   title?: string;
   projects?: SettingsProject[];
 };
 
-export default function McpServersSection({
-  title,
-  projects = [],
-}: McpServersSectionProps) {
+export default function McpServersSection({ title, projects = [] }: McpServersSectionProps) {
   const { t } = useTranslation("settings");
   const projectOptions = useMemo(() => {
     return projects
-      .map((project) => ({
-        label:
-          project.displayName ||
-          project.name ||
-          project.fullPath ||
-          project.path ||
-          "",
+      .map(project => ({
+        label: project.displayName || project.name || project.fullPath || project.path || "",
         value: project.fullPath || project.path || "",
       }))
-      .filter((project) => project.value);
+      .filter(project => project.value);
   }, [projects]);
   const [projectPath, setProjectPath] = useState(projectOptions[0]?.value ?? "");
   const [scope, setScope] = useState<Scope>("global");
@@ -65,13 +53,10 @@ export default function McpServersSection({
     setLoading(true);
     setError(null);
     try {
-      const query = projectPath
-        ? `?projectPath=${encodeURIComponent(projectPath)}`
-        : "";
+      const query = projectPath ? `?projectPath=${encodeURIComponent(projectPath)}` : "";
       const response = await authenticatedFetch(`/api/mcp/config${query}`);
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.details || data.error || "Failed to load MCP config");
+      if (!response.ok) throw new Error(data.details || data.error || "Failed to load MCP config");
       setConfigs({ global: data.global, project: data.project });
       setDrafts({ global: data.global.raw, project: data.project.raw });
       setServerDrafts({
@@ -101,7 +86,7 @@ export default function McpServersSection({
     setError(null);
     setMessage(null);
     try {
-      if (activeServers.some((server) => server.name.trim().length === 0)) {
+      if (activeServers.some(server => server.name.trim().length === 0)) {
         throw new Error(t("mcpConfig.nameRequired"));
       }
       const raw = stringifyServers(activeServers);
@@ -110,11 +95,10 @@ export default function McpServersSection({
         body: JSON.stringify({ raw, projectPath }),
       });
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.details || data.error || "Failed to save MCP config");
-      setConfigs((current) => (current ? { ...current, [scope]: data } : current));
-      setDrafts((current) => ({ ...current, [scope]: data.raw }));
-      setServerDrafts((current) => ({
+      if (!response.ok) throw new Error(data.details || data.error || "Failed to save MCP config");
+      setConfigs(current => (current ? { ...current, [scope]: data } : current));
+      setDrafts(current => ({ ...current, [scope]: data.raw }));
+      setServerDrafts(current => ({
         ...current,
         [scope]: parseServers(data.raw).servers,
       }));
@@ -127,25 +111,18 @@ export default function McpServersSection({
   };
 
   const updateServers = (servers: McpServerForm[]) => {
-    setServerDrafts((current) => ({ ...current, [scope]: servers }));
-    setDrafts((current) => ({ ...current, [scope]: stringifyServers(servers) }));
+    setServerDrafts(current => ({ ...current, [scope]: servers }));
+    setDrafts(current => ({ ...current, [scope]: stringifyServers(servers) }));
   };
 
   const updateServer = (serverId: string, patch: Partial<McpServerForm>) => {
-    updateServers(
-      activeServers.map((server) =>
-        server.id === serverId ? { ...server, ...patch } : server,
-      ),
-    );
+    updateServers(activeServers.map(server => (server.id === serverId ? { ...server, ...patch } : server)));
   };
 
   const addTemplate = (kind: "stdio" | "remote") => {
     try {
       const parsed = JSON.parse(activeDraft || EMPTY_CONFIG);
-      const mcpServers =
-        parsed.mcpServers && typeof parsed.mcpServers === "object"
-          ? parsed.mcpServers
-          : {};
+      const mcpServers = parsed.mcpServers && typeof parsed.mcpServers === "object" ? parsed.mcpServers : {};
       const baseName = kind === "stdio" ? "new-stdio-server" : "new-remote-server";
       let candidate = baseName;
       let index = 2;
@@ -153,10 +130,7 @@ export default function McpServersSection({
         candidate = `${baseName}-${index}`;
         index += 1;
       }
-      const nextServer = formFromRaw(
-        candidate,
-        kind === "stdio" ? STDIO_TEMPLATE : REMOTE_TEMPLATE,
-      );
+      const nextServer = formFromRaw(candidate, kind === "stdio" ? STDIO_TEMPLATE : REMOTE_TEMPLATE);
       updateServers([...activeServers, nextServer]);
     } catch {
       setError(t("mcpConfig.fixJsonBeforeTemplate"));
@@ -164,14 +138,14 @@ export default function McpServersSection({
   };
 
   const removeServer = (serverId: string) => {
-    updateServers(activeServers.filter((server) => server.id !== serverId));
+    updateServers(activeServers.filter(server => server.id !== serverId));
   };
 
   const updateAdvancedJson = (value: string) => {
-    setDrafts((current) => ({ ...current, [scope]: value }));
+    setDrafts(current => ({ ...current, [scope]: value }));
     const parsed = parseServers(value);
     if (!parsed.error) {
-      setServerDrafts((current) => ({ ...current, [scope]: parsed.servers }));
+      setServerDrafts(current => ({ ...current, [scope]: parsed.servers }));
     }
   };
 
@@ -191,22 +165,20 @@ export default function McpServersSection({
             </div>
             <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-              {t("pilotDeckConfig.actions.refresh")}
+              {t("satiConfig.actions.refresh")}
             </Button>
           </div>
         </div>
 
         {projectOptions.length > 0 && (
           <label className="block space-y-2">
-            <span className="text-sm text-muted-foreground">
-              {t("mcpConfig.project")}
-            </span>
+            <span className="text-sm text-muted-foreground">{t("mcpConfig.project")}</span>
             <select
               value={projectPath}
-              onChange={(event) => setProjectPath(event.target.value)}
+              onChange={event => setProjectPath(event.target.value)}
               className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
             >
-              {projectOptions.map((project) => (
+              {projectOptions.map(project => (
                 <option key={project.value} value={project.value}>
                   {project.label}
                 </option>
@@ -216,7 +188,7 @@ export default function McpServersSection({
         )}
 
         <div className="flex rounded-lg border border-border bg-muted/40 p-1">
-          {(["global", "project"] as Scope[]).map((item) => (
+          {(["global", "project"] as Scope[]).map(item => (
             <button
               key={item}
               type="button"
@@ -260,7 +232,7 @@ export default function McpServersSection({
           {loading ? (
             <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {t("pilotDeckConfig.loading")}
+              {t("satiConfig.loading")}
             </div>
           ) : parsedError ? (
             <div className="space-y-4 p-4">
@@ -276,11 +248,11 @@ export default function McpServersSection({
                   {t("mcpConfig.empty")}
                 </div>
               ) : (
-                activeServers.map((server) => (
+                activeServers.map(server => (
                   <McpServerFormCard
                     key={server.id}
                     server={server}
-                    onChange={(patch) => updateServer(server.id, patch)}
+                    onChange={patch => updateServer(server.id, patch)}
                     onRemove={() => removeServer(server.id)}
                   />
                 ))
@@ -294,9 +266,7 @@ export default function McpServersSection({
           <div
             className={cn(
               "rounded-lg border px-4 py-3 text-sm",
-              error
-                ? "border-destructive/40 text-destructive"
-                : "border-border text-muted-foreground",
+              error ? "border-destructive/40 text-destructive" : "border-border text-muted-foreground",
             )}
           >
             {error || message}
@@ -304,16 +274,9 @@ export default function McpServersSection({
         )}
 
         <div className="flex justify-end">
-          <Button
-            onClick={() => void save()}
-            disabled={saving || loading || (scope === "project" && !projectPath)}
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            {t("pilotDeckConfig.actions.saveAndReload")}
+          <Button onClick={() => void save()} disabled={saving || loading || (scope === "project" && !projectPath)}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {t("satiConfig.actions.saveAndReload")}
           </Button>
         </div>
       </div>

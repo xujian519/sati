@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import {
-  createExecuteCodeTool,
-  handleExecuteCodeRpcLineForTests,
-} from "../../../src/tool/builtin/executeCode.js";
+import { createExecuteCodeTool, handleExecuteCodeRpcLineForTests } from "../../../src/tool/builtin/executeCode.js";
 import { createBuiltinRegistry } from "../../../src/tool/registry/createBuiltinRegistry.js";
 
 test("execute_code read-only probe handles missing input", () => {

@@ -4,11 +4,7 @@ type StandaloneShellHeaderProps = {
   onClose?: (() => void) | null;
 };
 
-export default function StandaloneShellHeader({
-  title,
-  isCompleted,
-  onClose = null,
-}: StandaloneShellHeaderProps) {
+export default function StandaloneShellHeader({ title, isCompleted, onClose = null }: StandaloneShellHeaderProps) {
   return (
     <div className="flex-shrink-0 border-b border-gray-700 bg-gray-800 px-4 py-2">
       <div className="flex items-center justify-between">

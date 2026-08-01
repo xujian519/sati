@@ -24,7 +24,7 @@ const server = createServer((req, res) => {
         res.end(body);
       },
       timer: setTimeout(() => {
-        waitingPolls = waitingPolls.filter((p) => p !== poll);
+        waitingPolls = waitingPolls.filter(p => p !== poll);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ updates: [], next_offset: String(Date.now()) }));
       }, timeout),
@@ -35,7 +35,7 @@ const server = createServer((req, res) => {
 
   if (req.method === "POST" && url.pathname === "/sendmessage") {
     let body = "";
-    req.on("data", (chunk) => (body += chunk));
+    req.on("data", chunk => (body += chunk));
     req.on("end", () => {
       const data = JSON.parse(body);
       console.log(`\n[iLink mock] 收到回复 -> to_user=${data.to_user}`);
@@ -48,7 +48,7 @@ const server = createServer((req, res) => {
 
   if (req.method === "POST" && url.pathname === "/inject") {
     let body = "";
-    req.on("data", (chunk) => (body += chunk));
+    req.on("data", chunk => (body += chunk));
     req.on("end", () => {
       const data = JSON.parse(body);
       const msg = {
@@ -84,5 +84,7 @@ server.listen(PORT, () => {
   console.log(`  GET  /getupdates   - WeixinChannel long-poll 端点`);
   console.log(`  POST /sendmessage  - WeixinChannel 发送回复端点`);
   console.log(`  POST /inject       - 手动注入测试消息`);
-  console.log(`\n[iLink mock] 用法: curl -X POST http://127.0.0.1:${PORT}/inject -H 'Content-Type: application/json' -d '{"content":"你好"}'`);
+  console.log(
+    `\n[iLink mock] 用法: curl -X POST http://127.0.0.1:${PORT}/inject -H 'Content-Type: application/json' -d '{"content":"你好"}'`,
+  );
 });

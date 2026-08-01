@@ -7,11 +7,7 @@ export function isValidCronTimezone(timezone: string): boolean {
   }
 }
 
-export function resolveCronTimezone(
-  scheduleTimezone?: string,
-  taskTimezone?: string,
-  configTimezone?: string,
-): string {
+export function resolveCronTimezone(scheduleTimezone?: string, taskTimezone?: string, configTimezone?: string): string {
   for (const timezone of [scheduleTimezone, taskTimezone, configTimezone, "UTC"]) {
     if (timezone && isValidCronTimezone(timezone)) {
       return timezone;

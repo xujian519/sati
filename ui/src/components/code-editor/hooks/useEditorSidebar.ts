@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
-import type { Project } from '../../../types/app';
-import type { CodeEditorDiffInfo, CodeEditorFile, CodeEditorTab } from '../types/types';
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
+import type { Project } from "../../../types/app";
+import type { CodeEditorDiffInfo, CodeEditorFile, CodeEditorTab } from "../types/types";
 
 type UseEditorSidebarOptions = {
   selectedProject: Project | null;
@@ -14,8 +14,8 @@ const buildEditorFile = (
   projectName: string | undefined,
   diffInfo: CodeEditorDiffInfo | null = null,
 ): CodeEditorFile => {
-  const normalizedPath = filePath.replace(/\\/g, '/');
-  const fileName = normalizedPath.split('/').pop() || filePath;
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  const fileName = normalizedPath.split("/").pop() || filePath;
   return {
     name: fileName,
     path: normalizedPath,
@@ -24,24 +24,17 @@ const buildEditorFile = (
   };
 };
 
-const currentFile = (tab: CodeEditorTab | undefined): CodeEditorFile | null => (
-  tab?.fileStack.at(-1) ?? null
-);
+const currentFile = (tab: CodeEditorTab | undefined): CodeEditorFile | null => tab?.fileStack.at(-1) ?? null;
 
-const isPathAtOrBelow = (candidatePath: string, parentPath: string): boolean => (
-  candidatePath === parentPath || candidatePath.startsWith(`${parentPath}/`)
-);
+const isPathAtOrBelow = (candidatePath: string, parentPath: string): boolean =>
+  candidatePath === parentPath || candidatePath.startsWith(`${parentPath}/`);
 
 type EditorTabsState = {
   tabs: CodeEditorTab[];
   activeTabId: string | null;
 };
 
-export const useEditorSidebar = ({
-  selectedProject,
-  isMobile,
-  initialWidth = 600,
-}: UseEditorSidebarOptions) => {
+export const useEditorSidebar = ({ selectedProject, isMobile, initialWidth = 600 }: UseEditorSidebarOptions) => {
   const [tabsState, setTabsState] = useState<EditorTabsState>({
     tabs: [],
     activeTabId: null,
@@ -53,28 +46,28 @@ export const useEditorSidebar = ({
   const [hasManualWidth, setHasManualWidth] = useState(false);
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
 
-  const activeEditorTab = tabsState.tabs.find((tab) => tab.id === tabsState.activeTabId) ?? null;
+  const activeEditorTab = tabsState.tabs.find(tab => tab.id === tabsState.activeTabId) ?? null;
   const editingFile = currentFile(activeEditorTab ?? undefined);
   const canGoBack = (activeEditorTab?.fileStack.length ?? 0) > 1;
-  const parentFile = canGoBack ? activeEditorTab?.fileStack.at(-2) ?? null : null;
+  const parentFile = canGoBack ? (activeEditorTab?.fileStack.at(-2) ?? null) : null;
 
   const handleFileOpen = useCallback(
     (filePath: string, diffInfo: CodeEditorDiffInfo | null = null) => {
       const nextFile = buildEditorFile(filePath, selectedProject?.name, diffInfo);
-      setTabsState((previous) => {
-        const existing = previous.tabs.find((tab) => tab.fileStack[0]?.path === nextFile.path);
+      setTabsState(previous => {
+        const existing = previous.tabs.find(tab => tab.fileStack[0]?.path === nextFile.path);
         if (existing) {
           const existingRoot = existing.fileStack[0];
-          const shouldResetView = !existing.dirty && (
-            currentFile(existing)?.path !== nextFile.path
-            || Boolean(existingRoot?.diffInfo) !== Boolean(nextFile.diffInfo)
-            || (nextFile.diffInfo !== null && existingRoot?.diffInfo !== nextFile.diffInfo)
-          );
+          const shouldResetView =
+            !existing.dirty &&
+            (currentFile(existing)?.path !== nextFile.path ||
+              Boolean(existingRoot?.diffInfo) !== Boolean(nextFile.diffInfo) ||
+              (nextFile.diffInfo !== null && existingRoot?.diffInfo !== nextFile.diffInfo));
           return {
             tabs: shouldResetView
-              ? previous.tabs.map((tab) => (
-                tab.id === existing.id ? { ...tab, fileStack: [nextFile], dirty: false } : tab
-              ))
+              ? previous.tabs.map(tab =>
+                  tab.id === existing.id ? { ...tab, fileStack: [nextFile], dirty: false } : tab,
+                )
               : previous.tabs,
             activeTabId: existing.id,
           };
@@ -98,11 +91,11 @@ export const useEditorSidebar = ({
   const handlePreviewFileOpen = useCallback(
     (filePath: string) => {
       const nextFile = buildEditorFile(filePath, selectedProject?.name);
-      setTabsState((previous) => {
+      setTabsState(previous => {
         if (!previous.activeTabId) return previous;
         return {
           ...previous,
-          tabs: previous.tabs.map((tab) => {
+          tabs: previous.tabs.map(tab => {
             if (tab.id !== previous.activeTabId) return tab;
             const activeFile = currentFile(tab);
             if (activeFile?.path === nextFile.path) return tab;
@@ -119,33 +112,31 @@ export const useEditorSidebar = ({
   );
 
   const handleFileGoBack = useCallback(() => {
-    setTabsState((previous) => {
+    setTabsState(previous => {
       if (!previous.activeTabId) return previous;
       return {
         ...previous,
-        tabs: previous.tabs.map((tab) => (
+        tabs: previous.tabs.map(tab =>
           tab.id === previous.activeTabId && tab.fileStack.length > 1
             ? { ...tab, fileStack: tab.fileStack.slice(0, -1), dirty: false }
-            : tab
-        )),
+            : tab,
+        ),
       };
     });
   }, []);
 
   const handleTabSelect = useCallback((tabId: string) => {
-    setTabsState((previous) => (
-      previous.tabs.some((tab) => tab.id === tabId)
-        ? { ...previous, activeTabId: tabId }
-        : previous
-    ));
+    setTabsState(previous =>
+      previous.tabs.some(tab => tab.id === tabId) ? { ...previous, activeTabId: tabId } : previous,
+    );
   }, []);
 
   const handleTabClose = useCallback((tabId: string) => {
-    setTabsState((previous) => {
-      const closingIndex = previous.tabs.findIndex((tab) => tab.id === tabId);
+    setTabsState(previous => {
+      const closingIndex = previous.tabs.findIndex(tab => tab.id === tabId);
       if (closingIndex === -1) return previous;
 
-      const tabs = previous.tabs.filter((tab) => tab.id !== tabId);
+      const tabs = previous.tabs.filter(tab => tab.id !== tabId);
       if (previous.activeTabId !== tabId) {
         return { ...previous, tabs };
       }
@@ -162,22 +153,21 @@ export const useEditorSidebar = ({
     const closingTabIds = new Set(tabIds);
     if (closingTabIds.size === 0) return;
 
-    setTabsState((previous) => {
-      const activeIndex = previous.tabs.findIndex((tab) => tab.id === previous.activeTabId);
-      const tabs = previous.tabs.filter((tab) => !closingTabIds.has(tab.id));
+    setTabsState(previous => {
+      const activeIndex = previous.tabs.findIndex(tab => tab.id === previous.activeTabId);
+      const tabs = previous.tabs.filter(tab => !closingTabIds.has(tab.id));
       if (tabs.length === previous.tabs.length) return previous;
       if (!previous.activeTabId || !closingTabIds.has(previous.activeTabId)) {
         return { ...previous, tabs };
       }
 
-      const nextActiveTab = previous.tabs
-        .slice(activeIndex + 1)
-        .find((tab) => !closingTabIds.has(tab.id))
-        ?? previous.tabs
+      const nextActiveTab =
+        previous.tabs.slice(activeIndex + 1).find(tab => !closingTabIds.has(tab.id)) ??
+        previous.tabs
           .slice(0, activeIndex)
           .reverse()
-          .find((tab) => !closingTabIds.has(tab.id))
-        ?? null;
+          .find(tab => !closingTabIds.has(tab.id)) ??
+        null;
 
       return {
         tabs,
@@ -187,31 +177,29 @@ export const useEditorSidebar = ({
   }, []);
 
   const handleTabDirtyChange = useCallback((tabId: string, dirty: boolean) => {
-    setTabsState((previous) => {
-      const tab = previous.tabs.find((candidate) => candidate.id === tabId);
+    setTabsState(previous => {
+      const tab = previous.tabs.find(candidate => candidate.id === tabId);
       if (!tab || tab.dirty === dirty) return previous;
       return {
         ...previous,
-        tabs: previous.tabs.map((candidate) => (
-          candidate.id === tabId ? { ...candidate, dirty } : candidate
-        )),
+        tabs: previous.tabs.map(candidate => (candidate.id === tabId ? { ...candidate, dirty } : candidate)),
       };
     });
   }, []);
 
   const handleFileRename = useCallback((oldPath: string, newPath: string) => {
-    setTabsState((previous) => ({
+    setTabsState(previous => ({
       ...previous,
-      tabs: previous.tabs.map((tab) => ({
+      tabs: previous.tabs.map(tab => ({
         ...tab,
-        fileStack: tab.fileStack.map((file) => {
+        fileStack: tab.fileStack.map(file => {
           if (!isPathAtOrBelow(file.path, oldPath)) return file;
           const path = `${newPath}${file.path.slice(oldPath.length)}`;
           const preserveDirtyBuffer = tab.dirty && currentFile(tab)?.path === file.path;
           return {
             ...file,
             path,
-            name: path.split('/').pop() || file.name,
+            name: path.split("/").pop() || file.name,
             renamedFromPath: preserveDirtyBuffer ? file.path : undefined,
           };
         }),
@@ -220,18 +208,18 @@ export const useEditorSidebar = ({
   }, []);
 
   const handleFileDelete = useCallback((deletedPath: string) => {
-    setTabsState((previous) => {
-      const tabs = previous.tabs.flatMap((tab) => {
+    setTabsState(previous => {
+      const tabs = previous.tabs.flatMap(tab => {
         const rootFile = tab.fileStack[0];
         if (!rootFile || isPathAtOrBelow(rootFile.path, deletedPath)) return [];
-        const fileStack = tab.fileStack.filter((file) => !isPathAtOrBelow(file.path, deletedPath));
+        const fileStack = tab.fileStack.filter(file => !isPathAtOrBelow(file.path, deletedPath));
         return [{ ...tab, fileStack, dirty: false }];
       });
 
-      const activeStillExists = tabs.some((tab) => tab.id === previous.activeTabId);
+      const activeStillExists = tabs.some(tab => tab.id === previous.activeTabId);
       return {
         tabs,
-        activeTabId: activeStillExists ? previous.activeTabId : tabs.at(-1)?.id ?? null,
+        activeTabId: activeStillExists ? previous.activeTabId : (tabs.at(-1)?.id ?? null),
       };
     });
   }, []);
@@ -246,7 +234,7 @@ export const useEditorSidebar = ({
   }, [selectedProject?.name]);
 
   const handleToggleEditorExpand = useCallback(() => {
-    setEditorExpanded((previous) => !previous);
+    setEditorExpanded(previous => !previous);
   }, []);
 
   const handleResizeStart = useCallback(
@@ -293,17 +281,17 @@ export const useEditorSidebar = ({
     };
 
     if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
     }
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     };
   }, [isResizing]);
 

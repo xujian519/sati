@@ -1,7 +1,6 @@
 import type { CanonicalMessage, CanonicalToolSchema } from "../../model/index.js";
 
-const SUBAGENT_TAG_PATTERN =
-  /<(?:pilotdeck|ccr)-subagent-model>([\s\S]+?)<\/(?:pilotdeck|ccr)-subagent-model>/i;
+const SUBAGENT_TAG_PATTERN = /<(?:sati|ccr)-subagent-model>([\s\S]+?)<\/(?:sati|ccr)-subagent-model>/i;
 
 export type SubagentDetection = {
   isSubagent: boolean;
@@ -38,9 +37,7 @@ export function detectSubagent(
     }
   }
 
-  const missingAgentTool =
-    !!tools &&
-    !tools.some((tool) => AGENT_TOOL_NAME_PATTERN.test(tool.name));
+  const missingAgentTool = !!tools && !tools.some(tool => AGENT_TOOL_NAME_PATTERN.test(tool.name));
 
   return {
     isSubagent: !isMainAgent || taggedInUserMessage || missingAgentTool,
@@ -50,15 +47,13 @@ export function detectSubagent(
   };
 }
 
-export function stripSubagentTagFromMessages(
-  messages: CanonicalMessage[],
-): CanonicalMessage[] {
-  return messages.map((message) => {
+export function stripSubagentTagFromMessages(messages: CanonicalMessage[]): CanonicalMessage[] {
+  return messages.map(message => {
     if (message.role !== "user") {
       return message;
     }
     let mutated = false;
-    const content = message.content.map((block) => {
+    const content = message.content.map(block => {
       if (block.type !== "text") {
         return block;
       }

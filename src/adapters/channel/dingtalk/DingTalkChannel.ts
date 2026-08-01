@@ -10,7 +10,6 @@ import { renderDingTalkEvent } from "./dingtalk-render.js";
 
 let DingStream: any = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   DingStream = require("dingtalk-stream");
 } catch {
   // dingtalk-stream not installed — start() will warn
@@ -87,7 +86,11 @@ export class DingTalkChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`dingtalk: stopping (${reason ?? "no reason"})`);
         if (this.client) {
-          try { this.client.disconnect(); } catch { /* best effort */ }
+          try {
+            this.client.disconnect();
+          } catch {
+            /* best effort */
+          }
           this.client = null;
         }
         this.sessionWebhooks.clear();
@@ -183,7 +186,7 @@ export class DingTalkChannel implements ChannelAdapter {
     if (Array.isArray(rich)) {
       const parts = rich
         .filter((x): x is Record<string, unknown> => x != null && typeof x === "object")
-        .map((x) => String(x.text ?? ""))
+        .map(x => String(x.text ?? ""))
         .filter(Boolean);
       return parts.join(" ").trim();
     }

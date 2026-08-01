@@ -1,28 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  CheckCircle2,
-  Info,
-  Loader2,
-  RefreshCw,
-  XCircle,
-} from "lucide-react";
+import { CheckCircle2, Info, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { Button } from "../../../../../shared/view/ui";
 import { authenticatedFetch } from "../../../../../utils/api";
-import {
-  SettingsCard,
-  SettingsRow,
-  SettingsSection,
-  SettingsToggle,
-} from "../../../shared/view";
+import { SettingsCard, SettingsRow, SettingsSection, SettingsToggle } from "../../../shared/view";
 import { FormRow, SecretTextInput, Select, TextInput } from "../../../shared/components/Inputs";
 import { MASK } from "../../../shared/utils/secret";
-import type { PilotDeckConfig } from "../../modelPool/types";
+import type { SatiConfig } from "../../modelPool/types";
 import { patch } from "../../modelPool/utils/patch";
-import {
-  hasUsableSecret,
-  isMaskedSecret,
-} from "../../modelPool/utils/providerRefs";
+import { hasUsableSecret, isMaskedSecret } from "../../modelPool/utils/providerRefs";
 import {
   isWebSearchApiKeyRequired,
   webSearchConfigForProvider,
@@ -30,14 +16,14 @@ import {
 } from "../utils/webSearchConfig";
 
 type ToolsSectionProps = {
-  config: PilotDeckConfig;
-  onChange: (next: PilotDeckConfig) => void;
+  config: SatiConfig;
+  onChange: (next: SatiConfig) => void;
 };
 
 type CustomProviderAuth = "bearer" | "bodyApiKey" | "queryApiKey" | "none";
 type CustomProviderMethod = "GET" | "POST";
 type TestStatus = "idle" | "testing" | "success" | "error";
-type WebSearchConfig = NonNullable<NonNullable<PilotDeckConfig["tools"]>["webSearch"]>;
+type WebSearchConfig = NonNullable<NonNullable<SatiConfig["tools"]>["webSearch"]>;
 type CustomProviderConfig = NonNullable<WebSearchConfig["customProvider"]>;
 
 export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
@@ -45,14 +31,12 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
   const glmDefaultEndpoint = "https://api.z.ai/api/paas/v4/web_search";
   const ws = config.tools?.webSearch ?? {};
   const enabled = ws.enabled !== false;
-  const provider: WebSearchProvider =
-    ws.provider === "tavily" || ws.provider === "custom" ? ws.provider : "glm";
+  const provider: WebSearchProvider = ws.provider === "tavily" || ws.provider === "custom" ? ws.provider : "glm";
   const apiKey = typeof ws.apiKey === "string" ? ws.apiKey : "";
   const endpoint = typeof ws.endpoint === "string" ? ws.endpoint : "";
   const custom = ws.customProvider ?? {};
   const apiKeyRequired = isWebSearchApiKeyRequired(ws);
-  const hasConfiguredApiKey =
-    hasUsableSecret(apiKey) || isMaskedSecret(apiKey);
+  const hasConfiguredApiKey = hasUsableSecret(apiKey) || isMaskedSecret(apiKey);
   const endpointValue = endpoint || (provider === "glm" ? glmDefaultEndpoint : "");
   const endpointPlaceholder =
     provider === "custom"
@@ -71,11 +55,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
 
   const setProvider = (nextProvider: WebSearchProvider) => {
     const nextTools = {
-      webSearch: webSearchConfigForProvider(
-        ws,
-        nextProvider,
-        glmDefaultEndpoint,
-      ),
+      webSearch: webSearchConfigForProvider(ws, nextProvider, glmDefaultEndpoint),
     };
     onChange(patch(config, ["tools"], nextTools));
     resetTest();
@@ -95,10 +75,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
     resetTest();
   };
 
-  const setCustomField = (
-    field: keyof CustomProviderConfig,
-    value: string,
-  ) => {
+  const setCustomField = (field: keyof CustomProviderConfig, value: string) => {
     const nextWs: WebSearchConfig = {
       ...ws,
       provider: "custom",
@@ -121,14 +98,10 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
   };
 
   const handleTest = async () => {
-    const trimmedKey = hasUsableSecret(apiKey)
-      ? apiKey.trim()
-      : isMaskedSecret(apiKey)
-        ? MASK
-        : "";
+    const trimmedKey = hasUsableSecret(apiKey) ? apiKey.trim() : isMaskedSecret(apiKey) ? MASK : "";
     if (apiKeyRequired && !trimmedKey) {
       setTestStatus("error");
-      setTestMessage(t("pilotDeckConfig.panels.tools.test.needsKey"));
+      setTestMessage(t("satiConfig.panels.tools.test.needsKey"));
       return;
     }
     setTestStatus("testing");
@@ -147,7 +120,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
       if (data.ok) {
         setTestStatus("success");
         setTestMessage(
-          t("pilotDeckConfig.panels.tools.test.success", {
+          t("satiConfig.panels.tools.test.success", {
             count: data.organicCount ?? 0,
             latency: data.latencyMs ?? 0,
           }),
@@ -155,7 +128,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
       } else {
         setTestStatus("error");
         setTestMessage(
-          t("pilotDeckConfig.panels.tools.test.failedPrefix", {
+          t("satiConfig.panels.tools.test.failedPrefix", {
             error: data.error || "unknown",
           }),
         );
@@ -163,7 +136,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
     } catch (err) {
       setTestStatus("error");
       setTestMessage(
-        t("pilotDeckConfig.panels.tools.test.failedPrefix", {
+        t("satiConfig.panels.tools.test.failedPrefix", {
           error: err instanceof Error ? err.message : String(err),
         }),
       );
@@ -172,21 +145,17 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
 
   return (
     <SettingsSection>
-      <p className="text-sm text-muted-foreground">
-        {t("pilotDeckConfig.panels.tools.description")}
-      </p>
+      <p className="text-sm text-muted-foreground">{t("satiConfig.panels.tools.description")}</p>
       <SettingsCard divided>
         <SettingsRow
-          label={t("pilotDeckConfig.panels.tools.enabled.label")}
-          description={t("pilotDeckConfig.panels.tools.enabled.description")}
+          label={t("satiConfig.panels.tools.enabled.label")}
+          description={t("satiConfig.panels.tools.enabled.description")}
         >
           <SettingsToggle
             checked={enabled}
-            ariaLabel={t("pilotDeckConfig.panels.tools.enabled.label")}
-            onChange={(value) => {
-              onChange(
-                patch(config, ["tools", "webSearch", "enabled"], value),
-              );
+            ariaLabel={t("satiConfig.panels.tools.enabled.label")}
+            onChange={value => {
+              onChange(patch(config, ["tools", "webSearch", "enabled"], value));
               resetTest();
             }}
           />
@@ -194,89 +163,85 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
         {enabled && (
           <>
             <FormRow
-              label={t("pilotDeckConfig.panels.tools.provider.label")}
-              description={t("pilotDeckConfig.panels.tools.provider.description")}
+              label={t("satiConfig.panels.tools.provider.label")}
+              description={t("satiConfig.panels.tools.provider.description")}
             >
               <Select
                 value={provider}
                 options={[
-                  { value: "glm", label: t("pilotDeckConfig.panels.tools.provider.glm") },
-                  { value: "tavily", label: t("pilotDeckConfig.panels.tools.provider.tavily") },
-                  { value: "custom", label: t("pilotDeckConfig.panels.tools.provider.custom") },
+                  { value: "glm", label: t("satiConfig.panels.tools.provider.glm") },
+                  { value: "tavily", label: t("satiConfig.panels.tools.provider.tavily") },
+                  { value: "custom", label: t("satiConfig.panels.tools.provider.custom") },
                 ]}
-                onChange={(value) =>
-                  setProvider(
-                    value === "custom" ? "custom" : value === "tavily" ? "tavily" : "glm",
-                  )
-                }
+                onChange={value => setProvider(value === "custom" ? "custom" : value === "tavily" ? "tavily" : "glm")}
               />
             </FormRow>
             <FormRow
-              label={t("pilotDeckConfig.panels.tools.apiKey.label")}
-              description={t("pilotDeckConfig.panels.tools.apiKey.description")}
+              label={t("satiConfig.panels.tools.apiKey.label")}
+              description={t("satiConfig.panels.tools.apiKey.description")}
             >
               <SecretTextInput
                 value={apiKey}
-                emptyPlaceholder={t("pilotDeckConfig.panels.tools.apiKey.placeholder")}
-                maskedPlaceholder={t("pilotDeckConfig.panels.tools.apiKey.maskedPlaceholder")}
+                emptyPlaceholder={t("satiConfig.panels.tools.apiKey.placeholder")}
+                maskedPlaceholder={t("satiConfig.panels.tools.apiKey.maskedPlaceholder")}
                 monospace
-                onChange={(value) => setField("apiKey", value)}
+                onChange={value => setField("apiKey", value)}
               />
               {isMaskedSecret(apiKey) && (
                 <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Info className="h-3 w-3" />
-                  {t("pilotDeckConfig.panels.tools.apiKey.keyHidden")}
+                  {t("satiConfig.panels.tools.apiKey.keyHidden")}
                 </p>
               )}
             </FormRow>
             <FormRow
-              label={t("pilotDeckConfig.panels.tools.endpoint.label")}
-              description={t("pilotDeckConfig.panels.tools.endpoint.description")}
+              label={t("satiConfig.panels.tools.endpoint.label")}
+              description={t("satiConfig.panels.tools.endpoint.description")}
             >
               <TextInput
                 value={endpointValue}
                 placeholder={endpointPlaceholder}
                 monospace
-                onChange={(value) => setField("endpoint", value)}
+                onChange={value => setField("endpoint", value)}
               />
             </FormRow>
 
             {provider === "custom" && (
               <>
                 <FormRow
-                  label={t("pilotDeckConfig.panels.tools.custom.name.label")}
-                  description={t("pilotDeckConfig.panels.tools.custom.name.description")}
+                  label={t("satiConfig.panels.tools.custom.name.label")}
+                  description={t("satiConfig.panels.tools.custom.name.description")}
                 >
                   <TextInput
                     value={custom.name ?? ""}
                     placeholder="My Search"
-                    onChange={(value) => setCustomField("name", value)}
+                    onChange={value => setCustomField("name", value)}
                   />
                 </FormRow>
                 <FormRow
-                  label={t("pilotDeckConfig.panels.tools.custom.auth.label")}
-                  description={t("pilotDeckConfig.panels.tools.custom.auth.description")}
+                  label={t("satiConfig.panels.tools.custom.auth.label")}
+                  description={t("satiConfig.panels.tools.custom.auth.description")}
                 >
                   <Select
                     value={custom.auth ?? "bearer"}
                     options={[
-                      { value: "bearer", label: t("pilotDeckConfig.panels.tools.custom.auth.bearer") },
+                      { value: "bearer", label: t("satiConfig.panels.tools.custom.auth.bearer") },
                       {
                         value: "bodyApiKey",
-                        label: t("pilotDeckConfig.panels.tools.custom.auth.bodyApiKey"),
+                        label: t("satiConfig.panels.tools.custom.auth.bodyApiKey"),
                       },
                       {
                         value: "queryApiKey",
-                        label: t("pilotDeckConfig.panels.tools.custom.auth.queryApiKey"),
+                        label: t("satiConfig.panels.tools.custom.auth.queryApiKey"),
                       },
-                      { value: "none", label: t("pilotDeckConfig.panels.tools.custom.auth.none") },
+                      { value: "none", label: t("satiConfig.panels.tools.custom.auth.none") },
                     ]}
-                    onChange={(value) => setCustomField("auth", value)}
+                    onChange={value => setCustomField("auth", value)}
                   />
                 </FormRow>
                 <FormRow
-                  label={t("pilotDeckConfig.panels.tools.custom.method.label")}
-                  description={t("pilotDeckConfig.panels.tools.custom.method.description")}
+                  label={t("satiConfig.panels.tools.custom.method.label")}
+                  description={t("satiConfig.panels.tools.custom.method.description")}
                 >
                   <Select
                     value={custom.method ?? "POST"}
@@ -284,68 +249,68 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
                       { value: "POST", label: "POST" },
                       { value: "GET", label: "GET" },
                     ]}
-                    onChange={(value) => setCustomField("method", value)}
+                    onChange={value => setCustomField("method", value)}
                   />
                 </FormRow>
                 <FormRow
-                  label={t("pilotDeckConfig.panels.tools.custom.params.label")}
-                  description={t("pilotDeckConfig.panels.tools.custom.params.description")}
+                  label={t("satiConfig.panels.tools.custom.params.label")}
+                  description={t("satiConfig.panels.tools.custom.params.description")}
                 >
                   <div className="grid gap-2 md:grid-cols-2">
                     <TextInput
                       value={custom.queryParam ?? ""}
                       placeholder="query"
                       monospace
-                      onChange={(value) => setCustomField("queryParam", value)}
+                      onChange={value => setCustomField("queryParam", value)}
                     />
                     <TextInput
                       value={custom.apiKeyParam ?? ""}
                       placeholder="api_key"
                       monospace
-                      onChange={(value) => setCustomField("apiKeyParam", value)}
+                      onChange={value => setCustomField("apiKeyParam", value)}
                     />
                   </div>
                 </FormRow>
                 <FormRow
-                  label={t("pilotDeckConfig.panels.tools.custom.mapping.label")}
-                  description={t("pilotDeckConfig.panels.tools.custom.mapping.description")}
+                  label={t("satiConfig.panels.tools.custom.mapping.label")}
+                  description={t("satiConfig.panels.tools.custom.mapping.description")}
                 >
                   <div className="grid gap-2 md:grid-cols-2">
                     <TextInput
                       value={custom.resultsPath ?? ""}
                       placeholder="data.items"
                       monospace
-                      onChange={(value) => setCustomField("resultsPath", value)}
+                      onChange={value => setCustomField("resultsPath", value)}
                     />
                     <TextInput
                       value={custom.titleField ?? ""}
                       placeholder="title"
                       monospace
-                      onChange={(value) => setCustomField("titleField", value)}
+                      onChange={value => setCustomField("titleField", value)}
                     />
                     <TextInput
                       value={custom.urlField ?? ""}
                       placeholder="url"
                       monospace
-                      onChange={(value) => setCustomField("urlField", value)}
+                      onChange={value => setCustomField("urlField", value)}
                     />
                     <TextInput
                       value={custom.snippetField ?? ""}
                       placeholder="snippet"
                       monospace
-                      onChange={(value) => setCustomField("snippetField", value)}
+                      onChange={value => setCustomField("snippetField", value)}
                     />
                     <TextInput
                       value={custom.sourceField ?? ""}
                       placeholder="source"
                       monospace
-                      onChange={(value) => setCustomField("sourceField", value)}
+                      onChange={value => setCustomField("sourceField", value)}
                     />
                     <TextInput
                       value={custom.publishedAtField ?? ""}
                       placeholder="publishedAt"
                       monospace
-                      onChange={(value) => setCustomField("publishedAtField", value)}
+                      onChange={value => setCustomField("publishedAtField", value)}
                     />
                   </div>
                 </FormRow>
@@ -358,10 +323,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
                   variant="outline"
                   size="sm"
                   onClick={handleTest}
-                  disabled={
-                    testStatus === "testing" ||
-                    (apiKeyRequired && !hasConfiguredApiKey)
-                  }
+                  disabled={testStatus === "testing" || (apiKeyRequired && !hasConfiguredApiKey)}
                 >
                   {testStatus === "testing" ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -369,8 +331,8 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                   )}
                   {testStatus === "testing"
-                    ? t("pilotDeckConfig.panels.tools.test.testing")
-                    : t("pilotDeckConfig.panels.tools.test.button")}
+                    ? t("satiConfig.panels.tools.test.testing")
+                    : t("satiConfig.panels.tools.test.button")}
                 </Button>
                 {testStatus === "success" && (
                   <span className="inline-flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400">

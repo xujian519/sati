@@ -64,5 +64,4 @@ export class ImChatSessionState<Turn extends ImQueuedTurn = ImQueuedTurn> {
   clearActiveRun(chatId: string): void {
     this.activeRuns.delete(chatId);
   }
-
 }

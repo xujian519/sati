@@ -1,0 +1,65 @@
+# 修改规则
+# 基于：专利法第33条、专利法实施细则第51条
+# 来源：BCIP CON-701, CON-702, CON-703
+
+rules:
+  - ruleId: AMD-001
+    name: 修改不超范围
+    description: 对专利申请文件的修改不得超出原说明书和权利要求书记载的范围
+    legalBasis: 专利法第33条
+    domain: patent_general
+    severity: critical
+    action: block
+    check:
+      type: amendment_scope
+      principles:
+        - "修改内容必须能够从原申请文件中直接地、毫无疑义地确定"
+        - "禁止引入新事项：新特征、上位概括、新实验数据、新数值范围"
+        - "修改只能缩小保护范围，不能扩大"
+      permissible:
+        - "删除权利要求或技术方案"
+        - "进一步限定（引入原申请已记载的特征）"
+        - "修正明显错误（文字/符号错误）"
+        - "澄清不明确表述（不引入新内容）"
+      assessment:
+        withinScope: pass
+        beyondScope: block
+
+  - ruleId: AMD-002
+    name: 修改类型合法性
+    description: 答复审查意见时的修改类型应符合规定
+    legalBasis: 实施细则第51条第3款
+    domain: patent_general
+    severity: critical
+    action: block
+    check:
+      type: amendment_type
+      validTypes:
+        - "权利要求的删除"
+        - "权利要求的合并"
+        - "技术特征的进一步限定"
+      forbidden:
+        - "改变权利要求类型（产品改为方法）"
+        - "扩大保护范围"
+        - "引入原申请未记载的技术特征"
+      assessment:
+        validType: pass
+        forbiddenType: block
+
+  - ruleId: AMD-003
+    name: 主动修改时机
+    description: 主动修改必须在规定时间内进行
+    legalBasis: 实施细则第47条
+    domain: patent_general
+    severity: major
+    action: warn
+    check:
+      type: voluntary_amendment_timing
+      invention:
+        - "提出实质审查请求时"
+        - "收到进入实质审查通知书之日起3个月内"
+      utility:
+        - "申请日起2个月内"
+      assessment:
+        inTime: pass
+        outOfTime: warn + "已超出主动修改期限"

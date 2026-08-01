@@ -1,6 +1,6 @@
-import type { PilotDeckHookEvent } from "./events.js";
+import type { SatiHookEvent } from "./events.js";
 
-export type PilotDeckHookBaseInput = {
+export type SatiHookBaseInput = {
   sessionId: string;
   transcriptPath: string;
   cwd: string;
@@ -9,16 +9,16 @@ export type PilotDeckHookBaseInput = {
   agentType?: string;
 };
 
-export type PilotDeckHookInput = PilotDeckHookBaseInput &
+export type SatiHookInput = SatiHookBaseInput &
   Record<string, unknown> & {
-    hookEventName: PilotDeckHookEvent;
+    hookEventName: SatiHookEvent;
   };
 
 export function createHookInput(
-  event: PilotDeckHookEvent,
-  base: PilotDeckHookBaseInput,
+  event: SatiHookEvent,
+  base: SatiHookBaseInput,
   payload: Record<string, unknown> = {},
-): PilotDeckHookInput {
+): SatiHookInput {
   return {
     ...base,
     ...payload,
@@ -26,16 +26,8 @@ export function createHookInput(
   };
 }
 
-export function toLegacyHookInput(input: PilotDeckHookInput): Record<string, unknown> {
-  const {
-    hookEventName,
-    sessionId,
-    transcriptPath,
-    permissionMode,
-    agentId,
-    agentType,
-    ...rest
-  } = input;
+export function toLegacyHookInput(input: SatiHookInput): Record<string, unknown> {
+  const { hookEventName, sessionId, transcriptPath, permissionMode, agentId, agentType, ...rest } = input;
 
   const legacy: Record<string, unknown> = {
     ...camelRecordToSnake(rest),
@@ -60,5 +52,5 @@ function camelRecordToSnake(record: Record<string, unknown>): Record<string, unk
 }
 
 function camelToSnake(value: string): string {
-  return value.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+  return value.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 }

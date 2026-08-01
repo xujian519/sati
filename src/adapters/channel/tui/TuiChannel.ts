@@ -38,14 +38,22 @@ export class TuiChannel implements ChannelAdapter {
       sessionKey: this.options.sessionKey,
       model: this.options.model,
       cwd: this.options.cwd,
-      serverUrl: this.options.serverUrl ?? (connection === "remote" ? this.options.probe && typeof this.options.probe === "object" ? this.options.probe.url : undefined : undefined),
+      serverUrl:
+        this.options.serverUrl ??
+        (connection === "remote"
+          ? this.options.probe && typeof this.options.probe === "object"
+            ? this.options.probe.url
+            : undefined
+          : undefined),
       onViewOutput: async (path: string) => {
         this.instance?.unmount();
         const pager = process.env.PAGER || "less";
         try {
           const child = spawn(pager, [path], { stdio: "inherit" });
-          await new Promise<void>((resolve) => child.on("exit", () => resolve()));
-        } catch { /* pager failed, continue */ }
+          await new Promise<void>(resolve => child.on("exit", () => resolve()));
+        } catch {
+          /* pager failed, continue */
+        }
         this.instance = render(React.createElement(TuiApp, appProps));
       },
     };

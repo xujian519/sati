@@ -16,9 +16,7 @@
 import type { CanonicalMessage } from "../../model/index.js";
 import { messageContent } from "../../model/protocol/clone.js";
 
-export function filterIncompleteToolCalls(
-  messages: CanonicalMessage[],
-): CanonicalMessage[] {
+export function filterIncompleteToolCalls(messages: CanonicalMessage[]): CanonicalMessage[] {
   const completedIds = new Set<string>();
   for (const message of messages) {
     for (const block of messageContent(message)) {
@@ -33,7 +31,7 @@ export function filterIncompleteToolCalls(
       out.push(message);
       continue;
     }
-    const filtered = messageContent(message).filter((block) => {
+    const filtered = messageContent(message).filter(block => {
       if (block.type !== "tool_call") return true;
       return completedIds.has(block.id);
     });

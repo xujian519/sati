@@ -16,7 +16,7 @@ type NormalizedText = {
 };
 
 function normalizeSearchText(value: string): NormalizedText {
-  let text = '';
+  let text = "";
   const originalOffsets: number[] = [];
   let previousWasWhitespace = false;
 
@@ -25,7 +25,7 @@ function normalizeSearchText(value: string): NormalizedText {
     const isWhitespace = /\s/.test(character);
     if (isWhitespace) {
       if (!previousWasWhitespace && text.length > 0) {
-        text += ' ';
+        text += " ";
         originalOffsets.push(index);
       }
       previousWasWhitespace = true;
@@ -46,11 +46,7 @@ function normalizeSearchText(value: string): NormalizedText {
   };
 }
 
-function resolveTextPosition(
-  textItems: string[],
-  offset: number,
-  isMatchEnd: boolean,
-): PdfSearchPosition {
+function resolveTextPosition(textItems: string[], offset: number, isMatchEnd: boolean): PdfSearchPosition {
   let itemStart = 0;
   for (let divIndex = 0; divIndex < textItems.length; divIndex += 1) {
     const itemEnd = itemStart + textItems[divIndex].length;
@@ -67,14 +63,10 @@ function resolveTextPosition(
   return { divIndex: 0, offset: 0 };
 }
 
-export function findPdfSearchMatches(
-  textItems: string[],
-  query: string,
-  pageNumber: number,
-): PdfSearchMatch[] {
+export function findPdfSearchMatches(textItems: string[], query: string, pageNumber: number): PdfSearchMatch[] {
   if (textItems.length === 0) return [];
 
-  const sourceText = textItems.join('');
+  const sourceText = textItems.join("");
   const normalizedSource = normalizeSearchText(sourceText);
   const normalizedQuery = normalizeSearchText(query).text.trim();
   if (!normalizedSource.text || !normalizedQuery) return [];
@@ -111,9 +103,9 @@ export function renderPdfSearchHighlights(
   let selectedElement: HTMLElement | null = null;
 
   textDivs.forEach((textDiv, divIndex) => {
-    const text = textItems[divIndex] || '';
+    const text = textItems[divIndex] || "";
     const fragments = matches
-      .map((match) => {
+      .map(match => {
         if (divIndex < match.begin.divIndex || divIndex > match.end.divIndex) return null;
         const start = divIndex === match.begin.divIndex ? match.begin.offset : 0;
         const end = divIndex === match.end.divIndex ? match.end.offset : text.length;
@@ -134,17 +126,19 @@ export function renderPdfSearchHighlights(
         content.append(document.createTextNode(text.slice(offset, start)));
       }
 
-      const highlight = document.createElement('span');
+      const highlight = document.createElement("span");
       const selected = match.id === selectedMatchId;
       highlight.className = [
-        'highlight',
-        'appended',
-        'pilotdeck-document-search-highlight',
-        selected ? 'selected pilotdeck-document-search-highlight-active' : '',
-      ].filter(Boolean).join(' ');
+        "highlight",
+        "appended",
+        "sati-document-search-highlight",
+        selected ? "selected sati-document-search-highlight-active" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
       highlight.dataset.pdfSearchMatchId = match.id;
       if (selected) {
-        highlight.setAttribute('aria-current', 'true');
+        highlight.setAttribute("aria-current", "true");
       }
       highlight.append(document.createTextNode(text.slice(start, end)));
       content.append(highlight);

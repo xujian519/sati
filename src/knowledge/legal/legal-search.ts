@@ -1,0 +1,287 @@
+import { DatabaseSync } from "node:sqlite";
+import type { LawCategory, LawRecord, LawSearchResult } from "./types.js";
+
+/**
+ * 法律全文搜索引擎（基于宝宸知识库 laws-full-local.db / laws-full.db）。
+ *
+ * 与 Mady `SearchLaws` 同策略：FTS5（trigram tokenizer，BM25 排序）优先，
+ * 短查询（< 3 个 CJK 字符）或缺失 FTS 表时降级 LIKE 匹配。
+ * 注意：law_fts 的 rowid 对应 law 表的**隐藏 rowid**（非 law.id 主键）。
+ */
+
+const FTS_MIN_RUNES = 3; // trigram tokenizer 要求 3+ 字符
+
+/** 长查询切词用的虚词/疑问词（按这些词切分后取 ≥3 字片段）。 */
+const SPLIT_WORDS = [
+  "的",
+  "是",
+  "吗",
+  "呢",
+  "什么",
+  "如何",
+  "怎么",
+  "是否",
+  "哪些",
+  "一个",
+  "一种",
+  "以及",
+  "如果",
+  "那么",
+];
+
+/**
+ * 把长查询切分为 ≥3 字的关键词片段（trigram tokenizer 要求 3+ 字符）。
+ * 例："专利侵权的赔偿标准是什么" → ["专利侵权", "赔偿标准"]
+ */
+export function extractLawKeywords(query: string, max = 4): string[] {
+  let rest = query;
+  for (const w of SPLIT_WORDS) {
+    rest = rest.split(w).join("\n");
+  }
+  const fragments = rest
+    .split(/\s+/)
+    .map(f => f.trim())
+    .filter(f => Array.from(f).length >= FTS_MIN_RUNES);
+  return fragments.slice(0, max);
+}
+
+type LawRow = {
+  id: string;
+  level: string;
+  name: string;
+  filename: string | null;
+  publish: string | null;
+  expired: number;
+  category_id: number;
+  subtitle: string | null;
+  valid_from: string | null;
+  content: string | null;
+  category_name: string | null;
+  /** FTS5 BM25 分数（负值，越大越相关；仅 FTS 路径有值）。 */
+  fts_rank?: number | null;
+};
+
+export type LegalSearchOptions = {
+  /** 返回条数上限（默认 10）。 */
+  limit?: number;
+  /** 按法律层级过滤（法律/行政法规/司法解释/地方性法规/宪法/案例/部门规章）。 */
+  level?: string;
+  /** 按分类名称过滤（如 专利法 所属的 民法商法）。 */
+  category?: string;
+};
+
+export class LegalSearchEngine {
+  private readonly db: DatabaseSync;
+  private readonly hasFts: boolean;
+
+  constructor(dbPath: string) {
+    this.db = new DatabaseSync(dbPath, { readOnly: true });
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='law_fts'")
+      .get() as { c: number };
+    this.hasFts = row.c > 0;
+  }
+
+  /** FTS5 BM25 全文搜索；短查询/无 FTS 时降级 LIKE。 */
+  search(keyword: string, options: LegalSearchOptions = {}): LawSearchResult[] {
+    const limit = options.limit ?? 10;
+    const trimmed = keyword.trim();
+    if (!trimmed) return [];
+
+    const runes = Array.from(trimmed);
+    let rows: LawRow[];
+    if (!this.hasFts || runes.length < FTS_MIN_RUNES) {
+      rows = this.searchLike(trimmed, options, limit);
+    } else {
+      // 1. 整句 phrase（短查询命中率高）
+      rows = this.searchFts(trimmed, options, limit);
+      // 2. 整句无命中时切词 OR 查询（长句/自然语言查询）
+      if (rows.length === 0) {
+        const keywords = extractLawKeywords(trimmed);
+        if (keywords.length > 0 && keywords[0] !== trimmed) {
+          rows = this.searchFtsKeywords(keywords, options, limit);
+        }
+      }
+      // 3. FTS 仍无命中时降级 LIKE
+      if (rows.length === 0) {
+        rows = this.searchLike(trimmed, options, limit);
+      }
+    }
+
+    return rows.map(row => this.toSearchResult(row));
+  }
+
+  /** 按名称精确/模糊查找法律（返回全部版本记录）。 */
+  findByName(name: string, limit = 10): LawRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
+                l.category_id, l.subtitle, l.valid_from, l.content,
+                c.name AS category_name
+         FROM law l
+         JOIN category c ON c.id = l.category_id
+         WHERE l.name LIKE ? ESCAPE '\\'
+         ORDER BY l.publish DESC
+         LIMIT ?`,
+      )
+      .all(`%${name.replace(/[%_\\]/g, m => `\\${m}`)}%`, limit) as LawRow[];
+    return rows.map(this.toRecord);
+  }
+
+  /** 按 id（主键）精确查询。 */
+  getById(id: string): LawRecord | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
+                l.category_id, l.subtitle, l.valid_from, l.content,
+                c.name AS category_name
+         FROM law l
+         JOIN category c ON c.id = l.category_id
+         WHERE l.id = ?`,
+      )
+      .get(id) as LawRow | undefined;
+    return row ? this.toRecord(row) : undefined;
+  }
+
+  /** 列出全部分类（category 表）。 */
+  getCategories(): LawCategory[] {
+    return this.db
+      .prepare('SELECT id, name, folder, isSubFolder, "group" FROM category ORDER BY "order"')
+      .all() as LawCategory[];
+  }
+
+  /** 统计总数（诊断用）。 */
+  count(): number {
+    const row = this.db.prepare("SELECT COUNT(*) AS c FROM law").get() as { c: number };
+    return row.c;
+  }
+
+  close(): void {
+    this.db.close();
+  }
+
+  private searchFts(keyword: string, options: LegalSearchOptions, limit: number): LawRow[] {
+    // trigram 分词对引号敏感：整体作为 phrase 查询。
+    // 注意：law_fts 与 law 表的 rowid **不对齐**（不同导入批次），
+    // 正确关联键是 name（同名多版本在 JS 层去重，保留 bm25 最高者）。
+    const escaped = keyword.replace(/"/g, '""');
+    let sql = `
+      SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
+             l.category_id, l.subtitle, l.valid_from, l.content,
+             c.name AS category_name,
+             bm25(law_fts) AS fts_rank
+      FROM law_fts
+      JOIN law l ON l.name = law_fts.name
+      JOIN category c ON c.id = l.category_id
+      WHERE law_fts MATCH ?
+        AND (l.expired = 0 OR l.expired IS NULL)
+    `;
+    const params: Array<string | number> = [`"${escaped}"`];
+    if (options.level) {
+      sql += " AND l.level = ?";
+      params.push(options.level);
+    }
+    if (options.category) {
+      sql += " AND c.name = ?";
+      params.push(options.category);
+    }
+    // 先按发布时间倒序再按相关度：同名多版本去重时保留现行有效的最新版
+    sql += " ORDER BY l.publish DESC, bm25(law_fts) LIMIT ?";
+    params.push(limit * 3); // 放大取数，供 JS 层按 name 去重
+    const rows = this.db.prepare(sql).all(...params) as LawRow[];
+
+    // 按 name 去重，保留最新发布版本的记录
+    const seen = new Set<string>();
+    const deduped: LawRow[] = [];
+    for (const row of rows) {
+      if (seen.has(row.name)) continue;
+      seen.add(row.name);
+      deduped.push(row);
+      if (deduped.length >= limit) break;
+    }
+    return deduped;
+  }
+
+  /** 多个关键词 OR 组合的 FTS 查询（用于长查询切词降级）。 */
+  private searchFtsKeywords(keywords: string[], options: LegalSearchOptions, limit: number): LawRow[] {
+    const escaped = keywords.map(k => `"${k.replace(/"/g, '""')}"`).join(" OR ");
+    let sql = `
+      SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
+             l.category_id, l.subtitle, l.valid_from, l.content,
+             c.name AS category_name,
+             bm25(law_fts) AS fts_rank
+      FROM law_fts
+      JOIN law l ON l.name = law_fts.name
+      JOIN category c ON c.id = l.category_id
+      WHERE law_fts MATCH ?
+        AND (l.expired = 0 OR l.expired IS NULL)
+    `;
+    const params: Array<string | number> = [escaped];
+    if (options.level) {
+      sql += " AND l.level = ?";
+      params.push(options.level);
+    }
+    if (options.category) {
+      sql += " AND c.name = ?";
+      params.push(options.category);
+    }
+    sql += " ORDER BY l.publish DESC, bm25(law_fts) LIMIT ?";
+    params.push(limit * 3);
+    const rows = this.db.prepare(sql).all(...params) as LawRow[];
+
+    const seen = new Set<string>();
+    const deduped: LawRow[] = [];
+    for (const row of rows) {
+      if (seen.has(row.name)) continue;
+      seen.add(row.name);
+      deduped.push(row);
+      if (deduped.length >= limit) break;
+    }
+    return deduped;
+  }
+
+  private searchLike(keyword: string, options: LegalSearchOptions, limit: number): LawRow[] {
+    const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
+    let sql = `
+      SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
+             l.category_id, l.subtitle, l.valid_from, l.content,
+             c.name AS category_name
+      FROM law l
+      JOIN category c ON c.id = l.category_id
+      WHERE (l.name LIKE ? ESCAPE '\\' OR l.content LIKE ? ESCAPE '\\')
+        AND (l.expired = 0 OR l.expired IS NULL)
+    `;
+    const params: Array<string | number> = [pattern, pattern];
+    if (options.level) {
+      sql += " AND l.level = ?";
+      params.push(options.level);
+    }
+    if (options.category) {
+      sql += " AND c.name = ?";
+      params.push(options.category);
+    }
+    sql += ' ORDER BY l.publish DESC, l."order" LIMIT ?';
+    params.push(limit);
+    return this.db.prepare(sql).all(...params) as LawRow[];
+  }
+
+  private toRecord(row: LawRow): LawRecord {
+    return {
+      id: row.id,
+      level: row.level,
+      name: row.name,
+      filename: row.filename ?? undefined,
+      publish: row.publish ?? undefined,
+      expired: row.expired,
+      categoryId: row.category_id,
+      subtitle: row.subtitle ?? undefined,
+      validFrom: row.valid_from ?? undefined,
+      content: row.content ?? undefined,
+      categoryName: row.category_name ?? undefined,
+    };
+  }
+
+  private toSearchResult(row: LawRow): LawSearchResult {
+    return { ...this.toRecord(row), score: row.fts_rank ?? 0 };
+  }
+}

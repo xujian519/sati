@@ -1,5 +1,8 @@
 import { createAgentSessionStateFromReplay, type AgentSession } from "../../agent/session/AgentSession.js";
-import { createAgentSessionWithStorage, type CreateAgentSessionOptions } from "../../agent/session/createAgentSession.js";
+import {
+  createAgentSessionWithStorage,
+  type CreateAgentSessionOptions,
+} from "../../agent/session/createAgentSession.js";
 import type { AgentRuntimeDependencies } from "../../agent/runtime/AgentRuntimeDependencies.js";
 import type { SessionMetadataValue } from "../transcript/TranscriptEntry.js";
 import { SessionMetadataStore } from "../metadata/SessionMetadataStore.js";
@@ -28,7 +31,14 @@ export type ResumeSessionDependencyExtension = (
 ) => Partial<
   Pick<
     AgentRuntimeDependencies,
-    "context" | "fileHistory" | "subagentTranscript" | "elicitation" | "eventEmitter" | "drainEvents" | "planFileManager" | "planTodoManager"
+    | "context"
+    | "fileHistory"
+    | "subagentTranscript"
+    | "elicitation"
+    | "eventEmitter"
+    | "drainEvents"
+    | "planFileManager"
+    | "planTodoManager"
   >
 >;
 

@@ -6,13 +6,7 @@ import type { KeyValueRow } from "../types/mcp";
 import { INPUT_CLASS } from "../utils/constants";
 import { newId } from "../utils/mcpServerForm";
 
-export function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block space-y-2">
       <span className="text-sm font-medium text-foreground">{label}</span>
@@ -36,9 +30,7 @@ export function ToggleButton({
       onClick={onClick}
       className={cn(
         "rounded-md px-3 py-2 text-sm font-semibold transition-colors",
-        active
-          ? "bg-background text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground",
+        active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
       )}
     >
       {children}
@@ -81,25 +73,14 @@ export function StringListEditor({
           <div key={index} className="flex gap-2">
             <input
               value={value}
-              onChange={(event) =>
-                onChange(
-                  values.map((entry, i) =>
-                    i === index ? event.target.value : entry,
-                  ),
-                )
-              }
+              onChange={event => onChange(values.map((entry, i) => (i === index ? event.target.value : entry)))}
               placeholder={placeholder}
               className={INPUT_CLASS}
             />
             <IconButton onClick={() => onChange(values.filter((_, i) => i !== index))} />
           </div>
         ))}
-        <Button
-          variant="secondary"
-          size="sm"
-          className="w-full"
-          onClick={() => onChange([...values, ""])}
-        >
+        <Button variant="secondary" size="sm" className="w-full" onClick={() => onChange([...values, ""])}>
           <Plus className="h-4 w-4" />
           {addLabel}
         </Button>
@@ -127,37 +108,25 @@ export function KeyValueEditor({
     <div className="space-y-2">
       <div className="text-sm font-medium text-foreground">{label}</div>
       <div className="space-y-2">
-        {rows.map((row) => (
+        {rows.map(row => (
           <div key={row.id} className="grid grid-cols-[1fr_1fr_auto] gap-2">
             <input
               value={row.key}
-              onChange={(event) =>
-                onChange(
-                  rows.map((entry) =>
-                    entry.id === row.id
-                      ? { ...entry, key: event.target.value }
-                      : entry,
-                  ),
-                )
+              onChange={event =>
+                onChange(rows.map(entry => (entry.id === row.id ? { ...entry, key: event.target.value } : entry)))
               }
               placeholder={keyPlaceholder}
               className={INPUT_CLASS}
             />
             <input
               value={row.value}
-              onChange={(event) =>
-                onChange(
-                  rows.map((entry) =>
-                    entry.id === row.id
-                      ? { ...entry, value: event.target.value }
-                      : entry,
-                  ),
-                )
+              onChange={event =>
+                onChange(rows.map(entry => (entry.id === row.id ? { ...entry, value: event.target.value } : entry)))
               }
               placeholder={valuePlaceholder}
               className={INPUT_CLASS}
             />
-            <IconButton onClick={() => onChange(rows.filter((entry) => entry.id !== row.id))} />
+            <IconButton onClick={() => onChange(rows.filter(entry => entry.id !== row.id))} />
           </div>
         ))}
         <Button

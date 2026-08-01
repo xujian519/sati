@@ -14,22 +14,22 @@ export function formatChatHistorySearchResults(
 
   if (!result.query.trim()) {
     return locale === "zh"
-      ? "用法：/search <关键词> [--all] [--limit N] [--role user|assistant]\n示例：/search docker 部署"
-      : "Usage: /search <keyword> [--all] [--limit N] [--role user|assistant]\nExample: /search docker deploy";
+      ? "用法：/search <关键词> [--all] [--limit N] [--role user|assistant]\n示例：/search 智能体部署"
+      : "Usage: /search <keyword> [--all] [--limit N] [--role user|assistant]\nExample: /search agent deploy";
   }
 
   if (result.matches.length === 0) {
-    const scope = locale === "zh"
-      ? `已扫描 ${result.sessionsScanned} 个会话`
-      : `Scanned ${result.sessionsScanned} session(s)`;
+    const scope =
+      locale === "zh" ? `已扫描 ${result.sessionsScanned} 个会话` : `Scanned ${result.sessionsScanned} session(s)`;
     return locale === "zh"
       ? `未找到包含「${result.query}」的聊天记录。\n${scope}。`
       : `No chat history matches for "${result.query}".\n${scope}.`;
   }
 
-  const header = locale === "zh"
-    ? `🔍 找到 ${result.matches.length} 条匹配「${result.query}」${result.truncated ? "（结果已截断，可加大 --limit）" : ""}`
-    : `🔍 ${result.matches.length} match(es) for "${result.query}"${result.truncated ? " (truncated — try a higher --limit)" : ""}`;
+  const header =
+    locale === "zh"
+      ? `🔍 找到 ${result.matches.length} 条匹配「${result.query}」${result.truncated ? "（结果已截断，可加大 --limit）" : ""}`
+      : `🔍 ${result.matches.length} match(es) for "${result.query}"${result.truncated ? " (truncated — try a higher --limit)" : ""}`;
 
   const lines = [header, ""];
   result.matches.forEach((match, index) => {
@@ -51,14 +51,17 @@ function formatMatchLine(
   index: number,
   options: { locale: "zh" | "en"; includeProject: boolean },
 ): string {
-  const roleLabel = match.role === "user"
-    ? (options.locale === "zh" ? "用户" : "user")
-    : (options.locale === "zh" ? "助手" : "assistant");
+  const roleLabel =
+    match.role === "user"
+      ? options.locale === "zh"
+        ? "用户"
+        : "user"
+      : options.locale === "zh"
+        ? "助手"
+        : "assistant";
   const shortId = shortenId(match.sessionId);
   const when = formatWhen(match.createdAt, options.locale);
-  const projectSuffix = options.includeProject && match.projectKey
-    ? ` · ${basename(match.projectKey)}`
-    : "";
+  const projectSuffix = options.includeProject && match.projectKey ? ` · ${basename(match.projectKey)}` : "";
 
   return [
     `${index}. **${match.sessionTitle}** (\`${shortId}\`)${projectSuffix}`,

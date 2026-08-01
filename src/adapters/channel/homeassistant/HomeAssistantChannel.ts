@@ -2,14 +2,13 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
-import { HomeAssistantSessionMapper } from "./HomeAssistantSessionMapper.js";
-import { renderHomeAssistantEvent } from "./homeassistant-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { HomeAssistantSessionMapper } from "./HomeAssistantSessionMapper.js";
+import { renderHomeAssistantEvent } from "./homeassistant-render.js";
 
 let WebSocketImpl: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const wsMod = require("ws");
   WebSocketImpl = wsMod.WebSocket ?? wsMod;
 } catch {
@@ -78,7 +77,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
     this.closed = false;
     this.wsSessionReady = false;
 
-    const authOk = await new Promise<boolean>((resolve) => {
+    const authOk = await new Promise<boolean>(resolve => {
       let settled = false;
       const finish = (ok: boolean) => {
         if (settled) return;
@@ -86,7 +85,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
         resolve(ok);
       };
       const t = setTimeout(() => finish(false), 20_000);
-      this.authSettle = (ok) => {
+      this.authSettle = ok => {
         clearTimeout(t);
         finish(ok);
       };
@@ -155,7 +154,11 @@ export class HomeAssistantChannel implements ChannelAdapter {
 
   private async cleanupWs(): Promise<void> {
     if (this.ws) {
-      try { this.ws.close(); } catch { /* best effort */ }
+      try {
+        this.ws.close();
+      } catch {
+        /* best effort */
+      }
       this.ws = null;
     }
   }
@@ -217,7 +220,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
 
     const data = ev.data as Record<string, unknown> | undefined;
     const entityId = data?.entity_id as string | undefined;
-    if (!entityId || !this.watchPrefixes.some((p) => entityId.startsWith(p))) return;
+    if (!entityId || !this.watchPrefixes.some(p => entityId.startsWith(p))) return;
 
     const newState = (data?.new_state as Record<string, unknown> | undefined)?.state;
     const oldState = (data?.old_state as Record<string, unknown> | undefined)?.state;

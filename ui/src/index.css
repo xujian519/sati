@@ -1019,22 +1019,22 @@
     box-shadow: 0 0 0 2px rgb(253 224 71 / 0.28);
   }
 
-  .textLayer .pilotdeck-document-search-highlight {
+  .textLayer .sati-document-search-highlight {
     --highlight-bg-color: rgb(254 240 138 / 0.78);
     --highlight-selected-bg-color: rgb(250 204 21 / 0.96);
   }
 
-  .textLayer .pilotdeck-document-search-highlight-active {
+  .textLayer .sati-document-search-highlight-active {
     outline: 1px solid rgb(180 83 9);
     box-shadow: 0 0 0 2px rgb(251 191 36 / 0.32);
   }
 
-  .dark .textLayer .pilotdeck-document-search-highlight {
+  .dark .textLayer .sati-document-search-highlight {
     --highlight-bg-color: rgb(113 63 18 / 0.72);
     --highlight-selected-bg-color: rgb(217 119 6 / 0.94);
   }
 
-  .dark .textLayer .pilotdeck-document-search-highlight-active {
+  .dark .textLayer .sati-document-search-highlight-active {
     outline-color: rgb(253 224 71);
     box-shadow: 0 0 0 2px rgb(253 224 71 / 0.28);
   }

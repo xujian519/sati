@@ -1,5 +1,17 @@
-import { createElement, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import { useTranslation } from 'react-i18next';
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronDown,
@@ -19,28 +31,24 @@ import {
   X,
   ZoomIn,
   ZoomOut,
-} from 'lucide-react';
-import * as pdfjs from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import 'pdfjs-dist/web/pdf_viewer.css';
-import type { DocumentSelectionSource } from '../../../../types/documentSelection';
+} from "lucide-react";
+import * as pdfjs from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+import "pdfjs-dist/web/pdf_viewer.css";
+import type { DocumentSelectionSource } from "../../../../types/documentSelection";
 import {
   createImageRegionContentReference,
   createTextContentReference,
   type ContentReference,
   type ContentReferenceSelectionMode,
   type ReferenceCapabilities,
-} from '../../../../types/contentReference';
-import type { PdfNavigationMode } from '../../utils/documentPreview';
-import { resolvePdfOutline, type PdfOutlineItem } from '../../utils/pdfOutline';
-import {
-  findPdfSearchMatches,
-  renderPdfSearchHighlights,
-  type PdfSearchMatch,
-} from '../../utils/pdfSearch';
-import ContentReferenceMenu from './ContentReferenceMenu';
-import RegionSelectionOverlay, { type CapturedRegion } from './RegionSelectionOverlay';
-import { floatingSelectionSingleActionClassName } from './floatingSelectionAction';
+} from "../../../../types/contentReference";
+import type { PdfNavigationMode } from "../../utils/documentPreview";
+import { resolvePdfOutline, type PdfOutlineItem } from "../../utils/pdfOutline";
+import { findPdfSearchMatches, renderPdfSearchHighlights, type PdfSearchMatch } from "../../utils/pdfSearch";
+import ContentReferenceMenu from "./ContentReferenceMenu";
+import RegionSelectionOverlay, { type CapturedRegion } from "./RegionSelectionOverlay";
+import { floatingSelectionSingleActionClassName } from "./floatingSelectionAction";
 
 type PdfDocumentPreviewProps = {
   blob?: Blob;
@@ -78,9 +86,9 @@ type ViewerSize = {
   height: number;
 };
 
-type ZoomMode = 'fitPage' | 'fitWidth' | 'custom';
+type ZoomMode = "fitPage" | "fitWidth" | "custom";
 type Rotation = 0 | 90 | 180 | 270;
-type NavigationView = 'thumbnails' | 'outline';
+type NavigationView = "thumbnails" | "outline";
 
 type PdfViewState = {
   scrollTop: number;
@@ -135,15 +143,15 @@ const MAX_SCALE = 4;
 const ZOOM_STEP = 0.25;
 const CONTEXT_RADIUS = 500;
 const PDF_RANGE_CHUNK_SIZE = 256 * 1024;
-const PAGE_RENDER_ROOT_MARGIN = '1200px 0px';
-const THUMBNAIL_RENDER_ROOT_MARGIN = '600px 0px';
+const PAGE_RENDER_ROOT_MARGIN = "1200px 0px";
+const THUMBNAIL_RENDER_ROOT_MARGIN = "600px 0px";
 const THUMBNAIL_MAX_WIDTH = 116;
 const THUMBNAIL_MAX_HEIGHT = 124;
 
 const DEFAULT_VIEW_STATE: PdfViewState = {
   scrollTop: 0,
   currentPage: 1,
-  zoomMode: 'fitPage',
+  zoomMode: "fitPage",
   customScale: 1,
   rotation: 0,
 };
@@ -153,7 +161,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 function ignorePdfCleanupError(callback: () => unknown): void {
   try {
     const result = callback();
-    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+    if (result && typeof (result as PromiseLike<unknown>).then === "function") {
       void Promise.resolve(result).catch(() => {});
     }
   } catch {
@@ -162,7 +170,7 @@ function ignorePdfCleanupError(callback: () => unknown): void {
 }
 
 function normalizeText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -174,13 +182,11 @@ function isQuarterTurn(rotation: Rotation): boolean {
 }
 
 function getRotatedPageSize(size: PageSize, rotation: Rotation): PageSize {
-  return isQuarterTurn(rotation)
-    ? { width: size.height, height: size.width }
-    : size;
+  return isQuarterTurn(rotation) ? { width: size.height, height: size.width } : size;
 }
 
 function parsePercentInput(value: string): number | null {
-  const normalized = value.replace('%', '').trim();
+  const normalized = value.replace("%", "").trim();
   if (!normalized) return null;
   const parsed = Number.parseFloat(normalized);
   if (!Number.isFinite(parsed)) return null;
@@ -196,7 +202,7 @@ function parsePageInput(value: string, totalPages: number): number | null {
 function buildSurroundingText(documentText: string, selectedText: string): string {
   const normalizedDocument = normalizeText(documentText);
   const normalizedSelected = normalizeText(selectedText);
-  if (!normalizedDocument || !normalizedSelected) return '';
+  if (!normalizedDocument || !normalizedSelected) return "";
 
   const index = normalizedDocument.indexOf(normalizedSelected);
   if (index < 0) return normalizedSelected;
@@ -214,30 +220,31 @@ function getOccurrenceIndex(documentText: string, selectedText: string): number 
 }
 
 function getSelectedPageNumbers(root: HTMLElement, range: Range): number[] {
-  const pages = Array.from(root.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+  const pages = Array.from(root.querySelectorAll<HTMLElement>("[data-pdf-page-number]"));
   return pages
-    .filter((page) => {
+    .filter(page => {
       try {
         return range.intersectsNode(page);
       } catch {
         return false;
       }
     })
-    .map((page) => Number.parseInt(page.dataset.pdfPageNumber || '', 10))
-    .filter((pageNumber) => Number.isFinite(pageNumber) && pageNumber > 0);
+    .map(page => Number.parseInt(page.dataset.pdfPageNumber || "", 10))
+    .filter(pageNumber => Number.isFinite(pageNumber) && pageNumber > 0);
 }
 
 function getTextLayerText(root: HTMLElement, pageNumbers: number[]): string {
-  const pages = pageNumbers.length > 0
-    ? pageNumbers
-      .map((pageNumber) => root.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`))
-      .filter((page): page is HTMLElement => Boolean(page))
-    : Array.from(root.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+  const pages =
+    pageNumbers.length > 0
+      ? pageNumbers
+          .map(pageNumber => root.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`))
+          .filter((page): page is HTMLElement => Boolean(page))
+      : Array.from(root.querySelectorAll<HTMLElement>("[data-pdf-page-number]"));
 
   return pages
-    .map((page) => page.querySelector<HTMLElement>('.textLayer')?.textContent || '')
+    .map(page => page.querySelector<HTMLElement>(".textLayer")?.textContent || "")
     .filter(Boolean)
-    .join('\n');
+    .join("\n");
 }
 
 function getClosestElement(node: Node): Element | null {
@@ -246,7 +253,7 @@ function getClosestElement(node: Node): Element | null {
 
 function renderToolbarIcon(Icon: unknown): ReactNode {
   return createElement(Icon as ComponentType<ToolbarIconProps>, {
-    className: 'h-4 w-4',
+    className: "h-4 w-4",
     strokeWidth: 1.75,
   });
 }
@@ -272,11 +279,11 @@ function ToolbarButton({
       disabled={disabled}
       onClick={onClick}
       className={[
-        'flex h-8 w-8 items-center justify-center rounded-md text-neutral-600 transition-colors',
-        'hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40',
-        'dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50',
-        active ? 'bg-neutral-100 text-neutral-950 dark:bg-neutral-800 dark:text-neutral-50' : '',
-      ].join(' ')}
+        "flex h-8 w-8 items-center justify-center rounded-md text-neutral-600 transition-colors",
+        "hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40",
+        "dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50",
+        active ? "bg-neutral-100 text-neutral-950 dark:bg-neutral-800 dark:text-neutral-50" : "",
+      ].join(" ")}
     >
       {children}
     </button>
@@ -329,8 +336,8 @@ function PdfThumbnail({
     const node = buttonRef.current;
     if (!node || shouldRender) return undefined;
     const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
           setShouldRender(true);
           observer.disconnect();
         }
@@ -346,7 +353,7 @@ function PdfThumbnail({
 
   useEffect(() => {
     if (!active) return;
-    buttonRef.current?.scrollIntoView({ block: 'nearest' });
+    buttonRef.current?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
   useEffect(() => {
@@ -359,10 +366,7 @@ function PdfThumbnail({
         const page = await pdfDocument.getPage(pageNumber);
         if (cancelled || !canvasRef.current) return;
         const baseViewport = page.getViewport({ scale: 1, rotation });
-        const scale = Math.min(
-          THUMBNAIL_MAX_WIDTH / baseViewport.width,
-          THUMBNAIL_MAX_HEIGHT / baseViewport.height,
-        );
+        const scale = Math.min(THUMBNAIL_MAX_WIDTH / baseViewport.width, THUMBNAIL_MAX_HEIGHT / baseViewport.height);
         const viewport = page.getViewport({ scale, rotation });
         const canvas = canvasRef.current;
         const outputScale = Math.max(window.devicePixelRatio || 1, 1);
@@ -378,8 +382,8 @@ function PdfThumbnail({
         await renderTask.promise;
         if (!cancelled) setRenderError(false);
       } catch (error) {
-        const message = error instanceof Error ? error.message.toLowerCase() : '';
-        if (!cancelled && !message.includes('cancelled')) {
+        const message = error instanceof Error ? error.message.toLowerCase() : "";
+        if (!cancelled && !message.includes("cancelled")) {
           setRenderError(true);
         }
       }
@@ -397,17 +401,17 @@ function PdfThumbnail({
       ref={buttonRef}
       type="button"
       data-pdf-thumbnail-page={pageNumber}
-      aria-current={active ? 'page' : undefined}
+      aria-current={active ? "page" : undefined}
       aria-label={label}
       title={label}
       onClick={() => onSelect(pageNumber)}
       className={[
-        'group flex w-full flex-col items-center gap-1.5 rounded-md border px-2 py-2 text-[11px] outline-none transition-colors',
-        'focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-950',
+        "group flex w-full flex-col items-center gap-1.5 rounded-md border px-2 py-2 text-[11px] outline-none transition-colors",
+        "focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-950",
         active
-          ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200'
-          : 'border-transparent text-neutral-500 hover:border-neutral-300 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:bg-neutral-900',
-      ].join(' ')}
+          ? "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200"
+          : "border-transparent text-neutral-500 hover:border-neutral-300 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:bg-neutral-900",
+      ].join(" ")}
     >
       <span className="flex h-[124px] w-full items-center justify-center overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-neutral-200 dark:ring-neutral-700">
         {renderError ? (
@@ -430,8 +434,8 @@ function PdfOutlineTree({
   nested = false,
 }: PdfOutlineTreeProps) {
   return (
-    <ul role={nested ? 'group' : 'tree'} className="space-y-0.5">
-      {items.map((item) => (
+    <ul role={nested ? "group" : "tree"} className="space-y-0.5">
+      {items.map(item => (
         <PdfOutlineTreeItem
           key={item.id}
           item={item}
@@ -463,25 +467,21 @@ function PdfOutlineTreeItem({
   const active = item.pageNumber === currentPage;
 
   return (
-    <li
-      role="treeitem"
-      aria-expanded={hasChildren ? expanded : undefined}
-      aria-current={active ? 'page' : undefined}
-    >
+    <li role="treeitem" aria-expanded={hasChildren ? expanded : undefined} aria-current={active ? "page" : undefined}>
       <div
         className={[
-          'group flex min-h-8 items-start rounded-md text-[12px] transition-colors',
+          "group flex min-h-8 items-start rounded-md text-[12px] transition-colors",
           active
-            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200'
-            : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900',
-        ].join(' ')}
+            ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200"
+            : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900",
+        ].join(" ")}
       >
         {hasChildren ? (
           <button
             type="button"
             title={expanded ? collapseLabel : expandLabel}
             aria-label={expanded ? collapseLabel : expandLabel}
-            onClick={() => setExpanded((value) => !value)}
+            onClick={() => setExpanded(value => !value)}
             className="flex h-8 w-7 shrink-0 items-center justify-center text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200"
           >
             {renderToolbarIcon(expanded ? ChevronDown : ChevronRight)}
@@ -561,8 +561,8 @@ function PdfPage({
     const node = pageRef.current;
     if (!node) return undefined;
     const observer = new IntersectionObserver(
-      (entries) => {
-        const nextVisible = entries.some((entry) => entry.isIntersecting);
+      entries => {
+        const nextVisible = entries.some(entry => entry.isIntersecting);
         setIsIntersectionVisible(nextVisible);
         onPageVisibilityChange(pageNumber, nextVisible);
       },
@@ -584,8 +584,8 @@ function PdfPage({
       if (canvas) {
         canvas.width = 0;
         canvas.height = 0;
-        canvas.style.width = '';
-        canvas.style.height = '';
+        canvas.style.width = "";
+        canvas.style.height = "";
       }
       textLayerRef.current?.replaceChildren();
       textLayerMappingRef.current = null;
@@ -642,16 +642,16 @@ function PdfPage({
             textDivs: textLayer.textDivs,
             textItems,
           };
-          onPageText(pageNumber, textItems.join(' '), textItems);
-          setTextLayerRenderVersion((version) => version + 1);
+          onPageText(pageNumber, textItems.join(" "), textItems);
+          setTextLayerRenderVersion(version => version + 1);
           setHasRendered(true);
           setIsRendering(false);
         }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error);
-          const name = error instanceof Error ? error.name : '';
-          if (name !== 'RenderingCancelledException' && !message.toLowerCase().includes('cancelled')) {
+          const name = error instanceof Error ? error.name : "";
+          if (name !== "RenderingCancelledException" && !message.toLowerCase().includes("cancelled")) {
             setRenderError(message);
           }
           setIsRendering(false);
@@ -682,8 +682,8 @@ function PdfPage({
 
     const frame = window.requestAnimationFrame(() => {
       selectedElement.scrollIntoView({
-        block: 'center',
-        inline: 'center',
+        block: "center",
+        inline: "center",
       });
     });
     return () => window.cancelAnimationFrame(frame);
@@ -692,9 +692,9 @@ function PdfPage({
   const pageStyle = {
     width: pageSize.width,
     height: pageSize.height,
-    '--scale-factor': pageSize.scale,
-    '--user-unit': 1,
-    '--total-scale-factor': pageSize.scale,
+    "--scale-factor": pageSize.scale,
+    "--user-unit": 1,
+    "--total-scale-factor": pageSize.scale,
   } as CSSProperties;
 
   return (
@@ -727,9 +727,9 @@ export default function PdfDocumentPreview({
   fileName,
   filePath,
   source,
-  viewKey = '',
+  viewKey = "",
   loadingOverlay = null,
-  navigationMode = 'none',
+  navigationMode = "none",
   showPageControls = true,
   onRefresh = null,
   refreshDisabled = false,
@@ -738,7 +738,7 @@ export default function PdfDocumentPreview({
   isFullscreen = false,
   onToggleFullscreen = null,
 }: PdfDocumentPreviewProps) {
-  const { t } = useTranslation('codeEditor');
+  const { t } = useTranslation("codeEditor");
   const inputId = useId();
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pageTextRef = useRef(new Map<number, string>());
@@ -759,25 +759,25 @@ export default function PdfDocumentPreview({
   const [selectionAction, setSelectionAction] = useState<PdfSelectionAction | null>(null);
   const [referenceMode, setReferenceMode] = useState<ContentReferenceSelectionMode | null>(null);
   const [forcedRenderPageNumbers, setForcedRenderPageNumbers] = useState<Set<number>>(() => new Set());
-  const [zoomMode, setZoomMode] = useState<ZoomMode>('fitPage');
+  const [zoomMode, setZoomMode] = useState<ZoomMode>("fitPage");
   const [customScale, setCustomScale] = useState(1);
-  const [zoomInput, setZoomInput] = useState('100%');
+  const [zoomInput, setZoomInput] = useState("100%");
   const [zoomInputFocused, setZoomInputFocused] = useState(false);
   const [rotation, setRotation] = useState<Rotation>(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageInput, setPageInput] = useState('1');
+  const [pageInput, setPageInput] = useState("1");
   const [pageInputFocused, setPageInputFocused] = useState(false);
-  const [navigationOpen, setNavigationOpen] = useState(navigationMode !== 'none');
-  const [navigationView, setNavigationView] = useState<NavigationView>('thumbnails');
+  const [navigationOpen, setNavigationOpen] = useState(navigationMode !== "none");
+  const [navigationView, setNavigationView] = useState<NavigationView>("thumbnails");
   const [outlineItems, setOutlineItems] = useState<PdfOutlineItem[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PdfSearchMatch[]>([]);
   const [searchResultIndex, setSearchResultIndex] = useState(-1);
   const [searching, setSearching] = useState(false);
   const [searchCompleted, setSearchCompleted] = useState(false);
   const navigationRef = useRef<HTMLDivElement | null>(null);
-  const fileKey = `${source}:${projectName || ''}:${filePath}:${viewKey}`;
+  const fileKey = `${source}:${projectName || ""}:${filePath}:${viewKey}`;
 
   useEffect(() => {
     viewStateRef.current.currentPage = currentPage;
@@ -817,9 +817,9 @@ export default function PdfDocumentPreview({
     const isSameFile = fileKeyRef.current === fileKey;
     const nextViewState = isSameFile
       ? {
-        ...viewStateRef.current,
-        scrollTop: viewer?.scrollTop ?? viewStateRef.current.scrollTop,
-      }
+          ...viewStateRef.current,
+          scrollTop: viewer?.scrollTop ?? viewStateRef.current.scrollTop,
+        }
       : { ...DEFAULT_VIEW_STATE };
     fileKeyRef.current = fileKey;
     pendingRestoreRef.current = nextViewState;
@@ -838,11 +838,11 @@ export default function PdfDocumentPreview({
     setRotation(nextViewState.rotation);
     setZoomMode(nextViewState.zoomMode);
     setCustomScale(nextViewState.customScale);
-    setNavigationOpen(navigationMode !== 'none');
-    setNavigationView('thumbnails');
+    setNavigationOpen(navigationMode !== "none");
+    setNavigationView("thumbnails");
     setOutlineItems([]);
     setSearchOpen(false);
-    setSearchQuery('');
+    setSearchQuery("");
     setSearchResults([]);
     setSearchResultIndex(-1);
     setSearching(false);
@@ -852,7 +852,7 @@ export default function PdfDocumentPreview({
     const loadPdf = async () => {
       try {
         if (!url && !blob) {
-          throw new Error('PDF source is not available.');
+          throw new Error("PDF source is not available.");
         }
 
         if (url) {
@@ -870,11 +870,7 @@ export default function PdfDocumentPreview({
 
         const nextDocument = await loadingTask.promise;
         if (cancelled) return;
-        const restoredPage = clamp(
-          nextViewState.currentPage,
-          1,
-          Math.max(1, nextDocument.numPages),
-        );
+        const restoredPage = clamp(nextViewState.currentPage, 1, Math.max(1, nextDocument.numPages));
         if (restoredPage !== nextViewState.currentPage) {
           const clampedViewState = {
             ...nextViewState,
@@ -891,14 +887,14 @@ export default function PdfDocumentPreview({
         const viewport = firstPage.getViewport({ scale: 1 });
         setFirstPageSize({ width: viewport.width, height: viewport.height });
         setPdfDocument(nextDocument);
-        if (navigationMode === 'pages') {
+        if (navigationMode === "pages") {
           try {
             const rawOutline = await nextDocument.getOutline();
             const nextOutlineItems = await resolvePdfOutline(nextDocument, rawOutline);
             if (cancelled) return;
             setOutlineItems(nextOutlineItems);
             if (nextOutlineItems.length > 0) {
-              setNavigationView('outline');
+              setNavigationView("outline");
             }
           } catch {
             if (!cancelled) {
@@ -935,11 +931,8 @@ export default function PdfDocumentPreview({
     };
   }, [firstPageSize, rotation, viewerSize.height, viewerSize.width]);
 
-  const activeScale = zoomMode === 'fitWidth'
-    ? fitScales.fitWidth
-    : zoomMode === 'fitPage'
-      ? fitScales.fitPage
-      : customScale;
+  const activeScale =
+    zoomMode === "fitWidth" ? fitScales.fitWidth : zoomMode === "fitPage" ? fitScales.fitPage : customScale;
 
   const zoomPercent = Math.round(activeScale * 100);
 
@@ -958,16 +951,15 @@ export default function PdfDocumentPreview({
   const updateCurrentPageFromScroll = useCallback(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    const visiblePageNumbers = Array.from(new Set([
-      ...visiblePageNumbersRef.current,
-      ...forcedRenderPageNumbersRef.current,
-    ]))
-      .sort((left, right) => left - right);
-    const pages = visiblePageNumbers.length > 0
-      ? visiblePageNumbers
-        .map((pageNumber) => viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`))
-        .filter((page): page is HTMLElement => Boolean(page))
-      : Array.from(viewer.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+    const visiblePageNumbers = Array.from(
+      new Set([...visiblePageNumbersRef.current, ...forcedRenderPageNumbersRef.current]),
+    ).sort((left, right) => left - right);
+    const pages =
+      visiblePageNumbers.length > 0
+        ? visiblePageNumbers
+            .map(pageNumber => viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`))
+            .filter((page): page is HTMLElement => Boolean(page))
+        : Array.from(viewer.querySelectorAll<HTMLElement>("[data-pdf-page-number]"));
     if (pages.length === 0) return;
 
     const viewerRect = viewer.getBoundingClientRect();
@@ -977,16 +969,13 @@ export default function PdfDocumentPreview({
 
     for (const page of pages) {
       const rect = page.getBoundingClientRect();
-      const visibleHeight = Math.max(
-        0,
-        Math.min(rect.bottom, viewerRect.bottom) - Math.max(rect.top, viewerRect.top),
-      );
+      const visibleHeight = Math.max(0, Math.min(rect.bottom, viewerRect.bottom) - Math.max(rect.top, viewerRect.top));
       const topDistance = Math.abs(rect.top - viewerRect.top);
-      const isBetterCandidate = visibleHeight > bestVisibleHeight
-        || (visibleHeight === bestVisibleHeight && topDistance < bestTopDistance);
+      const isBetterCandidate =
+        visibleHeight > bestVisibleHeight || (visibleHeight === bestVisibleHeight && topDistance < bestTopDistance);
       if (!isBetterCandidate) continue;
 
-      const pageNumber = Number.parseInt(page.dataset.pdfPageNumber || '', 10);
+      const pageNumber = Number.parseInt(page.dataset.pdfPageNumber || "", 10);
       if (Number.isFinite(pageNumber) && pageNumber > 0) {
         bestPage = pageNumber;
         bestVisibleHeight = visibleHeight;
@@ -995,7 +984,7 @@ export default function PdfDocumentPreview({
     }
 
     if (bestPage !== null) {
-      setCurrentPage((previousPage) => (previousPage === bestPage ? previousPage : bestPage));
+      setCurrentPage(previousPage => (previousPage === bestPage ? previousPage : bestPage));
     }
   }, []);
 
@@ -1020,11 +1009,11 @@ export default function PdfDocumentPreview({
     const viewportTop = viewerRect.top - 1200;
     const viewportBottom = viewerRect.bottom + 1200;
     const nextPages = new Set<number>();
-    const pages = Array.from(viewer.querySelectorAll<HTMLElement>('[data-pdf-page-number]'));
+    const pages = Array.from(viewer.querySelectorAll<HTMLElement>("[data-pdf-page-number]"));
 
     for (const page of pages) {
       const rect = page.getBoundingClientRect();
-      const pageNumber = Number.parseInt(page.dataset.pdfPageNumber || '', 10);
+      const pageNumber = Number.parseInt(page.dataset.pdfPageNumber || "", 10);
       if (!Number.isFinite(pageNumber) || pageNumber <= 0) continue;
       if (rect.bottom >= viewportTop && rect.top <= viewportBottom) {
         nextPages.add(pageNumber);
@@ -1036,8 +1025,8 @@ export default function PdfDocumentPreview({
     }
 
     forcedRenderPageNumbersRef.current = nextPages;
-    setForcedRenderPageNumbers((previous) => {
-      if (previous.size === nextPages.size && Array.from(previous).every((pageNumber) => nextPages.has(pageNumber))) {
+    setForcedRenderPageNumbers(previous => {
+      if (previous.size === nextPages.size && Array.from(previous).every(pageNumber => nextPages.has(pageNumber))) {
         return previous;
       }
       return nextPages;
@@ -1052,26 +1041,32 @@ export default function PdfDocumentPreview({
     });
   }, [updateForcedRenderPages]);
 
-  useEffect(() => () => {
-    if (scrollRafRef.current !== null) {
-      window.cancelAnimationFrame(scrollRafRef.current);
-      scrollRafRef.current = null;
-    }
-    if (renderFallbackRafRef.current !== null) {
-      window.cancelAnimationFrame(renderFallbackRafRef.current);
-      renderFallbackRafRef.current = null;
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (scrollRafRef.current !== null) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+      if (renderFallbackRafRef.current !== null) {
+        window.cancelAnimationFrame(renderFallbackRafRef.current);
+        renderFallbackRafRef.current = null;
+      }
+    },
+    [],
+  );
 
-  const handlePageVisibilityChange = useCallback((pageNumber: number, visible: boolean) => {
-    if (visible) {
-      visiblePageNumbersRef.current.add(pageNumber);
-    } else {
-      visiblePageNumbersRef.current.delete(pageNumber);
-    }
-    scheduleForcedRenderUpdate();
-    scheduleCurrentPageUpdate();
-  }, [scheduleCurrentPageUpdate, scheduleForcedRenderUpdate]);
+  const handlePageVisibilityChange = useCallback(
+    (pageNumber: number, visible: boolean) => {
+      if (visible) {
+        visiblePageNumbersRef.current.add(pageNumber);
+      } else {
+        visiblePageNumbersRef.current.delete(pageNumber);
+      }
+      scheduleForcedRenderUpdate();
+      scheduleCurrentPageUpdate();
+    },
+    [scheduleCurrentPageUpdate, scheduleForcedRenderUpdate],
+  );
 
   const handlePageText = useCallback((pageNumber: number, text: string, textItems: string[]) => {
     pageTextRef.current.set(pageNumber, text);
@@ -1092,18 +1087,21 @@ export default function PdfDocumentPreview({
     setCurrentPage(pageNumber);
   }, []);
 
-  const goToSearchResult = useCallback((index: number, results = searchResults) => {
-    if (results.length === 0) {
-      setSearchResultIndex(-1);
-      return;
-    }
-    const nextIndex = (index + results.length) % results.length;
-    const pageNumber = results[nextIndex].pageNumber;
-    forcedRenderPageNumbersRef.current.add(pageNumber);
-    setForcedRenderPageNumbers(new Set(forcedRenderPageNumbersRef.current));
-    setSearchResultIndex(nextIndex);
-    jumpToPage(pageNumber);
-  }, [jumpToPage, searchResults]);
+  const goToSearchResult = useCallback(
+    (index: number, results = searchResults) => {
+      if (results.length === 0) {
+        setSearchResultIndex(-1);
+        return;
+      }
+      const nextIndex = (index + results.length) % results.length;
+      const pageNumber = results[nextIndex].pageNumber;
+      forcedRenderPageNumbersRef.current.add(pageNumber);
+      setForcedRenderPageNumbers(new Set(forcedRenderPageNumbersRef.current));
+      setSearchResultIndex(nextIndex);
+      jumpToPage(pageNumber);
+    },
+    [jumpToPage, searchResults],
+  );
 
   const runSearch = useCallback(async () => {
     const document = pdfDocument;
@@ -1129,11 +1127,9 @@ export default function PdfDocumentPreview({
         if (textItems === undefined) {
           const page = await document.getPage(pageNumber);
           const textContent = await page.getTextContent();
-          textItems = textContent.items
-            .map((item) => ('str' in item ? item.str : ''))
-            .filter(Boolean);
+          textItems = textContent.items.map(item => ("str" in item ? item.str : "")).filter(Boolean);
           pageTextItemsRef.current.set(pageNumber, textItems);
-          pageTextRef.current.set(pageNumber, textItems.join(' '));
+          pageTextRef.current.set(pageNumber, textItems.join(" "));
         }
         nextResults.push(...findPdfSearchMatches(textItems, query, pageNumber));
       }
@@ -1156,7 +1152,7 @@ export default function PdfDocumentPreview({
   const closeSearch = useCallback(() => {
     searchRequestIdRef.current += 1;
     setSearchOpen(false);
-    setSearchQuery('');
+    setSearchQuery("");
     setSearchResults([]);
     setSearchResultIndex(-1);
     setSearching(false);
@@ -1181,14 +1177,14 @@ export default function PdfDocumentPreview({
       return;
     }
     setCustomScale(parsed);
-    setZoomMode('custom');
+    setZoomMode("custom");
     setZoomInput(`${Math.round(parsed * 100)}%`);
   }, [zoomInput, zoomPercent]);
 
   const setCustomZoomFromScale = useCallback((nextScale: number) => {
     const next = clamp(nextScale, MIN_SCALE, MAX_SCALE);
     setCustomScale(next);
-    setZoomMode('custom');
+    setZoomMode("custom");
     setZoomInput(`${Math.round(next * 100)}%`);
   }, []);
 
@@ -1209,7 +1205,7 @@ export default function PdfDocumentPreview({
 
     const anchorElement = getClosestElement(anchorNode);
     const focusElement = getClosestElement(focusNode);
-    if (!anchorElement?.closest('.textLayer') || !focusElement?.closest('.textLayer')) {
+    if (!anchorElement?.closest(".textLayer") || !focusElement?.closest(".textLayer")) {
       setSelectionAction(null);
       return;
     }
@@ -1224,31 +1220,29 @@ export default function PdfDocumentPreview({
     const rect = range.getBoundingClientRect();
     const viewerRect = viewer.getBoundingClientRect();
     const pageNumbers = getSelectedPageNumbers(viewer, range);
-    const sortedPageTexts = Array.from(pageTextRef.current.entries())
-      .sort(([left], [right]) => left - right);
-    const cachedDocumentText = sortedPageTexts.map(([, text]) => text).join('\n');
-    const cachedPageText = pageNumbers.length > 0
-      ? pageNumbers.map((pageNumber) => pageTextRef.current.get(pageNumber) || '').join('\n')
-      : cachedDocumentText;
+    const sortedPageTexts = Array.from(pageTextRef.current.entries()).sort(([left], [right]) => left - right);
+    const cachedDocumentText = sortedPageTexts.map(([, text]) => text).join("\n");
+    const cachedPageText =
+      pageNumbers.length > 0
+        ? pageNumbers.map(pageNumber => pageTextRef.current.get(pageNumber) || "").join("\n")
+        : cachedDocumentText;
     const domPageText = getTextLayerText(viewer, pageNumbers);
     const contextText = domPageText || cachedPageText || cachedDocumentText || selectedText;
     const surroundingText = buildSurroundingText(contextText, selectedText);
     const occurrenceIndex = getOccurrenceIndex(cachedDocumentText || contextText, selectedText);
     const firstPage = pageNumbers[0];
-    const pageElement = firstPage
-      ? viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${firstPage}"]`)
-      : null;
+    const pageElement = firstPage ? viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${firstPage}"]`) : null;
     const pageRect = pageElement?.getBoundingClientRect();
     const normalizedRect = pageRect
       ? {
-        x: (rect.left - pageRect.left) / Math.max(1, pageRect.width),
-        y: (rect.top - pageRect.top) / Math.max(1, pageRect.height),
-        width: rect.width / Math.max(1, pageRect.width),
-        height: rect.height / Math.max(1, pageRect.height),
-      }
+          x: (rect.left - pageRect.left) / Math.max(1, pageRect.width),
+          y: (rect.top - pageRect.top) / Math.max(1, pageRect.height),
+          width: rect.width / Math.max(1, pageRect.width),
+          height: rect.height / Math.max(1, pageRect.height),
+        }
       : null;
     const reference = createTextContentReference({
-      selectionMode: 'text',
+      selectionMode: "text",
       source: {
         projectName,
         relativePath: filePath,
@@ -1257,11 +1251,11 @@ export default function PdfDocumentPreview({
       },
       renderer: {
         id: source,
-        backend: source === 'office-pdf' ? 'libreoffice' : 'builtin',
-        locatorQuality: source === 'office-pdf' ? 'approximate' : 'semantic',
+        backend: source === "office-pdf" ? "libreoffice" : "builtin",
+        locatorQuality: source === "office-pdf" ? "approximate" : "semantic",
       },
       locator: {
-        surface: 'page',
+        surface: "page",
         pageNumbers,
         quote: { exact: selectedText },
         occurrenceIndex,
@@ -1271,7 +1265,10 @@ export default function PdfDocumentPreview({
       surroundingText,
     });
 
-    const left = Math.max(12, Math.min(viewer.clientWidth - 190, rect.left - viewerRect.left + viewer.scrollLeft + rect.width / 2 - 80));
+    const left = Math.max(
+      12,
+      Math.min(viewer.clientWidth - 190, rect.left - viewerRect.left + viewer.scrollLeft + rect.width / 2 - 80),
+    );
     const top = Math.max(12, rect.top - viewerRect.top + viewer.scrollTop - 42);
     setSelectionAction({ top, left, reference });
   }, [blob, fileName, filePath, projectName, source]);
@@ -1304,26 +1301,34 @@ export default function PdfDocumentPreview({
       scheduleCurrentPageUpdate();
     };
 
-    document.addEventListener('selectionchange', handleSelectionChange);
-    document.addEventListener('mouseup', scheduleSelectionAction);
-    document.addEventListener('touchend', scheduleSelectionAction);
-    document.addEventListener('keyup', scheduleSelectionAction);
+    document.addEventListener("selectionchange", handleSelectionChange);
+    document.addEventListener("mouseup", scheduleSelectionAction);
+    document.addEventListener("touchend", scheduleSelectionAction);
+    document.addEventListener("keyup", scheduleSelectionAction);
     const viewer = viewerRef.current;
-    viewer?.addEventListener('scroll', handleScroll, { passive: true });
+    viewer?.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       cancelScheduledSelectionAction();
-      document.removeEventListener('selectionchange', handleSelectionChange);
-      document.removeEventListener('mouseup', scheduleSelectionAction);
-      document.removeEventListener('touchend', scheduleSelectionAction);
-      document.removeEventListener('keyup', scheduleSelectionAction);
-      viewer?.removeEventListener('scroll', handleScroll);
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      document.removeEventListener("mouseup", scheduleSelectionAction);
+      document.removeEventListener("touchend", scheduleSelectionAction);
+      document.removeEventListener("keyup", scheduleSelectionAction);
+      viewer?.removeEventListener("scroll", handleScroll);
     };
   }, [cancelScheduledSelectionAction, scheduleCurrentPageUpdate, scheduleForcedRenderUpdate, scheduleSelectionAction]);
 
   useEffect(() => {
     scheduleForcedRenderUpdate();
     scheduleCurrentPageUpdate();
-  }, [activeScale, rotation, pdfDocument, scheduleCurrentPageUpdate, scheduleForcedRenderUpdate, viewerSize.height, viewerSize.width]);
+  }, [
+    activeScale,
+    rotation,
+    pdfDocument,
+    scheduleCurrentPageUpdate,
+    scheduleForcedRenderUpdate,
+    viewerSize.height,
+    viewerSize.width,
+  ]);
 
   useEffect(() => {
     if (!pdfDocument || !firstPageSize) return undefined;
@@ -1341,7 +1346,7 @@ export default function PdfDocumentPreview({
           viewer.scrollTop = restoreState.scrollTop;
         } else if (restoreState.currentPage > 1) {
           const target = viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${restoreState.currentPage}"]`);
-          target?.scrollIntoView({ block: 'start' });
+          target?.scrollIntoView({ block: "start" });
         } else {
           viewer.scrollTop = 0;
         }
@@ -1359,29 +1364,27 @@ export default function PdfDocumentPreview({
 
   const handleAddReference = () => {
     if (!selectionAction) return;
-    window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', {
-      detail: selectionAction.reference,
-    }));
+    window.dispatchEvent(
+      new CustomEvent("sati:add-chat-reference", {
+        detail: selectionAction.reference,
+      }),
+    );
     window.getSelection()?.removeAllRanges();
     setSelectionAction(null);
   };
 
   const referenceCapabilities: ReferenceCapabilities = {
-    text: pdfDocument && firstPageSize
-      ? { state: 'available' }
-      : { state: 'loading', reason: 'SURFACE_NOT_READY' },
-    cells: { state: 'unavailable', reason: 'NO_CELL_MODEL' },
-    region: pdfDocument && firstPageSize
-      ? { state: 'available' }
-      : { state: 'loading', reason: 'SURFACE_NOT_READY' },
-    recommendedMode: 'text',
+    text: pdfDocument && firstPageSize ? { state: "available" } : { state: "loading", reason: "SURFACE_NOT_READY" },
+    cells: { state: "unavailable", reason: "NO_CELL_MODEL" },
+    region: pdfDocument && firstPageSize ? { state: "available" } : { state: "loading", reason: "SURFACE_NOT_READY" },
+    recommendedMode: "text",
   };
 
   const handleReferenceMode = (mode: ContentReferenceSelectionMode) => {
-    if (mode === 'region') {
+    if (mode === "region") {
       window.getSelection()?.removeAllRanges();
       setSelectionAction(null);
-      setReferenceMode('region');
+      setReferenceMode("region");
       return;
     }
     setReferenceMode(null);
@@ -1391,7 +1394,7 @@ export default function PdfDocumentPreview({
     const surfaceNumber = capture.pageNumber || currentPage;
     const imageName = `reference-${fileName}-page-${surfaceNumber}-${Date.now()}.png`;
     const reference = createImageRegionContentReference({
-      selectionMode: 'region',
+      selectionMode: "region",
       source: {
         projectName,
         relativePath: filePath,
@@ -1400,39 +1403,37 @@ export default function PdfDocumentPreview({
       },
       renderer: {
         id: source,
-        backend: source === 'office-pdf' ? 'libreoffice' : 'builtin',
-        locatorQuality: 'visual',
+        backend: source === "office-pdf" ? "libreoffice" : "builtin",
+        locatorQuality: "visual",
       },
       locator: {
-        surface: 'page',
+        surface: "page",
         pageNumber: surfaceNumber,
         rect: capture.rect,
       },
       image: {
         name: imageName,
-        mimeType: 'image/png',
+        mimeType: "image/png",
         width: capture.width,
         height: capture.height,
         dataUrl: capture.dataUrl,
       },
       nearbyText: capture.nearbyText,
     });
-    window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', { detail: reference }));
+    window.dispatchEvent(new CustomEvent("sati:add-chat-reference", { detail: reference }));
     setReferenceMode(null);
   };
 
   const searchMatchesByPage = useMemo(() => {
     const matchesByPage = new Map<number, PdfSearchMatch[]>();
-    searchResults.forEach((match) => {
+    searchResults.forEach(match => {
       const pageMatches = matchesByPage.get(match.pageNumber) || [];
       pageMatches.push(match);
       matchesByPage.set(match.pageNumber, pageMatches);
     });
     return matchesByPage;
   }, [searchResults]);
-  const selectedSearchMatchId = searchResultIndex >= 0
-    ? searchResults[searchResultIndex]?.id || null
-    : null;
+  const selectedSearchMatchId = searchResultIndex >= 0 ? searchResults[searchResultIndex]?.id || null : null;
 
   if (errorMessage) {
     return (
@@ -1445,46 +1446,39 @@ export default function PdfDocumentPreview({
   const totalPages = pdfDocument?.numPages || 0;
   const canZoomOut = activeScale > MIN_SCALE;
   const canZoomIn = activeScale < MAX_SCALE;
-  const readyDocument = pdfDocument && firstPageSize
-    ? { pdfDocument, firstPageSize }
-    : null;
+  const readyDocument = pdfDocument && firstPageSize ? { pdfDocument, firstPageSize } : null;
   const isLoaded = Boolean(readyDocument);
   const zoomInputId = `${inputId}-pdf-zoom`;
   const pageInputId = `${inputId}-pdf-page`;
   const searchInputId = `${inputId}-pdf-search`;
-  const navigationLabel = navigationMode === 'slides'
-    ? t('pdfToolbar.slides')
-    : t('pdfToolbar.pages');
-  const hasOutline = navigationMode === 'pages' && outlineItems.length > 0;
-  const currentLocationLabel = navigationMode === 'slides'
-    ? t('pdfToolbar.slideNumber')
-    : t('pdfToolbar.pageNumber');
-  const goToLocationLabel = navigationMode === 'slides'
-    ? t('pdfToolbar.goToSlide')
-    : t('pdfToolbar.goToPage');
-  const locationOfLabel = navigationMode === 'slides'
-    ? t('pdfToolbar.slideOf', { total: totalPages || '-' })
-    : t('pdfToolbar.pageOf', { total: totalPages || '-' });
+  const navigationLabel = navigationMode === "slides" ? t("pdfToolbar.slides") : t("pdfToolbar.pages");
+  const hasOutline = navigationMode === "pages" && outlineItems.length > 0;
+  const currentLocationLabel = navigationMode === "slides" ? t("pdfToolbar.slideNumber") : t("pdfToolbar.pageNumber");
+  const goToLocationLabel = navigationMode === "slides" ? t("pdfToolbar.goToSlide") : t("pdfToolbar.goToPage");
+  const locationOfLabel =
+    navigationMode === "slides"
+      ? t("pdfToolbar.slideOf", { total: totalPages || "-" })
+      : t("pdfToolbar.pageOf", { total: totalPages || "-" });
   const searchStatus = searching
-    ? t('pdfToolbar.searching')
+    ? t("pdfToolbar.searching")
     : searchCompleted
       ? searchResults.length > 0
-        ? t('pdfToolbar.resultOf', {
-          current: searchResultIndex + 1,
-          total: searchResults.length,
-        })
-        : t('pdfToolbar.noResults')
-      : '';
+        ? t("pdfToolbar.resultOf", {
+            current: searchResultIndex + 1,
+            total: searchResults.length,
+          })
+        : t("pdfToolbar.noResults")
+      : "";
   return (
     <div className="flex h-full w-full flex-col bg-neutral-100 dark:bg-neutral-900">
       <div className="scrollbar-hide flex min-h-11 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-neutral-200 bg-white px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-950">
-        {navigationMode !== 'none' ? (
+        {navigationMode !== "none" ? (
           <>
             <ToolbarButton
-              title={navigationOpen ? t('pdfToolbar.hideNavigation') : t('pdfToolbar.showNavigation')}
+              title={navigationOpen ? t("pdfToolbar.hideNavigation") : t("pdfToolbar.showNavigation")}
               active={navigationOpen}
               disabled={!isLoaded}
-              onClick={() => setNavigationOpen((open) => !open)}
+              onClick={() => setNavigationOpen(open => !open)}
             >
               {renderToolbarIcon(PanelLeft)}
             </ToolbarButton>
@@ -1493,34 +1487,34 @@ export default function PdfDocumentPreview({
         ) : null}
         <div className="flex shrink-0 items-center gap-1">
           <ToolbarButton
-            title={t('pdfToolbar.zoomOut')}
+            title={t("pdfToolbar.zoomOut")}
             disabled={!isLoaded || !canZoomOut}
             onClick={() => setCustomZoomFromScale(activeScale - ZOOM_STEP)}
           >
             {renderToolbarIcon(ZoomOut)}
           </ToolbarButton>
           <label className="sr-only" htmlFor={zoomInputId}>
-            {t('pdfToolbar.zoomPercent')}
+            {t("pdfToolbar.zoomPercent")}
           </label>
           <input
             id={zoomInputId}
             value={zoomInput}
             disabled={!isLoaded}
             inputMode="numeric"
-            aria-label={t('pdfToolbar.zoomPercent')}
-            onFocus={(event) => {
+            aria-label={t("pdfToolbar.zoomPercent")}
+            onFocus={event => {
               setZoomInputFocused(true);
               event.currentTarget.select();
             }}
-            onChange={(event) => setZoomInput(event.target.value)}
+            onChange={event => setZoomInput(event.target.value)}
             onBlur={() => {
               commitZoomInput();
               setZoomInputFocused(false);
             }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
+            onKeyDown={event => {
+              if (event.key === "Enter") {
                 event.currentTarget.blur();
-              } else if (event.key === 'Escape') {
+              } else if (event.key === "Escape") {
                 setZoomInput(`${zoomPercent}%`);
                 event.currentTarget.blur();
               }
@@ -1528,7 +1522,7 @@ export default function PdfDocumentPreview({
             className="h-8 w-16 rounded-md border border-neutral-200 bg-white px-2 text-center text-[12px] text-neutral-800 outline-none transition focus:border-neutral-400 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-600"
           />
           <ToolbarButton
-            title={t('pdfToolbar.zoomIn')}
+            title={t("pdfToolbar.zoomIn")}
             disabled={!isLoaded || !canZoomIn}
             onClick={() => setCustomZoomFromScale(activeScale + ZOOM_STEP)}
           >
@@ -1536,34 +1530,34 @@ export default function PdfDocumentPreview({
           </ToolbarButton>
           <ToolbarSeparator />
           <ToolbarButton
-            title={t('pdfToolbar.fitWidth')}
-            active={zoomMode === 'fitWidth'}
+            title={t("pdfToolbar.fitWidth")}
+            active={zoomMode === "fitWidth"}
             disabled={!isLoaded}
-            onClick={() => setZoomMode('fitWidth')}
+            onClick={() => setZoomMode("fitWidth")}
           >
             {renderToolbarIcon(StretchHorizontal)}
           </ToolbarButton>
           <ToolbarButton
-            title={t('pdfToolbar.fitPage')}
-            active={zoomMode === 'fitPage'}
+            title={t("pdfToolbar.fitPage")}
+            active={zoomMode === "fitPage"}
             disabled={!isLoaded}
-            onClick={() => setZoomMode('fitPage')}
+            onClick={() => setZoomMode("fitPage")}
           >
             {renderToolbarIcon(Maximize2)}
           </ToolbarButton>
-          {source === 'pdf' ? (
+          {source === "pdf" ? (
             <>
               <ToolbarButton
-                title={t('pdfToolbar.rotateCounterClockwise')}
+                title={t("pdfToolbar.rotateCounterClockwise")}
                 disabled={!isLoaded}
-                onClick={() => setRotation((value) => ((value + 270) % 360) as Rotation)}
+                onClick={() => setRotation(value => ((value + 270) % 360) as Rotation)}
               >
                 {renderToolbarIcon(RotateCcw)}
               </ToolbarButton>
               <ToolbarButton
-                title={t('pdfToolbar.rotateClockwise')}
+                title={t("pdfToolbar.rotateClockwise")}
                 disabled={!isLoaded}
-                onClick={() => setRotation((value) => ((value + 90) % 360) as Rotation)}
+                onClick={() => setRotation(value => ((value + 90) % 360) as Rotation)}
               >
                 {renderToolbarIcon(RotateCw)}
               </ToolbarButton>
@@ -1583,19 +1577,19 @@ export default function PdfDocumentPreview({
                 disabled={!isLoaded}
                 inputMode="numeric"
                 aria-label={goToLocationLabel}
-                onFocus={(event) => {
+                onFocus={event => {
                   setPageInputFocused(true);
                   event.currentTarget.select();
                 }}
-                onChange={(event) => setPageInput(event.target.value)}
+                onChange={event => setPageInput(event.target.value)}
                 onBlur={() => {
                   commitPageInput();
                   setPageInputFocused(false);
                 }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
+                onKeyDown={event => {
+                  if (event.key === "Enter") {
                     event.currentTarget.blur();
-                  } else if (event.key === 'Escape') {
+                  } else if (event.key === "Escape") {
                     setPageInput(String(currentPage));
                     event.currentTarget.blur();
                   }
@@ -1608,7 +1602,7 @@ export default function PdfDocumentPreview({
         ) : null}
         <ToolbarSeparator />
         <ToolbarButton
-          title={t('pdfToolbar.search')}
+          title={t("pdfToolbar.search")}
           active={searchOpen}
           disabled={!isLoaded}
           onClick={() => {
@@ -1625,15 +1619,18 @@ export default function PdfDocumentPreview({
           {renderToolbarIcon(Search)}
         </ToolbarButton>
         {searchOpen ? (
-          <div role="search" className="flex shrink-0 items-center gap-1 rounded-md border border-neutral-200 bg-white p-0.5 dark:border-neutral-800 dark:bg-neutral-950">
+          <div
+            role="search"
+            className="flex shrink-0 items-center gap-1 rounded-md border border-neutral-200 bg-white p-0.5 dark:border-neutral-800 dark:bg-neutral-950"
+          >
             <label className="sr-only" htmlFor={searchInputId}>
-              {t('pdfToolbar.search')}
+              {t("pdfToolbar.search")}
             </label>
             <input
               id={searchInputId}
               value={searchQuery}
-              placeholder={t('pdfToolbar.searchPlaceholder')}
-              onChange={(event) => {
+              placeholder={t("pdfToolbar.searchPlaceholder")}
+              onChange={event => {
                 // Changing the query invalidates any in-flight search immediately.
                 // Otherwise a slow search for the previous query can repopulate
                 // stale results before the user submits the new value.
@@ -1644,11 +1641,11 @@ export default function PdfDocumentPreview({
                 setSearching(false);
                 setSearchCompleted(false);
               }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
+              onKeyDown={event => {
+                if (event.key === "Enter") {
                   event.preventDefault();
                   void runSearch();
-                } else if (event.key === 'Escape') {
+                } else if (event.key === "Escape") {
                   closeSearch();
                 }
               }}
@@ -1658,20 +1655,20 @@ export default function PdfDocumentPreview({
               {searchStatus}
             </span>
             <ToolbarButton
-              title={t('pdfToolbar.previousResult')}
+              title={t("pdfToolbar.previousResult")}
               disabled={searchResults.length === 0}
               onClick={() => goToSearchResult(searchResultIndex - 1)}
             >
               {renderToolbarIcon(ChevronLeft)}
             </ToolbarButton>
             <ToolbarButton
-              title={t('pdfToolbar.nextResult')}
+              title={t("pdfToolbar.nextResult")}
               disabled={searchResults.length === 0}
               onClick={() => goToSearchResult(searchResultIndex + 1)}
             >
               {renderToolbarIcon(ChevronRight)}
             </ToolbarButton>
-            <ToolbarButton title={t('pdfToolbar.closeSearch')} onClick={closeSearch}>
+            <ToolbarButton title={t("pdfToolbar.closeSearch")} onClick={closeSearch}>
               {renderToolbarIcon(X)}
             </ToolbarButton>
           </div>
@@ -1684,123 +1681,119 @@ export default function PdfDocumentPreview({
           onCancelMode={() => setReferenceMode(null)}
           compact
         />
-        {(onRefresh || onToggleFullscreen || downloadUrl) ? <ToolbarSeparator /> : null}
+        {onRefresh || onToggleFullscreen || downloadUrl ? <ToolbarSeparator /> : null}
         {onRefresh ? (
-          <ToolbarButton
-            title={t('pdfToolbar.refresh')}
-            disabled={refreshDisabled}
-            onClick={onRefresh}
-          >
-            <span className={refreshDisabled ? 'animate-spin' : ''}>
-              {renderToolbarIcon(RefreshCw)}
-            </span>
+          <ToolbarButton title={t("pdfToolbar.refresh")} disabled={refreshDisabled} onClick={onRefresh}>
+            <span className={refreshDisabled ? "animate-spin" : ""}>{renderToolbarIcon(RefreshCw)}</span>
           </ToolbarButton>
         ) : null}
         {onToggleFullscreen ? (
           <ToolbarButton
-            title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
+            title={isFullscreen ? t("actions.exitFullscreen") : t("actions.fullscreen")}
             onClick={onToggleFullscreen}
           >
             {renderToolbarIcon(isFullscreen ? Minimize : Maximize)}
           </ToolbarButton>
         ) : null}
         {downloadUrl ? (
-          <ToolbarLink
-            title={t('actions.download')}
-            href={downloadUrl}
-            download={downloadName}
-          >
+          <ToolbarLink title={t("actions.download")} href={downloadUrl} download={downloadName}>
             {renderToolbarIcon(Download)}
           </ToolbarLink>
         ) : null}
       </div>
       <div className="flex min-h-0 flex-1">
-        {navigationMode !== 'none' && navigationOpen ? (
-          <aside className={[
-            'flex shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950',
-            hasOutline ? 'w-64' : 'w-40',
-          ].join(' ')}>
+        {navigationMode !== "none" && navigationOpen ? (
+          <aside
+            className={[
+              "flex shrink-0 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950",
+              hasOutline ? "w-64" : "w-40",
+            ].join(" ")}
+          >
             <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-neutral-200 px-2 text-[11px] font-medium text-neutral-600 dark:border-neutral-800 dark:text-neutral-300">
               {hasOutline ? (
                 <div className="flex items-center rounded-md bg-neutral-100 p-0.5 dark:bg-neutral-900">
                   <button
                     type="button"
-                    aria-pressed={navigationView === 'thumbnails'}
-                    title={t('pdfToolbar.pages')}
-                    onClick={() => setNavigationView('thumbnails')}
+                    aria-pressed={navigationView === "thumbnails"}
+                    title={t("pdfToolbar.pages")}
+                    onClick={() => setNavigationView("thumbnails")}
                     className={[
-                      'flex h-7 items-center gap-1.5 rounded px-2 transition-colors',
-                      navigationView === 'thumbnails'
-                        ? 'bg-white text-neutral-950 shadow-sm dark:bg-neutral-800 dark:text-neutral-50'
-                        : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100',
-                    ].join(' ')}
+                      "flex h-7 items-center gap-1.5 rounded px-2 transition-colors",
+                      navigationView === "thumbnails"
+                        ? "bg-white text-neutral-950 shadow-sm dark:bg-neutral-800 dark:text-neutral-50"
+                        : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100",
+                    ].join(" ")}
                   >
                     {renderToolbarIcon(Files)}
-                    <span>{t('pdfToolbar.pages')}</span>
+                    <span>{t("pdfToolbar.pages")}</span>
                   </button>
                   <button
                     type="button"
-                    aria-pressed={navigationView === 'outline'}
-                    title={t('pdfToolbar.outline')}
-                    onClick={() => setNavigationView('outline')}
+                    aria-pressed={navigationView === "outline"}
+                    title={t("pdfToolbar.outline")}
+                    onClick={() => setNavigationView("outline")}
                     className={[
-                      'flex h-7 items-center gap-1.5 rounded px-2 transition-colors',
-                      navigationView === 'outline'
-                        ? 'bg-white text-neutral-950 shadow-sm dark:bg-neutral-800 dark:text-neutral-50'
-                        : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100',
-                    ].join(' ')}
+                      "flex h-7 items-center gap-1.5 rounded px-2 transition-colors",
+                      navigationView === "outline"
+                        ? "bg-white text-neutral-950 shadow-sm dark:bg-neutral-800 dark:text-neutral-50"
+                        : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100",
+                    ].join(" ")}
                   >
                     {renderToolbarIcon(ListTree)}
-                    <span>{t('pdfToolbar.outline')}</span>
+                    <span>{t("pdfToolbar.outline")}</span>
                   </button>
                 </div>
               ) : (
                 <span>{navigationLabel}</span>
               )}
-              <span className="tabular-nums text-neutral-400 dark:text-neutral-500">{totalPages || '-'}</span>
+              <span className="tabular-nums text-neutral-400 dark:text-neutral-500">{totalPages || "-"}</span>
             </div>
             <div
               ref={navigationRef}
               role="navigation"
-              aria-label={navigationView === 'outline' ? t('pdfToolbar.outline') : navigationLabel}
+              aria-label={navigationView === "outline" ? t("pdfToolbar.outline") : navigationLabel}
               className={[
-                'scrollbar-thin min-h-0 flex-1 overflow-y-auto p-2',
-                navigationView === 'thumbnails' ? 'space-y-2' : '',
-              ].join(' ')}
+                "scrollbar-thin min-h-0 flex-1 overflow-y-auto p-2",
+                navigationView === "thumbnails" ? "space-y-2" : "",
+              ].join(" ")}
             >
-              {readyDocument && navigationView === 'outline' && hasOutline ? (
+              {readyDocument && navigationView === "outline" && hasOutline ? (
                 <PdfOutlineTree
                   items={outlineItems}
                   currentPage={currentPage}
                   onSelect={jumpToPage}
-                  expandLabel={t('pdfToolbar.expandOutline')}
-                  collapseLabel={t('pdfToolbar.collapseOutline')}
+                  expandLabel={t("pdfToolbar.expandOutline")}
+                  collapseLabel={t("pdfToolbar.collapseOutline")}
                 />
               ) : null}
-              {readyDocument && navigationView === 'thumbnails'
+              {readyDocument && navigationView === "thumbnails"
                 ? Array.from({ length: readyDocument.pdfDocument.numPages }, (_, index) => {
-                  const pageNumber = index + 1;
-                  const thumbnailLabel = navigationMode === 'slides'
-                    ? t('pdfToolbar.slideLabel', { number: pageNumber })
-                    : t('pdfToolbar.pageLabel', { number: pageNumber });
-                  return (
-                    <PdfThumbnail
-                      key={`${filePath}-thumbnail-${pageNumber}`}
-                      pdfDocument={readyDocument.pdfDocument}
-                      pageNumber={pageNumber}
-                      rotation={rotation}
-                      active={currentPage === pageNumber}
-                      navigationRootRef={navigationRef}
-                      label={thumbnailLabel}
-                      onSelect={jumpToPage}
-                    />
-                  );
-                })
+                    const pageNumber = index + 1;
+                    const thumbnailLabel =
+                      navigationMode === "slides"
+                        ? t("pdfToolbar.slideLabel", { number: pageNumber })
+                        : t("pdfToolbar.pageLabel", { number: pageNumber });
+                    return (
+                      <PdfThumbnail
+                        key={`${filePath}-thumbnail-${pageNumber}`}
+                        pdfDocument={readyDocument.pdfDocument}
+                        pageNumber={pageNumber}
+                        rotation={rotation}
+                        active={currentPage === pageNumber}
+                        navigationRootRef={navigationRef}
+                        label={thumbnailLabel}
+                        onSelect={jumpToPage}
+                      />
+                    );
+                  })
                 : null}
             </div>
           </aside>
         ) : null}
-        <div ref={viewerRef} className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-neutral-100 dark:bg-neutral-900">
+        <div
+          ref={viewerRef}
+          className="relative min-h-0 min-w-0 flex-1 overflow-auto bg-neutral-100 dark:bg-neutral-900"
+        >
           {!readyDocument ? (
             <div className="flex h-full w-full flex-col items-center justify-center gap-3">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600 dark:border-neutral-600 dark:border-t-neutral-300" />
@@ -1835,24 +1828,24 @@ export default function PdfDocumentPreview({
           {selectionAction ? (
             <button
               type="button"
-              onMouseDown={(event) => event.preventDefault()}
+              onMouseDown={event => event.preventDefault()}
               onClick={handleAddReference}
               className={`absolute z-20 ${floatingSelectionSingleActionClassName}`}
               style={{ top: selectionAction.top, left: selectionAction.left }}
             >
-              {t('selection.chatInPilotDeck')}
+              {t("selection.chatInSati")}
             </button>
           ) : null}
           <RegionSelectionOverlay
-            active={referenceMode === 'region'}
+            active={referenceMode === "region"}
             hostRef={viewerRef}
-            resolveTarget={(element) => {
-              const page = element?.closest<HTMLElement>('[data-pdf-page-number]');
+            resolveTarget={element => {
+              const page = element?.closest<HTMLElement>("[data-pdf-page-number]");
               if (!page || !viewerRef.current?.contains(page)) return null;
               const pageNumber = Number(page.dataset.pdfPageNumber || currentPage);
               return {
                 element: page,
-                surface: 'page',
+                surface: "page",
                 pageNumber,
                 nearbyText: pageTextRef.current.get(pageNumber),
               };

@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { buildBrowserUseArgs } from "../../src/cli/createLocalGateway.js";
 
 test("browser-use args do not inherit generic proxy env by default", () => {
@@ -19,7 +18,7 @@ test("browser-use args do not inherit generic proxy env by default", () => {
 
 test("browser-use args use explicit browser proxy server", () => {
   const args = buildBrowserUseArgs([], "/tmp/pd-browser", {
-    PILOTDECK_BROWSER_PROXY_SERVER: "http://127.0.0.1:7890",
+    SATI_BROWSER_PROXY_SERVER: "http://127.0.0.1:7890",
     NO_PROXY: "example.test",
   });
 
@@ -29,17 +28,22 @@ test("browser-use args use explicit browser proxy server", () => {
   ]);
   assert.deepEqual(args.slice(args.indexOf("--proxy-bypass"), args.indexOf("--proxy-bypass") + 2), [
     "--proxy-bypass",
-    "example.test,localhost,127.0.0.1,host.docker.internal",
+    "example.test,localhost,127.0.0.1",
   ]);
 });
 
 test("browser-use args only inherit generic proxy env when opted in", () => {
-  const args = buildBrowserUseArgs([], "/tmp/pd-browser", {
-    PILOTDECK_BROWSER_PROXY_FROM_ENV: "1",
-    HTTPS_PROXY: "http://proxy.example.test:8080",
-  }, {
-    url: "http://config-proxy.example.test:7890",
-  });
+  const args = buildBrowserUseArgs(
+    [],
+    "/tmp/pd-browser",
+    {
+      SATI_BROWSER_PROXY_FROM_ENV: "1",
+      HTTPS_PROXY: "http://proxy.example.test:8080",
+    },
+    {
+      url: "http://config-proxy.example.test:7890",
+    },
+  );
 
   assert.deepEqual(args.slice(args.indexOf("--proxy-server"), args.indexOf("--proxy-server") + 2), [
     "--proxy-server",
@@ -48,12 +52,17 @@ test("browser-use args only inherit generic proxy env when opted in", () => {
 });
 
 test("browser-use args use config proxy when browser env proxy is absent", () => {
-  const args = buildBrowserUseArgs([], "/tmp/pd-browser", {
-    NO_PROXY: "env-bypass.example.test",
-  }, {
-    url: "http://config-proxy.example.test:7890",
-    noProxy: "config-bypass.example.test",
-  });
+  const args = buildBrowserUseArgs(
+    [],
+    "/tmp/pd-browser",
+    {
+      NO_PROXY: "env-bypass.example.test",
+    },
+    {
+      url: "http://config-proxy.example.test:7890",
+      noProxy: "config-bypass.example.test",
+    },
+  );
 
   assert.deepEqual(args.slice(args.indexOf("--proxy-server"), args.indexOf("--proxy-server") + 2), [
     "--proxy-server",
@@ -61,16 +70,21 @@ test("browser-use args use config proxy when browser env proxy is absent", () =>
   ]);
   assert.deepEqual(args.slice(args.indexOf("--proxy-bypass"), args.indexOf("--proxy-bypass") + 2), [
     "--proxy-bypass",
-    "env-bypass.example.test,config-bypass.example.test,localhost,127.0.0.1,host.docker.internal",
+    "env-bypass.example.test,config-bypass.example.test,localhost,127.0.0.1",
   ]);
 });
 
 test("browser-use args allow explicit direct mode to disable config proxy", () => {
-  const args = buildBrowserUseArgs([], "/tmp/pd-browser", {
-    PILOTDECK_BROWSER_PROXY_SERVER: "direct",
-  }, {
-    url: "http://config-proxy.example.test:7890",
-  });
+  const args = buildBrowserUseArgs(
+    [],
+    "/tmp/pd-browser",
+    {
+      SATI_BROWSER_PROXY_SERVER: "direct",
+    },
+    {
+      url: "http://config-proxy.example.test:7890",
+    },
+  );
 
   assert.equal(args.includes("--proxy-server"), false);
   assert.equal(args.includes("http://config-proxy.example.test:7890"), false);

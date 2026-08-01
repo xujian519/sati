@@ -1,14 +1,14 @@
 function fallbackCopyToClipboard(text: string): boolean {
-  if (!text || typeof document === 'undefined') {
+  if (!text || typeof document === "undefined") {
     return false;
   }
 
-  const textarea = document.createElement('textarea');
+  const textarea = document.createElement("textarea");
   textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  textarea.style.pointerEvents = 'none';
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
 
   document.body.appendChild(textarea);
   textarea.focus();
@@ -16,7 +16,7 @@ function fallbackCopyToClipboard(text: string): boolean {
 
   let copied = false;
   try {
-    copied = document.execCommand('copy');
+    copied = document.execCommand("copy");
   } catch {
     copied = false;
   } finally {
@@ -35,9 +35,9 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
 
   try {
     if (
-      typeof window !== 'undefined' &&
+      typeof window !== "undefined" &&
       window.isSecureContext &&
-      typeof navigator !== 'undefined' &&
+      typeof navigator !== "undefined" &&
       navigator.clipboard?.writeText
     ) {
       await navigator.clipboard.writeText(text);

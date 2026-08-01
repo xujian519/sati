@@ -70,10 +70,7 @@ export type CanonicalToolResultBlock = {
   raw?: unknown;
 };
 
-export type CanonicalToolResultContentBlock =
-  | CanonicalTextBlock
-  | CanonicalImageBlock
-  | CanonicalPdfBlock;
+export type CanonicalToolResultContentBlock = CanonicalTextBlock | CanonicalImageBlock | CanonicalPdfBlock;
 
 /**
  * Reference to a persisted tool result whose body lives on disk. Replaces
@@ -185,7 +182,7 @@ export type CanonicalThinkingConfig = {
  *     payload is then read back from the assistant's `tool_use` block.
  *
  * Behaviour rationale: legacy `structured_output` is an SDK-side hook tool;
- * PilotDeck adopts provider-native enforcement. Tagged `intentional_difference`
+ * Sati adopts provider-native enforcement. Tagged `intentional_difference`
  * in the dual-parity table.
  */
 export type CanonicalOutputSchema = {
@@ -236,13 +233,7 @@ export type CanonicalUsage = {
   nativeCost?: number;
 };
 
-export type CanonicalFinishReason =
-  | "stop"
-  | "length"
-  | "tool_call"
-  | "content_filter"
-  | "error"
-  | "unknown";
+export type CanonicalFinishReason = "stop" | "length" | "tool_call" | "content_filter" | "error" | "unknown";
 
 export type CanonicalModelEvent =
   | {

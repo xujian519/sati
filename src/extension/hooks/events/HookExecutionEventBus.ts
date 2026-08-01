@@ -1,34 +1,34 @@
-import type { PilotDeckHookEvent } from "../protocol/events.js";
+import type { SatiHookEvent } from "../protocol/events.js";
 
-export type PilotDeckHookExecutionEvent =
+export type SatiHookExecutionEvent =
   | {
       type: "started";
       hookName: string;
-      hookEvent: PilotDeckHookEvent;
+      hookEvent: SatiHookEvent;
     }
   | {
       type: "response";
       hookName: string;
-      hookEvent: PilotDeckHookEvent;
+      hookEvent: SatiHookEvent;
       stdout: string;
       stderr: string;
       exitCode?: number;
       outcome: "success" | "blocking" | "non_blocking_error" | "cancelled" | "timeout";
     };
 
-export type PilotDeckHookExecutionEventHandler = (event: PilotDeckHookExecutionEvent) => void;
+export type SatiHookExecutionEventHandler = (event: SatiHookExecutionEvent) => void;
 
 export class HookExecutionEventBus {
-  private handlers = new Set<PilotDeckHookExecutionEventHandler>();
+  private handlers = new Set<SatiHookExecutionEventHandler>();
 
-  subscribe(handler: PilotDeckHookExecutionEventHandler): () => void {
+  subscribe(handler: SatiHookExecutionEventHandler): () => void {
     this.handlers.add(handler);
     return () => {
       this.handlers.delete(handler);
     };
   }
 
-  emit(event: PilotDeckHookExecutionEvent): void {
+  emit(event: SatiHookExecutionEvent): void {
     for (const handler of this.handlers) {
       handler(event);
     }

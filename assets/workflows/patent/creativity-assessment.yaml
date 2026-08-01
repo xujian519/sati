@@ -1,0 +1,179 @@
+# 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
+template_id: creativity-assessment
+name: 创造性评估
+description: 案卷探查 → 规则 → CAP02 解构 → 检索 → 质量门 → CAP02 对比 → 三步法创造性分析 → 反套话
+intent: 独立创造性评估：CAP02 深度技术分析 + 三步法 + 6 种发明类型差异化 + 辅助判断因素
+steps:
+  - id: probe
+    name: 案卷探查
+    description: 读取待评估技术方案、权利要求、现有技术材料
+    worker: project-probe
+    input_template: |
+      案卷目录：{{case_dir}}
+      识别待评估技术方案（权利要求书/说明书/交底书）、现有技术材料（如有），输出 intent=创造性评估 与 provision_ids（P-A02）。
+
+  - id: rules
+    name: 规则探查
+    description: 确定创造性评估适用规则
+    worker: rule-explorer
+    depends_on: [probe]
+    input_template: |
+      针对创造性评估场景，探查 P-A02（创造性）相关规则与 generatedPrompt。
+      主题：创造性 三步法 最接近现有技术 区别技术特征 技术启示
+      输出 provision_ids 与 generatedPrompt 供后续 worker 使用。
+
+  - id: tech-deconstruct
+    name: CAP02 技术解构
+    description: 待评估方案七维解构与因果图（检索前必步）
+    worker: patent-technical-analyzer
+    depends_on: [rules]
+    has_checkpoint: true
+    checkpoint_title: 确认技术方案七维解构与核心特征（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：创造性评估 — **待评估方案 CAP02 七维解构**（检索与三步法的前置必步）。
+
+      执行 CAP02 三级技术分析（目标为待评估方案，暂无对比文件时完成目标侧即可）：
+      1. 对权利要求/说明书/交底书完成七维解构
+      2. 提取核心发明点、必要技术特征、技术效果与问题-手段-效果链
+      3. 识别发明类型（组合发明/选择发明/转用发明/要素变更/开拓性发明/改进发明）
+      4. ≥3 特征时生成 tech-graph-spec.json 与 tech-graph-report.md
+      5. HITL：确认特征清单与发明类型后再进入检索
+
+      输出：data/cases/{{case_id}}/outputs/technical-deconstruction-target.md
+            data/cases/{{case_id}}/outputs/technical-analysis-report.md
+      检索规划 worker 须引用上述文件中的特征与 IPC/关键词。
+
+  - id: search-plan
+    name: 检索策略规划
+    description: 基于 CAP02 特征制定现有技术检索策略
+    worker: patent-search-planner
+    depends_on: [tech-deconstruct]
+    input_template: |
+      案卷：{{case_dir}}
+
+      读取 data/cases/{{case_id}}/outputs/technical-deconstruction-target.md，
+      基于已识别技术特征、IPC、发明类型与问题-手段-效果链制定检索策略。
+      重点关注：与最接近现有技术的检索方向。
+      构建三层检索式：精确层 → 扩展层 → 语义层。
+      输出 search-plan.md，含至少 3 组检索式（布尔表达式 + IPC 限定）。
+      参考 bcip-retrieval skill。
+
+  - id: search-exec
+    name: 检索执行
+    description: 执行双通道检索获取对比文件
+    worker: patent-search-executor
+    depends_on: [search-plan]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **必经步骤**：按 search-plan.md 执行检索。
+      至少使用 2 个检索源：
+      1. Google Patents（通过 google-patents-search skill）
+      2. CNIPA 公布公告（通过 cnipa-query skill）
+      每篇对比文件标注：专利号、标题、公开日、相关度（X/Y/A）、覆盖的权利要求、可引用段落（至少 3 段）。
+      输出 search-results.md。
+
+  - id: search-qual
+    name: 检索结果质量检查
+    description: 对检索结果进行质量验证，满足门槛后方可进入下游
+    worker: bcip-retrieval (quality check phase)
+    depends_on: [search-exec]
+    has_checkpoint: true
+    checkpoint_title: 确认对比文件列表与相关性（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **质量门槛**（以下条件必须全部满足）：
+      1. 对比文件 ≥ 3 篇
+      2. 每篇标注了相关度和覆盖的权利要求
+      3. 至少 2 篇获取了全文（PDF→Markdown 转换）
+      4. 检索式包含布尔逻辑和 IPC 限定
+      
+      不满足时：退回 search-exec 重新执行。
+      满足时：人工确认对比文件列表后再进入技术分析。
+
+  - id: tech-compare
+    name: CAP02 现有技术对比
+    description: 待评估方案 vs 检索结果的四级对比矩阵（三步法前置必步）
+    worker: patent-technical-analyzer
+    depends_on: [search-qual]
+    has_checkpoint: true
+    checkpoint_title: 确认区别特征清单与技术启示判断（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：创造性评估 — **CAP02 四级对比矩阵 + 区别特征四层分析**。
+
+      1. 对检索到的关键对比文件逐篇七维解构（technical-deconstruction-d1.md 等）
+      2. 四级对比矩阵（词法→语义→功能→效果）
+      3. 区别特征四层分析 + 技术启示初步判断
+      4. tech-graph 因果链对比（≥3 特征时必做）
+      5. 识别最接近现有技术（D1），论证选择理由
+      6. HITL：确认区别特征清单与最接近现有技术
+
+      前置：search-results.md（含对比文件全文标注）、technical-deconstruction-target.md
+      必须写入：
+        - technical-comparison-matrix.md
+        - distinctive-features.md
+        - technical-analysis-report.md（更新）
+
+  - id: inventiveness
+    name: 三步法创造性分析
+    description: 完整三步法 + 发明类型差异化分析 + 辅助判断因素
+    worker: provision-inventiveness
+    depends_on: [tech-compare]
+    has_checkpoint: true
+    checkpoint_title: 审核创造性评估结论（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **前置依赖**（必须先读取）：
+      - data/cases/{{case_id}}/outputs/technical-analysis-report.md
+      - data/cases/{{case_id}}/outputs/distinctive-features.md
+      - data/cases/{{case_id}}/outputs/technical-comparison-matrix.md
+      - data/cases/{{case_id}}/outputs/tech-graph-report.md（如有）
+
+      执行完整三步法创造性分析：
+
+      **第一步：确定最接近的现有技术**
+      - 论证 D1 的选择理由（技术领域相同/相近、技术问题最接近、公开特征最多）
+      - 不得脱离 CAP02 对比结果自行选择
+
+      **第二步：确定区别特征和实际解决的技术问题**
+      - 逐特征列出区别（基于 distinctive-features.md）
+      - 基于区别特征的技术效果确定实际解决的技术问题
+      - 检查技术问题是否包含对区别特征的指引（事后诸葛亮风险）
+
+      **第三步：判断要求保护的发明是否显而易见**
+      - 评估是否存在技术启示
+      - 按发明类型差异化分析：
+        * 组合发明：组合的难易程度、是否存在启示、整体效果
+        * 选择发明：选择的难易程度、技术效果是否预料不到
+        * 转用发明：转用的难易程度、技术效果
+        * 要素变更发明：变更方式、技术效果
+        * 开拓性发明：开创程度、技术贡献
+        * 改进发明：改进方向、显而易见性
+
+      **辅助判断因素**：
+      - 预料不到的技术效果
+      - 商业成功（如有）
+      - 解决了长期渴望解决的技术问题
+      - 克服了技术偏见
+
+      报告：data/cases/{{case_id}}/outputs/creativity-assessment-report.md
+
+  - id: slop-clean
+    name: 反套话润色+评分
+    description: stop-patent-slop 规则后处理 + 5维评分
+    worker: patent-slop-cleaner
+    depends_on: [inventiveness]
+    input_template: |
+      案卷：{{case_dir}}
+
+      对 outputs/creativity-assessment-report.md 应用 stop-patent-slop 规则：
+      1. 删除填充词与无证据套话
+      2. 运行 slop-scorer.ts 5维评分，总分 < 35 必须修订
+      3. 输出 creativity-assessment-report-clean.md
+      4. 输出 creativity-assessment-slop-changelog.md（列出变更 + 评分报告）

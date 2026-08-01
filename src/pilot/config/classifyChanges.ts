@@ -1,9 +1,6 @@
 import type { PilotConfigChangeClass, PilotConfigSnapshot } from "./types.js";
 
-export function diffConfigSnapshots(
-  previous: PilotConfigSnapshot,
-  next: PilotConfigSnapshot,
-): string[] {
+export function diffConfigSnapshots(previous: PilotConfigSnapshot, next: PilotConfigSnapshot): string[] {
   return diffValues(previous.config, next.config);
 }
 
@@ -61,10 +58,7 @@ function classifyRouterPath(path: string): PilotConfigChangeClass {
   if (path === "router.autoOrchestrate.skillExtensionId") {
     return "next-runtime";
   }
-  if (
-    path === "router.stats.enabled" ||
-    path === "router.customRouter.extensionId"
-  ) {
+  if (path === "router.stats.enabled" || path === "router.customRouter.extensionId") {
     return "restart-required";
   }
   return "next-runtime";

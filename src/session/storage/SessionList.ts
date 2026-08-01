@@ -110,7 +110,7 @@ function firstAcceptedInputText(head: string): string | undefined {
       const entry = JSON.parse(line) as {
         messages?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
       };
-      const text = entry.messages?.flatMap((message) => message.content ?? []).find((block) => block.type === "text")?.text;
+      const text = entry.messages?.flatMap(message => message.content ?? []).find(block => block.type === "text")?.text;
       if (text?.trim()) {
         return text.trim();
       }
@@ -131,7 +131,7 @@ function lastAcceptedInputText(tail: string): string | undefined {
       const entry = JSON.parse(line) as {
         messages?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
       };
-      const text = entry.messages?.flatMap((message) => message.content ?? []).find((block) => block.type === "text")?.text;
+      const text = entry.messages?.flatMap(message => message.content ?? []).find(block => block.type === "text")?.text;
       if (text?.trim()) {
         last = text.trim();
       }
@@ -273,10 +273,7 @@ export async function searchSessionsByTitle(options: SearchSessionsByTitleOption
     if (!lite) continue;
     const info = parseSessionInfoFromLite(sessionId, lite, options.projectRoot);
     if (!info) continue;
-    const haystack = [info.customTitle, info.aiTitle, info.firstPrompt]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
+    const haystack = [info.customTitle, info.aiTitle, info.firstPrompt].filter(Boolean).join(" ").toLowerCase();
     if (haystack.includes(needle)) {
       results.push(info);
     }

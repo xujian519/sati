@@ -1,7 +1,4 @@
-import type {
-  CanonicalToolResultBlock,
-  CanonicalToolResultContentBlock,
-} from "./canonical.js";
+import type { CanonicalToolResultBlock, CanonicalToolResultContentBlock } from "./canonical.js";
 
 export function toolResultContentBlockToText(block: CanonicalToolResultContentBlock): string {
   switch (block.type) {
@@ -16,9 +13,7 @@ export function toolResultContentBlockToText(block: CanonicalToolResultContentBl
   }
 }
 
-export function flattenToolResultContentText(
-  content: CanonicalToolResultContentBlock[],
-): string {
+export function flattenToolResultContentText(content: CanonicalToolResultContentBlock[]): string {
   return content.map(toolResultContentBlockToText).join("\n");
 }
 

@@ -1,14 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
-import { useTranslation } from 'react-i18next';
-import type {
-  ContentReferenceSurface,
-  NormalizedRect,
-} from '../../../../types/contentReference';
-import {
-  floatingSelectionGroupClassName,
-  getFloatingActionPosition,
-} from './floatingSelectionAction';
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import type { ContentReferenceSurface, NormalizedRect } from "../../../../types/contentReference";
+import { floatingSelectionGroupClassName, getFloatingActionPosition } from "./floatingSelectionAction";
 
 export type RegionCaptureTarget = {
   element: HTMLElement;
@@ -64,11 +58,11 @@ function clampRect(rect: ScreenRect, bounds: DOMRect): ScreenRect {
 async function captureTargetRegion(target: RegionCaptureTarget, rect: ScreenRect): Promise<CapturedRegion> {
   // Keep the capture engine out of the normal preview bundle. It is only
   // needed after the user confirms a rectangular reference.
-  const { default: html2canvas } = await import('html2canvas');
+  const { default: html2canvas } = await import("html2canvas");
   const targetRect = target.element.getBoundingClientRect();
   const bounded = clampRect(rect, targetRect);
   const canvas = await html2canvas(target.element, {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#ffffff",
     logging: false,
     useCORS: true,
     scale: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
@@ -77,24 +71,20 @@ async function captureTargetRegion(target: RegionCaptureTarget, rect: ScreenRect
   const scaleY = canvas.height / Math.max(1, targetRect.height);
   const sourceX = Math.max(0, Math.round((bounded.left - targetRect.left) * scaleX));
   const sourceY = Math.max(0, Math.round((bounded.top - targetRect.top) * scaleY));
-  const sourceWidth = Math.max(1, Math.min(canvas.width - sourceX, Math.round((bounded.right - bounded.left) * scaleX)));
-  const sourceHeight = Math.max(1, Math.min(canvas.height - sourceY, Math.round((bounded.bottom - bounded.top) * scaleY)));
-  const cropped = document.createElement('canvas');
+  const sourceWidth = Math.max(
+    1,
+    Math.min(canvas.width - sourceX, Math.round((bounded.right - bounded.left) * scaleX)),
+  );
+  const sourceHeight = Math.max(
+    1,
+    Math.min(canvas.height - sourceY, Math.round((bounded.bottom - bounded.top) * scaleY)),
+  );
+  const cropped = document.createElement("canvas");
   cropped.width = sourceWidth;
   cropped.height = sourceHeight;
-  const context = cropped.getContext('2d');
-  if (!context) throw new Error('Unable to create capture canvas.');
-  context.drawImage(
-    canvas,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    sourceWidth,
-    sourceHeight,
-  );
+  const context = cropped.getContext("2d");
+  if (!context) throw new Error("Unable to create capture canvas.");
+  context.drawImage(canvas, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, sourceWidth, sourceHeight);
   return {
     ...target,
     rect: {
@@ -103,7 +93,7 @@ async function captureTargetRegion(target: RegionCaptureTarget, rect: ScreenRect
       width: (bounded.right - bounded.left) / Math.max(1, targetRect.width),
       height: (bounded.bottom - bounded.top) / Math.max(1, targetRect.height),
     },
-    dataUrl: cropped.toDataURL('image/png'),
+    dataUrl: cropped.toDataURL("image/png"),
     width: sourceWidth,
     height: sourceHeight,
   };
@@ -116,7 +106,7 @@ export default function RegionSelectionOverlay({
   onCommit,
   onCancel,
 }: RegionSelectionOverlayProps) {
-  const { t } = useTranslation('codeEditor');
+  const { t } = useTranslation("codeEditor");
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const startRef = useRef<{ x: number; y: number; target: RegionCaptureTarget } | null>(null);
   const captureRequestRef = useRef(0);
@@ -137,26 +127,29 @@ export default function RegionSelectionOverlay({
       return undefined;
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancel();
+      if (event.key === "Escape") onCancel();
     };
     const updateHostRect = () => {
       const nextRect = hostRef.current?.getBoundingClientRect();
       setHostRect(nextRect ? DOMRect.fromRect(nextRect) : null);
     };
     updateHostRect();
-    document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', updateHostRect);
-    window.addEventListener('scroll', updateHostRect, true);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", updateHostRect);
+    window.addEventListener("scroll", updateHostRect, true);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', updateHostRect);
-      window.removeEventListener('scroll', updateHostRect, true);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", updateHostRect);
+      window.removeEventListener("scroll", updateHostRect, true);
     };
   }, [active, hostRef, onCancel]);
 
-  useEffect(() => () => {
-    captureRequestRef.current += 1;
-  }, []);
+  useEffect(
+    () => () => {
+      captureRequestRef.current += 1;
+    },
+    [],
+  );
 
   const localRect = useMemo(() => {
     if (!hostRect || !rect) return null;
@@ -177,7 +170,7 @@ export default function RegionSelectionOverlay({
       hostHeight: hostRect.height,
       actionWidth: 288,
       actionHeight: 44,
-      preferredPlacement: 'below',
+      preferredPlacement: "below",
     });
   }, [hostRect, localRect]);
 
@@ -193,17 +186,17 @@ export default function RegionSelectionOverlay({
         width: hostRect.width,
         height: hostRect.height,
       }}
-      aria-label={t('contentReference.regionSelection.ariaLabel')}
-      onPointerDown={(event) => {
+      aria-label={t("contentReference.regionSelection.ariaLabel")}
+      onPointerDown={event => {
         if (capturing || event.button !== 0) return;
         const overlay = overlayRef.current;
         if (!overlay) return;
-        overlay.style.pointerEvents = 'none';
+        overlay.style.pointerEvents = "none";
         const underlyingElement = document.elementFromPoint(event.clientX, event.clientY);
-        overlay.style.pointerEvents = '';
+        overlay.style.pointerEvents = "";
         const nextTarget = resolveTarget(underlyingElement);
         if (!nextTarget) {
-          setError(t('contentReference.regionSelection.invalidStart'));
+          setError(t("contentReference.regionSelection.invalidStart"));
           return;
         }
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -212,13 +205,13 @@ export default function RegionSelectionOverlay({
         setRect({ left: event.clientX, top: event.clientY, right: event.clientX, bottom: event.clientY });
         setError(null);
       }}
-      onPointerMove={(event) => {
+      onPointerMove={event => {
         const start = startRef.current;
         if (!start) return;
         const bounds = start.target.element.getBoundingClientRect();
         setRect(clampRect(rectFromPoints(start.x, start.y, event.clientX, event.clientY), bounds));
       }}
-      onPointerUp={(event) => {
+      onPointerUp={event => {
         const start = startRef.current;
         if (!start) return;
         startRef.current = null;
@@ -228,14 +221,14 @@ export default function RegionSelectionOverlay({
         if (nextRect.right - nextRect.left < 8 || nextRect.bottom - nextRect.top < 8) {
           setRect(null);
           setTarget(null);
-          setError(t('contentReference.regionSelection.tooSmall'));
+          setError(t("contentReference.regionSelection.tooSmall"));
           return;
         }
         setRect(nextRect);
       }}
     >
       <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-blue-200 bg-white/95 px-3 py-1.5 text-[12px] text-blue-700 shadow-sm backdrop-blur dark:border-blue-800 dark:bg-neutral-950/95 dark:text-blue-300">
-        {t('contentReference.regionSelection.hint')}
+        {t("contentReference.regionSelection.hint")}
       </div>
       {localRect ? (
         <div
@@ -247,7 +240,7 @@ export default function RegionSelectionOverlay({
         <div
           className={`absolute z-10 ${floatingSelectionGroupClassName}`}
           style={actionPosition}
-          onPointerDown={(event) => event.stopPropagation()}
+          onPointerDown={event => event.stopPropagation()}
         >
           <button
             type="button"
@@ -264,14 +257,12 @@ export default function RegionSelectionOverlay({
                 onCommit(capture);
               } catch {
                 if (captureRequestRef.current !== requestId) return;
-                setError(t('contentReference.regionSelection.captureFailed'));
+                setError(t("contentReference.regionSelection.captureFailed"));
                 setCapturing(false);
               }
             }}
           >
-            {capturing
-              ? t('contentReference.regionSelection.capturing')
-              : t('contentReference.addToChat')}
+            {capturing ? t("contentReference.regionSelection.capturing") : t("contentReference.addToChat")}
           </button>
           <button
             type="button"
@@ -283,7 +274,7 @@ export default function RegionSelectionOverlay({
               setError(null);
             }}
           >
-            {t('contentReference.regionSelection.selectAgain')}
+            {t("contentReference.regionSelection.selectAgain")}
           </button>
           <button
             type="button"
@@ -291,7 +282,7 @@ export default function RegionSelectionOverlay({
             className="rounded-xl px-2.5 py-1.5 text-[12px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
             onClick={onCancel}
           >
-            {t('contentReference.regionSelection.cancel')}
+            {t("contentReference.regionSelection.cancel")}
           </button>
         </div>
       ) : null}

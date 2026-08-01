@@ -1,0 +1,39 @@
+# 充分公开判断框架 (A26.3)
+# Layer 1 — 法条级原子单元
+
+articleId: "A26.3"
+name: "充分公开判断"
+lawRef: "专利法第26条第3款"
+guidelineRef: "审查指南第二部分第二章 2.1"
+
+steps:
+  - id: "A26.3_step_1"
+    order: 1
+    name: "确定说明书公开的技术内容"
+    ruleRef: "审查指南第二部分第二章 2.1"
+    inputHint: "说明书全文"
+    outputSchema:
+      disclosedContent: "string — 说明书公开的技术方案概要"
+      keyTeachings: "string[] — 说明书明确教导的技术手段"
+      examples: "string[] — 实施例数量和质量"
+
+  - id: "A26.3_step_2"
+    order: 2
+    name: "判断是否清楚完整到本领域技术人员能够实现"
+    ruleRef: "审查指南第二部分第二章 2.1"
+    inputHint: "权利要求 + 说明书公开内容"
+    outputSchema:
+      claimRequirements: "string[] — 权利要求要求保护的内容"
+      enablementGaps: "string[] — 说明书中未充分公开的内容"
+      skilledPersonAssessment: "string — 本领域技术人员能否实现的判断"
+      conclusion: "string — 是否满足充分公开要求"
+
+conclusionSchema:
+  sufficientlyDisclosed: "boolean — 是否充分公开"
+  confidence: "'high' | 'medium' | 'low'"
+  keyRationale: "string — 核心理由"
+
+applicableTo:
+  - invalidity
+  - validity
+  - drafting

@@ -1,11 +1,6 @@
 import { statSync } from "node:fs";
 import path from "node:path";
-import {
-  isIgnoredPath,
-  normalizeRelativePath,
-  runRipgrep,
-  splitRipgrepLines,
-} from "./ripgrep.js";
+import { isIgnoredPath, normalizeRelativePath, runRipgrep, splitRipgrepLines } from "./ripgrep.js";
 
 const DEFAULT_LIMIT = 1_000;
 const GLOB_ESCAPE_CHARS = new Set(["*", "?", "[", "]", "{", "}", "\\"]);
@@ -33,9 +28,7 @@ export function normalizeRipgrepGlobPattern(pattern: string, cwd?: string): stri
       continue;
     }
 
-    normalized += shouldTreatBackslashAsPathSeparator(pattern, index, normalized, cwd)
-      ? "/"
-      : "\\";
+    normalized += shouldTreatBackslashAsPathSeparator(pattern, index, normalized, cwd) ? "/" : "\\";
   }
   return normalized;
 }
@@ -59,7 +52,7 @@ export async function ripgrepFiles(input: RipgrepFilesInput): Promise<RipgrepFil
   const limit = input.limit ?? DEFAULT_LIMIT;
   const files = splitRipgrepLines(stdout)
     .map(normalizeRelativePath)
-    .filter((line) => !isIgnoredPath(line));
+    .filter(line => !isIgnoredPath(line));
   const selected = files.slice(0, limit);
   return {
     files: selected,
@@ -95,8 +88,10 @@ function shouldTreatBackslashAsPathSeparator(
 }
 
 function startsGlobstarPathSegment(pattern: string, index: number): boolean {
-  return pattern.startsWith("**", index)
-    && (index + 2 === pattern.length || pattern[index + 2] === "\\" || pattern[index + 2] === "/");
+  return (
+    pattern.startsWith("**", index) &&
+    (index + 2 === pattern.length || pattern[index + 2] === "\\" || pattern[index + 2] === "/")
+  );
 }
 
 function lastPathSegment(pattern: string): string {

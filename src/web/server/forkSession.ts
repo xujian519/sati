@@ -14,9 +14,7 @@ import { platform } from "node:process";
 import type { CanonicalContentBlock, CanonicalMessage } from "../../model/index.js";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { readTranscript } from "../../session/transcript/TranscriptReader.js";
-import {
-  sanitizeSessionIdForPath,
-} from "../../session/storage/ProjectSessionStorage.js";
+import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";
 import type {
   AgentAcceptedInputTranscriptEntry,
   AgentSessionMetadataTranscriptEntry,
@@ -48,8 +46,8 @@ function extractAcceptedInputText(entry: AgentAcceptedInputTranscriptEntry): str
 }
 
 function hasUnsupportedPrefillContent(entry: AgentAcceptedInputTranscriptEntry): boolean {
-  return entry.messages.some((message) =>
-    (message.content as CanonicalContentBlock[]).some((block) => block.type !== "text"),
+  return entry.messages.some(message =>
+    (message.content as CanonicalContentBlock[]).some(block => block.type !== "text"),
   );
 }
 
@@ -62,11 +60,7 @@ function getForkRunMode(entry: AgentAcceptedInputTranscriptEntry): WebAgentRunMo
   return value === "agent" || value === "plan" || value === "ask" ? value : undefined;
 }
 
-function buildForkTitle(
-  prefillText: string,
-  carriedMessageCount: number,
-  inheritedTitle: string | undefined,
-): string {
+function buildForkTitle(prefillText: string, carriedMessageCount: number, inheritedTitle: string | undefined): string {
   const normalized = prefillText.replace(/\s+/g, " ").trim();
   if (normalized) {
     const max = 48;
@@ -86,11 +80,8 @@ type ForkPoint = {
   preserveTarget: boolean;
 };
 
-function findForkPoint(
-  entries: AgentTranscriptEntry[],
-  fromEntryId: string,
-): ForkPoint {
-  const target = entries.find((entry) => entry.entryId === fromEntryId);
+function findForkPoint(entries: AgentTranscriptEntry[], fromEntryId: string): ForkPoint {
+  const target = entries.find(entry => entry.entryId === fromEntryId);
   if (!target) {
     throw new ForkSessionError("fork_entry_not_found", `Transcript entry not found: ${fromEntryId}`);
   }
@@ -108,10 +99,7 @@ function findForkPoint(
       entry.type === "accepted_input" && entry.turnId === target.turnId,
   );
   if (!accepted) {
-    throw new ForkSessionError(
-      "fork_turn_not_found",
-      `No accepted_input found for turn ${target.turnId}`,
-    );
+    throw new ForkSessionError("fork_turn_not_found", `No accepted_input found for turn ${target.turnId}`);
   }
   return {
     target,
@@ -159,34 +147,19 @@ function shouldPreserveSourceEntry(entry: AgentTranscriptEntry, forkPoint: ForkP
   // Assistant-message forks preserve the selected response as conversation
   // context. Keep the completion marker so replay does not drop that turn as
   // incomplete, without pulling in later durable messages from the same turn.
-  return (
-    entry.turnId === forkPoint.target.turnId &&
-    (entry.type === "turn_result" || entry.type === "file_artifacts")
-  );
+  return entry.turnId === forkPoint.target.turnId && (entry.type === "turn_result" || entry.type === "file_artifacts");
 }
 
-function retargetAuxiliaryPath(
-  path: string,
-  sourceSessionDir: string,
-  targetSessionDir: string,
-): string {
+function retargetAuxiliaryPath(path: string, sourceSessionDir: string, targetSessionDir: string): string {
   const absolutePath = resolve(path);
   const relativePath = relative(sourceSessionDir, absolutePath);
-  if (
-    relativePath === "" ||
-    relativePath.startsWith("..") ||
-    isAbsolute(relativePath)
-  ) {
+  if (relativePath === "" || relativePath.startsWith("..") || isAbsolute(relativePath)) {
     return path;
   }
   return resolve(targetSessionDir, relativePath);
 }
 
-function retargetRelativeSessionPath(
-  path: string,
-  sourceSafeId: string,
-  targetSafeId: string,
-): string {
+function retargetRelativeSessionPath(path: string, sourceSafeId: string, targetSafeId: string): string {
   const parts = path.split(/[\\/]/);
   if (parts[0] !== sourceSafeId) {
     return path;
@@ -233,26 +206,18 @@ function retargetTranscriptEntryAuxiliaryPaths(
   if (entry.type === "accepted_input") {
     return {
       ...entry,
-      messages: entry.messages.map((message) => ({
+      messages: entry.messages.map(message => ({
         ...message,
-        content: message.content.map((block) =>
-          retargetContentBlock(block, sourceSessionDir, targetSessionDir),
-        ),
+        content: message.content.map(block => retargetContentBlock(block, sourceSessionDir, targetSessionDir)),
       })),
     };
   }
-  if (
-    entry.type === "assistant_message" ||
-    entry.type === "tool_result_message" ||
-    entry.type === "durable_message"
-  ) {
+  if (entry.type === "assistant_message" || entry.type === "tool_result_message" || entry.type === "durable_message") {
     return {
       ...entry,
       message: {
         ...entry.message,
-        content: entry.message.content.map((block) =>
-          retargetContentBlock(block, sourceSessionDir, targetSessionDir),
-        ),
+        content: entry.message.content.map(block => retargetContentBlock(block, sourceSessionDir, targetSessionDir)),
       },
     };
   }
@@ -266,16 +231,10 @@ function markTranscriptEntryAsForkCarryover(
   if (entry.type === "accepted_input") {
     return {
       ...entry,
-      messages: entry.messages.map((message) =>
-        markMessageAsForkCarryover(message, sourceSessionId, entry.turnId),
-      ),
+      messages: entry.messages.map(message => markMessageAsForkCarryover(message, sourceSessionId, entry.turnId)),
     };
   }
-  if (
-    entry.type === "assistant_message" ||
-    entry.type === "tool_result_message" ||
-    entry.type === "durable_message"
-  ) {
+  if (entry.type === "assistant_message" || entry.type === "tool_result_message" || entry.type === "durable_message") {
     return {
       ...entry,
       message: markMessageAsForkCarryover(entry.message, sourceSessionId, entry.turnId),
@@ -290,11 +249,7 @@ function retargetAcceptedInputEntry(
   sourceSessionDir: string,
   targetSessionDir: string,
 ): AgentAcceptedInputTranscriptEntry {
-  const retargeted = retargetTranscriptEntryAuxiliaryPaths(
-    entry,
-    sourceSessionDir,
-    targetSessionDir,
-  );
+  const retargeted = retargetTranscriptEntryAuxiliaryPaths(entry, sourceSessionDir, targetSessionDir);
   if (retargeted.type !== "accepted_input") {
     return entry;
   }
@@ -314,7 +269,7 @@ function retargetEntriesToSession(
     targetSessionDir: string;
   },
 ): AgentTranscriptEntry[] {
-  return entries.map((entry) => {
+  return entries.map(entry => {
     if (entry.type === "accepted_input") {
       const retargeted = retargetAcceptedInputEntry(
         entry,
@@ -330,11 +285,7 @@ function retargetEntriesToSession(
       entry.type === "durable_message"
     ) {
       const retargeted = {
-        ...retargetTranscriptEntryAuxiliaryPaths(
-          entry,
-          options.sourceSessionDir,
-          options.targetSessionDir,
-        ),
+        ...retargetTranscriptEntryAuxiliaryPaths(entry, options.sourceSessionDir, options.targetSessionDir),
         sessionId: options.sessionId,
       };
       return markTranscriptEntryAsForkCarryover(retargeted, entry.sessionId);
@@ -359,10 +310,7 @@ function retargetEntriesToSession(
 
 function isNotFoundError(error: unknown): boolean {
   return Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code?: unknown }).code === "ENOENT",
+    error && typeof error === "object" && "code" in error && (error as { code?: unknown }).code === "ENOENT",
   );
 }
 
@@ -405,15 +353,13 @@ async function retargetCopiedSubagentTranscripts(
     const content = await readFile(path, "utf8");
     const rewritten = content
       .split(/\r?\n/)
-      .map((line) => {
+      .map(line => {
         if (!line.trim()) {
           return line;
         }
         try {
           const parsed = JSON.parse(line) as AgentTranscriptEntry;
-          return JSON.stringify(
-            retargetTranscriptEntryAuxiliaryPaths(parsed, sourceSessionDir, targetSessionDir),
-          );
+          return JSON.stringify(retargetTranscriptEntryAuxiliaryPaths(parsed, sourceSessionDir, targetSessionDir));
         } catch {
           return line;
         }
@@ -472,7 +418,7 @@ export async function forkWebSession(
   }
   const forkMode = getForkMode(forkAcceptedInput);
   const forkRunMode = getForkRunMode(forkAcceptedInput);
-  const preservedSourceEntries = entries.filter((entry) => shouldPreserveSourceEntry(entry, forkPoint));
+  const preservedSourceEntries = entries.filter(entry => shouldPreserveSourceEntry(entry, forkPoint));
   const forkInputText = extractAcceptedInputText(forkAcceptedInput);
   const prefillText = forkPoint.preserveTarget ? "" : forkInputText;
   const carriedMessageCount = countCarriedUserAssistantMessages(preservedSourceEntries);
@@ -493,7 +439,7 @@ export async function forkWebSession(
   await mkdir(newSessionDir, { recursive: true, mode: 0o700 });
   await copySessionAuxDirs(sourceSessionDir, newSessionDir);
 
-  const preservedLines = preserved.map((entry) => `${JSON.stringify(entry)}\n`).join("");
+  const preservedLines = preserved.map(entry => `${JSON.stringify(entry)}\n`).join("");
   const lastPreserved = preserved[preserved.length - 1];
   const lastEntryId = lastPreserved?.entryId ?? null;
   const maxSequence = preserved.reduce((max, entry) => Math.max(max, entry.sequence), 0);

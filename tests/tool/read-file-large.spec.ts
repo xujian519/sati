@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import { createEditFileTool } from "../../src/tool/builtin/editFile.js";
 import { createReadFileTool } from "../../src/tool/builtin/readFile.js";
 import { hasBinaryExtension } from "../../src/tool/builtin/filesystem/fileTypeSafety.js";
@@ -32,7 +31,7 @@ function textOf(result: Awaited<ReturnType<ReturnType<typeof createReadFileTool>
 }
 
 test("read_file auto-pages large text files instead of failing", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-large-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-large-"));
   try {
     const lines = Array.from({ length: 5000 }, (_, index) => `line-${index + 1} ${"x".repeat(80)}`);
     await writeFile(join(projectRoot, "large.txt"), lines.join("\n"));
@@ -51,7 +50,7 @@ test("read_file auto-pages large text files instead of failing", async () => {
 });
 
 test("read_file rejects Office container files during validation", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-office-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-office-"));
   try {
     await writeFile(join(projectRoot, "sample.docx"), Buffer.from("PK".padEnd(128, "x")));
 
@@ -69,12 +68,15 @@ test("read_file rejects Office container files during validation", async () => {
 });
 
 test("read_file explicit limit reads a large file range without auto paging", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-range-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-range-"));
   try {
     const lines = Array.from({ length: 5000 }, (_, index) => `line-${index + 1} ${"x".repeat(80)}`);
     await writeFile(join(projectRoot, "large.txt"), lines.join("\n"));
 
-    const result = await createReadFileTool().execute({ file_path: "large.txt", offset: 3000, limit: 3 }, context(projectRoot));
+    const result = await createReadFileTool().execute(
+      { file_path: "large.txt", offset: 3000, limit: 3 },
+      context(projectRoot),
+    );
     const text = textOf(result);
 
     assert.match(text, /^3000\|line-3000/m);
@@ -88,22 +90,31 @@ test("read_file explicit limit reads a large file range without auto paging", as
 });
 
 test("read_file auto-shrinks oversized persisted tool-result ref ranges", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-ref-autopage-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-ref-autopage-"));
   try {
-    const refPath = join(projectRoot, ".pilotdeck", "tool-results", "refs", "result-0001.txt");
-    await mkdir(join(projectRoot, ".pilotdeck", "tool-results", "refs"), { recursive: true });
-    await writeFile(refPath, Array.from({ length: 300 }, (_, index) => `line-${index + 1} ${"x".repeat(1200)}`).join("\n"));
+    const refPath = join(projectRoot, ".sati", "tool-results", "refs", "result-0001.txt");
+    await mkdir(join(projectRoot, ".sati", "tool-results", "refs"), { recursive: true });
+    await writeFile(
+      refPath,
+      Array.from({ length: 300 }, (_, index) => `line-${index + 1} ${"x".repeat(1200)}`).join("\n"),
+    );
 
-    const result = await createReadFileTool().execute({
-      file_path: ".pilotdeck/tool-results/refs/result-0001.txt",
-      offset: 1,
-      limit: 200,
-    }, context(projectRoot));
+    const result = await createReadFileTool().execute(
+      {
+        file_path: ".sati/tool-results/refs/result-0001.txt",
+        offset: 1,
+        limit: 200,
+      },
+      context(projectRoot),
+    );
     const text = textOf(result);
 
     assert.match(text, /^1\|line-1/m);
     assert.match(text, /persisted tool result was too large for the requested range/);
-    assert.match(text, /Continue with read_file\({ file_path: "\.pilotdeck\/tool-results\/refs\/result-0001\.txt", offset: \d+, limit: \d+ }\)/);
+    assert.match(
+      text,
+      /Continue with read_file\({ file_path: "\.sati\/tool-results\/refs\/result-0001\.txt", offset: \d+, limit: \d+ }\)/,
+    );
     assert.equal((result.data as { autoPaged?: boolean }).autoPaged, true);
     assert.ok((result.data as { endLine?: number }).endLine! < 200);
     assert.ok((result.data as { nextOffset?: number }).nextOffset! > 1);
@@ -114,9 +125,12 @@ test("read_file auto-shrinks oversized persisted tool-result ref ranges", async 
 });
 
 test("read_file keeps explicit oversized ordinary file ranges strict", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-ordinary-strict-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-ordinary-strict-"));
   try {
-    await writeFile(join(projectRoot, "large.txt"), Array.from({ length: 300 }, (_, index) => `line-${index + 1} ${"x".repeat(1200)}`).join("\n"));
+    await writeFile(
+      join(projectRoot, "large.txt"),
+      Array.from({ length: 300 }, (_, index) => `line-${index + 1} ${"x".repeat(1200)}`).join("\n"),
+    );
 
     await assert.rejects(
       () => createReadFileTool().execute({ file_path: "large.txt", offset: 1, limit: 200 }, context(projectRoot)),
@@ -128,17 +142,20 @@ test("read_file keeps explicit oversized ordinary file ranges strict", async () 
 });
 
 test("read_file explicit limit records a ranged snapshot for follow-up edits", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-range-edit-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-range-edit-"));
   try {
     await writeFile(join(projectRoot, "target.txt"), "alpha\nbeta\ngamma\n");
     const runtimeContext = context(projectRoot);
 
     await createReadFileTool().execute({ file_path: "target.txt", offset: 2, limit: 1 }, runtimeContext);
-    const edited = await createEditFileTool().execute({
-      file_path: "target.txt",
-      old_string: "beta",
-      new_string: "BETA",
-    }, runtimeContext);
+    const edited = await createEditFileTool().execute(
+      {
+        file_path: "target.txt",
+        old_string: "beta",
+        new_string: "BETA",
+      },
+      runtimeContext,
+    );
 
     const text = edited.content[0]?.type === "text" ? edited.content[0].text : "";
     assert.match(text, /Updated target\.txt/);
@@ -148,18 +165,21 @@ test("read_file explicit limit records a ranged snapshot for follow-up edits", a
 });
 
 test("read_file auto-paged large files record a ranged snapshot for follow-up edits", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-autopage-edit-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-autopage-edit-"));
   try {
     const lines = Array.from({ length: 5000 }, (_, index) => `line-${index + 1} ${"x".repeat(80)}`);
     await writeFile(join(projectRoot, "large.txt"), lines.join("\n"));
     const runtimeContext = context(projectRoot);
 
     await createReadFileTool().execute({ file_path: "large.txt" }, runtimeContext);
-    const edited = await createEditFileTool().execute({
-      file_path: "large.txt",
-      old_string: "line-1 ",
-      new_string: "LINE-1 ",
-    }, runtimeContext);
+    const edited = await createEditFileTool().execute(
+      {
+        file_path: "large.txt",
+        old_string: "line-1 ",
+        new_string: "LINE-1 ",
+      },
+      runtimeContext,
+    );
 
     const text = edited.content[0]?.type === "text" ? edited.content[0].text : "";
     assert.match(text, /Updated large\.txt/);
@@ -169,7 +189,7 @@ test("read_file auto-paged large files record a ranged snapshot for follow-up ed
 });
 
 test("read_file returns a head-tail preview for a single oversized line", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-long-line-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-long-line-"));
   try {
     await writeFile(join(projectRoot, "one-line.txt"), `prefix-${"x".repeat(250_000)}-suffix`);
 
@@ -193,22 +213,19 @@ test("read_file classifies common Office formats as binary", () => {
 });
 
 test("read_file rejects ranged binary input instead of hanging", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-binary-range-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-binary-range-"));
   try {
     const filePath = join(projectRoot, "unknown.payload");
     await writeFile(filePath, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x61, 0x62, 0x63]));
 
-    await assert.rejects(
-      () => readFileInRange(filePath, 1, 20),
-      /appears to be a binary file/,
-    );
+    await assert.rejects(() => readFileInRange(filePath, 1, 20), /appears to be a binary file/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }
 });
 
 test("read_file range honors an aborted signal", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-read-aborted-range-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-read-aborted-range-"));
   try {
     const filePath = join(projectRoot, "large.txt");
     await writeFile(filePath, Array.from({ length: 100 }, (_, index) => `line-${index + 1}`).join("\n"));
@@ -217,9 +234,10 @@ test("read_file range honors an aborted signal", async () => {
 
     await assert.rejects(
       () => readFileInRange(filePath, 1, 20, controller.signal),
-      (error: unknown) => error instanceof Error
-        && error.name === "PilotDeckToolRuntimeError"
-        && (error as { code?: string }).code === "tool_aborted",
+      (error: unknown) =>
+        error instanceof Error &&
+        error.name === "SatiToolRuntimeError" &&
+        (error as { code?: string }).code === "tool_aborted",
     );
   } finally {
     await rm(projectRoot, { recursive: true, force: true });

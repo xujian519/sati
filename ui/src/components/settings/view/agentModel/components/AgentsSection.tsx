@@ -5,16 +5,12 @@ import { cn } from "../../../../../lib/utils";
 import { PageSectionHeader, SettingsCard } from "../../../shared/view";
 import { FormRow, NumberInput, Select } from "../../../shared/components/Inputs";
 import { patch } from "../../modelPool/utils/patch";
-import type { PilotDeckConfig } from "../../modelPool/types";
-import {
-  activeModelCapabilities,
-  buildModelRefOptions,
-  ensureModelRefConfigured,
-} from "../utils/modelRefs";
+import type { SatiConfig } from "../../modelPool/types";
+import { activeModelCapabilities, buildModelRefOptions, ensureModelRefConfigured } from "../utils/modelRefs";
 
 type AgentsSectionProps = {
-  config: PilotDeckConfig;
-  onChange: (next: PilotDeckConfig) => void;
+  config: SatiConfig;
+  onChange: (next: SatiConfig) => void;
 };
 
 export default function AgentsSection({ config, onChange }: AgentsSectionProps) {
@@ -25,10 +21,7 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
   const subDefault = config.agent?.subagents?.default ?? "inherit";
 
   const mainOptions = [{ value: "", label: "— pick a model —" }, ...refOptions];
-  const subOptions = [
-    { value: "inherit", label: t("pilotDeckConfig.panels.agents.subagents.inherit") },
-    ...refOptions,
-  ];
+  const subOptions = [{ value: "inherit", label: t("satiConfig.panels.agents.subagents.inherit") }, ...refOptions];
 
   const caps = activeModelCapabilities(config);
   const supportsImageEffective = caps
@@ -46,9 +39,7 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
     const models = { ...(provider.models ?? {}) };
     const existingDef = models[modelId];
     const def: Record<string, unknown> =
-      existingDef && typeof existingDef === "object"
-        ? { ...(existingDef as Record<string, unknown>) }
-        : {};
+      existingDef && typeof existingDef === "object" ? { ...(existingDef as Record<string, unknown>) } : {};
 
     const catalogDefault = Boolean(caps.catalogModel?.supportsImage);
     if (enable === catalogDefault) {
@@ -68,9 +59,7 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
     const models = { ...(provider.models ?? {}) };
     const existingDef = models[modelId];
     const def: Record<string, unknown> =
-      existingDef && typeof existingDef === "object"
-        ? { ...(existingDef as Record<string, unknown>) }
-        : {};
+      existingDef && typeof existingDef === "object" ? { ...(existingDef as Record<string, unknown>) } : {};
     const capabilities: Record<string, unknown> =
       def.capabilities && typeof def.capabilities === "object"
         ? { ...(def.capabilities as Record<string, unknown>) }
@@ -91,18 +80,16 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
 
   return (
     <div className="space-y-3">
-      <PageSectionHeader description={t("pilotDeckConfig.panels.agents.description")} />
+      <PageSectionHeader description={t("satiConfig.panels.agents.description")} />
       <SettingsCard divided>
         <FormRow
-          label={t("pilotDeckConfig.panels.agents.mainModel.label")}
-          description={t("pilotDeckConfig.panels.agents.mainModel.description")}
+          label={t("satiConfig.panels.agents.mainModel.label")}
+          description={t("satiConfig.panels.agents.mainModel.description")}
         >
           <Select
             value={mainRef}
             options={mainOptions}
-            onChange={(v) =>
-              onChange(patch(ensureModelRefConfigured(config, v), ["agent", "model"], v))
-            }
+            onChange={v => onChange(patch(ensureModelRefConfigured(config, v), ["agent", "model"], v))}
           />
         </FormRow>
 
@@ -110,18 +97,18 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
           <div className="px-4 py-3">
             <div className="rounded-md border border-border/60 bg-muted/30 p-3">
               <div className="mb-2 text-xs font-medium text-foreground">
-                {t("pilotDeckConfig.panels.agents.capabilities.title")}
+                {t("satiConfig.panels.agents.capabilities.title")}
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <span className="inline-flex items-center gap-1.5">
                   <ImageIcon className="h-3.5 w-3.5" />
-                  {t("pilotDeckConfig.panels.agents.capabilities.imageInput")}
+                  {t("satiConfig.panels.agents.capabilities.imageInput")}
                 </span>
                 <label className="inline-flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={supportsImageEffective}
-                    onChange={(e) => setImageOverride(e.target.checked)}
+                    onChange={e => setImageOverride(e.target.checked)}
                     className="h-3.5 w-3.5 rounded border-border"
                   />
                   <span
@@ -133,44 +120,40 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
                     )}
                   >
                     {supportsImageEffective
-                      ? t("pilotDeckConfig.panels.agents.capabilities.enabled")
-                      : t("pilotDeckConfig.panels.agents.capabilities.disabled")}
+                      ? t("satiConfig.panels.agents.capabilities.enabled")
+                      : t("satiConfig.panels.agents.capabilities.disabled")}
                   </span>
                 </label>
               </div>
               <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                 {userOverrideActive
-                  ? t("pilotDeckConfig.panels.agents.capabilities.overrideActive")
+                  ? t("satiConfig.panels.agents.capabilities.overrideActive")
                   : caps.catalogModel
                     ? caps.catalogModel.supportsImage
-                      ? t("pilotDeckConfig.panels.agents.capabilities.catalogSupportsImage")
-                      : t("pilotDeckConfig.panels.agents.capabilities.catalogTextOnly")
-                    : t("pilotDeckConfig.panels.agents.capabilities.noCatalog")}{" "}
-                {t("pilotDeckConfig.panels.agents.capabilities.imageWarning")}
+                      ? t("satiConfig.panels.agents.capabilities.catalogSupportsImage")
+                      : t("satiConfig.panels.agents.capabilities.catalogTextOnly")
+                    : t("satiConfig.panels.agents.capabilities.noCatalog")}{" "}
+                {t("satiConfig.panels.agents.capabilities.imageWarning")}
               </p>
 
               <div className="mt-3 border-t border-border/60 pt-3">
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   <span className="inline-flex items-center gap-1.5">
                     <Gauge className="h-3.5 w-3.5" />
-                    {t("pilotDeckConfig.panels.agents.capabilities.maxOutputTokens")}
+                    {t("satiConfig.panels.agents.capabilities.maxOutputTokens")}
                   </span>
                   <div className="w-full max-w-[360px]">
                     <NumberInput
                       value={caps.maxOutputTokensOverride}
                       placeholder={String(caps.catalogModel?.maxOutputTokens ?? 16384)}
-                      onChange={(value) =>
-                        setMaxOutputTokens(
-                          typeof value === "number" && value > 0
-                            ? Math.floor(value)
-                            : undefined,
-                        )
+                      onChange={value =>
+                        setMaxOutputTokens(typeof value === "number" && value > 0 ? Math.floor(value) : undefined)
                       }
                     />
                   </div>
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-                  {t("pilotDeckConfig.panels.agents.capabilities.maxOutputDescription")}
+                  {t("satiConfig.panels.agents.capabilities.maxOutputDescription")}
                 </p>
               </div>
 
@@ -178,13 +161,13 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   <span className="inline-flex items-center gap-1.5">
                     <Gauge className="h-3.5 w-3.5" />
-                    {t("pilotDeckConfig.panels.agents.capabilities.maxContextTokens")}
+                    {t("satiConfig.panels.agents.capabilities.maxContextTokens")}
                   </span>
                   <div className="w-full max-w-[360px]">
                     <NumberInput
                       value={config.agent?.maxContextTokens}
                       placeholder={String(caps.catalogModel?.maxContextTokens ?? 200000)}
-                      onChange={(value) => {
+                      onChange={value => {
                         if (value === undefined) {
                           const next = { ...(config.agent ?? {}) };
                           delete next.maxContextTokens;
@@ -192,16 +175,14 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
                           return;
                         }
                         if (value > 0) {
-                          onChange(
-                            patch(config, ["agent", "maxContextTokens"], Math.floor(value)),
-                          );
+                          onChange(patch(config, ["agent", "maxContextTokens"], Math.floor(value)));
                         }
                       }}
                     />
                   </div>
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-                  {t("pilotDeckConfig.panels.agents.capabilities.maxContextDescription")}
+                  {t("satiConfig.panels.agents.capabilities.maxContextDescription")}
                 </p>
               </div>
             </div>
@@ -211,40 +192,32 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
         <div className="px-4 py-2.5">
           <button
             type="button"
-            onClick={() => setShowAdvanced((next) => !next)}
+            onClick={() => setShowAdvanced(next => !next)}
             aria-expanded={showAdvanced}
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <ChevronDown
-              className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-180")}
-            />
-            {t("pilotDeckConfig.panels.agents.advancedToggle")}
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-180")} />
+            {t("satiConfig.panels.agents.advancedToggle")}
           </button>
         </div>
 
         {showAdvanced && (
           <div className="divide-y divide-border">
             <FormRow
-              label={t("pilotDeckConfig.panels.agents.subagents.label")}
-              description={t("pilotDeckConfig.panels.agents.subagents.description")}
+              label={t("satiConfig.panels.agents.subagents.label")}
+              description={t("satiConfig.panels.agents.subagents.description")}
             >
               <Select
                 value={subDefault}
                 options={subOptions}
-                onChange={(v) =>
-                  onChange(
-                    patch(
-                      ensureModelRefConfigured(config, v),
-                      ["agent", "subagents", "default"],
-                      v,
-                    ),
-                  )
+                onChange={v =>
+                  onChange(patch(ensureModelRefConfigured(config, v), ["agent", "subagents", "default"], v))
                 }
               />
             </FormRow>
             <div className="flex gap-2 px-4 py-3 text-[11px] leading-5 text-muted-foreground">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <p>{t("pilotDeckConfig.panels.agents.subagents.routerNote")}</p>
+              <p>{t("satiConfig.panels.agents.subagents.routerNote")}</p>
             </div>
           </div>
         )}

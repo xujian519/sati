@@ -1,8 +1,8 @@
 import type { Gateway, GatewayEvent } from "../protocol/types.js";
 import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
-import { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
-import { TextWebSocketConnection } from "./websocket.js";
+import { SATI_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
 import { SkillManagerError, SkillValidationError } from "../../extension/skills/index.js";
+import { TextWebSocketConnection } from "./websocket.js";
 
 export type GatewayWsConnectionOptions = {
   gateway: Gateway;
@@ -18,15 +18,13 @@ export class GatewayWsConnection {
     private readonly ws: TextWebSocketConnection,
     private readonly options: GatewayWsConnectionOptions,
   ) {
-    ws.onMessage((message) => void this.handleMessage(message));
+    ws.onMessage(message => void this.handleMessage(message));
     ws.onClose(() => this.abortInFlightTurns());
   }
 
   private abortInFlightTurns(): void {
     for (const sessionKey of this.inFlightSessions) {
-      this.options.gateway
-        .abortTurn({ sessionKey })
-        .catch(() => undefined);
+      this.options.gateway.abortTurn({ sessionKey }).catch(() => undefined);
     }
     this.inFlightSessions.clear();
   }
@@ -66,7 +64,7 @@ export class GatewayWsConnection {
       this.ws.close(4001, "hello_required");
       return;
     }
-    if (frame.protocolVersion !== PILOTDECK_GATEWAY_PROTOCOL_VERSION) {
+    if (frame.protocolVersion !== SATI_GATEWAY_PROTOCOL_VERSION) {
       this.ws.close(4001, "protocol_mismatch");
       return;
     }
@@ -78,7 +76,7 @@ export class GatewayWsConnection {
     this.ws.sendText(
       JSON.stringify({
         type: "hello_ok",
-        protocolVersion: PILOTDECK_GATEWAY_PROTOCOL_VERSION,
+        protocolVersion: SATI_GATEWAY_PROTOCOL_VERSION,
         serverVersion: this.options.serverVersion,
         serverInfo: await this.options.gateway.describeServer(),
       }),
@@ -260,12 +258,18 @@ export class GatewayWsConnection {
         if (this.options.gateway.alwaysOnApply) {
           return this.options.gateway.alwaysOnApply(frame.params as never);
         }
-        return Promise.resolve({ sessionKey: "", error: { code: "not_configured", message: "Always-On apply not available" } });
+        return Promise.resolve({
+          sessionKey: "",
+          error: { code: "not_configured", message: "Always-On apply not available" },
+        });
       case "always_on_rerun_plan":
         if (this.options.gateway.alwaysOnRerunPlan) {
           return this.options.gateway.alwaysOnRerunPlan(frame.params as never);
         }
-        return Promise.resolve({ runId: "", error: { code: "not_configured", message: "Always-On rerun not available" } });
+        return Promise.resolve({
+          runId: "",
+          error: { code: "not_configured", message: "Always-On rerun not available" },
+        });
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }
@@ -285,10 +289,7 @@ function requireSkillMethod<TArg, TRet>(
   gateway: Gateway,
 ): (arg: TArg) => Promise<TRet> {
   if (!method) {
-    throw new SkillManagerError(
-      "not_configured",
-      "Skill management is not enabled on this gateway.",
-    );
+    throw new SkillManagerError("not_configured", "Skill management is not enabled on this gateway.");
   }
   return method.bind(gateway);
 }
@@ -306,10 +307,7 @@ function isHelloFrame(value: unknown): value is WsHelloFrame {
 
 function isRequestFrame(value: unknown): value is WsRequestFrame {
   return (
-    isRecord(value) &&
-    value.type === "request" &&
-    typeof value.id === "string" &&
-    typeof value.method === "string"
+    isRecord(value) && value.type === "request" && typeof value.id === "string" && typeof value.method === "string"
   );
 }
 

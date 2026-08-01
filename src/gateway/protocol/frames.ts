@@ -94,4 +94,10 @@ export type WsNotificationFrame = {
   payload?: unknown;
 };
 
-export type WsGatewayFrame = WsHelloFrame | WsHelloOk | WsRequestFrame | WsResponseFrame | WsEventFrame | WsNotificationFrame;
+export type WsGatewayFrame =
+  | WsHelloFrame
+  | WsHelloOk
+  | WsRequestFrame
+  | WsResponseFrame
+  | WsEventFrame
+  | WsNotificationFrame;

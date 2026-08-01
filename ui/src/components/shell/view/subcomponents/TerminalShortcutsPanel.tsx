@@ -1,31 +1,24 @@
-import { type MutableRefObject, useCallback, useState } from 'react';
-import {
-  Clipboard,
-  ArrowDownToLine,
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-} from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import type { Terminal } from '@xterm/xterm';
-import { sendSocketMessage } from '../../utils/socket';
+import { type MutableRefObject, useCallback, useState } from "react";
+import { Clipboard, ArrowDownToLine, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { Terminal } from "@xterm/xterm";
+import { sendSocketMessage } from "../../utils/socket";
 
 type Shortcut =
-  | { type: 'key'; id: string; label: string; sequence: string }
-  | { type: 'modifier'; id: string; label: string; modifier: 'ctrl' | 'alt' }
-  | { type: 'arrow'; id: string; sequence: string; icon: 'up' | 'down' | 'left' | 'right' };
+  | { type: "key"; id: string; label: string; sequence: string }
+  | { type: "modifier"; id: string; label: string; modifier: "ctrl" | "alt" }
+  | { type: "arrow"; id: string; sequence: string; icon: "up" | "down" | "left" | "right" };
 
 const MOBILE_KEYS: Shortcut[] = [
-  { type: 'key', id: 'esc', label: 'Esc', sequence: '\x1b' },
-  { type: 'key', id: 'tab', label: 'Tab', sequence: '\t' },
-  { type: 'key', id: 'shift-tab', label: '\u21e7Tab', sequence: '\x1b[Z' },
-  { type: 'modifier', id: 'ctrl', label: 'CTRL', modifier: 'ctrl' },
-  { type: 'modifier', id: 'alt', label: 'ALT', modifier: 'alt' },
-  { type: 'arrow', id: 'arrow-up', sequence: '\x1b[A', icon: 'up' },
-  { type: 'arrow', id: 'arrow-down', sequence: '\x1b[B', icon: 'down' },
-  { type: 'arrow', id: 'arrow-left', sequence: '\x1b[D', icon: 'left' },
-  { type: 'arrow', id: 'arrow-right', sequence: '\x1b[C', icon: 'right' },
+  { type: "key", id: "esc", label: "Esc", sequence: "\x1b" },
+  { type: "key", id: "tab", label: "Tab", sequence: "\t" },
+  { type: "key", id: "shift-tab", label: "\u21e7Tab", sequence: "\x1b[Z" },
+  { type: "modifier", id: "ctrl", label: "CTRL", modifier: "ctrl" },
+  { type: "modifier", id: "alt", label: "ALT", modifier: "alt" },
+  { type: "arrow", id: "arrow-up", sequence: "\x1b[A", icon: "up" },
+  { type: "arrow", id: "arrow-down", sequence: "\x1b[B", icon: "down" },
+  { type: "arrow", id: "arrow-left", sequence: "\x1b[D", icon: "left" },
+  { type: "arrow", id: "arrow-right", sequence: "\x1b[C", icon: "right" },
 ];
 
 const ARROW_ICONS = {
@@ -45,25 +38,25 @@ type TerminalShortcutsPanelProps = {
 const preventFocusSteal = (e: React.PointerEvent) => e.preventDefault();
 
 const KEY_BTN =
-  'shrink-0 rounded-md border border-gray-600 bg-gray-700 px-2.5 py-1.5 text-xs font-medium text-gray-100 transition-colors select-none active:bg-blue-600 active:text-white active:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40';
+  "shrink-0 rounded-md border border-gray-600 bg-gray-700 px-2.5 py-1.5 text-xs font-medium text-gray-100 transition-colors select-none active:bg-blue-600 active:text-white active:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40";
 const KEY_BTN_ACTIVE =
-  'shrink-0 rounded-md border border-blue-500 bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white transition-colors select-none disabled:cursor-not-allowed disabled:opacity-40';
+  "shrink-0 rounded-md border border-blue-500 bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white transition-colors select-none disabled:cursor-not-allowed disabled:opacity-40";
 const ICON_BTN =
-  'shrink-0 rounded-md border border-gray-600 bg-gray-700 p-1.5 text-gray-100 transition-colors select-none active:bg-blue-600 active:text-white active:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40';
+  "shrink-0 rounded-md border border-gray-600 bg-gray-700 p-1.5 text-gray-100 transition-colors select-none active:bg-blue-600 active:text-white active:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40";
 
 export default function TerminalShortcutsPanel({
   wsRef,
   terminalRef,
   isConnected,
-  bottomOffset = 'bottom-0',
+  bottomOffset = "bottom-0",
 }: TerminalShortcutsPanelProps) {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation("settings");
   const [ctrlActive, setCtrlActive] = useState(false);
   const [altActive, setAltActive] = useState(false);
 
   const sendInput = useCallback(
     (data: string) => {
-      sendSocketMessage(wsRef.current, { type: 'input', data });
+      sendSocketMessage(wsRef.current, { type: "input", data });
     },
     [wsRef],
   );
@@ -73,7 +66,7 @@ export default function TerminalShortcutsPanel({
   }, [terminalRef]);
 
   const pasteFromClipboard = useCallback(async () => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
       return;
     }
 
@@ -98,7 +91,7 @@ export default function TerminalShortcutsPanel({
         setCtrlActive(false);
       }
       if (altActive && seq.length === 1) {
-        finalSeq = '\x1b' + finalSeq;
+        finalSeq = "\x1b" + finalSeq;
         setAltActive(false);
       }
       sendInput(finalSeq);
@@ -117,19 +110,16 @@ export default function TerminalShortcutsPanel({
           }}
           disabled={!isConnected}
           className={ICON_BTN}
-          title={t('terminalShortcuts.paste', { defaultValue: 'Paste' })}
-          aria-label={t('terminalShortcuts.paste', { defaultValue: 'Paste' })}
+          title={t("terminalShortcuts.paste", { defaultValue: "Paste" })}
+          aria-label={t("terminalShortcuts.paste", { defaultValue: "Paste" })}
         >
           <Clipboard className="h-4 w-4" />
         </button>
 
-        {MOBILE_KEYS.map((key) => {
-          if (key.type === 'modifier') {
-            const isActive = key.modifier === 'ctrl' ? ctrlActive : altActive;
-            const toggle =
-              key.modifier === 'ctrl'
-                ? () => setCtrlActive((v) => !v)
-                : () => setAltActive((v) => !v);
+        {MOBILE_KEYS.map(key => {
+          if (key.type === "modifier") {
+            const isActive = key.modifier === "ctrl" ? ctrlActive : altActive;
+            const toggle = key.modifier === "ctrl" ? () => setCtrlActive(v => !v) : () => setAltActive(v => !v);
             return (
               <button
                 type="button"
@@ -144,7 +134,7 @@ export default function TerminalShortcutsPanel({
             );
           }
 
-          if (key.type === 'arrow') {
+          if (key.type === "arrow") {
             const Icon = ARROW_ICONS[key.icon];
             return (
               <button
@@ -180,8 +170,8 @@ export default function TerminalShortcutsPanel({
           onClick={scrollToBottom}
           disabled={!isConnected}
           className={ICON_BTN}
-          title={t('terminalShortcuts.scrollDown')}
-          aria-label={t('terminalShortcuts.scrollDown')}
+          title={t("terminalShortcuts.scrollDown")}
+          aria-label={t("terminalShortcuts.scrollDown")}
         >
           <ArrowDownToLine className="h-4 w-4" />
         </button>

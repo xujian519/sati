@@ -7,6 +7,7 @@ import type {
 import type { TokenAccountingRuntime } from "../budget/TokenAccountingRuntime.js";
 import { TokenBudgetManager } from "../budget/TokenBudgetManager.js";
 import type { ContextDiagnostic } from "../protocol/types.js";
+import type { AgentEventEmitter } from "../../agent/protocol/events.js";
 import { stripMultimediaFromMessages } from "./stripMultimedia.js";
 import {
   collectToolCallIds,
@@ -15,12 +16,7 @@ import {
   stripUnpairedToolCalls,
   stripUnpairedToolResults,
 } from "./toolPairIntegrity.js";
-import type { AgentEventEmitter } from "../../agent/protocol/events.js";
-import {
-  collectProtectedTurnIndexes,
-  protectedToolNameSet,
-  splitMessagesIntoTurns,
-} from "./protectedContext.js";
+import { collectProtectedTurnIndexes, protectedToolNameSet, splitMessagesIntoTurns } from "./protectedContext.js";
 
 export type CompactionTrigger = "manual" | "auto" | "reactive";
 
@@ -68,12 +64,7 @@ const SUMMARY_MARKDOWN_HEADINGS = [
   "Open Questions",
 ] as const;
 
-const CORE_SUMMARY_MARKDOWN_HEADINGS = [
-  "Objective",
-  "Current State",
-  "Remaining",
-  "Files And Artifacts",
-] as const;
+const CORE_SUMMARY_MARKDOWN_HEADINGS = ["Objective", "Current State", "Remaining", "Files And Artifacts"] as const;
 
 export type CompactionResult = {
   trigger: CompactionTrigger;
@@ -130,11 +121,7 @@ export class CompactionEngine {
     const preTokens = this.estimateMessages(input.messages);
     const tailRatio = clamp(input.keepTailRatio ?? DEFAULT_KEEP_TAIL_RATIO, 0, 1);
     const keepCount = Math.max(1, Math.floor(input.messages.length * tailRatio));
-    const compactPlan = planFullCompactionMessages(
-      input.messages,
-      keepCount,
-      this.protectedToolNames,
-    );
+    const compactPlan = planFullCompactionMessages(input.messages, keepCount, this.protectedToolNames);
     const messagesToSummarize = compactPlan.messagesToSummarize;
     const messagesToKeep = compactPlan.messagesToKeep;
 
@@ -146,7 +133,13 @@ export class CompactionEngine {
         messagesSummarized: messagesToSummarize.length,
       },
     });
-    this.options.eventEmitter?.({ type: "compact_started", sessionId: input.sessionId ?? "", turnId: input.turnId ?? "", trigger: input.trigger, preTokens });
+    this.options.eventEmitter?.({
+      type: "compact_started",
+      sessionId: input.sessionId ?? "",
+      turnId: input.turnId ?? "",
+      trigger: input.trigger,
+      preTokens,
+    });
 
     let summaryMessage: CanonicalMessage | undefined;
     let summaryError: string | undefined;
@@ -224,8 +217,9 @@ export class CompactionEngine {
   }
 
   private estimateMessages(messages: CanonicalMessage[]): number {
-    return this.options.tokenAccounting?.estimateMessages(messages)
-      ?? this.tokenBudget.estimateMessagesTokens(messages);
+    return (
+      this.options.tokenAccounting?.estimateMessages(messages) ?? this.tokenBudget.estimateMessagesTokens(messages)
+    );
   }
 
   private async summarize(
@@ -360,34 +354,36 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function buildMarkdownSummaryPrompt(userInstruction: string | undefined): string {
-  const headings = SUMMARY_MARKDOWN_HEADINGS.map((heading) => `## ${heading}`).join("\n");
-  const additional = userInstruction?.trim()
-    ? `\n\nAdditional summary instructions:\n${userInstruction.trim()}`
-    : "";
+  const headings = SUMMARY_MARKDOWN_HEADINGS.map(heading => `## ${heading}`).join("\n");
+  const additional = userInstruction?.trim() ? `\n\nAdditional summary instructions:\n${userInstruction.trim()}` : "";
 
-  return "Summarize the conversation so far as a concise Markdown handoff for the next coding agent.\n\n" +
+  return (
+    "Summarize the conversation so far as a concise Markdown handoff for the next coding agent.\n\n" +
     "Prefer this section structure, using the headings exactly when they apply:\n" +
     `${headings}\n\n` +
     "If a section has no content, write `None` under that heading. Preserve exact file paths, URLs, " +
     "commands, data values, user decisions, failed attempts and recovery steps, and unfinished TODOs. " +
     "Do not replay unrelated chat, and do not expand large raw tool outputs that are easy to re-read or rerun." +
-    additional;
+    additional
+  );
 }
 
 function validateSummaryMarkdownStructure(summaryMessage: CanonicalMessage): ContextDiagnostic[] {
   const text = summaryMessage.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
+    .filter(block => block.type === "text")
+    .map(block => block.text)
     .join("\n");
-  const missing = CORE_SUMMARY_MARKDOWN_HEADINGS.filter((heading) => !hasMarkdownHeading(text, heading));
+  const missing = CORE_SUMMARY_MARKDOWN_HEADINGS.filter(heading => !hasMarkdownHeading(text, heading));
   if (missing.length === 0) {
     return [];
   }
-  return [{
-    code: "compact_summary_structure_weak",
-    severity: "warning",
-    message: `Compact summary is missing recommended Markdown heading(s): ${missing.join(", ")}.`,
-  }];
+  return [
+    {
+      code: "compact_summary_structure_weak",
+      severity: "warning",
+      message: `Compact summary is missing recommended Markdown heading(s): ${missing.join(", ")}.`,
+    },
+  ];
 }
 
 function hasMarkdownHeading(text: string, heading: string): boolean {

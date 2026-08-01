@@ -16,7 +16,11 @@ export {
 export { InProcessGateway, mapAgentEvent, type InProcessGatewayOptions } from "./client/InProcessGateway.js";
 export { GatewayWsClient, GatewayRequestError, type GatewayWsClientOptions } from "./client/GatewayWsClient.js";
 export { RemoteGateway, createRemoteGateway } from "./client/RemoteGateway.js";
-export { connectRemoteGatewayIfAvailable, probeGatewayServer, type ProbeGatewayServerOptions } from "./client/probeServer.js";
+export {
+  connectRemoteGatewayIfAvailable,
+  probeGatewayServer,
+  type ProbeGatewayServerOptions,
+} from "./client/probeServer.js";
 export { startGatewayServer, type GatewayServer, type GatewayServerOptions } from "./server/GatewayServer.js";
 export {
   ensureGatewayAuthToken,
@@ -60,4 +64,4 @@ export type {
   WsNotificationFrame,
   WsResponseFrame,
 } from "./protocol/index.js";
-export { PILOTDECK_GATEWAY_PROTOCOL_VERSION } from "./protocol/index.js";
+export { SATI_GATEWAY_PROTOCOL_VERSION } from "./protocol/index.js";

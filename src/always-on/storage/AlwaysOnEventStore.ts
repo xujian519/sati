@@ -33,7 +33,7 @@ export class AlwaysOnEventStore {
     if (opts?.since) {
       const sinceMs = Date.parse(opts.since);
       if (Number.isFinite(sinceMs)) {
-        events = events.filter((e) => Date.parse(e.timestamp) >= sinceMs);
+        events = events.filter(e => Date.parse(e.timestamp) >= sinceMs);
       }
     }
 

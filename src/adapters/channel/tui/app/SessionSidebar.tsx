@@ -1,6 +1,5 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { GatewaySessionInfo } from "../../../../gateway/index.js";
 import {
   flattenSidebarRows,
   relativeTime,
@@ -9,7 +8,7 @@ import {
   type SessionGroup,
   type SidebarRow,
 } from "./sidebar-helpers.js";
-import { pilotDeckDarkBlueTheme as theme } from "./theme.js";
+import { satiDarkBlueTheme as theme } from "./theme.js";
 
 export const SIDEBAR_WIDTH = 30;
 export const MIN_SIDEBAR_COLS = 70;
@@ -46,8 +45,12 @@ export function SessionSidebar({
       paddingRight={0}
     >
       <Box paddingLeft={1} justifyContent="space-between">
-        <Text bold color={theme.brand}>Sessions</Text>
-        <Text color={theme.subtle} dimColor>{groupBy === "project" ? "by proj" : "by stat"} </Text>
+        <Text bold color={theme.brand}>
+          Sessions
+        </Text>
+        <Text color={theme.subtle} dimColor>
+          {groupBy === "project" ? "by proj" : "by stat"}{" "}
+        </Text>
       </Box>
 
       {visibleRows.map((row, i) => (
@@ -68,7 +71,7 @@ export function SessionSidebar({
 
       <Box marginTop={0} paddingLeft={1}>
         <Text color={theme.subtle} dimColor>
-          ↑↓ nav  Enter go  ^S group  Esc close
+          ↑↓ nav Enter go ^S group Esc close
         </Text>
       </Box>
     </Box>
@@ -91,11 +94,7 @@ function SidebarRowView({
     const label = `${arrow} ${row.label} (${row.count})`;
     return (
       <Box paddingLeft={1}>
-        <Text
-          color={selected ? theme.brandAccent : theme.text}
-          bold={selected}
-          inverse={selected}
-        >
+        <Text color={selected ? theme.brandAccent : theme.text} bold={selected} inverse={selected}>
           {truncateStr(label, titleWidth)}
         </Text>
       </Box>

@@ -1,14 +1,14 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { PilotDeckPluginSourceKind } from "../protocol/plugin.js";
+import type { SatiPluginSourceKind } from "../protocol/plugin.js";
 
 export type DiscoveredPluginPath = {
   path: string;
-  source: PilotDeckPluginSourceKind;
+  source: SatiPluginSourceKind;
 };
 
 export async function discoverPluginPaths(
-  directories: Array<{ path: string; source: PilotDeckPluginSourceKind }>,
+  directories: Array<{ path: string; source: SatiPluginSourceKind }>,
 ): Promise<DiscoveredPluginPath[]> {
   const discovered: DiscoveredPluginPath[] = [];
   for (const directory of directories) {
@@ -38,7 +38,7 @@ export async function discoverPluginPaths(
  * Mirrors the legacy standalone skill directory convention.
  */
 export async function discoverSkillPaths(
-  directories: Array<{ path: string; source: PilotDeckPluginSourceKind }>,
+  directories: Array<{ path: string; source: SatiPluginSourceKind }>,
 ): Promise<DiscoveredPluginPath[]> {
   const discovered: DiscoveredPluginPath[] = [];
   for (const directory of directories) {
@@ -53,7 +53,7 @@ export async function discoverSkillPaths(
       try {
         if (!(await stat(skillDir)).isDirectory()) continue;
         const files = await readdir(skillDir);
-        if (files.some((f) => /^skill\.md$/i.test(f))) {
+        if (files.some(f => /^skill\.md$/i.test(f))) {
           discovered.push({ path: skillDir, source: directory.source });
         }
       } catch {

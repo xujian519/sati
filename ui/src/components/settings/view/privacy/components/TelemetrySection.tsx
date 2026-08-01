@@ -8,18 +8,12 @@ type TelemetrySectionProps = {
   onToggle: (value: boolean) => void;
 };
 
-export default function TelemetrySection({
-  enabled,
-  loading,
-  onToggle,
-}: TelemetrySectionProps) {
+export default function TelemetrySection({ enabled, loading, onToggle }: TelemetrySectionProps) {
   const { t } = useTranslation("settings");
 
   return (
     <>
-      <h3 className="text-xl font-semibold text-foreground">
-        {t("settingsHome.telemetry.title")}
-      </h3>
+      <h3 className="text-xl font-semibold text-foreground">{t("settingsHome.telemetry.title")}</h3>
       <SettingsCard divided>
         <SettingsRow
           label={

@@ -4,11 +4,10 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import { FileArtifactCollector } from "../../src/session/artifacts/FileArtifactCollector.js";
 
 test("file artifacts include every meaningful workspace change without an extension allowlist", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-artifacts-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-artifacts-"));
   const uploadedFile = join(projectRoot, ".tmp", "chat-attachments", "source.xlsx");
   try {
     await mkdir(join(projectRoot, "app"), { recursive: true });
@@ -41,11 +40,11 @@ test("file artifacts include every meaningful workspace change without an extens
     await writeFile(join(projectRoot, "created-then-deleted.txt"), "temporary");
     await rm(join(projectRoot, "created-then-deleted.txt"));
 
-    await mkdir(join(projectRoot, ".pilotdeck", "work", "session", "turn", "pptx"), { recursive: true });
-    await writeFile(join(projectRoot, ".pilotdeck", "work", "session", "turn", "pptx", "deck.mjs"), "builder");
+    await mkdir(join(projectRoot, ".sati", "work", "session", "turn", "pptx"), { recursive: true });
+    await writeFile(join(projectRoot, ".sati", "work", "session", "turn", "pptx", "deck.mjs"), "builder");
     await mkdir(join(projectRoot, ".next", "static"), { recursive: true });
     await writeFile(join(projectRoot, ".next", "static", "bundle.js"), "generated bundle");
-    await writeFile(join(projectRoot, ".pilotdeck_build.mjs"), "build program");
+    await writeFile(join(projectRoot, ".sati_build.mjs"), "build program");
     await writeFile(join(projectRoot, ".env"), "API_KEY=secret");
     await writeFile(join(projectRoot, "private.pem"), "secret key");
 
@@ -61,24 +60,29 @@ test("file artifacts include every meaningful workspace change without an extens
       "notes.custom",
       "result.pptx",
     ].sort((left, right) => left.localeCompare(right));
-    assert.deepEqual(artifacts.map((artifact) => artifact.path), expectedPaths);
-    assert.equal(artifacts.find((artifact) => artifact.path === "app/page.tsx")?.operation, "updated");
-    assert.equal(artifacts.find((artifact) => artifact.path === "app/globals.css")?.operation, "created");
-    assert.equal(artifacts.find((artifact) => artifact.path === "notes.custom")?.mimeType, undefined);
-    assert.ok(artifacts.every((artifact) => artifact.status === "incomplete"));
-    assert.ok(artifacts.every((artifact) => artifact.sha256.length === 64));
+    assert.deepEqual(
+      artifacts.map(artifact => artifact.path),
+      expectedPaths,
+    );
+    assert.equal(artifacts.find(artifact => artifact.path === "app/page.tsx")?.operation, "updated");
+    assert.equal(artifacts.find(artifact => artifact.path === "app/globals.css")?.operation, "created");
+    assert.equal(artifacts.find(artifact => artifact.path === "notes.custom")?.mimeType, undefined);
+    assert.ok(artifacts.every(artifact => artifact.status === "incomplete"));
+    assert.ok(artifacts.every(artifact => artifact.sha256.length === 64));
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }
 });
 
 test("file artifact fingerprints are reused for unchanged files across scans and turns", async () => {
-  const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-artifact-cache-"));
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-artifact-cache-"));
   const trackedFile = join(projectRoot, "report.txt");
   let hashCalls = 0;
   const hashFile = async (filePath: string) => {
     hashCalls += 1;
-    return createHash("sha256").update(await readFile(filePath)).digest("hex");
+    return createHash("sha256")
+      .update(await readFile(filePath))
+      .digest("hex");
   };
 
   try {
@@ -98,7 +102,10 @@ test("file artifact fingerprints are reused for unchanged files across scans and
     const artifacts = await secondTurn.finish("complete");
 
     assert.equal(hashCalls, 2, "only the changed file is re-hashed");
-    assert.deepEqual(artifacts.map((artifact) => artifact.path), ["report.txt"]);
+    assert.deepEqual(
+      artifacts.map(artifact => artifact.path),
+      ["report.txt"],
+    );
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }

@@ -5,7 +5,7 @@ import type { WorkspaceProvider, WorkspacePrepareInput } from "./WorkspaceProvid
 /**
  * Picks the first applicable provider in priority order. The registry never
  * reads a "preferred strategy" from configuration; selection is purely
- * automatic per `02-pilotdeck-always-on-rewrite-plan.md` §9.
+ * automatic per `02-sati-always-on-rewrite-plan.md` §9.
  */
 export class WorkspaceProviderRegistry {
   private readonly providers: WorkspaceProvider[] = [];
@@ -29,10 +29,7 @@ export class WorkspaceProviderRegistry {
         // ignore: try the next provider.
       }
     }
-    throw new AlwaysOnError(
-      "workspace_unavailable",
-      `no workspace provider applicable for ${projectRoot}.`,
-    );
+    throw new AlwaysOnError("workspace_unavailable", `no workspace provider applicable for ${projectRoot}.`);
   }
 
   async prepare(input: WorkspacePrepareInput): Promise<{
@@ -45,6 +42,6 @@ export class WorkspaceProviderRegistry {
   }
 
   findById(id: WorkspaceProvider["id"]): WorkspaceProvider | undefined {
-    return this.providers.find((entry) => entry.id === id);
+    return this.providers.find(entry => entry.id === id);
   }
 }

@@ -1,17 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { createAgentTool } from "../../../src/tool/builtin/agent.js";
-import type {
-  PilotDeckSubagentForkApi,
-  PilotDeckToolModelClient,
-  PilotDeckToolRuntimeContext,
-} from "../../../src/tool/index.js";
+import type { SatiSubagentForkApi, SatiToolModelClient, SatiToolRuntimeContext } from "../../../src/tool/index.js";
 
 function baseContext(
-  fork: PilotDeckSubagentForkApi,
-  overrides: Partial<PilotDeckToolRuntimeContext> = {},
-): PilotDeckToolRuntimeContext {
+  fork: SatiSubagentForkApi,
+  overrides: Partial<SatiToolRuntimeContext> = {},
+): SatiToolRuntimeContext {
   return {
     sessionId: "s1",
     turnId: "t1",
@@ -30,7 +25,7 @@ function baseContext(
   };
 }
 
-function createFork(calls: string[]): PilotDeckSubagentForkApi {
+function createFork(calls: string[]): SatiSubagentForkApi {
   return {
     depth: 0,
     maxSubagentDepth: 1,
@@ -40,7 +35,7 @@ function createFork(calls: string[]): PilotDeckSubagentForkApi {
       { id: "plan", description: "plan" },
       { id: "verify", description: "verify" },
     ],
-    isAllowedDefinition: (id) => ["general-purpose", "explore", "plan", "verify"].includes(id),
+    isAllowedDefinition: id => ["general-purpose", "explore", "plan", "verify"].includes(id),
     fork: async ({ definitionId }) => {
       calls.push(definitionId);
       return {
@@ -80,7 +75,7 @@ test("agent tool defaults general-purpose to explore in ask mode", async () => {
 
 test("agent tool preserves unknown custom fallback subagent names", async () => {
   const requests: string[] = [];
-  const model: PilotDeckToolModelClient = {
+  const model: SatiToolModelClient = {
     async *stream(request) {
       requests.push(String(request.metadata?.subagent));
       yield { type: "text_delta", text: "custom ok" };

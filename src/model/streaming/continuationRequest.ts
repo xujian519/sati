@@ -5,10 +5,7 @@ export const LITELLM_CONTINUATION_INSTRUCTION =
   "You are also given a generated content. You need to respond to the message in continuation of the generated content. " +
   "Do not repeat the same content. Your response should be in continuation of this text:";
 
-export function buildLiteLLMContinuationRequest<T extends CanonicalModelRequest>(
-  original: T,
-  partialText: string,
-): T {
+export function buildLiteLLMContinuationRequest<T extends CanonicalModelRequest>(original: T, partialText: string): T {
   return {
     ...original,
     messages: [

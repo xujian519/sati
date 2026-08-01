@@ -1,12 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useUiPreferences } from "../../../../hooks/useUiPreferences";
-import {
-  PageSectionHeader,
-  SettingsCard,
-  SettingsRow,
-  SettingsSection,
-  SettingsToggle,
-} from "../../shared/view";
+import { PageSectionHeader, SettingsCard, SettingsRow, SettingsSection, SettingsToggle } from "../../shared/view";
 
 export default function ChatInputSection() {
   const { t } = useTranslation("settings");
@@ -21,21 +15,21 @@ export default function ChatInputSection() {
             <SettingsRow label={t("quickSettings.autoExpandTools")}>
               <SettingsToggle
                 checked={preferences.autoExpandTools}
-                onChange={(value) => setPreference("autoExpandTools", value)}
+                onChange={value => setPreference("autoExpandTools", value)}
                 ariaLabel={t("quickSettings.autoExpandTools")}
               />
             </SettingsRow>
             <SettingsRow label={t("quickSettings.showRawParameters")}>
               <SettingsToggle
                 checked={preferences.showRawParameters}
-                onChange={(value) => setPreference("showRawParameters", value)}
+                onChange={value => setPreference("showRawParameters", value)}
                 ariaLabel={t("quickSettings.showRawParameters")}
               />
             </SettingsRow>
             <SettingsRow label={t("quickSettings.showThinking")}>
               <SettingsToggle
                 checked={preferences.showThinking}
-                onChange={(value) => setPreference("showThinking", value)}
+                onChange={value => setPreference("showThinking", value)}
                 ariaLabel={t("quickSettings.showThinking")}
               />
             </SettingsRow>
@@ -43,7 +37,7 @@ export default function ChatInputSection() {
               <SettingsRow label={t("quickSettings.inlineThinking")}>
                 <SettingsToggle
                   checked={preferences.inlineThinking}
-                  onChange={(value) => setPreference("inlineThinking", value)}
+                  onChange={value => setPreference("inlineThinking", value)}
                   ariaLabel={t("quickSettings.inlineThinking")}
                 />
               </SettingsRow>
@@ -56,7 +50,7 @@ export default function ChatInputSection() {
             <SettingsRow label={t("quickSettings.autoScrollToBottom")}>
               <SettingsToggle
                 checked={preferences.autoScrollToBottom}
-                onChange={(value) => setPreference("autoScrollToBottom", value)}
+                onChange={value => setPreference("autoScrollToBottom", value)}
                 ariaLabel={t("quickSettings.autoScrollToBottom")}
               />
             </SettingsRow>
@@ -71,7 +65,7 @@ export default function ChatInputSection() {
             >
               <SettingsToggle
                 checked={preferences.sendByCtrlEnter}
-                onChange={(value) => setPreference("sendByCtrlEnter", value)}
+                onChange={value => setPreference("sendByCtrlEnter", value)}
                 ariaLabel={t("quickSettings.sendByCtrlEnter")}
               />
             </SettingsRow>

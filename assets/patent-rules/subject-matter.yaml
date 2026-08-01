@@ -1,0 +1,92 @@
+# 保护客体检查规则
+# 对应工具：subject-matter (SubjectMatterCheckerTool)
+# 专利法第2条（发明定义）、第25条（不授予专利权的客体）、第5条（违法性检查）
+version: "1.0.0"
+tool: "subject-matter"
+
+patterns:
+  # === 专利法第25条排除客体 ===
+
+  intellectual_activity_method:
+    description: "智力活动方法"
+    regex: "(?:方法|步骤).*(?:计算|运算|统计|分析|推理|判断|决策)"
+  intellectual_activity_management:
+    description: "管理规则"
+    regex: "(?:规则|方法|模式|算法|模型).*(?:管理|控制|优化)"
+  intellectual_activity_game:
+    description: "游戏规则"
+    regex: "(?:游戏|竞赛|比赛).*(?:规则|方法)"
+  intellectual_activity_business:
+    description: "商业模式"
+    regex: "(?:商业|经营|营销).*(?:模式|方法|策略)"
+  intellectual_activity_process:
+    description: "管理流程"
+    regex: "(?:流程|程序).*(?:管理|审批|审核)"
+
+  medical_diagnosis_1:
+    description: "疾病诊断"
+    regex: "(?:疾病|病症|病情).*(?:诊断|检查|筛查|检测)"
+  medical_diagnosis_2:
+    description: "治疗方法"
+    regex: "(?:手术|治疗|疗法|医治).*(?:方法|方案)"
+  medical_diagnosis_3:
+    description: "药物配方"
+    regex: "(?:药物|药品).*(?:配方|组合物).*(?:用于|治疗)"
+  medical_diagnosis_4:
+    description: "针灸理疗"
+    regex: "(?:针灸|按摩|理疗).*(?:方法)"
+
+  illegal_gambling:
+    description: "涉及赌博"
+    regex: "(?:赌博|博彩|赌场)"
+  illegal_drugs:
+    description: "涉及违禁品"
+    regex: "(?:毒品|违禁品|非法药物)"
+  illegal_fraud:
+    description: "涉及违法犯罪"
+    regex: "(?:诈骗|欺诈|传销)"
+
+  scientific_discovery_1:
+    description: "科学发现-新事物"
+    regex: "(?:发现|找到).*(?:新|未知)"
+  scientific_discovery_2:
+    description: "科学发现-规律"
+    regex: "(?:规律|原理|定理).*(?:发现|揭示)"
+
+  animal_plant_1:
+    description: "动物植物品种"
+    regex: "(?:动物|植物).*(?:品种|变种)"
+  animal_plant_2:
+    description: "育种方法"
+    regex: "(?:育种|培育).*(?:方法|技术)"
+
+  nuclear_transformation:
+    description: "原子核变换"
+    regex: "(?:原子核|核能).*(?:变换|裂变|聚变)"
+
+  computer_program_1:
+    description: "单纯计算机程序"
+    regex: "(?:仅仅|仅|单纯).*(?:计算机程序|软件|代码)"
+  computer_program_2:
+    description: "存储介质上的程序"
+    regex: "(?:存储介质|载体).*(?:计算机程序)"
+
+  # === 专利法第2条技术方案三要素 ===
+
+  technical_means_component:
+    description: "技术手段-结构组件"
+    regex: "装置|设备|机构|系统|单元|模块|组件|器件|电路|网络"
+  technical_means_action:
+    description: "技术手段-动作"
+    regex: "采用|利用|使用|设置|配置|安装|连接"
+  technical_means_channel:
+    description: "技术手段-路径"
+    regex: "通过|经由|基于"
+
+  technical_problem:
+    description: "技术问题推断"
+    regex: "问题|不足|缺点|缺陷|困难|需要|缺乏|缺少"
+
+  technical_effect:
+    description: "技术效果推断"
+    regex: "提高|改善|增强|优化|减少|降低|节省|效率|精度|性能|质量|稳定性"

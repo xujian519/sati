@@ -2,10 +2,10 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
-import { SignalSessionMapper } from "./SignalSessionMapper.js";
-import { renderSignalEvent } from "./signal-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { SignalSessionMapper } from "./SignalSessionMapper.js";
+import { renderSignalEvent } from "./signal-render.js";
 
 const MAX_MESSAGE_LENGTH = 2000;
 const DEFAULT_REST_URL = "http://127.0.0.1:8080";
@@ -36,16 +36,13 @@ function extractTextFromEnvelope(raw: Record<string, unknown>): EnvelopeExtract 
   const sent = sync?.sentMessage as Record<string, unknown> | undefined;
   const dm = envelope.dataMessage as Record<string, unknown> | undefined;
   const msg =
-    (typeof sent?.message === "string" && sent.message) ||
-    (typeof dm?.message === "string" && dm.message) ||
-    "";
+    (typeof sent?.message === "string" && sent.message) || (typeof dm?.message === "string" && dm.message) || "";
 
   const source =
     (typeof envelope.source === "string" && envelope.source) ||
     (typeof envelope.sourceNumber === "string" && envelope.sourceNumber) ||
     undefined;
-  const sourceUuid =
-    typeof envelope.sourceUuid === "string" ? envelope.sourceUuid : undefined;
+  const sourceUuid = typeof envelope.sourceUuid === "string" ? envelope.sourceUuid : undefined;
 
   const ts =
     (typeof dm?.timestamp === "number" && String(dm.timestamp)) ||
@@ -55,8 +52,7 @@ function extractTextFromEnvelope(raw: Record<string, unknown>): EnvelopeExtract 
   const groupId =
     (dm?.groupInfo as Record<string, unknown> | undefined)?.groupId ??
     (sent?.groupInfo as Record<string, unknown> | undefined)?.groupId;
-  const chatId =
-    typeof groupId === "string" ? `group:${groupId}` : source ? `dm:${source}` : undefined;
+  const chatId = typeof groupId === "string" ? `group:${groupId}` : source ? `dm:${source}` : undefined;
 
   return { text: msg, sourceNumber: source, sourceUuid, messageId: ts, chatId };
 }
@@ -80,9 +76,7 @@ export class SignalChannel implements ChannelAdapter {
 
   constructor(options: SignalChannelOptions = {}) {
     this.mapper = options.mapper ?? new SignalSessionMapper();
-    this.restUrl = normalizeBaseUrl(
-      options.restUrl ?? process.env.SIGNAL_HTTP_URL ?? DEFAULT_REST_URL,
-    );
+    this.restUrl = normalizeBaseUrl(options.restUrl ?? process.env.SIGNAL_HTTP_URL ?? DEFAULT_REST_URL);
     this.account = options.account ?? process.env.SIGNAL_ACCOUNT ?? "";
   }
 
@@ -98,9 +92,7 @@ export class SignalChannel implements ChannelAdapter {
     this.abort = new AbortController();
     this.running = true;
     this.receivePromise = this.runReceiveLoop(this.abort.signal);
-    this.logger?.info?.(
-      `signal: SSE receive at ${this.restUrl}/v1/receive/${encodeURIComponent(this.account)}`,
-    );
+    this.logger?.info?.(`signal: SSE receive at ${this.restUrl}/v1/receive/${encodeURIComponent(this.account)}`);
 
     return {
       stop: async (reason?: string) => {
@@ -109,7 +101,11 @@ export class SignalChannel implements ChannelAdapter {
         this.abort?.abort();
         this.abort = null;
         if (this.receivePromise) {
-          try { await this.receivePromise; } catch { /* best effort */ }
+          try {
+            await this.receivePromise;
+          } catch {
+            /* best effort */
+          }
           this.receivePromise = null;
         }
       },
@@ -131,9 +127,7 @@ export class SignalChannel implements ChannelAdapter {
           headers: { Accept: "text/event-stream, application/json, */*" },
         });
         if (!res.ok) {
-          this.logger?.error?.(
-            `signal: receive HTTP ${res.status}: ${await res.text().catch(() => "")}`,
-          );
+          this.logger?.error?.(`signal: receive HTTP ${res.status}: ${await res.text().catch(() => "")}`);
           await this.sleepBackoff(signal);
           continue;
         }
@@ -151,7 +145,7 @@ export class SignalChannel implements ChannelAdapter {
           const lines = carry.split(/\r?\n/);
           carry = lines.pop() ?? "";
           for (const line of lines) {
-            void this.parseLine(line).catch((e) => {
+            void this.parseLine(line).catch(e => {
               this.logger?.error?.(`signal: parseLine error: ${e}`);
             });
           }
@@ -263,8 +257,7 @@ export class SignalChannel implements ChannelAdapter {
 
   private async sendReply(chatId: string, text: string): Promise<boolean> {
     if (!this.running) return false;
-    const recipient =
-      this.recipientByChat.get(chatId) ?? chatId.replace(/^(dm:|group:)/, "");
+    const recipient = this.recipientByChat.get(chatId) ?? chatId.replace(/^(dm:|group:)/, "");
     if (!recipient) {
       this.logger?.warn?.(`signal: no recipient for ${chatId}, cannot send`);
       return false;
@@ -297,7 +290,7 @@ export class SignalChannel implements ChannelAdapter {
   }
 
   private async sleepBackoff(signal: AbortSignal): Promise<void> {
-    await new Promise<void>((resolve) => {
+    await new Promise<void>(resolve => {
       const t = setTimeout(() => resolve(), 3000);
       signal.addEventListener(
         "abort",

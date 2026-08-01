@@ -2,13 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { GatewayChannelKey } from "../../../gateway/index.js";
 
-export type ChannelRuntimeState =
-  | "starting"
-  | "connected"
-  | "waiting_for_login"
-  | "expired"
-  | "failed"
-  | "stopped";
+export type ChannelRuntimeState = "starting" | "connected" | "waiting_for_login" | "expired" | "failed" | "stopped";
 
 export type ChannelRuntimeStatus = {
   channelKey: GatewayChannelKey;
@@ -33,10 +27,7 @@ export type ChannelRuntimeStatusSnapshot = {
   channels: Record<string, ChannelRuntimeStatus>;
 };
 
-export type ChannelRuntimeStatusReporter = (
-  channelKey: GatewayChannelKey,
-  update: ChannelRuntimeStatusUpdate,
-) => void;
+export type ChannelRuntimeStatusReporter = (channelKey: GatewayChannelKey, update: ChannelRuntimeStatusUpdate) => void;
 
 export function channelRuntimeStatusPath(pilotHome: string): string {
   return join(pilotHome, "channels", "runtime-status.json");

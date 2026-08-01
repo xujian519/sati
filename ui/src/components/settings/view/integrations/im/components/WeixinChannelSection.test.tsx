@@ -1,11 +1,4 @@
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WeixinChannelSection from "./WeixinChannelSection";
 
@@ -49,21 +42,12 @@ describe("WeixinChannelSection", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "gateway.weixin.qrLogin" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "gateway.weixin.qrLogin" }));
 
     await waitFor(() => {
-      expect(mocks.authenticatedFetch).toHaveBeenCalledWith(
-        "/api/gateway/weixin/qr-begin",
-        { method: "POST" },
-      );
+      expect(mocks.authenticatedFetch).toHaveBeenCalledWith("/api/gateway/weixin/qr-begin", { method: "POST" });
     });
-    expect(
-      mocks.authenticatedFetch.mock.calls.some(
-        ([url]) => url === "/api/gateway/weixin/qr",
-      ),
-    ).toBe(false);
+    expect(mocks.authenticatedFetch.mock.calls.some(([url]) => url === "/api/gateway/weixin/qr")).toBe(false);
   });
 
   it("resumes an in-flight QR session from gateway runtime state", async () => {
@@ -96,26 +80,14 @@ describe("WeixinChannelSection", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByAltText("WeChat QR Code").getAttribute("src"),
-      ).toContain("existing-qr");
+      expect(screen.getByAltText("WeChat QR Code").getAttribute("src")).toContain("existing-qr");
     });
-    expect(
-      screen.getAllByText("gateway.weixin.waitingForLogin"),
-    ).toHaveLength(2);
-    expect(
-      mocks.authenticatedFetch.mock.calls.some(
-        ([url]) => url === "/api/gateway/weixin/qr-begin",
-      ),
-    ).toBe(false);
+    expect(screen.getAllByText("gateway.weixin.waitingForLogin")).toHaveLength(2);
+    expect(mocks.authenticatedFetch.mock.calls.some(([url]) => url === "/api/gateway/weixin/qr-begin")).toBe(false);
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "gateway.cancel" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "gateway.cancel" }));
     expect(screen.queryByAltText("WeChat QR Code")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "gateway.weixin.relogin" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "gateway.weixin.relogin" })).toBeTruthy();
   });
 
   it("ignores a terminal runtime result left over from an older QR request", async () => {
@@ -154,9 +126,7 @@ describe("WeixinChannelSection", () => {
     );
 
     await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "gateway.weixin.qrLogin" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "gateway.weixin.qrLogin" }));
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
@@ -168,8 +138,6 @@ describe("WeixinChannelSection", () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
 
-    expect(
-      screen.getByAltText("WeChat QR Code").getAttribute("src"),
-    ).toContain("fresh-qr");
+    expect(screen.getByAltText("WeChat QR Code").getAttribute("src")).toContain("fresh-qr");
   });
 });

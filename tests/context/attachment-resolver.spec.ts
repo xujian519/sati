@@ -3,11 +3,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import { AttachmentResolver } from "../../src/context/attachments/AttachmentResolver.js";
 
 test("Office attachments are reported unsupported before size checks", async () => {
-  const root = await mkdtemp(join(tmpdir(), "pilotdeck-attachment-resolver-"));
+  const root = await mkdtemp(join(tmpdir(), "sati-attachment-resolver-"));
   try {
     const filePath = join(root, "sample.docx");
     await writeFile(filePath, Buffer.from("PK".padEnd(128, "x")));

@@ -1,0 +1,601 @@
+# 专利判决规则集
+# 基于 7,266 份专利判决书分析提炼的司法实践规则
+# 规则ID前缀：JD-Judgment（司法裁判）
+
+rules:
+
+  # ================================================================
+  # 侵权判定实务（JD-INF-*）
+  # ================================================================
+
+  - id: JD-INF-001
+    name: "侵权判定—等同特征三要素同时满足原则"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "最高人民法院关于审理专利纠纷案件适用法律问题的若干规定第十三条第二款"
+    fix_suggestion: "等同侵权判断必须同时满足基本相同的手段、功能、效果三要素，缺一不可。逐一分析三要素，任何一项存在实质性差异即不构成等同"
+    fix_examples:
+      - "✅ 手段不同：牵引线带动环套 vs 内外枪管滑动机构，运动方式和设置方式均存在不同 → 不构成等同"
+      - "✅ 效果差距明显：双手操作与单手操作的差异，技术效果存在较为明显的差距 → 不构成等同"
+    check:
+      type: patent_infringement
+      mode: equivalent
+      requiredElements:
+        - "基本相同的手段"
+        - "基本相同的功能"
+        - "基本相同的效果"
+        - "本领域技术人员无需创造性劳动"
+      message: "等同侵权判断必须从手段、功能、效果三要素同时进行对比，任何一项存在实质性差异即不构成等同"
+
+  - id: JD-INF-002
+    name: "侵权判定—手段不同时无需判断功能效果"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2023）最高法知民终405号"
+    fix_suggestion: "在等同判断中，首先判断手段是否基本相同。如果手段已经不同，无需继续判断功能和效果，可直接得出不构成等同的结论"
+    check:
+      type: patent_infringement
+      mode: equivalent
+      requiredElements:
+        - "手段比对优先"
+        - "功能效果次要"
+      message: "等同判断中手段不同时无需判断功能和效果，避免不必要的分析"
+
+  - id: JD-INF-003
+    name: "侵权判定—发明点特征等同从严把握"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2023）最高法知民终844号"
+    fix_suggestion: "对于权利要求中构成专利获得授权的发明点技术特征，等同判断应当严格把握。专利权人在申请时明知或足以预见存在替代方案而未纳入的，不得再主张等同"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "发明点"
+        - "申请过程陈述"
+        - "技术特征限定"
+      antiPatterns:
+        - "随意选择的传动方式"
+        - "非限定性特征"
+      message: "发明点技术特征的等同认定应从严把握，避免将公共领域内容不当纳入专利权保护范围"
+
+  - id: JD-INF-004
+    name: "侵权判定—缺少技术特征不适用等同原则"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2024）最高法知民终983号"
+    fix_suggestion: "被诉侵权技术方案如果缺少权利要求记载的技术特征，则不存在对该特征进行等同判断的基础。不能通过等同原则将缺少某特征等同于具备某特征"
+    check:
+      type: patent_infringement
+      mode: both
+      requiredElements:
+        - "全部技术特征覆盖"
+        - "缺少特征不适用等同"
+      message: "被诉侵权技术方案缺少权利要求记载的技术特征时，不适用等同原则"
+
+  - id: JD-INF-005
+    name: "侵权判定—禁止以多个特征组合与一个特征比对"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2023）最高法知民终405号"
+    fix_suggestion: "等同比对应当是一个技术特征对应一个技术特征。不能将被诉侵权产品中多个组件共同实现的功能与专利一个技术特征的功能进行比对"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "一一对应比对"
+        - "单一特征比对"
+      antiPatterns:
+        - "多个组件组合比对"
+        - "整体功能比对"
+      message: "等同比对应坚持特征对应原则，不得以多个特征组合与一个特征比对"
+
+  - id: JD-INF-006
+    name: "侵权判定—禁止反悔原则的适用条件"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "最高人民法院关于审理专利纠纷案件适用法律问题的若干规定第六条"
+    fix_suggestion: "专利权人在授权或确权程序中的限缩性修改或意见陈述，在侵权诉讼中禁止反悔。需审查修改或陈述与被主张等同的技术特征之间是否存在实质联系"
+    check:
+      type: patent_infringement
+      mode: both
+      requiredElements:
+        - "审查历史"
+        - "限缩性修改"
+        - "陈述意见"
+        - "实质联系"
+      message: "禁止反悔原则的适用需审查审查历史中的修改或陈述与被主张等同特征是否具有实质联系"
+
+  - id: JD-INF-007
+    name: "侵权判定—说明书乃权利要求之母"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2010）知行字第53-1号"
+    fix_suggestion: "权利要求解释必须结合说明书及其附图。不参考说明书仅通过阅读权利要求书即可正确理解权利要求的含义，在通常情况下是不可能的"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - clarity
+        - interpretation_context
+      message: "权利要求解释必须结合说明书和附图，说明书乃权利要求之母"
+
+  - id: JD-INF-008
+    name: "侵权判定—功能性特征的认定标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "最高人民法院关于审理专利纠纷案件适用法律问题的若干规定第四条"
+    fix_suggestion: "功能性特征是指通过功能或效果进行限定的技术特征，但本领域技术人员仅通过阅读权利要求即可直接、明确确定实现方式的除外"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - functional_feature
+      message: "功能性特征的认定需判断是否隐含了特定结构、组分或步骤"
+
+  - id: JD-INF-009
+    name: "侵权判定—权利要求用语一致性解释"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2020）最高法知民终862号"
+    fix_suggestion: "同一份专利文件中的不同技术用语一般应认为具有不同含义。在同一权利要求中出现不同术语时，应作不同解释"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - terminology_consistency
+      message: "权利要求中使用的技术用语应结合附图标记加以确定，不同用语原则上作不同解释"
+
+  # ================================================================
+  # 抗辩实务（JD-DEF-*）
+  # ================================================================
+
+  - id: JD-DEF-001
+    name: "抗辩实务—现有技术抗辩单一比对原则"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "专利法第六十七条；最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释第十四条"
+    fix_suggestion: "现有技术抗辩应遵循单一比对原则，被诉侵权技术方案应当与一项现有技术方案进行比对，不能将多项现有技术方案组合后比对"
+    fix_examples:
+      - "✅ 错误：将对比文件1和2结合后与被诉侵权方案比对"
+      - "✅ 正确：将被诉侵权方案与对比文件1单独比对；再与对比文件2单独比对"
+    check:
+      type: patent_infringement
+      mode: both
+      requiredElements:
+        - "单一现有技术方案"
+        - "无实质性差异"
+        - "申请日前公开"
+      message: "现有技术抗辩必须遵循单一比对原则，不得组合多项现有技术"
+
+  - id: JD-DEF-002
+    name: "抗辩实务—现有技术抗辩无实质性差异认定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释第十四条"
+    fix_suggestion: "判断无实质性差异时，需综合考察多个区别技术特征之间的关联性和相互作用，判断其是否共同构成了不同的技术手段"
+    check:
+      type: patent_infringement
+      mode: both
+      requiredElements:
+        - "全部技术特征覆盖"
+        - "无实质性差异"
+        - "综合考察关联性"
+      message: "无实质性差异的认定应综合考察多个区别特征之间的关联性和相互作用"
+
+  - id: JD-DEF-003
+    name: "抗辩实务—现有技术证据必须完整公开全部特征"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2024）最高法知民终370号、（2022）最高法知民终2302号"
+    fix_suggestion: "现有技术证据必须能够完整公开被诉侵权技术方案的全部技术特征，仅公开外观或部分特征不足以支持抗辩"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "完整公开"
+        - "全部技术特征"
+        - "内部结构"
+      antiPatterns:
+        - "仅公开外观"
+        - "仅公开部分特征"
+      message: "现有技术抗辩要求证据完整公开全部技术特征，仅公开外观或部分特征不成立"
+
+  - id: JD-DEF-004
+    name: "抗辩实务—合法来源抗辩双重要件"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "专利法第七十七条；最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释（二）第二十五条"
+    fix_suggestion: "合法来源抗辩需同时满足客观要件（合法来源）和主观要件（实际不知道且不应当知道）。两个要件相互联系，客观要件成立时可推定主观无过错"
+    check:
+      type: patent_infringement
+      mode: literal
+      requiredElements:
+        - "合法来源"
+        - "客观要件"
+        - "主观无过错"
+      message: "合法来源抗辩需同时满足客观要件和主观要件，制造者不得主张"
+
+  - id: JD-DEF-005
+    name: "抗辩实务—合法来源抗辩证据链完整性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2023）最高法知民终2520号"
+    fix_suggestion: "销售者/使用者应提供符合交易习惯的证据，证明来源清晰、渠道合法、价格合理。证据之间应能相互印证，形成完整的证据链"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: purchase_evidence
+          patterns: ["购销合同", "送货单", "物流信息", "付款凭证", "发票"]
+        - element: evidence_chain
+          patterns: ["相互印证", "完整证据链", "对应关系"]
+      message: "合法来源抗辩要求证据形成完整链条，收据信息不完整、付款对象不明确的不予支持"
+
+  - id: JD-DEF-006
+    name: "抗辩实务—制造者不得主张合法来源抗辩"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2023）最高法知民终2147号"
+    fix_suggestion: "专利法意义上的制造者包括将技术方案再现于产品中的主体，以及标注自身企业名称、商标等表示其为产品制造者的主体，均不得主张合法来源抗辩"
+    check:
+      type: patent_infringement
+      mode: literal
+      requiredElements:
+        - "非制造者"
+        - "单纯销售者"
+      antiPatterns:
+        - "贴标行为"
+        - "标注商标"
+        - "包装装潢"
+      message: "标注自身商标、企业名称或进行包装装潢的行为构成制造行为，不得主张合法来源抗辩"
+
+  - id: JD-DEF-007
+    name: "抗辩实务—间接侵权以直接侵权为前提"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释（二）第二十一条"
+    fix_suggestion: "间接侵权（帮助侵权、教唆侵权）的成立以直接侵权行为的存在为前提。若无法证明他人实施了直接侵权行为，间接侵权主张不能成立"
+    check:
+      type: patent_infringement
+      mode: both
+      requiredElements:
+        - "直接侵权存在"
+        - "提供专用品"
+        - "主观明知"
+      message: "间接侵权成立以直接侵权行为存在为前提，无直接侵权则间接侵权不成立"
+
+  - id: JD-DEF-008
+    name: "抗辩实务—专门用于的认定标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2019）最高法知民终87号"
+    fix_suggestion: "专门用于是指产品除实施专利外不具有实质性的非侵权用途。被诉产品已实际用于侵权产品的，可初步推定系专用品，举证责任转移至生产商"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "唯一用途"
+        - "实质性非侵权用途"
+        - "行业通用"
+      antiPatterns:
+        - "多种用途"
+        - "通用零部件"
+      message: "专用品认定需判断除实施专利外是否具有实质性非侵权用途，通用零部件不构成专用品"
+
+  # ================================================================
+  # 损害赔偿（JD-DMG-*）
+  # ================================================================
+
+  - id: JD-DMG-001
+    name: "损害赔偿—法定赔偿的考量因素"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "专利法第七十一条第三款"
+    fix_suggestion: "法院适用法定赔偿时综合考虑专利类型、侵权行为性质、持续时间与规模、产品销售价格和数量、主观过错程度、专利技术贡献率、合理维权支出等因素"
+    check:
+      type: category_detection
+      categories:
+        - name: compensation_factors
+          keywords: ["专利类型", "侵权行为性质", "侵权持续时间", "侵权规模", "销售价格", "销售数量", "主观过错", "技术贡献率", "合理开支"]
+      minCategories: 3
+      message: "法定赔偿应综合考虑多项因素，逐一分析后作出合理裁量"
+
+  - id: JD-DMG-002
+    name: "损害赔偿—惩罚性赔偿的双重要件"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "专利法第七十一条第一款"
+    fix_suggestion: "惩罚性赔偿须同时满足故意侵权和情节严重两个要件。故意侵权包括被生效判决认定后继续侵权、收到警告后仍侵权、利用关联公司逃避制裁等"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "故意侵权"
+        - "情节严重"
+      antiPatterns:
+        - "间接证据不足"
+        - "无重复侵权"
+      message: "惩罚性赔偿需同时满足故意侵权和情节严重两个要件，缺一不可"
+
+  - id: JD-DMG-003
+    name: "损害赔偿—惩罚性赔偿的重复侵权认定"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2022）最高法知民终2920号"
+    fix_suggestion: "主张惩罚性赔偿需证明被诉侵权产品与在先判决中的产品结构相同，构成真正的重复侵权，仅证明型号相同不足以认定"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "产品结构相同"
+        - "技术方案相同"
+      antiPatterns:
+        - "仅型号相同"
+        - "结构不同"
+      message: "重复侵权认定需证明被诉侵权产品与在先判决产品结构相同，仅型号相同不成立"
+
+  - id: JD-DMG-004
+    name: "损害赔偿—专利贡献率的举证责任"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_infringement
+    legal_basis: "司法实践总结（2019）沪民终136号"
+    fix_suggestion: "被诉侵权人主张专利贡献率不高但未提供证据的，法院不予支持。法定赔偿中专利贡献率的举证责任在被诉侵权人一方"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "专利贡献率"
+        - "举证责任"
+        - "被诉侵权人"
+      message: "被诉侵权人主张专利贡献率不高需提供证据，否则承担不利后果"
+
+  # ================================================================
+  # 程序规则（JD-PRC-*）
+  # ================================================================
+
+  - id: JD-PRC-001
+    name: "程序规则—举证责任倒置的适用条件"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法第六十六条第一款；最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释第十七条"
+    fix_suggestion: "新产品制造方法专利适用举证责任倒置，但权利人需先证明依照专利方法制造的产品属于新产品，且被诉侵权产品为同样产品"
+    check:
+      type: patent_infringement
+      mode: both
+      requiredElements:
+        - "新产品"
+        - "同样产品"
+        - "权利人初步举证"
+      message: "举证责任倒置需权利人先证明新产品和同样产品，再转移至被诉侵权人"
+
+  - id: JD-PRC-002
+    name: "程序规则—举证妨碍的认定与后果"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "最高人民法院关于民事诉讼证据的若干规定第九十五条；最高人民法院关于知识产权民事诉讼证据的若干规定第十三条"
+    fix_suggestion: "被诉侵权人控制证据无正当理由拒不提供，或拒绝提供开机密码、拒不配合现场勘验的，构成举证妨碍，法院可推定权利人主张成立"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "拒不提供"
+        - "拒绝配合"
+        - "举证妨碍"
+      antiPatterns:
+        - "已按要求提供"
+        - "有正当理由"
+      message: "举证妨碍行为包括拒绝提供开机密码、拒绝现场勘验、拒不提供账簿资料等"
+
+  - id: JD-PRC-003
+    name: "程序规则—技术鉴定非必经程序"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "司法实践总结（2019）最高法知民终831号"
+    fix_suggestion: "技术鉴定并非侵权判定的必经程序。对于技术事实简单的案件，法院可通过技术调查官参与、当事人当庭比对等方式自行完成"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "技术鉴定"
+        - "技术调查官"
+        - "自行比对"
+      message: "技术鉴定非必经程序，法院可根据案情选择技术调查官或自行比对"
+
+  - id: JD-PRC-004
+    name: "程序规则—单方委托鉴定意见的审查标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "司法实践总结（2022）最高法知民终2100号"
+    fix_suggestion: "当事人单方委托鉴定意见经审查可予采纳。审查包括机构资格资质、鉴定方法科学性、证据材料真实可靠性、意见形成过程规范性、结论逻辑性以及与在案证据一致性"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: qualification
+          patterns: ["资格", "资质", "人民法院诉讼资产网备案"]
+        - element: method
+          patterns: ["科学方法", "行业规范"]
+        - element: evidence
+          patterns: ["真实可靠", "一致性"]
+        - element: logic
+          patterns: ["逻辑性", "科学性"]
+      message: "单方委托鉴定意见需从多维度审查，包括机构资质、方法科学性、证据真实性等"
+
+  - id: JD-PRC-005
+    name: "程序规则—网络证据的真实性认定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "司法实践总结（2020）最高法知民终248号"
+    fix_suggestion: "网络证据因其修改不留痕迹的特点，真实性认定需考量网站权威性、信息发布和审核管理机制、数据运行维护规则、获取路径是否正常、是否有其他证据佐证等因素"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: website_authority
+          patterns: ["权威性", "知名网站", "审核机制"]
+        - element: data_integrity
+          patterns: ["数据运行维护规则", "时间不可篡改"]
+        - element: acquisition_method
+          patterns: ["正常浏览路径", "非直接输入网址"]
+      message: "网络证据采信需证明网站权威性和时间不可篡改性，仅凭网页显示时间不足以认定公开时间"
+
+  # ================================================================
+  # 专利权效力（JD-VAL-*）
+  # ================================================================
+
+  - id: JD-VAL-001
+    name: "专利效力—无效程序中权利要求修改限制"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_procedure
+    legal_basis: "专利法第三十三条；专利法实施细则第四十三条"
+    fix_suggestion: "专利权人在无效宣告程序中修改权利要求不得超出原说明书和权利要求书记载的范围。修改应能直接地、毫无疑义地从原文件中确定"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - consistency
+        - modification_scope
+      message: "无效程序中权利要求修改受到严格限制，不能超出原说明书和权利要求书记载的范围"
+
+  - id: JD-VAL-002
+    name: "专利效力—创造性判断的改进动机认定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "司法实践总结（2024）最高法知行终719号"
+    fix_suggestion: "本领域技术人员对最接近现有技术有无改进动机，是评价发明创造是否具备创造性的重要考量因素。只要存在区别技术特征且发挥作用，通常可认定具有改进动机"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1:
+          - "最接近现有技术"
+        step2:
+          - "区别技术特征"
+          - "实际解决的技术问题"
+        step3:
+          - "改进动机"
+          - "技术启示"
+      message: "创造性判断中改进动机的认定：只要存在区别特征且发挥作用，通常可认定具有改进动机"
+
+  - id: JD-VAL-003
+    name: "专利效力—权利要求参数范围的支持性"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "司法实践总结（2024）最高法知行终501号"
+    fix_suggestion: "权利要求中参数的概括范围应与说明书实施例相匹配。单侧限定（如至少为X）与实施例实际数值差距明显较大且未描述参数与产品关系的，得不到说明书支持"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - support
+      message: "权利要求参数范围应与说明书实施例相匹配，单侧限定导致保护范围远超实际贡献的不予支持"
+
+  # ================================================================
+  # 权属纠纷（JD-OWN-*）
+  # ================================================================
+
+  - id: JD-OWN-001
+    name: "权属纠纷—离职后一年内相关性认定标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第六条；专利法实施细则第十二条"
+    fix_suggestion: "离职后一年内发明创造的认定，相关性一般不要求技术方案实质相同，只要在技术领域、技术主题、技术构思等方面具有延续性和传承性即可推定"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "技术领域"
+        - "技术主题"
+        - "技术构思"
+        - "延续性"
+        - "传承性"
+      antiPatterns:
+        - "技术方案完全相同"
+      message: "离职后一年内职务发明的相关性认定，不要求技术方案实质相同，技术领域、主题、构思具有延续性即可推定"
+
+  - id: JD-OWN-002
+    name: "权属纠纷—主要利用本单位物质技术条件的认定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第六条"
+    fix_suggestion: "主要利用本单位的物质技术条件是指全部或大部分利用本单位的资金、设备、器材、原材料等，且对形成发明创造具有实质性影响。利用目的在于完成技术方案而非实施技术方案"
+    check:
+      type: pattern_analysis
+      patterns:
+        - "全部或大部分利用"
+        - "实质性影响"
+        - "完成技术方案"
+      antiPatterns:
+        - "实施技术方案"
+        - "销售接触物料"
+      message: "主要利用单位物质技术条件的认定需考虑利用程度、影响程度和利用目的"
+
+  # ================================================================
+  # 外观设计（JD-DES-*）
+  # ================================================================
+
+  - id: JD-DES-001
+    name: "外观设计—保护范围确定要素"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_general
+    legal_basis: "专利法第六十四条第二款"
+    fix_suggestion: "外观设计专利权的保护范围以表示在图片或者照片中的该产品的外观设计为准，简要说明可以用于解释图片或照片。形状、图案、色彩是三项基本设计要素"
+    check:
+      type: patent_disclosure
+      requiredAspects:
+        - "图片或照片"
+        - "简要说明"
+        - "形状"
+        - "图案"
+        - "色彩"
+      message: "外观设计保护范围以图片或照片为准，简要说明可作解释。形状、图案、色彩是基本要素"
+
+  # ================================================================
+  # 总计30条规则
+  # ================================================================

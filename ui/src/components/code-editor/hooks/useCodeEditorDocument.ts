@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../../../utils/api';
-import type { CodeEditorFile } from '../types/types';
-import { isBinaryFile } from '../utils/binaryFile';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../../../utils/api";
+import type { CodeEditorFile } from "../types/types";
+import { isBinaryFile } from "../utils/binaryFile";
 
 type UseCodeEditorDocumentParams = {
   file: CodeEditorFile;
@@ -21,8 +21,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   // placeholder in here — if a load fails, the surface is hidden and the
   // user sees an error panel instead. Otherwise a stray Ctrl+S would
   // persist the placeholder text and overwrite the user's real file.
-  const [content, setContent] = useState('');
-  const [savedContent, setSavedContent] = useState('');
+  const [content, setContent] = useState("");
+  const [savedContent, setSavedContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -54,8 +54,8 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
         if (isBinaryFile(file.name)) {
           if (cancelled) return;
-          setContent('');
-          setSavedContent('');
+          setContent("");
+          setSavedContent("");
           setIsBinary(true);
           setLoading(false);
           return;
@@ -71,7 +71,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         }
 
         if (!fileProjectName) {
-          throw new Error('Missing project identifier');
+          throw new Error("Missing project identifier");
         }
 
         const response = await api.readFile(fileProjectName, filePath);
@@ -81,13 +81,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
         const data = await response.json();
         if (cancelled) return;
-        const nextContent = data.content ?? '';
+        const nextContent = data.content ?? "";
         setContent(nextContent);
         setSavedContent(nextContent);
       } catch (error) {
         if (cancelled) return;
         const message = getErrorMessage(error);
-        console.error('Error loading file:', error);
+        console.error("Error loading file:", error);
         // IMPORTANT: do not pour the error message into `content`. A previous
         // version of this code did `setContent('// Error loading file: ...')`
         // which silently became user-editable buffer content and got persisted
@@ -105,10 +105,19 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     return () => {
       cancelled = true;
     };
-  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, filePath, fileProjectName, reloadToken, renamedFromPath]);
+  }, [
+    file.diffInfo,
+    file.name,
+    fileDiffNewString,
+    fileDiffOldString,
+    filePath,
+    fileProjectName,
+    reloadToken,
+    renamedFromPath,
+  ]);
 
   const reload = useCallback(() => {
-    setReloadToken((token) => token + 1);
+    setReloadToken(token => token + 1);
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -116,11 +125,11 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     // Without this, a transient read failure followed by Ctrl+S would write
     // empty/stale content to disk.
     if (loading) {
-      setSaveError('File is still loading');
+      setSaveError("File is still loading");
       return;
     }
     if (loadError) {
-      setSaveError('Cannot save: file failed to load. Reload first.');
+      setSaveError("Cannot save: file failed to load. Reload first.");
       return;
     }
 
@@ -129,20 +138,20 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
     try {
       if (!fileProjectName) {
-        throw new Error('Missing project identifier');
+        throw new Error("Missing project identifier");
       }
 
       const response = await api.saveFile(fileProjectName, filePath, content);
 
       if (!response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType?.includes('application/json')) {
+        const contentType = response.headers.get("content-type");
+        if (contentType?.includes("application/json")) {
           const errorData = await response.json();
           throw new Error(errorData.error || `Save failed: ${response.status}`);
         }
 
         const textError = await response.text();
-        console.error('Non-JSON error response:', textError);
+        console.error("Non-JSON error response:", textError);
         throw new Error(`Save failed: ${response.status} ${response.statusText}`);
       }
 
@@ -153,7 +162,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (error) {
       const message = getErrorMessage(error);
-      console.error('Error saving file:', error);
+      console.error("Error saving file:", error);
       setSaveError(message);
     } finally {
       setSaving(false);
@@ -161,9 +170,9 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   }, [content, filePath, fileProjectName, loadError, loading]);
 
   const handleDownload = useCallback(() => {
-    const blob = new Blob([content], { type: 'text/plain' });
+    const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
+    const anchor = document.createElement("a");
 
     anchor.href = url;
     anchor.download = file.name;

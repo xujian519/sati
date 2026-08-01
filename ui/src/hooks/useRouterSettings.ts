@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { authenticatedFetch } from '../utils/api';
+import { useState, useEffect, useCallback } from "react";
+import { authenticatedFetch } from "../utils/api";
 
 export type TokenBucket = {
   inputTokens: number;
@@ -85,16 +85,16 @@ export function useRouterSettings() {
     setError(null);
     try {
       const [healthRes, configRes, summaryRes] = await Promise.all([
-        authenticatedFetch('/api/ccr/health').catch(() => null),
-        authenticatedFetch('/api/ccr/config').catch(() => null),
-        authenticatedFetch('/api/ccr/stats/summary').catch(() => null),
+        authenticatedFetch("/api/ccr/health").catch(() => null),
+        authenticatedFetch("/api/ccr/config").catch(() => null),
+        authenticatedFetch("/api/ccr/stats/summary").catch(() => null),
       ]);
 
       if (healthRes?.ok) setHealth(await healthRes.json());
       if (configRes?.ok) setConfig(await configRes.json());
       if (summaryRes?.ok) setSummary(await summaryRes.json());
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load CCR data');
+      setError(err instanceof Error ? err.message : "Failed to load CCR data");
     } finally {
       setLoading(false);
     }
@@ -104,36 +104,41 @@ export function useRouterSettings() {
     fetchAll();
   }, [fetchAll]);
 
-  const saveConfig = useCallback(async (newConfig: CCRConfig) => {
-    setSaving(true);
-    setSaveResult(null);
-    try {
-      const res = await authenticatedFetch('/api/ccr/config', {
-        method: 'PUT',
-        body: JSON.stringify(newConfig),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setSaveResult({
-          success: true,
-          message: data.restarted ? 'Saved & CCR restarted' : 'Saved (CCR restart pending)',
+  const saveConfig = useCallback(
+    async (newConfig: CCRConfig) => {
+      setSaving(true);
+      setSaveResult(null);
+      try {
+        const res = await authenticatedFetch("/api/ccr/config", {
+          method: "PUT",
+          body: JSON.stringify(newConfig),
         });
-        await fetchAll();
-      } else {
-        setSaveResult({ success: false, message: data.error || 'Save failed' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setSaveResult({
+            success: true,
+            message: data.restarted ? "Saved & CCR restarted" : "Saved (CCR restart pending)",
+          });
+          await fetchAll();
+        } else {
+          setSaveResult({ success: false, message: data.error || "Save failed" });
+        }
+      } catch (err: unknown) {
+        setSaveResult({ success: false, message: err instanceof Error ? err.message : "Save failed" });
+      } finally {
+        setSaving(false);
       }
-    } catch (err: unknown) {
-      setSaveResult({ success: false, message: err instanceof Error ? err.message : 'Save failed' });
-    } finally {
-      setSaving(false);
-    }
-  }, [fetchAll]);
+    },
+    [fetchAll],
+  );
 
   const resetStats = useCallback(async () => {
     try {
-      await authenticatedFetch('/api/ccr/stats/reset', { method: 'POST' });
+      await authenticatedFetch("/api/ccr/stats/reset", { method: "POST" });
       await fetchAll();
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   }, [fetchAll]);
 
   return {

@@ -56,8 +56,8 @@ import type {
   CronStopInput,
   CronStopResult,
 } from "../../cron/protocol/types.js";
-import { GatewayWsClient, type GatewayWsNotificationHandler } from "./GatewayWsClient.js";
 import { parseReloadConfigResult } from "../protocol/reloadConfigResult.js";
+import { GatewayWsClient, type GatewayWsNotificationHandler } from "./GatewayWsClient.js";
 
 export class RemoteGateway implements Gateway {
   constructor(private readonly client: GatewayWsClient) {}
@@ -90,7 +90,9 @@ export class RemoteGateway implements Gateway {
     await this.client.request("close_session", input);
   }
 
-  async recordAgentStatusMessage(input: import("../protocol/types.js").GatewayRecordAgentStatusMessageInput): Promise<{ recorded: boolean }> {
+  async recordAgentStatusMessage(
+    input: import("../protocol/types.js").GatewayRecordAgentStatusMessageInput,
+  ): Promise<{ recorded: boolean }> {
     return (await this.client.request("record_agent_status_message", input)) as { recorded: boolean };
   }
 
@@ -98,8 +100,13 @@ export class RemoteGateway implements Gateway {
     return (await this.client.request("describe_server", {})) as GatewayServerInfo;
   }
 
-  async getActiveTurnSnapshot(input: import("../protocol/types.js").GatewayActiveTurnSnapshotInput): Promise<import("../protocol/types.js").GatewayActiveTurnSnapshot> {
-    return (await this.client.request("active_turn_snapshot", input)) as import("../protocol/types.js").GatewayActiveTurnSnapshot;
+  async getActiveTurnSnapshot(
+    input: import("../protocol/types.js").GatewayActiveTurnSnapshotInput,
+  ): Promise<import("../protocol/types.js").GatewayActiveTurnSnapshot> {
+    return (await this.client.request(
+      "active_turn_snapshot",
+      input,
+    )) as import("../protocol/types.js").GatewayActiveTurnSnapshot;
   }
 
   async cronCreate(input: CronCreateInput): Promise<CronCreateResult> {
@@ -130,7 +137,9 @@ export class RemoteGateway implements Gateway {
     return (await this.client.request("permission_decide", input)) as { delivered: boolean };
   }
 
-  async grantSessionPermission(input: import("../protocol/types.js").GatewaySessionPermissionGrantInput): Promise<{ granted: boolean; entry?: string }> {
+  async grantSessionPermission(
+    input: import("../protocol/types.js").GatewaySessionPermissionGrantInput,
+  ): Promise<{ granted: boolean; entry?: string }> {
     return (await this.client.request("grant_session_permission", input)) as { granted: boolean; entry?: string };
   }
 
@@ -207,7 +216,9 @@ export class RemoteGateway implements Gateway {
   }
 }
 
-export async function createRemoteGateway(options: ConstructorParameters<typeof GatewayWsClient>[0]): Promise<RemoteGateway> {
+export async function createRemoteGateway(
+  options: ConstructorParameters<typeof GatewayWsClient>[0],
+): Promise<RemoteGateway> {
   const client = new GatewayWsClient(options);
   await client.connect();
   return new RemoteGateway(client);

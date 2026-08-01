@@ -8,7 +8,7 @@
  */
 
 import {
-  PILOTDECK_GATEWAY_PROTOCOL_VERSION_WEB,
+  SATI_GATEWAY_PROTOCOL_VERSION_WEB,
   type WebGatewayEvent,
   type WebGatewayFrame,
   type WebGatewayMethod,
@@ -87,10 +87,10 @@ export class GatewayBrowserClient {
 
     await waitForOpen(ws);
 
-    ws.addEventListener("message", (event) => {
+    ws.addEventListener("message", event => {
       this.handleMessage(typeof event.data === "string" ? event.data : String(event.data ?? ""));
     });
-    ws.addEventListener("close", (event) => {
+    ws.addEventListener("close", event => {
       this.handleClose(event.code, event.reason);
     });
     ws.addEventListener("error", () => {
@@ -100,8 +100,7 @@ export class GatewayBrowserClient {
     ws.send(
       JSON.stringify({
         type: "hello",
-        protocolVersion:
-          this.options.protocolVersion ?? PILOTDECK_GATEWAY_PROTOCOL_VERSION_WEB,
+        protocolVersion: this.options.protocolVersion ?? SATI_GATEWAY_PROTOCOL_VERSION_WEB,
         clientName: this.options.clientName ?? "web",
         clientVersion: this.options.clientVersion ?? "0.1.0",
         token: this.options.token,
@@ -117,7 +116,7 @@ export class GatewayBrowserClient {
     const id = this.newId();
     return new Promise<T>((resolve, reject) => {
       this.pending.set(id, {
-        resolve: (value) => resolve(value as T),
+        resolve: value => resolve(value as T),
         reject,
       });
       this.send({ type: "request", id, method, params });
@@ -143,17 +142,10 @@ export class GatewayBrowserClient {
   }
 
   listSessions(input: { projectKey?: string; limit?: number; cursor?: string }) {
-    return this.request<import("./protocol.js").WebListSessionsResult>(
-      "list_sessions",
-      input,
-    );
+    return this.request<import("./protocol.js").WebListSessionsResult>("list_sessions", input);
   }
 
-  newSession(input: {
-    projectKey?: string;
-    channelKey: import("./protocol.js").WebGatewayChannelKey;
-    hint?: string;
-  }) {
+  newSession(input: { projectKey?: string; channelKey: import("./protocol.js").WebGatewayChannelKey; hint?: string }) {
     return this.request<{ sessionKey: string }>("new_session", input);
   }
 
@@ -166,17 +158,11 @@ export class GatewayBrowserClient {
   }
 
   describeServer() {
-    return this.request<import("./protocol.js").WebHelloOk["serverInfo"]>(
-      "describe_server",
-      {},
-    );
+    return this.request<import("./protocol.js").WebHelloOk["serverInfo"]>("describe_server", {});
   }
 
   getActiveTurnSnapshot(input: import("./protocol.js").WebActiveTurnSnapshotInput) {
-    return this.request<import("./protocol.js").WebActiveTurnSnapshot>(
-      "active_turn_snapshot",
-      input,
-    );
+    return this.request<import("./protocol.js").WebActiveTurnSnapshot>("active_turn_snapshot", input);
   }
 
   permissionDecide(input: import("./protocol.js").WebPermissionDecision) {
@@ -195,22 +181,12 @@ export class GatewayBrowserClient {
     return this.request<{ delivered: boolean }>("elicitation_respond", input);
   }
 
-  readSessionMessages(
-    input: import("./protocol.js").WebReadSessionMessagesInput,
-  ) {
-    return this.request<import("./protocol.js").WebReadSessionMessagesResult>(
-      "read_session_messages",
-      input,
-    );
+  readSessionMessages(input: import("./protocol.js").WebReadSessionMessagesInput) {
+    return this.request<import("./protocol.js").WebReadSessionMessagesResult>("read_session_messages", input);
   }
 
-  readSubagentMessages(
-    input: import("./protocol.js").WebReadSubagentMessagesInput,
-  ) {
-    return this.request<import("./protocol.js").WebReadSubagentMessagesResult>(
-      "read_subagent_messages",
-      input,
-    );
+  readSubagentMessages(input: import("./protocol.js").WebReadSubagentMessagesInput) {
+    return this.request<import("./protocol.js").WebReadSubagentMessagesResult>("read_subagent_messages", input);
   }
 
   listProjects(): Promise<import("./protocol.js").WebListProjectsResult> {
@@ -265,9 +241,7 @@ export class GatewayBrowserClient {
   private waitForHello(timeoutMs: number): Promise<WebHelloOk> {
     if (this.hello) return Promise.resolve(this.hello);
     if (this.connectError || this.closed) {
-      return Promise.reject(
-        this.connectError ?? new Error("Gateway WebSocket closed before hello."),
-      );
+      return Promise.reject(this.connectError ?? new Error("Gateway WebSocket closed before hello."));
     }
     return new Promise<WebHelloOk>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -275,13 +249,13 @@ export class GatewayBrowserClient {
         this.helloReject = undefined;
         reject(new Error("Gateway hello timed out."));
       }, timeoutMs);
-      this.helloResolve = (hello) => {
+      this.helloResolve = hello => {
         clearTimeout(timer);
         this.helloResolve = undefined;
         this.helloReject = undefined;
         resolve(hello);
       };
-      this.helloReject = (err) => {
+      this.helloReject = err => {
         clearTimeout(timer);
         this.helloResolve = undefined;
         this.helloReject = undefined;
@@ -318,9 +292,7 @@ export class GatewayBrowserClient {
       if (frame.ok) {
         pending.resolve(frame.result);
       } else {
-        pending.reject(
-          Object.assign(new Error(frame.error.message), { code: frame.error.code }),
-        );
+        pending.reject(Object.assign(new Error(frame.error.message), { code: frame.error.code }));
       }
       return;
     }
@@ -347,9 +319,7 @@ export class GatewayBrowserClient {
       return;
     }
     this.closed = true;
-    const error = new Error(
-      `Gateway WebSocket closed (code=${code ?? "?"}${reason ? `, reason=${reason}` : ""}).`,
-    );
+    const error = new Error(`Gateway WebSocket closed (code=${code ?? "?"}${reason ? `, reason=${reason}` : ""}).`);
     if (!this.hello) {
       this.connectError ??= error;
       this.helloReject?.(error);
@@ -372,9 +342,7 @@ export class GatewayBrowserClient {
     if (this.options.newId) {
       return this.options.newId();
     }
-    const c =
-      typeof globalThis !== "undefined" &&
-      (globalThis as unknown as { crypto?: Crypto }).crypto;
+    const c = typeof globalThis !== "undefined" && (globalThis as unknown as { crypto?: Crypto }).crypto;
     if (c && typeof c.randomUUID === "function") {
       return c.randomUUID();
     }
@@ -383,7 +351,7 @@ export class GatewayBrowserClient {
 }
 
 export async function readLocalGatewayToken(
-  fetcher: (url: string) => Promise<Response> = (url) => fetch(url),
+  fetcher: (url: string) => Promise<Response> = url => fetch(url),
   url = "/auth/local-token",
 ): Promise<string> {
   const response = await fetcher(url);
@@ -447,7 +415,7 @@ class AsyncEventQueue<T> implements AsyncIterable<T> {
     if (this.closed) {
       return Promise.resolve({ done: true, value: undefined as never });
     }
-    return new Promise((resolve) => this.waiters.push(resolve));
+    return new Promise(resolve => this.waiters.push(resolve));
   }
 }
 

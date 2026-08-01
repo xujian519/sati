@@ -1,0 +1,51 @@
+# ============================================================================
+# 反思引擎错误指示词表
+#
+# 按域分类的指示词列表。每个域包含一个 phrases 列表和一个可选的
+# patterns（正则）列表。OutputReflector 在构造时按 domain 合并加载。
+#
+# common: 所有域通用的错误/不确定表述（从 reflection.ts 迁出）
+# safety: 安全敏感信息（从 reflexion.ts 迁出）
+# patent: 专利域专用（可扩展）
+# ============================================================================
+
+common:
+  description: "通用错误/不确定表述"
+  phrases:
+    - "抱歉"
+    - "对不起"
+    - "我错了"
+    - "可能不对"
+    - "I'm sorry"
+    - "I apologize"
+    - "I may be wrong"
+    - "I'm not sure"
+    - "I don't know"
+    - "my previous response"
+    - "let me correct"
+    - "I made a mistake"
+    - "我不确定"
+    - "我可能错了"
+
+safety:
+  description: "敏感信息安全检测"
+  phrases:
+    - "密码"
+    - "token"
+    - "secret"
+    - "api_key"
+    - "apikey"
+    - "access_token"
+    - "refresh_token"
+    - "bearer"
+    - "private_key"
+    - "credentials"
+
+patent:
+  description: "专利分析中的不确定表述"
+  phrases:
+    - "待核实"
+    - "需人工确认"
+    - "可能需要进一步检索"
+    - "无法确定新颖性"
+    - "需补充对比文件"

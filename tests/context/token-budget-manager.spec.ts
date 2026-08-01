@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { TokenBudgetManager } from "../../src/context/budget/TokenBudgetManager.js";
 
 test("budget snapshot uses conservative budget tokens for ratio while preserving real tokens", () => {

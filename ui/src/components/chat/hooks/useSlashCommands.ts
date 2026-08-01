@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
-import Fuse from 'fuse.js';
-import { authenticatedFetch } from '../../../utils/api';
-import { isImeEnterEvent } from '../../../utils/ime';
-import { safeLocalStorage } from '../utils/chatStorage';
-import type { Project } from '../../../types/app';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from "react";
+import Fuse from "fuse.js";
+import { authenticatedFetch } from "../../../utils/api";
+import { isImeEnterEvent } from "../../../utils/ime";
+import { safeLocalStorage } from "../utils/chatStorage";
+import type { Project } from "../../../types/app";
 
 const COMMAND_QUERY_DEBOUNCE_MS = 150;
 
@@ -37,7 +37,7 @@ const readCommandHistory = (projectName: string): Record<string, number> => {
   try {
     return JSON.parse(history);
   } catch (error) {
-    console.error('Error parsing command history:', error);
+    console.error("Error parsing command history:", error);
     return {};
   }
 };
@@ -47,18 +47,15 @@ const saveCommandHistory = (projectName: string, history: Record<string, number>
 };
 
 const getCommandKey = (command: SlashCommand) =>
-  `${command.name}::${command.namespace || command.type || 'other'}::${command.path || ''}`;
+  `${command.name}::${command.namespace || command.type || "other"}::${command.path || ""}`;
 
-const getCommandNamespace = (command: SlashCommand) =>
-  command.namespace || command.type || 'other';
+const getCommandNamespace = (command: SlashCommand) => command.namespace || command.type || "other";
 
-const groupCommandsForDisplay = (
-  commands: SlashCommand[],
-  frequentCommands: SlashCommand[],
-): SlashCommand[] => {
-  const preferredOrder = frequentCommands.length > 0
-    ? ['pinned', 'frequent', 'builtin', 'project', 'user', 'other']
-    : ['pinned', 'builtin', 'project', 'user', 'other'];
+const groupCommandsForDisplay = (commands: SlashCommand[], frequentCommands: SlashCommand[]): SlashCommand[] => {
+  const preferredOrder =
+    frequentCommands.length > 0
+      ? ["pinned", "frequent", "builtin", "project", "user", "other"]
+      : ["pinned", "builtin", "project", "user", "other"];
   const groups = new Map<string, SlashCommand[]>();
   const frequentCommandKeys = new Set(frequentCommands.map(getCommandKey));
 
@@ -74,20 +71,16 @@ const groupCommandsForDisplay = (
 
   if (frequentCommands.length > 0) {
     groups.set(
-      'frequent',
-      frequentCommands.map((command) => ({
+      "frequent",
+      frequentCommands.map(command => ({
         ...command,
-        namespace: 'frequent',
+        namespace: "frequent",
       })),
     );
   }
 
-  const extraNamespaces = [...groups.keys()].filter(
-    (namespace) => !preferredOrder.includes(namespace),
-  );
-  return [...preferredOrder, ...extraNamespaces].flatMap(
-    (namespace) => groups.get(namespace) || [],
-  );
+  const extraNamespaces = [...groups.keys()].filter(namespace => !preferredOrder.includes(namespace));
+  return [...preferredOrder, ...extraNamespaces].flatMap(namespace => groups.get(namespace) || []);
 };
 
 export function useSlashCommands({
@@ -100,7 +93,7 @@ export function useSlashCommands({
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
   const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([]);
   const [showCommandMenu, setShowCommandMenu] = useState(false);
-  const [commandQuery, setCommandQuery] = useState('');
+  const [commandQuery, setCommandQuery] = useState("");
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
   const [slashPosition, setSlashPosition] = useState(-1);
 
@@ -116,19 +109,19 @@ export function useSlashCommands({
   const resetCommandMenuState = useCallback(() => {
     setShowCommandMenu(false);
     setSlashPosition(-1);
-    setCommandQuery('');
+    setCommandQuery("");
     setSelectedCommandIndex(-1);
     clearCommandQueryTimer();
   }, [clearCommandQueryTimer]);
 
   const dismissCommandMenu = useCallback(() => {
     if (showCommandMenu && slashPosition >= 0) {
-      setInput((prev) => {
+      setInput(prev => {
         const before = prev.slice(0, slashPosition);
         const after = prev.slice(slashPosition);
-        const spaceIdx = after.indexOf(' ');
-        const tail = spaceIdx !== -1 ? after.slice(spaceIdx) : '';
-        const next = (before + tail).replace(/^\s+$/, '');
+        const spaceIdx = after.indexOf(" ");
+        const tail = spaceIdx !== -1 ? after.slice(spaceIdx) : "";
+        const next = (before + tail).replace(/^\s+$/, "");
         return next;
       });
     }
@@ -144,10 +137,10 @@ export function useSlashCommands({
       }
 
       try {
-        const response = await authenticatedFetch('/api/commands/list', {
-          method: 'POST',
+        const response = await authenticatedFetch("/api/commands/list", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             projectPath: selectedProject.path,
@@ -155,18 +148,18 @@ export function useSlashCommands({
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch commands');
+          throw new Error("Failed to fetch commands");
         }
 
         const data = await response.json();
         const allCommands: SlashCommand[] = [
-          ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
+          ...((data.builtIn || []) as SlashCommand[]).map(command => ({
             ...command,
-            type: 'built-in',
+            type: "built-in",
           })),
-          ...((data.custom || []) as SlashCommand[]).map((command) => ({
+          ...((data.custom || []) as SlashCommand[]).map(command => ({
             ...command,
-            type: 'custom',
+            type: "custom",
           })),
         ];
 
@@ -180,12 +173,8 @@ export function useSlashCommands({
 
         const parsedHistory = readCommandHistory(selectedProject.name);
         const sortedCommands = [...allCommands].sort((commandA, commandB) => {
-          const aPinnedIdx = pinnedOrderIndex.has(commandA.name)
-            ? (pinnedOrderIndex.get(commandA.name) as number)
-            : -1;
-          const bPinnedIdx = pinnedOrderIndex.has(commandB.name)
-            ? (pinnedOrderIndex.get(commandB.name) as number)
-            : -1;
+          const aPinnedIdx = pinnedOrderIndex.has(commandA.name) ? (pinnedOrderIndex.get(commandA.name) as number) : -1;
+          const bPinnedIdx = pinnedOrderIndex.has(commandB.name) ? (pinnedOrderIndex.get(commandB.name) as number) : -1;
           if (aPinnedIdx !== -1 || bPinnedIdx !== -1) {
             if (aPinnedIdx === -1) return 1;
             if (bPinnedIdx === -1) return -1;
@@ -198,7 +187,7 @@ export function useSlashCommands({
 
         setSlashCommands(sortedCommands);
       } catch (error) {
-        console.error('Error fetching slash commands:', error);
+        console.error("Error fetching slash commands:", error);
         setSlashCommands([]);
       }
     };
@@ -219,8 +208,8 @@ export function useSlashCommands({
 
     return new Fuse(slashCommands, {
       keys: [
-        { name: 'name', weight: 2 },
-        { name: 'description', weight: 1 },
+        { name: "name", weight: 2 },
+        { name: "description", weight: 1 },
       ],
       threshold: 0.4,
       includeScore: true,
@@ -240,7 +229,7 @@ export function useSlashCommands({
     }
 
     const results = fuse.search(commandQuery);
-    setFilteredCommands(results.map((result) => result.item));
+    setFilteredCommands(results.map(result => result.item));
   }, [commandQuery, slashCommands, fuse]);
 
   const frequentCommands = useMemo(() => {
@@ -251,20 +240,17 @@ export function useSlashCommands({
     const parsedHistory = readCommandHistory(selectedProject.name);
 
     return slashCommands
-      .map((command) => ({
+      .map(command => ({
         ...command,
         usageCount: parsedHistory[command.name] || 0,
       }))
-      .filter((command) => command.usageCount > 0)
+      .filter(command => command.usageCount > 0)
       .sort((commandA, commandB) => commandB.usageCount - commandA.usageCount)
       .slice(0, 5);
   }, [selectedProject, slashCommands]);
 
   const displayedCommands = useMemo(() => {
-    return groupCommandsForDisplay(
-      filteredCommands,
-      commandQuery ? [] : frequentCommands,
-    );
+    return groupCommandsForDisplay(filteredCommands, commandQuery ? [] : frequentCommands);
   }, [commandQuery, filteredCommands, frequentCommands]);
 
   useEffect(() => {
@@ -272,7 +258,7 @@ export function useSlashCommands({
       return;
     }
 
-    setSelectedCommandIndex((previousIndex) => {
+    setSelectedCommandIndex(previousIndex => {
       if (displayedCommands.length === 0) {
         return -1;
       }
@@ -311,9 +297,8 @@ export function useSlashCommands({
       const slashStart = slashPosition >= 0 ? slashPosition : input.length;
       const textBeforeSlash = input.slice(0, slashStart);
       const textAfterSlash = input.slice(slashStart);
-      const spaceIndex = textAfterSlash.indexOf(' ');
-      const textAfterQuery =
-        spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : '';
+      const spaceIndex = textAfterSlash.indexOf(" ");
+      const textAfterQuery = spaceIndex !== -1 ? textAfterSlash.slice(spaceIndex) : "";
       const head = `${textBeforeSlash}${command.name} `;
       const newInput = `${head}${textAfterQuery}`;
 
@@ -368,7 +353,7 @@ export function useSlashCommands({
   const handleToggleCommandMenu = useCallback(() => {
     const isOpening = !showCommandMenu;
     setShowCommandMenu(isOpening);
-    setCommandQuery('');
+    setCommandQuery("");
     setSelectedCommandIndex(-1);
 
     if (isOpening) {
@@ -393,8 +378,8 @@ export function useSlashCommands({
         return;
       }
 
-      const slashIdx = textBeforeCursor.lastIndexOf('/');
-      const query = slashMatch[3] || '';
+      const slashIdx = textBeforeCursor.lastIndexOf("/");
+      const query = slashMatch[3] || "";
 
       setSlashPosition(slashIdx);
       setShowCommandMenu(true);
@@ -415,7 +400,7 @@ export function useSlashCommands({
       }
 
       if (!displayedCommands.length) {
-        if (event.key === 'Escape') {
+        if (event.key === "Escape") {
           event.preventDefault();
           resetCommandMenuState();
           return true;
@@ -423,23 +408,23 @@ export function useSlashCommands({
         return false;
       }
 
-      if (event.key === 'ArrowDown') {
+      if (event.key === "ArrowDown") {
         event.preventDefault();
-        setSelectedCommandIndex((previousIndex) =>
+        setSelectedCommandIndex(previousIndex =>
           previousIndex < displayedCommands.length - 1 ? previousIndex + 1 : 0,
         );
         return true;
       }
 
-      if (event.key === 'ArrowUp') {
+      if (event.key === "ArrowUp") {
         event.preventDefault();
-        setSelectedCommandIndex((previousIndex) =>
+        setSelectedCommandIndex(previousIndex =>
           previousIndex > 0 ? previousIndex - 1 : displayedCommands.length - 1,
         );
         return true;
       }
 
-      if (event.key === 'Tab' || event.key === 'Enter') {
+      if (event.key === "Tab" || event.key === "Enter") {
         if (isImeEnterEvent(event)) {
           return false;
         }
@@ -452,7 +437,7 @@ export function useSlashCommands({
         return true;
       }
 
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         event.preventDefault();
         dismissCommandMenu();
         return true;

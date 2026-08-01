@@ -1,7 +1,7 @@
 export type PermissionsExport = {
   version: 2;
   exportedAt: string;
-  source: "pilotdeck";
+  source: "sati";
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
@@ -13,7 +13,4 @@ export type ParsedPermissionsImport = {
   skipPermissions?: boolean;
 };
 
-export type StatusBanner =
-  | { kind: "success"; message: string }
-  | { kind: "error"; message: string }
-  | null;
+export type StatusBanner = { kind: "success"; message: string } | { kind: "error"; message: string } | null;

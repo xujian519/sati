@@ -1,21 +1,12 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
-import {
-  ConfigSaveError,
-  PageSectionHeader,
-  SettingsCard,
-  SettingsRow,
-  SettingsToggle,
-} from "../../shared/view";
+import { useSatiConfig } from "../../../../hooks/useSatiConfig";
+import { ConfigSaveError, PageSectionHeader, SettingsCard, SettingsRow, SettingsToggle } from "../../shared/view";
 import { FormRow, Select } from "../../shared/components/Inputs";
 import { patch } from "../modelPool/utils/patch";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
-import type { PilotDeckConfig } from "../modelPool/types";
-import {
-  buildModelRefOptions,
-  ensureModelRefConfigured,
-} from "../agentModel/utils/modelRefs";
+import type { SatiConfig } from "../modelPool/types";
+import { buildModelRefOptions, ensureModelRefConfigured } from "../agentModel/utils/modelRefs";
 import type { SettingsProject } from "../../shared/types";
 import MemoryDataSection from "./MemoryDataSection";
 import {
@@ -32,29 +23,17 @@ type AgentMemorySectionsProps = {
   projects: SettingsProject[];
 };
 
-function MemorySection({
-  config,
-  onChange,
-}: {
-  config: PilotDeckConfig;
-  onChange: (next: PilotDeckConfig) => void;
-}) {
+function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (next: SatiConfig) => void }) {
   const { t } = useTranslation("settings");
   const m = config.memory ?? {};
   const options = [
-    { value: "inherit", label: t("pilotDeckConfig.panels.memory.model.inherit") },
+    { value: "inherit", label: t("satiConfig.panels.memory.model.inherit") },
     ...buildModelRefOptions(config),
   ];
   const selected = m.model && m.model.trim() ? m.model : "inherit";
 
-  const initialIndex = toDisplayUnit(
-    m.autoIndexIntervalMinutes,
-    DEFAULT_INDEX_MINUTES,
-  );
-  const initialDream = toDisplayUnit(
-    m.autoDreamIntervalMinutes,
-    DEFAULT_DREAM_MINUTES,
-  );
+  const initialIndex = toDisplayUnit(m.autoIndexIntervalMinutes, DEFAULT_INDEX_MINUTES);
+  const initialDream = toDisplayUnit(m.autoDreamIntervalMinutes, DEFAULT_DREAM_MINUTES);
   const [indexUnit, setIndexUnit] = useState<IntervalUnit>(initialIndex.unit);
   const [dreamUnit, setDreamUnit] = useState<IntervalUnit>(initialDream.unit);
   const [indexEditing, setIndexEditing] = useState(false);
@@ -65,31 +44,19 @@ function MemorySection({
   const [dreamDraftUnit, setDreamDraftUnit] = useState<IntervalUnit>(initialDream.unit);
 
   const applyIndex = (value: number | undefined, unit: IntervalUnit) => {
-    onChange(
-      patch(config, ["memory", "autoIndexIntervalMinutes"], toMinutes(value, unit)),
-    );
+    onChange(patch(config, ["memory", "autoIndexIntervalMinutes"], toMinutes(value, unit)));
   };
 
   const applyDream = (value: number | undefined, unit: IntervalUnit) => {
-    onChange(
-      patch(config, ["memory", "autoDreamIntervalMinutes"], toMinutes(value, unit)),
-    );
+    onChange(patch(config, ["memory", "autoDreamIntervalMinutes"], toMinutes(value, unit)));
   };
 
   const handleMemoryEnabled = (enabled: boolean) => {
     let next = patch(config, ["memory", "enabled"], enabled);
     if (enabled) {
       const intervals = resolveEnabledMemoryIntervals(config.memory);
-      next = patch(
-        next,
-        ["memory", "autoIndexIntervalMinutes"],
-        intervals.autoIndexIntervalMinutes,
-      );
-      next = patch(
-        next,
-        ["memory", "autoDreamIntervalMinutes"],
-        intervals.autoDreamIntervalMinutes,
-      );
+      next = patch(next, ["memory", "autoIndexIntervalMinutes"], intervals.autoIndexIntervalMinutes);
+      next = patch(next, ["memory", "autoDreamIntervalMinutes"], intervals.autoDreamIntervalMinutes);
     }
     onChange(next);
   };
@@ -97,12 +64,12 @@ function MemorySection({
   const indexValueDisplay =
     indexUnit === "hours"
       ? Math.max(0, Math.floor((m.autoIndexIntervalMinutes ?? DEFAULT_INDEX_MINUTES) / 60))
-      : m.autoIndexIntervalMinutes ?? DEFAULT_INDEX_MINUTES;
+      : (m.autoIndexIntervalMinutes ?? DEFAULT_INDEX_MINUTES);
 
   const dreamValueDisplay =
     dreamUnit === "hours"
       ? Math.max(0, Math.floor((m.autoDreamIntervalMinutes ?? DEFAULT_DREAM_MINUTES) / 60))
-      : m.autoDreamIntervalMinutes ?? DEFAULT_DREAM_MINUTES;
+      : (m.autoDreamIntervalMinutes ?? DEFAULT_DREAM_MINUTES);
 
   const commitIndex = () => {
     const parsed = Number(indexDraftValue);
@@ -134,36 +101,30 @@ function MemorySection({
 
   return (
     <div className="space-y-3 pb-6">
-      <PageSectionHeader description={t("pilotDeckConfig.panels.memory.description")} />
+      <PageSectionHeader description={t("satiConfig.panels.memory.description")} />
       <SettingsCard>
         <SettingsRow
-          label={t("pilotDeckConfig.panels.memory.enabled.label")}
-          description={t("pilotDeckConfig.panels.memory.enabled.description")}
+          label={t("satiConfig.panels.memory.enabled.label")}
+          description={t("satiConfig.panels.memory.enabled.description")}
         >
           <SettingsToggle
             checked={Boolean(m.enabled)}
-            ariaLabel={t("pilotDeckConfig.panels.memory.enabled.label")}
+            ariaLabel={t("satiConfig.panels.memory.enabled.label")}
             onChange={handleMemoryEnabled}
           />
         </SettingsRow>
         {m.enabled && (
           <>
             <FormRow
-              label={t("pilotDeckConfig.panels.memory.model.label")}
-              description={t("pilotDeckConfig.panels.memory.model.description")}
+              label={t("satiConfig.panels.memory.model.label")}
+              description={t("satiConfig.panels.memory.model.description")}
             >
               <Select
                 value={selected}
                 options={options}
-                onChange={(v) => {
+                onChange={v => {
                   const nextValue = v === "inherit" ? "" : v;
-                  onChange(
-                    patch(
-                      ensureModelRefConfigured(config, nextValue),
-                      ["memory", "model"],
-                      nextValue,
-                    ),
-                  );
+                  onChange(patch(ensureModelRefConfigured(config, nextValue), ["memory", "model"], nextValue));
                 }}
               />
             </FormRow>
@@ -171,10 +132,10 @@ function MemorySection({
             <div className="grid grid-cols-1 items-start gap-2 px-4 py-2.5 sm:grid-cols-[minmax(360px,1fr)_420px] sm:gap-4">
               <div className="min-w-0">
                 <div className="text-[13px] font-medium leading-5 text-foreground">
-                  {t("pilotDeckConfig.panels.memory.autoIndexInterval.label")}
+                  {t("satiConfig.panels.memory.autoIndexInterval.label")}
                 </div>
                 <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
-                  {t("pilotDeckConfig.panels.memory.autoIndexInterval.description")}
+                  {t("satiConfig.panels.memory.autoIndexInterval.description")}
                 </div>
               </div>
               <div className="flex items-center justify-end gap-2.5">
@@ -184,17 +145,13 @@ function MemorySection({
                     min={0}
                     value={indexEditing ? indexDraftValue : String(indexValueDisplay)}
                     readOnly={!indexEditing}
-                    onChange={(event) => setIndexDraftValue(event.target.value)}
-                    onKeyDown={(event) => {
+                    onChange={event => setIndexDraftValue(event.target.value)}
+                    onKeyDown={event => {
                       if (event.key === "Escape") {
                         event.preventDefault();
                         cancelIndex();
                       }
-                      if (
-                        event.key === "Enter" &&
-                        (event.ctrlKey || event.metaKey) &&
-                        !event.shiftKey
-                      ) {
+                      if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.shiftKey) {
                         event.preventDefault();
                         commitIndex();
                       }
@@ -211,10 +168,10 @@ function MemorySection({
                     value={indexEditing ? indexDraftUnit : indexUnit}
                     disabled={!indexEditing}
                     options={[
-                      { value: "minutes", label: t("pilotDeckConfig.panels.memory.intervalUnits.minutes") },
-                      { value: "hours", label: t("pilotDeckConfig.panels.memory.intervalUnits.hours") },
+                      { value: "minutes", label: t("satiConfig.panels.memory.intervalUnits.minutes") },
+                      { value: "hours", label: t("satiConfig.panels.memory.intervalUnits.hours") },
                     ]}
-                    onChange={(v) => {
+                    onChange={v => {
                       const unit = v === "hours" ? "hours" : "minutes";
                       if (!indexEditing) return;
                       setIndexDraftUnit(unit);
@@ -258,10 +215,10 @@ function MemorySection({
             <div className="grid grid-cols-1 items-start gap-2 px-4 py-2.5 sm:grid-cols-[minmax(360px,1fr)_420px] sm:gap-4">
               <div className="min-w-0">
                 <div className="text-[13px] font-medium leading-5 text-foreground">
-                  {t("pilotDeckConfig.panels.memory.autoDreamInterval.label")}
+                  {t("satiConfig.panels.memory.autoDreamInterval.label")}
                 </div>
                 <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
-                  {t("pilotDeckConfig.panels.memory.autoDreamInterval.description")}
+                  {t("satiConfig.panels.memory.autoDreamInterval.description")}
                 </div>
               </div>
               <div className="flex items-center justify-end gap-2.5">
@@ -271,17 +228,13 @@ function MemorySection({
                     min={0}
                     value={dreamEditing ? dreamDraftValue : String(dreamValueDisplay)}
                     readOnly={!dreamEditing}
-                    onChange={(event) => setDreamDraftValue(event.target.value)}
-                    onKeyDown={(event) => {
+                    onChange={event => setDreamDraftValue(event.target.value)}
+                    onKeyDown={event => {
                       if (event.key === "Escape") {
                         event.preventDefault();
                         cancelDream();
                       }
-                      if (
-                        event.key === "Enter" &&
-                        (event.ctrlKey || event.metaKey) &&
-                        !event.shiftKey
-                      ) {
+                      if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.shiftKey) {
                         event.preventDefault();
                         commitDream();
                       }
@@ -298,10 +251,10 @@ function MemorySection({
                     value={dreamEditing ? dreamDraftUnit : dreamUnit}
                     disabled={!dreamEditing}
                     options={[
-                      { value: "minutes", label: t("pilotDeckConfig.panels.memory.intervalUnits.minutes") },
-                      { value: "hours", label: t("pilotDeckConfig.panels.memory.intervalUnits.hours") },
+                      { value: "minutes", label: t("satiConfig.panels.memory.intervalUnits.minutes") },
+                      { value: "hours", label: t("satiConfig.panels.memory.intervalUnits.hours") },
                     ]}
-                    onChange={(v) => {
+                    onChange={v => {
                       const unit = v === "hours" ? "hours" : "minutes";
                       if (!dreamEditing) return;
                       setDreamDraftUnit(unit);
@@ -348,15 +301,12 @@ function MemorySection({
   );
 }
 
-export default function AgentMemorySections({
-  title,
-  projects,
-}: AgentMemorySectionsProps) {
+export default function AgentMemorySections({ title, projects }: AgentMemorySectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
+  const { raw, setRaw, save, loading, error } = useSatiConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
 
-  const onFormChange = (next: PilotDeckConfig) => {
+  const onFormChange = (next: SatiConfig) => {
     try {
       setRaw(configToYamlString(next));
       void save();
@@ -369,9 +319,7 @@ export default function AgentMemorySections({
     return (
       <div className="space-y-6">
         <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
-        <div className="py-6 text-xs text-muted-foreground">
-          {t("pilotDeckConfig.loading")}
-        </div>
+        <div className="py-6 text-xs text-muted-foreground">{t("satiConfig.loading")}</div>
       </div>
     );
   }

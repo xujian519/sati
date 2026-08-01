@@ -1,16 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import {
-  ArrowLeft,
-  ChevronDown,
-  ChevronRight,
-  ExternalLink,
-  Loader2,
-} from 'lucide-react';
-import type { AlwaysOnDashboardEvent } from '../../types/app';
-import { api } from '../../utils/api';
-import { cn } from '../../lib/utils.js';
-import { Markdown } from '../chat/view/subcomponents/Markdown';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import type { AlwaysOnDashboardEvent } from "../../types/app";
+import { api } from "../../utils/api";
+import { cn } from "../../lib/utils.js";
+import { Markdown } from "../chat/view/subcomponents/Markdown";
 
 type RunDetailProps = {
   runId?: string;
@@ -33,23 +27,23 @@ type PlanData = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  ready: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  queued: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  running: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-  failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  apply_failed: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  applying: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  applied: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  archived: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400',
+  ready: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  queued: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  running: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  apply_failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  applying: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  applied: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  archived: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
 };
 
 function planStatusToOutcome(status?: string): string {
-  if (!status) return '';
-  if (status === 'completed' || status === 'applied') return 'executed';
-  if (status === 'failed' || status === 'apply_failed') return 'failed';
-  if (status === 'archived') return 'archived';
-  return '';
+  if (!status) return "";
+  if (status === "completed" || status === "applied") return "executed";
+  if (status === "failed" || status === "apply_failed") return "failed";
+  if (status === "archived") return "archived";
+  return "";
 }
 
 export default function RunDetail(props: RunDetailProps) {
@@ -65,34 +59,37 @@ export default function RunDetail(props: RunDetailProps) {
     onOpenExecutionSession,
     compact = false,
   } = props;
-  const { t } = useTranslation('alwaysOn');
+  const { t } = useTranslation("alwaysOn");
 
-  const effectiveRunId = runIdProp || (directPlanId ? directPlanId.replace(/^plan_/, '') : '');
+  const effectiveRunId = runIdProp || (directPlanId ? directPlanId.replace(/^plan_/, "") : "");
 
   const runEvents = useMemo(
-    () => (effectiveRunId ? events.filter((e) => e.runId === effectiveRunId) : []),
+    () => (effectiveRunId ? events.filter(e => e.runId === effectiveRunId) : []),
     [events, effectiveRunId],
   );
 
   const { planId, projectKey, projectName, projectDisplayName, outcome } = useMemo(() => {
     if (directPlanId && directProjectName) {
-      let evtOutcome = '';
+      let evtOutcome = "";
       for (const e of runEvents) {
-        if (e.outcome) { evtOutcome = e.outcome; break; }
+        if (e.outcome) {
+          evtOutcome = e.outcome;
+          break;
+        }
       }
       return {
         planId: directPlanId,
-        projectKey: directProjectKey || '',
+        projectKey: directProjectKey || "",
         projectName: directProjectName,
-        projectDisplayName: directProjectDisplayName || '',
+        projectDisplayName: directProjectDisplayName || "",
         outcome: evtOutcome,
       };
     }
-    let planId = '';
-    let projectKey = '';
-    let projectName = '';
-    let projectDisplayName = '';
-    let outcome = '';
+    let planId = "";
+    let projectKey = "";
+    let projectName = "";
+    let projectDisplayName = "";
+    let outcome = "";
     for (const e of runEvents) {
       if (e.planId && !planId) planId = e.planId;
       if (e.projectKey && !projectKey) projectKey = e.projectKey;
@@ -104,7 +101,7 @@ export default function RunDetail(props: RunDetailProps) {
   }, [runEvents, directPlanId, directProjectName, directProjectDisplayName, directProjectKey]);
 
   const [plan, setPlan] = useState<PlanData | null>(null);
-  const [reportMarkdown, setReportMarkdown] = useState('');
+  const [reportMarkdown, setReportMarkdown] = useState("");
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
@@ -119,15 +116,13 @@ export default function RunDetail(props: RunDetailProps) {
       .then((r: Response) => r.json())
       .then((data: { plans?: Array<Record<string, unknown>> }) => {
         if (cancelled) return;
-        const match = data.plans?.find(
-          (p: Record<string, unknown>) => p.id === planId,
-        );
+        const match = data.plans?.find((p: Record<string, unknown>) => p.id === planId);
         if (match) {
           setPlan({
-            title: (match.title as string) || 'Untitled',
-            status: (match.status as string) || 'ready',
-            workspace: match.workspace as PlanData['workspace'],
-            content: ((match.content as string) || '').trim(),
+            title: (match.title as string) || "Untitled",
+            status: (match.status as string) || "ready",
+            workspace: match.workspace as PlanData["workspace"],
+            content: ((match.content as string) || "").trim(),
           });
         }
       })
@@ -135,7 +130,9 @@ export default function RunDetail(props: RunDetailProps) {
       .finally(() => {
         if (!cancelled) setLoadingPlan(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [projectName, planId]);
 
   useEffect(() => {
@@ -147,21 +144,22 @@ export default function RunDetail(props: RunDetailProps) {
       .then((r: Response) => r.json())
       .then((data: { content?: string }) => {
         if (cancelled) return;
-        setReportMarkdown((data.content || '').trim());
+        setReportMarkdown((data.content || "").trim());
       })
       .catch(() => {})
       .finally(() => {
         if (!cancelled) setLoadingReport(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [projectName, planId]);
 
   const statusColor =
-    STATUS_COLORS[plan?.status ?? ''] ??
-    'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400';
+    STATUS_COLORS[plan?.status ?? ""] ?? "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400";
 
   return (
-    <div className={cn('w-full space-y-5 py-5', compact ? 'px-4' : 'px-8')}>
+    <div className={cn("w-full space-y-5 py-5", compact ? "px-4" : "px-8")}>
       {/* Back button */}
       <button
         type="button"
@@ -169,7 +167,7 @@ export default function RunDetail(props: RunDetailProps) {
         className="inline-flex items-center gap-1.5 text-[13px] text-neutral-500 transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
       >
         <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
-        {backLabel ?? t('dashboard.runDetail.back', { defaultValue: 'Back to events' })}
+        {backLabel ?? t("dashboard.runDetail.back", { defaultValue: "Back to events" })}
       </button>
 
       {/* Header card */}
@@ -178,12 +176,12 @@ export default function RunDetail(props: RunDetailProps) {
           {loadingPlan && !plan ? (
             <div className="flex items-center gap-2 text-[13px] text-neutral-500">
               <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
-              {t('dashboard.runDetail.loading', { defaultValue: 'Loading…' })}
+              {t("dashboard.runDetail.loading", { defaultValue: "Loading…" })}
             </div>
           ) : (
             <>
               <h2 className="text-[16px] font-semibold text-neutral-900 dark:text-neutral-100">
-                {plan?.title || t('dashboard.runDetail.untitled', { defaultValue: 'Untitled Plan' })}
+                {plan?.title || t("dashboard.runDetail.untitled", { defaultValue: "Untitled Plan" })}
               </h2>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 {projectDisplayName && (
@@ -194,7 +192,7 @@ export default function RunDetail(props: RunDetailProps) {
                 {plan?.status && (
                   <span
                     className={cn(
-                      'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+                      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
                       statusColor,
                     )}
                   >
@@ -207,26 +205,28 @@ export default function RunDetail(props: RunDetailProps) {
         </div>
 
         {/* Metadata grid */}
-        <div className={cn(
-          'grid border-b border-neutral-200 dark:border-neutral-800',
-          compact
-            ? 'grid-cols-1 divide-y divide-neutral-100 dark:divide-neutral-800'
-            : 'grid-cols-3 divide-x divide-neutral-100 dark:divide-neutral-800',
-        )}>
+        <div
+          className={cn(
+            "grid border-b border-neutral-200 dark:border-neutral-800",
+            compact
+              ? "grid-cols-1 divide-y divide-neutral-100 dark:divide-neutral-800"
+              : "grid-cols-3 divide-x divide-neutral-100 dark:divide-neutral-800",
+          )}
+        >
           {/* Workspace strategy */}
           <div className="px-5 py-3">
             <div className="text-xxs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-              {t('dashboard.runDetail.workspaceStrategy', { defaultValue: 'Workspace' })}
+              {t("dashboard.runDetail.workspaceStrategy", { defaultValue: "Workspace" })}
             </div>
             <div className="mt-1 text-[13px] font-medium text-neutral-700 dark:text-neutral-300">
-              {plan?.workspace?.strategy || '—'}
+              {plan?.workspace?.strategy || "—"}
             </div>
           </div>
 
           {/* Execution session */}
           <div className="px-5 py-3">
             <div className="text-xxs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-              {t('dashboard.runDetail.executionSession', { defaultValue: 'Execution Session' })}
+              {t("dashboard.runDetail.executionSession", { defaultValue: "Execution Session" })}
             </div>
             <div className="mt-1">
               {projectKey && effectiveRunId ? (
@@ -235,7 +235,7 @@ export default function RunDetail(props: RunDetailProps) {
                   onClick={() => onOpenExecutionSession?.(projectKey, effectiveRunId, projectName)}
                   className="inline-flex items-center gap-1 text-[13px] font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                 >
-                  {t('dashboard.runDetail.openSession', { defaultValue: 'Open Session' })}
+                  {t("dashboard.runDetail.openSession", { defaultValue: "Open Session" })}
                   <ExternalLink className="h-3 w-3" strokeWidth={1.75} />
                 </button>
               ) : (
@@ -247,10 +247,10 @@ export default function RunDetail(props: RunDetailProps) {
           {/* Outcome */}
           <div className="px-5 py-3">
             <div className="text-xxs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-              {t('dashboard.runDetail.outcome', { defaultValue: 'Outcome' })}
+              {t("dashboard.runDetail.outcome", { defaultValue: "Outcome" })}
             </div>
             <div className="mt-1 text-[13px] font-medium text-neutral-700 dark:text-neutral-300">
-              {outcome || planStatusToOutcome(plan?.status) || '—'}
+              {outcome || planStatusToOutcome(plan?.status) || "—"}
             </div>
           </div>
         </div>
@@ -259,7 +259,7 @@ export default function RunDetail(props: RunDetailProps) {
         <div className="border-b border-neutral-200 dark:border-neutral-800">
           <button
             type="button"
-            onClick={() => setPlanOpen((v) => !v)}
+            onClick={() => setPlanOpen(v => !v)}
             className="flex w-full items-center gap-2 px-5 py-3 text-left transition hover:bg-neutral-50 dark:hover:bg-neutral-900"
           >
             {planOpen ? (
@@ -268,7 +268,7 @@ export default function RunDetail(props: RunDetailProps) {
               <ChevronRight className="h-4 w-4 text-neutral-400" strokeWidth={1.75} />
             )}
             <span className="text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">
-              {t('dashboard.runDetail.plan', { defaultValue: 'Plan' })}
+              {t("dashboard.runDetail.plan", { defaultValue: "Plan" })}
             </span>
           </button>
           {planOpen && (
@@ -276,7 +276,7 @@ export default function RunDetail(props: RunDetailProps) {
               {loadingPlan ? (
                 <div className="flex items-center gap-2 py-4 text-[13px] text-neutral-500">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-                  {t('dashboard.runDetail.loading', { defaultValue: 'Loading…' })}
+                  {t("dashboard.runDetail.loading", { defaultValue: "Loading…" })}
                 </div>
               ) : plan?.content ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -284,7 +284,7 @@ export default function RunDetail(props: RunDetailProps) {
                 </div>
               ) : (
                 <p className="py-4 text-[13px] text-neutral-400 dark:text-neutral-500">
-                  {t('dashboard.runDetail.noPlanContent', { defaultValue: 'No plan content available.' })}
+                  {t("dashboard.runDetail.noPlanContent", { defaultValue: "No plan content available." })}
                 </p>
               )}
             </div>
@@ -295,7 +295,7 @@ export default function RunDetail(props: RunDetailProps) {
         <div className="border-b border-neutral-200 dark:border-neutral-800">
           <button
             type="button"
-            onClick={() => setReportOpen((v) => !v)}
+            onClick={() => setReportOpen(v => !v)}
             className="flex w-full items-center gap-2 px-5 py-3 text-left transition hover:bg-neutral-50 dark:hover:bg-neutral-900"
           >
             {reportOpen ? (
@@ -304,7 +304,7 @@ export default function RunDetail(props: RunDetailProps) {
               <ChevronRight className="h-4 w-4 text-neutral-400" strokeWidth={1.75} />
             )}
             <span className="text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">
-              {t('dashboard.runDetail.report', { defaultValue: 'Report' })}
+              {t("dashboard.runDetail.report", { defaultValue: "Report" })}
             </span>
           </button>
           {reportOpen && (
@@ -312,7 +312,7 @@ export default function RunDetail(props: RunDetailProps) {
               {loadingReport ? (
                 <div className="flex items-center gap-2 py-4 text-[13px] text-neutral-500">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-                  {t('dashboard.runDetail.loading', { defaultValue: 'Loading…' })}
+                  {t("dashboard.runDetail.loading", { defaultValue: "Loading…" })}
                 </div>
               ) : reportMarkdown ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -320,7 +320,7 @@ export default function RunDetail(props: RunDetailProps) {
                 </div>
               ) : (
                 <p className="py-4 text-[13px] text-neutral-400 dark:text-neutral-500">
-                  {t('dashboard.runDetail.noReportContent', { defaultValue: 'No report available yet.' })}
+                  {t("dashboard.runDetail.noReportContent", { defaultValue: "No report available yet." })}
                 </p>
               )}
             </div>

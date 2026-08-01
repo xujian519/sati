@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import { WeixinChannel } from "../../src/adapters/index.js";
 import {
   createChannelRuntimeStatusReporter,
@@ -12,11 +11,11 @@ import {
 } from "../../src/adapters/channel/protocol/ChannelRuntimeStatus.js";
 import type { Gateway, GatewayChannelKey } from "../../src/gateway/index.js";
 
-test("WeixinChannel.start returns while QR login is waiting", async (t) => {
+test("WeixinChannel.start returns while QR login is waiting", async t => {
   t.mock.method(console, "log", () => undefined);
   t.mock.method(console, "error", () => undefined);
 
-  const tempDir = await mkdtemp(join(tmpdir(), "pilotdeck-weixin-start-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "sati-weixin-start-"));
   t.after(async () => {
     await rm(tempDir, { recursive: true, force: true });
   });
@@ -35,28 +34,25 @@ test("WeixinChannel.start returns while QR login is waiting", async (t) => {
       gateway: {} as Gateway,
       reportChannelStatus: (channelKey, update) => updates.push({ channelKey, update }),
     }),
-    new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 100)),
+    new Promise<"timeout">(resolve => setTimeout(() => resolve("timeout"), 100)),
   ]);
 
   assert.notEqual(handle, "timeout");
+  assert.ok(updates.some(entry => entry.channelKey === "weixin" && entry.update.state === "waiting_for_login"));
   assert.ok(
-    updates.some((entry) =>
-      entry.channelKey === "weixin" && entry.update.state === "waiting_for_login"
-    ),
-  );
-  assert.ok(
-    updates.some((entry) =>
-      entry.channelKey === "weixin"
-      && entry.update.state === "waiting_for_login"
-      && entry.update.qrUrl === "https://wechat.example/qr"
+    updates.some(
+      entry =>
+        entry.channelKey === "weixin" &&
+        entry.update.state === "waiting_for_login" &&
+        entry.update.qrUrl === "https://wechat.example/qr",
     ),
   );
 
   await (handle as Awaited<ReturnType<WeixinChannel["start"]>>).stop("test");
 });
 
-test("channel runtime status reporter persists the latest channel state", async (t) => {
-  const pilotHome = await mkdtemp(join(tmpdir(), "pilotdeck-channel-status-"));
+test("channel runtime status reporter persists the latest channel state", async t => {
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-channel-status-"));
   t.after(async () => {
     await rm(pilotHome, { recursive: true, force: true });
   });

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../../../utils/api';
-import type { Project } from '../../../types/app';
-import type { FileTreeNode } from '../types/types';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../../../utils/api";
+import type { Project } from "../../../types/app";
+import type { FileTreeNode } from "../types/types";
 
 type UseFileTreeDataResult = {
   files: FileTreeNode[];
@@ -16,7 +16,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const refreshFiles = useCallback(() => {
-    setRefreshKey((prev) => prev + 1);
+    setRefreshKey(prev => prev + 1);
   }, []);
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('File fetch failed:', response.status, errorText);
+          console.error("File fetch failed:", response.status, errorText);
           if (isActive) {
             setFiles([]);
           }
@@ -58,11 +58,11 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
           setFiles(data);
         }
       } catch (error) {
-        if ((error as { name?: string }).name === 'AbortError') {
+        if ((error as { name?: string }).name === "AbortError") {
           return;
         }
 
-        console.error('Error fetching files:', error);
+        console.error("Error fetching files:", error);
         if (isActive) {
           setFiles([]);
         }

@@ -13,11 +13,11 @@
     "untitledSession": "Untitled Session",
     "newSession": "New Session",
     "codexSession": "Codex Session",
-    "fetchingProjects": "Fetching your PilotDeck projects and sessions",
+    "fetchingProjects": "Fetching your Sati projects and sessions",
     "projects": "projects",
     "noMatchingProjects": "No matching projects",
     "tryDifferentSearch": "Try adjusting your search term",
-    "runPilotDeckCli": "Run PilotDeck CLI in a project directory to get started",
+    "runSatiCli": "Run Sati CLI in a project directory to get started",
     "collapseAll": "Collapse all projects",
     "expandAll": "Expand all projects"
   },
@@ -34,7 +34,7 @@
     "label": "Context menu"
   },
   "app": {
-    "title": "PilotDeck",
+    "title": "Sati",
     "subtitle": "AI coding assistant interface"
   },
   "sessions": {

@@ -9,25 +9,13 @@
  * `tests/web-ui-client/protocol-sync.test.ts`.
  */
 
-export const PILOTDECK_GATEWAY_PROTOCOL_VERSION_WEB = "1.0";
+export const SATI_GATEWAY_PROTOCOL_VERSION_WEB = "1.0";
 
-export type WebGatewayMode =
-  | "default"
-  | "plan"
-  | "bypassPermissions";
+export type WebGatewayMode = "default" | "plan" | "bypassPermissions";
 
-export type WebAgentRunMode =
-  | "agent"
-  | "plan"
-  | "ask";
+export type WebAgentRunMode = "agent" | "plan" | "ask";
 
-export type WebGatewayChannelKey =
-  | "cli"
-  | "tui"
-  | "feishu"
-  | "web"
-  | "test"
-  | (string & {});
+export type WebGatewayChannelKey = "cli" | "tui" | "feishu" | "web" | "test" | (string & {});
 
 export type WebElicitationQuestion = {
   question: string;
@@ -37,85 +25,90 @@ export type WebElicitationQuestion = {
 };
 
 export type WebElicitationAnswer =
-  | { type: "answered"; answers: Record<string, string | string[]>; annotations?: Record<string, { preview?: string; notes?: string }> }
+  | {
+      type: "answered";
+      answers: Record<string, string | string[]>;
+      annotations?: Record<string, { preview?: string; notes?: string }>;
+    }
   | { type: "cancelled"; reason?: string };
 
 type WebGatewayEventMetadata = {
   runId?: string;
 };
 
-export type WebGatewayEvent = WebGatewayEventMetadata & (
-  | { type: "turn_started"; runId: string }
-  | { type: "assistant_text_delta"; text: string }
-  | { type: "assistant_thinking_delta"; text: string }
-  | { type: "file_artifacts"; artifacts: import("../../session/artifacts/FileArtifact.js").FileArtifact[] }
-  | {
-      type: "tool_call_started";
-      toolCallId: string;
-      name: string;
-      argsPreview?: string;
-    }
-  | {
-      type: "tool_call_finished";
-      toolCallId: string;
-      ok: boolean;
-      resultPreview?: string;
-      /** Mirrors `GatewayEvent.tool_call_finished.errorCode`. */
-      errorCode?: string;
-      /**
-       * Mirrors `GatewayEvent.tool_call_finished.images` — inline image
-       * results (e.g. `read_file` on a PNG) surfaced to web clients so
-       * they render alongside the tool row instead of in a stray
-       * user-side bubble. Base64 payloads stay raw; the web reducer
-       * wraps them as data URLs before they reach React state.
-       */
-      images?: Array<{
-        mimeType: string;
-        data: string;
-        bytes?: number;
-        detail?: "auto" | "low" | "high";
-      }>;
-    }
-  | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
-  | {
-      type: "permission_request";
-      requestId: string;
-      toolName: string;
-      payload: unknown;
-    }
-  | {
-      type: "elicitation_request";
-      requestId: string;
-      toolCallId: string;
-      toolName: string;
-      previewFormat?: "html" | "markdown";
-      questions: WebElicitationQuestion[];
-      metadata?: Record<string, unknown>;
-    }
-  | { type: "elicitation_cancelled"; requestId: string; reason?: string }
-  | { type: "structured_output"; payload: unknown }
-  | { type: "plan_mode_changed"; mode: WebGatewayMode | (string & {}) }
-  | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
-  | { type: "worktree_created"; runId: string; cwd: string }
-  | { type: "worktree_removed"; cwd: string }
-  | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
-  | { type: "turn_completed"; usage: Record<string, number>; finishReason: string }
-  | {
-      type: "error";
-      message: string;
-      code?: string;
-      recoverable: boolean;
-      userHint?: string;
-      providerError?: {
-        provider?: string;
-        protocol?: string;
-        status?: number;
+export type WebGatewayEvent = WebGatewayEventMetadata &
+  (
+    | { type: "turn_started"; runId: string }
+    | { type: "assistant_text_delta"; text: string }
+    | { type: "assistant_thinking_delta"; text: string }
+    | { type: "file_artifacts"; artifacts: import("../../session/artifacts/FileArtifact.js").FileArtifact[] }
+    | {
+        type: "tool_call_started";
+        toolCallId: string;
+        name: string;
+        argsPreview?: string;
+      }
+    | {
+        type: "tool_call_finished";
+        toolCallId: string;
+        ok: boolean;
+        resultPreview?: string;
+        /** Mirrors `GatewayEvent.tool_call_finished.errorCode`. */
+        errorCode?: string;
+        /**
+         * Mirrors `GatewayEvent.tool_call_finished.images` — inline image
+         * results (e.g. `read_file` on a PNG) surfaced to web clients so
+         * they render alongside the tool row instead of in a stray
+         * user-side bubble. Base64 payloads stay raw; the web reducer
+         * wraps them as data URLs before they reach React state.
+         */
+        images?: Array<{
+          mimeType: string;
+          data: string;
+          bytes?: number;
+          detail?: "auto" | "low" | "high";
+        }>;
+      }
+    | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
+    | {
+        type: "permission_request";
+        requestId: string;
+        toolName: string;
+        payload: unknown;
+      }
+    | {
+        type: "elicitation_request";
+        requestId: string;
+        toolCallId: string;
+        toolName: string;
+        previewFormat?: "html" | "markdown";
+        questions: WebElicitationQuestion[];
+        metadata?: Record<string, unknown>;
+      }
+    | { type: "elicitation_cancelled"; requestId: string; reason?: string }
+    | { type: "structured_output"; payload: unknown }
+    | { type: "plan_mode_changed"; mode: WebGatewayMode | (string & {}) }
+    | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
+    | { type: "worktree_created"; runId: string; cwd: string }
+    | { type: "worktree_removed"; cwd: string }
+    | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
+    | { type: "turn_completed"; usage: Record<string, number>; finishReason: string }
+    | {
+        type: "error";
+        message: string;
         code?: string;
-        message?: string;
-        raw?: string;
-      };
-    }
-);
+        recoverable: boolean;
+        userHint?: string;
+        providerError?: {
+          provider?: string;
+          protocol?: string;
+          status?: number;
+          code?: string;
+          message?: string;
+          raw?: string;
+        };
+      }
+  );
 
 export type WebGatewayMethod =
   | "submit_turn"
@@ -243,10 +236,7 @@ export type WebEventFrame = {
   event: WebGatewayEvent;
 };
 
-export type WebGatewayFrame =
-  | WebHelloOk
-  | WebResponseFrame
-  | WebEventFrame;
+export type WebGatewayFrame = WebHelloOk | WebResponseFrame | WebEventFrame;
 
 export type WebPermissionDecision = {
   requestId: string;

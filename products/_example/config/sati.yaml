@@ -1,0 +1,59 @@
+# 产品覆盖配置示例
+# 部署时将此文件合并到目标环境的 ~/.sati/sati.yaml
+
+# 记忆系统配置
+memory:
+  enabled: true
+  provider: "edgeclaw"
+  captureStrategy: "full_session"
+  includeAssistant: true
+  # 语义检索（可选）：开启后记忆正文与专利 wiki 卡增加 embedding 召回路，
+  # 与关键词/FTS 检索做 RRF 融合。未配置或端点不可用时自动降级为纯关键词检索。
+  # 形态一：引用 model.providers 里的 provider（推荐，复用其 url/apiKey）
+  # embedding:
+  #   provider: "ollama"      # 需先在 model.providers 配置 ollama，并 ollama pull bge-m3
+  #   model: "bge-m3"
+  # 形态二：独立端点（OpenAI 兼容 /embeddings）
+  # embedding:
+  #   baseUrl: "http://localhost:11434/v1"
+  #   apiKey: "ollama"
+  #   model: "bge-m3"
+  #   dimensions: 1024        # bge-m3 dense 维度，缺省从首次响应推断
+  #
+  # 可选：KG（patent_kg.db 11.6 万节点）/ 法条（laws-full.db 9000+ 部）语义召回。
+  # 先用脚本生成离线向量索引，运行时探测到 vectors.db 即自动启用：
+  #   pnpm tsx scripts/build-knowledge-vectors.ts --corpus kg,law --limit 2000  # 先小批量验证
+  #   pnpm tsx scripts/build-knowledge-vectors.ts --corpus kg,law              # 全量（可后台）
+  # 增益对比：pnpm tsx scripts/embedding-baseline.ts --queries queries.txt
+  #
+  # 可选：重排（阶段 C）——召回（FTS/关键词/embedding）之后对候选做
+  # cross-encoder 重排，显著提升 top-N 精度。默认兼容 HuggingFace TEI 的
+  # /rerank 端点（本地部署 bge-reranker-v2-m3：tei serve BAAI/bge-reranker-v2-m3）。
+  # rerank:
+  #   baseUrl: "http://localhost:8080"      # TEI 服务地址
+  #   # provider: "tei"                     # 或引用 model.providers
+  #   # model: "bge-reranker-v2-m3"         # TEI 单模型服务可留空
+  #   topN: 16                              # 参与重排的候选上限
+
+# 模型配置（可覆盖默认模型）
+# agent:
+#   model:
+#     id: "claude-sonnet-4"
+#     provider: "anthropic"
+#     model: "claude-sonnet-4-20250514"
+
+# 内置工具配置（可选）
+# tools:
+#   webSearch:
+#     enabled: true                                 # 设为 false 时不向模型暴露 web_search
+#     provider: glm                                 # glm | tavily | custom
+#     apiKey: "..."
+#     # endpoint: https://api.z.ai/api/paas/v4/web_search
+
+# 品牌配置（待贡献点就绪后生效）
+# brand:
+#   name: "MyProduct"
+#   logo: "./brand/logo.svg"
+#   theme:
+#     brand: "rgb(0,120,212)"
+#     brandAccent: "rgb(0,150,255)"

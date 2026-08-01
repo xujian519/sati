@@ -1,6 +1,5 @@
-import WebSocket from "ws";
-import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
+import WebSocket from "ws";
 
 /**
  * QQ Official Bot API Gateway client.
@@ -73,14 +72,16 @@ export class QQBotGateway extends EventEmitter {
       this.emit("connected");
     });
 
-    this.ws.on("message", (data) => {
+    this.ws.on("message", data => {
       try {
         const msg = JSON.parse(data.toString()) as QQBotGatewayEvent;
         this.handleGatewayMessage(msg);
-      } catch { /* ignore malformed */ }
+      } catch {
+        /* ignore malformed */
+      }
     });
 
-    this.ws.on("close", (code) => {
+    this.ws.on("close", code => {
       this.stopHeartbeat();
       if (!this.intentionalClose) {
         this.emit("disconnected", { code });
@@ -88,7 +89,7 @@ export class QQBotGateway extends EventEmitter {
       }
     });
 
-    this.ws.on("error", (err) => {
+    this.ws.on("error", err => {
       this.emit("error", err);
     });
   }
@@ -122,7 +123,7 @@ export class QQBotGateway extends EventEmitter {
     const resp = await fetch(url, {
       method: "POST",
       headers: {
-        "Authorization": `QQBot ${this.tokenInfo!.accessToken}`,
+        Authorization: `QQBot ${this.tokenInfo!.accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -147,7 +148,7 @@ export class QQBotGateway extends EventEmitter {
     const resp = await fetch(url, {
       method: "POST",
       headers: {
-        "Authorization": `QQBot ${this.tokenInfo!.accessToken}`,
+        Authorization: `QQBot ${this.tokenInfo!.accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -224,31 +225,35 @@ export class QQBotGateway extends EventEmitter {
 
   private sendIdentify(): void {
     if (!this.ws || !this.tokenInfo) return;
-    this.ws.send(JSON.stringify({
-      op: 2,
-      d: {
-        token: `QQBot ${this.tokenInfo.accessToken}`,
-        intents: GROUP_INTENTS,
-        shard: [0, 1],
-        properties: {
-          $os: "linux",
-          $browser: "pilotdeck",
-          $device: "pilotdeck",
+    this.ws.send(
+      JSON.stringify({
+        op: 2,
+        d: {
+          token: `QQBot ${this.tokenInfo.accessToken}`,
+          intents: GROUP_INTENTS,
+          shard: [0, 1],
+          properties: {
+            $os: "linux",
+            $browser: "sati",
+            $device: "sati",
+          },
         },
-      },
-    }));
+      }),
+    );
   }
 
   private sendResume(): void {
     if (!this.ws || !this.tokenInfo) return;
-    this.ws.send(JSON.stringify({
-      op: 6,
-      d: {
-        token: `QQBot ${this.tokenInfo.accessToken}`,
-        session_id: this.sessionId,
-        seq: this.lastSeq,
-      },
-    }));
+    this.ws.send(
+      JSON.stringify({
+        op: 6,
+        d: {
+          token: `QQBot ${this.tokenInfo.accessToken}`,
+          session_id: this.sessionId,
+          seq: this.lastSeq,
+        },
+      }),
+    );
   }
 
   private startHeartbeat(): void {
@@ -271,7 +276,7 @@ export class QQBotGateway extends EventEmitter {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.emit("reconnecting");
-      void this.connect().catch((e) => this.emit("error", e));
+      void this.connect().catch(e => this.emit("error", e));
     }, 5000);
   }
 
@@ -290,7 +295,7 @@ export class QQBotGateway extends EventEmitter {
     if (!resp.ok) {
       throw new Error(`getAppAccessToken failed: ${resp.status} ${await resp.text()}`);
     }
-    const data = await resp.json() as { access_token: string; expires_in: string };
+    const data = (await resp.json()) as { access_token: string; expires_in: string };
     this.tokenInfo = {
       accessToken: data.access_token,
       expiresAt: Date.now() + Number(data.expires_in) * 1000,
@@ -304,13 +309,16 @@ export class QQBotGateway extends EventEmitter {
   }
 
   private async getGatewayUrl(): Promise<string> {
+    if (!this.tokenInfo) {
+      throw new Error("getGatewayUrl called before access token is ready");
+    }
     const resp = await fetch(GATEWAY_URL, {
-      headers: { "Authorization": `QQBot ${this.tokenInfo!.accessToken}` },
+      headers: { Authorization: `QQBot ${this.tokenInfo.accessToken}` },
     });
     if (!resp.ok) {
       throw new Error(`getGateway failed: ${resp.status}`);
     }
-    const data = await resp.json() as { url: string };
+    const data = (await resp.json()) as { url: string };
     return data.url;
   }
 }

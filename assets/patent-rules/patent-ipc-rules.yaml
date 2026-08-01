@@ -1,0 +1,616 @@
+# 专利 IPC 段审查标准规则集
+#
+# 来源：data/wiki/复审无效/创造性/ 中的 IPC 段审查标准卡片
+# 每条规则标注了：
+#   ipc_section — 适用 IPC 段（A61, G06, H04 等）
+#   legal_basis — 法律依据
+#   decision_ref — 引用的具体复审决定号（可到知识图谱验证）
+#   wiki_ref — Wiki 卡片路径
+
+rules:
+
+  # ================================================================
+  # A61: 医药 / 医疗器械
+  # ================================================================
+  - id: IPC-A61-INV-001
+    name: "医药领域—区别特征未被公开且非公知常识→创造性成立"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第566088号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示", "显而易见"]
+      message: "医药领域：区别技术特征未被现有技术公开也不属于公知常识时，即便手段看似简单，也应认定创造性（详见 复审无效/创造性/审查标准-A61）"
+    # 需校验：必须引用具体决定号，不得仅说"区别特征未被公开"
+
+  - id: IPC-A61-INV-002
+    name: "医药领域—跨领域结合障碍→创造性成立"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第564730号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["结合", "显而易见"]
+      message: "医药/医疗器械领域：跨领域技术结合存在障碍时（如功能不同、作用方式不同），应认定具备创造性"
+
+  - id: IPC-A61-INV-003
+    name: "医药领域—网络证据真实性异议→创造性基础不成立"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第581933号决定"
+    check:
+      type: pattern_analysis
+      patterns: ["证据真实", "公开时间", "网络证据"]
+      antiPatterns: ["编造"]
+      message: "医药领域：网络临床试验注册数据的真实性和公开时间无法确认时，不能用于评价创造性"
+
+  - id: IPC-A61-INV-004
+    name: "医药领域—区别特征带来有益效果→辅助判断创造性"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第561799号决定"
+    check:
+      type: pattern_analysis
+      patterns: ["有益效果", "预料不到", "技术效果"]
+      message: "医药领域：区别特征带来有益技术效果可作为创造性成立的辅助判断因素"
+
+  - id: IPC-A61-INV-005
+    name: "医药领域—结构特征与使用效果严格区分"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第560560号决定"
+    check:
+      type: pattern_analysis
+      patterns: ["结构特征", "动态效果", "客观结构"]
+      antiPatterns: ["使用过程中产生的"]
+      message: "医疗器械创造性判断应严格区分客观结构特征与使用过程中产生的动态效果"
+
+  # ================================================================
+  # A63: 运动或游戏
+  # ================================================================
+  - id: IPC-A63-INV-001
+    name: "运动/游戏领域—结构改进的创造性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示"]
+      message: "运动/游戏领域：结构改进需结合使用场景判断是否显而易见（详见 复审无效/创造性/审查标准-A63）"
+
+  # ================================================================
+  # C07: 有机化学
+  # ================================================================
+  - id: IPC-C07-INV-001
+    name: "有机化学领域—化合物创造性判断"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征", "结构"]
+        step3: ["技术启示", "预料不到"]
+      message: "有机化学领域：化合物创造性需考量结构接近程度和预料不到的技术效果（详见 复审无效/创造性/审查标准-C07）"
+
+  - id: IPC-C07-INV-002
+    name: "有机化学领域—选择发明的创造性"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: pattern_analysis
+      patterns: ["选择发明", "选择性", "优选范围", "预料不到"]
+      message: "有机化学领域：从已知范围内选择特定化合物，需论证产生了预料不到的技术效果"
+
+  # ================================================================
+  # G06: 计算/计数（软件+算法）
+  # ================================================================
+  - id: IPC-G06-INV-001
+    name: "计算领域—软件+算法的创造性判断"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示", "显而易见"]
+      message: "计算领域：算法改进需结合技术效果判断，仅功能相似不足以构成技术启示（详见 复审无效/创造性/审查标准-G06）"
+
+  - id: IPC-G06-NOV-001
+    name: "计算领域—新颖性的技术特征认定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "专利法第22条第2款"
+    check:
+      type: patent_novelty
+      singleComparison: true
+      requiredElements:
+        - "技术特征"
+        - "单独对比"
+        - "新颖性结论"
+      message: "计算领域：技术特征认定需从整体技术方案出发，不应将算法与物理实现割裂对比"
+
+  # ================================================================
+  # H04: 电子通信
+  # ================================================================
+  - id: IPC-H04-INV-001
+    name: "通信领域—硬件结构专利的公知常识认定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示", "显而易见", "公知常识"]
+      message: "电子通信领域：消费电子硬件结构改进中，公知常识和惯用手段的认定是争议焦点（详见 复审无效/创造性/审查标准-H04）"
+
+  - id: IPC-H04-INV-002
+    name: "通信领域—软件协议的技术启示需严格论证"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示", "结合"]
+      message: "通信领域：通信协议/软件方法的跨领域结合需严格论证，仅功能相似不构成结合启示"
+
+  - id: IPC-H04-NOV-001
+    name: "通信领域—开放式/封闭式表达方式区别"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法第26条第4款"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - clarity
+      message: "通信领域：注意权利要求中开放式（包含/包括）与封闭式（由……组成）表达方式对保护范围的不同影响"
+
+  # ================================================================
+  # H01: 基本电气元件
+  # ================================================================
+  - id: IPC-H01-INV-001
+    name: "电气元件领域—材料与结构改进的创造性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示"]
+      message: "基本电气元件领域：材料替换和结构改进需判断是否属于常规选择（详见 复审无效/创造性/审查标准-H01）"
+
+  # ================================================================
+  # F16: 工程元件
+  # ================================================================
+  - id: IPC-F16-INV-001
+    name: "工程元件领域—机械结构改进的显而易见性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近"]
+        step2: ["区别技术特征", "结构"]
+        step3: ["技术启示", "显而易见"]
+      message: "工程元件领域：机械结构改进需结合功能整体判断，局部结构差异可能构成实质性特点（详见 复审无效/创造性/审查标准-F16）"
+
+  # ================================================================
+  # IPC 通用跨段规则
+  # ================================================================
+  - id: IPC-GEN-INV-001
+    name: "通用—三步法是创造性判断的唯一框架"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；审查指南第二部分第四章"
+    fix_suggestion: "创造性分析必须按三步法结构进行：(1)确定最接近现有技术 (2)确定区别特征和实际解决的技术问题 (3)判断技术启示。不得跳过任一步骤"
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: closest_prior_art
+          patterns: ["最接近", "现有技术"]
+        - element: distinguishing_features
+          patterns: ["区别技术特征", "区别特征"]
+        - element: technical_problem
+          patterns: ["实际解决的技术问题", "技术问题"]
+        - element: technical_motivation
+          patterns: ["技术启示", "显而易见"]
+      message: "创造性分析必须遵循三步法框架：确定最接近现有技术 → 确定区别特征和实际解决的技术问题 → 判断技术启示"
+
+  - id: IPC-GEN-INV-002
+    name: "通用—三步法不能与事后诸葛亮混淆"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；审查指南第二部分第四章"
+    check:
+      type: keyword_blocklist
+      keywords: []
+      absoluteBan:
+        - "事后诸葛亮"
+        - " hindsight"
+        - "ex post facto"
+      message: "创造性分析应避免事后诸葛亮（hindsight bias），需站在申请日前的技术水平判断"
+
+  - id: IPC-GEN-INV-003
+    name: "通用—公知常识需举证"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；审查指南第二部分第四章3.2.1.1"
+    check:
+      type: pattern_analysis
+      patterns: ["公知常识"]
+      antiPatterns:
+        - "属于公知常识"  # 仅说"属于"不够
+      message: "公知常识认定需提供证据支持（教科书、工具书等），不得仅以'属于公知常识'为由否定创造性"
+
+  - id: IPC-GEN-NOV-001
+    name: "通用—新颖性采用单独对比"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "专利法第22条第2款"
+    fix_suggestion: "每份对比文件必须与权利要求单独对比。不得将多份对比文件的技术特征组合后评价新颖性"
+    check:
+      type: patent_novelty
+      singleComparison: true
+      requiredElements:
+        - "单独对比"
+        - "新颖性"
+      message: "新颖性必须采用单独对比原则：每份对比文件与权利要求单独对比，不得多份结合"
+
+  - id: IPC-GEN-DIS-001
+    name: "通用—充分公开站位本领域技术人员"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "专利法第26条第3款"
+    check:
+      type: patent_disclosure
+      requiredAspects:
+        - "所属领域"
+        - "技术人员"
+        - "能够实现"
+      message: "充分公开判断应站位所属领域技术人员，结合现有技术整体情况判断能否实现"
+
+  - id: IPC-A23-INV-001
+    name: "食品领域—组合物配方的协同效果判断"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第15013号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征", "组合物", "组分"]
+        step3: ["技术启示", "协同效果", "预料不到"]
+      message: "食品领域：组合物配方类专利的创造性判断应重点关注各组分之间是否存在超出各自固有性能范围的协同增效作用，若各组分仅发挥各自已知功能且无协同效果，则不具备创造性"
+    # 需校验：必须论证协同效果，不能仅列组分
+
+  - id: IPC-A23-INV-002
+    name: "食品领域—相似手段解决新问题新效果阻断结合动机"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第561529号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示", "技术问题", "技术效果"]
+      message: "食品领域：即使现有技术公开了与区别特征相似的技术手段，但若该特征解决了新的技术问题、产生新的技术效果，且新效果是相似手段无法实现的，且无改进启示，则非显而易见"
+
+  - id: IPC-A23-INV-003
+    name: "食品领域—部分公开+部分公知常识的叠加否定"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第565367号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示", "公知常识", "预料不到"]
+      message: "食品领域：若部分区别特征被其他现有技术公开且给出了技术启示，其余部分属于公知常识，且上述区别特征并未带来预料不到的技术效果，则该技术方案不具备创造性"
+
+  - id: IPC-B23-INV-001
+    name: "机床领域—区别未被公开且非公知常识时具备创造性"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第560600号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征"]
+        step3: ["技术启示", "公知常识", "技术效果"]
+      message: "机床领域：当区别技术特征未被任何对比文件公开，亦不属于本领域的公知常识，且该区别特征使得技术方案产生了有益的技术效果时，应当认定该技术方案具备创造性"
+
+  - id: IPC-B23-INV-002
+    name: "机床领域—相互关联特征不应割裂判断"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第560649号决定"
+    fix_suggestion: "分析相互关联的技术特征时，应作为一个整体考量其对技术方案的贡献，不得割裂后分别判断"
+    check:
+      type: patent_inventiveness
+      structural_analysis:
+        requiresAll:
+          - element: feature_integration
+            patterns: ["相互关联", "协同作用", "整体", "割裂"]
+            antiPatterns: ["分别判断", "简单组合"]
+      message: "机床领域：当技术方案中存在相互关联的技术特征时，不应将这些特征割裂开来分别判断其是否显而易见，而应当将其作为一个整体进行考量"
+
+  - id: IPC-B23-INV-003
+    name: "机床领域—功能性限定的保护范围判断"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法第26条第4款；第560780号决定"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - clarity
+        - support
+      patterns: ["功能性限定", "权利要求", "说明书", "具体实施方式"]
+      message: "机床领域：对于包含功能性限定的权利要求，需要判断本领域技术人员根据说明书的教导是否能够知晓足够多的具体实施方式，若功能性限定覆盖范围过宽且说明书中缺少足够技术信息，则在创造性判断中可能面临保护范围不确定的问题"
+
+  - id: IPC-B60-INV-001
+    name: "车辆领域—实用新型技术领域判断标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第561446号决定"
+    check:
+      type: patent_inventiveness
+      patentType: "utility_model"
+      stepElements:
+        step3: ["技术领域", "相近领域", "相关领域", "技术启示"]
+      message: "车辆领域：实用新型专利创造性判断中的技术领域确定具有特殊性，一般应着重考虑该实用新型所属的技术领域，但在有明确技术启示的情况下，可以考虑其相近或相关的技术领域"
+
+  - id: IPC-B60-INV-002
+    name: "车辆领域—相同技术需求下不同应用领域的结合启示"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第580118号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征", "应用领域"]
+        step3: ["技术启示", "技术需求", "技术手段"]
+      message: "车辆领域：当对比文件与专利技术方案虽处于不同的应用领域，但二者面临相同的技术需求、采用了基本相同的技术手段时，本领域技术人员容易想到将对比文件的技术方案应用于专利所要解决的技术问题中，因此不具备创造性"
+
+  - id: IPC-B60-INV-003
+    name: "车辆领域—公知常识的举证责任分配"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第567252号决定"
+    fix_suggestion: "主张公知常识时需引用教科书、技术手册等证据，不得仅作笼统断言"
+    check:
+      type: pattern_analysis
+      patterns: ["公知常识", "举证责任", "证据", "教科书"]
+      antiPatterns: ["笼统主张", "仅作断言"]
+      message: "车辆领域：在无效宣告请求程序中，主张某项技术特征属于公知常识的一方当事人承担举证责任，请求人应当提供相应的证据（如教科书、技术手册等）予以证明，仅作笼统主张而未提供证据或充分理由的，不予支持"
+
+  - id: IPC-C12-DIS-001
+    name: "生物技术领域—生物材料保藏与充分公开的关系"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_disclosure
+    legal_basis: "专利法第26条第3款；第20174号决定"
+    check:
+      type: patent_disclosure
+      requiredAspects:
+        - "生物材料"
+        - "保藏机构"
+        - "保藏信息"
+        - "能够实现"
+      message: "生物技术领域：对于说明书中记载的已经在国家知识产权局认可的保藏机构进行保藏的生物材料，在本领域技术人员根据说明书公开内容能够实现该技术方案时，应认定说明书公开充分，保藏是实现充分公开的重要手段"
+
+  - id: IPC-C12-CLM-001
+    name: "生物技术领域—权利要求得到说明书支持的判断"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法第26条第4款；第16489号决定"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - support
+      patterns: ["概括", "范围", "预期", "技术效果"]
+      message: "生物技术领域：若权利要求的概括超出了说明书公开的范围，本领域技术人员难以预期权利要求概括的范围均能解决发明所要解决的技术问题并产生预期技术效果，则该权利要求得不到说明书的支持"
+
+  - id: IPC-E04-INV-001
+    name: "建筑领域—建筑构件的组合启示判断"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征", "建筑构件", "组合"]
+        step3: ["技术启示", "组合动机", "功能影响"]
+      message: "建筑领域（IPC E04）：在评价建筑构件的组合创造性时，重点考察建筑结构的组合是否具有技术启示、区别特征是否属于本领域常规的建筑设计手段、以及结合后是否会导致原有功能受到不利影响"
+
+  - id: IPC-E04-INV-002
+    name: "建筑领域—模壳构件的结构替换判断"
+    severity: info
+    action: log
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款"
+    check:
+      type: pattern_analysis
+      patterns: ["模壳构件", "结构替换", "常规设计", "公知常识"]
+      message: "建筑领域：模壳构件的结构替换若属于本领域常规建筑设计手段，且未带来预料不到的技术效果，则不具备创造性"
+
+  - id: IPC-G01-INV-001
+    name: "测量领域—现有技术文献中含糊内容的合理解读原则"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第36894号决定"
+    check:
+      type: patent_inventiveness
+      evidence_analysis:
+        principles:
+          - "本领域技术人员的基本认知"
+          - "合理的分析和认定"
+          - "避免不合理推定"
+      message: "测量领域（IPC G01）：当现有技术文献中含有不十分清晰的内容时，应当按照本领域技术人员的基本认知进行合理的分析和认定，而不应直接认定为本领域技术人员无法理解的含义或进行不合理的推定"
+
+  - id: IPC-G01-INV-002
+    name: "测量领域—权利要求中部件作用的界定需结合说明书和附图"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_claims
+    legal_basis: "专利法第26条第4款；第18458号决定"
+    check:
+      type: patent_claim_analysis
+      dimensions:
+        - clarity
+      patterns: ["部件作用", "说明书", "附图", "理解权利要求"]
+      message: "测量领域：界定一项权利要求中某一部件的作用时，不能仅依据权利要求文字本身，还需考虑说明书及附图中相应部分的说明，因为说明书及附图可以用于帮助理解权利要求所限定的内容"
+
+  - id: IPC-G01-INV-003
+    name: "测量领域—跨领域技术结合需论证改进动机"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第562371号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step1: ["最接近", "现有技术"]
+        step2: ["区别技术特征", "测试对象", "目的"]
+        step3: ["技术启示", "改进动机", "跨领域"]
+      message: "测量领域：当现有技术与涉案专利的测试对象和目的不同时，本领域技术人员没有动机将现有技术的方法改进到涉案专利的技术领域中，仅在两者整体技术方案和解决的技术问题均不相同的情况下，不能认定存在技术启示"
+
+  - id: IPC-G01-NOV-001
+    name: "测量领域—使用公开证据的认定标准"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_novelty
+    legal_basis: "专利法第22条第2款；第36378号决定"
+    check:
+      type: patent_novelty
+      evidence_types:
+        - type: "use_publication"
+          requirement: "公众想得知就能够得知"
+          antiPatterns: ["仅销售", "仅协议", "保密状态"]
+      message: "测量领域：某一产品是否能够作为本专利的使用公开证据，应当考查该产品是否在本专利的申请日之前已经处于公众想得知就能够得知的状态，若根据现有证据不足以证明该产品在申请日之前已处于此状态，则该产品不能证明使用公开的事实"
+
+  - id: IPC-H02-INV-001
+    name: "发电配电领域—相互关联的技术特征不应割裂后进行比对"
+    severity: critical
+    action: block
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第567016号决定"
+    fix_suggestion: "相互关联、协同作用的技术特征应作为整体理解其贡献，不得割裂后分别比对"
+    check:
+      type: patent_inventiveness
+      structural_analysis:
+        requiresAll:
+          - element: feature_integration
+            patterns: ["相互关联", "协同作用", "完整的技术手段", "整体"]
+            antiPatterns: ["割裂", "分别", "简单组合"]
+      message: "发电配电领域（IPC H02）：在创造性判断中，对于相互关联、协同作用的技术特征，应当作为一个整体来理解其对技术方案的贡献，而不应将其割裂后分别与现有技术进行比对"
+
+  - id: IPC-H02-INV-002
+    name: "发电配电领域—类似结构但作用完全不同时未给出技术启示"
+    severity: warning
+    action: warn
+    phases: [post_execution]
+    domain: patent_inventiveness
+    legal_basis: "专利法第22条第3款；第564773号决定"
+    check:
+      type: patent_inventiveness
+      stepElements:
+        step2: ["区别技术特征", "结构特征", "作用"]
+        step3: ["技术启示", "功能作用"]
+      patterns: ["类似结构", "作用不同", "未给出启示"]
+      message: "发电配电领域：即使现有技术中存在与区别特征类似的结构特征，但如果该结构特征在现有技术中所起的作用与在本专利中完全不同，则该现有技术并未给出将此特征应用于最接近现有技术以解决本专利技术问题的技术启示"

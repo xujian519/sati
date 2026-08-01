@@ -1,17 +1,14 @@
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
+import type { FileArtifact } from "../artifacts/FileArtifact.js";
 import type {
   AgentControlBoundaryTranscriptEntry,
   AgentStatusMessageTranscriptEntry,
   AgentTranscriptEntry,
   SessionMetadataValue,
 } from "./TranscriptEntry.js";
-import type { FileArtifact } from "../artifacts/FileArtifact.js";
 
-export type AgentStatusMessageInput = Pick<
-  AgentStatusMessageTranscriptEntry,
-  "event" | "kind" | "text" | "detail"
->;
+export type AgentStatusMessageInput = Pick<AgentStatusMessageTranscriptEntry, "event" | "kind" | "text" | "detail">;
 
 export type AgentTranscriptWriterState = {
   sequence: number;

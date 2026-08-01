@@ -5,15 +5,11 @@ export type StructuredOutputExtraction =
   | { ok: true; value: unknown }
   | { ok: false; reason: StructuredOutputExtractionError };
 
-export type StructuredOutputExtractionError =
-  | "no_payload"
-  | "invalid_json"
-  | "schema_mismatch"
-  | "multiple_payloads";
+export type StructuredOutputExtractionError = "no_payload" | "invalid_json" | "schema_mismatch" | "multiple_payloads";
 
 export type ExtractStructuredOutputOptions = {
   /**
-   * Optional minimal validator. PilotDeck does not pull in `ajv` for this
+   * Optional minimal validator. Sati does not pull in `ajv` for this
    * (deps stay zero); callers that want strict validation pass their own
    * validator. The extractor only catches structural errors otherwise.
    */
@@ -40,7 +36,7 @@ export function extractStructuredOutput(
   options: ExtractStructuredOutputOptions = {},
 ): StructuredOutputExtraction {
   const toolBlocks = response.content.filter(
-    (block) => block.type === "tool_call" && block.name === ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME,
+    block => block.type === "tool_call" && block.name === ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME,
   );
 
   if (toolBlocks.length > 1) {
@@ -60,12 +56,12 @@ export function extractStructuredOutput(
   }
 
   // OpenAI path: assistant emits a single text block whose body is JSON.
-  const textBlocks = response.content.filter((block) => block.type === "text");
+  const textBlocks = response.content.filter(block => block.type === "text");
   if (textBlocks.length === 0) {
     return { ok: false, reason: "no_payload" };
   }
   const joined = textBlocks
-    .map((block) => (block.type === "text" ? block.text : ""))
+    .map(block => (block.type === "text" ? block.text : ""))
     .join("")
     .trim();
   if (joined.length === 0) {

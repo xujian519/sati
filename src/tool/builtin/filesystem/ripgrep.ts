@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { PilotDeckToolRuntimeError } from "../../protocol/errors.js";
+import { SatiToolRuntimeError } from "../../protocol/errors.js";
 
 const require = createRequire(import.meta.url);
 
@@ -40,7 +40,7 @@ export async function runRipgrep(input: RipgrepRunInput): Promise<string> {
     const cleanupAbort = attachAbortHandler(child, input.signal, () => {
       if (settled) return;
       settled = true;
-      reject(new PilotDeckToolRuntimeError("tool_aborted", `${input.toolName} search aborted.`));
+      reject(new SatiToolRuntimeError("tool_aborted", `${input.toolName} search aborted.`));
     });
 
     const timeout = setTimeout(() => {
@@ -49,10 +49,7 @@ export async function runRipgrep(input: RipgrepRunInput): Promise<string> {
       child.kill("SIGTERM");
       setTimeout(() => child.kill("SIGKILL"), DEFAULT_KILL_GRACE_MS).unref();
       reject(
-        new PilotDeckToolRuntimeError(
-          "tool_timeout",
-          `${input.toolName} search timed out after ${DEFAULT_TIMEOUT_MS}ms.`,
-        ),
+        new SatiToolRuntimeError("tool_timeout", `${input.toolName} search timed out after ${DEFAULT_TIMEOUT_MS}ms.`),
       );
     }, DEFAULT_TIMEOUT_MS);
 
@@ -65,7 +62,7 @@ export async function runRipgrep(input: RipgrepRunInput): Promise<string> {
       stderr += chunk;
     });
 
-    child.on("error", (error) => {
+    child.on("error", error => {
       clearTimeout(timeout);
       cleanupAbort();
       if (settled) return;
@@ -75,10 +72,7 @@ export async function runRipgrep(input: RipgrepRunInput): Promise<string> {
         return;
       }
       reject(
-        new PilotDeckToolRuntimeError(
-          "tool_execution_failed",
-          `ripgrep ${input.toolName} search failed: ${error.message}`,
-        ),
+        new SatiToolRuntimeError("tool_execution_failed", `ripgrep ${input.toolName} search failed: ${error.message}`),
       );
     });
 
@@ -90,7 +84,7 @@ export async function runRipgrep(input: RipgrepRunInput): Promise<string> {
 
       if (signal) {
         reject(
-          new PilotDeckToolRuntimeError(
+          new SatiToolRuntimeError(
             "tool_execution_failed",
             `ripgrep ${input.toolName} search exited via signal ${signal}.`,
           ),
@@ -105,7 +99,7 @@ export async function runRipgrep(input: RipgrepRunInput): Promise<string> {
 
       const stderrText = stderr.trim();
       reject(
-        new PilotDeckToolRuntimeError(
+        new SatiToolRuntimeError(
           "tool_execution_failed",
           stderrText.length > 0
             ? `ripgrep ${input.toolName} search failed: ${stderrText}`
@@ -137,8 +131,8 @@ function resolveBundledRipgrepPath(toolName: RipgrepRunInput["toolName"]): strin
 function createBundledRipgrepUnavailableError(
   toolName: RipgrepRunInput["toolName"],
   cause: unknown,
-): PilotDeckToolRuntimeError {
-  return new PilotDeckToolRuntimeError(
+): SatiToolRuntimeError {
+  return new SatiToolRuntimeError(
     "unsupported_tool",
     `${toolName} requires the bundled ripgrep binary from @vscode/ripgrep, but it is not available for ${process.platform}-${process.arch}. Reinstall dependencies with optional dependencies enabled.`,
     { cause: cause instanceof Error ? cause.message : String(cause) },
@@ -148,8 +142,8 @@ function createBundledRipgrepUnavailableError(
 export function splitRipgrepLines(stdout: string): string[] {
   return stdout
     .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.length > 0);
+    .map(line => line.trimEnd())
+    .filter(line => line.length > 0);
 }
 
 export function normalizeRelativePath(file: string): string {
@@ -159,7 +153,7 @@ export function normalizeRelativePath(file: string): string {
 }
 
 export function isIgnoredPath(file: string): boolean {
-  return file.split("/").some((segment) => IGNORED_DIRECTORIES.has(segment));
+  return file.split("/").some(segment => IGNORED_DIRECTORIES.has(segment));
 }
 
 function attachAbortHandler(

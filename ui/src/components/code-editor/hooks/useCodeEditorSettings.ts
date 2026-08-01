@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useTheme } from '../../../contexts/ThemeContext';
+import { useCallback, useEffect, useState } from "react";
+import { useTheme } from "../../../contexts/ThemeContext";
 import {
   CODE_EDITOR_DEFAULTS,
   CODE_EDITOR_SETTINGS_CHANGED_EVENT,
   CODE_EDITOR_STORAGE_KEYS,
-} from '../constants/settings';
+} from "../constants/settings";
 
-const readBoolean = (storageKey: string, defaultValue: boolean, falseValue = 'false') => {
+const readBoolean = (storageKey: string, defaultValue: boolean, falseValue = "false") => {
   const value = localStorage.getItem(storageKey);
   if (value === null) {
     return defaultValue;
@@ -16,7 +16,7 @@ const readBoolean = (storageKey: string, defaultValue: boolean, falseValue = 'fa
 };
 
 const readWordWrap = () => {
-  return localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.wordWrap) === 'true';
+  return localStorage.getItem(CODE_EDITOR_STORAGE_KEYS.wordWrap) === "true";
 };
 
 const readFontSize = () => {
@@ -32,18 +32,18 @@ export const useCodeEditorSettings = () => {
   const { isDarkMode, toggleDarkMode } = useTheme() as ThemeContextValue;
 
   const [wordWrap, setWordWrap] = useState(readWordWrap);
-  const [minimapEnabled, setMinimapEnabled] = useState(() => (
-    readBoolean(CODE_EDITOR_STORAGE_KEYS.showMinimap, CODE_EDITOR_DEFAULTS.minimapEnabled)
-  ));
-  const [showLineNumbers, setShowLineNumbers] = useState(() => (
-    readBoolean(CODE_EDITOR_STORAGE_KEYS.lineNumbers, CODE_EDITOR_DEFAULTS.showLineNumbers)
-  ));
+  const [minimapEnabled, setMinimapEnabled] = useState(() =>
+    readBoolean(CODE_EDITOR_STORAGE_KEYS.showMinimap, CODE_EDITOR_DEFAULTS.minimapEnabled),
+  );
+  const [showLineNumbers, setShowLineNumbers] = useState(() =>
+    readBoolean(CODE_EDITOR_STORAGE_KEYS.lineNumbers, CODE_EDITOR_DEFAULTS.showLineNumbers),
+  );
   const [fontSize, setFontSize] = useState(readFontSize);
 
   // Mirror app theme into the legacy codeEditorTheme key so any remaining
   // localStorage readers stay in sync.
   useEffect(() => {
-    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.theme, isDarkMode ? 'dark' : 'light');
+    localStorage.setItem(CODE_EDITOR_STORAGE_KEYS.theme, isDarkMode ? "dark" : "light");
   }, [isDarkMode]);
 
   useEffect(() => {
@@ -58,20 +58,23 @@ export const useCodeEditorSettings = () => {
       setFontSize(readFontSize());
     };
 
-    window.addEventListener('storage', refreshFromStorage);
+    window.addEventListener("storage", refreshFromStorage);
     window.addEventListener(CODE_EDITOR_SETTINGS_CHANGED_EVENT, refreshFromStorage);
 
     return () => {
-      window.removeEventListener('storage', refreshFromStorage);
+      window.removeEventListener("storage", refreshFromStorage);
       window.removeEventListener(CODE_EDITOR_SETTINGS_CHANGED_EVENT, refreshFromStorage);
     };
   }, []);
 
-  const setIsDarkMode = useCallback((next: boolean) => {
-    if (next !== isDarkMode) {
-      toggleDarkMode();
-    }
-  }, [isDarkMode, toggleDarkMode]);
+  const setIsDarkMode = useCallback(
+    (next: boolean) => {
+      if (next !== isDarkMode) {
+        toggleDarkMode();
+      }
+    },
+    [isDarkMode, toggleDarkMode],
+  );
 
   return {
     isDarkMode,

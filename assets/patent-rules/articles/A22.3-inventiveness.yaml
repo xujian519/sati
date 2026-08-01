@@ -1,0 +1,51 @@
+# 创造性判断框架 (A22.3)
+# Layer 1 — 法条级原子单元
+
+articleId: "A22.3"
+name: "创造性判断"
+lawRef: "专利法第22条第3款"
+guidelineRef: "审查指南第二部分第四章"
+
+steps:
+  - id: "A22.3_step_1"
+    order: 1
+    name: "确定最接近的现有技术"
+    ruleRef: "审查指南第二部分第四章 3.2.1"
+    inputHint: "reasoning_chain 中 nodeType=Case 的节点"
+    outputSchema:
+      document: "string — 对比文件号"
+      technicalField: "string — 技术领域"
+      disclosedFeatures: "string[] — 公开的技术特征列表"
+      rationale: "string — 选择理由"
+
+  - id: "A22.3_step_2"
+    order: 2
+    name: "确定区别特征和实际解决的技术问题"
+    ruleRef: "审查指南第二部分第四章 3.2.1.1"
+    inputHint: "权利要求 + 最接近现有技术的公开内容"
+    outputSchema:
+      distinguishingFeatures: "string[] — 区别技术特征"
+      actualTechnicalProblem: "string — 实际解决的技术问题"
+      rationale: "string — 推理过程"
+
+  - id: "A22.3_step_3"
+    order: 3
+    name: "判断是否显而易见"
+    ruleRef: "审查指南第二部分第四章 3.2.1.2"
+    inputHint: "区别特征 + 推理链中其他现有技术节点"
+    outputSchema:
+      obvious: "boolean — 是否显而易见"
+      motivation: "string — 技术启示（如有）"
+      evidence: "string[] — 证据"
+      dissentingFactors: "string[] — 反面因素（辅助判断基准）"
+
+conclusionSchema:
+  inventive: "boolean — 是否具备创造性"
+  confidence: "'high' | 'medium' | 'low'"
+  keyRationale: "string — 核心理由"
+
+applicableTo:
+  - patentability
+  - invalidity
+  - validity
+  - reexamination

@@ -1,5 +1,6 @@
-import express from 'express';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+// @vitest-environment node
+import express from "express";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const nativeFetch = globalThis.fetch;
 
@@ -8,15 +9,15 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe('memory clear route', () => {
-  it('returns a dashboard snapshot after clearing all memory with project context', async () => {
+describe("memory clear route", () => {
+  it("returns a dashboard snapshot after clearing all memory with project context", async () => {
     const { request, clearAllMemoryData, getMemoryServiceForRequest } = await createMemoryApp();
 
-    const result = await request('/api/memory/clear?projectPath=/tmp/pilotdeck-project', {
-      method: 'POST',
+    const result = await request("/api/memory/clear?projectPath=/tmp/sati-project", {
+      method: "POST",
       body: JSON.stringify({
-        scope: 'all_memory',
-        projectPath: '/tmp/pilotdeck-project',
+        scope: "all_memory",
+        projectPath: "/tmp/sati-project",
       }),
     });
 
@@ -24,7 +25,7 @@ describe('memory clear route', () => {
     expect(getMemoryServiceForRequest).toHaveBeenCalledOnce();
     expect(result.status).toBe(200);
     expect(result.body).toMatchObject({
-      scope: 'all_memory',
+      scope: "all_memory",
       cleared: {
         l0Sessions: 1,
         pipelineState: 2,
@@ -41,12 +42,12 @@ describe('memory clear route', () => {
           },
         },
         settings: {
-          reasoningMode: 'answer_first',
+          reasoningMode: "answer_first",
           autoIndexIntervalMinutes: 30,
           autoDreamIntervalMinutes: 60,
         },
         workspace: {
-          workspaceMode: 'project',
+          workspaceMode: "project",
           totalFiles: 0,
           totalProjects: 0,
           totalFeedback: 0,
@@ -56,7 +57,7 @@ describe('memory clear route', () => {
           deprecatedFeedbackEntries: [],
         },
         userSummary: {
-          summary: 'empty',
+          summary: "empty",
         },
         caseTraces: [],
         indexTraces: [],
@@ -66,73 +67,77 @@ describe('memory clear route', () => {
   });
 });
 
-describe('memory settings route', () => {
-  it('saves answer_first reasoning mode', async () => {
-    const { request, writePilotDeckConfig } = await createMemorySettingsApp({
+describe("memory settings route", () => {
+  it("saves answer_first reasoning mode", async () => {
+    const { request, writeSatiConfig } = await createMemorySettingsApp({
       memory: {
-        reasoningMode: 'accuracy_first',
+        reasoningMode: "accuracy_first",
         autoIndexIntervalMinutes: 30,
         autoDreamIntervalMinutes: 60,
       },
     });
 
-    const result = await request('/api/memory/settings?projectPath=/tmp/pilotdeck-project', {
-      method: 'POST',
-      body: JSON.stringify({ reasoningMode: 'answer_first' }),
+    const result = await request("/api/memory/settings?projectPath=/tmp/sati-project", {
+      method: "POST",
+      body: JSON.stringify({ reasoningMode: "answer_first" }),
     });
 
     expect(result.status).toBe(200);
-    expect(result.body.reasoningMode).toBe('answer_first');
-    expect(writePilotDeckConfig).toHaveBeenCalledWith(expect.objectContaining({
-      memory: expect.objectContaining({ reasoningMode: 'answer_first' }),
-    }));
+    expect(result.body.reasoningMode).toBe("answer_first");
+    expect(writeSatiConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memory: expect.objectContaining({ reasoningMode: "answer_first" }),
+      }),
+    );
   });
 
-  it('saves accuracy_first reasoning mode', async () => {
-    const { request, writePilotDeckConfig } = await createMemorySettingsApp({
+  it("saves accuracy_first reasoning mode", async () => {
+    const { request, writeSatiConfig } = await createMemorySettingsApp({
       memory: {
-        reasoningMode: 'answer_first',
+        reasoningMode: "answer_first",
         autoIndexIntervalMinutes: 30,
         autoDreamIntervalMinutes: 60,
       },
     });
 
-    const result = await request('/api/memory/settings?projectPath=/tmp/pilotdeck-project', {
-      method: 'POST',
-      body: JSON.stringify({ reasoningMode: 'accuracy_first' }),
+    const result = await request("/api/memory/settings?projectPath=/tmp/sati-project", {
+      method: "POST",
+      body: JSON.stringify({ reasoningMode: "accuracy_first" }),
     });
 
     expect(result.status).toBe(200);
-    expect(result.body.reasoningMode).toBe('accuracy_first');
-    expect(writePilotDeckConfig).toHaveBeenCalledWith(expect.objectContaining({
-      memory: expect.objectContaining({ reasoningMode: 'accuracy_first' }),
-    }));
+    expect(result.body.reasoningMode).toBe("accuracy_first");
+    expect(writeSatiConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memory: expect.objectContaining({ reasoningMode: "accuracy_first" }),
+      }),
+    );
   });
 
-  it('rejects invalid reasoning mode without saving config', async () => {
-    const { request, writePilotDeckConfig } = await createMemorySettingsApp({
+  it("rejects invalid reasoning mode without saving config", async () => {
+    const { request, writeSatiConfig } = await createMemorySettingsApp({
       memory: {
-        reasoningMode: 'answer_first',
+        reasoningMode: "answer_first",
         autoIndexIntervalMinutes: 30,
         autoDreamIntervalMinutes: 60,
       },
     });
 
-    const result = await request('/api/memory/settings?projectPath=/tmp/pilotdeck-project', {
-      method: 'POST',
-      body: JSON.stringify({ reasoningMode: 'fast_mode' }),
+    const result = await request("/api/memory/settings?projectPath=/tmp/sati-project", {
+      method: "POST",
+      body: JSON.stringify({ reasoningMode: "fast_mode" }),
     });
 
     expect(result.status).toBe(400);
-    expect(result.body.error).toBe('memory.reasoningMode must be answer_first or accuracy_first');
-    expect(writePilotDeckConfig).not.toHaveBeenCalled();
+    expect(result.body.error).toBe("memory.reasoningMode must be answer_first or accuracy_first");
+    expect(writeSatiConfig).not.toHaveBeenCalled();
   });
 });
 
 async function createMemoryApp() {
   const clearAllMemoryData = vi.fn(async () => ({
-    scope: 'all_memory',
-    clearedAt: '2026-07-09T00:00:00.000Z',
+    scope: "all_memory",
+    clearedAt: "2026-07-09T00:00:00.000Z",
     cleared: {
       l0Sessions: 1,
       pipelineState: 2,
@@ -142,31 +147,31 @@ async function createMemoryApp() {
   }));
 
   const store = {
-    getWorkspaceMode: vi.fn(() => 'project'),
-    getRootDir: vi.fn(() => '/tmp/pilotdeck-memory-store'),
+    getWorkspaceMode: vi.fn(() => "project"),
+    getRootDir: vi.fn(() => "/tmp/sati-memory-store"),
     getProjectMeta: vi.fn(() => null),
   };
   const repository = {
     getFileMemoryStore: vi.fn(() => store),
-    getWorkspaceMode: vi.fn(() => 'project'),
+    getWorkspaceMode: vi.fn(() => "project"),
     listMemoryEntries: vi.fn(() => []),
     getMemoryRecordsByIds: vi.fn(() => []),
   };
   const service = {
     repository,
     overview: vi.fn(() => ({ totalMemories: 0 })),
-    getUserSummary: vi.fn(() => ({ summary: 'empty' })),
+    getUserSummary: vi.fn(() => ({ summary: "empty" })),
     listCaseTraces: vi.fn(() => []),
     listIndexTraces: vi.fn(() => []),
     listDreamTraces: vi.fn(() => []),
   };
   const getMemoryServiceForRequest = vi.fn(async () => ({
-    projectPath: '/tmp/pilotdeck-project',
-    dataDir: '/tmp/pilotdeck-data',
+    projectPath: "/tmp/sati-project",
+    dataDir: "/tmp/sati-data",
     service,
   }));
 
-  vi.doMock('../services/memoryService.js', () => ({
+  vi.doMock("../services/memoryService.js", () => ({
     clearAllMemoryData,
     exportAllProjectsMemoryBundle: vi.fn(),
     getMemoryServiceForRequest,
@@ -180,21 +185,21 @@ async function createMemoryApp() {
     runManualMemoryDream: vi.fn(),
     runManualMemoryFlush: vi.fn(),
   }));
-  vi.doMock('../services/pilotdeckConfig.js', () => ({
-    readPilotDeckConfigFile: vi.fn(() => ({ config: {} })),
-    writePilotDeckConfig: vi.fn(async (config) => ({ config })),
+  vi.doMock("../services/satiConfig.js", () => ({
+    readSatiConfigFile: vi.fn(() => ({ config: {} })),
+    writeSatiConfig: vi.fn(async config => ({ config })),
   }));
-  vi.doMock('../services/pilotdeckConfigReloader.js', () => ({
-    reloadPilotDeckConfig: vi.fn(async () => undefined),
+  vi.doMock("../services/satiConfigReloader.js", () => ({
+    reloadSatiConfig: vi.fn(async () => undefined),
   }));
-  vi.doMock('../services/pilotdeckConfigWatcher.js', () => ({
+  vi.doMock("../services/satiConfigWatcher.js", () => ({
     suppressNextWatchEvent: vi.fn(),
   }));
 
-  const { default: memoryRoutes } = await import('./memory.js');
+  const { default: memoryRoutes } = await import("./memory.js");
   const app = express();
   app.use(express.json());
-  app.use('/api/memory', memoryRoutes);
+  app.use("/api/memory", memoryRoutes);
 
   return {
     clearAllMemoryData,
@@ -205,17 +210,17 @@ async function createMemoryApp() {
 
 async function createMemorySettingsApp(initialConfig) {
   let config = structuredClone(initialConfig);
-  const writePilotDeckConfig = vi.fn(async (nextConfig) => {
+  const writeSatiConfig = vi.fn(async nextConfig => {
     config = structuredClone(nextConfig);
     return { config };
   });
 
-  vi.doMock('../services/memoryService.js', () => ({
+  vi.doMock("../services/memoryService.js", () => ({
     clearAllMemoryData: vi.fn(),
     exportAllProjectsMemoryBundle: vi.fn(),
     getMemoryServiceForRequest: vi.fn(async () => ({
-      projectPath: '/tmp/pilotdeck-project',
-      dataDir: '/tmp/pilotdeck-data',
+      projectPath: "/tmp/sati-project",
+      dataDir: "/tmp/sati-data",
       service: { repository: {} },
     })),
     getMemorySchedulerStatus: vi.fn(() => ({
@@ -228,24 +233,24 @@ async function createMemorySettingsApp(initialConfig) {
     runManualMemoryDream: vi.fn(),
     runManualMemoryFlush: vi.fn(),
   }));
-  vi.doMock('../services/pilotdeckConfig.js', () => ({
-    readPilotDeckConfigFile: vi.fn(() => ({ config })),
-    writePilotDeckConfig,
+  vi.doMock("../services/satiConfig.js", () => ({
+    readSatiConfigFile: vi.fn(() => ({ config })),
+    writeSatiConfig,
   }));
-  vi.doMock('../services/pilotdeckConfigReloader.js', () => ({
-    reloadPilotDeckConfig: vi.fn(async () => undefined),
+  vi.doMock("../services/satiConfigReloader.js", () => ({
+    reloadSatiConfig: vi.fn(async () => undefined),
   }));
-  vi.doMock('../services/pilotdeckConfigWatcher.js', () => ({
+  vi.doMock("../services/satiConfigWatcher.js", () => ({
     suppressNextWatchEvent: vi.fn(),
   }));
 
-  const { default: memoryRoutes } = await import('./memory.js');
+  const { default: memoryRoutes } = await import("./memory.js");
   const app = express();
   app.use(express.json());
-  app.use('/api/memory', memoryRoutes);
+  app.use("/api/memory", memoryRoutes);
 
   return {
-    writePilotDeckConfig,
+    writeSatiConfig,
     request: (path, init) => requestJson(app, path, init),
   };
 }
@@ -255,11 +260,11 @@ async function requestJson(app, path, init = {}) {
   try {
     const { port } = server.address();
     const response = await nativeFetch(`http://127.0.0.1:${port}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+      headers: { "Content-Type": "application/json", ...(init.headers || {}) },
       ...init,
     });
     return { status: response.status, body: await response.json() };
   } finally {
-    await new Promise((resolve) => server.close(resolve));
+    await new Promise(resolve => server.close(resolve));
   }
 }

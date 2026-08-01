@@ -16,12 +16,7 @@ export type TextToolCallParseResult = {
   parseError?: boolean;
 };
 
-export type PartialTextToolCallFormat =
-  | "qwen_xml"
-  | "deepseek_dsml"
-  | "hermes_json"
-  | "mistral"
-  | "llama";
+export type PartialTextToolCallFormat = "qwen_xml" | "deepseek_dsml" | "hermes_json" | "mistral" | "llama";
 
 export type PartialTextToolCallInfo = {
   format: PartialTextToolCallFormat;
@@ -46,7 +41,7 @@ export function extractTextToolCalls(text: string): TextToolCallParseResult {
   let firstPartial: PartialTextToolCallInfo | undefined;
 
   for (const format of getToolCallFormats()) {
-    const markerHit = format.markers.some((marker) => text.includes(marker));
+    const markerHit = format.markers.some(marker => text.includes(marker));
     const result = format.parse(text);
     if (result?.partialToolCall && !firstPartial) {
       firstPartial = result.partialToolCall;
@@ -109,11 +104,7 @@ function tryParseQwenXml(text: string): TextToolCallParseResult | null {
     }
     const parameterRemainder = body.replace(QWEN_PARAM_RE, "");
     if (!partialToolCall && hasQwenParameterMarker(parameterRemainder)) {
-      partialToolCall = partialInfo(
-        "qwen_xml",
-        "incomplete_parameter_inside_function",
-        body,
-      );
+      partialToolCall = partialInfo("qwen_xml", "incomplete_parameter_inside_function", body);
     }
 
     toolCalls.push({
@@ -194,7 +185,7 @@ function tryParseDeepSeekDsml(text: string): TextToolCallParseResult | null {
     };
   }
 
-  let remaining = text.replace(/<\uff5cDSML\uff5ctool_calls>[\s\S]*?<\/\uff5cDSML\uff5ctool_calls>/g, "").trim();
+  const remaining = text.replace(/<\uff5cDSML\uff5ctool_calls>[\s\S]*?<\/\uff5cDSML\uff5ctool_calls>/g, "").trim();
   const partialToolCall = detectPartialTextToolCall(remaining, {
     preferredFormat: "deepseek_dsml",
   });
@@ -205,8 +196,10 @@ function classifyIncompleteDsml(text: string): string {
   if (/<\uff5cDSML\uff5cparameter\b/u.test(text) && !/<\uff5cDSML\uff5cinvoke\b/u.test(text)) {
     return "orphan_dsml_parameter";
   }
-  if ((/<\/\uff5cDSML\uff5cinvoke>/u.test(text) || /<\/\uff5cDSML\uff5ctool_calls>/u.test(text))
-    && !/<\uff5cDSML\uff5cinvoke\b/u.test(text)) {
+  if (
+    (/<\/\uff5cDSML\uff5cinvoke>/u.test(text) || /<\/\uff5cDSML\uff5ctool_calls>/u.test(text)) &&
+    !/<\uff5cDSML\uff5cinvoke\b/u.test(text)
+  ) {
     return "orphan_dsml_tool_call_close";
   }
   return "dsml_marker_without_complete_invoke";
@@ -241,11 +234,7 @@ function tryParseHermesJson(text: string): TextToolCallParseResult | null {
         });
       }
     } catch {
-      partialToolCall ??= partialInfo(
-        "hermes_json",
-        "invalid_json_inside_tool_call",
-        block.raw,
-      );
+      partialToolCall ??= partialInfo("hermes_json", "invalid_json_inside_tool_call", block.raw);
     }
   }
 
@@ -257,7 +246,7 @@ function tryParseHermesJson(text: string): TextToolCallParseResult | null {
     };
   }
 
-  let remaining = removeSpans(text, parsedBlocks.blocks).trim();
+  const remaining = removeSpans(text, parsedBlocks.blocks).trim();
   partialToolCall ??= detectPartialTextToolCall(remaining, {
     preferredFormat: "hermes_json",
   });
@@ -287,11 +276,7 @@ function tryParseMistral(text: string): TextToolCallParseResult | null {
     return {
       toolCalls: [],
       remainingText: text,
-      partialToolCall: partialToolCall ?? partialInfo(
-        "mistral",
-        "tool_calls_marker_without_json_array",
-        text,
-      ),
+      partialToolCall: partialToolCall ?? partialInfo("mistral", "tool_calls_marker_without_json_array", text),
     };
   }
 
@@ -310,31 +295,31 @@ function tryParseMistral(text: string): TextToolCallParseResult | null {
       continue;
     }
 
-    toolCalls.push(...parsed
-      .filter((item: unknown) => {
-        const obj = item as Record<string, unknown>;
-        return obj && typeof obj.name === "string";
-      })
-      .map((item: Record<string, unknown>) => ({
-        id: generateId(),
-        name: item.name as string,
-        input: (item.arguments ?? item.parameters ?? {}) as unknown,
-      })));
+    toolCalls.push(
+      ...parsed
+        .filter((item: unknown) => {
+          const obj = item as Record<string, unknown>;
+          return obj && typeof obj.name === "string";
+        })
+        .map((item: Record<string, unknown>) => ({
+          id: generateId(),
+          name: item.name as string,
+          input: (item.arguments ?? item.parameters ?? {}) as unknown,
+        })),
+    );
   }
 
   if (toolCalls.length === 0) {
     return {
       toolCalls: [],
       remainingText: text,
-      partialToolCall: partialToolCall ?? partialInfo(
-        "mistral",
-        "tool_calls_array_without_names",
-        parsedBlocks.blocks[0]?.raw ?? text,
-      ),
+      partialToolCall:
+        partialToolCall ??
+        partialInfo("mistral", "tool_calls_array_without_names", parsedBlocks.blocks[0]?.raw ?? text),
     };
   }
 
-  let remaining = removeSpans(text, parsedBlocks.blocks).trim();
+  const remaining = removeSpans(text, parsedBlocks.blocks).trim();
   partialToolCall ??= detectPartialTextToolCall(remaining, {
     preferredFormat: "mistral",
   });
@@ -374,15 +359,11 @@ function tryParseLlama(text: string): TextToolCallParseResult | null {
     return {
       toolCalls: [],
       remainingText: text,
-      partialToolCall: partialToolCall ?? partialInfo(
-        "llama",
-        "python_tag_without_valid_json_tool_call",
-        text,
-      ),
+      partialToolCall: partialToolCall ?? partialInfo("llama", "python_tag_without_valid_json_tool_call", text),
     };
   }
 
-  let remaining = removeSpans(text, parsedBlocks.blocks).trim();
+  const remaining = removeSpans(text, parsedBlocks.blocks).trim();
   partialToolCall ??= detectPartialTextToolCall(remaining, {
     preferredFormat: "llama",
   });
@@ -534,13 +515,13 @@ function findBalancedJsonObjectEnd(text: string, start: number): number | undefi
         escaped = false;
       } else if (ch === "\\") {
         escaped = true;
-      } else if (ch === "\"") {
+      } else if (ch === '"') {
         inString = false;
       }
       continue;
     }
 
-    if (ch === "\"") {
+    if (ch === '"') {
       inString = true;
       continue;
     }
@@ -572,13 +553,13 @@ function findBalancedJsonArrayEnd(text: string, start: number): number | undefin
         escaped = false;
       } else if (ch === "\\") {
         escaped = true;
-      } else if (ch === "\"") {
+      } else if (ch === '"') {
         inString = false;
       }
       continue;
     }
 
-    if (ch === "\"") {
+    if (ch === '"') {
       inString = true;
       continue;
     }
@@ -630,11 +611,7 @@ function detectPartialTextToolCall(
     return undefined;
   }
   if (options.allowLooseCommandFragment && hasLooseToolCommandFragment(text)) {
-    return partialInfo(
-      options.preferredFormat ?? "qwen_xml",
-      "loose_tool_command_fragment_after_tool_xml",
-      text,
-    );
+    return partialInfo(options.preferredFormat ?? "qwen_xml", "loose_tool_command_fragment_after_tool_xml", text);
   }
   if (options.preferredFormat && hasFormatMarker(text, options.preferredFormat)) {
     if (options.preferredFormat === "qwen_xml") {
@@ -646,11 +623,7 @@ function detectPartialTextToolCall(
     if (options.preferredFormat === "deepseek_dsml") {
       return partialInfo("deepseek_dsml", classifyIncompleteDsml(text), text);
     }
-    return partialInfo(
-      options.preferredFormat,
-      "dangling_tool_call_fragment_after_parse",
-      text,
-    );
+    return partialInfo(options.preferredFormat, "dangling_tool_call_fragment_after_parse", text);
   }
   if (hasDsmlMarker(text)) {
     return partialInfo("deepseek_dsml", classifyIncompleteDsml(text), text);
@@ -717,11 +690,7 @@ function hasLooseToolCommandFragment(text: string): boolean {
   return /(?:^|\n)\s*(?:Bash|bash|Shell|shell|Terminal|terminal)\/[^\s<]+/u.test(text);
 }
 
-function partialInfo(
-  format: PartialTextToolCallFormat,
-  reason: string,
-  text: string,
-): PartialTextToolCallInfo {
+function partialInfo(format: PartialTextToolCallFormat, reason: string, text: string): PartialTextToolCallInfo {
   return {
     format,
     reason,
@@ -747,7 +716,8 @@ registerToolCallFormat({
   modelFamilies: ["qwen"],
   markers: ["<function=", "</function>", "<parameter=", "</parameter>"],
   parse: tryParseQwenXml,
-  selfCorrectPrompt: "Use <function=TOOL_NAME> with one <parameter=NAME>VALUE</parameter> block for each argument, and close with </function>.",
+  selfCorrectPrompt:
+    "Use <function=TOOL_NAME> with one <parameter=NAME>VALUE</parameter> block for each argument, and close with </function>.",
   example: "<function=read_file>\n<parameter=path>/tmp/example.txt</parameter>\n</function>",
 });
 
@@ -757,8 +727,10 @@ registerToolCallFormat({
   modelFamilies: ["deepseek"],
   markers: ["\uff5cDSML\uff5c"],
   parse: tryParseDeepSeekDsml,
-  selfCorrectPrompt: "Use one <｜DSML｜invoke name=\"TOOL_NAME\"> block with <｜DSML｜parameter name=\"ARG\">VALUE</content> children.",
-  example: "<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"read_file\">\n<｜DSML｜parameter name=\"path\">/tmp/example.txt</content>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>",
+  selfCorrectPrompt:
+    'Use one <｜DSML｜invoke name="TOOL_NAME"> block with <｜DSML｜parameter name="ARG">VALUE</content> children.',
+  example:
+    '<｜DSML｜tool_calls>\n<｜DSML｜invoke name="read_file">\n<｜DSML｜parameter name="path">/tmp/example.txt</content>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>',
 });
 
 registerToolCallFormat({
@@ -768,7 +740,7 @@ registerToolCallFormat({
   markers: ["<tool_call>", "</tool_call>"],
   parse: tryParseHermesJson,
   selfCorrectPrompt: "Use a <tool_call> block containing valid JSON with string field name and object field arguments.",
-  example: "<tool_call>\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/example.txt\"}}\n</tool_call>",
+  example: '<tool_call>\n{"name":"read_file","arguments":{"path":"/tmp/example.txt"}}\n</tool_call>',
 });
 
 registerToolCallFormat({
@@ -778,7 +750,7 @@ registerToolCallFormat({
   markers: [MISTRAL_MARKER],
   parse: tryParseMistral,
   selfCorrectPrompt: "Use [TOOL_CALLS] followed by a valid JSON array of tool call objects with name and arguments.",
-  example: "[TOOL_CALLS] [{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/example.txt\"}}]",
+  example: '[TOOL_CALLS] [{"name":"read_file","arguments":{"path":"/tmp/example.txt"}}]',
 });
 
 registerToolCallFormat({
@@ -788,5 +760,5 @@ registerToolCallFormat({
   markers: [LLAMA_TAG],
   parse: tryParseLlama,
   selfCorrectPrompt: "Use <|python_tag|> followed by a valid JSON object with name and arguments.",
-  example: "<|python_tag|>{\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp/example.txt\"}}",
+  example: '<|python_tag|>{"name":"read_file","arguments":{"path":"/tmp/example.txt"}}',
 });

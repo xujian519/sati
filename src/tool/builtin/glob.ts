@@ -1,7 +1,7 @@
 import path from "node:path";
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
-import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
+import { resolveSatiWorkspacePath } from "./filesystem/pathSafety.js";
 import { ripgrepFiles } from "./filesystem/ripgrepFiles.js";
 
 export type GlobInput = {
@@ -23,10 +23,7 @@ export function extractGlobBaseDirectory(pattern: string): {
   }
 
   const staticPrefix = pattern.slice(0, match.index);
-  const lastSepIndex = Math.max(
-    staticPrefix.lastIndexOf("/"),
-    staticPrefix.lastIndexOf(path.sep),
-  );
+  const lastSepIndex = Math.max(staticPrefix.lastIndexOf("/"), staticPrefix.lastIndexOf(path.sep));
 
   if (lastSepIndex === -1) {
     return { baseDir: "", relativePattern: pattern };
@@ -45,12 +42,12 @@ export function extractGlobBaseDirectory(pattern: string): {
   return { baseDir, relativePattern };
 }
 
-export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
+export function createGlobTool(): SatiToolDefinition<GlobInput> {
   return {
     name: "glob",
     aliases: ["Glob"],
     description:
-      "Fast file pattern matching tool scoped to the workspace.\n\nUsage:\n- Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\".\n- Use this tool when you need to find files by name patterns.\n- Provide the optional path parameter to restrict the search to a subdirectory inside the workspace.\n- Returns matching file paths in stable sorted order.\n- Use this tool to narrow down candidate files before reading or editing them.",
+      'Fast file pattern matching tool scoped to the workspace.\n\nUsage:\n- Supports glob patterns like "**/*.js" or "src/**/*.ts".\n- Use this tool when you need to find files by name patterns.\n- Provide the optional path parameter to restrict the search to a subdirectory inside the workspace.\n- Returns matching file paths in stable sorted order.\n- Use this tool to narrow down candidate files before reading or editing them.',
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -60,8 +57,8 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
         pattern: {
           type: "string",
           description:
-            "The glob pattern to match files against. May be workspace-relative, path-relative, "
-            + "or an absolute glob that resolves inside the workspace.",
+            "The glob pattern to match files against. May be workspace-relative, path-relative, " +
+            "or an absolute glob that resolves inside the workspace.",
         },
         path: {
           type: "string",
@@ -71,7 +68,7 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
         limit: {
           type: "integer",
           description:
-            "Maximum number of file paths to return. This is a PilotDeck-specific output cap; defaults to 1000. Results remain stable and sorted before truncation.",
+            "Maximum number of file paths to return. This is a Sati-specific output cap; defaults to 1000. Results remain stable and sorted before truncation.",
         },
       },
     },
@@ -90,13 +87,9 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
         }
       }
 
-      const resolvedSearchPath = resolvePilotDeckWorkspacePath(
-        searchPath,
-        context,
-        { mustExist: true },
-      );
+      const resolvedSearchPath = resolveSatiWorkspacePath(searchPath, context, { mustExist: true });
       if (!resolvedSearchPath.ok) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           resolvedSearchPath.error.code,
           resolvedSearchPath.error.message,
           resolvedSearchPath.error.details,
@@ -111,10 +104,12 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
         signal: context.abortSignal,
       });
       const workspacePrefix = resolvedSearchPath.relativePath === "." ? "" : `${resolvedSearchPath.relativePath}/`;
-      const workspaceFiles = result.files.map((file) => `${workspacePrefix}${file}`);
+      const workspaceFiles = result.files.map(file => `${workspacePrefix}${file}`);
 
       return {
-        content: [{ type: "text", text: formatGlobResult(workspaceFiles, result.count, result.truncated, input.limit) }],
+        content: [
+          { type: "text", text: formatGlobResult(workspaceFiles, result.count, result.truncated, input.limit) },
+        ],
         data: {
           files: workspaceFiles,
           count: result.count,
@@ -128,9 +123,14 @@ export function createGlobTool(): PilotDeckToolDefinition<GlobInput> {
 
 function formatGlobResult(files: string[], totalCount: number, truncated: boolean, limit: number | undefined): string {
   const lines = files.length > 0 ? [...files] : ["[No files matched]"];
-  lines.push("", `[glob pagination] returned=${files.length} total=${totalCount} truncated=${truncated}${limit !== undefined ? ` limit=${limit}` : ""}`);
+  lines.push(
+    "",
+    `[glob pagination] returned=${files.length} total=${totalCount} truncated=${truncated}${limit !== undefined ? ` limit=${limit}` : ""}`,
+  );
   if (truncated) {
-    lines.push("More files are available. Narrow the pattern/path or call glob again with a higher limit if you need the full list.");
+    lines.push(
+      "More files are available. Narrow the pattern/path or call glob again with a higher limit if you need the full list.",
+    );
   }
   return lines.join("\n");
 }

@@ -5,9 +5,9 @@ import path from "node:path";
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import type { Readable } from "node:stream";
-import type { PilotDeckToolDefinition, PilotDeckToolRuntimeContext } from "../protocol/types.js";
-import { contentToText, type PilotDeckToolResult } from "../protocol/result.js";
-import type { PilotDeckToolValidationIssue } from "../protocol/schema.js";
+import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
+import { contentToText, type SatiToolResult } from "../protocol/result.js";
+import type { SatiToolValidationIssue } from "../protocol/schema.js";
 import { isReadOnlyShellCommand } from "./bash/permissions.js";
 import { collectPythonSyntaxDiagnostics } from "./filesystem/syntaxDiagnostics.js";
 
@@ -70,7 +70,7 @@ export async function handleExecuteCodeRpcLineForTests(
   line: string,
   options: {
     expectedToken?: string;
-    executeTool?: NonNullable<PilotDeckToolRuntimeContext["executeTool"]>;
+    executeTool?: NonNullable<SatiToolRuntimeContext["executeTool"]>;
     webSearch?: boolean;
   } = {},
 ): Promise<RpcResponse> {
@@ -89,9 +89,11 @@ export async function handleExecuteCodeRpcLineForTests(
         bypassAvailable: false,
       },
     },
-    executeTool: options.executeTool ?? (async () => {
-      throw new Error("executeTool should not be called by this test.");
-    }),
+    executeTool:
+      options.executeTool ??
+      (async () => {
+        throw new Error("executeTool should not be called by this test.");
+      }),
     maxToolCalls: 50,
     toolCallLog: [],
     nextToolCall: () => 1,
@@ -115,9 +117,7 @@ const EXECUTE_CODE_BASE_ALLOWED_TOOLS = [
   "bash",
 ] as const;
 
-function resolveExecuteCodeAllowedTools(
-  options: CreateExecuteCodeToolOptions,
-): ReadonlySet<string> {
+function resolveExecuteCodeAllowedTools(options: CreateExecuteCodeToolOptions): ReadonlySet<string> {
   const allowed = new Set<string>(EXECUTE_CODE_BASE_ALLOWED_TOOLS);
   if (options.webSearch !== false) {
     allowed.add("web_search");
@@ -127,22 +127,19 @@ function resolveExecuteCodeAllowedTools(
 
 export function createExecuteCodeTool(
   options: CreateExecuteCodeToolOptions = {},
-): PilotDeckToolDefinition<ExecuteCodeInput, ExecuteCodeOutput> {
+): SatiToolDefinition<ExecuteCodeInput, ExecuteCodeOutput> {
   const webSearchEnabled = options.webSearch !== false;
   const allowedTools = resolveExecuteCodeAllowedTools(options);
-  const availableHelpers = [
-    ...(webSearchEnabled ? ["web_search"] : []),
-    ...EXECUTE_CODE_BASE_ALLOWED_TOOLS,
-  ];
+  const availableHelpers = [...(webSearchEnabled ? ["web_search"] : []), ...EXECUTE_CODE_BASE_ALLOWED_TOOLS];
   return {
     name: "execute_code",
     description:
-      "Run a local Python 3 script that can call a small allow-list of PilotDeck tools via `import pilotdeck_tools`. " +
+      "Run a local Python 3 script that can call a small allow-list of Sati tools via `import sati_tools`. " +
       "The script runs from the workspace cwd and inherits the same runtime environment as normal tools such as bash, including configured API, proxy, PATH, virtualenv, and conda variables; do not print secrets or dump the full environment. " +
       "Only the script's final stdout/stderr summary is returned to the model; intermediate tool results stay inside the script. " +
       `Available helper functions: ${availableHelpers.join(", ")}. ` +
       "Use normal Python control flow to orchestrate tools: loops for batch work, conditionals for branching, data structures for aggregation, and try/except around individual helper calls when one failure should not abort the whole script. Helper failures raise RuntimeError. You can chain helper results, e.g. grep -> read_file -> edit_file. Print only the concise final result needed by the agent. " +
-      "Before modifying an existing file, call read_file first so PilotDeck can verify freshness. Prefer edit_file for targeted changes and write_file for new files or complete rewrites. " +
+      "Before modifying an existing file, call read_file first so Sati can verify freshness. Prefer edit_file for targeted changes and write_file for new files or complete rewrites. " +
       "Notebook edits, agent, task tools, MCP tools, and execute_code itself are not available.",
     kind: "custom",
     inputSchema: {
@@ -152,7 +149,7 @@ export function createExecuteCodeTool(
       properties: {
         code: {
           type: "string",
-          description: "Python 3 source code to execute. Use `from pilotdeck_tools import ...` to call allowed PilotDeck tools.",
+          description: "Python 3 source code to execute. Use `from sati_tools import ...` to call allowed Sati tools.",
         },
         description: {
           type: "string",
@@ -164,7 +161,7 @@ export function createExecuteCodeTool(
         },
         max_tool_calls: {
           type: "integer",
-          description: "Maximum number of PilotDeck tool calls the script may make. Defaults to 50; maximum 50.",
+          description: "Maximum number of Sati tool calls the script may make. Defaults to 50; maximum 50.",
         },
       },
     },
@@ -179,9 +176,9 @@ export function createExecuteCodeTool(
         tool_call_log: { type: "array" },
       },
     },
-    isReadOnly: (input) => isExecuteCodeReadOnly(input),
+    isReadOnly: input => isExecuteCodeReadOnly(input),
     isConcurrencySafe: () => false,
-    validateInput: async (input) => validateExecuteCodeInput(input as ExecuteCodeInput),
+    validateInput: async input => validateExecuteCodeInput(input as ExecuteCodeInput),
     execute: async (input, context) => {
       const startedAt = Date.now();
       const result = await runExecuteCode(input, context, startedAt, {
@@ -205,18 +202,24 @@ export function createExecuteCodeTool(
 }
 
 async function validateExecuteCodeInput(input: ExecuteCodeInput) {
-  const issues: PilotDeckToolValidationIssue[] = [];
+  const issues: SatiToolValidationIssue[] = [];
   if (!input.code.trim()) {
     issues.push({ path: "$.code", code: "invalid_schema", message: "$.code must not be empty." });
   }
-  if (input.timeout_seconds !== undefined && (input.timeout_seconds < 1 || input.timeout_seconds > DEFAULT_TIMEOUT_SECONDS)) {
+  if (
+    input.timeout_seconds !== undefined &&
+    (input.timeout_seconds < 1 || input.timeout_seconds > DEFAULT_TIMEOUT_SECONDS)
+  ) {
     issues.push({
       path: "$.timeout_seconds",
       code: "invalid_schema",
       message: `$.timeout_seconds must be between 1 and ${DEFAULT_TIMEOUT_SECONDS}.`,
     });
   }
-  if (input.max_tool_calls !== undefined && (input.max_tool_calls < 0 || input.max_tool_calls > DEFAULT_MAX_TOOL_CALLS)) {
+  if (
+    input.max_tool_calls !== undefined &&
+    (input.max_tool_calls < 0 || input.max_tool_calls > DEFAULT_MAX_TOOL_CALLS)
+  ) {
     issues.push({
       path: "$.max_tool_calls",
       code: "invalid_schema",
@@ -341,14 +344,14 @@ function createRpcTransport(): RpcTransport {
     kind: "uds",
     socketPath: path.join(
       process.platform === "darwin" ? "/tmp" : tmpdir(),
-      `pilotdeck_rpc_${process.pid}_${Date.now()}_${Math.random().toString(16).slice(2)}.sock`,
+      `sati_rpc_${process.pid}_${Date.now()}_${Math.random().toString(16).slice(2)}.sock`,
     ),
   };
 }
 
 async function runExecuteCode(
   input: ExecuteCodeInput,
-  context: PilotDeckToolRuntimeContext,
+  context: SatiToolRuntimeContext,
   startedAt: number,
   options: {
     allowedTools: ReadonlySet<string>;
@@ -374,10 +377,17 @@ async function runExecuteCode(
 
   const python = await findPython3(context.env);
   if (!python) {
-    return buildOutput("unsupported", "", "execute_code requires python3 on PATH.", startedAt, toolCallsMade, toolCallLog);
+    return buildOutput(
+      "unsupported",
+      "",
+      "execute_code requires python3 on PATH.",
+      startedAt,
+      toolCallsMade,
+      toolCallLog,
+    );
   }
 
-  const tempRoot = await mkdtemp(path.join(tmpdir(), "pilotdeck_execute_code_"));
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "sati_execute_code_"));
   let transport = createRpcTransport();
   let server: Server | undefined;
   let child: ChildProcessByStdio<null, Readable, Readable> | undefined;
@@ -395,8 +405,8 @@ async function runExecuteCode(
 
   try {
     await writeFile(
-      path.join(tempRoot, "pilotdeck_tools.py"),
-      generatePilotDeckToolsModule(transport.kind, options.webSearchEnabled),
+      path.join(tempRoot, "sati_tools.py"),
+      generateSatiToolsModule(transport.kind, options.webSearchEnabled),
       "utf8",
     );
     await writeFile(path.join(tempRoot, "script.py"), input.code, "utf8");
@@ -456,18 +466,33 @@ async function runExecuteCode(
       statusError = stderrText || `Script exited with code ${exit.code ?? "unknown"}.`;
     }
 
-    const output = status === "error" && stderrText ? `${stdoutText}\n--- stderr ---\n${stderrText}`.trim() : stdoutText;
-    return buildOutput(status, stripAnsi(output), statusError ? stripAnsi(statusError) : undefined, startedAt, toolCallsMade, toolCallLog);
+    const output =
+      status === "error" && stderrText ? `${stdoutText}\n--- stderr ---\n${stderrText}`.trim() : stdoutText;
+    return buildOutput(
+      status,
+      stripAnsi(output),
+      statusError ? stripAnsi(statusError) : undefined,
+      startedAt,
+      toolCallsMade,
+      toolCallLog,
+    );
   } catch (error) {
-    return buildOutput("error", "", error instanceof Error ? error.message : String(error), startedAt, toolCallsMade, toolCallLog);
+    return buildOutput(
+      "error",
+      "",
+      error instanceof Error ? error.message : String(error),
+      startedAt,
+      toolCallsMade,
+      toolCallLog,
+    );
   } finally {
     await cleanup();
   }
 }
 
 function createRpcServer(options: {
-  context: PilotDeckToolRuntimeContext;
-  executeTool: NonNullable<PilotDeckToolRuntimeContext["executeTool"]>;
+  context: SatiToolRuntimeContext;
+  executeTool: NonNullable<SatiToolRuntimeContext["executeTool"]>;
   maxToolCalls: number;
   toolCallLog: ExecuteCodeToolCallLogEntry[];
   nextToolCall: () => number;
@@ -475,22 +500,26 @@ function createRpcServer(options: {
   expectedToken?: string;
   allowedTools: ReadonlySet<string>;
 }): Server {
-  return createServer((socket) => {
+  return createServer(socket => {
     let buffer = "";
     socket.setEncoding("utf8");
-    socket.on("data", (chunk) => {
+    socket.on("data", chunk => {
       buffer += chunk;
-      void processBufferedRequests(socket, () => {
-        const lines: string[] = [];
-        let index = buffer.indexOf("\n");
-        while (index >= 0) {
-          const line = buffer.slice(0, index);
-          buffer = buffer.slice(index + 1);
-          lines.push(line);
-          index = buffer.indexOf("\n");
-        }
-        return lines;
-      }, options);
+      void processBufferedRequests(
+        socket,
+        () => {
+          const lines: string[] = [];
+          let index = buffer.indexOf("\n");
+          while (index >= 0) {
+            const line = buffer.slice(0, index);
+            buffer = buffer.slice(index + 1);
+            lines.push(line);
+            index = buffer.indexOf("\n");
+          }
+          return lines;
+        },
+        options,
+      );
     });
   });
 }
@@ -499,8 +528,8 @@ async function processBufferedRequests(
   socket: Socket,
   takeLines: () => string[],
   options: {
-    context: PilotDeckToolRuntimeContext;
-    executeTool: NonNullable<PilotDeckToolRuntimeContext["executeTool"]>;
+    context: SatiToolRuntimeContext;
+    executeTool: NonNullable<SatiToolRuntimeContext["executeTool"]>;
     maxToolCalls: number;
     toolCallLog: ExecuteCodeToolCallLogEntry[];
     nextToolCall: () => number;
@@ -520,8 +549,8 @@ async function processBufferedRequests(
 async function handleRpcLine(
   line: string,
   options: {
-    context: PilotDeckToolRuntimeContext;
-    executeTool: NonNullable<PilotDeckToolRuntimeContext["executeTool"]>;
+    context: SatiToolRuntimeContext;
+    executeTool: NonNullable<SatiToolRuntimeContext["executeTool"]>;
     maxToolCalls: number;
     toolCallLog: ExecuteCodeToolCallLogEntry[];
     nextToolCall: () => number;
@@ -534,7 +563,10 @@ async function handleRpcLine(
   try {
     request = JSON.parse(line) as RpcRequest;
   } catch (error) {
-    return { error: `Invalid RPC request: ${error instanceof Error ? error.message : String(error)}`, code: "invalid_rpc" };
+    return {
+      error: `Invalid RPC request: ${error instanceof Error ? error.message : String(error)}`,
+      code: "invalid_rpc",
+    };
   }
 
   const toolName = typeof request.tool === "string" ? request.tool : "";
@@ -564,7 +596,7 @@ async function handleRpcLine(
   return toolResultToRpcResponse(result);
 }
 
-function toolResultToRpcResponse(result: PilotDeckToolResult): RpcResponse {
+function toolResultToRpcResponse(result: SatiToolResult): RpcResponse {
   const content = result.content.map(contentToText).join("\n");
   if (result.type === "error") {
     const details = formatToolErrorDetails(result);
@@ -582,28 +614,27 @@ function toolResultToRpcResponse(result: PilotDeckToolResult): RpcResponse {
   };
 }
 
-function formatToolErrorDetails(result: Extract<PilotDeckToolResult, { type: "error" }>): string | undefined {
+function formatToolErrorDetails(result: Extract<SatiToolResult, { type: "error" }>): string | undefined {
   const issues = result.error.details?.issues;
   if (!Array.isArray(issues)) return undefined;
   const messages = issues
-    .map((issue) => isRecord(issue) && typeof issue.message === "string" ? issue.message : undefined)
+    .map(issue => (isRecord(issue) && typeof issue.message === "string" ? issue.message : undefined))
     .filter((message): message is string => !!message);
   return messages.length > 0 ? messages.join("\n") : undefined;
 }
 
-function generatePilotDeckToolsModule(
-  kind: RpcTransport["kind"],
-  webSearchEnabled: boolean,
-): string {
+function generateSatiToolsModule(kind: RpcTransport["kind"], webSearchEnabled: boolean): string {
   const transportHeader = kind === "tcp" ? TCP_PYTHON_TRANSPORT_HEADER : UDS_PYTHON_TRANSPORT_HEADER;
-  const webSearchHelper = webSearchEnabled ? `
+  const webSearchHelper = webSearchEnabled
+    ? `
 def web_search(query, country=None):
     args = {"query": query}
     if country is not None:
         args["gl"] = country
     return _call("web_search", args)
 
-` : "";
+`
+    : "";
   return `${transportHeader}
 ${webSearchHelper}
 
@@ -664,7 +695,7 @@ def bash(command, timeout_ms=None, workdir=None):
 `;
 }
 
-const UDS_PYTHON_TRANSPORT_HEADER = `"""Auto-generated PilotDeck execute_code RPC helpers."""
+const UDS_PYTHON_TRANSPORT_HEADER = `"""Auto-generated Sati execute_code RPC helpers."""
 import json
 import os
 import shlex
@@ -677,7 +708,7 @@ def _connect():
     global _sock
     if _sock is None:
         _sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        _sock.connect(os.environ["PILOTDECK_RPC_SOCKET"])
+        _sock.connect(os.environ["SATI_RPC_SOCKET"])
         _sock.settimeout(300)
     return _sock
 
@@ -689,7 +720,7 @@ def _call(tool_name, args):
     while True:
         chunk = conn.recv(65536)
         if not chunk:
-            raise RuntimeError("PilotDeck RPC server disconnected")
+            raise RuntimeError("Sati RPC server disconnected")
         chunks.append(chunk)
         if chunk.endswith(b"\\n"):
             break
@@ -699,21 +730,21 @@ def _call(tool_name, args):
     return response
 `;
 
-const TCP_PYTHON_TRANSPORT_HEADER = `"""Auto-generated PilotDeck execute_code RPC helpers."""
+const TCP_PYTHON_TRANSPORT_HEADER = `"""Auto-generated Sati execute_code RPC helpers."""
 import json
 import os
 import shlex
 import socket
 
 _sock = None
-_token = os.environ["PILOTDECK_RPC_TOKEN"]
+_token = os.environ["SATI_RPC_TOKEN"]
 
 
 def _connect():
     global _sock
     if _sock is None:
-        host = os.environ.get("PILOTDECK_RPC_HOST", "127.0.0.1")
-        port = int(os.environ["PILOTDECK_RPC_PORT"])
+        host = os.environ.get("SATI_RPC_HOST", "127.0.0.1")
+        port = int(os.environ["SATI_RPC_PORT"])
         _sock = socket.create_connection((host, port), timeout=300)
         _sock.settimeout(300)
     return _sock
@@ -726,7 +757,7 @@ def _call(tool_name, args):
     while True:
         chunk = conn.recv(65536)
         if not chunk:
-            raise RuntimeError("PilotDeck RPC server disconnected")
+            raise RuntimeError("Sati RPC server disconnected")
         chunks.append(chunk)
         if chunk.endswith(b"\\n"):
             break
@@ -739,10 +770,10 @@ def _call(tool_name, args):
 async function findPython3(env: NodeJS.ProcessEnv | undefined): Promise<string | undefined> {
   const candidates = ["python3", "python"];
   for (const candidate of candidates) {
-    const result = await new Promise<boolean>((resolve) => {
+    const result = await new Promise<boolean>(resolve => {
       const child = spawn(candidate, ["--version"], { env, stdio: "ignore" });
       child.on("error", () => resolve(false));
-      child.on("exit", (code) => resolve(code === 0));
+      child.on("exit", code => resolve(code === 0));
     });
     if (result) return candidate;
   }
@@ -757,21 +788,21 @@ function buildChildEnv(
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...source };
   env.PYTHONPATH = source.PYTHONPATH ? `${tempRoot}${path.delimiter}${source.PYTHONPATH}` : tempRoot;
-  env.PILOTDECK_WORKSPACE_CWD = workspaceCwd;
-  env.PILOTDECK_EXECUTE_CODE_TEMP_ROOT = tempRoot;
+  env.SATI_WORKSPACE_CWD = workspaceCwd;
+  env.SATI_EXECUTE_CODE_TEMP_ROOT = tempRoot;
   if (transport.kind === "uds") {
-    env.PILOTDECK_RPC_SOCKET = transport.socketPath;
+    env.SATI_RPC_SOCKET = transport.socketPath;
   } else {
-    env.PILOTDECK_RPC_HOST = transport.host;
-    env.PILOTDECK_RPC_PORT = String(transport.port);
-    env.PILOTDECK_RPC_TOKEN = transport.token;
+    env.SATI_RPC_HOST = transport.host;
+    env.SATI_RPC_PORT = String(transport.port);
+    env.SATI_RPC_TOKEN = transport.token;
   }
   env.PYTHONDONTWRITEBYTECODE = "1";
   return env;
 }
 
 function collectHead(stream: NodeJS.ReadableStream, maxBytes: number): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const chunks: Buffer[] = [];
     let total = 0;
     stream.on("data", (chunk: Buffer | string) => {
@@ -789,7 +820,7 @@ function collectHead(stream: NodeJS.ReadableStream, maxBytes: number): Promise<s
 function collectHeadTail(stream: NodeJS.ReadableStream, maxBytes: number): Promise<string> {
   const headBytes = Math.floor(maxBytes * 0.4);
   const tailBytes = maxBytes - headBytes;
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const head: Buffer[] = [];
     const tail: Buffer[] = [];
     let headCollected = 0;
@@ -825,7 +856,9 @@ function collectHeadTail(stream: NodeJS.ReadableStream, maxBytes: number): Promi
       const tailText = Buffer.concat(tail).toString("utf8");
       if (total > maxBytes && tailText) {
         const omitted = Math.max(0, total - Buffer.byteLength(headText) - Buffer.byteLength(tailText));
-        resolve(`${headText}\n\n... [OUTPUT TRUNCATED - ${omitted.toLocaleString()} bytes omitted out of ${total.toLocaleString()} total] ...\n\n${tailText}`);
+        resolve(
+          `${headText}\n\n... [OUTPUT TRUNCATED - ${omitted.toLocaleString()} bytes omitted out of ${total.toLocaleString()} total] ...\n\n${tailText}`,
+        );
       } else {
         resolve(headText + tailText);
       }
@@ -835,7 +868,9 @@ function collectHeadTail(stream: NodeJS.ReadableStream, maxBytes: number): Promi
   });
 }
 
-function waitForExit(child: ChildProcessByStdio<null, Readable, Readable>): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+function waitForExit(
+  child: ChildProcessByStdio<null, Readable, Readable>,
+): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
   return new Promise((resolve, reject) => {
     child.on("error", reject);
     child.on("exit", (code, signal) => resolve({ code, signal }));
@@ -847,15 +882,24 @@ function killProcess(child: ChildProcessByStdio<null, Readable, Readable> | unde
   try {
     if (process.platform !== "win32" && child.pid) {
       process.kill(-child.pid, "SIGTERM");
-      if (escalate) setTimeout(() => {
-        try { process.kill(-child.pid!, "SIGKILL"); } catch { /* noop */ }
-      }, 500).unref();
+      if (escalate)
+        setTimeout(() => {
+          try {
+            process.kill(-child.pid!, "SIGKILL");
+          } catch {
+            /* noop */
+          }
+        }, 500).unref();
     } else {
       child.kill("SIGTERM");
       if (escalate) setTimeout(() => child?.kill("SIGKILL"), 500).unref();
     }
   } catch {
-    try { child.kill("SIGKILL"); } catch { /* noop */ }
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* noop */
+    }
   }
 }
 
@@ -884,7 +928,7 @@ function listen(server: Server, transport: RpcTransport): Promise<RpcTransport> 
 }
 
 function closeServer(server: Server | undefined): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     if (!server || !server.listening) {
       resolve();
       return;
@@ -912,7 +956,11 @@ function buildOutput(
 }
 
 function formatExecuteCodeResult(result: ExecuteCodeOutput): string {
-  const lines = [`status: ${result.status}`, `duration_seconds: ${result.duration_seconds}`, `tool_calls_made: ${result.tool_calls_made}`];
+  const lines = [
+    `status: ${result.status}`,
+    `duration_seconds: ${result.duration_seconds}`,
+    `tool_calls_made: ${result.tool_calls_made}`,
+  ];
   if (result.error) lines.push(`error: ${result.error}`);
   if (result.output) lines.push("", result.output);
   return lines.join("\n");

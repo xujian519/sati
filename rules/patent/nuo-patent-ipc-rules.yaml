@@ -1,0 +1,164 @@
+# 由 scripts/port-nuo-rules.ts 从 XiaoNuo Agent patent-ipc-rules.yaml 转换生成
+# 原始文件完整内容见 assets/patent-rules/patent-ipc-rules.yaml（含 LLM 评估型规则与指导字段）
+# 转换语义: pattern_analysis(期望模式)→structural_analysis 单 element；severity warning→major；info→minor
+version: "1.0"
+rules:
+  - id: IPC-A61-INV-003
+    name: 医药领域—网络证据真实性异议→创造性基础不成立
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第22条第3款；第581933号决定
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 医药领域—网络证据真实性异议→创造性基础不成立
+          patterns:
+            - 证据真实
+            - 公开时间
+            - 网络证据
+      minConfidence: 1
+  - id: IPC-A61-INV-004
+    name: 医药领域—区别特征带来有益效果→辅助判断创造性
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 专利法第22条第3款；第561799号决定
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 医药领域—区别特征带来有益效果→辅助判断创造性
+          patterns:
+            - 有益效果
+            - 预料不到
+            - 技术效果
+      minConfidence: 1
+  - id: IPC-A61-INV-005
+    name: 医药领域—结构特征与使用效果严格区分
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 专利法第22条第3款；第560560号决定
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 医药领域—结构特征与使用效果严格区分
+          patterns:
+            - 结构特征
+            - 动态效果
+            - 客观结构
+      minConfidence: 1
+  - id: IPC-C07-INV-002
+    name: 有机化学领域—选择发明的创造性
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 专利法第22条第3款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 有机化学领域—选择发明的创造性
+          patterns:
+            - 选择发明
+            - 选择性
+            - 优选范围
+            - 预料不到
+      minConfidence: 1
+  - id: IPC-GEN-INV-001
+    name: 通用—三步法是创造性判断的唯一框架
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第22条第3款；审查指南第二部分第四章
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: closest_prior_art
+          patterns:
+            - 最接近
+            - 现有技术
+        - element: distinguishing_features
+          patterns:
+            - 区别技术特征
+            - 区别特征
+        - element: technical_problem
+          patterns:
+            - 实际解决的技术问题
+            - 技术问题
+        - element: technical_motivation
+          patterns:
+            - 技术启示
+            - 显而易见
+  - id: IPC-GEN-INV-002
+    name: 通用—三步法不能与事后诸葛亮混淆
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第22条第3款；审查指南第二部分第四章
+    check:
+      type: keyword_blocklist
+      keywords:
+        - 事后诸葛亮
+        - " hindsight"
+        - ex post facto
+  - id: IPC-GEN-INV-003
+    name: 通用—公知常识需举证
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第22条第3款；审查指南第二部分第四章3.2.1.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 通用—公知常识需举证
+          patterns:
+            - 公知常识
+      minConfidence: 1
+  - id: IPC-B60-INV-003
+    name: 车辆领域—公知常识的举证责任分配
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第22条第3款；第567252号决定
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 车辆领域—公知常识的举证责任分配
+          patterns:
+            - 公知常识
+            - 举证责任
+            - 证据
+            - 教科书
+      minConfidence: 1
+  - id: IPC-E04-INV-002
+    name: 建筑领域—模壳构件的结构替换判断
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 专利法第22条第3款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 建筑领域—模壳构件的结构替换判断
+          patterns:
+            - 模壳构件
+            - 结构替换
+            - 常规设计
+            - 公知常识
+      minConfidence: 1

@@ -1,5 +1,5 @@
 import type { CanonicalToolCall } from "../../model/index.js";
-import type { PilotDeckToolErrorResult, PilotDeckToolResult } from "../../tool/index.js";
+import type { SatiToolErrorResult, SatiToolResult } from "../../tool/index.js";
 import { buildToolErrorRecovery } from "../../tool/execution/errorRecovery.js";
 
 export type MissingToolResultRecoveryContext = {
@@ -9,12 +9,12 @@ export type MissingToolResultRecoveryContext = {
 
 export function ensureToolResultPairing(
   calls: CanonicalToolCall[],
-  results: PilotDeckToolResult[],
+  results: SatiToolResult[],
   now: () => Date = () => new Date(),
   message = "Tool execution did not produce a result.",
   recoveryContext?: MissingToolResultRecoveryContext,
-): PilotDeckToolResult[] {
-  const resultsByCallId = new Map<string, PilotDeckToolResult[]>();
+): SatiToolResult[] {
+  const resultsByCallId = new Map<string, SatiToolResult[]>();
   for (const result of results) {
     const queue = resultsByCallId.get(result.toolCallId);
     if (queue) {
@@ -24,13 +24,10 @@ export function ensureToolResultPairing(
     }
   }
 
-  const paired: PilotDeckToolResult[] = [];
+  const paired: SatiToolResult[] = [];
 
   for (const call of calls) {
-    paired.push(
-      resultsByCallId.get(call.id)?.shift()
-        ?? createMissingToolResult(call, now, message, recoveryContext),
-    );
+    paired.push(resultsByCallId.get(call.id)?.shift() ?? createMissingToolResult(call, now, message, recoveryContext));
   }
 
   return paired;
@@ -41,7 +38,7 @@ export function createMissingToolResult(
   now: () => Date = () => new Date(),
   message = "Tool execution did not produce a result.",
   recoveryContext?: MissingToolResultRecoveryContext,
-): PilotDeckToolErrorResult {
+): SatiToolErrorResult {
   const timestamp = now().toISOString();
   const recovery = buildToolErrorRecovery({
     code: "tool_execution_failed",

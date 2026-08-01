@@ -1,5 +1,3 @@
-import { fetch as undiciFetch } from "undici";
-
 export type NetworkErrorCode =
   | "network_timeout"
   | "network_dns_error"
@@ -63,24 +61,31 @@ export async function networkFetch(
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     const controller = new AbortController();
     const detachAbort = parentSignal ? forwardAbort(parentSignal, controller) : undefined;
-    const timeout = options.timeoutMs && options.timeoutMs > 0
-      ? setTimeout(() => controller.abort(new NetworkFetchError("network_timeout", `Network request timed out after ${options.timeoutMs}ms.`)), options.timeoutMs)
-      : undefined;
-    if (timeout && typeof timeout === "object" && "unref" in timeout) {
-      (timeout as NodeJS.Timeout).unref();
-    }
+    // 注意：不得 unref()——unref 的 timer 在事件循环空转（如 node:test
+    // runner）时永不触发，await 会挂起（"Promise resolution is still
+    // pending"）。请求完成路径有 clearTimeout 兜底，无需 unref。
+    const timeout =
+      options.timeoutMs && options.timeoutMs > 0
+        ? setTimeout(
+            () =>
+              controller.abort(
+                new NetworkFetchError("network_timeout", `Network request timed out after ${options.timeoutMs}ms.`),
+              ),
+            options.timeoutMs,
+          )
+        : undefined;
 
     try {
-      const response = await performFetch(input, {
-        ...init,
-        signal: controller.signal,
-      }, options.fetchImpl);
+      const response = await performFetch(
+        input,
+        {
+          ...init,
+          signal: controller.signal,
+        },
+        options.fetchImpl,
+      );
 
-      if (
-        canRetryMethod &&
-        attempt < maxRetries &&
-        shouldRetryStatus(response.status, retry.retryStatuses)
-      ) {
+      if (canRetryMethod && attempt < maxRetries && shouldRetryStatus(response.status, retry.retryStatuses)) {
         await response.body?.cancel().catch(() => undefined);
         await delay(resolveRetryDelay(attempt, retry, response.headers.get("retry-after")), parentSignal);
         continue;
@@ -113,7 +118,11 @@ export async function networkFetchJson<T = unknown>(
   const okStatus = options.expectedStatuses?.includes(response.status) ?? response.ok;
   if (!okStatus) {
     throw new NetworkFetchError(
-      response.status === 429 ? "network_rate_limited" : response.status >= 500 ? "network_server_error" : "network_fetch_failed",
+      response.status === 429
+        ? "network_rate_limited"
+        : response.status >= 500
+          ? "network_server_error"
+          : "network_fetch_failed",
       `HTTP ${response.status} ${response.statusText}: ${text.slice(0, 500)}`,
       { status: response.status, statusText: response.statusText, body: text },
     );
@@ -121,7 +130,11 @@ export async function networkFetchJson<T = unknown>(
   try {
     return { response, json: JSON.parse(text) as T, text };
   } catch (error) {
-    throw new NetworkFetchError("network_fetch_failed", `Non-JSON response from ${String(input)}: ${text.slice(0, 500)}`, error);
+    throw new NetworkFetchError(
+      "network_fetch_failed",
+      `Non-JSON response from ${String(input)}: ${text.slice(0, 500)}`,
+      error,
+    );
   }
 }
 
@@ -131,15 +144,19 @@ export function networkPostJson<T = unknown>(
   init: RequestInit = {},
   options: NetworkJsonOptions = {},
 ): Promise<{ response: Response; json: T; text: string }> {
-  return networkFetchJson<T>(input, {
-    ...init,
-    method: "POST",
-    headers: withJsonContentType(init.headers),
-    body: JSON.stringify(body),
-  }, {
-    ...options,
-    retry: { retryOnPost: true, ...options.retry },
-  });
+  return networkFetchJson<T>(
+    input,
+    {
+      ...init,
+      method: "POST",
+      headers: withJsonContentType(init.headers),
+      body: JSON.stringify(body),
+    },
+    {
+      ...options,
+      retry: { retryOnPost: true, ...options.retry },
+    },
+  );
 }
 
 export function normalizeNetworkError(
@@ -190,19 +207,34 @@ export function isRetryableNetworkCode(code: NetworkErrorCode): boolean {
   return code !== "network_abort" && code !== "network_tls_error";
 }
 
-export function jitteredBackoff(attempt: number, retry: NetworkRetryOptions = {}, retryAfterHeader?: string | null): number {
+export function jitteredBackoff(
+  attempt: number,
+  retry: NetworkRetryOptions = {},
+  retryAfterHeader?: string | null,
+): number {
   return resolveRetryDelay(attempt, retry, retryAfterHeader);
 }
 
-function performFetch(input: string | URL | Request, init: RequestInit, fetchImpl?: typeof fetch): Promise<Response> {
+async function performFetch(
+  input: string | URL | Request,
+  init: RequestInit,
+  fetchImpl?: typeof fetch,
+): Promise<Response> {
   if (fetchImpl) {
     return fetchImpl(input as Parameters<typeof fetch>[0], init);
   }
+  // Undici is loaded lazily so that tests injecting fetchImpl never trigger
+  // the undici module (avoids its global dispatcher conflicting with Node's
+  // bundled undici on Node 22).
+  const { fetch: undiciFetch } = await import("undici");
   // Proxy, NO_PROXY, keepalive and long transport timeouts are intentionally
   // owned by src/cli/proxy.ts and ui/server/utils/proxy.js via undici's global
   // dispatcher. Do not pass a per-request dispatcher here, or config hot-reload
   // of proxy.url/proxy.noProxy would be bypassed.
-  return undiciFetch(input as Parameters<typeof undiciFetch>[0], init as Parameters<typeof undiciFetch>[1]) as unknown as Promise<Response>;
+  return undiciFetch(
+    input as Parameters<typeof undiciFetch>[0],
+    init as Parameters<typeof undiciFetch>[1],
+  ) as unknown as Promise<Response>;
 }
 
 function shouldRetryStatus(status: number, configured?: readonly number[]): boolean {
@@ -233,21 +265,18 @@ function parseRetryAfterHeader(headerValue: string | null | undefined): number |
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
-  if (!signal) return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    if (typeof timer === "object" && "unref" in timer) {
-      (timer as NodeJS.Timeout).unref();
-    }
-  });
-  if (signal.aborted) return Promise.reject(new NetworkFetchError("network_abort", "Network retry aborted.", signal.reason));
+  // 不得 unref()：unref timer 在事件循环空转时永不触发，await 挂起
+  if (!signal)
+    return new Promise(resolve => {
+      setTimeout(resolve, ms);
+    });
+  if (signal.aborted)
+    return Promise.reject(new NetworkFetchError("network_abort", "Network retry aborted.", signal.reason));
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       signal.removeEventListener("abort", onAbort);
       resolve();
     }, ms);
-    if (typeof timer === "object" && "unref" in timer) {
-      (timer as NodeJS.Timeout).unref();
-    }
     const onAbort = () => {
       clearTimeout(timer);
       reject(new NetworkFetchError("network_abort", "Network retry aborted.", signal.reason));
@@ -267,7 +296,8 @@ function forwardAbort(source: AbortSignal, target: AbortController): () => void 
 }
 
 function resolveMethod(input: string | URL | Request, init: RequestInit): string {
-  const method = init.method ?? (typeof Request !== "undefined" && input instanceof Request ? input.method : undefined) ?? "GET";
+  const method =
+    init.method ?? (typeof Request !== "undefined" && input instanceof Request ? input.method : undefined) ?? "GET";
   return method.toUpperCase();
 }
 

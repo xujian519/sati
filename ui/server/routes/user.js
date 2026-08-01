@@ -1,43 +1,41 @@
-import express from 'express';
-import { userDb } from '../database/db.js';
-import { authenticateToken } from '../middleware/auth.js';
-import { getSystemGitConfig } from '../utils/gitConfig.js';
-import { readPilotDeckConfigFile } from '../services/pilotdeckConfig.js';
-import { spawn } from 'child_process';
+import express from "express";
+import { userDb } from "../database/db.js";
+import { authenticateToken } from "../middleware/auth.js";
+import { getSystemGitConfig } from "../utils/gitConfig.js";
+import { readSatiConfigFile } from "../services/satiConfig.js";
+import { spawn } from "child_process";
 
 const router = express.Router();
 
-// Sentinel api-key written by scripts/bootstrap-pilotdeck-config.mjs so the
+// Sentinel api-key written by scripts/bootstrap-sati-config.mjs so the
 // engine can boot. Treated as "not configured" so the UI routes to onboarding.
-const PLACEHOLDER_API_KEY = 'PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE';
+const PLACEHOLDER_API_KEY = "PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE";
 
 function providerAllowsMissingApiKey(providerId) {
-  return providerId === 'ollama';
+  return providerId === "ollama";
 }
 
-function hasUsablePilotDeckConfig() {
-  const record = readPilotDeckConfigFile();
+function hasUsableSatiConfig() {
+  const record = readSatiConfigFile();
   if (!record.exists) return false;
 
-  const mainRef = typeof record.config?.agent?.model === 'string'
-    ? record.config.agent.model.trim()
-    : '';
+  const mainRef = typeof record.config?.agent?.model === "string" ? record.config.agent.model.trim() : "";
   if (!mainRef) return false;
 
-  const slash = mainRef.indexOf('/');
+  const slash = mainRef.indexOf("/");
   if (slash <= 0 || slash === mainRef.length - 1) return false;
   const providerId = mainRef.slice(0, slash);
   const modelId = mainRef.slice(slash + 1);
 
   const provider = record.config?.model?.providers?.[providerId];
-  if (!provider || typeof provider !== 'object') return false;
+  if (!provider || typeof provider !== "object") return false;
 
-  const hasUrl = typeof provider.url === 'string' && provider.url.trim();
-  const apiKey = typeof provider.apiKey === 'string' ? provider.apiKey.trim() : '';
+  const hasUrl = typeof provider.url === "string" && provider.url.trim();
+  const apiKey = typeof provider.apiKey === "string" ? provider.apiKey.trim() : "";
   const hasRequiredCredential = providerAllowsMissingApiKey(providerId)
     ? apiKey !== PLACEHOLDER_API_KEY
     : Boolean(apiKey) && apiKey !== PLACEHOLDER_API_KEY;
-  const hasModel = provider.models && typeof provider.models === 'object' && modelId in provider.models;
+  const hasModel = provider.models && typeof provider.models === "object" && modelId in provider.models;
 
   return Boolean(hasUrl && hasRequiredCredential && hasModel);
 }
@@ -47,16 +45,25 @@ function spawnAsync(command, args, options = {}) {
     const child = spawn(command, args, {
       ...options,
       shell: false,
-      windowsHide: process.platform === 'win32',
+      windowsHide: process.platform === "win32",
     });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); });
-    child.on('error', (error) => { reject(error); });
-    child.on('close', (code) => {
-      if (code === 0) { resolve({ stdout, stderr }); return; }
-      const error = new Error(`Command failed: ${command} ${args.join(' ')}`);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", data => {
+      stdout += data.toString();
+    });
+    child.stderr.on("data", data => {
+      stderr += data.toString();
+    });
+    child.on("error", error => {
+      reject(error);
+    });
+    child.on("close", code => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      const error = new Error(`Command failed: ${command} ${args.join(" ")}`);
       error.code = code;
       error.stdout = stdout;
       error.stderr = stderr;
@@ -65,7 +72,7 @@ function spawnAsync(command, args, options = {}) {
   });
 }
 
-router.get('/git-config', authenticateToken, async (req, res) => {
+router.get("/git-config", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     let gitConfig = userDb.getGitConfig(userId);
@@ -78,81 +85,83 @@ router.get('/git-config', authenticateToken, async (req, res) => {
       if (systemConfig.git_name || systemConfig.git_email) {
         userDb.updateGitConfig(userId, systemConfig.git_name, systemConfig.git_email);
         gitConfig = systemConfig;
-        console.log(`Auto-populated git config from system for user ${userId}: ${systemConfig.git_name} <${systemConfig.git_email}>`);
+        console.log(
+          `Auto-populated git config from system for user ${userId}: ${systemConfig.git_name} <${systemConfig.git_email}>`,
+        );
       }
     }
 
     res.json({
       success: true,
       gitName: gitConfig?.git_name || null,
-      gitEmail: gitConfig?.git_email || null
+      gitEmail: gitConfig?.git_email || null,
     });
   } catch (error) {
-    console.error('Error getting git config:', error);
-    res.status(500).json({ error: 'Failed to get git configuration' });
+    console.error("Error getting git config:", error);
+    res.status(500).json({ error: "Failed to get git configuration" });
   }
 });
 
 // Apply git config globally via git config --global
-router.post('/git-config', authenticateToken, async (req, res) => {
+router.post("/git-config", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { gitName, gitEmail } = req.body;
 
     if (!gitName || !gitEmail) {
-      return res.status(400).json({ error: 'Git name and email are required' });
+      return res.status(400).json({ error: "Git name and email are required" });
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(gitEmail)) {
-      return res.status(400).json({ error: 'Invalid email format' });
+      return res.status(400).json({ error: "Invalid email format" });
     }
 
     userDb.updateGitConfig(userId, gitName, gitEmail);
 
     try {
-      await spawnAsync('git', ['config', '--global', 'user.name', gitName]);
-      await spawnAsync('git', ['config', '--global', 'user.email', gitEmail]);
+      await spawnAsync("git", ["config", "--global", "user.name", gitName]);
+      await spawnAsync("git", ["config", "--global", "user.email", gitEmail]);
       console.log(`Applied git config globally: ${gitName} <${gitEmail}>`);
     } catch (gitError) {
-      console.error('Error applying git config:', gitError);
+      console.error("Error applying git config:", gitError);
     }
 
     res.json({
       success: true,
       gitName,
-      gitEmail
+      gitEmail,
     });
   } catch (error) {
-    console.error('Error updating git config:', error);
-    res.status(500).json({ error: 'Failed to update git configuration' });
+    console.error("Error updating git config:", error);
+    res.status(500).json({ error: "Failed to update git configuration" });
   }
 });
 
-router.post('/complete-onboarding', authenticateToken, async (req, res) => {
+router.post("/complete-onboarding", authenticateToken, async (req, res) => {
   try {
     res.json({
       success: true,
-      message: 'Onboarding completed successfully'
+      message: "Onboarding completed successfully",
     });
   } catch (error) {
-    console.error('Error completing onboarding:', error);
-    res.status(500).json({ error: 'Failed to complete onboarding' });
+    console.error("Error completing onboarding:", error);
+    res.status(500).json({ error: "Failed to complete onboarding" });
   }
 });
 
-router.get('/onboarding-status', authenticateToken, async (req, res) => {
+router.get("/onboarding-status", authenticateToken, async (req, res) => {
   try {
-    const hasCompleted = hasUsablePilotDeckConfig();
+    const hasCompleted = hasUsableSatiConfig();
 
     res.json({
       success: true,
-      hasCompletedOnboarding: hasCompleted
+      hasCompletedOnboarding: hasCompleted,
     });
   } catch (error) {
-    console.error('Error checking onboarding status:', error);
-    res.status(500).json({ error: 'Failed to check onboarding status' });
+    console.error("Error checking onboarding status:", error);
+    res.status(500).json({ error: "Failed to check onboarding status" });
   }
 });
 

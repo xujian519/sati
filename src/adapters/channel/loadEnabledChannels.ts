@@ -1,33 +1,30 @@
-import type { ChannelAdapter } from "./protocol/ChannelAdapter.js";
 import type { PilotAdaptersConfig, PilotPlatformAdapterConfig } from "../../pilot/config/types.js";
+import type { ChannelAdapter } from "./protocol/ChannelAdapter.js";
 
 /**
  * Lazily import + instantiate every channel whose config has `enabled: true`.
  * Each entry maps a config key to a dynamic loader for the matching channel folder.
  */
-const CHANNEL_LOADERS: Record<
-  string,
-  (cfg: PilotPlatformAdapterConfig) => Promise<ChannelAdapter>
-> = {
-  telegram: async (cfg) => {
+const CHANNEL_LOADERS: Record<string, (cfg: PilotPlatformAdapterConfig) => Promise<ChannelAdapter>> = {
+  telegram: async cfg => {
     const { TelegramChannel } = await import("./telegram/TelegramChannel.js");
     return new TelegramChannel({
       token: cfg.token,
       webhookUrl: cfg.webhookUrl,
     });
   },
-  discord: async (cfg) => {
+  discord: async cfg => {
     const { DiscordChannel } = await import("./discord/DiscordChannel.js");
     return new DiscordChannel({ token: cfg.token });
   },
-  slack: async (cfg) => {
+  slack: async cfg => {
     const { SlackChannel } = await import("./slack/SlackChannel.js");
     return new SlackChannel({
       botToken: cfg.token,
       appToken: cfg.extra?.appToken as string | undefined,
     });
   },
-  matrix: async (cfg) => {
+  matrix: async cfg => {
     const { MatrixChannel } = await import("./matrix/MatrixChannel.js");
     return new MatrixChannel({
       accessToken: cfg.token,
@@ -35,7 +32,7 @@ const CHANNEL_LOADERS: Record<
       userId: cfg.extra?.userId as string | undefined,
     });
   },
-  mattermost: async (cfg) => {
+  mattermost: async cfg => {
     const { MattermostChannel } = await import("./mattermost/MattermostChannel.js");
     return new MattermostChannel({
       token: cfg.token,
@@ -43,35 +40,35 @@ const CHANNEL_LOADERS: Record<
       teamId: cfg.extra?.teamId as string | undefined,
     });
   },
-  signal: async (cfg) => {
+  signal: async cfg => {
     const { SignalChannel } = await import("./signal/SignalChannel.js");
     return new SignalChannel({
       restUrl: cfg.extra?.restUrl as string | undefined,
       account: cfg.extra?.account as string | undefined,
     });
   },
-  whatsapp: async (cfg) => {
+  whatsapp: async cfg => {
     const { WhatsAppChannel } = await import("./whatsapp/WhatsAppChannel.js");
     return new WhatsAppChannel({
       bridgePath: cfg.extra?.bridgePath as string | undefined,
       bridgeUrl: cfg.extra?.bridgeUrl as string | undefined,
     });
   },
-  bluebubbles: async (cfg) => {
+  bluebubbles: async cfg => {
     const { BlueBubblesChannel } = await import("./bluebubbles/BlueBubblesChannel.js");
     return new BlueBubblesChannel({
       serverUrl: cfg.extra?.serverUrl as string | undefined,
       password: cfg.token ?? (cfg.extra?.password as string | undefined),
     });
   },
-  dingtalk: async (cfg) => {
+  dingtalk: async cfg => {
     const { DingTalkChannel } = await import("./dingtalk/DingTalkChannel.js");
     return new DingTalkChannel({
       clientId: cfg.extra?.clientId as string | undefined,
       clientSecret: cfg.extra?.clientSecret as string | undefined,
     });
   },
-  wecomCallback: async (cfg) => {
+  wecomCallback: async cfg => {
     const { WeComCallbackChannel } = await import("./wecom-callback/WeComCallbackChannel.js");
     return new WeComCallbackChannel({
       corpId: cfg.extra?.corpId as string | undefined,
@@ -82,29 +79,29 @@ const CHANNEL_LOADERS: Record<
       port: cfg.extra?.port as number | undefined,
     });
   },
-  email: async (cfg) => {
+  email: async cfg => {
     const { EmailChannel } = await import("./email/EmailChannel.js");
     return new EmailChannel({ extra: cfg.extra });
   },
-  sms: async (cfg) => {
+  sms: async cfg => {
     const { SmsChannel } = await import("./sms/SmsChannel.js");
     return new SmsChannel({ extra: cfg.extra });
   },
-  homeassistant: async (cfg) => {
+  homeassistant: async cfg => {
     const { HomeAssistantChannel } = await import("./homeassistant/HomeAssistantChannel.js");
     return new HomeAssistantChannel({
       url: cfg.extra?.url as string | undefined,
       token: cfg.token,
     });
   },
-  apiServer: async (cfg) => {
+  apiServer: async cfg => {
     const { ApiServerChannel } = await import("./api-server/ApiServerChannel.js");
     return new ApiServerChannel({
       port: cfg.extra?.port as number | undefined,
       apiKey: cfg.apiKey,
     });
   },
-  webhook: async (cfg) => {
+  webhook: async cfg => {
     const { WebhookChannel } = await import("./webhook/WebhookChannel.js");
     return new WebhookChannel({
       port: cfg.extra?.port as number | undefined,

@@ -10,7 +10,11 @@ type PendingPermission = {
 export class ImPermissionHelper {
   private readonly pending = new Map<string, PendingPermission[]>();
 
-  capture(chatId: string, sessionKey: string, event: GatewayEvent & { type: "permission_request" }): string | undefined {
+  capture(
+    chatId: string,
+    sessionKey: string,
+    event: GatewayEvent & { type: "permission_request" },
+  ): string | undefined {
     const entries = this.pending.get(chatId) ?? [];
     entries.push({
       sessionKey,
@@ -89,17 +93,10 @@ function formatPermissionPrompt(entries: PendingPermission[]): string {
     ].join("\n");
   }
 
-  const lines = [
-    `共有 ${entries.length} 个工具权限请求正在等待，以下请求都会被本次回复处理：`,
-  ];
+  const lines = [`共有 ${entries.length} 个工具权限请求正在等待，以下请求都会被本次回复处理：`];
 
   entries.forEach((entry, index) => {
-    lines.push(
-      "",
-      `请求 ${index + 1}: 工具 ${entry.toolName}`,
-      "请求内容：",
-      formatPayload(entry.payload),
-    );
+    lines.push("", `请求 ${index + 1}: 工具 ${entry.toolName}`, "请求内容：", formatPayload(entry.payload));
   });
 
   lines.push("", "回复 1 允许以上所有待处理请求一次，回复 2 允许本会话，回复 0 拒绝。");

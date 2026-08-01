@@ -1,0 +1,129 @@
+# 权利要求规则
+# 基于：专利法第26条第4款、实施细则第19-22条
+# 来源：BCIP CON-203, CON-204, CON-205, CON-206
+
+rules:
+  - ruleId: CLA-001
+    name: 权利要求以说明书为依据（支持性）
+    description: 权利要求的范围不得超出说明书公开的范围
+    legalBasis: 专利法第26条第4款
+    domain: patent_claims
+    severity: critical
+    action: block
+    check:
+      type: support_analysis
+      rules:
+        - "上位概念需要下位实施例支持"
+        - "功能限定需要多种实现方式"
+        - "数值范围需要端点附近实施例"
+        - "马库什要素需要共同性能/结构"
+        - "装置权利要求中的功能特征需有结构支持"
+        - "方法权利要求中的功能特征需有步骤支持"
+      assessment:
+        supported: pass
+        unsupported: fail
+
+  - ruleId: CLA-002
+    name: 权利要求清楚简要
+    description: 权利要求应当清楚、简要地限定保护范围
+    legalBasis: 专利法第26条第4款（清楚简要）
+    domain: patent_claims
+    severity: critical
+    action: block
+    check:
+      type: clarity_analysis
+      unclearTerms:
+        - "大约|左右|上下|等等|可能|大概|约|大致"
+        - "或者其组合|例如|特别是|优选地"
+        - "必要时|适当情况下|根据需要"
+      overBroad:
+        - "任何|全部|所有|一切"
+        - "任意种类|各种类型的"
+      mixedCategories:
+        description: "产品权利要求不得混入方法特征"
+      assessment:
+        clear: pass
+        hasUnclearTerms: warn
+        hasOverBroad: warn
+        mixedCategories: fail
+
+  - ruleId: CLA-003
+    name: 保护范围确定
+    description: 权利要求的保护范围应当能够合理确定
+    legalBasis: 专利法第59条、审查指南第二部分第二章
+    domain: patent_claims
+    severity: critical
+    action: review
+    check:
+      type: scope_determination
+      principles:
+        - "权利要求中的术语应当具有确定的含义"
+        - "功能性特征应结合说明书中的结构和实施例理解"
+        - "使用自定术语时应在说明书中明确定义"
+        - "方法权利要求中的步骤顺序影响保护范围"
+      assessment:
+        determinable: pass
+        ambiguous: fail
+        selfDefinedTermNotDefined: warn
+
+  - ruleId: CLA-004
+    name: 引用关系正确
+    description: 从属权利要求的引用关系应当正确
+    legalBasis: 实施细则第22条
+    domain: patent_claims
+    severity: major
+    action: warn
+    check:
+      type: dependency_validation
+      rules:
+        - "引用号必须是已出现的权利要求号"
+        - "不能形成闭环引用（A→B→C→A）"
+        - "多项引用多项时格式规范"
+        - "产品权利要求不应引用方法权利要求中的步骤特征"
+      assessment:
+        correct: pass
+        wrongReference: fail
+        circular: fail
+        formatError: warn
+
+  - ruleId: CLA-005
+    name: 单一性
+    description: 一件专利申请应限于一项发明
+    legalBasis: 专利法第31条、实施细则第43条
+    domain: patent_claims
+    severity: major
+    action: review
+    check:
+      type: unity_analysis
+      criteria:
+        - "是否存在相同或相应的特定技术特征"
+        - "特定技术特征是体现发明对现有技术贡献的技术特征"
+        - "允许的组合：产品+方法、产品+设备、方法+设备"
+      assessment:
+        hasUnity: pass
+        noUnity: warn + "建议分案"
+
+  - ruleId: CLA-006
+    name: 必要技术特征
+    description: 独立权利要求应记载解决技术问题的必要技术特征
+    legalBasis: 实施细则第19条
+    domain: patent_claims
+    severity: major
+    action: review
+    check:
+      type: essential_feature
+      principles:
+        - "必要技术特征=解决技术问题所必不可少的技术特征"
+        - "非必要特征不应写入独立权利要求（过窄）"
+        - "写入过少必要特征可能导致不清楚（过宽）"
+      indicators:
+        tooMany:
+          - 独立权利要求中出现'优选地''具体地'等
+          - "包含具体数值/材料/尺寸等可替换参数"
+        tooFew:
+          - "仅有功能效果描述，缺少实现结构/步骤"
+          - "缺少与背景技术区别的根本性特征"
+      assessment:
+        balanced: pass
+        tooMany: warn + "独立权利要求含非必要特征，可能缩小保护范围"
+        tooFew: warn + "独立权利要求缺少必要特征，可能不清楚"

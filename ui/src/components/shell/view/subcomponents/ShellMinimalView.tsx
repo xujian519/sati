@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { RefObject } from 'react';
-import type { AuthCopyStatus } from '../../types/types';
-import { resolveAuthUrlForDisplay } from '../../utils/auth';
+import { useEffect, useMemo, useState } from "react";
+import type { RefObject } from "react";
+import type { AuthCopyStatus } from "../../types/types";
+import { resolveAuthUrlForDisplay } from "../../utils/auth";
 
 type ShellMinimalViewProps = {
   terminalContainerRef: RefObject<HTMLDivElement>;
@@ -22,17 +22,14 @@ export default function ShellMinimalView({
   openAuthUrlInBrowser,
   copyAuthUrlToClipboard,
 }: ShellMinimalViewProps) {
-  const [authUrlCopyStatus, setAuthUrlCopyStatus] = useState<AuthCopyStatus>('idle');
+  const [authUrlCopyStatus, setAuthUrlCopyStatus] = useState<AuthCopyStatus>("idle");
   const [isAuthPanelHidden, setIsAuthPanelHidden] = useState(false);
 
-  const displayAuthUrl = useMemo(
-    () => resolveAuthUrlForDisplay(initialCommand, authUrl),
-    [authUrl, initialCommand],
-  );
+  const displayAuthUrl = useMemo(() => resolveAuthUrlForDisplay(initialCommand, authUrl), [authUrl, initialCommand]);
 
   // Keep auth panel UI state local to minimal mode and reset it when connection/url changes.
   useEffect(() => {
-    setAuthUrlCopyStatus('idle');
+    setAuthUrlCopyStatus("idle");
     setIsAuthPanelHidden(false);
   }, [authUrlVersion, displayAuthUrl, isConnected]);
 
@@ -42,11 +39,7 @@ export default function ShellMinimalView({
 
   return (
     <div className="relative h-full w-full bg-gray-900">
-      <div
-        ref={terminalContainerRef}
-        className="h-full w-full focus:outline-none"
-        style={{ outline: 'none' }}
-      />
+      <div ref={terminalContainerRef} className="h-full w-full focus:outline-none" style={{ outline: "none" }} />
 
       {showMobileAuthPanel && (
         <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-sm md:hidden">
@@ -66,7 +59,7 @@ export default function ShellMinimalView({
               type="text"
               value={displayAuthUrl}
               readOnly
-              onClick={(event) => event.currentTarget.select()}
+              onClick={event => event.currentTarget.select()}
               className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
               aria-label="Authentication URL"
             />
@@ -86,11 +79,11 @@ export default function ShellMinimalView({
                 type="button"
                 onClick={async () => {
                   const copied = await copyAuthUrlToClipboard(displayAuthUrl);
-                  setAuthUrlCopyStatus(copied ? 'copied' : 'failed');
+                  setAuthUrlCopyStatus(copied ? "copied" : "failed");
                 }}
                 className="flex-1 rounded bg-gray-700 px-3 py-2 text-xs font-medium text-white hover:bg-gray-600"
               >
-                {authUrlCopyStatus === 'copied' ? 'Copied' : 'Copy URL'}
+                {authUrlCopyStatus === "copied" ? "Copied" : "Copy URL"}
               </button>
             </div>
           </div>

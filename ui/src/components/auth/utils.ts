@@ -1,4 +1,4 @@
-import type { ApiErrorPayload } from './types';
+import type { ApiErrorPayload } from "./types";
 
 export async function parseJsonSafely<T>(response: Response): Promise<T | null> {
   try {

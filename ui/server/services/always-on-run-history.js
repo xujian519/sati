@@ -3,8 +3,8 @@
  * `src/always-on/web/AlwaysOnRunHistoryService.ts`.
  */
 
-import { getAlwaysOnRoot } from './always-on-paths.js';
-import { AlwaysOnRunHistoryService } from '../../../src/always-on/web/AlwaysOnRunHistoryService.js';
+import { getAlwaysOnRoot } from "./always-on-paths.js";
+import { AlwaysOnRunHistoryService } from "../../../src/always-on/web/AlwaysOnRunHistoryService.js";
 
 function getService() {
   return new AlwaysOnRunHistoryService({

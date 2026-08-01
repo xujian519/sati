@@ -9,7 +9,6 @@ import { renderDiscordEvent } from "./discord-render.js";
 
 let DiscordLib: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   DiscordLib = require("discord.js");
 } catch {
   // discord.js not installed — start() will warn
@@ -73,7 +72,7 @@ export class DiscordChannel implements ChannelAdapter {
       });
 
       this.client.on("messageCreate", (message: any) => {
-        void this.handleMessageCreate(message).catch((e) => {
+        void this.handleMessageCreate(message).catch(e => {
           this.logger?.error?.(`discord: messageCreate error: ${e}`);
         });
       });
@@ -92,7 +91,11 @@ export class DiscordChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`discord: stopping (${reason ?? "no reason"})`);
         if (this.client) {
-          try { this.client.destroy(); } catch { /* best effort */ }
+          try {
+            this.client.destroy();
+          } catch {
+            /* best effort */
+          }
           this.client = null;
         }
         this.botUserId = null;
@@ -226,7 +229,9 @@ export class DiscordChannel implements ChannelAdapter {
       if (channel && typeof channel.sendTyping === "function") {
         await channel.sendTyping();
       }
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   }
 }
 

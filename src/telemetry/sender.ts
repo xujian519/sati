@@ -1,11 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type {
-  AnalyticsEvent,
-  AnalyticsEventEnvelope,
-  TelemetryConfig,
-  TelemetrySenderMetrics,
-} from "./types.js";
+import type { AnalyticsEvent, AnalyticsEventEnvelope, TelemetryConfig, TelemetrySenderMetrics } from "./types.js";
 
 type TelemetrySenderDeps = {
   fetchImpl?: typeof fetch;
@@ -85,7 +80,7 @@ export class TelemetrySender {
       while (this.queue.length > 0) {
         const batch = this.queue.splice(0, this.config.batchSize);
         try {
-          await this.sendBatch(batch.map((item) => item.event));
+          await this.sendBatch(batch.map(item => item.event));
           this.metrics.sent += batch.length;
           this.metrics.lastSuccessAt = new Date().toISOString();
         } catch {
@@ -143,7 +138,10 @@ export class TelemetrySender {
   private restoreQueue(): void {
     try {
       const raw = readFileSync(this.config.queueFilePath, "utf8");
-      const lines = raw.split("\n").map((line) => line.trim()).filter(Boolean);
+      const lines = raw
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean);
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line) as AnalyticsEventEnvelope;
@@ -167,12 +165,8 @@ export class TelemetrySender {
   private persistQueue(): void {
     try {
       mkdirSync(dirname(this.config.queueFilePath), { recursive: true });
-      const lines = this.queue.map((item) => JSON.stringify(item));
-      writeFileSync(
-        this.config.queueFilePath,
-        lines.length > 0 ? `${lines.join("\n")}\n` : "",
-        "utf8",
-      );
+      const lines = this.queue.map(item => JSON.stringify(item));
+      writeFileSync(this.config.queueFilePath, lines.length > 0 ? `${lines.join("\n")}\n` : "", "utf8");
     } catch {
       // noop
     }

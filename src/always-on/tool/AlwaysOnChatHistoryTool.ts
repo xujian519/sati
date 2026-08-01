@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { PilotDeckToolRuntimeError } from "../../tool/protocol/errors.js";
-import type { PilotDeckToolDefinition } from "../../tool/protocol/types.js";
+import { SatiToolRuntimeError } from "../../tool/protocol/errors.js";
+import type { SatiToolDefinition } from "../../tool/protocol/types.js";
 import { getPilotProjectChatDir } from "../../pilot/paths.js";
 import { readTranscript } from "../../session/transcript/TranscriptReader.js";
 import { replayTranscriptEntries } from "../../session/transcript/TranscriptReplay.js";
@@ -35,7 +35,7 @@ const ASSISTANT_TEXT_LIMIT = 300;
 
 export function createAlwaysOnChatHistoryTool(
   options: CreateAlwaysOnChatHistoryToolOptions,
-): PilotDeckToolDefinition<AlwaysOnChatHistoryInput, AlwaysOnChatHistoryOutput> {
+): SatiToolDefinition<AlwaysOnChatHistoryInput, AlwaysOnChatHistoryOutput> {
   return {
     name: ALWAYS_ON_CHAT_HISTORY_TOOL_NAME,
     aliases: ["AlwaysOnReadChatHistory"],
@@ -60,7 +60,7 @@ export function createAlwaysOnChatHistoryTool(
     execute: async (input, context) => {
       const ctx = options.runContexts.getDiscovery(context.sessionId);
       if (!ctx) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "tool_execution_failed",
           `${ALWAYS_ON_CHAT_HISTORY_TOOL_NAME} is only available during Always-On discovery (Phase 1).`,
         );
@@ -73,13 +73,8 @@ export function createAlwaysOnChatHistoryTool(
 
       const { entries, diagnostics } = await readTranscript(transcriptPath);
       if (entries.length === 0) {
-        const reason = diagnostics.length > 0
-          ? diagnostics[0].message
-          : "No transcript entries found.";
-        throw new PilotDeckToolRuntimeError(
-          "tool_execution_failed",
-          `Could not read session ${input.sessionId}: ${reason}`,
-        );
+        const reason = diagnostics.length > 0 ? diagnostics[0].message : "No transcript entries found.";
+        throw new SatiToolRuntimeError("tool_execution_failed", `Could not read session ${input.sessionId}: ${reason}`);
       }
 
       const { messages, metadata } = replayTranscriptEntries(entries);
@@ -89,7 +84,7 @@ export function createAlwaysOnChatHistoryTool(
         pilotHome: ctx.paths.pilotHome,
         includeInternal: false,
       });
-      const sessionInfo = sessions.find((s) => s.sessionId === realSessionId);
+      const sessionInfo = sessions.find(s => s.sessionId === realSessionId);
       const title = metadata.title ?? metadata.aiTitle ?? sessionInfo?.summary ?? realSessionId;
 
       const conversation: AlwaysOnChatHistoryConversationEntry[] = [];
@@ -97,17 +92,21 @@ export function createAlwaysOnChatHistoryTool(
         if (msg.role !== "user" && msg.role !== "assistant") continue;
 
         const textParts = msg.content
-          .filter((b): b is { type: "text"; text: string } => b.type === "text" && typeof (b as { text?: unknown }).text === "string")
-          .map((b) => b.text.trim())
-          .filter((t) => t.length > 0);
+          .filter(
+            (b): b is { type: "text"; text: string } =>
+              b.type === "text" && typeof (b as { text?: unknown }).text === "string",
+          )
+          .map(b => b.text.trim())
+          .filter(t => t.length > 0);
 
         if (textParts.length === 0) continue;
 
         const fullText = textParts.join("\n\n");
         const role = msg.role as "user" | "assistant";
-        const text = role === "assistant" && fullText.length > ASSISTANT_TEXT_LIMIT
-          ? `${fullText.slice(0, ASSISTANT_TEXT_LIMIT)}...`
-          : fullText;
+        const text =
+          role === "assistant" && fullText.length > ASSISTANT_TEXT_LIMIT
+            ? `${fullText.slice(0, ASSISTANT_TEXT_LIMIT)}...`
+            : fullText;
 
         conversation.push({ role, text, createdAt: "" });
       }

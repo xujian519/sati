@@ -26,19 +26,12 @@ export function computeNextRunAt(
   return computeNextCronRunAt(schedule.expression, after, schedule.timezone ?? fallbackTimezone);
 }
 
-export function delayToMilliseconds(
-  amount: number,
-  unit: "second" | "minute" | "hour" | "day",
-): number | undefined {
+export function delayToMilliseconds(amount: number, unit: "second" | "minute" | "hour" | "day"): number | undefined {
   if (!Number.isFinite(amount) || amount <= 0) return undefined;
   return amount * DELAY_UNIT_MS[unit];
 }
 
-export function computeNextCronRunAt(
-  expression: string,
-  after: Date,
-  timezone = "UTC",
-): Date | undefined {
+export function computeNextCronRunAt(expression: string, after: Date, timezone = "UTC"): Date | undefined {
   const parsed = parseCronExpression(expression);
   if (!parsed || !isValidCronTimezone(timezone)) return undefined;
   const formatter = createCronDateFormatter(timezone);
@@ -73,13 +66,7 @@ function parseCronExpression(expression: string): ParsedCron | undefined {
     months: parseField(month, 1, 12),
     daysOfWeek: parseField(dayOfWeek, 0, 7),
   };
-  if (
-    !parsed.minutes ||
-    !parsed.hours ||
-    !parsed.daysOfMonth ||
-    !parsed.months ||
-    !parsed.daysOfWeek
-  ) {
+  if (!parsed.minutes || !parsed.hours || !parsed.daysOfMonth || !parsed.months || !parsed.daysOfWeek) {
     return undefined;
   }
   if (parsed.daysOfWeek.has(7)) {

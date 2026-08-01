@@ -45,7 +45,7 @@ export function recursivelySanitizeUnicode<T>(value: T): T {
     return sanitizeUnicodeString(value) as unknown as T;
   }
   if (Array.isArray(value)) {
-    return value.map((v) => recursivelySanitizeUnicode(v)) as unknown as T;
+    return value.map(v => recursivelySanitizeUnicode(v)) as unknown as T;
   }
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};

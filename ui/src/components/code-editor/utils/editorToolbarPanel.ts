@@ -1,6 +1,6 @@
-import { getChunks } from '@codemirror/merge';
-import { EditorView, showPanel } from '@codemirror/view';
-import type { CodeEditorFile } from '../types/types';
+import { getChunks } from "@codemirror/merge";
+import { EditorView, showPanel } from "@codemirror/view";
+import type { CodeEditorFile } from "../types/types";
 
 type EditorToolbarLabels = {
   changes: string;
@@ -39,14 +39,13 @@ const getExpandIcon = (isExpanded: boolean) => {
   return '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />';
 };
 
-const escapeHtml = (value: string): string => (
+const escapeHtml = (value: string): string =>
   value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-);
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 export const createEditorToolbarPanelExtension = ({
   file,
@@ -64,8 +63,8 @@ export const createEditorToolbarPanelExtension = ({
   }
 
   const createPanel = (view: EditorView) => {
-    const dom = document.createElement('div');
-    dom.className = 'cm-editor-toolbar-panel';
+    const dom = document.createElement("div");
+    dom.className = "cm-editor-toolbar-panel";
 
     let currentIndex = 0;
 
@@ -89,18 +88,19 @@ export const createEditorToolbarPanelExtension = ({
       const diffVisibilityIcon = getDiffVisibilityIcon(showDiff);
       const expandIcon = getExpandIcon(isExpanded);
 
-      let toolbarHtml = '<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">';
+      let toolbarHtml =
+        '<div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">';
       toolbarHtml += '<div style="display: flex; align-items: center; gap: 8px;">';
 
       if (hasDiff) {
         toolbarHtml += `
-          <span style="font-weight: 500;">${chunkCount > 0 ? `${currentIndex + 1}/${chunkCount}` : '0'} ${escapedLabels.changes}</span>
-          <button class="cm-diff-nav-btn cm-diff-nav-prev" title="${escapedLabels.previousChange}" ${chunkCount === 0 ? 'disabled' : ''}>
+          <span style="font-weight: 500;">${chunkCount > 0 ? `${currentIndex + 1}/${chunkCount}` : "0"} ${escapedLabels.changes}</span>
+          <button class="cm-diff-nav-btn cm-diff-nav-prev" title="${escapedLabels.previousChange}" ${chunkCount === 0 ? "disabled" : ""}>
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
             </svg>
           </button>
-          <button class="cm-diff-nav-btn cm-diff-nav-next" title="${escapedLabels.nextChange}" ${chunkCount === 0 ? 'disabled' : ''}>
+          <button class="cm-diff-nav-btn cm-diff-nav-next" title="${escapedLabels.nextChange}" ${chunkCount === 0 ? "disabled" : ""}>
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
@@ -108,7 +108,7 @@ export const createEditorToolbarPanelExtension = ({
         `;
       }
 
-      toolbarHtml += '</div>';
+      toolbarHtml += "</div>";
       toolbarHtml += '<div style="display: flex; align-items: center; gap: 4px;">';
 
       if (file.diffInfo) {
@@ -141,16 +141,16 @@ export const createEditorToolbarPanelExtension = ({
         `;
       }
 
-      toolbarHtml += '</div>';
-      toolbarHtml += '</div>';
+      toolbarHtml += "</div>";
+      toolbarHtml += "</div>";
 
       dom.innerHTML = toolbarHtml;
 
       if (hasDiff) {
-        const previousButton = dom.querySelector<HTMLButtonElement>('.cm-diff-nav-prev');
-        const nextButton = dom.querySelector<HTMLButtonElement>('.cm-diff-nav-next');
+        const previousButton = dom.querySelector<HTMLButtonElement>(".cm-diff-nav-prev");
+        const nextButton = dom.querySelector<HTMLButtonElement>(".cm-diff-nav-next");
 
-        previousButton?.addEventListener('click', () => {
+        previousButton?.addEventListener("click", () => {
           if (chunks.length === 0) {
             return;
           }
@@ -160,14 +160,14 @@ export const createEditorToolbarPanelExtension = ({
 
           if (chunk) {
             view.dispatch({
-              effects: EditorView.scrollIntoView(chunk.fromB, { y: 'center' }),
+              effects: EditorView.scrollIntoView(chunk.fromB, { y: "center" }),
             });
           }
 
           updatePanel();
         });
 
-        nextButton?.addEventListener('click', () => {
+        nextButton?.addEventListener("click", () => {
           if (chunks.length === 0) {
             return;
           }
@@ -177,7 +177,7 @@ export const createEditorToolbarPanelExtension = ({
 
           if (chunk) {
             view.dispatch({
-              effects: EditorView.scrollIntoView(chunk.fromB, { y: 'center' }),
+              effects: EditorView.scrollIntoView(chunk.fromB, { y: "center" }),
             });
           }
 
@@ -185,16 +185,16 @@ export const createEditorToolbarPanelExtension = ({
         });
       }
 
-      const toggleDiffButton = dom.querySelector<HTMLButtonElement>('.cm-toggle-diff-btn');
-      toggleDiffButton?.addEventListener('click', onToggleDiff);
+      const toggleDiffButton = dom.querySelector<HTMLButtonElement>(".cm-toggle-diff-btn");
+      toggleDiffButton?.addEventListener("click", onToggleDiff);
 
-      const popOutButton = dom.querySelector<HTMLButtonElement>('.cm-popout-btn');
-      popOutButton?.addEventListener('click', () => {
+      const popOutButton = dom.querySelector<HTMLButtonElement>(".cm-popout-btn");
+      popOutButton?.addEventListener("click", () => {
         onPopOut?.();
       });
 
-      const expandButton = dom.querySelector<HTMLButtonElement>('.cm-expand-btn');
-      expandButton?.addEventListener('click', () => {
+      const expandButton = dom.querySelector<HTMLButtonElement>(".cm-expand-btn");
+      expandButton?.addEventListener("click", () => {
         onToggleExpand?.();
       });
     };

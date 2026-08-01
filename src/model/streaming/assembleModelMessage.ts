@@ -9,11 +9,7 @@ import type {
   CanonicalUsage,
 } from "../protocol/canonical.js";
 import type { CanonicalModelError } from "../protocol/errors.js";
-import {
-  extractTextToolCalls,
-  hasTextToolCallSyntax,
-  type PartialTextToolCallInfo,
-} from "./parseTextToolCalls.js";
+import { extractTextToolCalls, hasTextToolCallSyntax, type PartialTextToolCallInfo } from "./parseTextToolCalls.js";
 
 export type ModelMessageAssemblerState = {
   content: CanonicalContentBlock[];
@@ -58,10 +54,7 @@ export function createModelMessageAssemblerState(): ModelMessageAssemblerState {
   };
 }
 
-export function applyModelEventToAssembler(
-  state: ModelMessageAssemblerState,
-  event: CanonicalModelEvent,
-): void {
+export function applyModelEventToAssembler(state: ModelMessageAssemblerState, event: CanonicalModelEvent): void {
   switch (event.type) {
     case "request_started":
     case "message_start":
@@ -126,7 +119,9 @@ export function assembleAssistantMessage(state: ModelMessageAssemblerState): Ass
         state.hasUnparsedTextToolCall = true;
       }
       if (parseResult.toolCalls.length > 0) {
-        console.log(`[text-tool-call-fallback] Extracted ${parseResult.toolCalls.length} tool call(s) from assistant text (format: ${detectedFormat ?? "unknown"})`);
+        console.log(
+          `[text-tool-call-fallback] Extracted ${parseResult.toolCalls.length} tool call(s) from assistant text (format: ${detectedFormat ?? "unknown"})`,
+        );
         state.hasTextFallbackToolCalls = true;
         if (parseResult.remainingText.length > 0) {
           (state.content[textIdx] as CanonicalTextBlock).text = parseResult.remainingText;
@@ -172,7 +167,7 @@ function normalizeToolCallIds(state: ModelMessageAssemblerState): void {
   });
 
   let toolCallIndex = 0;
-  state.content = state.content.map((block) => {
+  state.content = state.content.map(block => {
     if (block.type !== "tool_call") return block;
     const normalized = normalizedToolCalls[toolCallIndex++];
     return normalized ? { ...block, id: normalized.id } : block;
@@ -239,5 +234,5 @@ function add(first: number | undefined, second: number | undefined): number | un
 }
 
 function hasUsage(usage: CanonicalUsage): boolean {
-  return Object.values(usage).some((value) => value !== undefined);
+  return Object.values(usage).some(value => value !== undefined);
 }

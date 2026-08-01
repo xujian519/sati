@@ -5,7 +5,7 @@ const PORT = parseInt(process.env.MOCK_PORT ?? "9999", 10);
 
 const server = http.createServer((req, res) => {
   let body = "";
-  req.on("data", (chunk) => (body += chunk));
+  req.on("data", chunk => (body += chunk));
   req.on("end", () => {
     const url = req.url;
     console.log(`[mock] ${req.method} ${url} — will respond in ${DELAY_SECONDS}s`);
@@ -18,17 +18,24 @@ const server = http.createServer((req, res) => {
           return;
         }
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          id: "mock-slow-001",
-          object: "chat.completion",
-          model: "mock-slow",
-          choices: [{
-            index: 0,
-            message: { role: "assistant", content: `Response after ${DELAY_SECONDS}s delay. The timeout/retry mechanism works!` },
-            finish_reason: "stop",
-          }],
-          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
-        }));
+        res.end(
+          JSON.stringify({
+            id: "mock-slow-001",
+            object: "chat.completion",
+            model: "mock-slow",
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: "assistant",
+                  content: `Response after ${DELAY_SECONDS}s delay. The timeout/retry mechanism works!`,
+                },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+          }),
+        );
         console.log(`[mock] responded OK after ${DELAY_SECONDS}s`);
       }, DELAY_SECONDS * 1000);
     } else if (url === "/v1/models") {

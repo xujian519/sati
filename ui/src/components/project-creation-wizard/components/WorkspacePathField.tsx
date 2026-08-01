@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { FolderOpen } from 'lucide-react';
-import { Button, Input } from '../../../shared/view/ui';
-import { browseFilesystemFolders } from '../data/workspaceApi';
-import { getSuggestionRootPath } from '../utils/pathUtils';
-import type { FolderSuggestion, WorkspaceType } from '../types';
-import FolderBrowserModal from './FolderBrowserModal';
+import { useCallback, useEffect, useState } from "react";
+import { FolderOpen } from "lucide-react";
+import { Button, Input } from "../../../shared/view/ui";
+import { browseFilesystemFolders } from "../data/workspaceApi";
+import { getSuggestionRootPath } from "../utils/pathUtils";
+import type { FolderSuggestion, WorkspaceType } from "../types";
+import FolderBrowserModal from "./FolderBrowserModal";
 
-const normalizePathForSuggestionMatch = (pathValue: string) =>
-  pathValue.trim().replace(/\\/g, '/').toLowerCase();
+const normalizePathForSuggestionMatch = (pathValue: string) => pathValue.trim().replace(/\\/g, "/").toLowerCase();
 
 type WorkspacePathFieldProps = {
   workspaceType: WorkspaceType;
@@ -43,19 +42,16 @@ export default function WorkspacePathField({
         const normalizedInput = normalizePathForSuggestionMatch(value);
 
         const matchingSuggestions = result.suggestions
-          .filter((suggestion) => {
+          .filter(suggestion => {
             const normalizedSuggestion = normalizePathForSuggestionMatch(suggestion.path);
-            return (
-              normalizedSuggestion.startsWith(normalizedInput) &&
-              normalizedSuggestion !== normalizedInput
-            );
+            return normalizedSuggestion.startsWith(normalizedInput) && normalizedSuggestion !== normalizedInput;
           })
           .slice(0, 5);
 
         setPathSuggestions(matchingSuggestions);
         setShowPathDropdown(matchingSuggestions.length > 0);
       } catch (error) {
-        console.error('Failed to load path suggestions:', error);
+        console.error("Failed to load path suggestions:", error);
       }
     }, 200);
 
@@ -90,19 +86,15 @@ export default function WorkspacePathField({
           <Input
             type="text"
             value={value}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder={
-              workspaceType === 'existing'
-                ? '/path/to/existing/workspace'
-                : '/path/to/new/workspace'
-            }
+            onChange={event => onChange(event.target.value)}
+            placeholder={workspaceType === "existing" ? "/path/to/existing/workspace" : "/path/to/new/workspace"}
             className="w-full"
             disabled={disabled}
           />
 
           {showPathDropdown && pathSuggestions.length > 0 && (
             <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-lg">
-              {pathSuggestions.map((suggestion) => (
+              {pathSuggestions.map(suggestion => (
                 <button
                   key={suggestion.path}
                   onClick={() => handleSuggestionSelect(suggestion)}
@@ -130,7 +122,7 @@ export default function WorkspacePathField({
 
       <FolderBrowserModal
         isOpen={showFolderBrowser}
-        autoAdvanceOnSelect={workspaceType === 'existing'}
+        autoAdvanceOnSelect={workspaceType === "existing"}
         onClose={() => setShowFolderBrowser(false)}
         onFolderSelected={handleFolderSelected}
       />

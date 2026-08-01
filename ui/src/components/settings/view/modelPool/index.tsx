@@ -1,13 +1,9 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  usePilotDeckConfig,
-  type ConfigSaveOptions,
-  type ConfigSaveResult,
-} from "../../../../hooks/usePilotDeckConfig";
+import { useSatiConfig, type ConfigSaveOptions, type ConfigSaveResult } from "../../../../hooks/useSatiConfig";
 import { FieldSaveModeProvider } from "../../shared/components/Inputs";
 import { ConfigSaveError } from "../../shared/view";
-import type { PilotDeckConfig } from "./types";
+import type { SatiConfig } from "./types";
 import { configToYamlString, safeParseYaml } from "./utils/configYaml";
 import ModelsSection from "./components/ModelsSection";
 
@@ -17,20 +13,10 @@ type ModelPoolSectionsProps = {
 
 export default function ModelPoolSections({ title }: ModelPoolSectionsProps) {
   const { t } = useTranslation("settings");
-  const {
-    raw,
-    setRaw,
-    restoreRawIfCurrent,
-    save,
-    loading,
-    error,
-  } = usePilotDeckConfig();
+  const { raw, setRaw, restoreRawIfCurrent, save, loading, error } = useSatiConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
 
-  const onFormChange = async (
-    next: PilotDeckConfig,
-    options?: ConfigSaveOptions,
-  ): Promise<ConfigSaveResult> => {
+  const onFormChange = async (next: SatiConfig, options?: ConfigSaveOptions): Promise<ConfigSaveResult> => {
     try {
       const previousRaw = raw;
       const nextRaw = configToYamlString(next);
@@ -41,9 +27,7 @@ export default function ModelPoolSections({ title }: ModelPoolSectionsProps) {
       }
       return result;
     } catch (caught) {
-      const message = caught instanceof Error
-        ? caught.message
-        : "Failed to serialise model pool config patch";
+      const message = caught instanceof Error ? caught.message : "Failed to serialise model pool config patch";
       console.error("Failed to serialise model pool config patch", caught);
       return { ok: false, error: message };
     }
@@ -53,9 +37,7 @@ export default function ModelPoolSections({ title }: ModelPoolSectionsProps) {
     return (
       <div className="space-y-6">
         <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
-        <div className="py-6 text-xs text-muted-foreground">
-          {t("pilotDeckConfig.loading")}
-        </div>
+        <div className="py-6 text-xs text-muted-foreground">{t("satiConfig.loading")}</div>
       </div>
     );
   }

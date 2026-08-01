@@ -1,9 +1,9 @@
-import { useTranslation } from 'react-i18next';
-import { Input } from '../../../shared/view/ui';
-import { shouldShowGithubAuthentication } from '../utils/pathUtils';
-import type { GithubTokenCredential, TokenMode, WorkspaceType } from '../types';
-import GithubAuthenticationCard from './GithubAuthenticationCard';
-import WorkspacePathField from './WorkspacePathField';
+import { useTranslation } from "react-i18next";
+import { Input } from "../../../shared/view/ui";
+import { shouldShowGithubAuthentication } from "../utils/pathUtils";
+import type { GithubTokenCredential, TokenMode, WorkspaceType } from "../types";
+import GithubAuthenticationCard from "./GithubAuthenticationCard";
+import WorkspacePathField from "./WorkspacePathField";
 
 type StepConfigurationProps = {
   workspaceType: WorkspaceType;
@@ -49,9 +49,7 @@ export default function StepConfiguration({
     <div className="space-y-4">
       <div>
         <label className="mb-2 block text-sm font-medium text-foreground">
-          {workspaceType === 'existing'
-            ? t('projectWizard.step2.existingPath')
-            : t('projectWizard.step2.newPath')}
+          {workspaceType === "existing" ? t("projectWizard.step2.existingPath") : t("projectWizard.step2.newPath")}
         </label>
 
         <WorkspacePathField
@@ -63,29 +61,25 @@ export default function StepConfiguration({
         />
 
         <p className="mt-1 text-xs text-muted-foreground">
-          {workspaceType === 'existing'
-            ? t('projectWizard.step2.existingHelp')
-            : t('projectWizard.step2.newHelp')}
+          {workspaceType === "existing" ? t("projectWizard.step2.existingHelp") : t("projectWizard.step2.newHelp")}
         </p>
       </div>
 
-      {workspaceType === 'new' && (
+      {workspaceType === "new" && (
         <>
           <div>
             <label className="mb-2 block text-sm font-medium text-foreground">
-              {t('projectWizard.step2.githubUrl')}
+              {t("projectWizard.step2.githubUrl")}
             </label>
             <Input
               type="text"
               value={githubUrl}
-              onChange={(event) => onGithubUrlChange(event.target.value)}
+              onChange={event => onGithubUrlChange(event.target.value)}
               placeholder="https://github.com/username/repository"
               className="w-full"
               disabled={isCreating}
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t('projectWizard.step2.githubHelp')}
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{t("projectWizard.step2.githubHelp")}</p>
           </div>
 
           {showGithubAuth && (

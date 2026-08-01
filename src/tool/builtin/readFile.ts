@@ -1,10 +1,11 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
 import type { PermissionResult, PermissionRule } from "../../permission/index.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
 import { applyResultSizeLimit } from "../protocol/result.js";
-import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import { countTokens } from "../../context/budget/tokenizer.js";
+import { resolveSatiWorkspacePath } from "./filesystem/pathSafety.js";
 import { readFileInRange } from "./filesystem/readFileInRange.js";
 import {
   countPdfPages,
@@ -18,7 +19,6 @@ import {
 } from "./filesystem/fileTypeSafety.js";
 import { readNotebook } from "./filesystem/readNotebook.js";
 import { recordWriteSnapshot } from "./filesystem/writeSnapshots.js";
-import { countTokens } from "../../context/budget/tokenizer.js";
 
 export type ReadFileInput = {
   file_path: string;
@@ -39,29 +39,29 @@ const PDF_EXTRACT_SIZE_THRESHOLD = 3 * 1024 * 1024;
 const FILE_UNCHANGED_STUB =
   "File unchanged since the last read. Refer to the earlier read_file result instead of re-reading it.";
 
-export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
+export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
   return {
     name: "read_file",
     aliases: ["Read"],
     description:
-      "Reads a file from the current workspace. You can access workspace files directly by using this tool.\n"
-      + "If the User provides a path to a file, assume that path is valid as long as it resolves inside the current workspace. "
-      + "It is okay to read a file that does not exist; an error will be returned.\n\nUsage:\n"
-      + "- The file_path parameter may be a workspace-relative path or an absolute path, but it must resolve inside the current workspace\n"
-      + "- If the user asks you to send or share a file, use send_attachment instead of read_file; do not inspect arbitrary binary files before sending them\n"
-      + "- By default, offset is 1 and the tool reads from the beginning of the file\n"
-      + "- You can optionally specify offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters\n"
-      + "- Results are returned using cat -n format, with line numbers starting at 1\n"
-      + "- For image files, screenshots, extracted video frames, and PDFs, use this tool to inspect the visual/document content directly\n"
-      + "- When the current model supports image input, image files are returned as model-visible image content\n"
-      + "- When the current model supports PDF input, small PDF files are returned as model-visible PDF content. When specific PDF pages are requested, pages are rendered as model-visible images if the model supports image input\n"
-      + "- Do not manually base64-encode local images/PDFs or route them through another vision/document API unless read_file reports that the current model cannot read that content\n"
-      + "- When the current model does not support the required modality, reading the file returns a text notice explaining that the current model cannot read it\n"
-      + "- For large PDFs, provide the pages parameter to validate specific page ranges (e.g., pages: \"1-5\"). Maximum 20 pages per request\n"
-      + "- This tool can read Jupyter notebooks (.ipynb files) and returns a text rendering of notebook cells and outputs\n"
-      + "- This tool can only read files, not directories\n"
-      + "- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents\n"
-      + "- If a previous tool result says it was persisted, truncated, or preview-only, read the file_path shown in that notice with read_file",
+      "Reads a file from the current workspace. You can access workspace files directly by using this tool.\n" +
+      "If the User provides a path to a file, assume that path is valid as long as it resolves inside the current workspace. " +
+      "It is okay to read a file that does not exist; an error will be returned.\n\nUsage:\n" +
+      "- The file_path parameter may be a workspace-relative path or an absolute path, but it must resolve inside the current workspace\n" +
+      "- If the user asks you to send or share a file, use send_attachment instead of read_file; do not inspect arbitrary binary files before sending them\n" +
+      "- By default, offset is 1 and the tool reads from the beginning of the file\n" +
+      "- You can optionally specify offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters\n" +
+      "- Results are returned using cat -n format, with line numbers starting at 1\n" +
+      "- For image files, screenshots, extracted video frames, and PDFs, use this tool to inspect the visual/document content directly\n" +
+      "- When the current model supports image input, image files are returned as model-visible image content\n" +
+      "- When the current model supports PDF input, small PDF files are returned as model-visible PDF content. When specific PDF pages are requested, pages are rendered as model-visible images if the model supports image input\n" +
+      "- Do not manually base64-encode local images/PDFs or route them through another vision/document API unless read_file reports that the current model cannot read that content\n" +
+      "- When the current model does not support the required modality, reading the file returns a text notice explaining that the current model cannot read it\n" +
+      '- For large PDFs, provide the pages parameter to validate specific page ranges (e.g., pages: "1-5"). Maximum 20 pages per request\n' +
+      "- This tool can read Jupyter notebooks (.ipynb files) and returns a text rendering of notebook cells and outputs\n" +
+      "- This tool can only read files, not directories\n" +
+      "- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents\n" +
+      "- If a previous tool result says it was persisted, truncated, or preview-only, read the file_path shown in that notice with read_file",
     kind: "filesystem",
     inputSchema: {
       type: "object",
@@ -80,13 +80,12 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         },
         limit: {
           type: "integer",
-          description:
-            "The number of lines to read. Only provide if the file is too large to read at once.",
+          description: "The number of lines to read. Only provide if the file is too large to read at once.",
         },
         pages: {
           type: "string",
           description:
-            "Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\"). Only applicable to PDF files. Maximum 20 pages per request.",
+            'Page range for PDF files (e.g., "1-5", "3", "10-20"). Only applicable to PDF files. Maximum 20 pages per request.',
         },
       },
     },
@@ -117,17 +116,19 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         if (!parsed) {
           return {
             ok: false,
-            issues: [{ path: "pages", code: "invalid_schema", message: "pages must use formats like \"1-5\" or \"3\"." }],
+            issues: [{ path: "pages", code: "invalid_schema", message: 'pages must use formats like "1-5" or "3".' }],
           };
         }
         if (parsed.lastPage - parsed.firstPage + 1 > MAX_PDF_PAGES_PER_REQUEST) {
           return {
             ok: false,
-            issues: [{
-              path: "pages",
-              code: "invalid_schema",
-              message: `pages exceeds the maximum of ${MAX_PDF_PAGES_PER_REQUEST} pages per request.`,
-            }],
+            issues: [
+              {
+                path: "pages",
+                code: "invalid_schema",
+                message: `pages exceeds the maximum of ${MAX_PDF_PAGES_PER_REQUEST} pages per request.`,
+              },
+            ],
           };
         }
       }
@@ -138,29 +139,38 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
       if (isBlockedDevicePath(absolutePath)) {
         return {
           ok: false,
-          issues: [{ path: "file_path", code: "invalid_schema", message: "device files that block or stream infinitely are not readable." }],
+          issues: [
+            {
+              path: "file_path",
+              code: "invalid_schema",
+              message: "device files that block or stream infinitely are not readable.",
+            },
+          ],
         };
       }
       if (hasBinaryExtension(absolutePath)) {
         return {
           ok: false,
-          issues: [{
-            path: "file_path",
-            code: "invalid_schema",
-            message: "binary files are not supported by read_file. Use the relevant document, spreadsheet, or presentation skill for Office files; convert archives or other binary files to a supported text, PDF, or image format before inspection. Use send_attachment/send_file only when the user wants this file sent back through the current channel.",
-          }],
+          issues: [
+            {
+              path: "file_path",
+              code: "invalid_schema",
+              message:
+                "binary files are not supported by read_file. Use the relevant document, spreadsheet, or presentation skill for Office files; convert archives or other binary files to a supported text, PDF, or image format before inspection. Use send_attachment/send_file only when the user wants this file sent back through the current channel.",
+            },
+          ],
         };
       }
       return { ok: true, input };
     },
     execute: async (input, context) => {
-      const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, {
+      const resolved = resolveSatiWorkspacePath(input.file_path, context, {
         mustExist: true,
         allowRegisteredReadFiles: true,
         allowOutsideWorkspace: context.currentPermissionDecision?.type === "allow",
       });
       if (!resolved.ok) {
-        throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+        throw new SatiToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
       const fileStat = await stat(resolved.absolutePath);
@@ -183,15 +193,17 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
       if (kind === "image") {
         const mimeType = getImageMimeType(resolved.absolutePath);
         if (!mimeType) {
-          throw new PilotDeckToolRuntimeError("invalid_tool_input", `Unsupported image type: ${resolved.relativePath}.`);
+          throw new SatiToolRuntimeError("invalid_tool_input", `Unsupported image type: ${resolved.relativePath}.`);
         }
         const supportsImage = context.modelMultimodal?.input?.includes("image");
         if (!supportsImage) {
           return {
-            content: [{
-              type: "text",
-              text: `[Image file: ${resolved.relativePath}, ${fileStat.size} bytes, ${mimeType}. Current model does not support image input.]`,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `[Image file: ${resolved.relativePath}, ${fileStat.size} bytes, ${mimeType}. Current model does not support image input.]`,
+              },
+            ],
             data: { filePath: resolved.relativePath, kind, modelSupportsImage: false },
           };
         }
@@ -200,10 +212,12 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         const preparedImage = await prepareImageForModel(imageBuffer, mimeType, maxImageBytes);
         if (!preparedImage.ok) {
           return {
-            content: [{
-              type: "text",
-              text: `[Image file: ${resolved.relativePath}, ${fileStat.size} bytes, ${mimeType}. Image decoding failed, so it was not attached as model-visible image content. Diagnostic: ${preparedImage.error}]`,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `[Image file: ${resolved.relativePath}, ${fileStat.size} bytes, ${mimeType}. Image decoding failed, so it was not attached as model-visible image content. Diagnostic: ${preparedImage.error}]`,
+              },
+            ],
             data: {
               filePath: resolved.relativePath,
               kind,
@@ -223,13 +237,15 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           pages: input.pages,
         });
         return {
-          content: [{
-            type: "image",
-            mimeType: compressed.mimeType,
-            data: compressed.buffer.toString("base64"),
-            bytes: compressed.buffer.byteLength,
-            detail: context.modelMultimodal?.imageDetail,
-          }],
+          content: [
+            {
+              type: "image",
+              mimeType: compressed.mimeType,
+              data: compressed.buffer.toString("base64"),
+              bytes: compressed.buffer.byteLength,
+              detail: context.modelMultimodal?.imageDetail,
+            },
+          ],
           data: {
             filePath: resolved.relativePath,
             kind,
@@ -245,18 +261,14 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         const supportsImage = context.modelMultimodal?.input?.includes("image");
         const parsedPages = input.pages ? parsePdfPageRange(input.pages) : undefined;
         if (input.pages && !parsedPages) {
-          throw new PilotDeckToolRuntimeError("invalid_tool_input", `Invalid PDF page range: ${input.pages}.`);
+          throw new SatiToolRuntimeError("invalid_tool_input", `Invalid PDF page range: ${input.pages}.`);
         }
 
         const pdfBuffer = await readFile(resolved.absolutePath, { signal: context.abortSignal });
         const pageCount = await countPdfPages(pdfBuffer);
 
-        if (
-          parsedPages
-          && pageCount !== undefined
-          && parsedPages.lastPage > pageCount
-        ) {
-          throw new PilotDeckToolRuntimeError(
+        if (parsedPages && pageCount !== undefined && parsedPages.lastPage > pageCount) {
+          throw new SatiToolRuntimeError(
             "invalid_tool_input",
             `PDF page range ${input.pages} exceeds the detected page count (${pageCount}).`,
           );
@@ -266,10 +278,12 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         if (parsedPages) {
           if (!supportsImage) {
             return {
-              content: [{
-                type: "text",
-                text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support image input; cannot render requested pages.]`,
-              }],
+              content: [
+                {
+                  type: "text",
+                  text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support image input; cannot render requested pages.]`,
+                },
+              ],
               data: { filePath: resolved.relativePath, kind, modelSupportsImage: false, pageCount },
             };
           }
@@ -283,10 +297,12 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
           );
           if (!rendered.ok) {
             return {
-              content: [{
-                type: "text",
-                text: `[PDF file: ${resolved.relativePath}. PDF page rendering failed: ${rendered.error}]`,
-              }],
+              content: [
+                {
+                  type: "text",
+                  text: `[PDF file: ${resolved.relativePath}. PDF page rendering failed: ${rendered.error}]`,
+                },
+              ],
               data: { filePath: resolved.relativePath, kind, pageCount, renderError: rendered.error },
             };
           }
@@ -298,15 +314,19 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
             pages: input.pages,
           });
           return {
-            content: [{
-              type: "text" as const,
-              text: `PDF pages extracted: ${rendered.lastPage - rendered.firstPage + 1} page(s) from ${resolved.relativePath} (pages ${rendered.firstPage}-${rendered.lastPage}${pageCount ? ` of ${pageCount}` : ""}).`,
-            }],
-            supplementalMessages: [{
-              role: "user",
-              content: rendered.images,
-              isMeta: true,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `PDF pages extracted: ${rendered.lastPage - rendered.firstPage + 1} page(s) from ${resolved.relativePath} (pages ${rendered.firstPage}-${rendered.lastPage}${pageCount ? ` of ${pageCount}` : ""}).`,
+              },
+            ],
+            supplementalMessages: [
+              {
+                role: "user",
+                content: rendered.images,
+                isMeta: true,
+              },
+            ],
             data: {
               filePath: resolved.relativePath,
               kind,
@@ -322,11 +342,11 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
 
         // Without pages: enforce page count threshold
         if (pageCount !== undefined && pageCount > PDF_AT_MENTION_INLINE_THRESHOLD) {
-          throw new PilotDeckToolRuntimeError(
+          throw new SatiToolRuntimeError(
             "invalid_tool_input",
             `This PDF has ${pageCount} pages, which is too many to read at once. ` +
-            `Use the pages parameter to read specific page ranges (e.g., pages: "1-5"). ` +
-            `Maximum ${MAX_PDF_PAGES_PER_REQUEST} pages per request.`,
+              `Use the pages parameter to read specific page ranges (e.g., pages: "1-5"). ` +
+              `Maximum ${MAX_PDF_PAGES_PER_REQUEST} pages per request.`,
           );
         }
 
@@ -334,11 +354,19 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         if (!supportsPdf || fileStat.size > PDF_EXTRACT_SIZE_THRESHOLD) {
           if (!supportsImage) {
             return {
-              content: [{
-                type: "text",
-                text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input or image input.]`,
-              }],
-              data: { filePath: resolved.relativePath, kind, modelSupportsPdf: false, modelSupportsImage: false, pageCount },
+              content: [
+                {
+                  type: "text",
+                  text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. Current model does not support PDF input or image input.]`,
+                },
+              ],
+              data: {
+                filePath: resolved.relativePath,
+                kind,
+                modelSupportsPdf: false,
+                modelSupportsImage: false,
+                pageCount,
+              },
             };
           }
           const rendered = await renderPdfPagesAsImages(
@@ -357,18 +385,27 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
               limit: input.limit,
               pages: input.pages,
             });
-            const degradeReason = !supportsPdf ? "model does not support PDF input" : `file exceeds ${PDF_EXTRACT_SIZE_THRESHOLD / 1024 / 1024}MB threshold`;
+            const degradeReason = !supportsPdf
+              ? "model does not support PDF input"
+              : `file exceeds ${PDF_EXTRACT_SIZE_THRESHOLD / 1024 / 1024}MB threshold`;
             return {
-              content: [{
-                type: "text" as const,
-                text: `[PDF pages rendered from ${resolved.relativePath}: ${rendered.firstPage}-${rendered.lastPage}${pageCount ? ` of ${pageCount}` : ""} (${degradeReason}).]`
-                  + (rendered.truncated ? `\n[PDF truncated to ${MAX_PDF_PAGES_PER_REQUEST} pages; use the pages parameter to read another range.]` : ""),
-              }],
-              supplementalMessages: [{
-                role: "user",
-                content: rendered.images,
-                isMeta: true,
-              }],
+              content: [
+                {
+                  type: "text" as const,
+                  text:
+                    `[PDF pages rendered from ${resolved.relativePath}: ${rendered.firstPage}-${rendered.lastPage}${pageCount ? ` of ${pageCount}` : ""} (${degradeReason}).]` +
+                    (rendered.truncated
+                      ? `\n[PDF truncated to ${MAX_PDF_PAGES_PER_REQUEST} pages; use the pages parameter to read another range.]`
+                      : ""),
+                },
+              ],
+              supplementalMessages: [
+                {
+                  role: "user",
+                  content: rendered.images,
+                  isMeta: true,
+                },
+              ],
               data: {
                 filePath: resolved.relativePath,
                 kind,
@@ -383,11 +420,19 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
             };
           }
           return {
-            content: [{
-              type: "text",
-              text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. PDF page rendering failed: ${rendered.error}]`,
-            }],
-            data: { filePath: resolved.relativePath, kind, modelSupportsPdf: !!supportsPdf, pageCount, renderError: rendered.error },
+            content: [
+              {
+                type: "text",
+                text: `[PDF file: ${resolved.relativePath}, ${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""}. PDF page rendering failed: ${rendered.error}]`,
+              },
+            ],
+            data: {
+              filePath: resolved.relativePath,
+              kind,
+              modelSupportsPdf: !!supportsPdf,
+              pageCount,
+              renderError: rendered.error,
+            },
           };
         }
 
@@ -406,19 +451,21 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
               text: `PDF file read: ${resolved.relativePath} (${fileStat.size} bytes${pageCount ? `, ${pageCount} pages` : ""})`,
             },
           ],
-          supplementalMessages: [{
-            role: "user",
-            content: [
-              {
-                type: "pdf" as const,
-                mimeType: "application/pdf" as const,
-                data: pdfBuffer.toString("base64"),
-                bytes: pdfBuffer.byteLength,
-                pages: pageCount,
-              },
-            ],
-            isMeta: true,
-          }],
+          supplementalMessages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "pdf" as const,
+                  mimeType: "application/pdf" as const,
+                  data: pdfBuffer.toString("base64"),
+                  bytes: pdfBuffer.byteLength,
+                  pages: pageCount,
+                },
+              ],
+              isMeta: true,
+            },
+          ],
           data: {
             filePath: resolved.relativePath,
             kind,
@@ -463,7 +510,8 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         };
       }
 
-      const effectiveLimit = input.limit ?? (fileStat.size > LARGE_TEXT_AUTO_PAGE_BYTES ? DEFAULT_LARGE_TEXT_PREVIEW_LINES : undefined);
+      const effectiveLimit =
+        input.limit ?? (fileStat.size > LARGE_TEXT_AUTO_PAGE_BYTES ? DEFAULT_LARGE_TEXT_PREVIEW_LINES : undefined);
       let ranged = await readFileInRange(resolved.absolutePath, offset, effectiveLimit, context.abortSignal);
       let text = renderReadableRange(ranged.content, ranged.startLine, ranged.totalLines);
       let autoPaged = input.limit === undefined && effectiveLimit !== undefined;
@@ -504,13 +552,10 @@ export function createReadFileTool(): PilotDeckToolDefinition<ReadFileInput> {
         limit: input.limit,
         pages: input.pages,
       });
-      recordWriteSnapshot(
-        context,
-        resolved.absolutePath,
-        ranged.fullContent ?? ranged.content,
-        ranged.mtimeMs,
-        { offset: input.offset, limit: input.limit ?? (ranged.fullContent === undefined ? ranged.lineCount : undefined) },
-      );
+      recordWriteSnapshot(context, resolved.absolutePath, ranged.fullContent ?? ranged.content, ranged.mtimeMs, {
+        offset: input.offset,
+        limit: input.limit ?? (ranged.fullContent === undefined ? ranged.lineCount : undefined),
+      });
       return {
         content: [{ type: "text", text }],
         data: {
@@ -566,31 +611,37 @@ function renderNumberedLines(lines: string[], startLine: number): string {
 }
 
 function renderReadMoreNotice(filePath: string, nextOffset: number, limit: number): string {
-  return "\n<system-reminder>"
-    + `The file is too large to read in one response, so read_file returned the first ${limit} lines. `
-    + `Continue with read_file({ file_path: "${filePath}", offset: ${nextOffset}, limit: ${limit} }) if you need more.`
-    + "</system-reminder>";
+  return (
+    "\n<system-reminder>" +
+    `The file is too large to read in one response, so read_file returned the first ${limit} lines. ` +
+    `Continue with read_file({ file_path: "${filePath}", offset: ${nextOffset}, limit: ${limit} }) if you need more.` +
+    "</system-reminder>"
+  );
 }
 
 function renderToolResultRefReadMoreNotice(filePath: string, nextOffset: number, limit: number): string {
-  return "\n<system-reminder>"
-    + `The persisted tool result was too large for the requested range, so read_file returned ${limit} lines. `
-    + `Continue with read_file({ file_path: "${filePath}", offset: ${nextOffset}, limit: ${limit} }) if you need more.`
-    + "</system-reminder>";
+  return (
+    "\n<system-reminder>" +
+    `The persisted tool result was too large for the requested range, so read_file returned ${limit} lines. ` +
+    `Continue with read_file({ file_path: "${filePath}", offset: ${nextOffset}, limit: ${limit} }) if you need more.` +
+    "</system-reminder>"
+  );
 }
 
 function isManagedToolResultRefPath(filePath: string): boolean {
-  return /^\.pilotdeck[\\/]tool-results[\\/]refs[\\/]result-\d+\.(?:txt|json)$/.test(filePath);
+  return /^\.sati[\\/]tool-results[\\/]refs[\\/]result-\d+\.(?:txt|json)$/.test(filePath);
 }
 
 function renderOversizedLinePreview(text: string, filePath: string, offset: number): string {
   const limitedContent = applyResultSizeLimit([{ type: "text", text }], OVERSIZED_LINE_PREVIEW_BYTES).content[0];
   const limited = limitedContent?.type === "text" ? limitedContent.text : text;
-  return limited
-    + "\n<system-reminder>"
-    + "This line range is still too large for the model context, so read_file returned a head/tail preview. "
-    + `Use a smaller line range, for example read_file({ file_path: "${filePath}", offset: ${offset}, limit: 1 }), or use grep to find the relevant section.`
-    + "</system-reminder>";
+  return (
+    limited +
+    "\n<system-reminder>" +
+    "This line range is still too large for the model context, so read_file returned a head/tail preview. " +
+    `Use a smaller line range, for example read_file({ file_path: "${filePath}", offset: ${offset}, limit: 1 }), or use grep to find the relevant section.` +
+    "</system-reminder>"
+  );
 }
 
 function isOverTextBudget(text: string): boolean {
@@ -611,22 +662,25 @@ async function renderPdfPagesAsImages(
   pageCount: number | undefined,
   maxImageBytes: number,
   imageDetail: "auto" | "low" | "high" | undefined,
-): Promise<{
-  ok: true;
-  images: Array<{
-    type: "image";
-    mimeType: string;
-    data: string;
-    bytes: number;
-    detail?: "auto" | "low" | "high";
-  }>;
-  firstPage: number;
-  lastPage: number;
-  truncated: boolean;
-} | {
-  ok: false;
-  error: string;
-}> {
+): Promise<
+  | {
+      ok: true;
+      images: Array<{
+        type: "image";
+        mimeType: string;
+        data: string;
+        bytes: number;
+        detail?: "auto" | "low" | "high";
+      }>;
+      firstPage: number;
+      lastPage: number;
+      truncated: boolean;
+    }
+  | {
+      ok: false;
+      error: string;
+    }
+> {
   const firstPage = pages?.firstPage ?? 1;
   const lastPage = pages?.lastPage ?? Math.min(pageCount ?? MAX_PDF_PAGES_PER_REQUEST, MAX_PDF_PAGES_PER_REQUEST);
   const truncated = pages === undefined && pageCount !== undefined && pageCount > lastPage;
@@ -639,12 +693,7 @@ async function renderPdfPagesAsImages(
     for (let i = firstPage - 1; i < lastPage; i++) {
       const page = doc.loadPage(i);
       const scale = 100 / 72;
-      const pixmap = page.toPixmap(
-        mupdf.Matrix.scale(scale, scale),
-        mupdf.ColorSpace.DeviceRGB,
-        false,
-        true,
-      );
+      const pixmap = page.toPixmap(mupdf.Matrix.scale(scale, scale), mupdf.ColorSpace.DeviceRGB, false, true);
       const jpegData = pixmap.asJPEG(80, false);
       const jpegBuffer = Buffer.from(jpegData);
 
@@ -700,10 +749,11 @@ function sliceRenderedText(
 
 function ensureTokenBudget(text: string, filePath: string, suggestedOffset?: number): void {
   if (isOverTextBudget(text)) {
-    const action = suggestedOffset === undefined
-      ? "Use offset and limit to read a smaller portion."
-      : `Use a smaller limit, for example read_file({ file_path: "${filePath}", offset: ${suggestedOffset}, limit: 500 }).`;
-    throw new PilotDeckToolRuntimeError(
+    const action =
+      suggestedOffset === undefined
+        ? "Use offset and limit to read a smaller portion."
+        : `Use a smaller limit, for example read_file({ file_path: "${filePath}", offset: ${suggestedOffset}, limit: 500 }).`;
+    throw new SatiToolRuntimeError(
       "result_too_large",
       `File content from ${filePath} exceeds the text token budget. ${action}`,
     );
@@ -714,16 +764,12 @@ function ensureTokenBudget(text: string, filePath: string, suggestedOffset?: num
  * Validate image integrity and attempt repair if truncated/corrupted.
  * Fast path: complete JPEGs (with EOI marker and > 1KB) pass through unchanged.
  * For suspicious images, attempt re-encode via sharp which can tolerate minor truncation.
- * Throws PilotDeckToolRuntimeError if the image is unrecoverably corrupt.
+ * Throws SatiToolRuntimeError if the image is unrecoverably corrupt.
  */
-async function validateAndRepairImage(
-  buffer: Buffer,
-  mimeType: string,
-): Promise<{ buffer: Buffer; mimeType: string }> {
+async function validateAndRepairImage(buffer: Buffer, mimeType: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const isJpeg = mimeType === "image/jpeg";
-  const hasEoi = isJpeg && buffer.length >= 2
-    && buffer[buffer.length - 2] === 0xff
-    && buffer[buffer.length - 1] === 0xd9;
+  const hasEoi =
+    isJpeg && buffer.length >= 2 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9;
 
   if (isJpeg && hasEoi && buffer.length > 1000) {
     return { buffer, mimeType };
@@ -747,7 +793,7 @@ async function validateAndRepairImage(
     const repaired = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
     return { buffer: repaired, mimeType: "image/jpeg" };
   } catch {
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "invalid_tool_input",
       `Image file appears truncated or corrupted (${buffer.length} bytes). Cannot decode.`,
     );
@@ -758,10 +804,7 @@ async function prepareImageForModel(
   buffer: Buffer,
   mimeType: string,
   maxBytes: number,
-): Promise<
-  | { ok: true; image: { buffer: Buffer; mimeType: string } }
-  | { ok: false; error: string }
-> {
+): Promise<{ ok: true; image: { buffer: Buffer; mimeType: string } } | { ok: false; error: string }> {
   try {
     const validated = await validateAndRepairImage(buffer, mimeType);
     return { ok: true, image: await compressImageForBudget(validated.buffer, validated.mimeType, maxBytes) };
@@ -846,7 +889,7 @@ async function compressImageForBudget(
   }
 
   if (output.byteLength > maxBytes) {
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "result_too_large",
       `Image content exceeds the read_file byte budget after compression attempts (${mimeType}).`,
       { mimeType: outputMimeType, bytes: output.byteLength, maxBytes },
@@ -857,9 +900,9 @@ async function compressImageForBudget(
 
 function checkReadFilePermission(
   inputPath: string,
-  context: Parameters<NonNullable<PilotDeckToolDefinition<ReadFileInput>["checkPermissions"]>>[1],
+  context: Parameters<NonNullable<SatiToolDefinition<ReadFileInput>["checkPermissions"]>>[1],
 ): PermissionResult {
-  const workspaceResolved = resolvePilotDeckWorkspacePath(inputPath, context, {
+  const workspaceResolved = resolveSatiWorkspacePath(inputPath, context, {
     mustExist: true,
     allowRegisteredReadFiles: true,
   });
@@ -874,7 +917,7 @@ function checkReadFilePermission(
     };
   }
 
-  const outsideResolved = resolvePilotDeckWorkspacePath(inputPath, context, {
+  const outsideResolved = resolveSatiWorkspacePath(inputPath, context, {
     mustExist: true,
     allowOutsideWorkspace: true,
   });

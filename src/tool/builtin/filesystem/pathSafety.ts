@@ -1,21 +1,26 @@
 import path from "node:path";
 import { realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import type { PilotDeckToolRuntimeContext } from "../../protocol/types.js";
-import type { PilotDeckToolError } from "../../protocol/errors.js";
+import type { SatiToolRuntimeContext } from "../../protocol/types.js";
+import type { SatiToolError } from "../../protocol/errors.js";
 import { toolError } from "../../protocol/errors.js";
 
-export type PilotDeckPathSafetyResult =
+export type SatiPathSafetyResult =
   | { ok: true; absolutePath: string; relativePath: string; root: string }
-  | { ok: false; error: PilotDeckToolError };
+  | { ok: false; error: SatiToolError };
 
 const DEFAULT_WRITE_DENY_DIRECTORIES = new Set([".git", "node_modules", "dist"]);
 
-export function resolvePilotDeckWorkspacePath(
+export function resolveSatiWorkspacePath(
   inputPath: string,
-  context: PilotDeckToolRuntimeContext,
-  options?: { forWrite?: boolean; mustExist?: boolean; allowOutsideWorkspace?: boolean; allowRegisteredReadFiles?: boolean },
-): PilotDeckPathSafetyResult {
+  context: SatiToolRuntimeContext,
+  options?: {
+    forWrite?: boolean;
+    mustExist?: boolean;
+    allowOutsideWorkspace?: boolean;
+    allowRegisteredReadFiles?: boolean;
+  },
+): SatiPathSafetyResult {
   if (!inputPath || inputPath.includes("\0")) {
     return {
       ok: false,
@@ -36,10 +41,10 @@ export function resolvePilotDeckWorkspacePath(
     return { ok: true, absolutePath, relativePath, root: context.cwd };
   }
 
-  const roots = [context.cwd, ...context.permissionContext.additionalWorkingDirectories].map((root) =>
+  const roots = [context.cwd, ...context.permissionContext.additionalWorkingDirectories].map(root =>
     path.resolve(root),
   );
-  const root = roots.find((candidate) => isPathWithinRoot(absolutePath, candidate));
+  const root = roots.find(candidate => isPathWithinRoot(absolutePath, candidate));
 
   if (!root) {
     if (!options?.forWrite && options?.allowRegisteredReadFiles) {
@@ -50,7 +55,7 @@ export function resolvePilotDeckWorkspacePath(
           error: toolError("file_not_found", `File ${inputPath} does not exist.`),
         };
       }
-      const allowed = (context.allowedReadFiles ?? []).some((allowedPath) => {
+      const allowed = (context.allowedReadFiles ?? []).some(allowedPath => {
         const allowedReal = safeRealpath(allowedPath) ?? path.resolve(allowedPath);
         return real === allowedReal;
       });
@@ -73,7 +78,7 @@ export function resolvePilotDeckWorkspacePath(
 
     return {
       ok: false,
-      error: toolError("path_not_allowed", `Path ${inputPath} is outside the PilotDeck workspace.`),
+      error: toolError("path_not_allowed", `Path ${inputPath} is outside the Sati workspace.`),
     };
   }
 
@@ -98,7 +103,7 @@ export function resolvePilotDeckWorkspacePath(
     if (!isPathWithinRoot(real, realRoot)) {
       return {
         ok: false,
-        error: toolError("path_not_allowed", `Path ${inputPath} resolves outside the PilotDeck workspace.`),
+        error: toolError("path_not_allowed", `Path ${inputPath} resolves outside the Sati workspace.`),
       };
     }
   }
@@ -128,8 +133,8 @@ function safeRealpath(value: string): string | undefined {
   }
 }
 
-function isManagedImAttachmentFile(realPath: string, context: PilotDeckToolRuntimeContext): boolean {
-  const pilotHome = path.resolve(context.env?.PILOT_HOME ?? path.join(homedir(), ".pilotdeck"));
+function isManagedImAttachmentFile(realPath: string, context: SatiToolRuntimeContext): boolean {
+  const pilotHome = path.resolve(context.env?.SATI_HOME ?? path.join(homedir(), ".sati"));
   const root = safeRealpath(path.join(pilotHome, "im-attachments")) ?? path.join(pilotHome, "im-attachments");
   return isPathWithinRoot(realPath, root) && isRegularFile(realPath);
 }

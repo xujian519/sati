@@ -1,4 +1,4 @@
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type ToolNameRepairResult = {
   name: string;
@@ -85,7 +85,7 @@ const BUILTIN_ALIASES: Record<string, string[]> = {
 
 export function repairToolName(
   rawName: string,
-  tools: PilotDeckToolDefinition[],
+  tools: SatiToolDefinition[],
   configuredAliases?: Record<string, string>,
 ): ToolNameRepairResult | undefined {
   const index = buildToolNameIndex(tools);
@@ -128,7 +128,7 @@ type ToolNameIndex = {
   spellings: { normalized: string; canonicalName: string }[];
 };
 
-function buildToolNameIndex(tools: PilotDeckToolDefinition[]): ToolNameIndex {
+function buildToolNameIndex(tools: SatiToolDefinition[]): ToolNameIndex {
   const byNormalizedName = new Map<string, Set<string>>();
   const spellings: { normalized: string; canonicalName: string }[] = [];
 
@@ -168,7 +168,7 @@ function resolveConfiguredAlias(
 
   for (const [source, target] of Object.entries(aliases)) {
     const sourceVariants = new Set(normalizedVariants(source));
-    const sourceMatches = rawName === source || variants.some((variant) => sourceVariants.has(variant));
+    const sourceMatches = rawName === source || variants.some(variant => sourceVariants.has(variant));
     if (!sourceMatches) {
       continue;
     }
@@ -272,7 +272,7 @@ function stripToolAffixes(normalizedName: string): string {
   let changed = true;
   while (changed) {
     changed = false;
-    for (const prefix of ["tool_", "tools_", "function_", "functions_", "pilotdeck_", "builtin_"]) {
+    for (const prefix of ["tool_", "tools_", "function_", "functions_", "sati_", "builtin_"]) {
       if (current.startsWith(prefix) && current.length > prefix.length) {
         current = current.slice(prefix.length);
         changed = true;
@@ -306,11 +306,7 @@ function levenshtein(left: string, right: string): number {
     current[0] = i;
     for (let j = 1; j <= right.length; j++) {
       const substitutionCost = left[i - 1] === right[j - 1] ? 0 : 1;
-      current[j] = Math.min(
-        current[j - 1] + 1,
-        previous[j] + 1,
-        previous[j - 1] + substitutionCost,
-      );
+      current[j] = Math.min(current[j - 1] + 1, previous[j] + 1, previous[j - 1] + substitutionCost);
     }
     for (let j = 0; j <= right.length; j++) {
       previous[j] = current[j];

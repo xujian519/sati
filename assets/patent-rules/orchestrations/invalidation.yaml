@@ -1,0 +1,49 @@
+# 无效宣告 — 事务级编排 (Layer 2)
+id: "invalidation"
+name: "无效宣告事务"
+caseType: "invalidation"
+description: "对目标专利提出无效宣告请求的完整流程"
+
+# 发现阶段 (FlexiblePlan)
+discoveryStages:
+  - name: "目标专利深度分析"
+    goal: "提取技术方案、权利要求树、关键特征"
+    suggestions: ["CNIPA获取专利全文", "LLM分析权利要求结构"]
+  - name: "探查无效规定范围"
+    goal: "列出可用的全部无效法条及其证据要求"
+    suggestions: ["ReasoningWalker.collectAll('invalidation')"]
+  - name: "迭代检索对比文件"
+    goal: "多轮检索现有技术，确定对比文件"
+    suggestions: ["全局检索", "IPC限定检索", "关键词扩展检索"]
+
+# 可用的法条框架 (Layer 1)
+availableArticles:
+  - articleId: "A22.2"
+    priority: 1
+    description: "新颖性 — 单独对比原则"
+  - articleId: "A22.3"
+    priority: 2
+    description: "创造性 — 三步法"
+  - articleId: "A26.3"
+    priority: 3
+    description: "充分公开 — 本领域技术人员能够实现"
+  - articleId: "A26.4"
+    priority: 4
+    description: "清楚支持 — 权利要求清楚+得到说明书支持"
+  - articleId: "A33"
+    priority: 5
+    description: "修改超范围 — 直接毫无疑义地确定"
+  - articleId: "A25"
+    priority: 6
+    description: "授权客体 — 不属于不授权主题"
+
+# 执行计划模板
+executionTemplate:
+  artifactType: "无效宣告请求书"
+  sections:
+    - "无效宣告请求范围及理由"
+    - "请求人信息"
+    - "专利权人及专利信息"
+    - "具体无效理由（逐条）"
+    - "证据清单"
+    - "结论"

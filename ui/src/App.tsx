@@ -1,14 +1,14 @@
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import { I18nextProvider } from 'react-i18next';
-import { ThemeProvider } from './contexts/ThemeContext';
-import { AuthProvider, ProtectedRoute } from './components/auth';
-import { TaskMasterProvider } from './contexts/TaskMasterContext';
-import { TasksSettingsProvider } from './contexts/TasksSettingsContext';
-import { WebSocketProvider } from './contexts/WebSocketContext';
-import { PluginsProvider } from './contexts/PluginsContext';
-import { ToastProvider } from './contexts/ToastContext';
-import AppShellV2 from './components/app-shell/AppShellV2';
-import i18n from './i18n/config.js';
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { I18nextProvider } from "react-i18next";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import { AuthProvider, ProtectedRoute } from "./components/auth";
+import { TaskMasterProvider } from "./contexts/TaskMasterContext";
+import { TasksSettingsProvider } from "./contexts/TasksSettingsContext";
+import { WebSocketProvider } from "./contexts/WebSocketContext";
+import { PluginsProvider } from "./contexts/PluginsContext";
+import { ToastProvider } from "./contexts/ToastContext";
+import AppShellV2 from "./components/app-shell/AppShellV2";
+import i18n from "./i18n/config.js";
 
 export default function App() {
   // Single wildcard so URL changes don't remount the shell. Params are
@@ -24,7 +24,7 @@ export default function App() {
                 <TasksSettingsProvider>
                   <TaskMasterProvider>
                     <ProtectedRoute>
-                      <Router basename={window.__ROUTER_BASENAME__ || ''}>
+                      <Router basename={window.__ROUTER_BASENAME__ || ""}>
                         <Routes>
                           <Route path="*" element={<AppShellV2 />} />
                         </Routes>

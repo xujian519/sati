@@ -13,9 +13,9 @@ import type {
 import { flattenToolResultBlockText } from "../../protocol/toolResultContent.js";
 import { messageContent } from "../../protocol/clone.js";
 import { cleanSchemaForGoogle, normalizeGoogleToolSchema } from "../google/schema.js";
-import { normalizeOpenAISchema } from "./schema.js";
 import { resolveThinkingPlan, throwIfUnsupportedThinkingPlan } from "../../thinking/registry.js";
 import { formatToolResultReferenceText } from "../toolResultReferenceText.js";
+import { normalizeOpenAISchema } from "./schema.js";
 
 export type OpenAIRequestBody = {
   model: string;
@@ -68,7 +68,11 @@ export function buildOpenAIRequest(
   provider?: ProviderConfig,
 ): OpenAIRequestBody {
   const googleOpenAICompatible = isGoogleOpenAICompatibleProvider(provider);
-  const thinkingPlan = resolveThinkingPlan(request.thinking, provider ?? { id: "openai", protocol: "openai", url: "", apiKey: "", headers: {}, models: {} }, model);
+  const thinkingPlan = resolveThinkingPlan(
+    request.thinking,
+    provider ?? { id: "openai", protocol: "openai", url: "", apiKey: "", headers: {}, models: {} },
+    model,
+  );
   throwIfUnsupportedThinkingPlan(thinkingPlan, request);
   const messages = repairOpenAIToolPairing(
     request.messages.flatMap((message, messageIndex) => toOpenAIMessages(message, messageIndex)),
@@ -81,14 +85,12 @@ export function buildOpenAIRequest(
     model: request.model,
     messages,
     max_tokens: request.maxOutputTokens ?? model.capabilities.maxOutputTokens,
-    tools: request.tools?.map((tool) => toOpenAITool(tool, googleOpenAICompatible)),
+    tools: request.tools?.map(tool => toOpenAITool(tool, googleOpenAICompatible)),
     tool_choice: toOpenAIToolChoice(request.toolChoice),
     temperature: thinkingPlan.omitTemperature ? undefined : request.temperature,
     stream: request.stream,
     metadata: request.metadata
-      ? Object.fromEntries(
-          Object.entries(request.metadata).map(([k, v]) => [k, String(v)]),
-        )
+      ? Object.fromEntries(Object.entries(request.metadata).map(([k, v]) => [k, String(v)]))
       : undefined,
   };
 
@@ -136,28 +138,24 @@ export function buildOpenAIRequest(
   return body;
 }
 
-function toOpenAIMessages(
-  message: CanonicalMessage,
-  messageIndex: number,
-): OpenAIMessage[] {
+function toOpenAIMessages(message: CanonicalMessage, messageIndex: number): OpenAIMessage[] {
   if (message.role === "user") {
     return toOpenAIUserMessages(message);
   }
 
   const content = messageContent(message);
 
-  const toolResultBlocks = content
-    .filter((block) => block.type === "tool_result");
+  const toolResultBlocks = content.filter(block => block.type === "tool_result");
   const toolResultMessages = toolResultBlocks.map(toOpenAIToolResultMessage);
   const toolResultVisualMessages = toolResultBlocks.flatMap(toOpenAIToolResultVisualMessages);
 
   const toolResultRefMessages = content
-    .filter((block) => block.type === "tool_result_reference")
+    .filter(block => block.type === "tool_result_reference")
     .map(toOpenAIToolResultReferenceMessage);
 
   const assistantToolCalls = content
-    .filter((block) => block.type === "tool_call")
-    .map((block) => ({
+    .filter(block => block.type === "tool_call")
+    .map(block => ({
       // Preserve the canonical id until `repairOpenAIToolPairing` can see the
       // adjacent tool results and rewrite both sides together.
       id: block.id,
@@ -168,11 +166,9 @@ function toOpenAIMessages(
       },
     }));
 
-  const thinkingBlocks = content.filter(
-    (block): block is CanonicalThinkingBlock => block.type === "thinking",
-  );
+  const thinkingBlocks = content.filter((block): block is CanonicalThinkingBlock => block.type === "thinking");
   const normalContent = content.filter(
-    (block) =>
+    block =>
       block.type !== "tool_result" &&
       block.type !== "tool_result_reference" &&
       block.type !== "tool_call" &&
@@ -183,9 +179,12 @@ function toOpenAIMessages(
   if (normalContent.length > 0 || assistantToolCalls.length > 0 || thinkingBlocks.length > 0) {
     const msg: OpenAIMessage = {
       role: message.role,
-      content: normalContent.length > 0
-        ? toOpenAIContent(normalContent)
-        : (message.role === "assistant" && thinkingBlocks.length > 0 ? "" : undefined),
+      content:
+        normalContent.length > 0
+          ? toOpenAIContent(normalContent)
+          : message.role === "assistant" && thinkingBlocks.length > 0
+            ? ""
+            : undefined,
       tool_calls: assistantToolCalls.length > 0 ? assistantToolCalls : undefined,
     };
     const reasoningContent = toOpenAIReasoningContent(thinkingBlocks);
@@ -236,10 +235,7 @@ function toOpenAIUserMessages(message: CanonicalMessage): OpenAIMessage[] {
       if (visualContent.length > 0) {
         messages.push({
           role: "user",
-          content: toOpenAIContent([
-            { type: "text", text: "[Visual content from tool result]" },
-            ...visualContent,
-          ]),
+          content: toOpenAIContent([{ type: "text", text: "[Visual content from tool result]" }, ...visualContent]),
         });
       }
       continue;
@@ -256,9 +252,7 @@ function toOpenAIUserMessages(message: CanonicalMessage): OpenAIMessage[] {
   return messages;
 }
 
-function toOpenAIToolResultMessage(
-  block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
-): OpenAIMessage {
+function toOpenAIToolResultMessage(block: Extract<CanonicalContentBlock, { type: "tool_result" }>): OpenAIMessage {
   return {
     role: "tool",
     tool_call_id: block.toolCallId,
@@ -273,21 +267,19 @@ function toOpenAIToolResultVisualMessages(
   if (visualContent.length === 0) {
     return [];
   }
-  return [{
-    role: "user",
-    content: toOpenAIContent([
-      { type: "text", text: "[Visual content from tool result]" },
-      ...visualContent,
-    ]),
-  }];
+  return [
+    {
+      role: "user",
+      content: toOpenAIContent([{ type: "text", text: "[Visual content from tool result]" }, ...visualContent]),
+    },
+  ];
 }
 
 function toolResultVisualContent(
   block: Extract<CanonicalContentBlock, { type: "tool_result" }>,
 ): (CanonicalImageBlock | CanonicalPdfBlock)[] {
   return block.content.filter(
-    (content): content is CanonicalImageBlock | CanonicalPdfBlock =>
-      content.type === "image" || content.type === "pdf",
+    (content): content is CanonicalImageBlock | CanonicalPdfBlock => content.type === "image" || content.type === "pdf",
   );
 }
 
@@ -302,52 +294,50 @@ function toOpenAIToolResultReferenceMessage(
 }
 
 function toOpenAIContent(blocks: CanonicalContentBlock[]): string | unknown[] {
-  if (blocks.every((block) => block.type === "text")) {
-    return blocks.map((block) => block.text).join("\n");
+  if (blocks.every(block => block.type === "text")) {
+    return blocks.map(block => block.text).join("\n");
   }
 
-  return blocks.map((block) => {
-    switch (block.type) {
-      case "text":
-        return { type: "text", text: block.text };
-      case "thinking":
-        return { type: "text", text: block.text };
-      case "image":
-        return {
-          type: "image_url",
-          image_url: {
-            url: block.source === "url" ? block.data : `data:${block.mimeType};base64,${block.data}`,
-            detail: block.detail,
-          },
-        };
-      case "audio":
-        return block.source === "url"
-          ? { type: "input_audio", audio_url: block.data }
-          : { type: "input_audio", input_audio: { data: block.data, format: block.mimeType } };
-      case "pdf":
-        return {
-          type: "image_url",
-          image_url: {
-            url: `data:${block.mimeType};base64,${block.data}`,
-          },
-        };
-      case "tool_call":
-      case "tool_result":
-        return undefined;
-      case "tool_result_reference":
-        return { type: "text", text: block.preview };
-      case "media_reference":
-        return { type: "text", text: block.preview };
-    }
-  }).filter(Boolean);
+  return blocks
+    .map(block => {
+      switch (block.type) {
+        case "text":
+          return { type: "text", text: block.text };
+        case "thinking":
+          return { type: "text", text: block.text };
+        case "image":
+          return {
+            type: "image_url",
+            image_url: {
+              url: block.source === "url" ? block.data : `data:${block.mimeType};base64,${block.data}`,
+              detail: block.detail,
+            },
+          };
+        case "audio":
+          return block.source === "url"
+            ? { type: "input_audio", audio_url: block.data }
+            : { type: "input_audio", input_audio: { data: block.data, format: block.mimeType } };
+        case "pdf":
+          return {
+            type: "image_url",
+            image_url: {
+              url: `data:${block.mimeType};base64,${block.data}`,
+            },
+          };
+        case "tool_call":
+        case "tool_result":
+          return undefined;
+        case "tool_result_reference":
+          return { type: "text", text: block.preview };
+        case "media_reference":
+          return { type: "text", text: block.preview };
+      }
+    })
+    .filter(Boolean);
 }
 
-function toOpenAIReasoningContent(
-  thinkingBlocks: CanonicalThinkingBlock[],
-): string | undefined {
-  const contexts = thinkingBlocks
-    .map((block) => block.reasoningContent ?? block.text)
-    .filter((text) => text.length > 0);
+function toOpenAIReasoningContent(thinkingBlocks: CanonicalThinkingBlock[]): string | undefined {
+  const contexts = thinkingBlocks.map(block => block.reasoningContent ?? block.text).filter(text => text.length > 0);
 
   if (contexts.length === 0 && thinkingBlocks.length > 0) {
     return "";
@@ -371,9 +361,7 @@ function toOpenAITool(tool: CanonicalToolSchema, googleOpenAICompatible: boolean
 
 function normalizeGoogleOpenAIResponseSchema(schema: Record<string, unknown>): Record<string, unknown> {
   const cleaned = cleanSchemaForGoogle(schema);
-  return cleaned && typeof cleaned === "object" && !Array.isArray(cleaned)
-    ? cleaned as Record<string, unknown>
-    : {};
+  return cleaned && typeof cleaned === "object" && !Array.isArray(cleaned) ? (cleaned as Record<string, unknown>) : {};
 }
 
 function isGoogleOpenAICompatibleProvider(provider: ProviderConfig | undefined): boolean {
@@ -387,11 +375,9 @@ function isGoogleOpenAICompatibleProvider(provider: ProviderConfig | undefined):
   const rawUrl = provider.url.trim().toLowerCase();
   try {
     const url = new URL(rawUrl);
-    return url.hostname === "generativelanguage.googleapis.com"
-      && url.pathname.includes("/openai");
+    return url.hostname === "generativelanguage.googleapis.com" && url.pathname.includes("/openai");
   } catch {
-    return rawUrl.includes("generativelanguage.googleapis.com")
-      && rawUrl.includes("/openai");
+    return rawUrl.includes("generativelanguage.googleapis.com") && rawUrl.includes("/openai");
   }
 }
 
@@ -400,9 +386,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function normalizeToolCallId(id: unknown, messageIndex: number, toolCallIndex: number): string {
-  return typeof id === "string" && id.trim().length > 0
-    ? id
-    : `call_${messageIndex}_${toolCallIndex}`;
+  return typeof id === "string" && id.trim().length > 0 ? id : `call_${messageIndex}_${toolCallIndex}`;
 }
 
 type NormalizedOpenAIToolCall = {
@@ -432,7 +416,7 @@ function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
     }
 
     const expected = normalizeOpenAIToolCalls(msg.tool_calls, i);
-    out.push({ ...msg, tool_calls: expected.map((entry) => entry.toolCall) });
+    out.push({ ...msg, tool_calls: expected.map(entry => entry.toolCall) });
 
     const matched = new Set<NormalizedOpenAIToolCall>();
     let j = i + 1;
@@ -461,10 +445,7 @@ function repairOpenAIToolPairing(messages: OpenAIMessage[]): OpenAIMessage[] {
   return out;
 }
 
-function normalizeOpenAIToolCalls(
-  toolCalls: unknown[],
-  messageIndex: number,
-): NormalizedOpenAIToolCall[] {
+function normalizeOpenAIToolCalls(toolCalls: unknown[], messageIndex: number): NormalizedOpenAIToolCall[] {
   const used = new Set<string>();
   return toolCalls.map((toolCall, toolCallIndex) => {
     const record = isRecord(toolCall) ? toolCall : {};
@@ -500,10 +481,7 @@ function takeExpectedToolCall(
     return undefined;
   }
   const id = toolCallId.trim();
-  return expected.find((entry) =>
-    !matched.has(entry) &&
-    (entry.originalId === id || entry.toolCall.id === id)
-  );
+  return expected.find(entry => !matched.has(entry) && (entry.originalId === id || entry.toolCall.id === id));
 }
 
 function normalizeOpenAIToolCall(

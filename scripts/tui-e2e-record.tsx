@@ -1,27 +1,22 @@
-import React from "react";
-import { render } from "ink-testing-library";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import React from "react";
+import { render } from "ink-testing-library";
 import { TuiApp } from "../src/adapters/channel/tui/app/TuiApp.js";
 import { createGateway } from "../src/gateway/index.js";
 import { createModelRuntime } from "../src/model/index.js";
 import { createDefaultPermissionContext, PermissionRuntime } from "../src/permission/index.js";
 import { loadPilotConfig } from "../src/pilot/index.js";
 import { createRouterRuntime } from "../src/router/index.js";
-import {
-  SequentialToolScheduler,
-  ToolRegistry,
-  ToolRuntime,
-  type PilotDeckToolDefinition,
-} from "../src/tool/index.js";
+import { SequentialToolScheduler, ToolRegistry, ToolRuntime, type SatiToolDefinition } from "../src/tool/index.js";
 import type { AgentRuntimeConfig } from "../src/agent/index.js";
 import { createAgentSession } from "../src/agent/index.js";
 
-const PROVIDER = process.env.PILOTDECK_E2E_PROVIDER ?? "edgeclaw";
-const MODEL = process.env.PILOTDECK_E2E_MODEL ?? "moonshotai/kimi-k2.6";
-const PROMPT = process.env.PILOTDECK_E2E_PROMPT ?? "Use add_numbers to compute 17 + 25, then tell me the result.";
+const PROVIDER = process.env.SATI_E2E_PROVIDER ?? "edgeclaw";
+const MODEL = process.env.SATI_E2E_MODEL ?? "moonshotai/kimi-k2.6";
+const PROMPT = process.env.SATI_E2E_PROMPT ?? "Use add_numbers to compute 17 + 25, then tell me the result.";
 
-const addNumbersTool: PilotDeckToolDefinition = {
+const addNumbersTool: SatiToolDefinition = {
   name: "add_numbers",
   description: "Add two numbers and return the result.",
   kind: "custom",
@@ -36,7 +31,7 @@ const addNumbersTool: PilotDeckToolDefinition = {
   },
   isReadOnly: () => true,
   isConcurrencySafe: () => true,
-  execute: async (input) => {
+  execute: async input => {
     const { a, b } = input as { a: number; b: number };
     return { content: [{ type: "text", text: String(a + b) }], data: { sum: a + b } };
   },
@@ -62,7 +57,7 @@ async function main(): Promise<void> {
     model: MODEL,
     cwd,
     systemPrompt:
-      "You are PilotDeck running an end-to-end TUI test. When asked for arithmetic, you MUST call the provided add_numbers tool exactly once instead of computing it yourself, then report the answer in plain text.",
+      "You are Sati running an end-to-end TUI test. When asked for arithmetic, you MUST call the provided add_numbers tool exactly once instead of computing it yourself, then report the answer in plain text.",
     maxOutputTokens: 1024,
     temperature: 0,
     permissionMode: "default",
@@ -100,16 +95,10 @@ async function main(): Promise<void> {
     serverInfo: { mode: "in_process", projectKey: cwd },
   });
 
-  const gateway = process.env.PILOTDECK_E2E_TRACE === "1" ? wrapWithTrace(baseGateway) : baseGateway;
+  const gateway = process.env.SATI_E2E_TRACE === "1" ? wrapWithTrace(baseGateway) : baseGateway;
 
   const tree = (
-    <TuiApp
-      gateway={gateway}
-      connection="in_process"
-      projectKey={cwd}
-      cwd={cwd}
-      model={`${PROVIDER} · ${MODEL}`}
-    />
+    <TuiApp gateway={gateway} connection="in_process" projectKey={cwd} cwd={cwd} model={`${PROVIDER} · ${MODEL}`} />
   );
 
   const instance = render(tree);
@@ -187,7 +176,7 @@ function wrapWithTrace(gateway: ReturnType<typeof createGateway>): ReturnType<ty
 }
 
 function wait(ms: number): Promise<void> {
-  return new Promise((resolveTimer) => setTimeout(resolveTimer, ms));
+  return new Promise(resolveTimer => setTimeout(resolveTimer, ms));
 }
 
 async function waitForFrame(
@@ -244,7 +233,7 @@ async function waitForStableFrame(
   return last;
 }
 
-main().catch((error) => {
+main().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });

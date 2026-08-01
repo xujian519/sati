@@ -36,7 +36,7 @@ export function normalizeGoogleUsage(raw: unknown): CanonicalUsage | undefined {
     cacheReadTokens,
     totalTokens,
   };
-  return Object.values(result).some((value) => value !== undefined) ? result : undefined;
+  return Object.values(result).some(value => value !== undefined) ? result : undefined;
 }
 
 export function normalizeGoogleFinishReason(reason: unknown): CanonicalFinishReason {
@@ -119,11 +119,7 @@ function createToolCallIdState(response: Record<string, unknown>): GoogleToolCal
   };
 }
 
-function chooseGoogleToolCallId(
-  state: GoogleToolCallIdState,
-  incomingId: string | undefined,
-  index: number,
-): string {
+function chooseGoogleToolCallId(state: GoogleToolCallIdState, incomingId: string | undefined, index: number): string {
   const candidate = incomingId ? safeToolCallIdPart(incomingId) : `call_${state.baseId}_${index}`;
   const unique = nextUniqueToolCallId(candidate, state.usedIds);
   state.usedIds.add(unique);
@@ -143,7 +139,12 @@ function nextUniqueToolCallId(id: string, used: Set<string>): string {
 }
 
 function safeToolCallIdPart(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "google";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "google"
+  );
 }
 
 function firstCandidate(response: Record<string, unknown>): Record<string, unknown> {
@@ -170,7 +171,5 @@ function readNumber(value: unknown): number | undefined {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }

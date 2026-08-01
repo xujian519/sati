@@ -47,11 +47,7 @@ const SELF_CORRECTABLE_CODES = new Set(["invalid_tool_arguments"]);
  * because a different provider may succeed (e.g. billing exhaustion on
  * one provider, model not found on another).
  */
-const FALLBACK_ELIGIBLE_NON_RETRYABLE = new Set([
-  "billing",
-  "model_not_found",
-  "auth_error",
-]);
+const FALLBACK_ELIGIBLE_NON_RETRYABLE = new Set(["billing", "model_not_found", "auth_error"]);
 
 export function isFallbackEligible(error: CanonicalModelError): boolean {
   if (SELF_CORRECTABLE_CODES.has(error.code)) {

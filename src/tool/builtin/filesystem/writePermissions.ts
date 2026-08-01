@@ -1,19 +1,19 @@
 import path from "node:path";
 import type { PermissionResult, PermissionRule } from "../../../permission/index.js";
-import type { PilotDeckToolRuntimeContext } from "../../protocol/types.js";
-import { resolvePilotDeckWorkspacePath } from "./pathSafety.js";
+import type { SatiToolRuntimeContext } from "../../protocol/types.js";
+import { resolveSatiWorkspacePath } from "./pathSafety.js";
 
 export function checkFilesystemWritePermission(
   toolName: "write_file" | "edit_file",
   inputPath: string,
-  context: PilotDeckToolRuntimeContext,
+  context: SatiToolRuntimeContext,
 ): PermissionResult {
-  const workspaceResolved = resolvePilotDeckWorkspacePath(inputPath, context, { forWrite: true });
+  const workspaceResolved = resolveSatiWorkspacePath(inputPath, context, { forWrite: true });
   if (workspaceResolved.ok) {
     return { type: "passthrough" };
   }
 
-  const outsideResolved = resolvePilotDeckWorkspacePath(inputPath, context, {
+  const outsideResolved = resolveSatiWorkspacePath(inputPath, context, {
     forWrite: true,
     allowOutsideWorkspace: true,
   });
@@ -54,10 +54,7 @@ export function checkFilesystemWritePermission(
   };
 }
 
-function buildRecursiveFileWriteRule(
-  toolName: "write_file" | "edit_file",
-  absolutePath: string,
-): PermissionRule {
+function buildRecursiveFileWriteRule(toolName: "write_file" | "edit_file", absolutePath: string): PermissionRule {
   return {
     source: "session",
     behavior: "allow",

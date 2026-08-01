@@ -1,7 +1,5 @@
 import { resolvePilotHome } from "../../pilot/index.js";
-import {
-  formatChatHistorySearchResults,
-} from "../../session/search/formatChatHistorySearch.js";
+import { formatChatHistorySearchResults } from "../../session/search/formatChatHistorySearch.js";
 import {
   parseChatSearchArgs,
   searchChatHistory,
@@ -60,7 +58,7 @@ export async function runChatSearchCli(argv: string[]): Promise<void> {
   const subcommand = argv[0];
   if (subcommand !== "search") {
     console.error(
-      "Usage: pilotdeck chat search <keyword> [--project <path>] [--all-projects] [--limit N] [--json] [--regex] [--case-sensitive] [--role user|assistant|all] [--session <id>]",
+      "Usage: sati chat search <keyword> [--project <path>] [--all-projects] [--limit N] [--json] [--regex] [--case-sensitive] [--role user|assistant|all] [--session <id>]",
     );
     process.exitCode = 1;
     return;
@@ -76,16 +74,14 @@ export async function runChatSearchCli(argv: string[]): Promise<void> {
   const role = roleFlag === "user" || roleFlag === "assistant" || roleFlag === "all" ? roleFlag : undefined;
   const sessionId = readStringFlag(argv, "--session");
 
-  const queryParts = argv
-    .slice(1)
-    .filter((token, index, all) => {
-      if (token.startsWith("--")) return false;
-      const prev = all[index - 1];
-      if (prev === "--project" || prev === "--limit" || prev === "--role" || prev === "--session") {
-        return false;
-      }
-      return true;
-    });
+  const queryParts = argv.slice(1).filter((token, index, all) => {
+    if (token.startsWith("--")) return false;
+    const prev = all[index - 1];
+    if (prev === "--project" || prev === "--limit" || prev === "--role" || prev === "--session") {
+      return false;
+    }
+    return true;
+  });
 
   const query = queryParts.join(" ").trim();
   if (!query) {
@@ -111,8 +107,10 @@ export async function runChatSearchCli(argv: string[]): Promise<void> {
     return;
   }
 
-  console.log(formatChatHistorySearchResults(result, {
-    locale: "en",
-    includeProject: allProjects,
-  }));
+  console.log(
+    formatChatHistorySearchResults(result, {
+      locale: "en",
+      includeProject: allProjects,
+    }),
+  );
 }

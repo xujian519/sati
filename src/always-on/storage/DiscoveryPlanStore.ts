@@ -55,7 +55,7 @@ export class DiscoveryPlanStore {
 
   async upsert(record: DiscoveryPlanRecord): Promise<DiscoveryPlanRecord> {
     const index = await this.readIndex();
-    const existingIndex = index.plans.findIndex((entry) => entry.id === record.id);
+    const existingIndex = index.plans.findIndex(entry => entry.id === record.id);
     const stored = freezeRecord(toRelativePaths(record, this.paths));
     if (existingIndex >= 0) {
       index.plans[existingIndex] = stored;
@@ -75,12 +75,15 @@ export class DiscoveryPlanStore {
     },
   ): Promise<DiscoveryPlanRecord | undefined> {
     const index = await this.readIndex();
-    const target = index.plans.find((entry) => entry.id === planId);
+    const target = index.plans.find(entry => entry.id === planId);
     if (!target) return undefined;
     if (update.status !== undefined) {
       target.status = update.status;
       const raw = target as Record<string, unknown>;
-      if ("executionStatus" in raw && (update.status === "completed" || update.status === "completed_no_report" || update.status === "failed")) {
+      if (
+        "executionStatus" in raw &&
+        (update.status === "completed" || update.status === "completed_no_report" || update.status === "failed")
+      ) {
         raw.executionStatus = update.status;
       }
     }
@@ -97,21 +100,19 @@ export class DiscoveryPlanStore {
 
   async getRecord(planId: string): Promise<DiscoveryPlanRecord | undefined> {
     const index = await this.readIndex();
-    return index.plans.find((entry) => entry.id === planId);
+    return index.plans.find(entry => entry.id === planId);
   }
 }
 
 function cloneIndex(index: DiscoveryPlanIndex): DiscoveryPlanIndex {
-  return { schemaVersion: 1, plans: index.plans.map((entry) => ({ ...entry })) };
+  return { schemaVersion: 1, plans: index.plans.map(entry => ({ ...entry })) };
 }
 
 function toRelativePaths(record: DiscoveryPlanRecord, paths: AlwaysOnPaths): DiscoveryPlanRecord {
   return {
     ...record,
     planFilePath: relativeIfInsideRoot(record.planFilePath, paths.projectDir),
-    reportFilePath: record.reportFilePath
-      ? relativeIfInsideRoot(record.reportFilePath, paths.projectDir)
-      : undefined,
+    reportFilePath: record.reportFilePath ? relativeIfInsideRoot(record.reportFilePath, paths.projectDir) : undefined,
   };
 }
 

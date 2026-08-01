@@ -1,11 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 
-export type SettingsMainTab =
-  | "appearance"
-  | "permissions"
-  | "config"
-  | "mcp"
-  | "gateway";
+export type SettingsMainTab = "appearance" | "permissions" | "config" | "mcp" | "gateway";
 
 export type ProjectSortOrder = "name" | "date";
 export type SaveStatus = "success" | "error" | null;

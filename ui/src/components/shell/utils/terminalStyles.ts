@@ -1,4 +1,4 @@
-const XTERM_STYLE_ELEMENT_ID = 'shell-xterm-focus-style';
+const XTERM_STYLE_ELEMENT_ID = "shell-xterm-focus-style";
 
 const XTERM_FOCUS_STYLES = `
   .xterm .xterm-screen {
@@ -13,7 +13,7 @@ const XTERM_FOCUS_STYLES = `
 `;
 
 export function ensureXtermFocusStyles(): void {
-  if (typeof document === 'undefined') {
+  if (typeof document === "undefined") {
     return;
   }
 
@@ -21,9 +21,9 @@ export function ensureXtermFocusStyles(): void {
     return;
   }
 
-  const styleSheet = document.createElement('style');
+  const styleSheet = document.createElement("style");
   styleSheet.id = XTERM_STYLE_ELEMENT_ID;
-  styleSheet.type = 'text/css';
+  styleSheet.type = "text/css";
   styleSheet.innerText = XTERM_FOCUS_STYLES;
   document.head.appendChild(styleSheet);
 }

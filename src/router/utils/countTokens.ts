@@ -1,8 +1,4 @@
-import {
-  flattenToolResultBlockText,
-  type CanonicalMessage,
-  type CanonicalModelEvent,
-} from "../../model/index.js";
+import { flattenToolResultBlockText, type CanonicalMessage, type CanonicalModelEvent } from "../../model/index.js";
 import { countTokens } from "../../context/budget/tokenizer.js";
 
 export { countTokens };

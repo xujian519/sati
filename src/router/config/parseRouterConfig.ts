@@ -1,7 +1,7 @@
 import type { ModelConfig } from "../../model/index.js";
+import type { RouterScenarioType } from "../protocol/decision.js";
 import {
   DEFAULT_ALLOWED_TOOLS,
-  DEFAULT_BLOCKED_TOOLS,
   DEFAULT_JUDGE_TIMEOUT_MS,
   DEFAULT_TIER_DESCRIPTIONS,
   DEFAULT_TIER_NAME,
@@ -19,7 +19,6 @@ import {
   type RouterStatsConfig,
   type RouterTokenSaverConfig,
 } from "./schema.js";
-import type { RouterScenarioType } from "../protocol/decision.js";
 
 export type RouterConfigDiagnostic = {
   code: string;
@@ -29,11 +28,7 @@ export type RouterConfigDiagnostic = {
   hint?: string;
 };
 
-const SCENARIO_KEYS: RouterScenarioType[] = [
-  "default",
-  "subagent",
-  "explicit",
-];
+const SCENARIO_KEYS: RouterScenarioType[] = ["default", "subagent", "explicit"];
 
 export type ParseRouterConfigResult = {
   config?: RouterConfig;
@@ -45,10 +40,7 @@ export type ParseRouterConfigResult = {
  * RouterConfig. Returns diagnostics rather than throwing so the caller
  * (loadPilotConfig) can integrate with its existing fatal-aware flow.
  */
-export function parseRouterConfig(
-  raw: unknown,
-  modelConfig: ModelConfig,
-): ParseRouterConfigResult {
+export function parseRouterConfig(raw: unknown, modelConfig: ModelConfig): ParseRouterConfigResult {
   const diagnostics: RouterConfigDiagnostic[] = [];
   if (raw === undefined) {
     return { diagnostics };
@@ -214,10 +206,7 @@ function parseFallback(
   return Object.keys(fallback).length > 0 ? fallback : undefined;
 }
 
-function parseZeroUsageRetry(
-  raw: unknown,
-  diagnostics: RouterConfigDiagnostic[],
-): RouterConfig["zeroUsageRetry"] {
+function parseZeroUsageRetry(raw: unknown, diagnostics: RouterConfigDiagnostic[]): RouterConfig["zeroUsageRetry"] {
   if (raw === undefined) {
     return { enabled: true, maxAttempts: DEFAULT_ZERO_USAGE_MAX_ATTEMPTS };
   }
@@ -233,11 +222,7 @@ function parseZeroUsageRetry(
   const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
   let maxAttempts = DEFAULT_ZERO_USAGE_MAX_ATTEMPTS;
   if (raw.maxAttempts !== undefined) {
-    if (
-      typeof raw.maxAttempts === "number" &&
-      Number.isInteger(raw.maxAttempts) &&
-      raw.maxAttempts >= 0
-    ) {
+    if (typeof raw.maxAttempts === "number" && Number.isInteger(raw.maxAttempts) && raw.maxAttempts >= 0) {
       maxAttempts = raw.maxAttempts;
     } else {
       diagnostics.push({
@@ -302,18 +287,19 @@ function parseTokenSaver(
     }
     tiers[name] = {
       model: ref,
-      description: typeof body.description === "string"
-        ? body.description
-        : DEFAULT_TIER_DESCRIPTIONS[name],
+      description: typeof body.description === "string" ? body.description : DEFAULT_TIER_DESCRIPTIONS[name],
     };
   }
   if (Object.keys(tiers).length === 0) {
     return undefined;
   }
 
-  let defaultTier = typeof raw.defaultTier === "string"
-    ? raw.defaultTier
-    : (tiers[DEFAULT_TIER_NAME] ? DEFAULT_TIER_NAME : Object.keys(tiers)[0]!);
+  let defaultTier =
+    typeof raw.defaultTier === "string"
+      ? raw.defaultTier
+      : tiers[DEFAULT_TIER_NAME]
+        ? DEFAULT_TIER_NAME
+        : Object.keys(tiers)[0]!;
   if (!tiers[defaultTier]) {
     diagnostics.push({
       code: "ROUTER_TOKEN_SAVER_DEFAULT_TIER_UNKNOWN",
@@ -326,7 +312,7 @@ function parseTokenSaver(
 
   let rules: string[] | undefined;
   if (raw.rules !== undefined) {
-    if (Array.isArray(raw.rules) && raw.rules.every((rule) => typeof rule === "string")) {
+    if (Array.isArray(raw.rules) && raw.rules.every(rule => typeof rule === "string")) {
       rules = raw.rules as string[];
     } else {
       diagnostics.push({
@@ -366,11 +352,7 @@ function parseTokenSaver(
 
   let judgeTimeoutMs = DEFAULT_JUDGE_TIMEOUT_MS;
   if (raw.judgeTimeoutMs !== undefined) {
-    if (
-      typeof raw.judgeTimeoutMs === "number" &&
-      Number.isInteger(raw.judgeTimeoutMs) &&
-      raw.judgeTimeoutMs > 0
-    ) {
+    if (typeof raw.judgeTimeoutMs === "number" && Number.isInteger(raw.judgeTimeoutMs) && raw.judgeTimeoutMs > 0) {
       judgeTimeoutMs = raw.judgeTimeoutMs;
     } else {
       diagnostics.push({
@@ -395,9 +377,7 @@ function parseTokenSaver(
         message: "cacheAwareSwitching must be an object.",
       });
     } else {
-      const enabled = typeof raw.cacheAwareSwitching.enabled === "boolean"
-        ? raw.cacheAwareSwitching.enabled
-        : true;
+      const enabled = typeof raw.cacheAwareSwitching.enabled === "boolean" ? raw.cacheAwareSwitching.enabled : true;
       const minSavingsRatioRaw = raw.cacheAwareSwitching.minSavingsRatio;
       let minSavingsRatio = 0;
       if (minSavingsRatioRaw !== undefined) {
@@ -459,7 +439,7 @@ function parseAutoOrchestrate(
   }
   let triggerTiers: string[] = [...DEFAULT_TRIGGER_TIERS];
   if (raw.triggerTiers !== undefined) {
-    if (Array.isArray(raw.triggerTiers) && raw.triggerTiers.every((entry) => typeof entry === "string")) {
+    if (Array.isArray(raw.triggerTiers) && raw.triggerTiers.every(entry => typeof entry === "string")) {
       triggerTiers = raw.triggerTiers as string[];
       if (tokenSaver) {
         for (const tier of triggerTiers) {
@@ -486,7 +466,7 @@ function parseAutoOrchestrate(
   let blockedTools: string[] | undefined;
 
   if (raw.allowedTools !== undefined) {
-    if (Array.isArray(raw.allowedTools) && raw.allowedTools.every((entry) => typeof entry === "string")) {
+    if (Array.isArray(raw.allowedTools) && raw.allowedTools.every(entry => typeof entry === "string")) {
       allowedTools = raw.allowedTools as string[];
     } else {
       diagnostics.push({
@@ -499,7 +479,7 @@ function parseAutoOrchestrate(
   }
 
   if (raw.blockedTools !== undefined) {
-    if (Array.isArray(raw.blockedTools) && raw.blockedTools.every((entry) => typeof entry === "string")) {
+    if (Array.isArray(raw.blockedTools) && raw.blockedTools.every(entry => typeof entry === "string")) {
       blockedTools = raw.blockedTools as string[];
     } else {
       diagnostics.push({
@@ -599,19 +579,11 @@ function parseStats(
       }
     }
   }
-  const baselineModel = optionalRef(
-    raw.baselineModel,
-    "router.stats.baselineModel",
-    modelConfig,
-    diagnostics,
-  );
+  const baselineModel = optionalRef(raw.baselineModel, "router.stats.baselineModel", modelConfig, diagnostics);
   return { enabled, modelPricing, baselineModel };
 }
 
-function parseCustomRouter(
-  raw: unknown,
-  diagnostics: RouterConfigDiagnostic[],
-): RouterCustomRouterConfig | undefined {
+function parseCustomRouter(raw: unknown, diagnostics: RouterConfigDiagnostic[]): RouterCustomRouterConfig | undefined {
   if (raw === undefined) {
     return undefined;
   }

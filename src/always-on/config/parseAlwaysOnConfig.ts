@@ -51,8 +51,8 @@ export type AlwaysOnConfig = {
 export const DEFAULT_IGNORE_GLOBS: string[] = [
   "**/.git/**",
   "**/node_modules/**",
-  "**/.pilotdeck/**",
-  "**/.pilotdeck-always-on/**",
+  "**/.sati/**",
+  "**/.sati-always-on/**",
   "**/dist/**",
   "**/.DS_Store",
 ];
@@ -132,10 +132,7 @@ const REMOVED_PROJECT_KEYS: Record<string, string> = {
     "alwaysOn.projects.<root>.workspace per-project override is no longer accepted. WorkspaceProviderRegistry resolves provider automatically.",
 };
 
-export function parseAlwaysOnConfig(
-  raw: unknown,
-  diagnostics: PilotConfigDiagnostic[],
-): AlwaysOnConfig | undefined {
+export function parseAlwaysOnConfig(raw: unknown, diagnostics: PilotConfigDiagnostic[]): AlwaysOnConfig | undefined {
   if (raw === undefined) {
     return undefined;
   }
@@ -207,11 +204,7 @@ export function parseAlwaysOnConfig(
   return result;
 }
 
-function parseTrigger(
-  raw: unknown,
-  target: AlwaysOnTriggerConfig,
-  diagnostics: PilotConfigDiagnostic[],
-): void {
+function parseTrigger(raw: unknown, target: AlwaysOnTriggerConfig, diagnostics: PilotConfigDiagnostic[]): void {
   if (!isRecord(raw)) {
     diagnostics.push({
       code: "ALWAYS_ON_TRIGGER_INVALID",
@@ -266,11 +259,7 @@ function parseTrigger(
   }
 }
 
-function parseDormancy(
-  raw: unknown,
-  target: AlwaysOnDormancyConfig,
-  diagnostics: PilotConfigDiagnostic[],
-): void {
+function parseDormancy(raw: unknown, target: AlwaysOnDormancyConfig, diagnostics: PilotConfigDiagnostic[]): void {
   if (!isRecord(raw)) {
     diagnostics.push({
       code: "ALWAYS_ON_DORMANCY_INVALID",
@@ -306,11 +295,7 @@ function parseDormancy(
   }
 }
 
-function parseWorkspace(
-  raw: unknown,
-  target: AlwaysOnWorkspaceConfig,
-  diagnostics: PilotConfigDiagnostic[],
-): void {
+function parseWorkspace(raw: unknown, target: AlwaysOnWorkspaceConfig, diagnostics: PilotConfigDiagnostic[]): void {
   if (!isRecord(raw)) {
     diagnostics.push({
       code: "ALWAYS_ON_WORKSPACE_INVALID",
@@ -350,11 +335,7 @@ function parseWorkspace(
   );
 }
 
-function parseExecution(
-  raw: unknown,
-  target: AlwaysOnExecutionConfig,
-  diagnostics: PilotConfigDiagnostic[],
-): void {
+function parseExecution(raw: unknown, target: AlwaysOnExecutionConfig, diagnostics: PilotConfigDiagnostic[]): void {
   if (!isRecord(raw)) {
     diagnostics.push({
       code: "ALWAYS_ON_EXECUTION_INVALID",
@@ -377,12 +358,7 @@ function parseExecution(
       });
     }
   }
-  target.maxTurns = positiveInteger(
-    raw.maxTurns,
-    target.maxTurns,
-    "alwaysOn.execution.maxTurns",
-    diagnostics,
-  );
+  target.maxTurns = positiveInteger(raw.maxTurns, target.maxTurns, "alwaysOn.execution.maxTurns", diagnostics);
   target.maxToolCalls = positiveInteger(
     raw.maxToolCalls,
     target.maxToolCalls,
@@ -397,10 +373,7 @@ function parseExecution(
   );
 }
 
-function parseProjects(
-  raw: unknown,
-  diagnostics: PilotConfigDiagnostic[],
-): Record<string, AlwaysOnProjectConfig> {
+function parseProjects(raw: unknown, diagnostics: PilotConfigDiagnostic[]): Record<string, AlwaysOnProjectConfig> {
   if (!isRecord(raw)) {
     diagnostics.push({
       code: "ALWAYS_ON_PROJECTS_INVALID",
@@ -469,12 +442,7 @@ function optionalString(value: unknown, fallback: string | undefined): string | 
   return fallback;
 }
 
-function positiveNumber(
-  value: unknown,
-  fallback: number,
-  path: string,
-  diagnostics: PilotConfigDiagnostic[],
-): number {
+function positiveNumber(value: unknown, fallback: number, path: string, diagnostics: PilotConfigDiagnostic[]): number {
   if (value === undefined) return fallback;
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     diagnostics.push({
@@ -509,19 +477,9 @@ function nonNegativeNumber(
   return value;
 }
 
-function positiveInteger(
-  value: unknown,
-  fallback: number,
-  path: string,
-  diagnostics: PilotConfigDiagnostic[],
-): number {
+function positiveInteger(value: unknown, fallback: number, path: string, diagnostics: PilotConfigDiagnostic[]): number {
   if (value === undefined) return fallback;
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    !Number.isInteger(value) ||
-    value <= 0
-  ) {
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
     diagnostics.push({
       code: "ALWAYS_ON_NUMBER_INVALID",
       severity: "warning",
@@ -541,12 +499,7 @@ function nonNegativeInteger(
   diagnostics: PilotConfigDiagnostic[],
 ): number {
   if (value === undefined) return fallback;
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    !Number.isInteger(value) ||
-    value < 0
-  ) {
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
     diagnostics.push({
       code: "ALWAYS_ON_NUMBER_INVALID",
       severity: "warning",

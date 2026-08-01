@@ -1,5 +1,5 @@
-export class PilotDeckLifecycleRuntimeError extends Error {
-  readonly name = "PilotDeckLifecycleRuntimeError";
+export class SatiLifecycleRuntimeError extends Error {
+  readonly name = "SatiLifecycleRuntimeError";
 
   constructor(
     readonly code: "hook_blocked" | "hook_failed",

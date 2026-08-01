@@ -1,28 +1,28 @@
-import path from 'path';
-import { promises as fs, openSync } from 'fs';
-import { mkdirSync } from 'fs';
-import os from 'os';
-import { spawn } from 'child_process';
-import { sendCronDaemonRequest } from './cron-daemon-owner.js';
-import { prepareBackgroundSpawnOptions } from '../utils/processSpawn.js';
+import path from "path";
+import { promises as fs, openSync } from "fs";
+import { mkdirSync } from "fs";
+import os from "os";
+import { spawn } from "child_process";
+import { sendCronDaemonRequest } from "./cron-daemon-owner.js";
+import { prepareBackgroundSpawnOptions } from "../utils/processSpawn.js";
 
 // Cron daemon entry point. The launcher script is discoverable on PATH
-// or supplied via PILOTDECK_CRON_DAEMON_BIN. Returning `null` falls back
+// or supplied via SATI_CRON_DAEMON_BIN. Returning `null` falls back
 // to the in-tree fallback path that handles missing binaries gracefully.
-function resolvePilotDeckMainRoot() {
-    return null;
+function resolveSatiMainRoot() {
+  return null;
 }
 
 const DEFAULT_RETRY_ATTEMPTS = 20;
 const DEFAULT_RETRY_DELAY_MS = 250;
 const START_LOCK_STALE_MS = 30000;
 
-function getPilotDeckConfigHomeDir() {
-  return process.env.PILOTDECK_CONFIG_DIR || process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck');
+function getSatiConfigHomeDir() {
+  return process.env.SATI_CONFIG_DIR || process.env.SATI_HOME || path.join(os.homedir(), ".sati");
 }
 
 function getCronDaemonStartLockPath() {
-  return path.join(getPilotDeckConfigHomeDir(), 'cron-daemon', 'start.lock');
+  return path.join(getSatiConfigHomeDir(), "cron-daemon", "start.lock");
 }
 
 /**
@@ -30,25 +30,25 @@ function getCronDaemonStartLockPath() {
  *
  * Prior to this, the daemon spawned with `stdio: 'ignore'` so all of its
  * lifecycle output, errors, and discovery-scheduler trace was silently
- * discarded — making post-mortem debugging on the PilotDeck Desktop install
- * basically impossible (`~/.pilotdeck/desktop.server.log` only captured the
+ * discarded — making post-mortem debugging on the Sati Desktop install
+ * basically impossible (`~/.sati/desktop.server.log` only captured the
  * UI server's own output, not its detached children).
  *
- * We honour an explicit override via `PILOTDECK_CRON_DAEMON_LOG`; otherwise we
- * default to `~/.pilotdeck/cron-daemon.log` (parallel to `desktop.server.log`).
+ * We honour an explicit override via `SATI_CRON_DAEMON_LOG`; otherwise we
+ * default to `~/.sati/cron-daemon.log` (parallel to `desktop.server.log`).
  * The directory is created on demand so this works pre-onboarding too.
  */
 function resolveCronDaemonLogPath() {
-  const override = process.env.PILOTDECK_CRON_DAEMON_LOG?.trim();
+  const override = process.env.SATI_CRON_DAEMON_LOG?.trim();
   if (override) return override;
-  return path.join(process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck'), 'cron-daemon.log');
+  return path.join(process.env.SATI_HOME || path.join(os.homedir(), ".sati"), "cron-daemon.log");
 }
 
 function openCronDaemonLogFd() {
   const logPath = resolveCronDaemonLogPath();
   try {
     mkdirSync(path.dirname(logPath), { recursive: true });
-    const fd = openSync(logPath, 'a');
+    const fd = openSync(logPath, "a");
     return { fd, logPath };
   } catch (err) {
     // Fall back to ignore — better to lose stdout than to fail to spawn.
@@ -58,16 +58,14 @@ function openCronDaemonLogFd() {
 }
 
 function sleep(ms) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     setTimeout(resolve, ms);
   });
 }
 
 export function isCronDaemonUnavailableError(error) {
   return Boolean(
-    error instanceof Error &&
-    'code' in error &&
-    (error.code === 'ENOENT' || error.code === 'ECONNREFUSED')
+    error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ECONNREFUSED"),
   );
 }
 
@@ -76,27 +74,27 @@ export function buildCronDaemonEnv(baseEnv = process.env) {
 }
 
 export function buildCronDaemonSpawnCommand({
-  resolvePilotDeckMainRootFn = resolvePilotDeckMainRoot,
-  cliPath = process.env.PILOTDECK_CLI_PATH
+  resolveSatiMainRootFn = resolveSatiMainRoot,
+  cliPath = process.env.SATI_CLI_PATH,
 } = {}) {
-  const localMainRoot = resolvePilotDeckMainRootFn();
+  const localMainRoot = resolveSatiMainRootFn();
   if (localMainRoot) {
-    const preloadPath = path.join(localMainRoot, 'preload.ts');
-    const daemonMainPath = path.join(localMainRoot, 'src', 'daemon', 'main.ts');
+    const preloadPath = path.join(localMainRoot, "preload.ts");
+    const daemonMainPath = path.join(localMainRoot, "src", "daemon", "main.ts");
     return {
-      command: 'bun',
+      command: "bun",
       args: [
-        '--preload',
+        "--preload",
         preloadPath,
-        '-e',
-        `const { daemonMain } = await import(${JSON.stringify(daemonMainPath)}); await daemonMain(['serve'])`
-      ]
+        "-e",
+        `const { daemonMain } = await import(${JSON.stringify(daemonMainPath)}); await daemonMain(['serve'])`,
+      ],
     };
   }
 
   return {
-    command: typeof cliPath === 'string' && cliPath.trim().length > 0 ? cliPath.trim() : 'pilotdeck',
-    args: ['daemon', 'serve']
+    command: typeof cliPath === "string" && cliPath.trim().length > 0 ? cliPath.trim() : "sati",
+    args: ["daemon", "serve"],
   };
 }
 
@@ -104,20 +102,21 @@ async function acquireStartLock() {
   const lockPath = getCronDaemonStartLockPath();
   await fs.mkdir(path.dirname(lockPath), { recursive: true });
   try {
-    const handle = await fs.open(lockPath, 'wx');
-    await handle.writeFile(`${process.pid}\n`, 'utf8');
+    const handle = await fs.open(lockPath, "wx");
+    await handle.writeFile(`${process.pid}\n`, "utf8");
     await handle.close();
     return async () => {
       await fs.rm(lockPath, { force: true }).catch(() => {});
     };
   } catch (error) {
-    if (error?.code !== 'EEXIST') {
+    if (error?.code !== "EEXIST") {
       throw error;
     }
   }
 
-  const ageMs = await fs.stat(lockPath)
-    .then((stats) => Date.now() - stats.mtimeMs)
+  const ageMs = await fs
+    .stat(lockPath)
+    .then(stats => Date.now() - stats.mtimeMs)
     .catch(() => 0);
   if (ageMs > START_LOCK_STALE_MS) {
     await fs.rm(lockPath, { force: true }).catch(() => {});
@@ -126,12 +125,10 @@ async function acquireStartLock() {
   return null;
 }
 
-export async function pingCronDaemon({
-  sendCronDaemonRequestFn = sendCronDaemonRequest
-} = {}) {
-  const response = await sendCronDaemonRequestFn({ type: 'ping' });
-  if (!response?.ok || response.data?.type !== 'pong') {
-    throw new Error('Unexpected Cron daemon ping response');
+export async function pingCronDaemon({ sendCronDaemonRequestFn = sendCronDaemonRequest } = {}) {
+  const response = await sendCronDaemonRequestFn({ type: "ping" });
+  if (!response?.ok || response.data?.type !== "pong") {
+    throw new Error("Unexpected Cron daemon ping response");
   }
   return response;
 }
@@ -139,31 +136,35 @@ export async function pingCronDaemon({
 export function startCronDaemonDetached({
   spawnFn = spawn,
   buildCronDaemonSpawnCommandFn = buildCronDaemonSpawnCommand,
-  openLogFdFn = openCronDaemonLogFd
+  openLogFdFn = openCronDaemonLogFd,
 } = {}) {
   const { command, args } = buildCronDaemonSpawnCommandFn();
   const { fd, logPath } = openLogFdFn();
-  // Detach so multiple ui servers (e.g. dev + PilotDeck Desktop side-by-side)
-  // can share state through ~/.pilotdeck/cron-daemon.sock, but pipe stdout/stderr
+  // Detach so multiple ui servers (e.g. dev + Sati Desktop side-by-side)
+  // can share state through ~/.sati/cron-daemon.sock, but pipe stdout/stderr
   // into a real log file instead of /dev/null so the daemon is debuggable
   // post-mortem. Stdin stays 'ignore' (the daemon never reads input).
-  const stdio = fd === null ? 'ignore' : ['ignore', fd, fd];
+  const stdio = fd === null ? "ignore" : ["ignore", fd, fd];
   let child;
   try {
-    child = spawnFn(command, args, prepareBackgroundSpawnOptions({
-      cwd: process.cwd(),
-      env: buildCronDaemonEnv(),
-      detached: true,
-      stdio,
-    }));
+    child = spawnFn(
+      command,
+      args,
+      prepareBackgroundSpawnOptions({
+        cwd: process.cwd(),
+        env: buildCronDaemonEnv(),
+        detached: true,
+        stdio,
+      }),
+    );
   } catch (err) {
     console.warn(`[WARN] Cron daemon spawn failed: ${err.message}`);
     return null;
   }
-  child.on('error', (err) => {
+  child.on("error", err => {
     console.warn(`[WARN] Cron daemon process error: ${err.message}`);
   });
-  if (typeof child?.unref === 'function') {
+  if (typeof child?.unref === "function") {
     child.unref();
   }
   if (fd !== null) {
@@ -179,7 +180,7 @@ export async function ensureCronDaemonForUiStartup({
   openLogFdFn = openCronDaemonLogFd,
   sleepFn = sleep,
   retryAttempts = DEFAULT_RETRY_ATTEMPTS,
-  retryDelayMs = DEFAULT_RETRY_DELAY_MS
+  retryDelayMs = DEFAULT_RETRY_DELAY_MS,
 } = {}) {
   try {
     return await pingCronDaemon({ sendCronDaemonRequestFn });
@@ -201,7 +202,7 @@ export async function ensureCronDaemonForUiStartup({
       startCronDaemonDetached({
         spawnFn,
         buildCronDaemonSpawnCommandFn,
-        openLogFdFn
+        openLogFdFn,
       });
 
       let lastError = null;
@@ -216,7 +217,7 @@ export async function ensureCronDaemonForUiStartup({
         }
       }
 
-      throw lastError instanceof Error ? lastError : new Error('Cron daemon failed to start');
+      throw lastError instanceof Error ? lastError : new Error("Cron daemon failed to start");
     } finally {
       await releaseStartLock();
     }
@@ -234,5 +235,5 @@ export async function ensureCronDaemonForUiStartup({
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error('Cron daemon failed to start');
+  throw lastError instanceof Error ? lastError : new Error("Cron daemon failed to start");
 }

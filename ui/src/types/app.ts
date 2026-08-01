@@ -1,16 +1,29 @@
-export type SessionProvider = 'claude' | 'cursor' | 'codex' | 'gemini' | 'pilotdeck';
-export type ProjectSessionKind = 'background_task';
+export type SessionProvider = "claude" | "cursor" | "codex" | "gemini" | "sati";
+export type ProjectSessionKind = "background_task";
 
-export type AppTab = 'home' | 'chat' | 'always-on' | 'cron' | 'files' | 'shell' | 'git' | 'tasks' | 'memory' | 'skills' | 'preview' | 'dashboard' | `plugin:${string}`;
+export type AppTab =
+  | "home"
+  | "chat"
+  | "always-on"
+  | "cron"
+  | "files"
+  | "shell"
+  | "git"
+  | "tasks"
+  | "memory"
+  | "skills"
+  | "preview"
+  | "dashboard"
+  | `plugin:${string}`;
 
 export type AlwaysOnSessionTarget =
   | {
-      kind: 'origin';
+      kind: "origin";
       sessionId: string;
       projectName?: string;
     }
   | {
-      kind: 'background';
+      kind: "background";
       sessionId: string;
       parentSessionId: string;
       relativeTranscriptPath: string;
@@ -24,22 +37,22 @@ export type AlwaysOnSessionTarget =
     };
 
 export type AlwaysOnDashboardEventPhase =
-  | 'discovery_started'
-  | 'plan_produced'
-  | 'no_plan'
-  | 'workspace_started'
-  | 'workspace_ready'
-  | 'execution_started'
-  | 'execution_completed'
-  | 'report_started'
-  | 'report_produced'
-  | 'apply_started'
-  | 'apply_completed'
-  | 'run_completed'
-  | 'run_failed'
-  | 'cron_started'
-  | 'cron_completed'
-  | 'cron_failed';
+  | "discovery_started"
+  | "plan_produced"
+  | "no_plan"
+  | "workspace_started"
+  | "workspace_ready"
+  | "execution_started"
+  | "execution_completed"
+  | "report_started"
+  | "report_produced"
+  | "apply_started"
+  | "apply_completed"
+  | "run_completed"
+  | "run_failed"
+  | "cron_started"
+  | "cron_completed"
+  | "cron_failed";
 
 export interface AlwaysOnDashboardEvent {
   eventId: string;
@@ -60,13 +73,13 @@ export interface AlwaysOnDashboardEventsResponse {
 }
 
 export type DiscoveryPlanStatus =
-  | 'ready'
-  | 'queued'
-  | 'running'
-  | 'completed'
-  | 'completed_no_report'
-  | 'failed'
-  | 'archived';
+  | "ready"
+  | "queued"
+  | "running"
+  | "completed"
+  | "completed_no_report"
+  | "failed"
+  | "archived";
 
 export interface DiscoveryPlanOverview {
   id: string;
@@ -84,7 +97,7 @@ export interface ProjectDiscoveryPlansResponse {
   plans: DiscoveryPlanOverview[];
 }
 
-export type WorkCycleStatus = 'active' | 'applying' | 'applied' | 'archived';
+export type WorkCycleStatus = "active" | "applying" | "applied" | "archived";
 
 export interface WorkCycleOverview {
   id: string;
@@ -114,7 +127,7 @@ export interface DiscoveryContextPlanItem {
   summary: string;
 }
 
-export type CronJobOverviewStatus = 'scheduled' | 'running' | 'completed' | 'failed';
+export type CronJobOverviewStatus = "scheduled" | "running" | "completed" | "failed";
 
 export interface CronJobOverview {
   id: string;
@@ -133,7 +146,7 @@ export interface CronJobsOverviewResponse {
   jobs: CronJobOverview[];
 }
 
-export type AlwaysOnSubTab = 'dashboard' | 'plans';
+export type AlwaysOnSubTab = "dashboard" | "plans";
 
 export interface DiscoveryContextCronItem {
   id: string;
@@ -195,31 +208,25 @@ export type SessionRequestParams = {
   relativeTranscriptPath?: string;
 };
 
-export function isBackgroundTaskSession(
-  session: ProjectSession | null | undefined,
-): session is ProjectSession & {
-  sessionKind: 'background_task';
+export function isBackgroundTaskSession(session: ProjectSession | null | undefined): session is ProjectSession & {
+  sessionKind: "background_task";
   parentSessionId: string;
   relativeTranscriptPath: string;
 } {
   return (
-    session?.sessionKind === 'background_task' &&
-    typeof session.parentSessionId === 'string' &&
+    session?.sessionKind === "background_task" &&
+    typeof session.parentSessionId === "string" &&
     session.parentSessionId.length > 0 &&
-    typeof session.relativeTranscriptPath === 'string' &&
+    typeof session.relativeTranscriptPath === "string" &&
     session.relativeTranscriptPath.length > 0
   );
 }
 
-export function isReadOnlySession(
-  session: ProjectSession | null | undefined,
-): boolean {
+export function isReadOnlySession(session: ProjectSession | null | undefined): boolean {
   return session?.isReadOnly === true || isBackgroundTaskSession(session);
 }
 
-export function getSessionRequestParams(
-  session: ProjectSession | null | undefined,
-): SessionRequestParams {
+export function getSessionRequestParams(session: ProjectSession | null | undefined): SessionRequestParams {
   if (!isBackgroundTaskSession(session)) {
     return {};
   }
@@ -256,7 +263,7 @@ export interface Project {
 }
 
 export interface LoadingProgress {
-  type?: 'loading_progress';
+  type?: "loading_progress";
   phase?: string;
   current: number;
   total: number;
@@ -265,17 +272,17 @@ export interface LoadingProgress {
 }
 
 export interface ProjectsUpdatedMessage {
-  type: 'projects_updated';
+  type: "projects_updated";
   projects: Project[];
   changedFile?: string;
   [key: string]: unknown;
 }
 
 export interface LoadingProgressMessage extends LoadingProgress {
-  type: 'loading_progress';
+  type: "loading_progress";
 }
 
 export type AppSocketMessage =
   | LoadingProgressMessage
   | ProjectsUpdatedMessage
-  | { type?: string;[key: string]: unknown };
+  | { type?: string; [key: string]: unknown };

@@ -2,13 +2,8 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { opendir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { PilotDeckToolResult } from "../../tool/index.js";
-import type {
-  FileArtifact,
-  FileArtifactOperation,
-  FileArtifactSource,
-  FileArtifactStatus,
-} from "./FileArtifact.js";
+import type { SatiToolResult } from "../../tool/index.js";
+import type { FileArtifact, FileArtifactOperation, FileArtifactSource, FileArtifactStatus } from "./FileArtifact.js";
 
 type FileFingerprint = {
   size: number;
@@ -37,7 +32,7 @@ const workspaceFingerprintCache = new Map<string, Map<string, FileFingerprint>>(
 
 const EXCLUDED_DIRECTORY_NAMES = new Set([
   ".git",
-  ".pilotdeck",
+  ".sati",
   ".cache",
   ".idea",
   ".next",
@@ -67,7 +62,7 @@ const EXCLUDED_DIRECTORY_NAMES = new Set([
 ]);
 
 const INTERNAL_FILE_PATTERNS = [
-  /^\.pilotdeck_build\.(?:c|m)?js$/i,
+  /^\.sati_build\.(?:c|m)?js$/i,
   /^\.DS_Store$/i,
   /\.(?:log|pid|sock)$/i,
   /\.(?:db|sqlite)(?:-(?:shm|wal))$/i,
@@ -133,8 +128,8 @@ export class FileArtifactCollector {
     this.hashFile = options.hashFile ?? sha256File;
     this.allowedInputPaths = new Set(
       (options.allowedInputPaths ?? [])
-        .map((inputPath) => path.isAbsolute(inputPath) ? path.resolve(inputPath) : path.resolve(this.cwd, inputPath))
-        .filter((inputPath) => isWithin(this.cwd, inputPath) && !isHardInternalPath(this.cwd, inputPath)),
+        .map(inputPath => (path.isAbsolute(inputPath) ? path.resolve(inputPath) : path.resolve(this.cwd, inputPath)))
+        .filter(inputPath => isWithin(this.cwd, inputPath) && !isHardInternalPath(this.cwd, inputPath)),
     );
   }
 
@@ -150,7 +145,7 @@ export class FileArtifactCollector {
     return collector;
   }
 
-  observeToolResult(result: PilotDeckToolResult): void {
+  observeToolResult(result: SatiToolResult): void {
     if (result.type !== "success") return;
 
     for (const item of result.content) {
@@ -160,7 +155,7 @@ export class FileArtifactCollector {
     }
 
     if (["write_file", "edit_file", "edit_notebook"].includes(result.toolName)) {
-      collectKnownFilePaths(result.data, (candidate) => this.addExplicitPath(candidate));
+      collectKnownFilePaths(result.data, candidate => this.addExplicitPath(candidate));
     }
   }
 
@@ -212,14 +207,14 @@ export class FileArtifactCollector {
     reusableFingerprints?: ReadonlyMap<string, FileFingerprint>,
   ): Promise<Array<{ absolutePath: string; fingerprint: FileFingerprint }>> {
     const paths: string[] = [];
-    await walk(this.cwd, async (absolutePath) => {
+    await walk(this.cwd, async absolutePath => {
       if (!this.isAllowedArtifactPath(absolutePath)) return;
       paths.push(absolutePath);
     });
     const files: Array<{ absolutePath: string; fingerprint: FileFingerprint }> = [];
     for (let index = 0; index < paths.length; index += 8) {
       const batch = await Promise.all(
-        paths.slice(index, index + 8).map(async (absolutePath) => {
+        paths.slice(index, index + 8).map(async absolutePath => {
           const fingerprint = await fingerprintFile(
             absolutePath,
             reusableFingerprints?.get(absolutePath),
@@ -257,12 +252,9 @@ export class FileArtifactCollector {
     if (!isWithin(this.cwd, candidate.absolutePath) || !this.isAllowedArtifactPath(candidate.absolutePath)) {
       return undefined;
     }
-    const fingerprint = candidate.fingerprint
-      ?? await fingerprintFile(
-        candidate.absolutePath,
-        undefined,
-        this.hashFile,
-      ).catch(() => undefined);
+    const fingerprint =
+      candidate.fingerprint ??
+      (await fingerprintFile(candidate.absolutePath, undefined, this.hashFile).catch(() => undefined));
     if (!fingerprint) return undefined;
 
     const relativePath = normalizeRelativePath(path.relative(this.cwd, candidate.absolutePath));
@@ -303,11 +295,11 @@ async function fingerprintFile(
   const fileStat = await stat(filePath);
   if (!fileStat.isFile()) return undefined;
   if (
-    reusableFingerprint
-    && reusableFingerprint.size === fileStat.size
-    && reusableFingerprint.mtimeMs === fileStat.mtimeMs
-    && reusableFingerprint.ctimeMs === fileStat.ctimeMs
-    && reusableFingerprint.ino === fileStat.ino
+    reusableFingerprint &&
+    reusableFingerprint.size === fileStat.size &&
+    reusableFingerprint.mtimeMs === fileStat.mtimeMs &&
+    reusableFingerprint.ctimeMs === fileStat.ctimeMs &&
+    reusableFingerprint.ino === fileStat.ino
   ) {
     return reusableFingerprint;
   }
@@ -342,7 +334,7 @@ async function sha256File(filePath: string): Promise<string> {
   const hash = createHash("sha256");
   await new Promise<void>((resolve, reject) => {
     const stream = createReadStream(filePath);
-    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("data", chunk => hash.update(chunk));
     stream.on("error", reject);
     stream.on("end", resolve);
   });
@@ -368,24 +360,26 @@ function isInternalPath(root: string, absolutePath: string): boolean {
   const relativePath = normalizeRelativePath(path.relative(root, absolutePath));
   if (!relativePath) return true;
   const segments = relativePath.split("/");
-  if (segments.some((segment) => EXCLUDED_DIRECTORY_NAMES.has(segment.toLowerCase()))) {
+  if (segments.some(segment => EXCLUDED_DIRECTORY_NAMES.has(segment.toLowerCase()))) {
     return true;
   }
-  return INTERNAL_FILE_PATTERNS.some((pattern) => pattern.test(path.basename(relativePath)));
+  return INTERNAL_FILE_PATTERNS.some(pattern => pattern.test(path.basename(relativePath)));
 }
 
 function isSensitivePath(absolutePath: string): boolean {
   const basename = path.basename(absolutePath);
   if (/^\.env\.example$/i.test(basename)) return false;
-  return SENSITIVE_FILE_PATTERNS.some((pattern) => pattern.test(basename));
+  return SENSITIVE_FILE_PATTERNS.some(pattern => pattern.test(basename));
 }
 
 function isHardInternalPath(root: string, absolutePath: string): boolean {
   const relativePath = normalizeRelativePath(path.relative(root, absolutePath));
   if (!relativePath) return true;
-  const segments = relativePath.split("/").map((segment) => segment.toLowerCase());
-  return segments.some((segment) => segment === ".pilotdeck" || segment === ".git" || segment === "node_modules")
-    || /^\.pilotdeck_build\.(?:c|m)?js$/i.test(path.basename(relativePath));
+  const segments = relativePath.split("/").map(segment => segment.toLowerCase());
+  return (
+    segments.some(segment => segment === ".sati" || segment === ".git" || segment === "node_modules") ||
+    /^\.sati_build\.(?:c|m)?js$/i.test(path.basename(relativePath))
+  );
 }
 
 function isWithin(root: string, candidate: string): boolean {
@@ -408,10 +402,7 @@ function collectKnownFilePaths(value: unknown, add: (pathValue: string) => void,
     return;
   }
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (
-      typeof child === "string" &&
-      /^(?:filePath|outputFile|outputPath|artifactPath)$/i.test(key)
-    ) {
+    if (typeof child === "string" && /^(?:filePath|outputFile|outputPath|artifactPath)$/i.test(key)) {
       add(child);
       continue;
     }

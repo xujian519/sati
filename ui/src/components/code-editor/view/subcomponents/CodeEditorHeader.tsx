@@ -1,5 +1,17 @@
-import { ArrowLeft, Check, ChevronsLeftRight, ChevronsRightLeft, Code2, Download, Eye, Maximize2, Minimize2, Save, X } from 'lucide-react';
-import type { CodeEditorFile } from '../../types/types';
+import {
+  ArrowLeft,
+  Check,
+  ChevronsLeftRight,
+  ChevronsRightLeft,
+  Code2,
+  Download,
+  Eye,
+  Maximize2,
+  Minimize2,
+  Save,
+  X,
+} from "lucide-react";
+import type { CodeEditorFile } from "../../types/types";
 
 type CodeEditorHeaderProps = {
   file: CodeEditorFile;
@@ -76,45 +88,41 @@ export default function CodeEditorHeader({
   const showPreviewLabel = isMarkdownFile ? labels.previewMarkdown : labels.previewHtml;
 
   const iconBtn =
-    'flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100';
+    "flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100";
 
   return (
     <div
-      className={compact
-        ? 'absolute right-2 top-1 z-10 flex h-8 items-center rounded-md bg-neutral-50 pl-2 dark:bg-neutral-900'
-        : 'flex min-w-0 flex-shrink-0 items-center justify-between gap-2 border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950'}
+      className={
+        compact
+          ? "absolute right-2 top-1 z-10 flex h-8 items-center rounded-md bg-neutral-50 pl-2 dark:bg-neutral-900"
+          : "flex min-w-0 flex-shrink-0 items-center justify-between gap-2 border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950"
+      }
     >
       {!compact ? (
         <div className="flex min-w-0 flex-1 shrink items-center gap-2">
-        {canGoBack && onGoBack ? (
-          <button
-            type="button"
-            onClick={onGoBack}
-            className="flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-            title={parentFileName ? `${labels.goBack}: ${parentFileName}` : labels.goBack}
-            aria-label={labels.goBack}
-          >
-            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
-            {parentFileName ? (
-              <span className="max-w-[7rem] truncate text-xxs">{parentFileName}</span>
-            ) : null}
-          </button>
-        ) : null}
-        <div className="min-w-0 shrink">
-          <div className="flex min-w-0 items-center gap-2">
-            <h3 className="truncate text-[13px] font-medium text-neutral-900 dark:text-neutral-100">
-              {file.name}
-            </h3>
-            {file.diffInfo && (
-              <span className="shrink-0 whitespace-nowrap rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xxs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-                {labels.showingChanges}
-              </span>
-            )}
+          {canGoBack && onGoBack ? (
+            <button
+              type="button"
+              onClick={onGoBack}
+              className="flex h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+              title={parentFileName ? `${labels.goBack}: ${parentFileName}` : labels.goBack}
+              aria-label={labels.goBack}
+            >
+              <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
+              {parentFileName ? <span className="max-w-[7rem] truncate text-xxs">{parentFileName}</span> : null}
+            </button>
+          ) : null}
+          <div className="min-w-0 shrink">
+            <div className="flex min-w-0 items-center gap-2">
+              <h3 className="truncate text-[13px] font-medium text-neutral-900 dark:text-neutral-100">{file.name}</h3>
+              {file.diffInfo && (
+                <span className="shrink-0 whitespace-nowrap rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xxs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+                  {labels.showingChanges}
+                </span>
+              )}
+            </div>
+            <p className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">{file.path}</p>
           </div>
-          <p className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">
-            {file.path}
-          </p>
-        </div>
         </div>
       ) : null}
 
@@ -125,7 +133,7 @@ export default function CodeEditorHeader({
             onClick={onToggleMarkdownPreview}
             className={
               previewActive
-                ? 'flex h-7 w-7 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
+                ? "flex h-7 w-7 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
                 : iconBtn
             }
             title={previewActive ? editPreviewLabel : showPreviewLabel}
@@ -139,7 +147,13 @@ export default function CodeEditorHeader({
           </button>
         )}
 
-        <button type="button" onClick={onDownload} className={iconBtn} title={labels.download} aria-label={labels.download}>
+        <button
+          type="button"
+          onClick={onDownload}
+          className={iconBtn}
+          title={labels.download}
+          aria-label={labels.download}
+        >
           <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
         </button>
 
@@ -149,7 +163,7 @@ export default function CodeEditorHeader({
           disabled={saving}
           className={
             saveSuccess
-              ? 'flex h-7 w-7 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100'
+              ? "flex h-7 w-7 items-center justify-center rounded-md bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
               : `${iconBtn} disabled:opacity-50`
           }
           title={saveTitle}

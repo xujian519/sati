@@ -16,8 +16,9 @@ export class AsyncQueue<T> {
 
   enqueue(value: T): void {
     if (this.closed) return;
-    if (this.waiters.length > 0) {
-      this.waiters.shift()!.resolve({ value, done: false });
+    const waiter = this.waiters.shift();
+    if (waiter) {
+      waiter.resolve({ value, done: false });
       return;
     }
     this.buffer.push(value);
@@ -26,8 +27,10 @@ export class AsyncQueue<T> {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    while (this.waiters.length > 0) {
-      this.waiters.shift()!.resolve({ value: undefined as unknown as T, done: true });
+    let waiter = this.waiters.shift();
+    while (waiter) {
+      waiter.resolve({ value: undefined as unknown as T, done: true });
+      waiter = this.waiters.shift();
     }
   }
 
@@ -44,13 +47,14 @@ export class AsyncQueue<T> {
           this.error = undefined;
           return Promise.reject(err);
         }
-        if (this.buffer.length > 0) {
-          return Promise.resolve({ value: this.buffer.shift()!, done: false });
+        const item = this.buffer.shift();
+        if (item !== undefined) {
+          return Promise.resolve({ value: item, done: false });
         }
         if (this.closed) {
           return Promise.resolve({ value: undefined as unknown as T, done: true });
         }
-        return new Promise<IteratorResult<T>>((resolve) => {
+        return new Promise<IteratorResult<T>>(resolve => {
           this.waiters.push({ resolve });
         });
       },

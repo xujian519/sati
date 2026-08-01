@@ -25,5 +25,5 @@ export function isImeCompositionEvent(event: KeyboardEventLike): boolean {
 }
 
 export function isImeEnterEvent(event: KeyboardEventLike): boolean {
-  return event.key === 'Enter' && isImeCompositionEvent(event);
+  return event.key === "Enter" && isImeCompositionEvent(event);
 }

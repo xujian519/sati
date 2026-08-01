@@ -19,7 +19,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { PilotDeckTaskOutputSlice } from "../protocol/types.js";
+import type { SatiTaskOutputSlice } from "../protocol/types.js";
 
 export type TaskOutputStoreOptions = {
   taskId: string;
@@ -48,9 +48,7 @@ export class TaskOutputStore {
   constructor(options: TaskOutputStoreOptions) {
     this.options = options;
     this.maxMemoryBytes = options.maxMemoryBytes ?? DEFAULT_MEMORY_BYTES;
-    this.diskSpillPath = options.diskSpillDir
-      ? path.join(options.diskSpillDir, `${options.taskId}.log`)
-      : null;
+    this.diskSpillPath = options.diskSpillDir ? path.join(options.diskSpillDir, `${options.taskId}.log`) : null;
   }
 
   /** Append a stdout/stderr chunk. */
@@ -77,9 +75,9 @@ export class TaskOutputStore {
    * been dropped from memory are reflected via `truncated=true`. Pass
    * `maxBytes` to bound the return size.
    */
-  readSlice(offset: number, maxBytes?: number): PilotDeckTaskOutputSlice {
+  readSlice(offset: number, maxBytes?: number): SatiTaskOutputSlice {
     const head = this.totalSeenBytes;
-    let cursor = Math.max(offset, this.droppedBytes);
+    const cursor = Math.max(offset, this.droppedBytes);
     const cap = maxBytes ?? Infinity;
     const truncated = offset < this.droppedBytes;
 

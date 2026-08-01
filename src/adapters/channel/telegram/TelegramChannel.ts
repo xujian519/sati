@@ -9,7 +9,6 @@ import { renderTelegramEvent } from "./telegram-render.js";
 
 let Bot: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   Bot = require("grammy").Bot;
 } catch {
   // grammy not installed — start() will warn
@@ -83,7 +82,11 @@ export class TelegramChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`telegram: stopping (${reason ?? "no reason"})`);
         if (this.bot) {
-          try { await this.bot.stop(); } catch { /* best effort */ }
+          try {
+            await this.bot.stop();
+          } catch {
+            /* best effort */
+          }
           this.bot = null;
         }
       },
@@ -196,7 +199,9 @@ export class TelegramChannel implements ChannelAdapter {
     if (!this.bot) return;
     try {
       await this.bot.api.sendChatAction(chatId, "typing");
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   }
 }
 

@@ -5,10 +5,10 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
-import { WeComCallbackSessionMapper } from "./WeComCallbackSessionMapper.js";
-import { renderWeComCallbackEvent } from "./wecom-callback-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { WeComCallbackSessionMapper } from "./WeComCallbackSessionMapper.js";
+import { renderWeComCallbackEvent } from "./wecom-callback-render.js";
 
 const QYAPI = "https://qyapi.weixin.qq.com/cgi-bin";
 const DEFAULT_PORT = 8780;
@@ -59,7 +59,7 @@ function extractEncryptFromXml(xml: string): string | undefined {
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c) => chunks.push(Buffer.from(c)));
+    req.on("data", c => chunks.push(Buffer.from(c)));
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
@@ -135,7 +135,7 @@ export class WeComCallbackChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`wecom_callback: stopping (${reason ?? "no reason"})`);
         if (this.server) {
-          await new Promise<void>((resolve) => {
+          await new Promise<void>(resolve => {
             this.server!.close(() => resolve());
           });
           this.server = null;
@@ -199,7 +199,9 @@ export class WeComCallbackChannel implements ChannelAdapter {
       this.logger?.error?.(`wecom_callback: HTTP error: ${e}`);
       try {
         res.writeHead(500).end("error");
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
   }
 

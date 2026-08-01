@@ -469,7 +469,7 @@ export interface DreamTraceRecord {
     outcome: DreamTraceOutcome;
     skipReason?: string;
 }
-export type RetrievalTraceStepKind = "recall_start" | "cache_hit" | "memory_gate" | "user_base_loaded" | "project_shortlist_built" | "project_selected" | "manifest_scanned" | "manifest_selected" | "files_loaded" | "context_rendered" | "fallback_applied" | "recall_skipped";
+export type RetrievalTraceStepKind = "recall_start" | "cache_hit" | "memory_gate" | "user_base_loaded" | "project_shortlist_built" | "project_selected" | "manifest_scanned" | "semantic_recall" | "manifest_selected" | "files_loaded" | "context_rendered" | "fallback_applied" | "recall_skipped";
 export interface RetrievalTraceStep extends TraceStepI18nFields {
     stepId: string;
     kind: RetrievalTraceStepKind;

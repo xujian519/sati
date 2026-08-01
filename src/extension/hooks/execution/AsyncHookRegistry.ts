@@ -1,12 +1,12 @@
-import type { PilotDeckHookEvent } from "../protocol/events.js";
+import type { SatiHookEvent } from "../protocol/events.js";
+import type { SatiHookOutput } from "../protocol/output.js";
 import { parseHookOutput } from "./parseHookOutput.js";
-import type { PilotDeckHookOutput } from "../protocol/output.js";
 
 export type PendingAsyncHook = {
   id: string;
   startedAt: Date;
   hookName: string;
-  hookEvent: PilotDeckHookEvent;
+  hookEvent: SatiHookEvent;
   stdout: string;
   stderr: string;
   responseDelivered: boolean;
@@ -16,10 +16,10 @@ export type PendingAsyncHook = {
 export type AsyncHookResponse = {
   id: string;
   hookName: string;
-  hookEvent: PilotDeckHookEvent;
+  hookEvent: SatiHookEvent;
   stdout: string;
   stderr: string;
-  output: PilotDeckHookOutput;
+  output: SatiHookOutput;
   rewake: boolean;
 };
 
@@ -71,6 +71,6 @@ export class AsyncHookRegistry {
   }
 }
 
-function isBlockingOutput(output: PilotDeckHookOutput): boolean {
+function isBlockingOutput(output: SatiHookOutput): boolean {
   return output.type === "sync" && (output.continue === false || output.decision === "block");
 }

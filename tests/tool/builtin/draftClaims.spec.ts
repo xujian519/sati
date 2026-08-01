@@ -81,6 +81,51 @@ test("draft_claims places prior_art in the preamble before 其特征在于", () 
   assert.ok(priorIndex >= 0 && priorIndex < charIndex, "prior_art must precede 其特征在于");
 });
 
+test("draft_claims chemical domain keeps 包含 terminology with prior_art", () => {
+  const withPrior = draftClaims({
+    invention_name: "一种催化剂组合物",
+    tech_domain: "chemical",
+    technical_features: ["活性组分", "载体"],
+    prior_art: "溶剂",
+  });
+  const withoutPrior = draftClaims({
+    invention_name: "一种催化剂组合物",
+    tech_domain: "chemical",
+    technical_features: ["活性组分", "载体"],
+  });
+  // 同一工具同一领域，术语必须一致（不因 prior_art 有无而切换 包括/包含）
+  assert.match(withPrior.claims[0].text, /一种催化剂组合物，包含：溶剂；其特征在于，还包含：活性组分；载体。/);
+  assert.match(withoutPrior.claims[0].text, /一种催化剂组合物，其特征在于，包含：活性组分；载体。/);
+});
+
+test("draft_claims software domain keeps prior_art in the preamble", () => {
+  const result = draftClaims({
+    invention_name: "一种数据处理方法",
+    tech_domain: "software",
+    technical_features: ["接收数据", "解析数据"],
+    prior_art: "对原始数据进行采集",
+  });
+  const independent = result.claims[0].text;
+  assert.match(
+    independent,
+    /一种数据处理方法的实现方法，包括以下步骤：对原始数据进行采集；其特征在于，还包括以下步骤：接收数据；解析数据。/,
+  );
+  const charIndex = independent.indexOf("其特征在于");
+  assert.ok(independent.indexOf("对原始数据进行采集") < charIndex, "prior_art must precede 其特征在于 for software");
+});
+
+test("draft_claims normalizes trailing period in prior_art", () => {
+  const result = draftClaims({
+    invention_name: "一种改进型阀门",
+    tech_domain: "mechanical",
+    technical_features: ["密封结构"],
+    prior_art: "阀体，包括密封圈。",
+  });
+  // 不得出现 "。；" 拼接
+  assert.ok(!result.claims[0].text.includes("。；"), `claim must not contain 。；: ${result.claims[0].text}`);
+  assert.match(result.claims[0].text, /包括：阀体，包括密封圈；其特征在于，还包括：密封结构。/);
+});
+
 test("draft_claims tool definition is read-only", async () => {
   const tool = createDraftClaimsTool();
   assert.equal(tool.name, "draft_claims");

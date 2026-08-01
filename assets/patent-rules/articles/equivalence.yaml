@@ -1,0 +1,48 @@
+# 等同原则判断框架
+# Layer 1 — 法条级原子单元
+#
+# 法律依据修正（2026-07）：原引用「专利法第67条」有误——2020 修正版第67条实际是
+# 「专利实施许可合同」，与侵权判定无关。等同特征定义见法释〔2015〕4号第17条第2款。
+
+articleId: "equivalence"
+name: "等同原则判断"
+lawRef: "法释〔2015〕4号第17条第2款（等同特征定义）+ 法释〔2009〕21号第7条第2款"
+guidelineRef: "最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释 第7条"
+
+steps:
+  - id: "equivalence_step_1"
+    order: 1
+    name: "确定区别特征"
+    ruleRef: "等同原则 — 区别特征识别"
+    inputHint: "被控产品与专利权利要求的对比结果"
+    outputSchema:
+      differingFeatures: "string[] — 不相同的技术特征"
+      claimedFeatures: "string[] — 权利要求中对应的特征"
+
+  - id: "equivalence_step_2"
+    order: 2
+    name: "判断是否以基本相同的手段实现基本相同的功能"
+    ruleRef: "等同原则 — 手段-功能-效果三要素"
+    inputHint: "区别特征的技术分析"
+    outputSchema:
+      meansAnalysis: "string — 手段是否基本相同"
+      functionAnalysis: "string — 功能是否基本相同"
+      effectAnalysis: "string — 效果是否基本相同"
+
+  - id: "equivalence_step_3"
+    order: 3
+    name: "判断是否本领域普通技术人员无需创造性劳动即能联想"
+    ruleRef: "等同原则 — 显而易见性判断"
+    inputHint: "区别特征的技术启示分析"
+    outputSchema:
+      obviousToSkilled: "boolean — 是否无需创造性劳动"
+      timeOfInfringement: "string — 以侵权行为发生日为判断时间点"
+      evidence: "string[] — 支持证据"
+
+conclusionSchema:
+  equivalent: "boolean — 是否构成等同"
+  confidence: "'high' | 'medium' | 'low'"
+  keyRationale: "string — 核心理由"
+
+applicableTo:
+  - infringement

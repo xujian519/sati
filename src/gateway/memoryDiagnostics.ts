@@ -23,14 +23,13 @@ export function isGatewayMemoryDiagnosticsEnabled(
   env: Record<string, string | undefined>,
   configEnabled?: boolean,
 ): boolean {
-  const value = env.PILOTDECK_MEMORY_DIAGNOSTICS;
+  const value = env.SATI_MEMORY_DIAGNOSTICS;
   return configEnabled === true || value === "1" || value === "true";
 }
 
-export function summarizeCanonicalMessages(messages: CanonicalMessage[]): Omit<
-  GatewayMemoryDiagnosticSession,
-  "sessionKey" | "projectKey" | "runId"
-> {
+export function summarizeCanonicalMessages(
+  messages: CanonicalMessage[],
+): Omit<GatewayMemoryDiagnosticSession, "sessionKey" | "projectKey" | "runId"> {
   let estimatedMessageBytes = 0;
   let toolResultReferences = 0;
   let mediaBlocks = 0;
@@ -70,7 +69,7 @@ export function logGatewayMemoryDiagnostic(input: GatewayMemoryDiagnosticInput):
     ...(input.session ? { session: input.session } : {}),
   };
   // Keep this parseable for log collectors while staying invisible unless enabled upstream.
-  console.log(`[pilotdeck:memory] ${JSON.stringify(payload)}`);
+  console.log(`[sati:memory] ${JSON.stringify(payload)}`);
 }
 
 function summarizeBlock(block: CanonicalContentBlock | CanonicalToolResultContentBlock): {
@@ -82,12 +81,22 @@ function summarizeBlock(block: CanonicalContentBlock | CanonicalToolResultConten
   switch (block.type) {
     case "text":
     case "thinking":
-      return { estimatedBytes: Buffer.byteLength(block.text, "utf8"), toolResultReferences: 0, mediaBlocks: 0, mediaBytes: 0 };
+      return {
+        estimatedBytes: Buffer.byteLength(block.text, "utf8"),
+        toolResultReferences: 0,
+        mediaBlocks: 0,
+        mediaBytes: 0,
+      };
     case "image":
     case "pdf":
     case "audio": {
       const bytes = ("bytes" in block ? block.bytes : undefined) ?? Buffer.byteLength(block.data, "utf8");
-      return { estimatedBytes: Buffer.byteLength(block.data, "utf8"), toolResultReferences: 0, mediaBlocks: 1, mediaBytes: bytes };
+      return {
+        estimatedBytes: Buffer.byteLength(block.data, "utf8"),
+        toolResultReferences: 0,
+        mediaBlocks: 1,
+        mediaBytes: bytes,
+      };
     }
     case "tool_call":
       return { estimatedBytes: estimateJsonBytes(block.input), toolResultReferences: 0, mediaBlocks: 0, mediaBytes: 0 };

@@ -1,8 +1,6 @@
 import type { SettingsMenuKey } from "./types";
 
-export function mapInitialTabToMenuKey(
-  tab: string | undefined,
-): SettingsMenuKey {
+export function mapInitialTabToMenuKey(tab: string | undefined): SettingsMenuKey {
   const normalized = String(tab || "");
   const configSections: Record<string, SettingsMenuKey> = {
     models: "modelPool",

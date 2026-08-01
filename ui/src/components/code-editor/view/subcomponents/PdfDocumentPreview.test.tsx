@@ -1,20 +1,20 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import PdfDocumentPreview from './PdfDocumentPreview';
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import PdfDocumentPreview from "./PdfDocumentPreview";
 
 const pdfMocks = vi.hoisted(() => ({
   getDocument: vi.fn(),
 }));
 
-vi.mock('pdfjs-dist', () => ({
+vi.mock("pdfjs-dist", () => ({
   GlobalWorkerOptions: {},
   TextLayer: class {},
   getDocument: pdfMocks.getDocument,
 }));
 
-vi.mock('pdfjs-dist/build/pdf.worker.mjs?url', () => ({
-  default: 'pdf-worker.js',
+vi.mock("pdfjs-dist/build/pdf.worker.mjs?url", () => ({
+  default: "pdf-worker.js",
 }));
 
 class ResizeObserverMock {
@@ -31,10 +31,13 @@ class IntersectionObserverMock {
 
 beforeEach(() => {
   pdfMocks.getDocument.mockReset();
-  vi.stubGlobal('ResizeObserver', ResizeObserverMock);
-  vi.stubGlobal('IntersectionObserver', IntersectionObserverMock);
-  vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
-  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+  vi.stubGlobal("IntersectionObserver", IntersectionObserverMock);
+  vi.stubGlobal(
+    "requestAnimationFrame",
+    vi.fn(() => 1),
+  );
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
   HTMLElement.prototype.scrollTo = vi.fn();
 });
 
@@ -44,10 +47,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('PdfDocumentPreview search', () => {
-  it('does not restore stale results after the query changes during a search', async () => {
+describe("PdfDocumentPreview search", () => {
+  it("does not restore stale results after the query changes during a search", async () => {
     let resolveTextContent!: (value: { items: Array<{ str: string }> }) => void;
-    const pendingTextContent = new Promise<{ items: Array<{ str: string }> }>((resolve) => {
+    const pendingTextContent = new Promise<{ items: Array<{ str: string }> }>(resolve => {
       resolveTextContent = resolve;
     });
     const firstPage = {
@@ -58,9 +61,7 @@ describe('PdfDocumentPreview search', () => {
     };
     const pdfDocument = {
       numPages: 1,
-      getPage: vi.fn()
-        .mockResolvedValueOnce(firstPage)
-        .mockResolvedValueOnce(searchPage),
+      getPage: vi.fn().mockResolvedValueOnce(firstPage).mockResolvedValueOnce(searchPage),
       destroy: vi.fn(),
     };
     pdfMocks.getDocument.mockReturnValue({
@@ -78,27 +79,26 @@ describe('PdfDocumentPreview search', () => {
       />,
     );
 
-    const openSearchButton = await screen.findByRole('button', { name: 'pdfToolbar.search' });
+    const openSearchButton = await screen.findByRole("button", { name: "pdfToolbar.search" });
     await waitFor(() => expect((openSearchButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(openSearchButton);
 
-    const input = screen.getByPlaceholderText('pdfToolbar.searchPlaceholder');
-    fireEvent.change(input, { target: { value: 'old query' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() => expect(screen.getByText('pdfToolbar.searching')).not.toBeNull());
+    const input = screen.getByPlaceholderText("pdfToolbar.searchPlaceholder");
+    fireEvent.change(input, { target: { value: "old query" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(screen.getByText("pdfToolbar.searching")).not.toBeNull());
 
-    fireEvent.change(input, { target: { value: 'new query' } });
-    resolveTextContent({ items: [{ str: 'old query' }] });
+    fireEvent.change(input, { target: { value: "new query" } });
+    resolveTextContent({ items: [{ str: "old query" }] });
 
     await waitFor(() => {
-      expect(screen.queryByText('pdfToolbar.resultOf')).toBeNull();
-      expect(screen.queryByText('pdfToolbar.searching')).toBeNull();
+      expect(screen.queryByText("pdfToolbar.resultOf")).toBeNull();
+      expect(screen.queryByText("pdfToolbar.searching")).toBeNull();
     });
-    expect((screen.getByRole('button', { name: 'pdfToolbar.nextResult' }) as HTMLButtonElement).disabled)
-      .toBe(true);
+    expect((screen.getByRole("button", { name: "pdfToolbar.nextResult" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('clamps the restored page when a refreshed document has fewer pages', async () => {
+  it("clamps the restored page when a refreshed document has fewer pages", async () => {
     const createDocument = (numPages: number) => ({
       numPages,
       getPage: vi.fn(async () => ({
@@ -129,11 +129,11 @@ describe('PdfDocumentPreview search', () => {
       />,
     );
 
-    const pageInput = await screen.findByRole('textbox', { name: 'pdfToolbar.goToPage' });
+    const pageInput = await screen.findByRole("textbox", { name: "pdfToolbar.goToPage" });
     await waitFor(() => expect((pageInput as HTMLInputElement).disabled).toBe(false));
-    fireEvent.change(pageInput, { target: { value: '3' } });
+    fireEvent.change(pageInput, { target: { value: "3" } });
     fireEvent.blur(pageInput);
-    expect((pageInput as HTMLInputElement).value).toBe('3');
+    expect((pageInput as HTMLInputElement).value).toBe("3");
 
     rerender(
       <PdfDocumentPreview
@@ -147,9 +147,13 @@ describe('PdfDocumentPreview search', () => {
 
     await waitFor(() => {
       expect(destroyFirstLoadingTask).toHaveBeenCalledOnce();
-      expect((screen.getByRole('textbox', {
-        name: 'pdfToolbar.goToPage',
-      }) as HTMLInputElement).value).toBe('1');
+      expect(
+        (
+          screen.getByRole("textbox", {
+            name: "pdfToolbar.goToPage",
+          }) as HTMLInputElement
+        ).value,
+      ).toBe("1");
     });
   });
 });

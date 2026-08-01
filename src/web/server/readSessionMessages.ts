@@ -16,6 +16,7 @@
  * `WebMessage` boundaries.
  */
 
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import {
   flattenToolResultBlockText,
   type CanonicalContentBlock,
@@ -23,15 +24,16 @@ import {
   type CanonicalMessage,
   type CanonicalUsage,
 } from "../../model/index.js";
-import { listProjectSessions, readTranscript, findLastCompactBoundaryIndex, type SessionInfo } from "../../session/index.js";
+import {
+  listProjectSessions,
+  readTranscript,
+  findLastCompactBoundaryIndex,
+  type SessionInfo,
+} from "../../session/index.js";
 import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";
-import type {
-  WebReadSessionMessagesInput,
-  WebReadSessionMessagesResult,
-} from "../client/protocol.js";
+import type { WebReadSessionMessagesInput, WebReadSessionMessagesResult } from "../client/protocol.js";
 import type { WebMessage, WebMessageKind, WebMessageRole } from "../client/webMessage.js";
 
 export type ReadWebSessionMessagesOptions = {
@@ -53,28 +55,29 @@ export async function readWebSessionMessages(
   const chatDir = getPilotProjectChatDir(effectiveProjectRoot, options.pilotHome);
   const transcriptPath = resolveTranscriptPath(input, chatDir);
   const isBackgroundTask = isBackgroundTaskInput(input);
-  const sessionInfo = isBackgroundTask ? undefined : await locateSession(input.sessionKey, {
-    ...options,
-    projectRoot: effectiveProjectRoot,
-  });
+  const sessionInfo = isBackgroundTask
+    ? undefined
+    : await locateSession(input.sessionKey, {
+        ...options,
+        projectRoot: effectiveProjectRoot,
+      });
   const { entries } = await readTranscript(transcriptPath);
   const webReplay = extractWebVisibleMessages(entries);
   const entryTimestamps = webReplay.timestamps;
   const entryIds = webReplay.entryIds;
   const incompleteTurnIds = extractIncompleteTurnIds(entries);
 
-  const flattenedPerMessage: WebMessage[][] = webReplay.messages
-    .map((message, index) =>
-      flattenCanonicalMessage(message, {
-        index,
-        sessionKey: input.sessionKey,
-        projectKey: input.projectKey,
-        now: options.now,
-        entryTimestamp: entryTimestamps[index],
-        entryId: entryIds[index],
-        forkUnsupportedContent: webReplay.forkUnsupportedContents[index],
-      }),
-    );
+  const flattenedPerMessage: WebMessage[][] = webReplay.messages.map((message, index) =>
+    flattenCanonicalMessage(message, {
+      index,
+      sessionKey: input.sessionKey,
+      projectKey: input.projectKey,
+      now: options.now,
+      entryTimestamp: entryTimestamps[index],
+      entryId: entryIds[index],
+      forkUnsupportedContent: webReplay.forkUnsupportedContents[index],
+    }),
+  );
 
   const cumulativeWebCounts: number[] = [];
   let cumulative = 0;
@@ -87,16 +90,14 @@ export async function readWebSessionMessages(
 
   for (const boundary of [...webReplay.compactBoundaries].reverse()) {
     const insertPos =
-      boundary.insertAfterMessageIndex >= 0
-        ? (cumulativeWebCounts[boundary.insertAfterMessageIndex] ?? 0)
-        : 0;
+      boundary.insertAfterMessageIndex >= 0 ? (cumulativeWebCounts[boundary.insertAfterMessageIndex] ?? 0) : 0;
     const meta = boundary.metadata ?? {};
     const compactMsg: WebMessage = {
       id: `${input.sessionKey}-compact-${boundary.timestamp}`,
       sessionKey: input.sessionKey,
       projectKey: input.projectKey,
       createdAt: boundary.timestamp,
-      provider: "pilotdeck",
+      provider: "sati",
       role: "system",
       kind: "compact_boundary",
       text: "Context compacted",
@@ -123,10 +124,7 @@ export async function readWebSessionMessages(
 
   return {
     messages: slice,
-    nextCursor:
-      input.limit && offset + slice.length < allMessages.length
-        ? String(offset + slice.length)
-        : undefined,
+    nextCursor: input.limit && offset + slice.length < allMessages.length ? String(offset + slice.length) : undefined,
     total: allMessages.length,
     tokenUsage: tokenUsageFromTranscript(entries, options),
     session: {
@@ -166,11 +164,12 @@ function tokenUsageFromTranscript(
   const cacheReadTokens = positiveNumber(latestTurn.cacheReadTokens) ?? 0;
   const cacheWriteTokens = positiveNumber(latestTurn.cacheWriteTokens) ?? 0;
   const totalTokens = positiveNumber(latestTurn.totalTokens);
-  const used = inputTokens !== undefined
-    ? Math.ceil(inputTokens + cacheReadTokens + cacheWriteTokens)
-    : totalTokens !== undefined
-      ? Math.max(0, Math.ceil(totalTokens - outputTokens))
-      : undefined;
+  const used =
+    inputTokens !== undefined
+      ? Math.ceil(inputTokens + cacheReadTokens + cacheWriteTokens)
+      : totalTokens !== undefined
+        ? Math.max(0, Math.ceil(totalTokens - outputTokens))
+        : undefined;
   if (used === undefined || used <= 0) {
     return undefined;
   }
@@ -238,11 +237,13 @@ function latestTurnUsage(entries: AgentTranscriptEntry[]): CanonicalUsage | unde
 
 function hasPositiveUsage(usage: CanonicalUsage | undefined): boolean {
   if (!usage) return false;
-  return positiveNumber(usage.inputTokens) !== undefined ||
+  return (
+    positiveNumber(usage.inputTokens) !== undefined ||
     positiveNumber(usage.outputTokens) !== undefined ||
     positiveNumber(usage.cacheReadTokens) !== undefined ||
     positiveNumber(usage.cacheWriteTokens) !== undefined ||
-    positiveNumber(usage.totalTokens) !== undefined;
+    positiveNumber(usage.totalTokens) !== undefined
+  );
 }
 
 function positiveNumber(value: unknown): number | undefined {
@@ -286,16 +287,12 @@ export async function readSubagentWebMessages(
     return { messages: [], total: 0 };
   }
 
-  const sidechainPath = resolveRelativeTranscriptPath(
-    sidechainRelative,
-    dirname(parentTranscriptPath),
-    chatDir,
-  );
+  const sidechainPath = resolveRelativeTranscriptPath(sidechainRelative, dirname(parentTranscriptPath), chatDir);
   const { entries } = await readTranscript(sidechainPath);
   const webReplay = extractSubagentExecutionMessages(entries);
 
   const flattenedPerMessage: WebMessage[][] = webReplay.messages
-    .filter((message) => !message.metadata?.synthetic)
+    .filter(message => !message.metadata?.synthetic)
     .map((message, index) =>
       flattenCanonicalMessage(message, {
         index,
@@ -316,16 +313,14 @@ export async function readSubagentWebMessages(
 
   for (const boundary of [...webReplay.compactBoundaries].reverse()) {
     const insertPos =
-      boundary.insertAfterMessageIndex >= 0
-        ? (cumulativeWebCounts[boundary.insertAfterMessageIndex] ?? 0)
-        : 0;
+      boundary.insertAfterMessageIndex >= 0 ? (cumulativeWebCounts[boundary.insertAfterMessageIndex] ?? 0) : 0;
     const meta = boundary.metadata ?? {};
     const compactMsg: WebMessage = {
       id: `${input.sessionKey}::sub::${input.subagentId}-compact-${boundary.timestamp}`,
       sessionKey: `${input.sessionKey}::sub::${input.subagentId}`,
       projectKey: input.projectKey,
       createdAt: boundary.timestamp,
-      provider: "pilotdeck",
+      provider: "sati",
       role: "system",
       kind: "compact_boundary",
       text: "Context compacted",
@@ -342,9 +337,11 @@ function isBackgroundTaskInput(input: {
   sessionKind?: string;
   relativeTranscriptPath?: string;
 }): input is { sessionKind: "background_task"; relativeTranscriptPath: string } {
-  return input.sessionKind === "background_task" &&
+  return (
+    input.sessionKind === "background_task" &&
     typeof input.relativeTranscriptPath === "string" &&
-    input.relativeTranscriptPath.length > 0;
+    input.relativeTranscriptPath.length > 0
+  );
 }
 
 function resolveTranscriptPath(
@@ -361,11 +358,7 @@ function resolveTranscriptPath(
   return resolve(chatDir, `${sanitizeSessionIdForPath(input.sessionKey)}.jsonl`);
 }
 
-function resolveRelativeTranscriptPath(
-  path: string,
-  baseDir: string,
-  allowedRoot: string,
-): string {
+function resolveRelativeTranscriptPath(path: string, baseDir: string, allowedRoot: string): string {
   if (!path || isAbsolute(path)) {
     throw new Error("relativeTranscriptPath must be a relative path.");
   }
@@ -392,7 +385,7 @@ function createIncompleteTurnStatusMessage(
     sessionKey: input.sessionKey,
     projectKey: input.projectKey,
     createdAt: stamp,
-    provider: "pilotdeck",
+    provider: "sati",
     role: "system",
     kind: "status",
     text: "上次运行未正常结束或已中断，已恢复当时产生的工具调用和输出。",
@@ -402,9 +395,7 @@ function createIncompleteTurnStatusMessage(
 }
 
 function extractIncompleteTurnIds(entries: AgentTranscriptEntry[]): string[] {
-  const completedTurnIds = new Set(
-    entries.filter((entry) => entry.type === "turn_result").map((entry) => entry.turnId),
-  );
+  const completedTurnIds = new Set(entries.filter(entry => entry.type === "turn_result").map(entry => entry.turnId));
   const incompleteTurnIds = new Set<string>();
   for (const entry of entries) {
     if (
@@ -431,9 +422,7 @@ async function locateSession(
   // the incoming sessionKey may still be the raw form (e.g. tui:project=/foo:default).
   // Compare against the sanitized form so locating works for both shapes.
   const safeKey = sanitizeSessionIdForPath(sessionKey);
-  return sessions.find(
-    (session) => session.sessionId === sessionKey || session.sessionId === safeKey,
-  );
+  return sessions.find(session => session.sessionId === sessionKey || session.sessionId === safeKey);
 }
 
 function parseCursor(cursor?: string): number {
@@ -468,10 +457,7 @@ type ProjectionContext = {
  * UI semantics want the picture rendered alongside the tool result on the
  * assistant/tool side.
  */
-export function flattenCanonicalMessage(
-  message: CanonicalMessage,
-  context: ProjectionContext,
-): WebMessage[] {
+export function flattenCanonicalMessage(message: CanonicalMessage, context: ProjectionContext): WebMessage[] {
   const stamp = context.entryTimestamp ?? (context.now ?? (() => new Date()))().toISOString();
   const out: WebMessage[] = [];
   const role: WebMessageRole = message.role === "user" ? "user" : "assistant";
@@ -486,7 +472,7 @@ export function flattenCanonicalMessage(
       sessionKey: context.sessionKey,
       projectKey: context.projectKey,
       createdAt: stamp,
-      provider: "pilotdeck",
+      provider: "sati",
       role,
       kind: "text",
       text: textBuffer,
@@ -516,13 +502,22 @@ export function flattenCanonicalMessage(
       lastToolResultMessage.images = [...existing, toWebMessageImage(block)];
       continue;
     }
-    flushBlock(block, out, context, stamp, role, () => {
-      flushText();
-    }, (chunk) => {
-      textBuffer += chunk;
-    }, (image) => {
-      pendingImages.push(toWebMessageImage(image));
-    });
+    flushBlock(
+      block,
+      out,
+      context,
+      stamp,
+      role,
+      () => {
+        flushText();
+      },
+      chunk => {
+        textBuffer += chunk;
+      },
+      image => {
+        pendingImages.push(toWebMessageImage(image));
+      },
+    );
     if (block.type === "tool_result") {
       lastToolResultMessage = out[out.length - 1];
     }
@@ -552,7 +547,7 @@ function flushBlock(
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "assistant",
         kind: "thinking",
         text: block.text,
@@ -566,7 +561,7 @@ function flushBlock(
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "tool",
         kind: "tool_use",
         toolCallId: block.id,
@@ -593,7 +588,7 @@ function flushBlock(
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "tool",
         kind: "tool_result",
         toolCallId: block.toolCallId,
@@ -614,7 +609,7 @@ function flushBlock(
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "tool",
         kind: "tool_result",
         toolCallId: block.toolCallId,
@@ -638,7 +633,7 @@ function flushBlock(
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role: "tool",
         kind: "tool_result",
         toolCallId: block.toolCallId,
@@ -668,7 +663,7 @@ function flushBlock(
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role,
         kind: "status",
         text: `[${block.type} attachment]`,
@@ -685,7 +680,7 @@ function flushBlock(
         sessionKey: context.sessionKey,
         projectKey: context.projectKey,
         createdAt: stamp,
-        provider: "pilotdeck",
+        provider: "sati",
         role,
         kind,
         text: `[${block.type} attachment]`,
@@ -737,8 +732,8 @@ function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
     switch (entry.type) {
       case "accepted_input":
         if (!beforeBoundary) {
-          const entryForkUnsupported = entry.messages.some((message) =>
-            message.content.some((block) => block.type !== "text"),
+          const entryForkUnsupported = entry.messages.some(message =>
+            message.content.some(block => block.type !== "text"),
           );
           for (const message of entry.messages) {
             if (message.metadata?.synthetic) {
@@ -819,12 +814,7 @@ function extractSubagentExecutionMessages(entries: AgentTranscriptEntry[]): {
         }
         break;
       case "control_boundary": {
-        if (
-          !beforeBoundary &&
-          sawExecutionMessage &&
-          entry.boundary &&
-          entry.boundary.kind === "compact"
-        ) {
+        if (!beforeBoundary && sawExecutionMessage && entry.boundary && entry.boundary.kind === "compact") {
           const meta: Record<string, unknown> = {};
           if (entry.boundary.subtype === "compact_boundary" && "compactMetadata" in entry.boundary) {
             const cm = entry.boundary.compactMetadata as Record<string, unknown>;
@@ -857,10 +847,7 @@ function cloneMessage(message: CanonicalMessage): CanonicalMessage {
  * (agent/Task) WebMessages by matching order within entries, then stamp
  * `subagentId` onto the WebMessage so the frontend can link to the sidechain.
  */
-function attachSubagentIds(
-  entries: AgentTranscriptEntry[],
-  allMessages: WebMessage[],
-): void {
+function attachSubagentIds(entries: AgentTranscriptEntry[], allMessages: WebMessage[]): void {
   const lastBoundaryIndex = findLastCompactBoundaryIndex(entries);
   const subagentQueue: string[] = [];
   for (let index = 0; index < entries.length; index += 1) {
@@ -902,7 +889,7 @@ function injectFileArtifactMessages(
       sessionKey,
       projectKey,
       createdAt: entry.createdAt,
-      provider: "pilotdeck",
+      provider: "sati",
       role: "assistant",
       kind: "file_artifacts",
       artifacts: entry.artifacts,
@@ -939,27 +926,23 @@ function injectErrorTurnMessages(
 ): void {
   const visibleFailureStatusTurnIds = new Set(
     entries
-      .filter((entry) =>
-        entry.type === "agent_status_message" &&
-        entry.kind === "error" &&
-        entry.detail?.visible !== false
+      .filter(
+        entry => entry.type === "agent_status_message" && entry.kind === "error" && entry.detail?.visible !== false,
       )
-      .map((entry) => entry.turnId),
+      .map(entry => entry.turnId),
   );
   const errorMessages: WebMessage[] = [];
   for (const entry of entries) {
     if (entry.type !== "turn_result" || entry.result.type !== "error") continue;
     if (visibleFailureStatusTurnIds.has(entry.turnId)) continue;
-    const errorTexts = entry.result.errors?.map((e) => e.message).filter(Boolean) ?? [];
-    const text = errorTexts.length > 0
-      ? errorTexts.join("\n")
-      : `Turn failed: ${entry.result.stopReason}`;
+    const errorTexts = entry.result.errors?.map(e => e.message).filter(Boolean) ?? [];
+    const text = errorTexts.length > 0 ? errorTexts.join("\n") : `Turn failed: ${entry.result.stopReason}`;
     errorMessages.push({
       id: `${sessionKey}-turn-error-${entry.turnId}`,
       sessionKey,
       projectKey,
       createdAt: entry.createdAt,
-      provider: "pilotdeck",
+      provider: "sati",
       role: "error",
       kind: "error",
       text,
@@ -996,7 +979,7 @@ function injectAgentStatusMessages(
       sessionKey,
       projectKey,
       createdAt: entry.createdAt,
-      provider: "pilotdeck",
+      provider: "sati",
       role: entry.kind === "error" ? "error" : "system",
       kind: entry.kind,
       text: entry.text,
@@ -1022,9 +1005,7 @@ function injectAgentStatusMessages(
 }
 
 function isI18nDescriptor(value: unknown): value is { key: string; params?: Record<string, unknown> } {
-  return typeof value === "object"
-    && value !== null
-    && typeof (value as { key?: unknown }).key === "string";
+  return typeof value === "object" && value !== null && typeof (value as { key?: unknown }).key === "string";
 }
 
 function readToolResultErrorCode(raw: unknown): string | undefined {
@@ -1058,9 +1039,7 @@ function readSearchToolData(raw: unknown): Record<string, unknown> | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const record = raw as { toolName?: unknown; data?: unknown };
   if (!isSearchToolName(record.toolName)) return undefined;
-  return record.data && typeof record.data === "object"
-    ? record.data as Record<string, unknown>
-    : undefined;
+  return record.data && typeof record.data === "object" ? (record.data as Record<string, unknown>) : undefined;
 }
 
 function isSearchToolName(name: unknown): boolean {

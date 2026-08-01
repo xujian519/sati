@@ -1,52 +1,44 @@
-export const ADD_WORKSPACE_FILE_MENTION_EVENT = 'pilotdeck:add-workspace-file-mention';
+export const ADD_WORKSPACE_FILE_MENTION_EVENT = "sati:add-workspace-file-mention";
 
 export type WorkspaceFileMentionRequest = {
   projectName: string;
   relativePath: string;
 };
 
-export function isWorkspaceFileMentionRequest(
-  value: unknown,
-): value is WorkspaceFileMentionRequest {
-  if (!value || typeof value !== 'object') return false;
+export function isWorkspaceFileMentionRequest(value: unknown): value is WorkspaceFileMentionRequest {
+  if (!value || typeof value !== "object") return false;
   const request = value as Partial<WorkspaceFileMentionRequest>;
   return Boolean(
-    typeof request.projectName === 'string'
-      && request.projectName.trim()
-      && typeof request.relativePath === 'string'
-      && request.relativePath.trim(),
+    typeof request.projectName === "string" &&
+      request.projectName.trim() &&
+      typeof request.relativePath === "string" &&
+      request.relativePath.trim(),
   );
 }
 
-const normalizeSlashes = (value: string) => value.replace(/\\/g, '/');
+const normalizeSlashes = (value: string) => value.replace(/\\/g, "/");
 
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export function hasWorkspaceFileMention(input: string, relativePath: string): boolean {
   if (!input || !relativePath) return false;
   return new RegExp(`(?:^|\\s)${escapeRegExp(relativePath)}(?=$|\\s)`).test(input);
 }
 
-const isAbsolutePath = (value: string) =>
-  value.startsWith('/') || /^[A-Za-z]:\//.test(value) || value.startsWith('//');
+const isAbsolutePath = (value: string) => value.startsWith("/") || /^[A-Za-z]:\//.test(value) || value.startsWith("//");
 
 const trimTrailingSlashes = (value: string) => {
-  if (value === '/' || /^[A-Za-z]:\/$/.test(value)) return value;
-  return value.replace(/\/+$/, '');
+  if (value === "/" || /^[A-Za-z]:\/$/.test(value)) return value;
+  return value.replace(/\/+$/, "");
 };
 
 const normalizeRelativePath = (value: string): string | null => {
-  const segments = value
-    .split('/')
-    .filter((segment) => segment && segment !== '.');
-  if (segments.length === 0 || segments.includes('..')) return null;
-  return segments.join('/');
+  const segments = value.split("/").filter(segment => segment && segment !== ".");
+  if (segments.length === 0 || segments.includes("..")) return null;
+  return segments.join("/");
 };
 
-export function getWorkspaceRelativePath(
-  filePath: string,
-  workspaceRoot: string,
-): string | null {
+export function getWorkspaceRelativePath(filePath: string, workspaceRoot: string): string | null {
   const normalizedFilePath = trimTrailingSlashes(normalizeSlashes(filePath));
   const normalizedRoot = trimTrailingSlashes(normalizeSlashes(workspaceRoot));
 
@@ -60,7 +52,7 @@ export function getWorkspaceRelativePath(
   const comparableFilePath = caseInsensitive ? normalizedFilePath.toLowerCase() : normalizedFilePath;
   const comparableRoot = caseInsensitive ? normalizedRoot.toLowerCase() : normalizedRoot;
 
-  const rootPrefix = comparableRoot.endsWith('/') ? comparableRoot : `${comparableRoot}/`;
+  const rootPrefix = comparableRoot.endsWith("/") ? comparableRoot : `${comparableRoot}/`;
   if (!comparableFilePath.startsWith(rootPrefix)) return null;
 
   const relativePath = normalizedFilePath.slice(rootPrefix.length);
@@ -89,8 +81,8 @@ export function insertWorkspaceFileMention(
   const cursorPosition = Math.max(0, Math.min(requestedCursorPosition, input.length));
   const before = input.slice(0, cursorPosition);
   const after = input.slice(cursorPosition);
-  const leadingSpace = before && !/\s$/.test(before) ? ' ' : '';
-  const trailingSpace = after && /^\s/.test(after) ? '' : ' ';
+  const leadingSpace = before && !/\s$/.test(before) ? " " : "";
+  const trailingSpace = after && /^\s/.test(after) ? "" : " ";
   const insertedText = `${leadingSpace}${relativePath}${trailingSpace}`;
 
   return {

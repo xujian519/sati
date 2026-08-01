@@ -1,14 +1,10 @@
-import type {
-  Project,
-  ProjectSession,
-  SessionProvider,
-} from '../../../types/app';
-import type { ContentReference } from '../../../types/contentReference';
+import type { Project, ProjectSession, SessionProvider } from "../../../types/app";
+import type { ContentReference } from "../../../types/contentReference";
 
 export type Provider = SessionProvider;
 
-export type PermissionMode = 'default' | 'bypassPermissions' | 'plan';
-export type ChatRunMode = 'agent' | 'plan' | 'ask';
+export type PermissionMode = "default" | "bypassPermissions" | "plan";
+export type ChatRunMode = "agent" | "plan" | "ask";
 
 export interface ChatImage {
   data: string;
@@ -19,14 +15,14 @@ export interface ChatImage {
 }
 
 export interface ChatAttachment {
-  kind?: 'file' | 'document-selection' | 'content-reference';
+  kind?: "file" | "document-selection" | "content-reference";
   name: string;
   path?: string;
   size?: number;
   mimeType?: string;
   fileName?: string;
   filePath?: string;
-  source?: 'pdf' | 'office-pdf';
+  source?: "pdf" | "office-pdf";
   pageNumbers?: number[];
   selectedText?: string;
   surroundingText?: string;
@@ -40,9 +36,9 @@ export interface ChatFileArtifact {
   id: string;
   name: string;
   path: string;
-  operation: 'created' | 'updated';
-  source: 'tool' | 'workspace_diff';
-  status: 'complete' | 'incomplete';
+  operation: "created" | "updated";
+  source: "tool" | "workspace_diff";
+  status: "complete" | "incomplete";
   size: number;
   sha256: string;
   mimeType?: string;
@@ -53,10 +49,10 @@ export interface ToolResult {
   content?: unknown;
   isError?: boolean;
   /**
-   * `PilotDeckToolErrorCode` from the backend (e.g. `permission_denied`,
+   * `SatiToolErrorCode` from the backend (e.g. `permission_denied`,
    * `permission_required`, `tool_execution_failed`, `file_not_found`).
    * Optional because legacy / replayed messages may not carry it. Used by
-   * `getPilotDeckPermissionSuggestion` to gate the "Add to Allowed Tools"
+   * `getSatiPermissionSuggestion` to gate the "Add to Allowed Tools"
    * affordance so it only fires for genuine permission failures.
    */
   errorCode?: string;
@@ -148,7 +144,7 @@ export interface CompactProgress {
   level: number;
   stage: string;
   label: string;
-  state: 'started' | 'running' | 'failed' | 'completed';
+  state: "started" | "running" | "failed" | "completed";
   pre_tokens?: number;
   reason?: string;
 }
@@ -169,7 +165,7 @@ export interface RetryProgress {
   model?: string;
 }
 
-export interface PilotDeckWorkStatus {
+export interface SatiWorkStatus {
   text: string;
   tokens: number;
   can_interrupt: boolean;
@@ -177,7 +173,7 @@ export interface PilotDeckWorkStatus {
   retryProgress?: RetryProgress | null;
 }
 
-export interface PilotDeckSettings {
+export interface SatiSettings {
   allowedTools: string[];
   disallowedTools: string[];
   skipPermissions: boolean;
@@ -186,7 +182,7 @@ export interface PilotDeckSettings {
   [key: string]: unknown;
 }
 
-export interface PilotDeckPermissionSuggestion {
+export interface SatiPermissionSuggestion {
   toolName: string;
   entry: string;
   isAllowed: boolean;
@@ -195,7 +191,7 @@ export interface PilotDeckPermissionSuggestion {
 export interface PermissionGrantResult {
   success: boolean;
   alreadyAllowed?: boolean;
-  updatedSettings?: PilotDeckSettings;
+  updatedSettings?: SatiSettings;
   completion?: Promise<PermissionGrantResult>;
 }
 
@@ -246,11 +242,7 @@ export interface ChatInterfaceProps {
   // Optimistic sidebar refresh fired the instant the user submits a
   // message — lets the sidebar reorder / show a placeholder row without
   // waiting on the server's debounced `projects_updated` round-trip.
-  onSessionActivityBump?: (
-    projectName: string,
-    sessionId: string,
-    optimisticTitle?: string,
-  ) => void;
+  onSessionActivityBump?: (projectName: string, sessionId: string, optimisticTitle?: string) => void;
   processingSessions?: Set<string>;
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (targetSessionId: string) => void;

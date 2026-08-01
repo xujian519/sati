@@ -1,23 +1,23 @@
 // @vitest-environment jsdom
-import type { ComponentProps, ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppTab, Project } from '../../../types/app';
-import MainContent from './MainContent';
+import type { ComponentProps, ReactNode } from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AppTab, Project } from "../../../types/app";
+import MainContent from "./MainContent";
 
 const mocks = vi.hoisted(() => ({
   handleFileOpen: vi.fn(),
   onMisroutedFileUrlHandled: vi.fn(),
 }));
 
-vi.mock('../../../contexts/TaskMasterContext', () => ({
+vi.mock("../../../contexts/TaskMasterContext", () => ({
   useTaskMaster: () => ({
-    currentProject: { name: 'pilotdeck' },
+    currentProject: { name: "sati" },
     setCurrentProject: vi.fn(),
   }),
 }));
 
-vi.mock('../../../contexts/TasksSettingsContext', () => ({
+vi.mock("../../../contexts/TasksSettingsContext", () => ({
   useTasksSettings: () => ({
     tasksEnabled: false,
     isTaskMasterInstalled: false,
@@ -25,7 +25,7 @@ vi.mock('../../../contexts/TasksSettingsContext', () => ({
   }),
 }));
 
-vi.mock('../../../hooks/useUiPreferences', () => ({
+vi.mock("../../../hooks/useUiPreferences", () => ({
   useUiPreferences: () => ({
     preferences: {
       autoExpandTools: false,
@@ -38,24 +38,28 @@ vi.mock('../../../hooks/useUiPreferences', () => ({
   }),
 }));
 
-vi.mock('../../code-editor/hooks/useEditorSidebar', () => ({
+vi.mock("../../code-editor/hooks/useEditorSidebar", () => ({
   useEditorSidebar: () => ({
-    editorTabs: [{
-      id: 'editor-tab-0',
-      fileStack: [{
-        name: 'report.pdf',
-        path: '/workspace/PilotDeck/report.pdf',
-        projectName: 'pilotdeck',
-        diffInfo: null,
-      }],
-      dirty: false,
-    }],
-    activeEditorTabId: 'editor-tab-0',
-    activeFilePath: '/workspace/PilotDeck/report.pdf',
+    editorTabs: [
+      {
+        id: "editor-tab-0",
+        fileStack: [
+          {
+            name: "report.pdf",
+            path: "/workspace/Sati/report.pdf",
+            projectName: "sati",
+            diffInfo: null,
+          },
+        ],
+        dirty: false,
+      },
+    ],
+    activeEditorTabId: "editor-tab-0",
+    activeFilePath: "/workspace/Sati/report.pdf",
     editingFile: {
-      name: 'report.pdf',
-      path: '/workspace/PilotDeck/report.pdf',
-      projectName: 'pilotdeck',
+      name: "report.pdf",
+      path: "/workspace/Sati/report.pdf",
+      projectName: "sati",
       diffInfo: null,
     },
     editorWidth: 600,
@@ -75,27 +79,27 @@ vi.mock('../../code-editor/hooks/useEditorSidebar', () => ({
   }),
 }));
 
-vi.mock('../../code-editor/view/EditorSidebar', () => ({
+vi.mock("../../code-editor/view/EditorSidebar", () => ({
   default: () => <div data-testid="editor-sidebar" />,
 }));
 
-vi.mock('../../chat-v2/ChatInterfaceV2', () => ({
+vi.mock("../../chat-v2/ChatInterfaceV2", () => ({
   default: ({ onFileOpen }: { onFileOpen: (filePath: string) => void }) => (
-    <button type="button" onClick={() => onFileOpen('/workspace/PilotDeck/generated.pptx')}>
+    <button type="button" onClick={() => onFileOpen("/workspace/Sati/generated.pptx")}>
       Open workspace file
     </button>
   ),
 }));
 
-vi.mock('../../main-content-v2/FilesV2', () => ({
+vi.mock("../../main-content-v2/FilesV2", () => ({
   default: () => <div data-testid="files-explorer" />,
 }));
 
-vi.mock('../../plugins/view/PluginTabContent', () => ({
+vi.mock("../../plugins/view/PluginTabContent", () => ({
   default: () => null,
 }));
 
-vi.mock('./ErrorBoundary', () => ({
+vi.mock("./ErrorBoundary", () => ({
   default: ({ children }: { children: ReactNode }) => children,
 }));
 
@@ -106,9 +110,9 @@ class ResizeObserverMock {
 }
 
 const project: Project = {
-  name: 'pilotdeck',
-  displayName: 'PilotDeck',
-  fullPath: '/workspace/PilotDeck',
+  name: "sati",
+  displayName: "Sati",
+  fullPath: "/workspace/Sati",
 };
 
 function propsFor(activeTab: AppTab, setActiveTab = vi.fn()) {
@@ -140,7 +144,7 @@ function propsFor(activeTab: AppTab, setActiveTab = vi.fn()) {
 }
 
 beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
   localStorage.clear();
   mocks.handleFileOpen.mockReset();
   mocks.onMisroutedFileUrlHandled.mockReset();
@@ -152,71 +156,69 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('MainContent file workspace routing', () => {
-  it('routes every chat file open into the Files workbench', async () => {
+describe("MainContent file workspace routing", () => {
+  it("routes every chat file open into the Files workbench", async () => {
     const setActiveTab = vi.fn();
-    const { rerender } = render(<MainContent {...propsFor('files', setActiveTab)} />);
+    const { rerender } = render(<MainContent {...propsFor("files", setActiveTab)} />);
 
-    expect(await screen.findByTestId('editor-sidebar')).not.toBeNull();
+    expect(await screen.findByTestId("editor-sidebar")).not.toBeNull();
 
-    rerender(<MainContent {...propsFor('chat', setActiveTab)} />);
-    expect(screen.queryByTestId('editor-sidebar')).toBeNull();
+    rerender(<MainContent {...propsFor("chat", setActiveTab)} />);
+    expect(screen.queryByTestId("editor-sidebar")).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open workspace file' }));
-    expect(mocks.handleFileOpen).toHaveBeenCalledWith(
-      '/workspace/PilotDeck/generated.pptx',
-      null,
-    );
-    expect(setActiveTab).toHaveBeenCalledWith('files');
-    expect(screen.queryByTestId('editor-sidebar')).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace file" }));
+    expect(mocks.handleFileOpen).toHaveBeenCalledWith("/workspace/Sati/generated.pptx", null);
+    expect(setActiveTab).toHaveBeenCalledWith("files");
+    expect(screen.queryByTestId("editor-sidebar")).toBeNull();
   });
 
-  it('routes a file-shaped session URL into Files instead of chat', async () => {
+  it("routes a file-shaped session URL into Files instead of chat", async () => {
     const setActiveTab = vi.fn();
     render(
       <MainContent
-        {...propsFor('chat', setActiveTab)}
-        misroutedFileFromUrl="/workspace/PilotDeck/report.pdf"
+        {...propsFor("chat", setActiveTab)}
+        misroutedFileFromUrl="/workspace/Sati/report.pdf"
         onMisroutedFileUrlHandled={mocks.onMisroutedFileUrlHandled}
       />,
     );
 
     await waitFor(() => {
-      expect(mocks.handleFileOpen).toHaveBeenCalledWith(
-        '/workspace/PilotDeck/report.pdf',
-        null,
-      );
+      expect(mocks.handleFileOpen).toHaveBeenCalledWith("/workspace/Sati/report.pdf", null);
     });
-    expect(setActiveTab).toHaveBeenCalledWith('files');
-    expect(setActiveTab).not.toHaveBeenCalledWith('chat');
+    expect(setActiveTab).toHaveBeenCalledWith("files");
+    expect(setActiveTab).not.toHaveBeenCalledWith("chat");
     expect(mocks.onMisroutedFileUrlHandled).toHaveBeenCalledOnce();
   });
 
-  it('keeps the agent panel collapsible and persists keyboard resizing', async () => {
-    render(<MainContent {...propsFor('files')} />);
+  it("keeps the agent panel collapsible and persists keyboard resizing", async () => {
+    render(<MainContent {...propsFor("files")} />);
 
-    const conversationTrigger = await screen.findByTestId('files-conversation-switcher-trigger');
-    const labels = conversationTrigger.querySelectorAll('span.block');
-    expect(labels[0]?.textContent).toBe('filesWorkbench.assistant');
-    expect(labels[1]?.textContent).toBe('filesWorkbench.conversations.newConversation');
+    const conversationTrigger = await screen.findByTestId("files-conversation-switcher-trigger");
+    const labels = conversationTrigger.querySelectorAll("span.block");
+    expect(labels[0]?.textContent).toBe("filesWorkbench.assistant");
+    expect(labels[1]?.textContent).toBe("filesWorkbench.conversations.newConversation");
 
-    const resizeHandle = screen.getByRole('separator', {
-      name: 'filesWorkbench.resizeAssistant',
+    const resizeHandle = screen.getByRole("separator", {
+      name: "filesWorkbench.resizeAssistant",
     });
-    expect(resizeHandle.getAttribute('aria-valuenow')).toBe('380');
+    expect(resizeHandle.getAttribute("aria-valuenow")).toBe("380");
 
-    fireEvent.keyDown(resizeHandle, { key: 'ArrowLeft' });
-    expect(resizeHandle.getAttribute('aria-valuenow')).toBe('396');
+    fireEvent.keyDown(resizeHandle, { key: "ArrowLeft" });
+    expect(resizeHandle.getAttribute("aria-valuenow")).toBe("396");
     await waitFor(() => {
-      expect(localStorage.getItem('pilotdeck:files-assistant-width')).toBe('396');
+      expect(localStorage.getItem("sati:files-assistant-width")).toBe("396");
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'filesWorkbench.collapseAssistant' }));
-    expect(screen.queryByRole('separator', { name: 'filesWorkbench.resizeAssistant' })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "filesWorkbench.collapseAssistant" }));
+    expect(screen.queryByRole("separator", { name: "filesWorkbench.resizeAssistant" })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'filesWorkbench.openAssistant' }));
-    expect(screen.getByRole('separator', {
-      name: 'filesWorkbench.resizeAssistant',
-    }).getAttribute('aria-valuenow')).toBe('396');
+    fireEvent.click(screen.getByRole("button", { name: "filesWorkbench.openAssistant" }));
+    expect(
+      screen
+        .getByRole("separator", {
+          name: "filesWorkbench.resizeAssistant",
+        })
+        .getAttribute("aria-valuenow"),
+    ).toBe("396");
   });
 });

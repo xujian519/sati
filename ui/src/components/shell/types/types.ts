@@ -1,12 +1,12 @@
-import type { MutableRefObject, RefObject } from 'react';
-import type { FitAddon } from '@xterm/addon-fit';
-import type { Terminal } from '@xterm/xterm';
-import type { Project, ProjectSession } from '../../../types/app';
+import type { MutableRefObject, RefObject } from "react";
+import type { FitAddon } from "@xterm/addon-fit";
+import type { Terminal } from "@xterm/xterm";
+import type { Project, ProjectSession } from "../../../types/app";
 
-export type AuthCopyStatus = 'idle' | 'copied' | 'failed';
+export type AuthCopyStatus = "idle" | "copied" | "failed";
 
 export type ShellInitMessage = {
-  type: 'init';
+  type: "init";
   projectPath: string;
   sessionId: string | null;
   hasSession: boolean;
@@ -18,22 +18,22 @@ export type ShellInitMessage = {
 };
 
 export type ShellResizeMessage = {
-  type: 'resize';
+  type: "resize";
   cols: number;
   rows: number;
 };
 
 export type ShellInputMessage = {
-  type: 'input';
+  type: "input";
   data: string;
 };
 
 export type ShellOutgoingMessage = ShellInitMessage | ShellResizeMessage | ShellInputMessage;
 
 export type ShellIncomingMessage =
-  | { type: 'output'; data: string }
-  | { type: 'auth_url'; url?: string }
-  | { type: 'url_open'; url?: string }
+  | { type: "output"; data: string }
+  | { type: "auth_url"; url?: string }
+  | { type: "url_open"; url?: string }
   | { type: string; [key: string]: unknown };
 
 export type UseShellRuntimeOptions = {

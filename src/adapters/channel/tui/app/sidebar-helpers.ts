@@ -27,8 +27,8 @@ export function groupSessionsByProject(sessions: GatewaySessionInfo[]): SessionG
     groups.push({ groupKey: key, label, sessions: list });
   }
   groups.sort((a, b) => {
-    const aTime = Math.max(...a.sessions.map((s) => s.lastModified ?? 0));
-    const bTime = Math.max(...b.sessions.map((s) => s.lastModified ?? 0));
+    const aTime = Math.max(...a.sessions.map(s => s.lastModified ?? 0));
+    const bTime = Math.max(...b.sessions.map(s => s.lastModified ?? 0));
     return bTime - aTime;
   });
   return groups;
@@ -72,27 +72,19 @@ export function groupSessions(sessions: GatewaySessionInfo[], by: "project" | "s
   return by === "project" ? groupSessionsByProject(sessions) : groupSessionsByStatus(sessions);
 }
 
-export function computeSmartCollapse(
-  groups: SessionGroup[],
-  activeSessionKey: string,
-): Set<string> {
+export function computeSmartCollapse(groups: SessionGroup[], activeSessionKey: string): Set<string> {
   if (groups.length <= 1) return new Set();
   const collapsed = new Set<string>();
   for (const g of groups) {
-    const hasActive = g.sessions.some(
-      (s) => (s.sessionKey ?? s.sessionId) === activeSessionKey,
-    );
+    const hasActive = g.sessions.some(s => (s.sessionKey ?? s.sessionId) === activeSessionKey);
     if (!hasActive) collapsed.add(g.groupKey);
   }
   return collapsed;
 }
 
-export function flattenSidebarRows(
-  groups: SessionGroup[],
-  collapsed: Set<string>,
-): SidebarRow[] {
+export function flattenSidebarRows(groups: SessionGroup[], collapsed: Set<string>): SidebarRow[] {
   if (groups.length === 1) {
-    return groups[0]!.sessions.map((s) => ({
+    return groups[0]!.sessions.map(s => ({
       kind: "session" as const,
       session: s,
       groupKey: groups[0]!.groupKey,

@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
-import type { Components } from 'react-markdown';
-import ReactMarkdown from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import { resolveMarkdownFileHref } from '../../../../chat/utils/resolveMarkdownFileHref';
-import MarkdownCodeBlock from './MarkdownCodeBlock';
+import { useMemo } from "react";
+import type { Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import { resolveMarkdownFileHref } from "../../../../chat/utils/resolveMarkdownFileHref";
+import MarkdownCodeBlock from "./MarkdownCodeBlock";
 
 type MarkdownPreviewProps = {
   content: string;
@@ -13,12 +13,9 @@ type MarkdownPreviewProps = {
   onFileOpen?: (filePath: string) => void;
 };
 
-const linkClassName = 'text-blue-600 hover:underline dark:text-blue-400';
+const linkClassName = "text-blue-600 hover:underline dark:text-blue-400";
 
-function createMarkdownPreviewComponents(
-  onFileOpen?: (filePath: string) => void,
-  baseFilePath?: string,
-): Components {
+function createMarkdownPreviewComponents(onFileOpen?: (filePath: string) => void, baseFilePath?: string): Components {
   return {
     code: MarkdownCodeBlock,
     blockquote: ({ children }) => (
@@ -33,7 +30,7 @@ function createMarkdownPreviewComponents(
           <a
             href={href}
             className={`${linkClassName} cursor-pointer`}
-            onClick={(event) => {
+            onClick={event => {
               event.preventDefault();
               onFileOpen(filePath);
             }}
@@ -49,7 +46,7 @@ function createMarkdownPreviewComponents(
         <a
           href={href}
           className={linkClassName}
-          {...(isExternal ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+          {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
           {...props}
         >
           {children}
@@ -63,7 +60,9 @@ function createMarkdownPreviewComponents(
     ),
     thead: ({ children }) => <thead className="bg-gray-50 dark:bg-gray-800">{children}</thead>,
     th: ({ children }) => (
-      <th className="border border-gray-200 px-3 py-2 text-left text-sm font-semibold dark:border-gray-700">{children}</th>
+      <th className="border border-gray-200 px-3 py-2 text-left text-sm font-semibold dark:border-gray-700">
+        {children}
+      </th>
     ),
     td: ({ children }) => (
       <td className="border border-gray-200 px-3 py-2 align-top text-sm dark:border-gray-700">{children}</td>
@@ -80,11 +79,7 @@ export default function MarkdownPreview({ content, baseFilePath, onFileOpen }: M
   );
 
   return (
-    <ReactMarkdown
-      remarkPlugins={remarkPlugins}
-      rehypePlugins={rehypePlugins}
-      components={components}
-    >
+    <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
       {content}
     </ReactMarkdown>
   );

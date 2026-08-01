@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Shield } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
+import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import {
-  PILOTDECK_SETTINGS_KEY,
-  fetchPilotDeckPermissionSettings,
-  getPilotDeckSettings,
+  SATI_SETTINGS_KEY,
+  fetchSatiPermissionSettings,
+  getSatiSettings,
   safeLocalStorage,
 } from "../../../chat/utils/chatStorage";
-import type { PilotDeckSettings } from "../../../chat/types/types";
+import type { SatiSettings } from "../../../chat/types/types";
 import { ConfigSaveError, PageSectionHeader } from "../../shared/view";
 import type { StatusBanner } from "./types";
 import { QUICK_ADD_TOOLS, QUICK_BLOCK_TOOLS } from "./utils/constants";
@@ -32,7 +32,7 @@ type PrivacySectionsProps = {
 
 export default function PrivacySections({ title }: PrivacySectionsProps) {
   const { t } = useTranslation("settings");
-  const { raw, setRaw, save, loading, error } = usePilotDeckConfig();
+  const { raw, setRaw, save, loading, error } = useSatiConfig();
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
   const [disallowedTools, setDisallowedTools] = useState<string[]>([]);
   const [skipPermissions, setSkipPermissions] = useState(false);
@@ -43,7 +43,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
   const telemetryEnabled = useMemo(() => readTelemetryEnabled(raw), [raw]);
 
   const reload = useCallback(() => {
-    const settings = getPilotDeckSettings();
+    const settings = getSatiSettings();
     setAllowedTools(settings.allowedTools);
     setDisallowedTools(settings.disallowedTools);
     setSkipPermissions(settings.skipPermissions);
@@ -51,26 +51,26 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
 
   useEffect(() => {
     reload();
-    fetchPilotDeckPermissionSettings()
-      .then((settings) => {
-        safeLocalStorage.setItem(PILOTDECK_SETTINGS_KEY, JSON.stringify(settings));
+    fetchSatiPermissionSettings()
+      .then(settings => {
+        safeLocalStorage.setItem(SATI_SETTINGS_KEY, JSON.stringify(settings));
         setAllowedTools(settings.allowedTools);
         setDisallowedTools(settings.disallowedTools);
         setSkipPermissions(settings.skipPermissions);
       })
-      .catch((error) => {
+      .catch(error => {
         console.error("Failed to load permission settings from backend:", error);
       });
 
     const onStorage = (event: StorageEvent) => {
-      if (event.key === PILOTDECK_SETTINGS_KEY) reload();
+      if (event.key === SATI_SETTINGS_KEY) reload();
     };
     const onCustom = () => reload();
     window.addEventListener("storage", onStorage);
-    window.addEventListener("pilotdeck-settings-changed", onCustom);
+    window.addEventListener("sati-settings-changed", onCustom);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("pilotdeck-settings-changed", onCustom);
+      window.removeEventListener("sati-settings-changed", onCustom);
     };
   }, [reload]);
 
@@ -127,7 +127,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
     try {
       const payload = buildExportPayload();
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJson(`pilotdeck-permissions-${stamp}.json`, payload);
+      downloadJson(`sati-permissions-${stamp}.json`, payload);
       setBanner({
         kind: "success",
         message: t("permissions.exportSuccess", {
@@ -175,8 +175,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
       setBanner({
         kind: "error",
         message: t("permissions.importInvalid", {
-          defaultValue:
-            "Not a valid permissions export. Expected JSON with allowedTools / disallowedTools.",
+          defaultValue: "Not a valid permissions export. Expected JSON with allowedTools / disallowedTools.",
         }),
       });
       return;
@@ -185,23 +184,20 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
     const summary = t("permissions.importConfirmBody", {
       allowed: parsed.allowedTools.length,
       blocked: parsed.disallowedTools.length,
-      defaultValue:
-        "Merge {{allowed}} allowed and {{blocked}} blocked tools into your existing permissions?",
+      defaultValue: "Merge {{allowed}} allowed and {{blocked}} blocked tools into your existing permissions?",
     });
     if (!window.confirm(summary)) {
       setBanner(null);
       return;
     }
 
-    const current = getPilotDeckSettings();
+    const current = getSatiSettings();
     const nextAllowed = mergeUnique(current.allowedTools, parsed.allowedTools);
     const nextBlocked = mergeUnique(current.disallowedTools, parsed.disallowedTools);
-    const updates: Partial<PilotDeckSettings> = {
+    const updates: Partial<SatiSettings> = {
       allowedTools: nextAllowed,
       disallowedTools: nextBlocked,
-      ...(parsed.skipPermissions !== undefined
-        ? { skipPermissions: parsed.skipPermissions }
-        : {}),
+      ...(parsed.skipPermissions !== undefined ? { skipPermissions: parsed.skipPermissions } : {}),
     };
     persistPermissionSettings(updates);
 
@@ -218,8 +214,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
       message: t("permissions.importSuccess", {
         addedAllowed,
         addedBlocked,
-        defaultValue:
-          "Imported. Added {{addedAllowed}} allowed and {{addedBlocked}} blocked tools.",
+        defaultValue: "Imported. Added {{addedAllowed}} allowed and {{addedBlocked}} blocked tools.",
       }),
     });
   };
@@ -262,11 +257,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
         icon={AlertTriangle}
       />
 
-      <TelemetrySection
-        enabled={telemetryEnabled}
-        loading={loading}
-        onToggle={handleTelemetryToggle}
-      />
+      <TelemetrySection enabled={telemetryEnabled} loading={loading} onToggle={handleTelemetryToggle} />
     </div>
   );
 }

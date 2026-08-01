@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
-import type { PilotDeckElicitationAnswer, PilotDeckElicitationRequest } from "../elicitation/PilotDeckElicitationChannel.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import type { SatiElicitationAnswer, SatiElicitationRequest } from "../elicitation/SatiElicitationChannel.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type ExitPlanModeInput = {
   plan_file_path: string;
@@ -31,7 +31,7 @@ const ENTER_PLAN_MODE_DESCRIPTION =
 
 const EXIT_PLAN_MODE_DESCRIPTION =
   "Signal that your plan is complete and ready for user review. " +
-  "Pass the plan_file_path for the markdown plan you want to submit from `.pilotdeck/plans`. " +
+  "Pass the plan_file_path for the markdown plan you want to submit from `.sati/plans`. " +
   "Do NOT use ask_user_question to ask about plan approval — that is exactly what this tool does.";
 
 function buildEnterPlanModeResult(planDirectoryPath: string | undefined): string {
@@ -78,11 +78,7 @@ function buildAlreadyInPlanModeResult(planDirectoryPath: string | undefined): st
 
 function buildApprovedPlanResult(plan: string, planFilePath: string | undefined): string {
   const locationSection = planFilePath
-    ? [
-        `Submitted plan file: ${planFilePath}`,
-        "You can refer back to it during implementation if needed.",
-        "",
-      ]
+    ? [`Submitted plan file: ${planFilePath}`, "You can refer back to it during implementation if needed.", ""]
     : [];
   return [
     "User has approved your plan. You can now start coding.",
@@ -97,16 +93,16 @@ function buildApprovedPlanResult(plan: string, planFilePath: string | undefined)
 }
 
 function buildContinuePlanningResult(feedback: string | undefined): string {
-  const feedbackSection = feedback
-    ? `\n\nUser feedback:\n${feedback}`
-    : "\n\nNo additional feedback was provided.";
-  return [
-    "The user wants to continue planning before implementation.",
-    "Stay in plan mode, refine the plan file, and call exit_plan_mode again when the updated plan is ready.",
-  ].join(" ") + feedbackSection;
+  const feedbackSection = feedback ? `\n\nUser feedback:\n${feedback}` : "\n\nNo additional feedback was provided.";
+  return (
+    [
+      "The user wants to continue planning before implementation.",
+      "Stay in plan mode, refine the plan file, and call exit_plan_mode again when the updated plan is ready.",
+    ].join(" ") + feedbackSection
+  );
 }
 
-function getExitPlanFeedback(answer: PilotDeckElicitationAnswer): string | undefined {
+function getExitPlanFeedback(answer: SatiElicitationAnswer): string | undefined {
   if (answer.type !== "answered" || !answer.annotations) {
     return undefined;
   }
@@ -118,13 +114,13 @@ function getExitPlanFeedback(answer: PilotDeckElicitationAnswer): string | undef
   return undefined;
 }
 
-function getExitPlanAction(answer: PilotDeckElicitationAnswer): "continue_planning" | "execute_plan" | undefined {
+function getExitPlanAction(answer: SatiElicitationAnswer): "continue_planning" | "execute_plan" | undefined {
   if (answer.type !== "answered") {
     return undefined;
   }
   for (const value of Object.values(answer.answers)) {
     if (Array.isArray(value)) {
-      const action = value.find((entry) => entry === EXIT_PLAN_MODE_CONTINUE || entry === EXIT_PLAN_MODE_EXECUTE);
+      const action = value.find(entry => entry === EXIT_PLAN_MODE_CONTINUE || entry === EXIT_PLAN_MODE_EXECUTE);
       if (action) return action;
       continue;
     }
@@ -135,7 +131,7 @@ function getExitPlanAction(answer: PilotDeckElicitationAnswer): "continue_planni
   return undefined;
 }
 
-export function createEnterPlanModeTool(): PilotDeckToolDefinition<Record<string, never>> {
+export function createEnterPlanModeTool(): SatiToolDefinition<Record<string, never>> {
   return {
     name: "enter_plan_mode",
     aliases: ["EnterPlanMode"],
@@ -150,7 +146,7 @@ export function createEnterPlanModeTool(): PilotDeckToolDefinition<Record<string
     isConcurrencySafe: () => true,
     execute: async (_input, context) => {
       if (context?.permissionMode === "plan") {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "tool_execution_failed",
           buildAlreadyInPlanModeResult(context?.planDirectory?.path),
         );
@@ -164,7 +160,7 @@ export function createEnterPlanModeTool(): PilotDeckToolDefinition<Record<string
   };
 }
 
-export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeInput, ExitPlanModeOutput> {
+export function createExitPlanModeTool(): SatiToolDefinition<ExitPlanModeInput, ExitPlanModeOutput> {
   return {
     name: "exit_plan_mode",
     aliases: ["ExitPlanMode"],
@@ -177,7 +173,7 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
       properties: {
         plan_file_path: {
           type: "string",
-          description: "Path to the markdown plan file to submit from the current project's `.pilotdeck/plans` directory.",
+          description: "Path to the markdown plan file to submit from the current project's `.sati/plans` directory.",
         },
       },
     },
@@ -186,41 +182,41 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
     requiresUserInteraction: () => true,
     execute: async (input, context) => {
       if (context?.permissionMode !== "plan") {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "tool_execution_failed",
           "exit_plan_mode can only be used while plan mode is active.",
         );
       }
       const channel = context?.elicitation;
       if (!channel) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "unsupported_tool",
           "exit_plan_mode requires a connected user interaction channel.",
         );
       }
       const resolvedPlanFilePath = context?.planDirectory?.resolve(input.plan_file_path);
       if (!resolvedPlanFilePath) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "invalid_tool_input",
-          "plan_file_path must point to a markdown file under the current project's .pilotdeck/plans directory.",
+          "plan_file_path must point to a markdown file under the current project's .sati/plans directory.",
         );
       }
       let plan: string;
       try {
         plan = readFileSync(resolvedPlanFilePath, "utf8").trim();
       } catch {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "invalid_tool_input",
           `Plan file does not exist or could not be read: ${resolvedPlanFilePath}`,
         );
       }
       if (!plan) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "invalid_tool_input",
           "Plan file is empty. Write your plan first before calling exit_plan_mode.",
         );
       }
-      const request: PilotDeckElicitationRequest = {
+      const request: SatiElicitationRequest = {
         toolCallId: context.turnId,
         toolName: "exit_plan_mode",
         previewFormat: "markdown",
@@ -253,10 +249,12 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
 
       if (answer.type === "cancelled" || !action) {
         return {
-          content: [{
-            type: "text",
-            text: "Exit plan mode was cancelled. Stay in plan mode and continue refining the plan file.",
-          }],
+          content: [
+            {
+              type: "text",
+              text: "Exit plan mode was cancelled. Stay in plan mode and continue refining the plan file.",
+            },
+          ],
           data: { plan, action: "cancelled" },
         };
       }
@@ -265,22 +263,26 @@ export function createExitPlanModeTool(): PilotDeckToolDefinition<ExitPlanModeIn
         context.planTodo?.markPlanApproved(plan);
         const titleMatch = plan.match(/^#\s+(.+)$/m);
         const planTitle = titleMatch?.[1];
-        const summaryLines = plan.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
+        const summaryLines = plan.split("\n").filter(l => l.trim() && !l.startsWith("#"));
         const planSummary = summaryLines.slice(0, 2).join("\n").slice(0, 200) || undefined;
         return {
-          content: [{
-            type: "text",
-            text: buildApprovedPlanResult(plan, resolvedPlanFilePath),
-          }],
+          content: [
+            {
+              type: "text",
+              text: buildApprovedPlanResult(plan, resolvedPlanFilePath),
+            },
+          ],
           data: { plan, action, requestedMode: "default", planFilePath: resolvedPlanFilePath, planTitle, planSummary },
         };
       }
 
       return {
-        content: [{
-          type: "text",
-          text: buildContinuePlanningResult(feedback),
-        }],
+        content: [
+          {
+            type: "text",
+            text: buildContinuePlanningResult(feedback),
+          },
+        ],
         data: { plan, action, ...(feedback ? { feedback } : {}) },
       };
     },

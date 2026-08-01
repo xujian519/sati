@@ -42,7 +42,11 @@ export function normalizeModelError(
   const networkCode = classifyNetworkError(error, message);
   const semanticCode = classifySemanticError(message, status, protocol);
   const code: CanonicalModelErrorCode | (string & {}) =
-    networkCode ?? semanticCode ?? readString(source?.code) ?? readString(source?.type) ?? statusCodeToCode(status, message);
+    networkCode ??
+    semanticCode ??
+    readString(source?.code) ??
+    readString(source?.type) ??
+    statusCodeToCode(status, message);
 
   const hint = resolveUserHint(code, message, status, provider);
 
@@ -110,7 +114,13 @@ function classifyNetworkError(error: unknown, message: string): CanonicalModelEr
   if (text.includes("econnreset") || text.includes("socket hang up")) return "connection_reset";
   if (text.includes("econnrefused")) return "connection_refused";
   if (text.includes("certificate") || text.includes("tls") || text.includes("ssl")) return "tls_error";
-  if (text.includes("proxy connect") || text.includes("proxy error") || text.includes("tunnel") || text.includes("econnrefused proxy")) return "proxy_error";
+  if (
+    text.includes("proxy connect") ||
+    text.includes("proxy error") ||
+    text.includes("tunnel") ||
+    text.includes("econnrefused proxy")
+  )
+    return "proxy_error";
   return undefined;
 }
 
@@ -247,15 +257,15 @@ function resolveUserHint(
       };
     case "auth_error":
       return {
-        userHint: `API key rejected${provider ? ` by provider \"${provider}\"` : " by the provider"}. Update the key in Settings → Model Provider or run pilotdeck setup.`,
+        userHint: `API key rejected${provider ? ` by provider \"${provider}\"` : " by the provider"}. Update the key in Settings → Model Provider or run sati setup.`,
         settingsFix: {
           description: "Reconfigure API key via setup.",
-          command: "pilotdeck setup",
+          command: "sati setup",
         },
       };
     case "model_not_found":
       return {
-        userHint: `The requested model does not exist or your account lacks access${provider ? ` on provider \"${provider}\"` : ""}. Select a valid model in Settings → Model Provider or add it under model.providers.<id>.models in pilotdeck.yaml.`,
+        userHint: `The requested model does not exist or your account lacks access${provider ? ` on provider \"${provider}\"` : ""}. Select a valid model in Settings → Model Provider or add it under model.providers.<id>.models in sati.yaml.`,
         settingsFix: {
           description: "Switch to a valid model.",
           configPath: "model.default",
@@ -264,7 +274,8 @@ function resolveUserHint(
     case "context_overflow":
     case "prompt_too_long":
       return {
-        userHint: "Input exceeds the model context window. Run /compact, start a new session with /new, remove large attachments, or switch to a larger-context model in Settings.",
+        userHint:
+          "Input exceeds the model context window. Run /compact, start a new session with /new, remove large attachments, or switch to a larger-context model in Settings.",
       };
     case "image_too_large":
       return {
@@ -273,19 +284,23 @@ function resolveUserHint(
     case "payload_too_large":
     case "request_too_large":
       return {
-        userHint: "Request payload too large. Remove attachments, run /compact, start a new session with /new, or reduce the prompt size before retrying.",
+        userHint:
+          "Request payload too large. Remove attachments, run /compact, start a new session with /new, or reduce the prompt size before retrying.",
       };
     case "rate_limit_error":
       return {
-        userHint: "Rate limited by the provider. Wait for the limit to reset, reduce concurrent requests, or switch provider/model in Settings.",
+        userHint:
+          "Rate limited by the provider. Wait for the limit to reset, reduce concurrent requests, or switch provider/model in Settings.",
       };
     case "overloaded_error":
       return {
-        userHint: "Provider is temporarily overloaded. Retry later, check provider API status, or switch provider/model in Settings if it repeats.",
+        userHint:
+          "Provider is temporarily overloaded. Retry later, check provider API status, or switch provider/model in Settings if it repeats.",
       };
     case "max_output_reached":
       return {
-        userHint: "Model output hit the token limit. Increase max output tokens in Settings → Model Provider or ask the agent to split the answer into smaller parts.",
+        userHint:
+          "Model output hit the token limit. Increase max output tokens in Settings → Model Provider or ask the agent to split the answer into smaller parts.",
       };
     case "timeout":
       return {
@@ -297,7 +312,8 @@ function resolveUserHint(
       };
     case "server_error":
       return {
-        userHint: "Provider returned a server error. Check provider API status/logs, retry later, or switch provider/model in Settings if it repeats.",
+        userHint:
+          "Provider returned a server error. Check provider API status/logs, retry later, or switch provider/model in Settings if it repeats.",
       };
     default:
       return {};

@@ -6,7 +6,7 @@ export {
   type WebSocketLike,
 } from "./GatewayBrowserClient.js";
 export {
-  PILOTDECK_GATEWAY_PROTOCOL_VERSION_WEB,
+  SATI_GATEWAY_PROTOCOL_VERSION_WEB,
   type WebActiveTurnSnapshot,
   type WebActiveTurnSnapshotInput,
   type WebChannelAttachment,

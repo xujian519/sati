@@ -69,10 +69,12 @@ export class TokenStatsCollector {
     this.baselineModel = config?.baselineModel;
 
     if (this.enabled) {
-      const routerDir = config?.filePath
-        ? path.dirname(config.filePath)
-        : path.join(resolvePilotHome(), "router");
-      try { fs.mkdirSync(routerDir, { recursive: true }); } catch { /* ok */ }
+      const routerDir = config?.filePath ? path.dirname(config.filePath) : path.join(resolvePilotHome(), "router");
+      try {
+        fs.mkdirSync(routerDir, { recursive: true });
+      } catch {
+        /* ok */
+      }
 
       this.jsonlPath = path.join(routerDir, "stats.jsonl");
 
@@ -85,7 +87,9 @@ export class TokenStatsCollector {
       // (one per project runtime) safely share the same file via O_APPEND.
       try {
         this.fd = fs.openSync(this.jsonlPath, "a");
-      } catch { /* will fall back to per-write open */ }
+      } catch {
+        /* will fall back to per-write open */
+      }
     } else {
       this.data = createPersistedData();
     }
@@ -100,7 +104,8 @@ export class TokenStatsCollector {
       record.cost = this.calculateCost(record.usage, record.provider, record.model);
     }
 
-    record.baselineCost = this.calculateBaselineCostForRecord(record.usage, record.provider, record.model) ?? record.cost!.total;
+    record.baselineCost =
+      this.calculateBaselineCostForRecord(record.usage, record.provider, record.model) ?? record.cost!.total;
 
     this.recentRecords.push(record);
     if (this.recentRecords.length > 500) {
@@ -170,13 +175,21 @@ export class TokenStatsCollector {
     this.data = createPersistedData();
     this.recentRecords = [];
     if (this.jsonlPath) {
-      try { fs.writeFileSync(this.jsonlPath, "", "utf-8"); } catch { /* ok */ }
+      try {
+        fs.writeFileSync(this.jsonlPath, "", "utf-8");
+      } catch {
+        /* ok */
+      }
     }
   }
 
   dispose(): void {
     if (this.fd !== undefined) {
-      try { fs.closeSync(this.fd); } catch { /* ok */ }
+      try {
+        fs.closeSync(this.fd);
+      } catch {
+        /* ok */
+      }
       this.fd = undefined;
     }
   }
@@ -191,7 +204,9 @@ export class TokenStatsCollector {
       } else if (this.jsonlPath) {
         fs.appendFileSync(this.jsonlPath, line, "utf-8");
       }
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
   }
 
   private rebuildFromJsonl(): PersistedData {
@@ -227,7 +242,9 @@ export class TokenStatsCollector {
         const sess = data.sessions[record.sessionId]!;
         bumpAggregate(sess.aggregate, record);
         sess.requestLog.push(record);
-      } catch { /* skip malformed lines */ }
+      } catch {
+        /* skip malformed lines */
+      }
     }
 
     // Prune after full replay
@@ -295,11 +312,7 @@ export class TokenStatsCollector {
     };
   }
 
-  private calculateBaselineCostForRecord(
-    usage: CanonicalUsage,
-    provider: string,
-    model: string,
-  ): number | undefined {
+  private calculateBaselineCostForRecord(usage: CanonicalUsage, provider: string, model: string): number | undefined {
     if (!this.baselineModel?.model) {
       const cost = this.calculateCost(usage, provider, model);
       return cost.total;
@@ -383,10 +396,7 @@ function isAggregate(val: unknown): val is RouterStatsAggregate {
 function migrateJsonToJsonl(routerDir: string, jsonlPath: string): void {
   if (fs.existsSync(jsonlPath)) return; // already migrated
 
-  const candidates = [
-    path.join(routerDir, "stats.json"),
-    path.join(path.dirname(routerDir), "router-stats.json"),
-  ];
+  const candidates = [path.join(routerDir, "stats.json"), path.join(path.dirname(routerDir), "router-stats.json")];
 
   for (const jsonPath of candidates) {
     try {
@@ -413,8 +423,14 @@ function migrateJsonToJsonl(routerDir: string, jsonlPath: string): void {
         fs.writeFileSync(jsonlPath, lines.join("\n") + "\n", "utf-8");
       }
       // Rename old file so it won't be read again
-      try { fs.renameSync(jsonPath, jsonPath + ".bak"); } catch { /* ok */ }
+      try {
+        fs.renameSync(jsonPath, jsonPath + ".bak");
+      } catch {
+        /* ok */
+      }
       return;
-    } catch { /* skip this candidate */ }
+    } catch {
+      /* skip this candidate */
+    }
   }
 }

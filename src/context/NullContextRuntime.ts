@@ -1,5 +1,5 @@
-import type { AgentContextRuntime, AgentContextPrepareInput, AgentPreparedContext } from "./ContextRuntime.js";
 import type { CanonicalMessage } from "../model/index.js";
+import type { AgentContextRuntime, AgentContextPrepareInput, AgentPreparedContext } from "./ContextRuntime.js";
 
 export class NullContextRuntime implements AgentContextRuntime {
   constructor(private readonly options: { maxMessages?: number } = {}) {}
@@ -57,7 +57,7 @@ function isToolResultOnly(message: CanonicalMessage): boolean {
     message.role === "user" &&
     message.content.length > 0 &&
     message.content.every(
-      (block) =>
+      block =>
         block.type === "tool_result" ||
         block.type === "tool_result_reference" ||
         (block.type === "media_reference" && typeof block.toolCallId === "string" && block.toolCallId.length > 0),

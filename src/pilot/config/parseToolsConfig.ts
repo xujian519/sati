@@ -9,7 +9,7 @@ import type {
 } from "./types.js";
 
 /**
- * Parse the optional `tools` section of `pilotdeck.yaml`.
+ * Parse the optional `tools` section of `sati.yaml`.
  *
  *   tools:
  *     webSearch:
@@ -60,10 +60,7 @@ export function parseToolsConfig(
   return { webSearch };
 }
 
-function parseWebSearch(
-  raw: unknown,
-  diagnostics: PilotConfigDiagnostic[],
-): PilotWebSearchConfig | undefined {
+function parseWebSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): PilotWebSearchConfig | undefined {
   if (raw === undefined) {
     return undefined;
   }
@@ -99,7 +96,7 @@ function parseWebSearch(
       diagnostics.push({
         code: "TOOLS_WEB_SEARCH_PROVIDER_INVALID",
         severity: "fatal",
-        message: "tools.webSearch.provider must be \"glm\", \"tavily\", or \"custom\".",
+        message: 'tools.webSearch.provider must be "glm", "tavily", or "custom".',
         path: "tools.webSearch.provider",
         recoverable: false,
       });
@@ -147,8 +144,7 @@ function parseWebSearch(
     diagnostics.push({
       code: "TOOLS_WEB_SEARCH_REGION_DEPRECATED",
       severity: "warning",
-      message:
-        "tools.webSearch.region has been removed. Select tools.webSearch.provider instead.",
+      message: "tools.webSearch.region has been removed. Select tools.webSearch.provider instead.",
       path: "tools.webSearch.region",
       recoverable: true,
     });
@@ -165,7 +161,15 @@ function parseWebSearch(
   }
 
   for (const key of Object.keys(raw)) {
-    if (key !== "enabled" && key !== "provider" && key !== "apiKey" && key !== "endpoint" && key !== "customProvider" && key !== "region" && key !== "tavilyApiKey") {
+    if (
+      key !== "enabled" &&
+      key !== "provider" &&
+      key !== "apiKey" &&
+      key !== "endpoint" &&
+      key !== "customProvider" &&
+      key !== "region" &&
+      key !== "tavilyApiKey"
+    ) {
       diagnostics.push({
         code: "TOOLS_WEB_SEARCH_UNKNOWN_FIELD",
         severity: "warning",

@@ -1,4 +1,4 @@
-import type { AlwaysOnSubTab, AppTab, Project, ProjectSession } from '../../../types/app';
+import type { AlwaysOnSubTab, AppTab, Project, ProjectSession } from "../../../types/app";
 
 export type SessionLifecycleHandler = (sessionId?: string | null) => void;
 
@@ -55,11 +55,7 @@ export type MainContentProps = {
   onSessionProcessing: SessionLifecycleHandler;
   onSessionNotProcessing: SessionLifecycleHandler;
   // See ChatInterfaceProps.onSessionActivityBump.
-  onSessionActivityBump?: (
-    projectName: string,
-    sessionId: string,
-    optimisticTitle?: string,
-  ) => void;
+  onSessionActivityBump?: (projectName: string, sessionId: string, optimisticTitle?: string) => void;
   processingSessions: Set<string>;
   unreadSessionIds: Set<string>;
   onReplaceTemporarySession: SessionLifecycleHandler;
@@ -83,7 +79,7 @@ export type MainContentProps = {
 };
 
 export type MainContentStateViewProps = {
-  mode: 'loading' | 'empty';
+  mode: "loading" | "empty";
   isMobile: boolean;
   onMenuClick: () => void;
 };

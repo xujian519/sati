@@ -20,10 +20,7 @@ export interface ModelRuntime {
   getProviderBaseUrl(providerId: string): string | undefined;
 }
 
-export function createModelRuntime(
-  config: ModelConfig,
-  options: ModelRuntimeOptions = {},
-): ModelRuntime {
+export function createModelRuntime(config: ModelConfig, options: ModelRuntimeOptions = {}): ModelRuntime {
   const getModel = (providerId: string, modelId: string) => {
     const provider = config.providers[providerId];
     if (!provider) {
@@ -32,10 +29,7 @@ export function createModelRuntime(
 
     const model = provider.models[modelId];
     if (!model) {
-      throw new ModelRequestError(
-        "model_not_found",
-        `Model ${modelId} does not exist in provider ${providerId}.`,
-      );
+      throw new ModelRequestError("model_not_found", `Model ${modelId} does not exist in provider ${providerId}.`);
     }
 
     return model;
@@ -46,8 +40,8 @@ export function createModelRuntime(
     complete: (request, callOptions) => complete(request, config, { ...options, ...callOptions }),
     getCapabilities: (providerId, modelId) => getModel(providerId, modelId).capabilities,
     getMultimodal: (providerId, modelId) => getModel(providerId, modelId).multimodal,
-    getProviderProtocol: (providerId) => config.providers[providerId]?.protocol,
-    getProviderBaseUrl: (providerId) => {
+    getProviderProtocol: providerId => config.providers[providerId]?.protocol,
+    getProviderBaseUrl: providerId => {
       const url = config.providers[providerId]?.url;
       return url ? normalizeProviderBaseUrl(url) : undefined;
     },

@@ -1,38 +1,38 @@
-import crypto from 'crypto';
-import { promises as fs } from 'fs';
-import net from 'net';
-import os from 'os';
-import path from 'path';
+import crypto from "crypto";
+import { promises as fs } from "fs";
+import net from "net";
+import os from "os";
+import path from "path";
 
-export const CRON_DAEMON_OWNER_KIND = 'pilotdeck-server';
-export const CRON_DAEMON_OWNER_KIND_ENV = 'PILOTDECK_CRON_DAEMON_OWNER_KIND';
-export const CRON_DAEMON_OWNER_TOKEN_ENV = 'PILOTDECK_CRON_DAEMON_OWNER_TOKEN';
-export const CRON_DAEMON_OWNER_PROCESS_PID_ENV = 'PILOTDECK_CRON_DAEMON_OWNER_PROCESS_PID';
+export const CRON_DAEMON_OWNER_KIND = "sati-server";
+export const CRON_DAEMON_OWNER_KIND_ENV = "SATI_CRON_DAEMON_OWNER_KIND";
+export const CRON_DAEMON_OWNER_TOKEN_ENV = "SATI_CRON_DAEMON_OWNER_TOKEN";
+export const CRON_DAEMON_OWNER_PROCESS_PID_ENV = "SATI_CRON_DAEMON_OWNER_PROCESS_PID";
 
-function getPilotDeckConfigHomeDir() {
-  return process.env.PILOTDECK_CONFIG_DIR || process.env.PILOT_HOME || path.join(os.homedir(), '.pilotdeck');
+function getSatiConfigHomeDir() {
+  return process.env.SATI_CONFIG_DIR || process.env.SATI_HOME || path.join(os.homedir(), ".sati");
 }
 
 function getCronDaemonOwnerPath() {
-  return path.join(getPilotDeckConfigHomeDir(), 'cron-daemon', 'owner.json');
+  return path.join(getSatiConfigHomeDir(), "cron-daemon", "owner.json");
 }
 
 function getCronDaemonSocketPath() {
-  if (process.platform === 'win32') {
-    return '\\\\.\\pipe\\pilotdeck-cron-daemon';
+  if (process.platform === "win32") {
+    return "\\\\.\\pipe\\sati-cron-daemon";
   }
-  return path.join(getPilotDeckConfigHomeDir(), 'cron-daemon.sock');
+  return path.join(getSatiConfigHomeDir(), "cron-daemon.sock");
 }
 
 async function readCronDaemonOwner() {
   try {
-    const raw = await fs.readFile(getCronDaemonOwnerPath(), 'utf-8');
+    const raw = await fs.readFile(getCronDaemonOwnerPath(), "utf-8");
     const parsed = JSON.parse(raw);
     if (
       !parsed ||
-      typeof parsed.kind !== 'string' ||
-      typeof parsed.token !== 'string' ||
-      typeof parsed.createdAt !== 'number'
+      typeof parsed.kind !== "string" ||
+      typeof parsed.token !== "string" ||
+      typeof parsed.createdAt !== "number"
     ) {
       return null;
     }
@@ -46,8 +46,8 @@ async function readCronDaemonOwner() {
 function isCurrentProcessCronDaemonOwner(owner) {
   return Boolean(
     owner &&
-    owner.kind === process.env[CRON_DAEMON_OWNER_KIND_ENV] &&
-    owner.token === process.env[CRON_DAEMON_OWNER_TOKEN_ENV]
+      owner.kind === process.env[CRON_DAEMON_OWNER_KIND_ENV] &&
+      owner.token === process.env[CRON_DAEMON_OWNER_TOKEN_ENV],
   );
 }
 
@@ -55,7 +55,7 @@ function sendCronDaemonRequest(request) {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(getCronDaemonSocketPath());
     let settled = false;
-    let buffer = '';
+    let buffer = "";
 
     const finalize = (callback, value) => {
       if (settled) return;
@@ -65,16 +65,16 @@ function sendCronDaemonRequest(request) {
     };
 
     socket.setTimeout(1000, () => {
-      finalize(reject, new Error('Timed out waiting for Cron daemon response'));
+      finalize(reject, new Error("Timed out waiting for Cron daemon response"));
     });
 
-    socket.on('connect', () => {
+    socket.on("connect", () => {
       socket.write(`${JSON.stringify(request)}\n`);
     });
 
-    socket.on('data', (chunk) => {
-      buffer += chunk.toString('utf-8');
-      const newlineIndex = buffer.indexOf('\n');
+    socket.on("data", chunk => {
+      buffer += chunk.toString("utf-8");
+      const newlineIndex = buffer.indexOf("\n");
       if (newlineIndex === -1) {
         return;
       }
@@ -86,7 +86,7 @@ function sendCronDaemonRequest(request) {
       }
     });
 
-    socket.on('error', (error) => {
+    socket.on("error", error => {
       finalize(reject, error);
     });
   });
@@ -99,7 +99,7 @@ export async function shutdownOwnedCronDaemon() {
   }
 
   try {
-    const response = await sendCronDaemonRequest({ type: 'shutdown' });
+    const response = await sendCronDaemonRequest({ type: "shutdown" });
     return Boolean(response?.ok);
   } catch {
     return false;
@@ -110,6 +110,4 @@ export async function _readCronDaemonOwnerForTest() {
   return await readCronDaemonOwner();
 }
 
-export {
-  sendCronDaemonRequest
-};
+export { sendCronDaemonRequest };

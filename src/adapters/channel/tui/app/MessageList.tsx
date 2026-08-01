@@ -2,9 +2,9 @@ import React, { useMemo } from "react";
 import { Box, Text } from "ink";
 import { MessageResponse } from "./MessageResponse.js";
 import { WelcomeCard } from "./WelcomeCard.js";
-import type { TuiAppState, TuiMessage } from "./types.js";
+import type { TuiAppState } from "./types.js";
 import { groupConsecutiveTools, type DisplayItem } from "./groupConsecutiveTools.js";
-import { pilotDeckDarkBlueTheme } from "./theme.js";
+import { satiDarkBlueTheme } from "./theme.js";
 
 export function MessageList({
   state,
@@ -20,13 +20,14 @@ export function MessageList({
   serverUrl?: string;
 }): React.ReactNode {
   const renderable = state.messages.filter(
-    (message) => !(message.role === "assistant" && message.text.trim().length === 0 && !message.thinking),
+    message => !(message.role === "assistant" && message.text.trim().length === 0 && !message.thinking),
   );
 
   const displayItems = useMemo(() => groupConsecutiveTools(renderable), [renderable]);
 
   if (displayItems.length === 0) {
-    const connection = state.connection === "remote" ? (serverUrl ? `server ${serverUrl}` : "server connected") : "local in-process";
+    const connection =
+      state.connection === "remote" ? (serverUrl ? `server ${serverUrl}` : "server connected") : "local in-process";
     return (
       <Box flexDirection="column" height={rows} justifyContent="center">
         <WelcomeCard model={model} cwd={cwd} connection={connection} />
@@ -46,7 +47,7 @@ export function MessageList({
   return (
     <Box flexDirection="column" height={rows} paddingX={1} overflow="hidden">
       {start > 0 && (
-        <Text color={pilotDeckDarkBlueTheme.subtle} dimColor>
+        <Text color={satiDarkBlueTheme.subtle} dimColor>
           ↑ {start} more message{start > 1 ? "s" : ""} above (PageUp to scroll)
         </Text>
       )}
@@ -54,7 +55,7 @@ export function MessageList({
         <DisplayItemView key={start + vi} item={item} focusedIndex={focusedIndex} />
       ))}
       {hasMore && (
-        <Text color={pilotDeckDarkBlueTheme.subtle} dimColor>
+        <Text color={satiDarkBlueTheme.subtle} dimColor>
           ↓ {scrollOffset} below — PageDown to scroll back
         </Text>
       )}
@@ -62,26 +63,13 @@ export function MessageList({
   );
 }
 
-function DisplayItemView({
-  item,
-  focusedIndex,
-}: {
-  item: DisplayItem;
-  focusedIndex: number | null;
-}): React.ReactNode {
+function DisplayItemView({ item, focusedIndex }: { item: DisplayItem; focusedIndex: number | null }): React.ReactNode {
   if (item.type === "single") {
-    return (
-      <MessageResponse
-        message={item.message}
-        focused={focusedIndex === item.index}
-      />
-    );
+    return <MessageResponse message={item.message} focused={focusedIndex === item.index} />;
   }
 
   const isFocused =
-    focusedIndex !== null &&
-    focusedIndex >= item.startIndex &&
-    focusedIndex < item.startIndex + item.messages.length;
+    focusedIndex !== null && focusedIndex >= item.startIndex && focusedIndex < item.startIndex + item.messages.length;
 
   if (item.expanded || isFocused) {
     return (
@@ -90,23 +78,19 @@ function DisplayItemView({
           {"  "}┌ {item.toolName} × {item.messages.length}
         </Text>
         {item.messages.map((msg, i) => (
-          <MessageResponse
-            key={item.startIndex + i}
-            message={msg}
-            focused={focusedIndex === item.startIndex + i}
-          />
+          <MessageResponse key={item.startIndex + i} message={msg} focused={focusedIndex === item.startIndex + i} />
         ))}
         <Text dimColor>{"  "}└</Text>
       </>
     );
   }
 
-  const okCount = item.messages.filter((m) => m.role === "tool" && m.ok !== false).length;
+  const okCount = item.messages.filter(m => m.role === "tool" && m.ok !== false).length;
   const errCount = item.messages.length - okCount;
 
   return (
     <Box flexDirection="row" flexShrink={0}>
-      <Text color={pilotDeckDarkBlueTheme.subtle}>{"  ⎿  "}</Text>
+      <Text color={satiDarkBlueTheme.subtle}>{"  ⎿  "}</Text>
       <Text dimColor>
         {item.toolName} × {item.messages.length}
         {errCount > 0 ? ` (${errCount} error${errCount > 1 ? "s" : ""})` : ""}

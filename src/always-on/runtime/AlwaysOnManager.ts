@@ -1,19 +1,16 @@
 import type { Gateway } from "../../gateway/index.js";
-import type { PilotDeckToolDefinition } from "../../tool/index.js";
+import type { SatiToolDefinition } from "../../tool/index.js";
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import type { CreateAlwaysOnDiscoveryPlanToolOptions } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { createAlwaysOnDiscoveryPlanTool } from "../tool/AlwaysOnDiscoveryPlanTool.js";
 import { createAlwaysOnReportTool } from "../tool/AlwaysOnReportTool.js";
 import { createAlwaysOnWorkspaceTool } from "../tool/AlwaysOnWorkspaceTool.js";
 import { createAlwaysOnChatHistoryTool } from "../tool/AlwaysOnChatHistoryTool.js";
+import type { TelemetryClient } from "../../telemetry/index.js";
 import { AlwaysOnRunContextRegistry } from "./AlwaysOnRunContextRegistry.js";
 import type { DiscoveryFireDependencies } from "./DiscoveryFire.js";
-import {
-  AlwaysOnRuntime,
-  type AlwaysOnRuntimeLogger,
-} from "./AlwaysOnRuntime.js";
+import { AlwaysOnRuntime, type AlwaysOnRuntimeLogger } from "./AlwaysOnRuntime.js";
 import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
-import type { TelemetryClient } from "../../telemetry/index.js";
 
 export type CreateAlwaysOnManagerOptions = {
   config: AlwaysOnConfig;
@@ -41,7 +38,7 @@ export class AlwaysOnManager {
   private readonly runtimes: AlwaysOnRuntime[] = [];
   private readonly runContexts = new AlwaysOnRunContextRegistry();
   private readonly sessionOverrides: SessionConfigOverrides;
-  private readonly tools: PilotDeckToolDefinition[];
+  private readonly tools: SatiToolDefinition[];
   private readonly logger: AlwaysOnRuntimeLogger;
 
   constructor(private readonly options: CreateAlwaysOnManagerOptions) {
@@ -91,7 +88,7 @@ export class AlwaysOnManager {
     }
   }
 
-  getTools(): PilotDeckToolDefinition[] {
+  getTools(): SatiToolDefinition[] {
     return [...this.tools];
   }
 
@@ -103,17 +100,12 @@ export class AlwaysOnManager {
    * Bind the gateway and an optional `isProjectBusy` callback that the
    * scheduler uses to evaluate the `agent_busy` gate from real data.
    */
-  bindGateway(
-    gateway: Gateway,
-    hooks?: { isProjectBusy?: (projectKey: string) => boolean },
-  ): void {
+  bindGateway(gateway: Gateway, hooks?: { isProjectBusy?: (projectKey: string) => boolean }): void {
     const isProjectBusy = hooks?.isProjectBusy;
     for (const runtime of this.runtimes) {
       const projectKey = runtime.projectKey;
       runtime.bindGateway(gateway, {
-        isSessionInFlight: isProjectBusy
-          ? () => isProjectBusy(projectKey)
-          : undefined,
+        isSessionInFlight: isProjectBusy ? () => isProjectBusy(projectKey) : undefined,
       });
     }
   }
@@ -137,9 +129,12 @@ export class AlwaysOnManager {
     projectKey: string;
     planId: string;
   }): Promise<{ runId: string; error?: { code: string; message: string } }> {
-    const runtime = this.runtimes.find((r) => r.projectKey === input.projectKey);
+    const runtime = this.runtimes.find(r => r.projectKey === input.projectKey);
     if (!runtime) {
-      return { runId: "", error: { code: "project_not_found", message: `No Always-On runtime for project ${input.projectKey}` } };
+      return {
+        runId: "",
+        error: { code: "project_not_found", message: `No Always-On runtime for project ${input.projectKey}` },
+      };
     }
     return runtime.rerunPlan({ planId: input.planId });
   }
@@ -149,9 +144,12 @@ export class AlwaysOnManager {
     workCycleId: string;
     projectName: string;
   }): Promise<{ sessionKey: string; error?: { code: string; message: string } }> {
-    const runtime = this.runtimes.find((r) => r.projectKey === input.projectKey);
+    const runtime = this.runtimes.find(r => r.projectKey === input.projectKey);
     if (!runtime) {
-      return { sessionKey: "", error: { code: "project_not_found", message: `No Always-On runtime for project ${input.projectKey}` } };
+      return {
+        sessionKey: "",
+        error: { code: "project_not_found", message: `No Always-On runtime for project ${input.projectKey}` },
+      };
     }
     return runtime.applyCycle({
       workCycleId: input.workCycleId,
@@ -161,8 +159,6 @@ export class AlwaysOnManager {
   }
 }
 
-export function createAlwaysOnManager(
-  options: CreateAlwaysOnManagerOptions,
-): AlwaysOnManager {
+export function createAlwaysOnManager(options: CreateAlwaysOnManagerOptions): AlwaysOnManager {
   return new AlwaysOnManager(options);
 }

@@ -1,33 +1,61 @@
-import { vi } from 'vitest';
-import React from 'react';
+import { vi } from "vitest";
+import React from "react";
 
-vi.mock('react-i18next', () => ({
+// jsdom 29 (vitest 4) does not provide localStorage on the global scope.
+// Provide a simple in-memory polyfill so components and hooks that
+// read/write localStorage work without crashing.
+const localStorageStore = new Map<string, string>();
+
+globalThis.localStorage = {
+  getItem: (key: string): string | null => {
+    const value = localStorageStore.get(key);
+    return value === undefined ? null : value;
+  },
+  setItem: (key: string, value: string): void => {
+    localStorageStore.set(key, value);
+  },
+  removeItem: (key: string): void => {
+    localStorageStore.delete(key);
+  },
+  clear: (): void => {
+    localStorageStore.clear();
+  },
+  get length(): number {
+    return localStorageStore.size;
+  },
+  key: (index: number): string | null => {
+    const keys = Array.from(localStorageStore.keys());
+    return keys[index] ?? null;
+  },
+} as Storage;
+
+vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
-      if (typeof options?.defaultValue === 'string') {
+      if (typeof options?.defaultValue === "string") {
         return options.defaultValue;
       }
-      if (key === 'messageTypes.error') return 'Error';
-      if (key === 'messageTypes.pilotdeck') return 'PilotDeck';
-      if (key === 'permissions.grant') return `Grant ${String(options?.tool || 'tool')} for this chat`;
-      if (key === 'permissions.openSettings') return 'Open settings';
-      if (key === 'permissions.addTo') return `Temporarily allows ${String(options?.entry || '')} in this chat only.`;
-      if (key === 'permissions.added') return 'Granted for this chat';
-      if (key === 'permissions.retry') return 'Retry in this chat to use the tool.';
-      if (key === 'permissions.error') return 'Unable to grant this chat permission. Please try again.';
+      if (key === "messageTypes.error") return "Error";
+      if (key === "messageTypes.sati") return "Sati";
+      if (key === "permissions.grant") return `Grant ${String(options?.tool || "tool")} for this chat`;
+      if (key === "permissions.openSettings") return "Open settings";
+      if (key === "permissions.addTo") return `Temporarily allows ${String(options?.entry || "")} in this chat only.`;
+      if (key === "permissions.added") return "Granted for this chat";
+      if (key === "permissions.retry") return "Retry in this chat to use the tool.";
+      if (key === "permissions.error") return "Unable to grant this chat permission. Please try again.";
       return key;
     },
   }),
 }));
 
-vi.mock('react-markdown', () => ({
+vi.mock("react-markdown", () => ({
   default: ({ children }: { children?: React.ReactNode }) => React.createElement(React.Fragment, null, children),
 }));
 
 const MockIcon = ({ children: _children, ...props }: React.SVGProps<SVGSVGElement>) =>
-  React.createElement('svg', props);
+  React.createElement("svg", props);
 
-vi.mock('lucide-react', () => ({
+vi.mock("lucide-react", () => ({
   Activity: MockIcon,
   AlertCircle: MockIcon,
   AlertTriangle: MockIcon,
@@ -80,3 +108,19 @@ vi.mock('lucide-react', () => ({
   Zap: MockIcon,
   Radio: MockIcon,
 }));
+
+// jsdom 29 does not implement Blob.prototype.stream(), while the global
+// Response (undici, from Node) calls it when constructed with a Blob body.
+// Polyfill it so `new Response(new Blob([...]))` works in component tests.
+if (typeof Blob !== "undefined" && typeof Blob.prototype.stream !== "function") {
+  Blob.prototype.stream = function stream(): ReadableStream<Uint8Array<ArrayBuffer>> {
+    const blob = this as Blob;
+    return new ReadableStream<Uint8Array<ArrayBuffer>>({
+      async pull(controller) {
+        const buffer = await blob.arrayBuffer();
+        controller.enqueue(new Uint8Array<ArrayBuffer>(buffer));
+        controller.close();
+      },
+    });
+  };
+}

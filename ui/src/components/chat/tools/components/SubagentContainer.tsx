@@ -1,56 +1,69 @@
-import React from 'react';
-import type { SubagentChildTool } from '../../types/types';
-import { CollapsibleSection } from './CollapsibleSection';
+import React from "react";
+import type { SubagentChildTool } from "../../types/types";
+import { CollapsibleSection } from "./CollapsibleSection";
+
+type SubagentState = {
+  childTools: SubagentChildTool[];
+  currentToolIndex: number;
+  isComplete: boolean;
+  isFailed?: boolean;
+};
 
 interface SubagentContainerProps {
   toolInput: unknown;
   toolResult?: { content?: unknown; isError?: boolean } | null;
-  subagentState: {
-    childTools: SubagentChildTool[];
-    currentToolIndex: number;
-    isComplete: boolean;
-  };
+  subagentState: SubagentState;
 }
 
 const getCompactToolDisplay = (toolName: string, toolInput: unknown): string => {
-  const input = typeof toolInput === 'string' ? (() => {
-    try { return JSON.parse(toolInput); } catch { return {}; }
-  })() : (toolInput || {});
+  const input =
+    typeof toolInput === "string"
+      ? (() => {
+          try {
+            return JSON.parse(toolInput);
+          } catch {
+            return {};
+          }
+        })()
+      : toolInput || {};
 
   switch (toolName) {
-    case 'Read':
-    case 'Write':
-    case 'Edit':
-    case 'ApplyPatch':
-      return input.file_path?.split('/').pop() || input.file_path || '';
-    case 'Grep':
-    case 'Glob':
-      return input.pattern || '';
-    case 'Bash':
-      const cmd = input.command || '';
+    case "Read":
+    case "Write":
+    case "Edit":
+    case "ApplyPatch":
+      return input.file_path?.split("/").pop() || input.file_path || "";
+    case "Grep":
+    case "Glob":
+      return input.pattern || "";
+    case "Bash":
+      const cmd = input.command || "";
       return cmd.length > 40 ? `${cmd.slice(0, 40)}...` : cmd;
-    case 'Task':
-      return input.description || input.subagent_type || '';
-    case 'WebFetch':
-    case 'WebSearch':
-      return input.url || input.query || '';
+    case "Task":
+      return input.description || input.subagent_type || "";
+    case "WebFetch":
+    case "WebSearch":
+      return input.url || input.query || "";
     default:
-      return '';
+      return "";
   }
 };
 
-export const SubagentContainer: React.FC<SubagentContainerProps> = ({
-  toolInput,
-  toolResult,
-  subagentState,
-}) => {
-  const parsedInput = typeof toolInput === 'string' ? (() => {
-    try { return JSON.parse(toolInput); } catch { return {}; }
-  })() : (toolInput || {});
+export const SubagentContainer: React.FC<SubagentContainerProps> = ({ toolInput, toolResult, subagentState }) => {
+  const parsedInput =
+    typeof toolInput === "string"
+      ? (() => {
+          try {
+            return JSON.parse(toolInput);
+          } catch {
+            return {};
+          }
+        })()
+      : toolInput || {};
 
-  const subagentType = parsedInput?.subagent_type || parsedInput?.subagentType || 'Agent';
-  const description = parsedInput?.description || 'Running task';
-  const prompt = parsedInput?.prompt || '';
+  const subagentType = parsedInput?.subagent_type || parsedInput?.subagentType || "Agent";
+  const description = parsedInput?.description || "Running task";
+  const prompt = parsedInput?.prompt || "";
   const childTools = Array.isArray(subagentState.childTools) ? subagentState.childTools : [];
   const { currentToolIndex, isComplete } = subagentState;
   const isFailed = Boolean(subagentState.isFailed || toolResult?.isError);
@@ -60,11 +73,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
 
   return (
     <div className="my-1 border-l-2 border-l-purple-500 py-0.5 pl-3 dark:border-l-purple-400">
-      <CollapsibleSection
-        title={title}
-        toolName="Task"
-        open={false}
-      >
+      <CollapsibleSection title={title} toolName="Task" open={false}>
         {/* Prompt/request to the subagent */}
         {prompt && (
           <div className="mb-2 line-clamp-4 whitespace-pre-wrap break-words text-xs text-gray-600 dark:text-gray-400">
@@ -102,7 +111,9 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
             <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span>Failed ({childTools.length} {childTools.length === 1 ? 'tool' : 'tools'})</span>
+            <span>
+              Failed ({childTools.length} {childTools.length === 1 ? "tool" : "tools"})
+            </span>
           </div>
         )}
 
@@ -111,7 +122,9 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
             <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            <span>Completed ({childTools.length} {childTools.length === 1 ? 'tool' : 'tools'})</span>
+            <span>
+              Completed ({childTools.length} {childTools.length === 1 ? "tool" : "tools"})
+            </span>
           </div>
         )}
 
@@ -131,7 +144,10 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
             </summary>
             <div className="mt-1 space-y-0.5 border-l border-gray-200 pl-3 dark:border-gray-700">
               {childTools.map((child, index) => (
-                <div key={child.toolId} className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                <div
+                  key={child.toolId}
+                  className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400"
+                >
                   <span className="w-4 flex-shrink-0 text-right text-gray-400 dark:text-gray-500">{index + 1}.</span>
                   <span className="font-medium">{child.toolName}</span>
                   {getCompactToolDisplay(child.toolName, child.toolInput) && (
@@ -139,9 +155,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
                       {getCompactToolDisplay(child.toolName, child.toolInput)}
                     </span>
                   )}
-                  {child.toolResult?.isError && (
-                    <span className="flex-shrink-0 text-red-500">(error)</span>
-                  )}
+                  {child.toolResult?.isError && <span className="flex-shrink-0 text-red-500">(error)</span>}
                 </div>
               ))}
             </div>
@@ -155,16 +169,14 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
               let content = toolResult.content;
 
               // Handle JSON string that needs parsing
-              if (typeof content === 'string') {
+              if (typeof content === "string") {
                 try {
                   const parsed = JSON.parse(content);
                   if (Array.isArray(parsed)) {
                     // Extract text from array format like [{"type":"text","text":"..."}]
-                    const textParts = parsed
-                      .filter((p: any) => p.type === 'text' && p.text)
-                      .map((p: any) => p.text);
+                    const textParts = parsed.filter((p: any) => p.type === "text" && p.text).map((p: any) => p.text);
                     if (textParts.length > 0) {
-                      content = textParts.join('\n');
+                      content = textParts.join("\n");
                     }
                   }
                 } catch {
@@ -172,18 +184,14 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({
                 }
               } else if (Array.isArray(content)) {
                 // Direct array format
-                const textParts = content
-                  .filter((p: any) => p.type === 'text' && p.text)
-                  .map((p: any) => p.text);
+                const textParts = content.filter((p: any) => p.type === "text" && p.text).map((p: any) => p.text);
                 if (textParts.length > 0) {
-                  content = textParts.join('\n');
+                  content = textParts.join("\n");
                 }
               }
 
-              return typeof content === 'string' ? (
-                <div className="line-clamp-6 whitespace-pre-wrap break-words">
-                  {content}
-                </div>
+              return typeof content === "string" ? (
+                <div className="line-clamp-6 whitespace-pre-wrap break-words">{content}</div>
               ) : content ? (
                 <pre className="line-clamp-6 whitespace-pre-wrap break-words font-mono text-[11px]">
                   {JSON.stringify(content, null, 2)}

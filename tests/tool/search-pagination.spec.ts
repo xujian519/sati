@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-
 import { createGlobTool } from "../../src/tool/builtin/glob.js";
 import { createGrepTool } from "../../src/tool/builtin/grep.js";
 
@@ -26,7 +25,7 @@ function context(cwd: string) {
 }
 
 test("glob result text tells the model when more files are available", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-glob-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "sati-glob-test-"));
   try {
     await writeFile(join(dir, "a.txt"), "a");
     await writeFile(join(dir, "b.txt"), "b");
@@ -44,7 +43,7 @@ test("glob result text tells the model when more files are available", async () 
 });
 
 test("grep result text includes next offset when paginated", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pilotdeck-grep-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "sati-grep-test-"));
   try {
     await writeFile(join(dir, "a.txt"), "needle one\nneedle two\nneedle three\n");
 

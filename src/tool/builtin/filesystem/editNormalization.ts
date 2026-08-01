@@ -36,10 +36,7 @@ export function stripTrailingWhitespace(str: string): string {
  * Returns the *actual* substring from `fileContent` that corresponds to
  * `searchString`, or `null` when nothing matches.
  */
-export function findActualString(
-  fileContent: string,
-  searchString: string,
-): string | null {
+export function findActualString(fileContent: string, searchString: string): string | null {
   if (fileContent.includes(searchString)) {
     return searchString;
   }

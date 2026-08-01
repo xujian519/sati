@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,13 +11,10 @@ import {
   X,
   ZoomIn,
   ZoomOut,
-} from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import type {
-  ContentReferenceSelectionMode,
-  ReferenceCapabilities,
-} from '../../../../types/contentReference';
-import ContentReferenceMenu from './ContentReferenceMenu';
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { ContentReferenceSelectionMode, ReferenceCapabilities } from "../../../../types/contentReference";
+import ContentReferenceMenu from "./ContentReferenceMenu";
 
 type BuiltinOfficeToolbarProps = {
   navigationVisible?: boolean;
@@ -50,10 +47,10 @@ type BuiltinOfficeToolbarProps = {
 };
 
 const buttonClass = [
-  'flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors',
-  'hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40',
-  'dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50',
-].join(' ');
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-600 transition-colors",
+  "hover:bg-neutral-100 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40",
+  "dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50",
+].join(" ");
 
 function Separator() {
   return <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-neutral-200 dark:bg-neutral-800" />;
@@ -88,7 +85,7 @@ export default function BuiltinOfficeToolbar({
   onSelectReferenceMode,
   onCancelReferenceMode,
 }: BuiltinOfficeToolbarProps) {
-  const { t } = useTranslation('codeEditor');
+  const { t } = useTranslation("codeEditor");
   const [searchOpen, setSearchOpen] = useState(false);
   const composingRef = useRef(false);
   const hasItemControls = Boolean(itemCount && itemCount > 0);
@@ -99,9 +96,9 @@ export default function BuiltinOfficeToolbar({
         <>
           <button
             type="button"
-            className={`${buttonClass} ${navigationVisible ? 'bg-neutral-100 text-neutral-950 dark:bg-neutral-800 dark:text-neutral-50' : ''}`}
-            title={navigationVisible ? t('pdfToolbar.hideNavigation') : t('pdfToolbar.showNavigation')}
-            aria-label={navigationVisible ? t('pdfToolbar.hideNavigation') : t('pdfToolbar.showNavigation')}
+            className={`${buttonClass} ${navigationVisible ? "bg-neutral-100 text-neutral-950 dark:bg-neutral-800 dark:text-neutral-50" : ""}`}
+            title={navigationVisible ? t("pdfToolbar.hideNavigation") : t("pdfToolbar.showNavigation")}
+            aria-label={navigationVisible ? t("pdfToolbar.hideNavigation") : t("pdfToolbar.showNavigation")}
             onClick={onToggleNavigation}
           >
             <PanelLeft className="h-4 w-4" strokeWidth={1.75} />
@@ -113,8 +110,8 @@ export default function BuiltinOfficeToolbar({
       <button
         type="button"
         className={buttonClass}
-        title={t('pdfToolbar.zoomOut')}
-        aria-label={t('pdfToolbar.zoomOut')}
+        title={t("pdfToolbar.zoomOut")}
+        aria-label={t("pdfToolbar.zoomOut")}
         disabled={zoom <= minZoom}
         onClick={() => onZoomChange(Math.max(minZoom, Math.round((zoom - 0.1) * 10) / 10))}
       >
@@ -126,8 +123,8 @@ export default function BuiltinOfficeToolbar({
       <button
         type="button"
         className={buttonClass}
-        title={t('pdfToolbar.zoomIn')}
-        aria-label={t('pdfToolbar.zoomIn')}
+        title={t("pdfToolbar.zoomIn")}
+        aria-label={t("pdfToolbar.zoomIn")}
         disabled={zoom >= maxZoom}
         onClick={() => onZoomChange(Math.min(maxZoom, Math.round((zoom + 0.1) * 10) / 10))}
       >
@@ -140,8 +137,8 @@ export default function BuiltinOfficeToolbar({
           <button
             type="button"
             className={buttonClass}
-            title={t('builtinOfficePreview.previousItem')}
-            aria-label={t('builtinOfficePreview.previousItem')}
+            title={t("builtinOfficePreview.previousItem")}
+            aria-label={t("builtinOfficePreview.previousItem")}
             disabled={!currentItem || currentItem <= 1}
             onClick={onPreviousItem}
           >
@@ -153,8 +150,8 @@ export default function BuiltinOfficeToolbar({
           <button
             type="button"
             className={buttonClass}
-            title={t('builtinOfficePreview.nextItem')}
-            aria-label={t('builtinOfficePreview.nextItem')}
+            title={t("builtinOfficePreview.nextItem")}
+            aria-label={t("builtinOfficePreview.nextItem")}
             disabled={!currentItem || currentItem >= (itemCount || 0)}
             onClick={onNextItem}
           >
@@ -166,10 +163,10 @@ export default function BuiltinOfficeToolbar({
       <Separator />
       <button
         type="button"
-        className={`${buttonClass} ${searchOpen ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300' : ''}`}
-        title={t('builtinOfficePreview.search')}
-        aria-label={t('builtinOfficePreview.search')}
-        onClick={() => setSearchOpen((value) => !value)}
+        className={`${buttonClass} ${searchOpen ? "bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300" : ""}`}
+        title={t("builtinOfficePreview.search")}
+        aria-label={t("builtinOfficePreview.search")}
+        onClick={() => setSearchOpen(value => !value)}
       >
         <Search className="h-4 w-4" strokeWidth={1.75} />
       </button>
@@ -181,42 +178,42 @@ export default function BuiltinOfficeToolbar({
             onCompositionStart={() => {
               composingRef.current = true;
             }}
-            onCompositionEnd={(event) => {
+            onCompositionEnd={event => {
               composingRef.current = false;
               onSearchQueryChange(event.currentTarget.value);
             }}
-            onChange={(event) => {
+            onChange={event => {
               if (!composingRef.current) onSearchQueryChange(event.target.value);
             }}
-            onKeyDown={(event) => {
+            onKeyDown={event => {
               if (event.nativeEvent.isComposing) return;
-              if (event.key === 'Enter') {
+              if (event.key === "Enter") {
                 event.preventDefault();
                 if (event.shiftKey) onPreviousMatch();
                 else onNextMatch();
-              } else if (event.key === 'Escape') {
+              } else if (event.key === "Escape") {
                 setSearchOpen(false);
               }
             }}
-            placeholder={t('builtinOfficePreview.searchPlaceholder')}
-            aria-label={t('builtinOfficePreview.search')}
+            placeholder={t("builtinOfficePreview.searchPlaceholder")}
+            aria-label={t("builtinOfficePreview.search")}
             className="min-w-0 flex-1 bg-transparent text-[12px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-neutral-100"
           />
           <span className="ml-2 shrink-0 text-[11px] tabular-nums text-neutral-500">
             {searchQuery
               ? searchMatchCount > 0
                 ? `${searchMatchIndex + 1} / ${searchMatchCount}`
-                : t('builtinOfficePreview.noMatches')
-              : ''}
+                : t("builtinOfficePreview.noMatches")
+              : ""}
           </span>
           <button
             type="button"
             className="ml-1 flex h-6 w-6 items-center justify-center rounded text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-            title={t('builtinOfficePreview.closeSearch')}
-            aria-label={t('builtinOfficePreview.closeSearch')}
+            title={t("builtinOfficePreview.closeSearch")}
+            aria-label={t("builtinOfficePreview.closeSearch")}
             onClick={() => {
               setSearchOpen(false);
-              onSearchQueryChange('');
+              onSearchQueryChange("");
             }}
           >
             <X className="h-3.5 w-3.5" />
@@ -238,25 +235,27 @@ export default function BuiltinOfficeToolbar({
         <button
           type="button"
           className={buttonClass}
-          title={t('officePreview.refresh')}
-          aria-label={t('officePreview.refresh')}
+          title={t("officePreview.refresh")}
+          aria-label={t("officePreview.refresh")}
           disabled={refreshing}
           onClick={onRefresh}
         >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={1.75} />
+          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} strokeWidth={1.75} />
         </button>
       ) : null}
       {onToggleFullscreen ? (
         <button
           type="button"
           className={buttonClass}
-          title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
-          aria-label={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
+          title={isFullscreen ? t("actions.exitFullscreen") : t("actions.fullscreen")}
+          aria-label={isFullscreen ? t("actions.exitFullscreen") : t("actions.fullscreen")}
           onClick={onToggleFullscreen}
         >
-          {isFullscreen
-            ? <Minimize className="h-4 w-4" strokeWidth={1.75} />
-            : <Maximize2 className="h-4 w-4" strokeWidth={1.75} />}
+          {isFullscreen ? (
+            <Minimize className="h-4 w-4" strokeWidth={1.75} />
+          ) : (
+            <Maximize2 className="h-4 w-4" strokeWidth={1.75} />
+          )}
         </button>
       ) : null}
       {downloadUrl ? (
@@ -264,8 +263,8 @@ export default function BuiltinOfficeToolbar({
           className={buttonClass}
           href={downloadUrl}
           download={downloadName}
-          title={t('actions.download')}
-          aria-label={t('actions.download')}
+          title={t("actions.download")}
+          aria-label={t("actions.download")}
         >
           <Download className="h-4 w-4" strokeWidth={1.75} />
         </a>

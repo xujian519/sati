@@ -1,5 +1,5 @@
 type ShellConnectionOverlayProps = {
-  mode: 'loading' | 'connect' | 'connecting';
+  mode: "loading" | "connect" | "connecting";
   description: string;
   loadingLabel: string;
   connectLabel: string;
@@ -17,7 +17,7 @@ export default function ShellConnectionOverlay({
   connectingLabel,
   onConnect,
 }: ShellConnectionOverlayProps) {
-  if (mode === 'loading') {
+  if (mode === "loading") {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
         <div className="text-white">{loadingLabel}</div>
@@ -25,7 +25,7 @@ export default function ShellConnectionOverlay({
     );
   }
 
-  if (mode === 'connect') {
+  if (mode === "connect") {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
         <div className="w-full max-w-sm text-center">

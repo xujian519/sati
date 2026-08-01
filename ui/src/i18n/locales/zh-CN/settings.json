@@ -394,7 +394,7 @@
     "apiDocsLink": "API 文档",
     "documentation": {
       "title": "外部 API 文档",
-      "description": "了解如何使用外部 API 从您的应用程序触发 PilotDeck 会话。",
+      "description": "了解如何使用外部 API 从您的应用程序触发 Sati 会话。",
       "viewLink": "查看 API 文档 →"
     },
     "loading": "加载中...",
@@ -444,8 +444,8 @@
       "gemini": {
         "description": "Google Gemini AI 助手"
       },
-      "pilotdeck": {
-        "description": "OpenBMB PilotDeck AI 助手"
+      "sati": {
+        "description": "Sati AI 助手"
       }
     },
     "connectionStatus": "连接状态",
@@ -545,7 +545,7 @@
   "mcpServers": {
     "title": "MCP 服务器",
     "description": {
-      "pilotdeck": "Model Context Protocol 服务器为 PilotDeck 提供额外的工具和数据源",
+      "sati": "Model Context Protocol 服务器为 Sati 提供额外的工具和数据源",
       "cursor": "Model Context Protocol 服务器为 Cursor 提供额外的工具和数据源",
       "codex": "Model Context Protocol 服务器为 Codex 提供额外的工具和数据源"
     },
@@ -578,7 +578,7 @@
   },
   "mcpConfig": {
     "title": "MCP 服务器",
-    "description": "编辑 PilotDeck MCP 配置。全局配置位于 ~/.pilotdeck/mcp.json；项目配置位于 .pilotdeck/mcp.json，同名服务器会覆盖全局配置。",
+    "description": "编辑 Sati MCP 配置。全局配置位于 ~/.sati/mcp.json；项目配置位于 .sati/mcp.json，同名服务器会覆盖全局配置。",
     "project": "项目级配置对应的项目",
     "scopes": {
       "global": "全局",
@@ -622,8 +622,8 @@
       "addHeader": "添加请求头"
     }
   },
-  "pilotDeckConfig": {
-    "loading": "正在加载 PilotDeck 配置...",
+  "satiConfig": {
+    "loading": "正在加载 Sati 配置...",
     "header": {
       "configFile": "配置文件",
       "configPreview": "配置预览",
@@ -633,64 +633,64 @@
       "form": "表单",
       "rawYaml": "原始 YAML"
     },
-	    "actions": {
-	      "opening": "正在打开...",
-	      "revealFile": "在访达中显示",
-	      "revealFileMac": "在访达中显示",
-	      "revealFileWindows": "在资源管理器中显示",
-	      "revealFileGeneric": "在文件管理器中显示",
-	      "refresh": "刷新",
-	      "reloadCurrent": "重新加载当前配置",
-	      "saving": "保存中...",
-	      "saveAndReload": "保存并重新加载当前配置",
-	      "saveAndReloadShort": "保存并重载",
-	      "remove": "移除",
-	      "removeModel": "移除模型",
-	      "add": "添加",
-	      "dismiss": "忽略",
-	      "showDetails": "展开配置详情",
-	      "hideDetails": "收起配置详情"
-	    },
-	    "status": {
-	      "unsavedChanges": "未保存更改",
-	      "noUnsavedChanges": "无未保存更改",
-	      "fixYamlInFilesystem": "请在文件系统中修复配置文件后刷新。",
-	      "fixYamlInRawEditor": "请先修复下方原始 YAML，然后保存以重新启用表单设置。",
-	      "subsystems": {
-	        "pending": "等待配置解析。",
-	        "processEnv": {
-	          "label": "进程环境",
-	          "applied": "原生设置已应用到当前进程。"
-	        },
-	        "memory": {
-	          "label": "记忆",
-	          "enabled": "记忆服务已启用。",
-	          "disabled": "memory.enabled 为 false。"
-	        },
-	        "router": {
-	          "label": "路由 (CCR)",
-	          "enabled": "路由看板使用原生记录。",
-	          "disabled": "router.enabled 为 false。"
-	        },
-	        "gateway": {
-	          "label": "网关",
-	          "enabled": "网关已启用。",
-	          "disabled": "gateway.enabled 为 false。"
-	        }
-	      }
-	    },
-	    "rawYaml": {
-	      "configValid": "配置有效",
-	      "unsaved": "（未保存）",
-	      "configInvalid": "配置存在校验错误",
-	      "configInvalidSeeBelow": "配置存在校验错误——见下方",
-	      "errors": "错误",
-	      "warnings": "警告",
-	      "yamlParseError": "配置文件 YAML 解析失败。请修复下方原始 YAML 后保存。",
-	      "yamlParseErrorWithDetail": "配置文件 YAML 解析失败：{{error}}",
-	      "cannotParse": "无法解析配置文件 YAML。请修复上方原始 YAML 后保存，以恢复表单设置。",
-	      "rawYaml": "原始 YAML"
-	    },
+    "actions": {
+      "opening": "正在打开...",
+      "revealFile": "在访达中显示",
+      "revealFileMac": "在访达中显示",
+      "revealFileWindows": "在资源管理器中显示",
+      "revealFileGeneric": "在文件管理器中显示",
+      "refresh": "刷新",
+      "reloadCurrent": "重新加载当前配置",
+      "saving": "保存中...",
+      "saveAndReload": "保存并重新加载当前配置",
+      "saveAndReloadShort": "保存并重载",
+      "remove": "移除",
+      "removeModel": "移除模型",
+      "add": "添加",
+      "dismiss": "忽略",
+      "showDetails": "展开配置详情",
+      "hideDetails": "收起配置详情"
+    },
+    "status": {
+      "unsavedChanges": "未保存更改",
+      "noUnsavedChanges": "无未保存更改",
+      "fixYamlInFilesystem": "请在文件系统中修复配置文件后刷新。",
+      "fixYamlInRawEditor": "请先修复下方原始 YAML，然后保存以重新启用表单设置。",
+      "subsystems": {
+        "pending": "等待配置解析。",
+        "processEnv": {
+          "label": "进程环境",
+          "applied": "原生设置已应用到当前进程。"
+        },
+        "memory": {
+          "label": "记忆",
+          "enabled": "记忆服务已启用。",
+          "disabled": "memory.enabled 为 false。"
+        },
+        "router": {
+          "label": "路由 (CCR)",
+          "enabled": "路由看板使用原生记录。",
+          "disabled": "router.enabled 为 false。"
+        },
+        "gateway": {
+          "label": "网关",
+          "enabled": "网关已启用。",
+          "disabled": "gateway.enabled 为 false。"
+        }
+      }
+    },
+    "rawYaml": {
+      "configValid": "配置有效",
+      "unsaved": "（未保存）",
+      "configInvalid": "配置存在校验错误",
+      "configInvalidSeeBelow": "配置存在校验错误——见下方",
+      "errors": "错误",
+      "warnings": "警告",
+      "yamlParseError": "配置文件 YAML 解析失败。请修复下方原始 YAML 后保存。",
+      "yamlParseErrorWithDetail": "配置文件 YAML 解析失败：{{error}}",
+      "cannotParse": "无法解析配置文件 YAML。请修复上方原始 YAML 后保存，以恢复表单设置。",
+      "rawYaml": "原始 YAML"
+    },
     "sectionGroups": {
       "basic": "基础",
       "basicDescription": "运行本服务前需要配置模型服务。",
@@ -722,7 +722,7 @@
       },
       "memory": {
         "label": "记忆",
-        "description": "PilotDeck 记忆服务"
+        "description": "Sati 记忆服务"
       },
       "tools": {
         "label": "搜索",
@@ -734,7 +734,7 @@
       },
       "router": {
         "label": "路由",
-        "description": "PilotDeck Router"
+        "description": "Sati Router"
       },
       "gateway": {
         "label": "网关",
@@ -757,13 +757,19 @@
           "apiTimeout": { "label": "API 超时（毫秒）", "description": "每次请求的上游超时。" },
           "databasePath": { "label": "数据库路径", "description": "SQLite 认证/项目数据库（~ 展开为主目录）。" },
           "workspacesRoot": { "label": "工作区根目录", "description": "项目扫描的根目录。" },
-          "proxyUrl": { "label": "HTTPS 代理", "description": "出站 HTTPS 代理 URL，同时作用于 Gateway 和 UI Server（对应 pilotdeck.yaml 中的 proxy.url）。" },
-          "proxyNoProxy": { "label": "代理排除列表", "description": "逗号分隔的主机名/IP，这些地址不走代理（对应 pilotdeck.yaml 中的 proxy.noProxy）。127.0.0.1 和 localhost 始终排除。" }
+          "proxyUrl": {
+            "label": "HTTPS 代理",
+            "description": "出站 HTTPS 代理 URL，同时作用于 Gateway 和 UI Server（对应 sati.yaml 中的 proxy.url）。"
+          },
+          "proxyNoProxy": {
+            "label": "代理排除列表",
+            "description": "逗号分隔的主机名/IP，这些地址不走代理（对应 sati.yaml 中的 proxy.noProxy）。127.0.0.1 和 localhost 始终排除。"
+          }
         }
       },
       "officePreview": {
         "title": "Office 文件预览服务",
-        "description": "选择 Office 文件的只读预览方式。PDF 始终使用 PilotDeck 内置浏览器，不受此设置影响。",
+        "description": "选择 Office 文件的只读预览方式。PDF 始终使用 Sati 内置浏览器，不受此设置影响。",
         "fields": {
           "service": {
             "label": "预览服务",
@@ -877,7 +883,7 @@
           "label": "子智能体默认模型",
           "description": "非路由路径下子智能体默认使用的模型。",
           "inherit": "继承主智能体模型",
-          "routerNote": "启用 PilotDeck Router 或 Token 节省后，子智能体请求会先进入路由器；默认会按子智能体策略重新判定层级并选择模型。这里的默认模型只作为直接子智能体路径或继承兜底，不会覆盖 Router 高级设置中的子智能体路由策略。"
+          "routerNote": "启用 Sati Router 或 Token 节省后，子智能体请求会先进入路由器；默认会按子智能体策略重新判定层级并选择模型。这里的默认模型只作为直接子智能体路径或继承兜底，不会覆盖 Router 高级设置中的子智能体路由策略。"
         }
       },
       "customEnv": {
@@ -897,12 +903,18 @@
         "trigger": {
           "title": "触发",
           "description": "控制自动发现何时、多久触发一次。",
-          "autoDiscovery": { "label": "自动发现", "description": "启用后，常驻模式会定期检查已接入的工作区并提出后续计划。" },
+          "autoDiscovery": {
+            "label": "自动发现",
+            "description": "启用后，常驻模式会定期检查已接入的工作区并提出后续计划。"
+          },
           "tickInterval": { "label": "检查间隔（分钟）", "description": "守护进程检查已接入工作区的频率。" },
           "cooldown": { "label": "冷却时间（分钟）", "description": "每个工作区两次发现运行之间的最短间隔。" },
           "dailyBudget": { "label": "每日预算", "description": "每个工作区每天最多自动发现运行次数。" },
           "heartbeatStale": { "label": "心跳过期（秒）", "description": "超过此时间的心跳视为过期。" },
-          "recentUserMsg": { "label": "最近用户消息（分钟）", "description": "仅在用户于此时间窗口内发送过消息时触发。" },
+          "recentUserMsg": {
+            "label": "最近用户消息（分钟）",
+            "description": "仅在用户于此时间窗口内发送过消息时触发。"
+          },
           "preferChannel": { "label": "首选频道", "description": "发现智能体偏好使用的交互频道。" }
         },
         "dormancy": {
@@ -918,7 +930,10 @@
           "gitWorktree": { "label": "Git 工作树根目录", "description": "基于 Git 工作树隔离的根目录。" },
           "snapshotDir": { "label": "快照根目录", "description": "基于快照隔离的根目录。" },
           "snapshotMaxBytes": { "label": "快照最大字节数", "description": "工作区快照的最大大小。" },
-          "maxPlansPerCycle": { "label": "每周期最大计划数", "description": "单个隔离环境周期内最多可累计执行的计划数量。" },
+          "maxPlansPerCycle": {
+            "label": "每周期最大计划数",
+            "description": "单个隔离环境周期内最多可累计执行的计划数量。"
+          },
           "gitLfs": { "label": "Git LFS", "description": "在工作区快照中包含 Git LFS 对象。" }
         },
         "execution": {
@@ -1080,7 +1095,7 @@
         }
       },
       "router": {
-        "title": "PilotDeck Router",
+        "title": "Sati Router",
         "description": "内嵌路由器，跨提供商路由分发（按层级分流、Token 节省、自动编排）。",
         "enabled": { "label": "启用", "description": "启用后，智能体通过路由器而非直接使用配置的提供商。" },
         "advancedToggle": "高级设置",
@@ -1129,7 +1144,10 @@
           "judgeModel": "判定模型",
           "defaultTier": "默认层级",
           "judgeTimeout": { "label": "判定超时（毫秒）", "description": "等待判定结果的最长时间。" },
-          "subagentPolicy": { "label": "子智能体策略", "description": "子智能体的路由方式：'judge' 重新评估每个子智能体轮次，'skip' 保持子智能体直接路由。" }
+          "subagentPolicy": {
+            "label": "子智能体策略",
+            "description": "子智能体的路由方式：'judge' 重新评估每个子智能体轮次，'skip' 保持子智能体直接路由。"
+          }
         },
         "autoOrchestrate": {
           "title": "自动编排",
@@ -1190,7 +1208,7 @@
   },
   "pluginSettings": {
     "title": "插件",
-    "description": "通过自定义插件扩展界面。从 git 安装或直接将文件夹放入 ~/.pilotdeck/plugins/",
+    "description": "通过自定义插件扩展界面。从 git 安装或直接将文件夹放入 ~/.sati/plugins/",
     "installPlaceholder": "https://github.com/user/my-plugin",
     "installButton": "安装",
     "installing": "安装中…",
@@ -1314,7 +1332,7 @@
       "websocketUrl": "WebSocket URL",
       "dmPolicy": "私聊策略",
       "groupPolicy": "群聊策略",
-      "policyHint": "基础策略会写入 pilotdeck.yaml；更细粒度的用户或群白名单可稍后手动编辑 YAML。",
+      "policyHint": "基础策略会写入 sati.yaml；更细粒度的用户或群白名单可稍后手动编辑 YAML。",
       "saveSuccess": "企业微信配置已保存"
     }
   }

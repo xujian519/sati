@@ -1,10 +1,10 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { useTranslation } from 'react-i18next';
-import { X, Loader2 } from 'lucide-react';
-import type { ChatMessage } from '../chat/types/types';
-import type { Project, SessionProvider } from '../../types/app';
-import SubagentDetailMessageFlow from './SubagentDetailMessageFlow';
+import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
+import { X, Loader2 } from "lucide-react";
+import type { ChatMessage } from "../chat/types/types";
+import type { Project, SessionProvider } from "../../types/app";
+import SubagentDetailMessageFlow from "./SubagentDetailMessageFlow";
 
 type DiffLine = { type: string; content: string; lineNum: number };
 
@@ -35,15 +35,15 @@ export default function SubagentDetailModal({
   isRunning = false,
   onClose,
 }: SubagentDetailModalProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation("chat");
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === "Escape") onClose();
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
   const handleOverlayClick = (e: React.MouseEvent) => {
@@ -58,15 +58,11 @@ export default function SubagentDetailModal({
       </div>
     );
   } else if (error) {
-    content = (
-      <div className="px-6 py-12 text-center text-sm text-red-500">
-        {t('subagent.loadError', { error })}
-      </div>
-    );
+    content = <div className="px-6 py-12 text-center text-sm text-red-500">{t("subagent.loadError", { error })}</div>;
   } else if (messages.length === 0) {
     content = (
       <div className="px-6 py-12 text-center text-sm text-neutral-500 dark:text-neutral-400">
-        {t('subagent.noMessages')}
+        {t("subagent.noMessages")}
       </div>
     );
   } else {
@@ -94,7 +90,7 @@ export default function SubagentDetailModal({
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-6 py-3 dark:border-neutral-700">
           <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-            {t('subagent.detailTitle')}
+            {t("subagent.detailTitle")}
             <span className="ml-2 font-mono text-xs text-neutral-400 dark:text-neutral-500">
               {subagentId.slice(0, 8)}
             </span>
@@ -110,14 +106,12 @@ export default function SubagentDetailModal({
         </div>
 
         {/* Content */}
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          {content}
-        </div>
+        <div className="relative flex min-h-0 flex-1 flex-col">{content}</div>
       </div>
     </div>
   );
 
-  if (typeof document === 'undefined') {
+  if (typeof document === "undefined") {
     return modal;
   }
 

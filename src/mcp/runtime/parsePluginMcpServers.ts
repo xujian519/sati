@@ -1,7 +1,7 @@
 /**
  * Convert the loosely-typed `mcpServers: Record<string, unknown>` blob produced
  * by `PluginRuntime.mcpServers()` (each plugin's manifest) into the strict
- * `PilotDeckMcpServerSpec[]` consumed by `McpRuntime`.
+ * `SatiMcpServerSpec[]` consumed by `McpRuntime`.
  *
  * Behaviour parity with the legacy upstream plugin manifest schema:
  *   - `command` ⇒ stdio transport (`args`/`env`/`cwd` optional).
@@ -11,23 +11,19 @@
  */
 
 import { expandMcpString } from "../config/expandPlaceholders.js";
-import type { PilotDeckMcpServerSpec } from "../protocol/types.js";
+import type { SatiMcpServerSpec } from "../protocol/types.js";
 
 function expandStringRecord(rec: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(rec).map(([k, v]) => [k, expandMcpString(v)]),
-  );
+  return Object.fromEntries(Object.entries(rec).map(([k, v]) => [k, expandMcpString(v)]));
 }
 
 export type ParsePluginMcpServersResult = {
-  servers: PilotDeckMcpServerSpec[];
+  servers: SatiMcpServerSpec[];
   diagnostics: { id: string; message: string }[];
 };
 
-export function parsePluginMcpServers(
-  raw: Record<string, unknown> | undefined,
-): ParsePluginMcpServersResult {
-  const servers: PilotDeckMcpServerSpec[] = [];
+export function parsePluginMcpServers(raw: Record<string, unknown> | undefined): ParsePluginMcpServersResult {
+  const servers: SatiMcpServerSpec[] = [];
   const diagnostics: { id: string; message: string }[] = [];
   if (!raw || typeof raw !== "object") {
     return { servers, diagnostics };
@@ -45,7 +41,7 @@ export function parsePluginMcpServers(
         transport: "stdio",
         command,
         args: Array.isArray(v.args)
-          ? (v.args.filter((a): a is string => typeof a === "string").map(expandMcpString))
+          ? v.args.filter((a): a is string => typeof a === "string").map(expandMcpString)
           : undefined,
         env: isStringRecord(v.env) ? expandStringRecord(v.env as Record<string, string>) : undefined,
         cwd: typeof v.cwd === "string" ? expandMcpString(v.cwd) : undefined,
@@ -53,11 +49,12 @@ export function parsePluginMcpServers(
       });
       continue;
     }
-    const url = typeof v.url === "string"
-      ? expandMcpString(v.url)
-      : typeof v.httpUrl === "string"
-        ? expandMcpString(v.httpUrl)
-        : undefined;
+    const url =
+      typeof v.url === "string"
+        ? expandMcpString(v.url)
+        : typeof v.httpUrl === "string"
+          ? expandMcpString(v.httpUrl)
+          : undefined;
     if (url) {
       servers.push({
         id,

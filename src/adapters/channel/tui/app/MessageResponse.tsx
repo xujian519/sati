@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text, useStdout } from "ink";
 import type { TuiMessage } from "./types.js";
-import { pilotDeckDarkBlueTheme } from "./theme.js";
+import { satiDarkBlueTheme } from "./theme.js";
 import { truncateForDisplay } from "./truncate.js";
 import { formatToolSummary } from "./formatToolSummary.js";
 
@@ -21,8 +21,10 @@ export function MessageResponse({
     return (
       <Box flexDirection="column" marginTop={1}>
         <Box flexDirection="row">
-          <Text color={pilotDeckDarkBlueTheme.brandAccent} bold>{"❯ "}</Text>
-          <Text color={pilotDeckDarkBlueTheme.brandAccent}>{message.text.trimEnd()}</Text>
+          <Text color={satiDarkBlueTheme.brandAccent} bold>
+            {"❯ "}
+          </Text>
+          <Text color={satiDarkBlueTheme.brandAccent}>{message.text.trimEnd()}</Text>
         </Box>
       </Box>
     );
@@ -36,9 +38,7 @@ export function MessageResponse({
             {"∴ Thinking"} ({formatCharCount(message.thinking.length)})
           </Text>
         )}
-        {message.text.trim().length > 0 && (
-          <Text color={pilotDeckDarkBlueTheme.text}>{message.text.trim()}</Text>
-        )}
+        {message.text.trim().length > 0 && <Text color={satiDarkBlueTheme.text}>{message.text.trim()}</Text>}
       </Box>
     );
   }
@@ -46,7 +46,10 @@ export function MessageResponse({
   if (message.role === "system") {
     return (
       <Box flexDirection="row" paddingLeft={2}>
-        <Text color={pilotDeckDarkBlueTheme.subtle} dimColor>{"ℹ "}{message.text}</Text>
+        <Text color={satiDarkBlueTheme.subtle} dimColor>
+          {"ℹ "}
+          {message.text}
+        </Text>
       </Box>
     );
   }
@@ -54,9 +57,9 @@ export function MessageResponse({
   if (message.role === "error") {
     return (
       <Box flexDirection="row" flexShrink={0}>
-        <Text color={pilotDeckDarkBlueTheme.subtle}>  ⎿  </Text>
+        <Text color={satiDarkBlueTheme.subtle}> ⎿ </Text>
         <Box flexGrow={1}>
-          <Text color={pilotDeckDarkBlueTheme.error}>{message.text.trim()}</Text>
+          <Text color={satiDarkBlueTheme.error}>{message.text.trim()}</Text>
         </Box>
       </Box>
     );
@@ -75,14 +78,10 @@ function ToolMessageResponse({
   const { stdout } = useStdout();
   const columns = stdout?.columns ?? 80;
 
-  const color = message.ok === false
-    ? pilotDeckDarkBlueTheme.error
-    : pilotDeckDarkBlueTheme.success;
+  const color = message.ok === false ? satiDarkBlueTheme.error : satiDarkBlueTheme.success;
 
   const gutter = focused ? "  ▸  " : "  ⎿  ";
-  const gutterColor = focused
-    ? pilotDeckDarkBlueTheme.brandAccent
-    : pilotDeckDarkBlueTheme.subtle;
+  const gutterColor = focused ? satiDarkBlueTheme.brandAccent : satiDarkBlueTheme.subtle;
 
   let content: string;
   let showHint = false;
@@ -108,7 +107,7 @@ function ToolMessageResponse({
       <Text color={gutterColor}>{gutter}</Text>
       <Box flexGrow={1}>
         <Text color={color}>{content}</Text>
-        {showHint && <Text dimColor>  ⏎</Text>}
+        {showHint && <Text dimColor> ⏎</Text>}
       </Box>
     </Box>
   );

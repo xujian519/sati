@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from "react";
 
-const CACHE_KEY = 'PILOTDECK_GITHUB_STARS';
-const DISMISS_KEY = 'PILOTDECK_HIDE_GITHUB_STAR';
+const CACHE_KEY = "SATI_GITHUB_STARS";
+const DISMISS_KEY = "SATI_HIDE_GITHUB_STAR";
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 type CachedStars = {
@@ -13,7 +13,7 @@ export const useGitHubStars = (owner: string, repo: string) => {
   const [starCount, setStarCount] = useState<number | null>(null);
   const [isDismissed, setIsDismissed] = useState(() => {
     try {
-      return localStorage.getItem(DISMISS_KEY) === 'true';
+      return localStorage.getItem(DISMISS_KEY) === "true";
     } catch {
       return false;
     }
@@ -42,7 +42,7 @@ export const useGitHubStars = (owner: string, repo: string) => {
         if (!response.ok) return;
         const data = await response.json();
         const count = data.stargazers_count;
-        if (typeof count === 'number') {
+        if (typeof count === "number") {
           setStarCount(count);
           try {
             localStorage.setItem(CACHE_KEY, JSON.stringify({ count, timestamp: Date.now() }));
@@ -61,17 +61,14 @@ export const useGitHubStars = (owner: string, repo: string) => {
   const dismiss = useCallback(() => {
     setIsDismissed(true);
     try {
-      localStorage.setItem(DISMISS_KEY, 'true');
+      localStorage.setItem(DISMISS_KEY, "true");
     } catch {
       // ignore
     }
   }, []);
 
-  const formattedCount = starCount !== null
-    ? starCount >= 1000
-      ? `${(starCount / 1000).toFixed(1)}k`
-      : `${starCount}`
-    : null;
+  const formattedCount =
+    starCount !== null ? (starCount >= 1000 ? `${(starCount / 1000).toFixed(1)}k` : `${starCount}`) : null;
 
   return { starCount, formattedCount, isDismissed, dismiss };
 };

@@ -42,7 +42,7 @@ function normalizeMessages(value) {
         return [];
     return value
         .filter((item) => isRecord(item))
-        .map((item) => ({
+        .map(item => ({
         ...(typeof item.msgId === "string" && item.msgId.trim() ? { msgId: item.msgId } : {}),
         role: typeof item.role === "string" && item.role.trim() ? item.role : "user",
         content: typeof item.content === "string" ? item.content : "",
@@ -107,10 +107,10 @@ function normalizeIndexTraceRecord(record) {
 function normalizeDreamTraceRecord(record) {
     const isNoOp = typeof record.isNoOp === "boolean"
         ? record.isNoOp
-        : record.status !== "error"
-            && record.outcome.deletedFiles === 0
-            && record.outcome.rewrittenProjects === 0
-            && !record.outcome.profileUpdated;
+        : record.status !== "error" &&
+            record.outcome.deletedFiles === 0 &&
+            record.outcome.rewrittenProjects === 0 &&
+            !record.outcome.profileUpdated;
     const displayStatus = typeof record.displayStatus === "string" && record.displayStatus.trim()
         ? record.displayStatus
         : record.status === "error"
@@ -127,9 +127,7 @@ function normalizeDreamTraceRecord(record) {
     };
 }
 function sanitizeDreamStatus(value) {
-    return value === "running" || value === "success" || value === "skipped" || value === "failed"
-        ? value
-        : undefined;
+    return value === "running" || value === "success" || value === "skipped" || value === "failed" ? value : undefined;
 }
 function clampInt(value, fallback, min, max) {
     const numeric = typeof value === "number"
@@ -158,8 +156,7 @@ function normalizeSnapshotRelativePath(value, index) {
         throw new MemoryBundleValidationError(`Invalid files[${index}].relativePath`);
     }
     const segments = raw.split("/").filter(Boolean);
-    if (segments.length === 0
-        || segments.some((segment) => segment === "." || segment === "..")) {
+    if (segments.length === 0 || segments.some(segment => segment === "." || segment === "..")) {
         throw new MemoryBundleValidationError(`Invalid files[${index}].relativePath`);
     }
     return segments.join("/");
@@ -176,8 +173,7 @@ function normalizeSnapshotFileRecord(value, index) {
     };
 }
 function hasLegacyMultiProjectPath(relativePath) {
-    return relativePath.startsWith("projects/")
-        || relativePath.includes("/project.meta.md");
+    return relativePath.startsWith("projects/") || relativePath.includes("/project.meta.md");
 }
 function normalizeMemoryBundle(value) {
     if (!isRecord(value))
@@ -188,9 +184,15 @@ function normalizeMemoryBundle(value) {
     }
     const metadata = {
         exportedAt: normalizeString(value.exportedAt).trim() || nowIso(),
-        ...(typeof value.lastIndexedAt === "string" && value.lastIndexedAt.trim() ? { lastIndexedAt: value.lastIndexedAt.trim() } : {}),
-        ...(typeof value.lastDreamAt === "string" && value.lastDreamAt.trim() ? { lastDreamAt: value.lastDreamAt.trim() } : {}),
-        ...(sanitizeDreamStatus(value.lastDreamStatus) ? { lastDreamStatus: sanitizeDreamStatus(value.lastDreamStatus) } : {}),
+        ...(typeof value.lastIndexedAt === "string" && value.lastIndexedAt.trim()
+            ? { lastIndexedAt: value.lastIndexedAt.trim() }
+            : {}),
+        ...(typeof value.lastDreamAt === "string" && value.lastDreamAt.trim()
+            ? { lastDreamAt: value.lastDreamAt.trim() }
+            : {}),
+        ...(sanitizeDreamStatus(value.lastDreamStatus)
+            ? { lastDreamStatus: sanitizeDreamStatus(value.lastDreamStatus) }
+            : {}),
         ...(typeof value.lastDreamSummary === "string" && value.lastDreamSummary.trim()
             ? { lastDreamSummary: value.lastDreamSummary.trim() }
             : {}),
@@ -198,10 +200,14 @@ function normalizeMemoryBundle(value) {
             ? { recentCaseTraces: sanitizeTraceArray(value.recentCaseTraces, "caseId", "startedAt") }
             : {}),
         ...(sanitizeTraceArray(value.recentIndexTraces, "indexTraceId", "startedAt").length > 0
-            ? { recentIndexTraces: sanitizeTraceArray(value.recentIndexTraces, "indexTraceId", "startedAt") }
+            ? {
+                recentIndexTraces: sanitizeTraceArray(value.recentIndexTraces, "indexTraceId", "startedAt"),
+            }
             : {}),
         ...(sanitizeTraceArray(value.recentDreamTraces, "dreamTraceId", "startedAt").length > 0
-            ? { recentDreamTraces: sanitizeTraceArray(value.recentDreamTraces, "dreamTraceId", "startedAt") }
+            ? {
+                recentDreamTraces: sanitizeTraceArray(value.recentDreamTraces, "dreamTraceId", "startedAt"),
+            }
             : {}),
     };
     if (value.formatVersion === MEMORY_EXPORT_FORMAT_VERSION) {
@@ -240,15 +246,11 @@ function isGlobalRelativePath(relativePath) {
 }
 function toExposedGlobalRelativePath(relativePath) {
     const normalized = normalizeRelativePath(relativePath);
-    return normalized.startsWith(GLOBAL_MEMORY_PREFIX)
-        ? normalized
-        : `${GLOBAL_MEMORY_PREFIX}${normalized}`;
+    return normalized.startsWith(GLOBAL_MEMORY_PREFIX) ? normalized : `${GLOBAL_MEMORY_PREFIX}${normalized}`;
 }
 function toInternalGlobalRelativePath(relativePath) {
     const normalized = normalizeRelativePath(relativePath);
-    return normalized.startsWith(GLOBAL_MEMORY_PREFIX)
-        ? normalized.slice(GLOBAL_MEMORY_PREFIX.length)
-        : normalized;
+    return normalized.startsWith(GLOBAL_MEMORY_PREFIX) ? normalized.slice(GLOBAL_MEMORY_PREFIX.length) : normalized;
 }
 function sortManifestEntries(entries) {
     return [...entries].sort((left, right) => {
@@ -260,7 +262,7 @@ function sortManifestEntries(entries) {
 async function loadSqlDatabaseFactory() {
     if (typeof globalThis.Bun !== "undefined") {
         const bunSqliteModuleName = "bun:sqlite";
-        const bunSqlite = await import(bunSqliteModuleName);
+        const bunSqlite = (await import(bunSqliteModuleName));
         return (dbPath) => {
             const db = new bunSqlite.Database(dbPath, { create: true });
             return {
@@ -308,15 +310,14 @@ function sortSnapshotFiles(files) {
     return [...files].sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 }
 function snapshotVersionFromFiles(files) {
-    return hashText(JSON.stringify(sortSnapshotFiles(files.filter((file) => file.relativePath !== "MEMORY.md"))));
+    return hashText(JSON.stringify(sortSnapshotFiles(files.filter(file => file.relativePath !== "MEMORY.md"))));
 }
 function readSnapshotFiles(rootDir) {
     if (!existsSync(rootDir))
         return [];
     const files = [];
     const walk = (currentDir) => {
-        const entries = readdirSync(currentDir, { withFileTypes: true })
-            .sort((left, right) => left.name.localeCompare(right.name));
+        const entries = readdirSync(currentDir, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
         for (const entry of entries) {
             const absolutePath = join(currentDir, entry.name);
             if (entry.isDirectory()) {
@@ -335,9 +336,9 @@ function readSnapshotFiles(rootDir) {
     return files;
 }
 function sameDreamRuntimeState(left, right) {
-    return (left.lastDreamAt ?? "") === (right.lastDreamAt ?? "")
-        && (left.lastDreamStatus ?? "") === (right.lastDreamStatus ?? "")
-        && (left.lastDreamSummary ?? "") === (right.lastDreamSummary ?? "");
+    return ((left.lastDreamAt ?? "") === (right.lastDreamAt ?? "") &&
+        (left.lastDreamStatus ?? "") === (right.lastDreamStatus ?? "") &&
+        (left.lastDreamSummary ?? "") === (right.lastDreamSummary ?? ""));
 }
 export class MemoryRepository {
     dbPath;
@@ -356,8 +357,7 @@ export class MemoryRepository {
         this.memoryDir = resolve(options.memoryDir ?? join(dirname(dbPath), "memory"));
         this.workspacesRoot = dirname(dirname(this.memoryDir));
         this.globalRootDir = resolve(options.globalRootDir ?? join(dirname(this.workspacesRoot), "global"));
-        this.workspaceDir = resolve(options.workspaceDir
-            ?? dirname(dirname(this.memoryDir)));
+        this.workspaceDir = resolve(options.workspaceDir ?? dirname(dirname(this.memoryDir)));
         this.workspaceMode = getWorkspaceMemoryMode(this.workspaceDir);
         mkdirSync(this.memoryDir, { recursive: true });
         mkdirSync(this.globalRootDir, { recursive: true });
@@ -405,9 +405,7 @@ export class MemoryRepository {
     }
     migratePipelineStateTable() {
         const columns = this.db.prepare("PRAGMA table_info(pipeline_state)").all();
-        const columnNames = new Set(columns
-            .map((column) => String(column.name ?? "").trim())
-            .filter(Boolean));
+        const columnNames = new Set(columns.map(column => String(column.name ?? "").trim()).filter(Boolean));
         if (columnNames.has("state_json") && !columnNames.has("state_value"))
             return;
         if (!columnNames.has("state_json") && !columnNames.has("state_value"))
@@ -469,9 +467,7 @@ export class MemoryRepository {
         const currentMemoryDir = this.workspaceMemory.getRootDir();
         const nextCache = new Map();
         const snapshots = [];
-        const entries = existsSync(this.workspacesRoot)
-            ? readdirSync(this.workspacesRoot, { withFileTypes: true })
-            : [];
+        const entries = existsSync(this.workspacesRoot) ? readdirSync(this.workspacesRoot, { withFileTypes: true }) : [];
         for (const entry of entries) {
             if (!entry.isDirectory())
                 continue;
@@ -519,8 +515,8 @@ export class MemoryRepository {
             limit: 5000,
             offset: 0,
         });
-        const projectEntries = entries.filter((entry) => entry.type === "project");
-        const feedbackEntries = entries.filter((entry) => entry.type === "feedback");
+        const projectEntries = entries.filter(entry => entry.type === "project");
+        const feedbackEntries = entries.filter(entry => entry.type === "feedback");
         return {
             totalEntries: entries.length,
             projectEntries: projectEntries.length,
@@ -533,7 +529,8 @@ export class MemoryRepository {
             const meta = this.workspaceMemory.getProjectMeta();
             if (!meta)
                 return [];
-            return [{
+            return [
+                {
                     ...meta,
                     workspaceMode: this.workspaceMode,
                     workspacePath: this.currentWorkspacePath(),
@@ -543,7 +540,8 @@ export class MemoryRepository {
                     readOnly: false,
                     hasLocalMirror: false,
                     summary: this.buildProjectSummary(this.workspaceMemory, meta.projectId),
-                }];
+                },
+            ];
         }
         const localMetas = this.workspaceMemory.listProjectMetas();
         const localByExternalKey = new Map();
@@ -576,6 +574,8 @@ export class MemoryRepository {
                 });
                 continue;
             }
+            // 一次扫描，避免对同一 mirror 重复执行 4 次全量目录扫描
+            const mirrorSummary = this.buildProjectSummary(this.workspaceMemory, mirror.projectId);
             catalog.push({
                 ...mirror,
                 workspaceMode: "general",
@@ -588,17 +588,14 @@ export class MemoryRepository {
                 localMirrorProjectId: mirror.projectId,
                 externalLogicalProjectId,
                 summary: {
-                    totalEntries: summary.totalEntries + this.buildProjectSummary(this.workspaceMemory, mirror.projectId).totalEntries,
-                    projectEntries: summary.projectEntries + this.buildProjectSummary(this.workspaceMemory, mirror.projectId).projectEntries,
-                    feedbackEntries: summary.feedbackEntries + this.buildProjectSummary(this.workspaceMemory, mirror.projectId).feedbackEntries,
-                    latestMemoryAt: [summary.latestMemoryAt, this.buildProjectSummary(this.workspaceMemory, mirror.projectId).latestMemoryAt]
-                        .filter(Boolean)
-                        .sort()
-                        .at(-1),
+                    totalEntries: summary.totalEntries + mirrorSummary.totalEntries,
+                    projectEntries: summary.projectEntries + mirrorSummary.projectEntries,
+                    feedbackEntries: summary.feedbackEntries + mirrorSummary.feedbackEntries,
+                    latestMemoryAt: [summary.latestMemoryAt, mirrorSummary.latestMemoryAt].filter(Boolean).sort().at(-1),
                 },
             });
         }
-        for (const meta of localMetas.filter((entry) => entry.sourceKind !== "workspace_external_mirror")) {
+        for (const meta of localMetas.filter(entry => entry.sourceKind !== "workspace_external_mirror")) {
             catalog.push({
                 ...meta,
                 workspaceMode: "general",
@@ -619,7 +616,7 @@ export class MemoryRepository {
         });
     }
     getReadableProject(logicalProjectId) {
-        return this.listReadableProjectCatalog().find((entry) => entry.logicalProjectId === logicalProjectId);
+        return this.listReadableProjectCatalog().find(entry => entry.logicalProjectId === logicalProjectId);
     }
     mapExternalManifestEntry(snapshot, entry) {
         return {
@@ -651,11 +648,13 @@ export class MemoryRepository {
                 offset: 0,
             }));
         }
-        if (includeExternal && (project.sourceType === "workspace_external" || project.sourceType === "workspace_external_mirror")) {
-            const snapshot = this.getExternalWorkspaceSnapshots().find((item) => resolve(item.workspacePath) === resolve(project.sourceWorkspacePath || project.workspacePath));
+        if (includeExternal &&
+            (project.sourceType === "workspace_external" || project.sourceType === "workspace_external_mirror")) {
+            const snapshot = this.getExternalWorkspaceSnapshots().find(item => resolve(item.workspacePath) === resolve(project.sourceWorkspacePath || project.workspacePath));
             if (snapshot) {
                 const sourceProjectId = project.sourceProjectId || project.projectId;
-                entries.push(...snapshot.store.listMemoryEntries({
+                entries.push(...snapshot.store
+                    .listMemoryEntries({
                     kinds,
                     scope: "project",
                     projectId: sourceProjectId,
@@ -663,7 +662,8 @@ export class MemoryRepository {
                     ...(options.query ? { query: options.query } : {}),
                     limit: 5000,
                     offset: 0,
-                }).map((entry) => this.mapExternalManifestEntry(snapshot, entry)));
+                })
+                    .map(entry => this.mapExternalManifestEntry(snapshot, entry)));
             }
         }
         return sortManifestEntries(entries);
@@ -675,7 +675,7 @@ export class MemoryRepository {
         const summary = this.globalUserMemory.getUserSummary();
         return {
             ...summary,
-            files: summary.files.map((entry) => this.mapGlobalFileRecord(entry)),
+            files: summary.files.map(entry => this.mapGlobalFileRecord(entry)),
         };
     }
     mapGlobalManifestEntry(entry) {
@@ -691,19 +691,21 @@ export class MemoryRepository {
         };
     }
     listGlobalMemoryEntries(options = {}) {
-        const kinds = options.kinds?.filter((kind) => kind === "user");
+        const kinds = options.kinds?.filter(kind => kind === "user");
         if (options.scope === "project")
             return [];
         if (options.kinds && (!kinds || kinds.length === 0))
             return [];
-        return this.globalUserMemory.listMemoryEntries({
+        return this.globalUserMemory
+            .listMemoryEntries({
             ...(kinds ? { kinds } : { kinds: ["user"] }),
             ...(options.query ? { query: options.query } : {}),
             ...(typeof options.limit === "number" ? { limit: options.limit } : {}),
             ...(typeof options.offset === "number" ? { offset: options.offset } : {}),
             scope: "global",
             includeDeprecated: options.includeDeprecated,
-        }).map((entry) => this.mapGlobalManifestEntry(entry));
+        })
+            .map(entry => this.mapGlobalManifestEntry(entry));
     }
     readPipelineState(key, fallback) {
         const row = this.db.prepare("SELECT state_json FROM pipeline_state WHERE state_key = ?").get(key);
@@ -718,18 +720,21 @@ export class MemoryRepository {
         return parseJson(row.state_json, undefined);
     }
     setPipelineState(key, value) {
-        this.db.prepare(`
+        this.db
+            .prepare(`
       INSERT INTO pipeline_state (state_key, state_json, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(state_key) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at
-    `).run(key, JSON.stringify(value), nowIso());
+    `)
+            .run(key, JSON.stringify(value), nowIso());
     }
     deletePipelineState(key) {
         this.db.prepare("DELETE FROM pipeline_state WHERE state_key = ?").run(key);
     }
     insertL0Session(record) {
         const createdAt = record.createdAt || nowIso();
-        this.db.prepare(`
+        this.db
+            .prepare(`
       INSERT INTO l0_sessions (
         l0_index_id,
         session_key,
@@ -746,7 +751,8 @@ export class MemoryRepository {
         source = excluded.source,
         indexed = excluded.indexed,
         created_at = excluded.created_at
-    `).run(record.l0IndexId, record.sessionKey, record.timestamp, JSON.stringify(record.messages), record.source || "openclaw", record.indexed ? 1 : 0, createdAt);
+    `)
+            .run(record.l0IndexId, record.sessionKey, record.timestamp, JSON.stringify(record.messages), record.source || "sati", record.indexed ? 1 : 0, createdAt);
     }
     listPendingSessionKeys(limit = 50, preferredSessionKeys) {
         const normalizedPreferred = Array.isArray(preferredSessionKeys)
@@ -754,24 +760,28 @@ export class MemoryRepository {
             : [];
         if (normalizedPreferred.length > 0) {
             const placeholders = normalizedPreferred.map(() => "?").join(", ");
-            const rows = this.db.prepare(`
+            const rows = this.db
+                .prepare(`
         SELECT DISTINCT session_key, MIN(timestamp) AS first_timestamp
         FROM l0_sessions
         WHERE indexed = 0 AND session_key IN (${placeholders})
         GROUP BY session_key
         ORDER BY first_timestamp ASC
-      `).all(...normalizedPreferred);
-            return rows.map((row) => String(row.session_key)).slice(0, Math.max(1, limit));
+      `)
+                .all(...normalizedPreferred);
+            return rows.map(row => String(row.session_key)).slice(0, Math.max(1, limit));
         }
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(`
       SELECT DISTINCT session_key, MIN(timestamp) AS first_timestamp
       FROM l0_sessions
       WHERE indexed = 0
       GROUP BY session_key
       ORDER BY first_timestamp ASC
       LIMIT ?
-    `).all(Math.max(1, limit));
-        return rows.map((row) => String(row.session_key));
+    `)
+            .all(Math.max(1, limit));
+        return rows.map(row => String(row.session_key));
     }
     countPendingDialogueTurns(preferredSessionKeys) {
         const normalizedPreferred = Array.isArray(preferredSessionKeys)
@@ -779,13 +789,16 @@ export class MemoryRepository {
             : [];
         if (normalizedPreferred.length > 0) {
             const placeholders = normalizedPreferred.map(() => "?").join(", ");
-            return Number(this.db.prepare(`
+            return Number(this.db
+                .prepare(`
           SELECT COUNT(*) AS count
           FROM l0_sessions
           WHERE indexed = 0 AND session_key IN (${placeholders})
-        `).get(...normalizedPreferred)?.count ?? 0);
+        `)
+                .get(...normalizedPreferred)?.count ?? 0);
         }
-        return Number(this.db.prepare("SELECT COUNT(*) AS count FROM l0_sessions WHERE indexed = 0").get()?.count ?? 0);
+        return Number(this.db.prepare("SELECT COUNT(*) AS count FROM l0_sessions WHERE indexed = 0").get()
+            ?.count ?? 0);
     }
     getEarliestPendingTimestamp(preferredSessionKeys) {
         const normalizedPreferred = Array.isArray(preferredSessionKeys)
@@ -793,72 +806,80 @@ export class MemoryRepository {
             : [];
         if (normalizedPreferred.length > 0) {
             const placeholders = normalizedPreferred.map(() => "?").join(", ");
-            const row = this.db.prepare(`
+            const row = this.db
+                .prepare(`
         SELECT MIN(timestamp) AS first_timestamp
         FROM l0_sessions
         WHERE indexed = 0 AND session_key IN (${placeholders})
-      `).get(...normalizedPreferred);
-            return typeof row?.first_timestamp === "string" && row.first_timestamp.trim()
-                ? row.first_timestamp
-                : undefined;
+      `)
+                .get(...normalizedPreferred);
+            return typeof row?.first_timestamp === "string" && row.first_timestamp.trim() ? row.first_timestamp : undefined;
         }
-        const row = this.db.prepare(`
+        const row = this.db
+            .prepare(`
       SELECT MIN(timestamp) AS first_timestamp
       FROM l0_sessions
       WHERE indexed = 0
-    `).get();
-        return typeof row?.first_timestamp === "string" && row.first_timestamp.trim()
-            ? row.first_timestamp
-            : undefined;
+    `)
+            .get();
+        return typeof row?.first_timestamp === "string" && row.first_timestamp.trim() ? row.first_timestamp : undefined;
     }
     listUnindexedL0BySession(sessionKey) {
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(`
       SELECT * FROM l0_sessions
       WHERE session_key = ? AND indexed = 0
       ORDER BY timestamp ASC, created_at ASC
-    `).all(sessionKey);
-        return rows.map((row) => normalizeL0Row(row));
+    `)
+            .all(sessionKey);
+        return rows.map(row => normalizeL0Row(row));
     }
     getLatestL0Before(sessionKey, timestamp, createdAt) {
-        const row = this.db.prepare(`
+        const row = this.db
+            .prepare(`
       SELECT * FROM l0_sessions
       WHERE session_key = ?
         AND (timestamp < ? OR (timestamp = ? AND created_at < ?))
       ORDER BY timestamp DESC, created_at DESC
       LIMIT 1
-    `).get(sessionKey, timestamp, timestamp, createdAt);
+    `)
+            .get(sessionKey, timestamp, timestamp, createdAt);
         return row ? normalizeL0Row(row) : undefined;
     }
     markL0Indexed(ids) {
-        const uniqueIds = Array.from(new Set(ids.filter((item) => typeof item === "string" && item.trim().length > 0)));
+        const uniqueIds = Array.from(new Set(ids.filter(item => typeof item === "string" && item.trim().length > 0)));
         if (uniqueIds.length === 0)
             return;
         const placeholders = uniqueIds.map(() => "?").join(", ");
         this.db.prepare(`UPDATE l0_sessions SET indexed = 1 WHERE l0_index_id IN (${placeholders})`).run(...uniqueIds);
     }
     getL0ByIds(ids) {
-        const uniqueIds = Array.from(new Set(ids.filter((item) => typeof item === "string" && item.trim().length > 0)));
+        const uniqueIds = Array.from(new Set(ids.filter(item => typeof item === "string" && item.trim().length > 0)));
         if (uniqueIds.length === 0)
             return [];
         const placeholders = uniqueIds.map(() => "?").join(", ");
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(`
       SELECT * FROM l0_sessions
       WHERE l0_index_id IN (${placeholders})
       ORDER BY timestamp DESC, created_at DESC
-    `).all(...uniqueIds);
-        return rows.map((row) => normalizeL0Row(row));
+    `)
+            .all(...uniqueIds);
+        return rows.map(row => normalizeL0Row(row));
     }
     listRecentL0(limit = 20, offset = 0) {
-        const rows = this.db.prepare(`
+        const rows = this.db
+            .prepare(`
       SELECT * FROM l0_sessions
       ORDER BY timestamp DESC, created_at DESC
       LIMIT ? OFFSET ?
-    `).all(Math.max(1, limit), Math.max(0, offset));
-        return rows.map((row) => normalizeL0Row(row));
+    `)
+            .all(Math.max(1, limit), Math.max(0, offset));
+        return rows.map(row => normalizeL0Row(row));
     }
     listAllL0() {
         const rows = this.db.prepare("SELECT * FROM l0_sessions ORDER BY timestamp ASC, created_at ASC").all();
-        return rows.map((row) => normalizeL0Row(row));
+        return rows.map(row => normalizeL0Row(row));
     }
     repairL0Sessions(transform) {
         const rows = this.listAllL0();
@@ -873,7 +894,8 @@ export class MemoryRepository {
             }
             if (JSON.stringify(nextMessages) === JSON.stringify(row.messages))
                 continue;
-            this.db.prepare("UPDATE l0_sessions SET messages_json = ?, indexed = 0 WHERE l0_index_id = ?")
+            this.db
+                .prepare("UPDATE l0_sessions SET messages_json = ?, indexed = 0 WHERE l0_index_id = ?")
                 .run(JSON.stringify(nextMessages), row.l0IndexId);
             updated += 1;
         }
@@ -892,27 +914,35 @@ export class MemoryRepository {
         return sanitizeTraceArray(this.readPipelineState(RECENT_CASE_TRACES_STATE_KEY, []), "caseId", "startedAt").slice(0, Math.max(1, limit));
     }
     getCaseTrace(caseId) {
-        return this.listRecentCaseTraces(200).find((item) => item.caseId === caseId);
+        return this.listRecentCaseTraces(200).find(item => item.caseId === caseId);
     }
     saveIndexTrace(record, limit = 30) {
-        const next = sanitizeTraceArray([record, ...this.readPipelineState(RECENT_INDEX_TRACES_STATE_KEY, [])], "indexTraceId", "startedAt").map((item) => normalizeIndexTraceRecord(item)).slice(0, Math.max(1, limit));
+        const next = sanitizeTraceArray([record, ...this.readPipelineState(RECENT_INDEX_TRACES_STATE_KEY, [])], "indexTraceId", "startedAt")
+            .map(item => normalizeIndexTraceRecord(item))
+            .slice(0, Math.max(1, limit));
         this.setPipelineState(RECENT_INDEX_TRACES_STATE_KEY, next);
     }
     listRecentIndexTraces(limit = 30) {
-        return sanitizeTraceArray(this.readPipelineState(RECENT_INDEX_TRACES_STATE_KEY, []), "indexTraceId", "startedAt").map((item) => normalizeIndexTraceRecord(item)).slice(0, Math.max(1, limit));
+        return sanitizeTraceArray(this.readPipelineState(RECENT_INDEX_TRACES_STATE_KEY, []), "indexTraceId", "startedAt")
+            .map(item => normalizeIndexTraceRecord(item))
+            .slice(0, Math.max(1, limit));
     }
     getIndexTrace(indexTraceId) {
-        return this.listRecentIndexTraces(200).find((item) => item.indexTraceId === indexTraceId);
+        return this.listRecentIndexTraces(200).find(item => item.indexTraceId === indexTraceId);
     }
     saveDreamTrace(record, limit = 30) {
-        const next = sanitizeTraceArray([record, ...this.readPipelineState(RECENT_DREAM_TRACES_STATE_KEY, [])], "dreamTraceId", "startedAt").map((item) => normalizeDreamTraceRecord(item)).slice(0, Math.max(1, limit));
+        const next = sanitizeTraceArray([record, ...this.readPipelineState(RECENT_DREAM_TRACES_STATE_KEY, [])], "dreamTraceId", "startedAt")
+            .map(item => normalizeDreamTraceRecord(item))
+            .slice(0, Math.max(1, limit));
         this.setPipelineState(RECENT_DREAM_TRACES_STATE_KEY, next);
     }
     listRecentDreamTraces(limit = 30) {
-        return sanitizeTraceArray(this.readPipelineState(RECENT_DREAM_TRACES_STATE_KEY, []), "dreamTraceId", "startedAt").map((item) => normalizeDreamTraceRecord(item)).slice(0, Math.max(1, limit));
+        return sanitizeTraceArray(this.readPipelineState(RECENT_DREAM_TRACES_STATE_KEY, []), "dreamTraceId", "startedAt")
+            .map(item => normalizeDreamTraceRecord(item))
+            .slice(0, Math.max(1, limit));
     }
     getDreamTrace(dreamTraceId) {
-        return this.listRecentDreamTraces(200).find((item) => item.dreamTraceId === dreamTraceId);
+        return this.listRecentDreamTraces(200).find(item => item.dreamTraceId === dreamTraceId);
     }
     getIndexingSettings(defaults) {
         return sanitizeIndexingSettings(this.getPipelineState(INDEXING_SETTINGS_STATE_KEY), defaults);
@@ -958,16 +988,10 @@ export class MemoryRepository {
     }
     getWorkspaceDir() {
         const workspaceDir = this.getPipelineState("workspaceDir");
-        return typeof workspaceDir === "string" && workspaceDir.trim()
-            ? workspaceDir
-            : "";
+        return typeof workspaceDir === "string" && workspaceDir.trim() ? workspaceDir : "";
     }
     restoreDreamRuntimeState(runtimeState) {
-        for (const key of [
-            LAST_DREAM_AT_STATE_KEY,
-            LAST_DREAM_STATUS_STATE_KEY,
-            LAST_DREAM_SUMMARY_STATE_KEY,
-        ]) {
+        for (const key of [LAST_DREAM_AT_STATE_KEY, LAST_DREAM_STATUS_STATE_KEY, LAST_DREAM_SUMMARY_STATE_KEY]) {
             this.deletePipelineState(key);
         }
         if (runtimeState.lastDreamAt)
@@ -1073,8 +1097,8 @@ export class MemoryRepository {
         if (!snapshot)
             return undefined;
         const currentSnapshot = this.captureLiveMemorySnapshot();
-        const rollbackReady = snapshot.metadata.after.workspaceVersion === currentSnapshot.workspaceVersion
-            && snapshot.metadata.after.globalVersion === currentSnapshot.globalVersion;
+        const rollbackReady = snapshot.metadata.after.workspaceVersion === currentSnapshot.workspaceVersion &&
+            snapshot.metadata.after.globalVersion === currentSnapshot.globalVersion;
         const warning = rollbackReady
             ? undefined
             : "Current memory state no longer matches the last Dream snapshot, so rollback is unavailable.";
@@ -1173,8 +1197,8 @@ export class MemoryRepository {
             throw new Error("No last Dream snapshot is available for rollback.");
         }
         const currentSnapshot = this.captureLiveMemorySnapshot();
-        const rollbackReady = snapshot.metadata.after.workspaceVersion === currentSnapshot.workspaceVersion
-            && snapshot.metadata.after.globalVersion === currentSnapshot.globalVersion;
+        const rollbackReady = snapshot.metadata.after.workspaceVersion === currentSnapshot.workspaceVersion &&
+            snapshot.metadata.after.globalVersion === currentSnapshot.globalVersion;
         if (!rollbackReady) {
             throw new Error("Current memory state no longer matches the last Dream snapshot, so rollback is unavailable.");
         }
@@ -1237,9 +1261,9 @@ export class MemoryRepository {
         return {
             managedFiles: workspaceStore.exportSnapshotFiles().length + globalStore.exportSnapshotFiles().length,
             memoryFiles: memoryFiles.length,
-            project: memoryFiles.filter((item) => item.type === "project").length,
-            feedback: memoryFiles.filter((item) => item.type === "feedback").length,
-            user: memoryFiles.filter((item) => item.type === "user").length,
+            project: memoryFiles.filter(item => item.type === "project").length,
+            feedback: memoryFiles.filter(item => item.type === "feedback").length,
+            user: memoryFiles.filter(item => item.type === "user").length,
             tmp: 0,
             projectMetas: workspaceImported.projectMetas.length,
         };
@@ -1262,10 +1286,10 @@ export class MemoryRepository {
         }
     }
     stageImportBundle(bundle) {
-        const workspaceFiles = bundle.files.filter((record) => !isGlobalRelativePath(record.relativePath));
+        const workspaceFiles = bundle.files.filter(record => !isGlobalRelativePath(record.relativePath));
         const globalFiles = bundle.files
-            .filter((record) => isGlobalRelativePath(record.relativePath))
-            .map((record) => ({
+            .filter(record => isGlobalRelativePath(record.relativePath))
+            .map(record => ({
             ...record,
             relativePath: toInternalGlobalRelativePath(record.relativePath),
         }));
@@ -1341,9 +1365,7 @@ export class MemoryRepository {
             ...(this.listRecentDreamTraces(200).length > 0 ? { recentDreamTraces: this.listRecentDreamTraces(200) } : {}),
             // MEMORY.md is a derived manifest that is regenerated on import. Excluding it keeps
             // current-project bundles free of cross-project/global references.
-            files: this.workspaceMemory
-                .exportSnapshotFiles()
-                .filter((record) => record.relativePath !== "MEMORY.md"),
+            files: this.workspaceMemory.exportSnapshotFiles().filter(record => record.relativePath !== "MEMORY.md"),
         };
     }
     importMemoryBundle(bundle) {
@@ -1384,7 +1406,7 @@ export class MemoryRepository {
         const lastDreamAt = this.getPipelineState(LAST_DREAM_AT_STATE_KEY);
         const fileOverview = this.workspaceMemory.getOverview(typeof lastDreamAt === "string" ? lastDreamAt : undefined);
         const readableProjects = this.workspaceMode === "general"
-            ? this.listReadableProjectCatalog().filter((entry) => entry.sourceType !== "workspace_external")
+            ? this.listReadableProjectCatalog().filter(entry => entry.sourceType !== "workspace_external")
             : [];
         const recentRecallTraceCount = this.listRecentCaseTraces(12).length;
         const recentIndexTraceCount = this.listRecentIndexTraces(30).length;
@@ -1395,7 +1417,7 @@ export class MemoryRepository {
             kinds: ["user"],
             scope: "global",
             limit: 10,
-        }).some((entry) => entry.relativePath === toExposedGlobalRelativePath(GLOBAL_USER_PROFILE_RELATIVE_PATH))
+        }).some(entry => entry.relativePath === toExposedGlobalRelativePath(GLOBAL_USER_PROFILE_RELATIVE_PATH))
             ? 1
             : 0;
         return {
@@ -1403,7 +1425,9 @@ export class MemoryRepository {
             workspaceMode: this.workspaceMode,
             currentProjectCount: this.workspaceMode === "general"
                 ? readableProjects.length
-                : workspaceHasProjectMemory || fileOverview.projectMetaCount > 0 ? 1 : 0,
+                : workspaceHasProjectMemory || fileOverview.projectMetaCount > 0
+                    ? 1
+                    : 0,
             projectMetaPresent: fileOverview.projectMetaCount > 0,
             projectMemoryCount: fileOverview.projectMemories,
             feedbackMemoryCount: fileOverview.feedbackMemories,
@@ -1475,16 +1499,14 @@ export class MemoryRepository {
         return [...workspaceEntries, ...globalEntries].length;
     }
     getMemoryRecordsByIds(ids, maxLines = 80) {
-        const uniqueIds = Array.from(new Set(ids.filter((item) => typeof item === "string" && item.trim().length > 0)));
-        const externalIds = uniqueIds.filter((id) => isExternalRecordId(id));
-        const workspaceIds = uniqueIds.filter((id) => !isGlobalRelativePath(id) && !isExternalRecordId(id));
-        const globalIds = uniqueIds
-            .filter((id) => isGlobalRelativePath(id))
-            .map((id) => toInternalGlobalRelativePath(id));
+        const uniqueIds = Array.from(new Set(ids.filter(item => typeof item === "string" && item.trim().length > 0)));
+        const externalIds = uniqueIds.filter(id => isExternalRecordId(id));
+        const workspaceIds = uniqueIds.filter(id => !isGlobalRelativePath(id) && !isExternalRecordId(id));
+        const globalIds = uniqueIds.filter(id => isGlobalRelativePath(id)).map(id => toInternalGlobalRelativePath(id));
         const workspaceRecords = this.workspaceMemory.getMemoryRecordsByIds(workspaceIds, maxLines);
         const globalRecords = this.globalUserMemory
             .getMemoryRecordsByIds(globalIds, maxLines)
-            .map((record) => this.mapGlobalFileRecord(record));
+            .map(record => this.mapGlobalFileRecord(record));
         const externalGroups = new Map();
         for (const id of externalIds) {
             const parsed = parseExternalRecordId(id);
@@ -1498,21 +1520,20 @@ export class MemoryRepository {
         if (externalGroups.size > 0) {
             const snapshots = this.getExternalWorkspaceSnapshots();
             for (const [workspaceKey, relativePaths] of externalGroups.entries()) {
-                const snapshot = snapshots.find((item) => item.workspaceKey === workspaceKey);
+                const snapshot = snapshots.find(item => item.workspaceKey === workspaceKey);
                 if (!snapshot)
                     continue;
-                externalRecords.push(...snapshot.store.getMemoryRecordsByIds(relativePaths, maxLines)
-                    .map((record) => this.mapExternalFileRecord(snapshot, record)));
+                externalRecords.push(...snapshot.store
+                    .getMemoryRecordsByIds(relativePaths, maxLines)
+                    .map(record => this.mapExternalFileRecord(snapshot, record)));
             }
         }
         const byId = new Map([
-            ...workspaceRecords.map((record) => [record.relativePath, record]),
-            ...globalRecords.map((record) => [record.relativePath, record]),
-            ...externalRecords.map((record) => [record.relativePath, record]),
+            ...workspaceRecords.map(record => [record.relativePath, record]),
+            ...globalRecords.map(record => [record.relativePath, record]),
+            ...externalRecords.map(record => [record.relativePath, record]),
         ]);
-        return ids
-            .map((id) => byId.get(id))
-            .filter((record) => Boolean(record));
+        return ids.map(id => byId.get(id)).filter((record) => Boolean(record));
     }
     editProjectMeta(input) {
         return this.workspaceMemory.editProjectMeta(input);
@@ -1525,9 +1546,7 @@ export class MemoryRepository {
     }
     editMemoryEntry(input) {
         const store = isGlobalRelativePath(input.id) ? this.globalUserMemory : this.workspaceMemory;
-        const relativePath = isGlobalRelativePath(input.id)
-            ? toInternalGlobalRelativePath(input.id)
-            : input.id;
+        const relativePath = isGlobalRelativePath(input.id) ? toInternalGlobalRelativePath(input.id) : input.id;
         const record = store.editEntry({
             relativePath,
             name: input.name,
@@ -1537,49 +1556,43 @@ export class MemoryRepository {
         return isGlobalRelativePath(input.id) ? this.mapGlobalFileRecord(record) : record;
     }
     deleteMemoryEntries(ids) {
-        const workspaceIds = ids.filter((id) => !isGlobalRelativePath(id));
-        const globalIds = ids
-            .filter((id) => isGlobalRelativePath(id))
-            .map((id) => toInternalGlobalRelativePath(id));
+        const workspaceIds = ids.filter(id => !isGlobalRelativePath(id));
+        const globalIds = ids.filter(id => isGlobalRelativePath(id)).map(id => toInternalGlobalRelativePath(id));
         const workspaceResult = this.workspaceMemory.deleteEntries(workspaceIds);
         const globalResult = this.globalUserMemory.deleteEntries(globalIds);
         this.workspaceMemory.repairManifests();
         return {
             mutatedIds: [
                 ...workspaceResult.mutatedIds,
-                ...globalResult.mutatedIds.map((id) => toExposedGlobalRelativePath(id)),
+                ...globalResult.mutatedIds.map(id => toExposedGlobalRelativePath(id)),
             ],
             deletedProjectIds: [...workspaceResult.deletedProjectIds, ...globalResult.deletedProjectIds],
         };
     }
     deprecateMemoryEntries(ids) {
-        const workspaceIds = ids.filter((id) => !isGlobalRelativePath(id));
-        const globalIds = ids
-            .filter((id) => isGlobalRelativePath(id))
-            .map((id) => toInternalGlobalRelativePath(id));
+        const workspaceIds = ids.filter(id => !isGlobalRelativePath(id));
+        const globalIds = ids.filter(id => isGlobalRelativePath(id)).map(id => toInternalGlobalRelativePath(id));
         const workspaceResult = this.workspaceMemory.markEntriesDeprecated(workspaceIds);
         const globalResult = this.globalUserMemory.markEntriesDeprecated(globalIds);
         this.workspaceMemory.repairManifests();
         return {
             mutatedIds: [
                 ...workspaceResult.mutatedIds,
-                ...globalResult.mutatedIds.map((id) => toExposedGlobalRelativePath(id)),
+                ...globalResult.mutatedIds.map(id => toExposedGlobalRelativePath(id)),
             ],
             deletedProjectIds: [...workspaceResult.deletedProjectIds, ...globalResult.deletedProjectIds],
         };
     }
     restoreMemoryEntries(ids) {
-        const workspaceIds = ids.filter((id) => !isGlobalRelativePath(id));
-        const globalIds = ids
-            .filter((id) => isGlobalRelativePath(id))
-            .map((id) => toInternalGlobalRelativePath(id));
+        const workspaceIds = ids.filter(id => !isGlobalRelativePath(id));
+        const globalIds = ids.filter(id => isGlobalRelativePath(id)).map(id => toInternalGlobalRelativePath(id));
         const workspaceResult = this.workspaceMemory.restoreEntries(workspaceIds);
         const globalResult = this.globalUserMemory.restoreEntries(globalIds);
         this.workspaceMemory.repairManifests();
         return {
             mutatedIds: [
                 ...workspaceResult.mutatedIds,
-                ...globalResult.mutatedIds.map((id) => toExposedGlobalRelativePath(id)),
+                ...globalResult.mutatedIds.map(id => toExposedGlobalRelativePath(id)),
             ],
             deletedProjectIds: [...workspaceResult.deletedProjectIds, ...globalResult.deletedProjectIds],
         };

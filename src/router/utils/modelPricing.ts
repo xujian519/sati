@@ -9,49 +9,49 @@ export type RouterModelPricingMap = Record<string, RouterModelPricing>;
 // $/million tokens – fallback when neither nativeCost nor user modelPricing is available
 const DEFAULT_PRICING: Array<{ pattern: RegExp; input: number; output: number; cacheRead?: number }> = [
   // DeepSeek
-  { pattern: /deepseek.*flash/i, input: 0.20, output: 0.60 },
-  { pattern: /deepseek.*chat/i, input: 0.50, output: 1.50 },
-  { pattern: /deepseek.*reasoner/i, input: 0.80, output: 2.00 },
-  { pattern: /deepseek.*v3/i, input: 0.27, output: 1.10 },
+  { pattern: /deepseek.*flash/i, input: 0.2, output: 0.6 },
+  { pattern: /deepseek.*chat/i, input: 0.5, output: 1.5 },
+  { pattern: /deepseek.*reasoner/i, input: 0.8, output: 2.0 },
+  { pattern: /deepseek.*v3/i, input: 0.27, output: 1.1 },
   // Anthropic Claude
-  { pattern: /claude.*opus/i, input: 15.00, output: 75.00, cacheRead: 1.50 },
-  { pattern: /claude.*sonnet/i, input: 3.00, output: 15.00, cacheRead: 0.30 },
-  { pattern: /claude.*haiku/i, input: 0.80, output: 4.00, cacheRead: 0.08 },
+  { pattern: /claude.*opus/i, input: 15.0, output: 75.0, cacheRead: 1.5 },
+  { pattern: /claude.*sonnet/i, input: 3.0, output: 15.0, cacheRead: 0.3 },
+  { pattern: /claude.*haiku/i, input: 0.8, output: 4.0, cacheRead: 0.08 },
   // OpenAI
-  { pattern: /gpt-4o-mini/i, input: 0.15, output: 0.60, cacheRead: 0.075 },
-  { pattern: /gpt-4o/i, input: 2.50, output: 10.00, cacheRead: 1.25 },
-  { pattern: /gpt-4\.1/i, input: 2.00, output: 8.00, cacheRead: 0.50 },
-  { pattern: /gpt-5/i, input: 2.00, output: 8.00, cacheRead: 0.50 },
-  { pattern: /o[134]-mini/i, input: 1.10, output: 4.40 },
-  { pattern: /o[134]-pro/i, input: 10.00, output: 40.00 },
-  { pattern: /o[134]/i, input: 2.50, output: 10.00 },
+  { pattern: /gpt-4o-mini/i, input: 0.15, output: 0.6, cacheRead: 0.075 },
+  { pattern: /gpt-4o/i, input: 2.5, output: 10.0, cacheRead: 1.25 },
+  { pattern: /gpt-4\.1/i, input: 2.0, output: 8.0, cacheRead: 0.5 },
+  { pattern: /gpt-5/i, input: 2.0, output: 8.0, cacheRead: 0.5 },
+  { pattern: /o[134]-mini/i, input: 1.1, output: 4.4 },
+  { pattern: /o[134]-pro/i, input: 10.0, output: 40.0 },
+  { pattern: /o[134]/i, input: 2.5, output: 10.0 },
   // Google Gemini
-  { pattern: /gemini.*flash/i, input: 0.10, output: 0.40 },
-  { pattern: /gemini.*pro/i, input: 1.25, output: 5.00 },
+  { pattern: /gemini.*flash/i, input: 0.1, output: 0.4 },
+  { pattern: /gemini.*pro/i, input: 1.25, output: 5.0 },
   // GLM / ChatGLM / Zhipu
-  { pattern: /glm/i, input: 0.50, output: 1.00 },
+  { pattern: /glm/i, input: 0.5, output: 1.0 },
   // Qwen / Tongyi
-  { pattern: /qwen.*turbo/i, input: 0.30, output: 0.60 },
-  { pattern: /qwen.*plus/i, input: 0.80, output: 2.00 },
-  { pattern: /qwen.*max/i, input: 2.00, output: 6.00 },
-  { pattern: /qwen/i, input: 0.50, output: 1.50 },
+  { pattern: /qwen.*turbo/i, input: 0.3, output: 0.6 },
+  { pattern: /qwen.*plus/i, input: 0.8, output: 2.0 },
+  { pattern: /qwen.*max/i, input: 2.0, output: 6.0 },
+  { pattern: /qwen/i, input: 0.5, output: 1.5 },
   // Llama / Meta
-  { pattern: /llama.*70b/i, input: 0.80, output: 0.80 },
-  { pattern: /llama.*405b/i, input: 3.00, output: 3.00 },
-  { pattern: /llama/i, input: 0.20, output: 0.20 },
+  { pattern: /llama.*70b/i, input: 0.8, output: 0.8 },
+  { pattern: /llama.*405b/i, input: 3.0, output: 3.0 },
+  { pattern: /llama/i, input: 0.2, output: 0.2 },
   // Mistral
-  { pattern: /mistral.*large/i, input: 2.00, output: 6.00 },
-  { pattern: /mistral.*small/i, input: 0.10, output: 0.30 },
+  { pattern: /mistral.*large/i, input: 2.0, output: 6.0 },
+  { pattern: /mistral.*small/i, input: 0.1, output: 0.3 },
   { pattern: /mistral/i, input: 0.25, output: 0.25 },
   // Yi / 01.AI
-  { pattern: /yi-/i, input: 0.30, output: 0.30 },
+  { pattern: /yi-/i, input: 0.3, output: 0.3 },
   // Moonshot / Kimi
-  { pattern: /moonshot|kimi/i, input: 1.00, output: 2.00 },
+  { pattern: /moonshot|kimi/i, input: 1.0, output: 2.0 },
   // Doubao / ByteDance
-  { pattern: /doubao/i, input: 0.40, output: 0.80 },
+  { pattern: /doubao/i, input: 0.4, output: 0.8 },
 ];
 
-const FALLBACK_PRICING = { input: 0.50, output: 1.50 };
+const FALLBACK_PRICING = { input: 0.5, output: 1.5 };
 
 export function lookupModelPricing(
   provider: string,

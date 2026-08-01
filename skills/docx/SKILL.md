@@ -1,6 +1,6 @@
 ---
 name: docx
-description: Create, inspect, edit, restyle, review, compare, sanitize, render, audit, and finalize professional Microsoft Word .docx documents. Use this skill whenever PilotDeck must produce or modify a Word document, preserve an existing document while making targeted changes, add comments or tracked replacements, analyze document structure or metadata, verify accessibility and layout quality, compare revisions, remove review data, or deliver a visually checked DOCX. Use only for .docx files, not legacy .doc, macro-enabled .docm, or Google Docs operations.
+description: Create, inspect, edit, restyle, review, compare, sanitize, render, audit, and finalize professional Microsoft Word .docx documents. Use this skill whenever Sati must produce or modify a Word document, preserve an existing document while making targeted changes, add comments or tracked replacements, analyze document structure or metadata, verify accessibility and layout quality, compare revisions, remove review data, or deliver a visually checked DOCX. Use only for .docx files, not legacy .doc, macro-enabled .docm, or Google Docs operations.
 ---
 
 # Professional Word DOCX
@@ -12,7 +12,7 @@ Treat a Word document as both structured content and a paginated visual artifact
 Resolve the directory containing this `SKILL.md` as `DOCX_SKILL_ROOT`. Common locations are:
 
 ```bash
-DOCX_SKILL_ROOT="${PILOT_HOME:-$HOME/.pilotdeck}/skills/docx"
+DOCX_SKILL_ROOT="${SATI_HOME:-$HOME/.sati}/skills/docx"
 # In a source checkout: <repo>/skills/docx
 ```
 
@@ -22,10 +22,10 @@ Invoke all deterministic operations through:
 bash "$DOCX_SKILL_ROOT/scripts/docx.sh" <command> [options]
 ```
 
-Use the turn-scoped PilotDeck work directory for every intermediate. The host sets `PILOTDECK_WORK_DIR`; the fallback keeps manual runs internal to the project:
+Use the turn-scoped Sati work directory for every intermediate. The host sets `SATI_WORK_DIR`; the fallback keeps manual runs internal to the project:
 
 ```bash
-WORKSPACE="${PILOTDECK_WORK_DIR:-$PWD/.pilotdeck/work/manual/<task-slug>}/docx"
+WORKSPACE="${SATI_WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/docx"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
 

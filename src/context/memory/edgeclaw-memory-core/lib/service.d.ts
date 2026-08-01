@@ -29,6 +29,11 @@ export interface EdgeClawMemoryServiceOptions {
     llm?: EdgeClawMemoryLlmOptions;
     runtime?: Record<string, unknown>;
     logger?: LoggerLike;
+    /** 语义召回路（可选）：见 RetrievalRuntimeOptions.semanticSearch。 */
+    semanticSearch?: (query: string, limit: number) => Promise<Array<{
+        relativePath: string;
+        score: number;
+    }>>;
 }
 export interface CaptureTurnResult {
     captured: boolean;
@@ -67,6 +72,11 @@ export declare class EdgeClawMemoryService {
     private readonly maxMessageChars;
     private readonly source;
     constructor(options: EdgeClawMemoryServiceOptions);
+    /** 运行时注入/替换语义召回路（外部装配，避免构造期循环依赖）。 */
+    setSemanticSearch(fn: (query: string, limit: number) => Promise<Array<{
+        relativePath: string;
+        score: number;
+    }>>): void;
     close(): void;
     getSettings(): IndexingSettings;
     saveSettings(partial: Partial<IndexingSettings>): IndexingSettings;

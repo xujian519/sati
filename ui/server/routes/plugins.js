@@ -1,8 +1,8 @@
-import express from 'express';
-import path from 'path';
-import http from 'http';
-import mime from 'mime-types';
-import fs from 'fs';
+import express from "express";
+import path from "path";
+import http from "http";
+import mime from "mime-types";
+import fs from "fs";
 import {
   scanPlugins,
   getPluginsConfig,
@@ -13,18 +13,18 @@ import {
   installPluginFromGit,
   updatePluginFromGit,
   uninstallPlugin,
-} from '../utils/plugin-loader.js';
+} from "../utils/plugin-loader.js";
 import {
   startPluginServer,
   stopPluginServer,
   getPluginPort,
   isPluginRunning,
-} from '../utils/plugin-process-manager.js';
+} from "../utils/plugin-process-manager.js";
 
 const router = express.Router();
 
 // GET / — List all installed plugins (includes server running status)
-router.get('/', (req, res) => {
+router.get("/", (req, res) => {
   try {
     const plugins = scanPlugins().map(p => ({
       ...p,
@@ -32,63 +32,63 @@ router.get('/', (req, res) => {
     }));
     res.json({ plugins });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to scan plugins', details: err.message });
+    res.status(500).json({ error: "Failed to scan plugins", details: err.message });
   }
 });
 
 // GET /:name/manifest — Get single plugin manifest
-router.get('/:name/manifest', (req, res) => {
+router.get("/:name/manifest", (req, res) => {
   try {
     if (!/^[a-zA-Z0-9_-]+$/.test(req.params.name)) {
-      return res.status(400).json({ error: 'Invalid plugin name' });
+      return res.status(400).json({ error: "Invalid plugin name" });
     }
     const plugins = scanPlugins();
     const plugin = plugins.find(p => p.name === req.params.name);
     if (!plugin) {
-      return res.status(404).json({ error: 'Plugin not found' });
+      return res.status(404).json({ error: "Plugin not found" });
     }
     res.json(plugin);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to read plugin manifest', details: err.message });
+    res.status(500).json({ error: "Failed to read plugin manifest", details: err.message });
   }
 });
 
 // GET /:name/assets/* — Serve plugin static files
-router.get('/:name/assets/*', (req, res) => {
+router.get("/:name/assets/*", (req, res) => {
   const pluginName = req.params.name;
   if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
-    return res.status(400).json({ error: 'Invalid plugin name' });
+    return res.status(400).json({ error: "Invalid plugin name" });
   }
   const assetPath = req.params[0];
 
   if (!assetPath) {
-    return res.status(400).json({ error: 'No asset path specified' });
+    return res.status(400).json({ error: "No asset path specified" });
   }
 
   const resolvedPath = resolvePluginAssetPath(pluginName, assetPath);
   if (!resolvedPath) {
-    return res.status(404).json({ error: 'Asset not found' });
+    return res.status(404).json({ error: "Asset not found" });
   }
 
   try {
     const stat = fs.statSync(resolvedPath);
     if (!stat.isFile()) {
-      return res.status(404).json({ error: 'Asset not found' });
+      return res.status(404).json({ error: "Asset not found" });
     }
   } catch {
-    return res.status(404).json({ error: 'Asset not found' });
+    return res.status(404).json({ error: "Asset not found" });
   }
 
-  const contentType = mime.lookup(resolvedPath) || 'application/octet-stream';
-  res.setHeader('Content-Type', contentType);
+  const contentType = mime.lookup(resolvedPath) || "application/octet-stream";
+  res.setHeader("Content-Type", contentType);
   // Prevent CDN/proxy caching of plugin assets so updates take effect immediately
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   const stream = fs.createReadStream(resolvedPath);
-  stream.on('error', () => {
+  stream.on("error", () => {
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Failed to read asset' });
+      res.status(500).json({ error: "Failed to read asset" });
     } else {
       res.end();
     }
@@ -97,17 +97,17 @@ router.get('/:name/assets/*', (req, res) => {
 });
 
 // PUT /:name/enable — Toggle plugin enabled/disabled (starts/stops server if applicable)
-router.put('/:name/enable', async (req, res) => {
+router.put("/:name/enable", async (req, res) => {
   try {
     const { enabled } = req.body;
-    if (typeof enabled !== 'boolean') {
+    if (typeof enabled !== "boolean") {
       return res.status(400).json({ error: '"enabled" must be a boolean' });
     }
 
     const plugins = scanPlugins();
     const plugin = plugins.find(p => p.name === req.params.name);
     if (!plugin) {
-      return res.status(404).json({ error: 'Plugin not found' });
+      return res.status(404).json({ error: "Plugin not found" });
     }
 
     const config = getPluginsConfig();
@@ -132,21 +132,21 @@ router.put('/:name/enable', async (req, res) => {
 
     res.json({ success: true, name: req.params.name, enabled });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update plugin', details: err.message });
+    res.status(500).json({ error: "Failed to update plugin", details: err.message });
   }
 });
 
 // POST /install — Install plugin from git URL
-router.post('/install', async (req, res) => {
+router.post("/install", async (req, res) => {
   try {
     const { url } = req.body;
-    if (!url || typeof url !== 'string') {
+    if (!url || typeof url !== "string") {
       return res.status(400).json({ error: '"url" is required and must be a string' });
     }
 
     // Basic URL validation
-    if (!url.startsWith('https://') && !url.startsWith('git@')) {
-      return res.status(400).json({ error: 'URL must start with https:// or git@' });
+    if (!url.startsWith("https://") && !url.startsWith("git@")) {
+      return res.status(400).json({ error: "URL must start with https:// or git@" });
     }
 
     const manifest = await installPluginFromGit(url);
@@ -165,17 +165,17 @@ router.post('/install', async (req, res) => {
 
     res.json({ success: true, plugin: manifest });
   } catch (err) {
-    res.status(400).json({ error: 'Failed to install plugin', details: err.message });
+    res.status(400).json({ error: "Failed to install plugin", details: err.message });
   }
 });
 
 // POST /:name/update — Pull latest from git (restarts server if running)
-router.post('/:name/update', async (req, res) => {
+router.post("/:name/update", async (req, res) => {
   try {
     const pluginName = req.params.name;
 
     if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
-      return res.status(400).json({ error: 'Invalid plugin name' });
+      return res.status(400).json({ error: "Invalid plugin name" });
     }
 
     const wasRunning = isPluginRunning(pluginName);
@@ -199,17 +199,17 @@ router.post('/:name/update', async (req, res) => {
 
     res.json({ success: true, plugin: manifest });
   } catch (err) {
-    res.status(400).json({ error: 'Failed to update plugin', details: err.message });
+    res.status(400).json({ error: "Failed to update plugin", details: err.message });
   }
 });
 
 // ALL /:name/rpc/* — Proxy requests to plugin's server subprocess
-router.all('/:name/rpc/*', async (req, res) => {
+router.all("/:name/rpc/*", async (req, res) => {
   const pluginName = req.params.name;
-  const rpcPath = req.params[0] || '';
+  const rpcPath = req.params[0] || "";
 
   if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
-    return res.status(400).json({ error: 'Invalid plugin name' });
+    return res.status(400).json({ error: "Invalid plugin name" });
   }
 
   let port = getPluginPort(pluginName);
@@ -218,16 +218,16 @@ router.all('/:name/rpc/*', async (req, res) => {
     const plugins = scanPlugins();
     const plugin = plugins.find(p => p.name === pluginName);
     if (!plugin || !plugin.server) {
-      return res.status(503).json({ error: 'Plugin server is not running' });
+      return res.status(503).json({ error: "Plugin server is not running" });
     }
     if (!plugin.enabled) {
-      return res.status(503).json({ error: 'Plugin is disabled' });
+      return res.status(503).json({ error: "Plugin is disabled" });
     }
     const pluginDir = path.join(getPluginsDir(), plugin.dirName);
     try {
       port = await startPluginServer(pluginName, pluginDir, plugin.server);
     } catch (err) {
-      return res.status(503).json({ error: 'Plugin server failed to start', details: err.message });
+      return res.status(503).json({ error: "Plugin server failed to start", details: err.message });
     }
   }
 
@@ -237,7 +237,7 @@ router.all('/:name/rpc/*', async (req, res) => {
   const secrets = pluginConfig.secrets || {};
 
   const headers = {
-    'content-type': req.headers['content-type'] || 'application/json',
+    "content-type": req.headers["content-type"] || "application/json",
   };
 
   // Add per-plugin user-configured secrets as X-Plugin-Secret-* headers
@@ -246,24 +246,24 @@ router.all('/:name/rpc/*', async (req, res) => {
   }
 
   // Reconstruct query string
-  const qs = req.url.includes('?') ? '?' + req.url.split('?').slice(1).join('?') : '';
+  const qs = req.url.includes("?") ? "?" + req.url.split("?").slice(1).join("?") : "";
 
   const options = {
-    hostname: '127.0.0.1',
+    hostname: "127.0.0.1",
     port,
     path: `/${rpcPath}${qs}`,
     method: req.method,
     headers,
   };
 
-  const proxyReq = http.request(options, (proxyRes) => {
+  const proxyReq = http.request(options, proxyRes => {
     res.writeHead(proxyRes.statusCode, proxyRes.headers);
     proxyRes.pipe(res);
   });
 
-  proxyReq.on('error', (err) => {
+  proxyReq.on("error", err => {
     if (!res.headersSent) {
-      res.status(502).json({ error: 'Plugin server error', details: err.message });
+      res.status(502).json({ error: "Plugin server error", details: err.message });
     } else {
       res.end();
     }
@@ -272,10 +272,10 @@ router.all('/:name/rpc/*', async (req, res) => {
   // Forward body (already parsed by express JSON middleware, so re-stringify).
   // Check content-length to detect whether a body was actually sent, since
   // req.body can be falsy for valid payloads like 0, false, null, or {}.
-  const hasBody = req.headers['content-length'] && parseInt(req.headers['content-length'], 10) > 0;
+  const hasBody = req.headers["content-length"] && parseInt(req.headers["content-length"], 10) > 0;
   if (hasBody && req.body !== undefined) {
     const bodyStr = JSON.stringify(req.body);
-    proxyReq.setHeader('content-length', Buffer.byteLength(bodyStr));
+    proxyReq.setHeader("content-length", Buffer.byteLength(bodyStr));
     proxyReq.write(bodyStr);
   }
 
@@ -283,13 +283,13 @@ router.all('/:name/rpc/*', async (req, res) => {
 });
 
 // DELETE /:name — Uninstall plugin (stops server first)
-router.delete('/:name', async (req, res) => {
+router.delete("/:name", async (req, res) => {
   try {
     const pluginName = req.params.name;
 
     // Validate name format to prevent path traversal
     if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
-      return res.status(400).json({ error: 'Invalid plugin name' });
+      return res.status(400).json({ error: "Invalid plugin name" });
     }
 
     // Stop server and wait for the process to fully exit before deleting files
@@ -300,7 +300,7 @@ router.delete('/:name', async (req, res) => {
     await uninstallPlugin(pluginName);
     res.json({ success: true, name: pluginName });
   } catch (err) {
-    res.status(400).json({ error: 'Failed to uninstall plugin', details: err.message });
+    res.status(400).json({ error: "Failed to uninstall plugin", details: err.message });
   }
 });
 

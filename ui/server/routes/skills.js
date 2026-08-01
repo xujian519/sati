@@ -3,8 +3,8 @@
  * contract that `ui/src/components/main-content-v2/SkillsV2.tsx` was
  * built against into the gateway's `skill_*` RPCs. The gateway is the
  * authoritative skill manager (see `src/extension/skills/SkillManager.ts`)
- * backed by release-bundled skills, `~/.pilotdeck/skills/`, and
- * `<project>/.pilotdeck/skills/`,
+ * backed by release-bundled skills, `~/.sati/skills/`, and
+ * `<project>/.sati/skills/`,
  * so the UI and the agent always read from the same place.
  *
  * Two endpoints stay file-based for now because they don't map cleanly
@@ -18,7 +18,7 @@
  *
  *   - `/clawhub/*` — shells out to the `clawhub` CLI which writes its
  *     output to disk by itself. We just retarget the install root to
- *     `~/.pilotdeck/skills/` so installs end up where the agent looks.
+ *     `~/.sati/skills/` so installs end up where the agent looks.
  *
  * Anything else (list/read/write/create/delete/import/validate/scan) is
  * a one-line forward to the gateway. Errors raised by `SkillManagerError`
@@ -26,17 +26,17 @@
  * HTTP status; everything else falls through as 500.
  */
 
-import express from 'express';
-import { promises as fs } from 'fs';
-import path from 'path';
-import os from 'os';
-import { fileURLToPath } from 'url';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import multer from 'multer';
-import { getPilotDeckGateway } from '../pilotdeck-bridge.js';
-import { resolvePilotHome } from '../utils/pilotPaths.js';
-import { moveDirectoryAcrossDevicesSafe } from '../utils/fileMoves.js';
+import express from "express";
+import { promises as fs } from "fs";
+import path from "path";
+import os from "os";
+import { fileURLToPath } from "url";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import multer from "multer";
+import { getSatiGateway } from "../sati-bridge.js";
+import { resolvePilotHome } from "../utils/pilotPaths.js";
+import { moveDirectoryAcrossDevicesSafe } from "../utils/fileMoves.js";
 
 const execFileAsync = promisify(execFile);
 const router = express.Router();
@@ -58,19 +58,19 @@ const upload = multer({
 // ---------------------------------------------------------------------------
 
 const SLUG_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
-const PILOT_HOME = resolvePilotHome(process.env);
-const PROJECT_DIR = '.pilotdeck';
-const SKILLS_SUBDIR = 'skills';
+const SATI_HOME = resolvePilotHome(process.env);
+const PROJECT_DIR = ".sati";
+const SKILLS_SUBDIR = "skills";
 const BUNDLED_SKILLS_ROOT = path.resolve(
-  process.env.PILOTDECK_BUNDLED_SKILLS_DIR ||
-    path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'skills'),
+  process.env.SATI_BUNDLED_SKILLS_DIR ||
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "skills"),
 );
 
 function safeSlug(slug) {
-  return typeof slug === 'string' && SLUG_RE.test(slug) && !slug.includes('..');
+  return typeof slug === "string" && SLUG_RE.test(slug) && !slug.includes("..");
 }
 
-const GENERAL_CWD_PATHS = [path.resolve(PILOT_HOME)];
+const GENERAL_CWD_PATHS = [path.resolve(SATI_HOME)];
 
 function isGeneralCwd(projectPath) {
   if (!projectPath) return false;
@@ -81,13 +81,13 @@ function resolveRequestedScope(scope, projectPath, { defaultToProjectWhenAvailab
   const generalCwd = isGeneralCwd(projectPath);
   const effectiveProjectPath = generalCwd ? null : projectPath || null;
 
-  if (scope === 'builtin') {
-    return { ok: false, error: 'built-in skills are read-only' };
+  if (scope === "builtin") {
+    return { ok: false, error: "built-in skills are read-only" };
   }
 
-  if (scope === 'project') {
+  if (scope === "project") {
     if (generalCwd) {
-      return { ok: true, scope: 'user', projectPath: null, wantProject: false };
+      return { ok: true, scope: "user", projectPath: null, wantProject: false };
     }
     if (!effectiveProjectPath) {
       return {
@@ -95,22 +95,22 @@ function resolveRequestedScope(scope, projectPath, { defaultToProjectWhenAvailab
         error: "project scope requires a real project (general chat doesn't qualify)",
       };
     }
-    return { ok: true, scope: 'project', projectPath: effectiveProjectPath, wantProject: true };
+    return { ok: true, scope: "project", projectPath: effectiveProjectPath, wantProject: true };
   }
 
-  if (scope === 'user') {
-    return { ok: true, scope: 'user', projectPath: null, wantProject: false };
+  if (scope === "user") {
+    return { ok: true, scope: "user", projectPath: null, wantProject: false };
   }
 
   if (defaultToProjectWhenAvailable && effectiveProjectPath) {
-    return { ok: true, scope: 'project', projectPath: effectiveProjectPath, wantProject: true };
+    return { ok: true, scope: "project", projectPath: effectiveProjectPath, wantProject: true };
   }
 
-  return { ok: true, scope: 'user', projectPath: null, wantProject: false };
+  return { ok: true, scope: "user", projectPath: null, wantProject: false };
 }
 
 function userSkillsRoot() {
-  return path.join(PILOT_HOME, SKILLS_SUBDIR);
+  return path.join(SATI_HOME, SKILLS_SUBDIR);
 }
 
 function projectSkillsRoot(projectPath) {
@@ -118,9 +118,9 @@ function projectSkillsRoot(projectPath) {
 }
 
 function expandHome(p) {
-  if (typeof p !== 'string' || !p) return p;
-  if (p === '~') return os.homedir();
-  if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
+  if (typeof p !== "string" || !p) return p;
+  if (p === "~") return os.homedir();
+  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
   return p;
 }
 
@@ -132,28 +132,28 @@ function expandHome(p) {
  * cannot cajole the gateway into touching arbitrary paths.
  */
 function classifySkillPath(skillPath, projectPath = null) {
-  if (typeof skillPath !== 'string' || !skillPath) {
-    return { ok: false, reason: 'skillPath is required' };
+  if (typeof skillPath !== "string" || !skillPath) {
+    return { ok: false, reason: "skillPath is required" };
   }
   const abs = path.resolve(skillPath);
-  if (abs.includes('..')) {
+  if (abs.includes("..")) {
     return { ok: false, reason: 'skillPath contains ".."' };
   }
 
   const candidates = [
-    { root: BUNDLED_SKILLS_ROOT, scope: 'builtin' },
-    { root: userSkillsRoot(), scope: 'user' },
+    { root: BUNDLED_SKILLS_ROOT, scope: "builtin" },
+    { root: userSkillsRoot(), scope: "user" },
   ];
   if (projectPath && !isGeneralCwd(projectPath)) {
-    candidates.push({ root: projectSkillsRoot(projectPath), scope: 'project' });
+    candidates.push({ root: projectSkillsRoot(projectPath), scope: "project" });
   }
   for (const { root, scope } of candidates) {
     const rootResolved = path.resolve(root);
     if (abs === rootResolved) {
-      return { ok: false, reason: 'skillPath is the skills root, not a skill' };
+      return { ok: false, reason: "skillPath is the skills root, not a skill" };
     }
     const rel = path.relative(rootResolved, abs);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
+    if (rel.startsWith("..") || path.isAbsolute(rel)) continue;
     const segments = rel.split(path.sep).filter(Boolean);
     if (segments.length === 0) continue;
     const slug = segments[0];
@@ -162,7 +162,7 @@ function classifySkillPath(skillPath, projectPath = null) {
     }
     return { ok: true, scope, slug };
   }
-  return { ok: false, reason: 'skillPath is not inside any known skills root' };
+  return { ok: false, reason: "skillPath is not inside any known skills root" };
 }
 
 /**
@@ -175,27 +175,27 @@ function sendGatewayError(res, err) {
   const code = err?.code;
   const message = err?.message || (err instanceof Error ? err.message : String(err));
   switch (code) {
-    case 'not_configured':
+    case "not_configured":
       return res.status(503).json({ error: message, code });
-    case 'invalid_input':
-    case 'invalid_slug':
-    case 'project_required':
-    case 'self_import':
+    case "invalid_input":
+    case "invalid_slug":
+    case "project_required":
+    case "self_import":
       return res.status(400).json({ error: message, code });
-    case 'read_only':
+    case "read_only":
       return res.status(403).json({ error: message, code });
-    case 'not_found':
-    case 'source_missing':
-    case 'source_not_directory':
-    case 'no_skill_md':
+    case "not_found":
+    case "source_missing":
+    case "source_not_directory":
+    case "no_skill_md":
       return res.status(404).json({ error: message, code });
-    case 'conflict':
+    case "conflict":
       return res.status(409).json({ error: message, code });
-    case 'validation_failed':
+    case "validation_failed":
       return res.status(422).json({ error: message, code, validation: err.validation });
     default:
-      console.error('[skills-bridge]', err);
-      return res.status(500).json({ error: message, code: code || 'gateway_request_failed' });
+      console.error("[skills-bridge]", err);
+      return res.status(500).json({ error: message, code: code || "gateway_request_failed" });
   }
 }
 
@@ -209,7 +209,7 @@ function sendGatewayError(res, err) {
  * timeout) surface as plain `Error` and route to the 500 fallback.
  */
 async function callGateway(method, params) {
-  const gw = await getPilotDeckGateway();
+  const gw = await getSatiGateway();
   return gw[method](params);
 }
 
@@ -217,12 +217,12 @@ async function callGateway(method, params) {
 // Core CRUD — every endpoint forwards to the gateway
 // ---------------------------------------------------------------------------
 
-router.post('/list', async (req, res) => {
+router.post("/list", async (req, res) => {
   try {
     const { projectPath } = req.body || {};
     const generalCwd = isGeneralCwd(projectPath);
     const effectiveProjectPath = generalCwd ? null : projectPath || null;
-    const data = await callGateway('skillsList', { projectKey: effectiveProjectPath });
+    const data = await callGateway("skillsList", { projectKey: effectiveProjectPath });
     res.json({
       builtin: data.builtin,
       user: data.user,
@@ -235,15 +235,15 @@ router.post('/list', async (req, res) => {
   }
 });
 
-router.post('/read', async (req, res) => {
+router.post("/read", async (req, res) => {
   try {
     const { skillPath, projectPath } = req.body || {};
     const cls = classifySkillPath(skillPath, projectPath);
     if (!cls.ok) return res.status(400).json({ error: cls.reason });
-    const result = await callGateway('skillRead', {
+    const result = await callGateway("skillRead", {
       scope: cls.scope,
       slug: cls.slug,
-      projectKey: cls.scope === 'project' ? projectPath : null,
+      projectKey: cls.scope === "project" ? projectPath : null,
     });
     res.json(result);
   } catch (e) {
@@ -251,18 +251,18 @@ router.post('/read', async (req, res) => {
   }
 });
 
-router.post('/write', async (req, res) => {
+router.post("/write", async (req, res) => {
   try {
     const { skillPath, content, projectPath } = req.body || {};
-    if (typeof content !== 'string') {
-      return res.status(400).json({ error: 'content (string) is required' });
+    if (typeof content !== "string") {
+      return res.status(400).json({ error: "content (string) is required" });
     }
     const cls = classifySkillPath(skillPath, projectPath);
     if (!cls.ok) return res.status(400).json({ error: cls.reason });
-    const result = await callGateway('skillWrite', {
+    const result = await callGateway("skillWrite", {
       scope: cls.scope,
       slug: cls.slug,
-      projectKey: cls.scope === 'project' ? projectPath : null,
+      projectKey: cls.scope === "project" ? projectPath : null,
       content,
     });
     res.json(result);
@@ -271,12 +271,12 @@ router.post('/write', async (req, res) => {
   }
 });
 
-router.post('/create', async (req, res) => {
+router.post("/create", async (req, res) => {
   try {
     const { scope, projectPath, slug, name, description, body, content } = req.body || {};
     const resolved = resolveRequestedScope(scope, projectPath);
     if (!resolved.ok) return res.status(400).json({ error: resolved.error });
-    const result = await callGateway('skillCreate', {
+    const result = await callGateway("skillCreate", {
       scope: resolved.scope,
       slug,
       projectKey: resolved.wantProject ? resolved.projectPath : null,
@@ -291,15 +291,15 @@ router.post('/create', async (req, res) => {
   }
 });
 
-router.post('/delete', async (req, res) => {
+router.post("/delete", async (req, res) => {
   try {
     const { skillPath, projectPath } = req.body || {};
     const cls = classifySkillPath(skillPath, projectPath);
     if (!cls.ok) return res.status(400).json({ error: cls.reason });
-    const result = await callGateway('skillDelete', {
+    const result = await callGateway("skillDelete", {
       scope: cls.scope,
       slug: cls.slug,
-      projectKey: cls.scope === 'project' ? projectPath : null,
+      projectKey: cls.scope === "project" ? projectPath : null,
     });
     res.json(result);
   } catch (e) {
@@ -307,25 +307,22 @@ router.post('/delete', async (req, res) => {
   }
 });
 
-router.post('/validate', async (req, res) => {
+router.post("/validate", async (req, res) => {
   try {
     const { sourcePath, skillMdContent, files } = req.body || {};
-    const result = await callGateway(
-      'skillValidate',
-      sourcePath ? { sourcePath } : { skillMdContent, files },
-    );
+    const result = await callGateway("skillValidate", sourcePath ? { sourcePath } : { skillMdContent, files });
     res.json(result);
   } catch (e) {
     sendGatewayError(res, e);
   }
 });
 
-router.post('/import', async (req, res) => {
+router.post("/import", async (req, res) => {
   try {
     const { sourcePath, slug, scope, projectPath, mode, force } = req.body || {};
     const resolved = resolveRequestedScope(scope, projectPath);
     if (!resolved.ok) return res.status(400).json({ error: resolved.error });
-    const result = await callGateway('skillImport', {
+    const result = await callGateway("skillImport", {
       sourcePath,
       slug,
       scope: resolved.scope,
@@ -339,10 +336,10 @@ router.post('/import', async (req, res) => {
   }
 });
 
-router.post('/scan', async (req, res) => {
+router.post("/scan", async (req, res) => {
   try {
     const { parentPath } = req.body || {};
-    const result = await callGateway('skillScan', { parentPath });
+    const result = await callGateway("skillScan", { parentPath });
     res.json(result);
   } catch (e) {
     sendGatewayError(res, e);
@@ -352,25 +349,23 @@ router.post('/scan', async (req, res) => {
 // ---------------------------------------------------------------------------
 // /import-upload — multipart picker upload. Multipart bodies don't fit the
 // WS RPC, so we stage on disk and then ask the gateway to validate. The
-// final move lands in `~/.pilotdeck/skills/<slug>` or
-// `<project>/.pilotdeck/skills/<slug>` so the agent picks it up on next
+// final move lands in `~/.sati/skills/<slug>` or
+// `<project>/.sati/skills/<slug>` so the agent picks it up on next
 // session refresh.
 // ---------------------------------------------------------------------------
 
-router.post('/import-upload', upload.array('files', 500), async (req, res) => {
+router.post("/import-upload", upload.array("files", 500), async (req, res) => {
   let stagingDir = null;
   try {
     const { slug: requestedSlug, scope, projectPath, force, paths: pathsJson } = req.body || {};
     let paths;
     try {
-      paths = JSON.parse(pathsJson || '[]');
+      paths = JSON.parse(pathsJson || "[]");
     } catch {
-      return res
-        .status(400)
-        .json({ error: '`paths` must be a JSON array of relative paths matching the file order.' });
+      return res.status(400).json({ error: "`paths` must be a JSON array of relative paths matching the file order." });
     }
     const filesIn = Array.isArray(req.files) ? req.files : [];
-    if (filesIn.length === 0) return res.status(400).json({ error: 'No files were uploaded.' });
+    if (filesIn.length === 0) return res.status(400).json({ error: "No files were uploaded." });
     if (filesIn.length !== paths.length) {
       return res.status(400).json({
         error: `paths length (${paths.length}) does not match files count (${filesIn.length}).`,
@@ -383,28 +378,26 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
       buffer: f.buffer,
     }));
 
-    let skillMdContent = '';
+    let skillMdContent = "";
     for (const m of manifest) {
-      if (m.relativePath === 'SKILL.md') {
-        skillMdContent = m.buffer.toString('utf8');
+      if (m.relativePath === "SKILL.md") {
+        skillMdContent = m.buffer.toString("utf8");
         break;
       }
     }
-    const validation = await callGateway('skillValidate', {
+    const validation = await callGateway("skillValidate", {
       skillMdContent,
-      files: manifest.map((m) => ({ relativePath: m.relativePath, size: m.size })),
+      files: manifest.map(m => ({ relativePath: m.relativePath, size: m.size })),
     });
     if (!validation.ok) {
-      return res.status(422).json({ error: 'Validation failed', validation });
+      return res.status(422).json({ error: "Validation failed", validation });
     }
 
     const resolved = resolveRequestedScope(scope, projectPath);
     if (!resolved.ok) return res.status(400).json({ error: resolved.error });
     const root = resolved.wantProject ? projectSkillsRoot(resolved.projectPath) : userSkillsRoot();
     const inferredSlug =
-      (typeof requestedSlug === 'string' && requestedSlug.trim()) ||
-      (paths[0] && paths[0].split('/')[0]) ||
-      '';
+      (typeof requestedSlug === "string" && requestedSlug.trim()) || (paths[0] && paths[0].split("/")[0]) || "";
     if (!safeSlug(inferredSlug)) {
       return res.status(400).json({
         error: `Invalid slug "${inferredSlug}". Allowed: [a-zA-Z0-9][a-zA-Z0-9._-]{0,99}, no "..".`,
@@ -413,9 +406,9 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
     const targetDir = path.join(root, inferredSlug);
 
     const stripPrefix = (() => {
-      const first = paths[0]?.split('/')?.[0];
+      const first = paths[0]?.split("/")?.[0];
       if (!first) return null;
-      return paths.every((p) => p.split('/')[0] === first) ? first + '/' : null;
+      return paths.every(p => p.split("/")[0] === first) ? first + "/" : null;
     })();
 
     let exists = false;
@@ -426,7 +419,7 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
       /* missing → fine */
     }
     if (exists) {
-      const isForce = force === 'true' || force === true;
+      const isForce = force === "true" || force === true;
       if (!isForce) {
         return res
           .status(409)
@@ -435,13 +428,13 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
     }
 
     await fs.mkdir(root, { recursive: true });
-    stagingDir = await fs.mkdtemp(path.join(root, '.tmp-skill-upload-'));
+    stagingDir = await fs.mkdtemp(path.join(root, ".tmp-skill-upload-"));
     for (const m of manifest) {
       const rel =
         stripPrefix && m.relativePath.startsWith(stripPrefix)
           ? m.relativePath.slice(stripPrefix.length)
           : m.relativePath;
-      if (rel.includes('..') || path.isAbsolute(rel)) continue;
+      if (rel.includes("..") || path.isAbsolute(rel)) continue;
       const out = path.join(stagingDir, rel);
       await fs.mkdir(path.dirname(out), { recursive: true });
       await fs.writeFile(out, m.buffer);
@@ -454,18 +447,18 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
     // matches the rest of the API (skill summary populated, scope echoed).
     let skillSummary = null;
     try {
-      const list = await callGateway('skillsList', {
+      const list = await callGateway("skillsList", {
         projectKey: resolved.wantProject ? resolved.projectPath : null,
       });
       const bucket = resolved.wantProject ? list.project : list.user;
-      skillSummary = bucket.find((s) => s.slug === inferredSlug) ?? null;
+      skillSummary = bucket.find(s => s.slug === inferredSlug) ?? null;
     } catch {
       /* best-effort; the file is on disk regardless */
     }
 
     res.json({
       ok: true,
-      mode: 'upload',
+      mode: "upload",
       scope: resolved.scope,
       slug: inferredSlug,
       skillPath: targetDir,
@@ -487,43 +480,41 @@ router.post('/import-upload', upload.array('files', 500), async (req, res) => {
 // ---------------------------------------------------------------------------
 // ClawHub passthrough — kept here because the binary writes to disk and
 // reading it back into the gateway would just add a layer.  We retarget
-// the install root to `~/.pilotdeck/skills/` (or `<project>/.pilotdeck/
+// the install root to `~/.sati/skills/` (or `<project>/.sati/
 // skills/`) so installed skills end up where the agent looks.
 // ---------------------------------------------------------------------------
 
-router.post('/clawhub/search', async (req, res) => {
+router.post("/clawhub/search", async (req, res) => {
   try {
     const { query, registry } = req.body || {};
-    if (typeof query !== 'string' || query.trim().length === 0) {
+    if (typeof query !== "string" || query.trim().length === 0) {
       return res.json({ results: [] });
     }
-    const args = ['--no-input'];
-    if (registry) args.push('--registry', registry);
-    args.push('search', query.trim());
+    const args = ["--no-input"];
+    if (registry) args.push("--registry", registry);
+    args.push("search", query.trim());
 
-    let stdout = '';
+    let stdout = "";
     try {
-      const r = await execFileAsync('clawhub', args, { timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
-      stdout = r.stdout || '';
+      const r = await execFileAsync("clawhub", args, { timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
+      stdout = r.stdout || "";
     } catch (e) {
-      if (e.code === 'ENOENT') {
-        return res
-          .status(503)
-          .json({ error: 'clawhub CLI not found in PATH. Install with `npm install -g clawhub`.' });
+      if (e.code === "ENOENT") {
+        return res.status(503).json({ error: "clawhub CLI not found in PATH. Install with `npm install -g clawhub`." });
       }
-      stdout = e.stdout || '';
+      stdout = e.stdout || "";
       if (!stdout) {
-        return res.status(500).json({ error: 'clawhub search failed', message: e.message });
+        return res.status(500).json({ error: "clawhub search failed", message: e.message });
       }
     }
 
     // eslint-disable-next-line no-control-regex
     const ANSI = /\x1b\[[0-9;]*m/g;
     const results = [];
-    for (const rawLine of stdout.split('\n')) {
-      const line = rawLine.replace(ANSI, '').trim();
+    for (const rawLine of stdout.split("\n")) {
+      const line = rawLine.replace(ANSI, "").trim();
       if (!line) continue;
-      if (line.startsWith('-') || line.toLowerCase().startsWith('searching')) continue;
+      if (line.startsWith("-") || line.toLowerCase().startsWith("searching")) continue;
       const m = line.match(/^(\S+)\s+(.+?)\s+\(([\d.]+)\)\s*$/);
       if (m) {
         results.push({ slug: m[1], name: m[2], score: parseFloat(m[3]) });
@@ -536,12 +527,12 @@ router.post('/clawhub/search', async (req, res) => {
     }
     res.json({ results });
   } catch (e) {
-    console.error('[skills/clawhub/search]', e);
-    res.status(500).json({ error: 'Search failed', message: e.message });
+    console.error("[skills/clawhub/search]", e);
+    res.status(500).json({ error: "Search failed", message: e.message });
   }
 });
 
-router.post('/clawhub/install', async (req, res) => {
+router.post("/clawhub/install", async (req, res) => {
   try {
     const { slug, version, force, scope, projectPath, registry } = req.body || {};
     if (!safeSlug(slug)) {
@@ -558,53 +549,50 @@ router.post('/clawhub/install', async (req, res) => {
       workdir = resolved.projectPath;
       dir = path.join(PROJECT_DIR, SKILLS_SUBDIR);
     } else {
-      workdir = PILOT_HOME;
+      workdir = SATI_HOME;
       dir = SKILLS_SUBDIR;
     }
     const installPath = path.join(workdir, dir, slug);
 
-    const args = ['--no-input', '--workdir', workdir, '--dir', dir];
-    if (registry) args.push('--registry', registry);
-    args.push('install', slug);
-    if (version) args.push('--version', version);
-    if (force) args.push('--force');
+    const args = ["--no-input", "--workdir", workdir, "--dir", dir];
+    if (registry) args.push("--registry", registry);
+    args.push("install", slug);
+    if (version) args.push("--version", version);
+    if (force) args.push("--force");
 
-    let stdout = '';
-    let stderr = '';
+    let stdout = "";
+    let stderr = "";
     let runError = null;
     try {
-      const r = await execFileAsync('clawhub', args, { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 });
-      stdout = r.stdout || '';
-      stderr = r.stderr || '';
+      const r = await execFileAsync("clawhub", args, { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 });
+      stdout = r.stdout || "";
+      stderr = r.stderr || "";
     } catch (e) {
-      if (e.code === 'ENOENT') {
-        return res
-          .status(503)
-          .json({ error: 'clawhub CLI not found in PATH. Install with `npm install -g clawhub`.' });
+      if (e.code === "ENOENT") {
+        return res.status(503).json({ error: "clawhub CLI not found in PATH. Install with `npm install -g clawhub`." });
       }
       runError = e;
-      stdout = e.stdout || '';
-      stderr = e.stderr || '';
+      stdout = e.stdout || "";
+      stderr = e.stderr || "";
     }
 
     let installed = false;
     let skill = null;
     try {
-      await fs.access(path.join(installPath, 'SKILL.md'));
+      await fs.access(path.join(installPath, "SKILL.md"));
       installed = true;
       // Pull the summary back through the gateway so descriptions reflect
       // the same frontmatter parser the agent will use.
-      const list = await callGateway('skillsList', {
+      const list = await callGateway("skillsList", {
         projectKey: resolved.wantProject ? resolved.projectPath : null,
       });
       const bucket = resolved.wantProject ? list.project : list.user;
-      skill = bucket.find((s) => s.slug === slug) ?? null;
+      skill = bucket.find(s => s.slug === slug) ?? null;
     } catch {
       /* not installed */
     }
 
-    const needsForce =
-      !installed && !force && (stderr || stdout).match(/Use --force to install suspicious/i) !== null;
+    const needsForce = !installed && !force && (stderr || stdout).match(/Use --force to install suspicious/i) !== null;
 
     res.json({
       ok: installed,
@@ -619,8 +607,8 @@ router.post('/clawhub/install', async (req, res) => {
       needsForce,
     });
   } catch (e) {
-    console.error('[skills/clawhub/install]', e);
-    res.status(500).json({ error: 'Install failed', message: e.message });
+    console.error("[skills/clawhub/install]", e);
+    res.status(500).json({ error: "Install failed", message: e.message });
   }
 });
 

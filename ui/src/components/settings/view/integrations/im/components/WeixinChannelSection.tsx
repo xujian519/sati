@@ -15,17 +15,12 @@ type WeixinChannelSectionProps = {
 
 const WEIXIN_QR_PREPARE_TIMEOUT_MS = 30_000;
 
-function isRuntimeCurrent(
-  runtime: GatewayStatus["weixin"]["runtime"],
-  requestedAt: string | null,
-): boolean {
+function isRuntimeCurrent(runtime: GatewayStatus["weixin"]["runtime"], requestedAt: string | null): boolean {
   if (!requestedAt) return true;
   if (typeof runtime?.updatedAt !== "string") return false;
   const runtimeUpdatedAt = Date.parse(runtime.updatedAt);
   const requestStartedAt = Date.parse(requestedAt);
-  return Number.isFinite(runtimeUpdatedAt)
-    && Number.isFinite(requestStartedAt)
-    && runtimeUpdatedAt >= requestStartedAt;
+  return Number.isFinite(runtimeUpdatedAt) && Number.isFinite(requestStartedAt) && runtimeUpdatedAt >= requestStartedAt;
 }
 
 function readRuntimeQr(
@@ -39,14 +34,9 @@ function readRuntimeQr(
   return status.runtime.qrUrl ?? null;
 }
 
-export default function WeixinChannelSection({
-  status,
-  onSaved,
-}: WeixinChannelSectionProps) {
+export default function WeixinChannelSection({ status, onSaved }: WeixinChannelSectionProps) {
   const { t } = useTranslation("settings");
-  const [phase, setPhase] = useState<"idle" | "loading-qr" | "scanning" | "success" | "error">(
-    "idle",
-  );
+  const [phase, setPhase] = useState<"idle" | "loading-qr" | "scanning" | "success" | "error">("idle");
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
   const pollRef = useRef<number | null>(null);
@@ -65,8 +55,8 @@ export default function WeixinChannelSection({
             ? t("gateway.weixin.failed")
             : null;
   const statusText =
-    runtimeLabel
-    ?? (status.enabled && status.hasCredentials
+    runtimeLabel ??
+    (status.enabled && status.hasCredentials
       ? `${t("gateway.connected")}${status.accountId ? ` · ${status.accountId}` : ""}`
       : t("gateway.notConfigured"));
   const badgeTone =
@@ -104,10 +94,7 @@ export default function WeixinChannelSection({
         const pollRes = await authenticatedFetch("/api/gateway/weixin/qr-poll");
         const pollData = await pollRes.json();
         if (pollData.pending) {
-          if (
-            pollData.qrUrl
-            && isRuntimeCurrent(pollData.runtime, requestedAtRef.current)
-          ) {
+          if (pollData.qrUrl && isRuntimeCurrent(pollData.runtime, requestedAtRef.current)) {
             clearPrepareTimeout();
             setQrUrl(pollData.qrUrl);
             setPhase("scanning");
@@ -130,12 +117,7 @@ export default function WeixinChannelSection({
         // Ignore transient network errors while polling.
       }
     }, 2000);
-  }, [
-    clearLoginTimers,
-    clearPoll,
-    clearPrepareTimeout,
-    onSaved,
-  ]);
+  }, [clearLoginTimers, clearPoll, clearPrepareTimeout, onSaved]);
 
   useEffect(() => {
     return clearLoginTimers;
@@ -170,30 +152,14 @@ export default function WeixinChannelSection({
     }
 
     if (
-      (
-        runtimeState === "failed"
-        || runtimeState === "expired"
-        || runtimeState === "stopped"
-      )
-      && isRuntimeCurrent(status.runtime, requestStartedAt)
+      (runtimeState === "failed" || runtimeState === "expired" || runtimeState === "stopped") &&
+      isRuntimeCurrent(status.runtime, requestStartedAt)
     ) {
       clearLoginTimers();
-      setError(
-        status.runtime?.error
-        || status.runtime?.message
-        || t("gateway.weixin.noRuntimeQr"),
-      );
+      setError(status.runtime?.error || status.runtime?.message || t("gateway.weixin.noRuntimeQr"));
       setPhase("error");
     }
-  }, [
-    clearLoginTimers,
-    clearPrepareTimeout,
-    phase,
-    qrUrl,
-    runtimeState,
-    status,
-    t,
-  ]);
+  }, [clearLoginTimers, clearPrepareTimeout, phase, qrUrl, runtimeState, status, t]);
 
   const startQRLogin = async () => {
     setPhase("loading-qr");
@@ -262,12 +228,8 @@ export default function WeixinChannelSection({
             <div className="flex items-center gap-2.5">
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
               <div>
-                <div className="text-[13px] font-medium text-foreground">
-                  {t("gateway.weixin.label")}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {statusText}
-                </div>
+                <div className="text-[13px] font-medium text-foreground">{t("gateway.weixin.label")}</div>
+                <div className="text-xs text-muted-foreground">{statusText}</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -275,12 +237,9 @@ export default function WeixinChannelSection({
                 <span
                   className={cn(
                     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                    badgeTone === "amber"
-                      && "bg-amber-500/10 text-amber-700 dark:text-amber-400",
-                    badgeTone === "red"
-                      && "bg-red-500/10 text-red-700 dark:text-red-400",
-                    badgeTone === "green"
-                      && "bg-green-500/10 text-green-600 dark:text-green-400",
+                    badgeTone === "amber" && "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+                    badgeTone === "red" && "bg-red-500/10 text-red-700 dark:text-red-400",
+                    badgeTone === "green" && "bg-green-500/10 text-green-600 dark:text-green-400",
                     badgeTone === "muted" && "bg-muted text-muted-foreground",
                   )}
                 >
@@ -306,12 +265,7 @@ export default function WeixinChannelSection({
                 {status.enabled ? t("gateway.weixin.relogin") : t("gateway.weixin.qrLogin")}
               </Button>
               {status.enabled && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-500 hover:text-red-600"
-                  onClick={handleDisable}
-                >
+                <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={handleDisable}>
                   {t("gateway.disable")}
                 </Button>
               )}
@@ -343,9 +297,7 @@ export default function WeixinChannelSection({
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    dismissedRuntimeRef.current =
-                      status.runtime?.qrUrl
-                      ?? qrUrl;
+                    dismissedRuntimeRef.current = status.runtime?.qrUrl ?? qrUrl;
                     clearLoginTimers();
                     setPhase("idle");
                   }}
@@ -360,12 +312,7 @@ export default function WeixinChannelSection({
             <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-400">
               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
               {t("gateway.weixin.loginSuccess")}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto text-xs"
-                onClick={() => setPhase("idle")}
-              >
+              <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={() => setPhase("idle")}>
                 {t("gateway.dismiss")}
               </Button>
             </div>

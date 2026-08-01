@@ -1,0 +1,296 @@
+# 由 scripts/port-nuo-rules.ts 从 XiaoNuo Agent patent-law.yaml 转换生成
+# 原始文件完整内容见 assets/patent-rules/patent-law.yaml（含 LLM 评估型规则与指导字段）
+# 转换语义: pattern_analysis(期望模式)→structural_analysis 单 element；severity warning→major；info→minor
+version: "1.0"
+rules:
+  - id: CON-101
+    name: 发明定义-技术方案三要素
+    domain: patent_general
+    phase: pre_execution、post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第二条第二款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: technical_means
+          patterns:
+            - 装置
+            - 设备
+            - 机构
+            - 系统
+            - 单元
+            - 模块
+            - 组件
+            - 步骤
+            - 方法
+        - element: technical_problem
+          patterns:
+            - 技术问题
+            - 解决
+            - 克服
+            - 改善
+        - element: technical_effect
+          patterns:
+            - 技术效果
+            - 有益效果
+            - 优点
+            - 提高
+            - 降低
+            - 增强
+  - id: CON-102
+    name: 禁止编造对比文件
+    phase: post_execution
+    severity: critical
+    action: block
+    check:
+      type: keyword_blocklist
+      keywords:
+        - 编造
+        - 虚构
+        - 杜撰
+        - 捏造
+  - id: CON-103
+    name: 新颖性分析必须引用法律依据
+    domain: patent_novelty
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第二十二条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 新颖性分析必须引用法律依据
+          patterns:
+            - 第二十二条
+            - 新颖性
+            - 现有技术
+            - 单独对比
+      minConfidence: 1
+  - id: CON-104
+    name: 创造性三步法结构检查
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第二十二条第三款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: closest_prior_art
+          patterns:
+            - 最接近的现有技术
+            - 对比文件
+        - element: distinguishing_features
+          patterns:
+            - 区别技术特征
+            - 区别特征
+            - 不同之处
+        - element: technical_problem
+          patterns:
+            - 实际解决的技术问题
+        - element: technical_motivation
+          patterns:
+            - 技术启示
+            - 结合启示
+            - 显而易见
+            - 容易想到
+  - id: CON-201
+    name: 充分公开-能够实现
+    domain: patent_disclosure
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第二十六条第三款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: clear_description
+          patterns:
+            - 技术方案
+            - 具体实施方式
+            - 实施例
+        - element: reproducible
+          patterns:
+            - 本领域技术人员
+            - 能够实现
+            - 按照
+  - id: CON-301
+    name: 权利要求清楚
+    domain: patent_claims
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第二十六条第四款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权利要求清楚
+          patterns:
+            - 清楚
+            - 简要
+            - 限定
+            - 必要技术特征
+      minConfidence: 1
+  - id: CON-302
+    name: 权利要求以说明书为依据
+    domain: patent_claims
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第二十六条第四款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: spec_support
+          patterns:
+            - 说明书
+            - 实施例
+            - 具体实施方式
+        - element: claim_scope
+          patterns:
+            - 保护范围
+            - 限定
+            - 技术特征
+  - id: CON-303
+    name: 独立权利要求记载必要技术特征
+    domain: patent_claims
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法实施细则第二十条第二款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: essential_features
+          patterns:
+            - 必要技术特征
+            - 必要特征
+            - 必不可少
+  - id: CON-401
+    name: 创造性非显而易见性判断
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第二十二条第三款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 创造性非显而易见性判断
+          patterns:
+            - 显而易见
+            - 容易想到
+            - 常规技术手段
+            - 惯用技术手段
+      minConfidence: 1
+  - id: CON-402
+    name: 预料不到的技术效果
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第二十二条第三款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 预料不到的技术效果
+          patterns:
+            - 预料不到
+            - 意想不到
+            - 出人意料
+            - 意外效果
+      minConfidence: 1
+  - id: CON-501
+    name: 修改不超范围
+    domain: patent_procedure
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法第三十三条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 修改不超范围
+          patterns:
+            - 原说明书
+            - 原权利要求书
+            - 原申请
+            - 原始公开
+      minConfidence: 1
+  - id: CON-502
+    name: 权利要求修改不得扩大保护范围
+    domain: patent_procedure
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 专利法实施细则第五十一条第三款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 权利要求修改不得扩大保护范围
+          patterns:
+            - 扩大
+            - 保护范围
+            - 修改
+      minConfidence: 1
+  - id: CON-601
+    name: 实用新型创造性标准
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第二十二条第三款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 实用新型创造性标准
+          patterns:
+            - 实质性特点
+            - 进步
+      minConfidence: 1
+  - id: CON-701
+    name: 答复期限
+    domain: patent_oa_response
+    phase: pre_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第三十七条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 答复期限
+          patterns:
+            - 答复
+            - 期限
+            - 四个月
+            - 两个月
+            - 指定期限
+      minConfidence: 1
+  - id: CON-702
+    name: 意见陈述书逐条回应
+    domain: patent_oa_response
+    phase: post_execution
+    severity: major
+    action: warn
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: respond_to_rejections
+          patterns:
+            - 审查意见
+            - 驳回理由
+            - 审查员指出
+        - element: legal_arguments
+          patterns:
+            - 专利法
+            - 专利审查指南
+            - 根据

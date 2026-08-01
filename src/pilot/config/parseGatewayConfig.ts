@@ -6,7 +6,10 @@ import type {
   PilotPlatformAdapterConfig,
 } from "./types.js";
 
-export function parseGatewayConfig(rawGateway: unknown, diagnostics: PilotConfigDiagnostic[]): PilotGatewayConfig | undefined {
+export function parseGatewayConfig(
+  rawGateway: unknown,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotGatewayConfig | undefined {
   if (rawGateway === undefined) {
     return undefined;
   }
@@ -53,7 +56,10 @@ export function parseGatewayConfig(rawGateway: unknown, diagnostics: PilotConfig
   };
 }
 
-export function parseAdaptersConfig(rawAdapters: unknown, diagnostics: PilotConfigDiagnostic[]): PilotAdaptersConfig | undefined {
+export function parseAdaptersConfig(
+  rawAdapters: unknown,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotAdaptersConfig | undefined {
   if (rawAdapters === undefined) {
     return undefined;
   }
@@ -69,11 +75,22 @@ export function parseAdaptersConfig(rawAdapters: unknown, diagnostics: PilotConf
   }
 
   const PLATFORM_KEYS = [
-    "telegram", "discord", "slack", "matrix", "mattermost",
-    "signal", "whatsapp", "bluebubbles",
-    "dingtalk", "wecom", "wecomCallback",
-    "email", "sms", "homeassistant",
-    "apiServer", "webhook",
+    "telegram",
+    "discord",
+    "slack",
+    "matrix",
+    "mattermost",
+    "signal",
+    "whatsapp",
+    "bluebubbles",
+    "dingtalk",
+    "wecom",
+    "wecomCallback",
+    "email",
+    "sms",
+    "homeassistant",
+    "apiServer",
+    "webhook",
   ] as const;
 
   const result: PilotAdaptersConfig = {
@@ -144,9 +161,10 @@ function parseQQ(raw: unknown): PilotAdaptersConfig["qq"] {
   const prefixes = Array.isArray(raw.triggerPrefixes)
     ? (raw.triggerPrefixes as unknown[]).filter((v): v is string => typeof v === "string")
     : undefined;
-  const maxLen = typeof raw.maxMessageLength === "number" && Number.isFinite(raw.maxMessageLength)
-    ? raw.maxMessageLength
-    : undefined;
+  const maxLen =
+    typeof raw.maxMessageLength === "number" && Number.isFinite(raw.maxMessageLength)
+      ? raw.maxMessageLength
+      : undefined;
   return {
     enabled: booleanField(raw, "enabled", false),
     appId: stringField(raw, "appId"),

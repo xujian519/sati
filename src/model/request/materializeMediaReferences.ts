@@ -1,9 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type {
-  CanonicalContentBlock,
-  CanonicalMediaReferenceBlock,
-  CanonicalMessage,
-} from "../protocol/canonical.js";
+import type { CanonicalContentBlock, CanonicalMediaReferenceBlock, CanonicalMessage } from "../protocol/canonical.js";
 import { cloneMessages, messageContent } from "../protocol/clone.js";
 
 export type MediaReferenceMaterializationDiagnostic = {
@@ -28,10 +24,8 @@ export async function materializeMediaReferences(
   const diagnostics: MediaReferenceMaterializationDiagnostic[] = [];
 
   await Promise.all(
-    cloned.map(async (message) => {
-      const content = await Promise.all(
-        messageContent(message).map((block) => materializeBlock(block, diagnostics)),
-      );
+    cloned.map(async message => {
+      const content = await Promise.all(messageContent(message).map(block => materializeBlock(block, diagnostics)));
       message.content = content;
     }),
   );
@@ -71,10 +65,7 @@ async function materializeBlock(
   }
 }
 
-function toMediaBlock(
-  block: CanonicalMediaReferenceBlock,
-  data: string,
-): CanonicalContentBlock | undefined {
+function toMediaBlock(block: CanonicalMediaReferenceBlock, data: string): CanonicalContentBlock | undefined {
   if (block.mediaType === "image") {
     return {
       type: "image",

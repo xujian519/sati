@@ -424,7 +424,10 @@ function scopedToolResultKey(toolCallId: string, turnId: string | undefined): st
 }
 
 function safePathPart(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
+  return value
+    .trim()
+    .replace(/[^A-Za-z0-9_.-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function isFileExistsError(error: unknown): boolean {
@@ -433,7 +436,10 @@ function isFileExistsError(error: unknown): boolean {
 
 function extensionForMedia(mediaType: "image" | "pdf" | "audio", mimeType: string): string {
   if (mediaType === "pdf") return "pdf.b64";
-  const subType = mimeType.split("/")[1]?.toLowerCase().replace(/[^a-z0-9.+-]/g, "");
+  const subType = mimeType
+    .split("/")[1]
+    ?.toLowerCase()
+    .replace(/[^a-z0-9.+-]/g, "");
   return `${subType || mediaType}.b64`;
 }
 

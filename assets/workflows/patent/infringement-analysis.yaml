@@ -1,0 +1,109 @@
+# 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
+template_id: infringement-analysis
+name: 侵权分析
+description: 案卷探查 → 规则 → 涉案专利 CAP02 → 权利要求解析 → 被控 CAP02 → 全面覆盖 → 等同侵权 → 反套话
+intent: 专利侵权分析：CAP02 深度技术分析支撑全面覆盖与等同原则判断
+steps:
+  - id: probe
+    name: 案卷探查
+    description: 读取专利文本与被控侵权材料
+    worker: project-probe
+    input_template: |
+      案卷目录：{{case_dir}}
+      识别专利权利要求书、说明书与被控侵权产品/方法材料，输出 intent 与 provision_ids（含 P-B02、P-B03）。
+
+  - id: rules
+    name: 规则探查
+    description: 确定侵权分析适用的规则与 provision_ids
+    worker: rule-explorer
+    depends_on: [probe]
+    input_template: |
+      针对侵权分析场景，探查 P-B02（全面覆盖）、P-B03（等同侵权）相关规则与 generatedPrompt。
+      主题：侵权 权利要求 全面覆盖 等同原则
+
+  - id: tech-patent
+    name: 涉案专利 CAP02 解构
+    description: 涉案专利七维解构与手段-效果因果图
+    worker: patent-technical-analyzer
+    depends_on: [rules]
+    has_checkpoint: true
+    checkpoint_title: 确认涉案专利技术特征解构（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：侵权分析 — **涉案专利 CAP02 七维解构**（权利要求解析与侵权对比的前置必步）。
+
+      对涉案专利完成七维解构、手段-效果因果链与 tech-graph（如适用）。
+      输出：data/cases/{{case_id}}/outputs/technical-deconstruction-target.md
+            data/cases/{{case_id}}/outputs/technical-analysis-report.md
+
+  - id: claims
+    name: 权利要求解析
+    description: 分解独立/从属权利要求的技术特征
+    worker: provision-claims-clarity
+    depends_on: [tech-patent]
+    input_template: |
+      案卷：{{case_dir}}
+
+      读取 technical-deconstruction-target.md，解析独立/从属权利要求必要技术特征清单。
+      输出：data/cases/{{case_id}}/outputs/claim-features.md
+
+  - id: accused
+    name: 被控方案 CAP02 分析
+    description: 被控侵权方案七维解构与对比准备
+    worker: patent-technical-analyzer
+    depends_on: [claims]
+    has_checkpoint: true
+    checkpoint_title: 确认被控方案技术解构（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      场景：侵权分析 — **被控产品/方法 CAP02 七维解构**。
+
+      1. 对被控方案完成七维解构（写入 technical-deconstruction-accused.md 或 deconstruction-d-accused.md）
+      2. 与 claim-features.md 做特征级预对比，标注可能缺失/等同特征
+      3. tech-graph：被控方案手段-效果链
+
+      输出：data/cases/{{case_id}}/outputs/accused-features.md（含 CAP02 结构化内容）
+
+  - id: literal
+    name: 全面覆盖判定
+    description: 字面侵权 / 全面覆盖原则对比
+    worker: provision-infringement-literal
+    depends_on: [accused]
+    input_template: |
+      案卷：{{case_dir}}
+
+      **前置依赖**：claim-features.md、accused-features.md、technical-analysis-report.md
+
+      按全面覆盖原则逐项对比。
+      输出：data/cases/{{case_id}}/outputs/literal-infringement.md
+
+  - id: equivalent
+    name: 等同侵权判定
+    description: 手段-功能-效果等同分析
+    worker: provision-infringement-equivalent
+    depends_on: [literal]
+    has_checkpoint: true
+    checkpoint_title: 审核侵权判定结论（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+    input_template: |
+      案卷：{{case_dir}}
+
+      **前置依赖**：literal-infringement.md、CAP02 手段/效果对比矩阵
+
+      对未全面覆盖的特征进行等同侵权分析（手段-功能-效果三要素）。
+      输出：data/cases/{{case_id}}/outputs/infringement-report.md
+
+  - id: slop-clean
+    name: 反套话润色+评分
+    description: stop-patent-slop 规则后处理 + 5维评分，清理侵权报告中的空洞套话
+    worker: patent-slop-cleaner
+    depends_on: [equivalent]
+    input_template: |
+      案卷：{{case_dir}}
+
+      对 outputs/infringement-report.md 应用 stop-patent-slop 规则：
+      1. 删除填充词与无证据套话
+      2. 运行 slop-scorer.ts 5维评分，总分 < 35 必须修订
+      3. 输出 infringement-report-clean.md
+      4. 输出 infringement-slop-changelog.md（列出变更 + 评分报告）

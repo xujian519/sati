@@ -45,14 +45,14 @@ SHEET="$SPREADSHEET_SKILL_ROOT/scripts/spreadsheet.sh"
 bash "$SHEET" check || bash "$SHEET" fix
 ```
 
-Use the turn-scoped PilotDeck work directory for every intermediate. The host sets `PILOTDECK_WORK_DIR`; the fallback keeps manual runs internal to the project:
+Use the turn-scoped Sati work directory for every intermediate. The host sets `SATI_WORK_DIR`; the fallback keeps manual runs internal to the project:
 
 ```bash
-WORKSPACE="${PILOTDECK_WORK_DIR:-$PWD/.pilotdeck/work/manual/<task-slug>}/spreadsheets"
+WORKSPACE="${SATI_WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/spreadsheets"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
 
-Keep builders, converted inputs, source notes, inspections, candidates, renders, recalculation files, and QA reports in `WORKSPACE`. Put only requested deliverables in the project or user-selected output directory. Never create `.pilotdeck_build.mjs`, QA directories, or other intermediates beside the user's files.
+Keep builders, converted inputs, source notes, inspections, candidates, renders, recalculation files, and QA reports in `WORKSPACE`. Put only requested deliverables in the project or user-selected output directory. Never create `.sati_build.mjs`, QA directories, or other intermediates beside the user's files.
 
 ## Route the request
 

@@ -2,20 +2,9 @@ export const ANALYTICS_SCHEMA_VERSION = "analytics.v2" as const;
 
 export type AnalyticsSchemaVersion = typeof ANALYTICS_SCHEMA_VERSION;
 
-export type TelemetryDeploymentMode =
-  | "source"
-  | "docker"
-  | "curl_installer"
-  | "desktop_installer"
-  | "npm_binary"
-  | "unknown";
+export type TelemetryDeploymentMode = "source" | "curl_installer" | "desktop_installer" | "npm_binary" | "unknown";
 
-export type TelemetryModule =
-  | "router"
-  | "always_on"
-  | "memory"
-  | "cron_job"
-  | "session";
+export type TelemetryModule = "router" | "always_on" | "memory" | "cron_job" | "session";
 
 export type TelemetryExecutionKind =
   | "user_session"
@@ -37,12 +26,7 @@ export type TelemetryLoopStage =
   | "permission_check"
   | "loop_end";
 
-export type TelemetryOutcome =
-  | "success"
-  | "failed"
-  | "aborted"
-  | "timeout"
-  | "denied";
+export type TelemetryOutcome = "success" | "failed" | "aborted" | "timeout" | "denied";
 
 export type TelemetryErrorCategory =
   | "model_request_error"
@@ -137,11 +121,7 @@ export type TelemetryConfig = {
 };
 
 export type TelemetryClient = {
-  track(
-    eventName: AnalyticsEventName,
-    properties?: AnalyticsEventProperties,
-    context?: TelemetryTrackContext,
-  ): void;
+  track(eventName: AnalyticsEventName, properties?: AnalyticsEventProperties, context?: TelemetryTrackContext): void;
   trackFeatureUsed(input: TelemetryFeatureUsedInput): void;
   trackFeatureLoopStage(input: TelemetryFeatureUsedInput): void;
   trackError(error: unknown, input?: TelemetryErrorInput): void;

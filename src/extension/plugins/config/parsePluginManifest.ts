@@ -1,6 +1,6 @@
-import type { PilotDeckPluginManifest } from "../protocol/manifest.js";
+import type { SatiPluginManifest } from "../protocol/manifest.js";
 
-export function parsePluginManifest(raw: unknown): PilotDeckPluginManifest {
+export function parsePluginManifest(raw: unknown): SatiPluginManifest {
   if (!isRecord(raw)) {
     throw new Error("Plugin manifest must be an object.");
   }
@@ -19,18 +19,20 @@ export function parsePluginManifest(raw: unknown): PilotDeckPluginManifest {
     mcpServers: isRecord(raw.mcpServers) ? raw.mcpServers : undefined,
     lspServers: isRecord(raw.lspServers) ? raw.lspServers : undefined,
     outputStyles: stringOrStringArray(raw.outputStyles),
-    marketplace: isRecord(raw.marketplace) && typeof raw.marketplace.name === "string" && typeof raw.marketplace.plugin === "string"
-      ? {
-          name: raw.marketplace.name,
-          plugin: raw.marketplace.plugin,
-          version: stringOrUndefined(raw.marketplace.version),
-          source: parseMarketplaceSource(raw.marketplace.source),
-          url: stringOrUndefined(raw.marketplace.url),
-        }
-      : undefined,
-    mcpb: typeof raw.mcpb === "string" && (raw.mcpb.endsWith(".mcpb") || raw.mcpb.endsWith(".dxt"))
-      ? raw.mcpb
-      : undefined,
+    marketplace:
+      isRecord(raw.marketplace) &&
+      typeof raw.marketplace.name === "string" &&
+      typeof raw.marketplace.plugin === "string"
+        ? {
+            name: raw.marketplace.name,
+            plugin: raw.marketplace.plugin,
+            version: stringOrUndefined(raw.marketplace.version),
+            source: parseMarketplaceSource(raw.marketplace.source),
+            url: stringOrUndefined(raw.marketplace.url),
+          }
+        : undefined,
+    mcpb:
+      typeof raw.mcpb === "string" && (raw.mcpb.endsWith(".mcpb") || raw.mcpb.endsWith(".dxt")) ? raw.mcpb : undefined,
     settings: isRecord(raw.settings) ? raw.settings : undefined,
   };
 }
@@ -47,7 +49,7 @@ function stringOrStringArray(value: unknown): string | string[] | undefined {
   if (typeof value === "string") {
     return value;
   }
-  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+  if (Array.isArray(value) && value.every(item => typeof item === "string")) {
     return value;
   }
   return undefined;

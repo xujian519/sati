@@ -19,7 +19,7 @@ export function decodeEscapedUnicodeText(text: string, decodeCommonEscapes = fal
       .replace(/\\r/g, "\r")
       .replace(/\\n/g, "\n")
       .replace(/\\t/g, "\t")
-      .replace(/\\"/g, "\"")
+      .replace(/\\"/g, '"')
       .replace(/\\\\/g, "\\");
   }
   return next;
@@ -30,7 +30,7 @@ export function decodeEscapedUnicodeValue<T>(value: T, decodeCommonEscapes = fal
     return decodeEscapedUnicodeText(value, decodeCommonEscapes) as T;
   }
   if (Array.isArray(value)) {
-    return value.map((item) => decodeEscapedUnicodeValue(item, decodeCommonEscapes)) as T;
+    return value.map(item => decodeEscapedUnicodeValue(item, decodeCommonEscapes)) as T;
   }
   if (!value || typeof value !== "object") return value;
   const entries = Object.entries(value as Record<string, unknown>).map(([key, item]) => [
@@ -58,7 +58,7 @@ export function scoreMatch(query: string, text: string): number {
   for (const word of qWords) {
     if (t.includes(word)) hits += 1;
   }
-  const wordScore = hits / qWords.length * 0.7;
+  const wordScore = (hits / qWords.length) * 0.7;
 
   const qCompact = q.replace(/\s+/g, "");
   const tCompact = t.replace(/\s+/g, "");

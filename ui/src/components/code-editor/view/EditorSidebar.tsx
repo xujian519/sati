@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import type { MouseEvent, MutableRefObject } from 'react';
-import { useTranslation } from 'react-i18next';
-import type { CodeEditorTab } from '../types/types';
-import CodeEditor from './CodeEditor';
-import CodeEditorTabBar from './subcomponents/CodeEditorTabBar';
+import { useState, useEffect, useRef } from "react";
+import type { MouseEvent, MutableRefObject } from "react";
+import { useTranslation } from "react-i18next";
+import type { CodeEditorTab } from "../types/types";
+import CodeEditor from "./CodeEditor";
+import CodeEditorTabBar from "./subcomponents/CodeEditorTabBar";
 
 type EditorSidebarProps = {
   editorTabs: CodeEditorTab[];
@@ -53,11 +53,11 @@ export default function EditorSidebar({
   fillSpace,
   workspaceMode = false,
 }: EditorSidebarProps) {
-  const { t } = useTranslation('codeEditor');
+  const { t } = useTranslation("codeEditor");
   const [poppedOut, setPoppedOut] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [effectiveWidth, setEffectiveWidth] = useState(editorWidth);
-  const activeEditorTab = editorTabs.find((tab) => tab.id === activeEditorTabId) ?? null;
+  const activeEditorTab = editorTabs.find(tab => tab.id === activeEditorTabId) ?? null;
   const editingFile = activeEditorTab?.fileStack.at(-1) ?? null;
 
   // Adjust editor width when container size changes to ensure buttons are always visible.
@@ -81,15 +81,16 @@ export default function EditorSidebar({
         // Not enough space - pop out the editor so user can still see everything
         setPoppedOut(true);
       } else {
-        const requestedWidth = fillSpace && !hasManualWidth && !editorExpanded
-          ? Math.min(editorWidth, Math.floor(containerWidth * AUTO_EDITOR_WIDTH_RATIO))
-          : editorWidth;
+        const requestedWidth =
+          fillSpace && !hasManualWidth && !editorExpanded
+            ? Math.min(editorWidth, Math.floor(containerWidth * AUTO_EDITOR_WIDTH_RATIO))
+            : editorWidth;
         setEffectiveWidth(Math.min(requestedWidth, maxEditorWidth));
       }
     };
 
     updateWidth();
-    window.addEventListener('resize', updateWidth);
+    window.addEventListener("resize", updateWidth);
 
     // Also use ResizeObserver for more accurate detection
     const resizeObserver = new ResizeObserver(updateWidth);
@@ -99,7 +100,7 @@ export default function EditorSidebar({
     }
 
     return () => {
-      window.removeEventListener('resize', updateWidth);
+      window.removeEventListener("resize", updateWidth);
       resizeObserver.disconnect();
     };
   }, [editingFile, fillSpace, hasManualWidth, isMobile, poppedOut, editorExpanded, editorWidth, workspaceMode]);
@@ -109,10 +110,10 @@ export default function EditorSidebar({
   }
 
   const requestCloseTab = (tabId: string) => {
-    const tab = editorTabs.find((candidate) => candidate.id === tabId);
+    const tab = editorTabs.find(candidate => candidate.id === tabId);
     const file = tab?.fileStack.at(-1);
     if (!tab || !file) return;
-    if (tab.dirty && !window.confirm(t('tabs.unsavedConfirm', { fileName: file.name }))) {
+    if (tab.dirty && !window.confirm(t("tabs.unsavedConfirm", { fileName: file.name }))) {
       return;
     }
     if (editorTabs.length === 1) {
@@ -123,26 +124,23 @@ export default function EditorSidebar({
 
   const requestCloseTabs = (tabIds: string[]) => {
     const requestedTabIds = new Set(tabIds);
-    const tabsToClose = editorTabs.filter((tab) => requestedTabIds.has(tab.id));
+    const tabsToClose = editorTabs.filter(tab => requestedTabIds.has(tab.id));
     if (tabsToClose.length === 0) return;
 
-    const dirtyTabs = tabsToClose.filter((tab) => tab.dirty);
+    const dirtyTabs = tabsToClose.filter(tab => tab.dirty);
     if (dirtyTabs.length === 1) {
       const fileName = dirtyTabs[0].fileStack.at(-1)?.name;
-      if (fileName && !window.confirm(t('tabs.unsavedConfirm', { fileName }))) {
+      if (fileName && !window.confirm(t("tabs.unsavedConfirm", { fileName }))) {
         return;
       }
-    } else if (
-      dirtyTabs.length > 1
-      && !window.confirm(t('tabs.unsavedBatchConfirm', { count: dirtyTabs.length }))
-    ) {
+    } else if (dirtyTabs.length > 1 && !window.confirm(t("tabs.unsavedBatchConfirm", { count: dirtyTabs.length }))) {
       return;
     }
 
     if (tabsToClose.length === editorTabs.length) {
       setPoppedOut(false);
     }
-    onTabsClose(tabsToClose.map((tab) => tab.id));
+    onTabsClose(tabsToClose.map(tab => tab.id));
   };
 
   const tabBar = (
@@ -153,25 +151,25 @@ export default function EditorSidebar({
       onClose={requestCloseTab}
       onCloseTabs={requestCloseTabs}
       labels={{
-        tabList: t('tabs.tabList'),
-        closeTab: (fileName) => t('tabs.closeTab', { fileName }),
-        moreActions: t('tabs.moreActions'),
-        closeCurrent: t('tabs.closeCurrent'),
-        closeOthers: t('tabs.closeOthers'),
-        closeToRight: t('tabs.closeToRight'),
-        closeAll: t('tabs.closeAll'),
-        modified: t('tabs.modified'),
+        tabList: t("tabs.tabList"),
+        closeTab: fileName => t("tabs.closeTab", { fileName }),
+        moreActions: t("tabs.moreActions"),
+        closeCurrent: t("tabs.closeCurrent"),
+        closeOthers: t("tabs.closeOthers"),
+        closeToRight: t("tabs.closeToRight"),
+        closeAll: t("tabs.closeAll"),
+        modified: t("tabs.modified"),
       }}
       reserveToolbarSpace={workspaceMode}
     />
   );
 
-  const editors = editorTabs.map((tab) => {
+  const editors = editorTabs.map(tab => {
     const file = tab.fileStack.at(-1);
     if (!file) return null;
     const active = tab.id === activeEditorTabId;
     const canGoBack = tab.fileStack.length > 1;
-    const parentFile = canGoBack ? tab.fileStack.at(-2) ?? null : null;
+    const parentFile = canGoBack ? (tab.fileStack.at(-2) ?? null) : null;
 
     return (
       <div
@@ -180,7 +178,7 @@ export default function EditorSidebar({
         id={`code-editor-panel-${tab.id}`}
         aria-labelledby={`code-editor-tab-${tab.id}`}
         aria-hidden={!active}
-        className={active ? 'h-full min-h-0 w-full' : 'hidden'}
+        className={active ? "h-full min-h-0 w-full" : "hidden"}
       >
         <CodeEditor
           file={file}
@@ -197,7 +195,7 @@ export default function EditorSidebar({
           headerPrefix={active ? tabBar : null}
           compactHeader={workspaceMode}
           isActive={active}
-          onDirtyChange={(dirty) => onTabDirtyChange(tab.id, dirty)}
+          onDirtyChange={dirty => onTabDirtyChange(tab.id, dirty)}
         />
       </div>
     );
@@ -208,17 +206,17 @@ export default function EditorSidebar({
   }
 
   const useAutoFilesWidth = fillSpace && !hasManualWidth && !editorExpanded;
-  const containerClassName = editorExpanded || workspaceMode
-    ? 'flex h-full min-w-0 flex-1 basis-0'
-    : 'flex h-full min-w-0 flex-shrink-0';
-  const containerStyle = editorExpanded || workspaceMode
-    ? undefined
-    : {
-        width: useAutoFilesWidth
-          ? `min(${editorWidth}px, ${AUTO_EDITOR_WIDTH_RATIO * 100}%, calc(100% - ${MIN_LEFT_CONTENT_WIDTH}px))`
-          : `${effectiveWidth}px`,
-        minWidth: `${MIN_EDITOR_WIDTH}px`,
-      };
+  const containerClassName =
+    editorExpanded || workspaceMode ? "flex h-full min-w-0 flex-1 basis-0" : "flex h-full min-w-0 flex-shrink-0";
+  const containerStyle =
+    editorExpanded || workspaceMode
+      ? undefined
+      : {
+          width: useAutoFilesWidth
+            ? `min(${editorWidth}px, ${AUTO_EDITOR_WIDTH_RATIO * 100}%, calc(100% - ${MIN_LEFT_CONTENT_WIDTH}px))`
+            : `${effectiveWidth}px`,
+          minWidth: `${MIN_EDITOR_WIDTH}px`,
+        };
 
   return (
     <div ref={containerRef} className={containerClassName} style={containerStyle}>
@@ -235,9 +233,11 @@ export default function EditorSidebar({
       )}
 
       <div
-        className={workspaceMode
-          ? 'h-full min-w-0 flex-1 overflow-hidden'
-          : 'h-full min-w-0 flex-1 overflow-hidden border-l border-neutral-200 dark:border-neutral-800'}
+        className={
+          workspaceMode
+            ? "h-full min-w-0 flex-1 overflow-hidden"
+            : "h-full min-w-0 flex-1 overflow-hidden border-l border-neutral-200 dark:border-neutral-800"
+        }
       >
         {editors}
       </div>

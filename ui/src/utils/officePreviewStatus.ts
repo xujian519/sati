@@ -1,6 +1,6 @@
-import { api } from './api';
+import { api } from "./api";
 
-export type OfficePreviewService = 'builtin' | 'libreoffice';
+export type OfficePreviewService = "builtin" | "libreoffice";
 
 export type OfficePreviewStatus = {
   service: OfficePreviewService;
@@ -20,7 +20,11 @@ export type OfficePreviewStatus = {
 };
 
 export function normalizeOfficePreviewService(value: unknown): OfficePreviewService {
-  return String(value || '').trim().toLowerCase() === 'libreoffice' ? 'libreoffice' : 'builtin';
+  return String(value || "")
+    .trim()
+    .toLowerCase() === "libreoffice"
+    ? "libreoffice"
+    : "builtin";
 }
 
 async function readJsonBody(response: Response): Promise<any> {
@@ -29,16 +33,12 @@ async function readJsonBody(response: Response): Promise<any> {
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(
-      response.ok
-        ? 'Expected JSON response for Office preview status.'
-        : text.slice(0, 160),
-    );
+    throw new Error(response.ok ? "Expected JSON response for Office preview status." : text.slice(0, 160));
   }
 }
 
 async function readServiceFromConfig(): Promise<OfficePreviewStatus> {
-  const response = await api.pilotDeckConfig();
+  const response = await api.satiConfig();
   const body = await readJsonBody(response);
   if (!response.ok) {
     throw new Error(body?.error || `HTTP ${response.status}`);

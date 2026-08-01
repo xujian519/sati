@@ -2,21 +2,19 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
-import { EmailSessionMapper } from "./EmailSessionMapper.js";
-import { renderEmailEvent } from "./email-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { EmailSessionMapper } from "./EmailSessionMapper.js";
+import { renderEmailEvent } from "./email-render.js";
 
 let ImapFlow: any;
 let nodemailer: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   ImapFlow = require("imapflow").ImapFlow;
 } catch {
   // imapflow not installed — start() will warn
 }
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   nodemailer = require("nodemailer");
 } catch {
   // nodemailer not installed — start() will warn
@@ -75,7 +73,9 @@ export class EmailChannel implements ChannelAdapter {
     this.defaultSubject = String(this.extra.defaultSubject ?? "Message");
 
     if (!this.ownAddress || !password || !imapHost || !smtpHost) {
-      this.logger?.error?.("email: missing config; need extra.address, password, imapHost, smtpHost (or env equivalents)");
+      this.logger?.error?.(
+        "email: missing config; need extra.address, password, imapHost, smtpHost (or env equivalents)",
+      );
       return { stop: async () => undefined };
     }
 
@@ -146,7 +146,11 @@ export class EmailChannel implements ChannelAdapter {
 
   private async cleanupImap(): Promise<void> {
     if (this.imapClient) {
-      try { await this.imapClient.logout(); } catch { /* best effort */ }
+      try {
+        await this.imapClient.logout();
+      } catch {
+        /* best effort */
+      }
       this.imapClient = null;
     }
   }
@@ -161,10 +165,7 @@ export class EmailChannel implements ChannelAdapter {
       return;
     }
     try {
-      for await (const msg of this.imapClient.fetch(
-        { unseen: true },
-        { envelope: true, source: true, uid: true },
-      )) {
+      for await (const msg of this.imapClient.fetch({ unseen: true }, { envelope: true, source: true, uid: true })) {
         const uid = msg.uid as number;
         if (this.seenUids.has(uid)) continue;
         this.seenUids.add(uid);
@@ -191,7 +192,11 @@ export class EmailChannel implements ChannelAdapter {
     } catch (e) {
       this.logger?.error?.(`email: poll error: ${e}`);
     } finally {
-      try { lock?.release?.(); } catch { /* best effort */ }
+      try {
+        lock?.release?.();
+      } catch {
+        /* best effort */
+      }
     }
   }
 
@@ -204,9 +209,7 @@ export class EmailChannel implements ChannelAdapter {
       let body = plain[1].replace(/^\r?\n/, "");
       const te = body.match(/^Content-Transfer-Encoding:\s*quoted-printable\r?\n([\s\S]*)/i);
       if (te) {
-        body = te[1].replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/g, (_, h) =>
-          String.fromCharCode(parseInt(h, 16)),
-        );
+        body = te[1].replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
       }
       return body.trim();
     }

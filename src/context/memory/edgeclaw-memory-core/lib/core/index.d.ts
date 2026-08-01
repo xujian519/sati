@@ -6,5 +6,6 @@ export * from "./skills/llm-extraction.js";
 export * from "./review/dream-review.js";
 export * from "./pipeline/heartbeat.js";
 export * from "./retrieval/reasoning-loop.js";
+export * from "./retrieval/semantic-fusion.js";
 export * from "./file-memory.js";
 export * from "./storage/sqlite.js";

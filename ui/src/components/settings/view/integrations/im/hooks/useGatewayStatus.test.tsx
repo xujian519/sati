@@ -10,9 +10,7 @@ vi.mock("../../../../../../utils/api", () => ({
 
 const mockedFetch = vi.mocked(authenticatedFetch);
 
-function gatewayStatus(
-  runtime: GatewayStatus["weixin"]["runtime"],
-): GatewayStatus {
+function gatewayStatus(runtime: GatewayStatus["weixin"]["runtime"]): GatewayStatus {
   return {
     feishu: {
       enabled: false,
@@ -60,25 +58,25 @@ describe("useGatewayStatus", () => {
   it("keeps refreshing while Weixin login is starting or waiting", async () => {
     mockedFetch
       .mockResolvedValueOnce({
-        json: async () => gatewayStatus({
-          state: "waiting_for_login",
-          qrUrl: "https://example.test/qr",
-        }),
+        json: async () =>
+          gatewayStatus({
+            state: "waiting_for_login",
+            qrUrl: "https://example.test/qr",
+          }),
       } as Response)
       .mockResolvedValueOnce({
-        json: async () => gatewayStatus({
-          state: "connected",
-          accountId: "wx-account",
-        }),
+        json: async () =>
+          gatewayStatus({
+            state: "connected",
+            accountId: "wx-account",
+          }),
       } as Response);
 
     const { result } = renderHook(() => useGatewayStatus());
     await act(flushAsyncEffects);
 
     expect(result.current.loading).toBe(false);
-    expect(result.current.status?.weixin.runtime?.state).toBe(
-      "waiting_for_login",
-    );
+    expect(result.current.status?.weixin.runtime?.state).toBe("waiting_for_login");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);

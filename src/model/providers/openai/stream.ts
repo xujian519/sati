@@ -1,5 +1,5 @@
-import { jsonrepair } from "jsonrepair";
 import { randomUUID } from "node:crypto";
+import { jsonrepair } from "jsonrepair";
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
 import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeOpenAIFinishReason } from "../../response/normalizeFinishReason.js";
@@ -47,11 +47,7 @@ const THINK_CLOSE = "</think>";
  *
  * FSM that splits reasoning tags from streamed content deltas.
  */
-export function splitThinkContent(
-  content: string,
-  state: OpenAIStreamState,
-  raw: unknown,
-): CanonicalModelEvent[] {
+export function splitThinkContent(content: string, state: OpenAIStreamState, raw: unknown): CanonicalModelEvent[] {
   const events: CanonicalModelEvent[] = [];
   let current = state.tagBuffer + content;
   state.tagBuffer = "";
@@ -133,17 +129,23 @@ export function normalizeOpenAIStreamEvent(
   const error = asRecord(chunk.error);
   if (Object.keys(error).length > 0) {
     const code = readNonEmptyString(error.type) ?? readNonEmptyString(error.code) ?? "provider_error";
-    return [{
-      type: "error",
-      error: {
-        provider: "openai",
-        protocol: "openai",
-        code,
-        message: readNonEmptyString(error.message) ?? "OpenAI stream request failed.",
-        retryable: code === "rate_limit_error" || code === "overloaded_error" || code === "server_error" || code === "timeout_error",
-        raw,
+    return [
+      {
+        type: "error",
+        error: {
+          provider: "openai",
+          protocol: "openai",
+          code,
+          message: readNonEmptyString(error.message) ?? "OpenAI stream request failed.",
+          retryable:
+            code === "rate_limit_error" ||
+            code === "overloaded_error" ||
+            code === "server_error" ||
+            code === "timeout_error",
+          raw,
+        },
       },
-    }];
+    ];
   }
   const responseId = readNonEmptyString(chunk.id);
   if (responseId !== undefined && state.streamResponseId === undefined) {
@@ -283,13 +285,14 @@ function finishToolCalls(
           `[openai-stream] repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawArguments.length})`,
         );
       } catch {
-        const preview = rawArguments.length > 500
-          ? rawArguments.slice(0, 250) + "\n…[truncated]…\n" + rawArguments.slice(-250)
-          : rawArguments;
+        const preview =
+          rawArguments.length > 500
+            ? rawArguments.slice(0, 250) + "\n…[truncated]…\n" + rawArguments.slice(-250)
+            : rawArguments;
         const code = isTruncation ? "max_output_reached" : "invalid_tool_arguments";
         console.error(
-          `[openai-stream] ${code} for tool "${toolCall.name ?? "?"}" (index=${key}, `
-          + `buf_len=${rawArguments.length}):\n${preview}`,
+          `[openai-stream] ${code} for tool "${toolCall.name ?? "?"}" (index=${key}, ` +
+            `buf_len=${rawArguments.length}):\n${preview}`,
         );
         throw new ModelProviderError({
           provider: "openai",
@@ -339,9 +342,7 @@ function finishToolCalls(
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function readNonEmptyString(value: unknown): string | undefined {
@@ -358,19 +359,16 @@ function chooseStreamToolCallId(
   choiceIndex: number,
   toolIndex: number,
 ): string {
-  const candidate = incomingId !== undefined && !state.usedToolCallIds.has(incomingId)
-    ? incomingId
-    : generateStreamToolCallId(state, choiceIndex, toolIndex);
+  const candidate =
+    incomingId !== undefined && !state.usedToolCallIds.has(incomingId)
+      ? incomingId
+      : generateStreamToolCallId(state, choiceIndex, toolIndex);
   const id = nextUniqueToolCallId(candidate, state.usedToolCallIds);
   state.usedToolCallIds.add(id);
   return id;
 }
 
-function generateStreamToolCallId(
-  state: OpenAIStreamState,
-  choiceIndex: number,
-  toolIndex: number,
-): string {
+function generateStreamToolCallId(state: OpenAIStreamState, choiceIndex: number, toolIndex: number): string {
   const base = getStreamToolCallBaseId(state);
   return `call_${base}_${choiceIndex}_${toolIndex}`;
 }
@@ -395,5 +393,10 @@ function nextUniqueToolCallId(id: string, used: Set<string>): string {
 }
 
 function safeToolCallIdPart(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "stream";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "stream"
+  );
 }

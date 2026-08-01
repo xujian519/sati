@@ -29,9 +29,7 @@ export class QQSessionMapper {
     }
 
     return {
-      sessionKey:
-        this.state.activeByChatKey[chatKey] ??
-        `qq:group=${input.groupId}:user=${input.userId}:general`,
+      sessionKey: this.state.activeByChatKey[chatKey] ?? `qq:group=${input.groupId}:user=${input.userId}:general`,
       message: trimmed,
     };
   }

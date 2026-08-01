@@ -8,9 +8,7 @@ export type PlanFileManager = {
   readPlanFile(filePath: string, cwd: string): string | undefined;
 };
 
-export function createPlanFileManager(options: {
-  projectRoot: string;
-}): PlanFileManager {
+export function createPlanFileManager(options: { projectRoot: string }): PlanFileManager {
   const planDir = resolve(options.projectRoot, PILOT_PROJECT_DIR_NAME, "plans");
 
   function getPlanDirectoryPath(): string {
@@ -23,10 +21,10 @@ export function createPlanFileManager(options: {
     const absolutePath = resolve(isAbsolute(filePath) ? filePath : resolve(cwd, filePath));
     const relativeToPlanDir = relative(planDir, absolutePath);
     if (
-      isAbsolute(relativeToPlanDir)
-      || relativeToPlanDir.startsWith("..")
-      || relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
-      || relativeToPlanDir === ""
+      isAbsolute(relativeToPlanDir) ||
+      relativeToPlanDir.startsWith("..") ||
+      relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) ||
+      relativeToPlanDir === ""
     ) {
       return undefined;
     }

@@ -1,24 +1,24 @@
 export default async function build({ createDeck, layouts, resolveDesignTokens }) {
   const tokens = await resolveDesignTokens({ lang: 'en-US', profile: 'cross-platform-en' });
   const pptx = await createDeck({
-    title: 'PilotDeck PPTX Skill',
+    title: 'Sati PPTX Skill',
     subject: 'A self-test presentation generated from an executable ES module',
     lang: 'en-US',
     tokens,
   });
 
   layouts.titleSlide(pptx, tokens, {
-    eyebrow: 'PilotDeck presentation runtime',
+    eyebrow: 'Sati presentation runtime',
     title: 'Native PowerPoint, built as code',
     subtitle: 'Editable output with rendering and quality gates built into the workflow.',
-    meta: 'PilotDeck · JavaScript · PPTX',
+    meta: 'Sati · JavaScript · PPTX',
   });
 
   layouts.sectionSlide(pptx, tokens, {
     number: 1,
     title: 'A repeatable production path',
     subtitle: 'Narrative planning, native authoring, full rendering, and structural validation.',
-    footer: 'PilotDeck PPTX Skill',
+    footer: 'Sati PPTX Skill',
     page: 2,
   });
 
@@ -30,7 +30,7 @@ export default async function build({ createDeck, layouts, resolveDesignTokens }
       { value: '0', label: 'canvas overflows', detail: 'Bounds are checked in OOXML.' },
       { value: '1×', label: 'reproducible build', detail: 'The source .mjs stays with the work.' },
     ],
-    source: 'PilotDeck self-test',
+    source: 'Sati self-test',
     page: 3,
   });
 
@@ -43,14 +43,14 @@ export default async function build({ createDeck, layouts, resolveDesignTokens }
       { label: 'Render', detail: 'Inspect every slide as an image.' },
       { label: 'Audit', detail: 'Fix overflow, overlap, and data issues.' },
     ],
-    footer: 'PilotDeck PPTX Skill',
+    footer: 'Sati PPTX Skill',
     page: 4,
   });
 
   layouts.closingSlide(pptx, tokens, {
     title: 'Build once. Inspect everything.',
     action: 'Keep the deck editable, the source reproducible, and the quality visible.',
-    contact: 'PilotDeck PPTX Skill',
+    contact: 'Sati PPTX Skill',
   });
 
   return pptx;

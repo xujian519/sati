@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { MutableRefObject } from 'react';
-import { authenticatedFetch } from '../../../utils/api';
-import type { ChatMessage, ClaudeWorkStatus, PilotDeckWorkStatus } from '../types/types';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
+import { authenticatedFetch } from "../../../utils/api";
+import type { ChatMessage, ClaudeWorkStatus, SatiWorkStatus } from "../types/types";
 import {
   getSessionRequestParams,
   isReadOnlySession,
   type Project,
   type ProjectSession,
   type SessionProvider,
-} from '../../../types/app';
-import type { SessionStore, NormalizedMessage } from '../../../stores/useSessionStore';
-import { parseUserAttachmentNote } from '../utils/attachmentNotes';
-import { createCachedDiffCalculator, type DiffCalculator } from '../utils/messageTransforms';
-import { normalizedToChatMessages } from './useChatMessages';
+} from "../../../types/app";
+import type { SessionStore, NormalizedMessage } from "../../../stores/useSessionStore";
+import { parseUserAttachmentNote } from "../utils/attachmentNotes";
+import { createCachedDiffCalculator, type DiffCalculator } from "../utils/messageTransforms";
+import { normalizedToChatMessages } from "./useChatMessages";
 
 const MESSAGES_PER_PAGE = 20;
 const INITIAL_VISIBLE_MESSAGES = 100;
@@ -61,10 +61,7 @@ export function isScrollNearBottom(
  * Using it for change-detection would always evaluate to false on a real
  * `tokenBudget` from the previous session into the new view.
  */
-export function didLoadedSessionChange(
-  lastLoadedSessionKey: string | null,
-  incomingSessionKey: string,
-): boolean {
+export function didLoadedSessionChange(lastLoadedSessionKey: string | null, incomingSessionKey: string): boolean {
   return lastLoadedSessionKey !== null && lastLoadedSessionKey !== incomingSessionKey;
 }
 
@@ -93,20 +90,20 @@ export function shouldRenderPendingBubble(
 export function getStreamContentKey(messages: ChatMessage[]): string {
   const lastMessage = messages[messages.length - 1];
   if (!lastMessage) {
-    return 'empty';
+    return "empty";
   }
 
-  const contentLength = typeof lastMessage.content === 'string' ? lastMessage.content.length : 0;
+  const contentLength = typeof lastMessage.content === "string" ? lastMessage.content.length : 0;
   const toolContent = lastMessage.toolResult?.content;
-  const toolContentLength = typeof toolContent === 'string' ? toolContent.length : 0;
+  const toolContentLength = typeof toolContent === "string" ? toolContent.length : 0;
   return [
-    lastMessage.id || '',
-    lastMessage.type || '',
-    lastMessage.isStreaming ? 'streaming' : '',
+    lastMessage.id || "",
+    lastMessage.type || "",
+    lastMessage.isStreaming ? "streaming" : "",
     contentLength,
     toolContentLength,
     messages.length,
-  ].join(':');
+  ].join(":");
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,41 +116,42 @@ function chatMessageToNormalized(
   provider: SessionProvider,
 ): NormalizedMessage | null {
   const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const ts = msg.timestamp instanceof Date
-    ? msg.timestamp.toISOString()
-    : typeof msg.timestamp === 'number'
-      ? new Date(msg.timestamp).toISOString()
-      : String(msg.timestamp);
+  const ts =
+    msg.timestamp instanceof Date
+      ? msg.timestamp.toISOString()
+      : typeof msg.timestamp === "number"
+        ? new Date(msg.timestamp).toISOString()
+        : String(msg.timestamp);
   const base = { id, sessionId, timestamp: ts, provider };
 
   if (msg.isToolUse) {
     return {
       ...base,
-      kind: 'tool_use',
+      kind: "tool_use",
       toolName: msg.toolName,
       toolInput: msg.toolInput,
       toolId: msg.toolId || id,
     } as NormalizedMessage;
   }
   if (msg.isThinking) {
-    return { ...base, kind: 'thinking', content: msg.content || '' } as NormalizedMessage;
+    return { ...base, kind: "thinking", content: msg.content || "" } as NormalizedMessage;
   }
   if (msg.isInteractivePrompt) {
-    return { ...base, kind: 'interactive_prompt', content: msg.content || '' } as NormalizedMessage;
+    return { ...base, kind: "interactive_prompt", content: msg.content || "" } as NormalizedMessage;
   }
   if ((msg as any).isTaskNotification) {
     return {
       ...base,
-      kind: 'task_notification',
-      status: (msg as any).taskStatus || 'completed',
-      summary: msg.content || '',
+      kind: "task_notification",
+      status: (msg as any).taskStatus || "completed",
+      summary: msg.content || "",
     } as NormalizedMessage;
   }
-  if (msg.type === 'error') {
+  if (msg.type === "error") {
     return {
       ...base,
-      kind: 'error',
-      content: msg.content || '',
+      kind: "error",
+      content: msg.content || "",
       ...((msg as any).userHint ? { userHint: (msg as any).userHint } : {}),
     } as NormalizedMessage;
   }
@@ -161,19 +159,19 @@ function chatMessageToNormalized(
   // so the optimistic message render and any re-derivation from the
   // session store both show the thumbnails. NormalizedMessage.images is
   // `string[]` of data URLs; we only attach it on user-side text frames.
-  const images = msg.type === 'user' && Array.isArray(msg.images)
-    ? msg.images
-        .filter((img) => img && typeof img.data === 'string')
-        .map((img) => img.data)
-    : undefined;
-  const attachments = msg.type === 'user' && Array.isArray(msg.attachments)
-    ? msg.attachments.filter((attachment) => attachment && typeof attachment.name === 'string')
-    : undefined;
+  const images =
+    msg.type === "user" && Array.isArray(msg.images)
+      ? msg.images.filter(img => img && typeof img.data === "string").map(img => img.data)
+      : undefined;
+  const attachments =
+    msg.type === "user" && Array.isArray(msg.attachments)
+      ? msg.attachments.filter(attachment => attachment && typeof attachment.name === "string")
+      : undefined;
   return {
     ...base,
-    kind: 'text',
-    role: msg.type === 'user' ? 'user' : 'assistant',
-    content: msg.content || '',
+    kind: "text",
+    role: msg.type === "user" ? "user" : "assistant",
+    content: msg.content || "",
     ...(images && images.length > 0 ? { images } : {}),
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
   } as NormalizedMessage;
@@ -181,15 +179,15 @@ function chatMessageToNormalized(
 
 function normalizeUserMessageText(value: unknown): string {
   const parsed = parseUserAttachmentNote(value);
-  return parsed.content.replace(/\s+/g, ' ').trim();
+  return parsed.content.replace(/\s+/g, " ").trim();
 }
 
 function getUserAttachmentNames(message: ChatMessage): string[] {
   const explicitNames = Array.isArray(message.attachments)
-    ? message.attachments.map((attachment) => attachment.name || '').filter(Boolean)
+    ? message.attachments.map(attachment => attachment.name || "").filter(Boolean)
     : [];
-  const parsedNames = parseUserAttachmentNote(message.content).attachments
-    .map((attachment) => attachment.name || '')
+  const parsedNames = parseUserAttachmentNote(message.content)
+    .attachments.map(attachment => attachment.name || "")
     .filter(Boolean);
   return [...explicitNames, ...parsedNames].sort();
 }
@@ -199,15 +197,15 @@ function hasEquivalentUserMessage(messages: ChatMessage[], pendingUserMessage: C
   const pendingImageCount = Array.isArray(pendingUserMessage.images) ? pendingUserMessage.images.length : 0;
   const pendingAttachmentNames = getUserAttachmentNames(pendingUserMessage);
 
-  return messages.some((message) => {
-    if (message.type !== 'user') return false;
+  return messages.some(message => {
+    if (message.type !== "user") return false;
     if (normalizeUserMessageText(message.content) !== pendingText) return false;
 
     const imageCount = Array.isArray(message.images) ? message.images.length : 0;
     if (imageCount !== pendingImageCount) return false;
 
     const attachmentNames = getUserAttachmentNames(message);
-    return attachmentNames.join('\n') === pendingAttachmentNames.join('\n');
+    return attachmentNames.join("\n") === pendingAttachmentNames.join("\n");
   });
 }
 
@@ -258,7 +256,7 @@ export function useChatSessionState({
   const [tokenBudget, setTokenBudget] = useState<Record<string, unknown> | null>(null);
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const [claudeStatus, setClaudeStatus] = useState<ClaudeWorkStatus | null>(null);
-  const [pilotDeckStatus, setPilotDeckStatus] = useState<PilotDeckWorkStatus | null>(null);
+  const [satiStatus, setSatiStatus] = useState<SatiWorkStatus | null>(null);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
   const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
   const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
@@ -267,7 +265,9 @@ export function useChatSessionState({
   const [viewHiddenCount, setViewHiddenCount] = useState(0);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [searchTarget, setSearchTarget] = useState<{ timestamp?: string; uuid?: string; snippet?: string } | null>(null);
+  const [searchTarget, setSearchTarget] = useState<{ timestamp?: string; uuid?: string; snippet?: string } | null>(
+    null,
+  );
   const searchScrollActiveRef = useRef(false);
   const isLoadingMoreRef = useRef(false);
   const allMessagesLoadedRef = useRef(false);
@@ -288,12 +288,15 @@ export function useChatSessionState({
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
-  useEffect(() => () => {
-    if (followScrollFrameRef.current !== null) {
-      cancelAnimationFrame(followScrollFrameRef.current);
-      followScrollFrameRef.current = null;
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (followScrollFrameRef.current !== null) {
+        cancelAnimationFrame(followScrollFrameRef.current);
+        followScrollFrameRef.current = null;
+      }
+    },
+    [],
+  );
 
   /* ---------------------------------------------------------------- */
   /*  Derive chatMessages from the store                              */
@@ -325,8 +328,7 @@ export function useChatSessionState({
     }
   } else if (currentSessionId !== effectiveCurrentRef.current) {
     const pendingSessionId = pendingViewSessionRef.current?.sessionId ?? null;
-    const isPendingSessionHandoff =
-      Boolean(currentSessionId) && pendingSessionId === currentSessionId;
+    const isPendingSessionHandoff = Boolean(currentSessionId) && pendingSessionId === currentSessionId;
     if (selSid) {
       effectiveCurrentRef.current = selSid;
       if (currentSessionId !== selSid) {
@@ -352,14 +354,9 @@ export function useChatSessionState({
   }
 
   const activeSessionId = selSid ?? effectiveCurrentRef.current;
-  const activeScrollKey = selectedProject && activeSessionId
-    ? `${selectedProject.name}:${activeSessionId}`
-    : null;
+  const activeScrollKey = selectedProject && activeSessionId ? `${selectedProject.name}:${activeSessionId}` : null;
   const sessionIsReadOnly = isReadOnlySession(selectedSession);
-  const sessionRequestParams = useMemo(
-    () => getSessionRequestParams(selectedSession),
-    [selectedSession],
-  );
+  const sessionRequestParams = useMemo(() => getSessionRequestParams(selectedSession), [selectedSession]);
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
 
   // Tell the store which session we're viewing so it only re-renders for this one
@@ -382,7 +379,7 @@ export function useChatSessionState({
   if (activeSessionId && activeSessionId !== prevActiveSessionRef.current && pendingUserMessage) {
     const expectedSessionId = pendingViewSessionRef.current?.sessionId ?? null;
     if (expectedSessionId && activeSessionId === expectedSessionId) {
-      const normalized = chatMessageToNormalized(pendingUserMessage, activeSessionId, 'pilotdeck' as SessionProvider);
+      const normalized = chatMessageToNormalized(pendingUserMessage, activeSessionId, "sati" as SessionProvider);
       if (normalized) {
         sessionStore.appendRealtime(activeSessionId, normalized);
       }
@@ -392,12 +389,8 @@ export function useChatSessionState({
   prevActiveSessionRef.current = activeSessionId;
 
   const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : EMPTY_NORMALIZED_MESSAGES;
-  const activityStoreMessages = activeSessionId
-    ? sessionStore.getActivityMessages?.(activeSessionId) ?? []
-    : [];
-  const subagentLinks = activeSessionId
-    ? sessionStore.getSessionSlot?.(activeSessionId)?.subagentLinks
-    : undefined;
+  const activityStoreMessages = activeSessionId ? (sessionStore.getActivityMessages?.(activeSessionId) ?? []) : [];
+  const subagentLinks = activeSessionId ? sessionStore.getSessionSlot?.(activeSessionId)?.subagentLinks : undefined;
 
   // Reset viewHiddenCount when store messages change
   const prevStoreLenRef = useRef(0);
@@ -430,11 +423,7 @@ export function useChatSessionState({
     // concurrent rendering / batched parent updates, so we also defend
     // here at the read site.
     const pendingBelongsHere = shouldRenderPendingBubble(activeSessionId, pendingTargetSessionId);
-    if (
-      pendingUserMessage &&
-      pendingBelongsHere &&
-      !hasEquivalentUserMessage(all, pendingUserMessage)
-    ) {
+    if (pendingUserMessage && pendingBelongsHere && !hasEquivalentUserMessage(all, pendingUserMessage)) {
       return [pendingUserMessage, ...all];
     }
     if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
@@ -447,18 +436,21 @@ export function useChatSessionState({
   /*  addMessage / clearMessages / rewindMessages                     */
   /* ---------------------------------------------------------------- */
 
-  const addMessage = useCallback((msg: ChatMessage, targetSessionId?: string | null) => {
-    const sessionId = targetSessionId !== undefined ? targetSessionId : activeSessionId;
-    if (!sessionId) {
-      // No session yet — show as pending until the backend creates one
-      setPendingUserMessage(msg);
-      return;
-    }
-    const normalized = chatMessageToNormalized(msg, sessionId, 'pilotdeck' as SessionProvider);
-    if (normalized) {
-      sessionStore.appendRealtime(sessionId, normalized);
-    }
-  }, [activeSessionId, sessionStore]);
+  const addMessage = useCallback(
+    (msg: ChatMessage, targetSessionId?: string | null) => {
+      const sessionId = targetSessionId !== undefined ? targetSessionId : activeSessionId;
+      if (!sessionId) {
+        // No session yet — show as pending until the backend creates one
+        setPendingUserMessage(msg);
+        return;
+      }
+      const normalized = chatMessageToNormalized(msg, sessionId, "sati" as SessionProvider);
+      if (normalized) {
+        sessionStore.appendRealtime(sessionId, normalized);
+      }
+    },
+    [activeSessionId, sessionStore],
+  );
 
   const clearMessages = useCallback(() => {
     if (!activeSessionId) return;
@@ -511,9 +503,9 @@ export function useChatSessionState({
 
       try {
         const slot = await sessionStore.fetchMore(selectedSession.id, {
-          provider: 'pilotdeck',
+          provider: "sati",
           projectName: selectedProject.name,
-          projectPath: selectedProject.fullPath || selectedProject.path || '',
+          projectPath: selectedProject.fullPath || selectedProject.path || "",
           ...sessionRequestParams,
           limit: MESSAGES_PER_PAGE,
         });
@@ -522,20 +514,13 @@ export function useChatSessionState({
         pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
         setHasMoreMessages(slot.hasMore);
         setTotalMessages(slot.total);
-        setVisibleMessageCount((prev) => prev + MESSAGES_PER_PAGE);
+        setVisibleMessageCount(prev => prev + MESSAGES_PER_PAGE);
         return true;
       } finally {
         isLoadingMoreRef.current = false;
       }
     },
-    [
-      hasMoreMessages,
-      isLoadingMoreMessages,
-      selectedProject,
-      selectedSession,
-      sessionRequestParams,
-      sessionStore,
-    ],
+    [hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionRequestParams, sessionStore],
   );
 
   const handleScroll = useCallback(async () => {
@@ -545,10 +530,7 @@ export function useChatSessionState({
     if (activeScrollKey) {
       conversationScrollPositionsRef.current.set(activeScrollKey, {
         top: container.scrollTop,
-        distanceFromBottom: Math.max(
-          0,
-          container.scrollHeight - container.scrollTop - container.clientHeight,
-        ),
+        distanceFromBottom: Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight),
       });
     }
 
@@ -557,7 +539,10 @@ export function useChatSessionState({
 
     if (!allMessagesLoadedRef.current) {
       const scrolledNearTop = container.scrollTop < 100;
-      if (!scrolledNearTop) { topLoadLockRef.current = false; return; }
+      if (!scrolledNearTop) {
+        topLoadLockRef.current = false;
+        return;
+      }
       if (topLoadLockRef.current) {
         if (container.scrollTop > 20) topLoadLockRef.current = false;
         return;
@@ -579,32 +564,30 @@ export function useChatSessionState({
   // Reset scroll/pagination state on session change
   useLayoutEffect(() => {
     const savedScrollPosition = activeScrollKey
-      ? conversationScrollPositionsRef.current.get(activeScrollKey) ?? null
+      ? (conversationScrollPositionsRef.current.get(activeScrollKey) ?? null)
       : null;
-    pendingConversationScrollRestoreRef.current = activeScrollKey && savedScrollPosition
-      ? { key: activeScrollKey, position: savedScrollPosition }
-      : null;
+    pendingConversationScrollRestoreRef.current =
+      activeScrollKey && savedScrollPosition ? { key: activeScrollKey, position: savedScrollPosition } : null;
     if (!searchScrollActiveRef.current) {
       pendingInitialScrollRef.current = !savedScrollPosition;
       setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
     }
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
-    setIsUserScrolledUp(Boolean(
-      savedScrollPosition
-      && savedScrollPosition.distanceFromBottom > CONVERSATION_SCROLL_BOTTOM_THRESHOLD
-    ));
+    setIsUserScrolledUp(
+      Boolean(savedScrollPosition && savedScrollPosition.distanceFromBottom > CONVERSATION_SCROLL_BOTTOM_THRESHOLD),
+    );
   }, [activeScrollKey]);
 
   useLayoutEffect(() => {
     const pendingRestore = pendingConversationScrollRestoreRef.current;
     const container = scrollContainerRef.current;
     if (
-      !pendingRestore
-      || pendingRestore.key !== activeScrollKey
-      || !container
-      || isLoadingSessionMessages
-      || chatMessages.length === 0
+      !pendingRestore ||
+      pendingRestore.key !== activeScrollKey ||
+      !container ||
+      isLoadingSessionMessages ||
+      chatMessages.length === 0
     ) {
       return;
     }
@@ -621,7 +604,10 @@ export function useChatSessionState({
   // Initial scroll to bottom
   useEffect(() => {
     if (!pendingInitialScrollRef.current || !scrollContainerRef.current || isLoadingSessionMessages) return;
-    if (chatMessages.length === 0) { pendingInitialScrollRef.current = false; return; }
+    if (chatMessages.length === 0) {
+      pendingInitialScrollRef.current = false;
+      return;
+    }
     pendingInitialScrollRef.current = false;
     if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), 200);
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
@@ -643,11 +629,9 @@ export function useChatSessionState({
       //    selectedProject's reference and re-fire this effect — the
       //    reset would wipe pendingUserMessage and flash back to welcome.
       const isPendingSessionHandoff =
-        Boolean(currentSessionId) &&
-        pendingViewSessionRef.current?.sessionId === currentSessionId;
+        Boolean(currentSessionId) && pendingViewSessionRef.current?.sessionId === currentSessionId;
       const isAwaitingSessionCreation =
-        pendingViewSessionRef.current !== null &&
-        !pendingViewSessionRef.current.sessionId;
+        pendingViewSessionRef.current !== null && !pendingViewSessionRef.current.sessionId;
       if (!selectedSession && (isPendingSessionHandoff || isAwaitingSessionCreation)) {
         return;
       }
@@ -655,7 +639,7 @@ export function useChatSessionState({
       pendingViewSessionRef.current = null;
       setPendingUserMessage(null);
       setClaudeStatus(null);
-      setPilotDeckStatus(null);
+      setSatiStatus(null);
       setCanAbortSession(false);
       setIsAborting(false);
       setIsLoading(false);
@@ -669,15 +653,15 @@ export function useChatSessionState({
       return;
     }
 
-    const provider = 'pilotdeck';
+    const provider = "sati";
     const sessionKey = JSON.stringify([
       selectedSession.id,
       selectedProject.name,
       provider,
-      sessionRequestParams.sessionKind ?? '',
-      sessionRequestParams.parentSessionId ?? '',
-      sessionRequestParams.relativeTranscriptPath ?? '',
-      sessionIsReadOnly ? 'readonly' : 'readwrite',
+      sessionRequestParams.sessionKind ?? "",
+      sessionRequestParams.parentSessionId ?? "",
+      sessionRequestParams.relativeTranscriptPath ?? "",
+      sessionIsReadOnly ? "readonly" : "readwrite",
     ]);
 
     // Skip if already loaded and fresh, or if stale but has live realtime
@@ -697,7 +681,7 @@ export function useChatSessionState({
       resetStreamingState();
       pendingViewSessionRef.current = null;
       setClaudeStatus(null);
-      setPilotDeckStatus(null);
+      setSatiStatus(null);
       setSessionLoadError(null);
       setCanAbortSession(false);
       setIsAborting(false);
@@ -728,7 +712,7 @@ export function useChatSessionState({
     // Check session status
     if (ws && !sessionIsReadOnly) {
       sendMessage({
-        type: 'check-session-status',
+        type: "check-session-status",
         sessionId: selectedSession.id,
         provider,
         includeActiveTurnMessages: true,
@@ -739,7 +723,7 @@ export function useChatSessionState({
 
     // Fetch from server → store updates → chatMessages re-derives automatically
     setIsLoadingSessionMessages(true);
-    // Intentionally fetch the WHOLE transcript on session entry: PilotDeck's
+    // Intentionally fetch the WHOLE transcript on session entry: Sati's
     // `readSessionMessages` slices in jsonl-forward order (`allMessages.slice(
     // offset, offset+limit)`), but the ui-side `fetchMore` path that handles
     // scroll-to-top assumes "more older messages" semantics and prepends the
@@ -748,27 +732,30 @@ export function useChatSessionState({
     // the *newer* tail messages — gets prepended in front of the older ones
     // already on screen). Sessions are typically well under a few hundred
     // messages, so fetching everything is fine.
-    sessionStore.fetchFromServer(selectedSession.id, {
-      provider: 'pilotdeck',
-      projectName: selectedProject.name,
-      projectPath: selectedProject.fullPath || selectedProject.path || '',
-      ...sessionRequestParams,
-      limit: null,
-      offset: 0,
-    }).then(slot => {
-      if (slot) {
-        setHasMoreMessages(slot.hasMore);
-        setTotalMessages(slot.total);
-        if (slot.tokenUsage) setTokenBudget(slot.tokenUsage as Record<string, unknown>);
-        setSessionLoadError(slot.status === 'error'
-          ? slot.lastError || 'Unable to load conversation messages.'
-          : null);
-      }
-      setIsLoadingSessionMessages(false);
-    }).catch((error) => {
-      setSessionLoadError(error instanceof Error ? error.message : 'Unable to load conversation messages.');
-      setIsLoadingSessionMessages(false);
-    });
+    sessionStore
+      .fetchFromServer(selectedSession.id, {
+        provider: "sati",
+        projectName: selectedProject.name,
+        projectPath: selectedProject.fullPath || selectedProject.path || "",
+        ...sessionRequestParams,
+        limit: null,
+        offset: 0,
+      })
+      .then(slot => {
+        if (slot) {
+          setHasMoreMessages(slot.hasMore);
+          setTotalMessages(slot.total);
+          if (slot.tokenUsage) setTokenBudget(slot.tokenUsage as Record<string, unknown>);
+          setSessionLoadError(
+            slot.status === "error" ? slot.lastError || "Unable to load conversation messages." : null,
+          );
+        }
+        setIsLoadingSessionMessages(false);
+      })
+      .catch(error => {
+        setSessionLoadError(error instanceof Error ? error.message : "Unable to load conversation messages.");
+        setIsLoadingSessionMessages(false);
+      });
   }, [
     currentSessionId,
     pendingViewSessionRef,
@@ -791,9 +778,9 @@ export function useChatSessionState({
         // Skip store refresh during active streaming
         if (!isLoading) {
           await sessionStore.refreshFromServer(selectedSession.id, {
-            provider: 'pilotdeck',
+            provider: "sati",
             projectName: selectedProject.name,
-            projectPath: selectedProject.fullPath || selectedProject.path || '',
+            projectPath: selectedProject.fullPath || selectedProject.path || "",
             ...sessionRequestParams,
           });
 
@@ -802,7 +789,7 @@ export function useChatSessionState({
           }
         }
       } catch (error) {
-        console.error('Error reloading messages from external update:', error);
+        console.error("Error reloading messages from external update:", error);
       }
     };
 
@@ -824,11 +811,11 @@ export function useChatSessionState({
     const session = selectedSession as Record<string, unknown> | null;
     const targetSnippet = session?.__searchTargetSnippet;
     const targetTimestamp = session?.__searchTargetTimestamp;
-    if (typeof targetSnippet === 'string' && targetSnippet) {
+    if (typeof targetSnippet === "string" && targetSnippet) {
       searchScrollActiveRef.current = true;
       setSearchTarget({
         snippet: targetSnippet,
-        timestamp: typeof targetTimestamp === 'string' ? targetTimestamp : undefined,
+        timestamp: typeof targetTimestamp === "string" ? targetTimestamp : undefined,
       });
     }
   }, [selectedSession]);
@@ -849,9 +836,9 @@ export function useChatSessionState({
         {
           try {
             const slot = await sessionStore.fetchFromServer(selectedSession.id, {
-              provider: 'pilotdeck',
+              provider: "sati",
               projectName: selectedProject.name,
-              projectPath: selectedProject.fullPath || selectedProject.path || '',
+              projectPath: selectedProject.fullPath || selectedProject.path || "",
               ...sessionRequestParams,
               limit: null,
               offset: 0,
@@ -879,33 +866,42 @@ export function useChatSessionState({
         let targetElement: Element | null = null;
 
         if (target.snippet) {
-          const cleanSnippet = target.snippet.replace(/^\.{3}/, '').replace(/\.{3}$/, '').trim();
+          const cleanSnippet = target.snippet
+            .replace(/^\.{3}/, "")
+            .replace(/\.{3}$/, "")
+            .trim();
           const searchPhrase = cleanSnippet.slice(0, 80).toLowerCase().trim();
           if (searchPhrase.length >= 10) {
-            const messageElements = container.querySelectorAll('.chat-message');
+            const messageElements = container.querySelectorAll(".chat-message");
             for (const el of messageElements) {
-              const text = (el.textContent || '').toLowerCase();
-              if (text.includes(searchPhrase)) { targetElement = el; break; }
+              const text = (el.textContent || "").toLowerCase();
+              if (text.includes(searchPhrase)) {
+                targetElement = el;
+                break;
+              }
             }
           }
         }
 
         if (!targetElement && target.timestamp) {
           const targetDate = new Date(target.timestamp).getTime();
-          const messageElements = container.querySelectorAll('[data-message-timestamp]');
+          const messageElements = container.querySelectorAll("[data-message-timestamp]");
           let closestDiff = Infinity;
           for (const el of messageElements) {
-            const ts = el.getAttribute('data-message-timestamp');
+            const ts = el.getAttribute("data-message-timestamp");
             if (!ts) continue;
             const diff = Math.abs(new Date(ts).getTime() - targetDate);
-            if (diff < closestDiff) { closestDiff = diff; targetElement = el; }
+            if (diff < closestDiff) {
+              closestDiff = diff;
+              targetElement = el;
+            }
           }
         }
 
         if (targetElement) {
-          targetElement.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          targetElement.classList.add('search-highlight-flash');
-          setTimeout(() => targetElement?.classList.remove('search-highlight-flash'), 4000);
+          targetElement.scrollIntoView({ block: "center", behavior: "smooth" });
+          targetElement.classList.add("search-highlight-flash");
+          setTimeout(() => targetElement?.classList.remove("search-highlight-flash"), 4000);
           searchScrollActiveRef.current = false;
         } else if (retriesLeft > 0) {
           setTimeout(() => findAndScroll(retriesLeft - 1), 200);
@@ -918,10 +914,18 @@ export function useChatSessionState({
     };
 
     scrollToTarget();
-  }, [chatMessages.length, isLoadingSessionMessages, searchTarget, selectedProject, selectedSession, sessionRequestParams, sessionStore]);
+  }, [
+    chatMessages.length,
+    isLoadingSessionMessages,
+    searchTarget,
+    selectedProject,
+    selectedSession,
+    sessionRequestParams,
+    sessionStore,
+  ]);
 
   useEffect(() => {
-    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith('new-session-')) {
+    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith("new-session-")) {
       setTokenBudget(null);
       return;
     }
@@ -932,7 +936,7 @@ export function useChatSessionState({
 
     const fetchInitialTokenUsage = async () => {
       try {
-        const url = `/api/projects/${selectedProject.name}/sessions/${encodeURIComponent(selectedSession.id)}/token-usage?provider=pilotdeck`;
+        const url = `/api/projects/${selectedProject.name}/sessions/${encodeURIComponent(selectedSession.id)}/token-usage?provider=sati`;
         const response = await authenticatedFetch(url);
         if (response.ok) {
           setTokenBudget(await response.json());
@@ -940,7 +944,7 @@ export function useChatSessionState({
           setTokenBudget(null);
         }
       } catch (error) {
-        console.error('Failed to fetch initial token usage:', error);
+        console.error("Failed to fetch initial token usage:", error);
       }
     };
     fetchInitialTokenUsage();
@@ -950,10 +954,7 @@ export function useChatSessionState({
     if (chatMessages.length <= visibleMessageCount) return chatMessages;
     return chatMessages.slice(-visibleMessageCount);
   }, [chatMessages, visibleMessageCount]);
-  const streamContentKey = useMemo(
-    () => getStreamContentKey(visibleMessages),
-    [visibleMessages],
-  );
+  const streamContentKey = useMemo(() => getStreamContentKey(visibleMessages), [visibleMessages]);
 
   useEffect(() => {
     if (!autoScrollToBottom && scrollContainerRef.current) {
@@ -990,8 +991,8 @@ export function useChatSessionState({
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
   useEffect(() => {
@@ -1018,9 +1019,9 @@ export function useChatSessionState({
 
     const requestStatus = () => {
       sendMessage({
-        type: 'check-session-status',
+        type: "check-session-status",
         sessionId: activeViewSessionId,
-        provider: 'pilotdeck',
+        provider: "sati",
         includeActiveTurnMessages: false,
       });
     };
@@ -1053,7 +1054,9 @@ export function useChatSessionState({
       if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
       setShowLoadAllOverlay(false);
     }
-    return () => { if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current); };
+    return () => {
+      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
+    };
   }, [isLoadingMoreMessages, hasMoreMessages]);
 
   const loadAllMessages = useCallback(async () => {
@@ -1071,9 +1074,9 @@ export function useChatSessionState({
 
     try {
       const slot = await sessionStore.fetchFromServer(requestSessionId, {
-        provider: 'pilotdeck',
+        provider: "sati",
         projectName: selectedProject.name,
-        projectPath: selectedProject.fullPath || selectedProject.path || '',
+        projectPath: selectedProject.fullPath || selectedProject.path || "",
         ...sessionRequestParams,
         limit: null,
         offset: 0,
@@ -1094,30 +1097,26 @@ export function useChatSessionState({
 
         setLoadAllJustFinished(true);
         if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-        loadAllFinishedTimerRef.current = setTimeout(() => { setLoadAllJustFinished(false); setShowLoadAllOverlay(false); }, 1000);
+        loadAllFinishedTimerRef.current = setTimeout(() => {
+          setLoadAllJustFinished(false);
+          setShowLoadAllOverlay(false);
+        }, 1000);
       } else {
         allMessagesLoadedRef.current = false;
         setShowLoadAllOverlay(false);
       }
     } catch (error) {
-      console.error('Error loading all messages:', error);
+      console.error("Error loading all messages:", error);
       allMessagesLoadedRef.current = false;
       setShowLoadAllOverlay(false);
     } finally {
       isLoadingMoreRef.current = false;
       setIsLoadingAllMessages(false);
     }
-  }, [
-    selectedSession,
-    selectedProject,
-    isLoadingAllMessages,
-    currentSessionId,
-    sessionRequestParams,
-    sessionStore,
-  ]);
+  }, [selectedSession, selectedProject, isLoadingAllMessages, currentSessionId, sessionRequestParams, sessionStore]);
 
   const loadEarlierMessages = useCallback(() => {
-    setVisibleMessageCount((prev) => prev + 100);
+    setVisibleMessageCount(prev => prev + 100);
   }, []);
 
   return {
@@ -1153,8 +1152,8 @@ export function useChatSessionState({
     showLoadAllOverlay,
     claudeStatus,
     setClaudeStatus,
-    pilotDeckStatus,
-    setPilotDeckStatus,
+    satiStatus,
+    setSatiStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,

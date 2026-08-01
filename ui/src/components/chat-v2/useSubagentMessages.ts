@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
-import type { ChatMessage } from '../chat/types/types';
-import { normalizedToChatMessages } from '../chat/hooks/useChatMessages';
-import type { NormalizedMessage, SessionStore } from '../../stores/useSessionStore';
-import type { SessionRequestParams } from '../../types/app';
-import { authenticatedFetch } from '../../utils/api';
+import { useEffect, useMemo, useState, useRef } from "react";
+import type { ChatMessage } from "../chat/types/types";
+import { normalizedToChatMessages } from "../chat/hooks/useChatMessages";
+import type { NormalizedMessage, SessionStore } from "../../stores/useSessionStore";
+import type { SessionRequestParams } from "../../types/app";
+import { authenticatedFetch } from "../../utils/api";
 
 const EMPTY_NORMALIZED_MESSAGES: NormalizedMessage[] = [];
 
@@ -13,29 +13,23 @@ interface SubagentMessagesResult {
   error: string | null;
 }
 
-function isPilotDeckForkDirective(message: ChatMessage): boolean {
-  if (typeof message.content !== 'string') return false;
-  return message.content.includes('<pilotdeck-fork>') &&
-    message.content.includes('Directive:');
+function isSatiForkDirective(message: ChatMessage): boolean {
+  if (typeof message.content !== "string") return false;
+  return message.content.includes("<sati-fork>") && message.content.includes("Directive:");
 }
 
-function isPilotDeckForkPlaceholder(message: ChatMessage): boolean {
-  const content = typeof message.content === 'string' ? message.content : '';
-  const toolResultContent = typeof message.toolResult?.content === 'string'
-    ? message.toolResult.content
-    : '';
-  return `${content}\n${toolResultContent}`.includes('<pilotdeck-fork-placeholder>');
+function isSatiForkPlaceholder(message: ChatMessage): boolean {
+  const content = typeof message.content === "string" ? message.content : "";
+  const toolResultContent = typeof message.toolResult?.content === "string" ? message.toolResult.content : "";
+  return `${content}\n${toolResultContent}`.includes("<sati-fork-placeholder>");
 }
 
 function filterSubagentDetailMessages(messages: ChatMessage[]): ChatMessage[] {
-  return messages.filter((message) =>
-    !isPilotDeckForkDirective(message) &&
-    !isPilotDeckForkPlaceholder(message)
-  );
+  return messages.filter(message => !isSatiForkDirective(message) && !isSatiForkPlaceholder(message));
 }
 
 function normalizeSubagentDetailContainers(messages: ChatMessage[]): ChatMessage[] {
-  return messages.map((message) => {
+  return messages.map(message => {
     if (message.isSubagentContainer && !message.subagentId) {
       return { ...message, isSubagentContainer: false, subagentState: undefined };
     }
@@ -57,29 +51,24 @@ export function mergeSubagentDetailMessages(
   }
 
   const merged = [...snapshotMessages];
-  const seenIds = new Set(snapshotMessages.map((message) => message.id));
-  const snapshotToolIds = new Set(
-    snapshotMessages.filter(m => m.kind === 'tool_use' && m.toolId).map(m => m.toolId!),
-  );
+  const seenIds = new Set(snapshotMessages.map(message => message.id));
+  const snapshotToolIds = new Set(snapshotMessages.filter(m => m.kind === "tool_use" && m.toolId).map(m => m.toolId!));
   const latestSnapshotFinalTimestamp = snapshotMessages.reduce<number | null>((latest, message) => {
-    if (
-      (message.kind !== 'text' || message.role === 'user') &&
-      message.kind !== 'thinking'
-    ) return latest;
-    const parsed = Date.parse(String(message.timestamp || ''));
+    if ((message.kind !== "text" || message.role === "user") && message.kind !== "thinking") return latest;
+    const parsed = Date.parse(String(message.timestamp || ""));
     if (!Number.isFinite(parsed)) return latest;
     return latest == null ? parsed : Math.max(latest, parsed);
   }, null);
   for (const message of realtimeMessages) {
     if (seenIds.has(message.id)) continue;
-    if (message.kind === 'tool_use' && message.toolId && snapshotToolIds.has(message.toolId)) continue;
-    if (message.kind === 'tool_result' && message.toolId && snapshotToolIds.has(message.toolId)) continue;
+    if (message.kind === "tool_use" && message.toolId && snapshotToolIds.has(message.toolId)) continue;
+    if (message.kind === "tool_result" && message.toolId && snapshotToolIds.has(message.toolId)) continue;
     if (
-      ((message.kind === 'text' && message.role !== 'user') || message.kind === 'thinking') &&
+      ((message.kind === "text" && message.role !== "user") || message.kind === "thinking") &&
       latestSnapshotFinalTimestamp != null &&
-      !String(message.id || '').startsWith('__subagent_thinking_')
+      !String(message.id || "").startsWith("__subagent_thinking_")
     ) {
-      const parsed = Date.parse(String(message.timestamp || ''));
+      const parsed = Date.parse(String(message.timestamp || ""));
       if (!Number.isFinite(parsed) || parsed <= latestSnapshotFinalTimestamp) continue;
     }
     seenIds.add(message.id);
@@ -101,15 +90,14 @@ export function useSubagentMessages(
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const { sessionKind, parentSessionId, relativeTranscriptPath } = sessionRequestParams;
-  const realtimeMessages = sessionId && subagentId
-    ? sessionStore?.getSubagentDetailMessages?.(sessionId, subagentId) ?? EMPTY_NORMALIZED_MESSAGES
-    : EMPTY_NORMALIZED_MESSAGES;
-  const useSnapshotOnly = refreshKey === 'completed' || refreshKey === 'failed';
+  const realtimeMessages =
+    sessionId && subagentId
+      ? (sessionStore?.getSubagentDetailMessages?.(sessionId, subagentId) ?? EMPTY_NORMALIZED_MESSAGES)
+      : EMPTY_NORMALIZED_MESSAGES;
+  const useSnapshotOnly = refreshKey === "completed" || refreshKey === "failed";
   const messages = useMemo(() => {
     const normalized = mergeSubagentDetailMessages(snapshotMessages, realtimeMessages, useSnapshotOnly);
-    return normalizeSubagentDetailContainers(
-      filterSubagentDetailMessages(normalizedToChatMessages(normalized)),
-    );
+    return normalizeSubagentDetailContainers(filterSubagentDetailMessages(normalizedToChatMessages(normalized)));
   }, [snapshotMessages, realtimeMessages, useSnapshotOnly]);
 
   useEffect(() => {
@@ -128,27 +116,27 @@ export function useSubagentMessages(
     setError(null);
 
     const params = new URLSearchParams();
-    if (projectPath) params.set('projectPath', projectPath);
-    if (sessionKind) params.set('sessionKind', sessionKind);
-    if (parentSessionId) params.set('parentSessionId', parentSessionId);
-    if (relativeTranscriptPath) params.set('relativeTranscriptPath', relativeTranscriptPath);
+    if (projectPath) params.set("projectPath", projectPath);
+    if (sessionKind) params.set("sessionKind", sessionKind);
+    if (parentSessionId) params.set("parentSessionId", parentSessionId);
+    if (relativeTranscriptPath) params.set("relativeTranscriptPath", relativeTranscriptPath);
     const query = params.toString();
-    const url = `/api/sessions/${encodeURIComponent(sessionId)}/subagent/${encodeURIComponent(subagentId)}/messages${query ? `?${query}` : ''}`;
+    const url = `/api/sessions/${encodeURIComponent(sessionId)}/subagent/${encodeURIComponent(subagentId)}/messages${query ? `?${query}` : ""}`;
 
     authenticatedFetch(url, { signal: controller.signal })
-      .then((res) => {
+      .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP ${res.status}`);
         }
         return res.json();
       })
-      .then((data) => {
+      .then(data => {
         if (controller.signal.aborted) return;
         const normalized = Array.isArray(data.messages) ? data.messages : [];
         setSnapshotMessages(normalized);
         setIsLoading(false);
       })
-      .catch((err) => {
+      .catch(err => {
         if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : String(err));
         setIsLoading(false);

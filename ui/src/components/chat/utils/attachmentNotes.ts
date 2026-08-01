@@ -1,41 +1,41 @@
-import type { ChatAttachment } from '../types/types';
+import type { ChatAttachment } from "../types/types";
 import {
   DOCUMENT_SELECTION_ATTACHMENT_KIND,
   parseDocumentSelectionPromptBlock,
   type DocumentSelectionReference,
-} from '../../../types/documentSelection';
+} from "../../../types/documentSelection";
 import {
   CONTENT_REFERENCE_ATTACHMENT_KIND,
   parseContentReferencePromptBlock,
   type ContentReference,
-} from '../../../types/contentReference';
+} from "../../../types/contentReference";
 
-const ATTACHMENT_NOTE_MARKER = '[Files attached by user and available for reading in the project:]';
+const ATTACHMENT_NOTE_MARKER = "[Files attached by user and available for reading in the project:]";
 
 function inferAttachmentMimeType(name: string, filePath: string): string | undefined {
   const source = `${name} ${filePath}`.toLowerCase();
-  if (source.endsWith('.pdf')) return 'application/pdf';
-  if (source.endsWith('.doc')) return 'application/msword';
-  if (source.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  if (source.endsWith('.xls')) return 'application/vnd.ms-excel';
-  if (source.endsWith('.xlsx')) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-  if (source.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
-  if (source.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-  if (source.endsWith('.txt')) return 'text/plain';
-  if (source.endsWith('.md') || source.endsWith('.markdown')) return 'text/markdown';
-  if (source.endsWith('.json')) return 'application/json';
-  if (source.endsWith('.csv')) return 'text/csv';
-  if (source.endsWith('.xml')) return 'application/xml';
-  if (source.endsWith('.png')) return 'image/png';
-  if (source.endsWith('.jpg') || source.endsWith('.jpeg')) return 'image/jpeg';
-  if (source.endsWith('.gif')) return 'image/gif';
-  if (source.endsWith('.webp')) return 'image/webp';
-  if (source.endsWith('.svg') || source.endsWith('.svgz')) return 'image/svg+xml';
+  if (source.endsWith(".pdf")) return "application/pdf";
+  if (source.endsWith(".doc")) return "application/msword";
+  if (source.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (source.endsWith(".xls")) return "application/vnd.ms-excel";
+  if (source.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (source.endsWith(".ppt")) return "application/vnd.ms-powerpoint";
+  if (source.endsWith(".pptx")) return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (source.endsWith(".txt")) return "text/plain";
+  if (source.endsWith(".md") || source.endsWith(".markdown")) return "text/markdown";
+  if (source.endsWith(".json")) return "application/json";
+  if (source.endsWith(".csv")) return "text/csv";
+  if (source.endsWith(".xml")) return "application/xml";
+  if (source.endsWith(".png")) return "image/png";
+  if (source.endsWith(".jpg") || source.endsWith(".jpeg")) return "image/jpeg";
+  if (source.endsWith(".gif")) return "image/gif";
+  if (source.endsWith(".webp")) return "image/webp";
+  if (source.endsWith(".svg") || source.endsWith(".svgz")) return "image/svg+xml";
   return undefined;
 }
 
 function isImageAttachmentMime(mimeType: string | undefined): boolean {
-  return Boolean(mimeType?.toLowerCase().startsWith('image/'));
+  return Boolean(mimeType?.toLowerCase().startsWith("image/"));
 }
 
 export function parseUserAttachmentNote(content: unknown): {
@@ -60,8 +60,8 @@ export function parseUserAttachmentNote(content: unknown): {
 
   for (const rawLine of note.split(/\r?\n/)) {
     const line = rawLine.trim();
-    if (!line.startsWith('- ')) continue;
-    const separator = line.indexOf(': ');
+    if (!line.startsWith("- ")) continue;
+    const separator = line.indexOf(": ");
     if (separator < 0) continue;
 
     const name = line.slice(2, separator).trim();
@@ -89,7 +89,7 @@ function contentReferenceToAttachment(reference: ContentReference): ChatAttachme
     filePath: reference.source.relativePath,
     contentReference: reference,
     createdAt: reference.createdAt,
-    mimeType: 'application/vnd.pilotdeck.content-reference+json',
+    mimeType: "application/vnd.sati.content-reference+json",
   };
 }
 
@@ -107,6 +107,6 @@ function documentSelectionToAttachment(reference: DocumentSelectionReference): C
     occurrenceIndex: reference.occurrenceIndex,
     createdAt: reference.createdAt,
     truncated: reference.truncated,
-    mimeType: 'application/vnd.pilotdeck.document-selection',
+    mimeType: "application/vnd.sati.document-selection",
   };
 }

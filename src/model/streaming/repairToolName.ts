@@ -20,13 +20,13 @@ export function repairToolName(
   }
 
   const lower = raw.toLowerCase();
-  const caseMatch = valid.find((candidate) => candidate.toLowerCase() === lower);
+  const caseMatch = valid.find(candidate => candidate.toLowerCase() === lower);
   if (caseMatch) {
     return { name: caseMatch, reason: "case_insensitive" };
   }
 
   const normalized = normalizeToolName(raw);
-  const normalizedMatch = valid.find((candidate) => normalizeToolName(candidate) === normalized);
+  const normalizedMatch = valid.find(candidate => normalizeToolName(candidate) === normalized);
   if (normalizedMatch) {
     return { name: normalizedMatch, reason: "normalized" };
   }
@@ -50,10 +50,7 @@ function maxSafeEditDistance(a: string, b: string): number {
   return 2;
 }
 
-function bestEditDistanceMatch(
-  raw: string,
-  valid: string[],
-): { name: string; distance: number } | undefined {
+function bestEditDistanceMatch(raw: string, valid: string[]): { name: string; distance: number } | undefined {
   let best: { name: string; distance: number } | undefined;
   for (const candidate of valid) {
     const distance = levenshtein(raw.toLowerCase(), candidate.toLowerCase());

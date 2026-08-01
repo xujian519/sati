@@ -1,7 +1,6 @@
 import { access, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
-
 import { getPilotExtensionPaths } from "../../pilot/paths.js";
 import { SkillManager, SkillManagerError, SkillValidationError } from "./SkillManager.js";
 import type { SkillImportResult, SkillScope, SkillValidationResult } from "./types.js";
@@ -15,12 +14,7 @@ export type SkillMigrationSource = {
   path: string;
 };
 
-export type SkillMigrationItemStatus =
-  | "migrated"
-  | "would_migrate"
-  | "skipped"
-  | "conflict"
-  | "error";
+export type SkillMigrationItemStatus = "migrated" | "would_migrate" | "skipped" | "conflict" | "error";
 
 export type SkillMigrationItem = {
   sourceKind: SkillMigrationSourceKind;
@@ -41,7 +35,7 @@ export type SkillMigrationReport = {
   items: SkillMigrationItem[];
 };
 
-export type MigrateSkillsToPilotDeckOptions = {
+export type MigrateSkillsToSatiOptions = {
   pilotHome: string;
   projectRoot?: string;
   include?: Array<Exclude<SkillMigrationSourceKind, "custom">>;
@@ -52,15 +46,9 @@ export type MigrateSkillsToPilotDeckOptions = {
   projectKey?: string | null;
 };
 
-const DEFAULT_INCLUDE: Array<Exclude<SkillMigrationSourceKind, "custom">> = [
-  "claude-code",
-  "openclaw",
-  "hermes",
-];
+const DEFAULT_INCLUDE: Array<Exclude<SkillMigrationSourceKind, "custom">> = ["claude-code", "openclaw", "hermes"];
 
-export async function migrateSkillsToPilotDeck(
-  options: MigrateSkillsToPilotDeckOptions,
-): Promise<SkillMigrationReport> {
+export async function migrateSkillsToSati(options: MigrateSkillsToSatiOptions): Promise<SkillMigrationReport> {
   const pilotHome = resolve(options.pilotHome);
   const scope = options.scope ?? "user";
   const projectKey = options.projectKey ?? options.projectRoot ?? null;
@@ -141,7 +129,7 @@ export async function migrateSkillsToPilotDeck(
               destinationPath,
               slug,
               status: "error",
-              reason: `validation_failed: ${validation.hardFails.map((issue) => issue.message).join("; ")}`,
+              reason: `validation_failed: ${validation.hardFails.map(issue => issue.message).join("; ")}`,
               validation,
             });
             continue;
@@ -183,7 +171,7 @@ export async function migrateSkillsToPilotDeck(
   };
 }
 
-function buildSources(options: MigrateSkillsToPilotDeckOptions): SkillMigrationSource[] {
+function buildSources(options: MigrateSkillsToSatiOptions): SkillMigrationSource[] {
   const home = homedir();
   const projectRoot = options.projectRoot ? resolve(options.projectRoot) : resolve(process.cwd());
   const include = options.include ?? DEFAULT_INCLUDE;
@@ -200,11 +188,19 @@ function buildSources(options: MigrateSkillsToPilotDeckOptions): SkillMigrationS
       sources.push(
         { kind, label: "OpenClaw workspace skills", path: join(openclawHome, "workspace", "skills") },
         { kind, label: "OpenClaw workspace-main skills", path: join(openclawHome, "workspace-main", "skills") },
-        { kind, label: "OpenClaw workspace-assistant skills", path: join(openclawHome, "workspace-assistant", "skills") },
+        {
+          kind,
+          label: "OpenClaw workspace-assistant skills",
+          path: join(openclawHome, "workspace-assistant", "skills"),
+        },
         { kind, label: "OpenClaw managed skills", path: join(openclawHome, "skills") },
         { kind, label: "OpenClaw shared skills", path: join(home, ".agents", "skills") },
         { kind, label: "OpenClaw project shared skills", path: join(openclawHome, "workspace", ".agents", "skills") },
-        { kind, label: "OpenClaw default shared skills", path: join(openclawHome, "workspace.default", ".agents", "skills") },
+        {
+          kind,
+          label: "OpenClaw default shared skills",
+          path: join(openclawHome, "workspace.default", ".agents", "skills"),
+        },
       );
     } else if (kind === "hermes") {
       const hermesHome = join(home, ".hermes");
@@ -224,7 +220,7 @@ function buildSources(options: MigrateSkillsToPilotDeckOptions): SkillMigrationS
     });
   }
 
-  return sources.map((source) => ({ ...source, path: resolve(source.path) }));
+  return sources.map(source => ({ ...source, path: resolve(source.path) }));
 }
 
 function dedupeSources(sources: SkillMigrationSource[]): SkillMigrationSource[] {
@@ -314,7 +310,7 @@ function toErrorItem(
     reason = `${error.code}: ${error.message}`;
   }
   if (error instanceof SkillValidationError) {
-    reason = `validation_failed: ${error.validation.hardFails.map((issue) => issue.message).join("; ")}`;
+    reason = `validation_failed: ${error.validation.hardFails.map(issue => issue.message).join("; ")}`;
   }
   return {
     sourceKind: source.kind,

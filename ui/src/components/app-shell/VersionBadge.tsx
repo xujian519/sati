@@ -1,55 +1,56 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { GitCommit, RefreshCw, X, Check, AlertCircle } from 'lucide-react';
-import { useGitVersion } from '../../hooks/useGitVersion';
-import { cn } from '../../lib/utils.js';
+import { useState, useCallback, useRef, useEffect } from "react";
+import { GitCommit, RefreshCw, X, Check, AlertCircle } from "lucide-react";
+import { useGitVersion } from "../../hooks/useGitVersion";
+import { cn } from "../../lib/utils.js";
 
-type UpdatePhase = 'idle' | 'updating' | 'success' | 'error';
+type UpdatePhase = "idle" | "updating" | "success" | "error";
 
 export function VersionBadge() {
   const { info, loading, triggerUpdate, triggerRestart, fetchVersion } = useGitVersion();
   const [showDialog, setShowDialog] = useState(false);
-  const [phase, setPhase] = useState<UpdatePhase>('idle');
+  const [phase, setPhase] = useState<UpdatePhase>("idle");
   const [logs, setLogs] = useState<string[]>([]);
   const dialogRef = useRef<HTMLDivElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [logs]);
 
   useEffect(() => {
     if (!showDialog) return;
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && phase !== 'updating') setShowDialog(false);
+      if (e.key === "Escape" && phase !== "updating") setShowDialog(false);
     };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
   }, [showDialog, phase]);
 
   const handleUpdate = useCallback(async () => {
-    setPhase('updating');
+    setPhase("updating");
     setLogs([]);
     const result = await triggerUpdate();
     if (result.success) {
       setLogs(result.lines);
-      setPhase('success');
+      setPhase("success");
     } else {
-      setLogs(result.lines.length > 0 ? result.lines : ['Update failed']);
-      setPhase('error');
+      setLogs(result.lines.length > 0 ? result.lines : ["Update failed"]);
+      setPhase("error");
     }
   }, [triggerUpdate]);
 
   const handleRestart = useCallback(async () => {
     // Immediately blank the entire page with a restart splash
-    document.title = 'Restarting PilotDeck...';
-    document.body.innerHTML = '';
-    document.body.style.cssText = 'margin:0;background:#0a0a0a;display:flex;align-items:center;justify-content:center;height:100vh';
+    document.title = "Restarting Sati...";
+    document.body.innerHTML = "";
+    document.body.style.cssText =
+      "margin:0;background:#0a0a0a;display:flex;align-items:center;justify-content:center;height:100vh";
     document.body.innerHTML = `
       <div style="text-align:center;font-family:system-ui,-apple-system,sans-serif">
         <svg style="width:40px;height:40px;margin-bottom:16px;animation:spin 1s linear infinite" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
-        <p style="color:#ccc;font-size:1.1rem;margin:0 0 8px">Restarting PilotDeck...</p>
+        <p style="color:#ccc;font-size:1.1rem;margin:0 0 8px">Restarting Sati...</p>
         <p style="color:#666;font-size:0.8rem;margin:0">Page will reload automatically when server is ready.</p>
       </div>
       <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
@@ -60,16 +61,21 @@ export function VersionBadge() {
     // Poll until server is back, then reload
     const poll = setInterval(async () => {
       try {
-        const res = await fetch('/health');
-        if (res.ok) { clearInterval(poll); window.location.reload(); }
-      } catch { /* still down */ }
+        const res = await fetch("/health");
+        if (res.ok) {
+          clearInterval(poll);
+          window.location.reload();
+        }
+      } catch {
+        /* still down */
+      }
     }, 2000);
   }, [triggerRestart]);
 
   const handleClose = useCallback(() => {
-    if (phase === 'updating') return;
+    if (phase === "updating") return;
     setShowDialog(false);
-    setPhase('idle');
+    setPhase("idle");
     setLogs([]);
     fetchVersion();
   }, [phase, fetchVersion]);
@@ -82,18 +88,16 @@ export function VersionBadge() {
         type="button"
         onClick={() => setShowDialog(true)}
         className={cn(
-          'flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono transition-colors',
+          "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono transition-colors",
           info.hasUpdate
-            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60'
-            : 'bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700',
+            ? "bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+            : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700",
         )}
         title={info.hasUpdate ? `Update available (${info.behindCount} commits behind)` : `Version: ${info.commitSha}`}
       >
         <GitCommit className="h-3 w-3" strokeWidth={2} />
         <span>{info.commitSha}</span>
-        {info.hasUpdate && (
-          <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-400" />
-        )}
+        {info.hasUpdate && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-400" />}
       </button>
 
       {showDialog && (
@@ -104,12 +108,12 @@ export function VersionBadge() {
           >
             <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-neutral-700">
               <h2 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-                {info.hasUpdate ? 'Update Available' : 'Version Info'}
+                {info.hasUpdate ? "Update Available" : "Version Info"}
               </h2>
               <button
                 type="button"
                 onClick={handleClose}
-                disabled={phase === 'updating'}
+                disabled={phase === "updating"}
                 className="rounded-md p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
               >
                 <X className="h-4 w-4" />
@@ -122,27 +126,20 @@ export function VersionBadge() {
                   <GitCommit className="h-5 w-5 text-neutral-600 dark:text-neutral-300" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                    {info.currentCommit}
-                  </div>
-                  <div className="text-xs text-neutral-500 dark:text-neutral-400">
-                    Branch: {info.branch}
-                  </div>
+                  <div className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{info.currentCommit}</div>
+                  <div className="text-xs text-neutral-500 dark:text-neutral-400">Branch: {info.branch}</div>
                 </div>
               </div>
 
-              {info.hasUpdate && phase === 'idle' && (
+              {info.hasUpdate && phase === "idle" && (
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/30">
                   <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                    {info.behindCount} new commit{info.behindCount > 1 ? 's' : ''} available
+                    {info.behindCount} new commit{info.behindCount > 1 ? "s" : ""} available
                   </p>
                   {info.newCommits.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {info.newCommits.slice(0, 5).map((commit, i) => (
-                        <li
-                          key={i}
-                          className="truncate text-xs font-mono text-blue-700 dark:text-blue-300"
-                        >
+                        <li key={i} className="truncate text-xs font-mono text-blue-700 dark:text-blue-300">
                           {commit}
                         </li>
                       ))}
@@ -156,13 +153,11 @@ export function VersionBadge() {
                 </div>
               )}
 
-              {phase === 'updating' && (
+              {phase === "updating" && (
                 <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
                   <div className="flex items-center gap-2 mb-2">
                     <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />
-                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                      Updating...
-                    </span>
+                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">Updating...</span>
                   </div>
                   <div className="max-h-40 overflow-y-auto rounded bg-neutral-900 p-2">
                     {logs.map((line, i) => (
@@ -175,13 +170,11 @@ export function VersionBadge() {
                 </div>
               )}
 
-              {phase === 'success' && (
+              {phase === "success" && (
                 <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950/30">
                   <div className="flex items-center gap-2 mb-2">
                     <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <span className="text-sm font-medium text-green-800 dark:text-green-200">
-                      Update complete!
-                    </span>
+                    <span className="text-sm font-medium text-green-800 dark:text-green-200">Update complete!</span>
                   </div>
                   {logs.length > 0 && (
                     <div className="max-h-32 overflow-y-auto rounded bg-neutral-900 p-2 mt-2">
@@ -195,13 +188,11 @@ export function VersionBadge() {
                 </div>
               )}
 
-              {phase === 'error' && (
+              {phase === "error" && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
                   <div className="flex items-center gap-2 mb-2">
                     <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                    <span className="text-sm font-medium text-red-800 dark:text-red-200">
-                      Update failed
-                    </span>
+                    <span className="text-sm font-medium text-red-800 dark:text-red-200">Update failed</span>
                   </div>
                   {logs.length > 0 && (
                     <div className="max-h-32 overflow-y-auto rounded bg-neutral-900 p-2 mt-2">
@@ -217,7 +208,7 @@ export function VersionBadge() {
             </div>
 
             <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3 dark:border-neutral-700">
-              {phase === 'idle' && info.hasUpdate && (
+              {phase === "idle" && info.hasUpdate && (
                 <button
                   type="button"
                   onClick={handleUpdate}
@@ -228,7 +219,7 @@ export function VersionBadge() {
                   Update Now
                 </button>
               )}
-              {phase === 'success' && (
+              {phase === "success" && (
                 <button
                   type="button"
                   onClick={handleRestart}
@@ -238,7 +229,7 @@ export function VersionBadge() {
                   Restart to Apply
                 </button>
               )}
-              {(phase === 'idle' || phase === 'error') && (
+              {(phase === "idle" || phase === "error") && (
                 <button
                   type="button"
                   onClick={handleClose}

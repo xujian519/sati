@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
-const PILOT_HOME = process.env.PILOT_HOME || join(homedir(), ".pilotdeck");
-const PILOTDECK_YAML_PATH = process.env.PILOTDECK_CONFIG_PATH || join(PILOT_HOME, "pilotdeck.yaml");
-const WEIXIN_CREDS_PATH = join(PILOT_HOME, "weixin-credentials.json");
+const SATI_HOME = process.env.SATI_HOME || join(homedir(), ".sati");
+const SATI_YAML_PATH = process.env.SATI_CONFIG_PATH || join(SATI_HOME, "sati.yaml");
+const WEIXIN_CREDS_PATH = join(SATI_HOME, "weixin-credentials.json");
 
 const FEISHU_TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal";
 const LARK_TOKEN_URL = "https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal";
@@ -31,7 +31,7 @@ export async function runGatewaySetup(argv: string[]): Promise<void> {
 
   try {
     console.log("\n╔══════════════════════════════════════════════════╗");
-    console.log("║  PilotDeck Gateway Setup                        ║");
+    console.log("║  Sati Gateway Setup                        ║");
     console.log("║  配置 IM 平台连接                                ║");
     console.log("╚══════════════════════════════════════════════════╝\n");
 
@@ -100,18 +100,12 @@ async function setupFeishu(rl: ReturnType<typeof createInterface>): Promise<void
   const currentDomain = currentConfig?.adapters?.feishu?.domainName || "feishu";
 
   // Domain selection
-  const domainAnswer = (
-    await rl.question(
-      `使用哪个平台？ [feishu/lark] (当前: ${currentDomain}): `,
-    )
-  ).trim().toLowerCase();
-  const domain: "feishu" | "lark" =
-    domainAnswer === "lark" ? "lark" : "feishu";
+  const domainAnswer = (await rl.question(`使用哪个平台？ [feishu/lark] (当前: ${currentDomain}): `))
+    .trim()
+    .toLowerCase();
+  const domain: "feishu" | "lark" = domainAnswer === "lark" ? "lark" : "feishu";
 
-  const consoleUrl =
-    domain === "lark"
-      ? "https://open.larksuite.com"
-      : "https://open.feishu.cn";
+  const consoleUrl = domain === "lark" ? "https://open.larksuite.com" : "https://open.feishu.cn";
 
   // Check if we can do QR-scan app creation via the Lark SDK
   const qrResult = await attemptFeishuQRCreation(rl, domain);
@@ -134,14 +128,10 @@ async function setupFeishu(rl: ReturnType<typeof createInterface>): Promise<void
     console.log("  4. 版本管理 → 发布版本\n");
 
     const defaultAppIdHint = currentAppId ? ` (当前: ${maskSecret(currentAppId)})` : "";
-    appId = (
-      await rl.question(`App ID${defaultAppIdHint}: `)
-    ).trim() || currentAppId;
+    appId = (await rl.question(`App ID${defaultAppIdHint}: `)).trim() || currentAppId;
 
     const defaultSecretHint = currentSecret ? " (回车保留当前值)" : "";
-    const secretInput = (
-      await rl.question(`App Secret${defaultSecretHint}: `)
-    ).trim();
+    const secretInput = (await rl.question(`App Secret${defaultSecretHint}: `)).trim();
     appSecret = secretInput || currentSecret;
   }
 
@@ -168,9 +158,9 @@ async function setupFeishu(rl: ReturnType<typeof createInterface>): Promise<void
 
   // Write config
   writeFeishuConfig({ appId, appSecret, domain });
-  console.log("\n✅ 飞书配置已写入 pilotdeck.yaml");
+  console.log("\n✅ 飞书配置已写入 sati.yaml");
   console.log("   连接模式: stream (WebSocket, 推荐 — 无需公网 IP)");
-  console.log("   重启 PilotDeck 服务后生效\n");
+  console.log("   重启 Sati 服务后生效\n");
 }
 
 async function attemptFeishuQRCreation(
@@ -187,11 +177,7 @@ async function attemptFeishuQRCreation(
 
   if (!Lark?.AppTicketManager) return null;
 
-  const answer = (
-    await rl.question(
-      "是否尝试扫码自动创建飞书应用？(需要管理员权限) [y/N]: ",
-    )
-  ).trim().toLowerCase();
+  const answer = (await rl.question("是否尝试扫码自动创建飞书应用？(需要管理员权限) [y/N]: ")).trim().toLowerCase();
 
   if (answer !== "y" && answer !== "yes") return null;
 
@@ -199,8 +185,8 @@ async function attemptFeishuQRCreation(
     console.log("\n正在生成二维码...");
     const larkDomain =
       domain === "lark"
-        ? Lark.Domain?.Lark ?? "https://open.larksuite.com"
-        : Lark.Domain?.Feishu ?? "https://open.feishu.cn";
+        ? (Lark.Domain?.Lark ?? "https://open.larksuite.com")
+        : (Lark.Domain?.Feishu ?? "https://open.feishu.cn");
 
     const createAppUrl = `${larkDomain}/open-apis/authen/v1/app_access_token`;
     console.log(`\n请在浏览器中访问以下链接，使用飞书扫码授权：`);
@@ -247,11 +233,7 @@ async function testFeishuCredentials(
   }
 }
 
-function writeFeishuConfig(cfg: {
-  appId: string;
-  appSecret: string;
-  domain: "feishu" | "lark";
-}): void {
+function writeFeishuConfig(cfg: { appId: string; appSecret: string; domain: "feishu" | "lark" }): void {
   const yamlConfig = loadYamlConfig() ?? {};
 
   if (!yamlConfig.adapters) yamlConfig.adapters = {};
@@ -279,7 +261,9 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
   const currentWeCom = currentConfig?.adapters?.wecom;
   const currentBotId = String(currentWeCom?.token ?? currentWeCom?.extra?.bot_id ?? currentWeCom?.extra?.botId ?? "");
   const currentSecret = String(currentWeCom?.extra?.secret ?? currentWeCom?.extra?.botSecret ?? "");
-  const currentWsUrl = String(currentWeCom?.extra?.websocket_url ?? currentWeCom?.extra?.websocketUrl ?? WECOM_DEFAULT_WS_URL);
+  const currentWsUrl = String(
+    currentWeCom?.extra?.websocket_url ?? currentWeCom?.extra?.websocketUrl ?? WECOM_DEFAULT_WS_URL,
+  );
 
   if (currentBotId && currentSecret) {
     console.log(`已有企业微信配置 (Bot ID: ${maskSecret(currentBotId)})`);
@@ -307,7 +291,7 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
   const scanAnswer = (await rl.question("是否扫码自动创建/获取 Bot ID 和 Secret？ [Y/n]: ")).trim().toLowerCase();
   if (scanAnswer !== "n" && scanAnswer !== "no") {
     credentials = await qrScanForWeComBotInfo({
-      log: (message) => console.log(message),
+      log: message => console.log(message),
     });
     if (!credentials) {
       console.log("\n扫码未完成或接口不可用，将使用手动输入模式。\n");
@@ -340,9 +324,7 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
   const websocketInput = (await rl.question(`WebSocket URL (默认: ${WECOM_DEFAULT_WS_URL}): `)).trim();
   const websocketUrl = websocketInput || WECOM_DEFAULT_WS_URL;
 
-  const dmChoice = (await rl.question(
-    "私聊访问策略 [1=open 推荐, 2=allowlist, 3=disabled] (默认 1): ",
-  )).trim();
+  const dmChoice = (await rl.question("私聊访问策略 [1=open 推荐, 2=allowlist, 3=disabled] (默认 1): ")).trim();
   let dmPolicy = dmChoice === "2" ? "allowlist" : dmChoice === "3" ? "disabled" : "open";
   let allowFrom: string[] = [];
   if (dmPolicy === "allowlist") {
@@ -353,9 +335,7 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
     }
   }
 
-  const groupChoice = (await rl.question(
-    "群聊访问策略 [1=disabled 推荐, 2=open, 3=allowlist] (默认 1): ",
-  )).trim();
+  const groupChoice = (await rl.question("群聊访问策略 [1=disabled 推荐, 2=open, 3=allowlist] (默认 1): ")).trim();
   const groupPolicy = groupChoice === "2" ? "open" : groupChoice === "3" ? "allowlist" : "disabled";
   let groupAllowFrom: string[] = [];
   if (groupPolicy === "allowlist") {
@@ -373,22 +353,24 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
     groupAllowFrom,
   });
 
-  console.log("\n企业微信配置已写入 pilotdeck.yaml");
+  console.log("\n企业微信配置已写入 sati.yaml");
   console.log("连接模式: AI Bot WebSocket (无需公网 IP)");
-  console.log("重启 PilotDeck 服务后生效。\n");
+  console.log("重启 Sati 服务后生效。\n");
 }
 
-export async function qrScanForWeComBotInfo(options: {
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
-  pollIntervalMs?: number;
-  sleep?: (ms: number) => Promise<void>;
-  log?: (message: string) => void;
-} = {}): Promise<WeComBotCredentials | null> {
+export async function qrScanForWeComBotInfo(
+  options: {
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    log?: (message: string) => void;
+  } = {},
+): Promise<WeComBotCredentials | null> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? WECOM_QR_TIMEOUT_MS;
   const pollIntervalMs = options.pollIntervalMs ?? WECOM_QR_POLL_INTERVAL_MS;
-  const sleep = options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const sleep = options.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
   const log = options.log ?? (() => undefined);
 
   try {
@@ -437,7 +419,7 @@ export async function qrScanForWeComBotInfo(options: {
 
 async function fetchJson(fetchImpl: typeof fetch, url: string): Promise<Record<string, unknown>> {
   const res = await fetchImpl(url, {
-    headers: { "User-Agent": "PilotDeck/1.0" },
+    headers: { "User-Agent": "Sati/1.0" },
   });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
@@ -479,16 +461,21 @@ function writeWeComConfig(cfg: {
 }
 
 function normalizeWeComSetupPolicy(value: unknown, fallback: "open" | "allowlist" | "disabled"): string {
-  const raw = String(value ?? "").trim().toLowerCase();
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
   return raw === "open" || raw === "allowlist" || raw === "disabled" ? raw : fallback;
 }
 
 function coerceSetupList(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
+    return value.map(item => String(item).trim()).filter(Boolean);
   }
   if (typeof value === "string") {
-    return value.split(",").map((item) => item.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map(item => item.trim())
+      .filter(Boolean);
   }
   return [];
 }
@@ -573,7 +560,7 @@ async function setupWeixin(rl: ReturnType<typeof createInterface>): Promise<void
     console.log(`\n✅ 微信登录成功！`);
     console.log(`   账号 ID: ${result.accountId}`);
     console.log(`   凭据已保存到: ${WEIXIN_CREDS_PATH}`);
-    console.log(`   重启 PilotDeck 服务后生效\n`);
+    console.log(`   重启 Sati 服务后生效\n`);
   } catch (e) {
     console.log(`\n❌ 微信登录失败: ${e instanceof Error ? e.message : String(e)}`);
     console.log("   请检查网络连接后重试。\n");
@@ -592,12 +579,8 @@ function loadWeixinCredentials(): { accountId: string; baseUrl: string; botToken
   }
 }
 
-function saveWeixinCredentials(creds: {
-  baseUrl: string;
-  botToken: string;
-  accountId: string;
-}): void {
-  mkdirSync(join(homedir(), ".pilotdeck"), { recursive: true });
+function saveWeixinCredentials(creds: { baseUrl: string; botToken: string; accountId: string }): void {
+  mkdirSync(SATI_HOME, { recursive: true });
   writeFileSync(WEIXIN_CREDS_PATH, JSON.stringify(creds, null, 2), "utf-8");
 }
 
@@ -614,8 +597,8 @@ function enableWeixinConfig(): void {
 
 function loadYamlConfig(): Record<string, any> | null {
   try {
-    if (!existsSync(PILOTDECK_YAML_PATH)) return null;
-    const raw = readFileSync(PILOTDECK_YAML_PATH, "utf-8");
+    if (!existsSync(SATI_YAML_PATH)) return null;
+    const raw = readFileSync(SATI_YAML_PATH, "utf-8");
     return parseYaml(raw) as Record<string, any>;
   } catch {
     return null;
@@ -623,12 +606,12 @@ function loadYamlConfig(): Record<string, any> | null {
 }
 
 function saveYamlConfig(config: Record<string, any>): void {
-  mkdirSync(dirname(PILOTDECK_YAML_PATH), { recursive: true });
+  mkdirSync(dirname(SATI_YAML_PATH), { recursive: true });
   const yamlStr = stringifyYaml(config, {
     lineWidth: 0,
     singleQuote: false,
   });
-  writeFileSync(PILOTDECK_YAML_PATH, yamlStr, "utf-8");
+  writeFileSync(SATI_YAML_PATH, yamlStr, "utf-8");
 }
 
 function maskSecret(value: string): string {

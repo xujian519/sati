@@ -1,18 +1,14 @@
-import { isPilotDeckHookEvent } from "../protocol/events.js";
-import type {
-  PilotDeckHookCommand,
-  PilotDeckHookMatcher,
-  PilotDeckHooksSettings,
-} from "../protocol/settings.js";
+import { isSatiHookEvent } from "../protocol/events.js";
+import type { SatiHookCommand, SatiHookMatcher, SatiHooksSettings } from "../protocol/settings.js";
 
 export type ParseHooksConfigResult = {
-  settings: PilotDeckHooksSettings;
+  settings: SatiHooksSettings;
   diagnostics: string[];
 };
 
 export function parseHooksConfig(raw: unknown): ParseHooksConfigResult {
   const diagnostics: string[] = [];
-  const settings: PilotDeckHooksSettings = {};
+  const settings: SatiHooksSettings = {};
 
   if (raw === undefined || raw === null) {
     return { settings, diagnostics };
@@ -22,7 +18,7 @@ export function parseHooksConfig(raw: unknown): ParseHooksConfigResult {
   }
 
   for (const [eventName, rawMatchers] of Object.entries(raw)) {
-    if (!isPilotDeckHookEvent(eventName)) {
+    if (!isSatiHookEvent(eventName)) {
       diagnostics.push(`Unsupported hook event ${eventName}.`);
       continue;
     }
@@ -31,7 +27,7 @@ export function parseHooksConfig(raw: unknown): ParseHooksConfigResult {
       continue;
     }
 
-    const matchers: PilotDeckHookMatcher[] = [];
+    const matchers: SatiHookMatcher[] = [];
     for (const rawMatcher of rawMatchers) {
       const matcher = parseMatcher(eventName, rawMatcher, diagnostics);
       if (matcher) {
@@ -46,7 +42,7 @@ export function parseHooksConfig(raw: unknown): ParseHooksConfigResult {
   return { settings, diagnostics };
 }
 
-function parseMatcher(eventName: string, rawMatcher: unknown, diagnostics: string[]): PilotDeckHookMatcher | undefined {
+function parseMatcher(eventName: string, rawMatcher: unknown, diagnostics: string[]): SatiHookMatcher | undefined {
   if (!isRecord(rawMatcher)) {
     diagnostics.push(`Hook matcher for ${eventName} must be an object.`);
     return undefined;
@@ -56,7 +52,7 @@ function parseMatcher(eventName: string, rawMatcher: unknown, diagnostics: strin
     return undefined;
   }
 
-  const hooks: PilotDeckHookCommand[] = [];
+  const hooks: SatiHookCommand[] = [];
   for (const rawHook of rawMatcher.hooks) {
     const hook = parseHookCommand(eventName, rawHook, diagnostics);
     if (hook) {
@@ -73,7 +69,7 @@ function parseMatcher(eventName: string, rawMatcher: unknown, diagnostics: strin
   };
 }
 
-function parseHookCommand(eventName: string, rawHook: unknown, diagnostics: string[]): PilotDeckHookCommand | undefined {
+function parseHookCommand(eventName: string, rawHook: unknown, diagnostics: string[]): SatiHookCommand | undefined {
   if (!isRecord(rawHook) || typeof rawHook.type !== "string") {
     diagnostics.push(`Hook for ${eventName} must contain a type.`);
     return undefined;

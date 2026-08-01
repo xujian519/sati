@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-
 import { ImPermissionHelper } from "../../src/adapters/channel/protocol/ImPermissionHelper.js";
 import type { Gateway } from "../../src/gateway/index.js";
 

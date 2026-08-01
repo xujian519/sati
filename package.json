@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.13.0 <23"
+    "node": ">=22.13.0"
   },
   "workspaces": [
     "ui"
@@ -35,6 +35,8 @@
     "@biomejs/biome": "^2.5.6",
     "@eslint/js": "^9.39.3",
     "@types/node": "^25.0.0",
+    "@types/react": "^19.2.14",
+    "@types/turndown": "^5.0.6",
     "@types/ws": "^8.18.1",
     "eslint": "^9.39.3",
     "eslint-plugin-import-x": "^4.16.1",
@@ -60,8 +62,6 @@
     "@google/genai": "^2.10.0",
     "@larksuiteoapi/node-sdk": "^1.65.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@types/react": "^19.2.14",
-    "@types/turndown": "^5.0.6",
     "@vscode/ripgrep": "^1.18.0",
     "csv-parse": "^7.0.0",
     "edgeclaw-memory-core": "file:src/context/memory/edgeclaw-memory-core",
@@ -75,7 +75,6 @@
     "sharp": "^0.34.5",
     "slice-ansi": "^9.0.0",
     "string-width": "^8.2.1",
-    "strip-ansi": "^7.2.0",
     "turndown": "^7.2.4",
     "undici": "^8.2.0",
     "weixin-ilink": "^0.1.0",

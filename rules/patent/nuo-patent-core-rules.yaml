@@ -1,0 +1,182 @@
+# 由 scripts/port-nuo-rules.ts 从 XiaoNuo Agent patent-core-rules.yaml 转换生成
+# 原始文件完整内容见 assets/patent-rules/patent-core-rules.yaml（含 LLM 评估型规则与指导字段）
+# 转换语义: pattern_analysis(期望模式)→structural_analysis 单 element；severity warning→major；info→minor
+version: "1.0"
+rules:
+  - id: P-INV-004
+    name: 创造性—辅助判断因素
+    domain: patent_inventiveness
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 专利审查指南第二部分第四章
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 创造性—辅助判断因素
+          patterns:
+            - 预料不到的技术效果
+            - 商业成功
+            - 技术偏见
+            - 长期存在需求
+      minConfidence: 1
+  - id: P-PRC-003
+    name: 优先权—相同主题认定
+    domain: patent_procedure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第29条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 优先权—相同主题认定
+          patterns:
+            - 优先权
+            - 相同主题
+            - 首次申请
+      minConfidence: 1
+  - id: P-PRC-004
+    name: 复审程序—驳回理由全面回应
+    domain: patent_procedure
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法实施细则第62条；审查指南第二部分第八章4.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: respond_to_rejection
+          patterns:
+            - 驳回决定
+            - 驳回理由
+            - 审查意见
+        - element: provide_arguments
+          patterns:
+            - 答复
+            - 争辩
+            - 意见陈述
+  - id: X-REF-001
+    name: 交叉—法律依据引用完整性
+    domain: patent_general
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第22条、第26条、第33条
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 交叉—法律依据引用完整性
+          patterns:
+            - 专利法
+            - 第二十二条
+            - 第二十六条
+      minConfidence: 1
+  - id: X-REF-002
+    name: 交叉—对比文件引用规范
+    domain: patent_general
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第26条第4款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 交叉—对比文件引用规范
+          patterns:
+            - 对比文件
+            - 公开号
+            - CN
+            - US
+            - WO
+      minConfidence: 1
+  - id: X-REF-003
+    name: 交叉—禁止编造案例案号
+    domain: patent_general
+    phase: post_execution
+    severity: critical
+    action: block
+    legalBasis: 最高人民法院关于审理侵犯专利权纠纷案件应用法律若干问题的解释
+    check:
+      type: keyword_blocklist
+      keywords:
+        - (202X)最高法知民终
+        - (202X)京73民初
+        - (202X)最高法知行终
+  - id: X-STR-002
+    name: 交叉—避免模糊措辞
+    domain: patent_general
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第二章
+    check:
+      type: keyword_blocklist
+      keywords:
+        - 可能具有
+        - 可能存在
+        - 大概
+        - 也许
+        - 不确定
+  - id: X-STR-003
+    name: 交叉—IC布局完整性（审查意见答复）
+    domain: patent_oa_response
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 审查指南第二部分第八章4.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: issue_map
+          patterns:
+            - 审查意见
+            - 审查员认为
+            - 指出
+            - 通知
+        - element: response
+          patterns:
+            - 答复
+            - 意见陈述
+            - 争辩
+        - element: conclusion
+          patterns:
+            - 请求
+            - 恳请
+            - 建议
+  - id: X-STR-004
+    name: 交叉—技术特征与权利要求锚定
+    domain: patent_general
+    phase: post_execution
+    severity: major
+    action: warn
+    legalBasis: 专利法第26条第4款
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 期望模式
+          description: 交叉—技术特征与权利要求锚定
+          patterns:
+            - 权利要求
+            - 技术特征
+            - 权项
+      minConfidence: 1
+  - id: X-QC-001
+    name: 交叉—术语一致性
+    domain: patent_general
+    phase: post_execution
+    severity: minor
+    action: log
+    legalBasis: 审查指南第二部分第二章
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: consistent_terms
+          patterns:
+            - 权利要求
+            - 技术特征
+            - 对比文件

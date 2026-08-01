@@ -1,14 +1,9 @@
 import { patch } from "../../modelPool/utils/patch";
-import type { PilotDeckConfig } from "../../modelPool/types";
+import type { SatiConfig } from "../../modelPool/types";
 
 export type RouterTierKey = "simple" | "medium" | "complex" | "reasoning";
 
-export const ROUTER_TIER_KEYS: RouterTierKey[] = [
-  "simple",
-  "medium",
-  "complex",
-  "reasoning",
-];
+export const ROUTER_TIER_KEYS: RouterTierKey[] = ["simple", "medium", "complex", "reasoning"];
 
 export const DEFAULT_TIERS: Record<RouterTierKey, { description: string }> = {
   simple: { description: "Quick confirmations and concise edits." },
@@ -24,18 +19,14 @@ export const DEFAULT_RULES: string[] = [
   "Trivial confirmations or one-file short Q&A is simple",
 ];
 
-export function replaceFallbackModelRef(
-  config: PilotDeckConfig,
-  oldRef: string,
-  newRef: string,
-): PilotDeckConfig {
+export function replaceFallbackModelRef(config: SatiConfig, oldRef: string, newRef: string): SatiConfig {
   const fallback = config.router?.fallback;
   if (!fallback || !oldRef || oldRef === newRef) return config;
 
   let changed = false;
   const rewritten = Object.fromEntries(
     Object.entries(fallback).map(([key, refs]) => {
-      const nextRefs = refs.map((ref) => {
+      const nextRefs = refs.map(ref => {
         if (ref !== oldRef) return ref;
         changed = true;
         return newRef;

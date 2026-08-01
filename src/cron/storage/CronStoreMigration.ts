@@ -1,15 +1,4 @@
-import {
-  copyFile,
-  mkdir,
-  open,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { CronRuntimeLogger } from "../runtime/CronRuntime.js";
 import { cronRunEventsPath, resolveCronPaths } from "./CronPaths.js";
@@ -26,10 +15,7 @@ type StoreSnapshot = {
 
 const LOCK_STALE_MS = 10 * 60_000;
 
-export async function migrateCronStores(input: {
-  pilotHome: string;
-  logger?: CronRuntimeLogger;
-}): Promise<void> {
+export async function migrateCronStores(input: { pilotHome: string; logger?: CronRuntimeLogger }): Promise<void> {
   const rootDir = resolve(input.pilotHome, "cron");
   const releaseLock = await acquireMigrationLock(rootDir, input.logger);
   try {
@@ -37,7 +23,7 @@ export async function migrateCronStores(input: {
     if (snapshots.length === 0) return;
 
     const blockedTaskDirs = new Set(
-      snapshots.filter((snapshot) => !snapshot.taskFileWritable).map((snapshot) => snapshot.dir),
+      snapshots.filter(snapshot => !snapshot.taskFileWritable).map(snapshot => snapshot.dir),
     );
     for (const projectDir of blockedTaskDirs) {
       input.logger?.warn("cron migration preserved an unreadable task store", { projectDir });
@@ -49,12 +35,7 @@ export async function migrateCronStores(input: {
 
     for (const snapshot of snapshots) {
       for (const task of snapshot.tasks) {
-        const targetDir = resolveTaskTargetDir(
-          input.pilotHome,
-          snapshot.dir,
-          task,
-          blockedTaskDirs,
-        );
+        const targetDir = resolveTaskTargetDir(input.pilotHome, snapshot.dir, task, blockedTaskDirs);
         pushMapArray(finalTasks, targetDir, task);
       }
       for (const line of snapshot.invalidRunLines) {
@@ -62,13 +43,7 @@ export async function migrateCronStores(input: {
         bucket.invalidLines.push(line);
       }
       for (const run of snapshot.runs) {
-        const targetDir = resolveRunTargetDir(
-          input.pilotHome,
-          snapshot.dir,
-          run,
-          taskProjects,
-          blockedTaskDirs,
-        );
+        const targetDir = resolveRunTargetDir(input.pilotHome, snapshot.dir, run, taskProjects, blockedTaskDirs);
         getRunBucket(finalRuns, targetDir).records.push(run);
         if (typeof run.runId === "string") {
           const targets = runTargets.get(run.runId) ?? new Set<string>();
@@ -126,9 +101,7 @@ async function readSnapshots(projectsDir: string): Promise<StoreSnapshot[]> {
   return snapshots;
 }
 
-async function readTasks(
-  path: string,
-): Promise<Pick<StoreSnapshot, "tasks" | "taskFileWritable">> {
+async function readTasks(path: string): Promise<Pick<StoreSnapshot, "tasks" | "taskFileWritable">> {
   try {
     const parsed = JSON.parse(await readFile(path, "utf-8")) as { tasks?: unknown };
     if (!Array.isArray(parsed.tasks)) {
@@ -194,9 +167,7 @@ function resolveTaskTargetDir(
 ): string {
   if (!isRecord(task)) return sourceDir;
   const projectKey = normalizedProjectKey(task.projectKey);
-  const targetDir = projectKey
-    ? resolveCronPaths({ pilotHome, projectKey }).projectDir
-    : sourceDir;
+  const targetDir = projectKey ? resolveCronPaths({ pilotHome, projectKey }).projectDir : sourceDir;
   return blockedTaskDirs.has(targetDir) ? sourceDir : targetDir;
 }
 
@@ -225,23 +196,17 @@ async function stageDestinationData(
   finalRuns: Map<string, { records: JsonRecord[]; invalidLines: string[] }>,
   logger?: CronRuntimeLogger,
 ): Promise<void> {
-  const originals = new Map(snapshots.map((snapshot) => [snapshot.dir, snapshot]));
+  const originals = new Map(snapshots.map(snapshot => [snapshot.dir, snapshot]));
   for (const [dir, tasks] of finalTasks) {
     const original = originals.get(dir);
     if (original && !original.taskFileWritable) continue;
-    await writeTaskFile(
-      dir,
-      dedupeTasks([...(original?.tasks ?? []), ...tasks], logger, dir),
-    );
+    await writeTaskFile(dir, dedupeTasks([...(original?.tasks ?? []), ...tasks], logger, dir));
   }
   for (const [dir, bucket] of finalRuns) {
     const original = originals.get(dir);
     await writeRunFile(dir, {
       records: dedupeRuns([...(original?.runs ?? []), ...bucket.records]),
-      invalidLines: [...new Set([
-        ...(original?.invalidRunLines ?? []),
-        ...bucket.invalidLines,
-      ])],
+      invalidLines: [...new Set([...(original?.invalidRunLines ?? []), ...bucket.invalidLines])],
     });
   }
 }
@@ -251,7 +216,7 @@ async function writeFinalSnapshots(
   finalTasks: Map<string, unknown[]>,
   finalRuns: Map<string, { records: JsonRecord[]; invalidLines: string[] }>,
 ): Promise<void> {
-  const originals = new Map(snapshots.map((snapshot) => [snapshot.dir, snapshot]));
+  const originals = new Map(snapshots.map(snapshot => [snapshot.dir, snapshot]));
   for (const [dir, tasks] of finalTasks) {
     const original = originals.get(dir);
     if (original && !original.taskFileWritable) continue;
@@ -263,20 +228,11 @@ async function writeFinalSnapshots(
 }
 
 async function writeTaskFile(dir: string, tasks: unknown[]): Promise<void> {
-  await atomicWrite(
-    resolve(dir, "tasks.json"),
-    `${JSON.stringify({ schemaVersion: 1, tasks }, null, 2)}\n`,
-  );
+  await atomicWrite(resolve(dir, "tasks.json"), `${JSON.stringify({ schemaVersion: 1, tasks }, null, 2)}\n`);
 }
 
-async function writeRunFile(
-  dir: string,
-  bucket: { records: JsonRecord[]; invalidLines: string[] },
-): Promise<void> {
-  const lines = [
-    ...bucket.records.map((record) => JSON.stringify(record)),
-    ...bucket.invalidLines,
-  ];
+async function writeRunFile(dir: string, bucket: { records: JsonRecord[]; invalidLines: string[] }): Promise<void> {
+  const lines = [...bucket.records.map(record => JSON.stringify(record)), ...bucket.invalidLines];
   await atomicWrite(resolve(dir, "run-history.jsonl"), lines.length ? `${lines.join("\n")}\n` : "");
 }
 
@@ -334,11 +290,7 @@ function pathsForDir(projectDir: string) {
   };
 }
 
-function dedupeTasks(
-  tasks: unknown[],
-  logger: CronRuntimeLogger | undefined,
-  projectDir: string,
-): unknown[] {
+function dedupeTasks(tasks: unknown[], logger: CronRuntimeLogger | undefined, projectDir: string): unknown[] {
   const anonymous: unknown[] = [];
   const byId = new Map<string, unknown>();
   for (const task of tasks) {
@@ -374,7 +326,8 @@ function dedupeRuns(runs: JsonRecord[]): JsonRecord[] {
     }
   }
   return [...byId.values(), ...anonymous].sort((left, right) =>
-    String(left.startedAt ?? "").localeCompare(String(right.startedAt ?? "")));
+    String(left.startedAt ?? "").localeCompare(String(right.startedAt ?? "")),
+  );
 }
 
 function compareUpdatedAt(left: JsonRecord, right: unknown): number {
@@ -386,14 +339,13 @@ function compareRun(left: JsonRecord, right: JsonRecord): number {
   const leftTerminal = typeof left.finishedAt === "string" ? 1 : 0;
   const rightTerminal = typeof right.finishedAt === "string" ? 1 : 0;
   if (leftTerminal !== rightTerminal) return leftTerminal - rightTerminal;
-  return String(left.finishedAt ?? left.startedAt ?? "")
-    .localeCompare(String(right.finishedAt ?? right.startedAt ?? ""));
+  return String(left.finishedAt ?? left.startedAt ?? "").localeCompare(
+    String(right.finishedAt ?? right.startedAt ?? ""),
+  );
 }
 
 function mergeJsonLines(left: string, right: string): string {
-  const lines = new Set(
-    `${left}\n${right}`.split("\n").filter((line) => line.trim().length > 0),
-  );
+  const lines = new Set(`${left}\n${right}`.split("\n").filter(line => line.trim().length > 0));
   return lines.size ? `${[...lines].join("\n")}\n` : "";
 }
 
@@ -414,10 +366,7 @@ async function atomicWrite(path: string, content: string): Promise<void> {
   }
 }
 
-async function acquireMigrationLock(
-  rootDir: string,
-  logger?: CronRuntimeLogger,
-): Promise<() => Promise<void>> {
+async function acquireMigrationLock(rootDir: string, logger?: CronRuntimeLogger): Promise<() => Promise<void>> {
   await mkdir(rootDir, { recursive: true });
   const lockPath = resolve(rootDir, ".store-migration.lock");
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -442,7 +391,7 @@ async function acquireMigrationLock(
         await rm(lockPath, { force: true });
         continue;
       }
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+      await new Promise(resolveDelay => setTimeout(resolveDelay, 100));
     }
   }
   throw new Error(`Timed out waiting for Cron store migration lock: ${lockPath}`);

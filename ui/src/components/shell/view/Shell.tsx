@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import '@xterm/xterm/css/xterm.css';
-import type { Project, ProjectSession } from '../../../types/app';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import "@xterm/xterm/css/xterm.css";
+import type { Project, ProjectSession } from "../../../types/app";
 import {
   PROMPT_BUFFER_SCAN_LINES,
   PROMPT_DEBOUNCE_MS,
@@ -9,15 +9,15 @@ import {
   PROMPT_MIN_OPTIONS,
   PROMPT_OPTION_SCAN_LINES,
   SHELL_RESTART_DELAY_MS,
-} from '../constants/constants';
-import { useShellRuntime } from '../hooks/useShellRuntime';
-import { sendSocketMessage } from '../utils/socket';
-import { getSessionDisplayName } from '../utils/auth';
-import ShellConnectionOverlay from './subcomponents/ShellConnectionOverlay';
-import ShellEmptyState from './subcomponents/ShellEmptyState';
-import ShellHeader from './subcomponents/ShellHeader';
-import ShellMinimalView from './subcomponents/ShellMinimalView';
-import TerminalShortcutsPanel from './subcomponents/TerminalShortcutsPanel';
+} from "../constants/constants";
+import { useShellRuntime } from "../hooks/useShellRuntime";
+import { sendSocketMessage } from "../utils/socket";
+import { getSessionDisplayName } from "../utils/auth";
+import ShellConnectionOverlay from "./subcomponents/ShellConnectionOverlay";
+import ShellEmptyState from "./subcomponents/ShellEmptyState";
+import ShellHeader from "./subcomponents/ShellHeader";
+import ShellMinimalView from "./subcomponents/ShellMinimalView";
+import TerminalShortcutsPanel from "./subcomponents/TerminalShortcutsPanel";
 
 type CliPromptOption = { number: string; label: string };
 
@@ -42,7 +42,7 @@ export default function Shell({
   autoConnect = false,
   isActive = true,
 }: ShellProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation("chat");
   const [isRestarting, setIsRestarting] = useState(false);
   const [cliPromptOptions, setCliPromptOptions] = useState<CliPromptOption[] | null>(null);
   const promptCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -174,7 +174,7 @@ export default function Shell({
 
   const sendInput = useCallback(
     (data: string) => {
-      sendSocketMessage(wsRef.current, { type: 'input', data });
+      sendSocketMessage(wsRef.current, { type: "input", data });
     },
     [wsRef],
   );
@@ -198,10 +198,7 @@ export default function Shell({
 
   if (!selectedProject) {
     return (
-      <ShellEmptyState
-        title={t('shell.selectProject.title')}
-        description={t('shell.selectProject.description')}
-      />
+      <ShellEmptyState title={t("shell.selectProject.title")} description={t("shell.selectProject.description")} />
     );
   }
 
@@ -228,23 +225,23 @@ export default function Shell({
   }
 
   const readyDescription = isPlainShell
-    ? t('shell.runCommand', {
-        command: initialCommand || t('shell.defaultCommand'),
+    ? t("shell.runCommand", {
+        command: initialCommand || t("shell.defaultCommand"),
         projectName: selectedProject.displayName,
       })
     : selectedSession
-      ? t('shell.resumeSession', { displayName: sessionDisplayNameLong })
-      : t('shell.startSession');
+      ? t("shell.resumeSession", { displayName: sessionDisplayNameLong })
+      : t("shell.startSession");
 
   const connectingDescription = isPlainShell
-    ? t('shell.runCommand', {
-        command: initialCommand || t('shell.defaultCommand'),
+    ? t("shell.runCommand", {
+        command: initialCommand || t("shell.defaultCommand"),
         projectName: selectedProject.displayName,
       })
-    : t('shell.startCli', { projectName: selectedProject.displayName });
+    : t("shell.startCli", { projectName: selectedProject.displayName });
 
-  const overlayMode = !isInitialized ? 'loading' : isConnecting ? 'connecting' : !isConnected ? 'connect' : null;
-  const overlayDescription = overlayMode === 'connecting' ? connectingDescription : readyDescription;
+  const overlayMode = !isInitialized ? "loading" : isConnecting ? "connecting" : !isConnected ? "connect" : null;
+  const overlayDescription = overlayMode === "connecting" ? connectingDescription : readyDescription;
 
   return (
     <div className="flex h-full w-full flex-col bg-gray-900">
@@ -256,31 +253,27 @@ export default function Shell({
         sessionDisplayNameShort={sessionDisplayNameShort}
         onDisconnect={disconnectFromShell}
         onRestart={handleRestartShell}
-        statusNewSessionText={t('shell.status.newSession')}
-        statusInitializingText={t('shell.status.initializing')}
-        statusRestartingText={t('shell.status.restarting')}
-        disconnectLabel={t('shell.actions.disconnect')}
-        disconnectTitle={t('shell.actions.disconnectTitle')}
-        restartLabel={t('shell.actions.restart')}
-        restartTitle={t('shell.actions.restartTitle')}
+        statusNewSessionText={t("shell.status.newSession")}
+        statusInitializingText={t("shell.status.initializing")}
+        statusRestartingText={t("shell.status.restarting")}
+        disconnectLabel={t("shell.actions.disconnect")}
+        disconnectTitle={t("shell.actions.disconnectTitle")}
+        restartLabel={t("shell.actions.restart")}
+        restartTitle={t("shell.actions.restartTitle")}
         disableRestart={isRestarting || isConnected}
       />
 
       <div className="relative flex-1 overflow-hidden p-2">
-        <div
-          ref={terminalContainerRef}
-          className="h-full w-full focus:outline-none"
-          style={{ outline: 'none' }}
-        />
+        <div ref={terminalContainerRef} className="h-full w-full focus:outline-none" style={{ outline: "none" }} />
 
         {overlayMode && (
           <ShellConnectionOverlay
             mode={overlayMode}
             description={overlayDescription}
-            loadingLabel={t('shell.loading')}
-            connectLabel={t('shell.actions.connect')}
-            connectTitle={t('shell.actions.connectTitle')}
-            connectingLabel={t('shell.connecting')}
+            loadingLabel={t("shell.loading")}
+            connectLabel={t("shell.actions.connect")}
+            connectTitle={t("shell.actions.connectTitle")}
+            connectingLabel={t("shell.connecting")}
             onConnect={connectToShell}
           />
         )}
@@ -288,10 +281,10 @@ export default function Shell({
         {cliPromptOptions && isConnected && (
           <div
             className="absolute inset-x-0 bottom-0 z-10 border-t border-gray-700/80 bg-gray-800/95 px-3 py-2 backdrop-blur-sm"
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={e => e.preventDefault()}
           >
             <div className="flex flex-wrap items-center gap-2">
-              {cliPromptOptions.map((opt) => (
+              {cliPromptOptions.map(opt => (
                 <button
                   type="button"
                   key={opt.number}
@@ -308,7 +301,7 @@ export default function Shell({
               <button
                 type="button"
                 onClick={() => {
-                  sendInput('\x1b');
+                  sendInput("\x1b");
                   setCliPromptOptions(null);
                 }}
                 className="rounded bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-200 transition-colors hover:bg-gray-600"
@@ -320,12 +313,7 @@ export default function Shell({
         )}
       </div>
 
-      <TerminalShortcutsPanel
-        wsRef={wsRef}
-        terminalRef={terminalRef}
-        isConnected={isConnected}
-      />
-
+      <TerminalShortcutsPanel wsRef={wsRef} terminalRef={terminalRef} isConnected={isConnected} />
     </div>
   );
 }

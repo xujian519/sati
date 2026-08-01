@@ -1,8 +1,5 @@
-import { useCallback, useState, type ErrorInfo, type ReactNode } from 'react';
-import {
-  ErrorBoundary as ReactErrorBoundary,
-  type FallbackProps,
-} from 'react-error-boundary';
+import { useCallback, useState, type ErrorInfo, type ReactNode } from "react";
+import { ErrorBoundary as ReactErrorBoundary, type FallbackProps } from "react-error-boundary";
 
 type ErrorFallbackProps = FallbackProps & {
   showDetails: boolean;
@@ -24,12 +21,7 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-function ErrorFallback({
-  error,
-  resetErrorBoundary,
-  showDetails,
-  componentStack,
-}: ErrorFallbackProps) {
+function ErrorFallback({ error, resetErrorBoundary, showDetails, componentStack }: ErrorFallbackProps) {
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center">
       <div className="max-w-md rounded-lg border border-red-200 bg-red-50 p-6">
@@ -79,7 +71,7 @@ function ErrorBoundary({
   const [componentStack, setComponentStack] = useState<string | null>(null);
 
   const handleError = useCallback((error: Error, errorInfo: ErrorInfo) => {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
     // Keep component stack for optional debug rendering in fallback UI.
     setComponentStack(errorInfo?.componentStack ?? null);
   }, []);
@@ -98,7 +90,7 @@ function ErrorBoundary({
         componentStack={componentStack}
       />
     ),
-    [showDetails, componentStack]
+    [showDetails, componentStack],
   );
 
   return (

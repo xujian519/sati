@@ -1,25 +1,26 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { MessageSquare } from 'lucide-react';
-import { useTasksSettings } from '../../contexts/TasksSettingsContext';
-import { useToast } from '../../contexts/ToastContext';
-import { api } from '../../utils/api';
-import type { ChatInterfaceProps, ChatMessage, ChatRunMode, Provider } from '../chat/types/types';
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { MessageSquare } from "lucide-react";
+import { useTasksSettings } from "../../contexts/TasksSettingsContext";
+import { useToast } from "../../contexts/ToastContext";
+import { api } from "../../utils/api";
+import type { ChatInterfaceProps, ChatMessage, ChatRunMode, Provider } from "../chat/types/types";
+import { getSessionRequestParams, isReadOnlySession } from "../../types/app";
+import { useChatProviderState } from "../chat/hooks/useChatProviderState";
+import { useChatSessionState } from "../chat/hooks/useChatSessionState";
+import { useChatRealtimeHandlers } from "../chat/hooks/useChatRealtimeHandlers";
+import { useChatComposerState } from "../chat/hooks/useChatComposerState";
+import { getThinkingModeAvailability } from "../chat/constants/thinkingModeAvailability";
+import { useSessionStore } from "../../stores/useSessionStore";
+import { getDraftInputStorageKey, safeLocalStorage } from "../chat/utils/chatStorage";
+import { useSessionWatch } from "../../hooks/useSessionWatch";
+import MessagesPaneV2 from "./MessagesPaneV2";
+import ComposerV2 from "./ComposerV2";
 import {
-  getSessionRequestParams,
-  isReadOnlySession,
-} from '../../types/app';
-import { useChatProviderState } from '../chat/hooks/useChatProviderState';
-import { useChatSessionState } from '../chat/hooks/useChatSessionState';
-import { useChatRealtimeHandlers } from '../chat/hooks/useChatRealtimeHandlers';
-import { useChatComposerState } from '../chat/hooks/useChatComposerState';
-import { getThinkingModeAvailability } from '../chat/constants/thinkingModeAvailability';
-import { useSessionStore } from '../../stores/useSessionStore';
-import { getDraftInputStorageKey, safeLocalStorage } from '../chat/utils/chatStorage';
-import { useSessionWatch } from '../../hooks/useSessionWatch';
-import MessagesPaneV2 from './MessagesPaneV2';
-import ComposerV2 from './ComposerV2';
-import { buildReconnectStatusMessage, refreshSessionAfterReconnect, shouldRefreshSessionOnReconnect } from './reconnectRecovery';
+  buildReconnectStatusMessage,
+  refreshSessionAfterReconnect,
+  shouldRefreshSessionOnReconnect,
+} from "./reconnectRecovery";
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -64,22 +65,18 @@ function ChatInterfaceV2({
   onExitWelcome,
   compact = false,
 }: ChatInterfaceProps) {
-  const { t } = useTranslation('chat');
-  const { tasksEnabled: _tasksEnabled, isTaskMasterInstalled: _isTaskMasterInstalled } =
-    useTasksSettings();
+  const { t } = useTranslation("chat");
+  const { tasksEnabled: _tasksEnabled, isTaskMasterInstalled: _isTaskMasterInstalled } = useTasksSettings();
   const sessionIsReadOnly = isReadOnlySession(selectedSession);
-  const sessionRequestParams = React.useMemo(
-    () => getSessionRequestParams(selectedSession),
-    [selectedSession],
-  );
+  const sessionRequestParams = React.useMemo(() => getSessionRequestParams(selectedSession), [selectedSession]);
 
   const sessionStore = useSessionStore();
-  const streamBufferRef = useRef('');
+  const streamBufferRef = useRef("");
   const streamTimerRef = useRef<number | null>(null);
-  const accumulatedStreamRef = useRef('');
+  const accumulatedStreamRef = useRef("");
   const pendingViewSessionRef = useRef<PendingViewSession | null>(null);
   const [isAbortPending, setIsAbortPending] = useState(false);
-  const [runMode, setRunMode] = useState<ChatRunMode>('agent');
+  const [runMode, setRunMode] = useState<ChatRunMode>("agent");
   const [isForkPending, setIsForkPending] = useState(false);
   const { addToast } = useToast();
 
@@ -88,8 +85,8 @@ function ChatInterfaceV2({
       clearTimeout(streamTimerRef.current);
       streamTimerRef.current = null;
     }
-    streamBufferRef.current = '';
-    accumulatedStreamRef.current = '';
+    streamBufferRef.current = "";
+    accumulatedStreamRef.current = "";
   }, []);
 
   const {
@@ -107,23 +104,25 @@ function ChatInterfaceV2({
   );
 
   const cycleRunMode = useCallback(() => {
-    setRunMode((currentMode) => {
-      if (currentMode === 'agent') return 'plan';
-      if (currentMode === 'plan') return 'ask';
-      return 'agent';
+    setRunMode(currentMode => {
+      if (currentMode === "agent") return "plan";
+      if (currentMode === "plan") return "ask";
+      return "agent";
     });
   }, []);
 
-  const selectPermissionMode = useCallback((mode: typeof permissionMode) => {
-    setPermissionModeRaw(mode);
-    localStorage.setItem('permissionMode-default', mode);
-    if (selectedSession?.id) {
-      localStorage.setItem(`permissionMode-${selectedSession.id}`, mode);
-    }
-  }, [setPermissionModeRaw, selectedSession?.id]);
+  const selectPermissionMode = useCallback(
+    (mode: typeof permissionMode) => {
+      setPermissionModeRaw(mode);
+      localStorage.setItem("permissionMode-default", mode);
+      if (selectedSession?.id) {
+        localStorage.setItem(`permissionMode-${selectedSession.id}`, mode);
+      }
+    },
+    [setPermissionModeRaw, selectedSession?.id],
+  );
 
-  const effectivePermissionMode =
-    runMode === 'plan' ? 'plan' : permissionMode;
+  const effectivePermissionMode = runMode === "plan" ? "plan" : permissionMode;
 
   const {
     chatMessages,
@@ -154,9 +153,9 @@ function ChatInterfaceV2({
     allMessagesLoaded,
     isLoadingAllMessages,
     claudeStatus,
-    pilotDeckStatus,
+    satiStatus,
     setClaudeStatus,
-    setPilotDeckStatus,
+    setSatiStatus,
     createDiff,
     scrollContainerRef,
     scrollToBottom,
@@ -257,17 +256,17 @@ function ChatInterfaceV2({
     setCanAbortSession,
     setIsAborting,
     setClaudeStatus,
-    setPilotDeckStatus,
+    setSatiStatus,
     setIsUserScrolledUp,
     pendingPermissionRequests,
     setPendingPermissionRequests,
-    referenceOnlyPrompt: t('documentReferences.defaultPrompt', {
-      defaultValue: 'Please answer based on the document selection I quoted.',
+    referenceOnlyPrompt: t("documentReferences.defaultPrompt", {
+      defaultValue: "Please answer based on the document selection I quoted.",
     }) as string,
   });
 
   const handlePlanExecutionApproved = useCallback(() => {
-    setRunMode('agent');
+    setRunMode("agent");
   }, []);
 
   const handleWebSocketReconnect = useCallback(async () => {
@@ -279,15 +278,15 @@ function ChatInterfaceV2({
       clearTimeout(streamTimerRef.current);
       streamTimerRef.current = null;
     }
-    accumulatedStreamRef.current = '';
-    streamBufferRef.current = '';
+    accumulatedStreamRef.current = "";
+    streamBufferRef.current = "";
 
     if (shouldRefreshSessionOnReconnect({ isLoading, processingSessions, sessionId: selectedSession.id })) {
       await refreshSessionAfterReconnect(() =>
         sessionStore.refreshFromServer(selectedSession.id, {
-          provider: 'pilotdeck',
+          provider: "sati",
           projectName: selectedProject.name,
-          projectPath: selectedProject.fullPath || selectedProject.path || '',
+          projectPath: selectedProject.fullPath || selectedProject.path || "",
           ...sessionRequestParams,
         }),
       );
@@ -312,7 +311,7 @@ function ChatInterfaceV2({
   ]);
 
   useChatRealtimeHandlers({
-    provider: 'pilotdeck',
+    provider: "sati",
     selectedProject,
     selectedSession,
     currentSessionId,
@@ -321,7 +320,7 @@ function ChatInterfaceV2({
     setCanAbortSession,
     setIsAborting,
     setClaudeStatus,
-    setPilotDeckStatus,
+    setSatiStatus,
     setTokenBudget,
     setPendingPermissionRequests,
     pendingViewSessionRef,
@@ -350,101 +349,108 @@ function ChatInterfaceV2({
     setIsAbortPending(true);
   }, [canAbortSession, handleAbortSession, isAbortPending, isLoading]);
 
-  const handleFork = useCallback(async (message: ChatMessage, _carriedPreview: number) => {
-    if (isForkPending || isLoading || sessionIsReadOnly) return;
-    const sessionId = currentSessionId || selectedSession?.id;
-    const fromEntryId = message.entryId;
-    if (!sessionId || !fromEntryId || !selectedProject) {
-      addToast('error', t('fork.missingTarget', { defaultValue: 'Cannot fork this message.' }));
-      return;
-    }
+  const handleFork = useCallback(
+    async (message: ChatMessage, _carriedPreview: number) => {
+      if (isForkPending || isLoading || sessionIsReadOnly) return;
+      const sessionId = currentSessionId || selectedSession?.id;
+      const fromEntryId = message.entryId;
+      if (!sessionId || !fromEntryId || !selectedProject) {
+        addToast("error", t("fork.missingTarget", { defaultValue: "Cannot fork this message." }));
+        return;
+      }
 
-    const projectPath = selectedProject.fullPath || selectedProject.path || '';
-    setIsForkPending(true);
-    try {
-      const response = await api.forkSession(sessionId, { projectPath, fromEntryId });
-      let result: { newSessionId?: string; prefillText?: string; runMode?: string; mode?: string; error?: string } = {};
+      const projectPath = selectedProject.fullPath || selectedProject.path || "";
+      setIsForkPending(true);
       try {
-        result = await response.json();
-      } catch {
-        result = {};
-      }
-      if (!response.ok) {
-        throw new Error(result?.error || `Fork failed (${response.status})`);
-      }
-      const newSessionId = result?.newSessionId;
-      if (!newSessionId) {
-        throw new Error('Fork did not return a new session id');
-      }
-      setRunMode(result.runMode === 'ask' ? 'ask' : result.mode === 'plan' || result.runMode === 'plan' ? 'plan' : 'agent');
-
-      if (typeof window.refreshProjects === 'function') {
+        const response = await api.forkSession(sessionId, { projectPath, fromEntryId });
+        let result: { newSessionId?: string; prefillText?: string; runMode?: string; mode?: string; error?: string } =
+          {};
         try {
-          await window.refreshProjects();
+          result = await response.json();
         } catch {
-          // Keep the fork usable even if the sidebar refresh races/fails.
+          result = {};
         }
-      }
+        if (!response.ok) {
+          throw new Error(result?.error || `Fork failed (${response.status})`);
+        }
+        const newSessionId = result?.newSessionId;
+        if (!newSessionId) {
+          throw new Error("Fork did not return a new session id");
+        }
+        setRunMode(
+          result.runMode === "ask" ? "ask" : result.mode === "plan" || result.runMode === "plan" ? "plan" : "agent",
+        );
 
-      const forkDraft = typeof result.prefillText === 'string'
-        ? result.prefillText
-        : message.type === 'user'
-          ? message.content || ''
-          : '';
-      const forkDraftStorageKey = getDraftInputStorageKey(selectedProject.name, newSessionId);
-      if (forkDraft) {
-        safeLocalStorage.setItem(forkDraftStorageKey, forkDraft);
-      } else {
-        safeLocalStorage.removeItem(forkDraftStorageKey);
-      }
+        if (typeof window.refreshProjects === "function") {
+          try {
+            await window.refreshProjects();
+          } catch {
+            // Keep the fork usable even if the sidebar refresh races/fails.
+          }
+        }
 
-      onNavigateToSession?.(newSessionId);
-      setInput(forkDraft);
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-        scrollToBottom?.();
-      });
-      // Messages load asynchronously after the session switch; scroll again
-      // once the carried history has had a chance to render.
-      setTimeout(() => scrollToBottom?.(), 400);
-      addToast(
-        'success',
-        t('fork.ready', {
-          defaultValue: 'Fork created — edit the prompt and send when ready.',
-        }),
-      );
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : String(error);
-      addToast('error', messageText || t('fork.failed', { defaultValue: 'Fork failed.' }));
-    } finally {
-      setIsForkPending(false);
-    }
-  }, [
-    addToast,
-    currentSessionId,
-    isForkPending,
-    isLoading,
-    sessionIsReadOnly,
-    onNavigateToSession,
-    scrollToBottom,
-    selectedProject,
-    selectedSession?.id,
-    setInput,
-    t,
-    textareaRef,
-  ]);
+        const forkDraft =
+          typeof result.prefillText === "string"
+            ? result.prefillText
+            : message.type === "user"
+              ? message.content || ""
+              : "";
+        const forkDraftStorageKey = getDraftInputStorageKey(selectedProject.name, newSessionId);
+        if (forkDraft) {
+          safeLocalStorage.setItem(forkDraftStorageKey, forkDraft);
+        } else {
+          safeLocalStorage.removeItem(forkDraftStorageKey);
+        }
+
+        onNavigateToSession?.(newSessionId);
+        setInput(forkDraft);
+        requestAnimationFrame(() => {
+          textareaRef.current?.focus();
+          scrollToBottom?.();
+        });
+        // Messages load asynchronously after the session switch; scroll again
+        // once the carried history has had a chance to render.
+        setTimeout(() => scrollToBottom?.(), 400);
+        addToast(
+          "success",
+          t("fork.ready", {
+            defaultValue: "Fork created — edit the prompt and send when ready.",
+          }),
+        );
+      } catch (error) {
+        const messageText = error instanceof Error ? error.message : String(error);
+        addToast("error", messageText || t("fork.failed", { defaultValue: "Fork failed." }));
+      } finally {
+        setIsForkPending(false);
+      }
+    },
+    [
+      addToast,
+      currentSessionId,
+      isForkPending,
+      isLoading,
+      sessionIsReadOnly,
+      onNavigateToSession,
+      scrollToBottom,
+      selectedProject,
+      selectedSession?.id,
+      setInput,
+      t,
+      textareaRef,
+    ],
+  );
 
   useEffect(() => {
     if (!isLoading || !canAbortSession) return;
     const handleGlobalEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) return;
-      if (document.querySelector('[data-modal-overlay]')) return;
+      if (event.key !== "Escape" || event.repeat || event.defaultPrevented) return;
+      if (document.querySelector("[data-modal-overlay]")) return;
       event.preventDefault();
       handleAbortWithPending();
     };
-    document.addEventListener('keydown', handleGlobalEscape, { capture: true });
+    document.addEventListener("keydown", handleGlobalEscape, { capture: true });
     return () => {
-      document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
+      document.removeEventListener("keydown", handleGlobalEscape, { capture: true });
     };
   }, [canAbortSession, handleAbortWithPending, isLoading]);
 
@@ -461,8 +467,7 @@ function ChatInterfaceV2({
   // into the normal layout (composer at bottom, messages on top) on the
   // next render.
   const isWelcomeMode =
-    !!forceWelcome ||
-    (!selectedSession && !currentSessionId && !isLoadingSessionMessages && chatMessages.length === 0);
+    !!forceWelcome || (!selectedSession && !currentSessionId && !isLoadingSessionMessages && chatMessages.length === 0);
 
   // Fire onExitWelcome the moment the user submits from welcome mode. Wraps
   // handleSubmit so we don't have to thread state through useChatComposerState.
@@ -479,17 +484,19 @@ function ChatInterfaceV2({
   const composer = sessionIsReadOnly ? (
     <div className="mx-auto w-full max-w-[720px] px-6 pb-6 pt-3">
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[13px] text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-        {t('session.readonlyTranscript', {
-          defaultValue: 'This transcript is read-only.',
+        {t("session.readonlyTranscript", {
+          defaultValue: "This transcript is read-only.",
         })}
       </div>
     </div>
   ) : (
     <ComposerV2
       input={input}
-      placeholder={t('composer.placeholder', {
-        defaultValue: 'Tell PilotDeck what you want to get done…',
-      }) as string}
+      placeholder={
+        t("composer.placeholder", {
+          defaultValue: "Tell Sati what you want to get done…",
+        }) as string
+      }
       textareaRef={textareaRef}
       inputHighlightRef={inputHighlightRef}
       renderInputWithMentions={renderInputWithMentions}
@@ -504,14 +511,12 @@ function ChatInterfaceV2({
       onAbortSession={handleAbortWithPending}
       openImagePicker={openImagePicker}
       attachedImages={attachedImages}
-      onRemoveImage={(index) =>
-        setAttachedImages((previous) =>
-          previous.filter((_, currentIndex) => currentIndex !== index),
-        )
+      onRemoveImage={index =>
+        setAttachedImages(previous => previous.filter((_, currentIndex) => currentIndex !== index))
       }
       documentReferences={documentReferences}
       onRemoveDocumentReference={removeDocumentReference}
-        onOpenDocumentReference={onFileOpen ? (filePath) => onFileOpen(filePath) : undefined}
+      onOpenDocumentReference={onFileOpen ? filePath => onFileOpen(filePath) : undefined}
       uploadingImages={uploadingImages}
       imageErrors={imageErrors}
       showFileDropdown={showFileDropdown}
@@ -525,8 +530,8 @@ function ChatInterfaceV2({
       isCommandMenuOpen={showCommandMenu}
       frequentCommands={commandQuery ? [] : frequentCommands}
       onToggleCommandMenu={handleToggleCommandMenu}
-      onInsertMention={() => insertAtCursor('@')}
-      onInsertSlash={() => insertAtCursor('/')}
+      onInsertMention={() => insertAtCursor("@")}
+      onInsertSlash={() => insertAtCursor("/")}
       getRootProps={getRootProps as (...args: unknown[]) => Record<string, unknown>}
       getInputProps={getInputProps as (...args: unknown[]) => Record<string, unknown>}
       isDragActive={isDragActive}
@@ -555,7 +560,7 @@ function ChatInterfaceV2({
   );
 
   if (isWelcomeMode) {
-    const projectName = selectedProject?.displayName || selectedProject?.name || '';
+    const projectName = selectedProject?.displayName || selectedProject?.name || "";
     if (compact) {
       return (
         <div className="flex h-full min-w-0 flex-col bg-white dark:bg-neutral-950">
@@ -564,11 +569,11 @@ function ChatInterfaceV2({
               <MessageSquare className="h-4 w-4" strokeWidth={1.8} />
             </div>
             <p className="text-[13px] font-medium text-neutral-700 dark:text-neutral-300">
-              {t('workspace.emptyTitle', { defaultValue: 'Ask PilotDeck about this project' })}
+              {t("workspace.emptyTitle", { defaultValue: "Ask Sati about this project" })}
             </p>
             <p className="mt-1 max-w-56 text-[12px] leading-5 text-neutral-400 dark:text-neutral-500">
-              {t('workspace.emptyDescription', {
-                defaultValue: 'Reference a workspace file with @ when you want it included.',
+              {t("workspace.emptyDescription", {
+                defaultValue: "Reference a workspace file with @ when you want it included.",
               })}
             </p>
           </div>
@@ -582,12 +587,12 @@ function ChatInterfaceV2({
           <div className="w-full max-w-[720px]">
             <h1 className="mb-8 text-center text-[26px] font-medium tracking-tight text-neutral-900 dark:text-neutral-100">
               {selectedProject
-                ? t('welcome.greetingWithProject', {
+                ? t("welcome.greetingWithProject", {
                     project: projectName,
                     defaultValue: `What's on the plan today?`,
                   })
-                : t('welcome.noProject', {
-                    defaultValue: 'Pick a project from the sidebar to get started',
+                : t("welcome.noProject", {
+                    defaultValue: "Pick a project from the sidebar to get started",
                   })}
             </h1>
             {composer}
@@ -617,7 +622,7 @@ function ChatInterfaceV2({
         loadAllMessages={loadAllMessages}
         allMessagesLoaded={allMessagesLoaded}
         isLoadingAllMessages={isLoadingAllMessages}
-        provider={'pilotdeck' as Provider}
+        provider={"sati" as Provider}
         selectedProject={selectedProject}
         selectedSession={selectedSession}
         createDiff={createDiff}
@@ -630,9 +635,9 @@ function ChatInterfaceV2({
         inlineThinking={inlineThinking}
         setInput={setInput}
         isAssistantWorking={isLoading}
-        workingStatus={claudeStatus || pilotDeckStatus}
+        workingStatus={claudeStatus || satiStatus}
         runMode={runMode}
-        planModeActive={effectivePermissionMode === 'plan'}
+        planModeActive={effectivePermissionMode === "plan"}
         sessionStore={sessionStore}
         onFork={sessionIsReadOnly ? undefined : handleFork}
         forkDisabled={isForkPending}

@@ -1,21 +1,18 @@
 import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
-import type {
-  PilotDeckToolRuntimeContext,
-  PilotDeckWriteSnapshotEntry,
-} from "../../protocol/types.js";
-import { PilotDeckToolRuntimeError } from "../../protocol/errors.js";
+import type { SatiToolRuntimeContext, SatiWriteSnapshotEntry } from "../../protocol/types.js";
+import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import { readTextFile } from "./readTextFile.js";
 
 export function getWriteSnapshot(
-  context: PilotDeckToolRuntimeContext,
+  context: SatiToolRuntimeContext,
   absolutePath: string,
-): PilotDeckWriteSnapshotEntry | undefined {
+): SatiWriteSnapshotEntry | undefined {
   return context.writeSnapshots?.get(absolutePath);
 }
 
 export function recordWriteSnapshot(
-  context: PilotDeckToolRuntimeContext,
+  context: SatiToolRuntimeContext,
   absolutePath: string,
   content: string,
   mtimeMs: number,
@@ -31,10 +28,7 @@ export function recordWriteSnapshot(
   });
 }
 
-export function invalidateReadFileState(
-  context: { readFileState?: Map<string, unknown> },
-  absolutePath: string,
-): void {
+export function invalidateReadFileState(context: { readFileState?: Map<string, unknown> }, absolutePath: string): void {
   if (!context.readFileState) return;
   const prefix = `${absolutePath}::`;
   for (const key of context.readFileState.keys()) {
@@ -45,7 +39,7 @@ export function invalidateReadFileState(
 }
 
 export async function validateWriteSnapshotFresh(
-  context: PilotDeckToolRuntimeContext,
+  context: SatiToolRuntimeContext,
   absolutePath: string,
 ): Promise<{ exists: boolean }> {
   const fileStat = await stat(absolutePath).catch((error: unknown) => {
@@ -60,12 +54,12 @@ export async function validateWriteSnapshotFresh(
   }
 
   if (!fileStat.isFile()) {
-    throw new PilotDeckToolRuntimeError("file_conflict", `${absolutePath} is not a regular file.`);
+    throw new SatiToolRuntimeError("file_conflict", `${absolutePath} is not a regular file.`);
   }
 
   const snapshot = getWriteSnapshot(context, absolutePath);
   if (!snapshot) {
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "invalid_tool_input",
       "File has not been read yet. Read it first before writing to it.",
     );
@@ -85,7 +79,7 @@ export async function validateWriteSnapshotFresh(
     }
   }
 
-  throw new PilotDeckToolRuntimeError(
+  throw new SatiToolRuntimeError(
     "invalid_tool_input",
     "File has changed since the last read. Read it again before writing to it.",
     {
@@ -97,7 +91,7 @@ export async function validateWriteSnapshotFresh(
 }
 
 export async function ensureWriteSnapshotFresh(
-  context: PilotDeckToolRuntimeContext,
+  context: SatiToolRuntimeContext,
   absolutePath: string,
 ): Promise<{ exists: boolean; previousContent: string | null; mtimeMs: number | null }> {
   const fileStat = await stat(absolutePath).catch((error: unknown) => {
@@ -112,12 +106,12 @@ export async function ensureWriteSnapshotFresh(
   }
 
   if (!fileStat.isFile()) {
-    throw new PilotDeckToolRuntimeError("file_conflict", `${absolutePath} is not a regular file.`);
+    throw new SatiToolRuntimeError("file_conflict", `${absolutePath} is not a regular file.`);
   }
 
   const snapshot = getWriteSnapshot(context, absolutePath);
   if (!snapshot) {
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "invalid_tool_input",
       "File has not been read yet. Read it first before writing to it.",
     );
@@ -134,7 +128,7 @@ export async function ensureWriteSnapshotFresh(
         return { exists: true, previousContent, mtimeMs: normalizedMtime };
       }
     }
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "invalid_tool_input",
       "File has changed since the last read. Read it again before writing to it.",
       {
@@ -151,7 +145,7 @@ export async function ensureWriteSnapshotFresh(
 
   const currentHash = hashText(previousContent);
   if (currentHash !== snapshot.contentHash) {
-    throw new PilotDeckToolRuntimeError(
+    throw new SatiToolRuntimeError(
       "invalid_tool_input",
       "File has changed since the last read. Read it again before writing to it.",
       {

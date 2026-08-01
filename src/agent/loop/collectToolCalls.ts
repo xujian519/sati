@@ -1,7 +1,7 @@
 import type { CanonicalMessage, CanonicalToolCall } from "../../model/index.js";
 
 export function collectToolCalls(message: CanonicalMessage): CanonicalToolCall[] {
-  return message.content.flatMap((block) =>
+  return message.content.flatMap(block =>
     block.type === "tool_call"
       ? [
           {

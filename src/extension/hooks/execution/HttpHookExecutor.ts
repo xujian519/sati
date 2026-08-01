@@ -1,5 +1,5 @@
-import type { PilotDeckHookInput } from "../protocol/input.js";
-import type { PilotDeckHookCommand } from "../protocol/settings.js";
+import type { SatiHookInput } from "../protocol/input.js";
+import type { SatiHookCommand } from "../protocol/settings.js";
 import { parseHookOutput } from "./parseHookOutput.js";
 import type { CommandHookExecutionResult } from "./CommandHookExecutor.js";
 
@@ -9,8 +9,8 @@ export class HttpHookExecutor {
   constructor(private readonly fetchImpl: HttpHookFetch = fetch) {}
 
   async execute(options: {
-    hook: Extract<PilotDeckHookCommand, { type: "http" }>;
-    hookInput: PilotDeckHookInput;
+    hook: Extract<SatiHookCommand, { type: "http" }>;
+    hookInput: SatiHookInput;
     env?: NodeJS.ProcessEnv;
     signal?: AbortSignal;
   }): Promise<CommandHookExecutionResult> {
@@ -51,10 +51,13 @@ function resolveHeaders(
   const allowed = new Set(allowedEnvVars ?? []);
   const output: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers ?? {})) {
-    output[key] = value.replace(/\$(\w+)|\$\{(\w+)\}/gu, (_match, bare: string | undefined, braced: string | undefined) => {
-      const name = bare ?? braced ?? "";
-      return allowed.has(name) ? env[name] ?? "" : "";
-    });
+    output[key] = value.replace(
+      /\$(\w+)|\$\{(\w+)\}/gu,
+      (_match, bare: string | undefined, braced: string | undefined) => {
+        const name = bare ?? braced ?? "";
+        return allowed.has(name) ? (env[name] ?? "") : "";
+      },
+    );
   }
   return output;
 }

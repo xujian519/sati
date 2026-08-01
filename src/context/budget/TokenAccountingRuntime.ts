@@ -210,12 +210,15 @@ export class TokenAccountingRuntime {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     const detach = signal ? forwardAbort(signal, controller) : undefined;
     try {
-      const response = await this.transport(joinUrl(options.useOriginBase ? providerOriginUrl(provider.url) : provider.url, path), {
-        method: "POST",
-        headers: buildProviderHeaders(provider),
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
+      const response = await this.transport(
+        joinUrl(options.useOriginBase ? providerOriginUrl(provider.url) : provider.url, path),
+        {
+          method: "POST",
+          headers: buildProviderHeaders(provider),
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        },
+      );
       if (!response.ok) {
         throw new Error(`Provider token count failed with HTTP ${response.status}.`);
       }
@@ -299,7 +302,7 @@ function toOpenAIResponsesContent(content: unknown): unknown {
   if (!Array.isArray(content)) {
     return content;
   }
-  return content.map((part) => {
+  return content.map(part => {
     if (!isRecord(part)) {
       return part;
     }
@@ -332,7 +335,7 @@ function toOpenAIResponsesTools(tools: unknown): unknown {
   if (!Array.isArray(tools)) {
     return undefined;
   }
-  return tools.map((tool) => {
+  return tools.map(tool => {
     if (!isRecord(tool) || tool.type !== "function" || !isRecord(tool.function)) {
       return tool;
     }
@@ -377,47 +380,53 @@ function contentToText(content: unknown): string {
   if (!Array.isArray(content)) {
     return safeJsonStringify(content);
   }
-  return content.map((part) => {
-    if (typeof part === "string") {
-      return part;
-    }
-    if (isRecord(part) && typeof part.text === "string") {
-      return part.text;
-    }
-    return safeJsonStringify(part);
-  }).join("\n");
+  return content
+    .map(part => {
+      if (typeof part === "string") {
+        return part;
+      }
+      if (isRecord(part) && typeof part.text === "string") {
+        return part.text;
+      }
+      return safeJsonStringify(part);
+    })
+    .join("\n");
 }
 
 function estimateToolSchemas(tokenBudget: TokenBudgetManager, tools: CanonicalToolSchema[]): number {
   if (tools.length === 0) return 0;
   let total = 0;
   for (const tool of tools) {
-    total += tokenBudget.estimateTextTokens(`${tool.name}${tool.description ?? ""}${safeJsonStringify(tool.inputSchema)}`);
+    total += tokenBudget.estimateTextTokens(
+      `${tool.name}${tool.description ?? ""}${safeJsonStringify(tool.inputSchema)}`,
+    );
   }
   return total;
 }
 
 function cacheKeyForRequest(request: CanonicalModelRequest): string {
   return createHash("sha256")
-    .update(stableJson({
-      provider: request.provider,
-      model: request.model,
-      messages: request.messages,
-      systemPrompt: request.systemPrompt,
-      tools: request.tools,
-      toolChoice: request.toolChoice,
-      thinking: request.thinking,
-      outputSchema: request.outputSchema,
-      cacheBreakpoints: request.cacheBreakpoints,
-    }))
+    .update(
+      stableJson({
+        provider: request.provider,
+        model: request.model,
+        messages: request.messages,
+        systemPrompt: request.systemPrompt,
+        tools: request.tools,
+        toolChoice: request.toolChoice,
+        thinking: request.thinking,
+        outputSchema: request.outputSchema,
+        cacheBreakpoints: request.cacheBreakpoints,
+      }),
+    )
     .digest("hex");
 }
 
 function isOfficialOpenAIProvider(provider: ProviderConfig): boolean {
   const normalized = normalizeProviderBaseUrl(provider.url);
-  return provider.protocol === "openai" && (
-    normalized === "https://api.openai.com" ||
-    normalized === "https://api.openai.com/v1"
+  return (
+    provider.protocol === "openai" &&
+    (normalized === "https://api.openai.com" || normalized === "https://api.openai.com/v1")
   );
 }
 
@@ -472,7 +481,7 @@ function sortValue(value: unknown): unknown {
   return Object.fromEntries(
     Object.keys(value)
       .sort()
-      .map((key) => [key, sortValue(value[key])]),
+      .map(key => [key, sortValue(value[key])]),
   );
 }
 

@@ -1,0 +1,36 @@
+# 修改超范围判断框架 (A33)
+# Layer 1 — 法条级原子单元
+
+articleId: "A33"
+name: "修改超范围判断"
+lawRef: "专利法第33条"
+guidelineRef: "审查指南第二部分第八章 5.2"
+
+steps:
+  - id: "A33_step_1"
+    order: 1
+    name: "确定原始申请文件记载的范围"
+    ruleRef: "审查指南第二部分第八章 5.2.1"
+    inputHint: "原始申请文件（权利要求+说明书+附图）"
+    outputSchema:
+      originalScope: "string — 原始申请文件记载的技术方案范围"
+      originalContent: "string[] — 关键段落的原始记载"
+
+  - id: "A33_step_2"
+    order: 2
+    name: "比较修改内容是否超出原始范围"
+    ruleRef: "审查指南第二部分第八章 5.2.3"
+    inputHint: "修改后的文件 + 原始文件"
+    outputSchema:
+      amendments: "string[] — 修改内容列表"
+      beyondScopeItems: "string[] — 超出原始范围的内容"
+      directlyDerivable: "boolean[] — 每项修改是否可直接毫无疑义地确定"
+
+conclusionSchema:
+  withinScope: "boolean — 是否在原始范围内"
+  confidence: "'high' | 'medium' | 'low'"
+  keyRationale: "string — 核心理由"
+
+applicableTo:
+  - invalidity
+  - reexamination

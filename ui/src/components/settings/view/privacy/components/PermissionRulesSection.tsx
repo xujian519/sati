@@ -36,9 +36,7 @@ export default function PermissionRulesSection({
         <span className="inline-flex items-center gap-2">
           <Icon
             className={
-              isAllowed
-                ? "h-4 w-4 text-green-600 dark:text-green-400"
-                : "h-4 w-4 text-red-600 dark:text-red-400"
+              isAllowed ? "h-4 w-4 text-green-600 dark:text-green-400" : "h-4 w-4 text-red-600 dark:text-red-400"
             }
           />
           {t(`permissions.${sectionKey}.title`, {
@@ -56,11 +54,11 @@ export default function PermissionRulesSection({
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             value={newValue}
-            onChange={(event) => onNewValueChange(event.target.value)}
+            onChange={event => onNewValueChange(event.target.value)}
             placeholder={t(`permissions.${sectionKey}.placeholder`, {
               defaultValue: isAllowed ? 'e.g. "bash:git log:*" or "write_file"' : 'e.g. "Bash(rm:*)"',
             })}
-            onKeyDown={(event) => {
+            onKeyDown={event => {
               if (event.key === "Enter") {
                 if (isImeEnterEvent(event)) return;
                 event.preventDefault();
@@ -69,12 +67,7 @@ export default function PermissionRulesSection({
             }}
             className="h-10 flex-1"
           />
-          <Button
-            onClick={() => onAdd(newValue)}
-            disabled={!newValue.trim()}
-            size="sm"
-            className="h-10 px-4"
-          >
+          <Button onClick={() => onAdd(newValue)} disabled={!newValue.trim()} size="sm" className="h-10 px-4">
             <Plus className="mr-1.5 h-4 w-4" />
             {t("permissions.actions.add", { defaultValue: "Add" })}
           </Button>
@@ -85,7 +78,7 @@ export default function PermissionRulesSection({
             {t("permissions.allowedTools.quickAdd", { defaultValue: "Quick add:" })}
           </p>
           <div className="flex flex-wrap gap-2">
-            {quickTools.map((tool) => (
+            {quickTools.map(tool => (
               <Button
                 key={tool}
                 variant="outline"
@@ -104,13 +97,11 @@ export default function PermissionRulesSection({
           {tools.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border py-5 text-center text-xs text-muted-foreground">
               {t(`permissions.${sectionKey}.empty`, {
-                defaultValue: isAllowed
-                  ? "No allowed tools configured yet."
-                  : "No blocked tools configured.",
+                defaultValue: isAllowed ? "No allowed tools configured yet." : "No blocked tools configured.",
               })}
             </div>
           ) : (
-            tools.map((tool) => (
+            tools.map(tool => (
               <div
                 key={tool}
                 className={

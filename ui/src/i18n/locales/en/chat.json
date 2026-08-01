@@ -5,7 +5,7 @@
     "copyCode": "Copy code"
   },
   "workspace": {
-    "emptyTitle": "Ask PilotDeck about this project",
+    "emptyTitle": "Ask Sati about this project",
     "emptyDescription": "Reference a workspace file with @ when you want it included."
   },
   "copyMessage": {
@@ -20,7 +20,7 @@
     "error": "Error",
     "tool": "Tool",
     "claude": "Claude",
-    "pilotdeck": "PilotDeck",
+    "sati": "Sati",
     "cursor": "Cursor",
     "codex": "Codex",
     "gemini": "Gemini"
@@ -150,8 +150,8 @@
   "interactive": {
     "title": "Interactive Prompt",
     "waiting": "Waiting for your response in the CLI",
-    "instruction": "Please select an option in your terminal where PilotDeck is running.",
-    "selectedOption": "✓ PilotDeck selected option {{number}}",
+    "instruction": "Please select an option in your terminal where Sati is running.",
+    "selectedOption": "✓ Sati selected option {{number}}",
     "instructionDetail": "In the CLI, you would select this option interactively using arrow keys or by typing the number."
   },
   "thinking": {
@@ -294,14 +294,14 @@
   "thinkingMode": {
     "selector": {
       "title": "Thinking Mode",
-      "description": "Extended thinking gives PilotDeck more time to evaluate alternatives",
+      "description": "Extended thinking gives Sati more time to evaluate alternatives",
       "active": "Active",
       "tip": "Higher thinking modes take more time but provide more thorough analysis"
     },
     "modes": {
       "none": {
         "name": "Standard",
-        "description": "Regular PilotDeck response",
+        "description": "Regular Sati response",
         "prefix": ""
       },
       "think": {
@@ -338,7 +338,7 @@
       "google": "by Google"
     },
     "readyPrompt": {
-      "pilotdeck": "Ready to use PilotDeck with {{model}}. Start typing your message below.",
+      "sati": "Ready to use Sati with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
@@ -401,13 +401,13 @@
     },
     "loading": "Loading terminal...",
     "connecting": "Connecting to shell...",
-    "startSession": "Start a new PilotDeck session",
+    "startSession": "Start a new Sati session",
     "resumeSession": "Resume session: {{displayName}}...",
     "runCommand": "Run {{command}} in {{projectName}}",
-    "startCli": "Starting PilotDeck CLI in {{projectName}}",
+    "startCli": "Starting Sati CLI in {{projectName}}",
     "defaultCommand": "command"
   },
-  "pilotdeckStatus": {
+  "satiStatus": {
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",
@@ -441,8 +441,8 @@
     "nextTaskPrompt": "Start the next task"
   },
   "composer": {
-    "placeholder": "Tell PilotDeck what you want to get done…",
-    "welcomePlaceholder": "Tell PilotDeck what you want to get done…"
+    "placeholder": "Tell Sati what you want to get done…",
+    "welcomePlaceholder": "Tell Sati what you want to get done…"
   },
   "subagent": {
     "detailTitle": "Subagent Detail",
@@ -462,8 +462,8 @@
       "message": "{{providerMessage}}\n\nSee the suggested action below.",
       "actions": {
         "settingsDefault": "Check Settings → Model Provider and verify the selected provider, base URL, API key, model name, and timeoutMs. If the provider is slow or the network is unstable, increase timeoutMs or check provider status.",
-        "auth": "Update the API key or access permissions for {{provider}} in Settings → Model Provider, or run pilotdeck setup.",
-        "modelNotFound": "Choose a valid model for {{provider}} in Settings → Model Provider, or add it under model.providers.<id>.models in pilotdeck.yaml.",
+        "auth": "Update the API key or access permissions for {{provider}} in Settings → Model Provider, or run sati setup.",
+        "modelNotFound": "Choose a valid model for {{provider}} in Settings → Model Provider, or add it under model.providers.<id>.models in sati.yaml.",
         "timeout": "Increase timeoutMs for {{provider}} in Settings → Model Provider → Advanced, or check local network/proxy and provider status.",
         "rateLimit": "Wait for the provider rate limit to reset, reduce concurrency, or switch to another provider/model in Settings.",
         "billing": "Top up billing/quota on the provider API side, or switch to another provider/model in Settings.",

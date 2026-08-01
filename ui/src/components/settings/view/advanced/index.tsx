@@ -1,16 +1,12 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ChevronDown, FolderOpen, RefreshCw, Save } from "lucide-react";
-import { usePilotDeckConfig } from "../../../../hooks/usePilotDeckConfig";
+import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import { Button } from "../../../../shared/view/ui";
 import { cn } from "../../../../lib/utils";
-import {
-  ConfigSaveError,
-  PageSectionHeader,
-  SettingsCard,
-} from "../../shared/view";
+import { ConfigSaveError, PageSectionHeader, SettingsCard } from "../../shared/view";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
-import type { PilotDeckConfig } from "../modelPool/types";
+import type { SatiConfig } from "../modelPool/types";
 import ServiceSection from "./components/ServiceSection";
 import CustomEnvSection from "./components/CustomEnvSection";
 
@@ -36,11 +32,11 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
     saving,
     opening,
     error,
-  } = usePilotDeckConfig();
+  } = useSatiConfig();
   const parsedConfig = useMemo(() => safeParseYaml(raw), [raw]);
   const [showRawYaml, setShowRawYaml] = useState(false);
 
-  const onFormChange = (next: PilotDeckConfig) => {
+  const onFormChange = (next: SatiConfig) => {
     try {
       setRaw(configToYamlString(next));
       void save();
@@ -54,20 +50,18 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
       <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
       <ConfigSaveError error={error} />
       {loading ? (
-        <div className="py-6 text-xs text-muted-foreground">
-          {t("pilotDeckConfig.loading")}
-        </div>
+        <div className="py-6 text-xs text-muted-foreground">{t("satiConfig.loading")}</div>
       ) : parsedConfig ? (
         <>
           <PageSectionHeader
-            title={t("pilotDeckConfig.panels.runtime.title")}
-            description={t("pilotDeckConfig.panels.runtime.description")}
+            title={t("satiConfig.panels.runtime.title")}
+            description={t("satiConfig.panels.runtime.description")}
           />
           <ServiceSection config={parsedConfig} onChange={onFormChange} />
 
           <PageSectionHeader
-            title={t("pilotDeckConfig.panels.customEnv.title")}
-            description={t("pilotDeckConfig.panels.customEnv.description")}
+            title={t("satiConfig.panels.customEnv.title")}
+            description={t("satiConfig.panels.customEnv.description")}
           />
           <CustomEnvSection config={parsedConfig} onChange={onFormChange} />
         </>
@@ -81,17 +75,13 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
         <SettingsCard className="p-4">
           <button
             type="button"
-            onClick={() => setShowRawYaml((value) => !value)}
+            onClick={() => setShowRawYaml(value => !value)}
             className="flex w-full items-center justify-between gap-3 text-left"
             aria-expanded={showRawYaml || !parsedConfig}
           >
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-foreground">
-                {t("pilotDeckConfig.rawYaml.rawYaml")}
-              </div>
-              <code className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">
-                {path}
-              </code>
+              <div className="text-sm font-semibold text-foreground">{t("satiConfig.rawYaml.rawYaml")}</div>
+              <code className="mt-1 block truncate font-mono text-[11px] text-muted-foreground">{path}</code>
             </div>
             <ChevronDown
               className={cn(
@@ -107,7 +97,7 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
                 <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                   <div className="flex items-center gap-2 font-semibold">
                     <AlertCircle className="h-4 w-4" />
-                    {t("pilotDeckConfig.rawYaml.configInvalid")}
+                    {t("satiConfig.rawYaml.configInvalid")}
                   </div>
                   {parseError && <div className="mt-1">{parseError}</div>}
                 </div>
@@ -115,11 +105,9 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
 
               {validation && validation.errors.length > 0 && (
                 <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                  <div className="mb-1 font-semibold">
-                    {t("pilotDeckConfig.rawYaml.errors")}
-                  </div>
+                  <div className="mb-1 font-semibold">{t("satiConfig.rawYaml.errors")}</div>
                   <ul className="list-disc space-y-1 pl-4">
-                    {validation.errors.map((item) => (
+                    {validation.errors.map(item => (
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
@@ -134,52 +122,32 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
                     onClick={dismissExternalNotice}
                     className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-amber-500/20"
                   >
-                    {t("pilotDeckConfig.actions.dismiss")}
+                    {t("satiConfig.actions.dismiss")}
                   </button>
                 </div>
               )}
 
               <textarea
                 value={raw}
-                onChange={(event) => setRaw(event.target.value)}
+                onChange={event => setRaw(event.target.value)}
                 spellCheck={false}
                 className="min-h-[360px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-5 text-foreground outline-none focus:ring-1 focus:ring-ring"
               />
 
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={openFile}
-                    disabled={opening}
-                  >
+                  <Button type="button" variant="outline" size="sm" onClick={openFile} disabled={opening}>
                     <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                    {opening
-                      ? t("pilotDeckConfig.actions.opening")
-                      : t("pilotDeckConfig.actions.revealFileGeneric")}
+                    {opening ? t("satiConfig.actions.opening") : t("satiConfig.actions.revealFileGeneric")}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void refresh()}
-                  >
+                  <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                    {t("pilotDeckConfig.actions.refresh")}
+                    {t("satiConfig.actions.refresh")}
                   </Button>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void save()}
-                  disabled={saving || !isDirty}
-                >
+                <Button type="button" size="sm" onClick={() => void save()} disabled={saving || !isDirty}>
                   <Save className="mr-1.5 h-3.5 w-3.5" />
-                  {saving
-                    ? t("pilotDeckConfig.actions.saving")
-                    : t("pilotDeckConfig.actions.saveAndReloadShort")}
+                  {saving ? t("satiConfig.actions.saving") : t("satiConfig.actions.saveAndReloadShort")}
                 </Button>
               </div>
             </div>

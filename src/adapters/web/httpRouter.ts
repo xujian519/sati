@@ -7,9 +7,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { resolve } from "node:path";
-import { ProjectFileService, WorkspaceBoundaryError } from "./projectFiles.js";
 import type { Gateway } from "../../gateway/protocol/types.js";
+import { ProjectFileService, WorkspaceBoundaryError } from "./projectFiles.js";
 
 export type WebHttpRouterOptions = {
   gateway: Gateway;
@@ -58,9 +57,7 @@ export async function handleWebApiRequest(
 
   if (match && match[1] && match[2]) {
     const projectKey = decodeURIComponent(match[1]);
-    const projectRoot = options.resolveProject
-      ? options.resolveProject(projectKey)
-      : projectKey;
+    const projectRoot = options.resolveProject ? options.resolveProject(projectKey) : projectKey;
     const subPath = match[2];
 
     try {
@@ -84,7 +81,12 @@ export async function handleWebApiRequest(
       }
       if (subPath === "/files/write" && request.method === "POST") {
         const body = await readJsonBody<{ path?: string; content?: string; encoding?: "utf8" | "base64" }>(request);
-        if (typeof body?.path !== "string" || !body.path || typeof body.content !== "string" || (body.encoding !== undefined && body.encoding !== "utf8" && body.encoding !== "base64")) {
+        if (
+          typeof body?.path !== "string" ||
+          !body.path ||
+          typeof body.content !== "string" ||
+          (body.encoding !== undefined && body.encoding !== "utf8" && body.encoding !== "base64")
+        ) {
           sendJson(response, 400, {
             error: { code: "invalid_body", message: "Expected { path, content[, encoding] }" },
           });

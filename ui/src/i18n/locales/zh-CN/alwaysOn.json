@@ -142,7 +142,7 @@
         "timezone": "时区"
       },
       "placeholders": {
-        "prompt": "描述 PilotDeck 在任务运行时应该做什么。",
+        "prompt": "描述 Sati 在任务运行时应该做什么。",
         "workspace": "选择工作区"
       },
       "schedule": {

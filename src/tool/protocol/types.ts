@@ -14,6 +14,7 @@ import type {
 import type { AgentRunMode } from "../../agent/protocol/input.js";
 import type { SatiToolAuditRecorder } from "../audit/ToolAuditRecorder.js";
 import type { SatiElicitationChannel } from "../elicitation/SatiElicitationChannel.js";
+import type { SatiEvidenceCollector } from "./evidence.js";
 import type { SatiToolInputSchema, SatiToolValidationResult } from "./schema.js";
 
 /**
@@ -94,6 +95,7 @@ export type ToolDomain =
   | "drafting"
   | "quality"
   | "patent"
+  | "legal"
   | "agent"
   | "session"
   | "mcp"
@@ -270,6 +272,11 @@ export type SatiToolRuntimeContext = {
   permissionMode: PermissionMode;
   permissionContext: PermissionContext;
   auditRecorder?: SatiToolAuditRecorder;
+  /**
+   * 证据收集器（可选）：每次工具执行后由 ToolRuntime 调用（成功/失败均记录），
+   * 供证据闭环（EvidenceSpan 账本）自动收集。未注入时零开销。
+   */
+  evidenceCollector?: SatiEvidenceCollector;
   /**
    * The final allow decision for the current tool call, populated by
    * ToolRuntime after permission checks pass and before tool execution.

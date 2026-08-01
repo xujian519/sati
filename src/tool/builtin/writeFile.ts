@@ -1,14 +1,10 @@
 import { stat } from "node:fs/promises";
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
-import { resolvePilotDeckWorkspacePath } from "./filesystem/pathSafety.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
+import { resolveSatiWorkspacePath } from "./filesystem/pathSafety.js";
 import { checkFilesystemWritePermission } from "./filesystem/writePermissions.js";
 import { writeTextFile } from "./filesystem/writeTextFile.js";
-import {
-  buildStructuredPatch,
-  buildUnifiedDiff,
-  type StructuredPatchHunk,
-} from "./filesystem/structuredPatch.js";
+import { buildStructuredPatch, buildUnifiedDiff, type StructuredPatchHunk } from "./filesystem/structuredPatch.js";
 import {
   ensureWriteSnapshotFresh,
   invalidateReadFileState,
@@ -34,7 +30,7 @@ export type WriteFileOutput = {
   };
 };
 
-export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, WriteFileOutput> {
+export function createWriteFileTool(): SatiToolDefinition<WriteFileInput, WriteFileOutput> {
   return {
     name: "write_file",
     aliases: ["Write"],
@@ -106,37 +102,42 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     isDestructive: () => true,
-    checkPermissions: async (input, context) =>
-      checkFilesystemWritePermission("write_file", input.file_path, context),
+    checkPermissions: async (input, context) => checkFilesystemWritePermission("write_file", input.file_path, context),
     validateInput: async (input, context) => {
-      const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, {
+      const resolved = resolveSatiWorkspacePath(input.file_path, context, {
         forWrite: true,
         allowOutsideWorkspace: true,
       });
       if (!resolved.ok) {
         return {
           ok: false,
-          issues: [{
-            path: "file_path",
-            code: "invalid_schema",
-            message: resolved.error.message,
-          }],
+          issues: [
+            {
+              path: "file_path",
+              code: "invalid_schema",
+              message: resolved.error.message,
+            },
+          ],
         };
       }
 
       try {
         await validateWriteSnapshotFresh(context, resolved.absolutePath);
       } catch (error) {
-        const normalized = error instanceof PilotDeckToolRuntimeError ? error.message : String(error);
-        if (normalized === "File has not been read yet. Read it first before writing to it."
-          || normalized === "File has changed since the last read. Read it again before writing to it.") {
+        const normalized = error instanceof SatiToolRuntimeError ? error.message : String(error);
+        if (
+          normalized === "File has not been read yet. Read it first before writing to it." ||
+          normalized === "File has changed since the last read. Read it again before writing to it."
+        ) {
           return {
             ok: false,
-            issues: [{
-              path: "file_path",
-              code: "invalid_schema",
-              message: normalized,
-            }],
+            issues: [
+              {
+                path: "file_path",
+                code: "invalid_schema",
+                message: normalized,
+              },
+            ],
           };
         }
         throw error;
@@ -145,20 +146,17 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
       return { ok: true, input };
     },
     execute: async (input, context) => {
-      const resolved = resolvePilotDeckWorkspacePath(input.file_path, context, {
+      const resolved = resolveSatiWorkspacePath(input.file_path, context, {
         forWrite: true,
         allowOutsideWorkspace: context.currentPermissionDecision?.type === "allow",
       });
       if (!resolved.ok) {
-        throw new PilotDeckToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+        throw new SatiToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
       }
 
       const freshness = await ensureWriteSnapshotFresh(context, resolved.absolutePath);
       if (context.fileHistory) {
-        await context.fileHistory.trackEdit(
-          resolved.absolutePath,
-          context.messageId ?? context.turnId,
-        );
+        await context.fileHistory.trackEdit(resolved.absolutePath, context.messageId ?? context.turnId);
       }
 
       const action = await writeTextFile(resolved.absolutePath, input.content, { allowOverwrite: true });
@@ -192,10 +190,12 @@ export function createWriteFileTool(): PilotDeckToolDefinition<WriteFileInput, W
       const syntaxDiagnostics = await formatSyntaxDiagnostics(resolved.relativePath, input.content);
 
       return {
-        content: [{
-          type: "text",
-          text: syntaxDiagnostics ? `${successText}\n\n${syntaxDiagnostics}` : successText,
-        }],
+        content: [
+          {
+            type: "text",
+            text: syntaxDiagnostics ? `${successText}\n\n${syntaxDiagnostics}` : successText,
+          },
+        ],
         data,
         metadata: {
           bytesWritten: Buffer.byteLength(input.content, "utf8"),

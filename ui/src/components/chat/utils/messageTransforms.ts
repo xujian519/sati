@@ -1,5 +1,5 @@
 export interface DiffLine {
-  type: 'added' | 'removed';
+  type: "added" | "removed";
   content: string;
   lineNum: number;
 }
@@ -7,8 +7,8 @@ export interface DiffLine {
 export type DiffCalculator = (oldStr: string, newStr: string) => DiffLine[];
 
 export const calculateDiff = (oldStr: string, newStr: string): DiffLine[] => {
-  const oldLines = oldStr.split('\n');
-  const newLines = newStr.split('\n');
+  const oldLines = oldStr.split("\n");
+  const newLines = newStr.split("\n");
 
   // Use LCS alignment so insertions/deletions don't cascade into a full-file "changed" diff.
   const lcsTable: number[][] = Array.from({ length: oldLines.length + 1 }, () =>
@@ -19,10 +19,7 @@ export const calculateDiff = (oldStr: string, newStr: string): DiffLine[] => {
       if (oldLines[oldIndex] === newLines[newIndex]) {
         lcsTable[oldIndex][newIndex] = lcsTable[oldIndex + 1][newIndex + 1] + 1;
       } else {
-        lcsTable[oldIndex][newIndex] = Math.max(
-          lcsTable[oldIndex + 1][newIndex],
-          lcsTable[oldIndex][newIndex + 1],
-        );
+        lcsTable[oldIndex][newIndex] = Math.max(lcsTable[oldIndex + 1][newIndex], lcsTable[oldIndex][newIndex + 1]);
       }
     }
   }
@@ -42,22 +39,22 @@ export const calculateDiff = (oldStr: string, newStr: string): DiffLine[] => {
     }
 
     if (lcsTable[oldIndex + 1][newIndex] >= lcsTable[oldIndex][newIndex + 1]) {
-      diffLines.push({ type: 'removed', content: oldLine, lineNum: oldIndex + 1 });
+      diffLines.push({ type: "removed", content: oldLine, lineNum: oldIndex + 1 });
       oldIndex += 1;
       continue;
     }
 
-    diffLines.push({ type: 'added', content: newLine, lineNum: newIndex + 1 });
+    diffLines.push({ type: "added", content: newLine, lineNum: newIndex + 1 });
     newIndex += 1;
   }
 
   while (oldIndex < oldLines.length) {
-    diffLines.push({ type: 'removed', content: oldLines[oldIndex], lineNum: oldIndex + 1 });
+    diffLines.push({ type: "removed", content: oldLines[oldIndex], lineNum: oldIndex + 1 });
     oldIndex += 1;
   }
 
   while (newIndex < newLines.length) {
-    diffLines.push({ type: 'added', content: newLines[newIndex], lineNum: newIndex + 1 });
+    diffLines.push({ type: "added", content: newLines[newIndex], lineNum: newIndex + 1 });
     newIndex += 1;
   }
 

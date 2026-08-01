@@ -1,14 +1,7 @@
-import type {
-  CanonicalMessage,
-  CanonicalToolResultBlock,
-} from "../../model/index.js";
+import type { CanonicalMessage, CanonicalToolResultBlock } from "../../model/index.js";
 import { flattenToolResultBlockText } from "../../model/index.js";
 import { COMPACTABLE_TOOL_NAMES } from "./CachedMicroCompactionEngine.js";
-import {
-  collectToolNamesByCallId,
-  isProtectedToolCallId,
-  protectedToolNameSet,
-} from "./protectedContext.js";
+import { collectToolNamesByCallId, isProtectedToolCallId, protectedToolNameSet } from "./protectedContext.js";
 
 export const MICROCOMPACT_CLEARED = "[Old tool result content compacted]";
 export const MICROCOMPACT_FAILURES_FOLDED = "[Repeated tool failures compacted]";
@@ -82,7 +75,7 @@ export class MicroCompactionEngine {
         return message;
       }
       let touched = false;
-      const newContent = message.content.map((block) => {
+      const newContent = message.content.map(block => {
         if (block.type !== "tool_result") {
           // Clear standalone multimedia blocks (from supplementalMessages)
           // in older user messages that are within the rewrite window.
@@ -144,15 +137,12 @@ export class MicroCompactionEngine {
     return ids;
   }
 
-  private collectCompactableToolResultIndices(
-    messages: CanonicalMessage[],
-    compactableCallIds: Set<string>,
-  ): number[] {
+  private collectCompactableToolResultIndices(messages: CanonicalMessage[], compactableCallIds: Set<string>): number[] {
     const indices: number[] = [];
     messages.forEach((message, index) => {
       if (message.role !== "user") return;
       const hasCompactable = message.content.some(
-        (block) => block.type === "tool_result" && compactableCallIds.has(block.toolCallId),
+        block => block.type === "tool_result" && compactableCallIds.has(block.toolCallId),
       );
       if (hasCompactable) indices.push(index);
     });
@@ -178,8 +168,6 @@ function compactToolResultText(text: string, trimToBytes: number): string {
     return MICROCOMPACT_CLEARED;
   }
   const previewBudget = Math.max(256, Math.min(trimToBytes, 4_000));
-  const preview = normalized.length > previewBudget
-    ? `${normalized.slice(0, previewBudget)}…`
-    : normalized;
+  const preview = normalized.length > previewBudget ? `${normalized.slice(0, previewBudget)}…` : normalized;
   return `${MICROCOMPACT_CLEARED}\n\nPreview:\n${preview}`;
 }

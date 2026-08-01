@@ -394,7 +394,7 @@
     "apiDocsLink": "API Documentation",
     "documentation": {
       "title": "External API Documentation",
-      "description": "Learn how to use the external API to trigger PilotDeck sessions from your applications.",
+      "description": "Learn how to use the external API to trigger Sati sessions from your applications.",
       "viewLink": "View API Documentation →"
     },
     "loading": "Loading...",
@@ -444,8 +444,8 @@
       "gemini": {
         "description": "Google Gemini AI assistant"
       },
-      "pilotdeck": {
-        "description": "OpenBMB PilotDeck AI assistant"
+      "sati": {
+        "description": "Sati AI assistant"
       }
     },
     "connectionStatus": "Connection Status",
@@ -545,7 +545,7 @@
   "mcpServers": {
     "title": "MCP Servers",
     "description": {
-      "pilotdeck": "Model Context Protocol servers provide additional tools and data sources to PilotDeck",
+      "sati": "Model Context Protocol servers provide additional tools and data sources to Sati",
       "cursor": "Model Context Protocol servers provide additional tools and data sources to Cursor",
       "codex": "Model Context Protocol servers provide additional tools and data sources to Codex"
     },
@@ -578,7 +578,7 @@
   },
   "mcpConfig": {
     "title": "MCP Servers",
-    "description": "Edit PilotDeck MCP config. Global config lives in ~/.pilotdeck/mcp.json; project config lives in .pilotdeck/mcp.json and overrides global servers with the same name.",
+    "description": "Edit Sati MCP config. Global config lives in ~/.sati/mcp.json; project config lives in .sati/mcp.json and overrides global servers with the same name.",
     "project": "Project for project-scoped config",
     "scopes": {
       "global": "Global",
@@ -622,8 +622,8 @@
       "addHeader": "Add header"
     }
   },
-  "pilotDeckConfig": {
-    "loading": "Loading PilotDeck config...",
+  "satiConfig": {
+    "loading": "Loading Sati config...",
     "header": {
       "configFile": "Config file",
       "configPreview": "Config preview",
@@ -633,64 +633,64 @@
       "form": "Form",
       "rawYaml": "Raw YAML"
     },
-	    "actions": {
-	      "opening": "Opening...",
-	      "revealFile": "Reveal in Finder",
-	      "revealFileMac": "Reveal in Finder",
-	      "revealFileWindows": "Reveal in Explorer",
-	      "revealFileGeneric": "Reveal in file manager",
-	      "refresh": "Refresh",
-	      "reloadCurrent": "Reload current config",
-	      "saving": "Saving...",
-	      "saveAndReload": "Save and reload current config",
-	      "saveAndReloadShort": "Save & reload",
-	      "remove": "Remove",
-	      "removeModel": "Remove model",
-	      "add": "Add",
-	      "dismiss": "Dismiss",
-	      "showDetails": "Show config details",
-	      "hideDetails": "Hide config details"
-	    },
-	    "status": {
-	      "unsavedChanges": "Unsaved changes",
-	      "noUnsavedChanges": "No unsaved changes",
-	      "fixYamlInFilesystem": "Fix the config file in the filesystem, then refresh.",
-	      "fixYamlInRawEditor": "Fix the Raw YAML below, then save to re-enable form settings.",
-	      "subsystems": {
-	        "pending": "Waiting for config parsing.",
-	        "processEnv": {
-	          "label": "Process Env",
-	          "applied": "Native settings have been applied to this process."
-	        },
-	        "memory": {
-	          "label": "Memory",
-	          "enabled": "Memory service is enabled.",
-	          "disabled": "memory.enabled is false."
-	        },
-	        "router": {
-	          "label": "Router (CCR)",
-	          "enabled": "Router dashboard uses native records.",
-	          "disabled": "router.enabled is false."
-	        },
-	        "gateway": {
-	          "label": "Gateway",
-	          "enabled": "Gateway is enabled.",
-	          "disabled": "gateway.enabled is false."
-	        }
-	      }
-	    },
-	    "rawYaml": {
-	      "configValid": "Config is valid",
-	      "unsaved": "(unsaved)",
-	      "configInvalid": "Config has validation errors",
-	      "configInvalidSeeBelow": "Config has validation errors — see below",
-	      "errors": "Errors",
-	      "warnings": "Warnings",
-	      "yamlParseError": "The config file YAML failed to parse. Fix the Raw YAML below, then save.",
-	      "yamlParseErrorWithDetail": "The config file YAML failed to parse: {{error}}",
-	      "cannotParse": "Could not parse the config file YAML. Fix the Raw YAML above, then save to restore form settings.",
-	      "rawYaml": "Raw YAML"
-	    },
+    "actions": {
+      "opening": "Opening...",
+      "revealFile": "Reveal in Finder",
+      "revealFileMac": "Reveal in Finder",
+      "revealFileWindows": "Reveal in Explorer",
+      "revealFileGeneric": "Reveal in file manager",
+      "refresh": "Refresh",
+      "reloadCurrent": "Reload current config",
+      "saving": "Saving...",
+      "saveAndReload": "Save and reload current config",
+      "saveAndReloadShort": "Save & reload",
+      "remove": "Remove",
+      "removeModel": "Remove model",
+      "add": "Add",
+      "dismiss": "Dismiss",
+      "showDetails": "Show config details",
+      "hideDetails": "Hide config details"
+    },
+    "status": {
+      "unsavedChanges": "Unsaved changes",
+      "noUnsavedChanges": "No unsaved changes",
+      "fixYamlInFilesystem": "Fix the config file in the filesystem, then refresh.",
+      "fixYamlInRawEditor": "Fix the Raw YAML below, then save to re-enable form settings.",
+      "subsystems": {
+        "pending": "Waiting for config parsing.",
+        "processEnv": {
+          "label": "Process Env",
+          "applied": "Native settings have been applied to this process."
+        },
+        "memory": {
+          "label": "Memory",
+          "enabled": "Memory service is enabled.",
+          "disabled": "memory.enabled is false."
+        },
+        "router": {
+          "label": "Router (CCR)",
+          "enabled": "Router dashboard uses native records.",
+          "disabled": "router.enabled is false."
+        },
+        "gateway": {
+          "label": "Gateway",
+          "enabled": "Gateway is enabled.",
+          "disabled": "gateway.enabled is false."
+        }
+      }
+    },
+    "rawYaml": {
+      "configValid": "Config is valid",
+      "unsaved": "(unsaved)",
+      "configInvalid": "Config has validation errors",
+      "configInvalidSeeBelow": "Config has validation errors — see below",
+      "errors": "Errors",
+      "warnings": "Warnings",
+      "yamlParseError": "The config file YAML failed to parse. Fix the Raw YAML below, then save.",
+      "yamlParseErrorWithDetail": "The config file YAML failed to parse: {{error}}",
+      "cannotParse": "Could not parse the config file YAML. Fix the Raw YAML above, then save to restore form settings.",
+      "rawYaml": "Raw YAML"
+    },
     "sectionGroups": {
       "basic": "Basic",
       "basicDescription": "Configure model services before running this service.",
@@ -722,7 +722,7 @@
       },
       "memory": {
         "label": "Memory",
-        "description": "PilotDeck memory service"
+        "description": "Sati memory service"
       },
       "tools": {
         "label": "Search",
@@ -734,7 +734,7 @@
       },
       "router": {
         "label": "Router",
-        "description": "PilotDeck Router"
+        "description": "Sati Router"
       },
       "gateway": {
         "label": "Gateway",
@@ -753,17 +753,32 @@
         "fields": {
           "host": { "label": "Host", "description": "Bind interface for the HTTP/WebSocket server." },
           "serverPort": { "label": "Server port", "description": "Express + WebSocket port." },
-          "vitePort": { "label": "Vite port", "description": "Frontend dev server (only used when running `npm run dev`)." },
+          "vitePort": {
+            "label": "Vite port",
+            "description": "Frontend dev server (only used when running `npm run dev`)."
+          },
           "apiTimeout": { "label": "API timeout (ms)", "description": "Per-request upstream timeout." },
-          "databasePath": { "label": "Database path", "description": "SQLite auth/projects database (~ expands to home)." },
-          "workspacesRoot": { "label": "Workspaces root", "description": "Directory under which projects are scanned." },
-          "proxyUrl": { "label": "HTTPS proxy", "description": "Outbound HTTPS proxy URL. Applies to both Gateway and UI Server (proxy.url in pilotdeck.yaml)." },
-          "proxyNoProxy": { "label": "No-proxy list", "description": "Comma-separated hostnames/IPs that bypass the proxy (proxy.noProxy in pilotdeck.yaml). 127.0.0.1 and localhost are always excluded." }
+          "databasePath": {
+            "label": "Database path",
+            "description": "SQLite auth/projects database (~ expands to home)."
+          },
+          "workspacesRoot": {
+            "label": "Workspaces root",
+            "description": "Directory under which projects are scanned."
+          },
+          "proxyUrl": {
+            "label": "HTTPS proxy",
+            "description": "Outbound HTTPS proxy URL. Applies to both Gateway and UI Server (proxy.url in sati.yaml)."
+          },
+          "proxyNoProxy": {
+            "label": "No-proxy list",
+            "description": "Comma-separated hostnames/IPs that bypass the proxy (proxy.noProxy in sati.yaml). 127.0.0.1 and localhost are always excluded."
+          }
         }
       },
       "officePreview": {
         "title": "Office File Preview Service",
-        "description": "Choose how Office files are previewed in read-only mode. PDF always uses PilotDeck's built-in viewer.",
+        "description": "Choose how Office files are previewed in read-only mode. PDF always uses Sati's built-in viewer.",
         "fields": {
           "service": {
             "label": "Preview service",
@@ -843,9 +858,18 @@
         "customModelPlaceholder": "Custom model ID",
         "providerAdvancedToggle": "Advanced retry settings",
         "providerRetry": {
-          "requestMaxRetries": { "label": "Request max retries", "description": "Maximum retries for non-streaming requests." },
-          "streamMaxRetries": { "label": "Stream max retries", "description": "Maximum retries for streaming requests." },
-          "streamIdleTimeoutMs": { "label": "Stream idle timeout (ms)", "description": "Abort a stream if no data is received for this duration." },
+          "requestMaxRetries": {
+            "label": "Request max retries",
+            "description": "Maximum retries for non-streaming requests."
+          },
+          "streamMaxRetries": {
+            "label": "Stream max retries",
+            "description": "Maximum retries for streaming requests."
+          },
+          "streamIdleTimeoutMs": {
+            "label": "Stream idle timeout (ms)",
+            "description": "Abort a stream if no data is received for this duration."
+          },
           "baseDelayMs": { "label": "Base delay (ms)", "description": "Initial delay before the first retry." },
           "maxDelayMs": { "label": "Max delay (ms)", "description": "Maximum delay between retries." }
         }
@@ -877,7 +901,7 @@
           "label": "Subagents default",
           "description": "Default model for subagents on non-router paths.",
           "inherit": "Inherit main agent model",
-          "routerNote": "When PilotDeck Router or Token Saver is enabled, subagent requests enter the router first. By default, the subagent policy re-judges each subagent turn and picks a tier model. This default only acts as a direct subagent fallback or inherited baseline; it does not override the subagent routing policy in Router advanced settings."
+          "routerNote": "When Sati Router or Token Saver is enabled, subagent requests enter the router first. By default, the subagent policy re-judges each subagent turn and picks a tier model. This default only acts as a direct subagent fallback or inherited baseline; it does not override the subagent routing policy in Router advanced settings."
         }
       },
       "customEnv": {
@@ -897,28 +921,67 @@
         "trigger": {
           "title": "Trigger",
           "description": "Controls when and how often discovery runs fire.",
-          "autoDiscovery": { "label": "Auto discovery", "description": "When enabled, Always-On periodically inspects opted-in workspaces and proposes follow-up plans." },
-          "tickInterval": { "label": "Tick interval (minutes)", "description": "How often the daemon checks opted-in workspaces." },
-          "cooldown": { "label": "Cooldown (minutes)", "description": "Minimum time between discovery runs per workspace." },
-          "dailyBudget": { "label": "Daily budget", "description": "Maximum automatic discovery runs per workspace per day." },
-          "heartbeatStale": { "label": "Heartbeat stale (seconds)", "description": "Heartbeats older than this are considered stale." },
-          "recentUserMsg": { "label": "Recent user msg (minutes)", "description": "Only fire if the user sent a message within this window." },
-          "preferChannel": { "label": "Preferred channel", "description": "Channel the discovery agent prefers to interact through." }
+          "autoDiscovery": {
+            "label": "Auto discovery",
+            "description": "When enabled, Always-On periodically inspects opted-in workspaces and proposes follow-up plans."
+          },
+          "tickInterval": {
+            "label": "Tick interval (minutes)",
+            "description": "How often the daemon checks opted-in workspaces."
+          },
+          "cooldown": {
+            "label": "Cooldown (minutes)",
+            "description": "Minimum time between discovery runs per workspace."
+          },
+          "dailyBudget": {
+            "label": "Daily budget",
+            "description": "Maximum automatic discovery runs per workspace per day."
+          },
+          "heartbeatStale": {
+            "label": "Heartbeat stale (seconds)",
+            "description": "Heartbeats older than this are considered stale."
+          },
+          "recentUserMsg": {
+            "label": "Recent user msg (minutes)",
+            "description": "Only fire if the user sent a message within this window."
+          },
+          "preferChannel": {
+            "label": "Preferred channel",
+            "description": "Channel the discovery agent prefers to interact through."
+          }
         },
         "dormancy": {
           "title": "Dormancy",
           "description": "File-system watcher that pauses discovery while the user is actively editing.",
-          "enabled": { "label": "Enabled", "description": "Suppress discovery fires while the workspace has recent file changes." },
-          "debounce": { "label": "Debounce (ms)", "description": "Wait this long after the last file change before resuming." },
-          "ignoreGlobs": { "label": "Ignore globs", "description": "File patterns excluded from dormancy detection, one per line." }
+          "enabled": {
+            "label": "Enabled",
+            "description": "Suppress discovery fires while the workspace has recent file changes."
+          },
+          "debounce": {
+            "label": "Debounce (ms)",
+            "description": "Wait this long after the last file change before resuming."
+          },
+          "ignoreGlobs": {
+            "label": "Ignore globs",
+            "description": "File patterns excluded from dormancy detection, one per line."
+          }
         },
         "workspace": {
           "title": "Workspace",
           "description": "Isolated workspace strategy for Always-On runs.",
-          "gitWorktree": { "label": "Git worktree base dir", "description": "Root directory for git worktree-based isolation." },
-          "snapshotDir": { "label": "Snapshot base dir", "description": "Root directory for snapshot-based isolation." },
+          "gitWorktree": {
+            "label": "Git worktree base dir",
+            "description": "Root directory for git worktree-based isolation."
+          },
+          "snapshotDir": {
+            "label": "Snapshot base dir",
+            "description": "Root directory for snapshot-based isolation."
+          },
           "snapshotMaxBytes": { "label": "Snapshot max bytes", "description": "Maximum size of a workspace snapshot." },
-          "maxPlansPerCycle": { "label": "Max plans per cycle", "description": "Maximum number of plans that can be accumulated in a single isolation environment cycle." },
+          "maxPlansPerCycle": {
+            "label": "Max plans per cycle",
+            "description": "Maximum number of plans that can be accumulated in a single isolation environment cycle."
+          },
           "gitLfs": { "label": "Git LFS", "description": "Include Git LFS objects in workspace snapshots." }
         },
         "execution": {
@@ -1080,9 +1143,12 @@
         }
       },
       "router": {
-        "title": "PilotDeck Router",
+        "title": "Sati Router",
         "description": "Embedded router for fan-out across providers (tier-based routing, token saver, auto-orchestrate).",
-        "enabled": { "label": "Enabled", "description": "When on, agents use the router instead of the configured provider directly." },
+        "enabled": {
+          "label": "Enabled",
+          "description": "When on, agents use the router instead of the configured provider directly."
+        },
         "advancedToggle": "Advanced settings",
         "levels": {
           "modelPlaceholder": "Select a configured model",
@@ -1120,7 +1186,10 @@
           "label": "Transient error retry",
           "description": "Automatically retry on transient errors (rate limits, server errors, overloaded) with exponential backoff.",
           "maxAttempts": { "label": "Max attempts", "description": "Maximum retry attempts before giving up." },
-          "baseDelayMs": { "label": "Base delay (ms)", "description": "Initial delay before the first retry, in milliseconds." },
+          "baseDelayMs": {
+            "label": "Base delay (ms)",
+            "description": "Initial delay before the first retry, in milliseconds."
+          },
           "maxDelayMs": { "label": "Max delay (ms)", "description": "Maximum delay between retries, in milliseconds." }
         },
         "tokenSaver": {
@@ -1128,16 +1197,28 @@
           "description": "A lightweight judge classifies each turn into a tier and routes it to a cost-appropriate model.",
           "judgeModel": "Judge model",
           "defaultTier": "Default tier",
-          "judgeTimeout": { "label": "Judge timeout (ms)", "description": "Maximum time to wait for the judge decision." },
-          "subagentPolicy": { "label": "Sub-agent policy", "description": "How sub-agents are routed: 'judge' re-evaluates each sub-agent turn, 'skip' keeps the direct sub-agent route." }
+          "judgeTimeout": {
+            "label": "Judge timeout (ms)",
+            "description": "Maximum time to wait for the judge decision."
+          },
+          "subagentPolicy": {
+            "label": "Sub-agent policy",
+            "description": "How sub-agents are routed: 'judge' re-evaluates each sub-agent turn, 'skip' keeps the direct sub-agent route."
+          }
         },
         "autoOrchestrate": {
           "title": "Auto Orchestrate",
           "description": "Automatically fan out complex turns into parallel sub-agents when the judge assigns certain tiers.",
           "triggerTiers": "Trigger tiers",
-          "slimPrompt": { "label": "Slim system prompt", "description": "Use a shorter system prompt for orchestrated sub-agents to save tokens." }
+          "slimPrompt": {
+            "label": "Slim system prompt",
+            "description": "Use a shorter system prompt for orchestrated sub-agents to save tokens."
+          }
         },
-        "stats": { "label": "Stats collection", "description": "Track token usage and cost per session. Powers the Dashboard tab." },
+        "stats": {
+          "label": "Stats collection",
+          "description": "Track token usage and cost per session. Powers the Dashboard tab."
+        },
         "pricing": {
           "title": "Model Pricing",
           "description": "Custom pricing per model ($/million tokens). Used when the API doesn't report cost.",
@@ -1178,8 +1259,14 @@
       "gateway": {
         "title": "Gateway",
         "description": "Messaging gateway (Feishu / Telegram / Discord / Slack) — channel-level secrets are best edited via Raw YAML.",
-        "enabled": { "label": "Enabled", "description": "When on, the gateway home is generated and channels with credentials come online." },
-        "home": { "label": "Gateway home", "description": "Working directory for gateway state and per-channel configs." }
+        "enabled": {
+          "label": "Enabled",
+          "description": "When on, the gateway home is generated and channels with credentials come online."
+        },
+        "home": {
+          "label": "Gateway home",
+          "description": "Working directory for gateway state and per-channel configs."
+        }
       },
       "subsystemReload": {
         "title": "Subsystem reload status",
@@ -1190,7 +1277,7 @@
   },
   "pluginSettings": {
     "title": "Plugins",
-    "description": "Extend the interface with custom plugins. Install from git or drop a folder in ~/.pilotdeck/plugins/",
+    "description": "Extend the interface with custom plugins. Install from git or drop a folder in ~/.sati/plugins/",
     "installPlaceholder": "https://github.com/user/my-plugin",
     "installButton": "Install",
     "installing": "Installing…",
@@ -1320,7 +1407,7 @@
       "websocketUrl": "WebSocket URL",
       "dmPolicy": "DM Policy",
       "groupPolicy": "Group Policy",
-      "policyHint": "Basic policies are written to pilotdeck.yaml; edit YAML later for finer user or group allowlists.",
+      "policyHint": "Basic policies are written to sati.yaml; edit YAML later for finer user or group allowlists.",
       "saveSuccess": "WeCom config saved"
     }
   }

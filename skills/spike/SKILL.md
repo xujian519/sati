@@ -19,7 +19,7 @@ Loop
 
 Output shape
 
-- Default workspace: `.tmp/openclaw-spikes/<slug>` unless user asks for a tracked repo-local path.
+- Default workspace: `.tmp/sati-spikes/<slug>` unless user asks for a tracked repo-local path.
 - Repo-local option: `spikes/<NNN-slug>/` with `README.md` and minimal code.
 - Prefer runnable CLI, tiny HTML, one endpoint, or focused test.
 - Avoid package sprawl, Docker, env files, app frameworks, and production cleanup.
@@ -49,8 +49,6 @@ Rules
 - Do not merge spike code into production without rewriting it normally.
 - If external dependencies are evaluated, check health: recent release/commit, docs, license, install friction.
 
-## PilotDeck Migration Note
+## Sati Migration Note
 
-- Source: /var/folders/27/xyyzc_n172l3jjmnxgqmhhzh0000gn/T/tmp.AyWDWGKoS4/openclaw/skills/spike
-- Review status: candidate for PilotDeck native skills pack.
-- Platform-specific OpenClaw/Hermes metadata was removed or should be ignored during review.
+- Review status: candidate for Sati native skills pack.

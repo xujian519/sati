@@ -8,10 +8,7 @@ export type ResolvedModelRequest = {
   model: ModelDefinition;
 };
 
-export function validateModelRequest(
-  request: CanonicalModelRequest,
-  config: ModelConfig,
-): ResolvedModelRequest {
+export function validateModelRequest(request: CanonicalModelRequest, config: ModelConfig): ResolvedModelRequest {
   const provider = config.providers[request.provider];
   if (!provider) {
     throw new ModelRequestError("provider_not_found", `Provider ${request.provider} does not exist.`);
@@ -30,10 +27,7 @@ export function validateModelRequest(
   }
 
   if (request.systemPrompt && !model.capabilities.supportsSystemPrompt) {
-    throw new ModelRequestError(
-      "unsupported_system_prompt",
-      `Model ${request.model} does not support system prompts.`,
-    );
+    throw new ModelRequestError("unsupported_system_prompt", `Model ${request.model} does not support system prompts.`);
   }
 
   if (request.tools?.length && !model.capabilities.supportsToolUse) {

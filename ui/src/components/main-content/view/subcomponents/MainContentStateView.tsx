@@ -1,11 +1,11 @@
-import { Folder } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import type { MainContentStateViewProps } from '../../types/types';
+import { Folder } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { MainContentStateViewProps } from "../../types/types";
 
 export default function MainContentStateView({ mode }: MainContentStateViewProps) {
   const { t } = useTranslation();
 
-  const isLoading = mode === 'loading';
+  const isLoading = mode === "loading";
 
   return (
     <div className="flex h-full flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -13,7 +13,7 @@ export default function MainContentStateView({ mode }: MainContentStateViewProps
         <div className="flex flex-1 items-center justify-center">
           <div className="flex items-center gap-2 text-[13px] text-neutral-500 dark:text-neutral-400">
             <div className="h-3.5 w-3.5 animate-spin rounded-full border-b-2 border-neutral-400" />
-            <span>{t('mainContent.loading', { defaultValue: 'Loading…' })}</span>
+            <span>{t("mainContent.loading", { defaultValue: "Loading…" })}</span>
           </div>
         </div>
       ) : (
@@ -23,11 +23,11 @@ export default function MainContentStateView({ mode }: MainContentStateViewProps
               <Folder className="h-4.5 w-4.5 text-neutral-500" strokeWidth={1.75} />
             </div>
             <h2 className="mb-1 text-[15px] font-medium text-neutral-900 dark:text-neutral-100">
-              {t('mainContent.chooseProject', { defaultValue: 'Pick a project to start' })}
+              {t("mainContent.chooseProject", { defaultValue: "Pick a project to start" })}
             </h2>
             <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-              {t('mainContent.selectProjectDescription', {
-                defaultValue: 'Choose a project from the sidebar, or open a new one.',
+              {t("mainContent.selectProjectDescription", {
+                defaultValue: "Choose a project from the sidebar, or open a new one.",
               })}
             </p>
           </div>

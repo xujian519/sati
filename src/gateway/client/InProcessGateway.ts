@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import type { AgentEvent, AgentInput, AgentTurnResult } from "../../agent/index.js";
+import type { AgentEvent, AgentInput, AgentTurnResult, AgentError } from "../../agent/index.js";
 import {
   flattenToolResultBlockText,
   type CanonicalContentBlock,
@@ -10,7 +10,6 @@ import {
   type CanonicalModelError,
   type CanonicalModelEvent,
 } from "../../model/index.js";
-import type { AgentError } from "../../agent/index.js";
 import { contentToText } from "../../tool/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
@@ -83,8 +82,7 @@ import type {
   SkillsListResult,
 } from "../../extension/skills/types.js";
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
-import type { TelemetryClient } from "../../telemetry/index.js";
-import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
+import type { TelemetryClient, TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 
 const PLAN_COMMAND_USAGE = "用法：/plan <任务>\n例如：/plan 设计一个新功能";
 const MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS = 20_000;
@@ -118,9 +116,11 @@ export type InProcessGatewayOptions = {
   prepareWeixinLogin?: () => Promise<PrepareWeixinLoginResult>;
   /**
    * Pluggable extension/MCP reload handler wired by `createLocalGateway`.
-   * Unlike `reloadConfig`, this does not depend on `pilotdeck.yaml` changing.
+   * Unlike `reloadConfig`, this does not depend on `sati.yaml` changing.
    */
-  reloadExtensions?: (input?: import("../protocol/types.js").ReloadExtensionsInput) => Promise<import("../protocol/types.js").ReloadExtensionsResult>;
+  reloadExtensions?: (
+    input?: import("../protocol/types.js").ReloadExtensionsInput,
+  ) => Promise<import("../protocol/types.js").ReloadExtensionsResult>;
   /**
    * Optional pre-turn hook that lets the host re-read disk config before
    * `submitTurn` resolves a session and starts streaming. Wired by
@@ -156,11 +156,7 @@ export type InProcessGatewayOptions = {
    * Optional non-blocking post-turn callback. Used by createLocalGateway to
    * coalesce project-level memory maintenance after a turn has fully ended.
    */
-  afterTurnCompleted?: (input: {
-    sessionKey: string;
-    projectKey?: string;
-    runId: string;
-  }) => void;
+  afterTurnCompleted?: (input: { sessionKey: string; projectKey?: string; runId: string }) => void;
   telemetry?: TelemetryClient;
 };
 
@@ -327,7 +323,7 @@ export class InProcessGateway implements Gateway {
     }
 
     let resolveTurnDone!: () => void;
-    const turnDone = new Promise<void>((resolve) => {
+    const turnDone = new Promise<void>(resolve => {
       resolveTurnDone = resolve;
     });
     this.turnCompletions.set(input.sessionKey, turnDone);
@@ -340,7 +336,7 @@ export class InProcessGateway implements Gateway {
       bytes: 0,
       truncated: false,
     });
-    this.emitSinks.set(input.sessionKey, (event) => queue.enqueue(event));
+    this.emitSinks.set(input.sessionKey, event => queue.enqueue(event));
     const emitGatewayFailureStatus = (status: GatewayRecordAgentStatusMessageInput["status"]): Promise<void> => {
       const recorded = this.recordGatewayStatusMessage({
         sessionKey: input.sessionKey,
@@ -378,13 +374,15 @@ export class InProcessGateway implements Gateway {
           timeoutHandle = setTimeout(() => {
             timedOut = true;
             const message = `Turn exceeded the ${input.timeoutMs}ms timeout.`;
-            void emitGatewayFailureStatus(createGatewayFailureStatus({
-              event: "turn_timeout",
-              code: "turn_timeout",
-              message,
-              userHint: "The turn exceeded its wall-clock limit. Retry with a smaller task or increase the timeout.",
-              detail: { timeoutMs: input.timeoutMs },
-            }));
+            void emitGatewayFailureStatus(
+              createGatewayFailureStatus({
+                event: "turn_timeout",
+                code: "turn_timeout",
+                message,
+                userHint: "The turn exceeded its wall-clock limit. Retry with a smaller task or increase the timeout.",
+                detail: { timeoutMs: input.timeoutMs },
+              }),
+            );
             const gatewayEvent: GatewayEvent = {
               type: "error",
               runId,
@@ -408,10 +406,13 @@ export class InProcessGateway implements Gateway {
         }
         const permissionSettings = readPermissionSettings();
         const inputMode = normalizeGatewayModeForLegacyInput((input as { mode?: unknown }).mode);
-        const runMode = normalizeGatewayRunMode((input as { runMode?: unknown }).runMode)
-          ?? (inputMode === "plan" ? "plan" : "agent");
+        const runMode =
+          normalizeGatewayRunMode((input as { runMode?: unknown }).runMode) ??
+          (inputMode === "plan" ? "plan" : "agent");
         const permissionMode = inputMode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
-        const basePermissionMode = normalizeGatewayModeForLegacyInput((input as { basePermissionMode?: unknown }).basePermissionMode);
+        const basePermissionMode = normalizeGatewayModeForLegacyInput(
+          (input as { basePermissionMode?: unknown }).basePermissionMode,
+        );
         const allowPlanModeTools = input.allowPlanModeTools ?? inputMode === "plan";
         const persistedRules = permissionSettingsToRuleSet(permissionSettings);
         const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
@@ -433,34 +434,27 @@ export class InProcessGateway implements Gateway {
         // files/images. UI uploads come through this path; resolving them here
         // keeps attachment semantics in the gateway for every client.
         const allowedReadFiles = await collectRegisteredAttachmentReadFiles(input.attachments);
-        const agentInput = await buildAgentInputWithAttachments(
-          input.message,
-          input.attachments,
-          allowedReadFiles,
-        );
-        const syntheticMessages: CanonicalMessage[] = (input.syntheticMessages ?? []).map((s) => ({
+        const agentInput = await buildAgentInputWithAttachments(input.message, input.attachments, allowedReadFiles);
+        const syntheticMessages: CanonicalMessage[] = (input.syntheticMessages ?? []).map(s => ({
           role: "user" as const,
           content: [{ type: "text" as const, text: s.text }],
           metadata: { synthetic: true, purpose: s.purpose ?? "channel_hint" },
         }));
-        for await (const event of session.submit(
-          agentInput,
-          {
-            turnId: runId,
-            maxTurns: input.maxTurns,
-            runMode,
-            permissionMode,
-            basePermissionMode,
-            allowPlanModeTools,
-            canPrompt: input.canPrompt,
-            allowedReadFiles,
-            permissionRules: {
-              ...persistedRules,
-              allow: [...sessionAllowRules, ...persistedRules.allow],
-            },
-            ...(syntheticMessages.length > 0 ? { syntheticMessages } : {}),
+        for await (const event of session.submit(agentInput, {
+          turnId: runId,
+          maxTurns: input.maxTurns,
+          runMode,
+          permissionMode,
+          basePermissionMode,
+          allowPlanModeTools,
+          canPrompt: input.canPrompt,
+          allowedReadFiles,
+          permissionRules: {
+            ...persistedRules,
+            allow: [...sessionAllowRules, ...persistedRules.allow],
           },
-        )) {
+          ...(syntheticMessages.length > 0 ? { syntheticMessages } : {}),
+        })) {
           if (this.turnCompletions.get(input.sessionKey) !== turnDone) {
             break;
           }
@@ -507,19 +501,23 @@ export class InProcessGateway implements Gateway {
         });
         if (this.turnCompletions.get(input.sessionKey) === turnDone) {
           const message = error instanceof Error ? error.message : String(error);
-          await emitGatewayFailureStatus(createGatewayFailureStatus({
-            event: "gateway_submit_failed",
-            code: "gateway_submit_failed",
-            message,
-            userHint: "PilotDeck failed before the agent turn could finish. Retry this message; if it repeats, check the gateway logs.",
-          }));
+          await emitGatewayFailureStatus(
+            createGatewayFailureStatus({
+              event: "gateway_submit_failed",
+              code: "gateway_submit_failed",
+              message,
+              userHint:
+                "Sati failed before the agent turn could finish. Retry this message; if it repeats, check the gateway logs.",
+            }),
+          );
           const gatewayEvent: GatewayEvent = {
             type: "error",
             runId,
             code: "gateway_submit_failed",
             message,
             recoverable: false,
-            userHint: "PilotDeck failed before the agent turn could finish. Retry this message; if it repeats, check the gateway logs.",
+            userHint:
+              "Sati failed before the agent turn could finish. Retry this message; if it repeats, check the gateway logs.",
           };
           this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
           queue.enqueue(gatewayEvent);
@@ -617,7 +615,7 @@ export class InProcessGateway implements Gateway {
     try {
       await this.options.recordAgentStatusMessage(input);
     } catch (error) {
-      console.warn("[pilotdeck] failed to record gateway status message:", error);
+      console.warn("[sati] failed to record gateway status message:", error);
     }
   }
 
@@ -643,8 +641,8 @@ export class InProcessGateway implements Gateway {
       sessionKey: replay.sessionKey,
       runId: replay.runId,
       events: replay.events
-        .filter((event) => this.shouldReplayActiveTurnEvent(input.sessionKey, event))
-        .map((event) => cloneGatewayEvent(event)),
+        .filter(event => this.shouldReplayActiveTurnEvent(input.sessionKey, event))
+        .map(event => cloneGatewayEvent(event)),
       ...(replay.truncated ? { truncated: true } : {}),
     };
   }
@@ -673,7 +671,10 @@ export class InProcessGateway implements Gateway {
     const entry = this.elicitationBus.consume(input.sessionKey, input.requestId);
     if (!entry) return { delivered: false };
     entry.resolve(input.answer);
-    this.options.dispatchHookForSession?.(input.sessionKey, "ElicitationResult", { requestId: input.requestId, delivered: true });
+    this.options.dispatchHookForSession?.(input.sessionKey, "ElicitationResult", {
+      requestId: input.requestId,
+      delivered: true,
+    });
     return { delivered: true };
   }
 
@@ -689,7 +690,9 @@ export class InProcessGateway implements Gateway {
     return { delivered: true };
   }
 
-  async grantSessionPermission(input: GatewaySessionPermissionGrantInput): Promise<{ granted: boolean; entry?: string }> {
+  async grantSessionPermission(
+    input: GatewaySessionPermissionGrantInput,
+  ): Promise<{ granted: boolean; entry?: string }> {
     const rule = permissionEntryToRule(input.entry, "allow", "session");
     if (!rule.toolName) {
       return { granted: false };
@@ -697,7 +700,7 @@ export class InProcessGateway implements Gateway {
 
     const rules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
     const alreadyGranted = rules.some(
-      (existing) => existing.toolName === rule.toolName && existing.pattern === rule.pattern,
+      existing => existing.toolName === rule.toolName && existing.pattern === rule.pattern,
     );
     if (!alreadyGranted) {
       rules.push(rule);
@@ -708,27 +711,21 @@ export class InProcessGateway implements Gateway {
 
   async readSessionMessages(input: WebReadSessionMessagesInput): Promise<WebReadSessionMessagesResult> {
     if (!this.options.readSessionMessages) {
-      throw new Error(
-        "read_session_messages is not configured. Wire `readSessionMessages` via createLocalGateway.",
-      );
+      throw new Error("read_session_messages is not configured. Wire `readSessionMessages` via createLocalGateway.");
     }
     return this.options.readSessionMessages(input);
   }
 
   async readSubagentMessages(input: WebReadSubagentMessagesInput): Promise<WebReadSubagentMessagesResult> {
     if (!this.options.readSubagentMessages) {
-      throw new Error(
-        "read_subagent_messages is not configured. Wire `readSubagentMessages` via createLocalGateway.",
-      );
+      throw new Error("read_subagent_messages is not configured. Wire `readSubagentMessages` via createLocalGateway.");
     }
     return this.options.readSubagentMessages(input);
   }
 
   async forkSession(input: WebForkSessionInput): Promise<WebForkSessionResult> {
     if (!this.options.forkSession) {
-      throw new Error(
-        "fork_session is not configured. Wire `forkSession` via createLocalGateway.",
-      );
+      throw new Error("fork_session is not configured. Wire `forkSession` via createLocalGateway.");
     }
     return this.options.forkSession(input);
   }
@@ -765,7 +762,9 @@ export class InProcessGateway implements Gateway {
     return this.options.prepareWeixinLogin();
   }
 
-  async reloadExtensions(input?: import("../protocol/types.js").ReloadExtensionsInput): Promise<import("../protocol/types.js").ReloadExtensionsResult> {
+  async reloadExtensions(
+    input?: import("../protocol/types.js").ReloadExtensionsInput,
+  ): Promise<import("../protocol/types.js").ReloadExtensionsResult> {
     if (!this.options.reloadExtensions) {
       return { reloaded: false, reason: "unsupported" };
     }
@@ -785,7 +784,8 @@ export class InProcessGateway implements Gateway {
   }
 
   setPrepareWeixinLogin(handler: InProcessGatewayOptions["prepareWeixinLogin"]): void {
-    (this.options as { prepareWeixinLogin?: InProcessGatewayOptions["prepareWeixinLogin"] }).prepareWeixinLogin = handler;
+    (this.options as { prepareWeixinLogin?: InProcessGatewayOptions["prepareWeixinLogin"] }).prepareWeixinLogin =
+      handler;
   }
 
   // -------------------------------------------------------------------
@@ -830,24 +830,27 @@ export class InProcessGateway implements Gateway {
 
   private requireSkills(): SkillManager {
     if (!this.options.skillManager) {
-      throw new SkillManagerError(
-        "not_configured",
-        "Skill manager is not configured on this gateway.",
-      );
+      throw new SkillManagerError("not_configured", "Skill manager is not configured on this gateway.");
     }
     return this.options.skillManager;
   }
 
   async alwaysOnApply(input: AlwaysOnApplyInput): Promise<AlwaysOnApplyResult> {
     if (!this.options.alwaysOnApply) {
-      return { sessionKey: "", error: { code: "not_configured", message: "Always-On apply is not configured on this gateway." } };
+      return {
+        sessionKey: "",
+        error: { code: "not_configured", message: "Always-On apply is not configured on this gateway." },
+      };
     }
     return this.options.alwaysOnApply(input);
   }
 
   async alwaysOnRerunPlan(input: AlwaysOnRerunPlanInput): Promise<AlwaysOnRerunPlanResult> {
     if (!this.options.alwaysOnRerunPlan) {
-      return { runId: "", error: { code: "not_configured", message: "Always-On rerun is not configured on this gateway." } };
+      return {
+        runId: "",
+        error: { code: "not_configured", message: "Always-On rerun is not configured on this gateway." },
+      };
     }
     return this.options.alwaysOnRerunPlan(input);
   }
@@ -879,10 +882,7 @@ export class InProcessGateway implements Gateway {
     const bytes = Buffer.byteLength(JSON.stringify(copy), "utf8");
     replay.events.push(copy);
     replay.bytes += bytes;
-    while (
-      replay.events.length > ACTIVE_TURN_EVENT_LIMIT ||
-      replay.bytes > ACTIVE_TURN_BYTE_LIMIT
-    ) {
+    while (replay.events.length > ACTIVE_TURN_EVENT_LIMIT || replay.bytes > ACTIVE_TURN_BYTE_LIMIT) {
       const dropped = replay.events.shift();
       if (!dropped) break;
       replay.bytes -= Buffer.byteLength(JSON.stringify(dropped), "utf8");
@@ -903,9 +903,7 @@ function cloneGatewayEvent(event: GatewayEvent): GatewayEvent {
 }
 
 function getGatewayEventRunId(event: GatewayEvent): string | undefined {
-  return typeof event.runId === "string" && event.runId.trim()
-    ? event.runId.trim()
-    : undefined;
+  return typeof event.runId === "string" && event.runId.trim() ? event.runId.trim() : undefined;
 }
 
 function withGatewayRunId(event: GatewayEvent, runId: string): GatewayEvent {
@@ -1012,9 +1010,7 @@ function emitSessionTelemetry(
             runId: context.runId,
             provider: event.event.provider,
             model: event.event.model,
-            ...(event.event.providerBaseUrl
-              ? { providerBaseUrl: event.event.providerBaseUrl }
-              : {}),
+            ...(event.event.providerBaseUrl ? { providerBaseUrl: event.event.providerBaseUrl } : {}),
             permissionMode: context.permissionMode,
             channelKey: context.channelKey,
           },
@@ -1062,7 +1058,7 @@ function emitSessionTelemetry(
         metadata: {
           runId: context.runId,
           toolCount: event.calls.length,
-          toolNames: event.calls.map((call) => call.name),
+          toolNames: event.calls.map(call => call.name),
         },
       });
       return;
@@ -1269,7 +1265,7 @@ function emitSessionTelemetry(
           subagentId: event.subagentId,
           subagentType: event.subagentType,
           toolCount: event.calls.length,
-          toolNames: event.calls.map((call) => call.name),
+          toolNames: event.calls.map(call => call.name),
         },
       });
       return;
@@ -1317,10 +1313,9 @@ function emitSessionTelemetry(
   }
 }
 
-function inferToolErrorCategory(code: string | undefined):
-  | "tool_param_error"
-  | "tool_runtime_error"
-  | "tool_result_parse_error" {
+function inferToolErrorCategory(
+  code: string | undefined,
+): "tool_param_error" | "tool_runtime_error" | "tool_result_parse_error" {
   if (!code) return "tool_runtime_error";
   if (/(invalid|argument|param|schema)/i.test(code)) return "tool_param_error";
   if (/(parse|json|decode|format)/i.test(code)) return "tool_result_parse_error";
@@ -1328,9 +1323,7 @@ function inferToolErrorCategory(code: string | undefined):
 }
 
 export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] {
-  return mapAgentEventForTurn(event, runId).map((gatewayEvent) =>
-    withGatewayRunId(gatewayEvent, runId)
-  );
+  return mapAgentEventForTurn(event, runId).map(gatewayEvent => withGatewayRunId(gatewayEvent, runId));
 }
 
 function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] {
@@ -1342,7 +1335,7 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
     case "model_event":
       return mapModelEvent(event.event, runId);
     case "tool_calls_detected":
-      return event.calls.map((call) => ({
+      return event.calls.map(call => ({
         type: "tool_call_started",
         toolCallId: call.id,
         name: call.name,
@@ -1360,7 +1353,7 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
       if (totalBytes > PERSIST_THRESHOLD) {
         const dir = resolve(
           tmpdir(),
-          "pilotdeck-tool-results",
+          "sati-tool-results",
           safeGatewayPathPart(event.sessionId),
           safeGatewayPathPart(event.turnId),
         );
@@ -1369,7 +1362,9 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
           try {
             await mkdir(dir, { recursive: true });
             await writeFile(resultPath!, fullText, { mode: 0o600 });
-          } catch { /* best-effort persistence */ }
+          } catch {
+            /* best-effort persistence */
+          }
         })();
       }
 
@@ -1378,43 +1373,53 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
       // appears on session reload via the persisted canonical message — and
       // it ends up in the "user" bubble because the wire role for tool
       // results is `user`. See `projectToolResults`.
-      const images = event.result.content.flatMap((item) =>
+      const images = event.result.content.flatMap(item =>
         item.type === "image"
-          ? [{
-              mimeType: item.mimeType,
-              data: item.data,
-              ...(item.bytes !== undefined ? { bytes: item.bytes } : {}),
-              ...(item.detail ? { detail: item.detail } : {}),
-            }]
+          ? [
+              {
+                mimeType: item.mimeType,
+                data: item.data,
+                ...(item.bytes !== undefined ? { bytes: item.bytes } : {}),
+                ...(item.detail ? { detail: item.detail } : {}),
+              },
+            ]
           : [],
       );
       const attachments = event.result.content.flatMap((item): GatewayEvent[] => {
         if (item.type === "image" && event.result.toolName !== "read_file") {
-          return [{
-            type: "assistant_attachment",
-            attachment: {
-              type: "image",
-              mimeType: item.mimeType,
-              content: item.data,
-              bytes: item.bytes,
-              name: `${safeGatewayPathPart(event.result.toolName)}-${safeGatewayPathPart(event.result.toolCallId)}.${extensionForMime(item.mimeType)}`,
-              source: "tool_result",
-              metadata: { toolCallId: event.result.toolCallId, toolName: event.result.toolName },
+          return [
+            {
+              type: "assistant_attachment",
+              attachment: {
+                type: "image",
+                mimeType: item.mimeType,
+                content: item.data,
+                bytes: item.bytes,
+                name: `${safeGatewayPathPart(event.result.toolName)}-${safeGatewayPathPart(event.result.toolCallId)}.${extensionForMime(item.mimeType)}`,
+                source: "tool_result",
+                metadata: { toolCallId: event.result.toolCallId, toolName: event.result.toolName },
+              },
             },
-          }];
+          ];
         }
         if (item.type === "file") {
-          return [{
-            type: "assistant_attachment",
-            attachment: {
-              type: "file",
-              path: item.path,
-              mimeType: item.mimeType,
-              name: item.path.split(/[\\/]/).pop(),
-              source: "tool_result",
-              metadata: { toolCallId: event.result.toolCallId, toolName: event.result.toolName, description: item.description },
+          return [
+            {
+              type: "assistant_attachment",
+              attachment: {
+                type: "file",
+                path: item.path,
+                mimeType: item.mimeType,
+                name: item.path.split(/[\\/]/).pop(),
+                source: "tool_result",
+                metadata: {
+                  toolCallId: event.result.toolCallId,
+                  toolName: event.result.toolName,
+                  description: item.description,
+                },
+              },
             },
-          }];
+          ];
         }
         return [];
       });
@@ -1456,42 +1461,48 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
         },
       ];
     case "token_cap_adjusted":
-      return [{
-        type: "agent_status",
-        event: "token_cap_adjusted",
-        detail: {
-          provider: event.provider,
-          model: event.model,
-          cap: event.cap,
-          previous: event.previous,
-          next: event.next,
-          reason: event.reason,
+      return [
+        {
+          type: "agent_status",
+          event: "token_cap_adjusted",
+          detail: {
+            provider: event.provider,
+            model: event.model,
+            cap: event.cap,
+            previous: event.previous,
+            next: event.next,
+            reason: event.reason,
+          },
         },
-      }];
+      ];
     case "empty_output_recovery":
-      return [{
-        type: "agent_status",
-        event: "empty_output_recovery",
-        detail: {
-          provider: event.provider,
-          model: event.model,
-          finishReason: event.finishReason,
-          previousMaxOutputTokens: event.previousMaxOutputTokens,
-          nextMaxOutputTokens: event.nextMaxOutputTokens,
+      return [
+        {
+          type: "agent_status",
+          event: "empty_output_recovery",
+          detail: {
+            provider: event.provider,
+            model: event.model,
+            finishReason: event.finishReason,
+            previousMaxOutputTokens: event.previousMaxOutputTokens,
+            nextMaxOutputTokens: event.nextMaxOutputTokens,
+          },
         },
-      }];
+      ];
     case "model_recovery_failed":
-      return [{
-        type: "agent_status",
-        event: "model_recovery_failed",
-        detail: {
-          provider: event.provider,
-          model: event.model,
-          code: event.error.code,
-          message: event.error.message,
-          providerError: providerErrorFromModelError(event.error),
+      return [
+        {
+          type: "agent_status",
+          event: "model_recovery_failed",
+          detail: {
+            provider: event.provider,
+            model: event.model,
+            code: event.error.code,
+            message: event.error.message,
+            providerError: providerErrorFromModelError(event.error),
+          },
         },
-      }];
+      ];
     case "session_aborted":
       return [
         {
@@ -1541,67 +1552,89 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
       return events;
     }
     case "compact_started":
-      return [{
-        type: "agent_status",
-        event: "compact_started",
-        detail: { trigger: event.trigger, preTokens: event.preTokens },
-      }];
+      return [
+        {
+          type: "agent_status",
+          event: "compact_started",
+          detail: { trigger: event.trigger, preTokens: event.preTokens },
+        },
+      ];
     case "compact_completed":
-      return [{
-        type: "agent_status",
-        event: "compact_completed",
-        detail: { status: event.status, preTokens: event.preTokens, postTokens: event.postTokens },
-      }];
+      return [
+        {
+          type: "agent_status",
+          event: "compact_completed",
+          detail: { status: event.status, preTokens: event.preTokens, postTokens: event.postTokens },
+        },
+      ];
     case "context_budget":
       const reservedOutputTokens = event.snapshot.reservedOutputTokens ?? event.snapshot.maxOutputTokens ?? 0;
-      const totalContextTokens = event.snapshot.effectiveContextTokens !== undefined
-        ? event.snapshot.effectiveContextTokens + reservedOutputTokens
-        : event.snapshot.maxContextTokens + reservedOutputTokens;
-      return [{
-        type: "context_budget",
-        used: event.snapshot.tokens,
-        displayUsed: event.snapshot.displayTokens,
-        budgetUsed: event.snapshot.budgetTokens,
-        total: totalContextTokens,
-        effectiveTotal: event.snapshot.effectiveContextTokens ?? event.snapshot.maxContextTokens,
-        reservedOutputTokens,
-        ratio: event.snapshot.ratio,
-        state: event.snapshot.state,
-      }];
+      const totalContextTokens =
+        event.snapshot.effectiveContextTokens !== undefined
+          ? event.snapshot.effectiveContextTokens + reservedOutputTokens
+          : event.snapshot.maxContextTokens + reservedOutputTokens;
+      return [
+        {
+          type: "context_budget",
+          used: event.snapshot.tokens,
+          displayUsed: event.snapshot.displayTokens,
+          budgetUsed: event.snapshot.budgetTokens,
+          total: totalContextTokens,
+          effectiveTotal: event.snapshot.effectiveContextTokens ?? event.snapshot.maxContextTokens,
+          reservedOutputTokens,
+          ratio: event.snapshot.ratio,
+          state: event.snapshot.state,
+        },
+      ];
     case "warning":
-      return [{
-        type: "agent_status",
-        event: "warning",
-        detail: { code: event.code, message: event.message, metadata: event.metadata },
-      }];
+      return [
+        {
+          type: "agent_status",
+          event: "warning",
+          detail: { code: event.code, message: event.message, metadata: event.metadata },
+        },
+      ];
     case "agent_status":
-      return [{
-        type: "agent_status",
-        event: event.event,
-        detail: event.detail,
-      }];
+      return [
+        {
+          type: "agent_status",
+          event: event.event,
+          detail: event.detail,
+        },
+      ];
     case "turn_continued":
-      return [{
-        type: "agent_status",
-        event: "turn_continued",
-        detail: { reason: event.reason },
-      }];
+      return [
+        {
+          type: "agent_status",
+          event: "turn_continued",
+          detail: { reason: event.reason },
+        },
+      ];
     case "subagent_started":
-      return [{
-        type: "agent_status",
-        event: "subagent_started",
-        detail: { subagentId: event.subagentId, subagentType: event.subagentType, toolCallId: event.toolCallId },
-      }];
+      return [
+        {
+          type: "agent_status",
+          event: "subagent_started",
+          detail: { subagentId: event.subagentId, subagentType: event.subagentType, toolCallId: event.toolCallId },
+        },
+      ];
     case "subagent_completed":
-      return [{
-        type: "agent_status",
-        event: "subagent_completed",
-        detail: { subagentId: event.subagentId, subagentType: event.subagentType, success: event.success, durationMs: event.durationMs },
-      }];
+      return [
+        {
+          type: "agent_status",
+          event: "subagent_completed",
+          detail: {
+            subagentId: event.subagentId,
+            subagentType: event.subagentType,
+            success: event.success,
+            durationMs: event.durationMs,
+          },
+        },
+      ];
     case "subagent_model_event":
       return mapSubagentModelEvent(event);
     case "subagent_tool_calls_detected":
-      return event.calls.map((call) => ({
+      return event.calls.map(call => ({
         type: "agent_status",
         event: "subagent_tool_call_started",
         detail: {
@@ -1616,50 +1649,56 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
       const fullText = event.result.content.map(contentToText).join("\n");
       const resultPreview = limitGatewayToolResultPreview(fullText);
       const lines = fullText.split("\n");
-      return [{
-        type: "agent_status",
-        event: "subagent_tool_result",
-        detail: {
-          subagentId: event.subagentId,
-          subagentType: event.subagentType,
-          toolCallId: event.result.toolCallId,
-          toolName: event.result.toolName,
-          ok: event.result.type === "success",
-          content: resultPreview,
-          preview: limitGatewayToolResultPreview(lines.slice(0, 3).join("\n")),
-          resultLineCount: lines.length,
-          resultBytes: Buffer.byteLength(fullText, "utf-8"),
-          ...(event.result.type === "error" && { errorCode: event.result.error.code }),
+      return [
+        {
+          type: "agent_status",
+          event: "subagent_tool_result",
+          detail: {
+            subagentId: event.subagentId,
+            subagentType: event.subagentType,
+            toolCallId: event.result.toolCallId,
+            toolName: event.result.toolName,
+            ok: event.result.type === "success",
+            content: resultPreview,
+            preview: limitGatewayToolResultPreview(lines.slice(0, 3).join("\n")),
+            resultLineCount: lines.length,
+            resultBytes: Buffer.byteLength(fullText, "utf-8"),
+            ...(event.result.type === "error" && { errorCode: event.result.error.code }),
+          },
         },
-      }];
+      ];
     }
     case "subagent_status":
-      return [{
-        type: "agent_status",
-        event: "subagent_status",
-        detail: {
-          subagentId: event.subagentId,
-          subagentType: event.subagentType,
-          status: event.status,
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          success: event.success,
-          durationMs: event.durationMs,
+      return [
+        {
+          type: "agent_status",
+          event: "subagent_status",
+          detail: {
+            subagentId: event.subagentId,
+            subagentType: event.subagentType,
+            status: event.status,
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            success: event.success,
+            durationMs: event.durationMs,
+          },
         },
-      }];
+      ];
     case "retry_progress":
-      return [{
-        type: "agent_status",
-        event: "retry_progress",
-        detail: {
-          attempt: event.detail.attempt,
-          maxAttempts: event.detail.maxAttempts,
-          delayMs: event.detail.delayMs,
-          reason: event.detail.reason,
-          provider: event.detail.provider,
-          model: event.detail.model,
+      return [
+        {
+          type: "agent_status",
+          event: "retry_progress",
+          detail: {
+            attempt: event.detail.attempt,
+            maxAttempts: event.detail.maxAttempts,
+            delayMs: event.detail.delayMs,
+            reason: event.detail.reason,
+            provider: event.detail.provider,
+            model: event.detail.model,
+          },
         },
-      }];
+      ];
     case "session_ended":
     case "user_prompt_submitted":
     case "setup_completed":
@@ -1716,7 +1755,9 @@ function sanitizeGatewayToolDataValue(value: unknown): unknown {
   return value;
 }
 
-function limitGatewayToolDataString(value: string): string | { preview: string; originalChars: number; originalBytes: number; truncated: true } {
+function limitGatewayToolDataString(
+  value: string,
+): string | { preview: string; originalChars: number; originalBytes: number; truncated: true } {
   if (value.length <= MAX_GATEWAY_TOOL_DATA_STRING_CHARS) {
     return value;
   }
@@ -1759,36 +1800,40 @@ function mapModelEvent(event: CanonicalModelEvent, runId: string): GatewayEvent[
   }
 }
 
-function mapSubagentModelEvent(
-  event: Extract<AgentEvent, { type: "subagent_model_event" }>,
-): GatewayEvent[] {
+function mapSubagentModelEvent(event: Extract<AgentEvent, { type: "subagent_model_event" }>): GatewayEvent[] {
   const base = {
     subagentId: event.subagentId,
     subagentType: event.subagentType,
   };
   switch (event.event.type) {
     case "text_delta":
-      return [{
-        type: "agent_status",
-        event: "subagent_text_delta",
-        detail: { ...base, text: event.event.text },
-      }];
-    case "thinking_delta":
-      return [{
-        type: "agent_status",
-        event: "subagent_thinking_delta",
-        detail: { ...base, text: event.event.text },
-      }];
-    case "error":
-      return [{
-        type: "agent_status",
-        event: "subagent_model_error",
-        detail: {
-          ...base,
-          code: event.event.error.code,
-          message: event.event.error.message,
+      return [
+        {
+          type: "agent_status",
+          event: "subagent_text_delta",
+          detail: { ...base, text: event.event.text },
         },
-      }];
+      ];
+    case "thinking_delta":
+      return [
+        {
+          type: "agent_status",
+          event: "subagent_thinking_delta",
+          detail: { ...base, text: event.event.text },
+        },
+      ];
+    case "error":
+      return [
+        {
+          type: "agent_status",
+          event: "subagent_model_error",
+          detail: {
+            ...base,
+            code: event.event.error.code,
+            message: event.event.error.message,
+          },
+        },
+      ];
     default:
       return [];
   }
@@ -1845,7 +1890,12 @@ function previewUnknown(value: unknown): string | undefined {
 }
 
 function safeGatewayPathPart(value: string): string {
-  return value.trim().replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "value";
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9_.-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "value"
+  );
 }
 
 const ATTACHMENT_PATH_NOTE_MARKER = "[Registered attachment files in this session:]";
@@ -1916,7 +1966,10 @@ function buildAttachmentPathNote(
     seen.add(normalized);
 
     const fallbackName = normalized.split(/[\\/]/).pop() || "attachment";
-    const name = String(attachment.name || fallbackName).replace(/[\r\n]+/g, " ").trim() || fallbackName;
+    const name =
+      String(attachment.name || fallbackName)
+        .replace(/[\r\n]+/g, " ")
+        .trim() || fallbackName;
     lines.push(`- ${name}: ${normalized}`);
   }
 
@@ -1930,11 +1983,8 @@ function buildAttachmentPathNote(
   };
 }
 
-function attachmentDiagnosticsGuidance(
-  attachments: ChannelAttachment[],
-  allowedReadFiles: Set<string>,
-): string {
-  const hasInspectableAttachment = attachments.some((attachment) => {
+function attachmentDiagnosticsGuidance(attachments: ChannelAttachment[], allowedReadFiles: Set<string>): string {
+  const hasInspectableAttachment = attachments.some(attachment => {
     if (!attachment.path) return false;
     if (!safeAllowedAttachmentPath(attachment.path, allowedReadFiles)) return false;
     return isReadFileInspectableAttachment(attachment);
@@ -1965,9 +2015,7 @@ function safeAllowedAttachmentPath(path: string, allowedReadFiles: Set<string>):
   return undefined;
 }
 
-async function collectRegisteredAttachmentReadFiles(
-  attachments: ChannelAttachment[] | undefined,
-): Promise<string[]> {
+async function collectRegisteredAttachmentReadFiles(attachments: ChannelAttachment[] | undefined): Promise<string[]> {
   if (!attachments || attachments.length === 0) return [];
   const allowed = new Set<string>();
 
@@ -2047,7 +2095,7 @@ async function attachmentsToContentBlocks(
   if (diagnostics.length > 0) {
     blocks.push({
       type: "text",
-      text: `[Attachment diagnostics]\n${diagnostics.map((message) => `- ${message}`).join("\n")}`,
+      text: `[Attachment diagnostics]\n${diagnostics.map(message => `- ${message}`).join("\n")}`,
     });
   }
 

@@ -1,25 +1,25 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
-import { createEditorToolbarPanelExtension } from './editorToolbarPanel';
+import { describe, expect, it, vi } from "vitest";
+import { createEditorToolbarPanelExtension } from "./editorToolbarPanel";
 
 const file = {
-  name: 'ultrarag_deck.mjs',
-  path: '/workspace/ultrarag_deck.mjs',
+  name: "ultrarag_deck.mjs",
+  path: "/workspace/ultrarag_deck.mjs",
   diffInfo: null,
 };
 
 const labels = {
-  changes: 'changes',
-  previousChange: 'previous',
-  nextChange: 'next',
-  hideDiff: 'hide diff',
-  showDiff: 'show diff',
-  collapse: 'collapse',
-  expand: 'expand',
+  changes: "changes",
+  previousChange: "previous",
+  nextChange: "next",
+  hideDiff: "hide diff",
+  showDiff: "show diff",
+  collapse: "collapse",
+  expand: "expand",
 };
 
-describe('createEditorToolbarPanelExtension', () => {
-  it('does not create an empty toolbar when workspace-only actions are removed', () => {
+describe("createEditorToolbarPanelExtension", () => {
+  it("does not create an empty toolbar when workspace-only actions are removed", () => {
     const extension = createEditorToolbarPanelExtension({
       file,
       showDiff: false,
@@ -34,13 +34,13 @@ describe('createEditorToolbarPanelExtension', () => {
     expect(extension).toEqual([]);
   });
 
-  it('retains the toolbar for file diffs', () => {
+  it("retains the toolbar for file diffs", () => {
     const extension = createEditorToolbarPanelExtension({
       file: {
         ...file,
         diffInfo: {
-          old_string: 'before',
-          new_string: 'after',
+          old_string: "before",
+          new_string: "after",
         },
       },
       showDiff: true,

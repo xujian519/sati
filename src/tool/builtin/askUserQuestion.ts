@@ -1,15 +1,8 @@
-import { PilotDeckToolRuntimeError } from "../protocol/errors.js";
-import type {
-  PilotDeckToolDefinition,
-  PilotDeckToolExecutionOutput,
-  PilotDeckToolRuntimeContext,
-} from "../protocol/types.js";
-import type { PilotDeckToolValidationResult } from "../protocol/schema.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
+import type { SatiToolDefinition, SatiToolExecutionOutput, SatiToolRuntimeContext } from "../protocol/types.js";
+import type { SatiToolValidationResult } from "../protocol/schema.js";
 import { validateHtmlPreview } from "../elicitation/validateHtmlPreview.js";
-import type {
-  PilotDeckElicitationChannel,
-  PilotDeckElicitationRequest,
-} from "../elicitation/PilotDeckElicitationChannel.js";
+import type { SatiElicitationChannel, SatiElicitationRequest } from "../elicitation/SatiElicitationChannel.js";
 
 export const ASK_USER_QUESTION_TOOL_NAME = "ask_user_question";
 /**
@@ -75,10 +68,7 @@ export type AskUserQuestionOutput = {
  *   E10 cancellation surfaces as `unsupported_tool` so the agent recovery
  *       loop can route back to the user via a fresh elicitation.
  */
-export function createAskUserQuestionTool(): PilotDeckToolDefinition<
-  AskUserQuestionInput,
-  AskUserQuestionOutput
-> {
+export function createAskUserQuestionTool(): SatiToolDefinition<AskUserQuestionInput, AskUserQuestionOutput> {
   return {
     name: ASK_USER_QUESTION_TOOL_NAME,
     aliases: ["AskUserQuestion"],
@@ -95,8 +85,7 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
           type: "array",
           minItems: 1,
           maxItems: 4,
-          description:
-            "Questions to ask the user. Provide 1-4 multiple-choice questions in one batch.",
+          description: "Questions to ask the user. Provide 1-4 multiple-choice questions in one batch.",
           items: {
             type: "object",
             required: ["question", "header", "options"],
@@ -110,8 +99,7 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
               header: {
                 type: "string",
                 maxLength: ASK_USER_QUESTION_HEADER_MAX,
-                description:
-                  `Very short chip/tag label for the question (max ${ASK_USER_QUESTION_HEADER_MAX} chars).`,
+                description: `Very short chip/tag label for the question (max ${ASK_USER_QUESTION_HEADER_MAX} chars).`,
               },
               options: {
                 type: "array",
@@ -126,13 +114,11 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
                   properties: {
                     label: {
                       type: "string",
-                      description:
-                        "Short display text for the option. This is what the user selects.",
+                      description: "Short display text for the option. This is what the user selects.",
                     },
                     description: {
                       type: "string",
-                      description:
-                        "Explanation of what the option means or what choosing it implies.",
+                      description: "Explanation of what the option means or what choosing it implies.",
                     },
                     preview: {
                       type: "string",
@@ -181,23 +167,19 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     requiresUserInteraction: () => true,
-    validateInput: async (input): Promise<PilotDeckToolValidationResult> => {
+    validateInput: async (input): Promise<SatiToolValidationResult> => {
       // E1: 1 ≤ questions ≤ 4. The JSON-Schema validator currently does not
       // enforce minItems/maxItems, so we double-check here.
       if (!Array.isArray(input.questions) || input.questions.length < 1) {
         return {
           ok: false,
-          issues: [
-            { path: "questions", code: "invalid_schema", message: "Provide 1-4 questions" },
-          ],
+          issues: [{ path: "questions", code: "invalid_schema", message: "Provide 1-4 questions" }],
         };
       }
       if (input.questions.length > 4) {
         return {
           ok: false,
-          issues: [
-            { path: "questions", code: "invalid_schema", message: "At most 4 questions allowed" },
-          ],
+          issues: [{ path: "questions", code: "invalid_schema", message: "At most 4 questions allowed" }],
         };
       }
 
@@ -283,15 +265,17 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
     // No `checkPermissions` override: the elicitation channel itself IS the
     // user-consent gate (legacy behaviour — ask_user_question's `checkPermissions`
     // returns `behavior: "ask"` and the host renders the question UI directly).
-    // PilotDeck would otherwise add a redundant "approve to ask" step in front
+    // Sati would otherwise add a redundant "approve to ask" step in front
     // of the actual question dialog. The tool is read-only, so the runtime's
     // default mode allows it through.
-    execute: async (input, context): Promise<PilotDeckToolExecutionOutput<AskUserQuestionOutput>> => {
-      const channel = (context as PilotDeckToolRuntimeContext & {
-        elicitation?: PilotDeckElicitationChannel;
-      }).elicitation;
+    execute: async (input, context): Promise<SatiToolExecutionOutput<AskUserQuestionOutput>> => {
+      const channel = (
+        context as SatiToolRuntimeContext & {
+          elicitation?: SatiElicitationChannel;
+        }
+      ).elicitation;
       if (!channel) {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "unsupported_tool",
           "ask_user_question requires a host elicitation channel (none registered).",
         );
@@ -306,14 +290,12 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
           ...(input.annotations && { annotations: input.annotations }),
         };
         return {
-          content: [
-            { type: "text", text: formatAnswersForModel(input.answers, input.annotations) },
-          ],
+          content: [{ type: "text", text: formatAnswersForModel(input.answers, input.annotations) }],
           data,
         };
       }
 
-      const request: PilotDeckElicitationRequest = {
+      const request: SatiElicitationRequest = {
         toolCallId: context.turnId,
         toolName: ASK_USER_QUESTION_TOOL_NAME,
         questions: input.questions,
@@ -323,7 +305,7 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
       const answer = await channel.askUser(request);
 
       if (answer.type === "cancelled") {
-        throw new PilotDeckToolRuntimeError(
+        throw new SatiToolRuntimeError(
           "unsupported_tool",
           `User declined to answer questions${answer.reason ? ` (${answer.reason})` : ""}`,
         );
@@ -335,9 +317,7 @@ export function createAskUserQuestionTool(): PilotDeckToolDefinition<
         ...(answer.annotations && { annotations: answer.annotations }),
       };
       return {
-        content: [
-          { type: "text", text: formatAnswersForModel(answer.answers, answer.annotations) },
-        ],
+        content: [{ type: "text", text: formatAnswersForModel(answer.answers, answer.annotations) }],
         data,
       };
     },

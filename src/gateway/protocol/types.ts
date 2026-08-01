@@ -16,10 +16,7 @@ import type {
 import type { CanonicalUsage } from "../../model/index.js";
 import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 import type { SessionInfo as ProjectSessionInfo } from "../../session/index.js";
-import type {
-  PilotDeckElicitationAnswer,
-  PilotDeckElicitationQuestion,
-} from "../../tool/elicitation/PilotDeckElicitationChannel.js";
+import type { SatiElicitationAnswer, SatiElicitationQuestion } from "../../tool/elicitation/SatiElicitationChannel.js";
 import type {
   WebListProjectsResult as WebUiListProjectsResult,
   WebProjectSummary as WebUiProjectSummary,
@@ -50,12 +47,29 @@ import type {
 } from "../../extension/skills/types.js";
 
 export type GatewayChannelKey =
-  | "cli" | "tui" | "feishu" | "weixin" | "qq" | "web" | "test"
-  | "telegram" | "discord" | "slack" | "matrix" | "mattermost"
-  | "signal" | "whatsapp" | "bluebubbles"
-  | "dingtalk" | "wecom" | "wecom_callback"
-  | "email" | "sms" | "homeassistant"
-  | "api_server" | "webhook"
+  | "cli"
+  | "tui"
+  | "feishu"
+  | "weixin"
+  | "qq"
+  | "web"
+  | "test"
+  | "telegram"
+  | "discord"
+  | "slack"
+  | "matrix"
+  | "mattermost"
+  | "signal"
+  | "whatsapp"
+  | "bluebubbles"
+  | "dingtalk"
+  | "wecom"
+  | "wecom_callback"
+  | "email"
+  | "sms"
+  | "homeassistant"
+  | "api_server"
+  | "webhook"
   | (string & {});
 
 export type GatewayMode = "default" | "plan" | "bypassPermissions";
@@ -135,105 +149,106 @@ type GatewayTurnScopedEventMetadata = {
   runId?: string;
 };
 
-export type GatewayEvent = GatewayTurnScopedEventMetadata & (
-  | { type: "turn_started"; runId: string }
-  | { type: "model_request_started"; model?: string; provider?: string }
-  | { type: "assistant_text_delta"; text: string }
-  | { type: "assistant_attachment"; attachment: GatewayOutboundAttachment }
-  | { type: "file_artifacts"; artifacts: import("../../session/artifacts/FileArtifact.js").FileArtifact[] }
-  | { type: "assistant_thinking_delta"; text: string }
-  | { type: "tool_call_started"; toolCallId: string; name: string; argsPreview?: string }
-  | {
-      type: "tool_call_finished";
-      toolCallId: string;
-      ok: boolean;
-      resultPreview?: string;
-      resultLineCount?: number;
-      resultBytes?: number;
-      toolName?: string;
-      resultPath?: string;
-      /**
-       * Inline image results — emitted when the tool returns one or more
-       * `PilotDeckToolResultContent { type: "image" }` blocks (e.g. `read_file`
-       * on a PNG/JPG, or PDF-page rendering). Hosts render these alongside
-       * the tool's row so the user sees the picture next to the call site
-       * instead of in a stray user-side bubble. Empty when no images were
-       * returned. Base64 payloads should already be size-budgeted by the tool.
-       */
-      images?: Array<{
-        mimeType: string;
-        data: string;
-        bytes?: number;
-        detail?: "auto" | "low" | "high";
-      }>;
-      /**
-       * `PilotDeckToolErrorCode` of the underlying failure when `ok === false`.
-       * Hosts use this to render type-specific affordances — e.g. the Web UI
-       * only surfaces the "Add to Allowed Tools" suggestion for
-       * `permission_denied` / `permission_required`, not for execution
-       * failures like a non-zero shell exit code.
-       */
-      errorCode?: string;
-      /** Structured data from the tool result (e.g. planFilePath for exit_plan_mode). */
-      data?: Record<string, unknown>;
-    }
-  | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
-  | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }
-  /**
-   * B1 elicitation request: a tool (`ask_user_question`) wants the host
-   * channel to render a multiple-choice dialog. The host MUST eventually
-   * call `Gateway.respondElicitation({ requestId, answer })` so the
-   * waiting tool can resume.
-   */
-  | {
-      type: "elicitation_request";
-      requestId: string;
-      toolCallId: string;
-      toolName: string;
-      previewFormat?: "html" | "markdown";
-      questions: PilotDeckElicitationQuestion[];
-      metadata?: Record<string, unknown>;
-    }
-  /**
-   * Surfaced when the agent loop is aborted while a question is still
-   * pending. The host should dismiss the dialog without expecting an
-   * answer — `respondElicitation` is no longer required for this id.
-   */
-  | { type: "elicitation_cancelled"; requestId: string; reason?: string }
-  | { type: "structured_output"; payload: unknown }
-  | { type: "plan_mode_changed"; mode: GatewayMode | (string & {}) }
-  | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
-  | { type: "worktree_created"; runId: string; cwd: string }
-  | { type: "worktree_removed"; cwd: string }
-  | {
-      type: "context_budget";
-      used: number;
-      displayUsed?: number;
-      budgetUsed?: number;
-      total: number;
-      effectiveTotal?: number;
-      reservedOutputTokens?: number;
-      ratio: number;
-      state: "ok" | "warning" | "blocking";
-    }
-  | { type: "turn_completed"; usage: TurnUsage; finishReason: AgentTurnResult["stopReason"] | string }
-  | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
-  | {
-      type: "error";
-      message: string;
-      code?: string;
-      recoverable: boolean;
-      userHint?: string;
-      providerError?: {
-        provider?: string;
-        protocol?: string;
-        status?: number;
+export type GatewayEvent = GatewayTurnScopedEventMetadata &
+  (
+    | { type: "turn_started"; runId: string }
+    | { type: "model_request_started"; model?: string; provider?: string }
+    | { type: "assistant_text_delta"; text: string }
+    | { type: "assistant_attachment"; attachment: GatewayOutboundAttachment }
+    | { type: "file_artifacts"; artifacts: import("../../session/artifacts/FileArtifact.js").FileArtifact[] }
+    | { type: "assistant_thinking_delta"; text: string }
+    | { type: "tool_call_started"; toolCallId: string; name: string; argsPreview?: string }
+    | {
+        type: "tool_call_finished";
+        toolCallId: string;
+        ok: boolean;
+        resultPreview?: string;
+        resultLineCount?: number;
+        resultBytes?: number;
+        toolName?: string;
+        resultPath?: string;
+        /**
+         * Inline image results — emitted when the tool returns one or more
+         * `SatiToolResultContent { type: "image" }` blocks (e.g. `read_file`
+         * on a PNG/JPG, or PDF-page rendering). Hosts render these alongside
+         * the tool's row so the user sees the picture next to the call site
+         * instead of in a stray user-side bubble. Empty when no images were
+         * returned. Base64 payloads should already be size-budgeted by the tool.
+         */
+        images?: Array<{
+          mimeType: string;
+          data: string;
+          bytes?: number;
+          detail?: "auto" | "low" | "high";
+        }>;
+        /**
+         * `SatiToolErrorCode` of the underlying failure when `ok === false`.
+         * Hosts use this to render type-specific affordances — e.g. the Web UI
+         * only surfaces the "Add to Allowed Tools" suggestion for
+         * `permission_denied` / `permission_required`, not for execution
+         * failures like a non-zero shell exit code.
+         */
+        errorCode?: string;
+        /** Structured data from the tool result (e.g. planFilePath for exit_plan_mode). */
+        data?: Record<string, unknown>;
+      }
+    | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
+    | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }
+    /**
+     * B1 elicitation request: a tool (`ask_user_question`) wants the host
+     * channel to render a multiple-choice dialog. The host MUST eventually
+     * call `Gateway.respondElicitation({ requestId, answer })` so the
+     * waiting tool can resume.
+     */
+    | {
+        type: "elicitation_request";
+        requestId: string;
+        toolCallId: string;
+        toolName: string;
+        previewFormat?: "html" | "markdown";
+        questions: SatiElicitationQuestion[];
+        metadata?: Record<string, unknown>;
+      }
+    /**
+     * Surfaced when the agent loop is aborted while a question is still
+     * pending. The host should dismiss the dialog without expecting an
+     * answer — `respondElicitation` is no longer required for this id.
+     */
+    | { type: "elicitation_cancelled"; requestId: string; reason?: string }
+    | { type: "structured_output"; payload: unknown }
+    | { type: "plan_mode_changed"; mode: GatewayMode | (string & {}) }
+    | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
+    | { type: "worktree_created"; runId: string; cwd: string }
+    | { type: "worktree_removed"; cwd: string }
+    | {
+        type: "context_budget";
+        used: number;
+        displayUsed?: number;
+        budgetUsed?: number;
+        total: number;
+        effectiveTotal?: number;
+        reservedOutputTokens?: number;
+        ratio: number;
+        state: "ok" | "warning" | "blocking";
+      }
+    | { type: "turn_completed"; usage: TurnUsage; finishReason: AgentTurnResult["stopReason"] | string }
+    | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
+    | {
+        type: "error";
+        message: string;
         code?: string;
-        message?: string;
-        raw?: string;
-      };
-    }
-);
+        recoverable: boolean;
+        userHint?: string;
+        providerError?: {
+          provider?: string;
+          protocol?: string;
+          status?: number;
+          code?: string;
+          message?: string;
+          raw?: string;
+        };
+      }
+  );
 
 export type GatewayActiveTurnSnapshotInput = {
   sessionKey: string;
@@ -254,7 +269,7 @@ export type GatewayActiveTurnSnapshot = {
 export type GatewayElicitationResponseInput = {
   sessionKey: string;
   requestId: string;
-  answer: PilotDeckElicitationAnswer;
+  answer: SatiElicitationAnswer;
 };
 
 /**
@@ -427,7 +442,7 @@ export interface Gateway {
    */
   readSubagentMessages(input: WebReadSubagentMessagesInput): Promise<WebReadSubagentMessagesResult>;
   /**
-   * Web Phase 3 — enumerate projects from PilotDeck home + an optional
+   * Web Phase 3 — enumerate projects from Sati home + an optional
    * registry.
    */
   listProjects(): Promise<WebListProjectsResult>;
@@ -436,7 +451,7 @@ export interface Gateway {
    */
   describeProject(input: WebDescribeProjectInput): Promise<WebProjectSummary>;
   /**
-   * Trigger a config reload from `~/.pilotdeck/pilotdeck.yaml` and
+   * Trigger a config reload from `~/.sati/sati.yaml` and
    * invalidate cached runtimes. Returns the list of changed config paths
    * so callers can decide whether further action is needed.
    *
@@ -462,8 +477,8 @@ export interface Gateway {
 
   /**
    * Skill-management RPCs. The gateway is the authoritative owner of
-   * bundled read-only skills, `~/.pilotdeck/skills/` (user scope), and
-   * `<project>/.pilotdeck/skills/` (project scope). The Web UI's REST endpoints under `/api/skills/*`
+   * bundled read-only skills, `~/.sati/skills/` (user scope), and
+   * `<project>/.sati/skills/` (project scope). The Web UI's REST endpoints under `/api/skills/*`
    * are now thin shims that forward here, so a skill the agent loads
    * and a skill the UI shows always come from the same place.
    *

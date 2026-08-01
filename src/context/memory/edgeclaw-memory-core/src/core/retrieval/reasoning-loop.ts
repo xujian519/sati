@@ -19,6 +19,7 @@ import { MemoryRepository } from "../storage/sqlite.js";
 import { traceI18n } from "../trace-i18n.js";
 import { hashText, nowIso } from "../utils/id.js";
 import { decodeEscapedUnicodeText, decodeEscapedUnicodeValue, truncate } from "../utils/text.js";
+import { SEMANTIC_SEARCH_LIMIT, fuseManifestWithSemantic } from "./semantic-fusion.js";
 
 const RECALL_CACHE_TTL_MS = 30_000;
 const MANIFEST_LIMIT = 200;
@@ -35,6 +36,15 @@ export interface RetrievalOptions {
 export interface RetrievalRuntimeOptions {
   getSettings?: () => IndexingSettings;
   isBackgroundBusy?: () => boolean;
+  logger?: {
+    warn?: (...args: unknown[]) => void;
+  };
+  /**
+   * 可选语义召回路：embedding 检索记忆正文，返回按相关度降序的
+   * 相对路径候选。返回的命中会与 manifest 做 RRF 融合后交给
+   * LLM 选择（候选增强，不替换现有决策链）。未配置时为 undefined。
+   */
+  semanticSearch?: (query: string, limit: number) => Promise<Array<{ relativePath: string; score: number }>>;
 }
 
 export interface RetrievalRuntimeStats {
@@ -63,18 +73,13 @@ function previewText(value: string, max = 220): string {
   return truncate(decodeEscapedUnicodeText(value).trim(), max);
 }
 
-function listDetail(
-  key: string,
-  label: string,
-  items: string[],
-  labelI18n?: TraceI18nText,
-): RetrievalTraceDetail {
+function listDetail(key: string, label: string, items: string[], labelI18n?: TraceI18nText): RetrievalTraceDetail {
   return {
     key,
     label,
     ...(labelI18n ? { labelI18n } : {}),
     kind: "list",
-    items: items.map((item) => decodeEscapedUnicodeText(item, true)),
+    items: items.map(item => decodeEscapedUnicodeText(item, true)),
   };
 }
 
@@ -89,19 +94,14 @@ function kvDetail(
     label,
     ...(labelI18n ? { labelI18n } : {}),
     kind: "kv",
-    entries: entries.map((entry) => ({
+    entries: entries.map(entry => ({
       label: entry.label,
       value: decodeEscapedUnicodeText(String(entry.value ?? ""), true),
     })),
   };
 }
 
-function jsonDetail(
-  key: string,
-  label: string,
-  json: unknown,
-  labelI18n?: TraceI18nText,
-): RetrievalTraceDetail {
+function jsonDetail(key: string, label: string, json: unknown, labelI18n?: TraceI18nText): RetrievalTraceDetail {
   return {
     key,
     label,
@@ -119,12 +119,9 @@ function renderUserSummaryBlock(userSummary: MemoryUserSummary): string[] {
   if (!hasUserSummary(userSummary)) return [];
   const updatedAt = userSummary.files[0]?.updatedAt ?? "";
   const relativePath = userSummary.files[0]?.relativePath ?? "global/UserIdentity/user-profile.md";
-  const lines = [
-    `### [user] ${relativePath}${updatedAt ? ` (${updatedAt})` : ""}`,
-    "## 身份背景",
-  ];
+  const lines = [`### [user] ${relativePath}${updatedAt ? ` (${updatedAt})` : ""}`, "## 身份背景"];
   if (userSummary.identityBackground.length > 0) {
-    lines.push(...userSummary.identityBackground.map((item) => `- ${item}`), "");
+    lines.push(...userSummary.identityBackground.map(item => `- ${item}`), "");
   } else {
     lines.push("- 暂无稳定用户画像信息。", "");
   }
@@ -166,8 +163,8 @@ function renderContext(
   projectMeta: ProjectMetaRecord | null,
   records: Array<{ relativePath: string; type: string; updatedAt: string; content: string }>,
 ): string {
-  const userSummaryPaths = new Set(userSummary.files.map((file) => file.relativePath));
-  const uniqueRecords = records.filter((record) => !userSummaryPaths.has(record.relativePath));
+  const userSummaryPaths = new Set(userSummary.files.map(file => file.relativePath));
+  const uniqueRecords = records.filter(record => !userSummaryPaths.has(record.relativePath));
   const lines = ["## ClawXMemory Recall", `route=${route}`, ""];
 
   if (route === "user") {
@@ -209,7 +206,7 @@ function buildEmptyResult(query: string, trace: RetrievalTrace, elapsedMs: numbe
 }
 
 function recentUserMessages(messages: MemoryMessage[] | undefined): MemoryMessage[] {
-  return (messages ?? []).filter((message) => message.role === "user").slice(-4);
+  return (messages ?? []).filter(message => message.role === "user").slice(-4);
 }
 
 const CJK_TOKEN_STOPWORDS = new Set([
@@ -257,15 +254,17 @@ function expandCjkSearchToken(token: string): string[] {
 }
 
 function tokenizeSearchText(value: string): string[] {
-  return Array.from(new Set(
-    value
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
-      .split(/\s+/)
-      .map((item) => item.trim())
-      .flatMap((item) => expandCjkSearchToken(item))
-      .filter((item) => item.length >= 2),
-  )).filter((item) => !CJK_TOKEN_STOPWORDS.has(item));
+  return Array.from(
+    new Set(
+      value
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .map(item => item.trim())
+        .flatMap(item => expandCjkSearchToken(item))
+        .filter(item => item.length >= 2),
+    ),
+  ).filter(item => !CJK_TOKEN_STOPWORDS.has(item));
 }
 
 function buildProjectShortlist(
@@ -274,14 +273,14 @@ function buildProjectShortlist(
   recentMessages: MemoryMessage[],
 ): ProjectShortlistCandidate[] {
   const queryTokens = tokenizeSearchText(query);
-  const recentText = recentMessages.map((message) => message.content).join(" ");
+  const recentText = recentMessages.map(message => message.content).join(" ");
   const recencyTokens = tokenizeSearchText(recentText);
   const allTokens = Array.from(new Set([...queryTokens, ...recencyTokens]));
   return catalog
-    .map((entry) => {
+    .map(entry => {
       const haystack = `${entry.projectName} ${entry.description}`.toLowerCase();
       const exact = query.toLowerCase().includes(entry.projectName.toLowerCase()) ? 2 : 0;
-      const matchedTokens = allTokens.filter((token) => haystack.includes(token));
+      const matchedTokens = allTokens.filter(token => haystack.includes(token));
       const score = exact * 10 + matchedTokens.length;
       return {
         projectId: entry.logicalProjectId,
@@ -304,10 +303,7 @@ function buildProjectShortlist(
     .slice(0, GENERAL_RECALL_PROJECT_CANDIDATE_LIMIT);
 }
 
-function createTrace(
-  query: string,
-  mode: "auto" | "explicit",
-): RetrievalTrace {
+function createTrace(query: string, mode: "auto" | "explicit"): RetrievalTrace {
   return {
     traceId: buildTraceId("trace", query),
     query,
@@ -352,13 +348,10 @@ function pushStep(
   });
 }
 
-function fallbackSelection(
-  route: MemoryRoute,
-  manifest: RecallHeaderEntry[],
-): string[] {
+function fallbackSelection(route: MemoryRoute, manifest: RecallHeaderEntry[]): string[] {
   if (manifest.length === 0) return [];
   const limit = route === "user" ? 1 : 3;
-  return manifest.slice(0, limit).map((entry) => entry.relativePath);
+  return manifest.slice(0, limit).map(entry => entry.relativePath);
 }
 
 export class ReasoningRetriever {
@@ -382,6 +375,11 @@ export class ReasoningRetriever {
     return { ...this.runtimeStats };
   }
 
+  /** 运行时注入/替换语义召回路（服务构造后由外部装配，避免构造期循环依赖）。 */
+  setSemanticSearch(fn: RetrievalRuntimeOptions["semanticSearch"]): void {
+    this.options.semanticSearch = fn;
+  }
+
   resetTransientState(): void {
     this.recallCache.clear();
   }
@@ -392,7 +390,7 @@ export class ReasoningRetriever {
     const cacheKey = JSON.stringify({
       mode,
       query: normalizeQueryKey(query),
-      recent: recentUserMessages(options.recentMessages).map((message) => message.content),
+      recent: recentUserMessages(options.recentMessages).map(message => message.content),
       snapshot: this.repository.getSnapshotVersion(),
     });
     const cached = this.recallCache.get(cacheKey);
@@ -420,63 +418,53 @@ export class ReasoningRetriever {
     }
 
     const trace = createTrace(query, mode);
-    pushStep(
-      trace,
-      "recall_start",
-      "Recall Started",
-      "info",
-      query,
-      `mode=${mode}`,
-      {
-        titleI18n: traceI18n("trace.step.recall_start", "Recall Started"),
-        details: [
-          kvDetail("recall-start-inputs", "Recall Inputs", [
+    pushStep(trace, "recall_start", "Recall Started", "info", query, `mode=${mode}`, {
+      titleI18n: traceI18n("trace.step.recall_start", "Recall Started"),
+      details: [
+        kvDetail(
+          "recall-start-inputs",
+          "Recall Inputs",
+          [
             { label: "query", value: query },
             { label: "mode", value: mode },
             { label: "recentUserMessages", value: recentUserMessages(options.recentMessages).length },
             { label: "workspaceHint", value: options.workspaceHint ?? "" },
-          ], traceI18n("trace.detail.recall_inputs", "Recall Inputs")),
-        ],
-      },
-    );
+          ],
+          traceI18n("trace.detail.recall_inputs", "Recall Inputs"),
+        ),
+      ],
+    });
 
     let gateDebug: RetrievalPromptDebug | undefined;
     const route = await this.extractor.decideFileMemoryRoute({
       query,
       recentMessages: options.recentMessages,
-      debugTrace: (debug) => {
+      debugTrace: debug => {
         gateDebug = debug;
       },
     });
-    pushStep(
-      trace,
-      "memory_gate",
-      "Memory Gate",
-      route === "none" ? "warning" : "success",
-      query,
-      `route=${route}`,
-      {
-        titleI18n: traceI18n("trace.step.memory_gate", "Memory Gate"),
-        details: [
-          kvDetail("gate-route", "Route", [
+    pushStep(trace, "memory_gate", "Memory Gate", route === "none" ? "warning" : "success", query, `route=${route}`, {
+      titleI18n: traceI18n("trace.step.memory_gate", "Memory Gate"),
+      details: [
+        kvDetail(
+          "gate-route",
+          "Route",
+          [
             { label: "route", value: route },
             { label: "recentUserMessages", value: recentUserMessages(options.recentMessages).length },
             { label: "workspaceHint", value: options.workspaceHint ?? "" },
-          ], traceI18n("trace.detail.route", "Route")),
-        ],
-        ...(gateDebug ? { promptDebug: gateDebug } : {}),
-      },
-    );
+          ],
+          traceI18n("trace.detail.route", "Route"),
+        ),
+      ],
+      ...(gateDebug ? { promptDebug: gateDebug } : {}),
+    });
 
     const needsUserSummary = route === "user" || route === "mix";
     const needsProjectMemory = route === "project" || route === "mix";
     const isGeneralWorkspace = this.repository.getWorkspaceMode() === "general";
-    const userSummary = needsUserSummary
-      ? this.repository.getUserSummary()
-      : { identityBackground: [], files: [] };
-    let projectMeta = needsProjectMemory
-      ? (this.repository.getFileMemoryStore().getProjectMeta() ?? null)
-      : null;
+    const userSummary = needsUserSummary ? this.repository.getUserSummary() : { identityBackground: [], files: [] };
+    let projectMeta = needsProjectMemory ? (this.repository.getFileMemoryStore().getProjectMeta() ?? null) : null;
     let selectedProject: ReadableProjectCatalogEntry | null = null;
     let selectedProjectReason = "";
     let projectShortlist: ProjectShortlistCandidate[] = [];
@@ -494,18 +482,25 @@ export class ReasoningRetriever {
       {
         titleI18n: traceI18n("trace.step.user_base_loaded", "User Base Loaded"),
         details: [
-          kvDetail("user-summary", "User Profile", [
-            { label: "route", value: route },
-            { label: "required", value: needsUserSummary ? "yes" : "no" },
-            { label: "identityBackground", value: userSummary.identityBackground.length },
-          ], traceI18n("trace.detail.user_profile", "User Profile")),
+          kvDetail(
+            "user-summary",
+            "User Profile",
+            [
+              { label: "route", value: route },
+              { label: "required", value: needsUserSummary ? "yes" : "no" },
+              { label: "identityBackground", value: userSummary.identityBackground.length },
+            ],
+            traceI18n("trace.detail.user_profile", "User Profile"),
+          ),
           ...(userSummary.files.length > 0
-            ? [listDetail(
-                "user-summary-files",
-                "Source Files",
-                userSummary.files.map((file) => `${file.relativePath} | ${file.updatedAt}`),
-                traceI18n("trace.detail.source_files", "Source Files"),
-              )]
+            ? [
+                listDetail(
+                  "user-summary-files",
+                  "Source Files",
+                  userSummary.files.map(file => `${file.relativePath} | ${file.updatedAt}`),
+                  traceI18n("trace.detail.source_files", "Source Files"),
+                ),
+              ]
             : []),
         ],
       },
@@ -532,7 +527,10 @@ export class ReasoningRetriever {
             listDetail(
               "project-shortlist-items",
               "Shortlist",
-              projectShortlist.map((item) => `${item.projectName} | ${item.projectId} | ${item.sourceType ?? "unknown"} | score=${item.score} | exact=${item.exact} | ${item.matchedText || "no-match"}`),
+              projectShortlist.map(
+                item =>
+                  `${item.projectName} | ${item.projectId} | ${item.sourceType ?? "unknown"} | score=${item.score} | exact=${item.exact} | ${item.matchedText || "no-match"}`,
+              ),
             ),
           ],
         },
@@ -544,14 +542,12 @@ export class ReasoningRetriever {
           recentUserMessages: recentUserMessages(options.recentMessages),
           shortlist: projectShortlist,
           allowEmpty: true,
-          debugTrace: (debug) => {
+          debugTrace: debug => {
             projectSelectionDebug = debug;
           },
         });
         const selectedProjectId = projectSelection.projectId;
-        selectedProject = selectedProjectId
-          ? this.repository.getReadableProject(selectedProjectId) ?? null
-          : null;
+        selectedProject = selectedProjectId ? (this.repository.getReadableProject(selectedProjectId) ?? null) : null;
         selectedProjectReason = projectSelection.reason || "";
         if (selectedProject) {
           projectMeta = selectedProject;
@@ -571,7 +567,9 @@ export class ReasoningRetriever {
                 selectedProjectId: selectedProjectId ?? null,
                 selectedProjectName: selectedProject?.projectName ?? null,
                 selectedProjectSource: selectedProject
-                  ? selectedProject.sourceType === "workspace_external" ? "workspace_external" : "general_local"
+                  ? selectedProject.sourceType === "workspace_external"
+                    ? "workspace_external"
+                    : "general_local"
                   : null,
                 reason: selectedProjectReason || null,
               }),
@@ -582,28 +580,31 @@ export class ReasoningRetriever {
       }
     }
 
-    const manifest = route === "user"
-      ? this.repository.listMemoryEntries({
-          kinds: ["user"],
-          scope: "global",
-          limit: MANIFEST_LIMIT,
-          includeDeprecated: false,
-        })
-      : needsProjectMemory && isGeneralWorkspace
-        ? selectedProject
-          ? this.repository.listReadableProjectEntries(selectedProject.logicalProjectId, {
-              kinds: ["project", "feedback"],
-              includeDeprecated: false,
-            }).slice(0, MANIFEST_LIMIT)
-          : []
-      : needsProjectMemory
+    const manifest =
+      route === "user"
         ? this.repository.listMemoryEntries({
-            kinds: ["project", "feedback"],
-            scope: "project",
+            kinds: ["user"],
+            scope: "global",
             limit: MANIFEST_LIMIT,
             includeDeprecated: false,
           })
-        : [];
+        : needsProjectMemory && isGeneralWorkspace
+          ? selectedProject
+            ? this.repository
+                .listReadableProjectEntries(selectedProject.logicalProjectId, {
+                  kinds: ["project", "feedback"],
+                  includeDeprecated: false,
+                })
+                .slice(0, MANIFEST_LIMIT)
+            : []
+          : needsProjectMemory
+            ? this.repository.listMemoryEntries({
+                kinds: ["project", "feedback"],
+                scope: "project",
+                limit: MANIFEST_LIMIT,
+                includeDeprecated: false,
+              })
+            : [];
 
     pushStep(
       trace,
@@ -615,52 +616,108 @@ export class ReasoningRetriever {
           ? `general project=${selectedProject?.projectName ?? "none"}`
           : "current workspace project memory"
         : `route=${route}`,
-      manifest.length > 0 ? `${manifest.length} recall header entries ready.` : "No matching workspace memory files were available.",
+      manifest.length > 0
+        ? `${manifest.length} recall header entries ready.`
+        : "No matching workspace memory files were available.",
       {
         titleI18n: traceI18n("trace.step.manifest_scanned", "Manifest Scanned"),
         details: [
-          kvDetail("manifest-scan-summary", "Manifest Scan", [
-            { label: "count", value: manifest.length },
-            { label: "route", value: route },
-            { label: "scope", value: route === "user" ? "global" : needsProjectMemory ? isGeneralWorkspace ? "general_selected_project" : "workspace_project" : "none" },
-            { label: "limit", value: MANIFEST_LIMIT },
-            { label: "workspaceHint", value: options.workspaceHint ?? "" },
-          ], traceI18n("trace.detail.manifest_scan", "Manifest Scan")),
+          kvDetail(
+            "manifest-scan-summary",
+            "Manifest Scan",
+            [
+              { label: "count", value: manifest.length },
+              { label: "route", value: route },
+              {
+                label: "scope",
+                value:
+                  route === "user"
+                    ? "global"
+                    : needsProjectMemory
+                      ? isGeneralWorkspace
+                        ? "general_selected_project"
+                        : "workspace_project"
+                      : "none",
+              },
+              { label: "limit", value: MANIFEST_LIMIT },
+              { label: "workspaceHint", value: options.workspaceHint ?? "" },
+            ],
+            traceI18n("trace.detail.manifest_scan", "Manifest Scan"),
+          ),
           listDetail(
             "manifest-scan-preview",
             "Sorted Candidates",
-            manifest.map((entry) => `${entry.updatedAt} | ${entry.type} | ${entry.relativePath} | ${entry.description}`),
+            manifest.map(entry => `${entry.updatedAt} | ${entry.type} | ${entry.relativePath} | ${entry.description}`),
             traceI18n("trace.detail.sorted_candidates", "Sorted Candidates"),
           ),
         ],
       },
     );
 
+    // 语义召回路（可选）：embedding 检索记忆正文，命中与 manifest RRF 融合。
+    const semanticSearch = this.options.semanticSearch;
+    const semanticHits: Array<{ relativePath: string; score: number }> = [];
+    if (semanticSearch && manifest.length > 0) {
+      try {
+        const hits = await semanticSearch(query, SEMANTIC_SEARCH_LIMIT);
+        semanticHits.push(...hits);
+      } catch (error) {
+        // 语义检索失败不阻断主流程（可降级为纯 keyword）。
+        this.options.logger?.warn?.(
+          `[reasoning-loop] semantic recall failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+    pushStep(
+      trace,
+      "semantic_recall",
+      "Semantic Recall",
+      semanticHits.length > 0 ? "success" : "skipped",
+      `semanticSearch=${semanticSearch ? "on" : "off"} manifest=${manifest.length}`,
+      semanticHits.length > 0
+        ? `${semanticHits.length} semantic hits fused into candidates.`
+        : "No semantic hits (disabled or empty).",
+      {
+        titleI18n: traceI18n("trace.step.semantic_recall", "Semantic Recall"),
+        details: [
+          listDetail(
+            "semantic-recall-hits",
+            "Semantic Hits",
+            semanticHits.map(hit => `${hit.relativePath} | score=${hit.score.toFixed(4)}`),
+            traceI18n("trace.detail.semantic_hits", "Semantic Hits"),
+          ),
+        ],
+      },
+    );
+
+    const selectionManifest = fuseManifestWithSemantic(manifest, semanticHits);
+
     let selectionDebug: RetrievalPromptDebug | undefined;
-    let selectedIds = manifest.length > 0
-      ? await this.extractor.selectFileManifestEntries({
-          query,
-          route,
-          recentUserMessages: recentUserMessages(options.recentMessages),
-          ...(projectMeta ? { projectMeta } : {}),
-          manifest,
-          limit: route === "user" ? 1 : DEFAULT_SELECTION_LIMIT,
-          debugTrace: (debug) => {
-            selectionDebug = debug;
-          },
-        })
-      : [];
+    let selectedIds =
+      selectionManifest.length > 0
+        ? await this.extractor.selectFileManifestEntries({
+            query,
+            route,
+            recentUserMessages: recentUserMessages(options.recentMessages),
+            ...(projectMeta ? { projectMeta } : {}),
+            manifest: selectionManifest,
+            limit: route === "user" ? 1 : DEFAULT_SELECTION_LIMIT,
+            debugTrace: debug => {
+              selectionDebug = debug;
+            },
+          })
+        : [];
 
     if (selectedIds.length === 0) {
-      selectedIds = fallbackSelection(route, manifest);
+      selectedIds = fallbackSelection(route, selectionManifest);
     }
 
     pushStep(
       trace,
       "manifest_selected",
       "Manifest Selected",
-      selectedIds.length > 0 ? "success" : manifest.length > 0 ? "warning" : "skipped",
-      `${manifest.length} entries`,
+      selectedIds.length > 0 ? "success" : selectionManifest.length > 0 ? "warning" : "skipped",
+      `${selectionManifest.length} entries`,
       `${selectedIds.length} file ids selected.`,
       {
         titleI18n: traceI18n("trace.step.manifest_selected", "Manifest Selected"),
@@ -668,7 +725,7 @@ export class ReasoningRetriever {
           listDetail(
             "manifest-selection-input",
             "Manifest Candidate IDs",
-            manifest.map((entry) => entry.relativePath),
+            selectionManifest.map(entry => entry.relativePath),
             traceI18n("trace.detail.manifest_candidate_ids", "Manifest Candidate IDs"),
           ),
           listDetail(
@@ -682,9 +739,8 @@ export class ReasoningRetriever {
       },
     );
 
-    const records = selectedIds.length > 0
-        ? this.repository.getMemoryRecordsByIds(selectedIds, RECALL_FILE_MAX_LINES)
-        : [];
+    const records =
+      selectedIds.length > 0 ? this.repository.getMemoryRecordsByIds(selectedIds, RECALL_FILE_MAX_LINES) : [];
 
     pushStep(
       trace,
@@ -696,30 +752,36 @@ export class ReasoningRetriever {
       {
         titleI18n: traceI18n("trace.step.files_loaded", "Files Loaded"),
         details: [
-          listDetail("requested-files", "Requested IDs", selectedIds, traceI18n("trace.detail.requested_ids", "Requested IDs")),
+          listDetail(
+            "requested-files",
+            "Requested IDs",
+            selectedIds,
+            traceI18n("trace.detail.requested_ids", "Requested IDs"),
+          ),
           listDetail(
             "loaded-files",
             "Loaded Files",
-            records.map((record) => `${record.relativePath} | ${record.updatedAt}`),
+            records.map(record => `${record.relativePath} | ${record.updatedAt}`),
             traceI18n("trace.detail.loaded_files", "Loaded Files"),
           ),
         ],
       },
     );
 
-    const context = route === "none"
-      ? ""
-      : renderContext(
-          route,
-          userSummary,
-          projectMeta,
-          records.map((record) => ({
-            relativePath: record.relativePath,
-            type: record.type,
-            updatedAt: record.updatedAt,
-            content: record.content,
-          })),
-        );
+    const context =
+      route === "none"
+        ? ""
+        : renderContext(
+            route,
+            userSummary,
+            projectMeta,
+            records.map(record => ({
+              relativePath: record.relativePath,
+              type: record.type,
+              updatedAt: record.updatedAt,
+              content: record.content,
+            })),
+          );
 
     pushStep(
       trace,
@@ -731,31 +793,40 @@ export class ReasoningRetriever {
       {
         titleI18n: traceI18n("trace.step.context_rendered", "Context Rendered"),
         details: [
-          kvDetail("context-rendered-summary", "Context Summary", [
-            { label: "route", value: route },
-            { label: "userBaseInjected", value: hasUserSummary(userSummary) ? "yes" : "no" },
-            { label: "projectMetaInjected", value: projectMeta ? "yes" : "no" },
-            { label: "selectedProject", value: selectedProject?.projectName ?? "" },
-            { label: "disambiguationRequired", value: isGeneralWorkspace && needsProjectMemory ? "yes" : "no" },
-            { label: "fileCount", value: records.length },
-            { label: "characters", value: context.length },
-            { label: "lines", value: context ? context.split("\n").length : 0 },
-          ], traceI18n("trace.detail.context_summary", "Context Summary")),
+          kvDetail(
+            "context-rendered-summary",
+            "Context Summary",
+            [
+              { label: "route", value: route },
+              { label: "userBaseInjected", value: hasUserSummary(userSummary) ? "yes" : "no" },
+              { label: "projectMetaInjected", value: projectMeta ? "yes" : "no" },
+              { label: "selectedProject", value: selectedProject?.projectName ?? "" },
+              { label: "disambiguationRequired", value: isGeneralWorkspace && needsProjectMemory ? "yes" : "no" },
+              { label: "fileCount", value: records.length },
+              { label: "characters", value: context.length },
+              { label: "lines", value: context ? context.split("\n").length : 0 },
+            ],
+            traceI18n("trace.detail.context_summary", "Context Summary"),
+          ),
           ...(context
-            ? [listDetail(
-                "context-rendered-blocks",
-                "Injected Blocks",
-                [
-                  ...(hasUserSummary(userSummary)
-                    ? userSummary.files.map((file) => file.relativePath)
-                    : []),
-                  ...(projectMeta ? ["project.meta.md"] : []),
-                  ...Array.from(new Set(records
-                    .map((record) => record.relativePath)
-                    .filter((relativePath) => !userSummary.files.some((file) => file.relativePath === relativePath)))),
-                ],
-                traceI18n("trace.detail.injected_blocks", "Injected Blocks"),
-              )]
+            ? [
+                listDetail(
+                  "context-rendered-blocks",
+                  "Injected Blocks",
+                  [
+                    ...(hasUserSummary(userSummary) ? userSummary.files.map(file => file.relativePath) : []),
+                    ...(projectMeta ? ["project.meta.md"] : []),
+                    ...Array.from(
+                      new Set(
+                        records
+                          .map(record => record.relativePath)
+                          .filter(relativePath => !userSummary.files.some(file => file.relativePath === relativePath)),
+                      ),
+                    ),
+                  ],
+                  traceI18n("trace.detail.injected_blocks", "Injected Blocks"),
+                ),
+              ]
             : []),
         ],
       },
@@ -763,24 +834,25 @@ export class ReasoningRetriever {
 
     trace.finishedAt = nowIso();
     const elapsedMs = Date.now() - startedAtMs;
-    const result = route === "none" && !context
-      ? buildEmptyResult(query, trace, elapsedMs)
-      : {
-          query,
-          intent: route,
-          context,
-          trace,
-          debug: {
-            mode: context ? "llm" as const : "local_fallback" as const,
-            elapsedMs,
-            cacheHit: false,
-            path: mode,
-            ...(selectedProject ? { resolvedProjectId: selectedProject.logicalProjectId } : {}),
-            route,
-            manifestCount: manifest.length,
-            selectedFileIds: selectedIds,
-          },
-        } satisfies RetrievalResult;
+    const result =
+      route === "none" && !context
+        ? buildEmptyResult(query, trace, elapsedMs)
+        : ({
+            query,
+            intent: route,
+            context,
+            trace,
+            debug: {
+              mode: context ? ("llm" as const) : ("local_fallback" as const),
+              elapsedMs,
+              cacheHit: false,
+              path: mode,
+              ...(selectedProject ? { resolvedProjectId: selectedProject.logicalProjectId } : {}),
+              route,
+              manifestCount: manifest.length,
+              selectedFileIds: selectedIds,
+            },
+          } satisfies RetrievalResult);
 
     this.recallCache.set(cacheKey, {
       expiresAt: Date.now() + RECALL_CACHE_TTL_MS,

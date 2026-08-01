@@ -8,25 +8,12 @@ type SettingsSectionProps = {
   className?: string;
 };
 
-export default function SettingsSection({
-  title,
-  description,
-  children,
-  className,
-}: SettingsSectionProps) {
+export default function SettingsSection({ title, description, children, className }: SettingsSectionProps) {
   return (
     <div className={cn("space-y-2.5", className)}>
       <div>
-        {title ? (
-          <h3 className="text-[13px] font-medium leading-5 text-muted-foreground">
-            {title}
-          </h3>
-        ) : null}
-        {description && (
-          <p className="mt-1 text-xs leading-[18px] text-muted-foreground">
-            {description}
-          </p>
-        )}
+        {title ? <h3 className="text-[13px] font-medium leading-5 text-muted-foreground">{title}</h3> : null}
+        {description && <p className="mt-1 text-xs leading-[18px] text-muted-foreground">{description}</p>}
       </div>
       {children}
     </div>

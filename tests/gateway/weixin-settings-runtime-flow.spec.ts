@@ -5,8 +5,9 @@ import { join } from "node:path";
 
 test("UI weixin QR route only reads runtime status", () => {
   const source = readFileSync(join(process.cwd(), "ui/server/routes/gateway.js"), "utf8");
-  const routeStart = source.indexOf("router.get('/weixin/qr'");
-  const routeEnd = source.indexOf("router.post('/weixin/disable'");
+  // Quote-style agnostic: the formatter may render these routes with single or double quotes.
+  const routeStart = source.search(/router\.get\(["']\/weixin\/qr["']/);
+  const routeEnd = source.search(/router\.post\(["']\/weixin\/disable["']/);
 
   assert.ok(routeStart >= 0, "expected /weixin/qr route to exist");
   assert.ok(routeEnd > routeStart, "expected weixin route section to be bounded");
@@ -15,13 +16,14 @@ test("UI weixin QR route only reads runtime status", () => {
   assert.doesNotMatch(weixinRouteSection, /loginWithQR/);
   assert.doesNotMatch(weixinRouteSection, /weixin-ilink/);
   assert.doesNotMatch(weixinRouteSection, /_weixinLogin/);
-  assert.match(weixinRouteSection, /runtime\?\.state === 'waiting_for_login' && runtime\.qrUrl/);
+  assert.match(weixinRouteSection, /runtime\?\.state === ["']waiting_for_login["'] && runtime\.qrUrl/);
 });
 
 test("UI weixin QR begin route delegates to gateway prepare RPC", () => {
   const source = readFileSync(join(process.cwd(), "ui/server/routes/gateway.js"), "utf8");
-  const routeStart = source.indexOf("router.post('/weixin/qr-begin'");
-  const routeEnd = source.indexOf("router.get('/weixin/qr'");
+  // Quote-style agnostic: the formatter may render these routes with single or double quotes.
+  const routeStart = source.search(/router\.post\(["']\/weixin\/qr-begin["']/);
+  const routeEnd = source.search(/router\.get\(["']\/weixin\/qr["']/);
 
   assert.ok(routeStart >= 0, "expected /weixin/qr-begin route to exist");
   assert.ok(routeEnd > routeStart, "expected begin route to be before read-only QR route");
@@ -37,10 +39,7 @@ test("UI weixin QR begin route delegates to gateway prepare RPC", () => {
 
 test("Gateway settings keeps existing status rendered during silent refresh", () => {
   const source = readFileSync(
-    join(
-      process.cwd(),
-      "ui/src/components/settings/view/integrations/im/hooks/useGatewayStatus.ts",
-    ),
+    join(process.cwd(), "ui/src/components/settings/view/integrations/im/hooks/useGatewayStatus.ts"),
     "utf8",
   );
 
@@ -51,10 +50,7 @@ test("Gateway settings keeps existing status rendered during silent refresh", ()
 
 test("Gateway settings starts weixin QR by begin route and ignores stale runtime errors", () => {
   const source = readFileSync(
-    join(
-      process.cwd(),
-      "ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx",
-    ),
+    join(process.cwd(), "ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx"),
     "utf8",
   );
 
@@ -70,12 +66,12 @@ test("Gateway protocol exposes prepare_weixin_login RPC", () => {
   const wsConnection = readFileSync(join(process.cwd(), "src/gateway/server/GatewayWsConnection.ts"), "utf8");
   const remoteGateway = readFileSync(join(process.cwd(), "src/gateway/client/RemoteGateway.ts"), "utf8");
   const inProcessGateway = readFileSync(join(process.cwd(), "src/gateway/client/InProcessGateway.ts"), "utf8");
-  const pilotdeck = readFileSync(join(process.cwd(), "src/cli/pilotdeck.ts"), "utf8");
+  const sati = readFileSync(join(process.cwd(), "src/cli/sati.ts"), "utf8");
 
   assert.match(frames, /"prepare_weixin_login"/);
   assert.match(wsConnection, /case "prepare_weixin_login"/);
   assert.match(remoteGateway, /request\("prepare_weixin_login", \{\}\)/);
   assert.match(inProcessGateway, /prepareWeixinLogin/);
-  assert.match(pilotdeck, /setPrepareWeixinLogin/);
-  assert.match(pilotdeck, /hotStartWeixinChannel/);
+  assert.match(sati, /setPrepareWeixinLogin/);
+  assert.match(sati, /hotStartWeixinChannel/);
 });

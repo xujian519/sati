@@ -6,12 +6,7 @@ import type { RouterConfig } from "../../router/config/schema.js";
 export type PilotConfigSourceKind = "default" | "project" | "env";
 export type PilotConfigSourcePhase = "bootstrap" | "merge";
 export type PilotConfigDiagnosticSeverity = "info" | "warning" | "error" | "fatal";
-export type PilotConfigChangeClass =
-  | "runtime-live"
-  | "next-request"
-  | "next-runtime"
-  | "restart-required"
-  | "invalid";
+export type PilotConfigChangeClass = "runtime-live" | "next-request" | "next-runtime" | "restart-required" | "invalid";
 
 export type PilotConfigSource = {
   kind: PilotConfigSourceKind;
@@ -85,18 +80,64 @@ export type PilotAgentConfig = {
  */
 export type PilotRouterConfig = RouterConfig;
 
-export type PilotMemoryApiType =
-  | "openai-responses"
-  | "responses"
-  | "openai-completions"
-  | "anthropic"
-  | "google";
+export type PilotMemoryApiType = "openai-responses" | "responses" | "openai-completions" | "anthropic" | "google";
 export type PilotMemoryReasoningMode = "answer_first" | "accuracy_first";
 
 export type PilotMemoryScheduleConfig = {
   reasoningMode?: PilotMemoryReasoningMode;
   autoIndexIntervalMinutes?: number;
   autoDreamIntervalMinutes?: number;
+};
+
+/**
+ * 重排（rerank）配置（阶段 C，可选）。
+ *
+ * 召回（embedding top-k / FTS / 关键词）之后的重排阶段：用 cross-encoder
+ * 对候选与 query 做 token 级交互打分，提升 top-N 精度。默认兼容
+ * HuggingFace TEI 的 `/rerank` 端点（本地部署 bge-reranker-v2-m3）。
+ * 未配置或端点不可用时保持原召回顺序（RRF 融合结果）。
+ */
+export type PilotMemoryRerankConfig = {
+  enabled: boolean;
+  /** 引用 model.providers 的 providerId（如 tei）。 */
+  provider?: string;
+  /** 重排模型名；TEI 单模型服务可留空（留空不发送 model 字段）。 */
+  model?: string;
+  /** 独立端点基地址（如 http://localhost:8080）。 */
+  baseUrl?: string;
+  apiKey?: string;
+  timeoutMs?: number;
+  /** 参与重排的候选上限（默认 16）。 */
+  topN?: number;
+};
+
+/**
+ * 语义检索（embedding）配置。
+ *
+ * 两种形态：
+ *   1. `provider` 形态：引用 model.providers 的 url/apiKey（如 ollama）；
+ *   2. `baseUrl` 形态：独立端点（url + apiKey + model 直配）。
+ * 未配置或校验失败时语义检索自动关闭，现有 keyword 路径原样工作。
+ */
+export type PilotMemoryEmbeddingConfig = {
+  enabled: boolean;
+  /** 引用 model.providers 的 providerId（如 "ollama"）。 */
+  provider?: string;
+  /** embedding 模型名（如 "bge-m3"）。 */
+  model: string;
+  /** 独立端点基地址（如 http://localhost:11434/v1）。 */
+  baseUrl?: string;
+  apiKey?: string;
+  /** 向量维度（bge-m3 dense = 1024）；缺省从首次响应推断。 */
+  dimensions?: number;
+  timeoutMs?: number;
+  batchSize?: number;
+  /** 是否索引记忆正文（默认 true）。 */
+  indexMemory?: boolean;
+  /** 是否索引专利 wiki 卡片（默认 true）。 */
+  indexWiki?: boolean;
+  /** 重排（可选，阶段 C）：召回后对候选做 cross-encoder 重排。 */
+  rerank?: PilotMemoryRerankConfig;
 };
 
 export type PilotMemoryConfig = {
@@ -112,6 +153,8 @@ export type PilotMemoryConfig = {
   apiType?: PilotMemoryApiType;
   schedule?: PilotMemoryScheduleConfig;
   heartbeatBatchSize?: number;
+  /** 语义检索（embedding）配置；未配置则关闭语义召回。 */
+  embedding?: PilotMemoryEmbeddingConfig;
 };
 
 export type PilotGatewayConfig = {

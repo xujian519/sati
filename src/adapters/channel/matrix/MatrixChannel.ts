@@ -3,14 +3,13 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
-import { MatrixSessionMapper } from "./MatrixSessionMapper.js";
-import { renderMatrixEvent } from "./matrix-render.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { MatrixSessionMapper } from "./MatrixSessionMapper.js";
+import { renderMatrixEvent } from "./matrix-render.js";
 
 let MatrixSdk: any;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   MatrixSdk = require("matrix-bot-sdk");
 } catch {
   // matrix-bot-sdk not installed — start() will warn
@@ -80,16 +79,16 @@ export class MatrixChannel implements ChannelAdapter {
         this.userId = this.userIdOption ?? null;
       }
 
-      this.client.on("room.invite", async (roomId: string) => {
-        try {
-          await this.client.joinRoom(roomId);
-        } catch (e) {
+      this.client.on("room.invite", (roomId: string) => {
+        const client = this.client;
+        if (!client) return;
+        void client.joinRoom(roomId).catch((e: unknown) => {
           this.logger?.warn?.(`matrix: joinRoom failed: ${e}`);
-        }
+        });
       });
 
       this.client.on("room.message", (roomId: string, raw: any) => {
-        void this.handleRoomMessage(roomId, raw).catch((e) => {
+        void this.handleRoomMessage(roomId, raw).catch(e => {
           this.logger?.error?.(`matrix: room.message error: ${e}`);
         });
       });
@@ -105,7 +104,11 @@ export class MatrixChannel implements ChannelAdapter {
       stop: async (reason?: string) => {
         this.logger?.info?.(`matrix: stopping (${reason ?? "no reason"})`);
         if (this.client) {
-          try { this.client.stop(); } catch { /* best effort */ }
+          try {
+            this.client.stop();
+          } catch {
+            /* best effort */
+          }
           this.client = null;
         }
         this.userId = null;

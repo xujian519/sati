@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
 import {
   buildSearchableMessages,
   clearSearchHighlights,
@@ -9,7 +9,7 @@ import {
   scrollToMessageIndex,
   type ChatHistorySearchMatch,
   type SearchableChatMessageInput,
-} from './chatHistorySearchUtils';
+} from "./chatHistorySearchUtils";
 
 type UseChatHistorySearchOptions = {
   scrollContainerRef: RefObject<HTMLElement | null>;
@@ -35,25 +35,19 @@ export function useChatHistorySearch({
   renderWindowKey = 0,
 }: UseChatHistorySearchOptions) {
   const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const searchableMessages = useMemo(
-    () => buildSearchableMessages(keyedMessages),
-    [keyedMessages],
-  );
+  const searchableMessages = useMemo(() => buildSearchableMessages(keyedMessages), [keyedMessages]);
 
-  const matches = useMemo(
-    () => findChatHistoryMatches(searchableMessages, query),
-    [query, searchableMessages],
-  );
+  const matches = useMemo(() => findChatHistoryMatches(searchableMessages, query), [query, searchableMessages]);
 
   const activeMatch: ChatHistorySearchMatch | null = matches[activeMatchIndex] ?? null;
 
   const closeSearch = useCallback(() => {
     setIsOpen(false);
-    setQuery('');
+    setQuery("");
     setActiveMatchIndex(0);
     const container = scrollContainerRef.current;
     if (container) clearSearchHighlights(container);
@@ -70,63 +64,61 @@ export function useChatHistorySearch({
   const ensureAllMessagesLoaded = useCallback(async () => {
     if (!hasMoreMessages || allMessagesLoaded) return;
     loadAllMessages();
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    await new Promise(resolve => setTimeout(resolve, 350));
   }, [allMessagesLoaded, hasMoreMessages, loadAllMessages]);
 
-  const applySearchHighlights = useCallback((match: ChatHistorySearchMatch | null) => {
-    const container = scrollContainerRef.current;
-    if (!container) return null;
-    return highlightSearchMatches(
-      container,
-      searchableMessages,
-      matches,
-      query.trim(),
-      match,
-    );
-  }, [matches, query, scrollContainerRef, searchableMessages]);
+  const applySearchHighlights = useCallback(
+    (match: ChatHistorySearchMatch | null) => {
+      const container = scrollContainerRef.current;
+      if (!container) return null;
+      return highlightSearchMatches(container, searchableMessages, matches, query.trim(), match);
+    },
+    [matches, query, scrollContainerRef, searchableMessages],
+  );
 
-  const revealMatch = useCallback(async (match: ChatHistorySearchMatch) => {
-    await ensureAllMessagesLoaded();
+  const revealMatch = useCallback(
+    async (match: ChatHistorySearchMatch) => {
+      await ensureAllMessagesLoaded();
 
-    const container = scrollContainerRef.current;
-    if (!container) return;
+      const container = scrollContainerRef.current;
+      if (!container) return;
 
-    const revealRenderedMatch = (behavior: ScrollBehavior): boolean => {
-      const target = applySearchHighlights(match);
-      if (!target) return false;
-      scrollSearchTargetIntoView(container, target, behavior);
-      return true;
-    };
+      const revealRenderedMatch = (behavior: ScrollBehavior): boolean => {
+        const target = applySearchHighlights(match);
+        if (!target) return false;
+        scrollSearchTargetIntoView(container, target, behavior);
+        return true;
+      };
 
-    // Nearby results are normally still mounted by the virtualized list. In
-    // that case, move directly from the current viewport instead of first
-    // resetting scrollTop from the beginning of the conversation.
-    if (revealRenderedMatch('smooth')) return;
+      // Nearby results are normally still mounted by the virtualized list. In
+      // that case, move directly from the current viewport instead of first
+      // resetting scrollTop from the beginning of the conversation.
+      if (revealRenderedMatch("smooth")) return;
 
-    // A distant result may not exist in the DOM yet. Perform one instant
-    // coarse jump so virtualization can mount it, then center it without a
-    // second long animation.
-    scrollToMessageIndex(container, measuredItemHeights, match.messageIndex);
+      // A distant result may not exist in the DOM yet. Perform one instant
+      // coarse jump so virtualization can mount it, then center it without a
+      // second long animation.
+      scrollToMessageIndex(container, measuredItemHeights, match.messageIndex);
 
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve());
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve());
+        });
       });
-    });
 
-    revealRenderedMatch('auto');
-  }, [
-    applySearchHighlights,
-    ensureAllMessagesLoaded,
-    measuredItemHeights,
-    scrollContainerRef,
-  ]);
+      revealRenderedMatch("auto");
+    },
+    [applySearchHighlights, ensureAllMessagesLoaded, measuredItemHeights, scrollContainerRef],
+  );
 
-  const goToMatch = useCallback((index: number) => {
-    if (matches.length === 0) return;
-    const wrapped = ((index % matches.length) + matches.length) % matches.length;
-    setActiveMatchIndex(wrapped);
-  }, [matches.length]);
+  const goToMatch = useCallback(
+    (index: number) => {
+      if (matches.length === 0) return;
+      const wrapped = ((index % matches.length) + matches.length) % matches.length;
+      setActiveMatchIndex(wrapped);
+    },
+    [matches.length],
+  );
 
   const goToNext = useCallback(() => {
     goToMatch(activeMatchIndex + 1);
@@ -146,9 +138,9 @@ export function useChatHistorySearch({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const isFindShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f';
+      const isFindShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f";
       if (isFindShortcut) {
-        if (!captureFindShortcutInModal && document.querySelector('[data-modal-overlay]')) return;
+        if (!captureFindShortcutInModal && document.querySelector("[data-modal-overlay]")) return;
         event.preventDefault();
         event.stopPropagation();
         if (isOpen) {
@@ -161,8 +153,8 @@ export function useChatHistorySearch({
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown, { capture: true });
-    return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
+    document.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => document.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, [captureFindShortcutInModal, isOpen, openSearch]);
 
   useEffect(() => {

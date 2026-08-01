@@ -7,12 +7,7 @@ type SettingsToggleProps = {
   disabled?: boolean;
 };
 
-export default function SettingsToggle({
-  checked,
-  onChange,
-  ariaLabel,
-  disabled,
-}: SettingsToggleProps) {
+export default function SettingsToggle({ checked, onChange, ariaLabel, disabled }: SettingsToggleProps) {
   return (
     <button
       type="button"
@@ -31,9 +26,7 @@ export default function SettingsToggle({
       <span
         className={cn(
           "pointer-events-none inline-block h-5 w-5 rounded-full shadow-sm transition-transform duration-200",
-          checked
-            ? "translate-x-[22px] bg-white"
-            : "translate-x-[2px] bg-foreground/60 dark:bg-foreground/80",
+          checked ? "translate-x-[22px] bg-white" : "translate-x-[2px] bg-foreground/60 dark:bg-foreground/80",
         )}
       />
     </button>

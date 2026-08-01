@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { renderAsync } from 'docx-preview';
-import { useTranslation } from 'react-i18next';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { renderAsync } from "docx-preview";
+import { useTranslation } from "react-i18next";
 import {
   createImageRegionContentReference,
   createTextContentReference,
   type ContentReference,
   type ContentReferenceSelectionMode,
   type ReferenceCapabilities,
-} from '../../../../types/contentReference';
-import BuiltinOfficeToolbar from './BuiltinOfficeToolbar';
-import RegionSelectionOverlay, { type CapturedRegion } from './RegionSelectionOverlay';
-import { floatingSelectionSingleActionClassName } from './floatingSelectionAction';
+} from "../../../../types/contentReference";
+import BuiltinOfficeToolbar from "./BuiltinOfficeToolbar";
+import RegionSelectionOverlay, { type CapturedRegion } from "./RegionSelectionOverlay";
+import { floatingSelectionSingleActionClassName } from "./floatingSelectionAction";
 
 type DocxBuiltinPreviewProps = {
   blob: Blob;
@@ -58,13 +58,13 @@ function getHeadingLevel(element: HTMLElement): number | null {
 }
 
 function findOutlineItems(root: HTMLElement): OutlineItem[] {
-  return Array.from(root.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6,p'))
+  return Array.from(root.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6,p"))
     .map((element, index) => {
       const level = getHeadingLevel(element);
-      const title = element.textContent?.replace(/\s+/g, ' ').trim() || '';
+      const title = element.textContent?.replace(/\s+/g, " ").trim() || "";
       if (!level || !title) return null;
-      const id = `pilotdeck-docx-heading-${index}`;
-      element.dataset.pilotdeckOutlineId = id;
+      const id = `sati-docx-heading-${index}`;
+      element.dataset.satiOutlineId = id;
       return { id, level, title, element };
     })
     .filter((item): item is OutlineItem => item !== null);
@@ -78,16 +78,14 @@ function findTextMatches(root: HTMLElement, query: string): SearchMatch[] {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement;
-      if (!parent || parent.closest('style,script')) return NodeFilter.FILTER_REJECT;
-      return node.textContent?.trim()
-        ? NodeFilter.FILTER_ACCEPT
-        : NodeFilter.FILTER_REJECT;
+      if (!parent || parent.closest("style,script")) return NodeFilter.FILTER_REJECT;
+      return node.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     },
   });
 
   let node = walker.nextNode();
   while (node) {
-    const text = node.textContent || '';
+    const text = node.textContent || "";
     const normalizedText = text.toLocaleLowerCase();
     let start = 0;
     while (start <= normalizedText.length - normalizedQuery.length) {
@@ -121,7 +119,7 @@ export default function DocxBuiltinPreview({
   onRefresh,
   onError,
 }: DocxBuiltinPreviewProps) {
-  const { t } = useTranslation('codeEditor');
+  const { t } = useTranslation("codeEditor");
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const onErrorRef = useRef(onError);
@@ -131,14 +129,14 @@ export default function DocxBuiltinPreview({
   const [zoom, setZoom] = useState(1);
   const [pages, setPages] = useState<HTMLElement[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchMatchIndex, setSearchMatchIndex] = useState(0);
   const [selectionAction, setSelectionAction] = useState<TextSelectionAction | null>(null);
   const [referenceMode, setReferenceMode] = useState<ContentReferenceSelectionMode | null>(null);
   const selectionTimerRef = useRef<number | null>(null);
   const searchMatchesRef = useRef<SearchMatch[]>([]);
-  const highlightId = useId().replace(/[^a-z0-9_-]/gi, '');
-  const allHighlightName = `pilotdeck-docx-search-${highlightId}`;
+  const highlightId = useId().replace(/[^a-z0-9_-]/gi, "");
+  const allHighlightName = `sati-docx-search-${highlightId}`;
   const activeHighlightName = `${allHighlightName}-active`;
 
   useEffect(() => {
@@ -157,7 +155,7 @@ export default function DocxBuiltinPreview({
     setCurrentPage(1);
 
     renderAsync(blob, container, container, {
-      className: 'pilotdeck-docx',
+      className: "sati-docx",
       breakPages: true,
       ignoreLastRenderedPageBreak: false,
       renderHeaders: true,
@@ -170,14 +168,12 @@ export default function DocxBuiltinPreview({
     })
       .then(() => {
         if (cancelled) return;
-        const nextPages = Array.from(
-          container.querySelectorAll<HTMLElement>('section.pilotdeck-docx'),
-        );
+        const nextPages = Array.from(container.querySelectorAll<HTMLElement>("section.sati-docx"));
         setPages(nextPages);
         setOutline(findOutlineItems(container));
         setRendered(true);
       })
-      .catch((error) => {
+      .catch(error => {
         if (!cancelled) {
           onErrorRef.current(error instanceof Error ? error : new Error(String(error)));
         }
@@ -190,7 +186,7 @@ export default function DocxBuiltinPreview({
   }, [blob]);
 
   useEffect(() => {
-    const wrapper = viewerRef.current?.querySelector<HTMLElement>('.pilotdeck-docx-wrapper');
+    const wrapper = viewerRef.current?.querySelector<HTMLElement>(".sati-docx-wrapper");
     if (wrapper) wrapper.style.zoom = String(zoom);
   }, [rendered, zoom]);
 
@@ -211,18 +207,22 @@ export default function DocxBuiltinPreview({
       setCurrentPage(closestIndex + 1);
     };
     updateCurrentPage();
-    scroll.addEventListener('scroll', updateCurrentPage, { passive: true });
-    return () => scroll.removeEventListener('scroll', updateCurrentPage);
+    scroll.addEventListener("scroll", updateCurrentPage, { passive: true });
+    return () => scroll.removeEventListener("scroll", updateCurrentPage);
   }, [pages]);
 
   useEffect(() => {
     const root = viewerRef.current;
-    const cssHighlights = (globalThis.CSS as unknown as {
-      highlights?: Map<string, unknown>;
-    })?.highlights;
-    const HighlightConstructor = (globalThis as unknown as {
-      Highlight?: new (...ranges: Range[]) => unknown;
-    }).Highlight;
+    const cssHighlights = (
+      globalThis.CSS as unknown as {
+        highlights?: Map<string, unknown>;
+      }
+    )?.highlights;
+    const HighlightConstructor = (
+      globalThis as unknown as {
+        Highlight?: new (...ranges: Range[]) => unknown;
+      }
+    ).Highlight;
     cssHighlights?.delete(allHighlightName);
     cssHighlights?.delete(activeHighlightName);
     searchMatchesRef.current = [];
@@ -234,14 +234,9 @@ export default function DocxBuiltinPreview({
 
     const matches = findTextMatches(root, searchQuery);
     searchMatchesRef.current = matches;
-    setSearchMatchIndex((current) => (
-      matches.length > 0 ? Math.min(current, matches.length - 1) : 0
-    ));
+    setSearchMatchIndex(current => (matches.length > 0 ? Math.min(current, matches.length - 1) : 0));
     if (cssHighlights && HighlightConstructor && matches.length > 0) {
-      cssHighlights.set(
-        allHighlightName,
-        new HighlightConstructor(...matches.map((match) => match.range)),
-      );
+      cssHighlights.set(allHighlightName, new HighlightConstructor(...matches.map(match => match.range)));
     }
 
     return () => {
@@ -252,34 +247,41 @@ export default function DocxBuiltinPreview({
 
   useEffect(() => {
     const matches = searchMatchesRef.current;
-    const cssHighlights = (globalThis.CSS as unknown as {
-      highlights?: Map<string, unknown>;
-    })?.highlights;
-    const HighlightConstructor = (globalThis as unknown as {
-      Highlight?: new (...ranges: Range[]) => unknown;
-    }).Highlight;
+    const cssHighlights = (
+      globalThis.CSS as unknown as {
+        highlights?: Map<string, unknown>;
+      }
+    )?.highlights;
+    const HighlightConstructor = (
+      globalThis as unknown as {
+        Highlight?: new (...ranges: Range[]) => unknown;
+      }
+    ).Highlight;
     cssHighlights?.delete(activeHighlightName);
     if (matches.length === 0) return;
     const match = matches[Math.min(searchMatchIndex, matches.length - 1)];
     if (cssHighlights && HighlightConstructor) {
       cssHighlights.set(activeHighlightName, new HighlightConstructor(match.range));
     }
-    match.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    match.element.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [activeHighlightName, searchMatchIndex, searchQuery]);
 
-  const goToPage = useCallback((pageNumber: number) => {
-    const page = pages[Math.max(0, Math.min(pages.length - 1, pageNumber - 1))];
-    page?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }, [pages]);
+  const goToPage = useCallback(
+    (pageNumber: number) => {
+      const page = pages[Math.max(0, Math.min(pages.length - 1, pageNumber - 1))];
+      page?.scrollIntoView({ block: "start", behavior: "smooth" });
+    },
+    [pages],
+  );
 
   const moveSearch = useCallback((direction: -1 | 1) => {
     const count = searchMatchesRef.current.length;
     if (count === 0) return;
-    setSearchMatchIndex((current) => (current + direction + count) % count);
+    setSearchMatchIndex(current => (current + direction + count) % count);
   }, []);
 
   const updateSelectionAction = useCallback(() => {
-    if (referenceMode === 'region') return;
+    if (referenceMode === "region") return;
     const root = viewerRef.current;
     const scroll = scrollRef.current;
     const selection = window.getSelection();
@@ -299,52 +301,66 @@ export default function DocxBuiltinPreview({
     }
     const rangeRect = range.getBoundingClientRect();
     const scrollRect = scroll.getBoundingClientRect();
-    const page = (range.startContainer.parentElement || range.startContainer)
-      && (range.startContainer.parentElement?.closest<HTMLElement>('section.pilotdeck-docx') || null);
+    const page =
+      (range.startContainer.parentElement || range.startContainer) &&
+      (range.startContainer.parentElement?.closest<HTMLElement>("section.sati-docx") || null);
     const pageIndex = page ? pages.indexOf(page) : -1;
     const pageRect = page?.getBoundingClientRect();
     const heading = [...outline]
       .reverse()
-      .find((item) => (
-        item.element === range.startContainer
-        || Boolean(item.element.compareDocumentPosition(range.startContainer) & Node.DOCUMENT_POSITION_FOLLOWING)
-      ));
-    const documentText = root.textContent?.replace(/\s+/g, ' ').trim() || selectedText;
+      .find(
+        item =>
+          item.element === range.startContainer ||
+          Boolean(item.element.compareDocumentPosition(range.startContainer) & Node.DOCUMENT_POSITION_FOLLOWING),
+      );
+    const documentText = root.textContent?.replace(/\s+/g, " ").trim() || selectedText;
     const prefixIndex = documentText.indexOf(selectedText);
     const reference = createTextContentReference({
-      selectionMode: 'text',
+      selectionMode: "text",
       source: {
         projectName,
         relativePath: filePath,
         fileName,
         revision: { size: blob.size },
       },
-      renderer: { id: 'docx', backend: 'builtin', locatorQuality: 'semantic' },
+      renderer: { id: "docx", backend: "builtin", locatorQuality: "semantic" },
       locator: {
-        surface: 'document',
+        surface: "document",
         ...(pageIndex >= 0 ? { pageNumbers: [pageIndex + 1] } : {}),
         ...(heading ? { headingPath: [heading.title] } : {}),
         quote: {
           exact: selectedText,
-          ...(prefixIndex >= 0 ? {
-            prefix: documentText.slice(Math.max(0, prefixIndex - 80), prefixIndex),
-            suffix: documentText.slice(prefixIndex + selectedText.length, prefixIndex + selectedText.length + 80),
-          } : {}),
+          ...(prefixIndex >= 0
+            ? {
+                prefix: documentText.slice(Math.max(0, prefixIndex - 80), prefixIndex),
+                suffix: documentText.slice(prefixIndex + selectedText.length, prefixIndex + selectedText.length + 80),
+              }
+            : {}),
         },
-        ...(pageRect ? {
-          rects: [{
-            x: (rangeRect.left - pageRect.left) / Math.max(1, pageRect.width),
-            y: (rangeRect.top - pageRect.top) / Math.max(1, pageRect.height),
-            width: rangeRect.width / Math.max(1, pageRect.width),
-            height: rangeRect.height / Math.max(1, pageRect.height),
-          }],
-        } : {}),
+        ...(pageRect
+          ? {
+              rects: [
+                {
+                  x: (rangeRect.left - pageRect.left) / Math.max(1, pageRect.width),
+                  y: (rangeRect.top - pageRect.top) / Math.max(1, pageRect.height),
+                  width: rangeRect.width / Math.max(1, pageRect.width),
+                  height: rangeRect.height / Math.max(1, pageRect.height),
+                },
+              ],
+            }
+          : {}),
       },
       selectedText,
       surroundingText: surroundingText(documentText, selectedText),
     });
     setSelectionAction({
-      left: Math.max(12, Math.min(scroll.clientWidth - 180, rangeRect.left - scrollRect.left + scroll.scrollLeft + rangeRect.width / 2 - 70)),
+      left: Math.max(
+        12,
+        Math.min(
+          scroll.clientWidth - 180,
+          rangeRect.left - scrollRect.left + scroll.scrollLeft + rangeRect.width / 2 - 70,
+        ),
+      ),
       top: Math.max(12, rangeRect.top - scrollRect.top + scroll.scrollTop - 42),
       reference,
     });
@@ -356,72 +372,75 @@ export default function DocxBuiltinPreview({
       selectionTimerRef.current = window.setTimeout(updateSelectionAction, 40);
     };
     const clear = () => setSelectionAction(null);
-    document.addEventListener('selectionchange', clear);
-    document.addEventListener('mouseup', schedule);
-    document.addEventListener('touchend', schedule);
-    document.addEventListener('keyup', schedule);
+    document.addEventListener("selectionchange", clear);
+    document.addEventListener("mouseup", schedule);
+    document.addEventListener("touchend", schedule);
+    document.addEventListener("keyup", schedule);
     return () => {
       if (selectionTimerRef.current !== null) window.clearTimeout(selectionTimerRef.current);
-      document.removeEventListener('selectionchange', clear);
-      document.removeEventListener('mouseup', schedule);
-      document.removeEventListener('touchend', schedule);
-      document.removeEventListener('keyup', schedule);
+      document.removeEventListener("selectionchange", clear);
+      document.removeEventListener("mouseup", schedule);
+      document.removeEventListener("touchend", schedule);
+      document.removeEventListener("keyup", schedule);
     };
   }, [updateSelectionAction]);
 
   const capabilities: ReferenceCapabilities = {
-    text: rendered ? { state: 'available' } : { state: 'loading', reason: 'SURFACE_NOT_READY' },
-    cells: { state: 'unavailable', reason: 'NO_CELL_MODEL' },
-    region: rendered ? { state: 'available' } : { state: 'loading', reason: 'SURFACE_NOT_READY' },
-    recommendedMode: 'text',
+    text: rendered ? { state: "available" } : { state: "loading", reason: "SURFACE_NOT_READY" },
+    cells: { state: "unavailable", reason: "NO_CELL_MODEL" },
+    region: rendered ? { state: "available" } : { state: "loading", reason: "SURFACE_NOT_READY" },
+    recommendedMode: "text",
   };
 
   const handleRegionCommit = (capture: CapturedRegion) => {
     const pageNumber = capture.pageNumber || currentPage;
     const reference = createImageRegionContentReference({
-      selectionMode: 'region',
+      selectionMode: "region",
       source: {
         projectName,
         relativePath: filePath,
         fileName,
         revision: { size: blob.size },
       },
-      renderer: { id: 'docx', backend: 'builtin', locatorQuality: 'visual' },
-      locator: { surface: 'page', pageNumber, rect: capture.rect },
+      renderer: { id: "docx", backend: "builtin", locatorQuality: "visual" },
+      locator: { surface: "page", pageNumber, rect: capture.rect },
       image: {
         name: `reference-${fileName}-page-${pageNumber}-${Date.now()}.png`,
-        mimeType: 'image/png',
+        mimeType: "image/png",
         width: capture.width,
         height: capture.height,
         dataUrl: capture.dataUrl,
       },
       nearbyText: capture.nearbyText,
     });
-    window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', { detail: reference }));
+    window.dispatchEvent(new CustomEvent("sati:add-chat-reference", { detail: reference }));
     setReferenceMode(null);
   };
 
-  const outlinePanel = useMemo(() => (
-    <aside className="w-64 shrink-0 overflow-auto border-r border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-        {t('pdfToolbar.outline')}
-      </div>
-      <div className="space-y-0.5">
-        {outline.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            title={item.title}
-            className="block min-h-8 w-full rounded-md py-1.5 pr-2 text-left text-[12px] leading-5 text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            style={{ paddingLeft: `${8 + (item.level - 1) * 12}px` }}
-            onClick={() => item.element.scrollIntoView({ block: 'start', behavior: 'smooth' })}
-          >
-            <span className="line-clamp-2">{item.title}</span>
-          </button>
-        ))}
-      </div>
-    </aside>
-  ), [outline, t]);
+  const outlinePanel = useMemo(
+    () => (
+      <aside className="w-64 shrink-0 overflow-auto border-r border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+          {t("pdfToolbar.outline")}
+        </div>
+        <div className="space-y-0.5">
+          {outline.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              title={item.title}
+              className="block min-h-8 w-full rounded-md py-1.5 pr-2 text-left text-[12px] leading-5 text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              style={{ paddingLeft: `${8 + (item.level - 1) * 12}px` }}
+              onClick={() => item.element.scrollIntoView({ block: "start", behavior: "smooth" })}
+            >
+              <span className="line-clamp-2">{item.title}</span>
+            </button>
+          ))}
+        </div>
+      </aside>
+    ),
+    [outline, t],
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-neutral-100 dark:bg-neutral-900">
@@ -434,14 +453,14 @@ export default function DocxBuiltinPreview({
           background: rgba(249, 115, 22, 0.88);
           color: #111827;
         }
-        .pilotdeck-docx-wrapper {
+        .sati-docx-wrapper {
           background: rgb(245 245 245) !important;
           padding: 28px !important;
         }
-        .dark .pilotdeck-docx-wrapper {
+        .dark .sati-docx-wrapper {
           background: rgb(23 23 23) !important;
         }
-        .pilotdeck-docx-wrapper > section.pilotdeck-docx {
+        .sati-docx-wrapper > section.sati-docx {
           margin: 0 auto 24px !important;
           box-shadow: 0 1px 4px rgb(0 0 0 / 0.16) !important;
         }
@@ -449,7 +468,7 @@ export default function DocxBuiltinPreview({
       <BuiltinOfficeToolbar
         navigationAvailable={outline.length > 0}
         navigationVisible={navigationVisible && outline.length > 0}
-        onToggleNavigation={() => setNavigationVisible((value) => !value)}
+        onToggleNavigation={() => setNavigationVisible(value => !value)}
         zoom={zoom}
         onZoomChange={setZoom}
         currentItem={currentPage}
@@ -470,11 +489,11 @@ export default function DocxBuiltinPreview({
         downloadName={downloadName}
         referenceCapabilities={capabilities}
         referenceMode={referenceMode}
-        onSelectReferenceMode={(mode) => {
-          if (mode === 'region') {
+        onSelectReferenceMode={mode => {
+          if (mode === "region") {
             window.getSelection()?.removeAllRanges();
             setSelectionAction(null);
-            setReferenceMode('region');
+            setReferenceMode("region");
           } else {
             setReferenceMode(null);
           }
@@ -490,30 +509,32 @@ export default function DocxBuiltinPreview({
               type="button"
               className={`absolute z-20 ${floatingSelectionSingleActionClassName}`}
               style={{ top: selectionAction.top, left: selectionAction.left }}
-              onMouseDown={(event) => event.preventDefault()}
+              onMouseDown={event => event.preventDefault()}
               onClick={() => {
-                window.dispatchEvent(new CustomEvent('pilotdeck:add-chat-reference', {
-                  detail: selectionAction.reference,
-                }));
+                window.dispatchEvent(
+                  new CustomEvent("sati:add-chat-reference", {
+                    detail: selectionAction.reference,
+                  }),
+                );
                 window.getSelection()?.removeAllRanges();
                 setSelectionAction(null);
               }}
             >
-              {t('selection.chatInPilotDeck')}
+              {t("selection.chatInSati")}
             </button>
           ) : null}
           <RegionSelectionOverlay
-            active={referenceMode === 'region'}
+            active={referenceMode === "region"}
             hostRef={scrollRef}
-            resolveTarget={(element) => {
-              const page = element?.closest<HTMLElement>('section.pilotdeck-docx');
+            resolveTarget={element => {
+              const page = element?.closest<HTMLElement>("section.sati-docx");
               if (!page || !viewerRef.current?.contains(page)) return null;
               const pageIndex = pages.indexOf(page);
               return {
                 element: page,
-                surface: 'page',
+                surface: "page",
                 pageNumber: pageIndex >= 0 ? pageIndex + 1 : currentPage,
-                nearbyText: page.textContent?.replace(/\s+/g, ' ').trim(),
+                nearbyText: page.textContent?.replace(/\s+/g, " ").trim(),
               };
             }}
             onCommit={handleRegionCommit}

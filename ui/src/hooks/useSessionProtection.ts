@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState } from "react";
 
 export function useSessionProtection() {
   const [activeSessions, setActiveSessions] = useState<Set<string>>(new Set());
@@ -9,7 +9,7 @@ export function useSessionProtection() {
       return;
     }
 
-    setActiveSessions((prev) => new Set([...prev, sessionId]));
+    setActiveSessions(prev => new Set([...prev, sessionId]));
   }, []);
 
   const markSessionAsInactive = useCallback((sessionId?: string | null) => {
@@ -17,7 +17,7 @@ export function useSessionProtection() {
       return;
     }
 
-    setActiveSessions((prev) => {
+    setActiveSessions(prev => {
       const next = new Set(prev);
       next.delete(sessionId);
       return next;
@@ -29,7 +29,7 @@ export function useSessionProtection() {
       return;
     }
 
-    setProcessingSessions((prev) => {
+    setProcessingSessions(prev => {
       if (prev.has(sessionId)) return prev;
       return new Set([...prev, sessionId]);
     });
@@ -40,7 +40,7 @@ export function useSessionProtection() {
       return;
     }
 
-    setProcessingSessions((prev) => {
+    setProcessingSessions(prev => {
       if (!prev.has(sessionId)) return prev;
       const next = new Set(prev);
       next.delete(sessionId);
@@ -53,10 +53,10 @@ export function useSessionProtection() {
       return;
     }
 
-    setActiveSessions((prev) => {
+    setActiveSessions(prev => {
       const next = new Set<string>();
       for (const sessionId of prev) {
-        if (!sessionId.startsWith('new-session-')) {
+        if (!sessionId.startsWith("new-session-")) {
           next.add(sessionId);
         }
       }

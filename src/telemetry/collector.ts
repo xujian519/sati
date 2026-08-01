@@ -12,12 +12,9 @@ import {
   type TelemetryClient,
   type TelemetryConfig,
   type TelemetryErrorCategory,
-  type TelemetryErrorInput,
-  type TelemetryFeatureUsedInput,
   type TelemetryExecutionKind,
   type TelemetryLoopStage,
   type TelemetryModule,
-  type TelemetryOutcome,
   type TelemetryRuntimeContext,
   type TelemetryTrackContext,
 } from "./types.js";
@@ -30,14 +27,12 @@ type CreateTelemetryCollectorInput = {
   enabled?: boolean;
 };
 
-const DEFAULT_BASE_URL = "http://tele.pilotdeck.cn";
+const DEFAULT_BASE_URL = "http://tele.sati.cn";
 
 const PATH_LIKE_KEY = /path|cwd|root|dir|file/i;
 const ABSOLUTE_PATH_VALUE = /^([A-Za-z]:)?[/\\]/;
 
-export function createTelemetryCollector(
-  input: CreateTelemetryCollectorInput = {},
-): TelemetryClient {
+export function createTelemetryCollector(input: CreateTelemetryCollectorInput = {}): TelemetryClient {
   const env = input.env ?? process.env;
   const config = resolveTelemetryConfig(env, input.pilotHome);
   if (input.enabled != null) {
@@ -49,12 +44,14 @@ export function createTelemetryCollector(
   return {
     track(eventName, properties = {}, context = {}) {
       if (!config.enabled) return;
-      sender.enqueue(buildEvent({
-        eventName,
-        properties: sanitizeProperties(properties),
-        context,
-        runtimeContext,
-      }));
+      sender.enqueue(
+        buildEvent({
+          eventName,
+          properties: sanitizeProperties(properties),
+          context,
+          runtimeContext,
+        }),
+      );
     },
     trackFeatureUsed(inputFeature) {
       this.trackFeatureLoopStage(inputFeature);
@@ -71,16 +68,20 @@ export function createTelemetryCollector(
         metadata = {},
         ...context
       } = inputFeature;
-      this.track("feature_used", {
-        module,
-        ownerModule: ownerModule ?? module,
-        ...(executionKind ? { executionKind } : {}),
-        ...(phase ? { phase } : {}),
-        loopStage,
-        outcome,
-        ...(errorCategory ? { errorCategory } : {}),
-        ...sanitizeProperties(metadata),
-      }, context);
+      this.track(
+        "feature_used",
+        {
+          module,
+          ownerModule: ownerModule ?? module,
+          ...(executionKind ? { executionKind } : {}),
+          ...(phase ? { phase } : {}),
+          loopStage,
+          outcome,
+          ...(errorCategory ? { errorCategory } : {}),
+          ...sanitizeProperties(metadata),
+        },
+        context,
+      );
     },
     trackError(error, inputError = {}) {
       const err = normalizeErrorCode(error);
@@ -89,16 +90,20 @@ export function createTelemetryCollector(
       const loopStage = inputError.loopStage ?? "loop_end";
       const errorCategory = inputError.errorCategory ?? "runtime_error";
       const code = inputError.code ?? err;
-      this.track("error_occurred", {
-        module,
-        ownerModule,
-        ...(inputError.executionKind ? { executionKind: inputError.executionKind } : {}),
-        ...(inputError.phase ? { phase: inputError.phase } : {}),
-        loopStage,
-        errorCategory,
-        code,
-        ...(inputError.toolName ? { toolName: inputError.toolName } : {}),
-      }, inputError);
+      this.track(
+        "error_occurred",
+        {
+          module,
+          ownerModule,
+          ...(inputError.executionKind ? { executionKind: inputError.executionKind } : {}),
+          ...(inputError.phase ? { phase: inputError.phase } : {}),
+          loopStage,
+          errorCategory,
+          code,
+          ...(inputError.toolName ? { toolName: inputError.toolName } : {}),
+        },
+        inputError,
+      );
       if (!isTelemetryModule(module) || !isTelemetryModule(ownerModule)) {
         return;
       }
@@ -133,10 +138,7 @@ export function createTelemetryCollector(
   };
 }
 
-function resolveTelemetryConfig(
-  env: Record<string, string | undefined>,
-  pilotHomeOverride?: string,
-): TelemetryConfig {
+function resolveTelemetryConfig(env: Record<string, string | undefined>, pilotHomeOverride?: string): TelemetryConfig {
   const enabled = parseEnabledFlag(env.ANALYTICS_ENABLED, false);
   const pilotHome = pilotHomeOverride ?? resolvePilotHome(env);
   const queueFilePath = env.ANALYTICS_QUEUE_FILE
@@ -205,9 +207,7 @@ function pickErrorFeatureMetadata(
   return out;
 }
 
-export function sanitizeProperties(
-  value: Record<string, unknown>,
-): Record<string, unknown> {
+export function sanitizeProperties(value: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
     if (PATH_LIKE_KEY.test(key)) {
@@ -229,9 +229,7 @@ function sanitizePropertyValue(value: unknown): unknown {
     return looksLikeAbsolutePath(value) ? undefined : value;
   }
   if (Array.isArray(value)) {
-    const items = value
-      .map((item) => sanitizePropertyValue(item))
-      .filter((item) => item !== undefined);
+    const items = value.map(item => sanitizePropertyValue(item)).filter(item => item !== undefined);
     return items.length > 0 ? items : undefined;
   }
   if (typeof value === "object") {

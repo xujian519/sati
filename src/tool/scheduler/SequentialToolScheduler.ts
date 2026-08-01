@@ -1,16 +1,13 @@
-import type { PilotDeckToolResult } from "../protocol/result.js";
-import type { PilotDeckToolCall, PilotDeckToolRuntimeContext } from "../protocol/types.js";
+import type { SatiToolResult } from "../protocol/result.js";
+import type { SatiToolCall, SatiToolRuntimeContext } from "../protocol/types.js";
 import type { ToolRuntime } from "../execution/ToolRuntime.js";
-import type { PilotDeckToolScheduler } from "./ToolScheduler.js";
+import type { SatiToolScheduler } from "./ToolScheduler.js";
 
-export class SequentialToolScheduler implements PilotDeckToolScheduler {
+export class SequentialToolScheduler implements SatiToolScheduler {
   constructor(private readonly runtime: ToolRuntime) {}
 
-  async executeAll(
-    calls: PilotDeckToolCall[],
-    context: PilotDeckToolRuntimeContext,
-  ): Promise<PilotDeckToolResult[]> {
-    const results: PilotDeckToolResult[] = [];
+  async executeAll(calls: SatiToolCall[], context: SatiToolRuntimeContext): Promise<SatiToolResult[]> {
+    const results: SatiToolResult[] = [];
     for (const call of calls) {
       results.push(await this.runtime.execute(call, context));
     }

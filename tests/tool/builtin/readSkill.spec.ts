@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-
 import { createReadSkillTool } from "../../../src/tool/builtin/readSkill.js";
 
 function baseContext() {
@@ -14,12 +13,14 @@ function baseContext() {
 
 test("read_skill returns the resolved SKILL.md path with the skill body", async () => {
   const tool = createReadSkillTool({
-    loader: async (name) => name === "spreadsheets" ? "# Spreadsheet workflow" : undefined,
-    lister: () => [{
-      name: "spreadsheets",
-      description: "Create spreadsheets.",
-      path: "/opt/pilotdeck/skills/spreadsheets/SKILL.md",
-    }],
+    loader: async name => (name === "spreadsheets" ? "# Spreadsheet workflow" : undefined),
+    lister: () => [
+      {
+        name: "spreadsheets",
+        description: "Create spreadsheets.",
+        path: "/opt/sati/skills/spreadsheets/SKILL.md",
+      },
+    ],
   });
 
   const result = await tool.execute({ skillName: "spreadsheets" }, baseContext());
@@ -31,7 +32,7 @@ test("read_skill returns the resolved SKILL.md path with the skill body", async 
     [
       "<skill>",
       "<name>spreadsheets</name>",
-      "<path>/opt/pilotdeck/skills/spreadsheets/SKILL.md</path>",
+      "<path>/opt/sati/skills/spreadsheets/SKILL.md</path>",
       "# Spreadsheet workflow",
       "</skill>",
     ].join("\n"),

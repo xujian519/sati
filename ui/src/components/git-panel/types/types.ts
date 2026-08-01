@@ -1,9 +1,17 @@
-import type { Project } from '../../../types/app';
+import type { Project } from "../../../types/app";
 
-export type GitPanelView = 'changes' | 'history' | 'branches';
-export type FileStatusCode = 'M' | 'A' | 'D' | 'U';
-export type GitStatusFileGroup = 'modified' | 'added' | 'deleted' | 'untracked';
-export type ConfirmActionType = 'discard' | 'delete' | 'commit' | 'pull' | 'push' | 'publish' | 'revertLocalCommit' | 'deleteBranch';
+export type GitPanelView = "changes" | "history" | "branches";
+export type FileStatusCode = "M" | "A" | "D" | "U";
+export type GitStatusFileGroup = "modified" | "added" | "deleted" | "untracked";
+export type ConfirmActionType =
+  | "discard"
+  | "delete"
+  | "commit"
+  | "pull"
+  | "push"
+  | "publish"
+  | "revertLocalCommit"
+  | "deleteBranch";
 
 export type FileDiffInfo = {
   old_string: string;

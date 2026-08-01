@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  AlertCircle,
-  Check,
-  CheckCircle2,
-  KeyRound,
-  Loader2,
-  MessageSquare,
-  QrCode,
-  XCircle,
-} from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, KeyRound, Loader2, MessageSquare, QrCode, XCircle } from "lucide-react";
 import { Button } from "../../../../../../shared/view/ui";
 import { authenticatedFetch } from "../../../../../../utils/api";
 import { SettingsCard, SettingsSection } from "../../../../shared/view";
@@ -24,19 +15,11 @@ type WeComChannelSectionProps = {
   onSaved: () => void;
 };
 
-function normalizeWeComPolicy(
-  value: string | undefined,
-  fallback: WeComAccessPolicy,
-): WeComAccessPolicy {
-  return value === "open" || value === "allowlist" || value === "disabled"
-    ? value
-    : fallback;
+function normalizeWeComPolicy(value: string | undefined, fallback: WeComAccessPolicy): WeComAccessPolicy {
+  return value === "open" || value === "allowlist" || value === "disabled" ? value : fallback;
 }
 
-export default function WeComChannelSection({
-  status,
-  onSaved,
-}: WeComChannelSectionProps) {
+export default function WeComChannelSection({ status, onSaved }: WeComChannelSectionProps) {
   const { t } = useTranslation("settings");
   const [expanded, setExpanded] = useState(!status.enabled);
   const [setupMode, setSetupMode] = useState<WeComSetupMode>("choose");
@@ -45,19 +28,13 @@ export default function WeComChannelSection({
   const [qrError, setQrError] = useState("");
   const [botId, setBotId] = useState("");
   const [secret, setSecret] = useState("");
-  const [websocketUrl, setWebsocketUrl] = useState(
-    status.websocketUrl || "wss://openws.work.weixin.qq.com",
-  );
-  const [dmPolicy, setDmPolicy] = useState<WeComAccessPolicy>(
-    normalizeWeComPolicy(status.dmPolicy, "open"),
-  );
+  const [websocketUrl, setWebsocketUrl] = useState(status.websocketUrl || "wss://openws.work.weixin.qq.com");
+  const [dmPolicy, setDmPolicy] = useState<WeComAccessPolicy>(normalizeWeComPolicy(status.dmPolicy, "open"));
   const [groupPolicy, setGroupPolicy] = useState<WeComAccessPolicy>(
     normalizeWeComPolicy(status.groupPolicy, "disabled"),
   );
   const [allowFrom, setAllowFrom] = useState((status.allowFrom || []).join(", "));
-  const [groupAllowFrom, setGroupAllowFrom] = useState(
-    (status.groupAllowFrom || []).join(", "),
-  );
+  const [groupAllowFrom, setGroupAllowFrom] = useState((status.groupAllowFrom || []).join(", "));
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<TestResult>(null);
   const pollRef = useRef<number | null>(null);
@@ -187,9 +164,7 @@ export default function WeComChannelSection({
             <div className="flex items-center gap-2.5">
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
               <div>
-                <div className="text-[13px] font-medium text-foreground">
-                  {t("gateway.wecom.label")}
-                </div>
+                <div className="text-[13px] font-medium text-foreground">{t("gateway.wecom.label")}</div>
                 <div className="text-xs text-muted-foreground">
                   {status.enabled && status.hasSecret
                     ? `${t("gateway.connected")}${status.botId ? ` · ${status.botId}` : ""}`
@@ -205,11 +180,7 @@ export default function WeComChannelSection({
                 </span>
               )}
               {!expanded && (
-                <Button
-                  variant={status.enabled ? "ghost" : "outline"}
-                  size="sm"
-                  onClick={() => setExpanded(true)}
-                >
+                <Button variant={status.enabled ? "ghost" : "outline"} size="sm" onClick={() => setExpanded(true)}>
                   {status.enabled ? t("gateway.edit") : t("gateway.setup")}
                 </Button>
               )}
@@ -226,12 +197,8 @@ export default function WeComChannelSection({
                   className="flex flex-col items-center gap-2 rounded-lg border border-border p-4 text-center transition-colors hover:border-ring hover:bg-accent/30"
                 >
                   <QrCode className="h-6 w-6 text-muted-foreground" />
-                  <span className="text-[13px] font-medium text-foreground">
-                    {t("gateway.wecom.qrSetup")}
-                  </span>
-                  <span className="text-[11px] leading-4 text-muted-foreground">
-                    {t("gateway.wecom.qrSetupDesc")}
-                  </span>
+                  <span className="text-[13px] font-medium text-foreground">{t("gateway.wecom.qrSetup")}</span>
+                  <span className="text-[11px] leading-4 text-muted-foreground">{t("gateway.wecom.qrSetupDesc")}</span>
                 </button>
                 <button
                   type="button"
@@ -239,9 +206,7 @@ export default function WeComChannelSection({
                   className="flex flex-col items-center gap-2 rounded-lg border border-border p-4 text-center transition-colors hover:border-ring hover:bg-accent/30"
                 >
                   <KeyRound className="h-6 w-6 text-muted-foreground" />
-                  <span className="text-[13px] font-medium text-foreground">
-                    {t("gateway.wecom.manualInput")}
-                  </span>
+                  <span className="text-[13px] font-medium text-foreground">{t("gateway.wecom.manualInput")}</span>
                   <span className="text-[11px] leading-4 text-muted-foreground">
                     {t("gateway.wecom.manualInputDesc")}
                   </span>
@@ -249,12 +214,7 @@ export default function WeComChannelSection({
               </div>
               <div className="flex items-center gap-2">
                 {status.enabled && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-600"
-                    onClick={handleDisable}
-                  >
+                  <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={handleDisable}>
                     {t("gateway.disable")}
                   </Button>
                 )}
@@ -273,11 +233,7 @@ export default function WeComChannelSection({
                     <QrCode className="mr-1.5 h-3 w-3" />
                     {t("gateway.wecom.startQr")}
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSetupMode("choose")}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setSetupMode("choose")}>
                     {t("gateway.cancel")}
                   </Button>
                 </div>
@@ -315,12 +271,7 @@ export default function WeComChannelSection({
                 <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs text-green-700 dark:text-green-400">
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                   {t("gateway.wecom.qrSuccess")}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="ml-auto text-xs"
-                    onClick={closeExpanded}
-                  >
+                  <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={closeExpanded}>
                     {t("gateway.dismiss")}
                   </Button>
                 </div>
@@ -336,11 +287,7 @@ export default function WeComChannelSection({
                     <Button variant="ghost" size="sm" onClick={() => setQrPhase("idle")}>
                       {t("gateway.wecom.retry")}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSetupMode("manual")}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => setSetupMode("manual")}>
                       {t("gateway.wecom.manualInput")}
                     </Button>
                   </div>
@@ -352,48 +299,40 @@ export default function WeComChannelSection({
           {expanded && setupMode === "manual" && (
             <div className="space-y-3 border-t border-border pt-4">
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {t("gateway.wecom.botId")}
-                </span>
+                <span className="text-xs font-medium text-muted-foreground">{t("gateway.wecom.botId")}</span>
                 <input
                   type="text"
                   value={botId}
-                  onChange={(e) => setBotId(e.target.value.trim())}
+                  onChange={e => setBotId(e.target.value.trim())}
                   placeholder={status.botId || "bot_xxxxxxxxxxxx"}
                   className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {t("gateway.wecom.secret")}
-                </span>
+                <span className="text-xs font-medium text-muted-foreground">{t("gateway.wecom.secret")}</span>
                 <input
                   type="password"
                   value={secret}
-                  onChange={(e) => setSecret(e.target.value.trim())}
+                  onChange={e => setSecret(e.target.value.trim())}
                   placeholder={status.hasSecret ? "Keep existing secret" : "••••••••"}
                   className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {t("gateway.wecom.websocketUrl")}
-                </span>
+                <span className="text-xs font-medium text-muted-foreground">{t("gateway.wecom.websocketUrl")}</span>
                 <input
                   type="text"
                   value={websocketUrl}
-                  onChange={(e) => setWebsocketUrl(e.target.value.trim())}
+                  onChange={e => setWebsocketUrl(e.target.value.trim())}
                   className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t("gateway.wecom.dmPolicy")}
-                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">{t("gateway.wecom.dmPolicy")}</span>
                   <select
                     value={dmPolicy}
-                    onChange={(e) => setDmPolicy(e.target.value as WeComAccessPolicy)}
+                    onChange={e => setDmPolicy(e.target.value as WeComAccessPolicy)}
                     className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
                   >
                     <option value="open">open</option>
@@ -402,12 +341,10 @@ export default function WeComChannelSection({
                   </select>
                 </label>
                 <label className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {t("gateway.wecom.groupPolicy")}
-                  </span>
+                  <span className="text-xs font-medium text-muted-foreground">{t("gateway.wecom.groupPolicy")}</span>
                   <select
                     value={groupPolicy}
-                    onChange={(e) => setGroupPolicy(e.target.value as WeComAccessPolicy)}
+                    onChange={e => setGroupPolicy(e.target.value as WeComAccessPolicy)}
                     className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
                   >
                     <option value="disabled">disabled</option>
@@ -422,7 +359,7 @@ export default function WeComChannelSection({
                   <input
                     type="text"
                     value={allowFrom}
-                    onChange={(e) => setAllowFrom(e.target.value)}
+                    onChange={e => setAllowFrom(e.target.value)}
                     placeholder="userid1, userid2"
                     className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                   />
@@ -434,15 +371,13 @@ export default function WeComChannelSection({
                   <input
                     type="text"
                     value={groupAllowFrom}
-                    onChange={(e) => setGroupAllowFrom(e.target.value)}
+                    onChange={e => setGroupAllowFrom(e.target.value)}
                     placeholder="chatid1, chatid2"
                     className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                   />
                 </label>
               )}
-              <p className="text-[11px] leading-4 text-muted-foreground">
-                {t("gateway.wecom.policyHint")}
-              </p>
+              <p className="text-[11px] leading-4 text-muted-foreground">{t("gateway.wecom.policyHint")}</p>
 
               {saveResult && (
                 <div
@@ -466,22 +401,12 @@ export default function WeComChannelSection({
                 <Button
                   size="sm"
                   onClick={handleSave}
-                  disabled={
-                    ((!botId && !status.botId) || (!secret && !status.hasSecret)) || saving
-                  }
+                  disabled={(!botId && !status.botId) || (!secret && !status.hasSecret) || saving}
                 >
-                  {saving ? (
-                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                  ) : (
-                    <Check className="mr-1.5 h-3 w-3" />
-                  )}
+                  {saving ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Check className="mr-1.5 h-3 w-3" />}
                   {t("gateway.save")}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSetupMode("choose")}
-                >
+                <Button variant="ghost" size="sm" onClick={() => setSetupMode("choose")}>
                   {t("gateway.cancel")}
                 </Button>
               </div>

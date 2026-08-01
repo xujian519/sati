@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FitAddon } from '@xterm/addon-fit';
-import type { Terminal } from '@xterm/xterm';
-import type { UseShellRuntimeOptions, UseShellRuntimeResult } from '../types/types';
-import { copyTextToClipboard } from '../../../utils/clipboard';
-import { useShellConnection } from './useShellConnection';
-import { useShellTerminal } from './useShellTerminal';
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { FitAddon } from "@xterm/addon-fit";
+import type { Terminal } from "@xterm/xterm";
+import type { UseShellRuntimeOptions, UseShellRuntimeResult } from "../types/types";
+import { copyTextToClipboard } from "../../../utils/clipboard";
+import { useShellConnection } from "./useShellConnection";
+import { useShellTerminal } from "./useShellTerminal";
 
 export function useShellRuntime({
   selectedProject,
@@ -22,7 +22,7 @@ export function useShellRuntime({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  const [authUrl, setAuthUrl] = useState('');
+  const [authUrl, setAuthUrl] = useState("");
   const [authUrlVersion, setAuthUrlVersion] = useState(0);
 
   const selectedProjectRef = useRef(selectedProject);
@@ -30,7 +30,7 @@ export function useShellRuntime({
   const initialCommandRef = useRef(initialCommand);
   const isPlainShellRef = useRef(isPlainShell);
   const onProcessCompleteRef = useRef(onProcessComplete);
-  const authUrlRef = useRef('');
+  const authUrlRef = useRef("");
   const lastSessionIdRef = useRef<string | null>(selectedSession?.id ?? null);
 
   // Keep mutable values in refs so websocket handlers always read current data.
@@ -45,7 +45,7 @@ export function useShellRuntime({
   const setCurrentAuthUrl = useCallback((nextAuthUrl: string) => {
     authUrlRef.current = nextAuthUrl;
     setAuthUrl(nextAuthUrl);
-    setAuthUrlVersion((previous) => previous + 1);
+    setAuthUrlVersion(previous => previous + 1);
   }, []);
 
   const closeSocket = useCallback(() => {
@@ -54,10 +54,7 @@ export function useShellRuntime({
       return;
     }
 
-    if (
-      activeSocket.readyState === WebSocket.OPEN ||
-      activeSocket.readyState === WebSocket.CONNECTING
-    ) {
+    if (activeSocket.readyState === WebSocket.OPEN || activeSocket.readyState === WebSocket.CONNECTING) {
       activeSocket.close();
     }
 
@@ -69,7 +66,7 @@ export function useShellRuntime({
       return false;
     }
 
-    const popup = window.open(url, '_blank');
+    const popup = window.open(url, "_blank");
     if (popup) {
       try {
         popup.opener = null;

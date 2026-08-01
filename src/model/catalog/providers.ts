@@ -1,7 +1,6 @@
 import type { ProviderCatalog } from "./types.js";
 
 export const PROVIDER_CATALOG: ProviderCatalog = {
-
   // ── Anthropic ──────────────────────────────────────────────────────────
 
   anthropic: {
@@ -210,7 +209,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
         },
         aliases: [],
       },
-      "o3": {
+      o3: {
         displayName: "o3",
         capabilities: {
           supportsToolUse: true,
@@ -342,7 +341,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
         },
         aliases: [],
       },
-      "o3": {
+      o3: {
         displayName: "o3",
         capabilities: {
           supportsToolUse: true,
@@ -1133,5 +1132,4 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
       },
     },
   },
-
 };

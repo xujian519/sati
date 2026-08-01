@@ -6,7 +6,7 @@ Envelope:
 {
   "type": "excalidraw",
   "version": 2,
-  "source": "openclaw/diagram-maker",
+  "source": "sati/diagram-maker",
   "elements": [],
   "appState": { "viewBackgroundColor": "#ffffff" }
 }

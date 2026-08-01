@@ -6,9 +6,9 @@ import { findCanonicalProjectRoot } from "../session/worktree/findCanonicalProje
 
 export type PilotPathEnv = Record<string, string | undefined>;
 
-export const DEFAULT_PILOT_HOME = "~/.pilotdeck";
-export const PILOT_CONFIG_FILE_NAME = "pilotdeck.yaml";
-export const PILOT_PROJECT_DIR_NAME = ".pilotdeck";
+export const DEFAULT_SATI_HOME = "~/.sati";
+export const PILOT_CONFIG_FILE_NAME = "sati.yaml";
+export const PILOT_PROJECT_DIR_NAME = ".sati";
 
 export type PilotExtensionPaths = {
   globalPluginsDir: string;
@@ -18,7 +18,7 @@ export type PilotExtensionPaths = {
 };
 
 export function resolvePilotHome(env: PilotPathEnv = process.env): string {
-  return normalizeHomePath(env.PILOT_HOME ?? DEFAULT_PILOT_HOME);
+  return normalizeHomePath(env.SATI_HOME ?? DEFAULT_SATI_HOME);
 }
 
 export function getPilotConfigFilePath(pilotHome: string): string {
@@ -44,10 +44,7 @@ export function getPilotProjectChatDir(projectRoot: string, pilotHome: string): 
  * Use this for all new code. The sync `getPilotProjectChatDir` keeps
  * the legacy behaviour for callers that cannot await.
  */
-export async function getPilotProjectChatDirAsync(
-  projectRoot: string,
-  pilotHome: string,
-): Promise<string> {
+export async function getPilotProjectChatDirAsync(projectRoot: string, pilotHome: string): Promise<string> {
   const canonical = await findCanonicalProjectRoot(projectRoot);
   const projectId = resolveProjectStorageId(canonical, pilotHome);
   return resolve(pilotHome, "projects", projectId, "chats");

@@ -1,27 +1,25 @@
-export type PilotDeckToolInputSchema = {
+export type SatiToolInputSchema = {
   type: "object";
-  properties?: Record<string, PilotDeckJsonSchema>;
+  properties?: Record<string, SatiJsonSchema>;
   required?: string[];
   additionalProperties?: boolean;
   [key: string]: unknown;
 };
 
-export type PilotDeckJsonSchema = {
+export type SatiJsonSchema = {
   type?: string | string[];
-  properties?: Record<string, PilotDeckJsonSchema>;
+  properties?: Record<string, SatiJsonSchema>;
   required?: string[];
   additionalProperties?: boolean;
-  items?: PilotDeckJsonSchema;
+  items?: SatiJsonSchema;
   enum?: unknown[];
   [key: string]: unknown;
 };
 
-export type PilotDeckToolValidationIssue = {
+export type SatiToolValidationIssue = {
   path: string;
   code: "required" | "unknown_property" | "invalid_type" | "invalid_enum" | "invalid_schema";
   message: string;
 };
 
-export type PilotDeckToolValidationResult =
-  | { ok: true; input: unknown }
-  | { ok: false; issues: PilotDeckToolValidationIssue[] };
+export type SatiToolValidationResult = { ok: true; input: unknown } | { ok: false; issues: SatiToolValidationIssue[] };

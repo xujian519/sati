@@ -89,8 +89,8 @@ export async function createDeck(options = {}) {
   });
   const pptx = new PptxGenJS();
   pptx.layout = options.layout ?? deckTokens.canvas.layout;
-  pptx.author = options.author ?? 'PilotDeck';
-  pptx.company = options.company ?? 'PilotDeck';
+  pptx.author = options.author ?? 'Sati';
+  pptx.company = options.company ?? 'Sati';
   pptx.subject = options.subject ?? '';
   pptx.title = options.title ?? '';
   pptx.lang = options.lang ?? deckTokens.typography.lang ?? 'zh-CN';

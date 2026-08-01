@@ -20,13 +20,9 @@ export function setTelemetryEnabled(raw: string, enabled: boolean): string | nul
   try {
     const parsed = parseYaml(raw);
     const config =
-      parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
+      parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
     const telemetry =
-      config.telemetry &&
-      typeof config.telemetry === "object" &&
-      !Array.isArray(config.telemetry)
+      config.telemetry && typeof config.telemetry === "object" && !Array.isArray(config.telemetry)
         ? (config.telemetry as Record<string, unknown>)
         : {};
     config.telemetry = { ...telemetry, enabled };

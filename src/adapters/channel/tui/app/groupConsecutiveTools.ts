@@ -33,9 +33,7 @@ export function groupConsecutiveTools(messages: TuiMessage[]): DisplayItem[] {
 
       if (j - i >= 3) {
         const slice = messages.slice(i, j);
-        const expanded = slice.some(
-          (m) => m.role === "tool" && m.expanded,
-        );
+        const expanded = slice.some(m => m.role === "tool" && m.expanded);
         items.push({
           type: "tool_group",
           toolName: msg.toolName,

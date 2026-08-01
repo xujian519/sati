@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { IncomingMessage, ServerResponse } from "node:http";
-
 import { FeishuChannel } from "../../src/adapters/index.js";
 import type { Gateway } from "../../src/gateway/index.js";
 
@@ -14,7 +13,7 @@ test("Feishu handles permission replies before the active chat drain finishes", 
     remember?: boolean;
   }> = [];
   let resolveDecided!: () => void;
-  const decided = new Promise<void>((resolve) => {
+  const decided = new Promise<void>(resolve => {
     resolveDecided = resolve;
   });
   const gateway = {
@@ -32,7 +31,7 @@ test("Feishu handles permission replies before the active chat drain finishes", 
   const sent: Array<{ chatId: string; text: string }> = [];
   const channel = new FeishuChannel({
     connectionMode: "webhook",
-    send: async (message) => {
+    send: async message => {
       sent.push(message);
     },
   });
@@ -62,7 +61,12 @@ test("Feishu handles permission replies before the active chat drain finishes", 
   assert.deepEqual((channel as any).inboundBatches.get(chatId), { messages: [], draining: true });
 });
 
-function createMockResponse(): { statusCode?: number; body?: string; writeHead(statusCode: number): void; end(body: string): void } {
+function createMockResponse(): {
+  statusCode?: number;
+  body?: string;
+  writeHead(statusCode: number): void;
+  end(body: string): void;
+} {
   return {
     writeHead(statusCode: number) {
       this.statusCode = statusCode;

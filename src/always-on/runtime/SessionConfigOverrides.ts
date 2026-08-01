@@ -4,11 +4,7 @@ import type { PermissionMode, PermissionRule } from "../../permission/index.js";
  * Tools that require a live user response and therefore cannot be exposed
  * to unattended agent sessions such as Always-On and Cron.
  */
-export const UNATTENDED_SESSION_EXCLUDED_TOOLS = [
-  "enter_plan_mode",
-  "exit_plan_mode",
-  "ask_user_question",
-] as const;
+export const UNATTENDED_SESSION_EXCLUDED_TOOLS = ["enter_plan_mode", "exit_plan_mode", "ask_user_question"] as const;
 
 export type SessionConfigOverride = {
   cwd?: string;

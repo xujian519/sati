@@ -62,6 +62,7 @@ import { resolveOutputTokenRetryBump } from "./outputTokenRetry.js";
 import { LargeFileRepair, type LargeFileRepairDecision } from "./LargeFileRepair.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { collectToolCalls } from "./collectToolCalls.js";
+import { DoomLoop, type DoomLoopSignal, type ToolCallObservation } from "./doomLoop.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
@@ -140,6 +141,8 @@ export class AgentLoop {
       hardMaxOutputTokens?: number;
     }
   >();
+  /** DoomLoop Fatal 信号的原因；非 undefined 时下一轮模型请求前终止 turn。 */
+  private doomLoopFatalReason: string | undefined;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -169,6 +172,8 @@ export class AgentLoop {
     const startedAt = this.now().toISOString();
     let messages = [...input.messages];
     let turnCount = 1;
+    this.doomLoopFatalReason = undefined;
+    this.dependencies.doomLoop?.reset(turnCount);
     let usage: CanonicalUsage = {};
     let lastModelUsage: CanonicalUsage | undefined;
     let permissionDenials: AgentPermissionDenial[] = [];
@@ -351,6 +356,23 @@ export class AgentLoop {
         if (status) {
           yield await emitStatus(status);
         }
+        await captureTurn(result.type === "error");
+        yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
+        return { result, messages };
+      }
+
+      if (this.doomLoopFatalReason !== undefined) {
+        const result = this.createTurnResult(input, {
+          type: "error",
+          stopReason: "model_error",
+          usage,
+          permissionDenials,
+          turns: turnCount,
+          startedAt,
+          finalMessage,
+          errors: [agentError("agent_doomloop", this.doomLoopFatalReason)],
+        });
+        yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
         await captureTurn(result.type === "error");
         yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
         return { result, messages };
@@ -616,6 +638,7 @@ export class AgentLoop {
       }
       finalMessage = assistantMessage;
       expireConsumedTransientPrompts();
+      this.observeModelCall(assistantMessage, input);
 
       if (assembled.hasPartialTextToolCall) {
         if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
@@ -1519,6 +1542,7 @@ export class AgentLoop {
       const repeatedFailure = detectRepeatedToolFailure(pairedResults, lastToolFailureFingerprint);
       pairedResults = annotateRepeatedToolFailures(pairedResults, repeatedFailure.repeatedKeys);
       lastToolFailureFingerprint = repeatedFailure.currentFingerprint;
+      this.observeToolResults(toolCalls, pairedResults, input);
       const toolResultRepair = largeFileRepair.analyzeToolResults(pairedResults, {
         outputTruncated: assembled.finishReason === "length" || assembled.hasRepairedToolCalls === true,
         repairedToolCalls: assembled.hasRepairedToolCalls === true,
@@ -2468,6 +2492,47 @@ export class AgentLoop {
     }
   }
 
+  private observeModelCall(message: CanonicalMessage, input: AgentLoopInput): void {
+    const doomLoop = this.dependencies.doomLoop;
+    if (!doomLoop) return;
+    const signals = doomLoop.recordModelCall({ text: textFromMessage(message) });
+    this.emitDoomLoopSignals(signals, input, doomLoop.currentTurnNumber());
+  }
+
+  private observeToolResults(toolCalls: CanonicalToolCall[], results: SatiToolResult[], input: AgentLoopInput): void {
+    const doomLoop = this.dependencies.doomLoop;
+    if (!doomLoop) return;
+    const turn = doomLoop.currentTurnNumber();
+    for (let i = 0; i < toolCalls.length; i += 1) {
+      const call = toolCalls[i]!;
+      const result = results[i];
+      const observation: ToolCallObservation = {
+        name: call.name,
+        args: call.input,
+        result: result ? flattenToolResultText(result) : "",
+      };
+      const signals = doomLoop.recordToolResult(observation);
+      this.emitDoomLoopSignals(signals, input, turn);
+    }
+  }
+
+  private emitDoomLoopSignals(signals: DoomLoopSignal[], input: AgentLoopInput, turn: number): void {
+    for (const signal of signals) {
+      this.dependencies.eventEmitter?.({
+        type: "doomloop_signal",
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        detector: signal.detector,
+        reason: signal.reason,
+        turn,
+        fatal: signal.fatal,
+      });
+      if (signal.fatal) {
+        this.doomLoopFatalReason = signal.reason;
+      }
+    }
+  }
+
   private createTurnResult(
     input: AgentLoopInput,
     options: Omit<AgentTurnResult, "sessionId" | "turnId" | "completedAt">,
@@ -2587,6 +2652,18 @@ function textFromMessage(message: CanonicalMessage): string {
     .filter(block => block.type === "text")
     .map(block => block.text)
     .join("\n");
+}
+
+/** 工具结果文本（供 DoomLoop 空结果/重复检测）。 */
+function flattenToolResultText(result: SatiToolResult): string {
+  return result.content
+    .map(block => {
+      if (block.type === "text") return block.text;
+      if (block.type === "json") return JSON.stringify(block.value);
+      return "";
+    })
+    .join("\n")
+    .trim();
 }
 
 function isMissingReasoningContentError(error: CanonicalModelError): boolean {

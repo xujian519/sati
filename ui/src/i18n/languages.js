@@ -10,14 +10,14 @@
 
 export const languages = [
   {
-    value: 'en',
-    label: 'English',
-    nativeName: 'English',
+    value: "en",
+    label: "English",
+    nativeName: "English",
   },
   {
-    value: 'zh-CN',
-    label: 'Simplified Chinese',
-    nativeName: '简体中文',
+    value: "zh-CN",
+    label: "Simplified Chinese",
+    nativeName: "简体中文",
   },
 ];
 
@@ -26,7 +26,7 @@ export const languages = [
  * @param {string} value - Language code
  * @returns {Object|undefined} Language object or undefined if not found
  */
-export const getLanguage = (value) => {
+export const getLanguage = value => {
   return languages.find(lang => lang.value === value);
 };
 
@@ -43,6 +43,6 @@ export const getLanguageValues = () => {
  * @param {string} value - Language code to check
  * @returns {boolean} True if language is supported
  */
-export const isLanguageSupported = (value) => {
+export const isLanguageSupported = value => {
   return languages.some(lang => lang.value === value);
 };

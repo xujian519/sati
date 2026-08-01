@@ -14,7 +14,7 @@ export type V2Provider = {
   };
 };
 
-export type PilotDeckConfig = {
+export type SatiConfig = {
   agent?: {
     model?: string;
     maxContextTokens?: number;
@@ -129,10 +129,7 @@ export type PilotDeckConfig = {
     };
     stats?: {
       enabled?: boolean;
-      modelPricing?: Record<
-        string,
-        { input?: number; output?: number; cacheRead?: number }
-      >;
+      modelPricing?: Record<string, { input?: number; output?: number; cacheRead?: number }>;
     };
     tokenSaver?: {
       enabled?: boolean;

@@ -3,6 +3,7 @@ import { mkdir, appendFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
+import type { FileArtifact } from "../artifacts/FileArtifact.js";
 import {
   classifyDurableMessageEntry,
   truncatePreview,
@@ -16,7 +17,6 @@ import {
   type SessionMetadataValue,
 } from "./TranscriptEntry.js";
 import type { AgentTranscriptWriter, AgentTranscriptWriterState } from "./TranscriptWriter.js";
-import type { FileArtifact } from "../artifacts/FileArtifact.js";
 
 export type SubagentTranscriptHandle = {
   /** UUID v4 of the subagent (matches sidechain filename). */
@@ -219,8 +219,7 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
    */
   forSubagent(subagentId: string, now?: () => Date): SubagentTranscriptHandle {
     const path =
-      this.options.subagentTranscriptPath?.(subagentId) ??
-      defaultSubagentPath(this.options.path, subagentId);
+      this.options.subagentTranscriptPath?.(subagentId) ?? defaultSubagentPath(this.options.path, subagentId);
     const writer = new JsonlTranscriptWriter({ path, now: now ?? this.now });
     return { subagentId, writer, transcriptPath: path };
   }
@@ -232,8 +231,7 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
    */
   relativeSubagentPath(subagentId: string): string {
     const sidechain =
-      this.options.subagentTranscriptPath?.(subagentId) ??
-      defaultSubagentPath(this.options.path, subagentId);
+      this.options.subagentTranscriptPath?.(subagentId) ?? defaultSubagentPath(this.options.path, subagentId);
     return relative(dirname(this.options.path), sidechain);
   }
 

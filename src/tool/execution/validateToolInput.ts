@@ -1,23 +1,18 @@
 import type {
-  PilotDeckJsonSchema,
-  PilotDeckToolInputSchema,
-  PilotDeckToolValidationIssue,
-  PilotDeckToolValidationResult,
+  SatiJsonSchema,
+  SatiToolInputSchema,
+  SatiToolValidationIssue,
+  SatiToolValidationResult,
 } from "../protocol/schema.js";
 
-export function validateToolInput(input: unknown, schema: PilotDeckToolInputSchema): PilotDeckToolValidationResult {
-  const issues: PilotDeckToolValidationIssue[] = [];
+export function validateToolInput(input: unknown, schema: SatiToolInputSchema): SatiToolValidationResult {
+  const issues: SatiToolValidationIssue[] = [];
   validateValue(input, schema, "$", issues);
   return issues.length === 0 ? { ok: true, input } : { ok: false, issues };
 }
 
-function validateValue(
-  value: unknown,
-  schema: PilotDeckJsonSchema,
-  path: string,
-  issues: PilotDeckToolValidationIssue[],
-): void {
-  if (schema.enum && !schema.enum.some((item) => Object.is(item, value))) {
+function validateValue(value: unknown, schema: SatiJsonSchema, path: string, issues: SatiToolValidationIssue[]): void {
+  if (schema.enum && !schema.enum.some(item => Object.is(item, value))) {
     issues.push({
       path,
       code: "invalid_enum",
@@ -35,7 +30,7 @@ function validateValue(
     return;
   }
 
-  const effectiveType = Array.isArray(schema.type) ? schema.type.find((type) => type !== "null") : schema.type;
+  const effectiveType = Array.isArray(schema.type) ? schema.type.find(type => type !== "null") : schema.type;
   if (effectiveType === "object" || (effectiveType === undefined && isPlainObject(value))) {
     validateObject(value, schema, path, issues);
   }
@@ -45,12 +40,7 @@ function validateValue(
   }
 }
 
-function validateObject(
-  value: unknown,
-  schema: PilotDeckJsonSchema,
-  path: string,
-  issues: PilotDeckToolValidationIssue[],
-): void {
+function validateObject(value: unknown, schema: SatiJsonSchema, path: string, issues: SatiToolValidationIssue[]): void {
   if (!isPlainObject(value)) {
     return;
   }
@@ -88,7 +78,7 @@ function validateObject(
 
 function matchesType(value: unknown, type: string | string[]): boolean {
   if (Array.isArray(type)) {
-    return type.some((item) => matchesType(value, item));
+    return type.some(item => matchesType(value, item));
   }
 
   switch (type) {

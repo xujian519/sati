@@ -1,7 +1,7 @@
-import type { Project } from '../../types/app';
+import type { Project } from "../../types/app";
 
 export function isGeneralProject(project: Project): boolean {
-  return project.name === 'general' || project.displayName === 'general';
+  return project.name === "general" || project.displayName === "general";
 }
 
 /**
@@ -10,7 +10,5 @@ export function isGeneralProject(project: Project): boolean {
  * fallback when no regular project exists.
  */
 export function chooseDefaultProject(projects: readonly Project[]): Project | null {
-  return projects.find((project) => !isGeneralProject(project))
-    ?? projects.find(isGeneralProject)
-    ?? null;
+  return projects.find(project => !isGeneralProject(project)) ?? projects.find(isGeneralProject) ?? null;
 }

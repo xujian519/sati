@@ -55,11 +55,10 @@ export class GitWorktreeProvider implements WorkspaceProvider {
       baseCommit,
     ]);
     if (add.exitCode !== 0) {
-      throw new AlwaysOnError(
-        "workspace_prepare_failed",
-        `git worktree add failed: ${add.stderr || add.stdout}`,
-        { repoRoot, worktreePath },
-      );
+      throw new AlwaysOnError("workspace_prepare_failed", `git worktree add failed: ${add.stderr || add.stdout}`, {
+        repoRoot,
+        worktreePath,
+      });
     }
 
     this.options.onWorktreeCreated?.(input.runId, worktreePath);
@@ -87,14 +86,9 @@ export class GitWorktreeProvider implements WorkspaceProvider {
     if (options.keep) return;
     this.options.onWorktreeRemoved?.(handle.cwd);
     const repoRoot = handle.metadata.repoRoot ?? handle.cwd;
-    const remove = await runGit(this.git(), [
-      "-C",
-      repoRoot,
-      "worktree",
-      "remove",
-      "--force",
-      handle.cwd,
-    ]).catch(() => undefined);
+    const remove = await runGit(this.git(), ["-C", repoRoot, "worktree", "remove", "--force", handle.cwd]).catch(
+      () => undefined,
+    );
     if (!remove || remove.exitCode !== 0) {
       await rm(handle.cwd, { recursive: true, force: true });
       await runGit(this.git(), ["-C", repoRoot, "worktree", "prune"]).catch(() => undefined);
@@ -142,20 +136,20 @@ export class GitWorktreeProvider implements WorkspaceProvider {
 type GitResult = { exitCode: number; stdout: string; stderr: string };
 
 async function runGit(bin: string, args: string[]): Promise<GitResult> {
-  return new Promise<GitResult>((resolvePromise) => {
+  return new Promise<GitResult>(resolvePromise => {
     const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
-    child.stdout?.on("data", (chunk) => {
+    child.stdout?.on("data", chunk => {
       stdout += chunk.toString("utf-8");
     });
-    child.stderr?.on("data", (chunk) => {
+    child.stderr?.on("data", chunk => {
       stderr += chunk.toString("utf-8");
     });
-    child.on("error", (error) => {
+    child.on("error", error => {
       resolvePromise({ exitCode: -1, stdout, stderr: error.message });
     });
-    child.on("close", (code) => {
+    child.on("close", code => {
       resolvePromise({ exitCode: code ?? -1, stdout, stderr });
     });
   });
@@ -163,9 +157,6 @@ async function runGit(bin: string, args: string[]): Promise<GitResult> {
 
 function expectOk(result: GitResult, label: string): void {
   if (result.exitCode !== 0) {
-    throw new AlwaysOnError(
-      "workspace_prepare_failed",
-      `${label} failed: ${result.stderr || result.stdout}`,
-    );
+    throw new AlwaysOnError("workspace_prepare_failed", `${label} failed: ${result.stderr || result.stdout}`);
   }
 }

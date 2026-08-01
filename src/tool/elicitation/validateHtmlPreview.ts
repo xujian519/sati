@@ -20,7 +20,7 @@ export function validateHtmlPreview(preview: string | undefined): string | null 
     return "preview must not contain <script> or <style> tags. Use inline styles via the style attribute if needed.";
   }
   if (!/<[a-z][^>]*>/i.test(preview)) {
-    return "preview must contain HTML (previewFormat is set to \"html\"). Wrap content in a tag like <div> or <pre>.";
+    return 'preview must contain HTML (previewFormat is set to "html"). Wrap content in a tag like <div> or <pre>.';
   }
   return null;
 }

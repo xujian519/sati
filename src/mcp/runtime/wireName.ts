@@ -13,9 +13,7 @@ export function buildMcpToolWireName(serverId: string, toolName: string): string
   return `mcp__${normalizeSegment(serverId)}__${normalizeSegment(toolName)}`;
 }
 
-export function parseMcpToolWireName(
-  wireName: string,
-): { serverId: string; toolName: string } | null {
+export function parseMcpToolWireName(wireName: string): { serverId: string; toolName: string } | null {
   if (!wireName.startsWith("mcp__")) return null;
   const rest = wireName.slice("mcp__".length);
   const sep = rest.indexOf("__");

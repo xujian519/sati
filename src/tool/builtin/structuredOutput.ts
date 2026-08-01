@@ -1,10 +1,10 @@
-import type { PilotDeckToolDefinition } from "../protocol/types.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type StructuredOutputInput = {
   value: unknown;
 };
 
-export function createStructuredOutputTool(): PilotDeckToolDefinition<StructuredOutputInput> {
+export function createStructuredOutputTool(): SatiToolDefinition<StructuredOutputInput> {
   return {
     name: "structured_output",
     aliases: ["StructuredOutput"],
@@ -23,7 +23,7 @@ export function createStructuredOutputTool(): PilotDeckToolDefinition<Structured
     },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
-    execute: async (input) => ({
+    execute: async input => ({
       content: [{ type: "json", value: input.value }],
       data: input.value,
       metadata: { structuredOutput: true },

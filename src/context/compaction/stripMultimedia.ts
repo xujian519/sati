@@ -13,11 +13,11 @@ import type { CanonicalContentBlock, CanonicalMessage, CanonicalToolResultBlock 
  * Only user messages are processed (assistant messages don't contain media).
  */
 export function stripMultimediaFromMessages(messages: CanonicalMessage[]): CanonicalMessage[] {
-  return messages.map((message) => {
+  return messages.map(message => {
     if (message.role !== "user") return message;
 
     let hasMedia = false;
-    const newContent: CanonicalContentBlock[] = message.content.map((block) => {
+    const newContent: CanonicalContentBlock[] = message.content.map(block => {
       if (block.type === "image") {
         hasMedia = true;
         return { type: "text" as const, text: "[image]" };
@@ -28,7 +28,7 @@ export function stripMultimediaFromMessages(messages: CanonicalMessage[]): Canon
       }
       if (block.type === "tool_result") {
         let toolHasMedia = false;
-        const newToolContent = (block as CanonicalToolResultBlock).content.map((item) => {
+        const newToolContent = (block as CanonicalToolResultBlock).content.map(item => {
           if (item.type === "image") {
             toolHasMedia = true;
             return { type: "text" as const, text: "[image]" };

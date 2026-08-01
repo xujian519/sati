@@ -1,7 +1,10 @@
 const TIER_TAG_PATTERN = /<tier>\s*([a-z0-9_-]+)\s*<\/tier>/i;
 
 export function parseTier(judgeOutput: string, knownTiers: string[]): string | undefined {
-  const cleaned = judgeOutput.replace(/```[a-z]*\n?/g, "").replace(/```/g, "").trim();
+  const cleaned = judgeOutput
+    .replace(/```[a-z]*\n?/g, "")
+    .replace(/```/g, "")
+    .trim();
 
   const match = TIER_TAG_PATTERN.exec(cleaned);
   if (match) {

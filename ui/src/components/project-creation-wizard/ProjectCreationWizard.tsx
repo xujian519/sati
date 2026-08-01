@@ -1,16 +1,16 @@
-import { useCallback, useMemo, useState } from 'react';
-import { FolderPlus, X } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import ErrorBanner from './components/ErrorBanner';
-import StepConfiguration from './components/StepConfiguration';
-import StepReview from './components/StepReview';
-import StepTypeSelection from './components/StepTypeSelection';
-import WizardFooter from './components/WizardFooter';
-import WizardProgress from './components/WizardProgress';
-import { useGithubTokens } from './hooks/useGithubTokens';
-import { cloneWorkspaceWithProgress, createWorkspaceRequest } from './data/workspaceApi';
-import { isCloneWorkflow, shouldShowGithubAuthentication } from './utils/pathUtils';
-import type { TokenMode, WizardFormState, WizardStep, WorkspaceType } from './types';
+import { useCallback, useMemo, useState } from "react";
+import { FolderPlus, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import ErrorBanner from "./components/ErrorBanner";
+import StepConfiguration from "./components/StepConfiguration";
+import StepReview from "./components/StepReview";
+import StepTypeSelection from "./components/StepTypeSelection";
+import WizardFooter from "./components/WizardFooter";
+import WizardProgress from "./components/WizardProgress";
+import { useGithubTokens } from "./hooks/useGithubTokens";
+import { cloneWorkspaceWithProgress, createWorkspaceRequest } from "./data/workspaceApi";
+import { isCloneWorkflow, shouldShowGithubAuthentication } from "./utils/pathUtils";
+import type { TokenMode, WizardFormState, WizardStep, WorkspaceType } from "./types";
 
 type ProjectCreationWizardProps = {
   onClose: () => void;
@@ -18,30 +18,26 @@ type ProjectCreationWizardProps = {
 };
 
 const initialFormState: WizardFormState = {
-  workspaceType: 'existing',
-  workspacePath: '',
-  githubUrl: '',
-  tokenMode: 'stored',
-  selectedGithubToken: '',
-  newGithubToken: '',
+  workspaceType: "existing",
+  workspacePath: "",
+  githubUrl: "",
+  tokenMode: "stored",
+  selectedGithubToken: "",
+  newGithubToken: "",
 };
 
-export default function ProjectCreationWizard({
-  onClose,
-  onProjectCreated,
-}: ProjectCreationWizardProps) {
+export default function ProjectCreationWizard({ onClose, onProjectCreated }: ProjectCreationWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<WizardStep>(1);
   const [formState, setFormState] = useState<WizardFormState>(initialFormState);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cloneProgress, setCloneProgress] = useState('');
+  const [cloneProgress, setCloneProgress] = useState("");
 
-  const shouldLoadTokens =
-    step === 2 && shouldShowGithubAuthentication(formState.workspaceType, formState.githubUrl);
+  const shouldLoadTokens = step === 2 && shouldShowGithubAuthentication(formState.workspaceType, formState.githubUrl);
 
   const autoSelectToken = useCallback((tokenId: string) => {
-    setFormState((previous) => ({ ...previous, selectedGithubToken: tokenId }));
+    setFormState(previous => ({ ...previous, selectedGithubToken: tokenId }));
   }, []);
 
   const {
@@ -57,25 +53,22 @@ export default function ProjectCreationWizard({
 
   // Keep cross-step values in this component; local UI state lives in child components.
   const updateField = useCallback(<K extends keyof WizardFormState>(key: K, value: WizardFormState[K]) => {
-    setFormState((previous) => ({ ...previous, [key]: value }));
+    setFormState(previous => ({ ...previous, [key]: value }));
   }, []);
 
   const updateWorkspaceType = useCallback(
-    (workspaceType: WorkspaceType) => updateField('workspaceType', workspaceType),
+    (workspaceType: WorkspaceType) => updateField("workspaceType", workspaceType),
     [updateField],
   );
 
-  const updateTokenMode = useCallback(
-    (tokenMode: TokenMode) => updateField('tokenMode', tokenMode),
-    [updateField],
-  );
+  const updateTokenMode = useCallback((tokenMode: TokenMode) => updateField("tokenMode", tokenMode), [updateField]);
 
   const handleNext = useCallback(() => {
     setError(null);
 
     if (step === 1) {
       if (!formState.workspaceType) {
-        setError(t('projectWizard.errors.selectType'));
+        setError(t("projectWizard.errors.selectType"));
         return;
       }
       setStep(2);
@@ -84,7 +77,7 @@ export default function ProjectCreationWizard({
 
     if (step === 2) {
       if (!formState.workspacePath.trim()) {
-        setError(t('projectWizard.errors.providePath'));
+        setError(t("projectWizard.errors.providePath"));
         return;
       }
       setStep(3);
@@ -93,13 +86,13 @@ export default function ProjectCreationWizard({
 
   const handleBack = useCallback(() => {
     setError(null);
-    setStep((previousStep) => (previousStep > 1 ? ((previousStep - 1) as WizardStep) : previousStep));
+    setStep(previousStep => (previousStep > 1 ? ((previousStep - 1) as WizardStep) : previousStep));
   }, []);
 
   const handleCreate = useCallback(async () => {
     setIsCreating(true);
     setError(null);
-    setCloneProgress('');
+    setCloneProgress("");
 
     try {
       const shouldCloneRepository = isCloneWorkflow(formState.workspaceType, formState.githubUrl);
@@ -132,9 +125,7 @@ export default function ProjectCreationWizard({
       onClose();
     } catch (createError) {
       const errorMessage =
-        createError instanceof Error
-          ? createError.message
-          : t('projectWizard.errors.failedToCreate');
+        createError instanceof Error ? createError.message : t("projectWizard.errors.failedToCreate");
       setError(errorMessage);
     } finally {
       setIsCreating(false);
@@ -154,9 +145,7 @@ export default function ProjectCreationWizard({
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground">
               <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
             </div>
-            <h3 className="text-lg font-semibold text-foreground">
-              {t('projectWizard.title')}
-            </h3>
+            <h3 className="text-lg font-semibold text-foreground">{t("projectWizard.title")}</h3>
           </div>
           <button
             onClick={onClose}
@@ -174,10 +163,7 @@ export default function ProjectCreationWizard({
           {error && <ErrorBanner message={error} />}
 
           {step === 1 && (
-            <StepTypeSelection
-              workspaceType={formState.workspaceType}
-              onWorkspaceTypeChange={updateWorkspaceType}
-            />
+            <StepTypeSelection workspaceType={formState.workspaceType} onWorkspaceTypeChange={updateWorkspaceType} />
           )}
 
           {step === 2 && (
@@ -192,15 +178,13 @@ export default function ProjectCreationWizard({
               loadingTokens={loadingTokens}
               tokenLoadError={tokenLoadError}
               isCreating={isCreating}
-              onWorkspacePathChange={(workspacePath) => updateField('workspacePath', workspacePath)}
-              onGithubUrlChange={(githubUrl) => updateField('githubUrl', githubUrl)}
+              onWorkspacePathChange={workspacePath => updateField("workspacePath", workspacePath)}
+              onGithubUrlChange={githubUrl => updateField("githubUrl", githubUrl)}
               onTokenModeChange={updateTokenMode}
-              onSelectedGithubTokenChange={(selectedGithubToken) =>
-                updateField('selectedGithubToken', selectedGithubToken)
+              onSelectedGithubTokenChange={selectedGithubToken =>
+                updateField("selectedGithubToken", selectedGithubToken)
               }
-              onNewGithubTokenChange={(newGithubToken) =>
-                updateField('newGithubToken', newGithubToken)
-              }
+              onNewGithubTokenChange={newGithubToken => updateField("newGithubToken", newGithubToken)}
               onAdvanceToConfirm={() => setStep(3)}
             />
           )}
