@@ -57,11 +57,7 @@ function isRecordOfStrings(value: unknown): value is Record<string, string[]> {
  * 校验正则列表（语法 + 灾难性回溯启发式），非法时收集问题并返回 false。
  * 供 pattern_analysis / structural_analysis 共用，保证 ReDoS 防护一致。
  */
-function validateRegexPatterns(
-  patterns: string[],
-  ruleId: string,
-  issues: RuleSetValidationIssue[],
-): boolean {
+function validateRegexPatterns(patterns: string[], ruleId: string, issues: RuleSetValidationIssue[]): boolean {
   for (const pattern of patterns) {
     try {
       new RegExp(pattern, "i");
