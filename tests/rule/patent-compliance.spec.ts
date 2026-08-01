@@ -17,9 +17,13 @@ test("patent compliance gate flags risk, approval, absolute and citation violati
   const { ruleSet } = loadPatentComplianceRuleSet();
   const gate = new RuleOutputGate(ruleSet);
 
-  const risk = gate.process("该方案不构成侵权。");
+  const risk = gate.process("该方案存在侵权风险。");
   assert.ok(risk.warnHits.includes("PAT-RISK-001"));
   assert.equal(risk.needsApproval, false);
+
+  // negationContext：否定语境不误报
+  const negated = gate.process("该方案不构成侵权。");
+  assert.equal(negated.warnHits.includes("PAT-RISK-001"), false);
 
   const approval = gate.process("专利结论：具备新颖性。");
   assert.ok(approval.reviewHits.includes("PAT-APPROVAL-001"));

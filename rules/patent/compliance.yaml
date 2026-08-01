@@ -19,6 +19,8 @@ rules:
     legalBasis: 执业规范：AI 输出不构成正式法律意见，应由专利代理人/律师确认
     check:
       type: keyword_blocklist
+      # 否定语境（"不构成侵权"/"避免侵权"）不误报
+      negationContext: true
       keywords:
         - "侵权"
         - "无效"
@@ -63,6 +65,8 @@ rules:
     legalBasis: 审查规范：回避"绝对/一定/必然"等绝对化表述，改用限定性表述
     check:
       type: keyword_blocklist
+      # 否定语境（"不一定"/"绝非绝对"）不误报
+      negationContext: true
       keywords:
         - "绝对"
         - "一定"
