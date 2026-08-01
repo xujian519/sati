@@ -11,6 +11,11 @@
  * 接入状态：已通过 PatentOutputGate + TurnRunner.persistDurableMessage 接入 Agent 输出流
  * （createAgentSession options.outputGate 注入；审批入口 AgentSession.approvePendingOutput/
  * rejectPendingOutput）。本文件的 processPatentOutput 亦被 PatentOutputGate 复用。
+ *
+ * 关键词表镜像：rules/patent/compliance.yaml 与本文件的 PATENT_RISK_KEYWORDS /
+ * PATENT_APPROVAL_KEYWORDS / ABSOLUTE_PHRASES 互为声明式镜像（该资产按"对齐
+ * quality-gate.ts"注释同步）。改任一处的关键词列表必须同步另一处；专利域
+ * 规则引擎（src/rule）与 patent_eval 工具分别消费这两份。
  */
 
 export const PATENT_DISCLAIMER =

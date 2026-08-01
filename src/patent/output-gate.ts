@@ -116,7 +116,7 @@ export class PatentOutputGate {
     return { message: processed, needsApproval: false, info };
   }
 
-  /** 审批通过：取出并移除挂起消息（调用方负责补写 processed；写库成功后调 notifyCommitted）。 */
+  /** 审批通过：取出并移除挂起消息（消息已在挂起时入库，此处仅完成流程控制；触发 onApproved）。 */
   approve(index: number): PendingPatentMessage | undefined {
     const pending = this.pending.get(index);
     if (!pending) return undefined;
