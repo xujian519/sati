@@ -1,6 +1,6 @@
-import fs from 'fs';
-import fsPromises from 'fs/promises';
-import path from 'path';
+import fs from "fs";
+import fsPromises from "fs/promises";
+import path from "path";
 import {
   configToYaml,
   getPilotDeckConfigPath,
@@ -8,8 +8,8 @@ import {
   rawYamlToMaskedString,
   readPilotDeckConfigFile,
   validatePilotDeckConfig,
-} from './pilotdeckConfig.js';
-import { reloadPilotDeckConfig } from './pilotdeckConfigReloader.js';
+} from "./pilotdeckConfig.js";
+import { reloadPilotDeckConfig } from "./pilotdeckConfigReloader.js";
 
 // Watches ~/.pilotdeck/pilotdeck.yaml for external edits (vim, Cursor, other IDEs)
 // and triggers the same reload path the UI uses on save, so *any* edit takes
@@ -19,7 +19,7 @@ import { reloadPilotDeckConfig } from './pilotdeckConfigReloader.js';
 let watcher = null;
 let debounceTimer = null;
 let suppressCount = 0;
-let lastSignature = '';
+let lastSignature = "";
 let onEventHandler = null;
 
 function signatureForFile(filePath) {
@@ -27,7 +27,7 @@ function signatureForFile(filePath) {
     const stat = fs.statSync(filePath);
     return `${stat.size}:${stat.mtimeMs}`;
   } catch {
-    return 'missing';
+    return "missing";
   }
 }
 
@@ -49,7 +49,7 @@ async function handleChange(configPath) {
     record = readPilotDeckConfigFile();
   } catch (error) {
     onEventHandler?.({
-      source: 'watcher',
+      source: "watcher",
       path: configPath,
       error: error instanceof Error ? error.message : String(error),
       validation: {
@@ -64,7 +64,7 @@ async function handleChange(configPath) {
 
   if (record.parseError) {
     onEventHandler?.({
-      source: 'watcher',
+      source: "watcher",
       path: record.configPath,
       raw: record.raw,
       configDisabled: true,
@@ -84,12 +84,12 @@ async function handleChange(configPath) {
   // Mirror serializeConfigResponse: emit the masked disk YAML so the
   // UI's hot-reload sees full router/gateway/adapters/etc. segments
   // when the file changes from any source (UI save, vim, external tool).
-  const hasDiskYaml = record.rawYaml && typeof record.rawYaml === 'object' && Object.keys(record.rawYaml).length > 0;
+  const hasDiskYaml = record.rawYaml && typeof record.rawYaml === "object" && Object.keys(record.rawYaml).length > 0;
   const maskedRaw = hasDiskYaml ? rawYamlToMaskedString(record.rawYaml) : configToYaml(maskSecrets(record.config));
 
   if (!validation.valid) {
     onEventHandler?.({
-      source: 'watcher',
+      source: "watcher",
       path: record.configPath,
       raw: maskedRaw,
       validation: { valid: false, errors: validation.errors, warnings: validation.warnings },
@@ -104,7 +104,7 @@ async function handleChange(configPath) {
     reloadResult = await reloadPilotDeckConfig(record.config);
   } catch (error) {
     onEventHandler?.({
-      source: 'watcher',
+      source: "watcher",
       path: record.configPath,
       raw: maskedRaw,
       validation: { valid: true, errors: [], warnings: validation.warnings },
@@ -116,7 +116,7 @@ async function handleChange(configPath) {
   }
 
   onEventHandler?.({
-    source: 'watcher',
+    source: "watcher",
     path: record.configPath,
     raw: maskedRaw,
     validation: { valid: true, errors: [], warnings: validation.warnings },
@@ -127,7 +127,7 @@ async function handleChange(configPath) {
 
 export async function startPilotDeckConfigWatcher({ onEvent } = {}) {
   stopPilotDeckConfigWatcher();
-  onEventHandler = typeof onEvent === 'function' ? onEvent : null;
+  onEventHandler = typeof onEvent === "function" ? onEvent : null;
 
   const configPath = getPilotDeckConfigPath();
   const configDir = path.dirname(configPath);
@@ -136,7 +136,7 @@ export async function startPilotDeckConfigWatcher({ onEvent } = {}) {
   try {
     await fsPromises.mkdir(configDir, { recursive: true });
   } catch (error) {
-    console.warn('[pilotdeck-config-watcher] failed to ensure config dir:', error?.message || error);
+    console.warn("[pilotdeck-config-watcher] failed to ensure config dir:", error?.message || error);
     return;
   }
 
@@ -151,12 +151,12 @@ export async function startPilotDeckConfigWatcher({ onEvent } = {}) {
         void handleChange(configPath);
       }, 250);
     });
-    watcher.on('error', (error) => {
-      console.warn('[pilotdeck-config-watcher] watch error:', error?.message || error);
+    watcher.on("error", error => {
+      console.warn("[pilotdeck-config-watcher] watch error:", error?.message || error);
     });
     console.log(`[pilotdeck-config-watcher] watching ${configPath}`);
   } catch (error) {
-    console.warn('[pilotdeck-config-watcher] failed to start:', error?.message || error);
+    console.warn("[pilotdeck-config-watcher] failed to start:", error?.message || error);
   }
 }
 

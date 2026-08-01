@@ -7,9 +7,9 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from 'react';
-import { authenticatedFetch } from '../utils/api';
-import { useWebSocket } from '../contexts/WebSocketContext';
+} from "react";
+import { authenticatedFetch } from "../utils/api";
+import { useWebSocket } from "../contexts/WebSocketContext";
 
 type ConfigValidation = {
   valid: boolean;
@@ -54,11 +54,9 @@ export type ConfigSaveOptions = {
   providerRenames?: ConfigProviderRename[];
 };
 
-export type ConfigSaveResult =
-  | { ok: true }
-  | { ok: false; error: string };
+export type ConfigSaveResult = { ok: true } | { ok: false; error: string };
 
-type ReloadSource = 'ui-save' | 'ui-reload' | 'watcher' | 'refresh';
+type ReloadSource = "ui-save" | "ui-reload" | "watcher" | "refresh";
 
 type ReloadInfo = {
   source: ReloadSource;
@@ -66,9 +64,9 @@ type ReloadInfo = {
 };
 
 function usePilotDeckConfigState() {
-  const [path, setPath] = useState('');
-  const [raw, setRaw] = useState('');
-  const [revision, setRevision] = useState('');
+  const [path, setPath] = useState("");
+  const [raw, setRaw] = useState("");
+  const [revision, setRevision] = useState("");
   const [exists, setExists] = useState(false);
   const [validation, setValidation] = useState<ConfigValidation | null>(null);
   const [reload, setReload] = useState<ConfigReload | null>(null);
@@ -84,7 +82,7 @@ function usePilotDeckConfigState() {
 
   // Users may be typing in the <textarea> when an external edit arrives.
   // Track local edits so we don't clobber unsaved input.
-  const savedRawRef = useRef<string>('');
+  const savedRawRef = useRef<string>("");
   const rawRef = useRef(raw);
   rawRef.current = raw;
   const revisionRef = useRef(revision);
@@ -107,11 +105,11 @@ function usePilotDeckConfigState() {
   const saveSequenceRef = useRef(0);
   const pendingSaveCountRef = useRef(0);
 
-  const applyResponse = useCallback((data: ConfigResponse, source: ReloadSource = 'refresh') => {
+  const applyResponse = useCallback((data: ConfigResponse, source: ReloadSource = "refresh") => {
     setPath(data.path);
     setRaw(data.raw);
     savedRawRef.current = data.raw;
-    if (typeof data.revision === 'string') {
+    if (typeof data.revision === "string") {
       revisionRef.current = data.revision;
       setRevision(data.revision);
     }
@@ -133,12 +131,12 @@ function usePilotDeckConfigState() {
     validateTimerRef.current = setTimeout(() => {
       void (async () => {
         try {
-          const response = await authenticatedFetch('/api/config/validate', {
-            method: 'POST',
+          const response = await authenticatedFetch("/api/config/validate", {
+            method: "POST",
             body: JSON.stringify({ raw: value }),
           });
           const data = await response.json();
-          if (data && typeof data.valid === 'boolean') {
+          if (data && typeof data.valid === "boolean") {
             setValidation(data as ConfigValidation);
           }
         } catch {
@@ -148,20 +146,23 @@ function usePilotDeckConfigState() {
     }, 400);
   }, []);
 
-  const updateRaw = useCallback((value: string) => {
-    rawRef.current = value;
-    setRaw(value);
-    scheduleValidation(value);
-  }, [scheduleValidation]);
+  const updateRaw = useCallback(
+    (value: string) => {
+      rawRef.current = value;
+      setRaw(value);
+      scheduleValidation(value);
+    },
+    [scheduleValidation],
+  );
 
-  const restoreRawIfCurrent = useCallback((
-    expected: string,
-    previous: string,
-  ): boolean => {
-    if (rawRef.current !== expected) return false;
-    updateRaw(previous);
-    return true;
-  }, [updateRaw]);
+  const restoreRawIfCurrent = useCallback(
+    (expected: string, previous: string): boolean => {
+      if (rawRef.current !== expected) return false;
+      updateRaw(previous);
+      return true;
+    },
+    [updateRaw],
+  );
 
   const refreshRef = useRef<() => Promise<void>>();
 
@@ -169,13 +170,13 @@ function usePilotDeckConfigState() {
     setLoading(true);
     setError(null);
     try {
-      const response = await authenticatedFetch('/api/config');
+      const response = await authenticatedFetch("/api/config");
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to load config');
-      applyResponse(data, 'refresh');
+      if (!response.ok) throw new Error(data.error || "Failed to load config");
+      applyResponse(data, "refresh");
       initialLoadDoneRef.current = true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to load config');
+      setError(caught instanceof Error ? caught.message : "Failed to load config");
     } finally {
       setLoading(false);
     }
@@ -187,49 +188,46 @@ function usePilotDeckConfigState() {
     void refresh();
   }, [refresh]);
 
-  useEffect(() => () => {
-    if (validateTimerRef.current) {
-      clearTimeout(validateTimerRef.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (validateTimerRef.current) {
+        clearTimeout(validateTimerRef.current);
+      }
+    },
+    [],
+  );
 
   // Use the synchronous subscribe mechanism instead of latestMessage state
   // to guarantee config:reloaded events are never lost to React 18
   // auto-batching when other WS messages arrive in the same task.
   useEffect(() => {
     const unsub = subscribe((msg: any) => {
-      if (msg?.type === 'websocket-reconnected') {
+      if (msg?.type === "websocket-reconnected") {
         if (initialLoadDoneRef.current) {
           void refreshRef.current?.();
         }
         return;
       }
 
-      if (msg?.type !== 'config:reloaded') return;
+      if (msg?.type !== "config:reloaded") return;
       if (!initialLoadDoneRef.current) return;
 
       const payload = msg as ConfigResponse & {
         source?: ReloadSource;
         timestamp?: string;
       };
-      const source: ReloadSource = payload.source ?? 'watcher';
+      const source: ReloadSource = payload.source ?? "watcher";
 
-      const keepLocalDraft = (
-        isDirtyRef.current
-        && source === 'watcher'
-      ) || (
-        source === 'ui-save'
-        && payload.raw !== rawRef.current
-        && (
-          pendingSaveCountRef.current > 0
-          || isDirtyRef.current
-        )
-      );
+      const keepLocalDraft =
+        (isDirtyRef.current && source === "watcher") ||
+        (source === "ui-save" &&
+          payload.raw !== rawRef.current &&
+          (pendingSaveCountRef.current > 0 || isDirtyRef.current));
 
       if (keepLocalDraft) {
-        if (source === 'watcher') {
+        if (source === "watcher") {
           setExternalChangeNotice(
-            'Config was changed on disk by an external edit. Your unsaved draft is kept — click Refresh to discard and load the new version.',
+            "Config was changed on disk by an external edit. Your unsaved draft is kept — click Refresh to discard and load the new version.",
           );
         }
         setValidation(payload.validation);
@@ -246,7 +244,7 @@ function usePilotDeckConfigState() {
         {
           exists: true,
           path: payload.path,
-          raw: payload.raw ?? '',
+          raw: payload.raw ?? "",
           revision: payload.revision,
           configDisabled: payload.configDisabled,
           parseError: payload.parseError,
@@ -255,8 +253,8 @@ function usePilotDeckConfigState() {
         },
         source,
       );
-      if (source === 'watcher') {
-        setExternalChangeNotice('Config was updated on disk — the new version is now loaded.');
+      if (source === "watcher") {
+        setExternalChangeNotice("Config was updated on disk — the new version is now loaded.");
       } else {
         setExternalChangeNotice(null);
       }
@@ -264,108 +262,94 @@ function usePilotDeckConfigState() {
     return unsub;
   }, [subscribe]);
 
-  const save = useCallback((options: ConfigSaveOptions = {}): Promise<ConfigSaveResult> => {
-    const draft = rawRef.current;
-    const sequence = ++saveSequenceRef.current;
-    pendingSaveCountRef.current += 1;
-    setSaving(true);
-    setError(null);
-    setMessage(null);
+  const save = useCallback(
+    (options: ConfigSaveOptions = {}): Promise<ConfigSaveResult> => {
+      const draft = rawRef.current;
+      const sequence = ++saveSequenceRef.current;
+      pendingSaveCountRef.current += 1;
+      setSaving(true);
+      setError(null);
+      setMessage(null);
 
-    const run = async (): Promise<ConfigSaveResult> => {
-      try {
-        const baseRevision = revisionRef.current;
-        const response = await authenticatedFetch('/api/config', {
-          method: 'PUT',
-          body: JSON.stringify({
-            raw: draft,
-            ...(baseRevision ? { baseRevision } : {}),
-            ...(options.providerRenames?.length
-              ? { providerRenames: options.providerRenames }
-              : {}),
-          }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(
-            data.error
-              || data.validation?.errors?.join(', ')
-              || 'Failed to save config',
-          );
-        }
+      const run = async (): Promise<ConfigSaveResult> => {
+        try {
+          const baseRevision = revisionRef.current;
+          const response = await authenticatedFetch("/api/config", {
+            method: "PUT",
+            body: JSON.stringify({
+              raw: draft,
+              ...(baseRevision ? { baseRevision } : {}),
+              ...(options.providerRenames?.length ? { providerRenames: options.providerRenames } : {}),
+            }),
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || data.validation?.errors?.join(", ") || "Failed to save config");
+          }
 
-        // Every successful queued write advances the disk snapshot, even when
-        // a newer local draft means this response must not replace the editor.
-        // Keeping this snapshot current ensures `isDirty` still compares the
-        // draft with what is actually on disk after an in-flight edit.
-        if (typeof data.raw === 'string') {
-          savedRawRef.current = data.raw;
-          isDirtyRef.current = rawRef.current !== data.raw;
-        }
-        if (typeof data.revision === 'string') {
-          revisionRef.current = data.revision;
-          setRevision(data.revision);
-        }
+          // Every successful queued write advances the disk snapshot, even when
+          // a newer local draft means this response must not replace the editor.
+          // Keeping this snapshot current ensures `isDirty` still compares the
+          // draft with what is actually on disk after an in-flight edit.
+          if (typeof data.raw === "string") {
+            savedRawRef.current = data.raw;
+            isDirtyRef.current = rawRef.current !== data.raw;
+          }
+          if (typeof data.revision === "string") {
+            revisionRef.current = data.revision;
+            setRevision(data.revision);
+          }
 
-        // Immediate-mode fields can enqueue another draft before this request
-        // finishes. Only the newest response may replace the editor state;
-        // every queued write still reaches disk in order.
-        if (
-          sequence === saveSequenceRef.current
-          && rawRef.current === draft
-        ) {
-          applyResponse(data, 'ui-save');
-          setMessage('Saved and reloaded');
-          setExternalChangeNotice(null);
-        }
-        return { ok: true };
-      } catch (caught) {
-        const message = caught instanceof Error
-          ? caught.message
-          : 'Failed to save config';
-        if (sequence === saveSequenceRef.current) {
-          setError(message);
-          if (
-            caught instanceof Error
-            && caught.message.toLowerCase().includes('config changed')
-          ) {
-            setExternalChangeNotice(
-              'Config changed while this draft was being saved. Your draft was not written — refresh before saving again.',
-            );
+          // Immediate-mode fields can enqueue another draft before this request
+          // finishes. Only the newest response may replace the editor state;
+          // every queued write still reaches disk in order.
+          if (sequence === saveSequenceRef.current && rawRef.current === draft) {
+            applyResponse(data, "ui-save");
+            setMessage("Saved and reloaded");
+            setExternalChangeNotice(null);
+          }
+          return { ok: true };
+        } catch (caught) {
+          const message = caught instanceof Error ? caught.message : "Failed to save config";
+          if (sequence === saveSequenceRef.current) {
+            setError(message);
+            if (caught instanceof Error && caught.message.toLowerCase().includes("config changed")) {
+              setExternalChangeNotice(
+                "Config changed while this draft was being saved. Your draft was not written — refresh before saving again.",
+              );
+            }
+          }
+          return { ok: false, error: message };
+        } finally {
+          pendingSaveCountRef.current = Math.max(0, pendingSaveCountRef.current - 1);
+          if (pendingSaveCountRef.current === 0) {
+            setSaving(false);
           }
         }
-        return { ok: false, error: message };
-      } finally {
-        pendingSaveCountRef.current = Math.max(
-          0,
-          pendingSaveCountRef.current - 1,
-        );
-        if (pendingSaveCountRef.current === 0) {
-          setSaving(false);
-        }
-      }
-    };
+      };
 
-    const result = saveQueueRef.current.then(run, run);
-    saveQueueRef.current = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }, [applyResponse]);
+      const result = saveQueueRef.current.then(run, run);
+      saveQueueRef.current = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    },
+    [applyResponse],
+  );
 
   const reloadConfig = useCallback(async () => {
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
-      const response = await authenticatedFetch('/api/config/reload', { method: 'POST' });
+      const response = await authenticatedFetch("/api/config/reload", { method: "POST" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to reload config');
-      applyResponse(data, 'ui-reload');
-      setMessage('Reloaded current config');
+      if (!response.ok) throw new Error(data.error || "Failed to reload config");
+      applyResponse(data, "ui-reload");
+      setMessage("Reloaded current config");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to reload config');
+      setError(caught instanceof Error ? caught.message : "Failed to reload config");
     } finally {
       setSaving(false);
     }
@@ -375,12 +359,12 @@ function usePilotDeckConfigState() {
     setOpening(true);
     setError(null);
     try {
-      const response = await authenticatedFetch('/api/config/open', { method: 'POST' });
+      const response = await authenticatedFetch("/api/config/open", { method: "POST" });
       const data = await response.json();
       if (!data.success && data.error) throw new Error(data.error);
       setMessage(`Config file: ${data.path}`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to open config file');
+      setError(caught instanceof Error ? caught.message : "Failed to open config file");
     } finally {
       setOpening(false);
     }
@@ -421,17 +405,13 @@ const PilotDeckConfigContext = createContext<PilotDeckConfigController | null>(n
 
 export function PilotDeckConfigProvider({ children }: { children: ReactNode }) {
   const controller = usePilotDeckConfigState();
-  return createElement(
-    PilotDeckConfigContext.Provider,
-    { value: controller },
-    children,
-  );
+  return createElement(PilotDeckConfigContext.Provider, { value: controller }, children);
 }
 
 export function usePilotDeckConfig(): PilotDeckConfigController {
   const controller = useContext(PilotDeckConfigContext);
   if (!controller) {
-    throw new Error('usePilotDeckConfig must be used within PilotDeckConfigProvider');
+    throw new Error("usePilotDeckConfig must be used within PilotDeckConfigProvider");
   }
   return controller;
 }

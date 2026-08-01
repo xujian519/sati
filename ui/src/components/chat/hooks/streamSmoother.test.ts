@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { SmoothTextStream } from './streamSmoother';
+import { describe, expect, it, vi } from "vitest";
+import { SmoothTextStream } from "./streamSmoother";
 
 function createManualFrameScheduler(onFrame?: () => void) {
   let nextId = 1;
@@ -13,7 +13,7 @@ function createManualFrameScheduler(onFrame?: () => void) {
       return id;
     },
     cancelFrame(id: number) {
-      const item = queue.find((entry) => entry.id === id);
+      const item = queue.find(entry => entry.id === id);
       if (item) item.cancelled = true;
     },
     runNext() {
@@ -32,101 +32,68 @@ function createManualFrameScheduler(onFrame?: () => void) {
       return count;
     },
     get size() {
-      return queue.filter((item) => !item.cancelled).length;
+      return queue.filter(item => !item.cancelled).length;
     },
   };
 }
 
-describe('SmoothTextStream', () => {
-  it('renders a large chunk over many bounded frame updates', () => {
+describe("SmoothTextStream", () => {
+  it("renders a large chunk over many bounded frame updates", () => {
     let now = 0;
     const scheduler = createManualFrameScheduler(() => {
       now += 33;
     });
     const emitted: string[] = [];
-    const text = 'abcdefghijklmnopqrstuvwxyz '.repeat(8);
+    const text = "abcdefghijklmnopqrstuvwxyz ".repeat(8);
     const stream = new SmoothTextStream({
-      emit: (content) => emitted.push(content),
-      scheduleFrame: (callback) => scheduler.scheduleFrame(callback),
-      cancelFrame: (handle) => scheduler.cancelFrame(handle),
+      emit: content => emitted.push(content),
+      scheduleFrame: callback => scheduler.scheduleFrame(callback),
+      cancelFrame: handle => scheduler.cancelFrame(handle),
       now: () => now,
-      frameMs: 33,
-      minCharsPerFrame: 3,
-      maxCharsPerFrame: 18,
     });
 
     stream.append(text);
+
+    // 首块由下一帧异步发出（append 不立即同步 emit）。
+    expect(emitted.length).toBe(0);
+    scheduler.runNext();
 
     expect(emitted.length).toBe(1);
     expect(emitted[0].length).toBeGreaterThan(0);
     expect(emitted[0].length).toBeLessThan(text.length);
     expect(stream.getSnapshot().targetLength).toBe(text.length);
 
-    scheduler.runNext();
-    scheduler.runNext();
-
-    expect(emitted.length).toBeGreaterThanOrEqual(2);
-    expect(emitted[0].length).toBeGreaterThan(0);
-    expect(emitted[0].length).toBeLessThan(text.length);
-
-    for (let index = 1; index < emitted.length; index += 1) {
-      const delta = emitted[index].length - emitted[index - 1].length;
-      expect(delta).toBeGreaterThan(0);
-      expect(delta).toBeLessThanOrEqual(18);
-    }
-
-    scheduler.drain();
+    // 216 chars / 2 chars-per-frame = 108 帧，超过默认 drain 上限。
+    scheduler.drain(120);
 
     expect(emitted[emitted.length - 1]).toBe(text);
     expect(stream.getSnapshot().renderedLength).toBe(text.length);
   });
 
-  it('updates the moving average rate when chunk cadence changes', () => {
+  it("keeps a steady rendering rate while content is buffered", () => {
     let now = 0;
     const scheduler = createManualFrameScheduler(() => {
       now += 33;
     });
     const stream = new SmoothTextStream({
       emit: () => {},
-      scheduleFrame: (callback) => scheduler.scheduleFrame(callback),
-      cancelFrame: (handle) => scheduler.cancelFrame(handle),
+      scheduleFrame: callback => scheduler.scheduleFrame(callback),
+      cancelFrame: handle => scheduler.cancelFrame(handle),
       now: () => now,
     });
 
-    stream.append('abcd');
+    stream.append("abcd");
     now += 40;
-    stream.append('x'.repeat(80));
+    stream.append("x".repeat(80));
 
     const snapshot = stream.getSnapshot();
-    expect(snapshot.averageCharsPerSecond).toBeGreaterThan(400);
     expect(snapshot.pendingChars).toBeGreaterThan(0);
-    expect(snapshot.pendingChars).toBeLessThan(84);
+    // 速率恒定（动画已移除），pending 内容稍后逐帧渲染。
+    scheduler.drain(60);
+    expect(stream.getSnapshot().renderedLength).toBe(84);
   });
 
-  it('prefers whitespace and punctuation boundaries without exceeding the frame cap', () => {
-    let now = 0;
-    const scheduler = createManualFrameScheduler(() => {
-      now += 33;
-    });
-    const emitted: string[] = [];
-    const stream = new SmoothTextStream({
-      emit: (content) => emitted.push(content),
-      scheduleFrame: (callback) => scheduler.scheduleFrame(callback),
-      cancelFrame: (handle) => scheduler.cancelFrame(handle),
-      now: () => now,
-      frameMs: 33,
-      minCharsPerFrame: 6,
-      maxCharsPerFrame: 12,
-    });
-
-    stream.append('hello world, next sentence.');
-    scheduler.runNext();
-
-    expect(emitted[0].length).toBeLessThanOrEqual(12);
-    expect(/[\s,]$/.test(emitted[0])).toBe(true);
-  });
-
-  it('flushes all buffered content and finalizes immediately', () => {
+  it("flushes all buffered content and finalizes immediately", () => {
     let now = 0;
     const scheduler = createManualFrameScheduler(() => {
       now += 33;
@@ -134,49 +101,51 @@ describe('SmoothTextStream', () => {
     const emitted: string[] = [];
     let finalized = 0;
     const stream = new SmoothTextStream({
-      emit: (content) => emitted.push(content),
+      emit: content => emitted.push(content),
       finalize: () => {
         finalized += 1;
       },
-      scheduleFrame: (callback) => scheduler.scheduleFrame(callback),
-      cancelFrame: (handle) => scheduler.cancelFrame(handle),
+      scheduleFrame: callback => scheduler.scheduleFrame(callback),
+      cancelFrame: handle => scheduler.cancelFrame(handle),
       now: () => now,
     });
 
-    stream.append('streaming output');
+    stream.append("streaming output");
     stream.flush(true);
 
-    expect(emitted.at(-1)).toBe('streaming output');
+    expect(emitted.at(-1)).toBe("streaming output");
     expect(finalized).toBe(1);
     expect(stream.getSnapshot().targetLength).toBe(0);
     expect(stream.getSnapshot().renderedLength).toBe(0);
     expect(scheduler.size).toBe(0);
   });
 
-  it('falls back when requestAnimationFrame does not run promptly', () => {
+  it("falls back when requestAnimationFrame does not run promptly", () => {
     vi.useFakeTimers();
     const requestAnimationFrameSpy = vi.fn(() => 1);
-    const cancelAnimationFrameSpy = vi.fn();
-    vi.stubGlobal('window', {
+    const clearTimeoutSpy = vi.fn();
+    vi.stubGlobal("window", {
       requestAnimationFrame: requestAnimationFrameSpy,
-      cancelAnimationFrame: cancelAnimationFrameSpy,
+      cancelAnimationFrame: vi.fn(),
       setTimeout: globalThis.setTimeout,
+      clearTimeout: clearTimeoutSpy,
     });
     const emitted: string[] = [];
 
     try {
       const stream = new SmoothTextStream({
-        emit: (content) => emitted.push(content),
+        emit: content => emitted.push(content),
         fallbackFrameMs: 10,
       });
 
-      stream.append('abcdefghijklmnopqrstuvwxyz '.repeat(4));
+      stream.append("abcdefghijklmnopqrstuvwxyz ".repeat(4));
 
-      expect(emitted.length).toBe(1);
+      // 首块不立即同步发出，等待 fallback 定时器推动首帧渲染。
+      expect(emitted.length).toBe(0);
       vi.advanceTimersByTime(10);
 
-      expect(cancelAnimationFrameSpy).toHaveBeenCalledWith(1);
-      expect(emitted.length).toBeGreaterThan(1);
+      expect(emitted.length).toBeGreaterThan(0);
+      expect(clearTimeoutSpy).toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
       vi.useRealTimers();
