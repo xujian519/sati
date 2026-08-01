@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -32,7 +32,10 @@ export type KnowledgeDbPaths = {
 };
 
 /** 随仓库分发的内置 wiki 卡片目录（不含商标）。 */
-const BUILTIN_WIKI_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "patent", "wiki");
+// 直接用 fileURLToPath(import.meta.url) 取目录：在 vitest/vite-node 环境下
+// new URL(".", import.meta.url) 的相对解析会被劫持成 http:// 服务器 URL，
+// 导致 fileURLToPath 抛 "The URL must be of scheme file"。
+const BUILTIN_WIKI_DIR = join(dirname(fileURLToPath(import.meta.url)), "patent", "wiki");
 
 /**
  * 语义向量持久化默认目录（memory/wiki 的 JSONL 索引；调用方显式传
