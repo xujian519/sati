@@ -18,34 +18,36 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Enable pnpm (corepack)
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+          pnpm --version
 
       - name: Install dependencies
-        run: corepack pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck (root)
-        run: corepack pnpm typecheck
+        run: pnpm typecheck
 
       - name: Typecheck (ui)
         working-directory: ui
-        run: corepack pnpm typecheck
+        run: pnpm typecheck
 
       - name: Lint (root)
-        run: corepack pnpm lint
+        run: pnpm lint
 
       - name: Lint (ui)
         working-directory: ui
-        run: corepack pnpm lint
+        run: pnpm lint
 
       - name: Format check (Biome)
-        run: corepack pnpm format:check
+        run: pnpm format:check
 
       - name: Build & test (backend)
-        run: corepack pnpm test
+        run: pnpm test
 
       - name: Test (ui)
         working-directory: ui
-        run: corepack pnpm test
+        run: pnpm test

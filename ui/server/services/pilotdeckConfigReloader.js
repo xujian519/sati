@@ -1,5 +1,5 @@
-import { applyConfigToProcessEnv } from './pilotdeckConfig.js';
-import { closeMemoryServices, startMemoryScheduler } from './memoryService.js';
+import { applyConfigToProcessEnv } from "./pilotdeckConfig.js";
+import { closeMemoryServices, startMemoryScheduler } from "./memoryService.js";
 
 // Applies a validated config to every running subsystem (env, memory) and
 // returns a per-subsystem summary so the UI can show what actually reloaded.
@@ -19,7 +19,7 @@ export async function reloadPilotDeckConfig(config) {
     startMemoryScheduler();
   }
   result.memory.reloaded = true;
-  result.memory.scheduler = config.memory?.enabled ? 'started' : 'stopped';
+  result.memory.scheduler = config.memory?.enabled ? "started" : "stopped";
 
   return result;
 }
