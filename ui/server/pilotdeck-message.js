@@ -12,9 +12,9 @@
  *   session_created | interactive_prompt | task_notification | interrupted
  */
 
-import crypto from 'node:crypto';
+import crypto from "node:crypto";
 
-export function generateMessageId(prefix = 'msg') {
+export function generateMessageId(prefix = "msg") {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
@@ -22,8 +22,8 @@ export function createNormalizedMessage(fields) {
   return {
     ...fields,
     id: fields.id || generateMessageId(fields.kind),
-    sessionId: fields.sessionId || '',
+    sessionId: fields.sessionId || "",
     timestamp: fields.timestamp || new Date().toISOString(),
-    provider: fields.provider || 'pilotdeck',
+    provider: fields.provider || "pilotdeck",
   };
 }
