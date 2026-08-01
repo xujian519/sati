@@ -41,7 +41,11 @@ export type PilotDeckElicitationRequest = {
 };
 
 export type PilotDeckElicitationAnswer =
-  | { type: "answered"; answers: Record<string, string | string[]>; annotations?: Record<string, { preview?: string; notes?: string }> }
+  | {
+      type: "answered";
+      answers: Record<string, string | string[]>;
+      annotations?: Record<string, { preview?: string; notes?: string }>;
+    }
   | { type: "cancelled"; reason?: string };
 
 export type PilotDeckElicitationChannel = {
@@ -57,10 +61,7 @@ export class InMemoryElicitationChannel implements PilotDeckElicitationChannel {
   private readonly answers: Map<string, string | string[]>;
   private readonly cancelOnAsk: boolean;
 
-  constructor(
-    answers: Record<string, string | string[]> = {},
-    options: { cancelOnAsk?: boolean } = {},
-  ) {
+  constructor(answers: Record<string, string | string[]> = {}, options: { cancelOnAsk?: boolean } = {}) {
     this.answers = new Map(Object.entries(answers));
     this.cancelOnAsk = options.cancelOnAsk ?? false;
   }
