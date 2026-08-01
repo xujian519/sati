@@ -156,6 +156,18 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     assert.ok(textOf(res).includes("非法状态迁移"));
   });
 
+  it("patent_plan_task 工具：非法状态字符串 fail-closed（不抛 TypeError）", async () => {
+    const tool = createPatentPlanTaskTool();
+    const res = await tool.execute({ action: "transition", currentState: "bogus_state", to: "executing" }, {} as never);
+    assert.ok(textOf(res).includes("非法状态"), `应返回非法状态提示: ${textOf(res)}`);
+  });
+
+  it("patent_plan_task 工具：未知 action fail-closed（不返回 undefined）", async () => {
+    const tool = createPatentPlanTaskTool();
+    const res = await tool.execute({ action: "fly_to_moon" as never }, {} as never);
+    assert.ok(textOf(res).includes("未知操作"), `应返回未知操作提示: ${textOf(res)}`);
+  });
+
   it("patent_worker_validate 工具：契约校验结果", async () => {
     const tool = createPatentWorkerValidateTool();
     const ok = await tool.execute(

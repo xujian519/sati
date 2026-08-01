@@ -2,6 +2,7 @@ import {
   PlanTaskStateMachine,
   replanTasks,
   syncPlanToTasks,
+  TRANSITIONS,
   type PlanTask,
   type PlanTaskState,
 } from "../../patent/index.js";
@@ -65,6 +66,18 @@ export function createPatentPlanTaskTool(): SatiToolDefinition<PatentPlanTaskInp
         case "transition": {
           const from = (input.currentState ?? "planning") as PlanTaskState;
           const to = input.to as PlanTaskState;
+          // 运行时输入校验（inputSchema enum 仅代理侧提示，不强制）：非法状态 fail-closed 返回文本而非抛 TypeError
+          const validStates = new Set(Object.keys(TRANSITIONS));
+          if (!validStates.has(from) || !validStates.has(to)) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `patent_plan_task: 非法状态 "${from}" 或 "${to}"（合法: ${[...validStates].join(" / ")}）`,
+                },
+              ],
+            };
+          }
           const machine = new PlanTaskStateMachine(from);
           if (!machine.canTransition(to)) {
             return {
@@ -109,6 +122,17 @@ export function createPatentPlanTaskTool(): SatiToolDefinition<PatentPlanTaskInp
               {
                 type: "text",
                 text: `patent_plan_task: 重规划 → ${result.tasks.length} 个任务\n${preserved}\n需执行: ${result.toRun.join(", ") || "（全部已完成）"}`,
+              },
+            ],
+          };
+        }
+        default: {
+          // inputSchema enum 仅代理侧提示，运行时不强制：未知 action fail-closed
+          return {
+            content: [
+              {
+                type: "text",
+                text: `patent_plan_task: 未知操作 "${String(input.action)}"（可选: transition / sync / replan）`,
               },
             ],
           };
