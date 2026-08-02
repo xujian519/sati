@@ -106,10 +106,10 @@ pd_runtime_free_port() {
   node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();});' 2>/dev/null || echo 28790
 }
 
-# Start Gateway (18789) + UI server. Sets PD_UI_PORT, PD_UI_URL, PD_GW_PID, PD_SRV_PID.
+# Start Gateway (19789) + UI server. Sets PD_UI_PORT, PD_UI_URL, PD_GW_PID, PD_SRV_PID.
 pd_runtime_start_dual_stack() {
   local ui_port="${1:-$(pd_runtime_free_port)}"
-  local gw_port="${2:-18789}"
+  local gw_port="${2:-19789}"
   export PD_UI_PORT="$ui_port" PD_GATEWAY_PORT="$gw_port"
   export PD_UI_URL="http://127.0.0.1:${ui_port}"
 

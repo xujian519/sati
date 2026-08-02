@@ -410,7 +410,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const allChannels = [...extraChannels, ...(wecomChannel ? [wecomChannel] : [])];
     const server = await startSatiServer({
       gateway,
-      port: readPort(argv) ?? (Number.isFinite(envPort) ? envPort : 18789),
+      port: readPort(argv) ?? (Number.isFinite(envPort) ? envPort : 19789),
       staticAssetsPath: resolve(projectRoot, "ui/dist"),
       feishu: feishuChannel,
       weixin: weixinChannel,
@@ -511,7 +511,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       return;
     }
     const snapshot = loadPilotConfig({ projectRoot: process.cwd() });
-    const gatewayPort = snapshot.config.gateway?.port ?? 18789;
+    const gatewayPort = snapshot.config.gateway?.port ?? 19789;
     const probeUrl = `http://127.0.0.1:${gatewayPort}`;
     const fallbackGateway = createFallbackGateway();
     try {

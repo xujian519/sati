@@ -13,7 +13,7 @@ export async function probeGatewayServer(options: ProbeGatewayServerOptions = {}
   wsUrl: string;
   token?: string;
 }> {
-  const url = options.url ?? "http://127.0.0.1:18789";
+  const url = options.url ?? "http://127.0.0.1:19789";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 200);
   try {

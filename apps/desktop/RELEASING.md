@@ -85,7 +85,7 @@ bash scripts/release.sh --signed
 ### L1 — DMG 制品冒烟（`verify-dmg.sh`）
 
 - **何时跑**：`release.sh` 打出 DMG 后自动调用（`--skip-verify` 可跳过）。
-- **覆盖**：挂载 DMG、codesign、tar 内 `server` / `sati` CLI、沙箱里用 **打包进去的 node** 起 Gateway(18789) + UI(18790)、`sati-bridge` 连通、V2 stub 配置、onboarding YAML 与 `loadPilotConfig` 兼容。
+- **覆盖**：挂载 DMG、codesign、tar 内 `server` / `sati` CLI、沙箱里用 **打包进去的 node** 起 Gateway(19789) + UI(18790)、`sati-bridge` 连通、V2 stub 配置、onboarding YAML 与 `loadPilotConfig` 兼容。
 - **故意不做**：不启动真实 Electron 窗口、不调 LLM API、不跑 Playwright 点 UI。
 
 ### L2 — UI / onboarding / Electron（Playwright，可自动化）

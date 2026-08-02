@@ -209,7 +209,7 @@ echo         test-model: {}
 
 set "GW_ENTRY=%CCM_DIR%\dist\src\cli\sati.js"
 set "NODE_BIN=%RES%\node-bin\node.exe"
-set GATEWAY_PORT=18789
+set GATEWAY_PORT=19789
 
 if not exist "%NODE_BIN%" (
     set /a WARN+=1

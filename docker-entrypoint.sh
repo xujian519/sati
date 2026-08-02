@@ -158,7 +158,7 @@ rm -f "$PILOT_HOME/server-token"
 # health endpoint before launching the bridge, eliminating the race.
 cd /app
 
-GATEWAY_PORT="${PILOTDECK_GATEWAY_PORT:-18789}"
+GATEWAY_PORT="${PILOTDECK_GATEWAY_PORT:-19789}"
 GATEWAY_HEALTH_URL="http://127.0.0.1:${GATEWAY_PORT}/health"
 GATEWAY_READY_TIMEOUT="${PILOTDECK_GATEWAY_READY_TIMEOUT:-120}"
 

@@ -3,7 +3,7 @@
  *
  *
  *   1. Connects to the standalone PilotDeck gateway server
- *      (`pilotdeck server`, default ws://127.0.0.1:18789/ws) as a
+ *      (`pilotdeck server`, default ws://127.0.0.1:19789/ws) as a
  *      WebSocket client. We never instantiate an in-process gateway
  *      here — that would create a second, divergent agent runtime that
  *      doesn't share `~/.pilotdeck/projects/<id>/chats/*.jsonl` writes
@@ -23,7 +23,7 @@
  *
  * Two-process launch:
  *
- *   - `pilotdeck server` (port 18789) owns the gateway, agent loop,
+ *   - `pilotdeck server` (port 19789) owns the gateway, agent loop,
  *     model router, MCP runtime, cron daemon, and on-disk session
  *     transcripts. Edit `src/**` then restart this process to pick up
  *     changes — no `npm run build` required when running via `tsx`.
@@ -63,7 +63,7 @@ const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const GENERAL_HOME = resolvePilotHome(process.env);
 
-const GATEWAY_URL = process.env.PILOTDECK_GATEWAY_URL || "ws://127.0.0.1:18789/ws";
+const GATEWAY_URL = process.env.PILOTDECK_GATEWAY_URL || "ws://127.0.0.1:19789/ws";
 const GATEWAY_TOKEN_PATH = process.env.PILOTDECK_GATEWAY_TOKEN_PATH || path.join(GENERAL_HOME, "server-token");
 // The two processes (gateway + bridge) are typically started in
 // parallel by `concurrently`. We allow up to 30 s for the gateway to

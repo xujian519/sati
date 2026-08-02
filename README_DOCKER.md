@@ -4,7 +4,7 @@
 
 PilotDeck runs as two cooperating Node.js processes in the container:
 
-- **Gateway**: agent runtime on `PILOTDECK_GATEWAY_PORT` (default `18789`)
+- **Gateway**: agent runtime on `PILOTDECK_GATEWAY_PORT` (default `19789`)
 - **UI Server**: web frontend + REST/WebSocket adapter on `SERVER_PORT` (default `3001`)
 
 The Docker Compose setup persists the full `PILOT_HOME` directory, including generated config, auth DB, permissions, sessions/projects, memory, skills/plugins, and router stats.
@@ -173,12 +173,12 @@ docker run -d --name pilotdeck \
 | `PILOTDECK_LIGHT_API_URL` | Base URL for a different light-model provider | Falls back to `PILOTDECK_API_URL` |
 | `PILOTDECK_PROXY` | HTTP/HTTPS proxy URL | — |
 | `SERVER_PORT` | UI server port | `3001` |
-| `PILOTDECK_GATEWAY_PORT` | Gateway port used by the UI bridge | `18789` |
+| `PILOTDECK_GATEWAY_PORT` | Gateway port used by the UI bridge | `19789` |
 
 ## Architecture
 
 ```text
-Browser (localhost:3001) ──► UI Server (port 3001) ──► Gateway (port 18789)
+Browser (localhost:3001) ──► UI Server (port 3001) ──► Gateway (port 19789)
 ```
 
 Both processes are managed by `concurrently` inside the Docker container.

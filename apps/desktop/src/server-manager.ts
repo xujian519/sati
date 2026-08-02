@@ -27,16 +27,16 @@ import { parse as parseYaml } from "yaml";
 
 const DEFAULT_PORT_START = 18790;
 const DEFAULT_PORT_END = 18799;
-// Gateway port. Default 18789 matches the canonical default in
-// src/cli/sati.ts (`readPort(argv) ?? SATI_GATEWAY_PORT ?? 18789`) and
+// Gateway port. Default 19789 matches the canonical default in
+// src/cli/sati.ts (`readPort(argv) ?? SATI_GATEWAY_PORT ?? 19789`) and
 // sati-bridge.js, so the desktop and standalone `sati server` agree.
 //
 // Resolution order (first valid integer in 1..65535 wins):
 //   1. SATI_GATEWAY_PORT environment variable (existing escape hatch)
 //   2. `gatewayPort` at the top level of ~/.sati/sati.yaml — lets desktop
 //      users pin a non-conflicting port (e.g. when another service already
-//      occupies 18789) without going through launchd/launchctl env.
-//   3. 18789 default.
+//      occupies 19789) without going through launchd/launchctl env.
+//   3. 19789 default.
 //
 // Note: the YAML key is desktop-only. The standalone `sati server` CLI does
 // not read it — use `sati server --port` / SATI_GATEWAY_PORT there.
@@ -54,7 +54,7 @@ function readGatewayPort(): number {
   } catch {
     /* best-effort: unreadable/malformed config falls back to default */
   }
-  return 18789;
+  return 19789;
 }
 const GATEWAY_PORT = readGatewayPort();
 const HEALTH_POLL_MS = 1500;
@@ -917,7 +917,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       SATI_DESKTOP: "1",
       SERVER_PORT: String(chosenPort),
       // Keep satiui's sati-bridge in sync with the (possibly overridden)
-      // gateway port. sati-bridge.js falls back to ws://127.0.0.1:18789/ws
+      // gateway port. sati-bridge.js falls back to ws://127.0.0.1:19789/ws
       // when this env var is absent.
       SATI_GATEWAY_URL: `ws://127.0.0.1:${GATEWAY_PORT}/ws`,
       // Force loopback regardless of what runtime.host says in YAML.

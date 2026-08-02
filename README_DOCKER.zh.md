@@ -2,7 +2,7 @@
 
 PilotDeck 在容器内由两个协作的 Node.js 进程组成：
 
-- **Gateway**：智能体运行时，监听 `PILOTDECK_GATEWAY_PORT`（默认 `18789`）
+- **Gateway**：智能体运行时，监听 `PILOTDECK_GATEWAY_PORT`（默认 `19789`）
 - **UI Server**：Web 前端 + REST/WebSocket 适配层，监听 `SERVER_PORT`（默认 `3001`）
 
 Docker Compose 会持久化完整的 `PILOT_HOME` 目录，包括自动生成的配置、认证数据库、权限、会话/项目、记忆、技能/插件和路由统计数据。
@@ -173,12 +173,12 @@ docker run -d --name pilotdeck \
 | `PILOTDECK_LIGHT_API_URL` | 轻量模型使用不同 Provider 时的 API Base URL | 回退到 `PILOTDECK_API_URL` |
 | `PILOTDECK_PROXY` | HTTP/HTTPS 代理 URL | — |
 | `SERVER_PORT` | UI server 端口 | `3001` |
-| `PILOTDECK_GATEWAY_PORT` | UI bridge 使用的 Gateway 端口 | `18789` |
+| `PILOTDECK_GATEWAY_PORT` | UI bridge 使用的 Gateway 端口 | `19789` |
 
 ## 架构
 
 ```text
-Browser (localhost:3001) ──► UI Server (port 3001) ──► Gateway (port 18789)
+Browser (localhost:3001) ──► UI Server (port 3001) ──► Gateway (port 19789)
 ```
 
 两个进程由容器内的 entrypoint 管理。

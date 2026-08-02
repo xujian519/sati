@@ -4,7 +4,7 @@ param(
   [string]$InstallDir = $env:SATI_INSTALL_DIR,
   [string]$ConfigPath = $env:SATI_CONFIG_PATH,
   [int]$ServerPort = $(if ($env:SERVER_PORT) { [int]$env:SERVER_PORT } else { 3001 }),
-  [int]$GatewayPort = $(if ($env:SATI_GATEWAY_PORT) { [int]$env:SATI_GATEWAY_PORT } else { 18789 }),
+  [int]$GatewayPort = $(if ($env:SATI_GATEWAY_PORT) { [int]$env:SATI_GATEWAY_PORT } else { 19789 }),
   [int]$MaxPortTries = $(if ($env:SATI_MAX_PORT_TRIES) { [int]$env:SATI_MAX_PORT_TRIES } else { 20 }),
   [int]$LfsTimeoutSeconds = $(if ($env:SATI_LFS_TIMEOUT_SECONDS) { [int]$env:SATI_LFS_TIMEOUT_SECONDS } else { 300 }),
   [switch]$SkipStart,
@@ -495,7 +495,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0sati.ps1" %*
 `$InstallDir = '$escapedInstallDir'
 `$ConfigPath = if (`$env:SATI_CONFIG_PATH) { `$env:SATI_CONFIG_PATH } else { '$escapedConfigPath' }
 `$ServerPort = if (`$env:SERVER_PORT) { [int]`$env:SERVER_PORT } else { 3001 }
-`$GatewayPort = if (`$env:SATI_GATEWAY_PORT) { [int]`$env:SATI_GATEWAY_PORT } else { 18789 }
+`$GatewayPort = if (`$env:SATI_GATEWAY_PORT) { [int]`$env:SATI_GATEWAY_PORT } else { 19789 }
 `$MaxPortTries = if (`$env:SATI_MAX_PORT_TRIES) { [int]`$env:SATI_MAX_PORT_TRIES } else { 20 }
 `$NodeDir = '$escapedNodeDir'
 `$NpmPath = '$escapedNpmPath'

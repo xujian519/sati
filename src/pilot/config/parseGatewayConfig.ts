@@ -46,7 +46,7 @@ export function parseGatewayConfig(
 
   const maxMcp = numberField(rawGateway, "maxPerSessionMcpInstances", 5);
   return {
-    port: numberField(rawGateway, "port", 18789),
+    port: numberField(rawGateway, "port", 19789),
     bindAddress: "127.0.0.1",
     idleSessionTimeoutMinutes: numberField(rawGateway, "idleSessionTimeoutMinutes", 30),
     idleSweepIntervalSeconds: numberField(rawGateway, "idleSweepIntervalSeconds", 60),

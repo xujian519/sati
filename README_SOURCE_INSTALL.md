@@ -315,7 +315,7 @@ SERVER_PORT=3002 SATI_GATEWAY_PORT=18790 SATI_GATEWAY_URL=ws://127.0.0.1:18790/w
 - `pnpm install --frozen-lockfile` 下载 npm 包超时：运行 `pnpm config set registry https://registry.npmmirror.com` 后重试。
 - macOS 出现 `ModuleNotFoundError: No module named 'distutils'`：一键安装脚本会尝试自动选择兼容 Python；手动运行 npm 命令时，可用 `PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile` 重试，或切换到其他带 `distutils` 的 Python。
 - macOS 缺少编译工具：不需要完整 Xcode，但 `xcrun --find clang` 必须可用。可运行 `xcode-select --install` 重新安装 Xcode Command Line Tools；如果已安装但状态异常，可运行 `sudo xcode-select --reset` 后重试。
-- 启动时报 `EADDRINUSE`：默认 `3001` 或 `18789` 已被占用，设置 `SERVER_PORT`、`SATI_GATEWAY_PORT` 和 `SATI_GATEWAY_URL` 后重试。
+- 启动时报 `EADDRINUSE`：默认 `3001` 或 `19789` 已被占用，设置 `SERVER_PORT`、`SATI_GATEWAY_PORT` 和 `SATI_GATEWAY_URL` 后重试。
 - 已有 `~/.sati/sati.yaml` 但仍进入 onboarding：检查配置里是否仍是 `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE` 或 `_placeholder/_placeholder`，需要替换为真实 Provider、API Key 和模型。
 - 缺少演示图片/视频：安装 Git LFS 后，在仓库根目录运行 `git lfs pull`。
 - 提示找不到 `rg`：安装 ripgrep 以启用完整的文件/搜索工具能力。

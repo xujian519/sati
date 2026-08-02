@@ -17,7 +17,7 @@ services:
       - NODE_ENV=production
       - PILOT_HOME=/root/.pilotdeck
       - SERVER_PORT=3001
-      - PILOTDECK_GATEWAY_PORT=18789
+      - PILOTDECK_GATEWAY_PORT=19789
       # ── Authentication (uncomment to require login) ──
       # - PILOTDECK_DISABLE_LOCAL_AUTH=0
       #

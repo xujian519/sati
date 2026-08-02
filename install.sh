@@ -786,7 +786,7 @@ find_free_port() {
 
 resolve_runtime_ports() {
   local server_base="${SERVER_PORT:-3001}"
-  local gateway_base="${SATI_GATEWAY_PORT:-18789}"
+  local gateway_base="${SATI_GATEWAY_PORT:-19789}"
 
   SERVER_PORT="$(find_free_port "$server_base")" || \
     fail "$(L "Could not find a free UI port within ${MAX_PORT_TRIES} ports from ${server_base}." "从 ${server_base} 起 ${MAX_PORT_TRIES} 个端口内未找到空闲的 UI 端口。")"
@@ -1418,7 +1418,7 @@ fi
 ensure_node_runtime
 
 SERVER_BASE="${SERVER_PORT:-3001}"
-GATEWAY_BASE="${SATI_GATEWAY_PORT:-18789}"
+GATEWAY_BASE="${SATI_GATEWAY_PORT:-19789}"
 SERVER_PORT="$(find_free_port "$SERVER_BASE")" || fail "could not find a free UI port from ${SERVER_BASE}"
 SATI_GATEWAY_PORT="$(find_free_port "$GATEWAY_BASE")" || fail "could not find a free gateway port from ${GATEWAY_BASE}"
 SATI_GATEWAY_URL="ws://127.0.0.1:${SATI_GATEWAY_PORT}/ws"
