@@ -9,7 +9,7 @@
 #   4. satiui-bundle.tar 解开后存在 server/index.js
 #   5. sati-main-bundle.tar 解开后存在 src/cli/sati.ts
 #   6. 用打包好的 node spawn UI server + /health (V2 sati.yaml)
-#   7. Gateway 进程启动 + /health (18789)
+#   7. Gateway 进程启动 + /health (free test port)
 #   8. sati-bridge 连接 Gateway
 #   9. 新用户 onboarding YAML 与 loadPilotConfig 兼容 (monorepo)
 #
@@ -207,7 +207,16 @@ fi
 hdr "6–8. Gateway + UI server + bridge smoke test"
 
 PORT="$(node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();});' 2>/dev/null || echo 28790)"
-GATEWAY_PORT=18789
+# 18789 belongs to openclaw on dev machines; the desktop runtime reads the
+# real gateway port from sati.yaml (`gatewayPort`, e.g. 19789 here). For an
+# isolated smoke test we pick a fresh free port instead of hardcoding any
+# real-world port, so a running openclaw / Sati instance can't be hit (or
+# hit back) during verification.
+pick_free_port() {
+  node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();});' 2>/dev/null || echo 28791
+}
+GATEWAY_PORT="$(pick_free_port)"
+while [[ "$GATEWAY_PORT" == "$PORT" ]]; do GATEWAY_PORT="$(pick_free_port)"; done
 
 # V2 schema — must match loadPilotConfig() (schemaVersion + agent + model).
 SATI_HOME="$SANDBOX/home/.sati"
@@ -270,19 +279,8 @@ if [[ -d "$CCM_DIR/dist/src" && ! -e "$SANDBOX/src" ]]; then
   pass "Symlinked \$SANDBOX/src → sati-main/dist/src"
 fi
 
-# Reuse of port 18789 from a prior desktop run breaks token/bridge checks.
-# 与 packaged-runtime.sh 一致：杀前先验证命令行，端口可能被用户的无关
-# 进程（或真实运行的 Sati 实例）占用，不得无身份检查地 kill。
-GW_LISTENER="$(/usr/sbin/lsof -nP -t -iTCP:18789 -sTCP:LISTEN 2>/dev/null | head -1 || true)"
-if [[ -n "$GW_LISTENER" ]]; then
-  if ps -p "$GW_LISTENER" -o command= 2>/dev/null | grep -q 'dist/src/cli/sati'; then
-    info "Stopping stale Sati gateway on :18789 (pid $GW_LISTENER)"
-    kill "$GW_LISTENER" 2>/dev/null || true
-    sleep 1
-  else
-    info "Skipping listener on :18789 (pid $GW_LISTENER) — not a Sati gateway"
-  fi
-fi
+# GATEWAY_PORT is a fresh free port picked above, so there is no stale
+# Sati gateway to clean up (and we must never touch openclaw's 18789).
 
 # Step 7: Gateway must be up before UI bridge connects.
 GW_ENTRY="$CCM_DIR/dist/src/cli/sati.js"
@@ -340,6 +338,7 @@ info "Spawning UI server: $CCUI_DIR/server/index.js (port $PORT)"
   HOME="$SANDBOX/home" \
   SATI_HOME="$SATI_HOME" \
   SERVER_PORT="$PORT" \
+  SATI_GATEWAY_URL="ws://127.0.0.1:${GATEWAY_PORT}/ws" \
   SATI_MAIN_DIR="$CCM_DIR" \
   BUN_BIN="$RES/bun-bin/bun" \
   NO_COLOR=1 FORCE_COLOR=0 \
