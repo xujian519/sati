@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ComponentProps } from "react";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "../../types/app";
@@ -36,11 +36,12 @@ function renderSidebar(selectedProject: Project | null) {
     onShowSettings: vi.fn(),
   };
 
-  return render(
+  const utils = render(
     <MemoryRouter>
       <SidebarV2 {...props} />
     </MemoryRouter>,
   );
+  return { ...utils, props };
 }
 
 afterEach(() => {
@@ -63,5 +64,34 @@ describe("SidebarV2 default section", () => {
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: "General" }).getAttribute("aria-selected")).toBe("true");
     });
+  });
+});
+
+describe("SidebarV2 project click behavior", () => {
+  // The project row button is the one containing the "Sati" text label;
+  // the header logo button shares the same accessible name ("Sati" via
+  // aria-label), so resolve by text and walk up to the row button.
+  const clickProjectRow = () => {
+    const label = screen.getByText("Sati");
+    const row = label.closest("button");
+    expect(row).not.toBeNull();
+    fireEvent.click(row as HTMLButtonElement);
+  };
+
+  it("switches to an unselected project when its row is clicked", () => {
+    const { props } = renderSidebar(null);
+
+    clickProjectRow();
+
+    expect(props.onSelectProject).toHaveBeenCalledTimes(1);
+    expect(props.onSelectProject).toHaveBeenCalledWith(project);
+  });
+
+  it("keeps collapse/expand toggle when clicking the already-selected project", () => {
+    const { props } = renderSidebar(project);
+
+    clickProjectRow();
+
+    expect(props.onSelectProject).not.toHaveBeenCalled();
   });
 });

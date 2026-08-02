@@ -24,7 +24,7 @@
   "general": {
     "title": "General",
     "name": "General",
-    "missing": "No general workspace found"
+    "missing": "General workspace is unavailable. Check your local server connection and try again."
   },
   "sectionToggle": {
     "label": "Sidebar section"

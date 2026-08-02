@@ -507,9 +507,18 @@ export default function SidebarV2({
   const handleProjectClick = useCallback(
     (project: Project) => {
       if (renamingProject === project.name) return;
-      toggleProjectExpanded(project);
+      if (selectedProject?.name !== project.name) {
+        // Clicking an unselected project switches to it (selection + main
+        // area follow) and expands its session tree — the folder-open
+        // behavior expected in a desktop app. Clicking the already-selected
+        // project keeps toggling collapse/expand.
+        onSelectProject(project);
+        ensureExpanded(project);
+      } else {
+        toggleProjectExpanded(project);
+      }
     },
-    [renamingProject, toggleProjectExpanded],
+    [renamingProject, selectedProject?.name, onSelectProject, ensureExpanded, toggleProjectExpanded],
   );
 
   const handleSessionClick = useCallback(

@@ -130,8 +130,17 @@ async function readMarkedProjectPaths() {
 }
 
 async function getProjects(progressCallback = null) {
-  const gateway = await getSatiGateway();
-  const { projects: webProjects } = await gateway.listProjects();
+  // Gateway hiccups must not nuke the whole project list — degrade to an
+  // empty project set so the virtual "general" workspace below still gets
+  // returned and the sidebar stays usable instead of erroring out.
+  let webProjects = [];
+  try {
+    const gateway = await getSatiGateway();
+    const listed = await gateway.listProjects();
+    webProjects = listed.projects || [];
+  } catch (err) {
+    console.error("[projects] gateway unavailable, returning general-only list:", err?.message ?? err);
+  }
   const markedProjects = await readMarkedProjectPaths();
   const markedProjectIdsByPath = new Map([...markedProjects.entries()].map(([id, cwd]) => [path.resolve(cwd), id]));
 
@@ -243,7 +252,11 @@ async function getProjects(progressCallback = null) {
       generalGateway.describeProject({ projectKey: generalHome }).catch(() => null),
     ]);
     generalSessions = (generalSessionsResult.sessions || []).map(session => toLegacySession(session, "general"));
-    applyCustomSessionNames(generalSessions, "claude");
+    try {
+      applyCustomSessionNames(generalSessions, "claude");
+    } catch {
+      // Custom names are cosmetic — don't let a failure drop the general workspace.
+    }
     generalTotal =
       typeof generalSummary?.sessionCount === "number" ? generalSummary.sessionCount : generalSessions.length;
     generalLastActivity = generalSummary?.lastActivity;

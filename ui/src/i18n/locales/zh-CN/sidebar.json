@@ -24,7 +24,7 @@
   "general": {
     "title": "通用",
     "name": "通用",
-    "missing": "未找到通用工作区"
+    "missing": "通用工作区暂不可用，请检查本地服务连接后重试"
   },
   "sectionToggle": {
     "label": "侧边栏分区"

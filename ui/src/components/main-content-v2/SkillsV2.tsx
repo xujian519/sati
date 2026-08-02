@@ -268,32 +268,6 @@ export default function SkillsV2({ selectedProject, projects, compact = false }:
     }
   }, [activeSkill, effectiveProjectPath, refresh, flashToast, t]);
 
-  const handleCreateUserOverride = useCallback(async () => {
-    if (!activeSkill || activeSkill.scope !== "builtin") return;
-    try {
-      const result = await api<{ skill: Skill }>("/api/skills/import", {
-        sourcePath: activeSkill.skillDir,
-        slug: activeSkill.slug,
-        scope: "user",
-        projectPath: null,
-        mode: "copy",
-        force: false,
-      });
-      await refresh();
-      setActiveSlug(activeSkill.slug);
-      setActiveScope("user");
-      flashToast({
-        kind: "success",
-        text: t("skillsTab.overrideCreated", {
-          defaultValue: 'Created user override for "{{name}}"',
-          name: result.skill?.name || activeSkill.name,
-        }) as string,
-      });
-    } catch (e) {
-      flashToast({ kind: "error", text: (e as Error).message });
-    }
-  }, [activeSkill, flashToast, refresh, t]);
-
   const handleSelect = useCallback(
     (skill: Skill) => {
       if (isDirty) {
@@ -387,7 +361,6 @@ export default function SkillsV2({ selectedProject, projects, compact = false }:
                 isDarkMode={isDarkMode}
                 onSave={handleSave}
                 onDelete={handleDelete}
-                onCreateUserOverride={handleCreateUserOverride}
                 onRevert={() => setEditorContent(originalContent)}
                 compact={compact}
                 t={t}
@@ -654,17 +627,7 @@ function SkillsList({
               />
             ) : null}
             {skills?.builtin && skills.builtin.length > 0 ? (
-              <ListSection
-                title={t("skillsTab.builtinScope", { defaultValue: "Built-in Skills" })}
-                items={skills.builtin}
-                activeSlug={activeScope === "builtin" ? activeSlug : null}
-                onSelect={onSelect}
-                onDelete={handleDeleteSkill}
-                onMove={handleMoveSkill}
-                moveTargets={moveTargets}
-                currentProjectPath={effectiveProjectPath}
-                t={t}
-              />
+              <BuiltinSkillsNotice count={skills.builtin.length} t={t} />
             ) : null}
             {skills &&
             skills.builtin.length === 0 &&
@@ -682,6 +645,25 @@ function SkillsList({
 }
 
 type ContextMenuState = { skill: Skill; x: number; y: number } | null;
+
+// Built-in skills ship with the app and are read-only, so instead of a
+// clickable list (which implies editability) we show a short notice.
+function BuiltinSkillsNotice({ count, t }: { count: number; t: ReturnType<typeof useTranslation>["t"] }) {
+  return (
+    <div className="mb-2">
+      <div className="px-4 py-1 text-xxs uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+        {t("skillsTab.builtinScope", { defaultValue: "Built-in Skills" })}{" "}
+        <span className="text-neutral-300 dark:text-neutral-600">· {count}</span>
+      </div>
+      <div className="mx-2 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-xxs leading-relaxed text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400">
+        {t("skillsTab.builtinNotice", {
+          defaultValue:
+            "Built-in skills ship with the app and are read-only. To modify one, copy it to your user skills first.",
+        })}
+      </div>
+    </div>
+  );
+}
 
 function ListSection({
   title,
@@ -897,7 +879,6 @@ function SkillDetail({
   isDarkMode,
   onSave,
   onDelete,
-  onCreateUserOverride,
   onRevert,
   compact,
   t,
@@ -911,7 +892,6 @@ function SkillDetail({
   isDarkMode: boolean;
   onSave: () => void;
   onDelete: () => void;
-  onCreateUserOverride: () => void;
   onRevert: () => void;
   compact: boolean;
   t: ReturnType<typeof useTranslation>["t"];
@@ -1007,16 +987,6 @@ function SkillDetail({
           </button>
         )}
         <div className="flex items-center gap-1.5">
-          {skill.readonly && !skill.overriddenBy ? (
-            <button
-              type="button"
-              onClick={onCreateUserOverride}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md bg-neutral-900 px-2.5 text-[12px] font-medium text-white transition hover:bg-neutral-700 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-            >
-              <PencilLine className="h-3.5 w-3.5" strokeWidth={1.75} />
-              <span>{t("skillsTab.createOverride", { defaultValue: "Create user override" })}</span>
-            </button>
-          ) : null}
           {!skill.readonly && isDirty ? (
             <button
               type="button"
