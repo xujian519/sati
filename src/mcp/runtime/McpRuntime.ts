@@ -10,6 +10,7 @@
 
 import { McpClient, McpClientError, type McpClientOptions } from "../client/McpClient.js";
 import type {
+  McpResourceListing,
   SatiMcpClientStatusEntry,
   SatiMcpServerInstructions,
   SatiMcpServerSpec,
@@ -74,6 +75,34 @@ export class McpRuntime {
 
   getClient(serverId: string): McpClient | undefined {
     return this.clients.get(serverId);
+  }
+
+  /** Aggregate every resource advertised across every ready client. */
+  async listResources(serverId?: string): Promise<McpResourceListing[]> {
+    const out: McpResourceListing[] = [];
+    for (const client of this.clients.values()) {
+      if (serverId !== undefined && client.spec.id !== serverId) continue;
+      if (client.getStatus() !== "ready") continue;
+      try {
+        const result = await client.listResources();
+        out.push({ serverId: client.spec.id, ...result });
+      } catch {
+        // skip — `start()` already recorded the error
+      }
+    }
+    return out;
+  }
+
+  /** Read a resource from a specific ready client. */
+  async readResource(serverId: string, uri: string): Promise<{ contents: unknown }> {
+    const client = this.clients.get(serverId);
+    if (!client) {
+      throw new Error(`MCP server ${serverId} is not registered`);
+    }
+    if (client.getStatus() !== "ready") {
+      throw new Error(`MCP server ${serverId} is not ready (${client.getStatus()})`);
+    }
+    return client.readResource(uri);
   }
 
   async stop(): Promise<void> {

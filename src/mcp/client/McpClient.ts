@@ -34,9 +34,9 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { recursivelySanitizeUnicode } from "../runtime/sanitize.js";
 import { truncateMcpToolDescription } from "../runtime/truncate.js";
-import { buildMcpToolWireName } from "../runtime/wireName.js";
+import { buildMcpToolWireName } from "../protocol/wireName.js";
 import { networkFetch } from "../../network/fetch.js";
-import type { SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
+import type { SatiMcpResource, SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
 
 const DEFAULT_CALL_TIMEOUT_MS = parseInt(process.env.SATI_MCP_TOOL_TIMEOUT_MS ?? "60000", 10);
 const LIST_TOOLS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -125,6 +125,11 @@ export class McpClient {
       );
     } catch (err) {
       this.status = "error";
+      // The timed-out `client.connect()` keeps running in the background; drop
+      // the half-open connection so the stdio subprocess does not leak. Both
+      // closes are fire-and-forget — we must rethrow immediately.
+      void client.close().catch(() => {});
+      void transport.close().catch(() => {});
       throw err instanceof McpClientError
         ? err
         : new McpClientError(`MCP handshake failed: ${(err as Error).message}`, "mcp_handshake_failed", this.spec.id);
@@ -132,13 +137,18 @@ export class McpClient {
     this.client = client;
     this.transport = transport;
     this.status = "ready";
-    const instructions = (client.getServerCapabilities() as { instructions?: string } | undefined)?.instructions;
+    const instructions =
+      client.getInstructions() ??
+      (client.getServerCapabilities() as { instructions?: string } | undefined)?.instructions;
     this.serverInstructions = typeof instructions === "string" ? instructions : (this.peekInstructions(client) ?? "");
   }
 
   private peekInstructions(client: Client): string | undefined {
-    const raw = (client as unknown as { _serverInstructions?: string })._serverInstructions;
-    return typeof raw === "string" ? raw : undefined;
+    // `getInstructions()` is the public API since SDK 1.29; `_instructions` /
+    // `_serverInstructions` are internal fallbacks for older SDK builds.
+    const raw = client as unknown as { _instructions?: string; _serverInstructions?: string };
+    const value = raw._instructions ?? raw._serverInstructions;
+    return typeof value === "string" ? value : undefined;
   }
 
   private buildTransport(): Transport {
@@ -193,12 +203,8 @@ export class McpClient {
     const cached = this.listToolsCache;
     if (cached && cached.expiresAt > Date.now()) return cached.tools;
 
-    await this.start();
-    if (!this.client) {
-      throw new McpClientError("Client not connected", "mcp_handshake_failed", this.spec.id);
-    }
-    const sdkResult = await this.callWithReconnect(() =>
-      this.client!.listTools(undefined, { timeout: this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS }),
+    const sdkResult = await this.callWithReconnect(client =>
+      client.listTools(undefined, { timeout: this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS }),
     );
 
     const tools = (sdkResult.tools ?? []).map((tool: unknown) => this.toToolSpec(tool));
@@ -215,13 +221,9 @@ export class McpClient {
     args: unknown,
     options: { signal?: AbortSignal; timeoutMs?: number } = {},
   ): Promise<{ content: unknown; isError?: boolean }> {
-    await this.start();
-    if (!this.client) {
-      throw new McpClientError("Client not connected", "mcp_handshake_failed", this.spec.id);
-    }
     const timeoutMs = options.timeoutMs ?? this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
-    const result = await this.callWithReconnect(() =>
-      this.client!.callTool({ name: toolName, arguments: (args ?? {}) as Record<string, unknown> }, undefined, {
+    const result = await this.callWithReconnect(client =>
+      client.callTool({ name: toolName, arguments: (args ?? {}) as Record<string, unknown> }, undefined, {
         timeout: timeoutMs,
         signal: options.signal,
       }),
@@ -232,16 +234,47 @@ export class McpClient {
     };
   }
 
-  /** M5 + M15 wrapper. Triggers exactly one reconnect on session-expired errors. */
-  private async callWithReconnect<T>(fn: () => Promise<T>): Promise<T> {
+  /** List resources advertised by this server (MCP resources capability). */
+  async listResources(): Promise<{ resources: SatiMcpResource[] }> {
+    const result = await this.callWithReconnect(client =>
+      client.listResources(undefined, { timeout: this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS }),
+    );
+    return { resources: recursivelySanitizeUnicode(result.resources) };
+  }
+
+  /** Read a resource by URI (MCP resources capability). */
+  async readResource(uri: string): Promise<{ contents: unknown }> {
+    const result = await this.callWithReconnect(client =>
+      client.readResource({ uri }, { timeout: this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS }),
+    );
+    return { contents: recursivelySanitizeUnicode(result.contents) };
+  }
+
+  /** Ensure a live connection and return the SDK client, narrowed. */
+  private async requireClient(): Promise<Client> {
+    await this.start();
+    if (!this.client) {
+      throw new McpClientError("Client not connected", "mcp_handshake_failed", this.spec.id);
+    }
+    return this.client;
+  }
+
+  /**
+   * M5 + M15 wrapper. Resolves the *current* client on every invocation, so
+   * after a reconnect the retried call uses the fresh connection, never a
+   * stale reference. Triggers exactly one reconnect on session-expired errors.
+   */
+  private async callWithReconnect<T>(fn: (client: Client) => Promise<T>): Promise<T> {
     try {
-      return await fn();
+      const client = await this.requireClient();
+      return await fn(client);
     } catch (err) {
       if (this.isSessionExpired(err) && !this.reconnectInFlight) {
         this.reconnectInFlight = true;
         try {
           await this.reconnect();
-          return await fn();
+          const client = await this.requireClient();
+          return await fn(client);
         } finally {
           this.reconnectInFlight = false;
         }
@@ -298,13 +331,7 @@ export class McpClient {
       } catch {
         // best effort — the subprocess may already be wedged
       }
-      if (oldDir) {
-        try {
-          rmSync(oldDir, { recursive: true, force: true });
-        } catch {
-          // best effort cleanup
-        }
-      }
+      if (oldDir) this.cleanupSessionDir(oldDir);
     })();
   }
 
@@ -312,14 +339,24 @@ export class McpClient {
   private async reconnect(): Promise<void> {
     this.status = "connecting";
     this.listToolsCache = null;
-    try {
-      await this.client?.close();
-    } catch {
-      // ignore close errors during reconnect
-    }
+    // Null out local refs *synchronously* before awaiting the old client's
+    // close: while `close()` is in flight, a concurrent `callTool`/`listTools`
+    // would otherwise `await start()`, see the stale resolved connectPromise
+    // and call into a half-closed client. Refs are dropped first, so racing
+    // callers either start a fresh connection (connectPromise is null) or
+    // wait on the new in-flight one — never touch the dying client.
+    const oldClient = this.client;
+    const oldDir = this.perSessionDir;
     this.client = null;
     this.transport = null;
     this.connectPromise = null;
+    this.perSessionDir = null;
+    try {
+      await oldClient?.close();
+    } catch {
+      // ignore close errors during reconnect
+    }
+    if (oldDir) this.cleanupSessionDir(oldDir);
     await this.start();
   }
 
@@ -335,12 +372,16 @@ export class McpClient {
     this.status = "idle";
     this.listToolsCache = null;
     if (this.perSessionDir) {
-      try {
-        rmSync(this.perSessionDir, { recursive: true, force: true });
-      } catch {
-        /* best effort cleanup */
-      }
+      this.cleanupSessionDir(this.perSessionDir);
       this.perSessionDir = null;
+    }
+  }
+
+  private cleanupSessionDir(dir: string): void {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best effort cleanup
     }
   }
 

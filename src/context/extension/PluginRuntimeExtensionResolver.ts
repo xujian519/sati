@@ -1,5 +1,6 @@
 import type { SatiLoadedPlugin } from "../../extension/index.js";
 import { isRoleFrontmatter, parseRoleConfig } from "../../extension/skills/roleConfig.js";
+import type { SatiMcpServerInstructions } from "../../mcp/protocol/types.js";
 import type {
   ContributedCommand,
   ContributedSkill,
@@ -25,6 +26,16 @@ export type PluginRuntimeLike = {
   getAllMcpInstructions?(): McpServerInstruction[];
 };
 
+export type PluginRuntimeExtensionResolverOptions = {
+  /**
+   * Optional runtime-fetched MCP server instructions (B3 upgrade path).
+   * Merged on top of the static plugin-declared instructions so the prompt
+   * assembler sees both sources. Injected by the gateway because live MCP
+   * servers are owned by `McpRuntime`, not by the plugin runtime.
+   */
+  runtimeMcpInstructions?: () => SatiMcpServerInstructions[];
+};
+
 /**
  * Wraps a `PluginRuntime` (or compatible) so context can read plugin-derived
  * info without reaching into `SatiLoadedPlugin` directly.
@@ -34,7 +45,14 @@ export type PluginRuntimeLike = {
  * to consume it (deferred `context-extension-snapshot`).
  */
 export class PluginRuntimeExtensionResolver implements ExtensionResolver {
-  constructor(private readonly runtime: PluginRuntimeLike) {}
+  private readonly runtimeMcpInstructions?: () => SatiMcpServerInstructions[];
+
+  constructor(
+    private readonly runtime: PluginRuntimeLike,
+    options: PluginRuntimeExtensionResolverOptions = {},
+  ) {
+    this.runtimeMcpInstructions = options.runtimeMcpInstructions;
+  }
 
   listCommands(): ContributedCommand[] {
     if (this.runtime.getAllCommands) {
@@ -75,10 +93,11 @@ export class PluginRuntimeExtensionResolver implements ExtensionResolver {
   }
 
   listMcpInstructions(): McpServerInstruction[] {
-    if (this.runtime.getAllMcpInstructions) {
-      return this.runtime.getAllMcpInstructions();
-    }
-    // MCP runtime not yet integrated — see deferred `context-mcp-instructions`.
-    return [];
+    const staticList = this.runtime.getAllMcpInstructions ? this.runtime.getAllMcpInstructions() : [];
+    const runtimeList: McpServerInstruction[] = (this.runtimeMcpInstructions?.() ?? []).map(entry => ({
+      serverName: entry.serverId,
+      instructions: entry.instructions,
+    }));
+    return [...staticList, ...runtimeList];
   }
 }

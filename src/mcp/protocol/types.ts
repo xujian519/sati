@@ -54,6 +54,27 @@ export type SatiMcpServerInstructions = {
   instructions: string;
 };
 
+/**
+ * A resource advertised by an MCP server (mirrors the MCP `Resource` shape,
+ * sanitized). Kept as a plain data contract so callers never reinterpret an
+ * ad-hoc `unknown` blob.
+ */
+export type SatiMcpResource = {
+  uri: string;
+  name?: string;
+  description?: string;
+  mimeType?: string;
+  size?: number;
+  annotations?: unknown;
+  [key: string]: unknown;
+};
+
+/** Per-server resource listing aggregated by `McpRuntime.listResources`. */
+export type McpResourceListing = {
+  serverId: string;
+  resources: SatiMcpResource[];
+};
+
 export type SatiMcpClientStatusEntry = {
   serverId: string;
   status: SatiMcpStatus;

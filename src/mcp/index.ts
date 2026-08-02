@@ -30,7 +30,7 @@ export {
 export {
   buildMcpToolWireName,
   parseMcpToolWireName,
-} from "./runtime/wireName.js";
+} from "./protocol/wireName.js";
 export {
   MAX_MCP_TOOL_DESCRIPTION_LENGTH,
   truncateMcpToolDescription,

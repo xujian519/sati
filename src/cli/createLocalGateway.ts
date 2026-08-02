@@ -87,19 +87,21 @@ import { readWebSessionMessages, readSubagentWebMessages } from "../web/server/r
 import { forkWebSession } from "../web/server/forkSession.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime, type BackgroundTaskCompletionEvent } from "../task/runtime/BackgroundTaskRuntime.js";
-import { createBuiltinRegistry, createPlanFileManager, filterAvailableTools } from "../tool/index.js";
-import type {
-  SatiElicitationChannel,
-  SatiToolDefinition,
-  SatiUnavailableToolDiagnostic,
-  ToolRegistry,
+import {
+  createBuiltinRegistry,
+  createPlanFileManager,
+  filterAvailableTools,
+  type SatiToolDefinition,
+  type ToolRegistry,
 } from "../tool/index.js";
+import type { SatiElicitationChannel, SatiUnavailableToolDiagnostic } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import { SessionRouterStore } from "../router/session/SessionRouterStore.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 import { SkillManager, migrateLegacyBundledSkillCopies } from "../extension/skills/index.js";
 import { createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
+import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
 
 export type CreateLocalGatewayOptions = {
@@ -893,10 +895,14 @@ class ProjectRuntimeRegistry {
           const mcp = new McpRuntime(sharedServers);
           runtime.mcpRuntime = mcp;
           await mcp.start();
-          const defs = await createMcpToolDefinitionsFromRuntime(mcp);
-          for (const def of defs) {
-            if (!runtime.tools.has(def.name)) runtime.tools.register(def);
-          }
+          registerToolsIfAbsent(runtime.tools, await createMcpToolDefinitionsFromRuntime(mcp));
+        }
+
+        // MCP resources + status tools are registered whenever a project-level
+        // (shared) MCP runtime exists. Per-session runtimes are session-scoped
+        // and therefore not reflected in these tools.
+        if (runtime.mcpRuntime) {
+          registerMcpAuxTools(runtime.tools, runtime.mcpRuntime);
         }
       } catch (err) {
         console.warn(
@@ -1081,7 +1087,11 @@ class ProjectRuntimeRegistry {
       );
     }
     const lifecycle = new LifecycleRuntime(hookRuntime);
-    const extension = new PluginRuntimeExtensionResolver(runtime.pluginRuntime);
+    const extension = new PluginRuntimeExtensionResolver(runtime.pluginRuntime, {
+      // B3 upgrade path: surface instructions fetched from live MCP servers
+      // (McpRuntime.getInstructions) on top of the static plugin-declared ones.
+      runtimeMcpInstructions: () => runtime.mcpRuntime?.getInstructions() ?? [],
+    });
     const projectRoot = runtime.projectRoot;
     const memoryResolver = runtime.memory;
     const now = this.options.now;

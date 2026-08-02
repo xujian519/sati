@@ -177,16 +177,12 @@ export {
   type WebSearchOutput,
 } from "./builtin/webSearch.js";
 export {
-  buildMcpToolWireName,
-  createMcpTool,
-  type CreateMcpToolOptions,
-  type SatiMcpToolAdapter,
-} from "./builtin/mcpTool.js";
-export {
   createListMcpResourcesTool,
   createReadMcpResourceTool,
   type SatiMcpResourceAdapter,
 } from "./builtin/mcpResources.js";
+export { createMcpStatusTool, type SatiMcpStatusAdapter } from "./builtin/mcpStatus.js";
+export { buildMcpToolWireName, parseMcpToolWireName } from "../mcp/protocol/wireName.js";
 export { createStructuredOutputTool, type StructuredOutputInput } from "./builtin/structuredOutput.js";
 export {
   createEnterPlanModeTool,
