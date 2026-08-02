@@ -1,6 +1,6 @@
 # 源码安装指南
 
-本文档适合希望直接从源码运行 PilotDeck 的开发者。如果只是想快速体验，建议优先使用一键安装脚本或 Docker。
+本文档适合希望直接从源码运行 PilotDeck 的开发者。如果只是想快速体验，建议优先使用一键安装脚本。
 
 ## 环境要求
 
@@ -142,7 +142,6 @@ Windows 支持多种源码部署路径。你不需要为每条路径安装所有
 | 路径 | 需要在 Windows 安装 | 适合场景 |
 |---|---|---|
 | WSL2 Ubuntu | WSL2、Ubuntu，然后在 Ubuntu 内安装 Linux 编译工具 | 源码部署和开发 |
-| Docker Desktop | 启用 WSL2 backend 的 Docker Desktop、Git for Windows | 不想在本机管理 Node/native build 环境，只想运行 PilotDeck |
 | 原生 Windows | Node.js、Git LFS、Python、Visual Studio C++ Build Tools、ripgrep | 只用 PowerShell 进行开发 |
 | Portable Node | 官方 Node.js zip、Git for Windows、Git LFS、ripgrep | 不修改系统 Node 设置，先验证部署流程 |
 
@@ -155,8 +154,6 @@ git --version
 git lfs version
 python --version
 rg --version
-docker --version
-docker compose version
 wsl --status
 ```
 
@@ -171,23 +168,6 @@ wsl --install -d Ubuntu
 ```
 
 如果系统提示重启，请重启 Windows；完成 Ubuntu 首次用户设置后，在 Ubuntu shell 中按 Debian / Ubuntu 小节安装依赖。
-
-#### Docker Desktop
-
-安装 Docker Desktop 并启用 WSL2 backend：
-
-```powershell
-winget install Docker.DockerDesktop
-```
-
-安装后启动一次 Docker Desktop，等待 engine 运行，然后检查：
-
-```powershell
-docker --version
-docker compose version
-```
-
-如果选择 Docker 路径，请按 `README_DOCKER.md` 中的 Docker 说明操作。Docker 构建会在容器内使用 Node.js 22 和仓库提交的 pnpm lockfile，因此不依赖宿主机 Node.js 架构。
 
 #### 原生 Windows PowerShell
 

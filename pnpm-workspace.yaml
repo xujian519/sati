@@ -13,7 +13,7 @@ allowBuilds:
   unrs-resolver: true
 
 # Native/build-time packages that are allowed to run lifecycle scripts during
-# pnpm install. Keeping this at the workspace root makes Docker/CI installs
+# pnpm install. Keeping this at the workspace root makes CI installs
 # deterministic and prevents ERR_PNPM_IGNORED_BUILDS failures.
 onlyBuiltDependencies:
   - '@google/genai'

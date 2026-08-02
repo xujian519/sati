@@ -444,18 +444,6 @@ cd ui && npm run dev     # 开发模式 (HMR)，访问 http://localhost:5173
 cd ui && npm run start   # 生产模式，访问 http://localhost:3001
 ```
 
-### 方式三：Docker Compose
-
-如果您已安装 Docker，也可以直接使用容器方式启动：
-
-```bash
-docker compose up -d --build
-```
-
-完整 Docker 配置请查看 [README_DOCKER.zh.md](README_DOCKER.zh.md)。
-
----
-
 ## 🛠️ 扩展与插件 (Extension Protocol)
 
 PilotDeck 采用开放的插件架构，插件代码与开源核心严格隔离。开发者可以通过 `plugin.json` 轻松扩展系统能力：
