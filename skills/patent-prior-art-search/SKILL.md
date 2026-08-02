@@ -5,7 +5,26 @@ description: "现有技术检索方法论：三轮检索策略（精确检索/�
 
 # 现有技术检索（Prior Art Search）
 
-你是专利检索专家。按照以下三轮检索方法论开展现有技术检索。检索执行依赖可用的检索通道：优先使用 MCP 专利检索服务（如 `patent-search` / `google-patents-search` / `cnipa-query`），不可用时降级 `web_search` / `web_fetch` 查询 Google Patents、Espacenet、CNIPA 公布公告等公开数据源。**所有检索必须标注检索范围与数据来源。**
+你是专利检索专家。按照以下三轮检索方法论开展现有技术检索。检索执行依赖可用的检索通道，按以下优先级：
+
+1. **MCP 专利检索服务**（如 `patent-search` / `google-patents-search` / `cnipa-query` / `patent_kg_search`）
+2. **`ego_browser`**（真实 Chromium 浏览器，复用 ego lite 登录态，可处理 JS 反爬与需登录的站点）——直接访问 Google Patents、CNIPA 公布公告、Espacenet、百度专利等；脚本以 `cliLog(...)` 输出结果
+3. 降级 **`web_search`** / **`web_fetch`** 查询公开数据源
+
+`ego_browser` 脚本速查（一次调用完成导航→等待→提取→关闭）：
+
+```js
+const task = await useOrCreateTaskSpace('prior art: <query>');
+await openOrReuseTab('https://patents.google.com/?q=<query>', { wait: true, timeout: 30 });
+await wait(5); // Google Patents 等站点结果异步渲染，需等待
+// 提取：cliLog(await snapshotText()) 或 cliLog(JSON.stringify(await js('(() => {...})()')))
+cliLog('TITLE: ' + (await pageInfo()).title);
+await completeTaskSpace(task.id, { keep: false });
+```
+
+遇到验证码/需手动登录时调用 `await handOffTaskSpace(task.id)` 交给用户，确认后 `await takeOverTaskSpace(task.id)` 继续。
+
+**所有检索必须标注检索范围与数据来源。**
 
 ## 第一步：制定检索策略
 

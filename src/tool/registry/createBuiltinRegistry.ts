@@ -3,6 +3,7 @@ import { createAgentTool, type CreateAgentToolOptions } from "../builtin/agent.j
 import { createAskUserQuestionTool } from "../builtin/askUserQuestion.js";
 import { createBashTool, type CreateBashToolOptions } from "../builtin/bash.js";
 import { createEditFileTool } from "../builtin/editFile.js";
+import { createEgoBrowserTool, type CreateEgoBrowserToolOptions } from "../builtin/egoBrowser.js";
 import { createEditNotebookTool } from "../builtin/editNotebook.js";
 import { createExecuteCodeTool } from "../builtin/executeCode.js";
 import { createGlobTool } from "../builtin/glob.js";
@@ -67,6 +68,13 @@ export type CreateBuiltinRegistryOptions = {
    * markdown without summarization.
    */
   webFetch?: CreateWebFetchToolOptions | false;
+  /**
+   * `ego_browser` builtin tool (drives the ego-browser CLI / ego lite real
+   * Chromium). Registered by default on macOS; the tool's `checkAvailability`
+   * filters it out when the ego-browser CLI is not installed. Pass `false` to
+   * skip registration entirely.
+   */
+  egoBrowser?: CreateEgoBrowserToolOptions | false;
   /**
    * Background task tools (`task_create` / `task_list` / `task_output` /
    * `task_wait` / `task_stop`). **Opt-in** — pass `{ runtime }` to register; absent or
@@ -146,6 +154,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   if (options?.webFetch !== false) {
     registry.register(annotate(createWebFetchTool(options?.webFetch), "network"));
+  }
+  if (options?.egoBrowser !== false) {
+    registry.register(annotate(createEgoBrowserTool(options?.egoBrowser), "network"));
   }
   if (options?.agent !== false) {
     const agentOpts = options?.agent === true || options?.agent === undefined ? undefined : options.agent;

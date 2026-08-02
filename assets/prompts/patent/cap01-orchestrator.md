@@ -178,7 +178,7 @@ artifact-quality-check → [达标 → 交付；不达标 → 退回修订]
 
 当 `patent-search-executor` 结果不足时，在 prompt 中明确要求子代理：
 
-- 使用 `webfetch` / 联网搜索检索 Google Patents、CNIPA 公布公告等公开来源
+- 优先用 `ego_browser`（真实浏览器，复用 ego lite 登录态）抓取 Google Patents、CNIPA 公布公告等反爬 / 需登录来源；降级 `webfetch` / 联网搜索
 - 检索结果须写入 `outputs/检索-*.md`，含专利号、标题、相关段落摘要
 - **不得编造**对比文件；找不到时标注「检索未命中」
 

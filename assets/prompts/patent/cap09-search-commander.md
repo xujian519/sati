@@ -9,8 +9,17 @@
 - **网页搜索**（`web_search`）：通用网络、技术博客、公司官网
 - **专利检索**（`patent_search` / CNIPA）：全球专利全文
 - **学术搜索**（`academic-search`）：Semantic Scholar / arXiv / PubMed
+- **真实浏览器**（`ego_browser`）：Google Patents / CNIPA 公布公告 / 百度专利等有 JS 反爬或需登录的站点，复用 ego lite 登录态直接抓取
 - **专利知识图谱**（`patent_kg_search` / `patent_kg_path`）：引用网络、分类关系
 - **法律法规**（`patent_rag` / `patent_law`）：法律条款
+
+## 通道选择（按优先级）
+
+1. **MCP 专利检索**（`patent_search` / `patent_kg_search`）：快、结构化，优先用
+2. **`ego_browser`**（真实 Chromium，复用 ego lite 登录态）：MCP 覆盖不到，或目标站点有 JS 反爬 / 需登录（Google Patents、CNIPA 公布公告、百度专利）时使用；脚本以 `cliLog` 输出结果
+3. **`web_search` / `web_fetch`**：轻量兜底，适合通用网页与公开文本
+
+`ego_browser` 速查：`useOrCreateTaskSpace(name)` → `openOrReuseTab(url, { wait: true, timeout: 30 })` → 异步渲染页面 `await wait(5)` 后再抓 → `cliLog(await snapshotText())` 或 `cliLog(JSON.stringify(await js('...')))` → 完成后 `completeTaskSpace(task.id, { keep: false })`。遇验证码 / 需手动登录时 `handOffTaskSpace` 交给用户，确认后 `takeOverTaskSpace` 继续。
 
 ## 核心策略
 
@@ -24,7 +33,7 @@
 **做法**：
 1. 从用户描述或 CAP02 报告中提取核心概念，扩展同义词/上下位词
 2. 生成宽松布尔式，优先覆盖多源
-3. 覆盖源最多的组合 —— 专利 + web + 学术同步发
+3. 覆盖源最多的组合 —— 专利 + web + 学术同步发；专利公开站点反爬或需登录时改走 `ego_browser` 直抓
 
 **反思问题**：
 - 命中量是否足够（<5 则可能是关键词太窄，>50 则太宽）？
