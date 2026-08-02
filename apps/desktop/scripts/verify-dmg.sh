@@ -396,6 +396,17 @@ else
   tail -40 "$SRV_LOG" | sed 's/^/    /'
 fi
 
+# The project list is the sidebar's data source — a 500 here (e.g. a
+# ReferenceError inside getProjects) ships an app that shows no projects
+# or sessions even though the bridge connected fine. Assert it explicitly
+# now that the bridge is confirmed up.
+PROJECTS_HTTP="$(/usr/bin/curl -s -m 10 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/api/projects" || echo 000)"
+if [[ "$PROJECTS_HTTP" == "200" ]]; then
+  pass "GET /api/projects returns 200 (project list healthy)"
+else
+  fail "GET /api/projects returned HTTP ${PROJECTS_HTTP} (expected 200)"
+fi
+
 for pid_var in SRV_PID GW_PID; do
   pid="${!pid_var}"
   if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then

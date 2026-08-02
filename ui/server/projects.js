@@ -133,9 +133,12 @@ async function getProjects(progressCallback = null) {
   // Gateway hiccups must not nuke the whole project list — degrade to an
   // empty project set so the virtual "general" workspace below still gets
   // returned and the sidebar stays usable instead of erroring out.
+  // `gateway` is function-scoped: the per-project session loop below also
+  // calls it, so it must survive the try/catch above.
+  let gateway = null;
   let webProjects = [];
   try {
-    const gateway = await getSatiGateway();
+    gateway = await getSatiGateway();
     const listed = await gateway.listProjects();
     webProjects = listed.projects || [];
   } catch (err) {
@@ -200,9 +203,9 @@ async function getProjects(progressCallback = null) {
       });
     }
 
-    const sessionsResult = await gateway
-      .listSessions({ projectKey: fullPath, limit: 5 })
-      .catch(() => ({ sessions: [] }));
+    const sessionsResult = gateway
+      ? await gateway.listSessions({ projectKey: fullPath, limit: 5 }).catch(() => ({ sessions: [] }))
+      : { sessions: [] };
     const sessions = (sessionsResult.sessions || []).map(session => toLegacySession(session, name));
     applyCustomSessionNames(sessions, "claude");
 
