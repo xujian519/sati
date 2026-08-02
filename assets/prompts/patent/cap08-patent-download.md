@@ -12,7 +12,7 @@
 ## 步骤
 
 1. 校验文献号格式（CN/US/EP/WO 等）
-2. 优先使用 `webfetch` / bash 从公开源获取（Google Patents、CNIPA 公布公告等）；站点有 JS 反爬 / 需登录时改用 `ego_browser` 打开下载页抓取
+2. 优先使用 `webfetch` / bash 从公开源获取（Google Patents、CNIPA 公布公告等）；站点有 JS 反爬 / 需登录时改用 `ego_browser` 打开下载页抓取；也可调用内置 skill `patent-download`（`skills/patent-download/`，ego-browser 提取 PDF CDN 链接 + 直连下载，支持批量）
 3. 保存至 `data/cases/{caseId}/source/patents/{文献号}.pdf` 或等价路径
 4. 若环境支持 markitdown，提示或执行转换至 `converted/`
 5. 更新 xiaonuo.md 文件索引（可提示 W-01 刷新）
