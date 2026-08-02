@@ -94,6 +94,9 @@ export default function AppShellV2() {
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   const { ws, sendMessage, latestMessage, isConnected, subscribe } = useWebSocket();
   const wasConnectedRef = useRef(false);
+  // Guards the URL→selectedProject sync effect against clobbering a project
+  // the user just clicked (see the effect's comment for the full race).
+  const userSelectedProjectRef = useRef<string | null>(null);
   const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() => new Set());
 
   const {
@@ -161,10 +164,27 @@ export default function AppShellV2() {
   // /session/:sessionId) we let useProjectsState own the resolution because
   // it sets BOTH the project and the session in one effect, avoiding a race
   // where this hook would clear the session via handleProjectSelect.
+  //
+  // The `userSelectedProjectRef` guard below exists because sidebar clicks
+  // update selectedProject synchronously while React Router's navigate()
+  // lands later (startTransition), and handleProjectSelect also bumps the
+  // `projects` array (setProjects(map(...))), which re-runs this effect
+  // before the URL has caught up. Without the guard the effect sees the
+  // stale URL (previous project) paired with the freshly selected project,
+  // mistakes it for an unsynced deep link, and calls handleProjectSelect
+  // back to the previous project — so clicking a project folder appears to
+  // do nothing.
   useEffect(() => {
     if (!projectNameParam) return;
     if (sessionId) return;
+    // URL caught up with the user's click — release the guard.
+    if (userSelectedProjectRef.current !== null && userSelectedProjectRef.current === projectNameParam) {
+      userSelectedProjectRef.current = null;
+    }
     if (selectedProject?.name === projectNameParam) return;
+    // The selected project came from an explicit user click whose URL
+    // navigation is still in flight — don't yank the selection back.
+    if (userSelectedProjectRef.current !== null && userSelectedProjectRef.current === selectedProject?.name) return;
     const target = sidebarSharedProps.projects.find(p => p.name === projectNameParam);
     if (target) {
       handleProjectSelect(target);
@@ -378,6 +398,7 @@ export default function AppShellV2() {
       const projectName = typeof project?.name === "string" ? project.name : "";
       if (!projectName) return;
       const newProject = project as Project;
+      userSelectedProjectRef.current = projectName;
       handleNewSession(newProject);
       navigate(`/p/${encodeURIComponent(projectName)}`);
       setActiveTab("chat");
@@ -470,6 +491,10 @@ export default function AppShellV2() {
 
   const handleSelectProject = useCallback(
     (project: Project) => {
+      // Record the user-initiated selection so the URL sync effect knows
+      // this project is being navigated to and must not be yanked back
+      // while React Router's navigate() is still in flight.
+      userSelectedProjectRef.current = project.name;
       handleProjectSelect(project);
       navigate(`/p/${encodeURIComponent(project.name)}`);
     },
@@ -485,6 +510,7 @@ export default function AppShellV2() {
         return next;
       });
       if (project.name !== selectedProject?.name) {
+        userSelectedProjectRef.current = project.name;
         handleProjectSelect(project);
       }
       const target = (project.sessions ?? []).find(s => s.id === sessId);
@@ -523,6 +549,9 @@ export default function AppShellV2() {
   const handleStartNewSession = useCallback(
     (project: Project | null, options?: SessionNavigationOptions) => {
       if (project) {
+        // Same guard as handleSelectProject: handleNewSession switches the
+        // selected project while React Router's navigate is still in flight.
+        userSelectedProjectRef.current = project.name;
         handleNewSession(project);
         navigate(`/p/${encodeURIComponent(project.name)}`);
         setActiveTab(options?.preserveActiveTab ? "files" : "chat");
@@ -647,6 +676,7 @@ export default function AppShellV2() {
             onSelectProjectByName={(name: string) => {
               const target = sidebarSharedProps.projects.find(p => p.name === name);
               if (target) {
+                userSelectedProjectRef.current = target.name;
                 setSelectedProject(target);
                 setSelectedSession(null);
                 setActiveTab("dashboard");
