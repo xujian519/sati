@@ -14,5 +14,6 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*.ts", "tests/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.tsx"],
+  "exclude": ["node_modules", "dist", "src/context/memory/edgeclaw-memory-core"]
 }

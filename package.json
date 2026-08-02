@@ -7,7 +7,8 @@
     "node": ">=22.13.0"
   },
   "workspaces": [
-    "ui"
+    "ui",
+    "src/context/memory/edgeclaw-memory-core"
   ],
   "bin": {
     "sati": "./dist/src/cli/sati.js"
@@ -15,7 +16,7 @@
   "scripts": {
     "check:runtime": "node scripts/check-node-runtime.mjs",
     "install:browser": "npx @playwright/mcp install-browser chrome-for-testing",
-    "prebuild": "npm run check:runtime && node scripts/bootstrap-sati-config.mjs && cd src/context/memory/edgeclaw-memory-core && npm run build",
+    "prebuild": "npm run check:runtime && node scripts/bootstrap-sati-config.mjs && pnpm --filter edgeclaw-memory-core build",
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/extension/plugins/builtin','dist/src/extension/plugins/builtin',{recursive:true})\" && node -e \"require('fs').cpSync('src/knowledge/patent/ipc-standards.yaml','dist/src/knowledge/patent/ipc-standards.yaml')\" && node -e \"require('fs').cpSync('src/knowledge/patent/wiki','dist/src/knowledge/patent/wiki',{recursive:true})\"",
     "server": "npm run check:runtime && tsx src/cli/sati.ts server",
     "server:built": "npm run check:runtime && node dist/src/cli/sati.js server",
@@ -24,7 +25,7 @@
     "dev": "node scripts/dev-launcher.mjs",
     "test": "npm run build && node --test --test-force-exit --test-timeout 60000 \"dist/tests/**/*.test.js\" \"dist/tests/**/*.spec.js\"",
     "e2e:real-agent-lifecycle-hooks": "npm run build && SATI_RUN_REAL_AGENT_LIFECYCLE_E2E=1 node dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm --filter edgeclaw-memory-core typecheck",
     "lint": "eslint src tests scripts",
     "lint:fix": "eslint src tests scripts --fix",
     "format": "biome format --write .",
@@ -64,7 +65,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@vscode/ripgrep": "^1.18.0",
     "csv-parse": "^7.0.0",
-    "edgeclaw-memory-core": "file:src/context/memory/edgeclaw-memory-core",
+    "edgeclaw-memory-core": "workspace:*",
     "ink": "^7.0.2",
     "ink-text-input": "^6.0.0",
     "js-tiktoken": "^1.0.21",

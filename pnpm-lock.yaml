@@ -24,8 +24,8 @@ importers:
         specifier: ^7.0.0
         version: 7.0.0
       edgeclaw-memory-core:
-        specifier: file:src/context/memory/edgeclaw-memory-core
-        version: file:src/context/memory/edgeclaw-memory-core
+        specifier: workspace:*
+        version: link:src/context/memory/edgeclaw-memory-core
       ink:
         specifier: ^7.0.2
         version: 7.0.4(@types/react@19.2.15)(react@19.2.6)
@@ -147,6 +147,15 @@ importers:
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
       typescript:
         specifier: ^5.8.3
+        version: 5.9.3
+
+  src/context/memory/edgeclaw-memory-core:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.14.1
+        version: 22.19.19
+      typescript:
+        specifier: ^5.9.3
         version: 5.9.3
 
   ui:
@@ -286,6 +295,9 @@ importers:
       docx-preview:
         specifier: 0.4.0
         version: 0.4.0
+      edgeclaw-memory-core:
+        specifier: workspace:*
+        version: link:../src/context/memory/edgeclaw-memory-core
       exceljs:
         specifier: 4.4.0
         version: 4.4.0
@@ -3462,10 +3474,6 @@ packages:
 
   echarts@6.1.0:
     resolution: {integrity: sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==}
-
-  edgeclaw-memory-core@file:src/context/memory/edgeclaw-memory-core:
-    resolution: {directory: src/context/memory/edgeclaw-memory-core, type: directory}
-    engines: {node: '>=22.13.0'}
 
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
@@ -9788,8 +9796,6 @@ snapshots:
     dependencies:
       tslib: 2.3.0
       zrender: 6.1.0
-
-  edgeclaw-memory-core@file:src/context/memory/edgeclaw-memory-core: {}
 
   ee-first@1.1.1: {}
 

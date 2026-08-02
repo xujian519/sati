@@ -1,6 +1,7 @@
 packages:
   - 'ui'
   - 'apps/desktop'
+  - 'src/context/memory/edgeclaw-memory-core'
 
 allowBuilds:
   '@google/genai': true
