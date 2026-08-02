@@ -10,13 +10,14 @@
   },
   "scripts": {
     "check:runtime": "node ../scripts/check-node-runtime.mjs",
-    "predev": "npm run check:runtime && node ../scripts/bootstrap-sati-config.mjs",
+    "predev": "npm run check:runtime && node ../scripts/bootstrap-sati-config.mjs && pnpm --filter edgeclaw-memory-core build",
     "dev": "node ../scripts/dev-launcher.mjs",
     "dev:concurrent": "concurrently --kill-others-on-fail --names gateway,server,client \"npm:dev:gateway\" \"npm:dev:server\" \"npm:dev:client\"",
     "dev:gateway": "npm --prefix .. run server",
     "dev:server": "npm run check:runtime && node --import tsx server/index.js",
     "dev:client": "vite",
     "server": "npm run check:runtime && node --import tsx server/index.js",
+    "preserver": "pnpm --filter edgeclaw-memory-core build",
     "gateway": "npm --prefix .. run server",
     "client": "vite",
     "build": "vite build",
@@ -76,6 +77,7 @@
     "cors": "^2.8.5",
     "cross-spawn": "^7.0.3",
     "docx-preview": "0.4.0",
+    "edgeclaw-memory-core": "workspace:*",
     "exceljs": "4.4.0",
     "express": "^4.18.2",
     "fuse.js": "^7.0.0",
@@ -108,8 +110,7 @@
     "tailwind-merge": "^3.3.1",
     "web-push": "^3.6.7",
     "ws": "^8.14.2",
-    "yaml": "^2.8.2",
-    "edgeclaw-memory-core": "workspace:*"
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.3",
