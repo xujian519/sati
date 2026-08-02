@@ -9,32 +9,12 @@
  */
 
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import type { RuleSet } from "../protocol/types.js";
 import { loadRuleSetFromFile } from "./RuleLoader.js";
+import { candidateRuleDirs } from "./asset-location.js";
 
 const COMPLIANCE_FILE = "compliance.yaml";
-
-const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
-
-/** 候选规则目录（从最具体到最通用）。 */
-function candidateDirs(): string[] {
-  const candidates: string[] = [];
-  const envDir = process.env.SATI_RULES_DIR;
-  if (envDir) candidates.push(resolve(envDir));
-  candidates.push(resolve(process.cwd(), "rules", "patent"));
-  // 仓库根：从 dist/src/rule/runtime 向上找到 package.json
-  let dir = CURRENT_DIR;
-  for (let i = 0; i < 6; i += 1) {
-    dir = dirname(dir);
-    if (existsSync(join(dir, "package.json"))) {
-      candidates.push(join(dir, "rules", "patent"));
-      break;
-    }
-  }
-  return candidates;
-}
 
 export type PatentComplianceLoadResult = {
   ruleSet: RuleSet;
@@ -45,7 +25,7 @@ export type PatentComplianceLoadResult = {
 /** 加载内置专利合规规则集；找不到资产时返回空规则集并附警告。 */
 export function loadPatentComplianceRuleSet(): PatentComplianceLoadResult {
   const warnings: string[] = [];
-  for (const dir of candidateDirs()) {
+  for (const dir of candidateRuleDirs()) {
     const path = join(dir, COMPLIANCE_FILE);
     if (!existsSync(path)) continue;
     try {

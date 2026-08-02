@@ -12,12 +12,15 @@
 
 import type { RuleEvaluation, RuleSet, RuleViolation } from "../protocol/types.js";
 import { evaluateText, groupByAction } from "./RuleEngine.js";
+import type { SynonymMap } from "./synonym-engine.js";
 
 export type RuleOutputGateOptions = {
   /** warn 违规提示区块标题（默认 "合规提示"）。 */
   warnTitle?: string;
   /** block 违规追加说明文案。 */
   blockMessage?: string;
+  /** 同义词表（synonym_match 检查用；缺省空表 = 纯关键词匹配）。 */
+  synonyms?: SynonymMap;
 };
 
 export type RuleOutputGateResult = {
@@ -41,6 +44,7 @@ export type RuleOutputGateResult = {
 export class RuleOutputGate {
   private readonly warnTitle: string;
   private readonly blockMessage: string;
+  private readonly synonyms: SynonymMap;
 
   constructor(
     private readonly ruleSet: RuleSet,
@@ -48,11 +52,12 @@ export class RuleOutputGate {
   ) {
     this.warnTitle = options?.warnTitle ?? "合规提示";
     this.blockMessage = options?.blockMessage ?? "输出命中强制拦截规则，须经人工审批后发布。";
+    this.synonyms = options?.synonyms ?? new Map();
   }
 
   /** 评估并处理输出文本（纯函数）。 */
   process(text: string): RuleOutputGateResult {
-    const evaluation = evaluateText(text, this.ruleSet);
+    const evaluation = evaluateText(text, this.ruleSet, this.synonyms);
     const grouped = groupByAction(evaluation);
     const warnHits = grouped.warn.map(v => v.ruleId);
     const reviewHits = grouped.review.map(v => v.ruleId);

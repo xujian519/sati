@@ -1,0 +1,192 @@
+# 专利术语同义词组 — 确定性规则引擎的同义词扩展（移植自 Mady synonymMap）
+# 消费方：src/rule/runtime/synonym-engine.ts（matchKeyword 展开匹配）
+# 语义：关键词命中检查时，其同义词同样视为命中（如"新颖性"命中"新创性"）。
+# 维护：只在确有中文专利实务变体时新增；宁少勿多。
+
+synonyms:
+  新颖性:
+    - 新创性
+    - 未公开
+    - 不属于现有技术
+    - 未被披露
+  创造性:
+    - 非显而易见
+    - 发明高度
+    - 创造性步骤
+    - inventive step
+  现有技术:
+    - 在先技术
+    - 引用文件
+    - 文献
+    - reference
+  权利要求:
+    - 权项
+    - 保护范围
+  说明书:
+    - specification
+    - 申请文件
+  充分公开:
+    - 清楚完整
+    - 能够实现
+    - enablement
+  三步法:
+    - 最接近的现有技术
+  单独对比:
+    - 单独对比原则
+    - 一一对比
+  公知常识:
+    - 常用技术手段
+    - 常规设计
+    - common knowledge
+    - well-known
+  全面覆盖:
+    - 全部技术特征
+    - 逐一比对
+    - 全覆盖原则
+  等同:
+    - 等同替换
+    - 等同侵权
+    - 基本相同的手段
+    - 基本相同的功能
+    - 基本相同的效果
+  禁止反悔:
+    - 审查过程禁反言
+    - prosecution history estoppel
+    - 修改导致放弃
+  捐献规则:
+    - 捐献原则
+    - dedicated to the public
+  技术特征:
+    - 技术特征分解
+    - 权项特征
+    - limitation
+  无效宣告:
+    - 无效请求
+    - 宣告无效
+    - invalidation
+  结合启示:
+    - 结合启示
+    - 有动机结合
+    - 技术结合启示
+    - 技术启示
+  优先权:
+    - 优先权日
+  复审:
+    - 复审请求
+    - 驳回复审
+    - reexamination
+  程序违法:
+    - 程序错误
+    - 违反法定程序
+  新证据:
+    - 补充证据
+    - 新提交的证据
+  外观设计:
+    - 工业设计
+    - design
+    - industrial design
+    - 外观
+  整体视觉效果:
+    - 视觉效果
+    - 整体外观
+    - 整体视觉
+    - overall visual effect
+  产品种类:
+    - 产品类别
+    - 产品类型
+    - 相似种类
+    - 同类产品
+  出版物公开:
+    - 公开出版
+    - 论文
+    - 期刊
+    - 杂志
+    - 书籍
+  使用公开:
+    - 公开使用
+    - 销售公开
+    - 展出
+    - 公开实施
+  互联网公开:
+    - 网络公开
+    - 在线公开
+    - 网页公开
+    - 网站公开
+  公开方式:
+    - 公开途径
+    - 公开形式
+    - 公开类型
+  修改超范围:
+    - 超出原范围
+    - 增加新内容
+    - 超范围修改
+    - amendment beyond scope
+    - 超范围
+  直接且毫无疑义:
+    - 直接毫无疑义
+    - 直接确定
+    - 原申请文件
+  技术方案:
+    - 技术方案本身
+    - technical solution
+  保护客体:
+    - 可专利主题
+    - patentable subject matter
+    - 授权客体
+  智力活动规则:
+    - 智力活动的规则
+    - 数学方法
+    - 商业规则
+    - mental activity
+    - 抽象思想
+  疾病诊断方法:
+    - 诊断方法
+    - 治疗方法
+    - 手术方法
+  科学发现:
+    - 自然规律
+    - 自然法则
+    - natural law
+  预料不到:
+    - 预料不到的技术效果
+    - 出乎意料
+    - surprising
+    - unexpected
+  用途限定:
+    - 用途特征
+    - use limitation
+  实验数据:
+    - 药效数据
+  最接近的现有技术:
+    - 最接近的对比文件
+  抵触申请:
+    - 在先申请在后公开
+    - conflicting application
+  功能性限定:
+    - 功能限定
+    - 功能性特征
+    - functional limitation
+  实用性:
+    - 工业实用性
+    - 产业应用
+    - industrial applicability
+  积极效果:
+    - 有益效果
+    - positive effect
+    - 技术效果
+  本领域技术人员:
+    - 所属领域技术人员
+    - person skilled in the art
+  能够实现:
+    - 可实施
+    - enablement
+    - 能够制造
+    - 能够使用
+  显而易见:
+    - obvious
+    - 显而易见性
+    - 非显而易见
+  转让:
+    - transfer
+    - assign
+    - assignment

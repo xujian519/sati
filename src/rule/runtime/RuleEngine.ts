@@ -15,6 +15,7 @@ import type {
   RuleViolation,
   StructuralAnalysisCheck,
 } from "../protocol/types.js";
+import { checkSynonymRequirements, type SynonymMap } from "./synonym-engine.js";
 
 /** 否定语境词：命中位置前出现这些词时，视为否定性描述（"防止赌博"不排除）。 */
 /** 否定语境词（与 src/patent/quality-gate.ts 的 NEGATION_WORDS 保持同步镜像；不含单字"不/未/无"以免误放行）。 */
@@ -176,18 +177,18 @@ function checkCitationAnalysis(
   return evidence;
 }
 
-/** 评估一段文本，返回全部违规。 */
-export function evaluateText(text: string, ruleSet: RuleSet): RuleEvaluation {
+/** 评估一段文本，返回全部违规（synonyms 为同义词表，供 synonym_match 检查；缺省空表）。 */
+export function evaluateText(text: string, ruleSet: RuleSet, synonyms?: SynonymMap): RuleEvaluation {
   const violations: RuleViolation[] = [];
   for (const rule of ruleSet.rules) {
-    const found = evaluateRule(rule, text);
+    const found = evaluateRule(rule, text, synonyms);
     if (found !== null) violations.push(found);
   }
   return { violations };
 }
 
 /** 评估单条规则；无违规返回 null。 */
-export function evaluateRule(rule: ConstitutionalRule, text: string): RuleViolation | null {
+export function evaluateRule(rule: ConstitutionalRule, text: string, synonyms?: SynonymMap): RuleViolation | null {
   const check = rule.check;
   let evidence: string[] = [];
   let message: string | null = null;
@@ -218,6 +219,13 @@ export function evaluateRule(rule: ConstitutionalRule, text: string): RuleViolat
       evidence = checkCitationAnalysis(check, text);
       if (evidence.length === 0) return null;
       message = `法条引用超出范围：${[...new Set(evidence)].join("、")}`;
+      break;
+    }
+    case "synonym_match": {
+      const { confidence, missing } = checkSynonymRequirements(text, check.requirements, synonyms ?? new Map());
+      const minConfidence = check.minConfidence ?? 1;
+      if (confidence >= minConfidence) return null;
+      message = `同义要素不完整：缺失 ${missing.join("、")}（置信度 ${(confidence * 100).toFixed(0)}% < ${(minConfidence * 100).toFixed(0)}%）`;
       break;
     }
   }

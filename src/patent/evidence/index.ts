@@ -21,6 +21,39 @@ export { type EvidenceSpan, type EvidenceDirection, createSpan, isLocatable } fr
 export { Ledger, contentHash, receiptFromToolExecution, type Receipt } from "./receipt.js";
 export { ClaimBinding } from "./claimBinding.js";
 export { ConflictDetector, type EvidenceConflict } from "./conflict.js";
+export {
+  EvidenceEngine,
+  inferEvidenceType,
+  evaluateFourElements,
+  STANDARD_PREPONDERANCE,
+  STANDARD_CLEAR_CONVINCING,
+} from "./engine.js";
+export type {
+  EvidenceJudgment,
+  DimensionJudgment,
+  TypeSpecificJudgment,
+  BurdenDetermination,
+  ProofStandardResult,
+  EvidenceRule,
+  EvidenceRuleSet,
+  EvidenceType,
+  CredibilityLevel,
+  DateDetermination,
+  FourElementsResult,
+} from "./types.js";
+export { platformCredibility, credibilityToScore, platformCategory, evaluatePublicIntent } from "./credibility.js";
+export {
+  parseDateFlexible,
+  isPreciseDate,
+  isMonthOnlyDate,
+  inferredMonthEnd,
+  extractDateFromText,
+  isBeforeFilingDate,
+  determinePublicationDate,
+  extractWaybackMachineDate,
+  cleanEvidenceURI,
+} from "./date.js";
+export { loadEvidenceRulesEngine } from "./rule-loader.js";
 
 /**
  * EvidenceExtension：证据闭环聚合体（实现 SatiEvidenceCollector）。

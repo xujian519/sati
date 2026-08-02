@@ -34,6 +34,19 @@ export type WorkflowStage = {
    * 声明后 runWorkflow 按 atom 分发到 StageHandler；缺省回退 executor。
    */
   atom?: string;
+  /**
+   * 可选：一致性重试循环（对齐 Mady disclosure 管线的 check_consistency 条件回退边）。
+   * 本阶段输出匹配 whenOutputMatches（信号：需要重做）时，回退到 rewindTo 阶段
+   * 重新执行（含中间阶段），最多 maxRetries 次。
+   */
+  retry?: {
+    /** 触发回退的输出信号（正则源文本；如 "不一致|矛盾|缺少"）。 */
+    whenOutputMatches: string;
+    /** 回退目标阶段 id；缺省重试当前阶段。 */
+    rewindTo?: string;
+    /** 最大回退次数（缺省 1）。 */
+    maxRetries?: number;
+  };
 };
 
 export type WorkflowManifest = {
@@ -132,6 +145,24 @@ export function validateWorkflowManifest(
     if (options?.atomNames && stage.atom !== undefined && !options.atomNames.has(stage.atom)) {
       throw new WorkflowError(`阶段 ${stage.id} 声明了未知 atom: ${stage.atom}`);
     }
+    if (stage.retry !== undefined) {
+      if (stage.retry.whenOutputMatches.trim() === "") {
+        throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputMatches 不能为空`);
+      }
+      try {
+        new RegExp(stage.retry.whenOutputMatches, "i");
+      } catch {
+        throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputMatches 非法正则`);
+      }
+      if (stage.retry.rewindTo !== undefined && !ids.has(stage.retry.rewindTo)) {
+        throw new WorkflowError(`阶段 ${stage.id} 的 retry.rewindTo 指向不存在的阶段: ${stage.retry.rewindTo}`);
+      }
+      if (stage.retry.rewindTo === stage.id) {
+        throw new WorkflowError(`阶段 ${stage.id} 的 retry.rewindTo 不能指向自身（无回退意义）`);
+      }
+      const maxRetries = stage.retry.maxRetries ?? 1;
+      if (maxRetries < 0) throw new WorkflowError(`阶段 ${stage.id} 的 retry.maxRetries 不能为负`);
+    }
   }
 }
 
@@ -165,7 +196,42 @@ export async function runWorkflow(
   const results: WorkflowStageResult[] = [];
   let interrupted: WorkflowInterrupt | undefined;
 
-  for (const stage of manifest.stages) {
+  const stageIds = new Map(manifest.stages.map((s, i) => [s.id, i]));
+  // 回退计数（局部 Map，不污染 PipelineState；跨阶段重入持久，防无限回退）。
+  const rewindCounts = new Map<string, number>();
+  // 信号正则预编译（manifest 常量，避免每次执行/回退重新编译）。
+  const signalCache = new Map<string, RegExp>();
+  const signalFor = (stage: WorkflowStage): RegExp | undefined => {
+    if (stage.retry === undefined) return undefined;
+    const cached = signalCache.get(stage.id);
+    if (cached !== undefined) return cached;
+    // g 标志必需：signalMatches 用 exec 遍历全部匹配位置（无 g 时 exec 每次从头匹配 → 死循环）
+    const compiled = new RegExp(stage.retry.whenOutputMatches, "gi");
+    signalCache.set(stage.id, compiled);
+    return compiled;
+  };
+
+  /**
+   * 信号触发判定：匹配位置前窗口内出现否定词（不/未/无/没，无句界分隔）
+   * 时视为否定性表述（"未发现不一致""不缺少任何特征"），不触发回退。
+   */
+  const signalMatches = (text: string, signal: RegExp): boolean => {
+    let match: RegExpExecArray | null;
+    const RE = /[不未无没]/;
+    signal.lastIndex = 0; // 带 g 标志的正则跨调用保留 lastIndex：回退重入前必须重置，否则 exec 直接返回 null
+    while ((match = signal.exec(text)) !== null) {
+      const start = Math.max(0, match.index - 12);
+      const before = text.slice(start, match.index);
+      if (!before.includes("。") && !before.includes("；") && !before.includes(";") && !RE.test(before)) {
+        return true;
+      }
+      if (match[0].length === 0) signal.lastIndex += 1;
+    }
+    return false;
+  };
+
+  for (let index = 0; index < manifest.stages.length; ) {
+    const stage = manifest.stages[index]!;
     const handler = stage.atom !== undefined ? handlers.lookup(stage.atom) : undefined;
     let output = "";
     let retries = 0;
@@ -204,6 +270,39 @@ export async function runWorkflow(
 
     if (interrupted) break; // 审批门等中断：暂停，不执行后续阶段
 
+    // 一致性重试循环（对齐 Mady check_consistency 条件回退边）：输出触发信号时
+    // 回退到 rewindTo 阶段重新执行（含中间阶段），覆盖被回退阶段的旧结果与 state。
+    if (output.trim().length > 0 && stage.retry !== undefined) {
+      const signal = signalFor(stage);
+      if (signal !== undefined && signalMatches(output, signal)) {
+        const rewindTo = stage.retry.rewindTo ?? stage.id;
+        const rewindIndex = stageIds.get(rewindTo)!;
+        const rewindCount = (rewindCounts.get(stage.id) ?? 0) + 1;
+        const maxRewind = stage.retry.maxRetries ?? 1;
+        if (rewindCount > maxRewind) {
+          // 超过最大回退次数：保留当前（不一致）输出并继续，标记 degraded。
+          results.push({
+            stageId: stage.id,
+            strategy: stage.strategy,
+            output: `[WORKFLOW_RETRY_EXHAUSTED] ${stage.id}: ${output}`,
+            degraded: true,
+            retries,
+            ...(stage.atom !== undefined ? { atom: stage.atom } : {}),
+          });
+          index += 1;
+          continue;
+        }
+        // 覆盖从 rewindTo 起的结果与 state 键（防陈旧输出被兜底复用），回退重执行。
+        rewindCounts.set(stage.id, rewindCount);
+        results.splice(rewindIndex);
+        for (const rewinded of manifest.stages.slice(rewindIndex)) {
+          delete state[rewinded.id];
+        }
+        index = rewindIndex;
+        continue;
+      }
+    }
+
     if (
       output.trim().length === 0 &&
       lastError !== undefined &&
@@ -221,6 +320,7 @@ export async function runWorkflow(
       retries,
       ...(stage.atom !== undefined ? { atom: stage.atom } : {}),
     });
+    index += 1;
   }
 
   const degradedSteps = results.filter(r => r.degraded).map(r => r.stageId);
@@ -262,6 +362,43 @@ export const patentNoveltyManifest: WorkflowManifest = {
     { id: "compare", strategy: "chain", description: "逐项对比技术特征与现有技术（单独对比原则）" },
     { id: "conclude", strategy: "chain", description: "生成新颖性分析结论（附置信度）" },
     { id: "approval", strategy: "chain", description: "人工确认分析结论" },
+  ],
+  validation: { requireAllSteps: true, maxRetries: 2 },
+};
+
+/**
+ * 内置：技术交底书披露分析 manifest（镜像 Mady disclosure/graph.go 的 PFE 管线）。
+ *
+ * PFE（Problem/Feature/Effect）三元组提取：problem/features/effects 三路提取 →
+ * 融合 → 一致性检查（输出含"不一致/矛盾/缺少"信号时回退到提取阶段重做，
+ * 最多 1 次）→ 报告 → 审批门。
+ *
+ * 注意：本 manifest 声明了内置原子（extract / approval-gate），消费方需注入
+ * provider（LLM）与内置原子注册表（registerBuiltinAtoms）执行；提取阶段按
+ * 顺序执行（语义等价 Mady 的 Pregel 并行提取，结果一致，此处不引入并行调度）。
+ */
+export const patentDisclosureManifest: WorkflowManifest = {
+  id: "patent_disclosure_v1",
+  name: "技术交底书披露分析",
+  caseType: "disclosure_analysis",
+  stages: [
+    { id: "preprocess", strategy: "chain", description: "预处理技术交底书，分段与去噪" },
+    { id: "extract_problem", strategy: "sub_agent", description: "提取待解决的技术问题", atom: "extract" },
+    { id: "extract_features", strategy: "sub_agent", description: "提取技术特征", atom: "extract" },
+    { id: "extract_effects", strategy: "sub_agent", description: "提取技术效果", atom: "extract" },
+    { id: "merge", strategy: "chain", description: "融合为 PFE 三元组（问题↔特征↔效果交叉引用）" },
+    {
+      id: "consistency",
+      strategy: "chain",
+      description: "PFE 一致性检查（特征-效果因果链闭合、无孤立特征）",
+      retry: {
+        whenOutputMatches: "不一致|矛盾|缺少|孤立",
+        rewindTo: "extract_problem",
+        maxRetries: 1,
+      },
+    },
+    { id: "report", strategy: "chain", description: "生成披露分析报告（创新点/保护建议）" },
+    { id: "approval", strategy: "chain", description: "人工确认披露分析报告", atom: "approval-gate" },
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
 };

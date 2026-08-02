@@ -18,6 +18,8 @@
  * 规则引擎（src/rule）与 patent_eval 工具分别消费这两份。
  */
 
+import { runeSlice } from "./slop-engine.js";
+
 export const PATENT_DISCLAIMER =
   "本分析由 AI 辅助生成，不构成正式法律意见。专利申请和专利性判断应由具备资质的专利代理人或专利律师确认。";
 
@@ -143,35 +145,92 @@ export type CitationReport = {
   flagged: FlaggedCitation[];
 };
 
-/** 静态法条主题表（精校条目；S1 静态表，移植 Mady citation_table 的专利法关键条目）。 */
-const PATENT_LAW_TOPICS: Record<string, { max: number; topics: Record<number, string[]> }> = {
+/**
+ * 静态法条主题表（S1 静态表；移植 Mady guardrails/citation_table.go 校准版）。
+ *
+ * 收录原则（对齐 Mady，误报防线 #1，由 v0.8 真实答案回放校准得出）：
+ *   1. 只收主题无争议、条号在 2008→2020 两次修法间保持稳定的条目；
+ *      条号漂移的一律剔除（如"保护范围"2008 版第 59 条 → 2020 版第 64 条，
+ *      收录必误报），被剔除条目核验时落 Unknown 放行。
+ *   2. 主题词只写该条最核心、最有区分度的词，宁少勿多；泛化法律名词
+ *      （如"说明书""权利要求书""发明"）不得收录——它们出现在大量无关
+ *      语境中，会让交叉匹配把正确引用误判为张冠李戴。
+ *   3. 专利法存在性范围（82 条）以 2020 年第四次修正版（CNIPA 公布）为准。
+ *   4. 实施细则因 2001/2010/2023 三版条号差异巨大，仅收录考试基准库与实务
+ *      仍高频共用的个别条目（标注版本），其余落 Unknown——R1 存在性核验
+ *      对细则不生效（max 未设），避免版本漂移误报。
+ */
+const PATENT_LAW_TOPICS: Record<string, { max?: number; topics: Record<number, string[]> }> = {
   专利法: {
-    max: 78,
+    max: 82,
     topics: {
-      2: ["发明", "实用新型", "外观设计", "定义"],
-      9: ["重复授权", "同样的发明创造"],
-      22: ["新颖性", "创造性", "实用性"],
-      25: ["不授予专利权", "智力活动规则", "疾病的诊断和治疗方法"],
-      26: ["说明书", "权利要求书", "清楚", "支持"],
-      27: ["外观设计", "图片", "照片"],
-      33: ["修改", "超范围", "原始记载"],
-      45: ["无效宣告"],
-      47: ["无效宣告", "自始不存在", "宣告无效"],
-      59: ["保护范围", "权利要求", "解释"],
-      64: ["强制许可"],
-      71: ["侵权", "专利侵权", "损害赔偿"],
+      2: ["发明创造", "实用新型", "外观设计", "定义"],
+      5: ["违反法律", "社会公德", "公共利益", "遗传资源", "不授予专利权"],
+      9: ["同样的发明创造", "一项专利权", "先申请", "重复授权"],
+      10: ["转让", "专利申请权"],
+      11: ["实施", "制造", "使用", "许诺销售", "销售", "进口", "许可"],
+      13: ["临时保护", "适当的费用", "公布后"],
+      22: ["新颖性", "创造性", "实用性", "现有技术"],
+      24: ["宽限期", "不丧失新颖性", "首次发表", "展览会"],
+      25: ["科学发现", "智力活动", "疾病的诊断和治疗方法", "疾病治疗", "动物和植物品种", "原子核", "不授予专利权"],
+      26: ["清楚", "完整", "支持", "摘要", "充分公开"],
+      27: ["外观设计", "图片", "照片", "简要说明"],
+      29: ["优先权", "外国优先权", "本国优先权", "十二个月", "六个月"],
+      30: ["优先权", "书面声明", "副本"],
+      31: ["单一性", "总的发明构思", "合案申请", "限于一项"],
+      32: ["撤回"],
+      33: ["修改", "超出", "原说明书和权利要求书记载的范围", "原图片或者照片"],
+      34: ["初步审查", "公布", "十八个月"],
+      35: ["实质审查", "请求", "三年", "视为撤回"],
+      36: ["参考资料", "检索"],
+      37: ["陈述意见", "视为撤回"],
+      38: ["驳回"],
+      39: ["实质审查", "授予", "发明专利权", "公告"],
+      40: ["初步审查", "实用新型", "外观设计", "授予", "公告"],
+      41: ["驳回", "复审", "起诉"],
+      42: ["期限", "二十年", "十年", "十五年", "补偿"],
+      43: ["年费"],
+      44: ["终止", "年费", "放弃"],
+      45: ["无效宣告", "请求"],
+      46: ["无效宣告", "审查", "决定", "起诉"],
+      47: ["无效宣告", "视为自始不存在", "效力", "追溯"],
+      62: ["现有技术抗辩", "公知技术抗辩", "不构成侵权"],
+      69: ["不视为侵权", "权利用尽", "先用权", "临时过境", "科研实验"],
+      70: ["合法来源", "善意使用销售", "不承担赔偿责任"],
     },
   },
   专利法实施细则: {
-    max: 126,
+    // 2023 修订版条号漂移：R1 存在性不核验（max 未设），仅收录高频共用条目。
     topics: {
-      20: ["权利要求书", "编号", "句号"],
-      21: ["独立权利要求", "前序部分", "特征部分"],
-      22: ["从属权利要求", "引用"],
-      23: ["说明书", "技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"],
-      26: ["附图", "实用新型"],
+      42: ["分案申请", "原申请", "两项以上发明"],
     },
   },
+};
+
+/**
+ * invalidationGrounds：可作为无效宣告理由的实体条款（2008→2020 条号稳定）。
+ * 核验这些条的引用时，交叉匹配不把"无效宣告"当作指向第 45-47 条的证据——
+ * "无效宣告理由（专利法第X条）"是同位命名（第 X 条即被新增的理由本身），
+ * 而非张冠李戴。由 Mady v0.8 回放 patent_exam_2009_a2_02 误报校准得出。
+ */
+const INVALIDATION_GROUNDS = new Set([2, 5, 9, 20, 22, 23, 25, 26, 27, 33]);
+
+/**
+ * 引用核验主题知识源（设计 S1 静态表 / S2 知识库索引复合）。
+ * 默认 S1 内嵌静态表；S2 知识库法条索引（如 laws-full.db / wiki 审查指南
+ * 卡片构建的条号→主题映射）实现本接口后可注入，替代静态表的大部分覆盖。
+ */
+export type CitationSource = {
+  /** 该法条的存在性上限（undefined = 不做 R1 存在性核验）。 */
+  maxArticle(statute: string): number | undefined;
+  /** 条号 → 注册主题词（undefined = 静态表未覆盖，放行）。 */
+  topics(statute: string, article: number): string[] | undefined;
+};
+
+/** 默认 S1 静态表知识源（内嵌 PATENT_LAW_TOPICS）。 */
+const defaultCitationSource: CitationSource = {
+  maxArticle: statute => PATENT_LAW_TOPICS[statute]?.max,
+  topics: (statute, article) => PATENT_LAW_TOPICS[statute]?.topics[article],
 };
 
 const CITATION_PATTERN =
@@ -228,8 +287,6 @@ const CN_NUM: Record<string, number> = {
   一百二十六: 126,
 };
 
-const ENUM_STARTERS = ["、", "或", "及", "和"];
-
 const PURPOSE_CONNECTORS = [
   "专利法实施细则",
   "实施细则",
@@ -278,8 +335,9 @@ const CROSS_MATCH_NOISE = new Set([
 /**
  * 核验文本中的法条引用（R1 存在性 + R2 语境相关性）。
  * Unknown（表未覆盖）与 Unverifiable（无用途声明）一律放行。
+ * source 为 S2 知识库法条索引（可选）；缺省使用 S1 内嵌静态表。
  */
-export function verifyCitations(text: string): CitationReport {
+export function verifyCitations(text: string, source?: CitationSource): CitationReport {
   const citations = extractCitations(text);
   const report: CitationReport = {
     total: citations.length,
@@ -292,7 +350,7 @@ export function verifyCitations(text: string): CitationReport {
   };
 
   for (const c of citations) {
-    const { verdict, reason } = verifyOne(c, text);
+    const { verdict, reason } = verifyOne(c, text, source ?? defaultCitationSource);
     report[verdict] += 1;
     if (verdict === "suspect" || verdict === "invalid") {
       report.flagged.push({ raw: c.raw, statute: c.statute, article: c.article, verdict, reason });
@@ -338,40 +396,52 @@ function extractCitations(text: string): ExtractedCitation[] {
   return result;
 }
 
-function verifyOne(c: ExtractedCitation, fullText: string): { verdict: CitationVerdict; reason: string } {
-  const statuteTable = PATENT_LAW_TOPICS[c.statute];
-  if (!statuteTable) return { verdict: "unknown", reason: "静态表未覆盖该法律，放行" };
-
-  // R1 存在性：条号超范围 → 幻觉编号疑点
-  if (c.article > statuteTable.max) {
-    return { verdict: "invalid", reason: `编号超出《${c.statute}》有效范围（共 ${statuteTable.max} 条）` };
+function verifyOne(
+  c: ExtractedCitation,
+  fullText: string,
+  source: CitationSource,
+): { verdict: CitationVerdict; reason: string } {
+  // R1 存在性：条号超范围 → 幻觉编号疑点（max 未设的法律不做存在性核验）。
+  // S2 注入源与 S1 静态表合并：source 未覆盖的法律/条号回退 S1，避免部分注入
+  // 静默禁用其余 S1 覆盖。
+  const max = source.maxArticle(c.statute) ?? PATENT_LAW_TOPICS[c.statute]?.max;
+  if (max !== undefined && c.article > max) {
+    return { verdict: "invalid", reason: `编号超出《${c.statute}》有效范围（共 ${max} 条）` };
   }
 
-  const topics = statuteTable.topics[c.article];
-  if (!topics) return { verdict: "unknown", reason: "静态表未覆盖该条主题，放行" };
+  const topics = source.topics(c.statute, c.article) ?? PATENT_LAW_TOPICS[c.statute]?.topics[c.article];
+  if (topics === undefined) return { verdict: "unknown", reason: "静态表未覆盖该条主题，放行" };
 
-  // R2 语境相关性：提取用途子句
-  const purpose = extractPurpose(c.raw, fullText);
-  if (purposeEmpty(purpose)) return { verdict: "unverifiable", reason: "无用途声明可核对，放行" };
-  if (purpose.startsWith("、") || ENUM_STARTERS.some(s => purpose.startsWith(s))) {
-    return { verdict: "unverifiable", reason: "引用属于枚举列表，R2 无法判定，放行" };
+  // R2 语境相关性：同一引用可能多次出现，遍历全部位置——任一出现的用途声明
+  // 命中主题即 valid（首个出现是枚举列表不代表后续出现也如此）。
+  const purposes = extractPurposes(c.raw, fullText);
+  let firstCheckable: { match: string; display: string } | undefined;
+  for (const p of purposes) {
+    if (purposeEmpty(p.match) || isEnumeration(p.trailing)) continue;
+    firstCheckable ??= p;
+    if (topics.some(kw => p.match.includes(kw))) return { verdict: "valid", reason: "" };
   }
 
-  for (const kw of topics) {
-    if (purpose.includes(kw)) return { verdict: "valid", reason: "" };
+  // 本条主题未命中：交叉匹配另一条 S1 注册主题 → suspect；否则放行。
+  // 仅"本条没命中"判 Unverifiable——宽松转述（如把第 33 条说成"关于专利权
+  // 范围的变更"）一律放行（回放校准出的关键误报防线）。
+  // 注意：交叉匹配只信 S1 静态表的精校词（高区分度），S2 知识库自动生成的
+  // 标题词不参与——自动词区分度未经人工校准，参与交叉匹配会把正确引用
+  // 误判为张冠李戴（误报防线 #1 的延伸）。
+  if (firstCheckable === undefined) {
+    return { verdict: "unverifiable", reason: "无用途声明可核对，放行" };
   }
-
-  // 本条主题未命中：交叉匹配另一条注册主题 → suspect；否则放行
-  const cross = crossMatch(c.statute, c.article, purpose);
-  if (cross) {
+  const cross = crossMatch(c.statute, c.article, firstCheckable.match);
+  if (cross !== null) {
     return {
       verdict: "suspect",
-      reason: `用途描述与《${c.statute}》第${c.article}条主题不一致，更接近《${cross.statute}》第${cross.article}条（${cross.keyword}）`,
+      reason: `用途描述（${truncateRunes(firstCheckable.display, 20)}）与《${c.statute}》第${c.article}条主题（${topics.join("、")}）不一致，更接近《${cross.statute}》第${cross.article}条（${cross.keyword}）`,
     };
   }
   return { verdict: "unverifiable", reason: "宽松转述，R2 无法判定，放行" };
 }
 
+/** 在 S1 静态表中查找命中 purpose 的另一条注册主题（含无效宣告同位命名特例）。 */
 function crossMatch(
   selfStatute: string,
   selfArticle: number,
@@ -383,6 +453,11 @@ function crossMatch(
       if (statute === selfStatute && a === selfArticle) continue;
       for (const kw of keywords) {
         if (CROSS_MATCH_NOISE.has(kw)) continue;
+        // "无效宣告"特例：当被核验条本身可作为无效宣告理由（invalidationGrounds）
+        // 时，用途描述中的"无效宣告"是同位命名——"无效宣告理由（专利法第X条）"
+        // 中第 X 条即被新增的理由本身——而非把无效宣告程序张冠李戴给第 X 条，
+        // 不构成交叉匹配证据。（v0.8 回放 patent_exam_2009_a2_02 误报校准。）
+        if (kw === "无效宣告" && selfStatute === "专利法" && INVALIDATION_GROUNDS.has(selfArticle)) continue;
         if (purpose.includes(kw)) {
           return { statute, article: a, keyword: kw };
         }
@@ -392,15 +467,65 @@ function crossMatch(
   return null;
 }
 
-/** 提取引用点后的用途子句（句界内截取，防上一句话题串扰）。 */
-function extractPurpose(raw: string, fullText: string): string {
-  const idx = fullText.indexOf(raw);
-  if (idx < 0) return "";
-  let trailing = fullText.slice(idx + raw.length);
-  if (trailing.startsWith("、") || trailing.startsWith("或")) return trailing.slice(0, 1);
-  const cut = trailing.search(/[。\n；;]/);
-  if (cut >= 0) trailing = trailing.slice(0, cut);
-  return trailing.trim();
+/**
+ * 提取引用的用途声明文本（遍历全部出现位置），返回（匹配文本, 展示文本, 后置原文）。
+ *
+ * 中文法律写作的用途声明有两种语序，只取一侧必然误报：
+ *   - 后置式："根据专利法第47条（分案申请）…"、"专利法第22条第3款规定的创造性…"
+ *   - 前置式："权利要求得不到说明书支持，不符合专利法第26条第4款"、
+ *     "被宣告无效的专利权视为自始不存在（专利法第47条）"
+ *
+ * 因此匹配文本 = 引用点前子句 + 引用点后子句（均在句界内截取，防止上一句的
+ * 话题串扰）；展示文本优先取后置子句（幻觉案例中用途声明通常紧跟引用）。
+ *
+ * 误报防线（回放校准）：
+ *   - 后置子句在句界符（。；换行）处截断——引用后跟分号时用途不跨分号吞入
+ *     下一子句（"…第26条；本申请具备新颖性"的"新颖性"属于下一子句）；
+ *   - 前置子句若仍含其他法条引用（同句多引用/枚举兄弟项），整体弃用前置
+ *     子句——"包括专利法第5条所述违反法律的情形，以及专利法第9条"中第 9 条
+ *     的用途不属于前置的"违反法律"（回归修复）。
+ */
+function extractPurposes(raw: string, fullText: string): Array<{ match: string; display: string; trailing: string }> {
+  const results: Array<{ match: string; display: string; trailing: string }> = [];
+  let from = 0;
+  while (true) {
+    const idx = fullText.indexOf(raw, from);
+    if (idx < 0) break;
+    from = idx + raw.length;
+    const leading = fullText.slice(0, idx);
+    const trailing = fullText.slice(idx + raw.length);
+
+    // 前置子句：最后一个句界符（。；换行）之后到引用点。
+    const leadingCut = Math.max(leading.lastIndexOf("。"), leading.lastIndexOf("；"), leading.lastIndexOf("\n"));
+    let leadingClause = leadingCut >= 0 ? leading.slice(leadingCut + 1) : leading;
+    // 前置子句含其他法条引用（同句多引用/枚举）→ 弃用前置子句（防话题串扰）。
+    if (/第[零一二三四五六七八九十百\d]+条/.test(leadingClause)) leadingClause = "";
+
+    // 后置子句：引用点之后到第一个句界符（。；换行）。
+    let rawTrailing = trailing;
+    const trailingCut = trailing.search(/[。\n；;]/);
+    if (trailingCut >= 0) rawTrailing = trailing.slice(0, trailingCut);
+
+    leadingClause = leadingClause.trim();
+    rawTrailing = rawTrailing.trim();
+    const display = rawTrailing !== "" ? rawTrailing : leadingClause;
+    results.push({ match: `${leadingClause} ${rawTrailing}`.trim(), display, trailing });
+  }
+  return results;
+}
+
+/** 枚举接续符：引用紧随其后出现另一个引用时，用途声明属于整个引用列表而非本条。 */
+const ENUM_STARTERS = ["、", "或", "及", "和"];
+
+/** 判断引用后置文本是否以枚举接续符开头（trim 空白与括号前缀后）。 */
+function isEnumeration(trailing: string): boolean {
+  const t = trailing.trim().replace(/^[\s（）()*]+/, "");
+  return ENUM_STARTERS.some(s => t.startsWith(s));
+}
+
+/** 按码点截断，超长追加省略号（复用 slop-engine 的 runeSlice，勿重复实现）。 */
+function truncateRunes(s: string, n: number): string {
+  return runeSlice(s, n, true);
 }
 
 function purposeEmpty(purpose: string): boolean {

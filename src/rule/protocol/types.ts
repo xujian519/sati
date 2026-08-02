@@ -20,7 +20,12 @@ export type RuleSeverity = "critical" | "major" | "minor";
 export type RuleAction = "block" | "warn" | "review" | "log";
 
 /** 检查类型标识（对齐 BCIP RuleCheck 的 tagged enum 设计）。 */
-export type RuleCheckType = "keyword_blocklist" | "pattern_analysis" | "structural_analysis" | "citation_analysis";
+export type RuleCheckType =
+  | "keyword_blocklist"
+  | "pattern_analysis"
+  | "structural_analysis"
+  | "citation_analysis"
+  | "synonym_match";
 
 /**
  * keyword_blocklist — 关键词黑名单。
@@ -69,7 +74,32 @@ export type CitationAnalysisCheck = {
   statutes: Record<string, { max: number; topics?: Record<number, string[]> }>;
 };
 
-export type RuleCheck = KeywordBlocklistCheck | PatternAnalysisCheck | StructuralAnalysisCheck | CitationAnalysisCheck;
+/**
+ * synonym_match — 同义词展开要素分析（移植自 Mady CheckRule 的 RequiredElements）。
+ * requirements 中每个要素的 keywords 任一命中（关键词本身 OR 其同义词，否定语境豁免）
+ * 即视为满足；与 structural_analysis 的差异在于是同义词语义匹配而非正则。
+ * 同义词表资产：rules/patent/synonyms.yaml（由消费方注入 SynonymMap）。
+ */
+export type SynonymMatchCheck = {
+  type: "synonym_match";
+  requirements: SynonymRequirement[];
+  /** 最低置信度 0-1 = 命中要素数 / 总要素数；低于则违规。 */
+  minConfidence?: number;
+};
+
+/** synonym_match 的单条要素（element + keywords；keywords 中任一命中即满足）。 */
+export type SynonymRequirement = {
+  element: string;
+  description?: string;
+  keywords: string[];
+};
+
+export type RuleCheck =
+  | KeywordBlocklistCheck
+  | PatternAnalysisCheck
+  | StructuralAnalysisCheck
+  | CitationAnalysisCheck
+  | SynonymMatchCheck;
 
 /** 单条宪法规则（对齐 BCIP ConstitutionalRule）。 */
 export type ConstitutionalRule = {

@@ -28,6 +28,7 @@ const CHECK_TYPES: readonly RuleCheckType[] = [
   "pattern_analysis",
   "structural_analysis",
   "citation_analysis",
+  "synonym_match",
 ];
 
 /** 把任意值规整为纯对象（yaml Document.toJS 产物），非对象返回 null。 */
@@ -178,8 +179,36 @@ function parseCheck(raw: unknown, issues: RuleSetValidationIssue[], ruleId: stri
       }
       return { type, statutes: parsed };
     }
+    case "synonym_match": {
+      if (!Array.isArray(record.requirements) || record.requirements.length === 0) {
+        issues.push({ ruleId, message: `rule ${ruleId}: synonym_match 需要非空 requirements` });
+        return null;
+      }
+      const requirements: SynonymRequirementRaw[] = [];
+      for (const item of record.requirements) {
+        const el = asRecord(item);
+        const keywords = el !== null ? asStringArray(el.keywords) : null;
+        if (el === null || typeof el.element !== "string" || keywords === null || keywords.length === 0) {
+          issues.push({ ruleId, message: `rule ${ruleId}: requirements 元素需要 element + 非空 keywords` });
+          return null;
+        }
+        requirements.push({
+          element: el.element,
+          description: typeof el.description === "string" ? el.description : undefined,
+          keywords,
+        });
+      }
+      const minConfidence = typeof record.minConfidence === "number" ? record.minConfidence : 1;
+      return { type, requirements, minConfidence };
+    }
   }
 }
+
+type SynonymRequirementRaw = {
+  element: string;
+  description?: string;
+  keywords: string[];
+};
 
 type StructuralElementRaw = {
   element: string;

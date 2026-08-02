@@ -33,6 +33,7 @@ import { createPatentWorkflowTool } from "../builtin/patentWorkflowTool.js";
 import { createPatentPlanTaskTool } from "../builtin/patentPlanTaskTool.js";
 import { registerBuiltinAtoms } from "../../patent/atoms/index.js";
 import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateTool.js";
+import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
 import type { SatiToolDefinition, ToolDomain } from "../protocol/types.js";
@@ -191,6 +192,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentWorkflowTool(), "patent"));
     registry.register(annotate(createPatentPlanTaskTool(), "patent"));
     registry.register(annotate(createPatentWorkerValidateTool(), "patent"));
+    registry.register(annotate(createEvaluateEvidenceTool(), "patent"));
   }
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));

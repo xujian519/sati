@@ -1,4 +1,10 @@
-import { evaluateText, loadPatentComplianceRuleSet, type RuleSet } from "../../rule/index.js";
+import {
+  evaluateText,
+  loadPatentComplianceRuleSet,
+  loadSynonymsAsset,
+  type RuleSet,
+  type SynonymMap,
+} from "../../rule/index.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type RuleCheckInput = {
@@ -11,6 +17,8 @@ export type RuleCheckInput = {
 export type RuleCheckDeps = {
   /** 可注入的规则集加载器：scope → RuleSet（缺省内置 patent compliance）。 */
   loader?: (scope: string) => RuleSet;
+  /** 可注入的同义词表加载器（缺省内置 rules/patent/synonyms.yaml）。 */
+  synonyms?: () => SynonymMap;
 };
 
 /**
@@ -36,11 +44,14 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
     return ruleSet;
   };
 
+  /** 同义词表（synonym_match 检查用；工厂构建时加载一次，不再每次 execute 读盘）。 */
+  const synonymsCache: SynonymMap = deps?.synonyms ? deps.synonyms() : loadSynonymsAsset().synonyms;
+
   return {
     name: "rule_check",
     aliases: ["RuleCheck", "constitutional_check"],
     description:
-      "Run deterministic constitutional rule checks (keyword blocklist / pattern / structural / citation range) " +
+      "Run deterministic constitutional rule checks (keyword blocklist / pattern / structural / citation range / synonym match) " +
       "against the given text and return violations with severity, action and legal basis. " +
       "Use before publishing compliance-sensitive output (e.g. patent conclusions, legal opinions).",
     kind: "session",
@@ -64,7 +75,7 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
     async execute(input) {
       const scope = input.scope ?? "patent";
       const ruleSet = resolve(scope);
-      const evaluation = evaluateText(input.text, ruleSet);
+      const evaluation = evaluateText(input.text, ruleSet, synonymsCache);
       if (evaluation.violations.length === 0) {
         return { content: [{ type: "text", text: `rule_check(${scope}): 无违规` }] };
       }

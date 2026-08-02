@@ -21,7 +21,20 @@ export type {
   RuleViolation,
   StructuralAnalysisCheck,
   StructuralElement,
+  SynonymMatchCheck,
+  SynonymRequirement,
 } from "./protocol/types.js";
+
+export {
+  checkSynonymRequirements,
+  hasNegationContext,
+  loadSynonymsAsset,
+  matchKeyword,
+  parseSynonyms,
+  type SynonymCheckResult,
+  type SynonymMap,
+  type SynonymsLoadResult,
+} from "./runtime/synonym-engine.js";
 
 export {
   evaluateRule,

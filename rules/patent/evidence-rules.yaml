@@ -1,0 +1,416 @@
+# 证据规则集 — 专利无效/诉讼证据三性审查
+# 移植自 Mady domains/rules/data/rules/evidence-rules.yaml
+# 15 rules: 三性(3) + 类型(4) + 举证责任(1) + 证明标准(1) + 日期认定(1) + 完整性(1) + 程序(1) + 电子证据(1) + 审查指南(2)
+# 消费方：src/patent/evidence/engine.ts（EvidenceEngine.loadRules）
+
+weights:
+  relevance: 0.35
+  legality: 0.30
+  authenticity: 0.35
+
+rules:
+  # ── 三性审查规则 ──────────────────────────────────────────
+
+  - ruleId: EVI-001
+    name: 证据相关性审查
+    description: 证据必须与待证事实具有关联性，能够影响法官对事实的认定
+    legalBasis: 专利法实施细则第65条
+    domain: patent
+    severity: major
+    action: apply
+    evidenceType: general
+    check:
+      type: relevance
+      method: triple-attribute
+      principles:
+        - 证据与待证事实存在直接或间接逻辑关联
+        - 证据能够增强或减弱待证事实的盖然性
+        - 证据本身真实可靠
+      conditions:
+        - evidence_has_claim_refs
+        - evidence_direction_clear
+    evidenceAssessment:
+      assessmentType: triple-attribute
+      dimensions:
+        - name: relevance
+          weight: 0.5
+          levels:
+            - { value: "high", score: 1.0, description: "直接关联" }
+            - { value: "medium_high", score: 0.75, description: "强关联" }
+            - { value: "medium", score: 0.5, description: "一般关联" }
+            - { value: "low", score: 0.25, description: "微弱关联" }
+
+  - ruleId: EVI-002
+    name: 证据合法性审查
+    description: 证据的收集主体、程序和形式必须符合法律规定
+    legalBasis: 民事诉讼法第63条、最高人民法院关于民事诉讼证据的若干规定
+    domain: patent
+    severity: critical
+    action: apply
+    evidenceType: general
+    check:
+      type: legality
+      method: triple-attribute
+      principles:
+        - 证据来源合法（非非法手段获取）
+        - 取证程序合法
+        - 证据形式合法
+      conditions:
+        - evidence_source_identified
+        - evidence_collection_legal
+    evidenceAssessment:
+      assessmentType: triple-attribute
+      dimensions:
+        - name: legality
+          weight: 0.35
+          levels:
+            - { value: "high", score: 1.0, description: "完全合法" }
+            - { value: "medium", score: 0.5, description: "基本合法" }
+            - { value: "low", score: 0.25, description: "合法性存疑" }
+
+  - ruleId: EVI-003
+    name: 证据真实性审查
+    description: 证据必须是真实的，非伪造、变造或虚构
+    legalBasis: 最高人民法院关于民事诉讼证据的若干规定第90条
+    domain: patent
+    severity: critical
+    action: apply
+    evidenceType: general
+    check:
+      type: authenticity
+      method: triple-attribute
+      principles:
+        - 证据形成过程真实
+        - 证据内容真实完整
+        - 证据未被篡改
+      conditions:
+        - evidence_content_hash_available
+        - evidence_provenance_clear
+    evidenceAssessment:
+      assessmentType: triple-attribute
+      dimensions:
+        - name: authenticity
+          weight: 0.35
+          levels:
+            - { value: "high", score: 1.0, description: "真实可靠" }
+            - { value: "medium", score: 0.5, description: "基本可信" }
+            - { value: "low", score: 0.25, description: "真实性存疑" }
+
+  # ── 类型特定规则 ──────────────────────────────────────────
+
+  - ruleId: EVI-010
+    name: 电子证据审查规则
+    description: 电子证据需审查其生成、存储、传输、收集的可靠性和完整性
+    legalBasis: 最高人民法院关于互联网法院审理案件若干问题的规定
+    domain: patent
+    severity: major
+    action: apply
+    evidenceType: electronic
+    check:
+      type: electronic
+      method: credibility_scaled
+      rules:
+        - 审查平台可信度（政府官方 > 学术机构 > 新闻媒体 > 社交平台）
+        - 审查内容完整性（哈希校验）
+        - 审查取证过程合法性
+      conditions:
+        - evidence_has_source_uri
+    evidenceAssessment:
+      assessmentType: credibility_scaled
+      platformCredibility:
+        gov.cn:            { score: 0.95, label: "政府官方" }
+        court.gov.cn:      { score: 0.95, label: "法院官方" }
+        cnipa.gov.cn:      { score: 0.95, label: "专利局官方" }
+        epo.org:           { score: 0.90, label: "欧洲专利局" }
+        wipo.int:          { score: 0.90, label: "WIPO" }
+        uspto.gov:         { score: 0.90, label: "USPTO" }
+        cnki.net:          { score: 0.85, label: "知网学术" }
+        ieee.org:          { score: 0.85, label: "IEEE" }
+        acm.org:           { score: 0.85, label: "ACM" }
+        bbc.com:           { score: 0.70, label: "新闻媒体" }
+        reuters.com:       { score: 0.70, label: "新闻媒体" }
+        baidu.com:         { score: 0.45, label: "搜索引擎" }
+        weibo.com:         { score: 0.25, label: "社交平台" }
+      dimensions:
+        - name: platform_credibility
+          weight: 0.6
+          levels:
+            - { value: "high", score: 1.0, description: "政府/法院/专利局官方" }
+            - { value: "medium_high", score: 0.75, description: "学术数据库" }
+            - { value: "medium", score: 0.55, description: "新闻媒体/聚合平台" }
+            - { value: "low", score: 0.25, description: "社交/自媒体" }
+        - name: content_integrity
+          weight: 0.4
+          levels:
+            - { value: "high", score: 1.0, description: "哈希匹配" }
+            - { value: "low", score: 0.25, description: "无法验证完整性" }
+
+  - ruleId: EVI-011
+    name: 域外证据审查规则
+    description: 域外形成的证据须经公证认证或履行相关证明手续
+    legalBasis: 最高人民法院关于民事诉讼证据的若干规定第16条
+    domain: patent
+    severity: major
+    action: notify
+    evidenceType: overseas
+    check:
+      type: overseas
+      method: multi_condition
+      rules:
+        - 域外证据须经所在国公证机关公证
+        - 须经中国驻该国使领馆认证（或条约免除）
+        - 外文证据须附中文译本
+      conditions:
+        - evidence_notarized
+        - evidence_legalized
+        - evidence_translated
+    evidenceAssessment:
+      assessmentType: multi_condition
+      dimensions:
+        - name: notarization
+          weight: 0.5
+          levels:
+            - { value: "confirmed", score: 1.0, description: "已公证" }
+            - { value: "missing", score: 0.0, description: "未公证" }
+        - name: translation
+          weight: 0.5
+          levels:
+            - { value: "complete", score: 1.0, description: "已附中文译本" }
+            - { value: "partial", score: 0.5, description: "部分翻译" }
+            - { value: "missing", score: 0.0, description: "无中文译本" }
+
+  - ruleId: EVI-012
+    name: 证人证言审查规则
+    description: 证人证言需审查证人与案件利害关系、证人作证能力、证言一致性
+    legalBasis: 民事诉讼法第72-75条
+    domain: patent
+    severity: major
+    action: apply
+    evidenceType: witness_testimony
+    check:
+      type: witness
+      method: multi_condition
+      principles:
+        - 证人与案件无利害关系（或已披露）
+        - 证人具备作证能力
+        - 证言内容前后一致
+      conditions:
+        - evidence_witness_disclosed
+    evidenceAssessment:
+      assessmentType: multi_condition
+      dimensions:
+        - name: witness_credibility
+          weight: 0.6
+          levels:
+            - { value: "high", score: 1.0, description: "无利害关系" }
+            - { value: "medium", score: 0.5, description: "存在一定利害关系" }
+            - { value: "low", score: 0.25, description: "存在重大利害关系" }
+        - name: consistency
+          weight: 0.4
+          levels:
+            - { value: "consistent", score: 1.0, description: "前后一致" }
+            - { value: "conflicting", score: 0.25, description: "存在矛盾" }
+
+  - ruleId: EVI-013
+    name: 公知常识免证规则
+    description: 公知常识属于免证事实，当事人无需举证
+    legalBasis: 最高人民法院关于民事诉讼证据的若干规定第10条
+    domain: patent
+    severity: minor
+    action: exempt
+    evidenceType: common_knowledge
+    check:
+      type: common_knowledge
+      method: binary
+      conditions:
+        - fact_is_well_known
+        - fact_is_uncontested
+    evidenceAssessment:
+      assessmentType: binary
+      exemptions:
+        - 技术领域内的公知常识
+        - 本领域技术人员普遍知晓的技术事实
+
+  # ── 举证责任 ──────────────────────────────────────────────
+
+  - ruleId: EVI-020
+    name: 举证责任分配规则
+    description: 主张权利的一方应当提供证据证明其主张的事实
+    legalBasis: 民事诉讼法第64条、专利法第x条
+    domain: patent
+    severity: major
+    action: apply
+    evidenceType: burden_of_proof
+    check:
+      type: burden
+      method: conditional
+      rules:
+        - 无效宣告请求人负举证责任
+        - 侵权纠纷中专利权人负举证责任
+        - 举证责任在特定条件下可转移
+      conditions:
+        - case_type_identified
+    evidenceAssessment:
+      assessmentType: conditional
+      conditions:
+        invalidation: "举证责任方: 请求人; 标准: 优势证据"
+        infringement: "举证责任方: 专利权人; 标准: 高度盖然性"
+        novelty_challenge: "举证责任方: 质疑方; 标准: 优势证据"
+
+  # ── 证明标准 ──────────────────────────────────────────────
+
+  - ruleId: EVI-030
+    name: 证明标准规则
+    description: 根据案件类型和待证事实确定适用的证明标准
+    legalBasis: 最高人民法院关于适用民事诉讼法的解释第108条
+    domain: patent
+    severity: major
+    action: apply
+    evidenceType: standard_of_proof
+    check:
+      type: proof_standard
+      method: scored
+      rules:
+        - "专利侵权: 高度盖然性（≥80%确信）"
+        - "专利无效: 优势证据（>50%确信）"
+        - "新颖性问题: 优势证据"
+        - "优先权核实: 高度盖然性"
+      conditions:
+        - supporting_evidence_counted
+        - contradicting_evidence_counted
+    evidenceAssessment:
+      assessmentType: scored
+      dimensions:
+        - name: confidence
+          weight: 1.0
+          levels:
+            - { value: "beyond_reasonable_doubt", score: 0.95, description: "≥95%, ≥3份有效证据" }
+            - { value: "high_probability", score: 0.80, description: "≥80%, ≥2份有效证据" }
+            - { value: "preponderance", score: 0.55, description: ">50%" }
+            - { value: "substantial", score: 0.30, description: "≥1份直接证据" }
+            - { value: "prima_facie", score: 0.15, description: "≥1份表面证据" }
+
+  # ── 日期认定 ──────────────────────────────────────────────
+
+  - ruleId: EVI-040
+    name: 公开日期认定规则
+    description: 以证据的公开日作为现有技术的时间基准，公开日应早于专利申请日
+    legalBasis: 专利法第22条第2款（新颖性）、第22条第3款（创造性）
+    domain: patent
+    severity: major
+    action: apply
+    evidenceType: prior_art_date
+    check:
+      type: date
+      method: conditional
+      rules:
+        - 公开出版物以印刷日或出版日为公开日
+        - 期刊以实际出版日为公开日
+        - 网络公开以首次公开日为公开日
+        - 口头公开以公开日为公开日
+      conditions:
+        - publication_date_available
+        - filing_date_available
+    evidenceAssessment:
+      assessmentType: conditional
+      conditions:
+        printed_publication: "以印刷日/出版日为公开日"
+        internet_publication: "以首次公开发布日为公开日"
+        oral_disclosure: "以公开日为公开日"
+        no_date: "需进一步查明公开日期"
+
+  # ── 补充规则 ──────────────────────────────────────────────
+
+  - ruleId: EVI-050
+    name: 证据链完整性规则
+    description: 证据链应完整，从取证到举证的每个环节应当衔接
+    legalBasis: 最高人民法院关于民事诉讼证据的若干规定
+    domain: patent
+    severity: major
+    action: apply
+    evidenceType: procedural
+    check:
+      type: chain_of_custody
+      method: multi_condition
+      principles:
+        - 取证主体适格
+        - 取证手段合法
+        - 保存过程完整
+        - 举证程序合规
+      conditions:
+        - custody_chain_traceable
+        - evidence_integrity_verified
+
+  - ruleId: EVI-051
+    name: 举证期限规则
+    description: 证据应在举证期限内提交，逾期提交可能不被采纳
+    legalBasis: 民事诉讼法第65条
+    domain: patent
+    severity: major
+    action: notify
+    evidenceType: procedural
+    check:
+      type: deadline
+      method: binary
+      conditions:
+        - deadline_defined
+        - submission_within_deadline
+
+  - ruleId: EVI-060
+    name: 电子证据完整性审查规则
+    description: 电子证据完整性是可信性的基础，需通过技术手段验证
+    legalBasis: 电子签名法、最高人民法院关于电子数据证据的规定
+    domain: patent
+    severity: major
+    action: apply
+    evidenceType: electronic
+    check:
+      type: integrity
+      method: scored
+      principles:
+        - 哈希校验确认内容未被篡改
+        - 时间戳确认取证时间
+        - 元数据分析确认来源
+      conditions:
+        - content_hash_provided
+    evidenceAssessment:
+      assessmentType: scored
+      dimensions:
+        - name: integrity
+          weight: 1.0
+          levels:
+            - { value: "verified", score: 1.0, description: "哈希匹配+时间戳+元数据完整" }
+            - { value: "partial", score: 0.5, description: "部分验证（如仅有哈希）" }
+            - { value: "unverified", score: 0.0, description: "无法验证完整性" }
+
+  - ruleId: EVI-070
+    name: 审查指南证据规则参照
+    description: 参照专利审查指南第二部分第三章第2.1节关于证据的规定
+    legalBasis: 专利审查指南第二部分第三章第2.1节
+    domain: patent
+    severity: minor
+    action: reference
+    evidenceType: procedural
+    check:
+      type: guideline
+      method: reference
+      principles:
+        - 证据形式包括书证、物证、视听资料、电子数据、证人证言等
+        - 证据应当提供原件或原物
+        - 外文证据应当附中文译文
+
+  - ruleId: EVI-071
+    name: 审查指南证据认定规则参照
+    description: 参照专利审查指南关于证据效力的认定标准和证明力的判断规则
+    legalBasis: 专利审查指南第二部分第三章第3.2节
+    domain: patent
+    severity: minor
+    action: reference
+    evidenceType: procedural
+    check:
+      type: guideline_evidence_weight
+      method: reference
+      principles:
+        - 证据效力取决于真实性、关联性和合法性
+        - 证明力判断需综合考量证据来源、内容和形式
+        - 多个证据相互印证的可信度更高

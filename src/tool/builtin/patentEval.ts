@@ -1,5 +1,5 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
-import { ABSOLUTE_PHRASES } from "../../patent/index.js";
+import { ABSOLUTE_PHRASES, analyzeSlop } from "../../patent/index.js";
 
 /**
  * patent_eval — 专利产出质量评估（移植自 Mady tools/patent_eval.go）。
@@ -46,21 +46,6 @@ const REPORT_SECTIONS: Array<{ name: string; pattern: RegExp }> = [
   { name: "法律依据", pattern: /^#{1,3}\s*法律依据/m },
   { name: "分析结论", pattern: /^#{1,3}\s*(分析结论|结论)/m },
   { name: "权利要求", pattern: /^#{1,3}\s*权利要求/m },
-];
-
-/** AI 套话检测词表（Mady slop 引擎的轻量替代）；绝对化部分复用 quality-gate 的 ABSOLUTE_PHRASES（单一事实源，勿再复制）。 */
-const SLOP_PHRASES = [
-  ...ABSOLUTE_PHRASES,
-  "综上所述",
-  "值得注意的是",
-  "不难发现",
-  "总而言之",
-  "众所周知",
-  "众所周知的是",
-  "我们相信",
-  "我们认为",
-  "显著提高",
-  "极大改善",
 ];
 
 const PASS_LINE = 0.7;
@@ -153,12 +138,12 @@ function evaluateReport(text: string): Record<string, PatentEvalDimension> {
     details: sectionCoverageDetail(text),
   };
 
-  const slopScore = scoreSlop(text);
+  const slopAnalysis = analyzeSlop(text);
+  const slopScore = scoreFromSlopAnalysis(slopAnalysis, text);
   dims["表达质量"] = {
     score: round2(slopScore),
     passed: slopScore >= 0.6,
-    // score = max(0, 1 - hits/5)，故 hits = round((1-score)*5)，避免放大 20 倍
-    details: `${Math.round((1 - slopScore) * 5)} 处 AI 套话/绝对化表述`,
+    details: `${slopAnalysis.changes.length} 处短语套话、${slopAnalysis.issues.length} 处结构缺陷、${countAbsolutePhrases(text)} 处绝对化表述（50 分制 ${slopAnalysis.score.total}/50）`,
   };
 
   const sufficient = scoreContentSufficiency(text);
@@ -192,14 +177,23 @@ function sectionCoverageDetail(text: string): string {
   return parts.join("");
 }
 
-function scoreSlop(text: string): number {
-  let hits = 0;
-  for (const phrase of SLOP_PHRASES) {
-    if (text.includes(phrase)) hits += 1;
-  }
-  // 命中 5 处及以上计 0 分，线性衰减到 1.0
-  const score = Math.max(0, 1 - hits / 5);
-  return score;
+/**
+ * 表达质量评分（反套话引擎，移植自 Mady slop_engine）。
+ * 基于 50 分五维评分（total/50）+ 结构缺陷惩罚（每处 -0.05，上限 -0.25）：
+ * 结构缺陷（假三步法/假对比表等）比短语套话更严重，单独计罚。
+ * 绝对化表述（P-A07 条款：绝对/一定/百分百/毫无疑问/必然，单一事实源
+ * quality-gate 的 ABSOLUTE_PHRASES）按每处 -0.05 追加惩罚——slop 引擎的
+ * 短语规则不含这些词，恢复旧 SLOP_PHRASES 的评分行为。
+ */
+function scoreFromSlopAnalysis(analysis: ReturnType<typeof analyzeSlop>, text: string): number {
+  const base = analysis.score.total / 50;
+  const penalty = Math.min(0.25, analysis.issues.length * 0.05) + Math.min(0.25, countAbsolutePhrases(text) * 0.05);
+  return Math.max(0, Math.min(1, base - penalty));
+}
+
+/** 绝对化表述命中数（ABSOLUTE_PHRASES 来自 quality-gate，单一事实源）。 */
+function countAbsolutePhrases(text: string): number {
+  return ABSOLUTE_PHRASES.filter(p => text.includes(p)).length;
 }
 
 function scoreContentSufficiency(text: string): number {
