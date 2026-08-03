@@ -157,7 +157,13 @@ let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
 const sessionWatchRegistry = createSessionWatchRegistry();
-registerAlwaysOnNotificationForwarding(connectedClients);
+registerAlwaysOnNotificationForwarding(connectedClients, (sessionId, frame) => {
+  // Always-On gateway notifications do not carry the originating UI socket.
+  // Delivering them to every tab caused unrelated sessions' live status
+  // (notably compaction progress) to race in the frontend. A tab explicitly
+  // watches its displayed session, so that registry is the routing authority.
+  broadcastToSessionWatchers(sessionId, frame, undefined);
+});
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
 
 function normalizeSessionId(value) {
@@ -205,7 +211,9 @@ function broadcastToSessionWatchers(sessionId, frame, userId, excludeWs = null) 
   watchers.forEach(client => {
     if (client === excludeWs) return;
     if (client.readyState !== WebSocket.OPEN) return;
-    if ((client.__satiUserId ?? null) !== userId) return;
+    // `undefined` denotes a gateway-originated event with no submitting
+    // user. Its recipient set is already constrained by the session watch.
+    if (userId !== undefined && (client.__satiUserId ?? null) !== userId) return;
     client.send(payload);
   });
 }

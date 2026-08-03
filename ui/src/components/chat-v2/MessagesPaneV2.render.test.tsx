@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatRunMode } from "../chat/types/types";
 import MessagesPaneV2 from "./MessagesPaneV2";
+import { getContextStatus } from "./ComposerV2";
 
 beforeAll(() => {
   class ResizeObserverMock {
@@ -85,6 +86,24 @@ function renderPane(options: {
 }) {
   return render(createPaneElement(options));
 }
+
+describe("getContextStatus", () => {
+  it("keeps the visible count and percentage on the same display-token basis", () => {
+    const status = getContextStatus({
+      displayUsed: 11_928,
+      budgetUsed: 12_080,
+      total: 12_000,
+      effectiveTotal: 12_000,
+      state: "blocking",
+    });
+
+    expect(status.used).toBe(11_928);
+    expect(status.percentLabel).toBe("99%");
+    // The padded request budget still controls the policy severity.
+    expect(status.state).toBe("blocking");
+    expect(status.tone).toBe("red");
+  });
+});
 
 describe("MessagesPaneV2 render behavior", () => {
   it("renders only the viewport window for large conversations", () => {

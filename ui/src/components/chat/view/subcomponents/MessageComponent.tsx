@@ -341,7 +341,12 @@ const MessageComponent = memo(
             </span>
             {typeof message.preTokens === "number" && (
               <span className="text-[11px] tabular-nums text-muted-foreground">
-                {t("compact.tokens", { tokens: message.preTokens.toLocaleString() })}
+                {typeof message.postTokens === "number"
+                  ? t("compact.tokensAfter", {
+                      before: message.preTokens.toLocaleString(),
+                      after: message.postTokens.toLocaleString(),
+                    })
+                  : t("compact.tokens", { tokens: message.preTokens.toLocaleString() })}
               </span>
             )}
             <span className="text-[11px] tabular-nums text-muted-foreground">{formattedTime}</span>

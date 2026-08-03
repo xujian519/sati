@@ -107,6 +107,7 @@ export interface NormalizedMessage {
   errorCode?: string;
   resultPath?: string;
   text?: string;
+  reasoningContent?: string;
   tokens?: number;
   canInterrupt?: boolean;
   compactProgress?: CompactProgress;
@@ -128,6 +129,8 @@ export interface NormalizedMessage {
   taskResult?: string;
   trigger?: string;
   preTokens?: number;
+  postTokens?: number;
+  messagesSummarized?: number;
   compactLevel?: number;
   compactStage?: string;
   compactStageLabel?: string;

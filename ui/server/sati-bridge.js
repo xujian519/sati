@@ -308,6 +308,48 @@ export function getSessionTokenBudget(sessionKey) {
   );
 }
 
+function finitePositiveNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function contextBudgetState(ratio) {
+  if (!Number.isFinite(ratio)) return "unknown";
+  if (ratio >= 0.95) return "blocking";
+  if (ratio >= 0.8) return "warning";
+  return "ok";
+}
+
+function tokenBudgetFromCompact(previousBudget, detail) {
+  const postTokens = finitePositiveNumber(detail?.postTokens);
+  if (!postTokens) return null;
+  const used = Math.ceil(postTokens);
+  const total = finitePositiveNumber(previousBudget?.total) ?? finitePositiveNumber(detail?.total);
+  const effectiveTotal =
+    finitePositiveNumber(previousBudget?.effectiveTotal) ?? finitePositiveNumber(detail?.effectiveTotal) ?? total;
+  if (!total || !effectiveTotal) return null;
+  const reservedOutputTokens =
+    finitePositiveNumber(previousBudget?.reservedOutputTokens) ??
+    finitePositiveNumber(detail?.reservedOutputTokens) ??
+    0;
+  const ratio = used / effectiveTotal;
+  return {
+    used,
+    displayUsed: used,
+    budgetUsed: used,
+    total,
+    effectiveTotal,
+    reservedOutputTokens,
+    ratio,
+    state: contextBudgetState(ratio),
+    source: "compact",
+    compacted: true,
+    ...(finitePositiveNumber(detail?.preTokens) ? { preCompactUsed: finitePositiveNumber(detail.preTokens) } : {}),
+    ...(finitePositiveNumber(detail?.messagesSummarized)
+      ? { messagesSummarized: finitePositiveNumber(detail.messagesSummarized) }
+      : {}),
+  };
+}
+
 /**
  * Convert UI-shape image attachments into Gateway-shape ChannelAttachment[].
  *
@@ -674,10 +716,13 @@ export function gatewayEventToFrames(event, sessionId, provider) {
             kind: "compact_boundary",
             trigger: detail.trigger || "auto",
             preTokens: detail.preTokens,
+            postTokens: detail.postTokens,
+            messagesSummarized: detail.messagesSummarized,
             compactLevel: detail.level,
             compactStage: detail.stage,
             compactStageLabel: detail.stageLabel || detail.stage,
             compactMetadata: detail,
+            ...(detail.tokenBudget ? { tokenBudget: detail.tokenBudget } : {}),
           }),
         ];
       }
@@ -1154,9 +1199,25 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
         sawTurnCompleted = true;
         clearActiveRunIfCurrent(state, runId);
       }
-      const suppressDuplicateError = event?.type === "error" && state.hasVisibleFailureStatus;
+      const compactTokenBudget =
+        event && event.type === "agent_status" && event.event === "compact_completed"
+          ? tokenBudgetFromCompact(state.tokenBudget, event.detail)
+          : null;
+      const eventForFrames = compactTokenBudget
+        ? {
+            ...event,
+            detail: {
+              ...(event.detail || {}),
+              tokenBudget: compactTokenBudget,
+            },
+          }
+        : event;
+      if (compactTokenBudget) {
+        state.tokenBudget = compactTokenBudget;
+      }
+      const suppressDuplicateError = eventForFrames?.type === "error" && state.hasVisibleFailureStatus;
       if (!suppressDuplicateError) {
-        for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
+        for (const frame of gatewayEventToFrames(eventForFrames, sessionKey, provider)) {
           writer.send(frame);
         }
       }
@@ -2214,8 +2275,22 @@ export function getRouterStatsSummary() {
  *
  * @param {Set<import('ws').WebSocket>} clients
  */
-export function registerAlwaysOnNotificationForwarding(clients) {
+export function registerAlwaysOnNotificationForwarding(clients, forwardToSessionWatchers) {
   const knownSessions = new Set();
+
+  const forwardFrame = (sessionId, frame) => {
+    if (typeof forwardToSessionWatchers === "function") {
+      forwardToSessionWatchers(sessionId, frame);
+      return;
+    }
+
+    // Compatibility fallback for embedders that have not supplied a
+    // watcher registry yet. The main UI server always uses the scoped path.
+    const msg = JSON.stringify(frame);
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(msg);
+    }
+  };
 
   ensureGateway()
     .then(gw => {
@@ -2236,10 +2311,7 @@ export function registerAlwaysOnNotificationForwarding(clients) {
             sessionKey,
             channelKey,
           });
-          const createdMsg = JSON.stringify(createdFrame);
-          for (const client of clients) {
-            if (client.readyState === 1) client.send(createdMsg);
-          }
+          forwardFrame(sessionKey, createdFrame);
         }
 
         if (event.type === "context_budget") {
@@ -2255,11 +2327,25 @@ export function registerAlwaysOnNotificationForwarding(clients) {
             state: event.state,
           };
         }
-        for (const frame of gatewayEventToFrames(event, sessionKey, provider)) {
-          const msg = JSON.stringify(frame);
-          for (const client of clients) {
-            if (client.readyState === 1) client.send(msg);
-          }
+        const aoState = ensureSessionState(sessionKey, "", channelKey || "web");
+        const compactTokenBudget =
+          event.type === "agent_status" && event.event === "compact_completed"
+            ? tokenBudgetFromCompact(aoState.tokenBudget, event.detail)
+            : null;
+        const eventForFrames = compactTokenBudget
+          ? {
+              ...event,
+              detail: {
+                ...(event.detail || {}),
+                tokenBudget: compactTokenBudget,
+              },
+            }
+          : event;
+        if (compactTokenBudget) {
+          aoState.tokenBudget = compactTokenBudget;
+        }
+        for (const frame of gatewayEventToFrames(eventForFrames, sessionKey, provider)) {
+          forwardFrame(sessionKey, frame);
         }
 
         if (event.type === "turn_completed") {
