@@ -417,7 +417,14 @@ export default function ComposerV2({
   }) as string;
 
   return (
-    <div className={cn("min-w-0 shrink-0", chromeless ? "" : "bg-white px-6 pb-6 pt-3 dark:bg-neutral-950")}>
+    <div
+      className={cn(
+        "min-w-0 shrink-0",
+        chromeless
+          ? ""
+          : "bg-gradient-to-t from-white via-white/95 to-white/0 px-6 pb-6 pt-3 dark:from-neutral-950 dark:via-neutral-950/95 dark:to-transparent",
+      )}
+    >
       <div className={cn("min-w-0", chromeless ? "" : "mx-auto max-w-[720px]")}>
         {pendingPermissionRequests.length > 0 ? (
           <div className="mb-3">
@@ -436,7 +443,7 @@ export default function ComposerV2({
             className="pd-composer-container relative"
           >
             {attachedImages.length > 0 || documentReferences.length > 0 ? (
-              <div className="pd-composer-attachment-panel mb-2 overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="pd-composer-attachment-panel mb-2 overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-50/70 p-2 dark:border-neutral-700/60 dark:bg-neutral-800/40">
                 <div className="flex flex-wrap gap-2">
                   {documentReferences.map(reference => (
                     <DocumentReferenceChip
@@ -504,10 +511,11 @@ export default function ComposerV2({
             <div
               {...getRootProps()}
               className={cn(
-                "group rounded-xl border bg-white p-2 shadow-sm transition-colors",
-                "border-neutral-200 focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-500/20",
-                "dark:border-neutral-800 dark:bg-neutral-900 dark:focus-within:border-brand-500",
-                isDragActive && "border-dashed border-neutral-400 dark:border-neutral-500",
+                "group rounded-2xl border bg-white p-2 transition-all duration-200",
+                "border-neutral-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_4px_16px_-4px_rgba(15,23,42,0.08)]",
+                "dark:border-neutral-700/60 dark:bg-neutral-900 dark:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_8px_24px_-4px_rgba(0,0,0,0.4)]",
+                isDragActive &&
+                  "border-dashed border-brand-400 bg-brand-50/30 dark:border-brand-500 dark:bg-brand-900/10",
               )}
             >
               <input {...getInputProps()} />
@@ -550,11 +558,11 @@ export default function ComposerV2({
                   onInput={onTextareaInput}
                   placeholder={placeholder}
                   rows={2}
-                  className="relative z-10 block max-h-[40vh] min-h-[48px] w-full resize-none bg-transparent px-2 pt-1.5 text-[14px] leading-6 text-neutral-900 placeholder-neutral-400 outline-none dark:text-neutral-100 dark:placeholder-neutral-500"
+                  className="relative z-10 block max-h-[40vh] min-h-[52px] w-full resize-none bg-transparent px-3 pt-2 text-[14.5px] leading-[22px] text-neutral-900 placeholder-neutral-400 outline-none dark:text-neutral-100 dark:placeholder-neutral-500"
                 />
               </div>
 
-              <div className="pd-composer-control-row flex flex-wrap items-center gap-x-2 gap-y-1 px-1 pt-1">
+              <div className="pd-composer-control-row flex flex-wrap items-center gap-x-1 gap-y-1 px-1 pb-0.5 pt-1.5">
                 <div className="pd-composer-toolbar-left flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
                   <div
                     className="relative mr-1"
@@ -981,8 +989,11 @@ export default function ComposerV2({
                       onClick={onAbortSession}
                       disabled={isAbortPending}
                       className={cn(
-                        "inline-flex h-8 w-8 items-center justify-center rounded-lg bg-red-500 text-white transition hover:bg-red-600",
-                        isAbortPending && "cursor-wait opacity-70 hover:bg-red-500",
+                        "inline-flex h-8 w-8 items-center justify-center rounded-lg text-white transition-all duration-200",
+                        "bg-gradient-to-b from-red-500 to-red-600",
+                        "shadow-[0_2px_8px_-2px_rgba(239,68,68,0.4),inset_0_1px_0_rgba(255,255,255,0.15)]",
+                        "hover:from-red-600 hover:to-red-700",
+                        isAbortPending && "cursor-wait opacity-70 hover:from-red-500 hover:to-red-600",
                       )}
                       title={
                         isAbortPending
@@ -1002,9 +1013,14 @@ export default function ComposerV2({
                     disabled={disabled}
                     aria-busy={isSubmitPending || hasUploadingImages || isBusySendConfirmed}
                     className={cn(
-                      "inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white transition hover:bg-brand-600 disabled:opacity-40 dark:bg-brand-500 dark:hover:bg-brand-600",
+                      "inline-flex h-8 w-8 items-center justify-center rounded-lg text-white transition-all duration-200",
+                      "bg-gradient-to-b from-brand-500 to-brand-600",
+                      "shadow-[0_2px_8px_-2px_rgba(79,156,255,0.4),inset_0_1px_0_rgba(255,255,255,0.15)]",
+                      "hover:from-brand-600 hover:to-brand-700 hover:shadow-[0_4px_12px_-2px_rgba(79,156,255,0.5),inset_0_1px_0_rgba(255,255,255,0.15)]",
+                      "disabled:opacity-40 disabled:shadow-none",
+                      "dark:from-brand-500 dark:to-brand-600",
                       isBusySendQueued &&
-                        "bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-400 dark:text-neutral-950 dark:hover:bg-amber-300",
+                        "from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 shadow-[0_2px_8px_-2px_rgba(245,158,11,0.4)] dark:from-amber-400 dark:to-amber-500 dark:text-neutral-950 dark:hover:from-amber-300 dark:hover:to-amber-400",
                       isBusySendConfirmed && "cursor-wait",
                       (isSubmitPending || hasUploadingImages) && "cursor-wait",
                     )}

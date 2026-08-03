@@ -301,7 +301,7 @@ function MessageRowV2({
             t={t}
           />
         ) : null}
-        <div className="min-w-0 max-w-[78%] overflow-hidden rounded-[22px] bg-neutral-100 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100">
+        <div className="min-w-0 max-w-[78%] overflow-hidden rounded-[20px] bg-gradient-to-br from-neutral-100 to-neutral-100/70 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:from-neutral-800 dark:to-neutral-800/70 dark:text-neutral-100 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
           {message.isStreaming && !formattedContent ? (
             <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
           ) : (

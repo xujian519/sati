@@ -124,8 +124,8 @@ function TimelineGroupRow({ group, defaultExpanded }: { group: TimelineGroup; de
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className={`group inline-flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-relaxed transition hover:bg-neutral-100 dark:hover:bg-neutral-800/60 ${
-          group.isRunning ? "text-neutral-600 dark:text-neutral-300" : "text-neutral-400 dark:text-neutral-500"
+        className={`group inline-flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] leading-relaxed transition-all hover:bg-neutral-100/80 dark:hover:bg-neutral-800/60 ${
+          group.isRunning ? "text-neutral-700 dark:text-neutral-200" : "text-neutral-400 dark:text-neutral-500"
         }`}
       >
         <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
@@ -139,11 +139,11 @@ function TimelineGroupRow({ group, defaultExpanded }: { group: TimelineGroup; de
         </span>
         <span className="min-w-0 truncate font-medium">{label}</span>
         {count > 1 && (
-          <span className="shrink-0 rounded bg-neutral-200/70 px-1.5 text-[11px] font-medium tabular-nums text-neutral-500 dark:bg-neutral-700/50 dark:text-neutral-400">
+          <span className="shrink-0 rounded-md bg-neutral-200/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-neutral-500 dark:bg-neutral-700/50 dark:text-neutral-400">
             {count}
           </span>
         )}
-        <span className="ml-auto shrink-0">
+        <span className="ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
           {expanded ? (
             <ChevronDown className="h-3.5 w-3.5 text-neutral-400" strokeWidth={1.8} />
           ) : (

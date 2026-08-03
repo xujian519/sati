@@ -16,7 +16,6 @@ import {
   ChevronsUpDown,
   Folder,
   MessageSquarePlus,
-  PanelLeftClose,
   Pencil,
   Plus,
   GitBranch,
@@ -213,8 +212,10 @@ function SessionStatusIndicator({ status, label }: { status: SessionIndicatorSta
       aria-label={label}
       title={label}
       className={cn(
-        "block h-1.5 w-1.5 rounded-full",
-        status === "unread" ? "bg-brand-500 dark:bg-brand-400" : "bg-neutral-300 dark:bg-neutral-600",
+        "block h-1.5 w-1.5 rounded-full transition-colors",
+        status === "unread"
+          ? "bg-brand-500 shadow-[0_0_6px_rgba(79,156,255,0.5)] dark:bg-brand-400 dark:shadow-[0_0_6px_rgba(96,165,250,0.6)]"
+          : "bg-neutral-300 dark:bg-neutral-600",
       )}
     />
   );
@@ -723,7 +724,9 @@ export default function SidebarV2({
             onContextMenu={event => (isOptimisticRow ? undefined : openSessionContextMenu(event, project, session))}
             className={cn(
               "group/session relative w-full rounded-md transition-colors",
-              isSessionActive ? "bg-brand-50 dark:bg-brand-900/20" : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+              isSessionActive
+                ? "bg-gradient-to-r from-brand-50 to-brand-50/60 ring-1 ring-brand-200/60 shadow-sm dark:from-brand-900/30 dark:to-brand-900/10 dark:ring-brand-700/30"
+                : "hover:bg-neutral-100/80 dark:hover:bg-neutral-800/70",
             )}
           >
             {isSessionRenaming ? (
@@ -879,10 +882,10 @@ export default function SidebarV2({
         <div
           onContextMenu={event => openProjectContextMenu(event, project, isGeneral)}
           className={cn(
-            "group/project flex h-8 w-full items-center rounded-lg border-l-2 pr-1 text-[13px] transition-colors",
+            "group/project relative flex h-9 w-full items-center rounded-lg border-l-[3px] pr-1.5 text-[13px] transition-all duration-200",
             isSelected
-              ? "border-brand-500 bg-brand-50 text-neutral-900 dark:bg-brand-900/20 dark:text-neutral-100"
-              : "border-transparent text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
+              ? "border-brand-500 bg-gradient-to-r from-brand-50 to-brand-50/30 font-medium text-neutral-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:from-brand-900/30 dark:to-brand-900/5 dark:text-neutral-100"
+              : "border-transparent text-neutral-700 hover:bg-neutral-100/80 hover:border-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-800/60 dark:hover:border-neutral-700",
           )}
         >
           {isRenaming && !isGeneral ? (
@@ -903,19 +906,20 @@ export default function SidebarV2({
             <button
               type="button"
               onClick={() => handleProjectClick(project)}
-              className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-l-lg pl-1.5 pr-1 text-left"
+              className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-l-lg pl-2 pr-1 text-left"
             >
               <ChevronRight
                 className={cn(
-                  "h-3.5 w-3.5 shrink-0 text-neutral-500 transition-transform dark:text-neutral-400",
+                  "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                  isSelected ? "text-brand-600 dark:text-brand-300" : "text-neutral-500 dark:text-neutral-400",
                   isExpanded && "rotate-90",
                 )}
                 strokeWidth={1.75}
               />
               <Folder
                 className={cn(
-                  "h-3.5 w-3.5 shrink-0",
-                  isSelected ? "text-neutral-900 dark:text-neutral-100" : "text-neutral-500 dark:text-neutral-400",
+                  "h-3.5 w-3.5 shrink-0 transition-colors",
+                  isSelected ? "text-brand-600 dark:text-brand-300" : "text-neutral-500 dark:text-neutral-400",
                 )}
                 strokeWidth={1.75}
               />
@@ -926,7 +930,7 @@ export default function SidebarV2({
           {!isRenaming ? (
             <div
               className={cn(
-                "ml-1 flex shrink-0 items-center gap-0.5 transition-opacity",
+                "ml-1 flex shrink-0 items-center gap-0.5 transition-opacity duration-150",
                 "[@media(hover:none)]:opacity-100",
                 isSelected ? "opacity-100" : "opacity-0 group-hover/project:opacity-100 focus-within:opacity-100",
               )}
@@ -938,7 +942,7 @@ export default function SidebarV2({
                 title={t("sidebar:tooltips.newChat", { defaultValue: "New Chat" }) as string}
                 className={cn(
                   "inline-flex h-6 w-6 items-center justify-center rounded-md",
-                  "text-neutral-500 hover:bg-neutral-200/70 hover:text-neutral-900",
+                  "text-neutral-500 transition-colors hover:bg-neutral-200/70 hover:text-neutral-900",
                   "dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100",
                 )}
               >
@@ -961,9 +965,10 @@ export default function SidebarV2({
         // On mobile the parent wraps this aside in an overlay constrained
         // to 85vw, so force the inline width style off with !w-full there.
         "relative flex h-full shrink-0 flex-col max-md:!w-full",
-        "bg-neutral-50 text-neutral-900",
-        "dark:bg-neutral-900 dark:text-neutral-100",
-        "border-r border-neutral-200 dark:border-neutral-800",
+        "bg-gradient-to-b from-neutral-50 via-neutral-50 to-neutral-100/60 text-neutral-900",
+        "dark:from-neutral-900 dark:via-neutral-900 dark:to-neutral-950",
+        "border-r border-neutral-200/80 dark:border-neutral-800/80",
+        "shadow-[inset_-1px_0_0_rgba(255,255,255,0.4)] dark:shadow-[inset_-1px_0_0_rgba(255,255,255,0.04)]",
       )}
     >
       <div className="flex h-16 items-center justify-between pl-2 pr-4">
@@ -979,36 +984,27 @@ export default function SidebarV2({
             }}
             aria-label="正念智能体"
             title="正念智能体"
-            className="flex min-w-0 shrink items-center gap-2 rounded-md p-1 transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-700"
+            className="group flex min-w-0 shrink items-center gap-2.5 rounded-lg p-1 transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
           >
-            <img
-              src={satiLogoLight}
-              alt="正念智能体"
-              className="h-7 w-7 shrink-0 select-none object-contain dark:hidden"
-              draggable={false}
-            />
-            <img
-              src={satiLogoDark}
-              alt="正念智能体"
-              className="hidden h-7 w-7 shrink-0 select-none object-contain dark:block"
-              draggable={false}
-            />
-            <span className="truncate text-[15px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 ring-1 ring-brand-300/40 shadow-sm transition group-hover:shadow-md dark:from-brand-500/20 dark:to-brand-700/30 dark:ring-brand-500/30">
+              <img
+                src={satiLogoLight}
+                alt="正念智能体"
+                className="h-7 w-7 shrink-0 select-none object-contain dark:hidden"
+                draggable={false}
+              />
+              <img
+                src={satiLogoDark}
+                alt="正念智能体"
+                className="hidden h-7 w-7 shrink-0 select-none object-contain dark:block"
+                draggable={false}
+              />
+            </span>
+            <span className="truncate text-[15.5px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
               正念智能体
             </span>
           </button>
         </div>
-        {onCollapse ? (
-          <button
-            type="button"
-            onClick={onCollapse}
-            aria-label={t("sidebar:tooltips.hideSidebar", { defaultValue: "Hide sidebar" }) as string}
-            title={t("sidebar:tooltips.hideSidebar", { defaultValue: "Hide sidebar" }) as string}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-          >
-            <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
-          </button>
-        ) : null}
       </div>
 
       {/* Brand divider — subtle gradient line under the logo area */}
@@ -1021,18 +1017,25 @@ export default function SidebarV2({
         <div
           role="tablist"
           aria-label={t("sidebar:sectionToggle.label", { defaultValue: "Sidebar section" }) as string}
-          className="flex w-full rounded-md bg-neutral-100 p-0.5 dark:bg-neutral-900"
+          className="relative flex w-full rounded-lg bg-neutral-200/60 p-0.5 ring-1 ring-neutral-200/80 dark:bg-neutral-800/60 dark:ring-neutral-800/80"
         >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-white shadow-sm ring-1 ring-neutral-200/80 transition-transform duration-300 ease-out dark:bg-neutral-700 dark:ring-neutral-600/80",
+              activeSection === "general" && "translate-x-full",
+            )}
+          />
           <button
             type="button"
             role="tab"
             aria-selected={activeSection === "projects"}
             onClick={handleProjectsSectionClick}
             className={cn(
-              "flex-1 rounded text-[12px] font-medium transition-colors",
+              "relative z-10 flex-1 rounded-md text-[12px] font-medium transition-colors duration-200",
               "h-7 leading-none",
               activeSection === "projects"
-                ? "bg-white text-brand-600 shadow-sm dark:bg-neutral-700 dark:text-brand-400"
+                ? "text-brand-600 dark:text-brand-300"
                 : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200",
             )}
           >
@@ -1044,10 +1047,10 @@ export default function SidebarV2({
             aria-selected={activeSection === "general"}
             onClick={handleGeneralSectionClick}
             className={cn(
-              "flex-1 rounded text-[12px] font-medium transition-colors",
+              "relative z-10 flex-1 rounded-md text-[12px] font-medium transition-colors duration-200",
               "h-7 leading-none",
               activeSection === "general"
-                ? "bg-white text-brand-600 shadow-sm dark:bg-neutral-700 dark:text-brand-400"
+                ? "text-brand-600 dark:text-brand-300"
                 : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200",
             )}
           >
@@ -1150,15 +1153,17 @@ export default function SidebarV2({
         )}
       </div>
 
-      <div className="border-t border-neutral-200 px-2 py-2 dark:border-neutral-800">
+      <div className="border-t border-neutral-200/80 bg-gradient-to-b from-transparent to-neutral-100/40 px-2 py-2.5 dark:border-neutral-800/80 dark:to-neutral-950/40">
         <button
           type="button"
           onClick={onShowSettings}
           aria-label={t("sidebar:actions.settings", { defaultValue: "Settings" }) as string}
           title={t("sidebar:actions.settings", { defaultValue: "Settings" }) as string}
-          className="flex h-9 w-full items-center justify-start gap-2 rounded-lg px-6 text-[13px] font-medium text-neutral-600 hover:bg-brand-50 hover:text-brand-600 dark:text-neutral-400 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
+          className="group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium text-neutral-600 transition-all duration-200 hover:bg-white hover:shadow-sm hover:text-brand-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
         >
-          <SettingsIcon className="h-4 w-4" strokeWidth={1.75} />
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-200/60 transition group-hover:bg-brand-50 group-hover:text-brand-600 dark:bg-neutral-800/60 dark:group-hover:bg-brand-900/30 dark:group-hover:text-brand-300">
+            <SettingsIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
+          </span>
           <span>{t("sidebar:actions.settings", { defaultValue: "Settings" })}</span>
         </button>
       </div>

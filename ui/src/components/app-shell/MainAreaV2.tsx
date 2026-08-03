@@ -235,7 +235,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
   return (
     <div className="flex h-full min-w-0 flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       {/* Header: session title left, tool switcher right. */}
-      <header className="relative z-[80] flex h-14 shrink-0 items-center overflow-visible border-b border-neutral-200/60 bg-white px-6 dark:border-neutral-800/60 dark:bg-neutral-950">
+      <header className="relative z-[80] flex h-14 shrink-0 items-center overflow-visible border-b border-neutral-200/60 bg-white/95 px-6 backdrop-blur dark:border-neutral-800/60 dark:bg-neutral-950/90">
         {isSidebarCollapsed ? (
           // Just the "expand sidebar" affordance — the Sati logo lives
           // in the sidebar header, so showing a duplicate badge here when
@@ -245,7 +245,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
             onClick={onOpenSidebar}
             aria-label={t("sidebar:tooltips.showSidebar", { defaultValue: "Show sidebar" }) as string}
             title={t("sidebar:tooltips.showSidebar", { defaultValue: "Show sidebar" }) as string}
-            className="mr-4 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+            className="mr-4 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
           >
             <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
           </button>
