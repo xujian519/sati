@@ -1,0 +1,546 @@
+/**
+ * src/patent/checker — 场景规则集（10 组，29 条）。
+ *
+ * 移植自 Mady domains/workflows/patent/rule_{novelty,inventiveness,disclosure,
+ * infringement,invalidation,reexamination,design,priority,public_access,
+ * subject_matter}.go（覆盖专利法 A2/A22.2/A22.3/A26.3/A33 及无效/复审/外观/优先权）。
+ * 推理模式规则见 reasoning-rules.ts。
+ */
+
+import type { CheckRule } from "./types.js";
+import { LevelMust, LevelQuality, LevelShould } from "./types.js";
+import {
+  TERM_CLOSEST_PRIOR_ART,
+  TERM_CLOSEST_PRIOR_ART_FULL,
+  TERM_COMBINATION_HINT,
+  TERM_COMBINATION_MOTIVATION,
+  TERM_DESIGN_PATENT,
+  TERM_DIFF_FEATURES,
+  TERM_DISTINGUISHING_FEATURES,
+  TERM_ENABLE,
+  TERM_FILING_DATE,
+  TERM_NOVELTY,
+  TERM_PRIORITY,
+  TERM_PRIORITY_DATE,
+  TERM_PRIOR_ART_DOC,
+  TERM_SCI_DISCOVERY,
+  TERM_SUFFICIENT_DISCLOSURE,
+  TERM_TECH_FEATURE,
+  TERM_TECH_HINT,
+  DOMAIN_AMENDMENT,
+  DOMAIN_CLAIMS,
+  DOMAIN_DESIGN,
+  DOMAIN_DISCLOSURE,
+  DOMAIN_EXAMINATION,
+  DOMAIN_INFRINGEMENT,
+  DOMAIN_INVALIDATION,
+  DOMAIN_INVENTIVENESS,
+  DOMAIN_NOVELTY,
+  DOMAIN_REEXAMINATION,
+  DIM_CONSISTENCY,
+  DIM_CLARITY,
+  DIM_ESSENTIAL,
+  DIM_SUPPORT,
+} from "./constants.js";
+
+/** 新颖性规则（专利法 A22.2）。 */
+export function noveltyRules(): CheckRule[] {
+  return [
+    {
+      id: "NOVELTY-SINGLE-COMPARISON",
+      name: "新颖性单独对比原则",
+      description: "新颖性分析必须采用单独对比原则，不得结合多份对比文件",
+      level: LevelMust,
+      severity: "critical",
+      message: "新颖性分析未遵循单独对比原则",
+      checkType: "patent_novelty",
+      requiredElements: [TERM_NOVELTY, TERM_PRIOR_ART_DOC],
+      singleComparison: true,
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "对每项权利要求与一份对比文件进行单独对比，明确相同或实质相同的技术方案",
+    },
+    {
+      id: "NOVELTY-FEATURE-COVERAGE",
+      name: "新颖性特征覆盖分析",
+      description: "新颖性分析应逐一比对权利要求的所有技术特征与对比文件",
+      level: LevelShould,
+      severity: "major",
+      message: "新颖性分析缺少技术特征的逐一比对",
+      checkType: "patent_novelty",
+      requiredElements: [TERM_TECH_FEATURE],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "列出权利要求的全部技术特征，逐一标注对比文件是否公开",
+    },
+  ];
+}
+
+/** 创造性规则（专利法 A22.3，三步法）。 */
+export function inventivenessRules(): CheckRule[] {
+  return [
+    {
+      id: "INVENTIVENESS-THREE-STEP",
+      name: "创造性三步法",
+      description: "创造性分析须包含三步法：最接近现有技术→区别技术特征→技术启示",
+      level: LevelMust,
+      severity: "critical",
+      message: "创造性分析缺少三步法",
+      checkType: "patent_inventiveness",
+      stepElements: [
+        [TERM_CLOSEST_PRIOR_ART_FULL, TERM_CLOSEST_PRIOR_ART],
+        [TERM_DISTINGUISHING_FEATURES, TERM_DIFF_FEATURES],
+        [TERM_TECH_HINT, "显而易见", "公知常识"],
+      ],
+      domain: DOMAIN_INVENTIVENESS,
+      fixSuggestion: "明确最接近现有技术，提炼区别技术特征，论证是否存在技术启示",
+    },
+    {
+      id: "INVENTIVENESS-TECHNICAL-PROBLEM",
+      name: "实际解决技术问题",
+      description: "创造性三步法第二步应明确发明实际解决的技术问题",
+      level: LevelShould,
+      severity: "major",
+      message: "创造性分析未明确实际解决的技术问题",
+      checkType: "patent_inventiveness",
+      requiredElements: [TERM_DISTINGUISHING_FEATURES],
+      domain: DOMAIN_INVENTIVENESS,
+      fixSuggestion: "基于区别技术特征，确定发明相对于最接近现有技术实际解决的技术问题",
+    },
+  ];
+}
+
+/** 充分公开 + 权利要求分析规则（专利法 A26.3）。 */
+export function disclosureRules(): CheckRule[] {
+  return [
+    {
+      id: "DISCLOSURE-SUFFICIENCY",
+      name: "充分公开审查",
+      description: "说明书应充分公开发明，使本领域技术人员能够实现",
+      level: LevelShould,
+      severity: "major",
+      message: "充分公开分析不完整",
+      checkType: "patent_disclosure",
+      requiredAspects: [TERM_SUFFICIENT_DISCLOSURE, TERM_ENABLE],
+      domain: DOMAIN_DISCLOSURE,
+      fixSuggestion: "确认说明书是否提供足够的技术细节使本领域技术人员能够实现该发明",
+    },
+    {
+      id: "CLAIM-CLARITY-SUPPORT",
+      name: "权利要求清楚性与支持",
+      description: "权利要求应当清楚、得到说明书支持",
+      level: LevelShould,
+      severity: "major",
+      message: "权利要求分析缺少必要维度",
+      checkType: "patent_claim_analysis",
+      dimensions: [DIM_CLARITY, DIM_SUPPORT],
+      domain: DOMAIN_CLAIMS,
+      fixSuggestion: "检查权利要求是否清楚简明、是否得到说明书支持",
+    },
+    {
+      id: "CLAIM-ESSENTIAL-FEATURES",
+      name: "必要技术特征完整性",
+      description: "独立权利要求应包含解决技术问题的必要技术特征",
+      level: LevelQuality,
+      severity: "minor",
+      message: "权利要求可能缺少必要技术特征",
+      checkType: "patent_claim_analysis",
+      dimensions: [DIM_ESSENTIAL, DIM_CONSISTENCY],
+      domain: DOMAIN_CLAIMS,
+      fixSuggestion: "核对独立权利要求是否包含全部必要技术特征",
+    },
+  ];
+}
+
+/** 侵权规则（全面覆盖/等同/禁止反悔/捐献）。 */
+export function infringementRules(): CheckRule[] {
+  return [
+    {
+      id: "INFRINGEMENT-FULL-COVERAGE",
+      name: "侵权全面覆盖原则",
+      description: "侵权分析应全面比对被控方案是否包含权利要求的全部技术特征",
+      level: LevelMust,
+      severity: "critical",
+      message: "侵权分析缺少全面覆盖分析",
+      checkType: "patent_infringement",
+      requiredElements: ["全面覆盖", TERM_TECH_FEATURE],
+      domain: DOMAIN_INFRINGEMENT,
+      fixSuggestion: "分解权利要求为技术特征A/B/C，逐一判断被控方案是否包含",
+    },
+    {
+      id: "INFRINGEMENT-EQUIVALENCE",
+      name: "等同侵权判定",
+      description: "侵权分析应评估区别特征是否构成等同替换（手段/功能/效果基本相同）",
+      level: LevelShould,
+      severity: "major",
+      message: "侵权分析缺少等同原则评估",
+      checkType: "patent_infringement",
+      requiredElements: ["等同"],
+      domain: DOMAIN_INFRINGEMENT,
+      fixSuggestion: "对不构成字面侵权的特征，检查是否满足等同三要素：手段/功能/效果基本相同+无需创造性劳动",
+    },
+    {
+      id: "INFRINGEMENT-ESTOPPEL",
+      name: "禁止反悔原则检查",
+      description: "侵权分析应考虑审查过程中的修改是否导致权利放弃（禁止反悔）",
+      level: LevelShould,
+      severity: "major",
+      message: "侵权分析未考虑禁止反悔原则的限制",
+      checkType: "patent_infringement",
+      requiredElements: ["禁止反悔"],
+      domain: DOMAIN_INFRINGEMENT,
+      fixSuggestion: "审查专利审查过程中的修改和陈述，确认是否对等同范围构成限制",
+    },
+    {
+      id: "INFRINGEMENT-DEDICATION",
+      name: "捐献规则检查",
+      description: "说明书中披露但权利要求未保护的技术方案视为捐献公众",
+      level: LevelQuality,
+      severity: "minor",
+      message: "侵权分析未检查捐献规则的适用性",
+      checkType: "patent_infringement",
+      requiredElements: ["捐献规则"],
+      domain: DOMAIN_INFRINGEMENT,
+      fixSuggestion: "确认被控方案对应的技术特征是否在说明书中披露但未写入权利要求",
+    },
+  ];
+}
+
+/** 无效宣告规则（单独对比/组合动机/公开日核实）。 */
+export function invalidationRules(): CheckRule[] {
+  return [
+    {
+      id: "INVALID-NOVELTY-SINGLE-COMPARISON",
+      name: "无效新颖性单独对比",
+      description: "无效宣告中的新颖性理由须采用单独对比原则",
+      level: LevelMust,
+      severity: "critical",
+      message: "无效宣告中新颖性论证未遵循单独对比原则",
+      checkType: "patent_novelty",
+      requiredElements: [TERM_NOVELTY, TERM_PRIOR_ART_DOC],
+      singleComparison: true,
+      domain: DOMAIN_INVALIDATION,
+      fixSuggestion: "对每项权利要求逐一与单份对比文件进行新颖性比对",
+    },
+    {
+      id: "INVALID-COMBINATION-MOTIVATION",
+      name: "无效组合动机论证",
+      description: "多篇对比文件组合攻击创造性时，须论证组合的技术启示/动机",
+      level: LevelMust,
+      severity: "critical",
+      message: "无效宣告中多篇组合缺乏组合动机论证",
+      checkType: "patent_inventiveness",
+      stepElements: [
+        [TERM_CLOSEST_PRIOR_ART_FULL, TERM_CLOSEST_PRIOR_ART],
+        [TERM_DISTINGUISHING_FEATURES, TERM_DIFF_FEATURES],
+        [TERM_COMBINATION_MOTIVATION, TERM_TECH_HINT, TERM_COMBINATION_HINT],
+      ],
+      domain: DOMAIN_INVALIDATION,
+      fixSuggestion: "论证本领域技术人员有动机将对比文件组合，说明组合的合理性",
+    },
+    {
+      id: "INVALID-PRIORITY-DATE-CHECK",
+      name: "对比文件公开日核实",
+      description: "无效宣告中引用的对比文件公开日须早于涉案专利的优先权日",
+      level: LevelShould,
+      severity: "major",
+      message: "未核实对比文件的公开日是否早于优先权日",
+      checkType: "patent_novelty",
+      requiredElements: [TERM_PRIORITY_DATE],
+      domain: DOMAIN_INVALIDATION,
+      fixSuggestion: "核实每份对比文件的公开日，标注是否早于涉案专利的优先权日/申请日",
+    },
+  ];
+}
+
+/** 复审请求规则（理由范围/新证据关联性）。 */
+export function reexaminationRules(): CheckRule[] {
+  return [
+    {
+      id: "REEXAM-GROUNDS-SCOPE",
+      name: "复审理由范围审查",
+      description: "复审理由应在驳回决定范围内，或提供新的证据/理由",
+      level: LevelShould,
+      severity: "major",
+      message: "复审理由分析不完整",
+      checkType: "patent_claim_analysis",
+      dimensions: [DIM_CLARITY, DIM_CONSISTENCY],
+      domain: DOMAIN_REEXAMINATION,
+      fixSuggestion: "逐条列出驳回理由，针对性回应或提交新证据克服",
+    },
+    {
+      id: "REEXAM-NEW-EVIDENCE",
+      name: "新证据关联性",
+      description: "复审中提交的新证据应与克服驳回理由直接相关",
+      level: LevelQuality,
+      severity: "minor",
+      message: "未说明新证据与驳回理由的关联性",
+      checkType: "patent_novelty",
+      requiredElements: ["新证据"],
+      domain: DOMAIN_REEXAMINATION,
+      fixSuggestion: "对于每份新证据，说明其如何克服驳回决定中指出的缺陷",
+    },
+  ];
+}
+
+/** 外观设计对比规则（整体视觉效果/产品种类/设计特征/直接模仿/多设计）。 */
+export function designRules(): CheckRule[] {
+  return [
+    {
+      id: "DESIGN-01",
+      name: "外观设计整体视觉效果对比",
+      description: "外观设计对比应以整体视觉效果为准，综合判断是否构成相同或近似",
+      level: LevelShould,
+      severity: "major",
+      message: "外观设计对比缺少整体视觉效果分析",
+      checkType: "patent_design_comparison",
+      requiredElements: [TERM_DESIGN_PATENT, "整体视觉效果"],
+      domain: DOMAIN_DESIGN,
+      fixSuggestion: "以整体视觉效果为准进行外观设计对比，判断是否构成相同或近似",
+    },
+    {
+      id: "DESIGN-02",
+      name: "外观设计产品种类认定",
+      description: "外观设计对比应在相同或相近种类的产品之间进行",
+      level: LevelShould,
+      severity: "major",
+      message: "未明确认定产品种类是否相同或相近",
+      checkType: "patent_design_comparison",
+      requiredElements: ["产品种类"],
+      domain: DOMAIN_DESIGN,
+      fixSuggestion: "根据产品用途、功能、销售渠道等因素认定产品种类是否相同或相近",
+    },
+    {
+      id: "DESIGN-03",
+      name: "外观设计设计特征识别",
+      description: "应识别外观设计的设计特征，区分创新设计部分与惯常设计",
+      level: LevelQuality,
+      severity: "minor",
+      message: "未充分识别外观设计的设计特征",
+      checkType: "patent_design_comparison",
+      requiredElements: ["设计特征"],
+      domain: DOMAIN_DESIGN,
+      fixSuggestion: "识别外观设计中区别于现有设计的创新设计特征",
+    },
+    {
+      id: "DESIGN-04",
+      name: "外观设计直接模仿判断",
+      description: "判断外观设计是否构成直接模仿或仅存在局部细微差异",
+      level: LevelQuality,
+      severity: "minor",
+      message: "未分析外观设计是否构成直接模仿",
+      checkType: "patent_design_comparison",
+      requiredElements: ["直接模仿", "局部差异"],
+      domain: DOMAIN_DESIGN,
+      fixSuggestion: "判断局部差异是否对整体视觉效果产生显著影响",
+    },
+    {
+      id: "DESIGN-05",
+      name: "外观设计多设计对比框架",
+      description: "涉及多项外观设计时，应逐项对比并明确各设计对象的对比结果",
+      level: LevelShould,
+      severity: "major",
+      message: "多设计对比未逐项分析",
+      checkType: "patent_design_comparison",
+      requiredElements: ["逐项对比", TERM_DESIGN_PATENT],
+      domain: DOMAIN_DESIGN,
+      fixSuggestion: "逐项对比每项外观设计与对比设计的整体视觉效果",
+    },
+  ];
+}
+
+/** 优先权规则（优先权日认定/转让/有效性/时间基准/部分优先权）。 */
+export function priorityRules(): CheckRule[] {
+  return [
+    {
+      id: "PRIORITY-01",
+      name: "优先权日认定",
+      description: "确认专利申请的优先权日及其法律效力",
+      level: LevelMust,
+      severity: "critical",
+      message: "未准确认定优先权日",
+      checkType: "patent_novelty",
+      requiredElements: [TERM_PRIORITY_DATE, TERM_PRIORITY],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "确认优先权主张的依据和优先权日的准确日期",
+    },
+    {
+      id: "PRIORITY-02",
+      name: "优先权转让审查",
+      description: "优先权人变更应在申请日前完成转让手续",
+      level: LevelShould,
+      severity: "major",
+      message: "未审查优先权转让的程序合规性",
+      checkType: "patent_amendment_scope",
+      requiredElements: [TERM_PRIORITY, "转让"],
+      domain: DOMAIN_AMENDMENT,
+      fixSuggestion: "确认优先权转让是否在申请日前完成，手续是否完整",
+    },
+    {
+      id: "PRIORITY-03",
+      name: "优先权主张有效性",
+      description: "优先权主张应符合形式条件和实质条件",
+      level: LevelShould,
+      severity: "major",
+      message: "未充分审查优先权主张的有效性",
+      checkType: "patent_novelty",
+      requiredElements: [TERM_PRIORITY, "有效性"],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "审查优先权主张是否符合形式条件和实质条件（在先申请是否相同主题）",
+    },
+    {
+      id: "PRIORITY-04",
+      name: "优先权日与申请日对比",
+      description: "以有效的优先权日作为现有技术判断的时间基准",
+      level: LevelMust,
+      severity: "critical",
+      message: "未以有效的优先权日作为现有技术判断的时间基准",
+      checkType: "patent_novelty",
+      requiredElements: [TERM_PRIORITY_DATE, TERM_FILING_DATE, "现有技术"],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "确认优先权有效后，以优先权日作为判断现有技术的时间基准",
+    },
+    {
+      id: "PRIORITY-05",
+      name: "部分优先权处理",
+      description: "同一申请中包含多项优先权时，应区分不同优先权对应的事项",
+      level: LevelQuality,
+      severity: "minor",
+      message: "未分析部分优先权的适用性",
+      checkType: "patent_novelty",
+      requiredElements: ["部分优先权", "多项优先权"],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "逐项确定各技术方案对应的优先权日，区分部分优先权和多项优先权",
+    },
+  ];
+}
+
+/** 公开方式认定规则（出版物/使用/互联网/公开日/保密义务）。 */
+export function publicAccessRules(): CheckRule[] {
+  return [
+    {
+      id: "PUBACC-01",
+      name: "出版物公开认定",
+      description: "判断现有技术是否通过出版物方式公开（论文/期刊/书籍）",
+      level: LevelShould,
+      severity: "major",
+      message: "未充分认定是否构成出版物公开",
+      checkType: "patent_public_access",
+      requiredElements: ["出版物公开"],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "确认出版物是否在申请日前出版发行，公众能否获知",
+    },
+    {
+      id: "PUBACC-02",
+      name: "使用公开认定",
+      description: "判断现有技术是否通过使用方式公开（销售/展出/公开实施）",
+      level: LevelShould,
+      severity: "major",
+      message: "未充分认定是否构成使用公开",
+      checkType: "patent_public_access",
+      requiredElements: ["使用公开"],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "确认使用行为是否在申请日前使技术内容为公众所知",
+    },
+    {
+      id: "PUBACC-03",
+      name: "互联网公开认定",
+      description: "判断现有技术是否通过互联网方式公开（网页/在线公开）",
+      level: LevelShould,
+      severity: "major",
+      message: "未充分认定是否构成互联网公开",
+      checkType: "patent_public_access",
+      requiredElements: ["互联网公开"],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "确认网页公开日的确定方式及公众能否通过互联网获知",
+    },
+    {
+      id: "PUBACC-04",
+      name: "公开日核实",
+      description: "核实现有技术的公开日是否早于申请日或优先权日",
+      level: LevelMust,
+      severity: "critical",
+      message: "未核实现有技术的公开日是否早于申请日",
+      checkType: "patent_public_access",
+      requiredElements: ["公开日", TERM_FILING_DATE],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "核实每份现有技术的公开日是否早于涉案专利的申请日或有效优先权日",
+    },
+    {
+      id: "PUBACC-05",
+      name: "保密义务分析",
+      description: "判断技术内容在公开日之前是否处于保密状态",
+      level: LevelQuality,
+      severity: "minor",
+      message: "未分析技术内容是否处于保密状态",
+      checkType: "patent_public_access",
+      requiredElements: ["保密", "保密义务"],
+      domain: DOMAIN_NOVELTY,
+      fixSuggestion: "确认技术内容在公开日之前是否存在明示或默示的保密义务",
+    },
+  ];
+}
+
+/** 保护客体规则（专利法 A2：技术方案/排除客体/技术效果）。 */
+export function subjectMatterRules(): CheckRule[] {
+  return [
+    {
+      id: "SUBJECT-01",
+      name: "技术方案构成审查",
+      description: "保护客体应是利用自然规律解决技术问题的技术方案",
+      level: LevelMust,
+      severity: "critical",
+      message: "未充分论证要求保护的主题是否构成技术方案",
+      checkType: "patent_subject_matter",
+      requiredElements: ["技术方案", "自然规律"],
+      domain: DOMAIN_EXAMINATION,
+      fixSuggestion: "论证该主题是否利用自然规律、解决技术问题、产生技术效果",
+    },
+    {
+      id: "SUBJECT-02",
+      name: "技术问题认定",
+      description: "技术方案应解决明确的技术问题",
+      level: LevelShould,
+      severity: "major",
+      message: "未明确技术方案解决的技术问题",
+      checkType: "patent_subject_matter",
+      requiredElements: ["技术问题"],
+      domain: DOMAIN_EXAMINATION,
+      fixSuggestion: "明确技术方案所要解决的技术问题",
+    },
+    {
+      id: "SUBJECT-03",
+      name: "技术手段审查",
+      description: "技术方案应采用技术手段实现技术问题的解决",
+      level: LevelShould,
+      severity: "major",
+      message: "未充分分析技术方案所采用的技术手段",
+      checkType: "patent_subject_matter",
+      requiredElements: ["技术手段"],
+      domain: DOMAIN_EXAMINATION,
+      fixSuggestion: "说明技术方案采用了哪些技术手段来解决技术问题",
+    },
+    {
+      id: "SUBJECT-04",
+      name: "非可专利客体排除",
+      description: "排除科学发现、智力活动规则、疾病诊断治疗方法、原子核变换方法",
+      level: LevelShould,
+      severity: "major",
+      message: "未逐一排除非可专利客体",
+      checkType: "patent_subject_matter",
+      requiredElements: [TERM_SCI_DISCOVERY, "智力活动规则"],
+      domain: DOMAIN_EXAMINATION,
+      fixSuggestion: "逐项排除科学发现、智力活动规则、疾病诊断治疗方法、原子核变换方法",
+    },
+    {
+      id: "SUBJECT-05",
+      name: "技术效果分析",
+      description: "技术方案应产生与解决的技术问题相对应的技术效果",
+      level: LevelQuality,
+      severity: "minor",
+      message: "未分析技术方案的技术效果",
+      checkType: "patent_subject_matter",
+      requiredElements: ["技术效果"],
+      domain: DOMAIN_EXAMINATION,
+      fixSuggestion: "说明技术方案所产生的技术效果与解决的技术问题之间的对应关系",
+    },
+  ];
+}

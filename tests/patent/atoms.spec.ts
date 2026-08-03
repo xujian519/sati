@@ -7,6 +7,7 @@ import {
   LookupStageHandler,
   StageHandlerRegistry,
   WorkflowError,
+  evidenceCoverage,
   isInterruptStageError,
   patentNoveltyManifest,
   registerBuiltinAtoms,
@@ -52,16 +53,27 @@ test("StageHandlerRegistry 注册/查询/同名覆盖", () => {
   assert.equal(reg.lookup("t"), h2);
 });
 
-test("registerBuiltinAtoms 注册 5 个内置原子与 handler", () => {
+test("registerBuiltinAtoms 注册 10 个内置原子与 handler", () => {
   registerBuiltinAtoms();
   const names = ListAtoms()
     .map(a => a.name)
     .sort();
-  assert.deepEqual(names, ["approval-gate", "compare", "extract", "reasoning", "search"]);
+  assert.deepEqual(names, [
+    "approval-gate",
+    "compare",
+    "draft-claims",
+    "extract",
+    "groundedness",
+    "keywords",
+    "merge",
+    "novelty",
+    "reasoning",
+    "search",
+  ]);
   for (const name of names) {
     assert.ok(LookupStageHandler(name), `handler ${name} 已注册`);
   }
-  assert.equal(globalAtomRegistry.list().length >= 5, true);
+  assert.equal(globalAtomRegistry.list().length >= 10, true);
 });
 
 // ---------------------------------------------------------------------------
@@ -145,6 +157,199 @@ test("ApprovalGateHandler：抛 InterruptStageError（不返回）", async () =>
       return true;
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// groundedness / keywords / novelty（disclosure 管线补全）
+// ---------------------------------------------------------------------------
+
+const groundednessProvider: StageProvider = {
+  callLLM: async prompt => {
+    if (prompt.includes("打分规则")) {
+      return JSON.stringify({
+        scores: [
+          { feature: "散热鳍片", score: 0.95, reason: "原文第3段明确记载" },
+          { feature: "AI 自适应", score: 0.3, reason: "原文未记载，仅推断" },
+        ],
+        feedback: "散热鳍片依据充分；AI 自适应需补充原文支持",
+      });
+    }
+    if (prompt.includes("检索关键词")) {
+      return JSON.stringify({ keywords: ["散热鳍片", "散热结构", "换热器"] });
+    }
+    if (prompt.includes("对比范围")) {
+      return JSON.stringify({
+        assessments: [
+          { feature: "散热鳍片", prior_art: "D1", disclosed: true, reasoning: "D1 公开相同结构" },
+          { feature: "AI 自适应", prior_art: "", disclosed: false, reasoning: "D1-D3 均未公开" },
+        ],
+        conclusion: "区别特征为 AI 自适应，具备新颖性（置信度 high）",
+      });
+    }
+    return "推理结论";
+  },
+};
+
+test("GroundednessHandler：批量打分并汇总低分特征", async () => {
+  const h = LookupStageHandler("groundedness")!;
+  const out = await h.execute({
+    state: { features: ["散热鳍片", "AI 自适应"], source_text: "本发明通过散热鳍片提升散热效率。" },
+    provider: groundednessProvider,
+  });
+  assert.deepEqual(out.low_confidence_features, ["AI 自适应"]);
+  assert.match(String(out.groundedness_feedback), /低依据特征 1 个/);
+  assert.match(String(out.groundedness_result), /0\.3/);
+});
+
+test("GroundednessHandler：无特征跳过；无 LLM 降级；LLM 失败 fail-open", async () => {
+  const h = LookupStageHandler("groundedness")!;
+  const empty = await h.execute({ state: { features: [], source_text: "x" }, provider: groundednessProvider });
+  assert.match(String(empty.groundedness_result), /skipped/);
+  const noLlm = await h.execute({ state: { features: ["F1"], source_text: "x" }, provider: {} });
+  assert.match(String(noLlm._error), /未配置 LLM/);
+  const failing: StageProvider = {
+    callLLM: async () => {
+      throw new Error("timeout");
+    },
+  };
+  const failOpen = await h.execute({ state: { features: ["F1"], source_text: "x" }, provider: failing });
+  assert.match(String(failOpen.groundedness_result), /skipped/);
+  assert.match(String(failOpen.groundedness_feedback), /LLM 调用失败/);
+});
+
+test("KeywordsHandler：生成检索关键词写入 keywords 键", async () => {
+  const h = LookupStageHandler("keywords")!;
+  const out = await h.execute({ state: { extraction_result: "散热鳍片结构" }, provider: groundednessProvider });
+  assert.deepEqual(out.keywords, ["散热鳍片", "散热结构", "换热器"]);
+});
+
+test("KeywordsHandler：无 LLM 或输入为空时降级", async () => {
+  const h = LookupStageHandler("keywords")!;
+  const noLlm = await h.execute({ state: { extraction_result: "x" }, provider: {} });
+  assert.match(String(noLlm._error), /未配置 LLM/);
+  const emptyInput = await h.execute({ state: {}, provider: groundednessProvider });
+  assert.match(String(emptyInput._error), /输入为空/);
+});
+
+test("NoveltyHandler：结合 prior_art 逐特征判定并标注证据覆盖", async () => {
+  const h = LookupStageHandler("novelty")!;
+  const out = await h.execute({
+    state: {
+      features: ["散热鳍片", "AI 自适应"],
+      prior_art: [
+        { title: "D1", snippet: "公开散热鳍片结构" },
+        { title: "D2", snippet: "公开换热器" },
+        { title: "D3", snippet: "公开散热材料" },
+      ],
+    },
+    provider: groundednessProvider,
+  });
+  assert.equal(out.evidence_coverage, "full");
+  assert.match(String(out.novelty_conclusion), /具备新颖性/);
+  assert.match(String(out.novelty_result), /AI 自适应/);
+});
+
+test("NoveltyHandler：无证据降级为 none；无 LLM 降级", async () => {
+  const h = LookupStageHandler("novelty")!;
+  const noEvidence = await h.execute({
+    state: { features: ["F1"], prior_art: [] },
+    provider: groundednessProvider,
+  });
+  assert.equal(noEvidence.evidence_coverage, "none");
+  const noLlm = await h.execute({ state: { features: ["F1"] }, provider: {} });
+  assert.match(String(noLlm._error), /未配置 LLM/);
+  const noFeatures = await h.execute({ state: { prior_art: [] }, provider: groundednessProvider });
+  assert.match(String(noFeatures._error), /无特征可评估/);
+});
+
+test("evidenceCoverage 分级：0→none / 1-2→partial / ≥3→full", () => {
+  assert.equal(evidenceCoverage(0), "none");
+  assert.equal(evidenceCoverage(1), "partial");
+  assert.equal(evidenceCoverage(2), "partial");
+  assert.equal(evidenceCoverage(3), "full");
+});
+
+// ---------------------------------------------------------------------------
+// extract 分键 / merge / draft-claims（① 修复三路覆盖 + ② 直出草稿）
+// ---------------------------------------------------------------------------
+
+test("ExtractHandler：output_key 分键——只写对应键，互不覆盖", async () => {
+  const h = LookupStageHandler("extract")!;
+  const problems = await h.execute({ state: { text: "x", output_key: "problems" }, provider });
+  assert.deepEqual(problems.problems, ["问题1"]);
+  assert.equal(problems.features, undefined, "problems 提取不应写 features");
+  const features = await h.execute({ state: { text: "x", output_key: "features" }, provider });
+  assert.deepEqual(features.features, ["特征A", "特征B"]);
+  assert.equal(features.problems, undefined, "features 提取不应写 problems");
+  const effects = await h.execute({ state: { text: "x", output_key: "effects" }, provider });
+  assert.deepEqual(effects.effects, []);
+  assert.equal(effects.features, undefined, "effects 提取不应写 features");
+});
+
+test("ExtractHandler：无 output_key 保持旧行为（全量写）", async () => {
+  const h = LookupStageHandler("extract")!;
+  const out = await h.execute({ state: { text: "x" }, provider });
+  assert.deepEqual(out.features, ["特征A", "特征B"]);
+  assert.deepEqual(out.problems, ["问题1"]);
+  assert.deepEqual(out.effects, []);
+});
+
+test("MergeHandler：PFE 按索引配对为三元组", async () => {
+  const h = LookupStageHandler("merge")!;
+  const out = await h.execute({
+    state: { problems: ["问题1", "问题2"], features: ["特征A", "特征B"], effects: ["效果1", "效果2"] },
+  });
+  const triples = out.pfe_triples as Array<{ id: string; problem: string; features: string[]; effects: string[] }>;
+  assert.equal(triples.length, 2);
+  assert.equal(triples[0]!.problem, "问题1");
+  assert.deepEqual(triples[0]!.features, ["特征A"]);
+  assert.deepEqual(triples[0]!.effects, ["效果1"]);
+  assert.equal(triples[1]!.id, "T2");
+  assert.match(String(out.merge_result), /2 个问题 \/ 2 个特征 \/ 2 个效果/);
+});
+
+test("MergeHandler：多余特征并入末组；无问题时构造单一三元组", async () => {
+  const h = LookupStageHandler("merge")!;
+  const extra = await h.execute({ state: { problems: ["P1"], features: ["F1", "F2"], effects: [] } });
+  const triples = extra.pfe_triples as Array<{ features: string[] }>;
+  assert.deepEqual(triples[0]!.features, ["F1", "F2"]);
+  const noProblem = await h.execute({ state: { problems: [], features: ["F1"], effects: ["E1"] } });
+  const single = noProblem.pfe_triples as Array<{ problem: string; features: string[] }>;
+  assert.equal(single.length, 1);
+  assert.equal(single[0]!.problem, "");
+  assert.deepEqual(single[0]!.features, ["F1"]);
+});
+
+test("MergeHandler：三路全空时降级（不抛错）", async () => {
+  const h = LookupStageHandler("merge")!;
+  const out = await h.execute({ state: {} });
+  assert.match(String(out._error), /三路提取结果均为空/);
+});
+
+const claimsProvider: StageProvider = {
+  callLLM: async () =>
+    JSON.stringify({
+      claims: ["1. 一种散热装置，包括散热鳍片…", "2. 根据权利要求1所述的散热装置，其特征是…"],
+      notes: "独立权利要求含必要技术特征",
+    }),
+};
+
+test("DraftClaimsHandler：产出权利要求草稿（逐条拼接）", async () => {
+  const h = LookupStageHandler("draft-claims")!;
+  const out = await h.execute({
+    state: { merge_result: "PFE 融合：1 个问题 / 1 个特征 / 1 个效果", novelty_conclusion: "具备新颖性" },
+    provider: claimsProvider,
+  });
+  assert.match(String(out.claims_draft), /^1\. 一种散热装置/);
+  assert.match(String(out.claims_draft), /\n\n2\. /);
+});
+
+test("DraftClaimsHandler：无 LLM 或输入为空时降级", async () => {
+  const h = LookupStageHandler("draft-claims")!;
+  const noLlm = await h.execute({ state: { merge_result: "x" }, provider: {} });
+  assert.match(String(noLlm._error), /未配置 LLM/);
+  const empty = await h.execute({ state: {}, provider: claimsProvider });
+  assert.match(String(empty._error), /输入为空/);
 });
 
 // ---------------------------------------------------------------------------

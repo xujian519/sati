@@ -249,13 +249,38 @@ test("validate：retry.rewindTo 指向后续阶段被拦截", () => {
 test("patentDisclosureManifest：结构与 retry 声明合法", () => {
   assert.doesNotThrow(() => validateWorkflowManifest(patentDisclosureManifest));
   assert.equal(patentDisclosureManifest.id, "patent_disclosure_v1");
-  assert.equal(patentDisclosureManifest.stages.length, 8);
+  assert.equal(patentDisclosureManifest.stages.length, 13);
   const consistency = patentDisclosureManifest.stages.find(s => s.id === "consistency")!;
   assert.equal(consistency.retry?.rewindTo, "extract_problem");
   assert.match(consistency.retry!.whenOutputMatches, /不一致|矛盾|缺少|孤立/);
-  // 原子声明：三路提取 + 审批门
+  // 原子声明：三路提取 + merge + groundedness + 检索关键词 + 检索 + 新颖性 + 复核门 + 草稿撰写
   const atoms = patentDisclosureManifest.stages.filter(s => s.atom !== undefined).map(s => s.atom);
-  assert.deepEqual([...new Set(atoms)].sort(), ["approval-gate", "extract"]);
+  assert.deepEqual([...new Set(atoms)].sort(), [
+    "approval-gate",
+    "draft-claims",
+    "extract",
+    "groundedness",
+    "keywords",
+    "merge",
+    "novelty",
+    "search",
+  ]);
+  // 三路提取经 stage.params 分键（① 修复覆盖：extract_problem 只写 problems 等）
+  const extractStages = patentDisclosureManifest.stages.filter(s => s.id.startsWith("extract_"));
+  assert.equal(extractStages.length, 3);
+  assert.deepEqual(extractStages.map(s => s.params?.output_key).sort(), ["effects", "features", "problems"]);
+  // merge 原子化：紧邻三路提取之后
+  const ids = patentDisclosureManifest.stages.map(s => s.id);
+  assert.ok(ids.indexOf("extract_effects") < ids.indexOf("merge"));
+  // ② review_gate → draft_claims：报告后人工复核再直出草稿
+  assert.ok(ids.indexOf("report") < ids.indexOf("review_gate"));
+  assert.ok(ids.indexOf("review_gate") < ids.indexOf("draft_claims"));
+  assert.equal(patentDisclosureManifest.stages.find(s => s.id === "review_gate")?.atom, "approval-gate");
+  assert.equal(patentDisclosureManifest.stages.find(s => s.id === "draft_claims")?.atom, "draft-claims");
+  // prior-art 注入链：generate_keywords → search → novelty 依序出现在 merge 之后
+  assert.ok(ids.indexOf("generate_keywords") < ids.indexOf("search"));
+  assert.ok(ids.indexOf("search") < ids.indexOf("novelty"));
+  assert.ok(ids.indexOf("novelty") < ids.indexOf("report"));
 });
 
 test("patentDisclosureManifest：声明原子存在性校验（内置注册后）", async () => {

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  AtomRegistry,
+  StageHandlerRegistry,
   WorkflowError,
   patentNoveltyManifest,
   runWorkflow,
@@ -92,4 +94,63 @@ test("novelty manifest covers the full five-stage analysis chain", () => {
     patentNoveltyManifest.stages.map(s => s.strategy),
     ["chain", "react", "chain", "chain", "chain"],
   );
+});
+
+test("runWorkflow：stage.params 合并进 handler 执行态（handler 可读）", async () => {
+  const registry = new StageHandlerRegistry();
+  registry.register({
+    name: "echo-params",
+    category: "extract" as const,
+    execute: async ({ state }) => ({ echoed: String(state.param_key ?? "") }),
+  });
+  const atoms = new AtomRegistry();
+  atoms.register({
+    name: "echo-params",
+    description: "echo",
+    category: "extract",
+    inputSchema: ["param_key"],
+    outputSchema: ["echoed"],
+  });
+  const manifest: WorkflowManifest = {
+    id: "params_wf",
+    name: "params",
+    caseType: "test",
+    stages: [
+      {
+        id: "echo",
+        strategy: "chain",
+        description: "echo",
+        atom: "echo-params",
+        params: { param_key: "from-stage" },
+      },
+    ],
+  };
+  const result = await runWorkflow(manifest, {}, undefined, { handlers: registry, atoms });
+  assert.equal(result.completed, true);
+  assert.equal(result.stages[0]!.output, "from-stage", "handler 应读到 stage.params");
+});
+
+test("runWorkflow：无 params 时 handler 执行态与共享 state 一致", async () => {
+  const registry = new StageHandlerRegistry();
+  registry.register({
+    name: "echo-ctx",
+    category: "extract" as const,
+    execute: async ({ state }) => ({ echoed: String(state.input ?? "") }),
+  });
+  const atoms = new AtomRegistry();
+  atoms.register({
+    name: "echo-ctx",
+    description: "echo",
+    category: "extract",
+    inputSchema: ["input"],
+    outputSchema: ["echoed"],
+  });
+  const manifest: WorkflowManifest = {
+    id: "ctx_wf",
+    name: "ctx",
+    caseType: "test",
+    stages: [{ id: "echo", strategy: "chain", description: "echo", atom: "echo-ctx" }],
+  };
+  const result = await runWorkflow(manifest, { input: "from-ctx" }, undefined, { handlers: registry, atoms });
+  assert.equal(result.stages[0]!.output, "from-ctx");
 });

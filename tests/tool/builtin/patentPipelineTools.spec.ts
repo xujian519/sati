@@ -8,7 +8,7 @@ import {
 } from "../../../src/patent/index.js";
 import { PlanTaskStateMachine, replanTasks, syncPlanToTasks, hashStep } from "../../../src/patent/plantask.js";
 import { WorkerRegistry, validateWorkerOutput, defaultPatentWorkers } from "../../../src/patent/worker-contract.js";
-import { createPatentWorkflowTool } from "../../../src/tool/builtin/patentWorkflowTool.js";
+import { createPatentWorkflowTool, runRuleGate } from "../../../src/tool/builtin/patentWorkflowTool.js";
 import { createPatentPlanTaskTool } from "../../../src/tool/builtin/patentPlanTaskTool.js";
 import { createPatentWorkerValidateTool } from "../../../src/tool/builtin/patentWorkerValidateTool.js";
 import { createBuiltinRegistry } from "../../../src/tool/registry/createBuiltinRegistry.js";
@@ -154,6 +154,112 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     const tool = createPatentWorkflowTool();
     const res = await tool.execute({ manifestId: "no_such_manifest", outputs: [] }, {} as never);
     assert.ok(textOf(res).includes("未知 manifest"), `应返回未知 manifest 提示: ${textOf(res)}`);
+  });
+
+  it("patent_workflow 工具：确定性门——合规新颖性产出 → ✅ 通过", async () => {
+    // 注意：本文本须满足 patent_novelty 域全部 17 条规则（基础新颖性/特征覆盖、
+    // 优先权×4/公开方式×5/推理模式：四相同、公开方式、抵触申请、优先权）。
+    // 若新增 patent_novelty 域规则，需在此文本补充对应要素，否则判定会从通过变为阻断。
+    const tool = createPatentWorkflowTool();
+    const res = await tool.execute(
+      {
+        checkDomain: "patent_novelty",
+        outputs: [
+          { stageId: "parse", text: "解析技术交底书，逐项列出权利要求1的技术特征A/B/C。" },
+          {
+            stageId: "search",
+            text:
+              "检索到对比文件D1、D2。D1公开日早于申请日，属于现有技术；" +
+              "公开方式为出版物公开、使用公开、互联网公开、网络公开，公开日前无保密义务、处于保密状态。",
+          },
+          {
+            stageId: "compare",
+            text:
+              "新颖性分析：将权利要求1与对比文件D1进行单独对比，技术领域相同、技术方案相同、" +
+              "技术效果相同，所有技术特征均已被D1公开。",
+          },
+          {
+            stageId: "conclude",
+            text:
+              "新颖性结论：权利要求1不具备新颖性。D2构成抵触申请（在先申请在后公开），仅用于新颖性判断。" +
+              "优先权日为2025-01-01，优先权主张的有效性已核实；本案不涉及部分优先权、多项优先权的情形，" +
+              "以优先权日作为现有技术判断时间基准。",
+          },
+          { stageId: "approval", text: "人工确认：结论属实，通过。" },
+        ],
+      },
+      {} as never,
+    );
+    const text = textOf(res);
+    assert.ok(text.includes("确定性门: ✅ 通过"), `应判定通过: ${text}`);
+    assert.ok(text.includes("所有规则检查均通过"), "不应有失败明细表");
+  });
+
+  it("patent_workflow 工具：确定性门——违反单独对比原则 → ⛔ 阻断并附失败明细", async () => {
+    const tool = createPatentWorkflowTool();
+    const res = await tool.execute(
+      {
+        outputs: [
+          { stageId: "parse", text: "解析技术交底书。" },
+          { stageId: "search", text: "检索到对比文件D1、D2。" },
+          { stageId: "compare", text: "结合多份对比文件结合，可认定本申请不具备新颖性。" },
+          { stageId: "conclude", text: "新颖性结论：不具备。" },
+          { stageId: "approval", text: "人工确认通过。" },
+        ],
+      },
+      {} as never,
+    );
+    const text = textOf(res);
+    assert.ok(text.includes("确定性门: ⛔ 阻断"), `应判定阻断: ${text}`);
+    assert.ok(text.includes("新颖性单独对比原则"), "失败明细应含单独对比规则名");
+    assert.match(text, /\| 规则 \| 级别 \| 严重度 \| 问题 \| 修改建议 \|/, "应输出失败明细表头");
+  });
+
+  it("patent_workflow 工具：disclosure manifest 可用且 checkDomain 可覆盖", async () => {
+    const tool = createPatentWorkflowTool();
+    const res = await tool.execute(
+      {
+        manifestId: "patent_disclosure_v1",
+        checkDomain: "patent_infringement",
+        outputs: [
+          { stageId: "preprocess", text: "交底书预处理完成。" },
+          { stageId: "extract_problem", text: "技术问题：提升散热效率。" },
+          { stageId: "extract_features", text: "技术特征：散热鳍片结构。" },
+          { stageId: "extract_effects", text: "技术效果：散热效率提升30%。" },
+          { stageId: "merge", text: "PFE 三元组：问题↔特征↔效果关联闭合。" },
+          { stageId: "consistency", text: "一致性校验通过，无孤立特征。" },
+          { stageId: "report", text: "披露分析报告已生成。" },
+          { stageId: "approval", text: "人工确认通过。" },
+        ],
+      },
+      {} as never,
+    );
+    const text = textOf(res);
+    assert.ok(text.includes("patent_workflow(patent_disclosure_v1)"), `应识别 disclosure manifest: ${text}`);
+    // checkDomain 覆盖为 infringement 域：文本缺全面覆盖要素 → 阻断
+    assert.ok(text.includes("确定性门: ⛔ 阻断"), `应按 infringement 域判定: ${text}`);
+    assert.ok(text.includes("侵权全面覆盖原则"), "失败明细应含全面覆盖规则");
+  });
+
+  it("patent_workflow 工具：checkDomain 空串禁用确定性门", async () => {
+    const tool = createPatentWorkflowTool();
+    const res = await tool.execute({ checkDomain: "", outputs: [{ stageId: "parse", text: "任意输出" }] }, {} as never);
+    assert.ok(!textOf(res).includes("确定性门"), "禁用后不应出现确定性门区块");
+  });
+
+  it("runRuleGate 单元：非降级输出拼接评估，返回判级行 + 报告", () => {
+    const md = runRuleGate(
+      {
+        stages: [
+          { degraded: false, output: "结合多份对比文件结合，不具备新颖性。" },
+          { degraded: true, output: "（降级阶段不参与评估）" },
+        ],
+      },
+      ["patent_novelty"],
+    );
+    assert.ok(md.includes("确定性门: ⛔ 阻断"), `应阻断: ${md}`);
+    assert.ok(md.includes("## 规则引擎检查"));
+    assert.ok(md.includes("新颖性单独对比原则"));
   });
 
   it("patent_plan_task 工具：非法迁移返回错误而非抛错", async () => {

@@ -35,6 +35,11 @@ export type WorkflowStage = {
    */
   atom?: string;
   /**
+   * 可选：传递给 StageHandler 的静态参数（执行前合并进 PipelineState，handler 经 state 读取）。
+   * 用于同一原子在不同阶段的差异化配置（如 extract 三路的 output_key / extraction_type）。
+   */
+  params?: Record<string, unknown>;
+  /**
    * 可选：一致性重试循环（对齐 Mady disclosure 管线的 check_consistency 条件回退边）。
    * 本阶段输出匹配 whenOutputMatches（信号：需要重做）时，回退到 rewindTo 阶段
    * 重新执行（含中间阶段），最多 maxRetries 次。
@@ -240,7 +245,9 @@ export async function runWorkflow(
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
         if (handler) {
-          const segment = await handler.execute({ state, provider: options.provider });
+          // 阶段静态参数合并进执行态（不污染共享 state，仅本次 handler 可见）。
+          const execState = stage.params !== undefined ? { ...state, ...stage.params } : state;
+          const segment = await handler.execute({ state: execState, provider: options.provider });
           Object.assign(state, segment);
           // 主输出键 = atom.outputSchema[0]（对齐 Mady 约定，文本/JSON 均可）；兜底按 stage.id 引用。
           const mainKey = stage.atom !== undefined ? atoms.lookup(stage.atom)?.outputSchema?.[0] : undefined;
@@ -367,15 +374,20 @@ export const patentNoveltyManifest: WorkflowManifest = {
 };
 
 /**
- * 内置：技术交底书披露分析 manifest（镜像 Mady disclosure/graph.go 的 PFE 管线）。
+ * 内置：技术交底书披露分析 manifest（移植 Mady disclosure/graph.go 的 PFE 管线）。
  *
- * PFE（Problem/Feature/Effect）三元组提取：problem/features/effects 三路提取 →
- * 融合 → 一致性检查（输出含"不一致/矛盾/缺少"信号时回退到提取阶段重做，
- * 最多 1 次）→ 报告 → 审批门。
+ * PFE（Problem/Feature/Effect）三元组提取：problem/features/effects 三路提取
+ * （经 stage.params 分键，互不覆盖）→ merge 融合 → groundedness 原文依据过滤
+ * （低分特征反馈）→ 一致性检查（输出含"不一致/矛盾/缺少"信号时回退到提取阶段
+ * 重做，最多 1 次）→ 检索关键词生成 → 现有技术检索（prior_art 证据注入）→
+ * 逐特征新颖性初判（单独对比原则 + 证据引用）→ 报告 → review_gate 人工复核
+ * （中断等待确认）→ draft_claims 直出权利要求草稿。
  *
- * 注意：本 manifest 声明了内置原子（extract / approval-gate），消费方需注入
- * provider（LLM）与内置原子注册表（registerBuiltinAtoms）执行；提取阶段按
- * 顺序执行（语义等价 Mady 的 Pregel 并行提取，结果一致，此处不引入并行调度）。
+ * 注意：本 manifest 声明了内置原子（extract / merge / groundedness / keywords /
+ * search / novelty / approval-gate / draft-claims），消费方需注入 provider
+ * （LLM/检索器）与内置原子注册表（registerBuiltinAtoms）执行。prior-art 注入链
+ * （generate_keywords → search → novelty）在 provider.search 缺失时降级
+ * （evidence_coverage=none），不中断管线（对齐 Mady fail-open 语义）。
  */
 export const patentDisclosureManifest: WorkflowManifest = {
   id: "patent_disclosure_v1",
@@ -383,10 +395,34 @@ export const patentDisclosureManifest: WorkflowManifest = {
   caseType: "disclosure_analysis",
   stages: [
     { id: "preprocess", strategy: "chain", description: "预处理技术交底书，分段与去噪" },
-    { id: "extract_problem", strategy: "sub_agent", description: "提取待解决的技术问题", atom: "extract" },
-    { id: "extract_features", strategy: "sub_agent", description: "提取技术特征", atom: "extract" },
-    { id: "extract_effects", strategy: "sub_agent", description: "提取技术效果", atom: "extract" },
-    { id: "merge", strategy: "chain", description: "融合为 PFE 三元组（问题↔特征↔效果交叉引用）" },
+    {
+      id: "extract_problem",
+      strategy: "sub_agent",
+      description: "提取待解决的技术问题",
+      atom: "extract",
+      params: { extraction_type: "提取待解决的技术问题（严格输出 problems 数组）", output_key: "problems" },
+    },
+    {
+      id: "extract_features",
+      strategy: "sub_agent",
+      description: "提取技术特征",
+      atom: "extract",
+      params: { extraction_type: "提取技术特征（严格输出 features 数组）", output_key: "features" },
+    },
+    {
+      id: "extract_effects",
+      strategy: "sub_agent",
+      description: "提取技术效果",
+      atom: "extract",
+      params: { extraction_type: "提取技术效果（严格输出 effects 数组）", output_key: "effects" },
+    },
+    { id: "merge", strategy: "chain", description: "融合 PFE 三元组（问题↔特征↔效果交叉引用）", atom: "merge" },
+    {
+      id: "groundedness",
+      strategy: "chain",
+      description: "评估提取特征在原文中的依据（低分特征反馈）",
+      atom: "groundedness",
+    },
     {
       id: "consistency",
       strategy: "chain",
@@ -397,8 +433,28 @@ export const patentDisclosureManifest: WorkflowManifest = {
         maxRetries: 1,
       },
     },
+    { id: "generate_keywords", strategy: "chain", description: "生成检索关键词（上位/下位/同义词）", atom: "keywords" },
+    { id: "search", strategy: "react", description: "检索现有技术文献（证据片段注入新颖性评估）", atom: "search" },
+    {
+      id: "novelty",
+      strategy: "chain",
+      description: "逐特征新颖性初判（单独对比原则 + 证据引用）",
+      atom: "novelty",
+    },
     { id: "report", strategy: "chain", description: "生成披露分析报告（创新点/保护建议）" },
-    { id: "approval", strategy: "chain", description: "人工确认披露分析报告", atom: "approval-gate" },
+    {
+      id: "review_gate",
+      strategy: "chain",
+      description: "人工复核披露分析报告（中断等待确认）",
+      atom: "approval-gate",
+      params: { review_context: "披露分析报告需人工复核后方可继续" },
+    },
+    {
+      id: "draft_claims",
+      strategy: "chain",
+      description: "基于 PFE 与新颖性结果直出权利要求草稿（独立+从属）",
+      atom: "draft-claims",
+    },
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
 };
