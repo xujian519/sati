@@ -776,6 +776,24 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     await killPidGracefully(pid, ORPHAN_TERM_WAIT_MS);
   }
 
+  /**
+   * 兜底：确保 gateway 端口可用。
+   *
+   * killOrphanGateway 只杀 Sati 运行时进程；若端口被非 Sati 进程占用（例如
+   * 残留的旧 gateway 未被识别、或用户手动启动了同端口服务），gateway spawn 会
+   * 抛 EADDRINUSE，sati-bridge 随即连接到该残留 listener 产生握手失败。
+   *
+   * 本方法在 killOrphanGateway 之后调用：若端口仍被占，无论占用者身份，
+   * 统一尝试优雅终止，最多等待 ORPHAN_TERM_WAIT_MS 后强杀。
+   */
+  private async ensurePortFreeForGateway(port: number): Promise<void> {
+    const pid = this.listenerPidForPort(port);
+    if (pid === null) return;
+    if (pid === process.pid) return;
+    // 已经是 Sati 进程 — killOrphanGateway 应该已处理；若仍存活则兜底杀
+    await killPidGracefully(pid, ORPHAN_TERM_WAIT_MS);
+  }
+
   private clearStableTimer(): void {
     if (this.stableTimer !== null) {
       clearTimeout(this.stableTimer);
@@ -955,6 +973,15 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // ${GATEWAY_PORT} (via SATI_GATEWAY_URL injected below) within 30s. We
     // must have the gateway listening before the UI server attempts its
     // first WebSocket handshake.
+    //
+    // Before spawning, ensure GATEWAY_PORT is free. The orphan cleanup
+    // above (cleanupOrphanRuntimeProcesses) only kills processes identified
+    // as Sati runtime — a non-Sati process holding the port would survive.
+    // If we blindly spawn into an occupied port, gateway dies with
+    // EADDRINUSE and sati-bridge connects to the stale listener, producing
+    // the "invalid request frame" handshake error.
+    await this.ensurePortFreeForGateway(GATEWAY_PORT);
+
     const gatewayEntry = path.join(satiMainDir, "dist", "src", "cli", "sati.js");
     if (fsSync.existsSync(gatewayEntry)) {
       this.emit("progress", "启动 Sati Gateway…");
