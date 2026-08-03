@@ -13,7 +13,7 @@
     "predev": "npm run check:runtime && node ../scripts/bootstrap-sati-config.mjs && pnpm --filter edgeclaw-memory-core build",
     "dev": "node ../scripts/dev-launcher.mjs",
     "dev:concurrent": "concurrently --kill-others-on-fail --names gateway,server,client \"npm:dev:gateway\" \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:gateway": "npm --prefix .. run server",
+    "dev:gateway": "npm --prefix .. run --ignore-scripts server",
     "dev:server": "npm run check:runtime && node --import tsx server/index.js",
     "dev:client": "vite",
     "server": "npm run check:runtime && node --import tsx server/index.js",

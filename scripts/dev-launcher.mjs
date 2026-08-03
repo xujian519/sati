@@ -119,7 +119,7 @@ async function main() {
     VITE_PORT: String(vite.port),
   };
 
-  const child = spawn("npm", ["--workspace", "ui", "run", "dev:concurrent"], {
+  const child = spawn("pnpm", ["--filter", "sati-ui", "run", "dev:concurrent"], {
     cwd: repoRoot,
     env,
     stdio: "inherit",
