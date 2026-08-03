@@ -10,6 +10,46 @@ export type MemoryAttachmentBuilderInput = MemoryRetrieveInput & {
   timeoutMs?: number;
 };
 
+/** query 达到该长度（字符）时视为有效检索词，不做回退。 */
+const MIN_RETRIEVE_QUERY_LENGTH = 8;
+/** 短 query 回退时最多拼接的最近用户消息条数。 */
+const MAX_RETRIEVE_FALLBACK_MESSAGES = 3;
+/** 短 query 回退拼接结果的最大字符数。 */
+const MAX_RETRIEVE_FALLBACK_CHARS = 500;
+
+/** 提取单条消息的文本内容（仅 text 块，工具结果等不参与回退）。 */
+function extractMessageText(message: CanonicalMessage): string {
+  const parts: string[] = [];
+  for (const block of message.content) {
+    if (block.type === "text" && block.text.trim()) {
+      parts.push(block.text.trim());
+    }
+  }
+  return parts.join("\n").trim();
+}
+
+/**
+ * 短 query 检索回退：query 过短（多轮指代如"继续"、短回复）时，
+ * 用最近用户消息拼接作为检索 query，提高知识召回率。
+ * 正常长 query 原样返回；无可用历史时保持原 query。
+ */
+export function buildRetrieveQuery(query: string, recentMessages: CanonicalMessage[]): string {
+  const trimmed = query.trim();
+  if (Array.from(trimmed).length >= MIN_RETRIEVE_QUERY_LENGTH) return query;
+
+  const texts: string[] = [];
+  for (let index = recentMessages.length - 1; index >= 0 && texts.length < MAX_RETRIEVE_FALLBACK_MESSAGES; index -= 1) {
+    const message = recentMessages[index];
+    if (message.role !== "user") continue;
+    const text = extractMessageText(message);
+    if (text) texts.push(text);
+  }
+  if (texts.length === 0) return query;
+
+  const joined = texts.reverse().join("\n").trim();
+  return joined.slice(0, MAX_RETRIEVE_FALLBACK_CHARS) || query;
+}
+
 /**
  * Build attachment messages from MemoryResolver output. Used by both:
  *   - PromptAssembler input (Phase 6): turn-start memory section
@@ -32,8 +72,9 @@ export class MemoryAttachmentBuilder {
         ? setTimeout(() => controller.abort(new Error(`Memory retrieval timed out after ${timeoutMs}ms.`)), timeoutMs)
         : undefined;
     try {
+      const effectiveQuery = buildRetrieveQuery(input.query, input.recentMessages);
       const result = await Promise.race([
-        this.resolver.retrieve({ ...input, signal: controller.signal }),
+        this.resolver.retrieve({ ...input, query: effectiveQuery, signal: controller.signal }),
         waitForAbort(controller.signal),
       ]);
       if (!result.systemContext || result.systemContext.trim().length === 0) {
