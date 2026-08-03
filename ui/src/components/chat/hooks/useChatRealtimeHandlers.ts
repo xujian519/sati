@@ -230,17 +230,6 @@ function warnResolvedSessionId(msg: LatestChatMessage, fallbackSessionId: string
   });
 }
 
-/**
- * A selected conversation always takes precedence over the last loaded id.
- * During a session switch React can render once with the new selection while
- * `currentSessionId` still points at the previous conversation. Treating both
- * ids as active lets a status frame from the previous conversation overwrite
- * the status (including compaction progress) of the newly selected one.
- */
-export function isSessionForActiveView(sessionId: string, activeViewSessionId: string | null): boolean {
-  return sessionId === activeViewSessionId;
-}
-
 interface UseChatRealtimeHandlersArgs {
   provider: SessionProvider;
   selectedProject: Project | null;
@@ -337,7 +326,13 @@ export function useChatRealtimeHandlers({
           case "session-status": {
             const statusSessionId = msg.sessionId;
             if (!statusSessionId) return;
-            const isCurrentSession = isSessionForActiveView(statusSessionId, activeViewSessionId);
+            // A selected conversation always takes precedence over the last
+            // loaded id: during a session switch React can render once with
+            // the new selection while `currentSessionId` still points at the
+            // previous conversation. A status frame from the previous
+            // conversation must not overwrite the newly selected one's status
+            // (including compaction progress).
+            const isCurrentSession = statusSessionId === activeViewSessionId;
 
             if (isCurrentSession && Array.isArray(msg.activeTurnMessages) && msg.activeTurnMessages.length > 0) {
               clearAccumulators();
@@ -463,7 +458,7 @@ export function useChatRealtimeHandlers({
         warnResolvedSessionId(msg, sid);
       }
 
-      const isForActiveView = isSessionForActiveView(sid, activeViewSessionId);
+      const isForActiveView = sid === activeViewSessionId;
 
       // Ensure the store's activeSession matches so notify() triggers re-renders.
       // Without this, the RAF scheduler silently drops notifications for

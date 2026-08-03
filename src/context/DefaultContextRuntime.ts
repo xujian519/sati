@@ -352,13 +352,13 @@ export class DefaultContextRuntime implements ContextRuntime {
     if (decision.type !== "trigger") {
       log("policy_skip", {
         decisionType: decision.type,
-        snapshot: describeTokenBudgetSnapshot(decision.snapshot),
+        snapshot: decision.snapshot,
       });
       return { type: "skipped", snapshot: decision.snapshot };
     }
     log("policy_trigger", {
       reason: decision.reason,
-      snapshot: describeTokenBudgetSnapshot(initialSnapshot),
+      snapshot: initialSnapshot,
       messages: messages.length,
       reservedOutputTokens: input.reservedOutputTokens,
     });
@@ -371,12 +371,12 @@ export class DefaultContextRuntime implements ContextRuntime {
         const snap = await evaluateBudget(messages);
         log("micro_compaction", {
           rewritten: r.rewritten,
-          snapshot: describeTokenBudgetSnapshot(snap),
+          snapshot: snap,
           stopAfterPrePrune: shouldStopAfterPrePrune(decision.reason, snap),
         });
         if (shouldStopAfterPrePrune(decision.reason, snap)) {
           log("micro_compaction_stop", {
-            snapshot: describeTokenBudgetSnapshot(snap),
+            snapshot: snap,
           });
           return {
             type: "compacted",
@@ -394,7 +394,7 @@ export class DefaultContextRuntime implements ContextRuntime {
 
     if (decision.reason === "warning_threshold") {
       log("warning_threshold_skip", {
-        snapshot: describeTokenBudgetSnapshot(decision.snapshot),
+        snapshot: decision.snapshot,
       });
       return { type: "skipped", snapshot: decision.snapshot };
     }
@@ -406,12 +406,12 @@ export class DefaultContextRuntime implements ContextRuntime {
         messages = r.messages;
         const snap = await evaluateBudget(messages);
         log("snip_compaction", {
-          snapshot: describeTokenBudgetSnapshot(snap),
+          snapshot: snap,
           stopAfterPrePrune: shouldStopAfterPrePrune(decision.reason, snap),
         });
         if (shouldStopAfterPrePrune(decision.reason, snap)) {
           log("snip_compaction_stop", {
-            snapshot: describeTokenBudgetSnapshot(snap),
+            snapshot: snap,
           });
           return {
             type: "compacted",
@@ -434,13 +434,13 @@ export class DefaultContextRuntime implements ContextRuntime {
         log("full_compaction_skipped_cooldown", {
           cooldownRemainingMs: this.fullCompactionCooldownUntil - nowMs,
           consecutiveIneffectiveFullCompactions: this.consecutiveIneffectiveFullCompactions,
-          snapshot: describeTokenBudgetSnapshot(decision.snapshot),
+          snapshot: decision.snapshot,
         });
         return { type: "skipped", snapshot: decision.snapshot };
       }
       log("full_compaction_started", {
         messages: messages.length,
-        snapshot: describeTokenBudgetSnapshot(decision.snapshot),
+        snapshot: decision.snapshot,
       });
       const result = await this.compactionEngine.run({
         trigger: "auto",
@@ -461,7 +461,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       let finalResult = result;
       if (snapshot.state === "blocking") {
         log("full_compaction_relaxed_retry", {
-          snapshot: describeTokenBudgetSnapshot(snapshot),
+          snapshot: snapshot,
           keepTailRatio: RELAXED_FULL_COMPACTION_KEEP_TAIL_RATIO,
         });
         const relaxedResult = await this.compactionEngine.run({
@@ -483,8 +483,8 @@ export class DefaultContextRuntime implements ContextRuntime {
         const relaxedMessages = ensureTrailingUserMessage(buildPostCompactMessages(relaxedResult));
         const relaxedSnapshot = await evaluateBudget(relaxedMessages);
         log("full_compaction_relaxed_result", {
-          previousSnapshot: describeTokenBudgetSnapshot(snapshot),
-          relaxedSnapshot: describeTokenBudgetSnapshot(relaxedSnapshot),
+          previousSnapshot: snapshot,
+          relaxedSnapshot: relaxedSnapshot,
         });
         if (relaxedSnapshot.tokens <= snapshot.tokens) {
           finalResult = relaxedResult;
@@ -501,7 +501,7 @@ export class DefaultContextRuntime implements ContextRuntime {
           FULL_COMPACTION_INEFFECTIVE_LIMIT,
         );
         log("full_compaction_still_blocking", {
-          snapshot: describeTokenBudgetSnapshot(snapshot),
+          snapshot: snapshot,
           cooldownUntilMs: this.fullCompactionCooldownUntil,
           consecutiveIneffectiveFullCompactions: this.consecutiveIneffectiveFullCompactions,
         });
@@ -528,7 +528,7 @@ export class DefaultContextRuntime implements ContextRuntime {
         });
       }
       log("full_compaction_completed", {
-        snapshot: describeTokenBudgetSnapshot(snapshot),
+        snapshot: snapshot,
         summarySucceeded: finalResult.error === undefined,
         preTokens: finalResult.preTokens,
         postTokens: finalResult.postTokens,
@@ -543,7 +543,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     }
 
     log("full_compaction_unavailable", {
-      snapshot: describeTokenBudgetSnapshot(decision.snapshot),
+      snapshot: decision.snapshot,
     });
     return { type: "skipped", snapshot: decision.snapshot };
   }
@@ -652,25 +652,4 @@ function logAutoCompactEvent(
   } catch {
     console.warn(`[context:auto-compact] ${stage}`);
   }
-}
-
-function describeTokenBudgetSnapshot(snapshot: TokenBudgetSnapshot): Record<string, unknown> {
-  return {
-    tokens: snapshot.tokens,
-    displayTokens: snapshot.displayTokens,
-    budgetTokens: snapshot.budgetTokens,
-    estimateSource: snapshot.estimateSource,
-    usageTokens: snapshot.usageTokens,
-    totalContextTokens: snapshot.totalContextTokens,
-    maxContextTokens: snapshot.maxContextTokens,
-    effectiveContextTokens: snapshot.effectiveContextTokens,
-    maxOutputTokens: snapshot.maxOutputTokens,
-    warningRatio: snapshot.warningRatio,
-    blockingRatio: snapshot.blockingRatio,
-    state: snapshot.state,
-    ratio: snapshot.ratio,
-    source: snapshot.source,
-    exact: snapshot.exact,
-    reservedOutputTokens: snapshot.reservedOutputTokens,
-  };
 }

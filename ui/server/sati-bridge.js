@@ -45,6 +45,7 @@ import { promises as fsPromises } from "node:fs";
 import { randomUUID } from "node:crypto";
 
 import { installGlobalProxy } from "../../src/cli/proxy.js";
+import { buildCompactTokenBudget } from "../../src/context/budget/compactBudget.js";
 await installGlobalProxy();
 
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from "./utils/pilotPaths.js";
@@ -308,46 +309,20 @@ export function getSessionTokenBudget(sessionKey) {
   );
 }
 
-function finitePositiveNumber(value) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-function contextBudgetState(ratio) {
-  if (!Number.isFinite(ratio)) return "unknown";
-  if (ratio >= 0.95) return "blocking";
-  if (ratio >= 0.8) return "warning";
-  return "ok";
-}
-
 function tokenBudgetFromCompact(previousBudget, detail) {
-  const postTokens = finitePositiveNumber(detail?.postTokens);
-  if (!postTokens) return null;
-  const used = Math.ceil(postTokens);
-  const total = finitePositiveNumber(previousBudget?.total) ?? finitePositiveNumber(detail?.total);
-  const effectiveTotal =
-    finitePositiveNumber(previousBudget?.effectiveTotal) ?? finitePositiveNumber(detail?.effectiveTotal) ?? total;
-  if (!total || !effectiveTotal) return null;
-  const reservedOutputTokens =
-    finitePositiveNumber(previousBudget?.reservedOutputTokens) ??
-    finitePositiveNumber(detail?.reservedOutputTokens) ??
-    0;
-  const ratio = used / effectiveTotal;
-  return {
-    used,
-    displayUsed: used,
-    budgetUsed: used,
-    total,
-    effectiveTotal,
-    reservedOutputTokens,
-    ratio,
-    state: contextBudgetState(ratio),
-    source: "compact",
-    compacted: true,
-    ...(finitePositiveNumber(detail?.preTokens) ? { preCompactUsed: finitePositiveNumber(detail.preTokens) } : {}),
-    ...(finitePositiveNumber(detail?.messagesSummarized)
-      ? { messagesSummarized: finitePositiveNumber(detail.messagesSummarized) }
-      : {}),
-  };
+  return buildCompactTokenBudget(
+    {
+      postTokens: detail?.postTokens,
+      preTokens: detail?.preTokens,
+      messagesSummarized: detail?.messagesSummarized,
+    },
+    previousBudget,
+    {
+      total: detail?.total,
+      effectiveTotal: detail?.effectiveTotal,
+      reservedOutputTokens: detail?.reservedOutputTokens,
+    },
+  );
 }
 
 /**

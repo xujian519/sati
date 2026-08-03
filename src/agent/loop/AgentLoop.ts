@@ -42,6 +42,7 @@ import type { SatiHookEvent } from "../../extension/hooks/protocol/events.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type {
+  AutoCompactResult,
   ContextRecoveryDecision,
   ContextSupplementalToolResultMessage,
   TokenBudgetSnapshot,
@@ -2096,7 +2097,7 @@ export class AgentLoop {
 
   private async persistCompactSnapshot(
     input: AgentLoopInput,
-    compact: Extract<Awaited<ReturnType<NonNullable<AgentContextRuntime["tryAutoCompact"]>>>, { type: "compacted" }>,
+    compact: Extract<AutoCompactResult, { type: "compacted" }>,
     preCompactMessages: CanonicalMessage[],
   ): Promise<void> {
     if (!input.onCompactPersisted || !compact.result) {

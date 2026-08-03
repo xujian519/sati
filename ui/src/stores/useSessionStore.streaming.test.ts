@@ -3,7 +3,6 @@ import type { SessionProvider } from "../types/app";
 import {
   getActiveTurnReplayMessagesToApply,
   getDuplicateAssistantStreamTextState,
-  isSessionForActiveView,
 } from "../components/chat/hooks/useChatRealtimeHandlers";
 import {
   computeMerged,
@@ -572,19 +571,5 @@ describe("subagent detail thinking ids", () => {
 
     expect(id).toBe(`subagent_thinking_session-1_subagent-1_${Date.parse("2026-05-28T00:00:03.000Z")}`);
     expect(id).not.toBe("subagent_thinking_session-1_subagent-1_0");
-  });
-});
-
-describe("isSessionForActiveView", () => {
-  it("does not accept the previously loaded session while a new session is selected", () => {
-    // On a session switch `currentSessionId` can still be A for one render,
-    // while the UI is already showing B. A status from A must not update B's
-    // live compaction progress.
-    expect(isSessionForActiveView("web:session-a", "web:session-b")).toBe(false);
-    expect(isSessionForActiveView("web:session-b", "web:session-b")).toBe(true);
-  });
-
-  it("accepts a pending new-session view when no saved session is selected", () => {
-    expect(isSessionForActiveView("web:new-session", "web:new-session")).toBe(true);
   });
 });
