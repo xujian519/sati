@@ -1,4 +1,10 @@
+Sati（正念智能体）
 Copyright (C) 2026 徐健 <xujian519@gmail.com>
+
+本项目源自 PilotDeck（GNU AGPL-3.0）。PilotDeck 由清华大学 THUNLP 实验室、
+面壁智能、OpenBMB 与 AI9Stars 联合研发并开源，原项目采用 GNU Affero General
+Public License v3.0。按 AGPL-3.0 要求，此处保留原项目版权归属声明；本项目的
+修改与再分发继续遵循 GNU Affero General Public License v3.0 的条款。
 
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007

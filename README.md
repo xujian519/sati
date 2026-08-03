@@ -207,3 +207,7 @@ Sati 采用开放的插件架构，插件代码与开源核心严格隔离。开
 ## 📄 许可证
 
 本项目基于 [GNU Affero General Public License v3.0](LICENSE) 开源。
+
+## 🙏 Acknowledgements
+
+Sati 源自 [PilotDeck](https://github.com/OpenBMB/PilotDeck)（最初为 [Gucc111/PilotDeck](https://github.com/Gucc111/PilotDeck)，后由清华大学 THUNLP 实验室、面壁智能、OpenBMB 与 AI9Stars 联合研发并开源，AGPL-3.0）。Sati 在其基础上聚焦专利业务场景独立发展。

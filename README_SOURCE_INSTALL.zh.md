@@ -1,10 +1,10 @@
 # 源码安装指南
 
-本文档适合希望直接从源码运行 PilotDeck 的开发者。如果只是想快速体验，建议优先使用一键安装脚本。
+本文档适合希望直接从源码运行 Sati 的开发者。如果只是想快速体验，建议优先使用一键安装脚本。
 
 ## 环境要求
 
-PilotDeck 需要：
+Sati 需要：
 
 - Node.js v22.13.0 或更新的 Node.js 22 版本，并且支持内置 `node:sqlite` 运行时。
 - Git。
@@ -157,7 +157,7 @@ rg --version
 wsl --status
 ```
 
-缺少命令说明对应工具还没有安装，或还没有加入 `PATH`。安装工具后，请关闭并重新打开 PowerShell 再检查。Git for Windows 会包含 Git Bash；PilotDeck 在 Windows 上会优先使用 Git Bash 作为默认终端 shell，只有找不到 Git Bash 时才回退到 PowerShell。
+缺少命令说明对应工具还没有安装，或还没有加入 `PATH`。安装工具后，请关闭并重新打开 PowerShell 再检查。Git for Windows 会包含 Git Bash；Sati 在 Windows 上会优先使用 Git Bash 作为默认终端 shell，只有找不到 Git Bash 时才回退到 PowerShell。
 
 #### WSL2 Ubuntu（推荐）
 
@@ -199,15 +199,15 @@ rg --version
 
 原生 Windows 源码安装按 x64 Node.js 验证。如果 `node -p "process.arch"` 不是 `x64`，请先切换到官方 x64 Node.js 22 zip，或其他 x64 Node.js 运行时，再安装依赖。
 
-执行上面的前置依赖检查命令时，请使用分开的 PowerShell 命令行，不要使用 Bash 风格的链式命令。安装 Git for Windows 后，PilotDeck 内置终端会自动优先使用 Git Bash。如果 PowerShell 拦截 `npm.ps1`，请改用 `npm.cmd`。
+执行上面的前置依赖检查命令时，请使用分开的 PowerShell 命令行，不要使用 Bash 风格的链式命令。安装 Git for Windows 后，Sati 内置终端会自动优先使用 Git Bash。如果 PowerShell 拦截 `npm.ps1`，请改用 `npm.cmd`。
 
 #### Portable Node 验证路径
 
-如果想在全局安装 Node.js 前先验证 PilotDeck，可只在当前 PowerShell 会话中使用官方 Windows Node.js zip：
+如果想在全局安装 Node.js 前先验证 Sati，可只在当前 PowerShell 会话中使用官方 Windows Node.js zip：
 
 ```powershell
 $NodeVersion = '22.23.1'
-$WorkDir = Join-Path $PWD '.pilotdeck-node'
+$WorkDir = Join-Path $PWD '.sati-node'
 $ZipPath = Join-Path $WorkDir "node-v$NodeVersion-win-x64.zip"
 $NodeUrl = "https://nodejs.org/dist/v$NodeVersion/node-v$NodeVersion-win-x64.zip"
 
@@ -231,8 +231,8 @@ npm.cmd --version
 克隆源码，默认不下载 Git LFS 管理的大型演示媒体文件：
 
 ```bash
-GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/OpenBMB/PilotDeck.git
-cd PilotDeck
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/xujian519/sati.git
+cd Sati
 ```
 
 如果之后需要演示视频/GIF，可在克隆后下载：
@@ -267,21 +267,21 @@ npm install -g clawhub
 clawhub --version
 ```
 
-在 Windows 上，如果 PowerShell 拦截 `npm.ps1`，请使用 `npm.cmd install -g clawhub`。如果使用 Portable Node，`clawhub` 会安装到当前 portable Node 前缀下；运行 PilotDeck 时需要继续保留该 Node 目录在 `PATH` 中。
+在 Windows 上，如果 PowerShell 拦截 `npm.ps1`，请使用 `npm.cmd install -g clawhub`。如果使用 Portable Node，`clawhub` 会安装到当前 portable Node 前缀下；运行 Sati 时需要继续保留该 Node 目录在 `PATH` 中。
 
 ## 首次 Onboarding
 
-PilotDeck 读取 `~/.pilotdeck/pilotdeck.yaml`。如果本机还没有配置文件，生产模式启动前请先准备 Web UI 的首次 onboarding 流程：
+Sati 读取 `~/.sati/sati.yaml`。如果本机还没有配置文件，生产模式启动前请先准备 Web UI 的首次 onboarding 流程：
 
 ```bash
-node scripts/bootstrap-pilotdeck-config.mjs
+node scripts/bootstrap-sati-config.mjs
 ```
 
-该命令会初始化 `~/.pilotdeck/pilotdeck.yaml`，让 Gateway 可以启动并进入首次 onboarding。随后打开 Web UI，在 onboarding/设置面板中完成 Provider 和 API Key 配置。
+该命令会初始化 `~/.sati/sati.yaml`，让 Gateway 可以启动并进入首次 onboarding。随后打开 Web UI，在 onboarding/设置面板中完成 Provider 和 API Key 配置。
 
 注意：首次生成的配置只是占位配置，包含 `_placeholder/_placeholder`、`https://placeholder.invalid` 和 `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE`。它的作用是让 Gateway 和 Web UI 可以启动；在填写真实 Provider、API Key 和模型前，UI 仍会进入 onboarding，这是预期行为。
 
-## 启动 PilotDeck
+## 启动 Sati
 
 开发模式，支持 HMR：
 
@@ -304,7 +304,7 @@ npm run start
 如果默认端口已被占用，可以通过环境变量换端口，例如：
 
 ```bash
-SERVER_PORT=3002 PILOTDECK_GATEWAY_PORT=18790 PILOTDECK_GATEWAY_URL=ws://127.0.0.1:18790/ws npm run start
+SERVER_PORT=3002 SATI_GATEWAY_PORT=18790 SATI_GATEWAY_URL=ws://127.0.0.1:18790/ws npm run start
 ```
 
 ## 常见问题
@@ -315,7 +315,7 @@ SERVER_PORT=3002 PILOTDECK_GATEWAY_PORT=18790 PILOTDECK_GATEWAY_URL=ws://127.0.0
 - `pnpm install --frozen-lockfile` 下载 npm 包超时：运行 `pnpm config set registry https://registry.npmmirror.com` 后重试。
 - macOS 出现 `ModuleNotFoundError: No module named 'distutils'`：一键安装脚本会尝试自动选择兼容 Python；手动运行 npm 命令时，可用 `PYTHON=/usr/bin/python3 corepack pnpm install --frozen-lockfile` 重试，或切换到其他带 `distutils` 的 Python。
 - macOS 缺少编译工具：不需要完整 Xcode，但 `xcrun --find clang` 必须可用。可运行 `xcode-select --install` 重新安装 Xcode Command Line Tools；如果已安装但状态异常，可运行 `sudo xcode-select --reset` 后重试。
-- 启动时报 `EADDRINUSE`：默认 `3001` 或 `19789` 已被占用，设置 `SERVER_PORT`、`PILOTDECK_GATEWAY_PORT` 和 `PILOTDECK_GATEWAY_URL` 后重试。
-- 已有 `~/.pilotdeck/pilotdeck.yaml` 但仍进入 onboarding：检查配置里是否仍是 `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE` 或 `_placeholder/_placeholder`，需要替换为真实 Provider、API Key 和模型。
+- 启动时报 `EADDRINUSE`：默认 `3001` 或 `19789` 已被占用，设置 `SERVER_PORT`、`SATI_GATEWAY_PORT` 和 `SATI_GATEWAY_URL` 后重试。
+- 已有 `~/.sati/sati.yaml` 但仍进入 onboarding：检查配置里是否仍是 `PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE` 或 `_placeholder/_placeholder`，需要替换为真实 Provider、API Key 和模型。
 - 缺少演示图片/视频：安装 Git LFS 后，在仓库根目录运行 `git lfs pull`。
 - 提示找不到 `rg`：安装 ripgrep 以启用完整的文件/搜索工具能力。
