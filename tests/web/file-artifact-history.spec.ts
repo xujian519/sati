@@ -31,6 +31,20 @@ test("history replay restores structured agent file artifacts", async () => {
         createdAt: "2026-07-21T10:00:00.000Z",
       },
     ]);
+    // workspace_diff artifacts are only replayed for turns that carried tool
+    // results (upstream compaction-replay behavior). Record one so the turn
+    // qualifies as an agent turn and the artifact card is restored.
+    await storage.transcript.recordDurableMessage(sessionKey, "turn-1", {
+      role: "assistant",
+      content: [
+        { type: "tool_call", id: "call-1", name: "edit_file", input: { path: "report.xlsx" } },
+        {
+          type: "tool_result",
+          toolCallId: "call-1",
+          content: [{ type: "text", text: "updated report.xlsx" }],
+        },
+      ],
+    });
 
     const replay = await readWebSessionMessages({ sessionKey }, { projectRoot, pilotHome });
     const message = replay.messages.find(item => item.kind === "file_artifacts");

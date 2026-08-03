@@ -107,7 +107,7 @@ export type AgentRuntimeDependencies = {
   getModelTokenLimits?: (
     provider: string,
     model: string,
-  ) => { maxContextTokens: number; maxOutputTokens: number } | undefined;
+  ) => { maxContextTokens: number; maxOutputTokens?: number } | undefined;
   now?: () => Date;
   uuid?: () => string;
   auditRecorder?: SatiToolAuditRecorder;

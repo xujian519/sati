@@ -49,6 +49,7 @@ export type AgentEvent =
       status: string;
       preTokens: number;
       postTokens?: number;
+      messagesSummarized?: number;
     }
   | { type: "context_budget"; sessionId: string; turnId: string; snapshot: TokenBudgetSnapshot }
   | {
