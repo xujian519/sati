@@ -210,3 +210,6 @@ CLAUDE.md
 .codegraph
 apps/desktop/dist-electron
 apps/desktop/resources/node-bin
+
+# Reasonix 桌面端本地会话索引（含本机绝对路径，不入库）
+.reasonix/
