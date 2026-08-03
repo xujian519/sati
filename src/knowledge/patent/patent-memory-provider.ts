@@ -3,6 +3,8 @@ import { reciprocalRankFusion } from "../../context/vector/rrf.js";
 import type { EmbeddingClient } from "../../model/embedding/types.js";
 import type { RerankClient } from "../../model/embedding/rerank.js";
 import { MIN_QUERY_LENGTH, type VectorDbSearch } from "../shared/vector-db.js";
+import { CircuitBreaker, guarded } from "../shared/circuit-breaker.js";
+import { TtlCache } from "../shared/ttl-cache.js";
 import { defaultEmbeddingDir } from "../config.js";
 import type {
   MemoryCaptureTurnInput,
@@ -60,6 +62,8 @@ export type PatentMemoryProviderOptions = {
   rerank?: RerankClient;
   /** 参与重排的候选上限（默认 16）。 */
   rerankTopN?: number;
+  /** 检索结果缓存 TTL ms（默认 60_000；传 0 关闭缓存）。 */
+  cacheTtlMs?: number;
   /** 降级日志（语义/重排失败时记录）。 */
   logger?: { warn?: (...args: unknown[]) => void };
 };
@@ -78,6 +82,9 @@ export class PatentMemoryProvider implements MemoryResolver {
   private readonly rerankTopN: number;
   private readonly logger?: { warn?: (...args: unknown[]) => void };
   private semanticCards?: WikiCardVectorIndex;
+  private readonly semanticBreaker: CircuitBreaker;
+  private readonly rerankBreaker: CircuitBreaker;
+  private readonly cache?: TtlCache<string, string>;
 
   constructor(options: PatentMemoryProviderOptions = {}) {
     this.kgAdapter = options.kgAdapter;
@@ -92,9 +99,26 @@ export class PatentMemoryProvider implements MemoryResolver {
     this.rerank = options.rerank;
     this.rerankTopN = options.rerankTopN ?? 16;
     this.logger = options.logger;
+    this.semanticBreaker = new CircuitBreaker({ logger: options.logger });
+    this.rerankBreaker = new CircuitBreaker({ logger: options.logger });
+    const cacheTtlMs = options.cacheTtlMs ?? 60_000;
+    this.cache = cacheTtlMs > 0 ? new TtlCache<string, string>({ ttlMs: cacheTtlMs }) : undefined;
   }
 
   async retrieve(input: MemoryRetrieveInput): Promise<MemoryRetrieveResult> {
+    const cacheKey = input.query.trim();
+    if (this.cache && cacheKey) {
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined) {
+        return {
+          systemContext: cached || undefined,
+          diagnostics: [
+            { code: "memory_context_empty", message: "知识检索缓存命中（同 query 短时复用）", severity: "info" },
+          ],
+        };
+      }
+    }
+
     const diagnostics: MemoryDiagnostic[] = [];
     const blocks: string[] = [];
 
@@ -144,10 +168,11 @@ export class PatentMemoryProvider implements MemoryResolver {
       blocks.push(...cardContexts);
     }
 
-    return {
-      systemContext: blocks.length > 0 ? blocks.join("\n\n") : undefined,
-      diagnostics,
-    };
+    const systemContext = blocks.length > 0 ? blocks.join("\n\n") : undefined;
+    if (this.cache && cacheKey && !input.signal?.aborted) {
+      this.cache.set(cacheKey, systemContext ?? "");
+    }
+    return { systemContext, diagnostics };
   }
 
   async captureTurn(_input: MemoryCaptureTurnInput): Promise<void> {
@@ -196,27 +221,31 @@ export class PatentMemoryProvider implements MemoryResolver {
 
   /** 语义召回路：embed query → vectors.db("kg") top-k → 回查节点详情。 */
   private async queryGraphSemantic(input: MemoryRetrieveInput): Promise<GraphHit[]> {
-    if (!this.embedding || !this.vectorDb || !this.vectorDb.hasCorpus("kg")) return [];
+    const embedding = this.embedding;
+    const vectorDb = this.vectorDb;
+    if (!embedding || !vectorDb || !vectorDb.hasCorpus("kg")) return [];
     if (input.signal?.aborted) return [];
-    try {
-      const [queryVector] = await this.embedding.embed([input.query]);
-      if (!queryVector || queryVector.length === 0) return [];
-      const hits = this.vectorDb.search("kg", Float32Array.from(queryVector), this.graphLimit);
-      const graphHits: GraphHit[] = [];
-      for (const hit of hits) {
-        const node = this.kgAdapter?.getNode(hit.docId);
-        if (!node) continue;
-        graphHits.push({
-          node: { id: node.id, nodeType: node.nodeType, name: node.name, title: node.title },
-          via: "semantic",
-          text: buildNodeText(node),
-        });
-      }
-      return graphHits;
-    } catch (error) {
-      this.logger?.warn?.(`[patent-memory] KG 语义召回失败，降级为纯关键词: ${errorMessage(error)}`);
-      return [];
-    }
+    return guarded(
+      this.semanticBreaker,
+      [],
+      async () => {
+        const [queryVector] = await embedding.embed([input.query]);
+        if (!queryVector || queryVector.length === 0) return [];
+        const hits = vectorDb.search("kg", Float32Array.from(queryVector), this.graphLimit);
+        const graphHits: GraphHit[] = [];
+        for (const hit of hits) {
+          const node = this.kgAdapter?.getNode(hit.docId);
+          if (!node) continue;
+          graphHits.push({
+            node: { id: node.id, nodeType: node.nodeType, name: node.name, title: node.title },
+            via: "semantic",
+            text: buildNodeText(node),
+          });
+        }
+        return graphHits;
+      },
+      error => this.logger?.warn?.(`[patent-memory] KG 语义召回失败，降级为纯关键词: ${errorMessage(error)}`),
+    );
   }
 
   /** wiki 卡片检索：图谱 WikiCard 节点 + query 关键词 + 语义召回三路命中。 */
@@ -269,23 +298,27 @@ export class PatentMemoryProvider implements MemoryResolver {
     if (loaded < this.cardLimit) {
       const semantic = this.getSemanticCards();
       if (semantic) {
-        try {
-          const remaining = this.cardLimit - loaded;
-          const candidateLimit = this.rerank ? remaining * 3 : remaining;
-          const hits = await semantic.search(input.query, candidateLimit);
-          const orderedIds = await this.tryRerankOrder(
-            input.query,
-            hits.map(hit => hit.id),
-            id => loader.formatAsContext(id, 500),
-            remaining,
-          );
-          for (const id of orderedIds) {
-            pushCard(id);
-            if (loaded >= this.cardLimit) break;
-          }
-        } catch (error) {
-          this.logger?.warn?.(`[patent-memory] wiki 语义召回失败，降级为图谱/关键词路径: ${errorMessage(error)}`);
-        }
+        await guarded(
+          this.semanticBreaker,
+          undefined,
+          async () => {
+            const remaining = this.cardLimit - loaded;
+            const candidateLimit = this.rerank ? remaining * 3 : remaining;
+            const hits = await semantic.search(input.query, candidateLimit);
+            const orderedIds = await this.tryRerankOrder(
+              input.query,
+              hits.map(hit => hit.id),
+              id => loader.formatAsContext(id, 500),
+              remaining,
+            );
+            for (const id of orderedIds) {
+              pushCard(id);
+              if (loaded >= this.cardLimit) break;
+            }
+          },
+          error =>
+            this.logger?.warn?.(`[patent-memory] wiki 语义召回失败，降级为图谱/关键词路径: ${errorMessage(error)}`),
+        );
       }
     }
     return contexts;
@@ -293,15 +326,18 @@ export class PatentMemoryProvider implements MemoryResolver {
 
   /** 通用重排助手：cross-encoder 对候选重新打分（失败/未配置保持原序）。 */
   private async tryRerankOrder<T>(query: string, items: T[], toText: (item: T) => string, topN: number): Promise<T[]> {
-    if (!this.rerank || items.length <= 1) return items;
-    try {
-      const docs = items.map(toText);
-      const results = await this.rerank.rerank(query, docs, topN);
-      return results.map(result => items[result.index]).filter((item): item is T => item !== undefined);
-    } catch (error) {
-      this.logger?.warn?.(`[patent-memory] rerank 失败，保持原序: ${errorMessage(error)}`);
-      return items;
-    }
+    const rerank = this.rerank;
+    if (!rerank || items.length <= 1) return items;
+    return guarded(
+      this.rerankBreaker,
+      items,
+      async () => {
+        const docs = items.map(toText);
+        const results = await rerank.rerank(query, docs, topN);
+        return results.map(result => items[result.index]).filter((item): item is T => item !== undefined);
+      },
+      error => this.logger?.warn?.(`[patent-memory] rerank 失败，保持原序: ${errorMessage(error)}`),
+    );
   }
 
   /** 懒建 wiki 卡语义索引（首次使用触发全量索引 + 后台预热）。 */

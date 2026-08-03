@@ -9,6 +9,8 @@ import type {
   MemoryRetrieveResult,
 } from "../../context/memory/MemoryResolver.js";
 import { MIN_QUERY_LENGTH, type VectorDbSearch } from "../shared/vector-db.js";
+import { CircuitBreaker, guarded } from "../shared/circuit-breaker.js";
+import { TtlCache } from "../shared/ttl-cache.js";
 import { LegalSearchEngine } from "./legal-search.js";
 import type { LawRecord } from "./types.js";
 
@@ -32,6 +34,8 @@ export type LegalMemoryProviderOptions = {
   vectorDb?: VectorDbSearch;
   /** 重排客户端（可选，阶段 C）；配置后对融合候选做 cross-encoder 重排。 */
   rerank?: RerankClient;
+  /** 检索结果缓存 TTL ms（默认 60_000；传 0 关闭缓存）。 */
+  cacheTtlMs?: number;
   /** 降级日志（语义/重排失败时记录）。 */
   logger?: { warn?: (...args: unknown[]) => void };
 };
@@ -44,6 +48,9 @@ export class LegalMemoryProvider implements MemoryResolver {
   private readonly vectorDb?: VectorDbSearch;
   private readonly rerank?: RerankClient;
   private readonly logger?: { warn?: (...args: unknown[]) => void };
+  private readonly semanticBreaker: CircuitBreaker;
+  private readonly rerankBreaker: CircuitBreaker;
+  private readonly cache?: TtlCache<string, string>;
 
   constructor(engine: LegalSearchEngine, options: LegalMemoryProviderOptions = {}) {
     this.engine = engine;
@@ -53,6 +60,10 @@ export class LegalMemoryProvider implements MemoryResolver {
     this.vectorDb = options.vectorDb;
     this.rerank = options.rerank;
     this.logger = options.logger;
+    this.semanticBreaker = new CircuitBreaker({ logger: options.logger });
+    this.rerankBreaker = new CircuitBreaker({ logger: options.logger });
+    const cacheTtlMs = options.cacheTtlMs ?? 60_000;
+    this.cache = cacheTtlMs > 0 ? new TtlCache<string, string>({ ttlMs: cacheTtlMs }) : undefined;
   }
 
   async retrieve(input: MemoryRetrieveInput): Promise<MemoryRetrieveResult> {
@@ -60,6 +71,17 @@ export class LegalMemoryProvider implements MemoryResolver {
     const trimmed = input.query.trim();
     if (Array.from(trimmed).length < 2) {
       return { systemContext: undefined, diagnostics };
+    }
+    if (this.cache) {
+      const cached = this.cache.get(trimmed);
+      if (cached !== undefined) {
+        return {
+          systemContext: cached || undefined,
+          diagnostics: [
+            { code: "memory_context_empty", message: "法律知识检索缓存命中（同 query 短时复用）", severity: "info" },
+          ],
+        };
+      }
     }
 
     // 1. 关键词路：FTS5 BM25
@@ -69,6 +91,9 @@ export class LegalMemoryProvider implements MemoryResolver {
     const semanticRecords = await this.searchSemantic(trimmed);
 
     if (keywordResults.length === 0 && semanticRecords.length === 0) {
+      if (this.cache && !input.signal?.aborted) {
+        this.cache.set(trimmed, "");
+      }
       return { systemContext: undefined, diagnostics };
     }
 
@@ -87,16 +112,20 @@ export class LegalMemoryProvider implements MemoryResolver {
     let merged = fused.map(item => byName.get(item.id)).filter((record): record is LawRecord => record !== undefined);
 
     // 可选重排（阶段 C）：cross-encoder 对融合候选重新打分
-    if (this.rerank && merged.length > 1) {
-      try {
-        const docs = merged.map(record => `${record.name}\n${this.truncate(record.content ?? "")}`);
-        const results = await this.rerank.rerank(trimmed, docs, merged.length);
-        merged = results
-          .map(result => merged[result.index])
-          .filter((record): record is LawRecord => record !== undefined);
-      } catch (error) {
-        this.logger?.warn?.(`[legal-memory] rerank 失败，保持融合顺序: ${errorMessage(error)}`);
-      }
+    const rerank = this.rerank;
+    if (rerank && merged.length > 1) {
+      merged = await guarded(
+        this.rerankBreaker,
+        merged,
+        async () => {
+          const docs = merged.map(record => `${record.name}\n${this.truncate(record.content ?? "")}`);
+          const results = await rerank.rerank(trimmed, docs, merged.length);
+          return results
+            .map(result => merged[result.index])
+            .filter((record): record is LawRecord => record !== undefined);
+        },
+        error => this.logger?.warn?.(`[legal-memory] rerank 失败，保持融合顺序: ${errorMessage(error)}`),
+      );
     }
     merged = merged.slice(0, this.limit);
     if (merged.length === 0) {
@@ -108,6 +137,10 @@ export class LegalMemoryProvider implements MemoryResolver {
       return `- [${result.level}] ${result.name}（${result.categoryName ?? "未分类"}）\n  ${content}`;
     });
     const blocks = [`<law-database>\n${lines.join("\n")}\n</law-database>`];
+
+    if (this.cache && !input.signal?.aborted) {
+      this.cache.set(trimmed, blocks.join("\n\n"));
+    }
 
     diagnostics.push({
       code: "memory_context_empty",
@@ -123,27 +156,31 @@ export class LegalMemoryProvider implements MemoryResolver {
   }
 
   private async searchSemantic(query: string): Promise<LawRecord[]> {
-    if (!this.embedding || !this.vectorDb || !this.vectorDb.hasCorpus("law")) return [];
+    const embedding = this.embedding;
+    const vectorDb = this.vectorDb;
+    if (!embedding || !vectorDb || !vectorDb.hasCorpus("law")) return [];
     if (Array.from(query).length < MIN_QUERY_LENGTH) return [];
-    try {
-      const [queryVector] = await this.embedding.embed([query]);
-      if (!queryVector || queryVector.length === 0) return [];
-      const hits = this.vectorDb.search("law", Float32Array.from(queryVector), this.limit * 2);
-      const records: LawRecord[] = [];
-      const seenNames = new Set<string>();
-      for (const hit of hits) {
-        const record = this.engine.getById(hit.docId);
-        if (!record) continue;
-        if (seenNames.has(record.name)) continue;
-        seenNames.add(record.name);
-        records.push(record);
-        if (records.length >= this.limit) break;
-      }
-      return records;
-    } catch (error) {
-      this.logger?.warn?.(`[legal-memory] 法条语义召回失败，降级为纯 FTS: ${errorMessage(error)}`);
-      return [];
-    }
+    return guarded(
+      this.semanticBreaker,
+      [],
+      async () => {
+        const [queryVector] = await embedding.embed([query]);
+        if (!queryVector || queryVector.length === 0) return [];
+        const hits = vectorDb.search("law", Float32Array.from(queryVector), this.limit * 2);
+        const records: LawRecord[] = [];
+        const seenNames = new Set<string>();
+        for (const hit of hits) {
+          const record = this.engine.getById(hit.docId);
+          if (!record) continue;
+          if (seenNames.has(record.name)) continue;
+          seenNames.add(record.name);
+          records.push(record);
+          if (records.length >= this.limit) break;
+        }
+        return records;
+      },
+      error => this.logger?.warn?.(`[legal-memory] 法条语义召回失败，降级为纯 FTS: ${errorMessage(error)}`),
+    );
   }
 
   private truncate(text: string): string {
