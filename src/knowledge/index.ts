@@ -8,6 +8,15 @@
 
 export { resolveKnowledgeDbPaths, defaultEmbeddingDir, type KnowledgeDbPaths } from "./config.js";
 export { buildKnowledgeResolvers, type BuildKnowledgeResolversOptions } from "./assemble.js";
+export {
+  resolveKnowledgeCapabilities,
+  formatKnowledgeCapabilities,
+  logKnowledgeCapabilities,
+  type KnowledgeCapability,
+  type KnowledgeCapabilityStatus,
+  type KnowledgeCapabilitiesOptions,
+  type KnowledgeCapabilityLogger,
+} from "./diagnostics.js";
 export { KgStore, type KgNeighbor, type KgPathEdge } from "./shared/kg-store.js";
 export { CompositeMemoryResolver } from "./shared/composite-memory-resolver.js";
 export {

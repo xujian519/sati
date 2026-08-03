@@ -94,3 +94,13 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+export {
+  resolveKnowledgeCapabilities,
+  formatKnowledgeCapabilities,
+  logKnowledgeCapabilities,
+  type KnowledgeCapability,
+  type KnowledgeCapabilityStatus,
+  type KnowledgeCapabilitiesOptions,
+  type KnowledgeCapabilityLogger,
+} from "./diagnostics.js";

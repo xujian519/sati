@@ -34,7 +34,12 @@ import {
 import { FileHistoryStore } from "../session/filesystem/FileHistoryStore.js";
 import type { AgentSubagentTranscriptHooks } from "../agent/runtime/AgentRuntimeDependencies.js";
 import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
-import { CompositeMemoryResolver, buildKnowledgeResolvers, resolveKnowledgeDbPaths } from "../knowledge/index.js";
+import {
+  CompositeMemoryResolver,
+  buildKnowledgeResolvers,
+  logKnowledgeCapabilities,
+  resolveKnowledgeDbPaths,
+} from "../knowledge/index.js";
 import type { MemoryResolver } from "../context/index.js";
 import {
   listRegisteredRoleIds,
@@ -823,6 +828,14 @@ class ProjectRuntimeRegistry {
         logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
       }),
     );
+
+    // 知识能力自检：数据/配置缺失时输出可读清单，避免静默降级。
+    logKnowledgeCapabilities(
+      knowledgePaths,
+      { embeddingConfigured: Boolean(embeddingClient), rerankConfigured: Boolean(rerankClient) },
+      console,
+    );
+
     const memoryResolver =
       knowledgeResolvers.length === 1 ? knowledgeResolvers[0] : new CompositeMemoryResolver(knowledgeResolvers);
 
