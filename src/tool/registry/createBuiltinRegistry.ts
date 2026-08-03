@@ -31,6 +31,9 @@ import { createDraftSpecificationTool } from "../builtin/draftSpecification.js";
 import { createValidateSpecificationTool } from "../builtin/validateSpecification.js";
 import { createPatentWorkflowTool } from "../builtin/patentWorkflowTool.js";
 import { createPatentPlanTaskTool } from "../builtin/patentPlanTaskTool.js";
+import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
+import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
+import { createPatentSearchTool } from "../builtin/patentSearch.js";
 import { registerBuiltinAtoms } from "../../patent/atoms/index.js";
 import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateTool.js";
 import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
@@ -206,6 +209,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentPlanTaskTool(), "patent"));
     registry.register(annotate(createPatentWorkerValidateTool(), "patent"));
     registry.register(annotate(createEvaluateEvidenceTool(), "patent"));
+    registry.register(annotate(createPatentMetadataTool(), "patent"));
+    registry.register(annotate(createPatentLegalStatusTool(), "patent"));
+    registry.register(annotate(createPatentSearchTool(), "patent"));
   }
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));

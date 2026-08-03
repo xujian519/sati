@@ -79,7 +79,8 @@
     "undici": "^8.9.0",
     "weixin-ilink": "^0.1.0",
     "ws": "^8.21.1",
-    "yaml": "^2.8.4"
+    "yaml": "^2.8.4",
+    "nuo-patent": "github:xujian519/nuo-patent#v2.3.1"
   },
   "packageManager": "pnpm@10.32.1",
   "pnpm": {

@@ -30,6 +30,9 @@ const DOMAIN_REQUIRED_TOOLS: Record<string, string> = {
   law_search: "legal",
   paper_search: "literature",
   paper_list_sources: "literature",
+  patent_metadata: "patent",
+  patent_legal_status: "patent",
+  patent_search: "patent",
 };
 
 /** 校验角色定义的工具/域一致性，不匹配时输出 warn（不阻断注册）。 */
