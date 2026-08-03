@@ -1,4 +1,5 @@
 import type { GatewayEvent } from "../../../gateway/index.js";
+import { renderPlainTextEvent } from "../protocol/render.js";
 
 export type FeishuLiveCardActivityKind = "thinking" | "tool" | "subagent";
 
@@ -74,38 +75,9 @@ function markdownElement(content: string): Record<string, unknown> {
 }
 
 export function renderFeishuEvent(event: GatewayEvent): string | undefined {
-  switch (event.type) {
-    case "assistant_text_delta":
-      return event.text;
-    case "assistant_thinking_delta":
-      return "";
-    case "tool_call_started":
-      return "";
-    case "tool_call_finished":
-      if (!event.ok) {
-        const name = event.toolName ?? event.toolCallId;
-        if (name === "send_attachment") return "";
-        const detail =
-          typeof event.resultPreview === "string" && event.resultPreview.trim()
-            ? `${event.resultPreview.trim()}\n`
-            : "";
-        return `\n⚠️ ${name} 执行失败\n${detail}`;
-      }
-      return "";
-    case "elicitation_request": {
-      const lines: string[] = [];
-      for (const q of event.questions) {
-        if (q.header) lines.push(`**${q.header}**`);
-        if (q.question) lines.push(q.question);
-        for (let i = 0; i < q.options.length; i++) {
-          lines.push(`${i + 1}. ${q.options[i].label}`);
-        }
-      }
-      return lines.length > 0 ? `\n${lines.join("\n")}\n` : "";
-    }
-    case "error":
-      return `\n❌ ${event.message}\n`;
-    default:
-      return undefined;
-  }
+  return renderPlainTextEvent(event, {
+    toolFailureLabel: "执行失败",
+    skipToolNames: new Set(["send_attachment"]),
+    includeResultPreview: true,
+  });
 }

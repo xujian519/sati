@@ -1,4 +1,5 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
+import { chunkText } from "../protocol/text.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
@@ -290,19 +291,4 @@ function toWsBase(url: string): { wsBase: string; origin: string } {
   const wsBase = `${proto}//${u.host}${path}`;
   const origin = `${u.protocol === "https:" ? "https:" : "http:"}//${u.host}`;
   return { wsBase, origin };
-}
-
-function chunkText(content: string, max: number): string[] {
-  if (content.length <= max) return [content];
-  const out: string[] = [];
-  let rest = content;
-  while (rest.length > max) {
-    let split = rest.lastIndexOf("\n", max);
-    if (split < max / 2) split = rest.lastIndexOf(" ", max);
-    if (split < max / 2) split = max;
-    out.push(rest.slice(0, split));
-    rest = rest.slice(split).replace(/^\n+/, "");
-  }
-  if (rest) out.push(rest);
-  return out;
 }

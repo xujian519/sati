@@ -335,3 +335,26 @@ export async function executeChannelCommand(text: string, ctx: CommandExecContex
   }
   return true;
 }
+
+/**
+ * Resolve an incoming chat message through the channel's session mapper and
+ * handle the shared "new session" acknowledgment that every channel repeats.
+ *
+ * Returns `handled: true` when the message was consumed (either a `/new`
+ * without extra text, which replies "已创建新会话。", or a non-message like an
+ * empty text). Otherwise returns the mapped result for the caller to process.
+ */
+export async function resolveIncomingMessage<T extends { command?: "new"; message: string }>(
+  mapper: { resolve(input: { chatId: string; text: string }): T },
+  chatId: string,
+  text: string,
+  sendReply: (chatId: string, text: string) => Promise<unknown>,
+): Promise<{ mapped: T; handled: boolean }> {
+  const mapped = mapper.resolve({ chatId, text });
+  if (mapped.command === "new" && !mapped.message) {
+    await sendReply(chatId, "已创建新会话。");
+    return { mapped, handled: true };
+  }
+  if (!mapped.message) return { mapped, handled: true };
+  return { mapped, handled: false };
+}

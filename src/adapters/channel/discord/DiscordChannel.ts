@@ -1,4 +1,6 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
+import { chunkText } from "../protocol/text.js";
+import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
@@ -143,12 +145,10 @@ export class DiscordChannel implements ChannelAdapter {
       return;
     }
 
-    const mapped = this.mapper.resolve({ chatId, text });
-    if (mapped.command === "new" && !mapped.message) {
-      await this.sendReply(chatId, "已创建新会话。");
-      return;
-    }
-    if (!mapped.message) return;
+    const { mapped, handled } = await resolveIncomingMessage(this.mapper, chatId, text, (id, t) =>
+      this.sendReply(id, t),
+    );
+    if (handled) return;
 
     this.activeChats.add(chatId);
     try {
@@ -233,19 +233,4 @@ export class DiscordChannel implements ChannelAdapter {
       /* best effort */
     }
   }
-}
-
-function chunkText(content: string, max: number): string[] {
-  if (content.length <= max) return [content];
-  const out: string[] = [];
-  let rest = content;
-  while (rest.length > max) {
-    let split = rest.lastIndexOf("\n", max);
-    if (split < max / 2) split = rest.lastIndexOf(" ", max);
-    if (split < max / 2) split = max;
-    out.push(rest.slice(0, split));
-    rest = rest.slice(split).replace(/^\n+/, "");
-  }
-  if (rest) out.push(rest);
-  return out;
 }
