@@ -1931,27 +1931,32 @@ export class AgentLoop {
 
   /**
    * Append an optional methodology prompt (from `config.methodologyInjection`)
-   * to the system prompt, keyed off the last user message of the request.
+   * to the system prompt, keyed off the FIRST user text message of the request.
    * No-op when the config hook is absent.
+   *
+   * Keying off the first user message (rather than the last) keeps the
+   * methodology stable across the turn: tool results and supplemental
+   * messages are projected as later role:"user" messages and would otherwise
+   * flip the matched methodology (or drop it) mid-turn, and it keeps the
+   * system-prompt prefix stable for prompt caching.
    */
   private applyMethodologyInjection(systemPrompt: string, messages: CanonicalMessage[]): string {
     const inject = this.config.methodologyInjection;
     if (!inject) return systemPrompt;
-    let lastUserText: string | undefined;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i]!;
+    let firstUserText: string | undefined;
+    for (const message of messages) {
       if (message.role !== "user") continue;
       const parts: string[] = [];
       for (const block of messageContent(message)) {
         if (block.type === "text") parts.push(block.text);
       }
       if (parts.length > 0) {
-        lastUserText = parts.join("\n");
+        firstUserText = parts.join("\n");
         break;
       }
     }
-    if (lastUserText === undefined) return systemPrompt;
-    const addendum = inject(lastUserText);
+    if (firstUserText === undefined) return systemPrompt;
+    const addendum = inject(firstUserText);
     if (!addendum) return systemPrompt;
     return `${systemPrompt}\n\n${addendum}`;
   }

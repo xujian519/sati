@@ -37,6 +37,7 @@ export type PendingPatentMessage = {
 export type PatentOutputGateOptions = {
   riskKeywords?: string[];
   approvalKeywords?: string[];
+  absolutePhrases?: string[];
   disclaimer?: string;
   enableCitationGate?: boolean;
   /** 挂起队列容量上限（默认 100）：超出时放弃挂起、直接入库（不丢消息）。 */
@@ -85,6 +86,7 @@ export class PatentOutputGate {
     const info = processPatentOutput(text, {
       riskKeywords: this.options.riskKeywords,
       approvalKeywords: this.options.approvalKeywords,
+      absolutePhrases: this.options.absolutePhrases,
       disclaimer: this.options.disclaimer,
       enableCitationGate: this.options.enableCitationGate,
     });

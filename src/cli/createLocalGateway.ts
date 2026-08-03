@@ -70,6 +70,8 @@ import {
   parsePluginMcpServers,
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
+import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
+import { PatentOutputGate } from "../patent/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig, resolvePilotHome, type PilotProxyConfig } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
@@ -521,6 +523,12 @@ class ProjectRuntimeRegistry {
    */
   private readonly sessionMcpRuntimes = new Map<string, McpRuntime>();
 
+  /**
+   * 推理方法论注册表（共享）：为所有会话的 `methodologyInjection` 回调提供
+   * PDCA / SWOT / 5 Whys / MECE / Fishbone / First Principles / Six Hats 匹配。
+   */
+  private readonly methodologyRegistry = new MethodologyRegistry();
+
   private _extraTools: SatiToolDefinition[];
   private _sessionOverrides: SessionConfigOverrides | undefined;
   private readonly sharedSessionStore = new SessionRouterStore({
@@ -924,6 +932,7 @@ class ProjectRuntimeRegistry {
       extendDependencies: prepared.extendDependencies,
       sessionTitleGenerator: prepared.sessionTitleGenerator,
       collectFileArtifacts: this.shouldCollectFileArtifacts(prepared.runtime),
+      outputGate: prepared.patentOutputGate,
     });
     return resumed.session;
   }
@@ -953,6 +962,7 @@ class ProjectRuntimeRegistry {
       seedState: previous.fileState,
       sessionTitleGenerator: prepared.sessionTitleGenerator,
       collectFileArtifacts: this.shouldCollectFileArtifacts(prepared.runtime),
+      outputGate: prepared.patentOutputGate,
     });
     return session;
   }
@@ -1275,11 +1285,43 @@ class ProjectRuntimeRegistry {
         planTodoManager,
       };
     };
+    /**
+     * 专利输出门禁（每会话一个）：命中审批词的消息挂起等待人工审批，审批入口
+     * 为 `AgentSession.approvePendingOutput/rejectPendingOutput`（gateway 命令
+     * 接入前的当前可见性是日志告警；消息本体挂起时已入库，不丢消息）。
+     *
+     * 保守默认：仅保留审批词 HITL 拦截（专利结论/侵权判断/有效性结论/最终建议），
+     * 关闭绝对化表述改写、风险词免责声明与法条核验——避免专利词表污染普通会话的
+     * 用户可见消息（如"一定/百分百"被追加改写提示）。需要完整门禁时显式传入
+     * 关键词表与 `enableCitationGate: true`。
+     */
+    const patentOutputGate = new PatentOutputGate({
+      riskKeywords: [],
+      absolutePhrases: [],
+      enableCitationGate: false,
+      onPending: pending => {
+        // 仅记录定位信息，不打消息内容（专利结论可能含敏感信息）
+        console.warn(
+          `[PatentOutputGate] 专利结论待人工审批: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}（消息已入库，审批入口待接入）`,
+        );
+      },
+      onApproved: pending => {
+        console.info(
+          `[PatentOutputGate] 审批通过: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
+        );
+      },
+      onRejected: pending => {
+        console.warn(
+          `[PatentOutputGate] 审批拒绝: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
+        );
+      },
+    });
     return {
       runtime,
       baseDependencies,
       sessionTitleGenerator,
       extendDependencies,
+      patentOutputGate,
     };
   }
 
@@ -1339,6 +1381,12 @@ class ProjectRuntimeRegistry {
       maxContextTokens,
       maxOutputTokens,
       thinking: agent.thinking,
+      methodologyInjection: lastUserMessage => {
+        // minScore 0.2：要求至少命中约 2 个触发词（1/8≈0.12 的单词偶然命中
+        // 会被过滤，如"问题/优化/流程"单独出现时），避免日常对话被强制注入格式。
+        const result = injectMethodology(this.methodologyRegistry, lastUserMessage, { minScore: 0.2 });
+        return result.applied && result.prompt ? result.prompt : null;
+      },
       permissionContext: createDefaultPermissionContext({
         cwd,
         mode: permissionMode,

@@ -180,3 +180,4 @@ export {
   type InstructionLayer,
   type InstructionScope,
 } from "./instructions/InstructionDiscovery.js";
+export * from "./vector/index.js";

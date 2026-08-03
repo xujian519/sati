@@ -128,3 +128,5 @@ export {
   type CanonicalModelError,
   type CanonicalModelErrorCode,
 } from "./protocol/errors.js";
+export * from "./catalog/index.js";
+export * from "./embedding/index.js";
