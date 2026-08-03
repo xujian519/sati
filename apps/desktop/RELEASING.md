@@ -8,17 +8,25 @@
 
 ## TL;DR — 90% 的发版流程
 
-```bash
-# 1. 在 apps/desktop/ 下，bump 版本（自动改 package.json + 自动 git commit + 自动 git tag）
-cd apps/desktop
-pnpm version patch -m "release(desktop): v%s"   # 0.1.0 → 0.1.1（仅修 bug）
-# 或：
-pnpm version minor -m "release(desktop): v%s"   # 0.1.0 → 0.2.0（加新功能）
-pnpm version major -m "release(desktop): v%s"   # 0.1.0 → 1.0.0（破坏性更新）
+> **Workspace 注意**：pnpm 10 的 `pnpm version` 在 pnpm workspace 内运行**只改
+> `package.json`，不会自动 git commit / git tag**（pnpm 11 文档描述的行为不适用于
+> 10.x workspace）。因此 git 部分需手动补，见下方完整命令。commit-msg hook 已支持
+> `release` type（见 `scripts/check-commit-msg.mjs`）。
 
-# 2. 写一行 CHANGELOG（顶部追加），git commit --amend 顺手补进去
+```bash
+# 1. 在 apps/desktop/ 下，bump 版本号（只改 package.json）
+cd apps/desktop
+pnpm version patch   # 0.1.0 → 0.1.1（仅修 bug）
+# 或：
+pnpm version minor   # 0.1.0 → 0.2.0（加新功能）
+pnpm version major   # 0.1.0 → 1.0.0（破坏性更新）
+
+# 2. 写一行 CHANGELOG（顶部追加），然后手动补 git commit + tag（pnpm version 不做这步）
 $EDITOR ../../CHANGELOG.md
-git commit --amend --no-edit
+cd ..
+git add apps/desktop/package.json CHANGELOG.md
+git commit -m "release(desktop): v0.0.13"        # %s 需手动替换成实际版本号
+git tag -a v0.0.13 -m "release(desktop): v0.0.13"
 
 # 3. 推 commit + tag 到 origin
 git push --follow-tags
@@ -214,8 +222,9 @@ pnpm version 0.2.1 -m "release(desktop): v%s"
     本地测试可加: ALLOW_UNTAGGED=1 bash scripts/release.sh --ad-hoc
 ```
 
-按提示来即可。**不要**手动改 package.json 然后 `git tag v0.1.1` —— 用 `pnpm version`
-让两件事原子化。
+按提示来即可。**不要**手动改 package.json 后漏掉 commit/tag —— 版本号修改用
+`pnpm version`，git commit / tag 手动补（见 TL;DR）。两件事都要做：release.sh 会校验
+`tag^{commit} == HEAD`，tag 必须指向 release commit。
 
 ---
 
