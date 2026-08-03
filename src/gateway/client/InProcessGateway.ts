@@ -2107,10 +2107,6 @@ async function attachmentsToContentBlocks(
   return { blocks, directContentPaths, hasDiagnostics: diagnostics.length > 0 };
 }
 
-function sanitizeAttachmentName(name: string): string {
-  return name.replace(/[\r\n]+/g, " ").trim() || "attachment";
-}
-
 function providerErrorFromAgentError(error: AgentError): GatewayEventProviderError | undefined {
   const details = error.details;
   if (!details || typeof details !== "object") return undefined;

@@ -134,7 +134,7 @@ export default function ProviderLoginModal({
                         href="https://aistudio.google.com/app/apikey"
                         target="_blank"
                         rel="noreferrer"
-                        className="flex inline-flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400"
+                        className="flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400"
                       >
                         Google AI Studio <ExternalLink className="h-3 w-3" />
                       </a>

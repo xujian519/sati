@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 组件与工具函数（getContextStatus 等）按设计同文件导出 */
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, MouseEvent, ReactNode, RefObject } from "react";
@@ -224,7 +225,6 @@ function formatContextPercentLabel(percent: number): string {
 
 export function getContextStatus(tokenBudget?: Record<string, unknown> | null): ContextStatus {
   const used = readNumber(tokenBudget?.displayUsed) ?? readNumber(tokenBudget?.used) ?? 0;
-  const budgetUsed = readNumber(tokenBudget?.budgetUsed) ?? readNumber(tokenBudget?.used) ?? used;
   const total = readNumber(tokenBudget?.total) ?? 0;
   const effectiveTotal = readNumber(tokenBudget?.effectiveTotal);
   const displayTotal = effectiveTotal && effectiveTotal > 0 ? effectiveTotal : total;

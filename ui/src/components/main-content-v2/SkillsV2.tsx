@@ -816,7 +816,7 @@ function ListSection({
                 <span className="text-neutral-400">›</span>
               </button>
               {showMoveSubmenu ? (
-                <div className="absolute left-full top-0 z-[101] ml-1 min-w-[160px] max-h-[240px] overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+                <div className="absolute left-full top-0 z-[101] ml-1 max-h-[240px] min-w-[160px] overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
                   {filteredMoveTargets.map(mt => (
                     <button
                       key={mt.target.scope + ":" + (mt.target.projectPath || "user")}
@@ -1297,7 +1297,7 @@ function InstallFromClawHub({
                 <li key={r.slug} className="flex items-center justify-between gap-3 px-5 py-2.5">
                   <div className="min-w-0">
                     <div className="flex items-baseline gap-2">
-                      <span className="truncate font-medium text-[13px]">{r.name}</span>
+                      <span className="truncate text-[13px] font-medium">{r.name}</span>
                       <span className="font-mono text-[11px] text-neutral-500 dark:text-neutral-400">{r.slug}</span>
                       {r.score ? (
                         <span className="text-[10px] text-neutral-400 dark:text-neutral-600">
@@ -1655,8 +1655,6 @@ function ImportFromFolder({
     setBatchResults(new Map(results));
 
     let successCount = 0;
-    let failCount = 0;
-
     for (const candidate of selected) {
       results.set(candidate.folderName, { folderName: candidate.folderName, status: "importing" });
       setBatchResults(new Map(results));
@@ -1708,7 +1706,6 @@ function ImportFromFolder({
           status: "error",
           error: (e as Error).message,
         });
-        failCount++;
       }
       setBatchResults(new Map(results));
     }
@@ -1862,7 +1859,6 @@ function ImportFromFolder({
               type="file"
               // @ts-expect-error webkitdirectory is non-standard but supported in Chromium/WebKit/Firefox.
               webkitdirectory=""
-              directory=""
               multiple
               onChange={handleFolderSelected}
               className="hidden"
@@ -1927,7 +1923,7 @@ function ImportFromFolder({
                 type="button"
                 onClick={clearBatch}
                 disabled={batchImporting}
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-500 hover:bg-neutral-200 dark:text-neutral-400 dark:hover:bg-neutral-800 disabled:opacity-40"
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-500 hover:bg-neutral-200 disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-800"
               >
                 <X className="h-3 w-3" strokeWidth={1.75} />
               </button>

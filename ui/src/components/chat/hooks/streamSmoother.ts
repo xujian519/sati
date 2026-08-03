@@ -29,38 +29,9 @@ const DEFAULT_MIN_CHARS_PER_FRAME = 1;
 const DEFAULT_MAX_CHARS_PER_FRAME = 4;
 const DEFAULT_AVERAGE_CHARS_PER_SECOND = 120;
 const DEFAULT_FALLBACK_FRAME_MS = 32;
-const RATE_ALPHA = 0.22;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function smooth(previous: number, next: number): number {
-  return previous * (1 - RATE_ALPHA) + next * RATE_ALPHA;
-}
-
-function isPreferredBoundary(char: string): boolean {
-  return /[\s,.;:!?，。！？、；：）\])}]/.test(char);
-}
-
-function findBoundary(content: string, minLength: number, desiredLength: number, maxLength: number): number {
-  const safeMax = clamp(maxLength, minLength, content.length);
-  const safeDesired = clamp(desiredLength, minLength, safeMax);
-  const backwardLimit = Math.max(minLength, safeDesired - 12);
-  for (let index = safeDesired; index >= backwardLimit; index -= 1) {
-    if (isPreferredBoundary(content[index - 1] || "")) {
-      return index;
-    }
-  }
-
-  const forwardLimit = Math.min(safeMax, safeDesired + 12);
-  for (let index = safeDesired + 1; index <= forwardLimit; index += 1) {
-    if (isPreferredBoundary(content[index - 1] || "")) {
-      return index;
-    }
-  }
-
-  return safeDesired;
 }
 
 export class SmoothTextStream {

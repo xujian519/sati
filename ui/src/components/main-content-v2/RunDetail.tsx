@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ChevronDown, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import type { AlwaysOnDashboardEvent } from "../../types/app";
@@ -279,7 +279,7 @@ export default function RunDetail(props: RunDetailProps) {
                   {t("dashboard.runDetail.loading", { defaultValue: "Loading…" })}
                 </div>
               ) : plan?.content ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none">
+                <div className="prose prose-sm max-w-none dark:prose-invert">
                   <Markdown>{plan.content}</Markdown>
                 </div>
               ) : (
@@ -315,7 +315,7 @@ export default function RunDetail(props: RunDetailProps) {
                   {t("dashboard.runDetail.loading", { defaultValue: "Loading…" })}
                 </div>
               ) : reportMarkdown ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none">
+                <div className="prose prose-sm max-w-none dark:prose-invert">
                   <Markdown>{reportMarkdown}</Markdown>
                 </div>
               ) : (

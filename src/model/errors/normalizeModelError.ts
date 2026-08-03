@@ -141,7 +141,7 @@ function firstErrorRecord(error: unknown): Record<string, unknown> | undefined {
 function classifySemanticError(
   message: string,
   status: number | undefined,
-  protocol: ModelProtocol,
+  _protocol: ModelProtocol,
 ): CanonicalModelErrorCode | undefined {
   if (PROMPT_TOO_LONG_ANTHROPIC_PATTERN.test(message)) {
     return "prompt_too_long";

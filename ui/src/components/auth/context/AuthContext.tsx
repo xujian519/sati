@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- AuthProvider + useAuth 按设计捆绑导出，拆分会破坏全部调用方 import */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { IS_PLATFORM, DISABLE_LOCAL_AUTH } from "../../../constants/config";
 import { api } from "../../../utils/api";

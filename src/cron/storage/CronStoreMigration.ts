@@ -63,7 +63,7 @@ export async function migrateCronStores(input: { pilotHome: string; logger?: Cro
     for (const [dir, tasks] of finalTasks) {
       finalTasks.set(dir, dedupeTasks(tasks, input.logger, dir));
     }
-    for (const [dir, bucket] of finalRuns) {
+    for (const [, bucket] of finalRuns) {
       bucket.records = dedupeRuns(bucket.records);
     }
 

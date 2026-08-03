@@ -189,7 +189,7 @@ const commands: ChannelCommand[] = [
       // Execute the update
       await ctx.reply("🚀 开始更新 Sati...\n正在拉取最新代码、重新构建...");
       try {
-        const { stdout, stderr } = await execFileAsync("bash", [scriptPath, "--restart"], {
+        const { stdout } = await execFileAsync("bash", [scriptPath, "--restart"], {
           cwd: projectRoot,
           env: { ...process.env, FORCE_COLOR: "0" },
           timeout: 300_000,

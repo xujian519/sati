@@ -304,9 +304,12 @@ export function useChatComposerState({
   }, [subscribe]);
 
   useEffect(() => {
+    // 拷贝 ref 对象（而非当前值），cleanup 始终读取最新 Map，避免未来
+    // ref 被重新赋值时清理到旧实例。
+    const pendingResolversRef = pendingSessionGrantResolversRef;
     return () => {
-      pendingSessionGrantResolversRef.current.forEach(resolve => resolve({ success: false }));
-      pendingSessionGrantResolversRef.current.clear();
+      pendingResolversRef.current.forEach(resolve => resolve({ success: false }));
+      pendingResolversRef.current.clear();
     };
   }, []);
 
@@ -702,56 +705,59 @@ export function useChatComposerState({
     inputHighlightRef.current.scrollLeft = target.scrollLeft;
   }, []);
 
-  const handleImageFiles = useCallback((files: File[]) => {
-    const validFiles = files.filter(file => {
-      try {
-        if (!file || typeof file !== "object") {
-          console.warn("Invalid file object:", file);
+  const handleImageFiles = useCallback(
+    (files: File[]) => {
+      const validFiles = files.filter(file => {
+        try {
+          if (!file || typeof file !== "object") {
+            console.warn("Invalid file object:", file);
+            return false;
+          }
+
+          if (typeof file.size !== "number" || file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+            const fileName = file.name || "Unknown file";
+            setImageErrors(previous => {
+              const next = new Map(previous);
+              next.set(fileName, "File too large (max 20MB)");
+              return next;
+            });
+            return false;
+          }
+
+          return true;
+        } catch (error) {
+          console.error("Error validating file:", error, file);
           return false;
         }
-
-        if (typeof file.size !== "number" || file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-          const fileName = file.name || "Unknown file";
-          setImageErrors(previous => {
-            const next = new Map(previous);
-            next.set(fileName, "File too large (max 20MB)");
-            return next;
-          });
-          return false;
-        }
-
-        return true;
-      } catch (error) {
-        console.error("Error validating file:", error, file);
-        return false;
-      }
-    });
-
-    setImageErrors(previous => {
-      if (!previous.has(MAX_ATTACHMENTS_ERROR_KEY)) return previous;
-      const next = new Map(previous);
-      next.delete(MAX_ATTACHMENTS_ERROR_KEY);
-      return next;
-    });
-
-    if (validFiles.length > 0) {
-      setAttachedImages(previous => {
-        const result = addAttachmentFiles(previous, validFiles);
-        if (result.droppedCount > 0) {
-          setImageErrors(previousErrors => {
-            const next = new Map(previousErrors);
-            next.set(
-              MAX_ATTACHMENTS_ERROR_KEY,
-              `Only the first ${MAX_ATTACHMENTS} attachments were added; ${result.droppedCount} file${result.droppedCount === 1 ? "" : "s"} skipped.`,
-            );
-            return next;
-          });
-        }
-        syncQueuedBusySendSnapshot({ attachedImages: result.files });
-        return result.files;
       });
-    }
-  }, []);
+
+      setImageErrors(previous => {
+        if (!previous.has(MAX_ATTACHMENTS_ERROR_KEY)) return previous;
+        const next = new Map(previous);
+        next.delete(MAX_ATTACHMENTS_ERROR_KEY);
+        return next;
+      });
+
+      if (validFiles.length > 0) {
+        setAttachedImages(previous => {
+          const result = addAttachmentFiles(previous, validFiles);
+          if (result.droppedCount > 0) {
+            setImageErrors(previousErrors => {
+              const next = new Map(previousErrors);
+              next.set(
+                MAX_ATTACHMENTS_ERROR_KEY,
+                `Only the first ${MAX_ATTACHMENTS} attachments were added; ${result.droppedCount} file${result.droppedCount === 1 ? "" : "s"} skipped.`,
+              );
+              return next;
+            });
+          }
+          syncQueuedBusySendSnapshot({ attachedImages: result.files });
+          return result.files;
+        });
+      }
+    },
+    [syncQueuedBusySendSnapshot],
+  );
 
   const handlePaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -1081,7 +1087,6 @@ export function useChatComposerState({
       setIsAborting,
       addMessage,
       setClaudeStatus,
-      setSatiStatus,
       setIsLoading,
       setIsUserScrolledUp,
       slashCommands,
@@ -1340,7 +1345,6 @@ export function useChatComposerState({
     selectedSession?.id,
     sendMessage,
     setCanAbortSession,
-    setClaudeStatus,
     setIsAborting,
     setSatiStatus,
   ]);

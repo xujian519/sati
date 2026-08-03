@@ -114,10 +114,6 @@ export async function readWebSessionMessages(
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /**
  * Read a subagent's sidechain transcript and project it onto WebMessage[].
  * Locates the sidechain JSONL by deriving the default path from the parent

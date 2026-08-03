@@ -2,16 +2,11 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { resolveWebSocketImpl } from "../protocol/resolveWebSocketImpl.js";
 import { MattermostSessionMapper } from "./MattermostSessionMapper.js";
 import { renderMattermostEvent } from "./mattermost-render.js";
 
-let WebSocketImpl: any;
-try {
-  const wsMod = require("ws");
-  WebSocketImpl = wsMod.WebSocket ?? wsMod;
-} catch {
-  WebSocketImpl = (globalThis as any).WebSocket;
-}
+const WebSocketImpl = resolveWebSocketImpl();
 
 const MAX_MESSAGE_LENGTH = 16383;
 const RECONNECT_DELAY_MS = 4000;

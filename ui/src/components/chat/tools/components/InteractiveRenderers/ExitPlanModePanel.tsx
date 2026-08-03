@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 组件与配套常量按设计同文件导出 */
 import React, { useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronUp, ClipboardList, MessageSquareText } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -126,7 +127,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({ request, onD
       </div>
 
       {!collapsed && (
-        <div className="min-h-[200px] max-h-[50vh] overflow-y-auto px-4 py-3">
+        <div className="max-h-[50vh] min-h-[200px] overflow-y-auto px-4 py-3">
           <MarkdownContent
             content={plan}
             className="prose prose-sm max-w-none text-neutral-800 dark:prose-invert dark:text-neutral-200"

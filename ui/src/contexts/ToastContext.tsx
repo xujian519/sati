@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 export type ToastKind = "success" | "error" | "info";

@@ -384,10 +384,6 @@ function bumpAggregate(agg: RouterStatsAggregate, record: RouterStatsRecord): vo
   }
 }
 
-function isAggregate(val: unknown): val is RouterStatsAggregate {
-  return typeof val === "object" && val !== null && "totalRequests" in val;
-}
-
 /**
  * One-time migration from the old stats.json (or legacy router-stats.json)
  * into the new append-only stats.jsonl format.  Extracts every requestLog

@@ -108,7 +108,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
 
   return (
     <div className="flex h-full flex-col bg-white dark:bg-neutral-950">
-      <div className="text-xxs flex h-10 shrink-0 items-center border-b border-neutral-200 px-6 dark:border-neutral-800">
+      <div className="flex h-10 shrink-0 items-center border-b border-neutral-200 px-6 text-xxs dark:border-neutral-800">
         <GitBranch className="mr-2 h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" strokeWidth={1.75} />
         <span className="font-medium text-neutral-900 dark:text-neutral-100">{controller.currentBranch || "main"}</span>
         <span className="ml-2 text-neutral-500 dark:text-neutral-400">
@@ -118,7 +118,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
           type="button"
           onClick={() => void controller.handleFetch()}
           disabled={controller.isFetching}
-          className="text-xxs ml-auto inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xxs text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
         >
           <RefreshCw className={cn("h-3.5 w-3.5", controller.isFetching && "animate-spin")} strokeWidth={1.75} />
           <span>Fetch</span>
@@ -137,7 +137,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
             <div>
               <div className="font-medium">{controller.gitStatus?.error}</div>
               {controller.gitStatus?.details ? (
-                <div className="text-xxs mt-1 opacity-80">{controller.gitStatus.details}</div>
+                <div className="mt-1 text-xxs opacity-80">{controller.gitStatus.details}</div>
               ) : null}
             </div>
           </div>
@@ -204,7 +204,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
           </button>
         </div>
         {controller.operationError ? (
-          <div className="text-xxs mt-2 flex items-start gap-1.5 text-red-600 dark:text-red-400">
+          <div className="mt-2 flex items-start gap-1.5 text-xxs text-red-600 dark:text-red-400">
             <AlertCircle className="mt-0.5 h-3 w-3" strokeWidth={1.75} />
             <span>{controller.operationError}</span>
             <button
@@ -224,7 +224,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
 function ChangeList({ title, rows, onFileOpen }: { title: string; rows: ChangeRow[]; onFileOpen?: FileOpenHandler }) {
   return (
     <div>
-      <div className="text-xxs mb-2 uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <div className="mb-2 text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         {title} · {rows.length}
       </div>
       <div className="space-y-1">

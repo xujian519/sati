@@ -284,7 +284,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
           )}
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-neutral-400 dark:text-neutral-500">
             <Box className="h-3 w-3 shrink-0" strokeWidth={1.75} />
-            <span className="min-w-0 max-w-[24rem] truncate" title={projectName}>
+            <span className="min-w-0 max-w-96 truncate" title={projectName}>
               {projectName}
             </span>
           </div>

@@ -473,7 +473,7 @@ export class FeishuChannel implements ChannelAdapter {
           this.mapper.resolve({ chatId, text: "/new" });
           this.onStateChange?.(this.mapper.snapshot());
         },
-        logger: this.logger as any,
+        logger: this.logger,
       });
       if (handled) return;
     }

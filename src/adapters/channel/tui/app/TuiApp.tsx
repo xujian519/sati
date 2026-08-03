@@ -117,7 +117,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
         };
       });
     }
-  }, [props.gateway, props.projectKey, stdout, state.sessions]);
+  }, [props.gateway, props.projectKey, stdout, state.sessions, state.sidebarGroupBy]);
 
   const switchToSession = useCallback(
     async (sessionKey: string, summary?: string) => {

@@ -120,7 +120,7 @@ export function VersionBadge() {
               </button>
             </div>
 
-            <div className="px-5 py-4 space-y-3">
+            <div className="space-y-3 px-5 py-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800">
                   <GitCommit className="h-5 w-5 text-neutral-600 dark:text-neutral-300" />
@@ -139,7 +139,7 @@ export function VersionBadge() {
                   {info.newCommits.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {info.newCommits.slice(0, 5).map((commit, i) => (
-                        <li key={i} className="truncate text-xs font-mono text-blue-700 dark:text-blue-300">
+                        <li key={i} className="truncate font-mono text-xs text-blue-700 dark:text-blue-300">
                           {commit}
                         </li>
                       ))}
@@ -155,13 +155,13 @@ export function VersionBadge() {
 
               {phase === "updating" && (
                 <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="mb-2 flex items-center gap-2">
                     <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />
                     <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">Updating...</span>
                   </div>
                   <div className="max-h-40 overflow-y-auto rounded bg-neutral-900 p-2">
                     {logs.map((line, i) => (
-                      <div key={i} className="text-[11px] font-mono text-neutral-300 leading-relaxed">
+                      <div key={i} className="font-mono text-[11px] leading-relaxed text-neutral-300">
                         {line}
                       </div>
                     ))}
@@ -172,14 +172,14 @@ export function VersionBadge() {
 
               {phase === "success" && (
                 <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950/30">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="mb-2 flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
                     <span className="text-sm font-medium text-green-800 dark:text-green-200">Update complete!</span>
                   </div>
                   {logs.length > 0 && (
-                    <div className="max-h-32 overflow-y-auto rounded bg-neutral-900 p-2 mt-2">
+                    <div className="mt-2 max-h-32 overflow-y-auto rounded bg-neutral-900 p-2">
                       {logs.slice(-5).map((line, i) => (
-                        <div key={i} className="text-[11px] font-mono text-neutral-300 leading-relaxed">
+                        <div key={i} className="font-mono text-[11px] leading-relaxed text-neutral-300">
                           {line}
                         </div>
                       ))}
@@ -190,14 +190,14 @@ export function VersionBadge() {
 
               {phase === "error" && (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950/30">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="mb-2 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
                     <span className="text-sm font-medium text-red-800 dark:text-red-200">Update failed</span>
                   </div>
                   {logs.length > 0 && (
-                    <div className="max-h-32 overflow-y-auto rounded bg-neutral-900 p-2 mt-2">
+                    <div className="mt-2 max-h-32 overflow-y-auto rounded bg-neutral-900 p-2">
                       {logs.slice(-5).map((line, i) => (
-                        <div key={i} className="text-[11px] font-mono text-red-300 leading-relaxed">
+                        <div key={i} className="font-mono text-[11px] leading-relaxed text-red-300">
                           {line}
                         </div>
                       ))}

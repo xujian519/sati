@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../components/auth/context/AuthContext";
 import { IS_PLATFORM } from "../constants/config";
@@ -194,9 +195,14 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
     connect();
 
+    // Copy the ref objects (not their values) so the cleanup closure reads a
+    // stable reference; the underlying refs are never re-assigned in this file.
+    const connectId = connectIdRef;
+    const queuedMessages = queuedMessagesRef;
+
     return () => {
-      connectIdRef.current++;
-      clearDisconnectedQueue(queuedMessagesRef.current);
+      connectId.current++;
+      clearDisconnectedQueue(queuedMessages.current);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;

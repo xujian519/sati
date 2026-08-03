@@ -243,6 +243,7 @@
     "placeholderDefault": "Type your message...",
     "disabled": "Input disabled",
     "attachFiles": "Attach files",
+    "attachFile": "Attach file",
     "attachImages": "Attach images",
     "mentionFile": "Mention a file",
     "slashCommand": "Run a slash command",
@@ -347,6 +348,7 @@
     "readyPrompt": {
       "sati": "Ready to use Sati with {{model}}. Start typing your message below.",
       "cursor": "Ready to use Cursor with {{model}}. Start typing your message below.",
+      "claude": "Ready to use Claude with {{model}}. Start typing your message below.",
       "codex": "Ready to use Codex with {{model}}. Start typing your message below.",
       "gemini": "Ready to use Gemini with {{model}}. Start typing your message below.",
       "default": "Select a provider above to begin"
@@ -450,6 +452,10 @@
   "composer": {
     "placeholder": "Tell Sati what you want to get done…",
     "welcomePlaceholder": "Tell Sati what you want to get done…"
+  },
+  "welcome": {
+    "greetingWithProject": "What would you like to do today?",
+    "noProject": "Select a project from the left to get started"
   },
   "subagent": {
     "detailTitle": "Subagent Detail",

@@ -234,10 +234,11 @@ export function useShellTerminal({
       }, TERMINAL_RESIZE_DELAY_MS);
     });
 
-    resizeObserver.observe(terminalContainerRef.current);
+    const terminalContainer = terminalContainerRef.current;
+    resizeObserver.observe(terminalContainer);
 
     return () => {
-      terminalContainerRef.current?.removeEventListener("copy", handleTerminalCopy);
+      terminalContainer?.removeEventListener("copy", handleTerminalCopy);
       resizeObserver.disconnect();
       if (resizeTimeoutRef.current !== null) {
         window.clearTimeout(resizeTimeoutRef.current);

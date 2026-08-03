@@ -377,7 +377,7 @@ export default function DashboardV2({
         <p className="text-[13px] text-neutral-600 dark:text-neutral-400">{error}</p>
         <button
           onClick={refresh}
-          className="text-xxs rounded-md bg-neutral-900 px-3 py-1.5 text-white transition hover:opacity-90 dark:bg-neutral-50 dark:text-neutral-900"
+          className="rounded-md bg-neutral-900 px-3 py-1.5 text-xxs text-white transition hover:opacity-90 dark:bg-neutral-50 dark:text-neutral-900"
         >
           {t("dashboard.retry", { defaultValue: "Retry" })}
         </button>
@@ -454,7 +454,7 @@ export default function DashboardV2({
               type="button"
               onClick={refresh}
               disabled={loading}
-              className="text-xxs inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 text-xxs text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
             >
               <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} strokeWidth={1.75} />
               <span>{t("dashboard.refresh", { defaultValue: "Refresh" })}</span>
@@ -574,7 +574,7 @@ export default function DashboardV2({
                 compact ? "p-4" : "p-5",
               )}
             >
-              <div className="text-xxs mb-4 uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+              <div className="mb-4 text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                 {t("dashboard.recent.title", { defaultValue: "Recent routes" })}
               </div>
               {recent.length === 0 ? (
@@ -605,7 +605,7 @@ export default function DashboardV2({
                     <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
                       {recent.map(row => (
                         <tr key={row.key}>
-                          <td className="text-xxs py-2 font-mono text-neutral-500 dark:text-neutral-400">
+                          <td className="py-2 font-mono text-xxs text-neutral-500 dark:text-neutral-400">
                             {row.timeLabel}
                           </td>
                           <td className="py-2 text-neutral-600 dark:text-neutral-400">{row.projectName || "—"}</td>
@@ -628,75 +628,6 @@ export default function DashboardV2({
 }
 
 // ─── Sub-components ───
-
-function ProjectGroupCard({ group, defaultOpen = false }: { group: ProjectGroup; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const agg = group.aggregated;
-  const hasData = agg.total.requestCount > 0;
-
-  return (
-    <div className="rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition hover:bg-neutral-50 dark:hover:bg-neutral-900"
-      >
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-neutral-400" strokeWidth={1.75} />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" strokeWidth={1.75} />
-        )}
-        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-neutral-400" strokeWidth={1.75} />
-        <span className="flex-1 truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
-          {group.displayName}
-        </span>
-        <span className="text-xxs shrink-0 tabular-nums text-neutral-500 dark:text-neutral-400">
-          {agg.sessionCount} sessions{agg.routedSessionCount > 0 ? ` · ${agg.routedSessionCount} routed` : ""} ·{" "}
-          {formatTokens(agg.total.totalTokens || 0)} tokens · {formatCost(agg.total.estimatedCost || 0)}
-        </span>
-      </button>
-
-      {open && (
-        <div className="border-t border-neutral-100 px-5 pb-4 pt-3 dark:border-neutral-800/50">
-          {/* Tier breakdown */}
-          {Object.keys(agg.byTier || {}).length > 0 && (
-            <div className="mb-3">
-              <div className="text-xxs mb-2 text-neutral-400 dark:text-neutral-500">Tier breakdown</div>
-              <div className="flex flex-wrap gap-2">
-                {getSortedTierEntries(agg.byTier).map(([tier, bucket]) => (
-                  <span
-                    key={tier}
-                    className="text-xxs inline-flex items-center gap-1.5 rounded-md border border-neutral-200 px-2 py-1 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400"
-                  >
-                    <span className="font-medium">{tier}</span>
-                    <span className="text-neutral-400 dark:text-neutral-500">·</span>
-                    <span>{formatTokens(bucket?.totalTokens || 0)}</span>
-                    <span className="text-neutral-400 dark:text-neutral-500">·</span>
-                    <span>{formatCost(bucket?.estimatedCost || 0)}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Session list — show all sessions */}
-          {group.allSessions.length > 0 ? (
-            <div>
-              <div className="text-xxs mb-2 text-neutral-400 dark:text-neutral-500">Sessions</div>
-              <div className="space-y-1">
-                {group.allSessions.map(session => (
-                  <SessionRow key={session.sessionId} session={session} />
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="text-xxs text-neutral-400 dark:text-neutral-500">No sessions yet.</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const TIER_COLORS: Record<string, string> = {
   SIMPLE: "bg-emerald-400 dark:bg-emerald-500",
@@ -775,7 +706,7 @@ function ProjectCostCard({ group, onClick }: { group: ProjectGroup; onClick?: ()
               {group.displayName}
             </span>
           </div>
-          <div className="text-xxs mt-1 text-neutral-500 dark:text-neutral-400">
+          <div className="mt-1 text-xxs text-neutral-500 dark:text-neutral-400">
             {t("dashboard.projectCard.summary", {
               requests,
               tokens: formatTokens(tokens),
@@ -1192,19 +1123,19 @@ function SessionRow({ session }: { session: DashboardSession }) {
         {routing ? (
           <div className="flex shrink-0 items-center gap-2">
             {isOrchestrated && (
-              <span className="text-xxs rounded bg-violet-100 px-1.5 py-0.5 font-medium text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
+              <span className="rounded bg-violet-100 px-1.5 py-0.5 text-xxs font-medium text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
                 {t("dashboard.session.orchestrated", { defaultValue: "orchestrated" })}
               </span>
             )}
             {Object.keys(routing.byTier || {}).map(tier => (
               <span
                 key={tier}
-                className="text-xxs rounded bg-blue-100 px-1.5 py-0.5 font-medium text-blue-600 dark:bg-blue-900/40 dark:text-blue-400"
+                className="rounded bg-blue-100 px-1.5 py-0.5 text-xxs font-medium text-blue-600 dark:bg-blue-900/40 dark:text-blue-400"
               >
                 {tier}
               </span>
             ))}
-            <div className="ml-1 grid grid-cols-[56px_62px_58px_86px] items-center gap-2 text-[11px] leading-[14px] tabular-nums">
+            <div className="ml-1 grid grid-cols-[56px_62px_58px_86px] items-center gap-2 text-[11px] tabular-nums leading-[14px]">
               <span className="text-right text-neutral-500 dark:text-neutral-400">
                 {t("dashboard.units.requestsShort", {
                   count: routing.total.requestCount,
@@ -1234,7 +1165,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
             </div>
           </div>
         ) : (
-          <span className="text-xxs shrink-0 text-neutral-300 dark:text-neutral-700">
+          <span className="shrink-0 text-xxs text-neutral-300 dark:text-neutral-700">
             {queryCount > 0
               ? t("dashboard.units.queries", {
                   count: queryCount,
@@ -1345,11 +1276,11 @@ function SessionRow({ session }: { session: DashboardSession }) {
                   {queries.map((q, i) => (
                     <div key={i} className="flex items-center gap-2 text-[12px]">
                       {perQueryTiers[i] ? (
-                        <span className="text-xxs shrink-0 rounded bg-neutral-200/70 px-1.5 py-0.5 font-medium text-neutral-600 dark:bg-neutral-700 dark:text-neutral-400">
+                        <span className="shrink-0 rounded bg-neutral-200/70 px-1.5 py-0.5 text-xxs font-medium text-neutral-600 dark:bg-neutral-700 dark:text-neutral-400">
                           {perQueryTiers[i]}
                         </span>
                       ) : (
-                        <span className="text-xxs shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-neutral-400 dark:bg-neutral-800 dark:text-neutral-600">
+                        <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-xxs text-neutral-400 dark:bg-neutral-800 dark:text-neutral-600">
                           —
                         </span>
                       )}
@@ -1374,7 +1305,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
               {Object.entries(routing.byModel || {}).map(([model, bucket]) => (
                 <span
                   key={model}
-                  className="text-xxs rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+                  className="rounded-full bg-neutral-100 px-2 py-0.5 text-xxs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
                 >
                   {model}{" "}
                   <span className="tabular-nums text-neutral-400 dark:text-neutral-500">
@@ -1405,15 +1336,15 @@ function StatCard({
 }) {
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="text-xxs flex items-center gap-2 uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <div className="flex items-center gap-2 text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         {icon}
         <span>{label}</span>
       </div>
       <div className="mt-2 text-[28px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
         {value}
       </div>
-      <div className="text-xxs mt-1 text-neutral-500 dark:text-neutral-400">{sub ?? " "}</div>
-      {hint ? <div className="text-xxs mt-1">{hint}</div> : null}
+      <div className="mt-1 text-xxs text-neutral-500 dark:text-neutral-400">{sub ?? " "}</div>
+      {hint ? <div className="mt-1 text-xxs">{hint}</div> : null}
     </div>
   );
 }

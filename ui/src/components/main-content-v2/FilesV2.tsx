@@ -804,7 +804,7 @@ export default function FilesV2({
                         <button
                           type="button"
                           onClick={event => handleDownloadFile(event, node)}
-                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500 opacity-0 transition group-hover/row:opacity-100 hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500 opacity-0 transition hover:bg-neutral-200 hover:text-neutral-900 group-hover/row:opacity-100 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                           title={t("fileTree.downloadFile", { defaultValue: "Download file" }) as string}
                           aria-label={t("fileTree.downloadFile", { defaultValue: "Download file" }) as string}
                         >

@@ -17,15 +17,14 @@ import {
   type AppTab,
   type Project,
   type ProjectSession,
-  type SessionProvider,
 } from "../../types/app";
 import { api } from "../../utils/api";
 import { resolveMarkdownFileHref } from "../chat/utils/resolveMarkdownFileHref";
 import type { SessionNavigationOptions } from "../main-content/types/types";
+import { ConnectionBanner } from "../ui/ConnectionBanner";
 import SidebarV2 from "./SidebarV2";
 import MainAreaV2 from "./MainAreaV2";
 import { chooseDefaultProject } from "./appShellSelection";
-import { ConnectionBanner } from "../ui/ConnectionBanner";
 
 type TypedSettingsProps = {
   isOpen: boolean;

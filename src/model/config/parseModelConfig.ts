@@ -284,24 +284,6 @@ function parseMultimodal(
   };
 }
 
-function readRequiredString(value: unknown, key: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new ModelConfigError("invalid_config_value", `${key} must be a non-empty string.`);
-  }
-  return value;
-}
-
-function readOptionalString(value: unknown, key: string): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (typeof value !== "string" || value.length === 0) {
-    throw new ModelConfigError("invalid_config_value", `${key} must be a non-empty string.`);
-  }
-  return value;
-}
-
 function readPositiveNumber(value: unknown, key: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new ModelConfigError("invalid_config_value", `${key} must be a positive number.`);

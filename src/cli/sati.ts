@@ -522,7 +522,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         model: "Sati",
         probe: { url: probeUrl },
       }).start({ gateway: local });
-    } catch (error) {
+    } catch {
       await new TuiChannel({
         projectKey: process.cwd(),
         cwd: process.cwd(),

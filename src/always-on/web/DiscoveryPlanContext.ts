@@ -10,9 +10,6 @@
  * All I/O is injectable so tests can substitute stubs.
  */
 
-import { promises as fs } from "node:fs";
-import { homedir } from "node:os";
-import { join, relative } from "node:path";
 import { spawn } from "node:child_process";
 import { normalizeString, toIsoTimestamp, toTimestampValue, truncateText } from "./DiscoveryPlanStatus.js";
 
@@ -139,61 +136,6 @@ async function collectWorkspaceSignals(projectRoot: string): Promise<string[]> {
 // ---------------------------------------------------------------------------
 // Memory signal collection
 // ---------------------------------------------------------------------------
-
-async function walkDirectory(rootDir: string, visit: (path: string) => Promise<void>): Promise<void> {
-  let entries: import("node:fs").Dirent[] = [];
-  try {
-    entries = await fs.readdir(rootDir, { withFileTypes: true });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return;
-    throw error;
-  }
-
-  await Promise.all(
-    entries.map(async entry => {
-      const entryPath = join(rootDir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === "node_modules" || entry.name === ".git") return;
-        await walkDirectory(entryPath, visit);
-        return;
-      }
-      if (entry.isFile()) await visit(entryPath);
-    }),
-  );
-}
-
-async function collectMemorySignals(projectName: string) {
-  const projectStoreDir = join(homedir(), ".sati", "projects", projectName);
-  const candidates: { entryPath: string; modifiedAt: string }[] = [];
-
-  await walkDirectory(projectStoreDir, async entryPath => {
-    const normalized = entryPath.replace(/\\/g, "/");
-    const isSessionMemorySummary = normalized.endsWith("/session-memory/summary.md");
-    const isAutoMemoryFile = normalized.includes("/memory/") && normalized.endsWith(".md");
-    if (!isSessionMemorySummary && !isAutoMemoryFile) return;
-
-    try {
-      const stats = await fs.stat(entryPath);
-      candidates.push({ entryPath, modifiedAt: stats.mtime.toISOString() });
-    } catch {
-      // transient file
-    }
-  });
-
-  candidates.sort((a, b) => (toTimestampValue(b.modifiedAt) ?? 0) - (toTimestampValue(a.modifiedAt) ?? 0));
-
-  const selected = candidates.slice(0, MAX_ITEMS);
-  return Promise.all(
-    selected.map(async candidate => {
-      const raw = await fs.readFile(candidate.entryPath, "utf8").catch(() => "");
-      return {
-        path: relative(projectStoreDir, candidate.entryPath).replace(/\\/g, "/"),
-        modifiedAt: candidate.modifiedAt,
-        summary: truncateText(raw, 280),
-      };
-    }),
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Item builders

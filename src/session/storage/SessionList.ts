@@ -147,21 +147,10 @@ function firstJsonStringField(source: string, field: string): string | undefined
   return match?.[1] ? unescapeJsonString(match[1]) : undefined;
 }
 
-function lastJsonStringField(source: string, field: string): string | undefined {
-  const regex = new RegExp(`"${escapeRegExp(field)}"\\s*:\\s*"((?:\\\\.|[^"])*)"`, "g");
-  let value: string | undefined;
-  for (const match of source.matchAll(regex)) {
-    if (match[1]) {
-      value = unescapeJsonString(match[1]);
-    }
-  }
-  return value;
-}
-
 /**
- * Like {@link lastJsonStringField} but restricted to JSONL lines whose
- * `"type"` is `"session_metadata"`. The old approach scanned the entire
- * raw head+tail text for `"title"`, which would pick up stray `"title"`
+ * Like scanning raw text for a JSON string field, but restricted to JSONL
+ * lines whose `"type"` is `"session_metadata"`. The old approach scanned the
+ * entire raw head+tail text for `"title"`, which would pick up stray `"title"`
  * keys from tool-call inputs, web-search results, or activity frames —
  * causing the sidebar to display an intermediate tool argument instead
  * of the actual session title.

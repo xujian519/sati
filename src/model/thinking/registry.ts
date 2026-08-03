@@ -73,7 +73,6 @@ export function resolveThinkingPlan(
     typeof requestThinking?.budgetTokens === "number" && Number.isFinite(requestThinking.budgetTokens)
       ? requestThinking.budgetTokens
       : undefined;
-  const isOff = mode === "off";
   const explicitlyUnsupported =
     (model.capabilities as { supportsThinkingExplicit?: boolean }).supportsThinkingExplicit === false;
 

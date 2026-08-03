@@ -188,7 +188,6 @@ async function attemptFeishuQRCreation(
         ? (Lark.Domain?.Lark ?? "https://open.larksuite.com")
         : (Lark.Domain?.Feishu ?? "https://open.feishu.cn");
 
-    const createAppUrl = `${larkDomain}/open-apis/authen/v1/app_access_token`;
     console.log(`\n请在浏览器中访问以下链接，使用飞书扫码授权：`);
     console.log(`  ${larkDomain}/app\n`);
     console.log("创建应用后，将 App ID 和 App Secret 粘贴到下方。\n");
@@ -520,7 +519,7 @@ async function setupWeixin(rl: ReturnType<typeof createInterface>): Promise<void
   try {
     const mod = await import("weixin-ilink");
     loginWithQR = mod.loginWithQR;
-  } catch (e) {
+  } catch {
     console.log("\n❌ weixin-ilink 模块加载失败");
     console.log("   请运行: npm install weixin-ilink\n");
     return;

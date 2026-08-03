@@ -96,7 +96,7 @@ export default function TasksV2({ isVisible }: TasksV2Props) {
           <button
             type="button"
             onClick={() => void refreshTasks()}
-            className="text-xxs inline-flex h-8 items-center gap-1.5 rounded-md bg-neutral-900 px-2.5 text-white transition hover:opacity-90 dark:bg-neutral-50 dark:text-neutral-900"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-neutral-900 px-2.5 text-xxs text-white transition hover:opacity-90 dark:bg-neutral-50 dark:text-neutral-900"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2} />
             <span>Refresh</span>
@@ -142,7 +142,7 @@ export default function TasksV2({ isVisible }: TasksV2Props) {
                     >
                       {task.title}
                     </div>
-                    <div className="text-xxs mt-0.5 text-neutral-500 dark:text-neutral-400">
+                    <div className="mt-0.5 text-xxs text-neutral-500 dark:text-neutral-400">
                       {STATUS_LABEL[status] ?? status}
                       {task.priority ? ` · ${task.priority}` : ""}
                     </div>

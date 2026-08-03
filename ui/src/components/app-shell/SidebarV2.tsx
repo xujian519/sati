@@ -294,7 +294,7 @@ export default function SidebarV2({
   const { t } = useTranslation();
   const navigate = useNavigate();
   useCustomNamesVersion();
-  const safeProjects = Array.isArray(projects) ? projects : [];
+  const safeProjects = useMemo(() => (Array.isArray(projects) ? projects : []), [projects]);
 
   const [renamingProject, setRenamingProject] = useState<string | null>(null);
   const [renamingSession, setRenamingSession] = useState<string | null>(null);
@@ -860,7 +860,7 @@ export default function SidebarV2({
                 return next;
               });
             }}
-            className="block w-full rounded-md px-2 py-1 text-left text-[11px] transition-colors text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+            className="block w-full rounded-md px-2 py-1 text-left text-[11px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           >
             {t("sidebar:sessions.showLess", { defaultValue: "Show less" })}
           </button>
@@ -1013,7 +1013,7 @@ export default function SidebarV2({
       {/* Section toggle: a thin pill control sitting just above the scroll
           area, so it doesn't move while the list scrolls. Mirrors the look of
           familiar two-tab segmented controls (e.g. iOS, ProseMirror). */}
-      <div className="px-3 pt-3 pb-1">
+      <div className="px-3 pb-1 pt-3">
         <div
           role="tablist"
           aria-label={t("sidebar:sectionToggle.label", { defaultValue: "Sidebar section" }) as string}

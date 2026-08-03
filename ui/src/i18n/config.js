@@ -14,11 +14,9 @@
 
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-// eslint-disable-next-line import-x/order
 import LanguageDetector from "i18next-browser-languagedetector";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { authenticatedFetch } from "../utils/api";
-
 import enCommon from "./locales/en/common.json";
 import enSettings from "./locales/en/settings.json";
 import enAuth from "./locales/en/auth.json";

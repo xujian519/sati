@@ -109,7 +109,7 @@ export default function CodeEditorHeader({
               aria-label={labels.goBack}
             >
               <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
-              {parentFileName ? <span className="max-w-[7rem] truncate text-xxs">{parentFileName}</span> : null}
+              {parentFileName ? <span className="max-w-28 truncate text-xxs">{parentFileName}</span> : null}
             </button>
           ) : null}
           <div className="min-w-0 shrink">

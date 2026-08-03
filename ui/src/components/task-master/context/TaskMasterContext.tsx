@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../utils/api";
 import { useAuth } from "../../auth/context/AuthContext";

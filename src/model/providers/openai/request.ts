@@ -138,7 +138,7 @@ export function buildOpenAIRequest(
   return body;
 }
 
-function toOpenAIMessages(message: CanonicalMessage, messageIndex: number): OpenAIMessage[] {
+function toOpenAIMessages(message: CanonicalMessage, _messageIndex: number): OpenAIMessage[] {
   if (message.role === "user") {
     return toOpenAIUserMessages(message);
   }

@@ -12,6 +12,24 @@
 
 ---
 
+## 已处理项（2026-08-03，全面修复会话）
+
+- **依赖安全**：root/ui 批量升级 20+ 包（larksuite 1.65→1.72、mcp-sdk 1.29→1.30、sharp 0.34.5→0.35.3、undici 8.3→8.9、genai 2.10→2.15、shell-quote 1.8.4→1.10 等）；新增 `.npmrc` `audit-registry` 指向 npm 官方（npmmirror 已下线 audit 端点）；`package.json` 增加 overrides（axios/hono/fast-uri/protobufjs/js-yaml/uuid/prismjs/@hono/node-server/body-parser）。audit 83→16，**生产运行时链清零**；残留 16 条均属 dev/打包链（eslint、tsx、electron-builder）与 react-router（RSC-only，npmmirror 未同步 8.x）。
+- **Lint 清零**：后端 25→0、UI 93→0（删死代码、`_` 前缀占位参数、修 hooks 依赖与 Tailwind 类冲突；fast-refresh 告警按「context+hook 捆绑」架构模式做文件级豁免并注明理由）。
+- **测试补齐**：router（parseTier/decideScenario）、cron（CronSchedule/CronTimezone）、always-on（DiscoveryGates/ChannelLeaseRegistry/PlanContract）新增 7 个 spec、67 用例；后端 806→873 全绿，UI 445 全绿。
+- **类型收敛**：移除 Feishu/Weixin `logger as any`（结构与 CommandExecContext 兼容）；Mattermost/HomeAssistant `globalThis as any` WebSocket 兜底改为 `typeof import("ws").WebSocket` 类型化并显式报错。
+- **文档/数据**：CLAUDE.md 目录结构补齐 26 模块、修正测试命名（`.spec.ts`/`.test.ts`）与 `ui/e2e/` 路径；i18n en/zh-CN 三份 JSON（common/chat/settings）key 完全对齐。
+
+## 已知残留（未处理，需专项排期）
+
+- **ui/server 双后端收敛**、AgentLoop（3643 行）/InProcessGateway（2180 行）拆解：中期重构，单会话强做必然半成品。
+- **TS7 / ESLint10 跨大版本迁移**、react-router 8 升级（漏洞仅影响 RSC 模式且 npmmirror 未同步 8.x）：需专项迁移。
+- **logger 统一**（135 处裸 console）、**130+ 无参 catch 治理**：持续工程。
+- **UI chunk >1MB**（vite 构建警告）：需代码分割。
+- **测试基建竞态**：root `pnpm test`（重建 dist）与 ui `pnpm test` 并发会偶发失败，CI 需串行执行。
+
+---
+
 ## 已处理项（2026-08-02，审计当日）
 
 - **Docker 技术栈确认已放弃，全部资产已删除**：`Dockerfile`、`docker-compose.yml`、`docker-entrypoint.sh`、`.dockerignore`、`README_DOCKER*.md`、`.github/workflows/docker-build.yml` 及文档中的 Docker 部署章节已随提交 `8c0d0eca chore(docker): remove abandoned Docker deployment assets` 移除。原 P0 两条（Docker 入口引用不存在的 `pilotdeck.js`、Gateway 端口三处不一致）随之消除，不再构成债务。审计时两条均属实（前者本地复现 `MODULE_NOT_FOUND`，成因是 rebrand 提交将 `src/cli/pilotdeck.ts` 重命名为 `sati.ts` 但未同步 entrypoint；后者为 `Dockerfile:88` 18789 vs compose/代码默认 19789，成因是端口迁移提交漏改 Dockerfile）。

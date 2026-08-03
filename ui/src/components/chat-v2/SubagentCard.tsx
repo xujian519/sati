@@ -78,7 +78,7 @@ export default function SubagentCard({
       return { icon: "failed" as const, text: t("subagent.status.stopped") };
     }
     return { icon: "running" as const, text: t("subagent.status.thinking") };
-  }, [isComplete, isFailed, hasToolResult, currentTool, liveActivity, isSessionRunning, t]);
+  }, [isComplete, isFailed, hasToolResult, currentTool, liveActivity, isSessionRunning, subagentId, t]);
 
   const handleClick = () => {
     if (subagentId && onOpenDetail) {
@@ -111,7 +111,7 @@ export default function SubagentCard({
       }
       className={`flex items-stretch gap-0 rounded-lg border border-neutral-200 dark:border-neutral-700 ${
         isClickable
-          ? "cursor-pointer transition-shadow hover:shadow-md hover:border-purple-300 dark:hover:border-purple-600"
+          ? "cursor-pointer transition-shadow hover:border-purple-300 hover:shadow-md dark:hover:border-purple-600"
           : ""
       }`}
     >

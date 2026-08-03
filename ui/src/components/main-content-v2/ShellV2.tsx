@@ -22,7 +22,7 @@ export default function ShellV2({ selectedProject, selectedSession, isActive }: 
   return (
     <div className="flex h-full w-full flex-col" style={{ background: "#0a0a0a", color: "#e5e5e5" }}>
       <div
-        className="text-xxs flex h-10 shrink-0 items-center gap-2 border-b px-5"
+        className="flex h-10 shrink-0 items-center gap-2 border-b px-5 text-xxs"
         style={{ borderColor: "#27272a", color: "#a1a1aa" }}
       >
         <Terminal className="h-3.5 w-3.5" strokeWidth={1.75} />

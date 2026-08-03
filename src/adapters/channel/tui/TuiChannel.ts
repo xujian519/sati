@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
+import React from "react";
+import { render, type Instance } from "ink";
 import type { Gateway } from "../../../gateway/index.js";
 import { connectRemoteGatewayIfAvailable, type ProbeGatewayServerOptions } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { applyTuiEvent, createTuiRenderState, type TuiRenderState } from "./tui-render.js";
-import React from "react";
-import { render, type Instance } from "ink";
 import { TuiApp, type TuiAppProps } from "./app/TuiApp.js";
 
 export type TuiChannelOptions = {

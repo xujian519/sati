@@ -254,8 +254,7 @@ function containsWriteCapableHelper(code: string): boolean {
 function readOnlyBashCallsOnly(code: string): boolean {
   const searchable = stripPythonCommentsAndStrings(code);
   const bashCallPattern = /\bbash\s*\(/gu;
-  let match: RegExpExecArray | null;
-  while ((match = bashCallPattern.exec(searchable)) !== null) {
+  while (bashCallPattern.exec(searchable) !== null) {
     const command = readFirstPythonStringArgument(code, bashCallPattern.lastIndex);
     if (!command || !isReadOnlyShellCommand(command)) {
       return false;

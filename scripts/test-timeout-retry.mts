@@ -2,7 +2,7 @@
  * Direct test: call complete() with mock-slow provider to verify
  * timeout detection, retry, and userHint generation.
  */
-import { complete, streamModel } from "../src/model/streaming/streamModel.js";
+import { complete } from "../src/model/streaming/streamModel.js";
 import { normalizeModelError } from "../src/model/errors/normalizeModelError.js";
 import type { ModelConfig } from "../src/model/protocol/canonical.js";
 

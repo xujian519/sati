@@ -179,22 +179,6 @@ function wait(ms: number): Promise<void> {
   return new Promise(resolveTimer => setTimeout(resolveTimer, ms));
 }
 
-async function waitForFrame(
-  instance: ReturnType<typeof render>,
-  pattern: RegExp,
-  timeoutMs: number,
-): Promise<string | undefined> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const frame = instance.lastFrame();
-    if (frame && pattern.test(frame)) {
-      return frame;
-    }
-    await wait(120);
-  }
-  return undefined;
-}
-
 async function waitForCompletedFrame(
   instance: ReturnType<typeof render>,
   timeoutMs: number,
@@ -210,27 +194,6 @@ async function waitForCompletedFrame(
     await wait(150);
   }
   return undefined;
-}
-
-async function waitForStableFrame(
-  instance: ReturnType<typeof render>,
-  timeoutMs: number,
-  stableMs = 600,
-): Promise<string | undefined> {
-  const deadline = Date.now() + timeoutMs;
-  let last = instance.lastFrame();
-  let lastChange = Date.now();
-  while (Date.now() < deadline) {
-    const current = instance.lastFrame();
-    if (current !== last) {
-      last = current;
-      lastChange = Date.now();
-    } else if (Date.now() - lastChange >= stableMs) {
-      return current;
-    }
-    await wait(120);
-  }
-  return last;
 }
 
 main().catch(error => {

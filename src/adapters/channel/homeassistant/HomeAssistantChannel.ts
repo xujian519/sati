@@ -4,16 +4,11 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { resolveWebSocketImpl } from "../protocol/resolveWebSocketImpl.js";
 import { HomeAssistantSessionMapper } from "./HomeAssistantSessionMapper.js";
 import { renderHomeAssistantEvent } from "./homeassistant-render.js";
 
-let WebSocketImpl: any;
-try {
-  const wsMod = require("ws");
-  WebSocketImpl = wsMod.WebSocket ?? wsMod;
-} catch {
-  WebSocketImpl = (globalThis as any).WebSocket;
-}
+const WebSocketImpl = resolveWebSocketImpl();
 
 const DEFAULT_URL = "http://127.0.0.1:8123";
 

@@ -485,7 +485,7 @@ export class WeixinChannel implements ChannelAdapter {
           this.mapper.resolve({ chatId: fromUser, text: "/new" });
           this.onStateChange?.(this.mapper.snapshot());
         },
-        logger: this.logger as any,
+        logger: this.logger,
       });
       if (handled) return;
     }

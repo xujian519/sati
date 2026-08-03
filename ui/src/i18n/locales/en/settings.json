@@ -1296,6 +1296,7 @@
     "uninstallFailed": "Uninstall failed",
     "toggleFailed": "Toggle failed",
     "starterPluginLabel": "Starter Plugin",
+    "buildYourOwn": "Build your own plugin",
     "starter": "Starter",
     "docs": "Docs",
     "starterPlugin": {

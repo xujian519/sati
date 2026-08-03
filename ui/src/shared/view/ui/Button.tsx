@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 组件 + cva variants 按设计同文件导出 */
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../../../lib/utils";

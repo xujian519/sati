@@ -1,5 +1,5 @@
-import { useWebSocket } from "../../contexts/WebSocketContext";
 import { WifiOff } from "lucide-react";
+import { useWebSocket } from "../../contexts/WebSocketContext";
 
 export function ConnectionBanner() {
   const { reconnectInfo } = useWebSocket();

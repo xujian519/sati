@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { authenticatedFetch } from "../utils/api";

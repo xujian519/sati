@@ -2238,7 +2238,7 @@ export class AgentLoop {
     };
   }
 
-  private buildSubagentForkApi(input: AgentLoopInput, messages: CanonicalMessage[]): SatiSubagentForkApi {
+  private buildSubagentForkApi(input: AgentLoopInput, _messages: CanonicalMessage[]): SatiSubagentForkApi {
     const depth = this.config.subagentDepth ?? 0;
     const maxDepth = this.config.maxSubagentDepth ?? 1;
     return {
@@ -3326,25 +3326,6 @@ function createLifecycleBlockedStatus(args: {
       },
     }),
   };
-}
-
-function defaultModelFailureHint(error: CanonicalModelError | undefined): string {
-  if (!error) {
-    return "Check the model provider settings and retry.";
-  }
-  if (error.retryable) {
-    return "The provider marked this error as retryable. Retry the turn; if it repeats, check provider status and rate limits.";
-  }
-  if (error.status === 401 || error.status === 403 || error.code === "auth_error") {
-    return "Check the provider API key and model access settings.";
-  }
-  if (error.status === 429 || error.code === "rate_limit_error") {
-    return "Wait for the rate limit to reset or switch to another provider/model.";
-  }
-  if (error.code === "billing") {
-    return "Check the provider billing or quota settings.";
-  }
-  return "Check the provider/model settings and retry.";
 }
 
 function createEmptyResponseStatus(args: { provider?: string; model?: string; attempts: number }): AgentStatusMessage {

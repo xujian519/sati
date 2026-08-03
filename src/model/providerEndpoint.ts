@@ -61,10 +61,6 @@ function buildEndpointCandidates(baseUrl: string, defaultVersion: string, endpoi
   return uniqueUrls([versionedEndpoint, unversionedEndpoint]);
 }
 
-function buildVersionedEndpoint(baseUrl: string, defaultVersion: string, endpointPath: string): string {
-  return buildEndpointCandidates(baseUrl, defaultVersion, endpointPath)[0] || "";
-}
-
 export function normalizeGoogleProbeModel(model: string): string {
   const text = String(model || "").trim();
   const withoutProvider = text.startsWith("google/") ? text.slice("google/".length) : text;

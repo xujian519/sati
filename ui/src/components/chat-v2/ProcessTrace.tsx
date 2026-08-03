@@ -211,9 +211,9 @@ function ProcessTraceLine({ step }: { step: ProcessTraceStep }) {
 export function ProcessTrace({
   label,
   collapsedDetail,
-  statusLabel,
+  statusLabel: _statusLabel,
   status = "completed",
-  metrics = [],
+  metrics: _metrics = [],
   steps = [],
   children,
   defaultExpanded = false,
