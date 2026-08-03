@@ -3,7 +3,7 @@ name: patent-analyzer
 description: 专利分析专家角色 — 解析专利文件、提取技术特征、四层对比矩阵与区别特征本质识别
 type: role
 tools: ["*"]
-domains: ["analysis", "patent", "search", "legal", "session"]
+domains: ["analysis", "patent", "search", "literature", "legal", "session"]
 omitTools: ["execute_code"]
 readOnly: false
 systemPrompt: |-

@@ -1,6 +1,7 @@
 import { isRecord } from "../../model/config/schema.js";
 import type {
   PilotConfigDiagnostic,
+  PilotPaperSearchConfig,
   PilotToolsConfig,
   PilotWebSearchConfig,
   PilotWebSearchCustomAuth,
@@ -41,9 +42,10 @@ export function parseToolsConfig(
   }
 
   const webSearch = parseWebSearch(rawTools.webSearch, diagnostics);
+  const paperSearch = parsePaperSearch(rawTools.paperSearch, diagnostics);
 
   for (const key of Object.keys(rawTools)) {
-    if (key !== "webSearch") {
+    if (key !== "webSearch" && key !== "paperSearch") {
       diagnostics.push({
         code: "TOOLS_UNKNOWN_FIELD",
         severity: "warning",
@@ -54,10 +56,10 @@ export function parseToolsConfig(
     }
   }
 
-  if (!webSearch) {
-    return undefined;
-  }
-  return { webSearch };
+  const result: PilotToolsConfig = {};
+  if (webSearch) result.webSearch = webSearch;
+  if (paperSearch) result.paperSearch = paperSearch;
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function parseWebSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): PilotWebSearchConfig | undefined {
@@ -300,4 +302,103 @@ function parseOptionalStringField(
     return undefined;
   }
   return raw.trim();
+}
+
+const PAPER_SEARCH_KNOWN_FIELDS = [
+  "enabled",
+  "arxiv",
+  "openalex",
+  "semanticScholar",
+  "crossref",
+  "openalexMailto",
+  "semanticScholarApiKey",
+] as const;
+const PAPER_SEARCH_BOOLEAN_FIELDS = ["arxiv", "openalex", "semanticScholar", "crossref"] as const;
+
+function parsePaperSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): PilotPaperSearchConfig | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    diagnostics.push({
+      code: "TOOLS_PAPER_SEARCH_INVALID",
+      severity: "fatal",
+      message: "tools.paperSearch must be an object.",
+      path: "tools.paperSearch",
+      recoverable: false,
+    });
+    return undefined;
+  }
+
+  const result: PilotPaperSearchConfig = {};
+
+  if (raw.enabled !== undefined) {
+    if (typeof raw.enabled !== "boolean") {
+      diagnostics.push({
+        code: "TOOLS_PAPER_SEARCH_ENABLED_INVALID",
+        severity: "fatal",
+        message: "tools.paperSearch.enabled must be a boolean.",
+        path: "tools.paperSearch.enabled",
+        recoverable: false,
+      });
+    } else {
+      result.enabled = raw.enabled;
+    }
+  }
+
+  for (const key of PAPER_SEARCH_BOOLEAN_FIELDS) {
+    const value = raw[key];
+    if (value === undefined) continue;
+    if (typeof value !== "boolean") {
+      diagnostics.push({
+        code: "TOOLS_PAPER_SEARCH_CONNECTOR_INVALID",
+        severity: "fatal",
+        message: `tools.paperSearch.${key} must be a boolean.`,
+        path: `tools.paperSearch.${key}`,
+        recoverable: false,
+      });
+    } else {
+      result[key] = value;
+    }
+  }
+
+  if (raw.openalexMailto !== undefined) {
+    if (typeof raw.openalexMailto !== "string" || raw.openalexMailto.trim().length === 0) {
+      diagnostics.push({
+        code: "TOOLS_PAPER_SEARCH_MAILTO_INVALID",
+        severity: "fatal",
+        message: "tools.paperSearch.openalexMailto must be a non-empty string.",
+        path: "tools.paperSearch.openalexMailto",
+        recoverable: false,
+      });
+    } else {
+      result.openalexMailto = raw.openalexMailto.trim();
+    }
+  }
+
+  if (raw.semanticScholarApiKey !== undefined) {
+    if (typeof raw.semanticScholarApiKey !== "string" || raw.semanticScholarApiKey.trim().length === 0) {
+      diagnostics.push({
+        code: "TOOLS_PAPER_SEARCH_S2_KEY_INVALID",
+        severity: "fatal",
+        message: "tools.paperSearch.semanticScholarApiKey must be a non-empty string.",
+        path: "tools.paperSearch.semanticScholarApiKey",
+        recoverable: false,
+      });
+    } else {
+      result.semanticScholarApiKey = raw.semanticScholarApiKey.trim();
+    }
+  }
+
+  for (const key of Object.keys(raw)) {
+    if (!PAPER_SEARCH_KNOWN_FIELDS.includes(key as (typeof PAPER_SEARCH_KNOWN_FIELDS)[number])) {
+      diagnostics.push({
+        code: "TOOLS_PAPER_SEARCH_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown tools.paperSearch field ${key}.`,
+        path: `tools.paperSearch.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
 }

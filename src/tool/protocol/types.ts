@@ -96,6 +96,7 @@ export type ToolDomain =
   | "quality"
   | "patent"
   | "legal"
+  | "literature"
   | "agent"
   | "session"
   | "mcp"

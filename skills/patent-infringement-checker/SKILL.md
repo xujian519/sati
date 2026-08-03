@@ -3,7 +3,7 @@ name: patent-infringement-checker
 description: 侵权分析专家角色 — 用全面覆盖原则和等同原则判断被控方案是否落入专利保护范围
 type: role
 tools: ["*"]
-domains: ["analysis", "patent", "search", "legal", "session"]
+domains: ["analysis", "patent", "search", "literature", "legal", "session"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
 systemPrompt: |-

@@ -3,7 +3,7 @@ name: patent-retriever
 description: 专利检索专家角色 — 从多源数据库检索最相关现有技术与法律依据，输出三段式检索报告
 type: role
 tools: ["*"]
-domains: ["search", "patent", "legal", "analysis", "network", "session"]
+domains: ["search", "literature", "patent", "legal", "analysis", "network", "session"]
 omitTools: ["execute_code"]
 readOnly: false
 systemPrompt: |-

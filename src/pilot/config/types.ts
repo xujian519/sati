@@ -203,8 +203,27 @@ export type PilotWebSearchConfig = {
   customProvider?: PilotWebSearchCustomProviderConfig;
 };
 
+/** 按源开关（缺省全部启用），与 CreateLiteratureRegistryOptions 同形。 */
+export type PilotPaperSearchConfig = {
+  /** Defaults to true when omitted. False removes the literature tools. */
+  enabled?: boolean;
+  /** arXiv 开关（默认 true）。 */
+  arxiv?: boolean;
+  /** OpenAlex 开关（默认 true）。 */
+  openalex?: boolean;
+  /** Semantic Scholar 开关（默认 true）。 */
+  semanticScholar?: boolean;
+  /** Crossref 开关（默认 true）。 */
+  crossref?: boolean;
+  /** OpenAlex polite pool 标识邮箱（可选，默认回退 OPENALEX_MAILTO env）。 */
+  openalexMailto?: string;
+  /** Semantic Scholar 提额 key（可选，默认回退 SEMANTIC_SCHOLAR_API_KEY env）。 */
+  semanticScholarApiKey?: string;
+};
+
 export type PilotToolsConfig = {
   webSearch?: PilotWebSearchConfig;
+  paperSearch?: PilotPaperSearchConfig;
 };
 
 export type PilotProxyConfig = {

@@ -36,6 +36,12 @@ import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateT
 import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
+import {
+  createLiteratureRegistry,
+  createPaperListSourcesTool,
+  createPaperSearchTool,
+  type CreateLiteratureRegistryOptions,
+} from "../../literature/index.js";
 import type { SatiToolDefinition, ToolDomain } from "../protocol/types.js";
 import { ToolRegistry } from "./ToolRegistry.js";
 
@@ -129,6 +135,13 @@ export type CreateBuiltinRegistryOptions = {
    * Pass `false` to keep them out of the registry.
    */
   legal?: false;
+  /**
+   * Literature-domain tools (`paper_search` / `paper_list_sources` — 学术论文
+   * 检索，免费无 key）。Registered by default：arXiv / OpenAlex / Semantic
+   * Scholar / Crossref 全部零配置可用。Pass `false` 关闭；传配置对象可
+   * 按源开关 / 设置 OpenAlex polite pool 邮箱 / Semantic Scholar 提额 key。
+   */
+  paperSearch?: CreateLiteratureRegistryOptions | false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -196,6 +209,14 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));
+  }
+  if (options?.paperSearch !== false) {
+    // 学术文献检索：两个工具共享同一注册表实例。外层条件已排除 false，
+    // 此处类型为 CreateLiteratureRegistryOptions | undefined。
+    const literatureOptions = options?.paperSearch;
+    const literatureRegistry = createLiteratureRegistry(literatureOptions);
+    registry.register(annotate(createPaperListSourcesTool({ registry: literatureRegistry }), "literature"));
+    registry.register(annotate(createPaperSearchTool({ registry: literatureRegistry }), "literature"));
   }
   if (options?.ruleCheck !== false) {
     registry.register(

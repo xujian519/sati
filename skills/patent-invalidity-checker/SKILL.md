@@ -3,7 +3,7 @@ name: patent-invalidity-checker
 description: 无效分析专家角色 — 分析目标专利无效理由、评估证据组合与成功率
 type: role
 tools: ["*"]
-domains: ["analysis", "patent", "search", "legal", "session"]
+domains: ["analysis", "patent", "search", "literature", "legal", "session"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
 systemPrompt: |-

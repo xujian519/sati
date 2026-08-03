@@ -3,7 +3,7 @@ name: patent-creativity-checker
 description: 创造性评估专家角色 — 用三步法判断权利要求创造性，输出三步法分析报告与辅助因素分析
 type: role
 tools: ["*"]
-domains: ["analysis", "patent", "search", "legal", "session"]
+domains: ["analysis", "patent", "search", "literature", "legal", "session"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
 systemPrompt: |-

@@ -3,7 +3,7 @@ name: patent-novelty-checker
 description: 新颖性评估专家角色 — 用单独对比原则判断权利要求是否被现有技术公开，输出逐特征对比表
 type: role
 tools: ["*"]
-domains: ["analysis", "patent", "search", "legal", "session"]
+domains: ["analysis", "patent", "search", "literature", "legal", "session"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
 systemPrompt: |-

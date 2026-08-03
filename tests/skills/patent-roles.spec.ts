@@ -42,6 +42,7 @@ const TOOL_DOMAINS = new Set([
   "quality",
   "patent",
   "legal",
+  "literature",
   "agent",
   "session",
   "mcp",

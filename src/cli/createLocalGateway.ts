@@ -731,6 +731,7 @@ class ProjectRuntimeRegistry {
       onCompletion: event => this.emitBackgroundTaskCompletion(event),
     });
     const webSearchConfig = snapshot.config.tools?.webSearch;
+    const paperSearchConfig = snapshot.config.tools?.paperSearch;
     const tools = createBuiltinRegistry({
       backgroundTasks: { runtime: backgroundTasks },
       readSkill: {
@@ -749,6 +750,24 @@ class ProjectRuntimeRegistry {
                 ...(webSearchConfig.apiKey ? { apiKey: webSearchConfig.apiKey } : {}),
                 ...(webSearchConfig.endpoint ? { endpoint: webSearchConfig.endpoint } : {}),
                 ...(webSearchConfig.customProvider ? { customProvider: webSearchConfig.customProvider } : {}),
+              },
+            }
+          : {}),
+      // Pass the YAML-configured literature sources through to the built-in
+      // `paper_search` / `paper_list_sources` tools. Config shape matches
+      // CreateLiteratureRegistryOptions; undefined fields fall back to defaults
+      // (all sources enabled, free no-key).
+      ...(paperSearchConfig?.enabled === false
+        ? { paperSearch: false as const }
+        : paperSearchConfig
+          ? {
+              paperSearch: {
+                arxiv: paperSearchConfig.arxiv,
+                openalex: paperSearchConfig.openalex,
+                semanticScholar: paperSearchConfig.semanticScholar,
+                crossref: paperSearchConfig.crossref,
+                openalexMailto: paperSearchConfig.openalexMailto,
+                semanticScholarApiKey: paperSearchConfig.semanticScholarApiKey,
               },
             }
           : {}),
