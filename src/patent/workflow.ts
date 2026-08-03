@@ -458,3 +458,76 @@ export const patentDisclosureManifest: WorkflowManifest = {
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
 };
+
+/**
+ * 内置：专利创造性分析八阶段 manifest（专利法 A22.3，三步法）。
+ *
+ * 阶段设计对齐知识资产（src/knowledge/patent/wiki/专利实务/创造性/）与
+ * 复审无效实务的模板化论证结构：解析与画像 → 检索与候选筛选 → 三步法
+ * 展开为三阶段（最接近现有技术 → 区别特征与实际解决的技术问题 → 技术启示）
+ * → 辅助判断因素复核 → 结论与反事后诸葛亮自检 → 人工确认（HITL）。
+ *
+ * 注意：本 manifest **不声明 atom**（与 patent_novelty_v1 一致）——消费方
+ * patent_workflow 工具采用"主代理产出文本 → 工具收口校验"语义（确定性、无
+ * LLM）；收口时按 caseType inventiveness_analysis 映射 patent_inventiveness 域
+ * 规则门（9 条：三步法/实际解决技术问题/公知常识路径/多文件结合/技术启示/
+ * 惯用手段/用途限定/预料不到效果）。需要原子自动执行时，调用方应定义带 atom
+ * 的自定义 manifest，并注入已注册内置原子的注册表与 provider（见 src/patent/atoms）。
+ */
+export const patentInventivenessManifest: WorkflowManifest = {
+  id: "patent_inventiveness_v1",
+  name: "专利创造性分析",
+  caseType: "inventiveness_analysis",
+  stages: [
+    {
+      id: "parse",
+      strategy: "chain",
+      description: "解析权利要求/技术方案，构建所属领域技术人员画像，确定申请日/优先权日时间基准",
+    },
+    {
+      id: "search",
+      strategy: "react",
+      description: "检索现有技术文献，筛选最接近现有技术候选（技术领域→技术问题→发明构思）",
+    },
+    { id: "closest", strategy: "chain", description: "三步法 Step1：确定最接近的现有技术（候选多时逐个试判）" },
+    {
+      id: "diff",
+      strategy: "chain",
+      description: "三步法 Step2：实质对比确定区别技术特征，客观确定实际解决的技术问题（不得包含解决手段）",
+    },
+    {
+      id: "hint",
+      strategy: "chain",
+      description: "三步法 Step3：技术启示判断（改进动机/结合启示/公知常识/发明构思/逻辑推理与有限试验）",
+    },
+    {
+      id: "secondary",
+      strategy: "chain",
+      description: "辅助判断因素复核（预料不到的技术效果/长期渴望难题/克服技术偏见/商业成功）",
+    },
+    { id: "conclude", strategy: "chain", description: "生成创造性结论（高/中/低/无，附置信度）+ 反事后诸葛亮自检" },
+    { id: "approval", strategy: "chain", description: "人工确认分析结论（HITL）" },
+  ],
+  validation: { requireAllSteps: true, maxRetries: 2 },
+};
+
+/**
+ * 内置 manifest 目录（单一数据源）。
+ *
+ * 消费方（patent_workflow 工具）经此遍历注册 manifest，并按条目读取确定性
+ * 规则门检查域（caseType 推导的默认值）——新增内置 manifest 只需在此追加
+ * 一项，工具层零改动；检查域与 manifest 同源声明，消除"漏配 → 规则门静默
+ * 跳过"的故障模式。自定义 manifest 不在目录内，未显式传 checkDomain 时不
+ * 跑规则门（fail-open，文档已声明）。
+ */
+export type BuiltinPatentManifest = {
+  manifest: WorkflowManifest;
+  /** 收口时确定性规则门检查域（caseType 推导的默认值）。 */
+  checkDomains: readonly string[];
+};
+
+export const builtinPatentManifests: readonly BuiltinPatentManifest[] = [
+  { manifest: patentNoveltyManifest, checkDomains: ["patent_novelty"] },
+  { manifest: patentDisclosureManifest, checkDomains: ["patent_disclosure", "patent_claims"] },
+  { manifest: patentInventivenessManifest, checkDomains: ["patent_inventiveness"] },
+];

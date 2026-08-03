@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  patentInventivenessManifest,
   patentNoveltyManifest,
   runWorkflow,
   validateWorkflowManifest,
@@ -18,6 +19,34 @@ function textOf(res: { content: readonly { type: string; text?: string; value?: 
   const first = res.content[0];
   return first.type === "text" && typeof first.text === "string" ? first.text : JSON.stringify(first.value ?? first);
 }
+
+/**
+ * 合规创造性产出（八阶段文本，拼接后须满足 patent_inventiveness 域全部 9 条规则：
+ * 三步法/实际解决技术问题/公知常识路径/多文件结合/技术启示/惯用手段/用途限定/预料不到效果）。
+ * 若新增 patent_inventiveness 域规则，需在此文本补充对应要素，否则判定会从通过变为阻断。
+ */
+const INVENTIVENESS_COMPLIANT_OUTPUTS: { stageId: string; text: string }[] = [
+  { stageId: "parse", text: "解析权利要求1，构建所属领域技术人员画像，申请日 2025-01-01。" },
+  { stageId: "search", text: "检索到对比文件D1、D2，D1为最接近的现有技术候选。" },
+  { stageId: "closest", text: "最接近的现有技术为对比文件D1（技术领域相同、技术问题相关、发明构思最接近）。" },
+  {
+    stageId: "diff",
+    text: "权利要求1相对于D1的区别技术特征为特征X，基于区别技术特征，发明实际解决的技术问题为T。",
+  },
+  {
+    stageId: "hint",
+    text: "技术启示判断：特征X属于公知常识/惯用技术手段，本领域技术人员众所周知，无需创造性劳动即可显而易见地获得该发明；D2亦给出结合启示，多篇对比文件结合具有组合动机。",
+  },
+  {
+    stageId: "secondary",
+    text: "辅助判断因素：发明产生了预料不到的有益效果，属于创造性的辅助判断因素；用途特征不影响产品结构本身的创造性判断。",
+  },
+  {
+    stageId: "conclude",
+    text: "创造性结论：权利要求1不具备创造性（置信度 high）。反事后诸葛亮自检：未使用申请日后知识。",
+  },
+  { stageId: "approval", text: "人工确认：结论属实，通过。" },
+];
 
 describe("patent workflow 执行器（workflow.ts 接线）", () => {
   it("patentNoveltyManifest 通过校验", () => {
@@ -101,7 +130,7 @@ describe("worker 契约（worker-contract.ts 接线）", () => {
       registry.register(w);
     }
     assert.deepEqual(registry.verify(), []);
-    assert.equal(registry.list().length, 5);
+    assert.equal(registry.list().length, 6);
   });
 
   it("validateWorkerOutput 硬性字段缺失 → degraded", () => {
@@ -295,5 +324,73 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     const tool = createPatentWorkerValidateTool();
     const res = await tool.execute({ workerName: "no_such_worker", outputText: "x" }, {} as never);
     assert.ok(textOf(res).includes("未知 worker"), `应返回未知 worker 提示: ${textOf(res)}`);
+  });
+});
+
+describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", () => {
+  it("runWorkflow 全阶段有输出 → completed", async () => {
+    const outputs = new Map(INVENTIVENESS_COMPLIANT_OUTPUTS.map(o => [o.stageId, o.text]));
+    const result = await runWorkflow(patentInventivenessManifest, {}, async stage => outputs.get(stage.id) ?? "");
+    assert.equal(result.completed, true);
+    assert.equal(result.degradedSteps.length, 0);
+    assert.equal(result.stages.length, 8);
+  });
+
+  it("patent_workflow 工具：inventiveness manifest 全阶段输出 → completed 摘要", async () => {
+    const tool = createPatentWorkflowTool();
+    const res = await tool.execute(
+      {
+        manifestId: "patent_inventiveness_v1",
+        outputs: ["parse", "search", "closest", "diff", "hint", "secondary", "conclude", "approval"].map(stageId => ({
+          stageId,
+          text: `阶段 ${stageId} 输出`,
+        })),
+      },
+      {} as never,
+    );
+    const text = textOf(res);
+    assert.ok(text.includes("patent_workflow(patent_inventiveness_v1)"), `应识别 inventiveness manifest: ${text}`);
+    assert.ok(text.includes("8/8 阶段完成"), `摘要应含 8/8: ${text}`);
+    assert.ok(text.includes("completed"));
+  });
+
+  it("patent_workflow 工具：确定性门——合规创造性产出（内置目录映射）→ ✅ 通过", async () => {
+    // 不传 checkDomain，验证 builtinPatentManifests 目录为 patent_inventiveness_v1
+    // 提供的默认检查域（patent_inventiveness）被正确读取。
+    const tool = createPatentWorkflowTool();
+    const res = await tool.execute(
+      {
+        manifestId: "patent_inventiveness_v1",
+        outputs: INVENTIVENESS_COMPLIANT_OUTPUTS,
+      },
+      {} as never,
+    );
+    const text = textOf(res);
+    assert.ok(text.includes("确定性门: ✅ 通过"), `应判定通过: ${text}`);
+    assert.ok(text.includes("所有规则检查均通过"), "不应有失败明细表");
+  });
+
+  it("patent_workflow 工具：确定性门——缺三步法要素 → ⛔ 阻断并附失败明细", async () => {
+    const tool = createPatentWorkflowTool();
+    const res = await tool.execute(
+      {
+        manifestId: "patent_inventiveness_v1",
+        outputs: [
+          { stageId: "parse", text: "解析权利要求1。" },
+          { stageId: "search", text: "检索到对比文件D1、D2。" },
+          { stageId: "closest", text: "选定D1。" },
+          { stageId: "diff", text: "区别特征为X。" },
+          { stageId: "hint", text: "本领域技术人员有动机结合，故不具备创造性。" },
+          { stageId: "secondary", text: "无特殊辅助因素。" },
+          { stageId: "conclude", text: "结论：不具备创造性。" },
+          { stageId: "approval", text: "人工确认通过。" },
+        ],
+      },
+      {} as never,
+    );
+    const text = textOf(res);
+    assert.ok(text.includes("确定性门: ⛔ 阻断"), `应判定阻断: ${text}`);
+    assert.ok(text.includes("创造性三步法"), "失败明细应含三步法规则名");
+    assert.match(text, /\| 规则 \| 级别 \| 严重度 \| 问题 \| 修改建议 \|/, "应输出失败明细表头");
   });
 });

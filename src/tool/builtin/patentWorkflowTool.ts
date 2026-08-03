@@ -1,9 +1,8 @@
 import {
   aggregate,
+  builtinPatentManifests,
   defaultPatentRules,
   formatRuleResults,
-  patentDisclosureManifest,
-  patentNoveltyManifest,
   runWorkflow,
   validateWorkflowManifest,
   RuleEngine,
@@ -30,20 +29,14 @@ export type PatentWorkflowInput = {
   caseId?: string;
   /**
    * 确定性规则检查域（覆盖 manifest 默认映射）。逗号分隔多域，如 "patent_novelty,patent_disclosure"；
-   * 传空串禁用检查。缺省按 manifest caseType 推导（novelty_search → patent_novelty；
-   * disclosure_analysis → patent_disclosure,patent_claims）。
+   * 传空串禁用检查。缺省按内置 manifest 目录条目读取（patent_novelty_v1 → patent_novelty；
+   * patent_disclosure_v1 → patent_disclosure,patent_claims；patent_inventiveness_v1 → patent_inventiveness）。
    */
   checkDomain?: string;
 };
 
-/** manifest caseType → 确定性规则检查域（dual-track 判定的"确定性轨"）。 */
-const MANIFEST_CHECK_DOMAINS: Record<string, string[]> = {
-  novelty_search: ["patent_novelty"],
-  disclosure_analysis: ["patent_disclosure", "patent_claims"],
-};
-
 /** 解析本次调用的检查域；返回空数组 = 跳过确定性门。 */
-function resolveCheckDomains(manifest: WorkflowManifest, checkDomain?: string): string[] {
+function resolveCheckDomains(manifest: WorkflowManifest, checkDomain?: string): readonly string[] {
   if (checkDomain === "") return [];
   if (checkDomain !== undefined) {
     return checkDomain
@@ -51,7 +44,9 @@ function resolveCheckDomains(manifest: WorkflowManifest, checkDomain?: string): 
       .map(s => s.trim())
       .filter(s => s.length > 0);
   }
-  return MANIFEST_CHECK_DOMAINS[manifest.caseType] ?? [];
+  // 内置 manifest 的检查域与 manifest 同源声明（builtinPatentManifests 目录）；
+  // 自定义 manifest 不在目录内，未显式传 checkDomain 时不跑规则门（fail-open）。
+  return builtinPatentManifests.find(e => e.manifest.id === manifest.id)?.checkDomains ?? [];
 }
 
 /** 规则检查结果摘要（一行）：verdict + 失败数。 */
@@ -69,7 +64,7 @@ function summarizeCheck(verdict: Verdict, failures: readonly RuleCheckResult[]):
  * 确定性执行，无 LLM 调用；用于专利新颖性分析等结构化流程的产物收口。
  *
  * 自 v0.1.0 起接入 **dual-track 确定性规则门**（src/patent/checker）：对全部非降级
- * 阶段产出拼接文本运行 defaultPatentRules 判定（按 manifest caseType 映射检查域，
+ * 阶段产出拼接文本运行 defaultPatentRules 判定（按内置 manifest 目录条目读取检查域，
  * 可用 checkDomain 覆盖），将 pass / needs_revision / blocked 判级与失败明细
  * 拼入工具输出——撰写/答复产出在收口时过一遍确定性审查，供主代理据此修订或放行。
  *
@@ -78,10 +73,7 @@ function summarizeCheck(verdict: Verdict, failures: readonly RuleCheckResult[]):
  * 调用方应注入已注册内置原子的注册表与 provider（见 src/patent/atoms）。
  */
 export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInput> {
-  const manifests = new Map<string, WorkflowManifest>([
-    [patentNoveltyManifest.id, patentNoveltyManifest],
-    [patentDisclosureManifest.id, patentDisclosureManifest],
-  ]);
+  const manifests = new Map(builtinPatentManifests.map(({ manifest }) => [manifest.id, manifest]));
 
   return {
     name: "patent_workflow",
@@ -90,9 +82,11 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
       "Run a declarative patent workflow: validates the manifest, assembles per-stage outputs into a " +
       "structured WorkflowRunResult with degraded-step marking and a summary, then runs the deterministic " +
       "rule gate (dual-track checker) over the outputs and appends the pass/needs_revision/blocked verdict. " +
-      "Built-in manifests: patent_novelty_v1 (parse → search → compare → conclude → approval) and " +
-      "patent_disclosure_v1 (preprocess → extract → merge → consistency → report → approval). Use to finalize " +
-      "multi-stage patent analyses (novelty / disclosure) with a single verifiable result record.",
+      "Built-in manifests: patent_novelty_v1 (parse → search → compare → conclude → approval), " +
+      "patent_disclosure_v1 (preprocess → extract → merge → consistency → report → approval) and " +
+      "patent_inventiveness_v1 (parse → search → closest → diff → hint → secondary → conclude → approval). " +
+      "Use to finalize " +
+      "multi-stage patent analyses (novelty / disclosure / inventiveness) with a single verifiable result record.",
     kind: "session",
     inputSchema: {
       type: "object",
@@ -131,7 +125,8 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     async execute(input) {
-      const manifest = manifests.get(input.manifestId ?? patentNoveltyManifest.id);
+      // 缺省取内置目录首个 manifest（patent_novelty_v1）。
+      const manifest = manifests.get(input.manifestId ?? builtinPatentManifests[0]?.manifest.id);
       if (!manifest) {
         const available = [...manifests.keys()].join(", ");
         return {

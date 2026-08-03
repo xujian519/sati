@@ -161,6 +161,7 @@ description: "专利代理与知识产权分析：专利检索、权利要求分
 ## 相关技能
 
 - 新颖性分析：见 `patent-novelty-analysis` 技能（检索→特征分解→单独对比→结论→人工确认；三级特征分解 + 创造性三步法）
+- 创造性分析：见 `patent-inventiveness-analysis` 技能（三步法八阶段：解析画像→检索筛选→最接近现有技术→区别特征与技术问题→技术启示→辅助因素→结论自检→人工确认；经 `patent_workflow`（manifestId `patent_inventiveness_v1`）收口校验）
 - 侵权比对：见 `patent-infringement-check` 技能（保护范围→特征分解→全面覆盖→等同原则→现有技术抗辩→风险定级）
 - 审查意见答复：见 `patent-oa-response` 技能（解读→深析→定策→成文四阶段流水线 + HITL 强制确认点）
 - 权利要求撰写：见 `patent-draft-claims` 技能（布局确认→独权→从属四模板→审核→撰写说明，对接 `draft_claims` 工具）

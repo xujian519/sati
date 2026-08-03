@@ -13,9 +13,10 @@ test("registry registers patent workers and verifies contract completeness", () 
   for (const w of defaultPatentWorkers()) registry.register(w);
   const issues = registry.verify();
   assert.deepEqual(issues, [], "all default patent workers should pass verification");
-  assert.equal(registry.list().length, 5);
-  assert.equal(registry.listByTier("reasoning").length, 1);
+  assert.equal(registry.list().length, 6);
+  assert.equal(registry.listByTier("reasoning").length, 2);
   assert.equal(registry.listByTier("reasoning")[0].name, "patent-novelty-analyzer");
+  assert.equal(registry.listByTier("reasoning")[1].name, "patent-inventiveness-analyzer");
 });
 
 test("registry rejects duplicate registration and incomplete definitions", () => {
@@ -44,6 +45,29 @@ test("validateWorkerOutput marks degraded on missing hard fields", () => {
   assert.equal(bad.degraded, true);
   assert.deepEqual(bad.missingHardFields, ["新颖性结论", "置信度"]);
   assert.match(bad.degradationReason ?? "", /硬性契约字段缺失/);
+});
+
+test("inventiveness worker: hard contract fields aligned with rule-gate elements", () => {
+  const worker = defaultPatentWorkers().find(w => w.name === "patent-inventiveness-analyzer")!;
+  assert.equal(worker.tier, "reasoning");
+  assert.equal(worker.triggersHITL, true);
+  const good = validateWorkerOutput(
+    worker,
+    "最接近的现有技术为D1；区别技术特征为X；实际解决的技术问题为T；D1结合公知常识给出技术启示；创造性结论：不具备；置信度：high",
+  );
+  assert.equal(good.valid, true);
+  assert.equal(good.degraded, false);
+  const bad = validateWorkerOutput(worker, "分析完成。");
+  assert.equal(bad.valid, false);
+  assert.equal(bad.degraded, true);
+  assert.deepEqual(bad.missingHardFields, [
+    "最接近的现有技术",
+    "区别技术特征",
+    "实际解决的技术问题",
+    "技术启示",
+    "创造性结论",
+    "置信度",
+  ]);
 });
 
 test("monitor aggregates success rate and degradation counts", () => {

@@ -4,6 +4,7 @@ import {
   AtomRegistry,
   StageHandlerRegistry,
   WorkflowError,
+  patentInventivenessManifest,
   patentNoveltyManifest,
   runWorkflow,
   validateWorkflowManifest,
@@ -153,4 +154,39 @@ test("runWorkflow：无 params 时 handler 执行态与共享 state 一致", asy
   };
   const result = await runWorkflow(manifest, { input: "from-ctx" }, undefined, { handlers: registry, atoms });
   assert.equal(result.stages[0]!.output, "from-ctx");
+});
+
+test("inventiveness manifest covers the full eight-stage three-step chain", () => {
+  assert.equal(patentInventivenessManifest.id, "patent_inventiveness_v1");
+  assert.equal(patentInventivenessManifest.name, "专利创造性分析");
+  assert.equal(patentInventivenessManifest.caseType, "inventiveness_analysis");
+  assert.equal(patentInventivenessManifest.stages.length, 8);
+  assert.deepEqual(
+    patentInventivenessManifest.stages.map(s => s.id),
+    ["parse", "search", "closest", "diff", "hint", "secondary", "conclude", "approval"],
+  );
+  assert.deepEqual(
+    patentInventivenessManifest.stages.map(s => s.strategy),
+    ["chain", "react", "chain", "chain", "chain", "chain", "chain", "chain"],
+  );
+});
+
+test("runWorkflow executes inventiveness manifest stages and reports completion", async () => {
+  const result = await runWorkflow(patentInventivenessManifest, { input: "一种散热装置" }, okExecutor);
+  assert.equal(result.manifestId, "patent_inventiveness_v1");
+  assert.equal(result.completed, true);
+  assert.equal(result.stages.length, 8);
+  assert.deepEqual(result.degradedSteps, []);
+  assert.match(result.summary, /8\/8 阶段完成/);
+});
+
+test("runWorkflow marks degraded inventiveness stage without aborting", async () => {
+  const flakyExecutor = (stage: WorkflowStage): Promise<string> => {
+    if (stage.id === "hint") return Promise.resolve("");
+    return Promise.resolve(`[${stage.id}] 完成`);
+  };
+  const result = await runWorkflow(patentInventivenessManifest, {}, flakyExecutor);
+  assert.equal(result.completed, false);
+  assert.deepEqual(result.degradedSteps, ["hint"]);
+  assert.ok(result.stages.find(s => s.stageId === "hint")?.degraded);
 });

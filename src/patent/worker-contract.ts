@@ -275,6 +275,29 @@ export function defaultPatentWorkers(): WorkerContract[] {
       triggersHITL: true,
     },
     {
+      name: "patent-inventiveness-analyzer",
+      tier: "reasoning",
+      description: "创造性（A22.3）三步法分析：最接近现有技术→区别技术特征→技术启示，输出结论与置信度",
+      allowedTools: ["patent_eval", "read_file"],
+      canInvoke: ["patent-search-commander", "patent-technical-analyzer"],
+      outputs: [
+        {
+          path: "data/cases/{caseId}/outputs/inventiveness-analysis.md",
+          format: "markdown",
+          contractLevel: "hard",
+          requiredFields: [
+            "最接近的现有技术",
+            "区别技术特征",
+            "实际解决的技术问题",
+            "技术启示",
+            "创造性结论",
+            "置信度",
+          ],
+        },
+      ],
+      triggersHITL: true,
+    },
+    {
       name: "patent-oa-writer",
       tier: "work",
       description: "审查意见答复：解析 OA、制定策略、撰写意见陈述书",

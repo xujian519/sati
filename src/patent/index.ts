@@ -36,6 +36,9 @@ export {
   runWorkflow,
   patentNoveltyManifest,
   patentDisclosureManifest,
+  patentInventivenessManifest,
+  builtinPatentManifests,
+  type BuiltinPatentManifest,
 } from "./workflow.js";
 
 export {
