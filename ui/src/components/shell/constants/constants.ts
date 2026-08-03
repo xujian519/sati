@@ -21,7 +21,6 @@ export const TERMINAL_OPTIONS: ITerminalOptions = {
   convertEol: true,
   scrollback: 10000,
   tabStopWidth: 4,
-  windowsMode: false,
   macOptionIsMeta: true,
   macOptionClickForcesSelection: true,
   // Keep the runtime theme keys used by the previous JSX implementation.
