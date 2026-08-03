@@ -26,6 +26,12 @@ jobs:
           pnpm --version
 
       - name: Install dependencies
+        env:
+          # node-gyp 编译原生模块（如 node-pty）时需下载 Node headers，
+          # 偶发网络超时会中断整个 CI，这里加大 fetch 重试与退避参数
+          npm_config_fetch_retries: "5"
+          npm_config_fetch_retry_mintimeout: "1000"
+          npm_config_fetch_retry_maxtimeout: "60000"
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck (root)
