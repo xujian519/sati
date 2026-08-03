@@ -21,11 +21,40 @@ import type { PluginSkillContribution } from "../../extension/plugins/runtime/Pl
 import type { SkillSummary } from "../../extension/skills/types.js";
 import type { SubagentDefinition } from "./builtinSubagentTypes.js";
 
+/**
+ * 带 domain 的工具要求对应 visibleDomains 域，否则子代理经
+ * scopeTools 裁剪后静默不可见。角色声明了这些工具但缺域时启动提示。
+ * （law_search → legal；paper_search/paper_list_sources → literature）
+ */
+const DOMAIN_REQUIRED_TOOLS: Record<string, string> = {
+  law_search: "legal",
+  paper_search: "literature",
+  paper_list_sources: "literature",
+};
+
+/** 校验角色定义的工具/域一致性，不匹配时输出 warn（不阻断注册）。 */
+function warnDomainMismatch(definition: SubagentDefinition): void {
+  const domains = definition.visibleDomains;
+  // 未声明 domains → scopeTools 不裁剪，工具天然可见，无需提示。
+  if (!domains || domains.length === 0) return;
+  const domainSet = new Set(domains);
+  const tools = definition.allowedTools;
+  const wildcard = tools.includes("*");
+  for (const [tool, requiredDomain] of Object.entries(DOMAIN_REQUIRED_TOOLS)) {
+    if (!wildcard && !tools.includes(tool)) continue;
+    if (domainSet.has(requiredDomain)) continue;
+    console.warn(
+      `[sati] role ${definition.id}: tools 暴露 ${tool} 但 domains 缺 "${requiredDomain}"，` +
+        `子代理将看不到该工具（请在 domains 中补充 "${requiredDomain}"）`,
+    );
+  }
+}
+
 /** 把角色 skill 转换为子代理定义；非角色 skill 返回 null。 */
 export function roleFromSkill(skill: SkillSummary): SubagentDefinition | null {
   const role = skill.role;
   if (!role) return null;
-  return {
+  const definition: SubagentDefinition = {
     id: skill.slug,
     description: skill.description,
     allowedTools: role.tools ?? ["*"],
@@ -37,6 +66,8 @@ export function roleFromSkill(skill: SkillSummary): SubagentDefinition | null {
     isReadOnly: role.readOnly ?? false,
     systemPromptSuffix: role.systemPrompt ?? "",
   };
+  warnDomainMismatch(definition);
+  return definition;
 }
 
 /** 从插件贡献（PluginSkillContribution.role）转换为子代理定义；非角色返回 null。 */
@@ -46,7 +77,7 @@ export function roleFromContribution(skill: PluginSkillContribution): SubagentDe
   // 角色 id 来自 frontmatter name（不可信输入）：按 skill slug 规则校验，
   // 非法字符不进子代理 id（事件/日志/提示词字段）。
   if (!SLUG_RE.test(skill.name)) return null;
-  return {
+  const definition: SubagentDefinition = {
     id: skill.name,
     description: skill.description ?? skill.name,
     allowedTools: role.tools ?? ["*"],
@@ -58,6 +89,8 @@ export function roleFromContribution(skill: PluginSkillContribution): SubagentDe
     isReadOnly: role.readOnly ?? false,
     systemPromptSuffix: role.systemPrompt ?? "",
   };
+  warnDomainMismatch(definition);
+  return definition;
 }
 
 /** 与 SkillManager 的 slug 规则保持一致（安全目录名/标识符）。 */

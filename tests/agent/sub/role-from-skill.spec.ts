@@ -162,6 +162,96 @@ test("role-scoped tools: domains + omitTools shape the scoped registry", () => {
   assert.ok(!names.includes("execute_code"));
 });
 
+test("roleFromSkill warns when law_search exposed without legal domain", () => {
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  try {
+    roleFromSkill(
+      roleSkillSummary({
+        role: { tools: ["law_search", "web_search"], domains: ["patent"], readOnly: false },
+      }),
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(
+    warns.some(w => w.includes("law_search") && w.includes("legal")),
+    `应输出域缺失 warn: ${warns.join("; ")}`,
+  );
+});
+
+test("roleFromSkill no warn when required domain present", () => {
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  try {
+    roleFromSkill(
+      roleSkillSummary({
+        role: { tools: ["law_search"], domains: ["legal", "patent"], readOnly: false },
+      }),
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(!warns.some(w => w.includes("law_search")), `不应 warn: ${warns.join("; ")}`);
+});
+
+test("roleFromSkill warns on wildcard tools without legal domain", () => {
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  try {
+    roleFromSkill(
+      roleSkillSummary({
+        role: { tools: ["*"], domains: ["patent"], readOnly: false },
+      }),
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(
+    warns.some(w => w.includes("law_search") && w.includes("legal")),
+    `通配工具也应触发 warn: ${warns.join("; ")}`,
+  );
+});
+
+test("roleFromSkill no warn when domains undefined (工具天然可见)", () => {
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  try {
+    roleFromSkill(
+      roleSkillSummary({
+        role: { tools: ["law_search"], readOnly: false },
+      }),
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warns.length, 0, `未裁剪角色不应 warn: ${warns.join("; ")}`);
+});
+
+test("roleFromContribution warns on paper_search without literature domain", () => {
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  try {
+    roleFromContribution({
+      name: "lit-searcher",
+      description: "文献检索",
+      path: "/tmp/lit-searcher/SKILL.md",
+      role: { tools: ["paper_search"], domains: ["search"], readOnly: true },
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.ok(
+    warns.some(w => w.includes("paper_search") && w.includes("literature")),
+    `应输出文献域缺失 warn: ${warns.join("; ")}`,
+  );
+});
+
 test("SkillManager parses role frontmatter from disk", async () => {
   const root = mkdtempSync(join(tmpdir(), "sati-roles-"));
   const roleDir = join(root, "writer");
