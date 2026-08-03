@@ -67,19 +67,30 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
-          manualChunks: {
-            "vendor-react": ["react", "react-dom", "react-router-dom"],
-            "vendor-codemirror": [
-              "@uiw/react-codemirror",
-              "@codemirror/lang-css",
-              "@codemirror/lang-html",
-              "@codemirror/lang-javascript",
-              "@codemirror/lang-json",
-              "@codemirror/lang-markdown",
-              "@codemirror/lang-python",
-              "@codemirror/theme-one-dark",
-            ],
-            "vendor-xterm": ["@xterm/xterm", "@xterm/addon-fit", "@xterm/addon-clipboard", "@xterm/addon-webgl"],
+          // vite 8 (rolldown) requires manualChunks to be a function;
+          // the object form is no longer accepted.
+          manualChunks(id) {
+            if (!id.includes("/node_modules/")) return undefined;
+            const match = pkg => id.includes(`/node_modules/${pkg}/`);
+            if (["react", "react-dom", "react-router-dom"].some(match)) return "vendor-react";
+            if (
+              [
+                "@uiw/react-codemirror",
+                "@codemirror/lang-css",
+                "@codemirror/lang-html",
+                "@codemirror/lang-javascript",
+                "@codemirror/lang-json",
+                "@codemirror/lang-markdown",
+                "@codemirror/lang-python",
+                "@codemirror/theme-one-dark",
+              ].some(match)
+            ) {
+              return "vendor-codemirror";
+            }
+            if (["@xterm/xterm", "@xterm/addon-fit", "@xterm/addon-clipboard", "@xterm/addon-webgl"].some(match)) {
+              return "vendor-xterm";
+            }
+            return undefined;
           },
         },
       },
