@@ -511,7 +511,7 @@ export default function ComposerV2({
             <div
               {...getRootProps()}
               className={cn(
-                "group rounded-2xl border bg-white p-2 transition-all duration-200",
+                "group rounded-2xl border bg-white p-2",
                 "border-neutral-200/90 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_4px_16px_-4px_rgba(15,23,42,0.08)]",
                 "dark:border-neutral-700/60 dark:bg-neutral-900 dark:shadow-[0_1px_2px_rgba(0,0,0,0.3),0_8px_24px_-4px_rgba(0,0,0,0.4)]",
                 isDragActive &&

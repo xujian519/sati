@@ -11,7 +11,6 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   Folder,
@@ -908,14 +907,6 @@ export default function SidebarV2({
               onClick={() => handleProjectClick(project)}
               className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-l-lg pl-2 pr-1 text-left"
             >
-              <ChevronRight
-                className={cn(
-                  "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-                  isSelected ? "text-brand-600 dark:text-brand-300" : "text-neutral-500 dark:text-neutral-400",
-                  isExpanded && "rotate-90",
-                )}
-                strokeWidth={1.75}
-              />
               <Folder
                 className={cn(
                   "h-3.5 w-3.5 shrink-0 transition-colors",
@@ -986,17 +977,17 @@ export default function SidebarV2({
             title="正念智能体"
             className="group flex min-w-0 shrink items-center gap-2.5 rounded-lg p-1 transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
           >
-            <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 ring-1 ring-brand-300/40 shadow-sm transition group-hover:shadow-md dark:from-brand-500/20 dark:to-brand-700/30 dark:ring-brand-500/30">
+            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 ring-1 ring-brand-300/40 shadow-sm transition group-hover:shadow-md dark:from-brand-500/20 dark:to-brand-700/30 dark:ring-brand-500/30">
               <img
                 src={satiLogoLight}
                 alt="正念智能体"
-                className="h-7 w-7 shrink-0 select-none object-contain dark:hidden"
+                className="h-full w-full shrink-0 select-none object-cover dark:hidden"
                 draggable={false}
               />
               <img
                 src={satiLogoDark}
                 alt="正念智能体"
-                className="hidden h-7 w-7 shrink-0 select-none object-contain dark:block"
+                className="hidden h-full w-full shrink-0 select-none object-cover dark:block"
                 draggable={false}
               />
             </span>
