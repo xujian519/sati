@@ -7,7 +7,7 @@ const pdfMocks = vi.hoisted(() => ({
   getDocument: vi.fn(),
 }));
 
-vi.mock("pdfjs-dist", () => ({
+vi.mock("./pdfjs", () => ({
   GlobalWorkerOptions: {},
   TextLayer: class {},
   getDocument: pdfMocks.getDocument,

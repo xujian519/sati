@@ -32,11 +32,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import * as pdfjs from "pdfjs-dist";
-// 使用 legacy worker：自带 ES2025 Map.prototype.getOrInsertComputed polyfill，
-// 兼容 Node 22 / Chromium <129 等不支持该 API 的运行环境（见 pdf.worker.mjs 的 ChunkedStreamManager）。
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
-import "pdfjs-dist/web/pdf_viewer.css";
+import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import type { DocumentSelectionSource } from "../../../../types/documentSelection";
 import {
   createImageRegionContentReference,
@@ -48,6 +45,7 @@ import {
 import type { PdfNavigationMode } from "../../utils/documentPreview";
 import { resolvePdfOutline, type PdfOutlineItem } from "../../utils/pdfOutline";
 import { findPdfSearchMatches, renderPdfSearchHighlights, type PdfSearchMatch } from "../../utils/pdfSearch";
+import * as pdfjs from "./pdfjs";
 import ContentReferenceMenu from "./ContentReferenceMenu";
 import RegionSelectionOverlay, { type CapturedRegion } from "./RegionSelectionOverlay";
 import { floatingSelectionSingleActionClassName } from "./floatingSelectionAction";
