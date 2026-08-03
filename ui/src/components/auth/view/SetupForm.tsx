@@ -84,7 +84,7 @@ export default function SetupForm() {
 
   return (
     <AuthScreenLayout
-      title="Welcome to Sati"
+      title="Welcome to 正念智能体"
       description="Set up your account to get started"
       footerText="This is a single-user system. Only one account can be created."
       logo={
@@ -145,7 +145,7 @@ export default function SetupForm() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="w-full rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-blue-700 disabled:bg-blue-400"
+          className="w-full rounded-md bg-brand-600 px-4 py-2 font-medium text-white transition-colors duration-200 hover:bg-brand-700 disabled:bg-brand-400"
         >
           {isSubmitting ? "Setting up..." : "Create Account"}
         </button>

@@ -27,9 +27,9 @@ type PlanData = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  ready: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  ready: "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
   queued: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  running: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  running: "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
   completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
   failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
   apply_failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
@@ -185,7 +185,7 @@ export default function RunDetail(props: RunDetailProps) {
               </h2>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 {projectDisplayName && (
-                  <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                  <span className="inline-flex items-center rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
                     {projectDisplayName}
                   </span>
                 )}
@@ -233,7 +233,7 @@ export default function RunDetail(props: RunDetailProps) {
                 <button
                   type="button"
                   onClick={() => onOpenExecutionSession?.(projectKey, effectiveRunId, projectName)}
-                  className="inline-flex items-center gap-1 text-[13px] font-medium text-blue-600 transition hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                  className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-600 transition hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
                 >
                   {t("dashboard.runDetail.openSession", { defaultValue: "Open Session" })}
                   <ExternalLink className="h-3 w-3" strokeWidth={1.75} />

@@ -75,7 +75,7 @@ const statusConfig = {
   in_progress: {
     icon: (
       <svg
-        className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400"
+        className="h-3.5 w-3.5 text-brand-500 dark:text-brand-400"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -89,7 +89,8 @@ const statusConfig = {
       </svg>
     ),
     textClass: "text-gray-900 dark:text-gray-100",
-    badgeClass: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+    badgeClass:
+      "bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-800",
   },
   pending: {
     icon: (

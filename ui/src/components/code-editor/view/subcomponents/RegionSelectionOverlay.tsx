@@ -179,7 +179,7 @@ export default function RegionSelectionOverlay({
   return createPortal(
     <div
       ref={overlayRef}
-      className="fixed z-[110] cursor-crosshair touch-none overflow-visible bg-blue-500/[0.03]"
+      className="fixed z-[110] cursor-crosshair touch-none overflow-visible bg-brand-500/[0.03]"
       style={{
         left: hostRect.left,
         top: hostRect.top,
@@ -227,12 +227,12 @@ export default function RegionSelectionOverlay({
         setRect(nextRect);
       }}
     >
-      <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-blue-200 bg-white/95 px-3 py-1.5 text-[12px] text-blue-700 shadow-sm backdrop-blur dark:border-blue-800 dark:bg-neutral-950/95 dark:text-blue-300">
+      <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-brand-200 bg-white/95 px-3 py-1.5 text-[12px] text-brand-700 shadow-sm backdrop-blur dark:border-brand-800 dark:bg-neutral-950/95 dark:text-brand-300">
         {t("contentReference.regionSelection.hint")}
       </div>
       {localRect ? (
         <div
-          className="pointer-events-none absolute border-2 border-blue-500 bg-blue-400/10 shadow-[0_0_0_9999px_rgba(15,23,42,0.16)]"
+          className="pointer-events-none absolute border-2 border-brand-500 bg-brand-400/10 shadow-[0_0_0_9999px_rgba(15,23,42,0.16)]"
           style={localRect}
         />
       ) : null}
@@ -245,7 +245,7 @@ export default function RegionSelectionOverlay({
           <button
             type="button"
             disabled={capturing}
-            className="rounded-xl bg-blue-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-xl bg-brand-600 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-brand-700 disabled:opacity-50"
             onClick={async () => {
               const requestId = captureRequestRef.current + 1;
               captureRequestRef.current = requestId;

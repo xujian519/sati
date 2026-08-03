@@ -75,7 +75,7 @@ export default function AlwaysOnV2({
               className={cn(
                 "inline-flex items-center gap-1.5 border-b-2 px-3 pb-2 text-[13px] font-medium transition-colors",
                 isActive
-                  ? "border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+                  ? "border-brand-500 text-brand-600 dark:border-brand-400 dark:text-brand-400"
                   : "border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200",
               )}
             >

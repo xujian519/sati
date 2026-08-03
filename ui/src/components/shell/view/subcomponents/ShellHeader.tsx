@@ -40,14 +40,14 @@ export default function ShellHeader({
           <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`} />
 
           {hasSession && sessionDisplayNameShort && (
-            <span className="text-xs text-blue-300">({sessionDisplayNameShort}...)</span>
+            <span className="text-xs text-brand-300">({sessionDisplayNameShort}...)</span>
           )}
 
           {!hasSession && <span className="text-xs text-gray-400">{statusNewSessionText}</span>}
 
           {!isInitialized && <span className="text-xs text-yellow-400">{statusInitializingText}</span>}
 
-          {isRestarting && <span className="text-xs text-blue-400">{statusRestartingText}</span>}
+          {isRestarting && <span className="text-xs text-brand-400">{statusRestartingText}</span>}
         </div>
 
         <div className="flex items-center space-x-3">

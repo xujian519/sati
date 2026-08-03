@@ -92,7 +92,7 @@ export default function ContentReferenceMenu({
         className={[
           "flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-[12px] transition-colors",
           activeMode
-            ? "bg-blue-50 font-medium text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
+            ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-950/50 dark:text-brand-300"
             : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-50",
         ].join(" ")}
         onClick={() => {
@@ -148,7 +148,7 @@ export default function ContentReferenceMenu({
                       <span className="block text-[13px] font-medium text-neutral-900 dark:text-neutral-100">
                         {labels[mode]}
                         {mode === capabilities.recommendedMode ? (
-                          <span className="ml-1.5 text-[10px] font-normal text-blue-600 dark:text-blue-300">
+                          <span className="ml-1.5 text-[10px] font-normal text-brand-600 dark:text-brand-300">
                             {t("contentReference.recommended")}
                           </span>
                         ) : null}

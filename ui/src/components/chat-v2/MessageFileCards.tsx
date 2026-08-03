@@ -58,7 +58,7 @@ function fileVisual(file: CardFile) {
   if (["zip", "tar", "gz", "7z", "rar"].includes(ext)) {
     return { Icon: FileArchive, className: "bg-amber-50 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300" };
   }
-  return { Icon: FileText, className: "bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300" };
+  return { Icon: FileText, className: "bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300" };
 }
 
 function formatBytes(bytes: number | undefined): string | null {
@@ -271,7 +271,7 @@ export function AgentFileArtifactGroup({
         <button
           type="button"
           onClick={() => setExpanded(value => !value)}
-          className="text-[12px] font-medium text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-400 dark:hover:text-blue-300"
+          className="text-[12px] font-medium text-brand-600 hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300"
         >
           {expanded
             ? t("fileArtifacts.collapse", { defaultValue: "Collapse" })

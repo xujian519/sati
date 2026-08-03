@@ -49,7 +49,7 @@ export default function AuthScreenLayout({ title, description, children, footerT
                 rel="noopener noreferrer"
                 className="text-xs text-muted-foreground/50 transition-colors hover:text-muted-foreground"
               >
-                Sati is open source
+                正念智能体 is open source
               </a>
             </div>
           )}

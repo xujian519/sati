@@ -1,7 +1,7 @@
 {
-  "name": "Sati",
-  "short_name": "Sati",
-  "description": "Sati — agent-driven development workspace",
+  "name": "正念智能体",
+  "short_name": "正念智能体",
+  "description": "正念智能体 Sati — agent-driven development workspace",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

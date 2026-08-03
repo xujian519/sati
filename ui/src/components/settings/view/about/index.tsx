@@ -143,7 +143,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
   const statusBadgeClass = cn(
     "inline-flex items-center rounded-md border px-2 py-0.5 text-sm font-medium leading-5",
     status === "updateAvailable"
-      ? "border-blue-300 bg-blue-50 text-blue-700"
+      ? "border-brand-300 bg-brand-50 text-brand-700"
       : status === "upToDate" || status === "installerLaunched"
         ? "border-emerald-300 bg-emerald-50 text-emerald-700"
         : status === "checking"
@@ -162,7 +162,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
             <span className="font-medium">{t("settingsPage.about.versionStatus")}</span>
             <span className={cn("ml-2", statusBadgeClass)}>
               {status === "updateAvailable" ? (
-                <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-blue-600" />
+                <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-brand-600" />
               ) : status === "checking" ? (
                 <Loader2 className={cn("mr-1.5 animate-spin", statusIconClass)} />
               ) : status === "unavailable" ? (
@@ -182,7 +182,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
               type="button"
               onClick={handleDownloadAndInstall}
               disabled={downloading || installing}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {downloading
                 ? t("settingsPage.about.downloadingAndInstalling")
@@ -193,7 +193,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
               type="button"
               onClick={handleWebUpdate}
               disabled={webUpdating || installing}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {webUpdating ? t("about.updating") : t("about.updateNow")}
             </button>
@@ -202,7 +202,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
               type="button"
               onClick={handleWebRestart}
               disabled={installing || webUpdating}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {installing ? t("settingsPage.about.restartingAndInstalling") : t("about.restartToApply")}
             </button>
@@ -211,7 +211,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
               type="button"
               onClick={handleInstall}
               disabled={installing || downloading}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {installing ? t("settingsPage.about.launchingInstaller") : t("settingsPage.about.installUpdate")}
             </button>

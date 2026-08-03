@@ -13,7 +13,7 @@ type MarkdownPreviewProps = {
   onFileOpen?: (filePath: string) => void;
 };
 
-const linkClassName = "text-blue-600 hover:underline dark:text-blue-400";
+const linkClassName = "text-brand-600 hover:underline dark:text-brand-400";
 
 function createMarkdownPreviewComponents(onFileOpen?: (filePath: string) => void, baseFilePath?: string): Components {
   return {

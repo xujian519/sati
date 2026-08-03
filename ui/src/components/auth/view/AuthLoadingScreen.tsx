@@ -12,13 +12,13 @@ export default function AuthLoadingScreen() {
           </div>
         </div>
 
-        <h1 className="mb-2 text-2xl font-bold text-foreground">Sati</h1>
+        <h1 className="mb-2 text-2xl font-bold text-foreground">正念智能体</h1>
 
         <div className="flex items-center justify-center space-x-2">
           {loadingDotAnimationDelays.map(delay => (
             <div
               key={delay}
-              className="h-2 w-2 animate-bounce rounded-full bg-blue-500"
+              className="h-2 w-2 animate-bounce rounded-full bg-brand-500"
               style={{ animationDelay: delay }}
             />
           ))}

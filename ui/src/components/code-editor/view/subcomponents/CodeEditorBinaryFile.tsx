@@ -75,7 +75,7 @@ function getFileTypeBadge(filename: string) {
   if (["doc", "docx", "wps", "odt"].includes(extension)) {
     return {
       label: "W",
-      className: "bg-blue-600 text-white",
+      className: "bg-brand-600 text-white",
       titleKey: "fileTypes.word",
     };
   }

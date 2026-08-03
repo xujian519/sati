@@ -631,7 +631,7 @@ export default function DashboardV2({
 
 const TIER_COLORS: Record<string, string> = {
   SIMPLE: "bg-emerald-400 dark:bg-emerald-500",
-  MEDIUM: "bg-blue-400 dark:bg-blue-500",
+  MEDIUM: "bg-brand-400 dark:bg-brand-500",
   COMPLEX: "bg-amber-400 dark:bg-amber-500",
   REASONING: "bg-purple-400 dark:bg-purple-500",
   HARD: "bg-red-400 dark:bg-red-500",
@@ -1130,7 +1130,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
             {Object.keys(routing.byTier || {}).map(tier => (
               <span
                 key={tier}
-                className="rounded bg-blue-100 px-1.5 py-0.5 text-xxs font-medium text-blue-600 dark:bg-blue-900/40 dark:text-blue-400"
+                className="rounded bg-brand-100 px-1.5 py-0.5 text-xxs font-medium text-brand-600 dark:bg-brand-900/40 dark:text-brand-400"
               >
                 {tier}
               </span>

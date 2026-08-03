@@ -991,7 +991,7 @@ function SplitBody(props: SplitBodyProps) {
               setFilesAssistantWidth(clampFilesAssistantWidth(FILES_ASSISTANT_MAX_WIDTH));
             }
           }}
-          className="group absolute inset-y-0 z-30 w-px cursor-col-resize bg-neutral-200 outline-none transition-colors hover:bg-neutral-400 focus:bg-blue-500 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:focus:bg-blue-400"
+          className="group absolute inset-y-0 z-30 w-px cursor-col-resize bg-neutral-200 outline-none transition-colors hover:bg-neutral-400 focus:bg-brand-500 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:focus:bg-brand-400"
           style={{ right: filesAssistantWidth }}
           title={t("filesWorkbench.resizeAssistant")}
           role="separator"

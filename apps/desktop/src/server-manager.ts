@@ -984,7 +984,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
     const gatewayEntry = path.join(satiMainDir, "dist", "src", "cli", "sati.js");
     if (fsSync.existsSync(gatewayEntry)) {
-      this.emit("progress", "启动 Sati Gateway…");
+      this.emit("progress", "启动正念智能体 Gateway…");
       // 同实例重启路径：先清上一次 spawn 的 gateway 引用（按端口探测的
       // killOrphanGateway 依赖 isSatiRuntimeProcess，此处按引用直接杀最稳）。
       if (this.gatewayChild) {

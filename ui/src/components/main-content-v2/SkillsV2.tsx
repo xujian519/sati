@@ -832,7 +832,7 @@ function ListSection({
                       {mt.target.scope === "user" ? (
                         <Globe className="h-3.5 w-3.5 shrink-0 text-amber-500" strokeWidth={1.75} />
                       ) : (
-                        <Folder className="h-3.5 w-3.5 shrink-0 text-blue-500" strokeWidth={1.75} />
+                        <Folder className="h-3.5 w-3.5 shrink-0 text-brand-500" strokeWidth={1.75} />
                       )}
                       <span className="truncate">{mt.label}</span>
                     </button>
@@ -907,7 +907,7 @@ function SkillDetail({
             className={cn(
               "rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider",
               skill.scope === "project"
-                ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                ? "bg-brand-100 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300"
                 : skill.scope === "builtin"
                   ? "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
                   : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",

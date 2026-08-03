@@ -20,7 +20,7 @@ const STATUS_COLOR: Record<ChangeRow["status"], string> = {
   M: "text-amber-500",
   A: "text-emerald-600",
   D: "text-red-500",
-  U: "text-blue-500",
+  U: "text-brand-500",
 };
 
 export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {

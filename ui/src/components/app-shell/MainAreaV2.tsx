@@ -53,7 +53,7 @@ const DASHBOARD_TABS: Tab[] = [
 ];
 
 const ACTIVE_TOOL_BUTTON_CLASS =
-  "bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-950/70 dark:text-blue-200 dark:hover:bg-blue-900/70";
+  "bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-200 dark:hover:bg-brand-800/50";
 
 const ALWAYS_ON_EVENT_BADGE_POLL_INTERVAL_MS = 15_000;
 const ALWAYS_ON_LAST_VIEWED_MARKER_KEY = "sati:always-on-last-viewed-marker";
@@ -235,7 +235,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
   return (
     <div className="flex h-full min-w-0 flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       {/* Header: session title left, tool switcher right. */}
-      <header className="relative z-[80] flex h-14 shrink-0 items-center overflow-visible border-b border-neutral-100 bg-white px-6 dark:border-neutral-900 dark:bg-neutral-950">
+      <header className="relative z-[80] flex h-14 shrink-0 items-center overflow-visible border-b border-neutral-200/60 bg-white px-6 dark:border-neutral-800/60 dark:bg-neutral-950">
         {isSidebarCollapsed ? (
           // Just the "expand sidebar" affordance — the Sati logo lives
           // in the sidebar header, so showing a duplicate badge here when
@@ -283,8 +283,8 @@ function MainAreaV2Content(props: MainAreaV2Props) {
             </div>
           )}
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-neutral-400 dark:text-neutral-500">
-            <Box className="h-3 w-3 shrink-0" strokeWidth={1.75} />
-            <span className="min-w-0 max-w-96 truncate" title={projectName}>
+            <Box className="h-3 w-3 shrink-0 text-brand-500 dark:text-brand-400" strokeWidth={1.75} />
+            <span className="min-w-0 max-w-96 truncate text-brand-600 dark:text-brand-400" title={projectName}>
               {projectName}
             </span>
           </div>
@@ -376,7 +376,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                 {alwaysOnUnread && activeDashboardTab.id !== "always-on" ? (
                   <span
                     aria-hidden="true"
-                    className="absolute right-1 top-1 h-2 w-2 rounded-full bg-blue-600 ring-2 ring-blue-100 dark:bg-blue-400 dark:ring-blue-950"
+                    className="absolute right-1 top-1 h-2 w-2 rounded-full bg-brand-600 ring-2 ring-brand-100 dark:bg-brand-400 dark:ring-brand-950"
                   />
                 ) : null}
               </button>
@@ -394,7 +394,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                 {alwaysOnUnread ? (
                   <span
                     aria-hidden="true"
-                    className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-neutral-950"
+                    className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-brand-500 ring-2 ring-white dark:ring-neutral-950"
                   />
                 ) : null}
               </button>
@@ -418,12 +418,12 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                         chatHistorySearch.closeSearch();
                         setActiveTab(tab.id);
                       }}
-                      className="relative flex h-9 w-full items-center justify-center gap-2 rounded-lg px-2 text-[13px] text-neutral-600 transition-colors hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-50 focus:text-blue-700 focus:outline-none dark:text-neutral-300 dark:hover:bg-blue-950/60 dark:hover:text-blue-200 dark:focus:bg-blue-950/60 dark:focus:text-blue-200"
+                      className="relative flex h-9 w-full items-center justify-center gap-2 rounded-lg px-2 text-[13px] text-neutral-600 transition-colors hover:bg-brand-50 hover:text-brand-700 focus:bg-brand-50 focus:text-brand-700 focus:outline-none dark:text-neutral-300 dark:hover:bg-brand-900/30 dark:hover:text-brand-200 dark:focus:bg-brand-900/30 dark:focus:text-brand-200"
                     >
                       <Icon className="h-4 w-4 shrink-0 text-neutral-400" strokeWidth={1.75} />
                       <span>{t(tab.labelKey)}</span>
                       {tab.id === "always-on" && alwaysOnUnread ? (
-                        <span className="absolute right-2 h-2 w-2 rounded-full bg-blue-500" aria-label="Unread" />
+                        <span className="absolute right-2 h-2 w-2 rounded-full bg-brand-500" aria-label="Unread" />
                       ) : null}
                     </button>
                   );

@@ -112,8 +112,8 @@ export default function ProviderLoginModal({
         <div className="flex-1 overflow-hidden">
           {provider === "gemini" ? (
             <div className="flex h-full flex-col items-center justify-center bg-gray-50 p-8 text-center dark:bg-gray-900/50">
-              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-                <KeyRound className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 dark:bg-brand-900/30">
+                <KeyRound className="h-8 w-8 text-brand-600 dark:text-brand-400" />
               </div>
 
               <h4 className="mb-3 text-xl font-medium text-gray-900 dark:text-white">Setup Gemini API Access</h4>
@@ -125,7 +125,7 @@ export default function ProviderLoginModal({
               <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white p-6 text-left shadow-sm dark:border-gray-700 dark:bg-gray-800">
                 <ol className="space-y-4">
                   <li className="flex gap-4">
-                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
+                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-medium text-brand-600 dark:bg-brand-900/50 dark:text-brand-400">
                       1
                     </div>
                     <div>
@@ -134,14 +134,14 @@ export default function ProviderLoginModal({
                         href="https://aistudio.google.com/app/apikey"
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center gap-1 text-sm text-blue-600 hover:underline dark:text-blue-400"
+                        className="flex items-center gap-1 text-sm text-brand-600 hover:underline dark:text-brand-400"
                       >
                         Google AI Studio <ExternalLink className="h-3 w-3" />
                       </a>
                     </div>
                   </li>
                   <li className="flex gap-4">
-                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
+                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-medium text-brand-600 dark:bg-brand-900/50 dark:text-brand-400">
                       2
                     </div>
                     <div>
@@ -157,7 +157,7 @@ export default function ProviderLoginModal({
 
               <button
                 onClick={onClose}
-                className="mt-8 rounded-lg bg-blue-600 px-6 py-2.5 font-medium text-white transition-colors hover:bg-blue-700"
+                className="mt-8 rounded-lg bg-brand-600 px-6 py-2.5 font-medium text-white transition-colors hover:bg-brand-700"
               >
                 Done
               </button>

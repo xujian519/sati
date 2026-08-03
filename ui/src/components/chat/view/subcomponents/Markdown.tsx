@@ -19,7 +19,7 @@ const streamingPlugins = [remarkGfm];
 const fullRemarkPlugins = [remarkGfm, remarkMath];
 const fullRehypePlugins = [rehypeKatex];
 
-const linkClassName = "text-blue-600 hover:underline dark:text-blue-400";
+const linkClassName = "text-brand-600 hover:underline dark:text-brand-400";
 
 function createMarkdownComponents(onFileOpen?: (filePath: string) => void): Components {
   return {

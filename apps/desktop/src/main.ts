@@ -125,15 +125,15 @@ function setupAppMenu(): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
-        label: "Sati",
+        label: "正念智能体",
         submenu: [
-          { role: "about", label: "关于 Sati" },
+          { role: "about", label: "关于正念智能体" },
           { type: "separator" },
-          { role: "hide", label: "隐藏 Sati" },
+          { role: "hide", label: "隐藏正念智能体" },
           { role: "hideOthers" },
           { role: "unhide" },
           { type: "separator" },
-          { role: "quit", label: "退出 Sati" },
+          { role: "quit", label: "退出正念智能体" },
         ],
       },
       {
@@ -251,6 +251,7 @@ function summarizeStartupFailure(message: string): {
   headline: string;
   detail: string;
 } {
+  // eslint-disable-next-line no-control-regex
   const stripped = message.replace(/\x1b\[[0-9;]*m/g, "");
 
   // 服务器端实际校验文案是 "<field> is required"（satiConfig.js validateSatiConfig），
@@ -275,7 +276,8 @@ function summarizeStartupFailure(message: string): {
   if (/Bundle not found/i.test(stripped)) {
     return {
       headline: "本地服务无法启动：runtime 资源损坏",
-      detail: `App Bundle 内的 runtime tar 缺失或损坏。\n\n` + `${firstLines(stripped, 4)}\n\n` + `请重新安装 Sati。`,
+      detail:
+        `App Bundle 内的 runtime tar 缺失或损坏。\n\n` + `${firstLines(stripped, 4)}\n\n` + `请重新安装正念智能体。`,
     };
   }
 
@@ -309,7 +311,7 @@ async function ensureConfigOrOnboard(): Promise<boolean> {
     // it does we still need to tell the user *something* before quitting.
     await dialog.showMessageBox({
       type: "error",
-      title: "Sati",
+      title: "正念智能体",
       message: "Onboarding 资源缺失",
       detail: `未找到 onboarding HTML：\n${htmlPath}\n\n配置问题：${validation.reason}`,
       buttons: ["退出"],
@@ -324,7 +326,7 @@ async function ensureConfigOrOnboard(): Promise<boolean> {
   if (fs.existsSync(configPath)) {
     await dialog.showMessageBox({
       type: "warning",
-      title: "Sati",
+      title: "正念智能体",
       message: "需要重新配置",
       detail:
         `已有的 ~/.sati/sati.yaml 不完整或缺少模型凭据，无法启动本地服务。\n\n` +
@@ -357,7 +359,7 @@ function createMainWindow(port: number, options: { onReadyToShow?: () => void } 
     height: 820,
     minWidth: 900,
     minHeight: 600,
-    title: "Sati",
+    title: "正念智能体",
     show: false,
     titleBarStyle: "default",
     ...(iconPath ? { icon: iconPath } : {}),
@@ -469,7 +471,7 @@ if (!gotLock) {
       // mainWindow 可能尚未创建（首次启动失败）或被销毁——此时走无窗口重载
       const options = {
         type: "error" as const,
-        title: "Sati",
+        title: "正念智能体",
         message: "本地服务多次崩溃",
         detail: "服务进程已多次异常退出。请尝试重启应用。",
       };
@@ -491,7 +493,7 @@ if (!gotLock) {
       preloadPath: path.join(__dirname, "preload.js"),
       htmlPath: resolveSplashHtmlPath(),
     });
-    splash.setStatus("准备启动…", `Sati v${app.getVersion()} · ${process.platform}-${process.arch}`);
+    splash.setStatus("准备启动…", `正念智能体 v${app.getVersion()} · ${process.platform}-${process.arch}`);
     const onProgress = (phase: string): void => splash.setStatus(phase);
     serverManager.on("progress", onProgress);
 
@@ -506,7 +508,7 @@ if (!gotLock) {
       const { headline, detail } = summarizeStartupFailure(msg);
       const choice = await dialog.showMessageBox({
         type: "error",
-        title: "Sati",
+        title: "正念智能体",
         message: headline,
         detail,
         buttons: ["重新配置", "退出"],

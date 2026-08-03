@@ -266,7 +266,7 @@ const MessageComponent = memo(
         {message.type === "user" ? (
           /* User message bubble on the right */
           <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
-            <div className="group flex-1 rounded-2xl rounded-br-md bg-blue-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
+            <div className="group flex-1 rounded-2xl rounded-br-md bg-brand-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
               {documentReferenceAttachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
                   {documentReferenceAttachments.map(reference => (
@@ -322,13 +322,13 @@ const MessageComponent = memo(
                   ))}
                 </div>
               )}
-              <div className="mt-1 flex items-center justify-end gap-1 text-xs text-blue-100">
+              <div className="mt-1 flex items-center justify-end gap-1 text-xs text-brand-100">
                 {shouldShowUserCopyControl && <MessageCopyControl content={userCopyContent} messageType="user" />}
                 <span>{formattedTime}</span>
               </div>
             </div>
             {!hideHeader && !isGrouped && (
-              <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex">
+              <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm text-white sm:flex">
                 U
               </div>
             )}
@@ -468,7 +468,7 @@ const MessageComponent = memo(
                           type="button"
                           key={`${image.name || "tool-image"}-${idx}`}
                           onClick={() => openLightbox(toolResultImages, idx)}
-                          className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900"
+                          className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-900"
                           aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
                         >
                           <img

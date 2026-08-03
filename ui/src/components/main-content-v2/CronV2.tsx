@@ -37,7 +37,7 @@ const COL = {
 } as const;
 
 const CRON_STATUS_STYLE: Record<"scheduled" | "running", string> = {
-  scheduled: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  scheduled: "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300",
   running: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
 };
 
@@ -200,7 +200,7 @@ export default function CronV2() {
               className={cn(
                 "inline-flex items-center gap-1.5 border-b-2 px-3 pb-2 text-[13px] font-medium transition-colors",
                 isActive
-                  ? "border-blue-500 text-blue-600 dark:border-blue-400 dark:text-blue-400"
+                  ? "border-brand-500 text-brand-600 dark:border-brand-400 dark:text-brand-400"
                   : "border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200",
               )}
             >
@@ -468,7 +468,7 @@ function CronCreateView({
             value={message}
             onChange={event => setMessage(event.target.value)}
             rows={5}
-            className="mt-1.5 w-full resize-y rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-blue-500 dark:focus:ring-blue-950"
+            className="mt-1.5 w-full resize-y rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
             placeholder={t("cron.create.placeholders.prompt", {
               defaultValue: "Describe what Sati should do when this task runs.",
             })}
@@ -482,7 +482,7 @@ function CronCreateView({
           <select
             value={projectKey}
             onChange={event => setProjectKey(event.target.value)}
-            className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-blue-500 dark:focus:ring-blue-950"
+            className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
           >
             <option value="">{t("cron.create.placeholders.workspace", { defaultValue: "Select a workspace" })}</option>
             {projects.map(project => (
@@ -506,7 +506,7 @@ function CronCreateView({
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded px-3 text-[12px] font-medium transition-colors",
                   scheduleKind === kind
-                    ? "bg-white text-blue-600 shadow-sm dark:bg-neutral-800 dark:text-blue-300"
+                    ? "bg-white text-brand-600 shadow-sm dark:bg-neutral-800 dark:text-brand-300"
                     : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100",
                 )}
               >
@@ -534,7 +534,7 @@ function CronCreateView({
               min={formatDateLocal(new Date())}
               disabled={scheduleKind === "cron"}
               onChange={event => setScheduleDate(event.target.value)}
-              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-blue-500 dark:focus:ring-blue-950 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
+              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
             />
           </label>
           <label className="block">
@@ -545,7 +545,7 @@ function CronCreateView({
               type="time"
               value={scheduleTime}
               onChange={event => setScheduleTime(event.target.value)}
-              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-blue-500 dark:focus:ring-blue-950"
+              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
             />
           </label>
           <label className="block">
@@ -555,7 +555,7 @@ function CronCreateView({
             <input
               value={timezone}
               onChange={event => setTimezone(event.target.value)}
-              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-blue-500 dark:focus:ring-blue-950"
+              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
             />
           </label>
         </div>
@@ -564,7 +564,7 @@ function CronCreateView({
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-blue-600 px-3 text-[12px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-brand-600 px-3 text-[12px] font-medium text-white transition hover:bg-brand-700 disabled:opacity-50 dark:bg-brand-700 dark:hover:bg-brand-600"
           >
             {submitting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
@@ -689,7 +689,7 @@ function CronJobRow({
             type="button"
             disabled={busy}
             onClick={() => void runAction("runNow")}
-            className="inline-flex h-7 items-center gap-1 rounded-md bg-blue-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600"
+            className="inline-flex h-7 items-center gap-1 rounded-md bg-brand-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-brand-700 disabled:opacity-50 dark:bg-brand-700 dark:hover:bg-brand-600"
           >
             {busy ? (
               <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />

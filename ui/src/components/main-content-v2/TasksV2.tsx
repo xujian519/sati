@@ -40,7 +40,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_BADGE_CLASS: Record<string, string> = {
   pending: "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400",
   "in-progress": "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-  review: "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+  review: "bg-brand-100 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400",
   blocked: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400",
   deferred: "bg-neutral-100 text-neutral-500 dark:bg-neutral-900 dark:text-neutral-500",
   cancelled: "bg-neutral-100 text-neutral-500 dark:bg-neutral-900 dark:text-neutral-500",

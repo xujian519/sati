@@ -34,8 +34,8 @@ import {
   setSessionCustomTitle,
   useCustomNamesVersion,
 } from "../../lib/customNames";
-import satiLogoDark from "../../assets/sati-wordmark-dark.png";
-import satiLogoLight from "../../assets/sati-wordmark-light.png";
+import satiLogoDark from "../../assets/sati-logo-white.png";
+import satiLogoLight from "../../assets/sati-logo.png";
 
 const asTimestamp = (value: unknown): number => {
   if (typeof value === "number") return value;
@@ -214,7 +214,7 @@ function SessionStatusIndicator({ status, label }: { status: SessionIndicatorSta
       title={label}
       className={cn(
         "block h-1.5 w-1.5 rounded-full",
-        status === "unread" ? "bg-blue-500 dark:bg-blue-400" : "bg-neutral-300 dark:bg-neutral-600",
+        status === "unread" ? "bg-brand-500 dark:bg-brand-400" : "bg-neutral-300 dark:bg-neutral-600",
       )}
     />
   );
@@ -723,9 +723,7 @@ export default function SidebarV2({
             onContextMenu={event => (isOptimisticRow ? undefined : openSessionContextMenu(event, project, session))}
             className={cn(
               "group/session relative w-full rounded-md transition-colors",
-              isSessionActive
-                ? "bg-neutral-200/70 dark:bg-neutral-800"
-                : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+              isSessionActive ? "bg-brand-50 dark:bg-brand-900/20" : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
             )}
           >
             {isSessionRenaming ? (
@@ -792,7 +790,7 @@ export default function SidebarV2({
           <button
             type="button"
             onClick={event => handleNewSession(event, project)}
-            className="block w-full rounded-md bg-neutral-200/70 px-2 py-1 text-left text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
+            className="block w-full rounded-md bg-brand-50 px-2 py-1 text-left text-neutral-900 dark:bg-brand-900/20 dark:text-neutral-100"
           >
             <div className="truncate text-[12.5px]">
               {t("sidebar:sessions.newSession", { defaultValue: "New Session" })}
@@ -881,10 +879,10 @@ export default function SidebarV2({
         <div
           onContextMenu={event => openProjectContextMenu(event, project, isGeneral)}
           className={cn(
-            "group/project flex h-8 w-full items-center rounded-lg pr-1 text-[13px] transition-colors",
+            "group/project flex h-8 w-full items-center rounded-lg border-l-2 pr-1 text-[13px] transition-colors",
             isSelected
-              ? "bg-neutral-200/70 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
-              : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
+              ? "border-brand-500 bg-brand-50 text-neutral-900 dark:bg-brand-900/20 dark:text-neutral-100"
+              : "border-transparent text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
           )}
         >
           {isRenaming && !isGeneral ? (
@@ -979,22 +977,25 @@ export default function SidebarV2({
                 navigate("/");
               }
             }}
-            aria-label="Sati"
-            title="Sati"
+            aria-label="正念智能体"
+            title="正念智能体"
             className="flex min-w-0 shrink items-center gap-2 rounded-md p-1 transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-700"
           >
             <img
               src={satiLogoLight}
-              alt="Sati"
-              className="h-7 w-auto max-w-[150px] select-none object-contain dark:hidden"
+              alt="正念智能体"
+              className="h-7 w-7 shrink-0 select-none object-contain dark:hidden"
               draggable={false}
             />
             <img
               src={satiLogoDark}
-              alt="Sati"
-              className="hidden h-7 w-auto max-w-[150px] select-none object-contain dark:block"
+              alt="正念智能体"
+              className="hidden h-7 w-7 shrink-0 select-none object-contain dark:block"
               draggable={false}
             />
+            <span className="truncate text-[15px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+              正念智能体
+            </span>
           </button>
         </div>
         {onCollapse ? (
@@ -1009,6 +1010,9 @@ export default function SidebarV2({
           </button>
         ) : null}
       </div>
+
+      {/* Brand divider — subtle gradient line under the logo area */}
+      <div className="nav-divider mx-2" />
 
       {/* Section toggle: a thin pill control sitting just above the scroll
           area, so it doesn't move while the list scrolls. Mirrors the look of
@@ -1028,7 +1032,7 @@ export default function SidebarV2({
               "flex-1 rounded text-[12px] font-medium transition-colors",
               "h-7 leading-none",
               activeSection === "projects"
-                ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100"
+                ? "bg-white text-brand-600 shadow-sm dark:bg-neutral-700 dark:text-brand-400"
                 : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200",
             )}
           >
@@ -1043,7 +1047,7 @@ export default function SidebarV2({
               "flex-1 rounded text-[12px] font-medium transition-colors",
               "h-7 leading-none",
               activeSection === "general"
-                ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100"
+                ? "bg-white text-brand-600 shadow-sm dark:bg-neutral-700 dark:text-brand-400"
                 : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200",
             )}
           >
@@ -1097,8 +1101,19 @@ export default function SidebarV2({
             </div>
 
             {otherProjects.length === 0 ? (
-              <div className="px-3 py-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-                {t("sidebar:projects.noProjects", { defaultValue: "No projects found" })}
+              <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                <Folder className="h-8 w-8 text-neutral-300 dark:text-neutral-700" strokeWidth={1.5} />
+                <div className="text-[12px] text-neutral-500 dark:text-neutral-400">
+                  {t("sidebar:projects.noProjects", { defaultValue: "No projects found" })}
+                </div>
+                <button
+                  type="button"
+                  onClick={onCreateProject}
+                  className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-3 py-1.5 text-[12px] font-medium text-brand-600 transition-colors hover:bg-brand-100 dark:bg-brand-900/20 dark:text-brand-400 dark:hover:bg-brand-900/40"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+                  {t("sidebar:projects.newProject", { defaultValue: "New Project" })}
+                </button>
               </div>
             ) : (
               <div className="space-y-0.5">{otherProjects.map(project => renderProjectGroup(project))}</div>
@@ -1141,7 +1156,7 @@ export default function SidebarV2({
           onClick={onShowSettings}
           aria-label={t("sidebar:actions.settings", { defaultValue: "Settings" }) as string}
           title={t("sidebar:actions.settings", { defaultValue: "Settings" }) as string}
-          className="flex h-9 w-full items-center justify-start gap-2 rounded-lg px-6 text-[13px] font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+          className="flex h-9 w-full items-center justify-start gap-2 rounded-lg px-6 text-[13px] font-medium text-neutral-600 hover:bg-brand-50 hover:text-brand-600 dark:text-neutral-400 dark:hover:bg-brand-900/20 dark:hover:text-brand-400"
         >
           <SettingsIcon className="h-4 w-4" strokeWidth={1.75} />
           <span>{t("sidebar:actions.settings", { defaultValue: "Settings" })}</span>
@@ -1206,7 +1221,7 @@ export default function SidebarV2({
         className={cn(
           "absolute inset-y-0 right-0 z-10 hidden w-1 cursor-col-resize select-none md:block",
           "transition-colors duration-150",
-          isResizing ? "bg-blue-500/60" : "hover:bg-neutral-300/70 dark:hover:bg-neutral-700/70",
+          isResizing ? "bg-brand-500/60" : "hover:bg-brand-400/40 dark:hover:bg-brand-400/30",
         )}
       />
 

@@ -505,8 +505,8 @@ export default function ComposerV2({
               {...getRootProps()}
               className={cn(
                 "group rounded-xl border bg-white p-2 shadow-sm transition-colors",
-                "border-neutral-200 focus-within:border-neutral-300",
-                "dark:border-neutral-800 dark:bg-neutral-900 dark:focus-within:border-neutral-700",
+                "border-neutral-200 focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-500/20",
+                "dark:border-neutral-800 dark:bg-neutral-900 dark:focus-within:border-brand-500",
                 isDragActive && "border-dashed border-neutral-400 dark:border-neutral-500",
               )}
             >
@@ -1002,7 +1002,7 @@ export default function ComposerV2({
                     disabled={disabled}
                     aria-busy={isSubmitPending || hasUploadingImages || isBusySendConfirmed}
                     className={cn(
-                      "inline-flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-white transition hover:opacity-90 disabled:opacity-40 dark:bg-neutral-50 dark:text-neutral-900",
+                      "inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white transition hover:bg-brand-600 disabled:opacity-40 dark:bg-brand-500 dark:hover:bg-brand-600",
                       isBusySendQueued &&
                         "bg-amber-500 text-white hover:bg-amber-600 dark:bg-amber-400 dark:text-neutral-950 dark:hover:bg-amber-300",
                       isBusySendConfirmed && "cursor-wait",

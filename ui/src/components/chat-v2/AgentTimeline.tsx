@@ -130,7 +130,7 @@ function TimelineGroupRow({ group, defaultExpanded }: { group: TimelineGroup; de
       >
         <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
           {group.isRunning ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" strokeWidth={2} />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-500" strokeWidth={2} />
           ) : allDone ? (
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" strokeWidth={2} />
           ) : (

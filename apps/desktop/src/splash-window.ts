@@ -66,7 +66,7 @@ export function showSplashWindow(opts: { preloadPath: string; htmlPath: string }
     hasShadow: true,
     alwaysOnTop: false,
     show: false,
-    title: "Sati",
+    title: "正念智能体",
     webPreferences: {
       preload: opts.preloadPath,
       contextIsolation: true,

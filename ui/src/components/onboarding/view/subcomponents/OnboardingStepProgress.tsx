@@ -26,7 +26,7 @@ export default function OnboardingStepProgress({ currentStep }: OnboardingStepPr
                     isCompleted
                       ? "border-green-500 bg-green-500 text-white"
                       : isActive
-                        ? "border-blue-600 bg-blue-600 text-white"
+                        ? "border-brand-600 bg-brand-600 text-white"
                         : "border-border bg-background text-muted-foreground"
                   }`}
                 >

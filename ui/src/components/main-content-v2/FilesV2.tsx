@@ -537,8 +537,8 @@ export default function FilesV2({
         onBlur={handleInlineBlur}
         className={cn(
           "min-w-0 flex-1 rounded border px-1.5 py-0.5 text-[13px] outline-none",
-          "border-blue-400 bg-white text-neutral-900 focus:ring-1 focus:ring-blue-400",
-          "dark:border-blue-500 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:ring-blue-500",
+          "border-brand-400 bg-white text-neutral-900 focus:ring-1 focus:ring-brand-400",
+          "dark:border-brand-500 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:ring-brand-500",
         )}
       />
     </li>
@@ -758,8 +758,8 @@ export default function FilesV2({
                         onBlur={handleInlineBlur}
                         className={cn(
                           "min-w-0 flex-1 rounded border px-1.5 py-0.5 text-[13px] outline-none",
-                          "border-blue-400 bg-white text-neutral-900 focus:ring-1 focus:ring-blue-400",
-                          "dark:border-blue-500 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:ring-blue-500",
+                          "border-brand-400 bg-white text-neutral-900 focus:ring-1 focus:ring-brand-400",
+                          "dark:border-brand-500 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:ring-brand-500",
                         )}
                       />
                     </div>

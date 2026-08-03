@@ -45,6 +45,24 @@
     --ring: 0 0% 30%;
     --radius: 0.5rem;
 
+    /* Brand color — 正念蓝 (Mindful Blue) #4f9cff */
+    --brand-50:  214 100% 97%;
+    --brand-100: 214 95%  93%;
+    --brand-200: 213 97%  87%;
+    --brand-300: 212 96%  78%;
+    --brand-400: 213 94%  68%;
+    --brand-500: 213 94%  60%;
+    --brand-600: 215 82%  51%;
+    --brand-700: 216 72%  43%;
+    --brand-800: 217 78%  35%;
+    --brand-900: 218 80%  28%;
+
+    /* Elevation system — four-layer shadow scale */
+    --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    --elevation-2: 0 2px 8px -2px rgb(0 0 0 / 0.08), 0 1px 3px 0 rgb(0 0 0 / 0.04);
+    --elevation-3: 0 8px 24px -4px rgb(0 0 0 / 0.10), 0 2px 6px -2px rgb(0 0 0 / 0.06);
+    --elevation-4: 0 16px 48px -8px rgb(0 0 0 / 0.14), 0 4px 12px -4px rgb(0 0 0 / 0.08);
+
     /* Nav design tokens — neutral light */
     --nav-glass-bg: 0 0% 100% / 0.7;
     --nav-glass-blur: 20px;
@@ -90,9 +108,9 @@
     /* V2 zinc/neutral palette — dark */
     --background: 0 0% 4%;
     --foreground: 0 0% 96%;
-    --card: 0 0% 4%;
+    --card: 0 0% 7%;
     --card-foreground: 0 0% 96%;
-    --popover: 0 0% 9%;
+    --popover: 0 0% 11%;
     --popover-foreground: 0 0% 96%;
     --primary: 0 0% 96%;
     --primary-foreground: 0 0% 9%;
@@ -104,9 +122,21 @@
     --accent-foreground: 0 0% 96%;
     --destructive: 0 62.8% 45%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 15%;
+    --border: 0 0% 18%;
     --input: 0 0% 25%;
     --ring: 0 0% 64%;
+
+    /* Brand color — dark mode overrides (brighter for visibility) */
+    --brand-400: 213 94%  72%;
+    --brand-500: 213 94%  64%;
+    --brand-600: 213 94%  60%;
+    --brand-700: 213 92%  56%;
+
+    /* Elevation system — dark mode shadows use higher opacity */
+    --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.20);
+    --elevation-2: 0 2px 8px -2px rgb(0 0 0 / 0.30), 0 1px 3px 0 rgb(0 0 0 / 0.18);
+    --elevation-3: 0 8px 24px -4px rgb(0 0 0 / 0.36), 0 2px 6px -2px rgb(0 0 0 / 0.24);
+    --elevation-4: 0 16px 48px -8px rgb(0 0 0 / 0.44), 0 4px 12px -4px rgb(0 0 0 / 0.28);
 
     /* Nav design tokens — dark overrides */
     --nav-glass-bg: 0 0% 9% / 0.7;
@@ -148,8 +178,8 @@
 
   html::-webkit-scrollbar,
   body::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   html::-webkit-scrollbar-track,
@@ -252,6 +282,39 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+
+  /* Brand color text selection */
+  ::selection {
+    background: hsl(var(--brand-500) / 0.25);
+    color: inherit;
+  }
+
+  ::-moz-selection {
+    background: hsl(var(--brand-500) / 0.25);
+    color: inherit;
+  }
+
+  /* Button micro-interaction — subtle scale on active */
+  button:active:not(:disabled),
+  [role="button"]:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  /* Unified focus-visible ring with brand color */
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid hsl(var(--brand-500) / 0.50);
+    outline-offset: 2px;
+  }
+
+  /* Card hover elevation transition */
+  .card {
+    transition: box-shadow 200ms ease-in-out, transform 200ms ease-in-out;
   }
 }
 
@@ -382,8 +445,8 @@
   
   /* Global scrollbar styles for main content areas */
   .dark::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
   
   .dark::-webkit-scrollbar-track {
@@ -407,7 +470,7 @@
   
   /* Ensure checkbox styling is preserved */
   input[type="checkbox"] {
-    @apply accent-blue-600;
+    @apply accent-brand-600;
     opacity: 1;
   }
   
@@ -421,17 +484,17 @@
   .dark input[type="checkbox"] {
     background-color: rgb(31 41 55); /* gray-800 */
     border-color: rgb(75 85 99); /* gray-600 */
-    color: rgb(37 99 235); /* blue-600 */
+    color: hsl(var(--brand-600));
     color-scheme: dark;
   }
   
   .dark input[type="checkbox"]:checked {
-    background-color: rgb(37 99 235); /* blue-600 */
-    border-color: rgb(37 99 235); /* blue-600 */
+    background-color: hsl(var(--brand-600));
+    border-color: hsl(var(--brand-600));
   }
   
   .dark input[type="checkbox"]:focus {
-    --tw-ring-color: rgb(59 130 246); /* blue-500 */
+    --tw-ring-color: hsl(var(--brand-500));
     --tw-ring-offset-color: rgb(31 41 55); /* gray-800 */
   }
   
@@ -439,17 +502,17 @@
   .dark input[type="radio"] {
     background-color: rgb(31 41 55); /* gray-800 */
     border-color: rgb(75 85 99); /* gray-600 */
-    color: rgb(37 99 235); /* blue-600 */
+    color: hsl(var(--brand-600));
     color-scheme: dark;
   }
   
   .dark input[type="radio"]:checked {
-    background-color: rgb(37 99 235); /* blue-600 */
-    border-color: rgb(37 99 235); /* blue-600 */
+    background-color: hsl(var(--brand-600));
+    border-color: hsl(var(--brand-600));
   }
   
   .dark input[type="radio"]:focus {
-    --tw-ring-color: rgb(59 130 246); /* blue-500 */
+    --tw-ring-color: hsl(var(--brand-500));
     --tw-ring-offset-color: rgb(31 41 55); /* gray-800 */
   }
   

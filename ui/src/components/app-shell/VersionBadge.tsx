@@ -90,14 +90,14 @@ export function VersionBadge() {
         className={cn(
           "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono transition-colors",
           info.hasUpdate
-            ? "bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+            ? "bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
             : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700",
         )}
         title={info.hasUpdate ? `Update available (${info.behindCount} commits behind)` : `Version: ${info.commitSha}`}
       >
         <GitCommit className="h-3 w-3" strokeWidth={2} />
         <span>{info.commitSha}</span>
-        {info.hasUpdate && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-blue-400" />}
+        {info.hasUpdate && <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-brand-500 dark:bg-brand-400" />}
       </button>
 
       {showDialog && (
@@ -132,19 +132,19 @@ export function VersionBadge() {
               </div>
 
               {info.hasUpdate && phase === "idle" && (
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/30">
-                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 dark:border-brand-800 dark:bg-brand-950/30">
+                  <p className="text-sm font-medium text-brand-800 dark:text-brand-200">
                     {info.behindCount} new commit{info.behindCount > 1 ? "s" : ""} available
                   </p>
                   {info.newCommits.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {info.newCommits.slice(0, 5).map((commit, i) => (
-                        <li key={i} className="truncate font-mono text-xs text-blue-700 dark:text-blue-300">
+                        <li key={i} className="truncate font-mono text-xs text-brand-700 dark:text-brand-300">
                           {commit}
                         </li>
                       ))}
                       {info.newCommits.length > 5 && (
-                        <li className="text-xs text-blue-600 dark:text-blue-400">
+                        <li className="text-xs text-brand-600 dark:text-brand-400">
                           ... and {info.newCommits.length - 5} more
                         </li>
                       )}
@@ -156,7 +156,7 @@ export function VersionBadge() {
               {phase === "updating" && (
                 <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
                   <div className="mb-2 flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4 animate-spin text-blue-500" />
+                    <RefreshCw className="h-4 w-4 animate-spin text-brand-500" />
                     <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">Updating...</span>
                   </div>
                   <div className="max-h-40 overflow-y-auto rounded bg-neutral-900 p-2">
@@ -213,7 +213,7 @@ export function VersionBadge() {
                   type="button"
                   onClick={handleUpdate}
                   disabled={loading}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-700 disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-600"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   Update Now

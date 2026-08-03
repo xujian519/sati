@@ -337,7 +337,7 @@ function MessageRowV2({
                       type="button"
                       key={`${image.name || "image"}-${index}`}
                       onClick={() => setUserImageLightbox(index)}
-                      className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900/40"
+                      className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-900/40"
                       aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
                     >
                       <img
@@ -401,7 +401,7 @@ function MessageRowV2({
             className="group"
             open={(isThinkingStreaming ? thinkingDisplayText.length > 12 : false) || undefined}
           >
-            <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-blue-600/70 hover:text-blue-700 dark:text-blue-400/70 dark:hover:text-blue-300">
+            <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-brand-600/70 hover:text-brand-700 dark:text-brand-400/70 dark:hover:text-brand-300">
               {isThinkingStreaming ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
               ) : (
@@ -416,8 +416,8 @@ function MessageRowV2({
             <div
               className={`mt-1.5 max-h-64 overflow-y-auto border-l-2 pl-3 text-[13px] ${
                 isThinkingStreaming
-                  ? "border-blue-400/50 text-neutral-600 dark:border-blue-500/40 dark:text-neutral-300"
-                  : "border-blue-400/30 text-neutral-600 dark:border-blue-500/30 dark:text-neutral-400"
+                  ? "border-brand-400/50 text-neutral-600 dark:border-brand-500/40 dark:text-neutral-300"
+                  : "border-brand-400/30 text-neutral-600 dark:border-brand-500/30 dark:text-neutral-400"
               }`}
             >
               <Markdown projectName={selectedProject?.name} onFileOpen={onFileOpen} isStreaming={isThinkingStreaming}>
@@ -656,7 +656,7 @@ function ProcessAttachmentRow({
               type="button"
               key={`${attachment.inlineImages[idx].toolId || "tool-image"}-${idx}`}
               onClick={() => setLightboxIndex(idx)}
-              className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900"
+              className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-900"
               aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
             >
               <img

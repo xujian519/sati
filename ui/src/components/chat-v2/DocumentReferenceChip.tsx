@@ -33,7 +33,7 @@ function getDocumentReferenceFileMeta(fileName: string): DocumentReferenceFileMe
     return {
       label: "DOC",
       Icon: FileText,
-      className: "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300",
+      className: "bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300",
     };
   }
   if (["xls", "xlsx", "ods", "csv", "tsv"].includes(extension)) {

@@ -10,9 +10,9 @@ const providerCards = [
   {
     provider: "claude" as const,
     title: "Anthropic",
-    connectedClassName: "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800",
-    iconContainerClassName: "bg-blue-100 dark:bg-blue-900/30",
-    loginButtonClassName: "bg-blue-600 hover:bg-blue-700",
+    connectedClassName: "bg-brand-50 dark:bg-brand-900/20 border-brand-200 dark:border-brand-800",
+    iconContainerClassName: "bg-brand-100 dark:bg-brand-900/30",
+    loginButtonClassName: "bg-brand-600 hover:bg-brand-700",
   },
   {
     provider: "cursor" as const,
@@ -37,7 +37,7 @@ const providerCards = [
   },
   {
     provider: "sati" as const,
-    title: "Sati",
+    title: "正念智能体",
     connectedClassName: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800",
     iconContainerClassName: "bg-green-100 dark:bg-green-900/30",
     loginButtonClassName: "bg-green-600 hover:bg-green-700",

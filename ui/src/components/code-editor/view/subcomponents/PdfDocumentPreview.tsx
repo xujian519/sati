@@ -407,9 +407,9 @@ function PdfThumbnail({
       onClick={() => onSelect(pageNumber)}
       className={[
         "group flex w-full flex-col items-center gap-1.5 rounded-md border px-2 py-2 text-[11px] outline-none transition-colors",
-        "focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-950",
+        "focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-950",
         active
-          ? "border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-200"
+          ? "border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-400 dark:bg-brand-950/40 dark:text-brand-200"
           : "border-transparent text-neutral-500 hover:border-neutral-300 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:bg-neutral-900",
       ].join(" ")}
     >
@@ -472,7 +472,7 @@ function PdfOutlineTreeItem({
         className={[
           "group flex min-h-8 items-start rounded-md text-[12px] transition-colors",
           active
-            ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200"
+            ? "bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200"
             : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900",
         ].join(" ")}
       >

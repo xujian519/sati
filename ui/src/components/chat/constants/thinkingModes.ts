@@ -38,7 +38,7 @@ export const thinkingModes: ThinkingModeOption[] = [
     name: "Low",
     description: "Light reasoning effort",
     icon: Brain,
-    color: "text-blue-600",
+    color: "text-brand-600",
   },
   {
     id: "medium",

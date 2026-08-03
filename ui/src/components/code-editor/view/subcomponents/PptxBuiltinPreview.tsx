@@ -64,7 +64,7 @@ function PptxThumbnail({
       className={[
         "flex w-full items-start gap-2 rounded-md border p-2 text-left transition-colors",
         active
-          ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/40"
+          ? "border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-950/40"
           : "border-transparent hover:border-neutral-300 hover:bg-neutral-100 dark:hover:border-neutral-700 dark:hover:bg-neutral-900",
       ].join(" ")}
       onClick={onSelect}

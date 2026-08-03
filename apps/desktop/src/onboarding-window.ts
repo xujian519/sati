@@ -56,7 +56,7 @@ export function showOnboardingWindow(opts: { preloadPath: string; htmlPath: stri
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
-      title: "Sati — 初始化",
+      title: "正念智能体 — 初始化",
       backgroundColor: "#0f1115",
       ...(iconPath ? { icon: iconPath } : {}),
       webPreferences: {

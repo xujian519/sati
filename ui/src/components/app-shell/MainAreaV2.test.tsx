@@ -132,8 +132,8 @@ describe("MainAreaV2 dashboard switcher", () => {
     expect(screen.getByTestId("main-content").getAttribute("data-active-tab")).toBe("chat");
     expect(screen.getByTestId("main-content").getAttribute("data-search-open")).toBe("true");
     expect(searchButton.getAttribute("aria-pressed")).toBe("true");
-    expect(searchButton.className).toContain("bg-blue-100");
-    expect(searchButton.className).toContain("text-blue-700");
+    expect(searchButton.className).toContain("bg-brand-100");
+    expect(searchButton.className).toContain("text-brand-700");
     expect(searchButton.className).not.toContain("shadow");
 
     const headerSearch = within(screen.getByRole("banner")).getByRole("search");
@@ -197,8 +197,8 @@ describe("MainAreaV2 dashboard switcher", () => {
     fireEvent.click(filesButton);
     expect(screen.getByTestId("main-content").getAttribute("data-active-tab")).toBe("files");
     expect(filesButton.getAttribute("aria-pressed")).toBe("true");
-    expect(filesButton.className).toContain("bg-blue-100");
-    expect(filesButton.className).toContain("text-blue-700");
+    expect(filesButton.className).toContain("bg-brand-100");
+    expect(filesButton.className).toContain("text-brand-700");
     expect(filesButton.className).not.toContain("shadow");
 
     fireEvent.click(filesButton);
@@ -222,8 +222,8 @@ describe("MainAreaV2 dashboard switcher", () => {
 
     const memoryButton = screen.getByRole("button", { name: "tabs.memory" });
     expect(memoryButton.getAttribute("aria-pressed")).toBe("true");
-    expect(memoryButton.className).toContain("bg-blue-100");
-    expect(memoryButton.className).toContain("text-blue-700");
+    expect(memoryButton.className).toContain("bg-brand-100");
+    expect(memoryButton.className).toContain("text-brand-700");
     expect(memoryButton.className).not.toContain("shadow");
     fireEvent.click(memoryButton);
 

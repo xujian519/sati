@@ -122,7 +122,7 @@ const MessageCopyControl = ({ content, messageType }: { content: string; message
 
   const toneClass =
     messageType === "user"
-      ? "text-blue-100 hover:text-white"
+      ? "text-brand-100 hover:text-white"
       : "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300";
   const copyTitle = copied ? t("copyMessage.copied") : t("copyMessage.copy");
   const rootClassName = canSelectCopyFormat

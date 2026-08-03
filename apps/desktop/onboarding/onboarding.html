@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'" />
-  <title>Sati — 初始化</title>
+  <title>正念智能体 — 初始化</title>
   <style>
     :root {
       --bg: #0f1115;
@@ -80,6 +80,7 @@
     .row input:focus,
     .row select:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(79,156,255,0.12);
     }
     .row input.error,
     .row select.error {
@@ -129,6 +130,11 @@
     .preset-btn:hover {
       color: var(--text);
       border-color: var(--accent);
+    }
+    .preset-btn.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: rgba(79,156,255,0.06);
     }
     .hint {
       margin-top: 4px;
@@ -264,7 +270,7 @@
 </head>
 <body>
   <div class="card">
-    <h1>初始化 Sati</h1>
+    <h1>初始化正念智能体</h1>
     <p class="subtitle">配置一个 OpenAI / Anthropic 兼容的上游，保存后会写入 <code>~/.sati/sati.yaml</code>。</p>
 
     <div class="preset-row">
@@ -355,6 +361,8 @@
       btn.addEventListener("click", () => {
         const p = PRESETS[btn.dataset.preset];
         if (!p) return;
+        document.querySelectorAll(".preset-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
         typeEl.value = p.type;
         baseEl.value = p.baseUrl;
         modelEl.value = p.model;
@@ -368,7 +376,10 @@
     });
 
     [typeEl, baseEl, keyEl, modelEl].forEach((el) => {
-      el.addEventListener("input", () => { lastTestPassed = false; });
+      el.addEventListener("input", () => {
+        lastTestPassed = false;
+        document.querySelectorAll(".preset-btn").forEach((b) => b.classList.remove("active"));
+      });
     });
 
     keyToggle.addEventListener("click", () => {
@@ -487,7 +498,7 @@
       try {
         const res = await window.satiOnboarding.save(getPayload());
         if (res && res.ok) {
-          showStatus("已保存，正在启动 Sati…", "success");
+          showStatus("已保存，正在启动正念智能体…", "success");
         } else {
           saveBtn.disabled = false;
           testBtn.disabled = false;
