@@ -74,7 +74,7 @@
     "react": "^19.2.6",
     "sharp": "^0.34.5",
     "slice-ansi": "^9.0.0",
-    "string-width": "^8.2.1",
+    "string-width": "^8.2.2",
     "turndown": "^7.2.4",
     "undici": "^8.2.0",
     "weixin-ilink": "^0.1.0",
