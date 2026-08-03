@@ -65,7 +65,39 @@ test("approval keywords with onPending hold the message in the pending queue", (
   assert.equal(result.needsApproval, true);
   assert.equal(result.pendingIndex, 0);
   assert.equal(gate.pendingCount(), 1);
-  assert.equal(pendings.length, 1);
+  // D1：onPending 延迟到转录写入确认（flushPending）后触发
+  assert.equal(pendings.length, 0, "onPending must not fire before flushPending");
+  gate.flushPending(result.pendingIndex!);
+  assert.equal(pendings.length, 1, "onPending fires after flushPending");
+});
+
+test("D1: cancelPending revokes a pending entry when transcript write fails", () => {
+  const pendings: unknown[] = [];
+  const gate = new PatentOutputGate({
+    onPending: p => {
+      pendings.push(p);
+    },
+  });
+  const result = gate.processMessage(assistantMessage("专利结论：X。"));
+  assert.ok(result.pendingIndex !== undefined);
+  assert.equal(gate.pendingCount(), 1);
+  gate.cancelPending(result.pendingIndex);
+  assert.equal(gate.pendingCount(), 0, "failed write must not leave a dangling pending entry");
+  gate.flushPending(result.pendingIndex);
+  assert.equal(pendings.length, 0, "cancelled entry must never fire onPending");
+});
+
+test("D1: flushPending on an unknown index is a no-op", () => {
+  const pendings: unknown[] = [];
+  const gate = new PatentOutputGate({
+    onPending: p => {
+      pendings.push(p);
+    },
+  });
+  gate.flushPending(99);
+  gate.cancelPending(99);
+  assert.equal(pendings.length, 0);
+  assert.equal(gate.pendingCount(), 0);
 });
 
 test("approval keywords without onPending still persist (no message loss)", () => {
@@ -157,6 +189,84 @@ test("approve/reject reject cross-session indices (security)", () => {
   // 本会话审批：成功
   assert.ok(gate.approve(held.pendingIndex, "session-a"), "same-session approve must succeed");
   assert.equal(gate.pendingCount(), 0);
+});
+
+test("D4: bare approve/reject without sessionId is refused for session-bound entries (fail-closed)", () => {
+  const gate = new PatentOutputGate({ onPending: () => {} });
+  const held = gate.processMessage(assistantMessage("专利结论：A。"), { sessionId: "session-a" });
+  assert.ok(held.pendingIndex !== undefined);
+  // 不传 sessionId 的裸审批调用（如绕过会话绑定的网关入口）→ 拒绝
+  assert.equal(gate.approve(held.pendingIndex), undefined, "bare approve must be refused");
+  assert.equal(gate.reject(held.pendingIndex), false, "bare reject must be refused");
+  assert.equal(gate.pendingCount(), 1, "pending must survive bare attempts");
+});
+
+test("D4: legacy entries without sessionId stay approvable (backward compat)", () => {
+  const gate = new PatentOutputGate({ onPending: () => {} });
+  const held = gate.processMessage(assistantMessage("专利结论：A。")); // 未传 context
+  assert.ok(held.pendingIndex !== undefined);
+  assert.ok(gate.approve(held.pendingIndex, "any-session"), "legacy entry without sessionId must be approvable");
+});
+
+test("D4: TTL-expired entries cannot be approved or rejected", () => {
+  let now = 1_000_000;
+  const gate = new PatentOutputGate({ onPending: () => {}, pendingTtlMs: 100, now: () => now });
+  const held = gate.processMessage(assistantMessage("专利结论：X。"));
+  assert.ok(held.pendingIndex !== undefined);
+  now += 101; // 越过 TTL；无新消息触发 pruneExpired，approve 应兜底拒绝
+  assert.equal(gate.approve(held.pendingIndex), undefined, "expired entry must be refused on approve");
+  assert.equal(gate.reject(held.pendingIndex), false, "expired entry must be refused on reject");
+  assert.equal(gate.pendingCount(), 0, "expired entry is cleaned up");
+});
+
+test("D4: injectable clock drives createdAt and TTL", () => {
+  let now = 500;
+  const gate = new PatentOutputGate({ onPending: () => {}, pendingTtlMs: 10, now: () => now });
+  const held = gate.processMessage(assistantMessage("专利结论：X。"));
+  assert.ok(held.pendingIndex !== undefined);
+  assert.equal(held.pendingIndex, 0);
+  now += 5;
+  assert.ok(gate.approve(held.pendingIndex), "within TTL must be approvable");
+});
+
+test("skipApproval context suppresses hanging but keeps quality processing", () => {
+  let pendingFired = 0;
+  const gate = new PatentOutputGate({
+    onPending: () => {
+      pendingFired += 1;
+    },
+  });
+  // 审批词 + 风险词：skipApproval 下不挂起，但免责声明照常注入
+  const result = gate.processMessage(assistantMessage("该方案存在侵权风险，专利结论：具备新颖性。"), {
+    sessionId: "session-a",
+    skipApproval: true,
+  });
+  assert.equal(result.needsApproval, false, "skipApproval must not hold the message");
+  assert.equal(gate.pendingCount(), 0);
+  assert.equal(pendingFired, 0);
+  assert.equal(result.info.disclaimerInjected, true, "quality processing still applies");
+  assert.match(extractMessageText(result.message), /不构成正式法律意见/);
+});
+
+test("restore re-queues a lost pending entry; onPending fires after flushPending", () => {
+  const pendings: number[] = [];
+  const gate = new PatentOutputGate({
+    onPending: p => {
+      pendings.push(p.index);
+    },
+  });
+  const result = gate.processMessage(assistantMessage("专利结论：X。"));
+  assert.ok(result.pendingIndex !== undefined);
+  // 模拟：条目丢失（cancel 后 restore 恢复）
+  const lost = gate.pendingItems()[0]!;
+  gate.cancelPending(lost.index);
+  assert.equal(gate.pendingCount(), 0);
+  gate.restore(lost);
+  assert.equal(gate.pendingCount(), 1, "restore must re-queue the entry");
+  // restore 不直接触发 onPending（与 D1 协议一致）；宿主确认写入后 flushPending 触发
+  assert.deepEqual(pendings, []);
+  gate.flushPending(lost.index);
+  assert.deepEqual(pendings, [lost.index]);
 });
 
 test("messages with thinking + text blocks are processed on the text part only", () => {

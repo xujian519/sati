@@ -7,6 +7,12 @@
  * The subagent always returns a single text report — even if the model
  * produces extra tool calls, we trust the AgentLoop to drive them to a
  * terminal `assistant_message` whose text we extract.
+ *
+ * 设计决策（输出门禁）：子代理的 sidechain 输出是中间产物（C3 临时转录），
+ * 不配置 PatentOutputGate——子代理报告最终作为 tool_result 回流父代理，
+ * 父代理的最终回复会经过主输出门禁（传递覆盖）。若未来需要对子代理
+ * 输出直接设门，可在 SubAgentSessionOptions 增加 outputGate 选项并在此
+ * 处理后再写入 sidechain（skipApproval 语义）。
  */
 
 import { AgentLoop, type AgentLoopRunResult } from "../loop/AgentLoop.js";

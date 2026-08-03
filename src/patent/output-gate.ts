@@ -11,6 +11,8 @@ import { createApprovalRecord, type ApprovalStore } from "./approval.js";
  *     （processed 版本，含免责声明/存疑提示）：消息不丢失、转录顺序正确、
  *     会话重启后审批历史可恢复；approve()/reject() 仅为流程控制标记
  *     （触发宿主 onApproved/onRejected，从挂起队列移除）
+ *   - onPending 在转录写入**确认后**触发（宿主调 flushPending；写入失败调
+ *     cancelPending 撤销挂起）——审批端感知到的挂起条目保证消息已在转录中
  *   - 未配置 onPending 时审批词命中仅注入提示、不挂起（跑批安全，不丢消息）
  *   - 非 assistant 文本消息 / 含 tool_call 的消息直接放行
  *
@@ -44,7 +46,7 @@ export type PatentOutputGateOptions = {
   maxPending?: number;
   /** 挂起消息 TTL 毫秒（默认 0 = 不过期）：超期未审批自动清理并告警。 */
   pendingTtlMs?: number;
-  /** 挂起回调：审批词命中且需人工审批时触发（接入审批 UI/宿主）。 */
+  /** 挂起回调：审批词命中且需人工审批时触发（接入审批 UI/宿主）。转录写入确认后触发（见 flushPending）。 */
   onPending?: (pending: PendingPatentMessage) => void | Promise<void>;
   /** 审批通过且写库成功后的回调（Commit 后触发）。 */
   onApproved?: (pending: PendingPatentMessage) => void | Promise<void>;
@@ -52,6 +54,8 @@ export type PatentOutputGateOptions = {
   onRejected?: (pending: PendingPatentMessage) => void | Promise<void>;
   /** 审批审计存储（可选）：approve/reject 时追加 ApprovalRecord（决策留痕）。未配置则零开销。 */
   approvalStore?: ApprovalStore;
+  /** 可注入时钟（毫秒时间戳；默认 Date.now）。与 TurnRunner/AgentLoop 的 now 注入保持一致。 */
+  now?: () => number;
 };
 
 export type ProcessedMessageResult = {
@@ -67,6 +71,12 @@ export type ProcessedMessageResult = {
 
 export class PatentOutputGate {
   private readonly pending = new Map<number, PendingPatentMessage>();
+  /**
+   * 待触发 onPending 的挂起索引：processMessage 挂起后先入队，待宿主确认
+   * 转录写入成功（flushPending）才触发 onPending；写入失败（cancelPending）
+   * 则撤销挂起——避免审批端感知到未入库的消息。
+   */
+  private readonly unflushed = new Set<number>();
   private nextIndex = 0;
   private readonly options: PatentOutputGateOptions;
 
@@ -74,8 +84,21 @@ export class PatentOutputGate {
     this.options = options ?? {};
   }
 
-  /** 处理一条待持久化的消息；返回写库用消息与是否挂起。context 为消息所属会话/轮次（记录进挂起条目供审批 UI 定位）。 */
-  processMessage(message: CanonicalMessage, context?: { sessionId?: string; turnId?: string }): ProcessedMessageResult {
+  /** 注入时钟（毫秒时间戳）；未配置时回退 Date.now。 */
+  private now(): number {
+    return this.options.now?.() ?? Date.now();
+  }
+
+  /**
+   * 处理一条待持久化的消息；返回写库用消息与是否挂起。context 为消息所属会话/轮次
+   * （记录进挂起条目供审批 UI 定位）。context.skipApproval=true 时审批词命中不挂起
+   * （needsApproval=false，质量处理照常）：用于重放已入库消息的场景（如压缩摘要），
+   * 避免已审批内容重复挂起产生悬空审批。
+   */
+  processMessage(
+    message: CanonicalMessage,
+    context?: { sessionId?: string; turnId?: string; skipApproval?: boolean },
+  ): ProcessedMessageResult {
     if (!this.shouldProcess(message)) {
       return { message, needsApproval: false, info: emptyGateInfo() };
     }
@@ -93,7 +116,7 @@ export class PatentOutputGate {
 
     const processed = info.text === text ? message : replaceLastTextBlock(message, info.text);
 
-    if (info.needsApproval && this.options.onPending) {
+    if (info.needsApproval && this.options.onPending && context?.skipApproval !== true) {
       const maxPending = this.options.maxPending ?? 100;
       if (this.pending.size >= maxPending) {
         // 队列已满：放弃挂起、直接入库（fail-open，保证用户可见回复不丢失；
@@ -111,10 +134,12 @@ export class PatentOutputGate {
         info,
         sessionId: context?.sessionId,
         turnId: context?.turnId,
-        createdAt: Date.now(),
+        createdAt: this.now(),
       };
       this.pending.set(index, pending);
-      this.safeInvoke(this.options.onPending, pending);
+      // onPending 不在挂起时立即触发：等待宿主转录写入确认后由 flushPending 触发
+      // （D1：避免写入失败时审批端感知到悬空挂起条目；restore() 语义保留给会话恢复）。
+      this.unflushed.add(index);
       return { message: processed, needsApproval: true, pendingIndex: index, info };
     }
 
@@ -122,17 +147,44 @@ export class PatentOutputGate {
   }
 
   /**
+   * 转录写入成功后调用：触发 onPending 让审批端感知挂起条目（D1——onPending
+   * 延迟到消息确认入库后触发，避免写入失败时出现悬空挂起）。
+   */
+  flushPending(index: number): void {
+    if (!this.unflushed.delete(index)) return;
+    const pending = this.pending.get(index);
+    if (pending) this.safeInvoke(this.options.onPending, pending);
+  }
+
+  /**
+   * 转录写入失败时调用：撤销挂起条目（消息未入库，无审批意义；D1 配套方法）。
+   */
+  cancelPending(index: number): void {
+    if (!this.unflushed.delete(index)) return;
+    this.pending.delete(index);
+  }
+
+  /**
    * 审批通过：取出并移除挂起消息（消息已在挂起时入库，此处仅完成流程控制；触发 onApproved）。
-   * sessionId 提供时校验匹配（防止跨会话越权批准）；不匹配返回 undefined。
+   * 跨会话守卫 fail-closed：条目记录过 sessionId 时必须严格匹配——不传 sessionId 的
+   * 裸审批调用同样拒绝；旧条目（无 sessionId）因无法核对而放行（兼容存量数据）。
+   * TTL 过期条目不可审批（pruneExpired 仅在新消息触发时清理，此处兜底）。
    * 通过后写入审计记录（verdict=adopted）。
    */
   approve(index: number, sessionId?: string): PendingPatentMessage | undefined {
     const pending = this.pending.get(index);
     if (!pending) return undefined;
-    if (sessionId !== undefined && pending.sessionId !== undefined && pending.sessionId !== sessionId) {
+    if (pending.sessionId !== undefined && sessionId !== pending.sessionId) {
+      return undefined;
+    }
+    if (this.isExpired(pending)) {
+      this.pending.delete(index);
+      this.unflushed.delete(index);
+      console.warn(`[PatentOutputGate] 挂起消息 ${index} 超过 TTL 未审批，拒绝审批`);
       return undefined;
     }
     this.pending.delete(index);
+    this.unflushed.delete(index);
     this.recordApproval(pending, { verdict: "adopted" });
     return pending;
   }
@@ -143,16 +195,23 @@ export class PatentOutputGate {
   }
 
   /**
-   * 审批拒绝：丢弃挂起消息。sessionId 提供时校验匹配（防止跨会话越权拒绝）。
+   * 审批拒绝：丢弃挂起消息。跨会话守卫与 TTL 检查同 approve（fail-closed）。
    * feedback 可选（人工拒绝理由，写入审计）。拒绝后写入审计记录（verdict=rejected）。
    */
   reject(index: number, sessionId?: string, feedback?: string): boolean {
     const pending = this.pending.get(index);
     if (!pending) return false;
-    if (sessionId !== undefined && pending.sessionId !== undefined && pending.sessionId !== sessionId) {
+    if (pending.sessionId !== undefined && sessionId !== pending.sessionId) {
+      return false;
+    }
+    if (this.isExpired(pending)) {
+      this.pending.delete(index);
+      this.unflushed.delete(index);
+      console.warn(`[PatentOutputGate] 挂起消息 ${index} 超过 TTL 未审批，拒绝审批`);
       return false;
     }
     this.pending.delete(index);
+    this.unflushed.delete(index);
     this.recordApproval(pending, { verdict: "rejected", feedback });
     this.safeInvoke(this.options.onRejected, pending);
     return true;
@@ -174,6 +233,7 @@ export class PatentOutputGate {
       verdict: decision.verdict,
       ...(decision.modifiedOutput !== undefined ? { modifiedOutput: decision.modifiedOutput } : {}),
       ...(decision.feedback !== undefined ? { feedback: decision.feedback } : {}),
+      now: this.options.now !== undefined ? () => new Date(this.now()) : undefined,
     });
     const result = store.saveRecord(record);
     if (result && typeof (result as Promise<void>).catch === "function") {
@@ -183,11 +243,15 @@ export class PatentOutputGate {
     }
   }
 
-  /** 写库失败时恢复挂起（避免消息丢失），并重新触发 onPending 让审批端感知。 */
+  /**
+   * 宿主会话恢复钩子：重新注册挂起条目（不直接触发 onPending——与 D1 协议一致，
+   * onPending 仅在写入确认后经 flushPending 触发；此处恢复的条目宿主确认写入后
+   * 同样走 flushPending）。避免恢复流程重新引入悬空挂起。
+   */
   restore(pending: PendingPatentMessage): void {
     if (!this.pending.has(pending.index)) {
       this.pending.set(pending.index, pending);
-      this.safeInvoke(this.options.onPending, pending);
+      this.unflushed.add(pending.index);
     }
   }
 
@@ -203,13 +267,20 @@ export class PatentOutputGate {
   private pruneExpired(): void {
     const ttl = this.options.pendingTtlMs ?? 0;
     if (ttl <= 0) return;
-    const now = Date.now();
     for (const [index, pending] of this.pending) {
-      if (now - pending.createdAt > ttl) {
+      if (this.isExpired(pending)) {
         this.pending.delete(index);
+        this.unflushed.delete(index);
         console.warn(`[PatentOutputGate] 挂起消息 ${index} 超过 TTL（${ttl}ms）未审批，已清理`);
       }
     }
+  }
+
+  /** 是否超过挂起 TTL（pendingTtlMs <= 0 表示不过期）。approve/reject/pruneExpired 共用。 */
+  private isExpired(pending: PendingPatentMessage): boolean {
+    const ttl = this.options.pendingTtlMs ?? 0;
+    if (ttl <= 0) return false;
+    return this.now() - pending.createdAt > ttl;
   }
 
   private shouldProcess(message: CanonicalMessage): boolean {

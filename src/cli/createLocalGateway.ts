@@ -1299,6 +1299,8 @@ class ProjectRuntimeRegistry {
       riskKeywords: [],
       absolutePhrases: [],
       enableCitationGate: false,
+      // 时钟与 Agent 层注入对齐（TurnRunner/AgentLoop 共用 this.options.now）
+      now: () => this.options.now().getTime(),
       onPending: pending => {
         // 仅记录定位信息，不打消息内容（专利结论可能含敏感信息）
         console.warn(

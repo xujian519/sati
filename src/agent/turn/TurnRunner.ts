@@ -92,12 +92,33 @@ export class TurnRunner {
    * 门禁感知的持久化：有门禁时先处理（注入免责声明/存疑提示）。
    * 命中审批词需人工审批的消息**也照常入库**（processed 版本）：不丢消息、
    * 转录顺序正确；挂起队列仅用于审批流程控制（approve/reject 不再补写或丢弃）。
+   * onPending 在写入成功后触发（flushPending）；写入失败撤销挂起（cancelPending）——
+   * 审批端感知到的挂起条目保证消息已在转录中（不出现悬空挂起）。
    */
-  private async persistDurableMessage(sessionId: string, turnId: string, msg: CanonicalMessage): Promise<void> {
+  private async persistDurableMessage(
+    sessionId: string,
+    turnId: string,
+    msg: CanonicalMessage,
+    options?: { skipApproval?: boolean },
+  ): Promise<void> {
     if (this.outputGate) {
-      const { message, needsApproval } = this.outputGate.processMessage(msg, { sessionId, turnId });
-      await this.transcript.recordDurableMessage(sessionId, turnId, message);
-      if (needsApproval) return; // 已挂起等待人工审批（消息已入库，无丢失）
+      const { message, needsApproval, pendingIndex } = this.outputGate.processMessage(msg, {
+        sessionId,
+        turnId,
+        skipApproval: options?.skipApproval === true,
+      });
+      try {
+        await this.transcript.recordDurableMessage(sessionId, turnId, message);
+      } catch (err) {
+        // 写入失败：撤销挂起（onPending 尚未触发、消息未入库，无审批意义）
+        if (needsApproval && pendingIndex !== undefined) {
+          this.outputGate.cancelPending(pendingIndex);
+        }
+        throw err;
+      }
+      if (needsApproval && pendingIndex !== undefined) {
+        this.outputGate.flushPending(pendingIndex); // 写入确认后触发 onPending
+      }
       return;
     }
     await this.transcript.recordDurableMessage(sessionId, turnId, msg);
@@ -240,7 +261,9 @@ export class TurnRunner {
         onCompactPersisted: async ({ boundary, messages: compactMessages }) => {
           await this.transcript.recordControlBoundary?.(options.sessionId, options.turnId, boundary);
           for (const message of compactMessages) {
-            await this.transcript.recordDurableMessage(options.sessionId, options.turnId, message);
+            // 压缩重放的消息同样经过门禁（免责声明等质量处理，避免摘要绕过门禁）；
+            // skipApproval=true：这些消息首次入库时已走过审批流程，重放不重复挂起
+            await this.persistDurableMessage(options.sessionId, options.turnId, message, { skipApproval: true });
           }
         },
       });

@@ -46,3 +46,16 @@ test("patent compliance gate does not flag valid citations", () => {
   const result = gate.process("依据专利法第22条，本申请具备新颖性和创造性。");
   assert.equal(result.warnHits.includes("PAT-CITE-001"), false);
 });
+
+test("patent compliance gate parses 百位中文数字（第一百零二条 不再逃逸）", () => {
+  const { ruleSet } = loadPatentComplianceRuleSet();
+  const gate = new RuleOutputGate(ruleSet);
+  // 专利法共 82 条：第一百零二条 超出范围 → 必须被核验标记（D3 修复前 parseCnNumber
+  // 无法解析"一百零二"，引用被静默跳过、逃逸法条核验）
+  const result = gate.process("依据专利法第一百零二条规定处理。");
+  assert.ok(result.warnHits.includes("PAT-CITE-001"), "超出范围的百位引用必须被标记");
+  assert.match(result.text, /PAT-CITE-001/);
+  // 范围内百位引用不误报（实施细则第126条场景——虽然 R1 对细则不生效，解析正确即放行）
+  const ok = gate.process("依据专利法实施细则第一百零二条的规定。");
+  assert.equal(ok.warnHits.includes("PAT-CITE-001"), false, "细则 max 未设，R1 不核验");
+});

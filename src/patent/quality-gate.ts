@@ -18,6 +18,7 @@
  * 规则引擎（src/rule）与 patent_eval 工具分别消费这两份。
  */
 
+import { hasNegationContext, parseCnNumber } from "../rule/runtime/text-utils.js";
 import { runeSlice } from "./slop-engine.js";
 
 export const PATENT_DISCLAIMER =
@@ -41,20 +42,7 @@ export const PATENT_APPROVAL_KEYWORDS = ["专利结论", "侵权判断", "有效
 /** 绝对化表述（P-A07 条款：回避绝对化表述）。 */
 export const ABSOLUTE_PHRASES = ["绝对", "一定", "百分百", "毫无疑问", "必然"];
 
-/**
- * 否定语境词与窗口（与 src/rule/runtime/RuleEngine.ts 的 NEGATION_WORDS 保持同步）：
- * 命中位置前窗口内出现这些词且无句号/分号分隔时视为否定性描述，不报告。
- */
-const NEGATION_WORDS = ["防止", "避免", "不用于", "排除", "禁止", "不为", "非用于", "不构成", "区别于", "不属于"];
-const NEGATION_WINDOW = 24;
-
-/** 在命中位置前查找否定语境：窗口内出现否定词且无句号/分号分隔。 */
-function hasNegationContext(text: string, matchStart: number): boolean {
-  const start = Math.max(0, matchStart - NEGATION_WINDOW);
-  const window = text.slice(start, matchStart);
-  if (window.includes("。") || window.includes("；") || window.includes(";")) return false;
-  return NEGATION_WORDS.some(word => window.includes(word));
-}
+/** 否定语境检测统一由 src/rule/runtime/text-utils.ts 提供（词表/窗口见该文件）。 */
 
 /** 过滤否定语境中的命中：关键词至少一处非否定命中才报告（"不构成侵权"不误报，"不构成侵权但仍存在侵权风险"照报）。 */
 function filterNegatedHits(keywords: string[], text: string): string[] {
@@ -236,57 +224,6 @@ const defaultCitationSource: CitationSource = {
 const CITATION_PATTERN =
   /(?:专利法|实施细则)?第([零一二三四五六七八九十百\d]+)条(?:第([零一二三四五六七八九十百\d]+)款)?/g;
 
-const CN_NUM: Record<string, number> = {
-  一: 1,
-  二: 2,
-  三: 3,
-  四: 4,
-  五: 5,
-  六: 6,
-  七: 7,
-  八: 8,
-  九: 9,
-  十: 10,
-  十一: 11,
-  十二: 12,
-  十三: 13,
-  十四: 14,
-  十五: 15,
-  十六: 16,
-  十七: 17,
-  十八: 18,
-  十九: 19,
-  二十: 20,
-  二十一: 21,
-  二十二: 22,
-  二十三: 23,
-  二十四: 24,
-  二十五: 25,
-  二十六: 26,
-  二十七: 27,
-  二十八: 28,
-  二十九: 29,
-  三十: 30,
-  三十一: 31,
-  三十二: 32,
-  三十三: 33,
-  三十四: 34,
-  三十五: 35,
-  三十六: 36,
-  三十七: 37,
-  三十八: 38,
-  三十九: 39,
-  四十: 40,
-  四十五: 45,
-  四十七: 47,
-  五十九: 59,
-  六十四: 64,
-  七十一: 71,
-  七十八: 78,
-  一百二十: 120,
-  一百二十六: 126,
-};
-
 const PURPOSE_CONNECTORS = [
   "专利法实施细则",
   "实施细则",
@@ -388,7 +325,7 @@ function extractCitations(text: string): ExtractedCitation[] {
       else continue;
     }
     const article = parseCnNumber(m[1]);
-    if (article === undefined) continue;
+    if (article === null) continue;
     if (seen.has(raw)) continue;
     seen.add(raw);
     result.push({ statute, article, raw });
@@ -535,18 +472,6 @@ function purposeEmpty(purpose: string): boolean {
   return !/[\u4e00-\u9fff]/.test(s);
 }
 
-function parseCnNumber(raw: string): number | undefined {
-  if (/^\d+$/.test(raw)) return Number(raw);
-  if (raw in CN_NUM) return CN_NUM[raw];
-  // 简单组合：X十Y
-  const m = raw.match(/^([一二三四五六七八九])十([一二三四五六七八九])?$/);
-  if (m) {
-    const tens = m[1] === "十" ? 10 : m[1] === "一" ? 10 : CN_NUM[m[1]] * 10;
-    return tens + (m[2] ? CN_NUM[m[2]] : 0);
-  }
-  return undefined;
-}
-
 export function formatCitationWarnings(report: CitationReport): string {
   if (report.flagged.length === 0) return "";
   const lines = report.flagged.map(f => `- 「${f.raw}」：${f.reason}`);
@@ -588,12 +513,13 @@ export function processPatentOutput(text: string, options?: PatentQualityGateOpt
     output = `${text}\n\n---\n${disclaimer}`;
     disclaimerInjected = true;
   }
-  if (absoluteHit.length > 0) {
+  // 幂等保护：重放已处理消息（如压缩重写）时提示不重复追加
+  if (absoluteHit.length > 0 && !output.includes("绝对化表述")) {
     output = `${output}\n\n---\n⚠️ 提示：输出包含绝对化表述（${absoluteHit.join("、")}），请改为限定性表述。`;
   }
 
   const citationReport = options?.enableCitationGate === false ? emptyReport() : verifyCitations(text);
-  if (citationReport.flagged.length > 0) {
+  if (citationReport.flagged.length > 0 && !output.includes("引用核验提示")) {
     output += formatCitationWarnings(citationReport);
   }
 

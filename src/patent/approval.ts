@@ -58,7 +58,7 @@ export class InMemoryApprovalStore implements ApprovalStore {
   }
 }
 
-/** 构造审计记录（供 PatentOutputGate approve/reject 调用）。 */
+/** 构造审计记录（供 PatentOutputGate approve/reject 调用）。now 为可注入时钟（默认系统时钟，与 TurnRunner 注入对齐）。 */
 export function createApprovalRecord(input: {
   pendingIndex: number;
   sessionId?: string;
@@ -68,6 +68,7 @@ export function createApprovalRecord(input: {
   verdict: ApprovalVerdict;
   modifiedOutput?: string;
   feedback?: string;
+  now?: () => Date;
 }): ApprovalRecord {
   return {
     pendingIndex: input.pendingIndex,
@@ -78,6 +79,6 @@ export function createApprovalRecord(input: {
     verdict: input.verdict,
     ...(input.modifiedOutput !== undefined ? { modifiedOutput: input.modifiedOutput } : {}),
     ...(input.feedback !== undefined ? { feedback: input.feedback } : {}),
-    decidedAt: new Date().toISOString(),
+    decidedAt: (input.now ?? (() => new Date()))().toISOString(),
   };
 }

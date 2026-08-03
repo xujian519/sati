@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { parseDocument } from "yaml";
 import type { SynonymRequirement } from "../protocol/types.js";
 import { candidateRuleDirs } from "./asset-location.js";
+import { hasNegationContext as sharedHasNegationContext } from "./text-utils.js";
 
 /** 同义词表：关键词 → 同义词列表（不含关键词本身）。 */
 export type SynonymMap = Map<string, string[]>;
@@ -39,12 +40,15 @@ const NEGATION_PATTERNS: readonly string[] = [
 /** 否定语境检查窗口（命中词前多少个字符；对齐 Mady 60 字符窗口）。 */
 const NEGATION_WINDOW = 60;
 
-/** 在命中位置前查找否定语境：窗口内出现否定短语/否定词且无句界分隔。 */
+/**
+ * 在命中位置前查找否定语境：窗口内出现否定短语/否定词且无句界分隔。
+ * 复用共享实现（text-utils.ts），窗口与词表按本引擎语义传入。
+ */
 export function hasNegationContext(text: string, matchStart: number): boolean {
-  const start = Math.max(0, matchStart - NEGATION_WINDOW);
-  const window = text.slice(start, matchStart);
-  if (window.includes("。") || window.includes("；") || window.includes(";")) return false;
-  return NEGATION_PATTERNS.some(p => window.includes(p));
+  return sharedHasNegationContext(text, matchStart, {
+    window: NEGATION_WINDOW,
+    negationWords: NEGATION_PATTERNS,
+  });
 }
 
 /**

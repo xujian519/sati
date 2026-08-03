@@ -197,3 +197,50 @@ test("processPatentOutput appends citation warnings when citations are flagged",
   assert.equal(result.citationReport.flagged.length, 1);
   assert.match(result.text, /引用核验提示/);
 });
+
+test("D2: 否定语境句界扩展（！？…— 分隔不再误豁免）", () => {
+  // 叹号句界：前句"避免侵权"的否定不豁免后句的"侵权"（旧实现仅认 。；; 会漏报）
+  const exclaim = processPatentOutput("本方案避免侵权！但需注意侵权风险。");
+  assert.ok(exclaim.riskKeywordsHit.includes("侵权"), "！句界后的侵权必须报告");
+  assert.equal(exclaim.disclaimerInjected, true);
+  // 普通否定语境（无句界）仍豁免
+  const negated = processPatentOutput("本方案避免侵权。");
+  assert.ok(!negated.riskKeywordsHit.includes("侵权"), "同句否定语境必须豁免");
+  assert.equal(negated.disclaimerInjected, false);
+});
+
+test("D2: 复合词吞入的否定词不算（无可避免的侵权仍是侵权陈述）", () => {
+  const result = processPatentOutput("使用无可避免的侵权风险，故需设计规避。");
+  assert.ok(result.riskKeywordsHit.includes("侵权"), "无可避免中的避免不得豁免侵权");
+  assert.equal(result.disclaimerInjected, true);
+});
+
+test("D2: 换行句界分隔否定语境", () => {
+  const result = processPatentOutput("本方案避免侵权\n但需注意侵权风险。");
+  assert.ok(result.riskKeywordsHit.includes("侵权"));
+});
+
+test("D3: 百位中文数字法条引用不再逃逸核验", () => {
+  // 旧实现 parseCnNumber 无法解析"一百零二"→ 引用被静默跳过（逃逸）；新实现解析为 102 > 82 → invalid
+  const report = verifyCitations("根据专利法第一百零二条规定处理。");
+  assert.equal(report.total, 1, "引用必须被提取（此前被静默跳过）");
+  assert.equal(report.invalid, 1, "102 超出专利法 82 条范围");
+  assert.equal(report.flagged.length, 1);
+});
+
+test("D3: 十位中文数字引用正常核验（第十条 → 10）", () => {
+  const report = verifyCitations("根据专利法第十条，办理专利申请权转让手续。");
+  assert.equal(report.total, 1);
+  assert.equal(report.valid, 1, "第十条（10）应命中转让主题");
+  assert.equal(report.invalid, 0);
+});
+
+test("D5: 幂等保护 — 已处理消息重放不重复追加提示", () => {
+  const once = processPatentOutput("该方案绝对可行且存在侵权风险。");
+  assert.equal((once.text.match(/不构成正式法律意见/g) ?? []).length, 1);
+  assert.equal((once.text.match(/绝对化表述/g) ?? []).length, 1);
+  // 重放已处理文本（压缩重写场景）：提示不重复
+  const twice = processPatentOutput(once.text);
+  assert.equal((twice.text.match(/不构成正式法律意见/g) ?? []).length, 1);
+  assert.equal((twice.text.match(/绝对化表述/g) ?? []).length, 1);
+});
