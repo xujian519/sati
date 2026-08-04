@@ -7,11 +7,9 @@
  *   runId 缺省用 manifestId；与 JsonFileWorkflowPlanStore 同一模式
  */
 
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir } from "node:fs/promises";
+import { atomicWriteJson, assertSafeId } from "./persist-utils.js";
 import type { WorkflowRunResult, WorkflowRunStore } from "./workflow.js";
-
-/** runId 安全字符集：字母/数字/点/下划线/连字符，且不允许以点开头（防 `..` 与隐藏文件）。 */
-const SAFE_RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** 内存存储——适合测试与单次运行上下文。 */
 export class InMemoryWorkflowRunStore implements WorkflowRunStore {
@@ -38,11 +36,7 @@ export class JsonFileWorkflowRunStore implements WorkflowRunStore {
   private fileFor(runId: string): string {
     // 防御路径注入：runId 直接拼入文件路径，只允许安全字符集，
     // 禁止路径分隔符与 `..`（否则可写出 dir 目录，或写入隐藏文件）。
-    if (!SAFE_RUN_ID_PATTERN.test(runId)) {
-      throw new RangeError(
-        `Invalid runId ${JSON.stringify(runId)}: only [A-Za-z0-9._-] allowed and must not start with "."`,
-      );
-    }
+    assertSafeId(runId, "runId");
     return `${this.dir}/${runId}.json`;
   }
 
@@ -50,9 +44,7 @@ export class JsonFileWorkflowRunStore implements WorkflowRunStore {
     await mkdir(this.dir, { recursive: true });
     const file = this.fileFor(runId ?? result.manifestId);
     // 原子写：先写同目录临时文件再 rename，避免中断/并发产生半写 JSON。
-    const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
-    await writeFile(tmp, JSON.stringify(result, null, 2), "utf8");
-    await rename(tmp, file);
+    await atomicWriteJson(file, JSON.stringify(result, null, 2));
   }
 
   async loadRun(runId: string): Promise<WorkflowRunResult | undefined> {
