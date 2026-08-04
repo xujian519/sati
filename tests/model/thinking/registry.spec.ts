@@ -86,8 +86,101 @@ test("default thinking mode keeps thinking disabled without adapter", () => {
   assert.equal(plan.enabled, false);
 });
 
+test("gpt-5.5-off maps to reasoning_effort none (not disabled)", () => {
+  const plan = planForOpenAI("openai", "gpt-5.5", { mode: "off", enabled: true });
+  assert.equal(plan.enabled, true);
+  assert.equal(plan.useOpenAIReasoning, true);
+  assert.equal(plan.effort, "none");
+});
+
+test("gpt-5.5 low maps to reasoning_effort low", () => {
+  const plan = planForOpenAI("openai", "gpt-5.5", { mode: "low", enabled: true });
+  assert.equal(plan.enabled, true);
+  assert.equal(plan.effort, "low");
+  assert.equal(plan.useOpenAIReasoning, true);
+});
+
+test("gpt-5.5 max maps to reasoning_effort max", () => {
+  const plan = planForOpenAI("openai", "gpt-5.5", { mode: "max", enabled: true });
+  assert.equal(plan.effort, "max");
+});
+
+test("gpt-5.6-sol off maps to reasoning_effort none", () => {
+  const plan = planForOpenAI("openai", "gpt-5.6-sol", { mode: "off", enabled: true });
+  assert.equal(plan.enabled, true);
+  assert.equal(plan.effort, "none");
+  assert.equal(plan.useOpenAIReasoning, true);
+});
+
+test("gpt-5.6-sol high maps to reasoning_effort high", () => {
+  const plan = planForOpenAI("openai", "gpt-5.6-sol", { mode: "high", enabled: true });
+  assert.equal(plan.effort, "high");
+  assert.equal(plan.useOpenAIReasoning, true);
+});
+
+test("claude-opus-4.8 uses adaptive thinking with output_config effort", () => {
+  const plan = planForAnthropic("anthropic", "claude-opus-4.8", { mode: "high", enabled: true });
+  assert.equal(plan.enabled, true);
+  assert.equal(plan.thinkingType, "adaptive");
+  assert.equal(plan.useAnthropicOutputEffort, true);
+  assert.equal(plan.effort, "high");
+});
+
+test("claude-sonnet-5 uses adaptive thinking", () => {
+  const plan = planForAnthropic("anthropic", "claude-sonnet-5", { mode: "medium", enabled: true });
+  assert.equal(plan.thinkingType, "adaptive");
+  assert.equal(plan.useAnthropicOutputEffort, true);
+  assert.equal(plan.effort, "medium");
+});
+
+test("claude-sonnet-4.6 uses adaptive thinking", () => {
+  const plan = planForAnthropic("anthropic", "claude-sonnet-4.6", { mode: "high", enabled: true });
+  assert.equal(plan.thinkingType, "adaptive");
+  assert.equal(plan.useAnthropicOutputEffort, true);
+});
+
+test("claude-sonnet-4.5 uses legacy enabled thinking with budget", () => {
+  const plan = planForAnthropic("anthropic", "claude-sonnet-4.5", { mode: "high", enabled: true });
+  assert.equal(plan.thinkingType, "enabled");
+  assert.equal(plan.useAnthropicOutputEffort, undefined);
+  assert.ok(plan.budgetTokens !== undefined);
+});
+
+test("gemini-3.1-pro-preview uses thinkingLevel (cannot be disabled)", () => {
+  const on = planForGoogle("google", "gemini-3.1-pro-preview", { mode: "high", enabled: true });
+  assert.equal(on.enabled, true);
+  assert.equal(on.thinkingLevel, "high");
+  assert.equal(on.useGeminiLevel, true);
+});
+
+test("gemini-3.6-flash uses thinkingLevel", () => {
+  const plan = planForGoogle("google", "gemini-3.6-flash", { mode: "medium", enabled: true });
+  assert.equal(plan.enabled, true);
+  assert.equal(plan.thinkingLevel, "medium");
+  assert.equal(plan.useGeminiLevel, true);
+});
+
+test("gemini-2.5-pro uses thinkingBudget", () => {
+  const plan = planForGoogle("google", "gemini-2.5-pro", { mode: "high", enabled: true });
+  assert.equal(plan.enabled, true);
+  assert.equal(plan.useGeminiBudget, true);
+  assert.ok(plan.budgetTokens !== undefined);
+});
+
 function planFor(providerId: string, modelId: string, thinking: CanonicalThinkingConfig | undefined) {
   return resolveThinkingPlan(thinking, provider(providerId, modelId), model(modelId));
+}
+
+function planForOpenAI(providerId: string, modelId: string, thinking: CanonicalThinkingConfig | undefined) {
+  return resolveThinkingPlan(thinking, openaiProvider(providerId), model(modelId));
+}
+
+function planForAnthropic(providerId: string, modelId: string, thinking: CanonicalThinkingConfig | undefined) {
+  return resolveThinkingPlan(thinking, anthropicProvider(providerId), model(modelId));
+}
+
+function planForGoogle(providerId: string, modelId: string, thinking: CanonicalThinkingConfig | undefined) {
+  return resolveThinkingPlan(thinking, googleProvider(providerId), model(modelId));
 }
 
 const capabilities: ModelCapabilities = {
@@ -114,5 +207,38 @@ function provider(id: string, modelId: string): ProviderConfig {
     apiKey: "test",
     headers: {},
     models: { [modelId]: model(modelId) },
+  };
+}
+
+function openaiProvider(id: string): ProviderConfig {
+  return {
+    id,
+    protocol: "openai",
+    url: "https://api.openai.com/v1",
+    apiKey: "test",
+    headers: {},
+    models: {},
+  };
+}
+
+function anthropicProvider(id: string): ProviderConfig {
+  return {
+    id,
+    protocol: "anthropic",
+    url: "https://api.anthropic.com",
+    apiKey: "test",
+    headers: {},
+    models: {},
+  };
+}
+
+function googleProvider(id: string): ProviderConfig {
+  return {
+    id,
+    protocol: "google",
+    url: "https://generativelanguage.googleapis.com",
+    apiKey: "test",
+    headers: {},
+    models: {},
   };
 }

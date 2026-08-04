@@ -143,7 +143,7 @@ function genericThinkingPlan(mode: ThinkingMode, budgetTokens?: number): Thinkin
 
 function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider: boolean): ThinkingPlan {
   if (mode === "off") {
-    return modelId.includes("gpt-5.5")
+    return /gpt-5\.[56]/.test(modelId)
       ? { mode, enabled: true, effort: "none", useOpenAIReasoning: true }
       : {
           mode,
@@ -152,13 +152,26 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
         };
   }
   if (modelId.includes("gpt-5.5-pro")) {
-    return { mode, enabled: true, effort: clampEffort(mode, ["medium", "high", "xhigh"]), useOpenAIReasoning: true };
+    return {
+      mode,
+      enabled: true,
+      effort: clampEffort(mode, ["medium", "high", "xhigh", "max"]),
+      useOpenAIReasoning: true,
+    };
+  }
+  if (modelId.includes("gpt-5.6")) {
+    return {
+      mode,
+      enabled: true,
+      effort: clampEffort(mode, ["none", "low", "medium", "high", "xhigh", "max"]),
+      useOpenAIReasoning: true,
+    };
   }
   if (modelId.includes("gpt-5.5")) {
     return {
       mode,
       enabled: true,
-      effort: clampEffort(mode, ["none", "low", "medium", "high", "xhigh"]),
+      effort: clampEffort(mode, ["none", "low", "medium", "high", "xhigh", "max"]),
       useOpenAIReasoning: true,
     };
   }
@@ -166,7 +179,7 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
     return {
       mode,
       enabled: true,
-      effort: clampEffort(mode, ["minimal", "low", "medium", "high"]),
+      effort: clampEffort(mode, ["none", "low", "medium", "high"]),
       useOpenAIReasoning: true,
     };
   }
@@ -185,12 +198,12 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
 
 function anthropicPlan(mode: ThinkingMode, modelId: string, budgetTokens?: number): ThinkingPlan {
   if (mode === "off") return { mode, enabled: false };
-  if (/opus-4\.8|opus-4\.7|sonnet-5|claude-.*(4\.8|4\.7|5)/.test(modelId)) {
+  if (/opus-4\.6|opus-4\.7|opus-4\.8|opus-5|sonnet-4\.6|sonnet-5|fable-5|mythos-5/.test(modelId)) {
     return {
       mode,
       enabled: true,
       thinkingType: "adaptive",
-      effort: clampEffort(mode, ["low", "medium", "high", "xhigh"]),
+      effort: clampEffort(mode, ["low", "medium", "high", "max"]),
       useAnthropicOutputEffort: true,
     };
   }
@@ -344,6 +357,9 @@ function minimaxPlan(mode: ThinkingMode): ThinkingPlan {
 }
 
 function clampEffort(mode: ThinkingMode, allowed: ThinkingPlan["effort"][]): NonNullable<ThinkingPlan["effort"]> {
+  if (mode === "max" && allowed.includes("max")) {
+    return "max";
+  }
   const normalized = mode === "max" ? "xhigh" : mode;
   if (allowed.includes(normalized as ThinkingPlan["effort"])) {
     return normalized as NonNullable<ThinkingPlan["effort"]>;
