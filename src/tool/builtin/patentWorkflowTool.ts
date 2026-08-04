@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { basename, isAbsolute, join } from "node:path";
 import {
   aggregate,
   builtinPatentManifests,
@@ -5,6 +7,8 @@ import {
   formatRuleResults,
   runWorkflow,
   validateWorkflowManifest,
+  workflowManifestToMermaid,
+  JsonFileWorkflowRunStore,
   RuleEngine,
   type RuleCheckResult,
   type Verdict,
@@ -56,6 +60,25 @@ function summarizeCheck(verdict: Verdict, failures: readonly RuleCheckResult[]):
 }
 
 /**
+ * 解析案例持久化目录：绝对路径 → `<caseId>/workflow-runs`；相对路径（含分隔符）→
+ * `<cwd>/<caseId>/workflow-runs`；纯 id → `<cwd>/data/cases/<caseId>/workflow-runs`
+ * （对齐 worker-contract 的 data/cases/{caseId}/outputs 约定）。
+ */
+function resolveWorkflowRunsDir(caseId: string, cwd: string): string {
+  if (isAbsolute(caseId)) return join(caseId, "workflow-runs");
+  if (caseId.includes("/") || caseId.includes("\\")) return join(cwd, caseId, "workflow-runs");
+  return join(cwd, "data", "cases", caseId, "workflow-runs");
+}
+
+/** 持久化 runId 键：路径形式取 basename，避免文件路径含分隔符破坏 JSON 文件名。 */
+function caseKeyOf(caseId: string): string {
+  if (isAbsolute(caseId) || caseId.includes("/") || caseId.includes("\\")) {
+    return basename(caseId);
+  }
+  return caseId;
+}
+
+/**
  * `patent_workflow` — 声明式专利工作流执行工具。
  *
  * 按内置/自定义 WorkflowManifest 的声明式阶段顺序执行：
@@ -86,7 +109,10 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
       "patent_disclosure_v1 (preprocess → extract → merge → consistency → report → approval) and " +
       "patent_inventiveness_v1 (parse → search → closest → diff → hint → secondary → conclude → approval). " +
       "Use to finalize " +
-      "multi-stage patent analyses (novelty / disclosure / inventiveness) with a single verifiable result record.",
+      "multi-stage patent analyses (novelty / disclosure / inventiveness) with a single verifiable result record. " +
+      "When caseId is provided, the run result is persisted to <caseDir>/workflow-runs/<caseId>__<manifestId>.json " +
+      "plus a Mermaid plan diagram <caseId>__<manifestId>.mmd " +
+      "(caseId as path → <caseId>/workflow-runs/; as plain id → data/cases/<caseId>/workflow-runs/ under cwd).",
     kind: "session",
     inputSchema: {
       type: "object",
@@ -99,7 +125,9 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
         },
         caseId: {
           type: "string",
-          description: "Optional case id for result records.",
+          description:
+            "Optional case id for result records. When provided, the run is persisted to " +
+            "<caseDir>/workflow-runs/<caseId>__<manifestId>.json for audit.",
         },
         checkDomain: {
           type: "string",
@@ -124,7 +152,7 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
     },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
-    async execute(input) {
+    async execute(input, context) {
       // 缺省取内置目录首个 manifest（patent_novelty_v1）。
       const manifest = manifests.get(input.manifestId ?? builtinPatentManifests[0]?.manifest.id);
       if (!manifest) {
@@ -150,6 +178,24 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
         handlers: new StageHandlerRegistry(),
       });
 
+      // 提供 caseId 时自动持久化到 `<caseDir>/workflow-runs/<runId>.json`，并顺带
+      // 写一份同名的 Mermaid 计划文档 `<runId>.mmd`（便于人工审阅执行链）。
+      // 失败不阻断工具结果，仅提示。
+      let persistNote = "持久化: 未启用（未提供 caseId）";
+      if (input.caseId !== undefined) {
+        const runsDir = resolveWorkflowRunsDir(input.caseId, context?.cwd ?? process.cwd());
+        const runId = `${caseKeyOf(input.caseId)}__${result.manifestId}`;
+        try {
+          const store = new JsonFileWorkflowRunStore(runsDir);
+          await store.saveRun(result, runId);
+          // saveRun 已确保 runsDir 存在，直接写 .mmd。
+          await writeFile(join(runsDir, `${runId}.mmd`), workflowManifestToMermaid(manifest), "utf8");
+          persistNote = `持久化: ${join(runsDir, `${runId}.json`)} + ${join(runsDir, `${runId}.mmd`)}`;
+        } catch (err) {
+          persistNote = `持久化失败: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      }
+
       const lines = result.stages.map(s => {
         const flag = s.degraded ? "⚠️ 降级" : "✅";
         return `- ${flag} ${s.stageId} (${s.strategy}): ${s.output.length > 0 ? `${s.output.slice(0, 80)}${s.output.length > 80 ? "…" : ""}` : "(无输出)"}`;
@@ -167,6 +213,7 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
               `patent_workflow(${result.manifestId}): ${result.summary}`,
               ...lines,
               `完成状态: ${result.completed ? "completed" : "incomplete（有降级阶段）"}`,
+              persistNote,
               ...(checkSection !== "" ? [checkSection] : []),
             ].join("\n"),
           },

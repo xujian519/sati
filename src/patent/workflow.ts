@@ -83,6 +83,14 @@ export type WorkflowRunOptions = {
   atoms?: AtomRegistry;
   /** 原子执行所需的外部能力（LLM/检索器），由宿主注入。 */
   provider?: StageProvider;
+  /**
+   * 结果持久化存储：执行结束时调用 saveRun（可选）。
+   * 设计对齐 src/workflow WorkflowPlanStore（save/load/list 三接口），
+   * 实现见 ./workflow-store.js。
+   */
+  persist?: WorkflowRunStore;
+  /** 持久化键（runId），用于区分同一 manifest 的多次执行；缺省 manifestId。 */
+  runId?: string;
 };
 
 export type WorkflowStageResult = {
@@ -113,6 +121,17 @@ export type WorkflowRunResult = {
   /** 审批门等中断信息：存在表示执行被人工介入暂停（暂停 ≠ 失败） */
   interrupted?: WorkflowInterrupt;
 };
+
+/**
+ * WorkflowRun 持久化契约（对齐 src/workflow/persistence/WorkflowPlanStore 的
+ * save/load/list 三接口；此处持久化对象为 patent 域的 WorkflowRunResult）。
+ * 实现见 ./workflow-store.js（InMemory / JsonFile 两种后端）。
+ */
+export interface WorkflowRunStore {
+  saveRun(result: WorkflowRunResult, runId?: string): Promise<void>;
+  loadRun(runId: string): Promise<WorkflowRunResult | undefined>;
+  listRuns(): Promise<string[]>;
+}
 
 export class WorkflowError extends Error {
   constructor(message: string) {
@@ -160,6 +179,10 @@ export function validateWorkflowManifest(
         throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputMatches 非法正则`);
       }
       if (stage.retry.rewindTo !== undefined && !ids.has(stage.retry.rewindTo)) {
+        // ids 按 manifest 顺序逐个收集：此检查隐含约束 rewindTo 只能指向更早阶段
+        // （后续阶段尚未入 ids）——因此“纯回退边图”天然无环；而“顺序边 + 回退边”
+        // 的混合环（如 disclosure 的 consistency → extract_problem）是合法的受控
+        // 回退，由 runWorkflow 的 rewindCounts 有界执行，不属配置错误。
         throw new WorkflowError(`阶段 ${stage.id} 的 retry.rewindTo 指向不存在的阶段: ${stage.retry.rewindTo}`);
       }
       if (stage.retry.rewindTo === stage.id) {
@@ -341,7 +364,7 @@ export async function runWorkflow(
     summary = `工作流 ${manifest.id}（${manifest.name}）: ${okCount}/${results.length} 阶段完成${degradedSteps.length > 0 ? `，降级阶段: ${degradedSteps.join("、")}` : ""}`;
   }
 
-  return {
+  const result: WorkflowRunResult = {
     manifestId: manifest.id,
     caseType: manifest.caseType,
     completed,
@@ -350,6 +373,8 @@ export async function runWorkflow(
     summary,
     ...(interrupted ? { interrupted } : {}),
   };
+  await options.persist?.saveRun(result, options.runId);
+  return result;
 }
 
 /**

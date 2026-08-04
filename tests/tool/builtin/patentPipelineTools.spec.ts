@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  JsonFileWorkflowRunStore,
   patentInventivenessManifest,
   patentNoveltyManifest,
   runWorkflow,
@@ -392,5 +396,74 @@ describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", (
     assert.ok(text.includes("确定性门: ⛔ 阻断"), `应判定阻断: ${text}`);
     assert.ok(text.includes("创造性三步法"), "失败明细应含三步法规则名");
     assert.match(text, /\| 规则 \| 级别 \| 严重度 \| 问题 \| 修改建议 \|/, "应输出失败明细表头");
+  });
+});
+
+describe("patent_workflow 工具：caseId 持久化（workflow-runs/ 子目录）", () => {
+  it("纯 id 形式 → <cwd>/data/cases/<caseId>/workflow-runs/ 下写入 run 文件", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sati-pwf-"));
+    try {
+      const tool = createPatentWorkflowTool();
+      const res = await tool.execute(
+        {
+          caseId: "case-001",
+          outputs: ["parse", "search", "compare", "conclude", "approval"].map(stageId => ({
+            stageId,
+            text: `阶段 ${stageId} 输出`,
+          })),
+        },
+        { cwd: dir } as never,
+      );
+      const text = textOf(res);
+      const expected = join(dir, "data", "cases", "case-001", "workflow-runs", "case-001__patent_novelty_v1.json");
+      assert.ok(text.includes(`持久化: ${expected}`), `应输出持久化路径: ${text}`);
+      // 内容可经 JsonFileWorkflowRunStore 恢复
+      const store = new JsonFileWorkflowRunStore(join(dir, "data", "cases", "case-001", "workflow-runs"));
+      const loaded = await store.loadRun("case-001__patent_novelty_v1");
+      assert.ok(loaded, "run 文件应可恢复");
+      assert.equal(loaded?.manifestId, "patent_novelty_v1");
+      assert.equal(loaded?.stages.length, 5);
+      // 同目录应顺带生成 Mermaid 计划文档
+      const mmd = await readFile(
+        join(dir, "data", "cases", "case-001", "workflow-runs", "case-001__patent_novelty_v1.mmd"),
+        "utf8",
+      );
+      assert.ok(mmd.startsWith("flowchart TD"));
+      assert.ok(mmd.includes("parse --> search"));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("绝对路径形式 → <caseId>/workflow-runs/ 下写入，runId 取 basename", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sati-pwf-"));
+    try {
+      const tool = createPatentWorkflowTool();
+      const res = await tool.execute({ caseId: dir, outputs: [] }, { cwd: dir } as never);
+      const text = textOf(res);
+      const key = dir.split(/[\\/]/).pop()!;
+      const expected = join(dir, "workflow-runs", `${key}__patent_novelty_v1.json`);
+      assert.ok(text.includes(`持久化: ${expected}`), `应输出持久化路径: ${text}`);
+      const store = new JsonFileWorkflowRunStore(join(dir, "workflow-runs"));
+      assert.ok(await store.loadRun(`${key}__patent_novelty_v1`), "run 文件应可恢复");
+      const mmd = await readFile(join(dir, "workflow-runs", `${key}__patent_novelty_v1.mmd`), "utf8");
+      assert.ok(mmd.startsWith("flowchart TD"), "应生成 Mermaid 计划文档");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("未提供 caseId → 不持久化且输出提示", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sati-pwf-"));
+    try {
+      const tool = createPatentWorkflowTool();
+      const res = await tool.execute({ outputs: [] }, { cwd: dir } as never);
+      assert.ok(textOf(res).includes("持久化: 未启用（未提供 caseId）"), textOf(res));
+      const store = new JsonFileWorkflowRunStore(join(dir, "data", "cases"));
+      assert.deepEqual(await store.listRuns(), [], "不应写入任何 run 文件");
+      await assert.rejects(readFile(join(dir, "data", "cases", "x.mmd")), { code: "ENOENT" });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -30,6 +30,7 @@ export {
   type WorkflowManifest,
   type WorkflowRunResult,
   type WorkflowRunOptions,
+  type WorkflowRunStore,
   type WorkflowInterrupt,
   WorkflowError,
   validateWorkflowManifest,
@@ -40,6 +41,17 @@ export {
   builtinPatentManifests,
   type BuiltinPatentManifest,
 } from "./workflow.js";
+
+export {
+  manifestToFlowGraph,
+  validateWorkflowManifestDag,
+  workflowManifestToMermaid,
+} from "./workflow-dag.js";
+
+export {
+  InMemoryWorkflowRunStore,
+  JsonFileWorkflowRunStore,
+} from "./workflow-store.js";
 
 export {
   type EvidenceSpan,
