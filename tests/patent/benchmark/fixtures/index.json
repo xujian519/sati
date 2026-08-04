@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-08-04T12:48:58Z",
+  "source": "Mady evaluate/benchmark (github.com/xujian519/mady)",
+  "totalCases": 196,
+  "suites": [
+    {
+      "suite": "patent-exam-mock",
+      "caseCount": 55
+    },
+    {
+      "suite": "patent-exam-real-a2",
+      "caseCount": 3
+    },
+    {
+      "suite": "patent-exam-real-a22",
+      "caseCount": 15
+    },
+    {
+      "suite": "patent-exam-real-a26",
+      "caseCount": 3
+    },
+    {
+      "suite": "patent-exam-real-a26-3",
+      "caseCount": 5
+    },
+    {
+      "suite": "patent-exam-real-a31",
+      "caseCount": 8
+    },
+    {
+      "suite": "patent-exam-real-a33",
+      "caseCount": 1
+    },
+    {
+      "suite": "patent-exam-real-r42",
+      "caseCount": 1
+    },
+    {
+      "suite": "patent-invalidation-decisions",
+      "caseCount": 100
+    },
+    {
+      "suite": "patent-design-invalidation",
+      "caseCount": 5
+    }
+  ]
+}

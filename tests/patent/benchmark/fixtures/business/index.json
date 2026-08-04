@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-08-04T12:52:43.441Z",
+  "source": "Sati 业务化转换：基于 Mady evaluate/benchmark 导出（github.com/xujian519/mady）",
+  "totalCases": 196,
+  "suites": [
+    {
+      "suite": "business-patentability",
+      "caseCount": 19
+    },
+    {
+      "suite": "business-drafting",
+      "caseCount": 15
+    },
+    {
+      "suite": "business-file-review",
+      "caseCount": 20
+    },
+    {
+      "suite": "business-oa-response",
+      "caseCount": 12
+    },
+    {
+      "suite": "business-infringement",
+      "caseCount": 6
+    },
+    {
+      "suite": "business-invalidation",
+      "caseCount": 124
+    }
+  ]
+}

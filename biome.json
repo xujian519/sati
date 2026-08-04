@@ -17,6 +17,7 @@
       "!skills/**",
       "!products/**",
       "!src/knowledge/patent/wiki/**",
+      "!tests/patent/benchmark/fixtures/**",
       "!**/*.map"
     ]
   },
