@@ -64,3 +64,19 @@ test("workflowManifestToMermaid renders plain chain for acyclic novelty manifest
   assert.ok(mermaid.includes("parse --> search"));
   assert.ok(!mermaid.includes("-.->"), "无回退边时不输出虚线");
 });
+
+test("workflowManifestToMermaid escapes quotes, backslashes and newlines in descriptions", () => {
+  const manifest: WorkflowManifest = {
+    id: "escape_v1",
+    name: "转义",
+    caseType: "test",
+    stages: [
+      { id: "a", strategy: "chain", description: '含 "双引号" 与 \\ 反斜杠' },
+      { id: "b", strategy: "chain", description: "含\n换行" },
+    ],
+  };
+  const mermaid = workflowManifestToMermaid(manifest);
+  assert.ok(mermaid.includes('  a["含 \\"双引号\\" 与 \\\\ 反斜杠"]'), "引号与反斜杠应转义");
+  assert.ok(mermaid.includes('  b["含\\n换行"]'), "换行应转义为 \\n");
+  assert.equal(mermaid.split("\n").length, 4, "转义后不应引入额外行（Mermaid 语法不被换行破坏）");
+});

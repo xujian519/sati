@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { rename, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import {
   aggregate,
@@ -76,6 +76,13 @@ function caseKeyOf(caseId: string): string {
     return basename(caseId);
   }
   return caseId;
+}
+
+/** 原子写：先写同目录临时文件再 rename，避免并发/中断产生半写文件。 */
+async function atomicWriteFile(file: string, content: string): Promise<void> {
+  const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  await writeFile(tmp, content, "utf8");
+  await rename(tmp, file);
 }
 
 /**
@@ -188,8 +195,8 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
         try {
           const store = new JsonFileWorkflowRunStore(runsDir);
           await store.saveRun(result, runId);
-          // saveRun 已确保 runsDir 存在，直接写 .mmd。
-          await writeFile(join(runsDir, `${runId}.mmd`), workflowManifestToMermaid(manifest), "utf8");
+          // saveRun 已确保 runsDir 存在，直接写 .mmd（原子写防半写文件）。
+          await atomicWriteFile(join(runsDir, `${runId}.mmd`), workflowManifestToMermaid(manifest));
           persistNote = `持久化: ${join(runsDir, `${runId}.json`)} + ${join(runsDir, `${runId}.mmd`)}`;
         } catch (err) {
           persistNote = `持久化失败: ${err instanceof Error ? err.message : String(err)}`;

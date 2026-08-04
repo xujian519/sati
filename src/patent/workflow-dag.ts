@@ -25,6 +25,9 @@ function nodeTypeFor(stage: { strategy: WorkflowStrategy; atom?: string }): Flow
 /**
  * 用 FlowGraph 构建 manifest 的执行链图：仅顺序边（依赖边），回退边不入图。
  * 返回的图是严格 DAG，可安全用于 topologicalLevels / validate。
+ *
+ * 前置条件：调用方应先执行 validateWorkflowManifest —— 悬空的 rewindTo 引用
+ * 只影响回退边（本函数不建回退边），不会在此报错而是被静默忽略。
  */
 export function manifestToFlowGraph(manifest: WorkflowManifest): FlowGraph {
   const graph = new FlowGraph();
@@ -40,14 +43,15 @@ export function manifestToFlowGraph(manifest: WorkflowManifest): FlowGraph {
 /**
  * 用 FlowGraph 静态校验 manifest 顺序链图（环 / 孤儿节点）。
  * 顺序链是严格 DAG，正常返回空数组；返回问题列表 = 图不合法。
+ * 前置条件同 manifestToFlowGraph：rewindTo 合法性由 validateWorkflowManifest 保证。
  */
 export function validateWorkflowManifestDag(manifest: WorkflowManifest): string[] {
   return manifestToFlowGraph(manifest).validate();
 }
 
-/** 转义节点名中的引号，避免破坏 Mermaid 字符串字面量。 */
+/** 转义 Mermaid 字符串字面量中的反斜杠、引号与换行，避免破坏语法。 */
 function escapeName(name: string): string {
-  return name.replace(/"/g, '\\"');
+  return name.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, "\\n");
 }
 
 /**

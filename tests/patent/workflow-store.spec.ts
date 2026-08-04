@@ -9,6 +9,7 @@ import {
   patentNoveltyManifest,
   runWorkflow,
   type WorkflowContext,
+  type WorkflowRunStore,
   type WorkflowStage,
 } from "../../src/patent/index.js";
 
@@ -63,4 +64,35 @@ test("runWorkflow without persist does not write anything", async () => {
   const store = new InMemoryWorkflowRunStore();
   await runWorkflow(patentNoveltyManifest, {}, okExecutor);
   assert.deepEqual(await store.listRuns(), []);
+});
+
+test("JsonFileWorkflowRunStore rejects runIds with path separators or traversal", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "sati-wf-"));
+  try {
+    const store = new JsonFileWorkflowRunStore(dir);
+    const result = await runWorkflow(patentNoveltyManifest, {}, okExecutor);
+    for (const bad of ["../evil", "a/b", "a\\b", ".hidden", "", ".."]) {
+      await assert.rejects(() => store.saveRun(result, bad), RangeError, `runId ${JSON.stringify(bad)} 应被拒绝`);
+      await assert.rejects(() => store.loadRun(bad), RangeError, `loadRun ${JSON.stringify(bad)} 应被拒绝`);
+    }
+    // 合法 runId 不受影响
+    await store.saveRun(result, "case-001.run_v2");
+    assert.ok(await store.loadRun("case-001.run_v2"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("runWorkflow degrades gracefully when persist saveRun throws", async () => {
+  const failingStore: WorkflowRunStore = {
+    saveRun: async () => {
+      throw new Error("disk full");
+    },
+    loadRun: async () => undefined,
+    listRuns: async () => [],
+  };
+  const result = await runWorkflow(patentNoveltyManifest, {}, okExecutor, { persist: failingStore });
+  assert.equal(result.completed, true);
+  assert.match(result.persistWarning ?? "", /持久化失败/);
+  assert.match(result.persistWarning ?? "", /disk full/);
 });

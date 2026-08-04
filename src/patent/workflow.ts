@@ -120,6 +120,8 @@ export type WorkflowRunResult = {
   summary: string;
   /** 审批门等中断信息：存在表示执行被人工介入暂停（暂停 ≠ 失败） */
   interrupted?: WorkflowInterrupt;
+  /** 可选：结果持久化失败时的告警（执行本身不受影响） */
+  persistWarning?: string;
 };
 
 /**
@@ -373,7 +375,13 @@ export async function runWorkflow(
     summary,
     ...(interrupted ? { interrupted } : {}),
   };
-  await options.persist?.saveRun(result, options.runId);
+  // 持久化失败不阻断执行结果（对齐工具层“持久化失败仅提示”的语义），
+  // 仅把告警带回结果供调用方展示。
+  try {
+    await options.persist?.saveRun(result, options.runId);
+  } catch (error) {
+    result.persistWarning = `持久化失败（不影响执行结果）: ${error instanceof Error ? error.message : String(error)}`;
+  }
   return result;
 }
 
