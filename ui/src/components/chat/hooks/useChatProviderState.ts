@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { authenticatedFetch } from "../../../utils/api";
 import { useWebSocket } from "../../../contexts/WebSocketContext";
-import { CLAUDE_MODELS } from "../../../../shared/modelConstants";
+import { buildModelOptionsFromConfig } from "../../../shared/modelOptions";
 import type { PendingPermissionRequest, PermissionMode } from "../types/types";
 import type { ProjectSession } from "../../../types/app";
 
@@ -22,10 +22,7 @@ type ThinkingModelContext = {
   supportsThinking?: boolean;
 };
 
-const DEFAULT_MODEL_OPTIONS: ModelOption[] = CLAUDE_MODELS.OPTIONS.map(option => ({
-  ...option,
-}));
-
+const SATI_MODEL_STORAGE_KEY = "sati-model";
 const DEFAULT_PERMISSION_MODE_KEY = "permissionMode-default";
 const COMPOSER_PERMISSION_MODES: PermissionMode[] = ["default", "bypassPermissions"];
 
@@ -33,6 +30,45 @@ function readStoredPermissionMode(key: string): PermissionMode | null {
   const stored = localStorage.getItem(key);
   if (!stored) return null;
   return COMPOSER_PERMISSION_MODES.includes(stored as PermissionMode) ? (stored as PermissionMode) : null;
+}
+
+function readAgentModelRef(config: unknown): string {
+  const configRecord = config && typeof config === "object" ? (config as Record<string, unknown>) : null;
+  const agent =
+    configRecord?.agent && typeof configRecord.agent === "object"
+      ? (configRecord.agent as Record<string, unknown>)
+      : null;
+  return typeof agent?.model === "string" ? agent.model.trim() : "";
+}
+
+/**
+ * 将一份 sati.yaml 配置应用到模型选择状态（选项 + 当前选中 + localStorage）。
+ *
+ * - 无配置（空 providers）：选项清空、选中清空、移除持久化值——UI 显示
+ *   "先配置模型"引导，而不是复活硬编码的假模型名。
+ * - 有配置：按 agent.model（后端权威）→ 当前选中（用户先前选择）→ 首个
+ *   选项 的顺序决定选中值，并写回 localStorage 保持持久化一致。
+ */
+function applyConfigModelState(
+  config: unknown,
+  setModelOptions: React.Dispatch<React.SetStateAction<ModelOption[]>>,
+  setModel: React.Dispatch<React.SetStateAction<string>>,
+): void {
+  const options = buildModelOptionsFromConfig(config);
+  const preferred = readAgentModelRef(config);
+  setModelOptions(options);
+  setModel(previous => {
+    if (options.length === 0) {
+      localStorage.removeItem(SATI_MODEL_STORAGE_KEY);
+      return "";
+    }
+    const candidate =
+      (preferred && options.some(option => option.value === preferred) && preferred) ||
+      (previous && options.some(option => option.value === previous) && previous) ||
+      options[0].value;
+    localStorage.setItem(SATI_MODEL_STORAGE_KEY, candidate);
+    return candidate;
+  });
 }
 
 function readThinkingModelContext(config: unknown): ThinkingModelContext | null {
@@ -84,9 +120,9 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   });
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [model, setModel] = useState<string>(() => {
-    return localStorage.getItem("sati-model") || CLAUDE_MODELS.DEFAULT;
+    return localStorage.getItem(SATI_MODEL_STORAGE_KEY) ?? "";
   });
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>(DEFAULT_MODEL_OPTIONS);
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
   const [thinkingModelContext, setThinkingModelContext] = useState<ThinkingModelContext | null>(null);
 
   useEffect(() => {
@@ -110,41 +146,16 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   useEffect(() => {
     let cancelled = false;
 
+    // Model options are driven exclusively by /api/config below — the
+    // runtime-config endpoint only carries permissions. Keeping a single
+    // authoritative source avoids the race where a late runtime-config
+    // response clobbers catalog-enriched options with raw pid/mid refs.
     authenticatedFetch("/api/agents/runtime-config")
       .then(response => response.json())
       .then(data => {
         if (cancelled) {
           return;
         }
-
-        const availableModels = Array.isArray(data?.claude?.availableModels)
-          ? data.claude.availableModels
-              .filter(
-                (option: unknown): option is ModelOption =>
-                  typeof option === "object" &&
-                  option !== null &&
-                  typeof (option as ModelOption).value === "string" &&
-                  typeof (option as ModelOption).label === "string",
-              )
-              .map((option: ModelOption) => ({
-                value: option.value.trim(),
-                label: option.label.trim() || option.value.trim(),
-              }))
-              .filter((option: ModelOption) => option.value.length > 0)
-          : [];
-        const runtimeOptions = availableModels.length > 0 ? availableModels : DEFAULT_MODEL_OPTIONS;
-        const runtimeDefaultModel =
-          typeof data?.claude?.defaultModel === "string" && data.claude.defaultModel.trim()
-            ? data.claude.defaultModel.trim()
-            : CLAUDE_MODELS.DEFAULT;
-        const storedModel = localStorage.getItem("sati-model")?.trim() || "";
-        const hasStoredModel = runtimeOptions.some((option: ModelOption) => option.value === storedModel);
-        const shouldReuseStoredModel = hasStoredModel && storedModel !== CLAUDE_MODELS.DEFAULT;
-        const nextModel = shouldReuseStoredModel ? storedModel : runtimeDefaultModel;
-
-        setModelOptions(runtimeOptions);
-        setModel(nextModel);
-        localStorage.setItem("sati-model", nextModel);
 
         const backendMode = data?.permissions?.effectiveMode;
         if (backendMode && COMPOSER_PERMISSION_MODES.includes(backendMode as PermissionMode)) {
@@ -166,6 +177,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
           return;
         }
         setThinkingModelContext(readThinkingModelContext(data?.config));
+        applyConfigModelState(data?.config, setModelOptions, setModel);
       })
       .catch(error => {
         console.error("Error loading Sati config:", error);
@@ -180,6 +192,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     return subscribe((message: any) => {
       if (message?.type !== "config:reloaded") return;
       setThinkingModelContext(readThinkingModelContext(message?.config));
+      applyConfigModelState(message?.config, setModelOptions, setModel);
     });
   }, [subscribe]);
 

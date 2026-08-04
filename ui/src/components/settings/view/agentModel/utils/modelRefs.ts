@@ -1,4 +1,5 @@
 import { findCatalogProviderById } from "../../../../../shared/catalogProviders";
+import { buildModelOptionsFromConfig } from "../../../../../shared/modelOptions";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
 import type { ActiveModelCapabilities } from "../types";
@@ -28,31 +29,7 @@ export function ensureModelRefsConfigured<T extends SatiConfig>(config: T, refs:
 }
 
 export function buildModelRefOptions(config: SatiConfig): Array<{ value: string; label: string }> {
-  const out: Array<{ value: string; label: string }> = [];
-  const providers = config.model?.providers ?? {};
-  for (const [pid, prov] of Object.entries(providers)) {
-    const catalog = findCatalogProviderById(pid);
-    const seen = new Set<string>();
-
-    if (catalog) {
-      for (const model of catalog.models) {
-        seen.add(model.id);
-        out.push({
-          value: `${pid}/${model.id}`,
-          label: `${catalog.displayName}: ${model.displayName}`,
-        });
-      }
-    }
-
-    for (const mid of Object.keys(prov.models ?? {})) {
-      if (seen.has(mid)) continue;
-      out.push({
-        value: `${pid}/${mid}`,
-        label: catalog ? `${catalog.displayName}: ${mid}` : `${pid}/${mid}`,
-      });
-    }
-  }
-  return out;
+  return buildModelOptionsFromConfig(config);
 }
 
 export function activeModelCapabilities(config: SatiConfig): ActiveModelCapabilities | null {

@@ -110,6 +110,7 @@ import {
   getSpreadsheetSheetPreviewPdf,
 } from "./services/spreadsheetPreview.js";
 import { startSatiConfigWatcher, stopSatiConfigWatcher } from "./services/satiConfigWatcher.js";
+import { readSatiConfigFile } from "./services/satiConfig.js";
 import { getAlwaysOnDashboardEvents } from "./services/always-on-events.js";
 import agentRoutes from "./routes/agent.js";
 import updateRoutes from "./routes/update.js";
@@ -537,17 +538,48 @@ app.use("/api/agent", agentRoutes);
 // Self-update API Routes (protected)
 app.use("/api/update", authenticateToken, updateRoutes);
 
-// Legacy four-provider config endpoints have been removed. The runtime
-// model is read from Sati config; fall back to a static stub so any
-// older frontend code paths render without crashing.
+// The runtime model is read from ~/.sati/sati.yaml. Enumerate every
+// configured provider/model pair so the chat composer can render real
+// model options instead of a hardcoded stub. On a fresh install (no
+// sati.yaml yet) the lists come back empty and the UI shows the
+// "configure a model first" state rather than a fake model name.
 app.get("/api/agents/runtime-config", authenticateToken, (_req, res) => {
   const permSettings = readPermissionSettings();
+  const permissions = {
+    skipPermissions: permSettings.skipPermissions,
+    effectiveMode: permSettings.skipPermissions ? "bypassPermissions" : "default",
+  };
+  // readSatiConfigFile can throw synchronously (EACCES on the config file,
+  // a directory at the config path, …). Degrade to an empty model list
+  // instead of 500-ing and dropping the permissions payload the composer
+  // also needs.
+  let availableModels = [];
+  let defaultModel = "";
+  try {
+    const record = readSatiConfigFile();
+    const providers = record.config?.model?.providers;
+    if (providers && typeof providers === "object") {
+      for (const [pid, prov] of Object.entries(providers)) {
+        if (!prov || typeof prov !== "object") continue;
+        // models must be a record (id → model config); a YAML array has no
+        // usable model refs and Object.keys on it would yield indices.
+        if (!prov.models || typeof prov.models !== "object" || Array.isArray(prov.models)) continue;
+        for (const mid of Object.keys(prov.models)) {
+          availableModels.push({ value: `${pid}/${mid}`, label: `${pid}/${mid}` });
+        }
+      }
+    }
+    defaultModel = typeof record.config?.agent?.model === "string" ? record.config.agent.model.trim() : "";
+  } catch (error) {
+    console.error("[runtime-config] failed to read sati.yaml:", error instanceof Error ? error.message : error);
+  }
   res.json({
-    sati: { provider: "sati" },
-    permissions: {
-      skipPermissions: permSettings.skipPermissions,
-      effectiveMode: permSettings.skipPermissions ? "bypassPermissions" : "default",
+    sati: {
+      provider: "sati",
+      defaultModel,
+      availableModels,
     },
+    permissions,
   });
 });
 
