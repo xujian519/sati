@@ -8,7 +8,10 @@ export type RouterModelPricingMap = Record<string, RouterModelPricing>;
 
 // $/million tokens – fallback when neither nativeCost nor user modelPricing is available
 const DEFAULT_PRICING: Array<{ pattern: RegExp; input: number; output: number; cacheRead?: number }> = [
-  // DeepSeek
+  // DeepSeek v4（官方人民币价按 ≈7.2 汇率折算为美元，来源 api-docs.deepseek.com/quick_start/pricing）
+  { pattern: /deepseek.*v4-flash/i, input: 0.14, output: 0.28, cacheRead: 0.003 },
+  { pattern: /deepseek.*v4-pro/i, input: 0.42, output: 0.83, cacheRead: 0.0035 },
+  // DeepSeek（旧版，随 deprecated 模型保留）
   { pattern: /deepseek.*flash/i, input: 0.2, output: 0.6 },
   { pattern: /deepseek.*chat/i, input: 0.5, output: 1.5 },
   { pattern: /deepseek.*reasoner/i, input: 0.8, output: 2.0 },
@@ -45,7 +48,11 @@ const DEFAULT_PRICING: Array<{ pattern: RegExp; input: number; output: number; c
   { pattern: /mistral/i, input: 0.25, output: 0.25 },
   // Yi / 01.AI
   { pattern: /yi-/i, input: 0.3, output: 0.3 },
-  // Moonshot / Kimi
+  // Moonshot / Kimi（官方人民币价按 ≈7.2 汇率折算为美元，来源 platform.kimi.com/docs/pricing）
+  { pattern: /kimi-k3/i, input: 2.78, output: 13.89, cacheRead: 0.28 },
+  { pattern: /kimi-k2\.7-code-highspeed/i, input: 1.81, output: 7.5, cacheRead: 0.36 },
+  { pattern: /kimi-k2\.7-code/i, input: 0.9, output: 3.75, cacheRead: 0.18 },
+  { pattern: /kimi-k2\.6/i, input: 0.9, output: 3.75, cacheRead: 0.15 },
   { pattern: /moonshot|kimi/i, input: 1.0, output: 2.0 },
   // Doubao / ByteDance
   { pattern: /doubao/i, input: 0.4, output: 0.8 },
@@ -62,9 +69,18 @@ export function lookupModelPricing(
   if (modelPricing) {
     const exact = modelPricing[combined];
     if (exact) return exact;
+    // 含前缀/包含匹配时取最长 key，避免 "kimi-k2.7-code" 误命中 "kimi-k2.7-code-highspeed"。
+    let bestKey: string | undefined;
+    let best: RouterModelPricing | undefined;
     for (const [key, val] of Object.entries(modelPricing)) {
-      if (model.includes(key) || key.includes(model)) return val;
+      if (model.includes(key) || key.includes(model)) {
+        if (bestKey === undefined || key.length > bestKey.length) {
+          bestKey = key;
+          best = val;
+        }
+      }
     }
+    if (best) return best;
   }
   for (const entry of DEFAULT_PRICING) {
     if (entry.pattern.test(combined) || entry.pattern.test(model)) {

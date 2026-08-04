@@ -246,6 +246,14 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: "openai",
     defaultUrl: "https://api.moonshot.cn/v1",
     models: [
+      { id: "kimi-k3", displayName: "Kimi K3", supportsImage: true, maxContextTokens: 1048576 },
+      { id: "kimi-k2.7-code", displayName: "Kimi K2.7 Code", supportsImage: true, maxContextTokens: 262144 },
+      {
+        id: "kimi-k2.7-code-highspeed",
+        displayName: "Kimi K2.7 Code Highspeed",
+        supportsImage: true,
+        maxContextTokens: 262144,
+      },
       { id: "kimi-k2.6", displayName: "Kimi K2.6", supportsImage: true, maxContextTokens: 262144 },
       { id: "kimi-k1.5", displayName: "Kimi K1.5", supportsImage: true, maxContextTokens: 131072 },
     ],

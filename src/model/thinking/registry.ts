@@ -258,7 +258,16 @@ function qwenPlan(mode: ThinkingMode, modelId: string, providerUrl: string, budg
 
 function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   const isAliLlmCenter = /^deepseek_/.test(modelId);
-  if (mode === "off" || mode === "minimal") {
+  // deepseek-reasoner 为始终思考的旧模型，不支持关闭思考（与 kimi-k3 处理一致）。
+  const alwaysThinking = /deepseek-reasoner/.test(modelId);
+  if (mode === "off") {
+    if (alwaysThinking) {
+      return {
+        mode,
+        enabled: false,
+        unsupportedReason: `Model ${modelId} always thinks and does not support an explicit off thinking mode. Switch thinking strength back to Default.`,
+      };
+    }
     return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true, preserve: true };
   }
   if (isAliLlmCenter) {
@@ -270,17 +279,43 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
       preserve: true,
     };
   }
+  // 官方 v4：reasoning_effort 仅 low/high/max 三档；v4-pro 目前仅支持 high/max，
+  // v4-flash 三档全支持（文档 2026 年中）。xhigh/max 取最高档 max，其余 clamp。
+  // 旧模型（deepseek-chat 等）保持 high/max 两档语义，避免对旧 API 发送 low。
+  const allowedEffort: ThinkingPlan["effort"][] =
+    /deepseek-v4/.test(modelId) && !/deepseek-v4-pro/.test(modelId) ? ["low", "high", "max"] : ["high", "max"];
+  const effort = mode === "xhigh" || mode === "max" ? "max" : clampEffort(mode, allowedEffort);
   return {
     mode,
     enabled: true,
     thinkingType: "enabled",
-    effort: mode === "xhigh" || mode === "max" ? "max" : "high",
+    effort,
     preserve: true,
     useOpenAICompatibleThinking: true,
   };
 }
 
-function kimiPlan(mode: ThinkingMode, _modelId: string): ThinkingPlan {
+function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
+  // kimi-k3 / kimi-k2.7-code(-highspeed) 为始终思考（always-thinking）模型，
+  // 官方不支持关闭思考；顶层仅 reasoning_effort low/high/max 三档（默认 max）。
+  const alwaysThinking = /kimi-k3|kimi-k2\.7-code/.test(modelId);
+  if (alwaysThinking) {
+    if (mode === "off") {
+      return {
+        mode,
+        enabled: false,
+        unsupportedReason: `Model ${modelId} always thinks and does not support an explicit off thinking mode. Switch thinking strength back to Default or use kimi-k2.6.`,
+      };
+    }
+    const effort = mode === "xhigh" || mode === "max" ? "max" : clampEffort(mode, ["low", "high", "max"]);
+    return {
+      mode,
+      enabled: true,
+      effort,
+      bodyPatch: { reasoning_effort: effort },
+      omitTemperature: true,
+    };
+  }
   if (mode === "off") {
     return {
       mode,

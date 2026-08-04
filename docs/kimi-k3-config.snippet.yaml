@@ -1,0 +1,45 @@
+# Kimi K3 配置片段 — 应用到 ~/.sati/sati.yaml
+
+将下方 `moonshot:` 段替换 `~/.sati/sati.yaml` 中 `model.providers.moonshot:` 的现有内容
+（保持原 apiKey 不变，这里用占位符示意）：
+
+```yaml
+model:
+  providers:
+    moonshot:
+      # 保留你现有的 apiKey，或改用环境变量引用：${MOONSHOT_API_KEY}
+      apiKey: ${MOONSHOT_API_KEY}
+      protocol: openai
+      url: https://api.moonshot.cn/v1
+      models:
+        kimi-k2.6: {}
+        kimi-k3: {}
+```
+
+改动要点：
+
+- 仅新增一行 `kimi-k3: {}`——模型能力（上下文 1M、始终思考、prompt cache、多模态）
+  由内置 catalog 自动补全，无需手写 capabilities。
+- kimi-k3 是"始终思考"模型：显式 `thinking: off` 会被拒绝（返回 unsupportedReason），
+  建议把 thinking strength 设为 Default 或 low/high/max 档位。
+- 之后即可用 `moonshot/kimi-k3` 作为 provider/model 引用（agent.model、
+  router.scenarios.*、UI 模型选择等）。
+
+## 验证方式
+
+重启 Sati 网关后执行（Node 22 环境）：
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v22.22.3/bin:$PATH"
+cd /Users/xujian/projects/Sati
+node -e '
+const { loadPilotConfig } = require("./dist/src/pilot/config/loadPilotConfig.js");
+const snap = loadPilotConfig();
+const m = snap.config.model.providers.moonshot;
+console.log("moonshot models:", Object.keys(m.models));
+console.log("kimi-k3 capabilities:", JSON.stringify(m.models["kimi-k3"].capabilities));
+'
+```
+
+预期输出包含 `kimi-k3` 且 capabilities 中 `supportsThinking: true`、
+`maxContextTokens: 1048576`。

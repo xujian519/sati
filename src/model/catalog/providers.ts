@@ -494,6 +494,9 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
   },
 
   // ── DeepSeek ───────────────────────────────────────────────────────────
+  // 现行模型（官方文档 2026 年中）：deepseek-v4-pro / deepseek-v4-flash。
+  // v4 默认思考（thinking.type + reasoning_effort），支持 prompt cache。
+  // deepseek-chat / deepseek-reasoner 已从官方文档下线，保留仅为兼容存量配置。
 
   deepseek: {
     displayName: "DeepSeek",
@@ -502,7 +505,8 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
     apiKeyEnvVar: "DEEPSEEK_API_KEY",
     models: {
       "deepseek-chat": {
-        displayName: "DeepSeek Chat (V4 Flash)",
+        // Deprecated: 官方文档已下线，保留兼容存量配置（别名旧 v3 语义）。
+        displayName: "DeepSeek Chat (Deprecated)",
         capabilities: {
           supportsToolUse: true,
           supportsStreaming: true,
@@ -518,7 +522,8 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
         aliases: ["deepseek-v3"],
       },
       "deepseek-reasoner": {
-        displayName: "DeepSeek Reasoner",
+        // Deprecated: 官方文档已下线，保留兼容存量配置。
+        displayName: "DeepSeek Reasoner (Deprecated)",
         capabilities: {
           supportsToolUse: false,
           supportsStreaming: true,
@@ -539,10 +544,10 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: false,
+          supportsThinking: true, // 默认思考，thinking.type + reasoning_effort（现 high/max）
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
-          supportsPromptCache: false,
+          supportsPromptCache: true, // usage.prompt_cache_hit_tokens
           maxContextTokens: 1048576,
           maxOutputTokens: 393216,
         },
@@ -555,10 +560,10 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: false,
+          supportsThinking: true, // 默认思考，thinking.type + reasoning_effort（low/high/max）
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
-          supportsPromptCache: false,
+          supportsPromptCache: true, // usage.prompt_cache_hit_tokens
           maxContextTokens: 1048576,
           maxOutputTokens: 393216,
         },
@@ -717,6 +722,9 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
   },
 
   // ── Moonshot / Kimi ────────────────────────────────────────────────────
+  // 现行模型（官方文档 2026 年中）：kimi-k3（旗舰，始终思考不可关闭）、
+  // kimi-k2.7-code(-highspeed)、kimi-k2.6（思考+非思考）。
+  // moonshot-v1 / kimi-k2.5 已于 2026-08-31 下线，不在此收录。
 
   moonshot: {
     displayName: "Moonshot AI (Kimi)",
@@ -724,13 +732,81 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
     defaultUrl: "https://api.moonshot.cn/v1",
     apiKeyEnvVar: "MOONSHOT_API_KEY",
     models: {
+      "kimi-k3": {
+        // 旗舰：始终思考不可关闭（reasoning_effort low/high/max，默认 max）；
+        // 自动上下文缓存（prompt > 256 tokens 命中）；官方另支持视频输入，
+        // 待 InputModality 扩展 video 后补充。
+        displayName: "Kimi K3",
+        capabilities: {
+          supportsToolUse: true,
+          supportsStreaming: true,
+          supportsParallelToolCalls: true,
+          supportsThinking: true,
+          supportsJsonSchema: true,
+          supportsSystemPrompt: true,
+          supportsPromptCache: true,
+          maxContextTokens: 1048576,
+          maxOutputTokens: 1048576,
+        },
+        multimodal: {
+          input: ["text", "image"],
+          maxImagesPerRequest: 20,
+          supportedImageMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          imageDetail: "auto",
+        },
+        aliases: ["moonshotai/kimi-k3"],
+      },
+      "kimi-k2.7-code": {
+        // 代码/agent 场景：仅思考模式（始终思考），256K 上下文。
+        displayName: "Kimi K2.7 Code",
+        capabilities: {
+          supportsToolUse: true,
+          supportsStreaming: true,
+          supportsParallelToolCalls: true,
+          supportsThinking: true,
+          supportsJsonSchema: true,
+          supportsSystemPrompt: true,
+          supportsPromptCache: false,
+          maxContextTokens: 262144,
+          maxOutputTokens: 8192,
+        },
+        multimodal: {
+          input: ["text", "image"],
+          maxImagesPerRequest: 20,
+          supportedImageMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          imageDetail: "auto",
+        },
+        aliases: ["moonshotai/kimi-k2.7-code"],
+      },
+      "kimi-k2.7-code-highspeed": {
+        // 仅思考模式（始终思考），256K 上下文，高吞吐版本。
+        displayName: "Kimi K2.7 Code Highspeed",
+        capabilities: {
+          supportsToolUse: true,
+          supportsStreaming: true,
+          supportsParallelToolCalls: true,
+          supportsThinking: true,
+          supportsJsonSchema: true,
+          supportsSystemPrompt: true,
+          supportsPromptCache: false,
+          maxContextTokens: 262144,
+          maxOutputTokens: 8192,
+        },
+        multimodal: {
+          input: ["text", "image"],
+          maxImagesPerRequest: 20,
+          supportedImageMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
+          imageDetail: "auto",
+        },
+        aliases: ["moonshotai/kimi-k2.7-code-highspeed"],
+      },
       "kimi-k2.6": {
         displayName: "Kimi K2.6",
         capabilities: {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: false,
+          supportsThinking: true, // 支持思考+非思考双模式
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
