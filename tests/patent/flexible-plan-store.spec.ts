@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createFlexiblePlan } from "../../src/patent/flexible-plan.js";
+import { FlexiblePlanError, createFlexiblePlan } from "../../src/patent/flexible-plan.js";
 import { JsonFileFlexiblePlanStore } from "../../src/patent/flexible-plan-store.js";
 
 async function withTempDir(fn: (dir: string) => Promise<void>): Promise<void> {
@@ -67,12 +67,26 @@ test("listCaseIds 列出全部案例", async () => {
   });
 });
 
-test("非法 caseId（路径注入）抛 RangeError", async () => {
+test("非法 caseId（路径注入）被创建层拒绝（fail-closed 前移）", async () => {
   await withTempDir(async dir => {
     const store = new JsonFileFlexiblePlanStore(dir);
-    await assert.rejects(() => store.savePlan(createFlexiblePlan("../evil", "invalidation")), RangeError);
+    // createFlexiblePlan 现在提前拒绝，存储层不再收到非法 caseId
+    assert.throws(() => createFlexiblePlan("../evil", "invalidation"), FlexiblePlanError);
+    // loadPlan 仍防御非法 id（读取侧 RangeError）
     await assert.rejects(() => store.loadPlan("../evil"), RangeError);
     await assert.rejects(() => store.loadPlan(".hidden"), RangeError);
+  });
+});
+
+test("listCaseIds 过滤目录中的外来文件", async () => {
+  await withTempDir(async dir => {
+    const store = new JsonFileFlexiblePlanStore(dir);
+    await store.savePlan(createFlexiblePlan("case-a", "invalidation"));
+    // 外来文件（不匹配安全字符集的 id）不应进入列表——否则 list→load 往返 RangeError
+    await writeFile(join(dir, "draft 2.json"), "{}", "utf8");
+    await writeFile(join(dir, ".hidden.json"), "{}", "utf8");
+    const ids = await store.listCaseIds();
+    assert.deepEqual(ids, ["case-a"]);
   });
 });
 

@@ -11,6 +11,7 @@
  * 执行结果经 confirmStage / rollbackStage 回流。
  */
 
+import { SAFE_ID_PATTERN } from "./persist-utils.js";
 import type { ArticleJudgment, FactBlackboard } from "./reasoning/fact-blackboard.js";
 import type { WorkflowManifest, WorkflowStage } from "./workflow.js";
 
@@ -79,6 +80,11 @@ export function createFlexiblePlan(
 ): FlexiblePlanState {
   if (caseId.trim() === "") throw new FlexiblePlanError("caseId 不能为空");
   if (caseType.trim() === "") throw new FlexiblePlanError("caseType 不能为空");
+  // 与存储层同款字符集校验（fail-closed 前移）：savePlan 之前就把路径注入
+  // 类 caseId 拒之门外，避免"创建成功、持久化时 RangeError"的接受-拒绝分裂。
+  if (!SAFE_ID_PATTERN.test(caseId)) {
+    throw new FlexiblePlanError(`caseId ${JSON.stringify(caseId)} 含非法字符（仅允许 [A-Za-z0-9._-] 且不以点开头）`);
+  }
 
   const nowFn = options.now ?? now;
   const ts = nowFn();
@@ -152,12 +158,14 @@ export function reorderStages(state: FlexiblePlanState, stageIds: string[]): Fle
   return { ...state, stages, currentStageId, updatedAt: now() };
 }
 
-/** 确认阶段：置 confirmed，currentStageId 推进到下一未确认阶段。 */
+/** 确认阶段：置 confirmed，currentStageId 指向首个未确认阶段。 */
 export function confirmStage(state: FlexiblePlanState, stageId: string): FlexiblePlanState {
   assertActive(state);
   const idx = findStageIndex(state, stageId);
   const stages = state.stages.map((s, i) => (i === idx ? { ...s, status: "confirmed" as const } : s));
-  const currentStageId = nextPendingAfter(stages, idx);
+  // 从头扫描而非从被确认阶段之后扫描：乱序确认（提前确认 s3）时，
+  // 更早的 pending 阶段仍须保留在待执行窗口，不能把指针推到 undefined。
+  const currentStageId = firstUnconfirmed(stages);
   return { ...state, stages, currentStageId, updatedAt: now() };
 }
 
@@ -190,6 +198,22 @@ export function attachArticleJudgment(
 ): FlexiblePlanState {
   assertActive(state);
   const idx = findStageIndex(state, stageId);
+  const target = state.stages[idx];
+  if (target === undefined) {
+    throw new FlexiblePlanError(`阶段 "${stageId}" 不存在（计划 ${state.caseId}）`);
+  }
+  // 黑板必须属于同一案件：不同 case 的法条事实混入会把判定写进错误的
+  // 案件事实库，且本案件的执行永远看不到它（按 articleId 键控，零校验）。
+  if (blackboard.caseId !== state.caseId || blackboard.caseType !== state.caseType) {
+    throw new FlexiblePlanError(
+      `attachArticleJudgment: 黑板属于 ${blackboard.caseId}/${blackboard.caseType}，` +
+        `与计划 ${state.caseId}/${state.caseType} 不一致`,
+    );
+  }
+  // 作废（rolled_back）阶段不再接收新判定：回滚后判定随阶段一并失效。
+  if (target.status === "rolled_back") {
+    throw new FlexiblePlanError(`阶段 "${stageId}" 已回退作废，不接受新法条判定`);
+  }
   blackboard.setArticleJudgment(judgment);
   const stages = state.stages.map((s, i) => {
     if (i !== idx) return s;
@@ -202,12 +226,14 @@ export function attachArticleJudgment(
 }
 
 /**
- * 生成 WorkflowManifest 交 runWorkflow 执行：过滤 rolled_back 阶段，
+ * 生成 WorkflowManifest 交 runWorkflow 执行：只发射未完成阶段
+ * （pending 待执行 + rolled_back 回退后待重做），confirmed 已确认不重复执行；
  * goal → description，strategy/atom/params 透传。保持"一条声明式路径"原则。
  */
 export function toManifest(state: FlexiblePlanState): WorkflowManifest {
+  assertActive(state);
   const stages: WorkflowStage[] = state.stages
-    .filter(s => s.status !== "rolled_back")
+    .filter(s => s.status !== "confirmed")
     .map(s => ({
       id: s.id,
       strategy: s.strategy,
@@ -215,6 +241,11 @@ export function toManifest(state: FlexiblePlanState): WorkflowManifest {
       ...(s.atom !== undefined ? { atom: s.atom } : {}),
       ...(s.params !== undefined ? { params: s.params } : {}),
     }));
+  // 无待执行阶段：空 manifest 会让 runWorkflow 抛 WorkflowError（执行层错误），
+  // 在计划层提前以 FlexiblePlanError 拒绝，语义更准确（fail-closed）。
+  if (stages.length === 0) {
+    throw new FlexiblePlanError(`计划 ${state.caseId} 没有待执行阶段（全部已确认）`);
+  }
   return {
     id: `flexible_${state.caseId}`,
     name: `灵活计划 ${state.caseId}`,
@@ -233,13 +264,17 @@ export function complete(state: FlexiblePlanState): FlexiblePlanState {
 /** 放弃计划：pending 置 rolled_back（已确认保留审计），status → abandoned，记录原因。 */
 export function abandon(state: FlexiblePlanState, reason: string): FlexiblePlanState {
   assertActive(state);
+  // 原因用于审计，空值会让 abandonReason 缺失/不可追溯——fail-closed。
+  if (reason.trim() === "") {
+    throw new FlexiblePlanError("abandon: reason 不能为空");
+  }
   const stages = state.stages.map(s => (s.status === "pending" ? { ...s, status: "rolled_back" as const } : s));
   return {
     ...state,
     status: "abandoned",
     stages,
     currentStageId: undefined,
-    abandonReason: reason,
+    abandonReason: reason.trim(),
     updatedAt: now(),
   };
 }
@@ -255,14 +290,58 @@ export function fromJSON(text: string): FlexiblePlanState {
   if (typeof data.caseId !== "string" || data.caseId.trim() === "") {
     throw new FlexiblePlanError("fromJSON: 非法计划快照（caseId 缺失）");
   }
+  // caseId 字符集与存储层一致：含路径分隔符的快照在 savePlan 必然 RangeError，
+  // 解析时提前拒绝，错误类型统一为 FlexiblePlanError。
+  if (!SAFE_ID_PATTERN.test(data.caseId)) {
+    throw new FlexiblePlanError(
+      `fromJSON: caseId ${JSON.stringify(data.caseId)} 含非法字符（仅允许 [A-Za-z0-9._-] 且不以点开头）`,
+    );
+  }
   if (typeof data.caseType !== "string" || data.caseType.trim() === "") {
     throw new FlexiblePlanError("fromJSON: 非法计划快照（caseType 缺失）");
+  }
+  if (data.status !== "active" && data.status !== "completed" && data.status !== "abandoned") {
+    throw new FlexiblePlanError(`fromJSON: 未知计划状态 "${String(data.status)}"`);
   }
   if (!Array.isArray(data.stages)) {
     throw new FlexiblePlanError("fromJSON: 非法计划快照（stages 缺失）");
   }
-  if (data.status !== "active" && data.status !== "completed" && data.status !== "abandoned") {
-    throw new FlexiblePlanError(`fromJSON: 未知计划状态 "${String(data.status)}"`);
+  const ids = new Set<string>();
+  for (const stage of data.stages) {
+    if (typeof stage !== "object" || stage === null) {
+      throw new FlexiblePlanError("fromJSON: 非法计划快照（stages 含非对象元素）");
+    }
+    if (typeof stage.id !== "string" || stage.id.trim() === "") {
+      throw new FlexiblePlanError("fromJSON: 非法计划快照（stage.id 缺失）");
+    }
+    if (ids.has(stage.id)) {
+      throw new FlexiblePlanError(`fromJSON: 重复的阶段 id: ${stage.id}`);
+    }
+    ids.add(stage.id);
+    if (typeof stage.name !== "string") {
+      throw new FlexiblePlanError(`fromJSON: 阶段 ${stage.id} 的 name 非法`);
+    }
+    if (typeof stage.goal !== "string" || stage.goal.trim() === "") {
+      throw new FlexiblePlanError(`fromJSON: 阶段 ${stage.id} 缺少 goal`);
+    }
+    if (stage.strategy !== "chain" && stage.strategy !== "react" && stage.strategy !== "sub_agent") {
+      throw new FlexiblePlanError(`fromJSON: 阶段 ${stage.id} 的 strategy 非法`);
+    }
+    if (stage.status !== "pending" && stage.status !== "confirmed" && stage.status !== "rolled_back") {
+      throw new FlexiblePlanError(`fromJSON: 阶段 ${stage.id} 的 status 非法`);
+    }
+    if (!Array.isArray(stage.artifacts)) {
+      throw new FlexiblePlanError(`fromJSON: 阶段 ${stage.id} 的 artifacts 非法`);
+    }
+    if (!Array.isArray(stage.constraintIds)) {
+      throw new FlexiblePlanError(`fromJSON: 阶段 ${stage.id} 的 constraintIds 非法`);
+    }
+    if (!Array.isArray(stage.articleJudgments)) {
+      throw new FlexiblePlanError(`fromJSON: 阶段 ${stage.id} 的 articleJudgments 非法`);
+    }
+  }
+  if (data.currentStageId !== undefined && !ids.has(data.currentStageId)) {
+    throw new FlexiblePlanError(`fromJSON: currentStageId "${String(data.currentStageId)}" 不属于任何阶段`);
   }
   return data;
 }
@@ -283,15 +362,6 @@ function findStageIndex(state: FlexiblePlanState, stageId: string): number {
     throw new FlexiblePlanError(`阶段 "${stageId}" 不存在（计划 ${state.caseId}）`);
   }
   return idx;
-}
-
-/** 从 fromIndex 之后找第一个未确认阶段。 */
-function nextPendingAfter(stages: readonly FlexibleStage[], fromIndex: number): string | undefined {
-  for (let i = fromIndex + 1; i < stages.length; i += 1) {
-    const s = stages[i];
-    if (s !== undefined && s.status !== "confirmed") return s.id;
-  }
-  return undefined;
 }
 
 /** 从头找第一个未确认阶段（无待执行阶段时为 undefined）。 */

@@ -5,6 +5,8 @@
  *   统一从本 barrel 导入，勿深路径直入内部文件；声明式规则镜像：
  *   rules/patent/compliance.yaml 与本模块的关键词表互为镜像（改词需两处同步，注释互指）。
  * - workflow：声明式工作流执行器（内置 patentNoveltyManifest 五阶段新颖性分析）
+ * - flexible-plan：灵活计划层（阶段级生命周期管理：增删改阶段/逐阶段确认/
+ *   回退重做/法条判定挂接，toManifest 交 runWorkflow 执行）
  * - plantask：人机协作计划状态机（HITL 闭环：planning→approval→executing→feedback→replanning）
  * - worker-contract：Worker 契约注册表与输出校验（defaultPatentWorkers 内置目录）
  */
@@ -47,6 +49,31 @@ export {
   validateWorkflowManifestDag,
   workflowManifestToMermaid,
 } from "./workflow-dag.js";
+
+export {
+  FlexiblePlanError,
+  createFlexiblePlan,
+  addStage,
+  removeStage,
+  reorderStages,
+  confirmStage,
+  rollbackStage,
+  attachArticleJudgment,
+  toManifest,
+  complete,
+  abandon,
+  toJSON,
+  fromJSON,
+  type FlexibleStageStatus,
+  type FlexibleStage,
+  type FlexiblePlanStatus,
+  type FlexiblePlanState,
+  type CreateFlexiblePlanOptions,
+} from "./flexible-plan.js";
+export {
+  type FlexiblePlanStore,
+  JsonFileFlexiblePlanStore,
+} from "./flexible-plan-store.js";
 
 export {
   InMemoryWorkflowRunStore,
