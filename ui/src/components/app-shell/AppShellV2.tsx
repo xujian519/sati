@@ -22,6 +22,7 @@ import { api } from "../../utils/api";
 import { resolveMarkdownFileHref } from "../chat/utils/resolveMarkdownFileHref";
 import type { SessionNavigationOptions } from "../main-content/types/types";
 import { ConnectionBanner } from "../ui/ConnectionBanner";
+import ErrorBoundary from "../main-content/view/ErrorBoundary";
 import SidebarV2 from "./SidebarV2";
 import MainAreaV2 from "./MainAreaV2";
 import { chooseDefaultProject } from "./appShellSelection";
@@ -613,129 +614,131 @@ export default function AppShellV2() {
   );
 
   return (
-    <div className="ui-v2 fixed inset-0 flex flex-col bg-white font-sans text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
-      <ConnectionBanner />
-      <div className="flex min-h-0 flex-1">
-        {!isMobile ? (
-          desktopSidebarOpen ? (
-            sidebar
-          ) : null
-        ) : (
-          <div
-            className={`fixed inset-0 z-50 flex transition-opacity duration-150 ease-out ${
-              sidebarOpen ? "visible opacity-100" : "invisible opacity-0"
-            }`}
-          >
-            <button
-              type="button"
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => setSidebarOpen(false)}
-              aria-label="Close sidebar"
-            />
+    <ErrorBoundary>
+      <div className="ui-v2 fixed inset-0 flex flex-col bg-white font-sans text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+        <ConnectionBanner />
+        <div className="flex min-h-0 flex-1">
+          {!isMobile ? (
+            desktopSidebarOpen ? (
+              sidebar
+            ) : null
+          ) : (
             <div
-              className={`relative h-full w-[85vw] max-w-sm transform transition-transform duration-150 ${
-                sidebarOpen ? "translate-x-0" : "-translate-x-full"
+              className={`fixed inset-0 z-50 flex transition-opacity duration-150 ease-out ${
+                sidebarOpen ? "visible opacity-100" : "invisible opacity-0"
               }`}
-              onClick={e => e.stopPropagation()}
             >
-              {sidebar}
+              <button
+                type="button"
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Close sidebar"
+              />
+              <div
+                className={`relative h-full w-[85vw] max-w-sm transform transition-transform duration-150 ${
+                  sidebarOpen ? "translate-x-0" : "-translate-x-full"
+                }`}
+                onClick={e => e.stopPropagation()}
+              >
+                {sidebar}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <MainAreaV2
-            projects={sidebarSharedProps.projects}
-            selectedProject={selectedProject}
-            selectedSession={selectedSession}
-            activeTab={activeTab}
-            setActiveTab={handleSelectTab}
-            ws={ws}
-            sendMessage={sendMessage}
-            latestMessage={latestMessage}
-            isMobile={isMobile}
-            onMenuClick={onMenuClick}
-            isLoading={isLoadingProjects}
-            onInputFocusChange={setIsInputFocused}
-            onSessionActive={markSessionAsActive}
-            onSessionInactive={handleSessionInactive}
-            onSessionProcessing={markSessionAsProcessing}
-            onSessionNotProcessing={markSessionAsNotProcessing}
-            onSessionActivityBump={bumpSessionActivity}
-            processingSessions={processingSessions}
-            unreadSessionIds={unreadSessionIds}
-            onReplaceTemporarySession={handleReplaceTemporarySession}
-            onNavigateToSession={(sid: string) => {
-              setSelectedSession(prev => (prev?.id === sid ? prev : ({ id: sid } as ProjectSession)));
-              navigate(`/session/${sid}`);
-            }}
-            onStartNewSession={handleStartNewSession}
-            onSelectSession={handleSelectSession}
-            onShowSettings={onShowSettings}
-            onSelectProjectByName={(name: string) => {
-              const target = sidebarSharedProps.projects.find(p => p.name === name);
-              if (target) {
-                userSelectedProjectRef.current = target.name;
-                setSelectedProject(target);
-                setSelectedSession(null);
-                setActiveTab("dashboard");
-                navigate(`/p/${encodeURIComponent(target.name)}`);
-              }
-            }}
-            isSidebarCollapsed={!isMobile && !desktopSidebarOpen}
-            onOpenSidebar={onOpenDesktopSidebar}
-            externalMessageUpdate={externalMessageUpdate}
-            misroutedFileFromUrl={misroutedFileFromUrl}
-            onMisroutedFileUrlHandled={handleMisroutedFileUrlHandled}
-          />
-        </main>
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <MainAreaV2
+              projects={sidebarSharedProps.projects}
+              selectedProject={selectedProject}
+              selectedSession={selectedSession}
+              activeTab={activeTab}
+              setActiveTab={handleSelectTab}
+              ws={ws}
+              sendMessage={sendMessage}
+              latestMessage={latestMessage}
+              isMobile={isMobile}
+              onMenuClick={onMenuClick}
+              isLoading={isLoadingProjects}
+              onInputFocusChange={setIsInputFocused}
+              onSessionActive={markSessionAsActive}
+              onSessionInactive={handleSessionInactive}
+              onSessionProcessing={markSessionAsProcessing}
+              onSessionNotProcessing={markSessionAsNotProcessing}
+              onSessionActivityBump={bumpSessionActivity}
+              processingSessions={processingSessions}
+              unreadSessionIds={unreadSessionIds}
+              onReplaceTemporarySession={handleReplaceTemporarySession}
+              onNavigateToSession={(sid: string) => {
+                setSelectedSession(prev => (prev?.id === sid ? prev : ({ id: sid } as ProjectSession)));
+                navigate(`/session/${sid}`);
+              }}
+              onStartNewSession={handleStartNewSession}
+              onSelectSession={handleSelectSession}
+              onShowSettings={onShowSettings}
+              onSelectProjectByName={(name: string) => {
+                const target = sidebarSharedProps.projects.find(p => p.name === name);
+                if (target) {
+                  userSelectedProjectRef.current = target.name;
+                  setSelectedProject(target);
+                  setSelectedSession(null);
+                  setActiveTab("dashboard");
+                  navigate(`/p/${encodeURIComponent(target.name)}`);
+                }
+              }}
+              isSidebarCollapsed={!isMobile && !desktopSidebarOpen}
+              onOpenSidebar={onOpenDesktopSidebar}
+              externalMessageUpdate={externalMessageUpdate}
+              misroutedFileFromUrl={misroutedFileFromUrl}
+              onMisroutedFileUrlHandled={handleMisroutedFileUrlHandled}
+            />
+          </main>
 
-        {sidebarSharedProps.showSettings
-          ? ReactDOM.createPortal(
-              <SettingsComponent
-                isOpen={sidebarSharedProps.showSettings}
-                onClose={onCloseSettings}
-                projects={sidebarSharedProps.projects.map(normalizeProjectForSettings)}
-                initialTab={sidebarSharedProps.settingsInitialTab || "appearance"}
-              />,
-              document.body,
-            )
-          : null}
+          {sidebarSharedProps.showSettings
+            ? ReactDOM.createPortal(
+                <SettingsComponent
+                  isOpen={sidebarSharedProps.showSettings}
+                  onClose={onCloseSettings}
+                  projects={sidebarSharedProps.projects.map(normalizeProjectForSettings)}
+                  initialTab={sidebarSharedProps.settingsInitialTab || "appearance"}
+                />,
+                document.body,
+              )
+            : null}
 
-        {showNewProject
-          ? ReactDOM.createPortal(
-              <ProjectCreationWizard onClose={handleCloseNewProject} onProjectCreated={handleProjectCreated} />,
-              document.body,
-            )
-          : null}
+          {showNewProject
+            ? ReactDOM.createPortal(
+                <ProjectCreationWizard onClose={handleCloseNewProject} onProjectCreated={handleProjectCreated} />,
+                document.body,
+              )
+            : null}
 
-        {deleteTarget
-          ? ReactDOM.createPortal(
-              <DeleteProjectDialog
-                project={deleteTarget}
-                isDeleting={isDeletingProject}
-                error={deleteError}
-                onCancel={handleCancelDelete}
-                onConfirm={handleConfirmDelete}
-              />,
-              document.body,
-            )
-          : null}
+          {deleteTarget
+            ? ReactDOM.createPortal(
+                <DeleteProjectDialog
+                  project={deleteTarget}
+                  isDeleting={isDeletingProject}
+                  error={deleteError}
+                  onCancel={handleCancelDelete}
+                  onConfirm={handleConfirmDelete}
+                />,
+                document.body,
+              )
+            : null}
 
-        {deleteSessionTarget
-          ? ReactDOM.createPortal(
-              <DeleteSessionDialog
-                target={deleteSessionTarget}
-                isDeleting={isDeletingSession}
-                error={deleteSessionError}
-                onCancel={handleCancelDeleteSession}
-                onConfirm={handleConfirmDeleteSession}
-              />,
-              document.body,
-            )
-          : null}
+          {deleteSessionTarget
+            ? ReactDOM.createPortal(
+                <DeleteSessionDialog
+                  target={deleteSessionTarget}
+                  isDeleting={isDeletingSession}
+                  error={deleteSessionError}
+                  onCancel={handleCancelDeleteSession}
+                  onConfirm={handleConfirmDeleteSession}
+                />,
+                document.body,
+              )
+            : null}
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 }
 

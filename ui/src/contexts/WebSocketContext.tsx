@@ -6,6 +6,25 @@ import { IS_PLATFORM } from "../constants/config";
 
 type WSSubscriber = (msg: any) => void;
 
+/**
+ * 高频流式增量事件：不进 `latestMessage` state（避免每条流式帧触发
+ * 消费 latestMessage 的组件 re-render）。流式渲染应走 subscribe 通道。
+ */
+const STREAMING_NOISE_TYPES = new Set([
+  "assistant_text_delta",
+  "assistant_thinking_delta",
+  "tool_call_delta",
+  "tool_call_finished",
+  "tool_call_started",
+  "agent_status",
+]);
+
+function isStreamingNoise(data: unknown): boolean {
+  if (typeof data !== "object" || data === null) return false;
+  const type = (data as { type?: unknown }).type;
+  return typeof type === "string" && STREAMING_NOISE_TYPES.has(type);
+}
+
 export type ReconnectInfo = {
   attempt: number;
   nextRetryMs: number;
@@ -169,7 +188,14 @@ const useWebSocketProviderState = (): WebSocketContextType => {
                 }
               });
             }
-            setLatestMessage(data);
+            // 高频流式增量事件（text_delta 等）不进 latestMessage state：
+            // 已核实的消费方（useProjectsState/useChatRealtimeHandlers/
+            // TaskMasterContext）只消费 loading_progress、projects_updated、
+            // session-status、taskmaster-* 等低频结构性事件；流式渲染走
+            // subscribe 通道。避免每条流式帧触发 AppShellV2 整树 re-render。
+            if (!isStreamingNoise(data)) {
+              setLatestMessage(data);
+            }
           } catch (error) {
             console.error("Error parsing WebSocket message:", error);
           }

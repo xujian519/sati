@@ -5,7 +5,7 @@ import type { CodeEditorTab } from "../types/types";
 import CodeEditor from "./CodeEditor";
 import CodeEditorTabBar from "./subcomponents/CodeEditorTabBar";
 
-type EditorSidebarProps = {
+export type EditorSidebarProps = {
   editorTabs: CodeEditorTab[];
   activeEditorTabId: string | null;
   isMobile: boolean;

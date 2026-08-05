@@ -21,7 +21,9 @@ import { useTaskMaster } from "../../../contexts/TaskMasterContext";
 import { useTasksSettings } from "../../../contexts/TasksSettingsContext";
 import { useUiPreferences } from "../../../hooks/useUiPreferences";
 import { useEditorSidebar } from "../../code-editor/hooks/useEditorSidebar";
-import EditorSidebar from "../../code-editor/view/EditorSidebar";
+// CodeMirror 全家（约 675KB）仅在用户打开编辑器时加载，避免首屏同步下载/执行。
+const EditorSidebar = React.lazy(() => import("../../code-editor/view/EditorSidebar"));
+import type { EditorSidebarProps } from "../../code-editor/view/EditorSidebar";
 import type { CodeEditorDiffInfo } from "../../code-editor/types/types";
 import type { AlwaysOnSessionTarget, AppTab, Project, ProjectSession } from "../../../types/app";
 import { isReadOnlySession } from "../../../types/app";
@@ -503,7 +505,7 @@ type SplitBodyProps = {
   onFileDelete: (deletedPath: string) => void;
   onSelectProjectByName?: (projectName: string) => void;
   isMobile: boolean;
-  editorSidebarProps: React.ComponentProps<typeof EditorSidebar>;
+  editorSidebarProps: EditorSidebarProps;
 };
 
 function SplitBody(props: SplitBodyProps) {
@@ -844,7 +846,15 @@ function SplitBody(props: SplitBodyProps) {
       {isFiles && showChat && (hasEditor || !isMobile) ? (
         <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col overflow-hidden bg-neutral-50/40 dark:bg-neutral-950">
           {hasEditor && selectedProject ? (
-            <EditorSidebar {...editorSidebarProps} workspaceMode />
+            <Suspense
+              fallback={
+                <div className="flex min-h-0 flex-1 items-center justify-center bg-neutral-50/40 dark:bg-neutral-950">
+                  <TabSkeleton />
+                </div>
+              }
+            >
+              <EditorSidebar {...editorSidebarProps} workspaceMode />
+            </Suspense>
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-8 text-center">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-400 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500">

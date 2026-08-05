@@ -4,6 +4,8 @@ import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+// 编辑器（EditorSidebar chunk 内按需加载）：katex 样式随本模块打包，不伤首屏。
+import "katex/dist/katex.min.css";
 import { resolveMarkdownFileHref } from "../../../../chat/utils/resolveMarkdownFileHref";
 import MarkdownCodeBlock from "./MarkdownCodeBlock";
 
