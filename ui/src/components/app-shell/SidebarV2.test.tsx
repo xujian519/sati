@@ -20,7 +20,7 @@ const project: Project = {
   sessions: [],
 };
 
-function renderSidebar(selectedProject: Project | null) {
+function renderSidebar(selectedProject: Project | null, onCollapse?: () => void) {
   const props: ComponentProps<typeof SidebarV2> = {
     projects: [general, project],
     selectedProject,
@@ -34,6 +34,7 @@ function renderSidebar(selectedProject: Project | null) {
     onRequestDeleteProject: vi.fn(),
     onRequestDeleteSession: vi.fn(),
     onShowSettings: vi.fn(),
+    onCollapse,
   };
 
   const utils = render(
@@ -93,5 +94,23 @@ describe("SidebarV2 project click behavior", () => {
     clickProjectRow();
 
     expect(props.onSelectProject).not.toHaveBeenCalled();
+  });
+});
+
+describe("SidebarV2 collapse button", () => {
+  it("hides the collapse button when no onCollapse handler is provided", () => {
+    renderSidebar(null);
+
+    expect(screen.queryByRole("button", { name: "Hide sidebar" })).toBeNull();
+  });
+
+  it("renders the collapse button and fires onCollapse on click", () => {
+    const onCollapse = vi.fn();
+    renderSidebar(null, onCollapse);
+
+    const button = screen.getByRole("button", { name: "Hide sidebar" });
+    fireEvent.click(button);
+
+    expect(onCollapse).toHaveBeenCalledTimes(1);
   });
 });

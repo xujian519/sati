@@ -15,6 +15,7 @@ import {
   ChevronsUpDown,
   Folder,
   MessageSquarePlus,
+  PanelLeftClose,
   Pencil,
   Plus,
   GitBranch,
@@ -996,6 +997,17 @@ export default function SidebarV2({
             </span>
           </button>
         </div>
+        {onCollapse ? (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label={t("sidebar:tooltips.hideSidebar", { defaultValue: "Hide sidebar" }) as string}
+            title={t("sidebar:tooltips.hideSidebar", { defaultValue: "Hide sidebar" }) as string}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+          >
+            <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
+          </button>
+        ) : null}
       </div>
 
       {/* Brand divider — subtle gradient line under the logo area */}

@@ -52,8 +52,7 @@ vi.mock("react-markdown", () => ({
   default: ({ children }: { children?: React.ReactNode }) => React.createElement(React.Fragment, null, children),
 }));
 
-const MockIcon = ({ children: _children, ...props }: React.SVGProps<SVGSVGElement>) =>
-  React.createElement("svg", props);
+const MockIcon = (props: React.SVGProps<SVGSVGElement>) => React.createElement("svg", props);
 
 vi.mock("lucide-react", () => ({
   Activity: MockIcon,
@@ -91,6 +90,7 @@ vi.mock("lucide-react", () => ({
   MessageSquareText: MockIcon,
   MoreHorizontal: MockIcon,
   Paperclip: MockIcon,
+  PanelLeftClose: MockIcon,
   PanelLeftOpen: MockIcon,
   PanelRightClose: MockIcon,
   PanelRightOpen: MockIcon,
