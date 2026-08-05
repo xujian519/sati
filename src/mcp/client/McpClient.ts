@@ -37,6 +37,7 @@ import { truncateMcpToolDescription } from "../runtime/truncate.js";
 import { buildMcpToolWireName } from "../protocol/wireName.js";
 import { networkFetch } from "../../network/fetch.js";
 import type { SatiMcpResource, SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
+import { APP_VERSION } from "../../version.js";
 
 const DEFAULT_CALL_TIMEOUT_MS = parseInt(process.env.SATI_MCP_TOOL_TIMEOUT_MS ?? "60000", 10);
 const LIST_TOOLS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -110,7 +111,7 @@ export class McpClient {
   private async runConnect(): Promise<void> {
     this.status = "connecting";
     const transport = this.buildTransport();
-    const client = new Client({ name: "sati", version: "0.1.0" }, { capabilities: { elicitation: {} } });
+    const client = new Client({ name: "sati", version: APP_VERSION }, { capabilities: { elicitation: {} } });
     const handshakeMs = this.options.handshakeTimeoutMs ?? 10_000;
     try {
       await withTimeout(

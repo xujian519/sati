@@ -1,8 +1,9 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { TuiAppState } from "./types.js";
-import { satiDarkBlueTheme } from "./theme.js";
+import { APP_VERSION } from "../../../../version.js";
 import { CondensedLogo } from "./SatiLogo.js";
+import { satiDarkBlueTheme } from "./theme.js";
+import type { TuiAppState } from "./types.js";
 
 export function StatusLine(props: {
   state: TuiAppState;
@@ -16,7 +17,7 @@ export function StatusLine(props: {
     <Box borderStyle="single" borderColor={satiDarkBlueTheme.border} paddingX={1} justifyContent="space-between">
       <Box gap={1}>
         <CondensedLogo />
-        <Text color={satiDarkBlueTheme.subtle}>v0.1.0</Text>
+        <Text color={satiDarkBlueTheme.subtle}>v{APP_VERSION}</Text>
       </Box>
       <Text color={satiDarkBlueTheme.subtle}>
         {props.model ?? "model"} · {props.state.mode} · {shortenPath(props.cwd)} · {connection}

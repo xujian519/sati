@@ -173,6 +173,23 @@ pd_release_assert_not_lfs_pointer() {
 }
 
 VERSION="$(node -e "console.log(require('${DESKTOP_DIR}/package.json').version)")"
+# Version lockstep: repo-root and ui package.json versions must match the desktop
+# version. Gateway hello frames (serverVersion), the MCP client identity and the TUI
+# header all read the repo-root package.json (src/version.ts); a mismatch makes the
+# installed desktop version and the reported internal version diverge. Use
+# `node scripts/bump-version.mjs` to bump all three in one go (see RELEASING.md).
+ROOT_VERSION="$(node -e "console.log(require('${REPO_ROOT}/package.json').version)")"
+UI_VERSION="$(node -e "console.log(require('${SATIUI_DIR}/package.json').version)")"
+if [[ "$ROOT_VERSION" != "$VERSION" ]]; then
+  fail "Repo-root package.json version (${ROOT_VERSION}) != desktop version (${VERSION}).
+    Keep versions in lockstep: run 'node scripts/bump-version.mjs' from the repo root,
+    or set package.json#version to ${VERSION} before releasing."
+fi
+if [[ "$UI_VERSION" != "$VERSION" ]]; then
+  fail "ui/package.json version (${UI_VERSION}) != desktop version (${VERSION}).
+    Keep versions in lockstep: run 'node scripts/bump-version.mjs' from the repo root,
+    or set ui/package.json#version to ${VERSION}."
+fi
 APP_OUT="${DESKTOP_DIR}/dist-electron/mac-arm64/Sati.app"
 DMG_OUT="${DESKTOP_DIR}/dist-electron/Sati-${VERSION}-arm64.dmg"
 
@@ -232,9 +249,9 @@ else
   else
     if [[ "${ALLOW_UNTAGGED:-0}" != "1" ]]; then
       fail "No git tag '${EXPECTED_TAG}' for version ${VERSION}.
-    先跑: (cd apps/desktop && pnpm version patch -m 'release(desktop): v%s')
-    本地测试可加: ALLOW_UNTAGGED=1 bash scripts/release.sh --ad-hoc
-    完整流程见: apps/desktop/RELEASING.md"
+    Run 'node scripts/bump-version.mjs' from the repo root first, then tag the release commit.
+    Local testing can bypass with: ALLOW_UNTAGGED=1 bash scripts/release.sh --ad-hoc
+    Full flow: apps/desktop/RELEASING.md"
     fi
     warn "No git tag '${EXPECTED_TAG}' (ALLOW_UNTAGGED=1)"
   fi

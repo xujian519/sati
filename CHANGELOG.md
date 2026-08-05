@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.0.16 - 2026-08-04
+
+### Added
+- 引入 nuo-patent 数据引擎与专利检索/元数据/法律状态三个内置工具（patent_search / patent_metadata / patent_legal_status）
+- 新增独立专利创造性 workflow，并接线 workflow-runs 持久化与 DAG 桥接
+- 补全 dual-track 确定性规则检查器与 disclosure 管线
+- patent-retriever 角色检索方法升级为结构化工具优先
+- 引入免费无 key 学术论文检索 paper_search / paper_list_sources（arXiv / OpenAlex / Semantic Scholar / Crossref）
+- 知识系统能力自检与启动诊断、语义召回熔断与检索结果短时缓存
+- 短 query 检索回退最近用户消息
+- 桌面端 UI 全面美化：品牌色体系 + 「正念智能体」品牌名统一、侧边栏与输入框交互打磨
+
+### Fixed
+- 修复 pnpm workspace 启动并消除 memory-core 构建竞态
+- 修复压缩后 token budget 在聊天历史中的展示
+- 加固专利输出门禁（pending 时序、否定语境、中文数字、审批守卫）
+
+### Changed
+- 去重 IM 渠道渲染与命令样板
+- 拆分压缩引擎并去重 compact budget
+- 依赖升级并加固 audit 配置；强制 Node 22 major runtime
+- 清理 lint 债务、补充核心子系统测试、同步 i18n
+- 文档：新增 nuo-patent 数据引擎集成方案、桌面端 UI 美化概览；清除 PilotDeck 残留
+
 ## v0.0.13 - 2026-08-03
 
 ### Added

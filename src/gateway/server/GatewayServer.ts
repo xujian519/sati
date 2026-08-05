@@ -4,6 +4,7 @@ import type { Duplex } from "node:stream";
 import { resolve } from "node:path";
 import type { Gateway } from "../protocol/types.js";
 import { handleWebApiRequest } from "../../adapters/web/httpRouter.js";
+import { APP_VERSION } from "../../version.js";
 import { createWebSocketAcceptValue, TextWebSocketConnection } from "./websocket.js";
 import { GatewayWsConnection } from "./GatewayWsConnection.js";
 import { ensureGatewayAuthToken } from "./authToken.js";
@@ -136,7 +137,7 @@ function handleUpgrade(
   const conn = new GatewayWsConnection(ws, {
     gateway: options.gateway,
     token,
-    serverVersion: options.serverVersion ?? "0.1.0",
+    serverVersion: options.serverVersion ?? APP_VERSION,
   });
   connections.add(conn);
   conn.onClose(() => connections.delete(conn));

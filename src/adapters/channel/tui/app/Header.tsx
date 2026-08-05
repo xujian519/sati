@@ -1,7 +1,8 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { TuiAppState } from "./types.js";
+import { APP_VERSION } from "../../../../version.js";
 import { satiDarkBlueTheme } from "./theme.js";
+import type { TuiAppState } from "./types.js";
 
 export function Header({
   state,
@@ -27,7 +28,9 @@ export function Header({
           Deck
         </Text>
         <Text color={satiDarkBlueTheme.brandAccent}> ↗</Text>
-        <Text color={satiDarkBlueTheme.subtle}>{"  "}v0.1.0</Text>
+        <Text color={satiDarkBlueTheme.subtle}>
+          {"  "}v{APP_VERSION}
+        </Text>
       </Text>
       <Text color={satiDarkBlueTheme.subtle}>
         {model ?? "model"} · {state.mode} · {shortenPath(cwd)} · {connection}

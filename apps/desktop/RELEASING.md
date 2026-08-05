@@ -3,30 +3,33 @@
 > 简短规则：**版本号必须和 git tag 一一对应**。`apps/desktop/package.json#version` 是
 > 所有版本号的 source of truth；git tag `vX.Y.Z` 把它钉到具体 commit。release.sh
 > 会校验这两件事，避免发出"找不到对应代码"的 DMG。
+>
+> **版本号 lockstep（全仓库）**：仓库根 `package.json` 与 `ui/package.json` 的 `version`
+> 必须与 `apps/desktop/package.json` **完全一致**（release.sh 预检强制根版本 == 桌面版本）。
+> 后端 gateway hello 帧、MCP 客户端标识、TUI 头部显示都从根 `package.json` 读取
+> （见 `src/version.ts`，浏览器侧经 `ui/vite.config.js` 注入），保证「用户安装的桌面版本」
+> 与「内部上报的版本」永远一致——bump 桌面版本时请同步改根 `package.json`。
 
 ---
 
 ## TL;DR — 90% 的发版流程
 
-> **Workspace 注意**：pnpm 10 的 `pnpm version` 在 pnpm workspace 内运行**只改
-> `package.json`，不会自动 git commit / git tag**（pnpm 11 文档描述的行为不适用于
-> 10.x workspace）。因此 git 部分需手动补，见下方完整命令。commit-msg hook 已支持
-> `release` type（见 `scripts/check-commit-msg.mjs`）。
+> **注意**：`bump-version.mjs`（以及 pnpm 10 workspace 内的 `pnpm version`）**只改
+> `package.json`，不会自动 git commit / git tag**。因此 git 部分需手动补，见下方
+> 完整命令。commit-msg hook 已支持 `release` type（见 `scripts/check-commit-msg.mjs`）。
 
 ```bash
-# 1. 在 apps/desktop/ 下，bump 版本号（只改 package.json）
-cd apps/desktop
-pnpm version patch   # 0.1.0 → 0.1.1（仅修 bug）
+# 1. 从仓库根 bump 版本号——根 / apps/desktop / ui 三处同步（lockstep，一次完成）
+node scripts/bump-version.mjs patch   # 0.0.16 → 0.0.17（仅修 bug）
 # 或：
-pnpm version minor   # 0.1.0 → 0.2.0（加新功能）
-pnpm version major   # 0.1.0 → 1.0.0（破坏性更新）
+node scripts/bump-version.mjs minor   # 0.0.16 → 0.1.0（加新功能）
+node scripts/bump-version.mjs major   # 0.0.x → 1.0.0（破坏性更新）
 
-# 2. 写一行 CHANGELOG（顶部追加），然后手动补 git commit + tag（pnpm version 不做这步）
-$EDITOR ../../CHANGELOG.md
-cd ..
-git add apps/desktop/package.json CHANGELOG.md
-git commit -m "release(desktop): v0.0.13"        # %s 需手动替换成实际版本号
-git tag -a v0.0.13 -m "release(desktop): v0.0.13"
+# 2. 写一行 CHANGELOG（顶部追加），然后手动补 git commit + tag（脚本不做这两步）
+$EDITOR CHANGELOG.md
+git add package.json apps/desktop/package.json ui/package.json CHANGELOG.md
+git commit -m "release(desktop): v0.0.17"        # %s 需手动替换成实际版本号
+git tag -a v0.0.17 -m "release(desktop): v0.0.17"
 
 # 3. 推 commit + tag 到 origin
 git push --follow-tags
@@ -161,25 +164,27 @@ SATI_RUN_REAL_AGENT_LIFECYCLE_E2E=1 bash apps/desktop/scripts/release-l3.sh
 
 | 改动类型 | bump 哪段 | 例子 |
 |---|---|---|
-| 仅修 bug，用户行为不变 | **patch** | 0.1.0 → 0.1.1（修了 provider test 误报 400） |
-| 加新功能，向后兼容 | **minor** | 0.1.0 → 0.2.0（加了 provider test 弹窗） |
+| 仅修 bug，用户行为不变 | **patch** | 0.0.16 → 0.0.17（修了 provider test 误报 400） |
+| 加新功能，向后兼容 | **minor** | 0.0.16 → 0.1.0（加了 provider test 弹窗） |
 | 用户必须重装/重配，配置文件不兼容 | **major** | 0.x → 1.0.0；1.x → 2.0.0 |
 
 **0.x 阶段（当前）**：所有破坏性改动都走 **minor** 即可，不必动 major——这是 SemVer 对
-0.x 的"宽容期"约定。等到产品稳定再 `pnpm version major` 跳到 1.0.0。
+0.x 的"宽容期"约定。等到产品稳定再 `node scripts/bump-version.mjs major` 跳到 1.0.0。
 
 ---
 
 ## Pre-release（rc / beta）
 
-发给少量用户验证、不公开宣传时用：
+发给少量用户验证、不公开宣传时用。`bump-version.mjs` 只支持 patch/minor/major，
+rc 流程仍用 `pnpm version prerelease`（在 apps/desktop/ 下），**完成后需手动把
+根 `package.json` 与 `ui/package.json` 的 version 同步为同一值**（lockstep）：
 
 ```bash
-pnpm version prerelease --preid=rc -m "release(desktop): v%s"  # 0.2.0 → 0.2.1-rc.0
+pnpm version prerelease --preid=rc -m "release(desktop): v%s"  # 0.0.17 → 0.0.18-rc.0
 # 反复迭代：
-pnpm version prerelease --preid=rc -m "release(desktop): v%s"  # → 0.2.1-rc.1
+pnpm version prerelease --preid=rc -m "release(desktop): v%s"  # → 0.0.18-rc.1
 # 转正：
-pnpm version 0.2.1 -m "release(desktop): v%s"
+pnpm version 0.0.18 -m "release(desktop): v%s"
 ```
 
 ---
@@ -203,7 +208,7 @@ pnpm version 0.2.1 -m "release(desktop): v%s"
 `CHANGELOG.md` 在仓库根目录。每次 bump 之前在顶部追加一段：
 
 ```markdown
-## v0.1.1 - 2026-04-30
+## v0.0.17 - 2026-08-05
 ### Added
 - Settings → Models 加入 Provider/Entry "测试连接"功能
 ### Fixed
@@ -217,13 +222,14 @@ pnpm version 0.2.1 -m "release(desktop): v%s"
 ## 如果忘了打 tag 就跑了 release.sh
 
 ```
-✗ No git tag 'v0.1.1' for version 0.1.1.
-    先跑: (cd apps/desktop && pnpm version patch -m 'release(desktop): v%s')
+✗ No git tag 'v0.0.17' for version 0.0.17.
+    Run 'node scripts/bump-version.mjs' from the repo root first, then tag the release commit.
     本地测试可加: ALLOW_UNTAGGED=1 bash scripts/release.sh --ad-hoc
 ```
 
 按提示来即可。**不要**手动改 package.json 后漏掉 commit/tag —— 版本号修改用
-`pnpm version`，git commit / tag 手动补（见 TL;DR）。两件事都要做：release.sh 会校验
+`node scripts/bump-version.mjs`（一次同步根 / desktop / ui 三处），git commit / tag
+手动补（见 TL;DR）。两件事都要做：release.sh 会校验
 `tag^{commit} == HEAD`，tag 必须指向 release commit。
 
 ---
@@ -327,8 +333,8 @@ xcrun notarytool submit app.zip \
 - macOS 顶部菜单栏 → **Sati → 关于 Sati** 显示：
   ```
   Sati
-  Version 0.1.1
-  build a2f682b · 2026-04-30
+  Version 0.0.17
+  build a2f682b · 2026-08-05
   Copyright © 2026 徐健  xujian519@gmail.com. AGPL-3.0-or-later.
   ```
   （macOS 原生 About 面板，由 `app.setAboutPanelOptions()` 注入；不需要进 Settings）

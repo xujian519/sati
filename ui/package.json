@@ -1,6 +1,6 @@
 {
   "name": "sati-ui",
-  "version": "0.1.0",
+  "version": "0.0.16",
   "private": true,
   "description": "Sati Web UI — talks to src/gateway via ui/server/sati-bridge.js.",
   "type": "module",

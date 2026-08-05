@@ -9,6 +9,7 @@ import type {
   WsResponseFrame,
 } from "../protocol/frames.js";
 import { SATI_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
+import { APP_VERSION } from "../../version.js";
 
 export type GatewayWsNotificationHandler = (name: string, payload: unknown) => void;
 
@@ -75,7 +76,7 @@ export class GatewayWsClient {
         type: "hello",
         protocolVersion: this.options.protocolVersion ?? SATI_GATEWAY_PROTOCOL_VERSION,
         clientName: this.options.clientName ?? "cli",
-        clientVersion: this.options.clientVersion ?? "0.1.0",
+        clientVersion: this.options.clientVersion ?? APP_VERSION,
         token: this.options.token,
       }),
     );

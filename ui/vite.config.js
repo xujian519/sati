@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "url";
@@ -7,6 +8,10 @@ import { getConnectableHost, normalizeLoopbackHost } from "./shared/networkHosts
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
+// 应用版本号唯一来源 = 根 package.json#version（与 apps/desktop/package.json 同步 bump，
+// 见 apps/desktop/RELEASING.md「版本号 lockstep」）。注入浏览器侧 gateway 客户端的
+// clientVersion（src/web/client/GatewayBrowserClient.ts 消费 __SATI_APP_VERSION__）。
+const rootPkg = JSON.parse(fs.readFileSync(path.resolve(repoRoot, "package.json"), "utf8"));
 
 export default defineConfig(({ mode }) => {
   // Load the single root .env and let exported shell vars override file values.
@@ -32,6 +37,7 @@ export default defineConfig(({ mode }) => {
   return {
     define: {
       "import.meta.env.VITE_DISABLE_LOCAL_AUTH": JSON.stringify(disableLocalAuth ? "true" : "false"),
+      __SATI_APP_VERSION__: JSON.stringify(rootPkg.version),
     },
     plugins: [react()],
     resolve: {

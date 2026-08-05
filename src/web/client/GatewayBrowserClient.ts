@@ -7,6 +7,21 @@
  * by the parity / contract tests under `tests/web-ui-client/`.
  */
 
+/**
+ * Injected by the Vite build (ui/vite.config.js `define`) from the repo root
+ * package.json version. This module is browser-safe by design (no node:fs),
+ * so the value arrives via build-time substitution; when undefined (plain
+ * Node / test runs without the Vite define pass) we fall back to "0.0.0".
+ */
+declare const __SATI_APP_VERSION__: string | undefined;
+
+/**
+ * Application version for hello frames. Injected at build time by the Vite `define`
+ * pass (ui/vite.config.js); when undefined (plain Node / test runs without Vite)
+ * we fall back to the "0.0.0" unresolved sentinel.
+ */
+const DEFAULT_CLIENT_VERSION = typeof __SATI_APP_VERSION__ !== "undefined" ? __SATI_APP_VERSION__ : "0.0.0";
+
 import {
   SATI_GATEWAY_PROTOCOL_VERSION_WEB,
   type WebGatewayEvent,
@@ -137,7 +152,7 @@ export class GatewayBrowserClient {
         type: "hello",
         protocolVersion: this.options.protocolVersion ?? SATI_GATEWAY_PROTOCOL_VERSION_WEB,
         clientName: this.options.clientName ?? "web",
-        clientVersion: this.options.clientVersion ?? "0.1.0",
+        clientVersion: this.options.clientVersion ?? DEFAULT_CLIENT_VERSION,
         token: this.options.token,
       }),
     );
