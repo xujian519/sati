@@ -127,7 +127,7 @@ export function isVisibleFailureStatusDetail(detail: unknown): boolean {
   return record.visible !== false && record.severity === "error";
 }
 
-function isVisibleFailureAgentStatus(event: Extract<WebGatewayEvent, { type: "agent_status" }>): boolean {
+export function isVisibleFailureAgentStatus(event: Extract<WebGatewayEvent, { type: "agent_status" }>): boolean {
   return VISIBLE_FAILURE_AGENT_STATUS_EVENTS.has(event.event) || isVisibleFailureStatusDetail(event.detail);
 }
 
