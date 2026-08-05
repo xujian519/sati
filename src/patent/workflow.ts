@@ -260,8 +260,13 @@ export async function runWorkflow(
     return false;
   };
 
-  for (let index = 0; index < manifest.stages.length; ) {
-    const stage = manifest.stages[index]!;
+  /**
+   * 执行单个 stage（含重试循环与 degraded 输出构造），不处理信号回退。
+   * 供串行路径与并行组共用。
+   */
+  const runStageOnce = async (
+    stage: WorkflowStage,
+  ): Promise<{ output: string; retries: number; interrupted?: WorkflowInterrupt }> => {
     const handler = stage.atom !== undefined ? handlers.lookup(stage.atom) : undefined;
     let output = "";
     let retries = 0;
@@ -287,8 +292,7 @@ export async function runWorkflow(
         lastError = new Error("阶段执行未产生输出");
       } catch (err) {
         if (isInterruptStageError(err)) {
-          interrupted = { stageId: stage.id, message: err.message, data: err.data };
-          break;
+          return { output: "", retries, interrupted: { stageId: stage.id, message: err.message, data: err.data } };
         }
         lastError = err;
         retries += 1;
@@ -300,7 +304,74 @@ export async function runWorkflow(
       retries = attempt + 1;
     }
 
-    if (interrupted) break; // 审批门等中断：暂停，不执行后续阶段
+    if (
+      output.trim().length === 0 &&
+      lastError !== undefined &&
+      !(lastError instanceof Error && lastError.message === "阶段执行未产生输出")
+    ) {
+      // 保留错误信息到输出，便于诊断；仍标记 degraded。
+      // 用结构化标记前缀（而非中文字面量），避免与 executor 正常输出冲突。
+      output = `[WORKFLOW_DEGRADED] ${stage.id}: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
+    }
+    return { output, retries };
+  };
+
+  const pushResult = (stage: WorkflowStage, outcome: { output: string; retries: number }): void => {
+    results.push({
+      stageId: stage.id,
+      strategy: stage.strategy,
+      output: outcome.output,
+      degraded: outcome.output.trim().length === 0 || outcome.output.startsWith("[WORKFLOW_DEGRADED]"),
+      retries: outcome.retries,
+      ...(stage.atom !== undefined ? { atom: stage.atom } : {}),
+    });
+  };
+
+  // 并行窗口上限：无 retry（无信号回退风险）且**同 atom** 的连续阶段才可并行
+  // （如 extract 三路分键提取）。非同 atom 阶段（approval-gate 审批门等可能抛
+  // 中断的 handler）保持串行——并行组内前序中断时后续阶段已并发执行过，
+  // 与"审批门后不再执行"语义不符，故中断型阶段一律不进并行组。
+  const MAX_PARALLEL_STAGES = 4;
+
+  for (let index = 0; index < manifest.stages.length; ) {
+    // 计算可并行窗口（从当前 stage 起，连续且无 retry、同 atom 的阶段）。
+    let window = 1;
+    const groupAtom = manifest.stages[index]!.atom;
+    while (index + window < manifest.stages.length && window < MAX_PARALLEL_STAGES) {
+      const candidate = manifest.stages[index + window]!;
+      if (candidate.retry !== undefined || candidate.atom !== groupAtom || groupAtom === undefined) break;
+      window += 1;
+    }
+
+    if (window > 1) {
+      // 并行组：各 stage 独立执行（无 retry → 组内不可能触发信号回退；
+      // interrupted 在组内全部完成后按顺序处理，与串行 break 语义一致）。
+      const group = manifest.stages.slice(index, index + window);
+      const outcomes = await Promise.all(group.map(stage => runStageOnce(stage)));
+      let groupInterrupted: WorkflowInterrupt | undefined;
+      for (let gi = 0; gi < outcomes.length; gi += 1) {
+        const outcome = outcomes[gi]!;
+        if (outcome.interrupted) {
+          groupInterrupted = outcome.interrupted;
+          break;
+        }
+        pushResult(group[gi]!, outcome);
+      }
+      if (groupInterrupted) {
+        interrupted = groupInterrupted;
+        break;
+      }
+      index += window;
+      continue;
+    }
+
+    const stage = manifest.stages[index]!;
+    const outcome = await runStageOnce(stage);
+    if (outcome.interrupted) {
+      interrupted = outcome.interrupted;
+      break;
+    }
+    const { output, retries } = outcome;
 
     // 一致性重试循环（对齐 Mady check_consistency 条件回退边）：输出触发信号时
     // 回退到 rewindTo 阶段重新执行（含中间阶段），覆盖被回退阶段的旧结果与 state。
@@ -335,23 +406,7 @@ export async function runWorkflow(
       }
     }
 
-    if (
-      output.trim().length === 0 &&
-      lastError !== undefined &&
-      !(lastError instanceof Error && lastError.message === "阶段执行未产生输出")
-    ) {
-      // 保留错误信息到输出，便于诊断；仍标记 degraded。
-      // 用结构化标记前缀（而非中文字面量），避免与 executor 正常输出冲突。
-      output = `[WORKFLOW_DEGRADED] ${stage.id}: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
-    }
-    results.push({
-      stageId: stage.id,
-      strategy: stage.strategy,
-      output,
-      degraded: output.trim().length === 0 || output.startsWith("[WORKFLOW_DEGRADED]"),
-      retries,
-      ...(stage.atom !== undefined ? { atom: stage.atom } : {}),
-    });
+    pushResult(stage, { output, retries });
     index += 1;
   }
 

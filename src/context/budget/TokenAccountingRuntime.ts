@@ -28,6 +28,12 @@ export type TokenAccountingRuntimeOptions = {
   fetch?: typeof fetch;
   timeoutMs?: number;
   cacheSize?: number;
+  /**
+   * 快速通道阈值（默认 0.9）：本地估算 ≤ 可用窗口 × 该比例时直接返回
+   * local 快照，跳过 provider count_tokens 网络调用（每 turn 一次的
+   * 全量请求序列化 + 网络往返）。仅当本地估算逼近窗口上限时才精确计数。
+   */
+  nearLimitRatio?: number;
 };
 
 export type CountRequestInputOptions = {
@@ -43,6 +49,7 @@ export type EvaluateRequestBudgetOptions = CountRequestInputOptions & {
 
 const DEFAULT_COUNT_TIMEOUT_MS = 1_500;
 const DEFAULT_CACHE_SIZE = 256;
+const DEFAULT_NEAR_LIMIT_RATIO = 0.9;
 
 export class TokenAccountingRuntime {
   private readonly modelConfig: ModelConfig;
@@ -50,6 +57,7 @@ export class TokenAccountingRuntime {
   private readonly transport: typeof fetch;
   private readonly timeoutMs: number;
   private readonly cacheSize: number;
+  private readonly nearLimitRatio: number;
   private readonly cache = new Map<string, TokenCountResult>();
 
   constructor(options: TokenAccountingRuntimeOptions) {
@@ -58,6 +66,7 @@ export class TokenAccountingRuntime {
     this.transport = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_COUNT_TIMEOUT_MS;
     this.cacheSize = Math.max(0, options.cacheSize ?? DEFAULT_CACHE_SIZE);
+    this.nearLimitRatio = clamp01(options.nearLimitRatio ?? DEFAULT_NEAR_LIMIT_RATIO);
   }
 
   async countRequestInput(
@@ -94,14 +103,31 @@ export class TokenAccountingRuntime {
     request: CanonicalModelRequest,
     options: EvaluateRequestBudgetOptions,
   ): Promise<TokenBudgetSnapshot> {
+    const usePadding = options.usePadding !== false;
+    const reservedOutputTokens = options.reservedOutputTokens ?? 0;
+    // 快速通道：本地估算（tiktoken BPE，毫秒级）显著低于可用窗口时直接返回，
+    // 避免每 turn 一次 provider count_tokens 网络调用（消息逐轮增长时每次全量
+    // 序列化 + 网络往返，是对话热路径的主要开销）。仅当估算逼近窗口时才精确计数。
+    const localTokens = this.estimateRequestInput(request, { usePadding });
+    const availableWindow = Math.max(1, options.maxContextTokens - reservedOutputTokens);
+    if (localTokens <= availableWindow * this.nearLimitRatio) {
+      return this.snapshotFromTokens(localTokens, options.maxContextTokens, {
+        reservedOutputTokens,
+        source: "local",
+        exact: false,
+        displayTokens: usePadding ? this.estimateRequestInput(request) : undefined,
+        budgetTokens: usePadding ? localTokens : undefined,
+      });
+    }
+
     const counted = await this.countRequestInput(request, options);
     return this.snapshotFromTokens(counted.tokens, options.maxContextTokens, {
-      reservedOutputTokens: options.reservedOutputTokens,
+      reservedOutputTokens,
       source: counted.source,
       exact: counted.exact,
       estimatorError: counted.estimatorError,
       displayTokens: counted.exact ? undefined : this.estimateRequestInput(request),
-      budgetTokens: options.usePadding ? this.estimateRequestInput(request, { usePadding: true }) : undefined,
+      budgetTokens: usePadding ? this.estimateRequestInput(request, { usePadding: true }) : undefined,
     });
   }
 
@@ -495,4 +521,8 @@ function safeJsonStringify(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
 }

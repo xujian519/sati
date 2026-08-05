@@ -6,6 +6,8 @@ import { computeNextRunAt } from "./CronSchedule.js";
 import type { CronFire } from "./CronFire.js";
 
 const DEFAULT_IDLE_POLL_MS = 60_000;
+/** 超并发任务被延迟后的重查间隔（原为 60s，缩短避免积压）。 */
+const RETRY_DELAY_MS = 15_000;
 const MIN_TIMER_MS = 250;
 
 export type CronSchedulerDependencies = {
@@ -25,6 +27,8 @@ export class CronScheduler {
   private running = false;
   private stopped = false;
   private tickInProgress: Promise<void> | undefined;
+  /** 最近一次 tick 读到的任务列表，用于精确计算下一次唤醒时间。 */
+  private lastTasks: CronTask[] = [];
 
   constructor(private readonly deps: CronSchedulerDependencies) {}
 
@@ -85,13 +89,27 @@ export class CronScheduler {
     }, waitMs);
   }
 
+  /**
+   * 基于最近一次 tick 的任务列表计算下一次唤醒延迟：
+   * 取最早 `nextRunAt`（跳过 running 任务）与当前时间的差，上限空闲回退 60s；
+   * 无任务/全部 running/无有效 nextRunAt 时回退 60s。
+   */
   private computeDelayMs(): number {
-    return DEFAULT_IDLE_POLL_MS;
+    const now = this.deps.now().getTime();
+    let earliest: number | undefined;
+    for (const task of this.lastTasks) {
+      if (task.status === "running" || !task.nextRunAt) continue;
+      const at = new Date(task.nextRunAt).getTime();
+      if (!Number.isNaN(at) && (earliest === undefined || at < earliest)) earliest = at;
+    }
+    if (earliest === undefined) return DEFAULT_IDLE_POLL_MS;
+    return Math.min(DEFAULT_IDLE_POLL_MS, Math.max(0, earliest - now));
   }
 
   private async tick(): Promise<void> {
     const now = this.deps.now();
     const tasks = await this.deps.store.listTasks();
+    this.lastTasks = tasks;
     const dueTasks = tasks.filter(task => isDue(task, now));
     for (const task of dueTasks) {
       if (this.deps.activeRunCount() >= this.deps.config.maxConcurrentRuns) {
@@ -147,7 +165,7 @@ export class CronScheduler {
   }
 
   private async delayTask(task: CronTask, now: Date): Promise<void> {
-    const nextRunAt = new Date(now.getTime() + DEFAULT_IDLE_POLL_MS).toISOString();
+    const nextRunAt = new Date(now.getTime() + RETRY_DELAY_MS).toISOString();
     await this.deps.store.putTask({
       ...task,
       nextRunAt,

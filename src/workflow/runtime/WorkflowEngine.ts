@@ -45,6 +45,11 @@ export type WorkflowEngineOptions = {
   retryPolicy?: WorkflowRetryPolicy;
   /** Model used by the `model_fallback` failure strategy. */
   fallbackModel?: string;
+  /**
+   * 每波就绪步骤的最大并行执行数（默认 4）。计划含大量独立步骤时防止
+   * 同时拉起 N 个 LLM 会话（成本与令牌放大）。
+   */
+  maxParallel?: number;
   logger?: {
     warn: (msg: string, data?: Record<string, unknown>) => void;
   };
@@ -57,6 +62,7 @@ type ExecutionState = {
 };
 
 const DEFAULT_RETRY_DELAY_MS = 1_000;
+const DEFAULT_MAX_PARALLEL = 4;
 
 /** Thrown for plan validation errors (cycles, missing workers, bad input). */
 export class WorkflowPlanError extends Error {
@@ -87,6 +93,7 @@ export class WorkflowEngine {
   private readonly persist?: WorkflowPlanStore;
   private readonly retryPolicy: Required<WorkflowRetryPolicy>;
   private readonly fallbackModel?: string;
+  private readonly maxParallel: number;
   private readonly logger?: WorkflowEngineOptions["logger"];
 
   constructor(options: WorkflowEngineOptions) {
@@ -103,6 +110,7 @@ export class WorkflowEngine {
       exponentialBackoff: options.retryPolicy?.exponentialBackoff ?? false,
     };
     this.fallbackModel = options.fallbackModel;
+    this.maxParallel = Math.max(1, options.maxParallel ?? DEFAULT_MAX_PARALLEL);
     this.logger = options.logger;
   }
 
@@ -264,28 +272,8 @@ export class WorkflowEngine {
         );
       }
 
-      // 3. Run ready steps in parallel.
-      const results = await Promise.allSettled(
-        ready.map(async step => {
-          step.status = "running";
-          this.emit({ type: "step_started", planId: plan.id, stepId: step.id });
-          try {
-            const output = await this.runStep(state, step);
-            step.output = output;
-            step.status = "completed";
-            state.stepOutputs[step.id] = { status: "completed", output };
-            this.emit({ type: "step_completed", planId: plan.id, stepId: step.id });
-          } catch (error) {
-            if (error instanceof WorkflowSkipError) {
-              step.status = "skipped";
-              this.emit({ type: "step_skipped", planId: plan.id, stepId: step.id });
-              return;
-            }
-            step.status = "failed";
-            throw error;
-          }
-        }),
-      );
+      // 3. Run ready steps in parallel, honoring the maxParallel cap.
+      const results = await this.runReadySteps(ready, state);
 
       // 4. Handle failures — any rejected step fails the plan.
       let failed = false;
@@ -339,6 +327,48 @@ export class WorkflowEngine {
       // 6. Persist progress.
       plan.updatedAt = new Date();
       await this.persist?.savePlan(plan);
+    }
+  }
+
+  /**
+   * 以 `maxParallel` 上限并发执行一批就绪步骤（信号量式 worker 池），
+   * 返回与 `ready` 同序的 settled 结果，语义等价于原 `Promise.allSettled`。
+   */
+  private async runReadySteps(ready: WorkflowStep[], state: ExecutionState): Promise<PromiseSettledResult<void>[]> {
+    const results = new Array<PromiseSettledResult<void>>(ready.length);
+    const limit = Math.min(this.maxParallel, ready.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.max(1, limit) }, async () => {
+      while (next < ready.length) {
+        const index = next;
+        next += 1;
+        const step = ready[index]!;
+        results[index] = await this.runOneStep(state, step);
+      }
+    });
+    await Promise.allSettled(workers);
+    return results;
+  }
+
+  /** 执行单个步骤并记录终态；WorkflowSkipError 时标记 skipped。 */
+  private async runOneStep(state: ExecutionState, step: WorkflowStep): Promise<PromiseSettledResult<void>> {
+    const planId = state.plan.id;
+    try {
+      this.emit({ type: "step_started", planId, stepId: step.id });
+      const output = await this.runStep(state, step);
+      step.output = output;
+      step.status = "completed";
+      state.stepOutputs[step.id] = { status: "completed", output };
+      this.emit({ type: "step_completed", planId, stepId: step.id });
+      return { status: "fulfilled", value: undefined };
+    } catch (error) {
+      if (error instanceof WorkflowSkipError) {
+        step.status = "skipped";
+        this.emit({ type: "step_skipped", planId, stepId: step.id });
+        return { status: "fulfilled", value: undefined };
+      }
+      step.status = "failed";
+      return { status: "rejected", reason: error };
     }
   }
 
