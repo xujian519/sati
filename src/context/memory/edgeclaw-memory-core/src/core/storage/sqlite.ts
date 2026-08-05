@@ -494,6 +494,18 @@ export class MemoryRepository {
   private readonly globalUserMemory: FileMemoryStore;
   private externalWorkspaceCache = new Map<string, ExternalWorkspaceSnapshot>();
 
+  // 热路径 prepared statements（init() 时 prepare 一次，反复复用，避免每次执行重新编译 SQL）
+  private stmtGetPipelineState!: SqlStatement;
+  private stmtSetPipelineState!: SqlStatement;
+  private stmtDeletePipelineState!: SqlStatement;
+  private stmtInsertL0Session!: SqlStatement;
+  private stmtListUnindexedL0!: SqlStatement;
+  private stmtGetLatestL0Before!: SqlStatement;
+  private stmtListRecentL0!: SqlStatement;
+  private stmtListAllL0!: SqlStatement;
+  private stmtDeleteL0!: SqlStatement;
+  private stmtUpdateL0Messages!: SqlStatement;
+
   constructor(
     dbPath: string,
     options: {
@@ -546,6 +558,9 @@ export class MemoryRepository {
       );
       CREATE INDEX IF NOT EXISTS idx_l0_sessions_session ON l0_sessions(session_key);
       CREATE INDEX IF NOT EXISTS idx_l0_sessions_pending ON l0_sessions(indexed, timestamp);
+      -- listRecentL0 / getLatestL0Before 的排序与过滤热路径（每轮对话 captureTurn 都会命中）
+      CREATE INDEX IF NOT EXISTS idx_l0_sessions_time ON l0_sessions(timestamp DESC, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_l0_sessions_session_time ON l0_sessions(session_key, timestamp, created_at);
       CREATE TABLE IF NOT EXISTS pipeline_state (
         state_key TEXT PRIMARY KEY,
         state_json TEXT NOT NULL,
@@ -553,6 +568,58 @@ export class MemoryRepository {
       );
     `);
     this.migratePipelineStateTable();
+    this.prepareHotStatements();
+  }
+
+  /** 热路径语句只 prepare 一次（node:sqlite 的 prepare() 无自动缓存，逐次 prepare 有编译开销）。 */
+  private prepareHotStatements(): void {
+    this.stmtGetPipelineState = this.db.prepare("SELECT state_json FROM pipeline_state WHERE state_key = ?");
+    this.stmtSetPipelineState = this.db.prepare(`
+      INSERT INTO pipeline_state (state_key, state_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(state_key) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at
+    `);
+    this.stmtDeletePipelineState = this.db.prepare("DELETE FROM pipeline_state WHERE state_key = ?");
+    this.stmtInsertL0Session = this.db.prepare(`
+      INSERT INTO l0_sessions (
+        l0_index_id,
+        session_key,
+        timestamp,
+        messages_json,
+        source,
+        indexed,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(l0_index_id) DO UPDATE SET
+        session_key = excluded.session_key,
+        timestamp = excluded.timestamp,
+        messages_json = excluded.messages_json,
+        source = excluded.source,
+        indexed = excluded.indexed,
+        created_at = excluded.created_at
+    `);
+    this.stmtListUnindexedL0 = this.db.prepare(`
+      SELECT * FROM l0_sessions
+      WHERE session_key = ? AND indexed = 0
+      ORDER BY timestamp ASC, created_at ASC
+    `);
+    this.stmtGetLatestL0Before = this.db.prepare(`
+      SELECT * FROM l0_sessions
+      WHERE session_key = ?
+        AND (timestamp < ? OR (timestamp = ? AND created_at < ?))
+      ORDER BY timestamp DESC, created_at DESC
+      LIMIT 1
+    `);
+    this.stmtListRecentL0 = this.db.prepare(`
+      SELECT * FROM l0_sessions
+      ORDER BY timestamp DESC, created_at DESC
+      LIMIT ? OFFSET ?
+    `);
+    this.stmtListAllL0 = this.db.prepare("SELECT * FROM l0_sessions ORDER BY timestamp ASC, created_at ASC");
+    this.stmtDeleteL0 = this.db.prepare("DELETE FROM l0_sessions WHERE l0_index_id = ?");
+    this.stmtUpdateL0Messages = this.db.prepare(
+      "UPDATE l0_sessions SET messages_json = ?, indexed = 0 WHERE l0_index_id = ?",
+    );
   }
 
   private migratePipelineStateTable(): void {
@@ -900,65 +967,36 @@ export class MemoryRepository {
   }
 
   private readPipelineState<T>(key: string, fallback: T): T {
-    const row = this.db.prepare("SELECT state_json FROM pipeline_state WHERE state_key = ?").get(key) as
-      | DbRow
-      | undefined;
+    const row = this.stmtGetPipelineState.get(key) as DbRow | undefined;
     if (!row || typeof row.state_json !== "string") return fallback;
     return parseJson(row.state_json, fallback);
   }
 
   getPipelineState<T = unknown>(key: string): T | undefined {
-    const row = this.db.prepare("SELECT state_json FROM pipeline_state WHERE state_key = ?").get(key) as
-      | DbRow
-      | undefined;
+    const row = this.stmtGetPipelineState.get(key) as DbRow | undefined;
     if (!row || typeof row.state_json !== "string") return undefined;
     return parseJson<T | undefined>(row.state_json, undefined);
   }
 
   setPipelineState(key: string, value: unknown): void {
-    this.db
-      .prepare(`
-      INSERT INTO pipeline_state (state_key, state_json, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(state_key) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at
-    `)
-      .run(key, JSON.stringify(value), nowIso());
+    this.stmtSetPipelineState.run(key, JSON.stringify(value), nowIso());
   }
 
   deletePipelineState(key: string): void {
-    this.db.prepare("DELETE FROM pipeline_state WHERE state_key = ?").run(key);
+    this.stmtDeletePipelineState.run(key);
   }
 
   insertL0Session(record: L0SessionRecord): void {
     const createdAt = record.createdAt || nowIso();
-    this.db
-      .prepare(`
-      INSERT INTO l0_sessions (
-        l0_index_id,
-        session_key,
-        timestamp,
-        messages_json,
-        source,
-        indexed,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(l0_index_id) DO UPDATE SET
-        session_key = excluded.session_key,
-        timestamp = excluded.timestamp,
-        messages_json = excluded.messages_json,
-        source = excluded.source,
-        indexed = excluded.indexed,
-        created_at = excluded.created_at
-    `)
-      .run(
-        record.l0IndexId,
-        record.sessionKey,
-        record.timestamp,
-        JSON.stringify(record.messages),
-        record.source || "sati",
-        record.indexed ? 1 : 0,
-        createdAt,
-      );
+    this.stmtInsertL0Session.run(
+      record.l0IndexId,
+      record.sessionKey,
+      record.timestamp,
+      JSON.stringify(record.messages),
+      record.source || "sati",
+      record.indexed ? 1 : 0,
+      createdAt,
+    );
   }
 
   listPendingSessionKeys(limit = 50, preferredSessionKeys?: string[]): string[] {
@@ -1041,26 +1079,12 @@ export class MemoryRepository {
   }
 
   listUnindexedL0BySession(sessionKey: string): L0SessionRecord[] {
-    const rows = this.db
-      .prepare(`
-      SELECT * FROM l0_sessions
-      WHERE session_key = ? AND indexed = 0
-      ORDER BY timestamp ASC, created_at ASC
-    `)
-      .all(sessionKey) as DbRow[];
+    const rows = this.stmtListUnindexedL0.all(sessionKey) as DbRow[];
     return rows.map(row => normalizeL0Row(row));
   }
 
   getLatestL0Before(sessionKey: string, timestamp: string, createdAt: string): L0SessionRecord | undefined {
-    const row = this.db
-      .prepare(`
-      SELECT * FROM l0_sessions
-      WHERE session_key = ?
-        AND (timestamp < ? OR (timestamp = ? AND created_at < ?))
-      ORDER BY timestamp DESC, created_at DESC
-      LIMIT 1
-    `)
-      .get(sessionKey, timestamp, timestamp, createdAt) as DbRow | undefined;
+    const row = this.stmtGetLatestL0Before.get(sessionKey, timestamp, timestamp, createdAt) as DbRow | undefined;
     return row ? normalizeL0Row(row) : undefined;
   }
 
@@ -1086,18 +1110,12 @@ export class MemoryRepository {
   }
 
   listRecentL0(limit = 20, offset = 0): L0SessionRecord[] {
-    const rows = this.db
-      .prepare(`
-      SELECT * FROM l0_sessions
-      ORDER BY timestamp DESC, created_at DESC
-      LIMIT ? OFFSET ?
-    `)
-      .all(Math.max(1, limit), Math.max(0, offset)) as DbRow[];
+    const rows = this.stmtListRecentL0.all(Math.max(1, limit), Math.max(0, offset)) as DbRow[];
     return rows.map(row => normalizeL0Row(row));
   }
 
   listAllL0(): L0SessionRecord[] {
-    const rows = this.db.prepare("SELECT * FROM l0_sessions ORDER BY timestamp ASC, created_at ASC").all() as DbRow[];
+    const rows = this.stmtListAllL0.all() as DbRow[];
     return rows.map(row => normalizeL0Row(row));
   }
 
@@ -1108,14 +1126,12 @@ export class MemoryRepository {
     for (const row of rows) {
       const nextMessages = transform(row);
       if (nextMessages.length === 0) {
-        this.db.prepare("DELETE FROM l0_sessions WHERE l0_index_id = ?").run(row.l0IndexId);
+        this.stmtDeleteL0.run(row.l0IndexId);
         removed += 1;
         continue;
       }
       if (JSON.stringify(nextMessages) === JSON.stringify(row.messages)) continue;
-      this.db
-        .prepare("UPDATE l0_sessions SET messages_json = ?, indexed = 0 WHERE l0_index_id = ?")
-        .run(JSON.stringify(nextMessages), row.l0IndexId);
+      this.stmtUpdateL0Messages.run(JSON.stringify(nextMessages), row.l0IndexId);
       updated += 1;
     }
     return {

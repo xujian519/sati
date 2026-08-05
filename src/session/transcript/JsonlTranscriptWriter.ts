@@ -44,6 +44,8 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   private writeChain: Promise<void> = Promise.resolve();
   private lastEntryId: string | null = null;
   private readonly now: () => Date;
+  /** 目录是否已确认存在（mkdir recursive 每次 syscall，仅首次需要）。 */
+  private dirReady = false;
 
   constructor(private readonly options: JsonlTranscriptWriterOptions) {
     this.now = options.now ?? (() => new Date());
@@ -146,8 +148,17 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     this.sequence = Math.max(this.sequence, entry.sequence);
     this.lastEntryId = entry.entryId ?? this.lastEntryId;
     this.writeChain = this.writeChain.then(async () => {
-      await mkdir(dirname(this.options.path), { recursive: true, mode: 0o700 });
-      await appendFile(this.options.path, `${JSON.stringify(entry)}\n`, { encoding: "utf8", mode: 0o600 });
+      if (!this.dirReady) {
+        await mkdir(dirname(this.options.path), { recursive: true, mode: 0o700 });
+        this.dirReady = true;
+      }
+      try {
+        await appendFile(this.options.path, `${JSON.stringify(entry)}\n`, { encoding: "utf8", mode: 0o600 });
+      } catch (error) {
+        // 目录可能被外部删除/移动：重置 dirReady 以便下次写入自愈（重新 mkdir）
+        this.dirReady = false;
+        throw error;
+      }
     });
     return this.writeChain;
   }
