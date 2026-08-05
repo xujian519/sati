@@ -13,6 +13,10 @@ export type GatewayWsConnectionOptions = {
 export class GatewayWsConnection {
   private authed = false;
   private readonly inFlightSessions = new Set<string>();
+  /** submit_turn 事件流发送缓冲：16ms 窗口合并，减少长轮次数千事件的 write/syscall。 */
+  private readonly pendingTexts: string[] = [];
+  private flushTimer: NodeJS.Timeout | undefined;
+  private readonly FLUSH_INTERVAL_MS = 16;
 
   constructor(
     private readonly ws: TextWebSocketConnection,
@@ -20,6 +24,14 @@ export class GatewayWsConnection {
   ) {
     ws.onMessage(message => void this.handleMessage(message));
     ws.onClose(() => this.abortInFlightTurns());
+    // 连接关闭时清理发送缓冲与定时器（防悬空定时器/内存残留）
+    ws.onClose(() => {
+      if (this.flushTimer) {
+        clearTimeout(this.flushTimer);
+        this.flushTimer = undefined;
+      }
+      this.pendingTexts.length = 0;
+    });
   }
 
   private abortInFlightTurns(): void {
@@ -32,6 +44,27 @@ export class GatewayWsConnection {
   sendNotification(name: string, payload?: unknown): void {
     if (!this.authed) return;
     this.ws.sendText(JSON.stringify({ type: "notification", name, payload }));
+  }
+
+  /** 缓冲一条发送文本，16ms 窗口后合并批量写入。 */
+  private queueText(text: string): void {
+    this.pendingTexts.push(text);
+    if (this.flushTimer) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = undefined;
+      this.flushPending();
+    }, this.FLUSH_INTERVAL_MS);
+  }
+
+  /** 立即冲刷缓冲（含取消 pending 定时器）。 */
+  private flushPending(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = undefined;
+    }
+    if (this.pendingTexts.length === 0) return;
+    const batch = this.pendingTexts.splice(0, this.pendingTexts.length);
+    this.ws.sendBatch(batch);
   }
 
   onClose(callback: () => void): void {
@@ -95,9 +128,12 @@ export class GatewayWsConnection {
             if (event.type === "turn_completed") {
               lastCompleted = event;
             }
-            this.ws.sendText(JSON.stringify({ type: "event", id: frame.id, seq: seq++, final: false, event }));
+            // 事件流经 16ms 缓冲批量发送（帧语义不变，仅减少 write 次数）；
+            // 循环结束立即冲刷保证 final 帧紧随其后、顺序不变。
+            this.queueText(JSON.stringify({ type: "event", id: frame.id, seq: seq++, final: false, event }));
           }
         } finally {
+          this.flushPending();
           if (sessionKey) this.inFlightSessions.delete(sessionKey);
         }
         const usage = lastCompleted?.type === "turn_completed" ? lastCompleted.usage : {};

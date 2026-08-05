@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import type { Socket } from "node:net";
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+/** 单帧 payload 上限（16MB）：防认证前恶意端声明超大 payload 撑爆接收缓冲（DoS）。 */
+const MAX_FRAME_SIZE = 16 * 1024 * 1024;
+/** 帧头最大长度（127 长度字段 + 掩码 4 字节 + 首 2 字节）。 */
+const MAX_FRAME_HEADER_BYTES = 14;
 
 export function createWebSocketAcceptValue(key: string): string {
   return createHash("sha1").update(`${key}${WS_GUID}`).digest("base64");
@@ -36,6 +40,27 @@ export class TextWebSocketConnection {
     this.socket.write(Buffer.concat([header, payload]));
   }
 
+  /**
+   * 批量发送多条文本消息：各消息独立 WS 帧，但一次 Buffer.concat + 一次
+   * socket.write（帧序列与单条发送完全一致，客户端无感知）。用于长轮次
+   * 事件流（数千 text_delta）显著减少序列化后的 write/syscall 次数。
+   */
+  sendBatch(messages: string[]): void {
+    if (this.closed || messages.length === 0) {
+      return;
+    }
+    if (messages.length === 1) {
+      this.sendText(messages[0]!);
+      return;
+    }
+    const parts: Buffer[] = [];
+    for (const message of messages) {
+      const payload = Buffer.from(message, "utf8");
+      parts.push(createServerFrameHeader(payload.length, 0x1), payload);
+    }
+    this.socket.write(Buffer.concat(parts));
+  }
+
   close(code = 1000, reason = ""): void {
     if (this.closed) {
       return;
@@ -50,6 +75,11 @@ export class TextWebSocketConnection {
 
   private handleData(chunk: Buffer): void {
     this.buffer = Buffer.concat([this.buffer, chunk]);
+    // 认证前 DoS 防护：接收缓冲超过单帧上限 + 帧头即断开（防超大 payload 声明撑爆内存）
+    if (this.buffer.length > MAX_FRAME_SIZE + MAX_FRAME_HEADER_BYTES) {
+      this.socket.destroy();
+      return;
+    }
     while (this.buffer.length >= 2) {
       const frame = readClientFrame(this.buffer);
       if (!frame) {
