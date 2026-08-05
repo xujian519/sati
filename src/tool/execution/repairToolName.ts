@@ -128,7 +128,22 @@ type ToolNameIndex = {
   spellings: { normalized: string; canonicalName: string }[];
 };
 
+/**
+ * 工具名索引缓存：keyed by `tools` 数组引用（ToolRegistry.list() 现返回
+ * 稳定引用），模型反复用近似名触发 fuzzy 修复时避免每次全量重建索引。
+ * 注册表变更会生成新数组引用，缓存自动失效，无需显式清理。
+ */
+const toolNameIndexCache = new WeakMap<SatiToolDefinition[], ToolNameIndex>();
+
 function buildToolNameIndex(tools: SatiToolDefinition[]): ToolNameIndex {
+  const cached = toolNameIndexCache.get(tools);
+  if (cached) return cached;
+  const index = buildToolNameIndexUncached(tools);
+  toolNameIndexCache.set(tools, index);
+  return index;
+}
+
+function buildToolNameIndexUncached(tools: SatiToolDefinition[]): ToolNameIndex {
   const byNormalizedName = new Map<string, Set<string>>();
   const spellings: { normalized: string; canonicalName: string }[] = [];
 

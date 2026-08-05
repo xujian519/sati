@@ -4,6 +4,8 @@ import type { SatiToolDefinition } from "../protocol/types.js";
 export class ToolRegistry {
   private readonly toolsByName = new Map<string, SatiToolDefinition>();
   private readonly aliases = new Map<string, string>();
+  /** 排序后的工具列表缓存（惰性构建，注册表变更时失效）。 */
+  private sortedCache: SatiToolDefinition[] | null = null;
 
   register(tool: SatiToolDefinition): void {
     if (this.toolsByName.has(tool.name)) {
@@ -27,6 +29,7 @@ export class ToolRegistry {
     for (const alias of tool.aliases ?? []) {
       this.aliases.set(alias, tool.name);
     }
+    this.invalidateCache();
   }
 
   get(name: string): SatiToolDefinition | undefined {
@@ -38,8 +41,18 @@ export class ToolRegistry {
     return this.get(name) !== undefined;
   }
 
+  /**
+   * 返回按名称排序的工具列表。
+   *
+   * 性能说明：排序结果缓存到 `sortedCache`，注册表未变更时 `list()` 为
+   * O(1)（agent 每轮模型请求会调用两次，避免每次全量排序）。返回内部缓存
+   * 数组引用——调用方必须将其视为只读，不得修改返回的数组或元素。
+   */
   list(): SatiToolDefinition[] {
-    return [...this.toolsByName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    if (!this.sortedCache) {
+      this.sortedCache = [...this.toolsByName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return this.sortedCache;
   }
 
   /**
@@ -98,6 +111,7 @@ export class ToolRegistry {
       this.aliases.delete(alias);
     }
     this.toolsByName.delete(name);
+    this.invalidateCache();
     return true;
   }
 
@@ -119,5 +133,10 @@ export class ToolRegistry {
     for (const alias of tool.aliases ?? []) {
       this.aliases.set(alias, tool.name);
     }
+    this.invalidateCache();
+  }
+
+  private invalidateCache(): void {
+    this.sortedCache = null;
   }
 }
