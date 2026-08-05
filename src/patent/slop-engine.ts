@@ -1,9 +1,10 @@
 /**
  * 反套话引擎（移植自 Mady domains/rules/slop_engine.go）。
  *
- * 三层分析：短语删除/替换（8 组 42 条校准正则）→ 结构缺陷检测（6 种：
- * 假三步法/假对比表/假转折/理由堆砌/被动语态/OA 公式）→ 50 分五维评分
- * （争点直陈/证据密度/论证节奏/实务可信/可删减性，通过线 35 分）+ 交付前快检清单。
+ * 三层分析：短语删除/替换（8 组 39 条校准正则）→ 结构缺陷检测（6 种：
+ * 假三步法/假对比表/假转折/理由堆砌/被动语态/OA 公式）→ 43 分五维评分
+ * （争点直陈/证据密度/论证节奏/实务可信/可删减性，满分 43，通过线 35 分）
+ * + 交付前快检清单。
  *
  * 用途：AI 生成专利文本（OA 答复/无效宣告/分析报告）在交付前经本引擎
  * 去冗余、标缺陷、计分，阻断"看起来专业但无实质内容"的套话输出。
@@ -92,7 +93,7 @@ const TYPE_LABELS: Record<StructureIssueType, string> = {
   oa_formula: "意见陈述公式",
 };
 
-/** 短语级规则（8 组 42 条，直接移植 Mady phraseRules，经真实答案回放校准）。 */
+/** 短语级规则（8 组 39 条，直接移植 Mady phraseRules，经真实答案回放校准；被动语态由结构层处理）。 */
 const PHRASE_RULES: SlopRule[] = [
   // 填充废词
   mk("进一步地[，,]?", "", "填充词「进一步地」", "filler"),
@@ -264,7 +265,12 @@ function scoreConcision(paragraphCount: number): number {
   return 8;
 }
 
-/** 50 分五维评分（通过线 35，对齐 Mady scoreDocument）。 */
+/**
+ * 43 分五维评分（对齐 Mady scoreDocument 公式，勿改各维上限）：
+ * directness 8 / evidence 10 / rhythm 8 / practicality 9 / concision 8 = 满分 43。
+ * 通过线 35 ≈ 81%（满分口径）。此前注释宣称"50 分制"但实际满分 43，
+ * 渲染侧（patentEval）已按 43 归一，勿再以 50 为分母。
+ */
 export function scoreDocument(text: string, changes: SlopChange[], issues: StructureIssue[]): SlopScore {
   const lines = text.split("\n");
   const firstPara = runeSlice(lines.slice(0, Math.min(10, lines.length)).join(""), 200);
@@ -412,15 +418,15 @@ export function formatSlopAnalysis(analysis: SlopAnalysis): string {
   const lines: string[] = [
     "## 反套话润色报告",
     "",
-    `**评分：${analysis.score.total}/50 (${passText})**`,
+    `**评分：${analysis.score.total}/43 (${passText})**`,
     "",
     "| 维度 | 得分 | 满分 |",
     "|------|------|------|",
-    `| 争点直陈 | ${analysis.score.directness} | 10 |`,
+    `| 争点直陈 | ${analysis.score.directness} | 8 |`,
     `| 证据密度 | ${analysis.score.evidence} | 10 |`,
-    `| 论证节奏 | ${analysis.score.rhythm} | 10 |`,
-    `| 实务可信 | ${analysis.score.practicality} | 10 |`,
-    `| 可删减性 | ${analysis.score.concision} | 10 |`,
+    `| 论证节奏 | ${analysis.score.rhythm} | 8 |`,
+    `| 实务可信 | ${analysis.score.practicality} | 9 |`,
+    `| 可删减性 | ${analysis.score.concision} | 8 |`,
   ];
 
   if (analysis.changes.length > 0) {

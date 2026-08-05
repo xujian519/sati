@@ -27,6 +27,14 @@ export {
 } from "./approval.js";
 
 export {
+  CASE_ROOT_REL,
+  CASE_OUTPUTS_REL,
+  CASE_WORKFLOW_RUNS_REL,
+  caseOutputsDir,
+  caseWorkflowRunsDir,
+} from "./paths.js";
+
+export {
   type WorkflowStage,
   type WorkflowContext,
   type WorkflowManifest,
@@ -227,6 +235,7 @@ export {
   WorkerRegistry,
   validateWorkerOutput,
   defaultPatentWorkers,
+  WORKER_ROLE_MAP,
 } from "./worker-contract.js";
 
 export {

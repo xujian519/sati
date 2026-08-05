@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CanonicalModelRequest, CanonicalUsage } from "../../model/index.js";
+import { DEFAULT_MODEL_ID, type CanonicalModelRequest, type CanonicalUsage } from "../../model/index.js";
 import type { PermissionResult } from "../../permission/index.js";
 import { SUBAGENT_DEFINITIONS } from "../../agent/sub/builtinSubagentTypes.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
@@ -104,7 +104,8 @@ export type CreateAgentToolOptions = {
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 65_536;
 const DEFAULT_PROVIDER_FALLBACK = "sati";
-const DEFAULT_MODEL_FALLBACK = "moonshotai/kimi-k2.6";
+// 模型 id 缺省值与 web_fetch / patent_workflow_run 共用（见 src/model/defaults.ts）
+const DEFAULT_MODEL_FALLBACK = DEFAULT_MODEL_ID;
 const DEFAULT_SUBAGENT_TIMEOUT_MS = 60 * 60_000;
 const PUBLIC_SUBAGENT_TYPES = ["general-purpose", "explore", "plan"] as const;
 

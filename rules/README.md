@@ -19,6 +19,11 @@ rules/
 `nuo-*.yaml` 由 `scripts/port-nuo-rules.ts` 从 XiaoNuo Agent 的 `data/rules/` 转换而来，
 采用**双轨策略**：
 
+> **加载状态（2026-08）**：nuo-*.yaml（8 个文件约 96 条）**当前未加载**——
+> `loadRuleSetDir(rules/patent)` 在生产代码零调用，`rule_check` 仅加载
+> `compliance.yaml`。这些规则属"沉睡资产"：激活前请先评审其中 `action: block`
+> 的 keyword_blocklist（如 X-REF-003 案例案号模式），避免接通后意外拦截。
+
 - **可执行转换**：`check.type` 属于本引擎支持的 4 种确定性检查 → 转换后由 RuleLoader 加载生效。
   关键语义映射（与 XiaoNuo agent-core 引擎源码核对）：
   - `keyword_blocklist`（命中即违规）→ 同义直转
@@ -67,9 +72,15 @@ rules:
 
 ### action 语义
 
+> **接线状态（2026-08）**：`block` 的**工具拦截**目前**未接入生产路径**——
+> `policy-bridge.ts` 的 `rulesToPolicyDenyRules` 仅被测试调用，无生产代码把
+> block 规则编译注入 `PermissionRuntime`。因此 `action: block` 当前**只作用于
+> 输出层**（强制挂起审批），不会在工具调用前拒绝。依赖"block 阻止工具调用"
+> 前请先完成 policy-bridge 接线。
+
 | action | 输出门禁（RuleOutputGate） | 工具拦截（policy-bridge） |
 |--------|---------------------------|--------------------------|
-| `block` | 强制挂起审批（输出已生成无法拦截） | 编译为 `PermissionRule(source:"policy")` deny，最高优先级 |
+| `block` | 强制挂起审批（输出已生成无法拦截） | ⚠️ 未接线：仅测试调用，生产不注入 deny 规则 |
 | `review` | 挂起人工审批 | 不参与（留给输出层） |
 | `warn` | 追加合规提示 | 不参与 |
 | `log` | 仅记录 | 不参与 |

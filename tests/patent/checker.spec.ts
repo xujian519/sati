@@ -142,6 +142,30 @@ test("matchKeyword: 无关文本返回 false", () => {
   assert.equal(matchKeyword("今天的天气很好", "新颖性"), false);
 });
 
+test("matchKeyword: 扩充否定词表不误报（缺乏/没有/未给出/未记载）", () => {
+  // 扩充前这些表述会被当"肯定提及"→ 规则门漏报
+  assert.equal(matchKeyword("缺乏创造性", "创造性"), false);
+  assert.equal(matchKeyword("没有新颖性", "新颖性"), false);
+  assert.equal(matchKeyword("无法体现创造性", "创造性"), false);
+  assert.equal(matchKeyword("未给出技术启示", "技术启示"), false);
+  assert.equal(matchKeyword("说明书未记载技术效果", "技术效果"), false);
+  assert.equal(matchKeyword("难以认定具有创造性", "创造性"), false);
+  // 肯定表述仍正常命中（不误伤）
+  assert.equal(matchKeyword("本申请具备新颖性", "新颖性"), true);
+  assert.equal(matchKeyword("对比文件未公开该特征，因此具备新颖性", "新颖性"), true);
+});
+
+test("matchKeyword: 双重否定不误判（并非没有/并不缺乏 = 肯定语义）", () => {
+  // 窗口含命中词后，嵌目标词的否定模式会命中"并非没有新颖性"——
+  // 反否定前缀守卫应将其翻转为肯定（典型紧邻形式）
+  assert.equal(matchKeyword("本发明并非没有新颖性", "新颖性"), true);
+  assert.equal(matchKeyword("本申请并不缺乏创造性", "创造性"), true);
+  assert.equal(matchKeyword("该方案并非没有技术启示", "技术启示"), true);
+  // 单纯否定仍判否定（守卫不误放行）
+  assert.equal(matchKeyword("本申请没有新颖性", "新颖性"), false);
+  assert.equal(matchKeyword("该方案缺乏技术启示", "技术启示"), false);
+});
+
 // =============================================================================
 // 域过滤
 // =============================================================================
@@ -364,4 +388,38 @@ test("spec: 双重否定（不仅超出）不误判为否定语境", () => {
     failures.some(f => f.ruleId === "SPEC-SCOPE-COMPLIANCE"),
     "不仅超出=肯定语义，应报超范围",
   );
+});
+
+// =============================================================================
+// 规则总数与禁语扩充（防止注释失真/禁语漏网）
+// =============================================================================
+
+test("defaultPatentRules: 总条数 = 68（core 44 + reasoning 24）", () => {
+  const all = defaultPatentRules();
+  assert.equal(all.length, 68, `defaultPatentRules 实际 ${all.length} 条，应与注释同步`);
+  // 每 3 条规则中约 1 条 Quality 级（粗粒度结构校验：各级别均非空）
+  assert.ok(
+    all.some(r => r.level === 0),
+    "应含 Must 级规则",
+  );
+  assert.ok(
+    all.some(r => r.level === 1),
+    "应含 Should 级规则",
+  );
+  assert.ok(
+    all.some(r => r.level === 2),
+    "应含 Quality 级规则",
+  );
+  // 规则 id 唯一（注册表按 id 覆盖，重复 id 会静默丢规则）
+  const ids = new Set(all.map(r => r.id));
+  assert.equal(ids.size, all.length, "规则 id 应唯一");
+});
+
+test("novelty: 单独对比禁语扩充（对比文件1和2结合）→ 阻断", () => {
+  // 扩充前 "对比文件1和2结合" 不在禁语表，可绕过 NOVELTY-SINGLE-COMPARISON
+  const text = "将对比文件1和2结合，可认定本申请不具备新颖性。";
+  const failures = engine.evaluate(text, { rules: noveltyRules() });
+  const single = failures.find(f => f.ruleId === "NOVELTY-SINGLE-COMPARISON");
+  assert.ok(single, "多文件结合书写形式应触发单独对比规则");
+  assert.match(single!.message, /单独对比原则/);
 });

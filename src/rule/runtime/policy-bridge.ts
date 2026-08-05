@@ -8,6 +8,10 @@
  * 当前支持：keyword_blocklist 规则 → `text:` 前缀模式（对工具输入序列化文本做
  * 关键词包含匹配，见 matchPermissionRule 的 TEXT_PATTERN_PREFIX）。
  * negationContext（否定语境）语义复杂，默认跳过以免误拦截（可显式开启）。
+ *
+ * ⚠️ 接线状态（2026-08）：本通道**未接入生产路径**——无代码调用 rulesToPolicyDenyRules
+ * 并把结果注入 PermissionContext。`action: block` 目前仅作用于输出层（强制挂起审批），
+ * 不拦截工具调用；接线前勿依赖该能力（详见 rules/README.md）。
  */
 
 import type { PermissionRule } from "../../permission/protocol/types.js";

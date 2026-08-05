@@ -9,6 +9,14 @@
  * 工具契约）；非法操作直接抛 FlexiblePlanError（fail-closed，对齐 FactBlackboard 风格）。
  * toManifest() 生成 WorkflowManifest 交给 runWorkflow 执行——本层只管理计划不执行阶段，
  * 执行结果经 confirmStage / rollbackStage 回流。
+ *
+ * ⚠️ 接线状态（2026-08）：本层自身**未接入独立工具**——`patent_plan_task` 工具
+ * 走的是 plantask.ts 状态机，与本层无关。但**原子执行消费路径已打通**：
+ * toManifest() 产出的 manifest 可被 runWorkflow 以全局原子注册表 + provider
+ * 自动执行（集成测试见 tests/patent/flexible-plan-atomic.spec.ts），
+ * 执行结果经 confirmStage / rollbackStage 回流。接入 `flexible_plan` 工具
+ * （创建计划 → 原子执行 → 逐阶段确认）时，可复用 patent_workflow_run 的
+ * provider 装配（LLM + nuo-patent 检索）。
  */
 
 import { SAFE_ID_PATTERN } from "./persist-utils.js";

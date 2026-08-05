@@ -6,6 +6,11 @@
  * `SceneCategory`, `WORKFLOW_FALLBACK_MODEL`). Executes a {@link WorkflowPlan}
  * by running all ready steps in parallel (Promise.allSettled), honoring
  * conditions, retries, failure strategies, checkpoints and persistence.
+ *
+ * ⚠️ 接线状态（2026-08）：**已移植未接线**——src/ 内无生产调用方（仅经
+ * src/workflow/index.ts 再导出）。专利侧（src/patent/workflow-dag.ts）仅借用其
+ * FlowGraph/DagExecutor 做静态校验与可视化，不执行。专利执行走的是
+ * src/patent/workflow.ts 的 runWorkflow（声明式顺序执行器）。
  */
 
 import { setTimeout as sleep } from "node:timers/promises";

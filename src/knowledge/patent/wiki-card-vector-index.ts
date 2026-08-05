@@ -3,8 +3,13 @@
  *
  * 语料：WikiCardLoader 可枚举的全部卡片（~1548 张）；text =
  * title + concept + domain + relatedConcepts + 正文前 800 字。
- * 卡片是静态资产：`syncSource()` 幂等全量同步（textHash 门控，
- * 内容未变化零 embed），删除的卡片从索引移除。
+ *
+ * 同步语义（2026-08 简化）：**语料静态**——WikiCardLoader 是一次性快照
+ * （ensureLoaded 置位后不再重扫目录），provider 单例持有同一 loader 实例，
+ * 卡片集在运行时不变。故不覆写 search 做检索前增量同步：基类 warmup 首次
+ * 全量构建（textHash 门控，内容未变零 embed）并持久化即可，之后零成本。
+ * 若未来卡片集可变（loader 支持刷新），需在换 loader 实例时重建本索引，
+ * 或恢复"检索前快照门控"覆写。
  */
 
 import type { EmbeddingClient } from "../../model/embedding/types.js";

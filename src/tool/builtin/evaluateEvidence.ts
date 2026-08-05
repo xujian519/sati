@@ -36,6 +36,16 @@ export type EvaluateEvidenceInput = {
   isUncontested?: boolean;
   deadlineDefined?: boolean;
   submissionWithinDeadline?: boolean;
+  /** 证据收集主体/程序/形式合法（EVI-002）。 */
+  collectionLegal?: boolean;
+  /** 支持性证据已计数（EVI-030 证明标准）。 */
+  supportingCount?: number;
+  /** 矛盾证据已计数（EVI-030 证明标准）。 */
+  contradictingCount?: number;
+  /** 证据保管链可追溯（EVI-050）。 */
+  custodyChainTraceable?: boolean;
+  /** 证据完整性已核验（EVI-050）。 */
+  integrityVerified?: boolean;
 };
 
 export type EvaluateEvidenceOutput = {
@@ -129,6 +139,11 @@ export function createEvaluateEvidenceTool(deps?: {
         isUncontested: { type: "boolean", description: "待证事实无争议（EVI-013 条件）。" },
         deadlineDefined: { type: "boolean", description: "举证期限已定义（EVI-051 条件）。" },
         submissionWithinDeadline: { type: "boolean", description: "证据在期限内提交（EVI-051 条件）。" },
+        collectionLegal: { type: "boolean", description: "证据收集主体/程序/形式合法（EVI-002 条件）。" },
+        supportingCount: { type: "number", description: "支持性证据已计数（EVI-030 证明标准条件）。" },
+        contradictingCount: { type: "number", description: "矛盾证据已计数（EVI-030 证明标准条件）。" },
+        custodyChainTraceable: { type: "boolean", description: "证据保管链可追溯（EVI-050 条件）。" },
+        integrityVerified: { type: "boolean", description: "证据完整性已核验（EVI-050 条件）。" },
       },
     },
     isReadOnly: () => true,
@@ -152,6 +167,12 @@ export function createEvaluateEvidenceTool(deps?: {
         isUncontested: input.isUncontested,
         deadlineDefined: input.deadlineDefined,
         submissionWithinDeadline: input.submissionWithinDeadline,
+        collectionLegal: input.collectionLegal,
+        caseType: input.caseType,
+        supportingCount: input.supportingCount,
+        contradictingCount: input.contradictingCount,
+        custodyChainTraceable: input.custodyChainTraceable,
+        integrityVerified: input.integrityVerified,
       };
       const judgment = engine.judge(span, input.filingDate, input.evidenceType, external);
       const burden = input.caseType !== undefined ? engine.assessBurdenOfProof(input.caseType) : undefined;

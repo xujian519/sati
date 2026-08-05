@@ -57,7 +57,7 @@ describe("resolveKnowledgeCapabilities", () => {
     const byId = new Map(caps.map(cap => [cap.id, cap]));
     assert.equal(byId.get("legal-fts")?.detail, "SATI_LAW_DB");
     assert.equal(byId.get("patent-kg")?.detail, "SATI_PATENT_KG_DB");
-    assert.equal(byId.get("semantic-vectors")?.detail, "build-knowledge-vectors.ts");
+    assert.match(byId.get("semantic-vectors")?.detail ?? "", /build-knowledge-vectors\.ts/, "应提示构建命令");
     assert.equal(byId.get("semantic-embedding")?.detail, "memory.embedding.enabled");
   });
 
@@ -79,7 +79,7 @@ describe("formatKnowledgeCapabilities", () => {
     const text = formatKnowledgeCapabilities(caps);
     assert.match(text, /patent-ipc=ready/);
     assert.match(text, /legal-fts=missing\(SATI_LAW_DB\)/);
-    assert.match(text, /semantic-vectors=disabled\(build-knowledge-vectors\.ts\)/);
+    assert.match(text, /semantic-vectors=disabled\(.*build-knowledge-vectors\.ts.*\)/);
   });
 
   it("全部 ready 时不带任何括号提示", () => {

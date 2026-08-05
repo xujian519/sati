@@ -62,6 +62,15 @@ export type PatentMemoryProviderOptions = {
   rerank?: RerankClient;
   /** 参与重排的候选上限（默认 16）。 */
   rerankTopN?: number;
+  /**
+   * 是否启用 wiki 卡语义索引（默认 true）。
+   *
+   * ⚠️ 写路径声明：启用后首次使用会在运行时**写入** `${embeddingDir}/wiki.jsonl`
+   * （后台预热全量 embed 并持久化）——这是知识库唯一"运行时写"路径，与
+   * "知识库只读"的总体约束不同。需要完全只读时置 false（KG 语义召回
+   * 经 vectors.db 离线索引，不受此开关影响）。
+   */
+  semanticIndexEnabled?: boolean;
   /** 检索结果缓存 TTL ms（默认 60_000；传 0 关闭缓存）。 */
   cacheTtlMs?: number;
   /** 降级日志（语义/重排失败时记录）。 */
@@ -80,6 +89,7 @@ export class PatentMemoryProvider implements MemoryResolver {
   private readonly vectorDb?: VectorDbSearch;
   private readonly rerank?: RerankClient;
   private readonly rerankTopN: number;
+  private readonly semanticIndexEnabled: boolean;
   private readonly logger?: { warn?: (...args: unknown[]) => void };
   private semanticCards?: WikiCardVectorIndex;
   private readonly semanticBreaker: CircuitBreaker;
@@ -98,6 +108,7 @@ export class PatentMemoryProvider implements MemoryResolver {
     this.vectorDb = options.vectorDb;
     this.rerank = options.rerank;
     this.rerankTopN = options.rerankTopN ?? 16;
+    this.semanticIndexEnabled = options.semanticIndexEnabled ?? true;
     this.logger = options.logger;
     this.semanticBreaker = new CircuitBreaker({ logger: options.logger });
     this.rerankBreaker = new CircuitBreaker({ logger: options.logger });
@@ -113,7 +124,7 @@ export class PatentMemoryProvider implements MemoryResolver {
         return {
           systemContext: cached || undefined,
           diagnostics: [
-            { code: "memory_context_empty", message: "知识检索缓存命中（同 query 短时复用）", severity: "info" },
+            { code: "memory_cache_hit", message: "知识检索缓存命中（同 query 短时复用）", severity: "info" },
           ],
         };
       }
@@ -136,7 +147,7 @@ export class PatentMemoryProvider implements MemoryResolver {
         }
         if (isHighConfidence(top.confidence)) {
           diagnostics.push({
-            code: "memory_context_empty",
+            code: "memory_ipc_classified",
             message: `IPC 分类 ${top.section} 高置信度（${top.confidence.toFixed(2)}）`,
             severity: "info",
           });
@@ -342,15 +353,18 @@ export class PatentMemoryProvider implements MemoryResolver {
 
   /** 懒建 wiki 卡语义索引（首次使用触发全量索引 + 后台预热）。 */
   private getSemanticCards(): WikiCardVectorIndex | undefined {
-    if (!this.embedding || !this.wikiLoader) return undefined;
+    // semanticIndexEnabled=false 时跳过（保持"知识库完全只读"；KG 语义召回走离线 vectors.db）
+    if (!this.embedding || !this.wikiLoader || !this.semanticIndexEnabled) return undefined;
     if (!this.semanticCards) {
+      const storePath = join(this.embeddingDir, "wiki.jsonl");
       const index = new WikiCardVectorIndex({
         loader: this.wikiLoader,
         client: this.embedding,
-        storePath: join(this.embeddingDir, "wiki.jsonl"),
+        storePath,
       });
       this.semanticCards = index;
-      // 后台预热：wiki 卡静态，首次全量索引后持久化，不阻塞当前检索。
+      // 后台预热：wiki 卡静态，首次全量索引后持久化到 storePath（知识库唯一运行时写路径），
+      // 不阻塞当前检索。写入失败由 VectorIndex.persist 的 logger.warn 报告。
       void index.warmup().catch(error => {
         this.logger?.warn?.(`[patent-memory] wiki 语义索引预热失败，search 时会重试: ${errorMessage(error)}`);
       });

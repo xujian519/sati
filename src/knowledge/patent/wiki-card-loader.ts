@@ -50,15 +50,22 @@ type CardIndexJson = {
 const CARD_INDEX_NAME = "card-index.json";
 const MAX_CACHE_ENTRIES = 64;
 
+export type WikiCardLoaderOptions = {
+  /** 降级日志（可选；不传则静默降级，保持向后兼容）。 */
+  logger?: { warn?: (...args: unknown[]) => void };
+};
+
 export class WikiCardLoader {
   private readonly wikiPath: string;
+  private readonly logger?: { warn?: (...args: unknown[]) => void };
   private readonly cards: WikiCardMeta[] = [];
   private readonly byId = new Map<string, WikiCardMeta>();
   private readonly contentCache = new Map<string, string>();
   private loaded = false;
 
-  constructor(wikiPath: string) {
+  constructor(wikiPath: string, options: WikiCardLoaderOptions = {}) {
     this.wikiPath = wikiPath;
+    this.logger = options.logger;
   }
 
   /** 扫描 wiki 目录 + card-index.json（惰性，首次调用时构建）。 */
@@ -70,7 +77,10 @@ export class WikiCardLoader {
     let files: string[];
     try {
       files = this.scanMarkdownFiles(this.wikiPath);
-    } catch {
+    } catch (error) {
+      this.logger?.warn?.(
+        `[wiki-card-loader] 扫描 wiki 目录失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
       this.loaded = false;
       return;
     }
@@ -90,8 +100,11 @@ export class WikiCardLoader {
           if (metadata["领域"]) meta.domain = metadata["领域"];
           const quality = Number.parseFloat(metadata["质量分"]);
           if (Number.isFinite(quality)) meta.quality = quality;
-        } catch {
+        } catch (error) {
           // 读取失败仅保留文件名标题
+          this.logger?.warn?.(
+            `[wiki-card-loader] 读取卡片头部元数据失败 ${file}: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
       this.byId.set(id, meta);
@@ -119,8 +132,11 @@ export class WikiCardLoader {
             relatedConcepts: entry.relatedConcepts,
           });
         }
-      } catch {
+      } catch (error) {
         // card-index.json 损坏时仅用文件扫描结果
+        this.logger?.warn?.(
+          `[wiki-card-loader] card-index.json 解析失败（仅用文件扫描结果）: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 

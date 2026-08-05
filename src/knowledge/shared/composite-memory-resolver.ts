@@ -14,8 +14,19 @@ import type {
  * captureTurn 广播到所有子 resolver（逐个 await，失败降级）。
  */
 
+export type CompositeMemoryResolverOptions = {
+  /** 捕获/检索降级日志（可选；不传则静默降级）。 */
+  logger?: { warn?: (...args: unknown[]) => void };
+};
+
 export class CompositeMemoryResolver implements MemoryResolver {
-  constructor(private readonly resolvers: MemoryResolver[]) {}
+  private readonly resolvers: MemoryResolver[];
+  private readonly logger?: { warn?: (...args: unknown[]) => void };
+
+  constructor(resolvers: MemoryResolver[], options: CompositeMemoryResolverOptions = {}) {
+    this.resolvers = resolvers;
+    this.logger = options.logger;
+  }
 
   async retrieve(input: MemoryRetrieveInput): Promise<MemoryRetrieveResult> {
     const results = await Promise.all(
@@ -48,8 +59,11 @@ export class CompositeMemoryResolver implements MemoryResolver {
     for (const resolver of this.resolvers) {
       try {
         await resolver.captureTurn(input);
-      } catch {
-        // 记忆捕获失败不阻断主流程。
+      } catch (error) {
+        // 记忆捕获失败不阻断主流程，但需可观测（此前静默吞掉）
+        this.logger?.warn?.(
+          `[composite-memory] captureTurn 失败: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }

@@ -87,4 +87,27 @@ describe("mapPatentData", () => {
     assert.deepEqual(mapped.classifications, []);
     assert.deepEqual(mapped.backwardCites, []);
   });
+
+  it("真实抓取响应形态：url/patent 回填字段不覆盖显式参数，额外字段不破坏解析", () => {
+    // getScrapedData 会在 PatentData 上附带 url/patent 字段；mapPatentData 应以显式参数为准
+    const data = makePatentData();
+    (data as { url?: string; patent?: string }).url = "https://patents.google.com/patent/US11452699B2/en";
+    (data as { url?: string; patent?: string }).patent = "US11452699B2";
+    // 真实页面可能出现的额外键/宽松格式（分类号含空格分隔、引证含 extra 字段）
+    data.classifications = JSON.stringify(["G06F 1/20", "H05K 7/20"]);
+    data.backward_cite_no_family = JSON.stringify([
+      { patent_number: "US10123456B2", priority_date: "2010-05-05", pub_date: "2012-01-01", extra: "ignored" },
+    ]);
+    const mapped = mapPatentData(data, "US11452699B2", "https://patents.google.com/patent/US11452699B2");
+    assert.equal(mapped.patent, "US11452699B2");
+    assert.equal(mapped.url, "https://patents.google.com/patent/US11452699B2");
+    assert.deepEqual(mapped.classifications, ["G06F 1/20", "H05K 7/20"]);
+    assert.equal(mapped.backwardCites[0]!.patent_number, "US10123456B2");
+    // 额外字段被 JSON.parse 保留（运行时行为），不影响核心字段解析
+    assert.equal(
+      (mapped.backwardCites[0] as unknown as Record<string, unknown>).extra,
+      "ignored",
+      "额外字段保留是 parseJsonArray 的运行时行为，不裁剪",
+    );
+  });
 });

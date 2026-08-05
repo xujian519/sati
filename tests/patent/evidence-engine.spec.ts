@@ -502,3 +502,145 @@ rules:
   assert.equal(e011ok.satisfied, true);
   assert.deepEqual(e011ok.pendingInputs, []);
 });
+
+// ---------------------------------------------------------------------------
+// 规则条件补齐（EVI-002/020/030/050/060）：7 个曾无实现的条件
+// ---------------------------------------------------------------------------
+
+test("规则条件补齐：EVI-002 收集合法 / EVI-020 案件类型 / EVI-030 计数 / EVI-050 证据链 / EVI-060 内容哈希", () => {
+  const engine = new EvidenceEngine(
+    `
+weights:
+  relevance: 0.35
+  legality: 0.3
+  authenticity: 0.35
+rules:
+  - ruleId: EVI-002
+    name: 证据合法性审查
+    description: d
+    severity: critical
+    action: apply
+    evidenceType: general
+    check:
+      type: legality
+      method: triple-attribute
+      conditions:
+        - evidence_collection_legal
+  - ruleId: EVI-020
+    name: 举证责任审查
+    description: d
+    severity: major
+    action: apply
+    evidenceType: general
+    check:
+      type: burden
+      method: conditional
+      conditions:
+        - case_type_identified
+  - ruleId: EVI-030
+    name: 证明标准审查
+    description: d
+    severity: major
+    action: apply
+    evidenceType: general
+    check:
+      type: standard
+      method: conditional
+      conditions:
+        - supporting_evidence_counted
+        - contradicting_evidence_counted
+  - ruleId: EVI-050
+    name: 证据链审查
+    description: d
+    severity: major
+    action: apply
+    evidenceType: general
+    check:
+      type: custody
+      method: conditional
+      conditions:
+        - custody_chain_traceable
+        - evidence_integrity_verified
+  - ruleId: EVI-060
+    name: 电子证据完整性审查
+    description: d
+    severity: major
+    action: apply
+    evidenceType: general
+    check:
+      type: electronic
+      method: conditional
+      conditions:
+        - content_hash_provided
+`,
+  );
+
+  // 未提供外部输入：外部条件 pending，不误判为失败
+  const bare = engine.judge(span({ snippet: "x" }));
+  for (const ruleId of ["EVI-002", "EVI-020", "EVI-030", "EVI-050"]) {
+    const r = bare.rulesApplied.find(x => x.ruleId === ruleId)!;
+    assert.equal(r.satisfied, false, `${ruleId} 未提供输入时不应 satisfied`);
+    assert.ok(r.pendingInputs.length > 0, `${ruleId} 应标记 pending 而非失败`);
+    assert.deepEqual(r.failedConditions, [], `${ruleId} 不应误判条件失败`);
+  }
+
+  // content_hash_provided 由 span 直接判定：无哈希 → failed（非 pending）
+  const e060 = bare.rulesApplied.find(r => r.ruleId === "EVI-060")!;
+  assert.deepEqual(e060.pendingInputs, [], "EVI-060 无需外部输入");
+  assert.deepEqual(e060.failedConditions, ["content_hash_provided"], "无哈希时条件失败");
+
+  // 提供全部外部输入后 satisfied
+  const full = engine.judge(span({ snippet: "x", contentHash: "abc123" }), undefined, undefined, {
+    collectionLegal: true,
+    caseType: "invalidation",
+    supportingCount: 2,
+    contradictingCount: 0,
+    custodyChainTraceable: true,
+    integrityVerified: true,
+  });
+  for (const ruleId of ["EVI-002", "EVI-020", "EVI-030", "EVI-050", "EVI-060"]) {
+    const r = full.rulesApplied.find(x => x.ruleId === ruleId)!;
+    assert.equal(r.satisfied, true, `${ruleId} 提供输入后应 satisfied`);
+    assert.deepEqual(r.pendingInputs, [], `${ruleId} 不应有 pending`);
+    assert.deepEqual(r.failedConditions, [], `${ruleId} 不应有失败条件`);
+  }
+
+  // caseType 空串视为未识别（pending）
+  const emptyCase = engine.judge(span({ snippet: "x" }), undefined, undefined, { caseType: "  " });
+  const e020 = emptyCase.rulesApplied.find(r => r.ruleId === "EVI-020")!;
+  assert.equal(e020.satisfied, false);
+  assert.deepEqual(e020.pendingInputs, ["case_type_identified"]);
+});
+
+test("真实资产（evidence-rules.yaml）的 EVI-002/020/030/050/060 条件可满足（防 engine↔YAML 漂移）", () => {
+  const { engine, source } = loadEvidenceRulesEngine();
+  assert.ok(source !== null, "真实资产应可加载");
+
+  // 提供各规则所需外部输入后，真实资产规则应 satisfied（而非永久 pending）
+  const e002 = engine.judge(span({ sourceUri: "web:https://x.com" }), undefined, "general", {
+    collectionLegal: true,
+  });
+  assert.equal(e002.rulesApplied.find(r => r.ruleId === "EVI-002")?.satisfied, true, "EVI-002 应可满足");
+
+  const e020 = engine.judge(span({ snippet: "x" }), undefined, "burden_of_proof", { caseType: "invalidation" });
+  assert.equal(e020.rulesApplied.find(r => r.ruleId === "EVI-020")?.satisfied, true, "EVI-020 应可满足");
+
+  const e030 = engine.judge(span({ snippet: "x" }), undefined, "standard_of_proof", {
+    supportingCount: 2,
+    contradictingCount: 0,
+  });
+  assert.equal(e030.rulesApplied.find(r => r.ruleId === "EVI-030")?.satisfied, true, "EVI-030 应可满足");
+
+  const e050 = engine.judge(span({ snippet: "x" }), undefined, "procedural", {
+    custodyChainTraceable: true,
+    integrityVerified: true,
+  });
+  assert.equal(e050.rulesApplied.find(r => r.ruleId === "EVI-050")?.satisfied, true, "EVI-050 应可满足");
+
+  const e060 = engine.judge(
+    span({ sourceUri: "web:https://x.com", contentHash: "abc", snippet: "x" }),
+    undefined,
+    "electronic",
+  );
+  assert.equal(e060.rulesApplied.find(r => r.ruleId === "EVI-060")?.satisfied, true, "EVI-060 应可满足");
+});

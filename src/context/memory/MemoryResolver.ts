@@ -28,7 +28,12 @@ export type MemoryCaptureTurnInput = {
 };
 
 export type MemoryDiagnostic = {
-  code: "memory_disabled" | "memory_provider_error" | "memory_context_empty";
+  code:
+    | "memory_disabled"
+    | "memory_provider_error"
+    | "memory_context_empty"
+    | "memory_cache_hit"
+    | "memory_ipc_classified";
   message: string;
   severity: "info" | "warning" | "error";
 };

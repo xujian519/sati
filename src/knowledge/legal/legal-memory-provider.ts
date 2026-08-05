@@ -78,7 +78,7 @@ export class LegalMemoryProvider implements MemoryResolver {
         return {
           systemContext: cached || undefined,
           diagnostics: [
-            { code: "memory_context_empty", message: "法律知识检索缓存命中（同 query 短时复用）", severity: "info" },
+            { code: "memory_cache_hit", message: "法律知识检索缓存命中（同 query 短时复用）", severity: "info" },
           ],
         };
       }
@@ -141,12 +141,6 @@ export class LegalMemoryProvider implements MemoryResolver {
     if (this.cache && !input.signal?.aborted) {
       this.cache.set(trimmed, blocks.join("\n\n"));
     }
-
-    diagnostics.push({
-      code: "memory_context_empty",
-      message: `法律知识库命中 ${merged.length} 条`,
-      severity: "info",
-    });
 
     return { systemContext: blocks.join("\n\n"), diagnostics };
   }

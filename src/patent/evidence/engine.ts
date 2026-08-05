@@ -65,6 +65,7 @@ function evaluateCondition(name: string, ctx: ConditionContext): boolean | undef
     case "evidence_source_identified":
       return Boolean(ctx.span.sourceUri);
     case "evidence_content_hash_available":
+    case "content_hash_provided":
       return Boolean(ctx.span.contentHash);
     case "evidence_provenance_clear":
       return Boolean(ctx.span.sourceUri) || Boolean(ctx.span.docVersion);
@@ -90,6 +91,22 @@ function evaluateCondition(name: string, ctx: ConditionContext): boolean | undef
       return ctx.external.deadlineDefined;
     case "submission_within_deadline":
       return ctx.external.submissionWithinDeadline;
+    // ── EVI-002 证据收集合法性（外部输入；未提供时 pending）──
+    case "evidence_collection_legal":
+      return ctx.external.collectionLegal;
+    // ── EVI-020 举证责任：案件类型已识别（外部输入；未提供时 pending）──
+    case "case_type_identified":
+      return typeof ctx.external.caseType === "string" && ctx.external.caseType.trim().length > 0 ? true : undefined;
+    // ── EVI-030 证明标准：支持/矛盾证据已计数（外部输入；未提供时 pending）──
+    case "supporting_evidence_counted":
+      return typeof ctx.external.supportingCount === "number" ? true : undefined;
+    case "contradicting_evidence_counted":
+      return typeof ctx.external.contradictingCount === "number" ? true : undefined;
+    // ── EVI-050 证据链：保管链可追溯 / 完整性已核验（外部输入；未提供时 pending）──
+    case "custody_chain_traceable":
+      return ctx.external.custodyChainTraceable;
+    case "evidence_integrity_verified":
+      return ctx.external.integrityVerified;
     default:
       return undefined;
   }

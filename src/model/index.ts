@@ -130,3 +130,4 @@ export {
 } from "./protocol/errors.js";
 export * from "./catalog/index.js";
 export * from "./embedding/index.js";
+export { DEFAULT_MODEL_PROVIDER, DEFAULT_MODEL_ID } from "./defaults.js";

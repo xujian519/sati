@@ -184,6 +184,18 @@ export type EvidenceExternalInputs = {
   deadlineDefined?: boolean;
   /** 证据在举证期限内提交。 */
   submissionWithinDeadline?: boolean;
+  /** 证据收集主体/程序/形式合法（EVI-002 条件）。 */
+  collectionLegal?: boolean;
+  /** 案件类型已识别：invalidation / infringement / new_product_method 等（EVI-020 条件）。 */
+  caseType?: string;
+  /** 支持性证据已计数（EVI-030 证明标准条件）。 */
+  supportingCount?: number;
+  /** 矛盾证据已计数（EVI-030 证明标准条件）。 */
+  contradictingCount?: number;
+  /** 证据保管链可追溯（EVI-050 条件）。 */
+  custodyChainTraceable?: boolean;
+  /** 证据完整性已核验（EVI-050 条件）。 */
+  integrityVerified?: boolean;
 };
 
 /** 单条证据规则的适用结果（judge 时计算，供 rulesMatched 语义与审计）。 */

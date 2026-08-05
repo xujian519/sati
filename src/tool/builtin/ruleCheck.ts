@@ -75,6 +75,17 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
     async execute(input) {
       const scope = input.scope ?? "patent";
       const ruleSet = resolve(scope);
+      if (ruleSet.rules.length === 0) {
+        // 空规则集 ≠ "合规"：显式提示，避免 scope 拼错时"静默零违规"误判
+        return {
+          content: [
+            {
+              type: "text",
+              text: `rule_check(${scope}): 未加载任何规则（scope 未知或规则集为空）。可用 scope: patent`,
+            },
+          ],
+        };
+      }
       const evaluation = evaluateText(input.text, ruleSet, synonymsCache);
       if (evaluation.violations.length === 0) {
         return { content: [{ type: "text", text: `rule_check(${scope}): 无违规` }] };

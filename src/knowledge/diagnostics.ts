@@ -66,7 +66,10 @@ export function resolveKnowledgeCapabilities(
       id: "semantic-vectors",
       label: "离线语义索引",
       status: paths.vectorsDb ? "ready" : "disabled",
-      detail: paths.vectorsDb ? undefined : "build-knowledge-vectors.ts",
+      // 未构建时给出重建命令（全量 30-90 分钟），避免"已配 embedding 但无向量"的静默降级
+      detail: paths.vectorsDb
+        ? undefined
+        : "未构建（pnpm tsx scripts/build-knowledge-vectors.ts；产物 vectors.db 供 KG/法条语义召回）",
     },
     {
       id: "rerank",

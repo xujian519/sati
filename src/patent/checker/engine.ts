@@ -19,12 +19,26 @@ import {
 } from "./constants.js";
 
 function hasNegation(before: string): boolean {
-  return negationPatterns.some(pattern => pattern.test(before));
+  return negationPatterns.some(pattern => {
+    const match = pattern.exec(before);
+    if (!match) return false;
+    // 双重否定守卫：否定模式命中位置前出现反否定前缀（"并非没有新颖性"=
+    // 肯定语义），翻转判定。窗口扩大（含命中词）后此守卫必不可少，否则
+    // "本发明并非没有新颖性"会被误判为否定表述。窗口取 8 字符以覆盖
+    // "不能说该特征缺少" 这类隔词形式；endsWith 语义保证仅近邻前缀翻转。
+    const prefix = before.slice(Math.max(0, match.index - 8), match.index);
+    return !REVERSE_NEGATION_PREFIXES.some(p => prefix.endsWith(p));
+  });
 }
+
+/** 反否定前缀（出现在否定模式前构成双重否定 → 肯定语义）。 */
+const REVERSE_NEGATION_PREFIXES = ["并非", "并不", "不能说", "不能认为", "不可谓", "绝非", "不无"];
 
 /**
  * 检查关键词（或任一扩展同义词）是否在文本中被"肯定地"提及。
  * 命中位置前 NEGATION_WINDOW 字符内出现否定模式视为否定表述，不算命中。
+ * 窗口含命中词本身（slice 到 idx+candidate.length），使"缺乏创造性"这类
+ * "否定词+目标词"组合模式可命中（窗口只到 idx 时仅含"缺乏"）。
  */
 export function matchKeyword(text: string, keyword: string): boolean {
   const candidates = [keyword, ...(synonymMap[keyword] ?? [])];
@@ -33,7 +47,8 @@ export function matchKeyword(text: string, keyword: string): boolean {
     const idx = lower.indexOf(candidate.toLowerCase());
     if (idx === -1) continue;
     const start = Math.max(0, idx - NEGATION_WINDOW);
-    if (!hasNegation(text.slice(start, idx))) return true;
+    const windowText = text.slice(start, idx + candidate.length);
+    if (!hasNegation(windowText)) return true;
   }
   return false;
 }

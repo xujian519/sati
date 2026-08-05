@@ -30,6 +30,7 @@ import { createDraftClaimsTool } from "../builtin/draftClaims.js";
 import { createDraftSpecificationTool } from "../builtin/draftSpecification.js";
 import { createValidateSpecificationTool } from "../builtin/validateSpecification.js";
 import { createPatentWorkflowTool } from "../builtin/patentWorkflowTool.js";
+import { createPatentWorkflowRunTool } from "../builtin/patentWorkflowRunTool.js";
 import { createPatentPlanTaskTool } from "../builtin/patentPlanTaskTool.js";
 import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
 import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
@@ -208,6 +209,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
     registry.register(annotate(createPatentWorkflowTool(), "patent"));
+    registry.register(annotate(createPatentWorkflowRunTool(), "patent"));
     registry.register(annotate(createPatentPlanTaskTool(), "patent"));
     registry.register(annotate(createPatentWorkerValidateTool(), "patent"));
     registry.register(annotate(createEvaluateEvidenceTool(), "patent"));

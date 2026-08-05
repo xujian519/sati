@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  WORKER_ROLE_MAP,
   WorkerMonitor,
   WorkerRegistry,
   WorkerRegistryError,
@@ -17,6 +18,23 @@ test("registry registers patent workers and verifies contract completeness", () 
   assert.equal(registry.listByTier("reasoning").length, 2);
   assert.equal(registry.listByTier("reasoning")[0].name, "patent-novelty-analyzer");
   assert.equal(registry.listByTier("reasoning")[1].name, "patent-inventiveness-analyzer");
+});
+
+test("search worker: allowedTools 含专利数据工具（修正后）", () => {
+  const commander = defaultPatentWorkers().find(w => w.name === "patent-search-commander")!;
+  for (const tool of ["patent_search", "patent_metadata", "patent_legal_status"]) {
+    assert.ok(commander.allowedTools?.includes(tool), `${tool} 应允许检索 worker 调用`);
+  }
+});
+
+test("WORKER_ROLE_MAP 覆盖全部 6 个 worker 且角色无重复", () => {
+  const workers = defaultPatentWorkers().map(w => w.name);
+  const mapped = WORKER_ROLE_MAP.map(e => e.worker);
+  assert.deepEqual([...mapped].sort(), [...workers].sort(), "映射表应覆盖全部内置 worker");
+  const roles = WORKER_ROLE_MAP.filter(e => e.role !== undefined).map(e => e.role!);
+  assert.equal(new Set(roles).size, roles.length, "worker→角色映射不应重复");
+  const oa = WORKER_ROLE_MAP.find(e => e.worker === "patent-oa-writer");
+  assert.equal(oa?.role, undefined, "patent-oa-writer 无对应角色（显式标注）");
 });
 
 test("registry rejects duplicate registration and incomplete definitions", () => {
@@ -94,3 +112,9 @@ test("monitor aggregates success rate and degradation counts", () => {
   assert.equal(stats["patent-novelty-analyzer"].degradedCount, 1);
   assert.match(monitor.summary(), /patent-novelty-analyzer/);
 });
+
+// ---------------------------------------------------------------------------
+// 校验语义（2026-08 回退说明）：label:N / regex / format:json 的 DSL 因
+// defaultPatentWorkers 零使用而回退为纯子串校验（见 worker-contract.ts 注释），
+// 此处不再保留对应测试——纯子串语义由"硬性字段缺失"既有用例覆盖。
+// ---------------------------------------------------------------------------

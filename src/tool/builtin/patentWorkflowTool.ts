@@ -13,8 +13,10 @@ import {
   type RuleCheckResult,
   type Verdict,
   type WorkflowManifest,
+  type WorkflowRunResult,
 } from "../../patent/index.js";
 import { StageHandlerRegistry } from "../../patent/atoms/index.js";
+import { caseWorkflowRunsDir } from "../../patent/paths.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type PatentWorkflowStageOutput = {
@@ -62,16 +64,17 @@ function summarizeCheck(verdict: Verdict, failures: readonly RuleCheckResult[]):
 /**
  * 解析案例持久化目录：绝对路径 → `<caseId>/workflow-runs`；相对路径（含分隔符）→
  * `<cwd>/<caseId>/workflow-runs`；纯 id → `<cwd>/data/cases/<caseId>/workflow-runs`
- * （对齐 worker-contract 的 data/cases/{caseId}/outputs 约定）。
+ * （路径约定来自 src/patent/paths.ts 的 caseWorkflowRunsDir，与 worker-contract 的
+ * outputs 目录同源）。patent_workflow_run（原子执行工具）复用本函数。
  */
-function resolveWorkflowRunsDir(caseId: string, cwd: string): string {
+export function resolveWorkflowRunsDir(caseId: string, cwd: string): string {
   if (isAbsolute(caseId)) return join(caseId, "workflow-runs");
   if (caseId.includes("/") || caseId.includes("\\")) return join(cwd, caseId, "workflow-runs");
-  return join(cwd, "data", "cases", caseId, "workflow-runs");
+  return join(cwd, caseWorkflowRunsDir(caseId));
 }
 
 /** 持久化 runId 键：路径形式取 basename，避免文件路径含分隔符破坏 JSON 文件名。 */
-function caseKeyOf(caseId: string): string {
+export function caseKeyOf(caseId: string): string {
   if (isAbsolute(caseId) || caseId.includes("/") || caseId.includes("\\")) {
     return basename(caseId);
   }
@@ -79,10 +82,69 @@ function caseKeyOf(caseId: string): string {
 }
 
 /** 原子写：先写同目录临时文件再 rename，避免并发/中断产生半写文件。 */
-async function atomicWriteFile(file: string, content: string): Promise<void> {
+export async function atomicWriteFile(file: string, content: string): Promise<void> {
   const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
   await writeFile(tmp, content, "utf8");
   await rename(tmp, file);
+}
+
+// ---------------------------------------------------------------------------
+// 工作流运行结果共享装配（收口工具 patent_workflow 与原子工具
+// patent_workflow_run 共用：持久化目标解析、Mermaid 落盘、尾部文本拼装）
+// ---------------------------------------------------------------------------
+
+export type WorkflowRunPersistTarget = { runsDir: string; runId: string };
+
+/** 解析本次运行的持久化目标（runsDir/runId）；无 caseId 时返回 undefined。 */
+export function resolveRunPersistTarget(
+  caseId: string | undefined,
+  manifestId: string,
+  cwd: string,
+): WorkflowRunPersistTarget | undefined {
+  if (caseId === undefined) return undefined;
+  return {
+    runsDir: resolveWorkflowRunsDir(caseId, cwd),
+    runId: `${caseKeyOf(caseId)}__${manifestId}`,
+  };
+}
+
+/**
+ * 执行后写 Mermaid 计划图并返回持久化提示。
+ * JSON 由 runWorkflow 内部经 persist 选项保存；本函数只补 .mmd 与提示，
+ * 并把 JSON 持久化失败（result.persistWarning）透出到提示文本。
+ */
+export async function writeRunArtifacts(
+  target: WorkflowRunPersistTarget,
+  manifest: WorkflowManifest,
+  result: WorkflowRunResult,
+): Promise<string> {
+  try {
+    await atomicWriteFile(join(target.runsDir, `${target.runId}.mmd`), workflowManifestToMermaid(manifest));
+    const note = `持久化: ${join(target.runsDir, `${target.runId}.json`)} + ${join(target.runsDir, `${target.runId}.mmd`)}`;
+    return result.persistWarning ? `${note}\n${result.persistWarning}` : note;
+  } catch (err) {
+    return `持久化失败: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
+/** 工作流运行结果尾部文本拼装（阶段行/规则门/持久化提示已由调用方备好）。 */
+export function renderWorkflowResultText(opts: {
+  toolName: string;
+  result: WorkflowRunResult;
+  stageLines: string[];
+  persistNote: string;
+  checkSection: string;
+  interruptNote?: string;
+}): string {
+  const completion = opts.result.completed ? "completed" : "incomplete";
+  return [
+    `${opts.toolName}(${opts.result.manifestId}): ${opts.result.summary}`,
+    ...opts.stageLines,
+    ...(opts.interruptNote !== undefined ? [opts.interruptNote] : []),
+    `完成状态: ${completion}`,
+    opts.persistNote,
+    ...(opts.checkSection !== "" ? [opts.checkSection] : []),
+  ].join("\n");
 }
 
 /**
@@ -100,7 +162,10 @@ async function atomicWriteFile(file: string, content: string): Promise<void> {
  *
  * 注意：本工具传**空 StageHandlerRegistry**（禁用原子执行）——阶段输出由主代理
  * 提供、工具只做收口校验；真正需要原子自动执行（handler 内部调 LLM/检索）时，
- * 调用方应注入已注册内置原子的注册表与 provider（见 src/patent/atoms）。
+ * 使用 `patent_workflow_run` 工具（src/tool/builtin/patentWorkflowRunTool.ts）：
+ * 它注入全局原子注册表 + provider（LLM + nuo-patent 检索）自动执行声明 atom 的
+ * 阶段（见 src/patent/atoms）。两条路径分工明确：收口（本工具）消费主代理文本，
+ * 原子（patent_workflow_run）自动产出。
  */
 export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInput> {
   const manifests = new Map(builtinPatentManifests.map(({ manifest }) => [manifest.id, manifest]));
@@ -181,27 +246,17 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
 
       const byId = new Map((input.outputs ?? []).map(o => [o.stageId, o.text]));
       // 空注册表：禁用原子执行，保持"主代理产出 → 工具收口"语义（无 LLM 调用）。
+      const persistTarget = resolveRunPersistTarget(input.caseId, manifest.id, context?.cwd ?? process.cwd());
       const result = await runWorkflow(manifest, { caseId: input.caseId }, async stage => byId.get(stage.id) ?? "", {
         handlers: new StageHandlerRegistry(),
+        persist: persistTarget ? new JsonFileWorkflowRunStore(persistTarget.runsDir) : undefined,
+        runId: persistTarget?.runId,
       });
 
-      // 提供 caseId 时自动持久化到 `<caseDir>/workflow-runs/<runId>.json`，并顺带
-      // 写一份同名的 Mermaid 计划文档 `<runId>.mmd`（便于人工审阅执行链）。
-      // 失败不阻断工具结果，仅提示。
-      let persistNote = "持久化: 未启用（未提供 caseId）";
-      if (input.caseId !== undefined) {
-        const runsDir = resolveWorkflowRunsDir(input.caseId, context?.cwd ?? process.cwd());
-        const runId = `${caseKeyOf(input.caseId)}__${result.manifestId}`;
-        try {
-          const store = new JsonFileWorkflowRunStore(runsDir);
-          await store.saveRun(result, runId);
-          // saveRun 已确保 runsDir 存在，直接写 .mmd（原子写防半写文件）。
-          await atomicWriteFile(join(runsDir, `${runId}.mmd`), workflowManifestToMermaid(manifest));
-          persistNote = `持久化: ${join(runsDir, `${runId}.json`)} + ${join(runsDir, `${runId}.mmd`)}`;
-        } catch (err) {
-          persistNote = `持久化失败: ${err instanceof Error ? err.message : String(err)}`;
-        }
-      }
+      // 提供 caseId 时自动持久化（JSON 由 runWorkflow 保存，.mmd 补写；失败仅提示）。
+      const persistNote = persistTarget
+        ? await writeRunArtifacts(persistTarget, manifest, result)
+        : "持久化: 未启用（未提供 caseId）";
 
       const lines = result.stages.map(s => {
         const flag = s.degraded ? "⚠️ 降级" : "✅";
@@ -216,13 +271,13 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
         content: [
           {
             type: "text",
-            text: [
-              `patent_workflow(${result.manifestId}): ${result.summary}`,
-              ...lines,
-              `完成状态: ${result.completed ? "completed" : "incomplete（有降级阶段）"}`,
+            text: renderWorkflowResultText({
+              toolName: "patent_workflow",
+              result,
+              stageLines: lines,
               persistNote,
-              ...(checkSection !== "" ? [checkSection] : []),
-            ].join("\n"),
+              checkSection,
+            }),
           },
         ],
       };

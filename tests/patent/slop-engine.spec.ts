@@ -94,7 +94,7 @@ test("结构层：理由堆砌（≥4 条理由）", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 评分层：50 分五维
+// 评分层：43 分五维（directness 8 / evidence 10 / rhythm 8 / practicality 9 / concision 8，满分 43，通过线 35）
 // ---------------------------------------------------------------------------
 
 test("评分：实质内容文档高分通过（≥35）", () => {
@@ -155,7 +155,7 @@ test("报告：格式完整且含评分", () => {
   const analysis = analyzeSlop("综上所述，区别特征无段落号。");
   const report = formatSlopAnalysis(analysis);
   assert.match(report, /反套话润色报告/);
-  assert.match(report, /评分：\d+\/50/);
+  assert.match(report, /评分：\d+\/43/, "43 分制渲染（五维上限 8/10/8/9/8，满分 43）");
   assert.match(report, /短语删除\/替换|结构缺陷/);
 });
 

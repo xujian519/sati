@@ -74,7 +74,6 @@ describe("legal-memory-provider 法条语义召回", () => {
     assert.ok(result.systemContext.includes("<law-database>"));
     assert.ok(result.systemContext.includes("专利法"));
     assert.ok(result.systemContext.includes("商标法"));
-    assert.ok(result.diagnostics.some(d => d.code === "memory_context_empty"));
   });
 
   it("FTS 命中与语义命中 RRF 融合（FTS 缺失时语义兜底）", async () => {

@@ -1,10 +1,10 @@
 /**
- * src/patent/checker — 场景规则集（10 组，29 条）。
+ * src/patent/checker — 场景规则集（11 组，44 条）。
  *
  * 移植自 Mady domains/workflows/patent/rule_{novelty,inventiveness,disclosure,
  * infringement,invalidation,reexamination,design,priority,public_access,
  * subject_matter}.go（覆盖专利法 A2/A22.2/A22.3/A26.3/A33 及无效/复审/外观/优先权）。
- * 推理模式规则见 reasoning-rules.ts。
+ * 推理模式规则见 reasoning-rules.ts（24 条）；defaultPatentRules() 合计 68 条。
  */
 
 import type { CheckRule } from "./types.js";

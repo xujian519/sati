@@ -3,7 +3,13 @@
  */
 
 import { type Atom } from "../../atom.js";
-import { type PipelineState, type StageExecuteInput, type StageHandler, getStateString } from "../../handler.js";
+import {
+  type PipelineState,
+  type StageExecuteInput,
+  type StageHandler,
+  getStateArray,
+  getStateString,
+} from "../../handler.js";
 import { callLlm, degraded, parseLlmJson, requireLlm, resolveInputText } from "./llm.js";
 
 // ---------------------------------------------------------------------------
@@ -24,7 +30,14 @@ export class SearchHandler implements StageHandler {
   readonly category = "search" as const;
 
   async execute({ state, provider }: StageExecuteInput): Promise<PipelineState> {
-    const query = resolveInputText(state, ["query", "search_query"], "keywords");
+    // 查询词：显式 query/search_query 优先；其次 keywords 键——KeywordsHandler
+    // 产出的是字符串数组，需 join 为查询串（此前 getStateString 对数组返回空，
+    // 导致 disclosure 管线的 search 阶段在原子执行下恒降级）。
+    const explicit = resolveInputText(state, ["query", "search_query"], "");
+    const query =
+      explicit ||
+      getStateArray(state, "keywords").map(String).filter(Boolean).join(" ") ||
+      getStateString(state, "keywords");
     if (!provider?.search) {
       return degraded("search", "未配置检索器（provider.search 缺失）");
     }

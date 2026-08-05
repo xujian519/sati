@@ -57,3 +57,13 @@ description: "技术交底书理解分析：结构化理解、PFE 三元组提�
 - 权利要求撰写：见 `patent-draft-claims`
 - 说明书撰写：见 `patent-draft-specification`
 - 总控与质量门禁：见 `patent-agent`（其"技术交底书分析能力"章节提供 PFE 校验与 2 轮修正回退）
+
+## 自动执行提示
+
+需要**自动**跑完 PFE 提取 → 检索 → 逐特征新颖性初判的原子管线时，调用
+`patent_workflow_run` 工具（manifestId `patent_disclosure_v1`，输入交底书文本）：
+extract/merge/groundedness/keywords/search/novelty 各原子阶段自动执行，
+在 review_gate（人工复核）处暂停等待确认。注意：本工具**无断点续跑**——
+再次调用会从零重跑并再次暂停；人工确认后的 draft_claims 阶段由主代理基于
+已产出的 PFE/新颖性结果用收口语义（`patent_workflow`）或撰写技能继续。
+（`patent_workflow` 工具是收口语义——阶段文本由主代理产出后收口校验，二者互补。）

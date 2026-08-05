@@ -143,7 +143,7 @@ function evaluateReport(text: string): Record<string, PatentEvalDimension> {
   dims["表达质量"] = {
     score: round2(slopScore),
     passed: slopScore >= 0.6,
-    details: `${slopAnalysis.changes.length} 处短语套话、${slopAnalysis.issues.length} 处结构缺陷、${countAbsolutePhrases(text)} 处绝对化表述（50 分制 ${slopAnalysis.score.total}/50）`,
+    details: `${slopAnalysis.changes.length} 处短语套话、${slopAnalysis.issues.length} 处结构缺陷、${countAbsolutePhrases(text)} 处绝对化表述（43 分制 ${slopAnalysis.score.total}/43）`,
   };
 
   const sufficient = scoreContentSufficiency(text);
@@ -179,14 +179,15 @@ function sectionCoverageDetail(text: string): string {
 
 /**
  * 表达质量评分（反套话引擎，移植自 Mady slop_engine）。
- * 基于 50 分五维评分（total/50）+ 结构缺陷惩罚（每处 -0.05，上限 -0.25）：
+ * 基于 43 分五维评分（total/43；五维上限 8/10/8/9/8，满分 43，通过线 35≈81%）
+ * + 结构缺陷惩罚（每处 -0.05，上限 -0.25）：
  * 结构缺陷（假三步法/假对比表等）比短语套话更严重，单独计罚。
  * 绝对化表述（P-A07 条款：绝对/一定/百分百/毫无疑问/必然，单一事实源
  * quality-gate 的 ABSOLUTE_PHRASES）按每处 -0.05 追加惩罚——slop 引擎的
  * 短语规则不含这些词，恢复旧 SLOP_PHRASES 的评分行为。
  */
 function scoreFromSlopAnalysis(analysis: ReturnType<typeof analyzeSlop>, text: string): number {
-  const base = analysis.score.total / 50;
+  const base = analysis.score.total / 43;
   const penalty = Math.min(0.25, analysis.issues.length * 0.05) + Math.min(0.25, countAbsolutePhrases(text) * 0.05);
   return Math.max(0, Math.min(1, base - penalty));
 }

@@ -8,6 +8,10 @@
  *
  * 注：`patent_workflow` 内置工具目前传空 StageHandlerRegistry（收口语义），
  * 本 provider 供需要原子自动执行的调用方使用，不改变现有工具行为。
+ *
+ * ✅ 接线状态（2026-08）：经 `patent_workflow_run` 工具接入生产——该工具
+ * （src/tool/builtin/patentWorkflowRunTool.ts）缺省使用本 provider 的 search
+ * 作为原子 search 阶段的检索器；测试亦可注入 mock（tests/tool/builtin/patentWorkflowRun.spec.ts）。
  */
 
 import { searchPatents as searchPatentsImpl } from "nuo-patent";

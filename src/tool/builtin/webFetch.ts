@@ -4,7 +4,13 @@
  * the 13-behaviour alignment checklist this implementation tracks.
  */
 
-import type { CanonicalModelError, CanonicalModelRequest, CanonicalUsage } from "../../model/index.js";
+import {
+  DEFAULT_MODEL_ID,
+  DEFAULT_MODEL_PROVIDER,
+  type CanonicalModelError,
+  type CanonicalModelRequest,
+  type CanonicalUsage,
+} from "../../model/index.js";
 import type { PermissionResult } from "../../permission/index.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolExecutionOutput, SatiToolModelClient } from "../protocol/types.js";
@@ -67,8 +73,7 @@ export type CreateWebFetchToolOptions = {
   fetchUrl?: typeof getURLMarkdownContent;
 };
 
-const DEFAULT_PROVIDER = "openrouter";
-const DEFAULT_MODEL_ID = "moonshotai/kimi-k2.6";
+// 缺省二次模型与 patent_workflow_run / agent 共用（见 src/model/defaults.ts）
 const DEFAULT_MAX_OUTPUT_TOKENS = 65_536;
 const DEFAULT_MODE: WebFetchMode = "llm";
 
@@ -362,7 +367,7 @@ export function createWebFetchTool(
 
       const secondaryPrompt = makeSecondaryModelPrompt(truncated, prompt, isPreapproved);
       const request: CanonicalModelRequest = {
-        provider: options.provider ?? DEFAULT_PROVIDER,
+        provider: options.provider ?? DEFAULT_MODEL_PROVIDER,
         model: options.modelId ?? DEFAULT_MODEL_ID,
         messages: [
           {

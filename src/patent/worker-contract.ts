@@ -9,6 +9,8 @@
  *   - Registry 注册完备性校验 + 懒激活
  */
 
+import { CASE_ROOT_REL, caseOutputsDir } from "./paths.js";
+
 export type WorkerTier = "work" | "provision" | "reasoning" | "domain" | "checker";
 
 export type ContractLevel = "hard" | "soft" | "structured";
@@ -151,8 +153,14 @@ export class WorkerRegistry {
 }
 
 /**
- * 校验 worker 输出：按契约检查 requiredFields 是否出现在输出文本中。
+ * 校验 worker 输出：按契约检查 requiredFields 是否以子串形式出现在输出文本中。
  * 硬性缺失 → 降级标记（degraded），不抛错不中断。
+ *
+ * 说明（2026-08 回退）：此前实现的 `label:N` / `regex:/…/` 字段模式与
+ * `format: "json"` 键校验属"无生产消费者的 DSL"——defaultPatentWorkers 全部
+ * 为 markdown + 纯 label，且子串计数无法防模板话术（测试已承认该边界）。
+ * 按"不为测试写健壮性"原则回退为纯子串校验；未来若引入 JSON 格式的 worker
+ * 契约，再按契约实现键级校验。
  */
 export function validateWorkerOutput(
   worker: WorkerContract,
@@ -223,6 +231,23 @@ export class WorkerMonitor {
   }
 }
 
+/**
+ * Worker → 角色映射表（审计用）。
+ *
+ * 代码内 worker 契约（defaultPatentWorkers）与 skills/patent-* 的 type: role 角色
+ * 是两套命名体系（kebab-case worker vs 角色 slug），语义存在对应但标识符分叉。
+ * 本表显式记录对应关系，避免任一侧增删时静默漂移；`patent-oa-writer` 当前
+ * 无对应 type: role 角色（OA 答复是技能 patent-oa-response 而非角色）。
+ */
+export const WORKER_ROLE_MAP: ReadonlyArray<{ worker: string; role?: string; note?: string }> = [
+  { worker: "patent-technical-analyzer", role: "patent-analyzer", note: "PFE 三要素提取" },
+  { worker: "patent-search-commander", role: "patent-retriever", note: "检索策略与执行" },
+  { worker: "patent-novelty-analyzer", role: "patent-novelty-checker", note: "A22.2 新颖性" },
+  { worker: "patent-inventiveness-analyzer", role: "patent-creativity-checker", note: "A22.3 三步法" },
+  { worker: "quality_checker", role: "patent-quality-checker", note: "质量复核" },
+  { worker: "patent-oa-writer", role: undefined, note: "无对应 type: role 角色（OA 答复为技能）" },
+];
+
 /** 内置专利 worker 目录（移植 Mady DefaultWorkers 的专利相关条目，工具名适配 Sati）。 */
 export function defaultPatentWorkers(): WorkerContract[] {
   return [
@@ -231,10 +256,10 @@ export function defaultPatentWorkers(): WorkerContract[] {
       tier: "work",
       description: "分析技术交底书，提取技术三要素（问题/特征/效果）PFE 三元组",
       allowedTools: ["read_file", "web_fetch"],
-      inputs: [{ path: "data/cases/{caseId}/disclosure/*.md", description: "技术交底书" }],
+      inputs: [{ path: `${CASE_ROOT_REL}/{caseId}/disclosure/*.md`, description: "技术交底书" }],
       outputs: [
         {
-          path: "data/cases/{caseId}/outputs/technical-analysis.md",
+          path: `${caseOutputsDir("{caseId}")}/technical-analysis.md`,
           format: "markdown",
           contractLevel: "hard",
           requiredFields: ["技术问题", "技术特征", "技术效果"],
@@ -247,10 +272,19 @@ export function defaultPatentWorkers(): WorkerContract[] {
       name: "patent-search-commander",
       tier: "domain",
       description: "制定检索策略并执行专利检索，输出检索报告",
-      allowedTools: ["web_search", "web_fetch", "patent_eval"],
+      // 修正（2026-08）：检索 worker 应可调用专利数据工具（此前遗漏 patent_search 系，
+      // 与 patent-retriever 角色的检索工具集冲突）
+      allowedTools: [
+        "patent_search",
+        "patent_metadata",
+        "patent_legal_status",
+        "web_search",
+        "web_fetch",
+        "patent_eval",
+      ],
       outputs: [
         {
-          path: "data/cases/{caseId}/outputs/search-report.md",
+          path: `${caseOutputsDir("{caseId}")}/search-report.md`,
           format: "markdown",
           contractLevel: "hard",
           requiredFields: ["检索式", "对比文件", "公开日"],
@@ -266,7 +300,7 @@ export function defaultPatentWorkers(): WorkerContract[] {
       canInvoke: ["patent-search-commander", "patent-technical-analyzer"],
       outputs: [
         {
-          path: "data/cases/{caseId}/outputs/novelty-analysis.md",
+          path: `${caseOutputsDir("{caseId}")}/novelty-analysis.md`,
           format: "markdown",
           contractLevel: "hard",
           requiredFields: ["新颖性结论", "置信度"],
@@ -282,7 +316,7 @@ export function defaultPatentWorkers(): WorkerContract[] {
       canInvoke: ["patent-search-commander", "patent-technical-analyzer"],
       outputs: [
         {
-          path: "data/cases/{caseId}/outputs/inventiveness-analysis.md",
+          path: `${caseOutputsDir("{caseId}")}/inventiveness-analysis.md`,
           format: "markdown",
           contractLevel: "hard",
           requiredFields: [
@@ -304,7 +338,7 @@ export function defaultPatentWorkers(): WorkerContract[] {
       allowedTools: ["read_file", "write_file", "patent_eval"],
       outputs: [
         {
-          path: "data/cases/{caseId}/outputs/oa-response.md",
+          path: `${caseOutputsDir("{caseId}")}/oa-response.md`,
           format: "markdown",
           contractLevel: "hard",
           requiredFields: ["意见陈述", "修改对照"],
@@ -319,7 +353,7 @@ export function defaultPatentWorkers(): WorkerContract[] {
       allowedTools: ["patent_eval"],
       outputs: [
         {
-          path: "data/cases/{caseId}/outputs/quality-report.md",
+          path: `${caseOutputsDir("{caseId}")}/quality-report.md`,
           format: "markdown",
           contractLevel: "hard",
           requiredFields: ["质量评分", "通过"],
