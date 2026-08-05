@@ -139,7 +139,19 @@ async function throttle(url: string, limit?: LiteratureRateLimit): Promise<() =>
 
 // ── GET 缓存（防污染） ──────────────────────────────────────────────────────
 
+/** 缓存条目上限：超限按 LRU 淘汰最久未访问项，防止长时间运行（分页检索等）无限增长。 */
+const MAX_CACHE_ENTRIES = 500;
 const cache = new Map<string, { expires: number; body: string }>();
+
+/** 写入缓存并维护 LRU 顺序（Map 插入序 = 最近访问序）。 */
+function cacheSet(key: string, value: { expires: number; body: string }): void {
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next();
+    if (!oldest.done) cache.delete(oldest.value);
+  }
+}
 
 /**
  * 执行一次带超时/重试/限速/缓存的 HTTP 请求。
@@ -155,10 +167,17 @@ const cache = new Map<string, { expires: number; body: string }>();
  */
 export async function literatureFetch(url: string, opts: LiteratureFetchOptions = {}): Promise<LiteratureResponse> {
   const ttl = opts.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
-  const cacheKey = ttl > 0 ? `GET ${url}` : undefined;
+  // 缓存键并入 Accept（getText 与 getJSON 对同一 URL 的结果不可互换），
+  // 避免内容协商结果互相污染。
+  const cacheKey = ttl > 0 ? `GET ${opts.accept ?? "*/*"} ${url}` : undefined;
   if (cacheKey) {
     const hit = cache.get(cacheKey);
-    if (hit && hit.expires > Date.now()) return { ok: true, status: 200, body: hit.body };
+    if (hit && hit.expires > Date.now()) {
+      // 刷新 LRU 顺序（重新插入到尾部）
+      cache.delete(cacheKey);
+      cache.set(cacheKey, hit);
+      return { ok: true, status: 200, body: hit.body };
+    }
     if (hit) cache.delete(cacheKey);
   }
 
@@ -183,7 +202,7 @@ export async function literatureFetch(url: string, opts: LiteratureFetchOptions 
     const body = await res.text();
     // 只缓存健康的 2xx 响应；空 body / looksValid 拒绝的 body 一律不缓存。
     const valid = res.ok && body.trim().length > 0 && (opts.looksValid?.(body) ?? true);
-    if (cacheKey && valid) cache.set(cacheKey, { expires: Date.now() + ttl, body });
+    if (cacheKey && valid) cacheSet(cacheKey, { expires: Date.now() + ttl, body });
     return { ok: res.ok, status: res.status, body };
   } finally {
     done();
