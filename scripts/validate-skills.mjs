@@ -80,6 +80,35 @@ async function validateSkill(skillDir) {
   }
   const lineCount = content.split("\n").length;
   if (lineCount > 500) issues.push(`warn: ${slug} SKILL.md is ${lineCount} lines (>500 guidance)`);
+
+  // Wiki 卡片路径校验：反引号内以 wiki 顶层目录（如 专利实务/复审无效）开头的相对路径
+  // 须能在 src/knowledge/patent/wiki/ 下解析到 .md，防止技能文档引用漂移。
+  // 顶层目录从 wiki 目录动态读取；目录不存在（如按自定义路径运行）时跳过本检查。
+  const wikiRoot = resolve("src/knowledge/patent/wiki");
+  const wikiTops = new Set();
+  try {
+    const entries = await fs.readdir(wikiRoot, { withFileTypes: true });
+    for (const entry of entries) if (entry.isDirectory()) wikiTops.add(entry.name);
+  } catch {
+    // 非仓库根目录运行时 wiki 目录不可达，跳过
+  }
+  if (wikiTops.size > 0) {
+    const seen = new Set();
+    for (const match of content.matchAll(/`([^`\n]+)`/g)) {
+      const ref = match[1].trim();
+      if (!ref.includes("/") || ref.includes("*")) continue; // 非相对路径 / glob 通配跳过
+      if (!wikiTops.has(ref.split("/")[0])) continue; // 非 wiki 顶层目录开头（如 references/、src/）跳过
+      const rel = ref.endsWith(".md") ? ref : `${ref}.md`;
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      try {
+        await fs.access(join(wikiRoot, rel));
+      } catch {
+        issues.push(`hard: ${slug} SKILL.md references missing wiki card: ${ref}`);
+      }
+    }
+  }
+
   const stats = { fileCount: 0, totalBytes: 0 };
   await walk(skillDir, "", stats, issues);
   if (stats.fileCount > MAX_FILE_COUNT) issues.push(`hard: ${slug} has >${MAX_FILE_COUNT} files`);
