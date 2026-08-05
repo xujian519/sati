@@ -1,4 +1,4 @@
-import { KgStore } from "../shared/kg-store.js";
+import { KgStore, type KgNeighbor } from "../shared/kg-store.js";
 import type { KgNode } from "./types.js";
 
 /**
@@ -20,10 +20,35 @@ export type PatentKgSearchOptions = {
   keywordLimit?: number;
   /** 每个命中节点扩展的邻居上限（默认 6）。 */
   expandLimit?: number;
+  /** 关键词匹配模式：phrase（默认）/ or（分词 OR，多词召回）。 */
+  mode?: "phrase" | "or";
 };
 
 const SIMILAR_RELATIONS = new Set(["SIMILAR_TO", "RELATED_TO"]);
 const CITE_RELATIONS = new Set(["CITES", "CITES_LAW", "FREQUENTLY_CITES", "REFERENCES"]);
+
+/**
+ * node_type 别名映射：数据库实际类型与 types.ts 中 KgNodeType 定义不一致
+ * （如 KgNodeType 的 "Judgment" 对应 db 中的 SupremeCourtJudgment / RegionalCourtJudgment）。
+ */
+const NODE_TYPE_ALIASES: Record<string, string[]> = {
+  Judgment: ["SupremeCourtJudgment", "RegionalCourtJudgment"],
+  LawArticle: ["Clause", "Chapter"],
+  Concept: ["Concept", "ConceptDetail", "一级概念", "二级概念", "三级概念"],
+};
+
+/** 解析 node_type（别名展开；未命中别名时按数据库实际类型透传）。 */
+export function resolveNodeTypes(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  const exact = NODE_TYPE_ALIASES[trimmed];
+  if (exact) return exact;
+  const lower = trimmed.toLowerCase();
+  for (const [alias, types] of Object.entries(NODE_TYPE_ALIASES)) {
+    if (alias.toLowerCase() === lower) return types;
+  }
+  return [trimmed];
+}
 
 export class PatentKgAdapter {
   constructor(private readonly store: KgStore) {}
@@ -37,7 +62,7 @@ export class PatentKgAdapter {
   searchRelevant(query: string, options: PatentKgSearchOptions = {}): RelevantHit[] {
     const keywordLimit = options.keywordLimit ?? 5;
     const expandLimit = options.expandLimit ?? 6;
-    const hits = this.store.searchByKeyword(query, keywordLimit);
+    const hits = this.store.searchByKeyword(query, keywordLimit, { mode: options.mode });
     const results: RelevantHit[] = [];
     const seen = new Set<string>();
 
@@ -96,5 +121,14 @@ export class PatentKgAdapter {
   /** 按类型列出节点（如 "IPC"、"GuidelineRule"、"WikiCard"）。 */
   listByType(nodeType: string, limit = 50): KgNode[] {
     return this.store.listByType(nodeType, limit);
+  }
+
+  /** 查询节点的出向邻居（relation 过滤可选）。 */
+  getNeighbors(nodeId: string, relation?: string, limit = 20): KgNeighbor[] {
+    return this.store.getNeighbors(nodeId, relation, limit);
+  }
+
+  close(): void {
+    this.store.close();
   }
 }

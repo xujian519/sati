@@ -23,7 +23,17 @@ export type KgPathEdge = {
   relation: string;
 };
 
-const FTS_MIN_RUNES = 3; // trigram tokenizer 要求 3+ 字符
+const FTS_MIN_RUNES = 3; // unicode61 tokenizer 下 2 字词几乎无法以独立 token 匹配，短词走 LIKE
+/** 分词模式的分隔符（空格 + 中文标点）。 */
+const OR_SEPARATOR_RE = /[\s，。？！、；：,.;!?]+/;
+/** 候选词数上限（防超长 query 构造超大 FTS SQL / 多次 LIKE 扫描）。 */
+const MAX_OR_TERMS = 8;
+
+/** 关键词搜索选项。 */
+export type KgSearchOptions = {
+  /** 匹配模式：phrase=整体短语（默认，保持既有行为）；or=分词 OR（多词召回）。 */
+  mode?: "phrase" | "or";
+};
 
 /** 单条 FTS5 命中（nodes_fts 返回原始行）。 */
 type FtsHit = {
@@ -90,9 +100,11 @@ export class KgStore {
   }
 
   /** 按关键词搜索节点（FTS5 MATCH；短查询或缺失 FTS 时降级 LIKE）。 */
-  searchByKeyword(keyword: string, limit = 10): KgNode[] {
+  searchByKeyword(keyword: string, limit = 10, options: KgSearchOptions = {}): KgNode[] {
     const trimmed = keyword.trim();
     if (!trimmed) return [];
+    if (options.mode === "or") return this.searchByKeywordOr(trimmed, limit);
+
     const runes = Array.from(trimmed);
 
     let ids: string[];
@@ -102,19 +114,98 @@ export class KgStore {
         .prepare(`SELECT id, name, title FROM nodes_fts WHERE nodes_fts MATCH ? LIMIT ?`)
         .all(`"${escaped}"`, limit) as FtsHit[];
       ids = rows.map(r => r.id);
+      // FTS 词级匹配未命中且无分隔符时降级 LIKE 子串：unicode61 下长句/短语常无完整 token，
+      // 子串匹配比 token 完全匹配宽松（如 "以说明书为依据" 作为 token 不存在时仍可命中正文）。
+      // 带分隔符短语的 LIKE（%创造性 三步法%）召回率趋近于零，跳过以避免无谓全表扫描。
+      if (ids.length === 0 && !OR_SEPARATOR_RE.test(trimmed)) {
+        ids = this.likeSearch(trimmed, limit).map(row => row.id);
+      }
     } else {
-      const pattern = `%${trimmed.replace(/[%_\\]/g, m => `\\${m}`)}%`;
-      const rows = this.db
-        .prepare(
-          `SELECT id FROM nodes
-           WHERE name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
-           LIMIT ?`,
-        )
-        .all(pattern, pattern, pattern, limit) as Array<{ id: string }>;
-      ids = rows.map(r => r.id);
+      ids = this.likeSearch(trimmed, limit).map(row => row.id);
     }
 
     return ids.map(id => this.getNode(id)).filter((n): n is KgNode => n !== undefined);
+  }
+
+  /** LIKE 子串检索（name/title/content 任一包含即命中）。 */
+  private likeSearch(keyword: string, limit: number): Array<{ id: string }> {
+    const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
+    return this.db
+      .prepare(
+        `SELECT id FROM nodes
+         WHERE name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
+         LIMIT ?`,
+      )
+      .all(pattern, pattern, pattern, limit) as Array<{ id: string }>;
+  }
+
+  /**
+   * OR 分词检索（多词召回）。
+   *
+   * nodes_fts 为 FTS5 默认 unicode61 tokenizer：连续汉字构成单个 token，
+   * 短语 MATCH 需 token 完全相等且相邻（"创造性 三步法" 基本不命中）。
+   * 本模式在单一入口内完成拆词与召回（调用方无需再分词）：
+   *   - 短词（≤3 字）直接整体：3 字走 FTS，2 字降级 LIKE
+   *   - 分隔符拆词：≥3 字词 FTS `"词1" OR "词2"`，2 字词 LIKE；1 字词丢弃
+   *     （LIKE %单字% 命中数万节点，纯噪音）
+   *   - 无分隔 4+ 字长词：整体 LIKE 精确子串优先（unicode61 下 4+ 字 token 基本不存在），
+   *     窗口子词补充召回（4-5 字 2 字窗 LIKE / ≥6 字 3 字窗 FTS）
+   *   - 全部未命中时整体 LIKE 一次（覆盖 3 字词 FTS 未命中但正文含子串的场景）
+   */
+  private searchByKeywordOr(keyword: string, limit: number): KgNode[] {
+    const trimmed = keyword.trim();
+    if (!trimmed) return [];
+    const chars = Array.from(trimmed);
+    const hasSeparators = OR_SEPARATOR_RE.test(trimmed);
+
+    const ids = new Set<string>();
+    const ftsTerms: string[] = [];
+    const likeTerms: string[] = [];
+
+    /** 词归入 FTS（≥3 字）或 LIKE（2 字）候选；1 字词丢弃。 */
+    const collect = (term: string): void => {
+      const runes = Array.from(term.trim());
+      if (this.hasFts && runes.length >= FTS_MIN_RUNES) ftsTerms.push(term.trim());
+      else if (runes.length >= 2) likeTerms.push(term.trim());
+    };
+
+    if (!hasSeparators && chars.length <= 3) {
+      collect(trimmed);
+    } else if (hasSeparators) {
+      for (const part of trimmed.split(OR_SEPARATOR_RE)) collect(part);
+    } else {
+      // 无分隔长词：整体 LIKE 优先（精确子串，插入序靠前以保证限流后存活），窗口子词补充
+      if (chars.length >= 4) {
+        for (const row of this.likeSearch(trimmed, limit)) ids.add(row.id);
+      }
+      const step = chars.length <= 5 ? 2 : 3;
+      for (let i = 0; i + step <= chars.length; i += step) {
+        collect(chars.slice(i, i + step).join(""));
+      }
+    }
+
+    if (ftsTerms.length > 0) {
+      const match = ftsTerms
+        .slice(0, MAX_OR_TERMS)
+        .map(term => `"${term.replace(/"/g, '""')}"`)
+        .join(" OR ");
+      const rows = this.db
+        .prepare(`SELECT id, name, title FROM nodes_fts WHERE nodes_fts MATCH ? LIMIT ?`)
+        .all(match, limit) as FtsHit[];
+      for (const row of rows) ids.add(row.id);
+    }
+
+    for (const term of likeTerms.slice(0, MAX_OR_TERMS)) {
+      for (const row of this.likeSearch(term, limit)) ids.add(row.id);
+    }
+
+    // 兜底：候选词均未命中时整体 LIKE 一次（带分隔符短语的子串匹配无意义，跳过）
+    if (ids.size === 0 && !hasSeparators && chars.length >= 2) {
+      for (const row of this.likeSearch(trimmed, limit)) ids.add(row.id);
+    }
+
+    const ordered = [...ids].slice(0, limit);
+    return ordered.map(id => this.getNode(id)).filter((n): n is KgNode => n !== undefined);
   }
 
   /** 查询节点的出向邻居（按 relation 过滤可选）。 */
