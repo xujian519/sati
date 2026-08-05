@@ -7,6 +7,10 @@ import type { LawCategory, LawRecord, LawSearchResult } from "./types.js";
  * 与 Mady `SearchLaws` 同策略：FTS5（trigram tokenizer，BM25 排序）优先，
  * 短查询（< 3 个 CJK 字符）或缺失 FTS 表时降级 LIKE 匹配。
  * 注意：law_fts 的 rowid 对应 law 表的**隐藏 rowid**（非 law.id 主键）。
+ *
+ * FTS5 能力探测：law_fts 表存在**且**运行时的 SQLite 编译了 FTS5 才走 FTS 路径。
+ * 桌面端捆绑的旧版 Node（node:sqlite 未编译 FTS5，如 v22.14.0）即便表存在，
+ * MATCH 查询也会抛 "no such module: fts5"——此时整体降级 LIKE，避免工具执行崩溃。
  */
 
 const FTS_MIN_RUNES = 3; // trigram tokenizer 要求 3+ 字符
@@ -73,13 +77,31 @@ export type LegalSearchOptions = {
 export class LegalSearchEngine {
   private readonly db: DatabaseSync;
   private readonly hasFts: boolean;
+  /** FTS5 查询曾抛异常（模块缺失等）后置 true，后续查询直接走 LIKE。 */
+  private ftsDegraded = false;
 
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath, { readOnly: true });
     const row = this.db
       .prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='law_fts'")
       .get() as { c: number };
-    this.hasFts = row.c > 0;
+    // 双重条件才启用 FTS：law_fts 表存在 + 运行时 SQLite 编译了 FTS5。
+    this.hasFts = row.c > 0 && this.fts5CompiledIn();
+  }
+
+  /** 当前运行时的 SQLite 是否编译了 FTS5（编译选项探测）。 */
+  private fts5CompiledIn(): boolean {
+    try {
+      const row = this.db.prepare("SELECT sqlite_compileoption_used('ENABLE_FTS5') AS v").get() as { v: number };
+      return row.v === 1;
+    } catch {
+      return false;
+    }
+  }
+
+  /** FTS5 是否实际可用（表存在 + 运行时支持 + 未被降级）。 */
+  get ftsAvailable(): boolean {
+    return this.hasFts && !this.ftsDegraded;
   }
 
   /** FTS5 BM25 全文搜索；短查询/无 FTS 时降级 LIKE。 */
@@ -90,20 +112,27 @@ export class LegalSearchEngine {
 
     const runes = Array.from(trimmed);
     let rows: LawRow[];
-    if (!this.hasFts || runes.length < FTS_MIN_RUNES) {
+    if (!this.hasFts || this.ftsDegraded || runes.length < FTS_MIN_RUNES) {
       rows = this.searchLike(trimmed, options, limit);
     } else {
-      // 1. 整句 phrase（短查询命中率高）
-      rows = this.searchFts(trimmed, options, limit);
-      // 2. 整句无命中时切词 OR 查询（长句/自然语言查询）
-      if (rows.length === 0) {
-        const keywords = extractLawKeywords(trimmed);
-        if (keywords.length > 0 && keywords[0] !== trimmed) {
-          rows = this.searchFtsKeywords(keywords, options, limit);
+      try {
+        // 1. 整句 phrase（短查询命中率高）
+        rows = this.searchFts(trimmed, options, limit);
+        // 2. 整句无命中时切词 OR 查询（长句/自然语言查询）
+        if (rows.length === 0) {
+          const keywords = extractLawKeywords(trimmed);
+          if (keywords.length > 0 && keywords[0] !== trimmed) {
+            rows = this.searchFtsKeywords(keywords, options, limit);
+          }
         }
-      }
-      // 3. FTS 仍无命中时降级 LIKE
-      if (rows.length === 0) {
+        // 3. FTS 仍无命中时降级 LIKE
+        if (rows.length === 0) {
+          rows = this.searchLike(trimmed, options, limit);
+        }
+      } catch {
+        // FTS5 模块缺失或查询异常（如运行时 SQLite 未编译 FTS5，MATCH 抛
+        // "no such module: fts5"）：整体降级 LIKE，避免工具执行崩溃。
+        this.ftsDegraded = true;
         rows = this.searchLike(trimmed, options, limit);
       }
     }

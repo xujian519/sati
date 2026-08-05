@@ -137,7 +137,7 @@ export function createLawSearchTool(
       return {
         content: [{ type: "json", value: output }],
         data: output,
-        metadata: { domain: "legal", dbPath },
+        metadata: { domain: "legal", dbPath, fts5: engine.ftsAvailable },
       };
     },
   };
