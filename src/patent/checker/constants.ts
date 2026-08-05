@@ -59,6 +59,36 @@ export const DOMAIN_DESIGN = "patent_design";
 export const DOMAIN_INVALIDATION = "patent_invalidation";
 export const DOMAIN_AMENDMENT = "patent_amendment";
 export const DOMAIN_REEXAMINATION = "patent_reexamination";
+export const DOMAIN_SPEC = "patent_spec";
+
+// =============================================================================
+// 说明书撰写域（spec-checklist 规则化）
+// =============================================================================
+
+/**
+ * 说明书必要章节（五部分结构，与 validate_specification 的 REQUIRED_SECTIONS 对齐；
+ * 摘要由 SPEC-ABSTRACT 规则单独以 Quality 级别检查，避免无摘要说明书被阻断）。
+ */
+export const SPEC_SECTION_TERMS = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"];
+
+/** 禁止性商业宣传用语（spec-checklist 四、形式规范"无禁止性内容"）。 */
+export const SPEC_COMMERCIAL_BAN_PHRASES = [
+  "行业领先",
+  "世界领先",
+  "全国领先",
+  "遥遥领先",
+  "全球首创",
+  "国内首创",
+  "独家技术",
+  "独一无二",
+  "一流品质",
+  "物美价廉",
+  "完美解决",
+  "零缺陷",
+];
+
+/** A33 超范围风险表述（spec-checklist 四、"无超范围内容"；出现即提示核对原始公开范围）。 */
+export const SPEC_SCOPE_BAN_PHRASES = ["超出原申请", "超出原始", "超过原始公开", "超范围修改", "超出公开范围"];
 
 // =============================================================================
 // 权利要求分析维度

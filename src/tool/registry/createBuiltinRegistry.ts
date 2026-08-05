@@ -36,6 +36,7 @@ import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
 import { createPatentSearchTool } from "../builtin/patentSearch.js";
 import { registerBuiltinAtoms } from "../../patent/atoms/index.js";
 import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateTool.js";
+import { createPatentWikiSearchTool } from "../builtin/patentWikiSearch.js";
 import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
@@ -128,7 +129,7 @@ export type CreateBuiltinRegistryOptions = {
   ruleCheck?: RuleCheckDeps | false;
   /**
    * Patent-domain tools (`patent_eval` / `draft_claims` / `draft_specification` /
-   * `validate_specification`). Registered by default — pure read-only
+   * `validate_specification` / `patent_wiki_search`). Registered by default — pure read-only
    * deterministic tools. Pass `false` to keep them out of the registry.
    */
   patent?: false;
@@ -212,6 +213,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentMetadataTool(), "patent"));
     registry.register(annotate(createPatentLegalStatusTool(), "patent"));
     registry.register(annotate(createPatentSearchTool(), "patent"));
+    registry.register(annotate(createPatentWikiSearchTool(), "patent"));
   }
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));

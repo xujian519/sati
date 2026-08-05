@@ -243,6 +243,7 @@ export {
   infringementRules,
   invalidationRules,
   reexaminationRules,
+  specRules,
   designRules,
   priorityRules,
   publicAccessRules,

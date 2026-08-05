@@ -10,6 +10,7 @@ import {
   matchKeyword,
   noveltyRules,
   reasoningPatternRules,
+  specRules,
   type RuleCheckResult,
   type Verdict,
 } from "../../src/patent/checker/index.js";
@@ -265,4 +266,102 @@ test("推理模式: 四相同标准缺步骤 → 阻断", () => {
   const r = failures.find(f => f.ruleId === "REASON-NOVELTY-01A");
   assert.ok(r, "应产出四相同标准规则失败");
   assert.equal(r!.level, 0);
+});
+
+// =============================================================================
+// 说明书域规则（patent_spec，spec-checklist 规则化）
+// =============================================================================
+
+test("spec: specRules 共 8 条并并入 defaultPatentRules", () => {
+  assert.equal(specRules().length, 8);
+  const all = defaultPatentRules();
+  assert.ok(all.some(r => r.id === "SPEC-SECTIONS"));
+  assert.ok(all.some(r => r.id === "SPEC-COMMERCIAL-BAN"));
+  assert.ok(all.some(r => r.id === "SPEC-SCOPE-COMPLIANCE"));
+});
+
+test("spec: 说明书缺少章节 → 阻断", () => {
+  const local = new RuleEngine();
+  local.registerMany(specRules());
+  const failures = local.evaluate("# 技术领域\n本发明涉及机械技术领域。", { domain: "patent_spec" });
+  const sections = failures.find(f => f.ruleId === "SPEC-SECTIONS");
+  assert.ok(sections, "应产出结构完整性规则失败");
+  assert.equal(sections!.level, 1);
+});
+
+test("spec: 七部分齐全 + 三段式 + 实施例 + 摘要关键词 → 通过", () => {
+  const local = new RuleEngine();
+  local.registerMany(specRules());
+  const text = [
+    "# 技术领域",
+    "本发明涉及机械技术领域。",
+    "# 背景技术",
+    "现有技术存在效率低下的问题。",
+    "# 发明内容",
+    "本发明要解决的技术问题是提高分拣效率。本发明提供如下技术方案：包括壳体与驱动单元。本发明的有益效果是效率提升30%。",
+    "# 附图说明",
+    "图1为本发明实施例的整体结构示意图。附图标记：1-壳体；2-驱动单元。",
+    "# 具体实施方式",
+    "实施例1：驱动单元采用伺服电机，转速为1000rpm。",
+    "# 摘要",
+    "本发明公开了一种分拣装置。关键词：分拣；驱动。",
+  ].join("\n");
+  const failures = local.evaluate(text, { domain: "patent_spec" });
+  assert.deepEqual(failures, []);
+});
+
+test("spec: 商业宣传禁语 → 阻断", () => {
+  const local = new RuleEngine();
+  local.registerMany(specRules());
+  const failures = local.evaluate("本方案行业领先，效率突出。", { domain: "patent_spec" });
+  const ban = failures.find(f => f.ruleId === "SPEC-COMMERCIAL-BAN");
+  assert.ok(ban, "应产出商业宣传禁语规则失败");
+  assert.match(ban!.message, /行业领先/);
+});
+
+test("spec: 超范围表述 → 阻断", () => {
+  const local = new RuleEngine();
+  local.registerMany(specRules());
+  const failures = local.evaluate("该特征超出原申请记载范围，需补充说明。", { domain: "patent_spec" });
+  assert.ok(failures.some(f => f.ruleId === "SPEC-SCOPE-COMPLIANCE"));
+});
+
+test("spec: 否定语境（未超出原申请）不误报超范围", () => {
+  const local = new RuleEngine();
+  local.registerMany(specRules());
+  const failures = local.evaluate("说明书内容未超出原申请记载范围，符合专利法第33条。", {
+    domain: "patent_spec",
+  });
+  assert.ok(!failures.some(f => f.ruleId === "SPEC-SCOPE-COMPLIANCE"));
+});
+
+test("spec: 无摘要说明书不被 SPEC-SECTIONS 阻断（摘要为 Quality 级检查）", () => {
+  const local = new RuleEngine();
+  local.registerMany(specRules());
+  const text = [
+    "# 技术领域",
+    "本发明涉及机械技术领域。",
+    "# 背景技术",
+    "现有技术存在效率低下的问题。",
+    "# 发明内容",
+    "本发明要解决的技术问题是提高效率。本发明提供如下技术方案：包括驱动单元。本发明的有益效果是效率提升30%。",
+    "# 附图说明",
+    "图1为本发明实施例的整体结构示意图。附图标记：1-驱动单元。",
+    "# 具体实施方式",
+    "实施例1：驱动单元采用伺服电机。",
+  ].join("\n");
+  const failures = local.evaluate(text, { domain: "patent_spec" });
+  assert.ok(!failures.some(f => f.ruleId === "SPEC-SECTIONS"), "五部分齐全时 SPEC-SECTIONS 应通过");
+  // 摘要缺失只触发 Quality 级 SPEC-ABSTRACT（不阻断）
+  assert.ok(failures.some(f => f.ruleId === "SPEC-ABSTRACT"));
+});
+
+test("spec: 双重否定（不仅超出）不误判为否定语境", () => {
+  const local = new RuleEngine();
+  local.registerMany(specRules());
+  const failures = local.evaluate("该修改不仅超出原申请记载范围，且引入新内容。", { domain: "patent_spec" });
+  assert.ok(
+    failures.some(f => f.ruleId === "SPEC-SCOPE-COMPLIANCE"),
+    "不仅超出=肯定语义，应报超范围",
+  );
 });

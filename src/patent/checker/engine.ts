@@ -130,6 +130,35 @@ function checkSubjectMatter(text: string, rule: CheckRule): [boolean, string] {
   return [true, ""];
 }
 
+/** 禁语否定前缀检测：命中位置前 8 字符内出现否定词且紧邻（≤4 个非标点字符）视为否定语境。 */
+function hasBanPhraseNegation(text: string, idx: number): boolean {
+  const before = text.slice(Math.max(0, idx - 8), idx);
+  // "不仅/不只是" 为双重否定（肯定语义），不视为否定语境
+  return /(?:未|不|没有|不会|未曾|并未|并非|无需)(?![仅只])[^，。；;、]{0,4}$/.test(before);
+}
+
+/**
+ * 说明书撰写质量（spec-checklist 规则化）：
+ * - RequiredAspects 全部须被肯定提及（结构完整性/实施例/问题-方案-效果三段式等）；
+ * - BanPhrases 被肯定提及即失败（商业宣传用语、超出原始公开范围的 A33 风险表述）；
+ *   "未超出原申请记载范围" 等否定语境不误报。
+ */
+function checkSpec(text: string, rule: CheckRule): [boolean, string] {
+  if ((rule.requiredAspects?.length ?? 0) > 0 && !matchKeywordsAll(text, rule.requiredAspects ?? [])) {
+    return [false, "说明书缺少必要要素（章节结构/实施例/问题-方案-效果对应）"];
+  }
+  for (const phrase of rule.banPhrases ?? []) {
+    let idx = text.indexOf(phrase);
+    while (idx !== -1) {
+      if (!hasBanPhraseNegation(text, idx)) {
+        return [false, `说明书包含禁止表述：${phrase}`];
+      }
+      idx = text.indexOf(phrase, idx + 1);
+    }
+  }
+  return [true, ""];
+}
+
 function checkReasoningPath(text: string, rule: CheckRule): [boolean, string] {
   const steps = rule.pathElements ?? [];
   for (let i = 0; i < steps.length; i += 1) {
@@ -175,6 +204,9 @@ function evaluateRule(rule: CheckRule, text: string): { passed: boolean; detail:
       break;
     case "patent_subject_matter":
       [passed, detail] = checkSubjectMatter(text, rule);
+      break;
+    case "patent_spec":
+      [passed, detail] = checkSpec(text, rule);
       break;
     default: {
       const exhaustive: never = rule.checkType;

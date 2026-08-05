@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  checkEffectQuantification,
+  checkNumericRangeCoverage,
   createValidateSpecificationTool,
+  extractClaimFeatures,
+  extractNumericValues,
   validateSpecification,
 } from "../../../src/tool/builtin/validateSpecification.js";
 
@@ -22,11 +26,13 @@ const GOOD_SPEC = [
   "实施例1：如图1所示，驱动单元采用伺服电机。",
 ].join("\n");
 
+const GOOD_ABSTRACT = "本发明公开了一种自动化分拣装置。摘要附图为图1。关键词：自动化分拣；驱动单元。";
+
 test("validate_specification passes a complete specification", () => {
   const result = validateSpecification({
     text: GOOD_SPEC,
     title: "一种自动化分拣装置",
-    abstract: "本发明公开了一种自动化分拣装置。",
+    abstract: GOOD_ABSTRACT,
   });
   assert.equal(result.passed, true);
   assert.equal(result.score, 1);
@@ -70,6 +76,136 @@ test("validate_specification flags abstract over 300 chars", () => {
     abstract: "长摘要".repeat(110),
   });
   assert.ok(result.violations.some(v => v.rule === "abstract_length"));
+});
+
+test("validate_specification flags missing abstract keywords and abstract drawing", () => {
+  const result = validateSpecification({
+    text: GOOD_SPEC,
+    abstract: "本发明公开了一种自动化分拣装置。",
+  });
+  assert.ok(
+    result.violations.some(v => v.rule === "abstract_keywords"),
+    "should flag missing keywords",
+  );
+  assert.ok(
+    result.violations.some(v => v.rule === "abstract_drawing"),
+    "should flag missing abstract drawing",
+  );
+});
+
+test("validate_specification flags missing embodiments", () => {
+  const result = validateSpecification({
+    text: "# 具体实施方式\n本领域技术人员可知如何实施该装置。",
+  });
+  assert.ok(result.violations.some(v => v.rule === "embodiments"));
+});
+
+test("claim coverage: fully missing features → error, partial → warning", () => {
+  const claims =
+    "1. 一种自动化分拣装置，其特征在于，包括：所述加热组件，用于加热物料；" +
+    "所述传动机构，用于传递动力；所述分拣臂，用于抓取物品。";
+  const fullMissing = validateSpecification({ text: GOOD_SPEC, claims });
+  const cov = fullMissing.violations.find(v => v.rule === "claim_coverage");
+  assert.ok(cov, "should flag missing feature coverage");
+  assert.equal(cov?.severity, "error");
+  assert.match(cov?.message ?? "", /加热组件/);
+
+  // 驱动单元与壳体已在说明书记载 → 部分缺失（1/3）→ warning
+  const partial = validateSpecification({
+    text: GOOD_SPEC,
+    claims:
+      "1. 一种自动化分拣装置，其特征在于，包括：所述驱动单元，用于提供动力；" +
+      "所述壳体，用于容纳部件；所述分拣臂，用于抓取物品。",
+  });
+  const partialCov = partial.violations.find(v => v.rule === "claim_coverage");
+  assert.equal(partialCov?.severity, "warning");
+});
+
+test("claim coverage: extractClaimFeatures extracts refs and numeric values", () => {
+  const features = extractClaimFeatures("1. 一种装置，其特征在于，包括：所述加热组件；所述传动机构；温度为60℃。");
+  assert.ok(features.includes("加热组件"));
+  assert.ok(features.includes("传动机构"));
+  assert.ok(features.includes("60°"), "温度单位应归一化为 60°");
+  assert.ok(!features.includes("装置"), "通用词应被过滤");
+});
+
+test("numeric range: missing endpoints → error, missing midpoint → warning, complete → pass", () => {
+  const base = "# 具体实施方式\n实施例1：加热温度为20-90℃。";
+  const noEndpoint = validateSpecification({ text: base });
+  assert.ok(
+    noEndpoint.violations.some(v => v.rule === "numeric_range_endpoints"),
+    "端点无实施例应报 error",
+  );
+
+  const withEndpoints = validateSpecification({
+    text: base + "\n实施例2：加热温度为20℃。\n实施例3：加热温度为90℃。",
+  });
+  const noMid = withEndpoints.violations.find(v => v.rule === "numeric_range_midpoint");
+  assert.ok(noMid, "有端点无中间值应报 warning");
+
+  const complete = validateSpecification({
+    text: base + "\n实施例2：加热温度为20℃。\n实施例3：加热温度为90℃。\n实施例4：加热温度为60℃。",
+  });
+  assert.ok(!complete.violations.some(v => v.rule.startsWith("numeric_range")));
+});
+
+test("numeric range: helper detects endpoint and midpoint coverage", () => {
+  // 只有中间值 60℃：端点全缺 → endpointMissing 报 1 条，中间值已命中
+  const onlyMid = checkNumericRangeCoverage("实施例1：温度为20-90℃。实施例2：温度为60℃。");
+  assert.equal(onlyMid.endpointMissing.length, 1, "缺 20℃/90℃ 端点");
+  assert.equal(onlyMid.endpointMissing[0]?.min, 20);
+  assert.equal(onlyMid.midpointMissing.length, 0);
+
+  // 补 90℃ 端点（一端命中即视为有端点实施例，两端值最好但非绝对要求）
+  const withMax = checkNumericRangeCoverage("实施例1：温度为20-90℃。实施例2：温度为60℃。实施例3：温度为90℃。");
+  assert.equal(withMax.endpointMissing.length, 0);
+});
+
+test("numeric range: 多字符单位优先解析（mg/MPa/min/mm），不误截断", () => {
+  const values = extractNumericValues("用量5mg，压力2MPa，时间30min，长度5mm。");
+  assert.deepEqual(new Set(values.map(v => v.unit)), new Set(["mg", "MPa", "min", "mm"]));
+
+  // 0.1-2MPa 范围：端点与中间值均有实施例 → 不误报 numeric_range
+  const result = validateSpecification({
+    text:
+      "# 具体实施方式\n实施例1：压力为0.1-2MPa。\n实施例2：压力为0.1MPa。\n" +
+      "实施例3：压力为1MPa。\n实施例4：压力为2MPa。",
+  });
+  assert.ok(!result.violations.some(v => v.rule.startsWith("numeric_range")));
+});
+
+test("effect quantification: vague effect without data → warning, quantified → pass", () => {
+  const vague = validateSpecification({
+    text: "# 发明内容\n本发明的有益效果是：效果好，效率显著提升。",
+  });
+  assert.ok(vague.violations.some(v => v.rule === "effect_data_quantified"));
+  assert.ok(checkEffectQuantification("效果好。")[0]?.includes("效果好"));
+
+  const quantified = validateSpecification({
+    text: "# 发明内容\n本发明的有益效果是：效率提升30%。",
+  });
+  assert.ok(!quantified.violations.some(v => v.rule === "effect_data_quantified"));
+});
+
+test("chemical: chemical domain without characterization → warning, with data → pass", () => {
+  const missing = validateSpecification({
+    text: "# 具体实施方式\n实施例1：制备化合物A。",
+    tech_domain: "chemical",
+  });
+  assert.ok(missing.violations.some(v => v.rule === "chemical_characterization"));
+
+  const withData = validateSpecification({
+    text: "# 具体实施方式\n实施例1：制备化合物A，其NMR谱图显示目标结构。",
+    tech_domain: "chemical",
+  });
+  assert.ok(!withData.violations.some(v => v.rule === "chemical_characterization"));
+
+  // 非化学领域不触发
+  const mechanical = validateSpecification({
+    text: "# 具体实施方式\n实施例1：制备装置A。",
+    tech_domain: "mechanical",
+  });
+  assert.ok(!mechanical.violations.some(v => v.rule === "chemical_characterization"));
 });
 
 test("validate_specification tool definition is read-only", async () => {

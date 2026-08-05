@@ -16,16 +16,18 @@ import {
   priorityRules,
   publicAccessRules,
   reexaminationRules,
+  specRules,
   subjectMatterRules,
 } from "./core-rules.js";
 import { reasoningPatternRules } from "./reasoning-rules.js";
 
-/** 全部默认规则（聚合 10 组场景规则 + 24 条推理模式规则）。 */
+/** 全部默认规则（聚合 11 组场景规则 + 24 条推理模式规则）。 */
 export function defaultPatentRules(): CheckRule[] {
   return [
     ...noveltyRules(),
     ...inventivenessRules(),
     ...disclosureRules(),
+    ...specRules(),
     ...infringementRules(),
     ...invalidationRules(),
     ...reexaminationRules(),
@@ -47,6 +49,7 @@ export {
   priorityRules,
   publicAccessRules,
   reexaminationRules,
+  specRules,
   subjectMatterRules,
 } from "./core-rules.js";
 export { reasoningPatternRules } from "./reasoning-rules.js";

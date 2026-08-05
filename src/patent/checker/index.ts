@@ -60,6 +60,10 @@ export {
   DOMAIN_INVENTIVENESS,
   DOMAIN_NOVELTY,
   DOMAIN_REEXAMINATION,
+  DOMAIN_SPEC,
+  SPEC_COMMERCIAL_BAN_PHRASES,
+  SPEC_SCOPE_BAN_PHRASES,
+  SPEC_SECTION_TERMS,
   DIM_CONSISTENCY,
   DIM_CLARITY,
   DIM_ESSENTIAL,
@@ -78,5 +82,6 @@ export {
   publicAccessRules,
   reasoningPatternRules,
   reexaminationRules,
+  specRules,
   subjectMatterRules,
 } from "./rules.js";

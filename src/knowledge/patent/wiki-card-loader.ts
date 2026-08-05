@@ -145,7 +145,7 @@ export class WikiCardLoader {
     return this.byId.get(id);
   }
 
-  /** 按标题搜索卡片（标题包含关键词，不区分大小写）。 */
+  /** 按 title 搜索卡片（标题包含关键词，不区分大小写）。 */
   search(keyword: string, limit = 10): WikiCardMeta[] {
     this.ensureLoaded();
     const kw = keyword.trim().toLowerCase();
@@ -158,6 +158,34 @@ export class WikiCardLoader {
         return false;
       })
       .slice(0, limit);
+  }
+
+  /**
+   * 按目录前缀检索（prefix 为相对 wiki 根的路径前缀，如 "专利实务/说明书"；空串 = 全部）。
+   * keyword 为空时按目录列出全部卡片（供清单核对/浏览）。
+   */
+  searchIn(prefix: string, keyword: string, limit = 10): WikiCardMeta[] {
+    this.ensureLoaded();
+    const normalizedPrefix = prefix.trim();
+    // 前缀按路径边界匹配（避免误匹配兄弟前缀目录，如 "专利实务/说明书附图"）
+    const candidates = normalizedPrefix
+      ? this.cards.filter(card => card.id === normalizedPrefix || card.id.startsWith(`${normalizedPrefix}/`))
+      : this.cards;
+    const kw = keyword.trim().toLowerCase();
+    if (!kw) return candidates.slice(0, limit);
+    return candidates
+      .filter(card => {
+        if (card.title.toLowerCase().includes(kw)) return true;
+        if (card.concept?.toLowerCase().includes(kw)) return true;
+        if (card.domain?.toLowerCase().includes(kw)) return true;
+        return false;
+      })
+      .slice(0, limit);
+  }
+
+  /** 列出目录前缀下的全部卡片（keyword 为空时按目录浏览）。 */
+  listDir(prefix: string, limit = 20): WikiCardMeta[] {
+    return this.searchIn(prefix, "", limit);
   }
 
   /** 按 concept 精确匹配（card-index 概念，如 "Bolar例外"）。 */

@@ -17,7 +17,8 @@ export type CheckType =
   | "patent_design_comparison" // 外观设计对比：RequiredElements 全匹配
   | "patent_public_access" // 公开方式认定：RequiredElements 全匹配
   | "patent_amendment_scope" // 修改超范围（A33）：RequiredElements 全匹配
-  | "patent_subject_matter"; // 保护客体（A2）：RequiredElements 全匹配
+  | "patent_subject_matter" // 保护客体（A2）：RequiredElements 全匹配
+  | "patent_spec"; // 说明书撰写质量（spec-checklist 规则化）：RequiredAspects 全命中 + BanPhrases 命中即失败
 
 /**
  * 规则级别：决定聚合判级的阈值。
@@ -59,6 +60,8 @@ export interface CheckRule {
   dimensions?: string[];
   /** 推理路径步骤完整性：每步至少命中其一（任意 CheckType 后置校验）。 */
   pathElements?: string[][];
+  /** 禁止短语：命中任一即失败（CheckSpec 禁语/超范围检查，如商业宣传、超出原始公开范围）。 */
+  banPhrases?: string[];
   /** CheckNovelty：强制单独对比原则（命中禁止短语即失败）。 */
   singleComparison?: boolean;
   fixSuggestion: string;
