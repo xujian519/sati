@@ -159,6 +159,7 @@ export type SubsystemUpdate = {
   cron?: GatewayCronController;
   alwaysOnApply?: InProcessGatewayOptions["alwaysOnApply"];
   alwaysOnRerunPlan?: InProcessGatewayOptions["alwaysOnRerunPlan"];
+  discoveryPlanService?: InProcessGatewayOptions["discoveryPlanService"];
 };
 
 export type CreateLocalGatewayResult = {
@@ -426,6 +427,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       gateway.setCronController(update.cron);
       gateway.setAlwaysOnApply(update.alwaysOnApply);
       gateway.setAlwaysOnRerunPlan(update.alwaysOnRerunPlan);
+      gateway.setDiscoveryPlanService(update.discoveryPlanService);
     },
   };
 }

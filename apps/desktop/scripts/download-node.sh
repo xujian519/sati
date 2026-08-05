@@ -2,7 +2,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NODE_VERSION="22.14.0"
+# node:sqlite 需启用 FTS5（law_search 的 law_fts 全文检索依赖）。
+# v22.14.0 的 bundled SQLite 未编译 FTS5（MATCH 抛 no such module: fts5），
+# 首个带 FTS5 的 22.x 为 v22.18.0，此处取最新 22.x LTS 补丁。
+NODE_VERSION="22.23.2"
 ARCHIVE="node-v${NODE_VERSION}-darwin-arm64.tar.gz"
 BASE_URL="https://nodejs.org/dist/v${NODE_VERSION}"
 OUT_DIR="${ROOT}/resources/node-bin"

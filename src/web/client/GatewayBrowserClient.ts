@@ -63,6 +63,11 @@ export class GatewayBrowserClient {
   private closed = false;
   private helloResolve?: (hello: WebHelloOk) => void;
   private helloReject?: (error: Error) => void;
+  /** 用户主动 close() 后置 true——此时不允许 reconnect。 */
+  private userClosed = false;
+  /** reconnect() 流程中主动关闭旧连接，避免误触发 disconnect 通知。 */
+  private reconnecting = false;
+  private readonly disconnectHandlers: Array<(info: { code?: number; reason?: string }) => void> = [];
 
   constructor(private readonly options: GatewayBrowserClientOptions) {}
 
@@ -73,6 +78,36 @@ export class GatewayBrowserClient {
 
   get serverInfo(): WebHelloOk["serverInfo"] | undefined {
     return this.hello?.serverInfo;
+  }
+
+  /**
+   * 订阅意外断线（非用户 close()）。重连由调用方经 {@link reconnect} 触发。
+   */
+  onDisconnect(handler: (info: { code?: number; reason?: string }) => void): void {
+    this.disconnectHandlers.push(handler);
+  }
+
+  /**
+   * 意外断线后重连：重置 hello/closed 状态并重新握手。
+   * 用户 close() 之后调用会拒绝。
+   */
+  async reconnect(): Promise<WebHelloOk> {
+    if (this.userClosed) {
+      throw new Error("GatewayBrowserClient was closed by the user.");
+    }
+    if (this.ws && !this.closed) {
+      // 旧连接仍活着时先关闭，避免并发连接；reconnecting 标志抑制 disconnect 通知
+      this.reconnecting = true;
+      this.ws.close();
+    }
+    this.hello = undefined;
+    this.connectError = undefined;
+    this.closed = false;
+    try {
+      return await this.connect();
+    } finally {
+      this.reconnecting = false;
+    }
   }
 
   async connect(): Promise<WebHelloOk> {
@@ -91,7 +126,7 @@ export class GatewayBrowserClient {
       this.handleMessage(typeof event.data === "string" ? event.data : String(event.data ?? ""));
     });
     ws.addEventListener("close", event => {
-      this.handleClose(event.code, event.reason);
+      this.handleClose(ws, event.code, event.reason);
     });
     ws.addEventListener("error", () => {
       this.connectError ??= new Error("Gateway WebSocket error.");
@@ -214,6 +249,7 @@ export class GatewayBrowserClient {
     if (this.closed) {
       return;
     }
+    this.userClosed = true;
     this.closed = true;
     this.ws?.close();
     this.failPendingAndStreams(new Error("Gateway client closed."));
@@ -314,7 +350,13 @@ export class GatewayBrowserClient {
     }
   }
 
-  private handleClose(code?: number, reason?: string): void {
+  private handleClose(ws: WebSocketLike, code?: number, reason?: string): void {
+    // Ignore close events from superseded sockets: during `reconnect()` the
+    // old socket is closed while a new one is connecting, and its async
+    // close event must not clobber the new connection's state (hello/closed).
+    if (ws !== this.ws) {
+      return;
+    }
     if (this.closed) {
       return;
     }
@@ -325,6 +367,11 @@ export class GatewayBrowserClient {
       this.helloReject?.(error);
     }
     this.failPendingAndStreams(error);
+    if (!this.userClosed && !this.reconnecting) {
+      for (const handler of this.disconnectHandlers) {
+        handler({ code, reason });
+      }
+    }
   }
 
   private failPendingAndStreams(error: Error): void {

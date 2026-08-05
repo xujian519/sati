@@ -52,7 +52,12 @@ export type WsGatewayMethod =
   | "skill_validate"
   | "skill_scan"
   | "always_on_apply"
-  | "always_on_rerun_plan";
+  | "always_on_rerun_plan"
+  | "always_on_list_plans"
+  | "always_on_read_report"
+  | "always_on_list_cycles"
+  | "always_on_archive_cycle"
+  | "always_on_apply_cycle";
 
 export type WsRequestFrame = {
   type: "request";

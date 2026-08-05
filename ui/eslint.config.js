@@ -89,4 +89,53 @@ export default tseslint.config(
       "no-useless-escape": "off",
     },
   },
+  {
+    // ui/server 边界：禁止直接导入 src/ 内部实现（CLAUDE.md「ui/ 不得直接导入 src/」）。
+    // 白名单 = 现存迁移中的合法入口；每个条目收敛后（走 gateway 协议或 barrel）即从 except 摘除。
+    // 新增的 ui/server → src/ 导入会被拦截（error）。
+    files: ["server/**/*.{js,mjs}"],
+    plugins: { "import-x": importX },
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          zones: [
+            {
+              target: "./server",
+              from: "../src",
+              except: [
+                // src/cli/proxy.js (pilotdeck-bridge.js:47, sati-bridge.js:47)
+                "cli/proxy.js",
+                // src/gateway/index.js (pilotdeck-bridge.js:56, sati-bridge.js:57)
+                "gateway/index.js",
+                // src/status/agentStatus.js (pilotdeck-bridge.js:57, sati-bridge.js:58)
+                "status/agentStatus.js",
+                // src/web/client/eventMapping.js — 共享 GatewayEvent→帧映射
+                // (pilotdeck-bridge.js / sati-bridge.js / ui/src/chat 浏览器直连共用一份)
+                "web/client/eventMapping.js",
+                // src/web/server/legacySessionPresentation.js (projects.js:26)
+                "web/server/legacySessionPresentation.js",
+                // src/cron/protocol/types.js (projects.js:33)
+                "cron/protocol/types.js",
+                // src/context/budget/compactBudget.js (sati-bridge.js:48)
+                "context/budget/compactBudget.js",
+                // src/context/memory/edgeclaw-memory-core/lib/index.js (routes/memory.js:5)
+                "context/memory/edgeclaw-memory-core/lib/index.js",
+                // src/model/providerEndpoint.js (routes/config.js:30)
+                "model/providerEndpoint.js",
+                // src/network/fetch.js (routes/config.js:31)
+                "network/fetch.js",
+                // src/adapters/channel/protocol/ChannelCommandRegistry.js (routes/commands.js:14)
+                "adapters/channel/protocol/ChannelCommandRegistry.js",
+                // src/cli/commands/chatSearch.js (routes/commands.js:15)
+                "cli/commands/chatSearch.js",
+                // src/pilot/config/parseGatewayConfig.js (services/satiConfig.js:6, services/pilotdeckConfig.js:6)
+                "pilot/config/parseGatewayConfig.js",
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

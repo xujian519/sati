@@ -172,7 +172,11 @@ export {
   type DiscoveryPlanServiceDeps,
   type StateManager,
 } from "./web/DiscoveryPlanService.js";
-export { buildDiscoveryContext, type DiscoveryContextDeps } from "./web/DiscoveryPlanContext.js";
+export {
+  createDiscoveryPlanService,
+  type DiscoveryPlanIo,
+  type CreateDiscoveryPlanServiceOptions,
+} from "./web/service-factory.js";
 export {
   AlwaysOnRunHistoryService,
   type AlwaysOnRunHistoryServiceDeps,

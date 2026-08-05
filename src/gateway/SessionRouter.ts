@@ -173,6 +173,11 @@ export class SessionRouter {
     return this.sessions.size;
   }
 
+  /** True when the given session has a turn currently in flight. */
+  hasInFlightTurn(sessionKey: string): boolean {
+    return this.inFlightTurns.has(sessionKey);
+  }
+
   snapshotSession(sessionKey: string): ReturnType<AgentSession["snapshot"]> | undefined {
     return this.sessions.get(sessionKey)?.session.snapshot();
   }

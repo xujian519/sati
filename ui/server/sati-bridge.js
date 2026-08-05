@@ -55,7 +55,14 @@ import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from "./u
 // rewriting the offending @type annotation below to `ReturnType<typeof
 // createRemoteGateway>`, which is why this import can live on `src/` again.)
 import { createRemoteGateway } from "../../src/gateway/index.js";
-import { createVisibleErrorStatusDetail, isVisibleFailureStatusDetail } from "../../src/status/agentStatus.js";
+import { createVisibleErrorStatusDetail } from "../../src/status/agentStatus.js";
+// Shared GatewayEvent → chat-frame mapping (single source of truth shared
+// with the browser direct-connect path and pilotdeck-bridge).
+import {
+  isVisibleFailureAgentStatus,
+  mapGatewayEventToFrames,
+  normalizeToolDisplayName,
+} from "../../src/web/client/eventMapping.js";
 import { createNormalizedMessage } from "./sati-message.js";
 import { readPermissionSettings } from "./services/permissionSettings.js";
 
@@ -75,86 +82,6 @@ const GATEWAY_CONNECT_RETRY_INTERVAL_MS = 500;
 const subagentActivityStarts = new Map();
 /** @type {Map<string, string[]>} sessionId → [toolCallId, ...] for pending agent/Task tool calls */
 const pendingAgentToolCalls = new Map();
-const visibleFailureAgentStatusEvents = new Set([
-  "model_empty_response_exhausted",
-  "max_turns_reached",
-  "max_output_recovery_exhausted",
-  "model_request_failed",
-  "tool_call_recovery_exhausted",
-  "tool_error_loop",
-  "lifecycle_blocked",
-  "turn_failed",
-  "turn_timeout",
-  "gateway_submit_failed",
-  "session_busy",
-  "gateway_bridge_error",
-  "gateway_stream_ended_without_completion",
-  "web_http_request_failed",
-  "project_unavailable",
-  "config_invalid",
-  "gateway_unavailable",
-  "channel_submit_failed",
-  "subagent_failed",
-  "content_filter_stop",
-  "unknown_finish_reason",
-]);
-
-function normalizeToolDisplayName(name) {
-  const aliases = {
-    agent: "Task",
-    ask_user_question: "AskUserQuestion",
-    bash: "Bash",
-    edit_file: "Edit",
-    glob: "Glob",
-    grep: "Grep",
-    read_file: "Read",
-    write_file: "Write",
-  };
-  if (aliases[name]) return aliases[name];
-  if (name === "todo_write") return "TodoWrite";
-  if (name === "todo_read") return "TodoRead";
-  return name;
-}
-
-function readOnlyModeToolDenyCode(text) {
-  if (typeof text !== "string") return undefined;
-  if (/\[PLAN_MODE_VIOLATION\]/i.test(text) || /plan mode denies side-effecting tool\b/i.test(text)) {
-    return "plan_mode_denied";
-  }
-  if (/\[ASK_MODE_VIOLATION\]/i.test(text) || /ask mode denies side-effecting tool\b/i.test(text)) {
-    return "ask_mode_denied";
-  }
-  return undefined;
-}
-
-function isSearchToolName(name) {
-  const normalized = String(name || "").toLowerCase();
-  return normalized === "grep" || normalized === "glob";
-}
-
-function normalizeToolErrorCode(errorCode, resultPreview) {
-  if (errorCode === "plan_mode_violation") return "plan_mode_denied";
-  if (errorCode === "ask_mode_violation") return "ask_mode_denied";
-  return readOnlyModeToolDenyCode(resultPreview) || errorCode;
-}
-
-const MAX_TOOL_RESULT_PREVIEW_CHARS = 20_000;
-
-function limitToolResultPreview(value) {
-  const text = typeof value === "string" ? value : "";
-  if (text.length <= MAX_TOOL_RESULT_PREVIEW_CHARS) return text;
-  const headLength = Math.floor(MAX_TOOL_RESULT_PREVIEW_CHARS / 2);
-  const tailLength = MAX_TOOL_RESULT_PREVIEW_CHARS - headLength;
-  return `${text.slice(0, headLength)}\n\n... [UI preview truncated: ${text.length - MAX_TOOL_RESULT_PREVIEW_CHARS} characters omitted] ...\n\n${text.slice(-tailLength)}`;
-}
-
-function isVisibleFailureAgentStatus(event) {
-  return (
-    event?.type === "agent_status" &&
-    (visibleFailureAgentStatusEvents.has(event.event) || isVisibleFailureStatusDetail(event.detail)) &&
-    event.detail?.visible !== false
-  );
-}
 
 /**
  * Default permission mode for sessions started from the Web UI. We use
@@ -175,7 +102,7 @@ const WEB_DEFAULT_PERMISSION_MODE = process.env.SATI_WEB_PERMISSION_MODE || "def
 /** @type {ReturnType<typeof createRemoteGateway> | null} */
 let gatewayPromise = null;
 
-async function readGatewayToken() {
+export async function readGatewayToken() {
   try {
     const raw = await fsPromises.readFile(GATEWAY_TOKEN_PATH, "utf8");
     const trimmed = raw.trim();
@@ -425,374 +352,27 @@ function resolvePermissionMode(options) {
  */
 export function gatewayEventToFrames(event, sessionId, provider) {
   const base = { sessionId, provider, ...(event.runId ? { runId: event.runId } : {}) };
-  switch (event.type) {
-    case "turn_started":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "status",
-          text: "started",
-        }),
-      ];
-    case "model_request_started":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "status",
-          text: "model_request_started",
-          model: event.model,
-          provider: event.provider,
-        }),
-      ];
-    case "assistant_text_delta":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "stream_delta",
-          content: event.text,
-        }),
-      ];
-    case "assistant_thinking_delta":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "thinking",
-          content: event.text,
-        }),
-      ];
-    case "file_artifacts":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "file_artifacts",
-          artifacts: Array.isArray(event.artifacts) ? event.artifacts : [],
-        }),
-      ];
-    case "tool_call_started": {
-      const displayName = normalizeToolDisplayName(event.name);
-      const rawName = String(event.name || "").toLowerCase();
-      if (rawName === "agent" || rawName === "task") {
-        const pending = pendingAgentToolCalls.get(base.sessionId) || [];
-        pending.push(event.toolCallId);
-        pendingAgentToolCalls.set(base.sessionId, pending);
-      }
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "tool_use",
-          toolId: event.toolCallId,
-          toolName: displayName,
-          toolInput: tryParseJson(event.argsPreview),
-        }),
-      ];
-    }
-    case "tool_call_finished": {
-      const normalizedErrorCode = normalizeToolErrorCode(event.errorCode, event.resultPreview);
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "tool_result",
-          toolId: event.toolCallId,
-          content: limitToolResultPreview(event.resultPreview),
-          isError: !event.ok,
-          // errorCode lets the UI distinguish permission denials
-          // (`permission_denied` / `permission_required`) from
-          // ordinary execution failures (`tool_execution_failed`,
-          // `file_not_found`, …) so the "Add to Allowed Tools"
-          // affordance only fires for the former.
-          ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
-          // Inline tool-result images (e.g. read_file on a PNG).
-          // The wire shape uses raw base64; we wrap as data URLs
-          // here so the UI can drop them straight into <img src>.
-          ...(Array.isArray(event.images) && event.images.length > 0
-            ? {
-                toolResultImages: event.images.map(image => ({
-                  data: `data:${image.mimeType};base64,${image.data}`,
-                  mimeType: image.mimeType,
-                })),
-              }
-            : {}),
-          ...(event.toolName === "exit_plan_mode" && event.data?.planFilePath
-            ? {
-                planFilePath: event.data.planFilePath,
-                planTitle: event.data.planTitle,
-                planSummary: event.data.planSummary,
-              }
-            : {}),
-          ...(event.toolName === "ask_user_question" && event.data ? { toolUseResult: event.data } : {}),
-          ...(isSearchToolName(event.toolName) && event.data ? { toolUseResult: event.data } : {}),
-        }),
-      ];
-    }
-    case "tool_result_detail_available": {
-      const detailText = event.resultPath
-        ? `Full tool result persisted at ${event.resultPath}`
-        : "Full tool result is available.";
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "tool_result",
-          toolId: event.toolCallId,
-          content: detailText,
-          isError: false,
-          ...(event.resultPath ? { resultPath: event.resultPath } : {}),
-        }),
-      ];
-    }
-    case "permission_request":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "permission_request",
-          requestId: event.requestId,
-          toolName: event.toolName,
-          input: event.payload,
-          context: { provider },
-        }),
-      ];
-    case "elicitation_request":
-      // Route structured elicitation through the same `permission_request`
-      // shape the UI already uses for the permission banner, so the
-      // registered `AskUserQuestion` PermissionPanel (rich multi-step
-      // multi-select dialog) renders inline in the chat instead of the
-      // legacy "wait in CLI" yellow box. We force `toolName` to the
-      // PascalCase alias that matches `registerPermissionPanel('AskUserQuestion', ...)`
-      // and tag the frame with `isElicitation: true` so the composer can
-      // route the user's answer back through `elicitation-response`
-      // (GatewayPermissionBus).
-      if (event.toolName === "exit_plan_mode") {
-        return [
-          createNormalizedMessage({
-            ...base,
-            kind: "permission_request",
-            requestId: event.requestId,
-            toolCallId: event.toolCallId,
-            toolName: "ExitPlanModeV2",
-            input: {
-              plan: event.metadata?.plan,
-              planFilePath: event.metadata?.planFilePath,
-              questions: event.questions,
-              metadata: event.metadata,
-            },
-            context: { provider, originalToolName: event.toolName },
-            isElicitation: true,
-          }),
-        ];
-      }
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "permission_request",
-          requestId: event.requestId,
-          toolCallId: event.toolCallId,
-          toolName: "AskUserQuestion",
-          input: {
-            questions: event.questions,
-            metadata: event.metadata,
-          },
-          context: { provider, originalToolName: event.toolName },
-          isElicitation: true,
-        }),
-      ];
-    case "elicitation_cancelled":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "permission_cancelled",
-          requestId: event.requestId,
-        }),
-      ];
-    case "structured_output":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "status",
-          text: "structured",
-          payload: event.payload,
-        }),
-      ];
-    case "plan_mode_changed":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "status",
-          text: `mode:${event.mode}`,
-        }),
-      ];
-    case "turn_completed":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "complete",
-          exitCode: 0,
-          success: true,
-          finishReason: event.finishReason,
-          usage: event.usage,
-        }),
-      ];
-    case "context_budget":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "status",
-          text: "token_budget",
-          tokenBudget: {
-            used: event.used,
-            displayUsed: event.displayUsed,
-            budgetUsed: event.budgetUsed,
-            total: event.total,
-            effectiveTotal: event.effectiveTotal,
-            reservedOutputTokens: event.reservedOutputTokens,
-            ratio: event.ratio,
-            state: event.state,
-          },
-        }),
-      ];
-    case "error":
-      return [
-        createNormalizedMessage({
-          ...base,
-          kind: "error",
-          content: event.message,
-          code: event.code,
-          recoverable: event.recoverable,
-          userHint: event.userHint,
-        }),
-      ];
-    case "agent_status": {
-      const subagentFrames = createSubagentStatusFrames(event, base);
-      if (subagentFrames && subagentFrames.length > 0) return subagentFrames;
-
-      const detail = event.detail || {};
-      if (event.event === "compact_started") {
-        const compactProgress = {
-          level: detail.level || 1,
-          stage: detail.stage || "compacting",
-          label: detail.label || detail.stage || "Compacting",
-          state: "running",
-          pre_tokens: detail.preTokens,
-          reason: detail.trigger,
-        };
-        return [
-          createNormalizedMessage({
-            ...base,
-            kind: "status",
-            text: "compacting",
-            tokens: 0,
-            canInterrupt: true,
-            compactProgress,
-          }),
-        ];
-      }
-      if (event.event === "compact_completed") {
-        return [
-          createNormalizedMessage({
-            ...base,
-            kind: "compact_boundary",
-            trigger: detail.trigger || "auto",
-            preTokens: detail.preTokens,
-            postTokens: detail.postTokens,
-            messagesSummarized: detail.messagesSummarized,
-            compactLevel: detail.level,
-            compactStage: detail.stage,
-            compactStageLabel: detail.stageLabel || detail.stage,
-            compactMetadata: detail,
-            ...(detail.tokenBudget ? { tokenBudget: detail.tokenBudget } : {}),
-          }),
-        ];
-      }
-      if (event.event === "retry_progress") {
-        const retryText =
-          detail.reason === "continuation"
-            ? "Continuing response"
-            : detail.reason === "rate_limit" || detail.reason === "overloaded"
-              ? "Switching model"
-              : "Reconnecting";
-        return [
-          createNormalizedMessage({
-            ...base,
-            kind: "status",
-            text: `${retryText}... ${detail.attempt}/${detail.maxAttempts}`,
-            tokens: 0,
-            canInterrupt: true,
-            retryProgress: {
-              attempt: detail.attempt,
-              maxAttempts: detail.maxAttempts,
-              delayMs: detail.delayMs,
-              reason: detail.reason,
-              provider: detail.provider,
-              model: detail.model,
-            },
-          }),
-        ];
-      }
-      if (event.event === "model_empty_response_exhausted") {
-        return [
-          createNormalizedMessage({
-            ...base,
-            kind: "error",
-            content:
-              detail.message ||
-              "The model returned empty content repeatedly, so this turn has stopped. Try again later or increase max output tokens.",
-            contentI18n: detail.messageI18n,
-            code: event.event,
-            recoverable: false,
-            userHint: detail.userHint,
-            userHintI18n: detail.userHintI18n,
-          }),
-        ];
-      }
-      if (event.event === "max_turns_reached") {
-        return [
-          createNormalizedMessage({
-            ...base,
-            kind: "error",
-            content:
-              detail.message ||
-              "Reached the maximum number of turns, so this turn has stopped. Increase maxTurns or split the task into smaller steps and try again.",
-            contentI18n: detail.messageI18n,
-            code: event.event,
-            recoverable: false,
-            userHint: detail.userHint,
-            userHintI18n: detail.userHintI18n,
-          }),
-        ];
-      }
-      if (visibleFailureAgentStatusEvents.has(event.event) || isVisibleFailureStatusDetail(detail)) {
-        return [
-          createNormalizedMessage({
-            ...base,
-            kind: "error",
-            content:
-              detail.message ||
-              "Agent execution stopped before producing a complete response. Please retry or adjust the task.",
-            contentI18n: detail.messageI18n,
-            code: event.event,
-            recoverable: false,
-            userHint: detail.userHint,
-            userHintI18n: detail.userHintI18n,
-          }),
-        ];
-      }
-      if (event.event === "structured_output_completed" || event.event === "turn_aborted") {
-        return [
-          createNormalizedMessage({
-            ...base,
-            kind: "status",
-            content: detail.message || "This turn ended before producing a standard assistant response.",
-            contentI18n: detail.messageI18n,
-            code: event.event,
-            recoverable: false,
-            userHint: detail.userHint,
-            userHintI18n: detail.userHintI18n,
-          }),
-        ];
-      }
-      return [];
-    }
-    default:
-      return [];
+  // Host-layer extensions on top of the shared mapping
+  // (`src/web/client/eventMapping.js` — see `mapGatewayEventToFrames`):
+  //   1. subagent activity frames (stateful, tracked per session here);
+  //   2. pending agent/Task tool-call bookkeeping for subagent links.
+  if (event.type === "agent_status") {
+    const subagentFrames = createSubagentStatusFrames(event, base);
+    if (subagentFrames && subagentFrames.length > 0) return subagentFrames;
   }
+  if (event.type === "tool_call_started") {
+    trackPendingAgentToolCall(event, base.sessionId);
+  }
+  return mapGatewayEventToFrames(event, sessionId, provider).map(createNormalizedMessage);
+}
+
+/** Record agent/Task tool calls so subagent_started can link them. */
+function trackPendingAgentToolCall(event, sessionId) {
+  const rawName = String(event.name || "").toLowerCase();
+  if (rawName !== "agent" && rawName !== "task") return;
+  const pending = pendingAgentToolCalls.get(sessionId) || [];
+  pending.push(event.toolCallId);
+  pendingAgentToolCalls.set(sessionId, pending);
 }
 
 function createSubagentStatusFrames(event, base) {
@@ -989,15 +569,6 @@ function normalizeSubagentStatus(eventName, detail) {
 
 function sanitizeMessageId(value) {
   return String(value || "unknown").replace(/[^a-zA-Z0-9_.:-]/g, "_");
-}
-
-function tryParseJson(value) {
-  if (typeof value !== "string" || !value) return undefined;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
 }
 
 function createBridgeFailureStatusEvent({ event, message, userHint, scope = "turn", detail = {} }) {
@@ -1414,7 +985,25 @@ function _buildSessionProjectIndex() {
   return { sessionIndex, dirToPath };
 }
 
+let routerStatsCache = { at: 0, data: undefined };
+const ROUTER_STATS_CACHE_TTL_MS = 5000;
+
+/**
+ * 带 TTL 的结果缓存：前端每 30s/15s 轮询 dashboard，避免每次请求都
+ * readdirSync 全盘扫描 ~/.sati/projects 并逐行 parse stats.jsonl。
+ * 新 router 决策写入 stats.jsonl 后最多延迟 5s 反映（对轮询场景可接受）。
+ */
 function loadPersistedStatsFromDisk() {
+  const now = Date.now();
+  if (routerStatsCache.data !== undefined && now - routerStatsCache.at < ROUTER_STATS_CACHE_TTL_MS) {
+    return routerStatsCache.data;
+  }
+  const data = loadPersistedStatsFromDiskUncached();
+  routerStatsCache = { at: now, data };
+  return data;
+}
+
+function loadPersistedStatsFromDiskUncached() {
   const result = new Map();
   try {
     // Prefer new JSONL format, fall back to legacy JSON.

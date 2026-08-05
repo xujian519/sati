@@ -5,7 +5,6 @@ import { spawn } from "child_process";
 import os from "os";
 import { addProjectManually, extractProjectDirectory } from "../projects.js";
 import {
-  getProjectDiscoveryContext,
   getProjectDiscoveryPlansOverview,
   getProjectDiscoveryPlanReport,
   rerunDiscoveryPlan,
@@ -206,20 +205,6 @@ export async function handleGetProjectDiscoveryPlans(req, res) {
   }
 }
 
-export async function handleGetProjectDiscoveryContext(req, res) {
-  try {
-    const projectName = getTrimmedParam(req.params?.projectName);
-    if (!projectName) {
-      return res.status(400).json({ error: "projectName is required" });
-    }
-
-    const context = await getProjectDiscoveryContext(projectName);
-    return res.json(context);
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
-}
-
 export async function handleExecuteProjectDiscoveryPlan(req, res) {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
@@ -240,7 +225,6 @@ export async function handleExecuteProjectDiscoveryPlan(req, res) {
   }
 }
 
-router.get("/:projectName/discovery-context", handleGetProjectDiscoveryContext);
 router.get("/:projectName/discovery-plans", handleGetProjectDiscoveryPlans);
 router.post("/:projectName/discovery-plans/:planId/execute", handleExecuteProjectDiscoveryPlan);
 

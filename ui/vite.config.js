@@ -36,6 +36,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     resolve: {
       alias: {
+        // 浏览器侧 gateway 客户端（src/web/client）唯一接入点——CLAUDE.md「ui/ 不得直接导入 src/」的豁免项
+        "@sati/web-client": path.resolve(repoRoot, "src", "web", "client"),
         react: localNodeModules("react"),
         "react-dom": localNodeModules("react-dom"),
         "react/jsx-runtime": localNodeModules("react", "jsx-runtime.js"),
@@ -64,7 +66,8 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: "dist",
-      chunkSizeWarningLimit: 1000,
+      // 2.3MB 主包在 1000KB 阈值下不告警；降到 500KB 让体积问题在构建时可见
+      chunkSizeWarningLimit: 500,
       rollupOptions: {
         output: {
           // vite 8 (rolldown) requires manualChunks to be a function;

@@ -28,12 +28,14 @@ export type AlwaysOnPaths = {
 export function resolveAlwaysOnPaths(input: {
   pilotHome: string;
   projectKey: string;
+  /** Precomputed project ID. Defaults to core `resolveProjectStorageId` — hosts with a custom ID encoder must pass it to keep paths consistent. */
+  projectId?: string;
   worktreesBaseDir?: string;
   snapshotsBaseDir?: string;
 }): AlwaysOnPaths {
   const pilotHome = resolve(input.pilotHome);
   const projectKey = resolve(input.projectKey);
-  const projectId = resolveProjectStorageId(projectKey, pilotHome);
+  const projectId = input.projectId ?? resolveProjectStorageId(projectKey, pilotHome);
   const rootDir = resolve(pilotHome, ROOT_DIR_NAME);
   const projectDir = resolve(rootDir, "projects", projectId);
   const worktreesBaseDir = resolveBaseDir(input.worktreesBaseDir, resolve(rootDir, "worktrees"));

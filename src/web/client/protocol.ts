@@ -39,6 +39,7 @@ type WebGatewayEventMetadata = {
 export type WebGatewayEvent = WebGatewayEventMetadata &
   (
     | { type: "turn_started"; runId: string }
+    | { type: "model_request_started"; model?: string; provider?: string }
     | { type: "assistant_text_delta"; text: string }
     | { type: "assistant_thinking_delta"; text: string }
     | { type: "file_artifacts"; artifacts: import("../../session/artifacts/FileArtifact.js").FileArtifact[] }
@@ -55,6 +56,10 @@ export type WebGatewayEvent = WebGatewayEventMetadata &
         resultPreview?: string;
         /** Mirrors `GatewayEvent.tool_call_finished.errorCode`. */
         errorCode?: string;
+        /** Mirrors `GatewayEvent.tool_call_finished.toolName`. */
+        toolName?: string;
+        /** Mirrors `GatewayEvent.tool_call_finished.data` (e.g. planFilePath for exit_plan_mode). */
+        data?: Record<string, unknown>;
         /**
          * Mirrors `GatewayEvent.tool_call_finished.images` — inline image
          * results (e.g. `read_file` on a PNG) surfaced to web clients so
@@ -91,6 +96,17 @@ export type WebGatewayEvent = WebGatewayEventMetadata &
     | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
     | { type: "worktree_created"; runId: string; cwd: string }
     | { type: "worktree_removed"; cwd: string }
+    | {
+        type: "context_budget";
+        used: number;
+        displayUsed?: number;
+        budgetUsed?: number;
+        total: number;
+        effectiveTotal?: number;
+        reservedOutputTokens?: number;
+        ratio: number;
+        state: "ok" | "warning" | "blocking";
+      }
     | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
     | { type: "turn_completed"; usage: Record<string, number>; finishReason: string }
     | {
@@ -144,7 +160,12 @@ export type WebGatewayMethod =
   | "skill_validate"
   | "skill_scan"
   | "always_on_apply"
-  | "always_on_rerun_plan";
+  | "always_on_rerun_plan"
+  | "always_on_list_plans"
+  | "always_on_read_report"
+  | "always_on_list_cycles"
+  | "always_on_archive_cycle"
+  | "always_on_apply_cycle";
 
 export type WebSubmitTurnInput = {
   sessionKey: string;
@@ -320,4 +341,98 @@ export type WebProjectSummary = {
 
 export type WebListProjectsResult = {
   projects: WebProjectSummary[];
+};
+
+// ─── Always-On discovery plans (protocol 1.1) ────────────────────────────────
+// Single source of truth for the discovery-plan wire shapes. The canonical
+// `src/gateway/protocol/types.ts` re-exports these (see its Always-On section),
+// so the browser bundle and the Node-side protocol never drift apart.
+//
+// Conventions (aligned with the sibling `always_on_rerun_plan` method):
+//   - `projectKey` is the absolute project root, not a display name — hosts
+//     resolve display names before calling these methods;
+//   - `cycleId` for archive / `workCycleId` for apply are the wire field names
+//     and intentionally differ (kept from the original 1.1 design).
+
+export type WebAlwaysOnWebPlan = {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  updatedAt?: string;
+  summary?: string;
+  rationale?: string;
+  content?: string;
+  executionStatus?: string;
+  executionStartedAt?: string;
+  executionLastActivityAt?: string;
+  latestSummary?: string;
+  planFilePath?: string;
+  reportFilePath?: string;
+  workspace?: { strategy: string; cwd: string };
+  workCycleId?: string;
+  /** Loose DTO: the store record carries fields beyond the typed subset. */
+  [key: string]: unknown;
+};
+
+/** Work-cycle DTO for the gateway protocol (subset of the store record). */
+export type WebAlwaysOnCycle = {
+  id: string;
+  projectKey: string;
+  status: string;
+  workspace: { strategy: string; cwd: string };
+  planIds: string[];
+  createdAt: string;
+  appliedAt?: string;
+  archivedAt?: string;
+  [key: string]: unknown;
+};
+
+export type WebAlwaysOnListPlansInput = {
+  projectKey: string;
+};
+
+export type WebAlwaysOnListPlansResult = {
+  plans: WebAlwaysOnWebPlan[];
+  error?: { code: string; message: string };
+};
+
+export type WebAlwaysOnReadReportInput = {
+  projectKey: string;
+  planId: string;
+};
+
+export type WebAlwaysOnReadReportResult = {
+  content: string;
+  error?: { code: string; message: string };
+};
+
+export type WebAlwaysOnListCyclesInput = {
+  projectKey: string;
+};
+
+export type WebAlwaysOnListCyclesResult = {
+  cycles: WebAlwaysOnCycle[];
+  error?: { code: string; message: string };
+};
+
+export type WebAlwaysOnArchiveCycleInput = {
+  projectKey: string;
+  cycleId: string;
+};
+
+export type WebAlwaysOnArchiveCycleResult = {
+  archived: boolean;
+  error?: { code: string; message: string };
+};
+
+export type WebAlwaysOnApplyCycleInput = {
+  projectKey: string;
+  workCycleId: string;
+};
+
+export type WebAlwaysOnApplyCycleResult = {
+  cycle: WebAlwaysOnCycle | null;
+  sessionKey?: string;
+  error?: { code: string; message: string };
 };

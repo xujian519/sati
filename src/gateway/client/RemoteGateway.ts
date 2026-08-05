@@ -3,6 +3,16 @@ import type {
   AlwaysOnApplyResult,
   AlwaysOnRerunPlanInput,
   AlwaysOnRerunPlanResult,
+  AlwaysOnListPlansInput,
+  AlwaysOnListPlansResult,
+  AlwaysOnReadReportInput,
+  AlwaysOnReadReportResult,
+  AlwaysOnListCyclesInput,
+  AlwaysOnListCyclesResult,
+  AlwaysOnArchiveCycleInput,
+  AlwaysOnArchiveCycleResult,
+  AlwaysOnApplyCycleInput,
+  AlwaysOnApplyCycleResult,
   Gateway,
   GatewayElicitationResponseInput,
   GatewayEvent,
@@ -213,6 +223,26 @@ export class RemoteGateway implements Gateway {
 
   async alwaysOnRerunPlan(input: AlwaysOnRerunPlanInput): Promise<AlwaysOnRerunPlanResult> {
     return (await this.client.request("always_on_rerun_plan", input)) as AlwaysOnRerunPlanResult;
+  }
+
+  async alwaysOnListPlans(input: AlwaysOnListPlansInput): Promise<AlwaysOnListPlansResult> {
+    return (await this.client.request("always_on_list_plans", input)) as AlwaysOnListPlansResult;
+  }
+
+  async alwaysOnReadReport(input: AlwaysOnReadReportInput): Promise<AlwaysOnReadReportResult> {
+    return (await this.client.request("always_on_read_report", input)) as AlwaysOnReadReportResult;
+  }
+
+  async alwaysOnListCycles(input: AlwaysOnListCyclesInput): Promise<AlwaysOnListCyclesResult> {
+    return (await this.client.request("always_on_list_cycles", input)) as AlwaysOnListCyclesResult;
+  }
+
+  async alwaysOnArchiveCycle(input: AlwaysOnArchiveCycleInput): Promise<AlwaysOnArchiveCycleResult> {
+    return (await this.client.request("always_on_archive_cycle", input)) as AlwaysOnArchiveCycleResult;
+  }
+
+  async alwaysOnApplyCycle(input: AlwaysOnApplyCycleInput): Promise<AlwaysOnApplyCycleResult> {
+    return (await this.client.request("always_on_apply_cycle", input)) as AlwaysOnApplyCycleResult;
   }
 }
 

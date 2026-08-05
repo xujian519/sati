@@ -19,6 +19,17 @@ export type {
   PrepareWeixinLoginResult,
   ReloadConfigResult,
   TurnUsage,
+  AlwaysOnApplyCycleInput,
+  AlwaysOnApplyCycleResult,
+  AlwaysOnArchiveCycleInput,
+  AlwaysOnArchiveCycleResult,
+  AlwaysOnListCyclesInput,
+  AlwaysOnListCyclesResult,
+  AlwaysOnListPlansInput,
+  AlwaysOnListPlansResult,
+  AlwaysOnReadReportInput,
+  AlwaysOnReadReportResult,
+  AlwaysOnWebPlan,
 } from "./types.js";
 export type {
   GatewayWsClientName,

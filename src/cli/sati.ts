@@ -40,7 +40,10 @@ import {
 } from "../extension/skills/index.js";
 import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createTelemetryCollector } from "../telemetry/index.js";
+import { createDiscoveryPlanService } from "../always-on/index.js";
+import type { InProcessGateway } from "../gateway/client/InProcessGateway.js";
 import { createLocalGateway } from "./createLocalGateway.js";
+import { createCoreDiscoveryPlanIo } from "./discoveryIo.js";
 import { startSatiServer } from "./satiServer.js";
 import { installGlobalProxy, reinstallGlobalProxy } from "./proxy.js";
 import { createShutdownAndExit } from "./shutdownCoordinator.js";
@@ -160,6 +163,21 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       },
     });
 
+    // Discovery-plan service wired into the gateway so the always_on_* protocol
+    // methods (list plans / reports / cycles / archive / apply) are served from
+    // the core instead of ui/server deep imports.
+    const discoveryIo = createCoreDiscoveryPlanIo({ pilotHome });
+    const discoveryPlanService = createDiscoveryPlanService({
+      pilotHome,
+      io: discoveryIo,
+    });
+    // Wire live session activity so plan execution status is real (the
+    // gateway is the authoritative source for in-flight turns). The gateway
+    // is an `InProcessGateway` at runtime; the protocol-level `Gateway` type
+    // does not expose this host capability.
+    const gatewayInstance = gateway as InProcessGateway;
+    discoveryIo.isSessionActive = sessionId => gatewayInstance.isSessionActive(sessionId);
+
     if (alwaysOn) {
       alwaysOn.bindGateway(gateway, { isProjectBusy });
       await alwaysOn.start();
@@ -170,6 +188,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       cron,
       alwaysOnApply: alwaysOn ? input => alwaysOn!.applyCycle(input) : standaloneApply,
       alwaysOnRerunPlan: alwaysOn ? input => alwaysOn!.rerunPlan(input) : undefined,
+      discoveryPlanService,
     });
     if (cron) {
       cron.bindGateway(gateway);
@@ -251,6 +270,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         cron,
         alwaysOnApply: alwaysOn ? input => alwaysOn!.applyCycle(input) : fallbackApply,
         alwaysOnRerunPlan: alwaysOn ? input => alwaysOn!.rerunPlan(input) : undefined,
+        discoveryPlanService,
       });
       if (cronChanged && cron) {
         cron.bindGateway(gateway);

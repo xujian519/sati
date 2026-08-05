@@ -90,6 +90,13 @@ export type StateManager = {
   clearActiveWorkCycleId(projectRoot: string): Promise<void>;
 };
 
+/** Host apply callback used by {@link DiscoveryPlanService.applyCycle}. */
+export type CycleApplyCallback = (input: {
+  projectKey: string;
+  workCycleId: string;
+  projectName: string;
+}) => Promise<{ sessionKey: string; error?: { code: string; message: string } }>;
+
 export type DiscoveryPlanServiceDeps = {
   pilotHome: string;
   resolveProjectId: (projectRoot: string) => string;
@@ -442,6 +449,59 @@ export class DiscoveryPlanService {
   }
 
   /**
+   * Queue → apply → finalize a work cycle in one call.
+   *
+   * Owns the whole apply state machine (queue/apply/finalize) so hosts
+   * (gateway protocol methods, future SDKs) never have to orchestrate the
+   * three phases themselves. `apply` is the host's apply callback; a
+   * *thrown* error is treated as a failed apply and rolls the cycle back
+   * to `active` — a stuck `applying` state is never left behind.
+   */
+  async applyCycle(
+    projectName: string,
+    cycleId: string,
+    apply: CycleApplyCallback | undefined,
+  ): Promise<{ cycle: WorkCycleRecord | null; sessionKey?: string; error?: { code: string; message: string } }> {
+    if (!apply) {
+      return {
+        cycle: null,
+        error: { code: "not_configured", message: "Always-On apply is not configured on this gateway." },
+      };
+    }
+
+    const { projectRoot, executionToken } = await this.queueCycleApply(projectName, cycleId);
+
+    let applyResult: Awaited<ReturnType<CycleApplyCallback>>;
+    try {
+      applyResult = await apply({ projectKey: projectRoot, workCycleId: cycleId, projectName });
+    } catch (error) {
+      const failed = await this.updateCycleExecution(projectName, cycleId, {
+        status: "failed",
+        executionToken,
+      });
+      return {
+        cycle: failed.cycle,
+        error: { code: "apply_error", message: error instanceof Error ? error.message : String(error) },
+      };
+    }
+
+    if (applyResult.error) {
+      const failed = await this.updateCycleExecution(projectName, cycleId, {
+        status: "failed",
+        executionToken,
+      });
+      return { cycle: failed.cycle, error: applyResult.error };
+    }
+
+    const finalResult = await this.updateCycleExecution(projectName, cycleId, {
+      status: "completed",
+      executionSessionId: applyResult.sessionKey,
+      executionToken,
+    });
+    return { cycle: finalResult.cycle, sessionKey: applyResult.sessionKey };
+  }
+
+  /**
    * Finalize a cycle apply — called after the gateway apply RPC completes.
    */
   async updateCycleExecution(
@@ -557,17 +617,19 @@ export class DiscoveryPlanService {
 
 type CycleIndex = {
   schemaVersion: number;
-  cycles: Array<{
-    id: string;
-    projectKey: string;
-    status: string;
-    workspace: { strategy: string; cwd: string; metadata?: Record<string, string> };
-    planIds: string[];
-    createdAt: string;
-    createdByRunId?: string;
-    appliedAt?: string;
-    archivedAt?: string;
-  }>;
+  cycles: WorkCycleRecord[];
+};
+
+export type WorkCycleRecord = {
+  id: string;
+  projectKey: string;
+  status: string;
+  workspace: { strategy: string; cwd: string; metadata?: Record<string, string> };
+  planIds: string[];
+  createdAt: string;
+  createdByRunId?: string;
+  appliedAt?: string;
+  archivedAt?: string;
 };
 
 const EMPTY_CYCLE_INDEX: CycleIndex = { schemaVersion: 1, cycles: [] };

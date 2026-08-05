@@ -1,148 +1,83 @@
 /**
- * Thin adapter — delegates all discovery-plan business logic to
- * `src/always-on/web/DiscoveryPlanService.ts`.
+ * Thin gateway proxy — all discovery-plan business logic now lives on the
+ * gateway side (`InProcessGateway` + `DiscoveryPlanService` wired in
+ * `src/cli/sati.ts`). This file resolves display names to project roots and
+ * forwards to the `always_on_*` protocol methods exposed by the gateway.
  *
- * This file only wires the service's dependency injection and
- * re-exports the public API surface consumed by routes and slash
- * commands.
+ * No direct `src/` imports remain — the gateway protocol is the only
+ * boundary crossing (via `sati-bridge.js`).
  */
 
-import { isSessionActiveViaGateway as isClaudeSDKSessionActive, getSatiGateway } from "./sati-bridge.js";
-import { extractProjectDirectory, getProjectCronJobsOverview, getSessions } from "./projects.js";
-import { appendAlwaysOnRunEvent } from "./services/always-on-run-history.js";
-import {
-  appendAlwaysOnRunLog,
-  appendAlwaysOnRunLogEvent,
-  formatAlwaysOnPlanLogLine,
-} from "./services/always-on-run-logs.js";
-import { resolvePilotHome, resolveProjectStorageId } from "./utils/pilotPaths.js";
+import { getSatiGateway } from "./sati-bridge.js";
+import { extractProjectDirectory } from "./projects.js";
 
-import { DiscoveryPlanService } from "../../src/always-on/web/DiscoveryPlanService.js";
-import { buildDiscoveryContext } from "../../src/always-on/web/DiscoveryPlanContext.js";
-import {
-  applyWorktreeToProject,
-  disposeWorkspace as disposeWorkspaceImpl,
-} from "../../src/always-on/workspace/WorkspaceApply.js";
-import { resolveAlwaysOnPaths } from "../../src/always-on/storage/AlwaysOnPaths.js";
-import { DiscoveryStateStore } from "../../src/always-on/storage/DiscoveryStateStore.js";
-
-// ---------------------------------------------------------------------------
-// Wire dependencies for the service
-// ---------------------------------------------------------------------------
-
-function getService() {
-  const pilotHome = resolvePilotHome();
-  return new DiscoveryPlanService({
-    pilotHome,
-    resolveProjectId: projectRoot => resolveProjectStorageId(projectRoot, pilotHome),
-    paths: { extractProjectDirectory },
-    sessions: { getSessions },
-    activity: { isSessionActive: isClaudeSDKSessionActive },
-    events: {
-      appendRunEvent: appendAlwaysOnRunEvent,
-      appendRunLog: appendAlwaysOnRunLog,
-      appendRunLogEvent: appendAlwaysOnRunLogEvent,
-      formatLogLine: formatAlwaysOnPlanLogLine,
-    },
-    workspace: {
-      applyWorktreeChanges: applyWorktreeToProject,
-      disposeWorkspace: disposeWorkspaceImpl,
-    },
-    state: {
-      clearActiveWorkCycleId: async projectRoot => {
-        const paths = resolveAlwaysOnPaths({
-          pilotHome,
-          projectKey: projectRoot,
-        });
-        const store = new DiscoveryStateStore(paths);
-        await store.clearActiveWorkCycleId(new Date());
-      },
-    },
-  });
+function toError(result) {
+  if (result && result.error) {
+    const error = new Error(result.error.message);
+    error.code = result.error.code;
+    return error;
+  }
+  return null;
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-export async function getProjectDiscoveryContext(projectName) {
-  const projectRoot = await extractProjectDirectory(projectName);
-  return buildDiscoveryContext({
-    projectName,
-    projectRoot,
-    getProjectCronJobsOverview,
-    getSessions,
-    extractProjectDirectory,
-  });
+async function getGateway() {
+  return getSatiGateway();
 }
 
 export async function getProjectDiscoveryPlansOverview(projectName) {
-  return getService().getPlansOverview(projectName);
+  const projectRoot = await extractProjectDirectory(projectName);
+  const gw = await getGateway();
+  const result = await gw.alwaysOnListPlans({ projectKey: projectRoot });
+  const error = toError(result);
+  if (error) throw error;
+  return { plans: result.plans };
 }
 
 export async function rerunDiscoveryPlan(projectName, planId) {
   const projectRoot = await extractProjectDirectory(projectName);
-  const gw = await getSatiGateway();
+  const gw = await getGateway();
   const result = await gw.alwaysOnRerunPlan({
     projectKey: projectRoot,
     planId,
     projectName,
   });
-  if (result.error) {
-    const err = new Error(result.error.message);
-    err.code = result.error.code;
-    throw err;
-  }
+  const error = toError(result);
+  if (error) throw error;
   return { runId: result.runId };
 }
 
 export async function getProjectDiscoveryPlanReport(projectName, planId) {
-  return getService().readReport(projectName, planId);
+  const projectRoot = await extractProjectDirectory(projectName);
+  const gw = await getGateway();
+  const result = await gw.alwaysOnReadReport({ projectKey: projectRoot, planId });
+  const error = toError(result);
+  if (error) throw error;
+  return { content: result.content };
 }
 
 export async function getProjectWorkCycles(projectName) {
-  return getService().getCyclesOverview(projectName);
+  const projectRoot = await extractProjectDirectory(projectName);
+  const gw = await getGateway();
+  const result = await gw.alwaysOnListCycles({ projectKey: projectRoot });
+  const error = toError(result);
+  if (error) throw error;
+  return { cycles: result.cycles };
 }
 
 export async function archiveWorkCycle(projectName, cycleId) {
-  return getService().archiveCycle(projectName, cycleId);
+  const projectRoot = await extractProjectDirectory(projectName);
+  const gw = await getGateway();
+  const result = await gw.alwaysOnArchiveCycle({ projectKey: projectRoot, cycleId });
+  const error = toError(result);
+  if (error) throw error;
+  return { archived: result.archived };
 }
 
 export async function applyWorkCycle(projectName, cycleId) {
-  const result = await getService().queueCycleApply(projectName, cycleId);
-
-  const gw = await getSatiGateway();
-
-  let applyResult;
-  try {
-    applyResult = await gw.alwaysOnApply({
-      projectKey: result.projectRoot,
-      workCycleId: cycleId,
-      projectName,
-    });
-  } catch (err) {
-    await getService().updateCycleExecution(projectName, cycleId, {
-      status: "failed",
-    });
-    return {
-      cycle: result.cycle,
-      error: { code: "apply_error", message: (err && err.message) || "Apply failed" },
-    };
-  }
-
-  if (applyResult.error) {
-    await getService().updateCycleExecution(projectName, cycleId, {
-      status: "failed",
-    });
-    return { cycle: result.cycle, error: applyResult.error };
-  }
-
-  const finalResult = await getService().updateCycleExecution(projectName, cycleId, {
-    status: "completed",
-    executionSessionId: applyResult.sessionKey,
-  });
-  return {
-    cycle: finalResult.cycle,
-    sessionKey: applyResult.sessionKey,
-  };
+  const projectRoot = await extractProjectDirectory(projectName);
+  const gw = await getGateway();
+  const result = await gw.alwaysOnApplyCycle({ projectKey: projectRoot, workCycleId: cycleId });
+  const error = toError(result);
+  if (error) throw error;
+  return { cycle: result.cycle, sessionKey: result.sessionKey };
 }

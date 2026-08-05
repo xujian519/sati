@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import type { DiscoveryPlanService } from "../../always-on/web/DiscoveryPlanService.js";
 import type { AgentEvent, AgentInput, AgentTurnResult, AgentError } from "../../agent/index.js";
 import {
   flattenToolResultBlockText,
@@ -36,6 +37,16 @@ import type {
   AlwaysOnApplyResult,
   AlwaysOnRerunPlanInput,
   AlwaysOnRerunPlanResult,
+  AlwaysOnListPlansInput,
+  AlwaysOnListPlansResult,
+  AlwaysOnReadReportInput,
+  AlwaysOnReadReportResult,
+  AlwaysOnListCyclesInput,
+  AlwaysOnListCyclesResult,
+  AlwaysOnArchiveCycleInput,
+  AlwaysOnArchiveCycleResult,
+  AlwaysOnApplyCycleInput,
+  AlwaysOnApplyCycleResult,
   ReloadConfigResult,
   WebDescribeProjectInput,
   WebListProjectsResult,
@@ -152,6 +163,12 @@ export type InProcessGatewayOptions = {
   /** Delegate for Always-On apply — wired to AlwaysOnManager.applyPlan. */
   alwaysOnApply?: (input: AlwaysOnApplyInput) => Promise<AlwaysOnApplyResult>;
   alwaysOnRerunPlan?: (input: AlwaysOnRerunPlanInput) => Promise<AlwaysOnRerunPlanResult>;
+  /**
+   * Discovery-plan lifecycle service. Wired by `createLocalGateway` via
+   * `createDiscoveryPlanService`; powers the always_on_* discovery
+   * protocol methods (list plans / reports / cycles / archive / apply).
+   */
+  discoveryPlanService?: DiscoveryPlanService;
   /**
    * Optional non-blocking post-turn callback. Used by createLocalGateway to
    * coalesce project-level memory maintenance after a turn has fully ended.
@@ -783,6 +800,10 @@ export class InProcessGateway implements Gateway {
     (this.options as { alwaysOnRerunPlan?: InProcessGatewayOptions["alwaysOnRerunPlan"] }).alwaysOnRerunPlan = handler;
   }
 
+  setDiscoveryPlanService(service: DiscoveryPlanService | undefined): void {
+    (this.options as { discoveryPlanService?: DiscoveryPlanService }).discoveryPlanService = service;
+  }
+
   setPrepareWeixinLogin(handler: InProcessGatewayOptions["prepareWeixinLogin"]): void {
     (this.options as { prepareWeixinLogin?: InProcessGatewayOptions["prepareWeixinLogin"] }).prepareWeixinLogin =
       handler;
@@ -853,6 +874,65 @@ export class InProcessGateway implements Gateway {
       };
     }
     return this.options.alwaysOnRerunPlan(input);
+  }
+
+  // -------------------------------------------------------------------
+  // Discovery-plan protocol methods (backed by `DiscoveryPlanService`)
+  // -------------------------------------------------------------------
+
+  async alwaysOnListPlans(input: AlwaysOnListPlansInput): Promise<AlwaysOnListPlansResult> {
+    const service = this.options.discoveryPlanService;
+    if (!service) {
+      return { plans: [], error: { code: "not_configured", message: "Always-On plans list is not configured." } };
+    }
+    const { plans } = await service.getPlansOverview(input.projectKey);
+    return { plans };
+  }
+
+  async alwaysOnReadReport(input: AlwaysOnReadReportInput): Promise<AlwaysOnReadReportResult> {
+    const service = this.options.discoveryPlanService;
+    if (!service) {
+      return { content: "", error: { code: "not_configured", message: "Always-On report is not configured." } };
+    }
+    return service.readReport(input.projectKey, input.planId);
+  }
+
+  async alwaysOnListCycles(input: AlwaysOnListCyclesInput): Promise<AlwaysOnListCyclesResult> {
+    const service = this.options.discoveryPlanService;
+    if (!service) {
+      return { cycles: [], error: { code: "not_configured", message: "Always-On cycles list is not configured." } };
+    }
+    return service.getCyclesOverview(input.projectKey);
+  }
+
+  async alwaysOnArchiveCycle(input: AlwaysOnArchiveCycleInput): Promise<AlwaysOnArchiveCycleResult> {
+    const service = this.options.discoveryPlanService;
+    if (!service) {
+      return { archived: false, error: { code: "not_configured", message: "Always-On archive is not configured." } };
+    }
+    return service.archiveCycle(input.projectKey, input.cycleId);
+  }
+
+  /**
+   * Queue → apply → finalize a work cycle in one RPC. The apply state
+   * machine lives in `DiscoveryPlanService.applyCycle`; this method only
+   * delegates the host's apply handler, so missing wiring surfaces as a
+   * `not_configured` result instead of a throw.
+   */
+  async alwaysOnApplyCycle(input: AlwaysOnApplyCycleInput): Promise<AlwaysOnApplyCycleResult> {
+    const service = this.options.discoveryPlanService;
+    if (!service) {
+      return { cycle: null, error: { code: "not_configured", message: "Always-On apply is not configured." } };
+    }
+    return service.applyCycle(input.projectKey, input.workCycleId, this.options.alwaysOnApply);
+  }
+
+  /**
+   * True when the given session has a turn in flight. Hosts wire this into
+   * their discovery-plan I/O so live plan execution surfaces real status.
+   */
+  isSessionActive(sessionKey: string): boolean {
+    return this.router.hasInFlightTurn(sessionKey);
   }
 
   private requireCron(): GatewayCronController {

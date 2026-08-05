@@ -1,6 +1,6 @@
 import type { Gateway, GatewayEvent } from "../protocol/types.js";
 import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
-import { SATI_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
+import { SATI_GATEWAY_PROTOCOL_VERSION, isProtocolCompatible } from "../protocol/version.js";
 import { SkillManagerError, SkillValidationError } from "../../extension/skills/index.js";
 import { TextWebSocketConnection } from "./websocket.js";
 
@@ -64,7 +64,7 @@ export class GatewayWsConnection {
       this.ws.close(4001, "hello_required");
       return;
     }
-    if (frame.protocolVersion !== SATI_GATEWAY_PROTOCOL_VERSION) {
+    if (!isProtocolCompatible(frame.protocolVersion, SATI_GATEWAY_PROTOCOL_VERSION)) {
       this.ws.close(4001, "protocol_mismatch");
       return;
     }
@@ -269,6 +269,46 @@ export class GatewayWsConnection {
         return Promise.resolve({
           runId: "",
           error: { code: "not_configured", message: "Always-On rerun not available" },
+        });
+      case "always_on_list_plans":
+        if (this.options.gateway.alwaysOnListPlans) {
+          return this.options.gateway.alwaysOnListPlans(frame.params as never);
+        }
+        return Promise.resolve({
+          plans: [],
+          error: { code: "not_configured", message: "Always-On plans list not available" },
+        });
+      case "always_on_read_report":
+        if (this.options.gateway.alwaysOnReadReport) {
+          return this.options.gateway.alwaysOnReadReport(frame.params as never);
+        }
+        return Promise.resolve({
+          content: "",
+          error: { code: "not_configured", message: "Always-On report not available" },
+        });
+      case "always_on_list_cycles":
+        if (this.options.gateway.alwaysOnListCycles) {
+          return this.options.gateway.alwaysOnListCycles(frame.params as never);
+        }
+        return Promise.resolve({
+          cycles: [],
+          error: { code: "not_configured", message: "Always-On cycles list not available" },
+        });
+      case "always_on_archive_cycle":
+        if (this.options.gateway.alwaysOnArchiveCycle) {
+          return this.options.gateway.alwaysOnArchiveCycle(frame.params as never);
+        }
+        return Promise.resolve({
+          archived: false,
+          error: { code: "not_configured", message: "Always-On archive not available" },
+        });
+      case "always_on_apply_cycle":
+        if (this.options.gateway.alwaysOnApplyCycle) {
+          return this.options.gateway.alwaysOnApplyCycle(frame.params as never);
+        }
+        return Promise.resolve({
+          cycle: null,
+          error: { code: "not_configured", message: "Always-On apply not available" },
         });
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);

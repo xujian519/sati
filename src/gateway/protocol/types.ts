@@ -26,6 +26,16 @@ import type {
   WebReadSubagentMessagesResult as WebUiReadSubagentMessagesResult,
   WebForkSessionInput as WebUiForkSessionInput,
   WebForkSessionResult as WebUiForkSessionResult,
+  WebAlwaysOnListPlansInput as AlwaysOnListPlansInput,
+  WebAlwaysOnListPlansResult as AlwaysOnListPlansResult,
+  WebAlwaysOnReadReportInput as AlwaysOnReadReportInput,
+  WebAlwaysOnReadReportResult as AlwaysOnReadReportResult,
+  WebAlwaysOnListCyclesInput as AlwaysOnListCyclesInput,
+  WebAlwaysOnListCyclesResult as AlwaysOnListCyclesResult,
+  WebAlwaysOnArchiveCycleInput as AlwaysOnArchiveCycleInput,
+  WebAlwaysOnArchiveCycleResult as AlwaysOnArchiveCycleResult,
+  WebAlwaysOnApplyCycleInput as AlwaysOnApplyCycleInput,
+  WebAlwaysOnApplyCycleResult as AlwaysOnApplyCycleResult,
 } from "../../web/client/protocol.js";
 import type {
   SkillCreateInput,
@@ -394,6 +404,25 @@ export type AlwaysOnRerunPlanResult = {
   error?: { code: string; message: string };
 };
 
+// Always-On discovery-plan wire shapes are defined once in the browser-safe
+// `src/web/client/protocol.ts` and re-exported here under the canonical names,
+// so the two sides cannot drift. Conventions: `projectKey` is the absolute
+// project root; archive uses `cycleId`, apply uses `workCycleId` (wire names).
+export type {
+  WebAlwaysOnListPlansInput as AlwaysOnListPlansInput,
+  WebAlwaysOnListPlansResult as AlwaysOnListPlansResult,
+  WebAlwaysOnReadReportInput as AlwaysOnReadReportInput,
+  WebAlwaysOnReadReportResult as AlwaysOnReadReportResult,
+  WebAlwaysOnListCyclesInput as AlwaysOnListCyclesInput,
+  WebAlwaysOnListCyclesResult as AlwaysOnListCyclesResult,
+  WebAlwaysOnArchiveCycleInput as AlwaysOnArchiveCycleInput,
+  WebAlwaysOnArchiveCycleResult as AlwaysOnArchiveCycleResult,
+  WebAlwaysOnApplyCycleInput as AlwaysOnApplyCycleInput,
+  WebAlwaysOnApplyCycleResult as AlwaysOnApplyCycleResult,
+  WebAlwaysOnWebPlan as AlwaysOnWebPlan,
+  WebAlwaysOnCycle as AlwaysOnWebCycle,
+} from "../../web/client/protocol.js";
+
 export interface Gateway {
   submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent>;
   abortTurn(input: { sessionKey: string; runId?: string; reason?: string }): Promise<void>;
@@ -506,4 +535,15 @@ export interface Gateway {
   skillImport?(input: SkillImportInput): Promise<SkillImportResult>;
   skillValidate?(input: SkillValidateInput): Promise<SkillValidationResult>;
   skillScan?(input: SkillScanInput): Promise<SkillScanResult>;
+
+  /** List Always-On discovery plans for a project (Web UI dashboard). */
+  alwaysOnListPlans?(input: AlwaysOnListPlansInput): Promise<AlwaysOnListPlansResult>;
+  /** Read a discovery plan's report markdown. */
+  alwaysOnReadReport?(input: AlwaysOnReadReportInput): Promise<AlwaysOnReadReportResult>;
+  /** List work cycles for a project. */
+  alwaysOnListCycles?(input: AlwaysOnListCyclesInput): Promise<AlwaysOnListCyclesResult>;
+  /** Archive a work cycle and its associated plans. */
+  alwaysOnArchiveCycle?(input: AlwaysOnArchiveCycleInput): Promise<AlwaysOnArchiveCycleResult>;
+  /** Queue → apply → finalize a work cycle in one RPC (composition of apply). */
+  alwaysOnApplyCycle?(input: AlwaysOnApplyCycleInput): Promise<AlwaysOnApplyCycleResult>;
 }

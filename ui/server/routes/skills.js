@@ -508,7 +508,6 @@ router.post("/clawhub/search", async (req, res) => {
       }
     }
 
-    // eslint-disable-next-line no-control-regex
     const ANSI = /\x1b\[[0-9;]*m/g;
     const results = [];
     for (const rawLine of stdout.split("\n")) {
