@@ -41,6 +41,7 @@ function makeStubEngine(): LegalSearchEngine {
   return {
     search: () => [],
     getById: (id: string) => laws.get(id),
+    getByIds: (ids: string[]) => ids.map(id => laws.get(id)).filter((r): r is LawRecord => r !== undefined),
   } as unknown as LegalSearchEngine;
 }
 

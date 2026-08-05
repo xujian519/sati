@@ -167,17 +167,22 @@ export class LegalMemoryProvider implements MemoryResolver {
         const [queryVector] = await embedding.embed([query]);
         if (!queryVector || queryVector.length === 0) return [];
         const hits = vectorDb.search("law", Float32Array.from(queryVector), this.limit * 2);
-        const records: LawRecord[] = [];
-        const seenNames = new Set<string>();
-        for (const hit of hits) {
-          const record = this.engine.getById(hit.docId);
-          if (!record) continue;
-          if (seenNames.has(record.name)) continue;
-          seenNames.add(record.name);
-          records.push(record);
-          if (records.length >= this.limit) break;
+        // 批量按 id 取回（一次 IN 查询），再按 hits 的向量相似度顺序重排去重截断——
+        // getByIds 无 ORDER BY（DB 行序），若直接按返回序去重会破坏相似度优先语义。
+        const byId = new Map<string, LawRecord>();
+        for (const record of this.engine.getByIds(hits.map(hit => hit.docId))) {
+          byId.set(record.id, record);
         }
-        return records;
+        const seenNames = new Set<string>();
+        const deduped: LawRecord[] = [];
+        for (const hit of hits) {
+          const record = byId.get(hit.docId);
+          if (!record || seenNames.has(record.name)) continue;
+          seenNames.add(record.name);
+          deduped.push(record);
+          if (deduped.length >= this.limit) break;
+        }
+        return deduped;
       },
       error => this.logger?.warn?.(`[legal-memory] 法条语义召回失败，降级为纯 FTS: ${errorMessage(error)}`),
     );

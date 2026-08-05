@@ -1,4 +1,4 @@
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { KgNode } from "../patent/types.js";
 
 /**
@@ -45,27 +45,59 @@ type FtsHit = {
 export class KgStore {
   private readonly db: DatabaseSync;
   private readonly nodeCache = new Map<string, KgNode | undefined>();
-  /** 表结构探测结果：是否含 FTS5 表。 */
-  private readonly hasFts: boolean;
+  /** 表结构探测结果：trigram FTS 表优先（scripts/migrate-kg-fts-trigram.mjs 生成），否则 unicode61 旧表；无 FTS 时为 null。 */
+  private readonly ftsTable: string | null;
+
+  // 热路径 prepared statements（prepare 一次反复复用，避免每次执行重新编译 SQL）
+  private readonly stmtGetNode: StatementSync;
+  private readonly stmtLikeSearch: StatementSync;
+  private readonly stmtFtsSearch: StatementSync | null;
+  private readonly stmtNeighbors: StatementSync;
+  private readonly stmtNeighborsByRelation: StatementSync;
+  private readonly stmtListByType: StatementSync;
 
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath, { readOnly: true });
-    const row = this.db
-      .prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='nodes_fts'")
-      .get() as { c: number };
-    this.hasFts = row.c > 0;
+    const ftsRow = this.db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('nodes_fts_trigram', 'nodes_fts') ORDER BY CASE name WHEN 'nodes_fts_trigram' THEN 0 ELSE 1 END LIMIT 1",
+      )
+      .get() as { name: string } | undefined;
+    this.ftsTable = ftsRow?.name ?? null;
+    this.stmtGetNode = this.db.prepare(
+      `SELECT id, node_type, name, title, content, law_refs_count,
+              source, full_ref, chapter, article_number, version
+       FROM nodes WHERE id = ?`,
+    );
+    this.stmtLikeSearch = this.db.prepare(
+      `SELECT id FROM nodes
+       WHERE name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
+       LIMIT ?`,
+    );
+    // 知识库可能未建 FTS（或运行时 SQLite 未编译 FTS5/trigram——如桌面端捆绑
+    // 旧 Node），prepare MATCH 会抛错：捕获后降级 LIKE（等价 legal-search 的
+    // 能力探测语义），避免构造函数崩溃导致整个 KgStore 不可用。
+    this.stmtFtsSearch = null;
+    if (this.ftsTable !== null) {
+      try {
+        this.stmtFtsSearch = this.db.prepare(
+          `SELECT id, name, title FROM ${this.ftsTable} WHERE ${this.ftsTable} MATCH ? LIMIT ?`,
+        );
+      } catch {
+        this.stmtFtsSearch = null;
+      }
+    }
+    this.stmtNeighbors = this.db.prepare("SELECT target, relation FROM edges WHERE source = ? LIMIT ?");
+    this.stmtNeighborsByRelation = this.db.prepare(
+      "SELECT target, relation FROM edges WHERE source = ? AND relation = ? LIMIT ?",
+    );
+    this.stmtListByType = this.db.prepare("SELECT id FROM nodes WHERE node_type = ? LIMIT ?");
   }
 
   /** 按 id 查询节点（带缓存）。 */
   getNode(id: string): KgNode | undefined {
     if (this.nodeCache.has(id)) return this.nodeCache.get(id);
-    const row = this.db
-      .prepare(
-        `SELECT id, node_type, name, title, content, law_refs_count,
-                source, full_ref, chapter, article_number, version
-         FROM nodes WHERE id = ?`,
-      )
-      .get(id) as
+    const row = this.stmtGetNode.get(id) as
       | {
           id: string;
           node_type: string | null;
@@ -108,11 +140,9 @@ export class KgStore {
     const runes = Array.from(trimmed);
 
     let ids: string[];
-    if (this.hasFts && runes.length >= FTS_MIN_RUNES) {
+    if (this.stmtFtsSearch !== null && runes.length >= FTS_MIN_RUNES) {
       const escaped = trimmed.replace(/"/g, '""');
-      const rows = this.db
-        .prepare(`SELECT id, name, title FROM nodes_fts WHERE nodes_fts MATCH ? LIMIT ?`)
-        .all(`"${escaped}"`, limit) as FtsHit[];
+      const rows = this.stmtFtsSearch!.all(`"${escaped}"`, limit) as FtsHit[];
       ids = rows.map(r => r.id);
       // FTS 词级匹配未命中且无分隔符时降级 LIKE 子串：unicode61 下长句/短语常无完整 token，
       // 子串匹配比 token 完全匹配宽松（如 "以说明书为依据" 作为 token 不存在时仍可命中正文）。
@@ -129,14 +159,34 @@ export class KgStore {
 
   /** LIKE 子串检索（name/title/content 任一包含即命中）。 */
   private likeSearch(keyword: string, limit: number): Array<{ id: string }> {
-    const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
-    return this.db
-      .prepare(
-        `SELECT id FROM nodes
-         WHERE name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
-         LIMIT ?`,
-      )
-      .all(pattern, pattern, pattern, limit) as Array<{ id: string }>;
+    const pattern = this.likePattern(keyword);
+    return this.stmtLikeSearch.all(pattern, pattern, pattern, limit) as Array<{ id: string }>;
+  }
+
+  /**
+   * 多词 LIKE：把多个词条合并为**单次**全表扫描（每词三列 OR），
+   * 替代原先每个词条一次全表扫描（最多 8 词 → 最多 8 次 116K 行扫描）。
+   * 语义说明：合并查询总 LIMIT 与原实现（每词 LIMIT 后 Set 并集再 slice(0, limit)）
+   * 的**最终召回上限一致**（均 ≤ limit），仅候选行序不同（表行序 vs 词序插入序）；
+   * 多词场景的主要召回由 FTS 路径承担，LIKE 仅兜底子串命中。
+   */
+  private likeSearchTerms(terms: string[], limit: number): Array<{ id: string }> {
+    const deduped = Array.from(new Set(terms.map(t => t.trim()).filter(Boolean)));
+    if (deduped.length === 0) return [];
+    if (deduped.length === 1) return this.likeSearch(deduped[0]!, limit);
+    const clause = deduped
+      .map(() => "(name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
+      .join(" OR ");
+    const params: Array<string | number> = deduped.flatMap(term => {
+      const pattern = this.likePattern(term);
+      return [pattern, pattern, pattern];
+    });
+    params.push(limit);
+    return this.db.prepare(`SELECT id FROM nodes WHERE ${clause} LIMIT ?`).all(...params) as Array<{ id: string }>;
+  }
+
+  private likePattern(keyword: string): string {
+    return `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
   }
 
   /**
@@ -165,7 +215,7 @@ export class KgStore {
     /** 词归入 FTS（≥3 字）或 LIKE（2 字）候选；1 字词丢弃。 */
     const collect = (term: string): void => {
       const runes = Array.from(term.trim());
-      if (this.hasFts && runes.length >= FTS_MIN_RUNES) ftsTerms.push(term.trim());
+      if (this.stmtFtsSearch !== null && runes.length >= FTS_MIN_RUNES) ftsTerms.push(term.trim());
       else if (runes.length >= 2) likeTerms.push(term.trim());
     };
 
@@ -189,14 +239,13 @@ export class KgStore {
         .slice(0, MAX_OR_TERMS)
         .map(term => `"${term.replace(/"/g, '""')}"`)
         .join(" OR ");
-      const rows = this.db
-        .prepare(`SELECT id, name, title FROM nodes_fts WHERE nodes_fts MATCH ? LIMIT ?`)
-        .all(match, limit) as FtsHit[];
+      const rows = this.stmtFtsSearch!.all(match, limit) as FtsHit[];
       for (const row of rows) ids.add(row.id);
     }
 
-    for (const term of likeTerms.slice(0, MAX_OR_TERMS)) {
-      for (const row of this.likeSearch(term, limit)) ids.add(row.id);
+    const mergedTerms = likeTerms.slice(0, MAX_OR_TERMS);
+    if (mergedTerms.length > 0) {
+      for (const row of this.likeSearchTerms(mergedTerms, limit)) ids.add(row.id);
     }
 
     // 兜底：候选词均未命中时整体 LIKE 一次（带分隔符短语的子串匹配无意义，跳过）
@@ -211,14 +260,13 @@ export class KgStore {
   /** 查询节点的出向邻居（按 relation 过滤可选）。 */
   getNeighbors(nodeId: string, relation?: string, limit = 20): KgNeighbor[] {
     if (relation) {
-      const rows = this.db
-        .prepare("SELECT target, relation FROM edges WHERE source = ? AND relation = ? LIMIT ?")
-        .all(nodeId, relation, limit) as Array<{ target: string; relation: string }>;
+      const rows = this.stmtNeighborsByRelation.all(nodeId, relation, limit) as Array<{
+        target: string;
+        relation: string;
+      }>;
       return rows.map(r => ({ targetId: r.target, relation: r.relation }));
     }
-    const rows = this.db
-      .prepare("SELECT target, relation FROM edges WHERE source = ? LIMIT ?")
-      .all(nodeId, limit) as Array<{ target: string; relation: string }>;
+    const rows = this.stmtNeighbors.all(nodeId, limit) as Array<{ target: string; relation: string }>;
     return rows.map(r => ({ targetId: r.target, relation: r.relation }));
   }
 
@@ -245,9 +293,7 @@ export class KgStore {
 
   /** 按类型列出节点（用于图谱浏览/过滤）。 */
   listByType(nodeType: string, limit = 50): KgNode[] {
-    const rows = this.db.prepare("SELECT id FROM nodes WHERE node_type = ? LIMIT ?").all(nodeType, limit) as Array<{
-      id: string;
-    }>;
+    const rows = this.stmtListByType.all(nodeType, limit) as Array<{ id: string }>;
     return rows.map(r => this.getNode(r.id)).filter((n): n is KgNode => n !== undefined);
   }
 

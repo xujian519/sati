@@ -132,14 +132,26 @@ export class VectorDbSearch {
     let currentStart = 0;
     let index = 0;
 
-    // OFFSET 分页加载（避免依赖 StatementSync.iterate，兼容 Node 22.13）。
+    // 键集分页加载（WHERE (doc_id, chunk_index) > (?, ?) 走主键前缀索引，
+    // 避免 OFFSET 分页在大偏移下重复扫描前序行；ORDER BY 与主键
+    // (corpus, doc_id, chunk_index) 一致，天然有序）。
     const PAGE_SIZE = 5000;
-    const pageStatement = this.db.prepare(
-      "SELECT doc_id, vector FROM vectors WHERE corpus = ? ORDER BY doc_id, chunk_index LIMIT ? OFFSET ?",
+    const pageFirst = this.db.prepare(
+      "SELECT doc_id, chunk_index, vector FROM vectors WHERE corpus = ? ORDER BY doc_id, chunk_index LIMIT ?",
     );
-    let offset = 0;
+    const pageNext = this.db.prepare(
+      `SELECT doc_id, chunk_index, vector FROM vectors
+       WHERE corpus = ? AND (doc_id > ? OR (doc_id = ? AND chunk_index > ?))
+       ORDER BY doc_id, chunk_index LIMIT ?`,
+    );
+    let cursorDocId: string | undefined;
+    let cursorChunkIndex = 0;
     while (true) {
-      const rows = pageStatement.all(corpus, PAGE_SIZE, offset) as Array<{ doc_id: string; vector: Uint8Array }>;
+      const rows = (
+        cursorDocId === undefined
+          ? pageFirst.all(corpus, PAGE_SIZE)
+          : pageNext.all(corpus, cursorDocId, cursorDocId, cursorChunkIndex, PAGE_SIZE)
+      ) as Array<{ doc_id: string; chunk_index: number; vector: Uint8Array }>;
       if (rows.length === 0) break;
       for (const row of rows) {
         const chunk = toInt8Array(row.vector, dimensions);
@@ -154,7 +166,9 @@ export class VectorDbSearch {
         }
         index += 1;
       }
-      offset += rows.length;
+      const last = rows[rows.length - 1]!;
+      cursorDocId = last.doc_id;
+      cursorChunkIndex = last.chunk_index;
     }
     if (currentDocId !== null) {
       docOffsets.set(currentDocId, { start: currentStart, end: index });
