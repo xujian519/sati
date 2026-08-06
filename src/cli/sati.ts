@@ -42,6 +42,7 @@ import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createTelemetryCollector } from "../telemetry/index.js";
 import { createDiscoveryPlanService } from "../always-on/index.js";
 import type { InProcessGateway } from "../gateway/client/InProcessGateway.js";
+import { APP_VERSION } from "../version.js";
 import { createLocalGateway } from "./createLocalGateway.js";
 import { createCoreDiscoveryPlanIo } from "./discoveryIo.js";
 import { startSatiServer } from "./satiServer.js";
@@ -50,8 +51,36 @@ import { createShutdownAndExit } from "./shutdownCoordinator.js";
 
 await installGlobalProxy();
 
+function printUsage(): void {
+  console.log(`sati v${APP_VERSION} — AI agent runtime · CLI · TUI · Web · Feishu
+
+Usage: sati [command] [options]
+
+Commands:
+  (none)                        Interactive CLI chat (default)
+  tui                           Interactive terminal UI (requires a TTY)
+  server                        Start the sati server (gateway + web)
+  gateway setup <channel>       Set up an IM channel (feishu|weixin|wecom)
+  cron <list|create|delete|stop> Manage cron tasks (requires a running server)
+  chat                          Search chat history
+  skills migrate                Migrate skills from other agents
+  update [--check|--restart]    Update sati from the git remote
+
+Options:
+  -v, --version                 Print the application version
+  -h, --help                    Show this help message`);
+}
+
 async function main(argv = process.argv.slice(2)): Promise<void> {
   const command = argv[0];
+  if (command === "--version" || command === "-v") {
+    console.log(APP_VERSION);
+    return;
+  }
+  if (command === "--help" || command === "-h" || command === "help") {
+    printUsage();
+    return;
+  }
   if (command === "server") {
     const projectRoot = process.cwd();
     const env = process.env;
