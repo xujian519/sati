@@ -9,6 +9,7 @@ import type {
   RecallHeaderEntry,
   RetrievalPromptDebug,
 } from "../types.js";
+import { truncate as truncateBase } from "../utils/text.js";
 
 type LoggerLike = {
   info?: (...args: unknown[]) => void;
@@ -845,9 +846,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+// llm-extraction 的截断语义：无省略号、截断后 trim（用于 LLM prompt 与存储，避免多余后缀）
 function truncate(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value;
-  return value.slice(0, maxLength).trim();
+  return truncateBase(value, maxLength, { ellipsis: false, trim: true });
 }
 
 function normalizeWhitespace(value: string): string {

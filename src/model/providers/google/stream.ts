@@ -1,4 +1,5 @@
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
+import { nextUniqueToolCallId, safeToolCallIdPart } from "../../streaming/toolCallIds.js";
 import { normalizeGoogleFinishReason, normalizeGoogleUsage } from "./response.js";
 
 type GoogleStreamToolCallState = {
@@ -34,7 +35,7 @@ export function normalizeGoogleStreamEvent(
     state.started = true;
     const responseId = readString(chunk.responseId);
     if (responseId) {
-      state.toolCalls.baseId = safeToolCallIdPart(responseId);
+      state.toolCalls.baseId = safeToolCallIdPart(responseId, "google");
     }
     events.push({ type: "message_start", role: "assistant", raw });
   }
@@ -104,22 +105,12 @@ function toToolInput(args: unknown): unknown {
 }
 
 function chooseToolCallId(state: GoogleStreamToolCallState, incomingId: string | undefined): string {
-  const candidate = incomingId ? safeToolCallIdPart(incomingId) : `call_${state.baseId}_${state.usedIds.size}`;
+  const candidate = incomingId
+    ? safeToolCallIdPart(incomingId, "google")
+    : `call_${state.baseId}_${state.usedIds.size}`;
   const unique = nextUniqueToolCallId(candidate, state.usedIds);
   state.usedIds.add(unique);
   return unique;
-}
-
-function nextUniqueToolCallId(id: string, used: Set<string>): string {
-  if (!used.has(id)) {
-    return id;
-  }
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${id}_${suffix}`;
-    if (!used.has(candidate)) {
-      return candidate;
-    }
-  }
 }
 
 function readCandidates(chunk: Record<string, unknown>): Record<string, unknown>[] {
@@ -129,15 +120,6 @@ function readCandidates(chunk: Record<string, unknown>): Record<string, unknown>
 function readParts(candidate: Record<string, unknown>): unknown[] {
   const content = asRecord(candidate.content);
   return Array.isArray(content.parts) ? content.parts : [];
-}
-
-function safeToolCallIdPart(value: string): string {
-  return (
-    value
-      .trim()
-      .replace(/[^A-Za-z0-9_-]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "google"
-  );
 }
 
 function readString(value: unknown): string | undefined {

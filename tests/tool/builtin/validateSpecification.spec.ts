@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { makeToolContext } from "../context-fixture.js";
 import {
   checkEffectQuantification,
   checkFigureMarkConsistency,
@@ -214,7 +215,7 @@ test("validate_specification tool definition is read-only", async () => {
   const tool = createValidateSpecificationTool();
   assert.equal(tool.name, "validate_specification");
   assert.equal(tool.isReadOnly({ text: "" }), true);
-  const result = await tool.execute({ text: GOOD_SPEC }, {} as never);
+  const result = await tool.execute({ text: GOOD_SPEC }, makeToolContext());
   const first = result.content[0];
   assert.equal(first?.type, "json");
   if (first?.type !== "json") assert.fail("expected json content");

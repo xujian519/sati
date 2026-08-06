@@ -3,6 +3,16 @@
  */
 
 /**
+ * 解析 `/new` 会话切换命令：非 `/new` 命令返回 null；否则返回命令后的
+ * 消息内容（去掉 `/new` 前缀并 trim）。判断与提取合一，调用方无需
+ * 记得两者必须配对使用。
+ */
+export function newSessionMessage(trimmed: string): string | null {
+  if (trimmed !== "/new" && !trimmed.startsWith("/new ")) return null;
+  return trimmed.slice("/new".length).trim();
+}
+
+/**
  * Split long text into chunks of at most `max` characters, preferring to
  * break on newlines (then spaces) to keep messages readable.
  */

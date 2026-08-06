@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { makeToolContext } from "../context-fixture.js";
 import {
   JsonFileWorkflowRunStore,
   patentInventivenessManifest,
@@ -167,7 +168,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
           text: `阶段 ${stageId} 输出`,
         })),
       },
-      {} as never,
+      makeToolContext(),
     );
     const text = textOf(res);
     assert.ok(text.includes("patent_workflow(patent_novelty_v1)"));
@@ -177,7 +178,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
 
   it("patent_workflow 工具：缺阶段输出 → 降级标注", async () => {
     const tool = createPatentWorkflowTool();
-    const res = await tool.execute({ outputs: [] }, {} as never);
+    const res = await tool.execute({ outputs: [] }, makeToolContext());
     const text = textOf(res);
     assert.ok(text.includes("降级"));
     assert.ok(text.includes("incomplete"));
@@ -185,7 +186,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
 
   it("patent_workflow 工具：未知 manifestId fail-closed", async () => {
     const tool = createPatentWorkflowTool();
-    const res = await tool.execute({ manifestId: "no_such_manifest", outputs: [] }, {} as never);
+    const res = await tool.execute({ manifestId: "no_such_manifest", outputs: [] }, makeToolContext());
     assert.ok(textOf(res).includes("未知 manifest"), `应返回未知 manifest 提示: ${textOf(res)}`);
   });
 
@@ -221,7 +222,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
           { stageId: "approval", text: "人工确认：结论属实，通过。" },
         ],
       },
-      {} as never,
+      makeToolContext(),
     );
     const text = textOf(res);
     assert.ok(text.includes("确定性门: ✅ 通过"), `应判定通过: ${text}`);
@@ -240,7 +241,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
           { stageId: "approval", text: "人工确认通过。" },
         ],
       },
-      {} as never,
+      makeToolContext(),
     );
     const text = textOf(res);
     assert.ok(text.includes("确定性门: ⛔ 阻断"), `应判定阻断: ${text}`);
@@ -265,7 +266,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
           { stageId: "approval", text: "人工确认通过。" },
         ],
       },
-      {} as never,
+      makeToolContext(),
     );
     const text = textOf(res);
     assert.ok(text.includes("patent_workflow(patent_disclosure_v1)"), `应识别 disclosure manifest: ${text}`);
@@ -276,7 +277,10 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
 
   it("patent_workflow 工具：checkDomain 空串禁用确定性门", async () => {
     const tool = createPatentWorkflowTool();
-    const res = await tool.execute({ checkDomain: "", outputs: [{ stageId: "parse", text: "任意输出" }] }, {} as never);
+    const res = await tool.execute(
+      { checkDomain: "", outputs: [{ stageId: "parse", text: "任意输出" }] },
+      makeToolContext(),
+    );
     assert.ok(!textOf(res).includes("确定性门"), "禁用后不应出现确定性门区块");
   });
 
@@ -297,19 +301,25 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
 
   it("patent_plan_task 工具：非法迁移返回错误而非抛错", async () => {
     const tool = createPatentPlanTaskTool();
-    const res = await tool.execute({ action: "transition", currentState: "finished", to: "planning" }, {} as never);
+    const res = await tool.execute(
+      { action: "transition", currentState: "finished", to: "planning" },
+      makeToolContext(),
+    );
     assert.ok(textOf(res).includes("非法状态迁移"));
   });
 
   it("patent_plan_task 工具：非法状态字符串 fail-closed（不抛 TypeError）", async () => {
     const tool = createPatentPlanTaskTool();
-    const res = await tool.execute({ action: "transition", currentState: "bogus_state", to: "executing" }, {} as never);
+    const res = await tool.execute(
+      { action: "transition", currentState: "bogus_state", to: "executing" },
+      makeToolContext(),
+    );
     assert.ok(textOf(res).includes("非法状态"), `应返回非法状态提示: ${textOf(res)}`);
   });
 
   it("patent_plan_task 工具：未知 action fail-closed（不返回 undefined）", async () => {
     const tool = createPatentPlanTaskTool();
-    const res = await tool.execute({ action: "fly_to_moon" as never }, {} as never);
+    const res = await tool.execute({ action: "fly_to_moon" as never }, makeToolContext());
     assert.ok(textOf(res).includes("未知操作"), `应返回未知操作提示: ${textOf(res)}`);
   });
 
@@ -317,16 +327,16 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     const tool = createPatentWorkerValidateTool();
     const ok = await tool.execute(
       { workerName: "patent-novelty-analyzer", outputText: "新颖性结论：具备；置信度：high" },
-      {} as never,
+      makeToolContext(),
     );
     assert.ok(textOf(ok).includes("通过"));
-    const bad = await tool.execute({ workerName: "patent-novelty-analyzer", outputText: "缺字段" }, {} as never);
+    const bad = await tool.execute({ workerName: "patent-novelty-analyzer", outputText: "缺字段" }, makeToolContext());
     assert.ok(textOf(bad).includes("降级"));
   });
 
   it("patent_worker_validate 工具：未知 workerName fail-closed", async () => {
     const tool = createPatentWorkerValidateTool();
-    const res = await tool.execute({ workerName: "no_such_worker", outputText: "x" }, {} as never);
+    const res = await tool.execute({ workerName: "no_such_worker", outputText: "x" }, makeToolContext());
     assert.ok(textOf(res).includes("未知 worker"), `应返回未知 worker 提示: ${textOf(res)}`);
   });
 });
@@ -350,7 +360,7 @@ describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", (
           text: `阶段 ${stageId} 输出`,
         })),
       },
-      {} as never,
+      makeToolContext(),
     );
     const text = textOf(res);
     assert.ok(text.includes("patent_workflow(patent_inventiveness_v1)"), `应识别 inventiveness manifest: ${text}`);
@@ -367,7 +377,7 @@ describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", (
         manifestId: "patent_inventiveness_v1",
         outputs: INVENTIVENESS_COMPLIANT_OUTPUTS,
       },
-      {} as never,
+      makeToolContext(),
     );
     const text = textOf(res);
     assert.ok(text.includes("确定性门: ✅ 通过"), `应判定通过: ${text}`);
@@ -390,7 +400,7 @@ describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", (
           { stageId: "approval", text: "人工确认通过。" },
         ],
       },
-      {} as never,
+      makeToolContext(),
     );
     const text = textOf(res);
     assert.ok(text.includes("确定性门: ⛔ 阻断"), `应判定阻断: ${text}`);

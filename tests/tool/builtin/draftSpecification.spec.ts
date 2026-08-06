@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { makeToolContext } from "../context-fixture.js";
 import { createDraftSpecificationTool, draftSpecification } from "../../../src/tool/builtin/draftSpecification.js";
 
 test("draft_specification assembles all five sections in order", () => {
@@ -122,7 +123,7 @@ test("draft_specification tool definition is read-only", async () => {
   const tool = createDraftSpecificationTool();
   assert.equal(tool.name, "draft_specification");
   assert.equal(tool.isReadOnly({ title: "一种装置" }), true);
-  const result = await tool.execute({ title: "一种装置", technical_solution: "包括壳体" }, {} as never);
+  const result = await tool.execute({ title: "一种装置", technical_solution: "包括壳体" }, makeToolContext());
   const first = result.content[0];
   assert.equal(first?.type, "json");
   if (first?.type !== "json") assert.fail("expected json content");

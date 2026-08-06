@@ -3,6 +3,7 @@ import test from "node:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { makeToolContext } from "../context-fixture.js";
 import type { CanonicalModelEvent, CanonicalModelRequest } from "../../../src/model/index.js";
 import type { SatiToolModelClient } from "../../../src/tool/protocol/types.js";
 import type { StageProvider } from "../../../src/patent/atoms/index.js";
@@ -128,7 +129,7 @@ test("disclosure manifest 原子全流程执行，review_gate 中断且 draft_cl
 test("merge 产出 PFE 三元组，novelty 产出逐特征判定（状态流打通）", async () => {
   registerBuiltinAtoms();
   const tool = createPatentWorkflowRunTool({ model: mockModel(disclosureResponder), search: mockSearch });
-  const res = await tool.execute({ input: DISCLOSURE_INPUT }, {} as never);
+  const res = await tool.execute({ input: DISCLOSURE_INPUT }, makeToolContext());
   const text = textOf(res);
   // merge 主输出 = pfe_triples（problem 进入三元组）
   assert.match(text, /现有保温杯无法长时间保温/);
@@ -142,7 +143,7 @@ test("LLM 输出非 JSON：extract 降级保留原文，流程 fail-open 直至�
     model: mockModel(() => "这不是 JSON"),
     search: mockSearch,
   });
-  const res = await tool.execute({ input: DISCLOSURE_INPUT }, {} as never);
+  const res = await tool.execute({ input: DISCLOSURE_INPUT }, makeToolContext());
   const text = textOf(res);
   // extract 降级（保留原文），但流程不中断；仍走到 review_gate 审批门
   assert.match(text, /暂停等待人工确认/);
@@ -154,7 +155,7 @@ test("LLM 输出非 JSON：extract 降级保留原文，流程 fail-open 直至�
 test("未提供模型客户端：返回明确错误而非静默降级", async () => {
   registerBuiltinAtoms();
   const tool = createPatentWorkflowRunTool({ search: mockSearch });
-  const res = await tool.execute({ input: DISCLOSURE_INPUT }, {} as never);
+  const res = await tool.execute({ input: DISCLOSURE_INPUT }, makeToolContext());
   const text = textOf(res);
   assert.match(text, /未提供模型客户端/);
   assert.doesNotMatch(text, /patent_workflow_run\(patent_disclosure_v1\)/);
@@ -163,7 +164,7 @@ test("未提供模型客户端：返回明确错误而非静默降级", async ()
 test("未知 manifest fail-closed", async () => {
   registerBuiltinAtoms();
   const tool = createPatentWorkflowRunTool({ model: mockModel(disclosureResponder), search: mockSearch });
-  const res = await tool.execute({ input: "x", manifestId: "no_such_manifest" }, {} as never);
+  const res = await tool.execute({ input: "x", manifestId: "no_such_manifest" }, makeToolContext());
   assert.match(textOf(res), /未知 manifest/);
 });
 
@@ -196,7 +197,7 @@ test("注入放行审批门的 handlers：draft_claims 执行 + 确定性规则�
     return disclosureResponder(prompt);
   });
   const tool = createPatentWorkflowRunTool({ model, search: mockSearch, handlers });
-  const res = await tool.execute({ input: DISCLOSURE_INPUT }, {} as never);
+  const res = await tool.execute({ input: DISCLOSURE_INPUT }, makeToolContext());
   const text = textOf(res);
   // 无中断：draft_claims 执行、整体完成
   assert.doesNotMatch(text, /审批门暂停/);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PATENT_WIKI_DIRS, createPatentWikiSearchTool } from "../../../src/tool/builtin/patentWikiSearch.js";
+import { makeToolContext } from "../context-fixture.js";
 
 test("patent_wiki_search: 目录映射正确", () => {
   assert.equal(PATENT_WIKI_DIRS.specification, "专利实务/说明书");
@@ -19,7 +20,7 @@ test("patent_wiki_search: 工具只读且可用", async () => {
 
 test("patent_wiki_search: specification 目录检索充分公开卡片", async () => {
   const tool = createPatentWikiSearchTool();
-  const result = await tool.execute({ query: "充分公开", dir: "specification", limit: 5 }, {} as never);
+  const result = await tool.execute({ query: "充分公开", dir: "specification", limit: 5 }, makeToolContext());
   const first = result.content[0];
   assert.equal(first?.type, "json");
   if (first?.type !== "json") assert.fail("expected json content");
@@ -32,7 +33,7 @@ test("patent_wiki_search: specification 目录检索充分公开卡片", async (
 
 test("patent_wiki_search: 附图目录列出说明书附图规范", async () => {
   const tool = createPatentWikiSearchTool();
-  const result = await tool.execute({ query: "", dir: "figures", limit: 20 }, {} as never);
+  const result = await tool.execute({ query: "", dir: "figures", limit: 20 }, makeToolContext());
   const first = result.content[0];
   if (first?.type !== "json") assert.fail("expected json content");
   const output = first.value as { results: Array<{ id: string }> };
@@ -46,7 +47,7 @@ test("patent_wiki_search: include_body 附带正文片段", async () => {
   const tool = createPatentWikiSearchTool();
   const result = await tool.execute(
     { query: "实施例", dir: "specification", limit: 2, include_body: true },
-    {} as never,
+    makeToolContext(),
   );
   const first = result.content[0];
   if (first?.type !== "json") assert.fail("expected json content");

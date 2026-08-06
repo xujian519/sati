@@ -1,4 +1,4 @@
-import { createServer, type AddressInfo, type Server, type Socket } from "node:net";
+import { type AddressInfo, type Server } from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -6,9 +6,9 @@ import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import type { Readable } from "node:stream";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
-import { contentToText, type SatiToolResult } from "../protocol/result.js";
 import type { SatiToolValidationIssue } from "../protocol/schema.js";
 import { isReadOnlyShellCommand } from "./bash/permissions.js";
+import { createRpcServer, EXECUTE_CODE_BASE_ALLOWED_TOOLS, resolveExecuteCodeAllowedTools } from "./executeCodeRpc.js";
 import { collectPythonSyntaxDiagnostics } from "./filesystem/syntaxDiagnostics.js";
 
 type ExecuteCodeInput = {
@@ -40,20 +40,6 @@ export type CreateExecuteCodeToolOptions = {
   webSearch?: boolean;
 };
 
-type RpcRequest = {
-  token?: unknown;
-  tool?: unknown;
-  args?: unknown;
-};
-
-type RpcResponse = {
-  content?: string;
-  data?: unknown;
-  metadata?: Record<string, unknown>;
-  error?: string;
-  code?: string;
-};
-
 type RpcTransport =
   | { kind: "uds"; socketPath: string }
   | { kind: "tcp"; host: "127.0.0.1"; port: number; token: string };
@@ -66,64 +52,10 @@ export function setExecuteCodeTransportOverrideForTests(kind: ExecuteCodeTranspo
   executeCodeTransportOverride = kind;
 }
 
-export async function handleExecuteCodeRpcLineForTests(
-  line: string,
-  options: {
-    expectedToken?: string;
-    executeTool?: NonNullable<SatiToolRuntimeContext["executeTool"]>;
-    webSearch?: boolean;
-  } = {},
-): Promise<RpcResponse> {
-  return handleRpcLine(line, {
-    context: {
-      sessionId: "test-session",
-      turnId: "test-turn",
-      cwd: process.cwd(),
-      permissionMode: "bypassPermissions",
-      permissionContext: {
-        mode: "bypassPermissions",
-        rules: { allow: [], deny: [], ask: [] },
-        cwd: process.cwd(),
-        additionalWorkingDirectories: [],
-        canPrompt: false,
-        bypassAvailable: false,
-      },
-    },
-    executeTool:
-      options.executeTool ??
-      (async () => {
-        throw new Error("executeTool should not be called by this test.");
-      }),
-    maxToolCalls: 50,
-    toolCallLog: [],
-    nextToolCall: () => 1,
-    canCallTool: () => true,
-    expectedToken: options.expectedToken,
-    allowedTools: resolveExecuteCodeAllowedTools({ webSearch: options.webSearch }),
-  });
-}
-
 const DEFAULT_TIMEOUT_SECONDS = 300;
 const DEFAULT_MAX_TOOL_CALLS = 50;
 const MAX_STDOUT_BYTES = 50_000;
 const MAX_STDERR_BYTES = 10_000;
-const EXECUTE_CODE_BASE_ALLOWED_TOOLS = [
-  "web_fetch",
-  "read_file",
-  "write_file",
-  "edit_file",
-  "grep",
-  "glob",
-  "bash",
-] as const;
-
-function resolveExecuteCodeAllowedTools(options: CreateExecuteCodeToolOptions): ReadonlySet<string> {
-  const allowed = new Set<string>(EXECUTE_CODE_BASE_ALLOWED_TOOLS);
-  if (options.webSearch !== false) {
-    allowed.add("web_search");
-  }
-  return allowed;
-}
 
 export function createExecuteCodeTool(
   options: CreateExecuteCodeToolOptions = {},
@@ -489,139 +421,6 @@ async function runExecuteCode(
   }
 }
 
-function createRpcServer(options: {
-  context: SatiToolRuntimeContext;
-  executeTool: NonNullable<SatiToolRuntimeContext["executeTool"]>;
-  maxToolCalls: number;
-  toolCallLog: ExecuteCodeToolCallLogEntry[];
-  nextToolCall: () => number;
-  canCallTool: () => boolean;
-  expectedToken?: string;
-  allowedTools: ReadonlySet<string>;
-}): Server {
-  return createServer(socket => {
-    let buffer = "";
-    socket.setEncoding("utf8");
-    socket.on("data", chunk => {
-      buffer += chunk;
-      void processBufferedRequests(
-        socket,
-        () => {
-          const lines: string[] = [];
-          let index = buffer.indexOf("\n");
-          while (index >= 0) {
-            const line = buffer.slice(0, index);
-            buffer = buffer.slice(index + 1);
-            lines.push(line);
-            index = buffer.indexOf("\n");
-          }
-          return lines;
-        },
-        options,
-      );
-    });
-  });
-}
-
-async function processBufferedRequests(
-  socket: Socket,
-  takeLines: () => string[],
-  options: {
-    context: SatiToolRuntimeContext;
-    executeTool: NonNullable<SatiToolRuntimeContext["executeTool"]>;
-    maxToolCalls: number;
-    toolCallLog: ExecuteCodeToolCallLogEntry[];
-    nextToolCall: () => number;
-    canCallTool: () => boolean;
-    expectedToken?: string;
-    allowedTools: ReadonlySet<string>;
-  },
-): Promise<void> {
-  for (const rawLine of takeLines()) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const response = await handleRpcLine(line, options);
-    socket.write(`${JSON.stringify(response)}\n`);
-  }
-}
-
-async function handleRpcLine(
-  line: string,
-  options: {
-    context: SatiToolRuntimeContext;
-    executeTool: NonNullable<SatiToolRuntimeContext["executeTool"]>;
-    maxToolCalls: number;
-    toolCallLog: ExecuteCodeToolCallLogEntry[];
-    nextToolCall: () => number;
-    canCallTool: () => boolean;
-    expectedToken?: string;
-    allowedTools: ReadonlySet<string>;
-  },
-): Promise<RpcResponse> {
-  let request: RpcRequest;
-  try {
-    request = JSON.parse(line) as RpcRequest;
-  } catch (error) {
-    return {
-      error: `Invalid RPC request: ${error instanceof Error ? error.message : String(error)}`,
-      code: "invalid_rpc",
-    };
-  }
-
-  const toolName = typeof request.tool === "string" ? request.tool : "";
-  const args = isRecord(request.args) ? request.args : {};
-  if (options.expectedToken && request.token !== options.expectedToken) {
-    return { error: "Invalid execute_code RPC token.", code: "invalid_rpc_token" };
-  }
-  if (!options.allowedTools.has(toolName)) {
-    return { error: `Tool '${toolName}' is not available in execute_code.`, code: "tool_not_allowed" };
-  }
-  if (!options.canCallTool()) {
-    return {
-      error: `Tool call limit reached (${options.maxToolCalls}). No more tool calls allowed in this execution.`,
-      code: "tool_call_limit_reached",
-    };
-  }
-
-  const sequence = options.nextToolCall();
-  const started = Date.now();
-  const outerId = options.context.currentToolCallId ?? "execute_code";
-  const result = await options.executeTool(
-    { id: `${outerId}:code:${sequence}`, name: toolName, input: args },
-    { currentToolCallId: `${outerId}:code:${sequence}` },
-  );
-  const ok = result.type === "success";
-  options.toolCallLog.push({ tool: toolName, duration_ms: Date.now() - started, ok });
-  return toolResultToRpcResponse(result);
-}
-
-function toolResultToRpcResponse(result: SatiToolResult): RpcResponse {
-  const content = result.content.map(contentToText).join("\n");
-  if (result.type === "error") {
-    const details = formatToolErrorDetails(result);
-    return {
-      error: details ? `${result.error.message}\n${details}` : result.error.message,
-      code: result.error.code,
-      content,
-      metadata: result.metadata,
-    };
-  }
-  return {
-    content,
-    data: result.data,
-    metadata: result.metadata,
-  };
-}
-
-function formatToolErrorDetails(result: Extract<SatiToolResult, { type: "error" }>): string | undefined {
-  const issues = result.error.details?.issues;
-  if (!Array.isArray(issues)) return undefined;
-  const messages = issues
-    .map(issue => (isRecord(issue) && typeof issue.message === "string" ? issue.message : undefined))
-    .filter((message): message is string => !!message);
-  return messages.length > 0 ? messages.join("\n") : undefined;
-}
-
 function generateSatiToolsModule(kind: RpcTransport["kind"], webSearchEnabled: boolean): string {
   const transportHeader = kind === "tcp" ? TCP_PYTHON_TRANSPORT_HEADER : UDS_PYTHON_TRANSPORT_HEADER;
   const webSearchHelper = webSearchEnabled
@@ -963,10 +762,6 @@ function formatExecuteCodeResult(result: ExecuteCodeOutput): string {
   if (result.error) lines.push(`error: ${result.error}`);
   if (result.output) lines.push("", result.output);
   return lines.join("\n");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stripAnsi(value: string): string {

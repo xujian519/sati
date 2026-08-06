@@ -142,12 +142,14 @@ export class WeixinChannel implements ChannelAdapter {
   private loginRecoveryPromise: Promise<void> | null = null;
   private currentLoginQrUrl: string | undefined;
 
+  private readonly defaultClientFactory: (options: ClientOptions) => WeixinIlinkClient = clientOptions =>
+    new ILinkClient(clientOptions) as unknown as WeixinIlinkClient;
+
   constructor(options: WeixinChannelOptions = {}) {
     this.credentialsPath = options.credentialsPath ?? CREDENTIALS_PATH;
     this.mapper = options.mapper ?? new WeixinSessionMapper();
     this.liveReplyOptions = options.liveReplyOptions;
-    this.clientFactory =
-      options.clientFactory ?? (clientOptions => new ILinkClient(clientOptions) as unknown as WeixinIlinkClient);
+    this.clientFactory = options.clientFactory ?? this.defaultClientFactory;
     this.login = options.loginWithQR ?? loginWithQR;
     this.onStateChange = options.onStateChange;
     this.attachmentStore = new ImAttachmentStore({
@@ -209,7 +211,12 @@ export class WeixinChannel implements ChannelAdapter {
       return;
     }
 
-    installIlinkFetchCompatibility();
+    // 仅在使用内置 ILinkClient（依赖全局 fetch 且无法注入）时才需要
+    // content-length 兼容 patch；注入自定义 clientFactory 的宿主（如测试）
+    // 不应被全局 fetch patch 污染。
+    if (this.clientFactory === this.defaultClientFactory) {
+      installIlinkFetchCompatibility();
+    }
     this.client = this.createClient(creds);
 
     this.loopAbort = new AbortController();
@@ -1362,6 +1369,16 @@ function looksLikeMostlyText(buffer: Buffer): boolean {
   return printable / buffer.length > 0.9;
 }
 
+/**
+ * weixin-ilink SDK 兼容层：SDK 在 `buildHeaders` 中手动设置 `Content-Length`，
+ * 与 Node fetch（undici）自动计算的 content-length 冲突，导致 iLink 服务端
+ * 拒绝请求。SDK 直接使用全局 `fetch` 且无注入点（黑盒依赖），因此必须
+ * patch 全局 fetch 拦截 `/ilink/bot/` 请求去除冲突 header。
+ *
+ * 副作用被刻意收窄：幂等（进程内只安装一次）、仅改写含 `/ilink/bot/` 且
+ * 带 headers 的请求（其余请求原样转发）、且仅在使用内置 ILinkClient 时安装
+ * （见 `startPollingWithCredentials`）。
+ */
 function installIlinkFetchCompatibility(): void {
   if (ilinkFetchCompatibilityInstalled) return;
   ilinkFetchCompatibilityInstalled = true;

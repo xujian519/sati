@@ -17,6 +17,7 @@ import { LlmMemoryExtractor, type MemoryClassificationLabel } from "../skills/ll
 import { MemoryRepository } from "../storage/sqlite.js";
 import { traceI18n } from "../trace-i18n.js";
 import { buildL0IndexId, hashText, nowIso } from "../utils/id.js";
+import { kvDetail, listDetail, jsonDetail } from "../utils/detail.js";
 import { decodeEscapedUnicodeText, decodeEscapedUnicodeValue } from "../utils/text.js";
 
 const LAST_INDEXED_AT_STATE_KEY = "lastIndexedAt" as const;
@@ -336,54 +337,6 @@ function noteDetail(
     ...(labelI18n ? { labelI18n } : {}),
     kind: "note",
     text: decodeEscapedUnicodeText(text, true),
-  };
-}
-
-function listDetail(
-  key: string,
-  label: string,
-  items: string[],
-  labelI18n?: TraceI18nText,
-): NonNullable<IndexTraceStep["details"]>[number] {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "list",
-    items: items.map(item => decodeEscapedUnicodeText(item, true)),
-  };
-}
-
-function kvDetail(
-  key: string,
-  label: string,
-  entries: Array<{ label: string; value: unknown }>,
-  labelI18n?: TraceI18nText,
-): NonNullable<IndexTraceStep["details"]>[number] {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "kv",
-    entries: entries.map(entry => ({
-      label: entry.label,
-      value: decodeEscapedUnicodeText(String(entry.value ?? ""), true),
-    })),
-  };
-}
-
-function jsonDetail(
-  key: string,
-  label: string,
-  json: unknown,
-  labelI18n?: TraceI18nText,
-): NonNullable<IndexTraceStep["details"]>[number] {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "json",
-    json: decodeEscapedUnicodeValue(json, true),
   };
 }
 

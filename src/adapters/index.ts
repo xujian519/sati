@@ -125,6 +125,7 @@ export {
   executeChannelCommand,
   resolveCommand,
   getRegisteredCommands,
+  setUpdateRestartHandler,
   type ChannelCommand,
   type CommandExecContext,
 } from "./channel/protocol/ChannelAdapter.js";

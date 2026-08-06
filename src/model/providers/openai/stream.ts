@@ -4,6 +4,7 @@ import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/cano
 import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeOpenAIFinishReason } from "../../response/normalizeFinishReason.js";
 import { normalizeOpenAIUsage } from "../../response/normalizeUsage.js";
+import { nextUniqueToolCallId, safeToolCallIdPart } from "../../streaming/toolCallIds.js";
 
 export type ThinkFsmMode = "NORMAL" | "THINKING";
 
@@ -375,28 +376,7 @@ function generateStreamToolCallId(state: OpenAIStreamState, choiceIndex: number,
 
 function getStreamToolCallBaseId(state: OpenAIStreamState): string {
   if (state.toolCallBaseId === undefined) {
-    state.toolCallBaseId = safeToolCallIdPart(state.streamResponseId ?? state.streamSyntheticId);
+    state.toolCallBaseId = safeToolCallIdPart(state.streamResponseId ?? state.streamSyntheticId, "stream");
   }
   return state.toolCallBaseId;
-}
-
-function nextUniqueToolCallId(id: string, used: Set<string>): string {
-  if (!used.has(id)) {
-    return id;
-  }
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${id}_${suffix}`;
-    if (!used.has(candidate)) {
-      return candidate;
-    }
-  }
-}
-
-function safeToolCallIdPart(value: string): string {
-  return (
-    value
-      .trim()
-      .replace(/[^A-Za-z0-9_-]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "stream"
-  );
 }

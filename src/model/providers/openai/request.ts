@@ -15,6 +15,7 @@ import { messageContent } from "../../protocol/clone.js";
 import { cleanSchemaForGoogle, normalizeGoogleToolSchema } from "../google/schema.js";
 import { resolveThinkingPlan, throwIfUnsupportedThinkingPlan } from "../../thinking/registry.js";
 import { formatToolResultReferenceText } from "../toolResultReferenceText.js";
+import { nextUniqueToolCallId } from "../../streaming/toolCallIds.js";
 import { normalizeOpenAISchema } from "./schema.js";
 
 export type OpenAIRequestBody = {
@@ -458,18 +459,6 @@ function normalizeOpenAIToolCalls(toolCalls: unknown[], messageIndex: number): N
       toolCall: id === normalized.id ? normalized : { ...normalized, id },
     };
   });
-}
-
-function nextUniqueToolCallId(id: string, used: Set<string>): string {
-  if (!used.has(id)) {
-    return id;
-  }
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${id}_${suffix}`;
-    if (!used.has(candidate)) {
-      return candidate;
-    }
-  }
 }
 
 function takeExpectedToolCall(

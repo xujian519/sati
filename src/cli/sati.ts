@@ -31,6 +31,7 @@ import {
   type WeixinSessionMapperState,
   type QQSessionMapperState,
   type WeComSessionMapperState,
+  setUpdateRestartHandler,
 } from "../adapters/index.js";
 import {
   migrateSkillsToSati,
@@ -82,6 +83,10 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
   if (command === "server") {
+    // 宿主拥有进程生命周期控制权：/update 渠道命令通过此 handler 触发
+    // 退出，由进程管理器拉起（无管理器时用户手动重启）。
+    setUpdateRestartHandler(() => process.exit(0));
+
     const projectRoot = process.cwd();
     const env = process.env;
     const pilotHome = resolvePilotHome(env);

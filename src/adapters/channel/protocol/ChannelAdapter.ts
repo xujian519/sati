@@ -10,6 +10,7 @@ export {
   executeChannelCommand,
   resolveCommand,
   getRegisteredCommands,
+  setUpdateRestartHandler,
   type ChannelCommand,
   type CommandExecContext,
 } from "./ChannelCommandRegistry.js";

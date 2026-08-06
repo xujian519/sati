@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { newSessionMessage } from "../protocol/text.js";
 
 export type QQSessionMapperState = {
   activeByChatKey: Record<string, string>;
@@ -18,13 +19,14 @@ export class QQSessionMapper {
     const chatKey = `${input.groupId}:${input.userId}`;
     const trimmed = input.text.trim();
 
-    if (trimmed === "/new" || trimmed.startsWith("/new ")) {
+    const newMessage = newSessionMessage(trimmed);
+    if (newMessage !== null) {
       const sessionKey = `qq:group=${input.groupId}:user=${input.userId}:s_${this.uuid()}`;
       this.state.activeByChatKey[chatKey] = sessionKey;
       return {
         sessionKey,
         command: "new",
-        message: trimmed.slice("/new".length).trim(),
+        message: newMessage,
       };
     }
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { makeToolContext } from "../context-fixture.js";
 import { createDraftClaimsTool, draftClaims } from "../../../src/tool/builtin/draftClaims.js";
 
 test("draft_claims generates an independent claim with essential features", () => {
@@ -130,7 +131,7 @@ test("draft_claims tool definition is read-only", async () => {
   const tool = createDraftClaimsTool();
   assert.equal(tool.name, "draft_claims");
   assert.equal(tool.isReadOnly({ invention_name: "x", technical_features: [] }), true);
-  const result = await tool.execute({ invention_name: "一种装置", technical_features: ["壳体"] }, {} as never);
+  const result = await tool.execute({ invention_name: "一种装置", technical_features: ["壳体"] }, makeToolContext());
   const first = result.content[0];
   assert.equal(first?.type, "json");
   if (first?.type !== "json") assert.fail("expected json content");

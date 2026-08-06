@@ -62,6 +62,17 @@ export type ChannelCommand = {
 // Command definitions
 // ---------------------------------------------------------------------------
 
+/**
+ * 宿主注册的"更新后重启"处理器（如退出进程让进程管理器重启）。
+ * 渠道层不持有进程生命周期控制权：未注册时 `/update` 仅提示手动重启，
+ * 由 CLI 宿主在启动时通过 `setUpdateRestartHandler` 决定是否自动退出。
+ */
+let updateRestartHandler: (() => void) | undefined;
+
+export function setUpdateRestartHandler(handler: (() => void) | undefined): void {
+  updateRestartHandler = handler;
+}
+
 const commands: ChannelCommand[] = [
   {
     name: "new",
@@ -197,11 +208,16 @@ const commands: ChannelCommand[] = [
 
         const output = (stdout || "").trim();
         const lastLines = output.split("\n").slice(-5).join("\n");
-        await ctx.reply(`✅ 更新完成！\n\n${lastLines}\n\n服务即将重启...`);
+        await ctx.reply(`✅ 更新完成！\n\n${lastLines}`);
 
-        // Exit so the process manager restarts us.
-        // In local dev without a process manager, the user must restart manually.
-        setTimeout(() => process.exit(0), 2000);
+        // 重启动作交由宿主决定（进程管理器场景退出后自动拉起）；
+        // 渠道层不再直接 process.exit。
+        if (updateRestartHandler) {
+          await ctx.reply("服务即将重启...");
+          setTimeout(() => updateRestartHandler?.(), 2_000);
+        } else {
+          await ctx.reply("请手动重启服务以应用更新。");
+        }
       } catch (e: unknown) {
         const err = e as { code?: number; stdout?: string; stderr?: string };
         if (err.code === 2) {

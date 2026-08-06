@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { makeToolContext } from "../context-fixture.js";
 import { createPatentEvalTool, evaluatePatentContent } from "../../../src/tool/builtin/patentEval.js";
 
 const FULL_REPORT = [
@@ -88,7 +89,7 @@ test("patent_eval tool definition is read-only and registered under patent_eval"
   assert.equal(tool.name, "patent_eval");
   assert.equal(tool.isReadOnly({ mode: "report" }), true);
   assert.equal(tool.isConcurrencySafe({ mode: "report" }), true);
-  const result = await tool.execute({ mode: "report", content: FULL_REPORT }, {} as never);
+  const result = await tool.execute({ mode: "report", content: FULL_REPORT }, makeToolContext());
   const first = result.content[0];
   assert.equal(first?.type, "json");
   if (first?.type !== "json") assert.fail("expected json content");

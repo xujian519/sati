@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { newSessionMessage } from "../protocol/text.js";
 
 export type WeComSessionMapperState = {
   activeByChatId: Record<string, string>;
@@ -35,14 +36,15 @@ export class WeComSessionMapper {
     const trimmed = input.text.trim();
     const scopeKey = this.scopeKey(input);
     const projectKey = this.state.projectByScopeKey?.[scopeKey];
-    if (trimmed === "/new" || trimmed.startsWith("/new ")) {
+    const newMessage = newSessionMessage(trimmed);
+    if (newMessage !== null) {
       const sessionKey = `${scopeKey}:s_${this.uuid()}`;
       this.state.activeByChatId[scopeKey] = sessionKey;
       return {
         sessionKey,
         projectKey,
         command: "new",
-        message: trimmed.slice("/new".length).trim(),
+        message: newMessage,
       };
     }
 

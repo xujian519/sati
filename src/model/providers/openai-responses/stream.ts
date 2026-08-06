@@ -3,6 +3,7 @@ import { jsonrepair } from "jsonrepair";
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
 import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeOpenAIUsage } from "../../response/normalizeUsage.js";
+import { nextUniqueToolCallId, safeToolCallIdPart } from "../../streaming/toolCallIds.js";
 
 type ToolCallState = Partial<CanonicalToolCall> & {
   argumentsBuffer?: string;
@@ -277,22 +278,10 @@ function chooseToolCallId(state: OpenAIResponsesStreamState, incomingId: string 
   const candidate =
     incomingId !== undefined && !state.usedToolCallIds.has(incomingId)
       ? incomingId
-      : `call_${safeToolCallIdPart(state.responseId ?? state.streamSyntheticId)}_${state.usedToolCallIds.size}`;
+      : `call_${safeToolCallIdPart(state.responseId ?? state.streamSyntheticId, "response")}_${state.usedToolCallIds.size}`;
   const id = nextUniqueToolCallId(candidate, state.usedToolCallIds);
   state.usedToolCallIds.add(id);
   return id;
-}
-
-function nextUniqueToolCallId(id: string, used: Set<string>): string {
-  if (!used.has(id)) {
-    return id;
-  }
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${id}_${suffix}`;
-    if (!used.has(candidate)) {
-      return candidate;
-    }
-  }
 }
 
 function readNonEmptyString(value: unknown): string | undefined {
@@ -301,15 +290,6 @@ function readNonEmptyString(value: unknown): string | undefined {
 
 function readNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function safeToolCallIdPart(value: string): string {
-  return (
-    value
-      .trim()
-      .replace(/[^A-Za-z0-9_-]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "response"
-  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

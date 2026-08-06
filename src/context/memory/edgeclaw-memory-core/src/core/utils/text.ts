@@ -1,7 +1,17 @@
-export function truncate(text: string, maxLength: number): string {
+export type TruncateOptions = {
+  /** 截断后是否追加省略号（默认 true）。 */
+  ellipsis?: boolean;
+  /** 截断后是否 trim 切片（默认 false；仅在发生截断时生效，未截断时始终返回原文）。 */
+  trim?: boolean;
+};
+
+export function truncate(text: string, maxLength: number, options: TruncateOptions = {}): string {
   if (!text) return "";
+  const { ellipsis = true, trim = false } = options;
   if (maxLength <= 0 || text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength)}...`;
+  const sliced = text.slice(0, maxLength);
+  const body = trim ? sliced.trim() : sliced;
+  return ellipsis ? `${body}...` : body;
 }
 
 export function decodeEscapedUnicodeText(text: string, decodeCommonEscapes = false): string {

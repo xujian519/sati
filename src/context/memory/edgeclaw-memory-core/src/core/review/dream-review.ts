@@ -22,6 +22,12 @@ import {
 import { MemoryRepository } from "../storage/sqlite.js";
 import { traceI18n } from "../trace-i18n.js";
 import { hashText, nowIso } from "../utils/id.js";
+import { truncate as truncateBase } from "../utils/text.js";
+import {
+  kvDetail as kvDetailBase,
+  listDetail as listDetailBase,
+  jsonDetail as jsonDetailBase,
+} from "../utils/detail.js";
 
 type LoggerLike = {
   info?: (...args: unknown[]) => void;
@@ -68,32 +74,18 @@ const EXPOSED_USER_PROFILE_RELATIVE_PATH = "global/UserIdentity/user-profile.md"
 const INTERNAL_USER_NOTE_PREFIX = "UserIdentityNotes/";
 const EXPOSED_USER_NOTE_PREFIX = "global/UserIdentityNotes/";
 
+// dream-review 的 detail 保留原始文本（数据源已预解码），与 heartbeat/reasoning-loop 的解码语义不同
 function kvDetail(
   key: string,
   label: string,
   entries: Array<{ label: string; value: unknown }>,
   labelI18n?: TraceI18nText,
 ): RetrievalTraceDetail {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "kv",
-    entries: entries.map(entry => ({
-      label: entry.label,
-      value: String(entry.value ?? ""),
-    })),
-  };
+  return kvDetailBase(key, label, entries, labelI18n, { decode: false });
 }
 
 function listDetail(key: string, label: string, items: string[], labelI18n?: TraceI18nText): RetrievalTraceDetail {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "list",
-    items,
-  };
+  return listDetailBase(key, label, items, labelI18n, { decode: false });
 }
 
 function normalizeDreamRelativePath(relativePath: string): string {
@@ -111,13 +103,7 @@ function isDreamUserNotePath(relativePath: string): boolean {
 }
 
 function jsonDetail(key: string, label: string, json: unknown, labelI18n?: TraceI18nText): RetrievalTraceDetail {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "json",
-    json,
-  };
+  return jsonDetailBase(key, label, json, labelI18n, { decode: false });
 }
 
 function createDreamTrace(trigger: DreamTraceRecord["trigger"]): DreamTraceRecord {
@@ -202,9 +188,9 @@ function mutation(
   };
 }
 
+// dream-review 的截断语义：截断后 trim 切片并追加省略号（与 utils/text.ts 默认不同）
 function truncate(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength).trim()}...`;
+  return truncateBase(value, maxLength, { trim: true });
 }
 
 function normalizeWhitespace(value: string | undefined): string {

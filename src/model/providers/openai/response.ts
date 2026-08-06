@@ -8,6 +8,7 @@ import type {
 import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeOpenAIFinishReason } from "../../response/normalizeFinishReason.js";
 import { normalizeOpenAIUsage } from "../../response/normalizeUsage.js";
+import { nextUniqueToolCallId, safeToolCallIdPart } from "../../streaming/toolCallIds.js";
 
 type OpenAIResponseToolCallIdState = {
   baseId: string;
@@ -141,7 +142,7 @@ function readNonEmptyString(value: unknown): string | undefined {
 
 function createResponseToolCallIdState(response: Record<string, unknown>): OpenAIResponseToolCallIdState {
   return {
-    baseId: safeToolCallIdPart(readNonEmptyString(response.id) ?? `response_${randomUUID().slice(0, 12)}`),
+    baseId: safeToolCallIdPart(readNonEmptyString(response.id) ?? `response_${randomUUID().slice(0, 12)}`, "response"),
     usedToolCallIds: new Set(),
   };
 }
@@ -163,25 +164,4 @@ function chooseResponseToolCallId(
 
 function generateToolCallId(state: OpenAIResponseToolCallIdState, choiceIndex: number, toolIndex: number): string {
   return `call_${state.baseId}_${choiceIndex}_${toolIndex}`;
-}
-
-function nextUniqueToolCallId(id: string, used: Set<string>): string {
-  if (!used.has(id)) {
-    return id;
-  }
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${id}_${suffix}`;
-    if (!used.has(candidate)) {
-      return candidate;
-    }
-  }
-}
-
-function safeToolCallIdPart(value: string): string {
-  return (
-    value
-      .trim()
-      .replace(/[^A-Za-z0-9_-]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "response"
-  );
 }

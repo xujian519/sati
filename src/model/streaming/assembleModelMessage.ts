@@ -10,6 +10,7 @@ import type {
 } from "../protocol/canonical.js";
 import type { CanonicalModelError } from "../protocol/errors.js";
 import { extractTextToolCalls, hasTextToolCallSyntax, type PartialTextToolCallInfo } from "./parseTextToolCalls.js";
+import { nextUniqueToolCallId } from "./toolCallIds.js";
 
 export type ModelMessageAssemblerState = {
   content: CanonicalContentBlock[];
@@ -177,12 +178,7 @@ function normalizeToolCallIds(state: ModelMessageAssemblerState): void {
 
 function nextToolCallId(rawId: string | undefined, index: number, used: Set<string>): string {
   const base = rawId && rawId.trim().length > 0 ? rawId.trim() : `call_${index}`;
-  if (!used.has(base)) return base;
-
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${base}_${suffix}`;
-    if (!used.has(candidate)) return candidate;
-  }
+  return nextUniqueToolCallId(base, used);
 }
 
 function flushTextBuffers(state: ModelMessageAssemblerState): void {

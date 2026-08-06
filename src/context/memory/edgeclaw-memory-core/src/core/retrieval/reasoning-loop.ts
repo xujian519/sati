@@ -18,6 +18,7 @@ import { LlmMemoryExtractor } from "../skills/llm-extraction.js";
 import { MemoryRepository } from "../storage/sqlite.js";
 import { traceI18n } from "../trace-i18n.js";
 import { hashText, nowIso } from "../utils/id.js";
+import { kvDetail, listDetail, jsonDetail } from "../utils/detail.js";
 import { decodeEscapedUnicodeText, decodeEscapedUnicodeValue, truncate } from "../utils/text.js";
 import { SEMANTIC_SEARCH_LIMIT, fuseManifestWithSemantic } from "./semantic-fusion.js";
 
@@ -71,44 +72,6 @@ function buildTraceId(prefix: string, seed: string): string {
 
 function previewText(value: string, max = 220): string {
   return truncate(decodeEscapedUnicodeText(value).trim(), max);
-}
-
-function listDetail(key: string, label: string, items: string[], labelI18n?: TraceI18nText): RetrievalTraceDetail {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "list",
-    items: items.map(item => decodeEscapedUnicodeText(item, true)),
-  };
-}
-
-function kvDetail(
-  key: string,
-  label: string,
-  entries: Array<{ label: string; value: unknown }>,
-  labelI18n?: TraceI18nText,
-): RetrievalTraceDetail {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "kv",
-    entries: entries.map(entry => ({
-      label: entry.label,
-      value: decodeEscapedUnicodeText(String(entry.value ?? ""), true),
-    })),
-  };
-}
-
-function jsonDetail(key: string, label: string, json: unknown, labelI18n?: TraceI18nText): RetrievalTraceDetail {
-  return {
-    key,
-    label,
-    ...(labelI18n ? { labelI18n } : {}),
-    kind: "json",
-    json: decodeEscapedUnicodeValue(json, true),
-  };
 }
 
 function hasUserSummary(userSummary: MemoryUserSummary): boolean {

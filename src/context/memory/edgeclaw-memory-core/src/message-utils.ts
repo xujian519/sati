@@ -1,5 +1,5 @@
 import type { MemoryMessage } from "./core/types.js";
-import { decodeEscapedUnicodeText } from "./core/utils/text.js";
+import { decodeEscapedUnicodeText, truncate } from "./core/utils/text.js";
 
 const MEMORY_CONTEXT_HEADER = "You are using retrieved ClawXMemory file memories for this turn.";
 const LEGACY_MEMORY_CONTEXT_HEADER = "You are using multi-level memory indexes for this turn.";
@@ -83,11 +83,6 @@ export interface TranscriptMessageInfo {
   role: "user" | "assistant" | undefined;
   content: string;
   hasToolCalls: boolean;
-}
-
-function truncate(text: string, maxLength: number): string {
-  if (maxLength <= 0 || text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength)}...`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

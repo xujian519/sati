@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { makeToolContext } from "../context-fixture.js";
 import {
   createPatentCaseSearchTool,
   type CaseLawEngineRef,
@@ -66,7 +67,7 @@ test("patent_case_search: 工具元数据正确", () => {
 
 test("patent_case_search: 命中输出 JSON 结构（含决定号/片段/命中方式）", async () => {
   const tool = createPatentCaseSearchTool(() => makeRef());
-  const result = await tool.execute({ query: "创造性" }, {} as never);
+  const result = await tool.execute({ query: "创造性" }, makeToolContext());
   const output = asJson(result);
   assert.equal(output.total, 2);
   assert.equal(output.dbPath, "/mock/knowledge.db");
@@ -79,7 +80,7 @@ test("patent_case_search: 命中输出 JSON 结构（含决定号/片段/命中�
 
 test("patent_case_search: include_content=false 时不附片段", async () => {
   const tool = createPatentCaseSearchTool(() => makeRef());
-  const result = await tool.execute({ query: "创造性", include_content: false }, {} as never);
+  const result = await tool.execute({ query: "创造性", include_content: false }, makeToolContext());
   const output = asJson(result);
   assert.equal(output.results[0]?.snippet, undefined);
 });
@@ -95,7 +96,7 @@ test("patent_case_search: limit 透传给引擎", async () => {
     close: () => {},
   } as unknown as CaseLawSearchEngine;
   const tool = createPatentCaseSearchTool(() => ({ engine, dbPath: "/mock/knowledge.db" }));
-  await tool.execute({ query: "创造性", limit: 3 }, {} as never);
+  await tool.execute({ query: "创造性", limit: 3 }, makeToolContext());
   assert.equal(capturedLimit, 3);
 });
 
@@ -110,7 +111,7 @@ test("patent_case_search: doc_type/court 过滤透传给引擎且默认排除 wi
     close: () => {},
   } as unknown as CaseLawSearchEngine;
   const tool = createPatentCaseSearchTool(() => ({ engine, dbPath: "/mock/knowledge.db" }));
-  await tool.execute({ query: "创造性", doc_type: "judgment", court: "最高" }, {} as never);
+  await tool.execute({ query: "创造性", doc_type: "judgment", court: "最高" }, makeToolContext());
   assert.equal(captured?.docType, "judgment");
   assert.equal(captured?.court, "最高");
   assert.equal(captured?.excludeSource, "wiki", "判例检索应默认排除 wiki 审查标准卡片");
@@ -118,11 +119,11 @@ test("patent_case_search: doc_type/court 过滤透传给引擎且默认排除 wi
 
 test("patent_case_search: 数据库缺失时 checkAvailability=setup_required 且 execute 提示 SATI_CASE_DB", async () => {
   const tool = createPatentCaseSearchTool(() => null);
-  const availability = await tool.checkAvailability?.({} as never);
+  const availability = await tool.checkAvailability?.(makeToolContext());
   assert.equal(availability?.ok, false);
   assert.equal(availability?.code, "setup_required");
 
-  const result = await tool.execute({ query: "创造性" }, {} as never);
+  const result = await tool.execute({ query: "创造性" }, makeToolContext());
   const first = result.content[0];
   assert.equal(first?.type, "text");
   if (first?.type !== "text") assert.fail("expected text content");

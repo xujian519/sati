@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { makeToolContext } from "../context-fixture.js";
 import {
   createPatentKgQueryTool,
   type PatentKgAdapterRef,
@@ -61,7 +62,7 @@ test("patent_kg_query: 工具元数据正确", () => {
 
 test("patent_kg_query: 关键词模式返回 via/relation 标注", async () => {
   const tool = createPatentKgQueryTool(() => makeRef());
-  const result = await tool.execute({ query: "三步法", limit: 5 }, {} as never);
+  const result = await tool.execute({ query: "三步法", limit: 5 }, makeToolContext());
   const output = asJson(result);
   assert.equal(output.total, 3);
   const byId = new Map(output.hits.map(hit => [hit.id, hit]));
@@ -74,7 +75,7 @@ test("patent_kg_query: 关键词模式返回 via/relation 标注", async () => {
 
 test("patent_kg_query: expand=false 仅返回关键词命中", async () => {
   const tool = createPatentKgQueryTool(() => makeRef());
-  const result = await tool.execute({ query: "三步法", expand: false }, {} as never);
+  const result = await tool.execute({ query: "三步法", expand: false }, makeToolContext());
   const output = asJson(result);
   assert.equal(output.total, 1);
   assert.equal(output.hits[0]?.via, "keyword");
@@ -82,7 +83,7 @@ test("patent_kg_query: expand=false 仅返回关键词命中", async () => {
 
 test("patent_kg_query: id 模式返回详情与相似/引用邻居", async () => {
   const tool = createPatentKgQueryTool(() => makeRef());
-  const result = await tool.execute({ id: "CASE_005" }, {} as never);
+  const result = await tool.execute({ id: "CASE_005" }, makeToolContext());
   const output = asJson(result);
   assert.equal(output.total, 1);
   const hit = output.hits[0];
@@ -95,7 +96,7 @@ test("patent_kg_query: id 模式返回详情与相似/引用邻居", async () =>
 
 test("patent_kg_query: id 不存在返回空结果", async () => {
   const tool = createPatentKgQueryTool(() => makeRef());
-  const result = await tool.execute({ id: "NOT_EXIST" }, {} as never);
+  const result = await tool.execute({ id: "NOT_EXIST" }, makeToolContext());
   const output = asJson(result);
   assert.equal(output.total, 0);
   assert.deepEqual(output.hits, []);
@@ -103,7 +104,7 @@ test("patent_kg_query: id 不存在返回空结果", async () => {
 
 test("patent_kg_query: node_type Judgment 别名展开合并", async () => {
   const tool = createPatentKgQueryTool(() => makeRef());
-  const result = await tool.execute({ node_type: "Judgment", limit: 5 }, {} as never);
+  const result = await tool.execute({ node_type: "Judgment", limit: 5 }, makeToolContext());
   const output = asJson(result);
   const types = output.hits.map(hit => hit.nodeType);
   assert.ok(types.includes("SupremeCourtJudgment"), "应含最高法院判决");
@@ -112,10 +113,10 @@ test("patent_kg_query: node_type Judgment 别名展开合并", async () => {
 
 test("patent_kg_query: 数据库缺失时 setup_required 且 execute 报错", async () => {
   const tool = createPatentKgQueryTool(() => null);
-  const availability = await tool.checkAvailability?.({} as never);
+  const availability = await tool.checkAvailability?.(makeToolContext());
   assert.equal(availability?.ok, false);
   assert.equal((availability as { code: string }).code, "setup_required");
-  const result = await tool.execute({ query: "x" }, {} as never);
+  const result = await tool.execute({ query: "x" }, makeToolContext());
   const first = result.content[0];
   assert.equal(first?.type, "text");
   assert.match((first as { text: string }).text, /未找到专利知识图谱数据库/);
@@ -132,15 +133,15 @@ test("patent_kg_query: limit 钳制到 1..10", async () => {
     },
   } as unknown as PatentKgAdapter;
   const tool = createPatentKgQueryTool(() => ref);
-  await tool.execute({ query: "x", limit: 100 }, {} as never);
+  await tool.execute({ query: "x", limit: 100 }, makeToolContext());
   assert.equal(receivedKeywordLimit, 10);
-  await tool.execute({ query: "x", limit: 0 }, {} as never);
+  await tool.execute({ query: "x", limit: 0 }, makeToolContext());
   assert.equal(receivedKeywordLimit, 1);
 });
 
 test("patent_kg_query: include_content 附正文片段", async () => {
   const tool = createPatentKgQueryTool(() => makeRef());
-  const result = await tool.execute({ query: "三步法", include_content: true }, {} as never);
+  const result = await tool.execute({ query: "三步法", include_content: true }, makeToolContext());
   const output = asJson(result);
   const rule = output.hits.find(hit => hit.id === "RULE_1");
   assert.equal(rule?.content, "rule-content");
@@ -157,7 +158,7 @@ test("patent_kg_query: 关键词模式使用 OR 分词检索", async () => {
     },
   } as unknown as PatentKgAdapter;
   const tool = createPatentKgQueryTool(() => ref);
-  await tool.execute({ query: "创造性 三步法" }, {} as never);
+  await tool.execute({ query: "创造性 三步法" }, makeToolContext());
   assert.ok(receivedModes.length > 0, "应调用 searchRelevant");
   assert.ok(
     receivedModes.every(mode => mode === "or"),
@@ -176,9 +177,9 @@ test("patent_kg_query: 多词/长词/窗口类 query 原样单次传参（拆词
     },
   } as unknown as PatentKgAdapter;
   const tool = createPatentKgQueryTool(() => ref);
-  await tool.execute({ query: "创造性 三步法" }, {} as never);
-  await tool.execute({ query: "创造性三步法判断规则" }, {} as never);
-  await tool.execute({ query: "禁止反悔" }, {} as never);
+  await tool.execute({ query: "创造性 三步法" }, makeToolContext());
+  await tool.execute({ query: "创造性三步法判断规则" }, makeToolContext());
+  await tool.execute({ query: "禁止反悔" }, makeToolContext());
   assert.deepEqual(calls, ["创造性 三步法", "创造性三步法判断规则", "禁止反悔"]);
 });
 
@@ -199,7 +200,7 @@ test("patent_kg_query: id 模式邻居数量上限为 limit", async () => {
         : [],
   } as unknown as PatentKgAdapter;
   const tool = createPatentKgQueryTool(() => ref);
-  const result = await tool.execute({ id: "CASE_005", limit: 2 }, {} as never);
+  const result = await tool.execute({ id: "CASE_005", limit: 2 }, makeToolContext());
   const output = asJson(result);
   assert.ok(output.hits[0]?.neighbors, "id 模式应返回邻居");
   assert.ok(output.hits[0]!.neighbors!.length <= 2, "相似+引用邻居合并后应截断到 limit");
@@ -207,7 +208,7 @@ test("patent_kg_query: id 模式邻居数量上限为 limit", async () => {
 
 test("patent_kg_query: 无有效输入返回错误", async () => {
   const tool = createPatentKgQueryTool(() => makeRef());
-  const result = await tool.execute({}, {} as never);
+  const result = await tool.execute({}, makeToolContext());
   const first = result.content[0];
   assert.equal(first?.type, "text");
   assert.match((first as { text: string }).text, /请提供 query/);

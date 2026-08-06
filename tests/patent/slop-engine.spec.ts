@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { makeToolContext } from "../tool/context-fixture.js";
 import {
   analyzeSlop,
   detectStructureIssues,
@@ -171,7 +172,7 @@ test("patent_eval：表达质量维度基于反套话引擎", async () => {
       mode: "report",
       content: "综上所述，进一步地，本方案具有显著进步。质的飞跃，创造性障碍得以克服。",
     },
-    {} as never,
+    makeToolContext(),
   );
   const details = bad.data!.details as Record<string, { score: number; passed: boolean; details?: string }>;
   assert.ok(details["表达质量"], "应有表达质量维度");
@@ -182,7 +183,7 @@ test("patent_eval：表达质量维度基于反套话引擎", async () => {
       mode: "report",
       content: "## 争点\n\n权利要求1的创造性。区别特征见 D1¶0123。本申请具备创造性。",
     },
-    {} as never,
+    makeToolContext(),
   );
   const goodDetails = good.data!.details as Record<string, { score: number; passed: boolean; details?: string }>;
   assert.ok(goodDetails["表达质量"]!.passed, "实质内容文档表达质量应通过");
@@ -196,7 +197,7 @@ test("patent_eval：绝对化表述恢复参与表达质量评分（P-A07）", a
       mode: "report",
       content: "## 争点\n\n毫无疑问，本申请具有创造性，绝对优于对比文件，必然获得授权。",
     },
-    {} as never,
+    makeToolContext(),
   );
   const details = absolute.data!.details as Record<string, { score: number; passed: boolean; details?: string }>;
   assert.ok(
@@ -209,7 +210,7 @@ test("patent_eval：绝对化表述恢复参与表达质量评分（P-A07）", a
       mode: "report",
       content: "## 争点\n\n本申请具有创造性，优于对比文件，具备授权前景。",
     },
-    {} as never,
+    makeToolContext(),
   );
   const cleanDetails = clean.data!.details as Record<string, { score: number; passed: boolean; details?: string }>;
   assert.ok(

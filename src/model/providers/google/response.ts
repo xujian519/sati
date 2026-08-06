@@ -6,6 +6,7 @@ import type {
   CanonicalToolCallBlock,
   CanonicalUsage,
 } from "../../protocol/canonical.js";
+import { nextUniqueToolCallId, safeToolCallIdPart } from "../../streaming/toolCallIds.js";
 
 export function parseGoogleResponse(raw: unknown, provider = "google"): CanonicalModelResponse {
   const response = asRecord(raw);
@@ -114,37 +115,16 @@ type GoogleToolCallIdState = {
 
 function createToolCallIdState(response: Record<string, unknown>): GoogleToolCallIdState {
   return {
-    baseId: safeToolCallIdPart(readString(response.responseId) ?? "google_response"),
+    baseId: safeToolCallIdPart(readString(response.responseId) ?? "google_response", "google"),
     usedIds: new Set(),
   };
 }
 
 function chooseGoogleToolCallId(state: GoogleToolCallIdState, incomingId: string | undefined, index: number): string {
-  const candidate = incomingId ? safeToolCallIdPart(incomingId) : `call_${state.baseId}_${index}`;
+  const candidate = incomingId ? safeToolCallIdPart(incomingId, "google") : `call_${state.baseId}_${index}`;
   const unique = nextUniqueToolCallId(candidate, state.usedIds);
   state.usedIds.add(unique);
   return unique;
-}
-
-function nextUniqueToolCallId(id: string, used: Set<string>): string {
-  if (!used.has(id)) {
-    return id;
-  }
-  for (let suffix = 2; ; suffix += 1) {
-    const candidate = `${id}_${suffix}`;
-    if (!used.has(candidate)) {
-      return candidate;
-    }
-  }
-}
-
-function safeToolCallIdPart(value: string): string {
-  return (
-    value
-      .trim()
-      .replace(/[^A-Za-z0-9_-]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "google"
-  );
 }
 
 function firstCandidate(response: Record<string, unknown>): Record<string, unknown> {
