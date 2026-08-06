@@ -773,9 +773,25 @@ class ProjectRuntimeRegistry {
       console.warn(`[sati] ${diagnostic.path}: ${diagnostic.message}`);
     }
 
+    // 知识库向量库目录（embedding 客户端解析见上，记忆/知识库/附图检索共用）。
+    // 记忆服务需在 createBuiltinRegistry 之前创建：memory_* 工具随注册表闭包注入。
+    const embeddingDir = joinPath(knowledgePaths.dataDir, "embeddings");
+
+    const memory = createEdgeClawMemoryProviderFromConfig({
+      config: snapshot.config.memory,
+      modelConfig: snapshot.config.model,
+      agentModel: snapshot.config.agent.model.id,
+      projectRoot,
+      now: this.options.now,
+      telemetry: this.options.telemetry,
+      embeddingClient,
+      embeddingDir,
+    });
+
     const tools = createBuiltinRegistry({
       backgroundTasks: { runtime: backgroundTasks },
       searchPatentFigure: { embeddingClient },
+      ...(memory?.service ? { memory: { service: memory.service } } : {}),
       readSkill: {
         loader: name => pluginRuntime.loadSkillPrompt(name),
         lister: () => pluginRuntime.getAllSkills(),
@@ -817,20 +833,6 @@ class ProjectRuntimeRegistry {
     for (const tool of this._extraTools) {
       tools.register(tool);
     }
-
-    // 知识库向量库目录（embedding 客户端解析见上，记忆/知识库/附图检索共用）。
-    const embeddingDir = joinPath(knowledgePaths.dataDir, "embeddings");
-
-    const memory = createEdgeClawMemoryProviderFromConfig({
-      config: snapshot.config.memory,
-      modelConfig: snapshot.config.model,
-      agentModel: snapshot.config.agent.model.id,
-      projectRoot,
-      now: this.options.now,
-      telemetry: this.options.telemetry,
-      embeddingClient,
-      embeddingDir,
-    });
 
     // 知识库 MemoryResolver 组装：EdgeClaw 会话记忆 + 专利知识库 + 法律知识库。
     // 数据库文件缺失/打开失败时自动降级（见 src/knowledge/assemble.ts）。

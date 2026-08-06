@@ -1,3 +1,4 @@
+import { buildEdgeClawMemoryPromptSection } from "edgeclaw-memory-core";
 import type { CanonicalMessage, CanonicalUsage } from "../model/index.js";
 import { ToolResultBudget } from "./budget/ToolResultBudget.js";
 import type { TokenBudgetManager, TokenBudgetSnapshot } from "./budget/TokenBudgetManager.js";
@@ -212,6 +213,15 @@ export class DefaultContextRuntime implements ContextRuntime {
           },
         };
       }
+    }
+
+    // ClawXMemory agent 记忆工具提示段：仅当注册了 memory_* 工具时输出，
+    // 未启用记忆（无 memory service → 工具未注册）时返回 null，不产生段落。
+    const memoryPromptSection = buildEdgeClawMemoryPromptSection({
+      availableTools: input.tools.map(tool => tool.name),
+    });
+    if (memoryPromptSection) {
+      parts.push(memoryPromptSection);
     }
 
     if (this.instructionDiscovery) {

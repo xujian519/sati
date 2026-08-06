@@ -1,3 +1,4 @@
+import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import type { BackgroundTaskRuntime } from "../../task/runtime/BackgroundTaskRuntime.js";
 import { createAgentTool, type CreateAgentToolOptions } from "../builtin/agent.js";
 import { createAskUserQuestionTool } from "../builtin/askUserQuestion.js";
@@ -21,6 +22,14 @@ import {
   createTaskStopTool,
   createTaskWaitTool,
 } from "../builtin/taskTools.js";
+import {
+  createMemoryDreamTool,
+  createMemoryFlushTool,
+  createMemoryGetTool,
+  createMemoryListTool,
+  createMemoryOverviewTool,
+  createMemorySearchTool,
+} from "../builtin/memoryTools.js";
 import { createWebFetchTool, type CreateWebFetchToolOptions } from "../builtin/webFetch.js";
 import { createWebSearchTool, type CreateWebSearchToolOptions } from "../builtin/webSearch.js";
 import { createReadSkillTool, type ReadSkillDeps } from "../builtin/readSkill.js";
@@ -100,6 +109,14 @@ export type CreateBuiltinRegistryOptions = {
    * fail with `unsupported_tool`.
    */
   backgroundTasks?: { runtime: BackgroundTaskRuntime } | false;
+  /**
+   * `memory_*` agent memory tools（memory_overview / memory_list /
+   * memory_search / memory_get / memory_flush / memory_dream — EdgeClaw
+   * 记忆内核）。**Opt-in** — pass `{ service }` to register; absent or
+   * `false` keeps them out of the registry (memory 未配置时不注册，对应
+   * system prompt 也不会出现 ClawXMemory 段落)。
+   */
+  memory?: { service: EdgeClawMemoryService } | false;
   /**
    * `structured_output` builtin (A3). Registered by default — the tool is
    * inert without a model client requesting it via `tool_choice`, but the
@@ -201,6 +218,15 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createTaskOutputTool(runtime), "session"));
     registry.register(annotate(createTaskWaitTool(runtime), "session"));
     registry.register(annotate(createTaskStopTool(runtime), "session"));
+  }
+  if (options?.memory) {
+    const service = options.memory.service;
+    registry.register(annotate(createMemoryOverviewTool(service), "session"));
+    registry.register(annotate(createMemoryListTool(service), "session"));
+    registry.register(annotate(createMemorySearchTool(service), "session"));
+    registry.register(annotate(createMemoryGetTool(service), "session"));
+    registry.register(annotate(createMemoryFlushTool(service), "session"));
+    registry.register(annotate(createMemoryDreamTool(service), "session"));
   }
   if (options?.structuredOutput !== false) {
     registry.register(annotate(createStructuredOutputTool(), "custom"));
