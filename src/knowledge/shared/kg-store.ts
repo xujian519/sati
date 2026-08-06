@@ -1,5 +1,6 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { KgNode } from "../patent/types.js";
+import { FTS_MIN_RUNES } from "./fts.js";
 
 /**
  * 知识图谱只读存储（基于 patent_kg.db 的 nodes/edges 表）。
@@ -23,7 +24,6 @@ export type KgPathEdge = {
   relation: string;
 };
 
-const FTS_MIN_RUNES = 3; // unicode61 tokenizer 下 2 字词几乎无法以独立 token 匹配，短词走 LIKE
 /** 分词模式的分隔符（空格 + 中文标点）。 */
 const OR_SEPARATOR_RE = /[\s，。？！、；：,.;!?]+/;
 /** 候选词数上限（防超长 query 构造超大 FTS SQL / 多次 LIKE 扫描）。 */

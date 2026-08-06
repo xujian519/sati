@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
  * 代码仓库分发，运行时按路径引用外部数据：
  *
  * 1. 环境变量 `SATI_KNOWLEDGE_DIR`（优先，指定数据目录）
- * 2. 环境变量 `SATI_PATENT_KG_DB` / `SATI_LAW_DB`（单文件覆盖）
+ * 2. 环境变量 `SATI_PATENT_KG_DB` / `SATI_LAW_DB` / `SATI_CASE_DB`（单文件覆盖）
  * 3. 默认目录 `~/.mady/knowledge/`（Mady 运行数据）
  * 4. 宝宸知识库原始目录（Laws-1.0.0/db.sqlite3）
  */
@@ -27,6 +27,8 @@ export type KnowledgeDbPaths = {
   wikiDir?: string;
   /** 离线向量索引（KG/法条 int8 语义检索，scripts/build-knowledge-vectors.ts 生成），缺失时 undefined。 */
   vectorsDb?: string;
+  /** 判例全文检索数据库（documents/chunks/docs_fts 表，含无效复审决定与专利判决全文），缺失时 undefined。 */
+  caseDb?: string;
   /** 数据目录来源（用于诊断）。 */
   dataDir: string;
 };
@@ -74,5 +76,8 @@ export function resolveKnowledgeDbPaths(env: NodeJS.ProcessEnv = process.env): K
   // 离线向量索引（build-knowledge-vectors.ts 产物；存在才启用语义召回）
   const vectorsDb = env.SATI_VECTORS_DB ?? firstExisting([join(dataDir, "vectors.db")]);
 
-  return { patentKgDb, lawDb, wikiDir, vectorsDb, dataDir };
+  // 判例全文库（knowledge.db：documents/chunks/docs_fts；外部交付，用户告知路径后经 SATI_CASE_DB 接入）
+  const caseDb = env.SATI_CASE_DB ?? firstExisting([join(dataDir, "knowledge.db"), join(dataDir, "cases.db")]);
+
+  return { patentKgDb, lawDb, wikiDir, vectorsDb, caseDb, dataDir };
 }

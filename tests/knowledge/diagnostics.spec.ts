@@ -19,6 +19,7 @@ describe("resolveKnowledgeCapabilities", () => {
         lawDb: "/data/laws-full.db",
         wikiDir: "/data/wiki",
         vectorsDb: "/data/vectors.db",
+        caseDb: "/data/knowledge.db",
       }),
       { embeddingConfigured: true, rerankConfigured: true },
     );
@@ -33,6 +34,7 @@ describe("resolveKnowledgeCapabilities", () => {
     assert.equal(byId.get("patent-kg"), "missing");
     assert.equal(byId.get("patent-wiki"), "missing");
     assert.equal(byId.get("legal-fts"), "missing");
+    assert.equal(byId.get("case-law"), "missing");
     assert.equal(byId.get("semantic-embedding"), "disabled");
     assert.equal(byId.get("semantic-vectors"), "disabled");
     assert.equal(byId.get("rerank"), "disabled");
@@ -89,6 +91,7 @@ describe("formatKnowledgeCapabilities", () => {
         lawDb: "/data/laws-full.db",
         wikiDir: "/data/wiki",
         vectorsDb: "/data/vectors.db",
+        caseDb: "/data/knowledge.db",
       }),
       { embeddingConfigured: true, rerankConfigured: true },
     );
@@ -106,6 +109,7 @@ describe("logKnowledgeCapabilities", () => {
         lawDb: "/data/laws-full.db",
         wikiDir: "/data/wiki",
         vectorsDb: "/data/vectors.db",
+        caseDb: "/data/knowledge.db",
       }),
       { embeddingConfigured: true, rerankConfigured: true },
       {

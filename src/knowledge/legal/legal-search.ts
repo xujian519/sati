@@ -1,4 +1,5 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
 import type { LawCategory, LawRecord, LawSearchResult } from "./types.js";
 
 /**
@@ -8,12 +9,11 @@ import type { LawCategory, LawRecord, LawSearchResult } from "./types.js";
  * 短查询（< 3 个 CJK 字符）或缺失 FTS 表时降级 LIKE 匹配。
  * 注意：law_fts 的 rowid 对应 law 表的**隐藏 rowid**（非 law.id 主键）。
  *
- * FTS5 能力探测：law_fts 表存在**且**运行时的 SQLite 编译了 FTS5 才走 FTS 路径。
- * 桌面端捆绑的旧版 Node（node:sqlite 未编译 FTS5，如 v22.14.0）即便表存在，
- * MATCH 查询也会抛 "no such module: fts5"——此时整体降级 LIKE，避免工具执行崩溃。
+ * FTS5 能力探测：law_fts 表存在**且**运行时的 SQLite 编译了 FTS5 才走 FTS 路径
+ * （见 shared/fts.ts 的 sqliteHasFts5）。桌面端捆绑的旧版 Node（node:sqlite
+ * 未编译 FTS5，如 v22.14.0）即便表存在，MATCH 查询也会抛 "no such module: fts5"——
+ * 此时整体降级 LIKE，避免工具执行崩溃。
  */
-
-const FTS_MIN_RUNES = 3; // trigram tokenizer 要求 3+ 字符
 
 /** 长查询切词用的虚词/疑问词（按这些词切分后取 ≥3 字片段）。 */
 const SPLIT_WORDS = [
@@ -94,7 +94,7 @@ export class LegalSearchEngine {
       .prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='law_fts'")
       .get() as { c: number };
     // 双重条件才启用 FTS：law_fts 表存在 + 运行时 SQLite 编译了 FTS5。
-    this.hasFts = row.c > 0 && this.fts5CompiledIn();
+    this.hasFts = row.c > 0 && sqliteHasFts5(this.db);
 
     // 基础（无 level/category 过滤）版本，热路径上避免逐次 prepare；
     // 带过滤条件的查询仍走动态 SQL（调用频率低）。
@@ -153,16 +153,6 @@ export class LegalSearchEngine {
       'SELECT id, name, folder, isSubFolder, "group" FROM category ORDER BY "order"',
     );
     this.stmtCount = this.db.prepare("SELECT COUNT(*) AS c FROM law");
-  }
-
-  /** 当前运行时的 SQLite 是否编译了 FTS5（编译选项探测）。 */
-  private fts5CompiledIn(): boolean {
-    try {
-      const row = this.db.prepare("SELECT sqlite_compileoption_used('ENABLE_FTS5') AS v").get() as { v: number };
-      return row.v === 1;
-    } catch {
-      return false;
-    }
   }
 
   /** FTS5 是否实际可用（表存在 + 运行时支持 + 未被降级）。 */

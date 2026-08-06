@@ -11,7 +11,15 @@ export type KnowledgeCapabilityStatus = "ready" | "missing" | "disabled";
 
 export type KnowledgeCapability = {
   /** 能力标识（稳定，供程序消费）。 */
-  id: "patent-kg" | "patent-ipc" | "patent-wiki" | "legal-fts" | "semantic-embedding" | "semantic-vectors" | "rerank";
+  id:
+    | "patent-kg"
+    | "patent-ipc"
+    | "patent-wiki"
+    | "legal-fts"
+    | "case-law"
+    | "semantic-embedding"
+    | "semantic-vectors"
+    | "rerank";
   /** 人类可读名称。 */
   label: string;
   status: KnowledgeCapabilityStatus;
@@ -55,6 +63,12 @@ export function resolveKnowledgeCapabilities(
       label: "法律法规全文检索",
       status: paths.lawDb ? "ready" : "missing",
       detail: paths.lawDb ? undefined : "SATI_LAW_DB",
+    },
+    {
+      id: "case-law",
+      label: "专利判例全文",
+      status: paths.caseDb ? "ready" : "missing",
+      detail: paths.caseDb ? undefined : "SATI_CASE_DB",
     },
     {
       id: "semantic-embedding",
