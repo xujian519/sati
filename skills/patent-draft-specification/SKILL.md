@@ -62,7 +62,7 @@ description: "专利说明书撰写：七部分结构（名称/技术领域/背�
 - 附图引用正确，无悬空标记
 - 无模糊用语（"大约/可能/较好"在权利要求中禁止，说明书中慎用）
 - 禁止商业性宣传用语
-- 可调用 `draft_specification` 工具起草初稿、`validate_specification` 工具做结构与一致性校验，用 `rule_check`（scope: patent）做合规自检
+- 可调用 `draft_specification` 工具起草初稿（**有附图分析结果时传入 `figure_analysis`，自动生成附图说明**）；`validate_specification` 工具做结构与一致性校验（**有附图分析结果时传入 `figure_analysis`，启用附图说明标号与图面标号的图文一致性检查**）；用 `rule_check`（scope: patent）做合规自检
 
 ## 输出成果
 

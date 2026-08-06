@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   checkEffectQuantification,
+  checkFigureMarkConsistency,
   checkNumericRangeCoverage,
   createValidateSpecificationTool,
   extractClaimFeatures,
   extractNumericValues,
   validateSpecification,
 } from "../../../src/tool/builtin/validateSpecification.js";
+import type { FigureAnalysisResult } from "../../../src/patent/figure/types.js";
 
 const GOOD_SPEC = [
   "# 技术领域",
@@ -217,4 +219,108 @@ test("validate_specification tool definition is read-only", async () => {
   assert.equal(first?.type, "json");
   if (first?.type !== "json") assert.fail("expected json content");
   assert.equal((first.value as { passed: boolean }).passed, true);
+});
+
+// ---------------------------------------------------------------------------
+// 图文一致性校验（figure_analysis 联动）
+// ---------------------------------------------------------------------------
+
+function makeFigureAnalysis(overrides: Partial<FigureAnalysisResult> = {}): FigureAnalysisResult {
+  return {
+    imagePath: "fig1.png",
+    figureNumber: 1,
+    figureType: "structure",
+    overallDescription: "缓冲装置整体结构",
+    components: [
+      { refNumber: "1", name: "壳体", kind: "mechanical", description: "外部壳体" },
+      { refNumber: "2", name: "缓冲层", kind: "mechanical", description: "缓冲结构" },
+    ],
+    connections: [],
+    figureDescription: "图1是本发明实施例提供的缓冲装置的结构示意图；图中：1-壳体；2-缓冲层；",
+    confidence: 0.9,
+    warnings: [],
+    usable: true,
+    modelUsed: "moonshot/kimi-k3",
+    ...overrides,
+  };
+}
+
+const SPEC_WITH_DRAWINGS = [
+  "# 技术领域",
+  "本发明涉及机械技术领域。",
+  "# 背景技术",
+  "现有技术缓冲效果差。",
+  "# 发明内容",
+  "本发明提供一种缓冲装置，包括壳体、缓冲层。",
+  "# 附图说明",
+  "图1是本发明实施例提供的缓冲装置的结构示意图；图中：1-壳体；2-缓冲层；",
+  "# 具体实施方式",
+  "实施例1：如图1所示，壳体1内设置缓冲层2。",
+].join("\n");
+
+test("checkFigureMarkConsistency: 标号一致时无违规", () => {
+  const violations = checkFigureMarkConsistency(SPEC_WITH_DRAWINGS, [makeFigureAnalysis()]);
+  assert.equal(violations.length, 0, JSON.stringify(violations));
+});
+
+test("checkFigureMarkConsistency: 附图说明漏标时警告", () => {
+  const spec = SPEC_WITH_DRAWINGS.replace("图中：1-壳体；2-缓冲层；", "图中：1-壳体；");
+  const violations = checkFigureMarkConsistency(spec, [makeFigureAnalysis()]);
+  assert.ok(
+    violations.some(v => v.rule === "figure_mark_consistency" && v.severity === "warning" && v.message.includes("2")),
+    "应警告附图标记 2 未在附图说明中列出",
+  );
+});
+
+test("checkFigureMarkConsistency: 附图说明悬空标号时报错", () => {
+  const spec = SPEC_WITH_DRAWINGS.replace("图中：1-壳体；2-缓冲层；", "图中：1-壳体；2-缓冲层；9-未知部件；");
+  const violations = checkFigureMarkConsistency(spec, [makeFigureAnalysis()]);
+  assert.ok(
+    violations.some(v => v.rule === "figure_mark_consistency" && v.severity === "error" && v.message.includes("9")),
+    "应报错附图说明中的标记 9 在附图中不存在",
+  );
+});
+
+test("checkFigureMarkConsistency: 分析不可用时仅提示人工核对", () => {
+  const violations = checkFigureMarkConsistency(SPEC_WITH_DRAWINGS, [makeFigureAnalysis({ usable: false })]);
+  assert.equal(violations.length, 1);
+  assert.ok(violations[0]?.message.includes("人工核对"), "应提示人工核对而非强校验");
+});
+
+test("validate_specification: figure_analysis 联动图文一致性", () => {
+  const specWithDangling = SPEC_WITH_DRAWINGS.replace("图中：1-壳体；2-缓冲层；", "图中：1-壳体；2-缓冲层；8-支架；");
+  const result = validateSpecification({ text: specWithDangling, figure_analysis: [makeFigureAnalysis()] });
+  assert.ok(
+    result.violations.some(v => v.rule === "figure_mark_consistency" && v.severity === "error"),
+    "应报错悬空标号",
+  );
+});
+
+test("checkFigureMarkConsistency: 部分图不可用时仅提示人工核对、可用图照常校验（标号齐全不报漏标）", () => {
+  const usableFig = makeFigureAnalysis();
+  const unusableFig = makeFigureAnalysis({ usable: false, figureNumber: 2 });
+  const violations = checkFigureMarkConsistency(SPEC_WITH_DRAWINGS, [usableFig, unusableFig]);
+  assert.ok(
+    violations.some(v => v.message.includes("不可用")),
+    "应提示存在不可用图",
+  );
+  assert.ok(
+    !violations.some(v => v.rule === "figure_mark_consistency" && v.message.includes("未在附图说明中列出")),
+    "可用图标号齐全时不应报漏标",
+  );
+});
+
+test("checkFigureMarkConsistency: 部分图不可用时仍校验可用图的漏标", () => {
+  const usableFig = makeFigureAnalysis();
+  const unusableFig = makeFigureAnalysis({ usable: false, figureNumber: 2 });
+  const spec = SPEC_WITH_DRAWINGS.replace("图中：1-壳体；2-缓冲层；", "图中：1-壳体；");
+  const violations = checkFigureMarkConsistency(spec, [usableFig, unusableFig]);
+  assert.ok(
+    violations.some(v => v.message.includes("不可用")),
+    "应提示存在不可用图",
+  );
+  assert.ok(
+    violations.some(v => v.severity === "warning" && v.message.includes("2")),
+    "可用图存在漏标时仍应报出（不 all-or-nothing）",
+  );
 });

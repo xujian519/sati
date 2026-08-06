@@ -1,4 +1,5 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
+import type { FigureAnalysisResult } from "../../patent/figure/types.js";
 import { DOMAIN_KEYWORDS, type PatentType, type TechDomain } from "./draftClaims.js";
 
 /**
@@ -25,6 +26,11 @@ export type DraftSpecificationInput = {
   background?: string;
   /** 附图说明（可选，如 "图1为本发明实施例的整体结构示意图"） */
   drawing_descriptions?: string[];
+  /**
+   * 附图智能分析结果（可选）：未提供 drawing_descriptions 时，
+   * 自动从其 figureDescription 生成附图说明（撰写工作流：先 analyze_patent_figure 再 draft_specification）。
+   */
+  figure_analysis?: FigureAnalysisResult[];
   /** 具体实施方式（可选，可多个实施例） */
   embodiments?: string[];
   /** 是否有附图（实用新型必须有附图） */
@@ -110,11 +116,20 @@ export function draftSpecification(input: DraftSpecificationInput): DraftSpecifi
     warnings.push("实用新型必须有附图，请确认补充附图");
   }
 
+  // 附图说明：显式 drawing_descriptions 优先；否则由 figure_analysis 自动生成。
+  const explicitDescriptions =
+    input.drawing_descriptions && input.drawing_descriptions.length > 0 ? input.drawing_descriptions : undefined;
+  const autoDescriptions = input.figure_analysis?.map(f => f.figureDescription.trim()).filter(d => d.length > 0) ?? [];
+  const drawingDescriptions = explicitDescriptions ?? (autoDescriptions.length > 0 ? autoDescriptions : undefined);
+  if (!explicitDescriptions && autoDescriptions.length > 0) {
+    warnings.push("附图说明由附图智能分析自动生成，请人工核对附图标记与图面一致");
+  }
+
   const sections: SpecificationSection[] = [
     buildTechField(title, domain),
     buildBackground(input.background),
     buildContent(input),
-    buildDrawings(input.drawing_descriptions, input.has_drawings),
+    buildDrawings(drawingDescriptions, input.has_drawings),
     buildEmbodiments(input.embodiments, patentType),
   ];
 

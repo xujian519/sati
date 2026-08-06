@@ -1,4 +1,5 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
+import type { FigureAnalysisResult } from "../../patent/figure/types.js";
 import type { TechDomain } from "./draftClaims.js";
 
 /**
@@ -27,6 +28,11 @@ export type ValidateSpecificationInput = {
   claims?: string;
   /** 技术领域（chemical 时附加化学表征数据校验） */
   tech_domain?: TechDomain;
+  /**
+   * 附图智能分析结果（可选）：提供时执行图文一致性校验——
+   * 附图说明章节列出的标号须与附图分析识别的组件标号一致（无漏标/无悬空）。
+   */
+  figure_analysis?: FigureAnalysisResult[];
 };
 
 export type SpecViolation = {
@@ -239,6 +245,85 @@ export function checkClaimCoverage(claims: string, text: string): { missing: str
   return { missing, total: features.length };
 }
 
+/**
+ * 图文一致性校验：附图说明章节列出的标号 vs 附图分析识别的组件标号。
+ *
+ * - 附图分析不可用（usable=false）的图不做校验，仅提示人工核对；
+ *   可用图照常校验（按图粒度降级，不 all-or-nothing）；
+ * - 漏标：附图中标号但附图说明未列出 → warning；
+ * - 悬空：附图说明列出但附图中不存在 → error。
+ *
+ * 支持的附图说明标号格式（正则假设）："图中：1-壳体；2-缓冲层；"——
+ * 标号前为行首或分隔符（；;\n，,：:），标号后跟连字符（-–—）。
+ * 其他格式（如 "1. 壳体" / "标号1为壳体"）不会被识别为标号。
+ */
+export function checkFigureMarkConsistency(text: string, figureAnalysis: FigureAnalysisResult[]): SpecViolation[] {
+  if (figureAnalysis.length === 0) return [];
+  const violations: SpecViolation[] = [];
+
+  const unusable = figureAnalysis.filter(f => !f.usable);
+  if (unusable.length > 0) {
+    violations.push({
+      rule: "figure_mark_consistency",
+      severity: "warning",
+      message: `附图分析结果不可用（${unusable.length} 张），请人工核对图面标号与附图说明`,
+    });
+  }
+
+  // 仅对可用图做标号集合比对。
+  const figureMarks = new Set<string>();
+  for (const f of figureAnalysis) {
+    if (!f.usable) continue;
+    for (const c of f.components) {
+      if (/^\d+$/.test(c.refNumber)) figureMarks.add(c.refNumber);
+    }
+  }
+  if (figureMarks.size === 0) return violations;
+
+  const drawingSection = getDrawingSection(text);
+  if (!drawingSection) {
+    violations.push({
+      rule: "figure_mark_consistency",
+      severity: "warning",
+      message: "说明书缺少附图说明章节，无法核验附图标记与图面一致性",
+      suggestion: "补充附图说明章节，逐图列出标号对应的部件",
+    });
+    return violations;
+  }
+
+  // 附图说明中列出的标号（"图中：1-壳体" / "2-缓冲层" 模式）。
+  const listedMarks = new Set<string>();
+  const markPattern = /(?:^|[；;\n，,：:])\s*(\d+)\s*[-–—]/g;
+  let match: RegExpExecArray | null;
+  while ((match = markPattern.exec(drawingSection)) !== null) {
+    listedMarks.add(match[1]);
+  }
+
+  const missing = [...figureMarks].filter(n => !listedMarks.has(n));
+  if (missing.length > 0) {
+    violations.push({
+      rule: "figure_mark_consistency",
+      severity: "warning",
+      section: "附图说明",
+      message: `附图标记 ${missing.join("、")} 未在附图说明中列出`,
+      suggestion: "在附图说明中补充对应标号的部件说明",
+    });
+  }
+
+  const dangling = [...listedMarks].filter(n => !figureMarks.has(n));
+  if (dangling.length > 0) {
+    violations.push({
+      rule: "figure_mark_consistency",
+      severity: "error",
+      section: "附图说明",
+      message: `附图说明中的标记 ${dangling.join("、")} 在附图中不存在`,
+      suggestion: "核对图面标号，删除或更正附图说明中不存在的标号",
+    });
+  }
+
+  return violations;
+}
+
 // =============================================================================
 // 主入口
 // =============================================================================
@@ -267,6 +352,32 @@ export function createValidateSpecificationTool(): SatiToolDefinition<
           type: "string",
           enum: ["mechanical", "electrical", "chemical", "software", "general"],
           description: "技术领域（chemical 时附加化学表征数据校验）",
+        },
+        figure_analysis: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: true,
+            properties: {
+              figure_number: { type: "number", description: "附图编号" },
+              figure_description: { type: "string", description: "附图说明文字（专利格式）" },
+              usable: { type: "boolean", description: "分析结果是否可用（组件提取成功）" },
+              components: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    ref_number: { type: "string", description: "附图标记号（与图面标号一致）" },
+                    name: { type: "string", description: "组件名称" },
+                  },
+                },
+                description: "识别的组件列表",
+              },
+            },
+          },
+          description:
+            "附图智能分析结果（analyze_patent_figure 的输出数组，可选）：提供时执行图文一致性校验（附图说明标号 vs 附图分析标号）",
         },
       },
     },
@@ -385,6 +496,11 @@ export function validateSpecification(input: ValidateSpecificationInput): Valida
       message: `正文引用了 ${bodyRefs} 处附图但缺少附图说明章节`,
       suggestion: "补充附图说明章节，逐图说明图名和内容",
     });
+  }
+
+  // 5b) 图文一致性（figure_analysis 提供时：附图说明标号 vs 附图分析标号）
+  if (input.figure_analysis?.length) {
+    violations.push(...checkFigureMarkConsistency(text, input.figure_analysis));
   }
 
   // 6) 实施例存在性（实施细则第17条：至少一个可实施实施例；支持"实施例1/本实施例"写法）

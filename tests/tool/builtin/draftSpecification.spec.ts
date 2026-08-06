@@ -59,6 +59,65 @@ test("draft_specification preserves explicit user figure numbers", () => {
   assert.ok(!result.sections[3].content.includes("图1为图一为"), "should not renumber chinese-numeral figure numbers");
 });
 
+test("draft_specification auto-builds 附图说明 from figure_analysis", () => {
+  const result = draftSpecification({
+    title: "一种缓冲装置",
+    tech_domain: "mechanical",
+    technical_problem: "现有缓冲装置减震效果差",
+    technical_solution: "包括壳体、缓冲层和内芯",
+    beneficial_effects: "提高减震性能",
+    figure_analysis: [
+      {
+        imagePath: "fig1.png",
+        figureNumber: 1,
+        figureType: "structure",
+        overallDescription: "缓冲装置整体结构",
+        components: [{ refNumber: "1", name: "壳体", kind: "mechanical", description: "外部壳体" }],
+        connections: [],
+        figureDescription: "图1是本发明实施例提供的缓冲装置的结构示意图；图中：1-壳体；",
+        confidence: 0.9,
+        warnings: [],
+        usable: true,
+        modelUsed: "moonshot/kimi-k3",
+      },
+    ],
+  });
+  // 附图说明章节自动取自 figureDescription（完整句，不套"图N为"前缀）。
+  assert.match(result.sections[3].content, /图1是本发明实施例提供的缓冲装置的结构示意图/);
+  assert.ok(result.sections[3].content.includes("1-壳体"), "应包含附图标记");
+  assert.equal(result.sections[3].placeholder, false);
+  // 人工核对提示。
+  assert.ok(
+    result.warnings.some(w => w.includes("自动生成")),
+    "应提示附图说明由分析自动生成",
+  );
+});
+
+test("draft_specification explicit drawing_descriptions take precedence over figure_analysis", () => {
+  const result = draftSpecification({
+    title: "一种缓冲装置",
+    drawing_descriptions: ["图1为整体结构示意图"],
+    figure_analysis: [
+      {
+        imagePath: "fig1.png",
+        figureNumber: 1,
+        figureType: "structure",
+        overallDescription: "",
+        components: [],
+        connections: [],
+        figureDescription: "图1是本发明实施例提供的装置的示意图；",
+        confidence: 0.9,
+        warnings: [],
+        usable: true,
+        modelUsed: "moonshot/kimi-k3",
+      },
+    ],
+  });
+  assert.match(result.sections[3].content, /图1为整体结构示意图/);
+  assert.ok(!result.sections[3].content.includes("本发明实施例提供的装置"), "显式 drawing_descriptions 优先");
+  assert.ok(!result.warnings.some(w => w.includes("自动生成")), "显式提供时不应提示自动生成");
+});
+
 test("draft_specification tool definition is read-only", async () => {
   const tool = createDraftSpecificationTool();
   assert.equal(tool.name, "draft_specification");
