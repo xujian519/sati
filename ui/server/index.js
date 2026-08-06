@@ -118,7 +118,12 @@ import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from "./routes
 import userRoutes from "./routes/user.js";
 import pluginsRoutes from "./routes/plugins.js";
 import messagesRoutes from "./routes/messages.js";
-import { closeMemoryServices, startMemoryScheduler, stopMemoryScheduler } from "./services/memoryService.js";
+import {
+  closeMemoryServices,
+  resolveManagedMemoryFile,
+  startMemoryScheduler,
+  stopMemoryScheduler,
+} from "./services/memoryService.js";
 import { createNormalizedMessage } from "./sati-message.js";
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from "./utils/plugin-process-manager.js";
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames, userDb } from "./database/db.js";
@@ -1408,8 +1413,30 @@ app.get("/api/projects/:projectName/file", authenticateToken, async (req, res) =
       return res.status(403).json({ error: "Path must be under project root" });
     }
 
-    const content = await fsPromises.readFile(resolved, "utf8");
-    res.json({ content, path: resolved });
+    // Memory-managed files (e.g. MEMORY.md) live under the memory store
+    // (memory/workspaces/<hash>/memory/...) rather than the project root.
+    // Try the managed location first so chat file references open the real
+    // memory file, then fall back to the project-root path as before.
+    const memoryCandidate = resolveManagedMemoryFile(projectRoot, path.relative(projectRoot, resolved));
+    const readTargets = memoryCandidate ? [memoryCandidate, resolved] : [resolved];
+
+    let content = null;
+    let readPath = null;
+    let firstError = null;
+    for (const target of readTargets) {
+      try {
+        content = await fsPromises.readFile(target, "utf8");
+        readPath = target;
+        break;
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        if (!firstError) firstError = error;
+      }
+    }
+    if (content === null) {
+      throw firstError;
+    }
+    res.json({ content, path: readPath });
   } catch (error) {
     console.error("Error reading file:", error);
     if (error.code === "ENOENT") {
@@ -1812,12 +1839,18 @@ app.put("/api/projects/:projectName/file", authenticateToken, async (req, res) =
       return res.status(403).json({ error: "Path must be under project root" });
     }
 
+    // Memory-managed files must be written back to the memory store instead
+    // of the project root — otherwise saving would create a shadow file at
+    // <projectRoot>/MEMORY.md that the memory pipeline never reads.
+    const memoryCandidate = resolveManagedMemoryFile(projectRoot, path.relative(projectRoot, resolved));
+    const writeTarget = memoryCandidate ?? resolved;
+
     // Write the new content
-    await fsPromises.writeFile(resolved, content, "utf8");
+    await fsPromises.writeFile(writeTarget, content, "utf8");
 
     res.json({
       success: true,
-      path: resolved,
+      path: writeTarget,
       message: "File saved successfully",
     });
   } catch (error) {

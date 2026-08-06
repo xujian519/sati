@@ -31,6 +31,39 @@ function resolveWorkspaceDataDir(projectPath) {
   return path.join(MEMORY_WORKSPACES_ROOT, hashText(path.resolve(projectPath)));
 }
 
+// Memory-managed files live under each workspace's `memory/` store
+// (memory/workspaces/<hash>/memory/) instead of the project root. Chat file
+// references (e.g. from read_file/edit_file tool results) often surface them
+// as project-root-relative paths like "MEMORY.md" or "Project/foo.md".
+// resolveManagedMemoryFile() remaps those to the real location so the UI
+// reads/writes the actual memory file rather than a non-existent (or shadow)
+// file at the project root.
+const MANAGED_MEMORY_TOP_LEVEL_FILES = new Set(["MEMORY.md", "USER.md", "project.meta.md"]);
+const MANAGED_MEMORY_DIRS = ["Project", "Feedback", "GeneralProjects"];
+
+function isManagedMemoryRelativePath(relativePath) {
+  if (MANAGED_MEMORY_TOP_LEVEL_FILES.has(relativePath)) return true;
+  const firstSegment = relativePath.split("/")[0];
+  return MANAGED_MEMORY_DIRS.includes(firstSegment);
+}
+
+/**
+ * Best-effort remap of a project-root-relative memory file path onto its real
+ * location under the memory store, or null when the path is not a managed
+ * memory file / the project root is unusable. Callers keep their original
+ * behavior when this returns null.
+ */
+export function resolveManagedMemoryFile(projectRoot, relativePath) {
+  const root = typeof projectRoot === "string" && projectRoot.trim() ? path.resolve(projectRoot.trim()) : "";
+  if (!root) return null;
+  const normalized = String(relativePath || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "");
+  if (!normalized || normalized.includes("..") || normalized.includes("\0")) return null;
+  if (!isManagedMemoryRelativePath(normalized)) return null;
+  return path.join(MEMORY_WORKSPACES_ROOT, hashText(root), "memory", ...normalized.split("/"));
+}
+
 function buildServiceForDataDir(dataDir, workspaceDir = dataDir) {
   let memoryDefaults = {};
   try {
