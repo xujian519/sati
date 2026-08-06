@@ -167,11 +167,12 @@ async function* lawDocs(dbPath: string, limit: number): AsyncGenerator<SourceDoc
 
 async function buildCorpus(
   args: CliArgs,
+  out: string,
   corpus: string,
   docs: AsyncGenerator<SourceDoc>,
   client: EmbeddingClient,
 ): Promise<void> {
-  const outDb = openVectorsDbWriter(args.out);
+  const outDb = openVectorsDbWriter(out);
   try {
     const meta = {
       corpus,
@@ -277,13 +278,13 @@ async function main(): Promise<void> {
         console.warn(`[kg] patent_kg.db 不存在（${paths.patentKgDb}），跳过。`);
         continue;
       }
-      await buildCorpus(args, "kg", kgDocs(paths.patentKgDb, args.limit), client);
+      await buildCorpus(args, out, "kg", kgDocs(paths.patentKgDb, args.limit), client);
     } else if (corpus === "law") {
       if (!paths.lawDb) {
         console.warn(`[law] laws 数据库不存在（${paths.lawDb}），跳过。`);
         continue;
       }
-      await buildCorpus(args, "law", lawDocs(paths.lawDb, args.limit), client);
+      await buildCorpus(args, out, "law", lawDocs(paths.lawDb, args.limit), client);
     } else {
       console.warn(`未知语料 ${corpus}（支持 kg/law），跳过。`);
     }
