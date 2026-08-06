@@ -26,80 +26,48 @@ function makeInput(query: string): MemoryRetrieveInput {
   return { query, sessionId: "s1", projectRoot: "/tmp", recentMessages: [] };
 }
 
-describe("PatentMemoryProvider 语义召回熔断", () => {
-  it("embedding 持续失败：达到阈值后短路，不再每 turn 重试，且降级不抛错", async () => {
+describe("PatentMemoryProvider KG 语义已移除", () => {
+  it("KG 不建向量：embedding 故障不影响关键词检索（embed 不被调用）", async () => {
     const embedCalls = { count: 0 };
     const kgAdapter = {
       searchRelevant: () => [],
       getNode: () => undefined,
     } as unknown as PatentKgAdapter;
-    const vectorDb = {
-      hasCorpus: (corpus: string) => corpus === "kg",
-      search: () => [],
-    } as unknown as VectorDbSearch;
     const provider = new PatentMemoryProvider({
       kgAdapter,
       embedding: makeFailingEmbeddingClient(embedCalls),
-      vectorDb,
       embeddingDir: "/tmp/sati-embedding-test",
-      cacheTtlMs: 0, // 熔断测试专注熔断行为，禁用结果缓存避免同 query 短路
+      cacheTtlMs: 0,
       logger: { warn: () => {} },
     });
 
     const query = "这个技术方案是否具备创造性，怎么判断";
-    // 前 3 次：每次都会尝试 embed（未达熔断阈值）
     for (let i = 0; i < 3; i += 1) {
       const result = await provider.retrieve(makeInput(query));
       assert.ok(result, "降级路径不应抛错");
     }
-    assert.equal(embedCalls.count, 3, "前 3 次应各尝试一次 embed");
-
-    // 第 4 次：熔断打开，不再尝试 embed，retrieve 仍正常返回
-    const result = await provider.retrieve(makeInput(query));
-    assert.equal(embedCalls.count, 3, "熔断后不应再调用 embed");
-    assert.ok(result.systemContext === undefined || typeof result.systemContext === "string");
+    assert.equal(embedCalls.count, 0, "KG 无语义路，embedding 不应被调用");
   });
 
-  it("embedding 恢复后（success 路径）不误触熔断", async () => {
+  it("embedding 存在但 KG 无语义路：不触发 embed（关键词 0 命中返回空上下文）", async () => {
     const embedCalls = { count: 0 };
-    let fail = true;
-    const embedding: EmbeddingClient = {
-      dimensions: 2,
-      async embed(texts: string[]): Promise<number[][]> {
-        embedCalls.count += 1;
-        if (fail) throw new Error("temporary failure");
-        return texts.map(() => [0.1, 0.2]);
-      },
-      async healthCheck(): Promise<boolean> {
-        return !fail;
-      },
-    };
     const kgAdapter = {
       searchRelevant: () => [],
       getNode: () => undefined,
     } as unknown as PatentKgAdapter;
-    const vectorDb = {
-      hasCorpus: (corpus: string) => corpus === "kg",
-      search: () => [],
-    } as unknown as VectorDbSearch;
     const provider = new PatentMemoryProvider({
       kgAdapter,
-      embedding,
-      vectorDb,
+      embedding: makeFailingEmbeddingClient(embedCalls),
       embeddingDir: "/tmp/sati-embedding-test",
       cacheTtlMs: 0,
       logger: { warn: () => {} },
     });
 
     const query = "判断权利要求是否清楚完整";
-    // 失败 3 次 → open
-    for (let i = 0; i < 3; i += 1) {
-      await provider.retrieve(makeInput(query));
-    }
-    fail = false;
-    // 熔断期内不重试（embed 不再增长）
     await provider.retrieve(makeInput(query));
-    assert.equal(embedCalls.count, 3);
+    await provider.retrieve(makeInput(query));
+    await provider.retrieve(makeInput(query));
+    assert.equal(embedCalls.count, 0, "KG 无语义路，embed 不应增长");
   });
 });
 

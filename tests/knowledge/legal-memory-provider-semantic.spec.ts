@@ -6,6 +6,10 @@ import type { MemoryRetrieveInput } from "../../src/context/memory/MemoryResolve
 import { LegalMemoryProvider } from "../../src/knowledge/legal/legal-memory-provider.js";
 import type { LegalSearchEngine } from "../../src/knowledge/legal/legal-search.js";
 import type { VectorDbSearch, VectorDbSearchHit } from "../../src/knowledge/shared/vector-db.js";
+import type {
+  KnowledgeEmbeddingSearch,
+  KnowledgeEmbeddingHit,
+} from "../../src/knowledge/shared/knowledge-embeddings.js";
 import type { LawRecord } from "../../src/knowledge/legal/types.js";
 
 function makeStubEmbedding(): EmbeddingClient {
@@ -53,6 +57,16 @@ function makeStubVectorDb(hits: VectorDbSearchHit[]): VectorDbSearch {
     search: () => hits,
     close: () => {},
   } as unknown as VectorDbSearch;
+}
+
+function makeStubKnowledgeEmbeddings(hits: KnowledgeEmbeddingHit[]): KnowledgeEmbeddingSearch {
+  return {
+    available: true,
+    loadedChunkCount: () => hits.length,
+    docTypeFilter: () => ["law_article"],
+    search: () => hits,
+    close: () => {},
+  } as unknown as KnowledgeEmbeddingSearch;
 }
 
 function makeInput(query: string): MemoryRetrieveInput {
@@ -107,6 +121,42 @@ describe("legal-memory-provider 法条语义召回", () => {
     // FTS 无命中 + 语义失败 → 空上下文，但不抛错
     const result = await provider.retrieve(makeInput("侵权赔偿的法定标准"));
     assert.equal(result.systemContext, undefined);
+  });
+
+  it("knowledge.db embeddings（law_article）语义路优先于 legacy vectors.db", async () => {
+    const provider = new LegalMemoryProvider(makeStubEngine(), {
+      embedding: makeStubEmbedding(),
+      knowledgeEmbeddings: makeStubKnowledgeEmbeddings([
+        { docId: "law-1", score: 0.9 },
+        { docId: "law-2", score: 0.7 },
+      ]),
+      limit: 2,
+    });
+    const result = await provider.retrieve(makeInput("侵权赔偿的法定标准"));
+    assert.ok(result.systemContext, "应注入法条上下文");
+    assert.ok(result.systemContext.includes("<law-database>"));
+    assert.ok(result.systemContext.includes("专利法"));
+    assert.ok(result.systemContext.includes("商标法"));
+  });
+
+  it("knowledgeEmbeddings 不可用且无 vectorDb 时语义路跳过（回归）", async () => {
+    const provider = new LegalMemoryProvider(makeStubEngine(), {
+      embedding: makeStubEmbedding(),
+      knowledgeEmbeddings: { available: false } as unknown as KnowledgeEmbeddingSearch,
+    });
+    const result = await provider.retrieve(makeInput("侵权赔偿的法定标准"));
+    assert.equal(result.systemContext, undefined);
+  });
+
+  it("FTS 命中与知识库语义命中 RRF 融合", async () => {
+    const engine = makeStubEngine();
+    const provider = new LegalMemoryProvider(engine, {
+      embedding: makeStubEmbedding(),
+      knowledgeEmbeddings: makeStubKnowledgeEmbeddings([{ docId: "law-1", score: 0.9 }]),
+      limit: 1,
+    });
+    const result = await provider.retrieve(makeInput("侵权赔偿的法定标准"));
+    assert.ok(result.systemContext?.includes("专利法"));
   });
 
   it("rerank 重排候选顺序（FTS 无命中时语义候选按 rerank 顺序注入）", async () => {
