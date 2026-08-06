@@ -87,7 +87,7 @@ docs(ui): update chat i18n keys
 - **后端模块**（`src/`）：`protocol/`（类型与契约）→ `runtime/`（实现）→ `config/`（配置加载），模块入口 `index.ts` 作为 barrel export
 - **前端组件**（`ui/src/components/`）：feature-folder 模式，`view/`（UI）+ `hooks/`（逻辑）+ `types/` + `constants/` + `utils/`，入口组件在目录根
 - **依赖边界**：`src/` 不得导入 `ui/`；`ui/` 通过 gateway API / WebSocket 通信，不得直接导入 `src/`
-- **桌面端**：仅实现 macOS（Intel + Apple Silicon），不维护 Windows / Linux 桌面端
+- **桌面端**：Electron 壳（`apps/desktop/`），当前维护 **macOS（DMG，arm64）** 与 **Windows（NSIS exe，x64/arm64）** 双平台构建与发布——mac 走 `apps/desktop/scripts/release.sh`（签名 + 公证），win 走 `apps/desktop/scripts/build-win.bat`（无签名）；**Linux 桌面端不维护**。macOS 专属行为（应用菜单 / About 面板 / Dock / 关闭即隐藏）在 Windows 上不可用
 
 ### 代码注释
 
