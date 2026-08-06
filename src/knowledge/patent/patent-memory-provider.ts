@@ -198,6 +198,20 @@ export class PatentMemoryProvider implements MemoryResolver {
     // 知识库只读，无记忆捕获。
   }
 
+  /**
+   * 预热 wiki 卡语义索引（幂等；全量 embed 在后台执行，不阻塞调用方）。
+   *
+   * 由组装层（buildKnowledgeResolvers）在启动时调用，把首次全量 embed
+   * 移出用户检索路径——否则首次检索会撞上分钟级全量 embed。未配置
+   * embedding / wikiLoader 或 indexWiki=false 时为空操作。
+   * 返回 promise 供调用方选择等待（测试/预热完成确认）。
+   */
+  warmupSemanticIndex(): Promise<void> {
+    const semantic = this.getSemanticCards();
+    if (!semantic) return Promise.resolve();
+    return semantic.warmup();
+  }
+
   /** 知识图谱检索：关键词路（+ 关系扩展），可选 rerank（KG 节点不建向量，无语义路）。 */
   private async queryGraph(input: MemoryRetrieveInput): Promise<GraphHit[]> {
     if (!this.enableGraph || !this.kgAdapter || Array.from(input.query.trim()).length < MIN_QUERY_LENGTH) return [];

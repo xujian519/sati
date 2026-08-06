@@ -10,10 +10,15 @@
  * 全量构建（textHash 门控，内容未变零 embed）并持久化即可，之后零成本。
  * 若未来卡片集可变（loader 支持刷新），需在换 loader 实例时重建本索引，
  * 或恢复"检索前快照门控"覆写。
+ *
+ * 就绪才检索（2026-08 变更）：`search` 覆写为基类 `searchIfReady` 语义——
+ * warmup 未完成（含首次全量 embed，本地 Ollama 下约百秒级）时**直接返回空**
+ * 而非阻塞等待，确保语义召回是可选增强、绝不拖慢主流程。预热由组装层
+ * 启动时后台触发（buildKnowledgeResolvers → warmupSemanticIndex）。
  */
 
 import type { EmbeddingClient } from "../../model/embedding/types.js";
-import { SemanticDocumentIndex, type VectorIndexEntry } from "../../context/vector/index.js";
+import { SemanticDocumentIndex, type VectorIndexEntry, type VectorSearchHit } from "../../context/vector/index.js";
 import { WikiCardLoader } from "./wiki-card-loader.js";
 
 export type WikiCardVectorIndexOptions = {
@@ -31,6 +36,14 @@ export class WikiCardVectorIndex extends SemanticDocumentIndex {
   constructor(options: WikiCardVectorIndexOptions) {
     super({ client: options.client, storePath: options.storePath, logger: options.logger });
     this.loader = options.loader;
+  }
+
+  /**
+   * 就绪才检索：warmup（首次全量 embed）未完成时返回空数组，不阻塞。
+   * 首次调用会兜底启动后台预热；此后每轮零成本判断，就绪即正常 top-k。
+   */
+  override async search(query: string, limit: number): Promise<VectorSearchHit[]> {
+    return this.searchIfReady(query, limit);
   }
 
   protected override async syncSource(): Promise<void> {

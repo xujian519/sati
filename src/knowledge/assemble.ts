@@ -87,16 +87,25 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
     stats: options.stats,
     logger: options.logger,
   };
+  // 启动时后台预热 wiki 卡语义索引：首次全量 embed（本地 Ollama 下约百秒级）
+  // 移出用户检索路径。预热失败由 provider 内部 warn/熔断处理，不影响启动。
+  function pushPatentProvider(provider: PatentMemoryProvider): void {
+    resolvers.push(provider);
+    void provider.warmupSemanticIndex();
+  }
+
   if (options.patentKgDb) {
     try {
       const kgStore = new KgStore(options.patentKgDb);
-      resolvers.push(new PatentMemoryProvider({ kgAdapter: new PatentKgAdapter(kgStore), ...patentProviderOptions }));
+      pushPatentProvider(
+        new PatentMemoryProvider({ kgAdapter: new PatentKgAdapter(kgStore), ...patentProviderOptions }),
+      );
     } catch (error) {
       // 与既有行为一致：KG 打开失败跳过专利 provider（wiki/IPC 随 KG 缺失路径兜底）
       options.logger?.warn?.(`patent_kg.db 打开失败，跳过专利知识图谱: ${errorMessage(error)}`);
     }
   } else {
-    resolvers.push(new PatentMemoryProvider(patentProviderOptions));
+    pushPatentProvider(new PatentMemoryProvider(patentProviderOptions));
   }
 
   // 法规引擎：knowledge.db 优先（law_article 文档），否则 legacy laws-full。

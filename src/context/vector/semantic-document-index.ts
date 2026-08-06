@@ -7,6 +7,9 @@
  *     并发调用去重；
  *   - `search()` = warmup + 余弦 top-k；需要"每次检索前增量同步"的子类
  *     （如记忆正文随会话增长）覆写 `search()` 在 super 之前做快照门控同步；
+ *   - `searchIfReady()` = 就绪才检索：warmup 未完成/未启动时返回空数组
+ *     （不等待、不阻塞），供"语义是可选增强、未就绪应快速降级"的调用方使用
+ *     （如 wiki 卡语义召回——全量 embed 可能数十秒，绝不应阻塞主流程）；
  *   - 索引只存 { id, text } → { id, score }，业务元数据由调用方按 id 回查。
  */
 
@@ -23,6 +26,8 @@ export abstract class SemanticDocumentIndex {
   private readonly index: VectorIndex;
   private warmupStarted = false;
   private warmupPromise: Promise<void> | null = null;
+  /** warmup 是否已完成（成功）。失败复位后回到 false，允许重试。 */
+  private warmupDone = false;
 
   protected constructor(options: SemanticDocumentIndexOptions) {
     this.index = new VectorIndex({ client: options.client, storePath: options.storePath, logger: options.logger });
@@ -40,6 +45,9 @@ export abstract class SemanticDocumentIndex {
     }
     this.warmupStarted = true;
     this.warmupPromise = this.doWarmup()
+      .then(() => {
+        this.warmupDone = true;
+      })
       .catch(error => {
         this.warmupStarted = false;
         this.warmupPromise = null;
@@ -49,6 +57,19 @@ export abstract class SemanticDocumentIndex {
         this.warmupPromise = null;
       });
     await this.warmupPromise;
+  }
+
+  /**
+   * 就绪才检索：warmup 已完成时正常余弦 top-k；未完成/失败时返回空数组。
+   *
+   * **纯读、无副作用**：不启动、不重试 warmup——预热启动由调用方负责
+   * （组装层 warmupSemanticIndex / 检索路径 getSemanticCards 的 fire-and-forget）。
+   * 若此处兜底启动，warmup 失败复位后每检索都会重启一次全量 embed（重试风暴），
+   * 且未就绪静默返回空会让上层 CircuitBreaker 失去感知。
+   */
+  async searchIfReady(query: string, limit: number): Promise<VectorSearchHit[]> {
+    if (!this.warmupDone) return [];
+    return this.index.search(query, limit);
   }
 
   /** 余弦 top-k；embedding 失败时抛出，由上层 catch 降级。 */

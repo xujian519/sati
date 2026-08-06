@@ -158,4 +158,63 @@ describe("createOpenAiEmbeddingClient", () => {
     assert.deepEqual(await client.embed([]), []);
     assert.equal(fetchCalls.length, 0);
   });
+
+  it("相同文本复用缓存向量（第二次不发请求）", async () => {
+    mockFetch(() => jsonResponse({ data: [{ embedding: [0.1, 0.2] }] }));
+    const client = createOpenAiEmbeddingClient({
+      apiType: "openai",
+      baseUrl: "http://localhost:11434/v1",
+      apiKey: "",
+      model: "m",
+    });
+    const first = await client.embed(["同一文本"]);
+    const second = await client.embed(["同一文本"]);
+    assert.deepEqual(first, [[0.1, 0.2]]);
+    assert.deepEqual(second, [[0.1, 0.2]]);
+    assert.equal(fetchCalls.length, 1, "缓存命中不应再发请求");
+  });
+
+  it("混合缓存命中与未命中：仅缺失文本发起请求", async () => {
+    mockFetch(call => {
+      const body = JSON.parse(String(call.init.body)) as { input: string[] };
+      return jsonResponse({ data: body.input.map((_, index) => ({ embedding: [index + 10] })) });
+    });
+    const client = createOpenAiEmbeddingClient({
+      apiType: "openai",
+      baseUrl: "http://localhost:11434/v1",
+      apiKey: "",
+      model: "m",
+      batchSize: 2,
+    });
+    await client.embed(["a", "b"]);
+    assert.equal(fetchCalls.length, 1);
+    // a 命中缓存，c 缺失 → 仅请求 ["c"]（mock 返回 [10]）
+    const result = await client.embed(["a", "c"]);
+    assert.deepEqual(result, [[10], [10]]);
+    assert.equal(fetchCalls.length, 2);
+    const lastBody = JSON.parse(String(fetchCalls[1]!.init.body)) as { input: string[] };
+    assert.deepEqual(lastBody.input, ["c"]);
+  });
+
+  it("缓存不影响批量分批请求与结果顺序（重复文本跨调用复用）", async () => {
+    mockFetch(call => {
+      const body = JSON.parse(String(call.init.body)) as { input: string[] };
+      return jsonResponse({ data: body.input.map((_, index) => ({ embedding: [index + 1] })) });
+    });
+    const client = createOpenAiEmbeddingClient({
+      apiType: "openai",
+      baseUrl: "http://localhost:11434/v1",
+      apiKey: "",
+      model: "m",
+      batchSize: 2,
+    });
+    const first = await client.embed(["x", "y", "x"]);
+    // 首次调用：批 1 ["x","y"] + 批 2 ["x"] → 2 个请求；结果顺序与入参一致
+    assert.deepEqual(first, [[1], [2], [1]]);
+    assert.equal(fetchCalls.length, 2);
+    // 第二次调用：全部命中缓存，零请求
+    const second = await client.embed(["x", "y", "x"]);
+    assert.deepEqual(second, [[1], [2], [1]]);
+    assert.equal(fetchCalls.length, 2, "缓存命中不应再发请求");
+  });
 });

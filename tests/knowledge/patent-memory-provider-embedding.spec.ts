@@ -63,7 +63,7 @@ function makeInput(query: string): MemoryRetrieveInput {
 }
 
 describe("patent-memory-provider wiki 语义召回", () => {
-  it("关键词漏召回时语义路径注入 wiki 卡片", async () => {
+  it("关键词漏召回时语义路径注入 wiki 卡片（预热就绪后）", async () => {
     const wikiDir = makeFixtureWiki();
     try {
       const loader = new WikiCardLoader(wikiDir);
@@ -73,12 +73,50 @@ describe("patent-memory-provider wiki 语义召回", () => {
         embeddingDir: join(wikiDir, "embeddings"),
         cardLimit: 1, // 只注入语义最相关的一张，便于断言
       });
+      // 语义索引就绪后再检索（运行时由组装层启动后台预热）
+      await provider.warmupSemanticIndex();
       // 长句改写 query：关键词（标题/概念子串）不命中，仅语义可召回
       const result = await provider.retrieve(makeInput("这个技术方案是否具备创造性，怎么判断"));
       assert.ok(result.systemContext, "应注入 wiki 卡片上下文");
       assert.ok(result.systemContext.includes("<wiki-card>"));
       assert.ok(result.systemContext.includes("创造性判断三步法"), "应注入创造性卡正文");
       assert.ok(!result.systemContext.includes("外观设计侵权判定"), "不应注入无关卡");
+    } finally {
+      rmSync(wikiDir, { recursive: true, force: true });
+    }
+  });
+
+  it("语义索引未就绪时检索不阻塞（embedding 挂起时快速返回，语义路降级）", async () => {
+    const wikiDir = makeFixtureWiki();
+    try {
+      const loader = new WikiCardLoader(wikiDir);
+      // embed 被 gate 挂起：模拟慢/未就绪的 embedding 端点。若检索错误地 await
+      // warmup，本测试将挂起直至超时——比时间断言更可靠地捕获回归。
+      let releaseEmbed: (() => void) | undefined;
+      const embedGate = new Promise<void>(resolve => {
+        releaseEmbed = resolve;
+      });
+      const gatedClient: EmbeddingClient = {
+        dimensions: 8,
+        async embed(texts: string[]): Promise<number[][]> {
+          await embedGate;
+          return texts.map(() => new Array(8).fill(0.1));
+        },
+        async healthCheck(): Promise<boolean> {
+          return true;
+        },
+      };
+      const provider = new PatentMemoryProvider({
+        wikiLoader: loader,
+        embedding: gatedClient,
+        embeddingDir: join(wikiDir, "embeddings"),
+      });
+      // 首次检索：warmup 被 gate 挂起，检索必须立即返回而非等待
+      const result = await provider.retrieve(makeInput("这个技术方案是否具备创造性，怎么判断"));
+      // 未就绪 → 无语义注入；keyword 路照常工作（不抛错）
+      assert.ok(!result.systemContext?.includes("<wiki-card>"));
+      // 放行后台 warmup，避免测试进程悬挂
+      releaseEmbed?.();
     } finally {
       rmSync(wikiDir, { recursive: true, force: true });
     }

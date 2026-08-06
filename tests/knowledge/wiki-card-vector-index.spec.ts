@@ -91,11 +91,16 @@ test("warmup 构建索引，search 返回 top-k 命中（与查询共享 2-gram 
   }
 });
 
-test("search 触发懒预热：未 warmup 直接 search 亦可", async () => {
+test("就绪才检索：未 warmup 时 search 返回空（不阻塞），warmup 后正常检索", async () => {
   const dir = tempDir();
   const { loader } = mockLoader([{ id: "c1", title: "创造性三步法", body: "最接近的现有技术。" }]);
   const index = new WikiCardVectorIndex({ loader, client: fakeEmbedding(), storePath: join(dir, "wiki.jsonl") });
   try {
+    // 语义是可选增强：warmup 未完成（首次全量 embed 可能数十秒）时直接返回空，
+    // 绝不阻塞主流程（此前行为是 await 全量 warmup，见 perf 探针 115s）。
+    assert.deepEqual(await index.search("创造性三步法", 1), []);
+    // 显式 warmup 完成后正常 top-k 检索
+    await index.warmup();
     const hits = await index.search("创造性三步法", 1);
     assert.equal(hits.length, 1);
     assert.equal(hits[0]!.id, "c1");
