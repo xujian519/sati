@@ -39,6 +39,7 @@ import { registerBuiltinAtoms } from "../../patent/atoms/index.js";
 import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateTool.js";
 import { createPatentWikiSearchTool } from "../builtin/patentWikiSearch.js";
 import { createPatentKgQueryTool } from "../builtin/patentKgQuery.js";
+import { createAnalyzePatentFigureTool } from "../builtin/analyzePatentFigure.js";
 import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
@@ -218,6 +219,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentSearchTool(), "patent"));
     registry.register(annotate(createPatentWikiSearchTool(), "patent"));
     registry.register(annotate(createPatentKgQueryTool(), "patent"));
+    registry.register(annotate(createAnalyzePatentFigureTool(), "patent"));
   }
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));

@@ -8,6 +8,7 @@
 
 import type { PipelineState, StageProvider } from "../../handler.js";
 import { getStateArray, getStateString } from "../../handler.js";
+import { tryParseJson } from "../../../llm-json.js";
 
 /** 返回包含 _error 的降级状态片段。 */
 export function degraded(atom: string, reason: string): PipelineState {
@@ -92,23 +93,4 @@ export function parseLlmJson(
     if (segment !== null) return segment;
   }
   return onParseFailure(raw);
-}
-
-function tryParseJson(raw: string): Record<string, unknown> | undefined {
-  const candidates = [raw, stripCodeFence(raw)];
-  for (const c of candidates) {
-    try {
-      const v = JSON.parse(c);
-      if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
-    } catch {
-      // 尝试下一个候选
-    }
-  }
-  return undefined;
-}
-
-/** 去掉 ```json ... ``` 围栏（LLM 输出格式漂移兜底）。 */
-function stripCodeFence(raw: string): string {
-  const m = /```(?:json)?\s*([\s\S]*?)```/.exec(raw);
-  return m ? m[1].trim() : raw;
 }
