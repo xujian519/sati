@@ -12,6 +12,7 @@ import type { EmbeddingClient } from "../model/embedding/types.js";
 import type { RerankClient } from "../model/embedding/rerank.js";
 import { KgStore } from "./shared/kg-store.js";
 import { VectorDbSearch } from "./shared/vector-db.js";
+import type { KnowledgeRuntimeStats } from "./shared/knowledge-stats.js";
 import { PatentKgAdapter } from "./patent/patent-kg-adapter.js";
 import { PatentMemoryProvider } from "./patent/patent-memory-provider.js";
 import { WikiCardLoader } from "./patent/wiki-card-loader.js";
@@ -35,6 +36,10 @@ export type BuildKnowledgeResolversOptions = {
   indexWiki?: boolean;
   /** 重排客户端（可选，阶段 C）。 */
   rerank?: RerankClient;
+  /** 参与重排的候选上限（透传 memory.embedding.rerank.topN；缺省 16）。 */
+  rerankTopN?: number;
+  /** 运行时状态聚合（可选，可观测性出口）；注入后由各 provider 打点。 */
+  stats?: KnowledgeRuntimeStats;
   logger?: { warn?: (...args: unknown[]) => void };
 };
 
@@ -59,6 +64,8 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
     embeddingDir: options.embeddingDir,
     vectorDb,
     rerank: options.rerank,
+    rerankTopN: options.rerankTopN,
+    stats: options.stats,
     logger: options.logger,
   };
   if (options.patentKgDb) {
@@ -80,6 +87,8 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
           embedding: options.embedding,
           vectorDb,
           rerank: options.rerank,
+          rerankTopN: options.rerankTopN,
+          stats: options.stats,
           logger: options.logger,
         }),
       );

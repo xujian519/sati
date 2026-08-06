@@ -139,4 +139,34 @@ describe("legal-memory-provider 法条语义召回", () => {
     assert.ok(lawIndex >= 0 && patentIndex >= 0);
     assert.ok(lawIndex < patentIndex, "rerank 后商标法应排在专利法之前");
   });
+
+  it("rerankTopN 透传到 rerank 调用（限制参与重排的候选数）", async () => {
+    const topNs: Array<number | undefined> = [];
+    const stubRerank: RerankClient = {
+      async rerank(
+        _query: string,
+        documents: string[],
+        topN?: number,
+      ): Promise<Array<{ index: number; score: number }>> {
+        topNs.push(topN);
+        return documents.map((_, index) => ({ index, score: 1 - index * 0.1 }));
+      },
+      async healthCheck(): Promise<boolean> {
+        return true;
+      },
+    };
+    const provider = new LegalMemoryProvider(makeStubEngine(), {
+      embedding: makeStubEmbedding(),
+      vectorDb: makeStubVectorDb([
+        { docId: "law-1", score: 0.9 },
+        { docId: "law-2", score: 0.8 },
+      ]),
+      rerank: stubRerank,
+      rerankTopN: 1,
+      limit: 2,
+    });
+    await provider.retrieve(makeInput("侵权赔偿的法定标准"));
+    assert.equal(topNs.length, 1);
+    assert.equal(topNs[0], 1);
+  });
 });

@@ -35,6 +35,8 @@ import type {
   WebReadSubagentMessagesResult,
   WebForkSessionInput,
   WebForkSessionResult,
+  KnowledgeCapabilitiesInput,
+  KnowledgeCapabilitiesResult,
 } from "../protocol/types.js";
 import type {
   SkillAddressInput,
@@ -243,6 +245,10 @@ export class RemoteGateway implements Gateway {
 
   async alwaysOnApplyCycle(input: AlwaysOnApplyCycleInput): Promise<AlwaysOnApplyCycleResult> {
     return (await this.client.request("always_on_apply_cycle", input)) as AlwaysOnApplyCycleResult;
+  }
+
+  async knowledgeCapabilities(input: KnowledgeCapabilitiesInput): Promise<KnowledgeCapabilitiesResult> {
+    return (await this.client.request("knowledge_capabilities", input)) as KnowledgeCapabilitiesResult;
   }
 }
 

@@ -36,10 +36,14 @@ import type { AgentSubagentTranscriptHooks } from "../agent/runtime/AgentRuntime
 import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
 import {
   CompositeMemoryResolver,
+  KnowledgeRuntimeStats,
   buildKnowledgeResolvers,
   logKnowledgeCapabilities,
+  resolveKnowledgeCapabilities,
   resolveKnowledgeDbPaths,
 } from "../knowledge/index.js";
+import type { KnowledgeDbPaths } from "../knowledge/index.js";
+import type { KnowledgeCapabilitiesResult } from "../gateway/protocol/types.js";
 import type { MemoryResolver } from "../context/index.js";
 import {
   listRegisteredRoleIds,
@@ -340,6 +344,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     },
     listProjects: () => listWebProjects({ pilotHome }),
     describeProject: input => describeWebProject(input.projectKey, { pilotHome }),
+    knowledgeCapabilities: input => Promise.resolve(registry.knowledgeCapabilitiesReport(input?.projectKey)),
     async reloadConfig() {
       let changedPaths: string[] = [];
       const unsubscribe = configStore.subscribe(event => {
@@ -478,6 +483,14 @@ type ProjectRuntime = {
   memory?: MemoryResolver;
   /** Backing memory service for maintenance / introspection. */
   memoryService?: EdgeClawMemoryService;
+  /** 知识库路径探测结果（knowledge.capabilities 可观测性出口数据源）。 */
+  knowledgePaths?: KnowledgeDbPaths;
+  /** 知识库运行时状态聚合（各 resolver 打点；gateway 出口读快照）。 */
+  knowledgeStats?: KnowledgeRuntimeStats;
+  /** 是否已配置 embedding 客户端（memory.embedding）。 */
+  knowledgeEmbeddingConfigured?: boolean;
+  /** 是否已配置 rerank 客户端（memory.embedding.rerank）。 */
+  knowledgeRerankConfigured?: boolean;
   /** Coalesced project-level memory maintenance loop. */
   memoryMaintenanceInFlight?: Promise<void>;
   memoryMaintenanceRequested?: boolean;
@@ -819,6 +832,7 @@ class ProjectRuntimeRegistry {
 
     // 知识库 MemoryResolver 组装：EdgeClaw 会话记忆 + 专利知识库 + 法律知识库。
     // 数据库文件缺失/打开失败时自动降级（见 src/knowledge/assemble.ts）。
+    const knowledgeStats = new KnowledgeRuntimeStats();
     const knowledgeResolvers: Array<MemoryResolver> = [];
     if (memory?.provider) knowledgeResolvers.push(memory.provider);
     knowledgeResolvers.push(
@@ -830,15 +844,23 @@ class ProjectRuntimeRegistry {
         embeddingDir,
         embedding: embeddingClient,
         rerank: rerankClient,
+        rerankTopN: snapshot.config.memory?.embedding?.rerank?.topN,
         indexWiki: snapshot.config.memory?.embedding?.indexWiki !== false,
+        stats: knowledgeStats,
         logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
       }),
     );
 
     // 知识能力自检：数据/配置缺失时输出可读清单，避免静默降级。
+    // 传 runtime 快照让 KG FTS tokenizer 等运行时能力项（如 FTS5 缺失回退 LIKE）
+    // 也出现在启动输出里——provider 构造时已同步完成探测。
     logKnowledgeCapabilities(
       knowledgePaths,
-      { embeddingConfigured: Boolean(embeddingClient), rerankConfigured: Boolean(rerankClient) },
+      {
+        embeddingConfigured: Boolean(embeddingClient),
+        rerankConfigured: Boolean(rerankClient),
+        runtime: knowledgeStats.snapshot(),
+      },
       console,
     );
 
@@ -856,6 +878,10 @@ class ProjectRuntimeRegistry {
       backgroundTasks,
       memory: memoryResolver,
       memoryService: memory?.service,
+      knowledgePaths,
+      knowledgeStats,
+      knowledgeEmbeddingConfigured: Boolean(embeddingClient),
+      knowledgeRerankConfigured: Boolean(rerankClient),
       projectStorage: {
         projectRoot,
         pilotHome: this.options.pilotHome,
@@ -863,6 +889,30 @@ class ProjectRuntimeRegistry {
     };
     this.runtimes.set(projectRoot, runtime);
     return runtime;
+  }
+
+  /**
+   * 知识库能力自检报告（knowledge.capabilities 可观测性出口）。
+   * 数据源与启动时 logKnowledgeCapabilities 同源（resolveKnowledgeCapabilities），
+   * 额外携带运行时统计快照（缓存/语义/重排计数 + 熔断器状态）。
+   */
+  knowledgeCapabilitiesReport(projectKey?: string): KnowledgeCapabilitiesResult {
+    const runtime = this.resolve(projectKey);
+    const paths = runtime.knowledgePaths ?? resolveKnowledgeDbPaths();
+    const embeddingConfigured = runtime.knowledgeEmbeddingConfigured ?? false;
+    const rerankConfigured = runtime.knowledgeRerankConfigured ?? false;
+    const stats = runtime.knowledgeStats?.snapshot();
+    return {
+      dataDir: paths.dataDir,
+      capabilities: resolveKnowledgeCapabilities(paths, {
+        embeddingConfigured,
+        rerankConfigured,
+        runtime: stats,
+      }),
+      embeddingConfigured,
+      rerankConfigured,
+      stats,
+    };
   }
 
   scheduleMemoryMaintenance(projectKey?: string): void {

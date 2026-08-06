@@ -1,6 +1,7 @@
 import type { Gateway, GatewayEvent } from "../protocol/types.js";
 import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
 import { SATI_GATEWAY_PROTOCOL_VERSION, isProtocolCompatible } from "../protocol/version.js";
+import { notConfigured } from "../protocol/notConfigured.js";
 import { SkillManagerError, SkillValidationError } from "../../extension/skills/index.js";
 import { TextWebSocketConnection } from "./websocket.js";
 
@@ -294,58 +295,47 @@ export class GatewayWsConnection {
         if (this.options.gateway.alwaysOnApply) {
           return this.options.gateway.alwaysOnApply(frame.params as never);
         }
-        return Promise.resolve({
-          sessionKey: "",
-          error: { code: "not_configured", message: "Always-On apply not available" },
-        });
+        return Promise.resolve(notConfigured({ sessionKey: "" }, "Always-On apply not available"));
       case "always_on_rerun_plan":
         if (this.options.gateway.alwaysOnRerunPlan) {
           return this.options.gateway.alwaysOnRerunPlan(frame.params as never);
         }
-        return Promise.resolve({
-          runId: "",
-          error: { code: "not_configured", message: "Always-On rerun not available" },
-        });
+        return Promise.resolve(notConfigured({ runId: "" }, "Always-On rerun not available"));
       case "always_on_list_plans":
         if (this.options.gateway.alwaysOnListPlans) {
           return this.options.gateway.alwaysOnListPlans(frame.params as never);
         }
-        return Promise.resolve({
-          plans: [],
-          error: { code: "not_configured", message: "Always-On plans list not available" },
-        });
+        return Promise.resolve(notConfigured({ plans: [] }, "Always-On plans list not available"));
       case "always_on_read_report":
         if (this.options.gateway.alwaysOnReadReport) {
           return this.options.gateway.alwaysOnReadReport(frame.params as never);
         }
-        return Promise.resolve({
-          content: "",
-          error: { code: "not_configured", message: "Always-On report not available" },
-        });
+        return Promise.resolve(notConfigured({ content: "" }, "Always-On report not available"));
       case "always_on_list_cycles":
         if (this.options.gateway.alwaysOnListCycles) {
           return this.options.gateway.alwaysOnListCycles(frame.params as never);
         }
-        return Promise.resolve({
-          cycles: [],
-          error: { code: "not_configured", message: "Always-On cycles list not available" },
-        });
+        return Promise.resolve(notConfigured({ cycles: [] }, "Always-On cycles list not available"));
       case "always_on_archive_cycle":
         if (this.options.gateway.alwaysOnArchiveCycle) {
           return this.options.gateway.alwaysOnArchiveCycle(frame.params as never);
         }
-        return Promise.resolve({
-          archived: false,
-          error: { code: "not_configured", message: "Always-On archive not available" },
-        });
+        return Promise.resolve(notConfigured({ archived: false }, "Always-On archive not available"));
       case "always_on_apply_cycle":
         if (this.options.gateway.alwaysOnApplyCycle) {
           return this.options.gateway.alwaysOnApplyCycle(frame.params as never);
         }
-        return Promise.resolve({
-          cycle: null,
-          error: { code: "not_configured", message: "Always-On apply not available" },
-        });
+        return Promise.resolve(notConfigured({ cycle: null }, "Always-On apply not available"));
+      case "knowledge_capabilities":
+        if (this.options.gateway.knowledgeCapabilities) {
+          return this.options.gateway.knowledgeCapabilities(frame.params as never);
+        }
+        return Promise.resolve(
+          notConfigured(
+            { dataDir: "", capabilities: [], embeddingConfigured: false, rerankConfigured: false },
+            "Knowledge capabilities not available",
+          ),
+        );
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }

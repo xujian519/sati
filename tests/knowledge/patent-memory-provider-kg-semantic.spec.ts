@@ -39,6 +39,8 @@ function makeStubKgAdapter(): PatentKgAdapter {
     getCitationChain: () => null,
     getSimilarNodes: () => [],
     listByType: () => [],
+    // stub 无 FTS 表，探测结果为 none（等价 FTS5 不可用回退 LIKE 的降级语义）。
+    ftsMode: () => "none" as const,
   } as unknown as PatentKgAdapter;
 }
 

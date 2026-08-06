@@ -57,7 +57,10 @@ import type {
   WebReadSubagentMessagesResult,
   WebForkSessionInput,
   WebForkSessionResult,
+  KnowledgeCapabilitiesInput,
+  KnowledgeCapabilitiesResult,
 } from "../protocol/types.js";
+import { notConfigured } from "../protocol/notConfigured.js";
 import type {
   CronCreateInput,
   CronCreateResult,
@@ -169,6 +172,12 @@ export type InProcessGatewayOptions = {
    * protocol methods (list plans / reports / cycles / archive / apply).
    */
   discoveryPlanService?: DiscoveryPlanService;
+  /**
+   * Knowledge capabilities delegate — wired by `createLocalGateway` from the
+   * per-project runtime (knowledge paths + resolver stats); powers the
+   * `knowledge_capabilities` protocol method.
+   */
+  knowledgeCapabilities?: (input: KnowledgeCapabilitiesInput) => Promise<KnowledgeCapabilitiesResult>;
   /**
    * Optional non-blocking post-turn callback. Used by createLocalGateway to
    * coalesce project-level memory maintenance after a turn has fully ended.
@@ -925,6 +934,21 @@ export class InProcessGateway implements Gateway {
       return { cycle: null, error: { code: "not_configured", message: "Always-On apply is not configured." } };
     }
     return service.applyCycle(input.projectKey, input.workCycleId, this.options.alwaysOnApply);
+  }
+
+  // -------------------------------------------------------------------
+  // Knowledge capabilities protocol method (observability exit)
+  // -------------------------------------------------------------------
+
+  async knowledgeCapabilities(input: KnowledgeCapabilitiesInput): Promise<KnowledgeCapabilitiesResult> {
+    const handler = this.options.knowledgeCapabilities;
+    if (!handler) {
+      return notConfigured(
+        { dataDir: "", capabilities: [], embeddingConfigured: false, rerankConfigured: false },
+        "Knowledge capabilities not available on this gateway",
+      );
+    }
+    return handler(input);
   }
 
   /**

@@ -128,6 +128,11 @@ export class PatentKgAdapter {
     return this.store.getNeighbors(nodeId, relation, limit);
   }
 
+  /** KG FTS tokenizer 实际生效模式（诊断用：trigram/unicode61/none）。 */
+  ftsMode(): "trigram" | "unicode61" | "none" {
+    return this.store.ftsMode();
+  }
+
   close(): void {
     this.store.close();
   }

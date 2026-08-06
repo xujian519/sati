@@ -5,6 +5,7 @@ import type { RerankClient } from "../../model/embedding/rerank.js";
 import { MIN_QUERY_LENGTH, type VectorDbSearch } from "../shared/vector-db.js";
 import { CircuitBreaker, guarded } from "../shared/circuit-breaker.js";
 import { TtlCache } from "../shared/ttl-cache.js";
+import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import { defaultEmbeddingDir } from "../config.js";
 import type {
   MemoryCaptureTurnInput,
@@ -75,6 +76,8 @@ export type PatentMemoryProviderOptions = {
   cacheTtlMs?: number;
   /** 降级日志（语义/重排失败时记录）。 */
   logger?: { warn?: (...args: unknown[]) => void };
+  /** 运行时状态聚合（可选，可观测性出口）；不传时行为与现状一致。 */
+  stats?: KnowledgeRuntimeStats;
 };
 
 export class PatentMemoryProvider implements MemoryResolver {
@@ -91,6 +94,7 @@ export class PatentMemoryProvider implements MemoryResolver {
   private readonly rerankTopN: number;
   private readonly semanticIndexEnabled: boolean;
   private readonly logger?: { warn?: (...args: unknown[]) => void };
+  private readonly stats?: KnowledgeRuntimeStats;
   private semanticCards?: WikiCardVectorIndex;
   private readonly semanticBreaker: CircuitBreaker;
   private readonly rerankBreaker: CircuitBreaker;
@@ -110,8 +114,17 @@ export class PatentMemoryProvider implements MemoryResolver {
     this.rerankTopN = options.rerankTopN ?? 16;
     this.semanticIndexEnabled = options.semanticIndexEnabled ?? true;
     this.logger = options.logger;
+    this.stats = options.stats;
     this.semanticBreaker = new CircuitBreaker({ logger: options.logger });
     this.rerankBreaker = new CircuitBreaker({ logger: options.logger });
+    this.stats?.registerBreaker("patent:semantic", this.semanticBreaker);
+    this.stats?.registerBreaker("patent:rerank", this.rerankBreaker);
+    // KG FTS 探测（诊断用）：kgAdapter.ftsMode 反映 kg-store 实际生效的分词器
+    // （trigram/unicode61/none；none 表示 FTS5 不可用已回退 LIKE）。
+    if (this.stats && options.kgAdapter) {
+      const mode = options.kgAdapter.ftsMode();
+      this.stats.setKgFtsMode(mode === "none" ? "like" : mode);
+    }
     const cacheTtlMs = options.cacheTtlMs ?? 60_000;
     this.cache = cacheTtlMs > 0 ? new TtlCache<string, string>({ ttlMs: cacheTtlMs }) : undefined;
   }
@@ -121,6 +134,7 @@ export class PatentMemoryProvider implements MemoryResolver {
     if (this.cache && cacheKey) {
       const cached = this.cache.get(cacheKey);
       if (cached !== undefined) {
+        this.stats?.recordCacheHit();
         return {
           systemContext: cached || undefined,
           diagnostics: [
@@ -128,6 +142,7 @@ export class PatentMemoryProvider implements MemoryResolver {
           ],
         };
       }
+      this.stats?.recordCacheMiss();
     }
 
     const diagnostics: MemoryDiagnostic[] = [];
@@ -240,6 +255,7 @@ export class PatentMemoryProvider implements MemoryResolver {
       this.semanticBreaker,
       [],
       async () => {
+        this.stats?.recordSemanticCall();
         const [queryVector] = await embedding.embed([input.query]);
         if (!queryVector || queryVector.length === 0) return [];
         const hits = vectorDb.search("kg", Float32Array.from(queryVector), this.graphLimit);
@@ -255,7 +271,10 @@ export class PatentMemoryProvider implements MemoryResolver {
         }
         return graphHits;
       },
-      error => this.logger?.warn?.(`[patent-memory] KG 语义召回失败，降级为纯关键词: ${errorMessage(error)}`),
+      error => {
+        this.stats?.recordSemanticFailure();
+        this.logger?.warn?.(`[patent-memory] KG 语义召回失败，降级为纯关键词: ${errorMessage(error)}`);
+      },
     );
   }
 
@@ -313,6 +332,7 @@ export class PatentMemoryProvider implements MemoryResolver {
           this.semanticBreaker,
           undefined,
           async () => {
+            this.stats?.recordSemanticCall();
             const remaining = this.cardLimit - loaded;
             const candidateLimit = this.rerank ? remaining * 3 : remaining;
             const hits = await semantic.search(input.query, candidateLimit);
@@ -327,8 +347,10 @@ export class PatentMemoryProvider implements MemoryResolver {
               if (loaded >= this.cardLimit) break;
             }
           },
-          error =>
-            this.logger?.warn?.(`[patent-memory] wiki 语义召回失败，降级为图谱/关键词路径: ${errorMessage(error)}`),
+          error => {
+            this.stats?.recordSemanticFailure();
+            this.logger?.warn?.(`[patent-memory] wiki 语义召回失败，降级为图谱/关键词路径: ${errorMessage(error)}`);
+          },
         );
       }
     }
@@ -339,15 +361,21 @@ export class PatentMemoryProvider implements MemoryResolver {
   private async tryRerankOrder<T>(query: string, items: T[], toText: (item: T) => string, topN: number): Promise<T[]> {
     const rerank = this.rerank;
     if (!rerank || items.length <= 1) return items;
+    // topN<=0 视为"全部候选参与"（与 legal provider 的 rerankTopN 语义一致）。
+    const effectiveTopN = topN > 0 ? topN : items.length;
     return guarded(
       this.rerankBreaker,
       items,
       async () => {
+        this.stats?.recordRerankCall();
         const docs = items.map(toText);
-        const results = await rerank.rerank(query, docs, topN);
+        const results = await rerank.rerank(query, docs, effectiveTopN);
         return results.map(result => items[result.index]).filter((item): item is T => item !== undefined);
       },
-      error => this.logger?.warn?.(`[patent-memory] rerank 失败，保持原序: ${errorMessage(error)}`),
+      error => {
+        this.stats?.recordRerankFailure();
+        this.logger?.warn?.(`[patent-memory] rerank 失败，保持原序: ${errorMessage(error)}`);
+      },
     );
   }
 
@@ -365,9 +393,14 @@ export class PatentMemoryProvider implements MemoryResolver {
       this.semanticCards = index;
       // 后台预热：wiki 卡静态，首次全量索引后持久化到 storePath（知识库唯一运行时写路径），
       // 不阻塞当前检索。写入失败由 VectorIndex.persist 的 logger.warn 报告。
-      void index.warmup().catch(error => {
-        this.logger?.warn?.(`[patent-memory] wiki 语义索引预热失败，search 时会重试: ${errorMessage(error)}`);
-      });
+      this.stats?.setWikiSemanticIndexState("warming");
+      void index
+        .warmup()
+        .then(() => this.stats?.setWikiSemanticIndexState("ready"))
+        .catch(error => {
+          this.stats?.setWikiSemanticIndexState("failed");
+          this.logger?.warn?.(`[patent-memory] wiki 语义索引预热失败，search 时会重试: ${errorMessage(error)}`);
+        });
     }
     return this.semanticCards;
   }

@@ -94,6 +94,12 @@ export class KgStore {
     this.stmtListByType = this.db.prepare("SELECT id FROM nodes WHERE node_type = ? LIMIT ?");
   }
 
+  /** 当前生效的 FTS 模式（诊断用）：trigram 表 / unicode61 旧表 / 无 FTS（LIKE 降级）。 */
+  ftsMode(): "trigram" | "unicode61" | "none" {
+    if (this.stmtFtsSearch === null) return "none";
+    return this.ftsTable === "nodes_fts_trigram" ? "trigram" : "unicode61";
+  }
+
   /** 按 id 查询节点（带缓存）。 */
   getNode(id: string): KgNode | undefined {
     if (this.nodeCache.has(id)) return this.nodeCache.get(id);

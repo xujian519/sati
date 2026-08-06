@@ -16,6 +16,8 @@ import type {
 import type { CanonicalUsage } from "../../model/index.js";
 import type { TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 import type { SessionInfo as ProjectSessionInfo } from "../../session/index.js";
+import type { KnowledgeCapability } from "../../knowledge/diagnostics.js";
+import type { KnowledgeRuntimeStatsSnapshot } from "../../knowledge/shared/knowledge-stats.js";
 import type { SatiElicitationAnswer, SatiElicitationQuestion } from "../../tool/elicitation/SatiElicitationChannel.js";
 import type {
   WebListProjectsResult as WebUiListProjectsResult,
@@ -404,6 +406,36 @@ export type AlwaysOnRerunPlanResult = {
   error?: { code: string; message: string };
 };
 
+// ---------------------------------------------------------------------------
+// Knowledge capabilities wire shapes (gateway `knowledge_capabilities` 出口，
+// 数据源与 diagnostics.resolveKnowledgeCapabilities 同源，避免静默降级盲区）。
+//
+// 与 Always-On shapes 不同，这些类型**不**定义在浏览器镜像
+// `src/web/client/protocol.ts`：浏览器不直接调用该方法（UI 经 REST 代理
+// `ui/server/knowledge.js` → sati-bridge 转发），类型仅供 Node 侧消费。
+// 直接复用 diagnostics 的 canonical 类型（KnowledgeCapability /
+// KnowledgeRuntimeStatsSnapshot），避免 wire 层与诊断层漂移。
+// ---------------------------------------------------------------------------
+
+export type KnowledgeCapabilitiesInput = {
+  /** 项目根目录（缺省用 gateway 默认项目）。 */
+  projectKey?: string;
+};
+
+export type KnowledgeCapabilitiesResult = {
+  /** 知识库数据根目录（探测结果，供 UI 展示）。 */
+  dataDir: string;
+  /** 能力清单（含运行时能力项 kg-fts-tokenizer / wiki-semantic-index）。 */
+  capabilities: KnowledgeCapability[];
+  /** 是否已配置 embedding 客户端。 */
+  embeddingConfigured: boolean;
+  /** 是否已配置 rerank 客户端。 */
+  rerankConfigured: boolean;
+  /** 运行时统计快照（缓存/语义/重排计数 + 熔断器状态）。 */
+  stats?: KnowledgeRuntimeStatsSnapshot;
+  error?: { code: string; message: string };
+};
+
 // Always-On discovery-plan wire shapes are defined once in the browser-safe
 // `src/web/client/protocol.ts` and re-exported here under the canonical names,
 // so the two sides cannot drift. Conventions: `projectKey` is the absolute
@@ -546,4 +578,12 @@ export interface Gateway {
   alwaysOnArchiveCycle?(input: AlwaysOnArchiveCycleInput): Promise<AlwaysOnArchiveCycleResult>;
   /** Queue → apply → finalize a work cycle in one RPC (composition of apply). */
   alwaysOnApplyCycle?(input: AlwaysOnApplyCycleInput): Promise<AlwaysOnApplyCycleResult>;
+
+  /**
+   * 知识库能力自检（可观测性出口）：返回能力清单 + 运行时统计（熔断器/
+   * 缓存/语义失败计数），把静默降级（FTS5 缺失回退 LIKE 等）暴露给 UI/自动化。
+   *
+   * Optional — 不拥有知识库装配的 gateway 实现可缺省；host 应做 feature-detect。
+   */
+  knowledgeCapabilities?(input: KnowledgeCapabilitiesInput): Promise<KnowledgeCapabilitiesResult>;
 }

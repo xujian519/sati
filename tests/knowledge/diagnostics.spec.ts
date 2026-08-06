@@ -6,9 +6,25 @@ import {
   resolveKnowledgeCapabilities,
 } from "../../src/knowledge/diagnostics.js";
 import type { KnowledgeDbPaths } from "../../src/knowledge/config.js";
+import type { KnowledgeRuntimeStatsSnapshot } from "../../src/knowledge/shared/knowledge-stats.js";
 
 function paths(overrides: Partial<KnowledgeDbPaths> = {}): KnowledgeDbPaths {
   return { dataDir: "/tmp/sati-knowledge-test", ...overrides };
+}
+
+function statsSnapshot(overrides: Partial<KnowledgeRuntimeStatsSnapshot> = {}): KnowledgeRuntimeStatsSnapshot {
+  return {
+    cacheHits: 0,
+    cacheMisses: 0,
+    semanticCalls: 0,
+    semanticFailures: 0,
+    rerankCalls: 0,
+    rerankFailures: 0,
+    breakers: [],
+    kgFtsMode: "unknown",
+    wikiSemanticIndex: "disabled",
+    ...overrides,
+  };
 }
 
 describe("resolveKnowledgeCapabilities", () => {
@@ -72,6 +88,63 @@ describe("resolveKnowledgeCapabilities", () => {
     });
     const legal = caps.find(cap => cap.id === "legal-fts");
     assert.equal(legal?.status, "missing");
+  });
+
+  it("不传运行时快照时不追加运行时能力项", () => {
+    const caps = resolveKnowledgeCapabilities(paths(), { embeddingConfigured: false, rerankConfigured: false });
+    assert.ok(!caps.some(cap => cap.id === "kg-fts-tokenizer"));
+    assert.ok(!caps.some(cap => cap.id === "wiki-semantic-index"));
+  });
+
+  it("trigram 模式：kg-fts-tokenizer=ready 且无升级提示", () => {
+    const caps = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ kgFtsMode: "trigram" }),
+    });
+    const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
+    assert.equal(fts?.status, "ready");
+    assert.equal(fts?.detail, "trigram");
+  });
+
+  it("unicode61 模式：ready 但提示升级 trigram 脚本", () => {
+    const caps = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ kgFtsMode: "unicode61" }),
+    });
+    const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
+    assert.equal(fts?.status, "ready");
+    assert.match(fts?.detail ?? "", /migrate-kg-fts-trigram/);
+  });
+
+  it("like 降级（桌面端 FTS5 缺失）：kg-fts-tokenizer=missing", () => {
+    const caps = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ kgFtsMode: "like" }),
+    });
+    const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
+    assert.equal(fts?.status, "missing");
+    assert.match(fts?.detail ?? "", /LIKE/);
+  });
+
+  it("wiki 语义索引：warming/ready 为 ready，failed 为 missing", () => {
+    const warming = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: true,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ wikiSemanticIndex: "warming" }),
+    });
+    assert.equal(warming.find(cap => cap.id === "wiki-semantic-index")?.status, "ready");
+    assert.match(warming.find(cap => cap.id === "wiki-semantic-index")?.detail ?? "", /预热中/);
+
+    const failed = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: true,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ wikiSemanticIndex: "failed" }),
+    });
+    assert.equal(failed.find(cap => cap.id === "wiki-semantic-index")?.status, "missing");
+    assert.match(failed.find(cap => cap.id === "wiki-semantic-index")?.detail ?? "", /预热失败/);
   });
 });
 

@@ -6,6 +6,7 @@
  */
 
 import type { KnowledgeDbPaths } from "./config.js";
+import type { KnowledgeRuntimeStatsSnapshot } from "./shared/knowledge-stats.js";
 
 export type KnowledgeCapabilityStatus = "ready" | "missing" | "disabled";
 
@@ -19,7 +20,9 @@ export type KnowledgeCapability = {
     | "case-law"
     | "semantic-embedding"
     | "semantic-vectors"
-    | "rerank";
+    | "rerank"
+    | "kg-fts-tokenizer"
+    | "wiki-semantic-index";
   /** 人类可读名称。 */
   label: string;
   status: KnowledgeCapabilityStatus;
@@ -32,6 +35,11 @@ export type KnowledgeCapabilitiesOptions = {
   embeddingConfigured: boolean;
   /** 是否已配置 rerank 客户端（memory.embedding.rerank）。 */
   rerankConfigured: boolean;
+  /**
+   * 运行时统计快照（可选）。提供时追加两项运行时能力（KG FTS tokenizer、
+   * wiki 语义索引状态），把静默降级（如桌面端 FTS5 缺失回退 LIKE）暴露出来。
+   */
+  runtime?: KnowledgeRuntimeStatsSnapshot;
 };
 
 /** 解析知识系统能力清单（不打开数据库，仅按路径探测与配置判定）。 */
@@ -39,7 +47,7 @@ export function resolveKnowledgeCapabilities(
   paths: KnowledgeDbPaths,
   options: KnowledgeCapabilitiesOptions,
 ): KnowledgeCapability[] {
-  return [
+  const capabilities: KnowledgeCapability[] = [
     {
       id: "patent-kg",
       label: "专利知识图谱",
@@ -92,6 +100,32 @@ export function resolveKnowledgeCapabilities(
       detail: options.rerankConfigured ? undefined : "memory.embedding.rerank",
     },
   ];
+  // 运行时能力项：仅在有运行时快照时追加（探测结果来自 provider 打点）。
+  const runtime = options.runtime;
+  if (runtime && runtime.kgFtsMode !== "unknown") {
+    const mode = runtime.kgFtsMode;
+    capabilities.push({
+      id: "kg-fts-tokenizer",
+      label: "KG FTS 分词器",
+      status: mode === "like" ? "missing" : "ready",
+      detail:
+        mode === "trigram"
+          ? "trigram"
+          : mode === "unicode61"
+            ? "unicode61（建议执行 scripts/migrate-kg-fts-trigram.mjs 升级 trigram）"
+            : "FTS5 不可用已回退 LIKE（如桌面端捆绑 Node 未编译 FTS5）",
+    });
+  }
+  if (runtime && runtime.wikiSemanticIndex !== "disabled") {
+    const state = runtime.wikiSemanticIndex;
+    capabilities.push({
+      id: "wiki-semantic-index",
+      label: "wiki 语义索引",
+      status: state === "failed" ? "missing" : "ready",
+      detail: state === "warming" ? "预热中" : state === "failed" ? "预热失败（已回退关键词三路）" : undefined,
+    });
+  }
+  return capabilities;
 }
 
 /** 格式化为单行紧凑清单（id=status(提示)，供 console 输出）。 */

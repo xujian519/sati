@@ -18,6 +18,12 @@ export {
   type KnowledgeCapabilityLogger,
 } from "./diagnostics.js";
 export { KgStore, type KgNeighbor, type KgPathEdge } from "./shared/kg-store.js";
+export {
+  KnowledgeRuntimeStats,
+  type KgFtsMode,
+  type KnowledgeRuntimeStatsSnapshot,
+  type WikiSemanticIndexState,
+} from "./shared/knowledge-stats.js";
 export { CaseLawSearchEngine } from "./case-law/index.js";
 export type {
   CaseLawChunk,

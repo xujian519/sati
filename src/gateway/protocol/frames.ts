@@ -57,7 +57,8 @@ export type WsGatewayMethod =
   | "always_on_read_report"
   | "always_on_list_cycles"
   | "always_on_archive_cycle"
-  | "always_on_apply_cycle";
+  | "always_on_apply_cycle"
+  | "knowledge_capabilities";
 
 export type WsRequestFrame = {
   type: "request";
