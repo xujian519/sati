@@ -1,11 +1,21 @@
 # 引入 XiaoNuo legal-bus「灵活计划」层 — 设计文档
 
-- 状态：草案（待评审）
+- 状态：**已实施**（P1–P4 落地，2026-08：`src/patent/flexible-plan.ts` + `flexible-plan-store.ts`；P3 的 workflow 断点恢复以 `workflow-store.ts` 持久化 + runs 落盘形式交付；checklist/intent-detector/orchestrations 未移植——以现有 checker/slop 确定性规则与 `patent_plan_task` 工具契约替代）
 - 日期：2026-08-04
 - 范围：仅 A1（flexible-plan 层），A2–A5 不在本期
 - 移植源：`/Users/xujian/projects/归档/XiaoNuo/src/legal-bus/`（FlexiblePlan / ChecklistEngine / LegalIntentDetector / LegalStateMachine / CaseStore）
 
 ---
+
+## 实施状态速览（2026-08 对照代码）
+
+| 条目 | 状态 | 代码位置 |
+|------|------|---------|
+| flexible-plan 阶段级状态机（增删改/确认/回退/法条判定） | ✅ 已实施 | `src/patent/flexible-plan.ts` |
+| 存储（`<caseId>.json` 原子写） | ✅ 已实施 | `src/patent/flexible-plan-store.ts` |
+| `toManifest()` 交 workflow 执行 | ✅ 已实施 | `flexible-plan.ts` → `src/patent/workflow.ts` |
+| workflow 断点恢复 / runs 持久化 | ✅ 已实施（runs 落盘） | `src/patent/workflow-store.ts`、`paths.ts`（CASE_WORKFLOW_RUNS_REL） |
+| checklist / intent-detector / orchestrations 移植 | ❌ 未实施（确定性规则复用 checker/slop；意图检测走 agent 提示词协议） | — |
 
 ## 1. 背景与目标
 

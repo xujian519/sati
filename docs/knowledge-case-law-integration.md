@@ -2,7 +2,7 @@
 
 > 状态：已实现（Phase 1：工具显式调用）
 > 涉及工具：`patent_case_search`（domain: patent）
-> 数据源：外接 `knowledge.db`（判例全文库，**通过其他渠道交付给最终用户，不随代码仓库分发**）
+> 数据源：外接 `knowledge.db`（判例全文库，**通过其他渠道交付给最终用户，不随代码仓库分发**；知识库统一接入见 `docs/design/import-xiaonuo-knowledge.md`，默认目录自 2026-08 起为 `~/.sati/knowledge/`）
 
 ## 1. 用途
 
@@ -25,8 +25,8 @@ export SATI_CASE_DB=/path/to/knowledge.db
 pnpm dev
 
 # 方式 B：放入默认目录（自动探测）
-mkdir -p ~/.mady/knowledge
-cp /path/to/knowledge.db ~/.mady/knowledge/knowledge.db
+mkdir -p ~/.sati/knowledge
+cp /path/to/knowledge.db ~/.sati/knowledge/knowledge.db
 
 # 方式 C：自定义数据目录
 export SATI_KNOWLEDGE_DIR=/custom/data/dir   # 该目录下需存在 knowledge.db 或 cases.db

@@ -1,10 +1,6 @@
-<p align="center">
-  <img src="assets/banner.png" alt="Sati" width="680"/>
-</p>
+# Sati（正念智能体）
 
-<p align="center">
-  面向专利工程师、专利代理人、专利律师与知识产权从业者的可扩展桌面端专利智能体。
-</p>
+> 面向专利工程师、专利代理人、专利律师与知识产权从业者的可扩展桌面端专利智能体。
 
 ---
 
@@ -26,10 +22,11 @@
 
 Sati 围绕专利业务的真实链路构建能力：
 
-- **覆盖专利全流程**：技术交底书理解（PFE 三元组提取）→ 现有技术检索 → 新颖性 / 创造性分析（单独对比、三步法）→ 权利要求与说明书撰写（四领域模板、形式自检）→ 审查意见答复 → 侵权比对（全面覆盖 + 等同原则）→ 无效宣告（证据组合、成功率评估）→ 形式 / 充分公开 / 清楚性审查与统一质量评测。
-- **内建专利知识底座**：IPC A–H 八部分类与 138 条审查标准、1500+ 张专利知识卡片、专利知识图谱（引用链可达 5 跳）、9000+ 部法律法规全文检索——分析结论有法条、有依据、可溯源。
-- **工程化质量保障**：声明式五阶段工作流（解析→检索→逐特征比对→结论→人工确认）、人机协作计划状态机、法条引用自动核验、风险表述免责与审批挂起等质量门禁，降低"看起来专业、实则出错"的风险。
-- **可扩展，随业务生长**：23 个专利技能（其中 9 个专家角色可作为子代理被调度）、7 个内置专利工具、原生支持 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)，技能与工具可随团队的审查实践持续沉淀。
+- **覆盖专利全流程**：技术交底书理解（PFE 三元组提取）→ 现有技术检索 → 新颖性 / 创造性分析（单独对比、三步法）→ 权利要求与说明书撰写（四领域模板、形式自检）→ 审查意见答复 → 侵权比对（全面覆盖 + 等同原则）→ 无效宣告（逐特征证据收集、证据组合、成功率评估）→ 形式 / 充分公开 / 清楚性审查与统一质量评测。
+- **内建统一专利知识底座**：以 `knowledge.db` 为单一数据源，零重新构建——专利知识图谱（21.5 万+ 节点：IPC 分类 / 判例 / 证据 / 法条，引用链可达 5 跳）、7.4 万+ 无效复审决定与 6.9 千+ 专利判决全文检索（FTS5 trigram 全文 + 14.4 万条 bge-m3 语义向量双路召回）、法律法规全文（96 部法规条文 + 9,000+ 条目 laws-full 降级库）、1,500+ 张专利知识 wiki 卡片与 138 张审查标准卡片（IPC A–H 八部分类）——分析结论有法条、有依据、可溯源。
+- **专利数据引擎**：内置 17 个专利域工具，覆盖专利检索（`patent_search`）、按号元数据（`patent_metadata`）、全球法律状态（`patent_legal_status`）、知识图谱查询（`patent_kg_query`）、判例全文检索（`patent_case_search`）、附图智能分析与检索（`analyze_patent_figure` / `search_patent_figure`）、工作流执行（`patent_workflow` / `patent_workflow_run`）——结构化 TS 数据通道，替代"浏览器降级取数"。
+- **工程化质量保障**：声明式工作流引擎（解析→检索→逐特征比对→结论→人工确认）、阶段级灵活计划（运行中增删改阶段 + 检查点回退）、人机协作计划状态机、宪法规则引擎（声明式 YAML 规则 + `rule_check` + 输出门禁）、法条引用自动核验、风险表述免责与审批挂起等质量门禁，降低"看起来专业、实则出错"的风险。
+- **可扩展，随业务生长**：26 个专利技能（其中 9 个专家角色可作为子代理被调度）、17 个专利域内置工具 + 免费无 key 学术论文检索（arXiv / OpenAlex / Semantic Scholar / Crossref 四源）、原生支持 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)，技能与工具可随团队的审查实践持续沉淀。
 
 Sati 以「WorkSpace」为基本单位，将文件、记忆、技能在项目级别完整隔离与沉淀，配套 **白盒记忆**、**智能路由**、**Always-on** 三大能力，跨前端（Web / CLI / IM）行为一致——只为让知识产权从业者，在长周期的多项目并行中，守住每一念。
 
@@ -185,12 +182,20 @@ model:
 **3. 启动服务**
 
 ```bash
-cd ui && npm run dev     # 开发模式 (HMR)，访问 http://localhost:5173
+pnpm dev          # 开发模式（HMR），访问 http://localhost:5173
 # 或
-cd ui && npm run start   # 生产模式，访问 http://localhost:3001
+pnpm server       # 生产模式，访问 http://localhost:3001
 ```
 
+> 也可进入 `ui/` 目录单独启动前端（`cd ui && pnpm dev`）。
+
 ---
+
+## 🖥️ 桌面端
+
+Sati 提供 Electron 桌面壳（`apps/desktop/`），当前维护 **macOS（DMG，arm64）** 与 **Windows（NSIS exe，x64/arm64）** 双平台构建与发布（mac 走 `apps/desktop/scripts/release.sh` 签名 + 公证，win 走 `build-win.bat`）；Linux 桌面端不维护。
+
+桌面端内置 node/bun 运行时与三件套 bundle（sati-main / satiui / sati-memory-core），启动时自动拉起本地 Gateway 服务，支持自动更新（`release(desktop)` 版本与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护）。macOS 专属行为（应用菜单 / About 面板 / Dock / 关闭即隐藏）在 Windows 上不可用。
 
 ## 🛠️ 扩展与插件 (Extension Protocol)
 
@@ -202,7 +207,6 @@ Sati 采用开放的插件架构，插件代码与开源核心严格隔离。开
 - **Custom Memory**: 允许接入自定义的记忆存储 Provider。
 
 ---
-
 
 ## 📄 许可证
 

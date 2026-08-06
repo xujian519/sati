@@ -1,11 +1,21 @@
 # Gateway 协议版本化与 ui/server 边界检查 — 落地草案
 
-- 状态：草案（待评审）
+- 状态：**Part A 已实施**（2026-08-05，协议 1.1 上线：`version.ts` 维护变更表 + hello MAJOR 协商 `isProtocolCompatible` + 新增可选 discovery-plan 方法）；**Part B 进行中**（S1 冻结增量已落地：`ui/eslint.config.js` 配置 `import-x/no-restricted-paths` 白名单；S2 逐个收敛、S3 归零、S4 最终态待排期）
 - 日期：2026-08-05
 - 关联：`docs/design/gateway-discovery-plans.md`（首个按本规范实施的协议扩展）
 - 约束来源：`CLAUDE.md`"网关协议：前后端通过 gateway WebSocket 帧通信（WsRequestFrame/WsResponseFrame），改协议需版本化"
 
 ---
+
+## 实施状态速览（2026-08 对照代码）
+
+| 条目 | 状态 | 代码位置 |
+|------|------|---------|
+| 版本常量 + 变更表 | ✅ 已实施 | `src/gateway/protocol/version.ts`（`SATI_GATEWAY_PROTOCOL_VERSION = "1.1"`，变更表注释 1.0 → 1.1） |
+| MAJOR 握手协商（`protocol_mismatch`） | ✅ 已实施 | `src/gateway/server/GatewayWsConnection.ts` + `isProtocolCompatible`（Web 镜像 `SATI_GATEWAY_PROTOCOL_VERSION_WEB = "1.0"`，同 MAJOR 可连） |
+| 可选方法 feature-detect（`not_configured`） | ✅ 已实施 | `GatewayWsConnection.ts` always_on_* / skill_* 分支 |
+| Part B S1 冻结增量（ESLint 白名单） | ✅ 已落地 | `ui/eslint.config.js` `import-x/no-restricted-paths` |
+| Part B S2–S4 收敛归零 | ⏳ 待排期 | `ui/server` 仍存在对 `src/` 的深层导入 |
 
 ## Part A：Gateway 协议版本化
 

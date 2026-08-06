@@ -283,11 +283,10 @@ node scripts/bootstrap-sati-config.mjs
 
 ## 启动 Sati
 
-开发模式，支持 HMR：
+开发模式，支持 HMR（dev-launcher 并发启动 gateway + server + 前端）：
 
 ```bash
-cd ui
-npm run dev
+pnpm dev
 ```
 
 打开 <http://localhost:5173>。
@@ -295,16 +294,17 @@ npm run dev
 生产模式：
 
 ```bash
-cd ui
-npm run start
+pnpm server
 ```
 
-打开 <http://localhost:3001>。
+打开 <http://localhost:3001>（gateway 默认 `ws://127.0.0.1:19789/ws`）。
+
+> 也可进入 `ui/` 目录单独启动前端：`cd ui && pnpm dev`（开发）/ `cd ui && pnpm start`（生产）。
 
 如果默认端口已被占用，可以通过环境变量换端口，例如：
 
 ```bash
-SERVER_PORT=3002 SATI_GATEWAY_PORT=18790 SATI_GATEWAY_URL=ws://127.0.0.1:18790/ws npm run start
+SERVER_PORT=3002 SATI_GATEWAY_PORT=19790 SATI_GATEWAY_URL=ws://127.0.0.1:19790/ws pnpm server
 ```
 
 ## 常见问题

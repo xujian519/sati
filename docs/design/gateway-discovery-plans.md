@@ -1,9 +1,21 @@
 # Discovery 链路 Gateway 化 — 实施计划
 
-- 状态：草案（待评审）
+- 状态：**已实施**（2026-08-05 随协议 1.1 落地：`always_on_list_plans` / `always_on_read_report` / `always_on_list_cycles` / `always_on_archive_cycle` / `always_on_apply_cycle` 五个可选方法已上线，见 `src/gateway/protocol/version.ts` 变更表）
 - 日期：2026-08-05
 - 关联：`docs/design/gateway-protocol-versioning.md`（协议版本化与边界检查草案）
 - 原则：**端 → gateway 协议 → 业务服务**，消除 ui/server 中转与重复实现
+
+---
+
+## 实施状态速览（2026-08 对照代码）
+
+| 条目 | 状态 |
+|------|------|
+| 协议 MINOR bump 1.0 → 1.1 + 变更表 | ✅ 已实施（`src/gateway/protocol/version.ts`） |
+| 五个可选 discovery 方法（入参/出参类型） | ✅ 已实施（`src/gateway/protocol/types.ts`） |
+| InProcessGateway / RemoteGateway / GatewayWsConnection 分发 | ✅ 已实施 |
+| 前端直连 gateway（P2b 直连聊天双轨） | ✅ 已实施（`docs/design/gateway-chat-direct-connect.md` P2b-0） |
+| `ui/server` discovery 业务完全退役 | ⏳ 部分：REST 薄适配仍保留（S2/S3 收敛排期中，见 gateway-protocol-versioning Part B） |
 
 ---
 

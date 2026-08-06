@@ -244,4 +244,15 @@
 
 ## 七、已完成项
 
+> **实施状态：6 个阶段全部完成**（2026-08-03 ~ 08-04，落地记录见 `overview.md`）。以下为原始计划验收项，均已达成并通过 QA（445/445 UI 测试、TypeScript 零错误、品牌色全量迁移 blue-* → brand-* 339 处、用户可见 "Sati" 残留清零）。
+
 - [x] 桌面端 logo 旁添加"正念智能体"文字 (SidebarV2.tsx, splash.html, onboarding.html, main.ts, splash-window.ts, onboarding-window.ts, manifest.json, index.html)
+- [x] 阶段 1 设计令牌基建：品牌色阶 `--brand-50`~`--brand-900`、四层高程阴影、暗色模式层次提升（card 4%→7%）、Tailwind brand-* 映射、滚动条 8px→6px
+- [x] 阶段 2 侧边栏美化：项目/会话选中态品牌色 + 左侧高亮条、未读指示器、空状态引导、拖拽手柄品牌色
+- [x] 阶段 3 主内容区美化：面包屑、Tab 选中态、头部分隔线、面板高程
+- [x] 阶段 4 聊天界面美化：Composer 聚焦环、发送按钮、MessageRowV2、代码块、打字机光标品牌色
+- [x] 阶段 5 启动页 & 引导页对齐：splash 径向渐变晕染 + logo 微光、onboarding 聚焦态与预设按钮
+- [x] 阶段 6 全局润色：`::selection`、`button:active` 微缩放、focus-visible 品牌色、卡片 hover 高程
+- [x] 全量修复：blue-* → brand-* 迁移（50 文件 339 处，保留 fileIcons/MessageComponent 语义色）、"Sati" → "正念智能体" 品牌名统一（9 文件，保留 Agent 标识符/文件系统路径/测试数据）
+
+> 注：本计划基于 Vite 7 编写；UI 已随依赖升级到 **Vite 8**（vite ^8.2.0），样式与构建链路不受影响。

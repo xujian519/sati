@@ -1,6 +1,6 @@
 # 路径 C 实施方案：以 nuo-patent 为 TS 数据引擎增强 Sati 专利 skill 生态
 
-> 状态：**草案（待确认决策点后进入实施）**
+> 状态：**已实施**（Phase 0 / 1 / 2a 完成，2026-08；Phase 2b 本地库适配器未实施、Phase 3 部分完成；决策点确认见 §2 与文末"实施记录"）
 > 关联分析：`docs/` 之前轮次对 nuo-patent 的深度探查（能力画像、重叠矩阵、路径 A/B/C 评估）
 > 目标读者：Sati 核心维护者、专利域技能维护者
 
@@ -51,12 +51,12 @@
 
 ## 2. 决策点与推荐（实施前需确认）
 
-| # | 决策点 | 推荐 | 备选 | 影响 |
-|---|--------|------|------|------|
-| D1 | nuo-patent 依赖引入方式 | **git 依赖**（`"nuo-patent": "github:xujian/nuo-patent#v2.2.0"`） | pnpm workspace 成员；或 child_process 调 CLI | Phase 1 前置 |
-| D2 | Phase 2 检索实现位置 | **nuo-patent 仓库新增 `searchPatents()`**（Google Patents 搜索结果页解析），Sati 侧只封装 | Sati 侧直接对接本地 PG 库 | 决定 Phase 2a/2b 分工 |
-| D3 | 本地 7520 万专利库对接 | **可选适配器**（Sati 配置层，默认关闭，不随开源分发强制启用） | 不做 | 决定 Phase 2b 是否实施 |
-| D4 | PDF 下载是否封装为工具 | **Phase 3 可选项**（`patent_pdf_download`，`isDestructive: true`） | 不封装（沿用 patent-download skill 的 python 脚本） | 影响权限模型 |
+| # | 决策点 | 推荐 | 备选 | 影响 | 实施结论 |
+|---|--------|------|------|------|---------|
+| D1 | nuo-patent 依赖引入方式 | **git 依赖**（`"nuo-patent": "github:xujian/nuo-patent#v2.2.0"`） | pnpm workspace 成员；或 child_process 调 CLI | Phase 1 前置 | ✅ 采用 git 依赖，锁定 `#v2.3.1` |
+| D2 | Phase 2 检索实现位置 | **nuo-patent 仓库新增 `searchPatents()`**（Google Patents 搜索结果页解析），Sati 侧只封装 | Sati 侧直接对接本地 PG 库 | 决定 Phase 2a/2b 分工 | ✅ 采用 nuo-patent 侧实现（Phase 2a 完成） |
+| D3 | 本地 7520 万专利库对接 | **可选适配器**（Sati 配置层，默认关闭，不随开源分发强制启用） | 不做 | 决定 Phase 2b 是否实施 | ❌ 未实施（本地 PG 库适配器未开工） |
+| D4 | PDF 下载是否封装为工具 | **Phase 3 可选项**（`patent_pdf_download`，`isDestructive: true`） | 不封装（沿用 patent-download skill 的 python 脚本） | 影响权限模型 | ❌ 未实施（沿用 patent-download skill 的 Python 脚本） |
 
 > D1 依赖用户对 nuo-patent 仓库发布策略的取舍；D2/D3 影响工作量约 ±2 人日。
 
@@ -290,10 +290,24 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 
 ---
 
-## 10. 待确认项（实施前需用户拍板）
+## 10. 实施记录（2026-08 落地对照）
 
-1. **D1 依赖引入方式**：git 依赖（推荐）还是 pnpm workspace 成员？
-2. **D2 Phase 2 检索实现位置**：nuo-patent 仓库内新增（推荐）还是 Sati 侧独立实现？
-3. **D3 本地 7520 万库**：是否现在做 Phase 2b 可选适配器？
-4. **D4 PDF 工具**：Phase 3 是否封装 `patent_pdf_download`？
-5. **Phase 1 范围**：是否接受先只做两个只读工具（metadata + legal_status）作为首发？
+> 原"待确认项"已全部决策（见 §2 表格），本节记录实际落地与方案的偏差。
+
+**已落地（与方案一致）**
+
+- **Phase 0**：`package.json` dependencies 增加 `"nuo-patent": "github:xujian519/nuo-patent#v2.3.1"`；`pnpm-workspace.yaml` 的 `onlyBuiltDependencies` 追加 nuo-patent。
+- **Phase 1**：`src/tool/builtin/patentMetadata.ts` / `patentLegalStatus.ts` 两个只读工具 + `src/patent/data/nuo/mapper.ts`（`mapPatentData` 解析 PatentData JSON 字符串字段）+ `searchProvider.ts`（`createNuoSearchProvider` 适配 workflow 原子 `StageProvider.search`）；注册于 `src/tool/registry/createBuiltinRegistry.ts`（`annotate(tool, "patent")`）。
+- **Phase 2a**：nuo-patent 侧 `searchPatents` 完成，`patent_search` 工具可用；`searchProvider` 经 `patent_workflow_run` 工具接线生产。
+- **Phase 3（部分）**：`patent-retriever` 角色检索方法升级为"结构化工具优先"（`d0b73135`）；`docs/technical-debt-report.md` 已更新"浏览器降级取数"闭环状态。
+
+**未落地（按决策保留）**
+
+- Phase 2b 本地 7520 万专利库适配器（D3 未实施，`patent-search` skill 的本地 PostgreSQL 检索仍走 skill 层）。
+- `patent_pdf_download` 工具（D4 未实施，沿用 patent-download skill 的 Python 脚本）。
+- Phase 3 可选：google-patents-search / patent-download 的 Python 脚本替换未做。
+
+**后续扩展（超出本方案）**
+
+- patent 域工具后续扩展至 17 个：`patent_kg_query`（知识图谱查询）、`patent_case_search`（判例全文检索，见 `docs/knowledge-case-law-integration.md`）、`analyze_patent_figure` / `search_patent_figure`（附图分析/检索）、`patent_wiki_search`、`patent_eval`、`draft_claims` / `draft_specification` / `validate_specification` / `evaluate_evidence` 等。
+- flexible-plan 阶段级生命周期（见 `docs/design/import-xiaonuo-flexible-plan.md`）与 workflow-runs 持久化（`src/patent/workflow-store.ts`）。

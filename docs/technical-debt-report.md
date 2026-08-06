@@ -30,6 +30,17 @@
 
 ---
 
+## 已处理项（2026-08-04 ~ 08-06，后续跟进）
+
+- **`.reasonix` 入库**（原 P2-6）：已 `git rm --cached` 并加入 .gitignore（`ccc2d582 chore(cleanup)`）。
+- **edgeclaw-memory-core 包内嵌包**（原 P1-2）：已移入 `pnpm-workspace.yaml`（`src/context/memory/edgeclaw-memory-core`），消除 `file:` 依赖与 npm/pnpm 构建混用；`prebuild`/`predev` 统一经 `pnpm --filter edgeclaw-memory-core build` 重建，构建竞态已修复（`bd303462`）。
+- **测试覆盖「中偏差」**（原 P2-1）：router / cron / always-on / permission 等原零测试模块已补齐测试（`tests/` 现有 router 3、cron 2、always-on 5、permission 3、knowledge 28、patent 47 等）；依赖对齐与权限模块测试（`33364962`）、knowledge.db 复用测试（`40de3523`）。
+- **i18n en/zh-CN 不同步**（原 P2-4）：三份 JSON key 已对齐（`20e9218c` 同步 i18n）。
+- **README.zh.md 品牌矛盾**（原 P2-5）：README.zh.md 已与 README.md 统一为 Sati/专利定位；CLAUDE.md 目录结构已按 26 模块补齐、测试命名（`.spec.ts`/`.test.ts`）与 `ui/e2e/` 路径已修正（2026-08-03 会话）。
+- **build-knowledge-vectors 空路径 bug 与方案废弃**（原审计附注）：脚本已标注 **deprecated**，被 knowledge.db embeddings 复用取代（`fc472b90` / `b9eb337e`，见 `docs/design/import-xiaonuo-knowledge.md`）。
+
+---
+
 ## 已处理项（2026-08-02，审计当日）
 
 - **Docker 技术栈确认已放弃，全部资产已删除**：`Dockerfile`、`docker-compose.yml`、`docker-entrypoint.sh`、`.dockerignore`、`README_DOCKER*.md`、`.github/workflows/docker-build.yml` 及文档中的 Docker 部署章节已随提交 `8c0d0eca chore(docker): remove abandoned Docker deployment assets` 移除。原 P0 两条（Docker 入口引用不存在的 `pilotdeck.js`、Gateway 端口三处不一致）随之消除，不再构成债务。审计时两条均属实（前者本地复现 `MODULE_NOT_FOUND`，成因是 rebrand 提交将 `src/cli/pilotdeck.ts` 重命名为 `sati.ts` 但未同步 entrypoint；后者为 `Dockerfile:88` 18789 vs compose/代码默认 19789，成因是端口迁移提交漏改 Dockerfile）。
@@ -51,6 +62,8 @@
   - 双品牌 bridge/config：`pilotdeck-bridge.js` 与 `sati-bridge.js` import 列表逐行相同；`satiConfig{Config,Watcher,Reloader}.js` 与 `pilotdeckConfig{...}.js` 同构复制两份
 
 ### 2. 内嵌子包 `edgeclaw-memory-core`：包内嵌包 + 双构建 + 产物入库
+
+> ✅ **已处理（2026-08）**：子包已移入 `pnpm-workspace.yaml`，统一 pnpm 构建，见"已处理项（2026-08-04 ~ 08-06）"。以下为审计时的原始描述，保留作历史记录。
 
 - 它**不在** `pnpm-workspace.yaml` 中，靠根 `package.json:67` 的 `file:` 依赖挂载；`prebuild` 里 `cd ... && npm run build`（`package.json:18`）用 **npm**（主仓用 pnpm），且自己的 devDeps 不随 pnpm install 安装，依赖隐式提升到根 `node_modules`——构建链脆弱。
 - **32 个 `lib/` 编译产物文件被 git 追踪**（`git ls-files` 实测），同时根 `tsconfig.json` 会把子包 `src/` 再编译一遍进 `dist/`——同一包被编译两次，产物与源码双份入库，任何源码改动必须手动重编译提交，极易漂移。
@@ -82,8 +95,8 @@ CLAUDE.md 宣称的"protocol/runtime/config 三层 + index.ts barrel"：26 个�
 2. **无统一 logger，可观测性靠裸 console**：无独立 logger 模块；`src/` 约 135 处 `console.log/error`，其中 model streaming 与 router 的热路径（如 `streamModel.ts:158` `[model-debug] Request dumped`）是生产诊断信号却无级别/无关联 ID；**130+ 处无参 `catch {}` 静默吞错**（部分有注释属防御式，可接受；无注释的如 `ApiServerChannel.ts` 多处是隐患）。全局错误处理只存在于 `cli/sati.ts:456-463` 的 server 入口。
 3. **依赖版本爆炸**：`react@18.3.1` 与 `react@19.2.6` 并存（ui 声明 ^18 供 React DOM、根声明 ^19 供 Ink）、`express@4` 与 `express@5`（后者是 `@modelcontextprotocol/sdk` 硬依赖）、`katex@0.16.47` 与 `0.18.1`（`@types/katex` 只匹配旧版）——同一进程树跑双版本运行时。
 4. **i18n en/zh-CN 不同步**：文件一一对应（9 namespace），但 `common.json` en 472/zh 470、`chat.json` en 421/zh 413、`settings.json` en 1170/zh 1119，互有缺失 key——CLAUDE.md 的 i18n 强制规则实际未被执行到现状。
-5. **文档系统性过时**：CLAUDE.md 目录结构只列了 13/26 个目录；声称测试为 `*.test.ts` 而实际 93 个 `.spec.ts` vs 10 个 `.test.ts`；声称组件 feature-folder 而 20 个组件目录仅 3 个符合；`README.md`（Sati/专利定位）与 `README.zh.md`（PilotDeck 品牌、指向 OpenBMB）内容互相矛盾。
-6. **仓库卫生小债**：`.reasonix/`（4 个文件，含本机绝对路径与会话索引）**被 git 追踪且 .gitignore 漏配**——唯一确认的工具残留入库；`install.sh`（60KB）前后两段重复定义了 11+ 个同名函数（历史分支拼接证据）；git 对象库有一个 191MB 历史 pack；`ui/package.json` 的 `sharp` devDep 全仓无引用。
+5. **文档系统性过时**：> ⚠️ **大部分已处理（2026-08）**：CLAUDE.md 目录结构已补齐 26 模块并重写（见"已处理项"）；README.zh.md 已统一为 Sati 品牌；`docs/` 专项文档（知识库/判例/专利数据层/协议版本化等）已随代码更新。剩余持续项：文档随代码漂移的管理机制（可考虑文档 CI 检查）。
+6. **仓库卫生小债**：`.reasonix/`（4 个文件，含本机绝对路径与会话索引）**被 git 追踪且 .gitignore 漏配**——✅ 已处理（`ccc2d582` untrack + 加 .gitignore）；`install.sh`（60KB）前后两段重复定义了 11+ 个同名函数（历史分支拼接证据）；git 对象库有一个 191MB 历史 pack；`ui/package.json` 的 `sharp` devDep 全仓无引用。
 
 ---
 
@@ -98,7 +111,9 @@ CLAUDE.md 宣称的"protocol/runtime/config 三层 + index.ts barrel"：26 个�
 
 ## 建议修复优先级
 
-1. **立即（半天内，可验证）**：`.reasonix` 加入 .gitignore 并 `git rm --cached`。
-2. **短期**：把 `edgeclaw-memory-core` 移入 `pnpm-workspace.yaml`、删除独立 `package-lock.json`、`lib/` 产物改为构建时生成不入库；为 `router/`、`cron/`、`permission/` 补最小行为测试；统一 i18n 三份 JSON 的 key。
-3. **中期**：确定 `ui/server` 的演进方向（要么收敛到 `src/` 的 TS 分层并只 import barrel，要么逐步迁到 gateway API）——这是消除双后端/双 WebSocket/双记忆运行时的唯一路径；拆分 `AgentLoop.ts` 与 `InProcessGateway.ts`；完成全仓品牌收敛（README.zh.md、products 示例、pilotdeck-* 文件）。
-4. **持续**：建立统一 logger 接入 telemetry；治理 130+ 静默 catch；统一 React/Express/katex 版本策略；重写 CLAUDE.md 使其与实际一致（否则会持续误导后续修改）。
+> 截至 2026-08-06 的跟进状态：✅ 已完成 / ⏳ 进行中 / ⬜ 未启动。
+
+1. **立即（半天内，可验证）**：`.reasonix` 加入 .gitignore 并 `git rm --cached`。 — ✅ 已完成（`ccc2d582`）
+2. **短期**：把 `edgeclaw-memory-core` 移入 `pnpm-workspace.yaml`、删除独立 `package-lock.json`、`lib/` 产物改为构建时生成不入库；为 `router/`、`cron/`、`permission/` 补最小行为测试；统一 i18n 三份 JSON 的 key。 — ✅ 大部分已完成（子包入 workspace、测试补齐、i18n 对齐均已落地；`lib/` 产物入库问题仍待处理）
+3. **中期**：确定 `ui/server` 的演进方向（要么收敛到 `src/` 的 TS 分层并只 import barrel，要么逐步迁到 gateway API）——这是消除双后端/双 WebSocket/双记忆运行时的唯一路径；拆分 `AgentLoop.ts` 与 `InProcessGateway.ts`；完成全仓品牌收敛（README.zh.md、products 示例、pilotdeck-* 文件）。 — ⏳ 进行中（S1 冻结增量已落地，见 `docs/design/gateway-protocol-versioning.md` Part B；品牌收敛基本完成：README.zh.md / products 已统一，ui/server 的 pilotdeck 双轨 bridge 仍在）
+4. **持续**：建立统一 logger 接入 telemetry；治理 130+ 静默 catch；统一 React/Express/katex 版本策略；重写 CLAUDE.md 使其与实际一致（否则会持续误导后续修改）。 — ⏳ 部分（CLAUDE.md 已重写对齐实际；logger / 静默 catch / 版本策略未启动）
