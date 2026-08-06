@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.0.18 - 2026-08-06
+
+### Added
+- 判例全文检索：patent_case_search 内置工具、knowledge.db 接入与 FTS5 共享工具，invalidity/oa-response/agent 接线
+- 附图智能分析：analyze_patent_figure / search_patent_figure 工具与索引持久化，draft/validate 自动附图说明与图文一致性校验
+- 本地真实附图基准测试运行器与 ground truth 清单
+- 知识库运行时能力自检与 gateway 可观测性出口；知识库能力面板与 embedding 语义增强配置表单
+- CLI 支持 --version/--help 参数，避免未知参数静默进入交互模式
+- 无效宣告特征化逐特征检索方法论技能（无效证据收集场景）
+
+### Changed
+- 修正 CONTRIBUTING.md 桌面端平台支持声明
+
 ## v0.0.16 - 2026-08-04
 
 ### Added
