@@ -205,7 +205,7 @@ const INVALIDATION_GROUNDS = new Set([2, 5, 9, 20, 22, 23, 25, 26, 27, 33]);
 
 /**
  * 引用核验主题知识源（设计 S1 静态表 / S2 知识库索引复合）。
- * 默认 S1 内嵌静态表；S2 知识库法条索引（如 laws-full.db / wiki 审查指南
+ * 默认 S1 内嵌静态表；S2 知识库法条索引（如 knowledge.db 法规/审查指南
  * 卡片构建的条号→主题映射）实现本接口后可注入，替代静态表的大部分覆盖。
  */
 export type CitationSource = {

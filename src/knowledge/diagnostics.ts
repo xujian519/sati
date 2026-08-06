@@ -5,10 +5,43 @@
  * 供启动时输出可读能力清单，避免数据/配置缺失时静默降级。
  */
 
+import { DatabaseSync } from "node:sqlite";
 import type { KnowledgeDbPaths } from "./config.js";
 import type { KnowledgeRuntimeStatsSnapshot } from "./shared/knowledge-stats.js";
 
 export type KnowledgeCapabilityStatus = "ready" | "missing" | "disabled";
+
+/** knowledge.db 关键表行数探测（进程内缓存：同进程知识库静态）。 */
+type KnowledgeDbProbe = { kgNodes: number; lawArticles: number; embeddings: number };
+
+const probeCache = new Map<string, KnowledgeDbProbe>();
+
+function probeKnowledgeDb(dbPath: string): KnowledgeDbProbe | null {
+  const cached = probeCache.get(dbPath);
+  if (cached) return cached;
+  try {
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      const kgNodes = (db.prepare("SELECT COUNT(*) c FROM kg_nodes").get() as { c: number }).c;
+      const lawArticles = (
+        db.prepare("SELECT COUNT(*) c FROM documents WHERE doc_type = 'law_article'").get() as { c: number }
+      ).c;
+      const embeddings = (db.prepare("SELECT COUNT(*) c FROM embeddings").get() as { c: number }).c;
+      const probe = { kgNodes, lawArticles, embeddings };
+      probeCache.set(dbPath, probe);
+      return probe;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+/** knowledge.db 路径存在时探测，否则 null。 */
+function probeKnowledgeDbSafe(paths: KnowledgeDbPaths): KnowledgeDbProbe | null {
+  return paths.knowledgeDb ? probeKnowledgeDb(paths.knowledgeDb) : null;
+}
 
 export type KnowledgeCapability = {
   /** 能力标识（稳定，供程序消费）。 */
@@ -47,12 +80,19 @@ export function resolveKnowledgeCapabilities(
   paths: KnowledgeDbPaths,
   options: KnowledgeCapabilitiesOptions,
 ): KnowledgeCapability[] {
+  // knowledge.db 关键表行数探测（一次提取；无 knowledge.db 时为 null）。
+  const probe = probeKnowledgeDbSafe(paths);
   const capabilities: KnowledgeCapability[] = [
     {
       id: "patent-kg",
       label: "专利知识图谱",
-      status: paths.patentKgDb ? "ready" : "missing",
-      detail: paths.patentKgDb ? undefined : "SATI_PATENT_KG_DB",
+      // knowledge.db 统一主库优先（kg_nodes），否则旧 patent_kg.db。
+      status: probe?.kgNodes ? "ready" : paths.patentKgDb ? "ready" : "missing",
+      detail: probe?.kgNodes
+        ? `kg_nodes ${probe.kgNodes.toLocaleString()} 节点（knowledge.db）`
+        : paths.patentKgDb
+          ? undefined
+          : "SATI_PATENT_KG_DB",
     },
     {
       // IPC 审查标准随仓库内置（ipc-standards.yaml），恒可用。
@@ -69,8 +109,12 @@ export function resolveKnowledgeCapabilities(
     {
       id: "legal-fts",
       label: "法律法规全文检索",
-      status: paths.lawDb ? "ready" : "missing",
-      detail: paths.lawDb ? undefined : "SATI_LAW_DB",
+      status: probe?.lawArticles ? "ready" : paths.lawDb ? "ready" : "missing",
+      detail: probe?.lawArticles
+        ? `法规 ${probe.lawArticles} 部（knowledge.db）`
+        : paths.lawDb
+          ? undefined
+          : "SATI_LAW_DB",
     },
     {
       id: "case-law",
@@ -87,11 +131,13 @@ export function resolveKnowledgeCapabilities(
     {
       id: "semantic-vectors",
       label: "离线语义索引",
-      status: paths.vectorsDb ? "ready" : "disabled",
-      // 未构建时给出重建命令（全量 30-90 分钟），避免"已配 embedding 但无向量"的静默降级
-      detail: paths.vectorsDb
-        ? undefined
-        : "未构建（pnpm tsx scripts/build-knowledge-vectors.ts；产物 vectors.db 供 KG/法条语义召回）",
+      // knowledge.db embeddings（XiaoNuo 产物，144K 向量）为主路径；vectors.db 为 legacy。
+      status: probe?.embeddings ? "ready" : paths.vectorsDb ? "ready" : "disabled",
+      detail: probe?.embeddings
+        ? `knowledge.db embeddings ${probe.embeddings.toLocaleString()} 条（复用 XiaoNuo 产物）`
+        : paths.vectorsDb
+          ? undefined
+          : "knowledge.db 无 embeddings（语义召回未启用）",
     },
     {
       id: "rerank",

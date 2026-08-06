@@ -1,6 +1,6 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
-import type { LawCategory, LawRecord, LawSearchResult } from "./types.js";
+import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
 
 /**
  * 法律全文搜索引擎（基于宝宸知识库 laws-full-local.db / laws-full.db）。
@@ -74,7 +74,7 @@ export type LegalSearchOptions = {
   category?: string;
 };
 
-export class LegalSearchEngine {
+export class LegalSearchEngine implements LegalSearchSource {
   private readonly db: DatabaseSync;
   private readonly hasFts: boolean;
   /** FTS5 查询曾抛异常（模块缺失等）后置 true，后续查询直接走 LIKE。 */

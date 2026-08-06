@@ -16,6 +16,7 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
 import { extractLawKeywords } from "../legal/legal-search.js";
+import type { KnowledgeEmbeddingSearch } from "../shared/knowledge-embeddings.js";
 import type { CaseLawChunk, CaseLawHit, CaseLawSearchOptions } from "./types.js";
 
 /**
@@ -41,6 +42,14 @@ type CaseLawRow = {
   fts_rank?: number | null;
 };
 
+/** 判例语义召回源（由 gateway 注入：query 向量 + knowledge.db embeddings reader）。 */
+export type CaseLawSemanticSource = {
+  /** 生成查询向量（调用方提供 embedding client）。 */
+  embed: (text: string) => Promise<Float32Array>;
+  /** knowledge.db embeddings reader（docTypes 应为 case/judgment）。 */
+  search: KnowledgeEmbeddingSearch;
+};
+
 export class CaseLawSearchEngine {
   private readonly db: DatabaseSync;
   private readonly hasFts: boolean;
@@ -50,7 +59,11 @@ export class CaseLawSearchEngine {
   // 热路径 prepared statements（固定 SQL；带过滤的查询走动态 SQL）
   private readonly stmtSearchLike: StatementSync;
   private readonly stmtGetById: StatementSync;
+  private readonly stmtGetDocById: StatementSync;
   private readonly stmtCount: StatementSync;
+
+  /** 语义召回源（可选；gateway 注入后启用判例语义叠加）。 */
+  private semantic?: CaseLawSemanticSource;
 
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath, { readOnly: true });
@@ -81,7 +94,49 @@ export class CaseLawSearchEngine {
       ORDER BY c.chunk_index
     `);
 
+    // 按 documents.id 取最长 chunk（语义命中回源片段）。
+    this.stmtGetDocById = this.db.prepare(`
+      SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
+             d.court, d.source, d.module, d.char_count, c.chunk_index, c.content
+      FROM documents d
+      JOIN chunks c ON c.id = (
+        SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
+      WHERE d.id = ?
+    `);
+
     this.stmtCount = this.db.prepare("SELECT COUNT(*) AS c FROM documents");
+  }
+
+  /** 注入判例语义召回源（gateway 启动时；未注入时语义路关闭）。 */
+  setSemantic(source?: CaseLawSemanticSource): void {
+    this.semantic = source;
+  }
+
+  /** 语义召回源是否就绪。 */
+  get semanticAvailable(): boolean {
+    return this.semantic?.search.available === true;
+  }
+
+  /**
+   * 判例语义召回：embed query → knowledge.db embeddings("case/judgment") top-k
+   * → 按 documents.id 回源最长 chunk 片段。
+   */
+  async searchSemantic(keyword: string, limit: number): Promise<CaseLawHit[]> {
+    const source = this.semantic;
+    if (!source || !source.search.available) return [];
+    const trimmed = keyword.trim();
+    if (!trimmed) return [];
+    const queryVector = await source.embed(trimmed);
+    if (queryVector.length === 0) return [];
+    const hits = source.search.search(queryVector, limit);
+    const results: CaseLawHit[] = [];
+    for (const hit of hits) {
+      const row = this.stmtGetDocById.get(hit.docId) as CaseLawRow | undefined;
+      if (!row) continue;
+      results.push(this.toHit(row, null, "semantic"));
+      if (results.length >= limit) break;
+    }
+    return results;
   }
 
   /** FTS5 是否实际可用（表存在 + 运行时支持 + 未被降级）。 */
@@ -230,7 +285,7 @@ export class CaseLawSearchEngine {
     return sorted.slice(0, limit).map(row => this.toHit(row, row.fts_rank ?? null, "fts"));
   }
 
-  private toHit(row: CaseLawRow, ftsRank: number | null, via: "fts" | "like"): CaseLawHit {
+  private toHit(row: CaseLawRow, ftsRank: number | null, via: CaseLawHit["via"]): CaseLawHit {
     return {
       documentId: row.document_id,
       docType: row.doc_type,

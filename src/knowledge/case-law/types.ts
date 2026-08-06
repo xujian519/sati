@@ -32,8 +32,8 @@ export type CaseLawHit = CaseLawRecord & {
   snippet: string;
   /** FTS5 BM25 分数（负值，越大越相关；仅 fts 路径有值）。 */
   ftsRank?: number | null;
-  /** 命中方式：fts=FTS5 BM25 命中，like=LIKE 降级命中。 */
-  via: "fts" | "like";
+  /** 命中方式：fts=FTS5 BM25 命中，like=LIKE 降级命中，semantic=embeddings 语义命中。 */
+  via: "fts" | "like" | "semantic";
 };
 
 /** 判例全文分块（按 documents.id 取回；不经过检索，无 via/ftsRank 语义）。 */

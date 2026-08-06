@@ -37,11 +37,13 @@ import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
 import {
   CompositeMemoryResolver,
   KnowledgeRuntimeStats,
+  KnowledgeEmbeddingSearch,
   buildKnowledgeResolvers,
   logKnowledgeCapabilities,
   resolveKnowledgeCapabilities,
   resolveKnowledgeDbPaths,
 } from "../knowledge/index.js";
+import { setCaseLawSemanticSource } from "../tool/builtin/patentCaseSearch.js";
 import type { KnowledgeDbPaths } from "../knowledge/index.js";
 import type { KnowledgeCapabilitiesResult } from "../gateway/protocol/types.js";
 import type { MemoryResolver } from "../context/index.js";
@@ -839,6 +841,7 @@ class ProjectRuntimeRegistry {
       ...buildKnowledgeResolvers({
         patentKgDb: knowledgePaths.patentKgDb,
         lawDb: knowledgePaths.lawDb,
+        knowledgeDb: knowledgePaths.knowledgeDb,
         wikiDir: knowledgePaths.wikiDir,
         vectorsDb: knowledgePaths.vectorsDb,
         embeddingDir,
@@ -850,6 +853,27 @@ class ProjectRuntimeRegistry {
         logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
       }),
     );
+
+    // 判例语义召回源注入（patent_case_search 工具）：knowledge.db embeddings(case/judgment)
+    // + 当前 embedding client。embedding 未配置或 knowledge.db 不可用时保持语义路关闭。
+    if (embeddingClient && knowledgePaths.caseDb) {
+      try {
+        const caseEmbeddings = new KnowledgeEmbeddingSearch({
+          dbPath: knowledgePaths.caseDb,
+          docTypes: ["case", "judgment"],
+          logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
+        });
+        setCaseLawSemanticSource({
+          embed: async text => {
+            const [vector] = await embeddingClient!.embed([text]);
+            return Float32Array.from(vector ?? []);
+          },
+          search: caseEmbeddings,
+        });
+      } catch (error) {
+        console.warn("[sati] knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
+      }
+    }
 
     // 知识能力自检：数据/配置缺失时输出可读清单，避免静默降级。
     // 传 runtime 快照让 KG FTS tokenizer 等运行时能力项（如 FTS5 缺失回退 LIKE）

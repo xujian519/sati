@@ -35,6 +35,8 @@ export type KnowledgeRuntimeStatsSnapshot = {
   kgFtsMode: KgFtsMode;
   /** wiki 卡语义索引状态。 */
   wikiSemanticIndex: WikiSemanticIndexState;
+  /** embedding 查询端与 knowledge.db 库向量一致性自检结果（未自检时 undefined）。 */
+  embeddingConsistency?: { ok: boolean; meanCosine: number };
 };
 
 export class KnowledgeRuntimeStats {
@@ -47,6 +49,7 @@ export class KnowledgeRuntimeStats {
   private readonly breakers = new Map<string, CircuitBreaker>();
   private kgFtsMode: KgFtsMode = "unknown";
   private wikiSemanticIndex: WikiSemanticIndexState = "disabled";
+  private embeddingConsistency?: { ok: boolean; meanCosine: number };
 
   recordCacheHit(): void {
     this.cacheHits += 1;
@@ -86,6 +89,11 @@ export class KnowledgeRuntimeStats {
     this.wikiSemanticIndex = state;
   }
 
+  /** 记录 embedding 一致性自检结果（不达标时语义召回已降级，此处仅留痕）。 */
+  setEmbeddingConsistency(result: { ok: boolean; meanCosine: number }): void {
+    this.embeddingConsistency = result;
+  }
+
   /** 只读快照（每次新建对象，消费方可安全序列化）。 */
   snapshot(): KnowledgeRuntimeStatsSnapshot {
     return {
@@ -98,6 +106,7 @@ export class KnowledgeRuntimeStats {
       breakers: Array.from(this.breakers.entries(), ([name, breaker]) => ({ name, state: breaker.state })),
       kgFtsMode: this.kgFtsMode,
       wikiSemanticIndex: this.wikiSemanticIndex,
+      embeddingConsistency: this.embeddingConsistency,
     };
   }
 }

@@ -1,8 +1,8 @@
 /**
- * vectors.db 只读语义检索（阶段 B：KG + 法条离线索引的运行时消费端）。
+ * vectors.db 只读语义检索（阶段 B：KG + 法条离线索引的运行时消费端；legacy）。
  *
  * 数据由 scripts/build-knowledge-vectors.ts 生成（见 vector-db-writer.ts）。
- * 检索策略：
+ * 检索策略（共享核心见 int8-matrix-search.ts，与 knowledge-embeddings.ts 同构）：
  *   - 按 corpus 惰性加载到内存（KG 116K 文档 × 1024 维 int8 ≈ 120MB，
  *     首次搜索该 corpus 时加载并缓存）；
  *   - 连续存储：所有 chunk 向量平铺进一个大 Int8Array，按 doc 记录
@@ -14,7 +14,13 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { int8Dot, l2Norm, quantizeInt8, topK } from "../../context/vector/cosine.js";
+import {
+  emptyChunkMatrix,
+  loadChunkMatrix,
+  searchChunkMatrix,
+  type ChunkRow,
+  type Int8ChunkMatrix,
+} from "./int8-matrix-search.js";
 
 export type VectorDbSearchHit = {
   docId: string;
@@ -26,25 +32,13 @@ export type VectorDbSearchOptions = {
   logger?: { warn?: (...args: unknown[]) => void };
 };
 
-type CorpusData = {
-  dimensions: number;
-  /** docId -> 该文档 chunk 在 vectors 中的 [start, end) 区间。 */
-  docOffsets: Map<string, { start: number; end: number }>;
-  /** 平铺的 chunk 向量（int8）。 */
-  vectors: Int8Array;
-  /** 每个 chunk 的 L2 范数（加载时预计算）。 */
-  norms: Float32Array;
-  /** 每个 chunk 的 corpus 内行号（供 docOffsets 引用）。 */
-  chunkCount: number;
-};
-
 const MIN_QUERY_LENGTH = 3;
 
 export class VectorDbSearch {
   private readonly db: DatabaseSync;
   private readonly logger?: { warn?: (...args: unknown[]) => void };
   private readonly corpora = new Map<string, { dimensions: number }>();
-  private readonly cache = new Map<string, CorpusData>();
+  private readonly cache = new Map<string, Int8ChunkMatrix>();
 
   constructor(options: VectorDbSearchOptions) {
     this.db = new DatabaseSync(options.dbPath, { readOnly: true });
@@ -79,29 +73,7 @@ export class VectorDbSearch {
    */
   search(corpus: string, queryVector: Float32Array, limit: number): VectorDbSearchHit[] {
     if (!this.hasCorpus(corpus) || limit <= 0) return [];
-    const data = this.loadCorpus(corpus);
-    if (data.chunkCount === 0) return [];
-
-    const query = quantizeInt8(queryVector).values;
-    const queryNorm = l2Norm(query);
-
-    const docScores = new Map<string, number>();
-    for (const [docId, range] of data.docOffsets) {
-      let best = -Infinity;
-      for (let i = range.start; i < range.end; i += 1) {
-        const chunk = data.vectors.subarray(i * data.dimensions, (i + 1) * data.dimensions);
-        const dot = int8Dot(query, chunk);
-        const normD = data.norms[i] ?? 0;
-        if (normD === 0) continue;
-        const score = dot / (queryNorm * normD);
-        if (score > best) best = score;
-      }
-      if (best > -Infinity) docScores.set(docId, best);
-    }
-
-    const scores = Float32Array.from(docScores.values());
-    const ids = Array.from(docScores.keys());
-    return topK(scores, limit).map(hit => ({ docId: ids[hit.index]!, score: hit.score }));
+    return searchChunkMatrix(this.loadCorpus(corpus), queryVector, limit);
   }
 
   close(): void {
@@ -109,85 +81,41 @@ export class VectorDbSearch {
     this.db.close();
   }
 
-  private loadCorpus(corpus: string): CorpusData {
+  private loadCorpus(corpus: string): Int8ChunkMatrix {
     const cached = this.cache.get(corpus);
     if (cached) return cached;
 
     const dimensions = this.corpora.get(corpus)?.dimensions ?? 0;
     if (dimensions <= 0) {
-      return {
-        dimensions: 0,
-        docOffsets: new Map(),
-        vectors: new Int8Array(0),
-        norms: new Float32Array(0),
-        chunkCount: 0,
-      };
+      const empty = emptyChunkMatrix(0);
+      this.cache.set(corpus, empty);
+      return empty;
     }
-
-    const docOffsets = new Map<string, { start: number; end: number }>();
-    const chunkBuffers: Int8Array[] = [];
-    const norms: number[] = [];
-
-    let currentDocId: string | null = null;
-    let currentStart = 0;
-    let index = 0;
 
     // 键集分页加载（WHERE (doc_id, chunk_index) > (?, ?) 走主键前缀索引，
     // 避免 OFFSET 分页在大偏移下重复扫描前序行；ORDER BY 与主键
     // (corpus, doc_id, chunk_index) 一致，天然有序）。
-    const PAGE_SIZE = 5000;
+    // 列别名对齐 int8-matrix-search 的 ChunkRow 契约（document_id/chunk_id）。
     const pageFirst = this.db.prepare(
-      "SELECT doc_id, chunk_index, vector FROM vectors WHERE corpus = ? ORDER BY doc_id, chunk_index LIMIT ?",
+      "SELECT doc_id AS document_id, chunk_index AS chunk_id, vector FROM vectors WHERE corpus = ? ORDER BY doc_id, chunk_index LIMIT ?",
     );
     const pageNext = this.db.prepare(
-      `SELECT doc_id, chunk_index, vector FROM vectors
+      `SELECT doc_id AS document_id, chunk_index AS chunk_id, vector FROM vectors
        WHERE corpus = ? AND (doc_id > ? OR (doc_id = ? AND chunk_index > ?))
        ORDER BY doc_id, chunk_index LIMIT ?`,
     );
-    let cursorDocId: string | undefined;
-    let cursorChunkIndex = 0;
-    while (true) {
-      const rows = (
-        cursorDocId === undefined
-          ? pageFirst.all(corpus, PAGE_SIZE)
-          : pageNext.all(corpus, cursorDocId, cursorDocId, cursorChunkIndex, PAGE_SIZE)
-      ) as Array<{ doc_id: string; chunk_index: number; vector: Uint8Array }>;
-      if (rows.length === 0) break;
-      for (const row of rows) {
-        const chunk = toInt8Array(row.vector, dimensions);
-        chunkBuffers.push(chunk);
-        norms.push(l2Norm(chunk));
-        if (row.doc_id !== currentDocId) {
-          if (currentDocId !== null) {
-            docOffsets.set(currentDocId, { start: currentStart, end: index });
-          }
-          currentDocId = row.doc_id;
-          currentStart = index;
-        }
-        index += 1;
-      }
-      const last = rows[rows.length - 1]!;
-      cursorDocId = last.doc_id;
-      cursorChunkIndex = last.chunk_index;
-    }
-    if (currentDocId !== null) {
-      docOffsets.set(currentDocId, { start: currentStart, end: index });
-    }
 
-    const vectors = new Int8Array(chunkBuffers.length * dimensions);
-    for (let i = 0; i < chunkBuffers.length; i += 1) {
-      vectors.set(chunkBuffers[i]!, i * dimensions);
-    }
-
-    const data: CorpusData = {
+    const data = loadChunkMatrix(
+      {
+        pageFirst: limit => pageFirst.all(corpus, limit) as ChunkRow[],
+        pageNext: (docId, chunkIndex, limit) => pageNext.all(corpus, docId, docId, chunkIndex, limit) as ChunkRow[],
+      },
       dimensions,
-      docOffsets,
-      vectors,
-      norms: Float32Array.from(norms),
-      chunkCount: index,
-    };
+      raw => toInt8Array(raw, dimensions),
+      (docCount, chunkCount) =>
+        this.logger?.warn?.(`[vector-db] loaded corpus "${corpus}": ${docCount} docs / ${chunkCount} chunks.`),
+    );
     this.cache.set(corpus, data);
-    this.logger?.warn?.(`[vector-db] loaded corpus "${corpus}": ${docOffsets.size} docs / ${index} chunks.`);
     return data;
   }
 }

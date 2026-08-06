@@ -29,6 +29,8 @@ export type KnowledgeDbPaths = {
   vectorsDb?: string;
   /** 判例全文检索数据库（documents/chunks/docs_fts 表，含无效复审决定与专利判决全文），缺失时 undefined。 */
   caseDb?: string;
+  /** knowledge.db 统一主库（XiaoNuo 管道产物：kg_nodes/法规/embeddings/判例），缺失时 undefined。 */
+  knowledgeDb?: string;
   /** 数据目录来源（用于诊断）。 */
   dataDir: string;
 };
@@ -58,8 +60,14 @@ function firstExisting(candidates: string[]): string | undefined {
 export function resolveKnowledgeDbPaths(env: NodeJS.ProcessEnv = process.env): KnowledgeDbPaths {
   const dataDir = env.SATI_KNOWLEDGE_DIR ?? DEFAULT_KNOWLEDGE_DIR;
 
+  // knowledge.db 统一主库（XiaoNuo 管道产物：kg_nodes/法规/embeddings/判例；存在时优先）。
+  const knowledgeDb = env.SATI_KNOWLEDGE_DB ?? firstExisting([join(dataDir, "knowledge.db")]);
+
+  // 图谱：knowledge.db 存在时读其 kg_nodes（KgStore 双 schema 自动识别）；否则旧 patent_kg.db。
   const patentKgDb =
-    env.SATI_PATENT_KG_DB ?? firstExisting([join(dataDir, "patent_kg.db"), join(dataDir, "knowledge", "patent_kg.db")]);
+    env.SATI_PATENT_KG_DB ??
+    knowledgeDb ??
+    firstExisting([join(dataDir, "patent_kg.db"), join(dataDir, "knowledge", "patent_kg.db")]);
 
   const lawDb =
     env.SATI_LAW_DB ??
@@ -73,11 +81,12 @@ export function resolveKnowledgeDbPaths(env: NodeJS.ProcessEnv = process.env): K
   // wiki 卡片：内置目录优先，环境变量可覆盖到外部数据目录
   const wikiDir = env.SATI_WIKI_DIR ?? (existsSync(BUILTIN_WIKI_DIR) ? BUILTIN_WIKI_DIR : undefined);
 
-  // 离线向量索引（build-knowledge-vectors.ts 产物；存在才启用语义召回）
+  // 离线向量索引（legacy 产物；knowledge.db embeddings 为主路径后不再作为首选）
   const vectorsDb = env.SATI_VECTORS_DB ?? firstExisting([join(dataDir, "vectors.db")]);
 
-  // 判例全文库（knowledge.db：documents/chunks/docs_fts；外部交付，用户告知路径后经 SATI_CASE_DB 接入）
-  const caseDb = env.SATI_CASE_DB ?? firstExisting([join(dataDir, "knowledge.db"), join(dataDir, "cases.db")]);
+  // 判例全文库：knowledge.db 优先（documents/chunks/docs_fts），否则旧 knowledge.db/cases.db 路径
+  const caseDb =
+    env.SATI_CASE_DB ?? knowledgeDb ?? firstExisting([join(dataDir, "knowledge.db"), join(dataDir, "cases.db")]);
 
-  return { patentKgDb, lawDb, wikiDir, vectorsDb, caseDb, dataDir };
+  return { patentKgDb, lawDb, wikiDir, vectorsDb, caseDb, knowledgeDb, dataDir };
 }

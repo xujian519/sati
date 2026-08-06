@@ -1,6 +1,7 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
 import { resolveKnowledgeDbPaths } from "../../knowledge/config.js";
-import { CaseLawSearchEngine } from "../../knowledge/case-law/case-law-search.js";
+import { CaseLawSearchEngine, type CaseLawSemanticSource } from "../../knowledge/case-law/case-law-search.js";
+import { reciprocalRankFusion } from "../../context/vector/rrf.js";
 import type { CaseLawDocType, CaseLawHit, CaseLawSearchOptions } from "../../knowledge/case-law/types.js";
 
 /**
@@ -38,13 +39,23 @@ export type PatentCaseSearchOutput = {
     charCount: number;
     snippet?: string;
     ftsRank?: number | null;
-    via: "fts" | "like";
+    via: "fts" | "like" | "semantic";
   }>;
   dbPath?: string;
 };
 
 /** 引擎访问引用（便于测试注入 mock）。 */
 export type CaseLawEngineRef = { engine: CaseLawSearchEngine; dbPath: string };
+
+/** 判例语义召回源（gateway 启动时注入；未注入则语义路关闭）。 */
+let semanticSource: CaseLawSemanticSource | null = null;
+
+/** 注入判例语义召回源（embedding client + knowledge.db embeddings reader）。 */
+export function setCaseLawSemanticSource(source: CaseLawSemanticSource | null): void {
+  semanticSource = source;
+  // 引擎已缓存时同步注入，避免下次 getCaseLawEngine 才生效。
+  if (cachedRef) cachedRef.engine.setSemantic(source ?? undefined);
+}
 
 /** 模块级缓存单例（判例库为只读静态数据，避免每次调用重建连接）。 */
 let cachedRef: CaseLawEngineRef | null = null;
@@ -56,6 +67,7 @@ export function getCaseLawEngine(): CaseLawEngineRef | null {
   if (cachedRef) cachedRef.engine.close();
   try {
     const engine = new CaseLawSearchEngine(caseDb);
+    if (semanticSource) engine.setSemantic(semanticSource);
     cachedRef = { engine, dbPath: caseDb };
     return cachedRef;
   } catch {
@@ -162,7 +174,36 @@ export function createPatentCaseSearchTool(
       };
       const includeContent = input.include_content ?? true;
 
-      const hits = engine.search(input.query, options);
+      const ftsHits = engine.search(input.query, options);
+
+      // 判例语义召回（knowledge.db embeddings，gateway 注入后可用）：
+      // FTS 命中与语义命中按 documentId RRF 融合（对齐记忆层双路融合语义）。
+      // 融合去重时 FTS 命中优先保留（via/ftsRank 不丢），语义只填充 FTS 未覆盖的文档。
+      let hits = ftsHits;
+      if (engine.semanticAvailable) {
+        try {
+          const semanticHits = await engine.searchSemantic(input.query, limit * 2);
+          if (semanticHits.length > 0) {
+            const byId = new Map<string, CaseLawHit>();
+            for (const hit of ftsHits) byId.set(hit.documentId, hit);
+            for (const hit of semanticHits) {
+              if (!byId.has(hit.documentId)) byId.set(hit.documentId, hit);
+            }
+            const fused = reciprocalRankFusion<string>([
+              ftsHits.map(hit => ({ id: hit.documentId })),
+              semanticHits.map(hit => ({ id: hit.documentId })),
+            ]);
+            hits = fused
+              .map(item => byId.get(item.id))
+              .filter((hit): hit is CaseLawHit => hit !== undefined)
+              .slice(0, limit);
+          }
+        } catch {
+          // 语义路失败降级为纯 FTS，不阻断工具执行。
+          hits = ftsHits;
+        }
+      }
+
       const output: PatentCaseSearchOutput = {
         total: hits.length,
         results: hits.map(hit => toResult(hit, includeContent)),
@@ -171,7 +212,7 @@ export function createPatentCaseSearchTool(
       return {
         content: [{ type: "json", value: output }],
         data: output,
-        metadata: { domain: "patent", dbPath, fts5: engine.ftsAvailable },
+        metadata: { domain: "patent", dbPath, fts5: engine.ftsAvailable, semantic: engine.semanticAvailable },
       };
     },
   };

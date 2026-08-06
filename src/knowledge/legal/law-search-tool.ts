@@ -1,14 +1,16 @@
 import type { SatiToolDefinition } from "../../tool/protocol/types.js";
 import { resolveKnowledgeDbPaths } from "../config.js";
 import { LegalSearchEngine, type LegalSearchOptions } from "./legal-search.js";
-import type { LawRecord } from "./types.js";
+import { KnowledgeLawSearch } from "./knowledge-law-search.js";
+import type { LawRecord, LegalSearchSource } from "./types.js";
 
 /**
  * law_search — 中国法律法规全文检索。
  *
- * 基于宝宸知识库（Laws-1.0.0）SQLite 数据，FTS5 BM25 排序优先，
- * 短查询/缺失 FTS 时降级 LIKE。支持按法律层级（法律/行政法规/司法解释/
- * 地方性法规/宪法/案例/部门规章）和分类过滤。
+ * 法规后端优先 knowledge.db（doc_type='law_article'，XiaoNuo 产物，
+ * docs_fts trigram + BM25）；无 knowledge.db 时回退宝宸知识库
+ * （laws-full.db，Laws-1.0.0）。FTS5 优先，短查询/缺失 FTS 时降级 LIKE。
+ * 支持按法律层级和分类过滤。
  */
 
 export type LawSearchToolInput = {
@@ -29,10 +31,24 @@ export type LawSearchToolOutput = {
 };
 
 /** 默认数据库路径（供模块级缓存使用）。 */
-let cachedEngine: { engine: LegalSearchEngine; dbPath: string } | null = null;
+let cachedEngine: { engine: LegalSearchSource; dbPath: string } | null = null;
 
-function getEngine(): { engine: LegalSearchEngine; dbPath: string } | null {
-  const { lawDb } = resolveKnowledgeDbPaths();
+function getEngine(): { engine: LegalSearchSource; dbPath: string } | null {
+  const { lawDb, knowledgeDb } = resolveKnowledgeDbPaths();
+  // knowledge.db 存在且有 law_article 文档时优先（复用 XiaoNuo 产物）。
+  if (knowledgeDb) {
+    try {
+      const engine = new KnowledgeLawSearch(knowledgeDb);
+      if (engine.count() > 0) {
+        if (cachedEngine && cachedEngine.dbPath !== knowledgeDb) cachedEngine.engine.close();
+        cachedEngine = { engine, dbPath: knowledgeDb };
+        return cachedEngine;
+      }
+      engine.close();
+    } catch {
+      // 法规后端打开失败，回退 legacy laws-full。
+    }
+  }
   if (!lawDb) return null;
   if (cachedEngine && cachedEngine.dbPath === lawDb) return cachedEngine;
   cachedEngine?.engine.close();
@@ -48,7 +64,7 @@ function truncateContent(content: string, maxChars = 4000): string {
 }
 
 export function createLawSearchTool(
-  getEngineFn: () => { engine: LegalSearchEngine; dbPath: string } | null = getEngine,
+  getEngineFn: () => { engine: LegalSearchSource; dbPath: string } | null = getEngine,
 ): SatiToolDefinition<LawSearchToolInput, LawSearchToolOutput> {
   return {
     name: "law_search",

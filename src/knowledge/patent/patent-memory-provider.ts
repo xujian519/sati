@@ -1,8 +1,7 @@
 import { join } from "node:path";
-import { reciprocalRankFusion } from "../../context/vector/rrf.js";
 import type { EmbeddingClient } from "../../model/embedding/types.js";
 import type { RerankClient } from "../../model/embedding/rerank.js";
-import { MIN_QUERY_LENGTH, type VectorDbSearch } from "../shared/vector-db.js";
+import { MIN_QUERY_LENGTH } from "../shared/vector-db.js";
 import { CircuitBreaker, guarded } from "../shared/circuit-breaker.js";
 import { TtlCache } from "../shared/ttl-cache.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
@@ -28,13 +27,13 @@ import { WikiCardVectorIndex } from "./wiki-card-vector-index.js";
  * 图谱命中 WikiCard 节点时联动加载卡片正文。知识库只读，captureTurn 为空操作。
  *
  * 可选语义增强：配置 `embedding` 后启用 wiki 卡语义召回；
- * 再配置 `vectorDb`（build-knowledge-vectors.ts 产物）后启用 KG 节点语义召回；
  * 配置 `rerank` 后对融合候选做 cross-encoder 重排。
+ * 注：KG 节点不建向量（与 XiaoNuo 设计一致），图谱检索为关键词 + 关系扩展。
  */
 
 type GraphHit = {
   node: { id: string; nodeType: string; name?: string; title?: string };
-  via: "keyword" | "similar" | "cites" | "semantic";
+  via: "keyword" | "similar" | "cites";
   relation?: string;
   /** 节点正文预览（供 rerank 打分；不注入上下文）。 */
   text?: string;
@@ -53,12 +52,10 @@ export type PatentMemoryProviderOptions = {
   graphLimit?: number;
   /** 卡片正文注入上限（默认 2）。 */
   cardLimit?: number;
-  /** 语义检索客户端（可选）；配置后启用 wiki 卡/KG 节点语义召回。 */
+  /** 语义检索客户端（可选）；配置后启用 wiki 卡语义召回。 */
   embedding?: EmbeddingClient;
   /** 向量持久化目录（默认见 knowledge/config.ts 的 defaultEmbeddingDir）。 */
   embeddingDir?: string;
-  /** 离线向量索引（vectors.db，可选）；配置后启用 KG 节点语义召回。 */
-  vectorDb?: VectorDbSearch;
   /** 重排客户端（可选，阶段 C）；配置后对融合候选做 cross-encoder 重排。 */
   rerank?: RerankClient;
   /** 参与重排的候选上限（默认 16）。 */
@@ -89,7 +86,6 @@ export class PatentMemoryProvider implements MemoryResolver {
   private readonly cardLimit: number;
   private readonly embedding?: EmbeddingClient;
   private readonly embeddingDir: string;
-  private readonly vectorDb?: VectorDbSearch;
   private readonly rerank?: RerankClient;
   private readonly rerankTopN: number;
   private readonly semanticIndexEnabled: boolean;
@@ -109,7 +105,6 @@ export class PatentMemoryProvider implements MemoryResolver {
     this.cardLimit = options.cardLimit ?? 2;
     this.embedding = options.embedding;
     this.embeddingDir = options.embeddingDir ?? defaultEmbeddingDir();
-    this.vectorDb = options.vectorDb;
     this.rerank = options.rerank;
     this.rerankTopN = options.rerankTopN ?? 16;
     this.semanticIndexEnabled = options.semanticIndexEnabled ?? true;
@@ -180,9 +175,7 @@ export class PatentMemoryProvider implements MemoryResolver {
             ? `（相似:${hit.relation ?? ""}）`
             : hit.via === "cites"
               ? `（引用:${hit.relation ?? ""}）`
-              : hit.via === "semantic"
-                ? "（语义）"
-                : "";
+              : "";
         return `- [${hit.node.nodeType}] ${label}${viaLabel}`;
       });
       blocks.push(`<knowledge-graph>\n${lines.join("\n")}\n</knowledge-graph>`);
@@ -205,7 +198,7 @@ export class PatentMemoryProvider implements MemoryResolver {
     // 知识库只读，无记忆捕获。
   }
 
-  /** 知识图谱检索：关键词路（+ 关系扩展）与语义路（vectors.db）RRF 融合，可选 rerank。 */
+  /** 知识图谱检索：关键词路（+ 关系扩展），可选 rerank（KG 节点不建向量，无语义路）。 */
   private async queryGraph(input: MemoryRetrieveInput): Promise<GraphHit[]> {
     if (!this.enableGraph || !this.kgAdapter || Array.from(input.query.trim()).length < MIN_QUERY_LENGTH) return [];
     if (input.signal?.aborted) return [];
@@ -216,66 +209,19 @@ export class PatentMemoryProvider implements MemoryResolver {
       relation: hit.relation,
       text: buildNodeText(hit.node),
     }));
-    const semanticHits = await this.queryGraphSemantic(input);
+    if (keywordHits.length === 0) return [];
 
-    const all = [...keywordHits, ...semanticHits];
-    if (all.length === 0) return [];
-    if (semanticHits.length === 0) {
-      const reranked = await this.tryRerankOrder(
-        input.query,
-        keywordHits,
-        hit => this.graphHitText(hit),
-        this.rerankTopN,
-      );
-      return reranked.slice(0, this.graphLimit);
-    }
-
-    // 双路 RRF 融合排序（关键词路 rank 与语义路 rank 各自贡献）
-    const fused = reciprocalRankFusion<string>([
-      keywordHits.map(hit => ({ id: hit.node.id })),
-      semanticHits.map(hit => ({ id: hit.node.id })),
-    ]);
-    const byId = new Map(all.map(hit => [hit.node.id, hit]));
-    const ordered = fused.map(item => byId.get(item.id)).filter((hit): hit is GraphHit => hit !== undefined);
-    const reranked = await this.tryRerankOrder(input.query, ordered, hit => this.graphHitText(hit), this.rerankTopN);
+    const reranked = await this.tryRerankOrder(
+      input.query,
+      keywordHits,
+      hit => this.graphHitText(hit),
+      this.rerankTopN,
+    );
     return reranked.slice(0, this.graphLimit);
   }
 
   private graphHitText(hit: GraphHit): string {
     return hit.text || hit.node.name || hit.node.title || hit.node.id;
-  }
-
-  /** 语义召回路：embed query → vectors.db("kg") top-k → 回查节点详情。 */
-  private async queryGraphSemantic(input: MemoryRetrieveInput): Promise<GraphHit[]> {
-    const embedding = this.embedding;
-    const vectorDb = this.vectorDb;
-    if (!embedding || !vectorDb || !vectorDb.hasCorpus("kg")) return [];
-    if (input.signal?.aborted) return [];
-    return guarded(
-      this.semanticBreaker,
-      [],
-      async () => {
-        this.stats?.recordSemanticCall();
-        const [queryVector] = await embedding.embed([input.query]);
-        if (!queryVector || queryVector.length === 0) return [];
-        const hits = vectorDb.search("kg", Float32Array.from(queryVector), this.graphLimit);
-        const graphHits: GraphHit[] = [];
-        for (const hit of hits) {
-          const node = this.kgAdapter?.getNode(hit.docId);
-          if (!node) continue;
-          graphHits.push({
-            node: { id: node.id, nodeType: node.nodeType, name: node.name, title: node.title },
-            via: "semantic",
-            text: buildNodeText(node),
-          });
-        }
-        return graphHits;
-      },
-      error => {
-        this.stats?.recordSemanticFailure();
-        this.logger?.warn?.(`[patent-memory] KG 语义召回失败，降级为纯关键词: ${errorMessage(error)}`);
-      },
-    );
   }
 
   /** wiki 卡片检索：图谱 WikiCard 节点 + query 关键词 + 语义召回三路命中。 */

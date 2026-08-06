@@ -3,13 +3,18 @@ import type { KgNode } from "../patent/types.js";
 import { FTS_MIN_RUNES } from "./fts.js";
 
 /**
- * 知识图谱只读存储（基于 patent_kg.db 的 nodes/edges 表）。
+ * 知识图谱只读存储（双 schema 兼容）。
+ *
+ * 优先 knowledge.db 统一 schema（kg_nodes/kg_edges/kg_nodes_fts，trigram，
+ * XiaoNuo 管道产物）；兼容旧 patent_kg.db（nodes/edges/nodes_fts*）。
  *
  * 设计：**按需 SQL 查询 + 轻量节点缓存**，避免将 217MB / 116K 节点
  * 全量加载进内存（Mady 的内存邻接表方案在 Node 侧过重）。edges 表
  * 已建 (source)/(target)/(relation) 索引，FTS5 表 nodes_fts 提供
  * 关键词检索，查询均在毫秒级。
  */
+
+export type KgSchema = "unified" | "legacy";
 
 export type KgNeighbor = {
   /** 邻居节点 id */
@@ -42,9 +47,29 @@ type FtsHit = {
   title: string | null;
 };
 
+/** 节点行（列集随 schema 变化：unified 有 law_refs JSON，legacy 有 law_refs_count + version）。 */
+type NodeRow = {
+  id: string;
+  node_type: string | null;
+  name: string | null;
+  title: string | null;
+  content: string | null;
+  /** unified schema：law_refs JSON 文本数组。 */
+  law_refs?: string | null;
+  /** legacy schema：law_refs_count 整数。 */
+  law_refs_count?: number | null;
+  source: string | null;
+  full_ref: string | null;
+  chapter: string | null;
+  article_number: string | null;
+  version?: string | null;
+};
+
 export class KgStore {
   private readonly db: DatabaseSync;
   private readonly nodeCache = new Map<string, KgNode | undefined>();
+  /** 生效的 schema：unified=knowledge.db（kg_nodes），legacy=patent_kg.db（nodes）。 */
+  private readonly schema: KgSchema;
   /** 表结构探测结果：trigram FTS 表优先（scripts/migrate-kg-fts-trigram.mjs 生成），否则 unicode61 旧表；无 FTS 时为 null。 */
   private readonly ftsTable: string | null;
 
@@ -58,19 +83,34 @@ export class KgStore {
 
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath, { readOnly: true });
+
+    // 表结构探测：knowledge.db 统一 schema（kg_nodes/kg_edges/kg_nodes_fts，trigram）
+    // 优先；patent_kg.db 旧 schema（nodes/edges/nodes_fts*）兼容保留。
+    const hasUnified = this.tableExists("kg_nodes");
+    const hasLegacy = this.tableExists("nodes");
+    if (!hasUnified && !hasLegacy) {
+      throw new Error(`KgStore: 未找到知识图谱表（kg_nodes/nodes 均不存在），dbPath=${dbPath}`);
+    }
+    this.schema = hasUnified ? "unified" : "legacy";
+    const nodeTable = hasUnified ? "kg_nodes" : "nodes";
+
     const ftsRow = this.db
       .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('nodes_fts_trigram', 'nodes_fts') ORDER BY CASE name WHEN 'nodes_fts_trigram' THEN 0 ELSE 1 END LIMIT 1",
+        hasUnified
+          ? "SELECT name FROM sqlite_master WHERE type='table' AND name = 'kg_nodes_fts' LIMIT 1"
+          : "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('nodes_fts_trigram', 'nodes_fts') ORDER BY CASE name WHEN 'nodes_fts_trigram' THEN 0 ELSE 1 END LIMIT 1",
       )
       .get() as { name: string } | undefined;
     this.ftsTable = ftsRow?.name ?? null;
-    this.stmtGetNode = this.db.prepare(
-      `SELECT id, node_type, name, title, content, law_refs_count,
-              source, full_ref, chapter, article_number, version
-       FROM nodes WHERE id = ?`,
-    );
+
+    // unified: law_refs 为 TEXT JSON 数组（无 version）；legacy: law_refs_count 整数 + version。
+    const nodeColumns = hasUnified
+      ? "id, node_type, name, title, content, law_refs, source, full_ref, chapter, article_number"
+      : "id, node_type, name, title, content, law_refs_count, source, full_ref, chapter, article_number, version";
+    this.stmtGetNode = this.db.prepare(`SELECT ${nodeColumns} FROM ${nodeTable} WHERE id = ?`);
+
     this.stmtLikeSearch = this.db.prepare(
-      `SELECT id FROM nodes
+      `SELECT id FROM ${nodeTable}
        WHERE name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
        LIMIT ?`,
     );
@@ -80,61 +120,75 @@ export class KgStore {
     this.stmtFtsSearch = null;
     if (this.ftsTable !== null) {
       try {
+        // unified：kg_nodes_fts 为 contentless（列仅 name/title/content，内容不存储），
+        // rowid 即 kg_nodes.rowid，须 JOIN 回源取 id/name/title。
         this.stmtFtsSearch = this.db.prepare(
-          `SELECT id, name, title FROM ${this.ftsTable} WHERE ${this.ftsTable} MATCH ? LIMIT ?`,
+          hasUnified
+            ? "SELECT k.id, k.name, k.title FROM kg_nodes_fts f JOIN kg_nodes k ON k.rowid = f.rowid WHERE kg_nodes_fts MATCH ? LIMIT ?"
+            : `SELECT id, name, title FROM ${this.ftsTable} WHERE ${this.ftsTable} MATCH ? LIMIT ?`,
         );
       } catch {
         this.stmtFtsSearch = null;
       }
     }
-    this.stmtNeighbors = this.db.prepare("SELECT target, relation FROM edges WHERE source = ? LIMIT ?");
-    this.stmtNeighborsByRelation = this.db.prepare(
-      "SELECT target, relation FROM edges WHERE source = ? AND relation = ? LIMIT ?",
+    this.stmtNeighbors = this.db.prepare(
+      hasUnified
+        ? "SELECT target_id AS target, relation FROM kg_edges WHERE source_id = ? LIMIT ?"
+        : "SELECT target, relation FROM edges WHERE source = ? LIMIT ?",
     );
-    this.stmtListByType = this.db.prepare("SELECT id FROM nodes WHERE node_type = ? LIMIT ?");
+    this.stmtNeighborsByRelation = this.db.prepare(
+      hasUnified
+        ? "SELECT target_id AS target, relation FROM kg_edges WHERE source_id = ? AND relation = ? LIMIT ?"
+        : "SELECT target, relation FROM edges WHERE source = ? AND relation = ? LIMIT ?",
+    );
+    this.stmtListByType = this.db.prepare(`SELECT id FROM ${nodeTable} WHERE node_type = ? LIMIT ?`);
+  }
+
+  /** 表是否存在于库中（sqlite_master 探测）。 */
+  private tableExists(name: string): boolean {
+    const row = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(name) as
+      | { name: string }
+      | undefined;
+    return row !== undefined;
+  }
+
+  /** 当前生效的 schema（诊断用）。 */
+  schemaKind(): KgSchema {
+    return this.schema;
   }
 
   /** 当前生效的 FTS 模式（诊断用）：trigram 表 / unicode61 旧表 / 无 FTS（LIKE 降级）。 */
   ftsMode(): "trigram" | "unicode61" | "none" {
     if (this.stmtFtsSearch === null) return "none";
+    // unified schema（kg_nodes_fts）恒为 trigram。
+    if (this.schema === "unified") return "trigram";
     return this.ftsTable === "nodes_fts_trigram" ? "trigram" : "unicode61";
   }
 
   /** 按 id 查询节点（带缓存）。 */
   getNode(id: string): KgNode | undefined {
     if (this.nodeCache.has(id)) return this.nodeCache.get(id);
-    const row = this.stmtGetNode.get(id) as
-      | {
-          id: string;
-          node_type: string | null;
-          name: string | null;
-          title: string | null;
-          content: string | null;
-          law_refs_count: number | null;
-          source: string | null;
-          full_ref: string | null;
-          chapter: string | null;
-          article_number: string | null;
-          version: string | null;
-        }
-      | undefined;
-    const node: KgNode | undefined = row
-      ? {
-          id: row.id,
-          nodeType: row.node_type ?? "",
-          name: row.name ?? undefined,
-          title: row.title ?? undefined,
-          content: row.content ?? undefined,
-          lawRefsCount: row.law_refs_count ?? undefined,
-          source: row.source ?? undefined,
-          fullRef: row.full_ref ?? undefined,
-          chapter: row.chapter ?? undefined,
-          articleNumber: row.article_number ?? undefined,
-          version: row.version ?? undefined,
-        }
-      : undefined;
+    const row = this.stmtGetNode.get(id) as NodeRow | undefined;
+    const node = row ? this.toNode(row) : undefined;
     this.nodeCache.set(id, node);
     return node;
+  }
+
+  /** 行 → KgNode 映射（unified: law_refs JSON 解析；legacy: law_refs_count + version）。 */
+  private toNode(row: NodeRow): KgNode {
+    return {
+      id: row.id,
+      nodeType: row.node_type ?? "",
+      name: row.name ?? undefined,
+      title: row.title ?? undefined,
+      content: row.content ?? undefined,
+      lawRefsCount: row.law_refs_count ?? (row.law_refs !== undefined ? parseLawRefsCount(row.law_refs) : undefined),
+      source: row.source ?? undefined,
+      fullRef: row.full_ref ?? undefined,
+      chapter: row.chapter ?? undefined,
+      articleNumber: row.article_number ?? undefined,
+      version: row.version ?? undefined,
+    };
   }
 
   /** 按关键词搜索节点（FTS5 MATCH；短查询或缺失 FTS 时降级 LIKE）。 */
@@ -188,7 +242,10 @@ export class KgStore {
       return [pattern, pattern, pattern];
     });
     params.push(limit);
-    return this.db.prepare(`SELECT id FROM nodes WHERE ${clause} LIMIT ?`).all(...params) as Array<{ id: string }>;
+    const nodeTable = this.schema === "unified" ? "kg_nodes" : "nodes";
+    return this.db.prepare(`SELECT id FROM ${nodeTable} WHERE ${clause} LIMIT ?`).all(...params) as Array<{
+      id: string;
+    }>;
   }
 
   private likePattern(keyword: string): string {
@@ -331,5 +388,16 @@ export class KgStore {
   close(): void {
     this.nodeCache.clear();
     this.db.close();
+  }
+}
+
+/** knowledge.db kg_nodes.law_refs 为 TEXT JSON 数组；解析失败返回 undefined。 */
+function parseLawRefsCount(lawRefs: string | null): number | undefined {
+  if (!lawRefs) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(lawRefs);
+    return Array.isArray(parsed) ? parsed.length : undefined;
+  } catch {
+    return undefined;
   }
 }

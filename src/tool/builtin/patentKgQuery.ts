@@ -7,7 +7,8 @@ import type { KgNode } from "../../knowledge/patent/types.js";
 /**
  * patent_kg_query — 专利知识图谱主动查询工具。
  *
- * 检索 patent_kg.db（116K 节点 / 484K 关系边）中的图谱节点（判例/审查规则/
+ * 检索 knowledge.db 的 kg_nodes/kg_edges（XiaoNuo 产物，21.4 万节点；
+ * legacy 兼容 patent_kg.db nodes/edges）中的图谱节点（判例/审查规则/
  * 法条/概念），支持三种模式：
  *   1. query 关键词检索（FTS5 + 相似/引用关系扩展，附命中方式标注）
  *   2. id 节点展开（节点详情 + 相似/引用邻居，用于沿引用关系追查判例）
@@ -251,7 +252,7 @@ export function createPatentKgQueryTool(
           ok: false,
           code: "setup_required",
           reason:
-            "未找到专利知识图谱数据库（默认 ~/.mady/knowledge/patent_kg.db，可用 SATI_KNOWLEDGE_DIR 或 SATI_PATENT_KG_DB 指定）",
+            "未找到专利知识图谱数据库（默认 ~/.mady/knowledge/knowledge.db 的 kg_nodes，可用 SATI_KNOWLEDGE_DIR 或 SATI_PATENT_KG_DB 指定）",
         };
       }
       return { ok: true };
@@ -263,7 +264,7 @@ export function createPatentKgQueryTool(
           content: [
             {
               type: "text",
-              text: "错误：未找到专利知识图谱数据库，请配置 SATI_KNOWLEDGE_DIR 或 SATI_PATENT_KG_DB 环境变量。",
+              text: "错误：未找到专利知识图谱数据库（knowledge.db kg_nodes），请配置 SATI_KNOWLEDGE_DIR 或 SATI_PATENT_KG_DB 环境变量。",
             },
           ],
           metadata: { error: "patent_kg_db_not_found" },

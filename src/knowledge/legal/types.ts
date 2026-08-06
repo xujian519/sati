@@ -48,3 +48,22 @@ export type LawCategory = {
   isSubFolder: number;
   group?: string;
 };
+
+/** 法律检索源统一契约（LegalSearchEngine=laws-full.db / KnowledgeLawSearch=knowledge.db）。 */
+export type LegalSearchSource = {
+  /** FTS5 是否实际可用。 */
+  readonly ftsAvailable: boolean;
+  /** 全文搜索（FTS5 BM25 优先，短查询/无 FTS 降级 LIKE）。 */
+  search(keyword: string, options?: { limit?: number; level?: string; category?: string }): LawSearchResult[];
+  /** 按名称模糊查找。 */
+  findByName(name: string, limit?: number): LawRecord[];
+  /** 按主键精确查询。 */
+  getById(id: string): LawRecord | undefined;
+  /** 批量按主键查询。 */
+  getByIds(ids: string[]): LawRecord[];
+  /** 列出分类。 */
+  getCategories(): LawCategory[];
+  /** 统计总数（诊断用）。 */
+  count(): number;
+  close(): void;
+};

@@ -12,21 +12,27 @@ import type { EmbeddingClient } from "../model/embedding/types.js";
 import type { RerankClient } from "../model/embedding/rerank.js";
 import { KgStore } from "./shared/kg-store.js";
 import { VectorDbSearch } from "./shared/vector-db.js";
+import { KnowledgeEmbeddingSearch } from "./shared/knowledge-embeddings.js";
+import { checkEmbeddingConsistency } from "./shared/embedding-consistency.js";
 import type { KnowledgeRuntimeStats } from "./shared/knowledge-stats.js";
 import { PatentKgAdapter } from "./patent/patent-kg-adapter.js";
 import { PatentMemoryProvider } from "./patent/patent-memory-provider.js";
 import { WikiCardLoader } from "./patent/wiki-card-loader.js";
 import { LegalMemoryProvider } from "./legal/legal-memory-provider.js";
 import { LegalSearchEngine } from "./legal/legal-search.js";
+import { KnowledgeLawSearch } from "./legal/knowledge-law-search.js";
+import type { LegalSearchSource } from "./legal/types.js";
 
 export type BuildKnowledgeResolversOptions = {
   /** patent_kg.db 路径（resolveKnowledgeDbPaths 探测结果）。 */
   patentKgDb?: string;
-  /** laws 数据库路径。 */
+  /** laws 数据库路径（legacy 法规源）。 */
   lawDb?: string;
+  /** knowledge.db 路径（XiaoNuo 统一知识库：kg_nodes + 法规 + embeddings，优先）。 */
+  knowledgeDb?: string;
   /** wiki 卡片目录。 */
   wikiDir?: string;
-  /** vectors.db 路径（离线语义索引，存在才启用 KG/法条语义召回）。 */
+  /** vectors.db 路径（legacy 语义索引，存在才启用 KG/法条语义召回）。 */
   vectorsDb?: string;
   /** 向量持久化目录（memory/wiki JSONL 索引）。 */
   embeddingDir: string;
@@ -58,11 +64,24 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
     }
   }
 
+  // knowledge.db 语义召回（复用 XiaoNuo embeddings）：法规语料（law_article）。
+  let legalEmbeddings: KnowledgeEmbeddingSearch | undefined;
+  if (options.knowledgeDb && options.embedding) {
+    try {
+      legalEmbeddings = new KnowledgeEmbeddingSearch({
+        dbPath: options.knowledgeDb,
+        docTypes: ["law_article"],
+        logger: options.logger,
+      });
+    } catch (error) {
+      options.logger?.warn?.(`knowledge.db embeddings 打开失败，法条语义降级: ${errorMessage(error)}`);
+    }
+  }
+
   const patentProviderOptions = {
     wikiLoader,
     embedding: patentEmbedding,
     embeddingDir: options.embeddingDir,
-    vectorDb,
     rerank: options.rerank,
     rerankTopN: options.rerankTopN,
     stats: options.stats,
@@ -80,21 +99,55 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
     resolvers.push(new PatentMemoryProvider(patentProviderOptions));
   }
 
-  if (options.lawDb) {
+  // 法规引擎：knowledge.db 优先（law_article 文档），否则 legacy laws-full。
+  let legalEngine: LegalSearchSource | undefined;
+  /** 法规引擎是否来自 knowledge.db（决定 knowledgeEmbeddings 是否同源可用）。 */
+  let legalEngineFromKnowledge = false;
+  if (options.knowledgeDb) {
     try {
-      resolvers.push(
-        new LegalMemoryProvider(new LegalSearchEngine(options.lawDb), {
-          embedding: options.embedding,
-          vectorDb,
-          rerank: options.rerank,
-          rerankTopN: options.rerankTopN,
-          stats: options.stats,
-          logger: options.logger,
-        }),
-      );
+      const lawSearch = new KnowledgeLawSearch(options.knowledgeDb);
+      if (lawSearch.count() > 0) {
+        legalEngine = lawSearch;
+        legalEngineFromKnowledge = true;
+      } else {
+        lawSearch.close();
+      }
+    } catch (error) {
+      options.logger?.warn?.(`knowledge.db 法规后端打开失败: ${errorMessage(error)}`);
+    }
+  }
+  if (!legalEngine && options.lawDb) {
+    try {
+      legalEngine = new LegalSearchEngine(options.lawDb);
     } catch (error) {
       options.logger?.warn?.(`laws 数据库打开失败，跳过法律知识库: ${errorMessage(error)}`);
     }
+  }
+  if (legalEngine) {
+    resolvers.push(
+      new LegalMemoryProvider(legalEngine, {
+        embedding: options.embedding,
+        // 语义索引与检索引擎必须同源：knowledgeEmbeddings 的 id 空间是 knowledge.db
+        // documents.id，仅当检索引擎也是 knowledge.db 后端时才可复用；否则语义路空转。
+        knowledgeEmbeddings: legalEngineFromKnowledge ? legalEmbeddings : undefined,
+        vectorDb,
+        rerank: options.rerank,
+        rerankTopN: options.rerankTopN,
+        stats: options.stats,
+        logger: options.logger,
+      }),
+    );
+  }
+
+  // embedding 查询端与 knowledge.db 库向量一致性自检（fire-and-forget，不阻塞启动）。
+  if (options.knowledgeDb && options.embedding) {
+    checkEmbeddingConsistency(options.knowledgeDb, options.embedding, { logger: options.logger })
+      .then(result => {
+        if (result) options.stats?.setEmbeddingConsistency({ ok: result.ok, meanCosine: result.meanCosine });
+      })
+      .catch(() => {
+        // 自检失败不阻断（consistency 内部已 warn）。
+      });
   }
 
   return resolvers;

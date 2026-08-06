@@ -9,18 +9,19 @@ import type {
   MemoryRetrieveResult,
 } from "../../context/memory/MemoryResolver.js";
 import { MIN_QUERY_LENGTH, type VectorDbSearch } from "../shared/vector-db.js";
+import type { KnowledgeEmbeddingSearch } from "../shared/knowledge-embeddings.js";
 import { CircuitBreaker, guarded } from "../shared/circuit-breaker.js";
 import { TtlCache } from "../shared/ttl-cache.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
-import { LegalSearchEngine } from "./legal-search.js";
-import type { LawRecord } from "./types.js";
+import type { LawRecord, LegalSearchSource } from "./types.js";
 
 /**
  * LegalMemoryProvider — 法律知识库 MemoryResolver。
  *
- * 检索时对 query 做 FTS5 全文搜索；配置 embedding + vectorDb 后叠加
- * 语义召回（vectors.db("law")），双路 RRF 融合；配置 rerank 后对融合
- * 候选做 cross-encoder 重排，取 top-N 注入 <law-database> 上下文块。
+ * 检索时对 query 做 FTS5 全文搜索；配置 embedding + 语义索引后叠加
+ * 语义召回（优先 knowledge.db embeddings("law_article")，legacy 为
+ * vectors.db("law")），双路 RRF 融合；配置 rerank 后对融合候选做
+ * cross-encoder 重排，取 top-N 注入 <law-database> 上下文块。
  * 知识库只读，captureTurn 为空操作。
  */
 
@@ -29,9 +30,11 @@ export type LegalMemoryProviderOptions = {
   limit?: number;
   /** 每条法条正文截断长度（默认 800 字，超出仅保留头部）。 */
   contentMaxChars?: number;
-  /** 语义检索客户端（可选）；与 vectorDb 同时配置时启用法条语义召回。 */
+  /** 语义检索客户端（可选）；与语义索引同时配置时启用法条语义召回。 */
   embedding?: EmbeddingClient;
-  /** 离线向量索引（vectors.db，可选）。 */
+  /** knowledge.db embeddings 语义索引（优先；docTypes 应含 law_article）。 */
+  knowledgeEmbeddings?: KnowledgeEmbeddingSearch;
+  /** 离线向量索引（vectors.db，legacy 备选）。 */
   vectorDb?: VectorDbSearch;
   /** 重排客户端（可选，阶段 C）；配置后对融合候选做 cross-encoder 重排。 */
   rerank?: RerankClient;
@@ -46,10 +49,11 @@ export type LegalMemoryProviderOptions = {
 };
 
 export class LegalMemoryProvider implements MemoryResolver {
-  private readonly engine: LegalSearchEngine;
+  private readonly engine: LegalSearchSource;
   private readonly limit: number;
   private readonly contentMaxChars: number;
   private readonly embedding?: EmbeddingClient;
+  private readonly knowledgeEmbeddings?: KnowledgeEmbeddingSearch;
   private readonly vectorDb?: VectorDbSearch;
   private readonly rerank?: RerankClient;
   private readonly rerankTopN: number;
@@ -59,11 +63,12 @@ export class LegalMemoryProvider implements MemoryResolver {
   private readonly rerankBreaker: CircuitBreaker;
   private readonly cache?: TtlCache<string, string>;
 
-  constructor(engine: LegalSearchEngine, options: LegalMemoryProviderOptions = {}) {
+  constructor(engine: LegalSearchSource, options: LegalMemoryProviderOptions = {}) {
     this.engine = engine;
     this.limit = options.limit ?? 3;
     this.contentMaxChars = options.contentMaxChars ?? 800;
     this.embedding = options.embedding;
+    this.knowledgeEmbeddings = options.knowledgeEmbeddings;
     this.vectorDb = options.vectorDb;
     this.rerank = options.rerank;
     this.rerankTopN = options.rerankTopN ?? 16;
@@ -169,9 +174,12 @@ export class LegalMemoryProvider implements MemoryResolver {
 
   private async searchSemantic(query: string): Promise<LawRecord[]> {
     const embedding = this.embedding;
+    if (!embedding || Array.from(query).length < MIN_QUERY_LENGTH) return [];
+    const knowledgeEmbeddings = this.knowledgeEmbeddings;
     const vectorDb = this.vectorDb;
-    if (!embedding || !vectorDb || !vectorDb.hasCorpus("law")) return [];
-    if (Array.from(query).length < MIN_QUERY_LENGTH) return [];
+    const hasKnowledge = knowledgeEmbeddings?.available === true;
+    const hasLegacy = vectorDb?.hasCorpus("law") === true;
+    if (!hasKnowledge && !hasLegacy) return [];
     return guarded(
       this.semanticBreaker,
       [],
@@ -179,17 +187,26 @@ export class LegalMemoryProvider implements MemoryResolver {
         this.stats?.recordSemanticCall();
         const [queryVector] = await embedding.embed([query]);
         if (!queryVector || queryVector.length === 0) return [];
-        const hits = vectorDb.search("law", Float32Array.from(queryVector), this.limit * 2);
-        // 批量按 id 取回（一次 IN 查询），再按 hits 的向量相似度顺序重排去重截断——
+        const queryVec = Float32Array.from(queryVector);
+        // 优先 knowledge.db embeddings（复用 XiaoNuo 产物，docTypes=law_article）。
+        let ids: string[];
+        if (hasKnowledge && knowledgeEmbeddings) {
+          ids = knowledgeEmbeddings.search(queryVec, this.limit * 2).map(hit => hit.docId);
+        } else if (vectorDb) {
+          ids = vectorDb.search("law", queryVec, this.limit * 2).map(hit => hit.docId);
+        } else {
+          return [];
+        }
+        // 批量按 id 取回（一次 IN 查询），再按 hits 的相似度顺序重排去重截断——
         // getByIds 无 ORDER BY（DB 行序），若直接按返回序去重会破坏相似度优先语义。
         const byId = new Map<string, LawRecord>();
-        for (const record of this.engine.getByIds(hits.map(hit => hit.docId))) {
+        for (const record of this.engine.getByIds(ids)) {
           byId.set(record.id, record);
         }
         const seenNames = new Set<string>();
         const deduped: LawRecord[] = [];
-        for (const hit of hits) {
-          const record = byId.get(hit.docId);
+        for (const id of ids) {
+          const record = byId.get(id);
           if (!record || seenNames.has(record.name)) continue;
           seenNames.add(record.name);
           deduped.push(record);

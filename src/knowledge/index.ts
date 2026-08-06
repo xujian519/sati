@@ -67,5 +67,16 @@ export {
 } from "./patent/wiki-card-loader.js";
 export { WikiCardVectorIndex, type WikiCardVectorIndexOptions } from "./patent/wiki-card-vector-index.js";
 export { LegalSearchEngine, type LegalSearchOptions } from "./legal/legal-search.js";
+export { KnowledgeLawSearch, type KnowledgeLawSearchOptions } from "./legal/knowledge-law-search.js";
 export { createLawSearchTool, type LawSearchToolInput, type LawSearchToolOutput } from "./legal/law-search-tool.js";
 export { LegalMemoryProvider } from "./legal/legal-memory-provider.js";
+export {
+  KnowledgeEmbeddingSearch,
+  type KnowledgeEmbeddingHit,
+  type KnowledgeEmbeddingSearchOptions,
+} from "./shared/knowledge-embeddings.js";
+export {
+  checkEmbeddingConsistency,
+  type EmbeddingConsistencyResult,
+  type EmbeddingConsistencySample,
+} from "./shared/embedding-consistency.js";

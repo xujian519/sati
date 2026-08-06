@@ -1,5 +1,12 @@
 #!/usr/bin/env tsx
 /**
+ * ⚠️ DEPRECATED（2026-08）——不再作为主路径。
+ *
+ * 已被 knowledge.db embeddings 复用取代（见 docs/design/import-xiaonuo-knowledge.md）：
+ * 语义召回直接读取 XiaoNuo 管道产物的 `knowledge.db`（embeddings 表 144K 向量），
+ * 无需重新 embedding；KG 节点不建向量（FTS + 图谱检索），法条走 knowledge.db
+ * law_article 文档。本脚本保留仅供 legacy 场景/显式 SATI_VECTORS_DB 使用。
+ *
  * KG / 法条离线向量索引生成器（阶段 B）。
  *
  * 读取 patent_kg.db（nodes 表）与 laws 库（law 表），长文分块后逐块 embed，
