@@ -43,7 +43,7 @@ export type CreateEdgeClawMemoryProviderOptions = {
   telemetry?: TelemetryClient;
   /** 语义检索客户端（memory.embedding 解析产物）；缺省则关闭语义召回。 */
   embeddingClient?: EmbeddingClient;
-  /** 向量持久化目录（默认 ~/.mady/knowledge/embeddings）。 */
+  /** 向量持久化目录（默认 ~/.sati/knowledge/embeddings）。 */
   embeddingDir?: string;
 };
 

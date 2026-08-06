@@ -19,7 +19,7 @@
  *     --embedding-url http://localhost:11434/v1 \
  *     --embedding-model bge-m3 \
  *     --corpus kg,law \
- *     [--out ~/.mady/knowledge/vectors.db] \
+ *     [--out ~/.sati/knowledge/vectors.db] \
  *     [--chunk-chars 1200] [--overlap 200] [--batch-size 32] \
  *     [--limit 500] [--force]
  *

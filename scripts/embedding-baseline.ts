@@ -17,7 +17,7 @@
  * （与 src/knowledge/config.ts 一致）。
  *
  * 注意：wiki 语义索引首次运行会对全部 ~1548 张卡做全量 embed，
- * 本地 bge-m3 约需 1-3 分钟（结果持久化到 ~/.mady/knowledge/embeddings/wiki.jsonl，
+ * 本地 bge-m3 约需 1-3 分钟（结果持久化到 ~/.sati/knowledge/embeddings/wiki.jsonl，
  * 之后秒级）。
  */
 

@@ -143,7 +143,7 @@ export function createPatentCaseSearchTool(
         return {
           ok: false,
           code: "setup_required",
-          reason: "未找到判例全文数据库（默认路径 ~/.mady/knowledge/knowledge.db，可用 SATI_CASE_DB 指定路径）",
+          reason: "未找到判例全文数据库（默认路径 ~/.sati/knowledge/knowledge.db，可用 SATI_CASE_DB 指定路径）",
         };
       }
       return { ok: true };
@@ -155,7 +155,7 @@ export function createPatentCaseSearchTool(
           content: [
             {
               type: "text",
-              text: "错误：未找到判例全文数据库（knowledge.db），请配置 SATI_CASE_DB 环境变量指向数据库路径，或放入默认目录 ~/.mady/knowledge/。",
+              text: "错误：未找到判例全文数据库（knowledge.db），请配置 SATI_CASE_DB 环境变量指向数据库路径，或放入默认目录 ~/.sati/knowledge/。",
             },
           ],
           metadata: { error: "case_db_not_found" },

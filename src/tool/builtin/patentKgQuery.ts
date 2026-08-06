@@ -252,7 +252,7 @@ export function createPatentKgQueryTool(
           ok: false,
           code: "setup_required",
           reason:
-            "未找到专利知识图谱数据库（默认 ~/.mady/knowledge/knowledge.db 的 kg_nodes，可用 SATI_KNOWLEDGE_DIR 或 SATI_PATENT_KG_DB 指定）",
+            "未找到专利知识图谱数据库（默认 ~/.sati/knowledge/knowledge.db 的 kg_nodes，可用 SATI_KNOWLEDGE_DIR 或 SATI_PATENT_KG_DB 指定）",
         };
       }
       return { ok: true };

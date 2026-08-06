@@ -105,7 +105,7 @@ export function createLawSearchTool(
         return {
           ok: false,
           code: "setup_required",
-          reason: "未找到法律数据库（默认路径 ~/.mady/knowledge/，可用 SATI_KNOWLEDGE_DIR 或 SATI_LAW_DB 指定）",
+          reason: "未找到法律数据库（默认路径 ~/.sati/knowledge/，可用 SATI_KNOWLEDGE_DIR 或 SATI_LAW_DB 指定）",
         };
       }
       return { ok: true };
