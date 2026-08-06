@@ -12,6 +12,7 @@ import {
   applyWorkCycle,
   archiveWorkCycle,
 } from "../discovery-plans.js";
+import { getKnowledgeCapabilities } from "../knowledge.js";
 
 const router = express.Router();
 
@@ -240,6 +241,21 @@ router.get("/:projectName/discovery-plans/:planId/report", async (req, res) => {
   } catch (error) {
     return res.status(getDiscoveryPlanErrorStatus(error)).json({
       error: getDiscoveryPlanErrorMessage(error, "Failed to read discovery plan report"),
+    });
+  }
+});
+
+router.get("/:projectName/knowledge-capabilities", async (req, res) => {
+  try {
+    const projectName = getTrimmedParam(req.params?.projectName);
+    if (!projectName) return res.status(400).json({ error: "projectName is required" });
+
+    const result = await getKnowledgeCapabilities(projectName);
+    return res.json(result);
+  } catch (error) {
+    const status = error?.code === "not_configured" ? 503 : getDiscoveryPlanErrorStatus(error);
+    return res.status(status).json({
+      error: getDiscoveryPlanErrorMessage(error, "Failed to read knowledge capabilities"),
     });
   }
 });

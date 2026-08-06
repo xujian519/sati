@@ -9,6 +9,8 @@ import type { SatiConfig } from "../modelPool/types";
 import { buildModelRefOptions, ensureModelRefConfigured } from "../agentModel/utils/modelRefs";
 import type { SettingsProject } from "../../shared/types";
 import MemoryDataSection from "./MemoryDataSection";
+import KnowledgeCapabilitiesSection from "./KnowledgeCapabilitiesSection";
+import EmbeddingConfigSection from "./EmbeddingConfigSection";
 import {
   DEFAULT_DREAM_MINUTES,
   DEFAULT_INDEX_MINUTES,
@@ -340,7 +342,9 @@ export default function AgentMemorySections({ title, projects }: AgentMemorySect
       <h2 className="text-2xl font-semibold text-foreground">{title}</h2>
       <ConfigSaveError error={error} />
       <MemorySection config={parsedConfig} onChange={onFormChange} />
+      <EmbeddingConfigSection config={parsedConfig} onChange={onFormChange} />
       <MemoryDataSection projects={projects} />
+      <KnowledgeCapabilitiesSection projects={projects} />
     </div>
   );
 }

@@ -1032,6 +1032,83 @@
             "invalidImport": "请选择有效的 JSON 备份文件。",
             "invalidExport": "导出的内容不是有效 JSON。"
           }
+        },
+        "knowledge": {
+          "title": "知识库能力",
+          "description": "知识库数据与语义增强的可用性自检（与运行时能力清单同源）。",
+          "refresh": "刷新",
+          "dataDir": "数据目录",
+          "empty": "暂无可查询知识库状态的项目。",
+          "error": "加载失败",
+          "statusReady": "就绪",
+          "statusMissing": "缺失",
+          "statusDisabled": "未启用",
+          "stats": {
+            "title": "运行时统计",
+            "cacheHits": "缓存命中",
+            "cacheMisses": "缓存未命中",
+            "semanticCalls": "语义召回",
+            "semanticFailures": "语义失败",
+            "rerankCalls": "重排次数",
+            "rerankFailures": "重排失败",
+            "breakers": "熔断器",
+            "noStats": "暂无运行时统计（尚未发生检索或运行时未创建）。"
+          }
+        },
+        "embedding": {
+          "title": "语义增强（Embedding / Rerank）",
+          "description": "可选增强：为知识库提供语义召回与重排。任意 OpenAI 兼容端点（本地 Ollama / TEI / 云 API）均可；不配置时关键词检索照常工作。",
+          "enabled": {
+            "label": "启用语义 embedding",
+            "description": "开启后知识库检索将叠加语义召回；端点故障时熔断并自动降级为关键词检索。"
+          },
+          "endpoint": {
+            "label": "端点方式",
+            "description": "引用已配置 provider 的地址与密钥，或直填 OpenAI 兼容端点。"
+          },
+          "endpointCustom": "直填端点地址（不引用 provider）",
+          "baseUrl": {
+            "label": "端点地址",
+            "description": "OpenAI 兼容 /embeddings 端点基地址（如本地 Ollama）。"
+          },
+          "apiKey": {
+            "label": "API 密钥",
+            "description": "本地服务无鉴权时可留空。",
+            "placeholder": "可选"
+          },
+          "model": {
+            "label": "Embedding 模型",
+            "description": "端点上已加载的嵌入模型名。"
+          },
+          "dimensions": {
+            "label": "向量维度",
+            "description": "可选；留空时从首次响应自动推断（bge-m3 为 1024）。"
+          },
+          "warningIncomplete": "需要填写端点（或 provider）与模型名，否则语义增强不会生效。",
+          "vectorsHint": "KG 语义召回还需离线向量索引：运行 pnpm tsx scripts/build-knowledge-vectors.ts 生成 vectors.db。",
+          "indexWiki": {
+            "label": "索引专利 wiki 卡片",
+            "description": "将专利 wiki 卡片正文纳入语义索引（建议开启）。关闭后 wiki 卡片仅走关键词召回。"
+          },
+          "rerank": {
+            "enabled": {
+              "label": "启用重排 rerank",
+              "description": "对语义召回候选做 cross-encoder 重排（如 HuggingFace TEI）。"
+            },
+            "baseUrl": {
+              "label": "重排端点地址",
+              "description": "cross-encoder 服务端点（Ollama 原生不提供 rerank）。"
+            },
+            "model": {
+              "label": "重排模型",
+              "description": "可选；使用端点默认模型时留空。",
+              "placeholder": "可选"
+            },
+            "topN": {
+              "label": "参与重排上限",
+              "description": "参与重排的候选条数上限，默认 16。"
+            }
+          }
         }
       },
       "tools": {

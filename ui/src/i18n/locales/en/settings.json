@@ -1080,6 +1080,83 @@
             "invalidImport": "Choose a valid JSON backup file.",
             "invalidExport": "The exported content was not valid JSON."
           }
+        },
+        "knowledge": {
+          "title": "Knowledge Base",
+          "description": "Availability self-check of knowledge base data and semantic enhancements (same source as the runtime capability list).",
+          "refresh": "Refresh",
+          "dataDir": "Data directory",
+          "empty": "No project available to query knowledge base status.",
+          "error": "Failed to load",
+          "statusReady": "Ready",
+          "statusMissing": "Missing",
+          "statusDisabled": "Disabled",
+          "stats": {
+            "title": "Runtime stats",
+            "cacheHits": "Cache hits",
+            "cacheMisses": "Cache misses",
+            "semanticCalls": "Semantic calls",
+            "semanticFailures": "Semantic failures",
+            "rerankCalls": "Rerank calls",
+            "rerankFailures": "Rerank failures",
+            "breakers": "Circuit breakers",
+            "noStats": "No runtime stats yet (no retrieval has happened or the runtime is not created)."
+          }
+        },
+        "embedding": {
+          "title": "Semantic Enhancements (Embedding / Rerank)",
+          "description": "Optional enhancement: adds semantic recall and reranking to the knowledge base. Any OpenAI-compatible endpoint (local Ollama / TEI / cloud API) works; keyword search keeps working without it.",
+          "enabled": {
+            "label": "Enable semantic embedding",
+            "description": "When enabled, knowledge retrieval adds semantic recall; endpoint failures trip the breaker and fall back to keyword search."
+          },
+          "endpoint": {
+            "label": "Endpoint source",
+            "description": "Reuse a configured provider's URL and key, or fill in an OpenAI-compatible endpoint directly."
+          },
+          "endpointCustom": "Direct endpoint URL (not a provider reference)",
+          "baseUrl": {
+            "label": "Endpoint URL",
+            "description": "Base URL of an OpenAI-compatible /embeddings endpoint (e.g. local Ollama)."
+          },
+          "apiKey": {
+            "label": "API key",
+            "description": "Leave empty for local services without authentication.",
+            "placeholder": "Optional"
+          },
+          "model": {
+            "label": "Embedding model",
+            "description": "Name of the embedding model loaded on the endpoint."
+          },
+          "dimensions": {
+            "label": "Vector dimensions",
+            "description": "Optional; inferred from the first response when empty (bge-m3 is 1024)."
+          },
+          "warningIncomplete": "An endpoint (or provider) and a model name are required, otherwise semantic enhancements will not activate.",
+          "vectorsHint": "KG semantic recall also needs the offline vector index: run pnpm tsx scripts/build-knowledge-vectors.ts to generate vectors.db.",
+          "indexWiki": {
+            "label": "Index wiki cards",
+            "description": "Embed patent wiki card text into the semantic index (recommended). Disable to keep keyword-only recall."
+          },
+          "rerank": {
+            "enabled": {
+              "label": "Enable reranking",
+              "description": "Rerank semantic candidates with a cross-encoder (e.g. HuggingFace TEI)."
+            },
+            "baseUrl": {
+              "label": "Rerank endpoint URL",
+              "description": "Cross-encoder service endpoint (Ollama does not provide rerank natively)."
+            },
+            "model": {
+              "label": "Rerank model",
+              "description": "Optional; leave empty to use the endpoint's default model.",
+              "placeholder": "Optional"
+            },
+            "topN": {
+              "label": "Rerank candidate cap",
+              "description": "Maximum number of candidates sent to the reranker; defaults to 16."
+            }
+          }
         }
       },
       "tools": {

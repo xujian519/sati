@@ -7,16 +7,11 @@ import { authenticatedFetch } from "../../../../utils/api";
 import type { SettingsProject } from "../../shared/types";
 import { FormRow, Select } from "../../shared/components/Inputs";
 import { SettingsCard, SettingsSection } from "../../shared/view";
+import { buildProjectTargets, projectPathFromTarget } from "./projectTargets";
 
 type MemoryActionState = {
   kind: "idle" | "busy" | "success" | "error";
   message?: string;
-};
-
-type MemoryProjectTarget = {
-  value: string;
-  label: string;
-  path: string;
 };
 
 type MemoryDataSectionProps = {
@@ -24,31 +19,6 @@ type MemoryDataSectionProps = {
 };
 
 const MEMORY_ALL_TARGET = "all_memory";
-
-function memoryProjectPath(project: SettingsProject): string {
-  return (project.fullPath || project.path || "").trim();
-}
-
-function memoryProjectLabel(project: SettingsProject, fallback: string): string {
-  const direct = (project.displayName || project.name || "").trim();
-  if (direct) return direct;
-
-  const root = memoryProjectPath(project);
-  const tail = root
-    .replace(/[\\/]+$/, "")
-    .split(/[\\/]/)
-    .filter(Boolean)
-    .pop();
-  return tail || fallback;
-}
-
-function memoryProjectTargetValue(projectPath: string): string {
-  return `project:${projectPath}`;
-}
-
-function memoryProjectPathFromTarget(target: string): string {
-  return target.startsWith("project:") ? target.slice("project:".length) : "";
-}
 
 function withMemoryProjectPath(url: string, projectPath: string): string {
   if (!projectPath) return url;
@@ -100,21 +70,10 @@ export default function MemoryDataSection({ projects }: MemoryDataSectionProps) 
     kind: "idle",
   });
 
-  const projectTargets = useMemo(() => {
-    const seen = new Set<string>();
-    const fallback = t("satiConfig.panels.memory.data.target.projectFallback");
-    return projects.reduce<MemoryProjectTarget[]>((items, project) => {
-      const path = memoryProjectPath(project);
-      if (!path || seen.has(path)) return items;
-      seen.add(path);
-      items.push({
-        value: memoryProjectTargetValue(path),
-        label: memoryProjectLabel(project, fallback),
-        path,
-      });
-      return items;
-    }, []);
-  }, [projects, t]);
+  const projectTargets = useMemo(
+    () => buildProjectTargets(projects, t("satiConfig.panels.memory.data.target.projectFallback")),
+    [projects, t],
+  );
 
   const [selectedMemoryTarget, setSelectedMemoryTarget] = useState(() => projectTargets[0]?.value ?? MEMORY_ALL_TARGET);
 
@@ -139,7 +98,7 @@ export default function MemoryDataSection({ projects }: MemoryDataSectionProps) 
   }, [memoryTargetOptions, projectTargets, selectedMemoryTarget]);
 
   const targetIsAllMemory = selectedMemoryTarget === MEMORY_ALL_TARGET;
-  const selectedProjectPath = targetIsAllMemory ? "" : memoryProjectPathFromTarget(selectedMemoryTarget);
+  const selectedProjectPath = targetIsAllMemory ? "" : projectPathFromTarget(selectedMemoryTarget);
   const selectedProjectTarget = projectTargets.find(target => target.path === selectedProjectPath) ?? null;
   const dashboardProjectPath = selectedProjectPath || projectTargets[0]?.path || "";
   const selectedTargetLabel = targetIsAllMemory

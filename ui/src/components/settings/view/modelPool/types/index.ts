@@ -28,6 +28,30 @@ export type SatiConfig = {
     model?: string;
     autoIndexIntervalMinutes?: number;
     autoDreamIntervalMinutes?: number;
+    /** 知识库语义增强（可选）；未配置时关键词检索照常工作。 */
+    embedding?: {
+      enabled?: boolean;
+      /** 引用 model.providers 的 url/apiKey（与 baseUrl 二选一）。 */
+      provider?: string;
+      /** 独立 OpenAI 兼容端点（与 provider 二选一），如 http://localhost:11434/v1。 */
+      baseUrl?: string;
+      apiKey?: string;
+      model?: string;
+      dimensions?: number;
+      timeoutMs?: number;
+      batchSize?: number;
+      indexMemory?: boolean;
+      indexWiki?: boolean;
+      rerank?: {
+        enabled?: boolean;
+        provider?: string;
+        baseUrl?: string;
+        apiKey?: string;
+        model?: string;
+        timeoutMs?: number;
+        topN?: number;
+      };
+    };
   };
   alwaysOn?: {
     enabled?: boolean;
