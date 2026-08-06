@@ -11,7 +11,7 @@ description: "审查意见答复（OA）：解析审查意见、评估驳回理�
 
 处理 OA 前/处理中，优先从项目知识库（`src/knowledge/patent/wiki/`）检索 wiki 卡片与知识图谱获得审查标准支撑。两路可用：
 
-- **主动检索**：调用 `patent_wiki_search` 检索 wiki 卡片（按驳回理由主题查询）；调用 `patent_kg_query` 沿知识图谱引用关系追查类似判例/审查规则（如 `patent_kg_query({ query: "创造性 三步法" })`、`patent_kg_query({ id: "<判例节点id>" })`）
+- **主动检索**：调用 `patent_wiki_search` 检索 wiki 卡片（按驳回理由主题查询）；调用 `patent_case_search` 检索相似在先决定的**论证细节与证据认定**（如 `patent_case_search({ query: "创造性 技术启示 区别特征" })`）；调用 `patent_kg_query` 沿知识图谱引用关系追查类似判例/审查规则（如 `patent_kg_query({ query: "创造性 三步法" })`、`patent_kg_query({ id: "<判例节点id>" })`）
 - **自动注入**：`<memory-context>` 会按 query 自动注入相关 wiki 卡片与图谱节点（`<knowledge-graph>` / `<wiki-card>` 块），与主动检索互补
 
 **OA 答复必查卡片清单**（按驳回理由类型，id 为 wiki 卡片标识）：
@@ -33,7 +33,7 @@ description: "审查意见答复（OA）：解析审查意见、评估驳回理�
 | 修改超范围 A33 | `专利实务/修改/修改-修改依据与超范围判断` | A33 论证 |
 | 修改超范围 | `专利实务/修改/修改-直接毫无疑义确定（上）` | 直接毫无疑义确定标准 |
 
-> 清单为必查底线；其余卡片可按需检索（如 `专利实务/创造性/创造性-原理-所属领域技术人员`、`复审无效/推理模式/推理模式-创造性-技术启示判断` 等）。判例沿引用关系追查用 `patent_kg_query`，法条原文核验用 `law_search`。
+> 清单为必查底线；其余卡片可按需检索（如 `专利实务/创造性/创造性-原理-所属领域技术人员`、`复审无效/推理模式/推理模式-创造性-技术启示判断` 等）。相似在先决定的论证细节/证据认定用 `patent_case_search`，判例沿引用关系追查用 `patent_kg_query`，法条原文核验用 `law_search`。
 
 ## 阶段一：解读（解析审查意见）
 
