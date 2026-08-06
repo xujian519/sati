@@ -226,8 +226,9 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     });
     if (cron) {
       cron.bindGateway(gateway);
-      await cron.start();
     }
+    // cron 启动与后续 server 启动无依赖，并行执行以缩短启动时间。
+    const cronStartPromise = cron ? cron.start() : Promise.resolve();
 
     // --- Subsystem hot-reload on config change ---
 
@@ -462,16 +463,36 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
           })
         : undefined;
     const allChannels = [...extraChannels, ...(wecomChannel ? [wecomChannel] : [])];
-    const server = await startSatiServer({
-      gateway,
-      port: readPort(argv) ?? (Number.isFinite(envPort) ? envPort : 19789),
-      staticAssetsPath: resolve(projectRoot, "ui/dist"),
-      feishu: feishuChannel,
-      weixin: weixinChannel,
-      qq: qqChannel,
-      channels: allChannels,
-      config: snapshot.config,
-    });
+    // 与 cron 启动并行（两者互不依赖）。用 allSettled 而非 Promise.all：
+    // 任一路失败时另一路的 rejection 已被消费（不产生 unhandled rejection），
+    // 且各路错误独立记录，不会因先到者遮蔽后到者。
+    const [serverResult, cronResult] = await Promise.allSettled([
+      startSatiServer({
+        gateway,
+        port: readPort(argv) ?? (Number.isFinite(envPort) ? envPort : 19789),
+        staticAssetsPath: resolve(projectRoot, "ui/dist"),
+        feishu: feishuChannel,
+        weixin: weixinChannel,
+        qq: qqChannel,
+        channels: allChannels,
+        config: snapshot.config,
+      }),
+      cronStartPromise,
+    ]);
+    if (cronResult.status === "rejected") {
+      console.warn(
+        `[cron] start failed: ${cronResult.reason instanceof Error ? cronResult.reason.message : String(cronResult.reason)}`,
+      );
+    }
+    if (serverResult.status === "rejected") {
+      throw serverResult.reason;
+    }
+    if (cronResult.status === "rejected") {
+      // cron 失败但 server 已监听：关闭 server，避免退出后端口残留
+      await serverResult.value.close().catch(() => {});
+      throw cronResult.reason;
+    }
+    const server = serverResult.value;
     serverRef = server;
     (
       gateway as {

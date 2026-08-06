@@ -83,6 +83,12 @@ export type PluginContributionSnapshot = {
 
 export class PluginRuntime {
   private readonly registry = new PluginRegistry();
+  /**
+   * In-flight refresh promise：并发 refresh() 调用共享同一次全量扫描与加载
+   * （如多个会话同时创建），避免重复的目录扫描/文件读取。refresh() 语义
+   * 保持不变——每次都重新加载，不做时间窗口缓存（文件系统变更必须立即可见）。
+   */
+  private inFlightRefresh: Promise<SatiLoadedPlugin[]> | null = null;
 
   constructor(private readonly options: PluginRuntimeOptions) {}
 
@@ -207,7 +213,17 @@ export class PluginRuntime {
   }
 
   async refresh(): Promise<SatiLoadedPlugin[]> {
-    return (await this.refreshWithReport()).next;
+    // 并发调用共享同一次刷新（会话并发创建时只扫描一次磁盘）；
+    // 串行调用每次都真实重新加载，保证文件系统变更立即可见。
+    if (this.inFlightRefresh) {
+      return this.inFlightRefresh;
+    }
+    this.inFlightRefresh = (async () => (await this.refreshWithReport()).next)();
+    try {
+      return await this.inFlightRefresh;
+    } finally {
+      this.inFlightRefresh = null;
+    }
   }
 
   async refreshWithReport(): Promise<PluginRefreshResult> {

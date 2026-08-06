@@ -176,6 +176,9 @@ apps/desktop/resources/*.tar
 .DS_Store
 **/.DS_Store
 
+# Wiki 扫描缓存（运行时生成，随 wiki 目录结构自动失效重建）
+**/wiki/.wiki-meta.json
+
 # WCB benchmark output (large, per-run data)
 wcb-output/
 

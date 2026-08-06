@@ -294,21 +294,23 @@ function portIsListening(port: number, timeoutMs = 1500): Promise<boolean> {
 }
 
 /** 读取进程命令行（杀进程前验证身份用；读取失败返回 null）。 */
-function processCommandLine(pid: number): string | null {
+async function processCommandLine(pid: number): Promise<string | null> {
   try {
     if (process.platform === "win32") {
-      const out = execSync(`wmic process where "processid=${pid}" get commandline /value`, {
-        stdio: ["ignore", "pipe", "ignore"],
-        timeout: 3000,
-        shell: "cmd.exe",
-      }).toString("utf8");
-      const m = /CommandLine=([\s\S]*?)(?:\r?\n\r?\n|$)/.exec(out.trim());
+      // async execFile 避免 wmic 阻塞 Electron 主进程（与 macOS 分支一致）。
+      const { stdout } = await execFile(
+        "wmic",
+        ["process", "where", `processid=${pid}`, "get", "commandline", "/value"],
+        { timeout: 3000 },
+      );
+      const m = /CommandLine=([\s\S]*?)(?:\r?\n\r?\n|$)/.exec(stdout.trim());
       return m?.[1]?.trim() ?? null;
     }
     // `ps -p PID -o command=` 在 macOS/Linux 输出单行、无表头（`-o` 指定
     // 字段时省略表头行）。取最后一行（有表头环境亦兼容），而不是 [1]。
-    const out = execSync(`ps -p ${pid} -o command=`).toString("utf8");
-    const line = out.trim().split("\n").at(-1)?.trim();
+    // 用 async execFile 避免 execSync 阻塞 Electron 主进程。
+    const { stdout } = await execFile("ps", ["-p", String(pid), "-o", "command="], { timeout: 3000 });
+    const line = stdout.trim().split("\n").at(-1)?.trim();
     return line && line.length > 0 ? line : null;
   } catch {
     return null;
@@ -319,8 +321,8 @@ function processCommandLine(pid: number): string | null {
  * 判断 PID 是否为 Sati 运行时进程（UI server / gateway / cron daemon）。
  * 仅凭 PID 或端口占用就杀会误伤 PID 复用或端口被无关进程占用的场景。
  */
-function isSatiRuntimeProcess(pid: number): boolean {
-  const cmd = processCommandLine(pid);
+async function isSatiRuntimeProcess(pid: number): Promise<boolean> {
+  const cmd = await processCommandLine(pid);
   if (!cmd) return false; // 读不到命令行时不杀，宁可放过不可误杀
   return /satiui\/server|dist\/src\/cli\/sati|daemonMain|ui\/server\/index\.js/.test(cmd);
 }
@@ -338,7 +340,7 @@ async function cleanupStaleOrOrphanPid(): Promise<void> {
   }
   // 身份验证：pid 文件记录的进程被强杀后，PID 可能已被系统回收给无关
   // 进程；仅凭 PID 存在就杀会误伤无辜进程。
-  if (!isSatiRuntimeProcess(pid)) {
+  if (!(await isSatiRuntimeProcess(pid))) {
     console.warn(`[desktop] refusing to kill pid ${pid}: not a Sati runtime process`);
     return;
   }
@@ -626,40 +628,42 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // wall-clock into the next phase keeps the splash sequence shorter.
     await this.cleanupStaleRuntimeVersions(this.appVersion);
 
-    // Order matters only for clarity; resolution at runtime is via ../../../
-    // path walks so all three must end up as siblings inside runtimeBaseDir.
-    // Each ensureBundleExtracted is awaited *sequentially* (not Promise.all)
-    // because: (a) tar is single-threaded I/O bound — parallel extraction
-    // saturates the disk and gives no wall-clock win; (b) sequential
-    // execution means the splash status label tracks reality (one tarball
-    // at a time) instead of showing one phase while three race in the
-    // background.
+    // All three must end up as siblings inside runtimeBaseDir (resolution at
+    // runtime is via ../../../ path walks). They extract to independent
+    // subdirectories with no interdependency, so extraction is parallelized:
+    // tar xf on Apple Silicon is CPU-bound (xz decompression) and each tar
+    // only uses one core — sequential extraction leaves 3+ cores idle on
+    // cold APFS caches. The later symlink wiring (dist/ etc.) only needs the
+    // directories to exist, so it can stay sequential after this point.
+    // SATI_TAR_PARALLEL=0 falls back to sequential extraction (e.g. on
+    // mechanical disks where concurrent I/O actually loses).
     //
     // Progress labels are intentionally generic ("应用资源 (N/3)") rather
     // than naming the internal bundle (memory-core / satiui /
     // sati-main) — those names mean nothing to end users and the
     // (N/3) index gives enough sense of "how many steps left".
-    await this.ensureBundleExtracted(
-      resources,
-      runtimeBaseDir,
-      "sati-memory-core-bundle.tar",
-      "edgeclaw-memory-core",
-      "正在解压应用资源 (1/3)",
-    );
-    const satiUiDir = await this.ensureBundleExtracted(
-      resources,
-      runtimeBaseDir,
-      "satiui-bundle.tar",
-      "satiui",
-      "正在解压应用资源 (2/3)",
-    );
-    const satiMainDir = await this.ensureBundleExtracted(
-      resources,
-      runtimeBaseDir,
-      "sati-main-bundle.tar",
-      "sati-main",
-      "正在解压应用资源 (3/3)",
-    );
+    const extractMemoryCore = () =>
+      this.ensureBundleExtracted(
+        resources,
+        runtimeBaseDir,
+        "sati-memory-core-bundle.tar",
+        "edgeclaw-memory-core",
+        "正在解压应用资源 (1/3)",
+      );
+    const extractSatiUi = () =>
+      this.ensureBundleExtracted(resources, runtimeBaseDir, "satiui-bundle.tar", "satiui", "正在解压应用资源 (2/3)");
+    const extractSatiMain = () =>
+      this.ensureBundleExtracted(
+        resources,
+        runtimeBaseDir,
+        "sati-main-bundle.tar",
+        "sati-main",
+        "正在解压应用资源 (3/3)",
+      );
+    const [satiMemoryDir, satiUiDir, satiMainDir] =
+      process.env.SATI_TAR_PARALLEL === "0"
+        ? [await extractMemoryCore(), await extractSatiUi(), await extractSatiMain()]
+        : await Promise.all([extractMemoryCore(), extractSatiUi(), extractSatiMain()]);
 
     // ui/server/ files import compiled JS via relative paths like
     // `../../dist/src/pilot/index.js`. From satiui/server/ that
@@ -676,8 +680,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // Compiled code does `import ... from "edgeclaw-memory-core"` (bare
     // specifier), so Node must find it under sati-main/node_modules/.
     const memNodeModLink = path.join(satiMainDir, "node_modules", "edgeclaw-memory-core");
-    const memCoreDir = path.join(runtimeBaseDir, "edgeclaw-memory-core");
-    linkDirectory(memNodeModLink, memCoreDir);
+    linkDirectory(memNodeModLink, satiMemoryDir);
 
     // npm hoists shared deps (ws, express, etc.) into the root node_modules/
     // which ends up inside sati-main-bundle.tar, not satiui-bundle.tar.
@@ -704,7 +707,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     if (fsSync.existsSync(memSrcLink) && !fsSync.lstatSync(memSrcLink).isSymbolicLink()) {
       fsSync.rmSync(memSrcLink, { recursive: true });
     }
-    linkDirectory(memSrcLink, memCoreDir);
+    linkDirectory(memSrcLink, satiMemoryDir);
 
     return {
       nodeBin: bundledBinary(path.join(resources, "node-bin"), "node"),
@@ -734,27 +737,23 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   // became an in-process undici dispatcher (src/cli/proxy.ts
   // installGlobalProxy), so nothing binds 18080 anymore.
 
-  private listenerPidForPort(port: number): number | null {
+  private async listenerPidForPort(port: number): Promise<number | null> {
     try {
       if (process.platform === "win32") {
         // netstat -ano gives lines like:  TCP  0.0.0.0:18790  0.0.0.0:0  LISTENING  1234
-        const raw = execSync(`netstat -ano -p TCP`, {
-          stdio: ["ignore", "pipe", "ignore"],
-          timeout: 5000,
-          shell: "cmd.exe",
-        }).toString("utf8");
-        const line = raw.split("\n").find(l => l.includes("LISTENING") && l.includes(`:${port} `));
+        // async execFile 避免 netstat 阻塞 Electron 主进程（与 lsof 分支一致）。
+        const { stdout } = await execFile("netstat", ["-ano", "-p", "TCP"], { timeout: 5000 });
+        const line = stdout.split("\n").find(l => l.includes("LISTENING") && l.includes(`:${port} `));
         if (!line) return null;
         const parts = line.trim().split(/\s+/);
         const pid = Number.parseInt(parts[parts.length - 1] ?? "", 10);
         return Number.isFinite(pid) && pid > 0 ? pid : null;
       }
-      const out = execSync(`/usr/sbin/lsof -nP -t -i :${port} -sTCP:LISTEN`, {
-        stdio: ["ignore", "pipe", "ignore"],
+      // async execFile 避免 lsof 阻塞 Electron 主进程（最坏 3s）。
+      const { stdout } = await execFile("/usr/sbin/lsof", ["-nP", "-t", "-i", `:${port}`, "-sTCP:LISTEN"], {
         timeout: 3000,
-      })
-        .toString("utf8")
-        .trim();
+      });
+      const out = stdout.trim();
       if (!out) return null;
       const first = Number.parseInt(out.split("\n")[0] ?? "", 10);
       return Number.isFinite(first) && first > 0 ? first : null;
@@ -768,11 +767,13 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
   }
 
   private async killOrphanGateway(): Promise<void> {
-    const pid = this.listenerPidForPort(GATEWAY_PORT);
+    // 直接用 lsof 查监听者（lsof 匹配任意地址族，含 IPv6/非 loopback；
+    // 不用 portIsListening 预检——它仅探测 127.0.0.1，会漏掉此类孤儿进程）。
+    const pid = await this.listenerPidForPort(GATEWAY_PORT);
     if (pid === null) return;
     if (pid === process.pid) return;
     // 端口可能被用户的无关进程占用，杀前验证 Sati 身份
-    if (!isSatiRuntimeProcess(pid)) return;
+    if (!(await isSatiRuntimeProcess(pid))) return;
     await killPidGracefully(pid, ORPHAN_TERM_WAIT_MS);
   }
 
@@ -787,7 +788,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
    * 统一尝试优雅终止，最多等待 ORPHAN_TERM_WAIT_MS 后强杀。
    */
   private async ensurePortFreeForGateway(port: number): Promise<void> {
-    const pid = this.listenerPidForPort(port);
+    const pid = await this.listenerPidForPort(port);
     if (pid === null) return;
     if (pid === process.pid) return;
     // 已经是 Sati 进程 — killOrphanGateway 应该已处理；若仍存活则兜底杀

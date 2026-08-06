@@ -15,12 +15,31 @@ type StoreSnapshot = {
 
 const LOCK_STALE_MS = 10 * 60_000;
 
+/** 迁移完成标记文件内容。 */
+function migrationMarkerJson(): string {
+  return `${JSON.stringify({ version: 1, completedAt: new Date().toISOString() }, null, 2)}\n`;
+}
+
 export async function migrateCronStores(input: { pilotHome: string; logger?: CronRuntimeLogger }): Promise<void> {
   const rootDir = resolve(input.pilotHome, "cron");
+  // 已迁移完成则直接跳过，避免重复获取锁和重读快照（锁争用最坏可等待 10s）
+  const markerPath = resolve(rootDir, "store-migration-v1.json");
+  try {
+    await stat(markerPath);
+    input.logger?.info?.("cron store migration already completed, skipping.");
+    return;
+  } catch {
+    // marker 不存在，继续迁移
+  }
   const releaseLock = await acquireMigrationLock(rootDir, input.logger);
   try {
     const snapshots = await readSnapshots(resolve(rootDir, "projects"));
-    if (snapshots.length === 0) return;
+    if (snapshots.length === 0) {
+      // 无 cron 项目：无可迁移数据，直接写完成标记，避免全新安装
+      // 每次启动都重复走锁获取与目录扫描。
+      await writeFile(markerPath, migrationMarkerJson(), "utf-8");
+      return;
+    }
 
     const blockedTaskDirs = new Set(
       snapshots.filter(snapshot => !snapshot.taskFileWritable).map(snapshot => snapshot.dir),
@@ -70,11 +89,7 @@ export async function migrateCronStores(input: { pilotHome: string; logger?: Cro
     await stageDestinationData(snapshots, finalTasks, finalRuns, input.logger);
     await migrateRunEvents(snapshots, runTargets, input.logger);
     await writeFinalSnapshots(snapshots, finalTasks, finalRuns);
-    await writeFile(
-      resolve(rootDir, "store-migration-v1.json"),
-      `${JSON.stringify({ version: 1, completedAt: new Date().toISOString() }, null, 2)}\n`,
-      "utf-8",
-    );
+    await writeFile(markerPath, migrationMarkerJson(), "utf-8");
   } finally {
     await releaseLock();
   }

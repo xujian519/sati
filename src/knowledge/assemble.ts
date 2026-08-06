@@ -88,10 +88,19 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
     logger: options.logger,
   };
   // 启动时后台预热 wiki 卡语义索引：首次全量 embed（本地 Ollama 下约百秒级）
-  // 移出用户检索路径。预热失败由 provider 内部 warn/熔断处理，不影响启动。
+  // 移出用户检索路径。预热失败仅告警（warmup() 内部无捕获，须在此兜底，
+  // 否则 unhandled rejection 会经进程级 handler 关停 server）。
+  // 延迟 SATI_WARMUP_DELAY（默认 30s）启动预热，避免与 server 就绪竞争 CPU（设 0 恢复立即预热）。
+  const warmupDelayMs = Number.parseInt(process.env.SATI_WARMUP_DELAY ?? "30000", 10);
   function pushPatentProvider(provider: PatentMemoryProvider): void {
     resolvers.push(provider);
-    void provider.warmupSemanticIndex();
+    setTimeout(() => {
+      provider.warmupSemanticIndex().catch(error => {
+        options.logger?.warn?.(
+          `wiki 语义索引预热失败（不影响启动与关键词检索）: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+    }, warmupDelayMs);
   }
 
   if (options.patentKgDb) {
