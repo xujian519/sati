@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # 手动触发入口：GitHub Actions push 事件偶发丢失（2026-08 基础设施故障）时，
+  # 可用 `gh workflow run ci.yml --ref main` 手动触发。
+  workflow_dispatch:
 
 jobs:
   quality:
