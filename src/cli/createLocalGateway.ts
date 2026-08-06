@@ -739,8 +739,28 @@ class ProjectRuntimeRegistry {
     });
     const webSearchConfig = snapshot.config.tools?.webSearch;
     const paperSearchConfig = snapshot.config.tools?.paperSearch;
+
+    // 语义检索（可选）：embedding 端点配置解析一次，分发给记忆、知识库与附图检索。
+    const knowledgePaths = resolveKnowledgeDbPaths();
+    const embeddingDiagnostics: PilotConfigDiagnostic[] = [];
+    const embeddingClient = resolveEmbeddingClient(
+      snapshot.config.memory?.embedding,
+      snapshot.config.model,
+      embeddingDiagnostics,
+    );
+    // 重排（可选，阶段 C）：cross-encoder 对召回候选重新打分
+    const rerankClient = resolveRerankClient(
+      snapshot.config.memory?.embedding?.rerank,
+      snapshot.config.model,
+      embeddingDiagnostics,
+    );
+    for (const diagnostic of embeddingDiagnostics) {
+      console.warn(`[sati] ${diagnostic.path}: ${diagnostic.message}`);
+    }
+
     const tools = createBuiltinRegistry({
       backgroundTasks: { runtime: backgroundTasks },
+      searchPatentFigure: { embeddingClient },
       readSkill: {
         loader: name => pluginRuntime.loadSkillPrompt(name),
         lister: () => pluginRuntime.getAllSkills(),
@@ -783,23 +803,7 @@ class ProjectRuntimeRegistry {
       tools.register(tool);
     }
 
-    // 语义检索（可选）：embedding 端点配置解析一次，分发给记忆与知识库。
-    const knowledgePaths = resolveKnowledgeDbPaths();
-    const embeddingDiagnostics: PilotConfigDiagnostic[] = [];
-    const embeddingClient = resolveEmbeddingClient(
-      snapshot.config.memory?.embedding,
-      snapshot.config.model,
-      embeddingDiagnostics,
-    );
-    // 重排（可选，阶段 C）：cross-encoder 对召回候选重新打分
-    const rerankClient = resolveRerankClient(
-      snapshot.config.memory?.embedding?.rerank,
-      snapshot.config.model,
-      embeddingDiagnostics,
-    );
-    for (const diagnostic of embeddingDiagnostics) {
-      console.warn(`[sati] ${diagnostic.path}: ${diagnostic.message}`);
-    }
+    // 知识库向量库目录（embedding 客户端解析见上，记忆/知识库/附图检索共用）。
     const embeddingDir = joinPath(knowledgePaths.dataDir, "embeddings");
 
     const memory = createEdgeClawMemoryProviderFromConfig({

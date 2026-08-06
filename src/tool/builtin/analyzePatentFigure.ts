@@ -6,11 +6,15 @@
  * 附图说明生成（专利格式）。输出结构化结果供撰写（draft_specification 的
  * drawing_descriptions）与校验（附图标记一致性）管线消费。
  *
+ * 分析成功后结果自动写入附图索引（.sati/figures-index.json），供
+ * search_patent_figure 检索；索引写入失败不影响分析结果返回（索引为可选增强）。
+ *
  * 方法依据：PatentVision（图文对齐）与 PatentLMM（附图领域引导）论文，
  * 见 src/patent/figure/prompts.ts 的说明。
  */
 
 import { analyzePatentFigure, DEFAULT_FIGURE_MODEL, DEFAULT_FIGURE_PROVIDER } from "../../patent/figure/analyze.js";
+import { DEFAULT_FIGURE_INDEX_RELATIVE_PATH, upsertFigureIndex } from "../../patent/figure/index-store.js";
 import { loadFigureImage } from "../../patent/figure/preprocess.js";
 import type { FigureAnalysisResult } from "../../patent/figure/types.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
@@ -52,7 +56,8 @@ export function createAnalyzePatentFigureTool(
     description:
       "分析专利说明书附图：识别附图类型（结构图/流程图/电路图/方框图/示意图/分解图/剖视图）、提取组件与连接关系、" +
       "核对附图标记并生成专利格式的附图说明文字。当用户提供附图图片并要求撰写附图说明、理解附图内容、" +
-      "核对附图标记一致性时使用。可传入权利要求或技术方案文本作为上下文提升识别准确率。",
+      "核对附图标记一致性时使用。可传入权利要求或技术方案文本作为上下文提升识别准确率。" +
+      "分析结果自动写入附图索引（.sati/figures-index.json）供 search_patent_figure 检索；plan 只读模式下不写盘。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -121,6 +126,25 @@ export function createAnalyzePatentFigureTool(
         { provider, model, signal: context.abortSignal },
       );
 
+      // 分析结果自动写入附图索引（供 search_patent_figure 检索）。
+      // 索引为可选增强：写入失败静默降级，不阻断分析结果返回。
+      // plan 只读模式下不写盘：工具声明 isReadOnly，plan 模式对只读工具自动
+      // 放行，索引写入会静默绕过只读约束，故显式门控。
+      let indexed = false;
+      try {
+        const indexPath = resolveSatiWorkspacePath(DEFAULT_FIGURE_INDEX_RELATIVE_PATH, context, { forWrite: true });
+        if (indexPath.ok && context.permissionContext?.mode !== "plan") {
+          await upsertFigureIndex(indexPath.absolutePath, {
+            imagePath: result.imagePath,
+            analyzedAt: (context.now?.() ?? new Date()).toISOString(),
+            analysis: result,
+          });
+          indexed = true;
+        }
+      } catch {
+        indexed = false;
+      }
+
       return {
         content: [{ type: "json", value: result }],
         data: result,
@@ -129,6 +153,7 @@ export function createAnalyzePatentFigureTool(
           figureType: result.figureType,
           componentCount: result.components.length,
           usable: result.usable,
+          indexed,
         },
       };
     },

@@ -40,9 +40,11 @@ import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateT
 import { createPatentWikiSearchTool } from "../builtin/patentWikiSearch.js";
 import { createPatentKgQueryTool } from "../builtin/patentKgQuery.js";
 import { createAnalyzePatentFigureTool } from "../builtin/analyzePatentFigure.js";
+import { createSearchPatentFigureTool } from "../builtin/searchPatentFigure.js";
 import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
+import type { EmbeddingClient } from "../../model/embedding/index.js";
 import {
   createLiteratureRegistry,
   createPaperListSourcesTool,
@@ -132,10 +134,18 @@ export type CreateBuiltinRegistryOptions = {
   ruleCheck?: RuleCheckDeps | false;
   /**
    * Patent-domain tools (`patent_eval` / `draft_claims` / `draft_specification` /
-   * `validate_specification` / `patent_wiki_search`). Registered by default — pure read-only
+   * `validate_specification` / `patent_wiki_search` / `analyze_patent_figure` /
+   * `search_patent_figure`). Registered by default — pure read-only
    * deterministic tools. Pass `false` to keep them out of the registry.
    */
   patent?: false;
+  /**
+   * `search_patent_figure` builtin（附图检索）。Registered by default — pure
+   * read-only retrieval over the figure analysis index
+   * (`.sati/figures-index.json`). Pass `{ embeddingClient }` to enable
+   * hybrid keyword + vector retrieval; absent → keyword-only.
+   */
+  searchPatentFigure?: { embeddingClient?: EmbeddingClient };
   /**
    * Legal-domain tools (`law_search` — 中国法律法规全文检索，宝宸知识库）。
    * Registered by default. 数据库缺失时工具返回 setup_required 状态。
@@ -220,6 +230,12 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentWikiSearchTool(), "patent"));
     registry.register(annotate(createPatentKgQueryTool(), "patent"));
     registry.register(annotate(createAnalyzePatentFigureTool(), "patent"));
+    registry.register(
+      annotate(
+        createSearchPatentFigureTool({ embeddingClient: options?.searchPatentFigure?.embeddingClient }),
+        "patent",
+      ),
+    );
   }
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));

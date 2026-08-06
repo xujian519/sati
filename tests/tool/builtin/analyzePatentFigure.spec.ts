@@ -3,7 +3,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -122,13 +122,13 @@ test("analyze_patent_figure: 非图片文件报格式错误", async () => {
   }
 });
 
-test("analyze_patent_figure: 全流程——真实 PNG + fake 模型产出结构化结果", async () => {
+test("analyze_patent_figure: 全流程——真实 PNG + fake 模型产出结构化结果并写入索引", async () => {
   const { dir, filePath } = await makeTmpPng();
   try {
     const tool = createAnalyzePatentFigureTool();
     const result = await tool.execute(
       { image_path: filePath, figure_number: 1, claim_context: "一种专利检索系统" },
-      baseContext(fakeModel(), process.cwd()),
+      baseContext(fakeModel(), dir),
     );
 
     const output = result.data as {
@@ -146,6 +146,62 @@ test("analyze_patent_figure: 全流程——真实 PNG + fake 模型产出结构
     const first = result.content[0];
     assert.equal(first?.type, "json");
     assert.equal(result.metadata?.componentCount, 2);
+
+    // 分析结果自动写入附图索引（供 search_patent_figure 检索）
+    assert.equal(result.metadata?.indexed, true);
+    const indexPath = path.join(dir, ".sati", "figures-index.json");
+    const indexRaw = await readFile(indexPath, "utf8");
+    const index = JSON.parse(indexRaw) as { entries: Array<{ imagePath: string; analysis: { figureNumber: number } }> };
+    assert.equal(index.entries.length, 1);
+    assert.equal(index.entries[0]?.imagePath, path.relative(dir, filePath));
+    assert.equal(index.entries[0]?.analysis.figureNumber, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("analyze_patent_figure: 索引写入失败时静默降级（indexed=false 且分析结果不受影响）", async () => {
+  const { dir, filePath } = await makeTmpPng();
+  try {
+    // 用普通文件占住 .sati 路径：upsert 时 mkdir/readFile 失败 → 写入失败
+    await writeFile(path.join(dir, ".sati"), "不是目录", "utf8");
+    const tool = createAnalyzePatentFigureTool();
+    const result = await tool.execute({ image_path: filePath, figure_number: 1 }, baseContext(fakeModel(), dir));
+
+    assert.equal(result.metadata?.indexed, false);
+    const output = result.data as { figureType: string; components: unknown[] };
+    assert.equal(output.figureType, "flowchart");
+    assert.equal(output.components.length, 2);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("analyze_patent_figure: plan 只读模式不写索引", async () => {
+  const { dir, filePath } = await makeTmpPng();
+  try {
+    const tool = createAnalyzePatentFigureTool();
+    const planContext: SatiToolRuntimeContext = {
+      sessionId: "s1",
+      turnId: "t1",
+      cwd: dir,
+      permissionMode: "plan",
+      permissionContext: {
+        mode: "plan",
+        cwd: dir,
+        additionalWorkingDirectories: [],
+        canPrompt: true,
+        bypassAvailable: false,
+        rules: { allow: [], deny: [], ask: [] },
+      },
+      model: fakeModel(),
+    };
+    const result = await tool.execute({ image_path: filePath, figure_number: 1 }, planContext);
+
+    assert.equal(result.metadata?.indexed, false);
+    await assert.rejects(() => readFile(path.join(dir, ".sati", "figures-index.json"), "utf8"), {
+      code: "ENOENT",
+    });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
