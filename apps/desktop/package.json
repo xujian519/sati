@@ -28,7 +28,7 @@
     "@types/node": "^22.0.0",
     "electron": "~39.8.6",
     "electron-builder": "^26.0.12",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "author": "徐健  xujian519@gmail.com"
 }
