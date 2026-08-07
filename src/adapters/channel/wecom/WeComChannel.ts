@@ -4,6 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { brandEnv, ENV_KEY } from "../../../env.js";
 import type { ChannelAttachment, Gateway, GatewayChannelKey, GatewayEvent } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
@@ -1642,7 +1643,7 @@ function mediaTypeForDeliverableExt(ext: string): WeComMediaType {
 function isDeniedDeliverablePath(path: string): boolean {
   const normalized = resolve(path);
   const home = homedir();
-  const pilotHome = process.env.SATI_HOME || join(home, ".sati");
+  const pilotHome = brandEnv(process.env, ENV_KEY.HOME) || join(home, ".sati");
   if (pathUnder(normalized, join(home, ".ssh"))) return true;
   if (pathUnder(normalized, join(pilotHome, "server-token"))) return true;
   if (pathUnder(normalized, join(pilotHome, "sati.yaml"))) return true;

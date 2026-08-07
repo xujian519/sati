@@ -19,6 +19,7 @@
 
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { brandEnv, ENV_KEY } from "../../env.js";
 
 export type InstructionScope = "managed" | "user" | "project" | "project-rules" | "local";
 
@@ -40,7 +41,7 @@ export class InstructionDiscovery {
     const seen = new Set<string>();
 
     // 1. Managed (administrator-level, e.g. /etc/sati/)
-    const managedDir = process.env.SATI_MANAGED_CONFIG;
+    const managedDir = brandEnv(process.env, ENV_KEY.MANAGED_CONFIG);
     if (managedDir) {
       await this.tryAdd(layers, seen, "managed", join(managedDir, "SATI.md"));
     }

@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import type { SatiToolRuntimeContext } from "../../protocol/types.js";
 import type { SatiToolError } from "../../protocol/errors.js";
 import { toolError } from "../../protocol/errors.js";
+import { brandEnv, ENV_KEY } from "../../../env.js";
 
 export type SatiPathSafetyResult =
   | { ok: true; absolutePath: string; relativePath: string; root: string }
@@ -134,7 +135,7 @@ function safeRealpath(value: string): string | undefined {
 }
 
 function isManagedImAttachmentFile(realPath: string, context: SatiToolRuntimeContext): boolean {
-  const pilotHome = path.resolve(context.env?.SATI_HOME ?? path.join(homedir(), ".sati"));
+  const pilotHome = path.resolve(brandEnv(context.env, ENV_KEY.HOME) ?? path.join(homedir(), ".sati"));
   const root = safeRealpath(path.join(pilotHome, "im-attachments")) ?? path.join(pilotHome, "im-attachments");
   return isPathWithinRoot(realPath, root) && isRegularFile(realPath);
 }

@@ -1,4 +1,5 @@
 import type { CanonicalContentBlock, CanonicalMessage, CanonicalToolResultContentBlock } from "../model/index.js";
+import { brandEnv, ENV_KEY } from "../env.js";
 
 export type GatewayMemoryDiagnosticSession = {
   sessionKey: string;
@@ -23,7 +24,7 @@ export function isGatewayMemoryDiagnosticsEnabled(
   env: Record<string, string | undefined>,
   configEnabled?: boolean,
 ): boolean {
-  const value = env.SATI_MEMORY_DIAGNOSTICS;
+  const value = brandEnv(env, ENV_KEY.MEMORY_DIAGNOSTICS);
   return configEnabled === true || value === "1" || value === "true";
 }
 

@@ -3,6 +3,7 @@ import {
   LITELLM_HTTP_CONNECTOR_LIMIT,
   LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS,
 } from "../model/streaming/streamModel.js";
+import { brandEnv, ENV_KEY } from "../env.js";
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -19,7 +20,7 @@ type DispatcherState =
  */
 export function getProxyUrl(env: EnvLike = process.env): string | undefined {
   return (
-    env.SATI_PROXY ||
+    brandEnv(env, ENV_KEY.PROXY) ||
     env.PILOTDECK_PROXY || // rebrand 前环境变量兼容
     env.https_proxy ||
     env.HTTPS_PROXY ||

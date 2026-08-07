@@ -3,9 +3,10 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { brandEnv, ENV_KEY } from "../../env.js";
 
-const SATI_HOME = process.env.SATI_HOME || join(homedir(), ".sati");
-const SATI_YAML_PATH = process.env.SATI_CONFIG_PATH || join(SATI_HOME, "sati.yaml");
+const SATI_HOME = brandEnv(process.env, ENV_KEY.HOME) || join(homedir(), ".sati");
+const SATI_YAML_PATH = brandEnv(process.env, ENV_KEY.CONFIG_PATH) || join(SATI_HOME, "sati.yaml");
 const WEIXIN_CREDS_PATH = join(SATI_HOME, "weixin-credentials.json");
 
 const FEISHU_TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal";

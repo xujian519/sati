@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { findCanonicalProjectRoot } from "../session/worktree/findCanonicalProjectRoot.js";
+import { brandEnv, ENV_KEY } from "../env.js";
 
 export type PilotPathEnv = Record<string, string | undefined>;
 
@@ -18,7 +19,7 @@ export type PilotExtensionPaths = {
 };
 
 export function resolvePilotHome(env: PilotPathEnv = process.env): string {
-  return normalizeHomePath(env.SATI_HOME ?? DEFAULT_SATI_HOME);
+  return normalizeHomePath(brandEnv(env, ENV_KEY.HOME) ?? DEFAULT_SATI_HOME);
 }
 
 export function getPilotConfigFilePath(pilotHome: string): string {

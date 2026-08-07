@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveGatewayTokenPath } from "../gateway/server/authToken.js";
+import { brandEnv, ENV_KEY } from "../env.js";
 import type { TelemetryDeploymentMode, TelemetryRuntimeContext } from "./types.js";
 
 type ResolveRuntimeContextInput = {
@@ -50,7 +51,7 @@ function resolveInstanceId(
   env: Record<string, string | undefined>,
   deploymentMode: TelemetryDeploymentMode,
 ): string {
-  const resolvedPilotHome = pilotHome ?? env.SATI_HOME ?? "unknown-pilot-home";
+  const resolvedPilotHome = pilotHome ?? brandEnv(env, ENV_KEY.HOME) ?? "unknown-pilot-home";
   const executablePath = process.execPath || "unknown-exec";
   const entrypoint = process.argv[1] ?? "unknown-entry";
   const seed = `${resolve(resolvedPilotHome)}|${resolve(executablePath)}|${resolve(entrypoint)}|${deploymentMode}`;
@@ -96,7 +97,7 @@ function looksLikeNpmBinary(env: Record<string, string | undefined>): boolean {
 }
 
 function resolveAppVersion(env: Record<string, string | undefined>): string {
-  const fromEnv = env.SATI_VERSION ?? env.npm_package_version;
+  const fromEnv = brandEnv(env, ENV_KEY.VERSION) ?? env.npm_package_version;
   if (fromEnv) return fromEnv;
   try {
     const file = resolve(dirname(fileURLToPath(import.meta.url)), "../../../package.json");
@@ -111,7 +112,7 @@ function resolveAppVersion(env: Record<string, string | undefined>): string {
 }
 
 function resolveAppCommitHash(env: Record<string, string | undefined>): string {
-  const fromEnv = env.COMMIT_HASH ?? env.GIT_COMMIT ?? env.SATI_GIT_SHA ?? env.GIT_SHA;
+  const fromEnv = env.COMMIT_HASH ?? env.GIT_COMMIT ?? brandEnv(env, ENV_KEY.GIT_SHA) ?? env.GIT_SHA;
   if (fromEnv) {
     return fromEnv;
   }
@@ -138,9 +139,9 @@ export function hashTelemetryId(input: string): string {
 
 function buildRuntimeContextCacheKey(pilotHome: string | undefined, env: Record<string, string | undefined>): string {
   return [
-    pilotHome ?? env.SATI_HOME ?? "default",
-    env.COMMIT_HASH ?? env.GIT_COMMIT ?? env.SATI_GIT_SHA ?? env.GIT_SHA ?? "",
-    env.SATI_VERSION ?? env.npm_package_version ?? "",
+    pilotHome ?? brandEnv(env, ENV_KEY.HOME) ?? "default",
+    env.COMMIT_HASH ?? env.GIT_COMMIT ?? brandEnv(env, ENV_KEY.GIT_SHA) ?? env.GIT_SHA ?? "",
+    brandEnv(env, ENV_KEY.VERSION) ?? env.npm_package_version ?? "",
     process.execPath,
     process.argv[1] ?? "",
   ].join("|");

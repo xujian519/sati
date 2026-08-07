@@ -36,10 +36,11 @@ import { recursivelySanitizeUnicode } from "../runtime/sanitize.js";
 import { truncateMcpToolDescription } from "../runtime/truncate.js";
 import { buildMcpToolWireName } from "../protocol/wireName.js";
 import { networkFetch } from "../../network/fetch.js";
+import { brandEnv, ENV_KEY } from "../../env.js";
 import type { SatiMcpResource, SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
 import { APP_VERSION } from "../../version.js";
 
-const DEFAULT_CALL_TIMEOUT_MS = parseInt(process.env.SATI_MCP_TOOL_TIMEOUT_MS ?? "60000", 10);
+const DEFAULT_CALL_TIMEOUT_MS = parseInt(brandEnv(process.env, ENV_KEY.MCP_TOOL_TIMEOUT_MS) ?? "60000", 10);
 const LIST_TOOLS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type McpClientOptions = {

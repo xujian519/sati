@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
+import { brandEnv, ENV_KEY } from "../env.js";
 import { sanitizeSessionIdForPath } from "../session/index.js";
 import {
   createAlwaysOnManager,
@@ -412,7 +413,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
 
     // --- Server startup ---
 
-    const envPort = Number.parseInt(env.SATI_GATEWAY_PORT ?? "", 10);
+    const envPort = Number.parseInt(brandEnv(env, ENV_KEY.GATEWAY_PORT) ?? "", 10);
     const extraChannels = await loadEnabledChannels(snapshot.config.adapters);
     const feishuCfg = snapshot.config.adapters?.feishu;
     const savedFeishuState = await channelStatePersistence.load<FeishuSessionMapperState>("feishu");

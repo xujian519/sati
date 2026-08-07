@@ -3,6 +3,7 @@ import { dirname, resolve, join as joinPath } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
+import { brandEnv, ENV_KEY } from "../env.js";
 import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
 import type { PilotConfigDiagnostic } from "../pilot/config/types.js";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
@@ -440,7 +441,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
 }
 
 function resolveBuiltinSkillsRoot(configuredRoot: string | undefined, env: Record<string, string | undefined>): string {
-  const explicit = configuredRoot ?? env.SATI_BUNDLED_SKILLS_DIR;
+  const explicit = configuredRoot ?? brandEnv(env, ENV_KEY.BUNDLED_SKILLS_DIR);
   if (explicit) return resolve(explicit);
 
   const moduleDir = dirname(fileURLToPath(import.meta.url));
@@ -1485,7 +1486,9 @@ class ProjectRuntimeRegistry {
       maxContextTokens = agent.maxContextTokens;
     }
     maxOutputTokens =
-      readPositiveIntegerEnv(this.options.env.SATI_MAX_OUTPUT_TOKENS) ?? agent.maxOutputTokens ?? maxOutputTokens;
+      readPositiveIntegerEnv(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ??
+      agent.maxOutputTokens ??
+      maxOutputTokens;
     return {
       provider: agent.model.provider,
       model: agent.model.model,
@@ -1664,8 +1667,8 @@ export function buildBrowserUseArgs(
     args,
     "--timeout-action",
     String(
-      readPositiveIntegerEnv(env.SATI_BROWSER_TIMEOUT_ACTION_MS) ??
-        readPositiveIntegerEnv(env.SATI_BROWSER_ACTION_TIMEOUT_MS) ??
+      readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_ACTION_MS)) ??
+        readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_ACTION_TIMEOUT_MS)) ??
         DEFAULT_BROWSER_ACTION_TIMEOUT_MS,
     ),
   );
@@ -1673,8 +1676,8 @@ export function buildBrowserUseArgs(
     args,
     "--timeout-navigation",
     String(
-      readPositiveIntegerEnv(env.SATI_BROWSER_TIMEOUT_NAVIGATION_MS) ??
-        readPositiveIntegerEnv(env.SATI_BROWSER_NAVIGATION_TIMEOUT_MS) ??
+      readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_NAVIGATION_MS)) ??
+        readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_NAVIGATION_TIMEOUT_MS)) ??
         DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS,
     ),
   );
@@ -1703,14 +1706,14 @@ function resolveBrowserProxyServer(
   env: Record<string, string | undefined>,
   configProxy?: PilotProxyConfig,
 ): { server: string; source: BrowserProxySource } | undefined {
-  const explicit = cleanEnvValue(env.SATI_BROWSER_PROXY_SERVER);
+  const explicit = cleanEnvValue(brandEnv(env, ENV_KEY.BROWSER_PROXY_SERVER));
   if (explicit) {
     if (/^(0|false|off|none|direct)$/i.test(explicit)) return undefined;
     return { server: explicit, source: "browser-env" };
   }
-  if (/^(1|true|on|yes)$/i.test(cleanEnvValue(env.SATI_BROWSER_PROXY_FROM_ENV) ?? "")) {
+  if (/^(1|true|on|yes)$/i.test(cleanEnvValue(brandEnv(env, ENV_KEY.BROWSER_PROXY_FROM_ENV)) ?? "")) {
     const envProxy =
-      cleanEnvValue(env.SATI_PROXY) ??
+      cleanEnvValue(brandEnv(env, ENV_KEY.PROXY)) ??
       cleanEnvValue(env.https_proxy) ??
       cleanEnvValue(env.HTTPS_PROXY) ??
       cleanEnvValue(env.http_proxy) ??
@@ -1726,7 +1729,7 @@ function resolveBrowserProxyBypass(
   configProxy: PilotProxyConfig | undefined,
   proxySource: BrowserProxySource,
 ): string {
-  const explicit = cleanEnvValue(env.SATI_BROWSER_PROXY_BYPASS);
+  const explicit = cleanEnvValue(brandEnv(env, ENV_KEY.BROWSER_PROXY_BYPASS));
   if (explicit) return explicit;
   const noProxy = cleanEnvValue(env.no_proxy) ?? cleanEnvValue(env.NO_PROXY);
   const configNoProxy = proxySource === "config" ? cleanEnvValue(configProxy?.noProxy) : undefined;

@@ -1,4 +1,5 @@
 import { normalizeModelError } from "../errors/normalizeModelError.js";
+import { brandEnv, ENV_KEY } from "../../env.js";
 import { createGoogleClient, type GoogleClientFactory } from "../providers/google/client.js";
 import { parseGoogleResponse } from "../providers/google/response.js";
 import type { GoogleRequestBody } from "../providers/google/request.js";
@@ -149,7 +150,7 @@ export async function* streamModel(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     throwIfAborted(options.signal);
     const body = buildModelRequest(currentRequest, config);
-    if (process.env.SATI_DUMP_REQUEST === "1") {
+    if (brandEnv(process.env, ENV_KEY.DUMP_REQUEST) === "1") {
       const fs = await import("node:fs");
       const os = await import("node:os");
       const path = await import("node:path");
@@ -309,7 +310,7 @@ async function* streamGoogleProviderRequest(params: {
         }) as Record<string, unknown>,
         params.options.signal,
       );
-      if (process.env.SATI_DUMP_REQUEST === "1") {
+      if (brandEnv(process.env, ENV_KEY.DUMP_REQUEST) === "1") {
         const fs = await import("node:fs");
         const os = await import("node:os");
         const path = await import("node:path");
