@@ -81,7 +81,7 @@ function parseRerankResults(json: unknown): Array<{ index: number; score: number
   throw new RerankRequestError('Rerank response missing "scores" or "results".');
 }
 
-export function createTeiRerankClient(config: RerankEndpointConfig): RerankClient {
+export function createRerankClient(config: RerankEndpointConfig): RerankClient {
   const baseUrl = config.baseUrl.trim().replace(/\/+$/, "");
   const timeoutMs = config.timeoutMs ?? 30_000;
   const style = config.style ?? "tei";
@@ -188,7 +188,7 @@ export function resolveRerankClient(
     return undefined;
   }
 
-  return createTeiRerankClient({
+  return createRerankClient({
     baseUrl: endpoint.baseUrl,
     apiKey: endpoint.apiKey,
     model: cfg.model,

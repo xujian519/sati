@@ -6,6 +6,9 @@ tools: ["*"]
 domains: ["search", "literature", "patent", "legal", "analysis", "network", "session"]
 omitTools: ["execute_code"]
 readOnly: false
+knowledge:
+  requireCaseSearch: true
+  requireLawSearch: true
 systemPrompt: |-
   你是一位专利检索专家，负责从多源数据库检索最相关的现有技术与法律依据。
 

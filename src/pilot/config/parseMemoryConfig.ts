@@ -99,8 +99,8 @@ export function parseMemoryConfig(
 }
 
 /**
- * 解析项目知识偏好（memory.knowledgeProfile）：domains / ipcSections /
- * focusReasonTypes 三个字符串数组字段。缺省返回 undefined（行为与现状一致）。
+ * 解析项目知识偏好（memory.knowledgeProfile）：ipcSections 字符串数组字段。
+ * 缺省返回 undefined（行为与现状一致）。
  */
 function parseKnowledgeProfile(
   value: unknown,
@@ -112,22 +112,9 @@ function parseKnowledgeProfile(
   if (!isRecord(value)) {
     throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", "memory.knowledgeProfile must be an object.");
   }
-  const readStringArray = (key: string): string[] | undefined => {
-    const raw = value[key];
-    if (raw === undefined) return undefined;
-    if (!Array.isArray(raw) || raw.some(item => typeof item !== "string" || item.trim().length === 0)) {
-      throw new PilotConfigError(
-        "CONFIG_MEMORY_VALUE_INVALID",
-        `memory.knowledgeProfile.${key} must be an array of non-empty strings.`,
-      );
-    }
-    return raw.map(item => item.trim());
-  };
-  const domains = readStringArray("domains");
-  const ipcSections = readStringArray("ipcSections");
-  const focusReasonTypes = readStringArray("focusReasonTypes");
+  const ipcSections = parseStringArray(value.ipcSections, "memory.knowledgeProfile.ipcSections");
   for (const key of Object.keys(value)) {
-    if (key !== "domains" && key !== "ipcSections" && key !== "focusReasonTypes") {
+    if (key !== "ipcSections") {
       diagnostics.push({
         code: "CONFIG_MEMORY_UNKNOWN_FIELD",
         severity: "warning",
@@ -137,14 +124,18 @@ function parseKnowledgeProfile(
       });
     }
   }
-  if (!domains && !ipcSections && !focusReasonTypes) {
+  return ipcSections && ipcSections.length > 0 ? { ipcSections } : undefined;
+}
+
+/** 解析字符串数组字段（元素须为非空字符串）。 */
+function parseStringArray(value: unknown, path: string): string[] | undefined {
+  if (value === undefined) {
     return undefined;
   }
-  return {
-    ...(domains ? { domains } : {}),
-    ...(ipcSections ? { ipcSections } : {}),
-    ...(focusReasonTypes ? { focusReasonTypes } : {}),
-  };
+  if (!Array.isArray(value) || value.some(item => typeof item !== "string" || item.trim().length === 0)) {
+    throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", `${path} must be an array of non-empty strings.`);
+  }
+  return value.map(item => item.trim());
 }
 
 const MEMORY_EMBEDDING_KNOWN_FIELDS = new Set([

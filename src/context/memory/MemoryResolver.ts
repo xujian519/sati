@@ -16,6 +16,32 @@ export type ContextMemoryMessage = {
 export type TaskIntent = "oa" | "invalidity" | "draft" | "general";
 
 /**
+ * 专利分析语义词：判例/知识注入的精确触发词（共享常量）。
+ *
+ * 覆盖非任务意图的分析类 query（区别特征/技术启示/证据认定等措辞）；
+ * 任务意图（oa/invalidity/draft）由 buildRetrieveTaskIntent 另行分类。
+ * 单一来源，供 CaseLawMemoryProvider 与未来知识增强复用，避免多份词表漂移。
+ */
+export const PATENT_ANALYSIS_KEYWORDS: readonly string[] = [
+  "创造性",
+  "新颖性",
+  "无效",
+  "答复",
+  "审查意见",
+  "区别特征",
+  "技术启示",
+  "证据认定",
+  "预料不到",
+  "充分公开",
+  "修改超范围",
+  "单独对比",
+  "三步法",
+  "A22",
+  "A26",
+  "A33",
+];
+
+/**
  * 项目知识偏好（per-project knowledge profile，可选）。
  *
  * 由配置（memory.knowledgeProfile）解析后经注入链透传到 knowledge provider：
@@ -23,12 +49,8 @@ export type TaskIntent = "oa" | "invalidity" | "draft" | "general";
  * 驱动的盲区。未配置时行为与现状完全一致。
  */
 export type KnowledgeProfile = {
-  /** 技术领域关键词（影响 wiki 卡片检索的追加词）。 */
-  domains?: string[];
-  /** IPC 部（A-H），query 命中该部关键词时强制注入对应审查标准卡片。 */
+  /** IPC 部（A-H），query 命中该部候选时强制注入对应审查标准卡片。 */
   ipcSections?: string[];
-  /** 重点关注的理由类型（如 创造性/新颖性/修改超范围；影响 wiki 卡片检索追加词）。 */
-  focusReasonTypes?: string[];
 };
 
 export type MemoryRetrieveInput = {
@@ -63,8 +85,7 @@ export type MemoryDiagnostic = {
     | "memory_context_empty"
     | "memory_cache_hit"
     | "memory_ipc_classified"
-    | "memory_case_law_injected"
-    | "memory_case_law_skipped";
+    | "memory_case_law_injected";
   message: string;
   severity: "info" | "warning" | "error";
 };

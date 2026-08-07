@@ -48,11 +48,8 @@ export function noteDocumentId(project: string | undefined, title: string, conte
     .slice(0, 16);
 }
 
-/** 写入实现（导出便于测试注入 dbPath）。 */
-export function savePersonalNote(
-  dbPath: string,
-  input: KnowledgeNoteSaveInput,
-): { saved: boolean; documentId?: string; reason: "inserted" | "duplicate" | "skipped"; charCount?: number } {
+/** 写入实现（导出便于测试注入 dbPath）。事务内含重复检查，幂等且原子。 */
+export function savePersonalNote(dbPath: string, input: KnowledgeNoteSaveInput): KnowledgeNoteSaveOutput {
   const title = input.title.trim();
   const content = input.content.trim();
   if (!title || !content) {
@@ -63,10 +60,6 @@ export function savePersonalNote(
   // 短连接 + 事务（journal_mode=delete 下写锁短暂；用完即关）。
   const db = new DatabaseSync(dbPath);
   try {
-    const existing = db.prepare("SELECT id FROM documents WHERE id = ?").get(documentId);
-    if (existing) {
-      return { saved: false, documentId, reason: "duplicate" };
-    }
     const hasFts =
       (
         db.prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='docs_fts'").get() as {
@@ -76,6 +69,11 @@ export function savePersonalNote(
 
     db.exec("BEGIN");
     try {
+      // 重复检查与写入同事务：并发下不会出现"检查通过后重复插入"的竞态窗口。
+      if (db.prepare("SELECT id FROM documents WHERE id = ?").get(documentId)) {
+        db.exec("ROLLBACK");
+        return { saved: false, documentId, reason: "duplicate" };
+      }
       const indexedAt = new Date().toISOString();
       db.prepare(
         `INSERT INTO documents (id, source, doc_type, domain, title, indexed_at, char_count, chunk_count, content_hash)

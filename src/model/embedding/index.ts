@@ -3,7 +3,7 @@ export {
   EmbeddingRequestError,
 } from "./client.js";
 export {
-  createTeiRerankClient,
+  createRerankClient,
   RerankRequestError,
   resolveRerankClient,
   type RerankClient,

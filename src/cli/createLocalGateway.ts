@@ -38,6 +38,7 @@ import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
 import {
   CompositeMemoryResolver,
   KnowledgeRuntimeStats,
+  createCaseLawSemanticSource,
   createKnowledgeEmbeddingSearch,
   buildKnowledgeResolvers,
   logKnowledgeCapabilities,
@@ -866,13 +867,7 @@ class ProjectRuntimeRegistry {
           docTypes: ["case", "judgment"],
           logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
         });
-        setCaseLawSemanticSource({
-          embed: async text => {
-            const [vector] = await embeddingClient!.embed([text]);
-            return Float32Array.from(vector ?? []);
-          },
-          search: caseEmbeddings,
-        });
+        setCaseLawSemanticSource(createCaseLawSemanticSource(texts => embeddingClient!.embed(texts), caseEmbeddings));
       } catch (error) {
         console.warn("[sati] knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
       }

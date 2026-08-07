@@ -19,6 +19,7 @@ import {
   IPC_DETAIL_MIN_CONFIDENCE,
   isHighConfidence,
   MULTI_CLASSIFY_MIN_CONFIDENCE,
+  type IpcClassification,
 } from "./ipc-classifier.js";
 import { formatStandardsAsContext, queryIpcDetail, queryIpcStandards } from "./ipc-standards-loader.js";
 import { PatentKgAdapter } from "./patent-kg-adapter.js";
@@ -44,6 +45,33 @@ type GraphHit = {
   /** 节点正文预览（供 rerank 打分；不注入上下文）。 */
   text?: string;
 };
+
+/** OA/无效类任务 wiki 卡片注入上限下限（必查清单通常超过默认 2 张）。 */
+const TASK_INTENT_CARD_LIMIT_FLOOR = 4;
+
+/**
+ * 项目知识偏好增强：把 profile 声明的 IPC 部（classification 中已命中候选者）
+ * 纳入注入候选并提升优先级，无视置信度门槛——覆盖"项目专注领域但本次 query
+ * 措辞弱命中"的场景。未声明 profile 时原样返回候选（零开销）。
+ */
+function withProfileBoost(
+  candidates: IpcClassification[],
+  classification: IpcClassification[],
+  ipcSections: readonly string[] | undefined,
+): IpcClassification[] {
+  if (!ipcSections || ipcSections.length === 0) return candidates;
+  const wanted = new Set(ipcSections);
+  const boosted = [...candidates];
+  for (const cand of classification) {
+    if (wanted.has(cand.section) && !boosted.includes(cand)) boosted.push(cand);
+  }
+  boosted.sort((a, b) => {
+    const aw = wanted.has(a.section) ? 1 : 0;
+    const bw = wanted.has(b.section) ? 1 : 0;
+    return bw - aw || b.confidence - a.confidence;
+  });
+  return boosted;
+}
 
 export type PatentMemoryProviderOptions = {
   /** 知识图谱适配器；缺省时跳过图谱检索。 */
@@ -170,23 +198,7 @@ export class PatentMemoryProvider implements MemoryResolver {
           c.confidence >= MULTI_CLASSIFY_MIN_CONFIDENCE ||
           (c.detailConfidence !== undefined && c.detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE),
       );
-      // 项目知识偏好：声明了 ipcSections 的部，若 query 已命中其任一候选
-      // （classification 中存在该 section），则无视置信度门槛强制纳入注入并
-      // 提升优先级——覆盖"项目专注领域但本次 query 措辞弱命中"的场景。
-      let effectiveCandidates = candidates;
-      const profile = input.knowledgeProfile;
-      if (profile?.ipcSections && profile.ipcSections.length > 0) {
-        const wanted = new Set(profile.ipcSections);
-        effectiveCandidates = [...candidates];
-        for (const cand of classification) {
-          if (wanted.has(cand.section) && !effectiveCandidates.includes(cand)) effectiveCandidates.push(cand);
-        }
-        effectiveCandidates.sort((a, b) => {
-          const aw = wanted.has(a.section) ? 1 : 0;
-          const bw = wanted.has(b.section) ? 1 : 0;
-          return bw - aw || b.confidence - a.confidence;
-        });
-      }
+      const effectiveCandidates = withProfileBoost(candidates, classification, input.knowledgeProfile?.ipcSections);
       for (const cand of effectiveCandidates.slice(0, this.multiSectionLimit)) {
         // 两级分类：大类命中置信度达标（≈ 大类关键词 ≥2 个）时精注入大类卡片，
         // 否则回退部级注入（向后兼容；未列入高频大类的部永远走回退）。
@@ -262,7 +274,9 @@ export class PatentMemoryProvider implements MemoryResolver {
    * 避免普通对话上下文膨胀。
    */
   private effectiveCardLimit(taskIntent?: TaskIntent): number {
-    return taskIntent === "oa" || taskIntent === "invalidity" ? Math.max(this.cardLimit, 4) : this.cardLimit;
+    return taskIntent === "oa" || taskIntent === "invalidity"
+      ? Math.max(this.cardLimit, TASK_INTENT_CARD_LIMIT_FLOOR)
+      : this.cardLimit;
   }
 
   /** 知识图谱检索：关键词路（+ 关系扩展），可选 rerank（KG 节点不建向量，无语义路）。 */

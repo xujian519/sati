@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { createTeiRerankClient, RerankRequestError, resolveRerankClient } from "../../../src/model/embedding/rerank.js";
+import { createRerankClient, RerankRequestError, resolveRerankClient } from "../../../src/model/embedding/rerank.js";
 import type { ModelConfig } from "../../../src/model/protocol/canonical.js";
 import type { PilotConfigDiagnostic } from "../../../src/pilot/config/types.js";
 
@@ -25,10 +25,10 @@ afterEach(() => {
   fetchCalls.length = 0;
 });
 
-describe("createTeiRerankClient", () => {
+describe("createRerankClient", () => {
   it("POST /rerank，body 为 { query, texts }，解析 { scores }（TEI 格式）", async () => {
     mockFetch(() => jsonResponse({ scores: [0.1, 0.9, 0.5] }));
-    const client = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080" });
     const results = await client.rerank("query", ["doc1", "doc2", "doc3"]);
     assert.equal(fetchCalls.length, 1);
     assert.equal(fetchCalls[0]!.url, "http://localhost:8080/rerank");
@@ -53,7 +53,7 @@ describe("createTeiRerankClient", () => {
         ],
       }),
     );
-    const client = createTeiRerankClient({ baseUrl: "http://localhost:8080", model: "bge-reranker-v2-m3" });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080", model: "bge-reranker-v2-m3" });
     const results = await client.rerank("q", ["a", "b", "c"]);
     assert.deepEqual(results, [
       { index: 2, score: 0.8 },
@@ -73,7 +73,7 @@ describe("createTeiRerankClient", () => {
         ],
       }),
     );
-    const client = createTeiRerankClient({
+    const client = createRerankClient({
       baseUrl: "http://localhost:8000/v1",
       model: "Qwen3-Reranker-4B-4bit-MLX",
       style: "jina",
@@ -96,7 +96,7 @@ describe("createTeiRerankClient", () => {
 
   it("style=tei（默认）保持 { query, texts } 兼容既有行为", async () => {
     mockFetch(() => jsonResponse({ scores: [0.5, 0.8] }));
-    const client = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080" });
     await client.rerank("q", ["a", "b"]);
     const body = JSON.parse(String(fetchCalls[0]!.init.body)) as { query: string; texts: string[]; model?: string };
     assert.deepEqual(body.texts, ["a", "b"]);
@@ -105,7 +105,7 @@ describe("createTeiRerankClient", () => {
 
   it("topN 限制返回条数", async () => {
     mockFetch(() => jsonResponse({ scores: [0.1, 0.9, 0.5] }));
-    const client = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080" });
     const results = await client.rerank("q", ["a", "b", "c"], 2);
     assert.deepEqual(results, [
       { index: 1, score: 0.9 },
@@ -114,14 +114,14 @@ describe("createTeiRerankClient", () => {
   });
 
   it("空文档直接返回空数组", async () => {
-    const client = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080" });
     assert.deepEqual(await client.rerank("q", []), []);
     assert.equal(fetchCalls.length, 0);
   });
 
   it("非 200 抛 RerankRequestError", async () => {
     mockFetch(() => jsonResponse({ error: "model not loaded" }, 503));
-    const client = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080" });
     await assert.rejects(
       async () => client.rerank("q", ["a"]),
       (error: unknown) => {
@@ -135,19 +135,19 @@ describe("createTeiRerankClient", () => {
 
   it("响应条数不匹配抛错", async () => {
     mockFetch(() => jsonResponse({ scores: [0.9] }));
-    const client = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080" });
     await assert.rejects(async () => client.rerank("q", ["a", "b"]), RerankRequestError);
   });
 
   it("healthCheck 成功/失败", async () => {
     mockFetch(() => jsonResponse({ scores: [0.5] }));
-    const ok = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    const ok = createRerankClient({ baseUrl: "http://localhost:8080" });
     assert.equal(await ok.healthCheck(), true);
 
     mockFetch(() => {
       throw new TypeError("down");
     });
-    const down = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    const down = createRerankClient({ baseUrl: "http://localhost:8080" });
     assert.equal(await down.healthCheck(), false);
   });
 });

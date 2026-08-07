@@ -24,7 +24,7 @@ export {
   type KnowledgeRuntimeStatsSnapshot,
   type WikiSemanticIndexState,
 } from "./shared/knowledge-stats.js";
-export { CaseLawSearchEngine, type CaseLawSemanticSource } from "./case-law/index.js";
+export { CaseLawSearchEngine, createCaseLawSemanticSource, type CaseLawSemanticSource } from "./case-law/index.js";
 export { CaseLawMemoryProvider, type CaseLawMemoryProviderOptions } from "./case-law/index.js";
 export { fuseCaseLawHits } from "./case-law/index.js";
 export type {

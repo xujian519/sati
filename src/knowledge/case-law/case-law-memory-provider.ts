@@ -16,31 +16,13 @@ import type {
   MemoryResolver,
   MemoryRetrieveInput,
   MemoryRetrieveResult,
+  TaskIntent,
 } from "../../context/memory/MemoryResolver.js";
+import { PATENT_ANALYSIS_KEYWORDS } from "../../context/memory/MemoryResolver.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import { CaseLawSearchEngine, type CaseLawSemanticSource } from "./case-law-search.js";
 import { fuseCaseLawHits } from "./rrf.js";
 import type { CaseLawHit } from "./types.js";
-
-/** OA/无效/审查类任务触发词（命中任一即检索判例；缺省列表覆盖专利实务高频语义）。 */
-const DEFAULT_TRIGGER_KEYWORDS: readonly string[] = [
-  "创造性",
-  "新颖性",
-  "无效",
-  "答复",
-  "审查意见",
-  "区别特征",
-  "技术启示",
-  "证据认定",
-  "预料不到",
-  "充分公开",
-  "修改超范围",
-  "单独对比",
-  "三步法",
-  "A22",
-  "A26",
-  "A33",
-];
 
 export type CaseLawMemoryProviderOptions = {
   /** 判例检索引擎；缺省或打开失败时 provider 禁用（诊断 memory_disabled）。 */
@@ -53,8 +35,6 @@ export type CaseLawMemoryProviderOptions = {
   caseLimit?: number;
   /** 命中片段截断字符数（默认 400，比工具的 800 更保守）。 */
   snippetMaxChars?: number;
-  /** 触发关键词表（缺省 DEFAULT_TRIGGER_KEYWORDS）。 */
-  triggerKeywords?: readonly string[];
   /** 运行时状态聚合（可选）。 */
   stats?: KnowledgeRuntimeStats;
   logger?: { warn?: (...args: unknown[]) => void };
@@ -65,7 +45,6 @@ export class CaseLawMemoryProvider implements MemoryResolver {
   private readonly enableCaseLaw: boolean;
   private readonly caseLimit: number;
   private readonly snippetMaxChars: number;
-  private readonly triggerKeywords: readonly string[];
   private readonly stats?: KnowledgeRuntimeStats;
   private readonly logger?: { warn?: (...args: unknown[]) => void };
 
@@ -74,7 +53,6 @@ export class CaseLawMemoryProvider implements MemoryResolver {
     this.enableCaseLaw = options.enableCaseLaw ?? true;
     this.caseLimit = Math.max(options.caseLimit ?? 2, 1);
     this.snippetMaxChars = Math.max(options.snippetMaxChars ?? 400, 100);
-    this.triggerKeywords = options.triggerKeywords ?? DEFAULT_TRIGGER_KEYWORDS;
     this.stats = options.stats;
     this.logger = options.logger;
     if (options.semantic) this.engine?.setSemantic(options.semantic);
@@ -97,7 +75,7 @@ export class CaseLawMemoryProvider implements MemoryResolver {
       };
     }
     const query = input.query.trim();
-    if (!query || !this.isTriggered(query)) {
+    if (!query || !this.isTriggered(query, input.taskIntent)) {
       return { diagnostics: [] };
     }
 
@@ -147,9 +125,14 @@ export class CaseLawMemoryProvider implements MemoryResolver {
     // 空操作
   }
 
-  /** 触发门控：query 是否命中专利实务语义（含法条号 A22/A26/A33 与关键概念词）。 */
-  private isTriggered(query: string): boolean {
-    return this.triggerKeywords.some(keyword => query.includes(keyword));
+  /**
+   * 触发门控：任务意图为 OA/无效（专利审查任务）时必然触发；
+   * 否则命中共享的专利分析语义词（PATENT_ANALYSIS_KEYWORDS）才检索。
+   * 词表单一来源（MemoryResolver），避免多份启发式漂移。
+   */
+  private isTriggered(query: string, taskIntent?: TaskIntent): boolean {
+    if (taskIntent === "oa" || taskIntent === "invalidity") return true;
+    return PATENT_ANALYSIS_KEYWORDS.some(keyword => query.includes(keyword));
   }
 
   private formatHit(hit: CaseLawHit): string {

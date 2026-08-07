@@ -6,6 +6,13 @@ tools: ["*"]
 domains: ["analysis", "quality", "patent", "legal", "session"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
+knowledge:
+  cards:
+    - 专利实务/权利要求/权利要求-清楚的要求
+    - 专利实务/说明书/说明书-能够实现的判断
+    - 专利实务/单一性/单一性-法条-合案申请与分案
+  requireCaseSearch: true
+  requireLawSearch: true
 systemPrompt: |-
   你是一位专利文件审查专家，负责审查专利申请文件的格式规范性和内容质量。
 

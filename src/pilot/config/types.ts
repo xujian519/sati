@@ -150,15 +150,11 @@ export type PilotMemoryEmbeddingConfig = {
  * 项目知识偏好（memory.knowledgeProfile，可选）。
  *
  * 供不同客户/技术领域项目声明知识侧重：knowledge provider 注入时据此
- * 强制注入/加权相关审查标准与卡片，弥补"全局知识 × 当前 query"的盲区。
+ * 强制注入相关审查标准，弥补"全局知识 × 当前 query"的盲区。
  */
 export type PilotKnowledgeProfileConfig = {
-  /** 技术领域关键词（影响 wiki 卡片检索追加词）。 */
-  domains?: string[];
   /** IPC 部（A-H）：query 命中该部候选时强制注入对应审查标准。 */
   ipcSections?: string[];
-  /** 重点关注理由类型（如 创造性/新颖性/修改超范围，影响卡片检索追加词）。 */
-  focusReasonTypes?: string[];
 };
 
 export type PilotMemoryConfig = {

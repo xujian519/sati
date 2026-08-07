@@ -6,7 +6,7 @@
  * （判例自动注入 <memory-context>）、FTS+语义融合函数与类型契约。
  */
 
-export { CaseLawSearchEngine, type CaseLawSemanticSource } from "./case-law-search.js";
+export { CaseLawSearchEngine, createCaseLawSemanticSource, type CaseLawSemanticSource } from "./case-law-search.js";
 export { CaseLawMemoryProvider, type CaseLawMemoryProviderOptions } from "./case-law-memory-provider.js";
 export { fuseCaseLawHits } from "./rrf.js";
 export type { CaseLawChunk, CaseLawDocType, CaseLawHit, CaseLawRecord, CaseLawSearchOptions } from "./types.js";

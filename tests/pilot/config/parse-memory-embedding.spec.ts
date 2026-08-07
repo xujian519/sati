@@ -162,20 +162,16 @@ describe("parseMemoryConfig embedding 段", () => {
 });
 
 describe("parseMemoryConfig knowledgeProfile 段", () => {
-  it("三字段解析成功", () => {
+  it("ipcSections 解析成功", () => {
     const { config, diagnostics } = parse({
       enabled: true,
       provider: "edgeclaw",
       knowledgeProfile: {
-        domains: ["汽车", "机械"],
         ipcSections: ["B", "F"],
-        focusReasonTypes: ["创造性", "新颖性"],
       },
     });
     assert.equal(diagnostics.length, 0);
-    assert.deepEqual(config?.knowledgeProfile?.domains, ["汽车", "机械"]);
     assert.deepEqual(config?.knowledgeProfile?.ipcSections, ["B", "F"]);
-    assert.deepEqual(config?.knowledgeProfile?.focusReasonTypes, ["创造性", "新颖性"]);
   });
 
   it("缺省（未配置）返回 undefined，行为与现状一致", () => {
@@ -186,6 +182,8 @@ describe("parseMemoryConfig knowledgeProfile 段", () => {
   it("空对象/空数组返回 undefined", () => {
     const { config: empty } = parse({ enabled: true, provider: "edgeclaw", knowledgeProfile: {} });
     assert.equal(empty?.knowledgeProfile, undefined);
+    const { config: emptyArr } = parse({ enabled: true, provider: "edgeclaw", knowledgeProfile: { ipcSections: [] } });
+    assert.equal(emptyArr?.knowledgeProfile, undefined);
   });
 
   it("非法数组抛 CONFIG_MEMORY_VALUE_INVALID", () => {
@@ -204,8 +202,11 @@ describe("parseMemoryConfig knowledgeProfile 段", () => {
     const { diagnostics } = parse({
       enabled: true,
       provider: "edgeclaw",
-      knowledgeProfile: { ipcSections: ["B"], nonsense: true },
+      knowledgeProfile: { ipcSections: ["B"], domains: ["汽车"] },
     });
-    assert.ok(diagnostics.some(d => d.path === "memory.knowledgeProfile.nonsense"));
+    assert.ok(
+      diagnostics.some(d => d.path === "memory.knowledgeProfile.domains"),
+      "未知字段应告警（已移除）",
+    );
   });
 });

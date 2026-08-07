@@ -22,7 +22,11 @@ import { LegalMemoryProvider } from "./legal/legal-memory-provider.js";
 import { LegalSearchEngine } from "./legal/legal-search.js";
 import { KnowledgeLawSearch } from "./legal/knowledge-law-search.js";
 import type { LegalSearchSource } from "./legal/types.js";
-import { CaseLawSearchEngine, type CaseLawSemanticSource } from "./case-law/case-law-search.js";
+import {
+  CaseLawSearchEngine,
+  createCaseLawSemanticSource,
+  type CaseLawSemanticSource,
+} from "./case-law/case-law-search.js";
 import { CaseLawMemoryProvider } from "./case-law/case-law-memory-provider.js";
 
 export type BuildKnowledgeResolversOptions = {
@@ -175,13 +179,7 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
               docTypes: ["case", "judgment"],
               logger: options.logger,
             });
-            caseSemantic = {
-              embed: async text => {
-                const [vector] = await options.embedding!.embed([text]);
-                return Float32Array.from(vector ?? []);
-              },
-              search: caseEmbeddings,
-            };
+            caseSemantic = createCaseLawSemanticSource(texts => options.embedding!.embed(texts), caseEmbeddings);
           } catch (error) {
             options.logger?.warn?.(`knowledge.db 判例 embeddings 打开失败，判例语义路关闭: ${errorMessage(error)}`);
           }

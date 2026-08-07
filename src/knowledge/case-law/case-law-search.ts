@@ -50,6 +50,24 @@ export type CaseLawSemanticSource = {
   search: KnowledgeEmbeddingSearch;
 };
 
+/**
+ * 构造判例语义召回源：把 EmbeddingClient 的批量接口包装为单条 Float32Array。
+ * 组装层（buildKnowledgeResolvers）与工具语义源注入（createLocalGateway）共用，
+ * 避免 embed 闭包在多个位置重复。
+ */
+export function createCaseLawSemanticSource(
+  embedBatch: (texts: string[]) => Promise<number[][]>,
+  search: KnowledgeEmbeddingSearch,
+): CaseLawSemanticSource {
+  return {
+    embed: async (text: string) => {
+      const [vector] = await embedBatch([text]);
+      return Float32Array.from(vector ?? []);
+    },
+    search,
+  };
+}
+
 export class CaseLawSearchEngine {
   private readonly db: DatabaseSync;
   private readonly hasFts: boolean;
