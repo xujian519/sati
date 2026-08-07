@@ -2,10 +2,7 @@ import { spawn } from "node:child_process";
 import React from "react";
 import { render, type Instance } from "ink";
 import type { Gateway } from "../../../gateway/index.js";
-import {
-  connectRemoteGatewayIfAvailable,
-  type ProbeGatewayServerOptions,
-} from "../../../gateway/client/probeServer.js";
+import { connectRemoteGatewayIfAvailable, type ProbeGatewayServerOptions } from "../../../gateway/client/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { applyTuiEvent, createTuiRenderState, type TuiRenderState } from "./tui-render.js";
 import { TuiApp, type TuiAppProps } from "./app/TuiApp.js";
@@ -13,13 +10,19 @@ import { TuiApp, type TuiAppProps } from "./app/TuiApp.js";
 export type TuiChannelOptions = {
   projectKey?: string;
   sessionKey?: string;
+  /** auto 模式下远端探测配置；false = 跳过探测，直接用本地 gateway。 */
   probe?: ProbeGatewayServerOptions | false;
   model?: string;
   cwd?: string;
   serverUrl?: string;
   interactive?: boolean;
-  /** Host-resolved connection mode; skips the internal probe when set (pair with `probe: false`). */
-  connection?: "remote" | "in_process";
+  /**
+   * 连接模式（缺省 "auto"）：
+   * - "auto"：内部探测远端 server，未命中回退本地 gateway；
+   * - "remote"：host 已预探测并传入远端 gateway，跳过内部探测；
+   * - "in_process"：host 已构建本地 gateway，跳过内部探测。
+   */
+  mode?: "auto" | "remote" | "in_process";
 };
 
 export class TuiChannel implements ChannelAdapter {
@@ -80,15 +83,17 @@ export class TuiChannel implements ChannelAdapter {
     return this.state;
   }
 
-  private async resolveGateway(fallback: Gateway): Promise<{ gateway: Gateway; connection: "remote" | "in_process" }> {
-    if (this.options.connection) {
-      return { gateway: fallback, connection: this.options.connection };
+  private async resolveGateway(gateway: Gateway): Promise<{ gateway: Gateway; connection: "remote" | "in_process" }> {
+    // host 已决定连接目标时（mode 非 auto），传入的 gateway 即最终 gateway。
+    const mode = this.options.mode ?? "auto";
+    if (mode === "remote" || mode === "in_process") {
+      return { gateway, connection: mode };
     }
     if (this.options.probe === false) {
-      return { gateway: fallback, connection: "in_process" };
+      return { gateway, connection: "in_process" };
     }
     const remote = await connectRemoteGatewayIfAvailable({ ...this.options.probe, timeoutMs: 200 });
-    return remote ? { gateway: remote, connection: "remote" } : { gateway: fallback, connection: "in_process" };
+    return remote ? { gateway: remote, connection: "remote" } : { gateway, connection: "in_process" };
   }
 
   private async stop(): Promise<void> {

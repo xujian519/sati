@@ -578,7 +578,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       return;
     }
     const { loadPilotConfig } = await import("../pilot/index.js");
-    const { connectRemoteGatewayIfAvailable } = await import("../gateway/client/probeServer.js");
+    const { connectRemoteGatewayIfAvailable } = await import("../gateway/client/index.js");
     const { TuiChannel } = await import("../adapters/channel/tui/TuiChannel.js");
     const { sanitizeSessionIdForPath } = await import("../session/index.js");
     const { installGlobalProxy } = await import("./proxy.js");
@@ -589,22 +589,30 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     try {
       const snapshot = loadPilotConfig({ projectRoot: process.cwd() });
       gatewayPort = snapshot.config.gateway?.port ?? 19789;
-    } catch {
-      /* fall back to the default gateway port */
+    } catch (error) {
+      console.warn(
+        `[sati] 读取 gateway 端口失败，回退默认 ${gatewayPort}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
     const probeUrl = `http://127.0.0.1:${gatewayPort}`;
     // 先探测已运行的 sati server；命中时无需在当前进程构建完整本地 gateway。
     const remote = await connectRemoteGatewayIfAvailable({ url: probeUrl });
     if (remote) {
-      await new TuiChannel({
-        projectKey: process.cwd(),
-        cwd: process.cwd(),
-        model: "Sati",
-        probe: false,
-        connection: "remote",
-        serverUrl: probeUrl,
-      }).start({ gateway: remote });
-      return;
+      try {
+        await new TuiChannel({
+          projectKey: process.cwd(),
+          cwd: process.cwd(),
+          model: "Sati",
+          mode: "remote",
+          serverUrl: probeUrl,
+        }).start({ gateway: remote });
+        return;
+      } catch (error) {
+        // 远端启动失败（如握手后崩溃）：回退本地 gateway，恢复自动探测的兜底语义。
+        console.warn(
+          `[sati] 连接远端 server 失败，回退本地 gateway: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     await installGlobalProxy();
     const fallbackGateway = createFallbackGateway(sanitizeSessionIdForPath);
@@ -615,15 +623,14 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         projectKey: process.cwd(),
         cwd: process.cwd(),
         model: "Sati",
-        probe: false,
-        connection: "in_process",
+        mode: "in_process",
       }).start({ gateway: local });
     } catch {
       await new TuiChannel({
         projectKey: process.cwd(),
         cwd: process.cwd(),
         model: "Sati",
-        probe: false,
+        mode: "in_process",
       }).start({ gateway: fallbackGateway });
     }
     return;
@@ -706,7 +713,7 @@ async function handleUpdateCommand(argv: string[]): Promise<void> {
 }
 
 async function handleCronCommand(argv: string[]): Promise<void> {
-  const { connectRemoteGatewayIfAvailable } = await import("../gateway/client/probeServer.js");
+  const { connectRemoteGatewayIfAvailable } = await import("../gateway/client/index.js");
   const gateway = await connectRemoteGatewayIfAvailable();
   if (!gateway) {
     console.error("sati cron requires a running sati server.");

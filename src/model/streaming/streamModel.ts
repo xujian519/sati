@@ -13,6 +13,12 @@ import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
 import { buildProviderChatEndpointCandidates, isExpectedProviderResponseShape } from "../providerEndpoint.js";
 import { NetworkFetchError, networkFetch } from "../../network/fetch.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
+// 流式 HTTP 传输常量单一来源（proxy 的 Undici 池共享，避免双源漂移）。
+import {
+  LITELLM_COMPLETION_HTTP_FALLBACK_MS,
+  LITELLM_HTTP_CONNECTOR_LIMIT,
+  LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS,
+} from "./constants.js";
 import { buildLiteLLMContinuationRequest } from "./continuationRequest.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
 
@@ -37,14 +43,13 @@ export type ModelStreamRetryProgress = {
 
 export const LITELLM_DEFAULT_MAX_RETRIES = 2;
 export const LITELLM_DEFAULT_REQUEST_TIMEOUT_MS = 6_000_000;
-export const LITELLM_COMPLETION_HTTP_FALLBACK_MS = 600_000;
+// 转发导出 constants.ts（保持既有导出名；模块内部亦可直接引用）。
+export { LITELLM_COMPLETION_HTTP_FALLBACK_MS, LITELLM_HTTP_CONNECTOR_LIMIT, LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS };
 export const LITELLM_REPEATED_STREAMING_CHUNK_LIMIT = 100;
 export const LITELLM_INITIAL_RETRY_DELAY_MS = 500;
 export const LITELLM_MAX_RETRY_DELAY_MS = 8_000;
 export const LITELLM_RETRY_JITTER = 0.75;
-export const LITELLM_HTTP_CONNECTOR_LIMIT = 1000;
 export const LITELLM_HTTP_CONNECTOR_LIMIT_PER_HOST = 500;
-export const LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS = 120_000;
 export const LITELLM_HTTP_TTL_DNS_CACHE_MS = 300_000;
 export const LITELLM_HTTP_SO_KEEPALIVE = false;
 export const LITELLM_HTTP_TCP_KEEPIDLE_SECONDS = 60;
