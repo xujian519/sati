@@ -257,7 +257,20 @@ export type WebEventFrame = {
   event: WebGatewayEvent;
 };
 
-export type WebGatewayFrame = WebHelloOk | WebResponseFrame | WebEventFrame;
+/**
+ * Server-pushed notification (no request id). Mirrors the canonical
+ * `WsNotificationFrame` in `src/gateway/protocol/frames.ts`. Known names:
+ * `always-on:turn-event` ({ sessionKey, channelKey, event })、
+ * `config_changed` ({ changedPaths, changeClasses })、
+ * `worktree_removed` ({ cwd })。
+ */
+export type WebNotificationFrame = {
+  type: "notification";
+  name: string;
+  payload?: unknown;
+};
+
+export type WebGatewayFrame = WebHelloOk | WebResponseFrame | WebEventFrame | WebNotificationFrame;
 
 export type WebPermissionDecision = {
   requestId: string;

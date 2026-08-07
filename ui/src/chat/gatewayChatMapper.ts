@@ -10,7 +10,8 @@
  *   - abort-session       → abort_turn
  *   - permission-response → permission_decide
  *   - elicitation-response→ elicitation_respond
- *   - 其他帧              → ignore（直连模式不转发给 ui/server）
+ *   - 其他帧              → non_chat（非聊天协议帧，由调用方路由到事件通道）
+ *   - 聊天帧但缺必要字段  → ignore（丢弃）
  */
 
 import type { WebGatewayMode, WebAgentRunMode, WebChannelAttachment, WebSubmitTurnInput } from "@sati/web-client";
@@ -39,6 +40,7 @@ export type GatewayCall =
       input: { sessionKey: string; requestId: string; decision: "allow" | "deny"; remember?: boolean; reason?: string };
     }
   | { kind: "elicitation_respond"; input: { sessionKey: string; requestId: string; answer: unknown } }
+  | { kind: "non_chat" }
   | { kind: "ignore" };
 
 type OutgoingFrame = {
@@ -136,7 +138,7 @@ export function mapOutgoingMessage(frame: OutgoingFrame): GatewayCall {
     }
 
     default:
-      return { kind: "ignore" };
+      return { kind: "non_chat" };
   }
 }
 

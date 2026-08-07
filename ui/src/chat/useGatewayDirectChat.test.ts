@@ -334,6 +334,99 @@ describe("useGatewayDirectChatProviderState 集成", () => {
   });
 });
 
+describe("Always-On 通知直收（always-on:turn-event）", () => {
+  const originalFetch = globalThis.fetch;
+  beforeEach(() => {
+    resetGatewayClient();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/auth/gateway-token") {
+          return { ok: true, json: async () => ({ token: "test-token" }) } as Response;
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      }),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    globalThis.fetch = originalFetch;
+  });
+
+  const turnEventNotification = (sessionKey: string, event: Record<string, unknown>) =>
+    JSON.stringify({
+      type: "notification",
+      name: "always-on:turn-event",
+      payload: { sessionKey, channelKey: "web", event },
+    });
+
+  it("首个事件补发 session_created，后续事件归一化广播；turn_completed 后可再次补发", async () => {
+    const { sockets } = stubWebSocket();
+    const received: unknown[] = [];
+    const { result } = renderHook(() => useGatewayDirectChatProviderState());
+    act(() => {
+      result.current.subscribe(message => received.push(message));
+    });
+    await waitFor(() => expect(result.current.isConnected).toBe(true));
+
+    act(() => {
+      sockets[0].receive(
+        turnEventNotification("ao-1", { type: "assistant_text_delta", runId: "r1", text: "后台输出" }),
+      );
+    });
+    await waitFor(() => {
+      const kinds = received.map(frame => (frame as { kind?: string }).kind);
+      expect(kinds).toContain("session_created");
+      expect(kinds).toContain("stream_delta");
+    });
+    const delta = received.find(frame => (frame as { kind?: string }).kind === "stream_delta") as {
+      content?: string;
+      sessionId?: string;
+    };
+    expect(delta.content).toBe("后台输出");
+    expect(delta.sessionId).toBe("ao-1");
+
+    // turn_completed 后 knownSessions 清除：下一轮首个事件再次补发 session_created
+    act(() => {
+      sockets[0].receive(
+        turnEventNotification("ao-1", { type: "turn_completed", finishReason: "end_turn", usage: {} }),
+      );
+      sockets[0].receive(turnEventNotification("ao-1", { type: "assistant_text_delta", runId: "r2", text: "第二轮" }));
+    });
+    await waitFor(() => {
+      expect(received.filter(frame => (frame as { kind?: string }).kind === "session_created").length).toBe(2);
+    });
+  });
+
+  it("无效载荷（缺 sessionKey/event）与非 always-on 通知被忽略", async () => {
+    const { sockets } = stubWebSocket();
+    const received: unknown[] = [];
+    const { result } = renderHook(() => useGatewayDirectChatProviderState());
+    act(() => {
+      result.current.subscribe(message => received.push(message));
+    });
+    await waitFor(() => expect(result.current.isConnected).toBe(true));
+
+    act(() => {
+      sockets[0].receive(JSON.stringify({ type: "notification", name: "config_changed", payload: {} }));
+      sockets[0].receive(
+        JSON.stringify({
+          type: "notification",
+          name: "always-on:turn-event",
+          payload: { event: { type: "turn_started", runId: "r1" } },
+        }),
+      );
+      sockets[0].receive(JSON.stringify({ type: "notification", name: "always-on:turn-event", payload: null }));
+    });
+    // 给事件循环一拍，确认没有帧泄漏
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+    expect(received.length).toBe(0);
+  });
+});
+
 describe("多标签页实时镜像（BroadcastChannel）", () => {
   /** 共享总线 BroadcastChannel mock（复用 gatewayBroadcast.test 的语义）。 */
   class MockBroadcastChannel {

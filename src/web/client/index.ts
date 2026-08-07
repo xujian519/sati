@@ -35,6 +35,7 @@ export {
   type WebListProjectsResult,
   type WebListSessionsInput,
   type WebListSessionsResult,
+  type WebNotificationFrame,
   type WebPermissionDecision,
   type WebProjectSummary,
   type WebReadSessionMessagesInput,

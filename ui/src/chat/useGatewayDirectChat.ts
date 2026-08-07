@@ -18,6 +18,7 @@ import type { GatewayBrowserClient } from "@sati/web-client";
 import { getGatewayClient } from "../utils/api";
 import { createChatBroadcast } from "./gatewayBroadcast";
 import type { ChatBroadcast } from "./gatewayBroadcast";
+import { AlwaysOnTurnForwarder } from "./alwaysOnTurnForwarder";
 import { gatewayEventToChatFrames } from "./gatewayEventAdapter";
 import { mapOutgoingMessage } from "./gatewayChatMapper";
 import type { SubmitTurnLike } from "./gatewayChatMapper";
@@ -127,6 +128,7 @@ export function useGatewayDirectChatProviderState() {
       if (cancelled) return;
       broadcastLocal(envelope.frame);
     });
+    let unsubscribeNotification: (() => void) | null = null;
     (async () => {
       try {
         const client = await getGatewayClient();
@@ -137,6 +139,14 @@ export function useGatewayDirectChatProviderState() {
           client.onDisconnect(handler);
         }
         pendingDisconnectHandlersRef.current = [];
+        // Always-On turn 事件直收（P3）：gateway 对全部 ws 连接广播，每个
+        // 标签页各自收到，故只走 broadcastLocal，不再经 BroadcastChannel
+        // 跨标签页转发（否则镜像会重复）。forwarder 与本次挂载同生命周期，
+        // cleanup 中注销 handler。
+        const forwarder = new AlwaysOnTurnForwarder(broadcastLocal);
+        unsubscribeNotification = client.onNotification((name: string, payload: unknown) =>
+          forwarder.handleNotification(name, payload),
+        );
         setClientReady(true);
       } catch {
         // gateway 未启动/token 不可用：保持 disconnected，sendMessage 会重试
@@ -145,6 +155,7 @@ export function useGatewayDirectChatProviderState() {
     })();
     return () => {
       cancelled = true;
+      unsubscribeNotification?.();
       unsubscribeTab();
       tabBroadcast.close();
     };
@@ -177,7 +188,8 @@ export function useGatewayDirectChatProviderState() {
   const sendMessage = useCallback(
     async (message: unknown) => {
       const call = mapOutgoingMessage(message as Parameters<typeof mapOutgoingMessage>[0]);
-      if (call.kind === "ignore") return;
+      // ignore：聊天帧但缺必要字段，丢弃；non_chat：非聊天协议帧，直连模式不转发。
+      if (call.kind === "ignore" || call.kind === "non_chat") return;
       try {
         const client = await getGatewayClient();
         if (call.kind === "submit_turn") {

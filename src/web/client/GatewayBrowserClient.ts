@@ -83,6 +83,7 @@ export class GatewayBrowserClient {
   /** reconnect() 流程中主动关闭旧连接，避免误触发 disconnect 通知。 */
   private reconnecting = false;
   private readonly disconnectHandlers: Array<(info: { code?: number; reason?: string }) => void> = [];
+  private readonly notificationHandlers: Array<(name: string, payload: unknown) => void> = [];
 
   constructor(private readonly options: GatewayBrowserClientOptions) {}
 
@@ -100,6 +101,22 @@ export class GatewayBrowserClient {
    */
   onDisconnect(handler: (info: { code?: number; reason?: string }) => void): void {
     this.disconnectHandlers.push(handler);
+  }
+
+  /**
+   * 订阅服务端推送通知（`notification` 帧，无 request id）。
+   * 已知通知名：`always-on:turn-event` / `config_changed` / `worktree_removed`。
+   * 重连后无需重新注册——handler 列表跨连接存活。
+   * 返回注销函数；调用方应在组件卸载/生命周期结束时注销，避免 handler 泄漏。
+   */
+  onNotification(handler: (name: string, payload: unknown) => void): () => void {
+    this.notificationHandlers.push(handler);
+    return () => {
+      const index = this.notificationHandlers.indexOf(handler);
+      if (index >= 0) {
+        this.notificationHandlers.splice(index, 1);
+      }
+    };
   }
 
   /**
@@ -344,6 +361,12 @@ export class GatewayBrowserClient {
         pending.resolve(frame.result);
       } else {
         pending.reject(Object.assign(new Error(frame.error.message), { code: frame.error.code }));
+      }
+      return;
+    }
+    if (frame.type === "notification") {
+      for (const handler of this.notificationHandlers) {
+        handler(frame.name, frame.payload);
       }
       return;
     }
