@@ -2,7 +2,7 @@
  * 宪法规则引擎 — 分层规则包（Rule Pack）装配器。
  *
  * 三层合并式加载：base（全领域通用）→ domains（清单声明顺序）→ overrides（项目私有）。
- * 复用 RuleLoader 的 loadRuleSetFromFile / mergeRuleSets（后加载按 id 覆盖）。
+ * 复用 RuleLoader 的 loadRuleSetDir / mergeRuleSets（后加载按 id 覆盖）。
  *
  * 项目清单：WorkSpace 根的 `.sati/rules.yaml`（全新约定，见 rules/README.md）：
  *   base: base                # 内置包名；或绝对路径（外部包 v1 用路径引用）
@@ -13,11 +13,12 @@
  * 坏包不阻塞：单层加载失败记 warning 继续。
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parseDocument } from "yaml";
 import type { RuleSet } from "../protocol/types.js";
-import { loadRuleSetFromFile, mergeRuleSets } from "./RuleLoader.js";
+import { candidatePackDirs, findWorkspaceRoot } from "./asset-location.js";
+import { loadRuleSetDir, mergeRuleSets } from "./RuleLoader.js";
 
 const MANIFEST_FILE = join(".sati", "rules.yaml");
 const PACK_MANIFEST_FILE = "pack.yaml";
@@ -41,27 +42,12 @@ export type RulePackLoadResult = {
   layers: Map<string, string>;
   /** 实际使用的清单路径；无清单时为 null。 */
   manifestPath: string | null;
-  /** 清单文件 mtime（毫秒）；无清单时为 null。供 rule_check 缓存 key。 */
+  /** 清单文件 mtime（毫秒）；无清单时为 null。供调用方做缓存失效判断。 */
   manifestMtimeMs: number | null;
 };
 
 /** 包清单（pack.yaml）校验问题。 */
 export type PackManifestIssue = { field: string; message: string };
-
-/**
- * 从 cwd 向上定位 WorkSpace 根（以 package.json 为界）；找不到回退 cwd。
- * 与 asset-location.ts 的仓库根定位策略一致。
- */
-export function findWorkspaceRoot(startDir = process.cwd()): string {
-  let dir = startDir;
-  for (let i = 0; i < 8; i += 1) {
-    if (existsSync(join(dir, "package.json"))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return startDir;
-}
 
 /** 定位项目清单：显式路径 > cwd/.sati/rules.yaml > WorkSpace 根。未找到返回 null。 */
 export function resolveRulePackManifestPath(explicitPath?: string): string | null {
@@ -133,60 +119,15 @@ export function validatePackManifest(raw: unknown, opts: { requireDomain?: boole
   return issues;
 }
 
-/**
- * 内置包候选目录（从最具体到最通用）：
- *   SATI_RULES_DIR/<name> → cwd/rules/<name> → cwd/rules/domains/<name>
- *   → WorkSpace 根 rules/<name> → WorkSpace 根 rules/domains/<name>
- * 独立于共享的 candidateRuleDirs()（后者写死 rules/patent，三处消费方复用）。
- */
-export function candidateRulePackDirs(name: string): string[] {
-  const candidates: string[] = [];
-  const envDir = process.env.SATI_RULES_DIR;
-  if (envDir) candidates.push(resolve(envDir, name));
-  const workspaceRoot = findWorkspaceRoot();
-  candidates.push(resolve(process.cwd(), "rules", name));
-  candidates.push(resolve(process.cwd(), "rules", "domains", name));
-  candidates.push(join(workspaceRoot, "rules", name));
-  candidates.push(join(workspaceRoot, "rules", "domains", name));
-  return candidates;
-}
-
 /** 定位内置包目录；未找到返回 null。绝对路径引用直接返回（若存在）。 */
 export function resolvePackDir(nameOrPath: string): string | null {
   if (isAbsolute(nameOrPath)) {
     return existsSync(nameOrPath) ? nameOrPath : null;
   }
-  for (const dir of candidateRulePackDirs(nameOrPath)) {
+  for (const dir of candidatePackDirs(nameOrPath)) {
     if (existsSync(dir)) return dir;
   }
   return null;
-}
-
-/** 单文件加载失败不阻塞；跳过坏文件记 warning。 */
-function loadRuleFilesFromPackDir(dir: string, warnings: string[]): { ruleSets: RuleSet[]; sources: string[] } {
-  const ruleSets: RuleSet[] = [];
-  const sources: string[] = [];
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    warnings.push(`规则包目录不存在: ${dir}`);
-    return { ruleSets, sources };
-  }
-  for (const entry of entries.sort()) {
-    if (!entry.endsWith(".yaml") && !entry.endsWith(".yml")) continue;
-    if (entry === PACK_MANIFEST_FILE) continue;
-    const path = join(dir, entry);
-    try {
-      const loaded = loadRuleSetFromFile(path);
-      ruleSets.push(loaded.ruleSet);
-      sources.push(loaded.source);
-      warnings.push(...loaded.warnings.map(w => w.message));
-    } catch (error) {
-      warnings.push(`跳过损坏规则文件: ${(error as Error).message}`);
-    }
-  }
-  return { ruleSets, sources };
 }
 
 /** 校验包目录内的 pack.yaml；问题记 warning（不阻塞规则加载）。 */
@@ -202,7 +143,8 @@ function checkPackManifest(dir: string, layerName: string, warnings: string[]): 
       warnings.push(`规则包 ${layerName} 清单解析失败: ${doc.errors[0]?.message ?? "unknown"}`);
       return;
     }
-    const isDomainPack = dir.includes(`${join("rules", "domains")}`);
+    // 领域包须声明 domain（按层语义判断，而非目录路径）
+    const isDomainPack = layerName.startsWith("domain:");
     const issues = validatePackManifest(doc.toJS(), { requireDomain: isDomainPack });
     for (const issue of issues) {
       warnings.push(`规则包 ${layerName} 清单非法（${issue.field}）: ${issue.message}`);
@@ -248,7 +190,8 @@ export function loadRulePack(options: { manifestPath?: string } = {}): RulePackL
     } else if (layerName !== "overrides") {
       warnings.push(`规则包 ${layerName} 缺少 pack.yaml 清单（${dir}）`);
     }
-    const { ruleSets, sources: layerSources } = loadRuleFilesFromPackDir(dir, warnings);
+    const { ruleSets, sources: layerSources, warnings: layerWarnings } = loadRuleSetDir(dir);
+    warnings.push(...layerWarnings.map(w => w.message));
     if (layerSources.length === 0 && layerName !== "overrides") {
       warnings.push(`规则包 ${layerName} 无可加载规则文件（${dir}）`);
     }
@@ -269,9 +212,7 @@ export function loadRulePack(options: { manifestPath?: string } = {}): RulePackL
   for (const layer of layerOrder) {
     for (const rule of layer.ruleSet.rules) {
       const previous = layers.get(rule.id);
-      if (previous !== undefined && previous === "base" && layer.name !== "base") {
-        warnings.push(`规则 ${rule.id} 被 ${layer.name} 层覆盖（原: base）`);
-      } else if (previous !== undefined) {
+      if (previous !== undefined) {
         warnings.push(`规则 ${rule.id} 被 ${layer.name} 层覆盖（原: ${previous}）`);
       }
       layers.set(rule.id, layer.name);

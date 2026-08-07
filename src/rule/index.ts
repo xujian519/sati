@@ -60,8 +60,12 @@ export {
   type PatentComplianceLoadResult,
 } from "./runtime/patent-compliance.js";
 export {
-  candidateRulePackDirs,
+  candidateRuleDirs,
+  candidatePackDirs,
   findWorkspaceRoot,
+  resolveRuleAsset,
+} from "./runtime/asset-location.js";
+export {
   loadRulePack,
   parseRulePackManifest,
   resolvePackDir,

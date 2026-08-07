@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { parseDocument } from "yaml";
 import {
-  candidateRulePackDirs,
+  candidatePackDirs,
   evaluateText,
   loadRulePack,
   loadRuleSetDir,
@@ -189,7 +189,7 @@ test("loadRulePack skips missing domain layer with warning", () => {
   const result = loadRulePack({ manifestPath });
   // 绝对路径引用的缺失层：目录不存在记 warning，不阻塞
   assert.ok(
-    result.warnings.some(w => w.includes("规则包目录不存在")),
+    result.warnings.some(w => w.includes("规则目录不存在")),
     `warnings 应含缺失层提示，实际: ${result.warnings.join(" | ")}`,
   );
   assert.equal(result.ruleSet.rules.length, 1, "base 层仍应正常加载");
@@ -273,14 +273,14 @@ test("evaluateText domain option skips foreign-domain rules but keeps universal 
 // ---------------------------------------------------------------------------
 // 8. 包解析回归安全网：SATI_RULES_DIR 优先；绝对路径直通；未知包名返回 null
 // ---------------------------------------------------------------------------
-test("candidateRulePackDirs and resolvePackDir resolution semantics", () => {
+test("candidatePackDirs and resolvePackDir resolution semantics", () => {
   const previous = process.env.SATI_RULES_DIR;
   try {
     process.env.SATI_RULES_DIR = "/tmp/sati-rules-env";
-    assert.equal(candidateRulePackDirs("base")[0], resolve("/tmp/sati-rules-env", "base"));
+    assert.equal(candidatePackDirs("base")[0], resolve("/tmp/sati-rules-env", "base"));
     const withoutEnv = ((): string[] => {
       delete process.env.SATI_RULES_DIR;
-      return candidateRulePackDirs("base");
+      return candidatePackDirs("base");
     })();
     assert.ok(withoutEnv.every(c => !c.startsWith("/tmp/sati-rules-env")));
     // 绝对路径直通

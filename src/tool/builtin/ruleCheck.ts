@@ -29,52 +29,57 @@ export type RuleCheckDeps = {
   pack?: () => RulePackLoadResult;
 };
 
+/** rule_check 支持的规则集 scope（description 与运行时报错共用）。 */
+const AVAILABLE_SCOPES = "patent, patent-electrical, pack";
+
 /**
  * `rule_check` — 宪法规则检查工具。
  *
  * 允许 agent 在发布合规敏感输出前显式调用规则引擎，对文本执行确定性检查
  * （keyword_blocklist / pattern_analysis / structural_analysis / citation_analysis），
  * 返回违规清单（含 severity / action / 法律依据 / 证据）。
- * 只读、无副作用；规则集按 scope 缓存（scope=pack 按清单 mtime 失效）。
+ * 只读、无副作用；规则集按 scope 缓存（scope=pack 按清单路径@mtime 失效）。
  */
 export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<RuleCheckInput> {
-  const cache = new Map<string, RuleSet>();
-
   /**
-   * scope=pack 缓存：清单路径 + mtime 未变则复用（清单级失效，
-   * 包内规则文件改动不清缓存——与 RuleLoader 其他消费方一致的边界）。
+   * 单一缓存：scope → { ruleSet, pack, key }。
+   * pack 的 key = 清单路径@mtime，变化即重载；清单缺失/被删 → key=null 触发重载。
+   * 其余 scope 的 key 恒为 null（仅缓存一次）。
    */
-  let packCache: RulePackLoadResult | null = null;
-  const resolvePack = (): RulePackLoadResult => {
+  const cache = new Map<string, { ruleSet: RuleSet; pack: RulePackLoadResult | null; key: string | null }>();
+
+  const packCacheKey = (): string | null => {
     const manifestPath = resolveRulePackManifestPath();
-    let mtimeMs: number | null = null;
-    if (manifestPath !== null) {
-      try {
-        mtimeMs = statSync(manifestPath).mtimeMs;
-      } catch {
-        // 清单在定位后被删除：mtime 置 null 触发重载
-      }
+    if (manifestPath === null) return null;
+    try {
+      return `${manifestPath}@${statSync(manifestPath).mtimeMs}`;
+    } catch {
+      // 清单在定位后被删除：key 置 null 触发重载
+      return null;
     }
-    if (packCache !== null && packCache.manifestPath === manifestPath && packCache.manifestMtimeMs === mtimeMs) {
-      return packCache;
-    }
-    packCache = deps?.pack ? deps.pack() : loadRulePack();
-    return packCache;
   };
 
-  const resolve = (scope: string): RuleSet => {
-    if (scope === "pack" && !deps?.loader) return resolvePack().ruleSet;
+  const resolve = (scope: string): { ruleSet: RuleSet; pack: RulePackLoadResult | null } => {
+    const isPack = scope === "pack" && deps?.loader === undefined;
+    const key = isPack ? packCacheKey() : null;
     const cached = cache.get(scope);
-    if (cached) return cached;
-    const ruleSet = deps?.loader
-      ? deps.loader(scope)
-      : scope === "patent"
-        ? loadPatentComplianceRuleSet().ruleSet
-        : scope === "patent-electrical"
-          ? loadPatentElectricalRuleSet().ruleSet
-          : { rules: [] };
-    cache.set(scope, ruleSet);
-    return ruleSet;
+    if (cached !== undefined && cached.key === key) return { ruleSet: cached.ruleSet, pack: cached.pack };
+    let ruleSet: RuleSet;
+    let pack: RulePackLoadResult | null = null;
+    if (isPack) {
+      pack = deps?.pack ? deps.pack() : loadRulePack();
+      ruleSet = pack.ruleSet;
+    } else if (deps?.loader) {
+      ruleSet = deps.loader(scope);
+    } else if (scope === "patent") {
+      ruleSet = loadPatentComplianceRuleSet().ruleSet;
+    } else if (scope === "patent-electrical") {
+      ruleSet = loadPatentElectricalRuleSet().ruleSet;
+    } else {
+      ruleSet = { rules: [] };
+    }
+    cache.set(scope, { ruleSet, pack, key });
+    return { ruleSet, pack };
   };
 
   /** 同义词表（synonym_match 检查用；工厂构建时加载一次，不再每次 execute 读盘）。 */
@@ -87,7 +92,7 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
       "Run deterministic constitutional rule checks (keyword blocklist / pattern / structural / citation range / synonym match) " +
       "against the given text and return violations with severity, action and legal basis. " +
       "Use before publishing compliance-sensitive output (e.g. patent conclusions, legal opinions). " +
-      "Scopes: 'patent' (general patent compliance), 'patent-electrical' (H-section electrical rules + general compliance), " +
+      `Scopes: 'patent' (general patent compliance), 'patent-electrical' (H-section electrical rules + general compliance), ` +
       "or 'pack' (layered rule pack assembled from the project manifest .sati/rules.yaml: base + domains + overrides).",
     kind: "session",
     inputSchema: {
@@ -111,21 +116,20 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
     isConcurrencySafe: () => true,
     async execute(input) {
       const scope = input.scope ?? "patent";
-      const ruleSet = resolve(scope);
+      const { ruleSet, pack } = resolve(scope);
       if (ruleSet.rules.length === 0) {
         // 空规则集 ≠ "合规"：显式提示，避免 scope 拼错时"静默零违规"误判
         return {
           content: [
             {
               type: "text",
-              text: `rule_check(${scope}): 未加载任何规则（scope 未知或规则集为空）。可用 scope: patent, patent-electrical, pack`,
+              text: `rule_check(${scope}): 未加载任何规则（scope 未知或规则集为空）。可用 scope: ${AVAILABLE_SCOPES}`,
             },
           ],
         };
       }
       const evaluation = evaluateText(input.text, ruleSet, synonymsCache);
       // scope=pack 附分层来源摘要与加载警告，便于审计与排障
-      const pack = scope === "pack" && !deps?.loader ? resolvePack() : null;
       const packHeader =
         pack !== null
           ? `规则分层: ${summarizeRulePackLayers(pack.layers)}（清单: ${pack.manifestPath ?? "无，默认 rules/base"}）`

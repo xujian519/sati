@@ -34,6 +34,8 @@ export function loadEvidenceRulesEngine(): EvidenceRulesLoadResult {
       warnings.push(`证据规则资产加载失败 ${path}: ${(error as Error).message}`);
     }
   }
-  warnings.push("未找到证据规则资产（SATI_RULES_DIR 或 rules/patent/evidence-rules.yaml），引擎降级为默认权重");
+  warnings.push(
+    "未找到证据规则资产（$SATI_RULES_DIR/patent/evidence-rules.yaml 或 rules/patent/evidence-rules.yaml），引擎降级为默认权重",
+  );
   return { engine: new EvidenceEngine(), source: null, warnings };
 }

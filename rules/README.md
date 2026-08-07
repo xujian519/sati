@@ -99,7 +99,7 @@ rules:
 
 ## 加载与覆盖
 
-- 内置资产定位：`SATI_RULES_DIR` 环境变量 → `./rules/patent/` → 仓库根 `rules/patent/`
+- 内置资产定位：`SATI_RULES_DIR`（规则根，布局镜像仓库 `rules/`，其下 `patent/`）→ `./rules/patent/` → 仓库根 `rules/patent/`
 - `mergeRuleSets` 按 id 覆盖（后出现者胜），可用于分层规则
 - 单文件解析失败不阻塞目录加载（跳过并告警，见 `loadRuleSetDir`）
 

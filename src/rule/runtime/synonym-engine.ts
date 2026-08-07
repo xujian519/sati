@@ -175,6 +175,8 @@ export function loadSynonymsAsset(): SynonymsLoadResult {
       warnings.push(`同义词资产加载失败 ${path}: ${(error as Error).message}`);
     }
   }
-  warnings.push("未找到同义词资产（SATI_RULES_DIR 或 rules/patent/synonyms.yaml），降级为纯关键词匹配");
+  warnings.push(
+    "未找到同义词资产（$SATI_RULES_DIR/patent/synonyms.yaml 或 rules/patent/synonyms.yaml），降级为纯关键词匹配",
+  );
   return { synonyms: new Map(), source: null, warnings };
 }
