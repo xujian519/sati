@@ -1,4 +1,4 @@
-# CAP01 专利总调度编排手册（小诺专利智能体）
+# CAP01 专利总调度编排手册（Sati 专利智能体）
 
 > 适用角色：`patent_orchestrator`（本项目主入口）。可调度专利 worker、知识库、workflow、**以及**编程工具 / Skills / CLI / 扩展能力。
 
@@ -8,16 +8,16 @@
 
 每次接到专利任务，按序执行：
 
-1. **解析案卷**：`read` 加载 `data/cases/{caseId}/xiaonuo.md`（或运行时注入的案卷上下文）
+1. **解析案卷**：`read` 加载 `data/cases/{caseId}/sati.md`（或运行时注入的案卷上下文）
 2. **确认路径**：所有 write 目标必须在仓库 `data/cases/{caseId}/outputs/` 下
-3. **读取推荐**：xiaonuo.md 中「推荐 workflow」与「推荐 worker」为默认 SOP，**优先遵循**
+3. **读取推荐**：sati.md 中「推荐 workflow」与「推荐 worker」为默认 SOP，**优先遵循**
 4. **盘点产出**：检查 `outputs/` 已有文件，跳过已完成步骤，仅补缺口
 5. **选择模式**：
-   - 标准 SOP → `plan_workflow`（传入 template_id）
+   - 标准 SOP → `patent_workflow` / `patent_workflow_run`（传入 manifestId）
    - 单点任务 / 灵活组合 → `agent` 调度 subagent
 6. **规则先行**：分析类任务必先 `rule-explorer`，再按 `provision_ids` 调度条款 worker
 
-无 xiaonuo.md 时：建议用户 `nuo project init --convert`，或调度 `project-probe` 探查目录。
+无 sati.md 时：调度 `project-probe` 探查目录并生成 sati.md（二进制文档可先用 markitdown 转为 Markdown 放入 converted/）。
 
 ---
 
@@ -31,19 +31,19 @@
 | 撰写、交底、申请 | `prosecution-draft` | CAP02 |
 | 检索、现有技术、调查 | `prior-art-survey` | 检索链 |
 
-**执行 SOP**：`plan_workflow` 使用上表 template_id → 用户确认计划 → `/workflow:execute`（或 CLI `nuo workflow use <id>`）。
+**执行 SOP**：按上表 template_id 拟定计划 → 用户确认计划 → `patent_workflow_run` 执行 workflow。
 
-若 xiaonuo.md 已写推荐模板，**必须与上表一致**；不一致时以 xiaonuo.md 为准并说明理由。
+若 sati.md 已写推荐模板，**必须与上表一致**；不一致时以 sati.md 为准并说明理由。
 
 ---
 
 ## 3. Worker 能力目录
 
-### 3.1 基础设施 worker（Work 工序层 W-*，详见 workers-catalog.yaml）
+### 3.1 基础设施 worker（Work 工序层 W-*）
 
 | worker | W-ID | 职责 | 典型输出 |
 |--------|------|------|----------|
-| `project-probe` | W-01 | 案卷探查、xiaonuo.md | xiaonuo.md |
+| `project-probe` | W-01 | 案卷探查、sati.md | sati.md |
 | `rule-explorer` | W-02 | provision_ids、generatedPrompt | generatedPrompt |
 | `patent-technical-analyzer` | W-03 | CAP02 技术分析 | technical-analysis-report.md |
 | `patent-search-planner` | W-04 | 检索策略 | search-plan.md |
@@ -110,7 +110,7 @@ Lazy：`reasoning-conflicting-application`、`reasoning-routine-selection`、`re
 ## 4. Artifact 依赖 DAG（硬约束）
 
 ```
-xiaonuo.md + converted/
+sati.md + converted/
     ↓
 rule-explorer → provision_ids
     ↓
@@ -156,23 +156,23 @@ artifact-quality-check → [达标 → 交付；不达标 → 退回修订]
 
 | 需求 | 工具 / worker |
 |------|---------------|
-| 读案卷、xiaonuo.md、converted | `read`、`glob` |
-| 法条与 Wiki 规则 | `knowledge_rules`、`knowledge_search`、`rule-explorer` |
-| 法条-概念图谱路径 | `knowledge_graph_path` |
-| 结构化 SOP | `plan_workflow` |
+| 读案卷、sati.md、converted | `read`、`glob` |
+| 法条与 Wiki 规则 | `law_search`、`patent_wiki_search`、`rule-explorer` |
+| 法条-概念图谱路径 | `patent_kg_query` |
+| 结构化 SOP | `patent_workflow` / `patent_workflow_run` |
 | 单步专家任务 | `agent` |
 | 列已注册 worker | `list_workers` |
 | 对比文件检索 | `patent-search-planner` → `patent-search-executor` |
 | 专利全文获取 | `patent-downloader` |
-| 技术分析与对比矩阵 | `patent-technical-analyzer` + `assets/scripts/patent/tech-graph-analyze.py` |
-| 文档转换（init 阶段） | CLI `nuo project init --convert`（markitdown） |
+| 技术分析与对比矩阵 | `patent-technical-analyzer` |
+| 文档转换（init 阶段） | `bash` 运行 markitdown 转换（产出放 converted/） |
 | 答复/说明书撰写 | `patent-oa-response-drafter` / `provision-drafting-*` |
-| 反 AI 套话 + 5维评分 | `patent-slop-cleaner` → `scripts/patent/slop-scorer.ts`（总分<35须修订） |
+| 反 AI 套话 + 5维评分 | `patent-slop-cleaner`（内置 slop 引擎，总分<35须修订） |
 | Checker 复核（CAP09） | `suggest_checkers` → `run_checker_review` |
 | 列 Checker 目录 | `list_checkers` |
-| Agent 角色定义加载 | `read assets/roles/{role}.yaml`（technical_analyzer/novelty_checker 等角色） |
-| 规则引擎（YAML 29条） | `run_patent_rules` → 按 provision_id 路由到对应 domain |
-| 产出质量门槛 | `scripts/patent/artifact-quality-check.ts <文件路径> <产出类型>` |
+| 子代理角色 | 按 `subagent_type` 名称直接经 `agent` 调度（technical_analyzer/novelty_checker 等） |
+| 规则引擎（YAML 规则检查） | `rule_check`（scope=patent） |
+| 产出质量门槛 | `patent_eval`（确定性质量门） |
 
 ### 外部检索补充（P2）
 
@@ -199,7 +199,7 @@ artifact-quality-check → [达标 → 交付；不达标 → 退回修订]
 1️⃣ 确认通过，继续下游
 2️⃣ 需要修改（请附修改建议）
 3️⃣ 退回重做（请说明原因）
-4️⃣ 🔄 跳过此检查点（须记录理由至 xiaonuo.md）
+4️⃣ 🔄 跳过此检查点（须记录理由至 sati.md）
 5️⃣ 💬 其他意见（请直接输入，任何建议或疑问均可）
 
 > 你的选择（输入数字或文本）：
@@ -211,12 +211,12 @@ artifact-quality-check → [达标 → 交付；不达标 → 退回修订]
 - 用户可选择输入数字选择，也可直接输入任意文本
 - 用户选择后，AI 必须确认用户意图并执行对应操作
 - 用户选择"需要修改"或"退回重做"时，AI 须等待用户补充描述后再操作
-- 跳过理由写入 `xiaonuo.md` 的 `decisions` 段
+- 跳过理由写入 `sati.md` 的 `decisions` 段
 - 非 HITL 的日常决策（策略选择、方向确认）也参照此格式，选项可动态调整
 
 ### 7.1 Checker 自动调度
 
-workflow 模板中带 `[HITL]` 的步骤会暂停；系统在 checkpoint **之前**按 `workers-catalog.yaml` 的 `checkers[].invokes_after` 自动调度复核子代理（交互会话默认开启）。
+workflow 模板中带 `[HITL]` 的步骤会暂停；系统在 checkpoint **之前**按下表的映射自动调度复核子代理（交互会话默认开启）。
 
 | workflow 步骤 (worker) | 建议 Checker (K-*) | 角色 subagent_type |
 |------------------------|-------------------|-------------------|
@@ -225,12 +225,12 @@ workflow 模板中带 `[HITL]` 的步骤会暂停；系统在 checkpoint **之�
 | 条款新颖性/创造性结论后 | K-01, K-02 | `novelty_checker`, `creativity_checker` |
 | 侵权对比后 | K-03 | `infringement_checker` |
 
-**自动调度行为**（`/workflow:execute`）：
+**自动调度行为**（workflow 执行时）：
 
 1. 步骤完成且触发 HITL → 按 catalog 匹配 Checker → `agent` 子代理复核
 2. 复核报告写入 `outputs/checkpoint-review-{worker}-{role_id}.md`
 3. 摘要追加到步骤 output，再按 7.0 标准格式弹出 HITL 供用户决策
-4. 设 `NUO_AUTO_CHECKER=0` 可关闭自动跑子代理，仅保留提示
+4. 用户要求不自动复核时，仅保留提示不调度子代理
 
 **手动调度**（总调度 orchestrator）：
 
@@ -285,7 +285,7 @@ agent(subagent_type="reviewer", ...) # 等价备选
 
 ## 10. 全能力调度（编程 / Skills / 扩展 / CLI）
 
-小诺专利智能体**不受专利 worker 边界限制**。完成专利任务时，按优先级选用：
+Sati 专利智能体**不受专利 worker 边界限制**。完成专利任务时，按优先级选用：
 
 | 层级 | 手段 | 何时使用 |
 |------|------|----------|
@@ -293,9 +293,9 @@ agent(subagent_type="reviewer", ...) # 等价备选
 | 2 | `agent` 子代理 | 单点专家（checker、retriever、technical_analyzer） |
 | 3 | `knowledge_*` + `rule-explorer` | 法条、Wiki、图谱 |
 | 4 | **Skills**（read 加载） | 文档处理、专利检索、stop-patent-slop、CNIPA 等已安装技能 |
-| 5 | **`bash` / `edit` / `write`** | 跑 `tech-graph-analyze.py`、markitdown、`npm run check`、修 workflow/工具代码 |
+| 5 | **`bash` / `edit` / `write`** | 跑 markitdown 转换、安装依赖、修 workflow/工具代码 |
 | 6 | **`tool_search` + MCP** | 发现 CodeGraph、浏览器、外部 MCP 工具 |
-| 7 | **TUI / CLI 命令** | `/project:init`、`/sync:all`、`/workflow:use`、`nuo case verify` 等 |
+| 7 | **Skills / 内置工具** | `/patent-agent`、`/patent-writer` 等 Skills，`patent_workflow_run`、`patent_plan_task` 等内置工具 |
 
 ### 路径约定
 
@@ -306,5 +306,5 @@ agent(subagent_type="reviewer", ...) # 等价备选
 
 1. worker 失败 → 读日志 / outputs，用 `agent` 换子代理或缩小任务
 2. 脚本/依赖缺失 → `bash` 安装或运行，必要时 `edit` 修复实现
-3. 知识库空 → 提示 `/sync:all` 或 `nuo sync all` + `knowledge reindex`
+3. 知识库空 → 提示用户将 knowledge.db / laws-full.db 等数据放入 `~/.sati/knowledge/` 目录（或以 `SATI_KNOWLEDGE_DIR` 指定）
 4. 仍无法完成 → 向用户说明已尝试的手段与缺失资源，**不得**伪造法律结论或对比文件

@@ -78,7 +78,7 @@ python3 scripts/download_patent.py CN123456789A --proxy 9981
 
 ## 输出目录
 
-默认保存到 `~/Documents/小诺工作记录/专利原文/YYYY-MM-DD/`（日期按当天自动生成），可通过 `-o` 参数修改。
+默认保存到**当前工作空间**下的 `专利原文/YYYY-MM-DD/`（日期按当天自动生成），可通过 `-o` 参数修改。
 
 ## 注意事项
 

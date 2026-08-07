@@ -16,6 +16,7 @@
       "!ui/src/index.css",
       "!skills/**",
       "!products/**",
+      "!vendor/**",
       "!src/knowledge/patent/wiki/**",
       "!tests/patent/benchmark/fixtures/**",
       "!**/*.map"

@@ -70,6 +70,7 @@
     "js-tiktoken": "^1.0.21",
     "jsonrepair": "^3.15.0",
     "mupdf": "^1.28.0",
+    "nuo-patent": "workspace:*",
     "parse5": "^8.0.1",
     "react": "^19.2.8",
     "sharp": "^0.35.3",
@@ -79,8 +80,7 @@
     "undici": "^8.9.0",
     "weixin-ilink": "^0.1.0",
     "ws": "^8.21.1",
-    "yaml": "^2.8.4",
-    "nuo-patent": "github:xujian519/nuo-patent#v2.3.1"
+    "yaml": "^2.8.4"
   },
   "packageManager": "pnpm@10.32.1",
   "pnpm": {

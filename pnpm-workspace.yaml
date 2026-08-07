@@ -2,6 +2,7 @@ packages:
   - 'ui'
   - 'apps/desktop'
   - 'src/context/memory/edgeclaw-memory-core'
+  - 'vendor/nuo-patent'
 
 allowBuilds:
   '@google/genai': true
@@ -24,7 +25,6 @@ onlyBuiltDependencies:
   - electron-winstaller
   - esbuild
   - node-pty
-  - nuo-patent
   - protobufjs
   - sharp
   - unrs-resolver

@@ -21,6 +21,7 @@ export default [
       "ui/**",
       "skills/**",
       "products/**",
+      "vendor/**",
       "src/context/memory/edgeclaw-memory-core/**",
     ],
   },

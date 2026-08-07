@@ -53,7 +53,7 @@
 
 | # | 决策点 | 推荐 | 备选 | 影响 | 实施结论 |
 |---|--------|------|------|------|---------|
-| D1 | nuo-patent 依赖引入方式 | **git 依赖**（`"nuo-patent": "github:xujian/nuo-patent#v2.2.0"`） | pnpm workspace 成员；或 child_process 调 CLI | Phase 1 前置 | ✅ 采用 git 依赖，锁定 `#v2.3.1` |
+| D1 | nuo-patent 依赖引入方式 | **git 依赖**（`"nuo-patent": "github:xujian/nuo-patent#v2.2.0"`） | pnpm workspace 成员；或 child_process 调 CLI | Phase 1 前置 | ✅ 采用 git 依赖，锁定 `#v2.3.1` → **2026-08 改为 workspace vendor**：预构建产物存 `vendor/nuo-patent/`（源自 `#v2.3.1`），`workspace:*` 链接，安装离线不依赖外部 git 源 |
 | D2 | Phase 2 检索实现位置 | **nuo-patent 仓库新增 `searchPatents()`**（Google Patents 搜索结果页解析），Sati 侧只封装 | Sati 侧直接对接本地 PG 库 | 决定 Phase 2a/2b 分工 | ✅ 采用 nuo-patent 侧实现（Phase 2a 完成） |
 | D3 | 本地 7520 万专利库对接 | **可选适配器**（Sati 配置层，默认关闭，不随开源分发强制启用） | 不做 | 决定 Phase 2b 是否实施 | ❌ 未实施（本地 PG 库适配器未开工） |
 | D4 | PDF 下载是否封装为工具 | **Phase 3 可选项**（`patent_pdf_download`，`isDestructive: true`） | 不封装（沿用 patent-download skill 的 python 脚本） | 影响权限模型 | ❌ 未实施（沿用 patent-download skill 的 Python 脚本） |
@@ -272,7 +272,7 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 | ego-browser 依赖（macOS）在 CI/无浏览器环境不可用 | 中 | 工具 `checkAvailability` 检测 + 回退 fetch；测试用 `NUO_PATENT_EGO_BROWSER=0` mock |
 | 本地 PG 库（移动硬盘）不可移植 | 低 | Phase 2b 设计为可选适配器 + `setup_required`，不阻塞开源主链 |
 | `patent_workflow` 行为回归 | 低 | 保持空 `StageHandlerRegistry` 收口语义不变；provider 注入走新路径 |
-| 依赖引入（git 依赖）构建不稳定 | 低 | 锁 tag（`#v2.2.0`）；或切换 D1 备选 workspace 方案 |
+| 依赖引入（git 依赖）构建不稳定 | 已消除 | 2026-08 已切换 D1 备选 workspace vendor 方案（`vendor/nuo-patent/`） |
 
 ---
 

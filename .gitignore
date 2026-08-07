@@ -83,6 +83,8 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+# vendor 第三方预构建产物需随仓库分发（nuo-patent）
+!vendor/**/dist/
 .output
 
 # Gatsby files
@@ -220,3 +222,6 @@ apps/desktop/resources/node-bin
 # WorkBuddy 本地记忆 / adhoc 构建产物（不入库）
 .workbuddy/
 build-info.json
+
+# Python bytecode cache
+__pycache__/

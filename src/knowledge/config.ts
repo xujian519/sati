@@ -12,11 +12,9 @@ import { fileURLToPath } from "node:url";
  * 1. 环境变量 `SATI_KNOWLEDGE_DIR`（优先，指定数据目录）
  * 2. 环境变量 `SATI_PATENT_KG_DB` / `SATI_LAW_DB` / `SATI_CASE_DB`（单文件覆盖）
  * 3. 默认目录 `~/.sati/knowledge/`（Sati 知识库数据，用户放 knowledge.db 于此）
- * 4. 宝宸知识库原始目录（Laws-1.0.0/db.sqlite3）
  */
 
 const DEFAULT_KNOWLEDGE_DIR = join(homedir(), ".sati", "knowledge");
-const BAOCHEN_LAW_DB = join(homedir(), "projects", "宝宸知识库_Raw", "Laws-1.0.0", "db.sqlite3");
 
 export type KnowledgeDbPaths = {
   /** 专利知识图谱数据库（nodes/edges 表），缺失时 undefined。 */
@@ -75,7 +73,6 @@ export function resolveKnowledgeDbPaths(env: NodeJS.ProcessEnv = process.env): K
       // FTS5 版优先（trigram + BM25）
       join(dataDir, "laws-full-local.db"),
       join(dataDir, "laws-full.db"),
-      BAOCHEN_LAW_DB,
     ]);
 
   // wiki 卡片：内置目录优先，环境变量可覆盖到外部数据目录

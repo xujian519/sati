@@ -21,7 +21,8 @@ from datetime import date
 from pathlib import Path
 
 EGO_BROWSER_CMD = os.environ.get('EGO_BROWSER_CMD', 'ego-browser')
-DEFAULT_OUTPUT_DIR = os.path.expanduser('~/Documents/小诺工作记录/专利原文')
+# 默认输出到智能体当前工作空间下的 专利原文/ 目录（可用 -o 覆盖）
+DEFAULT_OUTPUT_DIR = os.path.join(os.getcwd(), '专利原文')
 
 # 确保 ego-browser 在 PATH 中
 os.environ['PATH'] = os.path.expanduser('~/.local/bin') + ':' + os.environ.get('PATH', '')
@@ -153,7 +154,7 @@ def main():
     )
     
     parser.add_argument('patent_numbers', nargs='*', help='专利公开号/公告号')
-    parser.add_argument('-o', '--output', default=None, help='输出目录（默认: ~/Documents/小诺工作记录/专利原文/YYYY-MM-DD/）')
+    parser.add_argument('-o', '--output', default=None, help='输出目录（默认: 当前工作空间/专利原文/YYYY-MM-DD/）')
     parser.add_argument('-f', '--file', help='从文件读取专利号列表（每行一个）')
     parser.add_argument('--open', action='store_true', help='下载后自动打开PDF')
     

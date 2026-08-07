@@ -6,11 +6,11 @@ intent: 现有技术检索与 CAP02 深度技术分析（支撑新颖性/创造�
 steps:
   - id: probe
     name: 案卷探查
-    description: 读取 xiaonuo.md 与 source 目录，确认意图与 artifacts
+    description: 读取 sati.md 与 source 目录，确认意图与 artifacts
     worker: project-probe
     input_template: |
       案卷目录：{{case_dir}}
-      读取 xiaonuo.md 与 source/ 下文件，输出：意图、provision_ids、关键文件摘要、推荐 worker 链。
+      读取 sati.md 与 source/ 下文件，输出：意图、provision_ids、关键文件摘要、推荐 worker 链。
     has_checkpoint: true
     checkpoint_title: 确认案卷上下文（编号选择：1=确认/2=修改/3=退回/4=其他意见）
 
@@ -20,7 +20,7 @@ steps:
     worker: rule-explorer
     depends_on: [probe]
     input_template: |
-      基于案卷 {{case_dir}} 的 xiaonuo.md，探查现有技术调查适用的规则与 provision_ids（含 P-A01/P-A02）。
+      基于案卷 {{case_dir}} 的 sati.md，探查现有技术调查适用的规则与 provision_ids（含 P-A01/P-A02）。
       输出 generatedPrompt 供后续 worker 使用。
 
   - id: tech-deconstruct

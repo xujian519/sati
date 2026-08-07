@@ -6,12 +6,12 @@
 
 ## 输入
 
-- `xiaonuo.md`（可选，intent、provision_ids 初值、文件索引）
+- `sati.md`（可选，intent、provision_ids 初值、文件索引）
 - 用户任务描述（审查意见/无效理由/侵权材料等）——**必须项**
 
 ## 步骤
 
-0. **入口判断**：`read` 尝试读取 `xiaonuo.md`。不存在或内容不足时，直接从用户任务描述提取 intent
+0. **入口判断**：`read` 尝试读取 `sati.md`。不存在或内容不足时，直接从用户任务描述提取 intent
 1. `knowledge_rules` 检索适用规则（granularity: atomic/topic/framework）
 2. `knowledge_graph_path` 查找法条-概念路径
 3. 输出：
@@ -23,9 +23,9 @@
 
 ## 独立运行模式（standalone）
 
-无 `xiaonuo.md` 时：
+无 `sati.md` 时：
 
-1. **覆盖 CAP00「缺失即阻塞」规则**——xiaonuo.md 缺失不是阻塞条件
+1. **覆盖 CAP00「缺失即阻塞」规则**——sati.md 缺失不是阻塞条件
 2. 从用户任务描述直接提取：intent、场景类型（审查意见/无效/侵权/撰写）
 3. 跳过文件索引校验，直接执行知识库检索
 4. 输出 provision_ids、reasoningPatterns、ipc_hints、generatedPrompt

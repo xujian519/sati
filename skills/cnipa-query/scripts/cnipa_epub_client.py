@@ -3,12 +3,12 @@
 CNIPA epub 完整客户端 — 检索、详情、事务查询、PDF下载。
 
 策略: Playwright 仅用于 WAF bypass 获取 session (cookies + CSRF)，
-后续所有操作使用 requests (纯HTTP)，参考 XiaoNuo 项目的实现。
+后续所有操作使用 requests (纯HTTP)。
 
 PDF下载: 逐页下载 JPEG 图片，再用 Pillow 组装成 PDF（绕过 PDF 端点的 WAF）。
 
 依赖:
-  pip install -r tools/requirements-cnipa.txt && python -m playwright install chromium
+  pip install requests playwright pillow && python -m playwright install chromium
 
 用法:
   python cnipa_epub_client.py search "人工智能"
@@ -432,7 +432,7 @@ def _detail_via_playwright(pub_number: str) -> PatentDetail:
 
 
 # ---------------------------------------------------------------------------
-# 3. 事务数据查询 (XiaoNuo 方式: POST /SW/SWPageQuery)
+# 3. 事务数据查询 (POST /SW/SWPageQuery)
 # ---------------------------------------------------------------------------
 
 
@@ -531,7 +531,7 @@ def _transactions_via_playwright(app_number: str) -> list[TransactionRecord]:
 
 
 # ---------------------------------------------------------------------------
-# 4. PDF 下载 (XiaoNuo 方式: 逐页 JPEG → Pillow 组装 PDF)
+# 4. PDF 下载 (逐页 JPEG → Pillow 组装 PDF)
 # ---------------------------------------------------------------------------
 
 

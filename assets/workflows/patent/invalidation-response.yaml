@@ -75,7 +75,7 @@ steps:
       场景：无效/复审/审查意见答复 — **新颖性与创造性分析的前置必步**，不可跳过。
 
       执行 CAP02 三级技术分析：
-      1. 读取 xiaonuo.md、converted/、审查意见 PDF/MD 及对比文件材料
+      1. 读取 sati.md、converted/、审查意见 PDF/MD 及对比文件材料
       2. 对**本专利/申请**完成七维解构（写入 technical-deconstruction-target.md）
       3. 对审查意见/无效理由引用的**每篇对比文件 D1/D2…** 完成七维解构（technical-deconstruction-d1.md 等）
       4. 完成四级对比矩阵、四层区别特征、技术启示初步判断

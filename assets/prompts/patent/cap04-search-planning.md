@@ -8,7 +8,7 @@
 
 - `outputs/technical-analysis-report.md`
 - `outputs/technical-deconstruction-target.md`（如有）
-- `xiaonuo.md` 中的意图（现有技术调查 / 无效 / 创造性答复等）
+- `sati.md` 中的意图（现有技术调查 / 无效 / 创造性答复等）
 
 ## 步骤
 
