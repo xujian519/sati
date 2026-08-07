@@ -1,6 +1,7 @@
 import type { CanonicalMessage, CanonicalModelRequest, ModelRuntime } from "../../model/index.js";
+import { ModelProviderError, ModelRequestError } from "../../model/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
-import type { RouterModelRef, RouterTokenSaverConfig } from "../config/schema.js";
+import type { RouterModelRef, RouterTokenSaverConfig, RouterTierConfig } from "../config/schema.js";
 import { extractLastUserMessage } from "./extractLastUserMessage.js";
 import { generateJudgePrompt } from "./generateJudgePrompt.js";
 import { parseTier } from "./parseTier.js";
@@ -9,7 +10,23 @@ export type TokenSaverDecision = {
   tier: string;
   selection: RouterModelRef;
   resolvedFrom: "judge" | "default" | "fallback";
+  /**
+   * Legacy flat contract consumed by RouterRuntime telemetry. `failure` below
+   * carries the structured equivalent; both are kept so the persisted router
+   * event shape stays stable.
+   */
   failureReason?: "timeout" | "model_error" | "parse_error";
+  /** Diagnostic safe to persist in router events when classification falls back. */
+  failure?: TokenSaverFailure;
+};
+
+export type TokenSaverFailure = {
+  reason: "timeout" | "model_error" | "parse_error";
+  attempts: number;
+  /** Provider-normalized code when the judge request reached a provider. */
+  code?: string;
+  /** Sanitized provider message; never includes request content or credentials. */
+  message?: string;
 };
 
 export type ClassifyAndRouteInput = {
@@ -55,7 +72,9 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
       },
     ],
     maxOutputTokens: 256,
-    temperature: 0,
+    // Provider defaults are more compatible than an explicit temperature for
+    // lightweight routing requests. Some compatible gateways reject the field
+    // for particular models (including Claude-backed ones).
     thinking: { enabled: false },
     stream: false,
   };
@@ -81,6 +100,13 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
       await new Promise(r => setTimeout(r, 1_000));
     }
     let timeout: NodeJS.Timeout | undefined;
+    let timedOut = false;
+    const judgeAbortController = new AbortController();
+    const forwardAbort = () => judgeAbortController.abort(input.abortSignal?.reason);
+    input.abortSignal?.addEventListener("abort", forwardAbort, { once: true });
+    if (input.abortSignal?.aborted) {
+      forwardAbort();
+    }
     try {
       input.telemetry?.trackFeatureLoopStage({
         module: "router",
@@ -97,10 +123,21 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
           model: config.judge.model,
         },
       });
+      const judgeRequestPromise = input.judgeRuntime.complete(judgeRequest, {
+        signal: judgeAbortController.signal,
+      });
       const response = await Promise.race([
-        input.judgeRuntime.complete(judgeRequest),
+        judgeRequestPromise,
         new Promise<never>((_, reject) => {
-          timeout = setTimeout(() => reject(new TokenSaverTimeoutError()), timeoutMs);
+          timeout = setTimeout(() => {
+            // Aborting the judge request can propagate synchronously, so its
+            // rejection may settle the race before this one. `timedOut` pins
+            // the diagnosis to timeout regardless of which rejection wins.
+            timedOut = true;
+            const timeoutError = new TokenSaverTimeoutError();
+            judgeAbortController.abort(timeoutError);
+            reject(timeoutError);
+          }, timeoutMs);
         }),
       ]);
       console.log(
@@ -134,12 +171,7 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
           },
         });
         console.warn("[token-saver] Judge returned empty after retries");
-        return {
-          tier: config.defaultTier,
-          selection: defaultTier.model,
-          resolvedFrom: "fallback",
-          failureReason: "parse_error",
-        };
+        return parseFailureDecision(config.defaultTier, defaultTier, attempt);
       }
 
       const tier = parseTier(text, knownTiers);
@@ -164,12 +196,7 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
           },
         });
         console.warn("[token-saver] parseTier failed. Judge text:", JSON.stringify(text).slice(0, 300));
-        return {
-          tier: config.defaultTier,
-          selection: defaultTier.model,
-          resolvedFrom: "fallback",
-          failureReason: "parse_error",
-        };
+        return parseFailureDecision(config.defaultTier, defaultTier, attempt);
       }
       const selection = config.tiers[tier]?.model;
       if (!selection) {
@@ -190,12 +217,7 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
             model: config.judge.model,
           },
         });
-        return {
-          tier: config.defaultTier,
-          selection: defaultTier.model,
-          resolvedFrom: "fallback",
-          failureReason: "parse_error",
-        };
+        return parseFailureDecision(config.defaultTier, defaultTier, attempt);
       }
       input.telemetry?.trackFeatureLoopStage({
         module: "router",
@@ -215,21 +237,25 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
       });
       return { tier, selection, resolvedFrom: "judge" };
     } catch (error) {
-      if (attempt < maxAttempts && !(error instanceof TokenSaverTimeoutError)) {
+      if (input.abortSignal?.aborted) {
+        throw error;
+      }
+      const failure = timedOut ? new TokenSaverTimeoutError() : error;
+      if (attempt < maxAttempts && shouldRetryJudgeFailure(failure)) {
         continue;
       }
-      const timedOut = error instanceof TokenSaverTimeoutError;
+      const didTimeout = failure instanceof TokenSaverTimeoutError;
       input.telemetry?.trackError(error, {
         module: "router",
         ownerModule: "router",
         executionKind: "router_judge",
         phase: "judge",
         loopStage: "model_request",
-        errorCategory: timedOut ? "runtime_error" : "model_request_error",
+        errorCategory: didTimeout ? "runtime_error" : "model_request_error",
         sessionId: input.sessionId,
-        code: timedOut ? "judge_timeout" : "judge_model_error",
+        code: didTimeout ? "judge_timeout" : "judge_model_error",
         metadata: {
-          event: timedOut ? "timeout" : "request_failed",
+          event: didTimeout ? "timeout" : "request_failed",
           attempt,
           provider: config.judge.provider,
           model: config.judge.model,
@@ -239,24 +265,75 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
         tier: config.defaultTier,
         selection: defaultTier.model,
         resolvedFrom: "fallback",
-        failureReason: error instanceof TokenSaverTimeoutError ? "timeout" : "model_error",
+        failureReason: didTimeout ? "timeout" : "model_error",
+        failure: describeFailure(failure, attempt),
       };
     } finally {
       if (timeout) {
         clearTimeout(timeout);
       }
+      input.abortSignal?.removeEventListener("abort", forwardAbort);
     }
   }
-  return {
-    tier: config.defaultTier,
-    selection: defaultTier.model,
-    resolvedFrom: "fallback",
-    failureReason: "parse_error",
-  };
+  return parseFailureDecision(config.defaultTier, defaultTier, maxAttempts);
 }
 
 class TokenSaverTimeoutError extends Error {
   readonly name = "TokenSaverTimeoutError";
+}
+
+function parseFailureDecision(
+  defaultTierName: string,
+  defaultTier: RouterTierConfig,
+  attempts: number,
+): TokenSaverDecision {
+  return {
+    tier: defaultTierName,
+    selection: defaultTier.model,
+    resolvedFrom: "fallback",
+    failureReason: "parse_error",
+    failure: { reason: "parse_error", attempts },
+  };
+}
+
+function describeFailure(error: unknown, attempts: number): TokenSaverFailure {
+  if (error instanceof TokenSaverTimeoutError) {
+    return { reason: "timeout", attempts, code: "judge_timeout" };
+  }
+
+  const message = error instanceof Error ? error.message : undefined;
+  const code =
+    error instanceof ModelProviderError
+      ? error.error.code
+      : error instanceof ModelRequestError
+        ? error.code
+        : undefined;
+
+  return {
+    reason: "model_error",
+    attempts,
+    ...(code ? { code } : {}),
+    ...(message ? { message: sanitizeFailureMessage(message) } : {}),
+  };
+}
+
+function shouldRetryJudgeFailure(error: unknown): boolean {
+  if (error instanceof TokenSaverTimeoutError || error instanceof ModelRequestError) {
+    return false;
+  }
+  if (error instanceof ModelProviderError) {
+    return error.error.retryable;
+  }
+  return true;
+}
+
+function sanitizeFailureMessage(message: string): string {
+  return message
+    .replace(/\b(authorization\s*[:=]\s*bearer\s+|bearer\s+)[^\s,;]+/gi, "$1<redacted>")
+    .replace(/\b(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, "$1=<redacted>")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300);
 }
 
 const SHORT_CONTINUATION_MAX_CHARS = 30;
