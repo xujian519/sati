@@ -145,8 +145,12 @@ export function getCachedOllamaModels(baseUrl: string): OllamaModelInfo[] | null
   const entry = cache.get(baseUrl);
   if (!entry) return null;
   if (Date.now() > entry.expiresAt) {
-    cache.delete(baseUrl);
-    return null;
+    // 过期：返回 stale 数据并触发后台刷新（stale-while-revalidate）。
+    // 否则 config reload 会在「有探测模型 / 无探测模型」之间摆动，
+    // diffConfigSnapshots 每次判定 ollama.models 变化 → 每次 turn 前
+    // invalidate 全部 runtime → 每次 turn 重建（含 embeddings 全表扫描）。
+    void probeOllamaModelsCached(baseUrl);
+    return entry.models;
   }
   return entry.models;
 }
@@ -161,8 +165,11 @@ export async function probeOllamaModelsCached(
   baseUrl: string,
   options: { fetchImpl?: typeof fetch } = {},
 ): Promise<OllamaModelInfo[]> {
-  const cached = getCachedOllamaModels(baseUrl);
-  if (cached) return cached;
+  // 仅新鲜缓存直接命中；stale（过期但尚未刷新）也需重新探测，
+  // 否则 getCachedOllamaModels 的 stale-while-revalidate 会因 stale
+  // 非 null 而永远不触发真实刷新。
+  const entry = cache.get(baseUrl);
+  if (entry && Date.now() <= entry.expiresAt) return entry.models;
 
   const existing = inFlight.get(baseUrl);
   if (existing) return existing;

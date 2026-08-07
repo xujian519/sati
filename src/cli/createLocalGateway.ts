@@ -402,7 +402,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
           },
         });
       }
-      registry.scheduleMemoryMaintenance(projectKey ?? projectRoot);
+      registry.scheduleMemoryMaintenance(projectKey ?? fallbackProjectRoot);
     },
   });
   // Hand the gateway back to the registry so per-session creation can
