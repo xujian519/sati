@@ -3,6 +3,7 @@ import { parseDocument } from "yaml";
 import { parseAlwaysOnConfig } from "../../always-on/config/parseAlwaysOnConfig.js";
 import { parseCronConfig } from "../../cron/config/parseCronConfig.js";
 import { parseModelConfig } from "../../model/config/parseModelConfig.js";
+import { warmOllamaModels } from "../../model/ollama/probe.js";
 import { isRecord } from "../../model/config/schema.js";
 import { ModelConfigError } from "../../model/protocol/errors.js";
 import { getPilotConfigFilePath, getPilotMemoryRootDir, resolvePilotHome } from "../paths.js";
@@ -78,6 +79,10 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   throwConfigErrorIfFatal(diagnostics);
 
   const model = parseModel(rawConfig.model, env, diagnostics);
+  // 预热 Ollama 探测缓存（fire-and-forget，幂等）：配置解析是同步的，
+  // 无法等待网络探测；缓存就绪后，下一次 reload / 重启即可让
+  // parseModelConfig 自动补全用户已安装的模型（见 model/ollama/probe.ts）。
+  warmOllamaProviders(model);
   const agent = parseAgent(rawConfig.agent, model, diagnostics);
   const extension = parseExtension(rawConfig.extension, diagnostics);
   const memory = parseMemoryConfig(rawConfig.memory, diagnostics, getPilotMemoryRootDir(pilotHome), model);
@@ -503,6 +508,15 @@ function parseModel(rawModel: unknown, env: Record<string, string | undefined>, 
       throwConfigErrorIfFatal(diagnostics);
     }
     throw error;
+  }
+}
+
+/** 对配置中所有 ollama provider 触发一次探测预热（幂等，fire-and-forget）。 */
+function warmOllamaProviders(model: ReturnType<typeof parseModelConfig>): void {
+  for (const provider of Object.values(model.providers)) {
+    if (provider.id === "ollama") {
+      warmOllamaModels(provider.url);
+    }
   }
 }
 

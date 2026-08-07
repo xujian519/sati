@@ -312,6 +312,13 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         existingProvider.models && typeof existingProvider.models === "object" ? existingProvider.models : {}
       ) as Record<string, unknown>;
 
+      // Ollama 模型列表来自用户实际安装的模型：探测到完整列表时整体写入
+      // 配置（运行时可自由切换），同时保留手动输入的模型 id。
+      const ollamaDetectedModels =
+        providerId === "ollama" && apiModels && apiModels.length > 0
+          ? Object.fromEntries(apiModels.map(m => [m.id, existingModels[m.id] || {}]))
+          : {};
+
       yamlProviders[providerId] = {
         ...existingProvider,
         protocol: effectiveProtocol,
@@ -320,6 +327,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         timeoutMs: typeof existingProvider.timeoutMs === "number" ? existingProvider.timeoutMs : 120000,
         models: {
           ...existingModels,
+          ...ollamaDetectedModels,
           [modelId]: existingModels[modelId] || {},
         },
       };

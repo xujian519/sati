@@ -34,13 +34,13 @@ describe("catalogProviders maxOutputTokens", () => {
     expect(zhipu?.models.find(model => model.id === "glm-4-flash-250414")?.maxContextTokens).toBe(128_000);
   });
 
-  it("exposes Ollama as a no-api-key local provider", () => {
+  it("exposes Ollama as a no-api-key local provider with no bundled models", () => {
     const ollama = findCatalogProviderById("ollama");
 
     expect(ollama?.protocol).toBe("openai");
     expect(ollama?.defaultUrl).toBe("http://localhost:11434/v1");
     expect(ollama?.requiresApiKey).toBe(false);
-    expect(ollama?.models.find(model => model.id === "qwen3:0.6b")?.maxContextTokens).toBe(40_960);
-    expect(ollama?.models.find(model => model.id === "llama3.1:8b")?.maxOutputTokens).toBe(8_192);
+    // Ollama 模型列表不写死：由 onboarding / 设置页实时拉取用户已安装模型。
+    expect(ollama?.models).toEqual([]);
   });
 });

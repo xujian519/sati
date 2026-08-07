@@ -28,6 +28,7 @@ import {
   isExpectedProviderModelsResponseShape,
   isExpectedProviderResponseShape,
 } from "../../../src/model/providerEndpoint.js";
+import { ollamaOrigin } from "../../../src/model/ollama/probe.js";
 import { NetworkFetchError, networkFetch } from "../../../src/network/fetch.js";
 import {
   OFFICE_PREVIEW_SERVICE_BUILTIN,
@@ -655,6 +656,15 @@ router.post("/models", async (req, res) => {
 
   try {
     const urls = buildProviderModelsEndpointCandidates({ protocol, baseUrl: normalizedBaseUrl });
+    // Ollama 优先走原生 GET /api/tags（无需 API key，返回 {models:[{name}]}），
+    // 失败再回退 OpenAI 兼容 /v1/models。模型列表来自用户实际安装的模型。
+    if (
+      String(providerId || "")
+        .trim()
+        .toLowerCase() === "ollama"
+    ) {
+      urls.unshift(`${ollamaOrigin(normalizedBaseUrl)}/api/tags`);
+    }
     const headers = isGoogle
       ? effectiveApiKey && effectiveApiKey !== "********"
         ? { "x-goog-api-key": effectiveApiKey }

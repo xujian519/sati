@@ -35,7 +35,7 @@ describe("LlmConfigurationStep", () => {
     vi.clearAllMocks();
   });
 
-  it("fetches Ollama models through the no-key provider path without also running catalog fallback", async () => {
+  it("fetches Ollama models through the no-key provider path without catalog fallback", async () => {
     render(<LlmConfigurationStep onSaved={vi.fn()} />);
 
     await waitFor(() => {
@@ -61,8 +61,9 @@ describe("LlmConfigurationStep", () => {
       }),
     );
     expect(mocks.fetchRemoteDefaultModels).not.toHaveBeenCalled();
+    // Ollama 无 bundled 模型列表可回退：拉取失败时提示错误并允许手动输入。
     await waitFor(() => {
-      expect(screen.getByText(/Using bundled model list\. Local model list unavailable: ECONNREFUSED/)).toBeTruthy();
+      expect(screen.getByText(/ECONNREFUSED/)).toBeTruthy();
     });
   });
 });

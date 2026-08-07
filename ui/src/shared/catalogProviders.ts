@@ -224,11 +224,9 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: "openai",
     defaultUrl: "http://localhost:11434/v1",
     requiresApiKey: false,
-    models: [
-      { id: "qwen3:0.6b", displayName: "Qwen3 0.6B (Ollama)", maxContextTokens: 40960, maxOutputTokens: 8192 },
-      { id: "qwen3:8b", displayName: "Qwen3 8B (Ollama)", maxContextTokens: 40960, maxOutputTokens: 8192 },
-      { id: "llama3.1:8b", displayName: "Llama 3.1 8B (Ollama)", maxContextTokens: 131072, maxOutputTokens: 8192 },
-    ],
+    // 模型列表不写死：onboarding / 设置页从本地 Ollama 实时拉取
+    // 用户已安装的模型（/api/tags 或 /v1/models），失败时允许手动输入。
+    models: [],
   },
   {
     id: "minimax",

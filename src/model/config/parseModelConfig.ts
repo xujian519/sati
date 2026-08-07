@@ -12,6 +12,7 @@ import { mergeCapabilities, type ModelCapabilities } from "../protocol/capabilit
 import { ModelConfigError } from "../protocol/errors.js";
 import { DEFAULT_MULTIMODAL_CONSTRAINTS, isInputModality, type MultimodalConstraints } from "../protocol/multimodal.js";
 import { lookupCatalogModel, lookupCatalogProvider } from "../catalog/index.js";
+import { getCachedOllamaModels } from "../ollama/probe.js";
 import { resolveApiKey, type CredentialEnv } from "./resolveCredentials.js";
 import {
   isModelProtocol,
@@ -73,14 +74,25 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
   }
   assertValidUrl(rawUrl, providerId);
 
-  if (!isRecord(provider.models) || Object.keys(provider.models).length === 0) {
-    throw new ModelConfigError("empty_models", `Provider ${providerId} must contain at least one model.`, {
-      providerId,
-    });
+  let rawModels: Record<string, unknown>;
+  if (providerId === "ollama") {
+    // Ollama 模型列表由运行时自动识别（探测用户已安装的模型）：探测结果
+    // 补全缺失项，配置显式声明的模型优先。空 models 也不再报错、不阻塞启动。
+    rawModels = {
+      ...resolveOllamaModelsFromCache(rawUrl),
+      ...(isRecord(provider.models) ? provider.models : {}),
+    };
+  } else {
+    if (!isRecord(provider.models) || Object.keys(provider.models).length === 0) {
+      throw new ModelConfigError("empty_models", `Provider ${providerId} must contain at least one model.`, {
+        providerId,
+      });
+    }
+    rawModels = provider.models;
   }
 
   const models: Record<string, ModelDefinition> = {};
-  for (const [modelId, rawModel] of Object.entries(provider.models)) {
+  for (const [modelId, rawModel] of Object.entries(rawModels)) {
     models[modelId] = parseModelDefinition(modelId, protocol, rawModel, providerId);
   }
 
@@ -110,6 +122,23 @@ function resolveProviderApiKey(
   const hasConfigValue = value !== undefined && value !== null && !hasBlankString;
   const effectiveValue = hasConfigValue ? value : catalogEnvVar ? `\${${catalogEnvVar}}` : value;
   return resolveApiKey(effectiveValue, env);
+}
+
+/**
+ * Ollama 模型列表自动识别：从探测缓存读取用户已安装的模型并转成模型定义。
+ * 探测动作由配置加载层（loadPilotConfig）触发，本函数保持无副作用。
+ * 探测到的 contextLength 作为 maxContextTokens 默认值，比协议通用默认
+ * （128k）更贴合本地模型实际能力。
+ */
+function resolveOllamaModelsFromCache(rawUrl: string): Record<string, unknown> {
+  const cached = getCachedOllamaModels(rawUrl);
+  if (!cached || cached.length === 0) return {};
+  return Object.fromEntries(
+    cached.map(model => [
+      model.id,
+      model.contextLength && model.contextLength > 0 ? { capabilities: { maxContextTokens: model.contextLength } } : {},
+    ]),
+  );
 }
 
 function resolveDefaultProviderUrl(
