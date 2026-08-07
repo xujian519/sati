@@ -496,8 +496,11 @@ ok "satiui bundle: ${PDUI_MB}MB → $(basename "$PDUI_BUNDLE")"
 # imports like ../../dist/src/pilot/index.js), scripts/, node_modules/, and any
 # optional top-level files. gateway/ was merged into src/gateway/ — include it
 # if it exists as a top-level dir, otherwise omit.
+# vendor/ holds pnpm workspace deps linked into node_modules (e.g.
+# node_modules/nuo-patent -> ../vendor/nuo-patent); without it the packaged
+# runtime can't resolve those packages at startup.
 rm -f "$PDM_BUNDLE"
-PDM_ITEMS=(src/ dist/src/ scripts/ skills/ node_modules/)
+PDM_ITEMS=(src/ dist/src/ scripts/ skills/ node_modules/ vendor/)
 [[ -d "${SATI_MAIN_DIR}/gateway" ]] && PDM_ITEMS+=(gateway/)
 for f in package.json bunfig.toml preload.ts proxy.ts router.ts \
          sati-config.ts tsconfig.json; do
