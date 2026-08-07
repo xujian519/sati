@@ -2,7 +2,7 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
-## Unreleased (v0.0.18 之后)
+## v0.0.19 - 2026-08-07
 
 ### Added
 - 复用 XiaoNuo `knowledge.db` 统一知识库：知识图谱（21.5 万+ 节点）/ 法规 / 判例 / embeddings 语义召回（bge-m3，14.4 万向量）单库接入，零重新构建
