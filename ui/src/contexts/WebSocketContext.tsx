@@ -100,6 +100,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const unmountedRef = useRef(false);
   const hasConnectedRef = useRef(false);
   const connectIdRef = useRef(0);
+  // ws 作为 state 暴露给消费者（useSessionWatch 依赖它判断 socket 已连接），
+  // 与 wsRef 同步更新；ref 保留供 sendMessage 闭包读取，避免每次连接重建回调。
+  const [ws, setWs] = useState<WebSocket | null>(null);
   const [latestMessage, setLatestMessage] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [reconnectInfo, setReconnectInfo] = useState<ReconnectInfo>({
@@ -141,6 +144,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
           reconnectAttemptRef.current = 0;
           setReconnectInfo({ attempt: 0, nextRetryMs: 0, status: "connected" });
           wsRef.current = websocket;
+          setWs(websocket);
 
           while (queuedMessagesRef.current.length > 0 && websocket.readyState === WebSocket.OPEN) {
             const message = queuedMessagesRef.current.shift();
@@ -202,6 +206,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
           if (connectIdRef.current !== id) return;
           setIsConnected(false);
           wsRef.current = null;
+          setWs(null);
           const attempt = ++reconnectAttemptRef.current;
           const delay = Math.min(INITIAL_RECONNECT_MS * Math.pow(BACKOFF_FACTOR, attempt - 1), MAX_RECONNECT_MS);
           setReconnectInfo({ attempt, nextRetryMs: delay, status: "disconnected" });
@@ -242,6 +247,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         ws.close();
         wsRef.current = null;
       }
+      setWs(null);
       setIsConnected(false);
     };
   }, [token]);
@@ -267,14 +273,14 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
   const value: WebSocketContextType = useMemo(
     () => ({
-      ws: wsRef.current,
+      ws,
       sendMessage,
       latestMessage,
       isConnected,
       reconnectInfo,
       subscribe,
     }),
-    [sendMessage, latestMessage, isConnected, reconnectInfo, subscribe],
+    [ws, sendMessage, latestMessage, isConnected, reconnectInfo, subscribe],
   );
 
   return value;
