@@ -85,7 +85,12 @@ steps:
       2. 逐条解析审查意见驳回理由，建立「理由 ↔ 技术特征/说明书段落/附图」映射表
       3. 若涉及对比文件，对 D1 完成解构与四级对比矩阵
       4. tech-graph 因果链（≥3 特征时必做）
-      5. HITL：确认每条驳回理由的技术映射后再进入条款分析
+      5. 附图/化学核验（按驳回类型触发）：
+         - 驳回涉及附图清楚/附图标记/图文一致：逐图调用 analyze_patent_figure 分析本申请附图，
+           核对说明书文字与附图标记一致性，结论写入映射表
+         - 申请文件含化学结构式/分子式：调用 recognize_chemical_structure 转 SMILES 并 RDKit 校验，
+           needHumanReview 结果须人工确认后再采信
+      6. HITL：确认每条驳回理由的技术映射后再进入条款分析
 
       前置：search-results.md（含对比文件全文标注）
       输出：technical-analysis-report.md（含审查意见论点映射表 + 对比文件特征对比矩阵）
@@ -130,6 +135,8 @@ steps:
       基于 CAP02 报告、disclosure-analysis.md、claims-support-analysis.md、search-results.md 及已有答复草稿，
       撰写完整意见陈述书，逐条回应审查意见，禁止 AI 套话与编造事实。
       所有对比文件引用必须指向 search-results.md 中的具体段落（禁止凭记忆引用）。
+      附图引用用 search_patent_figure 确认附图编号与标记；化学式引用须经 recognize_chemical_structure 核验。
+      定稿前对结论性段落调用 rule_check（scope=pack）：「容易想到」类断言须附证据，命中 review 项挂人工核验。
       输出：data/cases/{{case_id}}/outputs/oa-response-statement.md
 
   - id: slop-clean

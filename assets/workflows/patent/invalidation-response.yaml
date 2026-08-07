@@ -80,7 +80,10 @@ steps:
       3. 对审查意见/无效理由引用的**每篇对比文件 D1/D2…** 完成七维解构（technical-deconstruction-d1.md 等）
       4. 完成四级对比矩阵、四层区别特征、技术启示初步判断
       5. ≥3 特征或存在因果链时：tech-graph-spec.json + tech-graph-analyze.py → tech-graph-report.md
-      6. HITL：区别特征清单确认后再进入新颖性/创造性步骤
+      6. 附图证据固化：对比文件附图作为公开证据时，逐图调用 analyze_patent_figure（附图图片先导出）
+         记录图号、组件与标号，支撑「直接地、毫无疑义地确定」的认定；本专利附图分析结果入索引
+         供下游 search_patent_figure 检索
+      7. HITL：区别特征清单确认后再进入新颖性/创造性步骤
 
       综合报告：data/cases/{{case_id}}/outputs/technical-analysis-report.md
       下游 provision-novelty / provision-inventiveness **必须**引用 distinctive-features.md 与本报告。
@@ -118,6 +121,11 @@ steps:
       - data/cases/{{case_id}}/outputs/ 下新颖性分析结论
 
       按三步法分析创造性，引用具体法条与审查指南规则；技术启示判断须与 CAP02 矩阵一致。
+      论证要求（对应分层规则包，定稿前调用 rule_check scope=pack 核验）：
+      1. 三步法结构完整：最接近现有技术 + 区别特征 + 技术启示（INV-METHOD-001）
+      2. 「容易想到/显而易见/易于获得」断言须附公知常识性证据（INV-EVIDENCE-001，命中挂 review）
+      3. 主张结构等效/等同公开时须含对应结构手段 + 作用或技术效果分析（MECH-INV-001，机械案）；
+         附图证据用 search_patent_figure 定位图号与标记，禁止凭记忆引用
       报告：data/cases/{{case_id}}/outputs/inventiveness-analysis.md
 
   - id: slop-clean

@@ -105,6 +105,18 @@ Lazy：`reasoning-conflicting-application`、`reasoning-routine-selection`、`re
 | `quality_checker` | 终稿一致性/规范性 |
 | `reviewer` | 形式+实质审查 |
 
+### 3.6 内置分析工具（worker 直接调用，非 worker 调度）
+
+| 工具 | 用途 | 接线的工作流步骤 |
+|------|------|------------------|
+| `analyze_patent_figure` | 附图识别：类型/组件/连接关系/标记核对 + 附图说明生成，结果入附图索引 | 撰写 figure-analysis；OA/无效 tech-analyze 附图核验 |
+| `search_patent_figure` | 按特征/部件/标记检索已分析附图（索引为空时先 analyze） | 撰写/答复引用附图标记时必经 |
+| `recognize_chemical_structure` | 化学式/化合物 → SMILES（RDKit 校验，needHumanReview 须人工确认） | 撰写 chemistry-check；OA tech-analyze 化学核验 |
+| `rule_check`（scope=pack） | 分层规则包确定性检查（三步法完整性/显而易见性证据/结构等效论证） | 无效 inventiveness 定稿前；撰写 rule-gate；OA draft 定稿前 |
+
+> 调度约束：附图标记/图号引用一律经 `search_patent_figure` 查证（禁止凭记忆）；
+> `needHumanReview` 与 `review/block` 命中一律挂 HITL，不得静默放行。
+
 ---
 
 ## 4. Artifact 依赖 DAG（硬约束）
@@ -259,11 +271,15 @@ agent(subagent_type="reviewer", ...) # 等价备选
 
 `plan_workflow(office-action-response)` 或手动链：
 
-`project-probe` → `rule-explorer` → `patent-search-planner` + `patent-search-executor`（必经）→ `patent-technical-analyzer` → `provision-disclosure` + `provision-claims-clarity`（按驳回类型）→ `run_patent_rules`（规则验证）→ `patent-oa-response-drafter` → `reviewer`/`quality_checker`（HITL）→ `patent-slop-cleaner` → `artifact-quality-check`（终检）
+`project-probe` → `rule-explorer` → `patent-search-planner` + `patent-search-executor`（必经）→ `patent-technical-analyzer`（含附图/化学式核验，见 §3.6）→ `provision-disclosure` + `provision-claims-clarity`（按驳回类型）→ `run_patent_rules`（规则验证）→ `patent-oa-response-drafter`（定稿前 rule_check scope=pack）→ `reviewer`/`quality_checker`（HITL）→ `patent-slop-cleaner` → `artifact-quality-check`（终检）
+
+### 申请撰写
+
+`prosecution-draft`：`project-probe` → `rule-explorer` → `patent-technical-analyzer`（CAP02 解构）→ 附图分析（`analyze_patent_figure`）+ 化学式核验（`recognize_chemical_structure`，按案卷内容触发）→ 检索链 → 现有技术 CAP02 对比 → `provision-disclosure` → `patent-slop-cleaner` → 规则门禁（`rule_check` scope=pack）
 
 ### 创造性/新颖性无效
 
-`invalidation-response`：`CAP02` → `patent-search-planner/executor` → `provision-novelty` + `provision-inventiveness` → 必要时 `creativity_checker`
+`invalidation-response`：`CAP02`（含对比文件附图证据固化，`analyze_patent_figure`）→ `patent-search-planner/executor` → `provision-novelty` + `provision-inventiveness`（定稿前 `rule_check` scope=pack）→ 必要时 `creativity_checker`
 
 ### 侵权
 

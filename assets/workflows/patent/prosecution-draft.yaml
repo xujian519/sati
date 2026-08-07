@@ -1,7 +1,7 @@
 # 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
 template_id: prosecution-draft
 name: 申请撰写辅助
-description: 案卷探查 → 规则 → 发明 CAP02 解构 → 检索 → 质量门 → 现有技术 CAP02 对比 → 充分公开审查 → 反套话
+description: 案卷探查 → 规则 → 发明 CAP02 解构 → 附图分析/化学式核验 → 检索 → 质量门 → 现有技术 CAP02 对比 → 充分公开审查 → 反套话 → 规则门禁
 intent: 从技术交底书到申请文件撰写：CAP02 深度技术分析贯穿检索与撰写
 steps:
   - id: probe
@@ -42,11 +42,41 @@ steps:
             data/cases/{{case_id}}/outputs/technical-analysis-report.md
       检索规划 worker 须引用上述文件中的特征与 IPC/关键词。
 
+  - id: figure-analysis
+    name: 附图分析
+    description: 交底书附图识别与附图说明生成（无附图时输出说明跳过）
+    worker: patent-technical-analyzer
+    depends_on: [tech-deconstruct]
+    input_template: |
+      案卷：{{case_dir}}
+
+      若案卷含交底书/说明书附图（jpg/png/gif/webp；PDF 页先导出为图片）：
+      1. 逐图调用 analyze_patent_figure 工具（传入 technical-deconstruction-target.md 作为上下文提升识别准确率）
+      2. 核对附图标记一致性，生成专利格式附图说明草稿 figure-descriptions.md
+      3. 分析结果自动入附图索引，供后续步骤 search_patent_figure 检索
+      无附图时：输出「本案卷无附图」简要说明并跳过。
+      输出：data/cases/{{case_id}}/outputs/figure-descriptions.md
+
+  - id: chemistry-check
+    name: 化学式核验
+    description: 化学结构/分子式转 SMILES 并 RDKit 校验（非化学方案输出说明跳过）
+    worker: patent-technical-analyzer
+    depends_on: [tech-deconstruct]
+    input_template: |
+      案卷：{{case_dir}}
+
+      若交底书/说明书含化学结构式（含 Markush 广义结构）、分子式或化合物名称：
+      1. 调用 recognize_chemical_structure 工具（结构图用图片模式；文本片段/化合物名称用文本模式）
+      2. 结果含 needHumanReview 标记时必须人工确认后再采信（禁止直接写入撰写建议）
+      3. SMILES/分子式核验结论记入 chemistry-verification.md，供后续步骤引用
+      非化学方案：输出「本案卷无化学式」简要说明并跳过。
+      输出：data/cases/{{case_id}}/outputs/chemistry-verification.md
+
   - id: search-plan
     name: 检索规划
     description: 基于 CAP02 特征制定现有技术检索策略
     worker: patent-search-planner
-    depends_on: [tech-deconstruct]
+    depends_on: [tech-deconstruct, figure-analysis, chemistry-check]
     input_template: |
       案卷：{{case_dir}}
 
@@ -122,6 +152,8 @@ steps:
       - data/cases/{{case_id}}/outputs/distinctive-features.md
 
       审查说明书/交底书是否充分公开，结合区别特征给出权利要求与说明书撰写改进建议。
+      撰写建议引用附图时用 search_patent_figure 确认特征对应的附图编号与标记（禁止凭记忆写附图标记）；
+      涉及化学式时引用 chemistry-verification.md 的核验结论。
       报告：data/cases/{{case_id}}/outputs/disclosure-review.md
 
   - id: slop-clean
@@ -137,3 +169,17 @@ steps:
       2. 运行 slop-scorer.ts 5维评分，总分 < 35 必须修订
       3. 输出 disclosure-review-clean.md
       4. 输出 disclosure-review-slop-changelog.md（列出变更 + 评分报告）
+
+  - id: rule-gate
+    name: 规则门禁
+    description: 分层规则包确定性检查（创造性论证完整性与证据要求）
+    worker: patent-slop-cleaner
+    depends_on: [slop-clean]
+    input_template: |
+      案卷：{{case_dir}}
+
+      对 outputs/disclosure-review-clean.md 调用 rule_check 工具（scope=pack）：
+      1. INV-METHOD-001：创造性论证须含最接近现有技术/区别特征/技术启示三要素
+      2. INV-EVIDENCE-001：「容易想到/显而易见」类断言须挂人工核验证据
+      3. 命中 review/block 的条目：附入 rule-gate-report.md 并挂 HITL 核验，不得静默放行
+      输出：data/cases/{{case_id}}/outputs/rule-gate-report.md

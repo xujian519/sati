@@ -8,6 +8,7 @@
 - 分层规则包（Rule Pack）复用体系：`rules/base` + `rules/domains/*` 三层合并加载（base → domains → overrides），项目清单 `.sati/rules.yaml` 装配，`pack.yaml` 包清单 + JSON Schema 校验；`rule_check` 新增 `scope=pack`（缓存按清单 mtime 失效，输出附分层摘要与覆盖审计）
 - 创造性判断样板规则入库：base 层 INV-METHOD-001 / INV-EVIDENCE-001，领域层 MECH-INV-001（机械）/ MED-INV-001（医疗）；判例画布全文入库 `assets/patent-rules/inventiveness-canvas.md`
 - `evaluateText` 新增可选 `domain` 过滤参数（异领域规则跳过，未声明 domain 的通用规则始终评估，缺省行为不变）
+- 专利能力串联进业务工作流：申请撰写新增附图分析/化学式核验条件步骤与规则门禁收尾步；审查意见答复 CAP02 步接入附图/化学核验、定稿前规则检查；无效答复新增对比文件附图证据固化与创造性论证规则核验；编排器提示词新增内置分析工具目录（§3.6）
 - 复用 XiaoNuo `knowledge.db` 统一知识库：知识图谱（21.5 万+ 节点）/ 法规 / 判例 / embeddings 语义召回（bge-m3，14.4 万向量）单库接入，零重新构建
 - `scripts/trim-knowledge-db.ts`：knowledge.db 裁剪版生成器（默认去 embeddings 7G → ~4.2G，`--no-fts` → ~1.6G）
 
