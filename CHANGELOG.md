@@ -9,6 +9,7 @@
 - `scripts/trim-knowledge-db.ts`：knowledge.db 裁剪版生成器（默认去 embeddings 7G → ~4.2G，`--no-fts` → ~1.6G）
 
 ### Changed
+- 聊天链路直连 gateway 切为默认并收口：退役 ui/server 聊天中转（watch/sati-command/permission 帧），浏览器 ws 降级为纯事件通道，移除 `VITE_GATEWAY_DIRECT_CHAT` 双轨开关
 - 默认知识库目录迁移至 `~/.sati/knowledge`（`SATI_KNOWLEDGE_DIR` / `SATI_KNOWLEDGE_DB` 可覆盖）
 - 全库异味消债：收敛重复实现并修复运行时隐患
 - 依赖版本对齐并新增权限模块测试
