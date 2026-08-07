@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   CanonicalMessage,
   CanonicalModelEvent,
@@ -57,6 +58,8 @@ export type CompactionEngineOptions = {
   /** Tool names whose turns should be preserved verbatim across full compaction. */
   protectedToolNames?: Iterable<string>;
   now?: () => Date;
+  /** Stable identity factory for correlating live and persisted compaction events. */
+  uuid?: () => string;
   eventEmitter?: AgentEventEmitter;
 };
 
@@ -66,14 +69,16 @@ export const COMPACT_SYSTEM_PROMPT_DEFAULT =
   "needs to continue working without repeating past steps.";
 export const COMPACT_MAX_OUTPUT_TOKENS = 20_000;
 
-const COMPACT_SUMMARY_SYSTEM_PROMPT_DEFAULT = buildMarkdownSummarySystemPrompt(COMPACT_SYSTEM_PROMPT_DEFAULT);
-
 const COMPACT_SUMMARY_FAILURE_COOLDOWN_MS = 60_000;
 
 export type CompactionResult = {
+  /** Stable identity shared by live and persisted representations of this pass. */
+  compactionId: string;
   trigger: CompactionTrigger;
   preTokens: number;
   postTokens?: number;
+  /** Number of messages actually summarized by this compaction pass. */
+  messagesSummarized: number;
   summaryMessage?: CanonicalMessage;
   boundaryMarker: CanonicalMessage;
   /** Messages preserved verbatim across the boundary (kept tail). */
@@ -128,6 +133,7 @@ export class CompactionEngine {
   }
 
   async run(input: CompactionInput): Promise<CompactionResult> {
+    const compactionId = this.options.uuid?.() ?? randomUUID();
     const preTokens = this.estimateMessages(input.messages);
     const tailRatio = clamp(input.keepTailRatio ?? DEFAULT_KEEP_TAIL_RATIO, 0, 1);
     const tailTokenBudget = Math.max(1, Math.floor(preTokens * tailRatio));
@@ -159,6 +165,7 @@ export class CompactionEngine {
       type: "compact_started",
       sessionId: input.sessionId ?? "",
       turnId: input.turnId ?? "",
+      compactionId,
       trigger: input.trigger,
       preTokens,
     });
@@ -229,8 +236,10 @@ export class CompactionEngine {
     }
 
     const result: CompactionResult = {
+      compactionId,
       trigger: input.trigger,
       preTokens,
+      messagesSummarized: messagesToSummarize.length,
       summaryMessage,
       boundaryMarker,
       messagesToKeep,
@@ -259,6 +268,8 @@ export class CompactionEngine {
       type: "compact_completed",
       sessionId: input.sessionId ?? "",
       turnId: input.turnId ?? "",
+      compactionId,
+      trigger: input.trigger,
       status: summaryError ? "fallback" : "success",
       preTokens,
       postTokens: result.postTokens,
@@ -282,6 +293,10 @@ export class CompactionEngine {
   ): Promise<{ message: CanonicalMessage; usage?: CanonicalUsage }> {
     const trailingPrompt: CanonicalMessage = {
       role: "user",
+      metadata: {
+        synthetic: true,
+        purpose: "context-summary-control",
+      },
       content: [
         {
           type: "text",
@@ -293,7 +308,9 @@ export class CompactionEngine {
       provider: this.options.provider,
       model: this.options.model_,
       messages: [...messages, trailingPrompt],
-      systemPrompt: this.options.systemPrompt ?? COMPACT_SUMMARY_SYSTEM_PROMPT_DEFAULT,
+      // Custom and default prompts both funnel through the same rubric builder
+      // so runtime intent-isolation constraints always apply.
+      systemPrompt: buildMarkdownSummarySystemPrompt(this.options.systemPrompt ?? COMPACT_SYSTEM_PROMPT_DEFAULT),
       maxOutputTokens: this.options.maxOutputTokens ?? COMPACT_MAX_OUTPUT_TOKENS,
       stream: true,
       thinking: { enabled: false },

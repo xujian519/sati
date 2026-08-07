@@ -41,6 +41,8 @@ export interface CompactProgress {
   state: "started" | "running" | "failed" | "completed";
   pre_tokens?: number;
   reason?: string;
+  /** Correlates the in-flight progress with the terminal compact_boundary message. */
+  compaction_id?: string;
 }
 
 export interface NormalizedMessage {
@@ -128,6 +130,8 @@ export interface NormalizedMessage {
   outputFile?: string;
   taskResult?: string;
   trigger?: string;
+  /** Stable identity shared by live and persisted representations of a compaction pass. */
+  compactionId?: string;
   preTokens?: number;
   postTokens?: number;
   messagesSummarized?: number;

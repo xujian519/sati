@@ -45,3 +45,44 @@ test("mapAgentEvent propagates runId to streaming lifecycle boundaries", () => {
   assert.equal(failed[0]?.type, "error");
   assert.equal(failed[0]?.runId, runId);
 });
+
+test("mapAgentEvent forwards compactionId and trigger on compaction lifecycle events", () => {
+  const runId = "run-2";
+
+  const started = mapAgentEvent(
+    {
+      type: "compact_started",
+      sessionId: "session-1",
+      turnId: "turn-1",
+      compactionId: "compact-test-1",
+      trigger: "auto",
+      preTokens: 120,
+    },
+    runId,
+  );
+  assert.equal(started[0]?.type, "agent_status");
+  const startedDetail = (started[0] as { detail?: Record<string, unknown> })?.detail ?? {};
+  assert.equal(startedDetail.compactionId, "compact-test-1");
+  assert.equal(startedDetail.trigger, "auto");
+  assert.equal(startedDetail.preTokens, 120);
+
+  const completed = mapAgentEvent(
+    {
+      type: "compact_completed",
+      sessionId: "session-1",
+      turnId: "turn-1",
+      compactionId: "compact-test-1",
+      trigger: "reactive",
+      status: "success",
+      preTokens: 120,
+      postTokens: 40,
+      messagesSummarized: 7,
+    },
+    runId,
+  );
+  assert.equal(completed[0]?.type, "agent_status");
+  const completedDetail = (completed[0] as { detail?: Record<string, unknown> })?.detail ?? {};
+  assert.equal(completedDetail.compactionId, "compact-test-1");
+  assert.equal(completedDetail.trigger, "reactive");
+  assert.equal(completedDetail.messagesSummarized, 7);
+});

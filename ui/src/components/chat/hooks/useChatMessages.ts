@@ -270,6 +270,7 @@ function convertSingleMessage(
         content: "Context compacted",
         timestamp: msg.timestamp,
         isCompactBoundary: true,
+        compactionId: msg.compactionId,
         compactTrigger: msg.trigger,
         preTokens: msg.preTokens,
         postTokens: msg.postTokens,

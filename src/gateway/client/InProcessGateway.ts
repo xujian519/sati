@@ -1660,7 +1660,11 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
         {
           type: "agent_status",
           event: "compact_started",
-          detail: { trigger: event.trigger, preTokens: event.preTokens },
+          detail: {
+            compactionId: event.compactionId,
+            trigger: event.trigger,
+            preTokens: event.preTokens,
+          },
         },
       ];
     case "compact_completed":
@@ -1669,6 +1673,8 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
           type: "agent_status",
           event: "compact_completed",
           detail: {
+            compactionId: event.compactionId,
+            trigger: event.trigger,
             status: event.status,
             preTokens: event.preTokens,
             postTokens: event.postTokens,

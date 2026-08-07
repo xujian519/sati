@@ -357,6 +357,7 @@ function agentStatusToFrames(
           state: "running",
           pre_tokens: detail.preTokens,
           reason: detail.trigger,
+          compaction_id: detail.compactionId,
         },
       },
     ];
@@ -367,6 +368,7 @@ function agentStatusToFrames(
       {
         ...base,
         kind: "compact_boundary",
+        compactionId: detail.compactionId,
         trigger: detail.trigger || "auto",
         preTokens: detail.preTokens,
         postTokens: detail.postTokens,

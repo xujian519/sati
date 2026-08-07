@@ -107,6 +107,8 @@ export interface ChatMessage {
   isCompactBoundary?: boolean;
   activityId?: string;
   runId?: string;
+  /** Stable identity shared by live and persisted representations of a compaction pass. */
+  compactionId?: string;
   compactTrigger?: string;
   preTokens?: number;
   postTokens?: number;
@@ -149,6 +151,8 @@ export interface CompactProgress {
   state: "started" | "running" | "failed" | "completed";
   pre_tokens?: number;
   reason?: string;
+  /** Correlates the in-flight progress with the terminal compact_boundary message. */
+  compaction_id?: string;
 }
 
 export interface ClaudeWorkStatus {

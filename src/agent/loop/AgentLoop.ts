@@ -407,9 +407,8 @@ export class AgentLoop {
             }),
           });
           if (compact.type === "compacted") {
-            const preCompactMessages = messages;
             messages = compact.messages;
-            await this.persistCompactSnapshot(input, compact, preCompactMessages);
+            await this.persistCompactSnapshot(input, compact);
             yield {
               type: "turn_continued",
               sessionId: input.sessionId,
@@ -500,11 +499,10 @@ export class AgentLoop {
               }),
             });
             if (recompact.type === "compacted") {
-              const preCompactMessages = messages;
               messages = recompact.messages;
               request = await this.createModelRequest(messages, input);
               request = this.applyTokenCapsToRequest(request, decision.provider, decision.model);
-              await this.persistCompactSnapshot(input, recompact, preCompactMessages);
+              await this.persistCompactSnapshot(input, recompact);
               yield {
                 type: "turn_continued",
                 sessionId: input.sessionId,
@@ -1105,9 +1103,8 @@ export class AgentLoop {
                 lastUsage: lastModelUsage,
               });
               if (compact.type === "compacted") {
-                const preCompactMessages = messages;
                 messages = compact.messages;
-                await this.persistCompactSnapshot(input, compact, preCompactMessages);
+                await this.persistCompactSnapshot(input, compact);
               } else {
                 messages = truncateHeadKeepRatio(messages, 0.5);
               }
@@ -2103,7 +2100,6 @@ export class AgentLoop {
   private async persistCompactSnapshot(
     input: AgentLoopInput,
     compact: Extract<AutoCompactResult, { type: "compacted" }>,
-    preCompactMessages: CanonicalMessage[],
   ): Promise<void> {
     if (!input.onCompactPersisted || !compact.result) {
       return;
@@ -2112,10 +2108,11 @@ export class AgentLoop {
       kind: "compact",
       subtype: "compact_boundary",
       compactMetadata: {
+        compactionId: compact.result.compactionId,
         trigger: compact.result.trigger,
         preTokens: compact.result.preTokens,
         ...(compact.result.postTokens !== undefined ? { postTokens: compact.result.postTokens } : {}),
-        messagesSummarized: Math.max(0, preCompactMessages.length - compact.result.messagesToKeep.length),
+        messagesSummarized: compact.result.messagesSummarized,
         extra: {
           tier: compact.tier,
           summarySucceeded: compact.result.error === undefined,
