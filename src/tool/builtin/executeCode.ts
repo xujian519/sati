@@ -506,7 +506,7 @@ def _connect():
     global _sock
     if _sock is None:
         _sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        _sock.connect(os.environ["SATI_RPC_SOCKET"])
+        _sock.connect(os.environ["RPC_SOCKET"])
         _sock.settimeout(300)
     return _sock
 
@@ -535,14 +535,14 @@ import shlex
 import socket
 
 _sock = None
-_token = os.environ["SATI_RPC_TOKEN"]
+_token = os.environ["RPC_TOKEN"]
 
 
 def _connect():
     global _sock
     if _sock is None:
-        host = os.environ.get("SATI_RPC_HOST", "127.0.0.1")
-        port = int(os.environ["SATI_RPC_PORT"])
+        host = os.environ.get("RPC_HOST", "127.0.0.1")
+        port = int(os.environ["RPC_PORT"])
         _sock = socket.create_connection((host, port), timeout=300)
         _sock.settimeout(300)
     return _sock
@@ -586,14 +586,16 @@ function buildChildEnv(
 ): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...source };
   env.PYTHONPATH = source.PYTHONPATH ? `${tempRoot}${path.delimiter}${source.PYTHONPATH}` : tempRoot;
-  env.SATI_WORKSPACE_CWD = workspaceCwd;
-  env.SATI_EXECUTE_CODE_TEMP_ROOT = tempRoot;
+  // 用户代码环境契约：被执行的脚本可经 os.environ 读取 WORKSPACE_CWD（工作区根）与
+  // EXECUTE_CODE_TEMP_ROOT（本次执行临时根），用于定位项目文件与临时产物。
+  env.WORKSPACE_CWD = workspaceCwd;
+  env.EXECUTE_CODE_TEMP_ROOT = tempRoot;
   if (transport.kind === "uds") {
-    env.SATI_RPC_SOCKET = transport.socketPath;
+    env.RPC_SOCKET = transport.socketPath;
   } else {
-    env.SATI_RPC_HOST = transport.host;
-    env.SATI_RPC_PORT = String(transport.port);
-    env.SATI_RPC_TOKEN = transport.token;
+    env.RPC_HOST = transport.host;
+    env.RPC_PORT = String(transport.port);
+    env.RPC_TOKEN = transport.token;
   }
   env.PYTHONDONTWRITEBYTECODE = "1";
   return env;
