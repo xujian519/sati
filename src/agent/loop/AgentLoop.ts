@@ -2586,9 +2586,9 @@ export function buildTurnEnvironment(
 ): NodeJS.ProcessEnv {
   return {
     ...(baseEnv ?? process.env),
-    SATI_SESSION_ID: sessionId,
-    SATI_TURN_ID: turnId,
-    SATI_WORK_DIR: path.join(
+    SESSION_ID: sessionId,
+    TURN_ID: turnId,
+    WORK_DIR: path.join(
       path.resolve(cwd),
       ".sati",
       "work",

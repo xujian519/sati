@@ -41,10 +41,10 @@ PPTX="$PPTX_SKILL_ROOT/scripts/pptx.sh"
 bash "$PPTX" check || bash "$PPTX" fix
 ```
 
-Use the turn-scoped Sati work directory for every intermediate. The host sets `SATI_WORK_DIR`; the fallback keeps manual runs internal to the project:
+Use the turn-scoped Sati work directory for every intermediate. The host sets `WORK_DIR`; the fallback keeps manual runs internal to the project:
 
 ```bash
-WORKSPACE="${SATI_WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/pptx"
+WORKSPACE="${WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/pptx"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
 

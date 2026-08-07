@@ -35,10 +35,10 @@ bash "$PDF_TOOL" check || bash "$PDF_TOOL" fix
 
 `fix` creates an isolated Python environment under `${PDF_SKILL_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/sati-pdf}`. Poppler is a system dependency; if `pdfinfo` or `pdftoppm` is missing, follow the platform-specific hint printed by `fix`.
 
-Use the turn-scoped Sati work directory for every intermediate. The host sets `SATI_WORK_DIR`; the fallback keeps manual runs internal to the project:
+Use the turn-scoped Sati work directory for every intermediate. The host sets `WORK_DIR`; the fallback keeps manual runs internal to the project:
 
 ```bash
-WORKSPACE="${SATI_WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/pdf"
+WORKSPACE="${WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/pdf"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
 

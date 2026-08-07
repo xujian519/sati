@@ -208,7 +208,7 @@ Return a workbook and choose `.csv` or `.tsv` as the `build --out` extension. Th
 Keep every builder, candidate, conversion, render, and report under the turn work directory. Only `FINAL_XLSX` is user-facing.
 
 ```bash
-WORKSPACE="${SATI_WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/spreadsheets"
+WORKSPACE="${WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/spreadsheets"
 FINAL_XLSX="$PWD/<requested-output>.xlsx"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 bash "$SHEET" scaffold --out "$WORKSPACE/tmp/workbook.mjs" --requirements-out "$WORKSPACE/tmp/requirements.json"

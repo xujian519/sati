@@ -9,9 +9,9 @@ test("turn environment provides an isolated Sati-owned work directory", () => {
 
   assert.equal(env.PATH, "/custom/bin");
   assert.equal(env.KEEP_ME, "yes");
-  assert.equal(env.SATI_SESSION_ID, "web:s_123/unsafe");
-  assert.equal(env.SATI_TURN_ID, "turn:456 unsafe");
-  assert.equal(env.SATI_WORK_DIR, join(cwd, ".sati", "work", "web-s_123-unsafe", "turn-456-unsafe"));
+  assert.equal(env.SESSION_ID, "web:s_123/unsafe");
+  assert.equal(env.TURN_ID, "turn:456 unsafe");
+  assert.equal(env.WORK_DIR, join(cwd, ".sati", "work", "web-s_123-unsafe", "turn-456-unsafe"));
 });
 
 test("turn environment inherits the process environment when no override is configured", () => {

@@ -3,7 +3,7 @@
 All command examples assume the turn-scoped paths below. Keep every builder, candidate, conversion, render, and report under `WORKSPACE`; only `FINAL_PPTX` is user-facing.
 
 ```bash
-WORKSPACE="${SATI_WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/pptx"
+WORKSPACE="${WORK_DIR:-$PWD/.sati/work/manual/<task-slug>}/pptx"
 FINAL_PPTX="$PWD/<requested-output>.pptx"
 mkdir -p "$WORKSPACE/tmp" "$WORKSPACE/qa"
 ```
