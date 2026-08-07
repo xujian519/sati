@@ -9,7 +9,36 @@ import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { DiscordSessionMapper } from "./DiscordSessionMapper.js";
 import { renderDiscordEvent } from "./discord-render.js";
 
-let DiscordLib: any;
+// discord.js 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
+interface DiscordUserLike {
+  id: string;
+  bot?: boolean;
+  tag?: string;
+}
+interface DiscordMessageLike {
+  author?: DiscordUserLike;
+  system?: boolean;
+  content?: string;
+  channel?: { id?: string };
+}
+interface DiscordChannelLike {
+  send(args: { content: string }): Promise<unknown>;
+  sendTyping(): Promise<unknown>;
+}
+interface DiscordClientLike {
+  on(event: "ready", handler: (client: DiscordClientLike) => void): void;
+  on(event: "messageCreate", handler: (message: DiscordMessageLike) => void): void;
+  on(event: string, handler: (err: unknown) => void): void;
+  login(token: string): Promise<unknown>;
+  destroy(): Promise<unknown> | void;
+  channels: { fetch(id: string): Promise<unknown> };
+  user?: DiscordUserLike;
+}
+type DiscordClientCtor = new (options: { intents: unknown[]; partials: unknown[] }) => DiscordClientLike;
+
+let DiscordLib:
+  | { Client: DiscordClientCtor; GatewayIntentBits: Record<string, unknown>; Partials: Record<string, unknown> }
+  | undefined;
 try {
   DiscordLib = require("discord.js");
 } catch {
@@ -31,7 +60,7 @@ export class DiscordChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private client: any = null;
+  private client: DiscordClientLike | null = null;
   private botUserId: string | null = null;
   private activeChats = new Set<string>();
   private readonly elicitation = new ImElicitationHelper();
@@ -58,7 +87,7 @@ export class DiscordChannel implements ChannelAdapter {
     const { Client, GatewayIntentBits, Partials } = DiscordLib;
 
     try {
-      this.client = new Client({
+      const client = new Client({
         intents: [
           GatewayIntentBits.Guilds,
           GatewayIntentBits.GuildMessages,
@@ -67,23 +96,24 @@ export class DiscordChannel implements ChannelAdapter {
         ],
         partials: [Partials.Channel, Partials.Message],
       });
+      this.client = client;
 
-      this.client.on("ready", (c: any) => {
+      client.on("ready", (c: DiscordClientLike) => {
         this.botUserId = c.user?.id ?? null;
         this.logger?.info?.(`discord: logged in as ${c.user?.tag ?? this.botUserId}`);
       });
 
-      this.client.on("messageCreate", (message: any) => {
+      client.on("messageCreate", (message: DiscordMessageLike) => {
         void this.handleMessageCreate(message).catch(e => {
           this.logger?.error?.(`discord: messageCreate error: ${e}`);
         });
       });
 
-      this.client.on("error", (err: any) => {
+      client.on("error", (err: unknown) => {
         this.logger?.error?.(`discord: client error: ${err}`);
       });
 
-      await this.client.login(this.token);
+      await client.login(this.token);
     } catch (e) {
       this.logger?.error?.(`discord: start failed: ${e}`);
       return { stop: async () => undefined };
@@ -109,7 +139,7 @@ export class DiscordChannel implements ChannelAdapter {
     return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.sendReply(chatId, text));
   }
 
-  private async handleMessageCreate(message: any): Promise<void> {
+  private async handleMessageCreate(message: DiscordMessageLike): Promise<void> {
     if (!message?.author || message.author.bot) return;
     if (message.system) return;
     if (this.botUserId && message.author.id === this.botUserId) return;
@@ -197,23 +227,25 @@ export class DiscordChannel implements ChannelAdapter {
   }
 
   private async sendReply(chatId: string, text: string): Promise<boolean> {
-    if (!this.client) return false;
-    let channel: any;
+    const client = this.client;
+    if (!client) return false;
+    let channel: unknown;
     try {
-      channel = await this.client.channels.fetch(chatId);
+      channel = await client.channels.fetch(chatId);
     } catch (e) {
       this.logger?.error?.(`discord: fetch channel failed: ${e}`);
       return false;
     }
-    if (!channel || typeof channel.send !== "function") {
+    if (!isDiscordChannelLike(channel)) {
       this.logger?.warn?.(`discord: channel ${chatId} not sendable`);
       return false;
     }
+    const sendable = channel;
     const chunks = chunkText(text, MAX_MESSAGE_LENGTH);
     let ok = true;
     for (const chunk of chunks) {
       try {
-        await channel.send({ content: chunk });
+        await sendable.send({ content: chunk });
       } catch (e) {
         this.logger?.error?.(`discord: send failed: ${e}`);
         ok = false;
@@ -223,14 +255,20 @@ export class DiscordChannel implements ChannelAdapter {
   }
 
   private async sendTyping(chatId: string): Promise<void> {
-    if (!this.client) return;
+    const client = this.client;
+    if (!client) return;
     try {
-      const channel = await this.client.channels.fetch(chatId);
-      if (channel && typeof channel.sendTyping === "function") {
+      const channel = await client.channels.fetch(chatId);
+      if (isDiscordChannelLike(channel) && typeof channel.sendTyping === "function") {
         await channel.sendTyping();
       }
     } catch {
       /* best effort */
     }
   }
+}
+
+/** 从 channels.fetch 的返回值窄化出可发送的频道对象。 */
+function isDiscordChannelLike(value: unknown): value is DiscordChannelLike {
+  return typeof value === "object" && value !== null && typeof (value as DiscordChannelLike).send === "function";
 }

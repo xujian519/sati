@@ -157,13 +157,21 @@ test("large tool error references preserve error semantics for model replay", as
     assert.match(String(openaiTool?.content), /read_file\(\{ file_path: ".*refs\/result-0001\.txt"/);
 
     const anthropic = buildAnthropicRequest(requestWith(applied), model);
-    const anthropicTool = anthropic.messages[1]?.content.find((part: any) => part?.type === "tool_result") as any;
+    const anthropicTool = anthropic.messages[1]?.content.find(
+      (part): part is { type: string; is_error?: boolean } =>
+        typeof part === "object" && part !== null && (part as { type?: string }).type === "tool_result",
+    );
     assert.equal(anthropicTool?.is_error, true);
 
-    const google = buildGoogleRequest(requestWith(applied), model) as any;
+    const google = buildGoogleRequest(requestWith(applied), model) as unknown as {
+      contents: Array<{ parts: Array<Record<string, unknown>> }>;
+    };
     const functionResponse = google.contents
-      .flatMap((content: any) => content.parts ?? [])
-      .find((part: any) => part.functionResponse);
+      .flatMap(content => content.parts ?? [])
+      .find(
+        (part): part is { functionResponse: { response?: { error?: string; output?: unknown } } } =>
+          typeof part.functionResponse === "object" && part.functionResponse !== null,
+      );
     assert.match(String(functionResponse?.functionResponse?.response?.error), /Tool result preview only/);
     assert.equal(functionResponse?.functionResponse?.response?.output, undefined);
   } finally {

@@ -4,6 +4,7 @@
  */
 import { complete } from "../src/model/streaming/streamModel.js";
 import { normalizeModelError } from "../src/model/errors/normalizeModelError.js";
+import { ModelProviderError } from "../src/model/protocol/errors.js";
 import type { ModelConfig } from "../src/model/protocol/canonical.js";
 
 const config: ModelConfig = {
@@ -54,10 +55,10 @@ try {
     config,
   );
   console.log("Unexpected success:", result);
-} catch (error: any) {
+} catch (error: unknown) {
   const elapsed = Date.now() - start;
   console.log(`Caught error after ${(elapsed / 1000).toFixed(1)}s:`);
-  if (error.error) {
+  if (error instanceof ModelProviderError) {
     const e = error.error;
     console.log(`  code:      ${e.code}`);
     console.log(`  message:   ${e.message}`);
@@ -67,7 +68,7 @@ try {
       console.log(`  settingsFix: ${JSON.stringify(e.settingsFix)}`);
     }
   } else {
-    console.log(`  ${error.message}`);
+    console.log(`  ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

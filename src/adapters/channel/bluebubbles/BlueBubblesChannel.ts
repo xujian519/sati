@@ -99,14 +99,8 @@ export class BlueBubblesChannel implements ChannelAdapter {
         this.logger?.warn?.(`bluebubbles: poll ${res.status}`);
         return;
       }
-      const data = (await res.json()) as any;
-      const rows: any[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.data)
-          ? data.data
-          : Array.isArray(data?.messages)
-            ? data.messages
-            : [];
+      const data: unknown = await res.json();
+      const rows = extractMessageRows(data);
 
       let maxTs = this.lastTimestamp;
       for (const row of rows) {
@@ -133,8 +127,10 @@ export class BlueBubblesChannel implements ChannelAdapter {
     if (isFromMe) return;
 
     const text = String(o.text ?? o.body ?? o.message ?? "").trim();
-    const chatsField = o.chats as any;
-    const chatGuid = String(o.chatGuid ?? o.chat_guid ?? (Array.isArray(chatsField) ? chatsField[0] : "") ?? "");
+    const chatsField = o.chats;
+    const chatGuid = String(
+      o.chatGuid ?? o.chat_guid ?? (Array.isArray(chatsField) ? (chatsField as unknown[])[0] : "") ?? "",
+    );
     if (!chatGuid || !text) return;
 
     if (this.elicitation.hasPending(chatGuid) && this.gateway) {
@@ -235,12 +231,27 @@ export class BlueBubblesChannel implements ChannelAdapter {
         signal: AbortSignal.timeout(120_000),
       });
       if (!res.ok) {
-        const raw: any = await res.json().catch(() => ({}));
-        const err = raw?.message ?? raw?.error ?? res.statusText;
+        const raw: unknown = await res.json().catch(() => ({}));
+        const err =
+          typeof raw === "object" && raw !== null
+            ? String((raw as { message?: unknown }).message ?? (raw as { error?: unknown }).error ?? res.statusText)
+            : res.statusText;
         this.logger?.error?.(`bluebubbles: send HTTP ${res.status}: ${err}`);
       }
     } catch (e) {
       this.logger?.error?.(`bluebubbles: send failed: ${e}`);
     }
   }
+}
+
+/**
+ * BlueBubbles 轮询接口返回消息数组的三种形态：顶层数组、{ data: [...] }、
+ * { messages: [...] }。统一提取为记录数组。
+ */
+function extractMessageRows(data: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(data)) return data as Array<Record<string, unknown>>;
+  const obj = data as { data?: unknown; messages?: unknown };
+  if (Array.isArray(obj.data)) return obj.data as Array<Record<string, unknown>>;
+  if (Array.isArray(obj.messages)) return obj.messages as Array<Record<string, unknown>>;
+  return [];
 }

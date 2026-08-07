@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createReadSkillTool } from "../../../src/tool/builtin/readSkill.js";
+import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 
 function baseContext() {
   return {
@@ -8,7 +9,7 @@ function baseContext() {
     projectRoot: "/workspace",
     env: {},
     abortSignal: undefined,
-  } as any;
+  } as unknown as SatiToolRuntimeContext;
 }
 
 test("read_skill returns the resolved SKILL.md path with the skill body", async () => {

@@ -9,6 +9,7 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
+import type { MinimalWebSocketLike, WebSocketCtor } from "../protocol/resolveWebSocketImpl.js";
 import { renderWeComEvent } from "./wecom-render.js";
 import {
   WeComSessionMapper,
@@ -178,7 +179,7 @@ export type WeComChannelOptions = {
   botKey?: string;
   extra?: Record<string, unknown>;
   mapper?: WeComSessionMapper;
-  webSocketCtor?: any;
+  webSocketCtor?: WebSocketCtor;
   uuid?: () => string;
   reconnectBackoffMs?: readonly number[];
   onStateChange?: (state: WeComSessionMapperState) => void;
@@ -191,7 +192,7 @@ export class WeComChannel implements ChannelAdapter {
   private readonly botId: string;
   private readonly botSecret: string;
   private readonly wsUrl: string;
-  private readonly webSocketCtor: any;
+  private readonly webSocketCtor: WebSocketCtor;
   private readonly uuid: () => string;
   private readonly reconnectBackoffMs: readonly number[];
   private readonly deviceId: string;
@@ -207,7 +208,7 @@ export class WeComChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private ws: any = null;
+  private ws: MinimalWebSocketLike | null = null;
   private pending = new Map<string, PendingRequest>();
   private replyReqIds = new Map<string, string>();
   private lastChatReqIds = new Map<string, string>();
@@ -297,26 +298,27 @@ export class WeComChannel implements ChannelAdapter {
 
   private async connectWs(): Promise<void> {
     await this.cleanupWs();
-    this.ws = new this.webSocketCtor(this.wsUrl);
+    const ws = new this.webSocketCtor(this.wsUrl);
+    this.ws = ws;
 
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => reject(new Error("WeCom WebSocket connect timeout")), CONNECT_TIMEOUT_MS);
-      this.ws.once("open", () => {
+      ws.once("open", () => {
         clearTimeout(t);
         resolve();
       });
-      this.ws.once("error", (err: unknown) => {
+      ws.once("error", (err: unknown) => {
         clearTimeout(t);
         reject(err);
       });
     });
 
-    this.ws.on("message", (data: any) => {
-      void this.onSocketData(data.toString()).catch((e: unknown) => {
+    ws.on("message", (data: unknown) => {
+      void this.onSocketData(String(data)).catch((e: unknown) => {
         this.logger?.error?.(`wecom: message handling failed: ${e}`);
       });
     });
-    this.ws.on("close", () => {
+    ws.on("close", () => {
       this.stopHeartbeat();
       this.failPending(new Error("WeCom connection interrupted"));
       if (!this.intentionalStop) {
@@ -324,7 +326,7 @@ export class WeComChannel implements ChannelAdapter {
         this.scheduleReconnect();
       }
     });
-    this.ws.on("error", (err: unknown) => {
+    ws.on("error", (err: unknown) => {
       this.logger?.error?.(`wecom: WebSocket error: ${err}`);
     });
 

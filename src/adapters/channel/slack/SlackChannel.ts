@@ -6,7 +6,35 @@ import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { SlackSessionMapper } from "./SlackSessionMapper.js";
 import { renderSlackEvent } from "./slack-render.js";
 
-let BoltApp: any;
+// @slack/bolt 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
+interface SlackMessageEvent {
+  bot_id?: string;
+  subtype?: string;
+  user?: string;
+  channel?: string;
+  text?: string;
+  thread_ts?: string;
+  ts?: string;
+}
+interface SlackAuthTestResult {
+  user_id?: string;
+  user?: string;
+}
+interface SlackAppLike {
+  event(event: string, handler: (args: { event: SlackMessageEvent }) => Promise<void> | void): void;
+  error(handler: (err: unknown) => void): void;
+  start(): Promise<unknown>;
+  stop(): Promise<unknown>;
+  client: {
+    auth: { test(args: { token: string }): Promise<SlackAuthTestResult> };
+    chat: {
+      postMessage(args: { channel: string; text: string; mrkdwn?: boolean; thread_ts?: string }): Promise<unknown>;
+    };
+  };
+}
+type SlackAppCtor = new (options: { token: string; appToken: string; socketMode: boolean }) => SlackAppLike;
+
+let BoltApp: SlackAppCtor | undefined;
 try {
   BoltApp = require("@slack/bolt").App;
 } catch {
@@ -30,7 +58,7 @@ export class SlackChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private app: any = null;
+  private app: SlackAppLike | null = null;
   private botUserId: string | null = null;
   private activeChats = new Set<string>();
   private readonly elicitation = new ImElicitationHelper();
@@ -60,13 +88,14 @@ export class SlackChannel implements ChannelAdapter {
     }
 
     try {
-      this.app = new BoltApp({
+      const app = new BoltApp({
         token: this.botToken,
         appToken: this.appToken,
         socketMode: true,
       });
+      this.app = app;
 
-      this.app.event("message", async ({ event }: any) => {
+      app.event("message", async ({ event }: { event: SlackMessageEvent }) => {
         try {
           await this.handleSlackMessage(event);
         } catch (e) {
@@ -74,13 +103,13 @@ export class SlackChannel implements ChannelAdapter {
         }
       });
 
-      this.app.error(async (err: any) => {
+      app.error(async (err: unknown) => {
         this.logger?.error?.(`slack: bolt error: ${err}`);
       });
 
-      await this.app.start();
-      const auth = await this.app.client.auth.test({ token: this.botToken });
-      this.botUserId = (auth.user_id as string) ?? null;
+      await app.start();
+      const auth = await app.client.auth.test({ token: this.botToken });
+      this.botUserId = auth.user_id ?? null;
       this.logger?.info?.(`slack: Socket Mode connected as ${auth.user ?? auth.user_id}`);
     } catch (e) {
       this.logger?.error?.(`slack: start failed: ${e}`);
@@ -103,22 +132,22 @@ export class SlackChannel implements ChannelAdapter {
     };
   }
 
-  private async handleSlackMessage(event: any): Promise<void> {
+  private async handleSlackMessage(event: SlackMessageEvent): Promise<void> {
     if (!event) return;
     if (event.bot_id || event.subtype === "bot_message") return;
     if (event.subtype === "message_changed" || event.subtype === "message_deleted") return;
 
-    const userId = event.user as string | undefined;
+    const userId = event.user;
     if (userId && this.botUserId && userId === this.botUserId) return;
 
-    const channelId = event.channel as string | undefined;
+    const channelId = event.channel;
     if (!channelId) return;
 
     const text = String(event.text ?? "")
       .replace(/<@[^>]+>/g, "")
       .trim();
-    const threadTs = (event.thread_ts as string | undefined) ?? undefined;
-    const ts = event.ts as string | undefined;
+    const threadTs = event.thread_ts;
+    const ts = event.ts;
 
     // Conversation key includes the thread root when present so each Slack thread
     // gets its own session bucket (DMs and channel parents share their own).
@@ -210,12 +239,13 @@ export class SlackChannel implements ChannelAdapter {
   }
 
   private async sendReply(ctx: { channelId: string; threadTs?: string }, text: string): Promise<void> {
-    if (!this.app) return;
+    const app = this.app;
+    if (!app) return;
     const formatted = formatSlackMrkdwn(text);
     const chunks = chunkText(formatted, MAX_MESSAGE_LENGTH);
     for (const chunk of chunks) {
       try {
-        await this.app.client.chat.postMessage({
+        await app.client.chat.postMessage({
           channel: ctx.channelId,
           text: chunk,
           mrkdwn: true,

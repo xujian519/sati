@@ -4,7 +4,7 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
-import { resolveWebSocketImpl } from "../protocol/resolveWebSocketImpl.js";
+import { resolveWebSocketImpl, type MinimalWebSocketLike } from "../protocol/resolveWebSocketImpl.js";
 import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { HomeAssistantSessionMapper } from "./HomeAssistantSessionMapper.js";
 import { renderHomeAssistantEvent } from "./homeassistant-render.js";
@@ -39,7 +39,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private ws: any = null;
+  private ws: MinimalWebSocketLike | null = null;
   private idCounter = 1;
   private closed = false;
   private wsSessionReady = false;
@@ -130,7 +130,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
       const onError = (e: unknown) => this.logger?.error?.(`homeassistant: ws error: ${e}`);
 
       if (typeof ws.addEventListener === "function") {
-        ws.addEventListener("message", (ev: any) => onMessage(ev.data as string));
+        ws.addEventListener("message", (ev: { data?: unknown }) => onMessage(String(ev.data ?? "")));
         ws.addEventListener("close", onClose);
         ws.addEventListener("error", onError);
       } else {

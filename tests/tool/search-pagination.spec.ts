@@ -36,7 +36,7 @@ test("glob result text tells the model when more files are available", async () 
 
     assert.match(text, /\[glob pagination\] returned=2 total=3 truncated=true limit=2/);
     assert.match(text, /More files are available/);
-    assert.deepEqual((result.data as any).truncated, true);
+    assert.deepEqual((result.data as { truncated?: boolean }).truncated, true);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -55,7 +55,7 @@ test("grep result text includes next offset when paginated", async () => {
 
     assert.match(text, /\[grep pagination\] returned=2 total=3 offset=0 limit=2 truncated=true/);
     assert.match(text, /Call grep again with offset=2 and head_limit=2/);
-    assert.deepEqual((result.data as any).truncated, true);
+    assert.deepEqual((result.data as { truncated?: boolean }).truncated, true);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

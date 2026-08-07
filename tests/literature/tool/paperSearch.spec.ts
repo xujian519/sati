@@ -7,6 +7,7 @@ import { createSemanticScholarConnector } from "../../../src/literature/runtime/
 import { ConnectorRegistry } from "../../../src/literature/runtime/ConnectorRegistry.js";
 import { createPaperListSourcesTool } from "../../../src/literature/tool/paperListSources.js";
 import { createPaperSearchTool } from "../../../src/literature/tool/paperSearch.js";
+import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 
 const ATOM_FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -21,7 +22,7 @@ const ATOM_FEED = `<?xml version="1.0" encoding="UTF-8"?>
   </entry>
 </feed>`;
 
-const context = { env: {}, cwd: "/", projectRoot: "/", abortSignal: undefined } as any;
+const context = { env: {}, cwd: "/", projectRoot: "/", abortSignal: undefined } as unknown as SatiToolRuntimeContext;
 
 /** 测试注入：跳过 arXiv/S2 的 per-host 限速与重试退避，避免用例拖慢。 */
 function makeRegistry(fetchImpl: typeof fetch): ConnectorRegistry {

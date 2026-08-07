@@ -22,6 +22,31 @@ export type WeComBotCredentials = {
   secret: string;
 };
 
+// Minimal structural types for the runtime-shaped sati.yaml content.
+// Only the fields this command reads/writes are typed; the rest stay unknown.
+interface YamlAdapterConfig {
+  enabled?: boolean;
+  appId?: string;
+  appSecret?: string;
+  connectionMode?: string;
+  domainName?: string;
+  token?: string;
+  extra?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+interface YamlConfig {
+  adapters?: Record<string, YamlAdapterConfig>;
+  [key: string]: unknown;
+}
+
+// Structural subset of the @larksuiteoapi/node-sdk module used by
+// attemptFeishuQRCreation; the SDK types are not imported statically.
+interface LarkSdkLike {
+  AppTicketManager?: unknown;
+  Domain?: { Lark?: string; Feishu?: string };
+}
+
 // ---------------------------------------------------------------------------
 // Entry
 // ---------------------------------------------------------------------------
@@ -167,10 +192,10 @@ async function attemptFeishuQRCreation(
   rl: ReturnType<typeof createInterface>,
   domain: "feishu" | "lark",
 ): Promise<{ appId: string; appSecret: string } | null> {
-  let Lark: any;
+  let Lark: LarkSdkLike | null = null;
   try {
     const mod = await import("@larksuiteoapi/node-sdk");
-    Lark = (mod as { default?: unknown }).default ?? mod;
+    Lark = ((mod as { default?: unknown }).default ?? mod) as LarkSdkLike;
   } catch {
     return null;
   }
@@ -479,7 +504,7 @@ function coerceSetupList(value: unknown): string[] {
   return [];
 }
 
-function isPlainObject(value: unknown): value is Record<string, any> {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -594,17 +619,17 @@ function enableWeixinConfig(): void {
 // YAML config read/write
 // ---------------------------------------------------------------------------
 
-function loadYamlConfig(): Record<string, any> | null {
+function loadYamlConfig(): YamlConfig | null {
   try {
     if (!existsSync(SATI_YAML_PATH)) return null;
     const raw = readFileSync(SATI_YAML_PATH, "utf-8");
-    return parseYaml(raw) as Record<string, any>;
+    return parseYaml(raw) as YamlConfig;
   } catch {
     return null;
   }
 }
 
-function saveYamlConfig(config: Record<string, any>): void {
+function saveYamlConfig(config: YamlConfig): void {
   mkdirSync(dirname(SATI_YAML_PATH), { recursive: true });
   const yamlStr = stringifyYaml(config, {
     lineWidth: 0,

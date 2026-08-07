@@ -25,14 +25,35 @@ import { createVisibleErrorStatusDetail } from "../../../status/agentStatus.js";
 import { FeishuSessionMapper, type FeishuSessionMapperState } from "./FeishuSessionMapper.js";
 import { type FeishuLiveCardActivityKind } from "./feishu-render.js";
 
-let Lark: any = null;
+// @larksuiteoapi/node-sdk 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
+interface FeishuWsClientLike {
+  start(args: { eventDispatcher: unknown }): Promise<unknown>;
+  stop(): Promise<unknown> | void;
+}
+interface LarkSdkLike {
+  EventDispatcher: new (
+    options: Record<string, never>,
+  ) => {
+    register(handlers: Record<string, (data: unknown) => void>): unknown;
+  };
+  WSClient: new (options: {
+    appId: string;
+    appSecret: string;
+    domain: string;
+    loggerLevel?: number;
+  }) => FeishuWsClientLike;
+  Domain?: { Lark?: string; Feishu?: string };
+  LoggerLevel?: { info?: number };
+}
+
+let Lark: LarkSdkLike | null = null;
 let larkLoadAttempted = false;
-async function loadLarkSdk(): Promise<any> {
+async function loadLarkSdk(): Promise<LarkSdkLike | null> {
   if (Lark || larkLoadAttempted) return Lark;
   larkLoadAttempted = true;
   try {
     const mod = await import("@larksuiteoapi/node-sdk");
-    Lark = (mod as { default?: unknown }).default ?? mod;
+    Lark = ((mod as { default?: unknown }).default ?? mod) as LarkSdkLike;
   } catch {
     Lark = null;
   }
@@ -164,7 +185,7 @@ export class FeishuChannel implements ChannelAdapter {
     fetchTimeoutMs: FEISHU_ATTACHMENT_FETCH_TIMEOUT_MS,
   });
 
-  private wsClient: any = null;
+  private wsClient: FeishuWsClientLike | null = null;
 
   constructor(options: FeishuChannelOptions = {}) {
     this.mapper = options.mapper ?? new FeishuSessionMapper();

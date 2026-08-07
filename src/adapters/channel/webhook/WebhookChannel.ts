@@ -356,15 +356,16 @@ export class WebhookChannel implements ChannelAdapter {
     if (typeof body.content === "string") return body.content;
     if (typeof body.body === "string") return body.body;
 
-    if (body.action && body.issue && typeof (body.issue as any).body === "string") {
-      return `GitHub ${body.action}: ${(body.issue as any).title}\n${(body.issue as any).body}`;
+    if (body.action && body.issue && typeof (body.issue as { body?: unknown }).body === "string") {
+      const issue = body.issue as { title?: unknown; body?: unknown };
+      return `GitHub ${body.action}: ${String(issue.title ?? "")}\n${String(issue.body ?? "")}`;
     }
     if (body.action && body.pull_request) {
       const pr = body.pull_request as Record<string, unknown>;
       return `GitHub PR ${body.action}: ${pr.title}\n${pr.body ?? ""}`;
     }
-    if (body.comment && typeof (body.comment as any).body === "string") {
-      return `Comment: ${(body.comment as any).body}`;
+    if (body.comment && typeof (body.comment as { body?: unknown }).body === "string") {
+      return `Comment: ${String((body.comment as { body?: unknown }).body)}`;
     }
 
     const str = JSON.stringify(body);

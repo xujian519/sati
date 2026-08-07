@@ -9,7 +9,29 @@ import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { MatrixSessionMapper } from "./MatrixSessionMapper.js";
 import { renderMatrixEvent } from "./matrix-render.js";
 
-let MatrixSdk: any;
+// matrix-bot-sdk 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
+interface MatrixRoomMessage {
+  sender?: string;
+  content?: {
+    msgtype?: string;
+    body?: string;
+    "m.relates_to"?: { rel_type?: string };
+    [key: string]: unknown;
+  };
+}
+interface MatrixClientLike {
+  getUserId(): Promise<string | null>;
+  joinRoom(roomId: string): Promise<unknown>;
+  on(event: "room.invite", handler: (roomId: string) => void): void;
+  on(event: "room.message", handler: (roomId: string, message: MatrixRoomMessage) => void): void;
+  start(): Promise<unknown>;
+  stop(): Promise<unknown> | void;
+  sendMessage(roomId: string, content: { msgtype: string; body: string }): Promise<unknown>;
+}
+type MatrixClientCtor = new (homeserver: string, accessToken: string, storage: unknown) => MatrixClientLike;
+type SimpleFsStorageProviderCtor = new (path: string) => unknown;
+
+let MatrixSdk: { MatrixClient: MatrixClientCtor; SimpleFsStorageProvider: SimpleFsStorageProviderCtor } | undefined;
 try {
   MatrixSdk = require("matrix-bot-sdk");
 } catch {
@@ -37,7 +59,7 @@ export class MatrixChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private client: any = null;
+  private client: MatrixClientLike | null = null;
   private userId: string | null = null;
   private activeChats = new Set<string>();
   private readonly elicitation = new ImElicitationHelper();
@@ -88,7 +110,7 @@ export class MatrixChannel implements ChannelAdapter {
         });
       });
 
-      this.client.on("room.message", (roomId: string, raw: any) => {
+      this.client.on("room.message", (roomId: string, raw: MatrixRoomMessage) => {
         void this.handleRoomMessage(roomId, raw).catch(e => {
           this.logger?.error?.(`matrix: room.message error: ${e}`);
         });
@@ -121,8 +143,8 @@ export class MatrixChannel implements ChannelAdapter {
     return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.sendReply(chatId, text));
   }
 
-  private async handleRoomMessage(roomId: string, raw: any): Promise<void> {
-    const sender = raw?.sender as string | undefined;
+  private async handleRoomMessage(roomId: string, raw: MatrixRoomMessage): Promise<void> {
+    const sender = raw?.sender;
     if (!sender) return;
     if (this.userId && sender === this.userId) return;
 
@@ -130,7 +152,7 @@ export class MatrixChannel implements ChannelAdapter {
     const relates = content["m.relates_to"] ?? {};
     if (relates["rel_type"] === "m.replace") return;
 
-    const msgtype = (content.msgtype as string) || "m.text";
+    const msgtype = content.msgtype || "m.text";
     if (msgtype !== "m.text") return;
     if (content.msgtype === "m.notice") return;
 
@@ -215,12 +237,13 @@ export class MatrixChannel implements ChannelAdapter {
   }
 
   private async sendReply(roomId: string, text: string): Promise<boolean> {
-    if (!this.client) return false;
+    const client = this.client;
+    if (!client) return false;
     const chunks = chunkText(text, MAX_MESSAGE_LENGTH);
     let ok = true;
     for (const chunk of chunks) {
       try {
-        await this.client.sendMessage(roomId, {
+        await client.sendMessage(roomId, {
           msgtype: "m.text",
           body: chunk,
         });

@@ -10,7 +10,13 @@ import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { SmsSessionMapper } from "./SmsSessionMapper.js";
 import { renderSmsEvent } from "./sms-render.js";
 
-let twilioFactory: any;
+// twilio 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
+interface TwilioClientLike {
+  messages: { create(options: Record<string, unknown>): Promise<unknown> };
+}
+type TwilioFactory = (accountSid: string, authToken: string) => TwilioClientLike;
+
+let twilioFactory: TwilioFactory | undefined;
 try {
   twilioFactory = require("twilio");
 } catch {
@@ -36,7 +42,7 @@ export class SmsChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private client: any = null;
+  private client: TwilioClientLike | null = null;
   private server: Server | null = null;
   private accountSid = "";
   private authToken = "";

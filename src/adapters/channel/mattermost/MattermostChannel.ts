@@ -3,7 +3,7 @@ import { chunkText } from "../protocol/text.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
-import { resolveWebSocketImpl } from "../protocol/resolveWebSocketImpl.js";
+import { resolveWebSocketImpl, type MinimalWebSocketLike } from "../protocol/resolveWebSocketImpl.js";
 import { MattermostSessionMapper } from "./MattermostSessionMapper.js";
 import { renderMattermostEvent } from "./mattermost-render.js";
 
@@ -30,7 +30,7 @@ export class MattermostChannel implements ChannelAdapter {
   private gateway?: Gateway;
   private logger?: ChannelLogger;
   private apiBase = "";
-  private ws: any = null;
+  private ws: MinimalWebSocketLike | null = null;
   private botUserId: string | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
@@ -111,7 +111,7 @@ export class MattermostChannel implements ChannelAdapter {
       };
 
       if (typeof ws.addEventListener === "function") {
-        ws.addEventListener("message", (ev: any) => onMsg(ev?.data ?? ""));
+        ws.addEventListener("message", (ev: { data?: unknown }) => onMsg(String(ev?.data ?? "")));
         ws.addEventListener("error", onErr);
         ws.addEventListener("close", onClose);
       } else {

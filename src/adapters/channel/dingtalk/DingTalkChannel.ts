@@ -8,7 +8,19 @@ import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { DingTalkSessionMapper } from "./DingTalkSessionMapper.js";
 import { renderDingTalkEvent } from "./dingtalk-render.js";
 
-let DingStream: any = null;
+// dingtalk-stream 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
+interface DingStreamMessage {
+  headers?: { topic?: string; messageId?: string };
+  data?: string;
+}
+interface DingStreamClientLike {
+  registerAllEventListener(listener: (msg: DingStreamMessage) => { status: unknown }): void;
+  connect(): Promise<unknown>;
+  disconnect(): Promise<unknown> | void;
+}
+type DWClientCtor = new (options: { clientId: string; clientSecret: string; debug: boolean }) => DingStreamClientLike;
+
+let DingStream: { DWClient: DWClientCtor; EventAck: { SUCCESS: unknown }; TOPIC_ROBOT: unknown } | null = null;
 try {
   DingStream = require("dingtalk-stream");
 } catch {
@@ -35,7 +47,7 @@ export class DingTalkChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private client: any = null;
+  private client: DingStreamClientLike | null = null;
   private activeChats = new Set<string>();
   private readonly elicitation = new ImElicitationHelper();
   private readonly permissions = new ImPermissionHelper();
@@ -52,7 +64,8 @@ export class DingTalkChannel implements ChannelAdapter {
     this.gateway = deps.gateway;
     this.logger = deps.logger;
 
-    if (!DingStream) {
+    const stream = DingStream;
+    if (!stream) {
       this.logger?.error?.("dingtalk: dingtalk-stream not installed; run `npm install dingtalk-stream`");
       return { stop: async () => undefined };
     }
@@ -62,20 +75,21 @@ export class DingTalkChannel implements ChannelAdapter {
     }
 
     try {
-      this.client = new DingStream.DWClient({
+      const client = new stream.DWClient({
         clientId: this.clientId,
         clientSecret: this.clientSecret,
         debug: Boolean(process.env.DINGTALK_STREAM_DEBUG),
       });
+      this.client = client;
 
-      this.client.registerAllEventListener((msg: any) => {
+      client.registerAllEventListener((msg: DingStreamMessage) => {
         void this.onDownstream(msg).catch((e: unknown) => {
           this.logger?.error?.(`dingtalk: onDownstream error: ${e}`);
         });
-        return { status: DingStream.EventAck.SUCCESS };
+        return { status: stream.EventAck.SUCCESS };
       });
 
-      await this.client.connect();
+      await client.connect();
       this.logger?.info?.("dingtalk: connected via Stream mode");
     } catch (e) {
       this.logger?.error?.(`dingtalk: start failed: ${e}`);
@@ -103,10 +117,11 @@ export class DingTalkChannel implements ChannelAdapter {
     return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.sendReply(chatId, text));
   }
 
-  private async onDownstream(msg: any): Promise<void> {
+  private async onDownstream(msg: DingStreamMessage): Promise<void> {
     const topic = String(msg?.headers?.topic ?? "");
     if (topic && DingStream && topic !== DingStream.TOPIC_ROBOT) return;
 
+    if (typeof msg.data !== "string") return;
     let data: Record<string, unknown>;
     try {
       data = JSON.parse(msg.data) as Record<string, unknown>;
@@ -119,7 +134,7 @@ export class DingTalkChannel implements ChannelAdapter {
     this.seenIds.add(msgId);
     if (this.seenIds.size > SEEN_IDS_MAX) {
       const first = this.seenIds.values().next().value;
-      if (first) this.seenIds.delete(first as string);
+      if (first) this.seenIds.delete(first);
     }
 
     const text = this.extractText(data);

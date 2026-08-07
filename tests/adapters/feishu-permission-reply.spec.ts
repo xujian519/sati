@@ -37,13 +37,20 @@ test("Feishu handles permission replies before the active chat drain finishes", 
   });
   await channel.start({ gateway, logger: {} });
 
-  (channel as any).permissions.capture(chatId, "session-1", {
+  // 测试需要注入权限决策并预置批处理状态，这两个成员是私有的，
+  // 通过结构化断言暴露最小访问面，避免使用 any。
+  const channelInternals = channel as unknown as {
+    permissions: { capture(chatId: string, sessionKey: string, request: unknown): void };
+    inboundBatches: Map<string, { messages: unknown[]; draining: boolean }>;
+  };
+
+  channelInternals.permissions.capture(chatId, "session-1", {
     type: "permission_request",
     requestId: "request-1",
     toolName: "read_file",
     payload: { file_path: "/tmp/a.txt" },
   });
-  (channel as any).inboundBatches.set(chatId, { messages: [], draining: true });
+  channelInternals.inboundBatches.set(chatId, { messages: [], draining: true });
 
   const response = createMockResponse();
   await channel.handleWebhook(
@@ -58,7 +65,7 @@ test("Feishu handles permission replies before the active chat drain finishes", 
     { sessionKey: "session-1", requestId: "request-1", decision: "allow", remember: false },
   ]);
   assert.deepEqual(sent, [{ chatId, text: "已允许一次，继续执行。" }]);
-  assert.deepEqual((channel as any).inboundBatches.get(chatId), { messages: [], draining: true });
+  assert.deepEqual(channelInternals.inboundBatches.get(chatId), { messages: [], draining: true });
 });
 
 function createMockResponse(): {

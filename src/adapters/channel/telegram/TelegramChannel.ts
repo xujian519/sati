@@ -9,7 +9,31 @@ import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { TelegramSessionMapper } from "./TelegramSessionMapper.js";
 import { renderTelegramEvent } from "./telegram-render.js";
 
-let Bot: any;
+// grammy 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
+interface TelegramMessage {
+  text?: string;
+  chat: { id: number };
+}
+interface TelegramContext {
+  message?: TelegramMessage;
+}
+interface TelegramBotApi {
+  setWebhook(url: string): Promise<unknown>;
+  deleteWebhook(): Promise<unknown>;
+  getMe(): Promise<{ username?: string }>;
+  sendMessage(chatId: string, text: string): Promise<unknown>;
+  sendChatAction(chatId: string, action: string): Promise<unknown>;
+}
+interface TelegramBotLike {
+  on(event: string, handler: (ctx: TelegramContext) => Promise<void> | void): void;
+  catch(handler: (err: unknown) => void): void;
+  api: TelegramBotApi;
+  start(options: { drop_pending_updates: boolean }): Promise<unknown> | void;
+  stop(): Promise<unknown> | void;
+}
+type TelegramBotCtor = new (token: string) => TelegramBotLike;
+
+let Bot: TelegramBotCtor | undefined;
 try {
   Bot = require("grammy").Bot;
 } catch {
@@ -33,7 +57,7 @@ export class TelegramChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private bot: any = null;
+  private bot: TelegramBotLike | null = null;
   private activeChats = new Set<string>();
   private readonly elicitation = new ImElicitationHelper();
   private readonly permissions = new ImPermissionHelper();
@@ -58,22 +82,23 @@ export class TelegramChannel implements ChannelAdapter {
     }
 
     try {
-      this.bot = new Bot(this.token);
-      this.bot.on("message:text", (ctx: any) => this.handleTextMessage(ctx));
-      this.bot.catch((err: any) => {
+      const bot = new Bot(this.token);
+      this.bot = bot;
+      bot.on("message:text", (ctx: TelegramContext) => this.handleTextMessage(ctx));
+      bot.catch((err: unknown) => {
         this.logger?.error?.(`telegram: bot error: ${err}`);
       });
 
       if (this.webhookUrl) {
-        await this.bot.api.setWebhook(this.webhookUrl);
+        await bot.api.setWebhook(this.webhookUrl);
         this.logger?.info?.(`telegram: webhook mode at ${this.webhookUrl}`);
       } else {
-        await this.bot.api.deleteWebhook();
-        this.bot.start({ drop_pending_updates: false });
+        await bot.api.deleteWebhook();
+        bot.start({ drop_pending_updates: false });
         this.logger?.info?.("telegram: long-polling started");
       }
 
-      const me = await this.bot.api.getMe();
+      const me = await bot.api.getMe();
       this.logger?.info?.(`telegram: connected as @${me.username}`);
     } catch (e) {
       this.logger?.error?.(`telegram: start failed: ${e}`);
@@ -99,7 +124,7 @@ export class TelegramChannel implements ChannelAdapter {
     return deliverChatCronResult(delivery, this.channelKey, (chatId, text) => this.sendReply(chatId, text));
   }
 
-  private async handleTextMessage(ctx: any): Promise<void> {
+  private async handleTextMessage(ctx: TelegramContext): Promise<void> {
     const msg = ctx.message;
     if (!msg?.text) return;
     const chatId = String(msg.chat.id);
@@ -181,12 +206,13 @@ export class TelegramChannel implements ChannelAdapter {
   }
 
   private async sendReply(chatId: string, text: string): Promise<boolean> {
-    if (!this.bot) return false;
+    const bot = this.bot;
+    if (!bot) return false;
     const chunks = chunkText(text, MAX_MESSAGE_LENGTH);
     let ok = true;
     for (const chunk of chunks) {
       try {
-        await this.bot.api.sendMessage(chatId, chunk);
+        await bot.api.sendMessage(chatId, chunk);
       } catch (e) {
         this.logger?.error?.(`telegram: sendMessage failed: ${e}`);
         ok = false;
@@ -196,9 +222,10 @@ export class TelegramChannel implements ChannelAdapter {
   }
 
   private async sendTyping(chatId: string): Promise<void> {
-    if (!this.bot) return;
+    const bot = this.bot;
+    if (!bot) return;
     try {
-      await this.bot.api.sendChatAction(chatId, "typing");
+      await bot.api.sendChatAction(chatId, "typing");
     } catch {
       /* best effort */
     }

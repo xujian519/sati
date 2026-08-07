@@ -99,7 +99,7 @@ class MockGateway implements Gateway {
   newSession = stub({ sessionKey: `new-${Date.now()}` });
   closeSession = noop as Gateway["closeSession"];
   describeServer = stub({ mode: "in_process" as const });
-  cronCreate = stub({ taskId: "c", task: {} as any, created: true }) as unknown as Gateway["cronCreate"];
+  cronCreate = stub({ taskId: "c", task: {}, created: true }) as unknown as Gateway["cronCreate"];
   cronList = stub({ tasks: [] }) as Gateway["cronList"];
   cronDelete = stub({ deleted: true }) as Gateway["cronDelete"];
   cronStop = stub({ stopped: true }) as Gateway["cronStop"];
@@ -109,7 +109,7 @@ class MockGateway implements Gateway {
   readSessionMessages = stub({
     messages: [],
     hasMore: false,
-    session: {} as any,
+    session: {},
   }) as unknown as Gateway["readSessionMessages"];
   readSubagentMessages = stub({ messages: [], total: 0 }) as unknown as Gateway["readSubagentMessages"];
   forkSession = stub({

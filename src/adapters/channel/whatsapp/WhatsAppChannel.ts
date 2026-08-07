@@ -279,8 +279,11 @@ export class WhatsAppChannel implements ChannelAdapter {
         signal: AbortSignal.timeout(60_000),
       });
       if (!res.ok) {
-        const raw: any = await res.json().catch(() => ({}));
-        const err = raw?.error ?? res.statusText;
+        const raw: unknown = await res.json().catch(() => ({}));
+        const err =
+          typeof raw === "object" && raw !== null
+            ? String((raw as { error?: unknown }).error ?? res.statusText)
+            : res.statusText;
         this.logger?.error?.(`whatsapp: send HTTP ${res.status}: ${err}`);
         return false;
       }

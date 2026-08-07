@@ -516,9 +516,15 @@ function normalizeContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .map((item: any) => {
+      .map((item: unknown) => {
         if (typeof item === "string") return item;
-        if (item?.type === "text" || item?.type === "input_text") return item.text ?? "";
+        if (
+          typeof item === "object" &&
+          item !== null &&
+          ((item as { type?: unknown }).type === "text" || (item as { type?: unknown }).type === "input_text")
+        ) {
+          return String((item as { text?: unknown }).text ?? "");
+        }
         return "";
       })
       .filter(Boolean)

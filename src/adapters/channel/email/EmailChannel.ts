@@ -8,8 +8,44 @@ import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { EmailSessionMapper } from "./EmailSessionMapper.js";
 import { renderEmailEvent } from "./email-render.js";
 
-let ImapFlow: any;
-let nodemailer: any;
+// imapflow / nodemailer 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
+interface ImapMessageLike {
+  uid: number;
+  envelope?: { from?: Array<{ address?: string }> };
+  source?: Buffer | string;
+}
+interface ImapMailboxLock {
+  release(): void;
+}
+interface ImapClientLike {
+  connect(): Promise<unknown>;
+  mailboxOpen(mailbox: string): Promise<unknown>;
+  status(mailbox: string, query: Record<string, boolean>): Promise<{ uidNext?: number }>;
+  fetch(range: string | Record<string, boolean>, options: Record<string, boolean>): AsyncIterable<ImapMessageLike>;
+  getMailboxLock(mailbox: string): Promise<ImapMailboxLock>;
+  logout(): Promise<unknown>;
+}
+type ImapFlowCtor = new (config: {
+  host: string;
+  port: number;
+  secure: boolean;
+  auth: { user: string; pass: string };
+  logger: boolean;
+}) => ImapClientLike;
+interface MailTransporterLike {
+  verify(): Promise<unknown>;
+  sendMail(options: { from: string; to: string; subject: string; text: string }): Promise<unknown>;
+}
+type CreateTransportFn = (config: {
+  host: string;
+  port: number;
+  secure: boolean;
+  requireTLS: boolean;
+  auth: { user: string; pass: string };
+}) => MailTransporterLike;
+
+let ImapFlow: ImapFlowCtor | undefined;
+let nodemailer: { createTransport: CreateTransportFn } | undefined;
 try {
   ImapFlow = require("imapflow").ImapFlow;
 } catch {
@@ -36,8 +72,8 @@ export class EmailChannel implements ChannelAdapter {
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
-  private imapClient: any = null;
-  private transporter: any = null;
+  private imapClient: ImapClientLike | null = null;
+  private transporter: MailTransporterLike | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private seenUids = new Set<number>();
   private ownAddress = "";
@@ -81,38 +117,40 @@ export class EmailChannel implements ChannelAdapter {
     }
 
     try {
-      this.imapClient = new ImapFlow({
+      const imap = new ImapFlow({
         host: imapHost,
         port: imapPort,
         secure: imapTls,
         auth: { user: this.ownAddress, pass: password },
         logger: false,
       });
+      this.imapClient = imap;
 
-      await this.imapClient.connect();
-      await this.imapClient.mailboxOpen("INBOX");
+      await imap.connect();
+      await imap.mailboxOpen("INBOX");
 
       try {
-        const st = await this.imapClient.status("INBOX", { uidNext: true });
+        const st = await imap.status("INBOX", { uidNext: true });
         const next = st.uidNext ?? 1;
         if (next > 1) {
           const from = Math.max(1, next - 300);
-          for await (const msg of this.imapClient.fetch(`${from}:${next - 1}`, { uid: true })) {
-            this.seenUids.add(msg.uid as number);
+          for await (const msg of imap.fetch(`${from}:${next - 1}`, { uid: true })) {
+            this.seenUids.add(msg.uid);
           }
         }
       } catch (e) {
         this.logger?.warn?.(`email: UID priming skipped: ${e}`);
       }
 
-      this.transporter = nodemailer.createTransport({
+      const transporter = nodemailer.createTransport({
         host: smtpHost,
         port: smtpPort,
         secure: smtpPort === 465,
         requireTLS: smtpTls && smtpPort !== 465,
         auth: { user: this.ownAddress, pass: password },
       });
-      await this.transporter.verify();
+      this.transporter = transporter;
+      await transporter.verify();
 
       await this.pollOnce();
       this.pollTimer = setInterval(() => {
@@ -157,30 +195,28 @@ export class EmailChannel implements ChannelAdapter {
   }
 
   private async pollOnce(): Promise<void> {
-    if (!this.imapClient || this.stopped) return;
-    let lock: any;
+    const imap = this.imapClient;
+    if (!imap || this.stopped) return;
+    let lock: ImapMailboxLock | undefined;
     try {
-      lock = await this.imapClient.getMailboxLock("INBOX");
+      lock = await imap.getMailboxLock("INBOX");
     } catch (e) {
       this.logger?.error?.(`email: failed to acquire mailbox lock: ${e}`);
       return;
     }
     try {
-      for await (const msg of this.imapClient.fetch({ unseen: true }, { envelope: true, source: true, uid: true })) {
-        const uid = msg.uid as number;
+      for await (const msg of imap.fetch({ unseen: true }, { envelope: true, source: true, uid: true })) {
+        const uid = msg.uid;
         if (this.seenUids.has(uid)) continue;
         this.seenUids.add(uid);
 
-        const env = msg.envelope as Record<string, unknown> | undefined;
-        const from = env?.from as Array<{ address?: string }> | undefined;
+        const env = msg.envelope;
+        const from = env?.from;
         const replyAddr = from?.[0]?.address ?? "unknown";
 
         let text = "";
         try {
-          const raw =
-            msg.source instanceof Buffer
-              ? msg.source.toString("utf8")
-              : String((msg as { source?: Buffer }).source ?? "");
+          const raw = msg.source instanceof Buffer ? msg.source.toString("utf8") : String(msg.source ?? "");
           text = this.extractPlainText(raw);
         } catch {
           text = "[Could not decode message body]";
@@ -296,9 +332,10 @@ export class EmailChannel implements ChannelAdapter {
   }
 
   private async sendReply(chatId: string, text: string): Promise<boolean> {
-    if (!this.transporter) return false;
+    const transporter = this.transporter;
+    if (!transporter) return false;
     try {
-      await this.transporter.sendMail({
+      await transporter.sendMail({
         from: this.ownAddress,
         to: chatId,
         subject: this.defaultSubject,
