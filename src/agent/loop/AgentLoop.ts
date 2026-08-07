@@ -21,6 +21,7 @@ import {
   type PartialTextToolCallInfo,
   getSelfCorrectPrompt,
   detectFormatByText,
+  textFromMessage,
 } from "../../model/index.js";
 import type {
   SatiToolDefinition,
@@ -59,12 +60,13 @@ import {
   createVisibleErrorStatusDetail,
   type AgentStatusI18nDescriptor,
 } from "../../status/agentStatus.js";
+import { applyMethodologyInjection } from "./methodologyInjection.js";
 import { projectToolResults } from "./projectToolResults.js";
 import { resolveOutputTokenRetryBump } from "./outputTokenRetry.js";
 import { LargeFileRepair, type LargeFileRepairDecision } from "./LargeFileRepair.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import { collectToolCalls } from "./collectToolCalls.js";
-import { type DoomLoopSignal, type ToolCallObservation } from "./doomLoop.js";
+import { recordModelCall, recordToolResults } from "./doomLoopIntegration.js";
 
 const TOOL_EVENT_PUMP_INTERVAL_MS = 500;
 const SUBAGENT_STATUS_HEARTBEAT_MS = 2_000;
@@ -654,7 +656,13 @@ export class AgentLoop {
       }
       finalMessage = assistantMessage;
       expireConsumedTransientPrompts();
-      this.observeModelCall(assistantMessage, input);
+      const fatalReason = recordModelCall(
+        this.dependencies.doomLoop,
+        assistantMessage,
+        input,
+        this.dependencies.eventEmitter,
+      );
+      if (fatalReason) this.doomLoopFatalReason = fatalReason;
 
       if (assembled.hasPartialTextToolCall) {
         if (maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
@@ -1562,7 +1570,14 @@ export class AgentLoop {
       const repeatedFailure = detectRepeatedToolFailure(pairedResults, lastToolFailureFingerprint);
       pairedResults = annotateRepeatedToolFailures(pairedResults, repeatedFailure.repeatedKeys);
       lastToolFailureFingerprint = repeatedFailure.currentFingerprint;
-      this.observeToolResults(toolCalls, pairedResults, input);
+      const toolFatalReason = recordToolResults(
+        this.dependencies.doomLoop,
+        toolCalls,
+        pairedResults,
+        input,
+        this.dependencies.eventEmitter,
+      );
+      if (toolFatalReason) this.doomLoopFatalReason = toolFatalReason;
       const toolResultRepair = largeFileRepair.analyzeToolResults(pairedResults, {
         outputTruncated: assembled.finishReason === "length" || assembled.hasRepairedToolCalls === true,
         repairedToolCalls: assembled.hasRepairedToolCalls === true,
@@ -1911,9 +1926,10 @@ export class AgentLoop {
       model: this.config.model,
       messages:
         this.config.permissionMode === "plan" ? appendPlanModeReminder(materialized.messages) : materialized.messages,
-      systemPrompt: this.applyMethodologyInjection(
+      systemPrompt: applyMethodologyInjection(
         prepared.systemPrompt ?? this.config.systemPrompt ?? "",
         requestMessages,
+        this.config.methodologyInjection,
       ),
       tools: prepared.tools,
       toolChoice: this.config.toolChoice,
@@ -1924,38 +1940,6 @@ export class AgentLoop {
       metadata: this.config.metadata,
       cacheBreakpoints: prepared.cacheBreakpoints,
     };
-  }
-
-  /**
-   * Append an optional methodology prompt (from `config.methodologyInjection`)
-   * to the system prompt, keyed off the FIRST user text message of the request.
-   * No-op when the config hook is absent.
-   *
-   * Keying off the first user message (rather than the last) keeps the
-   * methodology stable across the turn: tool results and supplemental
-   * messages are projected as later role:"user" messages and would otherwise
-   * flip the matched methodology (or drop it) mid-turn, and it keeps the
-   * system-prompt prefix stable for prompt caching.
-   */
-  private applyMethodologyInjection(systemPrompt: string, messages: CanonicalMessage[]): string {
-    const inject = this.config.methodologyInjection;
-    if (!inject) return systemPrompt;
-    let firstUserText: string | undefined;
-    for (const message of messages) {
-      if (message.role !== "user") continue;
-      const parts: string[] = [];
-      for (const block of messageContent(message)) {
-        if (block.type === "text") parts.push(block.text);
-      }
-      if (parts.length > 0) {
-        firstUserText = parts.join("\n");
-        break;
-      }
-    }
-    if (firstUserText === undefined) return systemPrompt;
-    const addendum = inject(firstUserText);
-    if (!addendum) return systemPrompt;
-    return `${systemPrompt}\n\n${addendum}`;
   }
 
   private createBudgetEvaluator(
@@ -2553,47 +2537,6 @@ export class AgentLoop {
     }
   }
 
-  private observeModelCall(message: CanonicalMessage, input: AgentLoopInput): void {
-    const doomLoop = this.dependencies.doomLoop;
-    if (!doomLoop) return;
-    const signals = doomLoop.recordModelCall({ text: textFromMessage(message) });
-    this.emitDoomLoopSignals(signals, input, doomLoop.currentTurnNumber());
-  }
-
-  private observeToolResults(toolCalls: CanonicalToolCall[], results: SatiToolResult[], input: AgentLoopInput): void {
-    const doomLoop = this.dependencies.doomLoop;
-    if (!doomLoop) return;
-    const turn = doomLoop.currentTurnNumber();
-    for (let i = 0; i < toolCalls.length; i += 1) {
-      const call = toolCalls[i]!;
-      const result = results[i];
-      const observation: ToolCallObservation = {
-        name: call.name,
-        args: call.input,
-        result: result ? flattenToolResultText(result) : "",
-      };
-      const signals = doomLoop.recordToolResult(observation);
-      this.emitDoomLoopSignals(signals, input, turn);
-    }
-  }
-
-  private emitDoomLoopSignals(signals: DoomLoopSignal[], input: AgentLoopInput, turn: number): void {
-    for (const signal of signals) {
-      this.dependencies.eventEmitter?.({
-        type: "doomloop_signal",
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        detector: signal.detector,
-        reason: signal.reason,
-        turn,
-        fatal: signal.fatal,
-      });
-      if (signal.fatal) {
-        this.doomLoopFatalReason = signal.reason;
-      }
-    }
-  }
-
   private createTurnResult(
     input: AgentLoopInput,
     options: Omit<AgentTurnResult, "sessionId" | "turnId" | "completedAt">,
@@ -2706,25 +2649,6 @@ function findToolLifecycleBlock(results: SatiToolResult[]): { reason: string; st
     }
   }
   return undefined;
-}
-
-function textFromMessage(message: CanonicalMessage): string {
-  return message.content
-    .filter(block => block.type === "text")
-    .map(block => block.text)
-    .join("\n");
-}
-
-/** 工具结果文本（供 DoomLoop 空结果/重复检测）。 */
-function flattenToolResultText(result: SatiToolResult): string {
-  return result.content
-    .map(block => {
-      if (block.type === "text") return block.text;
-      if (block.type === "json") return JSON.stringify(block.value);
-      return "";
-    })
-    .join("\n")
-    .trim();
 }
 
 function isMissingReasoningContentError(error: CanonicalModelError): boolean {
