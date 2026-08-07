@@ -67,17 +67,20 @@ import {
   clearProjectDirectoryCache,
   searchConversations,
 } from "./projects.js";
-// Chat traffic goes straight from the browser to the gateway (P3); the
-// bridge only keeps non-chat introspection and REST-driven agent runs.
 import {
+  runChatViaGateway,
+  abortViaGateway,
+  decidePermissionViaGateway,
   grantSessionPermissionViaGateway,
   isSessionActiveViaGateway,
   getActiveTurnSnapshotFramesViaGateway,
   getActiveSessionIdsViaGateway,
+  elicitationRespondViaGateway,
   getRouterDashboardData,
   getRouterSessionStats,
   getRouterStatsSummary,
   getSatiGateway,
+  registerAlwaysOnNotificationForwarding,
   getSessionTokenBudget,
 } from "./sati-bridge.js";
 import sessionManager from "./sessionManager.js";
@@ -121,6 +124,7 @@ import {
   startMemoryScheduler,
   stopMemoryScheduler,
 } from "./services/memoryService.js";
+import { createNormalizedMessage } from "./sati-message.js";
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from "./utils/plugin-process-manager.js";
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames, userDb } from "./database/db.js";
 import { configureWebPush } from "./services/vapid-keys.js";
@@ -130,6 +134,7 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from "./midd
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "./constants/config.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
 import { contentDispositionAttachment } from "./utils/downloadHeaders.js";
+import { createSessionWatchRegistry } from "./session-watch-registry.js";
 
 // Sati-only mode: chat execution always goes through src/gateway via
 // cursor-cli, openai-codex, gemini-cli) has been removed.
@@ -157,7 +162,67 @@ const WATCHER_DEBOUNCE_MS = 300;
 let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
 const connectedClients = new Set();
+const sessionWatchRegistry = createSessionWatchRegistry();
+registerAlwaysOnNotificationForwarding(connectedClients, (sessionId, frame) => {
+  // Always-On gateway notifications do not carry the originating UI socket.
+  // Delivering them to every tab caused unrelated sessions' live status
+  // (notably compaction progress) to race in the frontend. A tab explicitly
+  // watches its displayed session, so that registry is the routing authority.
+  broadcastToSessionWatchers(sessionId, frame, undefined);
+});
 let isGetProjectsRunning = false; // Flag to prevent reentrant calls
+
+function normalizeSessionId(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function broadcastChatFrame(frame, originWs, userId) {
+  const payload = JSON.stringify(frame);
+  const delivered = new Set();
+  const frameSessionId = normalizeSessionId(frame?.sessionId);
+
+  if (frameSessionId) {
+    const watchers = sessionWatchRegistry.getWatchers(frameSessionId);
+    watchers.forEach(client => {
+      if (client.readyState !== WebSocket.OPEN) return;
+      if ((client.__satiUserId ?? null) !== userId) return;
+      client.send(payload);
+      delivered.add(client);
+    });
+  }
+
+  if (originWs.readyState === WebSocket.OPEN && !delivered.has(originWs)) {
+    originWs.send(payload);
+    delivered.add(originWs);
+  }
+
+  // Reconnect fail-safe: if the origin websocket closed and no watcher
+  // received the frame yet, fan out to same-user sockets.
+  if (delivered.size === 0) {
+    connectedClients.forEach(client => {
+      if (client.readyState !== WebSocket.OPEN) return;
+      if ((client.__satiUserId ?? null) !== userId) return;
+      client.send(payload);
+    });
+  }
+}
+
+function broadcastToSessionWatchers(sessionId, frame, userId, excludeWs = null) {
+  const normalizedSessionId = normalizeSessionId(sessionId);
+  if (!normalizedSessionId) return;
+  const payload = JSON.stringify(frame);
+  const watchers = sessionWatchRegistry.getWatchers(normalizedSessionId);
+  watchers.forEach(client => {
+    if (client === excludeWs) return;
+    if (client.readyState !== WebSocket.OPEN) return;
+    // `undefined` denotes a gateway-originated event with no submitting
+    // user. Its recipient set is already constrained by the session watch.
+    if (userId !== undefined && (client.__satiUserId ?? null) !== userId) return;
+    client.send(payload);
+  });
+}
 
 // Broadcast progress to all connected WebSocket clients
 function broadcastProgress(progress) {
@@ -2389,17 +2454,114 @@ function handleChatConnection(ws, request) {
 
   // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
   const writer = new WebSocketWriter(ws, userId);
+  const streamWriter = {
+    send: data => broadcastChatFrame(data, ws, userId),
+  };
 
-  // P3: chat frames (sati-command / abort-session / permission-response /
-  // elicitation-response / watch-session) are retired — the browser talks
-  // to the gateway directly. This socket only serves non-chat introspection.
   ws.on("message", async message => {
     try {
       const data = JSON.parse(message);
 
       if (data.type === "ping") return;
+      const requestSessionId = normalizeSessionId(data.sessionId);
 
-      if (data.type === "session-permission-grant") {
+      if (data.type === "watch-session") {
+        if (requestSessionId) {
+          sessionWatchRegistry.watch(requestSessionId, ws);
+        }
+        return;
+      }
+
+      if (data.type === "unwatch-session") {
+        if (requestSessionId) {
+          sessionWatchRegistry.unwatch(requestSessionId, ws);
+        }
+        return;
+      }
+
+      if (
+        data.type === "sati-command" ||
+        // Deprecated: legacy per-provider frame types kept for back-compat.
+        data.type === "claude-command" ||
+        data.type === "cursor-command" ||
+        data.type === "codex-command" ||
+        data.type === "gemini-command"
+      ) {
+        console.log("[DEBUG] User message:", data.command || "[Continue/Resume]");
+        console.log("📁 Project:", data.options?.projectPath || data.options?.cwd || "Unknown");
+        console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
+        const commandSessionId = normalizeSessionId(data.options?.sessionId || data.options?.sessionKey);
+        if (commandSessionId) {
+          sessionWatchRegistry.watch(commandSessionId, ws);
+          const userVisibleInput =
+            typeof data.options?.userVisibleInput === "string" ? data.options.userVisibleInput.trim() : "";
+          if (userVisibleInput) {
+            const nowIso = new Date().toISOString();
+            const provider = data.options?.providerHint || "sati";
+            const optimisticUserFrame = createNormalizedMessage({
+              id: `local_ws_user_${crypto.randomUUID()}`,
+              sessionId: commandSessionId,
+              provider,
+              kind: "text",
+              role: "user",
+              content: userVisibleInput,
+              ...(Array.isArray(data.options?.attachments) && data.options.attachments.length > 0
+                ? { attachments: data.options.attachments }
+                : {}),
+              timestamp: nowIso,
+            });
+            const optimisticStatusFrame = createNormalizedMessage({
+              id: `local_ws_status_${crypto.randomUUID()}`,
+              sessionId: commandSessionId,
+              provider,
+              kind: "status",
+              text: "Processing",
+              canInterrupt: true,
+              timestamp: nowIso,
+            });
+            // The submitting tab already rendered its optimistic user row.
+            // Push only to sibling watchers so they mirror instantly.
+            broadcastToSessionWatchers(commandSessionId, optimisticUserFrame, userId, ws);
+            broadcastToSessionWatchers(commandSessionId, optimisticStatusFrame, userId, ws);
+          }
+        }
+        const providerHint = data.options?.providerHint || data.type.replace("-command", "");
+        await runChatViaGateway(data.command, data.options, streamWriter, providerHint);
+      } else if (data.type === "abort-session") {
+        console.log("[DEBUG] Abort session request:", data.sessionId);
+        const provider = data.provider || "sati";
+        const success = await abortViaGateway(data.sessionId, provider);
+        writer.send(
+          createNormalizedMessage({
+            kind: "complete",
+            exitCode: success ? 0 : 1,
+            aborted: true,
+            success,
+            sessionId: data.sessionId,
+            provider,
+          }),
+        );
+      } else if (data.type === "permission-response") {
+        if (data.requestId) {
+          await decidePermissionViaGateway(data.requestId, data.allow ? "allow" : "deny", {
+            remember: Boolean(data.rememberEntry),
+            reason: data.message,
+          });
+          const resolvedSessionId = normalizeSessionId(data.sessionId);
+          if (resolvedSessionId) {
+            broadcastToSessionWatchers(
+              resolvedSessionId,
+              createNormalizedMessage({
+                kind: "permission_cancelled",
+                requestId: data.requestId,
+                sessionId: resolvedSessionId,
+                provider: data.provider || "sati",
+              }),
+              userId,
+            );
+          }
+        }
+      } else if (data.type === "session-permission-grant") {
         const result = await grantSessionPermissionViaGateway(data.sessionId, data.entry);
         ws.send(
           JSON.stringify({
@@ -2411,8 +2573,28 @@ function handleChatConnection(ws, request) {
             ...(typeof result.entry === "string" ? { grantedEntry: result.entry } : {}),
           }),
         );
+      } else if (data.type === "elicitation-response") {
+        if (data.requestId) {
+          await elicitationRespondViaGateway(data.requestId, data.answer);
+          const resolvedSessionId = normalizeSessionId(data.sessionId);
+          if (resolvedSessionId) {
+            broadcastToSessionWatchers(
+              resolvedSessionId,
+              createNormalizedMessage({
+                kind: "permission_cancelled",
+                requestId: data.requestId,
+                sessionId: resolvedSessionId,
+                provider: data.provider || "sati",
+              }),
+              userId,
+            );
+          }
+        }
       } else if (data.type === "check-session-status") {
         const sessionId = data.sessionId;
+        if (normalizeSessionId(sessionId)) {
+          sessionWatchRegistry.watch(sessionId, ws);
+        }
         const isProcessing = isSessionActiveViaGateway(sessionId);
         const includeActiveTurnMessages = data.includeActiveTurnMessages !== false;
         const activeTurnMessages =
@@ -2460,6 +2642,7 @@ function handleChatConnection(ws, request) {
     cleanedUp = true;
     // Remove from connected clients
     connectedClients.delete(ws);
+    sessionWatchRegistry.removeClient(ws);
   };
 
   ws.on("close", (code, reason) => {

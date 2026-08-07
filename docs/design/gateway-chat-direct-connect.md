@@ -1,6 +1,6 @@
-# 浏览器直连聊天（P2b → P3）设计文档
+# 浏览器直连聊天（P2b）设计草案
 
-> 状态：**P3 已完成（2026-08-07）——直连为默认，ui/server 聊天中转已退役**｜前置：P0（协议协商 + alias + token 通道）、P1（只读方法双轨试点）、P2b-0〜4 已完成（2026-08-05）
+> 状态：草案（2026-08-05）｜前置：P0（协议协商 + alias + token 通道）、P1（只读方法双轨试点）已完成｜**P2b-0 已完成（2026-08-05）**
 
 ## 1. 背景与现状
 
@@ -118,11 +118,6 @@ WebGatewayEvent ──▶ webEventToChatMessage(event, sessionId) ──▶ 前�
 | P2b-2 | ✅ 已完成 | 协议层增强：`GatewayBrowserClient` 区分用户 close 与意外断线，新增 `onDisconnect` / `reconnect()`（reconnecting 标志抑制误触发，`gatewayReconnect.test.ts` 4 用例）；`ui/src/chat/useReconnect.ts`（connection 抽象解耦 + runningRef 防并发 + 断线自动恢复/手动 retry，`useReconnect.test.ts` 5 用例）。**实现语义修订**：恢复由草案的“按 (runId, seq) 逐条去重”改为**按 runId 重置式全量重放**——snapshot.events 无 seq 字段，逐条去重需内容指纹（脆弱）；重置由调用方 replayEvents 承担（P2b-3 接线时按 runId 重置实时增量），无重复由重置保证、无丢失由 snapshot 全量保证 |
 | P2b-3 | ✅ 已完成 | `gatewayChatMapper.ts`（sati-command/abort-session/permission-response/elicitation-response → 协议调用，10 用例）；`useGatewayDirectChat.ts`（WebSocketContext 等价实现：sendMessage 映射 + submitTurn 流→adapter→广播 + 断线自动重连，5 集成用例 mock ws 全流程）；`WebSocketContext` 双轨开关 `VITE_GATEWAY_DIRECT_CHAT=1`（Provider 拆为 Legacy/Direct 两组件，Chat 组件零改动）；`api.js` 导出 `getGatewayClient`。**收尾接线（断线恢复补齐）**：接入 `useReconnect`（onDisconnect → 自动 reconnect → 活跃会话取 `active_turn_snapshot` 全量重放，onRecovered 后移除活跃标记）；`runTurn` 断线保留语义——`AsyncEventQueue.fail` 对挂起 waiter 用 `done:true` 静默结束（for await 正常退出不抛错），故以 `client.connected` 区分正常完成/断线中断（断线保留活跃标记交恢复接管）；异步 client 初始化下断线订阅用 pending 队列补注册；`clientReady` state 驱动 isConnected（ref 赋值不触发重渲染）；暴露 `retryReconnect` 供 UI 手动重试（自动 recover 失败后保持 reconnecting）。**已知限制（记录）**：不做并发 turn 排队（gateway 侧行为决定） |
 | P2b-4 | ✅ 已完成 | `gatewayBroadcast.ts`（BroadcastChannel 封装：post 不回传自身、订阅/取消，3 用例）；`useGatewayDirectChat` 集成跨标签页镜像（本地 broadcast + 广播订阅，多标签页集成用例：A 发起 turn → B 实时收到镜像，B 不经 ws 流）；**多标签页验收主项达成**（双标签页同会话实时镜像；各标签页独立连接/独立断线，天然隔离）。**watch 通道退役推迟**：`session-watch-registry` / `watch-session` 帧 / `broadcastToSessionWatchers` 仍被 Legacy（非直连）模式使用（默认开关未切换），删除会破坏现网聊天——待直连成为默认（P3）后一并退役；`permission-response` 旧路径同理保留 |
-| P3-1/2 | ✅ 已完成 | 通知协议支持：`src/web/client/protocol.ts` 新增 `WebNotificationFrame`（镜像服务端 `WsNotificationFrame`）；`GatewayBrowserClient.onNotification()` 分发 `notification` 帧（handler 列表跨连接存活，重连无需重注册）；`browser-client-notification.spec.ts` 4 用例全绿 |
-| P3-3 | ✅ 已完成 | Always-On 事件直收：`alwaysOnTurnForwarder.ts`（载荷类型守卫 + knownSessions 生命周期 + 归一化广播）；直连 Provider 订阅 `always-on:turn-event` 通知（每标签页各自收到 gateway 广播，只走 broadcastLocal，**不再经 BroadcastChannel 跨标签页转发**，避免镜像重复）；2 用例新增全绿 |
-| P3-4 | ✅ 已完成 | 合并式单 Provider：`UnifiedGatewayWebSocketProvider` 聊天流量走 gateway 直连，ui/server `/ws` 降级为纯事件通道（projects_updated / loading_progress / config:reloaded / taskmaster-* / session-status），两传输合流同一 subscribe/latestMessage；出站帧由 `mapOutgoingMessage` 分流（可映射→直连，ignore→事件通道）。开关语义先反转为直连默认，后随 P3-5 完全移除（见 §9） |
-| P3-5 | ✅ 已完成 | 聊天中转退役：ui/server `/ws` 删除 watch-session / unwatch-session / sati-command（含 4 个 legacy 别名）/ abort-session / permission-response / elicitation-response 帧分支与乐观帧广播，保留 ping / check-session-status / get-pending-permissions / get-active-sessions / session-permission-grant；`session-watch-registry.js` 删除；sati-bridge 删除 `abortViaGateway` / `decidePermissionViaGateway` / `elicitationRespondViaGateway` / `registerAlwaysOnNotificationForwarding`（**`runChatViaGateway` 保留**——git 提交消息生成与 Agent API 两个 REST 路由仍在使用）；前端删除 `useSessionWatch.ts` 及 ChatInterfaceV2 接线 |
-| P3-6 | ✅ 已完成 | 全量验证：根目录 tsc/build、ui `tsc --noEmit` + vitest 88 文件 552 用例全绿、biome 通过 |
 
 ### 验收标准
 
@@ -141,23 +136,11 @@ WebGatewayEvent ──▶ webEventToChatMessage(event, sessionId) ──▶ 前�
 | 前端事件模型与 adapter 输出存在语义缝隙（乐观帧/状态机差异） | P2b-0 以"全事件类型映射表"单测锁死；对比 `createNormalizedMessage` 逐字段对齐 |
 | snapshot 全量重放对长 turn 成本高 | `truncated` 窗口化 + 按 seq 去重；transcript 兜底 |
 | 多标签页 BroadcastChannel 失效场景 | 降级为独立恢复（C），正确性不依赖广播 |
-| 双轨长期共存导致行为分叉 | 每阶段验收后推进；P2b-4 完成后移除开关默认值改为直连（P3 已完成） |
+| 双轨长期共存导致行为分叉 | 每阶段验收后推进；P2b-4 完成后移除开关默认值改为直连 |
 | gateway 重启导致 token/连接失效 | 复用 `getGatewayClient` 的失败重试 + token 重新领取（`resetGatewayClient` 已支持） |
 
 ## 8. 不做（本期明确排除）
 
 - `applyWebGatewayEvent` 模型接入（与现有前端消息管线并存会造成双轨）；
 - 聊天转录历史迁移 / transcript 格式改动；
-- 非 sati 品牌（pilotdeck-bridge）的直连适配——chat 已仅支持 sati，pilotdeck 侧随后续版本退役；
-- tokenBudget 富化复刻：sati-bridge 的 `context_budget` → sessionState 有状态富化（含 compact 后的预算折算）未移植到直连链路，直连模式已验证可容忍该信息缺失（预算展示降级）。
-
-## 9. P3 落地后的架构终态
-
-```
-浏览器 ──GatewayBrowserClient──▶ ws://127.0.0.1:19789/ws（聊天：submit_turn/abort/permission/elicitation + notification 广播）
-浏览器 ──WebSocket(/ws)──▶ ui/server（仅非聊天事件：projects_updated / loading_progress / config:reloaded / taskmaster-* / session-status 查询）
-REST（git 提交消息、Agent API）──▶ ui/server routes ──runChatViaGateway──▶ gateway
-```
-
-- `WebSocketProvider` 对外契约不变（subscribe/latestMessage/sendMessage/isConnected/reconnectInfo），业务组件零感知；
-- `VITE_GATEWAY_DIRECT_CHAT` 双轨开关已完全移除：服务端聊天中转退役后 legacy 分支已无聊天能力，保留只会造成误导；如托管模式（IS_PLATFORM）gateway 端口不可达，需要另行提供降级方案（不在本期范围）。
+- 非 sati 品牌（pilotdeck-bridge）的直连适配——chat 已仅支持 sati，pilotdeck 侧随后续版本退役。

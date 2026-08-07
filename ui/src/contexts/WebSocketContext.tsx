@@ -2,7 +2,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../components/auth/context/AuthContext";
 import { useGatewayDirectChatProviderState } from "../chat/useGatewayDirectChat";
-import { mapOutgoingMessage } from "../chat/gatewayChatMapper";
 import { IS_PLATFORM } from "../constants/config";
 
 type WSSubscriber = (msg: any) => void;
@@ -284,81 +283,24 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   return value;
 };
 
-/**
- * P3 合并式 Provider（直连为唯一路径）：
- *   - 聊天流量（sati-command / abort-session / permission-response /
- *     elicitation-response）→ gateway 直连（useGatewayDirectChatProviderState）；
- *   - 非聊天事件（projects_updated / loading_progress / config:reloaded /
- *     taskmaster-* / session-status 等）→ ui/server /ws 事件通道
- *     （useWebSocketProviderState，降级为只收广播 + 状态查询）。
- * 两条传输合流到同一个 subscribe 通道，Chat 组件零改动。
- */
-function UnifiedGatewayWebSocketProvider({ children }: { children: React.ReactNode }) {
-  const direct = useGatewayDirectChatProviderState();
-  const eventChannel = useWebSocketProviderState();
+function LegacyWebSocketProvider({ children }: { children: React.ReactNode }) {
+  const webSocketData = useWebSocketProviderState();
+  return <WebSocketContext.Provider value={webSocketData}>{children}</WebSocketContext.Provider>;
+}
 
-  // latestMessage 语义与 legacy 一致：只承载事件通道的低频结构性事件
-  // （事件通道已在 onmessage 中过滤流式噪声）。聊天流帧（stream_delta 等）
-  // 全部经 subscribe 通道分发，不进 latestMessage——避免每条流式帧触发
-  // useProjectsState 等消费方 re-render。
-  const latestMessage = eventChannel.latestMessage;
-
-  const sendMessage = useCallback(
-    (message: any) => {
-      const call = mapOutgoingMessage(message);
-      if (call.kind === "non_chat") {
-        // 非聊天协议帧 → 事件通道（ui/server /ws）。
-        eventChannel.sendMessage(message);
-      } else if (call.kind !== "ignore") {
-        // 聊天帧 → gateway 直连；ignore（缺必要字段的无效聊天帧）直接丢弃，
-        // 不泄漏到事件通道。
-        direct.sendMessage(message);
-      }
-    },
-    [direct, eventChannel],
-  );
-
-  const subscribe = useCallback(
-    (handler: WSSubscriber) => {
-      const unsubscribeDirect = direct.subscribe(handler);
-      const unsubscribeEvents = eventChannel.subscribe(handler);
-      return () => {
-        unsubscribeDirect();
-        unsubscribeEvents();
-      };
-    },
-    [direct, eventChannel],
-  );
-
-  const value: WebSocketContextType = useMemo(
-    () => ({
-      ws: eventChannel.ws,
-      sendMessage,
-      latestMessage,
-      // 聊天是主链路：连接状态/重连信息以 gateway 直连为准。
-      isConnected: direct.isConnected,
-      reconnectInfo: direct.reconnectInfo,
-      retryReconnect: direct.retryReconnect,
-      subscribe,
-    }),
-    [
-      eventChannel.ws,
-      sendMessage,
-      latestMessage,
-      direct.isConnected,
-      direct.reconnectInfo,
-      direct.retryReconnect,
-      subscribe,
-    ],
-  );
-
-  return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>;
+function DirectGatewayWebSocketProvider({ children }: { children: React.ReactNode }) {
+  const webSocketData = useGatewayDirectChatProviderState();
+  return <WebSocketContext.Provider value={webSocketData}>{children}</WebSocketContext.Provider>;
 }
 
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
-  // P3：直连为唯一路径——聊天流量直连 gateway，ui/server /ws 仅作非聊天事件通道。
-  // 原 VITE_GATEWAY_DIRECT_CHAT 双轨开关已随服务端中转退役（P3-5）一并移除。
-  return <UnifiedGatewayWebSocketProvider>{children}</UnifiedGatewayWebSocketProvider>;
+  // P2b-3 双轨开关：VITE_GATEWAY_DIRECT_CHAT=1 时聊天直连 gateway（浏览器 ws），
+  // 默认走 ui/server /ws 中转。两个 provider 返回同构结构，Chat 组件零改动。
+  const directChatEnabled = import.meta.env.VITE_GATEWAY_DIRECT_CHAT === "1";
+  if (directChatEnabled) {
+    return <DirectGatewayWebSocketProvider>{children}</DirectGatewayWebSocketProvider>;
+  }
+  return <LegacyWebSocketProvider>{children}</LegacyWebSocketProvider>;
 };
 
 export default WebSocketContext;

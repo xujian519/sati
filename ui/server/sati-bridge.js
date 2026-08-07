@@ -854,6 +854,46 @@ async function recordGatewayStatusMessage(gateway, { sessionKey, turnId, project
   }
 }
 
+export async function abortViaGateway(sessionId, _provider = "sati") {
+  const gw = await ensureGateway();
+  const sessionKey = isSatiSessionKey(sessionId) ? sessionId : null;
+  if (!sessionKey) return false;
+  const state = sessionState.get(sessionKey);
+  try {
+    const runId = state?.runId;
+    await gw.abortTurn({ sessionKey, runId });
+    if (state && (!runId || state.runId === runId)) {
+      state.active = false;
+      state.runId = undefined;
+    }
+    return true;
+  } catch (error) {
+    console.warn("[sati-bridge] abortTurn failed:", error);
+    return false;
+  }
+}
+
+export async function decidePermissionViaGateway(requestId, decision, options = {}) {
+  const gw = await ensureGateway();
+  // PermissionBus is keyed by sessionKey + requestId. We don't know
+  // which session owns the request, so try each known session.
+  for (const state of sessionState.values()) {
+    try {
+      const result = await gw.permissionDecide({
+        sessionKey: state.sessionKey,
+        requestId,
+        decision: decision === "allow" || decision === true ? "allow" : "deny",
+        remember: options.remember,
+        reason: options.reason,
+      });
+      if (result?.delivered) return true;
+    } catch (error) {
+      console.warn("[sati-bridge] permissionDecide failed:", error);
+    }
+  }
+  return false;
+}
+
 export async function grantSessionPermissionViaGateway(sessionId, entry) {
   const gw = await ensureGateway();
   if (!isSatiSessionKey(sessionId) || typeof entry !== "string" || !entry.trim()) {
@@ -1788,4 +1828,113 @@ export function getRouterStatsSummary() {
     },
     lastUpdatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Register a notification handler that forwards Always-On turn events
+ * to all connected browser WebSocket clients as NormalizedMessage frames.
+ *
+ * Called once from `index.js` after the WebSocket server is ready, passing
+ * the shared `connectedClients` set.
+ *
+ * @param {Set<import('ws').WebSocket>} clients
+ */
+export function registerAlwaysOnNotificationForwarding(clients, forwardToSessionWatchers) {
+  const knownSessions = new Set();
+
+  const forwardFrame = (sessionId, frame) => {
+    if (typeof forwardToSessionWatchers === "function") {
+      forwardToSessionWatchers(sessionId, frame);
+      return;
+    }
+
+    // Compatibility fallback for embedders that have not supplied a
+    // watcher registry yet. The main UI server always uses the scoped path.
+    const msg = JSON.stringify(frame);
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(msg);
+    }
+  };
+
+  ensureGateway()
+    .then(gw => {
+      gw.onNotification((name, payload) => {
+        if (name !== "always-on:turn-event") return;
+        const { sessionKey, channelKey, event } = payload ?? {};
+        if (!sessionKey || !event) return;
+
+        const provider = "sati";
+
+        if (!knownSessions.has(sessionKey)) {
+          knownSessions.add(sessionKey);
+          const createdFrame = createNormalizedMessage({
+            provider,
+            sessionId: sessionKey,
+            kind: "session_created",
+            newSessionId: sessionKey,
+            sessionKey,
+            channelKey,
+          });
+          forwardFrame(sessionKey, createdFrame);
+        }
+
+        if (event.type === "context_budget") {
+          const aoState = ensureSessionState(sessionKey, "", channelKey || "web");
+          aoState.tokenBudget = {
+            used: event.used,
+            displayUsed: event.displayUsed,
+            budgetUsed: event.budgetUsed,
+            total: event.total,
+            effectiveTotal: event.effectiveTotal,
+            reservedOutputTokens: event.reservedOutputTokens,
+            ratio: event.ratio,
+            state: event.state,
+          };
+        }
+        const aoState = ensureSessionState(sessionKey, "", channelKey || "web");
+        const compactTokenBudget =
+          event.type === "agent_status" && event.event === "compact_completed"
+            ? tokenBudgetFromCompact(aoState.tokenBudget, event.detail)
+            : null;
+        const eventForFrames = compactTokenBudget
+          ? {
+              ...event,
+              detail: {
+                ...(event.detail || {}),
+                tokenBudget: compactTokenBudget,
+              },
+            }
+          : event;
+        if (compactTokenBudget) {
+          aoState.tokenBudget = compactTokenBudget;
+        }
+        for (const frame of gatewayEventToFrames(eventForFrames, sessionKey, provider)) {
+          forwardFrame(sessionKey, frame);
+        }
+
+        if (event.type === "turn_completed") {
+          knownSessions.delete(sessionKey);
+        }
+      });
+    })
+    .catch(err => {
+      console.warn("[sati-bridge] failed to register always-on notification forwarding:", err?.message || err);
+    });
+}
+
+export async function elicitationRespondViaGateway(requestId, answer) {
+  const gw = await ensureGateway();
+  for (const state of sessionState.values()) {
+    try {
+      const result = await gw.respondElicitation({
+        sessionKey: state.sessionKey,
+        requestId,
+        answer,
+      });
+      if (result?.delivered) return true;
+    } catch (error) {
+      console.warn("[sati-bridge] respondElicitation failed:", error);
+    }
+  }
+  return false;
 }

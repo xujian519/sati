@@ -13,6 +13,7 @@ import { useChatComposerState } from "../chat/hooks/useChatComposerState";
 import { getThinkingModeAvailability } from "../chat/constants/thinkingModeAvailability";
 import { useSessionStore } from "../../stores/useSessionStore";
 import { getDraftInputStorageKey, safeLocalStorage } from "../chat/utils/chatStorage";
+import { useSessionWatch } from "../../hooks/useSessionWatch";
 import MessagesPaneV2 from "./MessagesPaneV2";
 import ComposerV2 from "./ComposerV2";
 import {
@@ -171,6 +172,9 @@ function ChatInterfaceV2({
     pendingViewSessionRef,
     sessionStore,
   });
+
+  const watchedSessionId = selectedSession?.id || currentSessionId || null;
+  useSessionWatch({ sessionId: watchedSessionId, ws, sendMessage });
 
   const {
     input,

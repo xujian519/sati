@@ -11,24 +11,13 @@ import path from "path";
 import os from "os";
 
 /**
- * Sati 用户级 MCP 配置候选路径。当前主路径为 `~/.sati/mcp.json`
- * （与 `src/mcp/config/loadMcpServerConfig.ts` 的 `MCP_CONFIG_FILE_NAME`
- * 对齐，Sati 运行时只读取它）；`.sati.json` / `settings.json` 为历史
- * 遗留兼容，运行时不再读取，保留仅为旧版迁移过渡。
- */
-const SATI_USER_CONFIG_PATHS = [
-  path.join(os.homedir(), ".sati.json"),
-  path.join(os.homedir(), ".sati", "settings.json"),
-  path.join(os.homedir(), ".sati", "mcp.json"),
-];
-
-/**
  * Check if task-master-ai MCP server is configured
  * @returns {Promise<Object>} MCP detection result
  */
 export async function detectTaskMasterMCPServer() {
   try {
-    const configPaths = SATI_USER_CONFIG_PATHS;
+    const homeDir = os.homedir();
+    const configPaths = [path.join(homeDir, ".sati.json"), path.join(homeDir, ".sati", "settings.json")];
 
     let configData = null;
     let configPath = null;
@@ -160,7 +149,8 @@ export async function detectTaskMasterMCPServer() {
  */
 export async function getAllMCPServers() {
   try {
-    const configPaths = SATI_USER_CONFIG_PATHS;
+    const homeDir = os.homedir();
+    const configPaths = [path.join(homeDir, ".sati.json"), path.join(homeDir, ".sati", "settings.json")];
 
     let configData = null;
     let configPath = null;

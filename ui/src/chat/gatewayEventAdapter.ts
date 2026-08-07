@@ -6,15 +6,13 @@
  * `ui/server/sati-bridge.js` / `ui/server/pilotdeck-bridge.js` 的
  * `gatewayEventToFrames` 共用同一份实现，消除双轨漂移。
  *
- * 直连模式在共享核心之上叠加带状态的 subagent 扩展层（`subagentFrames.ts`）：
- * gateway 的 `agent_status`（subagent_started/completed/status、subagent_text_delta
- * 等）→ `agent_activity` / `subagent_link` / subagent-detail 帧，与退役
- * sati-bridge 扩展层语义一致（P2b 补齐）。
+ * 已知差异（显式）：直连模式不产出 subagent 活动帧（`agent_activity` /
+ * `subagent_link`）——server 桥在共享核心之上叠加了带状态的 subagent 扩展层，
+ * 直连模式沿用该事件返回空帧（P2b 后续补）。
  */
 
 import type { WebGatewayEvent } from "@sati/web-client";
 import { mapGatewayEventToFrames } from "@sati/web-client";
-import { createSubagentFrames, trackPendingAgentToolCall } from "./subagentFrames";
 
 /** wire 帧：与 ui/server `createNormalizedMessage` 输出同构（无 id/timestamp envelope）。 */
 export type GatewayEventChatFrame = {
@@ -34,21 +32,5 @@ export function gatewayEventToChatFrames(
   sessionId: string,
   provider = "sati",
 ): GatewayEventChatFrame[] {
-  const base: { sessionId: string; provider: string; runId?: string } = {
-    sessionId,
-    provider,
-    ...(event.runId ? { runId: event.runId } : {}),
-  };
-
-  // subagent 活动帧：直连模式扩展层（agent_status 的 subagent_* 事件）。
-  if (event.type === "agent_status") {
-    const subagentFrames = createSubagentFrames(event, base);
-    if (subagentFrames && subagentFrames.length > 0) return subagentFrames;
-  }
-  // 记录 agent/task 工具调用，供 subagent_started 关联 subagent_link。
-  if (event.type === "tool_call_started") {
-    trackPendingAgentToolCall(event.toolCallId, event.name, sessionId);
-  }
-
   return mapGatewayEventToFrames(event, sessionId, provider) as GatewayEventChatFrame[];
 }
