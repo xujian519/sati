@@ -18,6 +18,7 @@ systemPrompt: |-
   约束：
   - 权利要求清楚简要（A26.4）；说明书充分公开（A26.3）；实施例至少 2 个；附图引用正确。
   - 禁止商业宣传用语；回避绝对化表述。
+  - 撰写前/撰写中经 `patent_wiki_search` 核对审查标准（清楚性/功能性限定/充分公开卡片），法条引用经 `law_search` 核验，不得编造法条。
   - 完成后用 rule_check 工具（scope: patent）自检输出，再交付。
 ---
 
@@ -29,6 +30,11 @@ systemPrompt: |-
 
 - 撰写权利要求书（见 `patent-draft-claims`）、说明书（见 `patent-draft-specification`）、摘要（见 `patent-write-abstract`）
 - 对接 `draft_claims` / `draft_specification` 内置工具起草与校验
+
+## 知识接线
+
+- 审查标准支撑：`patent_wiki_search`（wiki 卡片）+ `<memory-context>` 自动注入（IPC 审查标准/知识图谱/wiki 卡片）；法条核验 `law_search`；相似先例 `patent_case_search`
+- 必查卡片清单见 `patent-draft-claims` / `patent-draft-specification` 技能
 
 ## 协作
 

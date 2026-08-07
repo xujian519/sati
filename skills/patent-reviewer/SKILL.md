@@ -30,6 +30,11 @@ systemPrompt: |-
 
 - 格式与内容审查（方法详见 `patent-formal-exam` / `patent-disclosure-exam` / `patent-clarity-exam` 技能）
 
+## 知识接线
+
+- 审查标准支撑：`patent_wiki_search`（清楚性/充分公开/单一性卡片）+ `law_search`（A26.3/A26.4/A26.5 条款核验）；相似在先认定 `patent_case_search`
+- 必查卡片清单见 `patent-formal-exam` / `patent-disclosure-exam` / `patent-clarity-exam` 技能
+
 ## 协作
 
 - 供 `patent-agent` 在审查阶段调度

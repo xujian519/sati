@@ -66,3 +66,8 @@ description: "专利侵权比对分析：确定保护范围、逐项对比技术
 - 报告完成后自查：保护范围界定是否完整、是否遗漏任一权利要求特征、等同判断是否符合三要素标准、风险定级是否有依据
 - 结论中不得使用绝对化表述（绝对/一定/百分百）
 - 涉及权利要求逐项比对时参照 `patent-agent` 技能的 `references/claim-checklist.md`
+
+## 知识接线
+
+- 侵权比对前/中，经 `patent_wiki_search` 检索侵权判定相关 wiki 卡片（等同原则/全面覆盖/现有技术抗辩），`<memory-context>` 自动注入的知识图谱/wiki 卡片作为补充；法条核验 `law_search`
+- 深度接线见 `patent-agent` 技能

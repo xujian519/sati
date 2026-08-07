@@ -113,6 +113,32 @@ async function validateSkill(skillDir) {
   await walk(skillDir, "", stats, issues);
   if (stats.fileCount > MAX_FILE_COUNT) issues.push(`hard: ${slug} has >${MAX_FILE_COUNT} files`);
   if (stats.totalBytes > MAX_TOTAL_BYTES) issues.push(`hard: ${slug} total size exceeds 50MB`);
+
+  // 知识接线校验：专利/法律职责技能（slug 以 patent-/legal- 开头，或 role.domains 含 patent/legal）
+  // 除纯工具/外部数据类豁免外，应至少引用一个知识系统工具（patent_wiki_search / patent_case_search /
+  // law_search），防止技能文本完全脱离项目知识系统（knowledge.db）。warn 级（不阻断）。
+  const KNOWLEDGE_TOOLS = ["patent_wiki_search", "patent_case_search", "law_search"];
+  // 纯工具/外部数据类技能不依赖知识系统，豁免。
+  const KNOWLEDGE_EXEMPT = new Set([
+    "patent-download",
+    "patent-search",
+    "cnipa-query",
+    "google-patents-search",
+    "academic-search",
+    "chemical-structure-recognition",
+  ]);
+  const roleDomains = Array.isArray(fm.role?.domains) ? fm.role.domains : [];
+  const isPatentLegalSkill =
+    /^patent-|^legal-/.test(slug) || roleDomains.includes("patent") || roleDomains.includes("legal");
+  if (isPatentLegalSkill && !KNOWLEDGE_EXEMPT.has(slug)) {
+    const hasWiring = KNOWLEDGE_TOOLS.some(tool => content.includes(tool));
+    if (!hasWiring) {
+      issues.push(
+        `warn: ${slug} is a patent/legal skill but lacks knowledge-system wiring ` +
+          `(none of ${KNOWLEDGE_TOOLS.join(" / ")})`,
+      );
+    }
+  }
   return { slug, issues, lineCount };
 }
 

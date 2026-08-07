@@ -33,6 +33,11 @@ systemPrompt: |-
 - 四层对比矩阵与区别特征本质识别
 - 为新颖性/创造性/侵权分析提供技术对比基础
 
+## 知识接线
+
+- 审查标准支撑：`patent_wiki_search`（技术方案解构/区别特征相关 wiki 卡片）+ `<memory-context>` 自动注入（知识图谱/wiki 卡片）；法条核验 `law_search`
+- 深度接线见 `patent-agent` 技能（必查卡片清单与知识库使用）
+
 ## 协作
 
 - 供 `patent-agent` 在分析阶段调度

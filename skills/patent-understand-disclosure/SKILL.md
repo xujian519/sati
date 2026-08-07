@@ -67,3 +67,8 @@ extract/merge/groundedness/keywords/search/novelty 各原子阶段自动执行�
 再次调用会从零重跑并再次暂停；人工确认后的 draft_claims 阶段由主代理基于
 已产出的 PFE/新颖性结果用收口语义（`patent_workflow`）或撰写技能继续。
 （`patent_workflow` 工具是收口语义——阶段文本由主代理产出后收口校验，二者互补。）
+
+## 知识接线
+
+- PFE 提取与创新点识别后，经 `patent_wiki_search` 核对所属技术领域审查标准（wiki 卡片），`<memory-context>` 自动注入的知识图谱/wiki 卡片作为补充；法条核验 `law_search`
+- 深度接线见 `patent-agent` 技能

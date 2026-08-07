@@ -39,4 +39,5 @@ description: "专利摘要撰写：摘要规范（≤300字、含技术领域+�
 
 - 权利要求撰写：见 `patent-draft-claims`
 - 说明书撰写：见 `patent-draft-specification`
+- 知识接线：审查标准经 `patent_wiki_search` 检索、法条核验 `law_search`、深度接线见 `patent-agent`
 - 总控与质量门禁：见 `patent-agent`
