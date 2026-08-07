@@ -151,7 +151,9 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
         .join("");
 
       if (!text) {
-        if (attempt < maxAttempts) {
+        // finishReason=length：输出被 max_tokens 截断，重试（上下文不变）大概率
+        // 同样截断；直接降级默认 tier，避免 40K+ 上下文的无效重试空转。
+        if (response.finishReason !== "length" && attempt < maxAttempts) {
           continue;
         }
         input.telemetry?.trackFeatureLoopStage({
@@ -176,7 +178,9 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
 
       const tier = parseTier(text, knownTiers);
       if (!tier) {
-        if (attempt < maxAttempts) {
+        // finishReason=length 同理：截断的半截 <tier> 无法解析，重试大概率同样
+        // 截断，直接降级默认 tier。
+        if (response.finishReason !== "length" && attempt < maxAttempts) {
           continue;
         }
         input.telemetry?.trackFeatureLoopStage({

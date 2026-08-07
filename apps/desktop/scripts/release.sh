@@ -478,6 +478,53 @@ NODE_MODULES_EXCLUDES=(
   --exclude='node_modules/**/*.md'
 )
 
+# SATI_MAIN_ONLY_EXCLUDES: sati-main bundle 专属排除（不作用于 satiui）。
+# 这些是纯浏览器端 UI 依赖（已由 vite 打进 satiui/dist/，运行时不需要经
+# node_modules 解析）或 dev 工具，后端（src/）与 ui/server 均不引用——
+# 经 import 扫描验证零引用。排除后 sati-main-bundle.tar 从 ~1.1GB 降到
+# ~600MB 级，升级首启解压时间减半以上。
+SATI_MAIN_ONLY_EXCLUDES=(
+  --exclude='node_modules/.pnpm/echarts*'
+  --exclude='node_modules/.pnpm/@univerjs*'
+  --exclude='node_modules/.pnpm/mermaid*'
+  --exclude='node_modules/.pnpm/lucide-react*'
+  --exclude='node_modules/.pnpm/react-syntax-highlighter*'
+  --exclude='node_modules/.pnpm/prismjs*'
+  --exclude='node_modules/.pnpm/shiki*'
+  --exclude='node_modules/.pnpm/@shikijs*'
+  --exclude='node_modules/.pnpm/pdfjs-dist*'
+  --exclude='node_modules/.pnpm/tailwindcss*'
+  --exclude='node_modules/.pnpm/caniuse-lite*'
+  --exclude='node_modules/.pnpm/unicode-regex*'
+  --exclude='node_modules/.pnpm/katex*'
+  --exclude='node_modules/.pnpm/date-fns*'
+  --exclude='node_modules/.pnpm/rxjs*'
+  --exclude='node_modules/.pnpm/hono*'
+  --exclude='node_modules/.pnpm/jsdom*'
+  --exclude='node_modules/.pnpm/@biomejs*'
+  --exclude='node_modules/.pnpm/biome*'
+  --exclude='node_modules/.pnpm/eslint-plugin-*'
+  --exclude='node_modules/.pnpm/@typescript-eslint*'
+  --exclude='node_modules/.pnpm/app-builder-lib*'
+  --exclude='node_modules/.pnpm/@dnd-kit*'
+  --exclude='node_modules/.pnpm/framer-motion*'
+  --exclude='node_modules/.pnpm/clsx*'
+  --exclude='node_modules/.pnpm/class-variance-authority*'
+  --exclude='node_modules/.pnpm/@radix-ui*'
+  --exclude='node_modules/.pnpm/@floating-ui*'
+  --exclude='node_modules/.pnpm/@hookform*'
+  --exclude='node_modules/.pnpm/react-hook-form*'
+  --exclude='node_modules/.pnpm/sonner*'
+  --exclude='node_modules/.pnpm/@tanstack*'
+  --exclude='node_modules/.pnpm/recharts*'
+  --exclude='node_modules/.pnpm/@emotion*'
+  --exclude='node_modules/.pnpm/@mui*'
+  --exclude='node_modules/.pnpm/zod*'
+  --exclude='node_modules/.pnpm/@types+react*'
+  --exclude='node_modules/.pnpm/@types+react-dom*'
+  --exclude='node_modules/.pnpm/csstype*'
+)
+
 # satiui bundle: server/, dist/, shared/, scripts/, package.json, node_modules
 # Note: satiui server source is JS, no runtime .md imports → safe to also
 # strip top-level test/__tests__ dirs.
@@ -508,6 +555,7 @@ for f in package.json bunfig.toml preload.ts proxy.ts router.ts \
 done
 (cd "$SATI_MAIN_DIR" && tar cf "$PDM_BUNDLE" \
   "${NODE_MODULES_EXCLUDES[@]}" \
+  "${SATI_MAIN_ONLY_EXCLUDES[@]}" \
   --exclude='apps' --exclude='ui' --exclude='old_ui' \
   --exclude='docs' --exclude='tests' \
   --exclude='third-party' --exclude='dist/tests' --exclude='dist/scripts' \

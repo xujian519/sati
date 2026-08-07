@@ -60,6 +60,14 @@ function tierResponse(tier: string): CanonicalModelResponse {
   };
 }
 
+function lengthTruncatedResponse(text: string): CanonicalModelResponse {
+  return {
+    role: "assistant",
+    content: [{ type: "text", text }],
+    finishReason: "length",
+  };
+}
+
 test("judge 成功时返回解析出的 tier，且请求不带显式 temperature", async () => {
   const calls: Array<{
     request: Parameters<ModelRuntime["complete"]>[0];
@@ -192,5 +200,65 @@ test("provider 错误可重试时重试后成功，命中 judge 分级", async (
 
   assert.equal(decision?.resolvedFrom, "judge");
   assert.equal(decision?.tier, "simple");
+  assert.equal(calls.length, 2);
+});
+
+test("finishReason=length（截断）时不重试，直接降级默认 tier", async () => {
+  const calls: Array<{
+    request: Parameters<ModelRuntime["complete"]>[0];
+    options?: Parameters<ModelRuntime["complete"]>[1];
+  }> = [];
+  const decision = await classifyAndRoute({
+    config,
+    messages,
+    // 半截 <tier> 无法解析 + length 截断：应第一次就降级，不再重试
+    judgeRuntime: runtimeWithComplete(() => Promise.resolve(lengthTruncatedResponse("<tier>comp")), calls),
+  });
+
+  assert.equal(decision?.resolvedFrom, "fallback");
+  assert.equal(decision?.tier, config.defaultTier);
+  assert.equal(decision?.selection?.model, "simple");
+  assert.equal(calls.length, 1, "length 截断不应重试");
+});
+
+test("finishReason=length 且内容为空时不重试，直接降级", async () => {
+  const calls: Array<{
+    request: Parameters<ModelRuntime["complete"]>[0];
+    options?: Parameters<ModelRuntime["complete"]>[1];
+  }> = [];
+  const decision = await classifyAndRoute({
+    config,
+    messages,
+    judgeRuntime: runtimeWithComplete(() => Promise.resolve(lengthTruncatedResponse("")), calls),
+  });
+
+  assert.equal(decision?.resolvedFrom, "fallback");
+  assert.equal(calls.length, 1, "length 截断（空内容）不应重试");
+});
+
+test("非 length 的解析失败仍按原逻辑重试后成功", async () => {
+  const calls: Array<{
+    request: Parameters<ModelRuntime["complete"]>[0];
+    options?: Parameters<ModelRuntime["complete"]>[1];
+  }> = [];
+  let callCount = 0;
+  const decision = await classifyAndRoute({
+    config,
+    messages,
+    judgeRuntime: runtimeWithComplete(() => {
+      callCount += 1;
+      if (callCount === 1) {
+        return Promise.resolve({
+          role: "assistant" as const,
+          content: [{ type: "text" as const, text: "抱歉，我无法分类" }],
+          finishReason: "stop",
+        });
+      }
+      return Promise.resolve(tierResponse("complex"));
+    }, calls),
+  });
+
+  assert.equal(decision?.resolvedFrom, "judge");
+  assert.equal(decision?.tier, "complex");
   assert.equal(calls.length, 2);
 });

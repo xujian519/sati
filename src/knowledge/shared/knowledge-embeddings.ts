@@ -33,10 +33,18 @@ export type KnowledgeEmbeddingSearchOptions = {
   docTypes?: string[];
 };
 
+// 进程级共享矩阵缓存：同一 dbPath+docTypes 的 int8 量化矩阵只加载一次。
+// 否则每次会话/任务重建 KnowledgeEmbeddingSearch 都会重新加载 144069 chunk
+// （~147MB int8 矩阵），实测一天可触发数百次全量加载，显著拖慢会话启动。
+// LRU 上限 4 份，防止 docTypes 组合过多时内存膨胀。
+const MAX_MATRIX_CACHE = 4;
+const matrixCache = new Map<string, Int8ChunkMatrix>();
+
 export class KnowledgeEmbeddingSearch {
   private readonly db: DatabaseSync;
   private readonly logger?: { warn?: (...args: unknown[]) => void };
   private readonly docTypes?: string[];
+  private readonly dbPath: string;
   private readonly dimensions: number;
   /** docTypes 过滤后是否有可检索向量（构造时一次 COUNT；无命中直接不可用）。 */
   private readonly hasData: boolean;
@@ -50,6 +58,7 @@ export class KnowledgeEmbeddingSearch {
     this.db = new DatabaseSync(options.dbPath, { readOnly: true });
     this.logger = options.logger;
     this.docTypes = options.docTypes;
+    this.dbPath = options.dbPath;
 
     const filterList = this.docTypes && this.docTypes.length > 0 ? this.docTypes : undefined;
     this.joinSql = filterList ? " JOIN documents d ON d.id = e.document_id" : "";
@@ -109,6 +118,19 @@ export class KnowledgeEmbeddingSearch {
 
   private load(): Int8ChunkMatrix {
     if (this.data) return this.data;
+
+    // 进程级共享：命中缓存直接复用已量化矩阵，避免重复加载 144069 chunk。
+    const cacheKey = `${this.dbPath}|${(this.docTypes ?? []).join(",")}`;
+    const cached = matrixCache.get(cacheKey);
+    if (cached) {
+      // LRU 命中：刷新访问顺序
+      matrixCache.delete(cacheKey);
+      matrixCache.set(cacheKey, cached);
+      this.logger?.warn?.(`[knowledge-embeddings] 复用共享矩阵（${cached.chunkCount} chunks，key=${cacheKey}）`);
+      this.data = cached;
+      return cached;
+    }
+
     const dimensions = this.dimensions;
     const filterParams = this.filterParams;
 
@@ -135,6 +157,12 @@ export class KnowledgeEmbeddingSearch {
         this.logger?.warn?.(`[knowledge-embeddings] 已加载：${docCount} docs / ${chunkCount} chunks。`),
     );
     this.data = data;
+    // LRU 写入共享缓存（超上限淘汰最久未用）
+    matrixCache.set(cacheKey, data);
+    if (matrixCache.size > MAX_MATRIX_CACHE) {
+      const oldest = matrixCache.keys().next().value;
+      if (oldest !== undefined) matrixCache.delete(oldest);
+    }
     return data;
   }
 }

@@ -191,3 +191,54 @@ test("knowledge-embeddings: 异常向量长度（超维）安全截断", t => {
   assert.equal(hits.length, 1, "超维向量截断后应可检索");
   assert.equal(hits[0]!.docId, "d1");
 });
+
+test("knowledge-embeddings: 同 dbPath+docTypes 复用共享矩阵，不重复加载", t => {
+  const { search: first, dir } = createStore();
+  const dbPath = join(dir, "knowledge.db");
+  const logs: string[] = [];
+  const second = new KnowledgeEmbeddingSearch({ dbPath, logger: { warn: m => logs.push(String(m)) } });
+
+  t.after(() => {
+    first.close();
+    second.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  first.search(Float32Array.from([1, 0, 0, 0]), 3);
+  const firstCount = first.loadedChunkCount();
+  assert.equal(firstCount, 4, "首个实例应全量加载 4 个 chunk");
+
+  // 第二个实例同路径：命中进程级缓存，不重新加载
+  const hits = second.search(Float32Array.from([1, 0, 0, 0]), 3);
+  assert.equal(hits[0]!.docId, "d1");
+  assert.equal(second.loadedChunkCount(), 4);
+  assert.ok(
+    logs.some(m => m.includes("复用共享矩阵")),
+    `应命中共享矩阵缓存，实际日志: ${logs.join(" | ")}`,
+  );
+});
+
+test("knowledge-embeddings: 不同 docTypes 过滤不共享缓存", t => {
+  const { search: all, dir } = createStore();
+  const dbPath = join(dir, "knowledge.db");
+  const logs: string[] = [];
+  const filtered = new KnowledgeEmbeddingSearch({
+    dbPath,
+    docTypes: ["law_article"],
+    logger: { warn: m => logs.push(String(m)) },
+  });
+
+  t.after(() => {
+    all.close();
+    filtered.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  all.search(Float32Array.from([1, 0, 0, 0]), 3);
+  filtered.search(Float32Array.from([0, 1, 0, 0]), 3);
+  assert.equal(filtered.loadedChunkCount(), 1, "过滤实例应加载自己的子集");
+  assert.ok(
+    logs.some(m => m.includes("已加载：1 docs / 1 chunks")),
+    "不同 docTypes 应独立加载，实际日志: " + logs.join(" | "),
+  );
+});

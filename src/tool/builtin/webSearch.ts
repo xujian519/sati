@@ -85,7 +85,8 @@ export function createWebSearchTool(
   return {
     name: "web_search",
     aliases: ["WebSearch"],
-    description: `- Searches the web for current information using the configured GLM/Z.AI, Tavily, or custom provider
+    description: `- **Recommended general web search tool.** Backed by a cloud search API (Tavily/GLM/Z.AI), returns real results in ~1-3 seconds with structured organic results. Prefer this tool over locally-provided meta-search tools (e.g. MCP \`web_search\` backed by a local SearXNG instance), whose general web engines may be unavailable or slow.
+- Searches the web for current information using the configured GLM/Z.AI, Tavily, or custom provider
 - Takes a search query and optional country code (\`gl\`) as input
 - Returns structured search data including organic results and, when available, answer box content
 - Use this tool for current events, recent documentation, and information beyond the model's knowledge cutoff
