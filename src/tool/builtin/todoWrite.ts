@@ -22,6 +22,17 @@ export type TodoWriteOutput = {
   diagnostics?: SatiTodoDiagnostics;
 };
 
+/**
+ * Legacy checklist line format: `- [ ]` / `- [x]` / `- [X]` with optional
+ * leading whitespace and either `-` or `*` bullet. This is the canonical
+ * markdown checklist contract shared with the UI renderer:
+ *   ui/src/components/chat/tools/configs/toolConfigs.ts (parseTodoMarkdown)
+ * The two implementations MUST stay in sync — change the regex or the
+ * parse/status-assignment behavior here AND there, and keep the shared
+ * spec cases in tests/tool/builtin/todoWrite.spec.ts and
+ * ui/src/components/chat/tools/configs/toolConfigs.parseTodoMarkdown.spec.ts
+ * aligned (same inputs → same content/status sequences).
+ */
 const TODO_LINE_PATTERN = /^\s*[-*]\s+\[( |x|X)\]\s+(.*?)\s*$/u;
 
 function normalizeTodoUpdatesForFallback(todos: SatiTodoUpdate[]): SatiTodoItem[] {
