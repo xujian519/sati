@@ -37,7 +37,7 @@ import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
 import {
   CompositeMemoryResolver,
   KnowledgeRuntimeStats,
-  KnowledgeEmbeddingSearch,
+  createKnowledgeEmbeddingSearch,
   buildKnowledgeResolvers,
   logKnowledgeCapabilities,
   resolveKnowledgeCapabilities,
@@ -860,7 +860,7 @@ class ProjectRuntimeRegistry {
     // + 当前 embedding client。embedding 未配置或 knowledge.db 不可用时保持语义路关闭。
     if (embeddingClient && knowledgePaths.caseDb) {
       try {
-        const caseEmbeddings = new KnowledgeEmbeddingSearch({
+        const caseEmbeddings = createKnowledgeEmbeddingSearch({
           dbPath: knowledgePaths.caseDb,
           docTypes: ["case", "judgment"],
           logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },

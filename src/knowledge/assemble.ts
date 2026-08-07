@@ -12,7 +12,7 @@ import type { EmbeddingClient } from "../model/embedding/types.js";
 import type { RerankClient } from "../model/embedding/rerank.js";
 import { KgStore } from "./shared/kg-store.js";
 import { VectorDbSearch } from "./shared/vector-db.js";
-import { KnowledgeEmbeddingSearch } from "./shared/knowledge-embeddings.js";
+import { KnowledgeEmbeddingSearch, createKnowledgeEmbeddingSearch } from "./shared/knowledge-embeddings.js";
 import { checkEmbeddingConsistency } from "./shared/embedding-consistency.js";
 import type { KnowledgeRuntimeStats } from "./shared/knowledge-stats.js";
 import { PatentKgAdapter } from "./patent/patent-kg-adapter.js";
@@ -68,7 +68,7 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
   let legalEmbeddings: KnowledgeEmbeddingSearch | undefined;
   if (options.knowledgeDb && options.embedding) {
     try {
-      legalEmbeddings = new KnowledgeEmbeddingSearch({
+      legalEmbeddings = createKnowledgeEmbeddingSearch({
         dbPath: options.knowledgeDb,
         docTypes: ["law_article"],
         logger: options.logger,

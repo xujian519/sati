@@ -72,6 +72,7 @@ export { createLawSearchTool, type LawSearchToolInput, type LawSearchToolOutput 
 export { LegalMemoryProvider } from "./legal/legal-memory-provider.js";
 export {
   KnowledgeEmbeddingSearch,
+  createKnowledgeEmbeddingSearch,
   type KnowledgeEmbeddingHit,
   type KnowledgeEmbeddingSearchOptions,
 } from "./shared/knowledge-embeddings.js";

@@ -40,6 +40,24 @@ export type KnowledgeEmbeddingSearchOptions = {
 const MAX_MATRIX_CACHE = 4;
 const matrixCache = new Map<string, Int8ChunkMatrix>();
 
+// 进程级实例缓存：同一 dbPath+docTypes 复用同一实例（含 db 句柄与构造期
+// 的 dim 探测/COUNT 结果）。否则每次 ProjectRuntime 重建（如启动时 UI 对
+// 多个历史项目逐一 list_sessions）都会对 144069 行 embeddings 表做全表
+// COUNT 扫描，8 个项目即 16 次全表扫描，显著拖慢启动。
+const instanceCache = new Map<string, KnowledgeEmbeddingSearch>();
+
+/** 工厂：同 dbPath+docTypes 复用已构造实例（构造期全表 COUNT 只做一次）。 */
+export function createKnowledgeEmbeddingSearch(options: KnowledgeEmbeddingSearchOptions): KnowledgeEmbeddingSearch {
+  const key = `${options.dbPath}|${(options.docTypes ?? []).join(",")}`;
+  const existing = instanceCache.get(key);
+  if (existing) {
+    return existing;
+  }
+  const instance = new KnowledgeEmbeddingSearch(options);
+  instanceCache.set(key, instance);
+  return instance;
+}
+
 export class KnowledgeEmbeddingSearch {
   private readonly db: DatabaseSync;
   private readonly logger?: { warn?: (...args: unknown[]) => void };
@@ -104,6 +122,8 @@ export class KnowledgeEmbeddingSearch {
   }
 
   close(): void {
+    // 从进程级实例缓存移除，避免 close 后旧句柄被后续工厂调用复用。
+    instanceCache.delete(`${this.dbPath}|${(this.docTypes ?? []).join(",")}`);
     this.data = undefined;
     this.db.close();
   }

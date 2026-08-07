@@ -4,7 +4,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { KnowledgeEmbeddingSearch } from "../../src/knowledge/shared/knowledge-embeddings.js";
+import {
+  KnowledgeEmbeddingSearch,
+  createKnowledgeEmbeddingSearch,
+} from "../../src/knowledge/shared/knowledge-embeddings.js";
 
 /**
  * KnowledgeEmbeddingSearch 测试（knowledge.db embeddings 表复用 reader）。
@@ -241,4 +244,29 @@ test("knowledge-embeddings: 不同 docTypes 过滤不共享缓存", t => {
     logs.some(m => m.includes("已加载：1 docs / 1 chunks")),
     "不同 docTypes 应独立加载，实际日志: " + logs.join(" | "),
   );
+});
+
+test("knowledge-embeddings: createKnowledgeEmbeddingSearch 复用同 dbPath+docTypes 实例", t => {
+  const { dir } = createStore();
+  const dbPath = join(dir, "knowledge.db");
+  const options = { dbPath, docTypes: ["case"] };
+
+  const first = createKnowledgeEmbeddingSearch(options);
+  const second = createKnowledgeEmbeddingSearch(options);
+  t.after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  assert.equal(first, second, "同 dbPath+docTypes 应复用同一实例（构造期全表 COUNT 只做一次）");
+
+  // 不同 docTypes 不共享实例
+  const filtered = createKnowledgeEmbeddingSearch({ dbPath, docTypes: ["law_article"] });
+  assert.notEqual(filtered, first, "不同 docTypes 应各自构造");
+  filtered.close();
+
+  // close 后实例从缓存移除，下次工厂调用重新构造
+  first.close();
+  const recreated = createKnowledgeEmbeddingSearch(options);
+  assert.notEqual(recreated, first, "close 后不应复用已关闭实例");
+  recreated.close();
 });
