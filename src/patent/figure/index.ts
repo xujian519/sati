@@ -64,6 +64,31 @@ export {
 } from "./validator.js";
 
 export {
+  renderElectricalNetlistMermaid,
+  renderElectricalNetlistSvg,
+  formatElectricalSummary,
+  mermaidId,
+} from "./netlist-viz.js";
+
+export {
+  checkFigureConsistency,
+  type FigureConsistencyReport,
+  type ComponentConflict,
+} from "./multi-figure-consistency.js";
+
+export {
+  extractPdfPages,
+  extractPdfFigureCandidates,
+  extractPdfPagesFromFile,
+  renderPdfPageAsBase64,
+  openPdfDocument,
+  type PdfExtractOptions,
+  type PdfExtractedPage,
+  type PdfFigureCandidate,
+  type PdfTextBlock,
+} from "./pdf-extract.js";
+
+export {
   ELECTRICAL_SYMBOL_CATEGORIES,
   ELECTRICAL_SYMBOL_CATEGORY_NAMES,
   type ElectricalSymbolCategory,

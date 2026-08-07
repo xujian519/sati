@@ -1,6 +1,7 @@
 import {
   evaluateText,
   loadPatentComplianceRuleSet,
+  loadPatentElectricalRuleSet,
   loadSynonymsAsset,
   type RuleSet,
   type SynonymMap,
@@ -39,7 +40,9 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
       ? deps.loader(scope)
       : scope === "patent"
         ? loadPatentComplianceRuleSet().ruleSet
-        : { rules: [] };
+        : scope === "patent-electrical"
+          ? loadPatentElectricalRuleSet().ruleSet
+          : { rules: [] };
     cache.set(scope, ruleSet);
     return ruleSet;
   };
@@ -53,7 +56,8 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
     description:
       "Run deterministic constitutional rule checks (keyword blocklist / pattern / structural / citation range / synonym match) " +
       "against the given text and return violations with severity, action and legal basis. " +
-      "Use before publishing compliance-sensitive output (e.g. patent conclusions, legal opinions).",
+      "Use before publishing compliance-sensitive output (e.g. patent conclusions, legal opinions). " +
+      "Scopes: 'patent' (general patent compliance) or 'patent-electrical' (H-section electrical rules + general compliance).",
     kind: "session",
     inputSchema: {
       type: "object",
@@ -81,7 +85,7 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
           content: [
             {
               type: "text",
-              text: `rule_check(${scope}): 未加载任何规则（scope 未知或规则集为空）。可用 scope: patent`,
+              text: `rule_check(${scope}): 未加载任何规则（scope 未知或规则集为空）。可用 scope: patent, patent-electrical`,
             },
           ],
         };

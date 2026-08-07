@@ -47,11 +47,13 @@ export function extractClaimRefs(text: string | undefined, limit = 40): string[]
   const pattern = /(?:[\u4e00-\u9fa5]{0,6}?[A-Za-z]{1,4}\d{1,4})/g;
   for (const match of text.matchAll(pattern)) {
     const token = match[0];
-    const parsed = parseRefNumber(token);
+    // 从 token 末尾提取最可能的标号段（如“包括电阻R1” → “R1”）
+    const inner = /[A-Za-z]+\d+$/.exec(token);
+    if (!inner) continue;
+    const parsed = parseRefNumber(inner[0]);
     if (!parsed) continue;
     // 仅收录符号库已知前缀的标记（R1/C2/IC1…），排除普通文本数字
     if (querySymbolByRefPrefix(parsed.prefix).length === 0) continue;
-    // 中文+字母混排时可能截到前缀前的中文，取最后一个 token 段
     const ref = `${parsed.prefix}${parsed.number}`;
     found.add(ref);
     if (found.size >= limit) break;

@@ -1,0 +1,156 @@
+# H 部（电学）专利案件审查/撰写规则
+# 由宪法规则引擎加载（src/rule/），仅当 scope=patent-electrical 时与 compliance.yaml 合并使用。
+# 规则格式: id/name/domain/phase/severity/action/legalBasis/check
+
+version: "1.0"
+
+rules:
+  # ---------------------------------------------------------------------------
+  # 电学案件附图：电路图/框图应清晰、符号规范
+  # ---------------------------------------------------------------------------
+  electrical_figure_symbol_standard:
+    id: H-FIG-001
+    name: 电学附图符号规范
+    domain: patent-electrical
+    phase: 撰写
+    severity: minor
+    action: warn
+    legalBasis: 审查指南第一部分第一章 2.3；GB/T 4728 / IEC 60617 电气简图用图形符号
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 电路图或框图
+          description: 说明书或附图涉及电路结构
+          patterns:
+            - 电路
+            - 电路图
+            - 框图
+            - 原理图
+            - 电连接
+        - element: 符号规范性提示
+          description: 应提示使用标准电气符号
+          patterns:
+            - GB/T 4728
+            - IEC 60617
+            - 标准电气符号
+      minConfidence: 0.5
+
+  # ---------------------------------------------------------------------------
+  # 电学案件充分公开：电路连接关系、信号流、时序应清楚
+  # ---------------------------------------------------------------------------
+  electrical_enablement_connection:
+    id: H-ENA-001
+    name: 电学案件充分公开—连接关系与信号流
+    domain: patent-electrical
+    phase: 撰写
+    severity: major
+    action: warn
+    legalBasis: 专利法第26条第3款；审查指南第二部分第二章 2.1
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 电路/系统描述
+          description: 文本涉及电路、模块或系统
+          patterns:
+            - 电路
+            - 模块
+            - 单元
+            - 器件
+            - 芯片
+        - element: 连接或信号流描述
+          description: 应给出连接关系或信号流
+          patterns:
+            - 连接
+            - 耦合
+            - 电连接
+            - 信号流
+            - 时序
+            - 引脚
+            - 端口
+      minConfidence: 0.5
+
+  # ---------------------------------------------------------------------------
+  # 功能性限定：电学“模块/单元”需实施例支持
+  # ---------------------------------------------------------------------------
+  electrical_functional_limitation:
+    id: H-CLA-001
+    name: 电学功能性限定审查
+    domain: patent-electrical
+    phase: 撰写
+    severity: major
+    action: warn
+    legalBasis: 专利法第26条第4款；审查指南第二部分第二章 3.2.2
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 功能性限定
+          description: 权利要求中出现纯功能限定
+          patterns:
+            - 配置为
+            - 用于
+            - 模块
+            - 单元
+            - 装置
+        - element: 实施例支持
+          description: 说明书中应给出具体电路/算法实现
+          patterns:
+            - 实施例
+            - 具体电路
+            - 参考图
+            - 如图
+            - 示例
+      minConfidence: 0.5
+
+  # ---------------------------------------------------------------------------
+  # 电学案件权利要求清楚性：避免“等”泛化元件
+  # ---------------------------------------------------------------------------
+  electrical_claim_clarity:
+    id: H-CLA-002
+    name: 电学权利要求清楚性
+    domain: patent-electrical
+    phase: 撰写
+    severity: minor
+    action: warn
+    legalBasis: 专利法第26条第4款；审查指南第二部分第二章 3.2.1
+    check:
+      type: keyword_blocklist
+      keywords:
+        - "电阻等"
+        - "电容等"
+        - "晶体管等"
+        - "开关等"
+        - "传感器等"
+
+  # ---------------------------------------------------------------------------
+  # 通信案件：标准必要专利提示
+  # ---------------------------------------------------------------------------
+  electrical_sep_reminder:
+    id: H-SEP-001
+    name: 通信领域标准必要专利提示
+    domain: patent-electrical
+    phase: 审查
+    severity: minor
+    action: log
+    legalBasis: 专利法第22条第3款；通信领域SEP创造性判断需结合标准版本与必要性声明
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 通信/无线/协议主题
+          description: 案件涉及通信或协议
+          patterns:
+            - 通信
+            - 无线
+            - 协议
+            - 标准
+            - 基站
+            - 调制
+            - 解调
+        - element: SEP 相关性提示
+          description: 涉及标准时应提示SEP问题
+          patterns:
+            - 标准必要专利
+            - SEP
+            - 专利许可
+            - FRAND
+            - 声明
+      minConfidence: 0.5
