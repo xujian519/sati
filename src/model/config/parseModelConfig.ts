@@ -42,7 +42,10 @@ export function parseModelConfig(
 
   const providers: Record<string, ProviderConfig> = {};
   for (const [providerId, rawProvider] of Object.entries(rawConfig.providers)) {
-    providers[providerId] = parseProvider(providerId, rawProvider, options.env);
+    const parsed = parseProvider(providerId, rawProvider, options.env);
+    if (parsed) {
+      providers[providerId] = parsed;
+    }
   }
 
   return {
@@ -50,7 +53,21 @@ export function parseModelConfig(
   };
 }
 
-function parseProvider(providerId: string, rawProvider: unknown, env?: CredentialEnv): ProviderConfig {
+/**
+ * 判定 provider 是否为"纯占位 stub"：url、apiKey、models 全部为空。
+ * 这类条目由配置编辑器产生（新增 provider 行后未填写即保存），不承载
+ * 任何可用配置，parseProvider 对它们返回 null 由 parseModelConfig 跳过。
+ * 只要有一项有值（例如声明了 models 却漏 url），就按真实配置处理并报错。
+ */
+function isProviderStub(rawProvider: RawProviderConfig): boolean {
+  const url = typeof rawProvider.url === "string" ? rawProvider.url.trim() : "";
+  if (url.length > 0) return false;
+  const apiKey = typeof rawProvider.apiKey === "string" ? rawProvider.apiKey.trim() : "";
+  if (apiKey.length > 0) return false;
+  return !isRecord(rawProvider.models) || Object.keys(rawProvider.models).length === 0;
+}
+
+function parseProvider(providerId: string, rawProvider: unknown, env?: CredentialEnv): ProviderConfig | null {
   if (!isRecord(rawProvider)) {
     throw new ModelConfigError("invalid_provider", `Provider ${providerId} must be an object.`);
   }
@@ -70,6 +87,12 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
   const rawUrl =
     trimmedUrl.length > 0 ? trimmedUrl : resolveDefaultProviderUrl(providerId, protocol, catalogProvider?.defaultUrl);
   if (!rawUrl) {
+    // 纯占位 provider（url/apiKey/models 全空，例如配置编辑器里"新增
+    // provider"后未填写就保存的空行）没有任何可用配置：跳过而非抛错，
+    // 否则一个残留 stub 会让整个 gateway 启动失败。
+    if (isProviderStub(provider)) {
+      return null;
+    }
     throw new ModelConfigError("invalid_config_value", `Provider ${providerId} requires a url.`, { providerId });
   }
   assertValidUrl(rawUrl, providerId);

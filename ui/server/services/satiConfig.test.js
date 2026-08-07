@@ -222,4 +222,30 @@ describe("validateSatiConfig gateway validation", () => {
     expect(config.model.providers.ollama).not.toHaveProperty("apiKey");
     expect(config.model.providers.ollama.url).toBe("http://localhost:11434/v1");
   });
+
+  it("rejects an unreferenced provider stub missing url and apiKey", () => {
+    const validation = validateSatiConfig({
+      agent: { model: "deepseek/deepseek-v4-flash" },
+      model: {
+        providers: {
+          deepseek: {
+            protocol: "openai",
+            url: "https://api.deepseek.com/v1",
+            apiKey: "sk-test",
+            models: { "deepseek-v4-flash": {} },
+          },
+          provider1: {
+            protocol: "openai",
+            url: "",
+            apiKey: "",
+            models: {},
+          },
+        },
+      },
+    });
+
+    expect(validation.valid).toBe(false);
+    expect(validation.errors).toContain("model.providers.provider1.url is required");
+    expect(validation.errors).toContain("model.providers.provider1.apiKey is required");
+  });
 });

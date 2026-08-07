@@ -283,8 +283,15 @@ export function validateSatiConfig(config) {
     const main = resolveModel(normalized, mainRef, { allowMissing: true });
     if (!main) {
       errors.push(`agent.model="${mainRef}" doesn't resolve to a configured provider/model`);
-    } else {
-      validateProvider(main.providerId, main.provider, errors);
+    }
+  }
+
+  // 校验所有声明的 provider（不只 agent.model 引用的那个）：一个未被引用、
+  // 却缺少 url/apiKey 的 provider stub 会让 gateway 启动直接失败，必须先于
+  // 保存拦截。ollama 仍按 allowsMissingApiKey 放行 apiKey。
+  if (isRecord(normalized.model?.providers)) {
+    for (const [providerId, provider] of Object.entries(normalized.model.providers)) {
+      validateProvider(providerId, provider, errors);
     }
   }
 

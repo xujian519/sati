@@ -1023,6 +1023,11 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
         await sleep(HEALTH_POLL_MS);
       }
       if (!gwReady) {
+        // 记录真实退出状态：进程已自行退出时，"not listening within
+        // 45s" 是误导（实际是秒级退出）。exitCode/signalCode 在 Node
+        // 中由 child_process 设置，kill 前读取，kill 不会清除。
+        const exitCode = gwChild.exitCode;
+        const signal = gwChild.signalCode;
         // SIGTERM → 轮询退出 → SIGKILL 兜底（挂死的 gateway 不应泄漏 fd/管道）
         await this.killProcessGracefully(gwChild, ORPHAN_TERM_WAIT_MS);
         this.gatewayChild = null;
@@ -1030,7 +1035,9 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
         const tail = readTailSafe(logPath, 4000);
         const reason = gwSpawnErrors[0]
           ? `spawn error: ${gwSpawnErrors[0].message}`
-          : `not listening within ${GATEWAY_STARTUP_TIMEOUT_MS}ms`;
+          : exitCode !== null || signal !== null
+            ? `gateway exited early (exitCode=${exitCode}, signal=${signal ?? "none"})`
+            : `not listening within ${GATEWAY_STARTUP_TIMEOUT_MS}ms`;
         throw new Error(`Gateway failed to start on port ${GATEWAY_PORT} (${reason})\n--- log tail ---\n${tail}`);
       }
     }
