@@ -19,6 +19,12 @@
  * provider 装配（LLM + nuo-patent 检索）。
  */
 
+import {
+  HIGH_CONFIDENCE_THRESHOLD,
+  classifyIpcTop,
+  getIpcDomain,
+  type IpcClassification,
+} from "../knowledge/patent/ipc-classifier.js";
 import { SAFE_ID_PATTERN } from "./persist-utils.js";
 import type { ArticleJudgment, FactBlackboard } from "./reasoning/fact-blackboard.js";
 import type { WorkflowManifest, WorkflowStage } from "./workflow.js";
@@ -74,6 +80,13 @@ const now = (): string => new Date().toISOString();
 
 export type CreateFlexiblePlanOptions = {
   technicalField?: string;
+  /**
+   * 案件原始输入文本（如技术交底书摘要、权利要求主题）。
+   * 当 technicalField 未显式指定时，用于自动推断 IPC 技术领域。
+   */
+  inputText?: string;
+  /** 可注入的 IPC 分类器（测试用）。 */
+  classifier?: (text: string) => IpcClassification;
   /** 初始阶段（新计划全部置 pending）。 */
   stages?: FlexibleStage[];
   /** 可注入时钟（测试用）。 */
@@ -105,16 +118,55 @@ export function createFlexiblePlan(
     ids.add(s.id);
   }
 
+  const technicalField =
+    options.technicalField !== undefined
+      ? options.technicalField
+      : inferTechnicalField(options.inputText ?? "", options.classifier);
+
   return {
     caseId,
     caseType,
-    ...(options.technicalField !== undefined ? { technicalField: options.technicalField } : {}),
+    ...(technicalField !== undefined ? { technicalField } : {}),
     status: "active",
     stages,
     currentStageId: stages.length > 0 ? stages[0].id : undefined,
     createdAt: ts,
     updatedAt: ts,
   };
+}
+
+/** 把 IPC 分类结果格式化为 technicalField（例：H:电学 / H01:基本电气元件）。 */
+export function formatTechnicalField(classification: IpcClassification): string {
+  const sectionName = getIpcDomain(classification.section)?.name ?? classification.section;
+  const detail = classification.detail;
+  const code = detail ? `${classification.section} ${detail}` : classification.section;
+  const label = detail ? `${sectionName}-${classification.detail}` : sectionName;
+  return `${code}:${label}`;
+}
+
+/**
+ * 根据案件输入文本推断技术领域。
+ * 置信度低于高置信阈值时返回 undefined（避免低质量注入）。
+ */
+export function inferTechnicalField(
+  inputText: string,
+  classifier: (text: string) => IpcClassification = classifyIpcTop,
+): string | undefined {
+  if (!inputText.trim()) return undefined;
+  const top = classifier(inputText);
+  if (top.confidence < HIGH_CONFIDENCE_THRESHOLD) return undefined;
+  return formatTechnicalField(top);
+}
+
+/** 判断 IPC 分类是否属于电学（H 部）。 */
+export function isElectricalIpc(classification: IpcClassification): boolean {
+  return classification.section.toUpperCase() === "H";
+}
+
+/** 判断案件输入是否被识别为电学领域（H 部）。 */
+export function isElectricalCase(inputText: string): boolean {
+  if (!inputText.trim()) return false;
+  return isElectricalIpc(classifyIpcTop(inputText));
 }
 
 /** 追加阶段：新阶段置 pending；计划无当前阶段时指向新阶段。 */
