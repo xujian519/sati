@@ -1,13 +1,15 @@
-import {
-  LITELLM_COMPLETION_HTTP_FALLBACK_MS,
-  LITELLM_HTTP_CONNECTOR_LIMIT,
-  LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS,
-} from "../model/streaming/streamModel.js";
 import { brandEnv, ENV_KEY } from "../env.js";
 
 type EnvLike = Record<string, string | undefined>;
 
-export const UNDICI_TRANSPORT_TIMEOUT_MS = LITELLM_COMPLETION_HTTP_FALLBACK_MS;
+// Undici transport timeouts kept in sync with src/model/streaming/streamModel.ts
+// (LITELLM_* constants). Inlined here so this module stays a leaf dependency:
+// importing proxy.ts must not pull in the whole model streaming graph.
+const STREAM_HTTP_FALLBACK_TIMEOUT_MS = 600_000;
+const STREAM_HTTP_CONNECTOR_LIMIT = 1000;
+const STREAM_HTTP_KEEPALIVE_TIMEOUT_MS = 120_000;
+
+export const UNDICI_TRANSPORT_TIMEOUT_MS = STREAM_HTTP_FALLBACK_TIMEOUT_MS;
 
 type ProxyInstallSource = "env" | "config";
 type DispatcherState =
@@ -149,8 +151,8 @@ export function createLongTimeoutOptions(): {
   return {
     headersTimeout: UNDICI_TRANSPORT_TIMEOUT_MS,
     bodyTimeout: UNDICI_TRANSPORT_TIMEOUT_MS,
-    connections: LITELLM_HTTP_CONNECTOR_LIMIT,
-    keepAliveTimeout: LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS,
+    connections: STREAM_HTTP_CONNECTOR_LIMIT,
+    keepAliveTimeout: STREAM_HTTP_KEEPALIVE_TIMEOUT_MS,
   };
 }
 

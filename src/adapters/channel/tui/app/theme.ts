@@ -13,7 +13,7 @@ export type SatiTuiTheme = {
 };
 
 export const satiDarkBlueTheme: SatiTuiTheme = {
-  brand: "rgb(238,234,218)",
+  brand: "rgb(79,156,255)",
   brandAccent: "rgb(125,180,255)",
   background: "rgb(7,15,28)",
   panel: "rgb(10,25,47)",

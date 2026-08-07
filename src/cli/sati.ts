@@ -1,58 +1,21 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
-import { brandEnv, ENV_KEY } from "../env.js";
-import { sanitizeSessionIdForPath } from "../session/index.js";
-import {
-  createAlwaysOnManager,
-  createApplyHandler,
-  SessionConfigOverrides,
-  type AlwaysOnManager,
-  type AlwaysOnConfig,
-} from "../always-on/index.js";
-import { createCronManager, type CronManager, type CronConfig } from "../cron/index.js";
-import {
-  connectRemoteGatewayIfAvailable,
-  type Gateway,
-  type GatewayEvent,
-  type GatewaySubmitTurnInput,
-} from "../gateway/index.js";
-import {
-  CliChannel,
-  TuiChannel,
-  FeishuChannel,
-  WeixinChannel,
-  QQChannel,
-  WeComChannel,
-  loadEnabledChannels,
-  ChannelStatePersistence,
-  FeishuSessionMapper,
-  WeixinSessionMapper,
-  QQSessionMapper,
-  WeComSessionMapper,
-  type FeishuSessionMapperState,
-  type WeixinSessionMapperState,
-  type QQSessionMapperState,
-  type WeComSessionMapperState,
-  setUpdateRestartHandler,
-} from "../adapters/index.js";
-import {
-  migrateSkillsToSati,
-  type SkillMigrationConflictMode,
-  type SkillMigrationItem,
-  type SkillMigrationSourceKind,
-} from "../extension/skills/index.js";
-import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
-import { createTelemetryCollector } from "../telemetry/index.js";
-import { createDiscoveryPlanService } from "../always-on/index.js";
-import type { InProcessGateway } from "../gateway/client/InProcessGateway.js";
 import { APP_VERSION } from "../version.js";
-import { createLocalGateway } from "./createLocalGateway.js";
-import { createCoreDiscoveryPlanIo } from "./discoveryIo.js";
-import { startSatiServer } from "./satiServer.js";
-import { installGlobalProxy, reinstallGlobalProxy } from "./proxy.js";
-import { createShutdownAndExit } from "./shutdownCoordinator.js";
-
-await installGlobalProxy();
+import type { Gateway, GatewayEvent, GatewaySubmitTurnInput } from "../gateway/index.js";
+import type { InProcessGateway } from "../gateway/client/InProcessGateway.js";
+import type { AlwaysOnManager, AlwaysOnConfig } from "../always-on/index.js";
+import type { CronManager, CronConfig } from "../cron/index.js";
+import type {
+  FeishuSessionMapperState,
+  WeixinSessionMapperState,
+  QQSessionMapperState,
+  WeComSessionMapperState,
+} from "../adapters/index.js";
+import type {
+  SkillMigrationConflictMode,
+  SkillMigrationItem,
+  SkillMigrationReport,
+  SkillMigrationSourceKind,
+} from "../extension/skills/index.js";
 
 function printUsage(): void {
   console.log(`sati v${APP_VERSION} — AI agent runtime · CLI · TUI · Web · Feishu
@@ -85,6 +48,33 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
   if (command === "server") {
+    const { resolve } = await import("node:path");
+    const { brandEnv, ENV_KEY } = await import("../env.js");
+    const { createAlwaysOnManager, createApplyHandler, SessionConfigOverrides, createDiscoveryPlanService } =
+      await import("../always-on/index.js");
+    const { createCronManager } = await import("../cron/index.js");
+    const {
+      FeishuChannel,
+      WeixinChannel,
+      QQChannel,
+      WeComChannel,
+      loadEnabledChannels,
+      ChannelStatePersistence,
+      FeishuSessionMapper,
+      WeixinSessionMapper,
+      QQSessionMapper,
+      WeComSessionMapper,
+      setUpdateRestartHandler,
+    } = await import("../adapters/index.js");
+    const { loadPilotConfig, resolvePilotHome } = await import("../pilot/index.js");
+    const { createTelemetryCollector } = await import("../telemetry/index.js");
+    const { createLocalGateway } = await import("./createLocalGateway.js");
+    const { createCoreDiscoveryPlanIo } = await import("./discoveryIo.js");
+    const { startSatiServer } = await import("./satiServer.js");
+    const { installGlobalProxy, reinstallGlobalProxy } = await import("./proxy.js");
+    const { createShutdownAndExit } = await import("./shutdownCoordinator.js");
+    await installGlobalProxy();
+
     // 宿主拥有进程生命周期控制权：/update 渠道命令通过此 handler 触发
     // 退出，由进程管理器拉起（无管理器时用户手动重启）。
     setUpdateRestartHandler(() => process.exit(0));
@@ -587,29 +577,62 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    const snapshot = loadPilotConfig({ projectRoot: process.cwd() });
-    const gatewayPort = snapshot.config.gateway?.port ?? 19789;
-    const probeUrl = `http://127.0.0.1:${gatewayPort}`;
-    const fallbackGateway = createFallbackGateway();
+    const { loadPilotConfig } = await import("../pilot/index.js");
+    const { connectRemoteGatewayIfAvailable } = await import("../gateway/client/probeServer.js");
+    const { TuiChannel } = await import("../adapters/channel/tui/TuiChannel.js");
+    const { sanitizeSessionIdForPath } = await import("../session/index.js");
+    const { installGlobalProxy } = await import("./proxy.js");
+
+    // 读取 gateway 端口以探测运行中的 server；本地配置不完整（如模型
+    // provider 未配置）不应阻止 TUI 连接远端 server，故此处容错回退默认端口。
+    let gatewayPort = 19789;
     try {
+      const snapshot = loadPilotConfig({ projectRoot: process.cwd() });
+      gatewayPort = snapshot.config.gateway?.port ?? 19789;
+    } catch {
+      /* fall back to the default gateway port */
+    }
+    const probeUrl = `http://127.0.0.1:${gatewayPort}`;
+    // 先探测已运行的 sati server；命中时无需在当前进程构建完整本地 gateway。
+    const remote = await connectRemoteGatewayIfAvailable({ url: probeUrl });
+    if (remote) {
+      await new TuiChannel({
+        projectKey: process.cwd(),
+        cwd: process.cwd(),
+        model: "Sati",
+        probe: false,
+        connection: "remote",
+        serverUrl: probeUrl,
+      }).start({ gateway: remote });
+      return;
+    }
+    await installGlobalProxy();
+    const fallbackGateway = createFallbackGateway(sanitizeSessionIdForPath);
+    try {
+      const { createLocalGateway } = await import("./createLocalGateway.js");
       const { gateway: local } = createLocalGateway({ projectRoot: process.cwd() });
       await new TuiChannel({
         projectKey: process.cwd(),
         cwd: process.cwd(),
         model: "Sati",
-        probe: { url: probeUrl },
+        probe: false,
+        connection: "in_process",
       }).start({ gateway: local });
     } catch {
       await new TuiChannel({
         projectKey: process.cwd(),
         cwd: process.cwd(),
         model: "Sati",
-        probe: { url: probeUrl },
+        probe: false,
       }).start({ gateway: fallbackGateway });
     }
     return;
   }
 
+  const { createLocalGateway } = await import("./createLocalGateway.js");
+  const { CliChannel } = await import("../adapters/channel/cli/CliChannel.js");
+  const { installGlobalProxy } = await import("./proxy.js");
+  await installGlobalProxy();
   const { gateway: fallbackGateway } = createLocalGateway({ projectRoot: process.cwd() });
   await new CliChannel({ argv, projectKey: process.cwd() }).start({ gateway: fallbackGateway });
 }
@@ -683,6 +706,7 @@ async function handleUpdateCommand(argv: string[]): Promise<void> {
 }
 
 async function handleCronCommand(argv: string[]): Promise<void> {
+  const { connectRemoteGatewayIfAvailable } = await import("../gateway/client/probeServer.js");
   const gateway = await connectRemoteGatewayIfAvailable();
   if (!gateway) {
     console.error("sati cron requires a running sati server.");
@@ -747,6 +771,8 @@ async function handleCronCommand(argv: string[]): Promise<void> {
 }
 
 async function handleSkillsCommand(argv: string[]): Promise<void> {
+  const { migrateSkillsToSati } = await import("../extension/skills/index.js");
+  const { resolvePilotHome } = await import("../pilot/index.js");
   const command = argv[0];
   if (command !== "migrate") {
     console.error(
@@ -807,7 +833,7 @@ function parseSkillMigrationSources(
   return sources.length > 0 ? [...new Set(sources)] : undefined;
 }
 
-function printSkillMigrationReport(report: Awaited<ReturnType<typeof migrateSkillsToSati>>): void {
+function printSkillMigrationReport(report: SkillMigrationReport): void {
   const mode = report.mode === "execute" ? "EXECUTED" : "DRY RUN";
   console.log(`Sati skills migration (${mode})`);
   console.log(`Target: ${report.targetRoot}`);
@@ -884,7 +910,7 @@ function inferChannelKey(sessionKey: string): string {
   return separator > 0 ? sessionKey.slice(0, separator) : "cli";
 }
 
-function createFallbackGateway(): Gateway {
+function createFallbackGateway(sanitizeSessionIdForPath: (sessionId: string) => string): Gateway {
   async function* errorStream(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent> {
     yield {
       type: "error",

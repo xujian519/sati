@@ -2,7 +2,10 @@ import { spawn } from "node:child_process";
 import React from "react";
 import { render, type Instance } from "ink";
 import type { Gateway } from "../../../gateway/index.js";
-import { connectRemoteGatewayIfAvailable, type ProbeGatewayServerOptions } from "../../../gateway/index.js";
+import {
+  connectRemoteGatewayIfAvailable,
+  type ProbeGatewayServerOptions,
+} from "../../../gateway/client/probeServer.js";
 import type { ChannelAdapter, ChannelHandle, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { applyTuiEvent, createTuiRenderState, type TuiRenderState } from "./tui-render.js";
 import { TuiApp, type TuiAppProps } from "./app/TuiApp.js";
@@ -15,6 +18,8 @@ export type TuiChannelOptions = {
   cwd?: string;
   serverUrl?: string;
   interactive?: boolean;
+  /** Host-resolved connection mode; skips the internal probe when set (pair with `probe: false`). */
+  connection?: "remote" | "in_process";
 };
 
 export class TuiChannel implements ChannelAdapter {
@@ -76,6 +81,9 @@ export class TuiChannel implements ChannelAdapter {
   }
 
   private async resolveGateway(fallback: Gateway): Promise<{ gateway: Gateway; connection: "remote" | "in_process" }> {
+    if (this.options.connection) {
+      return { gateway: fallback, connection: this.options.connection };
+    }
     if (this.options.probe === false) {
       return { gateway: fallback, connection: "in_process" };
     }
