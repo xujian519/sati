@@ -2,7 +2,8 @@ import { useTranslation } from "react-i18next";
 import { FormRow } from "../../../shared/components/Inputs";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
-import { buildModelRefOptions, ensureModelRefConfigured } from "../../agentModel/utils/modelRefs";
+import { ensureModelRefConfigured } from "../../agentModel/utils/modelRefs";
+import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOptions";
 import { DEFAULT_TIERS, ROUTER_TIER_KEYS, type RouterTierKey, replaceFallbackModelRef } from "../utils/router";
 import { SettingsCard } from "../../../shared/view";
 import ModelRefInput from "./ModelRefInput";
@@ -14,7 +15,7 @@ type RouterLevelEditorProps = {
 
 export default function RouterLevelEditor({ config, onChange }: RouterLevelEditorProps) {
   const { t } = useTranslation("settings");
-  const modelOpts = buildModelRefOptions(config);
+  const modelOpts = useDynamicModelOptions(config);
   const defaultValue = config.router?.scenarios?.default ?? "";
   const judgeValue = config.router?.tokenSaver?.judge ?? "";
   const tiers = config.router?.tokenSaver?.tiers ?? {};

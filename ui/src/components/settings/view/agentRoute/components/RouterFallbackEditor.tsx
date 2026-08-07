@@ -3,11 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "../../../../../shared/view/ui";
 import { isImeEnterEvent } from "../../../../../utils/ime";
-import {
-  buildModelRefOptions,
-  ensureModelRefConfigured,
-  ensureModelRefsConfigured,
-} from "../../agentModel/utils/modelRefs";
+import { ensureModelRefConfigured, ensureModelRefsConfigured } from "../../agentModel/utils/modelRefs";
+import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOptions";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
 import { SettingsCard } from "../../../shared/view";
@@ -22,7 +19,7 @@ export default function RouterFallbackEditor({ config, onChange }: RouterFallbac
   const { t } = useTranslation("settings");
   const fallback = config.router?.fallback ?? {};
   const entries = Object.entries(fallback);
-  const modelOpts = buildModelRefOptions(config);
+  const modelOpts = useDynamicModelOptions(config);
   const [newKey, setNewKey] = useState("");
 
   const setChain = (scenario: string, chain: string[]) =>

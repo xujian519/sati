@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "../../../../../shared/view/ui";
 import { isImeEnterEvent } from "../../../../../utils/ime";
-import { buildModelRefOptions, ensureModelRefConfigured } from "../../agentModel/utils/modelRefs";
+import { ensureModelRefConfigured } from "../../agentModel/utils/modelRefs";
+import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOptions";
 import { TextAreaInput } from "../../../shared/components/Inputs";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
@@ -19,7 +20,7 @@ export default function TokenSaverTierEditor({ config, onChange }: TokenSaverTie
   const { t } = useTranslation("settings");
   const tiers = config.router?.tokenSaver?.tiers ?? {};
   const entries = Object.entries(tiers);
-  const modelOpts = buildModelRefOptions(config);
+  const modelOpts = useDynamicModelOptions(config);
   const [newKey, setNewKey] = useState("");
 
   const setTier = (key: string, field: "model" | "description", value: string) =>

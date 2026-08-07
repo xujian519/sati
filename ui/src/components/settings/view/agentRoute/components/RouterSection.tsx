@@ -5,7 +5,8 @@ import { cn } from "../../../../../lib/utils";
 import { FormRow, NumberInput, Select } from "../../../shared/components/Inputs";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
-import { buildModelRefOptions, ensureModelRefConfigured } from "../../agentModel/utils/modelRefs";
+import { ensureModelRefConfigured } from "../../agentModel/utils/modelRefs";
+import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOptions";
 import { PageSectionHeader, SettingsCard, SettingsRow, SettingsToggle } from "../../../shared/view";
 import { DEFAULT_RULES, DEFAULT_TIERS, ROUTER_TIER_KEYS } from "../utils/router";
 import ModelPricingEditor from "./ModelPricingEditor";
@@ -24,7 +25,7 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
   const [showAdvanced, setShowAdvanced] = useState(false);
   const r = config.router ?? {};
   const enabled = r.enabled !== false;
-  const modelOpts = buildModelRefOptions(config);
+  const modelOpts = useDynamicModelOptions(config);
 
   const ts = r.tokenSaver ?? {};
   const ao = r.autoOrchestrate ?? {};

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { buildModelOptionsFromConfig } from "./modelOptions";
+import { describe, expect, it, vi } from "vitest";
+import { buildModelOptionsFromConfig, buildModelOptionsFromConfigDynamic } from "./modelOptions";
 
 describe("buildModelOptionsFromConfig", () => {
   it("returns catalog-enriched labels for known providers", () => {
@@ -93,5 +93,60 @@ describe("buildModelOptionsFromConfig", () => {
     const values = known.map(option => option.value);
     expect(values.some(value => /\/\d+$/.test(value))).toBe(false);
     expect(values).toContain("openai/gpt-4o");
+  });
+});
+
+describe("buildModelOptionsFromConfigDynamic", () => {
+  const deepseekProvider = {
+    protocol: "openai",
+    url: "https://api.deepseek.com/v1",
+    models: { "deepseek-v4-pro": {} },
+  };
+
+  it("prefers live model lists over the hard-coded catalog", async () => {
+    const fetchModels = vi.fn(async () => [{ id: "live-model", displayName: "Live Model" }]);
+    const options = await buildModelOptionsFromConfigDynamic(
+      { model: { providers: { deepseek: deepseekProvider } } },
+      { fetchModels },
+    );
+
+    expect(fetchModels).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "deepseek", baseUrl: "https://api.deepseek.com/v1", protocol: "openai" }),
+    );
+    expect(options).toContainEqual({ value: "deepseek/live-model", label: "DeepSeek: Live Model" });
+    // live 列表替换 catalog 写死模型（deepseek-chat 不再出现）
+    expect(options.map(option => option.value)).not.toContain("deepseek/deepseek-chat");
+    // 配置显式声明的模型即使不在 live 中也保留
+    expect(options.map(option => option.value)).toContain("deepseek/deepseek-v4-pro");
+  });
+
+  it("falls back to the catalog when the live list cannot be fetched", async () => {
+    const fetchModels = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    const options = await buildModelOptionsFromConfigDynamic(
+      { model: { providers: { deepseek: deepseekProvider } } },
+      { fetchModels },
+    );
+
+    expect(options.map(option => option.value)).toContain("deepseek/deepseek-v4-pro");
+    expect(options.map(option => option.value)).toContain("deepseek/deepseek-chat");
+  });
+
+  it("skips providers without a base url or known protocol", async () => {
+    const fetchModels = vi.fn(async () => [{ id: "x", displayName: "X" }]);
+    const options = await buildModelOptionsFromConfigDynamic(
+      { model: { providers: { deepseek: { protocol: "openai", models: { "deepseek-v4-pro": {} } } } } },
+      { fetchModels },
+    );
+
+    expect(fetchModels).not.toHaveBeenCalled();
+    expect(options.map(option => option.value)).toContain("deepseek/deepseek-v4-pro");
+  });
+
+  it("returns an empty list for an unconfigured config", async () => {
+    const fetchModels = vi.fn();
+    expect(await buildModelOptionsFromConfigDynamic({ model: { providers: {} } }, { fetchModels })).toEqual([]);
+    expect(fetchModels).not.toHaveBeenCalled();
   });
 });

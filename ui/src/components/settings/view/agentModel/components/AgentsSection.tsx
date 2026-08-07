@@ -6,7 +6,8 @@ import { PageSectionHeader, SettingsCard } from "../../../shared/view";
 import { FormRow, NumberInput, Select } from "../../../shared/components/Inputs";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
-import { activeModelCapabilities, buildModelRefOptions, ensureModelRefConfigured } from "../utils/modelRefs";
+import { activeModelCapabilities, ensureModelRefConfigured } from "../utils/modelRefs";
+import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOptions";
 
 type AgentsSectionProps = {
   config: SatiConfig;
@@ -16,7 +17,7 @@ type AgentsSectionProps = {
 export default function AgentsSection({ config, onChange }: AgentsSectionProps) {
   const { t } = useTranslation("settings");
   const [showAdvanced, setShowAdvanced] = useState(true);
-  const refOptions = buildModelRefOptions(config);
+  const refOptions = useDynamicModelOptions(config);
   const mainRef = config.agent?.model ?? "";
   const subDefault = config.agent?.subagents?.default ?? "inherit";
 

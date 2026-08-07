@@ -6,7 +6,8 @@ import { FormRow, Select } from "../../shared/components/Inputs";
 import { patch } from "../modelPool/utils/patch";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
 import type { SatiConfig } from "../modelPool/types";
-import { buildModelRefOptions, ensureModelRefConfigured } from "../agentModel/utils/modelRefs";
+import { ensureModelRefConfigured } from "../agentModel/utils/modelRefs";
+import { useDynamicModelOptions } from "../../../../shared/useDynamicModelOptions";
 import type { SettingsProject } from "../../shared/types";
 import MemoryDataSection from "./MemoryDataSection";
 import KnowledgeCapabilitiesSection from "./KnowledgeCapabilitiesSection";
@@ -28,10 +29,8 @@ type AgentMemorySectionsProps = {
 function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (next: SatiConfig) => void }) {
   const { t } = useTranslation("settings");
   const m = config.memory ?? {};
-  const options = [
-    { value: "inherit", label: t("satiConfig.panels.memory.model.inherit") },
-    ...buildModelRefOptions(config),
-  ];
+  const dynamicOptions = useDynamicModelOptions(config);
+  const options = [{ value: "inherit", label: t("satiConfig.panels.memory.model.inherit") }, ...dynamicOptions];
   const selected = m.model && m.model.trim() ? m.model : "inherit";
 
   const initialIndex = toDisplayUnit(m.autoIndexIntervalMinutes, DEFAULT_INDEX_MINUTES);

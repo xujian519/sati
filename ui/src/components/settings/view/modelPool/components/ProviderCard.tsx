@@ -119,6 +119,39 @@ export default function ProviderCard({ providerId, provider, onSave, onRemove, c
     }
   };
 
+  // 进入编辑模式时自动拉取一次该 provider 实际可用的模型列表，
+  // 替代仅展示 catalog 写死列表；编辑期间的 apiKey/url 变更由手动
+  // "Fetch API models" 处理，避免输入时反复请求。
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    (async () => {
+      setApiModelsStatus("loading");
+      setApiModelsError("");
+      try {
+        const models = await fetchProviderModels({
+          protocol,
+          baseUrl: effectiveUrl,
+          apiKey: draftProvider.apiKey ?? "",
+          providerId,
+        });
+        if (!cancelled) {
+          setApiModels(models);
+          setApiModelsStatus("idle");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setApiModelsStatus("error");
+          setApiModelsError(error instanceof Error ? error.message : String(error));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅进入编辑模式时拉取一次
+  }, [editing]);
+
   return (
     <div className="space-y-3 rounded-lg border border-border bg-background/50 p-4 transition-colors">
       <div className="flex items-center gap-2">

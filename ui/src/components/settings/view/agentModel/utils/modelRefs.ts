@@ -1,5 +1,4 @@
 import { findCatalogProviderById } from "../../../../../shared/catalogProviders";
-import { buildModelOptionsFromConfig } from "../../../../../shared/modelOptions";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
 import type { ActiveModelCapabilities } from "../types";
@@ -26,10 +25,6 @@ export function ensureModelRefConfigured<T extends SatiConfig>(config: T, ref: s
 
 export function ensureModelRefsConfigured<T extends SatiConfig>(config: T, refs: Array<string | undefined>): T {
   return refs.reduce((next, ref) => ensureModelRefConfigured(next, ref), config);
-}
-
-export function buildModelRefOptions(config: SatiConfig): Array<{ value: string; label: string }> {
-  return buildModelOptionsFromConfig(config);
 }
 
 export function activeModelCapabilities(config: SatiConfig): ActiveModelCapabilities | null {
