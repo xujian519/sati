@@ -20,7 +20,7 @@ function makeTool(name: string, domain?: ToolDomain): SatiToolDefinition {
 test("builtin registry annotates every tool with a domain", () => {
   const registry = createBuiltinRegistry();
   const tools = registry.list();
-  assert.ok(tools.length >= 23, "默认注册工具数量应 >= 23");
+  assert.ok(tools.length >= 24, "默认注册工具数量应 >= 24");
   for (const tool of tools) {
     assert.ok(tool.domain !== undefined, `tool ${tool.name} 应标注 domain`);
   }

@@ -1,5 +1,6 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
 import type { FigureAnalysisResult } from "../../patent/figure/types.js";
+import { extractSmilesCandidates, isRdkitAvailable, validateSmiles } from "../../patent/chemistry/index.js";
 import type { TechDomain } from "./draftClaims.js";
 
 /**
@@ -193,6 +194,54 @@ export function checkChemicalCharacterization(text: string): string[] {
 }
 
 // =============================================================================
+// SMILES 合法性抽检（异步增强，评审 M1 修订）
+// =============================================================================
+
+/**
+ * SMILES 合法性抽检（异步步骤，仅当 RDKit 可用且文本含类 SMILES 候选时执行）。
+ * 非法候选追加 warning 级违规——不改变既有同步规则的判级语义（severity 保持 warning，
+ * 不新增 error）；RDKit 不可用或无可疑候选时静默跳过。
+ * 评审 M5：异常全兜底——抽检是增强步骤，任何异常不得拖垮同步校验结果。
+ */
+export async function checkSmilesValidity(text: string): Promise<SpecViolation[]> {
+  try {
+    const candidates = extractSmilesCandidates(text);
+    if (candidates.length === 0) return [];
+    if (!(await isRdkitAvailable())) return [];
+
+    const invalid: string[] = [];
+    for (const candidate of candidates) {
+      const result = await validateSmiles(candidate);
+      if (!result.ok) {
+        invalid.push(candidate.length > 40 ? `${candidate.slice(0, 40)}…` : candidate);
+      }
+    }
+    if (invalid.length === 0) return [];
+
+    return [
+      {
+        rule: "smiles_validity",
+        severity: "warning",
+        section: "具体实施方式",
+        message: `说明书中的 ${invalid.length} 个 SMILES 未通过 RDKit 校验：${invalid.slice(0, 3).join("、")}`,
+        suggestion: "核对 SMILES 写法（原子/键/环闭合/分支语法），或经 recognize_chemical_structure 重新识别",
+      },
+    ];
+  } catch {
+    // 抽检失败静默降级：仅损失增强违规项，同步规则结果不受影响
+    return [];
+  }
+}
+
+/** 评分：error 每条扣 0.25，warning 每条扣 0.1，最低 0；passed 仅受 error 影响。 */
+export function computeSpecScore(violations: SpecViolation[]): { passed: boolean; score: number } {
+  const errors = violations.filter(v => v.severity === "error").length;
+  const warnings = violations.filter(v => v.severity === "warning").length;
+  const score = Math.max(0, Math.min(1, 1 - errors * 0.25 - warnings * 0.1));
+  return { passed: errors === 0, score: Math.round(score * 100) / 100 };
+}
+
+// =============================================================================
 // 权利要求-说明书特征覆盖（A26.4）
 // =============================================================================
 
@@ -338,6 +387,7 @@ export function createValidateSpecificationTool(): SatiToolDefinition<
     description:
       "验证专利说明书是否符合撰写要求，包括结构完整性、发明名称长度、摘要长度、模糊表述、附图说明一致性、" +
       "权利要求特征覆盖（A26.4）、数值范围端点与中间值实施例、效果数据定量性、化学领域表征数据、摘要关键词与摘要附图等检查。" +
+      "文本含 SMILES 时附加合法性抽检（RDKit 校验，warning 级）。" +
       "在说明书初稿完成后使用；可传入权利要求书全文（claims）与技术领域（tech_domain）以启用实质校验。",
     kind: "custom",
     inputSchema: {
@@ -385,6 +435,14 @@ export function createValidateSpecificationTool(): SatiToolDefinition<
     isConcurrencySafe: () => true,
     execute: async input => {
       const output = validateSpecification(input);
+      // SMILES 合法性抽检（异步增强）：同步规则之后追加 warning，不改变判级语义。
+      const smileChecks = await checkSmilesValidity(input.text ?? "");
+      if (smileChecks.length > 0) {
+        output.violations.push(...smileChecks);
+        const scored = computeSpecScore(output.violations);
+        output.passed = scored.passed;
+        output.score = scored.score;
+      }
       return {
         content: [{ type: "json", value: output }],
         data: output,
@@ -580,13 +638,11 @@ export function validateSpecification(input: ValidateSpecificationInput): Valida
   }
 
   // 评分：error 每条扣 0.25，warning 每条扣 0.1，最低 0
-  const errors = violations.filter(v => v.severity === "error").length;
-  const warnings = violations.filter(v => v.severity === "warning").length;
-  const score = Math.max(0, Math.min(1, 1 - errors * 0.25 - warnings * 0.1));
+  const scored = computeSpecScore(violations);
 
   return {
-    passed: errors === 0,
-    score: Math.round(score * 100) / 100,
+    passed: scored.passed,
+    score: scored.score,
     violations,
   };
 }

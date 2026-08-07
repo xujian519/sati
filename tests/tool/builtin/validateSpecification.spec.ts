@@ -5,10 +5,13 @@ import {
   checkEffectQuantification,
   checkFigureMarkConsistency,
   checkNumericRangeCoverage,
+  checkSmilesValidity,
+  computeSpecScore,
   createValidateSpecificationTool,
   extractClaimFeatures,
   extractNumericValues,
   validateSpecification,
+  type SpecViolation,
 } from "../../../src/tool/builtin/validateSpecification.js";
 import type { FigureAnalysisResult } from "../../../src/patent/figure/types.js";
 
@@ -324,4 +327,30 @@ test("checkFigureMarkConsistency: 部分图不可用时仍校验可用图的漏�
     violations.some(v => v.severity === "warning" && v.message.includes("2")),
     "可用图存在漏标时仍应报出（不 all-or-nothing）",
   );
+});
+
+test("computeSpecScore: error 扣 0.25 / warning 扣 0.1，clamp 到 0，passed 仅受 error 影响", () => {
+  const error: SpecViolation = { rule: "r", severity: "error", message: "e" };
+  const warning: SpecViolation = { rule: "r", severity: "warning", message: "w" };
+
+  assert.deepEqual(computeSpecScore([]), { passed: true, score: 1 });
+  assert.deepEqual(computeSpecScore([warning]), { passed: true, score: 0.9 });
+  assert.deepEqual(computeSpecScore([error]), { passed: false, score: 0.75 });
+  assert.deepEqual(computeSpecScore([error, warning, warning]), { passed: false, score: 0.55 });
+  // 扣分下限 clamp：6 条 error = -1.5 → 0
+  assert.deepEqual(computeSpecScore(Array.from({ length: 6 }, () => error)), { passed: false, score: 0 });
+});
+
+test("checkSmilesValidity: 无候选/合法 SMILES 静默跳过", async () => {
+  assert.deepEqual(await checkSmilesValidity("纯中文文本，不含任何化学实体。"), []);
+  assert.deepEqual(await checkSmilesValidity("化合物为阿司匹林 CC(=O)Oc1ccccc1C(=O)O。"), []);
+});
+
+test("checkSmilesValidity: 非法 SMILES 追加 warning 级违规（不影响 passed 语义）", async () => {
+  // 超价碳：RDKit sanitization 失败（或抛 WASM 异常，经 H2 修复后归一为 ok=false）
+  const violations = await checkSmilesValidity("该化合物结构为 C(=O)(=O)(=O)C。");
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, "smiles_validity");
+  assert.equal(violations[0]?.severity, "warning");
+  assert.match(violations[0]?.message ?? "", /未通过 RDKit 校验/);
 });
