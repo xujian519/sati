@@ -160,3 +160,52 @@ describe("parseMemoryConfig embedding 段", () => {
     assert.ok(diagnostics.some(d => d.path === "memory.embedding.rerank.nonsense"));
   });
 });
+
+describe("parseMemoryConfig knowledgeProfile 段", () => {
+  it("三字段解析成功", () => {
+    const { config, diagnostics } = parse({
+      enabled: true,
+      provider: "edgeclaw",
+      knowledgeProfile: {
+        domains: ["汽车", "机械"],
+        ipcSections: ["B", "F"],
+        focusReasonTypes: ["创造性", "新颖性"],
+      },
+    });
+    assert.equal(diagnostics.length, 0);
+    assert.deepEqual(config?.knowledgeProfile?.domains, ["汽车", "机械"]);
+    assert.deepEqual(config?.knowledgeProfile?.ipcSections, ["B", "F"]);
+    assert.deepEqual(config?.knowledgeProfile?.focusReasonTypes, ["创造性", "新颖性"]);
+  });
+
+  it("缺省（未配置）返回 undefined，行为与现状一致", () => {
+    const { config } = parse({ enabled: true, provider: "edgeclaw" });
+    assert.equal(config?.knowledgeProfile, undefined);
+  });
+
+  it("空对象/空数组返回 undefined", () => {
+    const { config: empty } = parse({ enabled: true, provider: "edgeclaw", knowledgeProfile: {} });
+    assert.equal(empty?.knowledgeProfile, undefined);
+  });
+
+  it("非法数组抛 CONFIG_MEMORY_VALUE_INVALID", () => {
+    assert.throws(
+      () =>
+        parse({
+          enabled: true,
+          provider: "edgeclaw",
+          knowledgeProfile: { ipcSections: ["B", 42] },
+        }),
+      (error: unknown) => error instanceof PilotConfigError && error.code === "CONFIG_MEMORY_VALUE_INVALID",
+    );
+  });
+
+  it("未知字段 warning", () => {
+    const { diagnostics } = parse({
+      enabled: true,
+      provider: "edgeclaw",
+      knowledgeProfile: { ipcSections: ["B"], nonsense: true },
+    });
+    assert.ok(diagnostics.some(d => d.path === "memory.knowledgeProfile.nonsense"));
+  });
+});

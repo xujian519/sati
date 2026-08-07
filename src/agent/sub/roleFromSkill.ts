@@ -18,7 +18,7 @@
  */
 
 import type { PluginSkillContribution } from "../../extension/plugins/runtime/PluginRuntime.js";
-import type { SkillSummary } from "../../extension/skills/types.js";
+import type { SkillRoleConfig, SkillSummary } from "../../extension/skills/types.js";
 import type { SubagentDefinition } from "./builtinSubagentTypes.js";
 
 /**
@@ -67,7 +67,7 @@ export function roleFromSkill(skill: SkillSummary): SubagentDefinition | null {
     omitProjectInstructions: false,
     omitGitStatus: false,
     isReadOnly: role.readOnly ?? false,
-    systemPromptSuffix: role.systemPrompt ?? "",
+    systemPromptSuffix: buildRoleSystemPrompt(role),
   };
   warnDomainMismatch(definition);
   return definition;
@@ -90,10 +90,34 @@ export function roleFromContribution(skill: PluginSkillContribution): SubagentDe
     omitProjectInstructions: false,
     omitGitStatus: false,
     isReadOnly: role.readOnly ?? false,
-    systemPromptSuffix: role.systemPrompt ?? "",
+    systemPromptSuffix: buildRoleSystemPrompt(role),
   };
   warnDomainMismatch(definition);
   return definition;
+}
+
+/**
+ * 编译角色系统提示：基础 systemPrompt + 知识接线声明（knowledge）。
+ *
+ * knowledge 声明把"必查 wiki 卡片 / 需判例检索 / 需法条核验"编译进角色
+ * systemPrompt 末尾，使角色 turn 0 即携带知识检索指令（声明式知识预载），
+ * 而非依赖模型自觉或撞 query。无 knowledge 声明时原样返回基础提示。
+ */
+function buildRoleSystemPrompt(role: SkillRoleConfig): string {
+  const base = role.systemPrompt ?? "";
+  const knowledge = role.knowledge;
+  if (!knowledge) return base;
+  const parts: string[] = [];
+  if (knowledge.cards && knowledge.cards.length > 0) {
+    parts.push(`必查 wiki 卡片（经 \`patent_wiki_search\` 检索）：${knowledge.cards.join("、")}`);
+  }
+  if (knowledge.requireCaseSearch) {
+    parts.push("相似在先决定的论证细节用 `patent_case_search` 检索");
+  }
+  if (knowledge.requireLawSearch) {
+    parts.push("法条原文用 `law_search` 核验");
+  }
+  return parts.length > 0 ? `${base}\n\n【知识接线】${parts.join("；")}。` : base;
 }
 
 /** 与 SkillManager 的 slug 规则保持一致（安全目录名/标识符）。 */

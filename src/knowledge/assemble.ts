@@ -22,6 +22,8 @@ import { LegalMemoryProvider } from "./legal/legal-memory-provider.js";
 import { LegalSearchEngine } from "./legal/legal-search.js";
 import { KnowledgeLawSearch } from "./legal/knowledge-law-search.js";
 import type { LegalSearchSource } from "./legal/types.js";
+import { CaseLawSearchEngine, type CaseLawSemanticSource } from "./case-law/case-law-search.js";
+import { CaseLawMemoryProvider } from "./case-law/case-law-memory-provider.js";
 
 export type BuildKnowledgeResolversOptions = {
   /** patent_kg.db 路径（resolveKnowledgeDbPaths 探测结果）。 */
@@ -155,6 +157,47 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
         logger: options.logger,
       }),
     );
+  }
+
+  // 判例全文（CaseLawMemoryProvider）：knowledge.db（documents/chunks/docs_fts）打开成功
+  // 且存在判例数据时启用自动注入；失败降级跳过（显式工具 patent_case_search 仍可用）。
+  if (options.knowledgeDb) {
+    try {
+      const caseEngine = new CaseLawSearchEngine(options.knowledgeDb);
+      if (caseEngine.count() === 0) {
+        caseEngine.close();
+      } else {
+        let caseSemantic: CaseLawSemanticSource | undefined;
+        if (options.embedding) {
+          try {
+            const caseEmbeddings = createKnowledgeEmbeddingSearch({
+              dbPath: options.knowledgeDb,
+              docTypes: ["case", "judgment"],
+              logger: options.logger,
+            });
+            caseSemantic = {
+              embed: async text => {
+                const [vector] = await options.embedding!.embed([text]);
+                return Float32Array.from(vector ?? []);
+              },
+              search: caseEmbeddings,
+            };
+          } catch (error) {
+            options.logger?.warn?.(`knowledge.db 判例 embeddings 打开失败，判例语义路关闭: ${errorMessage(error)}`);
+          }
+        }
+        resolvers.push(
+          new CaseLawMemoryProvider({
+            engine: caseEngine,
+            semantic: caseSemantic,
+            stats: options.stats,
+            logger: options.logger,
+          }),
+        );
+      }
+    } catch (error) {
+      options.logger?.warn?.(`knowledge.db 判例库打开失败，跳过判例自动注入: ${errorMessage(error)}`);
+    }
   }
 
   // embedding 查询端与 knowledge.db 库向量一致性自检（fire-and-forget，不阻塞启动）。

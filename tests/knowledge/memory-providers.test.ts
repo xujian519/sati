@@ -99,6 +99,72 @@ describe("patent-memory-provider", () => {
     assert.equal(result.systemContext, undefined);
   });
 
+  it("taskIntent=oa 时 wiki 卡片注入上限提升（默认 2 → ≥4）", async () => {
+    // mock wikiLoader：关键词搜索恒返回 10 张卡；关闭 IPC/图谱聚焦卡片路径
+    const loader = {
+      search: () => Array.from({ length: 10 }, (_, i) => ({ id: `card-${i}`, title: `卡片${i}` })),
+      getById: () => undefined,
+      formatAsContext: (id: string) => `卡片正文 ${id}`,
+    };
+    const general = new PatentMemoryProvider({
+      wikiLoader: loader as never,
+      enableStandards: false,
+      enableGraph: false,
+      cardLimit: 2,
+    });
+    const oa = new PatentMemoryProvider({
+      wikiLoader: loader as never,
+      enableStandards: false,
+      enableGraph: false,
+      cardLimit: 2,
+    });
+    const query = "答复审查意见中权利要求清楚性分析";
+    const generalResult = await general.retrieve(makeInput(query));
+    const oaResult = await oa.retrieve({ ...makeInput(query), taskIntent: "oa" });
+    const generalCount = (generalResult.systemContext?.match(/<wiki-card>/g) ?? []).length;
+    const oaCount = (oaResult.systemContext?.match(/<wiki-card>/g) ?? []).length;
+    assert.ok(generalCount <= 2, `general 意图应保持默认上限（实际 ${generalCount}）`);
+    assert.ok(oaCount >= 3, `oa 意图应提升卡片注入（实际 ${oaCount}）`);
+  });
+
+  it("taskIntent=general 时保持默认上限", async () => {
+    const loader = {
+      search: () => Array.from({ length: 10 }, (_, i) => ({ id: `card-${i}`, title: `卡片${i}` })),
+      getById: () => undefined,
+      formatAsContext: (id: string) => `卡片正文 ${id}`,
+    };
+    const provider = new PatentMemoryProvider({
+      wikiLoader: loader as never,
+      enableStandards: false,
+      enableGraph: false,
+      cardLimit: 2,
+    });
+    const result = await provider.retrieve({ ...makeInput("答复审查意见"), taskIntent: "general" });
+    const count = (result.systemContext?.match(/<wiki-card>/g) ?? []).length;
+    assert.ok(count <= 2, `general 意图应保持默认上限（实际 ${count}）`);
+  });
+
+  it("knowledgeProfile.ipcSections：弱命中 query 强制注入声明部审查标准", async () => {
+    // "车辆连接器"对 B 部可能仅弱命中（置信度低于默认门槛）；
+    // 声明 ipcSections:["B"] 后，只要 classification 存在 B 部候选即强制注入。
+    const query = "一种车辆连接器";
+    const profileResult = await new PatentMemoryProvider({ multiSectionLimit: 1 }).retrieve({
+      ...makeInput(query),
+      knowledgeProfile: { ipcSections: ["B"] },
+    });
+    assert.ok(profileResult.systemContext?.includes('<ipc-standards section="B"'), "profile 应强制注入 B 部标准");
+  });
+
+  it("knowledgeProfile.ipcSections 未命中 query 不强制注入", async () => {
+    const provider = new PatentMemoryProvider({ multiSectionLimit: 1 });
+    // query 不含 B 部任何候选词：profile 声明 B 也不应凭空注入（保守：仅对 classification 存在候选的部强制）
+    const result = await provider.retrieve({
+      ...makeInput("一种抗肿瘤化合物"),
+      knowledgeProfile: { ipcSections: ["B"] },
+    });
+    assert.ok(!result.systemContext?.includes('<ipc-standards section="B"'), "未命中候选不应强制注入 B 部");
+  });
+
   it("captureTurn 为空操作", async () => {
     const provider = new PatentMemoryProvider();
     await provider.captureTurn({ sessionId: "s1", projectRoot: "/tmp", messages: [], errored: false });

@@ -24,6 +24,14 @@ export type RerankEndpointConfig = {
   /** 模型名；TEI 单模型服务可留空（留空则不发送 model 字段）。 */
   model?: string;
   timeoutMs?: number;
+  /**
+   * 请求/响应风格：
+   * - "tei"（默认）：TEI 风格 body { query, texts }，兼容 HuggingFace TEI 与
+   *   Jina/Cohere 风格的 { results: [{index, relevance_score}] } 响应；
+   * - "jina"：Jina/Cohere 风格 body { query, documents } + model（如 oMLX 的
+   *   /v1/rerank，要求 model 与 documents 字段）。
+   */
+  style?: "tei" | "jina";
 };
 
 export interface RerankClient {
@@ -76,12 +84,14 @@ function parseRerankResults(json: unknown): Array<{ index: number; score: number
 export function createTeiRerankClient(config: RerankEndpointConfig): RerankClient {
   const baseUrl = config.baseUrl.trim().replace(/\/+$/, "");
   const timeoutMs = config.timeoutMs ?? 30_000;
+  const style = config.style ?? "tei";
 
   async function postRerank(query: string, texts: string[]): Promise<Array<{ index: number; score: number }>> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const body: Record<string, unknown> = { query, texts };
+      // jina 风格（oMLX 等）要求 model + documents；tei 风格（默认）用 query + texts。
+      const body: Record<string, unknown> = style === "jina" ? { query, documents: texts } : { query, texts };
       if (config.model) body.model = config.model;
       const response = await fetch(`${baseUrl}/rerank`, {
         method: "POST",
@@ -183,5 +193,6 @@ export function resolveRerankClient(
     apiKey: endpoint.apiKey,
     model: cfg.model,
     timeoutMs: cfg.timeoutMs,
+    style: cfg.style,
   });
 }

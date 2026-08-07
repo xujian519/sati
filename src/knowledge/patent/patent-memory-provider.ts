@@ -12,6 +12,7 @@ import type {
   MemoryResolver,
   MemoryRetrieveInput,
   MemoryRetrieveResult,
+  TaskIntent,
 } from "../../context/memory/MemoryResolver.js";
 import {
   classifyIpc,
@@ -169,7 +170,24 @@ export class PatentMemoryProvider implements MemoryResolver {
           c.confidence >= MULTI_CLASSIFY_MIN_CONFIDENCE ||
           (c.detailConfidence !== undefined && c.detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE),
       );
-      for (const cand of candidates.slice(0, this.multiSectionLimit)) {
+      // 项目知识偏好：声明了 ipcSections 的部，若 query 已命中其任一候选
+      // （classification 中存在该 section），则无视置信度门槛强制纳入注入并
+      // 提升优先级——覆盖"项目专注领域但本次 query 措辞弱命中"的场景。
+      let effectiveCandidates = candidates;
+      const profile = input.knowledgeProfile;
+      if (profile?.ipcSections && profile.ipcSections.length > 0) {
+        const wanted = new Set(profile.ipcSections);
+        effectiveCandidates = [...candidates];
+        for (const cand of classification) {
+          if (wanted.has(cand.section) && !effectiveCandidates.includes(cand)) effectiveCandidates.push(cand);
+        }
+        effectiveCandidates.sort((a, b) => {
+          const aw = wanted.has(a.section) ? 1 : 0;
+          const bw = wanted.has(b.section) ? 1 : 0;
+          return bw - aw || b.confidence - a.confidence;
+        });
+      }
+      for (const cand of effectiveCandidates.slice(0, this.multiSectionLimit)) {
         // 两级分类：大类命中置信度达标（≈ 大类关键词 ≥2 个）时精注入大类卡片，
         // 否则回退部级注入（向后兼容；未列入高频大类的部永远走回退）。
         const cards =
@@ -209,7 +227,7 @@ export class PatentMemoryProvider implements MemoryResolver {
 
     // 3. 图谱命中 WikiCard 节点时联动加载卡片正文
     if (this.wikiLoader) {
-      const cardContexts = await this.loadWikiCards(graphNodes, input);
+      const cardContexts = await this.loadWikiCards(graphNodes, input, this.effectiveCardLimit(input.taskIntent));
       blocks.push(...cardContexts);
     }
 
@@ -236,6 +254,15 @@ export class PatentMemoryProvider implements MemoryResolver {
     const semantic = this.getSemanticCards();
     if (!semantic) return Promise.resolve();
     return semantic.warmup();
+  }
+
+  /**
+   * 按任务意图调整 wiki 卡片注入上限：OA/无效类任务知识需求密集
+   * （必查清单常超过默认 2 张上限），提升至 ≥4；其余任务保持默认，
+   * 避免普通对话上下文膨胀。
+   */
+  private effectiveCardLimit(taskIntent?: TaskIntent): number {
+    return taskIntent === "oa" || taskIntent === "invalidity" ? Math.max(this.cardLimit, 4) : this.cardLimit;
   }
 
   /** 知识图谱检索：关键词路（+ 关系扩展），可选 rerank（KG 节点不建向量，无语义路）。 */
@@ -268,6 +295,7 @@ export class PatentMemoryProvider implements MemoryResolver {
   private async loadWikiCards(
     graphNodes: Array<{ node: { id: string; name?: string; title?: string; nodeType: string } }>,
     input: MemoryRetrieveInput,
+    cardLimit: number = this.cardLimit,
   ): Promise<string[]> {
     if (input.signal?.aborted) return [];
     const contexts: string[] = [];
@@ -278,7 +306,7 @@ export class PatentMemoryProvider implements MemoryResolver {
     if (!loader) return [];
 
     const pushCard = (id: string) => {
-      if (loaded >= this.cardLimit || seen.has(id)) return;
+      if (loaded >= cardLimit || seen.has(id)) return;
       seen.add(id);
       const text = loader.formatAsContext(id, 800);
       if (!text) return;
@@ -288,7 +316,7 @@ export class PatentMemoryProvider implements MemoryResolver {
 
     // 1. 图谱 WikiCard 节点 → 按 id/标题匹配
     for (const hit of graphNodes) {
-      if (loaded >= this.cardLimit) break;
+      if (loaded >= cardLimit) break;
       if (hit.node.nodeType !== "WikiCard") continue;
       const byId = loader.getById(hit.node.id);
       const byTitle = byId ? undefined : loader.search(hit.node.name ?? hit.node.title ?? "", 1)[0];
@@ -297,21 +325,21 @@ export class PatentMemoryProvider implements MemoryResolver {
     }
 
     // 2. query 关键词 → 标题/概念/领域搜索（卡片独立于图谱可用）
-    if (loaded < this.cardLimit) {
+    if (loaded < cardLimit) {
       const keywords = this.extractCardKeywords(input.query);
       for (const kw of keywords) {
-        if (loaded >= this.cardLimit) break;
+        if (loaded >= cardLimit) break;
         const hits = loader.search(kw, 3);
         for (const hit of hits) {
           pushCard(hit.id);
-          if (loaded >= this.cardLimit) break;
+          if (loaded >= cardLimit) break;
         }
       }
     }
 
     // 3. 语义召回（可选）：embedding 检索卡片正文，补充关键词漏召回；
     //    配置 rerank 时先取更多候选再 cross-encoder 重排
-    if (loaded < this.cardLimit) {
+    if (loaded < cardLimit) {
       const semantic = this.getSemanticCards();
       if (semantic) {
         await guarded(
@@ -319,7 +347,7 @@ export class PatentMemoryProvider implements MemoryResolver {
           undefined,
           async () => {
             this.stats?.recordSemanticCall();
-            const remaining = this.cardLimit - loaded;
+            const remaining = cardLimit - loaded;
             const candidateLimit = this.rerank ? remaining * 3 : remaining;
             const hits = await semantic.search(input.query, candidateLimit);
             const orderedIds = await this.tryRerankOrder(
@@ -330,7 +358,7 @@ export class PatentMemoryProvider implements MemoryResolver {
             );
             for (const id of orderedIds) {
               pushCard(id);
-              if (loaded >= this.cardLimit) break;
+              if (loaded >= cardLimit) break;
             }
           },
           error => {

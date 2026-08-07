@@ -64,6 +64,45 @@ describe("createTeiRerankClient", () => {
     assert.equal(body.model, "bge-reranker-v2-m3");
   });
 
+  it("style=jina 时 body 为 { query, documents } + model（oMLX /v1/rerank）", async () => {
+    mockFetch(() =>
+      jsonResponse({
+        results: [
+          { index: 1, relevance_score: 0.9, document: { text: "b" } },
+          { index: 0, relevance_score: 0.1, document: { text: "a" } },
+        ],
+      }),
+    );
+    const client = createTeiRerankClient({
+      baseUrl: "http://localhost:8000/v1",
+      model: "Qwen3-Reranker-4B-4bit-MLX",
+      style: "jina",
+    });
+    const results = await client.rerank("创造性判断", ["a", "b"]);
+    assert.equal(fetchCalls[0]?.url, "http://localhost:8000/v1/rerank", "baseUrl 拼接 /rerank");
+    const body = JSON.parse(String(fetchCalls[0]!.init.body)) as {
+      query: string;
+      documents: string[];
+      model: string;
+    };
+    assert.equal(body.query, "创造性判断");
+    assert.deepEqual(body.documents, ["a", "b"], "jina 风格应使用 documents 字段");
+    assert.equal(body.model, "Qwen3-Reranker-4B-4bit-MLX");
+    assert.deepEqual(results, [
+      { index: 1, score: 0.9 },
+      { index: 0, score: 0.1 },
+    ]);
+  });
+
+  it("style=tei（默认）保持 { query, texts } 兼容既有行为", async () => {
+    mockFetch(() => jsonResponse({ scores: [0.5, 0.8] }));
+    const client = createTeiRerankClient({ baseUrl: "http://localhost:8080" });
+    await client.rerank("q", ["a", "b"]);
+    const body = JSON.parse(String(fetchCalls[0]!.init.body)) as { query: string; texts: string[]; model?: string };
+    assert.deepEqual(body.texts, ["a", "b"]);
+    assert.equal(body.model, undefined, "tei 风格未配 model 时不发送");
+  });
+
   it("topN 限制返回条数", async () => {
     mockFetch(() => jsonResponse({ scores: [0.1, 0.9, 0.5] }));
     const client = createTeiRerankClient({ baseUrl: "http://localhost:8080" });

@@ -101,14 +101,20 @@ export type PilotMemoryRerankConfig = {
   enabled: boolean;
   /** 引用 model.providers 的 providerId（如 tei）。 */
   provider?: string;
-  /** 重排模型名；TEI 单模型服务可留空（留空不发送 model 字段）。 */
+  /** 重排模型名；TEI 单模型服务可留空（留空不发送 model 字段）；jina 风格必填。 */
   model?: string;
-  /** 独立端点基地址（如 http://localhost:8080）。 */
+  /** 独立端点基地址（如 http://localhost:8080；oMLX 用 http://localhost:8000/v1）。 */
   baseUrl?: string;
   apiKey?: string;
   timeoutMs?: number;
   /** 参与重排的候选上限（默认 16）。 */
   topN?: number;
+  /**
+   * 请求风格（缺省 tei）：
+   * - "tei"：body { query, texts }（HuggingFace TEI /rerank）；
+   * - "jina"：body { query, documents } + model（oMLX /v1/rerank 等）。
+   */
+  style?: "tei" | "jina";
 };
 
 /**
@@ -140,6 +146,21 @@ export type PilotMemoryEmbeddingConfig = {
   rerank?: PilotMemoryRerankConfig;
 };
 
+/**
+ * 项目知识偏好（memory.knowledgeProfile，可选）。
+ *
+ * 供不同客户/技术领域项目声明知识侧重：knowledge provider 注入时据此
+ * 强制注入/加权相关审查标准与卡片，弥补"全局知识 × 当前 query"的盲区。
+ */
+export type PilotKnowledgeProfileConfig = {
+  /** 技术领域关键词（影响 wiki 卡片检索追加词）。 */
+  domains?: string[];
+  /** IPC 部（A-H）：query 命中该部候选时强制注入对应审查标准。 */
+  ipcSections?: string[];
+  /** 重点关注理由类型（如 创造性/新颖性/修改超范围，影响卡片检索追加词）。 */
+  focusReasonTypes?: string[];
+};
+
 export type PilotMemoryConfig = {
   enabled: boolean;
   provider: "edgeclaw";
@@ -155,6 +176,8 @@ export type PilotMemoryConfig = {
   heartbeatBatchSize?: number;
   /** 语义检索（embedding）配置；未配置则关闭语义召回。 */
   embedding?: PilotMemoryEmbeddingConfig;
+  /** 项目知识偏好（可选；未配置则知识注入无项目侧加权）。 */
+  knowledgeProfile?: PilotKnowledgeProfileConfig;
 };
 
 export type PilotGatewayConfig = {

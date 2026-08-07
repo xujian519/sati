@@ -1,5 +1,5 @@
 import type { CanonicalMessage } from "../../model/index.js";
-import type { MemoryDiagnostic, MemoryResolver, MemoryRetrieveInput } from "./MemoryResolver.js";
+import type { MemoryDiagnostic, MemoryResolver, MemoryRetrieveInput, TaskIntent } from "./MemoryResolver.js";
 
 export type MemoryAttachmentBuilderResult = {
   attachments: CanonicalMessage[];
@@ -50,6 +50,27 @@ export function buildRetrieveQuery(query: string, recentMessages: CanonicalMessa
   return joined.slice(0, MAX_RETRIEVE_FALLBACK_CHARS) || query;
 }
 
+/** 任务意图关键词表（按优先级匹配，先命中者胜）。 */
+const TASK_INTENT_KEYWORDS: ReadonlyArray<readonly [TaskIntent, readonly string[]]> = [
+  ["oa", ["答复", "审查意见", "OA", "驳回", "意见陈述", "通知书"]],
+  ["invalidity", ["无效", "无效理由", "无效宣告"]],
+  ["draft", ["撰写", "起草", "权利要求", "交底书", "说明书", "布局"]],
+];
+
+/**
+ * 任务意图启发式推导（保守）：query 命中明确任务词才判定对应 intent，
+ * 未命中回退 general（行为与现状一致）。短 query 场景调用方应先经
+ * buildRetrieveQuery 拼接最近用户消息再推导。
+ */
+export function buildRetrieveTaskIntent(query: string): TaskIntent {
+  const trimmed = query.trim();
+  if (!trimmed) return "general";
+  for (const [intent, keywords] of TASK_INTENT_KEYWORDS) {
+    if (keywords.some(keyword => trimmed.includes(keyword))) return intent;
+  }
+  return "general";
+}
+
 /**
  * Build attachment messages from MemoryResolver output. Used by both:
  *   - PromptAssembler input (Phase 6): turn-start memory section
@@ -74,7 +95,14 @@ export class MemoryAttachmentBuilder {
     try {
       const effectiveQuery = buildRetrieveQuery(input.query, input.recentMessages);
       const result = await Promise.race([
-        this.resolver.retrieve({ ...input, query: effectiveQuery, signal: controller.signal }),
+        this.resolver.retrieve({
+          ...input,
+          query: effectiveQuery,
+          // 调用方未显式传 taskIntent 时按（回退后的）query 启发式推导，
+          // 使短 query（如"继续"）场景也能命中 OA/无效/撰写意图。
+          taskIntent: input.taskIntent ?? buildRetrieveTaskIntent(effectiveQuery),
+          signal: controller.signal,
+        }),
         waitForAbort(controller.signal),
       ]);
       if (!result.systemContext || result.systemContext.trim().length === 0) {

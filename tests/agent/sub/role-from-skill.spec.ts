@@ -318,3 +318,72 @@ test("bundled example role asset is parseable", async () => {
   assert.ok(Array.isArray(fm.omitTools));
   assert.equal(typeof fm.systemPrompt, "string");
 });
+
+test("roleFromSkill compiles knowledge declaration into systemPromptSuffix", () => {
+  const definition = roleFromSkill(
+    roleSkillSummary({
+      role: {
+        tools: ["*"],
+        domains: ["patent", "filesystem"],
+        readOnly: false,
+        systemPrompt: "你是专利审查助手。",
+        knowledge: {
+          cards: ["专利实务/创造性/创造性-概述与三步法框架", "专利实务/创造性/创造性-原理-技术启示的认定"],
+          requireCaseSearch: true,
+          requireLawSearch: true,
+        },
+      },
+    }),
+  );
+  assert.ok(definition !== null);
+  const suffix = definition?.systemPromptSuffix ?? "";
+  assert.ok(suffix.startsWith("你是专利审查助手。"), "基础 systemPrompt 应保留");
+  assert.ok(suffix.includes("【知识接线】"), "应编译知识接线段");
+  assert.ok(suffix.includes("patent_wiki_search"), "应包含 wiki 卡片检索指令");
+  assert.ok(suffix.includes("创造性-概述与三步法框架"), "应包含必查卡片");
+  assert.ok(suffix.includes("patent_case_search"), "应包含判例检索指令");
+  assert.ok(suffix.includes("law_search"), "应包含法条核验指令");
+});
+
+test("roleFromSkill knowledge without optional flags only emits cards", () => {
+  const definition = roleFromSkill(
+    roleSkillSummary({
+      role: {
+        domains: ["patent"],
+        systemPrompt: "你是检索专家。",
+        knowledge: { cards: ["专利实务/新颖性/新颖性-原理-单独对比原则"] },
+      },
+    }),
+  );
+  const suffix = definition?.systemPromptSuffix ?? "";
+  assert.ok(suffix.includes("【知识接线】"));
+  assert.ok(suffix.includes("单独对比原则"));
+  assert.ok(!suffix.includes("patent_case_search"), "未声明 requireCaseSearch 不应输出判例指令");
+  assert.ok(!suffix.includes("law_search"), "未声明 requireLawSearch 不应输出法条指令");
+});
+
+test("roleFromSkill without knowledge keeps systemPrompt unchanged", () => {
+  const definition = roleFromSkill(roleSkillSummary());
+  assert.equal(definition?.systemPromptSuffix, "你是专利撰写专家。");
+  assert.ok(!definition?.systemPromptSuffix.includes("【知识接线】"));
+});
+
+test("roleFromContribution compiles knowledge declaration", () => {
+  const contribution: PluginSkillContribution = {
+    name: "oa-writer",
+    description: "OA 答复",
+    path: "/tmp/oa-writer/SKILL.md",
+    role: {
+      domains: ["patent", "legal"],
+      readOnly: false,
+      systemPrompt: "你是 OA 答复专家。",
+      knowledge: { cards: ["专利实务/修改/修改-修改依据与超范围判断"], requireLawSearch: true },
+    },
+  };
+  const definition = roleFromContribution(contribution);
+  const suffix = definition?.systemPromptSuffix ?? "";
+  assert.ok(suffix.includes("【知识接线】"));
+  assert.ok(suffix.includes("修改依据与超范围判断"));
+  assert.ok(suffix.includes("law_search"));
+  assert.ok(!suffix.includes("patent_case_search"));
+});

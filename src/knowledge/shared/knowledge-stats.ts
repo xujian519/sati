@@ -35,6 +35,10 @@ export type KnowledgeRuntimeStatsSnapshot = {
   kgFtsMode: KgFtsMode;
   /** wiki 卡语义索引状态。 */
   wikiSemanticIndex: WikiSemanticIndexState;
+  /** 判例自动注入（CaseLawMemoryProvider）是否可用。 */
+  caseLawAvailable: boolean;
+  /** 判例自动注入累计条数。 */
+  caseLawInjects: number;
   /** embedding 查询端与 knowledge.db 库向量一致性自检结果（未自检时 undefined）。 */
   embeddingConsistency?: { ok: boolean; meanCosine: number };
 };
@@ -49,6 +53,8 @@ export class KnowledgeRuntimeStats {
   private readonly breakers = new Map<string, CircuitBreaker>();
   private kgFtsMode: KgFtsMode = "unknown";
   private wikiSemanticIndex: WikiSemanticIndexState = "disabled";
+  private caseLawAvailable = false;
+  private caseLawInjects = 0;
   private embeddingConsistency?: { ok: boolean; meanCosine: number };
 
   recordCacheHit(): void {
@@ -89,6 +95,16 @@ export class KnowledgeRuntimeStats {
     this.wikiSemanticIndex = state;
   }
 
+  /** 判例自动注入可用性（CaseLawMemoryProvider 构造时打点）。 */
+  setCaseLawAvailable(available: boolean): void {
+    this.caseLawAvailable = available;
+  }
+
+  /** 判例自动注入一次（记录注入条数，供诊断观察注入强度）。 */
+  recordCaseLawInject(count: number): void {
+    this.caseLawInjects += count;
+  }
+
   /** 记录 embedding 一致性自检结果（不达标时语义召回已降级，此处仅留痕）。 */
   setEmbeddingConsistency(result: { ok: boolean; meanCosine: number }): void {
     this.embeddingConsistency = result;
@@ -106,6 +122,8 @@ export class KnowledgeRuntimeStats {
       breakers: Array.from(this.breakers.entries(), ([name, breaker]) => ({ name, state: breaker.state })),
       kgFtsMode: this.kgFtsMode,
       wikiSemanticIndex: this.wikiSemanticIndex,
+      caseLawAvailable: this.caseLawAvailable,
+      caseLawInjects: this.caseLawInjects,
       embeddingConsistency: this.embeddingConsistency,
     };
   }

@@ -16,7 +16,7 @@ import type { ContextOverflowRecovery } from "./recovery/ContextOverflowRecovery
 import { NullExtensionResolver, type ExtensionResolver } from "./extension/ExtensionResolver.js";
 import type { InstructionDiscovery, InstructionScope } from "./instructions/InstructionDiscovery.js";
 import { MemoryAttachmentBuilder } from "./memory/MemoryAttachmentBuilder.js";
-import type { MemoryResolver } from "./memory/MemoryResolver.js";
+import type { KnowledgeProfile, MemoryResolver } from "./memory/MemoryResolver.js";
 import { PromptAssembler } from "./prompt/PromptAssembler.js";
 import { MessageProjector } from "./projection/MessageProjector.js";
 import type {
@@ -85,6 +85,8 @@ export type DefaultContextRuntimeOptions = {
   truncateSecondKeepRatio?: number;
   /** Timeout budget for MemoryResolver.retrieve during prepareForModel. */
   memoryRetrievalTimeoutMs?: number;
+  /** 项目知识偏好（per-project knowledge profile），透传给 MemoryResolver.retrieve。 */
+  knowledgeProfile?: KnowledgeProfile;
   now?: () => Date;
 };
 
@@ -117,6 +119,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly truncateFirstKeepRatio: number;
   private readonly truncateSecondKeepRatio: number;
   private readonly memoryRetrievalTimeoutMs: number;
+  private readonly knowledgeProfile?: KnowledgeProfile;
   private readonly now: () => Date;
   private fullCompactionCooldownUntil = 0;
   private consecutiveIneffectiveFullCompactions = 0;
@@ -143,6 +146,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.truncateFirstKeepRatio = options.truncateFirstKeepRatio ?? DEFAULT_TRUNCATE_FIRST_RATIO;
     this.truncateSecondKeepRatio = options.truncateSecondKeepRatio ?? DEFAULT_TRUNCATE_SECOND_RATIO;
     this.memoryRetrievalTimeoutMs = options.memoryRetrievalTimeoutMs ?? DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS;
+    this.knowledgeProfile = options.knowledgeProfile;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -184,6 +188,7 @@ export class DefaultContextRuntime implements ContextRuntime {
         recentMessages: projection.messages,
         signal: input.abortSignal,
         timeoutMs: this.memoryRetrievalTimeoutMs,
+        knowledgeProfile: this.knowledgeProfile,
       });
       for (const block of memory.attachments) {
         for (const content of block.content) {

@@ -33,6 +33,19 @@ export type SkillRoleConfig = {
   readOnly?: boolean;
   /** 角色专属系统提示段（追加到子代理共享前缀之后）。 */
   systemPrompt?: string;
+  /**
+   * 知识接线声明（可选）：角色启动时把必查知识需求编译进系统提示，
+   * 使子代理 turn 0 即携带知识检索指令（而非依赖撞 query）。
+   * 声明内容仅供角色自身上下文使用，不改变工具可见性。
+   */
+  knowledge?: {
+    /** 必查 wiki 卡片（wiki 根相对路径 id 或自由文本检索词，经 patent_wiki_search 检索）。 */
+    cards?: string[];
+    /** 是否需要检索相似在先判例（patent_case_search，如 OA/无效类角色）。 */
+    requireCaseSearch?: boolean;
+    /** 是否需要核验法条原文（law_search）。 */
+    requireLawSearch?: boolean;
+  };
 };
 
 export type SkillSummary = {

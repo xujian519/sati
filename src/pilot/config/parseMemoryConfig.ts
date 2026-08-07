@@ -3,6 +3,7 @@ import type { ModelConfig } from "../../model/protocol/canonical.js";
 import {
   PilotConfigError,
   type PilotConfigDiagnostic,
+  type PilotKnowledgeProfileConfig,
   type PilotMemoryApiType,
   type PilotMemoryConfig,
   type PilotMemoryEmbeddingConfig,
@@ -48,6 +49,7 @@ export function parseMemoryConfig(
   const memoryModel = parseMemoryModelRef(rawMemory.model, diagnostics, modelConfig);
   const schedule = parseMemorySchedule(rawMemory.schedule, diagnostics) ?? buildScheduleFromFlatFields(rawMemory);
   const embedding = parseMemoryEmbeddingConfig(rawMemory.embedding, diagnostics, modelConfig);
+  const knowledgeProfile = parseKnowledgeProfile(rawMemory.knowledgeProfile, diagnostics);
 
   const KNOWN_FIELDS = new Set([
     "enabled",
@@ -65,6 +67,7 @@ export function parseMemoryConfig(
     "autoIndexIntervalMinutes",
     "autoDreamIntervalMinutes",
     "embedding",
+    "knowledgeProfile",
   ]);
   for (const key of Object.keys(rawMemory)) {
     if (!KNOWN_FIELDS.has(key)) {
@@ -91,6 +94,56 @@ export function parseMemoryConfig(
     schedule,
     heartbeatBatchSize: readOptionalPositiveInteger(rawMemory.heartbeatBatchSize, "memory.heartbeatBatchSize"),
     embedding,
+    knowledgeProfile,
+  };
+}
+
+/**
+ * 解析项目知识偏好（memory.knowledgeProfile）：domains / ipcSections /
+ * focusReasonTypes 三个字符串数组字段。缺省返回 undefined（行为与现状一致）。
+ */
+function parseKnowledgeProfile(
+  value: unknown,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotKnowledgeProfileConfig | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", "memory.knowledgeProfile must be an object.");
+  }
+  const readStringArray = (key: string): string[] | undefined => {
+    const raw = value[key];
+    if (raw === undefined) return undefined;
+    if (!Array.isArray(raw) || raw.some(item => typeof item !== "string" || item.trim().length === 0)) {
+      throw new PilotConfigError(
+        "CONFIG_MEMORY_VALUE_INVALID",
+        `memory.knowledgeProfile.${key} must be an array of non-empty strings.`,
+      );
+    }
+    return raw.map(item => item.trim());
+  };
+  const domains = readStringArray("domains");
+  const ipcSections = readStringArray("ipcSections");
+  const focusReasonTypes = readStringArray("focusReasonTypes");
+  for (const key of Object.keys(value)) {
+    if (key !== "domains" && key !== "ipcSections" && key !== "focusReasonTypes") {
+      diagnostics.push({
+        code: "CONFIG_MEMORY_UNKNOWN_FIELD",
+        severity: "warning",
+        message: `Unknown memory.knowledgeProfile field ${key}.`,
+        path: `memory.knowledgeProfile.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+  if (!domains && !ipcSections && !focusReasonTypes) {
+    return undefined;
+  }
+  return {
+    ...(domains ? { domains } : {}),
+    ...(ipcSections ? { ipcSections } : {}),
+    ...(focusReasonTypes ? { focusReasonTypes } : {}),
   };
 }
 
@@ -108,7 +161,16 @@ const MEMORY_EMBEDDING_KNOWN_FIELDS = new Set([
   "rerank",
 ]);
 
-const MEMORY_RERANK_KNOWN_FIELDS = new Set(["enabled", "provider", "model", "baseUrl", "apiKey", "timeoutMs", "topN"]);
+const MEMORY_RERANK_KNOWN_FIELDS = new Set([
+  "enabled",
+  "provider",
+  "model",
+  "baseUrl",
+  "apiKey",
+  "timeoutMs",
+  "topN",
+  "style",
+]);
 
 function parseMemoryRerankConfig(
   value: unknown,
@@ -165,8 +227,21 @@ function parseMemoryRerankConfig(
   if (timeoutMs !== undefined) rerank.timeoutMs = timeoutMs;
   const topN = readOptionalPositiveInteger(value.topN, "memory.embedding.rerank.topN");
   if (topN !== undefined) rerank.topN = topN;
+  const style = readOptionalRerankStyle(value.style);
+  if (style !== undefined) rerank.style = style;
 
   return rerank;
+}
+
+/** 解析 rerank 请求风格：tei（默认）或 jina（oMLX 等）。 */
+function readOptionalRerankStyle(value: unknown): "tei" | "jina" | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "tei" || value === "jina") {
+    return value;
+  }
+  throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", "memory.embedding.rerank.style must be 'tei' or 'jina'.");
 }
 
 function parseMemoryEmbeddingConfig(

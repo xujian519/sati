@@ -23,6 +23,8 @@ function statsSnapshot(overrides: Partial<KnowledgeRuntimeStatsSnapshot> = {}): 
     breakers: [],
     kgFtsMode: "unknown",
     wikiSemanticIndex: "disabled",
+    caseLawAvailable: false,
+    caseLawInjects: 0,
     ...overrides,
   };
 }

@@ -1,7 +1,7 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
 import { resolveKnowledgeDbPaths } from "../../knowledge/config.js";
 import { CaseLawSearchEngine, type CaseLawSemanticSource } from "../../knowledge/case-law/case-law-search.js";
-import { reciprocalRankFusion } from "../../context/vector/rrf.js";
+import { fuseCaseLawHits } from "../../knowledge/case-law/rrf.js";
 import type { CaseLawDocType, CaseLawHit, CaseLawSearchOptions } from "../../knowledge/case-law/types.js";
 
 /**
@@ -184,19 +184,7 @@ export function createPatentCaseSearchTool(
         try {
           const semanticHits = await engine.searchSemantic(input.query, limit * 2);
           if (semanticHits.length > 0) {
-            const byId = new Map<string, CaseLawHit>();
-            for (const hit of ftsHits) byId.set(hit.documentId, hit);
-            for (const hit of semanticHits) {
-              if (!byId.has(hit.documentId)) byId.set(hit.documentId, hit);
-            }
-            const fused = reciprocalRankFusion<string>([
-              ftsHits.map(hit => ({ id: hit.documentId })),
-              semanticHits.map(hit => ({ id: hit.documentId })),
-            ]);
-            hits = fused
-              .map(item => byId.get(item.id))
-              .filter((hit): hit is CaseLawHit => hit !== undefined)
-              .slice(0, limit);
+            hits = fuseCaseLawHits(ftsHits, semanticHits, limit);
           }
         } catch {
           // 语义路失败降级为纯 FTS，不阻断工具执行。

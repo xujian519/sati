@@ -6,7 +6,11 @@ import type {
   MemoryResolver,
   MemoryRetrieveResult,
 } from "../../../src/context/memory/MemoryResolver.js";
-import { MemoryAttachmentBuilder, buildRetrieveQuery } from "../../../src/context/memory/MemoryAttachmentBuilder.js";
+import {
+  MemoryAttachmentBuilder,
+  buildRetrieveQuery,
+  buildRetrieveTaskIntent,
+} from "../../../src/context/memory/MemoryAttachmentBuilder.js";
 
 function userMessage(text: string): CanonicalMessage {
   return { role: "user", content: [{ type: "text", text }] };
@@ -63,6 +67,54 @@ describe("buildRetrieveQuery", () => {
     const result = buildRetrieveQuery("?", messages);
     assert.ok(result.includes("q5") && result.includes("q4") && result.includes("q3"));
     assert.ok(!result.includes("q2") && !result.includes("q1"), "更早的消息不应包含");
+  });
+});
+
+describe("buildRetrieveTaskIntent", () => {
+  it("OA 关键词命中 oa 意图", () => {
+    assert.equal(buildRetrieveTaskIntent("帮我答复这份审查意见通知书"), "oa");
+    assert.equal(buildRetrieveTaskIntent("审查员驳回理由分析"), "oa");
+  });
+
+  it("无效关键词命中 invalidity 意图", () => {
+    assert.equal(buildRetrieveTaskIntent("分析这个专利能否无效"), "invalidity");
+    assert.equal(buildRetrieveTaskIntent("无效宣告请求理由"), "invalidity");
+  });
+
+  it("撰写关键词命中 draft 意图", () => {
+    assert.equal(buildRetrieveTaskIntent("撰写权利要求书"), "draft");
+    assert.equal(buildRetrieveTaskIntent("技术交底书分析"), "draft");
+  });
+
+  it("普通 query 回退 general", () => {
+    assert.equal(buildRetrieveTaskIntent("你好"), "general");
+    assert.equal(buildRetrieveTaskIntent(""), "general");
+    assert.equal(buildRetrieveTaskIntent("  "), "general");
+  });
+
+  it("短 query 在 builder 内经回退 query 推导意图", async () => {
+    const resolver = new RecordingResolver();
+    const builder = new MemoryAttachmentBuilder(resolver);
+    await builder.build({
+      query: "继续",
+      sessionId: "s1",
+      projectRoot: "/tmp",
+      recentMessages: [userMessage("请帮我答复这份审查意见：创造性 A22.3")],
+    });
+    assert.equal(resolver.received[0]?.taskIntent, "oa", "短 query 应按回退 query 推导意图");
+  });
+
+  it("调用方显式传入 taskIntent 时透传不改写", async () => {
+    const resolver = new RecordingResolver();
+    const builder = new MemoryAttachmentBuilder(resolver);
+    await builder.build({
+      query: "你好",
+      sessionId: "s1",
+      projectRoot: "/tmp",
+      recentMessages: [],
+      taskIntent: "draft",
+    });
+    assert.equal(resolver.received[0]?.taskIntent, "draft");
   });
 });
 

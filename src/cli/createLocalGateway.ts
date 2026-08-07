@@ -1314,6 +1314,8 @@ class ProjectRuntimeRegistry {
         projectRoot,
         memoryResolver,
         memoryRetrievalTimeoutMs: runtime.snapshot.config.memory?.retrievalTimeoutMs,
+        // 项目知识偏好透传：knowledge provider 据此强制注入/加权审查标准
+        knowledgeProfile: runtime.snapshot.config.memory?.knowledgeProfile,
         instructionDiscovery,
         toolResultBudget,
         tokenBudget,
