@@ -58,27 +58,16 @@ export const ENV_KEY = {
   MEMORY_DIAGNOSTICS: "MEMORY_DIAGNOSTICS",
 } as const;
 
-/** 中性键 → 品牌键 显式映射（品牌前缀只允许出现在本表）。 */
-const BRAND_KEY: Record<string, string> = {
+/** 品牌前缀：品牌键 = `${BRAND_PREFIX}${中性键}`，仅本文件允许出现。 */
+const BRAND_PREFIX = "SATI_";
+
+/**
+ * 中性键 ≠ 品牌键去前缀的特例映射。
+ * 目前唯一例外：`APP_HOME`（中性键）→ `SATI_HOME`（品牌键），
+ * 中性键取 `APP_HOME` 以避开系统环境变量 `HOME`。
+ */
+const BRAND_KEY_OVERRIDES: Record<string, string> = {
   [ENV_KEY.HOME]: "SATI_HOME",
-  [ENV_KEY.CONFIG_PATH]: "SATI_CONFIG_PATH",
-  [ENV_KEY.GATEWAY_PORT]: "SATI_GATEWAY_PORT",
-  [ENV_KEY.PROXY]: "SATI_PROXY",
-  [ENV_KEY.DUMP_REQUEST]: "SATI_DUMP_REQUEST",
-  [ENV_KEY.MCP_TOOL_TIMEOUT_MS]: "SATI_MCP_TOOL_TIMEOUT_MS",
-  [ENV_KEY.MANAGED_CONFIG]: "SATI_MANAGED_CONFIG",
-  [ENV_KEY.BUNDLED_SKILLS_DIR]: "SATI_BUNDLED_SKILLS_DIR",
-  [ENV_KEY.MAX_OUTPUT_TOKENS]: "SATI_MAX_OUTPUT_TOKENS",
-  [ENV_KEY.BROWSER_TIMEOUT_ACTION_MS]: "SATI_BROWSER_TIMEOUT_ACTION_MS",
-  [ENV_KEY.BROWSER_ACTION_TIMEOUT_MS]: "SATI_BROWSER_ACTION_TIMEOUT_MS",
-  [ENV_KEY.BROWSER_TIMEOUT_NAVIGATION_MS]: "SATI_BROWSER_TIMEOUT_NAVIGATION_MS",
-  [ENV_KEY.BROWSER_NAVIGATION_TIMEOUT_MS]: "SATI_BROWSER_NAVIGATION_TIMEOUT_MS",
-  [ENV_KEY.BROWSER_PROXY_SERVER]: "SATI_BROWSER_PROXY_SERVER",
-  [ENV_KEY.BROWSER_PROXY_FROM_ENV]: "SATI_BROWSER_PROXY_FROM_ENV",
-  [ENV_KEY.BROWSER_PROXY_BYPASS]: "SATI_BROWSER_PROXY_BYPASS",
-  [ENV_KEY.GIT_SHA]: "SATI_GIT_SHA",
-  [ENV_KEY.VERSION]: "SATI_VERSION",
-  [ENV_KEY.MEMORY_DIAGNOSTICS]: "SATI_MEMORY_DIAGNOSTICS",
 };
 
 /**
@@ -87,6 +76,6 @@ const BRAND_KEY: Record<string, string> = {
  */
 export function brandEnv(env: EnvLike | undefined, key: string): string | undefined {
   if (!env) return undefined;
-  const brandKey = BRAND_KEY[key];
-  return (brandKey ? env[brandKey] : undefined) ?? env[key];
+  const brandKey = BRAND_KEY_OVERRIDES[key] ?? `${BRAND_PREFIX}${key}`;
+  return env[brandKey] ?? env[key];
 }
