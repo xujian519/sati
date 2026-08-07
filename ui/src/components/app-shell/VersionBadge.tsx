@@ -132,7 +132,7 @@ export function VersionBadge() {
               </div>
 
               {info.hasUpdate && phase === "idle" && (
-                <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 dark:border-brand-800 dark:bg-brand-950/30">
+                <div className="dark:bg-brand-950/30 rounded-lg border border-brand-200 bg-brand-50 p-3 dark:border-brand-800">
                   <p className="text-sm font-medium text-brand-800 dark:text-brand-200">
                     {info.behindCount} new commit{info.behindCount > 1 ? "s" : ""} available
                   </p>

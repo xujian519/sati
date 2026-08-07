@@ -376,7 +376,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                 {alwaysOnUnread && activeDashboardTab.id !== "always-on" ? (
                   <span
                     aria-hidden="true"
-                    className="absolute right-1 top-1 h-2 w-2 rounded-full bg-brand-600 ring-2 ring-brand-100 dark:bg-brand-400 dark:ring-brand-950"
+                    className="dark:ring-brand-950 absolute right-1 top-1 h-2 w-2 rounded-full bg-brand-600 ring-2 ring-brand-100 dark:bg-brand-400"
                   />
                 ) : null}
               </button>

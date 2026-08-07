@@ -57,7 +57,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
         <img src={preview} alt={file.name} className="h-20 w-20 rounded object-cover" />
       ) : (
         <div className="flex h-20 w-44 items-center gap-2 rounded border border-neutral-200 bg-white p-2 text-neutral-900 shadow-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+          <div className="dark:bg-brand-950 flex h-10 w-10 shrink-0 items-center justify-center rounded bg-brand-100 text-brand-700 dark:text-brand-300">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h7l5 5v13H7z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3v5h5" />

@@ -468,7 +468,7 @@ function CronCreateView({
             value={message}
             onChange={event => setMessage(event.target.value)}
             rows={5}
-            className="mt-1.5 w-full resize-y rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
+            className="dark:focus:ring-brand-950 mt-1.5 w-full resize-y rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
             placeholder={t("cron.create.placeholders.prompt", {
               defaultValue: "Describe what Sati should do when this task runs.",
             })}
@@ -482,7 +482,7 @@ function CronCreateView({
           <select
             value={projectKey}
             onChange={event => setProjectKey(event.target.value)}
-            className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
+            className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
           >
             <option value="">{t("cron.create.placeholders.workspace", { defaultValue: "Select a workspace" })}</option>
             {projects.map(project => (
@@ -534,7 +534,7 @@ function CronCreateView({
               min={formatDateLocal(new Date())}
               disabled={scheduleKind === "cron"}
               onChange={event => setScheduleDate(event.target.value)}
-              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
+              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
             />
           </label>
           <label className="block">
@@ -545,7 +545,7 @@ function CronCreateView({
               type="time"
               value={scheduleTime}
               onChange={event => setScheduleTime(event.target.value)}
-              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
+              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
             />
           </label>
           <label className="block">
@@ -555,7 +555,7 @@ function CronCreateView({
             <input
               value={timezone}
               onChange={event => setTimezone(event.target.value)}
-              className="mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:focus:ring-brand-950"
+              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
             />
           </label>
         </div>

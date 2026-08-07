@@ -143,7 +143,7 @@ function TimelineGroupRow({ group, defaultExpanded }: { group: TimelineGroup; de
             {count}
           </span>
         )}
-        <span className="ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+        <span className="ml-auto shrink-0 opacity-60 transition-opacity group-hover:opacity-100">
           {expanded ? (
             <ChevronDown className="h-3.5 w-3.5 text-neutral-400" strokeWidth={1.8} />
           ) : (

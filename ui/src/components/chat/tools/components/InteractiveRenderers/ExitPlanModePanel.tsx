@@ -104,7 +104,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({ request, onD
 
   return (
     <div className="overflow-hidden rounded-2xl border border-brand-200 bg-white shadow-lg dark:border-brand-900/70 dark:bg-neutral-900">
-      <div className="border-b border-brand-100 bg-brand-50/70 px-4 py-3 dark:border-brand-900/70 dark:bg-brand-950/25">
+      <div className="dark:bg-brand-950/25 border-b border-brand-100 bg-brand-50/70 px-4 py-3 dark:border-brand-900/70">
         <div className="flex items-start gap-3">
           <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700 dark:bg-brand-900/50 dark:text-brand-300">
             <ClipboardList className="h-4 w-4" strokeWidth={2} />
@@ -144,7 +144,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({ request, onD
           onChange={event => setFeedback(event.target.value)}
           rows={3}
           placeholder={t("plan.exitMode.feedbackPlaceholder")}
-          className="block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-brand-700 dark:focus:ring-brand-950"
+          className="dark:focus:ring-brand-950 block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-brand-700"
         />
         <div className="mt-3 flex flex-wrap justify-end gap-2">
           <button

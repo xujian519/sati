@@ -978,7 +978,7 @@ export default function SidebarV2({
             title="正念智能体"
             className="group flex min-w-0 shrink items-center gap-2.5 rounded-lg p-1 transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
           >
-            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 ring-1 ring-brand-300/40 shadow-sm transition group-hover:shadow-md dark:from-brand-500/20 dark:to-brand-700/30 dark:ring-brand-500/30">
+            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 shadow-sm ring-1 ring-brand-300/40 transition group-hover:shadow-md dark:from-brand-500/20 dark:to-brand-700/30 dark:ring-brand-500/30">
               <img
                 src={satiLogoLight}
                 alt="正念智能体"
@@ -1162,7 +1162,7 @@ export default function SidebarV2({
           onClick={onShowSettings}
           aria-label={t("sidebar:actions.settings", { defaultValue: "Settings" }) as string}
           title={t("sidebar:actions.settings", { defaultValue: "Settings" }) as string}
-          className="group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium text-neutral-600 transition-all duration-200 hover:bg-white hover:shadow-sm hover:text-brand-600 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
+          className="group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium text-neutral-600 transition-all duration-200 hover:bg-white hover:text-brand-600 hover:shadow-sm dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
         >
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-200/60 transition group-hover:bg-brand-50 group-hover:text-brand-600 dark:bg-neutral-800/60 dark:group-hover:bg-brand-900/30 dark:group-hover:text-brand-300">
             <SettingsIcon className="h-3.5 w-3.5" strokeWidth={1.75} />

@@ -163,7 +163,7 @@ export default function BuiltinOfficeToolbar({
       <Separator />
       <button
         type="button"
-        className={`${buttonClass} ${searchOpen ? "bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-300" : ""}`}
+        className={`${buttonClass} ${searchOpen ? "dark:bg-brand-950/50 bg-brand-50 text-brand-700 dark:text-brand-300" : ""}`}
         title={t("builtinOfficePreview.search")}
         aria-label={t("builtinOfficePreview.search")}
         onClick={() => setSearchOpen(value => !value)}
