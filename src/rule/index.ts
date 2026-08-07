@@ -40,6 +40,7 @@ export {
   evaluateRule,
   evaluateText,
   groupByAction,
+  type EvaluateTextOptions,
 } from "./runtime/RuleEngine.js";
 export {
   loadRuleSetDir,
@@ -58,6 +59,19 @@ export {
   loadPatentElectricalRuleSet,
   type PatentComplianceLoadResult,
 } from "./runtime/patent-compliance.js";
+export {
+  candidateRulePackDirs,
+  findWorkspaceRoot,
+  loadRulePack,
+  parseRulePackManifest,
+  resolvePackDir,
+  resolveRulePackManifestPath,
+  summarizeRulePackLayers,
+  validatePackManifest,
+  type PackManifestIssue,
+  type RulePackLoadResult,
+  type RulePackManifest,
+} from "./runtime/rule-pack.js";
 export {
   rulesToPolicyDenyRules,
   type RulesToPolicyOptions,

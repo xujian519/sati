@@ -8,7 +8,10 @@
 
 ```
 rules/
-  patent/compliance.yaml   专利域合规规则（内置资产，随包发布）
+  base/                    基础规则包（全领域通用：创造性方法论 + 合规 + 引用核验）
+  domains/<name>/          领域规则包（mechanical / medical / chemical / software）
+  pack.schema.json         包清单（pack.yaml）的 JSON Schema
+  patent/compliance.yaml   专利域合规规则（内置资产，随包发布，rule_check scope=patent 用）
   patent/nuo-*.yaml        自 XiaoNuo Agent 移植的确定性规则（96 条，
                            由 scripts/port-nuo-rules.ts 转换生成，可重新生成）
   README.md                本规范
@@ -63,7 +66,7 @@ rules:
 | `id` | ✅ | 唯一规则编号（如 `CON-101`），重复 id 报错 |
 | `name` | ✅ | 规则名（中文） |
 | `description` | | 规则说明 |
-| `domain` | | 适用领域（`patent` 等），用于按域过滤 |
+| `domain` | | 适用领域（`mechanical` / `medical` 等）；`evaluateText(text, ruleSet, synonyms, { domain })` 可过滤异领域规则（未声明者始终评估） |
 | `phase` | | 生命周期阶段（自由文本，如 `申请前` / `输出`） |
 | `severity` | ✅ | `critical` / `major` / `minor` |
 | `action` | | `block` / `warn` / `review` / `log`（缺省 `warn`） |
@@ -100,13 +103,56 @@ rules:
 - `mergeRuleSets` 按 id 覆盖（后出现者胜），可用于分层规则
 - 单文件解析失败不阻塞目录加载（跳过并告警，见 `loadRuleSetDir`）
 
+## 分层规则包（Rule Pack）
+
+`src/rule/runtime/rule-pack.ts` 提供三层合并式加载：**base（通用）→ domains（清单声明顺序）→ overrides（项目私有）**，
+后加载按 id 覆盖并记审计 warning。通过 `rule_check` 工具 `scope=pack` 消费。
+
+### 包目录与清单
+
+每个包目录含 `pack.yaml` 清单（schema 见 `rules/pack.schema.json`，运行时校验由
+`validatePackManifest` 实现，两者须保持同步）：
+
+```yaml
+id: sati-rules-domain-mechanical   # 须形如 sati-rules-<slug>
+version: 0.1.0                     # semver
+domain: mechanical                 # 领域包必填；base 包不填
+description: 包用途说明
+```
+
+内置包定位候选（从具体到通用）：`SATI_RULES_DIR/<name>` → `cwd/rules/<name>` →
+`cwd/rules/domains/<name>` → WorkSpace 根同名目录；也支持绝对路径直接引用。
+
+### 项目清单 `.sati/rules.yaml`
+
+WorkSpace 根（或 cwd）的 `.sati/rules.yaml` 声明项目装配：
+
+```yaml
+base: base                  # 内置包名；或绝对路径（外部包 v1 用路径引用）
+domains: [mechanical]       # 领域包，可多个，按声明顺序加载
+overrides: ./local-rules/   # 可选，相对清单所在目录；项目私有规则，不强制 pack.yaml
+```
+
+**无清单时回退默认**：仅加载 `rules/base`（零配置可用）。坏包不阻塞：单层加载失败记 warning 继续。
+
+> **接线状态（2026-08）**：`scope=pack` 仅接入 `rule_check` 工具（缓存按清单 mtime 失效）；
+> 输出门禁（RuleOutputGate）仍只用 `compliance.yaml`，未消费规则包。
+> `evaluateText` 的 `domain` 过滤参数 v1 由调用方显式传入；rule_check 暂不传（内容设计兜底），
+> 为 v2 IPC 领域自动识别铺路。
+
+### 入库准入标准
+
+- **base 层**：仅收跨领域方法论级规则（不涉特定技术领域的实体判断）；宁缺毋滥。
+- **领域层**：样板规则入库前须用正/反例标定 minConfidence，误报由显式清单准入与 domain 过滤兜底。
+- 判例要旨/案例叙述属知识资产（`assets/patent-rules/`），不进规则文件。
+
 ## 消费方
 
 | 消费方 | 位置 | 说明 |
 |--------|------|------|
 | 输出门禁 | `src/rule/runtime/output-gate.ts` | `RuleOutputGate`：warn 追加提示 / review+block 挂起审批 |
 | 工具拦截 | `src/rule/runtime/policy-bridge.ts` | block 规则 → policy deny 规则（`text:` 前缀匹配工具输入） |
-| agent 显式调用 | `src/tool/builtin/ruleCheck.ts` | `rule_check` 工具：检查任意文本并返回违规清单 |
+| agent 显式调用 | `src/tool/builtin/ruleCheck.ts` | `rule_check` 工具：检查任意文本并返回违规清单；scope 支持 `patent` / `patent-electrical` / `pack` |
 
 ## 新增规则示例
 

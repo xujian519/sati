@@ -1,0 +1,47 @@
+# 机械领域规则包 — 创造性判断样板（来源：画布 §5.5 决定585168 结构等效性）
+# 判例要旨与方法叙述见 assets/patent-rules/inventiveness-canvas.md（知识资产，不进规则）。
+
+version: "1.0"
+
+rules:
+  # ---------------------------------------------------------------------------
+  # 结构等效性论证完整性（决定585168：相变壳体泄压口案）
+  # 名称不同 ≠ 技术实质不同：主张"对比文件已公开等效结构"时，
+  # 论证须含对应结构/手段 + 作用或技术效果的等效性分析。
+  # 语境锚点（等效性论证上下文）+ 两要素，minConfidence 0.75：
+  #   非等效性论证文本最多命中 2/3 不违规；有锚点且两要素全缺 → 违规。
+  # ---------------------------------------------------------------------------
+  mechanical_structural_equivalence:
+    id: MECH-INV-001
+    name: 结构等效性论证完整性
+    domain: mechanical
+    description: 主张结构等效/等同公开时，须给出对应结构手段与作用或技术效果的等效性分析
+    phase: 论证
+    severity: minor
+    action: warn
+    legalBasis: 无效复审决定585168：名称不同不等于技术实质不同，结构功能等效性须实质分析
+    check:
+      type: structural_analysis
+      requiresAll:
+        - element: 等效性论证语境
+          description: 文本处于结构等效/等同公开的论证上下文（语境锚点）
+          patterns:
+            - 等效
+            - 等同
+            - 实质相同
+            - 相同的作用
+        - element: 对应结构或手段
+          description: 应指明对比文件中对应的具体结构/手段
+          patterns:
+            - 结构
+            - 手段
+            - 构件
+            - 部件
+            - 设置
+        - element: 作用或技术效果
+          description: 应分析该结构在对比文件与发明中所起的作用/效果是否相同
+          patterns:
+            - 作用
+            - 功能
+            - 效果
+      minConfidence: 0.75

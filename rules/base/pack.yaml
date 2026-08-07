@@ -1,0 +1,5 @@
+# 基础规则包清单（分层规则包体系）
+# 由 rule_check scope=pack 经 loadRulePack 加载；schema 见 rules/pack.schema.json。
+id: sati-rules-base
+version: 0.1.0
+description: 全领域通用专利方法论规则（创造性论证结构、证据要求、法条引用范围、通用合规）

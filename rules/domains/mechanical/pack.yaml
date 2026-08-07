@@ -1,0 +1,5 @@
+# 机械领域规则包清单
+id: sati-rules-domain-mechanical
+version: 0.1.0
+domain: mechanical
+description: 机械领域创造性判断样板规则（结构等效性论证）

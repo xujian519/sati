@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "sati/rules/pack.schema.json",
+  "title": "Sati Rule Pack Manifest",
+  "description": "rules/<name>/pack.yaml 与 rules/domains/<name>/pack.yaml 的清单 schema。运行时校验由 src/rule/runtime/rule-pack.ts 的 validatePackManifest 实现（与本 schema 保持同步）。",
+  "type": "object",
+  "required": ["id", "version", "description"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^sati-rules-[a-z0-9-]+$",
+      "description": "包唯一标识，如 sati-rules-base / sati-rules-domain-mechanical"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "semver 版本号"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "包用途说明"
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "description": "领域包必填（mechanical / medical / chemical / software 等）；base 包不填"
+    }
+  }
+}

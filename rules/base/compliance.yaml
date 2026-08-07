@@ -1,0 +1,75 @@
+# 基础规则包 — 通用合规规则
+# 从 rules/patent/compliance.yaml 复制归位（法条引用范围规则移至 citation.yaml，
+# 以 base 命名空间 BASE-CITE-001 收录，避免 scope=pack 下重复报出）。
+
+version: "1.0"
+
+rules:
+  # ---------------------------------------------------------------------------
+  # 风险结论免责声明：命中即追加"不构成正式法律意见"提示（warn）
+  # 对齐 quality-gate.ts 的 PATENT_RISK_KEYWORDS
+  # ---------------------------------------------------------------------------
+  patent_risk_disclaimer:
+    id: PAT-RISK-001
+    name: 专利风险结论免责声明
+    domain: patent
+    phase: 输出
+    severity: major
+    action: warn
+    legalBasis: 执业规范：AI 输出不构成正式法律意见，应由专利代理人/律师确认
+    check:
+      type: keyword_blocklist
+      # 否定语境（"不构成侵权"/"避免侵权"）不误报
+      negationContext: true
+      keywords:
+        - "侵权"
+        - "无效"
+        - "驳回"
+        - "不授权"
+        - "专利性"
+        - "自由实施"
+        - "新颖性结论"
+        - "创造性结论"
+
+  # ---------------------------------------------------------------------------
+  # 结论性表述人工审批：命中即挂起，需人工审批后入库（review）
+  # 对齐 quality-gate.ts 的 PATENT_APPROVAL_KEYWORDS
+  # ---------------------------------------------------------------------------
+  patent_approval_review:
+    id: PAT-APPROVAL-001
+    name: 专利结论人工审批
+    domain: patent
+    phase: 输出
+    severity: critical
+    action: review
+    legalBasis: 质量门禁：结论性/侵权性/有效性判断需人工确认
+    check:
+      type: keyword_blocklist
+      keywords:
+        - "专利结论"
+        - "侵权判断"
+        - "有效性结论"
+        - "最终建议"
+
+  # ---------------------------------------------------------------------------
+  # 回避绝对化表述（warn）
+  # 对齐 quality-gate.ts 的 ABSOLUTE_PHRASES（P-A07 条款）
+  # ---------------------------------------------------------------------------
+  patent_absolute_phrases:
+    id: PAT-ABS-001
+    name: 回避绝对化表述
+    domain: patent
+    phase: 输出
+    severity: minor
+    action: warn
+    legalBasis: 审查规范：回避"绝对/一定/必然"等绝对化表述，改用限定性表述
+    check:
+      type: keyword_blocklist
+      # 否定语境（"不一定"/"绝非绝对"）不误报
+      negationContext: true
+      keywords:
+        - "绝对"
+        - "一定"
+        - "百分百"
+        - "毫无疑问"
+        - "必然"

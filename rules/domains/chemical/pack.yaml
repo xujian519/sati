@@ -1,0 +1,7 @@
+# 化学领域规则包清单（v1 占位：无规则）
+# 化合物/晶型创造性判断要点（画布 §7）属实体知识，确定性检查不适用，
+# 以知识条目收录于 assets/patent-rules/inventiveness-canvas.md。
+id: sati-rules-domain-chemical
+version: 0.1.0
+domain: chemical
+description: 化学领域创造性判断规则包（v1 占位，暂无规则）

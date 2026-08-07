@@ -1,0 +1,41 @@
+# 医疗器械领域规则包 — 创造性判断样板（来源：画布 §5.4 判例要旨 / §7 用途发明）
+# 判例要旨全文见 assets/patent-rules/inventiveness-canvas.md（知识资产，不进规则）。
+
+version: "1.0"
+
+rules:
+  # ---------------------------------------------------------------------------
+  # 医疗器械用途特征的限制性分析（最高法院判例要旨）
+  # 若区别特征仅在于治疗用途且对产品本身没有影响，不能因用途区别
+  # 认定产品权利要求具备创造性 → 涉及用途特征的论证须分析其对产品本身的影响。
+  # synonym_match：文本提及用途特征（要素1）时，须伴随对产品本身影响的分析（要素2）。
+  # minConfidence 1：任一要素缺失即 warn；领域外文本误报由显式清单
+  # （domains: [medical]）准入与 v2 领域过滤兜底。
+  # ---------------------------------------------------------------------------
+  medical_use_feature_contribution:
+    id: MED-INV-001
+    name: 医疗器械用途特征须分析产品贡献
+    domain: medical
+    description: 以治疗用途作为区别特征时，须分析该用途特征对产品本身（结构/构造）的影响
+    phase: 论证
+    severity: minor
+    action: warn
+    legalBasis: 最高法院判例要旨：区别特征仅在于治疗用途且对产品本身没有影响的，不能因用途区别认定产品权利要求具备创造性
+    check:
+      type: synonym_match
+      minConfidence: 1
+      requirements:
+        - element: 用途特征语境
+          description: 文本涉及医疗器械的治疗用途特征（语境锚点）
+          keywords:
+            - 用途特征
+            - 治疗用途
+            - 用于治疗
+            - 适用于治疗
+        - element: 产品本身影响分析
+          description: 应分析用途特征对产品本身结构/构造的影响
+          keywords:
+            - 对产品本身
+            - 产品本身没有影响
+            - 结构贡献
+            - 对产品结构

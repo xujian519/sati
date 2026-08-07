@@ -344,6 +344,8 @@ export function loadRuleSetDir(dir: string): {
   }
   for (const entry of entries.sort()) {
     if (!entry.endsWith(".yaml") && !entry.endsWith(".yml")) continue;
+    // pack.yaml 是包清单（见 rule-pack.ts），非规则文件
+    if (entry === "pack.yaml") continue;
     const path = join(dir, entry);
     try {
       const loaded = loadRuleSetFromFile(path);

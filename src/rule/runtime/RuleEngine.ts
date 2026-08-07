@@ -129,10 +129,25 @@ function checkCitationAnalysis(
   return evidence;
 }
 
+/** evaluateText 可选评估选项。 */
+export type EvaluateTextOptions = {
+  /**
+   * 领域过滤（分层规则包场景）：已声明 `domain` 且与之不同的规则跳过；
+   * 未声明 `domain` 的规则（通用规则）始终评估。缺省不过滤（向后兼容）。
+   */
+  domain?: string;
+};
+
 /** 评估一段文本，返回全部违规（synonyms 为同义词表，供 synonym_match 检查；缺省空表）。 */
-export function evaluateText(text: string, ruleSet: RuleSet, synonyms?: SynonymMap): RuleEvaluation {
+export function evaluateText(
+  text: string,
+  ruleSet: RuleSet,
+  synonyms?: SynonymMap,
+  options?: EvaluateTextOptions,
+): RuleEvaluation {
   const violations: RuleViolation[] = [];
   for (const rule of ruleSet.rules) {
+    if (options?.domain !== undefined && rule.domain && rule.domain !== options.domain) continue;
     const found = evaluateRule(rule, text, synonyms);
     if (found !== null) violations.push(found);
   }
