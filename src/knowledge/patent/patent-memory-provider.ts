@@ -13,8 +13,13 @@ import type {
   MemoryRetrieveInput,
   MemoryRetrieveResult,
 } from "../../context/memory/MemoryResolver.js";
-import { classifyIpc, isHighConfidence } from "./ipc-classifier.js";
-import { formatStandardsAsContext, queryIpcStandards } from "./ipc-standards-loader.js";
+import {
+  classifyIpc,
+  IPC_DETAIL_MIN_CONFIDENCE,
+  isHighConfidence,
+  MULTI_CLASSIFY_MIN_CONFIDENCE,
+} from "./ipc-classifier.js";
+import { formatStandardsAsContext, queryIpcDetail, queryIpcStandards } from "./ipc-standards-loader.js";
 import { PatentKgAdapter } from "./patent-kg-adapter.js";
 import { WikiCardLoader } from "./wiki-card-loader.js";
 import { WikiCardVectorIndex } from "./wiki-card-vector-index.js";
@@ -52,6 +57,10 @@ export type PatentMemoryProviderOptions = {
   graphLimit?: number;
   /** 卡片正文注入上限（默认 2）。 */
   cardLimit?: number;
+  /** IPC 审查标准注入上限（默认 0 = 不截断；>0 时按卡片顺序截取前 N 张，防止部级回退时上下文膨胀）。 */
+  standardsLimit?: number;
+  /** 多重分类并行注入的部/大类数上限（默认 2：top + 并列高置信部；1 等价关闭多重注入）。 */
+  multiSectionLimit?: number;
   /** 语义检索客户端（可选）；配置后启用 wiki 卡语义召回。 */
   embedding?: EmbeddingClient;
   /** 向量持久化目录（默认见 knowledge/config.ts 的 defaultEmbeddingDir）。 */
@@ -84,6 +93,8 @@ export class PatentMemoryProvider implements MemoryResolver {
   private readonly enableStandards: boolean;
   private readonly graphLimit: number;
   private readonly cardLimit: number;
+  private readonly standardsLimit: number;
+  private readonly multiSectionLimit: number;
   private readonly embedding?: EmbeddingClient;
   private readonly embeddingDir: string;
   private readonly rerank?: RerankClient;
@@ -103,6 +114,8 @@ export class PatentMemoryProvider implements MemoryResolver {
     this.enableStandards = options.enableStandards ?? true;
     this.graphLimit = options.graphLimit ?? 8;
     this.cardLimit = options.cardLimit ?? 2;
+    this.standardsLimit = options.standardsLimit ?? 0;
+    this.multiSectionLimit = options.multiSectionLimit ?? 2;
     this.embedding = options.embedding;
     this.embeddingDir = options.embeddingDir ?? defaultEmbeddingDir();
     this.rerank = options.rerank;
@@ -143,22 +156,35 @@ export class PatentMemoryProvider implements MemoryResolver {
     const diagnostics: MemoryDiagnostic[] = [];
     const blocks: string[] = [];
 
-    // 1. IPC 分类 → 注入审查标准
+    // 1. IPC 分类 → 注入审查标准（多重分类：置信度达门槛的部并行注入）
     if (this.enableStandards) {
       const classification = classifyIpc(input.query);
-      const top = classification[0];
-      // 门槛：≥2 个关键词命中才注入（单关键词碰巧命中不注入，避免普通
-      // 对话被注入 IPC 审查标准；无命中默认 B/0.15 也不注入）
-      if (top && top.matchedKeywords.length >= 2) {
-        const cards = queryIpcStandards(top.section);
-        if (cards.length > 0) {
-          const text = formatStandardsAsContext(cards);
-          blocks.push(`<ipc-standards section="${top.section}">\n${text}\n</ipc-standards>`);
+      // 门槛：confidence >= MULTI_CLASSIFY_MIN_CONFIDENCE（与部级命中 ≥2 词等价），
+      // 或大类命中达标（detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE，≈ 大类 ≥2 词）——
+      // 后者覆盖"部级单命中但大类多命中"的典型专利 query（如"汽车座椅"部级仅 1 词、
+      // B60 大类 3 词）。单关键词碰巧命中不注入，避免普通对话被注入 IPC 审查标准；
+      // 无命中默认 B/0.15 低于门槛也不注入。最多并行注入 multiSectionLimit 个部。
+      const candidates = classification.filter(
+        c =>
+          c.confidence >= MULTI_CLASSIFY_MIN_CONFIDENCE ||
+          (c.detailConfidence !== undefined && c.detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE),
+      );
+      for (const cand of candidates.slice(0, this.multiSectionLimit)) {
+        // 两级分类：大类命中置信度达标（≈ 大类关键词 ≥2 个）时精注入大类卡片，
+        // 否则回退部级注入（向后兼容；未列入高频大类的部永远走回退）。
+        const cards =
+          cand.detail && cand.detailConfidence !== undefined && cand.detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE
+            ? queryIpcDetail(cand.detail)
+            : queryIpcStandards(cand.section);
+        const limited = this.standardsLimit > 0 ? cards.slice(0, this.standardsLimit) : cards;
+        if (limited.length > 0) {
+          const text = formatStandardsAsContext(limited);
+          blocks.push(`<ipc-standards section="${cand.section}">\n${text}\n</ipc-standards>`);
         }
-        if (isHighConfidence(top.confidence)) {
+        if (isHighConfidence(cand.confidence)) {
           diagnostics.push({
             code: "memory_ipc_classified",
-            message: `IPC 分类 ${top.section} 高置信度（${top.confidence.toFixed(2)}）`,
+            message: `IPC 分类 ${cand.section}${cand.detail ? `/${cand.detail}` : ""} 高置信度（${cand.confidence.toFixed(2)}）`,
             severity: "info",
           });
         }

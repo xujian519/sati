@@ -4,13 +4,21 @@ export type { IpcClassification } from "./types.js";
 /**
  * IPC 分类器（移植自 Mady domains/ipc/）。
  *
- * 关键词规则匹配：扫描文本中出现的各 IPC 大类（A-H）关键词，
- * 取命中数最多的大类；置信度 = 0.50 + 命中数/该大类关键词总数 * 0.5，
- * 无匹配时返回默认 B（作业/运输）和低置信度 0.15。
+ * 两级关键词规则匹配：先按部（A-H）关键词表扫描文本，对命中部再按高频
+ * 大类关键词子表（IPC_DETAIL_DOMAINS）做二次匹配，产出 detail（如 "A61"）。
+ * 置信度 = 0.5 + 0.5*(1 - e^(-命中数/K))，只依赖绝对命中数，不受关键词表
+ * 长度影响（消除"关键词少的部虚高"）；无匹配时返回默认 B（作业/运输）
+ * 和低置信度 0.15。
  */
 
 const MIN_CONFIDENCE_FOR_KEYWORD = 0.5;
 export const HIGH_CONFIDENCE_THRESHOLD = 0.8;
+/** 置信度饱和函数参数 K（命中 K 词时达到 (1-1/e) ≈ 0.632 的归一化增量）。 */
+const CONFIDENCE_SATURATION_K = 3;
+/** 大类精注入置信度门槛：detailConfidence >= 该值（≈ 大类命中 ≥2 词）才精注入，否则回退部级。 */
+export const IPC_DETAIL_MIN_CONFIDENCE = 0.7;
+/** 多重分类门槛：confidence >= 该值（与部级命中 ≥2 词等价：2 词=0.743，1 词=0.642）的部参与并行注入。 */
+export const MULTI_CLASSIFY_MIN_CONFIDENCE = 0.7;
 
 export type IpcDomainMeta = {
   section: string;
@@ -434,7 +442,276 @@ export const IPC_DOMAINS: IpcDomainMeta[] = [
 export const DEFAULT_IPC_SECTION = "B";
 export const DEFAULT_IPC_CONFIDENCE = 0.15;
 
-/** 返回所有 IPC 大类的关键词匹配结果（含未命中部按置信度排序）。 */
+/** 高频大类的关键词子表（两级分类第二级；对齐 ipc-standards.yaml 的 ipcDetail）。 */
+export type IpcDetailDomainMeta = {
+  /** IPC 大类号，如 "A61" */
+  detail: string;
+  /** 所属部（A-H），与 IPC_DOMAINS 的 section 对应 */
+  section: string;
+  /** 大类名称 */
+  name: string;
+  /** 大类关键词（技术领域词；未列入的大类回退部级注入） */
+  keywords: string[];
+};
+
+/** 高频大类关键词表（10 个：卡片数最多的医药/食品/车辆/包装/有机化学/测量/计算/电气元件/电力/通信）。 */
+export const IPC_DETAIL_DOMAINS: IpcDetailDomainMeta[] = [
+  {
+    detail: "A61",
+    section: "A",
+    name: "医药/医疗器械",
+    keywords: [
+      "医药",
+      "药物",
+      "药品",
+      "药剂",
+      "给药",
+      "剂型",
+      "片剂",
+      "胶囊",
+      "注射液",
+      "输液",
+      "医疗器械",
+      "手术器械",
+      "植入",
+      "假体",
+      "支架",
+      "诊断设备",
+      "医用",
+      "生物相容",
+    ],
+  },
+  {
+    detail: "A23",
+    section: "A",
+    name: "食品",
+    keywords: [
+      "食品",
+      "乳制品",
+      "饮料",
+      "调味",
+      "烘焙",
+      "保鲜",
+      "冷藏",
+      "谷物",
+      "面粉",
+      "茶",
+      "咖啡",
+      "酒",
+      "酿造",
+      "膳食",
+      "营养",
+      "休闲食品",
+      "加工食品",
+    ],
+  },
+  {
+    detail: "B60",
+    section: "B",
+    name: "车辆",
+    keywords: [
+      "车辆",
+      "汽车",
+      "车架",
+      "车身",
+      "车轴",
+      "车轮",
+      "轮胎",
+      "制动",
+      "刹车",
+      "转向",
+      "悬架",
+      "座椅",
+      "安全带",
+      "气囊",
+      "驾驶室",
+      "客车",
+      "货车",
+      "挂车",
+      "摩托车",
+      "车灯",
+    ],
+  },
+  {
+    detail: "B65",
+    section: "B",
+    name: "输送包装",
+    keywords: [
+      "包装",
+      "容器",
+      "封口",
+      "密封",
+      "包装机",
+      "输送",
+      "传送",
+      "传送带",
+      "分拣",
+      "码垛",
+      "贴标",
+      "捆扎",
+      "打包",
+      "托盘",
+      "箱子",
+      "瓶子",
+      "罐",
+      "标签",
+    ],
+  },
+  {
+    detail: "C07",
+    section: "C",
+    name: "有机化学",
+    keywords: [
+      "有机化合物",
+      "杂环",
+      "芳香族",
+      "烷基",
+      "烯",
+      "炔",
+      "醇",
+      "酚",
+      "醛",
+      "酮",
+      "羧酸",
+      "酯",
+      "胺",
+      "酰胺",
+      "氨基酸",
+      "核苷",
+      "糖苷",
+      "中间体",
+      "手性",
+      "异构体",
+      "聚合",
+      "高分子",
+    ],
+  },
+  {
+    detail: "G01",
+    section: "G",
+    name: "测量测试",
+    keywords: [
+      "测量",
+      "计量",
+      "校准",
+      "仪表",
+      "探头",
+      "示波器",
+      "频谱",
+      "流量计",
+      "压力测量",
+      "温度测量",
+      "位移测量",
+      "角度测量",
+      "检测仪器",
+      "测试装置",
+    ],
+  },
+  {
+    detail: "G06",
+    section: "G",
+    name: "计算",
+    keywords: [
+      "计算",
+      "数据处理",
+      "算法",
+      "图像处理",
+      "图像识别",
+      "模式识别",
+      "机器学习",
+      "人工智能",
+      "神经网络",
+      "深度学习",
+      "计算机",
+      "处理器",
+      "存储器",
+      "数据库",
+      "人机交互",
+      "语音识别",
+      "自然语言",
+    ],
+  },
+  {
+    detail: "H01",
+    section: "H",
+    name: "基本电气元件",
+    keywords: [
+      "集成电路",
+      "芯片",
+      "半导体",
+      "晶体管",
+      "二极管",
+      "电容器",
+      "电阻器",
+      "电感",
+      "继电器",
+      "连接器",
+      "印刷电路",
+      "封装",
+      "晶圆",
+      "衬底",
+      "LED",
+      "发光二极管",
+      "太阳能电池",
+      "光伏",
+      "激光器",
+    ],
+  },
+  {
+    detail: "H02",
+    section: "H",
+    name: "发电变电配电",
+    keywords: [
+      "发电",
+      "输电",
+      "配电",
+      "变电",
+      "电力系统",
+      "变压器",
+      "整流器",
+      "逆变器",
+      "蓄电池",
+      "电池",
+      "燃料电池",
+      "充电",
+      "充电桩",
+      "电动机",
+      "发电机",
+      "电网",
+      "稳压",
+      "电压调节",
+    ],
+  },
+  {
+    detail: "H04",
+    section: "H",
+    name: "电子通信",
+    keywords: [
+      "通信",
+      "无线",
+      "移动通信",
+      "基站",
+      "天线",
+      "射频",
+      "调制",
+      "解调",
+      "编码",
+      "解码",
+      "信道",
+      "载波",
+      "信号传输",
+      "网络",
+      "蓝牙",
+      "WIFI",
+      "数据传输",
+      "广播",
+      "电话",
+      "卫星通信",
+    ],
+  },
+];
+
+/** 返回所有 IPC 大类的关键词匹配结果（含未命中部按置信度排序；命中部附两级 detail）。 */
 export function classifyIpc(text: string): IpcClassification[] {
   const results: IpcClassification[] = [];
   const lowered = text.toLowerCase();
@@ -442,15 +719,38 @@ export function classifyIpc(text: string): IpcClassification[] {
   for (const domain of IPC_DOMAINS) {
     const matched = matchKeywordsInText(lowered, domain.keywords);
     if (matched.length === 0) continue;
-    const ratio = matched.length / domain.keywords.length;
-    const confidence = Math.min(MIN_CONFIDENCE_FOR_KEYWORD + ratio * 0.5, 1.0);
-    results.push({ section: domain.section, confidence, matchedKeywords: matched });
+    const confidence = ipcConfidence(matched.length);
+    const detail = matchIpcDetail(lowered, domain.section);
+    results.push({ section: domain.section, confidence, matchedKeywords: matched, ...detail });
   }
 
   if (results.length === 0) {
     return [{ section: DEFAULT_IPC_SECTION, confidence: DEFAULT_IPC_CONFIDENCE, matchedKeywords: [] }];
   }
   return results.sort((a, b) => b.confidence - a.confidence);
+}
+
+/**
+ * 两级分类第二级：在部内对高频大类关键词子表做二次匹配，
+ * 取置信度最高的大类；大类命中 ≥1 词才产出（供消费方按 IPC_DETAIL_MIN_CONFIDENCE 判定精注入）。
+ */
+function matchIpcDetail(text: string, section: string): { detail: string; detailConfidence: number } | undefined {
+  let best: { detail: string; detailConfidence: number } | undefined;
+  for (const detailDomain of IPC_DETAIL_DOMAINS) {
+    if (detailDomain.section !== section) continue;
+    const hits = matchKeywordsInText(text, detailDomain.keywords).length;
+    if (hits === 0) continue;
+    const detailConfidence = ipcConfidence(hits);
+    if (!best || detailConfidence > best.detailConfidence) {
+      best = { detail: detailDomain.detail, detailConfidence };
+    }
+  }
+  return best;
+}
+
+/** 置信度：0.5 + 0.5*(1 - e^(-hits/K))。饱和函数只依赖绝对命中数，消除关键词表长度偏差。 */
+function ipcConfidence(hits: number): number {
+  return Math.min(MIN_CONFIDENCE_FOR_KEYWORD + 0.5 * (1 - Math.exp(-hits / CONFIDENCE_SATURATION_K)), 1.0);
 }
 
 /** 返回单个最佳分类（与 Mady Classify 一致）。 */

@@ -27,10 +27,14 @@ export type IpcStandardCard = {
 export type IpcClassification = {
   /** IPC 部（A-H） */
   section: string;
-  /** 置信度 0..1（公式：0.5 + 匹配率 * 0.5，与 Mady 一致） */
+  /** 置信度 0..1（饱和函数：0.5 + 0.5*(1 - e^(-hits/K))，只依赖绝对命中数） */
   confidence: number;
   /** 命中的关键词 */
   matchedKeywords: string[];
+  /** 部内大类（如 "A61"）；大类关键词命中 ≥1 词时产出，否则缺省 */
+  detail?: string;
+  /** 大类命中置信度 0..1（与 confidence 同公式；供消费方按阈值决定精注入或回退部级） */
+  detailConfidence?: number;
 };
 
 /** 知识图谱节点类型（对应 Mady GraphNode.NodeType 常量子集）。 */
