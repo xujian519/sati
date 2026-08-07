@@ -25,8 +25,8 @@
     "e2e:real-agent-lifecycle-hooks": "npm run build && SATI_RUN_REAL_AGENT_LIFECYCLE_E2E=1 node dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js",
     "pretypecheck": "pnpm --filter edgeclaw-memory-core build",
     "typecheck": "tsc --noEmit && pnpm --filter edgeclaw-memory-core typecheck",
-    "lint": "eslint src tests scripts",
-    "lint:fix": "eslint src tests scripts --fix",
+    "lint": "eslint src tests scripts && pnpm --filter sati-ui lint",
+    "lint:fix": "eslint src tests scripts --fix && pnpm --filter sati-ui lint:fix",
     "format": "biome format --write .",
     "format:check": "biome check .",
     "prepare": "simple-git-hooks"

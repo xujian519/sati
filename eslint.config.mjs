@@ -90,7 +90,12 @@ export default [
       ],
 
       // --- Disabled base rules (consistent with ui/) ---
-      "@typescript-eslint/no-explicit-any": "off",
+      // no-explicit-any: warn 而非 off —— 存量 any（约 170 处）开始可见，新代码不再无感引入。
+      // 收敛进度：逐处改为 unknown 或具体类型；warn 不阻断 CI。
+      // 治理机制：不设 eslint max-warnings（存量 warning 会让 CI 立即变红、阻断全部合入，
+      // 反而无人清理）；改为「PR 评审把关新引入的 any」+ 按模块分批收敛
+      // （优先 context/agent/router），存量清单见各文件 lint 输出。
+      "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "off",
       "no-case-declarations": "off",
       "no-control-regex": "off",

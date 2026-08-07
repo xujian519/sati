@@ -82,7 +82,8 @@ export default tseslint.config(
       "tailwindcss/no-unnecessary-arbitrary-value": "warn",
 
       // --- Disabled base rules ---
-      "@typescript-eslint/no-explicit-any": "off",
+      // no-explicit-any: warn 而非 off —— 与根 eslint.config.mjs 保持一致，存量 any 可见、增量收敛。
+      "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "off",
       "no-case-declarations": "off",
       "no-control-regex": "off",
