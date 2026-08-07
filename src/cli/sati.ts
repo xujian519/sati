@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve } from "node:path";
+import { sanitizeSessionIdForPath } from "../session/index.js";
 import {
   createAlwaysOnManager,
   createApplyHandler,
@@ -897,7 +898,9 @@ function createFallbackGateway(): Gateway {
     listSessions: async () => ({ sessions: [] }),
     resumeSession: async input => input,
     newSession: async input => ({
-      sessionKey: `${input.channelKey}:project=${input.projectKey ?? process.cwd()}:s_local`,
+      // 与磁盘 transcript 文件名一致（sanitize 幂等），避免会话列表
+      // sessionId（磁盘文件名）与 gateway sessionKey 双编码失配。
+      sessionKey: sanitizeSessionIdForPath(`${input.channelKey}:project=${input.projectKey ?? process.cwd()}:s_local`),
     }),
     closeSession: async () => undefined,
     describeServer: async () => ({ mode: "in_process" }),

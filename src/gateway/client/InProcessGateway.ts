@@ -12,6 +12,7 @@ import {
   type CanonicalModelEvent,
 } from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
+import { sanitizeSessionIdForPath } from "../../session/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
 import { GatewayPermissionBus } from "../permission/GatewayPermissionBus.js";
@@ -619,7 +620,16 @@ export class InProcessGateway implements Gateway {
   async newSession(input: NewSessionInput): Promise<{ sessionKey: string }> {
     const suffix = this.uuid();
     const projectKey = input.projectKey ? `project=${input.projectKey}:` : "";
-    return { sessionKey: `${input.channelKey}:${projectKey}s_${suffix}` };
+    const rawKey = `${input.channelKey}:${projectKey}s_${suffix}`;
+    // 与磁盘 transcript 文件名保持一致（sanitizeSessionIdForPath 幂等）。
+    // 聊天直连（P3）下新会话由本方法创建：若返回含原始路径分隔符的 key
+    // （如 `web:project=/Users/xujian/.sati:s_<uuid>`），而会话列表从磁盘
+    // 文件名（`/` → `-`）读取 sessionId，同一会话就出现两种编码——UI resume
+    // 提交的 key 与 gateway 注册的 key 不一致，getOrCreate 会新建空会话、
+    // turn 事件 sid 与 selectedSession.id 失配（complete 帧不复位 isLoading，
+    // 追问被 UI 排队/静默丢弃）。旧中转路径（ui/server newSessionKey）正是
+    // 为避免该问题而生成无路径分隔符的 key，此处对齐同一约定。
+    return { sessionKey: sanitizeSessionIdForPath(rawKey) };
   }
 
   async closeSession(input: { sessionKey: string; reason?: string }): Promise<void> {
