@@ -11,12 +11,14 @@
 
 import type { CanonicalModelEvent, CanonicalModelRequest } from "../../model/index.js";
 import { tryParseJson } from "../llm-json.js";
+import { analyzeElectricalFigure } from "./analyze-electrical.js";
 import { buildStep1Prompt, buildStep2Prompt, type Step1Result, type Step2Result } from "./prompts.js";
 import {
   FIGURE_TYPE_NAMES,
   normalizeComponentKind,
   normalizeConnectionKind,
   normalizeFigureType,
+  type ElectricalAnalysis,
   type FigureAnalysisResult,
   type FigureComponent,
   type FigureConnection,
@@ -365,6 +367,28 @@ export async function analyzePatentFigure(
     figureDescription = buildFigureDescription(figureNumber, figureType, input.inventionName, components);
   }
 
+  // ---- Step3：电学深度分析（仅电路图/原理示意图触发，失败不回归 Step1/2） ----
+  let electrical: ElectricalAnalysis | undefined;
+  if (figureType === "circuit" || figureType === "schematic") {
+    const electricalResult = await analyzeElectricalFigure(
+      {
+        imagePath: input.imagePath,
+        imageBase64: input.imageBase64,
+        imageMimeType: input.imageMimeType,
+        imageBytes: input.imageBytes,
+        figureNumber,
+        overallDescription,
+        claimContext: input.claimContext,
+      },
+      model,
+      { provider, model: modelId, temperature, signal, maxRetries },
+    );
+    if (electricalResult.analysis) {
+      electrical = electricalResult.analysis;
+    }
+    warnings.push(...electricalResult.warnings);
+  }
+
   // ---- 确定性收尾 ----
   const uniqueWarnings = [...new Set(warnings.filter(w => w.length > 0))];
   // usable 仅反映"组件提取是否成功"（与分类置信度解耦）；分类失败时 confidence 为 0.5 中性值。
@@ -383,5 +407,6 @@ export async function analyzePatentFigure(
     usable,
     // provider键/model键（非 Sati 会话展示用的 alias 格式，如 moonshotai/kimi-k3）。
     modelUsed: `${provider}/${modelId}`,
+    ...(electrical ? { electrical } : {}),
   };
 }

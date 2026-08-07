@@ -1,0 +1,304 @@
+# src/patent/figure/symbols/electrical-symbols.yaml — 电学符号知识库
+#
+# 依据：GB/T 4728《电气简图用图形符号》（等同采用 IEC 60617）的专利实务常用子集，
+# 结合中国专利附图标记惯例（字母前缀 + 数字编号，如 R1/C1/Q1，与说明书一一对应）。
+# 用途：analyze_patent_figure Step3 提示词注入 + symbol-validator 确定性校验依据。
+#
+# 维护：新增符号时保持字段齐全；refPrefix 为该符号在专利附图中的常见标号前缀。
+# 本文件为只读资产（与 ipc-standards.yaml 同机制），不参与运行时写入。
+
+symbols:
+  - id: resistor
+    nameZh: 电阻
+    nameEn: Resistor
+    category: passive
+    refPrefix: [R]
+    terminalCount: 2
+    valueUnit: Ω
+    drawingHints: "矩形（国标）或锯齿形（欧式）图形，两端各一根引线；可带斜线表示可调/电位器。"
+    semantics: "限制电流、分压、匹配阻抗；无源两端元件。"
+
+  - id: capacitor
+    nameZh: 电容
+    nameEn: Capacitor
+    category: passive
+    refPrefix: [C]
+    terminalCount: 2
+    valueUnit: F
+    drawingHints: "两条平行短线段表示极板，中间留间隙；电解电容在正极侧标注“+”。"
+    semantics: "储存电荷、滤波、隔直通交、耦合；无源两端元件。"
+
+  - id: inductor
+    nameZh: 电感
+    nameEn: Inductor
+    category: passive
+    refPrefix: [L]
+    terminalCount: 2
+    valueUnit: H
+    drawingHints: "若干个半圆弧（无铁芯）或半圆弧加两条竖直铁芯线（带铁芯）。"
+    semantics: "储存磁能、扼流、滤波；无源两端元件。"
+
+  - id: transformer
+    nameZh: 变压器
+    nameEn: Transformer
+    category: passive
+    refPrefix: [T]
+    terminalCount: 4
+    drawingHints: "两个相邻线圈符号（初级/次级），中间可加两条铁芯竖线；多绕组时画出各绕组。"
+    semantics: "电压变换、电气隔离、阻抗变换；无源多端元件。"
+
+  - id: diode
+    nameZh: 二极管
+    nameEn: Diode
+    category: semiconductor
+    refPrefix: [D, VD]
+    terminalCount: 2
+    drawingHints: "等边三角形尖端指向一条短横线（三角为正极、横线为负极），两端引线。"
+    semantics: "单向导电（正向导通、反向截止）；整流、检波、续流。"
+
+  - id: zener
+    nameZh: 稳压二极管
+    nameEn: Zener Diode
+    category: semiconductor
+    refPrefix: [D, VD]
+    terminalCount: 2
+    drawingHints: "二极管符号基础上，负极横线中部向三角方向折一个 Z 形拐角。"
+    semantics: "反向击穿区稳压，用于基准电压/钳位。"
+
+  - id: led
+    nameZh: 发光二极管
+    nameEn: Light-Emitting Diode
+    category: semiconductor
+    refPrefix: [D, LED, VD]
+    terminalCount: 2
+    drawingHints: "二极管符号基础上，加两个向外（远离符号）的斜箭头表示发光。"
+    semantics: "通电发光，用于指示/照明；正向导通。"
+
+  - id: transistor_bjt
+    nameZh: 三极管
+    nameEn: Bipolar Junction Transistor
+    category: semiconductor
+    refPrefix: [Q, VT]
+    terminalCount: 3
+    drawingHints: "基极一条短竖线垂直引线，发射极斜线带箭头（NPN 箭头向外、PNP 箭头向内），集电极另一斜线。"
+    semantics: "电流放大、开关；三端半导体器件（B 基极/E 发射极/C 集电极）。"
+
+  - id: mosfet
+    nameZh: 场效应管
+    nameEn: Metal-Oxide-Semiconductor FET
+    category: semiconductor
+    refPrefix: [Q, VT]
+    terminalCount: 3
+    drawingHints: "栅极竖线不接触沟道，源/漏两条平行短线段，衬底引线可带箭头（N/P 沟道方向不同）。"
+    semantics: "电压控制电流、开关；三端器件（G 栅极/S 源极/D 漏极）。"
+
+  - id: thyristor
+    nameZh: 晶闸管
+    nameEn: Thyristor
+    category: semiconductor
+    refPrefix: [Q, VS]
+    terminalCount: 3
+    drawingHints: "二极管符号基础上，从三角与横线之间引出门极斜线。"
+    semantics: "可控整流、交流调压；三端器件（阳极/阴极/门极）。"
+
+  - id: photodiode
+    nameZh: 光敏二极管
+    nameEn: Photodiode
+    category: semiconductor
+    refPrefix: [D, VD]
+    terminalCount: 2
+    drawingHints: "二极管符号基础上，加两个向内（指向三角）的斜箭头表示接收光照。"
+    semantics: "光照产生电流/电阻变化，用于光电检测。"
+
+  - id: optocoupler
+    nameZh: 光耦
+    nameEn: Optocoupler
+    category: ic
+    refPrefix: [U, IC, OC]
+    terminalCount: 4
+    drawingHints: "发光二极管符号与光敏三极管符号相邻放置，中间用虚线箭头连接表示光耦合。"
+    semantics: "电气隔离 + 信号传输（输入侧 LED、输出侧光敏管）。"
+
+  - id: opamp
+    nameZh: 运算放大器
+    nameEn: Operational Amplifier
+    category: ic
+    refPrefix: [U, IC, N]
+    terminalCount: 3
+    drawingHints: "三角形符号，左侧两个输入（标 +/-），右侧一个输出；可带电源引脚与反馈回路。"
+    semantics: "高增益差分放大，用于放大/比较/跟随/滤波；多端 IC。"
+
+  - id: logic_gate
+    nameZh: 逻辑门
+    nameEn: Logic Gate
+    category: ic
+    refPrefix: [U, IC, G]
+    terminalCount: 2
+    drawingHints: "矩形（或与门/或门/非门专用形状）符号，框内标注 AND/OR/NOT 等逻辑标记，多输入单输出。"
+    semantics: "实现与/或/非等布尔逻辑运算。"
+
+  - id: ic_chip
+    nameZh: 集成电路芯片
+    nameEn: Integrated Circuit
+    category: ic
+    refPrefix: [U, IC, N]
+    terminalCount: 8
+    drawingHints: "矩形框，引脚按编号从框边引出，框内标注芯片型号或功能名。"
+    semantics: "集成多种功能（MCU/驱动/电源管理等），引脚数不固定，以框内文字为准。"
+
+  - id: battery
+    nameZh: 电池
+    nameEn: Battery
+    category: power
+    refPrefix: [BAT, GB, E]
+    terminalCount: 2
+    valueUnit: V
+    drawingHints: "长线段（正极）与短粗线段（负极）并列；多节电池用多组长短线表示。"
+    semantics: "直流供电能源，正负两极。"
+
+  - id: dc_power
+    nameZh: 直流电源
+    nameEn: DC Power Supply
+    category: power
+    refPrefix: [VCC, VDD, V+, V]
+    terminalCount: 2
+    valueUnit: V
+    drawingHints: "带正负极标记的电源端子，常标注 VCC/VDD/+V 等网络名，或画圆圈内波浪线+直流标记。"
+    semantics: "提供稳定直流电压的电源网络（恒压源）。"
+
+  - id: ac_source
+    nameZh: 交流电源
+    nameEn: AC Power Source
+    category: power
+    refPrefix: [AC, U]
+    terminalCount: 2
+    valueUnit: V
+    drawingHints: "圆圈内一条波浪线（正弦交流），两端引线。"
+    semantics: "提供交流电压的电源。"
+
+  - id: ground
+    nameZh: 地
+    nameEn: Ground
+    category: power
+    refPrefix: [GND]
+    terminalCount: 1
+    drawingHints: "三条自上而下递减的水平短线段（信号地），或单横线+斜线（机壳地）。"
+    semantics: "电路参考电位（0V）节点，所有接地符号电气上相连。"
+
+  - id: switch
+    nameZh: 开关
+    nameEn: Switch
+    category: switch
+    refPrefix: [K, S, SA]
+    terminalCount: 2
+    drawingHints: "一根可绕支点旋转的斜短线，闭合时接触另一端；常开/常闭画法不同。"
+    semantics: "通断电路；单刀单掷/单刀双掷/联动开关等。"
+
+  - id: relay
+    nameZh: 继电器
+    nameEn: Relay
+    category: switch
+    refPrefix: [K, KA]
+    terminalCount: 4
+    drawingHints: "线圈画成矩形（或两端引线矩形），旁边画常开/常闭触点符号。"
+    semantics: "电磁驱动触点通断，实现小信号控制大功率/隔离。"
+
+  - id: fuse
+    nameZh: 熔断器
+    nameEn: Fuse
+    category: switch
+    refPrefix: [F, FU]
+    terminalCount: 2
+    drawingHints: "矩形内一条竖直短线段（或锯齿线），两端引线。"
+    semantics: "过流保护，熔断后断开电路。"
+
+  - id: connector
+    nameZh: 连接器/接插件
+    nameEn: Connector
+    category: connector
+    refPrefix: [XT, CN, J, P]
+    terminalCount: 2
+    drawingHints: "两个插针/插孔符号相对（或矩形框），引脚按序标注 1/2/3…。"
+    semantics: "板间/线间电气连接，可插拔。"
+
+  - id: terminal
+    nameZh: 接线端子
+    nameEn: Terminal
+    category: connector
+    refPrefix: [XT, TB]
+    terminalCount: 1
+    drawingHints: "小圆圈或短横线端子符号，常带序号。"
+    semantics: "外部接线点。"
+
+  - id: sensor
+    nameZh: 传感器
+    nameEn: Sensor
+    category: sensor
+    refPrefix: [B, BT, BP, U]
+    terminalCount: 2
+    drawingHints: "矩形框内标注传感器类型文字（如温度/压力/位移），两至多根引线。"
+    semantics: "将物理量（温度/压力/光/磁等）转换为电信号。"
+
+  - id: display_digit
+    nameZh: 数码管
+    nameEn: Seven-Segment Display
+    category: display
+    refPrefix: [DS, LED]
+    terminalCount: 8
+    drawingHints: "七个（或八个含小数点）矩形段按 8 字形排列，标注共阴/共阳。"
+    semantics: "数字/符号显示。"
+
+  - id: lamp
+    nameZh: 指示灯
+    nameEn: Indicator Lamp
+    category: display
+    refPrefix: [HL, L, LED]
+    terminalCount: 2
+    drawingHints: "圆圈内一个叉（灯丝）或实心圆点，两端引线。"
+    semantics: "状态指示（电源/运行/告警）。"
+
+  - id: buzzer
+    nameZh: 蜂鸣器/扬声器
+    nameEn: Buzzer / Loudspeaker
+    category: misc
+    refPrefix: [LS, BZ, HA, SP]
+    terminalCount: 2
+    drawingHints: "扬声器画半圆+音膜斜线；蜂鸣器画矩形+引线。"
+    semantics: "发声器件（提示音/语音）。"
+
+  - id: microphone
+    nameZh: 话筒
+    nameEn: Microphone
+    category: misc
+    refPrefix: [MIC, BM]
+    terminalCount: 2
+    drawingHints: "圆圈+弧线（电容式）或矩形+引线，标注 MIC。"
+    semantics: "声音→电信号。"
+
+  - id: crystal
+    nameZh: 晶振
+    nameEn: Crystal Oscillator
+    category: misc
+    refPrefix: [XT, Y, B]
+    terminalCount: 2
+    valueUnit: Hz
+    drawingHints: "矩形（两端引线）或两平行线间夹一晶体符号，常标注频率值。"
+    semantics: "提供精确时钟频率。"
+
+  - id: antenna
+    nameZh: 天线
+    nameEn: Antenna
+    category: misc
+    refPrefix: [ANT, E]
+    terminalCount: 1
+    drawingHints: "顶端三条发散斜线（或鞭状直线），底端一根引线。"
+    semantics: "发射/接收电磁波。"
+
+  - id: motor
+    nameZh: 电机
+    nameEn: Electric Motor
+    category: motor
+    refPrefix: [M, MG]
+    terminalCount: 2
+    drawingHints: "圆圈内标注 M（电动机）或 G（发电机），两根或多根引线。"
+    semantics: "电能→机械能（电动）或反之（发电）。"

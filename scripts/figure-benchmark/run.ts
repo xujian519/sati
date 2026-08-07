@@ -17,6 +17,7 @@ import { createModelRuntime, type ModelRuntime } from "../../src/model/index.js"
 import { createAnalyzePatentFigureTool } from "../../src/tool/builtin/analyzePatentFigure.js";
 import type { SatiToolModelClient, SatiToolRuntimeContext } from "../../src/tool/protocol/types.js";
 import type { FigureAnalysisResult, FigureComponent, FigureType } from "../../src/patent/figure/types.js";
+import { generateSyntheticFigures, type SyntheticBenchmarkFigure } from "./synth.js";
 
 const BENCHMARK_DIR = path.join(process.env.HOME ?? process.env.USERPROFILE ?? ".", ".sati", "benchmark");
 const MANIFEST_PATH = path.join(BENCHMARK_DIR, "manifest.json");
@@ -32,6 +33,8 @@ type BenchmarkFigure = {
   humanFigureType: FigureType;
   expectedRefNumbers: string[];
   keyComponents: { refNumber: string; name: string }[];
+  /** 电学 ground truth（合成图含此字段，真实图可缺省）。 */
+  expectedElectrical?: SyntheticBenchmarkFigure["expectedElectrical"];
   notes?: string;
 };
 
@@ -63,6 +66,13 @@ type FigureResult = {
     refF1: number;
     usable: boolean;
     confidence: number;
+    /** 电学深度分析指标（仅合成电学图存在 ground truth 时）。 */
+    electrical?: {
+      symbolAccuracy: number;
+      netlistValid: boolean;
+      /** 电学结果是否存在。 */
+      hasElectrical: boolean;
+    };
   };
   durationMs: number;
 };
@@ -82,6 +92,12 @@ type BenchmarkRun = {
     avgRefF1: number;
     avgConfidence: number;
     usableRate: number;
+    /** 电学图电学结果产出率。 */
+    electricalRate: number;
+    /** 电学图平均符号准确率（仅合成图有 ground truth）。 */
+    avgSymbolAccuracy: number;
+    /** 电学图 netlist 结构校验通过率。 */
+    netlistValidRate: number;
   };
   results: FigureResult[];
 };
@@ -99,6 +115,7 @@ function parseArgs(argv: string[]) {
     provider: args.provider ?? "moonshot",
     model: args.model ?? "kimi-k3",
     limit: args.limit ? Number(args.limit) : undefined,
+    synthCount: args.synth ? Number(args.synth) : undefined,
   };
 }
 
@@ -159,6 +176,48 @@ function computeRefMetrics(expected: string[], predictedComponents: FigureCompon
   };
 }
 
+/** 计算电学深度分析指标：符号准确率 + netlist 结构校验通过率。 */
+function computeElectricalMetrics(
+  figure: BenchmarkFigure,
+  predicted: FigureAnalysisResult,
+): FigureResult["metrics"]["electrical"] | undefined {
+  if (!figure.expectedElectrical || figure.expectedElectrical.components.length === 0) return undefined;
+  const hasElectrical = predicted.electrical !== undefined;
+  if (!hasElectrical) {
+    return { hasElectrical: false, symbolAccuracy: 0, netlistValid: false };
+  }
+  const expected = figure.expectedElectrical.components;
+  const predictedComponents = predicted.electrical!.components;
+  let correctSymbols = 0;
+  for (const exp of expected) {
+    const pred = predictedComponents.find(c => normalizeRefNumber(c.ref) === normalizeRefNumber(exp.ref));
+    if (pred && normalizeRefNumber(pred.symbol) === normalizeRefNumber(exp.symbol)) {
+      correctSymbols++;
+    }
+  }
+  const symbolAccuracy = expected.length > 0 ? correctSymbols / expected.length : 0;
+
+  // netlist 结构校验：nets 非空、组件引用有效、无悬空网络（简单版）
+  const nets = predicted.electrical!.nets;
+  let netlistValid = false;
+  if (nets.length > 0) {
+    const componentRefs = new Set(predictedComponents.map(c => normalizeRefNumber(c.ref)));
+    const allRefsValid = nets.every(net =>
+      net.connectedRefs.every(pinRef => {
+        const ref = normalizeRefNumber(pinRef.split(".")[0] ?? "");
+        return componentRefs.has(ref);
+      }),
+    );
+    const noEmptyNets = nets.every(net => net.connectedRefs.length > 0);
+    const noSingleNodeNets = nets.every(
+      net => net.connectedRefs.length >= 2 || /^\s*(vcc|vdd|vee|vss|gnd|\+v|bat|ac)/i.test(net.name),
+    );
+    netlistValid = allRefsValid && noEmptyNets && noSingleNodeNets;
+  }
+
+  return { hasElectrical: true, symbolAccuracy, netlistValid };
+}
+
 async function runFigure(
   figure: BenchmarkFigure,
   tool: ReturnType<typeof createAnalyzePatentFigureTool>,
@@ -195,6 +254,7 @@ async function runFigure(
     metrics.typeCorrect = predicted.figureType === figure.humanFigureType;
     metrics.usable = predicted.usable;
     metrics.confidence = predicted.confidence ?? 0;
+    metrics.electrical = computeElectricalMetrics(figure, predicted);
 
     return {
       id: figure.id,
@@ -225,10 +285,17 @@ function average(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
+export { computeRefMetrics, computeElectricalMetrics, summarize };
+
 function summarize(results: FigureResult[]): BenchmarkRun["summary"] {
   const total = results.length;
   const success = results.filter(r => r.predicted !== null && !r.error).length;
   const failed = total - success;
+
+  const electricalMetrics = results
+    .map(r => r.metrics.electrical)
+    .filter((m): m is NonNullable<typeof m> => m !== undefined);
+  const hasElectricalCount = electricalMetrics.length;
 
   return {
     total,
@@ -240,13 +307,21 @@ function summarize(results: FigureResult[]): BenchmarkRun["summary"] {
     avgRefF1: average(results.map(r => r.metrics.refF1)),
     avgConfidence: average(results.filter(r => r.predicted).map(r => r.metrics.confidence)),
     usableRate: average(results.filter(r => r.predicted).map(r => (r.metrics.usable ? 1 : 0))),
+    electricalRate: hasElectricalCount > 0 ? average(electricalMetrics.map(m => (m.hasElectrical ? 1 : 0))) : 0,
+    avgSymbolAccuracy: hasElectricalCount > 0 ? average(electricalMetrics.map(m => m.symbolAccuracy)) : 0,
+    netlistValidRate: hasElectricalCount > 0 ? average(electricalMetrics.map(m => (m.netlistValid ? 1 : 0))) : 0,
   };
 }
 
 async function main() {
   const args = parseArgs(process.argv);
   const manifest = await loadManifest();
-  const figures = args.limit ? manifest.figures.slice(0, args.limit) : manifest.figures;
+  let figures: BenchmarkFigure[] = args.limit ? manifest.figures.slice(0, args.limit) : manifest.figures;
+
+  if (args.synthCount && args.synthCount > 0) {
+    const synthetic = await generateSyntheticFigures(args.synthCount);
+    figures = [...figures, ...synthetic];
+  }
 
   console.log(`基准数据集: ${manifest.name}`);
   console.log(`图幅总数: ${manifest.figures.length}，本次运行: ${figures.length}`);
@@ -293,6 +368,11 @@ async function main() {
   console.log(`平均标号 F1: ${(summary.avgRefF1 * 100).toFixed(1)}%`);
   console.log(`平均置信度: ${(summary.avgConfidence * 100).toFixed(1)}%`);
   console.log(`usable 率: ${(summary.usableRate * 100).toFixed(1)}%`);
+  if (summary.total > 0) {
+    console.log(`电学图电学结果产出率: ${(summary.electricalRate * 100).toFixed(1)}%`);
+    console.log(`电学图平均符号准确率: ${(summary.avgSymbolAccuracy * 100).toFixed(1)}%`);
+    console.log(`电学图 netlist 结构校验通过率: ${(summary.netlistValidRate * 100).toFixed(1)}%`);
+  }
   console.log(`总耗时: ${runDurationMs}ms`);
   console.log(`结果已保存: ${resultPath}`);
 }

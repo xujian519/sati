@@ -76,6 +76,58 @@ export type FigureConnection = {
 };
 
 /**
+ * 电气元件大类（电学深度分析 Step3 输出）。
+ * 与 symbols 模块的 ELECTRICAL_SYMBOL_CATEGORIES 对齐，另含 "unknown"（无法映射）。
+ */
+export const ELECTRICAL_CATEGORIES = [
+  "passive",
+  "semiconductor",
+  "ic",
+  "power",
+  "switch",
+  "connector",
+  "sensor",
+  "display",
+  "motor",
+  "misc",
+  "unknown",
+] as const;
+
+export type ElectricalCategory = (typeof ELECTRICAL_CATEGORIES)[number];
+
+/** 电学符号元件（符号级识别结果，对应附图标记）。 */
+export type ElectricalComponent = {
+  /** 附图标记（如 "R1"，与图面字母前缀+编号一致）。 */
+  ref: string;
+  /** 符号库 id（resistor/capacitor/…；无法匹配为 "unknown"）。 */
+  symbol: string;
+  /** 元件大类。 */
+  category: ElectricalCategory;
+  /** 元件中文名称（如 "电阻"）。 */
+  name: string;
+  /** 电气参数（图上明确标注时，如 "10kΩ"；否则省略）。 */
+  value?: string;
+  /** 引脚数（如识别）。 */
+  terminalCount?: number;
+};
+
+/** 电路网络（电气连通关系）。 */
+export type ElectricalNet = {
+  /** 网络名（VCC / GND / 节点号如 N1）。 */
+  name: string;
+  /** 连接到该网络的元件引脚，格式 "元件标号.引脚号"（如 "R1.1"）。 */
+  connectedRefs: string[];
+};
+
+/** 电学深度分析结果（Step3，仅附图类型为 circuit/schematic 时产生）。 */
+export type ElectricalAnalysis = {
+  components: ElectricalComponent[];
+  nets: ElectricalNet[];
+  /** SPICE 风格网表文本（尽力而为；不可用时省略）。 */
+  netlist?: string;
+};
+
+/**
  * 附图分析结果。
  *
  * `figureDescription` 为可直接落入说明书「附图说明」章节的文字（专利格式：
@@ -106,6 +158,8 @@ export type FigureAnalysisResult = {
   usable: boolean;
   /** 实际使用的模型标识（provider/model）。 */
   modelUsed: string;
+  /** 电学深度分析结果（仅当附图类型为 circuit/schematic 时存在）。 */
+  electrical?: ElectricalAnalysis;
 };
 
 /**
@@ -125,3 +179,6 @@ export const normalizeComponentKind = makeNormalizer(FIGURE_COMPONENT_KINDS, "un
 
 /** 连接类型枚举值校验：非合法值返回 "unknown"。 */
 export const normalizeConnectionKind = makeNormalizer(FIGURE_CONNECTION_KINDS, "unknown");
+
+/** 电气元件大类枚举值校验：非合法值返回 "unknown"。 */
+export const normalizeElectricalCategory = makeNormalizer(ELECTRICAL_CATEGORIES, "unknown");

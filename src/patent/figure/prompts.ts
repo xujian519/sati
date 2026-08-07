@@ -12,6 +12,7 @@
  */
 
 import type { FigureType } from "./types.js";
+import { formatSymbolsAsContext } from "./symbols/loader.js";
 
 /** 附图规范要点（静态注入，来源：专利实务附图规范常识，与 wiki 附图卡片一致）。 */
 export const FIGURE_SPEC_GUIDE = [
@@ -118,6 +119,86 @@ export type Step2Result = {
   warnings?: string[];
 };
 
+/** Step3 输出 JSON Schema（电学符号级深度分析）。 */
+export const STEP3_SCHEMA = {
+  type: "object",
+  properties: {
+    electrical_components: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          ref: {
+            type: "string",
+            description: "附图标记（与图面字母前缀+编号完全一致，如 R1/C2/Q3/IC1）",
+          },
+          symbol: {
+            type: "string",
+            description:
+              "符号库 id（resistor/capacitor/inductor/transformer/diode/transistor_bjt/mosfet/opamp/logic_gate/ic_chip/battery/dc_power/ground/switch/relay/fuse/connector/sensor/display_digit/lamp/buzzer/crystal/antenna/motor/…；无法匹配用 unknown）",
+          },
+          category: {
+            type: "string",
+            enum: [
+              "passive",
+              "semiconductor",
+              "ic",
+              "power",
+              "switch",
+              "connector",
+              "sensor",
+              "display",
+              "motor",
+              "misc",
+              "unknown",
+            ],
+            description: "元件大类",
+          },
+          name: { type: "string", description: "元件中文名称（如 电阻/电容/三极管）" },
+          value: { type: "string", description: "电气参数（图上明确标注时，如 10kΩ/100μF；无标注省略）" },
+          terminal_count: { type: "number", description: "引脚数（如可判断）" },
+        },
+        required: ["ref", "symbol", "category", "name"],
+      },
+    },
+    nets: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "网络名（VCC/GND/节点号如 N1）" },
+          connected_refs: {
+            type: "array",
+            items: { type: "string" },
+            description: "连接到该网络的元件引脚，格式“元件标号.引脚号”（如 R1.1），地/电源网络用 GND/VCC 直接列引脚",
+          },
+        },
+        required: ["name", "connected_refs"],
+      },
+    },
+    netlist: { type: "string", description: "SPICE 风格网表文本（尽力而为；无法组织时省略）" },
+    warnings: { type: "array", items: { type: "string" }, description: "无法识别的符号或区域" },
+  },
+  required: ["electrical_components", "nets", "warnings"],
+} as const;
+
+export type Step3Result = {
+  electrical_components: Array<{
+    ref: string;
+    symbol: string;
+    category: string;
+    name: string;
+    value?: string;
+    terminal_count?: number;
+  }>;
+  nets: Array<{
+    name: string;
+    connected_refs: string[];
+  }>;
+  netlist?: string;
+  warnings?: string[];
+};
+
 function formatContext(claimContext: string | undefined): string {
   return claimContext && claimContext.trim().length > 0
     ? `\n【权利要求/技术方案上下文】\n${claimContext.trim().slice(0, 4000)}`
@@ -166,5 +247,36 @@ export function buildStep2Prompt(
     "",
     "严格输出 JSON，不要输出其他内容：",
     JSON.stringify(STEP2_SCHEMA, null, 2),
+  ].join("\n");
+}
+
+/** Step3 提示词：电学符号级深度分析（电路图/原理示意图专用）。 */
+export function buildStep3Prompt(
+  figureNumber: number,
+  overallDescription: string,
+  claimContext: string | undefined,
+): string {
+  return [
+    "这张附图被判定为电路图/原理示意图。请进行电学符号级深度分析：",
+    "1. 识别每个电气元件的符号类型（对照下方标准符号集）、附图标记与图上标注的电气参数；",
+    "2. 提取电路连接关系（网络 nets）：同一导线相连的引脚属于同一网络，电源/地网络单独列出；",
+    "3. 尽力组织 SPICE 风格网表（netlist）。",
+    "",
+    `附图编号：图${figureNumber}`,
+    `整体描述：${overallDescription || "（未提供）"}`,
+    formatContext(claimContext),
+    "",
+    "【电学符号标准集（GB/T 4728 简化，依据标准符号画法）】",
+    formatSymbolsAsContext(),
+    "",
+    "【识别要求】",
+    "- 元件标号必须与图面字母前缀+数字完全一致（R1/C2/Q3/IC1…），不得改写；",
+    "- symbol 字段必须从上方符号集中选择 id；无法匹配的符号 symbol 用 unknown 并在 warnings 中说明；",
+    "- 元件参数（阻值/容值/型号）仅在图上明确标注时填写，不得猜测；",
+    "- 网络描述电气连通关系，VCC/GND 等电源网络单独列出；",
+    "- 无法识别的区域写入 warnings，不要猜测。",
+    "",
+    "严格输出 JSON，不要输出其他内容：",
+    JSON.stringify(STEP3_SCHEMA, null, 2),
   ].join("\n");
 }

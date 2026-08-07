@@ -119,7 +119,8 @@ export function draftSpecification(input: DraftSpecificationInput): DraftSpecifi
   // 附图说明：显式 drawing_descriptions 优先；否则由 figure_analysis 自动生成。
   const explicitDescriptions =
     input.drawing_descriptions && input.drawing_descriptions.length > 0 ? input.drawing_descriptions : undefined;
-  const autoDescriptions = input.figure_analysis?.map(f => f.figureDescription.trim()).filter(d => d.length > 0) ?? [];
+  const autoDescriptions =
+    input.figure_analysis?.map(f => enrichFigureDescription(f).trim()).filter(d => d.length > 0) ?? [];
   const drawingDescriptions = explicitDescriptions ?? (autoDescriptions.length > 0 ? autoDescriptions : undefined);
   if (!explicitDescriptions && autoDescriptions.length > 0) {
     warnings.push("附图说明由附图智能分析自动生成，请人工核对附图标记与图面一致");
@@ -237,4 +238,23 @@ function resolveDomain(hint: TechDomain | undefined, title: string, input: Draft
     if (entry.keywords.some(k => haystack.includes(k))) return entry.domain;
   }
   return "general";
+}
+
+/**
+ * 附图说明增强：当附图分析含电学深度分析（Step3）时，用元件级明细
+ * （ref-名称（参数））补全 Step2 附图说明中缺失的元件。
+ *
+ * 已含全部电学元件引用时不重复追加（避免「图中：」明细重复）；电学分析
+ * 缺失或为空时原样返回。向后兼容：无 electrical 字段的旧分析结果不受影响。
+ */
+function enrichFigureDescription(figure: FigureAnalysisResult): string {
+  const base = figure.figureDescription.trim();
+  const electrical = figure.electrical;
+  if (!electrical || electrical.components.length === 0) return base;
+  const hasAllRefs = electrical.components.every(component => base.includes(component.ref));
+  if (hasAllRefs) return base;
+  const details = electrical.components
+    .map(component => `${component.ref}-${component.name}${component.value ? `（${component.value}）` : ""}`)
+    .join("；");
+  return base.length > 0 ? `${base}\n图中：${details}；` : `图1为电路原理图；图中：${details}；`;
 }
