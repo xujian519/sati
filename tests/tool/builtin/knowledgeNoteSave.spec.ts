@@ -126,10 +126,16 @@ test("工具 execute：正常保存返回插入消息", async t => {
   const dbPath = withFixture(t);
   const tool = createKnowledgeNoteSaveTool();
   const { makeToolContext } = await import("../context-fixture.js");
-  // 注入真实 dbPath：临时改写 resolveKnowledgeDbPaths 的成本高，直接测 savePersonalNote 已覆盖；
-  // 此处仅验证 execute 在库存在时的输入校验分支。
+  // 通过 SATI_KNOWLEDGE_DB 注入 fixture 库路径，让 execute 命中"库存在"分支。
+  // resolveKnowledgeDbPaths 每次调用实时读 env（无缓存），CI 无 ~/.sati 库也能稳定断言；
+  // 写入路径由 savePersonalNote 用例覆盖，此处仅验证输入校验分支。
+  const prevDb = process.env.SATI_KNOWLEDGE_DB;
+  process.env.SATI_KNOWLEDGE_DB = dbPath;
+  t.after(() => {
+    if (prevDb === undefined) delete process.env.SATI_KNOWLEDGE_DB;
+    else process.env.SATI_KNOWLEDGE_DB = prevDb;
+  });
   const missing = await tool.execute({ title: "", content: "x" } as never, makeToolContext());
   const text = missing.content[0]?.type === "text" ? missing.content[0].text : "";
   assert.ok(text.includes("title 与 content 均不能为空"));
-  assert.equal(dbPath, dbPath);
 });
