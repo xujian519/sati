@@ -1,98 +1,4 @@
-import { GatewayBrowserClient } from "@sati/web-client";
 import { IS_PLATFORM } from "../constants/config";
-
-// ─── Gateway WebSocket 请求层（浏览器直连，protocol 1.0+）──────────────────
-// token 经 /api/auth/gateway-token 颁发；ws 不可用/失败时由各方法降级 REST。
-const GATEWAY_WS_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_GATEWAY_WS_URL) ||
-  `ws://${globalThis.location?.hostname || "127.0.0.1"}:19789/ws`;
-
-let gatewayClientPromise = null;
-
-/** 获取（惰性初始化）浏览器侧 gateway ws 客户端单例。 */
-export function getGatewayClient() {
-  if (!gatewayClientPromise) {
-    gatewayClientPromise = (async () => {
-      const res = await fetch("/api/auth/gateway-token");
-      if (!res.ok) throw new Error("gateway-token unavailable");
-      const { token } = await res.json();
-      if (!token) throw new Error("gateway-token empty");
-      const client = new GatewayBrowserClient({ url: GATEWAY_WS_URL, token, clientName: "web" });
-      await client.connect();
-      return client;
-    })().catch(error => {
-      gatewayClientPromise = null; // 允许下次重试
-      throw error;
-    });
-  }
-  return gatewayClientPromise;
-}
-
-/** list_projects → 显示名映射到绝对路径（fullPath），供 always_on_* 方法使用。 */
-export function resolveProjectKeyByName(projects, projectName) {
-  if (!projects?.length) return projectName;
-  const match = projects.find(p => p.name === projectName || p.fullPath === projectName);
-  return match?.fullPath || projectName;
-}
-
-/** 试点：discovery plans 列表走 gateway 直连，失败降级 REST。 */
-export async function gatewayListPlans(projectName) {
-  try {
-    const client = await getGatewayClient();
-    const projects = await listProjectsCached(client);
-    const key = resolveProjectKeyByName(projects, projectName);
-    const result = await client.request("always_on_list_plans", { projectKey: key });
-    if (result?.error) {
-      throw Object.assign(new Error(result.error.message || String(result.error.code)), { code: result.error.code });
-    }
-    return result?.plans ?? [];
-  } catch (error) {
-    // 降级 REST（gateway 未启动 / token 不可用 / 方法不可用）——记录原因便于排障
-    console.warn(
-      "[gateway-direct] always_on_list_plans fallback to REST:",
-      error instanceof Error ? error.message : error,
-    );
-    const res = await authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/discovery-plans`);
-    const data = await res.json();
-    return data?.plans ?? [];
-  }
-}
-
-/** list_projects 结果缓存（projectKey 映射在同一会话内不变）。 */
-let cachedProjects = null;
-let cachedProjectsAt = 0;
-const PROJECTS_CACHE_TTL_MS = 60_000;
-
-async function listProjectsCached(client) {
-  const now = Date.now();
-  if (cachedProjects && now - cachedProjectsAt < PROJECTS_CACHE_TTL_MS) {
-    return cachedProjects;
-  }
-  const result = await client.request("list_projects", {});
-  const projects = result?.projects ?? [];
-  cachedProjects = projects;
-  cachedProjectsAt = now;
-  return projects;
-}
-
-/** 测试隔离：清空 list_projects 缓存。 */
-export function resetGatewayClient() {
-  gatewayClientPromise = null;
-  cachedProjects = null;
-  cachedProjectsAt = 0;
-}
-
-/** P2b-1：权限决策直发 gateway（permission_decide）。调用方负责状态机/错误处理。 */
-export async function gatewayPermissionDecide(input) {
-  const client = await getGatewayClient();
-  return client.request("permission_decide", input);
-}
-
-/** P2b-1：elicitation 应答直发 gateway（elicitation_respond）。 */
-export async function gatewayElicitationRespond(input) {
-  const client = await getGatewayClient();
-  return client.request("elicitation_respond", input);
-}
 
 const normalizePathForUrl = value => String(value || "").replace(/\\/g, "/");
 
@@ -251,8 +157,6 @@ function defaultWebHttpUserHint(status) {
 
 // API endpoints
 export const api = {
-  // Gateway 直连试点（失败自动降级 REST）
-  gatewayListPlans,
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch("/api/auth/status"),

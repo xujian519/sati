@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../components/auth/context/AuthContext";
-import { useGatewayDirectChatProviderState } from "../chat/useGatewayDirectChat";
 import { IS_PLATFORM } from "../constants/config";
 
 type WSSubscriber = (msg: any) => void;
@@ -37,8 +36,6 @@ type WebSocketContextType = {
   latestMessage: any | null;
   isConnected: boolean;
   reconnectInfo: ReconnectInfo;
-  /** 手动重试（直连模式：自动 recover 失败后触发；legacy 模式不提供）。 */
-  retryReconnect?: () => void;
   /**
    * Subscribe to every incoming WebSocket message synchronously, bypassing
    * React state batching. Returns an unsubscribe function. Use this for
@@ -288,18 +285,9 @@ function LegacyWebSocketProvider({ children }: { children: React.ReactNode }) {
   return <WebSocketContext.Provider value={webSocketData}>{children}</WebSocketContext.Provider>;
 }
 
-function DirectGatewayWebSocketProvider({ children }: { children: React.ReactNode }) {
-  const webSocketData = useGatewayDirectChatProviderState();
-  return <WebSocketContext.Provider value={webSocketData}>{children}</WebSocketContext.Provider>;
-}
-
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
-  // P2b-3 双轨开关：VITE_GATEWAY_DIRECT_CHAT=1 时聊天直连 gateway（浏览器 ws），
-  // 默认走 ui/server /ws 中转。两个 provider 返回同构结构，Chat 组件零改动。
-  const directChatEnabled = import.meta.env.VITE_GATEWAY_DIRECT_CHAT === "1";
-  if (directChatEnabled) {
-    return <DirectGatewayWebSocketProvider>{children}</DirectGatewayWebSocketProvider>;
-  }
+  // 聊天流量经 ui/server /ws 中转（useSessionWatch + session-watch-registry
+  // 中间人）。浏览器直连 gateway 路径已移除。
   return <LegacyWebSocketProvider>{children}</LegacyWebSocketProvider>;
 };
 

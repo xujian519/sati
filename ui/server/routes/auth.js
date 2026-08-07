@@ -3,7 +3,6 @@ import bcrypt from "bcrypt";
 import { userDb, db } from "../database/db.js";
 import { generateToken, authenticateToken } from "../middleware/auth.js";
 import { DISABLE_LOCAL_AUTH } from "../constants/config.js";
-import { readGatewayToken } from "../sati-bridge.js";
 
 const router = express.Router();
 
@@ -24,21 +23,6 @@ router.get("/status", async (req, res) => {
     });
   } catch (error) {
     console.error("Auth status error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// Gateway WebSocket 连接令牌：供浏览器端 GatewayBrowserClient 直接连 gateway（ws://127.0.0.1:19789/ws）使用。
-// 仅颁发本地 server-token；未配置时返回 404 由前端降级。
-router.get("/gateway-token", async (req, res) => {
-  try {
-    const token = await readGatewayToken();
-    if (!token) {
-      return res.status(404).json({ error: "Gateway token is not available" });
-    }
-    res.json({ token });
-  } catch (error) {
-    console.error("Gateway token error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });

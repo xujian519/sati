@@ -112,9 +112,11 @@ export default function RunDetail(props: RunDetailProps) {
     let cancelled = false;
     setLoadingPlan(true);
     api
-      .gatewayListPlans(projectName)
-      .then((plans: Array<Record<string, unknown>>) => {
+      .projectDiscoveryPlans(projectName)
+      .then(res => res.json())
+      .then((payload: { plans?: Array<Record<string, unknown>> }) => {
         if (cancelled) return;
+        const plans = payload.plans ?? [];
         const match = plans.find((p: Record<string, unknown>) => p.id === planId);
         if (match) {
           setPlan({

@@ -1,11 +1,4 @@
 export {
-  GatewayBrowserClient,
-  readLocalGatewayToken,
-  type GatewayBrowserClientOptions,
-  type GatewayBrowserStream,
-  type WebSocketLike,
-} from "./GatewayBrowserClient.js";
-export {
   SATI_GATEWAY_PROTOCOL_VERSION_WEB,
   type WebActiveTurnSnapshot,
   type WebActiveTurnSnapshotInput,
