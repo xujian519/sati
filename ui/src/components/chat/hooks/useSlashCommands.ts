@@ -22,7 +22,7 @@ interface UseSlashCommandsOptions {
   selectedProject: Project | null;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
-  textareaRef: RefObject<HTMLTextAreaElement>;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
   inputValueRef?: { current: string };
 }
 

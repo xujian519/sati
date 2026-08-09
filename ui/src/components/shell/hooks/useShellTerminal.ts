@@ -17,7 +17,7 @@ import { sendSocketMessage } from "../utils/socket";
 import { ensureXtermFocusStyles } from "../utils/terminalStyles";
 
 type UseShellTerminalOptions = {
-  terminalContainerRef: RefObject<HTMLDivElement>;
+  terminalContainerRef: RefObject<HTMLDivElement | null>;
   terminalRef: MutableRefObject<Terminal | null>;
   fitAddonRef: MutableRefObject<FitAddon | null>;
   wsRef: MutableRefObject<WebSocket | null>;

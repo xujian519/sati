@@ -44,7 +44,7 @@ import {
 type DiffLine = { type: string; content: string; lineNum: number };
 
 type MessagesPaneV2Props = {
-  scrollContainerRef: RefObject<HTMLDivElement>;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
   onWheel: () => void;
   onTouchMove: () => void;
   isLoadingSessionMessages: boolean;

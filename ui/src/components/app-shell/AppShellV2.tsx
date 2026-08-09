@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { useMatch, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import ReactDOM from "react-dom";

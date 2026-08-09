@@ -164,7 +164,7 @@ function useSatiConfigState() {
     [updateRaw],
   );
 
-  const refreshRef = useRef<() => Promise<void>>();
+  const refreshRef = useRef<() => Promise<void>>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);

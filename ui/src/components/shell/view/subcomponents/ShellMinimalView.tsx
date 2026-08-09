@@ -4,7 +4,7 @@ import type { AuthCopyStatus } from "../../types/types";
 import { resolveAuthUrlForDisplay } from "../../utils/auth";
 
 type ShellMinimalViewProps = {
-  terminalContainerRef: RefObject<HTMLDivElement>;
+  terminalContainerRef: RefObject<HTMLDivElement | null>;
   authUrl: string;
   authUrlVersion: number;
   initialCommand: string | null | undefined;
