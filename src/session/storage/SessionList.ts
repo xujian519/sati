@@ -1,9 +1,34 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
+import { TtlCache } from "../../shared/ttl-cache.js";
 import { readSessionLite, type SessionLiteFile } from "./SessionLiteReader.js";
 
 const ALWAYS_ON_AUXILIARY_PATTERN = /^always-on-(discovery|workspace|report)[:\-]/;
+
+/**
+ * chatDir 扫描结果缓存：以目录文件快照做快速失效判断。
+ * 列表变更（新建/删除会话）会改变文件名集合 → 快照不匹配 → 重新扫描；
+ * 会话内容更新（活跃度/标题）文件名不变 → TTL 内返回缓存（5s 新鲜度）。
+ * 侧栏每次加载/翻页因此省去对每个会话文件的 stat + head/tail 读取。
+ *
+ * 缓存条目为不可变快照：会话不含 cwd（调用方按各自语义盖章），
+ * includeInternal 过滤在读取侧进行；scanChatDir 返回浅拷贝数组，
+ * 调用方修改返回结果不会污染缓存。
+ */
+const CHAT_DIR_CACHE_TTL_MS = 5_000;
+const CHAT_DIR_CACHE_MAX = 64;
+
+type ChatDirCacheEntry = {
+  /** 目录快照：排序后的 .jsonl 文件名。 */
+  names: string[];
+  sessions: SessionInfo[];
+};
+
+const chatDirCache = new TtlCache<string, ChatDirCacheEntry>({
+  ttlMs: CHAT_DIR_CACHE_TTL_MS,
+  maxSize: CHAT_DIR_CACHE_MAX,
+});
 
 function isInternalSession(sessionId: string): boolean {
   return ALWAYS_ON_AUXILIARY_PATTERN.test(sessionId);
@@ -34,36 +59,76 @@ export type ListProjectSessionsOptions = {
 
 export async function listProjectSessions(options: ListProjectSessionsOptions): Promise<SessionInfo[]> {
   const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
+  const sessions = (await scanChatDir(chatDir)).filter(
+    session => options.includeInternal || !isInternalSession(session.sessionId),
+  );
+  return paginateSessions(
+    sessions.map(session => ({ ...session, cwd: options.projectRoot })),
+    options.limit,
+    options.offset,
+  );
+}
+
+/** 带目录快照缓存的 chatDir 扫描。返回不含 cwd 的不可变快照（浅拷贝数组）。 */
+async function scanChatDir(chatDir: string): Promise<SessionInfo[]> {
+  const cached = chatDirCache.get(chatDir);
+  if (cached) {
+    // 快速失效判断：仅 readdir 一次（轻量），文件名集合未变则复用上次扫描结果，
+    // 跳过对每个会话文件的 stat + head/tail 读取。
+    let names: string[];
+    try {
+      names = (await readdir(chatDir)).filter(name => name.endsWith(".jsonl")).sort();
+    } catch {
+      return [];
+    }
+    if (arraysEqual(cached.names, names)) {
+      return [...cached.sessions];
+    }
+  }
+
+  const { sessions, names } = await scanChatDirUncached(chatDir);
+  chatDirCache.set(chatDir, { names, sessions });
+  return [...sessions];
+}
+
+async function scanChatDirUncached(chatDir: string): Promise<{ sessions: SessionInfo[]; names: string[] }> {
   let names: string[];
   try {
     names = await readdir(chatDir);
   } catch {
-    return [];
+    return { sessions: [], names: [] };
   }
-
+  const jsonlNames = names.filter(name => name.endsWith(".jsonl"));
   const sessions: SessionInfo[] = [];
-  for (const name of names) {
-    if (!name.endsWith(".jsonl")) {
-      continue;
-    }
+  for (const name of jsonlNames) {
     const lite = await readSessionLite(join(chatDir, name));
     if (!lite) {
       continue;
     }
     const sessionId = name.slice(0, -".jsonl".length);
-    if (!options.includeInternal && isInternalSession(sessionId)) {
-      continue;
-    }
-    const info = parseSessionInfoFromLite(sessionId, lite, options.projectRoot);
+    // 注意：不传 projectRoot，cwd 由调用方盖章（缓存快照不含 cwd）。
+    const info = parseSessionInfoFromLite(sessionId, lite);
     if (info) {
       sessions.push(info);
     }
   }
 
   sessions.sort((left, right) => right.lastModified - left.lastModified);
-  const offset = Math.max(0, options.offset ?? 0);
-  const limit = options.limit ?? sessions.length;
-  return sessions.slice(offset, limit === 0 ? undefined : offset + limit);
+  return { sessions, names: jsonlNames.sort() };
+}
+
+function paginateSessions(sessions: SessionInfo[], limit?: number, offset?: number): SessionInfo[] {
+  const off = Math.max(0, offset ?? 0);
+  const lim = limit ?? sessions.length;
+  return sessions.slice(off, lim === 0 ? undefined : off + lim);
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 export function parseSessionInfoFromLite(
@@ -202,31 +267,16 @@ export async function listAllSessions(options: ListAllSessionsOptions): Promise<
   const all: SessionInfo[] = [];
   for (const projectId of projectIds) {
     const chatDir = join(projectsDir, projectId, "chats");
-    let names: string[];
-    try {
-      names = await readdir(chatDir);
-    } catch {
-      continue;
-    }
-
-    for (const name of names) {
-      if (!name.endsWith(".jsonl")) continue;
-      const sessionId = name.slice(0, -".jsonl".length);
-      if (!options.includeInternal && isInternalSession(sessionId)) continue;
-      const lite = await readSessionLite(join(chatDir, name));
-      if (!lite) continue;
-      const info = parseSessionInfoFromLite(sessionId, lite);
-      if (info) {
-        info.cwd = projectId;
-        all.push(info);
-      }
+    const sessions = (await scanChatDir(chatDir)).filter(
+      session => options.includeInternal || !isInternalSession(session.sessionId),
+    );
+    for (const session of sessions) {
+      all.push({ ...session, cwd: projectId });
     }
   }
 
   all.sort((left, right) => right.lastModified - left.lastModified);
-  const offset = Math.max(0, options.offset ?? 0);
-  const limit = options.limit ?? all.length;
-  return all.slice(offset, limit === 0 ? undefined : offset + limit);
+  return paginateSessions(all, options.limit, options.offset);
 }
 
 /** Options for title-based session search. */
@@ -245,29 +295,18 @@ export type SearchSessionsByTitleOptions = {
  */
 export async function searchSessionsByTitle(options: SearchSessionsByTitleOptions): Promise<SessionInfo[]> {
   const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
-  let names: string[];
-  try {
-    names = await readdir(chatDir);
-  } catch {
-    return [];
-  }
+  const all = (await scanChatDir(chatDir)).filter(
+    session => options.includeInternal || !isInternalSession(session.sessionId),
+  );
 
   const needle = options.query.toLowerCase();
   const results: SessionInfo[] = [];
-  for (const name of names) {
-    if (!name.endsWith(".jsonl")) continue;
-    const sessionId = name.slice(0, -".jsonl".length);
-    if (!options.includeInternal && isInternalSession(sessionId)) continue;
-    const lite = await readSessionLite(join(chatDir, name));
-    if (!lite) continue;
-    const info = parseSessionInfoFromLite(sessionId, lite, options.projectRoot);
-    if (!info) continue;
+  for (const info of all) {
     const haystack = [info.customTitle, info.aiTitle, info.firstPrompt].filter(Boolean).join(" ").toLowerCase();
     if (haystack.includes(needle)) {
-      results.push(info);
+      results.push({ ...info, cwd: options.projectRoot });
     }
   }
 
-  results.sort((left, right) => right.lastModified - left.lastModified);
   return options.limit ? results.slice(0, options.limit) : results;
 }
