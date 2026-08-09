@@ -422,7 +422,7 @@ export default function ComposerV2({
         "min-w-0 shrink-0",
         chromeless
           ? ""
-          : "bg-gradient-to-t from-white via-white/95 to-white/0 px-6 pb-6 pt-3 dark:from-neutral-950 dark:via-neutral-950/95 dark:to-transparent",
+          : "bg-gradient-to-t from-white via-white/95 to-white/0 px-6 pt-3 pb-6 dark:from-neutral-950 dark:via-neutral-950/95 dark:to-transparent",
       )}
     >
       <div className={cn("min-w-0", chromeless ? "" : "mx-auto max-w-[720px]")}>
@@ -481,7 +481,7 @@ export default function ComposerV2({
             ) : null}
 
             {showFileDropdown && filteredFiles.length > 0 ? (
-              <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-lg border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+              <div className="absolute right-0 bottom-full left-0 z-50 mb-2 max-h-48 overflow-y-auto rounded-lg border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
                 {filteredFiles.map((file, index) => (
                   <div
                     key={file.path}
@@ -541,7 +541,7 @@ export default function ComposerV2({
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 overflow-hidden"
                 >
-                  <div className="block w-full whitespace-pre-wrap break-words px-2 pt-1.5 text-[14px] leading-6 text-transparent">
+                  <div className="block w-full px-2 pt-1.5 text-[14px] leading-6 break-words whitespace-pre-wrap text-transparent">
                     {renderInputWithMentions(input)}
                   </div>
                 </div>
@@ -558,11 +558,11 @@ export default function ComposerV2({
                   onInput={onTextareaInput}
                   placeholder={placeholder}
                   rows={2}
-                  className="relative z-10 block max-h-[40vh] min-h-[52px] w-full resize-none bg-transparent px-3 pt-2 text-[14.5px] leading-[22px] text-neutral-900 placeholder-neutral-400 outline-none dark:text-neutral-100 dark:placeholder-neutral-500"
+                  className="relative z-10 block max-h-[40vh] min-h-[52px] w-full resize-none bg-transparent px-3 pt-2 text-[14.5px] leading-[22px] text-neutral-900 placeholder-neutral-400 outline-hidden dark:text-neutral-100 dark:placeholder-neutral-500"
                 />
               </div>
 
-              <div className="pd-composer-control-row flex flex-wrap items-center gap-x-1 gap-y-1 px-1 pb-0.5 pt-1.5">
+              <div className="pd-composer-control-row flex flex-wrap items-center gap-x-1 gap-y-1 px-1 pt-1.5 pb-0.5">
                 <div className="pd-composer-toolbar-left flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
                   <div
                     className="relative mr-1"
@@ -811,7 +811,7 @@ export default function ComposerV2({
                 </div>
 
                 {isBusySendQueued ? (
-                  <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 px-2 text-[12px] text-amber-700 dark:text-amber-300 sm:flex">
+                  <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 px-2 text-[12px] text-amber-700 sm:flex dark:text-amber-300">
                     <span className="truncate rounded-full bg-amber-50 px-2 py-1 dark:bg-amber-950/30">
                       {isBusySendConfirmed
                         ? t("input.queuedSendConfirmedInline", { defaultValue: "Stopping current turn; sending next" })
@@ -865,7 +865,7 @@ export default function ComposerV2({
                     {isContextPopoverOpen ? (
                       <div
                         role="status"
-                        className="absolute bottom-full right-0 z-50 mb-2 w-64 rounded-lg border border-neutral-200 bg-white p-3 text-left text-[12px] leading-5 text-neutral-700 shadow-lg dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
+                        className="absolute right-0 bottom-full z-50 mb-2 w-64 rounded-lg border border-neutral-200 bg-white p-3 text-left text-[12px] leading-5 text-neutral-700 shadow-lg dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
                       >
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <span className="font-medium text-neutral-900 dark:text-neutral-100">
@@ -938,7 +938,7 @@ export default function ComposerV2({
                     {isThinkingModeMenuOpen ? (
                       <div
                         role="menu"
-                        className="absolute bottom-full right-0 z-50 mb-2 w-64 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
+                        className="absolute right-0 bottom-full z-50 mb-2 w-64 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
                       >
                         {thinkingModes.map(option => {
                           const Icon = option.icon || Brain;
@@ -1020,7 +1020,7 @@ export default function ComposerV2({
                       "disabled:opacity-40 disabled:shadow-none",
                       "dark:from-brand-500 dark:to-brand-600",
                       isBusySendQueued &&
-                        "from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 shadow-[0_2px_8px_-2px_rgba(245,158,11,0.4)] dark:from-amber-400 dark:to-amber-500 dark:text-neutral-950 dark:hover:from-amber-300 dark:hover:to-amber-400",
+                        "from-amber-500 to-amber-600 shadow-[0_2px_8px_-2px_rgba(245,158,11,0.4)] hover:from-amber-600 hover:to-amber-700 dark:from-amber-400 dark:to-amber-500 dark:text-neutral-950 dark:hover:from-amber-300 dark:hover:to-amber-400",
                       isBusySendConfirmed && "cursor-wait",
                       (isSubmitPending || hasUploadingImages) && "cursor-wait",
                     )}

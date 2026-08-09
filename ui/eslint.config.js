@@ -33,6 +33,7 @@ export default tseslint.config(
     },
     settings: {
       react: { version: "detect" },
+      tailwindcss: { cssConfigPath: "src/index.css" },
     },
     rules: {
       // --- Unused imports/vars ---
@@ -79,7 +80,10 @@ export default tseslint.config(
       // --- Tailwind CSS ---
       "tailwindcss/classnames-order": "warn",
       "tailwindcss/no-contradicting-classname": "warn",
-      "tailwindcss/no-unnecessary-arbitrary-value": "warn",
+      // Disabled: the v4 plugin's fixes are not value-preserving — it rewrites
+      // text-[11px] -> text-xxs (adds a line-height) and text-[14px] ->
+      // text-xxs--line-height (an invalid class name), changing rendered output.
+      "tailwindcss/no-unnecessary-arbitrary-value": "off",
 
       // --- Disabled base rules ---
       // no-explicit-any: warn 而非 off —— 与根 eslint.config.mjs 保持一致，存量 any 可见、增量收敛。

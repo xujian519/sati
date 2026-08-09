@@ -68,7 +68,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
   const renderCopyButton = () => (
     <button
       onClick={handleAction}
-      className="ml-1 flex-shrink-0 text-gray-400 opacity-0 transition-all hover:text-gray-600 group-hover:opacity-100 dark:hover:text-gray-200"
+      className="ml-1 flex-shrink-0 text-gray-400 opacity-0 transition-all group-hover:opacity-100 hover:text-gray-600 dark:hover:text-gray-200"
       title="Copy to clipboard"
       aria-label="Copy to clipboard"
     >
@@ -112,9 +112,9 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
           <div className="flex min-w-0 flex-1 items-start gap-2">
             <div className="min-w-0 flex-1 rounded bg-gray-900 px-2.5 py-1 dark:bg-black">
               <code
-                className={`font-mono text-xs text-green-400 ${wrapText ? "whitespace-pre-wrap break-all" : "block truncate"}`}
+                className={`font-mono text-xs text-green-400 ${wrapText ? "break-all whitespace-pre-wrap" : "block truncate"}`}
               >
-                <span className="select-none text-green-600 dark:text-green-500">$ </span>
+                <span className="text-green-600 select-none dark:text-green-500">$ </span>
                 {value}
               </code>
             </div>
@@ -122,8 +122,8 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
           </div>
         </div>
         {secondary && (
-          <div className="ml-7 mt-1">
-            <span className="text-[11px] italic text-gray-400 dark:text-gray-500">{secondary}</span>
+          <div className="mt-1 ml-7">
+            <span className="text-[11px] text-gray-400 italic dark:text-gray-500">{secondary}</span>
           </div>
         )}
       </div>
@@ -156,7 +156,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
         <span className="text-[10px] text-gray-300 dark:text-gray-600">/</span>
         <span className={`min-w-0 flex-1 truncate font-mono text-xs ${colorScheme.primary}`}>{value}</span>
         {secondary && (
-          <span className="flex-shrink-0 text-[11px] italic text-gray-400 dark:text-gray-500">{secondary}</span>
+          <span className="flex-shrink-0 text-[11px] text-gray-400 italic dark:text-gray-500">{secondary}</span>
         )}
         {toolResult && (
           <a
@@ -183,7 +183,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
       )}
       {(icon || label || toolName) && <span className="text-[10px] text-gray-300 dark:text-gray-600">/</span>}
       <span
-        className={`font-mono text-xs ${wrapText ? "whitespace-pre-wrap break-all" : "truncate"} min-w-0 flex-1 ${colorScheme.primary}`}
+        className={`font-mono text-xs ${wrapText ? "break-all whitespace-pre-wrap" : "truncate"} min-w-0 flex-1 ${colorScheme.primary}`}
       >
         {value}
       </span>

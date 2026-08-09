@@ -57,7 +57,7 @@ export default function CustomEnvSection({ config, onChange }: CustomEnvSectionP
               <input
                 value={key}
                 readOnly
-                className="w-[200px] shrink-0 rounded-md border border-border bg-muted px-2 py-1.5 font-mono text-xs text-foreground outline-none"
+                className="w-[200px] shrink-0 rounded-md border border-border bg-muted px-2 py-1.5 font-mono text-xs text-foreground outline-hidden"
               />
               <span className="text-muted-foreground">=</span>
               <SecretTextInput
@@ -99,7 +99,7 @@ export default function CustomEnvSection({ config, onChange }: CustomEnvSectionP
             value={newKey}
             onChange={event => setNewKey(event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ""))}
             placeholder="KEY_NAME"
-            className="w-[200px] shrink-0 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            className="w-[200px] shrink-0 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-hidden focus:ring-1 focus:ring-ring"
           />
           <span className="text-muted-foreground">=</span>
           <input
@@ -107,7 +107,7 @@ export default function CustomEnvSection({ config, onChange }: CustomEnvSectionP
             onChange={event => setNewValue(event.target.value)}
             placeholder="value"
             type="password"
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-hidden focus:ring-1 focus:ring-ring"
             onKeyDown={event => {
               if (event.key === "Enter" && !isImeEnterEvent(event)) addEntry();
             }}

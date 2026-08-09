@@ -18,7 +18,7 @@ export default function AuthScreenLayout({ title, description, children, footerT
           <div className="text-center">
             <div className="mb-4 flex justify-center">
               {logo ?? (
-                <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary shadow-sm">
+                <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary shadow-xs">
                   <MessageSquare className="h-8 w-8 text-primary-foreground" />
                 </div>
               )}

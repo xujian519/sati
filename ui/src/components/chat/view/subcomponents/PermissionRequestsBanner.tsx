@@ -78,7 +78,7 @@ export default function PermissionRequestsBanner({
         return (
           <div
             key={entry}
-            className="rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-sm dark:border-amber-800 dark:bg-amber-900/20"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-xs dark:border-amber-800 dark:bg-amber-900/20"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -103,7 +103,7 @@ export default function PermissionRequestsBanner({
                 <summary className="cursor-pointer text-xs text-amber-800 hover:text-amber-900 dark:text-amber-200 dark:hover:text-amber-100">
                   {t("permissionBanner.viewToolInput")}
                 </summary>
-                <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-amber-200/60 bg-white/80 p-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-gray-900/60 dark:text-amber-100">
+                <pre className="mt-2 max-h-40 overflow-auto rounded-md border border-amber-200/60 bg-white/80 p-2 text-xs whitespace-pre-wrap text-amber-900 dark:border-amber-800/60 dark:bg-gray-900/60 dark:text-amber-100">
                   {rawInput}
                 </pre>
               </details>
@@ -120,7 +120,7 @@ export default function PermissionRequestsBanner({
                     return inp ? (
                       <pre
                         key={r.requestId}
-                        className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md border border-amber-200/60 bg-white/80 p-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-gray-900/60 dark:text-amber-100"
+                        className="max-h-28 overflow-auto rounded-md border border-amber-200/60 bg-white/80 p-2 text-xs whitespace-pre-wrap text-amber-900 dark:border-amber-800/60 dark:bg-gray-900/60 dark:text-amber-100"
                       >
                         {inp}
                       </pre>

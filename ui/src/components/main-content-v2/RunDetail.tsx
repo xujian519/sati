@@ -216,7 +216,7 @@ export default function RunDetail(props: RunDetailProps) {
         >
           {/* Workspace strategy */}
           <div className="px-5 py-3">
-            <div className="text-xxs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+            <div className="text-xxs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
               {t("dashboard.runDetail.workspaceStrategy", { defaultValue: "Workspace" })}
             </div>
             <div className="mt-1 text-[13px] font-medium text-neutral-700 dark:text-neutral-300">
@@ -226,7 +226,7 @@ export default function RunDetail(props: RunDetailProps) {
 
           {/* Execution session */}
           <div className="px-5 py-3">
-            <div className="text-xxs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+            <div className="text-xxs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
               {t("dashboard.runDetail.executionSession", { defaultValue: "Execution Session" })}
             </div>
             <div className="mt-1">
@@ -247,7 +247,7 @@ export default function RunDetail(props: RunDetailProps) {
 
           {/* Outcome */}
           <div className="px-5 py-3">
-            <div className="text-xxs font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+            <div className="text-xxs font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
               {t("dashboard.runDetail.outcome", { defaultValue: "Outcome" })}
             </div>
             <div className="mt-1 text-[13px] font-medium text-neutral-700 dark:text-neutral-300">

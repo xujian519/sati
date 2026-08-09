@@ -66,7 +66,7 @@ export default function TokenSaverRulesEditor({ config, onChange }: TokenSaverRu
           value={newRule}
           onChange={e => setNewRule(e.target.value)}
           placeholder={t("satiConfig.panels.router.rules.placeholder")}
-          className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-hidden focus:ring-1 focus:ring-ring"
           onKeyDown={e => {
             if (e.key === "Enter" && !isImeEnterEvent(e)) addRule();
           }}

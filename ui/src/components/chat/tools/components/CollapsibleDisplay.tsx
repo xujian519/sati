@@ -69,7 +69,7 @@ export const CollapsibleDisplay: React.FC<CollapsibleDisplayProps> = ({
               </svg>
               raw params
             </summary>
-            <pre className="mt-1 overflow-hidden whitespace-pre-wrap break-words rounded border border-gray-200/40 bg-gray-50 p-2 font-mono text-[11px] text-gray-600 dark:border-gray-700/40 dark:bg-gray-900/50 dark:text-gray-400">
+            <pre className="mt-1 overflow-hidden rounded border border-gray-200/40 bg-gray-50 p-2 font-mono text-[11px] break-words whitespace-pre-wrap text-gray-600 dark:border-gray-700/40 dark:bg-gray-900/50 dark:text-gray-400">
               {rawContent}
             </pre>
           </details>

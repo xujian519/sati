@@ -89,7 +89,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({ qu
         className={`rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/20 dark:text-amber-200 ${className}`}
       >
         <div className="font-medium">Question payload could not be rendered.</div>
-        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px] opacity-80">
+        <pre className="mt-2 max-h-40 overflow-auto text-[11px] break-words whitespace-pre-wrap opacity-80">
           {formatInvalidPayload(questions)}
         </pre>
       </div>
@@ -140,12 +140,12 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({ qu
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   {q.header && (
-                    <span className="inline-flex items-center rounded border border-brand-100/80 bg-brand-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-brand-600 dark:border-brand-800/40 dark:bg-brand-900/30 dark:text-brand-400">
+                    <span className="inline-flex items-center rounded border border-brand-100/80 bg-brand-50 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider text-brand-600 uppercase dark:border-brand-800/40 dark:bg-brand-900/30 dark:text-brand-400">
                       {q.header}
                     </span>
                   )}
                   {total > 1 && (
-                    <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500">
+                    <span className="text-[10px] text-gray-400 tabular-nums dark:text-gray-500">
                       {idx + 1}/{total}
                     </span>
                   )}
@@ -172,7 +172,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({ qu
                 )}
 
                 {!isExpanded && skipped && hasAnyAnswer && (
-                  <span className="mt-1 inline-block text-[10px] italic text-gray-400 dark:text-gray-500">Skipped</span>
+                  <span className="mt-1 inline-block text-[10px] text-gray-400 italic dark:text-gray-500">Skipped</span>
                 )}
               </div>
 
@@ -190,7 +190,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({ qu
             </button>
 
             {isExpanded && (
-              <div className="border-t border-gray-100 px-3 pb-2.5 pt-0.5 dark:border-gray-700/40">
+              <div className="border-t border-gray-100 px-3 pt-0.5 pb-2.5 dark:border-gray-700/40">
                 <div className="ml-6.5 space-y-1">
                   {q.options.map(opt => {
                     const wasSelected = answerLabels.includes(opt.label);
@@ -270,7 +270,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({ qu
                     ))}
 
                   {skipped && hasAnyAnswer && (
-                    <div className="px-2.5 py-1 text-[11px] italic text-gray-400 dark:text-gray-500">
+                    <div className="px-2.5 py-1 text-[11px] text-gray-400 italic dark:text-gray-500">
                       No answer provided
                     </div>
                   )}
@@ -282,7 +282,7 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({ qu
       })}
 
       {!hasAnyAnswer && total === 1 && (
-        <div className="text-[11px] italic text-gray-400 dark:text-gray-500">Skipped</div>
+        <div className="text-[11px] text-gray-400 italic dark:text-gray-500">Skipped</div>
       )}
     </div>
   );

@@ -94,7 +94,7 @@ export default function CodeEditorHeader({
     <div
       className={
         compact
-          ? "absolute right-2 top-1 z-10 flex h-8 items-center rounded-md bg-neutral-50 pl-2 dark:bg-neutral-900"
+          ? "absolute top-1 right-2 z-10 flex h-8 items-center rounded-md bg-neutral-50 pl-2 dark:bg-neutral-900"
           : "flex min-w-0 flex-shrink-0 items-center justify-between gap-2 border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950"
       }
     >
@@ -116,7 +116,7 @@ export default function CodeEditorHeader({
             <div className="flex min-w-0 items-center gap-2">
               <h3 className="truncate text-[13px] font-medium text-neutral-900 dark:text-neutral-100">{file.name}</h3>
               {file.diffInfo && (
-                <span className="shrink-0 whitespace-nowrap rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xxs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+                <span className="shrink-0 rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xxs whitespace-nowrap text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
                   {labels.showingChanges}
                 </span>
               )}

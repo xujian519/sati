@@ -202,29 +202,29 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({ request, 
       tabIndex={-1}
       onKeyDown={handleKeyDown}
       className={cn(
-        "w-full outline-none transition-all duration-300 ease-out",
+        "w-full outline-hidden transition-all duration-300 ease-out",
         mounted ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
       )}
     >
-      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
         {/* Header */}
-        <div className="px-4 pb-2 pt-3">
+        <div className="px-4 pt-3 pb-2">
           <div className="mb-1.5 flex items-center gap-2">
             <HelpCircle className="h-4 w-4 flex-shrink-0 text-muted-foreground" strokeWidth={1.75} />
 
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
                 Agent needs your input
               </span>
               {q.header && (
-                <span className="inline-flex items-center rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <span className="inline-flex items-center rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold tracking-wider text-muted-foreground uppercase">
                   {q.header}
                 </span>
               )}
             </div>
 
             {!isSingle && (
-              <span className="flex-shrink-0 text-[10px] tabular-nums text-muted-foreground">
+              <span className="flex-shrink-0 text-[10px] text-muted-foreground tabular-nums">
                 {currentStep + 1}/{total}
               </span>
             )}
@@ -253,13 +253,13 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({ request, 
           )}
 
           {/* Question text */}
-          <p className="text-[14px] font-medium leading-snug text-foreground">{q.question}</p>
+          <p className="text-[14px] leading-snug font-medium text-foreground">{q.question}</p>
           {multi && <span className="text-[10px] text-muted-foreground">Select all that apply</span>}
         </div>
 
         {/* Options */}
         <div
-          className="scrollbar-thin max-h-48 overflow-y-auto px-4 pb-2"
+          className="max-h-48 scrollbar-thin overflow-y-auto px-4 pb-2"
           role={multi ? "group" : "radiogroup"}
           aria-label={q.question}
         >
@@ -344,7 +344,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({ request, 
 
             {/* Other text input */}
             {isOtherOn && (
-              <div className="pl-[30px] pr-0.5">
+              <div className="pr-0.5 pl-[30px]">
                 <div className="relative">
                   <Input
                     ref={otherInputRef}
@@ -367,7 +367,7 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({ request, 
                     placeholder="Type your answer..."
                     className="h-8 pr-14 text-[13px]"
                   />
-                  <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
+                  <kbd className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-border bg-muted px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
                     Enter
                   </kbd>
                 </div>

@@ -123,14 +123,14 @@ export function ProcessLiveStatus({
           type="button"
           aria-expanded={expanded}
           onClick={() => setExpanded(value => !value)}
-          className={`group inline-flex min-w-0 max-w-full items-start gap-2 text-left transition hover:text-neutral-600 dark:hover:text-neutral-300 ${
+          className={`group inline-flex max-w-full min-w-0 items-start gap-2 text-left transition hover:text-neutral-600 dark:hover:text-neutral-300 ${
             isRunning ? "animate-pulse" : ""
           }`}
         >
           {statusContent}
         </button>
       ) : (
-        <div className={`inline-flex min-w-0 max-w-full items-start gap-2 ${isRunning ? "animate-pulse" : ""}`}>
+        <div className={`inline-flex max-w-full min-w-0 items-start gap-2 ${isRunning ? "animate-pulse" : ""}`}>
           {statusContent}
         </div>
       )}
@@ -186,7 +186,7 @@ function ProcessTraceLine({ step }: { step: ProcessTraceStep }) {
 
   return (
     <div
-      className={`inline-flex min-w-0 max-w-full items-start gap-2 text-[14px] leading-relaxed text-neutral-400 dark:text-neutral-500 ${
+      className={`inline-flex max-w-full min-w-0 items-start gap-2 text-[14px] leading-relaxed text-neutral-400 dark:text-neutral-500 ${
         isRunning ? "animate-pulse" : ""
       }`}
     >
@@ -252,7 +252,7 @@ export function ProcessTrace({
           }
         }}
         disabled={!hasDetails}
-        className={`group inline-flex min-w-0 max-w-full items-center gap-2 text-left text-[14px] leading-relaxed text-neutral-400 transition hover:text-neutral-600 disabled:cursor-default disabled:hover:text-neutral-400 dark:text-neutral-500 dark:hover:text-neutral-300 dark:disabled:hover:text-neutral-500 ${
+        className={`group inline-flex max-w-full min-w-0 items-center gap-2 text-left text-[14px] leading-relaxed text-neutral-400 transition hover:text-neutral-600 disabled:cursor-default disabled:hover:text-neutral-400 dark:text-neutral-500 dark:hover:text-neutral-300 dark:disabled:hover:text-neutral-500 ${
           isRunning ? "animate-pulse" : ""
         }`}
       >
@@ -317,7 +317,7 @@ export function StreamingThinkingPreview({ content, maxLines = 10 }: { content: 
       }
     >
       {visibleLines.map((line, i) => (
-        <div key={i} className="whitespace-pre-wrap break-words">
+        <div key={i} className="break-words whitespace-pre-wrap">
           {line || "\u00A0"}
         </div>
       ))}

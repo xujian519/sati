@@ -132,7 +132,7 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
 
             <div className="grid grid-cols-1 items-start gap-2 px-4 py-2.5 sm:grid-cols-[minmax(360px,1fr)_420px] sm:gap-4">
               <div className="min-w-0">
-                <div className="text-[13px] font-medium leading-5 text-foreground">
+                <div className="text-[13px] leading-5 font-medium text-foreground">
                   {t("satiConfig.panels.memory.autoIndexInterval.label")}
                 </div>
                 <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
@@ -159,8 +159,8 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
                     }}
                     className={
                       indexEditing
-                        ? "w-full rounded-md border border-primary/40 bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground outline-none ring-1 ring-ring/40 focus:ring-1 focus:ring-ring"
-                        : "w-full rounded-md border border-border bg-muted/40 px-2 py-1.5 text-[13px] leading-5 text-muted-foreground outline-none"
+                        ? "w-full rounded-md border border-primary/40 bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground ring-1 ring-ring/40 outline-hidden focus:ring-1 focus:ring-ring"
+                        : "w-full rounded-md border border-border bg-muted/40 px-2 py-1.5 text-[13px] leading-5 text-muted-foreground outline-hidden"
                     }
                   />
                 </div>
@@ -184,7 +184,7 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
                     <button
                       type="button"
                       onClick={cancelIndex}
-                      className="whitespace-nowrap rounded border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      className="rounded border border-border bg-background px-2 py-1 text-[11px] whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
                       {t("settingsPage.actions.cancel")}
                     </button>
@@ -192,7 +192,7 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
                       type="button"
                       onClick={commitIndex}
                       disabled={!Number.isFinite(Number(indexDraftValue)) || Number(indexDraftValue) < 0}
-                      className="whitespace-nowrap rounded border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] whitespace-nowrap text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {t("settingsPage.actions.save")}
                     </button>
@@ -205,7 +205,7 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
                       setIndexDraftUnit(indexUnit);
                       setIndexEditing(true);
                     }}
-                    className="whitespace-nowrap rounded border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="rounded border border-border bg-background px-2 py-1 text-[11px] whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     {t("settingsPage.actions.edit")}
                   </button>
@@ -215,7 +215,7 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
 
             <div className="grid grid-cols-1 items-start gap-2 px-4 py-2.5 sm:grid-cols-[minmax(360px,1fr)_420px] sm:gap-4">
               <div className="min-w-0">
-                <div className="text-[13px] font-medium leading-5 text-foreground">
+                <div className="text-[13px] leading-5 font-medium text-foreground">
                   {t("satiConfig.panels.memory.autoDreamInterval.label")}
                 </div>
                 <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
@@ -242,8 +242,8 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
                     }}
                     className={
                       dreamEditing
-                        ? "w-full rounded-md border border-primary/40 bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground outline-none ring-1 ring-ring/40 focus:ring-1 focus:ring-ring"
-                        : "w-full rounded-md border border-border bg-muted/40 px-2 py-1.5 text-[13px] leading-5 text-muted-foreground outline-none"
+                        ? "w-full rounded-md border border-primary/40 bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground ring-1 ring-ring/40 outline-hidden focus:ring-1 focus:ring-ring"
+                        : "w-full rounded-md border border-border bg-muted/40 px-2 py-1.5 text-[13px] leading-5 text-muted-foreground outline-hidden"
                     }
                   />
                 </div>
@@ -267,7 +267,7 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
                     <button
                       type="button"
                       onClick={cancelDream}
-                      className="whitespace-nowrap rounded border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      className="rounded border border-border bg-background px-2 py-1 text-[11px] whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
                       {t("settingsPage.actions.cancel")}
                     </button>
@@ -275,7 +275,7 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
                       type="button"
                       onClick={commitDream}
                       disabled={!Number.isFinite(Number(dreamDraftValue)) || Number(dreamDraftValue) < 0}
-                      className="whitespace-nowrap rounded border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] whitespace-nowrap text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {t("settingsPage.actions.save")}
                     </button>
@@ -288,7 +288,7 @@ function MemorySection({ config, onChange }: { config: SatiConfig; onChange: (ne
                       setDreamDraftUnit(dreamUnit);
                       setDreamEditing(true);
                     }}
-                    className="whitespace-nowrap rounded border border-border bg-background px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    className="rounded border border-border bg-background px-2 py-1 text-[11px] whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     {t("settingsPage.actions.edit")}
                   </button>

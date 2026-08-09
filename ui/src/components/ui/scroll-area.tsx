@@ -9,7 +9,7 @@ import { cn } from "../../lib/utils.js";
 export type ScrollAreaProps = React.HTMLAttributes<HTMLDivElement>;
 
 const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(({ className, children, ...props }, ref) => (
-  <div ref={ref} className={cn("relative overflow-y-auto overflow-x-hidden scrollbar-thin", className)} {...props}>
+  <div ref={ref} className={cn("relative scrollbar-thin overflow-x-hidden overflow-y-auto", className)} {...props}>
     {children}
   </div>
 ));

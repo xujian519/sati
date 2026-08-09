@@ -651,7 +651,7 @@ type ContextMenuState = { skill: Skill; x: number; y: number } | null;
 function BuiltinSkillsNotice({ count, t }: { count: number; t: ReturnType<typeof useTranslation>["t"] }) {
   return (
     <div className="mb-2">
-      <div className="px-4 py-1 text-xxs uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+      <div className="px-4 py-1 text-xxs tracking-wider text-neutral-400 uppercase dark:text-neutral-500">
         {t("skillsTab.builtinScope", { defaultValue: "Built-in Skills" })}{" "}
         <span className="text-neutral-300 dark:text-neutral-600">· {count}</span>
       </div>
@@ -733,7 +733,7 @@ function ListSection({
 
   return (
     <div className="mb-2">
-      <div className="px-4 py-1 text-xxs uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+      <div className="px-4 py-1 text-xxs tracking-wider text-neutral-400 uppercase dark:text-neutral-500">
         {title} <span className="text-neutral-300 dark:text-neutral-600">· {items.length}</span>
       </div>
       <ul className="space-y-0.5 px-2">
@@ -784,7 +784,7 @@ function ListSection({
                     e.stopPropagation();
                     onDelete(s);
                   }}
-                  className="absolute right-1.5 top-1/2 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-neutral-400 hover:bg-red-50 hover:text-red-600 group-hover:inline-flex dark:text-neutral-500 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                  className="absolute top-1/2 right-1.5 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-neutral-400 group-hover:inline-flex hover:bg-red-50 hover:text-red-600 dark:text-neutral-500 dark:hover:bg-red-950/40 dark:hover:text-red-400"
                   title={t("skillsTab.delete", { defaultValue: "Delete" }) as string}
                 >
                   <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -816,7 +816,7 @@ function ListSection({
                 <span className="text-neutral-400">›</span>
               </button>
               {showMoveSubmenu ? (
-                <div className="absolute left-full top-0 z-[101] ml-1 max-h-[240px] min-w-[160px] overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+                <div className="absolute top-0 left-full z-[101] ml-1 max-h-[240px] min-w-[160px] overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
                   {filteredMoveTargets.map(mt => (
                     <button
                       key={mt.target.scope + ":" + (mt.target.projectPath || "user")}
@@ -905,9 +905,9 @@ function SkillDetail({
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{skill.name}</h2>
           <span
             className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider",
+              "rounded px-1.5 py-0.5 text-[10px] tracking-wider uppercase",
               skill.scope === "project"
-                ? "bg-brand-100 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300"
+                ? "dark:bg-brand-950/60 bg-brand-100 text-brand-700 dark:text-brand-300"
                 : skill.scope === "builtin"
                   ? "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
                   : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
@@ -1266,7 +1266,7 @@ function InstallFromClawHub({
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder={t("skillsTab.searchPlaceholder", { defaultValue: "Search clawhub.com…" }) as string}
-            className="h-8 w-full rounded-md border border-neutral-200 bg-white pl-8 pr-2 text-[13px] outline-none focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:focus:border-neutral-600"
+            className="h-8 w-full rounded-md border border-neutral-200 bg-white pr-2 pl-8 text-[13px] outline-hidden focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:focus:border-neutral-600"
           />
           {searching ? (
             <Loader2 className="absolute right-2.5 h-3.5 w-3.5 animate-spin text-neutral-400" strokeWidth={1.75} />
@@ -1877,7 +1877,7 @@ function ImportFromFolder({
               autoCorrect="off"
               disabled={picked !== null || batchMode}
               className={cn(
-                "h-8 flex-1 rounded-md border bg-white px-2 font-mono text-[12px] outline-none focus:border-neutral-400 dark:bg-neutral-950 dark:focus:border-neutral-600",
+                "h-8 flex-1 rounded-md border bg-white px-2 font-mono text-[12px] outline-hidden focus:border-neutral-400 dark:bg-neutral-950 dark:focus:border-neutral-600",
                 picked || batchMode
                   ? "cursor-not-allowed border-neutral-100 text-neutral-400 dark:border-neutral-900 dark:text-neutral-600"
                   : "border-neutral-200 dark:border-neutral-800",
@@ -2107,7 +2107,7 @@ function ImportFromFolder({
                 }}
                 placeholder="my-skill"
                 className={cn(
-                  "h-8 w-full rounded-md border bg-white px-2 font-mono text-[12px] outline-none dark:bg-neutral-950",
+                  "h-8 w-full rounded-md border bg-white px-2 font-mono text-[12px] outline-hidden dark:bg-neutral-950",
                   slugValid
                     ? "border-neutral-200 focus:border-neutral-400 dark:border-neutral-800 dark:focus:border-neutral-600"
                     : "border-red-300 dark:border-red-800",
@@ -2382,7 +2382,7 @@ function CreateFromScratch({
               onChange={e => setSlug(e.target.value)}
               placeholder="my-skill"
               className={cn(
-                "h-8 w-full rounded-md border bg-white px-2 font-mono text-[13px] outline-none dark:bg-neutral-950",
+                "h-8 w-full rounded-md border bg-white px-2 font-mono text-[13px] outline-hidden dark:bg-neutral-950",
                 slugValid || !slug
                   ? "border-neutral-200 focus:border-neutral-400 dark:border-neutral-800 dark:focus:border-neutral-600"
                   : "border-red-300 dark:border-red-800",
@@ -2397,7 +2397,7 @@ function CreateFromScratch({
               placeholder={
                 slug || (t("skillsTab.fieldNamePlaceholder", { defaultValue: "Optional, defaults to slug" }) as string)
               }
-              className="h-8 w-full rounded-md border border-neutral-200 bg-white px-2 text-[13px] outline-none focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:focus:border-neutral-600"
+              className="h-8 w-full rounded-md border border-neutral-200 bg-white px-2 text-[13px] outline-hidden focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:focus:border-neutral-600"
             />
           </Field>
         </div>
@@ -2413,7 +2413,7 @@ function CreateFromScratch({
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-[13px] outline-none focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:focus:border-neutral-600"
+            className="w-full rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-[13px] outline-hidden focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:focus:border-neutral-600"
           />
         </Field>
         <Field
@@ -2426,7 +2426,7 @@ function CreateFromScratch({
             value={body}
             onChange={e => setBody(e.target.value)}
             rows={8}
-            className="w-full rounded-md border border-neutral-200 bg-white px-2 py-1.5 font-mono text-[12px] outline-none focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:focus:border-neutral-600"
+            className="w-full rounded-md border border-neutral-200 bg-white px-2 py-1.5 font-mono text-[12px] outline-hidden focus:border-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:focus:border-neutral-600"
             placeholder={"# My Skill\n\nDescribe what this skill does..."}
           />
         </Field>

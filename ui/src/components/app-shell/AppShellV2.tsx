@@ -630,7 +630,7 @@ export default function AppShellV2() {
             >
               <button
                 type="button"
-                className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+                className="fixed inset-0 bg-black/40 backdrop-blur-xs"
                 onClick={() => setSidebarOpen(false)}
                 aria-label="Close sidebar"
               />
@@ -755,7 +755,7 @@ function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }
   const displayName = project.displayName || project.name;
 
   return (
-    <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
       <div className="w-full max-w-md rounded-xl border border-border bg-card text-card-foreground shadow-xl">
         <div className="flex items-start gap-3 border-b border-border p-5">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
@@ -763,7 +763,7 @@ function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold text-foreground">Delete project?</h3>
-            <p className="mt-1 break-all text-sm text-muted-foreground">
+            <p className="mt-1 text-sm break-all text-muted-foreground">
               <span className="font-mono text-xs">{displayName}</span>
             </p>
           </div>
@@ -834,7 +834,7 @@ function DeleteSessionDialog({ target, isDeleting, error, onCancel, onConfirm }:
   const sessionTitle = sessionDisplayTitle(target.session);
 
   return (
-    <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
       <div className="w-full max-w-md rounded-xl border border-border bg-card text-card-foreground shadow-xl">
         <div className="flex items-start gap-3 border-b border-border p-5">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">

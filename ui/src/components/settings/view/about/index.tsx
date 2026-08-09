@@ -141,7 +141,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
     !isDesktop && versionInfo.hasUpdate && localUpdateResult !== "webUpdated" && localUpdateResult !== "webUpToDate";
   const showWebRestartButton = !isDesktop && localUpdateResult === "webUpdated";
   const statusBadgeClass = cn(
-    "inline-flex items-center rounded-md border px-2 py-0.5 text-sm font-medium leading-5",
+    "inline-flex items-center rounded-md border px-2 py-0.5 text-sm leading-5 font-medium",
     status === "updateAvailable"
       ? "border-brand-300 bg-brand-50 text-brand-700"
       : status === "upToDate" || status === "installerLaunched"

@@ -7,7 +7,7 @@ export default function AuthLoadingScreen() {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="text-center">
         <div className="mb-4 flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary shadow-sm">
+          <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-primary shadow-xs">
             <MessageSquare className="h-8 w-8 text-primary-foreground" />
           </div>
         </div>

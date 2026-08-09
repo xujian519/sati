@@ -64,7 +64,7 @@ export default function SpreadsheetTabs({
         ref={scrollerRef}
         role="tablist"
         aria-label={t("spreadsheetPreview.worksheets")}
-        className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-w-0 flex-1 [scrollbar-width:none] items-stretch overflow-x-auto [&::-webkit-scrollbar]:hidden"
       >
         {sheets.map(sheet => {
           const active = sheet.index === activeSheetIndex;

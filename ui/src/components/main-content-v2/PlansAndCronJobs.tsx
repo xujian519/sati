@@ -304,7 +304,7 @@ export default function PlansAndCronJobs({
                     <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" strokeWidth={1.75} />
                   )}
                   <span className="text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">{label}</span>
-                  <span className="ml-auto text-xxs tabular-nums text-neutral-400 dark:text-neutral-500">
+                  <span className="ml-auto text-xxs text-neutral-400 tabular-nums dark:text-neutral-500">
                     {items.length}
                   </span>
                 </button>
@@ -483,7 +483,7 @@ function SubSection({
         <button
           type="button"
           onClick={() => toggleSection(sectionKey)}
-          className="flex items-center gap-1.5 text-xxs font-semibold uppercase tracking-wider text-neutral-500 transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
+          className="flex items-center gap-1.5 text-xxs font-semibold tracking-wider text-neutral-500 uppercase transition-colors hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
         >
           {isCollapsed ? (
             <ChevronRight className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
@@ -507,22 +507,22 @@ function ColumnHeaders({ t }: { t: (key: string, opts?: Record<string, string>) 
   return (
     <div className="flex items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/50">
       <div className={COL.title}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("plansCron.columns.title", { defaultValue: "Title" })}
         </span>
       </div>
       <div className={COL.createdAt}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("plansCron.columns.createdAt", { defaultValue: "Created" })}
         </span>
       </div>
       <div className={COL.status}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("plansCron.columns.status", { defaultValue: "Status" })}
         </span>
       </div>
       <div className={COL.actions}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("plansCron.columns.actions", { defaultValue: "Actions" })}
         </span>
       </div>
@@ -625,7 +625,7 @@ function ItemRow({
       <div
         className={cn(
           compact ? "w-auto" : COL.createdAt,
-          "font-mono text-xxs tabular-nums text-neutral-500 dark:text-neutral-400",
+          "font-mono text-xxs text-neutral-500 tabular-nums dark:text-neutral-400",
         )}
       >
         {formatAbsoluteTime(createdAt)}

@@ -242,7 +242,7 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
                     <select
                       value={qrDomain}
                       onChange={e => setQrDomain(e.target.value as "feishu" | "lark")}
-                      className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                      className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-hidden focus:border-ring focus:ring-1 focus:ring-ring"
                     >
                       <option value="feishu">{t("gateway.feishu.domainOptions.feishu")}</option>
                       <option value="lark">{t("gateway.feishu.domainOptions.lark")}</option>
@@ -325,7 +325,7 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
                   <select
                     value={domain}
                     onChange={e => setDomain(e.target.value as "feishu" | "lark")}
-                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-hidden focus:border-ring focus:ring-1 focus:ring-ring"
                   >
                     <option value="feishu">{t("gateway.feishu.domainOptions.feishu")}</option>
                     <option value="lark">{t("gateway.feishu.domainOptions.lark")}</option>
@@ -338,7 +338,7 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
                   <select
                     value={mode}
                     onChange={e => setMode(e.target.value as "stream" | "webhook")}
-                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-hidden focus:border-ring focus:ring-1 focus:ring-ring"
                   >
                     <option value="stream">Stream (WebSocket)</option>
                     <option value="webhook">Webhook</option>
@@ -353,7 +353,7 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
                   value={appId}
                   onChange={e => setAppId(e.target.value.trim())}
                   placeholder="cli_xxxxxxxxxxxx"
-                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
 
@@ -364,7 +364,7 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
                   value={appSecret}
                   onChange={e => setAppSecret(e.target.value.trim())}
                   placeholder="••••••••"
-                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
 

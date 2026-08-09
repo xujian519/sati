@@ -160,7 +160,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
           placeholder="Commit message"
           rows={2}
           disabled={isCommitting || allChangeFiles.length === 0}
-          className="w-full resize-none rounded-lg border border-neutral-200 bg-transparent p-2.5 text-[13px] outline-none placeholder:text-neutral-400 focus:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:placeholder:text-neutral-500 dark:focus:border-neutral-700"
+          className="w-full resize-none rounded-lg border border-neutral-200 bg-transparent p-2.5 text-[13px] outline-hidden placeholder:text-neutral-400 focus:border-neutral-300 disabled:opacity-50 dark:border-neutral-800 dark:placeholder:text-neutral-500 dark:focus:border-neutral-700"
         />
         <div className="mt-2 flex gap-2">
           <button
@@ -224,7 +224,7 @@ export default function GitV2({ selectedProject, onFileOpen }: GitV2Props) {
 function ChangeList({ title, rows, onFileOpen }: { title: string; rows: ChangeRow[]; onFileOpen?: FileOpenHandler }) {
   return (
     <div>
-      <div className="mb-2 text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <div className="mb-2 text-xxs tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
         {title} · {rows.length}
       </div>
       <div className="space-y-1">

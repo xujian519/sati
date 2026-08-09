@@ -46,14 +46,14 @@ export default function StepReview({ formState, selectedTokenName, isCreating, c
 
           <div className="flex justify-between gap-4 text-sm">
             <span className="text-muted-foreground">{t("projectWizard.step3.path")}</span>
-            <span className="break-all text-right font-mono text-xs text-foreground">{formState.workspacePath}</span>
+            <span className="text-right font-mono text-xs break-all text-foreground">{formState.workspacePath}</span>
           </div>
 
           {formState.workspaceType === "new" && formState.githubUrl && (
             <>
               <div className="flex justify-between gap-4 text-sm">
                 <span className="text-muted-foreground">{t("projectWizard.step3.cloneFrom")}</span>
-                <span className="break-all text-right font-mono text-xs text-foreground">{formState.githubUrl}</span>
+                <span className="text-right font-mono text-xs break-all text-foreground">{formState.githubUrl}</span>
               </div>
 
               <div className="flex justify-between text-sm">
@@ -71,7 +71,7 @@ export default function StepReview({ formState, selectedTokenName, isCreating, c
             <p className="text-sm font-medium text-foreground">
               {t("projectWizard.step3.cloningRepository", { defaultValue: "Cloning repository..." })}
             </p>
-            <code className="block whitespace-pre-wrap break-all font-mono text-xs text-muted-foreground">
+            <code className="block font-mono text-xs break-all whitespace-pre-wrap text-muted-foreground">
               {cloneProgress}
             </code>
           </div>

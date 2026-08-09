@@ -28,7 +28,7 @@ export const PlanApprovedCard: React.FC<PlanApprovedCardProps> = ({
 
       {planSummary && (
         <div className="max-h-28 overflow-hidden px-4 py-2.5">
-          <Markdown className="prose prose-sm max-w-none text-xs leading-relaxed text-neutral-600 dark:prose-invert prose-table:my-0 prose-th:px-2 prose-th:py-0.5 prose-td:px-2 prose-td:py-0.5 dark:text-neutral-400">
+          <Markdown className="prose prose-sm max-w-none text-xs leading-relaxed text-neutral-600 dark:text-neutral-400 dark:prose-invert prose-table:my-0 prose-th:px-2 prose-th:py-0.5 prose-td:px-2 prose-td:py-0.5">
             {planSummary}
           </Markdown>
         </div>

@@ -264,7 +264,7 @@ export default function Shell({
       />
 
       <div className="relative flex-1 overflow-hidden p-2">
-        <div ref={terminalContainerRef} className="h-full w-full focus:outline-none" style={{ outline: "none" }} />
+        <div ref={terminalContainerRef} className="h-full w-full focus:outline-hidden" style={{ outline: "none" }} />
 
         {overlayMode && (
           <ShellConnectionOverlay
@@ -280,7 +280,7 @@ export default function Shell({
 
         {cliPromptOptions && isConnected && (
           <div
-            className="absolute inset-x-0 bottom-0 z-10 border-t border-gray-700/80 bg-gray-800/95 px-3 py-2 backdrop-blur-sm"
+            className="absolute inset-x-0 bottom-0 z-10 border-t border-gray-700/80 bg-gray-800/95 px-3 py-2 backdrop-blur-xs"
             onMouseDown={e => e.preventDefault()}
           >
             <div className="flex flex-wrap items-center gap-2">

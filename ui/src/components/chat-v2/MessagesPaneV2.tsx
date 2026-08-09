@@ -976,7 +976,7 @@ function MessagesPaneV2({
         ref={scrollContainerRef}
         onWheel={onWheel}
         onTouchMove={onTouchMove}
-        className="h-full overflow-y-auto overflow-x-hidden bg-white dark:bg-neutral-950"
+        className="h-full overflow-x-hidden overflow-y-auto bg-white dark:bg-neutral-950"
       >
         {hasSessionLoadError ? (
           <div className="mx-auto flex h-full max-w-[720px] flex-col items-center justify-center gap-3 px-6 py-10 text-center">

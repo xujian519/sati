@@ -128,7 +128,7 @@ function OfficePreviewSection({ config, onChange }: { config: SatiConfig; onChan
                 </div>
 
                 {scanListOpen && (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
+                  <div className="absolute top-full right-0 left-0 z-20 mt-1 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
                     <div className="border-b border-border px-3 py-2 text-[12px] font-medium text-foreground">
                       {t("satiConfig.panels.officePreview.scan.title")}
                     </div>

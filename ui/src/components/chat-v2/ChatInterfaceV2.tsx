@@ -482,7 +482,7 @@ function ChatInterfaceV2({
   // The composer is identical in welcome / normal mode — just rendered in a
   // different parent container. Pulled out so we don't drift between the two.
   const composer = sessionIsReadOnly ? (
-    <div className="mx-auto w-full max-w-[720px] px-6 pb-6 pt-3">
+    <div className="mx-auto w-full max-w-[720px] px-6 pt-3 pb-6">
       <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[13px] text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
         {t("session.readonlyTranscript", {
           defaultValue: "This transcript is read-only.",

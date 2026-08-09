@@ -12,7 +12,7 @@ export default function WizardProgress({ step }: WizardProgressProps) {
   const steps: WizardStep[] = [1, 2, 3];
 
   return (
-    <div className="px-6 pb-2 pt-4">
+    <div className="px-6 pt-4 pb-2">
       <div className="flex items-center justify-between">
         {steps.map(currentStep => {
           const isDone = currentStep < step;

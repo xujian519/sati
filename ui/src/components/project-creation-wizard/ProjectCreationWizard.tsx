@@ -138,7 +138,7 @@ export default function ProjectCreationWizard({ onClose, onProjectCreated }: Pro
   );
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 top-0 z-[60] flex items-center justify-center bg-black/50 p-0 backdrop-blur-sm sm:p-4">
+    <div className="fixed top-0 right-0 bottom-0 left-0 z-[60] flex items-center justify-center bg-black/50 p-0 backdrop-blur-xs sm:p-4">
       <div className="h-full w-full overflow-y-auto border-0 bg-card text-card-foreground shadow-xl sm:h-auto sm:max-w-2xl sm:rounded-xl sm:border sm:border-border">
         <div className="flex items-center justify-between border-b border-border p-6">
           <div className="flex items-center gap-3">

@@ -159,11 +159,11 @@ export default function ConversationSwitcher({
             setOpen(true);
           }
         }}
-        className="group flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 text-left transition hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:hover:bg-neutral-800 dark:focus-visible:ring-neutral-700"
+        className="group flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 text-left transition hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-neutral-300 focus-visible:outline-hidden dark:hover:bg-neutral-800 dark:focus-visible:ring-neutral-700"
       >
         <MessageSquare className="h-4 w-4 shrink-0 text-neutral-500 dark:text-neutral-400" strokeWidth={1.8} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[12px] font-medium leading-4 text-neutral-700 dark:text-neutral-300">
+          <span className="block truncate text-[12px] leading-4 font-medium text-neutral-700 dark:text-neutral-300">
             {t("filesWorkbench.assistant")}
           </span>
           <span className="block truncate text-[10px] leading-3 text-neutral-400 dark:text-neutral-500">
@@ -185,7 +185,7 @@ export default function ConversationSwitcher({
           close();
           onNewSession();
         }}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-neutral-200 dark:focus-visible:ring-neutral-700"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-2 focus-visible:ring-neutral-300 focus-visible:outline-hidden dark:hover:bg-neutral-800 dark:hover:text-neutral-200 dark:focus-visible:ring-neutral-700"
         title={t("filesWorkbench.conversations.newConversation")}
         aria-label={t("filesWorkbench.conversations.newConversation")}
       >
@@ -197,12 +197,12 @@ export default function ConversationSwitcher({
           role="dialog"
           aria-label={t("filesWorkbench.conversations.switchConversation")}
           data-testid="files-conversation-switcher-popover"
-          className="absolute left-0 top-[calc(100%+0.4rem)] z-[70] flex max-h-[min(30rem,calc(100vh-7rem))] w-[calc(100%+2.25rem)] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+          className="absolute top-[calc(100%+0.4rem)] left-0 z-[70] flex max-h-[min(30rem,calc(100vh-7rem))] w-[calc(100%+2.25rem)] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
         >
           <div className="border-b border-neutral-100 p-2 dark:border-neutral-800">
             <div className="relative">
               <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400"
+                className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400"
                 strokeWidth={1.8}
               />
               <input
@@ -212,7 +212,7 @@ export default function ConversationSwitcher({
                 onKeyDown={handleSearchKeyDown}
                 placeholder={t("filesWorkbench.conversations.searchPlaceholder")}
                 aria-label={t("filesWorkbench.conversations.searchPlaceholder")}
-                className="h-8 w-full rounded-lg border border-neutral-200 bg-neutral-50 pl-8 pr-2 text-[12px] text-neutral-800 outline-none placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-500 dark:focus:bg-neutral-900"
+                className="h-8 w-full rounded-lg border border-neutral-200 bg-neutral-50 pr-2 pl-8 text-[12px] text-neutral-800 outline-hidden placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-white dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-500 dark:focus:bg-neutral-900"
               />
             </div>
             <button
@@ -221,7 +221,7 @@ export default function ConversationSwitcher({
                 close();
                 onNewSession();
               }}
-              className="mt-2 flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:text-neutral-200 dark:hover:bg-neutral-800 dark:focus-visible:ring-neutral-700"
+              className="mt-2 flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[12px] font-medium text-neutral-700 transition hover:bg-neutral-100 focus-visible:ring-2 focus-visible:ring-neutral-300 focus-visible:outline-hidden dark:text-neutral-200 dark:hover:bg-neutral-800 dark:focus-visible:ring-neutral-700"
             >
               <MessageSquarePlus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" strokeWidth={1.8} />
               {t("filesWorkbench.conversations.newConversation")}
@@ -233,7 +233,7 @@ export default function ConversationSwitcher({
             role="listbox"
             aria-label={t("filesWorkbench.conversations.recentConversations")}
           >
-            <div className="px-2 pb-1 pt-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+            <div className="px-2 pt-0.5 pb-1 text-[10px] font-medium tracking-wide text-neutral-400 uppercase dark:text-neutral-500">
               {t("filesWorkbench.conversations.recentConversations")}
             </div>
             {filteredSessions.length > 0 ? (
@@ -259,7 +259,7 @@ export default function ConversationSwitcher({
                     }}
                     onKeyDown={event => handleSessionKeyDown(event, index)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:focus-visible:ring-neutral-700",
+                      "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition focus-visible:ring-2 focus-visible:ring-neutral-300 focus-visible:outline-hidden dark:focus-visible:ring-neutral-700",
                       isSelected
                         ? "bg-neutral-100 dark:bg-neutral-800"
                         : "hover:bg-neutral-50 dark:hover:bg-neutral-800/70",

@@ -92,13 +92,13 @@ export default function SetupForm() {
           <img
             src={satiLogoLight}
             alt="Sati"
-            className="h-14 w-auto max-w-72 select-none object-contain dark:hidden"
+            className="h-14 w-auto max-w-72 object-contain select-none dark:hidden"
             draggable={false}
           />
           <img
             src={satiLogoDark}
             alt="Sati"
-            className="hidden h-14 w-auto max-w-72 select-none object-contain dark:block"
+            className="hidden h-14 w-auto max-w-72 object-contain select-none dark:block"
             draggable={false}
           />
         </div>

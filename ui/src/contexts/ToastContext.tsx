@@ -64,12 +64,12 @@ function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2">
+    <div className="fixed right-4 bottom-4 z-[9999] flex flex-col gap-2">
       {toasts.map(toast => (
         <div
           key={toast.id}
           role="alert"
-          className={`animate-in slide-in-from-right fade-in min-w-[280px] max-w-sm rounded-lg px-4 py-3 text-[13px] font-medium shadow-lg backdrop-blur-sm ${
+          className={`animate-in slide-in-from-right fade-in max-w-sm min-w-[280px] rounded-lg px-4 py-3 text-[13px] font-medium shadow-lg backdrop-blur-xs ${
             toast.kind === "error"
               ? "bg-red-500/90 text-white"
               : toast.kind === "success"

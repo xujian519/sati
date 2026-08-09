@@ -156,7 +156,7 @@ export function TextInput({
           spellCheck={false}
           readOnly={!editing}
           className={cn(
-            "w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground outline-none",
+            "w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground outline-hidden",
             editing
               ? "border-primary/40 ring-1 ring-ring/40 focus:ring-1 focus:ring-ring"
               : "cursor-default bg-muted/40 text-muted-foreground",
@@ -233,7 +233,7 @@ export function NumberInput({
           placeholder={placeholder}
           readOnly={!editing}
           className={cn(
-            "w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground outline-none",
+            "w-full rounded-md border border-border bg-background px-2 py-1.5 text-[13px] leading-5 text-foreground outline-hidden",
             editing
               ? "border-primary/40 ring-1 ring-ring/40 focus:ring-1 focus:ring-ring"
               : "cursor-default bg-muted/40 text-muted-foreground",
@@ -273,7 +273,7 @@ export function TextAreaInput({
         onChange={e => onChange(e.target.value)}
         spellCheck={false}
         className={cn(
-          "min-h-[100px] w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs leading-5 text-foreground outline-none focus:ring-1 focus:ring-ring",
+          "min-h-[100px] w-full resize-y rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs leading-5 text-foreground outline-hidden focus:ring-1 focus:ring-ring",
           className,
         )}
       />
@@ -311,7 +311,7 @@ export function TextAreaInput({
         readOnly={!editing}
         spellCheck={false}
         className={cn(
-          "min-h-[100px] min-w-0 flex-1 resize-y rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs leading-5 text-foreground outline-none",
+          "min-h-[100px] min-w-0 flex-1 resize-y rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs leading-5 text-foreground outline-hidden",
           editing
             ? "border-primary/40 ring-1 ring-ring/40 focus:ring-1 focus:ring-ring"
             : "cursor-default bg-muted/40 text-muted-foreground",
@@ -360,7 +360,7 @@ export function Select({
           {selectedLabel}
         </span>
       </div>
-      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+      <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground">
         ▾
       </span>
       <select
@@ -392,7 +392,7 @@ export function FormRow({
   return (
     <div className="grid grid-cols-1 items-start gap-2 px-4 py-2.5 sm:grid-cols-[180px_1fr] sm:gap-4">
       <div className="min-w-0">
-        <div className="text-[13px] font-medium leading-5 text-foreground">{label}</div>
+        <div className="text-[13px] leading-5 font-medium text-foreground">{label}</div>
         {description && <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{description}</div>}
       </div>
       <div className="min-w-0">{children}</div>

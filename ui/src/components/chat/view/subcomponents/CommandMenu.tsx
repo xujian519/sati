@@ -151,7 +151,7 @@ export default function CommandMenu({
             {showHeader ? (
               <div
                 className={cn(
-                  "px-2 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400",
+                  "px-2 pt-1.5 pb-1 text-[11px] font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400",
                   commandIndex > 0 && "mt-1 border-t border-neutral-100 pt-2 dark:border-neutral-800",
                 )}
               >

@@ -100,7 +100,7 @@ export default function ModelPricingEditor({ config, onChange }: ModelPricingEdi
             value={newKey}
             onChange={e => setNewKey(e.target.value)}
             placeholder="provider/model-name"
-            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-hidden focus:ring-1 focus:ring-ring"
             onKeyDown={e => {
               if (e.key === "Enter" && !isImeEnterEvent(e)) addPricing();
             }}

@@ -169,7 +169,7 @@ export default function ProviderCard({ providerId, provider, onSave, onRemove, c
               }}
               readOnly={!editing}
               className={cn(
-                "rounded-md border border-border px-2 py-0.5 font-mono text-[11px] outline-none",
+                "rounded-md border border-border px-2 py-0.5 font-mono text-[11px] outline-hidden",
                 editing
                   ? "border-primary/40 bg-background text-foreground ring-1 ring-ring/40"
                   : "bg-muted/40 text-muted-foreground",
@@ -356,7 +356,7 @@ export default function ProviderCard({ providerId, provider, onSave, onRemove, c
               value={newModelId}
               onChange={e => setNewModelId(e.target.value)}
               placeholder={t("satiConfig.panels.models.customModelPlaceholder")}
-              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground outline-none focus:ring-1 focus:ring-ring"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground outline-hidden focus:ring-1 focus:ring-ring"
               onKeyDown={e => {
                 if (e.key === "Enter" && !isImeEnterEvent(e)) addModel(newModelId);
               }}
@@ -380,7 +380,7 @@ export default function ProviderCard({ providerId, provider, onSave, onRemove, c
           type="button"
           onClick={() => setShowProviderAdvanced(v => !v)}
           aria-expanded={showProviderAdvanced}
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] leading-5 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showProviderAdvanced && "rotate-180")} />
           {t("satiConfig.panels.models.providerAdvancedToggle")}

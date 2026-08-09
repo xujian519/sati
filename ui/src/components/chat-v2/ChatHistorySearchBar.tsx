@@ -129,7 +129,7 @@ export default function ChatHistorySearchBar({
         "pointer-events-auto flex items-center gap-1 border border-neutral-200 bg-white px-2 dark:border-neutral-700 dark:bg-neutral-900",
         placement === "header"
           ? "h-9 w-full max-w-[360px] rounded-md"
-          : "absolute right-4 top-4 z-20 w-[min(100%,320px)] rounded-lg bg-white/95 py-1.5 shadow-lg backdrop-blur-sm dark:bg-neutral-900/95",
+          : "absolute top-4 right-4 z-20 w-[min(100%,320px)] rounded-lg bg-white/95 py-1.5 shadow-lg backdrop-blur-xs dark:bg-neutral-900/95",
       )}
       data-chat-history-search
       role="search"
@@ -145,13 +145,13 @@ export default function ChatHistorySearchBar({
         onCompositionEnd={handleCompositionEnd}
         onKeyDown={handleKeyDown}
         placeholder={t("chatSearch.placeholder", { defaultValue: "Search in chat…" }) as string}
-        className="min-w-0 flex-1 bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-neutral-100"
+        className="min-w-0 flex-1 bg-transparent text-[13px] text-neutral-900 outline-hidden placeholder:text-neutral-400 dark:text-neutral-100"
         autoComplete="off"
         spellCheck={false}
         aria-label={t("chatSearch.placeholder", { defaultValue: "Search in chat…" }) as string}
       />
       {hasQuery ? (
-        <span className="shrink-0 px-1 text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
+        <span className="shrink-0 px-1 text-[11px] text-neutral-500 tabular-nums dark:text-neutral-400">
           {matchLabel}
         </span>
       ) : null}

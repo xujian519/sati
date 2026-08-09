@@ -120,7 +120,7 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
                   <button
                     type="button"
                     onClick={dismissExternalNotice}
-                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-amber-500/20"
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase hover:bg-amber-500/20"
                   >
                     {t("satiConfig.actions.dismiss")}
                   </button>
@@ -131,7 +131,7 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
                 value={raw}
                 onChange={event => setRaw(event.target.value)}
                 spellCheck={false}
-                className="min-h-[360px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-5 text-foreground outline-none focus:ring-1 focus:ring-ring"
+                className="min-h-[360px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-5 text-foreground outline-hidden focus:ring-1 focus:ring-ring"
               />
 
               <div className="flex flex-wrap items-center justify-between gap-2">

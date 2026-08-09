@@ -139,7 +139,7 @@ function TimelineGroupRow({ group, defaultExpanded }: { group: TimelineGroup; de
         </span>
         <span className="min-w-0 truncate font-medium">{label}</span>
         {count > 1 && (
-          <span className="shrink-0 rounded-md bg-neutral-200/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-neutral-500 dark:bg-neutral-700/50 dark:text-neutral-400">
+          <span className="shrink-0 rounded-md bg-neutral-200/70 px-1.5 py-0.5 text-[11px] font-medium text-neutral-500 tabular-nums dark:bg-neutral-700/50 dark:text-neutral-400">
             {count}
           </span>
         )}

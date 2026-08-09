@@ -319,13 +319,13 @@ export default function AlwaysOnDashboard({ onOpenExecutionSession, compact = fa
       {/* Stats cards */}
       <div className={cn("grid gap-3", compact ? "grid-cols-1" : "grid-cols-3")}>
         <div className="rounded-lg border border-neutral-200 p-3.5 dark:border-neutral-800">
-          <div className="text-xxs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          <div className="text-xxs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
             {t("dashboard.stats.todayEvents", { defaultValue: "Today's Events" })}
           </div>
           <div className="mt-1 text-xl font-semibold text-neutral-900 dark:text-neutral-100">{stats.todayEvents}</div>
         </div>
         <div className="rounded-lg border border-neutral-200 p-3.5 dark:border-neutral-800">
-          <div className="text-xxs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          <div className="text-xxs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
             {t("dashboard.stats.activeProjects", { defaultValue: "Active Projects" })}
           </div>
           <div className="mt-1 text-xl font-semibold text-neutral-900 dark:text-neutral-100">
@@ -333,7 +333,7 @@ export default function AlwaysOnDashboard({ onOpenExecutionSession, compact = fa
           </div>
         </div>
         <div className="rounded-lg border border-neutral-200 p-3.5 dark:border-neutral-800">
-          <div className="text-xxs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          <div className="text-xxs font-medium tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
             {t("dashboard.stats.running", { defaultValue: "Running Now" })}
           </div>
           <div className="mt-1 text-xl font-semibold text-neutral-900 dark:text-neutral-100">{stats.runningCount}</div>

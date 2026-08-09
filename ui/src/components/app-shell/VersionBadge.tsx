@@ -88,7 +88,7 @@ export function VersionBadge() {
         type="button"
         onClick={() => setShowDialog(true)}
         className={cn(
-          "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono transition-colors",
+          "flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] transition-colors",
           info.hasUpdate
             ? "bg-brand-100 text-brand-700 hover:bg-brand-200 dark:bg-brand-900/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
             : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-700",
@@ -101,7 +101,7 @@ export function VersionBadge() {
       </button>
 
       {showDialog && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-xs">
           <div
             ref={dialogRef}
             className="relative mx-4 w-full max-w-md rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900"

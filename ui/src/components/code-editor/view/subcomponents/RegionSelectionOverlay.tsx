@@ -227,7 +227,7 @@ export default function RegionSelectionOverlay({
         setRect(nextRect);
       }}
     >
-      <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-brand-200 bg-white/95 px-3 py-1.5 text-[12px] text-brand-700 shadow-sm backdrop-blur dark:border-brand-800 dark:bg-neutral-950/95 dark:text-brand-300">
+      <div className="pointer-events-none absolute top-3 left-3 rounded-md border border-brand-200 bg-white/95 px-3 py-1.5 text-[12px] text-brand-700 shadow-xs backdrop-blur dark:border-brand-800 dark:bg-neutral-950/95 dark:text-brand-300">
         {t("contentReference.regionSelection.hint")}
       </div>
       {localRect ? (

@@ -39,17 +39,17 @@ export default function ShellMinimalView({
 
   return (
     <div className="relative h-full w-full bg-gray-900">
-      <div ref={terminalContainerRef} className="h-full w-full focus:outline-none" style={{ outline: "none" }} />
+      <div ref={terminalContainerRef} className="h-full w-full focus:outline-hidden" style={{ outline: "none" }} />
 
       {showMobileAuthPanel && (
-        <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-sm md:hidden">
+        <div className="absolute inset-x-0 bottom-14 z-20 border-t border-gray-700/80 bg-gray-900/95 p-3 backdrop-blur-xs md:hidden">
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-gray-300">Open or copy the login URL:</p>
               <button
                 type="button"
                 onClick={() => setIsAuthPanelHidden(true)}
-                className="rounded bg-gray-700 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-gray-100 hover:bg-gray-600"
+                className="rounded bg-gray-700 px-2 py-1 text-[10px] font-medium tracking-wide text-gray-100 uppercase hover:bg-gray-600"
               >
                 Hide
               </button>
@@ -60,7 +60,7 @@ export default function ShellMinimalView({
               value={displayAuthUrl}
               readOnly
               onClick={event => event.currentTarget.select()}
-              className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded border border-gray-600 bg-gray-800 px-2 py-1 text-xs text-gray-100 focus:ring-1 focus:ring-brand-500 focus:outline-hidden"
               aria-label="Authentication URL"
             />
 
@@ -91,11 +91,11 @@ export default function ShellMinimalView({
       )}
 
       {showMobileAuthPanelToggle && (
-        <div className="absolute bottom-14 right-3 z-20 md:hidden">
+        <div className="absolute right-3 bottom-14 z-20 md:hidden">
           <button
             type="button"
             onClick={() => setIsAuthPanelHidden(false)}
-            className="rounded bg-gray-800/95 px-3 py-2 text-xs font-medium text-gray-100 shadow-lg backdrop-blur-sm hover:bg-gray-700"
+            className="rounded bg-gray-800/95 px-3 py-2 text-xs font-medium text-gray-100 shadow-lg backdrop-blur-xs hover:bg-gray-700"
           >
             Show login URL
           </button>

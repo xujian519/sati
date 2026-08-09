@@ -101,7 +101,7 @@ function SettingsInner({ isOpen, onClose, projects = [], initialTab }: SettingsP
   }
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm md:p-4">
+    <div className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-xs md:p-4">
       <div className="relative flex h-full w-full overflow-hidden border border-border bg-background shadow-2xl md:h-[90vh] md:max-w-7xl md:rounded-xl">
         <div className="flex h-full w-full flex-col md:flex-row">
           <SettingsSidebar

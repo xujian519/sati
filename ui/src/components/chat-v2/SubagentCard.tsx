@@ -122,7 +122,7 @@ export default function SubagentCard({
         {/* Line 1: type badge + description */}
         <div className="flex min-w-0 items-center gap-2">
           <Bot className="h-3.5 w-3.5 shrink-0 text-purple-500 dark:text-purple-400" strokeWidth={1.8} />
-          <span className="shrink-0 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium uppercase leading-none text-purple-600 dark:bg-purple-900/40 dark:text-purple-300">
+          <span className="shrink-0 rounded bg-purple-100 px-1.5 py-0.5 text-[10px] leading-none font-medium text-purple-600 uppercase dark:bg-purple-900/40 dark:text-purple-300">
             {subagentType}
           </span>
           <span className="truncate text-[13px] font-medium text-neutral-700 dark:text-neutral-200">{description}</span>
@@ -166,7 +166,7 @@ export default function SubagentCard({
             }
           >
             {thinkingLines.map((line, i) => (
-              <div key={i} className="whitespace-pre-wrap break-words">
+              <div key={i} className="break-words whitespace-pre-wrap">
                 {line || "\u00A0"}
               </div>
             ))}

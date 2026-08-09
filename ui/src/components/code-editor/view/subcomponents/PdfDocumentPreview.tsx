@@ -406,14 +406,14 @@ function PdfThumbnail({
       title={label}
       onClick={() => onSelect(pageNumber)}
       className={[
-        "group flex w-full flex-col items-center gap-1.5 rounded-md border px-2 py-2 text-[11px] outline-none transition-colors",
+        "group flex w-full flex-col items-center gap-1.5 rounded-md border px-2 py-2 text-[11px] outline-hidden transition-colors",
         "focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-neutral-950",
         active
           ? "border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-400 dark:bg-brand-950/40 dark:text-brand-200"
           : "border-transparent text-neutral-500 hover:border-neutral-300 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:bg-neutral-900",
       ].join(" ")}
     >
-      <span className="flex h-[124px] w-full items-center justify-center overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-neutral-200 dark:ring-neutral-700">
+      <span className="flex h-[124px] w-full items-center justify-center overflow-hidden rounded-sm bg-white shadow-xs ring-1 ring-neutral-200 dark:ring-neutral-700">
         {renderError ? (
           <span className="px-2 text-center text-[10px] text-red-500">!</span>
         ) : (
@@ -701,7 +701,7 @@ function PdfPage({
     <div
       ref={pageRef}
       data-pdf-page-number={pageNumber}
-      className="relative mx-auto my-5 bg-white shadow-sm ring-1 ring-neutral-200 dark:ring-neutral-800"
+      className="relative mx-auto my-5 bg-white shadow-xs ring-1 ring-neutral-200 dark:ring-neutral-800"
       style={pageStyle}
     >
       <canvas ref={canvasRef} className="block" />
@@ -1519,7 +1519,7 @@ export default function PdfDocumentPreview({
                 event.currentTarget.blur();
               }
             }}
-            className="h-8 w-16 rounded-md border border-neutral-200 bg-white px-2 text-center text-[12px] text-neutral-800 outline-none transition focus:border-neutral-400 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-600"
+            className="h-8 w-16 rounded-md border border-neutral-200 bg-white px-2 text-center text-[12px] text-neutral-800 outline-hidden transition focus:border-neutral-400 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-600"
           />
           <ToolbarButton
             title={t("pdfToolbar.zoomIn")}
@@ -1594,7 +1594,7 @@ export default function PdfDocumentPreview({
                     event.currentTarget.blur();
                   }
                 }}
-                className="h-8 w-12 rounded-md border border-neutral-200 bg-white px-1.5 text-center text-[12px] text-neutral-800 outline-none transition focus:border-neutral-400 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-600"
+                className="h-8 w-12 rounded-md border border-neutral-200 bg-white px-1.5 text-center text-[12px] text-neutral-800 outline-hidden transition focus:border-neutral-400 disabled:opacity-50 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-neutral-600"
               />
               <span className="whitespace-nowrap">{locationOfLabel}</span>
             </div>
@@ -1649,9 +1649,9 @@ export default function PdfDocumentPreview({
                   closeSearch();
                 }
               }}
-              className="h-7 w-40 bg-transparent px-2 text-[12px] text-neutral-800 outline-none placeholder:text-neutral-400 dark:text-neutral-100 dark:placeholder:text-neutral-600"
+              className="h-7 w-40 bg-transparent px-2 text-[12px] text-neutral-800 outline-hidden placeholder:text-neutral-400 dark:text-neutral-100 dark:placeholder:text-neutral-600"
             />
-            <span className="min-w-12 whitespace-nowrap text-center text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
+            <span className="min-w-12 text-center text-[11px] whitespace-nowrap text-neutral-500 tabular-nums dark:text-neutral-400">
               {searchStatus}
             </span>
             <ToolbarButton
@@ -1720,7 +1720,7 @@ export default function PdfDocumentPreview({
                     className={[
                       "flex h-7 items-center gap-1.5 rounded px-2 transition-colors",
                       navigationView === "thumbnails"
-                        ? "bg-white text-neutral-950 shadow-sm dark:bg-neutral-800 dark:text-neutral-50"
+                        ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-neutral-50"
                         : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100",
                     ].join(" ")}
                   >
@@ -1735,7 +1735,7 @@ export default function PdfDocumentPreview({
                     className={[
                       "flex h-7 items-center gap-1.5 rounded px-2 transition-colors",
                       navigationView === "outline"
-                        ? "bg-white text-neutral-950 shadow-sm dark:bg-neutral-800 dark:text-neutral-50"
+                        ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-neutral-50"
                         : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100",
                     ].join(" ")}
                   >
@@ -1746,7 +1746,7 @@ export default function PdfDocumentPreview({
               ) : (
                 <span>{navigationLabel}</span>
               )}
-              <span className="tabular-nums text-neutral-400 dark:text-neutral-500">{totalPages || "-"}</span>
+              <span className="text-neutral-400 tabular-nums dark:text-neutral-500">{totalPages || "-"}</span>
             </div>
             <div
               ref={navigationRef}
@@ -1820,7 +1820,7 @@ export default function PdfDocumentPreview({
           )}
 
           {loadingOverlay ? (
-            <div className="absolute left-3 top-3 z-10 rounded-md border border-neutral-200 bg-white/95 px-3 py-1.5 text-[12px] text-neutral-600 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95 dark:text-neutral-300">
+            <div className="absolute top-3 left-3 z-10 rounded-md border border-neutral-200 bg-white/95 px-3 py-1.5 text-[12px] text-neutral-600 shadow-xs backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/95 dark:text-neutral-300">
               {loadingOverlay}
             </div>
           ) : null}

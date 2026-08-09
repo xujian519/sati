@@ -73,7 +73,7 @@ function SavingsBadge({ baseline, saved }: { baseline?: number; saved?: number }
   return (
     <span
       className={cn(
-        "text-xxs inline-flex items-center gap-1",
+        "inline-flex items-center gap-1 text-xxs",
         isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400",
       )}
     >
@@ -439,7 +439,7 @@ export default function DashboardV2({
                     className={cn(
                       "rounded px-2.5 text-[12px] font-medium transition-colors",
                       activeScope === item
-                        ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100"
+                        ? "bg-white text-neutral-900 shadow-xs dark:bg-neutral-700 dark:text-neutral-100"
                         : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200",
                     )}
                   >
@@ -526,7 +526,7 @@ export default function DashboardV2({
         {/* Project-filtered: flat session list */}
         {effectiveProjectFilter && (
           <div className="mt-6 space-y-2">
-            <div className="text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            <div className="text-xxs tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
               {t("dashboard.sessions.title", { defaultValue: "Sessions" })}
             </div>
             {groups.length > 0 && groups[0].allSessions.length > 0 ? (
@@ -552,7 +552,7 @@ export default function DashboardV2({
           <>
             {(groups.length > 0 || generalGroup) && (
               <div className="mt-6 space-y-3">
-                <div className="text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                <div className="text-xxs tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
                   {t("dashboard.projects.title", { defaultValue: "By project" })}
                 </div>
                 <div className={cn("grid grid-cols-1 gap-3", !compact && "md:grid-cols-2")}>
@@ -574,7 +574,7 @@ export default function DashboardV2({
                 compact ? "p-4" : "p-5",
               )}
             >
-              <div className="mb-4 text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+              <div className="mb-4 text-xxs tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
                 {t("dashboard.recent.title", { defaultValue: "Recent routes" })}
               </div>
               {recent.length === 0 ? (
@@ -695,7 +695,7 @@ function ProjectCostCard({ group, onClick }: { group: ProjectGroup; onClick?: ()
       onClick={onClick}
       className={cn(
         "flex flex-col rounded-xl border border-neutral-200 bg-white p-4 text-left dark:border-neutral-800 dark:bg-neutral-950",
-        onClick && "cursor-pointer transition hover:border-neutral-300 hover:shadow-sm dark:hover:border-neutral-700",
+        onClick && "cursor-pointer transition hover:border-neutral-300 hover:shadow-xs dark:hover:border-neutral-700",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -716,7 +716,7 @@ function ProjectCostCard({ group, onClick }: { group: ProjectGroup; onClick?: ()
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <div className="text-[18px] font-semibold tabular-nums text-neutral-900 dark:text-neutral-100">
+          <div className="text-[18px] font-semibold text-neutral-900 tabular-nums dark:text-neutral-100">
             {formatCost(cost)}
           </div>
           {baseline > 0 && (
@@ -760,7 +760,7 @@ function PriceSection({ sessions, compact = false }: { sessions: DashboardSessio
 
   return (
     <div className="mt-6 space-y-2">
-      <div className="text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <div className="text-xxs tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
         {t("dashboard.price.title", { defaultValue: "Price" })}
       </div>
       <div
@@ -939,7 +939,7 @@ function PriceMetric({
       <div className="text-xxs text-neutral-500 dark:text-neutral-400">{label}</div>
       <div
         className={cn(
-          "mt-1 text-[22px] font-semibold tabular-nums text-neutral-900 dark:text-neutral-100",
+          "mt-1 text-[22px] font-semibold text-neutral-900 tabular-nums dark:text-neutral-100",
           tone === "positive" && "text-emerald-700 dark:text-emerald-300",
           tone === "warning" && "text-amber-700 dark:text-amber-300",
         )}
@@ -962,10 +962,10 @@ function PriceCell({
 }) {
   return (
     <div className="flex items-center justify-between gap-3 md:block md:text-right">
-      <span className="text-xxs text-neutral-500 dark:text-neutral-400 md:hidden">{label}</span>
+      <span className="text-xxs text-neutral-500 md:hidden dark:text-neutral-400">{label}</span>
       <span
         className={cn(
-          "tabular-nums text-neutral-700 dark:text-neutral-300",
+          "text-neutral-700 tabular-nums dark:text-neutral-300",
           tone === "positive" && "font-medium text-emerald-700 dark:text-emerald-300",
           tone === "warning" && "font-medium text-amber-700 dark:text-amber-300",
         )}
@@ -1034,14 +1034,14 @@ function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: "m
 
   return (
     <div className={cn("flex items-start gap-2 rounded-md px-2.5 py-1.5 text-[12px]", bgClass)}>
-      <span className={cn("text-xxs mt-0.5 shrink-0 rounded px-1.5 py-0.5 font-medium", tierClass)}>
+      <span className={cn("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xxs font-medium", tierClass)}>
         {entry.tier || "—"}
       </span>
-      <span className={cn("text-xxs mt-0.5 shrink-0 rounded px-1 py-0.5", badgeClass)}>{badgeLabel}</span>
+      <span className={cn("mt-0.5 shrink-0 rounded px-1 py-0.5 text-xxs", badgeClass)}>{badgeLabel}</span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-neutral-700 dark:text-neutral-300">
           {entry.query || (
-            <span className="italic text-neutral-400">
+            <span className="text-neutral-400 italic">
               {t("dashboard.session.noContent", { defaultValue: "(no content)" })}
             </span>
           )}
@@ -1135,7 +1135,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
                 {tier}
               </span>
             ))}
-            <div className="ml-1 grid grid-cols-[56px_62px_58px_86px] items-center gap-2 text-[11px] tabular-nums leading-[14px]">
+            <div className="ml-1 grid grid-cols-[56px_62px_58px_86px] items-center gap-2 text-[11px] leading-[14px] tabular-nums">
               <span className="text-right text-neutral-500 dark:text-neutral-400">
                 {t("dashboard.units.requestsShort", {
                   count: routing.total.requestCount,
@@ -1178,7 +1178,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
 
       {/* Expanded detail */}
       {open && (
-        <div className="border-t border-neutral-100 bg-neutral-50/50 px-5 pb-3 pt-2 dark:border-neutral-800/50 dark:bg-neutral-900/30">
+        <div className="border-t border-neutral-100 bg-neutral-50/50 px-5 pt-2 pb-3 dark:border-neutral-800/50 dark:bg-neutral-900/30">
           {hasLog ? (
             <>
               {/* Orchestration summary header */}
@@ -1189,7 +1189,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
                       <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">
                         {t("dashboard.session.mainAgent", { defaultValue: "Main Agent" })}
                       </div>
-                      <div className="mt-0.5 text-xxs tabular-nums text-neutral-500 dark:text-neutral-400">
+                      <div className="mt-0.5 text-xxs text-neutral-500 tabular-nums dark:text-neutral-400">
                         {t("dashboard.units.requestsShort", {
                           count: mainRole.requestCount,
                           defaultValue: `${mainRole.requestCount} req`,
@@ -1203,7 +1203,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
                       <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">
                         {t("dashboard.session.subagents", { defaultValue: "Sub-agents" })}
                       </div>
-                      <div className="mt-0.5 text-xxs tabular-nums text-violet-600 dark:text-violet-400">
+                      <div className="mt-0.5 text-xxs text-violet-600 tabular-nums dark:text-violet-400">
                         {t("dashboard.units.requestsShort", {
                           count: subRole.requestCount,
                           defaultValue: `${subRole.requestCount} req`,
@@ -1221,7 +1221,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
                   <div key={gi}>
                     <RequestLogRow entry={group.main} variant="main" />
                     {group.subs.length > 0 && (
-                      <div className="ml-5 mt-1 space-y-1 border-l-2 border-amber-200/60 pl-3 dark:border-amber-700/30">
+                      <div className="mt-1 ml-5 space-y-1 border-l-2 border-amber-200/60 pl-3 dark:border-amber-700/30">
                         {group.subs.map((sub, si) => (
                           <RequestLogRow
                             key={si}
@@ -1245,7 +1245,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
                       <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">
                         {t("dashboard.session.mainAgent", { defaultValue: "Main Agent" })}
                       </div>
-                      <div className="mt-0.5 text-xxs tabular-nums text-neutral-500 dark:text-neutral-400">
+                      <div className="mt-0.5 text-xxs text-neutral-500 tabular-nums dark:text-neutral-400">
                         {t("dashboard.units.requestsShort", {
                           count: mainRole.requestCount,
                           defaultValue: `${mainRole.requestCount} req`,
@@ -1259,7 +1259,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
                       <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">
                         {t("dashboard.session.subagents", { defaultValue: "Sub-agents" })}
                       </div>
-                      <div className="mt-0.5 text-xxs tabular-nums text-violet-600 dark:text-violet-400">
+                      <div className="mt-0.5 text-xxs text-violet-600 tabular-nums dark:text-violet-400">
                         {t("dashboard.units.requestsShort", {
                           count: subRole.requestCount,
                           defaultValue: `${subRole.requestCount} req`,
@@ -1308,7 +1308,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
                   className="rounded-full bg-neutral-100 px-2 py-0.5 text-xxs text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
                 >
                   {model}{" "}
-                  <span className="tabular-nums text-neutral-400 dark:text-neutral-500">
+                  <span className="text-neutral-400 tabular-nums dark:text-neutral-500">
                     ×{bucket?.requestCount ?? 0}
                   </span>
                 </span>
@@ -1336,7 +1336,7 @@ function StatCard({
 }) {
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-950">
-      <div className="flex items-center gap-2 text-xxs uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+      <div className="flex items-center gap-2 text-xxs tracking-wide text-neutral-500 uppercase dark:text-neutral-400">
         {icon}
         <span>{label}</span>
       </div>

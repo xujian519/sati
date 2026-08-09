@@ -17,7 +17,7 @@ export default function AdvancedJsonEditor({ value, onChange }: AdvancedJsonEdit
         value={value}
         onChange={event => onChange(event.target.value)}
         spellCheck={false}
-        className="min-h-[260px] w-full resize-y border-t border-border bg-background p-4 font-mono text-xs leading-5 text-foreground outline-none"
+        className="min-h-[260px] w-full resize-y border-t border-border bg-background p-4 font-mono text-xs leading-5 text-foreground outline-hidden"
       />
     </details>
   );

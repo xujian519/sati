@@ -45,7 +45,7 @@ export const TextContent: React.FC<TextContentProps> = ({ content, format = "pla
   if (format === "code") {
     return (
       <pre
-        className={`mt-1 overflow-hidden whitespace-pre-wrap break-words rounded border border-gray-200/50 bg-gray-50 p-2 font-mono text-xs text-gray-700 dark:border-gray-700/50 dark:bg-gray-800/50 dark:text-gray-300 ${className}`}
+        className={`mt-1 overflow-hidden rounded border border-gray-200/50 bg-gray-50 p-2 font-mono text-xs break-words whitespace-pre-wrap text-gray-700 dark:border-gray-700/50 dark:bg-gray-800/50 dark:text-gray-300 ${className}`}
       >
         {safeContent}
       </pre>
@@ -54,7 +54,7 @@ export const TextContent: React.FC<TextContentProps> = ({ content, format = "pla
 
   // Plain text
   return (
-    <div className={`mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 ${className}`}>
+    <div className={`mt-1 text-sm whitespace-pre-wrap text-gray-700 dark:text-gray-300 ${className}`}>
       {safeContent}
     </div>
   );

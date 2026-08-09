@@ -130,7 +130,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({ request, onD
         <div className="max-h-[50vh] min-h-[200px] overflow-y-auto px-4 py-3">
           <MarkdownContent
             content={plan}
-            className="prose prose-sm max-w-none text-neutral-800 dark:prose-invert dark:text-neutral-200"
+            className="prose prose-sm max-w-none text-neutral-800 dark:text-neutral-200 dark:prose-invert"
           />
         </div>
       )}
@@ -144,7 +144,7 @@ export const ExitPlanModePanel: React.FC<PermissionPanelProps> = ({ request, onD
           onChange={event => setFeedback(event.target.value)}
           rows={3}
           placeholder={t("plan.exitMode.feedbackPlaceholder")}
-          className="dark:focus:ring-brand-950 block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-brand-700"
+          className="dark:focus:ring-brand-950 block w-full resize-none rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-hidden transition focus:border-brand-300 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-brand-700"
         />
         <div className="mt-3 flex flex-wrap justify-end gap-2">
           <button

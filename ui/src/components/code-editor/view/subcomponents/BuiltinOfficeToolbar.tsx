@@ -117,7 +117,7 @@ export default function BuiltinOfficeToolbar({
       >
         <ZoomOut className="h-4 w-4" strokeWidth={1.75} />
       </button>
-      <span className="flex h-8 min-w-16 items-center justify-center rounded-md border border-neutral-200 px-2 text-[12px] tabular-nums text-neutral-700 dark:border-neutral-800 dark:text-neutral-200">
+      <span className="flex h-8 min-w-16 items-center justify-center rounded-md border border-neutral-200 px-2 text-[12px] text-neutral-700 tabular-nums dark:border-neutral-800 dark:text-neutral-200">
         {Math.round(zoom * 100)}%
       </span>
       <button
@@ -144,7 +144,7 @@ export default function BuiltinOfficeToolbar({
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
           </button>
-          <span className="min-w-14 text-center text-[12px] tabular-nums text-neutral-600 dark:text-neutral-300">
+          <span className="min-w-14 text-center text-[12px] text-neutral-600 tabular-nums dark:text-neutral-300">
             {currentItem || 1} / {itemCount}
           </span>
           <button
@@ -171,7 +171,7 @@ export default function BuiltinOfficeToolbar({
         <Search className="h-4 w-4" strokeWidth={1.75} />
       </button>
       {searchOpen ? (
-        <div className="flex h-8 min-w-56 max-w-sm flex-1 items-center rounded-md border border-neutral-200 bg-white px-2 dark:border-neutral-700 dark:bg-neutral-900">
+        <div className="flex h-8 max-w-sm min-w-56 flex-1 items-center rounded-md border border-neutral-200 bg-white px-2 dark:border-neutral-700 dark:bg-neutral-900">
           <input
             autoFocus
             value={searchQuery}
@@ -197,9 +197,9 @@ export default function BuiltinOfficeToolbar({
             }}
             placeholder={t("builtinOfficePreview.searchPlaceholder")}
             aria-label={t("builtinOfficePreview.search")}
-            className="min-w-0 flex-1 bg-transparent text-[12px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-neutral-100"
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-neutral-900 outline-hidden placeholder:text-neutral-400 dark:text-neutral-100"
           />
-          <span className="ml-2 shrink-0 text-[11px] tabular-nums text-neutral-500">
+          <span className="ml-2 shrink-0 text-[11px] text-neutral-500 tabular-nums">
             {searchQuery
               ? searchMatchCount > 0
                 ? `${searchMatchIndex + 1} / ${searchMatchCount}`

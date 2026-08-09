@@ -40,7 +40,7 @@ export default function CodeEditorLoadError({
         <p className="text-xs text-neutral-600 dark:text-neutral-400">{labels.description}</p>
         <p className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">{file.path}</p>
       </div>
-      <pre className="max-h-32 w-full overflow-auto whitespace-pre-wrap rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-mono text-xxs text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+      <pre className="max-h-32 w-full overflow-auto rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-left font-mono text-xxs whitespace-pre-wrap text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
         {errorMessage}
       </pre>
       <div className="flex items-center gap-2">
@@ -74,8 +74,8 @@ export default function CodeEditorLoadError({
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] md:flex md:items-center md:justify-center md:bg-black/40 md:backdrop-blur-sm">
-      <div className="flex h-full w-full flex-col bg-white dark:bg-neutral-950 md:h-[80vh] md:max-h-[80vh] md:max-w-6xl md:rounded-xl md:border md:border-neutral-200 dark:md:border-neutral-800">
+    <div className="fixed inset-0 z-[9999] md:flex md:items-center md:justify-center md:bg-black/40 md:backdrop-blur-xs">
+      <div className="flex h-full w-full flex-col bg-white md:h-[80vh] md:max-h-[80vh] md:max-w-6xl md:rounded-xl md:border md:border-neutral-200 dark:bg-neutral-950 dark:md:border-neutral-800">
         {headerPrefix}
         <div className="flex min-h-0 flex-1 items-center justify-center">{body}</div>
       </div>

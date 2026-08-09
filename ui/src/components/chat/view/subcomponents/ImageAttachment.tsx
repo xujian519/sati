@@ -56,7 +56,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
       {isImage ? (
         <img src={preview} alt={file.name} className="h-20 w-20 rounded object-cover" />
       ) : (
-        <div className="flex h-20 w-44 items-center gap-2 rounded border border-neutral-200 bg-white p-2 text-neutral-900 shadow-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
+        <div className="flex h-20 w-44 items-center gap-2 rounded border border-neutral-200 bg-white p-2 text-neutral-900 shadow-xs dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
           <div className="dark:bg-brand-950 flex h-10 w-10 shrink-0 items-center justify-center rounded bg-brand-100 text-brand-700 dark:text-brand-300">
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 3h7l5 5v13H7z" />
@@ -65,7 +65,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
           </div>
           <div className="min-w-0">
             <div className="truncate text-xs font-medium">{file.name}</div>
-            <div className="mt-0.5 text-[11px] uppercase text-neutral-500">{getFileTypeLabel(file)}</div>
+            <div className="mt-0.5 text-[11px] text-neutral-500 uppercase">{getFileTypeLabel(file)}</div>
           </div>
         </div>
       )}
@@ -84,7 +84,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }: ImageAttachm
       <button
         type="button"
         onClick={onRemove}
-        className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+        className="absolute -top-2 -right-2 rounded-full bg-red-500 p-1 text-white opacity-100 transition-opacity focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
         aria-label="Remove attachment"
       >
         <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

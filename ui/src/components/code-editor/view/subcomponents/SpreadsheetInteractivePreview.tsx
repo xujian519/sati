@@ -492,13 +492,13 @@ export default function SpreadsheetInteractivePreview({
         </div>
         <div
           aria-hidden="true"
-          className="shrink-0 border-r border-border px-3 font-serif italic text-muted-foreground"
+          className="shrink-0 border-r border-border px-3 font-serif text-muted-foreground italic"
         >
           fx
         </div>
         <input
           aria-label={t("contentReference.spreadsheet.cellValue")}
-          className="min-w-0 flex-1 bg-transparent px-3 text-foreground outline-none"
+          className="min-w-0 flex-1 bg-transparent px-3 text-foreground outline-hidden"
           readOnly
           value={selectedCell.value}
         />

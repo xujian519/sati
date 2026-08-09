@@ -176,7 +176,7 @@ export default function McpServersSection({ title, projects = [] }: McpServersSe
             <select
               value={projectPath}
               onChange={event => setProjectPath(event.target.value)}
-              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-hidden focus:ring-1 focus:ring-ring"
             >
               {projectOptions.map(project => (
                 <option key={project.value} value={project.value}>
@@ -197,7 +197,7 @@ export default function McpServersSection({ title, projects = [] }: McpServersSe
               className={cn(
                 "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 scope === item
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
                 item === "project" && !projectPath && "cursor-not-allowed opacity-50",
               )}

@@ -77,7 +77,7 @@ export const ToolDiffViewer: React.FC<ToolDiffViewerProps> = ({
         {diffLines.map((diffLine, i) => (
           <div key={i} className="flex">
             <span
-              className={`w-6 flex-shrink-0 select-none text-center ${
+              className={`w-6 flex-shrink-0 text-center select-none ${
                 diffLine.type === "removed"
                   ? "bg-red-50 text-red-400 dark:bg-red-950/30 dark:text-red-500"
                   : "bg-green-50 text-green-400 dark:bg-green-950/30 dark:text-green-500"
@@ -86,7 +86,7 @@ export const ToolDiffViewer: React.FC<ToolDiffViewerProps> = ({
               {diffLine.type === "removed" ? "-" : "+"}
             </span>
             <span
-              className={`flex-1 whitespace-pre-wrap px-2 ${
+              className={`flex-1 px-2 whitespace-pre-wrap ${
                 diffLine.type === "removed"
                   ? "bg-red-50/50 text-red-800 dark:bg-red-950/20 dark:text-red-200"
                   : "bg-green-50/50 text-green-800 dark:bg-green-950/20 dark:text-green-200"

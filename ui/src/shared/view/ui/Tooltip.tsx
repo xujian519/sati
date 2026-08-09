@@ -177,14 +177,14 @@ function Tooltip({ children, content, position = "top", className = "", delay = 
             ref={tooltipRef}
             style={tooltipStyle || { position: "fixed", top: "-9999px", left: "-9999px", opacity: 0 }}
             className={cn(
-              "px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-100 dark:text-gray-900 rounded shadow-lg whitespace-nowrap pointer-events-none",
+              "pointer-events-none rounded bg-gray-900 px-2 py-1 text-xs font-medium whitespace-nowrap text-white shadow-lg dark:bg-gray-100 dark:text-gray-900",
               "animate-in fade-in-0 zoom-in-95 duration-200",
               className,
             )}
           >
             {content}
             {/* Arrow */}
-            <div className={cn("absolute w-0 h-0 border-4 border-transparent", getArrowClasses(position))} />
+            <div className={cn("absolute h-0 w-0 border-4 border-transparent", getArrowClasses(position))} />
           </div>,
           document.body,
         )}

@@ -83,7 +83,7 @@ export default function SubagentDetailModal({
     <div
       ref={overlayRef}
       data-modal-overlay
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs"
       onClick={handleOverlayClick}
     >
       <div className="relative flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-700 dark:bg-neutral-900">

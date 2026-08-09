@@ -32,7 +32,7 @@ export default function McpServerFormCard({ server, onChange, onRemove }: McpSer
               <span className="truncate text-sm font-semibold text-foreground">
                 {server.name || t("mcpConfig.unnamed")}
               </span>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground uppercase">
                 {server.transport === "stdio" ? "STDIO" : t("mcpConfig.transport.http")}
               </span>
             </div>

@@ -160,7 +160,7 @@ const MessageCopyControl = ({ content, messageType }: { content: string; message
             <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
           </svg>
         )}
-        <span className="text-[10px] font-semibold uppercase tracking-wide">{selectedFormatTag}</span>
+        <span className="text-[10px] font-semibold tracking-wide uppercase">{selectedFormatTag}</span>
       </button>
 
       {canSelectCopyFormat && (
@@ -183,7 +183,7 @@ const MessageCopyControl = ({ content, messageType }: { content: string; message
           </button>
 
           {isDropdownOpen && (
-            <div className="absolute left-auto top-full z-30 mt-1 min-w-36 rounded-md border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+            <div className="absolute top-full left-auto z-30 mt-1 min-w-36 rounded-md border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
               {copyFormatOptions.map(option => {
                 const isSelected = option.format === selectedFormat;
                 return (

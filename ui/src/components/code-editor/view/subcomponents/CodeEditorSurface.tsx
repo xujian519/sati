@@ -44,7 +44,7 @@ export default function CodeEditorSurface({
   if (markdownPreview && isMarkdownFile) {
     return (
       <div className="h-full overflow-y-auto bg-white dark:bg-neutral-950">
-        <div className="prose prose-sm prose-neutral mx-auto max-w-none px-8 py-6 dark:prose-invert prose-headings:font-semibold prose-a:text-neutral-900 prose-a:underline prose-code:text-[13px] prose-pre:bg-neutral-900 prose-img:rounded-lg dark:prose-a:text-neutral-100">
+        <div className="mx-auto prose prose-sm max-w-none px-8 py-6 prose-neutral dark:prose-invert prose-headings:font-semibold prose-a:text-neutral-900 prose-a:underline dark:prose-a:text-neutral-100 prose-code:text-[13px] prose-pre:bg-neutral-900 prose-img:rounded-lg">
           <MarkdownPreview content={content} baseFilePath={baseFilePath} onFileOpen={onFileOpen} />
         </div>
       </div>

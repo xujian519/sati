@@ -66,7 +66,7 @@ export default function SettingsContent({
         mobileVisible ? "block" : "hidden",
       )}
     >
-      <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-8 pb-6 pt-7">
+      <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-8 pt-7 pb-6">
         <button
           type="button"
           onClick={onOpenMobileNavigation}

@@ -72,7 +72,7 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
       role="dialog"
       aria-modal="true"
       aria-label={active?.name || "Image preview"}
-      className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+      className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/85 backdrop-blur-xs"
       onClick={onClose}
     >
       <button
@@ -81,7 +81,7 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
           event.stopPropagation();
           onClose();
         }}
-        className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white shadow-sm transition hover:bg-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+        className="absolute top-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white shadow-xs transition hover:bg-white/30 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-hidden"
         aria-label="Close preview"
       >
         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -96,7 +96,7 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
             event.stopPropagation();
             showPrev();
           }}
-          className="absolute left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white shadow-sm transition hover:bg-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+          className="absolute top-1/2 left-4 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white shadow-xs transition hover:bg-white/30 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-hidden"
           aria-label="Previous image"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -112,7 +112,7 @@ const ImageLightbox = ({ images, startIndex = 0, onClose }: ImageLightboxProps) 
             event.stopPropagation();
             showNext();
           }}
-          className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white shadow-sm transition hover:bg-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+          className="absolute top-1/2 right-4 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-white shadow-xs transition hover:bg-white/30 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-hidden"
           aria-label="Next image"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>

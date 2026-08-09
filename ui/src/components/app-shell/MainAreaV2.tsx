@@ -268,12 +268,12 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                 }
               }}
               aria-label={t("sidebar:sessions.renameSession", { defaultValue: "Rename Session" }) as string}
-              className="h-6 min-w-0 max-w-[34rem] rounded border border-neutral-300 bg-white px-1.5 text-[15px] font-semibold leading-5 text-neutral-950 outline-none focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50"
+              className="h-6 max-w-[34rem] min-w-0 rounded border border-neutral-300 bg-white px-1.5 text-[15px] leading-5 font-semibold text-neutral-950 outline-hidden focus:border-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50"
             />
           ) : (
             <div
               className={cn(
-                "min-w-0 max-w-[34rem] truncate text-[15px] font-semibold leading-5 text-neutral-950 dark:text-neutral-50",
+                "max-w-[34rem] min-w-0 truncate text-[15px] leading-5 font-semibold text-neutral-950 dark:text-neutral-50",
                 selectedSession && "cursor-text",
               )}
               title={headerTitle}
@@ -284,7 +284,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
           )}
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-neutral-400 dark:text-neutral-500">
             <Box className="h-3 w-3 shrink-0 text-brand-500 dark:text-brand-400" strokeWidth={1.75} />
-            <span className="min-w-0 max-w-96 truncate text-brand-600 dark:text-brand-400" title={projectName}>
+            <span className="max-w-96 min-w-0 truncate text-brand-600 dark:text-brand-400" title={projectName}>
               {projectName}
             </span>
           </div>
@@ -376,7 +376,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                 {alwaysOnUnread && activeDashboardTab.id !== "always-on" ? (
                   <span
                     aria-hidden="true"
-                    className="dark:ring-brand-950 absolute right-1 top-1 h-2 w-2 rounded-full bg-brand-600 ring-2 ring-brand-100 dark:bg-brand-400"
+                    className="dark:ring-brand-950 absolute top-1 right-1 h-2 w-2 rounded-full bg-brand-600 ring-2 ring-brand-100 dark:bg-brand-400"
                   />
                 ) : null}
               </button>
@@ -394,7 +394,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                 {alwaysOnUnread ? (
                   <span
                     aria-hidden="true"
-                    className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-brand-500 ring-2 ring-white dark:ring-neutral-950"
+                    className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-brand-500 ring-2 ring-white dark:ring-neutral-950"
                   />
                 ) : null}
               </button>
@@ -404,7 +404,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
               <div
                 role="menu"
                 aria-label={t("dashboardSwitcher.menuLabel", { defaultValue: "Dashboards" }) as string}
-                className="absolute right-0 top-10 z-[90] w-32 overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl shadow-black/10 dark:border-neutral-700 dark:bg-neutral-900"
+                className="absolute top-10 right-0 z-[90] w-32 overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl shadow-black/10 dark:border-neutral-700 dark:bg-neutral-900"
               >
                 {DASHBOARD_TABS.map(tab => {
                   const Icon = tab.icon;
@@ -418,7 +418,7 @@ function MainAreaV2Content(props: MainAreaV2Props) {
                         chatHistorySearch.closeSearch();
                         setActiveTab(tab.id);
                       }}
-                      className="relative flex h-9 w-full items-center justify-center gap-2 rounded-lg px-2 text-[13px] text-neutral-600 transition-colors hover:bg-brand-50 hover:text-brand-700 focus:bg-brand-50 focus:text-brand-700 focus:outline-none dark:text-neutral-300 dark:hover:bg-brand-900/30 dark:hover:text-brand-200 dark:focus:bg-brand-900/30 dark:focus:text-brand-200"
+                      className="relative flex h-9 w-full items-center justify-center gap-2 rounded-lg px-2 text-[13px] text-neutral-600 transition-colors hover:bg-brand-50 hover:text-brand-700 focus:bg-brand-50 focus:text-brand-700 focus:outline-hidden dark:text-neutral-300 dark:hover:bg-brand-900/30 dark:hover:text-brand-200 dark:focus:bg-brand-900/30 dark:focus:text-brand-200"
                     >
                       <Icon className="h-4 w-4 shrink-0 text-neutral-400" strokeWidth={1.75} />
                       <span>{t(tab.labelKey)}</span>

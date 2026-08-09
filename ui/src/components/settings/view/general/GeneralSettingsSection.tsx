@@ -30,7 +30,7 @@ function SelectControl({
       value={value}
       onChange={event => onChange(event.target.value)}
       className={cn(
-        "h-9 rounded-lg border border-transparent bg-muted px-3 text-[13px] font-medium text-foreground outline-none transition-colors",
+        "h-9 rounded-lg border border-transparent bg-muted px-3 text-[13px] font-medium text-foreground outline-hidden transition-colors",
         "hover:bg-accent focus:border-ring focus:bg-card focus:ring-1 focus:ring-ring",
         className,
       )}
@@ -59,7 +59,7 @@ function MenuRow({
     <div className="flex min-h-[58px] items-center gap-3 px-4 py-2.5">
       <Icon className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium leading-5 text-foreground">{title}</div>
+        <div className="text-sm leading-5 font-medium text-foreground">{title}</div>
         <div className="mt-0.5 text-xs leading-[18px] text-muted-foreground">{detail}</div>
       </div>
       <div className="flex-shrink-0">{children}</div>

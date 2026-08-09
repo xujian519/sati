@@ -382,7 +382,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
 
       {/* Provider grid */}
       <div>
-        <div className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Provider</div>
+        <div className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">Provider</div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {CATALOG_PROVIDERS.map(provider => (
             <button
@@ -397,7 +397,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
             >
               <div className="font-medium">{provider.displayName}</div>
               {selectedProvider?.id === provider.id && (
-                <Check className="absolute right-2 top-2 h-4 w-4 text-foreground" strokeWidth={2.5} />
+                <Check className="absolute top-2 right-2 h-4 w-4 text-foreground" strokeWidth={2.5} />
               )}
             </button>
           ))}
@@ -415,7 +415,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
               <div className="font-medium">Custom</div>
               <div className="mt-0.5 text-[11px] opacity-60">OpenAI / Anthropic / Google</div>
             </div>
-            {isCustomMode && <Check className="absolute right-2 top-2 h-4 w-4 text-foreground" strokeWidth={2.5} />}
+            {isCustomMode && <Check className="absolute top-2 right-2 h-4 w-4 text-foreground" strokeWidth={2.5} />}
           </button>
         </div>
       </div>
@@ -436,7 +436,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                 setTestMessage("");
               }}
               placeholder="e.g. my-llm"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-hidden"
               autoComplete="off"
               spellCheck={false}
             />
@@ -456,14 +456,14 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                     setTestStatus("idle");
                     setTestMessage("");
                   }}
-                  className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
+                  className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-hidden"
                 >
                   <option value="openai">openai</option>
                   <option value="openai-responses">openai-responses</option>
                   <option value="anthropic">anthropic</option>
                   <option value="google">google</option>
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               </div>
             </div>
             <div className="col-span-2">
@@ -480,7 +480,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                   setTestMessage("");
                 }}
                 placeholder="https://api.example.com/v1"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-hidden"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -522,7 +522,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
             setTestMessage("");
           }}
           placeholder={selectedProviderRequiresApiKey ? "sk-..." : "Not required for this provider"}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-hidden"
           autoComplete="off"
           spellCheck={false}
         />
@@ -544,7 +544,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                 setTestStatus("idle");
                 setTestMessage("");
               }}
-              className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
+              className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-hidden"
             >
               {selectedModels.map(m => (
                 <option key={m.id} value={m.id}>
@@ -552,7 +552,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                 </option>
               ))}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           </div>
         ) : (
           <input
@@ -565,7 +565,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
               setTestMessage("");
             }}
             placeholder="Enter model ID..."
-            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-hidden"
             autoComplete="off"
             spellCheck={false}
           />
@@ -602,7 +602,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                 setTestMessage("");
               }}
               placeholder="Or type a custom model ID..."
-              className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-none"
+              className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-hidden"
               autoComplete="off"
               spellCheck={false}
             />
@@ -636,7 +636,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
                     setTestMessage("");
                   }}
                   placeholder={selectedDefaultUrl}
-                  className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-none"
+                  className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-hidden"
                   autoComplete="off"
                   spellCheck={false}
                 />

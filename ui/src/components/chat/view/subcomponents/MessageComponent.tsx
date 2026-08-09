@@ -266,7 +266,7 @@ const MessageComponent = memo(
         {message.type === "user" ? (
           /* User message bubble on the right */
           <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
-            <div className="group flex-1 rounded-2xl rounded-br-md bg-brand-600 px-3 py-2 text-white shadow-sm sm:flex-initial sm:px-4">
+            <div className="group flex-1 rounded-2xl rounded-br-md bg-brand-600 px-3 py-2 text-white shadow-xs sm:flex-initial sm:px-4">
               {documentReferenceAttachments.length > 0 && (
                 <div className="mb-2 flex flex-wrap gap-2">
                   {documentReferenceAttachments.map(reference => (
@@ -294,7 +294,7 @@ const MessageComponent = memo(
                       </div>
                       <div className="min-w-0 text-left">
                         <div className="truncate text-[13px] font-semibold">{attachment.name}</div>
-                        <div className="mt-0.5 text-[11px] font-medium uppercase text-neutral-500">
+                        <div className="mt-0.5 text-[11px] font-medium text-neutral-500 uppercase">
                           {getAttachmentTypeLabel(attachment.name, attachment.mimeType)}
                         </div>
                       </div>
@@ -302,7 +302,7 @@ const MessageComponent = memo(
                   ))}
                 </div>
               )}
-              <div className="whitespace-pre-wrap break-words text-sm">{messageContent}</div>
+              <div className="text-sm break-words whitespace-pre-wrap">{messageContent}</div>
               {messageImages.length > 0 && (
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {messageImages.map((img, idx) => (
@@ -310,7 +310,7 @@ const MessageComponent = memo(
                       type="button"
                       key={img.name || idx}
                       onClick={() => openLightbox(messageImages as LightboxImage[], idx)}
-                      className="block overflow-hidden rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                      className="block overflow-hidden rounded-lg focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-hidden"
                       aria-label={img.name ? `Preview ${img.name}` : "Preview image"}
                     >
                       <img
@@ -336,11 +336,11 @@ const MessageComponent = memo(
         ) : message.isCompactBoundary ? (
           <div className="my-2 flex w-full items-center justify-center gap-2 px-3 sm:px-0">
             <span className="h-px flex-1 bg-emerald-200/70 dark:bg-emerald-900/50" />
-            <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+            <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-emerald-700 uppercase dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300">
               {t("compact.label")}
             </span>
             {typeof message.preTokens === "number" && (
-              <span className="text-[11px] tabular-nums text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
                 {typeof message.postTokens === "number"
                   ? t("compact.tokensAfter", {
                       before: message.preTokens.toLocaleString(),
@@ -349,16 +349,16 @@ const MessageComponent = memo(
                   : t("compact.tokens", { tokens: message.preTokens.toLocaleString() })}
               </span>
             )}
-            <span className="text-[11px] tabular-nums text-muted-foreground">{formattedTime}</span>
+            <span className="text-[11px] text-muted-foreground tabular-nums">{formattedTime}</span>
             <span className="h-px flex-1 bg-emerald-200/70 dark:bg-emerald-900/50" />
           </div>
         ) : message.isInterruptedNotice ? (
           <div className="my-1 flex w-full items-center justify-center gap-2 px-3 sm:px-0">
             <span className="h-px flex-1 bg-border/60" />
-            <span className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="rounded-full border border-border/60 bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
               {t("interrupted.label")}
             </span>
-            <span className="text-[11px] tabular-nums text-muted-foreground">{formattedTime}</span>
+            <span className="text-[11px] text-muted-foreground tabular-nums">{formattedTime}</span>
             <span className="h-px flex-1 bg-border/60" />
           </div>
         ) : message.isTaskNotification ? (
@@ -468,7 +468,7 @@ const MessageComponent = memo(
                           type="button"
                           key={`${image.name || "tool-image"}-${idx}`}
                           onClick={() => openLightbox(toolResultImages, idx)}
-                          className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-900"
+                          className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-xs transition hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-hidden dark:border-neutral-700 dark:bg-neutral-900"
                           aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
                         >
                           <img
@@ -659,7 +659,7 @@ const MessageComponent = memo(
                                 </summary>
                                 <div className="mt-1.5 pl-[18px] text-xs leading-5 text-gray-700 dark:text-gray-300">
                                   <Markdown
-                                    className="prose prose-sm prose-red max-w-none dark:prose-invert"
+                                    className="prose prose-sm max-w-none prose-red dark:prose-invert"
                                     projectName={selectedProject?.name}
                                     onFileOpen={onFileOpen}
                                   >
@@ -858,7 +858,7 @@ const MessageComponent = memo(
                     </summary>
                     <div className="mt-2 border-l-2 border-gray-300 pl-4 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-400">
                       <Markdown
-                        className="prose prose-sm prose-gray max-w-none dark:prose-invert"
+                        className="prose prose-sm max-w-none prose-gray dark:prose-invert"
                         projectName={selectedProject?.name}
                         onFileOpen={onFileOpen}
                       >
@@ -875,7 +875,7 @@ const MessageComponent = memo(
                       <summary className="cursor-pointer font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
                         {t("thinking.emoji")}
                       </summary>
-                      <div className="mt-2 border-l-2 border-gray-300 pl-4 text-sm italic text-gray-600 dark:border-gray-600 dark:text-gray-400">
+                      <div className="mt-2 border-l-2 border-gray-300 pl-4 text-sm text-gray-600 italic dark:border-gray-600 dark:text-gray-400">
                         <div className="whitespace-pre-wrap">{stringifyMessageContent(message.reasoning)}</div>
                       </div>
                     </details>
@@ -909,7 +909,7 @@ const MessageComponent = memo(
                             </div>
                             <div className="overflow-hidden rounded-lg border border-gray-600/30 bg-gray-800 dark:border-gray-700 dark:bg-gray-900">
                               <pre className="overflow-x-auto p-4">
-                                <code className="block whitespace-pre font-mono text-sm text-gray-100 dark:text-gray-200">
+                                <code className="block font-mono text-sm whitespace-pre text-gray-100 dark:text-gray-200">
                                   {formatted}
                                 </code>
                               </pre>
@@ -924,7 +924,7 @@ const MessageComponent = memo(
                     // Normal rendering for non-JSON content
                     return message.type === "assistant" ? (
                       <Markdown
-                        className="prose prose-sm prose-gray max-w-none dark:prose-invert"
+                        className="prose prose-sm max-w-none prose-gray dark:prose-invert"
                         projectName={selectedProject?.name}
                         onFileOpen={onFileOpen}
                       >

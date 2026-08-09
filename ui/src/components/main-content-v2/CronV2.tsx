@@ -318,7 +318,7 @@ function CronListView({
                   <span className="text-[13px] font-semibold text-neutral-900 dark:text-neutral-100">
                     {group.displayName}
                   </span>
-                  <span className="ml-auto text-xxs tabular-nums text-neutral-400 dark:text-neutral-500">
+                  <span className="ml-auto text-xxs text-neutral-400 tabular-nums dark:text-neutral-500">
                     {group.items.length}
                   </span>
                 </button>
@@ -468,7 +468,7 @@ function CronCreateView({
             value={message}
             onChange={event => setMessage(event.target.value)}
             rows={5}
-            className="dark:focus:ring-brand-950 mt-1.5 w-full resize-y rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+            className="dark:focus:ring-brand-950 mt-1.5 w-full resize-y rounded-md border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
             placeholder={t("cron.create.placeholders.prompt", {
               defaultValue: "Describe what Sati should do when this task runs.",
             })}
@@ -482,7 +482,7 @@ function CronCreateView({
           <select
             value={projectKey}
             onChange={event => setProjectKey(event.target.value)}
-            className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+            className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
           >
             <option value="">{t("cron.create.placeholders.workspace", { defaultValue: "Select a workspace" })}</option>
             {projects.map(project => (
@@ -506,7 +506,7 @@ function CronCreateView({
                 className={cn(
                   "inline-flex h-8 items-center gap-1.5 rounded px-3 text-[12px] font-medium transition-colors",
                   scheduleKind === kind
-                    ? "bg-white text-brand-600 shadow-sm dark:bg-neutral-800 dark:text-brand-300"
+                    ? "bg-white text-brand-600 shadow-xs dark:bg-neutral-800 dark:text-brand-300"
                     : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100",
                 )}
               >
@@ -534,7 +534,7 @@ function CronCreateView({
               min={formatDateLocal(new Date())}
               disabled={scheduleKind === "cron"}
               onChange={event => setScheduleDate(event.target.value)}
-              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
+              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
             />
           </label>
           <label className="block">
@@ -545,7 +545,7 @@ function CronCreateView({
               type="time"
               value={scheduleTime}
               onChange={event => setScheduleTime(event.target.value)}
-              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
             />
           </label>
           <label className="block">
@@ -555,7 +555,7 @@ function CronCreateView({
             <input
               value={timezone}
               onChange={event => setTimezone(event.target.value)}
-              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
             />
           </label>
         </div>
@@ -583,27 +583,27 @@ function ColumnHeaders({ t }: { t: (key: string, opts?: Record<string, string>) 
   return (
     <div className="flex items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-5 py-2 dark:border-neutral-800 dark:bg-neutral-900/50">
       <div className={COL.title}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("cron.columns.title", { defaultValue: "Title" })}
         </span>
       </div>
       <div className={COL.createdAt}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("cron.columns.createdAt", { defaultValue: "Created" })}
         </span>
       </div>
       <div className={COL.nextRunAt}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("cron.columns.nextRunAt", { defaultValue: "Next Run" })}
         </span>
       </div>
       <div className={COL.status}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("cron.columns.status", { defaultValue: "Status" })}
         </span>
       </div>
       <div className={COL.actions}>
-        <span className="text-xxs font-medium uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="text-xxs font-medium tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
           {t("cron.columns.actions", { defaultValue: "Actions" })}
         </span>
       </div>
@@ -654,10 +654,10 @@ function CronJobRow({
       >
         {job.prompt || "—"}
       </div>
-      <div className={cn(COL.createdAt, "font-mono text-xxs tabular-nums text-neutral-500 dark:text-neutral-400")}>
+      <div className={cn(COL.createdAt, "font-mono text-xxs text-neutral-500 tabular-nums dark:text-neutral-400")}>
         {formatAbsoluteTime(job.createdAt)}
       </div>
-      <div className={cn(COL.nextRunAt, "font-mono text-xxs tabular-nums text-neutral-500 dark:text-neutral-400")}>
+      <div className={cn(COL.nextRunAt, "font-mono text-xxs text-neutral-500 tabular-nums dark:text-neutral-400")}>
         {job.nextRunAt ? formatAbsoluteTime(job.nextRunAt) || "—" : "—"}
       </div>
       <div className={COL.status}>

@@ -206,7 +206,7 @@ function SessionStatusIndicator({ status, label }: { status: SessionIndicatorSta
         {SPINNER_DOTS.map(dot => (
           <span
             key={dot}
-            className="absolute left-1/2 top-1/2 h-1 w-1 rounded-full bg-neutral-500 dark:bg-neutral-300"
+            className="absolute top-1/2 left-1/2 h-1 w-1 rounded-full bg-neutral-500 dark:bg-neutral-300"
             style={{
               transform: `translate(-50%, -50%) rotate(${dot * 45}deg) translateY(-4px)`,
               opacity: 0.35 + dot * 0.08,
@@ -757,7 +757,7 @@ export default function SidebarV2({
             className={cn(
               "group/session relative w-full rounded-md transition-colors",
               isSessionActive
-                ? "bg-gradient-to-r from-brand-50 to-brand-50/60 ring-1 ring-brand-200/60 shadow-sm dark:from-brand-900/30 dark:to-brand-900/10 dark:ring-brand-700/30"
+                ? "bg-gradient-to-r from-brand-50 to-brand-50/60 shadow-xs ring-1 ring-brand-200/60 dark:from-brand-900/30 dark:to-brand-900/10 dark:ring-brand-700/30"
                 : "hover:bg-neutral-100/80 dark:hover:bg-neutral-800/70",
             )}
           >
@@ -771,7 +771,7 @@ export default function SidebarV2({
                   onKeyDown={event => handleRenameKey(event, "session")}
                   onClick={event => event.stopPropagation()}
                   placeholder={t("sidebar:renamePlaceholder", { defaultValue: "Rename - empty to reset" }) as string}
-                  className="w-full rounded-sm border border-neutral-300 bg-white px-1.5 py-0.5 text-[12.5px] text-neutral-900 outline-none focus:border-neutral-500 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                  className="w-full rounded-sm border border-neutral-300 bg-white px-1.5 py-0.5 text-[12.5px] text-neutral-900 outline-hidden focus:border-neutral-500 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
                 />
               </div>
             ) : (
@@ -788,7 +788,7 @@ export default function SidebarV2({
                   <div
                     className={cn(
                       "flex min-w-0 items-center gap-1 truncate text-[12.5px] text-neutral-900 dark:text-neutral-100",
-                      isOptimisticRow && "italic text-neutral-600 dark:text-neutral-300",
+                      isOptimisticRow && "text-neutral-600 italic dark:text-neutral-300",
                     )}
                   >
                     {isForkChild ? (
@@ -917,11 +917,11 @@ export default function SidebarV2({
             "group/project relative flex h-9 w-full items-center rounded-lg border-l-[3px] pr-1.5 text-[13px] transition-all duration-200",
             isSelected
               ? "border-brand-500 bg-gradient-to-r from-brand-50 to-brand-50/30 font-medium text-neutral-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:from-brand-900/30 dark:to-brand-900/5 dark:text-neutral-100"
-              : "border-transparent text-neutral-700 hover:bg-neutral-100/80 hover:border-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-800/60 dark:hover:border-neutral-700",
+              : "border-transparent text-neutral-700 hover:border-neutral-200 hover:bg-neutral-100/80 dark:text-neutral-300 dark:hover:border-neutral-700 dark:hover:bg-neutral-800/60",
           )}
         >
           {isRenaming && !isGeneral ? (
-            <div className="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-2 pr-1">
+            <div className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-1 pl-2">
               <Folder className="h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-neutral-400" strokeWidth={1.75} />
               <input
                 ref={renameInputRef}
@@ -931,14 +931,14 @@ export default function SidebarV2({
                 onKeyDown={event => handleRenameKey(event, "project")}
                 onClick={event => event.stopPropagation()}
                 placeholder={t("sidebar:renamePlaceholder", { defaultValue: "Rename - empty to reset" }) as string}
-                className="w-full rounded-sm border border-neutral-300 bg-white px-1.5 py-0.5 text-[12.5px] text-neutral-900 outline-none focus:border-neutral-500 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
+                className="w-full rounded-sm border border-neutral-300 bg-white px-1.5 py-0.5 text-[12.5px] text-neutral-900 outline-hidden focus:border-neutral-500 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100"
               />
             </div>
           ) : (
             <button
               type="button"
               onClick={() => handleProjectClick(project)}
-              className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-l-lg pl-2 pr-1 text-left"
+              className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-l-lg pr-1 pl-2 text-left"
             >
               <Folder
                 className={cn(
@@ -995,7 +995,7 @@ export default function SidebarV2({
         "shadow-[inset_-1px_0_0_rgba(255,255,255,0.4)] dark:shadow-[inset_-1px_0_0_rgba(255,255,255,0.04)]",
       )}
     >
-      <div className="flex h-16 items-center justify-between pl-2 pr-4">
+      <div className="flex h-16 items-center justify-between pr-4 pl-2">
         <div className="flex min-w-0 shrink items-center gap-2">
           <button
             type="button"
@@ -1008,19 +1008,19 @@ export default function SidebarV2({
             }}
             aria-label="正念智能体"
             title="正念智能体"
-            className="group flex min-w-0 shrink items-center gap-2.5 rounded-lg p-1 transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+            className="group flex min-w-0 shrink items-center gap-2.5 rounded-lg p-1 transition hover:opacity-90 focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500/30"
           >
-            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 shadow-sm ring-1 ring-brand-300/40 transition group-hover:shadow-md dark:from-brand-500/20 dark:to-brand-700/30 dark:ring-brand-500/30">
+            <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 shadow-xs ring-1 ring-brand-300/40 transition group-hover:shadow-md dark:from-brand-500/20 dark:to-brand-700/30 dark:ring-brand-500/30">
               <img
                 src={satiLogoLight}
                 alt="正念智能体"
-                className="h-full w-full shrink-0 select-none object-cover dark:hidden"
+                className="h-full w-full shrink-0 object-cover select-none dark:hidden"
                 draggable={false}
               />
               <img
                 src={satiLogoDark}
                 alt="正念智能体"
-                className="hidden h-full w-full shrink-0 select-none object-cover dark:block"
+                className="hidden h-full w-full shrink-0 object-cover select-none dark:block"
                 draggable={false}
               />
             </span>
@@ -1048,7 +1048,7 @@ export default function SidebarV2({
       {/* Section toggle: a thin pill control sitting just above the scroll
           area, so it doesn't move while the list scrolls. Mirrors the look of
           familiar two-tab segmented controls (e.g. iOS, ProseMirror). */}
-      <div className="px-3 pb-1 pt-3">
+      <div className="px-3 pt-3 pb-1">
         <div
           role="tablist"
           aria-label={t("sidebar:sectionToggle.label", { defaultValue: "Sidebar section" }) as string}
@@ -1057,7 +1057,7 @@ export default function SidebarV2({
           <span
             aria-hidden="true"
             className={cn(
-              "pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-white shadow-sm ring-1 ring-neutral-200/80 transition-transform duration-300 ease-out dark:bg-neutral-700 dark:ring-neutral-600/80",
+              "pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-white shadow-xs ring-1 ring-neutral-200/80 transition-transform duration-300 ease-out dark:bg-neutral-700 dark:ring-neutral-600/80",
               activeSection === "general" && "translate-x-full",
             )}
           />
@@ -1094,7 +1094,7 @@ export default function SidebarV2({
         </div>
       </div>
 
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+      <div className="min-h-0 flex-1 scrollbar-thin overflow-y-auto px-2 pb-2">
         {isLoading && safeProjects.length === 0 ? (
           <div className="px-2 py-4 text-xs text-neutral-500 dark:text-neutral-400">
             {t("sidebar:sessions.loading", { defaultValue: "Loading..." })}
@@ -1102,7 +1102,7 @@ export default function SidebarV2({
         ) : activeSection === "projects" ? (
           <section className="pt-2">
             <div className="flex items-center px-3 pb-1">
-              <span className="flex-1 text-[11px] font-medium uppercase tracking-[0.04em] text-neutral-500/90 dark:text-neutral-400/80">
+              <span className="flex-1 text-[11px] font-medium tracking-[0.04em] text-neutral-500/90 uppercase dark:text-neutral-400/80">
                 {t("sidebar:projects.title", { defaultValue: "Projects" })}
               </span>
               <button
@@ -1162,7 +1162,7 @@ export default function SidebarV2({
             {generalProject ? (
               <>
                 <div className="flex items-center px-3 pb-1">
-                  <span className="flex-1 text-[11px] font-medium uppercase tracking-[0.04em] text-neutral-500/90 dark:text-neutral-400/80">
+                  <span className="flex-1 text-[11px] font-medium tracking-[0.04em] text-neutral-500/90 uppercase dark:text-neutral-400/80">
                     {t("sidebar:general.title", { defaultValue: "General" })}
                   </span>
                   <button
@@ -1194,7 +1194,7 @@ export default function SidebarV2({
           onClick={onShowSettings}
           aria-label={t("sidebar:actions.settings", { defaultValue: "Settings" }) as string}
           title={t("sidebar:actions.settings", { defaultValue: "Settings" }) as string}
-          className="group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium text-neutral-600 transition-all duration-200 hover:bg-white hover:text-brand-600 hover:shadow-sm dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
+          className="group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium text-neutral-600 transition-all duration-200 hover:bg-white hover:text-brand-600 hover:shadow-xs dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
         >
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-200/60 transition group-hover:bg-brand-50 group-hover:text-brand-600 dark:bg-neutral-800/60 dark:group-hover:bg-brand-900/30 dark:group-hover:text-brand-300">
             <SettingsIcon className="h-3.5 w-3.5" strokeWidth={1.75} />

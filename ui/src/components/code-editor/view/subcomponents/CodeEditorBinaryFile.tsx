@@ -123,7 +123,7 @@ function FileTypeBadge({ fileName }: { fileName: string }) {
       title={t(badge.titleKey)}
       aria-label={t(badge.titleKey)}
       className={[
-        "flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-semibold leading-none shadow-sm ring-1 ring-black/5",
+        "flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] text-[10px] font-semibold leading-none shadow-xs ring-1 ring-black/5",
         badge.className,
       ].join(" ")}
     >
@@ -858,7 +858,7 @@ function SpreadsheetPreviewToolbar({
             <path d="M8 11h6m2.5 5.5L21 21" strokeLinecap="round" strokeWidth="1.75" />
           </svg>
         </button>
-        <span className="min-w-[52px] text-center text-[12px] tabular-nums text-neutral-600 dark:text-neutral-300">
+        <span className="min-w-[52px] text-center text-[12px] text-neutral-600 tabular-nums dark:text-neutral-300">
           {Math.round(zoom * 100)}%
         </span>
         <button
@@ -1438,7 +1438,7 @@ export default function CodeEditorBinaryFile({
     <div
       className={
         compactHeader
-          ? "absolute right-2 top-1 z-10 flex h-8 items-center rounded-md bg-neutral-50 px-1 dark:bg-neutral-900"
+          ? "absolute top-1 right-2 z-10 flex h-8 items-center rounded-md bg-neutral-50 px-1 dark:bg-neutral-900"
           : "flex flex-shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950"
       }
     >
@@ -1500,7 +1500,7 @@ export default function CodeEditorBinaryFile({
 
   const containerClassName = isFullscreen
     ? "fixed inset-0 z-[9999] bg-white dark:bg-neutral-950 flex flex-col"
-    : "fixed inset-0 z-[9999] md:bg-black/40 md:backdrop-blur-sm md:flex md:items-center md:justify-center md:p-4";
+    : "fixed inset-0 z-[9999] md:bg-black/40 md:backdrop-blur-xs md:flex md:items-center md:justify-center md:p-4";
 
   const innerClassName = isFullscreen
     ? "bg-white dark:bg-neutral-950 flex flex-col w-full h-full"

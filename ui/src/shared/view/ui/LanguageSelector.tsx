@@ -34,7 +34,7 @@ export default function LanguageSelector({ compact = false }: LanguageSelectorPr
         <select
           value={i18n.language}
           onChange={handleLanguageChange}
-          className="w-[100px] rounded-lg border border-input bg-card p-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary"
+          className="w-[100px] rounded-lg border border-input bg-card p-2 text-sm text-foreground focus:border-primary focus:ring-2 focus:ring-primary focus:outline-hidden"
         >
           {languages.map(lang => (
             <option key={lang.value} value={lang.value}>

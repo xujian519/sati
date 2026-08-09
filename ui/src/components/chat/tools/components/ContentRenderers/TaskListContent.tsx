@@ -119,7 +119,7 @@ export const TaskListContent: React.FC<TaskListContentProps> = ({ content }) => 
   // If we couldn't parse any tasks, fall back to text display
   if (tasks.length === 0) {
     return (
-      <pre className="whitespace-pre-wrap font-mono text-[11px] text-gray-600 dark:text-gray-400">{safeContent}</pre>
+      <pre className="font-mono text-[11px] whitespace-pre-wrap text-gray-600 dark:text-gray-400">{safeContent}</pre>
     );
   }
 

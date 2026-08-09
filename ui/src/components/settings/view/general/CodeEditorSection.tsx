@@ -27,7 +27,7 @@ function SelectControl({
       value={value}
       onChange={event => onChange(event.target.value)}
       className={cn(
-        "h-9 rounded-lg border border-transparent bg-muted px-3 text-[13px] font-medium text-foreground outline-none transition-colors",
+        "h-9 rounded-lg border border-transparent bg-muted px-3 text-[13px] font-medium text-foreground outline-hidden transition-colors",
         "hover:bg-accent focus:border-ring focus:bg-card focus:ring-1 focus:ring-ring",
         className,
       )}

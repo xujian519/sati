@@ -204,7 +204,7 @@ export default function CodeEditorTabBar({
             type="button"
             role="menuitem"
             onClick={() => closeTabs("current")}
-            className="flex h-8 w-full items-center rounded-md px-2.5 text-left outline-none hover:bg-neutral-100 focus-visible:bg-neutral-100 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800"
+            className="flex h-8 w-full items-center rounded-md px-2.5 text-left outline-hidden hover:bg-neutral-100 focus-visible:bg-neutral-100 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800"
           >
             {labels.closeCurrent}
           </button>
@@ -213,7 +213,7 @@ export default function CodeEditorTabBar({
             role="menuitem"
             disabled={tabs.length <= 1}
             onClick={() => closeTabs("others")}
-            className="flex h-8 w-full items-center rounded-md px-2.5 text-left outline-none hover:bg-neutral-100 focus-visible:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800 dark:disabled:text-neutral-600"
+            className="flex h-8 w-full items-center rounded-md px-2.5 text-left outline-hidden hover:bg-neutral-100 focus-visible:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800 dark:disabled:text-neutral-600"
           >
             {labels.closeOthers}
           </button>
@@ -222,7 +222,7 @@ export default function CodeEditorTabBar({
             role="menuitem"
             disabled={menuTargetIndex < 0 || menuTargetIndex >= tabs.length - 1}
             onClick={() => closeTabs("right")}
-            className="flex h-8 w-full items-center rounded-md px-2.5 text-left outline-none hover:bg-neutral-100 focus-visible:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800 dark:disabled:text-neutral-600"
+            className="flex h-8 w-full items-center rounded-md px-2.5 text-left outline-hidden hover:bg-neutral-100 focus-visible:bg-neutral-100 disabled:cursor-not-allowed disabled:text-neutral-300 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800 dark:disabled:text-neutral-600"
           >
             {labels.closeToRight}
           </button>
@@ -231,7 +231,7 @@ export default function CodeEditorTabBar({
             type="button"
             role="menuitem"
             onClick={() => closeTabs("all")}
-            className="flex h-8 w-full items-center rounded-md px-2.5 text-left outline-none hover:bg-neutral-100 focus-visible:bg-neutral-100 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800"
+            className="flex h-8 w-full items-center rounded-md px-2.5 text-left outline-hidden hover:bg-neutral-100 focus-visible:bg-neutral-100 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800"
           >
             {labels.closeAll}
           </button>
@@ -262,7 +262,7 @@ export default function CodeEditorTabBar({
               <div
                 key={tab.id}
                 className={cn(
-                  "group/tab flex h-8 min-w-[9rem] max-w-[14rem] shrink-0 items-center rounded-t-md border border-b-0 transition-colors",
+                  "group/tab flex h-8 max-w-[14rem] min-w-[9rem] shrink-0 items-center rounded-t-md border border-b-0 transition-colors",
                   active
                     ? "border-neutral-200 bg-white text-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                     : "border-transparent text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800",
@@ -291,7 +291,7 @@ export default function CodeEditorTabBar({
                   title={file.path}
                   onClick={() => onSelect(tab.id)}
                   onKeyDown={event => handleKeyDown(event, index)}
-                  className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500"
+                  className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-2 text-left outline-hidden focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset"
                 >
                   <Icon className={cn("h-3.5 w-3.5 shrink-0", iconData.color)} strokeWidth={1.75} />
                   <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{file.name}</span>
@@ -306,7 +306,7 @@ export default function CodeEditorTabBar({
                     onClose(tab.id);
                   }}
                   className={cn(
-                    "mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-400 outline-none transition-colors hover:bg-neutral-200 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
+                    "mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-400 outline-hidden transition-colors hover:bg-neutral-200 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
                     !active && "opacity-0 group-hover/tab:opacity-100 focus:opacity-100",
                   )}
                   title={labels.closeTab(file.name)}

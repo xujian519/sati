@@ -420,7 +420,7 @@ export default function DocxBuiltinPreview({
   const outlinePanel = useMemo(
     () => (
       <aside className="w-64 shrink-0 overflow-auto border-r border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-950">
-        <div className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+        <div className="px-2 py-1.5 text-[11px] font-medium tracking-wide text-neutral-400 uppercase">
           {t("pdfToolbar.outline")}
         </div>
         <div className="space-y-0.5">

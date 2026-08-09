@@ -109,7 +109,7 @@ export default function DocumentReferenceChip({
   return (
     <div
       className={cn(
-        "flex h-8 min-w-0 max-w-full items-center rounded-lg bg-neutral-100 text-left text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300",
+        "flex h-8 max-w-full min-w-0 items-center rounded-lg bg-neutral-100 text-left text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300",
         className,
       )}
       title={title}
@@ -124,7 +124,7 @@ export default function DocumentReferenceChip({
       >
         <span
           className={cn(
-            "flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[10px] font-semibold leading-none",
+            "flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-[10px] leading-none font-semibold",
             meta.className,
           )}
         >
@@ -135,7 +135,7 @@ export default function DocumentReferenceChip({
           )}
           {meta.label}
         </span>
-        <span className="min-w-0 flex-1 truncate whitespace-nowrap text-[13px] leading-5">&quot;{summary}&quot;</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] leading-5 whitespace-nowrap">&quot;{summary}&quot;</span>
       </button>
       {onRemove ? (
         <button

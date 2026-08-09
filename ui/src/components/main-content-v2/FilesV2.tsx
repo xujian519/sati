@@ -536,7 +536,7 @@ export default function FilesV2({
         onKeyDown={handleInlineKeyDown}
         onBlur={handleInlineBlur}
         className={cn(
-          "min-w-0 flex-1 rounded border px-1.5 py-0.5 text-[13px] outline-none",
+          "min-w-0 flex-1 rounded border px-1.5 py-0.5 text-[13px] outline-hidden",
           "border-brand-400 bg-white text-neutral-900 focus:ring-1 focus:ring-brand-400",
           "dark:border-brand-500 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:ring-brand-500",
         )}
@@ -599,7 +599,7 @@ export default function FilesV2({
               )}
             </button>
             {uploadMenuOpen ? (
-              <div className="absolute left-0 top-8 z-20 w-36 rounded-md border border-neutral-200 bg-white py-1 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="absolute top-8 left-0 z-20 w-36 rounded-md border border-neutral-200 bg-white py-1 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
                 <button
                   type="button"
                   onClick={e => {
@@ -757,7 +757,7 @@ export default function FilesV2({
                         onKeyDown={handleInlineKeyDown}
                         onBlur={handleInlineBlur}
                         className={cn(
-                          "min-w-0 flex-1 rounded border px-1.5 py-0.5 text-[13px] outline-none",
+                          "min-w-0 flex-1 rounded border px-1.5 py-0.5 text-[13px] outline-hidden",
                           "border-brand-400 bg-white text-neutral-900 focus:ring-1 focus:ring-brand-400",
                           "dark:border-brand-500 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:ring-brand-500",
                         )}
@@ -804,7 +804,7 @@ export default function FilesV2({
                         <button
                           type="button"
                           onClick={event => handleDownloadFile(event, node)}
-                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500 opacity-0 transition hover:bg-neutral-200 hover:text-neutral-900 group-hover/row:opacity-100 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+                          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500 opacity-0 transition group-hover/row:opacity-100 hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
                           title={t("fileTree.downloadFile", { defaultValue: "Download file" }) as string}
                           aria-label={t("fileTree.downloadFile", { defaultValue: "Download file" }) as string}
                         >

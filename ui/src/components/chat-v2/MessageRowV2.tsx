@@ -301,7 +301,7 @@ function MessageRowV2({
             t={t}
           />
         ) : null}
-        <div className="min-w-0 max-w-[78%] overflow-hidden rounded-[20px] bg-gradient-to-br from-neutral-100 to-neutral-100/70 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:from-neutral-800 dark:to-neutral-800/70 dark:text-neutral-100 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+        <div className="max-w-[78%] min-w-0 overflow-hidden rounded-[20px] bg-gradient-to-br from-neutral-100 to-neutral-100/70 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:from-neutral-800 dark:to-neutral-800/70 dark:text-neutral-100 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
           {message.isStreaming && !formattedContent ? (
             <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
           ) : (
@@ -337,7 +337,7 @@ function MessageRowV2({
                       type="button"
                       key={`${image.name || "image"}-${index}`}
                       onClick={() => setUserImageLightbox(index)}
-                      className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-900/40"
+                      className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-hidden dark:border-neutral-700 dark:bg-neutral-900/40"
                       aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
                     >
                       <img
@@ -352,7 +352,7 @@ function MessageRowV2({
               ) : null}
               {formattedContent ? (
                 <Markdown
-                  className="prose prose-sm prose-neutral min-w-0 max-w-none break-words [overflow-wrap:anywhere] dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0"
+                  className="prose prose-sm max-w-none min-w-0 [overflow-wrap:anywhere] prose-neutral dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0"
                   projectName={selectedProject?.name}
                   onFileOpen={onFileOpen}
                 >
@@ -401,7 +401,7 @@ function MessageRowV2({
             className="group"
             open={(isThinkingStreaming ? thinkingDisplayText.length > 12 : false) || undefined}
           >
-            <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-brand-600/70 hover:text-brand-700 dark:text-brand-400/70 dark:hover:text-brand-300">
+            <summary className="flex cursor-pointer items-center gap-1.5 text-[13px] font-medium text-brand-600/70 select-none hover:text-brand-700 dark:text-brand-400/70 dark:hover:text-brand-300">
               {isThinkingStreaming ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
               ) : (
@@ -433,7 +433,7 @@ function MessageRowV2({
     return withProcessRows(
       <div className="min-w-0 text-[14px] leading-relaxed">
         <details className="group">
-          <summary className="flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-medium text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
+          <summary className="flex cursor-pointer items-center gap-1.5 text-[13px] font-medium text-neutral-500 select-none hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
             <span>{t("thinking.completed", { defaultValue: "Thought process" })}</span>
           </summary>
@@ -463,7 +463,7 @@ function MessageRowV2({
           <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
         ) : (
           <Markdown
-            className="prose prose-sm prose-neutral max-w-none dark:prose-invert prose-headings:mb-2 prose-headings:mt-4 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4"
+            className="prose prose-sm max-w-none prose-neutral dark:prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4"
             projectName={selectedProject?.name}
             onFileOpen={onFileOpen}
             isStreaming={message.isStreaming}
@@ -656,7 +656,7 @@ function ProcessAttachmentRow({
               type="button"
               key={`${attachment.inlineImages[idx].toolId || "tool-image"}-${idx}`}
               onClick={() => setLightboxIndex(idx)}
-              className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-neutral-700 dark:bg-neutral-900"
+              className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-xs transition hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-hidden dark:border-neutral-700 dark:bg-neutral-900"
               aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
             >
               <img

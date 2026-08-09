@@ -19,7 +19,7 @@ export default function ShellConnectionOverlay({
 }: ShellConnectionOverlayProps) {
   if (mode === "loading") {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
+      <div className="bg-opacity-90 absolute inset-0 flex items-center justify-center bg-gray-900">
         <div className="text-white">{loadingLabel}</div>
       </div>
     );
@@ -27,7 +27,7 @@ export default function ShellConnectionOverlay({
 
   if (mode === "connect") {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
+      <div className="bg-opacity-90 absolute inset-0 flex items-center justify-center bg-gray-900 p-4">
         <div className="w-full max-w-sm text-center">
           <button
             onClick={onConnect}
@@ -46,7 +46,7 @@ export default function ShellConnectionOverlay({
   }
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
+    <div className="bg-opacity-90 absolute inset-0 flex items-center justify-center bg-gray-900 p-4">
       <div className="w-full max-w-sm text-center">
         <div className="flex items-center justify-center space-x-3 text-yellow-400">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>

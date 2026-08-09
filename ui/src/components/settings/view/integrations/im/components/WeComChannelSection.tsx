@@ -305,7 +305,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                   value={botId}
                   onChange={e => setBotId(e.target.value.trim())}
                   placeholder={status.botId || "bot_xxxxxxxxxxxx"}
-                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
               <label className="block space-y-1">
@@ -315,7 +315,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                   value={secret}
                   onChange={e => setSecret(e.target.value.trim())}
                   placeholder={status.hasSecret ? "Keep existing secret" : "••••••••"}
-                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
               <label className="block space-y-1">
@@ -324,7 +324,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                   type="text"
                   value={websocketUrl}
                   onChange={e => setWebsocketUrl(e.target.value.trim())}
-                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                  className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -333,7 +333,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                   <select
                     value={dmPolicy}
                     onChange={e => setDmPolicy(e.target.value as WeComAccessPolicy)}
-                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-hidden focus:border-ring focus:ring-1 focus:ring-ring"
                   >
                     <option value="open">open</option>
                     <option value="allowlist">allowlist</option>
@@ -345,7 +345,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                   <select
                     value={groupPolicy}
                     onChange={e => setGroupPolicy(e.target.value as WeComAccessPolicy)}
-                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-[13px] text-foreground outline-hidden focus:border-ring focus:ring-1 focus:ring-ring"
                   >
                     <option value="disabled">disabled</option>
                     <option value="allowlist">allowlist</option>
@@ -361,7 +361,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                     value={allowFrom}
                     onChange={e => setAllowFrom(e.target.value)}
                     placeholder="userid1, userid2"
-                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                   />
                 </label>
               )}
@@ -373,7 +373,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                     value={groupAllowFrom}
                     onChange={e => setGroupAllowFrom(e.target.value)}
                     placeholder="chatid1, chatid2"
-                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                    className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                   />
                 </label>
               )}

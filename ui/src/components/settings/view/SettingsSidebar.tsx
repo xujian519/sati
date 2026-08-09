@@ -81,7 +81,7 @@ export default function SettingsSidebar({
           </button>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-5">
+        <nav className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 pb-6">
           <ul className="space-y-3">
             {MENU_ITEMS.map(item => {
               const active = isItemActive(item, selectedKey);
@@ -93,7 +93,7 @@ export default function SettingsSidebar({
                     onClick={hasChildren ? undefined : () => onSelect(item.key)}
                     disabled={hasChildren}
                     className={cn(
-                      "flex min-h-8 w-full items-center rounded-md px-3 py-1 text-left text-sm leading-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                      "flex min-h-8 w-full items-center rounded-md px-3 py-1 text-left text-sm leading-5 focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-hidden",
                       hasChildren
                         ? "cursor-default"
                         : "cursor-pointer transition-colors hover:bg-muted hover:text-foreground",
@@ -120,7 +120,7 @@ export default function SettingsSidebar({
                             type="button"
                             onClick={() => onSelect(child.key)}
                             className={cn(
-                              "flex min-h-8 w-full cursor-pointer items-center rounded-md py-1 pl-9 pr-3 text-left text-sm leading-5 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                              "flex min-h-8 w-full cursor-pointer items-center rounded-md py-1 pr-3 pl-9 text-left text-sm leading-5 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-hidden",
                               selectedKey === child.key
                                 ? "bg-muted/80 font-medium text-foreground"
                                 : "font-normal text-muted-foreground",

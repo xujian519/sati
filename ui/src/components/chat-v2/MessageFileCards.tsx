@@ -132,7 +132,7 @@ export function MessageFileCard({ file, project, source, onBrowse, compact = fal
   return (
     <div
       className={cn(
-        "group/file-card flex min-w-0 items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 shadow-sm transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700",
+        "group/file-card flex min-w-0 items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 shadow-xs transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700",
         compact && "border-white/70 bg-white/85 shadow-none dark:border-neutral-700/60 dark:bg-neutral-900/55",
       )}
       title={fullDisplayPath(file.path, project)}

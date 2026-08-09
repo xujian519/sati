@@ -76,7 +76,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({ toolInput,
       <CollapsibleSection title={title} toolName="Task" open={false}>
         {/* Prompt/request to the subagent */}
         {prompt && (
-          <div className="mb-2 line-clamp-4 whitespace-pre-wrap break-words text-xs text-gray-600 dark:text-gray-400">
+          <div className="mb-2 line-clamp-4 text-xs break-words whitespace-pre-wrap text-gray-600 dark:text-gray-400">
             {prompt}
           </div>
         )}
@@ -191,9 +191,9 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({ toolInput,
               }
 
               return typeof content === "string" ? (
-                <div className="line-clamp-6 whitespace-pre-wrap break-words">{content}</div>
+                <div className="line-clamp-6 break-words whitespace-pre-wrap">{content}</div>
               ) : content ? (
-                <pre className="line-clamp-6 whitespace-pre-wrap break-words font-mono text-[11px]">
+                <pre className="line-clamp-6 font-mono text-[11px] break-words whitespace-pre-wrap">
                   {JSON.stringify(content, null, 2)}
                 </pre>
               ) : null;

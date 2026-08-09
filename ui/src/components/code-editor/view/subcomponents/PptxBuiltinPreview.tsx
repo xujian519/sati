@@ -69,10 +69,10 @@ function PptxThumbnail({
       ].join(" ")}
       onClick={onSelect}
     >
-      <span className="w-5 shrink-0 pt-1 text-center text-[11px] tabular-nums text-neutral-500">{index + 1}</span>
+      <span className="w-5 shrink-0 pt-1 text-center text-[11px] text-neutral-500 tabular-nums">{index + 1}</span>
       <span
         ref={containerRef}
-        className="block min-h-[76px] min-w-0 flex-1 overflow-hidden rounded-sm bg-white shadow-sm ring-1 ring-neutral-200 dark:ring-neutral-700"
+        className="block min-h-[76px] min-w-0 flex-1 overflow-hidden rounded-sm bg-white shadow-xs ring-1 ring-neutral-200 dark:ring-neutral-700"
       />
     </button>
   );

@@ -195,7 +195,7 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
             type="button"
             onClick={() => setShowAdvanced(next => !next)}
             aria-expanded={showAdvanced}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium leading-5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] leading-5 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-180")} />
             {t("satiConfig.panels.agents.advancedToggle")}

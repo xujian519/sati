@@ -857,7 +857,7 @@ function SplitBody(props: SplitBodyProps) {
             </Suspense>
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-400 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500">
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-400 shadow-xs dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500">
                 <FileText className="h-5 w-5" strokeWidth={1.6} />
               </div>
               <p className="text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
@@ -1001,7 +1001,7 @@ function SplitBody(props: SplitBodyProps) {
               setFilesAssistantWidth(clampFilesAssistantWidth(FILES_ASSISTANT_MAX_WIDTH));
             }
           }}
-          className="group absolute inset-y-0 z-30 w-px cursor-col-resize bg-neutral-200 outline-none transition-colors hover:bg-neutral-400 focus:bg-brand-500 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:focus:bg-brand-400"
+          className="group absolute inset-y-0 z-30 w-px cursor-col-resize bg-neutral-200 outline-hidden transition-colors hover:bg-neutral-400 focus:bg-brand-500 dark:bg-neutral-800 dark:hover:bg-neutral-600 dark:focus:bg-brand-400"
           style={{ right: filesAssistantWidth }}
           title={t("filesWorkbench.resizeAssistant")}
           role="separator"
