@@ -18,7 +18,7 @@ type FakeChild = EventEmitter & {
   killedSignals: string[];
 };
 
-function makeFakeChild(pid = 1000 + Math.floor(Math.random() * 1000)): FakeChild {
+function makeFakeChild(pid = 1234): FakeChild {
   const child = new EventEmitter() as FakeChild;
   child.pid = pid;
   child.killedSignals = [];

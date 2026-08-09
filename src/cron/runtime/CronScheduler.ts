@@ -10,6 +10,23 @@ const DEFAULT_IDLE_POLL_MS = 60_000;
 const RETRY_DELAY_MS = 15_000;
 const MIN_TIMER_MS = 250;
 
+/**
+ * 基于任务列表计算下一次唤醒延迟：
+ * 取最早 `nextRunAt`（跳过 running 任务）与当前时间的差，上限空闲回退 60s；
+ * 无任务/全部 running/无有效 nextRunAt 时回退 60s。
+ * 纯函数，便于直接单元测试。
+ */
+export function computeCronDelayMs(tasks: CronTask[], nowMs: number): number {
+  let earliest: number | undefined;
+  for (const task of tasks) {
+    if (task.status === "running" || !task.nextRunAt) continue;
+    const at = new Date(task.nextRunAt).getTime();
+    if (!Number.isNaN(at) && (earliest === undefined || at < earliest)) earliest = at;
+  }
+  if (earliest === undefined) return DEFAULT_IDLE_POLL_MS;
+  return Math.min(DEFAULT_IDLE_POLL_MS, Math.max(0, earliest - nowMs));
+}
+
 export type CronSchedulerDependencies = {
   config: CronConfig;
   store: CronTaskStore;
@@ -74,7 +91,7 @@ export class CronScheduler {
 
   private scheduleNextTick(delayMs?: number): void {
     if (this.stopped || !this.running || !this.deps.config.enabled) return;
-    const waitMs = Math.max(MIN_TIMER_MS, delayMs ?? this.computeDelayMs());
+    const waitMs = Math.max(MIN_TIMER_MS, delayMs ?? computeCronDelayMs(this.lastTasks, this.deps.now().getTime()));
     this.timer = setTimeout(() => {
       this.timer = undefined;
       this.tickInProgress = this.tick().catch((error: unknown) => {
@@ -87,23 +104,6 @@ export class CronScheduler {
         this.scheduleNextTick();
       });
     }, waitMs);
-  }
-
-  /**
-   * 基于最近一次 tick 的任务列表计算下一次唤醒延迟：
-   * 取最早 `nextRunAt`（跳过 running 任务）与当前时间的差，上限空闲回退 60s；
-   * 无任务/全部 running/无有效 nextRunAt 时回退 60s。
-   */
-  private computeDelayMs(): number {
-    const now = this.deps.now().getTime();
-    let earliest: number | undefined;
-    for (const task of this.lastTasks) {
-      if (task.status === "running" || !task.nextRunAt) continue;
-      const at = new Date(task.nextRunAt).getTime();
-      if (!Number.isNaN(at) && (earliest === undefined || at < earliest)) earliest = at;
-    }
-    if (earliest === undefined) return DEFAULT_IDLE_POLL_MS;
-    return Math.min(DEFAULT_IDLE_POLL_MS, Math.max(0, earliest - now));
   }
 
   private async tick(): Promise<void> {

@@ -3,8 +3,13 @@ import { afterEach, describe, it } from "node:test";
 import type { CronConfig } from "../../../src/cron/config/parseCronConfig.js";
 import type { CronTask } from "../../../src/cron/protocol/types.js";
 import type { CronFire } from "../../../src/cron/runtime/CronFire.js";
-import { CronScheduler, type CronSchedulerDependencies } from "../../../src/cron/runtime/CronScheduler.js";
+import {
+  CronScheduler,
+  computeCronDelayMs,
+  type CronSchedulerDependencies,
+} from "../../../src/cron/runtime/CronScheduler.js";
 import type { CronTaskStore } from "../../../src/cron/storage/CronTaskStore.js";
+import { makeTask } from "../helpers.js";
 
 const FIXED_NOW = new Date("2026-08-05T00:00:00.000Z");
 
@@ -93,24 +98,6 @@ function makeScheduler(
   });
   createdSchedulers.push(scheduler);
   return scheduler;
-}
-
-function makeTask(overrides: Partial<CronTask> = {}): CronTask {
-  return {
-    schemaVersion: 1,
-    taskId: "t1",
-    message: "定时任务",
-    schedule: { type: "cron", expression: "*/5 * * * *", timezone: "UTC" },
-    status: "scheduled",
-    sessionKey: "cron:t1",
-    channelKey: "cron",
-    projectKey: "/tmp/project",
-    createdAt: "2026-08-01T00:00:00.000Z",
-    updatedAt: "2026-08-01T00:00:00.000Z",
-    nextRunAt: "2026-08-05T00:00:00.000Z",
-    scheduleComputationVersion: 2,
-    ...overrides,
-  };
 }
 
 /**
@@ -258,77 +245,49 @@ describe("CronScheduler 并发上限", () => {
 });
 
 // ---------------------------------------------------------------------------
-// computeDelayMs（通过定时器捕获观察）
+// computeCronDelayMs（纯函数，直接喂字面量）
 // ---------------------------------------------------------------------------
 
-describe("CronScheduler.computeDelayMs", () => {
-  it("无任务时空闲回退 60s", async () => {
-    const delays: number[] = [];
-    const restore = installTimerCapture(delays, true);
-    try {
-      const scheduler = makeScheduler({ store: makeFakeStore() });
-      await scheduler.start();
-      assert.equal(delays[0], 60_000);
-      // 首次定时器触发后按 lastTasks 重算
-      await waitFor(() => delays.length >= 2);
-      assert.equal(delays[1], 60_000);
-      await scheduler.stop();
-    } finally {
-      restore();
-    }
+describe("computeCronDelayMs", () => {
+  const NOW = FIXED_NOW.getTime();
+
+  it("无任务时空闲回退 60s", () => {
+    assert.equal(computeCronDelayMs([], NOW), 60_000);
   });
 
-  it("按最早 nextRunAt 计算唤醒间隔（30s 后到期 → 30s）", async () => {
-    const delays: number[] = [];
-    const restore = installTimerCapture(delays, true);
-    try {
-      const store = makeFakeStore([
-        makeTask({ taskId: "t1", nextRunAt: "2026-08-05T00:00:30.000Z" }),
-        makeTask({ taskId: "t2", nextRunAt: "2026-08-05T00:01:00.000Z" }),
-      ]);
-      const scheduler = makeScheduler({ store });
-      await scheduler.start();
-      assert.equal(delays[0], 60_000);
-      await waitFor(() => delays.length >= 2);
-      assert.equal(delays[1], 30_000);
-      await scheduler.stop();
-    } finally {
-      restore();
-    }
+  it("按最早 nextRunAt 计算唤醒间隔", () => {
+    const tasks = [
+      makeTask({ taskId: "t1", nextRunAt: new Date(NOW + 30_000).toISOString() }),
+      makeTask({ taskId: "t2", nextRunAt: new Date(NOW + 60_000).toISOString() }),
+    ];
+    assert.equal(computeCronDelayMs(tasks, NOW), 30_000);
   });
 
-  it("nextRunAt 超过 60s 时钳制到 60s 上限", async () => {
-    const delays: number[] = [];
-    const restore = installTimerCapture(delays, true);
-    try {
-      const store = makeFakeStore([makeTask({ nextRunAt: "2026-08-05T00:05:00.000Z" })]);
-      const scheduler = makeScheduler({ store });
-      await scheduler.start();
-      assert.equal(delays[0], 60_000);
-      await waitFor(() => delays.length >= 2);
-      assert.equal(delays[1], 60_000);
-      await scheduler.stop();
-    } finally {
-      restore();
-    }
+  it("nextRunAt 超过 60s 时钳制到 60s 上限", () => {
+    const tasks = [makeTask({ nextRunAt: new Date(NOW + 5 * 60_000).toISOString() })];
+    assert.equal(computeCronDelayMs(tasks, NOW), 60_000);
   });
 
-  it("所有任务 running/无 nextRunAt 时回退 60s", async () => {
-    const delays: number[] = [];
-    const restore = installTimerCapture(delays, true);
-    try {
-      const store = makeFakeStore([
-        makeTask({ taskId: "t1", status: "running", nextRunAt: "2026-08-04T00:00:00.000Z" }),
-        makeTask({ taskId: "t2", nextRunAt: undefined }),
-      ]);
-      const scheduler = makeScheduler({ store });
-      await scheduler.start();
-      await waitFor(() => delays.length >= 2);
-      assert.equal(delays[1], 60_000);
-      await scheduler.stop();
-    } finally {
-      restore();
-    }
+  it("已过期任务返回 0（立即唤醒）", () => {
+    const tasks = [makeTask({ nextRunAt: new Date(NOW - 1000).toISOString() })];
+    assert.equal(computeCronDelayMs(tasks, NOW), 0);
+  });
+
+  it("running/无 nextRunAt/非法日期任务一律跳过并回退 60s", () => {
+    const tasks = [
+      makeTask({ taskId: "t1", status: "running", nextRunAt: new Date(NOW + 10_000).toISOString() }),
+      makeTask({ taskId: "t2", nextRunAt: undefined }),
+      makeTask({ taskId: "t3", nextRunAt: "not-a-date" }),
+    ];
+    assert.equal(computeCronDelayMs(tasks, NOW), 60_000);
+  });
+
+  it("跳过 running 任务后取剩余最早时间", () => {
+    const tasks = [
+      makeTask({ taskId: "t1", status: "running", nextRunAt: new Date(NOW + 5_000).toISOString() }),
+      makeTask({ taskId: "t2", nextRunAt: new Date(NOW + 45_000).toISOString() }),
+    ];
+    assert.equal(computeCronDelayMs(tasks, NOW), 45_000);
   });
 });
 

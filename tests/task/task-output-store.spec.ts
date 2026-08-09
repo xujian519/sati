@@ -1,6 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { TaskOutputStore } from "../../src/task/index.js";
+
+const tempDirs: string[] = [];
+
+test.afterEach(() => {
+  while (tempDirs.length > 0) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+  }
+});
 
 test("append accepts string and buffer and totalBytes is monotonic", () => {
   const store = new TaskOutputStore({ taskId: "t1" });
@@ -93,10 +104,9 @@ test("close clears memory but keeps totalBytes", () => {
 });
 
 test("disk spill appends overflow chunks to <dir>/<taskId>.log", async () => {
-  const { mkdtemp, readFile } = await import("node:fs/promises");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
-  const dir = await mkdtemp(join(tmpdir(), "sati-task-spill-"));
+  const { readFile } = await import("node:fs/promises");
+  const dir = mkdtempSync(join(tmpdir(), "sati-task-spill-"));
+  tempDirs.push(dir);
   const store = new TaskOutputStore({ taskId: "task-x", diskSpillDir: dir });
   store.append("first chunk");
   store.append("second chunk");

@@ -14,6 +14,7 @@ import {
   type CronPhaseEventCallback,
 } from "../../../src/cron/runtime/CronFire.js";
 import type { CronTaskStore } from "../../../src/cron/storage/CronTaskStore.js";
+import { makeTask } from "../helpers.js";
 
 const FIXED_NOW = new Date("2026-08-05T10:00:00.000Z");
 
@@ -122,24 +123,6 @@ function makeFakeStore(
     },
   } as unknown as CronTaskStore;
   return { store, state };
-}
-
-function makeTask(overrides: Partial<CronTask> = {}): CronTask {
-  return {
-    schemaVersion: 1,
-    taskId: "t1",
-    message: "定时巡检",
-    schedule: { type: "cron", expression: "*/5 * * * *", timezone: "UTC" },
-    status: "scheduled",
-    sessionKey: "cron:t1",
-    channelKey: "cron",
-    projectKey: "/tmp/project",
-    createdAt: "2026-08-01T00:00:00.000Z",
-    updatedAt: "2026-08-01T00:00:00.000Z",
-    nextRunAt: "2026-08-05T09:55:00.000Z",
-    scheduleComputationVersion: 2,
-    ...overrides,
-  };
 }
 
 function makeFire(options: {

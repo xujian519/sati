@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTelemetryCollector, TelemetrySender, hashTelemetryId } from "../../src/telemetry/index.js";
@@ -32,8 +32,18 @@ function okFetch(calls: CapturedCall[]): typeof fetch {
 }
 
 function makePilotHome(): string {
-  return mkdtempSync(join(tmpdir(), "sati-telemetry-"));
+  const dir = mkdtempSync(join(tmpdir(), "sati-telemetry-"));
+  tempDirs.push(dir);
+  return dir;
 }
+
+const tempDirs: string[] = [];
+
+test.afterEach(() => {
+  while (tempDirs.length > 0) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+  }
+});
 
 test("enabled collector sends feature_used events with contract shape", async () => {
   const calls: CapturedCall[] = [];
