@@ -1,3 +1,4 @@
+import { TtlCache } from "../../shared/ttl-cache.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import {
   canonicalMessagesToMemoryMessages,
@@ -70,10 +71,23 @@ export type EdgeClawMemoryProviderOptions = {
   source?: string;
   now?: () => Date;
   telemetry?: TelemetryClient;
+  /**
+   * `retrieve` 结果进程内 TTL 缓存（毫秒）。默认 30_000，与 memory-core
+   * 内部 recall cache（reasoning-loop）对齐。多轮工具循环中 query 不变时
+   * 第二轮起直接命中，省去每轮的 memory-gate LLM 调用与语义检索。
+   */
+  retrieveCacheTtlMs?: number;
 };
+
+const DEFAULT_RETRIEVE_CACHE_TTL_MS = 30_000;
+/** 缓存条目上限；超出后淘汰最旧条目（TtlCache 语义）。 */
+const MAX_RETRIEVE_CACHE_ENTRIES = 256;
 
 export class EdgeClawMemoryProvider implements MemoryResolver {
   private readonly now: () => Date;
+  private readonly retrieveCache: TtlCache<string, MemoryRetrieveResult>;
+  /** 同 key 并发去重：多个并发 retrieve 共享一次底层调用。 */
+  private readonly inFlightRetrieves = new Map<string, Promise<MemoryRetrieveResult>>();
   private readonly pendingRetrievals = new Map<
     string,
     {
@@ -85,6 +99,11 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
 
   constructor(private readonly options: EdgeClawMemoryProviderOptions) {
     this.now = options.now ?? (() => new Date());
+    this.retrieveCache = new TtlCache<string, MemoryRetrieveResult>({
+      ttlMs: options.retrieveCacheTtlMs ?? DEFAULT_RETRIEVE_CACHE_TTL_MS,
+      maxSize: MAX_RETRIEVE_CACHE_ENTRIES,
+      now: () => this.now().getTime(),
+    });
   }
 
   async retrieve(input: MemoryRetrieveInput): Promise<MemoryRetrieveResult> {
@@ -98,6 +117,36 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
       outcome: "success",
       sessionId: input.sessionId,
     });
+
+    const cacheKey = buildRetrieveCacheKey(input);
+    // 命中返回共享引用（含 trace/debug 对象）。调用方（MemoryAttachmentBuilder
+    // 等）只读消费，不得改写——缓存条目为进程内只读快照约定。
+    const cached = this.retrieveCache.get(cacheKey);
+    if (cached !== undefined) {
+      this.trackRetrieveLoopEnd(input.sessionId, { cacheHit: true });
+      return cached;
+    }
+
+    // 同 key 并发去重：共享首个调用方的底层调用与 abort signal——若首个调用
+    // 方超时/中止，跟随方也会拿到降级诊断（MemoryAttachmentBuilder 均优雅
+    // 降级为 warning，不抛出）；去重的是"结果"，不是各自的中止边界。
+    const inFlight = this.inFlightRetrieves.get(cacheKey);
+    if (inFlight) return inFlight;
+
+    const pending = this.performRetrieve(input, cacheKey, startedAt);
+    this.inFlightRetrieves.set(cacheKey, pending);
+    try {
+      return await pending;
+    } finally {
+      this.inFlightRetrieves.delete(cacheKey);
+    }
+  }
+
+  private async performRetrieve(
+    input: MemoryRetrieveInput,
+    cacheKey: string,
+    startedAt: string,
+  ): Promise<MemoryRetrieveResult> {
     try {
       const recentMessages = canonicalMessagesToMemoryMessages(input.recentMessages);
       const result = await this.options.service.retrieveContext(input.query, {
@@ -113,17 +162,8 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
       });
       const systemContext = (result.systemContext ?? result.context ?? "").trim();
       if (!systemContext) {
-        this.options.telemetry?.trackFeatureLoopStage({
-          module: "memory",
-          ownerModule: "memory",
-          executionKind: "memory",
-          phase: "retrieve",
-          loopStage: "loop_end",
-          outcome: "success",
-          sessionId: input.sessionId,
-          metadata: { injected: false },
-        });
-        return {
+        this.trackRetrieveLoopEnd(input.sessionId, { injected: false });
+        const empty: MemoryRetrieveResult = {
           diagnostics: [
             {
               code: "memory_context_empty",
@@ -133,23 +173,18 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
           ],
           metadata: { trace: result.trace, debug: result.debug },
         };
+        this.setCachedRetrieve(cacheKey, empty);
+        return empty;
       }
 
-      this.options.telemetry?.trackFeatureLoopStage({
-        module: "memory",
-        ownerModule: "memory",
-        executionKind: "memory",
-        phase: "retrieve",
-        loopStage: "loop_end",
-        outcome: "success",
-        sessionId: input.sessionId,
-        metadata: { injected: true },
-      });
-      return {
+      this.trackRetrieveLoopEnd(input.sessionId, { injected: true });
+      const success: MemoryRetrieveResult = {
         systemContext,
         diagnostics: [],
         metadata: { trace: result.trace, debug: result.debug },
       };
+      this.setCachedRetrieve(cacheKey, success);
+      return success;
     } catch (error) {
       this.options.telemetry?.trackError(error, {
         module: "memory",
@@ -170,6 +205,23 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
         ],
       };
     }
+  }
+
+  private trackRetrieveLoopEnd(sessionId: string, metadata: Record<string, unknown>): void {
+    this.options.telemetry?.trackFeatureLoopStage({
+      module: "memory",
+      ownerModule: "memory",
+      executionKind: "memory",
+      phase: "retrieve",
+      loopStage: "loop_end",
+      outcome: "success",
+      sessionId,
+      metadata,
+    });
+  }
+
+  private setCachedRetrieve(cacheKey: string, result: MemoryRetrieveResult): void {
+    this.retrieveCache.set(cacheKey, result);
   }
 
   async captureTurn(input: MemoryCaptureTurnInput): Promise<void> {
@@ -254,4 +306,12 @@ function extractLastAssistantText(messages: readonly ContextMemoryMessage[]): st
     }
   }
   return "";
+}
+
+/**
+ * 检索缓存键：session + query + workspace。query 已含调用方的短 query 回退
+ * 拼接（buildRetrieveQuery），多轮工具循环中同一用户意图下保持不变。
+ */
+function buildRetrieveCacheKey(input: MemoryRetrieveInput): string {
+  return `${input.sessionId}\u0000${input.query}\u0000${input.projectRoot ?? ""}`;
 }

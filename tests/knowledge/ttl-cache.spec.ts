@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { TtlCache } from "../../src/knowledge/shared/ttl-cache.js";
+import { TtlCache } from "../../src/shared/ttl-cache.js";
 
 describe("TtlCache", () => {
   it("TTL 内命中，过期后 miss 并惰性清除", () => {

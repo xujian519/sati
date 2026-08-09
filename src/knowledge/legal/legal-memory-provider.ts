@@ -11,7 +11,7 @@ import type {
 import { MIN_QUERY_LENGTH, type VectorDbSearch } from "../shared/vector-db.js";
 import type { KnowledgeEmbeddingSearch } from "../shared/knowledge-embeddings.js";
 import { CircuitBreaker, guarded } from "../shared/circuit-breaker.js";
-import { TtlCache } from "../shared/ttl-cache.js";
+import { TtlCache } from "../../shared/ttl-cache.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import type { LawRecord, LegalSearchSource } from "./types.js";
 

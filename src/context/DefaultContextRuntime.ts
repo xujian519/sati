@@ -166,6 +166,21 @@ export class DefaultContextRuntime implements ContextRuntime {
       });
     }
 
+    // 提前并行启动记忆检索：build 内部是异步的 memory-gate LLM 调用 + 语义
+    // 检索（EdgeClawMemoryProvider 命中 TTL 缓存时几乎零成本），让它在后续
+    // 同步的 prompt 组装与本地文件读取期间执行，避免串行等待拖慢首 token。
+    const memoryPromise = this.memoryAttachmentBuilder
+      ? this.memoryAttachmentBuilder.build({
+          query: extractRecentUserText(projection.messages) ?? "",
+          sessionId: input.sessionId,
+          projectRoot: this.projectRoot ?? input.cwd,
+          recentMessages: projection.messages,
+          signal: input.abortSignal,
+          timeoutMs: this.memoryRetrievalTimeoutMs,
+          knowledgeProfile: this.knowledgeProfile,
+        })
+      : undefined;
+
     const prompt = this.promptAssembler.assemble({
       cwd: input.cwd,
       provider: input.provider,
@@ -180,16 +195,8 @@ export class DefaultContextRuntime implements ContextRuntime {
     });
 
     const parts = [...prompt.parts];
-    if (this.memoryAttachmentBuilder) {
-      const memory = await this.memoryAttachmentBuilder.build({
-        query: extractRecentUserText(projection.messages) ?? "",
-        sessionId: input.sessionId,
-        projectRoot: this.projectRoot ?? input.cwd,
-        recentMessages: projection.messages,
-        signal: input.abortSignal,
-        timeoutMs: this.memoryRetrievalTimeoutMs,
-        knowledgeProfile: this.knowledgeProfile,
-      });
+    if (memoryPromise) {
+      const memory = await memoryPromise;
       for (const block of memory.attachments) {
         for (const content of block.content) {
           if (content.type === "text" && content.text.trim().length > 0) {

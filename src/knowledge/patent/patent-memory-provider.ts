@@ -3,7 +3,7 @@ import type { EmbeddingClient } from "../../model/embedding/types.js";
 import type { RerankClient } from "../../model/embedding/rerank.js";
 import { MIN_QUERY_LENGTH } from "../shared/vector-db.js";
 import { CircuitBreaker, guarded } from "../shared/circuit-breaker.js";
-import { TtlCache } from "../shared/ttl-cache.js";
+import { TtlCache } from "../../shared/ttl-cache.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import { defaultEmbeddingDir } from "../config.js";
 import type {

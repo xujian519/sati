@@ -47,6 +47,11 @@ export class TtlCache<K, V> {
     }
   }
 
+  /** 删除指定键（无论是否过期）。 */
+  delete(key: K): void {
+    this.entries.delete(key);
+  }
+
   clear(): void {
     this.entries.clear();
   }
