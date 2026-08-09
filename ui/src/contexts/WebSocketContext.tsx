@@ -8,6 +8,12 @@ type WSSubscriber = (msg: any) => void;
 /**
  * 高频流式增量事件：不进 `latestMessage` state（避免每条流式帧触发
  * 消费 latestMessage 的组件 re-render）。流式渲染应走 subscribe 通道。
+ *
+ * 浏览器聊天流量经 ui/server 桥转发：`sati-bridge.js` 把 gateway 事件
+ * 归一化为 `kind` 帧（stream_delta/thinking/tool_use/tool_result 等，
+ * 见 `src/web/client/eventMapping.ts`），因此高频噪声需同时按 `kind`
+ * 与 `type` 匹配；结构性事件（session-status/loading_progress/
+ * projects_updated/taskmaster-*）不带 kind，仍正常进入 latestMessage。
  */
 const STREAMING_NOISE_TYPES = new Set([
   "assistant_text_delta",
@@ -18,10 +24,19 @@ const STREAMING_NOISE_TYPES = new Set([
   "agent_status",
 ]);
 
-function isStreamingNoise(data: unknown): boolean {
+/** 桥归一化后高频流式增量的 kind 值（每条可达每秒数十帧）。 */
+const STREAMING_NOISE_KINDS = new Set(["stream_delta", "thinking", "tool_use", "tool_result", "agent_activity"]);
+
+// kind 值来源：`src/web/client/eventMapping.ts`（gateway 事件 → kind 帧）与
+// `ui/server/sati-bridge.js`（直接构造的 kind 帧）。新增高频 kind 时需同步两处。
+
+export function isStreamingNoise(data: unknown): boolean {
   if (typeof data !== "object" || data === null) return false;
-  const type = (data as { type?: unknown }).type;
-  return typeof type === "string" && STREAMING_NOISE_TYPES.has(type);
+  const record = data as { type?: unknown; kind?: unknown };
+  const type = record.type;
+  if (typeof type === "string" && STREAMING_NOISE_TYPES.has(type)) return true;
+  const kind = record.kind;
+  return typeof kind === "string" && STREAMING_NOISE_KINDS.has(kind);
 }
 
 export type ReconnectInfo = {

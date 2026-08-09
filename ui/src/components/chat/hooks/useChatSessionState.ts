@@ -1027,7 +1027,10 @@ export function useChatSessionState({
     };
 
     requestStatus();
-    const timer = setInterval(requestStatus, 1200);
+    // 兜底存活探测：turn 开始/结束已有 stream_end/complete 事件驱动，
+    // 3s 间隔足以维持中断按钮等状态的实时性，避免 1.2s 高频 session-status
+    // 帧触发消费方整树 re-render。
+    const timer = setInterval(requestStatus, 3000);
     return () => clearInterval(timer);
   }, [
     currentSessionId,

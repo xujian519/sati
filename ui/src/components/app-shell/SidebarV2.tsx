@@ -117,6 +117,16 @@ type SessionTreeNode = {
   children: SessionTreeNode[];
 };
 
+/** 收起状态下列出的会话行上限（展开时最多渲染 500 条）。 */
+const COLLAPSED_SESSION_LIMIT = 5;
+
+type SessionTreeCacheEntry = {
+  allSessions: FlatSession[];
+  tree: SessionTreeNode[];
+  collapsedTree: SessionTreeNode[];
+  titles: Map<string, string>;
+};
+
 const isForkChildSession = (session: ProjectSession, knownSessionIds: Set<string>): boolean =>
   Boolean(
     session.parentSessionId &&
@@ -296,6 +306,24 @@ export default function SidebarV2({
   const navigate = useNavigate();
   useCustomNamesVersion();
   const safeProjects = useMemo(() => (Array.isArray(projects) ? projects : []), [projects]);
+
+  // 会话树构建缓存：仅在 projects 引用变化时重建。此前每次 shell re-render
+  // （流式帧/1.2s 轮询）都会对每个项目重复 collect + sort + buildSessionTree
+  // （O(n log n) + O(n)）；缓存后 renderSessionRows 只做廉价的 slice 与读取。
+  const sessionTreeByProject = useMemo(() => {
+    const cache = new Map<string, SessionTreeCacheEntry>();
+    for (const project of safeProjects) {
+      const allSessions = collectSessionsForProject(project).slice(0, 500);
+      const titles = new Map(allSessions.map(({ sessionId, session }) => [sessionId, sessionDisplayTitle(session)]));
+      cache.set(project.name, {
+        allSessions,
+        tree: buildSessionTree(allSessions),
+        collapsedTree: buildSessionTree(allSessions.slice(0, COLLAPSED_SESSION_LIMIT)),
+        titles,
+      });
+    }
+    return cache;
+  }, [safeProjects]);
 
   const [renamingProject, setRenamingProject] = useState<string | null>(null);
   const [renamingSession, setRenamingSession] = useState<string | null>(null);
@@ -662,8 +690,8 @@ export default function SidebarV2({
   );
 
   const renderSessionRows = (project: Project, options: { flat?: boolean } = {}) => {
-    const COLLAPSED_SESSION_LIMIT = 5;
-    const allSessions = collectSessionsForProject(project).slice(0, 500);
+    const cached = sessionTreeByProject.get(project.name);
+    const allSessions = cached?.allSessions ?? collectSessionsForProject(project).slice(0, 500);
     const isCollapsed = collapsedSessionProjects.has(project.name);
     const sessions = isCollapsed ? allSessions.slice(0, COLLAPSED_SESSION_LIMIT) : allSessions;
     const hiddenLoadedCount = isCollapsed ? Math.max(0, allSessions.length - COLLAPSED_SESSION_LIMIT) : 0;
@@ -689,10 +717,14 @@ export default function SidebarV2({
     // top-level list (no folder ancestor), so the usual ml-6 indent would
     // leave a weird empty gutter on the left.
     const containerClass = options.flat ? "space-y-0.5" : "ml-6 space-y-0.5";
-    const sessionTree = buildSessionTree(sessions);
-    const sessionTitleById = new Map(
-      allSessions.map(({ sessionId, session }) => [sessionId, sessionDisplayTitle(session)]),
-    );
+    const sessionTree = isCollapsed
+      ? (cached?.collapsedTree ?? buildSessionTree(sessions))
+      : (cached?.tree ?? buildSessionTree(sessions));
+    const sessionTitleById =
+      cached?.titles ?? new Map(allSessions.map(({ sessionId, session }) => [sessionId, sessionDisplayTitle(session)]));
+    // 注：titles 来自 useMemo 缓存（随 projects 刷新重建），仅用于 fork 父级
+    // 标签（renderSessionTreeNode 的 parentTitle）；用户重命名父会话后该标签
+    // 最迟下一次 projects 刷新时更新，主行标题不受影响（渲染时实时计算）。
 
     const renderSessionTreeNode = (node: SessionTreeNode, depth: number, isForkChild: boolean): ReactNode => {
       const { session, sessionId, lastActivity } = node.flat;
