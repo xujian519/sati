@@ -48,4 +48,32 @@ describe("TtlCache", () => {
     assert.equal(cache.get("a"), "1");
     assert.equal(cache.get("b"), "2");
   });
+
+  it("delete 移除指定键并反映到 size", () => {
+    const cache = new TtlCache<string, string>({ ttlMs: 1000 });
+    cache.set("a", "1");
+    cache.set("b", "2");
+    cache.delete("a");
+    assert.equal(cache.get("a"), undefined);
+    assert.equal(cache.size, 1);
+    cache.delete("missing"); // 无副作用
+    assert.equal(cache.size, 1);
+  });
+
+  it("set 覆盖已有键更新值而不改变 size", () => {
+    const cache = new TtlCache<string, string>({ ttlMs: 1000 });
+    cache.set("a", "1");
+    cache.set("a", "2");
+    assert.equal(cache.get("a"), "2");
+    assert.equal(cache.size, 1);
+  });
+
+  it("maxSize 为 1 时每次 set 淘汰前一键", () => {
+    const cache = new TtlCache<string, string>({ ttlMs: 1000, maxSize: 1 });
+    cache.set("a", "1");
+    cache.set("b", "2");
+    assert.equal(cache.size, 1);
+    assert.equal(cache.get("a"), undefined);
+    assert.equal(cache.get("b"), "2");
+  });
 });
