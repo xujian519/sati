@@ -199,3 +199,33 @@ test("case-law: excludeSource 排除 wiki 审查标准卡片", t => {
     "排除后仍应命中 raw 判例",
   );
 });
+
+test("case-law: 无过滤热路径走预编译语句，重复调用结果稳定", t => {
+  const engine = withEngine(t);
+  assert.equal(engine.ftsAvailable, true, "带 docs_fts 的 fixture 应启用 FTS");
+  // 无过滤 FTS 查询走构造器预编译的 stmtSearchFts（不再逐次 prepare）
+  const first = engine.search("创造性");
+  const second = engine.search("创造性");
+  assert.deepEqual(
+    first.map(h => h.documentId),
+    second.map(h => h.documentId),
+    "预编译路径重复调用结果应一致",
+  );
+  assert.ok(first.length >= 1);
+});
+
+test("case-law: LIKE 降级路径走预编译 stmtSearchLike，重复调用稳定", t => {
+  const engine = withEngine(t);
+  const first = engine.search("认为");
+  const second = engine.search("认为");
+  assert.ok(first.length >= 1, "2 字查询应命中");
+  assert.deepEqual(
+    first.map(h => h.documentId).sort(),
+    second.map(h => h.documentId).sort(),
+    "LIKE 预编译路径重复调用结果应一致",
+  );
+  assert.ok(
+    first.every(h => h.via === "like"),
+    "2 字查询应标注 via=like",
+  );
+});

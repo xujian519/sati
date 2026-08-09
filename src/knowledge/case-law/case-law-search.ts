@@ -27,6 +27,11 @@ const FETCH_MULTIPLIER = 5;
 /** 引擎层单次检索返回的判例上限（工具层另有更严格的 1-10 限制）。 */
 const MAX_LIMIT = 50;
 
+/** 是否存在会改变 SQL 形状的过滤条件（有过滤时走动态 SQL，低频）。 */
+function hasCaseLawFilters(options: CaseLawSearchOptions): boolean {
+  return Boolean(options.docType || options.court || options.excludeSource);
+}
+
 type CaseLawRow = {
   document_id: string;
   doc_type: string;
@@ -76,6 +81,7 @@ export class CaseLawSearchEngine {
 
   // 热路径 prepared statements（固定 SQL；带过滤的查询走动态 SQL）
   private readonly stmtSearchLike: StatementSync;
+  private readonly stmtSearchFts: StatementSync | null;
   private readonly stmtGetById: StatementSync;
   private readonly stmtGetDocById: StatementSync;
   private readonly stmtCount: StatementSync;
@@ -121,6 +127,28 @@ export class CaseLawSearchEngine {
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
       WHERE d.id = ?
     `);
+
+    // 无过滤 FTS 查询（searchFts 与 searchFtsKeywords 的 SQL 相同，仅 MATCH 参数
+    // 不同，共用一条语句）。docs_fts 表可能存在但运行时 SQLite 未注册 FTS5
+    // （如捆绑旧版 Node 的 bm25/MATCH），prepare 会抛错——捕获并降级 LIKE。
+    this.stmtSearchFts = null;
+    if (this.hasFts) {
+      try {
+        this.stmtSearchFts = this.db.prepare(`
+      SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
+             d.court, d.source, d.module, d.char_count,
+             c.chunk_index, c.content, bm25(docs_fts) AS fts_rank
+      FROM docs_fts
+      JOIN chunks c ON c.id = docs_fts.rowid
+      JOIN documents d ON d.id = c.document_id
+      WHERE docs_fts MATCH ?
+      ORDER BY bm25(docs_fts) LIMIT ?
+    `);
+      } catch {
+        this.ftsDegraded = true;
+        this.stmtSearchFts = null;
+      }
+    }
 
     this.stmtCount = this.db.prepare("SELECT COUNT(*) AS c FROM documents");
   }
@@ -248,45 +276,61 @@ export class CaseLawSearchEngine {
   private searchFts(keyword: string, options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
     // trigram 分词对引号敏感：整体作为 phrase 查询（与 law_fts 同策略）。
     const escaped = keyword.replace(/"/g, '""');
-    const { sql, filterParams } = this.buildFtsQuery(options);
-    const rows = this.db.prepare(sql).all(`"${escaped}"`, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
+    const query = `"${escaped}"`;
+    let rows: CaseLawRow[];
+    if (this.stmtSearchFts !== null && !hasCaseLawFilters(options)) {
+      rows = this.stmtSearchFts.all(query, limit * FETCH_MULTIPLIER) as CaseLawRow[];
+    } else {
+      const { sql, filterParams } = this.buildFtsQuery(options);
+      rows = this.db.prepare(sql).all(query, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
+    }
     return this.dedupeByDocument(rows, limit);
   }
 
   /** 多个关键词 OR 组合的 FTS 查询（用于长查询切词降级）。 */
   private searchFtsKeywords(keywords: string[], options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
     const escaped = keywords.map(k => `"${k.replace(/"/g, '""')}"`).join(" OR ");
-    const { sql, filterParams } = this.buildFtsQuery(options);
-    const rows = this.db.prepare(sql).all(escaped, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
+    let rows: CaseLawRow[];
+    if (this.stmtSearchFts !== null && !hasCaseLawFilters(options)) {
+      rows = this.stmtSearchFts.all(escaped, limit * FETCH_MULTIPLIER) as CaseLawRow[];
+    } else {
+      const { sql, filterParams } = this.buildFtsQuery(options);
+      rows = this.db.prepare(sql).all(escaped, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
+    }
     return this.dedupeByDocument(rows, limit);
   }
 
   private searchLike(keyword: string, options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
     const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
-    let sql = `
-      SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
-             d.court, d.source, d.module, d.char_count, c.chunk_index, c.content
-      FROM documents d
-      JOIN chunks c ON c.id = (
-        SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
-      WHERE (d.title LIKE ? ESCAPE '\\' OR c.content LIKE ? ESCAPE '\\')
-    `;
-    const params: Array<string | number | null> = [pattern, pattern];
-    if (options.docType) {
-      sql += " AND d.doc_type = ?";
-      params.push(options.docType);
+    let rows: CaseLawRow[];
+    if (!hasCaseLawFilters(options)) {
+      rows = this.stmtSearchLike.all(pattern, pattern, limit) as CaseLawRow[];
+    } else {
+      let sql = `
+        SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
+               d.court, d.source, d.module, d.char_count, c.chunk_index, c.content
+        FROM documents d
+        JOIN chunks c ON c.id = (
+          SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
+        WHERE (d.title LIKE ? ESCAPE '\\' OR c.content LIKE ? ESCAPE '\\')
+      `;
+      const params: Array<string | number | null> = [pattern, pattern];
+      if (options.docType) {
+        sql += " AND d.doc_type = ?";
+        params.push(options.docType);
+      }
+      if (options.court) {
+        sql += " AND d.court LIKE ?";
+        params.push(`%${options.court.replace(/[%_\\]/g, m => `\\${m}`)}%`);
+      }
+      if (options.excludeSource) {
+        sql += " AND d.source != ?";
+        params.push(options.excludeSource);
+      }
+      sql += " LIMIT ?";
+      params.push(limit);
+      rows = this.db.prepare(sql).all(...params) as CaseLawRow[];
     }
-    if (options.court) {
-      sql += " AND d.court LIKE ?";
-      params.push(`%${options.court.replace(/[%_\\]/g, m => `\\${m}`)}%`);
-    }
-    if (options.excludeSource) {
-      sql += " AND d.source != ?";
-      params.push(options.excludeSource);
-    }
-    sql += " LIMIT ?";
-    params.push(limit);
-    const rows = this.db.prepare(sql).all(...params) as CaseLawRow[];
     return rows.map(row => this.toHit(row, null, "like"));
   }
 
