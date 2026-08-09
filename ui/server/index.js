@@ -48,7 +48,7 @@ import cors from "cors";
 import { promises as fsPromises } from "fs";
 import { spawn } from "child_process";
 import pty from "node-pty";
-import fetch from "node-fetch";
+// Uses the global fetch (Node >= 22); the node-fetch dependency was removed.
 import mime from "mime-types";
 import JSZip from "jszip";
 import { readPermissionSettings } from "./services/permissionSettings.js";
@@ -1734,10 +1734,11 @@ app.get(
 
 // Serve project files through a stable project-root URL so generated HTML can
 // load sibling CSS, JS and image assets with normal relative paths.
-app.get("/api/projects/:projectName/preview/*", authenticateToken, async (req, res) => {
+app.get("/api/projects/:projectName/preview/{*splat}", authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
-    const relativeFilePath = req.params[0] || "index.html";
+    const splat = Array.isArray(req.params.splat) ? req.params.splat.join("/") : (req.params.splat ?? "");
+    const relativeFilePath = splat || "index.html";
 
     const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
     if (!projectRoot) {
@@ -3474,7 +3475,7 @@ app.get("/api/projects/:projectName/sessions/:sessionId/token-usage", authentica
 });
 
 // Serve React app for all other routes (excluding static files)
-app.get("*", (req, res) => {
+app.get("/{*splat}", (req, res) => {
   // Skip requests for actual static asset extensions only
   const ext = path.extname(req.path);
   if (ext && /^\.(js|css|map|json|ico|png|jpg|jpeg|gif|svg|webp|woff2?|ttf|eot|mp4|webm)$/.test(ext)) {

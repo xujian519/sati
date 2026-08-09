@@ -53,13 +53,13 @@ router.get("/:name/manifest", (req, res) => {
   }
 });
 
-// GET /:name/assets/* — Serve plugin static files
-router.get("/:name/assets/*", (req, res) => {
+// GET /:name/assets/{*splat} — Serve plugin static files
+router.get("/:name/assets/{*splat}", (req, res) => {
   const pluginName = req.params.name;
   if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
     return res.status(400).json({ error: "Invalid plugin name" });
   }
-  const assetPath = req.params[0];
+  const assetPath = Array.isArray(req.params.splat) ? req.params.splat.join("/") : (req.params.splat ?? "");
 
   if (!assetPath) {
     return res.status(400).json({ error: "No asset path specified" });
@@ -203,10 +203,10 @@ router.post("/:name/update", async (req, res) => {
   }
 });
 
-// ALL /:name/rpc/* — Proxy requests to plugin's server subprocess
-router.all("/:name/rpc/*", async (req, res) => {
+// ALL /:name/rpc/{*splat} — Proxy requests to plugin's server subprocess
+router.all("/:name/rpc/{*splat}", async (req, res) => {
   const pluginName = req.params.name;
-  const rpcPath = req.params[0] || "";
+  const rpcPath = Array.isArray(req.params.splat) ? req.params.splat.join("/") : (req.params.splat ?? "");
 
   if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
     return res.status(400).json({ error: "Invalid plugin name" });
