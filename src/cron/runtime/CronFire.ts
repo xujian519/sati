@@ -138,6 +138,8 @@ export class CronFire {
         outcome = "stopped";
       }
       this.deps.unregisterActiveRun(runId);
+      // run 事件流结束：关闭复用 fd 的写入器（未关闭时 store 内 TTL 兜底）。
+      void this.deps.store.closeRun(runId).catch(() => undefined);
     }
     // Note: no early `return` inside `finally` — it would swallow the caught error.
     if (!startedRun) {

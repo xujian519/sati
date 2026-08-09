@@ -1134,28 +1134,34 @@ export class DiscoveryFire {
     persistEvents?: boolean;
   }): Promise<GatewayEvent[]> {
     const events: GatewayEvent[] = [];
-    for await (const event of this.deps.gateway.submitTurn({
-      sessionKey: input.sessionKey,
-      channelKey: input.channelKey,
-      message: input.message,
-      mode: input.mode,
-      runId: input.runId,
-      projectKey: this.deps.projectKey,
-      telemetry: {
-        ownerModule: "always_on",
-        executionKind: "always_on",
-        phase: String(input.channelKey).startsWith("always-on/")
-          ? String(input.channelKey).slice("always-on/".length)
-          : undefined,
-      },
-    })) {
-      events.push(event);
-      this.deps.onTurnEvent?.(input.sessionKey, input.channelKey, event);
-      if (input.persistEvents) {
-        await this.deps.reportStore
-          .appendRunEvent(input.runId, event as unknown as Record<string, unknown>)
-          .catch(() => undefined);
+    try {
+      for await (const event of this.deps.gateway.submitTurn({
+        sessionKey: input.sessionKey,
+        channelKey: input.channelKey,
+        message: input.message,
+        mode: input.mode,
+        runId: input.runId,
+        projectKey: this.deps.projectKey,
+        telemetry: {
+          ownerModule: "always_on",
+          executionKind: "always_on",
+          phase: String(input.channelKey).startsWith("always-on/")
+            ? String(input.channelKey).slice("always-on/".length)
+            : undefined,
+        },
+      })) {
+        events.push(event);
+        this.deps.onTurnEvent?.(input.sessionKey, input.channelKey, event);
+        if (input.persistEvents) {
+          await this.deps.reportStore
+            .appendRunEvent(input.runId, event as unknown as Record<string, unknown>)
+            .catch(() => undefined);
+        }
       }
+    } finally {
+      // turn 事件流结束（含异步迭代器异常中止）：关闭复用 fd 的写入器，
+      // 与 CronFire 的 run 收尾语义对齐（未关闭时 store 内 TTL 兜底）。
+      void this.deps.reportStore.closeRun(input.runId).catch(() => undefined);
     }
     return events;
   }

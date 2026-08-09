@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { GatewayEvent } from "../../gateway/index.js";
+import { createJsonlRunWriter, type JsonlRunWriter } from "../../fs/jsonl-run-writer.js";
 import type { CronRunRecord, CronTask } from "../protocol/types.js";
 import { cronRunEventsPath, type CronPaths } from "./CronPaths.js";
 
@@ -13,7 +14,11 @@ type CronTaskFile = {
 const taskFileMutationTails = new Map<string, Promise<void>>();
 
 export class CronTaskStore {
-  constructor(private readonly paths: CronPaths) {}
+  private readonly runWriter: JsonlRunWriter;
+
+  constructor(private readonly paths: CronPaths) {
+    this.runWriter = createJsonlRunWriter(runId => cronRunEventsPath(this.paths, runId));
+  }
 
   async listTasks(): Promise<CronTask[]> {
     return (await this.readTaskFile()).tasks;
@@ -104,10 +109,18 @@ export class CronTaskStore {
     return records.slice(-Math.max(0, limit)).reverse();
   }
 
+  /**
+   * 追加一条 run 事件：按 runId 复用已打开的文件句柄（首次 open('a')，
+   * 后续直接 write），避免每条事件重复 mkdir + open/close 三个 syscall。
+   * 调用方保持 await 语义，事件顺序与落盘行为不变。
+   */
   async appendRunEvent(runId: string, event: GatewayEvent): Promise<void> {
-    const path = cronRunEventsPath(this.paths, runId);
-    await mkdir(dirname(path), { recursive: true });
-    await appendFile(path, `${JSON.stringify({ schemaVersion: 1, runId, event })}\n`, "utf-8");
+    await this.runWriter.append(runId, `${JSON.stringify({ schemaVersion: 1, runId, event })}\n`);
+  }
+
+  /** run 生命周期结束时主动关闭事件写入器（未调用则由空闲 TTL 兜底回收）。 */
+  closeRun(runId: string): Promise<void> {
+    return this.runWriter.close(runId);
   }
 
   private async readTaskFile(): Promise<CronTaskFile> {
