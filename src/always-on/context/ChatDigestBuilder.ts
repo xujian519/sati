@@ -95,6 +95,7 @@ export async function buildChatDigest(options: BuildChatDigestOptions): Promise<
  * We deduplicate by text identity (head and tail may overlap for small files).
  */
 export function extractAllUserPrompts(source: string, maxPrompts: number, maxLength: number): string[] {
+  if (maxPrompts <= 0) return [];
   const seen = new Set<string>();
   const prompts: string[] = [];
 
