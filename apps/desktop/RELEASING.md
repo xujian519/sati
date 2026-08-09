@@ -49,11 +49,92 @@ bash scripts/release.sh --signed
 | 平台 | 构建命令 | 产物 |
 |---|---|---|
 | macOS (arm64) | `bash apps/desktop/scripts/release.sh` | `Sati-<version>-arm64.dmg`、未打包的 `mac-arm64/Sati.app` |
-| Windows (x64 / arm64) | `apps/desktop/scripts/build-win.bat` | `Sati-<version>-win-x64.exe`、`Sati-<version>-win-arm64.exe` |
+| Windows (x64) | `apps/desktop/scripts/build-win.bat` | `Sati-<version>-win-x64.exe`（`--arm64` 可打 `Sati-<version>-win-arm64.exe`） |
 
 发版脚本还会在同一目录生成 README 永久链接用的副本：`Sati-latest-arm64.dmg`、`Sati-latest-win-*.exe`（与带版本号文件字节级一致，上传前会校验大小与 SHA256，上传后会用 GitHub API 核对远端大小）。
 
 同目录常见辅助文件：`install-sati.sh`、`INSTALL.md`（macOS 沙盒 IM 安装修复用）。
+
+---
+
+## Windows 发版
+
+Windows 端没有 macOS 的 `release.sh` 流水线（签名/公证/验证/发布一体），由
+`build-win.bat` → `verify-installer.bat` → `release-l2-win.mjs` → `publish-win.mjs`
+四步独立执行，在 **Windows 机器/虚拟机**上运行：
+
+```bat
+REM 1. 构建（在 apps/desktop 下）——默认 x64；--arm64 打 arm64 包
+build-win.bat
+
+REM 2. L1 制品冒烟（结构 / 运行时 / FTS5 / native 模块 / gateway 健康）
+verify-installer.bat
+
+REM 3. L2 冒烟（UI tab / onboarding / Electron 冷启动；需交互式桌面会话）
+node scripts\release-l2-win.mjs dist-electron\win-unpacked
+
+REM 4.（可选）发布到 GitHub Releases（需 gh CLI 且已 auth）
+node scripts\publish-win.mjs dist-electron
+```
+
+### build-win.bat 参数
+
+| 参数 | 说明 |
+|---|---|
+| `--skip-install` | 跳过 pnpm install（复用已装依赖） |
+| `--skip-build` | 跳过构建（复用已有 `ui/dist` + `dist/src`） |
+| `--skip-tests` | 跳过测试门禁（紧急本地构建用，**正式发版不要用**） |
+| `--skip-sign` | 强制跳过 Authenticode 签名 |
+| `--arm64` | 构建 arm64 安装包（自动下载 arm64 运行时并只打 arm64） |
+| `--pull` | 构建前 `git pull origin main`（默认不拉取，避免覆盖本地未提交改动） |
+
+### 与 macOS release.sh 的对齐与差异
+
+`build-win.bat` 已对齐 `release.sh` 的关键门禁：版本 lockstep 校验、`pnpm test`
+测试门禁、Node **v22.23.2**（bundled SQLite 带 FTS5，`law_fts` 全文检索依赖；
+v22.14.0 无 FTS5 会降级为 LIKE）、Node/Bun 下载 SHA256 校验、bundle 排除列表
+（sati-main 从 ~1.1GB 压到 ~600MB）、native 依赖重建（better-sqlite3 / sharp /
+node-pty / mupdf 用 bundled node 逐个 rebuild）。
+
+差异：
+
+- **无公证**：Windows 没有 Apple 公证对应的机制，靠 Authenticode 签名兜底
+- **无 L3**：Windows 无 `release-l3.sh`（真模型 E2E）；L2 已覆盖
+- **签名需自备证书**：设置环境变量后 electron-builder 自动签名，见下
+- **托盘常驻**：Windows 桌面端关窗最小化到托盘而非退出（`main.ts`），与
+  macOS 的"关闭即隐藏"行为对齐 always-on 定位
+
+### 签名（Authenticode）
+
+未签名的安装包在用户机器上触发 SmartScreen"未知发布者"警告。要签名：
+
+```bat
+set CSC_LINK=C:\certs\sati.pfx        REM 证书文件路径（或 base64 内容）
+set CSC_KEY_PASSWORD=你的私钥密码
+build-win.bat
+```
+
+脚本检测到 `CSC_LINK` 即走 electron-builder 签名路径，`build-info.json` 的
+`mode` 字段标记为 `win-signed`（未签名时为 `win-unsigned`）。证书需为 OV/EV
+代码签名证书——个人证书签出的包仍会触发 SmartScreen。
+
+### SmartScreen 提示（未签名时的用户指引）
+
+首次运行未签名安装包：双击 exe → 弹出"Windows 已保护你的电脑" →
+点"更多信息" → "仍要运行"。
+
+### arm64 说明
+
+默认只打 x64。此前默认双架构但 arm64 包内嵌 x64 运行时（坏包），已修正为：
+`build-win.bat --arm64` 会下载 arm64 的 Node/Bun 运行时并只打 arm64 安装包。
+arm64 构建同样需在 Windows 机器上执行。
+
+### 发布（publish-win.mjs）
+
+`publish-win.mjs` 是 `release.sh` 发布段的 Windows 镜像：收集 exe → 最小体积
+校验（100MB）→ CHANGELOG.md 提取 release notes → `gh release view/create` →
+上传 exe + `Sati-latest-win-*.exe` permalink 副本（字节级 + SHA256 校验）→
+GitHub API 远端大小核对。前置条件：`gh` CLI 已安装且 `gh auth login` 完成。
 
 ---
 

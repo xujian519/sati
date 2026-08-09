@@ -155,17 +155,23 @@ async function ensureSatiDir(): Promise<void> {
  * first launch but can be wiped silently on app upgrade and is technically a
  * violation of Apple's "app bundle is read-only after install" guideline.
  *
- * The proper home is `~/Library/Application Support/<App>/runtime/<version>/`,
- * which is per-user, writable, survives macOS upgrades, and is the standard
- * location Electron's `app.getPath('userData')` resolves to.
+ * The proper home is the per-user app-data directory, which is writable and
+ * survives upgrades — Electron's `app.getPath('userData')` resolves to
+ * `~/Library/Application Support/Sati` on macOS and `%APPDATA%\Sati` on
+ * Windows. We mirror that layout here without importing electron so this
+ * module stays unit-testable outside an Electron runtime.
  *
  * We key on the Sati bundle version so that upgrading the app forces a
  * fresh extraction (otherwise stale source files from the previous version
  * would silently win). Old version dirs are GC'd on next startup via
  * `cleanupStaleRuntimeVersions()`.
  */
-function getRuntimeBaseDir(version: string): string {
-  return path.join(os.homedir(), "Library", "Application Support", "Sati", "runtime", version);
+export function getRuntimeBaseDir(version: string): string {
+  const base =
+    process.platform === "win32"
+      ? process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming")
+      : path.join(os.homedir(), "Library", "Application Support");
+  return path.join(base, "Sati", "runtime", version);
 }
 
 async function isPortFree(port: number): Promise<boolean> {
@@ -480,9 +486,18 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOTEMPTY") throw err;
     }
-    // ENOTEMPTY: 兜底 1 — shell rm -rf（逐个文件失败后继续，比 fs.rm 宽容）
+    // ENOTEMPTY: 兜底 1 — shell 递归删除（逐个文件失败后继续，比 fs.rm 宽容）。
+    // Windows 没有 rm -rf，改用 PowerShell Remove-Item（-LiteralPath 避免
+    // 路径通配符/转义问题；-ErrorAction SilentlyContinue 容忍单个文件失败）。
     try {
-      execSync(`rm -rf "${destDir}"`, { stdio: "ignore", timeout: 30_000 });
+      if (process.platform === "win32") {
+        execSync(
+          `powershell -NoProfile -NonInteractive -Command "Remove-Item -LiteralPath '${destDir}' -Recurse -Force -ErrorAction SilentlyContinue"`,
+          { stdio: "ignore", timeout: 60_000 },
+        );
+      } else {
+        execSync(`rm -rf "${destDir}"`, { stdio: "ignore", timeout: 30_000 });
+      }
       return;
     } catch {
       /* fall through to targeted cleanup */

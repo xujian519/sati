@@ -77,6 +77,11 @@ extraResources:
     to: sati-main-bundle.tar
   - from: resources/sati-memory-core-bundle.tar
     to: sati-memory-core-bundle.tar
+  # Windows 托盘/窗口图标：Tray 与 BrowserWindow 需要从磁盘加载图标文件，
+  # 而 electron-builder 只把 .ico 编进 exe 资源，不会放进 resourcesPath ——
+  # 不单独打包的话打包后 resolveAppIconPath() 找不到图标。
+  - from: resources/icon.ico
+    to: icon.ico
 
 files:
   - "dist/**/*"

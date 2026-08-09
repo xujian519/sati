@@ -10,7 +10,18 @@
  *   4. Wait for /health, then load http://127.0.0.1:<port>/ in BrowserWindow
  */
 
-import { BrowserWindow, Menu, app, clipboard, dialog, ipcMain, nativeImage, shell } from "electron";
+import {
+  BrowserWindow,
+  Menu,
+  Tray,
+  app,
+  clipboard,
+  dialog,
+  ipcMain,
+  nativeImage,
+  shell,
+  type MenuItemConstructorOptions,
+} from "electron";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -43,6 +54,8 @@ const serverManager = new ServerManager({
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 let shutdownStarted = false;
+/** Windows 托盘（关窗最小化到托盘，兑现 always-on 常驻）；macOS 用 Dock，不建托盘。 */
+let tray: Tray | null = null;
 
 // Current local server port, mirrored from ServerManager events. The Help
 // menu's "在浏览器中打开" / "复制本机地址" items read this to build the URL
@@ -112,30 +125,95 @@ function setupAboutPanel(): void {
   });
 }
 
-function setupAppMenu(): void {
-  if (process.platform !== "darwin") return;
-
-  // Build the localhost URL once. The historical `?uiV2=1` query was
-  // retired in 2899ba5 (V2 is the only entry; `useIsUiV2`/`VITE_UI_V2`
-  // were removed from the ui), so we serve a clean root URL — opening
-  // it in a real browser produces exactly the same UI the BrowserWindow
-  // shows.
+/**
+ * 帮助菜单（darwin 与 win32 共用）。依赖 localhost URL 的项根据
+ * currentServerPort 决定 enabled 状态；菜单在 `ready`/`restarting` 事件里
+ * 整体重建，所以这里每次读取的都是最新端口。
+ *
+ * Build the localhost URL once. The historical `?uiV2=1` query was
+ * retired in 2899ba5 (V2 is the only entry; `useIsUiV2`/`VITE_UI_V2`
+ * were removed from the ui), so we serve a clean root URL — opening
+ * it in a real browser produces exactly the same UI the BrowserWindow
+ * shows.
+ */
+function buildHelpSubmenu(): MenuItemConstructorOptions[] {
   const localUrl = currentServerPort != null ? `http://127.0.0.1:${currentServerPort}/` : null;
+  return [
+    {
+      label: "在浏览器中打开",
+      // Disabled until the local server has emitted `ready` with a
+      // concrete port; the `ready`/`restarting` listeners rebuild the
+      // menu so this flips back on automatically.
+      enabled: localUrl != null,
+      click: () => {
+        if (localUrl) void shell.openExternal(localUrl);
+      },
+    },
+    {
+      label: "复制本机地址",
+      enabled: localUrl != null,
+      click: () => {
+        if (localUrl) clipboard.writeText(localUrl);
+      },
+    },
+    { type: "separator" },
+    {
+      label: "显示服务日志",
+      click: () => {
+        // Reveal the log file in the file manager when it exists; before
+        // the first spawn the file may not be there yet — fall back to
+        // opening the parent dir so the menu item is never a no-op.
+        if (fs.existsSync(SERVER_LOG_PATH)) {
+          shell.showItemInFolder(SERVER_LOG_PATH);
+        } else {
+          void shell.openPath(SATI_DIR);
+        }
+      },
+    },
+    {
+      label: "显示配置文件夹",
+      click: () => {
+        void shell.openPath(SATI_DIR);
+      },
+    },
+    { type: "separator" },
+    {
+      label: "报告问题…",
+      click: () => {
+        void shell.openExternal(ISSUES_URL);
+      },
+    },
+    {
+      label: "项目主页…",
+      click: () => {
+        void shell.openExternal(REPO_URL);
+      },
+    },
+  ];
+}
 
+function setupAppMenu(): void {
+  const isMac = process.platform === "darwin";
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
-      {
-        label: "正念智能体",
-        submenu: [
-          { role: "about", label: "关于正念智能体" },
-          { type: "separator" },
-          { role: "hide", label: "隐藏正念智能体" },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          { role: "quit", label: "退出正念智能体" },
-        ],
-      },
+      // macOS 专属应用菜单：hide/about/quit 等 role 仅 darwin 有意义，
+      // Windows 上保留 Electron 默认行为，退出走托盘菜单。
+      ...(isMac
+        ? ([
+            {
+              label: "正念智能体",
+              submenu: [
+                { role: "about", label: "关于正念智能体" },
+                { type: "separator" },
+                { role: "hide", label: "隐藏正念智能体" },
+                { role: "hideOthers" },
+                { role: "unhide" },
+                { type: "separator" },
+                { role: "quit", label: "退出正念智能体" },
+              ],
+            },
+          ] as MenuItemConstructorOptions[])
+        : []),
       {
         label: "编辑",
         submenu: [
@@ -160,68 +238,21 @@ function setupAppMenu(): void {
           { role: "resetZoom" },
         ],
       },
-      {
-        label: "窗口",
-        submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }],
-      },
+      ...(isMac
+        ? ([
+            {
+              label: "窗口",
+              submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }],
+            },
+          ] as MenuItemConstructorOptions[])
+        : []),
       {
         // role: "help" tells macOS this is the Help menu so it adds the
         // built-in Help search field above our items, matching native app
         // conventions. Our app-defined items below are unaffected by it.
         label: "帮助",
         role: "help",
-        submenu: [
-          {
-            label: "在浏览器中打开",
-            // Disabled until the local server has emitted `ready` with a
-            // concrete port; the `ready`/`restarting` listeners rebuild the
-            // menu so this flips back on automatically.
-            enabled: localUrl != null,
-            click: () => {
-              if (localUrl) void shell.openExternal(localUrl);
-            },
-          },
-          {
-            label: "复制本机地址",
-            enabled: localUrl != null,
-            click: () => {
-              if (localUrl) clipboard.writeText(localUrl);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "显示服务日志",
-            click: () => {
-              // Reveal the log file in Finder when it exists; before the
-              // first spawn the file may not be there yet — fall back to
-              // opening the parent dir so the menu item is never a no-op.
-              if (fs.existsSync(SERVER_LOG_PATH)) {
-                shell.showItemInFolder(SERVER_LOG_PATH);
-              } else {
-                void shell.openPath(SATI_DIR);
-              }
-            },
-          },
-          {
-            label: "显示配置文件夹",
-            click: () => {
-              void shell.openPath(SATI_DIR);
-            },
-          },
-          { type: "separator" },
-          {
-            label: "报告问题…",
-            click: () => {
-              void shell.openExternal(ISSUES_URL);
-            },
-          },
-          {
-            label: "项目主页…",
-            click: () => {
-              void shell.openExternal(REPO_URL);
-            },
-          },
-        ],
+        submenu: buildHelpSubmenu(),
       },
     ]),
   );
@@ -352,6 +383,43 @@ function registerIpcHandlers(): void {
   }));
 }
 
+/** 恢复并聚焦主窗口（托盘点击 / 二次启动实例共用）。 */
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+/**
+ * Windows 托盘：关窗最小化到托盘而非退出，兑现 always-on 常驻定位
+ * （macOS 用 Dock + 关闭即隐藏，不需要托盘；Linux 不维护）。
+ * 托盘菜单提供"显示主窗口"与"退出"；退出入口置 isQuitting 后走
+ * app.quit() → before-quit → shutdown() 的正常退出路径。
+ */
+function createTray(): void {
+  if (process.platform !== "win32" || tray) return;
+  const iconPath = resolveAppIconPath();
+  const image = iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+  if (image.isEmpty()) return; // 图标缺失时不建托盘，避免空图标不可见/不可点
+  tray = new Tray(image);
+  tray.setToolTip("正念智能体");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "显示正念智能体", click: showMainWindow },
+      { type: "separator" },
+      {
+        label: "退出",
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+  tray.on("click", showMainWindow);
+}
+
 function createMainWindow(port: number, options: { onReadyToShow?: () => void } = {}): BrowserWindow {
   const iconPath = resolveAppIconPath();
   const win = new BrowserWindow({
@@ -375,10 +443,13 @@ function createMainWindow(port: number, options: { onReadyToShow?: () => void } 
 
   win.on("close", e => {
     // macOS：关闭即隐藏（Dock 图标可恢复，符合惯例）。
-    // Windows/Linux：无托盘图标且应用菜单不存在（setupAppMenu 仅 darwin），
-    // 隐藏会导致应用不可见且无法退出 —— 此处真正关闭窗口，
-    // 由 window-all-closed → app.quit() → before-quit → shutdown() 完成退出。
-    if (process.platform === "darwin" && !isQuitting) {
+    // Windows（有托盘）：关闭最小化到托盘，本地服务继续常驻；真正退出
+    // 走托盘菜单"退出"或应用退出路径。
+    // 无托盘平台（Linux / 托盘图标加载失败）：隐藏会导致应用不可见且无法
+    // 退出——此处真正关闭窗口，由 window-all-closed → app.quit() →
+    // before-quit → shutdown() 完成退出。
+    if (isQuitting) return;
+    if (process.platform === "darwin" || (process.platform === "win32" && tray)) {
       e.preventDefault();
       win.hide();
     }
@@ -409,6 +480,10 @@ async function shutdown(): Promise<void> {
   } catch {
     /* ignore */
   }
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
   mainWindow = null;
 }
 
@@ -428,6 +503,7 @@ if (!gotLock) {
     applyDockIcon();
     setupAboutPanel();
     setupAppMenu();
+    createTray();
     registerIpcHandlers();
 
     const configured = await ensureConfigOrOnboard();
@@ -556,7 +632,10 @@ app.on("activate", () => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin" && mainWindow !== null) app.quit();
+  // 正常退出路径（before-quit → shutdown → app.exit）不会走到这里；此事件
+  // 只在窗口被真正销毁时触发。Windows 有托盘时点 X 是 hide 而非 destroy，
+  // 因此此处是兜底：无托盘（Linux / 托盘缺失）时保持"关窗即退出"。
+  if (process.platform !== "darwin" && mainWindow !== null && tray === null) app.quit();
 });
 
 app.on("web-contents-created", (_event, contents) => {

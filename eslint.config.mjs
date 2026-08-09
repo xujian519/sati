@@ -32,6 +32,7 @@ export default [
       "src/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
       "tests/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
       "scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
+      "apps/desktop/scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
     ],
     plugins: {
       react,

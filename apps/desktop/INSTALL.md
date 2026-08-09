@@ -62,3 +62,37 @@ macOS Sonoma (14) 引入了一个叫 `com.apple.provenance` 的扩展属性。�
 - 申请 **Developer ID Installer 证书**,改造 `release.sh` 同时产出 `Sati-<version>-arm64.pkg`
 - PKG 由 macOS 内置 Installer.app 安装,**绕开** sandboxed-IM provenance 标记
 - 用户体验:双击 PKG → 装好 → 直接启动,无任何额外步骤,不论通过什么渠道收到
+
+---
+
+## Windows 安装
+
+Windows 安装包为 NSIS 安装器（`Sati-<version>-win-x64.exe`，arm64 构建见
+`apps/desktop/RELEASING.md`）。
+
+### 标准安装流程
+
+1. 下载 `Sati-<version>-win-x64.exe`
+2. 双击运行 → 选择安装目录（默认按用户安装，无需管理员权限）
+3. 安装完成后从开始菜单 / 桌面快捷方式启动 Sati
+4. 首次启动进入初始化窗口，填入模型 API 凭据后进入主界面
+
+### SmartScreen 提示（未签名包）
+
+未签名的安装包（`build-win.bat` 未配置证书时产出）在双击时会弹出
+"Windows 已保护你的电脑"：
+
+1. 点击 **更多信息**
+2. 点击 **仍要运行**
+
+已签名的官方包不会出现此提示。如不确定来源，可校验文件哈希后再安装。
+
+### 常驻行为
+
+Windows 版关闭主窗口会**最小化到系统托盘**而非退出（本地服务继续常驻）。
+要完全退出：右键托盘图标 → **退出**；或从托盘菜单退出。
+
+### 卸载
+
+通过 Windows 设置 → 应用 → 已安装的应用 → Sati → 卸载；或从控制面板
+"程序和功能"卸载。

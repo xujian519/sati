@@ -185,6 +185,69 @@ if exist "%RES%\sati-memory-core-bundle.tar" (
     )
 )
 
+REM ── 4b. Bundled Node FTS5 check ──
+echo.
+echo -- 4b. Bundled Node FTS5 check --
+
+set "NODE_BIN=%RES%\node-bin\node.exe"
+if not exist "%NODE_BIN%" (
+    set /a WARN+=1
+    echo   [WARN] Skipping FTS5 check (no bundled node)
+    goto :skip_fts5
+)
+
+REM law_fts 全文检索依赖 node:sqlite 的 FTS5（v22.18+ 才编译进去）；缺失时
+REM MATCH 抛 "no such module: fts5"，检索降级为 LIKE。用打包的 node 建一张
+REM fts5 虚拟表并 MATCH 查询，成功才 PASS。
+"%NODE_BIN%" -e "const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(':memory:'); db.exec('CREATE VIRTUAL TABLE t USING fts5(x)'); db.prepare('INSERT INTO t (x) VALUES (?)').run('hello'); const row = db.prepare('SELECT x FROM t WHERE t MATCH ?').get('hello'); if (!row) process.exit(1); console.log('fts5 ok');" >nul 2>nul
+if errorlevel 1 (
+    set /a FAIL+=1
+    echo   [FAIL] Bundled Node lacks FTS5 — law_fts full-text search will degrade to LIKE
+) else (
+    set /a PASS+=1
+    echo   [PASS] Bundled Node FTS5 available
+)
+:skip_fts5
+
+REM ── 4c. Native modules load check ──
+echo.
+echo -- 4c. Native modules load check --
+
+if not exist "%NODE_BIN%" (
+    set /a WARN+=1
+    echo   [WARN] Skipping native check (no bundled node)
+    goto :skip_native
+)
+if not exist "%CCM_DIR%\node_modules" (
+    set /a WARN+=1
+    echo   [WARN] Skipping native check (no sati-main node_modules)
+    goto :skip_native
+)
+
+REM pnpm --ignore-scripts 会跳过 native 依赖的 install/build 脚本；build-win.bat
+REM 已用 bundled node 重建。此处逐模块 require，任一失败说明重建不完整。
+REM pushd/popd 只在检查期间切换 cwd，避免影响后续 gateway 启动的工作目录。
+pushd "%CCM_DIR%"
+set NATIVE_OK=0
+for %%m in (better-sqlite3 sharp node-pty mupdf) do (
+    "%NODE_BIN%" -e "require('%%m')" >nul 2>nul
+    if errorlevel 1 (
+        echo   [FAIL] native module "%%m" failed to load
+    ) else (
+        echo   [PASS] native module %%m loads
+        set /a NATIVE_OK+=1
+    )
+)
+popd
+if !NATIVE_OK!==4 (
+    set /a PASS+=1
+    echo   [PASS] all native modules load
+) else (
+    set /a FAIL+=1
+    echo   [FAIL] one or more native modules failed to load
+)
+:skip_native
+
 REM ── 5. Gateway smoke test ──
 echo.
 echo -- 5. Gateway smoke test --
