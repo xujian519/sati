@@ -52,6 +52,7 @@ import pty from "node-pty";
 import mime from "mime-types";
 import JSZip from "jszip";
 import { readPermissionSettings } from "./services/permissionSettings.js";
+import { getSplatPath } from "./utils/splatPath.js";
 import { getDefaultPtyShell } from "./utils/defaultShell.js";
 import { getOpenUrlSpawnCommand } from "./utils/processSpawn.js";
 
@@ -1737,8 +1738,7 @@ app.get(
 app.get("/api/projects/:projectName/preview/{*splat}", authenticateToken, async (req, res) => {
   try {
     const { projectName } = req.params;
-    const splat = Array.isArray(req.params.splat) ? req.params.splat.join("/") : (req.params.splat ?? "");
-    const relativeFilePath = splat || "index.html";
+    const relativeFilePath = getSplatPath(req) || "index.html";
 
     const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
     if (!projectRoot) {

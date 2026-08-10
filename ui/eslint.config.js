@@ -78,7 +78,9 @@ export default tseslint.config(
       ],
 
       // --- Tailwind CSS ---
-      "tailwindcss/classnames-order": "warn",
+      // Disabled: automatic class ordering produces large, meaningless diffs
+      // across the whole codebase whenever the plugin's sort heuristic changes.
+      "tailwindcss/classnames-order": "off",
       "tailwindcss/no-contradicting-classname": "warn",
       // Disabled: the v4 plugin's fixes are not value-preserving — it rewrites
       // text-[11px] -> text-xxs (adds a line-height) and text-[14px] ->

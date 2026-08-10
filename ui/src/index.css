@@ -2,6 +2,9 @@
 
 @plugin '@tailwindcss/typography';
 
+@source "./index.html";
+@source "./src/**/*.{js,ts,jsx,tsx}";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme {
@@ -60,8 +63,9 @@
 }
 
 /*
-  The default border color changed to `currentcolor` in Tailwind CSS v4;
-  restore the v3 gray-200 default so existing borders keep their look.
+  Tailwind CSS v4 changed the default border color to `currentcolor`.
+  Restore the v3 gray-200 default explicitly so existing borders keep their look
+  without depending on the default theme's --color-gray-200 variable.
 */
 @layer base {
   *,
@@ -69,7 +73,7 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: #e5e7eb;
   }
 }
 

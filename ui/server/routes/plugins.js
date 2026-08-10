@@ -20,6 +20,7 @@ import {
   getPluginPort,
   isPluginRunning,
 } from "../utils/plugin-process-manager.js";
+import { getSplatPath } from "../utils/splatPath.js";
 
 const router = express.Router();
 
@@ -59,7 +60,7 @@ router.get("/:name/assets/{*splat}", (req, res) => {
   if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
     return res.status(400).json({ error: "Invalid plugin name" });
   }
-  const assetPath = Array.isArray(req.params.splat) ? req.params.splat.join("/") : (req.params.splat ?? "");
+  const assetPath = getSplatPath(req);
 
   if (!assetPath) {
     return res.status(400).json({ error: "No asset path specified" });
@@ -206,7 +207,7 @@ router.post("/:name/update", async (req, res) => {
 // ALL /:name/rpc/{*splat} — Proxy requests to plugin's server subprocess
 router.all("/:name/rpc/{*splat}", async (req, res) => {
   const pluginName = req.params.name;
-  const rpcPath = Array.isArray(req.params.splat) ? req.params.splat.join("/") : (req.params.splat ?? "");
+  const rpcPath = getSplatPath(req);
 
   if (!/^[a-zA-Z0-9_-]+$/.test(pluginName)) {
     return res.status(400).json({ error: "Invalid plugin name" });
