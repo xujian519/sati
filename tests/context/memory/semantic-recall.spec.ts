@@ -6,7 +6,11 @@ import { describe, it } from "node:test";
 import type { LlmMemoryExtractor, MemoryRepository } from "edgeclaw-memory-core";
 import { ReasoningRetriever } from "edgeclaw-memory-core";
 import type { EmbeddingClient } from "../../../src/model/embedding/types.js";
-import { MemorySemanticIndex, type MemorySemanticIndexOptions } from "../../../src/context/memory/semantic-index.js";
+import {
+  MemorySemanticIndex,
+  MemorySemanticServiceClosedError,
+  type MemorySemanticIndexOptions,
+} from "../../../src/context/memory/semantic-index.js";
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), "sati-semantic-"));
@@ -248,5 +252,53 @@ describe("MemorySemanticIndex", () => {
     service._delete("a.md");
     await index.search("任意", 2);
     assert.equal(index.size, 1);
+  });
+
+  it("service 已关闭（statement finalized）时 warmup 抛 MemorySemanticServiceClosedError", async () => {
+    const service = {
+      list: () => [{ relativePath: "a.md" }],
+      get: () => [{ relativePath: "a.md", content: "内容甲" }],
+      getSnapshotVersion: () => {
+        throw new Error("statement has been finalized");
+      },
+    };
+    const index = new MemorySemanticIndex({
+      service: service as unknown as ServiceLike,
+      client: makeStubEmbeddingClient().client,
+      storePath: join(makeTempDir(), "memory.jsonl"),
+    });
+    await assert.rejects(index.warmup(), MemorySemanticServiceClosedError);
+  });
+
+  it("service 已关闭时 search 降级为空结果（不抛错、不告警）", async () => {
+    const service = {
+      list: () => [{ relativePath: "a.md" }],
+      get: () => [{ relativePath: "a.md", content: "内容甲" }],
+      getSnapshotVersion: () => {
+        throw new Error("statement has been finalized");
+      },
+    };
+    const index = new MemorySemanticIndex({
+      service: service as unknown as ServiceLike,
+      client: makeStubEmbeddingClient().client,
+      storePath: join(makeTempDir(), "memory.jsonl"),
+    });
+    assert.deepEqual(await index.search("查询", 5), []);
+  });
+
+  it("非关闭错误（其他 SQLite/业务错误）原样抛出，不被误判为关闭", async () => {
+    const service = {
+      list: () => [{ relativePath: "a.md" }],
+      get: () => [{ relativePath: "a.md", content: "内容甲" }],
+      getSnapshotVersion: () => {
+        throw new Error("disk full");
+      },
+    };
+    const index = new MemorySemanticIndex({
+      service: service as unknown as ServiceLike,
+      client: makeStubEmbeddingClient().client,
+      storePath: join(makeTempDir(), "memory.jsonl"),
+    });
+    await assert.rejects(index.warmup(), /disk full/);
   });
 });

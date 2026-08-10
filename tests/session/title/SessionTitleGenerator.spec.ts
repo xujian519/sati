@@ -79,6 +79,11 @@ test("parseGeneratedTitle returns null for a JSON array", () => {
   assert.equal(parseGeneratedTitle(textContent('["a", "b"]')), null);
 });
 
+test("parseGeneratedTitle does not pick up a title from an array of objects", () => {
+  // 合法 JSON 数组：即使元素带 title 也不提取（与嵌套字段同等对待）。
+  assert.equal(parseGeneratedTitle(textContent('[{"title": "Debug failing CI tests"}]')), null);
+});
+
 test("parseGeneratedTitle does not pick up a nested title field", () => {
   // 合法 JSON 但缺顶层 title：不能从嵌套字段误提取。
   assert.equal(parseGeneratedTitle(textContent('{"foo": {"title": "nested"}}')), null);

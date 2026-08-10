@@ -19,6 +19,7 @@
 import { join } from "node:path";
 import { EdgeClawMemoryService, type EdgeClawMemoryLlmOptions } from "edgeclaw-memory-core";
 import type { ModelConfig, ModelProtocol } from "../../model/protocol/canonical.js";
+import { EmbeddingRequestError } from "../../model/embedding/client.js";
 import type { EmbeddingClient } from "../../model/embedding/types.js";
 import type { PilotMemoryConfig } from "../../pilot/config/types.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
@@ -88,15 +89,9 @@ export function createEdgeClawMemoryProviderFromConfig(
       return hits.map(hit => ({ relativePath: hit.id, score: hit.score }));
     });
     // 后台预热（首次全量索引可能耗时秒级，不阻塞启动）。
-    void semanticIndex.warmup().catch(error => {
-      if (error instanceof MemorySemanticServiceClosedError) {
-        options.logger?.info?.("[sati] memory semantic index warmup cancelled: service closed");
-        return;
-      }
-      options.logger?.warn?.(
-        `[sati] memory semantic index warmup failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    });
+    // embedding 服务随 Sati 启动存在就绪竞态：启动期网络不可达（retryable）时
+    // 做有限重试，避免预热在服务就绪前失败一次后长期静默。关闭/非重试错误不重试。
+    void warmupWithRetry(semanticIndex, options.logger, WARMUP_RETRY_ATTEMPTS);
   }
 
   const provider = new EdgeClawMemoryProvider({
@@ -107,6 +102,41 @@ export function createEdgeClawMemoryProviderFromConfig(
   });
 
   return { provider, service };
+}
+
+/** 预热重试：最多尝试次数（含首次）。 */
+const WARMUP_RETRY_ATTEMPTS = 3;
+/** 重试间隔（毫秒），给 embedding 服务就绪留出时间。 */
+const WARMUP_RETRY_DELAY_MS = 1500;
+
+/**
+ * 后台预热 + 有限重试。只对 retryable 的 embedding 网络错误重试；
+ * 服务关闭（MemorySemanticServiceClosedError）与确定性错误直接落日志，不重试。
+ */
+async function warmupWithRetry(
+  semanticIndex: MemorySemanticIndex,
+  logger: CreateEdgeClawMemoryProviderOptions["logger"],
+  attemptsLeft: number,
+): Promise<void> {
+  try {
+    await semanticIndex.warmup();
+  } catch (error) {
+    if (error instanceof MemorySemanticServiceClosedError) {
+      logger?.info?.("[sati] memory semantic index warmup cancelled: service closed");
+      return;
+    }
+    const retryable = error instanceof EmbeddingRequestError && error.retryable;
+    if (retryable && attemptsLeft > 1) {
+      logger?.info?.(
+        `[sati] memory semantic index warmup retryable failure (${attemptsLeft - 1} attempts left): ${error.message}`,
+      );
+      await new Promise(resolve => setTimeout(resolve, WARMUP_RETRY_DELAY_MS));
+      return warmupWithRetry(semanticIndex, logger, attemptsLeft - 1);
+    }
+    logger?.warn?.(
+      `[sati] memory semantic index warmup failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 function resolveMemoryLlm(

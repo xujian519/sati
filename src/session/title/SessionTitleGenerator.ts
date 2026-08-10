@@ -132,10 +132,12 @@ export function parseGeneratedTitle(content: CanonicalContentBlock[]): string | 
   let jsonSucceeded = false;
   try {
     const parsed: unknown = JSON.parse(stripped);
-    if (typeof parsed === "object" && parsed !== null && typeof (parsed as { title?: unknown }).title === "string") {
-      return sanitizeGeneratedTitle((parsed as { title: string }).title);
+    const title = readTopLevelTitle(parsed);
+    if (title !== null) {
+      return sanitizeGeneratedTitle(title);
     }
-    // 合法 JSON 但缺顶层 title：不再用正则兜底，避免误提取嵌套字段（如 {"foo": {"title": "x"}}）。
+    // 合法 JSON 但缺顶层 title：不再用正则兜底，避免误提取嵌套字段
+    // （如 {"foo": {"title": "x"}}、[{"title": "x"}]——嵌套/数组一律不取）。
     jsonSucceeded = true;
   } catch {
     // JSON 解析失败，落入下面的宽松兜底
@@ -158,6 +160,13 @@ export function parseGeneratedTitle(content: CanonicalContentBlock[]): string | 
 
   logSessionTitleFailure("missing_title");
   return null;
+}
+
+/** 读取 JSON 顶层 `title` 字符串字段；非对象/缺字段/非字符串一律返回 null。 */
+function readTopLevelTitle(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return null;
+  const title = (value as Record<string, unknown>).title;
+  return typeof title === "string" ? title : null;
 }
 
 /** 匹配 `title: "..."` 字段（容忍单/双引号、中文冒号、前后多余内容）。 */
