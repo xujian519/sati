@@ -24,7 +24,7 @@ import type { PilotMemoryConfig } from "../../pilot/config/types.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import { defaultEmbeddingDir } from "../../knowledge/config.js";
 import { EdgeClawMemoryProvider } from "./EdgeClawMemoryProvider.js";
-import { MemorySemanticIndex } from "./semantic-index.js";
+import { MemorySemanticIndex, MemorySemanticServiceClosedError } from "./semantic-index.js";
 
 export type CreateEdgeClawMemoryProviderOptions = {
   config: PilotMemoryConfig | undefined;
@@ -89,6 +89,10 @@ export function createEdgeClawMemoryProviderFromConfig(
     });
     // 后台预热（首次全量索引可能耗时秒级，不阻塞启动）。
     void semanticIndex.warmup().catch(error => {
+      if (error instanceof MemorySemanticServiceClosedError) {
+        options.logger?.info?.("[sati] memory semantic index warmup cancelled: service closed");
+        return;
+      }
       options.logger?.warn?.(
         `[sati] memory semantic index warmup failed: ${error instanceof Error ? error.message : String(error)}`,
       );

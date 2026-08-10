@@ -24,6 +24,33 @@ export type MemorySemanticIndexOptions = {
   logger?: { warn?: (...args: unknown[]) => void };
 };
 
+/**
+ * 底层 memory service 已关闭（进程退出/服务释放）时的显式错误。
+ * 由 warmup 调用方识别并静默处理——与"索引失败"区分开，避免关闭期产生噪音告警。
+ */
+export class MemorySemanticServiceClosedError extends Error {
+  constructor() {
+    super("MemorySemanticIndex service closed");
+    this.name = "MemorySemanticServiceClosedError";
+  }
+}
+
+/**
+ * edgeclaw-memory-core 是外部子包，SQLite 关闭错误没有结构化类型，
+ * 只能按错误消息识别（better-sqlite3 在不同版本/调用路径下措辞不同）。
+ * 判断逻辑收敛在本模块（service 层知识），外部通过 MemorySemanticServiceClosedError 感知。
+ */
+function isServiceClosedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lowered = message.toLowerCase();
+  return (
+    lowered.includes("statement has been finalized") ||
+    lowered.includes("database is closed") ||
+    lowered.includes("this database connection is already closed") ||
+    lowered.includes("this statement has been finalized")
+  );
+}
+
 export class MemorySemanticIndex extends SemanticDocumentIndex {
   private readonly service: MemorySemanticIndexOptions["service"];
   private readonly maxFiles: number;
@@ -48,7 +75,7 @@ export class MemorySemanticIndex extends SemanticDocumentIndex {
   }
 
   protected override async syncSource(): Promise<void> {
-    const snapshot = this.service.getSnapshotVersion();
+    const snapshot = this.getSnapshotVersionSafe();
     if (this.lastSnapshotVersion === snapshot) return;
     if (this.syncing) {
       await this.syncing;
@@ -58,6 +85,17 @@ export class MemorySemanticIndex extends SemanticDocumentIndex {
       this.syncing = null;
     });
     await this.syncing;
+  }
+
+  private getSnapshotVersionSafe(): string {
+    try {
+      return this.service.getSnapshotVersion();
+    } catch (error) {
+      if (isServiceClosedError(error)) {
+        throw new MemorySemanticServiceClosedError();
+      }
+      throw error;
+    }
   }
 
   private async doSync(): Promise<void> {
@@ -80,6 +118,6 @@ export class MemorySemanticIndex extends SemanticDocumentIndex {
     const stale = this.listIds().filter(id => !current.has(id));
     if (stale.length > 0) this.remove(stale);
 
-    this.lastSnapshotVersion = this.service.getSnapshotVersion();
+    this.lastSnapshotVersion = this.getSnapshotVersionSafe();
   }
 }
