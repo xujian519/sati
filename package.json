@@ -1,6 +1,6 @@
 {
   "name": "sati",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "private": true,
   "type": "module",
   "engines": {
@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",
-    "@eslint/js": "^9.39.3",
+    "@eslint/js": "^9.39.5",
     "@types/node": "^22.19.7",
     "@types/react": "^19.2.18",
     "@types/turndown": "^5.0.6",
@@ -59,7 +59,7 @@
     "*.{ts,tsx,js,jsx,mjs,cjs,json}": "node scripts/lint-staged.mjs"
   },
   "dependencies": {
-    "@google/genai": "^2.15.0",
+    "@google/genai": "^2.16.0",
     "@larksuiteoapi/node-sdk": "^1.72.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@rdkit/rdkit": "2025.3.4-1.0.0",
