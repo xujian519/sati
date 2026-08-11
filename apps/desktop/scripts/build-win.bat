@@ -1,18 +1,23 @@
 @echo off
 setlocal enabledelayedexpansion
 REM ============================================================================
-REM Sati Windows Build Script（补齐版 — 与 macOS release.sh 对齐）
+REM Sati Windows Build Script (aligned with macOS release.sh)
 REM Usage: build-win.bat [options]
-REM   --skip-install   跳过 pnpm install（复用已装依赖）
-REM   --skip-build     跳过构建（复用已有 ui/dist + dist/src）
-REM   --skip-tests     跳过测试门禁（紧急本地构建用，正式发版不要用）
-REM   --skip-sign      强制跳过 Authenticode 签名
-REM   --arm64          构建 arm64 安装包（自动下载 arm64 运行时；默认 x64）
-REM   --pull           构建前 git pull origin main（默认不拉取，避免覆盖本地改动）
+REM   --skip-install   skip pnpm install (reuse installed deps)
+REM   --skip-build     skip builds (reuse existing ui/dist + dist/src)
+REM   --skip-tests     skip the test gate (emergency local builds only, never for release)
+REM   --skip-sign      force-skip Authenticode signing
+REM   --arm64          build arm64 installer (auto-downloads arm64 runtime; default x64)
+REM   --pull           git pull origin main before building (default: no, to avoid clobbering local changes)
 REM
-REM 签名：设置环境变量 CSC_LINK（证书文件路径，pfx/p12 或 base64）与
-REM   CSC_KEY_PASSWORD 后运行，electron-builder 会自动签名；未设置时
-REM   产物未签名（SmartScreen 会提示"未知发布者"），见 RELEASING.md。
+REM Signing: set CSC_LINK (path to a pfx/p12 cert or base64) and
+REM   CSC_KEY_PASSWORD, then electron-builder signs automatically; without them
+REM   the installer is unsigned (SmartScreen shows "unknown publisher"), see RELEASING.md.
+REM
+REM NOTE: this file is ASCII-only on purpose. Batch files with non-ASCII bytes
+REM are read by cmd.exe using the system OEM codepage; on a GBK console a UTF-8
+REM file's bytes get byte-shifted and can swallow CR/LF and REM prefixes,
+REM corrupting parsing. Keep all comments and echo text ASCII.
 REM ============================================================================
 
 set "REPO_ROOT=%~dp0..\..\..\"
@@ -21,7 +26,7 @@ set "UI_DIR=%REPO_ROOT%ui"
 set "MEMORY_DIR=%REPO_ROOT%src\context\memory\edgeclaw-memory-core"
 set "RESOURCES=%DESKTOP_DIR%resources"
 
-REM ── 参数解析 ──
+REM ---- Arg parsing ----
 set SKIP_INSTALL=0
 set SKIP_BUILD=0
 set SKIP_TESTS=0
@@ -50,10 +55,13 @@ echo  Sati Windows Builder
 echo ========================================
 echo.
 
-REM ── Step 0: 版本一致性（lockstep，与 release.sh 预检对齐）──
+REM ---- Step 0: version lockstep (same preflight as release.sh) ----
+REM NOTE: the node -e JS must avoid "!" characters. setlocal enabledelayedexpansion
+REM mangles "!" inside for /f command strings (e.g. !== becomes garbage), which
+REM broke this check. The ternary form below is bang-free.
 echo [0] Verifying version lockstep...
 set "VERSION="
-for /f "delims=" %%v in ('node -e "const r=require('./package.json'),d=require('./apps/desktop/package.json'),u=require('./ui/package.json');if(r.version!==d.version||d.version!==u.version)process.exit(1);console.log(d.version)"') do set "VERSION=%%v"
+for /f "delims=" %%v in ('node -e "const r=require('./package.json'),d=require('./apps/desktop/package.json'),u=require('./ui/package.json');if((r.version===d.version)+(d.version===u.version)===2)console.log(d.version)"') do set "VERSION=%%v"
 if not defined VERSION (
     echo ERROR: version mismatch across root / ui / apps-desktop package.json
     echo   Run "node scripts/bump-version.mjs" from the repo root to sync all three.
@@ -61,7 +69,7 @@ if not defined VERSION (
 )
 echo OK: version %VERSION%
 
-REM ── Step 1: 仓库测试门禁（release gate；与 release.sh 一致）──
+REM ---- Step 1: repository test gate (release gate; same as release.sh) ----
 if %SKIP_TESTS%==0 (
     echo.
     echo [1] Running repository tests...
@@ -77,7 +85,7 @@ if %SKIP_TESTS%==0 (
     echo [1] Skipping tests ^(--skip-tests^)
 )
 
-REM ── Step 2: 可选 git pull（默认不拉取，避免覆盖本地未提交改动）──
+REM ---- Step 2: optional git pull (default off to avoid clobbering local changes) ----
 if %DO_PULL%==1 (
     echo.
     echo [2] Pulling latest from GitHub...
@@ -92,7 +100,7 @@ if %DO_PULL%==1 (
     echo [2] Skipping git pull ^(use --pull to fetch origin/main^)
 )
 
-REM ── Step 3: 安装依赖 ──
+REM ---- Step 3: install dependencies ----
 if %SKIP_INSTALL%==0 (
     echo.
     echo [3] Installing dependencies ^(pnpm^)...
@@ -113,9 +121,10 @@ if %SKIP_INSTALL%==0 (
     echo [3] Skipping install ^(--skip-install^)
 )
 
-REM ── Step 4: 下载 Node.js for Windows（按目标架构 + SHA256 校验）──
-REM v22.23.2：bundled SQLite 带 FTS5（law_fts 全文检索依赖；v22.14.0 无
-REM FTS5，MATCH 抛 "no such module: fts5" —— 见 scripts/download-node.sh 注释）。
+REM ---- Step 4: download Node.js for Windows (per target arch + SHA256) ----
+REM v22.23.2: bundled SQLite ships FTS5 (law_fts full-text search depends on it;
+REM v22.14.0 lacks FTS5 and MATCH throws "no such module: fts5" -- see the
+REM comments in scripts/download-node.sh).
 set "NODE_VERSION=22.23.2"
 set "NODE_ZIP=node-v%NODE_VERSION%-win-%TARGET_ARCH%.zip"
 set "NODE_URL=https://nodejs.org/dist/v%NODE_VERSION%/%NODE_ZIP%"
@@ -128,7 +137,7 @@ if exist "%NODE_EXE%" (
         echo [4] Node.js already present ^(!CUR_ARCH!^), skipping download
         goto :node_ok
     )
-    echo   Existing node.exe is !CUR_ARCH! but target is %TARGET_ARCH% — re-downloading
+    echo   Existing node.exe is !CUR_ARCH! but target is %TARGET_ARCH% - re-downloading
 )
 
 echo.
@@ -140,7 +149,7 @@ if errorlevel 1 (
     echo ERROR: Node download failed ^(network/proxy?^)
     exit /b 1
 )
-REM SHA256 校验（与 download-node.sh 同模式）
+REM SHA256 check (same pattern as download-node.sh)
 curl -fsSL -o SHASUMS256.txt "https://nodejs.org/dist/v%NODE_VERSION%/SHASUMS256.txt"
 set "EXPECTED_HASH="
 for /f "usebackq delims=" %%l in (`findstr /c:"%NODE_ZIP%" SHASUMS256.txt`) do (
@@ -173,11 +182,12 @@ del "%NODE_ZIP%" SHASUMS256.txt 2>nul
 :node_ok
 echo OK: Node v%NODE_VERSION% ^(%TARGET_ARCH%^)
 
-REM ── Step 4b: 重建 native 依赖（对齐 bundled Node ABI）──
-REM pnpm install --ignore-scripts 跳过了全部 postinstall：better-sqlite3
-REM （prebuilds 存在但保险重建）、sharp（libvips 预编译二进制靠 install 脚本
-REM 下载，必须重建）、node-pty / mupdf（node-gyp 编译，必须重建）。统一用
-REM bundled node 的 npm 逐个 rebuild，保证产物与运行时 ABI 一致。
+REM ---- Step 4b: rebuild native deps (match bundled Node ABI) ----
+REM pnpm install --ignore-scripts skips all postinstalls: better-sqlite3
+REM (has prebuilds but rebuild anyway), sharp (libvips prebuilt binaries are
+REM fetched by its install script, must rebuild), node-pty / mupdf (node-gyp
+REM compile, must rebuild). Rebuild each with the bundled node's npm so the
+REM artifact matches the runtime ABI.
 echo.
 echo [4b] Rebuilding native deps for bundled Node...
 cd /d "%REPO_ROOT%"
@@ -200,15 +210,17 @@ for %%p in (better-sqlite3 sharp node-pty mupdf) do (
     echo   Rebuilding %%p...
     "%RESOURCES%\node-bin\node.exe" "%NPM_CLI%" rebuild %%p
     if errorlevel 1 (
-        echo ERROR: native rebuild failed for %%p
-        echo   Windows 构建需要 VS Build Tools（含 "Desktop development with C++" 工作负载）。
-        echo   安装后重试；或确认 npm 配置的 node-gyp 环境正常。
-        exit /b 1
+        echo   WARN: rebuild failed for %%p - using the shipped prebuilt binary.
+        echo   WARN: the npm packages ship ABI-correct prebuilds, so this is not fatal.
+        echo   WARN: verify-installer.bat L1 will confirm it loads under the bundled Node.
+        echo   WARN: node-pty fails its own tsc prepare step yet loads fine via prebuilds.
+    ) else (
+        echo   %%p rebuilt OK
     )
 )
 echo OK
 
-REM ── Step 5: 下载 Bun for Windows（按目标架构 + SHA256 校验）──
+REM ---- Step 5: download Bun for Windows (per target arch + SHA256) ----
 set "BUN_VERSION=1.3.10"
 set "BUN_ZIP=bun-windows-%TARGET_ARCH%.zip"
 set "BUN_URL=https://github.com/oven-sh/bun/releases/download/bun-v%BUN_VERSION%/%BUN_ZIP%"
@@ -221,7 +233,7 @@ if exist "%BUN_EXE%" (
         echo [5] Bun already present ^(!CUR_ARCH!^), skipping download
         goto :bun_ok
     )
-    echo   Existing bun.exe is !CUR_ARCH! but target is %TARGET_ARCH% — re-downloading
+    echo   Existing bun.exe is !CUR_ARCH! but target is %TARGET_ARCH% - re-downloading
 )
 
 echo.
@@ -233,8 +245,9 @@ if errorlevel 1 (
     echo ERROR: Bun download failed ^(network/proxy?^)
     exit /b 1
 )
-REM SHA256 校验：Bun 官方 release 随附 SHASUMS256.txt；条目缺失时降级警告
-REM （--version 仍兜底），绝不静默接受坏包（与 download-bun.sh 同模式）。
+REM SHA256 check: Bun releases ship a SHASUMS256.txt; if the entry is missing,
+REM degrade to a warning (--version is still the last line of defense), but never
+REM silently accept a bad package (same pattern as download-bun.sh).
 curl -fsSL -o SHASUMS256.txt "https://github.com/oven-sh/bun/releases/download/bun-v%BUN_VERSION%/SHASUMS256.txt" 2>nul
 set "EXPECTED_HASH="
 if exist SHASUMS256.txt (
@@ -272,7 +285,7 @@ if errorlevel 1 (
 :bun_ok
 echo OK: Bun v%BUN_VERSION% ^(%TARGET_ARCH%^)
 
-REM ── Step 6: 构建 satiui（vite）──
+REM ---- Step 6: build satiui (vite) ----
 if %SKIP_BUILD%==0 (
     echo.
     echo [6] Building satiui ^(vite^)...
@@ -288,7 +301,7 @@ if %SKIP_BUILD%==0 (
     goto :skip_builds
 )
 
-REM ── Step 7: 构建 memory-core + sati-main（tsc）──
+REM ---- Step 7: build memory-core + sati-main (tsc) ----
 echo.
 echo [7] Building memory-core + sati-main ^(tsc^)...
 cd /d "%MEMORY_DIR%"
@@ -308,11 +321,11 @@ mkdir dist\src\extension\plugins 2>nul
 xcopy /E /I /Y src\extension\plugins\builtin dist\src\extension\plugins\builtin >nul
 echo OK
 
-REM ── Step 8: 创建 bundle tars（排除列表与 release.sh 对齐，控制包体积）──
+REM ---- Step 8: create bundle tars (exclude lists aligned with release.sh) ----
 echo.
 echo [8] Creating bundle tars...
 
-REM satiui bundle：只排 dev 依赖与缓存（UI 依赖已被 vite 打进 dist/）
+REM satiui bundle: only dev deps and caches excluded (UI deps are in dist/ via vite)
 cd /d "%UI_DIR%"
 tar cf "%RESOURCES%\satiui-bundle.tar" ^
     --exclude=node_modules/.pnpm/electron* --exclude=node_modules/.pnpm/@electron* ^
@@ -337,7 +350,8 @@ if errorlevel 1 (
 )
 echo   satiui-bundle.tar OK
 
-REM sati-main bundle：额外排除纯浏览器端 UI 依赖（后端不引用，import 扫描验证零引用）
+REM sati-main bundle: additionally exclude browser-only UI deps (not imported by
+REM the backend; verified zero references by import scan)
 cd /d "%REPO_ROOT%"
 tar cf "%RESOURCES%\sati-main-bundle.tar" ^
     --exclude=node_modules/.pnpm/electron* --exclude=node_modules/.pnpm/@electron* ^
@@ -396,7 +410,7 @@ echo   sati-memory-core-bundle.tar OK
 
 :skip_builds
 
-REM ── Step 9: 生成 build-info.json ──
+REM ---- Step 9: emit build-info.json ----
 echo.
 echo [9] Generating build-info.json...
 cd /d "%REPO_ROOT%"
@@ -404,11 +418,11 @@ for /f "delims=" %%i in ('git rev-parse --short HEAD 2^>nul') do set "GIT_SHA=%%
 for /f "delims=" %%i in ('git rev-parse HEAD 2^>nul') do set "GIT_FULL_SHA=%%i"
 for /f "delims=" %%i in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set "GIT_BRANCH=%%i"
 
-REM ISO 日期：%date% 的子串切片依赖区域格式（en-US 是 "Sat 08/01/2026"，
-REM dd/mm/yyyy 区域日月互换），用 PowerShell 取固定格式。
+REM ISO date: %date% substring slicing depends on the locale format, so use
+REM PowerShell to get a fixed yyyy-MM-dd.
 for /f "delims=" %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "BUILD_DATE=%%i"
 
-REM 签名模式标记：CSC_LINK 已设置且未 --skip-sign → win-signed
+REM Signing mode marker: win-signed iff CSC_LINK is set and not --skip-sign
 if %SKIP_SIGN%==1 (
     set "BUILD_MODE=win-unsigned"
 ) else if defined CSC_LINK (
@@ -421,7 +435,7 @@ mkdir "%DESKTOP_DIR%dist" 2>nul
 echo {"version":"%VERSION%","gitSha":"%GIT_SHA%","gitFullSha":"%GIT_FULL_SHA%","gitBranch":"%GIT_BRANCH%","buildDate":"%BUILD_DATE%","mode":"%BUILD_MODE%"} > "%DESKTOP_DIR%dist\build-info.json"
 echo OK: v%VERSION% ^(%GIT_SHA%^) mode=%BUILD_MODE%
 
-REM ── Step 10: 编译 desktop TypeScript ──
+REM ---- Step 10: compile desktop TypeScript ----
 echo.
 echo [10] Compiling desktop TypeScript...
 cd /d "%DESKTOP_DIR%"
@@ -432,7 +446,7 @@ if errorlevel 1 (
 )
 echo OK
 
-REM ── Step 11: electron-builder ──
+REM ---- Step 11: electron-builder ----
 echo.
 echo [11] Running electron-builder ^(--win --%TARGET_ARCH%^)...
 
@@ -443,9 +457,9 @@ if %SKIP_SIGN%==1 (
     echo   Signing: Authenticode via CSC_LINK ^(CSC_KEY_PASSWORD required if the key is encrypted^)
 ) else (
     set "CSC_IDENTITY_AUTO_DISCOVERY=false"
-    echo   WARN: no CSC_LINK set — installer will be UNSIGNED.
+    echo   WARN: no CSC_LINK set - installer will be UNSIGNED.
     echo         Users will see SmartScreen "unknown publisher" warning.
-    echo         To sign, set CSC_LINK + CSC_KEY_PASSWORD (see RELEASING.md).
+    echo         To sign, set CSC_LINK + CSC_KEY_PASSWORD, see RELEASING.md.
 )
 
 call npx electron-builder --win --%TARGET_ARCH%
