@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import React from "react";
 
 // jsdom 29 (vitest 4) does not provide localStorage on the global scope.
@@ -124,3 +124,16 @@ if (typeof Blob !== "undefined" && typeof Blob.prototype.stream !== "function") 
     });
   };
 }
+
+// React 19's scheduler falls back to setImmediate when MessageChannel is
+// unavailable (jsdom does not expose it). After a commit that leaves pending
+// passive effects, React schedules a flush callback whose first statement
+// reads `window.event`. If the test ends before that callback runs, vitest
+// tears down jsdom first and the callback throws "ReferenceError: window is
+// not defined" — a hard failure even though every test passed. Drain the
+// immediate queue at the end of each test while jsdom is still alive.
+afterEach(async () => {
+  for (let i = 0; i < 5; i++) {
+    await new Promise<void>(resolve => setImmediate(resolve));
+  }
+});
