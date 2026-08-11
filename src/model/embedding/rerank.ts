@@ -99,7 +99,10 @@ export function createRerankClient(config: RerankEndpointConfig): RerankClient {
     }
 
     /** 单次 POST；非 2xx 抛 RerankRequestError（附带响应体，供降级判定）。 */
-    async function postOnce(useJinaStyle: boolean): Promise<Array<{ index: number; score: number }>> {
+    async function postOnce(
+      useJinaStyle: boolean,
+      signal: AbortSignal,
+    ): Promise<Array<{ index: number; score: number }>> {
       const response = await fetch(`${baseUrl}/rerank`, {
         method: "POST",
         headers: {
@@ -107,7 +110,7 @@ export function createRerankClient(config: RerankEndpointConfig): RerankClient {
           ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
         },
         body: JSON.stringify(buildBody(useJinaStyle)),
-        signal: controller.signal,
+        signal,
       });
       if (!response.ok) {
         const text = await response.text().catch(() => "");
@@ -129,7 +132,7 @@ export function createRerankClient(config: RerankEndpointConfig): RerankClient {
 
     try {
       try {
-        return await postOnce(style === "jina");
+        return await postOnce(style === "jina", controller.signal);
       } catch (error) {
         // 自动降级：tei 风格遇到 OpenAI 兼容（oMLX 等）的 422——该服务要求
         // documents（可能还要 model）字段，tei 的 { query, texts } 会被拒。
@@ -138,7 +141,23 @@ export function createRerankClient(config: RerankEndpointConfig): RerankClient {
         if (style === "jina" || !(error instanceof RerankRequestError)) throw error;
         const wantsJinaBody = error.status === 422 && /documents|model/i.test(error.message);
         if (!wantsJinaBody) throw error;
-        return await postOnce(true);
+        // 降级重试使用独立的超时预算：首请求可能已消耗大部分 timeoutMs（如服务端
+        // 响应慢），若复用同一 controller 会立即被 abort。独立 controller 保证重试
+        // 有完整 timeoutMs；外层 controller.abort() 仍会经由同 signal 传递取消。
+        const retryController = new AbortController();
+        const retryTimer = setTimeout(() => retryController.abort(), timeoutMs);
+        const onOuterAbort = () => retryController.abort(controller.signal.reason);
+        if (controller.signal.aborted) {
+          retryController.abort(controller.signal.reason);
+        } else {
+          controller.signal.addEventListener("abort", onOuterAbort, { once: true });
+        }
+        try {
+          return await postOnce(true, retryController.signal);
+        } finally {
+          clearTimeout(retryTimer);
+          controller.signal.removeEventListener("abort", onOuterAbort);
+        }
       }
     } catch (error) {
       if (error instanceof RerankRequestError) throw error;

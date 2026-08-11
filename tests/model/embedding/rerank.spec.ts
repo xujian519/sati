@@ -209,6 +209,30 @@ describe("createRerankClient", () => {
     assert.equal(calls, 1);
   });
 
+  it("降级重试使用独立超时预算：首请求耗掉大部分 timeout 后重试仍成功", async () => {
+    let calls = 0;
+    // 第一次 tei 请求：慢响应（接近 timeoutMs=50 预算）+ 422
+    mockFetch(async call => {
+      calls += 1;
+      if (calls === 1) {
+        await new Promise(resolve => setTimeout(resolve, 40));
+        return jsonResponse(
+          { error: { message: "body -> documents: Field required", type: "invalid_request_error" } },
+          422,
+        );
+      }
+      // 降级重试：独立 50ms 预算，不应因共享 controller 被提前 abort
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const body = JSON.parse(String(call.init.body)) as { documents?: string[] };
+      assert.ok(body.documents, "重试应为 jina 风格");
+      return jsonResponse({ results: [{ index: 0, relevance_score: 0.9 }] });
+    });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080", timeoutMs: 50 });
+    const results = await client.rerank("q", ["a"]);
+    assert.equal(results.length, 1);
+    assert.equal(calls, 2);
+  });
+
   it("style=tei 响应条数不匹配抛错", async () => {
     mockFetch(() => jsonResponse({ scores: [0.9] }));
     const client = createRerankClient({ baseUrl: "http://localhost:8080" });
