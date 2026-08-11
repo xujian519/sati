@@ -48,6 +48,17 @@ export type PlanTaskTransitionContext = {
   feedback?: string;
 };
 
+/**
+ * 迁移语义守卫表：目标状态 → 前置条件校验（返回违规消息；undefined = 通过）。
+ * 数据表驱动，新增状态守卫无需改动 transition 本体。
+ */
+const SEMANTIC_GUARDS: Partial<Record<PlanTaskState, (ctx: PlanTaskTransitionContext) => string | undefined>> = {
+  executing: ctx =>
+    ctx.tasks !== undefined && ctx.tasks.length > 0 ? undefined : "executing 前必须先 sync 计划步骤（tasks 非空）",
+  replanning: ctx =>
+    ctx.feedback !== undefined && ctx.feedback.trim() !== "" ? undefined : "replanning 必须有反馈（feedback 非空）",
+};
+
 /** 计划状态机：只允许白名单内迁移，并强制迁移前置条件（语义守卫）。 */
 export class PlanTaskStateMachine {
   private current: PlanTaskState;
@@ -70,11 +81,9 @@ export class PlanTaskStateMachine {
     }
     // 语义强制（fail-closed）：白名单之外的业务前置条件，缺省即拒绝——
     // 强制"计划步骤先同步成任务再执行、有反馈才重规划"，不允许空转。
-    if (to === "executing" && (context.tasks === undefined || context.tasks.length === 0)) {
-      throw new PlanTaskSemanticError("executing 前必须先 sync 计划步骤（tasks 非空）");
-    }
-    if (to === "replanning" && (context.feedback === undefined || context.feedback.trim() === "")) {
-      throw new PlanTaskSemanticError("replanning 必须有反馈（feedback 非空）");
+    const violation = SEMANTIC_GUARDS[to]?.(context);
+    if (violation !== undefined) {
+      throw new PlanTaskSemanticError(violation);
     }
     this.current = to;
     return this.current;

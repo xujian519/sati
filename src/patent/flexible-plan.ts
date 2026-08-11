@@ -130,6 +130,8 @@ export function createFlexiblePlan(
     caseId,
     caseType,
     ...(technicalField !== undefined ? { technicalField } : {}),
+    // inputText 所有权在状态机：create 时持久化，供 run 原子执行复用（工具层不再补丁）。
+    ...(options.inputText !== undefined && options.inputText.trim() !== "" ? { inputText: options.inputText } : {}),
     status: "active",
     stages,
     currentStageId: stages.length > 0 ? stages[0].id : undefined,

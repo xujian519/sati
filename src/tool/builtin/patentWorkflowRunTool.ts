@@ -14,14 +14,16 @@ import {
   type GraphRunResult,
   type WorkflowManifest,
 } from "../../patent/index.js";
-import { globalAtomRegistry, globalStageHandlerRegistry, type StageProvider } from "../../patent/atoms/index.js";
+import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
 import type { SatiToolDefinition, SatiToolModelClient } from "../protocol/types.js";
 import {
   buildWorkflowProvider,
+  buildWorkflowRunContext,
   renderWorkflowResultText,
   resolveRunPersistTarget,
   runRuleGate,
   writeRunArtifacts,
+  type WorkflowProviderDeps,
 } from "./patentWorkflowTool.js";
 
 /**
@@ -73,15 +75,8 @@ export type PatentWorkflowRunInput = {
   maxResults?: number;
 };
 
-export type PatentWorkflowRunDeps = {
-  /** 模型客户端（缺省取 context.model；二者皆无时返回明确错误而非静默降级）。 */
-  model?: SatiToolModelClient;
-  /** 模型 provider id（缺省 "openrouter"，对齐 web_fetch 默认）。 */
-  provider?: string;
-  /** 模型 id（缺省 "moonshotai/kimi-k2.6"，对齐 web_fetch 默认）。 */
-  modelId?: string;
-  /** 检索器（缺省 nuo-patent 的 searchPatents，经 createNuoSearchProvider 适配）。 */
-  search?: StageProvider["search"];
+/** provider 装配字段（model/provider/modelId/search）单一来源见 patentWorkflowTool 的 WorkflowProviderDeps。 */
+export type PatentWorkflowRunDeps = WorkflowProviderDeps & {
   /** 阶段处理器注册表（缺省全局注册表——registerBuiltinAtoms 已装配内置原子）。 */
   handlers?: typeof globalStageHandlerRegistry;
 };
@@ -196,17 +191,14 @@ export function createPatentWorkflowRunTool(
       }
 
       // 统一 ctx 映射：各原子输入键（text/source_text/extraction_input）指向同一份输入。
-      const workflowCtx = {
+      const workflowCtx = buildWorkflowRunContext({
         caseId: input.caseId,
         input: input.input,
-        text: input.input,
-        source_text: input.input,
-        extraction_input: input.input,
-        max_results: String(input.maxResults ?? 5),
-      };
+        maxResults: input.maxResults,
+      });
 
       // 无 atom 阶段（preprocess/report）：透传输入文本（等价"未预处理"），不 degraded。
-      const executor = async (): Promise<string> => workflowCtx.input;
+      const executor = async (): Promise<string> => input.input;
 
       // caseId 持久化（复用收口工具目录约定）：runWorkflow 内 saveRun JSON，执行后补 .mmd。
       const persistTarget = resolveRunPersistTarget(input.caseId, manifest.id, context?.cwd ?? process.cwd());
@@ -323,15 +315,11 @@ async function executeGraphRun(
   }
 
   // 统一 ctx 映射（与 manifest 路径一致）。
-  const workflowCtx = {
+  const workflowCtx = buildWorkflowRunContext({
     caseId: input.caseId,
     input: input.input,
-    text: input.input,
-    source_text: input.input,
-    extraction_input: input.input,
-    claim: input.input,
-    max_results: String(input.maxResults ?? 5),
-  };
+    maxResults: input.maxResults,
+  });
 
   // 检查点：caseId 提供时持久化到 <caseDir>/workflow-runs/checkpoints/，否则内存。
   const graph = def.build({ handlers: deps.handlers ?? globalStageHandlerRegistry }).compile(def.entry);

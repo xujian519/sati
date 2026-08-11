@@ -12,6 +12,7 @@ import {
   RuleEngine,
   type RuleCheckResult,
   type Verdict,
+  type WorkflowContext,
   type WorkflowManifest,
   type WorkflowRunResult,
 } from "../../patent/index.js";
@@ -330,7 +331,7 @@ export type WorkflowProviderContext = {
 };
 
 /** 收集 stream 事件为完整文本（对齐 web_fetch 二次模型调用模式）。 */
-export async function collectModelText(model: SatiToolModelClient, request: CanonicalModelRequest): Promise<string> {
+async function collectModelText(model: SatiToolModelClient, request: CanonicalModelRequest): Promise<string> {
   let text = "";
   for await (const event of model.stream(request)) {
     switch (event.type) {
@@ -344,6 +345,27 @@ export async function collectModelText(model: SatiToolModelClient, request: Cano
     }
   }
   return text;
+}
+
+/**
+ * 统一 ctx 映射：各原子输入键（text/source_text/extraction_input/claim）指向同一份
+ * 输入文本。patent_workflow_run（manifest + graph 路径）与 flexible_plan（run）共用，
+ * 避免三处各自维护映射漂移。
+ */
+export function buildWorkflowRunContext(opts: {
+  caseId?: string;
+  input: string;
+  maxResults?: number;
+}): WorkflowContext {
+  return {
+    caseId: opts.caseId,
+    input: opts.input,
+    text: opts.input,
+    source_text: opts.input,
+    extraction_input: opts.input,
+    claim: opts.input,
+    max_results: String(opts.maxResults ?? 5),
+  };
 }
 
 /**

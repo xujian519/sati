@@ -17,14 +17,17 @@ import {
   type FlexiblePlanStore,
   type FlexibleStage,
 } from "../../patent/index.js";
-import { globalAtomRegistry, globalStageHandlerRegistry, type StageProvider } from "../../patent/atoms/index.js";
-import type { SatiToolDefinition, SatiToolModelClient } from "../protocol/types.js";
+import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
+import type { SatiJsonSchema } from "../protocol/schema.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
 import {
   buildWorkflowProvider,
+  buildWorkflowRunContext,
   renderWorkflowResultText,
   resolveRunPersistTarget,
   resolveWorkflowRunsDir,
   writeRunArtifacts,
+  type WorkflowProviderDeps,
 } from "./patentWorkflowTool.js";
 
 /**
@@ -94,15 +97,8 @@ export type FlexiblePlanToolInput = {
   autoConfirm?: boolean;
 };
 
-export type FlexiblePlanToolDeps = {
-  /** 模型客户端（缺省取 context.model；皆无时 run 返回明确错误）。 */
-  model?: SatiToolModelClient;
-  /** 模型 provider id（缺省 "openrouter"，对齐 web_fetch 默认）。 */
-  provider?: string;
-  /** 模型 id（缺省 "moonshotai/kimi-k2.6"，对齐 web_fetch 默认）。 */
-  modelId?: string;
-  /** 检索器（缺省 nuo-patent 的 searchPatents，经 createNuoSearchProvider 适配）。 */
-  search?: StageProvider["search"];
+/** provider 装配字段（model/provider/modelId/search）单一来源见 patentWorkflowTool 的 WorkflowProviderDeps。 */
+export type FlexiblePlanToolDeps = WorkflowProviderDeps & {
   /** 阶段处理器注册表（缺省全局注册表——registerBuiltinAtoms 已装配内置原子）。 */
   handlers?: typeof globalStageHandlerRegistry;
   /** 计划存储（缺省 JsonFileFlexiblePlanStore：<caseDir>/workflow-runs/flexible-plans/）。 */
@@ -135,14 +131,10 @@ function renderPlan(plan: FlexiblePlanState): string {
     const artifactNote = s.artifacts.length > 0 ? `（产物: ${s.artifacts.length} 项）` : "";
     return `- ${flag} ${s.id}${atomNote}（${s.strategy}）: ${s.goal}${artifactNote}`;
   });
-  return [
-    `flexible_plan(caseId=${plan.caseId}, caseType=${plan.caseType}, status=${plan.status})`,
-    plan.technicalField !== undefined ? `技术领域: ${plan.technicalField}` : undefined,
-    `当前阶段: ${plan.currentStageId ?? "（无待执行阶段）"}`,
-    ...lines,
-  ]
-    .filter((part): part is string => part !== undefined)
-    .join("\n");
+  const parts = [`flexible_plan(caseId=${plan.caseId}, caseType=${plan.caseType}, status=${plan.status})`];
+  if (plan.technicalField !== undefined) parts.push(`技术领域: ${plan.technicalField}`);
+  parts.push(`当前阶段: ${plan.currentStageId ?? "（无待执行阶段）"}`, ...lines);
+  return parts.join("\n");
 }
 
 /** 加载计划（不存在时抛 FlexiblePlanError，由 execute 统一转文本）。 */
@@ -157,6 +149,83 @@ function defaultPlanStore(caseId: string, cwd: string): FlexiblePlanStore {
   const runsDir = resolveWorkflowRunsDir(caseId, cwd);
   return new JsonFileFlexiblePlanStore(join(runsDir, "flexible-plans"));
 }
+
+/** 工具文本结果（错误与成功共用；前缀由调用方写全）。 */
+function toolText(message: string): { content: Array<{ type: "text"; text: string }> } {
+  return { content: [{ type: "text", text: message }] };
+}
+
+/**
+ * 阶段 JSON Schema（inputSchema 中 create 的 stages 与 add 的 stage 共享，
+ * 避免 9 个字段两处复制漂移）。
+ */
+const STAGE_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  required: ["id", "name", "goal", "strategy"],
+  additionalProperties: false,
+  properties: {
+    id: { type: "string" },
+    name: { type: "string" },
+    goal: { type: "string" },
+    strategy: { type: "string", enum: ["chain", "react", "sub_agent"] },
+    atom: { type: "string", description: "Atom name to auto-execute this stage (e.g. extract)." },
+    params: { type: "object", description: "Static params passed to the stage handler." },
+    artifacts: { type: "array", items: { type: "string" } },
+    constraintIds: { type: "array", items: { type: "string" } },
+    articleJudgments: { type: "array", items: { type: "string" } },
+  },
+};
+
+/**
+ * 计划变更操作表：confirm/rollback/add/remove/reorder/complete/abandon 七个变更
+ * 共用同一条执行流（require → loadPlan → apply → savePlan → 渲染），差异只有
+ * 前置校验、状态机函数与后缀消息。数据表驱动，避免 7 个同构 switch 分支。
+ */
+type MutationSpec = {
+  /** 前置校验：缺失参数时返回错误消息；通过返回 undefined。 */
+  require?: (input: FlexiblePlanToolInput) => string | undefined;
+  /** 状态机变更（apply 前已 loadPlan）。 */
+  apply: (state: FlexiblePlanState, input: FlexiblePlanToolInput) => FlexiblePlanState;
+  /** 变更后的附加消息（追加在 renderPlan 之后）。 */
+  message: (state: FlexiblePlanState, input: FlexiblePlanToolInput) => string;
+};
+
+const MUTATIONS: Partial<Record<Exclude<FlexiblePlanAction, "create" | "get" | "run">, MutationSpec>> = {
+  confirm: {
+    require: i => (i.stageId === undefined ? "confirm 需要 stageId" : undefined),
+    apply: (s, i) => confirmStage(s, i.stageId!),
+    message: (_s, i) => `已确认阶段 "${i.stageId}"。`,
+  },
+  rollback: {
+    require: i => (i.stageId === undefined ? "rollback 需要 stageId" : undefined),
+    apply: (s, i) => rollbackStage(s, i.stageId!),
+    message: (_s, i) => `已回退到阶段 "${i.stageId}"（其及后续已确认阶段置 rolled_back 保留审计）。`,
+  },
+  add: {
+    require: i => (i.stage === undefined ? "add 需要 stage" : undefined),
+    apply: (s, i) => addStage(s, toFlexibleStage(i.stage!)),
+    message: (_s, i) => `已追加阶段 "${i.stage!.id}"。`,
+  },
+  remove: {
+    require: i => (i.stageId === undefined ? "remove 需要 stageId" : undefined),
+    apply: (s, i) => removeStage(s, i.stageId!),
+    message: (_s, i) => `已删除阶段 "${i.stageId}"。`,
+  },
+  reorder: {
+    require: i => (i.stageIds === undefined ? "reorder 需要 stageIds（含全部阶段 id）" : undefined),
+    apply: (s, i) => reorderStages(s, i.stageIds!),
+    message: () => "已重排阶段顺序。",
+  },
+  complete: {
+    apply: s => complete(s),
+    message: () => "计划已完成（status=completed）。",
+  },
+  abandon: {
+    require: i => (i.reason !== undefined && i.reason.trim() !== "" ? undefined : "abandon 需要 reason（审计留痕）"),
+    apply: (s, i) => abandon(s, i.reason!),
+    message: () => "计划已放弃（status=abandoned）。",
+  },
+};
 
 const ACTIONS_LABEL = "create / get / run / confirm / rollback / add / remove / reorder / complete / abandon";
 
@@ -202,38 +271,11 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
         stages: {
           type: "array",
           description: "Stage definitions (create / add).",
-          items: {
-            type: "object",
-            required: ["id", "name", "goal", "strategy"],
-            additionalProperties: false,
-            properties: {
-              id: { type: "string" },
-              name: { type: "string" },
-              goal: { type: "string" },
-              strategy: { type: "string", enum: ["chain", "react", "sub_agent"] },
-              atom: { type: "string", description: "Atom name to auto-execute this stage (e.g. extract)." },
-              params: { type: "object", description: "Static params passed to the stage handler." },
-              artifacts: { type: "array", items: { type: "string" } },
-              constraintIds: { type: "array", items: { type: "string" } },
-              articleJudgments: { type: "array", items: { type: "string" } },
-            },
-          },
+          items: STAGE_SCHEMA,
         },
         stage: {
-          type: "object",
           description: "Single stage definition (add).",
-          additionalProperties: false,
-          properties: {
-            id: { type: "string" },
-            name: { type: "string" },
-            goal: { type: "string" },
-            strategy: { type: "string", enum: ["chain", "react", "sub_agent"] },
-            atom: { type: "string" },
-            params: { type: "object" },
-            artifacts: { type: "array", items: { type: "string" } },
-            constraintIds: { type: "array", items: { type: "string" } },
-            articleJudgments: { type: "array", items: { type: "string" } },
-          },
+          ...STAGE_SCHEMA,
         },
         stageId: { type: "string", description: "Target stage id (confirm / rollback / remove)." },
         stageIds: {
@@ -253,34 +295,39 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
     isConcurrencySafe: () => false,
     async execute(input, context) {
       if (input.caseId === undefined || input.caseId.trim() === "") {
-        return {
-          content: [{ type: "text", text: "flexible_plan: caseId 不能为空（计划按 caseId 持久化，跨调用状态）" }],
-        };
+        return toolText("flexible_plan: caseId 不能为空（计划按 caseId 持久化，跨调用状态）");
       }
       const store = deps.store ?? defaultPlanStore(input.caseId, context?.cwd ?? process.cwd());
       try {
+        // 计划变更：七个 mutation 共用同一条执行流（操作表驱动）。
+        const mutation = MUTATIONS[input.action as keyof typeof MUTATIONS];
+        if (mutation !== undefined) {
+          const missing = mutation.require?.(input);
+          if (missing !== undefined) return toolText(`flexible_plan: ${missing}`);
+          const plan = await loadPlan(store, input.caseId);
+          const updated = mutation.apply(plan, input);
+          await store.savePlan(updated);
+          return toolText(`${renderPlan(updated)}\n${mutation.message(updated, input)}`);
+        }
+
         switch (input.action) {
           case "create": {
             if (input.caseType === undefined || input.caseType.trim() === "") {
-              return { content: [{ type: "text", text: "flexible_plan: create 需要 caseType" }] };
+              return toolText("flexible_plan: create 需要 caseType");
             }
+            // inputText 由状态机 createFlexiblePlan 持久化（字段所有权在状态机）。
             const plan = createFlexiblePlan(input.caseId, input.caseType, {
               inputText: input.inputText,
               technicalField: input.technicalField,
               stages: (input.stages ?? []).map(toFlexibleStage),
               now: deps.now,
             });
-            if (input.inputText !== undefined && input.inputText.trim() !== "") {
-              plan.inputText = input.inputText;
-            }
             await store.savePlan(plan);
-            return {
-              content: [{ type: "text", text: `${renderPlan(plan)}\n已创建并持久化（action=run 执行未确认阶段）。` }],
-            };
+            return toolText(`${renderPlan(plan)}\n已创建并持久化（action=run 执行未确认阶段）。`);
           }
           case "get": {
             const plan = await loadPlan(store, input.caseId);
-            return { content: [{ type: "text", text: renderPlan(plan) }] };
+            return toolText(renderPlan(plan));
           }
           case "run": {
             const plan = await loadPlan(store, input.caseId);
@@ -288,25 +335,16 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
             const manifest = toManifest(plan);
             const provider = buildWorkflowProvider(deps, context);
             if (!provider) {
-              return {
-                content: [
-                  {
-                    type: "text",
-                    text: "flexible_plan: 未提供模型客户端（context.model 缺失），无法执行原子阶段。请在有模型会话中调用。",
-                  },
-                ],
-              };
+              return toolText(
+                "flexible_plan: 未提供模型客户端（context.model 缺失），无法执行原子阶段。请在有模型会话中调用。",
+              );
             }
             const sourceText = input.inputText ?? plan.inputText ?? "";
-            const workflowCtx = {
+            const workflowCtx = buildWorkflowRunContext({
               caseId: input.caseId,
               input: sourceText,
-              text: sourceText,
-              source_text: sourceText,
-              extraction_input: sourceText,
-              claim: sourceText,
-              max_results: String(input.maxResults ?? 5),
-            };
+              maxResults: input.maxResults,
+            });
             // 无 atom 阶段（报告/透传）：透传输入文本，不降级。
             const executor = async (): Promise<string> => sourceText;
             const persistTarget = resolveRunPersistTarget(input.caseId, manifest.id, context?.cwd ?? process.cwd());
@@ -353,87 +391,14 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
               ],
             };
           }
-          case "confirm": {
-            if (input.stageId === undefined) {
-              return { content: [{ type: "text", text: "flexible_plan: confirm 需要 stageId" }] };
-            }
-            const plan = await loadPlan(store, input.caseId);
-            const updated = confirmStage(plan, input.stageId);
-            await store.savePlan(updated);
-            return { content: [{ type: "text", text: `${renderPlan(updated)}\n已确认阶段 "${input.stageId}"。` }] };
-          }
-          case "rollback": {
-            if (input.stageId === undefined) {
-              return { content: [{ type: "text", text: "flexible_plan: rollback 需要 stageId" }] };
-            }
-            const plan = await loadPlan(store, input.caseId);
-            const updated = rollbackStage(plan, input.stageId);
-            await store.savePlan(updated);
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `${renderPlan(updated)}\n已回退到阶段 "${input.stageId}"（其及后续已确认阶段置 rolled_back 保留审计）。`,
-                },
-              ],
-            };
-          }
-          case "add": {
-            if (input.stage === undefined) {
-              return { content: [{ type: "text", text: "flexible_plan: add 需要 stage" }] };
-            }
-            const plan = await loadPlan(store, input.caseId);
-            const updated = addStage(plan, toFlexibleStage(input.stage));
-            await store.savePlan(updated);
-            return { content: [{ type: "text", text: `${renderPlan(updated)}\n已追加阶段 "${input.stage.id}"。` }] };
-          }
-          case "remove": {
-            if (input.stageId === undefined) {
-              return { content: [{ type: "text", text: "flexible_plan: remove 需要 stageId" }] };
-            }
-            const plan = await loadPlan(store, input.caseId);
-            const updated = removeStage(plan, input.stageId);
-            await store.savePlan(updated);
-            return { content: [{ type: "text", text: `${renderPlan(updated)}\n已删除阶段 "${input.stageId}"。` }] };
-          }
-          case "reorder": {
-            if (input.stageIds === undefined) {
-              return { content: [{ type: "text", text: "flexible_plan: reorder 需要 stageIds（含全部阶段 id）" }] };
-            }
-            const plan = await loadPlan(store, input.caseId);
-            const updated = reorderStages(plan, input.stageIds);
-            await store.savePlan(updated);
-            return { content: [{ type: "text", text: `${renderPlan(updated)}\n已重排阶段顺序。` }] };
-          }
-          case "complete": {
-            const plan = await loadPlan(store, input.caseId);
-            const updated = complete(plan);
-            await store.savePlan(updated);
-            return { content: [{ type: "text", text: `${renderPlan(updated)}\n计划已完成（status=completed）。` }] };
-          }
-          case "abandon": {
-            if (input.reason === undefined || input.reason.trim() === "") {
-              return { content: [{ type: "text", text: "flexible_plan: abandon 需要 reason（审计留痕）" }] };
-            }
-            const plan = await loadPlan(store, input.caseId);
-            const updated = abandon(plan, input.reason);
-            await store.savePlan(updated);
-            return { content: [{ type: "text", text: `${renderPlan(updated)}\n计划已放弃（status=abandoned）。` }] };
-          }
           default: {
             // inputSchema enum 仅代理侧提示，运行时不强制：未知 action fail-closed。
-            return {
-              content: [
-                { type: "text", text: `flexible_plan: 未知操作 "${String(input.action)}"（可选: ${ACTIONS_LABEL}）` },
-              ],
-            };
+            return toolText(`flexible_plan: 未知操作 "${String(input.action)}"（可选: ${ACTIONS_LABEL}）`);
           }
         }
       } catch (err) {
         // FlexiblePlanError / WorkflowError / 存储错误统一转文本（fail-closed，对齐专利工具风格）。
-        return {
-          content: [{ type: "text", text: `flexible_plan: ${err instanceof Error ? err.message : String(err)}` }],
-        };
+        return toolText(`flexible_plan: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   };
