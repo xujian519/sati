@@ -2,13 +2,89 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.0.24 - 2026-08-11
+
+### Added
+- 输出门禁 HITL 审批闭环：审批门放行（`approvePendingOutput` / `rejectPendingOutput`）+ gateway 审批命令（`approvalDecide`，协议 1.2 新增可选方法）+ UI 审批卡片（`approval_pending` 事件）；`GatewayApprovalBus` 按 sessionKey 组织挂起条目
+- HITL P1 收尾：`flexible_plan` 工具（阶段级计划增删改的显式工具入口）+ plantask 语义强制 + workflow 人工检查点
+
+### Changed
+- 移除 README 中过时的 WorkSpace 定位段落
+- UI 统一 WebSocket 消息类型（`WsMessage`）并清理消费方 any；chat 工具渲染 / settings 配置聚合 any 清理
+- rerank 默认 tei 风格遇到 oMLX 422 时自动降级 jina 重试；检索/点查加 LRU 缓存 + 并发合并，消除重复 ego-browser 调用
+
+### Perf
+- 批量下载改单会话提取 + 并发流式写盘
+
+### Fixed
+- 批量下载 tab 复用 URL 校验 + rerank 降级独立超时预算
+- 排空测试遗留的 React setImmediate 调度任务，消除 CI unhandled error flake
+
+### Docs
+- 新增 THIRD_PARTY_NOTICES
+
+## v0.0.23 - 2026-08-11
+
+### Added
+- Pregel graph engine（`src/patent/graph/`）：SuperStep 并行超步 + Reducer 确定性合并 + 条件边 + NodePolicy 重试/超时 + DegradationMark 数据降级 + 超步粒度检查点/resume；`manifestToGraph` 兼容既有 WorkflowManifest 与 10 个内置原子；`domains/` 提供三性领域子图（`buildNoveltyGraph` A22.2 / `buildInventivenessGraph` A22.3 / `buildEnablementGraph` A26.3）；`patent_workflow_run` 新增 `graph` 参数与 `resumeCheckpointId`；`scripts/patent-eval.mjs --mode graph` 跑图 + expected 打分（`pnpm test:patent-eval`）
+- 原子化技术问题合规校验：`src/patent/problem/atomicChecker.ts` 四检验（不绑方案 / 单一因果 / 可测效果 / 手段可反推）+ 4 条 `INVENTIVENESS-PROBLEM-*` 规则接入创造性链路（`domain: patent_inventiveness` 双链路自动生效），详见 `docs/problem-atomization-minimal-plan.md`
+
+### Changed
+- UI 统一 WebSocket 消息类型（WsMessage）并清理消费方 any
+
+### Fixed
+- 语义索引预热关闭竞态收尾与重试
+
+## v0.0.22 - 2026-08-10
+
+### Added
+- 补齐 Windows 桌面端（构建/托盘/验证/发布）
+- 判例自动注入、知识声明、任务意图限额、项目偏好与笔记沉淀（`knowledge_note_save`）
+- 吸收 PilotDeck docx skill（docxlib 全套 + 品牌适配）；专利技能补齐知识系统接线与校验规则
+- 补齐零测试模块与纯函数层测试覆盖；cron/session/always-on 状态机与存储层测试
+
+### Changed
+- UI 依赖大版本升级：Express 4 → 5、React 18 → 19（含 react-i18next 14 → 17）、Tailwind CSS 3 → 4、UI libs / dev tools
+- 会话标题跟随用户语言并宽容解析模型输出
+- 品牌环境变量读取收敛到 `src/env.ts`（前缀推导 + 特例 override）；执行环境键中性化（WORK_DIR/SESSION_ID/TURN_ID、RPC_*）
+- 聊天直连切默认后回退：移除浏览器直连 gateway 路径，聊天统一走 ui/server 中转；WebSocketContext 将 ws 提升为 state；TUI 启动加速（惰性加载 + 远端优先）
+
+### Perf
+- 流式帧 latestMessage 短路修复并缓存侧栏会话树；记忆检索 TTL 缓存 + 与 prompt 组装并行（TtlCache 提升至 src/shared）
+- always-on run 事件按 runId 复用 fd 的 JSONL 写入器（JsonlRunWriter）；case-law-search 热路径 SQL 预编译
+- 会话列表目录快照缓存 + transcript mtime 感知缓存；always-on dashboard 事件聚合 TTL 缓存
+- 修复搜索空转与启动加载慢；消除每次 turn 的 ProjectRuntime 重建（Ollama 探测摆动）；KnowledgeEmbeddingSearch 实例缓存
+
+### Fixed
+- 新会话 sessionKey 与磁盘文件名编码对齐，修复追问无法发送
+- desktop bundle 包含 vendor/ 并移除 zod/hono 排除项；容忍空 provider stub，修复桌面端 Gateway 启动失败
+- 语义索引预热在服务关闭时静默退出
+
+## v0.0.20 - 2026-08-07
+
+### Added
+- 分层规则包复用体系：`rules/base` + `rules/domains/*` 三层合并加载（base → domains → overrides），项目清单 `.sati/rules.yaml` 装配，`pack.yaml` 包清单 + JSON Schema 校验；`rule_check` 新增 `scope=pack`（缓存按清单 mtime 失效，输出附分层摘要与覆盖审计）；`evaluateText` 新增可选 `domain` 过滤参数
+- 创造性判断样板规则入库：base 层 INV-METHOD-001 / INV-EVIDENCE-001，领域层 MECH-INV-001（机械）/ MED-INV-001（医疗）；判例画布全文入库 `assets/patent-rules/inventiveness-canvas.md`
+- IPC 分类两级精注入与多重分类并行注入（部级关键词 + 高频大类二级匹配，大类置信度达标时精注入 ipcDetail 卡片）
+- 电学附图深度分析（Step3 电学符号识别、校验器与附图说明增强）+ P2 多图一致性、PDF 提取与网表可视化
+- 化学式识别能力（RDKit 校验 + VLM 三路流水线 + 防幻觉闭环），`recognize_chemical_structure` 工具
+- 弹性计划技术领域基于 IPC 分类自动推断
+- 专利能力串联进业务工作流：申请撰写新增附图分析/化学式核验条件步骤与规则门禁收尾步；审查意见答复 CAP02 步接入附图/化学核验、定稿前规则检查；无效答复新增对比文件附图证据固化与创造性论证规则核验；编排器提示词新增内置分析工具目录（§3.6）
+- 压缩摘要意图隔离与 compactionId 贯通，UI 透传压缩关联标识
+- 收敛后端 no-explicit-any 存量警告并复用共享类型
+
+### Fixed
+- judge 调用支持超时中止、失败脱敏诊断与 provider 兼容性
+
+### Changed
+- nuo-patent 改为 workspace vendor（`vendor/nuo-patent`），随 sati-main bundle 分发
+
+### Docs
+- macOS 打包调研结论入库（`docs/macos-packaging-research.md`）
+
 ## v0.0.19 - 2026-08-07
 
 ### Added
-- 分层规则包（Rule Pack）复用体系：`rules/base` + `rules/domains/*` 三层合并加载（base → domains → overrides），项目清单 `.sati/rules.yaml` 装配，`pack.yaml` 包清单 + JSON Schema 校验；`rule_check` 新增 `scope=pack`（缓存按清单 mtime 失效，输出附分层摘要与覆盖审计）
-- 创造性判断样板规则入库：base 层 INV-METHOD-001 / INV-EVIDENCE-001，领域层 MECH-INV-001（机械）/ MED-INV-001（医疗）；判例画布全文入库 `assets/patent-rules/inventiveness-canvas.md`
-- `evaluateText` 新增可选 `domain` 过滤参数（异领域规则跳过，未声明 domain 的通用规则始终评估，缺省行为不变）
-- 专利能力串联进业务工作流：申请撰写新增附图分析/化学式核验条件步骤与规则门禁收尾步；审查意见答复 CAP02 步接入附图/化学核验、定稿前规则检查；无效答复新增对比文件附图证据固化与创造性论证规则核验；编排器提示词新增内置分析工具目录（§3.6）
 - 复用 XiaoNuo `knowledge.db` 统一知识库：知识图谱（21.5 万+ 节点）/ 法规 / 判例 / embeddings 语义召回（bge-m3，14.4 万向量）单库接入，零重新构建
 - `scripts/trim-knowledge-db.ts`：knowledge.db 裁剪版生成器（默认去 embeddings 7G → ~4.2G，`--no-fts` → ~1.6G）
 

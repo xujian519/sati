@@ -1,6 +1,6 @@
 # 专利判例全文检索接线（patent_case_search / knowledge.db）
 
-> 状态：已实现（Phase 1：工具显式调用）
+> 状态：**已实现（Phase 1–3）**（2026-08：Phase 1 工具显式调用；Phase 2 `CaseLawMemoryProvider` 自动注入 `<case-law>` 摘要块已接线（`src/knowledge/assemble.ts`，语义召回失败降级 FTS）；Phase 3 embeddings 语义召回随 knowledge.db 单库复用上线（bge-m3，14.4 万向量，`CaseLawSearchEngine` 双路召回））
 > 涉及工具：`patent_case_search`（domain: patent）
 > 数据源：外接 `knowledge.db`（判例全文库，**通过其他渠道交付给最终用户，不随代码仓库分发**；知识库统一接入见 `docs/design/import-xiaonuo-knowledge.md`，默认目录自 2026-08 起为 `~/.sati/knowledge/`）
 
@@ -61,7 +61,7 @@ export SATI_KNOWLEDGE_DIR=/custom/data/dir   # 该目录下需存在 knowledge.d
 | `src/knowledge/diagnostics.ts` | 能力自检 `case-law` 项 |
 | `skills/patent-invalidity` / `patent-oa-response` / `patent-agent` | 检索接线（优先本地判例全文，网络库降级） |
 
-## 6. 后续规划（未实现）
+## 6. 后续规划（已全部实现，保留供历史参考）
 
-- **Phase 2**：`CaseLawMemoryProvider` 自动注入 `<case-law>` 摘要块（默认关闭，控制 token 成本）
-- **Phase 3**：embeddings 表向量检索（需经 `scripts/build-knowledge-vectors.ts` 管道对齐 int8 量化）
+- **Phase 2**：`CaseLawMemoryProvider` 自动注入 `<case-law>` 摘要块（默认关闭，控制 token 成本）——**已实现**（`src/knowledge/case-law/case-law-memory-provider.ts`，随项目激活注入 systemContext）
+- **Phase 3**：embeddings 表向量检索（需经 `scripts/build-knowledge-vectors.ts` 管道对齐 int8 量化）——**已实现**（复用 knowledge.db embeddings 表语义召回；`build-knowledge-vectors.ts` 已标 DEPRECATED，不再作为主路径）

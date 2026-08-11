@@ -78,8 +78,11 @@ rules:
 > **接线状态（2026-08）**：`block` 的**工具拦截**目前**未接入生产路径**——
 > `policy-bridge.ts` 的 `rulesToPolicyDenyRules` 仅被测试调用，无生产代码把
 > block 规则编译注入 `PermissionRuntime`。因此 `action: block` 当前**只作用于
-> 输出层**（强制挂起审批），不会在工具调用前拒绝。依赖"block 阻止工具调用"
-> 前请先完成 policy-bridge 接线。
+> 输出层**（强制挂起审批），不会在工具调用前拒绝。
+> **HITL 审批闭环（2026-08-11 落地）**：输出层挂起审批已打通放行链路——
+> `GatewayApprovalBus` 注册挂起条目 + `approval_pending` 事件 → UI 审批卡片 →
+> `approvalDecide` 命令 → `approvePendingOutput` / `rejectPendingOutput` 完成流控。
+> 依赖"block 阻止工具调用"前请先完成 policy-bridge 接线。
 
 | action | 输出门禁（RuleOutputGate） | 工具拦截（policy-bridge） |
 |--------|---------------------------|--------------------------|
@@ -139,6 +142,8 @@ overrides: ./local-rules/   # 可选，相对清单所在目录；项目私有�
 > 输出门禁（RuleOutputGate）仍只用 `compliance.yaml`，未消费规则包。
 > `evaluateText` 的 `domain` 过滤参数 v1 由调用方显式传入；rule_check 暂不传（内容设计兜底），
 > 为 v2 IPC 领域自动识别铺路。
+> 注：`patent_inventiveness` 域的确定性规则（`INVENTIVENESS-*`，含原子化问题四检验）
+> 在 `src/patent/checker/`（TS 代码形态）经 `defaultPatentRules()` 注册，随 Graph/收口双链路生效。
 
 ### 入库准入标准
 

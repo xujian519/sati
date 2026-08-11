@@ -15,7 +15,7 @@
     "allowJs": true,
     // "checkJs": true,
     "types": ["vite/client"],
-    // Pin react/react-dom type resolution to the UI's React 18 typings.
+    // Pin react/react-dom type resolution to the UI's React 19 typings.
     // Without this, libraries under node_modules/.pnpm resolve "react"
     // to the root workspace's React 19 (@types/react@19), producing
     // TS2786 ReactNode mismatches (bigint not assignable).

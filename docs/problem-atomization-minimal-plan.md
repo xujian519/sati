@@ -1,9 +1,10 @@
 # 原子化问题合规校验 — 最小成本落地实施方案
 
-- 方案版本：v0.1（最小落地版，对应 problem-atomization-implementation-plan.md 的"只取问题合规校验这一半收益"）
-- 编制日期：2026-08-11
-- 适用范围：Sati 专利创造性分析（A22.3 三步法）的 diff 阶段"实际解决的技术问题"合规校验
-- 决策依据：`docs/problem-atomization-implementation-plan.md` 深度分析结论（复用度 60–70%，砍高阶体验，只做核心基座）
+> 方案版本：v0.1（最小落地版，对应 problem-atomization-implementation-plan.md 的"只取问题合规校验这一半收益"）
+> 编制日期：2026-08-11
+> **实施状态：已落地（2026-08-11，随 v0.0.23/0.0.24 交付）**——`src/patent/problem/atomicChecker.ts` + `customCheck` 引擎扩展 + 4 条 `INVENTIVENESS-PROBLEM-*` 规则已上线，测试 `tests/patent/atomic-checker.spec.ts` / `problem-rules.spec.ts` 全绿；详见下方任务清单勾选
+> 适用范围：Sati 专利创造性分析（A22.3 三步法）的 diff 阶段"实际解决的技术问题" 合规校验
+> 决策依据：`docs/problem-atomization-implementation-plan.md` 深度分析结论（复用度 60–70%，砍高阶体验，只做核心基座）
 
 ---
 
@@ -201,15 +202,15 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 
 ## 六、任务清单（可逐项勾选）
 
-- [ ] T1 新建 `src/patent/problem/atomicChecker.ts`（四检验 + 泛指词排除 + diagnostics）
-- [ ] T2 新建 `src/patent/problem/index.ts`（barrel）
-- [ ] T3 `src/patent/checker/types.ts` 加 `customCheck?` 字段
-- [ ] T4 `src/patent/checker/engine.ts` 追加 customCheck 执行
-- [ ] T5 `src/patent/checker/core-rules.ts` 追加 3 条 INV 规则（含 extractTechnicalProblem）
-- [ ] T6 `src/patent/index.ts` 追加 problem 模块导出
-- [ ] T7 新建 `tests/patent/atomic-checker.spec.ts`（≥10 用例）
-- [ ] T8 新建 `tests/patent/problem-rules.spec.ts`（规则 fixture + 双形态 + Graph 冒烟）
-- [ ] T9 回归验证：`pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`
+- [x] T1 新建 `src/patent/problem/atomicChecker.ts`（四检验 + 泛指词排除 + diagnostics）
+- [x] T2 新建 `src/patent/problem/index.ts`（barrel）
+- [x] T3 `src/patent/checker/types.ts` 加 `customCheck?` 字段
+- [x] T4 `src/patent/checker/engine.ts` 追加 customCheck 执行
+- [x] T5 `src/patent/checker/core-rules.ts` 追加 3 条 INV 规则（含 extractTechnicalProblem）——实际落地 4 条：`INVENTIVENESS-TECHNICAL-PROBLEM` / `-SOLUTION-BINDING` / `-MULTI-CAUSAL` / `-UNMEASURED`
+- [x] T6 `src/patent/index.ts` 追加 problem 模块导出
+- [x] T7 新建 `tests/patent/atomic-checker.spec.ts`（≥10 用例）
+- [x] T8 新建 `tests/patent/problem-rules.spec.ts`（规则 fixture + 双形态 + Graph 冒烟）
+- [x] T9 回归验证：`pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`
 - [ ] T10（可选）`patent-inventiveness-analysis` SKILL.md 第 4 步补"四检验"提示
 
 ---

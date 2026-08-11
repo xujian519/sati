@@ -1,6 +1,6 @@
 # 浏览器直连聊天（P2b）设计草案
 
-> 状态：草案（2026-08-05）｜前置：P0（协议协商 + alias + token 通道）、P1（只读方法双轨试点）已完成｜**P2b-0 已完成（2026-08-05）**
+> 状态：**已回退**（2026-08-07 回退网关直连域，恢复 ui/server 聊天中转；`GatewayBrowserClient` / `useGatewayDirectChat` / `VITE_GATEWAY_DIRECT_CHAT` 直连路径已移除，浏览器 WebSocket 流量统一经 `ui/server /ws` 中转再达 gateway）｜本文档保留作为 P2b 直连方案的历史设计与回退决策依据，现行聊天链路见 `CLAUDE.md`「浏览器聊天链路」
 
 ## 1. 背景与现状
 

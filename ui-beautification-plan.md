@@ -2,7 +2,8 @@
 
 > **编制人**: UI Designer  
 > **日期**: 2026-08-03  
-> **范围**: Electron 桌面端 + Web UI (React + Tailwind CSS 3 + shadcn/ui)
+> **范围**: Electron 桌面端 + Web UI (React + Tailwind CSS 3 + shadcn/ui)  
+> **状态**: ✅ 已实施（2026-08-04 落地，验收报告见 `overview.md`）｜本文档为历史计划快照，其中技术栈描述（React 18 / Vite 7 / Tailwind 3）为编制时状态，现行技术栈（React 19 / Vite 8 / Tailwind 4 / Express 5）见 `CLAUDE.md`
 
 ---
 

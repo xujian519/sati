@@ -1,6 +1,6 @@
 # Gateway 协议版本化与 ui/server 边界检查 — 落地草案
 
-- 状态：**Part A 已实施**（2026-08-05，协议 1.1 上线：`version.ts` 维护变更表 + hello MAJOR 协商 `isProtocolCompatible` + 新增可选 discovery-plan 方法）；**Part B 进行中**（S1 冻结增量已落地：`ui/eslint.config.js` 配置 `import-x/no-restricted-paths` 白名单；S2 逐个收敛、S3 归零、S4 最终态待排期）
+- 状态：**Part A 已实施**（2026-08-05，协议 1.1 上线：`version.ts` 维护变更表 + hello MAJOR 协商 `isProtocolCompatible` + 新增可选 discovery-plan 方法；2026-08-11 协议 1.2 追加 output-gate HITL approval 方法）；**Part B 进行中**（S1 冻结增量已落地：`ui/eslint.config.js` 配置 `import-x/no-restricted-paths` 白名单；S2 逐个收敛、S3 归零、S4 最终态待排期）
 - 日期：2026-08-05
 - 关联：`docs/design/gateway-discovery-plans.md`（首个按本规范实施的协议扩展）
 - 约束来源：`CLAUDE.md`"网关协议：前后端通过 gateway WebSocket 帧通信（WsRequestFrame/WsResponseFrame），改协议需版本化"
