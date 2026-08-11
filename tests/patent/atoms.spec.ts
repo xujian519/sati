@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  APPROVAL_GRANTED_KEY,
   AtomRegistry,
   AtomRegistryError,
   InterruptStageError,
@@ -8,6 +9,7 @@ import {
   StageHandlerRegistry,
   WorkflowError,
   evidenceCoverage,
+  isApprovalGateHandler,
   isInterruptStageError,
   patentNoveltyManifest,
   registerBuiltinAtoms,
@@ -157,6 +159,21 @@ test("ApprovalGateHandler：抛 InterruptStageError（不返回）", async () =>
       return true;
     },
   );
+});
+
+test("ApprovalGateHandler：state 含放行标记时直接放行（不中断）", async () => {
+  const h = LookupStageHandler("approval-gate")!;
+  const out = await h.execute({
+    state: { review_context: "请人工确认", [APPROVAL_GRANTED_KEY]: { 1720000000000: true } },
+  });
+  assert.deepEqual(out, {});
+});
+
+test("isApprovalGateHandler：按 name 契约识别审批门", () => {
+  const gate = LookupStageHandler("approval-gate")!;
+  assert.equal(isApprovalGateHandler(gate), true);
+  const extract = LookupStageHandler("extract")!;
+  assert.equal(isApprovalGateHandler(extract), false);
 });
 
 // ---------------------------------------------------------------------------

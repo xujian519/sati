@@ -16,8 +16,11 @@
  *   - 1.1 — 2026-08-05: added optional discovery-plan methods
  *           always_on_list_plans / always_on_read_report / always_on_list_cycles /
  *           always_on_archive_cycle / always_on_apply_cycle.
+ *   - 1.2 — 2026-08-11: added optional output-gate HITL approval methods
+ *           approval_list_pending / approval_decide + `approval_pending` /
+ *           `approval_resolved` event types.
  */
-export const SATI_GATEWAY_PROTOCOL_VERSION = "1.1";
+export const SATI_GATEWAY_PROTOCOL_VERSION = "1.2";
 
 /**
  * Handshake compatibility check: clients and servers with the same MAJOR

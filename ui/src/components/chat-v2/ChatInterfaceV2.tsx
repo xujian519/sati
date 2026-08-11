@@ -96,6 +96,8 @@ function ChatInterfaceV2({
     thinkingModelContext,
     pendingPermissionRequests,
     setPendingPermissionRequests,
+    pendingApprovals,
+    setPendingApprovals,
   } = useChatProviderState({ selectedSession });
 
   const thinkingModeAvailability = React.useMemo(
@@ -221,6 +223,7 @@ function ChatInterfaceV2({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleGrantSessionToolPermission,
+    handleApprovalDecision,
     handleInputFocusChange,
     isBusySendQueued,
     isBusySendConfirmed,
@@ -260,6 +263,7 @@ function ChatInterfaceV2({
     setIsUserScrolledUp,
     pendingPermissionRequests,
     setPendingPermissionRequests,
+    setPendingApprovals,
     referenceOnlyPrompt: t("documentReferences.defaultPrompt", {
       defaultValue: "Please answer based on the document selection I quoted.",
     }) as string,
@@ -323,6 +327,7 @@ function ChatInterfaceV2({
     setSatiStatus,
     setTokenBudget,
     setPendingPermissionRequests,
+    setPendingApprovals,
     pendingViewSessionRef,
     onSessionInactive,
     onSessionProcessing,
@@ -548,6 +553,8 @@ function ChatInterfaceV2({
       pendingPermissionRequests={pendingPermissionRequests}
       handlePermissionDecision={handlePermissionDecision}
       handleGrantToolPermission={handleGrantToolPermission}
+      pendingApprovals={pendingApprovals}
+      handleApprovalDecision={handleApprovalDecision}
       permissionMode={permissionMode}
       onPermissionModeChange={selectPermissionMode}
       runMode={runMode}

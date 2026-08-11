@@ -246,6 +246,30 @@ export function mapGatewayEventToFrames(
         },
       ];
 
+    case "approval_pending":
+      return [
+        {
+          ...base,
+          kind: "approval_pending",
+          pendingIndex: event.pendingIndex,
+          textPreview: event.textPreview,
+          triggerKeyword: event.triggerKeyword,
+          agentSessionId: event.sessionId,
+          turnId: event.turnId,
+          createdAt: event.createdAt,
+        },
+      ];
+
+    case "approval_resolved":
+      return [
+        {
+          ...base,
+          kind: "approval_resolved",
+          pendingIndex: event.pendingIndex,
+          verdict: event.verdict,
+        },
+      ];
+
     case "elicitation_request": {
       // Structured elicitation flows through the same `permission_request`
       // shape the permission banner already renders, so the registered

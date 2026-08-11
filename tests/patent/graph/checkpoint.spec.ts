@@ -4,10 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  APPROVAL_GRANTED_KEY,
   GraphBuilder,
   GraphInterruptError,
   InMemoryCheckpointStore,
   JsonFileCheckpointStore,
+  grantApproval,
   runGraphWithCheckpoints,
   type GraphCheckpoint,
   type GraphState,
@@ -97,6 +99,50 @@ test("runGraphWithCheckpoints: 中断后 resume 从正确超步继续", async ()
   assert.equal(second.result.state.a, 1);
   assert.equal(second.result.state.gate_passed, true);
   assert.equal(second.result.state.c, 3);
+});
+
+test("grantApproval：写入放行标记后 resume 通过审批门（HITL 闭环）", async () => {
+  const builder = new GraphBuilder();
+  builder
+    .addNode("a", node("a", 1))
+    .addNode("gate", async ({ state }) => {
+      if (!state[APPROVAL_GRANTED_KEY]) {
+        throw new GraphInterruptError("审批暂停", { review_context: "确认" });
+      }
+      return { gate_passed: true };
+    })
+    .addNode("c", node("c", 3))
+    .addEdge("a", "gate")
+    .addEdge("gate", "c");
+  const graph = builder.compile("a");
+  const store = new InMemoryCheckpointStore();
+
+  // 第一次：审批门中断，拿到 checkpointId。
+  const first = await runGraphWithCheckpoints(graph, {}, { store, graphId: "g2" });
+  assert.equal(first.result.completed, false);
+  assert.equal(first.result.interrupted?.node, "gate");
+  assert.ok(first.checkpointId);
+
+  // 人工批准：grantApproval 把放行标记写入检查点 state。
+  const granted = await grantApproval(store, first.checkpointId!);
+  assert.ok(granted);
+  assert.ok(granted.state[APPROVAL_GRANTED_KEY], "放行标记应写入检查点 state");
+
+  // 幂等：重复批准无副作用，放行语义不变。
+  const grantedAgain = await grantApproval(store, first.checkpointId!);
+  assert.ok(grantedAgain);
+  assert.equal(grantedAgain.state[APPROVAL_GRANTED_KEY], true);
+
+  // 审批后 resume：审批门放行，后续节点执行（真正通过审批门）。
+  const second = await runGraphWithCheckpoints(graph, {}, { store, graphId: "g2", resumeFrom: granted });
+  assert.equal(second.result.completed, true);
+  assert.equal(second.result.state.gate_passed, true);
+  assert.equal(second.result.state.c, 3);
+});
+
+test("grantApproval：检查点不存在返回 undefined", async () => {
+  const store = new InMemoryCheckpointStore();
+  assert.equal(await grantApproval(store, "missing"), undefined);
 });
 
 test("runGraphWithCheckpoints: 完成路径亦保存最终态检查点", async () => {

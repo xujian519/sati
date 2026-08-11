@@ -37,4 +37,10 @@ export {
   GROUNDEDNESS_THRESHOLD,
 } from "./reason.js";
 export { draftClaimsAtom, DraftClaimsHandler } from "./draft.js";
-export { approvalGateAtom, ApprovalGateHandler } from "./gate.js";
+export {
+  approvalGateAtom,
+  ApprovalGateHandler,
+  APPROVAL_GRANTED_KEY,
+  APPROVAL_GRANTED_OUTPUT,
+  isApprovalGateHandler,
+} from "./gate.js";

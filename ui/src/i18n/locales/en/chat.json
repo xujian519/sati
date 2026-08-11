@@ -183,6 +183,15 @@
     "allowSaved": "Allow (saved)",
     "deny": "Deny"
   },
+  "approvalBanner": {
+    "title": "Patent conclusion awaiting review",
+    "trigger": "Trigger:",
+    "pending": "Awaiting approval",
+    "viewMessage": "View message",
+    "feedbackPlaceholder": "Reason for rejection (optional)",
+    "approve": "Approve",
+    "reject": "Reject"
+  },
   "todo": {
     "updated": "Todo list has been updated successfully",
     "current": "Current Todo List"

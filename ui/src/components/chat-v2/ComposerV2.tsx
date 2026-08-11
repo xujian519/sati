@@ -19,11 +19,12 @@ import {
   Square,
   type LucideIcon,
 } from "lucide-react";
-import type { ChatRunMode, PendingPermissionRequest, PermissionMode } from "../chat/types/types";
+import type { ChatRunMode, PendingApproval, PendingPermissionRequest, PermissionMode } from "../chat/types/types";
 import { MAX_ATTACHMENTS_ERROR_KEY } from "../chat/hooks/useChatComposerState";
 import { thinkingModes, type ThinkingModeId } from "../chat/constants/thinkingModes";
 import { getEffectiveThinkingMode, type ThinkingModeAvailability } from "../chat/constants/thinkingModeAvailability";
 import PermissionRequestsBanner from "../chat/view/subcomponents/PermissionRequestsBanner";
+import ApprovalRequestsBanner from "../chat/view/subcomponents/ApprovalRequestsBanner";
 import ImageAttachment from "../chat/view/subcomponents/ImageAttachment";
 import CommandMenu from "../chat/view/subcomponents/CommandMenu";
 import { cn } from "../../lib/utils.js";
@@ -111,6 +112,8 @@ export type ComposerV2Props = {
     },
   ) => void;
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
+  pendingApprovals: PendingApproval[];
+  handleApprovalDecision: (approval: PendingApproval, verdict: "adopted" | "rejected", feedback?: string) => void;
   permissionMode: PermissionMode;
   onPermissionModeChange: (mode: PermissionMode) => void;
   runMode: ChatRunMode;
@@ -326,6 +329,8 @@ export default function ComposerV2({
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
+  pendingApprovals,
+  handleApprovalDecision,
   permissionMode,
   onPermissionModeChange,
   runMode,
@@ -433,6 +438,15 @@ export default function ComposerV2({
               handlePermissionDecision={handlePermissionDecision}
               handleGrantToolPermission={handleGrantToolPermission}
               onPlanExecutionApproved={onPlanExecutionApproved}
+            />
+          </div>
+        ) : null}
+
+        {pendingApprovals.length > 0 ? (
+          <div className="mb-3">
+            <ApprovalRequestsBanner
+              pendingApprovals={pendingApprovals}
+              handleApprovalDecision={handleApprovalDecision}
             />
           </div>
         ) : null}

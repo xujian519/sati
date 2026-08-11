@@ -11,15 +11,20 @@
  * - 未声明 atom 的阶段回退到调用方 executor（向后兼容；patent_workflow 工具走此路径）。
  * - 审批门（approval-gate）等 handler 抛 InterruptStageError 时，runWorkflow 暂停
  *   并返回 interrupted 信息（暂停 ≠ 失败），不执行后续阶段。
+ * - 已人工批准的审批门（options.approvalGrants 命中该阶段 id）：跳过执行直接放行，
+ *   输出占位文本 APPROVED，不中断、不标记 degraded——人工批准后重跑可从审批门继续。
  */
 
 import {
+  APPROVAL_GRANTED_KEY,
+  APPROVAL_GRANTED_OUTPUT,
   type AtomRegistry,
   type PipelineState,
   type StageHandlerRegistry,
   type StageProvider,
   globalAtomRegistry,
   globalStageHandlerRegistry,
+  isApprovalGateHandler,
   isInterruptStageError,
 } from "./atoms/index.js";
 
@@ -83,6 +88,11 @@ export type WorkflowRunOptions = {
   atoms?: AtomRegistry;
   /** 原子执行所需的外部能力（LLM/检索器），由宿主注入。 */
   provider?: StageProvider;
+  /**
+   * 已人工批准的审批门阶段 id 列表：命中时跳过执行直接放行（输出 "APPROVED"），
+   * 未命中的审批门照常中断。人工批准后重跑时传入，实现"审批门通过后继续"。
+   */
+  approvalGrants?: string[];
   /**
    * 结果持久化存储：执行结束时调用 saveRun（可选）。
    * 设计对齐 src/workflow WorkflowPlanStore（save/load/list 三接口），
@@ -275,8 +285,14 @@ export async function runWorkflow(
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
         if (handler) {
+          // 已人工批准的审批门：把放行标记注入 handler 执行态，由 ApprovalGateHandler
+          // 统一判定放行（与图路径同一契约）；此处不跳过执行。
+          const approvedGate = isApprovalGateHandler(handler) && options.approvalGrants?.includes(stage.id);
           // 阶段静态参数合并进执行态（不污染共享 state，仅本次 handler 可见）。
           const execState = stage.params !== undefined ? { ...state, ...stage.params } : state;
+          if (approvedGate) {
+            execState[APPROVAL_GRANTED_KEY] = true;
+          }
           const segment = await handler.execute({ state: execState, provider: options.provider });
           Object.assign(state, segment);
           // 主输出键 = atom.outputSchema[0]（对齐 Mady 约定，文本/JSON 均可）；兜底按 stage.id 引用。
@@ -284,6 +300,10 @@ export async function runWorkflow(
           const raw = mainKey !== undefined ? segment[mainKey] : undefined;
           output = typeof raw === "string" ? raw : raw === undefined ? "" : JSON.stringify(raw, null, 2);
           if (output.trim().length === 0) output = String(state[stage.id] ?? "");
+          // 已批准审批门放行后无实质输出：占位避免被标记 degraded（语义 = 已人工批准）。
+          if (approvedGate && output.trim().length === 0) {
+            output = APPROVAL_GRANTED_OUTPUT;
+          }
           state[stage.id] = output;
         } else if (executor) {
           output = (await executor(stage, ctx)) ?? "";

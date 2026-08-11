@@ -13,6 +13,7 @@
 
 export {
   PatentOutputGate,
+  extractMessageText,
   type PatentOutputGateOptions,
   type PendingPatentMessage,
   type ProcessedMessageResult,
@@ -105,6 +106,7 @@ export {
   InMemoryCheckpointStore,
   JsonFileCheckpointStore,
   runGraphWithCheckpoints,
+  grantApproval,
   type CheckpointedRunOptions,
   type CheckpointedRunResult,
   // 适配层
@@ -308,6 +310,9 @@ export {
   ReasoningHandler,
   approvalGateAtom,
   ApprovalGateHandler,
+  APPROVAL_GRANTED_KEY,
+  APPROVAL_GRANTED_OUTPUT,
+  isApprovalGateHandler,
   groundednessAtom,
   GroundednessHandler,
   GROUNDEDNESS_THRESHOLD,

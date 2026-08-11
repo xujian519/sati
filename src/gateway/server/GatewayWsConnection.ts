@@ -246,6 +246,16 @@ export class GatewayWsConnection {
         return this.options.gateway.permissionDecide(frame.params as never);
       case "grant_session_permission":
         return this.options.gateway.grantSessionPermission(frame.params as never);
+      case "approval_list_pending":
+        if (this.options.gateway.approvalListPending) {
+          return this.options.gateway.approvalListPending(frame.params as never);
+        }
+        return Promise.resolve(notConfigured({ pending: [] }, "Approval list not available"));
+      case "approval_decide":
+        if (this.options.gateway.approvalDecide) {
+          return this.options.gateway.approvalDecide(frame.params as never);
+        }
+        return Promise.resolve(notConfigured({ delivered: false }, "Approval decide not available"));
       case "read_session_messages":
         return this.options.gateway.readSessionMessages(frame.params as never);
       case "read_subagent_messages":

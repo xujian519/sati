@@ -72,6 +72,8 @@ import {
   runChatViaGateway,
   abortViaGateway,
   decidePermissionViaGateway,
+  approvalDecideViaGateway,
+  approvalListPendingViaGateway,
   grantSessionPermissionViaGateway,
   isSessionActiveViaGateway,
   getActiveTurnSnapshotFramesViaGateway,
@@ -2561,6 +2563,30 @@ function handleChatConnection(ws, request) {
               userId,
             );
           }
+        }
+      } else if (data.type === "approval-response") {
+        // 输出门禁 HITL 审批：通过/拒绝一条挂起审批（verdict: adopted | rejected）。
+        const verdict = data.verdict === "adopted" ? "adopted" : "rejected";
+        const result = await approvalDecideViaGateway(
+          data.sessionId,
+          data.pendingIndex,
+          verdict,
+          typeof data.feedback === "string" ? data.feedback : undefined,
+        );
+        const resolvedSessionId = normalizeSessionId(data.sessionId);
+        if (result?.delivered && resolvedSessionId) {
+          // 通知同会话 watchers 移除审批卡片（乐观移除的兜底广播）。
+          broadcastToSessionWatchers(
+            resolvedSessionId,
+            createNormalizedMessage({
+              kind: "approval_resolved",
+              pendingIndex: data.pendingIndex,
+              verdict,
+              sessionId: resolvedSessionId,
+              provider: data.provider || "sati",
+            }),
+            userId,
+          );
         }
       } else if (data.type === "session-permission-grant") {
         const result = await grantSessionPermissionViaGateway(data.sessionId, data.entry);

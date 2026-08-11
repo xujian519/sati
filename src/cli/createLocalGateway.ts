@@ -84,7 +84,7 @@ import {
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
-import { PatentOutputGate } from "../patent/index.js";
+import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig, resolvePilotHome, type PilotProxyConfig } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
@@ -1399,14 +1399,28 @@ class ProjectRuntimeRegistry {
     };
     /**
      * 专利输出门禁（每会话一个）：命中审批词的消息挂起等待人工审批，审批入口
-     * 为 `AgentSession.approvePendingOutput/rejectPendingOutput`（gateway 命令
-     * 接入前的当前可见性是日志告警；消息本体挂起时已入库，不丢消息）。
+     * 为 `AgentSession.approvePendingOutput/rejectPendingOutput`，经 gateway
+     * `approval_list_pending` / `approval_decide` 命令暴露给审批 UI（Web/TUI）。
+     * 挂起时把条目注册进 gateway 审批总线并广播 `approval_pending` 事件；
+     * 审批完成（onApproved/onRejected）时从总线移除并广播 `approval_resolved`。
+     * 消息本体挂起时已入库（不丢消息），挂起/审批仅为流程控制。
      *
      * 保守默认：仅保留审批词 HITL 拦截（专利结论/侵权判断/有效性结论/最终建议），
      * 关闭绝对化表述改写、风险词免责声明与法条核验——避免专利词表污染普通会话的
      * 用户可见消息（如"一定/百分百"被追加改写提示）。需要完整门禁时显式传入
      * 关键词表与 `enableCitationGate: true`。
      */
+    const sessionKey = context.sessionKey;
+    // 审批完成收口：从总线移除 + 广播 approval_resolved（onApproved/onRejected 共用）。
+    const resolveApproval = (pending: PendingPatentMessage, verdict: "adopted" | "rejected") => {
+      this.gateway?.getApprovalBus().remove(sessionKey, pending.index);
+      this.gateway?.emitForSession(sessionKey, {
+        type: "approval_resolved",
+        sessionKey,
+        pendingIndex: pending.index,
+        verdict,
+      });
+    };
     const patentOutputGate = new PatentOutputGate({
       riskKeywords: [],
       absolutePhrases: [],
@@ -1414,17 +1428,44 @@ class ProjectRuntimeRegistry {
       // 时钟与 Agent 层注入对齐（TurnRunner/AgentLoop 共用 this.options.now）
       now: () => this.options.now().getTime(),
       onPending: pending => {
-        // 仅记录定位信息，不打消息内容（专利结论可能含敏感信息）
+        // 注册进 gateway 审批总线 + 广播 approval_pending（审批 UI 展示入口）。
+        const gw = this.gateway;
+        const textPreview = extractMessageText(pending.processed).trim().slice(0, 500);
+        const triggerKeyword = pending.info.approvalKeywordsHit[0] ?? "approval";
+        if (gw) {
+          gw.getApprovalBus().register({
+            sessionKey,
+            pendingIndex: pending.index,
+            textPreview,
+            triggerKeyword,
+            sessionId: pending.sessionId,
+            turnId: pending.turnId,
+            createdAt: pending.createdAt,
+          });
+          gw.emitForSession(sessionKey, {
+            type: "approval_pending",
+            sessionKey,
+            pendingIndex: pending.index,
+            textPreview,
+            triggerKeyword,
+            sessionId: pending.sessionId,
+            turnId: pending.turnId,
+            createdAt: pending.createdAt,
+          });
+        }
+        // 日志仅记录定位信息，不打消息内容（专利结论可能含敏感信息）
         console.warn(
-          `[PatentOutputGate] 专利结论待人工审批: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}（消息已入库，审批入口待接入）`,
+          `[PatentOutputGate] 专利结论待人工审批: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
         );
       },
       onApproved: pending => {
+        resolveApproval(pending, "adopted");
         console.info(
           `[PatentOutputGate] 审批通过: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
         );
       },
       onRejected: pending => {
+        resolveApproval(pending, "rejected");
         console.warn(
           `[PatentOutputGate] 审批拒绝: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
         );

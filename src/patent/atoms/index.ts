@@ -62,6 +62,9 @@ export {
   DraftClaimsHandler,
   approvalGateAtom,
   ApprovalGateHandler,
+  APPROVAL_GRANTED_KEY,
+  APPROVAL_GRANTED_OUTPUT,
+  isApprovalGateHandler,
   type PFETriple,
 } from "./handlers/builtin/index.js";
 

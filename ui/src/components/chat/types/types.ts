@@ -221,6 +221,26 @@ export interface PendingPermissionRequest {
   isElicitation?: boolean;
 }
 
+/**
+ * 输出门禁 HITL 挂起审批（patent 域）：命中审批词的专利结论等待人工审批。
+ * 消息本体已入库（不丢消息），通过/拒绝仅为流程控制 + 审计留痕。
+ */
+export interface PendingApproval {
+  /** PatentOutputGate 挂起索引（会话内唯一）。 */
+  pendingIndex: number;
+  /** 消息文本预览（展示用）。 */
+  textPreview: string;
+  /** 触发审批的关键词。 */
+  triggerKeyword: string;
+  /** 挂起所属的 UI 会话 id（frame.sessionId，用于跨会话隔离与切换清理）。 */
+  uiSessionId?: string;
+  /** Agent 内部 sessionId（定位/审计用）。 */
+  sessionId?: string;
+  turnId?: string;
+  createdAt?: number;
+  receivedAt?: Date;
+}
+
 export interface QuestionOption {
   label: string;
   description?: string;

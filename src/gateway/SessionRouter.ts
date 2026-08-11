@@ -123,6 +123,14 @@ export class SessionRouter {
     }
   }
 
+  /**
+   * 读取已存在会话（不创建）：供审批等不驱动 turn 的操作定位会话。
+   * 会话不存在（从未创建或已被空闲回收）时返回 undefined。
+   */
+  get(sessionKey: string): AgentSession | undefined {
+    return this.sessions.get(sessionKey)?.session;
+  }
+
   markAllDirty(reason = "runtime_changed"): number {
     let count = 0;
     for (const record of this.sessions.values()) {

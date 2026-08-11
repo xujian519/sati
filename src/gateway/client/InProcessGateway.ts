@@ -16,6 +16,7 @@ import { sanitizeSessionIdForPath } from "../../session/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
 import { GatewayPermissionBus } from "../permission/GatewayPermissionBus.js";
+import { GatewayApprovalBus } from "../approval/GatewayApprovalBus.js";
 import { AsyncQueue } from "../util/AsyncQueue.js";
 import type {
   ChannelAttachment,
@@ -23,6 +24,10 @@ import type {
   Gateway,
   GatewayActiveTurnSnapshot,
   GatewayActiveTurnSnapshotInput,
+  GatewayApprovalDecideInput,
+  GatewayApprovalDecideResult,
+  GatewayApprovalListPendingInput,
+  GatewayApprovalListPendingResult,
   GatewayElicitationResponseInput,
   GatewayEvent,
   GatewayPermissionDecisionInput,
@@ -216,6 +221,12 @@ export class InProcessGateway implements Gateway {
    * Web confirmation register here while the host UI shows the banner.
    */
   private readonly permissionBus = new GatewayPermissionBus();
+  /**
+   * 输出门禁 HITL 审批（patent 域）— pending approval entries surfaced by
+   * the host's output gate. The Web UI lists/decides via
+   * `approvalListPending` / `approvalDecide`.
+   */
+  private readonly approvalBus = new GatewayApprovalBus();
   private readonly sessionPermissionGrants = new Map<string, PermissionRule[]>();
   /**
    * Per-session "turn ended" deferreds. Set when `submitTurn`'s consumer
@@ -251,6 +262,15 @@ export class InProcessGateway implements Gateway {
    */
   getPermissionBus(): GatewayPermissionBus {
     return this.permissionBus;
+  }
+
+  /**
+   * 输出门禁 HITL 审批 — exposed so the host (createLocalGateway) can
+   * register pending approvals from the output gate's onPending and emit
+   * `approval_pending` events; the Web UI consumes via the protocol methods.
+   */
+  getApprovalBus(): GatewayApprovalBus {
+    return this.approvalBus;
   }
 
   /**
@@ -723,6 +743,30 @@ export class InProcessGateway implements Gateway {
       remember: input.remember,
       reason: input.reason,
     });
+    return { delivered: true };
+  }
+
+  async approvalListPending(input: GatewayApprovalListPendingInput): Promise<GatewayApprovalListPendingResult> {
+    return {
+      pending: this.approvalBus.list(input.sessionKey).map(({ sessionKey: _sk, ...info }) => info),
+    };
+  }
+
+  async approvalDecide(input: GatewayApprovalDecideInput): Promise<GatewayApprovalDecideResult> {
+    // fail-closed：总线无此挂起条目（已审批/已过期/幽灵会话）直接拒绝。
+    if (!this.approvalBus.hasPending(input.sessionKey, input.pendingIndex)) {
+      return { delivered: false };
+    }
+    const session = this.router.get(input.sessionKey);
+    if (!session) return { delivered: false };
+    const ok =
+      input.verdict === "adopted"
+        ? session.approvePendingOutput(input.pendingIndex)
+        : session.rejectPendingOutput(input.pendingIndex, input.feedback);
+    if (!ok) return { delivered: false };
+    // 广播 approval_resolved 由宿主 output-gate 回调（onApproved/onRejected）负责；
+    // 此处仅兜底从总线移除（宿主未配置回调时保证不残留）。UI 侧在决策返回后乐观移除。
+    this.approvalBus.remove(input.sessionKey, input.pendingIndex);
     return { delivered: true };
   }
 

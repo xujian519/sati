@@ -207,6 +207,27 @@ export type GatewayEvent = GatewayTurnScopedEventMetadata &
     | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
     | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }
     /**
+     * 输出门禁挂起（patent 域 HITL）：命中审批词的专利结论已挂起等待人工审批。
+     * 消息本体已入库（不丢消息），挂起仅流程控制。宿主应展示审批入口，
+     * 最终经 `Gateway.approvalDecide({ verdict })` 完成审批。
+     */
+    | {
+        type: "approval_pending";
+        sessionKey: string;
+        pendingIndex: number;
+        textPreview: string;
+        triggerKeyword: string;
+        sessionId?: string;
+        turnId?: string;
+        createdAt: number;
+      }
+    /**
+     * 挂起审批已处理（通过/拒绝）：宿主据此移除审批卡片。
+     * 注意：turn 结束后 emit 可能无接收方（事件丢失），宿主应在
+     * `approvalDecide` 返回后自行移除卡片（本事件为补充通知）。
+     */
+    | { type: "approval_resolved"; sessionKey: string; pendingIndex: number; verdict: "adopted" | "rejected" }
+    /**
      * B1 elicitation request: a tool (`ask_user_question`) wants the host
      * channel to render a multiple-choice dialog. The host MUST eventually
      * call `Gateway.respondElicitation({ requestId, answer })` so the
@@ -302,6 +323,43 @@ export type GatewayPermissionDecisionInput = {
   remember?: boolean;
   /** Optional free-form reason; surfaced in audit/transcript. */
   reason?: string;
+};
+
+/**
+ * 输出门禁 HITL 审批（patent 域）：挂起消息展示与审批决策的 DTO。
+ * pendingIndex 对应 PatentOutputGate 的挂起索引（每会话内唯一）；
+ * verdict 与 approval.ts 的 ApprovalVerdict 对齐（adopted / rejected；
+ * modified 留给审批 UI 的"编辑后通过"增强，当前不暴露）。
+ */
+export type GatewayApprovalPendingInfo = {
+  pendingIndex: number;
+  textPreview: string;
+  triggerKeyword: string;
+  sessionId?: string;
+  turnId?: string;
+  createdAt: number;
+};
+
+export type GatewayApprovalListPendingInput = {
+  /** 缺省列出全部会话的挂起审批。 */
+  sessionKey?: string;
+};
+
+export type GatewayApprovalListPendingResult = {
+  pending: GatewayApprovalPendingInfo[];
+};
+
+export type GatewayApprovalDecideInput = {
+  sessionKey: string;
+  pendingIndex: number;
+  verdict: "adopted" | "rejected";
+  /** 拒绝时的人工反馈理由（写入审计记录）。 */
+  feedback?: string;
+};
+
+export type GatewayApprovalDecideResult = {
+  /** false = 挂起条目不存在或会话不可用（已审批/已过期/跨会话）。 */
+  delivered: boolean;
 };
 
 export type GatewaySessionPermissionGrantInput = {
@@ -484,6 +542,18 @@ export interface Gateway {
    * `{ delivered: false }` if the requestId is unknown.
    */
   permissionDecide(input: GatewayPermissionDecisionInput): Promise<{ delivered: boolean }>;
+  /**
+   * 输出门禁 HITL 审批（patent 域）：列出挂起审批（供审批 UI 恢复/轮询）。
+   * Optional — 旧实现无此能力时 hosts 应 feature-detect。
+   */
+  approvalListPending?(input: GatewayApprovalListPendingInput): Promise<GatewayApprovalListPendingResult>;
+  /**
+   * 输出门禁 HITL 审批：通过/拒绝一条挂起审批。通过 = 完成流程控制并触发
+   * 宿主 onApproved（消息已在挂起时入库）；拒绝 = 移除挂起并触发 onRejected。
+   * 返回 `{ delivered: false }` 当挂起条目不存在（已处理/已过期/跨会话）。
+   * Optional — 同 approvalListPending。
+   */
+  approvalDecide?(input: GatewayApprovalDecideInput): Promise<GatewayApprovalDecideResult>;
   /**
    * Grants a tool only for the current session. This is intentionally
    * non-persistent: global Settings / permissions.json stay unchanged.

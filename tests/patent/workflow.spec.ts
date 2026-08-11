@@ -6,12 +6,16 @@ import {
   WorkflowError,
   patentInventivenessManifest,
   patentNoveltyManifest,
+  registerBuiltinAtoms,
   runWorkflow,
   validateWorkflowManifest,
   type WorkflowContext,
   type WorkflowManifest,
   type WorkflowStage,
 } from "../../src/patent/index.js";
+
+// 审批门测试需要全局原子注册表（approval-gate handler）；幂等。
+registerBuiltinAtoms();
 
 function okExecutor(stage: WorkflowStage, ctx: WorkflowContext): Promise<string> {
   return Promise.resolve(`[${stage.id}] 完成。输入: ${ctx.input ?? ""}`);
@@ -189,4 +193,59 @@ test("runWorkflow marks degraded inventiveness stage without aborting", async ()
   assert.equal(result.completed, false);
   assert.deepEqual(result.degradedSteps, ["hint"]);
   assert.ok(result.stages.find(s => s.stageId === "hint")?.degraded);
+});
+
+// ---------------------------------------------------------------------------
+// 审批门 HITL：无批准 → 暂停；approvalGrants 命中 → 放行继续
+// ---------------------------------------------------------------------------
+
+const approvalGateManifest: WorkflowManifest = {
+  id: "approval_gate_test",
+  name: "审批门测试",
+  caseType: "patent",
+  stages: [
+    { id: "analyze", strategy: "chain", description: "分析" },
+    {
+      id: "review_gate",
+      strategy: "chain",
+      description: "人工复核",
+      atom: "approval-gate",
+      params: { review_context: "请人工确认分析结论" },
+    },
+    { id: "conclude", strategy: "chain", description: "结论" },
+  ],
+};
+
+test("runWorkflow：审批门无批准时暂停返回 interrupted（不执行后续阶段）", async () => {
+  const result = await runWorkflow(approvalGateManifest, { input: "x" }, okExecutor);
+  assert.equal(result.completed, false);
+  assert.ok(result.interrupted);
+  assert.equal(result.interrupted.stageId, "review_gate");
+  assert.equal(result.interrupted.data.guardrail_level, "high");
+  // 审批门后的阶段不执行
+  assert.ok(!result.stages.find(s => s.stageId === "conclude"));
+});
+
+test("runWorkflow：approvalGrants 命中已批准审批门 → 跳过放行并继续后续阶段", async () => {
+  const result = await runWorkflow(approvalGateManifest, { input: "x" }, okExecutor, {
+    approvalGrants: ["review_gate"],
+  });
+  assert.equal(result.completed, true);
+  assert.equal(result.interrupted, undefined);
+  const gate = result.stages.find(s => s.stageId === "review_gate")!;
+  assert.equal(gate.output, "APPROVED");
+  assert.equal(gate.degraded, false);
+  assert.ok(
+    result.stages.find(s => s.stageId === "conclude"),
+    "审批门后的阶段应继续执行",
+  );
+});
+
+test("runWorkflow：approvalGrants 未命中时审批门照常暂停", async () => {
+  const result = await runWorkflow(approvalGateManifest, { input: "x" }, okExecutor, {
+    approvalGrants: ["other_gate"],
+  });
+  assert.equal(result.completed, false);
+  assert.ok(result.interrupted);
+  assert.equal(result.interrupted.stageId, "review_gate");
 });

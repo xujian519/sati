@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   ClaudeWorkStatus,
   CompactProgress,
+  PendingApproval,
   PendingPermissionRequest,
   RetryProgress,
   SatiWorkStatus,
@@ -261,6 +262,7 @@ interface UseChatRealtimeHandlersArgs {
   setSatiStatus: (status: SatiWorkStatus | null) => void;
   setTokenBudget: (budget: Record<string, unknown> | null) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  setPendingApprovals: Dispatch<SetStateAction<PendingApproval[]>>;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
   onSessionInactive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
@@ -287,6 +289,7 @@ export function useChatRealtimeHandlers({
   setSatiStatus,
   setTokenBudget,
   setPendingPermissionRequests,
+  setPendingApprovals,
   pendingViewSessionRef,
   onSessionInactive,
   onSessionProcessing,
@@ -800,6 +803,49 @@ export function useChatRealtimeHandlers({
           break;
         }
 
+        case "approval_pending": {
+          // 输出门禁 HITL 审批：专利结论挂起等待人工审批（非当前会话的挂起不显示）。
+          if (!isForActiveView) break;
+          const pendingIndex = msg.pendingIndex;
+          if (typeof pendingIndex !== "number") break;
+          onSessionProcessing?.(sid);
+          setPendingApprovals(prev => {
+            if (prev.some((a: PendingApproval) => a.pendingIndex === pendingIndex)) return prev;
+            return [
+              ...prev,
+              {
+                pendingIndex,
+                textPreview: typeof msg.textPreview === "string" ? msg.textPreview : "",
+                triggerKeyword: typeof msg.triggerKeyword === "string" ? msg.triggerKeyword : "approval",
+                uiSessionId: typeof msg.sessionId === "string" ? msg.sessionId : undefined,
+                sessionId: typeof msg.agentSessionId === "string" ? msg.agentSessionId : undefined,
+                turnId: typeof msg.turnId === "string" ? msg.turnId : undefined,
+                createdAt: typeof msg.createdAt === "number" ? msg.createdAt : undefined,
+                receivedAt: new Date(),
+              },
+            ];
+          });
+          break;
+        }
+
+        case "approval_resolved": {
+          // 按 (uiSessionId, pendingIndex) 匹配移除：pendingIndex 是每会话局部的，
+          // 不匹配会话会误删其他会话的同 index 挂起。
+          const pendingIndex = msg.pendingIndex;
+          if (typeof pendingIndex !== "number") break;
+          const resolvedSessionId = typeof msg.sessionId === "string" ? msg.sessionId : undefined;
+          setPendingApprovals(prev =>
+            prev.filter(
+              (a: PendingApproval) =>
+                !(
+                  a.pendingIndex === pendingIndex &&
+                  (resolvedSessionId === undefined || a.uiSessionId === resolvedSessionId)
+                ),
+            ),
+          );
+          break;
+        }
+
         case "status": {
           if (msg.text && msg.text !== "token_budget" && msg.text !== "clear_status") {
             onSessionProcessing?.(sid);
@@ -859,6 +905,7 @@ export function useChatRealtimeHandlers({
       setSatiStatus,
       setTokenBudget,
       setPendingPermissionRequests,
+      setPendingApprovals,
       pendingViewSessionRef,
       onSessionInactive,
       onSessionProcessing,

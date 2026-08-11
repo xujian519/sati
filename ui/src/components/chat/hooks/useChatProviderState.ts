@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { authenticatedFetch } from "../../../utils/api";
 import { useWebSocket } from "../../../contexts/WebSocketContext";
 import { buildModelOptionsFromConfig } from "../../../shared/modelOptions";
-import type { PendingPermissionRequest, PermissionMode } from "../types/types";
+import type { PendingApproval, PendingPermissionRequest, PermissionMode } from "../types/types";
 import type { ProjectSession } from "../../../types/app";
 
 interface UseChatProviderStateArgs {
@@ -119,6 +119,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     return readStoredPermissionMode(DEFAULT_PERMISSION_MODE_KEY) || "default";
   });
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [model, setModel] = useState<string>(() => {
     return localStorage.getItem(SATI_MODEL_STORAGE_KEY) ?? "";
   });
@@ -139,6 +140,15 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   useEffect(() => {
     setPendingPermissionRequests(previous => {
       const next = previous.filter(request => !request.sessionId || request.sessionId === selectedSession?.id);
+      return next;
+    });
+  }, [selectedSession?.id]);
+
+  useEffect(() => {
+    // 切换会话时清掉不属于当前会话的挂起审批（与 permission 请求一致；
+    // pendingIndex 每会话局部，跨会话残留会与新增挂起冲突）。
+    setPendingApprovals(previous => {
+      const next = previous.filter(approval => !approval.uiSessionId || approval.uiSessionId === selectedSession?.id);
       return next;
     });
   }, [selectedSession?.id]);
@@ -226,6 +236,8 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
     setPermissionMode,
     pendingPermissionRequests,
     setPendingPermissionRequests,
+    pendingApprovals,
+    setPendingApprovals,
     cyclePermissionMode,
   };
 }

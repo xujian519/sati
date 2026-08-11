@@ -7,8 +7,10 @@ import {
   InMemoryCheckpointStore,
   JsonFileCheckpointStore,
   runGraphWithCheckpoints,
+  grantApproval,
   DOMAIN_GRAPHS,
   type DomainGraphName,
+  type GraphCheckpoint,
   type GraphRunResult,
   type WorkflowManifest,
 } from "../../patent/index.js";
@@ -53,6 +55,17 @@ export type PatentWorkflowRunInput = {
   graph?: DomainGraphName;
   /** 图模式断点续跑：提供 checkpoint id（上次中断返回）时从该检查点继续。 */
   resumeCheckpointId?: string;
+  /**
+   * 图模式审批：批准该检查点的审批门（写入放行标记）后从该检查点续跑——
+   * 审批门节点重放时检测到标记即放行，后续节点继续执行（真正通过审批门）。
+   * 与 resumeCheckpointId 互斥：提供时优先，等价"批准 + 续跑"。
+   */
+  approveCheckpointId?: string;
+  /**
+   * manifest 模式审批：已人工批准的审批门阶段 id 列表（如 ["review_gate"]）。
+   * 重跑时这些审批门跳过执行直接放行，未批准的照常中断——实现"批准后继续"。
+   */
+  approveStageIds?: string[];
   /** 案例标识（用于结果记录与持久化；可含 {caseId} 占位）。 */
   caseId?: string;
   /** 初始材料（技术交底书等），映射为各原子读取的 text/source_text/extraction_input。 */
@@ -107,7 +120,9 @@ export function createPatentWorkflowRunTool(
       "Graph path (graph=novelty|inventiveness|enablement): runs a full domain graph (LLM nodes + patent search + " +
       "deterministic rule gate) in one call — e.g. graph=inventiveness runs the A22.3 three-step analysis end-to-end. " +
       "Provide the input as 'input'. The review gate pauses the run (reports interrupted + checkpointId); re-invoking " +
-      "with resumeCheckpointId continues from the pause point. When caseId is provided, run results, the Mermaid " +
+      "with resumeCheckpointId continues from the pause point (the gate pauses again), while approveCheckpointId " +
+      "grants the gate and resumes past it. Manifest path: approveStageIds skips approved gates on rerun. " +
+      "When caseId is provided, run results, the Mermaid " +
       "diagram, and graph checkpoints are persisted under <caseDir>/workflow-runs/. Requires a model client.",
     kind: "session",
     domain: "patent",
@@ -133,6 +148,17 @@ export function createPatentWorkflowRunTool(
           type: "string",
           description:
             "Graph-mode checkpoint id from a previous interrupted run; continues from that point instead of restarting.",
+        },
+        approveCheckpointId: {
+          type: "string",
+          description:
+            "Graph-mode approval: grants the approval gate at this checkpoint (writes the grant marker) and resumes from it — the gate passes on replay and later nodes run. Mutually exclusive with resumeCheckpointId.",
+        },
+        approveStageIds: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Manifest-mode approval: stage ids of already-approved approval gates (e.g. ['review_gate']); reruns skip these gates and continue past them.",
         },
         caseId: {
           type: "string",
@@ -231,6 +257,10 @@ export function createPatentWorkflowRunTool(
         provider,
         persist: persistTarget ? new JsonFileWorkflowRunStore(persistTarget.runsDir) : undefined,
         runId: persistTarget?.runId,
+        // 已人工批准的审批门：重跑时跳过（放行），未批准的照常中断。
+        ...(input.approveStageIds !== undefined && input.approveStageIds.length > 0
+          ? { approvalGrants: input.approveStageIds }
+          : {}),
       });
 
       const persistNote = persistTarget
@@ -379,16 +409,30 @@ async function executeGraphRun(
   }
   store ??= new InMemoryCheckpointStore();
 
-  const resumeFrom = input.resumeCheckpointId !== undefined ? await store.load(input.resumeCheckpointId) : undefined;
-  if (input.resumeCheckpointId !== undefined && resumeFrom === undefined) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `patent_workflow_run: 检查点 "${input.resumeCheckpointId}" 不存在（可用 checkpoints 目录下的 id）。`,
-        },
-      ],
-    };
+  // 审批/续跑：approveCheckpointId 优先——批准审批门（写入放行标记）后从该检查点
+  // 继续，审批门节点重放时放行、后续节点执行；否则 resumeCheckpointId 直接续跑
+  // （不改变审批门状态，门会再次暂停等待审批）。
+  const resumeSpec =
+    input.approveCheckpointId !== undefined
+      ? { checkpointId: input.approveCheckpointId, grant: true }
+      : input.resumeCheckpointId !== undefined
+        ? { checkpointId: input.resumeCheckpointId, grant: false }
+        : undefined;
+  let resumeFrom: GraphCheckpoint | undefined;
+  if (resumeSpec !== undefined) {
+    resumeFrom = resumeSpec.grant
+      ? await grantApproval(store, resumeSpec.checkpointId)
+      : await store.load(resumeSpec.checkpointId);
+    if (resumeFrom === undefined) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `patent_workflow_run: 检查点 "${resumeSpec.checkpointId}" 不存在（可用 checkpoints 目录下的 id）。`,
+          },
+        ],
+      };
+    }
   }
 
   const { result, checkpointId } = await runGraphWithCheckpoints(graph, workflowCtx, {

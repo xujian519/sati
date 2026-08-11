@@ -32,6 +32,7 @@ import type {
   ChatAttachment,
   ChatImage,
   ChatMessage,
+  PendingApproval,
   PendingPermissionRequest,
   PermissionGrantResult,
   PermissionMode,
@@ -82,6 +83,7 @@ interface UseChatComposerStateArgs {
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   pendingPermissionRequests: PendingPermissionRequest[];
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  setPendingApprovals: Dispatch<SetStateAction<PendingApproval[]>>;
   referenceOnlyPrompt?: string;
 }
 
@@ -206,6 +208,7 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   pendingPermissionRequests,
   setPendingPermissionRequests,
+  setPendingApprovals,
   referenceOnlyPrompt = "Please answer based on the document selection I quoted.",
 }: UseChatComposerStateArgs) {
   const draftStorageKey = selectedProject ? getDraftInputStorageKey(selectedProject.name, selectedSession?.id) : null;
@@ -1475,6 +1478,27 @@ export function useChatComposerState({
     [pendingPermissionRequests, sendMessage, setClaudeStatus, setSatiStatus, setPendingPermissionRequests],
   );
 
+  /**
+   * 输出门禁 HITL 审批决策：通过（adopted）/ 拒绝（rejected，可带理由）。
+   * 经 /ws 桥 approval-response 转发 gateway.approvalDecide；乐观移除卡片，
+   * 服务端 approval_resolved 广播为兜底。
+   */
+  const handleApprovalDecision = useCallback(
+    (approval: PendingApproval, verdict: "adopted" | "rejected", feedback?: string) => {
+      const sessionId = currentSessionId || selectedSession?.id;
+      if (!sessionId) return;
+      sendMessage({
+        type: "approval-response",
+        sessionId,
+        pendingIndex: approval.pendingIndex,
+        verdict,
+        ...(verdict === "rejected" && feedback ? { feedback } : {}),
+      });
+      setPendingApprovals(prev => prev.filter(a => a.pendingIndex !== approval.pendingIndex));
+    },
+    [currentSessionId, selectedSession?.id, sendMessage, setPendingApprovals],
+  );
+
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   const handleInputFocusChange = useCallback(
@@ -1543,6 +1567,7 @@ export function useChatComposerState({
     handlePermissionDecision,
     handleGrantToolPermission,
     handleGrantSessionToolPermission,
+    handleApprovalDecision,
     handleInputFocusChange,
     isInputFocused,
     isBusySendQueued,

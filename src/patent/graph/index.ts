@@ -23,6 +23,7 @@ export {
   InMemoryCheckpointStore,
   JsonFileCheckpointStore,
   runGraphWithCheckpoints,
+  grantApproval,
   type CheckpointedRunOptions,
   type CheckpointedRunResult,
 } from "./checkpoint.js";

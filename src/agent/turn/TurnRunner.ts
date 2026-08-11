@@ -133,10 +133,10 @@ export class TurnRunner {
     return true;
   }
 
-  /** 拒绝挂起的门禁消息：从挂起队列移除并触发 onRejected（消息已入库，不删除转录）。sessionId 匹配校验防越权。 */
-  rejectPendingOutput(index: number, sessionId?: string): boolean {
+  /** 拒绝挂起的门禁消息：从挂起队列移除并触发 onRejected（消息已入库，不删除转录）。sessionId 匹配校验防越权。feedback 为可选人工拒绝理由（写入审计记录）。 */
+  rejectPendingOutput(index: number, sessionId?: string, feedback?: string): boolean {
     if (!this.outputGate) return false;
-    return this.outputGate.reject(index, sessionId);
+    return this.outputGate.reject(index, sessionId, feedback);
   }
 
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {

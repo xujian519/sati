@@ -46,9 +46,9 @@ export class AgentSession {
     return this.options.turnRunner.approvePendingOutput(index, this.state.sessionId);
   }
 
-  /** 拒绝挂起的门禁消息：从挂起队列移除（消息本体已在转录中，不删除）。sessionId 自动绑定本会话，防跨会话越权。 */
-  rejectPendingOutput(index: number): boolean {
-    return this.options.turnRunner.rejectPendingOutput(index, this.state.sessionId);
+  /** 拒绝挂起的门禁消息：从挂起队列移除（消息本体已在转录中，不删除）。sessionId 自动绑定本会话，防跨会话越权。feedback 为可选人工拒绝理由（写入审计记录）。 */
+  rejectPendingOutput(index: number, feedback?: string): boolean {
+    return this.options.turnRunner.rejectPendingOutput(index, this.state.sessionId, feedback);
   }
 
   async *submit(input: AgentInput, submitOptions: AgentSubmitOptions = {}): AsyncGenerator<AgentEvent, void, unknown> {

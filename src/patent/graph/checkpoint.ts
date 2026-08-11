@@ -9,6 +9,7 @@
  */
 
 import { JsonFileStore } from "../persist-utils.js";
+import { APPROVAL_GRANTED_KEY } from "../atoms/index.js";
 import type { CheckpointStore, GraphCheckpoint, GraphRunResult, GraphState, RunOptions } from "./types.js";
 import { cloneState } from "./state.js";
 
@@ -91,6 +92,23 @@ export type CheckpointedRunResult = {
    */
   checkpointId?: string;
 };
+
+/**
+ * 人工批准审批门：把放行标记（`APPROVAL_GRANTED_KEY`）写入检查点 state 并持久化，
+ * 返回更新后的检查点。调用方用返回值 resume——
+ * 审批门节点重放时 handler 检测到标记即放行（不再中断），后续节点继续执行。
+ * 幂等：重复批准同一检查点无副作用。检查点不存在时返回 undefined。
+ */
+export async function grantApproval(
+  store: CheckpointStore,
+  checkpointId: string,
+): Promise<GraphCheckpoint | undefined> {
+  const cp = await store.load(checkpointId);
+  if (cp === undefined) return undefined;
+  cp.state[APPROVAL_GRANTED_KEY] = true;
+  await store.save(cp);
+  return cp;
+}
 
 /**
  * 带检查点的图运行：每超步开始前保存 checkpoint。

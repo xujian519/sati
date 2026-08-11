@@ -35,6 +35,8 @@ export type WsGatewayMethod =
   | "elicitation_respond"
   | "permission_decide"
   | "grant_session_permission"
+  | "approval_list_pending"
+  | "approval_decide"
   | "read_session_messages"
   | "read_subagent_messages"
   | "fork_session"

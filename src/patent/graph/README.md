@@ -66,6 +66,13 @@ const { result, checkpointId } = await runGraphWithCheckpoints(graph, { input: "
 图停在审批门暂停等待人工介入（工具路径默认）；自动执行/评测场景传
 `includeApproval: false` 直达规则门收口（如 `createGraphRunner`）。
 
+审批通过（2026-08 补齐闭环）：`grantApproval(store, checkpointId)` 把放行标记
+（`APPROVAL_GRANTED_KEY`）写入检查点 state 并持久化；`patent_workflow_run` 的
+`approveCheckpointId` 参数 = 批准 + 续跑一步到位——resume 时审批门节点重放，
+`ApprovalGateHandler` 检测到标记即放行，后续节点继续执行（不再无限暂停）。
+manifest 路径（`runWorkflow`）对应 `approvalGrants: string[]`（已批准的审批门
+阶段 id），重跑时跳过这些门直接放行。
+
 消费方式（推荐）：
 ```ts
 import { DOMAIN_GRAPHS, runGraphWithCheckpoints, JsonFileCheckpointStore } from "../../patent/index.js";

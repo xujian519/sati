@@ -82,6 +82,22 @@ export type WebGatewayEvent = WebGatewayEventMetadata &
         payload: unknown;
       }
     | {
+        type: "approval_pending";
+        sessionKey: string;
+        pendingIndex: number;
+        textPreview: string;
+        triggerKeyword: string;
+        sessionId?: string;
+        turnId?: string;
+        createdAt: number;
+      }
+    | {
+        type: "approval_resolved";
+        sessionKey: string;
+        pendingIndex: number;
+        verdict: "adopted" | "rejected";
+      }
+    | {
         type: "elicitation_request";
         requestId: string;
         toolCallId: string;

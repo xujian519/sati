@@ -894,6 +894,37 @@ export async function decidePermissionViaGateway(requestId, decision, options = 
   return false;
 }
 
+/**
+ * 输出门禁 HITL 审批：通过/拒绝一条挂起审批。
+ * verdict: "adopted" | "rejected"；feedback 为拒绝理由（写入审计）。
+ */
+export async function approvalDecideViaGateway(sessionId, pendingIndex, verdict, feedback) {
+  const gw = await ensureGateway();
+  if (!isSatiSessionKey(sessionId) || typeof pendingIndex !== "number" || !gw.approvalDecide) {
+    return { delivered: false };
+  }
+  try {
+    return await gw.approvalDecide({ sessionKey: sessionId, pendingIndex, verdict, feedback });
+  } catch (error) {
+    console.warn("[sati-bridge] approvalDecide failed:", error);
+    return { delivered: false };
+  }
+}
+
+/** 列出某会话的挂起审批（供审批列表/恢复查询）。 */
+export async function approvalListPendingViaGateway(sessionId) {
+  const gw = await ensureGateway();
+  if (!gw.approvalListPending) {
+    return { pending: [] };
+  }
+  try {
+    return await gw.approvalListPending({ sessionKey: sessionId });
+  } catch (error) {
+    console.warn("[sati-bridge] approvalListPending failed:", error);
+    return { pending: [] };
+  }
+}
+
 export async function grantSessionPermissionViaGateway(sessionId, entry) {
   const gw = await ensureGateway();
   if (!isSatiSessionKey(sessionId) || typeof entry !== "string" || !entry.trim()) {
