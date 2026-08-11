@@ -133,7 +133,83 @@ describe("createRerankClient", () => {
     );
   });
 
-  it("响应条数不匹配抛错", async () => {
+  it("style=tei 遇到 422 缺 documents 时自动降级 jina 重试（oMLX /v1 场景）", async () => {
+    let calls = 0;
+    mockFetch(call => {
+      calls += 1;
+      if (calls === 1) {
+        // 第一次按 tei 发送 → oMLX 422 拒绝（缺 documents/model）
+        return jsonResponse(
+          {
+            error: {
+              message: "body -> documents: Field required; body -> model: Field required",
+              type: "invalid_request_error",
+            },
+          },
+          422,
+        );
+      }
+      // 降级后按 jina 风格发送 → 成功
+      const body = JSON.parse(String(call.init.body)) as {
+        query: string;
+        documents?: string[];
+        texts?: string[];
+        model?: string;
+      };
+      assert.equal(body.query, "创造性判断");
+      assert.deepEqual(body.documents, ["a", "b"], "降级请求应使用 documents 字段");
+      assert.equal(body.texts, undefined, "降级请求不应再使用 texts");
+      assert.equal(body.model, "Qwen3-Reranker-4B-4bit-MLX");
+      return jsonResponse({
+        results: [
+          { index: 1, relevance_score: 0.9 },
+          { index: 0, relevance_score: 0.1 },
+        ],
+      });
+    });
+    const client = createRerankClient({
+      baseUrl: "http://localhost:8010/v1",
+      model: "Qwen3-Reranker-4B-4bit-MLX",
+      // 未显式指定 style → 默认 tei，触发降级
+    });
+    const results = await client.rerank("创造性判断", ["a", "b"]);
+    assert.equal(calls, 2);
+    assert.deepEqual(results, [
+      { index: 1, score: 0.9 },
+      { index: 0, score: 0.1 },
+    ]);
+  });
+
+  it("style=tei 非 422 错误不降级（保持原错误）", async () => {
+    let calls = 0;
+    mockFetch(() => {
+      calls += 1;
+      return jsonResponse({ error: "model not loaded" }, 503);
+    });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080" });
+    await assert.rejects(
+      async () => client.rerank("q", ["a"]),
+      (error: unknown) => {
+        assert.ok(error instanceof RerankRequestError);
+        assert.equal(error.status, 503);
+        return true;
+      },
+    );
+    assert.equal(calls, 1, "503 不应触发降级重试");
+  });
+
+  it("style=tei 422 但错误不含 documents/model 不降级", async () => {
+    let calls = 0;
+    mockFetch(() => {
+      calls += 1;
+      return jsonResponse({ error: { message: "body -> query: Field required" } }, 422);
+    });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080" });
+    await assert.rejects(async () => client.rerank("q", ["a"]), RerankRequestError);
+    assert.equal(calls, 1);
+  });
+
+  it("style=tei 响应条数不匹配抛错", async () => {
     mockFetch(() => jsonResponse({ scores: [0.9] }));
     const client = createRerankClient({ baseUrl: "http://localhost:8080" });
     await assert.rejects(async () => client.rerank("q", ["a", "b"]), RerankRequestError);

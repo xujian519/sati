@@ -89,17 +89,24 @@ export function createRerankClient(config: RerankEndpointConfig): RerankClient {
   async function postRerank(query: string, texts: string[]): Promise<Array<{ index: number; score: number }>> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
+
+    /** 按指定风格构造请求体。 */
+    function buildBody(useJinaStyle: boolean): Record<string, unknown> {
       // jina 风格（oMLX 等）要求 model + documents；tei 风格（默认）用 query + texts。
-      const body: Record<string, unknown> = style === "jina" ? { query, documents: texts } : { query, texts };
+      const body: Record<string, unknown> = useJinaStyle ? { query, documents: texts } : { query, texts };
       if (config.model) body.model = config.model;
+      return body;
+    }
+
+    /** 单次 POST；非 2xx 抛 RerankRequestError（附带响应体，供降级判定）。 */
+    async function postOnce(useJinaStyle: boolean): Promise<Array<{ index: number; score: number }>> {
       const response = await fetch(`${baseUrl}/rerank`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
           ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildBody(useJinaStyle)),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -118,6 +125,21 @@ export function createRerankClient(config: RerankEndpointConfig): RerankClient {
         );
       }
       return results;
+    }
+
+    try {
+      try {
+        return await postOnce(style === "jina");
+      } catch (error) {
+        // 自动降级：tei 风格遇到 OpenAI 兼容（oMLX 等）的 422——该服务要求
+        // documents（可能还要 model）字段，tei 的 { query, texts } 会被拒。
+        // 这是用户配置未显式指定 style（默认 tei）时的常见错配，无需用户改
+        // 配置，自动用 jina 风格重试一次。
+        if (style === "jina" || !(error instanceof RerankRequestError)) throw error;
+        const wantsJinaBody = error.status === 422 && /documents|model/i.test(error.message);
+        if (!wantsJinaBody) throw error;
+        return await postOnce(true);
+      }
     } catch (error) {
       if (error instanceof RerankRequestError) throw error;
       if (controller.signal.aborted) {
