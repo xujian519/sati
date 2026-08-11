@@ -31,7 +31,9 @@ const CUSTOM_PROVIDER: CatalogProvider = {
   models: [],
 };
 
-const DEFAULT_PROVIDER = CATALOG_PROVIDERS.find(provider => provider.id === "openrouter") ?? CATALOG_PROVIDERS[0];
+// 默认选中 DeepSeek（常用国产模型，API 便宜、注册简单），方便国内用户
+// 开箱即用；也可在下方网格切换到 Kimi / GLM / Qwen 等其它内置 Provider。
+const DEFAULT_PROVIDER = CATALOG_PROVIDERS.find(provider => provider.id === "deepseek") ?? CATALOG_PROVIDERS[0];
 
 function defaultModelForProvider(provider: CatalogProvider | null) {
   if (!provider) return "";
