@@ -73,9 +73,18 @@ verify-installer.bat
 REM 3. L2 冒烟（UI tab / onboarding / Electron 冷启动；需交互式桌面会话）
 node scripts\release-l2-win.mjs dist-electron\win-unpacked
 
-REM 4.（可选）发布到 GitHub Releases（需 gh CLI 且已 auth）
+REM 3b.（可选）L3 真模型 E2E（需要 API key；无 key 自动 skip）
+node scripts\release-l3-win.mjs            REM 或 --force 无 key 时失败
+
+REM 4. 发布到 GitHub Releases（需 gh CLI 且已 auth）
 node scripts\publish-win.mjs dist-electron
 ```
+
+> **发布门禁**：`publish-win.mjs` 现在与 `release.sh` 的 pre-flight 对齐——校验
+> 版本 lockstep（根 / ui / desktop 三处一致）、git tag `vX.Y.Z` 必须指向 HEAD、
+> 且仅在 main/master/release 分支发布。紧急/本地发布可用环境变量绕过：
+> `ALLOW_UNTAGGED=1`（跳过 tag 校验）、`ALLOW_NON_MAIN_SIGNED=1`（允许非
+> main 分支），语义与 `release.sh` 完全一致。
 
 ### build-win.bat 参数
 
@@ -99,10 +108,17 @@ node-pty / mupdf 用 bundled node 逐个 rebuild）。
 差异：
 
 - **无公证**：Windows 没有 Apple 公证对应的机制，靠 Authenticode 签名兜底
-- **无 L3**：Windows 无 `release-l3.sh`（真模型 E2E）；L2 已覆盖
+- **L3 封装脚本**：Windows 用 `release-l3-win.mjs` 镜像 `release-l3.sh`（真模型
+  E2E，需 API key）。注意：`release-l3.sh` 引用的真模型 harness
+  （`framework-wcb-smoke` / `run-real-agent-lifecycle-hooks`）已从仓库移除，
+  Windows 脚本会自动检测并明确报告"无 harness 可跑"，两个平台在 harness 恢复
+  前都无法真正执行 L3
 - **签名需自备证书**：设置环境变量后 electron-builder 自动签名，见下
 - **托盘常驻**：Windows 桌面端关窗最小化到托盘而非退出（`main.ts`），与
   macOS 的"关闭即隐藏"行为对齐 always-on 定位
+- **关于面板**：macOS 用原生 About 面板（`app.setAboutPanelOptions`）；Windows
+  上该 API 是 no-op，`main.ts` 在帮助菜单里补了一个原生"关于 Sati"对话框，
+  显示同样的 version + git-sha + build-date 三段信息
 
 ### 签名（Authenticode）
 
@@ -122,6 +138,11 @@ build-win.bat
 
 首次运行未签名安装包：双击 exe → 弹出"Windows 已保护你的电脑" →
 点"更多信息" → "仍要运行"。
+
+发给用户前可用 `verify-signature-win.bat` 校验产物：它输出 SHA256、Authenticode
+签名状态（Valid / NotSigned / 错误）与签发者，帮助确认安装包完整且来源可信
+（Windows 版 install-sati.sh 的对应物——macOS 有 Gatekeeper/provenance 需要修复，
+Windows 没有，只需验证签名与哈希）。
 
 ### arm64 说明
 
@@ -225,7 +246,22 @@ bash apps/desktop/scripts/release-l3.sh
 SATI_RUN_REAL_AGENT_LIFECYCLE_E2E=1 bash apps/desktop/scripts/release-l3.sh
 ```
 
-无 API key 时 `release-l3.sh` **退出 0 并 skip**（不挡发版）；`--force` 则在缺 key 时失败。
+Windows 用 Node 镜像：
+
+```bat
+set ANTHROPIC_API_KEY=sk-...
+node apps\desktop\scripts\release-l3-win.mjs          REM 无 key 自动 skip
+node apps\desktop\scripts\release-l3-win.mjs --force  REM 无 key 时失败
+set SATI_RUN_REAL_AGENT_LIFECYCLE_E2E=1
+node apps\desktop\scripts\release-l3-win.mjs          REM 额外跑 lifecycle hooks
+```
+
+无 API key 时 `release-l3.sh` / `release-l3-win.mjs` **退出 0 并 skip**（不挡发版）；
+`--force` 则在缺 key 时失败。
+
+> **当前状态**：两平台脚本引用的真模型 harness（`dist/tests/e2e/framework-wcb-smoke`
+> 与 `dist/tests/agent/e2e/run-real-agent-lifecycle-hooks`）已从仓库移除，脚本会
+> 自动检测并报告"无 harness 可跑"。恢复 harness 后两平台即可执行真模型 E2E。
 
 **为什么 L3 不进默认 DMG 构建？** 需要密钥、外网、配额；失败常是环境而非制品——默认只在 `--full-verify` / nightly / 发 rc 前显式开启。
 
