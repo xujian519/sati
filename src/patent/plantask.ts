@@ -32,7 +32,23 @@ export class PlanTaskStateError extends Error {
   }
 }
 
-/** 计划状态机：只允许白名单内迁移。 */
+/** 语义守卫失败（迁移合法但前置条件不满足）：executing 需已 sync 任务 / replanning 需反馈。 */
+export class PlanTaskSemanticError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PlanTaskSemanticError";
+  }
+}
+
+/** transition 的语义上下文：前置条件随迁移传入（fail-closed，缺省即拒绝）。 */
+export type PlanTaskTransitionContext = {
+  /** 计划任务列表（to=executing 时必需且非空：执行必须有任务，先 sync 计划步骤）。 */
+  tasks?: readonly PlanTask[];
+  /** 重规划反馈（to=replanning 时必需且非空：反馈驱动重规划）。 */
+  feedback?: string;
+};
+
+/** 计划状态机：只允许白名单内迁移，并强制迁移前置条件（语义守卫）。 */
 export class PlanTaskStateMachine {
   private current: PlanTaskState;
 
@@ -48,9 +64,17 @@ export class PlanTaskStateMachine {
     return TRANSITIONS[this.current].includes(to);
   }
 
-  transition(to: PlanTaskState): PlanTaskState {
+  transition(to: PlanTaskState, context: PlanTaskTransitionContext = {}): PlanTaskState {
     if (!this.canTransition(to)) {
       throw new PlanTaskStateError(this.current, to);
+    }
+    // 语义强制（fail-closed）：白名单之外的业务前置条件，缺省即拒绝——
+    // 强制"计划步骤先同步成任务再执行、有反馈才重规划"，不允许空转。
+    if (to === "executing" && (context.tasks === undefined || context.tasks.length === 0)) {
+      throw new PlanTaskSemanticError("executing 前必须先 sync 计划步骤（tasks 非空）");
+    }
+    if (to === "replanning" && (context.feedback === undefined || context.feedback.trim() === "")) {
+      throw new PlanTaskSemanticError("replanning 必须有反馈（feedback 非空）");
     }
     this.current = to;
     return this.current;

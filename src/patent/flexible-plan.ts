@@ -10,13 +10,13 @@
  * toManifest() 生成 WorkflowManifest 交给 runWorkflow 执行——本层只管理计划不执行阶段，
  * 执行结果经 confirmStage / rollbackStage 回流。
  *
- * ⚠️ 接线状态（2026-08）：本层自身**未接入独立工具**——`patent_plan_task` 工具
- * 走的是 plantask.ts 状态机，与本层无关。但**原子执行消费路径已打通**：
- * toManifest() 产出的 manifest 可被 runWorkflow 以全局原子注册表 + provider
- * 自动执行（集成测试见 tests/patent/flexible-plan-atomic.spec.ts），
- * 执行结果经 confirmStage / rollbackStage 回流。接入 `flexible_plan` 工具
- * （创建计划 → 原子执行 → 逐阶段确认）时，可复用 patent_workflow_run 的
- * provider 装配（LLM + nuo-patent 检索）。
+ * ⚠️ 接线状态（2026-08）：本层经 `flexible_plan` 工具（src/tool/builtin/patentFlexiblePlanTool.ts）
+ * 接入生产路径——create 建计划（可选 IPC 技术领域推断）→ run 把未确认阶段经 toManifest
+ * 交 runWorkflow 原子执行（provider 装配与 patent_workflow_run 共享 buildWorkflowProvider：
+ * LLM + nuo-patent 检索）→ confirm/rollback 逐阶段确认或回退重做，add/remove/reorder
+ * 运行时增删改阶段；计划按 caseId 持久化（JsonFileFlexiblePlanStore）。`patent_plan_task`
+ * 工具走的是 plantask.ts 状态机，与本层无关。原子执行消费路径另有集成测试
+ * （tests/patent/flexible-plan-atomic.spec.ts）。
  */
 
 import {
@@ -60,6 +60,8 @@ export type FlexiblePlanState = {
   /** 对齐 orchestrations id（invalidation / infringement / drafting …）。 */
   caseType: string;
   technicalField?: string;
+  /** 案件原始输入文本（create 时透传，供 run 原子执行复用；可选）。 */
+  inputText?: string;
   status: FlexiblePlanStatus;
   stages: FlexibleStage[];
   /** 当前执行阶段；缺省 = 首个未确认阶段；无待执行阶段时为 undefined。 */

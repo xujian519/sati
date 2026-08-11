@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  PlanTaskSemanticError,
   PlanTaskStateError,
   PlanTaskStateMachine,
   hashStep,
@@ -12,11 +13,11 @@ test("state machine follows the allowed transition chain", () => {
   const sm = new PlanTaskStateMachine();
   assert.equal(sm.state, "planning");
   sm.transition("awaiting_approval");
-  sm.transition("executing");
+  sm.transition("executing", { tasks: syncPlanToTasks(["步骤A"]).tasks });
   sm.transition("awaiting_feedback");
-  sm.transition("replanning");
+  sm.transition("replanning", { feedback: "补充检索范围" });
   sm.transition("awaiting_approval");
-  sm.transition("executing");
+  sm.transition("executing", { tasks: syncPlanToTasks(["步骤A", "步骤B"]).tasks });
   sm.transition("finished");
   assert.equal(sm.state, "finished");
 });
@@ -27,6 +28,25 @@ test("state machine rejects illegal transitions", () => {
   assert.throws(() => sm.transition("finished"), PlanTaskStateError);
   assert.equal(sm.canTransition("awaiting_approval"), true);
   assert.equal(sm.state, "planning");
+});
+
+test("semantic enforcement: executing without tasks is rejected (fail-closed)", () => {
+  const sm = new PlanTaskStateMachine("awaiting_approval");
+  assert.throws(() => sm.transition("executing"), PlanTaskSemanticError);
+  assert.throws(() => sm.transition("executing", {}), PlanTaskSemanticError);
+  assert.throws(() => sm.transition("executing", { tasks: [] }), PlanTaskSemanticError);
+  // 有任务才放行
+  sm.transition("executing", { tasks: syncPlanToTasks(["步骤A"]).tasks });
+  assert.equal(sm.state, "executing");
+});
+
+test("semantic enforcement: replanning without feedback is rejected (fail-closed)", () => {
+  const sm = new PlanTaskStateMachine("awaiting_feedback");
+  assert.throws(() => sm.transition("replanning"), PlanTaskSemanticError);
+  assert.throws(() => sm.transition("replanning", { feedback: "   " }), PlanTaskSemanticError);
+  // 有反馈才放行
+  sm.transition("replanning", { feedback: "对比文件 D3 需纳入" });
+  assert.equal(sm.state, "replanning");
 });
 
 test("syncPlanToTasks builds ordered task list with blockedBy dependencies", () => {

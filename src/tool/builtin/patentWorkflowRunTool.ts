@@ -15,10 +15,9 @@ import {
   type WorkflowManifest,
 } from "../../patent/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry, type StageProvider } from "../../patent/atoms/index.js";
-import { createNuoSearchProvider } from "../../patent/data/nuo/searchProvider.js";
-import { DEFAULT_MODEL_ID, DEFAULT_MODEL_PROVIDER, type CanonicalModelRequest } from "../../model/index.js";
 import type { SatiToolDefinition, SatiToolModelClient } from "../protocol/types.js";
 import {
+  buildWorkflowProvider,
   renderWorkflowResultText,
   resolveRunPersistTarget,
   runRuleGate,
@@ -86,25 +85,6 @@ export type PatentWorkflowRunDeps = {
   /** 阶段处理器注册表（缺省全局注册表——registerBuiltinAtoms 已装配内置原子）。 */
   handlers?: typeof globalStageHandlerRegistry;
 };
-
-const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
-
-/** 收集 stream 事件为完整文本（对齐 web_fetch 二次模型调用模式）。 */
-async function collectModelText(model: SatiToolModelClient, request: CanonicalModelRequest): Promise<string> {
-  let text = "";
-  for await (const event of model.stream(request)) {
-    switch (event.type) {
-      case "text_delta":
-        text += event.text;
-        break;
-      case "error":
-        throw new Error(`模型调用失败: ${event.error.message}`);
-      default:
-        break;
-    }
-  }
-  return text;
-}
 
 export function createPatentWorkflowRunTool(
   deps: PatentWorkflowRunDeps = {},
@@ -203,8 +183,8 @@ export function createPatentWorkflowRunTool(
       }
 
       // 模型客户端：deps 优先，否则运行时上下文（AgentLoop 注入）；皆无时明确报错。
-      const model = deps.model ?? context.model;
-      if (!model) {
+      const provider = buildWorkflowProvider(deps, context);
+      if (!provider) {
         return {
           content: [
             {
@@ -223,27 +203,6 @@ export function createPatentWorkflowRunTool(
         source_text: input.input,
         extraction_input: input.input,
         max_results: String(input.maxResults ?? 5),
-      };
-
-      const provider: StageProvider = {
-        callLLM: async (prompt, opts) => {
-          const jsonSchema = opts?.jsonSchema;
-          const outputSchema =
-            jsonSchema !== undefined && typeof jsonSchema === "object" && jsonSchema !== null
-              ? { name: "structured_output", schema: jsonSchema as Record<string, unknown>, strict: true }
-              : undefined;
-          const request: CanonicalModelRequest = {
-            provider: deps.provider ?? DEFAULT_MODEL_PROVIDER,
-            model: deps.modelId ?? DEFAULT_MODEL_ID,
-            messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-            maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
-            temperature: opts?.temperature ?? 0,
-            stream: true,
-            ...(outputSchema !== undefined ? { outputSchema } : {}),
-          };
-          return collectModelText(model, request);
-        },
-        search: deps.search ?? createNuoSearchProvider().search,
       };
 
       // 无 atom 阶段（preprocess/report）：透传输入文本（等价"未预处理"），不 degraded。
@@ -351,8 +310,8 @@ async function executeGraphRun(
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
   const graphName = input.graph!;
   const def = DOMAIN_GRAPHS[graphName];
-  const model = deps.model ?? context.model;
-  if (!model) {
+  const provider = buildWorkflowProvider(deps, context);
+  if (!provider) {
     return {
       content: [
         {
@@ -372,27 +331,6 @@ async function executeGraphRun(
     extraction_input: input.input,
     claim: input.input,
     max_results: String(input.maxResults ?? 5),
-  };
-
-  const provider: StageProvider = {
-    callLLM: async (prompt, opts) => {
-      const jsonSchema = opts?.jsonSchema;
-      const outputSchema =
-        jsonSchema !== undefined && typeof jsonSchema === "object" && jsonSchema !== null
-          ? { name: "structured_output", schema: jsonSchema as Record<string, unknown>, strict: true }
-          : undefined;
-      const request: CanonicalModelRequest = {
-        provider: deps.provider ?? DEFAULT_MODEL_PROVIDER,
-        model: deps.modelId ?? DEFAULT_MODEL_ID,
-        messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
-        maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
-        temperature: opts?.temperature ?? 0,
-        stream: true,
-        ...(outputSchema !== undefined ? { outputSchema } : {}),
-      };
-      return collectModelText(model, request);
-    },
-    search: deps.search ?? createNuoSearchProvider().search,
   };
 
   // 检查点：caseId 提供时持久化到 <caseDir>/workflow-runs/checkpoints/，否则内存。

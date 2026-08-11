@@ -333,6 +333,9 @@ export {
   type PlanTask,
   TRANSITIONS,
   PlanTaskStateMachine,
+  PlanTaskStateError,
+  PlanTaskSemanticError,
+  type PlanTaskTransitionContext,
   syncPlanToTasks,
   replanTasks,
 } from "./plantask.js";

@@ -1,4 +1,5 @@
 import {
+  PlanTaskSemanticError,
   PlanTaskStateMachine,
   replanTasks,
   syncPlanToTasks,
@@ -19,6 +20,10 @@ export type PatentPlanTaskInput = {
   planSteps?: string[];
   /** 之前已同步的任务（replan 可选：哈希比对已完成步骤）。 */
   previousTasks?: PlanTask[];
+  /** 当前任务列表（transition 到 executing 必需：强制先 sync 计划步骤）。 */
+  tasks?: PlanTask[];
+  /** 重规划反馈（transition 到 replanning 必需：反馈驱动重规划）。 */
+  feedback?: string;
 };
 
 /**
@@ -27,6 +32,8 @@ export type PatentPlanTaskInput = {
  * 维护专利任务的白名单状态迁移（planning → awaiting_approval → executing →
  * awaiting_feedback → replanning → finished），非法迁移抛错（fail-closed）；
  * 支持计划步骤 → 任务同步与重规划增量续跑（哈希比对已完成步骤）。
+ * 状态机带语义强制：进入 executing 必须先 sync 出任务（tasks 非空）、
+ * 进入 replanning 必须有反馈（feedback 非空）——无任务不执行、无反馈不重规划。
  * 工具无会话状态：每次调用传入当前状态，由调用方（agent）持久化。
  */
 export function createPatentPlanTaskTool(): SatiToolDefinition<PatentPlanTaskInput> {
@@ -56,6 +63,15 @@ export function createPatentPlanTaskTool(): SatiToolDefinition<PatentPlanTaskInp
           type: "array",
           description: "Previous task list (replan, optional: preserve completed steps).",
           items: { type: "object", additionalProperties: true },
+        },
+        tasks: {
+          type: "array",
+          description: "Current task list (transition to executing, required: sync first).",
+          items: { type: "object", additionalProperties: true },
+        },
+        feedback: {
+          type: "string",
+          description: "Feedback driving replanning (transition to replanning, required).",
         },
       },
     },
@@ -89,8 +105,17 @@ export function createPatentPlanTaskTool(): SatiToolDefinition<PatentPlanTaskInp
               ],
             };
           }
-          const next = machine.transition(to);
-          return { content: [{ type: "text", text: `patent_plan_task: ${from} → ${next} ✅` }] };
+          // 语义强制（fail-closed）：executing 需 tasks、replanning 需 feedback——
+          // 与状态机 PlanTaskSemanticError 一致，工具层转为文本返回。
+          try {
+            const next = machine.transition(to, { tasks: input.tasks, feedback: input.feedback });
+            return { content: [{ type: "text", text: `patent_plan_task: ${from} → ${next} ✅` }] };
+          } catch (err) {
+            if (err instanceof PlanTaskSemanticError) {
+              return { content: [{ type: "text", text: `patent_plan_task: ${err.message}` }] };
+            }
+            throw err;
+          }
         }
         case "sync": {
           const steps = input.planSteps ?? [];

@@ -15,9 +15,11 @@ import {
   type WorkflowManifest,
   type WorkflowRunResult,
 } from "../../patent/index.js";
-import { StageHandlerRegistry } from "../../patent/atoms/index.js";
+import { StageHandlerRegistry, type StageProvider } from "../../patent/atoms/index.js";
+import { createNuoSearchProvider } from "../../patent/data/nuo/searchProvider.js";
 import { caseWorkflowRunsDir } from "../../patent/paths.js";
-import type { SatiToolDefinition } from "../protocol/types.js";
+import { DEFAULT_MODEL_ID, DEFAULT_MODEL_PROVIDER, type CanonicalModelRequest } from "../../model/index.js";
+import type { SatiToolDefinition, SatiToolModelClient } from "../protocol/types.js";
 
 export type PatentWorkflowStageOutput = {
   /** 与 manifest.stages[].id 对应的阶段 id。 */
@@ -303,4 +305,76 @@ export function runRuleGate(
   const verdict = aggregate(failures);
   const summary = summarizeCheck(verdict, failures);
   return `${summary}\n${formatRuleResults(failures, verdict)}`;
+}
+
+// ---------------------------------------------------------------------------
+// 原子执行共享装配（patent_workflow_run 与 flexible_plan 共用：
+// LLM 客户端 + 检索器 → StageProvider，避免两处各自维护装配逻辑漂移）
+// ---------------------------------------------------------------------------
+
+const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+
+export type WorkflowProviderDeps = {
+  /** 模型客户端（缺省取 context.model；二者皆无时 buildWorkflowProvider 返回 undefined）。 */
+  model?: SatiToolModelClient;
+  /** 模型 provider id（缺省 "openrouter"，对齐 web_fetch 默认）。 */
+  provider?: string;
+  /** 模型 id（缺省 "moonshotai/kimi-k2.6"，对齐 web_fetch 默认）。 */
+  modelId?: string;
+  /** 检索器（缺省 nuo-patent 的 searchPatents，经 createNuoSearchProvider 适配）。 */
+  search?: StageProvider["search"];
+};
+
+export type WorkflowProviderContext = {
+  model?: SatiToolModelClient;
+};
+
+/** 收集 stream 事件为完整文本（对齐 web_fetch 二次模型调用模式）。 */
+export async function collectModelText(model: SatiToolModelClient, request: CanonicalModelRequest): Promise<string> {
+  let text = "";
+  for await (const event of model.stream(request)) {
+    switch (event.type) {
+      case "text_delta":
+        text += event.text;
+        break;
+      case "error":
+        throw new Error(`模型调用失败: ${event.error.message}`);
+      default:
+        break;
+    }
+  }
+  return text;
+}
+
+/**
+ * 装配 StageProvider：callLLM 走 deps.model ?? context.model（皆无时返回
+ * undefined，由调用方给出明确错误而非静默降级）；search 走 deps.search 或
+ * nuo-patent。jsonSchema 提供时要求结构化输出（handler 尝试解析 JSON）。
+ */
+export function buildWorkflowProvider(
+  deps: WorkflowProviderDeps,
+  context: WorkflowProviderContext = {},
+): StageProvider | undefined {
+  const model = deps.model ?? context.model;
+  if (!model) return undefined;
+  return {
+    callLLM: async (prompt, opts) => {
+      const jsonSchema = opts?.jsonSchema;
+      const outputSchema =
+        jsonSchema !== undefined && typeof jsonSchema === "object" && jsonSchema !== null
+          ? { name: "structured_output", schema: jsonSchema as Record<string, unknown>, strict: true }
+          : undefined;
+      const request: CanonicalModelRequest = {
+        provider: deps.provider ?? DEFAULT_MODEL_PROVIDER,
+        model: deps.modelId ?? DEFAULT_MODEL_ID,
+        messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+        maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+        temperature: opts?.temperature ?? 0,
+        stream: true,
+        ...(outputSchema !== undefined ? { outputSchema } : {}),
+      };
+      return collectModelText(model, request);
+    },
+    search: deps.search ?? createNuoSearchProvider().search,
+  };
 }

@@ -62,6 +62,11 @@ export {
   WorkflowCheckpointError,
 } from "./checkpoint/CheckpointHandler.js";
 export {
+  HumanCheckpointHandler,
+  type WorkflowCheckpointPending,
+  type HumanCheckpointHandlerOptions,
+} from "./checkpoint/HumanCheckpointHandler.js";
+export {
   InMemoryWorkflowPlanStore,
   JsonFileWorkflowPlanStore,
   type WorkflowPlanStore,

@@ -95,16 +95,23 @@ describe("patent workflow 执行器（workflow.ts 接线）", () => {
 });
 
 describe("patent plan task 状态机（plantask.ts 接线）", () => {
-  it("白名单迁移合法，非法迁移 fail-closed", () => {
+  it("白名单迁移合法（含语义前置条件），非法迁移 fail-closed", () => {
     const machine = new PlanTaskStateMachine();
     machine.transition("awaiting_approval");
-    machine.transition("executing");
+    machine.transition("executing", { tasks: syncPlanToTasks(["解析"]).tasks });
     machine.transition("awaiting_feedback");
-    machine.transition("replanning");
+    machine.transition("replanning", { feedback: "补充检索" });
     machine.transition("awaiting_approval");
     machine.transition("finished");
     assert.equal(machine.state, "finished");
     assert.throws(() => machine.transition("planning"), /非法状态迁移/);
+  });
+
+  it("语义强制：executing 无任务 / replanning 无反馈 fail-closed", () => {
+    const sm = new PlanTaskStateMachine("awaiting_approval");
+    assert.throws(() => sm.transition("executing"), /executing 前必须先 sync/);
+    const rf = new PlanTaskStateMachine("awaiting_feedback");
+    assert.throws(() => rf.transition("replanning"), /replanning 必须有反馈/);
   });
 
   it("syncPlanToTasks 建立顺序依赖", () => {
@@ -306,6 +313,31 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
       makeToolContext(),
     );
     assert.ok(textOf(res).includes("非法状态迁移"));
+  });
+
+  it("patent_plan_task 工具：语义强制——executing 无任务 / replanning 无反馈返回文本", async () => {
+    const tool = createPatentPlanTaskTool();
+    const noTasks = await tool.execute(
+      { action: "transition", currentState: "awaiting_approval", to: "executing" },
+      makeToolContext(),
+    );
+    assert.ok(textOf(noTasks).includes("executing 前必须先 sync"), `应提示先 sync: ${textOf(noTasks)}`);
+    const noFeedback = await tool.execute(
+      { action: "transition", currentState: "awaiting_feedback", to: "replanning" },
+      makeToolContext(),
+    );
+    assert.ok(textOf(noFeedback).includes("replanning 必须有反馈"), `应提示需反馈: ${textOf(noFeedback)}`);
+    // 满足前置条件后正常放行
+    const ok = await tool.execute(
+      {
+        action: "transition",
+        currentState: "awaiting_approval",
+        to: "executing",
+        tasks: syncPlanToTasks(["解析"]).tasks,
+      },
+      makeToolContext(),
+    );
+    assert.ok(textOf(ok).includes("awaiting_approval → executing ✅"), `应放行: ${textOf(ok)}`);
   });
 
   it("patent_plan_task 工具：非法状态字符串 fail-closed（不抛 TypeError）", async () => {
