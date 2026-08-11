@@ -91,9 +91,9 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
           // ignore network errors while polling
         }
       }, 3000);
-    } catch (err: any) {
+    } catch (err) {
       setQrPhase("error");
-      setQrError(err.message);
+      setQrError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -117,8 +117,8 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
         body: JSON.stringify({ appId, appSecret, domainName: domain }),
       });
       setTestResult(await res.json());
-    } catch (err: any) {
-      setTestResult({ ok: false, error: err.message });
+    } catch (err) {
+      setTestResult({ ok: false, error: err instanceof Error ? err.message : String(err) });
     } finally {
       setTesting(false);
     }
@@ -144,8 +144,8 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
       } else {
         setTestResult({ ok: false, error: data.error });
       }
-    } catch (err: any) {
-      setTestResult({ ok: false, error: err.message });
+    } catch (err) {
+      setTestResult({ ok: false, error: err instanceof Error ? err.message : String(err) });
     } finally {
       setSaving(false);
     }

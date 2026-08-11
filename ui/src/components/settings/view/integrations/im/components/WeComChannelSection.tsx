@@ -90,9 +90,9 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
           // ignore network errors while polling
         }
       }, 3000);
-    } catch (err: any) {
+    } catch (err) {
       setQrPhase("error");
-      setQrError(err.message);
+      setQrError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -134,8 +134,8 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
       } else {
         setSaveResult({ ok: false, error: data.error || "Failed" });
       }
-    } catch (err: any) {
-      setSaveResult({ ok: false, error: err.message });
+    } catch (err) {
+      setSaveResult({ ok: false, error: err instanceof Error ? err.message : String(err) });
     } finally {
       setSaving(false);
     }

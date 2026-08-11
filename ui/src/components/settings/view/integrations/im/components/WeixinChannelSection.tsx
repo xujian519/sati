@@ -203,10 +203,10 @@ export default function WeixinChannelSection({ status, onSaved }: WeixinChannelS
         setError(t("gateway.weixin.qrPreparing"));
         setPhase("error");
       }, WEIXIN_QR_PREPARE_TIMEOUT_MS);
-    } catch (err: any) {
+    } catch (err) {
       clearLoginTimers();
       setPhase("error");
-      setError(err.message);
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 

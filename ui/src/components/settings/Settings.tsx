@@ -17,7 +17,17 @@ export type DesktopVersionCheckResult = {
   buildTime: string | null;
 };
 
-function normalizeDesktopVersionResult(payload: any): DesktopVersionCheckResult {
+type VersionCheckPayload = {
+  hasUpdate?: boolean;
+  checkUnavailable?: boolean;
+  current?: { version?: string; buildTime?: string | null };
+  latest?: { version?: string | null; publishedAt?: string | null };
+  localHead?: string;
+  remoteHead?: string | null;
+  [key: string]: unknown;
+};
+
+function normalizeDesktopVersionResult(payload: VersionCheckPayload): DesktopVersionCheckResult {
   return {
     mode: "desktop",
     hasUpdate: Boolean(payload?.hasUpdate),
@@ -29,7 +39,7 @@ function normalizeDesktopVersionResult(payload: any): DesktopVersionCheckResult 
   };
 }
 
-function normalizeWebVersionResult(payload: any): DesktopVersionCheckResult {
+function normalizeWebVersionResult(payload: VersionCheckPayload): DesktopVersionCheckResult {
   return {
     mode: "web",
     hasUpdate: Boolean(payload?.hasUpdate),
@@ -42,7 +52,7 @@ function normalizeWebVersionResult(payload: any): DesktopVersionCheckResult {
 }
 
 function SettingsInner({ isOpen, onClose, projects = [], initialTab }: SettingsProps) {
-  const isDesktopApp = typeof window !== "undefined" && !!(window as any).satiDesktop;
+  const isDesktopApp = typeof window !== "undefined" && !!(window as Window & { satiDesktop?: unknown }).satiDesktop;
   const initialKey = useMemo(() => mapInitialTabToMenuKey(initialTab), [initialTab]);
   const [selectedKey, setSelectedKey] = useState<SettingsMenuKey>(initialKey);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(initialKey === "general");

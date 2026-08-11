@@ -96,8 +96,8 @@ export function useRoutingDashboard() {
         const body = await res.json().catch(() => ({}));
         setError(body.error || `HTTP ${res.status}`);
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch dashboard");
     } finally {
       hasFetchedRef.current = true;
       if (isInitial) setLoading(false);

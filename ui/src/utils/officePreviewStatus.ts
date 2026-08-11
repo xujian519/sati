@@ -27,11 +27,25 @@ export function normalizeOfficePreviewService(value: unknown): OfficePreviewServ
     : "builtin";
 }
 
-async function readJsonBody(response: Response): Promise<any> {
+type ConfigResponseBody = {
+  error?: string;
+  service?: unknown;
+  libreOffice?: OfficePreviewStatus["libreOffice"];
+  config?: {
+    webui?: {
+      officePreview?: {
+        service?: unknown;
+      };
+    };
+  };
+  [key: string]: unknown;
+};
+
+async function readJsonBody(response: Response): Promise<ConfigResponseBody | null> {
   const text = await response.text();
   if (!text.trim()) return null;
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as ConfigResponseBody;
   } catch {
     throw new Error(response.ok ? "Expected JSON response for Office preview status." : text.slice(0, 160));
   }

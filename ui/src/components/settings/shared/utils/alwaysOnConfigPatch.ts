@@ -1,6 +1,7 @@
 import type { SettingsProject } from "../types";
+import { asRecord } from "../../../../utils/unknown";
 
-type SatiConfigLike = Record<string, any>;
+type SatiConfigLike = Record<string, unknown>;
 
 export function getAlwaysOnProjectRoot(project: SettingsProject): string {
   const root = project.fullPath || project.path || "";
@@ -9,7 +10,10 @@ export function getAlwaysOnProjectRoot(project: SettingsProject): string {
 
 export function isAlwaysOnProjectEnabled(config: SatiConfigLike, project: SettingsProject): boolean {
   const root = getAlwaysOnProjectRoot(project);
-  return Boolean(root && config.alwaysOn?.projects?.[root]?.enabled === true);
+  if (!root) return false;
+  const alwaysOn: Record<string, unknown> = asRecord(config.alwaysOn) ?? {};
+  const projects: Record<string, unknown> = asRecord(alwaysOn.projects) ?? {};
+  return asRecord(projects[root])?.enabled === true;
 }
 
 export function setAlwaysOnProjectEnabled<T extends SatiConfigLike>(
@@ -20,14 +24,17 @@ export function setAlwaysOnProjectEnabled<T extends SatiConfigLike>(
   const root = getAlwaysOnProjectRoot(project);
   if (!root) return config;
 
+  const alwaysOn: Record<string, unknown> = asRecord(config.alwaysOn) ?? {};
+  const projects: Record<string, unknown> = asRecord(alwaysOn.projects) ?? {};
+
   return {
     ...config,
     alwaysOn: {
-      ...config.alwaysOn,
+      ...alwaysOn,
       projects: {
-        ...config.alwaysOn?.projects,
+        ...projects,
         [root]: {
-          ...config.alwaysOn?.projects?.[root],
+          ...(asRecord(projects[root]) ?? {}),
           enabled,
         },
       },

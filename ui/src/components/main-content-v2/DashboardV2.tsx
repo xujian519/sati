@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useRoutingDashboard } from "../../hooks/useRoutingDashboard";
+import type { TokenBucket } from "../../hooks/useRouterSettings";
 import type {
   DashboardData,
   DashboardProject,
@@ -211,8 +212,8 @@ function buildProjectGroups(data: DashboardData): { groups: ProjectGroup[]; gene
       baselineCost: 0,
       savedCost: 0,
     };
-    const aggByTier: Record<string, any> = {};
-    const aggByRole: Record<string, any> = {};
+    const aggByTier: Record<string, TokenBucket> = {};
+    const aggByRole: Record<string, TokenBucket> = {};
     const sessions: DashboardSession[] = [];
 
     for (const u of unmatched) {
@@ -237,11 +238,11 @@ function buildProjectGroups(data: DashboardData): { groups: ProjectGroup[]; gene
             baselineCost: 0,
             savedCost: 0,
           };
-        aggByTier[k].totalTokens += v?.totalTokens || 0;
-        aggByTier[k].requestCount += v?.requestCount || 0;
-        aggByTier[k].estimatedCost += v?.estimatedCost || 0;
-        aggByTier[k].baselineCost += v?.baselineCost || 0;
-        aggByTier[k].savedCost += v?.savedCost || 0;
+        aggByTier[k]!.totalTokens += v?.totalTokens || 0;
+        aggByTier[k]!.requestCount += v?.requestCount || 0;
+        aggByTier[k]!.estimatedCost += v?.estimatedCost || 0;
+        aggByTier[k]!.baselineCost = (aggByTier[k]!.baselineCost ?? 0) + (v?.baselineCost || 0);
+        aggByTier[k]!.savedCost = (aggByTier[k]!.savedCost ?? 0) + (v?.savedCost || 0);
       }
 
       sessions.push({
