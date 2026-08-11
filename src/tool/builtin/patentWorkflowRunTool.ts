@@ -1,8 +1,15 @@
+import { join } from "node:path";
 import {
   builtinPatentManifests,
   runWorkflow,
   validateWorkflowManifest,
   JsonFileWorkflowRunStore,
+  InMemoryCheckpointStore,
+  JsonFileCheckpointStore,
+  runGraphWithCheckpoints,
+  DOMAIN_GRAPHS,
+  type DomainGraphName,
+  type GraphRunResult,
   type WorkflowManifest,
 } from "../../patent/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry, type StageProvider } from "../../patent/atoms/index.js";
@@ -38,6 +45,14 @@ import {
 export type PatentWorkflowRunInput = {
   /** 工作流 manifest id（缺省 "patent_disclosure_v1"，唯一声明原子的内置 manifest）。 */
   manifestId?: string;
+  /**
+   * 领域子图模式：命中时走图引擎自动执行对应子图（A22.2 新颖性 / A22.3 创造性 /
+   * A26.3 充分公开），一次调用跑完全部节点（LLM + 检索 + 规则门），无需主代理驱动。
+   * 缺省走 manifest 路径（向后兼容）。
+   */
+  graph?: DomainGraphName;
+  /** 图模式断点续跑：提供 checkpoint id（上次中断返回）时从该检查点继续。 */
+  resumeCheckpointId?: string;
   /** 案例标识（用于结果记录与持久化；可含 {caseId} 占位）。 */
   caseId?: string;
   /** 初始材料（技术交底书等），映射为各原子读取的 text/source_text/extraction_input。 */
@@ -87,13 +102,13 @@ export function createPatentWorkflowRunTool(
     name: "patent_workflow_run",
     aliases: ["PatentWorkflowRun", "run_patent_atoms"],
     description:
-      "Automatically execute a declarative patent workflow's atom stages (extract → merge → groundedness → " +
-      "keywords → search → novelty → draft-claims) with an LLM + patent-search provider, instead of collecting " +
-      "agent-written stage texts. Built-in atom manifest: patent_disclosure_v1 (PFE extraction → prior-art search → " +
-      "per-feature novelty → review gate → claims draft). Provide the disclosure text as 'input'. The review gate " +
-      "pauses the run (reports interrupted; later stages do not execute) — re-invoking restarts from scratch and " +
-      "pauses again (no checkpoint resume). When caseId is provided the run result and a Mermaid diagram are " +
-      "persisted to <caseDir>/workflow-runs/. Requires a model client (session model) and optionally a search provider.",
+      "Automatically execute a declarative patent workflow (atom stages) or a domain graph. Manifest path: " +
+      "patent_disclosure_v1 (PFE extraction → prior-art search → per-feature novelty → review gate → claims draft). " +
+      "Graph path (graph=novelty|inventiveness|enablement): runs a full domain graph (LLM nodes + patent search + " +
+      "deterministic rule gate) in one call — e.g. graph=inventiveness runs the A22.3 three-step analysis end-to-end. " +
+      "Provide the input as 'input'. The review gate pauses the run (reports interrupted + checkpointId); re-invoking " +
+      "with resumeCheckpointId continues from the pause point. When caseId is provided, run results, the Mermaid " +
+      "diagram, and graph checkpoints are persisted under <caseDir>/workflow-runs/. Requires a model client.",
     kind: "session",
     domain: "patent",
     inputSchema: {
@@ -104,6 +119,20 @@ export function createPatentWorkflowRunTool(
         manifestId: {
           type: "string",
           description: "Workflow manifest id. Defaults to 'patent_disclosure_v1' (the built-in atom manifest).",
+        },
+        graph: {
+          type: "string",
+          enum: ["novelty", "inventiveness", "enablement"],
+          description:
+            "Domain graph to run: novelty (A22.2), inventiveness (A22.3 three-step), enablement (A26.3). " +
+            "Runs all LLM/search/rule-gate nodes up to the approval gate, which pauses the run (HITL); " +
+            "re-invoke with resumeCheckpointId to continue (the gate pauses again until approved). " +
+            "Mutually exclusive with manifestId.",
+        },
+        resumeCheckpointId: {
+          type: "string",
+          description:
+            "Graph-mode checkpoint id from a previous interrupted run; continues from that point instead of restarting.",
         },
         caseId: {
           type: "string",
@@ -123,6 +152,11 @@ export function createPatentWorkflowRunTool(
     isReadOnly: () => false,
     isConcurrencySafe: () => true,
     async execute(input, context) {
+      // 图模式：领域子图自动执行（与 manifest 路径互斥）。
+      if (input.graph !== undefined) {
+        return executeGraphRun(input, context, deps);
+      }
+
       // 默认 patent_disclosure_v1：唯一声明原子的内置 manifest（novelty/inventiveness
       // 无 atom，原子执行无意义，应由 patent_workflow 收口语义消费）。
       const manifest: WorkflowManifest | undefined = manifests.get(input.manifestId ?? "patent_disclosure_v1");
@@ -234,5 +268,141 @@ export function createPatentWorkflowRunTool(
         ],
       };
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 图模式：领域子图自动执行（graph=novelty|inventiveness|enablement）
+// ---------------------------------------------------------------------------
+
+type GraphExecuteContext = {
+  model?: SatiToolModelClient;
+  cwd?: string;
+};
+
+/** 渲染图运行结果文本。 */
+function renderGraphResultText(opts: {
+  graph: DomainGraphName;
+  result: GraphRunResult;
+  persistNote: string;
+  checkpointNote: string;
+}): string {
+  const completion = opts.result.completed ? "completed" : "incomplete";
+  const keyLines = Object.entries(opts.result.state)
+    .filter(([key]) => !key.startsWith("_") && !key.endsWith("__degradation"))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => {
+      // 防御：state 值可能为 undefined（JSON.stringify(undefined) 返回 undefined）。
+      const text = typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value);
+      const preview = text.length > 0 ? `${text.slice(0, 80)}${text.length > 80 ? "…" : ""}` : "(空)";
+      return `- ${key}: ${preview}`;
+    });
+  const degraded = opts.result.degraded.map(d => `- ${d.severity} [${d.reason}] ${d.message}`);
+  return [
+    `patent_workflow_run(graph=${opts.graph}): 图引擎执行 ${opts.result.steps} 超步，完成状态: ${completion}`,
+    ...keyLines,
+    ...(opts.result.degraded.length > 0 ? ["", "⚠️ 降级标记:", ...degraded] : ["", "✅ 无降级"]),
+    `规则门 verdict: ${String(opts.result.state.rule_gate_verdict ?? "（未启用）")}`,
+    opts.checkpointNote,
+    opts.persistNote,
+    ...(opts.result.interrupted !== undefined
+      ? [
+          `⏸ 审批门暂停: "${opts.result.interrupted.node}"（${opts.result.interrupted.message}）——可用 resumeCheckpointId 续跑`,
+        ]
+      : []),
+  ].join("\n");
+}
+
+/** 图模式执行入口：构建子图 → 装配 provider → 带检查点运行（可续跑）→ 渲染。 */
+async function executeGraphRun(
+  input: PatentWorkflowRunInput,
+  context: GraphExecuteContext,
+  deps: PatentWorkflowRunDeps,
+): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+  const graphName = input.graph!;
+  const def = DOMAIN_GRAPHS[graphName];
+  const model = deps.model ?? context.model;
+  if (!model) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `patent_workflow_run: 未提供模型客户端（context.model 缺失），无法执行图 ${graphName}。请在有模型会话中调用。`,
+        },
+      ],
+    };
+  }
+
+  // 统一 ctx 映射（与 manifest 路径一致）。
+  const workflowCtx = {
+    caseId: input.caseId,
+    input: input.input,
+    text: input.input,
+    source_text: input.input,
+    extraction_input: input.input,
+    claim: input.input,
+    max_results: String(input.maxResults ?? 5),
+  };
+
+  const provider: StageProvider = {
+    callLLM: async (prompt, opts) => {
+      const jsonSchema = opts?.jsonSchema;
+      const outputSchema =
+        jsonSchema !== undefined && typeof jsonSchema === "object" && jsonSchema !== null
+          ? { name: "structured_output", schema: jsonSchema as Record<string, unknown>, strict: true }
+          : undefined;
+      const request: CanonicalModelRequest = {
+        provider: deps.provider ?? DEFAULT_MODEL_PROVIDER,
+        model: deps.modelId ?? DEFAULT_MODEL_ID,
+        messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+        maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+        temperature: opts?.temperature ?? 0,
+        stream: true,
+        ...(outputSchema !== undefined ? { outputSchema } : {}),
+      };
+      return collectModelText(model, request);
+    },
+    search: deps.search ?? createNuoSearchProvider().search,
+  };
+
+  // 检查点：caseId 提供时持久化到 <caseDir>/workflow-runs/checkpoints/，否则内存。
+  const graph = def.build({ handlers: deps.handlers ?? globalStageHandlerRegistry }).compile(def.entry);
+  const graphId = `patent_${graphName}`;
+  let store;
+  let persistNote = "持久化: 未启用（未提供 caseId）";
+  if (input.caseId !== undefined) {
+    const persistTarget = resolveRunPersistTarget(input.caseId, graphId, context.cwd ?? process.cwd());
+    if (persistTarget !== undefined) {
+      store = new JsonFileCheckpointStore(join(persistTarget.runsDir, "checkpoints"));
+      persistNote = `持久化: checkpoints 目录 ${join(persistTarget.runsDir, "checkpoints")}`;
+    }
+  }
+  store ??= new InMemoryCheckpointStore();
+
+  const resumeFrom = input.resumeCheckpointId !== undefined ? await store.load(input.resumeCheckpointId) : undefined;
+  if (input.resumeCheckpointId !== undefined && resumeFrom === undefined) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `patent_workflow_run: 检查点 "${input.resumeCheckpointId}" 不存在（可用 checkpoints 目录下的 id）。`,
+        },
+      ],
+    };
+  }
+
+  const { result, checkpointId } = await runGraphWithCheckpoints(graph, workflowCtx, {
+    store,
+    graphId,
+    provider,
+    resumeFrom,
+  });
+
+  const checkpointNote = checkpointId
+    ? `检查点: ${checkpointId}${result.interrupted !== undefined ? "（中断可续跑）" : ""}`
+    : "检查点: 无";
+
+  return {
+    content: [{ type: "text", text: renderGraphResultText({ graph: graphName, result, persistNote, checkpointNote }) }],
   };
 }

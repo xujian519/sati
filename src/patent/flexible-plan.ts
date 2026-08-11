@@ -28,6 +28,7 @@ import {
 import { SAFE_ID_PATTERN } from "./persist-utils.js";
 import type { ArticleJudgment, FactBlackboard } from "./reasoning/fact-blackboard.js";
 import type { WorkflowManifest, WorkflowStage } from "./workflow.js";
+import { manifestToGraph, type CompiledGraph, type ManifestToGraphDeps } from "./graph/index.js";
 
 /** 阶段状态：pending 未执行 / confirmed 已确认 / rolled_back 曾确认后作废（审计保留）。 */
 export type FlexibleStageStatus = "pending" | "confirmed" | "rolled_back";
@@ -312,6 +313,15 @@ export function toManifest(state: FlexiblePlanState): WorkflowManifest {
     caseType: state.caseType,
     stages,
   };
+}
+
+/**
+ * 灵活计划 → 可执行图（toManifest + manifestToGraph 一步到位）。
+ * 图执行（runGraph / runGraphWithCheckpoints）后经 confirmStage / rollbackStage
+ * 回流，语义与 toManifest → runWorkflow 一致；声明 atom 的阶段由图引擎自动执行。
+ */
+export function toCompiledGraph(state: FlexiblePlanState, deps: ManifestToGraphDeps = {}): CompiledGraph {
+  return manifestToGraph(toManifest(state), deps);
 }
 
 /** 完成计划：全部 pending 置 confirmed（已确认/已回退保留），status → completed。 */

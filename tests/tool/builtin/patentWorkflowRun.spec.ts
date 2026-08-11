@@ -240,3 +240,153 @@ test("createBuiltinRegistry 注册 patent_workflow_run（domain: patent）", () 
   assert.equal(tool!.domain, "patent");
   assert.equal(tool!.isReadOnly({ input: "x" } as never), false, "原子执行有 LLM/持久化副作用，非只读");
 });
+
+// ---------------------------------------------------------------------------
+// 图模式（graph=novelty|inventiveness|enablement）
+// ---------------------------------------------------------------------------
+
+/** inventiveness 三步法 prompt 响应器。 */
+function inventivenessResponder(prompt: string): string {
+  if (prompt.includes("创造性分析专家")) {
+    return JSON.stringify({
+      features: ["传送带", "识别传感器"],
+      field: "机械分拣",
+      filing_date: "2024-01-01",
+      inventor_claimed_effect: "提高分拣准确率",
+    });
+  }
+  if (prompt.includes("检索策略")) {
+    return "检索策略：1) 分拣 AND 传感器；2) IPC B07C";
+  }
+  if (prompt.includes("三步法第一步")) {
+    return JSON.stringify({
+      document: "D1",
+      technical_field: "机械分拣",
+      disclosed_features: ["传送带"],
+      rationale: "技术领域相同且公开特征最多",
+    });
+  }
+  if (prompt.includes("三步法第二步")) {
+    return JSON.stringify({
+      distinguishing_features: ["识别传感器"],
+      actual_technical_problem: "如何自动识别分拣目标",
+      effect_of_diff: "提高分拣准确率",
+    });
+  }
+  if (prompt.includes("三步法第三步")) {
+    return JSON.stringify({ obvious: false, motivation: "D1 无结合启示", evidence: [], dissenting_factors: [] });
+  }
+  if (prompt.includes("辅助判断因素")) {
+    return JSON.stringify({
+      unexpected_effect: "准确率提升 30%",
+      long_felt_need: "",
+      technical_prejudice: "",
+      commercial_success: "",
+    });
+  }
+  if (prompt.includes("综合三步法")) {
+    return JSON.stringify({
+      inventive: true,
+      confidence: "medium",
+      key_rationale: "区别特征带来预料不到的技术效果",
+      report:
+        "三步法分析报告：D1 为最接近的现有技术，区别特征为识别传感器，对本领域技术人员而言并非显而易见，具备创造性。",
+    });
+  }
+  return "{}";
+}
+
+test("graph=inventiveness 图自动执行 → 审批门中断 + 检查点输出", async () => {
+  registerBuiltinAtoms();
+  const tool = createPatentWorkflowRunTool({ model: mockModel(inventivenessResponder), search: mockSearch });
+  const res = await tool.execute({ graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器" }, {
+    cwd: "/tmp",
+  } as never);
+  const text = textOf(res);
+  assert.match(text, /patent_workflow_run\(graph=inventiveness\)/);
+  assert.match(text, /审批门暂停/);
+  assert.match(text, /检查点: patent_inventiveness-\d+/);
+  assert.match(text, /规则门 verdict/);
+});
+
+test("graph=inventiveness 断点续跑：中断后 resumeCheckpointId 从检查点继续", async () => {
+  registerBuiltinAtoms();
+  const dir = mkdtempSync(join(tmpdir(), "wf-graph-resume-"));
+  try {
+    const tool = createPatentWorkflowRunTool({ model: mockModel(inventivenessResponder), search: mockSearch });
+    // 第一次：approval 中断（默认全局 handler），返回 checkpointId。
+    const first = await tool.execute(
+      { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器", caseId: "graph-resume-1" },
+      { cwd: dir } as never,
+    );
+    const firstText = textOf(first);
+    assert.match(firstText, /审批门暂停/);
+    const checkpointMatch = firstText.match(/检查点: (patent_inventiveness-\d+)/);
+    assert.ok(checkpointMatch, "应输出 checkpointId");
+
+    // 第二次：注入放行 approval 的 handlers，resumeCheckpointId 续跑至完成。
+    const passthroughApproval = {
+      name: "approval-gate",
+      category: "gate" as const,
+      execute: async () => ({ review_passed: true }),
+    };
+    const handlers = new StageHandlerRegistry();
+    for (const h of globalStageHandlerRegistry.list()) handlers.register(h);
+    handlers.register(passthroughApproval);
+    const resumedTool = createPatentWorkflowRunTool({
+      model: mockModel(inventivenessResponder),
+      search: mockSearch,
+      handlers,
+    });
+    const resumed = await resumedTool.execute(
+      {
+        graph: "inventiveness",
+        input: "一种分拣装置，包括传送带与识别传感器",
+        caseId: "graph-resume-1",
+        resumeCheckpointId: checkpointMatch[1],
+      },
+      { cwd: dir } as never,
+    );
+    const resumedText = textOf(resumed);
+    assert.match(resumedText, /完成状态: completed/);
+    assert.match(resumedText, /规则门 verdict/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("graph=novelty 图自动执行（含数值范围节点）", async () => {
+  registerBuiltinAtoms();
+  const responder = (prompt: string): string => {
+    if (prompt.includes("完整新颖性分析报告")) {
+      return "新颖性分析报告：权利要求相对于现有技术 D1 具备新颖性（单独对比原则，逐技术特征比对见附表）。";
+    }
+    if (prompt.includes("数值范围")) {
+      return JSON.stringify({
+        assessments: [{ range: "50-80", category: "重叠区间", disclosed: false, reasoning: "端点未公开" }],
+      });
+    }
+    if (prompt.includes("技术分析助手")) {
+      return JSON.stringify({ features: ["传送带", "识别传感器"], problems: [], effects: [] });
+    }
+    if (prompt.includes("生成检索关键词")) {
+      return JSON.stringify({ keywords: ["分拣", "传感器"] });
+    }
+    if (prompt.includes("专利新颖性分析专家")) {
+      return JSON.stringify({
+        assessments: [{ feature: "传送带", prior_art: "D1", disclosed: false, reasoning: "未公开" }],
+        conclusion: "具备新颖性（置信度 0.8）",
+      });
+    }
+    return "{}";
+  };
+  const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: mockSearch });
+  const res = await tool.execute(
+    { graph: "novelty", input: "一种分拣装置，温度范围为 50-80°C，包含传送带与识别传感器" },
+    { cwd: "/tmp" } as never,
+  );
+  const text = textOf(res);
+  assert.match(text, /patent_workflow_run\(graph=novelty\)/);
+  assert.match(text, /numeric_ranges/);
+  assert.match(text, /新颖性分析报告/);
+});

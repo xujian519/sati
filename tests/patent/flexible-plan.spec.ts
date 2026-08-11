@@ -12,10 +12,12 @@ import {
   removeStage,
   reorderStages,
   rollbackStage,
+  toCompiledGraph,
   toJSON,
   toManifest,
   type FlexibleStage,
 } from "../../src/patent/flexible-plan.js";
+import { globalAtomRegistry, globalStageHandlerRegistry, registerBuiltinAtoms } from "../../src/patent/atoms/index.js";
 import { FactBlackboard } from "../../src/patent/reasoning/fact-blackboard.js";
 
 /** 构造最小合法阶段（减少样板）。 */
@@ -439,4 +441,34 @@ test("completed/abandoned 计划拒绝全部变更操作", () => {
   assert.throws(() => addStage(ab, stage("s2")), FlexiblePlanError);
   assert.throws(() => complete(ab), FlexiblePlanError);
   assert.throws(() => abandon(ab, "again"), FlexiblePlanError);
+});
+
+// ---------------------------------------------------------------------------
+// toCompiledGraph（灵活计划 → 图引擎）
+// ---------------------------------------------------------------------------
+
+test("toCompiledGraph: 声明 atom 的阶段由图引擎自动执行", async () => {
+  registerBuiltinAtoms();
+  const provider = {
+    callLLM: async () => JSON.stringify({ features: ["特征A", "特征B"], problems: ["问题1"], effects: ["效果1"] }),
+  };
+  const plan = createFlexiblePlan("case-g", "disclosure_analysis", {
+    stages: [
+      stage("extract", {
+        atom: "extract",
+        params: { extraction_type: "提取技术特征", output_key: "features" },
+      }),
+      stage("merge", { atom: "merge" }),
+      stage("done"),
+    ],
+  });
+  const graph = toCompiledGraph(plan, {
+    handlers: globalStageHandlerRegistry,
+    atoms: globalAtomRegistry,
+    provider,
+  });
+  const result = await graph.run({ text: "一种装置" });
+  assert.equal(result.completed, true);
+  assert.ok(Array.isArray(result.state.features), "extract 原子产出 features");
+  assert.ok(result.state.pfe_triples || result.state.merge_result, "merge 原子产出");
 });

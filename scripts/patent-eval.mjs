@@ -31,6 +31,8 @@ import { fileURLToPath } from "node:url";
 import { loadPilotConfig } from "../dist/src/pilot/index.js";
 import { createModelRuntime } from "../dist/src/model/index.js";
 import { runRuleGate } from "../dist/src/tool/builtin/patentWorkflowTool.js";
+import { createGraphRunner, Evaluator } from "../dist/src/patent/evaluate/index.js";
+import { createNuoSearchProvider } from "../dist/src/patent/data/nuo/searchProvider.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -61,9 +63,10 @@ function printHelp() {
   console.log(`用法: node scripts/patent-eval.mjs [options]
   --suite <path>                评测用例 JSON（默认 tests/patent/benchmark/fixtures/patent-exam-real-a26-3.json）
   --model <provider/model>      LLM（默认 deepseek/deepseek-v4-pro）
-  --no-knowledge                关闭领域知识注入（基线对照）
-  --no-dimension-instruction    关闭维度覆盖指令
-  --check-domain <domain>       规则门检查域，逗号分隔（默认 patent_disclosure）
+  --mode <text|graph>           评测模式：text=单文本+规则门（默认）；graph=领域子图自动执行（图引擎）
+  --no-knowledge                关闭领域知识注入（基线对照；仅 text 模式）
+  --no-dimension-instruction    关闭维度覆盖指令（仅 text 模式）
+  --check-domain <domain>       规则门检查域，逗号分隔（默认 patent_disclosure；text 模式）
   --out <path>                  完整产出 JSON 保存路径（默认 /tmp/patent-eval-outputs.json）
   --max-cases <N>               最多评测前 N 个 case（默认全部）
   -h, --help                    显示本帮助`);
@@ -73,6 +76,7 @@ function parseArgs(argv) {
   const opts = {
     suite: "tests/patent/benchmark/fixtures/patent-exam-real-a26-3.json",
     model: "deepseek/deepseek-v4-pro",
+    mode: "text",
     knowledge: true,
     dimensionInstruction: true,
     checkDomain: "patent_disclosure",
@@ -87,6 +91,9 @@ function parseArgs(argv) {
         break;
       case "--model":
         opts.model = argv[++i];
+        break;
+      case "--mode":
+        opts.mode = argv[++i];
         break;
       case "--no-knowledge":
         opts.knowledge = false;
@@ -150,6 +157,52 @@ async function main() {
   if (targets.length === 0) {
     console.error(`fixture 无 case（suite=${fixture.suite ?? "?"}）`);
     process.exit(1);
+  }
+
+  // 图模式：领域子图自动执行（三性）→ 规则门 + expected 指标（Evaluator 汇总）。
+  if (opts.mode === "graph") {
+    const provider = {
+      callLLM: async (prompt, callOpts) => {
+        const res = await runtime.complete({
+          provider,
+          model,
+          messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+          maxOutputTokens: 4096,
+          temperature: callOpts?.temperature ?? 0,
+          ...(callOpts?.jsonSchema
+            ? { outputSchema: { name: "structured_output", schema: callOpts.jsonSchema, strict: true } }
+            : {}),
+        });
+        return res.content
+          .filter(b => b.type === "text")
+          .map(b => b.text)
+          .join("\n");
+      },
+      search: createNuoSearchProvider().search,
+    };
+    const runner = createGraphRunner({ provider });
+    const evaluator = new Evaluator(runner, { passLine: 0.5 });
+    const evalCases = targets.map(c => ({
+      id: c.id,
+      domain: c.domain ?? "patent",
+      input: c.input,
+      expected: c.expected ?? "",
+      requiredCitations: c.requiredCitations,
+      businessTask: c.businessTask,
+    }));
+    console.log(
+      `[评测·图] fixture=${opts.suite} | 模型=${opts.model} | cases=${evalCases.length} | 模式=领域子图自动执行`,
+    );
+    const report = await evaluator.evaluateCases(evalCases);
+    console.log(`[结果] total=${report.total} passed=${report.passed} degraded=${report.degradedCount}`);
+    console.log(`[指标] ${JSON.stringify(report.metrics, null, 2)}`);
+    for (const o of report.cases) {
+      const gate = o.ruleGateFailures.length === 0 ? "pass" : `fail(${o.ruleGateFailures.length})`;
+      console.log(`  ${o.caseId}: verdict=${o.verdict} gate=${gate} degraded=${o.degraded} ${o.elapsedMs}ms`);
+    }
+    writeFileSync(opts.out, JSON.stringify(report, null, 2));
+    console.log(`产出已写入: ${opts.out}`);
+    return;
   }
 
   const systemPrompt = [
