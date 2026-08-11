@@ -329,6 +329,7 @@ REM satiui bundle: only dev deps and caches excluded (UI deps are in dist/ via v
 cd /d "%UI_DIR%"
 tar cf "%RESOURCES%\satiui-bundle.tar" ^
     --exclude=node_modules/.pnpm/electron* --exclude=node_modules/.pnpm/@electron* ^
+    --exclude=node_modules/.pnpm/node_modules/@sati ^
     --exclude=node_modules/electron --exclude=*.map ^
     --exclude=node_modules/.cache --exclude=node_modules/.bin ^
     --exclude=node_modules/typescript --exclude=node_modules/@typescript ^
@@ -351,10 +352,15 @@ if errorlevel 1 (
 echo   satiui-bundle.tar OK
 
 REM sati-main bundle: additionally exclude browser-only UI deps (not imported by
-REM the backend; verified zero references by import scan)
+REM the backend; verified zero references by import scan). Also exclude the
+REM workspace's own @sati/desktop junction under .pnpm/node_modules - without
+REM it, tar walks into apps/desktop/ (resources/*.tar, dist-electron, ...) via
+REM the pnpm junction and balloons the bundle to multiple GB ("Can't add
+REM archive to itself").
 cd /d "%REPO_ROOT%"
 tar cf "%RESOURCES%\sati-main-bundle.tar" ^
     --exclude=node_modules/.pnpm/electron* --exclude=node_modules/.pnpm/@electron* ^
+    --exclude=node_modules/.pnpm/node_modules/@sati ^
     --exclude=node_modules/electron --exclude=*.map ^
     --exclude=node_modules/.cache --exclude=node_modules/.bin ^
     --exclude=node_modules/typescript --exclude=node_modules/@typescript ^
