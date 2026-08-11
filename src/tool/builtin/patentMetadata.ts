@@ -7,6 +7,7 @@
  */
 
 import { scrapePatent, validatePatentNumber } from "nuo-patent";
+import { cachedScrapePatent } from "../../patent/data/nuo/patentCache.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 import type { StructuredPatentData } from "../../patent/data/nuo/mapper.js";
@@ -90,7 +91,9 @@ function mapScrapeResult(result: Awaited<ReturnType<typeof scrapePatent>>): Pate
 export function createPatentMetadataTool(
   options?: CreatePatentMetadataToolOptions,
 ): SatiToolDefinition<PatentMetadataInput, PatentMetadataOutput> {
-  const scrape = options?.scrape ?? scrapePatent;
+  // 默认实现包 LRU 缓存 + 并发合并：同一专利号在 TTL 内重复点查直接命中，
+  // 不再重复 spawn ego-browser / 抓 Google Patents。测试注入的 mock 原样使用。
+  const scrape = options?.scrape ? options.scrape : cachedScrapePatent(scrapePatent);
 
   return {
     name: "patent_metadata",

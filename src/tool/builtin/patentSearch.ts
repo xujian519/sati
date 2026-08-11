@@ -7,6 +7,7 @@
  */
 
 import { searchPatents as searchPatentsImpl, type PatentSearchHit } from "nuo-patent";
+import { cachedSearchPatents } from "../../patent/data/nuo/patentCache.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 
@@ -55,7 +56,10 @@ function toItem(h: PatentSearchHit): PatentSearchHitItem {
 export function createPatentSearchTool(
   options?: CreatePatentSearchToolOptions,
 ): SatiToolDefinition<PatentSearchInput, PatentSearchOutput> {
-  const search = options?.search ?? searchPatentsImpl;
+  // 默认实现包一层 LRU 缓存 + 并发合并：同一检索式在 TTL 内重复调用（agent
+  // 重试/多工具并行）直接命中，不再 spawn ego-browser / 打 Google。
+  // 测试注入的 mock search 原样使用（不套缓存，保持行为可预期）。
+  const search = options?.search ? options.search : cachedSearchPatents(searchPatentsImpl);
 
   return {
     name: "patent_search",

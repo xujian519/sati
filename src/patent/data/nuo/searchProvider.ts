@@ -16,18 +16,21 @@
 
 import { searchPatents as searchPatentsImpl } from "nuo-patent";
 import type { StageProvider } from "../../atoms/index.js";
+import { cachedSearchPatents } from "./patentCache.js";
 
 export type CreateNuoSearchProviderOptions = {
-  /** 检索函数注入（测试用；缺省用 nuo-patent 的 searchPatents） */
+  /** 检索函数注入（测试用；缺省用 nuo-patent 的 searchPatents 套 LRU 缓存） */
   search?: typeof searchPatentsImpl;
 };
 
 /**
  * 构造基于 nuo-patent 的检索 provider。
  * 返回的 search 将检索命中映射为 workflow 原子消费的 { title, snippet, url }。
+ * 默认实现套 `cachedSearchPatents`：同一检索式 TTL 内重复调用直接命中缓存，
+ * 避免 workflow 多阶段/多轮重复 spawn ego-browser。
  */
 export function createNuoSearchProvider(options?: CreateNuoSearchProviderOptions): StageProvider {
-  const search = options?.search ?? searchPatentsImpl;
+  const search = options?.search ? options.search : cachedSearchPatents(searchPatentsImpl);
 
   return {
     search: async (query, opts) => {
