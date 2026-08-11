@@ -368,6 +368,12 @@ export {
 } from "./checker/index.js";
 
 export {
+  checkAtomic,
+  type AtomicCheckResult,
+  type AtomicChecks,
+} from "./problem/index.js";
+
+export {
   CHEMICAL_KINDS,
   CHEMISTRY_INDEX_VERSION,
   DEFAULT_CHEMISTRY_INDEX_RELATIVE_PATH,

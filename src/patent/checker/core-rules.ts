@@ -1,5 +1,5 @@
 /**
- * src/patent/checker — 场景规则集（11 组，44 条）。
+ * src/patent/checker — 场景规则集（11 组，47 条）。
  *
  * 移植自 Mady domains/workflows/patent/rule_{novelty,inventiveness,disclosure,
  * infringement,invalidation,reexamination,design,priority,public_access,
@@ -7,6 +7,7 @@
  * 推理模式规则见 reasoning-rules.ts（24 条）；defaultPatentRules() 合计 68 条。
  */
 
+import { technicalProblemCheck } from "../problem/index.js";
 import type { CheckRule } from "./types.js";
 import { LevelMust, LevelQuality, LevelShould } from "./types.js";
 import {
@@ -108,6 +109,51 @@ export function inventivenessRules(): CheckRule[] {
       requiredElements: [TERM_DISTINGUISHING_FEATURES],
       domain: DOMAIN_INVENTIVENESS,
       fixSuggestion: "基于区别技术特征，确定发明相对于最接近现有技术实际解决的技术问题",
+    },
+    {
+      id: "INVENTIVENESS-PROBLEM-SOLUTION-BINDING",
+      name: "技术问题不得包含解决手段",
+      description: "实际解决的技术问题表述不得包含解决手段（审查指南第二部分第四章 3.2.1.1），防止事后诸葛亮式问题认定",
+      level: LevelMust,
+      severity: "critical",
+      message: "实际解决的技术问题包含解决手段，违反审查指南 3.2.1.1 属于事后诸葛亮式问题认定",
+      checkType: "patent_inventiveness",
+      domain: DOMAIN_INVENTIVENESS,
+      customCheck: technicalProblemCheck(
+        r => r.checks.noSolutionBinding,
+        "技术问题包含解决手段（如'通过设置X'/'利用X装置'），请改写为不含任何具体手段的表述（如'如何在部件装配后提供可靠的轴向定位'）",
+      ),
+      fixSuggestion: "将技术问题改写为不含任何具体手段的表述，仅描述要解决的效果或缺陷",
+    },
+    {
+      id: "INVENTIVENESS-PROBLEM-MULTI-CAUSAL",
+      name: "技术问题单一因果",
+      description: "实际解决的技术问题应聚焦单一因果链，捆绑/复合问题会导致后续三步法论证混乱",
+      level: LevelShould,
+      severity: "major",
+      message: "实际解决的技术问题含复合因果/捆绑问题",
+      checkType: "patent_inventiveness",
+      domain: DOMAIN_INVENTIVENESS,
+      customCheck: technicalProblemCheck(
+        r => r.checks.singleCausality,
+        "技术问题含复合因果/捆绑问题（多个因果链），请拆分或明确主因",
+      ),
+      fixSuggestion: "将捆绑的技术问题拆分为单一因果的独立问题，或明确主因与次因",
+    },
+    {
+      id: "INVENTIVENESS-PROBLEM-UNMEASURED",
+      name: "技术问题可测效果",
+      description: "实际解决的技术问题应落到可测效果（量化指标），避免'可靠性差'类不可验证表述",
+      level: LevelQuality,
+      severity: "minor",
+      message: "实际解决的技术问题缺少可测指标",
+      checkType: "patent_inventiveness",
+      domain: DOMAIN_INVENTIVENESS,
+      customCheck: technicalProblemCheck(
+        r => r.checks.measurableEffect,
+        "技术问题缺少可测指标，建议落到量化效果（如'焊点断裂率从 0.1% 升至 3%'）",
+      ),
+      fixSuggestion: "补充技术问题对应的可测指标与量化效果，便于后续客观性论证",
     },
   ];
 }

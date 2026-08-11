@@ -229,6 +229,11 @@ function evaluateRule(rule: CheckRule, text: string): { passed: boolean; detail:
     }
   }
   if (!passed) return { passed: false, detail };
+  // 自定义判定（语义型规则）：如原子化四检验 INV 规则在确定性关键词之外补充检测。
+  if (rule.customCheck !== undefined) {
+    const custom = rule.customCheck(text);
+    if (!custom.passed) return { passed: false, detail: custom.detail };
+  }
   // 后置校验：推理路径步骤完整性。
   if ((rule.pathElements?.length ?? 0) > 0) {
     const [pathOk, pathDetail] = checkReasoningPath(text, rule);

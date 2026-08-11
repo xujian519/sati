@@ -394,9 +394,9 @@ test("spec: 双重否定（不仅超出）不误判为否定语境", () => {
 // 规则总数与禁语扩充（防止注释失真/禁语漏网）
 // =============================================================================
 
-test("defaultPatentRules: 总条数 = 68（core 44 + reasoning 24）", () => {
+test("defaultPatentRules: 总条数 = 71（core 47 + reasoning 24）", () => {
   const all = defaultPatentRules();
-  assert.equal(all.length, 68, `defaultPatentRules 实际 ${all.length} 条，应与注释同步`);
+  assert.equal(all.length, 71, `defaultPatentRules 实际 ${all.length} 条，应与注释同步`);
   // 每 3 条规则中约 1 条 Quality 级（粗粒度结构校验：各级别均非空）
   assert.ok(
     all.some(r => r.level === 0),

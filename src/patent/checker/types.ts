@@ -64,6 +64,12 @@ export interface CheckRule {
   banPhrases?: string[];
   /** CheckNovelty：强制单独对比原则（命中禁止短语即失败）。 */
   singleComparison?: boolean;
+  /**
+   * 自定义判定函数（可选）：在 CheckType 分派检查之后、推理路径检查之前执行。
+   * 返回 passed=false 时以 detail 作为失败信息。用于语义型规则
+   * （如原子化四检验 INV 规则，见 src/patent/problem/atomicChecker.ts）。
+   */
+  customCheck?: (text: string) => { passed: boolean; detail: string };
   fixSuggestion: string;
 }
 
