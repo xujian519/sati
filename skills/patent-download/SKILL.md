@@ -10,7 +10,7 @@ description: 从 Google Patents 下载专利 PDF 原文。通过专利公开号/
 ## 执行通道（优先级）
 
 1. **Sati 内置 `ego_browser` 工具（首选）**——真实浏览器复用 ego lite 登录态，直接打开 `https://patents.google.com/patent/<专利号>` 抓取 PDF 下载链接；适用于反爬 / 网络隔离场景。
-2. **`scripts/download_patent_ego.py`（CLI 备选）**——ego-browser 打开页面提取真实 PDF CDN URL，再用 urllib 从 CDN 下载（速度快、不受 CORS 限制），中国大陆无需代理。
+2. **`scripts/download_patent_ego.py`（CLI 备选，推荐批量）**——ego-browser **单次会话批量**打开所有专利页提取真实 PDF CDN URL（复用同一 tab，不再每篇重启浏览器），再用 urllib **并发流式**从 CDN 下载（`-j` 控制线程数，默认 4；分块写盘内存占用 ~64KB）。中国大陆无需代理。
 3. **`scripts/download_patent.py`（旧版参考）**——requests + BeautifulSoup 爬取，中国大陆需代理才能访问。
 
 ## 快速使用
@@ -24,7 +24,7 @@ cd <本 skill 目录，仓库内为 skills/patent-download/>
 # 单个专利（推荐：ego-browser 提取链接 + CDN 下载）
 python3 scripts/download_patent_ego.py CN115690481A
 
-# 多个专利（批量下载）
+# 多个专利（批量下载：单次浏览器会话 + 并发）
 python3 scripts/download_patent_ego.py US11452699B2 CN109600000A EP1234567A1
 
 # 从文件读取专利号列表（每行一个）
@@ -33,9 +33,15 @@ python3 scripts/download_patent_ego.py -f patent_list.txt
 # 指定输出目录
 python3 scripts/download_patent_ego.py CN115690481A -o ~/Downloads/patents
 
+# 控制并发下载线程数（默认 4）
+python3 scripts/download_patent_ego.py -f patent_list.txt -j 8
+
 # 下载后自动打开 PDF
 python3 scripts/download_patent_ego.py CN115690481A --open
 ```
+
+> 性能说明：批量 12 篇（如 D1-D12 全文）只需启动 **1 次** Chromium（旧版为 12 次），
+> 提取阶段整体超时 = 30s 基础 + 每篇 20s 页面超时。
 
 ## 方式一：ego-browser 提取 + CDN 下载（推荐）
 
