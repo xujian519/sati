@@ -7,6 +7,7 @@ import type { NormalizedMessage } from "../../../stores/useSessionStore";
 import type { ChatMessage, SubagentChildTool } from "../types/types";
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from "../utils/chatFormatting";
 import { parseUserAttachmentNote } from "../utils/attachmentNotes";
+import { asRecord } from "../../../utils/unknown";
 
 // Per-message conversion cache keyed by NormalizedMessage reference.
 // When patchMergedStreamingMessage creates a new object for the streaming
@@ -141,20 +142,22 @@ function convertSingleMessage(
 
       const childTools: SubagentChildTool[] = [];
       if (isSubagentContainer && msg.subagentTools && Array.isArray(msg.subagentTools)) {
-        for (const tool of msg.subagentTools as any[]) {
+        for (const tool of msg.subagentTools) {
+          const t = tool as Partial<SubagentChildTool>;
           childTools.push({
-            toolId: tool.toolId,
-            toolName: tool.toolName,
-            toolInput: tool.toolInput,
-            toolResult: tool.toolResult || null,
-            timestamp: new Date(tool.timestamp || Date.now()),
+            toolId: t.toolId ?? "",
+            toolName: t.toolName ?? "",
+            toolInput: t.toolInput,
+            toolResult: t.toolResult ?? null,
+            timestamp: new Date(t.timestamp ?? Date.now()),
           });
         }
       }
 
+      const trRecord = asRecord(tr);
       const toolResultImages =
-        tr && Array.isArray((tr as any).toolResultImages)
-          ? ((tr as any).toolResultImages as Array<{ data?: unknown; mimeType?: unknown; name?: unknown }>)
+        trRecord && Array.isArray(trRecord.toolResultImages)
+          ? (trRecord.toolResultImages as Array<{ data?: unknown; mimeType?: unknown; name?: unknown }>)
               .filter(image => image && typeof image.data === "string" && image.data.length > 0)
               .map(image => ({
                 data: image.data as string,
@@ -162,19 +165,19 @@ function convertSingleMessage(
                 ...(typeof image.mimeType === "string" ? { mimeType: image.mimeType } : {}),
               }))
           : undefined;
-      const toolResult = tr
+      const toolResult = trRecord
         ? {
-            content: typeof tr.content === "string" ? tr.content : JSON.stringify(tr.content),
-            isError: Boolean(tr.isError),
-            toolUseResult: (tr as any).toolUseResult,
-            errorCode: (tr as any).errorCode,
-            resultPath: (tr as any).resultPath,
+            content: typeof trRecord.content === "string" ? trRecord.content : JSON.stringify(trRecord.content),
+            isError: Boolean(trRecord.isError),
+            toolUseResult: trRecord.toolUseResult,
+            errorCode: typeof trRecord.errorCode === "string" ? trRecord.errorCode : undefined,
+            resultPath: trRecord.resultPath,
             ...(toolResultImages && toolResultImages.length > 0 ? { images: toolResultImages } : {}),
-            ...((tr as any).planFilePath
+            ...(trRecord.planFilePath
               ? {
-                  planFilePath: (tr as any).planFilePath,
-                  planTitle: (tr as any).planTitle,
-                  planSummary: (tr as any).planSummary,
+                  planFilePath: trRecord.planFilePath,
+                  planTitle: trRecord.planTitle,
+                  planSummary: trRecord.planSummary,
                 }
               : {}),
           }

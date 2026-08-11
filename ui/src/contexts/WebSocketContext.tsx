@@ -3,7 +3,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useAuth } from "../components/auth/context/AuthContext";
 import { IS_PLATFORM } from "../constants/config";
 
-type WSSubscriber = (msg: any) => void;
+/**
+ * WebSocket 帧（浏览器经 ui/server 桥转发，见 src/web/client/eventMapping.ts）：
+ * `type`/`kind` 为已知判别字段，其余负载字段高度动态，消费方按需局部收窄。
+ */
+export type WsMessage = {
+  type?: string;
+  kind?: string;
+  [key: string]: unknown;
+};
+
+type WSSubscriber = (msg: WsMessage) => void;
 
 /**
  * 高频流式增量事件：不进 `latestMessage` state（避免每条流式帧触发
@@ -47,8 +57,8 @@ export type ReconnectInfo = {
 
 type WebSocketContextType = {
   ws: WebSocket | null;
-  sendMessage: (message: any) => void;
-  latestMessage: any | null;
+  sendMessage: (message: WsMessage) => void;
+  latestMessage: WsMessage | null;
   isConnected: boolean;
   reconnectInfo: ReconnectInfo;
   /**
@@ -82,18 +92,22 @@ const MAX_RECONNECT_MS = 30000;
 const BACKOFF_FACTOR = 2;
 const MAX_QUEUED_MESSAGES = 100;
 
-export function getQueuedMessageKey(message: any): string | null {
+export function getQueuedMessageKey(message: WsMessage): string | null {
   if (message?.type === "check-session-status" && typeof message.sessionId === "string" && message.sessionId.trim()) {
     return `check-session-status:${message.sessionId.trim()}`;
   }
   return null;
 }
 
-export function isQueueableDisconnectedMessage(message: any): boolean {
+export function isQueueableDisconnectedMessage(message: WsMessage): boolean {
   return getQueuedMessageKey(message) !== null;
 }
 
-export function enqueueDisconnectedMessage(queue: any[], message: any, maxQueuedMessages = MAX_QUEUED_MESSAGES): void {
+export function enqueueDisconnectedMessage(
+  queue: WsMessage[],
+  message: WsMessage,
+  maxQueuedMessages = MAX_QUEUED_MESSAGES,
+): void {
   const key = getQueuedMessageKey(message);
   if (!key) return;
   const existingIndex = queue.findIndex(queuedMessage => getQueuedMessageKey(queuedMessage) === key);
@@ -106,7 +120,7 @@ export function enqueueDisconnectedMessage(queue: any[], message: any, maxQueued
   }
 }
 
-export function clearDisconnectedQueue(queue: any[]): void {
+export function clearDisconnectedQueue(queue: WsMessage[]): void {
   queue.splice(0, queue.length);
 }
 
@@ -118,7 +132,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   // ws 作为 state 暴露给消费者（useSessionWatch 依赖它判断 socket 已连接），
   // 与 wsRef 同步更新；ref 保留供 sendMessage 闭包读取，避免每次连接重建回调。
   const [ws, setWs] = useState<WebSocket | null>(null);
-  const [latestMessage, setLatestMessage] = useState<any>(null);
+  const [latestMessage, setLatestMessage] = useState<WsMessage | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [reconnectInfo, setReconnectInfo] = useState<ReconnectInfo>({
     attempt: 0,
@@ -127,7 +141,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   });
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptRef = useRef(0);
-  const queuedMessagesRef = useRef<any[]>([]);
+  const queuedMessagesRef = useRef<WsMessage[]>([]);
   const subscribersRef = useRef<Set<WSSubscriber>>(new Set());
   const { token } = useAuth();
 
@@ -193,7 +207,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         websocket.onmessage = event => {
           if (connectIdRef.current !== id) return;
           try {
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(event.data) as WsMessage;
             const subs = subscribersRef.current;
             if (subs.size > 0) {
               subs.forEach(sub => {
@@ -267,7 +281,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     };
   }, [token]);
 
-  const sendMessage = useCallback((message: any) => {
+  const sendMessage = useCallback((message: WsMessage) => {
     const socket = wsRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(message));

@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
+import type { WsMessage } from "../contexts/WebSocketContext";
 
 type UseSessionWatchArgs = {
   sessionId: string | null | undefined;
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
+  sendMessage: (message: WsMessage) => void;
 };
 
 function normalizeSessionId(value: string | null | undefined): string | null {

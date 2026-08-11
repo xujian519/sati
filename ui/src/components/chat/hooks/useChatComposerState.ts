@@ -30,12 +30,14 @@ import {
 } from "../../../types/contentReference";
 import type {
   ChatAttachment,
+  ChatImage,
   ChatMessage,
   PendingPermissionRequest,
   PermissionGrantResult,
   PermissionMode,
 } from "../types/types";
 import type { Project, ProjectSession } from "../../../types/app";
+import type { WsMessage } from "../../../contexts/WebSocketContext";
 import { isImeEnterEvent } from "../../../utils/ime";
 import { useFileMentions } from "./useFileMentions";
 import { type SlashCommand, useSlashCommands } from "./useSlashCommands";
@@ -58,8 +60,8 @@ interface UseChatComposerStateArgs {
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
   thinkingModeAvailability: ThinkingModeAvailability;
-  sendMessage: (message: unknown) => void;
-  subscribe?: (handler: (message: any) => void) => () => void;
+  sendMessage: (message: WsMessage) => void;
+  subscribe?: (handler: (message: WsMessage) => void) => () => void;
   sendByCtrlEnter?: boolean;
   onSessionActive?: (sessionId?: string | null) => void;
   onSessionProcessing?: (sessionId?: string | null) => void;
@@ -91,6 +93,7 @@ interface MentionableFile {
 interface CommandExecutionResult {
   type: "builtin" | "custom";
   action?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 命令执行结果负载异构（help/model/cost/status/rewind/skillInstall 结构各不相同），类型化需大量收窄且收益低。
   data?: any;
   content?: string;
   hasBashCommands?: boolean;
@@ -286,7 +289,7 @@ export function useChatComposerState({
     if (!subscribe) {
       return undefined;
     }
-    return subscribe((message: any) => {
+    return subscribe(message => {
       if (message?.type !== "session-permission-grant-result") {
         return;
       }
@@ -972,8 +975,8 @@ export function useChatComposerState({
       const userMessage: ChatMessage = {
         type: "user",
         content: userVisibleInput,
-        images: uploadedImages as any,
-        attachments: [...uploadedFiles, ...documentReferenceAttachments] as any,
+        images: uploadedImages as ChatImage[],
+        attachments: [...uploadedFiles, ...documentReferenceAttachments],
         timestamp: new Date(),
       };
 

@@ -1,4 +1,5 @@
 import type { AlwaysOnSubTab, AppTab, Project, ProjectSession } from "../../../types/app";
+import type { WsMessage } from "../../../contexts/WebSocketContext";
 
 export type SessionLifecycleHandler = (sessionId?: string | null) => void;
 
@@ -44,8 +45,8 @@ export type MainContentProps = {
   alwaysOnSubTab?: AlwaysOnSubTab;
   onAlwaysOnSubTabChange?: (tab: AlwaysOnSubTab) => void;
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
-  latestMessage: unknown;
+  sendMessage: (message: WsMessage) => void;
+  latestMessage: WsMessage | null;
   isMobile: boolean;
   onMenuClick: () => void;
   isLoading: boolean;

@@ -16,7 +16,8 @@ import {
 import ChatInterfaceV2 from "../../chat-v2/ChatInterfaceV2";
 import PluginTabContent from "../../plugins/view/PluginTabContent";
 import { cn } from "../../../lib/utils.js";
-import type { MainContentProps } from "../types/types";
+import type { MainContentProps, SessionLifecycleHandler } from "../types/types";
+import type { WsMessage } from "../../../contexts/WebSocketContext";
 import { useTaskMaster } from "../../../contexts/TaskMasterContext";
 import { useTasksSettings } from "../../../contexts/TasksSettingsContext";
 import { useUiPreferences } from "../../../hooks/useUiPreferences";
@@ -469,33 +470,33 @@ type SplitBodyProps = {
   activeTab: AppTab;
   shouldShowTasksTab: boolean;
   tasksEnabled: boolean;
-  setActiveTab: (tab: any) => void;
+  setActiveTab: (tab: AppTab) => void;
   alwaysOnSubTab: MainContentProps["alwaysOnSubTab"];
   onAlwaysOnSubTabChange: MainContentProps["onAlwaysOnSubTabChange"];
-  ws: any;
-  sendMessage: any;
-  latestMessage: any;
+  ws: WebSocket | null;
+  sendMessage: (message: WsMessage) => void;
+  latestMessage: WsMessage | null;
   handleFileOpen: (filePath: string, diffInfo?: CodeEditorDiffInfo | null) => void;
-  onInputFocusChange: any;
-  onSessionActive: any;
-  onSessionInactive: any;
-  onSessionProcessing: any;
-  onSessionNotProcessing: any;
+  onInputFocusChange: (focused: boolean) => void;
+  onSessionActive: SessionLifecycleHandler;
+  onSessionInactive: SessionLifecycleHandler;
+  onSessionProcessing: SessionLifecycleHandler;
+  onSessionNotProcessing: SessionLifecycleHandler;
   onSessionActivityBump?: (projectName: string, sessionId: string, optimisticTitle?: string) => void;
   processingSessions: Set<string>;
   unreadSessionIds: Set<string>;
-  onReplaceTemporarySession: any;
+  onReplaceTemporarySession: SessionLifecycleHandler;
   onNavigateToSession: (sessionId: string) => void;
   onStartNewSession: MainContentProps["onStartNewSession"];
   onSelectSession: MainContentProps["onSelectSession"];
-  onShowSettings: any;
-  externalMessageUpdate: any;
-  autoExpandTools: any;
-  showRawParameters: any;
-  showThinking: any;
-  inlineThinking: any;
-  autoScrollToBottom: any;
-  sendByCtrlEnter: any;
+  onShowSettings: () => void;
+  externalMessageUpdate: number;
+  autoExpandTools: boolean;
+  showRawParameters: boolean;
+  showThinking: boolean;
+  inlineThinking: boolean;
+  autoScrollToBottom: boolean;
+  sendByCtrlEnter: boolean;
   applyAndLaunchCycle: (projectName: string, cycleId: string) => Promise<void>;
   handleOpenExecutionSession: (projectKey: string, runId: string, projectName?: string) => void;
   editorExpanded: boolean;
@@ -933,7 +934,9 @@ function SplitBody(props: SplitBodyProps) {
             ws={ws}
             sendMessage={sendMessage}
             latestMessage={latestMessage}
-            onFileOpen={handleFileOpen}
+            onFileOpen={(filePath, diffInfo) =>
+              handleFileOpen(filePath, diffInfo as CodeEditorDiffInfo | null | undefined)
+            }
             onInputFocusChange={onInputFocusChange}
             onSessionActive={onSessionActive}
             onSessionInactive={onSessionInactive}

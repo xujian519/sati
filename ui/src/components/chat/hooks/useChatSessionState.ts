@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { authenticatedFetch } from "../../../utils/api";
+import type { WsMessage } from "../../../contexts/WebSocketContext";
 import type { ChatMessage, ClaudeWorkStatus, SatiWorkStatus } from "../types/types";
 import {
   getSessionRequestParams,
@@ -28,7 +29,7 @@ interface UseChatSessionStateArgs {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
+  sendMessage: (message: WsMessage) => void;
   autoScrollToBottom?: boolean;
   externalMessageUpdate?: number;
   processingSessions?: Set<string>;
@@ -139,11 +140,11 @@ function chatMessageToNormalized(
   if (msg.isInteractivePrompt) {
     return { ...base, kind: "interactive_prompt", content: msg.content || "" } as NormalizedMessage;
   }
-  if ((msg as any).isTaskNotification) {
+  if (msg.isTaskNotification) {
     return {
       ...base,
       kind: "task_notification",
-      status: (msg as any).taskStatus || "completed",
+      status: msg.taskStatus || "completed",
       summary: msg.content || "",
     } as NormalizedMessage;
   }
@@ -152,7 +153,7 @@ function chatMessageToNormalized(
       ...base,
       kind: "error",
       content: msg.content || "",
-      ...((msg as any).userHint ? { userHint: (msg as any).userHint } : {}),
+      ...(typeof msg.userHint === "string" ? { userHint: msg.userHint } : {}),
     } as NormalizedMessage;
   }
   // Carry user-attached image data URLs through the normalize round-trip

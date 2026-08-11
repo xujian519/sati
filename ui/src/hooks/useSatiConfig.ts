@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { authenticatedFetch } from "../utils/api";
-import { useWebSocket } from "../contexts/WebSocketContext";
+import { useWebSocket, type WsMessage } from "../contexts/WebSocketContext";
 
 type ConfigValidation = {
   valid: boolean;
@@ -57,6 +57,16 @@ export type ConfigSaveOptions = {
 export type ConfigSaveResult = { ok: true } | { ok: false; error: string };
 
 type ReloadSource = "ui-save" | "ui-reload" | "watcher" | "refresh";
+
+type ConfigReloadedMessage = ConfigResponse & {
+  source?: ReloadSource;
+  timestamp?: string;
+};
+
+/** 收窄 config:reloaded 帧：type 判别 + 负载结构（source/timestamp 为桥附加字段）。 */
+function isConfigReloadedMessage(msg: WsMessage): msg is ConfigReloadedMessage {
+  return msg?.type === "config:reloaded";
+}
 
 type ReloadInfo = {
   source: ReloadSource;
@@ -201,7 +211,7 @@ function useSatiConfigState() {
   // to guarantee config:reloaded events are never lost to React 18
   // auto-batching when other WS messages arrive in the same task.
   useEffect(() => {
-    const unsub = subscribe((msg: any) => {
+    const unsub = subscribe(msg => {
       if (msg?.type === "websocket-reconnected") {
         if (initialLoadDoneRef.current) {
           void refreshRef.current?.();
@@ -209,13 +219,10 @@ function useSatiConfigState() {
         return;
       }
 
-      if (msg?.type !== "config:reloaded") return;
+      if (!isConfigReloadedMessage(msg)) return;
       if (!initialLoadDoneRef.current) return;
 
-      const payload = msg as ConfigResponse & {
-        source?: ReloadSource;
-        timestamp?: string;
-      };
+      const payload = msg;
       const source: ReloadSource = payload.source ?? "watcher";
 
       const keepLocalDraft =

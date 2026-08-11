@@ -189,7 +189,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
   }, []);
 
   useEffect(() => {
-    return subscribe((message: any) => {
+    return subscribe(message => {
       if (message?.type !== "config:reloaded") return;
       setThinkingModelContext(readThinkingModelContext(message?.config));
       applyConfigModelState(message?.config, setModelOptions, setModel);

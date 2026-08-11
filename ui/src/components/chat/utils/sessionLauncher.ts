@@ -1,9 +1,10 @@
 import type { Project, ProjectSession } from "../../../types/app";
 import type { ChatAttachment, ChatRunMode, SatiSettings, PermissionMode } from "../types/types";
+import type { WsMessage } from "../../../contexts/WebSocketContext";
 import { getSatiSettings, safeLocalStorage } from "./chatStorage";
 
 type StartSessionOptions = {
-  sendMessage: (message: unknown) => void;
+  sendMessage: (message: WsMessage) => void;
   selectedProject: Project;
   command: string;
   userVisibleInput?: string;

@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { useOutletContext } from "react-router-dom";
 import type { AppTab, Project, ProjectSession } from "../../types/app";
 import type { SessionLifecycleHandler, SessionNavigationOptions } from "../main-content/types/types";
+import type { WsMessage } from "../../contexts/WebSocketContext";
 
 // Everything the V2 routes need from the shell. Mirrors what legacy
 // MainContentProps exposed but carries the route context in a single bag so
@@ -15,8 +16,8 @@ export type AppShellContextValue = {
   isMobile: boolean;
 
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
-  latestMessage: unknown;
+  sendMessage: (message: WsMessage) => void;
+  latestMessage: WsMessage | null;
   externalMessageUpdate: number;
 
   processingSessions: Set<string>;

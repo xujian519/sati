@@ -4,11 +4,12 @@ import {
   enqueueDisconnectedMessage,
   getQueuedMessageKey,
   isQueueableDisconnectedMessage,
+  type WsMessage,
 } from "./WebSocketContext";
 
 describe("WebSocket disconnected send queue", () => {
   it("does not queue sati commands without an idempotency key", () => {
-    const queue: any[] = [];
+    const queue: WsMessage[] = [];
 
     enqueueDisconnectedMessage(queue, { type: "sati-command", text: "one" });
     enqueueDisconnectedMessage(queue, { type: "sati-command", text: "two" });
@@ -19,7 +20,7 @@ describe("WebSocket disconnected send queue", () => {
   });
 
   it("dedupes check-session-status by sessionId and keeps the latest message", () => {
-    const queue: any[] = [];
+    const queue: WsMessage[] = [];
 
     enqueueDisconnectedMessage(queue, {
       type: "check-session-status",
@@ -49,7 +50,7 @@ describe("WebSocket disconnected send queue", () => {
   });
 
   it("drops the oldest messages when the queue exceeds its cap", () => {
-    const queue: any[] = [];
+    const queue: WsMessage[] = [];
 
     enqueueDisconnectedMessage(queue, { type: "check-session-status", sessionId: "session-1" }, 2);
     enqueueDisconnectedMessage(queue, { type: "check-session-status", sessionId: "session-2" }, 2);
@@ -59,7 +60,7 @@ describe("WebSocket disconnected send queue", () => {
   });
 
   it("clears queued messages on provider cleanup so old token messages cannot flush later", () => {
-    const queue: any[] = [];
+    const queue: WsMessage[] = [];
 
     enqueueDisconnectedMessage(queue, { type: "sati-command", text: "stale" });
     enqueueDisconnectedMessage(queue, { type: "check-session-status", sessionId: "session-1" });

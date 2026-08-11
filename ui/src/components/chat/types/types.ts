@@ -1,5 +1,6 @@
 import type { Project, ProjectSession, SessionProvider } from "../../../types/app";
 import type { ContentReference } from "../../../types/contentReference";
+import type { WsMessage } from "../../../contexts/WebSocketContext";
 
 export type Provider = SessionProvider;
 
@@ -236,10 +237,10 @@ export interface ChatInterfaceProps {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
-  subscribe?: (handler: (message: any) => void) => () => void;
-  latestMessage: any;
-  onFileOpen?: (filePath: string, diffInfo?: any) => void;
+  sendMessage: (message: WsMessage) => void;
+  subscribe?: (handler: (message: WsMessage) => void) => () => void;
+  latestMessage: WsMessage | null;
+  onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   onInputFocusChange?: (focused: boolean) => void;
   onSessionActive?: (sessionId?: string | null) => void;
   onSessionInactive?: (sessionId?: string | null) => void;

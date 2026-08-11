@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import type { ClaudeWorkStatus, CompactProgress, PendingPermissionRequest, SatiWorkStatus } from "../types/types";
+import type {
+  ClaudeWorkStatus,
+  CompactProgress,
+  PendingPermissionRequest,
+  RetryProgress,
+  SatiWorkStatus,
+} from "../types/types";
 import type { Project, ProjectSession, SessionProvider } from "../../../types/app";
 import type { SessionStore, NormalizedMessage } from "../../../stores/useSessionStore";
 import { useWebSocket } from "../../../contexts/WebSocketContext";
+import { asRecord } from "../../../utils/unknown";
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -13,8 +20,8 @@ type PendingViewSession = {
 type LatestChatMessage = {
   type?: string;
   kind?: string;
-  data?: any;
-  message?: any;
+  data?: unknown;
+  message?: unknown;
   delta?: string;
   sessionId?: string;
   session_id?: string;
@@ -23,14 +30,14 @@ type LatestChatMessage = {
   input?: unknown;
   context?: unknown;
   error?: string;
-  tool?: any;
+  tool?: unknown;
   toolId?: string;
-  result?: any;
+  result?: unknown;
   exitCode?: number;
   isProcessing?: boolean;
   actualSessionId?: string;
   event?: string;
-  status?: any;
+  status?: unknown;
   isNewSession?: boolean;
   activeTurnMessages?: LatestChatMessage[];
   activitySnapshot?: LatestChatMessage[];
@@ -48,15 +55,21 @@ type LatestChatMessage = {
   tokenBudget?: unknown;
   newSessionId?: string;
   aborted?: boolean;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 function normalizeAssistantStreamText(value?: string): string {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 }
 
-function getMessageRunId(message: LatestChatMessage): string | undefined {
-  return typeof message.runId === "string" && message.runId.trim() ? message.runId.trim() : undefined;
+function getMessageRunId(message: LatestChatMessage | NormalizedMessage): string | undefined {
+  const runId = asRecord(message)?.runId;
+  return typeof runId === "string" && runId.trim() ? runId.trim() : undefined;
+}
+
+/** 桥帧（LatestChatMessage）→ store 模型（NormalizedMessage）。桥已归一化字段形状，此处收敛类型边界断言。 */
+function toNormalizedMessage(msg: LatestChatMessage): NormalizedMessage {
+  return msg as unknown as NormalizedMessage;
 }
 
 function parseAssistantStreamTimestamp(value?: string): number | null {
@@ -201,7 +214,12 @@ export function getActiveTurnReplayMessagesToApply(
   return output;
 }
 
-function getExplicitSessionId(msg: LatestChatMessage): string | null {
+function getExplicitSessionId(msg: {
+  sessionId?: unknown;
+  session_id?: unknown;
+  actualSessionId?: unknown;
+  newSessionId?: unknown;
+}): string | null {
   const value = msg.sessionId ?? msg.session_id ?? msg.actualSessionId ?? msg.newSessionId;
   return typeof value === "string" && value.trim() ? value : null;
 }
@@ -319,7 +337,7 @@ export function useChatRealtimeHandlers({
             const isCurrentPermSession =
               permSessionId === currentSessionId || (selectedSession && permSessionId === selectedSession.id);
             if (permSessionId && !isCurrentPermSession) return;
-            setPendingPermissionRequests(msg.data || []);
+            setPendingPermissionRequests(Array.isArray(msg.data) ? (msg.data as PendingPermissionRequest[]) : []);
             return;
           }
 
@@ -389,21 +407,24 @@ export function useChatRealtimeHandlers({
 
             if (isCurrentSession && Array.isArray(msg.activitySnapshot)) {
               const activities = msg.activitySnapshot.map(activity => {
-                const normalized = activity as NormalizedMessage;
+                const normalized = toNormalizedMessage(activity);
                 if (getExplicitSessionId(normalized)) return normalized;
                 return { ...normalized, sessionId: statusSessionId };
               });
               sessionStore.setActivities?.(statusSessionId, activities);
             }
 
-            const status = msg.status;
+            const status = asRecord(msg.status);
             if (status) {
               if (!isCurrentSession) return;
-              const statusInfo = {
-                text: status.text || "Working...",
-                tokens: status.tokens || 0,
-                can_interrupt: status.can_interrupt !== undefined ? status.can_interrupt : true,
-                compactProgress: status.compactProgress || status.compact_progress || null,
+              const statusInfo: ClaudeWorkStatus = {
+                text: typeof status.text === "string" ? status.text : "Working...",
+                tokens: typeof status.tokens === "number" ? status.tokens : 0,
+                can_interrupt: status.can_interrupt === undefined ? true : Boolean(status.can_interrupt),
+                compactProgress:
+                  (status.compactProgress as CompactProgress | undefined) ||
+                  (status.compact_progress as CompactProgress | undefined) ||
+                  null,
               };
               setClaudeStatus(statusInfo);
               setSatiStatus(statusInfo);
@@ -489,12 +510,12 @@ export function useChatRealtimeHandlers({
           sessionStore.finalizeSubagentDetailThinking?.(sid, activitySubagentId);
           sessionStore.finalizeSubagentDetailStreaming?.(sid, activitySubagentId);
         }
-        sessionStore.upsertActivity?.(sid, msg as NormalizedMessage);
+        sessionStore.upsertActivity?.(sid, toNormalizedMessage(msg));
         return;
       }
 
       if (msg.kind === "subagent_link") {
-        sessionStore.recordSubagentLink?.(sid, msg as NormalizedMessage);
+        sessionStore.recordSubagentLink?.(sid, toNormalizedMessage(msg));
         return;
       }
 
@@ -516,7 +537,7 @@ export function useChatRealtimeHandlers({
         }
         sessionStore.finalizeSubagentDetailThinking?.(sid, subagentId);
         sessionStore.finalizeSubagentDetailStreaming?.(sid, subagentId);
-        sessionStore.appendSubagentDetailMessage?.(sid, subagentId, msg as NormalizedMessage);
+        sessionStore.appendSubagentDetailMessage?.(sid, subagentId, toNormalizedMessage(msg));
         return;
       }
 
@@ -531,7 +552,7 @@ export function useChatRealtimeHandlers({
         }
         const slot = sessionStore.getSessionSlot?.(sid);
         const streamId = `__streaming_${streamKey}`;
-        const existing = slot?.realtimeMessages.find((m: any) => m.id === streamId);
+        const existing = slot?.realtimeMessages.find(m => m.id === streamId);
         const currentText = existing?.content || "";
         sessionStore.updateStreaming(sid, currentText + text, provider, msgRunId);
         return;
@@ -542,11 +563,11 @@ export function useChatRealtimeHandlers({
         const text = msg.content || "";
         if (!text) return;
         // Mark that thinking is active
-        thinkingBySessionRef.current.set(sid, true as any);
+        thinkingBySessionRef.current.set(sid, true);
         // Read current thinking content and append delta
         const slot = sessionStore.getSessionSlot?.(sid);
         const streamId = `__streaming_thinking_${streamKey}`;
-        const existing = slot?.realtimeMessages.find((m: any) => m.id === streamId);
+        const existing = slot?.realtimeMessages.find(m => m.id === streamId);
         const currentText = existing?.content || "";
         sessionStore.updateStreamingThinking(sid, currentText + text, provider, msgRunId);
         return;
@@ -588,14 +609,14 @@ export function useChatRealtimeHandlers({
       // already creates a text message in realtimeMessages. If the backend also
       // sends a standalone 'text' message with the same content, skip it.
       const duplicateStreamTextState = getDuplicateAssistantStreamTextState(
-        msg as NormalizedMessage,
+        toNormalizedMessage(msg),
         sessionStore.getSessionSlot?.(sid)?.realtimeMessages ?? [],
       );
       if (duplicateStreamTextState.hasActiveStream) {
         sessionStore.finalizeStreaming(sid, duplicateStreamTextState.activeStreamRunId ?? undefined);
       }
       if (!duplicateStreamTextState.isDuplicate) {
-        sessionStore.appendRealtime(sid, msg as NormalizedMessage);
+        sessionStore.appendRealtime(sid, toNormalizedMessage(msg));
       }
 
       // --- UI side effects for specific kinds ---
@@ -801,7 +822,7 @@ export function useChatRealtimeHandlers({
               tokens: msg.tokens || 0,
               can_interrupt: msg.canInterrupt !== undefined ? msg.canInterrupt : true,
               compactProgress: msg.compactProgress || msg.compact_progress || null,
-              retryProgress: msg.retryProgress || null,
+              retryProgress: (msg.retryProgress as RetryProgress | undefined) || null,
             });
             setIsLoading(true);
             setCanAbortSession(msg.canInterrupt !== false);
@@ -852,6 +873,6 @@ export function useChatRealtimeHandlers({
 
   useEffect(() => {
     if (!subscribe) return;
-    return subscribe(handleMessage as (msg: any) => void);
+    return subscribe(handleMessage);
   }, [subscribe, handleMessage]);
 }
