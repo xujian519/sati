@@ -1,11 +1,12 @@
 #!/usr/bin/env node
+/* global window */
 /**
  * L2 onboarding smoke — Playwright drives onboarding.html with a mocked IPC bridge.
  * Verifies form flow + V2 YAML shape via onboarding-config (no Electron required).
  */
 import * as fs from "node:fs";
-import * as path from "node:path";
 import { createRequire } from "node:module";
+import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 

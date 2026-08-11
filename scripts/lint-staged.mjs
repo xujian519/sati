@@ -21,6 +21,10 @@ function run(cwd, args) {
   const result = spawnSync("npx", ["--no-install", ...args], {
     cwd,
     stdio: "inherit",
+    // Windows: npx is a .cmd shim which child_process.spawn can't resolve
+    // without a shell (ENOENT). shell:true routes it through cmd.exe/sh,
+    // which also works on macOS/Linux.
+    shell: true,
   });
   if (result.status !== 0) failed = true;
 }

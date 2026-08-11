@@ -360,7 +360,7 @@ try {
     env: { ...process.env, PD_UI_URL: uiUrl },
     stdio: "inherit",
   });
-} catch (e) {
+} catch {
   console.error("L2a FAILED");
   process.exit(1);
 }
@@ -377,7 +377,7 @@ try {
     cwd: REPO_ROOT,
     stdio: "inherit",
   });
-} catch (e) {
+} catch {
   console.error("L2b FAILED");
   process.exit(1);
 }
@@ -396,7 +396,7 @@ if (hasDesktop) {
       stdio: "inherit",
       timeout: 180_000,
     });
-  } catch (e) {
+  } catch {
     console.error("  L2c FAILED (non-blocking for L2 overall)");
   }
 
@@ -408,7 +408,7 @@ if (hasDesktop) {
       stdio: "inherit",
       timeout: 300_000,
     });
-  } catch (e) {
+  } catch {
     console.error("  L2d FAILED");
     process.exitCode = 1;
   }

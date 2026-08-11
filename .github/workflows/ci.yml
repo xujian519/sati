@@ -60,3 +60,40 @@ jobs:
       - name: Test (ui)
         working-directory: ui
         run: pnpm test
+
+  desktop:
+    name: Desktop (Windows) build & lint
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pnpm (corepack)
+        run: corepack enable
+        shell: bash
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          npm_config_fetch_retries: "5"
+          npm_config_fetch_retry_mintimeout: "1000"
+          npm_config_fetch_retry_maxtimeout: "60000"
+        # --ignore-scripts: 本 job 只需 tsc + eslint，无需编译 native 模块
+        # （与 build-win.bat 的 pnpm install --ignore-scripts 一致；native 依赖
+        # 由发版脚本单独重建）。
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Lint (desktop)
+        run: pnpm exec eslint apps/desktop
+        shell: bash
+
+      - name: Build (desktop TypeScript)
+        working-directory: apps/desktop
+        run: pnpm build
+        shell: bash
