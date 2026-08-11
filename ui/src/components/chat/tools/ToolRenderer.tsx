@@ -1,7 +1,8 @@
 import React, { memo, useMemo, useCallback } from "react";
 import type { Project } from "../../../types/app";
-import type { SubagentChildTool } from "../types/types";
-import { getCanonicalToolName, getToolConfig } from "./configs/toolConfigs";
+import type { SubagentChildTool, ToolResult } from "../types/types";
+import { asRecord } from "../../../utils/unknown";
+import { getCanonicalToolName, getToolConfig, type ToolDisplaySection } from "./configs/toolConfigs";
 import {
   OneLineDisplay,
   CollapsibleDisplay,
@@ -24,11 +25,11 @@ type DiffLine = {
 
 interface ToolRendererProps {
   toolName: string;
-  toolInput: any;
-  toolResult?: any;
+  toolInput: unknown;
+  toolResult?: unknown;
   toolId?: string;
   mode: "input" | "result";
-  onFileOpen?: (filePath: string, diffInfo?: any) => void;
+  onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
   createDiff?: (oldStr: string, newStr: string) => DiffLine[];
   selectedProject?: Project | null;
   autoExpandTools?: boolean;
@@ -104,9 +105,11 @@ function toDisplayString(value: unknown, fallback = ""): string {
   }
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- 内容对象读取器：下游以 any 字段访问（content/files/todos/oldContent 等异构结构），类型化为 unknown 需全量收窄且收益低。 */
 function toObject(value: unknown): Record<string, any> {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, any>) : {};
+  return asRecord(value) ?? {};
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 function getToolCategory(toolName: string): string {
   if (["Edit", "Write", "ApplyPatch"].includes(toolName)) return "edit";
@@ -141,7 +144,7 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
 }) => {
   const canonicalToolName = getCanonicalToolName(toolName);
   const config = getToolConfig(toolName);
-  const displayConfig: any = mode === "input" ? config.input : config.result;
+  const displayConfig: ToolDisplaySection | undefined = mode === "input" ? config.input : config.result;
 
   const parsedData = useMemo(() => {
     try {
@@ -164,7 +167,13 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
     if (mode === "result") {
       return null;
     }
-    return <SubagentContainer toolInput={toolInput} toolResult={toolResult} subagentState={subagentState} />;
+    return (
+      <SubagentContainer
+        toolInput={toolInput}
+        toolResult={toolResult as ToolResult | null | undefined}
+        subagentState={subagentState}
+      />
+    );
   }
 
   if (!displayConfig) return null;

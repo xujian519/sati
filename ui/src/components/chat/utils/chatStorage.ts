@@ -10,8 +10,8 @@ export const safeLocalStorage = {
   setItem: (key: string, value: string) => {
     try {
       localStorage.setItem(key, value);
-    } catch (error: any) {
-      if (error?.name === "QuotaExceededError") {
+    } catch (error) {
+      if (error instanceof Error && error.name === "QuotaExceededError") {
         console.warn("localStorage quota exceeded, clearing old data");
 
         const keys = Object.keys(localStorage);

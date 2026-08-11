@@ -21,7 +21,7 @@ interface OneLineDisplayProps {
     icon?: string;
   };
   resultId?: string;
-  toolResult?: any;
+  toolResult?: unknown;
   toolId?: string;
 }
 
@@ -158,7 +158,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
         {secondary && (
           <span className="flex-shrink-0 text-[11px] text-gray-400 italic dark:text-gray-500">{secondary}</span>
         )}
-        {toolResult && (
+        {toolResult ? (
           <a
             href={`#tool-result-${toolId}`}
             className="flex flex-shrink-0 items-center gap-0.5 text-[11px] text-brand-600 transition-colors hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
@@ -167,7 +167,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </a>
-        )}
+        ) : null}
       </div>
     );
   }

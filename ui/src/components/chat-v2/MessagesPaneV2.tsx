@@ -1223,7 +1223,7 @@ function getLiveStatusStep(
     return activityToLiveStep(latestActivity);
   }
 
-  const retryProgress = (workingStatus as any)?.retryProgress;
+  const retryProgress = (workingStatus as SatiWorkStatus | null | undefined)?.retryProgress;
   if (retryProgress) {
     const parts: string[] = [];
     if (retryProgress.reason) parts.push(retryProgress.reason);

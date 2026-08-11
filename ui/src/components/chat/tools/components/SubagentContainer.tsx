@@ -1,5 +1,5 @@
 import React from "react";
-import type { SubagentChildTool } from "../../types/types";
+import type { SubagentChildTool, ToolResult } from "../../types/types";
 import { CollapsibleSection } from "./CollapsibleSection";
 
 type SubagentState = {
@@ -9,9 +9,20 @@ type SubagentState = {
   isFailed?: boolean;
 };
 
+/** 从工具结果数组（[{"type":"text","text":"..."}] 形态）提取纯文本片段。 */
+function extractTextParts(items: unknown[]): string[] {
+  return items
+    .filter(
+      (item): item is { type?: unknown; text?: unknown } =>
+        item !== null && typeof item === "object" && !Array.isArray(item),
+    )
+    .filter(item => item.type === "text" && item.text)
+    .map(item => String(item.text));
+}
+
 interface SubagentContainerProps {
   toolInput: unknown;
-  toolResult?: { content?: unknown; isError?: boolean } | null;
+  toolResult?: ToolResult | null;
   subagentState: SubagentState;
 }
 
@@ -174,7 +185,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({ toolInput,
                   const parsed = JSON.parse(content);
                   if (Array.isArray(parsed)) {
                     // Extract text from array format like [{"type":"text","text":"..."}]
-                    const textParts = parsed.filter((p: any) => p.type === "text" && p.text).map((p: any) => p.text);
+                    const textParts = extractTextParts(parsed);
                     if (textParts.length > 0) {
                       content = textParts.join("\n");
                     }
@@ -184,7 +195,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({ toolInput,
                 }
               } else if (Array.isArray(content)) {
                 // Direct array format
-                const textParts = content.filter((p: any) => p.type === "text" && p.text).map((p: any) => p.text);
+                const textParts = extractTextParts(content);
                 if (textParts.length > 0) {
                   content = textParts.join("\n");
                 }

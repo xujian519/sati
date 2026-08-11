@@ -38,6 +38,12 @@ function buildContext(
   };
 }
 
+type PluginModule = {
+  mount?: (container: HTMLDivElement, api: unknown) => void | Promise<void>;
+  unmount?: (container: HTMLDivElement) => void | Promise<void>;
+  [key: string]: unknown;
+};
+
 export default function PluginTabContent({ pluginName, selectedProject, selectedSession }: PluginTabContentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { isDarkMode } = useTheme();
@@ -47,7 +53,7 @@ export default function PluginTabContent({ pluginName, selectedProject, selected
   const contextRef = useRef<PluginContext>(buildContext(isDarkMode, selectedProject, selectedSession));
   const contextCallbacksRef = useRef<Set<(ctx: PluginContext) => void>>(new Set());
 
-  const moduleRef = useRef<any>(null);
+  const moduleRef = useRef<PluginModule | null>(null);
 
   const plugin = plugins.find(p => p.name === pluginName);
 

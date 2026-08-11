@@ -1,3 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any --
+ * 工具渲染注册表：input/result 为异构工具数据（JSON），跨 17+ 专利/内置工具的结构
+ * 各不相同，静态建模收益低且会波及所有 config 实现处。文件内已有 SearchToolResultData
+ * 等 unknown 先例做局部收窄，存量 any 待工具协议收敛后分批处理。
+ */
 import { parseStructuredTodos, parseTodoMarkdown } from "./todoParsing";
 
 /**
@@ -50,6 +55,33 @@ export interface ToolDisplayConfig {
     getContentProps?: (result: any) => any;
   };
 }
+
+/**
+ * 工具显示配置的宽松视图（合并 input/result 两段的可选字段），供 ToolRenderer
+ * 鸭子类型读取渲染所需的字段。字段值仍按需局部收窄；本质是异构配置注册表。
+ */
+export type ToolDisplaySection = {
+  type?: string;
+  icon?: string;
+  label?: string;
+  action?: "copy" | "open-file" | "jump-to-results" | "none";
+  style?: string;
+  wrapText?: boolean;
+  colorScheme?: {
+    primary?: string;
+    secondary?: string;
+    background?: string;
+    border?: string;
+    icon?: string;
+  };
+  title?: string | ((input: unknown, helpers?: unknown) => string);
+  defaultOpen?: boolean;
+  contentType?: string;
+  getValue?: (input: unknown) => string;
+  getSecondary?: (input: unknown) => string | undefined;
+  getMessage?: (result: unknown) => string;
+  getContentProps?: (input: unknown, helpers?: unknown) => unknown;
+};
 
 type SearchToolResultData = {
   files?: unknown;
