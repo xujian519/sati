@@ -1,6 +1,6 @@
 {
   "name": "@sati/desktop",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "description": "Sati macOS Desktop App (Electron shell + satiui + sati-main)",
   "main": "dist/main.js",
   "private": true,
