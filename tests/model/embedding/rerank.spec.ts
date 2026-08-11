@@ -211,26 +211,59 @@ describe("createRerankClient", () => {
 
   it("降级重试使用独立超时预算：首请求耗掉大部分 timeout 后重试仍成功", async () => {
     let calls = 0;
-    // 第一次 tei 请求：慢响应（接近 timeoutMs=50 预算）+ 422
+    // 第一次 tei 请求：慢响应（接近 timeoutMs=60 预算）+ 422
     mockFetch(async call => {
       calls += 1;
       if (calls === 1) {
-        await new Promise(resolve => setTimeout(resolve, 40));
+        await new Promise(resolve => setTimeout(resolve, 30));
         return jsonResponse(
           { error: { message: "body -> documents: Field required", type: "invalid_request_error" } },
           422,
         );
       }
-      // 降级重试：独立 50ms 预算，不应因共享 controller 被提前 abort
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // 降级重试：独立 60ms 预算，不应因共享 controller 被提前 abort
+      await new Promise(resolve => setTimeout(resolve, 15));
       const body = JSON.parse(String(call.init.body)) as { documents?: string[] };
       assert.ok(body.documents, "重试应为 jina 风格");
       return jsonResponse({ results: [{ index: 0, relevance_score: 0.9 }] });
     });
-    const client = createRerankClient({ baseUrl: "http://localhost:8080", timeoutMs: 50 });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080", timeoutMs: 60 });
     const results = await client.rerank("q", ["a"]);
     assert.equal(results.length, 1);
     assert.equal(calls, 2);
+  });
+
+  it("外层 abort 传递到降级重试：首请求 422 后重试被取消并抛错", async () => {
+    let calls = 0;
+    let retryAborted = false;
+    mockFetch(call => {
+      calls += 1;
+      if (calls === 1) {
+        // 首请求快速 422 → 进入降级
+        return jsonResponse(
+          { error: { message: "body -> documents: Field required", type: "invalid_request_error" } },
+          422,
+        );
+      }
+      // 重试：挂起直到外层 abort 到达；监听 signal 记录取消
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = call.init.signal;
+        if (signal?.aborted) {
+          retryAborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+          return;
+        }
+        signal?.addEventListener("abort", () => {
+          retryAborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    });
+    const client = createRerankClient({ baseUrl: "http://localhost:8080", timeoutMs: 30 });
+    // 重试被外层 abort 取消 → 抛 RerankRequestError（超时）
+    await assert.rejects(async () => client.rerank("q", ["a"]), RerankRequestError);
+    assert.equal(calls, 2, "降级重试已发起");
+    assert.equal(retryAborted, true, "重试应收到外层 abort");
   });
 
   it("style=tei 响应条数不匹配抛错", async () => {
