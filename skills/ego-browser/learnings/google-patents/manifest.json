@@ -1,0 +1,62 @@
+{
+  "id": "google-patents",
+  "name": "Google Patents",
+  "domains": ["patents.google.com", "*.patents.google.com"],
+  "notes": ["notes/overview.md"],
+  "nodeTools": {
+    "search_patents": {
+      "description": "Search Google Patents by keyword/boolean query and return top hits. Handles the SPA rendering wait internally.",
+      "path": "tools/search.js",
+      "callable": "searchPatents",
+      "args": {
+        "query": {
+          "type": "string",
+          "required": true,
+          "description": "Search query: keywords, boolean (AND/OR/NOT), assignee:(Name), inventor:(Name), after:/before: dates."
+        },
+        "maxResults": {
+          "type": "integer",
+          "required": false,
+          "description": "Maximum number of results to extract (default 10, max 50)."
+        }
+      },
+      "returns": {
+        "type": "array",
+        "description": "Array of {title, patent, url, assignee, pubDate, abstract} objects."
+      }
+    },
+    "get_patent_metadata": {
+      "description": "Open a Google Patents patent page by number and return its bibliographic metadata (title, inventors, assignee, dates, status, abstract, PDF link).",
+      "path": "tools/metadata.js",
+      "callable": "getPatentMetadata",
+      "args": {
+        "patent": {
+          "type": "string",
+          "required": true,
+          "description": "Patent publication number, e.g. US11739244B2 or CN115690481A."
+        }
+      },
+      "returns": {
+        "type": "object",
+        "description": "Patent bibliographic data."
+      }
+    }
+  },
+  "browserTools": {
+    "extract_search_results": {
+      "description": "Extract the visible search-result rows on the current Google Patents search page (call after navigating).",
+      "path": "browser-tools/extract-results.js",
+      "args": {
+        "maxResults": {
+          "type": "integer",
+          "required": false,
+          "description": "Maximum results (default 10)."
+        }
+      },
+      "returns": {
+        "type": "array",
+        "description": "Array of {title, patent, url, assignee, pubDate, abstract}."
+      }
+    }
+  }
+}
