@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -93,26 +93,54 @@ test("patent_pdf_download: validateInput rejects empty/oversized/invalid inputs"
 test("patent_pdf_download: execute parses results and summary on success", async () => {
   const runner = new FakeRunner();
   runner.result = { exitCode: 0, stdout: "", stderr: OK_OUTPUT, timedOut: false, durationMs: 1200 };
-  const tool = createPatentPdfDownloadTool({ session: makeSession(runner) });
+  // 注入失败的 fetch：兜底下载也失败 → fallback 条目升格为 failed（不触发真实网络）。
+  const fetchImpl: typeof fetch = async () => {
+    throw new Error("network down");
+  };
+  const tool = createPatentPdfDownloadTool({ session: makeSession(runner), fetchImpl });
 
   const output = await tool.execute({ patents: ["CN115690481A", "US11739244B2"] }, makeContext());
 
   assert.equal(output.data?.summary.total, 2);
   assert.equal(output.data?.summary.ok, 1);
-  assert.equal(output.data?.summary.fallback, 1);
-  assert.equal(output.data?.summary.failed, 0);
+  assert.equal(output.data?.summary.failed, 1);
   assert.equal(output.data?.results[0]?.status, "ok");
   assert.equal(output.data?.results[0]?.patent, "CN115690481A");
-  assert.equal(output.data?.results[1]?.status, "fallback");
+  assert.equal(output.data?.results[0]?.method, "browser");
+  assert.equal(output.data?.results[1]?.status, "failed");
+  assert.equal(output.data?.results[1]?.patent, "US11739244B2");
+  assert.equal(output.data?.results[1]?.pdfUrl, "https://x/US1.pdf");
   assert.ok(output.data?.outputDir?.includes("专利原文"));
   const content = output.content[0];
   assert.equal(content?.type, "text");
-  assert.match(content.type === "text" ? content.text : "", /下载完成：1\/2 成功/);
-  // 脚本包含下载拦截关键步骤与归一化专利号
+  assert.match(content.type === "text" ? content.text : "", /下载完成：1\/2 成功，1 失败/);
+  // 脚本包含统一拦截函数与归一化专利号
   const script = runner.calls[0]?.command ?? "";
   assert.ok(script.includes("page.waitForEvent('download'"));
   assert.ok(script.includes("saveAs"));
+  assert.ok(script.includes("downloadVia"));
   assert.ok(script.includes("CN115690481A"));
+});
+
+test("patent_pdf_download: execute rescues fallback items via fetch to ok/http", async () => {
+  const runner = new FakeRunner();
+  runner.result = { exitCode: 0, stdout: "", stderr: OK_OUTPUT, timedOut: false, durationMs: 1200 };
+  const fetchImpl: typeof fetch = async () =>
+    new Response("%PDF-1.4 fake pdf content", { status: 200, headers: { "content-type": "application/pdf" } });
+  const outputDir = mkdtempSync(join(tmpdir(), "sati-pdf-dl-rescue-"));
+  const tool = createPatentPdfDownloadTool({ session: makeSession(runner), fetchImpl });
+
+  const output = await tool.execute({ patents: ["CN115690481A", "US11739244B2"], outputDir }, makeContext());
+
+  assert.equal(output.data?.summary.ok, 2);
+  assert.equal(output.data?.summary.failed, 0);
+  assert.equal(output.data?.results[1]?.status, "ok");
+  assert.equal(output.data?.results[1]?.method, "http");
+  assert.equal(output.data?.results[1]?.pdfUrl, "https://x/US1.pdf");
+  assert.ok(output.data?.results[1]?.path?.endsWith("US11739244B2.pdf"));
+  // 文件真实落盘
+  const target = output.data?.results[1]?.path;
+  assert.ok(target && statSync(target).size > 0);
 });
 
 test("patent_pdf_download: execute throws setup_required when session unavailable", async () => {
