@@ -115,6 +115,21 @@ cd ui && pnpm test    # UI 测试
 
 修改核心模块（`agent/` `router/` `tool/` `session/` 等）必须附相应测试。
 
+### 测试注意事项（性能与调用方式）
+
+实测基线（Apple Silicon 14 核、warm cache）：
+
+| 命令 | 耗时 | 说明 |
+|---|---|---|
+| `pnpm test`（完整） | ≈ 20s | build ≈ 7s + 测试 ≈ 12s，约 2400 个用例 |
+| `node --test --test-force-exit --test-timeout 60000 "dist/tests/**/*.test.js" "dist/tests/**/*.spec.js"` | ≈ 12s | 仅改测试、跳过 build 时使用 |
+
+- **务必带 `--test-force-exit`**：部分测试会泄漏句柄/定时器（Express server、WebSocket、轮询），裸 `node --test` 不带该参数会一直等子进程自然退出——实测 3 分钟以上仍未完成。`pnpm test` 脚本已内置该参数。
+- **单测必须 mock 外部网络与服务**：文献连接器、ollama probe 等一律经 `fetchImpl` 注入（参考 `tests/literature/`、`tests/model/ollamaProbe.spec.ts`）；引入真实网络依赖的测试会被 Review 打回。
+- **真实知识库只读测试很快**：`~/.sati/knowledge/knowledge.db`（约 3.5GB）的只读检索约 0.3s（SQLite mmap），不要为了"加快"把大库复制进 fixture。
+- 3 个单体最慢的测试文件（`tool/read-file-large` ≈ 7.8s、`model/ollamaProbe` ≈ 5.1s、`context/tool-result-reference-error` ≈ 5.0s）是刻意的大数据量功能测试，14 核并发下拖尾影响有限，不建议为提速削减其覆盖。
+- 测试中启动的 server / WebSocket / 定时器请在 `t.after()` 或 finally 中关闭，避免泄漏句柄拖慢 CI。
+
 ## 提交前自查清单
 
 - [ ] `pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm test` 全部通过
