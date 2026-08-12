@@ -1,0 +1,12 @@
+{
+  "name": "browser-use-python",
+  "version": "1.0.0",
+  "description": "Browser automation via browser-use (MIT, Python 3.11+, macOS/Windows/Linux). Persistent daemon CLI, reuse of the user's real Chrome profile for logins, and MCP server over stdio.",
+  "mcpServers": {
+    "browser-use-python": {
+      "command": "uvx",
+      "args": ["browser-use", "--cli-mcp"],
+      "instructions": "Drive a real Chromium browser through the browser-use MCP server (MIT licensed Python CLI).\n\nWorkflow: open <url> to navigate, state to inspect clickable elements (indexed), then click <index> / input <index> \"text\" / keys \"Enter\" / screenshot <path> / eval \"<js>\" to extract. The daemon keeps the browser open between calls (~50ms/call).\n\nLogin state: by default a managed Chromium (no logins) is used. To reuse the user's logged-in Chrome profile, run `browser-use --profile \"Default\" open <url>` — cookies, logins and extensions carry over.\n\nAvailability: requires Python >= 3.11 and the uv tool (`uv tool install browser-use`; `uvx browser-use install` downloads Chromium on first run). If `uvx` is missing or the connection fails, run `browser-use doctor` for diagnostics, or fall back to Sati's built-in @playwright/mcp for unauthenticated pages."
+    }
+  }
+}

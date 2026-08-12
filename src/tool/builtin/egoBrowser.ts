@@ -173,7 +173,11 @@ export function createEgoBrowserTool(
     checkAvailability: async (context: SatiToolAvailabilityContext): Promise<SatiToolAvailability> => {
       const availability = session.checkAvailability(context.env);
       if (!availability.ok) {
-        return availability;
+        const platform = options.platform ?? process.platform;
+        return {
+          ...availability,
+          reason: buildEgoUnavailableReason(platform, availability.code),
+        };
       }
       if (options.doctorCheck) {
         const doctorOk = await session.runConnectionProbe(options.doctorTimeoutMs ?? DEFAULT_DOCTOR_TIMEOUT_MS);
@@ -332,4 +336,55 @@ function summarizeFailure(result: { stdout: string; stderr: string }): string {
     return stdout.length > 1_000 ? `stdout: ${stdout.slice(0, 1_000)}…` : `stdout: ${stdout}`;
   }
   return "No output captured.";
+}
+
+/**
+ * 三平台差异化的 ego 不可用提示（级联降级指引）。
+ * 与 docs/windows-browser-automation-plan.md §5.2.3 保持一致：
+ * macOS 走「安装/启动 ego lite + 备选链」，Windows/Linux 直接给备选链。
+ */
+function buildEgoUnavailableReason(platform: NodeJS.Platform, code: "unavailable" | "setup_required"): string {
+  const fallback = [
+    "可用替代方案（按体验排序）：",
+    "  1. BrowserOS neo (https://browseros.com/agents) — 第二浏览器，Chrome 登录态一键导入 + 录屏回放",
+    "  2. browser-use CLI — MIT 协议，三端一致（见下方安装命令）",
+    "  3. Sati 内置 @playwright/mcp — 无需额外安装，公开页面可用（无已登录会话）",
+    "运行 `sati browsers` 查看本机浏览器后端探测矩阵。",
+  ].join("\n");
+
+  if (platform === "darwin") {
+    if (code === "setup_required") {
+      return [
+        "ego-browser CLI not found. Install ego lite (https://lite.ego.app/), complete first-run onboarding, and confirm `ego-browser` is on the PATH (usually ~/.local/bin/ego-browser).",
+        fallback,
+        "  (macOS 备选安装：brew install uv && uv tool install browser-use)",
+      ].join("\n");
+    }
+    return [
+      "ego-browser (ego lite) is unavailable on this macOS machine. Launch the ego lite app and retry; if the browser session stays stale, restart ego lite or run `ego-browser --doctor` / `--reload`.",
+      fallback,
+    ].join("\n");
+  }
+
+  if (platform === "win32") {
+    return [
+      "ego-browser (ego lite) does not support Windows.",
+      "  1. BrowserOS neo (https://browseros.com/agents) — 下载 .exe，Chrome 登录态一键导入 + 录屏回放，Windows 体验最佳",
+      "  2. browser-use CLI — winget install Python.Python.3.12 && uv tool install browser-use",
+      "  3. Sati 内置 @playwright/mcp — 无需额外安装，公开页面可用（无已登录会话）",
+      "运行 `sati browsers` 查看本机浏览器后端探测矩阵。",
+    ].join("\n");
+  }
+
+  if (platform === "linux") {
+    return [
+      "ego-browser (ego lite) does not support Linux.",
+      "  1. browser-use CLI — 安装 uv（apt|yum|pacman install uv）后执行 uv tool install browser-use；MIT 协议，Linux 首选",
+      "  2. Sati 内置 @playwright/mcp — 无需额外安装，公开页面可用（无已登录会话）",
+      "注：BrowserOS neo 暂不支持 Linux；完整录屏与登录态管理可关注 BrowserOS（非 neo）的 AppImage/Deb 包。",
+      "运行 `sati browsers` 查看本机浏览器后端探测矩阵。",
+    ].join("\n");
+  }
+
+  return ["ego-browser (ego lite) only supports macOS.", fallback].join("\n");
 }

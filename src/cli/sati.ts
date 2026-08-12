@@ -29,6 +29,7 @@ Commands:
   gateway setup <channel>       Set up an IM channel (feishu|weixin|wecom)
   cron <list|create|delete|stop> Manage cron tasks (requires a running server)
   chat                          Search chat history
+  browsers [--doctor] [--json]  Probe browser backends (ego lite / BrowserOS neo / browser-use / @playwright/mcp)
   skills migrate                Migrate skills from other agents
   update [--check|--restart]    Update sati from the git remote
 
@@ -562,6 +563,19 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
 
   if (command === "skills") {
     await handleSkillsCommand(argv.slice(1));
+    return;
+  }
+
+  if (command === "browsers") {
+    const { runBrowserBackendProbes, formatBrowserBackendMatrix } = await import("./commands/browserBackends.js");
+    const probes = await runBrowserBackendProbes({
+      doctorCheck: argv.includes("--doctor"),
+    });
+    if (argv.includes("--json")) {
+      console.log(JSON.stringify(probes, null, 2));
+      return;
+    }
+    console.log(formatBrowserBackendMatrix(probes));
     return;
   }
 

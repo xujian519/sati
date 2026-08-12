@@ -3,12 +3,18 @@ import { homedir } from "node:os";
 /**
  * Expand MCP config placeholders in a single string:
  * - `${env:NAME}` → process.env[NAME] (fallback empty string)
+ * - `${env:NAME:-default}` → process.env[NAME] (fallback `default` when unset/empty)
  * - `${userHome}` → user home directory
  * - `~/` or `~\` prefix → user home directory (kept for backward compat)
  */
 export function expandMcpString(value: string): string {
   let result = value
-    .replace(/\$\{env:([^}]+)\}/g, (_m, name: string) => process.env[name] ?? "")
+    .replace(/\$\{env:([^}]+)\}/g, (_m, expr: string) => {
+      const sep = expr.indexOf(":-");
+      const name = sep >= 0 ? expr.slice(0, sep) : expr;
+      const fallback = sep >= 0 ? expr.slice(sep + 2) : "";
+      return process.env[name] ?? fallback;
+    })
     .replace(/\$\{userHome\}/g, process.env.HOME ?? process.env.USERPROFILE ?? homedir());
   if (result.startsWith("~/") || result.startsWith("~\\")) {
     result = homedir() + result.slice(1);

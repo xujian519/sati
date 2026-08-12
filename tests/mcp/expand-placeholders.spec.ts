@@ -29,6 +29,34 @@ test("expandMcpString leaves unknown env vars as empty string", () => {
   assert.equal(expandMcpString("${env:__SATI_NONEXISTENT_VAR__}"), "");
 });
 
+test("expandMcpString supports ${env:NAME:-default} fallback syntax", () => {
+  delete process.env.__SATI_NONEXISTENT_VAR__;
+  assert.equal(
+    expandMcpString("${env:__SATI_NONEXISTENT_VAR__:-http://127.0.0.1:9010/mcp}"),
+    "http://127.0.0.1:9010/mcp",
+  );
+  process.env.SATI_TEST_URL = "https://mcp.example.com";
+  try {
+    assert.equal(expandMcpString("${env:SATI_TEST_URL:-http://127.0.0.1:9010/mcp}"), "https://mcp.example.com");
+  } finally {
+    delete process.env.SATI_TEST_URL;
+  }
+});
+
+test("parsePluginMcpServers falls back to default when env unset in streamable_http url", () => {
+  delete process.env.__SATI_NONEXISTENT_URL__;
+  const { servers } = parsePluginMcpServers({
+    httpServer: {
+      url: "${env:__SATI_NONEXISTENT_URL__:-http://127.0.0.1:9010/mcp}",
+    },
+  });
+  assert.equal(servers.length, 1);
+  const s = servers[0]!;
+  if (s.transport === "streamable_http") {
+    assert.equal(s.url, "http://127.0.0.1:9010/mcp");
+  }
+});
+
 test("expandMcpString handles combined placeholders", () => {
   process.env.SATI_TEST_PORT = "8080";
   try {

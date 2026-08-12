@@ -1,0 +1,11 @@
+{
+  "name": "browseros-neo",
+  "version": "1.0.0",
+  "description": "BrowserOS neo — a second browser for AI agents. Chromium fork with one-click Chrome login import, live dashboard, and scrubbable session replay. MCP browser tools via http://127.0.0.1:9010/mcp.",
+  "mcpServers": {
+    "browseros-neo": {
+      "url": "${env:SATI_BROWSEROS_MCP_URL:-http://127.0.0.1:9010/mcp}",
+      "instructions": "Drive the user's BrowserOS neo browser (a separate Chromium browser for agents) through its local MCP endpoint. Use this for pages that need a real logged-in session, anti-bot handling, or session recording — the browser inherits the user's Chrome logins (imported once at BrowserOS neo setup).\n\nReal tool surface (verified on browseros-neo v0.0.28):\n- tabs (list / active / new / close), navigate ({page, action: url|back|forward|reload}), windows (list / create / close)\n- read ({page, format: text|markdown|links|console}), grep, snapshot, diff\n- act (click / type / press key …), evaluate ({page, code}), run, wait\n- screenshot, pdf, download, upload\n- history, tab_groups, name_session\n\nPractical notes:\n- Agent-owned pages must be created with `tabs` action=\"new\" (returns \"opened page N\"); the agent cannot navigate pages it does not own.\n- Prefer `evaluate` returning document.body.innerText over `read` for price/data extraction; `read` can return empty on JS-heavy pages.\n- BrowserOS neo must be running on this machine (its MCP endpoint listens on 127.0.0.1:9010). If the connection is refused, ask the user to launch BrowserOS neo. Override the URL with env SATI_BROWSEROS_MCP_URL when the port differs.\n- The endpoint has no authentication — any process on this machine can control the browser. Only enable on a trusted machine.\n- Every agent session is recorded and replayable from the BrowserOS neo dashboard; screenshots/saved files are returned as tool results.\n- Under heavy tab churn the browser window/profile can become unavailable (\"No browser window available\") — restart the BrowserOS neo app to recover."
+    }
+  }
+}
