@@ -5,6 +5,7 @@ import { createAskUserQuestionTool } from "../builtin/askUserQuestion.js";
 import { createBashTool, type CreateBashToolOptions } from "../builtin/bash.js";
 import { createEditFileTool } from "../builtin/editFile.js";
 import { createEgoBrowserTool, type CreateEgoBrowserToolOptions } from "../builtin/egoBrowser.js";
+import { createPatentPdfDownloadTool, type CreatePatentPdfDownloadToolOptions } from "../builtin/patentPdfDownload.js";
 import { createEditNotebookTool } from "../builtin/editNotebook.js";
 import { createExecuteCodeTool } from "../builtin/executeCode.js";
 import { createGlobTool } from "../builtin/glob.js";
@@ -104,6 +105,13 @@ export type CreateBuiltinRegistryOptions = {
    * skip registration entirely.
    */
   egoBrowser?: CreateEgoBrowserToolOptions | false;
+  /**
+   * `patent_pdf_download` builtin tool — 基于 ego-browser 下载拦截批量下载
+   * Google Patents PDF（写文件，权限 ask）。Registered by default；依赖
+   * ego-browser 可用（tool 内自检）。注意：注册在 `patent` 域块内，传
+   * `patent: false` 会连带关闭本工具。Pass `false` to skip registration.
+   */
+  patentPdfDownload?: CreatePatentPdfDownloadToolOptions | false;
   /**
    * Background task tools (`task_create` / `task_list` / `task_output` /
    * `task_wait` / `task_stop`). **Opt-in** — pass `{ runtime }` to register; absent or
@@ -258,6 +266,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentMetadataTool(), "patent"));
     registry.register(annotate(createPatentLegalStatusTool(), "patent"));
     registry.register(annotate(createPatentSearchTool(), "patent"));
+    if (options?.patentPdfDownload !== false) {
+      registry.register(annotate(createPatentPdfDownloadTool(options?.patentPdfDownload), "patent"));
+    }
     registry.register(annotate(createPatentWikiSearchTool(), "patent"));
     registry.register(annotate(createPatentKgQueryTool(), "patent"));
     registry.register(annotate(createPatentCaseSearchTool(), "patent"));

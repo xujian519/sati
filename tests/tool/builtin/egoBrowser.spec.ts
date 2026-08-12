@@ -194,3 +194,33 @@ test("ego_browser registry: independent of web_search toggles", () => {
   assert.equal(registry.has("web_search"), false);
   assert.equal(registry.has("web_fetch"), true);
 });
+
+test("ego_browser doctorCheck: probe success keeps availability ok", async () => {
+  const { homeDir } = makeFakeHomeDir();
+  const runner = new FakeRunner();
+  runner.result = { exitCode: 0, stdout: "", stderr: "EGO_DOCTOR_OK\n", timedOut: false, durationMs: 200 };
+  const tool = createEgoBrowserTool({ runner, homeDir, platform: "darwin", doctorCheck: true });
+  const availability = await tool.checkAvailability?.({ cwd: process.cwd(), env: { PATH: "/usr/bin:/bin" } });
+  assert.deepEqual(availability, { ok: true });
+  assert.match(runner.calls[0]?.command ?? "", /nodejs -e "cliLog\('EGO_DOCTOR_OK'\)"/);
+});
+
+test("ego_browser doctorCheck: probe failure reports failed_check (not setup_required)", async () => {
+  const { homeDir } = makeFakeHomeDir();
+  const runner = new FakeRunner();
+  runner.result = { exitCode: 1, stdout: "", stderr: "Unknown command: --doctor", timedOut: false, durationMs: 150 };
+  const tool = createEgoBrowserTool({ runner, homeDir, platform: "darwin", doctorCheck: true });
+  const availability = await tool.checkAvailability?.({ cwd: process.cwd(), env: { PATH: "/usr/bin:/bin" } });
+  assert.equal(availability?.ok, false);
+  assert.equal(availability?.code, "failed_check");
+  assert.match(availability?.reason ?? "", /ego lite app may not be running/);
+});
+
+test("ego_browser doctorCheck: disabled by default (no probe spawn)", async () => {
+  const { homeDir } = makeFakeHomeDir();
+  const runner = new FakeRunner();
+  const tool = createEgoBrowserTool({ runner, homeDir, platform: "darwin" });
+  const availability = await tool.checkAvailability?.({ cwd: process.cwd(), env: { PATH: "/usr/bin:/bin" } });
+  assert.deepEqual(availability, { ok: true });
+  assert.equal(runner.calls.length, 0, "probe must not run when doctorCheck is off");
+});

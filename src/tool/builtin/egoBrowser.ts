@@ -7,11 +7,13 @@
  * straight through to the CLI. ego-browser task spaces inherit the user's ego
  * lite login state by default, so authenticated sites are reachable without
  * re-entering credentials.
+ *
+ * 执行层统一委托 `EgoBrowserSession`（src/patent/data/nuo/egoSession.ts）：
+ * heredoc 构造 / PATH 注入 / CLI 探测 / 输出截断的唯一 canonical 实现，
+ * 本文件只保留工具定义与错误语义。
  */
 
-import { accessSync, constants as fsConstants } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { EgoBrowserSession, EGO_HEREDOC_MARKER } from "../../patent/data/nuo/egoSession.js";
 import type { PermissionResult } from "../../permission/index.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolValidationResult } from "../protocol/schema.js";
@@ -21,7 +23,7 @@ import type {
   SatiToolDefinition,
   SatiToolExecutionOutput,
 } from "../protocol/types.js";
-import { NodeShellCommandRunner, type SatiCommandResult, type SatiCommandRunner } from "./bash/commandRunner.js";
+import type { SatiCommandRunner } from "./bash/commandRunner.js";
 
 export type EgoBrowserInput = {
   /**
@@ -65,14 +67,23 @@ export type CreateEgoBrowserToolOptions = {
   pathEntries?: string[];
   /** Soft cap on returned stdout bytes (default 200_000). */
   maxOutputBytes?: number;
+  /**
+   * When true, `checkAvailability` additionally runs a connection probe
+   * (`ego-browser nodejs -e "cliLog(...)"`) to confirm the ego lite app is
+   * actually reachable, not just that the CLI file exists. Default false —
+   * the probe costs a process spawn on every availability check.
+   */
+  doctorCheck?: boolean;
+  /** Timeout for the connection probe in ms (default 8_000). */
+  doctorTimeoutMs?: number;
 };
 
 const DEFAULT_COMMAND_NAME = "ego-browser";
 const DEFAULT_TIMEOUT_MS = 90_000;
 const DEFAULT_MAX_TIMEOUT_MS = 300_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 200_000;
+const DEFAULT_DOCTOR_TIMEOUT_MS = 8_000;
 const MAX_SCRIPT_LENGTH = 50_000;
-const HEREDOC_MARKER = "EGO_SCRIPT_EOF";
 
 const EGO_BROWSER_DESCRIPTION = `Drive the ego-browser (ego lite) real Chromium browser from inside Sati. Use this for pages that need JavaScript rendering, login state, or anti-bot handling — e.g. Google Patents, CNIPA, Baidu Patents, authenticated databases, or interactive web UIs. Prefer this over web_fetch/web_search when a site blocks plain HTTP requests or requires the user's logged-in session.
 
@@ -85,7 +96,13 @@ Core helpers:
 - Evaluate: \`js('(() => {...})()')\` (runs in the page), \`cdp(...)\`, \`serverFetch\`, \`browserFetch\`
 - Output: \`cliLog(value)\` — the only way to return data; \`help(name)\` prints usage
 
-Task spaces default to inheriting the user's ego lite login state, so authenticated sites work without re-entering credentials. Reuse the same task space name across calls for a continuous session; always finish with \`completeTaskSpace(id, { keep: false })\` unless the user needs the page left open.
+Playwright-style \`page\` facade (binds the current tab): \`page.goto(url)\`, \`page.url()\`, \`page.locator(css)\` / \`page.getByText(...)\`, \`page.waitForLoadState('load')\`, \`page.screenshot({ path })\`, \`page.waitForEvent('download')\` (returns { saveAs(path), url(), suggestedFilename() } — in-browser download interception, reuse it for PDF/file downloads instead of guessing CDN URLs), \`page.screencast.start({ path, size })\` / \`page.screencast.stop()\` (record the session for evidence), \`page.keyboard.press\`, \`page.mouse.click\`.
+
+Learned site skills: \`site.runTool(siteId, toolName, args)\` runs a packaged site tool (e.g. google-patents) — see \`site.skills(url)\` to list what applies to a URL.
+
+Parallel work: multiple task spaces run concurrently — create several spaces and \`await Promise.all([...])\` to scrape/search several sites at once; each space is isolated and inherits login state.
+
+Task spaces default to inheriting the user's ego lite login state, so authenticated sites work without re-entering credentials. Reuse the same task space name across calls for a continuous session; always finish with \`completeTaskSpace(id, { keep: false })\` unless the user needs the page left open. If the browser connection seems stale, restart the ego lite app (newer CLI builds also offer \`ego-browser --doctor\` / \`--reload\`).
 
 Example (Google Patents keyword search):
 \`\`\`js
@@ -117,7 +134,16 @@ export function createEgoBrowserTool(
   const defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxTimeoutMs = options.maxTimeoutMs ?? DEFAULT_MAX_TIMEOUT_MS;
   const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
-  const runner = options.runner ?? new NodeShellCommandRunner();
+  const session = new EgoBrowserSession({
+    commandName,
+    defaultTimeoutMs,
+    maxTimeoutMs,
+    homeDir: options.homeDir,
+    pathEntries: options.pathEntries,
+    maxOutputBytes,
+    platform: options.platform,
+    runner: options.runner,
+  });
 
   return {
     name: "ego_browser",
@@ -144,22 +170,21 @@ export function createEgoBrowserTool(
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     isOpenWorld: () => true,
-    checkAvailability: (context): SatiToolAvailability => {
-      const platform = options.platform ?? process.platform;
-      if (platform !== "darwin") {
-        return {
-          ok: false,
-          code: "unavailable",
-          reason: "ego-browser (ego lite) only supports macOS.",
-        };
+    checkAvailability: async (context: SatiToolAvailabilityContext): Promise<SatiToolAvailability> => {
+      const availability = session.checkAvailability(context.env);
+      if (!availability.ok) {
+        return availability;
       }
-      if (!isEgoBrowserCommandAvailable(options.homeDir ?? homedir(), context)) {
-        return {
-          ok: false,
-          code: "setup_required",
-          reason:
-            "ego-browser CLI not found. Install ego lite (https://lite.ego.app/), complete first-run onboarding, and confirm `ego-browser` is on the PATH (usually ~/.local/bin/ego-browser).",
-        };
+      if (options.doctorCheck) {
+        const doctorOk = await session.runConnectionProbe(options.doctorTimeoutMs ?? DEFAULT_DOCTOR_TIMEOUT_MS);
+        if (!doctorOk) {
+          return {
+            ok: false,
+            code: "failed_check",
+            reason:
+              "ego-browser CLI is present but the browser connection could not be confirmed — the ego lite app may not be running or this CLI version does not support the probe. Launch ego lite and retry; if it persists, run `ego-browser upgrade` or reinstall from https://lite.ego.app/.",
+          };
+        }
       }
       return { ok: true };
     },
@@ -211,14 +236,14 @@ export function createEgoBrowserTool(
           ],
         };
       }
-      if (script.includes(`\n${HEREDOC_MARKER}`)) {
+      if (script.includes(`\n${EGO_HEREDOC_MARKER}`)) {
         return {
           ok: false,
           issues: [
             {
               path: "script",
               code: "invalid_schema",
-              message: `script must not contain the heredoc marker "${HEREDOC_MARKER}"`,
+              message: `script must not contain the heredoc marker "${EGO_HEREDOC_MARKER}"`,
             },
           ],
         };
@@ -241,14 +266,11 @@ export function createEgoBrowserTool(
     },
     execute: async (input, context): Promise<SatiToolExecutionOutput<EgoBrowserOutput>> => {
       const timeoutMs = input.timeoutMs ?? defaultTimeoutMs;
-      const command = buildEgoBrowserCommand(commandName, input.script);
-      const env = buildEgoBrowserEnv(context.env ?? process.env, options.homeDir ?? homedir(), options.pathEntries);
-
-      let result: SatiCommandResult;
+      let result;
       try {
-        result = await runner.run(command, {
+        result = await session.runScript(input.script, {
           cwd: context.cwd,
-          env,
+          env: context.env ?? process.env,
           timeoutMs,
           signal: context.abortSignal,
         });
@@ -277,13 +299,12 @@ export function createEgoBrowserTool(
 
       // ego-browser prints `cliLog(...)` output to stderr (observed on
       // v0.4.5.8), so the tool result must merge both channels — stdout alone
-      // is empty in practice.
-      const combinedOutput = [result.stdout, result.stderr].filter(text => text.length > 0).join("\n");
-      const output = truncateStdout(combinedOutput, maxOutputBytes);
+      // is empty in practice. `result.output` is already the merged, truncated
+      // text from the session.
       return {
-        content: [{ type: "text", text: output }],
+        content: [{ type: "text", text: result.output }],
         data: {
-          output,
+          output: result.output,
           stdout: result.stdout,
           stderr: result.stderr,
           exitCode: result.exitCode,
@@ -293,7 +314,7 @@ export function createEgoBrowserTool(
         metadata: {
           command: commandName,
           durationMs: result.durationMs,
-          outputBytes: output.length,
+          outputBytes: result.output.length,
           outputChannel: result.stdout.length > 0 ? "stdout" : "stderr",
         },
       };
@@ -301,46 +322,7 @@ export function createEgoBrowserTool(
   };
 }
 
-function buildEgoBrowserCommand(commandName: string, script: string): string {
-  return `${commandName} nodejs <<'${HEREDOC_MARKER}'\n${script}\n${HEREDOC_MARKER}`;
-}
-
-function buildEgoBrowserEnv(
-  base: NodeJS.ProcessEnv,
-  homeDir: string,
-  pathEntries: string[] | undefined,
-): NodeJS.ProcessEnv {
-  const entries = pathEntries ?? [join(homeDir, ".local", "bin")];
-  const existingPath = base.PATH ?? "";
-  const segments = existingPath.length > 0 ? existingPath.split(":") : [];
-  for (const entry of entries) {
-    if (entry && entry.length > 0 && !segments.includes(entry)) {
-      segments.push(entry);
-    }
-  }
-  return { ...base, PATH: segments.join(":") };
-}
-
-function isEgoBrowserCommandAvailable(homeDir: string, context: SatiToolAvailabilityContext): boolean {
-  const localBin = join(homeDir, ".local", "bin");
-  const pathSegments = (context.env?.PATH ?? process.env.PATH ?? "").split(":").filter(segment => segment.length > 0);
-  const candidates = [
-    join(localBin, DEFAULT_COMMAND_NAME),
-    ...pathSegments.map(segment => join(segment, DEFAULT_COMMAND_NAME)),
-  ];
-  return candidates.some(isExecutableFile);
-}
-
-function isExecutableFile(path: string): boolean {
-  try {
-    accessSync(path, fsConstants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function summarizeFailure(result: SatiCommandResult): string {
+function summarizeFailure(result: { stdout: string; stderr: string }): string {
   const stderr = result.stderr.trim();
   if (stderr.length > 0) {
     return stderr.length > 1_000 ? `stderr: ${stderr.slice(0, 1_000)}…` : `stderr: ${stderr}`;
@@ -350,8 +332,4 @@ function summarizeFailure(result: SatiCommandResult): string {
     return stdout.length > 1_000 ? `stdout: ${stdout.slice(0, 1_000)}…` : `stdout: ${stdout}`;
   }
   return "No output captured.";
-}
-
-function truncateStdout(text: string, maxBytes: number): string {
-  return text.length > maxBytes ? `${text.slice(0, maxBytes)}…\n[output truncated]` : text;
 }
