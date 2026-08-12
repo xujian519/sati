@@ -40,6 +40,23 @@ test("chunk-compression: 异常 BLOB 按 utf8 兜底", () => {
   assert.equal(decompressChunk(raw), "非压缩 BLOB 内容");
 });
 
+test("chunk-compression: SC 魔数但非有效 gzip 不抛错（按 utf8 兜底）", () => {
+  // 截断的迁移写入：前两字节是魔数但后面不是合法 gzip 流
+  const corrupt = Buffer.concat([Buffer.from([0x53, 0x43]), Buffer.from("不是 gzip 数据", "utf8")]);
+  assert.doesNotThrow(() => decompressChunk(corrupt), "非法 gzip 不应抛错（否则一行坏数据拖垮整条检索）");
+  assert.equal(decompressChunk(corrupt), corrupt.toString("utf8"), "魔数匹配但解压失败时按 utf8 原样返回");
+});
+
+test("chunk-compression: sati_uncompress SQL 函数对损坏 BLOB 不抛错", () => {
+  const db = new DatabaseSync(":memory:");
+  registerChunkUncompress(db);
+  db.exec("CREATE TABLE t (content)");
+  db.prepare("INSERT INTO t VALUES (?)").run(Buffer.concat([Buffer.from([0x53, 0x43]), Buffer.from("坏数据")]));
+  const row = db.prepare("SELECT sati_uncompress(content) AS c FROM t").get() as { c: string };
+  assert.equal(typeof row.c, "string", "损坏行应返回字符串而非抛错");
+  db.close();
+});
+
 test("chunk-compression: sati_uncompress SQL 函数（明文 TEXT 原样 / 压缩 BLOB 解压）", () => {
   const db = new DatabaseSync(":memory:");
   registerChunkUncompress(db);

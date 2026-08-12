@@ -128,6 +128,9 @@ export class KnowledgeEmbeddingSearch {
   close(): void {
     // 从进程级实例缓存移除，避免 close 后旧句柄被后续工厂调用复用。
     instanceCache.delete(`${this.dbPath}|${(this.docTypes ?? []).join(",")}`);
+    // 同时清共享矩阵缓存：同路径库文件被替换（如迁移产物 mv 覆盖）后重建
+    // 实例不应复用旧文件的矩阵（缓存键无格式/内容维度，close 即显式失效）。
+    matrixCache.delete(`${this.dbPath}|${(this.docTypes ?? []).join(",")}`);
     this.data = undefined;
     this.db.close();
   }

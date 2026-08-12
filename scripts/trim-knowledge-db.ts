@@ -65,11 +65,14 @@ function parseArgs(argv: string[]): Args {
   };
   const input = get("--input") ?? join(homedir(), ".sati", "knowledge", "knowledge.db");
   const output = get("--output") ?? join(dirname(input), "knowledge-lite.db");
+  const migrateInt8 = argv.includes("--migrate-int8");
   return {
     input,
     output,
-    keepEmbeddings: argv.includes("--keep-embeddings"),
-    migrateInt8: argv.includes("--migrate-int8"),
+    // --migrate-int8 隐含保留 embeddings（迁移语义即保留语义能力），
+    // 单独使用 --migrate-int8 不应静默变成"删 embeddings + 忽略迁移"。
+    keepEmbeddings: argv.includes("--keep-embeddings") || migrateInt8,
+    migrateInt8,
     rebuildKgFts: argv.includes("--rebuild-kg-fts"),
     compressChunks: argv.includes("--compress-chunks"),
     noFts: argv.includes("--no-fts"),
@@ -156,22 +159,30 @@ function rebuildKgFtsIndex(db: DatabaseSync): void {
     return;
   }
   // contentless_delete 是表级选项，无法 ALTER——需 DROP 重建回填。
-  db.exec(`DROP TABLE IF EXISTS kg_nodes_fts;
+  // 回填在单个事务内：中断时 DROP 与回填原子回滚，不会留下空索引。
+  db.exec("BEGIN");
+  try {
+    db.exec(`DROP TABLE IF EXISTS kg_nodes_fts;
 CREATE VIRTUAL TABLE kg_nodes_fts USING fts5(
   name, title, content,
   tokenize='trigram',
   content='',
   contentless_delete=1
 );`);
-  // rowid 与 kg_nodes 的 rowid 对齐（contentless 表 rowid 必须显式对应）。
-  const rows = db
-    .prepare("SELECT rowid, name, COALESCE(title, '') AS title, COALESCE(content, '') AS content FROM kg_nodes")
-    .all() as Array<{ rowid: number; name: string; title: string; content: string }>;
-  const insert = db.prepare("INSERT INTO kg_nodes_fts(rowid, name, title, content) VALUES (?, ?, ?, ?)");
-  for (const r of rows) {
-    insert.run(r.rowid, r.name, r.title, r.content);
+    // rowid 与 kg_nodes 的 rowid 对齐（contentless 表 rowid 必须显式对应）。
+    const rows = db
+      .prepare("SELECT rowid, name, COALESCE(title, '') AS title, COALESCE(content, '') AS content FROM kg_nodes")
+      .all() as Array<{ rowid: number; name: string; title: string; content: string }>;
+    const insert = db.prepare("INSERT INTO kg_nodes_fts(rowid, name, title, content) VALUES (?, ?, ?, ?)");
+    for (const r of rows) {
+      insert.run(r.rowid, r.name, r.title, r.content);
+    }
+    db.exec("COMMIT");
+    console.log(`    已重建 kg_nodes_fts 并回填 ${rows.length.toLocaleString()} 节点`);
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
   }
-  console.log(`    已重建 kg_nodes_fts 并回填 ${rows.length.toLocaleString()} 节点`);
 }
 
 function gb(bytes: number): string {
@@ -232,11 +243,8 @@ function main(): void {
     }
   }
 
-  // 2. 可选迁移：embeddings float32 → int8（--migrate-int8，保留语义能力）。
-  //    必须在删除 embeddings 之前执行（--keep-embeddings + --migrate-int8 组合有意义）。
-  if (migrateInt8 && !keepEmbeddings) {
-    console.log("[2/4] --migrate-int8 与默认删 embeddings 冲突（--migrate-int8 隐含保留 embeddings），已忽略迁移。");
-  }
+  // 2. 可选迁移：embeddings float32 → int8（--migrate-int8 在 parseArgs 中已
+  //    隐含 keepEmbeddings；必须在删除 embeddings 之前执行）。
   {
     const db = new DatabaseSync(output);
     try {
@@ -260,8 +268,9 @@ function main(): void {
         }
       }
 
-      // chunks 压缩：在删表之前执行（--no-fts 组合时压缩无意义但无害，跳过）。
-      if (compressChunks && !noFts) {
+      // chunks 压缩：在删表之前执行。--no-fts 组合同样有效（LIKE 降级路径
+      // 读取端 sati_uncompress() 已解压，压缩不损害降级检索）。
+      if (compressChunks) {
         console.log("[3/4] 压缩 chunks.content（长 chunk 转 gzip BLOB）…");
         const n = compressChunksTable(db);
         console.log(`    完成：压缩 ${n.toLocaleString()} 条（其余明文保留）`);

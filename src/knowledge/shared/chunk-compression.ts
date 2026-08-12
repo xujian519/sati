@@ -35,12 +35,21 @@ export function compressChunk(text: string): Buffer {
 /**
  * 解压：明文 TEXT 原样返回；压缩 BLOB（魔数）gunzip；异常 BLOB 按 utf8 兜底。
  * 幂等（对明文/压缩结果均可再调用）。
+ *
+ * 注意：SC 魔数前缀是强约定，但内容可能并非有效 gzip（截断的迁移写入、
+ * 巧合以 'SC' 开头的二进制内容）——gunzip 失败时降级 utf8 兜底，保证
+ * sati_uncompress() 永不抛错（一行坏数据只影响自身，不拖垮整条检索）。
  */
 export function decompressChunk(data: string | Uint8Array | null): string {
   if (data === null) return "";
   if (typeof data === "string") return data;
   if (data.length >= MAGIC.length && data[0] === MAGIC[0] && data[1] === MAGIC[1]) {
-    return gunzipSync(Buffer.from(data.subarray(MAGIC.length))).toString("utf8");
+    try {
+      return gunzipSync(Buffer.from(data.subarray(MAGIC.length))).toString("utf8");
+    } catch {
+      // 魔数匹配但非有效 gzip：按 utf8 原样返回（避免整条 SQL 查询抛错）。
+      return Buffer.from(data).toString("utf8");
+    }
   }
   return Buffer.from(data).toString("utf8");
 }

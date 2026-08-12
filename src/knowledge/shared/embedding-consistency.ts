@@ -73,25 +73,33 @@ export async function checkEmbeddingConsistency(
 
     // 双格式兼容：dim*4 字节 = float32（XiaoNuo 原始）；dim 字节 = int8（--migrate-int8
     // 产物），乘 scale 反量化回 float32 再算余弦（量化误差内等价）。
-    const vectors: Float32Array[] = rows.map(row => {
-      const dim = row.dim || Math.floor(row.vector.byteLength / 4);
+    // 防御：dim 缺失/非法或字节数不足以构成 dim 向量时跳过该行（不抛错、
+    // 不产生空向量拖低均值）——一行损坏数据不应废掉整个自检。
+    // 过滤后的行与原 rows 对齐：仅保留解码成功的（content, vector）对。
+    const valid: Array<{ row: (typeof rows)[number]; vector: Float32Array }> = [];
+    for (const row of rows) {
+      const dim = row.dim > 0 ? row.dim : Math.floor(row.vector.byteLength / 4);
+      if (dim <= 0) continue;
       if (row.vector.byteLength === dim * 4) {
-        return new Float32Array(row.vector.buffer, row.vector.byteOffset, dim);
+        valid.push({ row, vector: new Float32Array(row.vector.buffer, row.vector.byteOffset, dim) });
+        continue;
       }
+      if (row.vector.byteLength < dim) continue; // 截断 BLOB：不足以构成 int8 向量
       const int8 = new Int8Array(row.vector.buffer, row.vector.byteOffset, dim);
-      const scale = row.scale || 1;
+      const scale = row.scale > 0 ? row.scale : 1;
       const out = new Float32Array(dim);
       for (let i = 0; i < dim; i += 1) {
         out[i] = (int8[i] ?? 0) * scale;
       }
-      return out;
-    });
-    const queryVectors = await client.embed(rows.map(row => row.content));
+      valid.push({ row, vector: out });
+    }
+    if (valid.length === 0) return null;
+    const queryVectors = await client.embed(valid.map(v => v.row.content));
 
-    const samples: EmbeddingConsistencySample[] = rows.map((row, i) => {
+    const samples: EmbeddingConsistencySample[] = valid.map((v, i) => {
       const query = Float32Array.from(queryVectors[i] ?? []);
-      const cosine = cosineSimilarity(query, vectors[i]!);
-      return { text: row.content.slice(0, 60), cosine };
+      const cosine = cosineSimilarity(query, v.vector);
+      return { text: v.row.content.slice(0, 60), cosine };
     });
     const meanCosine = samples.reduce((sum, s) => sum + s.cosine, 0) / samples.length;
     const ok = meanCosine >= threshold;

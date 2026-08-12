@@ -124,6 +124,42 @@ test("embedding-consistency: embedding 请求抛错时返回 null 并降级（�
   rmSync(dbPath, { recursive: false, force: true });
 });
 
+test("embedding-consistency: 截断/损坏向量行被跳过，不废掉整个自检", async () => {
+  // 构造含一条损坏行的库：dim=4 但 vector 只有 2 字节（截断 BLOB）
+  const dir = mkdtempSync(join(tmpdir(), "embedding-consistency-corrupt-"));
+  const dbPath = join(dir, "knowledge.db");
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE documents (id TEXT PRIMARY KEY, source TEXT NOT NULL, doc_type TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent', title TEXT NOT NULL, indexed_at TEXT NOT NULL);
+    CREATE TABLE chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT NOT NULL REFERENCES documents(id), chunk_index INTEGER NOT NULL, chunk_type TEXT NOT NULL, content TEXT NOT NULL);
+    CREATE TABLE embeddings (id INTEGER PRIMARY KEY AUTOINCREMENT, chunk_id INTEGER NOT NULL REFERENCES chunks(id), document_id TEXT NOT NULL REFERENCES documents(id), vector BLOB NOT NULL, model TEXT NOT NULL DEFAULT 'bge-m3', dim INTEGER NOT NULL DEFAULT 4, indexed_at TEXT NOT NULL, norm REAL NOT NULL DEFAULT 0.0);
+  `);
+  db.prepare(
+    `INSERT INTO documents (id, source, doc_type, title, indexed_at) VALUES ('d1', 'raw', 'case', '判例X', '2026-01-01')`,
+  ).run();
+  const cid = db
+    .prepare(`INSERT INTO chunks (document_id, chunk_index, chunk_type, content) VALUES ('d1', 0, 'text', ?)`)
+    .run(anchorText()).lastInsertRowid as number;
+  // 一条完好（float32 [1,0,0,0]）+ 一条截断（2 字节）
+  const okBuf = Buffer.alloc(4 * 4);
+  [1, 0, 0, 0].forEach((v, j) => okBuf.writeFloatLE(v, j * 4));
+  db.prepare(
+    `INSERT INTO embeddings (chunk_id, document_id, vector, dim, norm, indexed_at) VALUES (?, 'd1', ?, 4, 1.0, '2026-01-01')`,
+  ).run(cid, okBuf);
+  const cid2 = db
+    .prepare(`INSERT INTO chunks (document_id, chunk_index, chunk_type, content) VALUES ('d1', 1, 'text', ?)`)
+    .run(anchorText()).lastInsertRowid as number;
+  db.prepare(
+    `INSERT INTO embeddings (chunk_id, document_id, vector, dim, norm, indexed_at) VALUES (?, 'd1', ?, 4, 1.0, '2026-01-01')`,
+  ).run(cid2, Buffer.from([0x01, 0x02])); // 截断：byteLength(2) < dim(4)
+
+  const result = await checkEmbeddingConsistency(dbPath, makeConsistentClient(), { sampleSize: 4, threshold: 0.9 });
+  assert.ok(result, "损坏行应被跳过，自检仍应返回结果");
+  assert.equal(result.ok, true, "剩余完好行同源应通过");
+  db.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test("embedding-consistency: int8 存储格式（--migrate-int8 产物，含 scale 列）反量化后同源通过", async () => {
   // 构造 int8 格式库：embeddings 表含 scale 列，vector 为 dim 字节 int8
   const dir = mkdtempSync(join(tmpdir(), "embedding-consistency-int8-"));
