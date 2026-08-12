@@ -28,7 +28,7 @@ description: "专利新颖性分析：检索现有技术、逐项对比技术特
 ## 分析流程
 
 ### 第 1 步：检索现有技术
-- 使用专利检索技能（`patent-search` / `google-patents-search` / `cnipa-query`）检索与目标专利最相关的现有技术文献；若专用检索技能不可用，使用 `web_search` / `web_fetch` 直接查询 Google Patents、Espacenet、CNIPA 公布公告等公开数据库
+- 按优先级使用检索通道检索现有技术：本地浏览器 `ego_browser`（首选，复用登录态/插件）→ 浏览器自动化（`google-patents-search` / `cnipa-query`）→ 本地 `patent-search` 库（兜底）；均不可用时使用 `web_search` / `web_fetch` 直接查询 Google Patents、Espacenet、CNIPA 公布公告等公开数据库
 - 优先检索同 IPC 分类下的授权专利和公开申请
 - 标注每篇对比文件的公开日期（需早于目标专利的申请日/优先权日）
 - 需要学术文献支撑时使用 `academic-search`

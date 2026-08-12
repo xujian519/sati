@@ -11,7 +11,7 @@ description: "专利代理与知识产权分析：专利检索、权利要求分
 
 - 用简体中文回复，专业严谨
 - 法律推理遵循五步三段论（识别法律问题→引用法条→比对技术事实→适用法律→结论+置信度），详见 `references/legal-reasoning.md`
-- 专利检索优先使用可用的专利检索技能（如 `patent-search` / `google-patents-search` / `cnipa-query` / `academic-search`）查询公开专利数据库；若专用检索技能不可用，改用 `web_search` / `web_fetch` 直接查询 Google Patents、Espacenet、CNIPA 公布公告等公开数据源，并标注检索范围与数据来源
+- 专利检索按优先级执行：① 本地浏览器 `ego_browser`（首选，复用登录态/插件）直接访问 Google Patents、CNIPA 公布公告等；② 浏览器自动化与检索脚本（`google-patents-search` / `cnipa-query` / `academic-search`，次选）；③ 本地 `patent-search` 库（最后兜底，仅中国专利）；④ 均不可用时降级 `web_search` / `web_fetch` 直接查询公开数据源。所有检索标注检索范围与数据来源
 - 权利要求分析需逐项比对，标注引用关系
 - 所有专利相关输出必须附带免责声明：**"本分析由 AI 辅助生成，不构成正式法律意见。专利申请和专利性判断应由具备资质的专利代理人或专利律师确认。"**
 
@@ -27,7 +27,7 @@ description: "专利代理与知识产权分析：专利检索、权利要求分
 
 | 工具/技能 | 用途 | 调用条件 |
 |-----------|------|---------|
-| `patent-search` / `google-patents-search` | 专利元数据查询、PDF 下载、法律状态查询 | 已知专利号或检索需求时 |
+| `google-patents-search` / `patent-search` | 专利检索（浏览器自动化次选 / 本地库兜底）、PDF 下载、法律状态查询 | 已知专利号或检索需求时 |
 | `cnipa-query` | CNIPA 法律状态/事务查询 | 中国专利法律状态、实质审查、授权/驳回查询 |
 | `academic-search` | 学术论文检索（Semantic Scholar/arXiv/PubMed） | 需要现有技术文献支撑时 |
 | `web_fetch` / `web_search` | 抓取专利全文、对比文件、审查指南 | 需要原文或补充资料时 |
@@ -174,5 +174,5 @@ description: "专利代理与知识产权分析：专利检索、权利要求分
 - 形式审查：见 `patent-formal-exam` 技能（A26.2/A26.5 格式/单一性/摘要，对接 `validate_specification`）
 - 无效宣告分析：见 `patent-invalidity` 技能（权利要求拆解→证据组合≥3 策略→成功率评估）
 - 统一质量评估：见 `patent-unified-eval` 技能（五维评分 + 交叉验证 + 门控，对接 `patent_eval`）
-- 现有技术检索：见 `patent-prior-art-search` 技能（三轮检索方法论，调用 MCP patent-search / web_search）
+- 现有技术检索：见 `patent-prior-art-search` 技能（三轮检索方法论，本地浏览器 `ego_browser` 首选，本地 `patent-search` 库兜底）
 - 交底书理解：见 `patent-understand-disclosure` 技能（PFE 三元组 + 创新点识别 + 澄清问题四维）

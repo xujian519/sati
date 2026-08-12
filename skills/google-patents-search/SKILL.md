@@ -36,9 +36,10 @@ patent-download US11739244B2
 ## 快速使用
 
 > **执行通道（优先级）**：
-> 1. **`ego_browser` 工具（首选）**——Sati 内置真实浏览器，复用 ego lite 登录态，直接访问 `https://patents.google.com/?q=<检索式>` 抓取结果；脚本以 `cliLog` 输出。适用于反爬 / 网络隔离场景。
-> 2. **`scripts/patent-search.py`（备选）**——Playwright 驱动浏览器；需 `pip install playwright` 且代理可达 Google Patents。
+> 1. **`ego_browser` 工具（首选）**——Sati 内置真实浏览器，复用本地浏览器登录态与插件，直接访问 `https://patents.google.com/?q=<检索式>` 抓取结果；脚本以 `cliLog` 输出。适用于反爬 / 网络隔离场景。**推荐用站点工具**：`site.runTool('google-patents', 'search_patents', { query, maxResults })` 直接出结构化结果（`get_patent_metadata` 取著录项；learnings 包已随技能安装，页面内提取用 `site.runBrowserTool('google-patents', 'extract_search_results', { maxResults })`）。
+> 2. **`scripts/patent-search.py`（次选）**——Playwright 驱动浏览器自动化；需 `pip install playwright` 且代理可达 Google Patents。
 > 3. 降级 `web_search` / `web_fetch`。
+> 4. **本地 `patent-search` 库（最后兜底）**——本机 PostgreSQL 库，仅中国专利；以上通道均不可用或失效时使用。
 
 **执行方式**：脚本在 `scripts/patent-search.py`，使用 `python3` 运行。
 > 如需 `patent-search` 命令，创建 alias：`alias patent-search='python3 /path/to/scripts/patent-search.py'`

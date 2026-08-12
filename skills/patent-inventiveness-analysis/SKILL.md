@@ -38,7 +38,7 @@ description: "专利创造性分析：三步法（最接近现有技术→区别
 - **输出必备关键词**：`本领域技术人员`、`申请日`（或优先权日）
 
 ### 第 2 步：检索与候选筛选（search）
-- 检索与目标方案最相关的现有技术文献（`patent-search` / `google-patents-search` / `cnipa-query` / `academic-search`；不可用时 `web_search` / `web_fetch`）
+- 检索与目标方案最相关的现有技术文献（优先级：本地浏览器 `ego_browser` → 浏览器自动化 `google-patents-search` / `cnipa-query` / `academic-search` → 本地 `patent-search` 库兜底；不可用时 `web_search` / `web_fetch`）
 - 标注每篇对比文件公开日（须早于申请日/优先权日）
 - 按"技术领域（相同/相近优先）→ 技术问题（须与发明相关）→ 发明构思与技术手段"筛选最接近现有技术候选
 - 候选不唯一时保留多个，后续逐个试判

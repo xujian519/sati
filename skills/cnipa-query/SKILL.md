@@ -27,8 +27,8 @@ limitations: 仅中国专利法律状态/事务查询，需 Playwright + Chromiu
 - 任何涉及中国专利实务状态的查询
 
 ❌ **不适用场景**（请转用其他技能）：
-- 关键词检索专利 → 用 `patent-search` 或 `google-patents-search`
-- 查看专利详情/著录项目 → 用 `patent-search` 或 `google-patents-search`
+- 关键词检索专利 → 用 `google-patents-search`（浏览器自动化）或 `patent-search`（本地库兜底）
+- 查看专利详情/著录项目 → 用 `google-patents-search` 或 `patent-search`（兜底）
 - 下载专利 PDF → 用 `patent-download`
 - 美国/欧洲/海外专利 → 用 `google-patents-search`
 

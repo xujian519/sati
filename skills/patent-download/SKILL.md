@@ -1,6 +1,6 @@
 ---
 name: patent-download
-description: 从 Google Patents 下载专利 PDF 原文。通过专利公开号/授权公告号下载。触发场景：(1) "下载专利PDF"、"获取专利原文"、"下载CN/US/EP专利" (2) 单个或批量下载（支持从文件读取）。支持中国(CN)、美国(US)、欧洲(EP)、PCT(WO)等多国专利。优先使用 ego-browser（浏览器自动化），CDN直连作为备选。
+description: 从 Google Patents 下载专利 PDF 原文。通过专利公开号/授权公告号下载。触发场景：(1) "下载专利PDF"、"获取专利原文"、"下载CN/US/EP专利" (2) 单个或批量下载（支持从文件读取）。支持中国(CN)、美国(US)、欧洲(EP)、PCT(WO)等多国专利。优先使用本地浏览器 ego-browser（复用登录态/插件），其次浏览器自动化脚本。
 ---
 
 # 专利下载技能
@@ -9,9 +9,11 @@ description: 从 Google Patents 下载专利 PDF 原文。通过专利公开号/
 
 ## 执行通道（优先级）
 
-1. **Sati 内置 `ego_browser` 工具（首选）**——真实浏览器复用 ego lite 登录态，直接打开 `https://patents.google.com/patent/<专利号>` 抓取 PDF 下载链接；适用于反爬 / 网络隔离场景。
-2. **`scripts/download_patent_ego.py`（CLI 备选，推荐批量）**——ego-browser **单次会话批量**打开所有专利页提取真实 PDF CDN URL（复用同一 tab，不再每篇重启浏览器），再用 urllib **并发流式**从 CDN 下载（`-j` 控制线程数，默认 4；分块写盘内存占用 ~64KB）。中国大陆无需代理。
-3. **`scripts/download_patent.py`（旧版参考）**——requests + BeautifulSoup 爬取，中国大陆需代理才能访问。
+1. **`patent_pdf_download` 内置工具（首选）**——Sati 内置批量下载工具：单次 ego-browser 会话内用**浏览器下载拦截**（`page.waitForEvent("download")` + `saveAs`，ego-browser v1.2.6+）逐篇下载，复用登录态/Cookie（授权类 PDF 更稳）；输出 `PROGRESS` 进度、可选 screencast 录屏留证；某篇拦截失败自动降级返回 CDN 链接（`status: "fallback"`），不中断其余。
+2. **Sati 内置 `ego_browser` 工具（本地浏览器）**——需要精细控制（登录/反爬/交互页面）时手写脚本驱动本地浏览器（复用登录态/插件），打开 `https://patents.google.com/patent/<专利号>` 抓取 PDF 下载链接；适用于反爬 / 网络隔离场景。
+3. **浏览器自动化（次选）**——
+   - `scripts/download_patent_ego.py`：ego-browser **单次会话批量**打开所有专利页提取真实 PDF CDN URL（复用同一 tab，不再每篇重启浏览器），再用 urllib **并发流式**从 CDN 下载（`-j` 控制线程数，默认 4；分块写盘内存占用 ~64KB）。中国大陆无需代理。
+   - `scripts/download_patent.py`（旧版参考）：requests + BeautifulSoup 爬取，中国大陆需代理才能访问。
 
 ## 快速使用
 

@@ -16,9 +16,9 @@ systemPrompt: |-
   1. 提取检索要素（技术关键词、IPC 分类号、申请人/发明人、时间范围）。
   2. 构造多层检索式：精确词 → 语义扩展 → 同义词变体。
   3. 跨源检索，按优先级：
-     a. 结构化专利工具（TS 原生数据引擎，首选）：`patent_search`（关键词/布尔检索）→ `patent_metadata`（按号取详情）→ `patent_legal_status`（法律状态）；
-     b. 真实浏览器：`ego_browser`（Google Patents/Espacenet/CNIPA 等，复用 ego lite 登录态）；
-     c. MCP 专利检索服务 / 本地 patent-search 库；
+     a. 本地浏览器（首选）：`ego_browser`（复用本地浏览器登录态与插件，可处理 JS 反爬/需登录站点）——直接访问 Google Patents/Espacenet/CNIPA 公布公告等；
+     b. 浏览器自动化 / 结构化数据引擎（次选）：`patent_search`（关键词/布尔检索）→ `patent_metadata`（按号取详情）→ `patent_legal_status`（法律状态），及 Playwright 驱动脚本（`google-patents-search`）；
+     c. 本地 patent-search 库（最后兜底，仅中国专利）；
      d. 法规库（`law_search`）与审查指南；
      e. 最后降级 `web_search`/`web_fetch`。
   4. 按相关度（>0.75）、时效（近 3-5 年优先）、引用频次、权威性合并排序。
