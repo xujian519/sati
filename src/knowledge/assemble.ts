@@ -7,6 +7,7 @@
  * （单个失败不影响其他）。
  */
 
+import { join } from "node:path";
 import type { MemoryResolver } from "../context/memory/MemoryResolver.js";
 import type { EmbeddingClient } from "../model/embedding/types.js";
 import type { RerankClient } from "../model/embedding/rerank.js";
@@ -28,6 +29,7 @@ import {
   type CaseLawSemanticSource,
 } from "./case-law/case-law-search.js";
 import { CaseLawMemoryProvider } from "./case-law/case-law-memory-provider.js";
+import { getOrCreatePersonalNoteIndex, type PersonalNoteVectorIndex } from "./personal-note/index.js";
 
 export type BuildKnowledgeResolversOptions = {
   /** patent_kg.db 路径（resolveKnowledgeDbPaths 探测结果）。 */
@@ -184,6 +186,26 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
             options.logger?.warn?.(`knowledge.db 判例 embeddings 打开失败，判例语义路关闭: ${errorMessage(error)}`);
           }
         }
+        // personal_note 语义索引（项目沉淀笔记可被语义召回；进程级单例与工具侧共享）。
+        let noteSemantic: PersonalNoteVectorIndex | undefined;
+        if (options.embedding) {
+          try {
+            noteSemantic = getOrCreatePersonalNoteIndex({
+              dbPath: options.knowledgeDb,
+              client: options.embedding,
+              storePath: join(options.embeddingDir, "personal-note.jsonl"),
+              logger: options.logger,
+            });
+            // 后台预热：personal_note 量小（首次 embed 秒级）；失败仅告警不阻断。
+            void noteSemantic.warmup().catch(error => {
+              options.logger?.warn?.(`personal_note 语义索引预热失败（不影响关键词检索）: ${errorMessage(error)}`);
+            });
+          } catch (error) {
+            options.logger?.warn?.(`personal_note 语义索引构建失败，笔记语义路关闭: ${errorMessage(error)}`);
+            noteSemantic = undefined;
+          }
+        }
+        caseEngine.setNoteSemantic(noteSemantic);
         resolvers.push(
           new CaseLawMemoryProvider({
             engine: caseEngine,

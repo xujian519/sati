@@ -12,12 +12,22 @@
  *   --no-fts  —— 额外删除 FTS5 索引（docs_fts/kg_nodes_fts），检索降级
  *                 LIKE（无 BM25/trigram 模糊匹配）：7.0G → ~1.6G（-77%）
  *   --keep-embeddings —— 仅 VACUUM 去碎片，保留完整能力：7.0G → ~4.8G
+ *   --migrate-int8 —— 将 embeddings float32 向量量化为 int8 存储（加 scale
+ *                 列），语义检索质量不变（检索链路本就 int8 量化），
+ *                 向量存储 4096B/条 → 1024B/条（-75%）：7.0G → ~4.5G（-36%）
+ *   --compress-chunks —— 将 chunks.content 长正文（≥800 字符且压缩有收益）
+ *                 转 gzip BLOB（魔数 SC 前缀），读取端 sati_uncompress() 透明
+ *                 解压，FTS contentless 索引与检索质量不受影响；小 chunk 与
+ *                 知识笔记写入的明文保持原样：7.0G → ~4.1G（-41%）
  *
  * 用法：
  *   pnpm tsx scripts/trim-knowledge-db.ts \
  *     [--input ~/.sati/knowledge/knowledge.db] \
  *     [--output ~/.sati/knowledge/knowledge-lite.db] \
  *     [--keep-embeddings] \
+ *     [--migrate-int8] \
+ *     [--compress-chunks] \
+ *     [--rebuild-kg-fts] \
  *     [--no-fts] \
  *     [--skip-verify]
  *
@@ -30,6 +40,8 @@ import { DatabaseSync } from "node:sqlite";
 import { existsSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { quantizeInt8 } from "../src/context/vector/cosine.js";
+import { compressChunk, shouldCompress } from "../src/knowledge/shared/chunk-compression.js";
 import { KgStore } from "../src/knowledge/shared/kg-store.js";
 import { KnowledgeLawSearch } from "../src/knowledge/legal/knowledge-law-search.js";
 import { CaseLawSearchEngine } from "../src/knowledge/case-law/case-law-search.js";
@@ -39,6 +51,9 @@ type Args = {
   input: string;
   output: string;
   keepEmbeddings: boolean;
+  migrateInt8: boolean;
+  rebuildKgFts: boolean;
+  compressChunks: boolean;
   noFts: boolean;
   skipVerify: boolean;
 };
@@ -54,9 +69,109 @@ function parseArgs(argv: string[]): Args {
     input,
     output,
     keepEmbeddings: argv.includes("--keep-embeddings"),
+    migrateInt8: argv.includes("--migrate-int8"),
+    rebuildKgFts: argv.includes("--rebuild-kg-fts"),
+    compressChunks: argv.includes("--compress-chunks"),
     noFts: argv.includes("--no-fts"),
     skipVerify: argv.includes("--skip-verify"),
   };
+}
+
+/**
+ * chunks.content 应用级压缩：逐行读取，长度达标且压缩后更小的改为
+ * gzip+魔数 BLOB（明文 TEXT 保留原样）。读取端经 sati_uncompress() 解压，
+ * FTS contentless 索引不受影响。返回压缩的条数。
+ */
+function compressChunksTable(db: DatabaseSync): number {
+  const select = db.prepare("SELECT id, content FROM chunks");
+  const update = db.prepare("UPDATE chunks SET content = ? WHERE id = ?");
+  let compressed = 0;
+  // iterate() 流式逐行（select.all() 会物化整表，7G 级库内存不可控）。
+  for (const row of select.iterate() as Iterable<{ id: number; content: string | Uint8Array }>) {
+    // 已是压缩 BLOB（重复运行）跳过；TEXT 明文才评估压缩。
+    if (typeof row.content !== "string") {
+      continue;
+    }
+    if (shouldCompress(row.content)) {
+      update.run(compressChunk(row.content), row.id);
+      compressed += 1;
+    }
+    if (compressed > 0 && compressed % 5000 === 0) {
+      console.log(`    已压缩 ${compressed.toLocaleString()} 条…`);
+    }
+  }
+  return compressed;
+}
+
+/** 单条 float32 向量 BLOB → int8 BLOB + scale。 */
+function quantizeVectorBlob(raw: Uint8Array, dimensions: number): { blob: Uint8Array; scale: number } {
+  const view = new Float32Array(raw.buffer, raw.byteOffset, Math.floor(raw.byteLength / 4));
+  const floats = new Float32Array(dimensions);
+  floats.set(view.subarray(0, dimensions));
+  const { values, scale } = quantizeInt8(floats);
+  return { blob: new Uint8Array(values.buffer, values.byteOffset, values.byteLength), scale };
+}
+
+/**
+ * embeddings 表 float32 → int8 迁移：新增 scale 列，逐批（5000 条/批）量化写回。
+ * 返回迁移的条数。源向量必须恰好 dim*4 字节（float32）；异常行跳过并计数。
+ */
+function migrateEmbeddingsInt8(db: DatabaseSync, dimensions: number): { migrated: number; skipped: number } {
+  // scale 列幂等：已存在（重复运行）则跳过 ALTER。
+  const cols = db.prepare("SELECT name FROM pragma_table_info('embeddings')").all() as Array<{ name: string }>;
+  if (!cols.some(c => c.name === "scale")) {
+    db.exec("ALTER TABLE embeddings ADD COLUMN scale REAL NOT NULL DEFAULT 1.0");
+  }
+
+  const select = db.prepare("SELECT id, vector FROM embeddings");
+  const update = db.prepare("UPDATE embeddings SET vector = ?, scale = ? WHERE id = ?");
+  const expected = dimensions * 4;
+  let migrated = 0;
+  let skipped = 0;
+  // iterate() 流式逐行（select.all() 会物化整表，7G 级库内存不可控）。
+  for (const row of select.iterate() as Iterable<{ id: number; vector: Uint8Array }>) {
+    if (row.vector.byteLength === expected) {
+      const { blob, scale } = quantizeVectorBlob(row.vector, dimensions);
+      update.run(blob, scale, row.id);
+      migrated += 1;
+    } else {
+      // 已是 int8（1024B）或异常长度：不动，计数跳过。
+      skipped += 1;
+    }
+    if (migrated > 0 && migrated % 5000 === 0) {
+      console.log(`    已迁移 ${migrated.toLocaleString()} 条…`);
+    }
+  }
+  return { migrated, skipped };
+}
+
+/**
+ * kg_nodes_fts 重建为 contentless_delete=1（与 docs_fts 一致），减少删除后的
+ * 索引碎片；回填 name/title/content。用于知识库被增量更新过的场景。
+ */
+function rebuildKgFtsIndex(db: DatabaseSync): void {
+  const has = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kg_nodes_fts'").get();
+  if (!has) {
+    console.log("    kg_nodes_fts 不存在，跳过重建。");
+    return;
+  }
+  // contentless_delete 是表级选项，无法 ALTER——需 DROP 重建回填。
+  db.exec(`DROP TABLE IF EXISTS kg_nodes_fts;
+CREATE VIRTUAL TABLE kg_nodes_fts USING fts5(
+  name, title, content,
+  tokenize='trigram',
+  content='',
+  contentless_delete=1
+);`);
+  // rowid 与 kg_nodes 的 rowid 对齐（contentless 表 rowid 必须显式对应）。
+  const rows = db
+    .prepare("SELECT rowid, name, COALESCE(title, '') AS title, COALESCE(content, '') AS content FROM kg_nodes")
+    .all() as Array<{ rowid: number; name: string; title: string; content: string }>;
+  const insert = db.prepare("INSERT INTO kg_nodes_fts(rowid, name, title, content) VALUES (?, ?, ?, ?)");
+  for (const r of rows) {
+    insert.run(r.rowid, r.name, r.title, r.content);
+  }
+  console.log(`    已重建 kg_nodes_fts 并回填 ${rows.length.toLocaleString()} 节点`);
 }
 
 function gb(bytes: number): string {
@@ -78,13 +193,18 @@ function sqlQuote(path: string): string {
 }
 
 function main(): void {
-  const { input, output, keepEmbeddings, noFts, skipVerify } = parseArgs(process.argv.slice(2));
+  const { input, output, keepEmbeddings, migrateInt8, rebuildKgFts, compressChunks, noFts, skipVerify } = parseArgs(
+    process.argv.slice(2),
+  );
   console.log(`输入: ${input}`);
   console.log(`输出: ${output}`);
   const removed: string[] = [];
   if (!keepEmbeddings) removed.push("embeddings（语义召回关闭，FTS/关键词不受影响）");
   if (noFts) removed.push("FTS5 索引（docs_fts/kg_nodes_fts，全文检索降级 LIKE）");
   console.log(`去除: ${removed.length > 0 ? removed.join("；") : "无（仅 VACUUM 去碎片）"}`);
+  if (migrateInt8) console.log("迁移: embeddings float32 → int8（+scale 列，语义质量不变）");
+  if (compressChunks) console.log("压缩: chunks.content 应用级 gzip（读取端透明解压，FTS 不受影响）");
+  if (rebuildKgFts) console.log("重建: kg_nodes_fts（contentless_delete=1）");
 
   if (!existsSync(input)) {
     console.error(`错误: 输入库不存在（${input}）。请用 --input 指定 knowledge.db 路径。`);
@@ -112,10 +232,41 @@ function main(): void {
     }
   }
 
-  // 2. 删除可选表：embeddings 相关（默认）与 FTS5 索引（--no-fts）。
+  // 2. 可选迁移：embeddings float32 → int8（--migrate-int8，保留语义能力）。
+  //    必须在删除 embeddings 之前执行（--keep-embeddings + --migrate-int8 组合有意义）。
+  if (migrateInt8 && !keepEmbeddings) {
+    console.log("[2/4] --migrate-int8 与默认删 embeddings 冲突（--migrate-int8 隐含保留 embeddings），已忽略迁移。");
+  }
   {
     const db = new DatabaseSync(output);
     try {
+      if (migrateInt8 && keepEmbeddings) {
+        // 表不存在时 prepare 即抛错，须先探测（与 rebuildKgFtsIndex 的
+        // sqlite_master 检查一致），避免对已删 embeddings 的 lite 库崩溃。
+        const hasTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='embeddings'").get();
+        if (!hasTable) {
+          console.log("[2/4] embeddings 表不存在，跳过迁移。");
+        } else {
+          const meta = db
+            .prepare("SELECT dim, COUNT(*) AS c FROM embeddings GROUP BY dim ORDER BY c DESC LIMIT 1")
+            .get() as { dim: number; c: number } | undefined;
+          if (meta && meta.c > 0) {
+            console.log(`[2/4] 迁移 embeddings 至 int8（dim=${meta.dim}，共 ${meta.c.toLocaleString()} 条）…`);
+            const { migrated, skipped } = migrateEmbeddingsInt8(db, meta.dim);
+            console.log(`    完成：迁移 ${migrated.toLocaleString()} 条，跳过 ${skipped} 条（已 int8 或异常）`);
+          } else {
+            console.log("[2/4] embeddings 表为空，跳过迁移。");
+          }
+        }
+      }
+
+      // chunks 压缩：在删表之前执行（--no-fts 组合时压缩无意义但无害，跳过）。
+      if (compressChunks && !noFts) {
+        console.log("[3/4] 压缩 chunks.content（长 chunk 转 gzip BLOB）…");
+        const n = compressChunksTable(db);
+        console.log(`    完成：压缩 ${n.toLocaleString()} 条（其余明文保留）`);
+      }
+
       const drops: string[] = [];
       if (!keepEmbeddings) {
         drops.push("embeddings", "ivf_index", "index_meta");
@@ -125,13 +276,17 @@ function main(): void {
         drops.push("docs_fts", "kg_nodes_fts");
       }
       if (drops.length > 0) {
-        console.log(`[2/3] 删除: ${drops.join(", ")}…`);
+        console.log(`[3/4] 删除: ${drops.join(", ")}…`);
         db.exec(drops.map(t => `DROP TABLE IF EXISTS "${t}"`).join(";\n"));
       } else {
-        console.log("[2/3] 无删除项（--keep-embeddings 且未 --no-fts）");
+        console.log("[3/4] 无删除项（--keep-embeddings 且未 --no-fts）");
       }
-      // 3. 释放删表空间，输出库保持紧凑。
-      console.log("[3/3] 二次 VACUUM 释放空间…");
+      if (rebuildKgFts && !noFts && !drops.includes("kg_nodes_fts")) {
+        console.log("[3/4] 重建 kg_nodes_fts（contentless_delete=1）…");
+        rebuildKgFtsIndex(db);
+      }
+      // 4. 释放删表空间，输出库保持紧凑。
+      console.log("[4/4] 二次 VACUUM 释放空间…");
       db.exec("VACUUM");
     } finally {
       db.close();

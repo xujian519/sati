@@ -40,12 +40,13 @@ import {
   KnowledgeRuntimeStats,
   createCaseLawSemanticSource,
   createKnowledgeEmbeddingSearch,
+  getOrCreatePersonalNoteIndex,
   buildKnowledgeResolvers,
   logKnowledgeCapabilities,
   resolveKnowledgeCapabilities,
   resolveKnowledgeDbPaths,
 } from "../knowledge/index.js";
-import { setCaseLawSemanticSource } from "../tool/builtin/patentCaseSearch.js";
+import { setCaseLawSemanticSource, setPersonalNoteSemanticSource } from "../tool/builtin/patentCaseSearch.js";
 import type { KnowledgeDbPaths } from "../knowledge/index.js";
 import type { KnowledgeCapabilitiesResult } from "../gateway/protocol/types.js";
 import type { MemoryResolver } from "../context/index.js";
@@ -870,6 +871,30 @@ class ProjectRuntimeRegistry {
         setCaseLawSemanticSource(createCaseLawSemanticSource(texts => embeddingClient!.embed(texts), caseEmbeddings));
       } catch (error) {
         console.warn("[sati] knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
+      }
+    }
+
+    // personal_note 语义召回源注入（patent_case_search 工具）：项目沉淀笔记（OA 答复要点等）
+    // 可被语义召回。数据源固定为 knowledgeDb（knowledge_note_save 写入地），与组装层
+    // 单例键一致；进程级单例与组装层共享。引擎侧回源走 caseDb——两者分离
+    // （SATI_CASE_DB）时笔记命中无法经 caseDb 引擎回源，显式告警关闭该路。
+    if (embeddingClient && knowledgePaths.knowledgeDb) {
+      try {
+        const noteIndex = getOrCreatePersonalNoteIndex({
+          dbPath: knowledgePaths.knowledgeDb,
+          client: embeddingClient,
+          storePath: joinPath(embeddingDir, "personal-note.jsonl"),
+          logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
+        });
+        if (knowledgePaths.caseDb && knowledgePaths.caseDb !== knowledgePaths.knowledgeDb) {
+          console.warn(
+            "[sati] knowledge: personal_note 库与判例库分离（SATI_CASE_DB），笔记命中无法回源，工具侧笔记语义路关闭。",
+          );
+        } else {
+          setPersonalNoteSemanticSource(noteIndex);
+        }
+      } catch (error) {
+        console.warn("[sati] knowledge: personal_note 语义召回源注入失败，笔记语义路关闭:", error);
       }
     }
 

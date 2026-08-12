@@ -15,6 +15,7 @@
 
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
+import { registerChunkUncompress } from "../shared/chunk-compression.js";
 import { extractLawKeywords } from "../legal/legal-search.js";
 import type { KnowledgeEmbeddingSearch } from "../shared/knowledge-embeddings.js";
 import type { CaseLawChunk, CaseLawHit, CaseLawSearchOptions } from "./types.js";
@@ -56,6 +57,14 @@ export type CaseLawSemanticSource = {
 };
 
 /**
+ * personal_note 语义召回源（结构化接口，避免与 personal-note 模块循环依赖）。
+ * id 即 documents.id，供 searchSemantic 命中后经 stmtGetDocById 回源正文。
+ */
+export type PersonalNoteSemanticSource = {
+  search(query: string, limit: number): Promise<Array<{ id: string; score: number }>>;
+};
+
+/**
  * 构造判例语义召回源：把 EmbeddingClient 的批量接口包装为单条 Float32Array。
  * 组装层（buildKnowledgeResolvers）与工具语义源注入（createLocalGateway）共用，
  * 避免 embed 闭包在多个位置重复。
@@ -89,29 +98,37 @@ export class CaseLawSearchEngine {
   /** 语义召回源（可选；gateway 注入后启用判例语义叠加）。 */
   private semantic?: CaseLawSemanticSource;
 
+  /** personal_note 语义召回源（可选；组装层/工具侧注入后启用项目笔记语义叠加）。 */
+  private noteSemantic?: PersonalNoteSemanticSource;
+
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath, { readOnly: true });
+    // chunk 压缩解压函数（--compress-chunks 产物 BLOB；明文原样返回）。
+    registerChunkUncompress(this.db);
     const row = this.db
       .prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='docs_fts'")
       .get() as { c: number };
     // 双重条件才启用 FTS：docs_fts 表存在 + 运行时 SQLite 编译了 FTS5。
     this.hasFts = row.c > 0 && sqliteHasFts5(this.db);
 
-    // LIKE 降级：documents.title 或 每文档最长 chunk 的 content；子查询取最长 chunk 作片段。
+    // LIKE 降级：documents.title 或 每文档最长 chunk 的 content（压缩 chunk 先
+    // 解压再匹配）；子查询取最长 chunk 作片段。
     this.stmtSearchLike = this.db.prepare(`
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
-             d.court, d.source, d.module, d.char_count, c.chunk_index, c.content
+             d.court, d.source, d.module, d.char_count, c.chunk_index,
+             sati_uncompress(c.content) AS content
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
-      WHERE (d.title LIKE ? ESCAPE '\\' OR c.content LIKE ? ESCAPE '\\')
+      WHERE (d.title LIKE ? ESCAPE '\\' OR sati_uncompress(c.content) LIKE ? ESCAPE '\\')
       LIMIT ?
     `);
 
     // 按 documents.id 取全文分块（供"查看判例全文"场景）。
     this.stmtGetById = this.db.prepare(`
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
-             d.court, d.source, d.module, d.char_count, c.chunk_index, c.content
+             d.court, d.source, d.module, d.char_count, c.chunk_index,
+             sati_uncompress(c.content) AS content
       FROM documents d
       JOIN chunks c ON c.document_id = d.id
       WHERE d.id = ?
@@ -121,7 +138,8 @@ export class CaseLawSearchEngine {
     // 按 documents.id 取最长 chunk（语义命中回源片段）。
     this.stmtGetDocById = this.db.prepare(`
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
-             d.court, d.source, d.module, d.char_count, c.chunk_index, c.content
+             d.court, d.source, d.module, d.char_count, c.chunk_index,
+             sati_uncompress(c.content) AS content
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -137,7 +155,7 @@ export class CaseLawSearchEngine {
         this.stmtSearchFts = this.db.prepare(`
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
              d.court, d.source, d.module, d.char_count,
-             c.chunk_index, c.content, bm25(docs_fts) AS fts_rank
+             c.chunk_index, sati_uncompress(c.content) AS content, bm25(docs_fts) AS fts_rank
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
@@ -158,30 +176,62 @@ export class CaseLawSearchEngine {
     this.semantic = source;
   }
 
-  /** 语义召回源是否就绪。 */
+  /** 注入 personal_note 语义召回源（未注入时该路关闭）。 */
+  setNoteSemantic(source?: PersonalNoteSemanticSource): void {
+    this.noteSemantic = source;
+  }
+
+  /** 语义召回源是否就绪（判例语义或 personal_note 语义任一可用）。 */
   get semanticAvailable(): boolean {
-    return this.semantic?.search.available === true;
+    return this.semantic?.search.available === true || this.noteSemantic !== undefined;
   }
 
   /**
-   * 判例语义召回：embed query → knowledge.db embeddings("case/judgment") top-k
-   * → 按 documents.id 回源最长 chunk 片段。
+   * 语义召回：判例语义（knowledge.db embeddings case/judgment）+ personal_note
+   * 语义（项目沉淀笔记）双路叠加，命中均按 documents.id 回源最长 chunk 片段。
+   * 任一路失败降级跳过，不阻断另一路与关键词路。
    */
   async searchSemantic(keyword: string, limit: number): Promise<CaseLawHit[]> {
-    const source = this.semantic;
-    if (!source || !source.search.available) return [];
     const trimmed = keyword.trim();
     if (!trimmed) return [];
-    const queryVector = await source.embed(trimmed);
-    if (queryVector.length === 0) return [];
-    const hits = source.search.search(queryVector, limit);
     const results: CaseLawHit[] = [];
-    for (const hit of hits) {
-      const row = this.stmtGetDocById.get(hit.docId) as CaseLawRow | undefined;
-      if (!row) continue;
-      results.push(this.toHit(row, null, "semantic"));
-      if (results.length >= limit) break;
+    const seen = new Set<string>();
+
+    // 1. 判例语义：embed query → top-k → 回源。
+    const source = this.semantic;
+    if (source && source.search.available) {
+      try {
+        const queryVector = await source.embed(trimmed);
+        if (queryVector.length > 0) {
+          for (const hit of source.search.search(queryVector, limit)) {
+            if (results.length >= limit) break;
+            const row = this.stmtGetDocById.get(hit.docId) as CaseLawRow | undefined;
+            if (!row || seen.has(row.document_id)) continue;
+            seen.add(row.document_id);
+            results.push(this.toHit(row, null, "semantic"));
+          }
+        }
+      } catch {
+        // 判例语义路失败降级（不阻断 personal_note 路与关键词路）。
+      }
     }
+
+    // 2. personal_note 语义：项目沉淀笔记（OA 答复要点等），命中经同一语句回源。
+    if (this.noteSemantic && results.length < limit) {
+      try {
+        for (const hit of await this.noteSemantic.search(trimmed, limit)) {
+          if (results.length >= limit) break;
+          if (seen.has(hit.id)) continue;
+          const row = this.stmtGetDocById.get(hit.id) as CaseLawRow | undefined;
+          if (!row) continue;
+          seen.add(hit.id);
+          results.push(this.toHit(row, null, "semantic"));
+        }
+      } catch {
+        // personal_note 语义失败降级（embedding 端点不可用等），不阻断。
+      }
+    }
+
     return results;
   }
 
@@ -250,7 +300,7 @@ export class CaseLawSearchEngine {
     let sql = `
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
              d.court, d.source, d.module, d.char_count,
-             c.chunk_index, c.content, bm25(docs_fts) AS fts_rank
+             c.chunk_index, sati_uncompress(c.content) AS content, bm25(docs_fts) AS fts_rank
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
@@ -308,11 +358,12 @@ export class CaseLawSearchEngine {
     } else {
       let sql = `
         SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
-               d.court, d.source, d.module, d.char_count, c.chunk_index, c.content
+               d.court, d.source, d.module, d.char_count, c.chunk_index,
+               sati_uncompress(c.content) AS content
         FROM documents d
         JOIN chunks c ON c.id = (
           SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
-        WHERE (d.title LIKE ? ESCAPE '\\' OR c.content LIKE ? ESCAPE '\\')
+        WHERE (d.title LIKE ? ESCAPE '\\' OR sati_uncompress(c.content) LIKE ? ESCAPE '\\')
       `;
       const params: Array<string | number | null> = [pattern, pattern];
       if (options.docType) {

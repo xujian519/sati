@@ -140,7 +140,7 @@ export class CaseLawMemoryProvider implements MemoryResolver {
       hit.decisionNumber ? `决定号 ${hit.decisionNumber}` : undefined,
       hit.caseNumber ? `案号 ${hit.caseNumber}` : undefined,
       hit.court ? `法院 ${hit.court}` : undefined,
-      hit.docType === "judgment" ? "判决" : "无效复审决定",
+      hit.docType === "judgment" ? "判决" : hit.docType === "personal_note" ? "项目笔记" : "无效复审决定",
     ].filter(Boolean);
     const snippet =
       hit.snippet.length > this.snippetMaxChars

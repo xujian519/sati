@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { EmbeddingClient } from "../../src/model/embedding/types.js";
 import { checkEmbeddingConsistency } from "../../src/knowledge/shared/embedding-consistency.js";
+import { quantizeInt8 } from "../../src/context/vector/cosine.js";
 
 /**
  * checkEmbeddingConsistency 测试（查询端与 knowledge.db 库向量一致性自检）。
@@ -121,4 +122,36 @@ test("embedding-consistency: embedding 请求抛错时返回 null 并降级（�
   const result = await checkEmbeddingConsistency(dbPath, failing, { logger: { warn: () => {} } });
   assert.equal(result, null);
   rmSync(dbPath, { recursive: false, force: true });
+});
+
+test("embedding-consistency: int8 存储格式（--migrate-int8 产物，含 scale 列）反量化后同源通过", async () => {
+  // 构造 int8 格式库：embeddings 表含 scale 列，vector 为 dim 字节 int8
+  const dir = mkdtempSync(join(tmpdir(), "embedding-consistency-int8-"));
+  const dbPath = join(dir, "knowledge.db");
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE documents (id TEXT PRIMARY KEY, source TEXT NOT NULL, doc_type TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent', title TEXT NOT NULL, indexed_at TEXT NOT NULL);
+    CREATE TABLE chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT NOT NULL REFERENCES documents(id), chunk_index INTEGER NOT NULL, chunk_type TEXT NOT NULL, content TEXT NOT NULL);
+    CREATE TABLE embeddings (id INTEGER PRIMARY KEY AUTOINCREMENT, chunk_id INTEGER NOT NULL REFERENCES chunks(id), document_id TEXT NOT NULL REFERENCES documents(id), vector BLOB NOT NULL, model TEXT NOT NULL DEFAULT 'bge-m3', dim INTEGER NOT NULL DEFAULT 4, indexed_at TEXT NOT NULL, norm REAL NOT NULL DEFAULT 0.0, scale REAL NOT NULL DEFAULT 1.0);
+  `);
+  db.prepare(
+    `INSERT INTO documents (id, source, doc_type, title, indexed_at) VALUES ('d1', 'raw', 'case', '判例X', '2026-01-01')`,
+  ).run();
+  const cid = db
+    .prepare(`INSERT INTO chunks (document_id, chunk_index, chunk_type, content) VALUES ('d1', 0, 'text', ?)`)
+    .run(anchorText()).lastInsertRowid as number;
+  // [1,0,0,0] → int8: scale=maxAbs/127=1/127≈0.00787, values=[127,0,0,0]
+  const floats = Float32Array.from([1, 0, 0, 0]);
+  const { values: q, scale } = quantizeInt8(floats);
+  const blob = Buffer.from(q.buffer, q.byteOffset, q.byteLength);
+  db.prepare(
+    `INSERT INTO embeddings (chunk_id, document_id, vector, dim, norm, indexed_at, scale) VALUES (?, 'd1', ?, 4, 1.0, '2026-01-01', ?)`,
+  ).run(cid, blob, scale);
+  db.close();
+
+  const result = await checkEmbeddingConsistency(dbPath, makeConsistentClient(), { sampleSize: 1, threshold: 0.9 });
+  assert.ok(result, "int8 格式应正常自检");
+  assert.equal(result.ok, true, "反量化后同源余弦应 ≥ 阈值");
+  assert.ok(result.meanCosine > 0.9, `int8 反量化余弦应 >0.9，实际 ${result.meanCosine}`);
+  rmSync(dir, { recursive: true, force: true });
 });

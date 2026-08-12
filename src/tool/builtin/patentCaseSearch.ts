@@ -1,6 +1,10 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
 import { resolveKnowledgeDbPaths } from "../../knowledge/config.js";
-import { CaseLawSearchEngine, type CaseLawSemanticSource } from "../../knowledge/case-law/case-law-search.js";
+import {
+  CaseLawSearchEngine,
+  type CaseLawSemanticSource,
+  type PersonalNoteSemanticSource,
+} from "../../knowledge/case-law/case-law-search.js";
 import { fuseCaseLawHits } from "../../knowledge/case-law/rrf.js";
 import type { CaseLawDocType, CaseLawHit, CaseLawSearchOptions } from "../../knowledge/case-law/types.js";
 
@@ -57,6 +61,15 @@ export function setCaseLawSemanticSource(source: CaseLawSemanticSource | null): 
   if (cachedRef) cachedRef.engine.setSemantic(source ?? undefined);
 }
 
+/** personal_note 语义召回源（gateway 启动时注入；未注入则该路关闭）。 */
+let noteSemanticSource: PersonalNoteSemanticSource | null = null;
+
+/** 注入 personal_note 语义召回源（项目沉淀笔记可被语义召回）。 */
+export function setPersonalNoteSemanticSource(source: PersonalNoteSemanticSource | null): void {
+  noteSemanticSource = source;
+  if (cachedRef) cachedRef.engine.setNoteSemantic(source ?? undefined);
+}
+
 /** 模块级缓存单例（判例库为只读静态数据，避免每次调用重建连接）。 */
 let cachedRef: CaseLawEngineRef | null = null;
 
@@ -68,6 +81,7 @@ export function getCaseLawEngine(): CaseLawEngineRef | null {
   try {
     const engine = new CaseLawSearchEngine(caseDb);
     if (semanticSource) engine.setSemantic(semanticSource);
+    if (noteSemanticSource) engine.setNoteSemantic(noteSemanticSource);
     cachedRef = { engine, dbPath: caseDb };
     return cachedRef;
   } catch {
@@ -182,7 +196,12 @@ export function createPatentCaseSearchTool(
       let hits = ftsHits;
       if (engine.semanticAvailable) {
         try {
-          const semanticHits = await engine.searchSemantic(input.query, limit * 2);
+          // 语义命中同样受 doc_type 过滤约束（对齐 FTS 路径：FTS SQL 已按
+          // doc_type 过滤，而语义命中含 personal_note——显式过滤时须剔除，
+          // 避免“doc_type=case 却混入笔记”）。
+          const semanticHits = (await engine.searchSemantic(input.query, limit * 2)).filter(
+            hit => !input.doc_type || hit.docType === input.doc_type,
+          );
           if (semanticHits.length > 0) {
             hits = fuseCaseLawHits(ftsHits, semanticHits, limit);
           }

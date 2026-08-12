@@ -1,8 +1,12 @@
 /**
  * knowledge.db embeddings 只读语义检索（复用 XiaoNuo 管道产物，零重新构建）。
  *
- * 数据：knowledge.db `embeddings` 表（float32 × dim，bge-m3 1024 维，norm≈1.0，
- * XiaoNuo `@nuo/knowledge` 管道生成），chunk 经 `chunks.document_id` 归属文档。
+ * 数据：knowledge.db `embeddings` 表（bge-m3 1024 维，norm≈1.0，XiaoNuo
+ * `@nuo/knowledge` 管道生成），chunk 经 `chunks.document_id` 归属文档。
+ * 向量存储双格式兼容：
+ *   - float32（4096B/条，XiaoNuo 原始格式）——加载时 int8 量化（默认路径）；
+ *   - int8 + scale（1024B/条，`trim-knowledge-db.ts --migrate-int8` 产物）
+ *     ——直接读取，跳过量化，存储 -75%。
  *
  * 检索策略（共享核心见 int8-matrix-search.ts，与 vector-db.ts 同构）：
  *   - 惰性加载：float32 → 加载时 int8 量化（1024 维 × 144K chunk ≈ 147MB 内存；
@@ -172,7 +176,7 @@ export class KnowledgeEmbeddingSearch {
         pageNext: (docId, chunkId, limit) => pageNext.all(...filterParams, docId, docId, chunkId, limit) as ChunkRow[],
       },
       dimensions,
-      raw => quantizeInt8(toFloat32Array(raw, dimensions)).values,
+      raw => decodeVector(raw, dimensions),
       (docCount, chunkCount) =>
         this.logger?.warn?.(`[knowledge-embeddings] 已加载：${docCount} docs / ${chunkCount} chunks。`),
     );
@@ -194,4 +198,26 @@ function toFloat32Array(raw: Uint8Array, dimensions: number): Float32Array {
   const out = new Float32Array(dimensions);
   out.set(view.subarray(0, dimensions));
   return out;
+}
+
+/** BLOB(int8) → Int8Array；长度超维度时截断。 */
+function toInt8Array(raw: Uint8Array, dimensions: number): Int8Array {
+  const view = new Int8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+  return view.length === dimensions ? view : view.subarray(0, dimensions);
+}
+
+/**
+ * 向量 BLOB 解码：按字节长度区分存储格式（cosine 中 scale 抵消，无需读取）。
+ *   - dim*4 字节 = float32 旧格式（XiaoNuo 原始产物）→ 加载时 int8 量化；
+ *   - dim 字节   = int8 新格式（--migrate-int8 产物）→ 直接读取，跳过量化。
+ * 其他长度按 float32 截断/补零兼容处理（避免把非标 float32 行按 int8 误读）。
+ */
+function decodeVector(raw: Uint8Array, dimensions: number): Int8Array {
+  if (raw.byteLength === dimensions * 4) {
+    return quantizeInt8(toFloat32Array(raw, dimensions)).values;
+  }
+  if (raw.byteLength === dimensions) {
+    return toInt8Array(raw, dimensions);
+  }
+  return quantizeInt8(toFloat32Array(raw, dimensions)).values;
 }

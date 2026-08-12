@@ -27,6 +27,14 @@ export {
 export { CaseLawSearchEngine, createCaseLawSemanticSource, type CaseLawSemanticSource } from "./case-law/index.js";
 export { CaseLawMemoryProvider, type CaseLawMemoryProviderOptions } from "./case-law/index.js";
 export { fuseCaseLawHits } from "./case-law/index.js";
+export {
+  getOrCreatePersonalNoteIndex,
+  PersonalNoteStore,
+  PersonalNoteVectorIndex,
+  type PersonalNoteRow,
+  type PersonalNoteVectorIndexOptions,
+  type GetOrCreatePersonalNoteIndexOptions,
+} from "./personal-note/index.js";
 export type {
   CaseLawChunk,
   CaseLawDocType,

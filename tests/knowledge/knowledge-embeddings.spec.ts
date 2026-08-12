@@ -8,6 +8,7 @@ import {
   KnowledgeEmbeddingSearch,
   createKnowledgeEmbeddingSearch,
 } from "../../src/knowledge/shared/knowledge-embeddings.js";
+import { quantizeInt8 } from "../../src/context/vector/cosine.js";
 
 /**
  * KnowledgeEmbeddingSearch 测试（knowledge.db embeddings 表复用 reader）。
@@ -60,6 +61,12 @@ function floatVec(values: number[]): Buffer {
   const buf = Buffer.alloc(values.length * 4);
   values.forEach((v, i) => buf.writeFloatLE(v, i * 4));
   return buf;
+}
+
+/** int8 存储格式 BLOB（--migrate-int8 产物：dim 字节/条，无 scale 参与检索）。 */
+function int8Vec(values: number[]): Buffer {
+  const { values: q } = quantizeInt8(Float32Array.from(values));
+  return Buffer.from(q.buffer, q.byteOffset, q.byteLength);
 }
 
 function withStore(t: test.TestContext, options?: { docTypes?: string[] }): KnowledgeEmbeddingSearch {
@@ -269,4 +276,37 @@ test("knowledge-embeddings: createKnowledgeEmbeddingSearch 复用同 dbPath+docT
   const recreated = createKnowledgeEmbeddingSearch(options);
   assert.notEqual(recreated, first, "close 后不应复用已关闭实例");
   recreated.close();
+});
+
+test("knowledge-embeddings: int8 存储格式（--migrate-int8 产物）直读且结果与 float32 一致", t => {
+  const { search, dir } = createStore();
+  t.after(() => {
+    search.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  // 将 embeddings 表全部替换为 int8 BLOB（dim 字节/条）
+  const dbPath = join(dir, "knowledge.db");
+  const db = new DatabaseSync(dbPath);
+  const vectors: Array<{ id: number; vector: Buffer }> = (
+    db.prepare("SELECT id, vector FROM embeddings").all() as Array<{ id: number; vector: Buffer }>
+  ).map(r => ({ ...r, vector: r.vector }));
+  const toInt8 = (raw: Buffer): Buffer => {
+    const floats = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
+    return int8Vec(Array.from(floats));
+  };
+  for (const { id, vector } of vectors) {
+    db.prepare("UPDATE embeddings SET vector = ? WHERE id = ?").run(toInt8(vector), id);
+  }
+  db.close();
+
+  // 与 float32 存储同一查询集对比：查询 [1,0,0,0]（对应 c1/c2 → d1）
+  const query = Float32Array.from([1, 0, 0, 0]);
+  const hits = search.search(query, 3);
+  assert.equal(hits.length, 3, "int8 格式应正常检索");
+  assert.equal(hits[0]?.docId, "d1", "top-1 文档应为 d1（chunk [1,0,0,0] 最高余弦 1.0）");
+  assert.ok(hits[0]!.score > hits[1]!.score, "d1 得分应高于其余文档");
+  // 多文档排序：查询 [0,1,0,0] → d2
+  const hits2 = search.search(Float32Array.from([0, 1, 0, 0]), 3);
+  assert.equal(hits2[0]?.docId, "d2", "int8 格式下 [0,1,0,0] 应命中 d2");
 });

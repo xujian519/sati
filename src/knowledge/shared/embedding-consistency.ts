@@ -11,8 +11,9 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { cosineSimilarity } from "../../context/vector/cosine.js";
 import type { EmbeddingClient } from "../../model/embedding/types.js";
+import { cosineSimilarity } from "../../context/vector/cosine.js";
+import { registerChunkUncompress } from "./chunk-compression.js";
 
 export type EmbeddingConsistencySample = {
   /** 锚点原文预览（≤60 字符，诊断用）。 */
@@ -56,16 +57,34 @@ export async function checkEmbeddingConsistency(
     return null;
   }
   try {
+    // chunk 压缩解压函数（--compress-chunks 产物 BLOB；明文原样返回）。
+    registerChunkUncompress(db);
+    // scale 列仅 --migrate-int8 后的库存在；旧 schema 无此列，查询时回退常量。
+    const cols = db.prepare("SELECT name FROM pragma_table_info('embeddings')").all() as Array<{ name: string }>;
+    const hasScale = cols.some(c => c.name === "scale");
     const rows = db
       .prepare(
-        `SELECT c.content, e.vector FROM chunks c JOIN embeddings e ON e.chunk_id = c.id
-         WHERE length(c.content) BETWEEN 100 AND 500 ORDER BY RANDOM() LIMIT ?`,
+        `SELECT sati_uncompress(c.content) AS content, e.vector, e.dim, ${hasScale ? "e.scale" : "1.0"} AS scale
+         FROM chunks c JOIN embeddings e ON e.chunk_id = c.id
+         WHERE length(sati_uncompress(c.content)) BETWEEN 100 AND 500 ORDER BY RANDOM() LIMIT ?`,
       )
-      .all(sampleSize) as Array<{ content: string; vector: Uint8Array }>;
+      .all(sampleSize) as Array<{ content: string; vector: Uint8Array; dim: number; scale: number }>;
     if (rows.length === 0) return null;
 
+    // 双格式兼容：dim*4 字节 = float32（XiaoNuo 原始）；dim 字节 = int8（--migrate-int8
+    // 产物），乘 scale 反量化回 float32 再算余弦（量化误差内等价）。
     const vectors: Float32Array[] = rows.map(row => {
-      return new Float32Array(row.vector.buffer, row.vector.byteOffset, Math.floor(row.vector.byteLength / 4));
+      const dim = row.dim || Math.floor(row.vector.byteLength / 4);
+      if (row.vector.byteLength === dim * 4) {
+        return new Float32Array(row.vector.buffer, row.vector.byteOffset, dim);
+      }
+      const int8 = new Int8Array(row.vector.buffer, row.vector.byteOffset, dim);
+      const scale = row.scale || 1;
+      const out = new Float32Array(dim);
+      for (let i = 0; i < dim; i += 1) {
+        out[i] = (int8[i] ?? 0) * scale;
+      }
+      return out;
     });
     const queryVectors = await client.embed(rows.map(row => row.content));
 
