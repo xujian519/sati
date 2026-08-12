@@ -4,13 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PdfDocumentPreview from "./PdfDocumentPreview";
 
 const pdfMocks = vi.hoisted(() => ({
-  getDocument: vi.fn(),
+  loadDocument: vi.fn(),
 }));
 
 vi.mock("./pdfjs", () => ({
   GlobalWorkerOptions: {},
   TextLayer: class {},
-  getDocument: pdfMocks.getDocument,
+  loadDocument: pdfMocks.loadDocument,
 }));
 
 vi.mock("pdfjs-dist/legacy/build/pdf.worker.mjs?url", () => ({
@@ -30,7 +30,7 @@ class IntersectionObserverMock {
 }
 
 beforeEach(() => {
-  pdfMocks.getDocument.mockReset();
+  pdfMocks.loadDocument.mockReset();
   vi.stubGlobal("ResizeObserver", ResizeObserverMock);
   vi.stubGlobal("IntersectionObserver", IntersectionObserverMock);
   vi.stubGlobal(
@@ -64,7 +64,7 @@ describe("PdfDocumentPreview search", () => {
       getPage: vi.fn().mockResolvedValueOnce(firstPage).mockResolvedValueOnce(searchPage),
       destroy: vi.fn(),
     };
-    pdfMocks.getDocument.mockReturnValue({
+    pdfMocks.loadDocument.mockReturnValue({
       promise: Promise.resolve(pdfDocument),
       destroy: vi.fn(),
     });
@@ -109,7 +109,7 @@ describe("PdfDocumentPreview search", () => {
     const firstDocument = createDocument(3);
     const refreshedDocument = createDocument(1);
     const destroyFirstLoadingTask = vi.fn();
-    pdfMocks.getDocument
+    pdfMocks.loadDocument
       .mockReturnValueOnce({
         promise: Promise.resolve(firstDocument),
         destroy: destroyFirstLoadingTask,
