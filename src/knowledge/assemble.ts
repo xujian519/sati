@@ -221,14 +221,22 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
   }
 
   // embedding 查询端与 knowledge.db 库向量一致性自检（fire-and-forget，不阻塞启动）。
+  // checkEmbeddingConsistency 在首个 await 之前会同步执行一段采样 SQL，直接调用会
+  // 阻塞 gateway 启动（修复前实测约 7s）；setTimeout(0) 推迟到 server listen 之后执行。
   if (options.knowledgeDb && options.embedding) {
-    checkEmbeddingConsistency(options.knowledgeDb, options.embedding, { logger: options.logger })
-      .then(result => {
-        if (result) options.stats?.setEmbeddingConsistency({ ok: result.ok, meanCosine: result.meanCosine });
-      })
-      .catch(() => {
-        // 自检失败不阻断（consistency 内部已 warn）。
-      });
+    const knowledgeDb = options.knowledgeDb;
+    const embedding = options.embedding;
+    const logger = options.logger;
+    const stats = options.stats;
+    setTimeout(() => {
+      checkEmbeddingConsistency(knowledgeDb, embedding, { logger })
+        .then(result => {
+          if (result) stats?.setEmbeddingConsistency({ ok: result.ok, meanCosine: result.meanCosine });
+        })
+        .catch(() => {
+          // 自检失败不阻断（consistency 内部已 warn）。
+        });
+    }, 0);
   }
 
   return resolvers;

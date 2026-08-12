@@ -13,7 +13,7 @@
 import { DatabaseSync } from "node:sqlite";
 import type { EmbeddingClient } from "../../model/embedding/types.js";
 import { cosineSimilarity } from "../../context/vector/cosine.js";
-import { registerChunkUncompress } from "./chunk-compression.js";
+import { decompressChunk } from "./chunk-compression.js";
 
 export type EmbeddingConsistencySample = {
   /** 锚点原文预览（≤60 字符，诊断用）。 */
@@ -57,27 +57,40 @@ export async function checkEmbeddingConsistency(
     return null;
   }
   try {
-    // chunk 压缩解压函数（--compress-chunks 产物 BLOB；明文原样返回）。
-    registerChunkUncompress(db);
     // scale 列仅 --migrate-int8 后的库存在；旧 schema 无此列，查询时回退常量。
     const cols = db.prepare("SELECT name FROM pragma_table_info('embeddings')").all() as Array<{ name: string }>;
     const hasScale = cols.some(c => c.name === "scale");
+    // 先随机采样 sampleSize 对（chunk 正文 + 库向量），解压只对样本行在 JS 侧做
+    // （≤ sampleSize 次 gunzip）。不要在 SQL 里对 144K 行全量 sati_uncompress() 过滤：
+    // 实测每启动一次约 7s 的同步 CPU，且发生在 async 函数首个 await 之前，直接阻塞
+    // gateway 启动（见 buildKnowledgeResolvers 的 fire-and-forget 调用）。
+    // 压缩 BLOB 的字节长度与明文长度无关，length 过滤移到 JS：解压后落在 100..500
+    // 字符才入样本，不足则跳过（全部不达标时 valid 为空 → 返回 null，与旧行为一致）。
     const rows = db
       .prepare(
-        `SELECT sati_uncompress(c.content) AS content, e.vector, e.dim, ${hasScale ? "e.scale" : "1.0"} AS scale
+        `SELECT c.content, e.vector, e.dim, ${hasScale ? "e.scale" : "1.0"} AS scale
          FROM chunks c JOIN embeddings e ON e.chunk_id = c.id
-         WHERE length(sati_uncompress(c.content)) BETWEEN 100 AND 500 ORDER BY RANDOM() LIMIT ?`,
+         ORDER BY RANDOM() LIMIT ?`,
       )
-      .all(sampleSize) as Array<{ content: string; vector: Uint8Array; dim: number; scale: number }>;
+      .all(sampleSize) as Array<{
+      content: string | Uint8Array | null;
+      vector: Uint8Array;
+      dim: number;
+      scale: number;
+    }>;
     if (rows.length === 0) return null;
+    const decoded = rows
+      .map(row => ({ ...row, content: decompressChunk(row.content) }))
+      .filter(row => row.content.length >= 100 && row.content.length <= 500);
+    if (decoded.length === 0) return null;
 
     // 双格式兼容：dim*4 字节 = float32（XiaoNuo 原始）；dim 字节 = int8（--migrate-int8
     // 产物），乘 scale 反量化回 float32 再算余弦（量化误差内等价）。
     // 防御：dim 缺失/非法或字节数不足以构成 dim 向量时跳过该行（不抛错、
     // 不产生空向量拖低均值）——一行损坏数据不应废掉整个自检。
-    // 过滤后的行与原 rows 对齐：仅保留解码成功的（content, vector）对。
-    const valid: Array<{ row: (typeof rows)[number]; vector: Float32Array }> = [];
-    for (const row of rows) {
+    // 过滤后的行与原 decoded 对齐：仅保留解码成功的（content, vector）对。
+    const valid: Array<{ row: (typeof decoded)[number]; vector: Float32Array }> = [];
+    for (const row of decoded) {
       const dim = row.dim > 0 ? row.dim : Math.floor(row.vector.byteLength / 4);
       if (dim <= 0) continue;
       if (row.vector.byteLength === dim * 4) {
