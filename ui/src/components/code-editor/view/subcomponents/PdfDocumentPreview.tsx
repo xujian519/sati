@@ -856,7 +856,7 @@ export default function PdfDocumentPreview({
         }
 
         if (url) {
-          loadingTask = pdfjs.getDocument({
+          loadingTask = pdfjs.loadDocument({
             url,
             rangeChunkSize: PDF_RANGE_CHUNK_SIZE,
             disableStream: true,
@@ -865,7 +865,7 @@ export default function PdfDocumentPreview({
         } else {
           const data = new Uint8Array(await blob!.arrayBuffer());
           if (cancelled) return;
-          loadingTask = pdfjs.getDocument({ data });
+          loadingTask = pdfjs.loadDocument({ data });
         }
 
         const nextDocument = await loadingTask.promise;
