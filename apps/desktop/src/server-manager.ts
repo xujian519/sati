@@ -203,6 +203,39 @@ function getServerLogPath(): string {
   return path.join(getSatiDir(), "desktop.server.log");
 }
 
+/** 超过该大小（20 MiB）即归档轮转；实测 14 天可累积 8.4MB+，无轮转会无限增长。 */
+const SERVER_LOG_ROTATE_BYTES = 20 * 1024 * 1024;
+/** 保留最近几份归档。 */
+const SERVER_LOG_KEEP_ARCHIVES = 3;
+
+/**
+ * 启动时检查日志大小：超过阈值则重命名为 desktop.server.log.<YYYY-MM-DD-HH-mm-ss>，
+ * 并清理超出保留份数的旧归档。文件不存在时静默跳过（首启场景）。
+ */
+function rotateServerLogIfNeeded(logPath: string): void {
+  try {
+    const stat = fsSync.statSync(logPath);
+    if (stat.size <= SERVER_LOG_ROTATE_BYTES) return;
+    const ts = new Date().toISOString().replace(/T/, "-").replace(/[:.]/g, "-").slice(0, 19); // 2026-08-13-18-20-30
+    fsSync.renameSync(logPath, `${logPath}.${ts}`);
+    const basename = path.basename(logPath);
+    const archives = fsSync
+      .readdirSync(path.dirname(logPath))
+      .filter(f => f.startsWith(`${basename}.`) && /\.\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/.test(f))
+      .sort();
+    for (const stale of archives.slice(0, Math.max(0, archives.length - SERVER_LOG_KEEP_ARCHIVES))) {
+      try {
+        fsSync.unlinkSync(path.join(path.dirname(logPath), stale));
+      } catch {
+        // 归档删除失败不影响主流程
+      }
+    }
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") console.warn("rotate server log failed:", err);
+  }
+}
+
 function readTailSafe(filePath: string, maxBytes: number): string {
   try {
     const stat = fsSync.statSync(filePath);
@@ -985,6 +1018,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     // (no terminal).
     await ensureSatiDir();
     const logPath = getServerLogPath();
+    rotateServerLogIfNeeded(logPath);
 
     // --- Start the Gateway process before the UI server ---
     // The UI server's sati-bridge connects to the gateway WebSocket at
