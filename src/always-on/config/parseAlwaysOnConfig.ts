@@ -201,6 +201,20 @@ export function parseAlwaysOnConfig(raw: unknown, diagnostics: PilotConfigDiagno
     result.projects = parseProjects(raw.projects, diagnostics);
   }
 
+  // trigger.enabled 独立开关且默认 false：顶层 enabled: true 而 trigger 未启用时
+  // 常驻执行实际不会触发（DiscoveryGates 对两者同时要求），显式告警避免"以为开了"。
+  if (result.enabled && !result.trigger.enabled) {
+    diagnostics.push({
+      code: "ALWAYS_ON_TRIGGER_NOT_ENABLED",
+      severity: "warning",
+      message:
+        "alwaysOn.enabled is true but alwaysOn.trigger.enabled is false; " +
+        "set alwaysOn.trigger.enabled: true to actually run discovery cycles.",
+      path: "alwaysOn.trigger.enabled",
+      recoverable: true,
+    });
+  }
+
   return result;
 }
 
