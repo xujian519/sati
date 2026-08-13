@@ -118,7 +118,6 @@ export class Evaluator {
     for (const name of metricNames) {
       averages[name] = round3(mean(outcomes.map(o => o.metrics[name] ?? 0)));
     }
-    const overall = metricNames.length > 0 ? mean(outcomes.map(o => mean(metricNames.map(n => o.metrics[n] ?? 0)))) : 0;
     return {
       total: outcomes.length,
       passed: outcomes.filter(o => overallOf(o, metricNames) >= this.passLine).length,
