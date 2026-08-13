@@ -83,52 +83,66 @@ interface ClaimChart {
 | 模块 | 职责 | 白盒价值 |
 |---|---|---|
 | `element-validator.ts` | 每个要素 `text` 必须是权利要求原文**连续子串**（归一化空白后校验）；编号连续无跳号 | 防幻觉拆分 |
-| `pin-cite-validator.ts` | pin-cite 格式解析 + 与对比文件 converted markdown 存在性检查（段号存在 + 引文子串匹配） | 防幻觉引用 |
+| `pin-cite-validator.ts` | pin-cite 格式解析 + 与对比文件 converted markdown 存在性检查（段号存在 + 引文子串匹配）；**全文经 `sourcePaths` 入参读案卷文件（`data/cases/{case_id}/converted/`，路径工具 `src/patent/paths.ts`）**——原子层 StageProvider 无全文，此为工具/worker 传入 | 防幻觉引用 |
 | `mapping-machine.ts` | 行级状态机：`anticipation`/`obviousness-combination` 仅限 prior-art 目标、`doe` 仅限侵权模式；跨行推导：新颖性=每要素单篇 mapped、区别特征=D1 上 not-found 行 | 场景合法性 + 法理推导 |
 | `gap-detector.ts` | 聚合 `not-found`/`needs-evidence`/`partial` → gap list（排序 + 建议动作：补充检索/证据固化/等同分析） | 第一优先输出 |
-| `store.ts` | 持久化 `claim-chart.json` + `claim-chart.md`（顶部 gap list + 免责声明，表格 `[#]│Element│目标特征│证据│Mapping│State│Verified`）；HITL 退回重跑保留 `verified` 行 | 增量修订 |
+| `store.ts` | 持久化 `claim-chart.json` + `claim-chart.md`（顶部 gap list + 免责声明，表格 `[#]│Element│目标特征│证据│Mapping│State│Verified`）；HITL 退回重跑保留 `verified` 行；落盘目录经 `StageProvider.caseId`（`data/cases/{case_id}/outputs/`，现有 worker 体系惯例） | 增量修订 |
 
 ## 二、原子 / 工具 / 五工作流接入
 
 ### 原子与工具
 
 **`build-claim-chart` 原子**（`src/patent/atoms/handlers/builtin/chart.ts`，对齐现有 10 原子模式）
-- category: `"analyze"`；流程：读权利要求 + 目标材料 → LLM 产出要素拆分与逐行映射 JSON → 过 element/pin-cite/mapping 三关 → 非法行打回 LLM 重做（限 2 次）→ 持久化
+- category: `"compare"`（`AtomCategory` 为封闭 union：`"search" | "extract" | "compare" | "reason" | "gate"`，无 `"analyze"`）
+- 与既有 `compare` 原子的关系（`atoms/handlers/builtin/compare.ts` 已自称"claim chart"但为粗粒度一次性输出）：**compare = 粗对比初筛（feature/prior_art_match/identical/note），claim-chart = 要素级精细证据网格（编号 + pin-cite + 状态机 + gap）**。第一版两者共存，输出键错开（新原子输出 `claim_chart_doc`，不占用 compare 的 `claim_chart` 键）；演进路径：compare 的粗表可作为 claim-chart 的输入草稿
+- 流程：读权利要求 + 目标材料 → LLM 产出要素拆分与逐行映射 JSON → 过 element/pin-cite/mapping 三关 → 非法行打回 LLM 重做（限 2 次，重做 prompt 附校验错误清单）→ 持久化
+  - 注：**打回重做是 handler 内循环新模式**——现有 7 个 LLM handler 均为单次 `callLlm` + `parseLlmJson` 兜底（`builtin/llm.ts` 骨架）；本原子在 handler 内循环调用 `callLlm`，每次把校验失败原因拼入 prompt
 - 输入：claimText、targets[]（对比文件 converted 路径 / 产品材料路径）、mode；输出：chart 摘要 + gap list
 
 **`claim_chart_build` 工具**（`src/tool/builtin/claimChart.ts`，domain: `patent`，检索型角色经 `visibleDomains` 自动可见）
+- 工具输入含 `sourcePaths`（对比文件 converted 路径），pin-cite 校验的全文经此读入——**原子层 `StageProvider` 只有 title/snippet 无全文，全文来自案卷 `data/cases/{case_id}/converted/`（路径工具 `src/patent/paths.ts`）**
 
-### 五工作流注入
+### 三层架构与执行链路接入（经代码核实修正）
 
-在现有 YAML 的 `tech-analyze`（对比矩阵）之后插入 `claim-chart` 步骤，**不新建工作流**：
+代码核实：`assets/workflows/patent/*.yaml` 的 `worker:`/`input_template` 字段**无代码消费方（沉睡资产，蓝图性质）**，真正生效的执行链路是 `builtinPatentManifests`（`src/patent/workflow.ts:637`，当前仅 3 个：patent_novelty_v1 / patent_disclosure_v1 / patent_inventiveness_v1）→ `patent_workflow` 工具 → atom 分发到 StageHandler；另有图引擎三性子图与 flexible-plan 动态 manifest。因此：
 
 ```
-撰写   prior-art-survey（现有技术调查）:
-       tech-compare → claim-chart(mode=patentability, targets=D1…)
+① 确定性内核（src/patent/claim-chart/runtime/，纯函数）
+② 工具层：claim_chart_build 直接调内核
+③ 执行接入层（WorkflowManifest 体系，唯一生效路径）：
+   - 新增 build-claim-chart 原子（StageHandler 注册表）
+   - 新增/扩展内置 WorkflowManifest：在 compare 阶段后插入
+     claim-chart 阶段（atom: "build-claim-chart"），注册进
+     builtinPatentManifests（含 checkDomains）
+```
+
+**五场景 manifest 接入**（在 `src/patent/workflow.ts` 内置 manifest 中插入 `claim-chart` 阶段）：
+
+```
+可专利性（撰写）  新增 patent_patentability_v1 或扩展 prior-art 链路:
+       parse → search → compare → claim-chart(mode=patentability)
        → draft-claims 基于 not-found 区别特征布局，规避 D1
-       （prosecution-draft 为纯撰写无对比对象，不注入）
 
-OA答复 office-action-response:
-       tech-analyze → claim-chart(mode=oa-response, targets=审查员引用D1/D2)
-       → draft 答复书引用 chart 生成"新颖性陈述+三步法"证据网格部分
+OA答复   新增 patent_oa_response_v1:
+       parse → search → compare → claim-chart(mode=oa-response,
+       targets=审查员引用D1/D2) → 答复书撰写消费 chart 生成
+       "新颖性陈述+三步法"证据网格部分
 
-无效   invalidation-response:
-       tech-analyze → claim-chart(mode=invalidity, targets=证据组合)
-       → novelty（mapping-machine 校验单篇全覆盖）→ inventiveness
-         （区别特征 = D1 not-found 行，组合启示 = D2 映射行）
+无效/复审 新增 patent_invalidation_v1（mode=invalidity/reexamination 复用）:
+       parse → search → compare → claim-chart(mode=invalidity,
+       targets=证据组合) → novelty（mapping-machine 校验单篇全覆盖）
+       → inventiveness（区别特征 = D1 not-found 行，组合启示 = D2 映射行）
 
-复审   复用 invalidation-response（已声明"无效/复审答复"双场景）:
-       mode=reexamination, targets=驳回决定引用对比文件
-
-侵权   infringement-analysis:
-       对比分析 → claim-chart(mode=infringement, targets=被控产品,
+侵权     新增 patent_infringement_v1:
+       parse → compare → claim-chart(mode=infringement, targets=被控产品,
        支持 doe 行 + 现有技术抗辩子表) → 报告
 ```
 
 关键点：
-- 不新建工作流 YAML，只注入步骤（五场景流程骨架已存在且被 benchmark 验证）
+- 现有 3 个内置 manifest（novelty/disclosure/inventiveness）不动，新场景 manifest 新增（避免破坏 benchmark 等价性测试）；`patent_novelty_v1` 的 compare→conclude 链路可留作演进参考
 - chart 是"方案级对比矩阵"到"法律文书"的桥梁：CAP02 出区别特征 → chart 落要素级证据 → 下游 novelty/inventiveness/draft 消费 `claim-chart.json`，不再各自重复对比
-- HITL 检查点：chart 步骤后加确认点（对齐现有"编号选择协议"）
+- HITL：claim-chart 阶段后接 approval-gate（对齐 `patent_novelty_v1` 的 approval 阶段模式）
+- assets/workflows/patent/*.yaml 蓝图资产**不在本期修改范围**（无运行时效果；如要同步维护另立任务）
 
 ## 三、TRIZ 组件
 
@@ -155,17 +169,17 @@ execute 四步 prompt：
 **内置数据**（`components/data/`）：
 - `triz-principles.json`——40 原理（名称 + 说明 + 专利示例方向）
 - `triz-matrix.json`——Altshuller 经典 39×39 矛盾矩阵（1521 格，公开经典数据整理内置）
-- 注册进 `MethodologyRegistry`
+- 注册方式：加入 `MethodologyRegistry.ts` 的 `DEFAULT_METHODOLOGY_COMPONENTS` 数组（现有 7 组件同数组）
 
 ## 测试与验证
 
 | 层 | 内容 |
 |---|---|
 | 内核单测 `tests/patent/claim-chart/` | element-validator（verbatim 子串拦截改写/跳号检测）、pin-cite-validator（幻觉引用拦截）、mapping-machine（场景合法性 + 新颖性单篇覆盖推导 + 区别特征提取）、gap-detector（排序/建议动作）——全纯函数 |
-| 原子测试 | `build-claim-chart` 非法行打回重做路径、verified 行增量保留 |
+| 原子测试 | **mock provider 模式**（对齐 `tests/patent/graph/domains.spec.ts`：`callLLM` 按 prompt 关键词分支返回 JSON）：非法行打回重做路径、verified 行增量保留 |
 | TRIZ 测试 `tests/methodology/triz.spec.ts` | identify 触发词命中/不命中、execute prompt 含矩阵推荐原理编号、矩阵数据完整性（39×39 结构校验） |
-| 工作流测试 | 5 处 YAML 注入后步骤拓扑合法 |
-| 端到端 | benchmark `invalidation_analysis` 业务任务跑真实案例：claim-chart.md（顶部 gap list + 免责声明）、claim-chart.json、下游消费 |
+| 工作流测试 | 新增 4 个内置 manifest 拓扑合法 + `patent_workflow` 工具能解析执行（现有 workflow 测试模式 `tests/patent/workflow.spec.ts`） |
+| 端到端 | benchmark `oa_response` 业务任务跑真实案例（BUSINESS_TASKS 实际任务名为 patentability_analysis / drafting / file_review / oa_response / infringement_analysis，无 invalidation_analysis）：claim-chart.md（顶部 gap list + 免责声明）、claim-chart.json、下游消费 |
 | 质量门 | `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test` |
 
 ## 文件清单
@@ -174,12 +188,15 @@ execute 四步 prompt：
 - `src/patent/claim-chart/protocol/types.ts`
 - `src/patent/claim-chart/runtime/{element-validator,pin-cite-validator,mapping-machine,gap-detector,store}.ts`
 - `src/patent/claim-chart/index.ts`（barrel）
-- `src/patent/atoms/handlers/builtin/chart.ts`
+- `src/patent/atoms/handlers/builtin/chart.ts`（build-claim-chart 原子，category: `"compare"`）
 - `src/tool/builtin/claimChart.ts`
 - `src/methodology/runtime/components/triz.ts`
 - `src/methodology/runtime/components/data/{triz-principles,triz-matrix}.json`
 - `tests/patent/claim-chart/*.spec.ts`、`tests/methodology/triz.spec.ts`
 
 修改：
-- 4 个工作流 YAML（`assets/workflows/patent/`：prior-art-survey / office-action-response / invalidation-response / infringement-analysis）注入 `claim-chart` 步骤
-- `src/patent/atoms/handlers/builtin/index.ts`、`src/methodology/runtime/MethodologyRegistry.ts`（注册新组件）
+- `src/patent/workflow.ts`：新增 4 个内置 WorkflowManifest（patent_patentability_v1 / patent_oa_response_v1 / patent_invalidation_v1 / patent_infringement_v1，各含 claim-chart 阶段）并注册进 `builtinPatentManifests`（含 checkDomains）
+- `src/patent/atoms/handlers/builtin/index.ts`（registerBuiltinAtoms 注册新原子）
+- `src/methodology/runtime/MethodologyRegistry.ts`（`DEFAULT_METHODOLOGY_COMPONENTS` 数组加 triz）
+
+本期不修改：`assets/workflows/patent/*.yaml`（沉睡资产，无运行时效果）
