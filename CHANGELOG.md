@@ -2,6 +2,28 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.0.27 - 2026-08-13
+
+> **版本目标（2026-08-13）**：继续增强专利业务处理能力——落地权利要求对照图（claim-chart）全链路与 TRIZ 方法论组件，精修附图/检索提示词，扩展多模态路由与国产模型支持。
+
+### Added
+- claim-chart 权利要求对照图全链路：协议层（要素/行/gap/模式）、要素校验器（verbatim 子串 + 编号连续性）、映射状态机（场景合法性 + 新颖性/区别特征推导）、gap 检测器（缺口聚合/排序/建议动作）、pin-cite 校验器（格式 + 段号存在性 + quote 子串）、`build-claim-chart` 原子（LLM 拆分 + 三关校验 + 打回重做 + gap 检测）、`claim_chart_build` 工具（domain: patent，落盘路径透出）、持久化与 markdown/json 双产物渲染
+- 4 个内置 manifest 接入五场景（可专利性/OA答复/无效复审/侵权），`chart_mode`/审批断言补全（T12 收尾）
+- TRIZ 方法论组件：40 发明原理 + 39×39 矛盾矩阵查表（Altshuller 经典矩阵，来源 kamil-szczepanik/TRIZ-Agents）+ 专利场景落点
+- 路由设置新增多模态模型选择项 + 模型下拉图标标注；媒体重路由纯函数化 + `fallback.media` 多模态候选键
+- 模型设置内置 DeepSeek/Kimi/GLM 等国产模型并置顶，onboarding 默认 DeepSeek
+
+### Fixed
+- claim-chart target 字段归一化（source_path/product）+ 引用完整性校验
+- 附图提示词精修（标号谨慎/图面证据粒度）+ JSON 自愈 + 工具审计字段
+- TRIZ 矩阵回归纯 XLS 1190 格（移除无来源单值格）+ prompt 行列语义修正 + 计数断言
+- element-validator 剥离空白比较防换行误报；claim-chart store chartId 安全校验
+- 桌面端：Windows 打包后重建 pnpm junction 修复本地服务启动失败；build-win.bat 编码与延迟展开 bug 修复；bundle 排除 `@sati` 冗余依赖
+
+### Docs
+- M-Cube 多模态深度研究 + 路由/提示词落地方案文档
+- claim-chart + TRIZ 实现计划（12 任务 TDD）与内核/设计文档（按代码架构审阅修订）
+
 ## v0.0.26 - 2026-08-13
 
 > **迭代基准（2026-08-13）**：v0.0.25 实测使用效果良好，作为体验基线；后续迭代版本须以不低于 v0.0.25 的稳定性与使用体验为基准。
