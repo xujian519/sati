@@ -143,4 +143,4 @@ WebGatewayEvent ──▶ webEventToChatMessage(event, sessionId) ──▶ 前�
 
 - `applyWebGatewayEvent` 模型接入（与现有前端消息管线并存会造成双轨）；
 - 聊天转录历史迁移 / transcript 格式改动；
-- 非 sati 品牌（pilotdeck-bridge）的直连适配——chat 已仅支持 sati，pilotdeck 侧随后续版本退役。
+- 非 sati 品牌（pilotdeck-bridge）的直连适配——chat 已仅支持 sati，pilotdeck-bridge 已删除（2026-08-13 品牌统一收尾）。

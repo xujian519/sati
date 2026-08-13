@@ -111,14 +111,14 @@ export default tseslint.config(
               target: "./server",
               from: "../src",
               except: [
-                // src/cli/proxy.js (pilotdeck-bridge.js:47, sati-bridge.js:47)
+                // src/cli/proxy.js (sati-bridge.js:47)
                 "cli/proxy.js",
-                // src/gateway/index.js (pilotdeck-bridge.js:56, sati-bridge.js:57)
+                // src/gateway/index.js (sati-bridge.js:57)
                 "gateway/index.js",
-                // src/status/agentStatus.js (pilotdeck-bridge.js:57, sati-bridge.js:58)
+                // src/status/agentStatus.js (sati-bridge.js:58)
                 "status/agentStatus.js",
                 // src/web/client/eventMapping.js — 共享 GatewayEvent→帧映射
-                // (pilotdeck-bridge.js / sati-bridge.js / ui/src/chat 浏览器直连共用一份)
+                // (sati-bridge.js / ui/src/chat 浏览器直连共用一份)
                 "web/client/eventMapping.js",
                 // src/web/server/legacySessionPresentation.js (projects.js:26)
                 "web/server/legacySessionPresentation.js",
@@ -136,7 +136,7 @@ export default tseslint.config(
                 "adapters/channel/protocol/ChannelCommandRegistry.js",
                 // src/cli/commands/chatSearch.js (routes/commands.js:15)
                 "cli/commands/chatSearch.js",
-                // src/pilot/config/parseGatewayConfig.js (services/satiConfig.js:6, services/pilotdeckConfig.js:6)
+                // src/pilot/config/parseGatewayConfig.js (services/satiConfig.js:6)
                 "pilot/config/parseGatewayConfig.js",
               ],
             },

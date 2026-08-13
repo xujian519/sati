@@ -115,5 +115,201 @@ CLAUDE.md 宣称的"protocol/runtime/config 三层 + index.ts barrel"：26 个�
 
 1. **立即（半天内，可验证）**：`.reasonix` 加入 .gitignore 并 `git rm --cached`。 — ✅ 已完成（`ccc2d582`）
 2. **短期**：把 `edgeclaw-memory-core` 移入 `pnpm-workspace.yaml`、删除独立 `package-lock.json`、`lib/` 产物改为构建时生成不入库；为 `router/`、`cron/`、`permission/` 补最小行为测试；统一 i18n 三份 JSON 的 key。 — ✅ 大部分已完成（子包入 workspace、测试补齐、i18n 对齐均已落地；`lib/` 产物入库问题仍待处理）
-3. **中期**：确定 `ui/server` 的演进方向（要么收敛到 `src/` 的 TS 分层并只 import barrel，要么逐步迁到 gateway API）——这是消除双后端/双 WebSocket/双记忆运行时的唯一路径；拆分 `AgentLoop.ts` 与 `InProcessGateway.ts`；完成全仓品牌收敛（README.zh.md、products 示例、pilotdeck-* 文件）。 — ⏳ 进行中（S1 冻结增量已落地，见 `docs/design/gateway-protocol-versioning.md` Part B；品牌收敛基本完成：README.zh.md / products 已统一，ui/server 的 pilotdeck 双轨 bridge 仍在）
+3. **中期**：确定 `ui/server` 的演进方向（要么收敛到 `src/` 的 TS 分层并只 import barrel，要么逐步迁到 gateway API）——这是消除双后端/双 WebSocket/双记忆运行时的唯一路径；拆分 `AgentLoop.ts` 与 `InProcessGateway.ts`；完成全仓品牌收敛（README.zh.md、products 示例、pilotdeck-* 文件）。 — ⏳ 部分（S1 冻结增量已落地，见 `docs/design/gateway-protocol-versioning.md` Part B；品牌收敛✅ 已完成（2026-08-13 收尾：pilotdeck 双轨死代码删除、provider 标识统一、兼容层标注 `legacy(pre-rebrand)`，见 `docs/brand-unification-plan.md`）；双后端收敛 / AgentLoop 拆分为剩余工作）
 4. **持续**：建立统一 logger 接入 telemetry；治理 130+ 静默 catch；统一 React/Express/katex 版本策略；重写 CLAUDE.md 使其与实际一致（否则会持续误导后续修改）。 — ⏳ 部分（CLAUDE.md 已重写对齐实际；logger / 静默 catch / 版本策略未启动）
+
+---
+
+# 2026-08-12 二次审计快照（当前状态验证）
+
+- 审计日期：2026-08-12
+- 审计基线：`pnpm typecheck` ✅ 0 错误；`pnpm lint` ⚠️ 1 warning（`evaluator.ts:121` unused var）；`pnpm audit --registry npmjs` 🔴 26 vulns（1 critical / 17 high / 7 moderate / 1 low）
+- 方法：**只读实证**（`tsc --noEmit`、`eslint`、`pnpm audit`、`find + wc -l` Top 大文件、`grep` 模式扫描、`git ls-files` 追踪状态），与 2026-08-02 首次审计结果逐项交叉比对
+
+## 本次基线（可复现命令）
+
+```bash
+pnpm typecheck                        # → 0 错误（含 edgeclaw-memory-core 子包）
+pnpm lint                             # → 1 warning：src/patent/evaluate/evaluator.ts:121
+pnpm audit --registry https://registry.npmjs.org/   # → Severity: 1 low | 7 moderate | 17 high | 1 critical
+```
+
+## 一、总体判断（对比 2026-08-02）
+
+| 维度 | 08-02 | 08-12 现状 | 变化 |
+|---|---|---|---|
+| TypeScript 严格检查 | 全绿 | ✅ 全绿 | 保持 |
+| ESLint | 后端 0 / UI 0 | ⚠️ 后端 1 warning / UI 0 | 新增 1 处未使用变量 |
+| 依赖安全漏洞 | 16（生产链清零） | 🔴 **26（1 crit + 17 high + 7 mod + 1 low）** | ⚠️ **恶化 10 条**，需重新审核 overrides 覆盖范围 |
+| React 版本并存 | 18 + 19 双版本 | ✅ 仅 19.2.8 | 已修复 |
+| Express 版本并存 | 4 + 5 双版本 | ✅ 仅 5.2.1 | 已修复 |
+| edgeclaw 产物入库 | 部分追踪 | ✅ lib/node_modules 均不入库 | 已修复 |
+| `ui/server` 深层 import `src/` | 存在 | ⚠️ **20 处 / 9 文件，未收敛** | 无进展 |
+| 品牌双轨（pilotdeck / sati） | 双轨完整 | ✅ **已收尾（2026-08-13）：11 个双轨死代码文件已删除，仅剩 legacy(pre-rebrand) 兼容层** | 已修复 |
+| 裸 console | 135 处 | ⚠️ **225 处 / 29 文件**（增幅 67%，热点 `sati.ts` 54 处） | 恶化 |
+| `any` / `@ts-ignore` 类逃逸 | 未测 | ⚠️ **111 处 / 74 文件** | 新测量项 |
+
+---
+
+## 二、P1 结构性债务 — 2026-08-12 现状
+
+### 1. 双后端并存（未收敛 / 与 08-02 一致）
+
+- `ui/server/`：**92 JS 文件，72 个裸手写无类型 JS（无对应 .ts/.tsx）**
+- `index.js` **3808 行**（首次审计时 130KB，按 250 行/KB 估算约 3250 行，当前实测 3808 行 → 增长约 17%）
+- 跨边界深层 import 20 处（9 文件），典型路径：
+  - [sati-bridge.js](file:///Users/xujian/projects/Sati/ui/server/sati-bridge.js) → `src/cli/proxy.js`、`src/gateway/index.js`、`src/status/agentStatus.js`、`src/web/client/eventMapping.js`、`src/context/budget/compactBudget.js`
+  - [routes/config.js](file:///Users/xujian/projects/Sati/ui/server/routes/config.js) → `src/model/providerEndpoint.js`、`src/model/ollama/probe.js`、`src/network/fetch.js`
+  - [routes/memory.js](file:///Users/xujian/projects/Sati/ui/server/routes/memory.js) → **直接 import `edgeclaw-memory-core/lib/index.js` 编译产物**（绕开 TS 层）
+  - [routes/commands.js](file:///Users/xujian/projects/Sati/ui/server/routes/commands.js) → `src/adapters/channel/protocol/ChannelCommandRegistry.js`、`src/cli/commands/chatSearch.js`
+
+### 2. 品牌双轨 PilotDeck→Sati 迁移（✅ 已收尾，2026-08-13）
+
+> ✅ **已处理（2026-08-13）**：按 `docs/brand-unification-plan.md` 完成收尾——`ui/server/pilotdeck-bridge.js`、`pilotdeckConfig{Config,Reloader,Watcher}.js` 及各自 test、`ui/src/hooks/usePilotDeckConfig.ts(.test.tsx)`、`scripts/bootstrap-pilotdeck-config.mjs` 共 11 个双轨死代码文件已删除；`readSessionMessages.ts` 12 处历史消息帧 `provider` 标识统一为 `sati`；13 处升级兼容层统一标注 `legacy(pre-rebrand)`。以下为审计时的原始描述，保留作历史记录。
+
+- 仍 **38 个文件** 含 `pilotdeck` 字样（`grep -ri pilotdeck --include='*.{ts,tsx,js,jsx,json,md,html}'` 实测）
+- `ui/server/` 内部完整双轨：
+  - [pilotdeck-bridge.js](file:///Users/xujian/projects/Sati/ui/server/pilotdeck-bridge.js) 1862 行 ↔ [sati-bridge.js](file:///Users/xujian/projects/Sati/ui/server/sati-bridge.js) 1971 行（import 列表逐行一致，仅常量 / 注释差异）
+  - [pilotdeckConfig.js](file:///Users/xujian/projects/Sati/ui/server/services/pilotdeckConfig.js) 699 行 ↔ [satiConfig.js](file:///Users/xujian/projects/Sati/ui/server/services/satiConfig.js) 728 行（`deepMerge/clone/isRecord/normalizeString` 工具函数逐字复制；Watcher / Reloader / test 同样成对）
+  - Hooks 仍未改名：[usePilotDeckConfig.ts](file:///Users/xujian/projects/Sati/ui/src/hooks/usePilotDeckConfig.ts)（含 `usePilotDeckConfig.test.tsx`）
+
+### 3. 上帝文件与巨无霸函数（略有恶化）
+
+#### Top 大文件 > 1000 行（src/ + memory-core 子包，共 12 个）
+
+| 文件 | 08-02 行数 | 08-12 实测 | 变化 |
+|---|---|---|---|
+| [llm-extraction.ts](file:///Users/xujian/projects/Sati/src/context/memory/edgeclaw-memory-core/src/core/skills/llm-extraction.ts) | 未单独统计 | **3737 / 106 fns** | 新增入榜 |
+| [AgentLoop.ts](file:///Users/xujian/projects/Sati/src/agent/loop/AgentLoop.ts) | 3569 | **3546 / 67 fns** | ↓23（小幅清理） |
+| [InProcessGateway.ts](file:///Users/xujian/projects/Sati/src/gateway/client/InProcessGateway.ts) | 2180 | **2341 / 40 fns** | ↑161（净增功能） |
+| [sqlite.ts](file:///Users/xujian/projects/Sati/src/context/memory/edgeclaw-memory-core/src/core/storage/sqlite.ts) | 未单独统计 | **2024** | 新增入榜 |
+| [createLocalGateway.ts](file:///Users/xujian/projects/Sati/src/cli/createLocalGateway.ts) | 1583 | **1823** | ↑240 |
+| [WeComChannel.ts](file:///Users/xujian/projects/Sati/src/adapters/channel/wecom/WeComChannel.ts) | 1757 | **1760** | 持平 |
+| [file-memory.ts](file:///Users/xujian/projects/Sati/src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts) | 未单独统计 | **1632** | 新增入榜 |
+| [providers.ts](file:///Users/xujian/projects/Sati/src/model/catalog/providers.ts) | 未单独统计 | **1579** | 新增入榜 |
+| [WeixinChannel.ts](file:///Users/xujian/projects/Sati/src/adapters/channel/weixin/WeixinChannel.ts) | 未单独统计 | **1417** | 新增入榜 |
+| [FeishuChannel.ts](file:///Users/xujian/projects/Sati/src/adapters/channel/feishu/FeishuChannel.ts) | 未单独统计 | **1332** | 新增入榜 |
+| [RouterRuntime.ts](file:///Users/xujian/projects/Sati/src/router/RouterRuntime.ts) | 1293 | **1293** | 持平 |
+| [DiscoveryFire.ts](file:///Users/xujian/projects/Sati/src/always-on/runtime/DiscoveryFire.ts) | 未单独统计 | **1252** | 新增入榜 |
+
+#### 单函数超 300 行（1 fn / file，真正的巨无霸函数异味）
+
+| 文件 | 行数 | 函数数 | 平均行/函数 |
+|---|---|---|---|
+| [reasoning-rules.ts](file:///Users/xujian/projects/Sati/src/patent/checker/reasoning-rules.ts) | 439 | 1 | **439.0** |
+| [McpClient.ts](file:///Users/xujian/projects/Sati/src/mcp/client/McpClient.ts) | 426 | 1 | **426.0** |
+| [kg-store.ts](file:///Users/xujian/projects/Sati/src/knowledge/shared/kg-store.ts) | 404 | 1 | **404.0** |
+| [legal-search.ts](file:///Users/xujian/projects/Sati/src/knowledge/legal/legal-search.ts) | 389 | 1 | **389.0** |
+| [WhatsAppChannel.ts](file:///Users/xujian/projects/Sati/src/adapters/channel/whatsapp/WhatsAppChannel.ts) | 322 | 1 | **322.0** |
+| [workflow.ts](file:///Users/xujian/projects/Sati/src/patent/workflow.ts) | 642 | 2 | **321.0** |
+| [SmsChannel.ts](file:///Users/xujian/projects/Sati/src/adapters/channel/sms/SmsChannel.ts) | 315 | 1 | **315.0** |
+| [AlwaysOnRuntime.ts](file:///Users/xujian/projects/Sati/src/always-on/runtime/AlwaysOnRuntime.ts) | 306 | 1 | **306.0** |
+| [DiscordChannel.ts](file:///Users/xujian/projects/Sati/src/adapters/channel/discord/DiscordChannel.ts) | 275 | 1 | **275.0** |
+| [JsonlTranscriptWriter.ts](file:///Users/xujian/projects/Sati/src/session/transcript/JsonlTranscriptWriter.ts) | 270 | 1 | **270.0** |
+| [SlackChannel.ts](file:///Users/xujian/projects/Sati/src/adapters/channel/slack/SlackChannel.ts) | 268 | 1 | **268.0** |
+| [schema.ts](file:///Users/xujian/projects/Sati/src/router/config/schema.ts) | 267 | 1 | **267.0** |
+| [RemoteGateway.ts](file:///Users/xujian/projects/Sati/src/gateway/client/RemoteGateway.ts) | 262 | 1 | **262.0** |
+
+---
+
+## 三、P2 工程欠账 — 2026-08-12 新测数据
+
+### 1. 依赖安全：26 漏洞（较 08-02 的 16 条增长 10 条）
+
+| 级别 | 数量 | 典型漏洞包 | 是否生产链路 |
+|---|---|---|---|
+| **Critical** | 1 | node-tar（解压缩 DoS / 负数大小无限循环） | 大概率打包/dev（electron-builder 链） |
+| **High** | 17 | js-yaml（!!omap 二次方 CPU、merge-key 二次方）× 2 链；brace-expansion（ReDoS 指数膨胀）× 6 链；form-data CRLF 注入；nanoid 自定义生成器死循环；ip-address IPv4 前导零解析歧义 | js-yaml / brace-expansion 多为打包链；form-data / ip-address 需复核是否进入生产 MCP/邮件通道 |
+| **Moderate** | 7 | node-tar PAX 崩溃 × 4；JS-YAML merge key DoS；ip-address CIDR/NAT64 误判 × 2 | 同上 |
+| **Low** | 1 | esbuild Windows dev 任意文件读 | 非 macOS 生产 |
+
+> 建议：在 `package.json` `pnpm.overrides` 中补齐 `node-tar / js-yaml / brace-expansion / nanoid / form-data / ip-address` 6 类 patched 版本后再跑一次 audit，验证是否能清到只留 dev 链。
+
+### 2. 可观测性：225 处裸 console / 29 文件（增幅 67%）
+
+Top 5 热点（本次 `grep -c` 实测）：
+
+| 文件 | 次数 | 典型 pattern |
+|---|---|---|
+| [sati.ts](file:///Users/xujian/projects/Sati/src/cli/sati.ts) | **54** | CLI 入口启动 / 关闭日志 |
+| [createLocalGateway.ts](file:///Users/xujian/projects/Sati/src/cli/createLocalGateway.ts) | **24** | 网关启动调试 |
+| [WeixinChannel.ts](file:///Users/xujian/projects/Sati/src/adapters/channel/weixin/WeixinChannel.ts) | 10 | 微信通道事件 |
+| [gatewaySetup.ts](file:///Users/xujian/projects/Sati/src/cli/commands/gatewaySetup.ts) | 8 | 网关配置向导 |
+| [chatSearch.ts](file:///Users/xujian/projects/Sati/src/cli/commands/chatSearch.ts) | 4 | 命令输出 |
+| [streamModel.ts](file:///Users/xujian/projects/Sati/src/model/streaming/streamModel.ts) | 4 | **含生产热路径 `[model-debug] Request dumped`** |
+
+### 3. 类型逃逸：111 处 any / @ts-expect-error（74 文件）
+
+热点模块（grep 实测次数）：
+
+| 位置 | 次数 | 风险 |
+|---|---|---|
+| [planMode.ts](file:///Users/xujian/projects/Sati/src/tool/builtin/planMode.ts) | 6 | 工具计划模式参数解析（主链路） |
+| [llm-extraction.ts](file:///Users/xujian/projects/Sati/src/context/memory/edgeclaw-memory-core/src/core/skills/llm-extraction.ts) | 6 | memory-core LLM 结构化输出 |
+| [MessageProjector.ts](file:///Users/xujian/projects/Sati/src/context/projection/MessageProjector.ts) | 5 | context 消息投影（主链路） |
+| [RouterRuntime.ts](file:///Users/xujian/projects/Sati/src/router/RouterRuntime.ts) | 4 | 路由决策（主链路） |
+| [InProcessGateway.ts](file:///Users/xujian/projects/Sati/src/gateway/client/InProcessGateway.ts) | 3 | 进程内网关消息路由（主链路） |
+
+### 4. 测试覆盖分布不均（49 patent vs 1 browser/fs/lifecycle）
+
+`find tests -name "*.spec.ts" -o -name "*.test.ts" | awk -F/ '{print $2}' | sort | uniq -c | sort -rn` 实测：
+
+| 深度 | 模块（测试文件数） |
+|---|---|
+| ✅ 深覆盖 | patent(49) · tool(39) · knowledge(31) · context(22) · model(14) |
+| ⚠️ 中覆盖 | gateway(12) · session(11) · always-on(11) · agent(10) · router(9) · rule(8) · mcp(8) · literature(8) |
+| 🔴 极薄 | extension(7) · cron(7) · pilot(5) · cli(5) · workflow(4) · web(4) · permission(3) · adapters(3) · telemetry(2) · task(2) · skills(2) · network(1) · **status(1)** · **scripts(1)** · **lifecycle(1)** · **fs(1)** · **methodology(1)** · **desktop(1)** · **browser(1)** |
+| ⚫ 零测试 | **shared/**（[ttl-cache.ts](file:///Users/xujian/projects/Sati/src/shared/ttl-cache.ts) 通用基础设施） |
+
+> 零直接单测的高风险文件：[AgentLoop.ts](file:///Users/xujian/projects/Sati/src/agent/loop/AgentLoop.ts)（3546 行主循环）；[InProcessGateway.ts](file:///Users/xujian/projects/Sati/src/gateway/client/InProcessGateway.ts)（2341 行核心网关）
+
+### 5. ESLint 唯一残留（1 warning）
+
+- [evaluator.ts:121](file:///Users/xujian/projects/Sati/src/patent/evaluate/evaluator.ts#L121-L121)：`'overall' is assigned a value but never used.`
+
+### 6. edgeclaw-memory-core 残留
+
+- ✅ `lib/` 已不再被 git 追踪、✅ 独立 `package-lock.json` 已移除、✅ 已加入 `pnpm-workspace.yaml`
+- ⚠️ 仍残留 [ui-source/](file:///Users/xujian/projects/Sati/src/context/memory/edgeclaw-memory-core/ui-source) 旧 UI 目录（历史遗留 `app.js` 94KB）
+- ⚠️ 子包本地仍有 `node_modules/`（8KB，说明依赖提升不完整但无实际影响）
+
+---
+
+## 四、2026-08-12 健康面（更新版）
+
+新增 / 更新项：
+
+- ✅ React 18/19 并存已修复（锁文件仅 19.2.8）；Express 4/5 并存已修复（仅 5.2.1）
+- ✅ 零 `@ts-ignore`（维持）；无裸 TODO/FIXME（维持；本次扫描出现的「TODO」均为业务语义：计划合同校验 / `todoWrite` 工具名）
+- ✅ `pnpm workspace` 规范化：`edgeclaw-memory-core` 通过 workspace 挂载，`prebuild/predev/typecheck` 均走 `pnpm --filter`
+- ✅ 新模块（mcp / cron / rule / always-on）`protocol/runtime/config` 三层 + barrel 维持
+- ✅ 格式化统一：`biome.json` lineWidth=120、2 空格、双引号；lint-staged 自动化
+
+---
+
+## 五、2026-08-12 建议修复优先级（Sprint Backlog 就绪）
+
+### 立即（< 半天，可独立验收，Definition of Done 可写）
+
+1. **[evaluator.ts](file:///Users/xujian/projects/Sati/src/patent/evaluate/evaluator.ts#L121-L121) unused var 清理**：删除 `overall` 变量或加 `_` 前缀 → DoD：`pnpm lint` 0 errors / 0 warnings。
+2. **pnpm overrides 补齐 6 类漏洞包**：`node-tar / js-yaml / brace-expansion / nanoid / form-data / ip-address` → DoD：`pnpm audit --registry npmjs` 清到 ≤ 10 条（剩余均在 dev/build 链，标注不触及生产）。
+3. **删除 `edgeclaw-memory-core/ui-source/`**：`grep -r ui-source` 确认无引用后 `git rm` → DoD：`git status` 无该目录、`pnpm typecheck` 全绿。
+
+### 短期（1–2 天，不碰架构）
+
+4. **极薄测试模块补最小烟雾 spec**：`browser/backend`、`lifecycle`、`fs`、`shared/ttl-cache`、`methodology`、`desktop` 各 1 个 spec，覆盖 public API 主路径 → DoD：`find tests/$module -name "*.spec.ts" | wc -l` ≥ 2，`pnpm test` 全绿。
+5. **品牌双轨增量冻结**：给 [pilotdeck-bridge.js](file:///Users/xujian/projects/Sati/ui/server/pilotdeck-bridge.js)、[pilotdeckConfig.js](file:///Users/xujian/projects/Sati/ui/server/services/pilotdeckConfig.js)（含 Watcher/Reloader/test）、[usePilotDeckConfig.ts](file:///Users/xujian/projects/Sati/ui/src/hooks/usePilotDeckConfig.ts) 文件顶部加 `@deprecated` 注释，并在引用点统一标注 `// TODO(brand-migrate): replace with sati* equivalent` → DoD：`grep -c TODO(brand-migrate)` 输出数与引用点一致。 — ✅ 已被 2026-08-13 品牌统一收尾取代（死代码直接删除，见 `docs/brand-unification-plan.md`，无需再冻结）
+
+### 中期（3–7 天专项，单独 Sprint 排期）
+
+6. **巨无霸函数拆解 Top 5**：[McpClient.ts](file:///Users/xujian/projects/Sati/src/mcp/client/McpClient.ts) / [reasoning-rules.ts](file:///Users/xujian/projects/Sati/src/patent/checker/reasoning-rules.ts) / [legal-search.ts](file:///Users/xujian/projects/Sati/src/knowledge/legal/legal-search.ts) / [kg-store.ts](file:///Users/xujian/projects/Sati/src/knowledge/shared/kg-store.ts) / [workflow.ts](file:///Users/xujian/projects/Sati/src/patent/workflow.ts) 各拆成 ≥ 3 个职责清晰的函数或独立文件 → DoD：拆后平均行/函数 ≤ 100，对应 spec 全绿。
+7. **`AgentLoop.ts` 按阶段拆分 + 补阶段单测**：拆出 `PlanStage / ActStage / ReflectStage` 三个模块（每块 ≤ 300 行）；每阶段写 ≥ 2 个单元测试 → DoD：`src/agent/loop/` 新增 3 文件，`tests/agent/loop/` 新增 6 个 describe 块，`pnpm typecheck` + `pnpm test` 全绿。
+8. **`ui/server` 跨边界 import 增量冻结方案落地**：二选一作为专项，方案确定后写设计文档并在下一轮审计验收。
+   - **方案 A（协议层收敛）**：`ui/server` 所有 `import from ../../src/` 改为连 `ws://localhost:<gatewayPort>` 走 gateway 协议，仅保留 `parseGatewayConfig`（纯函数）例外
+   - **方案 B（TS 化 + barrel 约束）**：`ui/server` 迁 TS 写类型，所有对 `src/` 的 import 限定为 `src/<module>/index.ts` barrel，禁止 2、3 级子路径；写 eslint rule `no-restricted-imports` 强制执行
+
+### 持续工程（跨 Sprint 滚动，每 Sprint 清理一块）
+
+9. **裸 console 按模块收束到 `src/telemetry/` wrapper**：从 `sati.ts`（54 处）→ `createLocalGateway.ts`（24 处）→ `streamModel.ts`（4 处，主链路最关键），每 PR 只改 1–2 个模块 → DoD：每 Sprint 末 `grep -c console.log src/$module` 计数下降可验证。
+10. **111 处 any 主链路收敛**：优先级 `tool/builtin/planMode.ts(6)` → `context/projection/MessageProjector.ts(5)` → `router/RouterRuntime.ts(4)` → `gateway/client/InProcessGateway.ts(3)` → 其余 60 外围模块 → DoD：主链路 any 清零，外围 any 加 `// SAFETY: ...` 注释说明原因并附类型守卫位置。
+11. **`ui/server/index.js` 3808 行分片**：按 routes / middleware / services / websocket 四类拆出独立文件，纯机械拆分不改逻辑 → DoD：拆出后单文件 ≤ 500 行，`ui/server/index.js` ≤ 400 行（作为 entry 只做组装），`pnpm --filter sati-ui test` 全绿。

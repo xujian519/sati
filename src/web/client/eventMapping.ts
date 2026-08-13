@@ -3,8 +3,8 @@
  *
  * Single source of truth for translating a gateway event into the legacy
  * "NormalizedMessage"-shaped wire frames consumed by the chat UI. Both the
- * Node-side bridges (`ui/server/sati-bridge.js`, `ui/server/pilotdeck-bridge.js`)
- * build on this module, so the hosts can no longer drift apart.
+ * Node-side bridge (`ui/server/sati-bridge.js`) builds on this module, so the
+ * hosts can no longer drift apart.
  *
  * Scope / ownership:
  *   - Included: pure event→frame mapping (all event types), tool-name

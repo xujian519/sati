@@ -57,7 +57,7 @@ import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from "./u
 import { createRemoteGateway } from "../../src/gateway/index.js";
 import { createVisibleErrorStatusDetail } from "../../src/status/agentStatus.js";
 // Shared GatewayEvent → chat-frame mapping (single source of truth shared
-// with the browser direct-connect path and pilotdeck-bridge).
+// with the browser direct-connect path).
 import {
   isVisibleFailureAgentStatus,
   mapGatewayEventToFrames,
