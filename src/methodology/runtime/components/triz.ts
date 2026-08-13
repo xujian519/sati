@@ -30,7 +30,6 @@ export const TRIGGERS = [
 /** 39×39 矛盾矩阵（[恶化参数][改善参数] = 推荐原理编号数组）。 */
 let matrixCache: number[][][] | null = null;
 
-// 注意：dist 构建（pnpm build）的 cpSync 白名单不含 data/ 目录，T11 需把矩阵数据纳入构建拷贝（否则 dist 运行时 ENOENT）
 export function loadMatrix(): number[][][] {
   if (matrixCache) return matrixCache;
   const path = join(dirname(fileURLToPath(import.meta.url)), "data", "triz-matrix.json");

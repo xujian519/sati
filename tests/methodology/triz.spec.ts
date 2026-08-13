@@ -36,11 +36,13 @@ test("lookupMatrixCell 确定性查表", () => {
   assert.deepEqual(lookupMatrixCell(9, 10), [13, 28, 15, 19]);
 });
 
-// 矩阵数据来源：Altshuller 经典矛盾矩阵（39×39），由 Casey Perno 2007 转录的
-// triz_matrix.xls（流传最广的经典矩阵电子转录，源自 Altshuller
-// 《Creativity as an Exact Science》1979/1984）程序化转换生成，原始文件：
+// 矩阵数据来源：Altshuller 经典矛盾矩阵（39×39，有值 1190 格、无单值格），
+// 由 Casey Perno 2007 转录的 triz_matrix.xls（流传最广的经典矩阵电子转录，
+// 源自 Altshuller《Creativity as an Exact Science》1979/1984）程序化转换生成。
+// 原始 XLS 行=改善参数、列=恶化参数，JSON 已转置为 [worsening-1][improving-1]；
+// 原始文件：
 // https://github.com/kamil-szczepanik/TRIZ-Agents/blob/master/data/tools_sources/triz_matrix.xls
-// （数据为公开经典数据；'+'/'−' 占位格与对角线均转为空数组）
+// （公开经典数据；'+'/'−' 占位格、无独立来源佐证的单值格与对角线均转为空数组）
 test("矩阵数据完整：39×39 且值为 1-40 原理编号", () => {
   const data = JSON.parse(
     readFileSync(
@@ -52,14 +54,18 @@ test("矩阵数据完整：39×39 且值为 1-40 原理编号", () => {
     ),
   ) as number[][][];
   assert.equal(data.length, 39);
+  let filled = 0;
   for (const row of data) {
     assert.equal(row.length, 39);
     for (const cell of row) {
+      if (cell.length > 0) filled += 1;
       for (const n of cell) {
         assert.ok(n >= 1 && n <= 40, `原理编号越界: ${n}`);
       }
     }
   }
+  // 数据版本固化：有值格 1190（Casey Perno xls 主流转录版，防回归）
+  assert.equal(filled, 1190);
 });
 
 test("矩阵对角线（改善=恶化）为物理矛盾，无经典推荐", () => {
