@@ -73,10 +73,13 @@ interface GapEntry {
 interface ClaimChart {
   chartId: string;  mode: ChartMode;  caseId: string;
   claimNos: number[];  targets: ChartTarget[];  rows: ChartRow[];
+  elements: ClaimElement[];  // 已拆分的要素（渲染表格左列与 gap list 需要）
   gaps: GapEntry[];        // 第一优先输出
   draftNotice: string;     // "本表为分析草稿"免责声明（行业标准）
 }
 ```
+
+> ClaimChart 含 elements 字段（计划阶段补充：markdown 渲染与 gap list 需要要素文本）。
 
 ### 内核 runtime（`src/patent/claim-chart/runtime/`）
 
@@ -121,7 +124,9 @@ interface ClaimChart {
 ```
 可专利性（撰写）  新增 patent_patentability_v1 或扩展 prior-art 链路:
        parse → search → compare → claim-chart(mode=patentability)
-       → draft-claims 基于 not-found 区别特征布局，规避 D1
+       → draft 基于 not-found 区别特征布局，规避 D1
+       （draft 阶段为收口语义——draft-claims 原子输入键 pfe_triples/
+       merge_result 本 manifest 无产出，主代理按描述产出阶段文本）
 
 OA答复   新增 patent_oa_response_v1:
        parse → search → compare → claim-chart(mode=oa-response,
@@ -132,6 +137,9 @@ OA答复   新增 patent_oa_response_v1:
        parse → search → compare → claim-chart(mode=invalidity,
        targets=证据组合) → novelty（mapping-machine 校验单篇全覆盖）
        → inventiveness（区别特征 = D1 not-found 行，组合启示 = D2 映射行）
+       （novelty/inventiveness 阶段为收口语义——novelty 原子输入键
+       features/prior_art、reasoning 原子输入键 reasoning_prompt/
+       reasoning_input 本 manifest 无产出，主代理按描述产出阶段文本）
 
 侵权     新增 patent_infringement_v1:
        parse → compare → claim-chart(mode=infringement, targets=被控产品,
@@ -140,6 +148,7 @@ OA答复   新增 patent_oa_response_v1:
 
 关键点：
 - 现有 3 个内置 manifest（novelty/disclosure/inventiveness）不动，新场景 manifest 新增（避免破坏 benchmark 等价性测试）；`patent_novelty_v1` 的 compare→conclude 链路可留作演进参考
+- 接线修正（T9 遗留）：声明了 atom 但输入键与 manifest 产出不匹配的阶段一律回退收口（上表 patentability 的 draft 与 invalidation 的 novelty/inventiveness 已注明）；claim-chart 阶段保留 atom 声明（输入键 claim/chart_targets/chart_mode 由上下文提供，chart_targets 经 `patent_workflow_run` 工具 chartTargets 参数注入）
 - chart 是"方案级对比矩阵"到"法律文书"的桥梁：CAP02 出区别特征 → chart 落要素级证据 → 下游 novelty/inventiveness/draft 消费 `claim-chart.json`，不再各自重复对比
 - HITL：claim-chart 阶段后接 approval-gate（对齐 `patent_novelty_v1` 的 approval 阶段模式）
 - assets/workflows/patent/*.yaml 蓝图资产**不在本期修改范围**（无运行时效果；如要同步维护另立任务）

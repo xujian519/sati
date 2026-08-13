@@ -168,6 +168,60 @@ test("未知 manifest fail-closed", async () => {
   assert.match(textOf(res), /未知 manifest/);
 });
 
+test("chartTargets 注入：claim-chart 原子收到目标对象（manifest 路径，T9 I-2 接线）", async () => {
+  registerBuiltinAtoms();
+  const claimText = "一种智能保温杯，其特征在于杯体采用双层真空结构。";
+  const targetsJson = JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]);
+
+  // 不传 chartTargets：prompt 提示无目标对象（只拆分要素）
+  let promptWithout = "";
+  const toolWithout = createPatentWorkflowRunTool({
+    model: mockModel(prompt => {
+      if (prompt.includes("专利权利要求分析专家")) {
+        promptWithout = prompt;
+        return JSON.stringify({
+          elements: [{ id: "1a", claimNo: 1, text: "杯体采用双层真空结构", kind: "limitation" }],
+          rows: [{ elementId: "1a", targetId: "D1", quote: "", pinCite: "", mapping: "literal" }],
+        });
+      }
+      return "{}";
+    }),
+    search: mockSearch,
+  });
+  await toolWithout.execute({ input: claimText, manifestId: "patent_invalidation_v1" }, makeToolContext());
+  assert.ok(promptWithout.length > 0, "未传 chartTargets 时 claim-chart 原子也应被调用");
+  assert.match(promptWithout, /无目标对象/);
+
+  // 传 chartTargets：prompt 渲染目标对象（id/kind/title）
+  let promptWith = "";
+  const toolWith = createPatentWorkflowRunTool({
+    model: mockModel(prompt => {
+      if (prompt.includes("专利权利要求分析专家")) {
+        promptWith = prompt;
+        return JSON.stringify({
+          elements: [{ id: "1a", claimNo: 1, text: "杯体采用双层真空结构", kind: "limitation" }],
+          rows: [{ elementId: "1a", targetId: "D1", quote: "", pinCite: "", mapping: "literal" }],
+        });
+      }
+      return "{}";
+    }),
+    search: mockSearch,
+  });
+  const res = await toolWith.execute(
+    { input: claimText, manifestId: "patent_invalidation_v1", chartTargets: targetsJson },
+    makeToolContext(),
+  );
+  const text = textOf(res);
+  assert.match(promptWith, /【目标对象】/);
+  assert.match(promptWith, /D1（对比文件：对比文件1）/);
+  assert.match(text, /claim-chart \[atom:claim-chart\]/);
+  // T9 I-1 回归：novelty/inventiveness 无 atom 声明（收口透传），不出现降级标注
+  assert.match(text, /✅ novelty:/);
+  assert.doesNotMatch(text, /novelty \[atom:/);
+  assert.match(text, /✅ inventiveness:/);
+  assert.doesNotMatch(text, /inventiveness \[atom:/);
+});
+
 // ---------------------------------------------------------------------------
 // 持久化
 // ---------------------------------------------------------------------------

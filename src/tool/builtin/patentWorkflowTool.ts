@@ -356,6 +356,8 @@ export function buildWorkflowRunContext(opts: {
   caseId?: string;
   input: string;
   maxResults?: number;
+  /** claim-chart 阶段的目标对象 JSON（[{id,kind,title?,source_path?}]）；缺省为空。 */
+  chartTargets?: string;
 }): WorkflowContext {
   return {
     caseId: opts.caseId,
@@ -364,6 +366,7 @@ export function buildWorkflowRunContext(opts: {
     source_text: opts.input,
     extraction_input: opts.input,
     claim: opts.input,
+    chart_targets: opts.chartTargets ?? "",
     max_results: String(opts.maxResults ?? 5),
   };
 }

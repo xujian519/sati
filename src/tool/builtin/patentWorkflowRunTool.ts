@@ -71,6 +71,12 @@ export type PatentWorkflowRunInput = {
   caseId?: string;
   /** 初始材料（技术交底书等），映射为各原子读取的 text/source_text/extraction_input。 */
   input: string;
+  /**
+   * claim-chart 阶段的目标对象 JSON（[{id,kind,title?,source_path?}]）；缺省为空
+   * （只拆分要素，逐行映射留待后续补充）。kind 取值 prior-art（对比文件）/
+   * product（被控产品）。
+   */
+  chartTargets?: string;
   /** 检索结果上限（缺省 5，透传给 provider.search）。 */
   maxResults?: number;
 };
@@ -145,6 +151,11 @@ export function createPatentWorkflowRunTool(
           type: "string",
           description: "Initial material (e.g. the technical disclosure text) consumed by the extract atoms.",
         },
+        chartTargets: {
+          type: "string",
+          description:
+            "Target objects JSON for the claim-chart stage ([{id,kind,title?,source_path?}], kind: prior-art|product); empty by default (elements only, row mapping deferred).",
+        },
         maxResults: {
           type: "number",
           description: "Max prior-art search results (default 5).",
@@ -196,6 +207,7 @@ export function createPatentWorkflowRunTool(
         caseId: input.caseId,
         input: input.input,
         maxResults: input.maxResults,
+        chartTargets: input.chartTargets,
       });
 
       // 无 atom 阶段（preprocess/report）：透传输入文本（等价"未预处理"），不 degraded。
@@ -320,6 +332,7 @@ async function executeGraphRun(
     caseId: input.caseId,
     input: input.input,
     maxResults: input.maxResults,
+    chartTargets: input.chartTargets,
   });
 
   // 检查点：caseId 提供时持久化到 <caseDir>/workflow-runs/checkpoints/，否则内存。

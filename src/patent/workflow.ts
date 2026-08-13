@@ -622,7 +622,8 @@ export const patentInventivenessManifest: WorkflowManifest = {
 /**
  * 内置：可专利性检索与布局 manifest（撰写场景）。
  * parse（主代理）→ claim-chart（要素级证据网格，atom 自动执行）→
- * draft-claims（基于 not-found 区别特征布局规避 D1）。
+ * draft（基于 not-found 区别特征布局规避 D1；draft-claims 原子输入键
+ * pfe_triples/merge_result 本 manifest 无产出，故不声明 atom，回退收口）。
  */
 export const patentPatentabilityManifest: WorkflowManifest = {
   id: "patent_patentability_v1",
@@ -637,7 +638,7 @@ export const patentPatentabilityManifest: WorkflowManifest = {
       atom: "claim-chart",
       params: { chart_mode: "patentability" },
     },
-    { id: "draft", strategy: "chain", description: "基于区别特征布局权利要求（规避 D1）", atom: "draft-claims" },
+    { id: "draft", strategy: "chain", description: "基于区别特征布局权利要求（规避 D1）（原子路径不支持，收口模式）" },
     { id: "approval", strategy: "chain", description: "人工确认权利要求布局" },
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
@@ -672,6 +673,11 @@ export const patentOaResponseManifest: WorkflowManifest = {
  * parse → claim-chart（mode=invalidity；复审场景可经 flexible-plan 调整）→
  * novelty（单篇全覆盖由 mapping-machine 校验）→ inventiveness（区别特征 = D1
  * not-found 行）。
+ *
+ * 注意：novelty / inventiveness 两阶段**不声明 atom**（原子路径不支持——novelty
+ * 原子输入键为 features/prior_art、reasoning 原子输入键为 reasoning_prompt/
+ * reasoning_input，本 manifest 无对应产出），回退为收口语义：主代理按阶段描述
+ * 产出阶段文本，消费方 patent_workflow 工具按 caseType 映射规则门校验。
  */
 export const patentInvalidationManifest: WorkflowManifest = {
   id: "patent_invalidation_v1",
@@ -686,8 +692,8 @@ export const patentInvalidationManifest: WorkflowManifest = {
       atom: "claim-chart",
       params: { chart_mode: "invalidity" },
     },
-    { id: "novelty", strategy: "chain", description: "新颖性单独对比（单篇全覆盖）", atom: "novelty" },
-    { id: "inventiveness", strategy: "chain", description: "三步法创造性分析", atom: "reasoning" },
+    { id: "novelty", strategy: "chain", description: "新颖性单独对比（单篇全覆盖）（原子路径不支持，收口模式）" },
+    { id: "inventiveness", strategy: "chain", description: "三步法创造性分析（原子路径不支持，收口模式）" },
     { id: "approval", strategy: "chain", description: "人工确认分析结论" },
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
