@@ -12,16 +12,25 @@
 ### Changed
 - 品牌清理收尾：移除 pilotdeck 死代码桥/配置/hook（11 文件，4211 行）、历史消息 provider 标签统一为 "sati"、品牌前兼容 shim 标记 `legacy(pre-rebrand)`、清理注释与文档中过时 pilotdeck 引用
 - pnpm overrides 加固传递依赖（audit 27 → 1）
+- 桌面端日志超过 20MB 自动轮转归档
 
 ### Fixed
 - 代理不可达时回退直连 fetch（`src/cli/proxy.ts` + `ui/server/utils/proxy.js` 双端）
 - clawhub CLI 定位脱离桌面端最小 GUI PATH
+- reasoning 模型显式 temperature 省略，修复会话标题与 Dream 400 错误
+- always-on trigger 未启用时输出告警，避免常驻执行静默失效
+
+### Perf
+- 知识库检索优化与可观测性补齐（H1-H6 高优先级建议）
+- always-on gate blocked 等调度噪音降 debug，SATI_DEBUG 门控
+- router autoOrch/policy_skip/token-saver 噪音降 debug
 
 ### Test
 - 新增 history-frame provider 契约测试（`tests/web/history-frame-provider.spec.ts`）
 
 ### Docs
 - 修正计划文档计数与悬空 env.ts 引用；记录 2026-08-13 技术债清理与 ui-source keep 决策（`docs/technical-debt-report.md`）
+- 知识库系统研究报告（架构/验证/性能/对标/建议）；删除高优先级建议重复标题
 
 ## v0.0.25 - 2026-08-12
 
