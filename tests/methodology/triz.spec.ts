@@ -28,11 +28,53 @@ test("execute prompt 含矛盾定义与矩阵查表步骤", () => {
   assert.ok(prompt.includes("规避设计"));
 });
 
-// lookupMatrixCell 依赖 triz-matrix.json（39×39 矛盾矩阵），该数据在 Task 11
-// 补齐。数据就位后恢复为 test(...) 启用。
-test.skip("lookupMatrixCell 确定性查表", () => {
-  // 强度(14) 恶化 运动物体重量(1)：经典推荐 1, 8, 40, 15
+test("lookupMatrixCell 确定性查表", () => {
+  // 基准值（广泛引用的经典值，见 commit message 数据来源）：
+  // 改善 强度(14) × 恶化 运动物体重量(1)：经典推荐 1, 8, 40, 15
   assert.deepEqual(lookupMatrixCell(14, 1), [1, 8, 40, 15]);
+  // 改善 速度(9) × 恶化 力(10)：经典推荐 13, 28, 15, 19
+  assert.deepEqual(lookupMatrixCell(9, 10), [13, 28, 15, 19]);
+});
+
+// 矩阵数据来源：Altshuller 经典矛盾矩阵（39×39），由 Casey Perno 2007 转录的
+// triz_matrix.xls（流传最广的经典矩阵电子转录，源自 Altshuller
+// 《Creativity as an Exact Science》1979/1984）程序化转换生成，原始文件：
+// https://github.com/kamil-szczepanik/TRIZ-Agents/blob/master/data/tools_sources/triz_matrix.xls
+// （数据为公开经典数据；'+'/'−' 占位格与对角线均转为空数组）
+test("矩阵数据完整：39×39 且值为 1-40 原理编号", () => {
+  const data = JSON.parse(
+    readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../src/methodology/runtime/components/data/triz-matrix.json",
+      ),
+      "utf8",
+    ),
+  ) as number[][][];
+  assert.equal(data.length, 39);
+  for (const row of data) {
+    assert.equal(row.length, 39);
+    for (const cell of row) {
+      for (const n of cell) {
+        assert.ok(n >= 1 && n <= 40, `原理编号越界: ${n}`);
+      }
+    }
+  }
+});
+
+test("矩阵对角线（改善=恶化）为物理矛盾，无经典推荐", () => {
+  const data = JSON.parse(
+    readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../src/methodology/runtime/components/data/triz-matrix.json",
+      ),
+      "utf8",
+    ),
+  ) as number[][][];
+  for (let i = 0; i < 39; i += 1) {
+    assert.deepEqual(data[i]![i], [], `对角线格 [${i + 1}][${i + 1}] 应为空（物理矛盾走分离原理）`);
+  }
 });
 
 test("40 原理数据完整（40 条，名称非空）", () => {
