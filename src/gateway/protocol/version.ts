@@ -19,8 +19,9 @@
  *   - 1.2 — 2026-08-11: added optional output-gate HITL approval methods
  *           approval_list_pending / approval_decide + `approval_pending` /
  *           `approval_resolved` event types.
+ *   - 1.3 — 2026-08-13: added optional cron task update method `cron_update`.
  */
-export const SATI_GATEWAY_PROTOCOL_VERSION = "1.2";
+export const SATI_GATEWAY_PROTOCOL_VERSION = "1.3";
 
 /**
  * Handshake compatibility check: clients and servers with the same MAJOR

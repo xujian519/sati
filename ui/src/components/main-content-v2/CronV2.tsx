@@ -8,11 +8,13 @@ import {
   Clock,
   ListChecks,
   Loader2,
+  Pencil,
   Play,
   PlusCircle,
   RefreshCw,
   Square,
   Trash2,
+  X,
 } from "lucide-react";
 import type { CronJobOverview, CronJobsOverviewResponse, Project } from "../../types/app";
 import { cn } from "../../lib/utils.js";
@@ -22,10 +24,29 @@ const POLL_INTERVAL_MS = 15_000;
 
 type CronSubTab = "list" | "create";
 type ScheduleKind = "once" | "cron";
+type CronFrequency = "daily" | "weekly" | "monthly" | "yearly" | "custom";
 
 const SUB_TABS: { id: CronSubTab; labelKey: string; defaultLabel: string; icon: typeof ListChecks }[] = [
   { id: "list", labelKey: "cron.tabs.list", defaultLabel: "Task List", icon: ListChecks },
   { id: "create", labelKey: "cron.tabs.create", defaultLabel: "Create Task", icon: PlusCircle },
+];
+
+const WEEKDAYS: { value: number; labelKey: string; defaultLabel: string }[] = [
+  { value: 1, labelKey: "cron.create.weekdays.mon", defaultLabel: "Mon" },
+  { value: 2, labelKey: "cron.create.weekdays.tue", defaultLabel: "Tue" },
+  { value: 3, labelKey: "cron.create.weekdays.wed", defaultLabel: "Wed" },
+  { value: 4, labelKey: "cron.create.weekdays.thu", defaultLabel: "Thu" },
+  { value: 5, labelKey: "cron.create.weekdays.fri", defaultLabel: "Fri" },
+  { value: 6, labelKey: "cron.create.weekdays.sat", defaultLabel: "Sat" },
+  { value: 7, labelKey: "cron.create.weekdays.sun", defaultLabel: "Sun" },
+];
+
+const FREQUENCIES: { id: CronFrequency; labelKey: string; defaultLabel: string }[] = [
+  { id: "daily", labelKey: "cron.create.frequency.daily", defaultLabel: "Daily" },
+  { id: "weekly", labelKey: "cron.create.frequency.weekly", defaultLabel: "Weekly" },
+  { id: "monthly", labelKey: "cron.create.frequency.monthly", defaultLabel: "Monthly" },
+  { id: "yearly", labelKey: "cron.create.frequency.yearly", defaultLabel: "Yearly" },
+  { id: "custom", labelKey: "cron.create.frequency.custom", defaultLabel: "Custom (cron)" },
 ];
 
 const COL = {
@@ -82,9 +103,75 @@ function formatTimeLocal(date: Date): string {
   return formatDateTimeLocal(date).slice(11, 16);
 }
 
-function buildDailyCronExpression(time: string): string {
+function buildCronExpression(
+  frequency: CronFrequency,
+  time: string,
+  weekdays: number[],
+  monthDay: number,
+  month: number,
+): string {
   const [hour = "0", minute = "0"] = time.split(":");
-  return `${Number(minute)} ${Number(hour)} * * *`;
+  const minuteInt = Number(minute);
+  const hourInt = Number(hour);
+  switch (frequency) {
+    case "daily":
+      return `${minuteInt} ${hourInt} * * *`;
+    case "weekly":
+      return `${minuteInt} ${hourInt} * * ${[...weekdays].sort((left, right) => left - right).join(",")}`;
+    case "monthly":
+      return `${minuteInt} ${hourInt} ${monthDay} * *`;
+    case "yearly":
+      return `${minuteInt} ${hourInt} ${monthDay} ${month} *`;
+    case "custom":
+      return "";
+  }
+}
+
+const CRON_SEGMENT_PATTERN = /^(\*|\d+([,-]\d+)*|\*\/\d+|\d+\/\d+)$/;
+
+function isValidCronExpression(expression: string): boolean {
+  const parts = expression.trim().split(/\s+/);
+  return parts.length === 5 && parts.every(part => CRON_SEGMENT_PATTERN.test(part));
+}
+
+type ParsedCronExpression = {
+  frequency: CronFrequency;
+  time: string;
+  weekdays: number[];
+  monthDay: number;
+  month: number;
+};
+
+function parseCronExpression(expression: string): ParsedCronExpression | null {
+  const parts = expression.trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const [minute, hour, dom, month, dow] = parts;
+  if (!/^\d+$/.test(minute) || !/^\d+$/.test(hour)) return null;
+  const time = `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
+  if (dow !== "*") {
+    if (dom === "*" && month === "*" && /^[0-7](,[0-7])*$/.test(dow)) {
+      return {
+        frequency: "weekly",
+        time,
+        weekdays: [...new Set(dow.split(",").map(value => (Number(value) === 0 ? 7 : Number(value))))],
+        monthDay: 1,
+        month: 1,
+      };
+    }
+    return null;
+  }
+  if (dom === "*" && month === "*") {
+    return { frequency: "daily", time, weekdays: [], monthDay: 1, month: 1 };
+  }
+  if (dom !== "*" && month === "*") {
+    if (!/^\d+$/.test(dom)) return null;
+    return { frequency: "monthly", time, weekdays: [], monthDay: Number(dom), month: 1 };
+  }
+  if (dom !== "*" && month !== "*") {
+    if (!/^\d+$/.test(dom) || !/^\d+$/.test(month)) return null;
+    return { frequency: "yearly", time, weekdays: [], monthDay: Number(dom), month: Number(month) };
+  }
+  return null;
 }
 
 function formatAbsoluteTime(iso: string | number): string {
@@ -103,6 +190,7 @@ function formatAbsoluteTime(iso: string | number): string {
 export default function CronV2() {
   const { t } = useTranslation("alwaysOn");
   const [subTab, setSubTab] = useState<CronSubTab>("list");
+  const [editingJob, setEditingJob] = useState<CronJobOverview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -196,7 +284,10 @@ export default function CronV2() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setSubTab(tab.id)}
+              onClick={() => {
+                setEditingJob(null);
+                setSubTab(tab.id);
+              }}
               className={cn(
                 "inline-flex items-center gap-1.5 border-b-2 px-3 pb-2 text-[13px] font-medium transition-colors",
                 isActive
@@ -222,13 +313,24 @@ export default function CronV2() {
             collapsedProjects={collapsedProjects}
             onRefresh={refresh}
             onToggleProject={toggleProject}
+            onEdit={job => {
+              setEditingJob(job);
+              setSubTab("create");
+            }}
           />
         ) : (
-          <CronCreateView
+          <CronFormView
+            key={editingJob?.id ?? "new"}
             t={t}
             projects={projects}
-            onCreated={async () => {
+            editingJob={editingJob}
+            onDone={async () => {
+              setEditingJob(null);
               await refresh();
+              setSubTab("list");
+            }}
+            onCancelEdit={() => {
+              setEditingJob(null);
               setSubTab("list");
             }}
           />
@@ -247,6 +349,7 @@ function CronListView({
   collapsedProjects,
   onRefresh,
   onToggleProject,
+  onEdit,
 }: {
   t: (key: string, opts?: Record<string, string>) => string;
   loading: boolean;
@@ -256,6 +359,7 @@ function CronListView({
   collapsedProjects: Set<string>;
   onRefresh: () => Promise<void>;
   onToggleProject: (key: string) => void;
+  onEdit: (job: CronJobOverview) => void;
 }) {
   return (
     <div className="w-full space-y-5 px-8 py-5">
@@ -328,7 +432,7 @@ function CronListView({
                     <ColumnHeaders t={t} />
                     <div className="divide-y divide-neutral-100 dark:divide-neutral-900">
                       {group.items.map(job => (
-                        <CronJobRow key={job.id} job={job} t={t} onRefresh={onRefresh} />
+                        <CronJobRow key={job.id} job={job} t={t} onRefresh={onRefresh} onEdit={onEdit} />
                       ))}
                     </div>
                   </>
@@ -342,22 +446,43 @@ function CronListView({
   );
 }
 
-function CronCreateView({
+function CronFormView({
   t,
   projects,
-  onCreated,
+  editingJob,
+  onDone,
+  onCancelEdit,
 }: {
   t: (key: string, opts?: Record<string, string>) => string;
   projects: Project[];
-  onCreated: () => Promise<void>;
+  editingJob: CronJobOverview | null;
+  onDone: () => Promise<void>;
+  onCancelEdit: () => void;
 }) {
   const defaultRunAt = useMemo(() => new Date(Date.now() + 60 * 60 * 1000), []);
-  const [message, setMessage] = useState("");
-  const [projectKey, setProjectKey] = useState("");
-  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>("once");
-  const [scheduleDate, setScheduleDate] = useState(formatDateLocal(defaultRunAt));
-  const [scheduleTime, setScheduleTime] = useState(formatTimeLocal(defaultRunAt));
-  const [timezone, setTimezone] = useState(getBrowserTimezone);
+  const parsed = useMemo(() => (editingJob?.recurring ? parseCronExpression(editingJob.cron) : null), [editingJob]);
+  const [message, setMessage] = useState(editingJob?.prompt ?? "");
+  const [projectKey, setProjectKey] = useState(editingJob?.projectKey ?? "");
+  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>(
+    editingJob ? (editingJob.recurring ? "cron" : "once") : "once",
+  );
+  const [frequency, setFrequency] = useState<CronFrequency>(
+    parsed?.frequency ?? (editingJob?.recurring ? "custom" : "daily"),
+  );
+  const [weekdays, setWeekdays] = useState<number[]>(parsed?.weekdays ?? []);
+  const [monthDay, setMonthDay] = useState(parsed?.monthDay ?? 1);
+  const [month, setMonth] = useState(parsed?.month ?? 1);
+  const [expression, setExpression] = useState(editingJob?.recurring ? editingJob.cron : "");
+  const [scheduleDate, setScheduleDate] = useState(
+    editingJob?.nextRunAt ? formatDateLocal(new Date(editingJob.nextRunAt)) : formatDateLocal(defaultRunAt),
+  );
+  // recurring 编辑：时间取自 cron 表达式自身的 分:时（与浏览器时区无关），
+  // 避免 nextRunAt 本地渲染跨时区导致保存时计划平移。
+  const [scheduleTime, setScheduleTime] = useState(
+    parsed?.time ??
+      (editingJob?.nextRunAt ? formatTimeLocal(new Date(editingJob.nextRunAt)) : formatTimeLocal(defaultRunAt)),
+  );
+  const [timezone, setTimezone] = useState(editingJob?.timezone || getBrowserTimezone());
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -366,6 +491,11 @@ function CronCreateView({
     setMessage("");
     setProjectKey("");
     setScheduleKind("once");
+    setFrequency("daily");
+    setWeekdays([]);
+    setMonthDay(1);
+    setMonth(1);
+    setExpression("");
     const nextDefault = new Date(Date.now() + 60 * 60 * 1000);
     setScheduleDate(formatDateLocal(nextDefault));
     setScheduleTime(formatTimeLocal(nextDefault));
@@ -379,9 +509,6 @@ function CronCreateView({
     if (!projectKey) {
       return t("cron.create.validation.workspaceRequired", { defaultValue: "Workspace is required." });
     }
-    if (!scheduleTime) {
-      return t("cron.create.validation.timeRequired", { defaultValue: "Time is required." });
-    }
     if (!timezone.trim()) {
       return t("cron.create.validation.timezoneRequired", { defaultValue: "Timezone is required." });
     }
@@ -389,10 +516,31 @@ function CronCreateView({
       if (!scheduleDate) {
         return t("cron.create.validation.dateRequired", { defaultValue: "Date is required." });
       }
+      if (!scheduleTime) {
+        return t("cron.create.validation.timeRequired", { defaultValue: "Time is required." });
+      }
       const parsed = new Date(`${scheduleDate}T${scheduleTime}`);
       if (Number.isNaN(parsed.getTime()) || parsed.getTime() <= Date.now()) {
         return t("cron.create.validation.runAtFuture", { defaultValue: "Run time must be in the future." });
       }
+      return null;
+    }
+    if (frequency !== "custom" && !scheduleTime) {
+      return t("cron.create.validation.timeRequired", { defaultValue: "Time is required." });
+    }
+    if (frequency === "weekly" && weekdays.length === 0) {
+      return t("cron.create.validation.weekdaysRequired", { defaultValue: "Select at least one weekday." });
+    }
+    if ((frequency === "monthly" || frequency === "yearly") && (monthDay < 1 || monthDay > 31)) {
+      return t("cron.create.validation.monthDayInvalid", { defaultValue: "Day of month must be between 1 and 31." });
+    }
+    if (frequency === "yearly" && (month < 1 || month > 12)) {
+      return t("cron.create.validation.monthInvalid", { defaultValue: "Month must be between 1 and 12." });
+    }
+    if (frequency === "custom" && !isValidCronExpression(expression)) {
+      return t("cron.create.validation.expressionInvalid", {
+        defaultValue: "Enter a valid 5-field cron expression, e.g. 0 9 * * 1.",
+      });
     }
     return null;
   };
@@ -413,20 +561,31 @@ function CronCreateView({
       const schedule =
         scheduleKind === "once"
           ? { type: "once", runAt: new Date(`${scheduleDate}T${scheduleTime}`).toISOString() }
-          : { type: "cron", expression: buildDailyCronExpression(scheduleTime), timezone: timezone.trim() };
-      const response = await api.cronCreate({
+          : frequency === "custom"
+            ? { type: "cron", expression: expression.trim(), timezone: timezone.trim() }
+            : {
+                type: "cron",
+                expression: buildCronExpression(frequency, scheduleTime, weekdays, monthDay, month),
+                timezone: timezone.trim(),
+              };
+      const payload = {
         message: message.trim(),
-        projectKey,
         schedule,
         timezone: timezone.trim() || undefined,
-      });
+        projectKey,
+      };
+      const response = editingJob ? await api.cronUpdate(editingJob.id, payload) : await api.cronCreate(payload);
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
-      resetForm();
-      setSuccess(t("cron.create.success", { defaultValue: "Cron task created." }));
-      await onCreated();
+      if (editingJob) {
+        setSuccess(t("cron.edit.success", { defaultValue: "Cron task updated." }));
+      } else {
+        resetForm();
+        setSuccess(t("cron.create.success", { defaultValue: "Cron task created." }));
+      }
+      await onDone();
     } catch (caught) {
       setFormError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -434,15 +593,37 @@ function CronCreateView({
     }
   };
 
+  const toggleWeekday = (value: number) => {
+    setWeekdays(prev => (prev.includes(value) ? prev.filter(day => day !== value) : [...prev, value]));
+  };
+
   return (
     <div className="w-full space-y-5 px-8 py-5">
-      <div>
-        <h2 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
-          {t("cron.create.title", { defaultValue: "Create Cron Task" })}
-        </h2>
-        <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
-          {t("cron.create.subtitle", { defaultValue: "Schedule a one-time or recurring background prompt." })}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-[20px] font-semibold tracking-tight text-neutral-900 dark:text-neutral-100">
+            {editingJob
+              ? t("cron.edit.title", { defaultValue: "Edit Cron Task" })
+              : t("cron.create.title", { defaultValue: "Create Cron Task" })}
+          </h2>
+          <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
+            {editingJob
+              ? t("cron.edit.subtitle", { defaultValue: "Update the prompt or schedule of this background task." })
+              : t("cron.create.subtitle", {
+                  defaultValue: "Schedule a one-time or recurring background prompt.",
+                })}
+          </p>
+        </div>
+        {editingJob ? (
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 text-xxs text-neutral-600 transition hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={1.75} />
+            {t("cron.edit.actions.cancel", { defaultValue: "Back to list" })}
+          </button>
+        ) : null}
       </div>
 
       <form
@@ -482,7 +663,8 @@ function CronCreateView({
           <select
             value={projectKey}
             onChange={event => setProjectKey(event.target.value)}
-            className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+            disabled={!!editingJob}
+            className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
           >
             <option value="">{t("cron.create.placeholders.workspace", { defaultValue: "Select a workspace" })}</option>
             {projects.map(project => (
@@ -523,42 +705,193 @@ function CronCreateView({
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[1fr_1fr_260px]">
-          <label className="block">
-            <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
-              {t("cron.create.fields.date", { defaultValue: "Date" })}
-            </span>
-            <input
-              type="date"
-              value={scheduleDate}
-              min={formatDateLocal(new Date())}
-              disabled={scheduleKind === "cron"}
-              onChange={event => setScheduleDate(event.target.value)}
-              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500 dark:disabled:bg-neutral-900 dark:disabled:text-neutral-500"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
-              {t("cron.create.fields.time", { defaultValue: "Time" })}
-            </span>
-            <input
-              type="time"
-              value={scheduleTime}
-              onChange={event => setScheduleTime(event.target.value)}
-              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
-              {t("cron.create.fields.timezone", { defaultValue: "Timezone" })}
-            </span>
-            <input
-              value={timezone}
-              onChange={event => setTimezone(event.target.value)}
-              className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
-            />
-          </label>
-        </div>
+        {scheduleKind === "cron" ? (
+          <>
+            <div className="space-y-2.5">
+              <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                {t("cron.create.fields.frequency", { defaultValue: "Frequency" })}
+              </span>
+              <div className="flex w-fit flex-wrap rounded-md border border-neutral-200 bg-neutral-50 p-0.5 dark:border-neutral-800 dark:bg-neutral-900">
+                {FREQUENCIES.map(freq => (
+                  <button
+                    key={freq.id}
+                    type="button"
+                    onClick={() => setFrequency(freq.id)}
+                    className={cn(
+                      "inline-flex h-8 items-center rounded px-3 text-[12px] font-medium transition-colors",
+                      frequency === freq.id
+                        ? "bg-white text-brand-600 shadow-xs dark:bg-neutral-800 dark:text-brand-300"
+                        : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100",
+                    )}
+                  >
+                    {t(freq.labelKey, { defaultValue: freq.defaultLabel })}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {frequency === "custom" ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block">
+                    <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                      {t("cron.create.fields.expression", { defaultValue: "Cron Expression" })}
+                    </span>
+                    <input
+                      value={expression}
+                      onChange={event => setExpression(event.target.value)}
+                      className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 font-mono text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+                      placeholder="0 9 * * 1"
+                    />
+                  </label>
+                  <p className="mt-1 text-xxs text-neutral-400 dark:text-neutral-500">
+                    {t("cron.create.placeholders.expressionHint", {
+                      defaultValue: "minute hour day-of-month month day-of-week",
+                    })}
+                  </p>
+                </div>
+                <label className="block">
+                  <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                    {t("cron.create.fields.timezone", { defaultValue: "Timezone" })}
+                  </span>
+                  <input
+                    value={timezone}
+                    onChange={event => setTimezone(event.target.value)}
+                    className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-[1fr_260px]">
+                <label className="block">
+                  <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                    {t("cron.create.fields.time", { defaultValue: "Time" })}
+                  </span>
+                  <input
+                    type="time"
+                    value={scheduleTime}
+                    onChange={event => setScheduleTime(event.target.value)}
+                    className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                    {t("cron.create.fields.timezone", { defaultValue: "Timezone" })}
+                  </span>
+                  <input
+                    value={timezone}
+                    onChange={event => setTimezone(event.target.value)}
+                    className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+                  />
+                </label>
+              </div>
+            )}
+
+            {frequency === "weekly" ? (
+              <div className="space-y-2.5">
+                <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                  {t("cron.create.fields.weekdays", { defaultValue: "Days of Week" })}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {WEEKDAYS.map(day => {
+                    const active = weekdays.includes(day.value);
+                    return (
+                      <button
+                        key={day.value}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => toggleWeekday(day.value)}
+                        className={cn(
+                          "inline-flex h-8 items-center rounded-md border px-2.5 text-[12px] font-medium transition-colors",
+                          active
+                            ? "border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-400 dark:bg-brand-900/40 dark:text-brand-300"
+                            : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900",
+                        )}
+                      >
+                        {t(day.labelKey, { defaultValue: day.defaultLabel })}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {frequency === "monthly" || frequency === "yearly" ? (
+              <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
+                {frequency === "yearly" ? (
+                  <label className="block">
+                    <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                      {t("cron.create.fields.month", { defaultValue: "Month" })}
+                    </span>
+                    <select
+                      value={month}
+                      onChange={event => setMonth(Number(event.target.value))}
+                      className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+                    >
+                      {Array.from({ length: 12 }, (_, index) => index + 1).map(value => (
+                        <option key={value} value={value}>
+                          {t(`cron.create.months.${value}`, { defaultValue: String(value) })}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <label className="block">
+                  <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                    {t("cron.create.fields.monthDay", { defaultValue: "Day of Month" })}
+                  </span>
+                  <select
+                    value={monthDay}
+                    onChange={event => setMonthDay(Number(event.target.value))}
+                    className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+                  >
+                    {Array.from({ length: 31 }, (_, index) => index + 1).map(value => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-[1fr_1fr_260px]">
+            <label className="block">
+              <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                {t("cron.create.fields.date", { defaultValue: "Date" })}
+              </span>
+              <input
+                type="date"
+                value={scheduleDate}
+                min={formatDateLocal(new Date())}
+                onChange={event => setScheduleDate(event.target.value)}
+                className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                {t("cron.create.fields.time", { defaultValue: "Time" })}
+              </span>
+              <input
+                type="time"
+                value={scheduleTime}
+                onChange={event => setScheduleTime(event.target.value)}
+                className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+              />
+            </label>
+            <label className="block">
+              <span className="text-[13px] font-medium text-neutral-800 dark:text-neutral-200">
+                {t("cron.create.fields.timezone", { defaultValue: "Timezone" })}
+              </span>
+              <input
+                value={timezone}
+                onChange={event => setTimezone(event.target.value)}
+                className="dark:focus:ring-brand-950 mt-1.5 h-9 w-full rounded-md border border-neutral-200 bg-white px-3 text-[13px] text-neutral-900 outline-hidden transition focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 dark:focus:border-brand-500"
+              />
+            </label>
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2 pt-1">
           <button
@@ -571,7 +904,9 @@ function CronCreateView({
             ) : (
               <PlusCircle className="h-3.5 w-3.5" strokeWidth={1.75} />
             )}
-            {t("cron.create.actions.submit", { defaultValue: "Create Task" })}
+            {editingJob
+              ? t("cron.edit.actions.save", { defaultValue: "Save Changes" })
+              : t("cron.create.actions.submit", { defaultValue: "Create Task" })}
           </button>
         </div>
       </form>
@@ -615,12 +950,15 @@ function CronJobRow({
   job,
   t,
   onRefresh,
+  onEdit,
 }: {
   job: CronJobOverview;
   t: (key: string, opts?: Record<string, string>) => string;
   onRefresh: () => Promise<void>;
+  onEdit: (job: CronJobOverview) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const status = job.status === "running" ? "running" : "scheduled";
   const meta = CRON_STATUS_LABEL[status];
 
@@ -638,6 +976,7 @@ function CronJobRow({
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
+      setConfirmingDelete(false);
       await onRefresh();
     } catch {
       // The next refresh or global toast surface carries the visible error.
@@ -668,7 +1007,32 @@ function CronJobRow({
         </span>
       </div>
       <div className={cn(COL.actions, "flex items-center gap-1.5")}>
-        {status === "running" ? (
+        {confirmingDelete ? (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void runAction("delete")}
+              className="inline-flex h-7 items-center gap-1 rounded-md bg-red-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-600"
+            >
+              {busy ? (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
+              ) : (
+                <Trash2 className="h-3 w-3" strokeWidth={2} />
+              )}
+              {t("cron.delete.confirmAction", { defaultValue: "Delete Task" })}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmingDelete(false)}
+              className="inline-flex h-7 items-center gap-1 rounded-md border border-neutral-200 px-2 text-[11px] font-medium text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-900"
+            >
+              <X className="h-3 w-3" strokeWidth={2} />
+              {t("cron.delete.cancel", { defaultValue: "Cancel" })}
+            </button>
+          </>
+        ) : status === "running" ? (
           <button
             type="button"
             disabled={busy}
@@ -703,8 +1067,17 @@ function CronJobRow({
         )}
         <button
           type="button"
+          disabled={busy || status === "running" || confirmingDelete}
+          onClick={() => onEdit(job)}
+          className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-brand-700 dark:hover:text-brand-400"
+          title={t("cron.actions.edit", { defaultValue: "Edit" })}
+        >
+          <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
           disabled={busy}
-          onClick={() => void runAction("delete")}
+          onClick={() => setConfirmingDelete(true)}
           className="inline-flex h-7 items-center rounded-md border border-neutral-200 px-2 text-neutral-500 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-red-700 dark:hover:text-red-400"
           title={t("cron.actions.delete", { defaultValue: "Delete" })}
         >

@@ -678,6 +678,37 @@ app.post("/api/always-on/cron-jobs", authenticateToken, async (req, res) => {
   }
 });
 
+app.put("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req, res) => {
+  try {
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    const schedule = req.body?.schedule;
+    const timezone =
+      typeof req.body?.timezone === "string" && req.body.timezone.trim() ? req.body.timezone.trim() : undefined;
+
+    if (!message) {
+      res.status(400).json({ error: "Cron message is required." });
+      return;
+    }
+    if (!schedule || typeof schedule !== "object") {
+      res.status(400).json({ error: "Cron schedule is required." });
+      return;
+    }
+
+    const gateway = await getSatiGateway();
+    const result = await gateway.cronUpdate({
+      taskId: req.params.taskId,
+      message,
+      schedule,
+      timezone,
+      projectKey: req.body?.projectKey || req.query?.projectKey || undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    console.error("[always-on-cron-update] failed:", error);
+    res.status(500).json({ error: error?.message || "cron update failed" });
+  }
+});
+
 app.post("/api/always-on/cron-jobs/:taskId/run-now", authenticateToken, async (req, res) => {
   try {
     const gateway = await getSatiGateway();

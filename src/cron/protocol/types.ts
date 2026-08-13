@@ -92,6 +92,18 @@ export type CronCreateResult = {
   task: CronTask;
 };
 
+export type CronUpdateInput = {
+  taskId: string;
+  message: string;
+  schedule: CronCreateSchedule;
+  timezone?: string;
+  projectKey?: string;
+};
+
+export type CronUpdateResult = {
+  task: CronTask;
+};
+
 export type CronListInput = {
   projectKey?: string;
   includeHistory?: boolean;

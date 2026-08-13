@@ -20,6 +20,8 @@ import type {
   CronStopInput,
   CronStopResult,
   CronTask,
+  CronUpdateInput,
+  CronUpdateResult,
 } from "../protocol/types.js";
 import { createCronCreateTool } from "../tool/CronCreateTool.js";
 import { createCronDeleteTool } from "../tool/CronDeleteTool.js";
@@ -105,6 +107,14 @@ export class CronManager {
     const projectKey = requireProjectKey(input.projectKey);
     const runtime = await this.ensureRuntime(projectKey);
     return runtime.createTask({ ...input, projectKey });
+  }
+
+  async updateTask(input: CronUpdateInput): Promise<CronUpdateResult> {
+    const runtime = await this.resolveTaskRuntime(input.taskId, input.projectKey);
+    if (!runtime) {
+      throw new Error(`Cron task not found: ${input.taskId}`);
+    }
+    return runtime.updateTask(input);
   }
 
   async listTasks(input: CronListInput = {}): Promise<CronListResult> {

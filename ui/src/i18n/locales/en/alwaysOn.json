@@ -123,7 +123,8 @@
     "actions": {
       "delete": "Delete",
       "runNow": "Run Now",
-      "stop": "Stop"
+      "stop": "Stop",
+      "edit": "Edit"
     },
     "status": {
       "scheduled": "Scheduled",
@@ -139,11 +140,17 @@
         "scheduleType": "Schedule Type",
         "date": "Date",
         "time": "Time",
-        "timezone": "Timezone"
+        "timezone": "Timezone",
+        "frequency": "Frequency",
+        "weekdays": "Days of Week",
+        "monthDay": "Day of Month",
+        "month": "Month",
+        "expression": "Cron Expression"
       },
       "placeholders": {
         "prompt": "Describe what Sati should do when this task runs.",
-        "workspace": "Select a workspace"
+        "workspace": "Select a workspace",
+        "expressionHint": "minute hour day-of-month month day-of-week"
       },
       "schedule": {
         "once": "One-time",
@@ -155,11 +162,58 @@
         "dateRequired": "Date is required.",
         "timeRequired": "Time is required.",
         "timezoneRequired": "Timezone is required.",
-        "runAtFuture": "Run time must be in the future."
+        "runAtFuture": "Run time must be in the future.",
+        "weekdaysRequired": "Select at least one weekday.",
+        "monthDayInvalid": "Day of month must be between 1 and 31.",
+        "monthInvalid": "Month must be between 1 and 12.",
+        "expressionInvalid": "Enter a valid 5-field cron expression, e.g. 0 9 * * 1."
       },
       "actions": {
         "submit": "Create Task"
+      },
+      "frequency": {
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "monthly": "Monthly",
+        "yearly": "Yearly",
+        "custom": "Custom (cron)"
+      },
+      "weekdays": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "months": {
+        "1": "Jan",
+        "2": "Feb",
+        "3": "Mar",
+        "4": "Apr",
+        "5": "May",
+        "6": "Jun",
+        "7": "Jul",
+        "8": "Aug",
+        "9": "Sep",
+        "10": "Oct",
+        "11": "Nov",
+        "12": "Dec"
       }
+    },
+    "edit": {
+      "title": "Edit Cron Task",
+      "subtitle": "Update the prompt or schedule of this background task.",
+      "success": "Cron task updated.",
+      "actions": {
+        "save": "Save Changes",
+        "cancel": "Back to list"
+      }
+    },
+    "delete": {
+      "confirmAction": "Delete Task",
+      "cancel": "Cancel"
     }
   }
 }

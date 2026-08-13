@@ -955,6 +955,9 @@ function createFallbackGateway(sanitizeSessionIdForPath: (sessionId: string) => 
     cronCreate: async () => {
       throw new Error("Cron runtime is not configured.");
     },
+    cronUpdate: async () => {
+      throw new Error("Cron runtime is not configured.");
+    },
     cronList: async () => {
       throw new Error("Cron runtime is not configured.");
     },

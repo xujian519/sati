@@ -28,6 +28,7 @@ export type WsGatewayMethod =
   | "describe_server"
   | "active_turn_snapshot"
   | "cron_create"
+  | "cron_update"
   | "cron_list"
   | "cron_delete"
   | "cron_stop"

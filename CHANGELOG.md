@@ -2,6 +2,46 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.0.26 - 2026-08-13
+
+> **迭代基准（2026-08-13）**：v0.0.25 实测使用效果良好，作为体验基线；后续迭代版本须以不低于 v0.0.25 的稳定性与使用体验为基准。
+
+### Added
+- Cron 计划配置 UI（对齐 PilotDeck #482）：Recurring 支持每日/每周/每月/每年快捷计划（周几多选、每月几号、月份）与自定义五字段 cron 表达式（带校验）；任务编辑（表单回填 + 保存，running 任务禁止编辑）；删除增加行内两态确认；`cron_update` 网关方法（`src/cron` + gateway 桥 + `PUT /api/always-on/cron-jobs/:taskId`）
+
+### Changed
+- 品牌清理收尾：移除 pilotdeck 死代码桥/配置/hook（11 文件，4211 行）、历史消息 provider 标签统一为 "sati"、品牌前兼容 shim 标记 `legacy(pre-rebrand)`、清理注释与文档中过时 pilotdeck 引用
+- pnpm overrides 加固传递依赖（audit 27 → 1）
+
+### Fixed
+- 代理不可达时回退直连 fetch（`src/cli/proxy.ts` + `ui/server/utils/proxy.js` 双端）
+- clawhub CLI 定位脱离桌面端最小 GUI PATH
+
+### Test
+- 新增 history-frame provider 契约测试（`tests/web/history-frame-provider.spec.ts`）
+
+### Docs
+- 修正计划文档计数与悬空 env.ts 引用；记录 2026-08-13 技术债清理与 ui-source keep 决策（`docs/technical-debt-report.md`）
+
+## v0.0.25 - 2026-08-12
+
+### Added
+- personal_note 语义召回 + embeddings int8 双格式 + chunks 压缩
+- ego-browser 深度集成：egoSession 统一封装 + `patent_pdf_download` 下载拦截工具
+- 跨平台浏览器后端抽象与级联降级路由
+- google-patents learnings 站点包与安装脚本
+
+### Fixed
+- knowledge 审查修复：损坏 gzip 兜底 / 向量行防御 / 矩阵缓存失效 / 迁移原子化
+- embedding 一致性自检不再阻塞 gateway 启动
+- `patent_pdf_download` 统一拦截与 fetch 回退修复
+- pdfjs-dist wasmUrl 配置（JBIG2/OpenJPEG/QCMS 解码）并同步测试 mock
+
+### Docs
+- 新增 THIRD_PARTY_NOTICES；项目文档同步至 v0.0.24 实际代码状态
+- 专利检索与下载优先级统一为本地浏览器优先；跨平台浏览器自动化方案与 POC 报告
+- CONTRIBUTING 增加测试运行指引
+
 ## v0.0.24 - 2026-08-11
 
 ### Added

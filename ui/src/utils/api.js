@@ -189,6 +189,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  cronUpdate: (taskId, payload) =>
+    authenticatedFetch(`/api/always-on/cron-jobs/${encodeURIComponent(taskId)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
   cronRunNow: taskId =>
     authenticatedFetch(`/api/always-on/cron-jobs/${encodeURIComponent(taskId)}/run-now`, { method: "POST" }),
   cronStop: taskId =>

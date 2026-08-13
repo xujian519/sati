@@ -497,6 +497,7 @@ async function getProjectCronJobsOverview(projectName) {
         prompt: task.message || "",
         createdAt: task.createdAt,
         nextRunAt: task.nextRunAt,
+        timezone: task.timezone || (isCron ? task.schedule.timezone : undefined) || null,
         recurring: isCron,
         permanent: isCron,
         manualOnly: false,

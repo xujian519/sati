@@ -19,6 +19,8 @@ import type {
   CronStopInput,
   CronStopResult,
   CronTask,
+  CronUpdateInput,
+  CronUpdateResult,
   CronResultDeliveryHandler,
 } from "../protocol/types.js";
 import { resolveCronPaths, type CronPaths } from "../storage/CronPaths.js";
@@ -249,6 +251,43 @@ export class CronRuntime {
         scheduleType: schedule.type,
       },
     });
+    this.scheduler?.poke();
+    return { task };
+  }
+
+  async updateTask(input: CronUpdateInput): Promise<CronUpdateResult> {
+    if (!this.config.enabled) {
+      throw new Error("Cron is disabled. Enable it in sati.yaml to update tasks.");
+    }
+    const now = this.now();
+    const schedule = normalizeSchedule(input, this.config.timezone, now);
+    const timezone = schedule.type === "cron" ? schedule.timezone : (input.timezone ?? this.config.timezone);
+    const nextRunAt = computeNextRunAt(schedule, now, timezone);
+    if (!nextRunAt) {
+      throw new Error("Cron schedule does not produce a valid future run time.");
+    }
+    if (schedule.type === "once" && nextRunAt.getTime() < now.getTime()) {
+      throw new Error("One-time Cron tasks must be scheduled in the future.");
+    }
+    // running 检查与写入放在同一原子变更内，避免 check-then-write 窗口被调度器
+    // 并发触发（CronFire.replaceTask 写 running 状态）导致状态回写覆盖。
+    const task = await this.store.updateTask(input.taskId, current => {
+      if (current.status === "running") {
+        throw new Error("Cannot update a running Cron task; stop it before editing.");
+      }
+      return {
+        ...current,
+        message: input.message,
+        schedule,
+        timezone,
+        nextRunAt: nextRunAt.toISOString(),
+        scheduleComputationVersion: schedule.type === "cron" ? 2 : undefined,
+        updatedAt: now.toISOString(),
+      };
+    });
+    if (!task) {
+      throw new Error(`Cron task not found: ${input.taskId}`);
+    }
     this.scheduler?.poke();
     return { task };
   }

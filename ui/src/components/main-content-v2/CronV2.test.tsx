@@ -9,6 +9,7 @@ const apiMock = vi.hoisted(() => ({
   projects: vi.fn(),
   allCronJobs: vi.fn(),
   cronCreate: vi.fn(),
+  cronUpdate: vi.fn(),
   cronDelete: vi.fn(),
   cronRunNow: vi.fn(),
   cronStop: vi.fn(),
@@ -57,6 +58,7 @@ function setup(jobs: CronJobOverview[]) {
   apiMock.projects.mockResolvedValue(jsonResponse([project]));
   apiMock.allCronJobs.mockResolvedValue(jsonResponse({ jobs }));
   apiMock.cronCreate.mockResolvedValue(jsonResponse({ task: { taskId: "created-task" } }));
+  apiMock.cronUpdate.mockResolvedValue(jsonResponse({ task: { taskId: "updated-task" } }));
   apiMock.cronRunNow.mockResolvedValue(jsonResponse({ triggered: true }));
   apiMock.cronStop.mockResolvedValue(jsonResponse({ stopped: true }));
   apiMock.cronDelete.mockResolvedValue(jsonResponse({ deleted: true }));
@@ -205,16 +207,210 @@ describe("CronV2", () => {
     });
   });
 
-  it("deletes a cron job and refreshes", async () => {
+  it("deletes a cron job only after inline confirmation", async () => {
     setup([makeJob({ id: "job-delete", prompt: "Delete this job" })]);
 
     await screen.findByText("Delete this job");
     fireEvent.click(screen.getByTitle("Delete"));
+    expect(apiMock.cronDelete).not.toHaveBeenCalled();
+
+    // 确认前可取消
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(apiMock.cronDelete).not.toHaveBeenCalled();
+
+    // 再次进入确认态并确认删除
+    fireEvent.click(screen.getByTitle("Delete"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete Task" }));
 
     await waitFor(() => {
       expect(apiMock.cronDelete).toHaveBeenCalledWith("job-delete");
       expect(apiMock.allCronJobs).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("edits a recurring cron task with prefilled values and saves changes", async () => {
+    setup([
+      makeJob({
+        id: "job-edit",
+        prompt: "Edit me",
+        cron: "30 8 * * 1",
+        recurring: true,
+        timezone: "Asia/Shanghai",
+        nextRunAt: "2026-01-05T00:30:00.000Z",
+      }),
+    ]);
+
+    await screen.findByText("Edit me");
+    fireEvent.click(screen.getByTitle("Edit"));
+
+    await screen.findByText("Edit Cron Task");
+    // 回填断言：prompt / 时区 / 频率（30 8 * * 1 → weekly 周一 08:30）
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe("Edit me");
+    expect((screen.getByLabelText("Timezone") as HTMLInputElement).value).toBe("Asia/Shanghai");
+    expect((screen.getByLabelText("Time") as HTMLInputElement).value).toBe("08:30");
+    // 30 8 * * 1 → weekly 周一（value 1）选中
+    expect(screen.getByRole("button", { name: "Mon" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Tue" }).getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Updated prompt" } });
+    fireEvent.change(screen.getByLabelText("Time"), { target: { value: "09:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(apiMock.cronUpdate).toHaveBeenCalledWith(
+        "job-edit",
+        expect.objectContaining({
+          message: "Updated prompt",
+          projectKey: "/project/general",
+          schedule: expect.objectContaining({ type: "cron", expression: "0 9 * * 1" }),
+        }),
+      );
+      expect(apiMock.allCronJobs).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("creates a weekly cron task from selected weekdays", async () => {
+    setup([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Task" }));
+    await screen.findByText("Create Cron Task");
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Weekly digest" },
+    });
+    fireEvent.change(screen.getByLabelText("Workspace"), {
+      target: { value: "/project/general" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Recurring" }));
+    fireEvent.click(screen.getByRole("button", { name: "Weekly" }));
+    fireEvent.change(screen.getByLabelText("Time"), {
+      target: { value: "09:15" },
+    });
+    fireEvent.change(screen.getByLabelText("Timezone"), {
+      target: { value: "Asia/Shanghai" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mon" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fri" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Create Task" }).at(-1)!);
+
+    await waitFor(() => {
+      expect(apiMock.cronCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Weekly digest",
+          schedule: {
+            type: "cron",
+            expression: "15 9 * * 1,5",
+            timezone: "Asia/Shanghai",
+          },
+        }),
+      );
+    });
+  });
+
+  it("creates a cron task from a custom 5-field expression", async () => {
+    setup([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Task" }));
+    await screen.findByText("Create Cron Task");
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Custom schedule" },
+    });
+    fireEvent.change(screen.getByLabelText("Workspace"), {
+      target: { value: "/project/general" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Recurring" }));
+    fireEvent.click(screen.getByRole("button", { name: "Custom (cron)" }));
+    fireEvent.change(screen.getByLabelText("Cron Expression"), {
+      target: { value: "0 9 * * 1" },
+    });
+    fireEvent.change(screen.getByLabelText("Timezone"), {
+      target: { value: "UTC" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Create Task" }).at(-1)!);
+
+    await waitFor(() => {
+      expect(apiMock.cronCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Custom schedule",
+          schedule: { type: "cron", expression: "0 9 * * 1", timezone: "UTC" },
+        }),
+      );
+    });
+  });
+
+  it("falls back to custom frequency when editing an unparseable cron expression", async () => {
+    setup([
+      makeJob({
+        id: "job-unparseable",
+        prompt: "Range schedule",
+        cron: "0 9 * * 1-5",
+        recurring: true,
+        timezone: "UTC",
+      }),
+    ]);
+
+    await screen.findByText("Range schedule");
+    fireEvent.click(screen.getByTitle("Edit"));
+
+    await screen.findByText("Edit Cron Task");
+    // 不可解析表达式（1-5 区间）落到 custom，原始表达式保留
+    expect((screen.getByLabelText("Cron Expression") as HTMLInputElement).value).toBe("0 9 * * 1-5");
+
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Edited range" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(apiMock.cronUpdate).toHaveBeenCalledWith(
+        "job-unparseable",
+        expect.objectContaining({
+          schedule: expect.objectContaining({ type: "cron", expression: "0 9 * * 1-5" }),
+        }),
+      );
+    });
+  });
+
+  it("clears edit state when switching back to the task list tab", async () => {
+    setup([makeJob({ id: "job-tab", prompt: "Tab task", cron: "0 9 * * 1", recurring: true, timezone: "UTC" })]);
+
+    await screen.findByText("Tab task");
+    fireEvent.click(screen.getByTitle("Edit"));
+    await screen.findByText("Edit Cron Task");
+
+    // 切回列表再进创建 → 应为新建表单而非编辑残留
+    fireEvent.click(screen.getByRole("button", { name: "Task List" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Create Task" })[0]);
+
+    await screen.findByText("Create Cron Task");
+    expect(screen.queryByText("Edit Cron Task")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save Changes" })).toBeNull();
+  });
+
+  it("disables the workspace selector while editing", async () => {
+    setup([makeJob({ id: "job-ws", prompt: "Workspace locked", cron: "0 9 * * 1", recurring: true, timezone: "UTC" })]);
+
+    await screen.findByText("Workspace locked");
+    fireEvent.click(screen.getByTitle("Edit"));
+    await screen.findByText("Edit Cron Task");
+
+    expect((screen.getByLabelText("Workspace") as HTMLSelectElement).disabled).toBe(true);
+  });
+
+  it("validates weekly frequency requires at least one weekday", async () => {
+    setup([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Task" }));
+    await screen.findByText("Create Cron Task");
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "No weekday" },
+    });
+    fireEvent.change(screen.getByLabelText("Workspace"), {
+      target: { value: "/project/general" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Recurring" }));
+    fireEvent.click(screen.getByRole("button", { name: "Weekly" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Create Task" }).at(-1)!);
+
+    await screen.findByText("Select at least one weekday.");
+    expect(apiMock.cronCreate).not.toHaveBeenCalled();
   });
 
   it("shows an empty state when there are no active cron jobs", async () => {

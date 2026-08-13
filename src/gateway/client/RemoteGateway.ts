@@ -67,6 +67,8 @@ import type {
   CronRunNowResult,
   CronStopInput,
   CronStopResult,
+  CronUpdateInput,
+  CronUpdateResult,
 } from "../../cron/protocol/types.js";
 import { parseReloadConfigResult } from "../protocol/reloadConfigResult.js";
 import { GatewayWsClient, type GatewayWsNotificationHandler } from "./GatewayWsClient.js";
@@ -123,6 +125,10 @@ export class RemoteGateway implements Gateway {
 
   async cronCreate(input: CronCreateInput): Promise<CronCreateResult> {
     return (await this.client.request("cron_create", input)) as CronCreateResult;
+  }
+
+  async cronUpdate(input: CronUpdateInput): Promise<CronUpdateResult> {
+    return (await this.client.request("cron_update", input)) as CronUpdateResult;
   }
 
   async cronList(input: CronListInput): Promise<CronListResult> {

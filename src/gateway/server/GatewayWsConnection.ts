@@ -232,6 +232,8 @@ export class GatewayWsConnection {
         });
       case "cron_create":
         return this.options.gateway.cronCreate(frame.params as never);
+      case "cron_update":
+        return this.options.gateway.cronUpdate(frame.params as never);
       case "cron_list":
         return this.options.gateway.cronList(frame.params as never);
       case "cron_delete":

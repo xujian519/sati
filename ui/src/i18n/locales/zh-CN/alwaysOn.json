@@ -123,7 +123,8 @@
     "actions": {
       "delete": "删除",
       "runNow": "立即运行",
-      "stop": "停止"
+      "stop": "停止",
+      "edit": "编辑"
     },
     "status": {
       "scheduled": "已安排",
@@ -139,11 +140,17 @@
         "scheduleType": "任务类型",
         "date": "日期",
         "time": "时间",
-        "timezone": "时区"
+        "timezone": "时区",
+        "frequency": "频率",
+        "weekdays": "每周星期",
+        "monthDay": "每月几号",
+        "month": "月份",
+        "expression": "Cron 表达式"
       },
       "placeholders": {
         "prompt": "描述 Sati 在任务运行时应该做什么。",
-        "workspace": "选择工作区"
+        "workspace": "选择工作区",
+        "expressionHint": "分 时 日 月 周"
       },
       "schedule": {
         "once": "一次性",
@@ -155,11 +162,58 @@
         "dateRequired": "请选择日期。",
         "timeRequired": "请选择时间。",
         "timezoneRequired": "请填写时区。",
-        "runAtFuture": "运行时间必须晚于当前时间。"
+        "runAtFuture": "运行时间必须晚于当前时间。",
+        "weekdaysRequired": "请至少选择一天。",
+        "monthDayInvalid": "每月几号需在 1-31 之间。",
+        "monthInvalid": "月份需在 1-12 之间。",
+        "expressionInvalid": "请输入合法的五段式 cron 表达式，如 0 9 * * 1。"
       },
       "actions": {
         "submit": "创建任务"
+      },
+      "frequency": {
+        "daily": "每天",
+        "weekly": "每周",
+        "monthly": "每月",
+        "yearly": "每年",
+        "custom": "自定义（cron）"
+      },
+      "weekdays": {
+        "mon": "周一",
+        "tue": "周二",
+        "wed": "周三",
+        "thu": "周四",
+        "fri": "周五",
+        "sat": "周六",
+        "sun": "周日"
+      },
+      "months": {
+        "1": "1月",
+        "2": "2月",
+        "3": "3月",
+        "4": "4月",
+        "5": "5月",
+        "6": "6月",
+        "7": "7月",
+        "8": "8月",
+        "9": "9月",
+        "10": "10月",
+        "11": "11月",
+        "12": "12月"
       }
+    },
+    "edit": {
+      "title": "编辑 Cron 任务",
+      "subtitle": "更新该后台任务的提示词或计划。",
+      "success": "Cron 任务已更新。",
+      "actions": {
+        "save": "保存修改",
+        "cancel": "返回列表"
+      }
+    },
+    "delete": {
+      "confirmAction": "删除任务",
+      "cancel": "取消"
     }
   }
 }
