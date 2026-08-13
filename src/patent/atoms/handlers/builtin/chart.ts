@@ -88,26 +88,68 @@ const CHART_SCHEMA = {
 
 const MAX_RETRIES = 2;
 
-function parseTargets(raw: string): ChartTarget[] {
-  if (raw.trim().length === 0) return [];
+type TargetsParseResult = { targets: ChartTarget[]; error: string | null };
+
+/** 解析目标对象列表：损坏 JSON / 非数组时给出可操作的错误（而非静默当空处理）。 */
+function parseTargets(raw: string): TargetsParseResult {
+  if (raw.trim().length === 0) return { targets: [], error: null };
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed as ChartTarget[];
-    return [];
+    if (Array.isArray(parsed)) return { targets: parsed as ChartTarget[], error: null };
+    return { targets: [], error: "输入 chart_targets 不是数组" };
   } catch {
-    return [];
+    return { targets: [], error: "输入 chart_targets JSON 解析失败" };
   }
 }
 
-/** 三关校验：返回错误列表（空 = 全部通过）。 */
+/**
+ * 字段级形状防御：LLM 输出 malformed（缺字段 / 类型错误 / null 项）时返回
+ * 错误清单，让非法输出回到打回重做路径，而不是在校验器内 TypeError 崩溃
+ * （element-validator 的 stripWhitespace、mapping-machine 的 mapping 访问等）。
+ */
+function checkChartShape(elements: unknown[], rows: unknown[]): string[] {
+  const errors: string[] = [];
+  elements.forEach((el, i) => {
+    if (el === null || typeof el !== "object" || Array.isArray(el)) {
+      errors.push(`要素[${i}] 不是对象`);
+      return;
+    }
+    const e = el as Record<string, unknown>;
+    if (typeof e.id !== "string") errors.push(`要素[${i}] 缺少 id`);
+    if (typeof e.claimNo !== "number") errors.push(`要素[${i}] 缺少 claimNo`);
+    if (typeof e.text !== "string") errors.push(`要素[${i}] 缺少 text`);
+    if (typeof e.kind !== "string") errors.push(`要素[${i}] 缺少 kind`);
+  });
+  rows.forEach((row, i) => {
+    if (row === null || typeof row !== "object" || Array.isArray(row)) {
+      errors.push(`行[${i}] 不是对象`);
+      return;
+    }
+    const r = row as Record<string, unknown>;
+    if (typeof r.elementId !== "string") errors.push(`行[${i}] 缺少 elementId`);
+    if (typeof r.targetId !== "string") errors.push(`行[${i}] 缺少 targetId`);
+    if (typeof r.quote !== "string") errors.push(`行[${i}] 缺少 quote`);
+    if (typeof r.pinCite !== "string") errors.push(`行[${i}] 缺少 pinCite`);
+    if (typeof r.mapping !== "string") errors.push(`行[${i}] 缺少 mapping`);
+  });
+  return errors;
+}
+
+/**
+ * 三关校验：返回错误列表（空 = 全部通过）。sourceText 经 sourceCache 提供
+ * （execute 内预读一次，重做 attempt 间复用），读取失败统一报"源文件不可读"。
+ */
 function validateChart(
   elements: ClaimElement[],
   rows: ChartRow[],
   targets: ChartTarget[],
   mode: ChartMode,
   claim: string,
+  sourceCache: Map<string, string>,
 ): string[] {
   const errors: string[] = [];
+  errors.push(...checkChartShape(elements, rows));
+  if (errors.length > 0) return errors; // 形状非法：跳过语义校验（避免二次崩溃），回到打回重做
   const elResult = validateElements(elements, claim);
   if (!elResult.ok) errors.push(...elResult.errors);
   const targetById = new Map(targets.map(t => [t.id, t]));
@@ -115,15 +157,15 @@ function validateChart(
     errors.push(...validateRowMapping(row, targetById.get(row.targetId), mode));
     const target = targetById.get(row.targetId);
     if (target?.sourcePath) {
-      try {
-        const sourceText = readFileSync(target.sourcePath, "utf8");
-        const pin = validatePinCite(row.pinCite, sourceText);
-        if (!pin.ok) errors.push(`行 [${row.elementId}→${row.targetId}] ${pin.reason}`);
-        const quote = verifyQuoteInSource(row.quote, sourceText);
-        if (!quote.ok) errors.push(`行 [${row.elementId}→${row.targetId}] ${quote.reason}`);
-      } catch {
+      const sourceText = sourceCache.get(target.sourcePath);
+      if (sourceText === undefined) {
         errors.push(`行 [${row.elementId}→${row.targetId}] 源文件不可读: ${target.sourcePath}`);
+        continue;
       }
+      const pin = validatePinCite(row.pinCite, sourceText);
+      if (!pin.ok) errors.push(`行 [${row.elementId}→${row.targetId}] ${pin.reason}`);
+      const quote = verifyQuoteInSource(row.quote, sourceText);
+      if (!quote.ok) errors.push(`行 [${row.elementId}→${row.targetId}] ${quote.reason}`);
     }
   }
   return errors;
@@ -140,16 +182,33 @@ export class ClaimChartHandler implements StageHandler {
     if (claim.trim().length === 0) {
       return degraded("claim-chart", "权利要求为空");
     }
-    const targets = parseTargets(getStateString(state, "chart_targets"));
+    const targetsRes = parseTargets(getStateString(state, "chart_targets"));
+    if (targetsRes.error) return degraded("claim-chart", targetsRes.error);
+    const targets = targetsRes.targets;
     const modeRaw = getStateString(state, "chart_mode") || "invalidity";
     const mode = (CHART_MODES.includes(modeRaw) ? modeRaw : "invalidity") as ChartMode;
+
+    // 预读目标源文件一次（重做 attempt 间复用，避免循环内重复 I/O）；
+    // 读取失败不缓存，由 validateChart 对引用该源的每行报"源文件不可读"。
+    const sourceCache = new Map<string, string>();
+    for (const t of targets) {
+      if (!t.sourcePath) continue;
+      try {
+        sourceCache.set(t.sourcePath, readFileSync(t.sourcePath, "utf8"));
+      } catch {
+        // 源文件不可读：留空缓存，错误归因下沉到行级校验
+      }
+    }
 
     const targetLines =
       targets.length === 0
         ? "（无目标对象 —— 只拆分要素，逐行映射留待后续补充）"
         : targets
             .map(
-              t => `- ${t.id}（${t.kind === "prior-art" ? "对比文件" : "被控产品"}${t.title ? `：${t.title}` : ""}）`,
+              t =>
+                `- ${t.id || "(未命名目标)"}（${t.kind === "prior-art" ? "对比文件" : "被控产品"}${
+                  t.title ? `：${t.title}` : ""
+                }）`,
             )
             .join("\n");
     const basePrompt = [
@@ -187,7 +246,7 @@ export class ClaimChartHandler implements StageHandler {
       );
       const elements = parsed.elements as ClaimElement[];
       const rows = parsed.rows as ChartRow[];
-      const errors = validateChart(elements, rows, targets, mode, claim);
+      const errors = validateChart(elements, rows, targets, mode, claim, sourceCache);
       if (errors.length === 0) {
         const gaps = detectGaps(rows);
         const existing = provider?.caseId ? loadClaimChart(provider.caseId, "chart-1") : null;
@@ -220,6 +279,7 @@ export class ClaimChartHandler implements StageHandler {
       }
       prompt = `${basePrompt}\n\n【上一轮输出校验失败，请修正后重新输出】\n${errors.map(e => `- ${e}`).join("\n")}`;
     }
+    // 理论上不可达（循环内每个 attempt 均已 return），保留作防御性兜底
     return degraded("claim-chart", "重做循环异常退出");
   }
 }
