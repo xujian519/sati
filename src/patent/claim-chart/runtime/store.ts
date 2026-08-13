@@ -7,9 +7,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { caseOutputsDir } from "../../paths.js";
+import { assertSafeId } from "../../persist-utils.js";
 import type { ClaimChart } from "../protocol/types.js";
 
 export function chartFileBase(caseId: string, chartId: string): string {
+  // 防御路径注入：chartId 直接拼入文件名，仅允许安全字符集（对齐 persist-utils 惯例）。
+  assertSafeId(chartId, "chartId");
   return join(caseOutputsDir(caseId), `claim-chart-${chartId}`);
 }
 
