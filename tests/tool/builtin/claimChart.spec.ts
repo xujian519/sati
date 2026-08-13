@@ -88,8 +88,8 @@ test("createClaimChartTool.execute：mockModel 全流程 → content 摘要 + da
     assert.equal(res.metadata?.error, undefined);
     assert.equal(res.data?.chart.rows.length, 3);
     assert.equal(res.data?.gap_count, 1);
-    assert.ok(res.data?.json_path?.endsWith("claim-chart-chart-1.json"));
-    assert.ok(res.data?.md_path?.endsWith("claim-chart-chart-1.md"));
+    assert.ok(res.data?.json_path?.endsWith("claim-chart-chart-invalidity.json"));
+    assert.ok(res.data?.md_path?.endsWith("claim-chart-chart-invalidity.md"));
     // content 摘要：json 条目含 gap_count/gaps；text 条目含落盘路径
     const jsonEntry = res.content.find(c => c.type === "json");
     assert.ok(jsonEntry && jsonEntry.type === "json");

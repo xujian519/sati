@@ -190,7 +190,8 @@ export function createPatentWorkflowRunTool(
       }
 
       // 模型客户端：deps 优先，否则运行时上下文（AgentLoop 注入）；皆无时明确报错。
-      const provider = buildWorkflowProvider(deps, context);
+      // caseId 透出：claim-chart 等原子按 provider.caseId 落盘/核验合并。
+      const provider = buildWorkflowProvider(deps, { ...context, caseId: input.caseId });
       if (!provider) {
         return {
           content: [
@@ -315,7 +316,8 @@ async function executeGraphRun(
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
   const graphName = input.graph!;
   const def = DOMAIN_GRAPHS[graphName];
-  const provider = buildWorkflowProvider(deps, context);
+  // caseId 透出：claim-chart 等原子按 provider.caseId 落盘/核验合并（与 manifest 路径一致）。
+  const provider = buildWorkflowProvider(deps, { ...context, caseId: input.caseId });
   if (!provider) {
     return {
       content: [

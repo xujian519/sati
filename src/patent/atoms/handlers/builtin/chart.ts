@@ -16,12 +16,16 @@ import {
   type ChartTarget,
   type ClaimChart,
   type ClaimElement,
-  type TargetKind,
 } from "../../../claim-chart/protocol/types.js";
 import { validateElements } from "../../../claim-chart/runtime/element-validator.js";
 import { validateRowMapping } from "../../../claim-chart/runtime/mapping-machine.js";
 import { detectGaps } from "../../../claim-chart/runtime/gap-detector.js";
-import { validatePinCite, verifyQuoteInSource } from "../../../claim-chart/runtime/pin-cite-validator.js";
+import {
+  validatePinCite,
+  validatePinCiteFormat,
+  verifyQuoteInSource,
+  type PinCiteCheckResult,
+} from "../../../claim-chart/runtime/pin-cite-validator.js";
 import { loadClaimChart, saveClaimChart } from "../../../claim-chart/runtime/store.js";
 import { callLlm, degraded, parseLlmJson, requireLlm, resolveInputText } from "./llm.js";
 
@@ -105,11 +109,19 @@ function parseTargets(raw: string): TargetsParseResult {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return { targets: [], error: "输入 chart_targets 不是数组" };
-    const targets: ChartTarget[] = parsed.map((entry: unknown) => {
+    const targets: ChartTarget[] = [];
+    for (const entry of parsed) {
       const t = entry as Record<string, unknown>;
-      return {
+      // kind 归一化：外部契约用 product=被控产品；内核仅支持 prior-art/accused-product，
+      // 未知 kind 直接报错（fail-closed），避免静默落入"被控产品"渲染与校验分支。
+      const rawKind = t.kind === "product" ? "accused-product" : t.kind;
+      if (rawKind !== "prior-art" && rawKind !== "accused-product") {
+        const id = typeof t.id === "string" ? JSON.stringify(t.id) : "(未命名)";
+        return { targets: [], error: `目标 ${id} 的 kind 非法（仅支持 prior-art/product）: ${JSON.stringify(t.kind)}` };
+      }
+      targets.push({
         id: typeof t.id === "string" ? t.id : "",
-        kind: (t.kind === "product" ? "accused-product" : t.kind) as TargetKind,
+        kind: rawKind,
         ...(typeof t.title === "string" ? { title: t.title } : {}),
         sourcePath:
           typeof t.sourcePath === "string"
@@ -117,8 +129,8 @@ function parseTargets(raw: string): TargetsParseResult {
             : typeof t.source_path === "string"
               ? t.source_path
               : undefined,
-      };
-    });
+      });
+    }
     return { targets, error: null };
   } catch {
     return { targets: [], error: "输入 chart_targets JSON 解析失败" };
@@ -179,6 +191,11 @@ function validateChart(
   const targetById = new Map(targets.map(t => [t.id, t]));
   // 目标存在性仅在有目标对象时核验（"只拆要素"模式 targets 为空，无目标可对照，放行）。
   const targetsProvided = targets.length > 0;
+  if (!targetsProvided && rows.length > 0) {
+    // 元素模式：schema 强制 rows 数组但无目标可映射，LLM 产出的 targetId 无对应目标
+    // （幻影引用）不得进入 chart 与 gap 推导，打回重做（prompt 已要求输出空数组）。
+    errors.push("无目标对象（chart_targets 为空）时不得产出映射行，rows 必须为空数组");
+  }
   for (const row of rows) {
     // 引用完整性：LLM 幻觉出的未知 elementId/targetId 不得静默进入渲染与 gap
     // 推导（归入打回重做路径）。
@@ -188,6 +205,12 @@ function validateChart(
     if (targetsProvided && !targetById.has(row.targetId)) {
       errors.push(`行 [${row.elementId}→${row.targetId}] 引用了不存在的目标 ${row.targetId}`);
     }
+    // pin-cite 格式校验无条件执行（纯函数，不依赖源文；防幻觉引用最便宜的防线，
+    // 多数用户不传 source_path，段号/quote 校验仅在源文可读时追加）。
+    // 空 pinCite（trim 后为空）放行：与 quote 空串语义对齐，代表"未提供位置定位"。
+    const pinFormat: PinCiteCheckResult =
+      row.pinCite.trim().length > 0 ? validatePinCiteFormat(row.pinCite) : { ok: true };
+    if (!pinFormat.ok) errors.push(`行 [${row.elementId}→${row.targetId}] ${pinFormat.reason}`);
     errors.push(...validateRowMapping(row, targetById.get(row.targetId), mode));
     const target = targetById.get(row.targetId);
     if (target?.sourcePath) {
@@ -260,6 +283,7 @@ export class ClaimChartHandler implements StageHandler {
       "- 要素编号为 数字+小写字母（1a/1b/1c…），按顺序连续",
       "- 要素 text 必须为权利要求原文的连续子串（逐字引用，不得改写）",
       "- 每个要素对每个目标产出一行：quote 为目标对象对应内容的逐字引用（未找到/证据不足时为空串）",
+      "- 无目标对象（【目标对象】为空）时只输出 elements，rows 必须为空数组 []",
       "- pinCite 格式 [D1 段[0032] 图3]；mapping 取值：literal（字面对应）/literal-construction-dependent/doe（等同，仅侵权）/anticipation（单篇公开，仅对比文件）/obviousness-combination（组合公开，仅对比文件）/partial/not-found/needs-evidence/construction-dependent",
       `- 场景模式：${mode}`,
       "",
@@ -283,16 +307,25 @@ export class ClaimChartHandler implements StageHandler {
       const errors = validateChart(elements, rows, targets, mode, claim, sourceCache);
       if (errors.length === 0) {
         const gaps = detectGaps(rows);
-        const existing = provider?.caseId ? loadClaimChart(provider.caseId, "chart-1") : null;
-        const verifiedById = new Map(
-          (existing?.rows ?? []).filter(r => r.verified).map(r => [`${r.elementId}→${r.targetId}`, true]),
+        // 落盘/核验按 mode 区分 chartId：同一 caseId 下不同场景（invalidity /
+        // patentability / oa-response…）互不覆盖，verified 标记也不跨 mode 串扰。
+        const chartId = `chart-${mode}`;
+        const existing = provider?.caseId ? loadClaimChart(provider.caseId, chartId) : null;
+        // HITL 核验标记只迁移到内容完全一致的行（mapping/quote/pinCite 指纹）：
+        // 重跑产出变化后旧核验作废，不得静默迁移到未复核的新内容上。
+        const verifiedByContent = new Map(
+          (existing?.rows ?? [])
+            .filter(r => r.verified)
+            .map(r => [`${r.elementId}→${r.targetId}|${r.mapping}|${r.quote}|${r.pinCite}`, true]),
         );
         for (const row of rows) {
           row.state = row.mapping;
-          row.verified = verifiedById.has(`${row.elementId}→${row.targetId}`);
+          row.verified = verifiedByContent.has(
+            `${row.elementId}→${row.targetId}|${row.mapping}|${row.quote}|${row.pinCite}`,
+          );
         }
         const chart: ClaimChart = {
-          chartId: "chart-1",
+          chartId,
           mode,
           caseId: provider?.caseId ?? "",
           elements,
@@ -309,7 +342,7 @@ export class ClaimChartHandler implements StageHandler {
         // 落盘路径透出：saveClaimChart 返回 { jsonPath, mdPath }，供工具层
         // 透传给用户（无 caseId 时不写该键，避免空路径噪音）。
         if (provider?.caseId) {
-          state.claim_chart_paths = JSON.stringify(saveClaimChart(chart, provider.caseId));
+          state.claim_chart_paths = JSON.stringify(await saveClaimChart(chart, provider.caseId));
         }
         return state;
       }

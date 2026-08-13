@@ -4,10 +4,10 @@
  * + claim-chart-<chartId>.md（交付物：顶部 gap list + 免责声明 + 逐要素映射表）。
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { atomicWriteJson, assertSafeId } from "../../persist-utils.js";
 import { caseOutputsDir } from "../../paths.js";
-import { assertSafeId } from "../../persist-utils.js";
 import type { ClaimChart } from "../protocol/types.js";
 
 export function chartFileBase(caseId: string, chartId: string): string {
@@ -16,20 +16,28 @@ export function chartFileBase(caseId: string, chartId: string): string {
   return join(caseOutputsDir(caseId), `claim-chart-${chartId}`);
 }
 
-export function saveClaimChart(chart: ClaimChart, caseId: string): { jsonPath: string; mdPath: string } {
+export async function saveClaimChart(chart: ClaimChart, caseId: string): Promise<{ jsonPath: string; mdPath: string }> {
   const base = chartFileBase(caseId, chart.chartId);
   mkdirSync(caseOutputsDir(caseId), { recursive: true });
   const jsonPath = `${base}.json`;
   const mdPath = `${base}.md`;
-  writeFileSync(jsonPath, JSON.stringify(chart, null, 2), "utf8");
-  writeFileSync(mdPath, renderChartMarkdown(chart), "utf8");
+  // 原子写（tmp+rename）：并发/中断不产生半写 JSON（对齐 workflow-store / flexible-plan-store）。
+  await atomicWriteJson(jsonPath, JSON.stringify(chart, null, 2));
+  await atomicWriteJson(mdPath, renderChartMarkdown(chart));
   return { jsonPath, mdPath };
 }
 
 export function loadClaimChart(caseId: string, chartId: string): ClaimChart | null {
   const p = `${chartFileBase(caseId, chartId)}.json`;
   if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, "utf8")) as ClaimChart;
+  try {
+    const parsed = JSON.parse(readFileSync(p, "utf8")) as Partial<ClaimChart>;
+    // 最小形状守卫：损坏/人工编辑文件不崩溃（chart.ts 的 verified 合并依赖 rows 数组）。
+    if (!Array.isArray(parsed.rows) || !Array.isArray(parsed.elements)) return null;
+    return parsed as ClaimChart;
+  } catch {
+    return null;
+  }
 }
 
 function escapeCell(text: string): string {

@@ -328,6 +328,8 @@ export type WorkflowProviderDeps = {
 
 export type WorkflowProviderContext = {
   model?: SatiToolModelClient;
+  /** 案例标识：透出到 StageProvider.caseId，供 claim-chart 等原子落盘/核验合并。 */
+  caseId?: string;
 };
 
 /** 收集 stream 事件为完整文本（对齐 web_fetch 二次模型调用模式）。 */
@@ -401,5 +403,6 @@ export function buildWorkflowProvider(
       return collectModelText(model, request);
     },
     search: deps.search ?? createNuoSearchProvider().search,
+    caseId: context.caseId ?? "",
   };
 }

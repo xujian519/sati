@@ -476,3 +476,4 @@ export {
   type FigureRetrieveResult,
   type FigureRetrieveOptions,
 } from "./figure/index.js";
+export * from "./claim-chart/index.js";

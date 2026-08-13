@@ -18,8 +18,29 @@ export function stripWhitespace(text: string): string {
 
 const ELEMENT_ID_RE = /^(\d+)([a-z]+)$/;
 
+/**
+ * 按行首 "N. / N、 / N．" 切分权利要求文本为 { claimNo → 段落文本 }。
+ * 无编号（单条 claim）或非行首编号时返回空 Map，调用方回退全文校验。
+ */
+export function splitClaimSegments(claimText: string): Map<number, string> {
+  const segments = new Map<number, string>();
+  let current: { no: number; lines: string[] } | null = null;
+  for (const line of claimText.split(/\n/)) {
+    const m = /^\s*(\d+)[.、．]\s*/.exec(line);
+    if (m) {
+      if (current) segments.set(current.no, current.lines.join("\n"));
+      current = { no: Number(m[1]), lines: [line] };
+    } else if (current) {
+      current.lines.push(line);
+    }
+  }
+  if (current) segments.set(current.no, current.lines.join("\n"));
+  return segments;
+}
+
 export function validateElements(elements: ClaimElement[], claimText: string): ElementValidationResult {
   const errors: string[] = [];
+  const segments = splitClaimSegments(claimText);
   const normalizedClaim = stripWhitespace(claimText);
   if (normalizedClaim.length === 0) return { ok: false, errors: ["权利要求原文为空"] };
   if (elements.length === 0) return { ok: false, errors: ["要素列表为空"] };
@@ -51,8 +72,12 @@ export function validateElements(elements: ClaimElement[], claimText: string): E
       errors.push(`要素 ${el.id} 文本为空`);
       continue;
     }
-    if (!normalizedClaim.includes(text)) {
-      errors.push(`要素 ${el.id} 不是权利要求原文的连续子串: "${text.slice(0, 50)}…"`);
+    // 子串校验按要素归属的 claim 段落进行（claimNo 无对应段时回退全文，
+    // 兼容无编号的单条 claim 输入），防止跨 claim 借用他条文本蒙混过关。
+    const segment = segments.get(claimNo);
+    const scopeText = segment !== undefined ? stripWhitespace(segment) : normalizedClaim;
+    if (!scopeText.includes(text)) {
+      errors.push(`要素 ${el.id} 不是权利要求原文的连续子串（claim ${claimNo} 段内未找到）: "${text.slice(0, 50)}…"`);
     }
   }
 

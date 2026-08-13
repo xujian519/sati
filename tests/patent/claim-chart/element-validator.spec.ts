@@ -77,6 +77,19 @@ test("多 claim 共存且各自连续时通过，跨 claim 跳号报错", () => 
   }
 });
 
+test("要素文本必须来自自身 claim 段（跨 claim 借用被拒）", () => {
+  const multi = "1. 一种过滤装置，包括壳体和滤芯。\n2. 如权利要求1所述，所述滤芯含有活性炭。";
+  // 1a 的文本实际来自 claim 2 的段 → 应在 claim 1 段内找不到
+  const bad = validateElements([el("1a", "所述滤芯含有活性炭"), el("2a", "所述滤芯含有活性炭")], multi);
+  assert.equal(bad.ok, false);
+  if (!bad.ok) {
+    assert.ok(bad.errors.some(e => e.includes("claim 1 段内未找到")));
+  }
+  // 各自段内命中则通过
+  const ok = validateElements([el("1a", "包括壳体"), el("1b", "和滤芯"), el("2a", "所述滤芯含有活性炭")], multi);
+  assert.equal(ok.ok, true);
+});
+
 test("空白-only 要素文本报错", () => {
   const res = validateElements([el("1a", "   ")], CLAIM);
   assert.equal(res.ok, false);

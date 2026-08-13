@@ -106,13 +106,13 @@ test("chartFileBase 拒绝不安全 chartId（防路径注入）", () => {
   assert.doesNotThrow(() => chartFileBase("case-1", "a.b_c-1"));
 });
 
-test("save/load 往返一致（落盘 data/cases/<caseId>/outputs/）", () => {
+test("save/load 往返一致（落盘 data/cases/<caseId>/outputs/）", async () => {
   const prevCwd = process.cwd();
   const dir = mkdtempSync(join(tmpdir(), "cc-store-"));
   process.chdir(dir);
   try {
     const chart = makeChart();
-    const { jsonPath, mdPath } = saveClaimChart(chart, chart.caseId);
+    const { jsonPath, mdPath } = await saveClaimChart(chart, chart.caseId);
     assert.ok(jsonPath.includes(join("data", "cases", "case-1", "outputs")));
     assert.ok(readFileSync(mdPath, "utf8").length > 0);
     const loaded = loadClaimChart(chart.caseId, chart.chartId);

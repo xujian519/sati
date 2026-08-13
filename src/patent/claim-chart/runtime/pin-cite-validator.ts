@@ -10,6 +10,14 @@ export type PinCiteCheckResult = { ok: true } | { ok: false; reason: string };
 /** "[D1 段[0032] 图3]" / "[D1 段[0032]]"。 */
 const PIN_CITE_RE = /^\[(\S+)\s+段\[(\d+)\](?:\s+图(\d+))?\]$/;
 
+/** 纯格式校验（不依赖源文，无条件执行）："[D1 段[0032] 图3]" / "[D1 段[0032]]"。 */
+export function validatePinCiteFormat(pinCite: string): PinCiteCheckResult {
+  if (!PIN_CITE_RE.exec(pinCite.trim())) {
+    return { ok: false, reason: `pin-cite 格式非法（应为 [文档 段[xxxx] 图n]）: ${pinCite}` };
+  }
+  return { ok: true };
+}
+
 export function validatePinCite(pinCite: string, sourceText: string): PinCiteCheckResult {
   const m = PIN_CITE_RE.exec(pinCite.trim());
   if (!m) {

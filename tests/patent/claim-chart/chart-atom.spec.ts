@@ -119,11 +119,13 @@ test("重做超过 2 次仍失败 → 降级输出", async () => {
 test("字段级 malformed 输出（缺 text/null 项）→ 打回重做而非崩溃", async () => {
   const prompts: string[] = [];
   let calls = 0;
+  // 元素模式（targets 空）下好输出 = elements-only（rows 空数组，M2 语义）。
+  const elementsOnly = { elements: (goodChart() as { elements: unknown[] }).elements, rows: [] };
   const provider: StageProvider = {
     callLLM: async (prompt: string) => {
       calls += 1;
       prompts.push(prompt);
-      return calls === 1 ? JSON.stringify(malformedChart()) : JSON.stringify(goodChart());
+      return calls === 1 ? JSON.stringify(malformedChart()) : JSON.stringify(elementsOnly);
     },
   };
   const handler = new ClaimChartHandler();
@@ -337,33 +339,168 @@ test("caseId 提供时落盘 json，verified 行在重跑时保留", async () =>
   process.chdir(dir);
   try {
     const caseId = "case-1";
+    const chartId = "chart-invalidity"; // 按 mode 命名（M1 修复）
     const handler = new ClaimChartHandler();
     // 第一次运行：caseId 提供 → 落盘
     const p1: StageProvider = { caseId, callLLM: async () => JSON.stringify(goodChart()) };
     await handler.execute({
-      state: { claim: CLAIM, chart_targets: "[]", chart_mode: "invalidity" },
+      state: {
+        claim: CLAIM,
+        chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+        chart_mode: "invalidity",
+      },
       provider: p1,
     });
     // 人工核验第 1 行（1a→D1）
-    const saved = loadClaimChart(caseId, "chart-1");
+    const saved = loadClaimChart(caseId, chartId);
     assert.ok(saved);
     saved!.rows[0]!.verified = true;
     const { saveClaimChart } = await import("../../../src/patent/claim-chart/runtime/store.js");
-    saveClaimChart(saved!, caseId);
-    const again = loadClaimChart(caseId, "chart-1");
+    await saveClaimChart(saved!, caseId);
+    const again = loadClaimChart(caseId, chartId);
     assert.equal(again?.rows[0]?.verified, true); // verified 行可持久化往返
     // 第二次运行 handler（同 caseId）：loadClaimChart 合并 verified —— 已验证行保留、未验证行仍 false
     const p2: StageProvider = { caseId, callLLM: async () => JSON.stringify(goodChart()) };
     await handler.execute({
-      state: { claim: CLAIM, chart_targets: "[]", chart_mode: "invalidity" },
+      state: {
+        claim: CLAIM,
+        chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+        chart_mode: "invalidity",
+      },
       provider: p2,
     });
-    const merged = loadClaimChart(caseId, "chart-1");
-    assert.equal(merged?.rows[0]?.verified, true); // 1a→D1 核验标记重跑保留
+    const merged = loadClaimChart(caseId, chartId);
+    assert.equal(merged?.rows[0]?.verified, true); // 1a→D1 核验标记重跑保留（内容一致）
     assert.equal(merged?.rows[1]?.verified, false); // 1b→D1 未核验仍 false
     assert.equal(merged?.rows[2]?.verified, false);
   } finally {
     process.chdir(prevCwd);
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("重跑产出内容变化的行，verified 不迁移（M1 内容指纹）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-atom-"));
+  const prevCwd = process.cwd();
+  process.chdir(dir);
+  try {
+    const caseId = "case-1";
+    const chartId = "chart-invalidity";
+    const handler = new ClaimChartHandler();
+    await handler.execute({
+      state: {
+        claim: CLAIM,
+        chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+        chart_mode: "invalidity",
+      },
+      provider: { caseId, callLLM: async () => JSON.stringify(goodChart()) },
+    });
+    const saved = loadClaimChart(caseId, chartId)!;
+    saved.rows[0]!.verified = true;
+    const { saveClaimChart } = await import("../../../src/patent/claim-chart/runtime/store.js");
+    await saveClaimChart(saved, caseId);
+    // 重跑：1a 行 mapping 从 literal 变为 not-found（内容变化，人工核验应作废）
+    const changed = goodChart() as { rows: Array<Record<string, unknown>> };
+    changed.rows[0]!.mapping = "not-found";
+    changed.rows[0]!.quote = "";
+    await handler.execute({
+      state: {
+        claim: CLAIM,
+        chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+        chart_mode: "invalidity",
+      },
+      provider: { caseId, callLLM: async () => JSON.stringify(changed) },
+    });
+    const merged = loadClaimChart(caseId, chartId);
+    assert.equal(merged?.rows[0]?.verified, false); // 内容变化 → 旧核验作废
+    assert.equal(merged?.rows[1]?.verified, false);
+  } finally {
+    process.chdir(prevCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("同 caseId 不同 mode 落盘互不覆盖（chartId 按 mode 区分）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-atom-"));
+  const prevCwd = process.cwd();
+  process.chdir(dir);
+  try {
+    const caseId = "case-1";
+    const handler = new ClaimChartHandler();
+    await handler.execute({
+      state: {
+        claim: CLAIM,
+        chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+        chart_mode: "invalidity",
+      },
+      provider: { caseId, callLLM: async () => JSON.stringify(goodChart()) },
+    });
+    await handler.execute({
+      state: {
+        claim: CLAIM,
+        chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+        chart_mode: "patentability",
+      },
+      provider: { caseId, callLLM: async () => JSON.stringify(goodChart()) },
+    });
+    const invalidity = loadClaimChart(caseId, "chart-invalidity");
+    const patentability = loadClaimChart(caseId, "chart-patentability");
+    assert.ok(invalidity);
+    assert.ok(patentability);
+    assert.equal(invalidity!.mode, "invalidity");
+    assert.equal(patentability!.mode, "patentability");
+    assert.equal(loadClaimChart(caseId, "chart-1"), null); // 旧 chart-1 命名不再产生
+  } finally {
+    process.chdir(prevCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("元素模式（chart_targets 为空）产出幻影 rows → 打回重做（M2）", async () => {
+  const prompts: string[] = [];
+  let calls = 0;
+  // 第一次输出带 rows（targetId D1 无对应目标），第二次好输出 rows 为空数组
+  const goodElementsOnly = { elements: (goodChart() as { elements: unknown[] }).elements, rows: [] };
+  const provider: StageProvider = {
+    callLLM: async (prompt: string) => {
+      calls += 1;
+      prompts.push(prompt);
+      return calls === 1 ? JSON.stringify(goodChart()) : JSON.stringify(goodElementsOnly);
+    },
+  };
+  const handler = new ClaimChartHandler();
+  const state = await handler.execute({
+    state: { claim: CLAIM, chart_targets: "[]", chart_mode: "invalidity" },
+    provider,
+  });
+  assert.equal(calls, 2);
+  assert.match(prompts[1]!, /不得产出映射行/);
+  const doc = JSON.parse(state.claim_chart_doc as string) as ClaimChart;
+  assert.equal(doc.rows.length, 0); // 幻影 rows 未进入 chart
+});
+
+test("无 sourcePath 时 pin-cite 格式非法仍打回重做（m4 格式校验无条件）", async () => {
+  const prompts: string[] = [];
+  let calls = 0;
+  const badFormatChart = goodChart() as { rows: Array<Record<string, unknown>> };
+  badFormatChart.rows[0]!.pinCite = "[D1 段[0032]"; // 缺右括号：格式非法
+  const provider: StageProvider = {
+    callLLM: async (prompt: string) => {
+      calls += 1;
+      prompts.push(prompt);
+      return calls === 1 ? JSON.stringify(badFormatChart) : JSON.stringify(goodChart());
+    },
+  };
+  const handler = new ClaimChartHandler();
+  const state = await handler.execute({
+    state: {
+      claim: CLAIM,
+      chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+      chart_mode: "invalidity",
+    },
+    provider,
+  });
+  assert.equal(calls, 2);
+  assert.match(prompts[1]!, /pin-cite 格式非法/);
+  assert.equal(typeof state.claim_chart_doc, "string");
 });
