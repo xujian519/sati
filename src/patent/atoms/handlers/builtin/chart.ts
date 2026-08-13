@@ -16,6 +16,7 @@ import {
   type ChartTarget,
   type ClaimChart,
   type ClaimElement,
+  type TargetKind,
 } from "../../../claim-chart/protocol/types.js";
 import { validateElements } from "../../../claim-chart/runtime/element-validator.js";
 import { validateRowMapping } from "../../../claim-chart/runtime/mapping-machine.js";
@@ -90,13 +91,35 @@ const MAX_RETRIES = 2;
 
 type TargetsParseResult = { targets: ChartTarget[]; error: string | null };
 
-/** 解析目标对象列表：损坏 JSON / 非数组时给出可操作的错误（而非静默当空处理）。 */
+/**
+ * 解析目标对象列表：损坏 JSON / 非数组时给出可操作的错误（而非静默当空处理）。
+ *
+ * 字段归一化：外部输入契约（patent_workflow_run.chartTargets 文档）用
+ * snake_case（source_path）与 kind=product；内核 ChartTarget 用 camelCase
+ * （sourcePath）与 kind=accused-product。不归一化会让 sourcePath 恒为
+ * undefined → pin-cite/引用校验静默跳过（fail-open），防幻觉引用失效。
+ * 同时只产出 ChartTarget 形状（source_path 等冗余键不残留）。
+ */
 function parseTargets(raw: string): TargetsParseResult {
   if (raw.trim().length === 0) return { targets: [], error: null };
   try {
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return { targets: parsed as ChartTarget[], error: null };
-    return { targets: [], error: "输入 chart_targets 不是数组" };
+    if (!Array.isArray(parsed)) return { targets: [], error: "输入 chart_targets 不是数组" };
+    const targets: ChartTarget[] = parsed.map((entry: unknown) => {
+      const t = entry as Record<string, unknown>;
+      return {
+        id: typeof t.id === "string" ? t.id : "",
+        kind: (t.kind === "product" ? "accused-product" : t.kind) as TargetKind,
+        ...(typeof t.title === "string" ? { title: t.title } : {}),
+        sourcePath:
+          typeof t.sourcePath === "string"
+            ? t.sourcePath
+            : typeof t.source_path === "string"
+              ? t.source_path
+              : undefined,
+      };
+    });
+    return { targets, error: null };
   } catch {
     return { targets: [], error: "输入 chart_targets JSON 解析失败" };
   }
@@ -152,8 +175,19 @@ function validateChart(
   if (errors.length > 0) return errors; // 形状非法：跳过语义校验（避免二次崩溃），回到打回重做
   const elResult = validateElements(elements, claim);
   if (!elResult.ok) errors.push(...elResult.errors);
+  const elementById = new Map(elements.map(el => [el.id, el]));
   const targetById = new Map(targets.map(t => [t.id, t]));
+  // 目标存在性仅在有目标对象时核验（"只拆要素"模式 targets 为空，无目标可对照，放行）。
+  const targetsProvided = targets.length > 0;
   for (const row of rows) {
+    // 引用完整性：LLM 幻觉出的未知 elementId/targetId 不得静默进入渲染与 gap
+    // 推导（归入打回重做路径）。
+    if (!elementById.has(row.elementId)) {
+      errors.push(`行 [${row.elementId}→${row.targetId}] 引用了不存在的要素 ${row.elementId}`);
+    }
+    if (targetsProvided && !targetById.has(row.targetId)) {
+      errors.push(`行 [${row.elementId}→${row.targetId}] 引用了不存在的目标 ${row.targetId}`);
+    }
     errors.push(...validateRowMapping(row, targetById.get(row.targetId), mode));
     const target = targetById.get(row.targetId);
     if (target?.sourcePath) {

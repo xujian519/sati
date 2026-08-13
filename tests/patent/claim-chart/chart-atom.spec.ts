@@ -198,6 +198,116 @@ test("quote 不在源文（sourcePath 提供）→ 打回重做 → 第二次好
   }
 });
 
+test("parseTargets 归一化：source_path（snake_case）target 触发 pin-cite 校验（不静默跳过）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-src-"));
+  const sourcePath = join(dir, "d1.txt");
+  writeFileSync(sourcePath, SOURCE_TEXT, "utf8");
+  const prompts: string[] = [];
+  let calls = 0;
+  try {
+    const provider: StageProvider = {
+      callLLM: async prompt => {
+        prompts.push(prompt);
+        calls += 1;
+        return JSON.stringify(calls === 1 ? badPinChart() : goodChart());
+      },
+    };
+    const handler = new ClaimChartHandler();
+    const state = await handler.execute({
+      state: {
+        claim: CLAIM,
+        // 外部契约字段：source_path（非内核 sourcePath）——归一化后 pin-cite 校验必须生效
+        chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1", source_path: sourcePath }]),
+        chart_mode: "invalidity",
+      },
+      provider,
+    });
+    // 段号 9999 不在源文 → 第一次输出校验失败触发打回重做（归一化前会静默跳过校验直接成功）
+    assert.equal(calls, 2);
+    assert.match(prompts[0]!, /段号|pinCite|定位|不在|存在/);
+    assert.equal(typeof state.claim_chart_doc, "string"); // 第二次好输出成功
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("parseTargets 归一化：kind=product → accused-product（doe 行合法，anticipation 行报错）", async () => {
+  const prompts: string[] = [];
+  let calls = 0;
+  const provider: StageProvider = {
+    callLLM: async prompt => {
+      prompts.push(prompt);
+      calls += 1;
+      if (calls === 1) {
+        // 第一次输出：anticipation 行（仅 prior-art 目标合法）→ product 归一化后不是 prior-art → 校验失败
+        return JSON.stringify({
+          elements: (goodChart() as { elements: unknown[] }).elements,
+          rows: [
+            { elementId: "1a", targetId: "P1", quote: "壳体", pinCite: "", mapping: "anticipation" },
+            { elementId: "1b", targetId: "P1", quote: "", pinCite: "", mapping: "literal" },
+          ],
+        });
+      }
+      // 第二次输出：doe 行（侵权模式下合法）→ 成功
+      return JSON.stringify({
+        elements: (goodChart() as { elements: unknown[] }).elements,
+        rows: [
+          { elementId: "1a", targetId: "P1", quote: "壳体", pinCite: "", mapping: "doe" },
+          { elementId: "1b", targetId: "P1", quote: "滤芯", pinCite: "", mapping: "literal" },
+          { elementId: "1c", targetId: "P1", quote: "", pinCite: "", mapping: "not-found" },
+        ],
+      });
+    },
+  };
+  const handler = new ClaimChartHandler();
+  const state = await handler.execute({
+    state: {
+      claim: CLAIM,
+      chart_targets: JSON.stringify([{ id: "P1", kind: "product", title: "被控产品A" }]),
+      chart_mode: "infringement",
+    },
+    provider,
+  });
+  assert.equal(calls, 2);
+  assert.match(prompts[1]!, /仅适用于 prior-art/); // 重做 prompt 含错误：anticipation 行被拒（product ≠ prior-art）
+  assert.match(prompts[0]!, /被控产品A/); // 基础 prompt 中 kind 渲染为"被控产品"分支
+  const doc = JSON.parse(state.claim_chart_doc as string) as ClaimChart;
+  assert.equal(doc.mode, "infringement");
+  assert.equal(doc.targets[0]!.kind, "accused-product"); // 归一化为内核 kind
+  assert.equal(doc.rows[0]!.mapping, "doe"); // doe 行合法通过
+});
+
+test("引用完整性：行引用了不存在的 elementId/targetId → 打回重做", async () => {
+  const prompts: string[] = [];
+  let calls = 0;
+  const provider: StageProvider = {
+    callLLM: async prompt => {
+      prompts.push(prompt);
+      calls += 1;
+      if (calls === 1) {
+        const c = goodChart() as { elements: unknown[]; rows: Array<Record<string, unknown>> };
+        c.rows[0]!.elementId = "9z"; // 幻觉出的未知要素
+        c.rows[1]!.targetId = "D9"; // 幻觉出的未知目标
+        return JSON.stringify(c);
+      }
+      return JSON.stringify(goodChart());
+    },
+  };
+  const handler = new ClaimChartHandler();
+  const state = await handler.execute({
+    state: {
+      claim: CLAIM,
+      chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+      chart_mode: "invalidity",
+    },
+    provider,
+  });
+  assert.equal(calls, 2);
+  assert.match(prompts[1]!, /不存在的要素 9z/);
+  assert.match(prompts[1]!, /不存在的目标 D9/);
+  assert.equal(typeof state.claim_chart_doc, "string"); // 第二次好输出成功
+});
+
 test("sourcePath 文件不存在 → 错误消息含目标路径（重做超限降级）", async () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-src-"));
   const sourcePath = join(dir, "missing.txt"); // 不存在
