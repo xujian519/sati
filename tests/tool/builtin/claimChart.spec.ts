@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { claimChartBuild, type ClaimChartInput } from "../../../src/tool/builtin/claimChart.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { claimChartBuild, createClaimChartTool, type ClaimChartInput } from "../../../src/tool/builtin/claimChart.js";
+import { makeToolContext } from "../context-fixture.js";
+import type { CanonicalModelEvent, CanonicalModelRequest } from "../../../src/model/index.js";
+import type { SatiToolModelClient } from "../../../src/tool/protocol/types.js";
+
+function textDelta(text: string): CanonicalModelEvent {
+  return { type: "text_delta", text } as CanonicalModelEvent;
+}
+
+/** 按 prompt 内容分发响应的 mock model（对齐 patentWorkflowRun.spec.ts 模式）。 */
+function mockModel(respond: (prompt: string) => string): SatiToolModelClient {
+  return {
+    async *stream(request: CanonicalModelRequest) {
+      const prompt = request.messages[0]?.content?.[0]?.type === "text" ? request.messages[0].content[0].text : "";
+      yield textDelta(respond(prompt));
+    },
+  };
+}
 
 const CLAIM = "1. 一种过滤装置，包括壳体和滤芯，所述滤芯含有活性炭。";
 
@@ -48,4 +68,47 @@ test("claims 为空返回错误", async () => {
     { callLLM: async () => "{}" },
   );
   assert.equal(result.ok, false);
+});
+
+test("createClaimChartTool.execute：mockModel 全流程 → content 摘要 + data.chart + 落盘路径透出", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-tool-"));
+  const prevCwd = process.cwd();
+  process.chdir(dir);
+  try {
+    const tool = createClaimChartTool();
+    const res = await tool.execute(
+      {
+        mode: "invalidity",
+        claim_text: CLAIM,
+        targets: [{ id: "D1", kind: "prior-art", title: "对比文件1" }],
+        case_id: "case-1",
+      },
+      makeToolContext({ model: mockModel(() => JSON.stringify(goodChart())) }),
+    );
+    assert.equal(res.metadata?.error, undefined);
+    assert.equal(res.data?.chart.rows.length, 3);
+    assert.equal(res.data?.gap_count, 1);
+    assert.ok(res.data?.json_path?.endsWith("claim-chart-chart-1.json"));
+    assert.ok(res.data?.md_path?.endsWith("claim-chart-chart-1.md"));
+    // content 摘要：json 条目含 gap_count/gaps；text 条目含落盘路径
+    const jsonEntry = res.content.find(c => c.type === "json");
+    assert.ok(jsonEntry && jsonEntry.type === "json");
+    const summary = jsonEntry.value as { gap_count?: number; gaps?: unknown[] };
+    assert.equal(summary.gap_count, 1);
+    assert.equal(summary.gaps?.length, 1);
+    const textEntry = res.content.find(c => c.type === "text" && c.text.includes("落盘"));
+    assert.ok(textEntry && textEntry.type === "text");
+    assert.ok(textEntry.text.includes(".json"));
+  } finally {
+    process.chdir(prevCwd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("createClaimChartTool.execute：无 model 客户端时返回失败路径", async () => {
+  const tool = createClaimChartTool();
+  const res = await tool.execute({ mode: "invalidity", claim_text: CLAIM, targets: [] }, makeToolContext());
+  assert.equal(res.metadata?.error, "claim_chart_build_failed");
+  const text = res.content.find(c => c.type === "text");
+  assert.ok(text && text.type === "text" && text.text.includes("失败"));
 });

@@ -268,11 +268,16 @@ export class ClaimChartHandler implements StageHandler {
           gaps,
           draftNotice: DRAFT_NOTICE,
         };
-        if (provider?.caseId) saveClaimChart(chart, provider.caseId);
-        return {
+        const state: PipelineState = {
           claim_chart_doc: JSON.stringify(chart, null, 2),
           gap_list: JSON.stringify(chart.gaps),
         };
+        // 落盘路径透出：saveClaimChart 返回 { jsonPath, mdPath }，供工具层
+        // 透传给用户（无 caseId 时不写该键，避免空路径噪音）。
+        if (provider?.caseId) {
+          state.claim_chart_paths = JSON.stringify(saveClaimChart(chart, provider.caseId));
+        }
+        return state;
       }
       if (attempt >= MAX_RETRIES) {
         return degraded("claim-chart", `校验失败且重做超限（${MAX_RETRIES} 次）: ${errors.slice(0, 5).join("；")}`);

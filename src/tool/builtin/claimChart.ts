@@ -90,7 +90,10 @@ export async function claimChartBuild(
   }
   const doc = typeof state.claim_chart_doc === "string" ? state.claim_chart_doc : "{}";
   const chart = JSON.parse(doc) as ClaimChart;
-  return { ok: true, chart };
+  // 落盘路径透出（handler 在 caseId 存在时写 claim_chart_paths；无 caseId 不写该键）。
+  const rawPaths = typeof state.claim_chart_paths === "string" ? state.claim_chart_paths : undefined;
+  const paths = rawPaths !== undefined ? (JSON.parse(rawPaths) as { jsonPath: string; mdPath: string }) : undefined;
+  return { ok: true, chart, jsonPath: paths?.jsonPath, mdPath: paths?.mdPath };
 }
 
 export function createClaimChartTool(): SatiToolDefinition<ClaimChartInput, ClaimChartOutput> {
@@ -162,6 +165,8 @@ export function createClaimChartTool(): SatiToolDefinition<ClaimChartInput, Clai
       }
       const output: ClaimChartOutput = {
         chart: result.chart,
+        json_path: result.jsonPath,
+        md_path: result.mdPath,
         gap_count: result.chart.gaps.length,
       };
       return {
@@ -175,6 +180,10 @@ export function createClaimChartTool(): SatiToolDefinition<ClaimChartInput, Clai
               gaps: result.chart.gaps,
             },
           },
+          // 落盘路径透出（对齐 patent_workflow 的"持久化: <路径>"惯例；无 caseId 时不加该行）。
+          ...(result.jsonPath !== undefined && result.mdPath !== undefined
+            ? [{ type: "text" as const, text: `落盘: ${result.jsonPath} + ${result.mdPath}` }]
+            : []),
         ],
         data: output,
       };
