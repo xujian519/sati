@@ -170,6 +170,28 @@ function parseFallback(
       }
       continue;
     }
+    if (key === "media") {
+      if (!Array.isArray(value)) {
+        diagnostics.push({
+          code: "ROUTER_FALLBACK_MEDIA_NOT_ARRAY",
+          severity: "fatal",
+          path: "router.fallback.media",
+          message: "router.fallback.media must be an array of provider/model strings.",
+        });
+        continue;
+      }
+      const refs: RouterModelRef[] = [];
+      value.forEach((item: unknown, index: number) => {
+        const ref = consumeRef(item, `router.fallback.media[${index}]`, modelConfig, diagnostics);
+        if (ref) {
+          refs.push(ref);
+        }
+      });
+      if (refs.length > 0) {
+        fallback.media = refs;
+      }
+      continue;
+    }
     if (!SCENARIO_KEYS.includes(key as RouterScenarioType)) {
       diagnostics.push({
         code: "ROUTER_FALLBACK_UNKNOWN_SCENARIO",

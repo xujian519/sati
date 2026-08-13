@@ -84,9 +84,21 @@ router:
   enabled: true
   scenarios:
     default: _placeholder/_placeholder
+  # fallback 同时承担两个职责：
+  #   1) 故障降级链——主模型失败（billing/model_not_found 等）时按顺序逐个尝试；
+  #   2) 媒体升级候选——请求含附图/PDF 等媒体、而主模型不支持时，路由层会
+  #      在此链中查找第一个支持该媒体的模型（见 src/router/RouterRuntime.ts
+  #      的 rerouteDecisionForMedia）。
+  # 多模态模型推荐使用下方独立的 media 键（仅媒体升级，不参与故障降级，成本可控）：
+  #   media:
+  #     - moonshot/kimi-k3   # 视觉/多模态模型，替换为你的 provider/model
+  # 若未配置 media，媒体重路由回退到 default 链；此时请把视觉模型置于【末尾】，
+  # 避免昂贵的 thinking 视觉模型在故障降级时被意外优先调用。路由结果经
+  # mediaCapabilityRerouted 字段落盘到 ~/.sati/router/events.jsonl，可据此审计。
   fallback:
     default:
       - _placeholder/_placeholder
+      # - moonshot/kimi-k3   # 回退链兜底用视觉模型：取消注释并置于末尾（未配 media 时）
   zeroUsageRetry:
     enabled: true
     maxAttempts: 2

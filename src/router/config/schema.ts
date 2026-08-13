@@ -65,6 +65,8 @@ export type RouterStatsConfig = {
 export type RouterFallbackConfig = Partial<Record<RouterScenarioType, RouterModelRef[]>> & {
   /** LiteLLM-compatible max fallback model groups to try after the primary model. Default 5. */
   maxFallbacks?: number;
+  /** 跨场景多模态模型候选：仅用于媒体升级（含图/PDF/音频请求），不参与故障降级链。 */
+  media?: RouterModelRef[];
 };
 
 export const LITELLM_ROUTER_MAX_FALLBACKS = 5;

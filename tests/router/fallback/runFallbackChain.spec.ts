@@ -57,6 +57,15 @@ test("planFallback：未配置 maxFallbacks 时使用默认上限", () => {
   assert.equal(planFallback(config, "explicit").attempts.length, LITELLM_ROUTER_MAX_FALLBACKS);
 });
 
+test("planFallback：media 键不进故障降级链", () => {
+  const config: RouterFallbackConfig = {
+    default: [ref("a/x")],
+    media: [ref("v/vision")],
+  };
+  assert.deepEqual(planFallback(config, "explicit"), { attempts: [ref("a/x")] });
+  assert.deepEqual(planFallback(config, "subagent"), { attempts: [ref("a/x")] });
+});
+
 test("isFallbackEligible：可自我纠正的错误码可回退", () => {
   assert.equal(isFallbackEligible(error({ code: "invalid_tool_arguments", retryable: false })), true);
 });

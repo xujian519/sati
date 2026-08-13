@@ -38,6 +38,7 @@ import { classifyAndRoute } from "./tokenSaver/classifyAndRoute.js";
 import { countMessagesTokens, countResponseTokens, dispose as disposeTokenizer } from "./utils/countTokens.js";
 import { calculateCacheReadCost, calculateInputCost } from "./utils/modelPricing.js";
 import { collectRequiredInputModalities, missingInputModalities } from "./utils/mediaRequirements.js";
+import { resolveMediaReroute, buildMediaRerouteCandidates } from "./utils/mediaReroute.js";
 
 export type RouterRuntimeDeps = {
   modelRuntime: ModelRuntime;
@@ -131,61 +132,31 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
     return missingForModel(ref, required).length === 0;
   }
 
-  function fallbackCandidatesFor(scenarioType: RouterScenarioType): RouterModelRef[] {
-    const candidates: RouterModelRef[] = [];
-    const add = (refs: RouterModelRef[] | undefined) => {
-      for (const ref of refs ?? []) {
-        const id = ref.id || `${ref.provider}/${ref.model}`;
-        if (!candidates.some(candidate => candidate.provider === ref.provider && candidate.model === ref.model)) {
-          candidates.push({ ...ref, id });
-        }
-      }
-    };
-    add((config.fallback as Record<string, RouterModelRef[] | undefined> | undefined)?.[scenarioType]);
-    add(config.fallback?.default);
-    return candidates;
-  }
-
-  function findCompatibleFallback(
-    scenarioType: RouterScenarioType,
-    required: readonly InputModality[],
-  ): RouterModelRef | undefined {
-    return fallbackCandidatesFor(scenarioType).find(ref => supportsMediaRequirements(ref, required));
-  }
-
   function rerouteDecisionForMedia(
     decision: RouterDecision,
     messages: CanonicalModelRequest["messages"],
     mutations: RouterMutationsLog,
   ): RouterMutationsLog {
-    const required = collectRequiredInputModalities(messages);
-    if (required.length === 0) {
+    const result = resolveMediaReroute(
+      { provider: decision.provider, model: decision.model },
+      messages,
+      buildMediaRerouteCandidates(config.fallback, decision.scenarioType),
+      supportsMediaRequirements,
+    );
+
+    if (result.status !== "routed") {
       return mutations;
     }
 
-    const selected: RouterModelRef = {
-      id: `${decision.provider}/${decision.model}`,
-      provider: decision.provider,
-      model: decision.model,
-    };
-    if (supportsMediaRequirements(selected, required)) {
-      return mutations;
-    }
-
-    const replacement = findCompatibleFallback(decision.scenarioType, required);
-    if (!replacement) {
-      return mutations;
-    }
-
-    decision.provider = replacement.provider;
-    decision.model = replacement.model;
+    decision.provider = result.to.provider;
+    decision.model = result.to.model;
     decision.resolvedFrom = "fallback";
     return {
       ...mutations,
       mediaCapabilityRerouted: {
-        required: [...required],
-        from: selected.id,
-        to: replacement.id || `${replacement.provider}/${replacement.model}`,
+        required: result.required,
+        from: result.from,
+        to: result.to.id,
       },
     };
   }
