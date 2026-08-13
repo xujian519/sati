@@ -90,7 +90,8 @@ if (process.env.SATI_RUN_REAL_AGENT_LIFECYCLE_E2E === "1") {
   console.log("\n── L3b: Real agent lifecycle hooks ──");
   if (fs.existsSync(lifecycleHooks)) {
     try {
-      sh("pnpm", ["run", "e2e:real-agent-lifecycle-hooks"]);
+      // 直接调用 harness（不依赖 pnpm script）：与 L3a 一致，构建产物路径即可
+      sh("node", [lifecycleHooks], { SATI_RUN_REAL_AGENT_LIFECYCLE_E2E: "1" });
       ran.push("L3b (lifecycle-hooks)");
     } catch {
       console.log("  ⚠ lifecycle hooks E2E failed (often model tool_choice; L3a still counts)");

@@ -8,6 +8,14 @@
 #   SATI_RUN_FRAMEWORK_E2E=1 bash scripts/release-l3.sh
 #
 # Also runs real-agent-lifecycle-hooks when SATI_RUN_REAL_AGENT_LIFECYCLE_E2E=1.
+#
+# Note on harnesses: the real-model harnesses referenced here
+# (dist/tests/e2e/framework-wcb-smoke.test.js and
+# dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js) were removed from the
+# repo (see RELEASING.md). This script auto-detects whichever harnesses are
+# present in dist/tests and runs them. If a key is provided but no harness
+# exists, the gate FAILS (exit 1) — a release gate that silently passes without
+# doing its job is a false pass. Mirrors release-l3-win.mjs.
 # ============================================================================
 
 set -euo pipefail
@@ -48,17 +56,28 @@ cd "$REPO_ROOT"
 echo
 echo "${CYN}── L3a: Framework WCB smoke (Gateway + real model) ──${RST}"
 pnpm run build
-SATI_RUN_FRAMEWORK_E2E=1 node --test --test-force-exit --test-timeout 300000 \
-  dist/tests/e2e/framework-wcb-smoke.test.js
+RAN_L3A=0
+if [[ -f dist/tests/e2e/framework-wcb-smoke.test.js ]]; then
+  SATI_RUN_FRAMEWORK_E2E=1 node --test --test-force-exit --test-timeout 300000 \
+    dist/tests/e2e/framework-wcb-smoke.test.js
+  RAN_L3A=1
+else
+  echo "${YEL}⚠ dist/tests/e2e/framework-wcb-smoke.test.js not found in this build — skipped.${RST}"
+  echo "  (The real-model harness was removed repo-wide; see RELEASING.md.)"
+fi
 
 if [[ "${SATI_RUN_REAL_AGENT_LIFECYCLE_E2E:-}" == "1" ]]; then
   echo
   echo "${CYN}── L3b: Real agent lifecycle hooks ──${RST}"
-  if pnpm run e2e:real-agent-lifecycle-hooks; then
-    echo "  ${GRN}✓${RST} lifecycle hooks E2E passed"
+  if [[ -f dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js ]]; then
+    if SATI_RUN_REAL_AGENT_LIFECYCLE_E2E=1 node dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js; then
+      echo "  ${GRN}✓${RST} lifecycle hooks E2E passed"
+    else
+      echo "  ${YEL}⚠${RST} lifecycle hooks E2E failed (often model tool_choice; L3a still counts)"
+      L3B_FAILED=1
+    fi
   else
-    echo "  ${YEL}⚠${RST} lifecycle hooks E2E failed (often model tool_choice; L3a still counts)"
-    L3B_FAILED=1
+    echo "${YEL}⚠ dist/tests/agent/e2e/run-real-agent-lifecycle-hooks.js not found — skipped.${RST}"
   fi
 else
   echo
@@ -67,8 +86,16 @@ else
 fi
 
 echo
-if [[ "${L3B_FAILED:-0}" == "1" ]]; then
-  echo "${BLD}${YEL}✓ L3 core PASSED (L3a); L3b failed — see log above${RST}"
+if [[ "${RAN_L3A:-0}" == "1" ]]; then
+  if [[ "${L3B_FAILED:-0}" == "1" ]]; then
+    echo "${BLD}${YEL}✓ L3 core PASSED (L3a); L3b failed — see log above${RST}"
+    exit 0
+  fi
+  echo "${BLD}${GRN}✓ L3 E2E PASSED${RST}"
   exit 0
 fi
-echo "${BLD}${GRN}✓ L3 E2E PASSED${RST}"
+
+echo "${RED}✗ No real-model harness was available in this build — L3 ran nothing.${RST}"
+echo "  A key was provided but the gate could not do its job, so this is a FAILURE,"
+echo "  not a pass (mirrors release-l3-win.mjs). Restore the harness or skip L3."
+exit 1

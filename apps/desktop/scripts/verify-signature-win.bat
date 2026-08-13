@@ -89,7 +89,8 @@ echo.
 echo  What this means:
 echo   - If Status = NotSigned: the installer was built without a code-signing
 echo     certificate (build-win.bat without CSC_LINK). Double-clicking it shows
-echo     "Windows 已保护你的电脑" → 更多信息 → 仍要运行.
+echo     a SmartScreen "Windows protected your PC" prompt; click "More info"
+echo     then "Run anyway" to proceed.
 echo   - If Status = UnknownError / HashMismatch: the file may be corrupted or
 echo     tampered — re-download and re-run this script before installing.
 echo   - If the publisher does NOT match Sati, do NOT install this file.

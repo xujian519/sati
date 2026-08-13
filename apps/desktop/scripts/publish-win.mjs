@@ -130,9 +130,11 @@ if (gitSha === null) {
 }
 
 // ── Collect installers ──
+// 排除 Sati-latest-* permalink 副本：它们由本脚本末尾生成并单独上传，重跑发布时
+// 若被当作普通资产收集会与新版同名文件重复冲突。
 const exes = fs
   .readdirSync(distDir)
-  .filter(f => /^Sati-.*-win-.*\.exe$/.test(f))
+  .filter(f => /^Sati-.*-win-.*\.exe$/.test(f) && !/^Sati-latest-/.test(f))
   .map(f => path.join(distDir, f));
 if (exes.length === 0) {
   fail(`No Sati-*-win-*.exe found in ${distDir}`);

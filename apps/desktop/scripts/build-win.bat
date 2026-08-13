@@ -210,6 +210,13 @@ for %%p in (better-sqlite3 sharp node-pty mupdf) do (
     echo   Rebuilding %%p...
     "%RESOURCES%\node-bin\node.exe" "%NPM_CLI%" rebuild %%p
     if errorlevel 1 (
+        if "%%p"=="sharp" (
+            echo   ERROR: sharp rebuild failed. sharp's libvips prebuilt binaries are
+            echo          fetched by its install script, which pnpm --ignore-scripts
+            echo          skipped; without a working rebuild the packaged app crashes
+            echo          on image processing. Aborting build.
+            exit /b 1
+        )
         echo   WARN: rebuild failed for %%p - using the shipped prebuilt binary.
         echo   WARN: the npm packages ship ABI-correct prebuilds, so this is not fatal.
         echo   WARN: verify-installer.bat L1 will confirm it loads under the bundled Node.
