@@ -19,6 +19,7 @@ import { pdca } from "./components/pdca.js";
 import { fishbone } from "./components/fishbone.js";
 import { firstPrinciples } from "./components/first-principles.js";
 import { sixHats } from "./components/six-hats.js";
+import { triz } from "./components/triz.js";
 
 /** Default component set covering the core analytical/classical scenarios. */
 export const DEFAULT_METHODOLOGY_COMPONENTS: MethodologyComponent[] = [
@@ -29,6 +30,7 @@ export const DEFAULT_METHODOLOGY_COMPONENTS: MethodologyComponent[] = [
   fishbone,
   firstPrinciples,
   sixHats,
+  triz,
 ];
 
 export class MethodologyRegistry {
