@@ -118,8 +118,11 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
         new PatentMemoryProvider({ kgAdapter: new PatentKgAdapter(kgStore), ...patentProviderOptions }),
       );
     } catch (error) {
-      // 与既有行为一致：KG 打开失败跳过专利 provider（wiki/IPC 随 KG 缺失路径兜底）
-      options.logger?.warn?.(`patent_kg.db 打开失败，跳过专利知识图谱: ${errorMessage(error)}`);
+      // A2 修复：KG 打开失败时降级为"无图谱"专利 provider（wiki/IPC 语义检索仍
+      // 可用），与 patentKgDb 未配置的 else 分支一致——不再整体丢失专利 provider
+      // （诊断 patent-ipc/patent-wiki 恒 ready，须与装配行为对齐）。
+      options.logger?.warn?.(`patent_kg.db 打开失败，降级为无图谱专利 provider: ${errorMessage(error)}`);
+      pushPatentProvider(new PatentMemoryProvider(patentProviderOptions));
     }
   } else {
     pushPatentProvider(new PatentMemoryProvider(patentProviderOptions));

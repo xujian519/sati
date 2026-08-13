@@ -12,7 +12,7 @@ import type { KnowledgeRuntimeStatsSnapshot } from "./shared/knowledge-stats.js"
 export type KnowledgeCapabilityStatus = "ready" | "missing" | "disabled";
 
 /** knowledge.db 关键表行数探测（进程内缓存：同进程知识库静态）。 */
-type KnowledgeDbProbe = { kgNodes: number; lawArticles: number; embeddings: number };
+type KnowledgeDbProbe = { kgNodes: number; lawArticles: number; embeddings: number; documents: number };
 
 const probeCache = new Map<string, KnowledgeDbProbe>();
 
@@ -27,7 +27,9 @@ function probeKnowledgeDb(dbPath: string): KnowledgeDbProbe | null {
         db.prepare("SELECT COUNT(*) c FROM documents WHERE doc_type = 'law_article'").get() as { c: number }
       ).c;
       const embeddings = (db.prepare("SELECT COUNT(*) c FROM embeddings").get() as { c: number }).c;
-      const probe = { kgNodes, lawArticles, embeddings };
+      // documents 全表计数：与 CaseLawSearchEngine.count()（装配判据）同一语句语义。
+      const documents = (db.prepare("SELECT COUNT(*) c FROM documents").get() as { c: number }).c;
+      const probe = { kgNodes, lawArticles, embeddings, documents };
       probeCache.set(dbPath, probe);
       return probe;
     } finally {
@@ -119,8 +121,20 @@ export function resolveKnowledgeCapabilities(
     {
       id: "case-law",
       label: "专利判例全文",
-      status: paths.caseDb ? "ready" : "missing",
-      detail: paths.caseDb ? undefined : "SATI_CASE_DB",
+      // 与 assemble 对齐（A1/A5 修复）：knowledge.db 主路径（documents 行数与
+      // CaseLawSearchEngine.count() 同一语义）优先——
+      //   probe.documents>0       → ready（knowledge.db 为准，与装配一致）
+      //   probe 成功但 documents=0 → missing（空库不误报）
+      //   probe 失败且主库存在     → missing（库损坏/表缺失，装配大概率失败）
+      //   无主库                   → 回退 SATI_CASE_DB 独立库判定（legacy）
+      status: probe?.documents ? "ready" : probe === null ? (paths.caseDb ? "ready" : "missing") : "missing",
+      detail: probe?.documents
+        ? `判例库 ${probe.documents.toLocaleString()} 篇（knowledge.db）`
+        : probe === null
+          ? paths.knowledgeDb
+            ? "knowledge.db 不可用（打开失败或缺少 documents 表）"
+            : "SATI_CASE_DB"
+          : "knowledge.db 无判例文档（documents 为空）",
     },
     {
       id: "semantic-embedding",
@@ -146,8 +160,21 @@ export function resolveKnowledgeCapabilities(
       detail: options.rerankConfigured ? undefined : "memory.embedding.rerank",
     },
   ];
-  // 运行时能力项：仅在有运行时快照时追加（探测结果来自 provider 打点）。
+  // 运行时降级联动（H3）：legal/case 引擎 FTS5 粘性降级（查询期异常）时，
+  // 静态能力项如实降级——桌面端无 FTS5 的 Node 下不再误报 ready。
   const runtime = options.runtime;
+  if (runtime) {
+    for (const cap of capabilities) {
+      if (cap.id === "legal-fts" && runtime.legalFtsDegraded) {
+        cap.status = "missing";
+        cap.detail = "FTS5 不可用，已降级 LIKE（运行中降级）";
+      } else if (cap.id === "case-law" && runtime.caseLawFtsDegraded) {
+        cap.status = "missing";
+        cap.detail = "FTS5 不可用，已降级 LIKE（运行中降级）";
+      }
+    }
+  }
+  // 运行时能力项：仅在有运行时快照时追加（探测结果来自 provider 打点）。
   if (runtime && runtime.kgFtsMode !== "unknown") {
     const mode = runtime.kgFtsMode;
     capabilities.push({

@@ -72,6 +72,30 @@ test("knowledge-law-search: FTS 命中并按文档去重", t => {
   assert.ok(hits[0]!.content!.includes("说明书应当"), "content 应为命中/最长 chunk");
 });
 
+test("knowledge-law-search: LIKE 降级打在内容表——contentless 虚表 LIKE 零结果陷阱回归", t => {
+  // H6：社区证实 contentless trigram 虚表上 LIKE 返回零结果（无原文可校验）——
+  // 降级路径必须打在内容表（documents/chunks），否则短词/无 FTS 场景会静默空返回。
+  const { search, dir } = createStore();
+  t.after(() => {
+    search.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const db = new DatabaseSync(join(dir, "knowledge.db"), { readOnly: true });
+  try {
+    const ftsLike = db.prepare("SELECT count(*) c FROM docs_fts WHERE docs_fts LIKE '%说明书%'").get() as {
+      c: number;
+    };
+    assert.equal(ftsLike.c, 0, "contentless 虚表 LIKE 应零结果（陷阱确认）");
+  } finally {
+    db.close();
+  }
+  // 引擎 LIKE 降级（2 字查询 < FTS_MIN_RUNES）：打在内容表，命中非零。
+  // 注：LIKE 路径匹配"最长 chunk"（子查询取片段），fixture 最长 chunk 含"专利"。
+  const hits = search.search("专利", { limit: 5 });
+  assert.ok(hits.length > 0, "LIKE 降级应命中内容表数据");
+  assert.ok(hits[0]!.content!.includes("专利"), "片段应含命中词（最长 chunk 回源）");
+});
+
 test("knowledge-law-search: 非 law_article 文档不命中", t => {
   const s = withStore(t);
   const hits = s.search("无效决定");

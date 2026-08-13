@@ -41,6 +41,12 @@ export type KnowledgeRuntimeStatsSnapshot = {
   caseLawInjects: number;
   /** embedding 查询端与 knowledge.db 库向量一致性自检结果（未自检时 undefined）。 */
   embeddingConsistency?: { ok: boolean; meanCosine: number };
+  /** 法规全文引擎 FTS5 已粘性降级（查询期异常后永久走 LIKE；false=未降级/无引擎）。 */
+  legalFtsDegraded: boolean;
+  /** 判例全文引擎 FTS5 已粘性降级（同上）。 */
+  caseLawFtsDegraded: boolean;
+  /** 关键词检索 LIKE 回退累计次数（短词/未命中/FTS 降级等设计内路径）。 */
+  likeFallbacks: number;
 };
 
 export class KnowledgeRuntimeStats {
@@ -56,6 +62,9 @@ export class KnowledgeRuntimeStats {
   private caseLawAvailable = false;
   private caseLawInjects = 0;
   private embeddingConsistency?: { ok: boolean; meanCosine: number };
+  private legalFtsDegraded = false;
+  private caseLawFtsDegraded = false;
+  private likeFallbacks = 0;
 
   recordCacheHit(): void {
     this.cacheHits += 1;
@@ -110,6 +119,21 @@ export class KnowledgeRuntimeStats {
     this.embeddingConsistency = result;
   }
 
+  /** 法规全文引擎 FTS5 粘性降级（引擎查询期异常后打点一次）。 */
+  setLegalFtsDegraded(degraded: boolean): void {
+    this.legalFtsDegraded = degraded;
+  }
+
+  /** 判例全文引擎 FTS5 粘性降级（同上）。 */
+  setCaseLawFtsDegraded(degraded: boolean): void {
+    this.caseLawFtsDegraded = degraded;
+  }
+
+  /** 关键词检索 LIKE 回退一次（短词/未命中/FTS 降级等设计内路径）。 */
+  recordLikeFallback(): void {
+    this.likeFallbacks += 1;
+  }
+
   /** 只读快照（每次新建对象，消费方可安全序列化）。 */
   snapshot(): KnowledgeRuntimeStatsSnapshot {
     return {
@@ -125,6 +149,9 @@ export class KnowledgeRuntimeStats {
       caseLawAvailable: this.caseLawAvailable,
       caseLawInjects: this.caseLawInjects,
       embeddingConsistency: this.embeddingConsistency,
+      legalFtsDegraded: this.legalFtsDegraded,
+      caseLawFtsDegraded: this.caseLawFtsDegraded,
+      likeFallbacks: this.likeFallbacks,
     };
   }
 }

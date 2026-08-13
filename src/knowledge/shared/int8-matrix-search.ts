@@ -9,7 +9,7 @@
  *     chunk 范数在加载时预计算，文档得分取该文档所有 chunk 的最高余弦。
  */
 
-import { int8Dot, l2Norm, quantizeInt8, topK } from "../../context/vector/cosine.js";
+import { l2Norm, quantizeInt8 } from "../../context/vector/cosine.js";
 
 export type Int8ChunkMatrix = {
   dimensions: number;
@@ -19,6 +19,8 @@ export type Int8ChunkMatrix = {
   vectors: Int8Array;
   /** 每个 chunk 的 L2 范数（加载时预计算）。 */
   norms: Float32Array;
+  /** 每个 chunk 的 max|v|（Hölder 上界剪枝用，int8 域 ≤127）。 */
+  maxAbs: Int8Array;
   chunkCount: number;
 };
 
@@ -44,6 +46,7 @@ export function emptyChunkMatrix(dimensions: number): Int8ChunkMatrix {
     docOffsets: new Map(),
     vectors: new Int8Array(0),
     norms: new Float32Array(0),
+    maxAbs: new Int8Array(0),
     chunkCount: 0,
   };
 }
@@ -62,6 +65,7 @@ export function loadChunkMatrix(
   const docOffsets = new Map<string, { start: number; end: number }>();
   const chunkBuffers: Int8Array[] = [];
   const norms: number[] = [];
+  const maxAbs: number[] = [];
 
   let currentDocId: string | null = null;
   let currentStart = 0;
@@ -77,6 +81,13 @@ export function loadChunkMatrix(
       const chunk = decode(row.vector);
       chunkBuffers.push(chunk);
       norms.push(l2Norm(chunk));
+      // Hölder 上界剪枝预计算：每 chunk 的 max|v|（int8 域 ≤127）。
+      let chunkMaxAbs = 0;
+      for (let i = 0; i < chunk.length; i += 1) {
+        const a = Math.abs(chunk[i] ?? 0);
+        if (a > chunkMaxAbs) chunkMaxAbs = a;
+      }
+      maxAbs.push(chunkMaxAbs);
       if (row.document_id !== currentDocId) {
         if (currentDocId !== null) {
           docOffsets.set(currentDocId, { start: currentStart, end: index });
@@ -110,6 +121,7 @@ export function loadChunkMatrix(
     docOffsets,
     vectors,
     norms: Float32Array.from(norms),
+    maxAbs: Int8Array.from(maxAbs),
     chunkCount: index,
   };
 }
@@ -117,6 +129,15 @@ export function loadChunkMatrix(
 /**
  * 语义 top-k：queryVector（float）与已加载 chunk 求 int8 余弦，
  * 文档得分 = 其 chunk 最高余弦。无数据、维度不匹配或查询过短返回空数组。
+ *
+ * 无损剪枝：候选超过 limit 后，维护在线阈值 θ = 当前第 limit 大文档得分；
+ * 对每个 chunk 用 Hölder 上界 `dot_so_far + ‖q‖₁·maxAbs < θ·‖q‖₂·‖d‖₂` 提前
+ * 终止点积（跳过"确定不可能进 topK"的 chunk）。上界为严格上界且 θ 单调不减，
+ * 跳过条件与 topK 的"严格大于才替换"语义一致——**返回结果与暴力扫描一致**。
+ *
+ * 精度说明：V8 对 Float32Array 元素参与的除法可能生成 F32 指令（与 double
+ * 计算差 ~1e-8 相对），因此跳过条件带 1e-6 相对安全余量（`< θ·(1-1e-6)`），
+ * 保证 F32 舍入噪声下仍不可能把"实际得分 > θ"的 chunk 误剪。
  */
 export function searchChunkMatrix(
   data: Int8ChunkMatrix,
@@ -130,21 +151,48 @@ export function searchChunkMatrix(
   const queryNorm = l2Norm(query);
   if (queryNorm === 0) return [];
 
-  const docScores = new Map<string, number>();
+  // 查询向量 L1（Hölder 上界用：Σ|q_i|，一次 O(dim)）。
+  let queryL1 = 0;
+  for (let i = 0; i < query.length; i += 1) {
+    queryL1 += Math.abs(query[i] ?? 0);
+  }
+
+  // 在线 topK 候选（降序，长度 ≤ limit；与 topK() 相同的"严格大于才替换"语义）。
+  const result: Array<{ docId: string; score: number }> = [];
+  const theta = (): number => (result.length === limit ? result[result.length - 1]!.score : -Infinity);
+
   for (const [docId, range] of data.docOffsets) {
     let best = -Infinity;
     for (let i = range.start; i < range.end; i += 1) {
-      const chunk = data.vectors.subarray(i * data.dimensions, (i + 1) * data.dimensions);
-      const dot = int8Dot(query, chunk);
       const normD = data.norms[i] ?? 0;
       if (normD === 0) continue;
+      const threshold = theta() * queryNorm * normD;
+      const maxAbs = data.maxAbs[i] ?? 0;
+      let dot = 0;
+      const base = i * data.dimensions;
+      let pruned = false;
+      for (let j = 0; j < data.dimensions; j += 1) {
+        dot += (query[j] ?? 0) * (data.vectors[base + j] ?? 0);
+        // Hölder: 剩余部分和 ≤ Σ|q|·maxAbs（用总 L1 作安全上界）→ dot 最终 ≤ dot + queryL1·maxAbs。
+        // 严格小于 + 1e-6 相对余量：跳过条件与 topK"严格大于才替换"对齐，且覆盖 F32 舍入噪声。
+        if (dot + queryL1 * maxAbs < threshold * (1 - 1e-6)) {
+          pruned = true;
+          break;
+        }
+      }
+      if (pruned) continue;
       const score = dot / (queryNorm * normD);
       if (score > best) best = score;
     }
-    if (best > -Infinity) docScores.set(docId, best);
+    if (best > -Infinity) {
+      if (result.length < limit) {
+        result.push({ docId, score: best });
+        result.sort((a, b) => b.score - a.score);
+      } else if (best > result[result.length - 1]!.score) {
+        result[result.length - 1] = { docId, score: best };
+        result.sort((a, b) => b.score - a.score);
+      }
+    }
   }
-
-  const scores = Float32Array.from(docScores.values());
-  const ids = Array.from(docScores.keys());
-  return topK(scores, limit).map(hit => ({ docId: ids[hit.index]!, score: hit.score }));
+  return result;
 }

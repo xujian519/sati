@@ -15,10 +15,19 @@
 
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
-import { registerChunkUncompress } from "../shared/chunk-compression.js";
+import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
+import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import { extractLawKeywords } from "../legal/legal-search.js";
 import type { KnowledgeEmbeddingSearch } from "../shared/knowledge-embeddings.js";
 import type { CaseLawChunk, CaseLawHit, CaseLawSearchOptions } from "./types.js";
+
+/** 引擎构造选项（全部可选；不传时行为与旧签名完全一致）。 */
+export type CaseLawSearchEngineOptions = {
+  /** 降级/异常日志出口（不传时静默，与旧行为一致）。 */
+  logger?: { warn: (message: string) => void };
+  /** 运行时状态聚合（可观测性出口；降级时打点）。 */
+  stats?: KnowledgeRuntimeStats;
+};
 
 /**
  * 每文档多 chunk 命中时的放大取数系数（供 JS 层按文档去重）。
@@ -44,7 +53,8 @@ type CaseLawRow = {
   module: string | null;
   char_count: number;
   chunk_index: number;
-  content: string;
+  /** 正文片段（LIKE/回源路径有值；FTS 主查询不取正文，经回源填充——延迟解压）。 */
+  content: string | null;
   fts_rank?: number | null;
 };
 
@@ -87,12 +97,16 @@ export class CaseLawSearchEngine {
   private readonly hasFts: boolean;
   /** FTS5 查询曾抛异常（模块缺失等）后置 true，后续查询直接走 LIKE。 */
   private ftsDegraded = false;
+  private readonly logger?: { warn: (message: string) => void };
+  private readonly stats?: KnowledgeRuntimeStats;
 
   // 热路径 prepared statements（固定 SQL；带过滤的查询走动态 SQL）
   private readonly stmtSearchLike: StatementSync;
   private readonly stmtSearchFts: StatementSync | null;
   private readonly stmtGetById: StatementSync;
   private readonly stmtGetDocById: StatementSync;
+  /** 按 (document_id, chunk_index) 取命中 chunk（FTS 延迟解压回源，保持"命中 chunk"语义）。 */
+  private readonly stmtGetChunkAt: StatementSync;
   private readonly stmtCount: StatementSync;
 
   /** 语义召回源（可选；gateway 注入后启用判例语义叠加）。 */
@@ -101,7 +115,9 @@ export class CaseLawSearchEngine {
   /** personal_note 语义召回源（可选；组装层/工具侧注入后启用项目笔记语义叠加）。 */
   private noteSemantic?: PersonalNoteSemanticSource;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, options: CaseLawSearchEngineOptions = {}) {
+    this.logger = options.logger;
+    this.stats = options.stats;
     this.db = new DatabaseSync(dbPath, { readOnly: true });
     // chunk 压缩解压函数（--compress-chunks 产物 BLOB；明文原样返回）。
     registerChunkUncompress(this.db);
@@ -125,10 +141,13 @@ export class CaseLawSearchEngine {
     `);
 
     // 按 documents.id 取全文分块（供"查看判例全文"场景）。
+    // 注：content 取原始存储（TEXT 明文 / SC 魔数 gzip BLOB），JS 层
+    // decompressChunk 解压——绕开 node:sqlite JS UDF 的 ~4ms/次边界开销
+    // （实测：UDF 单行 4.18ms vs 原始列 0.04ms）。
     this.stmtGetById = this.db.prepare(`
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
              d.court, d.source, d.module, d.char_count, c.chunk_index,
-             sati_uncompress(c.content) AS content
+             c.content AS content
       FROM documents d
       JOIN chunks c ON c.document_id = d.id
       WHERE d.id = ?
@@ -139,31 +158,46 @@ export class CaseLawSearchEngine {
     this.stmtGetDocById = this.db.prepare(`
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
              d.court, d.source, d.module, d.char_count, c.chunk_index,
-             sati_uncompress(c.content) AS content
+             c.content AS content
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
       WHERE d.id = ?
     `);
 
+    // 按 (document_id, chunk_index) 取命中 chunk（FTS 延迟解压回源；保持
+    // 旧行为"片段 = 命中的 chunk"而非最长 chunk）。
+    this.stmtGetChunkAt = this.db.prepare(`
+      SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
+             d.court, d.source, d.module, d.char_count, c.chunk_index,
+             c.content AS content
+      FROM documents d
+      JOIN chunks c ON c.document_id = d.id AND c.chunk_index = ?
+      WHERE d.id = ?
+    `);
+
     // 无过滤 FTS 查询（searchFts 与 searchFtsKeywords 的 SQL 相同，仅 MATCH 参数
     // 不同，共用一条语句）。docs_fts 表可能存在但运行时 SQLite 未注册 FTS5
     // （如捆绑旧版 Node 的 bm25/MATCH），prepare 会抛错——捕获并降级 LIKE。
+    // 正文不在此取（sati_uncompress 延迟到 JS 层对 top-N 回源——避免解压
+    // FETCH_MULTIPLIER×limit 行全文）。排序保持 bm25(docs_fts)：实测 JOIN 场景
+    // ORDER BY rank 触发 FTS5 rank 全量物化（354ms vs bm25 0.12ms，3000 倍倒退）
+    // ——rank 渐进优化仅适用无 JOIN 的 FTS 直查（H5 实测证伪，勿改回 rank）。
     this.stmtSearchFts = null;
     if (this.hasFts) {
       try {
         this.stmtSearchFts = this.db.prepare(`
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
              d.court, d.source, d.module, d.char_count,
-             c.chunk_index, sati_uncompress(c.content) AS content, bm25(docs_fts) AS fts_rank
+             c.chunk_index, NULL AS content, bm25(docs_fts) AS fts_rank
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
       WHERE docs_fts MATCH ?
       ORDER BY bm25(docs_fts) LIMIT ?
     `);
-      } catch {
-        this.ftsDegraded = true;
+      } catch (error) {
+        this.degradeFts(error instanceof Error ? error.message : String(error));
         this.stmtSearchFts = null;
       }
     }
@@ -179,6 +213,13 @@ export class CaseLawSearchEngine {
   /** 注入 personal_note 语义召回源（未注入时该路关闭）。 */
   setNoteSemantic(source?: PersonalNoteSemanticSource): void {
     this.noteSemantic = source;
+  }
+
+  /** FTS5 粘性降级打点（构造期 prepare 捕获与查询期异常共用）。 */
+  private degradeFts(reason: string): void {
+    this.ftsDegraded = true;
+    this.logger?.warn?.(`[sati] case-law FTS5 不可用，已降级 LIKE: ${reason}`);
+    this.stats?.setCaseLawFtsDegraded(true);
   }
 
   /** 语义召回源是否就绪（判例语义或 personal_note 语义任一可用）。 */
@@ -211,8 +252,11 @@ export class CaseLawSearchEngine {
             results.push(this.toHit(row, null, "semantic"));
           }
         }
-      } catch {
+      } catch (error) {
         // 判例语义路失败降级（不阻断 personal_note 路与关键词路）。
+        this.logger?.warn?.(
+          `[sati] 判例语义召回失败，降级跳过: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -227,8 +271,11 @@ export class CaseLawSearchEngine {
           seen.add(hit.id);
           results.push(this.toHit(row, null, "semantic"));
         }
-      } catch {
+      } catch (error) {
         // personal_note 语义失败降级（embedding 端点不可用等），不阻断。
+        this.logger?.warn?.(
+          `[sati] personal_note 语义召回失败，降级跳过: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -265,10 +312,10 @@ export class CaseLawSearchEngine {
         if (hits.length === 0) {
           hits = this.searchLike(trimmed, options, limit);
         }
-      } catch {
+      } catch (error) {
         // FTS5 模块缺失或查询异常（如运行时 SQLite 未编译 FTS5，MATCH 抛
         // "no such module: fts5"）：整体降级 LIKE，避免工具执行崩溃。
-        this.ftsDegraded = true;
+        this.degradeFts(error instanceof Error ? error.message : String(error));
         hits = this.searchLike(trimmed, options, limit);
       }
     }
@@ -281,7 +328,7 @@ export class CaseLawSearchEngine {
     return rows.map(row => ({
       documentId: row.document_id,
       chunkIndex: row.chunk_index,
-      content: row.content,
+      content: decompressChunk(row.content),
     }));
   }
 
@@ -300,7 +347,7 @@ export class CaseLawSearchEngine {
     let sql = `
       SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
              d.court, d.source, d.module, d.char_count,
-             c.chunk_index, sati_uncompress(c.content) AS content, bm25(docs_fts) AS fts_rank
+             c.chunk_index, NULL AS content, bm25(docs_fts) AS fts_rank
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
@@ -334,7 +381,7 @@ export class CaseLawSearchEngine {
       const { sql, filterParams } = this.buildFtsQuery(options);
       rows = this.db.prepare(sql).all(query, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
     }
-    return this.dedupeByDocument(rows, limit);
+    return this.backfillContent(this.dedupeByDocument(rows, limit));
   }
 
   /** 多个关键词 OR 组合的 FTS 查询（用于长查询切词降级）。 */
@@ -347,10 +394,25 @@ export class CaseLawSearchEngine {
       const { sql, filterParams } = this.buildFtsQuery(options);
       rows = this.db.prepare(sql).all(escaped, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
     }
-    return this.dedupeByDocument(rows, limit);
+    return this.backfillContent(this.dedupeByDocument(rows, limit));
+  }
+
+  /**
+   * 延迟解压回源：FTS 主查询不取正文（避免解压 FETCH_MULTIPLIER×limit 行全文），
+   * 去重后仅对最终 top-limit 行按 (document_id, chunk_index) 回源**命中 chunk**
+   * 片段——保持旧行为"片段 = 命中的 chunk"；JS 层解压（绕开 UDF 边界开销）。
+   */
+  private backfillContent(hits: CaseLawHit[]): CaseLawHit[] {
+    return hits.map(hit => {
+      if (hit.snippet) return hit;
+      const row = this.stmtGetChunkAt.get(hit.chunkIndex, hit.documentId) as CaseLawRow | undefined;
+      return row ? { ...hit, snippet: decompressChunk(row.content) } : hit;
+    });
   }
 
   private searchLike(keyword: string, options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
+    // LIKE 回退计数（设计内降级路径：短词/未命中/FTS 降级；不 warn 避免噪音）。
+    this.stats?.recordLikeFallback();
     const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
     let rows: CaseLawRow[];
     if (!hasCaseLawFilters(options)) {
@@ -410,7 +472,7 @@ export class CaseLawSearchEngine {
       module: row.module ?? undefined,
       charCount: row.char_count,
       chunkIndex: row.chunk_index,
-      snippet: row.content,
+      snippet: decompressChunk(row.content),
       ftsRank,
       via,
     };

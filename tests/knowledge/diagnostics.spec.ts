@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import {
   formatKnowledgeCapabilities,
   logKnowledgeCapabilities,
@@ -25,6 +29,9 @@ function statsSnapshot(overrides: Partial<KnowledgeRuntimeStatsSnapshot> = {}): 
     wikiSemanticIndex: "disabled",
     caseLawAvailable: false,
     caseLawInjects: 0,
+    legalFtsDegraded: false,
+    caseLawFtsDegraded: false,
+    likeFallbacks: 0,
     ...overrides,
   };
 }
@@ -129,6 +136,54 @@ describe("resolveKnowledgeCapabilities", () => {
     const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
     assert.equal(fts?.status, "missing");
     assert.match(fts?.detail ?? "", /LIKE/);
+  });
+
+  it("case-law 判据与装配对齐：空 knowledge.db 不误报 ready（即使 caseDb 指向同一主库）", () => {
+    // A1/A5 修复：空库（documents 0 行）probe 成功但 documents=0 → missing；
+    // 与 assemble 的 CaseLawSearchEngine.count()===0 → 关闭 行为一致。
+    const dir = mkdtempSync(join(tmpdir(), "kb-diag-empty-"));
+    const dbPath = join(dir, "knowledge.db");
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      CREATE TABLE documents (id TEXT PRIMARY KEY, source TEXT NOT NULL, doc_type TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent', title TEXT NOT NULL, indexed_at TEXT NOT NULL);
+      CREATE TABLE kg_nodes (id TEXT PRIMARY KEY, node_type TEXT NOT NULL, name TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent');
+      CREATE TABLE embeddings (id INTEGER PRIMARY KEY, chunk_id INTEGER NOT NULL, document_id TEXT NOT NULL, vector BLOB NOT NULL, dim INTEGER NOT NULL DEFAULT 1024, indexed_at TEXT NOT NULL);
+    `);
+    db.close();
+    try {
+      const caps = resolveKnowledgeCapabilities(paths({ knowledgeDb: dbPath, caseDb: dbPath }), {
+        embeddingConfigured: false,
+        rerankConfigured: false,
+      });
+      assert.equal(caps.find(cap => cap.id === "case-law")?.status, "missing", "空 documents 不应报 ready");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("运行时 FTS 降级联动：legal-fts/case-law 如实降级为 missing", () => {
+    // H3：桌面端无 FTS5 的 Node 下引擎粘性降级 LIKE——诊断不再误报 ready。
+    const caps = resolveKnowledgeCapabilities(paths({ lawDb: "/data/laws.db", caseDb: "/data/knowledge.db" }), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ legalFtsDegraded: true, caseLawFtsDegraded: true }),
+    });
+    const legal = caps.find(cap => cap.id === "legal-fts");
+    const caseLaw = caps.find(cap => cap.id === "case-law");
+    assert.equal(legal?.status, "missing");
+    assert.match(legal?.detail ?? "", /LIKE/);
+    assert.equal(caseLaw?.status, "missing");
+    assert.match(caseLaw?.detail ?? "", /LIKE/);
+  });
+
+  it("运行时 FTS 正常时不降级（回归）", () => {
+    const caps = resolveKnowledgeCapabilities(paths({ lawDb: "/data/laws.db", caseDb: "/data/knowledge.db" }), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ legalFtsDegraded: false, caseLawFtsDegraded: false }),
+    });
+    assert.equal(caps.find(cap => cap.id === "legal-fts")?.status, "ready");
+    assert.equal(caps.find(cap => cap.id === "case-law")?.status, "ready");
   });
 
   it("wiki 语义索引：warming/ready 为 ready，failed 为 missing", () => {

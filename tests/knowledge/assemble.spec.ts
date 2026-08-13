@@ -13,15 +13,16 @@ describe("buildKnowledgeResolvers", () => {
     assert.equal(resolvers.length, 1);
   });
 
-  it("vectors.db 缺失时正常运行（语义召回关闭）", () => {
+  it("KG 打开失败时降级为无图谱专利 provider（wiki/IPC 保留，不整体丢失）", () => {
     const resolvers = buildKnowledgeResolvers({
       ...baseOptions,
       patentKgDb: "/nonexistent/patent_kg.db",
       lawDb: "/nonexistent/laws.db",
       wikiDir: "/nonexistent/wiki",
     });
-    // KG 打开失败跳过专利；law 打开失败跳过法律 → 空列表（不抛错）
-    assert.equal(resolvers.length, 0);
+    // A2 修复：KG 打开失败降级 push 无图谱 provider（与 patentKgDb 未配置一致）；
+    // law 打开失败跳过法律 → 共 1 个 resolver（不抛错）
+    assert.equal(resolvers.length, 1);
   });
 
   it("indexWiki=false 时不给专利 provider 注入 embedding（不抛错）", () => {
@@ -31,6 +32,6 @@ describe("buildKnowledgeResolvers", () => {
       indexWiki: false,
       embedding: undefined,
     });
-    assert.equal(resolvers.length, 0); // KG 打开失败跳过，仅验证不抛错
+    assert.equal(resolvers.length, 1); // A2 修复：KG 打开失败仍 push 无图谱 provider
   });
 });

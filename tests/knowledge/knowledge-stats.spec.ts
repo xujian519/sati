@@ -62,6 +62,25 @@ describe("KnowledgeRuntimeStats", () => {
     assert.equal(snap.wikiSemanticIndex, "ready");
   });
 
+  it("FTS 降级状态与 LIKE 回退计数（H3 可观测性）", () => {
+    const stats = new KnowledgeRuntimeStats();
+    // 初始：未降级、回退 0
+    let snap = stats.snapshot();
+    assert.equal(snap.legalFtsDegraded, false);
+    assert.equal(snap.caseLawFtsDegraded, false);
+    assert.equal(snap.likeFallbacks, 0);
+    // 引擎粘性降级 + LIKE 回退累计
+    stats.setLegalFtsDegraded(true);
+    stats.setCaseLawFtsDegraded(true);
+    stats.recordLikeFallback();
+    stats.recordLikeFallback();
+    stats.recordLikeFallback();
+    snap = stats.snapshot();
+    assert.equal(snap.legalFtsDegraded, true);
+    assert.equal(snap.caseLawFtsDegraded, true);
+    assert.equal(snap.likeFallbacks, 3);
+  });
+
   it("snapshot 每次返回新对象（消费方可安全序列化）", () => {
     const stats = new KnowledgeRuntimeStats();
     const a = stats.snapshot();

@@ -205,8 +205,11 @@ export function createPatentCaseSearchTool(
           if (semanticHits.length > 0) {
             hits = fuseCaseLawHits(ftsHits, semanticHits, limit);
           }
-        } catch {
-          // 语义路失败降级为纯 FTS，不阻断工具执行。
+        } catch (error) {
+          // 语义路失败降级为纯 FTS，不阻断工具执行（H3：不再静默吞错）。
+          console.warn(
+            `[patent_case_search] 判例语义召回失败，回退纯 FTS: ${error instanceof Error ? error.message : String(error)}`,
+          );
           hits = ftsHits;
         }
       }

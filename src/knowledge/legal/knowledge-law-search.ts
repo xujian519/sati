@@ -17,9 +17,18 @@
 
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
-import { registerChunkUncompress } from "../shared/chunk-compression.js";
+import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
+import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
 import { extractLawKeywords } from "./legal-search.js";
+
+/** 引擎构造选项（全部可选；不传时行为与旧签名完全一致）。 */
+export type KnowledgeLawSearchOptions2 = {
+  /** 降级/异常日志出口（不传时静默，与旧行为一致）。 */
+  logger?: { warn: (message: string) => void };
+  /** 运行时状态聚合（可观测性出口；降级时打点）。 */
+  stats?: KnowledgeRuntimeStats;
+};
 
 export type KnowledgeLawSearchOptions = {
   /** 返回条数上限（默认 10）。 */
@@ -35,6 +44,7 @@ type DocChunkRow = {
   title: string;
   level: string | null;
   source: string | null;
+  /** 正文片段（LIKE/回源路径有值；FTS 主查询不取正文，经回源填充——延迟解压）。 */
   content: string | null;
   chunk_index: number;
   char_count: number | null;
@@ -49,14 +59,20 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   private readonly hasFts: boolean;
   /** FTS5 查询曾抛异常（模块缺失等）后置 true，后续查询直接走 LIKE。 */
   private ftsDegraded = false;
+  private readonly logger?: { warn: (message: string) => void };
+  private readonly stats?: KnowledgeRuntimeStats;
 
   private readonly stmtSearchLike: StatementSync;
   private readonly stmtSearchFts: StatementSync | null;
   private readonly stmtFindByName: StatementSync;
   private readonly stmtGetById: StatementSync;
+  /** 按 (document_id, chunk_index) 取命中 chunk（FTS 延迟解压回源，保持"命中 chunk"语义）。 */
+  private readonly stmtGetChunkAt: StatementSync;
   private readonly stmtCount: StatementSync;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, options: KnowledgeLawSearchOptions2 = {}) {
+    this.logger = options.logger;
+    this.stats = options.stats;
     this.db = new DatabaseSync(dbPath, { readOnly: true });
     // chunk 压缩解压函数（--compress-chunks 产物 BLOB；明文原样返回）。
     registerChunkUncompress(this.db);
@@ -66,10 +82,12 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     this.hasFts = row.c > 0 && sqliteHasFts5(this.db);
 
     // LIKE 降级：documents.title 或每文档最长 chunk 的 content（压缩 chunk 先
-    // 解压再匹配）；子查询取最长 chunk 作片段。
+    // 解压再匹配）；子查询取最长 chunk 作片段。content 取原始存储（TEXT 明文 /
+    // SC 魔数 gzip BLOB），JS 层 decompressChunk 解压——绕开 node:sqlite JS UDF
+    // 的 ~4ms/次边界开销；WHERE 的 sati_uncompress 仅匹配语义（LIKE 降级路径低频）。
     this.stmtSearchLike = this.db.prepare(`
       SELECT d.id AS document_id, d.title, d.level, d.source,
-             sati_uncompress(c.content) AS content, c.char_count
+             c.content AS content, c.char_count
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -77,26 +95,30 @@ export class KnowledgeLawSearch implements LegalSearchSource {
         AND (d.title LIKE ? ESCAPE '\\' OR sati_uncompress(c.content) LIKE ? ESCAPE '\\')
       ORDER BY d.char_count DESC LIMIT ?
     `);
+    // 正文不在此取（sati_uncompress 延迟到 JS 层对 top-N 回源——避免解压
+    // FETCH_MULTIPLIER×limit 行全文）。排序保持 bm25(docs_fts)：实测 JOIN 场景
+    // ORDER BY rank 触发 FTS5 rank 全量物化（354ms vs bm25 0.12ms，3000 倍倒退）
+    // ——rank 渐进优化仅适用无 JOIN 的 FTS 直查（H5 实测证伪，勿改回 rank）。
     this.stmtSearchFts = null;
     if (this.hasFts) {
       try {
         this.stmtSearchFts = this.db.prepare(`
           SELECT d.id AS document_id, d.title, d.level, d.source,
-                 sati_uncompress(c.content) AS content, c.char_count, bm25(docs_fts) AS fts_rank
+                 NULL AS content, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
           FROM docs_fts
           JOIN chunks c ON c.id = docs_fts.rowid
           JOIN documents d ON d.id = c.document_id
           WHERE docs_fts MATCH ? AND d.doc_type = 'law_article'
           ORDER BY bm25(docs_fts) LIMIT ?
         `);
-      } catch {
-        this.ftsDegraded = true;
+      } catch (error) {
+        this.degradeFts(error instanceof Error ? error.message : String(error));
         this.stmtSearchFts = null;
       }
     }
     this.stmtFindByName = this.db.prepare(`
       SELECT d.id AS document_id, d.title, d.level, d.source,
-             sati_uncompress(c.content) AS content, c.char_count
+             c.content AS content, c.char_count
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -105,13 +127,28 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     `);
     this.stmtGetById = this.db.prepare(`
       SELECT d.id AS document_id, d.title, d.level, d.source,
-             sati_uncompress(c.content) AS content, c.char_count
+             c.content AS content, c.char_count
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
       WHERE d.id = ?
     `);
+    // 按 (document_id, chunk_index) 取命中 chunk（FTS 延迟解压回源）。
+    this.stmtGetChunkAt = this.db.prepare(`
+      SELECT d.id AS document_id, d.title, d.level, d.source,
+             c.content AS content, c.char_count
+      FROM documents d
+      JOIN chunks c ON c.document_id = d.id AND c.chunk_index = ?
+      WHERE d.id = ?
+    `);
     this.stmtCount = this.db.prepare("SELECT COUNT(*) AS c FROM documents WHERE doc_type = 'law_article'");
+  }
+
+  /** FTS5 粘性降级打点（构造期 prepare 捕获与查询期异常共用）。 */
+  private degradeFts(reason: string): void {
+    this.ftsDegraded = true;
+    this.logger?.warn?.(`[sati] 法规 FTS5 不可用，已降级 LIKE: ${reason}`);
+    this.stats?.setLegalFtsDegraded(true);
   }
 
   /** FTS5 是否实际可用（表存在 + 运行时支持 + 未被降级）。 */
@@ -144,8 +181,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
         if (rows.length === 0) {
           rows = this.searchLike(trimmed, options, limit);
         }
-      } catch {
-        this.ftsDegraded = true;
+      } catch (error) {
+        this.degradeFts(error instanceof Error ? error.message : String(error));
         rows = this.searchLike(trimmed, options, limit);
       }
     }
@@ -178,7 +215,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     const rows = this.db
       .prepare(`
         SELECT d.id AS document_id, d.title, d.level, d.source,
-               sati_uncompress(c.content) AS content, c.char_count
+               c.content AS content, c.char_count
         FROM documents d
         JOIN chunks c ON c.id = (
           SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -207,13 +244,26 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   private searchFts(keyword: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
     const escaped = keyword.replace(/"/g, '""');
     const rows = this.withLevelFilter(`"${escaped}"`, options, limit * FETCH_MULTIPLIER) as DocChunkRow[];
-    return this.dedupeByDocument(rows, limit);
+    return this.backfillContent(this.dedupeByDocument(rows, limit));
   }
 
   private searchFtsKeywords(keywords: string[], options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
     const escaped = keywords.map(k => `"${k.replace(/"/g, '""')}"`).join(" OR ");
     const rows = this.withLevelFilter(escaped, options, limit * FETCH_MULTIPLIER) as DocChunkRow[];
-    return this.dedupeByDocument(rows, limit);
+    return this.backfillContent(this.dedupeByDocument(rows, limit));
+  }
+
+  /**
+   * 延迟解压回源：FTS 主查询不取正文（避免解压 FETCH_MULTIPLIER×limit 行全文），
+   * 去重后仅对最终 top-limit 行按 (document_id, chunk_index) 回源**命中 chunk**
+   * 片段（含解压）——保持旧行为"片段 = 命中的 chunk"。
+   */
+  private backfillContent(rows: DocChunkRow[]): DocChunkRow[] {
+    return rows.map(row => {
+      if (row.content !== null) return row;
+      const hit = this.stmtGetChunkAt.get(row.chunk_index, row.document_id) as DocChunkRow | undefined;
+      return hit ? { ...row, content: decompressChunk(hit.content) } : row;
+    });
   }
 
   /** FTS 查询 + 可选 level 过滤（动态 SQL；无过滤走预编译热路径）。 */
@@ -223,7 +273,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     }
     let sql = `
       SELECT d.id AS document_id, d.title, d.level, d.source,
-             sati_uncompress(c.content) AS content, c.char_count, bm25(docs_fts) AS fts_rank
+             NULL AS content, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
@@ -240,6 +290,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   }
 
   private searchLike(keyword: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
+    // LIKE 回退计数（设计内降级路径：短词/未命中/FTS 降级；不 warn 避免噪音）。
+    this.stats?.recordLikeFallback();
     const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
     if (!options.level) {
       return this.stmtSearchLike.all(pattern, pattern, limit) as DocChunkRow[];
@@ -277,13 +329,14 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   }
 
   private toRecord(row: DocChunkRow): LawRecord {
+    const content = decompressChunk(row.content);
     return {
       id: row.document_id,
       level: row.level ?? "其他",
       name: row.title,
       expired: 0,
       categoryId: 0,
-      content: row.content ?? undefined,
+      content: content.length > 0 ? content : undefined,
       categoryName: "法律法规",
     };
   }
