@@ -39,7 +39,7 @@ describe("LlmConfigurationStep", () => {
     render(<LlmConfigurationStep onSaved={vi.fn()} />);
 
     await waitFor(() => {
-      expect(mocks.fetchRemoteDefaultModels).toHaveBeenCalledWith("openrouter");
+      expect(mocks.fetchRemoteDefaultModels).toHaveBeenCalledWith("deepseek");
     });
 
     mocks.fetchRemoteDefaultModels.mockClear();
