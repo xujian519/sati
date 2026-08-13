@@ -10,6 +10,7 @@ import { parseFrontmatter } from "../utils/frontmatter.js";
 import { getClaudeRuntimeModelConfig, getClaudeRuntimeModelValues } from "../utils/claude-runtime-config.js";
 import { readSatiConfigFile, resolveModel } from "../services/satiConfig.js";
 import { resolvePilotHome } from "../utils/pilotPaths.js";
+import { CLAWHUB_NOT_FOUND_MESSAGE, getClawhubPath } from "../utils/clawhub.js";
 import { executeTurnkeySlashCommand } from "../turnkey-slash.js";
 import { getRegisteredCommands } from "../../../src/adapters/channel/protocol/ChannelCommandRegistry.js";
 import { runChatSearchFormatted } from "../../../src/cli/commands/chatSearch.js";
@@ -775,7 +776,7 @@ Custom commands can be created in:
     let stderr = "";
     let runError = null;
     try {
-      const result = await execFileAsync("clawhub", clawArgs, {
+      const result = await execFileAsync((await getClawhubPath()) ?? "clawhub", clawArgs, {
         timeout: 120_000,
         maxBuffer: 10 * 1024 * 1024,
       });
@@ -813,7 +814,7 @@ Custom commands can be created in:
         action: "skillInstall",
         data: {
           error: true,
-          message: "clawhub CLI not found in PATH. Install it with `npm install -g clawhub`, then retry.",
+          message: CLAWHUB_NOT_FOUND_MESSAGE,
         },
       };
     }

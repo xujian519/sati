@@ -37,6 +37,7 @@ import multer from "multer";
 import { getSatiGateway } from "../sati-bridge.js";
 import { resolvePilotHome } from "../utils/pilotPaths.js";
 import { moveDirectoryAcrossDevicesSafe } from "../utils/fileMoves.js";
+import { CLAWHUB_NOT_FOUND_MESSAGE, getClawhubPath } from "../utils/clawhub.js";
 
 const execFileAsync = promisify(execFile);
 const router = express.Router();
@@ -496,11 +497,14 @@ router.post("/clawhub/search", async (req, res) => {
 
     let stdout = "";
     try {
-      const r = await execFileAsync("clawhub", args, { timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
+      const r = await execFileAsync((await getClawhubPath()) ?? "clawhub", args, {
+        timeout: 30_000,
+        maxBuffer: 4 * 1024 * 1024,
+      });
       stdout = r.stdout || "";
     } catch (e) {
       if (e.code === "ENOENT") {
-        return res.status(503).json({ error: "clawhub CLI not found in PATH. Install with `npm install -g clawhub`." });
+        return res.status(503).json({ error: CLAWHUB_NOT_FOUND_MESSAGE });
       }
       stdout = e.stdout || "";
       if (!stdout) {
@@ -563,12 +567,15 @@ router.post("/clawhub/install", async (req, res) => {
     let stderr = "";
     let runError = null;
     try {
-      const r = await execFileAsync("clawhub", args, { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 });
+      const r = await execFileAsync((await getClawhubPath()) ?? "clawhub", args, {
+        timeout: 120_000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
       stdout = r.stdout || "";
       stderr = r.stderr || "";
     } catch (e) {
       if (e.code === "ENOENT") {
-        return res.status(503).json({ error: "clawhub CLI not found in PATH. Install with `npm install -g clawhub`." });
+        return res.status(503).json({ error: CLAWHUB_NOT_FOUND_MESSAGE });
       }
       runError = e;
       stdout = e.stdout || "";
