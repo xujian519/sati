@@ -225,3 +225,6 @@ build-info.json
 
 # Python bytecode cache
 __pycache__/
+
+# Chrome remote-debugging instance profile (browser automation)
+.chrome-debug/
