@@ -13,6 +13,7 @@ import { SignalWatcher } from "./SignalWatcher.js";
 export type DiscoverySchedulerLogger = {
   info: (message: string, data?: Record<string, unknown>) => void;
   warn: (message: string, data?: Record<string, unknown>) => void;
+  debug?: (message: string, data?: Record<string, unknown>) => void;
 };
 
 export type DiscoverySchedulerDependencies = {
@@ -104,7 +105,8 @@ export class DiscoveryScheduler {
     });
 
     if (!evaluation.ok) {
-      this.deps.logger.info("always-on gate blocked", { reason: evaluation.reason });
+      // 高频正常调度信息（tick 周期运行），降 debug 避免噪音。
+      this.deps.logger.debug?.("always-on gate blocked", { reason: evaluation.reason });
       if (evaluation.reason === "dormant_no_signal") {
         this.ensureDormancyWatcher();
       }
@@ -118,7 +120,7 @@ export class DiscoveryScheduler {
         activeCycle.status === "active" &&
         activeCycle.planIds.length >= this.deps.config.workspace.maxPlansPerCycle
       ) {
-        this.deps.logger.info("always-on gate blocked", { reason: "cycle_full" });
+        this.deps.logger.debug?.("always-on gate blocked", { reason: "cycle_full" });
         return { outcome: "blocked", reason: "cycle_full" as GateBlockReason };
       }
     }

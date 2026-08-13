@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { debugLog } from "../shared/debug.js";
 import { APP_VERSION } from "../version.js";
 import type { Gateway, GatewayEvent, GatewaySubmitTurnInput } from "../gateway/index.js";
 import type { InProcessGateway } from "../gateway/client/InProcessGateway.js";
@@ -107,6 +108,8 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         console.log(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
       warn: (message: string, data?: Record<string, unknown>) =>
         console.warn(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+      debug: (message: string, data?: Record<string, unknown>) =>
+        debugLog(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
     };
     const cronLogger = {
       info: (message: string, data?: Record<string, unknown>) =>

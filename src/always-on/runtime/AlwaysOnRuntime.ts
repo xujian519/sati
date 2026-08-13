@@ -29,6 +29,7 @@ import { SessionConfigOverrides } from "./SessionConfigOverrides.js";
 export type AlwaysOnRuntimeLogger = {
   info: (message: string, data?: Record<string, unknown>) => void;
   warn: (message: string, data?: Record<string, unknown>) => void;
+  debug?: (message: string, data?: Record<string, unknown>) => void;
 };
 
 export type CreateAlwaysOnRuntimeOptions = {
