@@ -21,6 +21,8 @@ export const FIGURE_SPEC_GUIDE = [
   "箭头表示连接方向、运动方向或流程走向。",
   "同一部件在不同附图中共用同一标号；标号不得跳号或重复。",
   "附图说明句式：'图N是本发明实施例提供的{发明名称}的{附图类型}；图中：1-{部件}；2-{部件}；…'",
+  "标号识别必须严格依据图面：图面可见但标号模糊、被遮挡或无法确认的部件，不得臆造编号或用近似编号代替，应在结果中明确注明'无法确认'；仅当部件在图面确实无标号时，才使用 U1/U2… 占位符并注明。",
+  "组件描述应包含图面可见的物理形态、空间相对位置与连接关系；图面未显示的信息（材料、参数等）不得补充。",
 ].join("\n");
 
 /** Step1 输出 JSON Schema（附图类型分类 + 整体理解）。 */
@@ -208,15 +210,16 @@ function formatContext(claimContext: string | undefined): string {
 /** Step1 提示词：附图类型分类 + 整体理解。 */
 export function buildStep1Prompt(figureNumber: number, claimContext: string | undefined): string {
   return [
-    "你是一位资深专利代理师与专利审查专家。下面是一张专利说明书附图（图" + figureNumber + "）。请完成两项任务：",
+    "你是一位资深专利代理师与专利审查专家。下面是一张专利说明书附图（图" + figureNumber + "）。请完成以下任务：",
     "1. 判断附图类型（结构图/流程图/电路图/方框图/示意图/分解图/剖视图之一）；",
     "2. 用一句话概述附图展示的技术内容。",
+    "3. 若图面存在旋转（横向/竖向）、模糊、多图拼版或明显无法识别的区域，在 notes 中逐条说明。",
     "",
     "【专利附图规范要点】",
     FIGURE_SPEC_GUIDE,
     formatContext(claimContext),
     "",
-    "严格输出 JSON，不要输出其他内容：",
+    "严格输出 JSON：只输出一个 JSON 对象；不要用 markdown 代码围栏；不要输出 JSON 以外的任何文字；所有键与字符串使用双引号。",
     JSON.stringify(STEP1_SCHEMA, null, 2),
   ].join("\n");
 }
@@ -243,9 +246,10 @@ export function buildStep2Prompt(
     "- 组件标号必须与图面阿拉伯数字完全一致，不得改写或跳号；",
     "- 无标号但明显存在的部件用 U1/U2… 编号并在 warnings 中注明'未标注'；",
     "- 无法识别的区域写入 warnings，不要猜测；",
+    "- 每个组件的 description 必须包含图面可见的结构细节：形状、位置、与相邻部件的连接方式；图面未展示的内容不得补充；",
     "- 附图说明使用专利格式，发明名称未知时用'装置'代替。",
     "",
-    "严格输出 JSON，不要输出其他内容：",
+    "严格输出 JSON：只输出一个 JSON 对象；不要用 markdown 代码围栏；不要输出 JSON 以外的任何文字；所有键与字符串使用双引号。",
     JSON.stringify(STEP2_SCHEMA, null, 2),
   ].join("\n");
 }
@@ -276,7 +280,7 @@ export function buildStep3Prompt(
     "- 网络描述电气连通关系，VCC/GND 等电源网络单独列出；",
     "- 无法识别的区域写入 warnings，不要猜测。",
     "",
-    "严格输出 JSON，不要输出其他内容：",
+    "严格输出 JSON：只输出一个 JSON 对象；不要用 markdown 代码围栏；不要输出 JSON 以外的任何文字；所有键与字符串使用双引号。",
     JSON.stringify(STEP3_SCHEMA, null, 2),
   ].join("\n");
 }

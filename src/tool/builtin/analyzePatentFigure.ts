@@ -154,6 +154,9 @@ export function createAnalyzePatentFigureTool(
           componentCount: result.components.length,
           usable: result.usable,
           indexed,
+          modelUsed: result.modelUsed,
+          imageBytes: prepared.bytes,
+          visionWarnings: result.warnings.length,
         },
       };
     },

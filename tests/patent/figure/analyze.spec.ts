@@ -172,3 +172,50 @@ test("tryParseJson: 容错解析直接 JSON 与代码围栏（共享模块）", 
 test("buildFigureDescription: 无组件时生成简式", () => {
   assert.equal(buildFigureDescription(2, "flowchart", undefined, []), "图2是本发明实施例提供的装置的流程图。");
 });
+
+/** 按 metadata.phase 精确分发的 mock（区分 step1/step2/repair:xxx）。 */
+function phaseAwareModel(
+  responder: (phase: string) => string,
+): FigureModelClient & { requests: CanonicalModelRequest[] } {
+  const requests: CanonicalModelRequest[] = [];
+  return {
+    requests,
+    async *stream(request) {
+      requests.push(request);
+      const phase = String(request.metadata?.phase ?? "step1");
+      yield { type: "text_delta", text: responder(phase) };
+      yield { type: "usage", usage: { inputTokens: 10, outputTokens: 10 } };
+    },
+  };
+}
+
+test("JSON 自愈：Step1 重试耗尽后经修复调用成功", async () => {
+  const model = phaseAwareModel(phase => {
+    if (phase === "step1") return "这不是 JSON";
+    if (phase === "repair:step1") return STEP1_JSON;
+    return STEP2_JSON;
+  });
+  const result = await analyzePatentFigure(BASE_INPUT, model);
+  assert.equal(result.figureType, "structure");
+  assert.equal(result.components.length, 3);
+
+  const repairReq = model.requests.find(r => String(r.metadata?.phase).startsWith("repair:"));
+  assert.ok(repairReq, "应存在修复请求");
+  const content = repairReq!.messages[0]!.content;
+  assert.equal(content.length, 1, "修复请求不附图片，仅一个文本块");
+  assert.equal(content[0]!.type, "text");
+});
+
+test("JSON 自愈：修复也失败时走既有降级路径", async () => {
+  const model = phaseAwareModel(phase => {
+    if (phase === "step1") return "这不是 JSON";
+    if (phase === "repair:step1") return "还是不是 JSON";
+    return STEP2_JSON;
+  });
+  const result = await analyzePatentFigure(BASE_INPUT, model);
+  assert.equal(result.figureType, "unknown");
+  assert.ok(
+    result.warnings.some(w => w.includes("Step1")),
+    "应包含 Step1 失败警告",
+  );
+});

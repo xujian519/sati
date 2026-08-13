@@ -12,7 +12,14 @@
 import type { CanonicalModelEvent, CanonicalModelRequest } from "../../model/index.js";
 import { tryParseJson } from "../llm-json.js";
 import { analyzeElectricalFigure } from "./analyze-electrical.js";
-import { buildStep1Prompt, buildStep2Prompt, type Step1Result, type Step2Result } from "./prompts.js";
+import {
+  buildStep1Prompt,
+  buildStep2Prompt,
+  STEP1_SCHEMA,
+  STEP2_SCHEMA,
+  type Step1Result,
+  type Step2Result,
+} from "./prompts.js";
 import {
   FIGURE_TYPE_NAMES,
   normalizeComponentKind,
@@ -135,11 +142,38 @@ async function collectModelText(
 
 /** JSON 容错解析已收敛至 ../llm-json.js（tryParseJson），与 atoms 层共用。 */
 
+/** JSON 修复提示词：带 schema + 原始输出 + 阶段，请模型重写为严格 JSON。 */
+function buildRepairPrompt(schema: unknown, raw: string, phase: string): string {
+  return [
+    "你是一个 JSON 修复工具。请把下面的输出重写为符合 SCHEMA 的单个 JSON 对象。",
+    "规则：只输出 JSON 对象；不要用 markdown 代码围栏；保持原有语义，不要添加 SCHEMA 之外的字段。",
+    "[SCHEMA]",
+    JSON.stringify(schema, null, 2),
+    "[RAW_OUTPUT]",
+    raw.slice(0, 20000),
+    `[PHASE] ${phase}`,
+  ].join("\n");
+}
+
+/** 修复请求：不附图片（纯文本 JSON 修复），metadata.phase 用 repair: 前缀区分。 */
+function buildRepairRequest(repairPrompt: string, opts: RequestBuildOptions): CanonicalModelRequest {
+  return {
+    provider: opts.provider,
+    model: opts.model,
+    messages: [{ role: "user", content: [{ type: "text", text: repairPrompt }] }],
+    maxOutputTokens: opts.maxOutputTokens,
+    temperature: opts.temperature,
+    stream: true,
+    metadata: { tool: "analyze_patent_figure", phase: `repair:${opts.phase}` },
+  };
+}
+
 async function callStep(
   model: FigureModelClient,
   input: AnalyzePatentFigureInput,
   prompt: string,
   maxOutputTokens: number,
+  schema: unknown,
   opts: {
     provider: string;
     modelId: string;
@@ -157,14 +191,40 @@ async function callStep(
     phase: opts.phase,
   });
   let lastError: string | undefined;
+  let lastRaw: string | undefined;
   for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
     try {
       const raw = await collectModelText(model, request, opts.signal);
+      lastRaw = raw;
       if (tryParseJson(raw) !== undefined) return { ok: true, raw };
+      lastError = "JSON 解析失败";
     } catch (error) {
+      // 网络/流错误：清空 lastRaw，避免对历史坏 JSON 发起无意义的修复调用。
+      lastRaw = undefined;
       lastError = error instanceof Error ? error.message : String(error);
     }
   }
+
+  // JSON 自愈：重试耗尽后带 schema 让模型重写一次（不附图片，成本可控）；
+  // 修复仍失败则走既有降级路径（ok: false）。
+  if (lastRaw !== undefined && lastRaw.trim().length > 0) {
+    const repairPrompt = buildRepairPrompt(schema, lastRaw, opts.phase);
+    try {
+      const repairRequest = buildRepairRequest(repairPrompt, {
+        provider: opts.provider,
+        model: opts.modelId,
+        maxOutputTokens,
+        temperature: opts.temperature,
+        phase: opts.phase,
+      });
+      const repaired = await collectModelText(model, repairRequest, opts.signal);
+      if (tryParseJson(repaired) !== undefined) return { ok: true, raw: repaired };
+      lastError = "JSON 修复后仍无法解析";
+    } catch (error) {
+      lastError = `JSON 修复失败：${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
   return { ok: false, error: lastError ?? `模型未返回有效 JSON（尝试 ${opts.maxRetries + 1} 次）` };
 }
 
@@ -302,7 +362,7 @@ export async function analyzePatentFigure(
 
   // ---- Step1：分类 + 整体理解 ----
   const step1Prompt = buildStep1Prompt(figureNumber, input.claimContext);
-  const step1Call = await callStep(model, input, step1Prompt, STEP1_MAX_OUTPUT_TOKENS, {
+  const step1Call = await callStep(model, input, step1Prompt, STEP1_MAX_OUTPUT_TOKENS, STEP1_SCHEMA, {
     provider,
     modelId,
     temperature,
@@ -338,7 +398,7 @@ export async function analyzePatentFigure(
   let figureDescription = "";
 
   const step2Prompt = buildStep2Prompt(figureNumber, figureType, overallDescription, input.claimContext);
-  const step2Call = await callStep(model, input, step2Prompt, maxOutputTokens, {
+  const step2Call = await callStep(model, input, step2Prompt, maxOutputTokens, STEP2_SCHEMA, {
     provider,
     modelId,
     temperature,
