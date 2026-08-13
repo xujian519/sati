@@ -45,6 +45,15 @@ const QWEN_BUDGETS: Partial<Record<ThinkingMode, number>> = {
   max: 38912,
 };
 
+/**
+ * 推理模型（reasoning-only）白名单：temperature 仅接受 1（或省略），
+ * 显式发送其他值会被 provider 以 400 拒绝。仅对白名单内模型省略温度，
+ * 避免误伤可接受 temperature 的非推理模型（如 deepseek-chat 温度范围 0-2）。
+ */
+function isReasoningOnlyModel(modelId: string): boolean {
+  return /deepseek-v4|deepseek-reasoner|kimi-k2|kimi-k3/.test(modelId.toLowerCase());
+}
+
 export function normalizeThinkingMode(thinking?: CanonicalThinkingConfig): ThinkingMode {
   if (!thinking) return "default";
   if (thinking.mode) return thinking.mode;
@@ -66,7 +75,12 @@ export function resolveThinkingPlan(
   const mode = enabledByLegacy ? "medium" : requestedMode;
 
   if (mode === "default") {
-    return { mode, enabled: false };
+    // 推理模型仅接受 temperature=1（或省略），default 模式下仍须省略显式
+    // temperature，否则带 temperature 的调用（如 session-title 的
+    // temperature: 0）会被 provider 以 400 拒绝。只按 modelId 白名单判断，
+    // 避免误伤 provider 名含 "deepseek" 的非推理模型。
+    const reasoningOnly = isReasoningOnlyModel(modelId);
+    return { mode, enabled: false, ...(reasoningOnly ? { omitTemperature: true } : {}) };
   }
 
   const budgetTokens =
@@ -281,7 +295,15 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
         unsupportedReason: `Model ${modelId} always thinks and does not support an explicit off thinking mode. Switch thinking strength back to Default.`,
       };
     }
-    return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true, preserve: true };
+    return {
+      mode,
+      enabled: false,
+      thinkingType: "disabled",
+      useOpenAICompatibleThinking: true,
+      preserve: true,
+      // 仅推理模型（v4/reasoner）省略显式温度；deepseek-chat 等接受 0-2。
+      ...(isReasoningOnlyModel(modelId) ? { omitTemperature: true } : {}),
+    };
   }
   if (isAliLlmCenter) {
     return {
@@ -290,6 +312,7 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
       thinkingType: "enabled",
       useOpenAICompatibleThinking: true,
       preserve: true,
+      ...(isReasoningOnlyModel(modelId) ? { omitTemperature: true } : {}),
     };
   }
   // 官方 v4：reasoning_effort 仅 low/high/max 三档；v4-pro 目前仅支持 high/max，
@@ -305,6 +328,7 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
     effort,
     preserve: true,
     useOpenAICompatibleThinking: true,
+    ...(isReasoningOnlyModel(modelId) ? { omitTemperature: true } : {}),
   };
 }
 
@@ -336,7 +360,8 @@ function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
       thinkingType: "disabled",
       preserve: true,
       useOpenAICompatibleThinking: true,
-      omitTemperature: true,
+      // 仅推理模型（k2.6/k3 等）省略显式温度；kimi-moonshot-v1 等旧模型接受 0-2。
+      ...(isReasoningOnlyModel(modelId) ? { omitTemperature: true } : {}),
     };
   }
   return {
@@ -344,7 +369,7 @@ function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
     enabled: mode !== "default",
     preserve: true,
     useOpenAICompatibleThinking: false,
-    omitTemperature: true,
+    ...(isReasoningOnlyModel(modelId) ? { omitTemperature: true } : {}),
   };
 }
 

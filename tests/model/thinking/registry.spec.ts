@@ -21,6 +21,8 @@ test("deepseek-v4-flash maps effort to low/high/max with openai-compatible think
   assert.equal(plan.thinkingType, "enabled");
   assert.equal(plan.effort, "high");
   assert.equal(plan.useOpenAICompatibleThinking, true);
+  // 推理模型仅接受 temperature=1（或省略），显式温度一律省略。
+  assert.equal(plan.omitTemperature, true);
 });
 
 test("deepseek-v4-flash clamps medium to low and xhigh to max", () => {
@@ -41,6 +43,8 @@ test("deepseek-v4 off disables thinking via thinking.type=disabled", () => {
   const plan = planFor("deepseek", "deepseek-v4-flash", { mode: "off", enabled: true });
   assert.equal(plan.enabled, false);
   assert.equal(plan.thinkingType, "disabled");
+  // off 分支同样省略温度（v4 仅接受 temperature=1 或省略）。
+  assert.equal(plan.omitTemperature, true);
 });
 
 test("deprecated deepseek-chat keeps legacy high/max effort semantics", () => {
@@ -48,6 +52,17 @@ test("deprecated deepseek-chat keeps legacy high/max effort semantics", () => {
   assert.equal(medium.effort, "high");
   const low = planFor("deepseek", "deepseek-chat", { mode: "low", enabled: true });
   assert.equal(low.effort, "high");
+});
+
+test("non-reasoning deepseek-chat keeps explicit temperature (no omitTemperature)", () => {
+  const plan = planFor("deepseek", "deepseek-chat", { mode: "high", enabled: true });
+  assert.equal(plan.omitTemperature, undefined);
+});
+
+test("non-reasoning kimi-moonshot-v1 keeps explicit temperature (no omitTemperature)", () => {
+  const plan = planFor("moonshot", "kimi-moonshot-v1-32k", undefined);
+  assert.equal(plan.enabled, false);
+  assert.equal(plan.omitTemperature, undefined);
 });
 
 test("deprecated deepseek-reasoner rejects explicit off (always-thinking)", () => {
@@ -81,9 +96,22 @@ test("kimi-k2.6 keeps dual-mode behavior (off -> thinking.type=disabled)", () =>
   assert.equal(off.useOpenAICompatibleThinking, true);
 });
 
-test("default thinking mode keeps thinking disabled without adapter", () => {
+test("default thinking mode keeps thinking disabled but omits temperature for deepseek", () => {
   const plan = planFor("deepseek", "deepseek-v4-flash", undefined);
   assert.equal(plan.enabled, false);
+  assert.equal(plan.omitTemperature, true);
+});
+
+test("default thinking mode omits temperature for kimi reasoning models", () => {
+  const plan = planFor("moonshot", "kimi-k2.6", undefined);
+  assert.equal(plan.enabled, false);
+  assert.equal(plan.omitTemperature, true);
+});
+
+test("default thinking mode for other providers keeps no omitTemperature", () => {
+  const plan = planForOpenAI("openai", "gpt-5.5", undefined);
+  assert.equal(plan.enabled, false);
+  assert.equal(plan.omitTemperature, undefined);
 });
 
 test("gpt-5.5-off maps to reasoning_effort none (not disabled)", () => {

@@ -2178,6 +2178,15 @@ function normalizeProviderApi(value: string): string {
   return api === "gemini" ? "google" : api;
 }
 
+/**
+ * 推理模型（deepseek-v4 系列/deepseek-reasoner/kimi-k2 系列/kimi-k3 等）
+ * 仅接受 temperature=1（或省略）。直连构造 body 时须省略显式 temperature，
+ * 否则 provider 返回 400 "invalid temperature: only 1 is allowed for this model"。
+ */
+function shouldOmitTemperature(model: string): boolean {
+  return /deepseek-v4|deepseek-reasoner|deepseek-r1|kimi-k2|kimi-k3/.test(model.toLowerCase());
+}
+
 function buildGoogleGenerateContentUrl(baseUrl: string, model: string): string {
   const url = new URL(stripTrailingSlash(baseUrl));
   const parts = url.pathname.split("/").filter(Boolean);
@@ -2356,7 +2365,7 @@ export class LlmMemoryExtractor {
       url = `${selection.baseUrl}/responses`;
       body = {
         model: selection.model,
-        temperature: 0,
+        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
         input: [
           { role: "system", content: input.systemPrompt },
           { role: "user", content: input.userPrompt },
@@ -2369,7 +2378,7 @@ export class LlmMemoryExtractor {
       body = {
         model: selection.model,
         max_tokens: 65536,
-        temperature: 0,
+        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
         system: input.systemPrompt,
         messages: [{ role: "user", content: input.userPrompt }],
       };
@@ -2380,7 +2389,7 @@ export class LlmMemoryExtractor {
         systemInstruction: { parts: [{ text: input.systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: input.userPrompt }] }],
         generationConfig: {
-          temperature: 0,
+          temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
           responseMimeType: "application/json",
         },
       };
@@ -2389,7 +2398,7 @@ export class LlmMemoryExtractor {
       url = `${selection.baseUrl}/chat/completions`;
       body = {
         model: selection.model,
-        temperature: 0,
+        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
         stream: false,
         response_format: { type: "json_object" },
         messages: [
