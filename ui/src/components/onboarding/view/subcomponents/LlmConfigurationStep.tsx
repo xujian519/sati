@@ -37,7 +37,8 @@ const DEFAULT_PROVIDER = CATALOG_PROVIDERS.find(provider => provider.id === "dee
 
 function defaultModelForProvider(provider: CatalogProvider | null) {
   if (!provider) return "";
-  return provider.models.find(model => model.id === "deepseek/deepseek-v4-flash")?.id ?? provider.models[0]?.id ?? "";
+  // DeepSeek provider 的模型 id 无 "deepseek/" 前缀（带前缀的是 OpenRouter 入口）。
+  return provider.models.find(model => model.id === "deepseek-v4-flash")?.id ?? provider.models[0]?.id ?? "";
 }
 
 function hasUsableApiKey(value: unknown) {

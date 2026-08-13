@@ -150,7 +150,13 @@ export async function buildModelOptionsFromConfigDynamic(
       const liveOptions = live.map((m: ApiModelListItem) => {
         const value = `${pid}/${m.id}`;
         liveValues.add(value);
-        const supportsImage = catalog?.models.find(cm => cm.id === m.id)?.supportsImage;
+        // 与同步路径一致：用户在 provider.models 声明的 multimodal 覆盖优先，
+        // 否则回退 catalog 手维护值（同一模型在 live 加载前后 🖼 指示不跳变）。
+        const userDeclared = isRecord(prov.models) ? declaredMultimodalInput(prov.models[m.id]) : undefined;
+        const supportsImage =
+          userDeclared !== undefined
+            ? userDeclared.includes("image")
+            : catalog?.models.find(cm => cm.id === m.id)?.supportsImage;
         return { value, label: `${displayName}: ${m.displayName}`, supportsImage };
       });
       // live 列表替换 catalog 写死模型；配置显式声明的模型（不在 live 中）保留

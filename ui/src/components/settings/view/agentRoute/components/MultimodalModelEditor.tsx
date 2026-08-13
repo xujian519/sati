@@ -23,14 +23,17 @@ export default function MultimodalModelEditor({ config, onChange }: MultimodalMo
   const modelOpts = useDynamicModelOptions(config);
 
   const setMedia = (chain: string[]) => {
-    if (chain.length === 0) {
+    // 过滤空串：无配置 provider 时下拉可能产出 ""，写空 ref 会让后端
+    // resolveProviderRef 产生 ROUTER_REF_INVALID fatal 诊断（整段 router 配置被拒）。
+    const filtered = chain.filter(v => v.trim().length > 0);
+    if (filtered.length === 0) {
       // 删空时移除 media 键，而非残留 media: []（后端 parse 会忽略空数组，但 yaml 应干净）。
       const fallback = { ...(config.router?.fallback ?? {}) };
       delete fallback.media;
       onChange(patch(config, ["router", "fallback"], fallback));
       return;
     }
-    onChange(patch(ensureModelRefsConfigured(config, chain), ["router", "fallback", "media"], chain));
+    onChange(patch(ensureModelRefsConfigured(config, filtered), ["router", "fallback", "media"], filtered));
   };
 
   return (
@@ -71,7 +74,11 @@ export default function MultimodalModelEditor({ config, onChange }: MultimodalMo
         ))}
         <button
           type="button"
-          onClick={() => setMedia([...(media ?? []), modelOpts[0]?.value ?? ""])}
+          onClick={() => {
+            // 无可用选项（零配置 provider）时不添加空 ref（后端 fatal 诊断风险）。
+            if (modelOpts.length === 0) return;
+            setMedia([...(media ?? []), modelOpts[0]!.value]);
+          }}
           className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
         >
           <Plus className="h-3 w-3" />
