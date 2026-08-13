@@ -1004,7 +1004,7 @@ export class WeixinChannel implements ChannelAdapter {
   }
 
   private loadCredentials(): SavedCredentials | null {
-    // rebrand 前旧路径 ~/.pilotdeck 兼容回退（升级用户保留已登录状态）
+    // legacy(pre-rebrand): 兼容 PilotDeck 旧 home ~/.pilotdeck 回退，升级用户保留已登录状态
     const candidatePaths = [this.credentialsPath, join(homedir(), ".pilotdeck", "weixin-credentials.json")];
     for (const path of candidatePaths) {
       try {

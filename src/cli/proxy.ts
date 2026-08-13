@@ -21,7 +21,7 @@ type DispatcherState =
 export function getProxyUrl(env: EnvLike = process.env): string | undefined {
   return (
     brandEnv(env, ENV_KEY.PROXY) ||
-    env.PILOTDECK_PROXY || // rebrand 前环境变量兼容
+    env.PILOTDECK_PROXY || // legacy(pre-rebrand): 兼容 PilotDeck 旧环境变量，升级用户迁移用
     env.https_proxy ||
     env.HTTPS_PROXY ||
     env.http_proxy ||

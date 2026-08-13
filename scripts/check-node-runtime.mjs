@@ -43,6 +43,7 @@ process.emitWarning = (warning, typeOrOptions, ...args) => {
   emitWarning(warning, typeOrOptions, ...args);
 };
 
+// legacy(pre-rebrand): 兼容 PilotDeck 测试 hook，升级用户迁移用。
 // Test hooks mirror the upstream PilotDeck contract so the shared spec can
 // exercise both failure paths without touching the real runtime.
 const testMode = process.env.PILOTDECK_RUNTIME_CHECK_TEST_MODE === "1";

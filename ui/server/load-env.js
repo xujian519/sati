@@ -16,6 +16,7 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
 // retired; ui/server boots even when the config file is missing.
 
 /**
+ * legacy(pre-rebrand): 兼容 PilotDeck 旧环境变量，升级用户数据迁移用。
  * Pre-rebrand env compatibility: map explicit PILOTDECK_* / PILOT_HOME
  * settings onto their SATI_* counterparts when the new names are not set.
  * Without this, upgrading users silently lose their config path, home

@@ -883,6 +883,7 @@ router.post("/", validateExternalApiKey, async (req, res) => {
     return res.status(400).json({ error: "message is required" });
   }
 
+  // legacy(pre-rebrand): 兼容 PilotDeck 旧 provider 别名，升级用户迁移用。
   // After the Sati-only migration any incoming `provider` is just a
   // label — every request is routed through `src/gateway`. Accept the
   // legacy pre-rebrand value `pilotdeck` as an alias for `sati` so existing

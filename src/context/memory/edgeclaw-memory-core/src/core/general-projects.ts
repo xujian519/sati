@@ -8,6 +8,7 @@ export const GENERAL_PROJECT_MEMORY_DIR = "Project";
 export const GENERAL_FEEDBACK_MEMORY_DIR = "Feedback";
 export const GENERAL_WORKSPACE_DIR = join(homedir(), ".sati");
 /**
+ * legacy(pre-rebrand): 兼容 PilotDeck 旧 home，升级用户数据迁移用。
  * Pre-rebrand workspace root. Existing external/general workspaces created
  * under `~/.pilotdeck` must keep resolving to general mode after an upgrade,
  * otherwise their project memory silently falls back to single-workspace

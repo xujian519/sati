@@ -940,6 +940,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      // legacy(pre-rebrand): 清理 PilotDeck 旧环境变量，升级用户迁移用。
       // 钉死数据目录并移除旧品牌变量：load-env.js 会把遗留的 PILOT_HOME
       // 映射为 SATI_HOME —— 若用户 shell 残留 PILOT_HOME 且 SATI_HOME 未设，
       // ui-server 子进程会读 ~/.pilotdeck 而 desktop/gateway 读 ~/.sati，
@@ -972,6 +973,7 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       // unless overridden. See REASONING_FRIENDLY_MAX_OUTPUT_TOKENS docstring.
       SATI_MAX_OUTPUT_TOKENS: process.env.SATI_MAX_OUTPUT_TOKENS ?? REASONING_FRIENDLY_MAX_OUTPUT_TOKENS,
     };
+    // legacy(pre-rebrand): 清理 PilotDeck 旧环境变量，升级用户迁移用。
     // 移除旧品牌变量（见上方 SATI_HOME 注释）：显式 delete 比依赖
     // spawn 对 undefined 值的过滤更明确。
     delete env.PILOT_HOME;

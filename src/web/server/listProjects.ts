@@ -26,7 +26,7 @@ export async function listWebProjects(options: ListWebProjectsOptions): Promise<
   try {
     projectIds = await readdir(projectsDir);
   } catch {
-    // rebrand 前旧 home 回退：~/.pilotdeck/projects 的项目升级后仍可见可恢复
+    // legacy(pre-rebrand): 兼容 PilotDeck 旧 home 回退，升级用户 ~/.pilotdeck/projects 项目仍可见可恢复
     const legacyProjectsDir = join(homedir(), ".pilotdeck", "projects");
     try {
       projectIds = await readdir(legacyProjectsDir);

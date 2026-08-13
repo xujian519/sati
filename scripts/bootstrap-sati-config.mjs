@@ -211,6 +211,7 @@ function main() {
     return;
   }
 
+  // legacy(pre-rebrand): 兼容 PilotDeck 旧 home，升级用户数据迁移用。
   // rebrand 前旧 home 迁移：存在 ~/.pilotdeck/pilotdeck.yaml 时直接沿用，
   // 避免升级安装以占位配置启动而忽略用户已有的 API key/模型/渠道设置。
   const legacyConfigPath = join(homedir(), ".pilotdeck", "pilotdeck.yaml");

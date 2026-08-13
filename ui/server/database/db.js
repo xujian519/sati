@@ -57,6 +57,7 @@ if (DB_PATH !== LEGACY_DB_PATH && !fs.existsSync(DB_PATH) && fs.existsSync(LEGAC
   }
 }
 
+// legacy(pre-rebrand): 兼容 PilotDeck 旧 home，升级用户数据迁移用。
 // Pre-rebrand home migration: when the new home (~/.sati) has no auth.db but
 // the old ~/.pilotdeck home does, copy it over so existing accounts, API keys
 // and the stored JWT secret survive the rename.

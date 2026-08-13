@@ -18,6 +18,7 @@ import { Agent, EnvHttpProxyAgent, setGlobalDispatcher } from "undici";
 export const UNDICI_TRANSPORT_TIMEOUT_MS = 600_000;
 
 function getProxyUrl(env = process.env) {
+  // legacy(pre-rebrand): 兼容 PilotDeck 旧环境变量，升级用户迁移用
   return (
     env.SATI_PROXY || env.PILOTDECK_PROXY || env.https_proxy || env.HTTPS_PROXY || env.http_proxy || env.HTTP_PROXY
   );

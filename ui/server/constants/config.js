@@ -8,6 +8,7 @@ import "../load-env.js";
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === "true";
 
 /**
+ * legacy(pre-rebrand): 兼容 PilotDeck 旧环境变量，升级用户数据迁移用。
  * When true, skip JWT login/register in the web UI (single-user local mode).
  * Set SATI_DISABLE_LOCAL_AUTH=0 or false to require username/password again.
  * The pre-rebrand PILOTDECK_DISABLE_LOCAL_AUTH is honored too: an explicit

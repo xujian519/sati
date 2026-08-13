@@ -520,6 +520,7 @@ export function getSatiConfigPath() {
   if (!fs.existsSync(primary) && fs.existsSync(legacy)) {
     return legacy;
   }
+  // legacy(pre-rebrand): 兼容 PilotDeck 旧 home，升级用户数据迁移用。
   // 旧 home（~/.pilotdeck/pilotdeck.yaml）：真实 rebrand 前安装的落点
   const legacyHome = path.join(os.homedir(), ".pilotdeck", "pilotdeck.yaml");
   if (!fs.existsSync(primary) && !fs.existsSync(legacy) && fs.existsSync(legacyHome)) {
