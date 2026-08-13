@@ -620,6 +620,102 @@ export const patentInventivenessManifest: WorkflowManifest = {
 };
 
 /**
+ * 内置：可专利性检索与布局 manifest（撰写场景）。
+ * parse（主代理）→ claim-chart（要素级证据网格，atom 自动执行）→
+ * draft-claims（基于 not-found 区别特征布局规避 D1）。
+ */
+export const patentPatentabilityManifest: WorkflowManifest = {
+  id: "patent_patentability_v1",
+  name: "可专利性检索与权利要求布局",
+  caseType: "novelty_search",
+  stages: [
+    { id: "parse", strategy: "chain", description: "解析技术方案与权利要求" },
+    {
+      id: "claim-chart",
+      strategy: "chain",
+      description: "权利要求要素级映射到最接近现有技术（mode=patentability）",
+      atom: "claim-chart",
+      params: { chart_mode: "patentability" },
+    },
+    { id: "draft", strategy: "chain", description: "基于区别特征布局权利要求（规避 D1）", atom: "draft-claims" },
+    { id: "approval", strategy: "chain", description: "人工确认权利要求布局" },
+  ],
+  validation: { requireAllSteps: true, maxRetries: 2 },
+};
+
+/**
+ * 内置：审查意见答复 manifest（OA 答复场景）。
+ * parse → claim-chart（mode=oa-response，targets=审查员引用对比文件）→
+ * draft（意见陈述书撰写，消费 claim-chart 产出）。
+ */
+export const patentOaResponseManifest: WorkflowManifest = {
+  id: "patent_oa_response_v1",
+  name: "审查意见答复",
+  caseType: "oa_response",
+  stages: [
+    { id: "parse", strategy: "chain", description: "解析审查意见与权利要求" },
+    {
+      id: "claim-chart",
+      strategy: "chain",
+      description: "权利要求要素级映射到审查员引用对比文件（mode=oa-response）",
+      atom: "claim-chart",
+      params: { chart_mode: "oa-response" },
+    },
+    { id: "draft", strategy: "chain", description: "撰写意见陈述书（新颖性陈述 + 三步法，消费 claim-chart）" },
+    { id: "approval", strategy: "chain", description: "人工确认答复书" },
+  ],
+  validation: { requireAllSteps: true, maxRetries: 2 },
+};
+
+/**
+ * 内置：无效宣告/复审答复 manifest（无效/复审双场景）。
+ * parse → claim-chart（mode 经 params 切换）→ novelty（单篇全覆盖由
+ * mapping-machine 校验）→ inventiveness（区别特征 = D1 not-found 行）。
+ */
+export const patentInvalidationManifest: WorkflowManifest = {
+  id: "patent_invalidation_v1",
+  name: "无效/复审答复",
+  caseType: "invalidation_analysis",
+  stages: [
+    { id: "parse", strategy: "chain", description: "解析无效请求/驳回决定与权利要求" },
+    {
+      id: "claim-chart",
+      strategy: "chain",
+      description: "权利要求要素级映射到证据组合（mode=invalidity/reexamination）",
+      atom: "claim-chart",
+      params: { chart_mode: "invalidity" },
+    },
+    { id: "novelty", strategy: "chain", description: "新颖性单独对比（单篇全覆盖）", atom: "novelty" },
+    { id: "inventiveness", strategy: "chain", description: "三步法创造性分析", atom: "reasoning" },
+    { id: "approval", strategy: "chain", description: "人工确认分析结论" },
+  ],
+  validation: { requireAllSteps: true, maxRetries: 2 },
+};
+
+/**
+ * 内置：侵权比对 manifest（侵权场景）。
+ * parse → claim-chart（mode=infringement，targets=被控产品，支持 doe 行）→ 报告。
+ */
+export const patentInfringementManifest: WorkflowManifest = {
+  id: "patent_infringement_v1",
+  name: "侵权比对分析",
+  caseType: "infringement_analysis",
+  stages: [
+    { id: "parse", strategy: "chain", description: "解析权利要求与被控产品材料" },
+    {
+      id: "claim-chart",
+      strategy: "chain",
+      description: "权利要求要素级映射到被控产品（mode=infringement，支持等同 doe 行）",
+      atom: "claim-chart",
+      params: { chart_mode: "infringement" },
+    },
+    { id: "report", strategy: "chain", description: "生成侵权比对报告（全面覆盖 + 等同 + 现有技术抗辩）" },
+    { id: "approval", strategy: "chain", description: "人工确认比对结论" },
+  ],
+  validation: { requireAllSteps: true, maxRetries: 2 },
+};
+
+/**
  * 内置 manifest 目录（单一数据源）。
  *
  * 消费方（patent_workflow 工具）经此遍历注册 manifest，并按条目读取确定性
@@ -638,4 +734,11 @@ export const builtinPatentManifests: readonly BuiltinPatentManifest[] = [
   { manifest: patentNoveltyManifest, checkDomains: ["patent_novelty"] },
   { manifest: patentDisclosureManifest, checkDomains: ["patent_disclosure", "patent_claims"] },
   { manifest: patentInventivenessManifest, checkDomains: ["patent_inventiveness"] },
+  { manifest: patentPatentabilityManifest, checkDomains: ["patent_novelty"] },
+  { manifest: patentOaResponseManifest, checkDomains: ["patent_claims", "patent_inventiveness"] },
+  {
+    manifest: patentInvalidationManifest,
+    checkDomains: ["patent_invalidation", "patent_novelty", "patent_inventiveness"],
+  },
+  { manifest: patentInfringementManifest, checkDomains: ["patent_infringement"] },
 ];

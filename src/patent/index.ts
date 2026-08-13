@@ -49,6 +49,10 @@ export {
   patentNoveltyManifest,
   patentDisclosureManifest,
   patentInventivenessManifest,
+  patentPatentabilityManifest,
+  patentOaResponseManifest,
+  patentInvalidationManifest,
+  patentInfringementManifest,
   builtinPatentManifests,
   type BuiltinPatentManifest,
 } from "./workflow.js";
