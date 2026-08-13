@@ -41,6 +41,14 @@
 
 ---
 
+## 已处理项（2026-08-13，技术债务清理会话）
+
+- **lint 残留清零**（原"立即"1）：`src/patent/evaluate/evaluator.ts:121` 未使用变量 `overall` 已删除，`pnpm lint` 0 error / 0 warning。
+- **依赖安全 27 → 1**（原"立即"2）：`pnpm.overrides` 补齐 6 类漏洞包（tar ^7.5.21、js-yaml@>=4 4.3.1、brace-expansion 按主版本 1.1.18 / 2.1.4 / 5.0.9、nanoid 3.3.17 / 5.1.16、form-data@>=4 4.0.6、ip-address ^10.3.1、esbuild ^0.28.1）；`pnpm audit` 27 → **1**（仅 extract-zip，无可用修复版本，electron 安装期依赖）。全部为同大版本 semver 兼容升级，经 `pnpm-lock.yaml` 实测解析验证。
+- **ui-source 删除：评估后不执行**（原"立即"3）：详见 Sprint Backlog 第 3 项——ui-source 为 `/memory-dashboard` 活跃资产，非死代码，已回滚。
+
+---
+
 ## 已处理项（2026-08-02，审计当日）
 
 - **Docker 技术栈确认已放弃，全部资产已删除**：`Dockerfile`、`docker-compose.yml`、`docker-entrypoint.sh`、`.dockerignore`、`README_DOCKER*.md`、`.github/workflows/docker-build.yml` 及文档中的 Docker 部署章节已随提交 `8c0d0eca chore(docker): remove abandoned Docker deployment assets` 移除。原 P0 两条（Docker 入口引用不存在的 `pilotdeck.js`、Gateway 端口三处不一致）随之消除，不再构成债务。审计时两条均属实（前者本地复现 `MODULE_NOT_FOUND`，成因是 rebrand 提交将 `src/cli/pilotdeck.ts` 重命名为 `sati.ts` 但未同步 entrypoint；后者为 `Dockerfile:88` 18789 vs compose/代码默认 19789，成因是端口迁移提交漏改 Dockerfile）。
@@ -295,7 +303,7 @@ Top 5 热点（本次 `grep -c` 实测）：
 
 1. **[evaluator.ts](file:///Users/xujian/projects/Sati/src/patent/evaluate/evaluator.ts#L121-L121) unused var 清理**：删除 `overall` 变量或加 `_` 前缀 → DoD：`pnpm lint` 0 errors / 0 warnings。
 2. **pnpm overrides 补齐 6 类漏洞包**：`node-tar / js-yaml / brace-expansion / nanoid / form-data / ip-address` → DoD：`pnpm audit --registry npmjs` 清到 ≤ 10 条（剩余均在 dev/build 链，标注不触及生产）。
-3. **删除 `edgeclaw-memory-core/ui-source/`**：`grep -r ui-source` 确认无引用后 `git rm` → DoD：`git status` 无该目录、`pnpm typecheck` 全绿。
+3. **删除 `edgeclaw-memory-core/ui-source/`**：~~`grep -r ui-source` 确认无引用后 `git rm`~~ → ⏸️ **评估后不执行（2026-08-13）**：审计假设"无引用的历史遗留"不成立——`ui-source/` 是 `/memory-dashboard` 内存仪表盘的活跃资产（`release.sh:566-575` 强制检查并打包进 sati-memory-core bundle、`ui/server/index.js:779-808` 静态服务、`MemoryPanel.tsx:51` iframe 加载、`auth.js:30` 鉴权豁免）。删除属 feature 级决策（需同步清理 5 处引用），已回滚保留；如需废弃该功能另立专项。
 
 ### 短期（1–2 天，不碰架构）
 
