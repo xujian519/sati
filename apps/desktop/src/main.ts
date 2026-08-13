@@ -10,6 +10,9 @@
  *   4. Wait for /health, then load http://127.0.0.1:<port>/ in BrowserWindow
  */
 
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import {
   BrowserWindow,
   Menu,
@@ -22,9 +25,6 @@ import {
   shell,
   type MenuItemConstructorOptions,
 } from "electron";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { validateSatiConfigFile } from "./config-validator";
 import { showOnboardingWindow } from "./onboarding-window";
 import { ServerManager } from "./server-manager";
@@ -72,8 +72,8 @@ const REPO_URL = "https://github.com/xujian519/sati";
 const ISSUES_URL = `${REPO_URL}/issues`;
 
 /**
- * Read build-info.json (emitted by scripts/release.sh) and feed it into
- * macOS's native "About" panel. Result: `Sati → 关于 Sati` shows
+ * Read build-info.json (emitted by release.sh / build-win.bat) into a shape
+ * shared by macOS's native About panel and the Windows About dialog. Result:
  *
  *   Sati
  *   Version 0.1.1
@@ -81,16 +81,10 @@ const ISSUES_URL = `${REPO_URL}/issues`;
  *   Copyright …
  *
  * In dev (`npm run dev`) build-info.json doesn't exist yet — we fall back to
- * package.json version + a "(dev build)" marker so the About panel still
- * works and is obviously distinguishable from a packaged release.
- *
- * macOS-only: `setAboutPanelOptions` is a no-op on Linux/Windows, so the
- * platform guard isn't strictly required, but we keep the early-return for
- * symmetry with setupAppMenu.
+ * package.json version + a "(dev build)" marker so the About UI still works
+ * and is obviously distinguishable from a packaged release.
  */
-function setupAboutPanel(): void {
-  if (process.platform !== "darwin") return;
-
+function readBuildInfo(): { version: string; versionLine: string; copyright: string } {
   type BuildInfo = {
     version?: string;
     gitSha?: string;
@@ -117,11 +111,26 @@ function setupAboutPanel(): void {
   // human-friendly version in `applicationVersion` and provenance in `version`.
   const versionLine = sha && date ? `build ${sha} · ${date}` : "dev build";
 
+  return {
+    version,
+    versionLine,
+    copyright: "Copyright © 2026 徐健  xujian519@gmail.com. AGPL-3.0-or-later.",
+  };
+}
+
+/**
+ * macOS native "About" panel. `setAboutPanelOptions` is a no-op on
+ * Linux/Windows, so the platform guard isn't strictly required, but we keep
+ * the early-return for symmetry with setupAppMenu.
+ */
+function setupAboutPanel(): void {
+  if (process.platform !== "darwin") return;
+  const { version, versionLine, copyright } = readBuildInfo();
   app.setAboutPanelOptions({
     applicationName: "Sati",
     applicationVersion: version,
     version: versionLine,
-    copyright: "Copyright © 2026 徐健  xujian519@gmail.com. AGPL-3.0-or-later.",
+    copyright,
   });
 }
 
@@ -139,6 +148,35 @@ function setupAboutPanel(): void {
 function buildHelpSubmenu(): MenuItemConstructorOptions[] {
   const localUrl = currentServerPort != null ? `http://127.0.0.1:${currentServerPort}/` : null;
   return [
+    // macOS 的原生 About 面板由 App 菜单（role: "about"）触发；Windows 没有
+    // 对应 role，setAboutPanelOptions 是 no-op —— 这里补一个原生对话框，让
+    // Windows 用户也能看到 version + git-sha + build-date（与 macOS About
+    // 面板同样的三段信息），报 bug 时能精确定位代码。
+    ...(process.platform !== "darwin"
+      ? ([
+          {
+            label: "关于 Sati",
+            click: () => {
+              const { version, versionLine, copyright } = readBuildInfo();
+              const options: Electron.MessageBoxOptions = {
+                type: "info",
+                title: "关于 Sati",
+                message: "正念智能体",
+                detail: `版本 ${version}\n${versionLine}\n\n${copyright}`,
+                buttons: ["确定"],
+              };
+              // 绑到主窗口作父级，避免对话框出现在主窗口后面；主窗口尚不存在时退化为无父级对话框。
+              const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+              if (parent) {
+                void dialog.showMessageBox(parent, options);
+              } else {
+                void dialog.showMessageBox(options);
+              }
+            },
+          },
+          { type: "separator" as const },
+        ] as MenuItemConstructorOptions[])
+      : []),
     {
       label: "在浏览器中打开",
       // Disabled until the local server has emitted `ready` with a
@@ -282,7 +320,6 @@ function summarizeStartupFailure(message: string): {
   headline: string;
   detail: string;
 } {
-  // eslint-disable-next-line no-control-regex
   const stripped = message.replace(/\x1b\[[0-9;]*m/g, "");
 
   // 服务器端实际校验文案是 "<field> is required"（satiConfig.js validateSatiConfig），

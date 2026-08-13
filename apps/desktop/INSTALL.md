@@ -85,7 +85,17 @@ Windows 安装包为 NSIS 安装器（`Sati-<version>-win-x64.exe`，arm64 构�
 1. 点击 **更多信息**
 2. 点击 **仍要运行**
 
-已签名的官方包不会出现此提示。如不确定来源，可校验文件哈希后再安装。
+已签名的官方包不会出现此提示。如不确定来源，可校验文件哈希后再安装：
+
+1. 把 `verify-signature-win.bat` 和安装包放在一起（随包发布）
+2. 双击运行，传入安装包路径（或让它自动找 `dist-electron\Sati-*.exe`）
+3. 脚本输出 **SHA256**、**Authenticode 签名状态** 与 **签发者**——
+   - `Valid` 且签发者是 Sati / 官方 OV/EV 证书 → 放心安装
+   - `NotSigned` → 未签名包，按上面"仍要运行"安装
+   - `HashMismatch` / `UnknownError` → 文件可能损坏或被篡改，重新下载
+
+macOS 需要 `install-sati.sh` 修复 Gatekeeper/provenance；Windows 没有这个机制，
+只需验证签名与哈希，`verify-signature-win.bat` 就是它的对应物。
 
 ### 常驻行为
 

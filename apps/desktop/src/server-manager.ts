@@ -757,6 +757,15 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     }
     linkDirectory(memSrcLink, satiMemoryDir);
 
+    // Windows bsdtar FOLLOWS directory junctions while archiving node_modules,
+    // so the extracted tree has real directories where pnpm placed junctions
+    // (macOS/Linux keep symlinks and are unaffected). Node's ESM resolution
+    // then can't reach a package's isolated deps in the virtual store (e.g.
+    // `@google/genai` -> `p-retry` throws ERR_MODULE_NOT_FOUND at startup).
+    // Re-link real package dirs to their canonical vstore location. Idempotent:
+    // existing symlinks/junctions are skipped, so this is a no-op on macOS/Linux.
+    this.reconstructPnpmLinks(satiMainDir, [satiUiDir, satiMemoryDir]);
+
     return {
       nodeBin: bundledBinary(path.join(resources, "node-bin"), "node"),
       bunBin: bundledBinary(path.join(resources, "bun-bin"), "bun"),
@@ -764,6 +773,146 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
       serverCwd: satiUiDir,
       satiMainDir,
     };
+  }
+
+  // ───────────────────────── Pnpm link reconstruction ─────────────────────
+  //
+  // See the call site in resolvePaths() for the full rationale. Re-links real
+  // package dirs inside an extracted pnpm node_modules tree back to their
+  // canonical `.pnpm/<name>@<version>/node_modules/<name>` vstore locations so
+  // Node's ESM resolver can reach isolated transitive deps on Windows (where
+  // bsdtar materialized the junctions). Version is matched from each package's
+  // package.json, preserving pnpm's version isolation. Idempotent and safe on
+  // any platform: already-linked entries are skipped.
+  private reconstructPnpmLinks(satiMainDir: string, extraRoots: string[]): void {
+    const pnpmDir = path.join(satiMainDir, "node_modules", ".pnpm");
+    if (!fsSync.existsSync(pnpmDir)) return; // not a pnpm virtual-store layout
+
+    const encode = (name: string): string => (name.startsWith("@") ? name.replace("/", "+") : name);
+
+    const versionOf = (dir: string): string | null => {
+      try {
+        const pkg = JSON.parse(fsSync.readFileSync(path.join(dir, "package.json"), "utf8")) as { version?: string };
+        return pkg.version ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    const tryLink = (pkgDir: string, name: string): void => {
+      let st: fsSync.Stats;
+      try {
+        st = fsSync.lstatSync(pkgDir);
+      } catch {
+        return;
+      }
+      if (st.isSymbolicLink() || st.isFile()) return;
+      const ver = versionOf(pkgDir);
+      if (!ver) return;
+
+      let candidates: string[];
+      try {
+        candidates = fsSync.readdirSync(pnpmDir).filter(d => d.startsWith(`${encode(name)}@`));
+      } catch {
+        return;
+      }
+      if (candidates.length === 0) return;
+      const pick =
+        candidates.find(c => c === `${encode(name)}@${ver}`) ?? (candidates.length === 1 ? candidates[0] : null);
+      if (!pick) return;
+
+      const target = path.join(pnpmDir, pick, "node_modules", name);
+      if (!fsSync.existsSync(target)) return;
+      if (path.resolve(target) === path.resolve(pkgDir)) return; // self-link
+      try {
+        fsSync.rmSync(pkgDir, { recursive: true, force: true });
+        fsSync.symlinkSync(target, pkgDir, "junction");
+      } catch {
+        /* best-effort: locked/read-only dirs are left as real dirs */
+      }
+    };
+
+    const processNodeModules = (nm: string): void => {
+      let entries: string[];
+      try {
+        entries = fsSync.readdirSync(nm);
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        if (e === ".pnpm" || e === ".bin") continue;
+        const p = path.join(nm, e);
+        let st: fsSync.Stats;
+        try {
+          st = fsSync.lstatSync(p);
+        } catch {
+          continue;
+        }
+        if (st.isSymbolicLink()) continue;
+        if (e.startsWith("@")) {
+          let scopeEntries: string[];
+          try {
+            scopeEntries = fsSync.readdirSync(p);
+          } catch {
+            continue;
+          }
+          for (const child of scopeEntries) {
+            const cp = path.join(p, child);
+            let cst: fsSync.Stats;
+            try {
+              cst = fsSync.lstatSync(cp);
+            } catch {
+              continue;
+            }
+            if (!cst.isSymbolicLink() && cst.isDirectory()) tryLink(cp, `${e}/${child}`);
+          }
+        } else if (st.isDirectory()) {
+          tryLink(p, e);
+        }
+      }
+    };
+
+    // Collect every node_modules/ dir in the tree, including inside the vstore.
+    const found = new Set<string>();
+    const dirs: string[] = [
+      path.join(satiMainDir, "node_modules"),
+      ...extraRoots.map(r => path.join(r, "node_modules")),
+    ];
+    let pnpmPkgs: string[];
+    try {
+      pnpmPkgs = fsSync.readdirSync(pnpmDir);
+    } catch {
+      pnpmPkgs = [];
+    }
+    for (const pkg of pnpmPkgs) {
+      const inner = path.join(pnpmDir, pkg, "node_modules");
+      if (fsSync.existsSync(inner)) dirs.push(inner);
+    }
+    while (dirs.length > 0) {
+      const d = dirs.pop();
+      if (!d || found.has(d)) continue;
+      found.add(d);
+      let entries: string[];
+      try {
+        entries = fsSync.readdirSync(d);
+      } catch {
+        continue;
+      }
+      for (const e of entries) {
+        if (e === ".pnpm" || e === ".bin") continue;
+        const p = path.join(d, e);
+        let st: fsSync.Stats;
+        try {
+          st = fsSync.lstatSync(p);
+        } catch {
+          continue;
+        }
+        if (!st.isDirectory() || st.isSymbolicLink()) continue;
+        const inner = path.join(p, "node_modules");
+        if (fsSync.existsSync(inner)) dirs.push(inner);
+      }
+    }
+    for (const d of found) processNodeModules(d);
   }
 
   // ───────────────────────── Orphan-process cleanup ───────────────────────

@@ -61,6 +61,74 @@ const version = desktopPkg.version;
 const tag = `v${version}`;
 console.log(`  Version: ${tag}`);
 
+// ── Version lockstep (mirrors release.sh pre-flight) ──
+// Gateway hello frames, the MCP client identity and the TUI header read the
+// repo-root package.json; a mismatch makes installed desktop version diverge
+// from the reported internal version. Use `node scripts/bump-version.mjs`.
+const rootPkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));
+const uiPkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "ui", "package.json"), "utf8"));
+if (rootPkg.version !== version) {
+  fail(
+    `Repo-root package.json version (${rootPkg.version}) != desktop version (${version}).\n` +
+      "  Keep versions in lockstep: run 'node scripts/bump-version.mjs' from the repo root.",
+  );
+}
+if (uiPkg.version !== version) {
+  fail(
+    `ui/package.json version (${uiPkg.version}) != desktop version (${version}).\n` +
+      "  Keep versions in lockstep: run 'node scripts/bump-version.mjs' from the repo root.",
+  );
+}
+
+// ── Git provenance gate (mirrors release.sh pre-flight) ──
+// A published installer without a corresponding git tag is untraceable — when a
+// user reports a bug you can't check out the code that built their binary.
+// Escape hatches match release.sh: ALLOW_UNTAGGED=1 skips the tag check,
+// ALLOW_NON_MAIN_SIGNED=1 allows publishing from a non-main branch.
+function git(args) {
+  try {
+    return sh("git", ["-C", REPO_ROOT, ...args]);
+  } catch {
+    return null;
+  }
+}
+
+const gitSha = git(["rev-parse", "--short", "HEAD"]);
+if (gitSha === null) {
+  console.log("  ⚠ Not a git checkout — skipping tag/branch checks");
+} else {
+  const gitFullSha = git(["rev-parse", "HEAD"]);
+  const tagSha = git(["rev-parse", `${tag}^{commit}`]);
+  if (tagSha === null || tagSha !== gitFullSha) {
+    if (process.env.ALLOW_UNTAGGED !== "1") {
+      fail(
+        `git tag '${tag}' does not point at HEAD (${gitSha}).\n` +
+          "  Tag the release commit first: git tag -a " +
+          tag +
+          ` -m "release(desktop): v${version}"\n` +
+          "  Local testing can bypass with: ALLOW_UNTAGGED=1 node scripts/publish-win.mjs",
+      );
+    }
+    console.log(`  ⚠ tag '${tag}' ≠ HEAD (ALLOW_UNTAGGED=1) — publishing anyway`);
+  } else {
+    console.log(`  git tag: ${tag} → HEAD (${gitSha})`);
+  }
+
+  const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
+  if (branch && !["main", "master", "release"].includes(branch)) {
+    if (process.env.ALLOW_NON_MAIN_SIGNED !== "1") {
+      fail(
+        `Publishing from non-release branch '${branch}'.\n` +
+          "  Official releases should come from main/master/release.\n" +
+          "  Hotfix 强制覆盖: ALLOW_NON_MAIN_SIGNED=1 node scripts/publish-win.mjs",
+      );
+    }
+    console.log(`  ⚠ publishing from branch '${branch}' (ALLOW_NON_MAIN_SIGNED=1)`);
+  } else if (branch) {
+    console.log(`  Branch: ${branch}`);
+  }
+}
+
 // ── Collect installers ──
 const exes = fs
   .readdirSync(distDir)

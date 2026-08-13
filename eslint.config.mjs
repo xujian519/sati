@@ -22,6 +22,8 @@ export default [
       "skills/**",
       "products/**",
       "vendor/**",
+      "apps/desktop/dist/**",
+      "apps/desktop/dist-electron/**",
       "src/context/memory/edgeclaw-memory-core/**",
     ],
   },
@@ -33,6 +35,7 @@ export default [
       "tests/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
       "scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
       "apps/desktop/scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
+      "apps/desktop/src/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
     ],
     plugins: {
       react,

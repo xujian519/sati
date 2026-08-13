@@ -21,8 +21,8 @@
  * before showing the error dialog).
  */
 
-import { BrowserWindow } from "electron";
 import * as path from "node:path";
+import { BrowserWindow } from "electron";
 
 export interface SplashController {
   /**
