@@ -50,6 +50,8 @@ export function getProxyUrl(env: EnvLike = process.env): string | undefined {
  */
 let dispatcherState: DispatcherState | undefined;
 let pendingInstall: Promise<string | undefined> | null = null;
+let directFallbackAgent: import("undici").Agent | null = null;
+let fetchFallbackInstalled = false;
 
 export async function installGlobalProxy(explicitUrl?: string, extraNoProxy?: string): Promise<string | undefined> {
   if (pendingInstall) return pendingInstall;
@@ -99,6 +101,54 @@ export function getGlobalProxyStateForTesting(): DispatcherState | undefined {
   return dispatcherState ? { ...dispatcherState } : undefined;
 }
 
+/** 连接建立阶段失败码：代理未运行时 undici 抛 ECONNREFUSED / UND_ERR_CONNECT_TIMEOUT。 */
+const PROXY_CONNECTION_ERROR_CODES = new Set(["ECONNREFUSED", "UND_ERR_CONNECT_TIMEOUT"]);
+
+/**
+ * 递归查找 error → cause 链中的连接类错误码。代理不可达时 Node fetch
+ * 抛 `TypeError: fetch failed`，cause 为 `Error: connect ECONNREFUSED 127.0.0.1:9981`。
+ */
+export function isProxyConnectionError(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    const record = current as { code?: unknown; cause?: unknown };
+    if (typeof record.code === "string" && PROXY_CONNECTION_ERROR_CODES.has(record.code)) return true;
+    current = record.cause;
+  }
+  return false;
+}
+
+function describeFetchInput(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+/**
+ * 包装全局 fetch：代理模式下若连接建立失败（代理未运行/连不上），自动用直连
+ * dispatcher 重试一次，实现"代理开与关都不影响"。仅在请求尚未发出（连接阶段
+ * 失败）时回退，HTTP 状态码错误不受影响。
+ */
+function installFetchProxyFallback(): void {
+  if (fetchFallbackInstalled) return;
+  fetchFallbackInstalled = true;
+  const nativeFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = (async (input: Parameters<typeof nativeFetch>[0], init?: Parameters<typeof nativeFetch>[1]) => {
+    if (dispatcherState?.mode !== "proxy") return nativeFetch(input, init);
+    try {
+      return await nativeFetch(input, init);
+    } catch (error) {
+      if (!isProxyConnectionError(error)) throw error;
+      console.warn(`[proxy] Proxy unreachable, retrying direct (${describeFetchInput(input)})`);
+      const { Agent, fetch: undiciFetch } = await import("undici");
+      directFallbackAgent ??= new Agent(createLongTimeoutOptions());
+      return undiciFetch(input as never, { ...(init ?? {}), dispatcher: directFallbackAgent } as never);
+    }
+  }) as typeof nativeFetch;
+}
+
 async function applyDirectDispatcher(logRemoval = false): Promise<string | undefined> {
   try {
     const { Agent, setGlobalDispatcher } = await import("undici");
@@ -129,6 +179,7 @@ async function applyGlobalProxy(
     });
     setGlobalDispatcher(agent);
     dispatcherState = { mode: "proxy", source, proxyUrl, noProxy };
+    installFetchProxyFallback();
     console.log(`[proxy] Global fetch proxy → ${proxyUrl} (noProxy: ${noProxy})`);
     return proxyUrl;
   } catch (error) {

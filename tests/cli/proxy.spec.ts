@@ -4,6 +4,7 @@ import {
   createLongTimeoutOptions,
   getProxyUrl,
   installGlobalProxy,
+  isProxyConnectionError,
   reinstallGlobalProxy,
 } from "../../src/cli/proxy.js";
 
@@ -38,4 +39,20 @@ test("installGlobalProxy with no proxy configured returns undefined", async () =
 test("reinstallGlobalProxy with undefined removes the proxy", async () => {
   const result = await reinstallGlobalProxy(undefined);
   assert.equal(result, undefined);
+});
+
+test("isProxyConnectionError walks the cause chain for ECONNREFUSED", () => {
+  const err = new TypeError("fetch failed", {
+    cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:9981"), { code: "ECONNREFUSED" }),
+  });
+  assert.equal(isProxyConnectionError(err), true);
+});
+
+test("isProxyConnectionError rejects DNS and non-network errors", () => {
+  const dnsError = new TypeError("fetch failed", {
+    cause: Object.assign(new Error("getaddrinfo ENOTFOUND example.test"), { code: "ENOTFOUND" }),
+  });
+  assert.equal(isProxyConnectionError(dnsError), false);
+  assert.equal(isProxyConnectionError(new Error("boom")), false);
+  assert.equal(isProxyConnectionError(undefined), false);
 });
