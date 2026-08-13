@@ -30,6 +30,7 @@ export const TRIGGERS = [
 /** 39×39 矛盾矩阵（[恶化参数][改善参数] = 推荐原理编号数组）。 */
 let matrixCache: number[][][] | null = null;
 
+// 注意：dist 构建（pnpm build）的 cpSync 白名单不含 data/ 目录，T11 需把矩阵数据纳入构建拷贝（否则 dist 运行时 ENOENT）
 export function loadMatrix(): number[][][] {
   if (matrixCache) return matrixCache;
   const path = join(dirname(fileURLToPath(import.meta.url)), "data", "triz-matrix.json");
@@ -61,7 +62,7 @@ export const triz: MethodologyComponent = {
 
 方法：
 1. **定义技术矛盾**：指出当前方案中「改善的参数」与「因此恶化的参数」，从 39 个工程参数中命名这对矛盾（如：改善强度→恶化重量）
-2. **查矛盾矩阵**：以改善参数为行、恶化参数为列，从经典矛盾矩阵查得推荐发明原理编号（1-40）
+2. **查矛盾矩阵**：以恶化参数为行、改善参数为列，从经典矛盾矩阵查得推荐发明原理编号（1-40）
 3. **原理启发构思**：按命中的发明原理（结合 40 发明原理说明）生成 2-3 个候选解决方案，逐个说明其如何消解矛盾
 4. **专利场景落点**（如适用）：
    - 撰写前创新辅助：候选方案与已知现有方案的区别特征

@@ -25,6 +25,7 @@ test("execute prompt 含矛盾定义与矩阵查表步骤", () => {
   assert.ok(prompt.includes("技术矛盾"));
   assert.ok(prompt.includes("矛盾矩阵"));
   assert.ok(prompt.includes("40 发明原理"));
+  assert.ok(prompt.includes("规避设计"));
 });
 
 // lookupMatrixCell 依赖 triz-matrix.json（39×39 矛盾矩阵），该数据在 Task 11
@@ -46,6 +47,10 @@ test("40 原理数据完整（40 条，名称非空）", () => {
   ) as Array<{ no: number; name: string; description: string }>;
   assert.equal(data.length, 40);
   assert.equal(new Set(data.map(p => p.no)).size, 40);
+  assert.deepEqual(
+    data.map(p => p.no),
+    Array.from({ length: 40 }, (_, i) => i + 1),
+  );
   for (const p of data) {
     assert.ok(p.name.length > 0);
     assert.ok(p.description.length > 0);
