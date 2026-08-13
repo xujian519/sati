@@ -7,6 +7,7 @@
  * - reason.ts：reasoning（自由推理）/ groundedness（原文依据过滤）
  * - draft.ts：draft-claims（权利要求草稿）
  * - gate.ts：approval-gate（人机审批门）
+ * - chart.ts：claim-chart（要素级证据网格）
  */
 
 export {
@@ -44,3 +45,4 @@ export {
   APPROVAL_GRANTED_OUTPUT,
   isApprovalGateHandler,
 } from "./gate.js";
+export { claimChartAtom, ClaimChartHandler } from "./chart.js";

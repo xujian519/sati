@@ -55,13 +55,14 @@ test("StageHandlerRegistry 注册/查询/同名覆盖", () => {
   assert.equal(reg.lookup("t"), h2);
 });
 
-test("registerBuiltinAtoms 注册 10 个内置原子与 handler", () => {
+test("registerBuiltinAtoms 注册 11 个内置原子与 handler", () => {
   registerBuiltinAtoms();
   const names = ListAtoms()
     .map(a => a.name)
     .sort();
   assert.deepEqual(names, [
     "approval-gate",
+    "claim-chart",
     "compare",
     "draft-claims",
     "extract",
