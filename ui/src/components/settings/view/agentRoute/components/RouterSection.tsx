@@ -10,6 +10,7 @@ import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOpt
 import { PageSectionHeader, SettingsCard, SettingsRow, SettingsToggle } from "../../../shared/view";
 import { DEFAULT_RULES, DEFAULT_TIERS, ROUTER_TIER_KEYS } from "../utils/router";
 import ModelPricingEditor from "./ModelPricingEditor";
+import MultimodalModelEditor from "./MultimodalModelEditor";
 import RouterFallbackEditor from "./RouterFallbackEditor";
 import RouterLevelEditor from "./RouterLevelEditor";
 import TokenSaverRulesEditor from "./TokenSaverRulesEditor";
@@ -144,6 +145,7 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
 
           {showAdvanced && (
             <>
+              <MultimodalModelEditor config={config} onChange={onChange} />
               <RouterFallbackEditor config={config} onChange={onChange} />
 
               <SettingsCard divided>

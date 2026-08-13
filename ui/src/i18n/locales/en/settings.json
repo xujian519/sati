@@ -1320,6 +1320,12 @@
           "addModel": "Add fallback model",
           "add": "Add"
         },
+        "media": {
+          "title": "Multimodal Model",
+          "description": "Model upgrade candidates for figure/PDF requests. Used only for media understanding, not for failure fallback. Vision/thinking models cost significantly more — configure as needed.",
+          "empty": "No multimodal model configured. Media requests fall back to the fallback chain for a vision-capable model.",
+          "addModel": "Add multimodal model"
+        },
         "tiers": {
           "title": "Tiers",
           "description": "Complexity tiers the judge can route to. Pick a model for each — descriptions are pre-filled.",

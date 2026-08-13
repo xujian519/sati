@@ -32,8 +32,8 @@ describe("buildModelOptionsFromConfig", () => {
       },
     });
 
-    expect(options).toContainEqual({ value: "custom/my-model-1", label: "custom/my-model-1" });
-    expect(options).toContainEqual({ value: "custom/my-model-2", label: "custom/my-model-2" });
+    expect(options).toContainEqual({ value: "custom/my-model-1", label: "custom/my-model-1", supportsImage: false });
+    expect(options).toContainEqual({ value: "custom/my-model-2", label: "custom/my-model-2", supportsImage: false });
   });
 
   it("merges catalog models with user-declared models without duplicates", () => {

@@ -4,10 +4,25 @@ import { fetchProviderModels, type ApiModelListItem } from "./modelListApi";
 export type ModelOption = {
   value: string;
   label: string;
+  supportsImage?: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** 从模型定义（provider.models[id]）提取用户声明的 multimodal.input（未声明时 undefined）。 */
+function declaredMultimodalInput(modelDef: unknown): string[] | undefined {
+  if (!isRecord(modelDef)) return undefined;
+  const multimodal = modelDef.multimodal;
+  if (!isRecord(multimodal)) return undefined;
+  const input = multimodal.input;
+  return Array.isArray(input) ? input.filter((s): s is string => typeof s === "string") : undefined;
+}
+
+/** 从自定义模型定义判断是否声明支持 image 输入。 */
+function modelSupportsImage(modelDef: unknown): boolean {
+  return declaredMultimodalInput(modelDef)?.includes("image") ?? false;
 }
 
 const KNOWN_PROTOCOLS: CatalogProviderProtocol[] = ["openai", "openai-responses", "anthropic", "google"];
@@ -26,9 +41,13 @@ function buildModelOptionsForProvider(pid: string, prov: Record<string, unknown>
   if (catalog) {
     for (const catalogModel of catalog.models) {
       seen.add(catalogModel.id);
+      // 用户在 provider.models 里声明的 multimodal 覆盖优先，否则用 catalog 手维护值。
+      const userDeclared = isRecord(prov.models) ? declaredMultimodalInput(prov.models[catalogModel.id]) : undefined;
+      const supportsImage = userDeclared !== undefined ? userDeclared.includes("image") : catalogModel.supportsImage;
       out.push({
         value: `${pid}/${catalogModel.id}`,
         label: `${catalog.displayName}: ${catalogModel.displayName}`,
+        supportsImage,
       });
     }
   }
@@ -41,6 +60,7 @@ function buildModelOptionsForProvider(pid: string, prov: Record<string, unknown>
       out.push({
         value: `${pid}/${mid}`,
         label: catalog ? `${catalog.displayName}: ${mid}` : `${pid}/${mid}`,
+        supportsImage: modelSupportsImage(prov.models[mid]),
       });
     }
   }
@@ -130,7 +150,8 @@ export async function buildModelOptionsFromConfigDynamic(
       const liveOptions = live.map((m: ApiModelListItem) => {
         const value = `${pid}/${m.id}`;
         liveValues.add(value);
-        return { value, label: `${displayName}: ${m.displayName}` };
+        const supportsImage = catalog?.models.find(cm => cm.id === m.id)?.supportsImage;
+        return { value, label: `${displayName}: ${m.displayName}`, supportsImage };
       });
       // live 列表替换 catalog 写死模型；配置显式声明的模型（不在 live 中）保留
       out.push(...liveOptions);
@@ -138,7 +159,11 @@ export async function buildModelOptionsFromConfigDynamic(
         for (const mid of Object.keys(prov.models)) {
           const value = `${pid}/${mid}`;
           if (liveValues.has(value)) continue;
-          out.push({ value, label: catalog ? `${catalog.displayName}: ${mid}` : value });
+          out.push({
+            value,
+            label: catalog ? `${catalog.displayName}: ${mid}` : value,
+            supportsImage: modelSupportsImage(prov.models[mid]),
+          });
         }
       }
     } else {
