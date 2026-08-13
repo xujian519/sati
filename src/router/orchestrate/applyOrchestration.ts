@@ -1,3 +1,4 @@
+import { debugLog } from "../../shared/debug.js";
 import type { RouterAutoOrchestrateConfig } from "../config/schema.js";
 import type { RouterMutationsLog } from "../protocol/decision.js";
 
@@ -27,7 +28,7 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
   if (!input.alreadyOrchestrating) {
     const triggerTiers = config.triggerTiers ?? [];
     if (triggerTiers.length > 0 && (!input.tier || !triggerTiers.includes(input.tier))) {
-      console.log(`[autoOrch] tier "${input.tier}" not in triggerTiers, skipping`);
+      debugLog(`[autoOrch] tier "${input.tier}" not in triggerTiers, skipping`);
       return { mutations: {}, applied: false };
     }
   }

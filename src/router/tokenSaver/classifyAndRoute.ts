@@ -1,3 +1,4 @@
+import { debugLog } from "../../shared/debug.js";
 import type { CanonicalMessage, CanonicalModelRequest, ModelRuntime } from "../../model/index.js";
 import { ModelProviderError, ModelRequestError } from "../../model/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
@@ -140,9 +141,15 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
           }, timeoutMs);
         }),
       ]);
-      console.log(
+      // 只保留 text 块（thinking 原文不进日志），且走 SATI_DEBUG 门控避免每 turn 噪音。
+      const judgeText = response.content
+        .filter(block => block.type === "text")
+        .map(block => block.text)
+        .join("")
+        .slice(0, 500);
+      debugLog(
         `[token-saver] Judge raw content blocks (attempt ${attempt}):`,
-        JSON.stringify(response.content).slice(0, 500),
+        JSON.stringify(judgeText),
         `| finishReason=${response.finishReason}`,
       );
       const text = response.content

@@ -1,5 +1,6 @@
 import { buildEdgeClawMemoryPromptSection } from "edgeclaw-memory-core";
 import type { CanonicalMessage, CanonicalUsage } from "../model/index.js";
+import { debugLog } from "../shared/debug.js";
 import { ToolResultBudget } from "./budget/ToolResultBudget.js";
 import type { TokenBudgetManager, TokenBudgetSnapshot } from "./budget/TokenBudgetManager.js";
 import type { AutoCompactionPolicy } from "./compaction/AutoCompactionPolicy.js";
@@ -335,8 +336,8 @@ export class DefaultContextRuntime implements ContextRuntime {
   }): Promise<AutoCompactResult> {
     const sessionId = input.sessionId ?? "";
     const turnId = input.turnId ?? "";
-    const log = (stage: string, details: Record<string, unknown> = {}) => {
-      logAutoCompactEvent(stage, { sessionId, turnId }, details);
+    const log = (stage: string, details: Record<string, unknown> = {}, level?: "warn" | "debug") => {
+      logAutoCompactEvent(stage, { sessionId, turnId }, details, level);
     };
     const effectiveMaxContextTokens = input.maxContextTokens ?? this.maxContextTokens;
     if (!this.autoCompactionPolicy || !this.tokenBudget) {
@@ -372,10 +373,15 @@ export class DefaultContextRuntime implements ContextRuntime {
     const initialSnapshot = await evaluateBudget(messages, input.lastUsage);
     const decision = this.autoCompactionPolicy.evaluateSnapshot(initialSnapshot);
     if (decision.type !== "trigger") {
-      log("policy_skip", {
-        decisionType: decision.type,
-        snapshot: decision.snapshot,
-      });
+      // 未触发压缩是每个 turn 的正常信息（含完整 snapshot JSON），降 debug 避免噪音。
+      log(
+        "policy_skip",
+        {
+          decisionType: decision.type,
+          snapshot: decision.snapshot,
+        },
+        "debug",
+      );
       return { type: "skipped", snapshot: decision.snapshot };
     }
     log("policy_trigger", {
@@ -663,6 +669,7 @@ function logAutoCompactEvent(
   stage: string,
   context: { sessionId?: string; turnId?: string },
   details: Record<string, unknown>,
+  level: "warn" | "debug" = "warn",
 ): void {
   const payload = {
     sessionId: context.sessionId ?? "",
@@ -670,8 +677,17 @@ function logAutoCompactEvent(
     ...details,
   };
   try {
+    if (level === "debug") {
+      // console.debug 是 console.log 别名，无法降噪；走 SATI_DEBUG 门控。
+      debugLog(`[context:auto-compact] ${stage} ${JSON.stringify(payload)}`);
+      return;
+    }
     console.warn(`[context:auto-compact] ${stage} ${JSON.stringify(payload)}`);
   } catch {
+    if (level === "debug") {
+      debugLog(`[context:auto-compact] ${stage}`);
+      return;
+    }
     console.warn(`[context:auto-compact] ${stage}`);
   }
 }
