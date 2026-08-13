@@ -1,5 +1,6 @@
 /**
- * 要素校验（纯函数）：LLM 拆分的要素必须是权利要求原文的连续子串，
+ * 要素校验（纯函数）：LLM 拆分的要素必须与权利要求原文逐词一致
+ * （剥离全部空白后为连续子串，容忍 PDF 提取的换行/多空格折行），
  * 编号（数字+小写字母）唯一且连续无跳号 —— 防幻觉拆分。
  */
 
@@ -11,11 +12,15 @@ export function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+export function stripWhitespace(text: string): string {
+  return text.replace(/\s+/g, "");
+}
+
 const ELEMENT_ID_RE = /^(\d+)([a-z]+)$/;
 
 export function validateElements(elements: ClaimElement[], claimText: string): ElementValidationResult {
   const errors: string[] = [];
-  const normalizedClaim = normalizeWhitespace(claimText);
+  const normalizedClaim = stripWhitespace(claimText);
   if (normalizedClaim.length === 0) return { ok: false, errors: ["权利要求原文为空"] };
   if (elements.length === 0) return { ok: false, errors: ["要素列表为空"] };
 
@@ -41,7 +46,7 @@ export function validateElements(elements: ClaimElement[], claimText: string): E
     letters.push(m[2]!);
     byClaim.set(claimNo, letters);
 
-    const text = normalizeWhitespace(el.text);
+    const text = stripWhitespace(el.text);
     if (text.length === 0) {
       errors.push(`要素 ${el.id} 文本为空`);
       continue;

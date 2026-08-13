@@ -55,3 +55,32 @@ test("权利要求原文为空或要素列表为空报错", () => {
   assert.equal(validateElements([el("1a", "x")], "").ok, false);
   assert.equal(validateElements([], CLAIM).ok, false);
 });
+
+test("claim 原文含换行折行时要素仍通过（空白不参与比较）", () => {
+  const wrapped = "1. 一种过滤装置，包括\n壳体和滤芯，所述滤芯含有活性炭。";
+  const res = validateElements([el("1a", "包括壳体"), el("1b", "和滤芯"), el("1c", "所述滤芯含有活性炭")], wrapped);
+  assert.equal(res.ok, true);
+});
+
+test("多 claim 共存且各自连续时通过，跨 claim 跳号报错", () => {
+  const multi = "1. 一种过滤装置，包括壳体和滤芯。2. 所述滤芯含有活性炭。";
+  const ok = validateElements([el("1a", "包括壳体"), el("1b", "和滤芯"), el("2a", "所述滤芯含有活性炭")], multi);
+  assert.equal(ok.ok, true);
+
+  const bad = validateElements(
+    [el("1a", "包括壳体"), el("1b", "和滤芯"), el("2a", "所述滤芯含有活性炭"), el("2c", "活性炭")],
+    multi,
+  );
+  assert.equal(bad.ok, false);
+  if (!bad.ok) {
+    assert.ok(bad.errors.some(e => e.includes("跳号")));
+  }
+});
+
+test("空白-only 要素文本报错", () => {
+  const res = validateElements([el("1a", "   ")], CLAIM);
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.ok(res.errors.some(e => e.includes("文本为空")));
+  }
+});
