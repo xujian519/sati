@@ -13,11 +13,16 @@ function ctx(goal: string) {
 test("identify：矛盾/权衡/规避等触发词命中", () => {
   assert.ok(triz.identify(ctx("这个结构的强度和重量存在矛盾，需要权衡")) > 0);
   assert.ok(triz.identify(ctx("对竞争对手专利做规避设计")) > 0);
-  assert.ok(triz.identify(ctx("优化传动效率同时减小体积")) > 0);
+  assert.ok(triz.identify(ctx("优化传动效率时体积增大，需要权衡")) > 0);
 });
 
 test("identify：无关任务不命中", () => {
   assert.equal(triz.identify(ctx("写一份会议纪要")), 0);
+});
+
+test("identify：泛化的改进/优化/重构词不单独触发（归属 pdca/first-principles）", () => {
+  assert.equal(triz.identify(ctx("改进生产线流程，优化效率")), 0);
+  assert.equal(triz.identify(ctx("重构这套系统的架构")), 0);
 });
 
 test("execute prompt 含矛盾定义与矩阵查表步骤", () => {
@@ -26,6 +31,19 @@ test("execute prompt 含矛盾定义与矩阵查表步骤", () => {
   assert.ok(prompt.includes("矛盾矩阵"));
   assert.ok(prompt.includes("40 发明原理"));
   assert.ok(prompt.includes("规避设计"));
+});
+
+test("execute：goal 含工程参数时注入确定性查表结果", () => {
+  const { prompt } = triz.execute(ctx("提高强度同时减轻重量"));
+  assert.ok(prompt.includes("确定性查表结果"));
+  assert.ok(prompt.includes("强度(14)"));
+  assert.ok(prompt.includes("重量(1)"));
+  assert.ok(prompt.includes("原理 ["));
+});
+
+test("execute：goal 无工程参数时不注入查表段", () => {
+  const { prompt } = triz.execute(ctx("写一份会议纪要"));
+  assert.ok(!prompt.includes("确定性查表结果"));
 });
 
 test("lookupMatrixCell 确定性查表", () => {

@@ -32,3 +32,4 @@ export { pdca } from "./runtime/components/pdca.js";
 export { fishbone } from "./runtime/components/fishbone.js";
 export { firstPrinciples } from "./runtime/components/first-principles.js";
 export { sixHats } from "./runtime/components/six-hats.js";
+export { triz } from "./runtime/components/triz.js";
