@@ -46,7 +46,7 @@ import {
  */
 
 export type PatentWorkflowRunInput = {
-  /** 工作流 manifest id（缺省 "patent_disclosure_v1"，唯一声明原子的内置 manifest）。 */
+  /** 工作流 manifest id（缺省 "patent_disclosure_v1"；多个内置 manifest 声明 atom，均可自动执行）。 */
   manifestId?: string;
   /**
    * 领域子图模式：命中时走图引擎自动执行对应子图（A22.2 新颖性 / A22.3 创造性 /
@@ -108,7 +108,8 @@ export function createPatentWorkflowRunTool(
       properties: {
         manifestId: {
           type: "string",
-          description: "Workflow manifest id. Defaults to 'patent_disclosure_v1' (the built-in atom manifest).",
+          description:
+            "Workflow manifest id. Defaults to 'patent_disclosure_v1'; multiple built-in manifests declare atoms (claim-chart etc.) and run automatically.",
         },
         graph: {
           type: "string",
@@ -158,8 +159,8 @@ export function createPatentWorkflowRunTool(
         return executeGraphRun(input, context, deps);
       }
 
-      // 默认 patent_disclosure_v1：唯一声明原子的内置 manifest（novelty/inventiveness
-      // 无 atom，原子执行无意义，应由 patent_workflow 收口语义消费）。
+      // 默认 patent_disclosure_v1（PFE 管线）；多个内置 manifest 声明 atom
+      // （claim-chart/draft-claims/novelty/reasoning 等），均可经本工具自动执行。
       const manifest: WorkflowManifest | undefined = manifests.get(input.manifestId ?? "patent_disclosure_v1");
       if (!manifest) {
         const available = [...manifests.keys()].join(", ");

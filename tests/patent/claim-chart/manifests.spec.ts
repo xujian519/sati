@@ -10,6 +10,12 @@ import {
 } from "../../../src/patent/index.js";
 
 test("4 个新 manifest 通过校验且含 claim-chart 阶段", () => {
+  const expectedChartModes: Record<string, string> = {
+    patent_patentability_v1: "patentability",
+    patent_oa_response_v1: "oa-response",
+    patent_invalidation_v1: "invalidity",
+    patent_infringement_v1: "infringement",
+  };
   for (const m of [
     patentPatentabilityManifest,
     patentOaResponseManifest,
@@ -20,6 +26,9 @@ test("4 个新 manifest 通过校验且含 claim-chart 阶段", () => {
     const chart = m.stages.find(s => s.id === "claim-chart");
     assert.ok(chart, `${m.id} 缺 claim-chart 阶段`);
     assert.equal(chart!.atom, "claim-chart");
+    const chartMode = (chart!.params as { chart_mode?: string } | undefined)?.chart_mode;
+    assert.equal(chartMode, expectedChartModes[m.id], `${m.id} claim-chart chart_mode 非法`);
+    assert.equal(m.stages[m.stages.length - 1]!.id, "approval", `${m.id} 末阶段应为 approval`);
   }
 });
 

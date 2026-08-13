@@ -669,8 +669,9 @@ export const patentOaResponseManifest: WorkflowManifest = {
 
 /**
  * 内置：无效宣告/复审答复 manifest（无效/复审双场景）。
- * parse → claim-chart（mode 经 params 切换）→ novelty（单篇全覆盖由
- * mapping-machine 校验）→ inventiveness（区别特征 = D1 not-found 行）。
+ * parse → claim-chart（mode=invalidity；复审场景可经 flexible-plan 调整）→
+ * novelty（单篇全覆盖由 mapping-machine 校验）→ inventiveness（区别特征 = D1
+ * not-found 行）。
  */
 export const patentInvalidationManifest: WorkflowManifest = {
   id: "patent_invalidation_v1",
