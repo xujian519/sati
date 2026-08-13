@@ -286,8 +286,6 @@ kg-fts-tokenizer=ready(trigram)（运行时项，kgFtsMode 静态近似：kg_nod
 
 ### 高优先级（检索体验 / 正确性 / 可观测性）
 
-### 高优先级（检索体验 / 正确性 / 可观测性）
-
 | # | 建议 | 问题 | 预期收益 | 实现成本 | 风险 |
 |---|---|---|---|---|---|
 | H1 | **向量检索加入阈值剪枝或评估 sqlite-vec**：int8 点积循环内对 `(dot/queryNorm - normD) > 当前 topK 阈值` 的 chunk 提前跳过（当前 cosine 无任何剪枝）；中长期评估 sqlite-vec（int8[N] 与现状对齐，readonly 兼容需实测，其实验性 IVF 为 ANN 演进口） | B1 | 195ms → 60-120ms（剪枝）或 <20ms（ANN）；剪枝不动存储格式，改动仅 int8-matrix-search.ts 循环 | 剪枝：低（单函数）；sqlite-vec：中（新依赖 + 双写维护 + 评测） | 剪枝有召回损失，需用现有评测（patent-eval）回归；sqlite-vec pre-v1 破坏性变更 |
