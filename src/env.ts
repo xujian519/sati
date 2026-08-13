@@ -4,8 +4,8 @@
  * 职责：集中封装品牌环境变量（`SATI_*`）的读取。公共代码一律经本模块访问，
  * 禁止直接引用 `process.env.SATI_*` / `env.SATI_*`，品牌前缀只允许出现在本文件。
  *
- * legacy(pre-rebrand): 注释指向 PilotDeck 上游合并策略文档，升级用户迁移用。
- * 设计（对齐 PilotDeck 上游合并策略，见 docs/pilotdeck-merge-plan.md）：
+ * legacy(pre-rebrand): 兼容 PilotDeck 旧配置读取路径，升级用户数据迁移用。
+ * 设计（对齐 PilotDeck 上游合并策略）：
  * - 品牌键（`SATI_X`）优先读取，用户现有配置不变，对外契约零迁移；
  * - 中性键（`ENV_KEY` 中声明的键名）兜底读取——上游 PilotDeck 代码中性化后
  *   （改读同名中性键）本层自动兼容，合并冲突收敛到本文件；

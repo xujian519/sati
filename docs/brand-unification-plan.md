@@ -1,7 +1,7 @@
 # 品牌统一（PilotDeck → Sati）彻底收尾技术方案
 
 - 方案日期：2026-08-13
-- 状态：待评审
+- 状态：已实施（2026-08-13，对应提交 `3b0099c2..9e348565`）
 - 前置背景：`docs/technical-debt-report.md`（2026-08-12 二次审计）标记「品牌双轨（pilotdeck / sati）」与「ui/server 深层 import src/」无进展
 - 本方案只解决**品牌统一**这一条债务线；「ui/server 双后端收敛」「深层 import src/ 收敛」为独立专项（见债务报告 §五 第 8 条），不在此范围内
 
@@ -65,9 +65,9 @@
 | 12 | `scripts/check-node-runtime.mjs:46-51` | 测试 hook（`PILOTDECK_RUNTIME_CHECK_TEST_MODE`） |
 | 13 | `src/env.ts:7-9` | 注释（指向 `docs/pilotdeck-merge-plan.md`） |
 
-### C 类：数据层 provider 标识（11 处，需统一为 `sati`）
+### C 类：数据层 provider 标识（12 处，需统一为 `sati`）
 
-`src/web/server/readSessionMessages.ts` 内 11 处硬编码 `provider: "pilotdeck"`（`:222` `:309` `:384` `:398` `:425` `:446` `:470` `:500` `:517` `:750` `:807` `:844`）。经查为**新生成的历史消息帧**品牌标签（`source: "history"` / `role: "system"`，如 `createIncompleteTurnStatusMessage`），并非从历史 jsonl 透传；前端 `ui/src` 无任何 `provider === "pilotdeck"` 判断 → 可安全统一为 `"sati"`。
+`src/web/server/readSessionMessages.ts` 内 12 处硬编码 `provider: "pilotdeck"`（`:222` `:309` `:384` `:398` `:425` `:446` `:470` `:500` `:517` `:750` `:807` `:844`）。经查为**新生成的历史消息帧**品牌标签（`source: "history"` / `role: "system"`，如 `createIncompleteTurnStatusMessage`），并非从历史 jsonl 透传；前端 `ui/src` 无任何 `provider === "pilotdeck"` 判断 → 可安全统一为 `"sati"`。
 
 ### D 类：注释/文档残留（更新，非删除）
 
@@ -105,7 +105,7 @@ cd ui && pnpm test                           # 期望全绿
 
 ### 阶段 2：统一 C 类 provider 标识
 
-`readSessionMessages.ts` 11 处 `provider: "pilotdeck"` → `"sati"`（单文件全局替换）。
+`readSessionMessages.ts` 12 处 `provider: "pilotdeck"` → `"sati"`（单文件全局替换）。
 
 **DoD**：
 - `grep -n '"pilotdeck"' src/web/server/readSessionMessages.ts` 返回 0

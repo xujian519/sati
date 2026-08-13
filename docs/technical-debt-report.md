@@ -50,6 +50,8 @@
 
 ## P1 — 结构性债务（重构成本高、影响面大）
 
+> 以下为 2026-08-12 二次审计时的现状快照；个别条目已被后续提交解决（如"品牌双轨"已于 2026-08-13 收尾，见 `docs/brand-unification-plan.md`，P1-1 中 `pilotdeck-bridge.js` 等描述为审计时状态）。
+
 ### 1. 双后端并存：`ui/server` 是第二套手写 JS 后端（最重的一项）
 
 - `ui/server/` 共 **95 个文件、约 1.1MB 手写 JS**（无 TypeScript、无 protocol/runtime/config 分层），其中 `index.js` 130KB、`pilotdeck-bridge.js`/`sati-bridge.js` 各 80KB、`routes/{taskmaster,git,agent,config}.js` 各 37–56KB。
