@@ -37,6 +37,7 @@ import { createReadSkillTool, type ReadSkillDeps } from "../builtin/readSkill.js
 import { createRuleCheckTool, type RuleCheckDeps } from "../builtin/ruleCheck.js";
 import { createPatentEvalTool } from "../builtin/patentEval.js";
 import { createDraftClaimsTool } from "../builtin/draftClaims.js";
+import { createClaimChartTool } from "../builtin/claimChart.js";
 import { createDraftSpecificationTool } from "../builtin/draftSpecification.js";
 import { createValidateSpecificationTool } from "../builtin/validateSpecification.js";
 import { createPatentWorkflowTool } from "../builtin/patentWorkflowTool.js";
@@ -255,6 +256,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registerBuiltinAtoms();
     registry.register(annotate(createPatentEvalTool(), "patent"));
     registry.register(annotate(createDraftClaimsTool(), "patent"));
+    registry.register(annotate(createClaimChartTool(), "patent"));
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
     registry.register(annotate(createPatentWorkflowTool(), "patent"));
