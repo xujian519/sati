@@ -2,6 +2,28 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.0.28 - 2026-08-14
+
+> **版本目标（2026-08-14）**：以内部工程质量迭代为主——AgentLoop 核心重构（模块化拆解 + 遮蔽式压缩重放 + Web 消息投影收敛）与权限守卫体系落地，spill 溢出存储运维补强，TRIZ 确定性查表与 claim-chart 校验收尾加固。
+
+### Refactor
+- AgentLoop 模块化拆解：4685 行巨型循环拆分为 8 个独立模块（messages / modelErrors / subagentExecutor / tokenCapManager / toolContext / toolFailure / turnRuntimeState / misc），各模块配套独立单测
+- 遮蔽式压缩重放（shadowed compaction replay）：压缩历史完整重放 + Web 消息投影收敛（`injectWebMessages` / `readSessionMessages` / `webMessageFlatten`），UI 新增压缩边界渲染组件 `CompactBoundaryRow`
+- 权限守卫体系：`ToolGuard` / `ToolGuardRegistry` 注册机制 + `PermissionRuntime` 接线
+
+### Added
+- spill 溢出存储补强：`ToolResultsCleanup` 孤儿目录回收（gateway 启动时清理无对应 transcript 且超 30 天 mtime 的 `.sati/tool-results/` 目录）+ `scripts/trim-tool-results.ts` 手动治理 + 直调路径 `maxResultBytes` 截断兜底
+
+### Fixed
+- MiniMax / Google provider 配置与官方文档对齐（含 onboarding 同步）
+- 模型选择器空引用防护 + DeepSeek 默认模型修正
+- claim-chart 三关校验加固（chart 原子字段级防御 / element-validator 空白剥离 / pin-cite 补强）与持久化完善
+- TRIZ 确定性查表接入 execute 并收敛触发词（此前仅数据组件）
+- 桌面端 L3 发布 gate 断链清理 + Windows 构建/签名脚本硬化（build-win / publish-win / verify-signature-win / release-l3）
+
+### Docs
+- `docs/agentloop-refactor-plan.md` + DeepSeek harness 两阶段计划（phase1 / phase2）
+
 ## v0.0.27 - 2026-08-13
 
 > **版本目标（2026-08-13）**：继续增强专利业务处理能力——落地权利要求对照图（claim-chart）全链路与 TRIZ 方法论组件，精修附图/检索提示词，扩展多模态路由与国产模型支持。
