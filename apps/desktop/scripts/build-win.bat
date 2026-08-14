@@ -26,6 +26,9 @@ set "UI_DIR=%REPO_ROOT%ui"
 set "MEMORY_DIR=%REPO_ROOT%src\context\memory\edgeclaw-memory-core"
 set "RESOURCES=%DESKTOP_DIR%resources"
 
+REM ---- overall build timer (epoch seconds via PowerShell, locale-safe) ----
+for /f "delims=" %%t in ('powershell -NoProfile -Command "(Get-Date -UFormat %%s)"') do set "BUILD_START_S=%%t"
+
 REM ---- Arg parsing ----
 set SKIP_INSTALL=0
 set SKIP_BUILD=0
@@ -60,6 +63,7 @@ REM NOTE: the node -e JS must avoid "!" characters. setlocal enabledelayedexpans
 REM mangles "!" inside for /f command strings (e.g. !== becomes garbage), which
 REM broke this check. The ternary form below is bang-free.
 echo [0] Verifying version lockstep...
+cd /d "%REPO_ROOT%"
 set "VERSION="
 for /f "delims=" %%v in ('node -e "const r=require('./package.json'),d=require('./apps/desktop/package.json'),u=require('./ui/package.json');if((r.version===d.version)+(d.version===u.version)===2)console.log(d.version)"') do set "VERSION=%%v"
 if not defined VERSION (
@@ -101,6 +105,9 @@ if %DO_PULL%==1 (
 )
 
 REM ---- Step 3: install dependencies ----
+REM apps/desktop is a pnpm-workspace member, so the single root install covers
+REM the desktop deps (electron, electron-builder, yaml) - the old second
+REM `pnpm install` in apps/desktop was redundant resolution/network time.
 if %SKIP_INSTALL%==0 (
     echo.
     echo [3] Installing dependencies ^(pnpm^)...
@@ -108,12 +115,6 @@ if %SKIP_INSTALL%==0 (
     call corepack pnpm install --ignore-scripts
     if errorlevel 1 (
         echo ERROR: pnpm install failed
-        exit /b 1
-    )
-    cd /d "%DESKTOP_DIR%"
-    call corepack pnpm install
-    if errorlevel 1 (
-        echo ERROR: desktop pnpm install failed
         exit /b 1
     )
     echo OK
@@ -182,48 +183,22 @@ del "%NODE_ZIP%" SHASUMS256.txt 2>nul
 :node_ok
 echo OK: Node v%NODE_VERSION% ^(%TARGET_ARCH%^)
 
-REM ---- Step 4b: rebuild native deps (match bundled Node ABI) ----
-REM pnpm install --ignore-scripts skips all postinstalls: better-sqlite3
-REM (has prebuilds but rebuild anyway), sharp (libvips prebuilt binaries are
-REM fetched by its install script, must rebuild), node-pty / mupdf (node-gyp
-REM compile, must rebuild). Rebuild each with the bundled node's npm so the
-REM artifact matches the runtime ABI.
+REM ---- Step 4b: native-deps preflight (bundled Node) ----
+REM Every native module ships an ABI-correct prebuilt binary for the bundled
+REM Node runtime, so the old `npm rebuild better-sqlite3 sharp node-pty mupdf`
+REM loop was pure waste: 5-15 min of node-gyp/MSVC per build, and it silently
+REM degraded to a warning when MSVC was absent. Verified under bundled Node
+REM v22.23.2: better-sqlite3@13 ships prebuilds/win32-x64.node (FTS5 included),
+REM node-pty@1.1 ships prebuilds/win32-x64/pty.node, sharp's binary is the
+REM @img/sharp-* optional dep, mupdf is pure WASM. check-native-win.mjs loads
+REM all four with the bundled node and fails fast if that assumption breaks.
 echo.
-echo [4b] Rebuilding native deps for bundled Node...
-cd /d "%REPO_ROOT%"
-set "PATH=%RESOURCES%\node-bin;%PATH%"
-set "NPM_CMD="
-for /f "delims=" %%i in ('where npm.cmd 2^>nul') do (
-    if not defined NPM_CMD set "NPM_CMD=%%i"
-)
-if not defined NPM_CMD (
-    echo ERROR: npm.cmd not found
+echo [4b] Preflighting native deps under bundled Node...
+"%RESOURCES%\node-bin\node.exe" "%DESKTOP_DIR%scripts\check-native-win.mjs"
+if errorlevel 1 (
+    echo ERROR: native-deps preflight failed - see messages above.
+    echo   Fix: re-run pnpm install with scripts enabled, or bump pnpm-lock.yaml.
     exit /b 1
-)
-for %%i in ("%NPM_CMD%") do set "NPM_DIR=%%~dpi"
-set "NPM_CLI=%NPM_DIR%node_modules\npm\bin\npm-cli.js"
-if not exist "%NPM_CLI%" (
-    echo ERROR: npm-cli.js not found: %NPM_CLI%
-    exit /b 1
-)
-for %%p in (better-sqlite3 sharp node-pty mupdf) do (
-    echo   Rebuilding %%p...
-    "%RESOURCES%\node-bin\node.exe" "%NPM_CLI%" rebuild %%p
-    if errorlevel 1 (
-        if "%%p"=="sharp" (
-            echo   ERROR: sharp rebuild failed. sharp's libvips prebuilt binaries are
-            echo          fetched by its install script, which pnpm --ignore-scripts
-            echo          skipped; without a working rebuild the packaged app crashes
-            echo          on image processing. Aborting build.
-            exit /b 1
-        )
-        echo   WARN: rebuild failed for %%p - using the shipped prebuilt binary.
-        echo   WARN: the npm packages ship ABI-correct prebuilds, so this is not fatal.
-        echo   WARN: verify-installer.bat L1 will confirm it loads under the bundled Node.
-        echo   WARN: node-pty fails its own tsc prepare step yet loads fine via prebuilds.
-    ) else (
-        echo   %%p rebuilt OK
-    )
 )
 echo OK
 
@@ -333,10 +308,16 @@ echo.
 echo [8] Creating bundle tars...
 
 REM satiui bundle: only dev deps and caches excluded (UI deps are in dist/ via vite)
+REM node_modules/.pnpm/node_modules is the pnpm public-hoist root: on Windows
+REM bsdtar follows its junctions and materializes full copies of every hoisted
+REM package (638MB/60k entries in sati-main; here the ui .pnpm is a junction to
+REM the root store that tar does not follow, so this is a no-op that guards the
+REM layout). The runtime re-links top-level entries to the vstore directly, so
+REM the hoist root is never needed after extraction.
 cd /d "%UI_DIR%"
 tar cf "%RESOURCES%\satiui-bundle.tar" ^
     --exclude=node_modules/.pnpm/electron* --exclude=node_modules/.pnpm/@electron* ^
-    --exclude=node_modules/.pnpm/node_modules/@sati ^
+    --exclude=node_modules/.pnpm/node_modules ^
     --exclude=node_modules/electron --exclude=*.map ^
     --exclude=node_modules/.cache --exclude=node_modules/.bin ^
     --exclude=node_modules/typescript --exclude=node_modules/@typescript ^
@@ -359,15 +340,22 @@ if errorlevel 1 (
 echo   satiui-bundle.tar OK
 
 REM sati-main bundle: additionally exclude browser-only UI deps (not imported by
-REM the backend; verified zero references by import scan). Also exclude the
-REM workspace's own @sati/desktop junction under .pnpm/node_modules - without
-REM it, tar walks into apps/desktop/ (resources/*.tar, dist-electron, ...) via
-REM the pnpm junction and balloons the bundle to multiple GB ("Can't add
-REM archive to itself").
+REM the backend; verified zero references by import scan). The big one is the
+REM pnpm public-hoist root node_modules/.pnpm/node_modules: on Windows bsdtar
+REM FOLLOWS its junctions and materializes a full copy of every hoisted package
+REM (~638MB / 59,919 entries of the 1.45GB tar - the previous per-package
+REM excludes like --exclude=node_modules/.pnpm/@univerjs* only removed the
+REM vstore copy while the same packages leaked back in through the hoist root).
+REM Excluding the whole root drops the tar to ~745MB; the runtime's
+REM reconstructPnpmLinks() re-creates top-level junctions straight from the
+REM vstore, so the hoist root is never needed after extraction (verified: its
+REM 866 entries have vstore equivalents except 18 dev/browser-only orphans).
+REM (This also covers the old @sati/desktop junction worry: the whole hoist
+REM root, @sati/desktop included, is gone.)
 cd /d "%REPO_ROOT%"
 tar cf "%RESOURCES%\sati-main-bundle.tar" ^
     --exclude=node_modules/.pnpm/electron* --exclude=node_modules/.pnpm/@electron* ^
-    --exclude=node_modules/.pnpm/node_modules/@sati ^
+    --exclude=node_modules/.pnpm/node_modules ^
     --exclude=node_modules/electron --exclude=*.map ^
     --exclude=node_modules/.cache --exclude=node_modules/.bin ^
     --exclude=node_modules/typescript --exclude=node_modules/@typescript ^
@@ -463,6 +451,39 @@ REM ---- Step 11: electron-builder ----
 echo.
 echo [11] Running electron-builder ^(--win --%TARGET_ARCH%^)...
 
+REM Remove stale installers before building:
+REM   1) arch-ambiguous "Sati-<ver>-win.exe" (combined x64+arm64 NSIS that
+REM      electron-builder emitted while win.target.arch was a list - the
+REM      historical 800MB+ junk; publish-win.mjs must never see it)
+REM   2) per-arch installers from other versions (0.0.24/0.0.26 leftovers,
+REM      ~1.7GB, confuse the dir listing; publish already filters by version)
+REM Same-version other-arch files (e.g. Sati-0.0.27-win-arm64.exe from an
+REM earlier --arm64 run) are kept.
+for %%f in ("%DESKTOP_DIR%dist-electron\Sati-*-win.exe") do (
+    if exist "%%f" (
+        del "%%f" "%%~nf.exe.blockmap" 2>nul
+        echo   Removed arch-ambiguous installer: %%~nxf
+    )
+)
+for %%f in ("%DESKTOP_DIR%dist-electron\Sati-*-win-*.exe") do (
+    if exist "%%f" (
+        set "FN=%%~nxf"
+        echo !FN! | findstr /r /c:"^Sati-%VERSION%-win-" >nul
+        if errorlevel 1 (
+            del "%%f" "%%~nf.exe.blockmap" 2>nul
+            echo   Removed stale installer: !FN!
+        )
+    )
+)
+
+REM CN-friendly download mirrors: electron-builder fetches the electron zip's
+REM SHASUMS + winCodeSign/nsis from GitHub, which routinely stalls for the full
+REM 10-min request timeout on CN networks ("Timeout awaiting 'request'"). The
+REM npmmirror CDN mirrors all three; only set as defaults, so explicit env vars
+REM win for users who prefer GitHub.
+if not defined ELECTRON_MIRROR set "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/"
+if not defined ELECTRON_BUILDER_BINARIES_MIRROR set "ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/"
+
 if %SKIP_SIGN%==1 (
     set "CSC_IDENTITY_AUTO_DISCOVERY=false"
     echo   Signing: skipped ^(--skip-sign^)
@@ -485,6 +506,13 @@ echo.
 echo ========================================
 echo  Build complete!
 echo ========================================
+echo.
+set "BUILD_END_S="
+for /f "delims=" %%t in ('powershell -NoProfile -Command "(Get-Date -UFormat %%s)"') do set "BUILD_END_S=%%t"
+if defined BUILD_START_S if defined BUILD_END_S (
+    set /a BUILD_SECS=BUILD_END_S - BUILD_START_S
+    echo Total build time: !BUILD_SECS! seconds ^(about !BUILD_SECS!/60 minutes^)
+)
 echo.
 echo Output:
 dir /b "%DESKTOP_DIR%dist-electron\*.exe"

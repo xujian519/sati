@@ -51,9 +51,14 @@ dmg:
       path: /Applications
 
 win:
+  # arch deliberately NOT listed here: with a multi-arch list, electron-builder
+  # v26 ignores the CLI --x64/--arm64 flag (it merges it into the config list)
+  # and emits THREE installers per build: the combined archs=x64+arm64
+  # "Sati-<v>-win.exe" (~600MB, the historical 830MB-junk mechanism) plus one
+  # per-arch exe. build-win.bat always passes --x64/--arm64, so the CLI flag is
+  # the single source of truth and each run produces exactly one installer.
   target:
     - target: nsis
-      arch: [x64, arm64]
   icon: resources/icon.ico
 
 nsis:
