@@ -227,6 +227,7 @@ function normalizeTask(value: unknown): CronTask | undefined {
     updatedAt: candidate.updatedAt,
     nextRunAt: typeof candidate.nextRunAt === "string" ? candidate.nextRunAt : undefined,
     lastRunId: typeof candidate.lastRunId === "string" ? candidate.lastRunId : undefined,
+    revision: Number.isSafeInteger(candidate.revision) && (candidate.revision as number) >= 0 ? candidate.revision : 0,
     scheduleComputationVersion: candidate.scheduleComputationVersion === 2 ? 2 : undefined,
     originSessionKey: typeof candidate.originSessionKey === "string" ? candidate.originSessionKey : undefined,
     originChannelKey: typeof candidate.originChannelKey === "string" ? candidate.originChannelKey : undefined,

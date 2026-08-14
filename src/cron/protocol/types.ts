@@ -38,6 +38,7 @@ export type CronTask = {
   updatedAt: string;
   nextRunAt?: string;
   lastRunId?: string;
+  revision?: number;
   scheduleComputationVersion?: 2;
   originSessionKey?: string;
   originChannelKey?: GatewayChannelKey;
@@ -95,14 +96,21 @@ export type CronCreateResult = {
 export type CronUpdateInput = {
   taskId: string;
   message: string;
-  schedule: CronCreateSchedule;
+  schedule: CronTaskSchedule;
   timezone?: string;
   projectKey?: string;
+  expectedRevision: number;
 };
 
-export type CronUpdateResult = {
-  task: CronTask;
-};
+export type CronUpdateResult =
+  | {
+      updated: true;
+      task: CronTask;
+    }
+  | {
+      updated: false;
+      reason: "not_found" | "running" | "conflict";
+    };
 
 export type CronListInput = {
   projectKey?: string;

@@ -353,10 +353,12 @@ describe("CronFire.runTask", () => {
     const { store, state } = makeFakeStore(task);
     const { fire, releases } = makeFire({ task, gateway, store });
     await fire.runTask(task, "run-1");
-    assert.deepEqual(state.deleteCalls, [task.taskId]);
+    // 启动认领（revision 0→1）后，once 完成经 updateTask 返回 undefined 删除
     assert.equal(releases.length, 1);
     assert.equal(releases[0]!.taskId, task.taskId);
-    assert.equal(state.updateCalls.length, 0);
+    assert.ok(state.updateCalls.length >= 2);
+    const deleteUpdate = state.updateResults[state.updateResults.length - 1];
+    assert.equal(deleteUpdate, undefined);
     // 运行记录仍会写入
     assert.equal(state.runRecords[0]!.outcome, "completed");
   });
@@ -367,9 +369,10 @@ describe("CronFire.runTask", () => {
     const { store, state } = makeFakeStore(task);
     const { fire } = makeFire({ task, gateway, store, now: () => FIXED_NOW });
     await fire.runTask(task, "run-1");
-    assert.equal(state.updateCalls.length, 1);
-    assert.equal(state.updateCalls[0]!.taskId, task.taskId);
-    const updated = state.updateResults[0];
+    // 第一次 updateTask 为启动认领（status → running），第二次为完成后重算
+    assert.equal(state.updateCalls.length, 2);
+    assert.equal(state.updateCalls[1]!.taskId, task.taskId);
+    const updated = state.updateResults[1];
     assert.ok(updated);
     assert.equal(updated.status, "scheduled");
     assert.equal(updated.scheduleComputationVersion, 2);
@@ -378,17 +381,18 @@ describe("CronFire.runTask", () => {
     assert.equal(updated.timezone, "UTC");
   });
 
-  it("replaceTask 失败 → aborted，不消费 submitTurn、不写任何记录", async () => {
+  it("任务快照不匹配（已被其他路径修改）→ 认领失败 aborted，不消费 submitTurn、不写任何记录", async () => {
     const task = makeTask();
     const { gateway, calls } = makeFakeGateway([{ type: "turn_started", runId: "run-1" }]);
-    const { store, state } = makeFakeStore(task, { replaceOk: false });
+    const { store, state } = makeFakeStore(task);
+    // 模拟任务在调度读取后被编辑（revision 前进），运行时的快照已过期
+    await store.updateTask(task.taskId, current => ({ ...current, revision: 99 }));
     const { fire } = makeFire({ task, gateway, store });
     await fire.runTask(task, "run-1");
     assert.equal(calls.submits.length, 0);
     assert.equal(state.eventCalls.length, 0);
     assert.equal(state.runRecords.length, 0);
     assert.equal(state.deleteCalls.length, 0);
-    assert.equal(state.updateCalls.length, 0);
     assert.deepEqual(state.closeCalls, ["run-1"]);
   });
 
@@ -428,7 +432,7 @@ describe("CronFire.runTask", () => {
     assert.equal(warns.length, 1);
     assert.equal(warns[0]!.message, "cron run terminal record write failed");
     assert.equal(deliveries.length, 1);
-    assert.equal(state.updateCalls.length, 1);
+    assert.equal(state.updateCalls.length, 2);
     assert.equal(state.closeCalls.length, 1);
   });
 });

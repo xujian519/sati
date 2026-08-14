@@ -21,18 +21,21 @@ type FakeStore = {
   listCalls: number;
   putCalls: CronTask[];
   deleteCalls: string[];
+  updateCalls: CronTask[];
   tasks: CronTask[];
 };
 
 function makeFakeStore(initial: CronTask[] = []): FakeStore & {
   listTasks: () => Promise<CronTask[]>;
   putTask: (task: CronTask) => Promise<void>;
+  updateTask: (taskId: string, update: (task: CronTask) => CronTask | undefined) => Promise<CronTask | undefined>;
   deleteTask: (taskId: string) => Promise<boolean>;
 } {
   const store = {
     listCalls: 0,
     putCalls: [] as CronTask[],
     deleteCalls: [] as string[],
+    updateCalls: [] as CronTask[],
     tasks: [...initial],
     async listTasks(): Promise<CronTask[]> {
       store.listCalls += 1;
@@ -41,6 +44,16 @@ function makeFakeStore(initial: CronTask[] = []): FakeStore & {
     async putTask(task: CronTask): Promise<void> {
       store.tasks = [...store.tasks.filter(t => t.taskId !== task.taskId), task];
       store.putCalls.push(task);
+    },
+    async updateTask(taskId: string, update: (task: CronTask) => CronTask | undefined): Promise<CronTask | undefined> {
+      let updated: CronTask | undefined;
+      store.tasks = store.tasks.flatMap(task => {
+        if (task.taskId !== taskId) return [task];
+        updated = update(task);
+        return updated ? [updated] : [];
+      });
+      if (updated) store.updateCalls.push(updated);
+      return updated;
     },
     async deleteTask(taskId: string): Promise<boolean> {
       store.tasks = store.tasks.filter(t => t.taskId !== taskId);
@@ -215,8 +228,8 @@ describe("CronScheduler 并发上限", () => {
     const scheduler = makeScheduler({ store, fire, activeRunCount: () => 1 });
     await scheduler.runTickOnce();
     assert.equal(calls.length, 0);
-    assert.equal(store.putCalls.length, 1);
-    const updated = store.putCalls[0]!;
+    assert.equal(store.updateCalls.length, 1);
+    const updated = store.updateCalls[0]!;
     assert.equal(updated.taskId, "t1");
     assert.equal(updated.nextRunAt, new Date(FIXED_NOW.getTime() + 15_000).toISOString());
     assert.equal(updated.updatedAt, FIXED_NOW.toISOString());

@@ -79,4 +79,13 @@ describe("computeNextCronRunAt", () => {
   it("非法时区返回 undefined", () => {
     assert.equal(computeNextCronRunAt("* * * * *", new Date("2026-08-03T10:00:00Z"), "Not/AZone"), undefined);
   });
+
+  it("2/29 闰日表达式只在下个闰年触发（跳过非闰年）", () => {
+    // 2026 与 2027 均非闰年，下一次 2/29 为 2028。
+    const next = computeNextCronRunAt("0 0 29 2 *", new Date("2026-08-05T00:00:00Z"), "UTC");
+    assert.deepEqual(next, new Date("2028-02-29T00:00:00Z"));
+    // 闰年内 2/29 之后的下一次为下一个闰年。
+    const afterLeap = computeNextCronRunAt("0 0 29 2 *", new Date("2028-03-01T00:00:00Z"), "UTC");
+    assert.deepEqual(afterLeap, new Date("2032-02-29T00:00:00Z"));
+  });
 });

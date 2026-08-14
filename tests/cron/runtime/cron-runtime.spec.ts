@@ -41,6 +41,7 @@ describe("CronRuntime.updateTask", () => {
 
     const existing = makeTask({
       taskId: "t1",
+      projectKey: PROJECT_KEY,
       message: "旧任务",
       schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
       timezone: "UTC",
@@ -52,11 +53,15 @@ describe("CronRuntime.updateTask", () => {
 
     const result = await runtime.updateTask({
       taskId: "t1",
+      projectKey: PROJECT_KEY,
+      expectedRevision: 0,
       message: "新任务",
       schedule: { type: "cron", expression: "30 8 * * 1-5", timezone: "UTC" },
       timezone: "UTC",
     });
 
+    assert.equal(result.updated, true);
+    assert.ok(result.updated);
     assert.equal(result.task.taskId, "t1");
     assert.equal(result.task.message, "新任务");
     assert.deepEqual(result.task.schedule, { type: "cron", expression: "30 8 * * 1-5", timezone: "UTC" });
@@ -79,6 +84,7 @@ describe("CronRuntime.updateTask", () => {
 
     const existing = makeTask({
       taskId: "t-once",
+      projectKey: PROJECT_KEY,
       schedule: { type: "once", runAt: "2026-08-06T00:00:00.000Z" },
       nextRunAt: "2026-08-06T00:00:00.000Z",
     });
@@ -86,10 +92,14 @@ describe("CronRuntime.updateTask", () => {
 
     const result = await runtime.updateTask({
       taskId: "t-once",
+      projectKey: PROJECT_KEY,
+      expectedRevision: 0,
       message: existing.message,
       schedule: { type: "once", runAt: "2026-08-07T10:00:00.000Z" },
     });
 
+    assert.equal(result.updated, true);
+    assert.ok(result.updated);
     assert.equal(result.task.schedule.type, "once");
     assert.equal(result.task.nextRunAt, "2026-08-07T10:00:00.000Z");
   });
@@ -97,39 +107,41 @@ describe("CronRuntime.updateTask", () => {
   it("rejects updating a running task", async () => {
     const { runtime, store } = makeRuntime();
 
-    await store.putTask(makeTask({ taskId: "t-running", status: "running" }));
+    await store.putTask(makeTask({ taskId: "t-running", projectKey: PROJECT_KEY, status: "running" }));
 
-    await assert.rejects(
-      runtime.updateTask({
-        taskId: "t-running",
-        message: "改不了",
-        schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
-      }),
-      /running/,
-    );
+    const result = await runtime.updateTask({
+      taskId: "t-running",
+      projectKey: PROJECT_KEY,
+      expectedRevision: 0,
+      message: "改不了",
+      schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+    });
+    assert.deepEqual(result, { updated: false, reason: "running" });
   });
 
   it("rejects updating a task that does not exist", async () => {
     const { runtime } = makeRuntime();
 
-    await assert.rejects(
-      runtime.updateTask({
-        taskId: "missing",
-        message: "无",
-        schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
-      }),
-      /not found/,
-    );
+    const result = await runtime.updateTask({
+      taskId: "missing",
+      projectKey: PROJECT_KEY,
+      expectedRevision: 0,
+      message: "无",
+      schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+    });
+    assert.deepEqual(result, { updated: false, reason: "not_found" });
   });
 
   it("rejects an invalid cron expression", async () => {
     const { runtime, store } = makeRuntime();
 
-    await store.putTask(makeTask({ taskId: "t-bad" }));
+    await store.putTask(makeTask({ taskId: "t-bad", projectKey: PROJECT_KEY }));
 
     await assert.rejects(
       runtime.updateTask({
         taskId: "t-bad",
+        projectKey: PROJECT_KEY,
+        expectedRevision: 0,
         message: "坏表达式",
         schedule: { type: "cron", expression: "not-a-cron", timezone: "UTC" },
       }),
@@ -140,15 +152,54 @@ describe("CronRuntime.updateTask", () => {
   it("rejects a one-time task scheduled in the past", async () => {
     const { runtime, store } = makeRuntime();
 
-    await store.putTask(makeTask({ taskId: "t-past" }));
+    await store.putTask(makeTask({ taskId: "t-past", projectKey: PROJECT_KEY }));
 
     await assert.rejects(
       runtime.updateTask({
         taskId: "t-past",
+        projectKey: PROJECT_KEY,
+        expectedRevision: 0,
         message: "过去时间",
         schedule: { type: "once", runAt: "2026-01-01T00:00:00.000Z" },
       }),
       /must be scheduled in the future/,
     );
+  });
+
+  it("rejects a stale expectedRevision with conflict, then accepts the latest revision", async () => {
+    const { runtime, store } = makeRuntime();
+
+    await store.putTask(makeTask({ taskId: "t-edit", projectKey: PROJECT_KEY }));
+
+    const first = await runtime.updateTask({
+      taskId: "t-edit",
+      projectKey: PROJECT_KEY,
+      expectedRevision: 0,
+      message: "v1",
+      schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+    });
+    assert.equal(first.updated, true);
+
+    // 用已过期的 revision 再更新 → conflict
+    const stale = await runtime.updateTask({
+      taskId: "t-edit",
+      projectKey: PROJECT_KEY,
+      expectedRevision: 0,
+      message: "v2",
+      schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+    });
+    assert.deepEqual(stale, { updated: false, reason: "conflict" });
+
+    // 最新 revision 可更新
+    const ok = await runtime.updateTask({
+      taskId: "t-edit",
+      projectKey: PROJECT_KEY,
+      expectedRevision: 1,
+      message: "v2",
+      schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+    });
+    assert.equal(ok.updated, true);
+    assert.ok(ok.updated);
+    assert.equal(ok.task.message, "v2");
   });
 });

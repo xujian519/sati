@@ -10,6 +10,7 @@ import type { CronConfig } from "../config/parseCronConfig.js";
 import type {
   CronCreateInput,
   CronCreateResult,
+  CronCreateSchedule,
   CronDeleteInput,
   CronDeleteResult,
   CronListInput,
@@ -31,7 +32,7 @@ import { createCronDeleteTool } from "../tool/CronDeleteTool.js";
 import { createCronListTool } from "../tool/CronListTool.js";
 import { createCronStopTool } from "../tool/CronStopTool.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
-import { CronFire, type CronActiveRun } from "./CronFire.js";
+import { CronFire, type CronActiveRun, type CronTurnEventHandler } from "./CronFire.js";
 import { computeNextRunAt } from "./CronSchedule.js";
 import { CronScheduler } from "./CronScheduler.js";
 
@@ -53,6 +54,7 @@ export type CreateCronRuntimeOptions = {
   activeRunCount?: () => number;
   skipToolCreation?: boolean;
   onResultDelivery?: CronResultDeliveryHandler;
+  onTurnEvent?: CronTurnEventHandler;
 };
 
 const NOOP_LOGGER: CronRuntimeLogger = {
@@ -71,6 +73,7 @@ export class CronRuntime {
   private readonly logger: CronRuntimeLogger;
   private readonly telemetry?: TelemetryClient;
   private readonly onResultDelivery?: CronResultDeliveryHandler;
+  private readonly onTurnEvent?: CronTurnEventHandler;
   private readonly sessionOverrides: SessionConfigOverrides;
   private readonly tools: SatiToolDefinition[];
   private readonly activeRuns = new Map<string, CronActiveRun>();
@@ -89,6 +92,7 @@ export class CronRuntime {
     this.logger = options.logger ?? NOOP_LOGGER;
     this.telemetry = options.telemetry;
     this.onResultDelivery = options.onResultDelivery;
+    this.onTurnEvent = options.onTurnEvent;
     this.sessionOverrides = options.sessionOverrides ?? new SessionConfigOverrides();
     this.sharedActiveRunCount = options.activeRunCount;
     this.tools = options.skipToolCreation
@@ -118,6 +122,7 @@ export class CronRuntime {
       defaultTimezone: this.config.timezone,
       releaseTaskSession: task => this.releaseTaskSession(task),
       onResultDelivery: this.onResultDelivery,
+      onTurnEvent: this.onTurnEvent,
       onPhaseEvent: event => {
         this.telemetry?.trackFeatureLoopStage({
           module: "cron_job",
@@ -231,6 +236,7 @@ export class CronRuntime {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       nextRunAt: nextRunAt.toISOString(),
+      revision: 0,
       scheduleComputationVersion: schedule.type === "cron" ? 2 : undefined,
     };
     this.registerTaskSession(task);
@@ -259,6 +265,20 @@ export class CronRuntime {
     if (!this.config.enabled) {
       throw new Error("Cron is disabled. Enable it in sati.yaml to update tasks.");
     }
+    const projectKey = input.projectKey;
+    if (typeof projectKey !== "string" || !projectKey.trim() || !this.matchesProject(projectKey)) {
+      return { updated: false, reason: "not_found" };
+    }
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) {
+      throw new Error("Cron task expectedRevision must be a non-negative integer.");
+    }
+    if (typeof input.message !== "string" || !input.message.trim()) {
+      throw new Error("Cron task message is required.");
+    }
+    if (input.timezone !== undefined && (typeof input.timezone !== "string" || !isValidCronTimezone(input.timezone))) {
+      throw new Error(`Invalid Cron timezone: ${input.timezone}`);
+    }
+
     const now = this.now();
     const schedule = normalizeSchedule(input, this.config.timezone, now);
     const timezone = schedule.type === "cron" ? schedule.timezone : (input.timezone ?? this.config.timezone);
@@ -269,11 +289,21 @@ export class CronRuntime {
     if (schedule.type === "once" && nextRunAt.getTime() < now.getTime()) {
       throw new Error("One-time Cron tasks must be scheduled in the future.");
     }
-    // running 检查与写入放在同一原子变更内，避免 check-then-write 窗口被调度器
-    // 并发触发（CronFire.replaceTask 写 running 状态）导致状态回写覆盖。
-    const task = await this.store.updateTask(input.taskId, current => {
+
+    let reason: Extract<CronUpdateResult, { updated: false }>["reason"] | undefined;
+    const updated = await this.store.updateTask(input.taskId, current => {
+      const currentProjectKey = current.projectKey?.trim() ? resolve(current.projectKey) : this.projectKey;
+      if (currentProjectKey !== this.projectKey || currentProjectKey !== resolve(projectKey)) {
+        reason = "not_found";
+        return current;
+      }
       if (current.status === "running") {
-        throw new Error("Cannot update a running Cron task; stop it before editing.");
+        reason = "running";
+        return current;
+      }
+      if ((current.revision ?? 0) !== input.expectedRevision) {
+        reason = "conflict";
+        return current;
       }
       return {
         ...current,
@@ -281,15 +311,19 @@ export class CronRuntime {
         schedule,
         timezone,
         nextRunAt: nextRunAt.toISOString(),
+        revision: (current.revision ?? 0) + 1,
         scheduleComputationVersion: schedule.type === "cron" ? 2 : undefined,
         updatedAt: now.toISOString(),
       };
     });
-    if (!task) {
-      throw new Error(`Cron task not found: ${input.taskId}`);
+    if (reason) {
+      return { updated: false, reason };
+    }
+    if (!updated) {
+      return { updated: false, reason: "not_found" };
     }
     this.scheduler?.poke();
-    return { task };
+    return { updated: true, task: updated };
   }
 
   async listTasks(input: CronListInput = {}): Promise<CronListResult> {
@@ -299,6 +333,10 @@ export class CronRuntime {
       result.recentRuns = await this.store.listRuns(input.limit ?? 50);
     }
     return result;
+  }
+
+  private matchesProject(projectKey: string): boolean {
+    return resolve(projectKey) === this.projectKey;
   }
 
   async deleteTask(input: CronDeleteInput): Promise<CronDeleteResult> {
@@ -503,25 +541,30 @@ export function createCronRuntime(options: CreateCronRuntimeOptions): CronRuntim
   return new CronRuntime(options);
 }
 
-function normalizeSchedule(input: CronCreateInput, configTimezone: string, now: Date): CronTask["schedule"] {
-  if (input.schedule.type === "once") {
-    return { type: "once", runAt: input.schedule.runAt };
+function normalizeSchedule(
+  input: { schedule: CronCreateSchedule; timezone?: string },
+  configTimezone: string,
+  now: Date,
+): CronTask["schedule"] {
+  const schedule = input.schedule;
+  if (schedule.type === "once") {
+    return { type: "once", runAt: schedule.runAt };
   }
-  if (input.schedule.type === "delay") {
-    const runAt = computeNextRunAt(input.schedule, now);
+  if (schedule.type === "delay") {
+    const runAt = computeNextRunAt(schedule, now);
     if (!runAt) {
       throw new Error("Cron delay schedule must use a positive finite amount.");
     }
     return { type: "once", runAt: runAt.toISOString() };
   }
-  const requestedTimezone = input.schedule.timezone ?? input.timezone;
+  const requestedTimezone = schedule.timezone ?? input.timezone;
   if (requestedTimezone && !isValidCronTimezone(requestedTimezone)) {
     throw new Error(`Invalid Cron timezone: ${requestedTimezone}`);
   }
   const timezone = resolveCronTimezone(requestedTimezone, undefined, configTimezone);
   return {
     type: "cron",
-    expression: input.schedule.expression,
+    expression: schedule.expression,
     timezone,
   };
 }

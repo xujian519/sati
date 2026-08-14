@@ -138,10 +138,20 @@ export class CronScheduler {
           }
           const nextRunAt = computeNextRunAt(task.schedule, now)?.toISOString();
           if (!nextRunAt) {
-            await this.deps.store.deleteTask(task.taskId);
+            await this.deps.store.updateTask(task.taskId, current =>
+              matchesTaskSnapshot(current, task) ? undefined : current,
+            );
             return;
           }
-          await this.deps.store.putTask({ ...task, nextRunAt, updatedAt: now.toISOString() });
+          await this.deps.store.updateTask(task.taskId, current => {
+            if (!matchesTaskSnapshot(current, task)) return current;
+            return {
+              ...current,
+              nextRunAt,
+              revision: (current.revision ?? 0) + 1,
+              updatedAt: now.toISOString(),
+            };
+          });
           return;
         }
 
@@ -151,14 +161,18 @@ export class CronScheduler {
         const timezone = resolveCronTimezone(task.schedule.timezone, task.timezone, this.deps.config.timezone);
         const schedule = { ...task.schedule, timezone };
         const nextRunAt = computeNextRunAt(schedule, now, timezone)?.toISOString();
-        await this.deps.store.putTask({
-          ...task,
-          schedule,
-          timezone,
-          status: "scheduled",
-          nextRunAt,
-          scheduleComputationVersion: 2,
-          updatedAt: now.toISOString(),
+        await this.deps.store.updateTask(task.taskId, current => {
+          if (!matchesTaskSnapshot(current, task)) return current;
+          return {
+            ...current,
+            schedule,
+            timezone,
+            status: "scheduled",
+            nextRunAt,
+            revision: (current.revision ?? 0) + 1,
+            scheduleComputationVersion: 2,
+            updatedAt: now.toISOString(),
+          };
         });
       }),
     );
@@ -166,10 +180,14 @@ export class CronScheduler {
 
   private async delayTask(task: CronTask, now: Date): Promise<void> {
     const nextRunAt = new Date(now.getTime() + RETRY_DELAY_MS).toISOString();
-    await this.deps.store.putTask({
-      ...task,
-      nextRunAt,
-      updatedAt: now.toISOString(),
+    await this.deps.store.updateTask(task.taskId, current => {
+      if (!matchesTaskSnapshot(current, task) || current.status !== "scheduled") return current;
+      return {
+        ...current,
+        nextRunAt,
+        revision: (current.revision ?? 0) + 1,
+        updatedAt: now.toISOString(),
+      };
     });
   }
 }
@@ -183,4 +201,13 @@ function isDue(task: CronTask, now: Date): boolean {
   }
   const dueAt = new Date(task.nextRunAt);
   return !Number.isNaN(dueAt.getTime()) && dueAt.getTime() <= now.getTime();
+}
+
+function matchesTaskSnapshot(current: CronTask, snapshot: CronTask): boolean {
+  return (
+    current.status === snapshot.status &&
+    (current.revision ?? 0) === (snapshot.revision ?? 0) &&
+    current.nextRunAt === snapshot.nextRunAt &&
+    current.lastRunId === snapshot.lastRunId
+  );
 }
