@@ -2180,8 +2180,8 @@ function normalizeProviderApi(value: string): string {
 
 /**
  * 推理模型（deepseek-v4 系列/deepseek-reasoner/kimi-k2 系列/kimi-k3 等）
- * 仅接受 temperature=1（或省略）。直连构造 body 时须省略显式 temperature，
- * 否则 provider 返回 400 "invalid temperature: only 1 is allowed for this model"。
+ * 官方约束 temperature 不可修改（kimi 传其他值报错、deepseek-v4 思考模式
+ * 静默忽略）。直连构造 body 时须省略显式 temperature。
  */
 function shouldOmitTemperature(model: string): boolean {
   return /deepseek-v4|deepseek-reasoner|deepseek-r1|kimi-k2|kimi-k3/.test(model.toLowerCase());

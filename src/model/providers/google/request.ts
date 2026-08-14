@@ -35,8 +35,9 @@ export function buildGoogleRequest(request: CanonicalModelRequest, model: ModelD
   );
   const config: GenerateContentConfig = {
     maxOutputTokens: request.maxOutputTokens ?? model.capabilities.maxOutputTokens,
-    // 推理模型仅接受 temperature=1（或省略）：经 google 兼容端点跑
-    // deepseek-v4/kimi-k2 等模型时同样省略显式温度。
+    // 推理模型官方约束 temperature 不可修改（kimi 传其他值报错、deepseek-v4
+    // 思考模式静默忽略）：经 google 兼容端点跑 deepseek-v4/kimi-k2 等
+    // 模型时同样省略显式温度。
     temperature: thinkingPlan.omitTemperature ? undefined : request.temperature,
     systemInstruction: request.systemPrompt ? { text: request.systemPrompt } : undefined,
     automaticFunctionCalling: { disable: true },

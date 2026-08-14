@@ -93,8 +93,9 @@ export function buildAnthropicRequest(request: CanonicalModelRequest, model: Mod
       : undefined,
     tools: tools.length > 0 ? tools : undefined,
     tool_choice: toolChoice,
-    // 推理模型仅接受 temperature=1（或省略）：经 anthropic 兼容端点跑
-    // deepseek-v4/kimi-k2 等模型时同样省略显式温度。
+    // 推理模型官方约束 temperature 不可修改（kimi 传其他值报错、deepseek-v4
+    // 思考模式静默忽略）：经 anthropic 兼容端点跑 deepseek-v4/kimi-k2 等
+    // 模型时同样省略显式温度。
     temperature: thinkingPlan.omitTemperature ? undefined : request.temperature,
     thinking:
       thinkingPlan.enabled && thinkingPlan.thinkingType

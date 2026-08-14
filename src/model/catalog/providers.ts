@@ -1018,7 +1018,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: true, // thinking: {type: "adaptive"|"disabled"}（官方 OpenAI/Anthropic 兼容接口）
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: true,
@@ -1026,6 +1026,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           maxOutputTokens: 131_072,
         },
         multimodal: {
+          // 官方另支持视频输入，待 InputModality 扩展 video 后补充。
           input: ["text", "image"],
           maxImagesPerRequest: 20,
           supportedImageMimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"],
@@ -1039,14 +1040,14 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false, // M2.x thinking 无法关闭，无用户可控思考开关
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
           maxContextTokens: 204_800,
           maxOutputTokens: 16384,
         },
-        multimodal: { input: ["text"] },
+        multimodal: { input: ["text"] }, // M2.x 官方仅文本输入（OpenAI/Anthropic 兼容接口均不支持图片）
         aliases: ["minimax-m2.7"],
       },
       "MiniMax-M2.7-highspeed": {
@@ -1055,7 +1056,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false,
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
@@ -1071,7 +1072,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false,
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
@@ -1087,7 +1088,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false,
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
@@ -1103,7 +1104,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false,
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
@@ -1119,7 +1120,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false,
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
@@ -1135,12 +1136,12 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false,
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
           maxContextTokens: 204_800,
-          maxOutputTokens: 10240,
+          maxOutputTokens: 16384,
         },
         multimodal: { input: ["text"] },
         aliases: ["minimax-m2"],
@@ -1151,7 +1152,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
   // ── Moonshot / Kimi ────────────────────────────────────────────────────
   // 现行模型（官方文档 2026 年中）：kimi-k3（旗舰，始终思考不可关闭）、
   // kimi-k2.7-code(-highspeed)、kimi-k2.6（思考+非思考）。
-  // moonshot-v1 / kimi-k2.5 已于 2026-08-31 下线，不在此收录。
+  // moonshot-v1 / kimi-k2.5 已停止向新用户开放，2026-08-31 全平台下线，不在此收录。
 
   moonshot: {
     displayName: "Moonshot AI (Kimi)",
@@ -1190,12 +1191,12 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false, // 始终思考且不支持 reasoning_effort，无用户可控思考开关
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
           maxContextTokens: 262144,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 32768,
         },
         multimodal: {
           input: ["text", "image"],
@@ -1212,12 +1213,12 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsToolUse: true,
           supportsStreaming: true,
           supportsParallelToolCalls: true,
-          supportsThinking: true,
+          supportsThinking: false, // 始终思考且不支持 reasoning_effort，无用户可控思考开关
           supportsJsonSchema: true,
           supportsSystemPrompt: true,
           supportsPromptCache: false,
           maxContextTokens: 262144,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 32768,
         },
         multimodal: {
           input: ["text", "image"],
@@ -1238,7 +1239,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsSystemPrompt: true,
           supportsPromptCache: false,
           maxContextTokens: 262144,
-          maxOutputTokens: 8192,
+          maxOutputTokens: 32768,
         },
         multimodal: {
           input: ["text", "image"],

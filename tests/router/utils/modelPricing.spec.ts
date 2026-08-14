@@ -9,18 +9,18 @@ test("deepseek v4 models hit their own pricing entries, not legacy ones", () => 
   assert.deepEqual(lookupModelPricing("deepseek", "deepseek-v4-flash"), {
     input: 0.14,
     output: 0.28,
-    cacheRead: 0.003,
+    cacheRead: 0.0028,
   });
   assert.deepEqual(lookupModelPricing("deepseek", "deepseek-v4-pro"), {
-    input: 0.42,
-    output: 0.83,
-    cacheRead: 0.0035,
+    input: 0.435,
+    output: 0.87,
+    cacheRead: 0.003625,
   });
 });
 
-test("legacy deepseek models keep their deprecated pricing entries", () => {
-  assert.equal(lookupModelPricing("deepseek", "deepseek-chat").input, 0.5);
-  assert.equal(lookupModelPricing("deepseek", "deepseek-reasoner").input, 0.8);
+test("legacy deepseek models map to the V4 Flash tier pricing", () => {
+  assert.equal(lookupModelPricing("deepseek", "deepseek-chat").input, 0.14);
+  assert.equal(lookupModelPricing("deepseek", "deepseek-reasoner").input, 0.14);
 });
 
 test("kimi models hit their own pricing entries in order", () => {
@@ -30,6 +30,30 @@ test("kimi models hit their own pricing entries in order", () => {
   assert.equal(lookupModelPricing("moonshot", "kimi-k2.6").input, 0.9);
   assert.equal(lookupModelPricing("moonshot", "kimi-k2.7-code-highspeed").output, 7.5);
   assert.equal(lookupModelPricing("moonshot", "kimi-k3").cacheRead, 0.28);
+});
+
+test("glm models hit their official Z.AI pricing entries in order", () => {
+  assert.deepEqual(lookupModelPricing("zhipu", "glm-5.2"), { input: 1.4, output: 4.4, cacheRead: 0.26 });
+  assert.deepEqual(lookupModelPricing("zhipu", "glm-5.1"), { input: 1.4, output: 4.4, cacheRead: 0.26 });
+  assert.equal(lookupModelPricing("zhipu", "glm-5-turbo").output, 4.0);
+  // flashx 必须先于 4.7 通用行命中
+  assert.deepEqual(lookupModelPricing("zhipu", "glm-4.7-flashx"), { input: 0.07, output: 0.4, cacheRead: 0.01 });
+  assert.deepEqual(lookupModelPricing("zhipu", "glm-4.7-flash"), { input: 0, output: 0, cacheRead: 0 });
+  assert.deepEqual(lookupModelPricing("zhipu", "glm-4.7"), { input: 0.6, output: 2.2, cacheRead: 0.11 });
+});
+
+test("minimax models hit their official pricing entries in order", () => {
+  assert.deepEqual(lookupModelPricing("minimax", "MiniMax-M3"), { input: 0.29, output: 1.17, cacheRead: 0.06 });
+  // highspeed 必须先于基础型号命中
+  assert.deepEqual(lookupModelPricing("minimax", "MiniMax-M2.7-highspeed"), {
+    input: 0.58,
+    output: 2.33,
+    cacheRead: 0.06,
+  });
+  assert.equal(lookupModelPricing("minimax", "MiniMax-M2.7").input, 0.29);
+  assert.equal(lookupModelPricing("minimax", "MiniMax-M2.5-highspeed").input, 0.58);
+  assert.equal(lookupModelPricing("minimax", "MiniMax-M2.1").cacheRead, 0.03);
+  assert.deepEqual(lookupModelPricing("minimax", "MiniMax-M2"), { input: 0.29, output: 1.17, cacheRead: 0.03 });
 });
 
 test("unknown models fall back to FALLBACK_PRICING", () => {

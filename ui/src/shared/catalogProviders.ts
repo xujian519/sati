@@ -60,16 +60,34 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: "openai",
     defaultUrl: "https://api.moonshot.cn/v1",
     models: [
-      { id: "kimi-k3", displayName: "Kimi K3", supportsImage: true, maxContextTokens: 1048576 },
-      { id: "kimi-k2.7-code", displayName: "Kimi K2.7 Code", supportsImage: true, maxContextTokens: 262144 },
+      {
+        id: "kimi-k3",
+        displayName: "Kimi K3",
+        supportsImage: true,
+        maxContextTokens: 1048576,
+        maxOutputTokens: 1048576,
+      },
+      {
+        id: "kimi-k2.7-code",
+        displayName: "Kimi K2.7 Code",
+        supportsImage: true,
+        maxContextTokens: 262144,
+        maxOutputTokens: 32768,
+      },
       {
         id: "kimi-k2.7-code-highspeed",
         displayName: "Kimi K2.7 Code Highspeed",
         supportsImage: true,
         maxContextTokens: 262144,
+        maxOutputTokens: 32768,
       },
-      { id: "kimi-k2.6", displayName: "Kimi K2.6", supportsImage: true, maxContextTokens: 262144 },
-      { id: "kimi-k1.5", displayName: "Kimi K1.5", supportsImage: true, maxContextTokens: 131072 },
+      {
+        id: "kimi-k2.6",
+        displayName: "Kimi K2.6",
+        supportsImage: true,
+        maxContextTokens: 262144,
+        maxOutputTokens: 32768,
+      },
     ],
   },
   {
@@ -164,10 +182,16 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     id: "minimax",
     displayName: "MiniMax",
     protocol: "openai",
-    defaultUrl: "https://api.minimax.io/v1",
-    modelListUrl: "https://api.minimax.io/v1/models",
+    defaultUrl: "https://api.minimaxi.com/v1",
+    modelListUrl: "https://api.minimaxi.com/v1/models",
     models: [
-      { id: "MiniMax-M3", displayName: "MiniMax M3", maxContextTokens: 1000000, maxOutputTokens: 131072 },
+      {
+        id: "MiniMax-M3",
+        displayName: "MiniMax M3",
+        supportsImage: true,
+        maxContextTokens: 1000000,
+        maxOutputTokens: 131072,
+      },
       { id: "MiniMax-M2.7", displayName: "MiniMax M2.7", maxContextTokens: 204800, maxOutputTokens: 16384 },
       {
         id: "MiniMax-M2.7-highspeed",
@@ -189,7 +213,7 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
         maxContextTokens: 204800,
         maxOutputTokens: 16384,
       },
-      { id: "MiniMax-M2", displayName: "MiniMax M2", maxContextTokens: 204800, maxOutputTokens: 10240 },
+      { id: "MiniMax-M2", displayName: "MiniMax M2", maxContextTokens: 204800, maxOutputTokens: 16384 },
     ],
   },
   {

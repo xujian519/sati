@@ -8,10 +8,12 @@ import type {
 } from "../../../src/model/index.js";
 import { resolveThinkingPlan } from "../../../src/model/thinking/registry.js";
 
-// DeepSeek v4 与 Kimi K3/K2.7 的官方思考语义（对照 2026 年中官方文档）：
-// - deepseek-v4-flash：reasoning_effort 支持 low/high/max；v4-pro 目前仅 high/max；
+// DeepSeek v4 与 Kimi K3/K2.7 的官方思考语义（对照 2026-08 官方文档）：
+// - deepseek-v4-flash / deepseek-v4-pro：reasoning_effort 均支持 low/high/max，
+//   两型号 effort 映射一致（medium→high, xhigh→max）；
 //   off 通过 thinking.type=disabled 显式关闭（useOpenAICompatibleThinking 路径）。
-// - kimi-k3 / kimi-k2.7-code(-highspeed)：始终思考不可关闭，顶层 reasoning_effort；
+// - kimi-k3：始终思考不可关闭，顶层 reasoning_effort（low/high/max，默认 max）；
+//   kimi-k2.7-code(-highspeed)：始终思考，但不支持 reasoning_effort（仅 k3 发送）；
 //   off 必须返回 unsupportedReason，不得发出 thinking.type=disabled。
 // - kimi-k2.6：思考+非思考双模式，off 走 thinking.type=disabled。
 
@@ -25,16 +27,16 @@ test("deepseek-v4-flash maps effort to low/high/max with openai-compatible think
   assert.equal(plan.omitTemperature, true);
 });
 
-test("deepseek-v4-flash clamps medium to low and xhigh to max", () => {
+test("deepseek-v4-flash maps medium to high and xhigh to max", () => {
   const medium = planFor("deepseek", "deepseek-v4-flash", { mode: "medium", enabled: true });
-  assert.equal(medium.effort, "low");
+  assert.equal(medium.effort, "high");
   const xhigh = planFor("deepseek", "deepseek-v4-flash", { mode: "xhigh", enabled: true });
   assert.equal(xhigh.effort, "max");
 });
 
-test("deepseek-v4-pro restricts effort to high/max", () => {
+test("deepseek-v4-pro supports the full low/high/max effort range", () => {
   const low = planFor("deepseek", "deepseek-v4-pro", { mode: "low", enabled: true });
-  assert.equal(low.effort, "high");
+  assert.equal(low.effort, "low");
   const max = planFor("deepseek", "deepseek-v4-pro", { mode: "max", enabled: true });
   assert.equal(max.effort, "max");
 });
@@ -89,11 +91,42 @@ test("kimi-k2.7-code-highspeed rejects explicit off", () => {
   assert.match(plan.unsupportedReason ?? "", /always thinks/);
 });
 
+test("kimi-k2.7-code never sends reasoning_effort (API does not support it)", () => {
+  const high = planFor("moonshot", "kimi-k2.7-code", { mode: "high", enabled: true });
+  assert.equal(high.enabled, true);
+  assert.equal(high.bodyPatch, undefined);
+  assert.equal(high.omitTemperature, true);
+  const max = planFor("moonshot", "kimi-k2.7-code-highspeed", { mode: "max", enabled: true });
+  assert.equal(max.enabled, true);
+  assert.equal(max.bodyPatch, undefined);
+});
+
 test("kimi-k2.6 keeps dual-mode behavior (off -> thinking.type=disabled)", () => {
   const off = planFor("moonshot", "kimi-k2.6", { mode: "off", enabled: true });
   assert.equal(off.enabled, false);
   assert.equal(off.thinkingType, "disabled");
   assert.equal(off.useOpenAICompatibleThinking, true);
+});
+
+test("minimax M2.x rejects explicit off (always-thinking, no user switch)", () => {
+  const off = planFor("minimax", "MiniMax-M2.7", { mode: "off", enabled: true });
+  assert.equal(off.enabled, false);
+  assert.equal(off.thinkingType, undefined);
+  assert.match(off.unsupportedReason ?? "", /always thinks/);
+});
+
+test("minimax M3 maps explicit off to thinking.type=disabled", () => {
+  const off = planFor("minimax", "MiniMax-M3", { mode: "off", enabled: true });
+  assert.equal(off.enabled, false);
+  assert.equal(off.thinkingType, "disabled");
+  assert.equal(off.useOpenAICompatibleThinking, true);
+  assert.equal(off.unsupportedReason, undefined);
+});
+
+test("minimax M2.x keeps splitReasoning for non-off modes", () => {
+  const high = planFor("minimax", "MiniMax-M2.5", { mode: "high", enabled: true });
+  assert.equal(high.enabled, true);
+  assert.equal(high.splitReasoning, true);
 });
 
 test("default thinking mode keeps thinking disabled but omits temperature for deepseek", () => {
@@ -231,7 +264,12 @@ function provider(id: string, modelId: string): ProviderConfig {
   return {
     id,
     protocol: "openai",
-    url: id === "moonshot" ? "https://api.moonshot.cn/v1" : "https://api.deepseek.com/v1",
+    url:
+      id === "moonshot"
+        ? "https://api.moonshot.cn/v1"
+        : id === "minimax"
+          ? "https://api.minimaxi.com/v1"
+          : "https://api.deepseek.com/v1",
     apiKey: "test",
     headers: {},
     models: { [modelId]: model(modelId) },

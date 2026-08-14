@@ -8,13 +8,13 @@ export type RouterModelPricingMap = Record<string, RouterModelPricing>;
 
 // $/million tokens – fallback when neither nativeCost nor user modelPricing is available
 const DEFAULT_PRICING: Array<{ pattern: RegExp; input: number; output: number; cacheRead?: number }> = [
-  // DeepSeek v4（官方人民币价按 ≈7.2 汇率折算为美元，来源 api-docs.deepseek.com/quick_start/pricing）
-  { pattern: /deepseek.*v4-flash/i, input: 0.14, output: 0.28, cacheRead: 0.003 },
-  { pattern: /deepseek.*v4-pro/i, input: 0.42, output: 0.83, cacheRead: 0.0035 },
-  // DeepSeek（旧版，随 deprecated 模型保留）
+  // DeepSeek v4（官方美元价，来源 api-docs.deepseek.com/quick_start/pricing）
+  { pattern: /deepseek.*v4-flash/i, input: 0.14, output: 0.28, cacheRead: 0.0028 },
+  { pattern: /deepseek.*v4-pro/i, input: 0.435, output: 0.87, cacheRead: 0.003625 },
+  // DeepSeek（旧版，官方 2026-07-24 已停服；仍可解析时按 V4 Flash 档计价）
   { pattern: /deepseek.*flash/i, input: 0.2, output: 0.6 },
-  { pattern: /deepseek.*chat/i, input: 0.5, output: 1.5 },
-  { pattern: /deepseek.*reasoner/i, input: 0.8, output: 2.0 },
+  { pattern: /deepseek.*chat/i, input: 0.14, output: 0.28, cacheRead: 0.0028 },
+  { pattern: /deepseek.*reasoner/i, input: 0.14, output: 0.28, cacheRead: 0.0028 },
   { pattern: /deepseek.*v3/i, input: 0.27, output: 1.1 },
   // Anthropic Claude
   { pattern: /claude.*opus/i, input: 15.0, output: 75.0, cacheRead: 1.5 },
@@ -31,7 +31,15 @@ const DEFAULT_PRICING: Array<{ pattern: RegExp; input: number; output: number; c
   // Google Gemini
   { pattern: /gemini.*flash/i, input: 0.1, output: 0.4 },
   { pattern: /gemini.*pro/i, input: 1.25, output: 5.0 },
-  // GLM / ChatGLM / Zhipu
+  // GLM / Z.AI（官方美元价，来源 docs.z.ai/guides/overview/pricing）
+  { pattern: /glm.*5\.2/i, input: 1.4, output: 4.4, cacheRead: 0.26 },
+  { pattern: /glm.*5\.1/i, input: 1.4, output: 4.4, cacheRead: 0.26 },
+  { pattern: /glm.*5.*turbo/i, input: 1.2, output: 4.0, cacheRead: 0.24 },
+  { pattern: /glm.*4\.7.*flashx/i, input: 0.07, output: 0.4, cacheRead: 0.01 },
+  { pattern: /glm.*4\.7.*flash/i, input: 0, output: 0, cacheRead: 0 },
+  { pattern: /glm.*4\.7/i, input: 0.6, output: 2.2, cacheRead: 0.11 },
+  { pattern: /glm.*4\.6/i, input: 0.6, output: 2.2, cacheRead: 0.11 },
+  // GLM 其它（旧 bigmodel 时代模型等）
   { pattern: /glm/i, input: 0.5, output: 1.0 },
   // Qwen / Tongyi
   { pattern: /qwen.*turbo/i, input: 0.3, output: 0.6 },
@@ -54,6 +62,16 @@ const DEFAULT_PRICING: Array<{ pattern: RegExp; input: number; output: number; c
   { pattern: /kimi-k2\.7-code/i, input: 0.9, output: 3.75, cacheRead: 0.18 },
   { pattern: /kimi-k2\.6/i, input: 0.9, output: 3.75, cacheRead: 0.15 },
   { pattern: /moonshot|kimi/i, input: 1.0, output: 2.0 },
+  // MiniMax（官方人民币价按 ≈7.2 汇率折算为美元，来源 platform.minimaxi.com/docs/guides/pricing-paygo）
+  { pattern: /minimax.*m3/i, input: 0.29, output: 1.17, cacheRead: 0.06 },
+  { pattern: /minimax.*m2\.7.*highspeed/i, input: 0.58, output: 2.33, cacheRead: 0.06 },
+  { pattern: /minimax.*m2\.7/i, input: 0.29, output: 1.17, cacheRead: 0.06 },
+  { pattern: /minimax.*m2\.5.*highspeed/i, input: 0.58, output: 2.33, cacheRead: 0.03 },
+  { pattern: /minimax.*m2\.5/i, input: 0.29, output: 1.17, cacheRead: 0.03 },
+  { pattern: /minimax.*m2\.1.*highspeed/i, input: 0.58, output: 2.33, cacheRead: 0.03 },
+  { pattern: /minimax.*m2\.1/i, input: 0.29, output: 1.17, cacheRead: 0.03 },
+  { pattern: /minimax.*m2$/i, input: 0.29, output: 1.17, cacheRead: 0.03 },
+  { pattern: /minimax/i, input: 0.5, output: 1.5 },
   // Doubao / ByteDance
   { pattern: /doubao/i, input: 0.4, output: 0.8 },
 ];

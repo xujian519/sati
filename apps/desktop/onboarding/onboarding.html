@@ -274,12 +274,17 @@
     <p class="subtitle">配置一个 OpenAI / Anthropic 兼容的上游，保存后会写入 <code>~/.sati/sati.yaml</code>。</p>
 
     <div class="preset-row">
-      <button type="button" class="preset-btn" data-preset="anthropic">Anthropic 官方</button>
-      <button type="button" class="preset-btn" data-preset="openrouter">OpenRouter</button>
+      <button type="button" class="preset-btn" data-preset="deepseek">DeepSeek</button>
+      <button type="button" class="preset-btn" data-preset="kimi">Kimi</button>
+      <button type="button" class="preset-btn" data-preset="zhipu">智谱 GLM</button>
+      <button type="button" class="preset-btn" data-preset="dashscope">阿里百炼</button>
+      <button type="button" class="preset-btn" data-preset="volc_ark">火山方舟</button>
       <button type="button" class="preset-btn" data-preset="minimax">MiniMax</button>
       <button type="button" class="preset-btn" data-preset="siliconflow">硅基流动</button>
-      <button type="button" class="preset-btn" data-preset="google">Google</button>
+      <button type="button" class="preset-btn" data-preset="anthropic">Anthropic 官方</button>
       <button type="button" class="preset-btn" data-preset="openai">OpenAI</button>
+      <button type="button" class="preset-btn" data-preset="openrouter">OpenRouter</button>
+      <button type="button" class="preset-btn" data-preset="google">Google Gemini</button>
     </div>
 
     <div class="row">
@@ -288,14 +293,14 @@
         <option value="anthropic">anthropic（/v1/messages）</option>
         <option value="openai-chat">openai-chat（/chat/completions）</option>
         <option value="openai-responses">openai-responses（/responses）</option>
-        <option value="google">google（Gemini generateContent）</option>
+        <option value="google">google（/v1beta/models/...:generateContent）</option>
       </select>
     </div>
 
     <div class="row">
       <label for="base-url">API Base URL</label>
       <input id="base-url" type="text" placeholder="https://api.anthropic.com" autocomplete="off" spellcheck="false" />
-      <div class="hint">不要带尾部 <code>/v1</code>，由协议类型自动拼接。</div>
+      <div class="hint">可省略或保留尾部 <code>/v1</code>（<code>/api/paas/v4</code> 等版本段需保留），系统自动兼容两种写法。</div>
     </div>
 
     <div class="row">
@@ -324,35 +329,60 @@
 
   <script>
     const PRESETS = {
+      deepseek: {
+        type: "openai-chat",
+        baseUrl: "https://api.deepseek.com/v1",
+        model: "deepseek-v4-flash",
+      },
+      kimi: {
+        type: "openai-chat",
+        baseUrl: "https://api.moonshot.cn/v1",
+        model: "kimi-k2.6",
+      },
+      zhipu: {
+        type: "openai-chat",
+        baseUrl: "https://api.z.ai/api/paas/v4",
+        model: "glm-4.7",
+      },
+      dashscope: {
+        type: "openai-chat",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model: "qwen-plus",
+      },
+      volc_ark: {
+        type: "openai-chat",
+        baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+        model: "doubao-1.5-pro-256k",
+      },
+      minimax: {
+        type: "openai-chat",
+        baseUrl: "https://api.minimaxi.com/v1",
+        model: "MiniMax-M2.7-highspeed",
+      },
       anthropic: {
         type: "anthropic",
         baseUrl: "https://api.anthropic.com",
         model: "claude-sonnet-4-5-20250929",
-      },
-      openrouter: {
-        type: "openai-chat",
-        baseUrl: "https://openrouter.ai/api",
-        model: "anthropic/claude-sonnet-4.5",
-      },
-      minimax: {
-        type: "openai-chat",
-        baseUrl: "https://api.minimax.io",
-        model: "MiniMax-M3",
       },
       siliconflow: {
         type: "openai-chat",
         baseUrl: "https://api.siliconflow.cn",
         model: "deepseek-ai/DeepSeek-V3",
       },
+      openai: {
+        type: "openai-chat",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-4o",
+      },
+      openrouter: {
+        type: "openai-chat",
+        baseUrl: "https://openrouter.ai/api/v1",
+        model: "anthropic/claude-sonnet-4.5",
+      },
       google: {
         type: "google",
         baseUrl: "https://generativelanguage.googleapis.com",
-        model: "gemini-2.5-pro",
-      },
-      openai: {
-        type: "openai-chat",
-        baseUrl: "https://api.openai.com",
-        model: "gpt-4o",
+        model: "gemini-2.5-flash",
       },
     };
 

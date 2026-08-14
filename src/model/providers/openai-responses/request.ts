@@ -83,7 +83,10 @@ export function buildOpenAIResponsesRequest(
     max_output_tokens: request.maxOutputTokens ?? model.capabilities.maxOutputTokens,
     tools: request.tools?.map(toResponsesTool),
     tool_choice: toResponsesToolChoice(request.toolChoice),
-    temperature: request.temperature,
+    // 推理模型官方约束 temperature 不可修改：deepseek-v4（Responses API 唯一
+    // 支持模型）思考模式忽略 temperature，kimi 等固定值模型不支持该端点；
+    // 统一尊重 thinkingPlan.omitTemperature，避免带温度调用报错。
+    temperature: thinkingPlan.omitTemperature ? undefined : request.temperature,
     stream: request.stream,
     metadata: request.metadata
       ? Object.fromEntries(Object.entries(request.metadata).map(([key, value]) => [key, String(value)]))

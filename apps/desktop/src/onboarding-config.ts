@@ -12,7 +12,7 @@ export interface OnboardingPayload {
   model: string;
 }
 
-const ALLOWED_PROVIDER_TYPES = new Set(["anthropic", "openai-chat", "openai-responses", "google"]);
+const ALLOWED_PROVIDER_TYPES = new Set(["anthropic", "openai-chat", "openai-responses", "google", "litellm", "ccr"]);
 
 /** Gateway V2 schema: anthropic | openai | google */
 export function providerTypeToProtocol(providerType: string): "anthropic" | "openai" | "google" {

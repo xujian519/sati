@@ -46,9 +46,11 @@ const QWEN_BUDGETS: Partial<Record<ThinkingMode, number>> = {
 };
 
 /**
- * 推理模型（reasoning-only）白名单：temperature 仅接受 1（或省略），
- * 显式发送其他值会被 provider 以 400 拒绝。仅对白名单内模型省略温度，
- * 避免误伤可接受 temperature 的非推理模型（如 deepseek-chat 温度范围 0-2）。
+ * 推理模型（reasoning-only）白名单：官方约束 temperature 不可修改
+ * （kimi-k3/k2.7-code 固定 1.0、kimi-k2.6 思考 1.0/非思考 0.6，传其他值报错；
+ * deepseek-v4 思考模式下 temperature 被静默忽略）。统一省略显式温度。
+ * 仅对白名单内模型省略，避免误伤可接受 temperature 的非推理模型
+ * （如 deepseek-chat 温度范围 0-2）。
  */
 function isReasoningOnlyModel(modelId: string): boolean {
   return /deepseek-v4|deepseek-reasoner|kimi-k2|kimi-k3/.test(modelId.toLowerCase());
@@ -75,10 +77,10 @@ export function resolveThinkingPlan(
   const mode = enabledByLegacy ? "medium" : requestedMode;
 
   if (mode === "default") {
-    // 推理模型仅接受 temperature=1（或省略），default 模式下仍须省略显式
-    // temperature，否则带 temperature 的调用（如 session-title 的
-    // temperature: 0）会被 provider 以 400 拒绝。只按 modelId 白名单判断，
-    // 避免误伤 provider 名含 "deepseek" 的非推理模型。
+    // 推理模型官方约束 temperature 不可修改（kimi 传其他值报错、deepseek-v4
+    // 思考模式静默忽略），default 模式下仍须省略显式 temperature，否则带
+    // temperature 的调用（如 session-title 的 temperature: 0）会报错。
+    // 只按 modelId 白名单判断，避免误伤 provider 名含 "deepseek" 的非推理模型。
     const reasoningOnly = isReasoningOnlyModel(modelId);
     return { mode, enabled: false, ...(reasoningOnly ? { omitTemperature: true } : {}) };
   }
@@ -120,7 +122,7 @@ export function resolveThinkingPlan(
     return kimiPlan(mode, modelId);
   }
   if (/minimax/.test(providerId + providerUrl + modelId)) {
-    return minimaxPlan(mode);
+    return minimaxPlan(mode, modelId);
   }
 
   if (explicitMode) {
@@ -315,12 +317,15 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
       ...(isReasoningOnlyModel(modelId) ? { omitTemperature: true } : {}),
     };
   }
-  // 官方 v4：reasoning_effort 仅 low/high/max 三档；v4-pro 目前仅支持 high/max，
-  // v4-flash 三档全支持（文档 2026 年中）。xhigh/max 取最高档 max，其余 clamp。
+  // 官方 v4（文档 2026-08 thinking_mode）：reasoning_effort 仅 low/high/max 三档，
+  // flash 与 pro 的 effort 映射完全一致（low→low, medium→high, high→high, xhigh→high, max→max）。
   // 旧模型（deepseek-chat 等）保持 high/max 两档语义，避免对旧 API 发送 low。
-  const allowedEffort: ThinkingPlan["effort"][] =
-    /deepseek-v4/.test(modelId) && !/deepseek-v4-pro/.test(modelId) ? ["low", "high", "max"] : ["high", "max"];
-  const effort = mode === "xhigh" || mode === "max" ? "max" : clampEffort(mode, allowedEffort);
+  const allowedEffort: ThinkingPlan["effort"][] = /deepseek-v4/.test(modelId)
+    ? ["low", "high", "max"]
+    : ["high", "max"];
+  // medium 按官方映射到 high；xhigh/max 取最高档 max，其余 clamp。
+  const effort =
+    mode === "xhigh" || mode === "max" ? "max" : mode === "medium" ? "high" : clampEffort(mode, allowedEffort);
   return {
     mode,
     enabled: true,
@@ -334,7 +339,10 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
 
 function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   // kimi-k3 / kimi-k2.7-code(-highspeed) 为始终思考（always-thinking）模型，
-  // 官方不支持关闭思考；顶层仅 reasoning_effort low/high/max 三档（默认 max）。
+  // 官方不支持关闭思考；其中仅 kimi-k3 支持顶层 reasoning_effort
+  // （low/high/max，默认 max），kimi-k2.7-code 系列不支持 reasoning_effort
+  // （官方 models-overview：reasoning_effort 仅 kimi-k3 支持）。
+  const isK3 = /kimi-k3/.test(modelId);
   const alwaysThinking = /kimi-k3|kimi-k2\.7-code/.test(modelId);
   if (alwaysThinking) {
     if (mode === "off") {
@@ -344,14 +352,19 @@ function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
         unsupportedReason: `Model ${modelId} always thinks and does not support an explicit off thinking mode. Switch thinking strength back to Default or use kimi-k2.6.`,
       };
     }
-    const effort = mode === "xhigh" || mode === "max" ? "max" : clampEffort(mode, ["low", "high", "max"]);
-    return {
-      mode,
-      enabled: true,
-      effort,
-      bodyPatch: { reasoning_effort: effort },
-      omitTemperature: true,
-    };
+    const plan: ThinkingPlan = { mode, enabled: true, omitTemperature: true };
+    if (isK3) {
+      // k3 官方仅 low/high/max 三档；medium 就近取 high（与 DeepSeek 官方映射一致）。
+      const effort =
+        mode === "xhigh" || mode === "max"
+          ? "max"
+          : mode === "medium"
+            ? "high"
+            : clampEffort(mode, ["low", "high", "max"]);
+      plan.effort = effort;
+      plan.bodyPatch = { reasoning_effort: effort };
+    }
+    return plan;
   }
   if (mode === "off") {
     return {
@@ -373,8 +386,18 @@ function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   };
 }
 
-function minimaxPlan(mode: ThinkingMode): ThinkingPlan {
+function minimaxPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
+  // M3 支持 thinking: {type: "adaptive"|"disabled"}；M2.x 思考无法关闭（无用户
+  // 可控开关），显式 off 必须拒绝，不得发送 thinking.type=disabled（否则 400）。
+  const isM2x = /^minimax-m2(\.|-|$)/.test(modelId);
   if (mode === "off") {
+    if (isM2x) {
+      return {
+        mode,
+        enabled: false,
+        unsupportedReason: `Model ${modelId} always thinks and does not support an explicit off thinking mode. Switch thinking strength back to Default.`,
+      };
+    }
     return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true };
   }
   if (mode === "default") return { mode, enabled: false };
