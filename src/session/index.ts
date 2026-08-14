@@ -1,9 +1,16 @@
 export {
   createAgentProjectSessionStorage,
   sanitizeSessionIdForPath,
+  toolResultsDirFor,
   type AgentProjectSessionStorage,
   type AgentProjectSessionStorageOptions,
 } from "./storage/ProjectSessionStorage.js";
+export {
+  cleanupOrphanToolResults,
+  DEFAULT_ORPHAN_GRACE_MS,
+  type ToolResultsCleanupOptions,
+  type ToolResultsCleanupResult,
+} from "./storage/ToolResultsCleanup.js";
 export {
   listAllSessions,
   listProjectSessions,

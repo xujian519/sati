@@ -205,7 +205,17 @@ export class ToolResultBudget {
     }
     const readFilePath = await this.createReadFileAlias(path, ext);
 
-    const preview = headTailPreview(flat, this.previewBytes);
+    // 取回提示计入预览预算：替换件自带显式指令，模型无需从 read_file
+    // 描述猜测即可用 read_file 读回全文（与 read_file 描述中的引导行
+    // 形成双保险）。提示本身也受 previewBytes 约束（罕见的小预算/超长
+    // 路径下截断提示而非溢出预览）。
+    const retrievalHint = buildRetrievalHint(readFilePath, path, byteLength);
+    const boundedHint =
+      Buffer.byteLength(retrievalHint, "utf8") > this.previewBytes
+        ? truncateToBytes(retrievalHint, this.previewBytes)
+        : retrievalHint;
+    const previewBudget = Math.max(0, this.previewBytes - Buffer.byteLength(boundedHint, "utf8"));
+    const preview = `${headTailPreview(flat, previewBudget)}${boundedHint}`;
     const record: ToolResultReplacementRecord = {
       toolCallId: block.toolCallId,
       isError: block.isError,
@@ -353,24 +363,60 @@ function truncateToBytes(value: string, maxBytes: number): string {
   return buffer.subarray(0, end).toString("utf8");
 }
 
+/** Keep the last `maxBytes` bytes of `value`, UTF-8 safe (no split codepoints). */
+function truncateToBytesFromEnd(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) {
+    return value;
+  }
+  const buffer = Buffer.from(value, "utf8");
+  let start = Math.max(0, buffer.length - maxBytes);
+  while (start < buffer.length && (buffer[start] & 0b11000000) === 0b10000000) {
+    start += 1;
+  }
+  return buffer.subarray(start).toString("utf8");
+}
+
 /**
- * Head + tail preview: first half of budget from the start,
- * last half from the end, joined by a separator.
+ * Separator byte upper bound. The omitted-bytes count is rendered literally,
+ * so budget the fixed text plus a 15-digit ceiling (≈1 PB) — enough for any
+ * realistic spill body — to guarantee the rendered preview never exceeds the
+ * caller's budget.
+ */
+const SEPARATOR_MAX_BYTES = Buffer.byteLength("\n\n... [123456789012345 bytes omitted] ...\n\n");
+
+/**
+ * Head + tail preview: first half of the content budget from the start,
+ * last half from the end (both byte-aware), joined by a separator. The
+ * rendered result is guaranteed to fit within `budgetBytes`.
  */
 function headTailPreview(value: string, budgetBytes: number): string {
   const totalBytes = Buffer.byteLength(value, "utf8");
   if (totalBytes <= budgetBytes) {
     return value;
   }
-  const halfBudget = Math.floor(budgetBytes / 2) - 20;
+  if (budgetBytes <= 64) {
+    return truncateToBytes(value, budgetBytes);
+  }
+  const contentBudget = Math.max(0, budgetBytes - SEPARATOR_MAX_BYTES);
+  const halfBudget = Math.floor(contentBudget / 2);
   if (halfBudget <= 0) {
     return truncateToBytes(value, budgetBytes);
   }
   const head = truncateToBytes(value, halfBudget);
-  const tailStart = value.length - halfBudget * 2;
-  const tail = tailStart > 0 ? value.slice(tailStart) : "";
+  const tail = truncateToBytesFromEnd(value, halfBudget);
   const omitted = totalBytes - Buffer.byteLength(head, "utf8") - Buffer.byteLength(tail, "utf8");
   return `${head}\n\n... [${omitted} bytes omitted] ...\n\n${tail}`;
+}
+
+/**
+ * Model-facing retrieval hint appended to a persisted reference's preview.
+ * Names the workspace-relative read_file target when one exists (absolute
+ * spill path otherwise) so the model can deterministically read the full
+ * body back instead of relying on the preview alone.
+ */
+function buildRetrievalHint(readFilePath: string | undefined, path: string, originalBytes: number): string {
+  const target = readFilePath ?? path;
+  return `\n\n[Full result persisted to ${target} (${originalBytes} bytes). Use read_file with file_path="${target}" to read the full content.]`;
 }
 
 /** Helper for tests / inspection. */

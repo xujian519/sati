@@ -307,7 +307,9 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
         type: "success",
         toolCallId: call.id,
         toolName: tool.name,
-        content: output.content,
+        // 主路径（ToolResultBudget spill）需要完整原文落盘，不得截断；
+        // 直调路径（无 spill 层）由 applyResultSizeLimit 头尾截断兜底。
+        content: context.spillLayerActive ? output.content : previewLimit.content,
         supplementalMessages: output.supplementalMessages,
         data: output.data,
         metadata: mergeMetadata(

@@ -2,6 +2,15 @@ import { resolve } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { JsonlTranscriptWriter } from "../transcript/JsonlTranscriptWriter.js";
 
+/** `.sati/tool-results/<sessionId>/` 下的 tool-results 根目录名。 */
+export const TOOL_RESULTS_DIR_NAME = "tool-results";
+/**
+ * 跨会话共享的 read_file 别名目录（ToolResultBudget.createReadFileAlias
+ * 把所有会话的别名统一放在 `tool-results/refs/`）。不属于任何单个会话，
+ * 孤儿回收必须跳过，否则 30 天闲置后全部会话的取回通道被一次性删除。
+ */
+export const TOOL_RESULTS_REFS_DIR_NAME = "refs";
+
 export type AgentProjectSessionStorageOptions = {
   projectRoot: string;
   pilotHome: string;
@@ -52,6 +61,16 @@ export function sanitizeSessionIdForPath(sessionId: string): string {
   return sessionId.replace(illegal, "-").replace(/^-+|-+$/g, "") || "session";
 }
 
+/**
+ * Per-session directory for spilled tool-result bodies
+ * (`{projectRoot}/.sati/tool-results/<safeId>/`). Kept inside the workspace so
+ * the agent can read bodies back with read_file (workspace path boundary);
+ * the project-local `.sati` directory is gitignored.
+ */
+export function toolResultsDirFor(projectRoot: string, sessionId: string): string {
+  return resolve(projectRoot, ".sati", TOOL_RESULTS_DIR_NAME, sanitizeSessionIdForPath(sessionId));
+}
+
 export function createAgentProjectSessionStorage(
   options: AgentProjectSessionStorageOptions,
 ): AgentProjectSessionStorage {
@@ -62,7 +81,7 @@ export function createAgentProjectSessionStorage(
   // them back with read_file when the inline preview is insufficient. The
   // project-local .sati directory is gitignored and already within the
   // workspace path boundary enforced by read_file.
-  const toolResultsDir = resolve(options.projectRoot, ".sati", "tool-results", safeId);
+  const toolResultsDir = toolResultsDirFor(options.projectRoot, options.sessionId);
   const fileHistoryDir = resolve(chatDir, safeId, "file-history");
   const subagentsDir = resolve(chatDir, safeId, "subagents");
   const subagentTranscriptPath = (subagentId: string): string =>

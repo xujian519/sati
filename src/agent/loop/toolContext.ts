@@ -47,6 +47,10 @@ export class ToolContextFactory {
     return {
       sessionId: input.sessionId,
       turnId: input.turnId,
+      // 主路径经 context runtime 的 ToolResultBudget 落盘替换大结果，
+      // ToolRuntime 不得截断原文（spill 需要完整 body）；无该能力时
+      // 由 ToolRuntime 自行按 maxResultBytes 头尾截断兜底。
+      spillLayerActive: typeof dependencies.context?.applyToolResults === "function",
       // Group key for `FileHistoryStore.trackEdit` (C4). Our canonical
       // assistant messages don't carry an id, so the turn id is the closest
       // stable scope: every edit/write produced inside this turn rewinds as

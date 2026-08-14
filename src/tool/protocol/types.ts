@@ -287,6 +287,16 @@ export type SatiToolRuntimeContext = {
   now?: () => Date;
   env?: NodeJS.ProcessEnv;
   maxResultBytes?: number;
+  /**
+   * True when the caller routes tool results through a context runtime that
+   * implements `applyToolResults` (i.e. a `ToolResultBudget` spill layer).
+   * The runtime then replaces oversized results with persisted references, so
+   * `ToolRuntime` must NOT truncate the original content here — the spill
+   * body must stay intact. When absent/false, `ToolRuntime` applies the
+   * `maxResultBytes` head/tail truncation itself as a fallback for direct
+   * call paths with no spill layer.
+   */
+  spillLayerActive?: boolean;
   runMode?: AgentRunMode;
   /**
    * Optional streaming progress sink. Tools that produce incremental output

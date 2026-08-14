@@ -167,8 +167,6 @@ export type InProcessGatewayOptions = {
    */
   skillManager?: SkillManager;
   dispatchHookForSession?: (sessionKey: string, event: string, payload: Record<string, unknown>) => void;
-  /** Directory to persist large tool outputs for TUI/Web viewing. */
-  toolResultsDir?: string;
   /** Override a session's cwd via SessionConfigOverrides. */
   setSessionCwd?: (sessionKey: string, cwd: string) => void;
   /** Delegate for Always-On apply — wired to AlwaysOnManager.applyPlan. */

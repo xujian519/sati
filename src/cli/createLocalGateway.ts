@@ -1,6 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync as mkdirSyncFs, renameSync } from "node:fs";
 import { dirname, resolve, join as joinPath } from "node:path";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import { brandEnv, ENV_KEY } from "../env.js";
@@ -96,7 +95,12 @@ import {
   DEFAULT_TRIGGER_TIERS,
   type RouterConfig,
 } from "../router/config/schema.js";
-import { createAgentProjectSessionStorage, listProjectSessions, resumeAgentSession } from "../session/index.js";
+import {
+  cleanupOrphanToolResults,
+  createAgentProjectSessionStorage,
+  listProjectSessions,
+  resumeAgentSession,
+} from "../session/index.js";
 import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStorage.js";
 import { createSessionTitleGenerator } from "../session/title/SessionTitleGenerator.js";
 import { readWebSessionMessages, readSubagentWebMessages } from "../web/server/readSessionMessages.js";
@@ -313,7 +317,6 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     now,
     serverInfo: { mode: "in_process", projectKey: projectRoot },
     telemetry,
-    toolResultsDir: resolve(tmpdir(), "sati-tool-output", process.pid.toString()),
     cron: options.cron,
     skillManager,
     setSessionCwd: (sessionKey, cwd) => registry.setSessionCwd(sessionKey, cwd),
@@ -412,6 +415,18 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // build a `GatewayElicitationChannel` against this gateway's bus +
   // emit-sink (B1).
   registry.setGateway(gateway);
+  // Startup sweep: reclaim .sati/tool-results/ directories whose transcript
+  // no longer exists (crash leftovers, deleted sessions). Fire-and-forget —
+  // must not block gateway startup.
+  void cleanupOrphanToolResults({ projectRoot, pilotHome })
+    .then(({ removed, removedIds }) => {
+      if (removed > 0) {
+        console.log(
+          `[sati] Reclaimed ${removed} orphaned tool-results director${removed === 1 ? "y" : "ies"}: ${removedIds.join(", ")}`,
+        );
+      }
+    })
+    .catch(() => undefined);
   return {
     gateway,
     configStore,

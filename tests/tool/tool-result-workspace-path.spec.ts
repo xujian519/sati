@@ -123,3 +123,87 @@ test("large tool result read_file aliases are short and sequential", async () =>
     await rm(pilotHome, { recursive: true, force: true });
   }
 });
+
+test("persisted reference preview carries a read_file retrieval hint within budget", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-readable-tool-result-hint-"));
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-home-"));
+  try {
+    const storage = createAgentProjectSessionStorage({
+      projectRoot,
+      pilotHome,
+      sessionId: "web:s_test",
+      now: () => new Date("2026-07-09T00:00:00.000Z"),
+    });
+    const previewBytes = 200;
+    const budget = new ToolResultBudget({
+      toolResultsDir: storage.toolResultsDir,
+      maxResultSizeChars: 64,
+      maxResultSizeTokens: 20,
+      previewBytes,
+    });
+    const message = await budget.applyToMessage(
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            toolCallId: "call-hint",
+            content: [{ type: "text", text: `head\n${"x".repeat(500)}\ntail` }],
+          },
+        ],
+      },
+      { turnId: "turn-1" },
+    );
+
+    const ref = message.content.find(block => block.type === "tool_result_reference");
+    assert.ok(ref, "expected a persisted tool_result_reference");
+    // 显式取回指令：模型可直接用 read_file 读回全文。
+    assert.match(
+      ref.preview,
+      /Full result persisted to \.sati\/tool-results\/refs\/result-0001\.txt \(510 bytes\)\. Use read_file with file_path="\.sati\/tool-results\/refs\/result-0001\.txt"/,
+    );
+    // 提示行计入预览预算：总预览不超 previewBytes。
+    assert.ok(Buffer.byteLength(ref.preview, "utf8") <= previewBytes, "preview must stay within budget");
+    assert.equal(ref.hasMore, true);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("CJK preview stays within byte budget (head/tail byte-aware)", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-readable-tool-result-cjk-"));
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-home-"));
+  try {
+    const storage = createAgentProjectSessionStorage({
+      projectRoot,
+      pilotHome,
+      sessionId: "web:s_test",
+      now: () => new Date("2026-07-09T00:00:00.000Z"),
+    });
+    const previewBytes = 2048;
+    const budget = new ToolResultBudget({
+      toolResultsDir: storage.toolResultsDir,
+      maxResultSizeChars: 256,
+      maxResultSizeTokens: 20,
+      previewBytes,
+    });
+    const cjkBody = "专".repeat(2_000);
+    const message = await budget.applyToMessage(
+      {
+        role: "user",
+        content: [{ type: "tool_result", toolCallId: "call-cjk", content: [{ type: "text", text: cjkBody }] }],
+      },
+      { turnId: "turn-1" },
+    );
+    const ref = message.content.find(block => block.type === "tool_result_reference");
+    assert.ok(ref, "expected a persisted tool_result_reference");
+    assert.ok(
+      Buffer.byteLength(ref.preview, "utf8") <= previewBytes,
+      `preview (${Buffer.byteLength(ref.preview, "utf8")}B) must stay within ${previewBytes}B`,
+    );
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
