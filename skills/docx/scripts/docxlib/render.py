@@ -216,7 +216,7 @@ def render_docx(
             # command is still passed entirely as positional arguments, so no
             # path or filename is interpolated into shell source.
             launch_command = (
-                ["/bin/sh", "-c", 'exec "$@"', "pilotdeck-soffice", *command]
+                ["/bin/sh", "-c", 'exec "$@"', "sati-soffice", *command]
                 if platform.system() == "Darwin"
                 else command
             )

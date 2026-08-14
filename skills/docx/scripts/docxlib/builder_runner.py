@@ -15,7 +15,7 @@ def main() -> int:
     args = parser.parse_args()
 
     builder_path = Path(args.builder).expanduser().resolve()
-    specification = importlib.util.spec_from_file_location("pilotdeck_docx_builder", builder_path)
+    specification = importlib.util.spec_from_file_location("sati_docx_builder", builder_path)
     if specification is None or specification.loader is None:
         raise RuntimeError(f"Could not load builder: {builder_path}")
     module = importlib.util.module_from_spec(specification)

@@ -1,1 +1,1 @@
-"""PilotDeck DOCX skill implementation."""
+"""Sati DOCX skill implementation."""
