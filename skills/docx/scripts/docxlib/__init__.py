@@ -1,3 +1,1 @@
-"""Sati DOCX skill implementation."""
-
-__version__ = "0.1.0"
+"""PilotDeck DOCX skill implementation."""

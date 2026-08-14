@@ -7,6 +7,7 @@ import type { SatiLoadedPlugin } from "../protocol/plugin.js";
 import type { SatiHooksSettings } from "../../hooks/protocol/settings.js";
 import type { SatiCustomRouter } from "../../../router/customRouter/customRouter.js";
 import { isRoleFrontmatter, parseRoleConfig } from "../../skills/roleConfig.js";
+import { renderSkillContent } from "../../skills/renderSkillContent.js";
 import type { SkillRoleConfig } from "../../skills/types.js";
 import { PluginRegistry } from "./PluginRegistry.js";
 import { truncateMcpInstructionString } from "./truncateMcpString.js";
@@ -188,7 +189,7 @@ export class PluginRuntime {
     for (const plugin of plugins) {
       const skill = plugin.skills?.find(entry => entry.name === extensionId);
       if (skill) {
-        return skill.content;
+        return renderSkillContent(skill.content, skill.path);
       }
     }
 
@@ -197,7 +198,7 @@ export class PluginRuntime {
     for (const plugin of plugins) {
       const skill = plugin.skills?.find(entry => entry.name.endsWith(`:${extensionId}`));
       if (skill) {
-        return skill.content;
+        return renderSkillContent(skill.content, skill.path);
       }
     }
 
