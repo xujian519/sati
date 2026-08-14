@@ -47,6 +47,14 @@
 - **依赖安全 27 → 1**（原"立即"2）：`pnpm.overrides` 补齐 6 类漏洞包（tar ^7.5.21、js-yaml@>=4 4.3.1、brace-expansion 按主版本 1.1.18 / 2.1.4 / 5.0.9、nanoid 3.3.17 / 5.1.16、form-data@>=4 4.0.6、ip-address ^10.3.1、esbuild ^0.28.1）；`pnpm audit` 27 → **1**（仅 extract-zip，无可用修复版本，electron 安装期依赖）。全部为同大版本 semver 兼容升级，经 `pnpm-lock.yaml` 实测解析验证。
 - **ui-source 删除：评估后不执行**（原"立即"3）：详见 Sprint Backlog 第 3 项——ui-source 为 `/memory-dashboard` 活跃资产，非死代码，已回滚。
 
+## 已处理项（2026-08-14，A 档低风险清理会话）
+
+- **UI 死代码删除**（BFS 可达性 + 全量引用确认后）：`app-shell/AppShellContext.ts`、`app-shell/VersionBadge.tsx`、`components/ui/scroll-area.tsx`（共 310 行）已删除，`ui` typecheck 通过；级联孤儿 `hooks/useGitVersion.ts`（VersionBadge 唯一消费者，109 行）随审查一并删除。
+- **命名颠倒标注**（B 档）：`main-content/view/MainContent.tsx`（活跃路由壳）与 `chat-v2/ChatInterfaceV2.tsx`（活跃组合壳）头部加注释，说明"v1/v2 目录名不代表新旧"（视图在 `main-content-v2/`、聊天基础层在 `chat/`）。重命名目录未做（中风险，需专项）。
+- **nuo-*.yaml 处置决策**（B 档）：2026-08-14 决策为**激活（评审后接入）**，已登记为 Sprint Backlog 中期项 #9（前置：31 条 `action: block` 逐条评审；接入路径：scope=patent 合并 或 domains pack）。
+- **C 档验证**：CI 串行确认——`.github/workflows/ci.yml` quality job 中 `Build & test (backend)` 与 `Test (ui)` 为同 job 顺序 step，同 runner 串行，08-02 报告所述并发竞态在 CI 不存在（无需修改）。`pnpm audit` 复跑发现 **nanoid 3.3.17 → 3.3.18**（`ui>postcss>nanoid`，官方 patched `>=3.3.18`，08-13 override 值 3.3.17 偏旧），override 更新 + `pnpm install` 后 **audit 2 → 1**（仅剩 `extract-zip`，electron 安装期依赖，`Patched: <0.0.0` 无修复版本，保留）。
+- **测试覆盖修正（此前粗筛误报）**：`atomicChecker`（atomic-checker.spec.ts 15 用例）、`slop-engine`（slop-engine.spec.ts 19 用例）、`graph/node-policy`（node-policy.spec.ts 7 用例）、`workflow-dag`（workflow-dag.spec.ts）、镜像一致性（quality-gate-mirror.spec.ts，PAT-RISK/APPROVAL/ABS 三组关键词 vs quality-gate.ts 三数组）**均有测试**——此前"新增 patent 模块无测试"为假阴性（测试文件 kebab-case 命名 + barrel 间接引用）。真实无直接测试的仅剩 `evidence/claimBinding.ts`、`evidence/rule-loader.ts`、`graph/domains/shared.ts`（低风险辅助模块，可后续补或豁免）。
+
 ---
 
 ## 已处理项（2026-08-02，审计当日）
@@ -62,6 +70,8 @@
 
 ### 1. 双后端并存：`ui/server` 是第二套手写 JS 后端（最重的一项）
 
+> ✅ **决策保留（2026-08-14）**：双后端为**有意设计**，不再列为债务。`ui/server` 是独立 Express 桥接层，经 WebSocket 连 gateway 协议通信（见 `ui/server/sati-bridge.js` 头部注释：进程内网关会造出第二个分叉的 agent 运行时，不共享 `~/.sati/projects/<id>/chats/*.jsonl` 写入与权限状态）；非聊天执行能力（项目/文件/git/mcp/skills/taskmaster/记忆/cron 管理）本就是本地磁盘操作，无需 agent 运行时。历史上统一尝试后系统难用。后续审计不再催收；若未来要动，只关注其中**可分离的卫生子项**（见下），不动架构本身。
+
 - `ui/server/` 共 **95 个文件、约 1.1MB 手写 JS**（无 TypeScript、无 protocol/runtime/config 分层），其中 `index.js` 130KB、`pilotdeck-bridge.js`/`sati-bridge.js` 各 80KB、`routes/{taskmaster,git,agent,config}.js` 各 37–56KB。
 - 它**直接深层 import `src/` 内部实现**（≥10 个文件，如 `ui/server/discovery-plans.js:20-27` → `src/always-on/web/DiscoveryPlanService.js`、`projects.js:26` → `src/web/server/legacySessionPresentation.js`），违反 CLAUDE.md"ui/ 不得直接导入 src/"的边界声明——**绕过 gateway 协议，编译期耦合核心实现**。
 - 由此产生**同能力多套实现**：
@@ -70,6 +80,12 @@
   - 三重会话/项目列表：gateway 协议层 + `src/web/server/listProjects.ts` + `ui/server/projects.js` 各自实现 `getProjects`
   - 双 `repairToolName`：`src/model/streaming/repairToolName.ts` 与 `src/tool/execution/repairToolName.ts` 两套并行算法
   - 双品牌 bridge/config：`pilotdeck-bridge.js` 与 `sati-bridge.js` import 列表逐行相同；`satiConfig{Config,Watcher,Reloader}.js` 与 `pilotdeckConfig{...}.js` 同构复制两份
+
+#### 可选卫生项（2026-08-14 决策保留后登记，纯卫生不动架构，做不做都行）
+
+1. **深层 import 收口**：`ui/server → src/` 深层 import 实测 18 处（含测试文件；排除测试 15 处；08-12 审计为 20 处/9 文件），改为统一走 `src/<module>/index.ts` barrel——纯防御，防止未来核心重构（如模块内文件移动）静默破坏桥接层。
+2. **停用编译产物直连**：`ui/server/routes/memory.js:5` 直接 import `edgeclaw-memory-core/lib/index.js` 编译产物，源码改动需手动重编译才生效（漂移风险点），可改用子包源码入口。
+3. **`ui/server/index.js` 机械分片**：3839 行纯拆分（routes / middleware / services / websocket 四类），不改逻辑 → DoD：拆后单文件 ≤ 500 行，entry 只做组装，`pnpm --filter sati-ui test` 全绿。
 
 ### 2. 内嵌子包 `edgeclaw-memory-core`：包内嵌包 + 双构建 + 产物入库
 
@@ -125,7 +141,7 @@ CLAUDE.md 宣称的"protocol/runtime/config 三层 + index.ts barrel"：26 个�
 
 1. **立即（半天内，可验证）**：`.reasonix` 加入 .gitignore 并 `git rm --cached`。 — ✅ 已完成（`ccc2d582`）
 2. **短期**：把 `edgeclaw-memory-core` 移入 `pnpm-workspace.yaml`、删除独立 `package-lock.json`、`lib/` 产物改为构建时生成不入库；为 `router/`、`cron/`、`permission/` 补最小行为测试；统一 i18n 三份 JSON 的 key。 — ✅ 大部分已完成（子包入 workspace、测试补齐、i18n 对齐均已落地；`lib/` 产物入库问题仍待处理）
-3. **中期**：确定 `ui/server` 的演进方向（要么收敛到 `src/` 的 TS 分层并只 import barrel，要么逐步迁到 gateway API）——这是消除双后端/双 WebSocket/双记忆运行时的唯一路径；拆分 `AgentLoop.ts` 与 `InProcessGateway.ts`；完成全仓品牌收敛（README.zh.md、products 示例、pilotdeck-* 文件）。 — ⏳ 部分（S1 冻结增量已落地，见 `docs/design/gateway-protocol-versioning.md` Part B；品牌收敛✅ 已完成（2026-08-13 收尾：pilotdeck 双轨死代码删除、provider 标识统一、兼容层标注 `legacy(pre-rebrand)`，见 `docs/brand-unification-plan.md`）；双后端收敛 / AgentLoop 拆分为剩余工作）
+3. **中期**：确定 `ui/server` 的演进方向（要么收敛到 `src/` 的 TS 分层并只 import barrel，要么逐步迁到 gateway API）——这是消除双后端/双 WebSocket/双记忆运行时的唯一路径；拆分 `AgentLoop.ts` 与 `InProcessGateway.ts`；完成全仓品牌收敛（README.zh.md、products 示例、pilotdeck-* 文件）。 — ⏳ 部分（S1 冻结增量已落地，见 `docs/design/gateway-protocol-versioning.md` Part B；品牌收敛✅ 已完成（2026-08-13 收尾：pilotdeck 双轨死代码删除、provider 标识统一、兼容层标注 `legacy(pre-rebrand)`，见 `docs/brand-unification-plan.md`）；AgentLoop 拆分为剩余工作；双后端按 2026-08-14 决策保留，不列为债务）
 4. **持续**：建立统一 logger 接入 telemetry；治理 130+ 静默 catch；统一 React/Express/katex 版本策略；重写 CLAUDE.md 使其与实际一致（否则会持续误导后续修改）。 — ⏳ 部分（CLAUDE.md 已重写对齐实际；logger / 静默 catch / 版本策略未启动）
 
 ---
@@ -314,12 +330,13 @@ Top 5 热点（本次 `grep -c` 实测）：
 
 6. **巨无霸函数拆解 Top 5**：[McpClient.ts](file:///Users/xujian/projects/Sati/src/mcp/client/McpClient.ts) / [reasoning-rules.ts](file:///Users/xujian/projects/Sati/src/patent/checker/reasoning-rules.ts) / [legal-search.ts](file:///Users/xujian/projects/Sati/src/knowledge/legal/legal-search.ts) / [kg-store.ts](file:///Users/xujian/projects/Sati/src/knowledge/shared/kg-store.ts) / [workflow.ts](file:///Users/xujian/projects/Sati/src/patent/workflow.ts) 各拆成 ≥ 3 个职责清晰的函数或独立文件 → DoD：拆后平均行/函数 ≤ 100，对应 spec 全绿。
 7. **`AgentLoop.ts` 按阶段拆分 + 补阶段单测**：拆出 `PlanStage / ActStage / ReflectStage` 三个模块（每块 ≤ 300 行）；每阶段写 ≥ 2 个单元测试 → DoD：`src/agent/loop/` 新增 3 文件，`tests/agent/loop/` 新增 6 个 describe 块，`pnpm typecheck` + `pnpm test` 全绿。
-8. **`ui/server` 跨边界 import 增量冻结方案落地**：二选一作为专项，方案确定后写设计文档并在下一轮审计验收。
-   - **方案 A（协议层收敛）**：`ui/server` 所有 `import from ../../src/` 改为连 `ws://localhost:<gatewayPort>` 走 gateway 协议，仅保留 `parseGatewayConfig`（纯函数）例外
-   - **方案 B（TS 化 + barrel 约束）**：`ui/server` 迁 TS 写类型，所有对 `src/` 的 import 限定为 `src/<module>/index.ts` barrel，禁止 2、3 级子路径；写 eslint rule `no-restricted-imports` 强制执行
+8. **`ui/server` 跨边界 import 增量冻结方案落地**：~~二选一作为专项，方案确定后写设计文档并在下一轮审计验收。~~ — ✅ **取消（2026-08-14 决策）**：双后端为必要设计，暂不收敛。仅保留可分离卫生子项：深层 import 改走 `src/<module>/index.ts` barrel、`routes/memory.js` 停用编译产物 `lib/index.js` 直连（可选用源码路径）、`index.js` 3839 行机械分片——均不动架构。
+   - ~~**方案 A（协议层收敛）**：`ui/server` 所有 `import from ../../src/` 改为连 `ws://localhost:<gatewayPort>` 走 gateway 协议，仅保留 `parseGatewayConfig`（纯函数）例外~~（历史方案，随条目取消）
+   - ~~**方案 B（TS 化 + barrel 约束）**：`ui/server` 迁 TS 写类型，所有对 `src/` 的 import 限定为 `src/<module>/index.ts` barrel，禁止 2、3 级子路径；写 eslint rule `no-restricted-imports` 强制执行~~（历史方案，随条目取消）
+9. **nuo-*.yaml 激活专项（2026-08-14 决策：激活，评审后接入）**：`rules/patent/nuo-*.yaml`（7 文件 96 条，XiaoNuo 移植，源在 `assets/patent-rules/`、可由 `scripts/port-nuo-rules.ts` 重新生成）当前生产零加载。前置评审：**31 条 `action: block` 逐条评审**（拦截工具调用，拦截面最大；domain 分布：patent_inventiveness 18 / patent_general 18 / patent_claims 15 / patent_disclosure 13 / patent_procedure 11 / patent_oa_response 8 / patent_infringement 8 / patent_novelty 4…），评审结论落 `rules/README.md`。接入路径二选一（分层加载器 `loadRulePack` 已就绪）：(a) 并入 `rule_check` scope=patent 加载（改 `patent-compliance.ts` 或 ruleCheck resolve）；(b) 挂入 `rules/domains/*` pack.yaml 清单经 scope=pack 加载。→ DoD：`rule_check` scope=patent 规则数 = compliance + 评审通过后的 nuo 规则数；输出门禁新规则生效且全量测试绿。
 
 ### 持续工程（跨 Sprint 滚动，每 Sprint 清理一块）
 
-9. **裸 console 按模块收束到 `src/telemetry/` wrapper**：从 `sati.ts`（54 处）→ `createLocalGateway.ts`（24 处）→ `streamModel.ts`（4 处，主链路最关键），每 PR 只改 1–2 个模块 → DoD：每 Sprint 末 `grep -c console.log src/$module` 计数下降可验证。
-10. **111 处 any 主链路收敛**：优先级 `tool/builtin/planMode.ts(6)` → `context/projection/MessageProjector.ts(5)` → `router/RouterRuntime.ts(4)` → `gateway/client/InProcessGateway.ts(3)` → 其余 60 外围模块 → DoD：主链路 any 清零，外围 any 加 `// SAFETY: ...` 注释说明原因并附类型守卫位置。
-11. **`ui/server/index.js` 3808 行分片**：按 routes / middleware / services / websocket 四类拆出独立文件，纯机械拆分不改逻辑 → DoD：拆出后单文件 ≤ 500 行，`ui/server/index.js` ≤ 400 行（作为 entry 只做组装），`pnpm --filter sati-ui test` 全绿。
+10. **裸 console 按模块收束到 `src/telemetry/` wrapper**：从 `sati.ts`（54 处）→ `createLocalGateway.ts`（24 处）→ `streamModel.ts`（4 处，主链路最关键），每 PR 只改 1–2 个模块 → DoD：每 Sprint 末 `grep -c console.log src/$module` 计数下降可验证。
+11. **111 处 any 主链路收敛**：优先级 `tool/builtin/planMode.ts(6)` → `context/projection/MessageProjector.ts(5)` → `router/RouterRuntime.ts(4)` → `gateway/client/InProcessGateway.ts(3)` → 其余 60 外围模块 → DoD：主链路 any 清零，外围 any 加 `// SAFETY: ...` 注释说明原因并附类型守卫位置。
+12. **`ui/server/index.js` 3839 行分片**：按 routes / middleware / services / websocket 四类拆出独立文件，纯机械拆分不改逻辑 → DoD：拆出后单文件 ≤ 500 行，`ui/server/index.js` ≤ 400 行（作为 entry 只做组装），`pnpm --filter sati-ui test` 全绿。
