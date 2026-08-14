@@ -700,7 +700,12 @@ app.put("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req, res) 
       schedule,
       timezone,
       projectKey: req.body?.projectKey || req.query?.projectKey || undefined,
+      expectedRevision: req.body?.expectedRevision,
     });
+    if (result && result.updated === false) {
+      res.status(409).json({ error: `Cron task update rejected: ${result.reason}`, reason: result.reason });
+      return;
+    }
     res.json(result);
   } catch (error) {
     console.error("[always-on-cron-update] failed:", error);

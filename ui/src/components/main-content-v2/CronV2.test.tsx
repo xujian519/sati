@@ -236,6 +236,7 @@ describe("CronV2", () => {
         cron: "30 8 * * 1",
         recurring: true,
         timezone: "Asia/Shanghai",
+        revision: 3,
         nextRunAt: "2026-01-05T00:30:00.000Z",
       }),
     ]);
@@ -262,6 +263,7 @@ describe("CronV2", () => {
         expect.objectContaining({
           message: "Updated prompt",
           projectKey: "/project/general",
+          expectedRevision: 3,
           schedule: expect.objectContaining({ type: "cron", expression: "0 9 * * 1" }),
         }),
       );

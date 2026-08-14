@@ -573,10 +573,18 @@ function CronFormView({
         schedule,
         timezone: timezone.trim() || undefined,
         projectKey,
+        ...(editingJob ? { expectedRevision: editingJob.revision ?? 0 } : {}),
       };
       const response = editingJob ? await api.cronUpdate(editingJob.id, payload) : await api.cronCreate(payload);
       if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        const body = (await response.json().catch(() => ({}))) as { error?: string; reason?: string };
+        if (editingJob && body?.reason === "conflict") {
+          throw new Error(
+            t("cron.edit.error.conflict", {
+              defaultValue: "This task was modified elsewhere. Refresh the list and try again.",
+            }),
+          );
+        }
         throw new Error(body?.error || `HTTP ${response.status}`);
       }
       if (editingJob) {

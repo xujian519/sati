@@ -137,6 +137,7 @@ export interface CronJobOverview {
   createdAt: string;
   nextRunAt?: string;
   timezone?: string | null;
+  revision?: number;
   recurring: boolean;
   manualOnly: boolean;
   status: CronJobOverviewStatus;
