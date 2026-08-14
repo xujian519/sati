@@ -277,6 +277,8 @@
       <button type="button" class="preset-btn" data-preset="anthropic">Anthropic 官方</button>
       <button type="button" class="preset-btn" data-preset="openrouter">OpenRouter</button>
       <button type="button" class="preset-btn" data-preset="minimax">MiniMax</button>
+      <button type="button" class="preset-btn" data-preset="siliconflow">硅基流动</button>
+      <button type="button" class="preset-btn" data-preset="google">Google</button>
       <button type="button" class="preset-btn" data-preset="openai">OpenAI</button>
     </div>
 
@@ -286,6 +288,7 @@
         <option value="anthropic">anthropic（/v1/messages）</option>
         <option value="openai-chat">openai-chat（/chat/completions）</option>
         <option value="openai-responses">openai-responses（/responses）</option>
+        <option value="google">google（Gemini generateContent）</option>
       </select>
     </div>
 
@@ -332,9 +335,19 @@
         model: "anthropic/claude-sonnet-4.5",
       },
       minimax: {
-        type: "anthropic",
-        baseUrl: "https://api.minimaxi.com/anthropic",
-        model: "MiniMax-M2.7-highspeed",
+        type: "openai-chat",
+        baseUrl: "https://api.minimax.io",
+        model: "MiniMax-M3",
+      },
+      siliconflow: {
+        type: "openai-chat",
+        baseUrl: "https://api.siliconflow.cn",
+        model: "deepseek-ai/DeepSeek-V3",
+      },
+      google: {
+        type: "google",
+        baseUrl: "https://generativelanguage.googleapis.com",
+        model: "gemini-2.5-pro",
       },
       openai: {
         type: "openai-chat",

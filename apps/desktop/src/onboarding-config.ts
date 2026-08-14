@@ -12,11 +12,13 @@ export interface OnboardingPayload {
   model: string;
 }
 
-const ALLOWED_PROVIDER_TYPES = new Set(["anthropic", "openai-chat", "openai-responses", "litellm", "ccr"]);
+const ALLOWED_PROVIDER_TYPES = new Set(["anthropic", "openai-chat", "openai-responses", "google"]);
 
-/** Gateway V2 schema: anthropic | openai */
-export function providerTypeToProtocol(providerType: string): "anthropic" | "openai" {
-  return providerType === "anthropic" ? "anthropic" : "openai";
+/** Gateway V2 schema: anthropic | openai | google */
+export function providerTypeToProtocol(providerType: string): "anthropic" | "openai" | "google" {
+  if (providerType === "anthropic") return "anthropic";
+  if (providerType === "google") return "google";
+  return "openai";
 }
 
 /**
