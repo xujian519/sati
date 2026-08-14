@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { buildTurnEnvironment } from "../../src/agent/loop/AgentLoop.js";
+import { buildTurnEnvironment } from "../../src/agent/loop/misc.js";
 
 test("turn environment provides an isolated Sati-owned work directory", () => {
   const cwd = "/workspace/project";

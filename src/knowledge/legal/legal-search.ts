@@ -1,4 +1,6 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { openKnowledgeDb } from "../shared/db-version.js";
+import { LAWS_DB } from "../shared/schema-versions.js";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
 
@@ -89,7 +91,8 @@ export class LegalSearchEngine implements LegalSearchSource {
   private readonly stmtCount: StatementSync;
 
   constructor(dbPath: string) {
-    this.db = new DatabaseSync(dbPath, { readOnly: true });
+    const opened = openKnowledgeDb(dbPath, LAWS_DB, { readOnly: true });
+    this.db = opened.db;
     const row = this.db
       .prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='law_fts'")
       .get() as { c: number };

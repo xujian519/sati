@@ -1,6 +1,8 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { KgNode } from "../patent/types.js";
 import { FTS_MIN_RUNES } from "./fts.js";
+import { openKnowledgeDb } from "./db-version.js";
+import { KNOWLEDGE_DB } from "./schema-versions.js";
 
 /**
  * 知识图谱只读存储（双 schema 兼容）。
@@ -82,7 +84,8 @@ export class KgStore {
   private readonly stmtListByType: StatementSync;
 
   constructor(dbPath: string) {
-    this.db = new DatabaseSync(dbPath, { readOnly: true });
+    const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
+    this.db = opened.db;
 
     // 表结构探测：knowledge.db 统一 schema（kg_nodes/kg_edges/kg_nodes_fts，trigram）
     // 优先；patent_kg.db 旧 schema（nodes/edges/nodes_fts*）兼容保留。

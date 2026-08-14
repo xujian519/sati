@@ -79,6 +79,12 @@ export type CompactionResult = {
   postTokens?: number;
   /** Number of messages actually summarized by this compaction pass. */
   messagesSummarized: number;
+  /**
+   * 被遮蔽（摘要替代）消息在压缩输入 messages 中的原始索引（升序）。
+   * 供 transcript 持久化 shadowedRanges 使用——压缩不删历史，只遮蔽；
+   * 重放可据此恢复被摘要替代的完整原文（对应 dsh surface replace 语义）。
+   */
+  shadowedMessageIndexes?: number[];
   summaryMessage?: CanonicalMessage;
   boundaryMarker: CanonicalMessage;
   /** Messages preserved verbatim across the boundary (kept tail). */
@@ -240,6 +246,7 @@ export class CompactionEngine {
       trigger: input.trigger,
       preTokens,
       messagesSummarized: messagesToSummarize.length,
+      shadowedMessageIndexes: compactPlan.shadowedMessageIndexes,
       summaryMessage,
       boundaryMarker,
       messagesToKeep,
@@ -387,7 +394,7 @@ function planFullCompactionMessages(
   protectedToolNames: Iterable<string>,
   minTailMessages: number,
   estimateTurnTokens: (turnMessages: CanonicalMessage[]) => number,
-): { messagesToSummarize: CanonicalMessage[]; messagesToKeep: CanonicalMessage[] } {
+): { messagesToSummarize: CanonicalMessage[]; messagesToKeep: CanonicalMessage[]; shadowedMessageIndexes: number[] } {
   const turns = splitMessagesIntoCompactionGroups(messages);
   const tailStartTurn = moveTailBoundaryBeforeProtectedRequest(
     turns,
@@ -399,15 +406,22 @@ function planFullCompactionMessages(
   const protectedIndexes = collectProtectedGroupIndexes(prefixTurns, { protectedToolNames });
   const protectedMessages: CanonicalMessage[] = [];
   const messagesToSummarize: CanonicalMessage[] = [];
+  // 被遮蔽消息的原始索引（分组保序切分原始数组，游标累计即原始位置）。
+  const shadowedMessageIndexes: number[] = [];
+  let cursor = 0;
 
   for (const turn of prefixTurns) {
     if (protectedIndexes.has(turn.index)) {
       protectedMessages.push(...turn.messages);
+      cursor += turn.messages.length;
     } else {
       messagesToSummarize.push(...turn.messages);
+      for (let i = 0; i < turn.messages.length; i += 1) {
+        shadowedMessageIndexes.push(cursor + i);
+      }
+      cursor += turn.messages.length;
     }
   }
-
   // Tool pair integrity: the summarized portion will be replaced by a summary
   // message, so any tool_result in the preserved portion whose tool_call was
   // summarized away (and vice versa) must be stripped.
@@ -417,7 +431,25 @@ function planFullCompactionMessages(
   const pairedToolCallIds = collectToolCallIds(withoutDanglingCalls);
   const messagesToKeep = stripUnpairedToolResults(withoutDanglingCalls, pairedToolCallIds);
 
-  return { messagesToSummarize, messagesToKeep };
+  return { messagesToSummarize, messagesToKeep, shadowedMessageIndexes };
+}
+
+/**
+ * 把升序消息索引压缩为连续范围列表（含端）。
+ * 例：[0,1,2,5,6] → [{fromIndex:0,toIndex:2},{fromIndex:5,toIndex:6}]。
+ * 供 compactMetadata.shadowedRanges 持久化（比存原始索引数组更紧凑）。
+ */
+export function compressIndexRanges(indexes: readonly number[]): Array<{ fromIndex: number; toIndex: number }> {
+  const ranges: Array<{ fromIndex: number; toIndex: number }> = [];
+  for (const index of indexes) {
+    const last = ranges.at(-1);
+    if (last !== undefined && index === last.toIndex + 1) {
+      last.toIndex = index;
+    } else {
+      ranges.push({ fromIndex: index, toIndex: index });
+    }
+  }
+  return ranges;
 }
 
 /**

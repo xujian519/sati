@@ -11,6 +11,8 @@
 
 import { DatabaseSync } from "node:sqlite";
 import { registerChunkUncompress } from "../shared/chunk-compression.js";
+import { openKnowledgeDb } from "../shared/db-version.js";
+import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
 
 /** 一条 personal_note（documents 行 + 聚合后的 chunk 正文）。 */
 export type PersonalNoteRow = {
@@ -27,7 +29,8 @@ export class PersonalNoteStore {
   private readonly db: DatabaseSync;
 
   constructor(dbPath: string) {
-    this.db = new DatabaseSync(dbPath, { readOnly: true });
+    const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
+    this.db = opened.db;
     // chunk 压缩解压函数（--compress-chunks 产物 BLOB；明文原样返回）。
     registerChunkUncompress(this.db);
   }

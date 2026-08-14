@@ -26,6 +26,7 @@ import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/inde
 import { ConcurrentToolScheduler } from "../../tool/scheduler/ConcurrentToolScheduler.js";
 import { ToolRuntime } from "../../tool/execution/ToolRuntime.js";
 import { PermissionRuntime } from "../../permission/index.js";
+import { createDefaultToolGuardRegistry } from "../session/defaultToolGuards.js";
 import type { CanonicalAssistantTextSummary } from "./types.js";
 import { buildForkedMessages } from "./buildForkedMessages.js";
 import { buildSubagentSystemPrompt, type SubagentDefinition } from "./builtinSubagentTypes.js";
@@ -217,7 +218,7 @@ export class SubAgentSession {
   }
 
   private cloneDependencies(registry: ToolRegistry): AgentRuntimeDependencies {
-    const permissionRuntime = new PermissionRuntime();
+    const permissionRuntime = new PermissionRuntime({ guards: createDefaultToolGuardRegistry() });
     const toolRuntime = new ToolRuntime(
       registry,
       permissionRuntime,

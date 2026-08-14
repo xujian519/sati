@@ -5,6 +5,7 @@ import { parseGoogleResponse } from "../providers/google/response.js";
 import type { GoogleRequestBody } from "../providers/google/request.js";
 import { buildModelRequest } from "../request/buildModelRequest.js";
 import { validateModelRequest } from "../request/validateModelRequest.js";
+import { resolveApiKey, type CredentialEnv } from "../config/resolveCredentials.js";
 import type { CanonicalModelEvent, CanonicalModelRequest, ModelConfig, ProviderConfig } from "../protocol/canonical.js";
 import { ModelProviderError, parseRetryAfterHeader } from "../protocol/errors.js";
 import { parseModelResponse } from "../response/parseModelResponse.js";
@@ -710,7 +711,7 @@ async function shouldUseEndpointResponse(
   }
 }
 
-export function buildProviderHeaders(provider: ProviderConfig): HeadersInit {
+export function buildProviderHeaders(provider: ProviderConfig, env: CredentialEnv = process.env): HeadersInit {
   const headers: Record<string, string> = {
     "content-type": "application/json",
     ...provider.headers,
@@ -721,7 +722,7 @@ export function buildProviderHeaders(provider: ProviderConfig): HeadersInit {
   // here that bypassed the parser. A stray space in the header value
   // (`Bearer  sk-...`) is silently rejected by most providers as
   // `invalid_token`, so guard at the wire boundary too.
-  const apiKey = provider.apiKey.trim();
+  const apiKey = resolveApiKeyAtRequest(provider, env);
   if (provider.protocol === "anthropic") {
     headers["x-api-key"] = apiKey;
     headers["anthropic-version"] = headers["anthropic-version"] ?? "2023-06-01";
@@ -730,6 +731,20 @@ export function buildProviderHeaders(provider: ProviderConfig): HeadersInit {
   }
 
   return headers;
+}
+
+/**
+ * 请求期 apiKey 解析（引用/值分离的消费端）：
+ * - env 源（apiKeySource="env"）：每次请求从 apiKeyRaw 重新解析
+ *   `${VAR}`——密钥轮换后下一次请求即生效，无需重启；解析失败抛错
+ *   （与 parse 期行为一致，fail-loud 而非静默用旧值）；
+ * - literal 源：用 parse 期已解析的 apiKey（trim 防御线内调用方直传）。
+ */
+function resolveApiKeyAtRequest(provider: ProviderConfig, env: CredentialEnv): string {
+  if (provider.apiKeySource === "env" && provider.apiKeyRaw !== undefined) {
+    return resolveApiKey(provider.apiKeyRaw, env);
+  }
+  return provider.apiKey.trim();
 }
 
 async function safeReadJson(response: Response): Promise<unknown> {

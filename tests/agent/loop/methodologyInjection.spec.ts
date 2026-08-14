@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalMessage } from "../../../src/model/index.js";
-import { applyMethodologyInjection } from "../../../src/agent/loop/methodologyInjection.js";
+import {
+  applyMethodologyAddendum,
+  computeMethodologyAddendum,
+  findFirstUserText,
+} from "../../../src/agent/loop/methodologyInjection.js";
 
 const SYSTEM = "You are Sati.";
 
@@ -13,63 +17,96 @@ function assistantMessage(): CanonicalMessage {
   return { role: "assistant", content: [] };
 }
 
-test("无 inject 回调时原样返回 systemPrompt", () => {
+test("computeMethodologyAddendum：无 inject 回调时返回 undefined", () => {
   const messages = [userMessage([{ type: "text", text: "hello" }])];
-  assert.equal(applyMethodologyInjection(SYSTEM, messages, undefined), SYSTEM);
+  assert.equal(computeMethodologyAddendum(messages, undefined), undefined);
 });
 
-test("消息数组为空时原样返回", () => {
+test("computeMethodologyAddendum：消息数组为空时返回 undefined", () => {
   assert.equal(
-    applyMethodologyInjection(SYSTEM, [], () => "EXTRA"),
-    SYSTEM,
+    computeMethodologyAddendum([], () => "EXTRA"),
+    undefined,
   );
 });
 
-test("没有 user 文本消息时原样返回（跳过 assistant/tool）", () => {
-  const messages = [assistantMessage()];
+test("computeMethodologyAddendum：没有 user 文本消息时返回 undefined", () => {
   assert.equal(
-    applyMethodologyInjection(SYSTEM, messages, () => "EXTRA"),
-    SYSTEM,
+    computeMethodologyAddendum([assistantMessage()], () => "EXTRA"),
+    undefined,
   );
 });
 
-test("命中第一条 user 文本时追加 addendum", () => {
+test("computeMethodologyAddendum：命中第一条 user 文本", () => {
   const messages = [userMessage([{ type: "text", text: "写一份权利要求" }])];
   assert.equal(
-    applyMethodologyInjection(SYSTEM, messages, text => `methodology: ${text}`),
-    `${SYSTEM}\n\nmethodology: 写一份权利要求`,
+    computeMethodologyAddendum(messages, text => `methodology: ${text}`),
+    "methodology: 写一份权利要求",
   );
 });
 
-test("回调返回 null 时原样返回", () => {
+test("computeMethodologyAddendum：回调返回 null / 空字符串时视为无 addendum", () => {
   const messages = [userMessage([{ type: "text", text: "hi" }])];
   assert.equal(
-    applyMethodologyInjection(SYSTEM, messages, () => null),
-    SYSTEM,
+    computeMethodologyAddendum(messages, () => null),
+    undefined,
   );
-});
-
-test("回调返回空字符串时原样返回", () => {
-  const messages = [userMessage([{ type: "text", text: "hi" }])];
   assert.equal(
-    applyMethodologyInjection(SYSTEM, messages, () => ""),
-    SYSTEM,
+    computeMethodologyAddendum(messages, () => ""),
+    undefined,
   );
 });
 
-test("多条 user 消息时取第一条有文本的", () => {
+test("computeMethodologyAddendum：多条 user 消息时取第一条有文本的", () => {
   const messages = [userMessage([{ type: "text", text: "第一条" }]), userMessage([{ type: "text", text: "第二条" }])];
-  const result = applyMethodologyInjection(SYSTEM, messages, text => `got:${text}`);
-  assert.equal(result, `${SYSTEM}\n\ngot:第一条`);
+  assert.equal(
+    computeMethodologyAddendum(messages, text => `got:${text}`),
+    "got:第一条",
+  );
 });
 
-test("单条 user 消息多个文本块按 \\n 拼接后传给回调", () => {
+test("computeMethodologyAddendum：单条 user 消息多个文本块按 \\n 拼接", () => {
   const messages = [
     userMessage([
       { type: "text", text: "甲" },
       { type: "text", text: "乙" },
     ]),
   ];
-  const result = applyMethodologyInjection(SYSTEM, messages, text => `got:${text}`);
-  assert.equal(result, `${SYSTEM}\n\ngot:甲\n乙`);
+  assert.equal(
+    computeMethodologyAddendum(messages, text => `got:${text}`),
+    "got:甲\n乙",
+  );
+});
+
+test("computeMethodologyAddendum：回调只被调用一次（单次计算供落库与拼 prompt 复用）", () => {
+  let calls = 0;
+  const messages = [userMessage([{ type: "text", text: "hello" }])];
+  const addendum = computeMethodologyAddendum(messages, text => {
+    calls += 1;
+    return `got:${text}`;
+  });
+  assert.equal(addendum, "got:hello");
+  assert.equal(calls, 1, "inject 回调必须且只执行一次");
+});
+
+test("applyMethodologyAddendum：空 addendum 原样返回", () => {
+  assert.equal(applyMethodologyAddendum(SYSTEM, undefined), SYSTEM);
+  assert.equal(applyMethodologyAddendum(SYSTEM, ""), SYSTEM);
+});
+
+test("applyMethodologyAddendum：追加 addendum 到 system prompt", () => {
+  assert.equal(applyMethodologyAddendum(SYSTEM, "methodology: 写权利要求"), `${SYSTEM}\n\nmethodology: 写权利要求`);
+});
+
+test("findFirstUserText：取第一条 user 文本消息并拼接多文本块", () => {
+  assert.equal(
+    findFirstUserText([
+      assistantMessage(),
+      userMessage([
+        { type: "text", text: "甲" },
+        { type: "text", text: "乙" },
+      ]),
+    ]),
+    "甲\n乙",
+  );
+  assert.equal(findFirstUserText([assistantMessage()]), undefined);
 });

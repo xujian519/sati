@@ -5,9 +5,10 @@
  * 供启动时输出可读能力清单，避免数据/配置缺失时静默降级。
  */
 
-import { DatabaseSync } from "node:sqlite";
 import type { KnowledgeDbPaths } from "./config.js";
 import type { KnowledgeRuntimeStatsSnapshot } from "./shared/knowledge-stats.js";
+import { openKnowledgeDb } from "./shared/db-version.js";
+import { KNOWLEDGE_DB } from "./shared/schema-versions.js";
 
 export type KnowledgeCapabilityStatus = "ready" | "missing" | "disabled";
 
@@ -20,7 +21,8 @@ function probeKnowledgeDb(dbPath: string): KnowledgeDbProbe | null {
   const cached = probeCache.get(dbPath);
   if (cached) return cached;
   try {
-    const db = new DatabaseSync(dbPath, { readOnly: true });
+    const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
+    const db = opened.db;
     try {
       const kgNodes = (db.prepare("SELECT COUNT(*) c FROM kg_nodes").get() as { c: number }).c;
       const lawArticles = (

@@ -15,9 +15,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 import { existsSync } from "node:fs";
 import { resolveKnowledgeDbPaths } from "../../knowledge/config.js";
+import { openKnowledgeDb } from "../../knowledge/shared/db-version.js";
+import { KNOWLEDGE_DB } from "../../knowledge/shared/schema-versions.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type KnowledgeNoteSaveInput = {
@@ -58,7 +59,9 @@ export function savePersonalNote(dbPath: string, input: KnowledgeNoteSaveInput):
   const documentId = noteDocumentId(input.project, title, content);
 
   // 短连接 + 事务（journal_mode=delete 下写锁短暂；用完即关）。
-  const db = new DatabaseSync(dbPath);
+  // 写路径同样做版本校验：真源版本不符时拒绝写入，避免向旧库写新格式数据。
+  const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB);
+  const db = opened.db;
   try {
     const hasFts =
       (

@@ -3,6 +3,7 @@ import { mkdir, appendFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
+import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
 import {
   classifyDurableMessageEntry,
@@ -49,6 +50,11 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
 
   constructor(private readonly options: JsonlTranscriptWriterOptions) {
     this.now = options.now ?? (() => new Date());
+  }
+
+  /** 实际落盘的 transcript 文件路径（供投影器等读取方绑定真实 writer）。 */
+  get path(): string {
+    return this.options.path;
   }
 
   /**
@@ -129,6 +135,16 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       type: "session_metadata",
       ...this.baseEntry(sessionId, turnId),
       metadata,
+    });
+  }
+
+  recordInjectedContext(sessionId: string, turnId: string, injection: InjectionRecord): Promise<void> {
+    return this.recordEntry({
+      type: "injected_context",
+      ...this.baseEntry(sessionId, turnId),
+      source: injection.source,
+      text: injection.text,
+      ...(injection.partIndex !== undefined ? { partIndex: injection.partIndex } : {}),
     });
   }
 

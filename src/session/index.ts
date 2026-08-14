@@ -59,8 +59,14 @@ export {
 export { readTranscript, type AgentTranscriptReadResult } from "./transcript/TranscriptReader.js";
 export {
   replayTranscriptEntries,
+  replayShadowedMessages,
+  replayShadowedMessagesAt,
+  readInjectedContexts,
+  projectMessagesFromTranscript,
   findLastCompactBoundaryIndex,
   type AgentTranscriptReplayResult,
+  type ShadowedMessagesResult,
+  type InjectedContextRecord,
 } from "./transcript/TranscriptReplay.js";
 export { replaySubagentTranscript } from "./transcript/replaySubagentTranscript.js";
 export {

@@ -1,5 +1,6 @@
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
+import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
 import type { AgentControlBoundaryTranscriptEntry, SessionMetadataValue } from "./TranscriptEntry.js";
 import type { AgentStatusMessageInput, AgentTranscriptWriter, AgentTranscriptWriterState } from "./TranscriptWriter.js";
@@ -22,7 +23,8 @@ export type InMemoryTranscriptEntry =
       sessionId: string;
       turnId: string;
       boundary: AgentControlBoundaryTranscriptEntry["boundary"];
-    };
+    }
+  | ({ type: "injected_context"; sessionId: string; turnId: string } & InjectionRecord);
 
 export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
   readonly entries: InMemoryTranscriptEntry[] = [];
@@ -68,6 +70,10 @@ export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
     boundary: AgentControlBoundaryTranscriptEntry["boundary"],
   ): void {
     this.entries.push({ type: "control_boundary", sessionId, turnId, boundary });
+  }
+
+  recordInjectedContext(sessionId: string, turnId: string, injection: InjectionRecord): void {
+    this.entries.push({ type: "injected_context", sessionId, turnId, ...injection });
   }
 
   snapshotState(): AgentTranscriptWriterState {

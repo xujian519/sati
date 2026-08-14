@@ -14,7 +14,9 @@ export {
   type PermissionRuleSource,
 } from "./protocol/types.js";
 export { matchPermissionRule } from "./policy/matchPermissionRule.js";
-export { PermissionRuntime } from "./decision/PermissionRuntime.js";
+export { PermissionRuntime, type PermissionRuntimeOptions } from "./decision/PermissionRuntime.js";
+export { ToolGuardRegistry } from "./guard/ToolGuardRegistry.js";
+export type { ToolGuard, ToolGuardDenial } from "./guard/ToolGuard.js";
 export {
   DEFAULT_PERMISSION_SETTINGS,
   getPermissionSettingsPath,

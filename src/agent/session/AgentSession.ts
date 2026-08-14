@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { CanonicalMessage } from "../../model/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentInput, AgentSubmitOptions } from "../protocol/input.js";
@@ -24,6 +25,13 @@ export type AgentSessionOptions = {
   initialState?: AgentSessionStateShape;
   replayEvents?: AgentEvent[];
   lifecycle?: LifecycleRuntime;
+  /**
+   * 历史消息投影器（运行期 messages 投影化）：从 transcript（唯一真源）
+   * 派生 submit 输入的历史消息。注入后 submit 不再使用内存累积的
+   * `state.messages`，消除内存态与持久态漂移。未注入（内存 transcript /
+   * 测试）时回退到 `state.messages`（无持久层，无漂移可言）。
+   */
+  projectMessages?: () => Promise<CanonicalMessage[]>;
 };
 
 export type AgentSessionRuntimeReloadSnapshot = {
@@ -81,10 +89,14 @@ export class AgentSession {
     });
     yield { type: "setup_completed", sessionId: this.state.sessionId };
 
+    // 运行期 messages 投影化：有投影器时历史消息从 transcript（唯一真源）
+    // 派生，替代内存累积的 state.messages——持久层为准，消除漂移。
+    const historyMessages = this.options.projectMessages ? await this.options.projectMessages() : this.state.messages;
+
     const runResult = yield* this.options.turnRunner.run({
       sessionId: this.state.sessionId,
       turnId,
-      messages: this.state.messages,
+      messages: historyMessages,
       input,
       maxTurns: submitOptions.maxTurns,
       runMode: submitOptions.runMode,

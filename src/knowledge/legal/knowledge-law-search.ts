@@ -16,6 +16,8 @@
  */
 
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { openKnowledgeDb } from "../shared/db-version.js";
+import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
@@ -73,7 +75,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   constructor(dbPath: string, options: KnowledgeLawSearchOptions2 = {}) {
     this.logger = options.logger;
     this.stats = options.stats;
-    this.db = new DatabaseSync(dbPath, { readOnly: true });
+    const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
+    this.db = opened.db;
     // chunk 压缩解压函数（--compress-chunks 产物 BLOB；明文原样返回）。
     registerChunkUncompress(this.db);
     const row = this.db

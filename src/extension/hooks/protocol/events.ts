@@ -10,6 +10,12 @@ export const SATI_HOOK_EVENTS = [
   "Notification",
   "UserPromptSubmit",
   "PreModelRequest",
+  /**
+   * Turn 开始、模型请求组装前的扩展点（对应 dsh pre-step）：钩子返回的
+   * `messages` 追加到本轮模型可见消息（消息改写）；`blockingErrors` 中的
+   * block 效果终止 turn（消息拒绝）。无钩子注册时零开销。
+   */
+  "PreStep",
   "SessionStart",
   "SessionEnd",
   "Stop",

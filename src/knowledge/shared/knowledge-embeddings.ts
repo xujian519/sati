@@ -21,6 +21,8 @@
 
 import { DatabaseSync } from "node:sqlite";
 import { quantizeInt8 } from "../../context/vector/cosine.js";
+import { openKnowledgeDb } from "./db-version.js";
+import { KNOWLEDGE_DB } from "./schema-versions.js";
 import { loadChunkMatrix, searchChunkMatrix, type ChunkRow, type Int8ChunkMatrix } from "./int8-matrix-search.js";
 
 export type KnowledgeEmbeddingHit = {
@@ -77,7 +79,8 @@ export class KnowledgeEmbeddingSearch {
   private data?: Int8ChunkMatrix;
 
   constructor(options: KnowledgeEmbeddingSearchOptions) {
-    this.db = new DatabaseSync(options.dbPath, { readOnly: true });
+    const opened = openKnowledgeDb(options.dbPath, KNOWLEDGE_DB, { readOnly: true });
+    this.db = opened.db;
     this.logger = options.logger;
     this.docTypes = options.docTypes;
     this.dbPath = options.dbPath;

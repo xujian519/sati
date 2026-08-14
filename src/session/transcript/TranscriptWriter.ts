@@ -1,5 +1,6 @@
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
+import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
 import type {
   AgentControlBoundaryTranscriptEntry,
@@ -32,6 +33,8 @@ export type AgentTranscriptWriter = {
     turnId: string,
     boundary: AgentControlBoundaryTranscriptEntry["boundary"],
   ): void | Promise<void>;
+  /** 注入内容参考条目（模型实际看到的记忆/指令/方法论段落原文，不进入重放投影）。 */
+  recordInjectedContext?(sessionId: string, turnId: string, injection: InjectionRecord): void | Promise<void>;
   recordEntry?(entry: AgentTranscriptEntry): void | Promise<void>;
   snapshotState?(): AgentTranscriptWriterState;
 };

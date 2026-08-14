@@ -15,6 +15,8 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { quantizeInt8 } from "../../context/vector/cosine.js";
+import { openKnowledgeDb } from "./db-version.js";
+import { VECTORS_DB } from "./schema-versions.js";
 
 export { quantizeInt8 }; // int8 量化原语统一在 cosine.ts（全仓唯一实现）
 
@@ -48,12 +50,36 @@ export type CorpusMeta = {
   builtAt: string;
 };
 
-/** 打开（或创建）vectors.db 并建表。 */
+/** 打开（或创建）vectors.db 并建表。版本过旧时清空重建（派生索引可重灌）。 */
 export function openVectorsDbWriter(dbPath: string): DatabaseSync {
   mkdirSync(dirname(dbPath), { recursive: true });
-  const db = new DatabaseSync(dbPath);
-  db.exec(VECTORS_DB_SCHEMA);
-  return db;
+  const opened = openKnowledgeDb(
+    dbPath,
+    VECTORS_DB,
+    // 写端与读端一致：version=0（含中断构建的半成品）视为需重建，DROP 旧表后全量重灌。
+    { treatZeroAsStale: true },
+  );
+  if (opened.needsRebuild) {
+    // 派生索引重建：清空旧表，脚本随后全量重灌。
+    opened.db.exec("DROP TABLE IF EXISTS vectors; DROP TABLE IF EXISTS vector_meta;");
+  }
+  // 版本戳一律复位（含 openKnowledgeDb 对全新库的存量打戳）：构建成功由
+  // finalizeVectorsDb 统一标记；中断构建的库保持 version=0，读端
+  // （VectorDbSearch，treatZeroAsStale）视为需重建而非静默读空库。
+  opened.db.exec("PRAGMA user_version = 0");
+  opened.db.exec("PRAGMA application_id = 0");
+  opened.db.exec(VECTORS_DB_SCHEMA);
+  return opened.db;
+}
+
+/**
+ * 构建完成后标记版本就绪（打 user_version/application_id）。
+ * 必须在全部数据灌入成功后调用；中断构建的库保持未打戳，
+ * 读端（VectorDbSearch）将其视为需重建。
+ */
+export function finalizeVectorsDb(db: DatabaseSync): void {
+  db.exec(`PRAGMA user_version = ${VECTORS_DB.version}`);
+  db.exec(`PRAGMA application_id = ${VECTORS_DB.applicationId}`);
 }
 
 export function setCorpusMeta(db: DatabaseSync, meta: CorpusMeta): void {

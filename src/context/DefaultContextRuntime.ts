@@ -30,6 +30,7 @@ import type {
   ContextToolResultInput,
   ContextToolResultResult,
   ModelContext,
+  InjectionRecord,
 } from "./protocol/types.js";
 
 export type CompactionTier = "micro" | "snip" | "full";
@@ -196,12 +197,16 @@ export class DefaultContextRuntime implements ContextRuntime {
     });
 
     const parts = [...prompt.parts];
+    // 「模型可见 = 已记录」：动态注入段落的来源清单，随 ModelContext 返回，
+    // 由调用方作为带 source 标记的参考条目落 transcript（不进入重放投影）。
+    const injections: InjectionRecord[] = [];
     if (memoryPromise) {
       const memory = await memoryPromise;
       for (const block of memory.attachments) {
         for (const content of block.content) {
           if (content.type === "text" && content.text.trim().length > 0) {
             parts.push(content.text);
+            injections.push({ source: "memory", text: content.text });
           }
         }
       }
@@ -217,6 +222,7 @@ export class DefaultContextRuntime implements ContextRuntime {
           messages: projection.messages,
           systemPrompt: parts.join("\n\n"),
           systemPromptParts: parts,
+          injections,
           tools: input.tools,
           diagnostics,
           boundaries: [],
@@ -235,6 +241,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     });
     if (memoryPromptSection) {
       parts.push(memoryPromptSection);
+      injections.push({ source: "clawx_memory", text: memoryPromptSection });
     }
 
     if (this.instructionDiscovery) {
@@ -245,11 +252,12 @@ export class DefaultContextRuntime implements ContextRuntime {
             const desc = instructionScopeDescription(l.scope);
             return `Contents of ${l.path}${desc}:\n\n${l.content}`;
           });
-          parts.push(
+          const instructionText =
             `<project-instructions>\nProject instructions are shown below. Adhere to these instructions. ` +
-              `IMPORTANT: These instructions OVERRIDE any default behavior.\n\n` +
-              `${blocks.join("\n\n")}\n</project-instructions>`,
-          );
+            `IMPORTANT: These instructions OVERRIDE any default behavior.\n\n` +
+            `${blocks.join("\n\n")}\n</project-instructions>`;
+          parts.push(instructionText);
+          injections.push({ source: "project_instructions", text: instructionText });
         }
       } catch {
         diagnostics.push({
@@ -270,6 +278,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       messages: projection.messages,
       systemPrompt: joined,
       systemPromptParts: parts,
+      injections,
       tools: input.tools,
       diagnostics,
       boundaries: [],

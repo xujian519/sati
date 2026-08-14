@@ -4,7 +4,7 @@
  */
 
 import type { NormalizedMessage } from "../../../stores/useSessionStore";
-import type { ChatMessage, SubagentChildTool } from "../types/types";
+import type { ChatMessage, CompactBoundaryShadowedMessage, SubagentChildTool } from "../types/types";
 import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from "../utils/chatFormatting";
 import { parseUserAttachmentNote } from "../utils/attachmentNotes";
 import { asRecord } from "../../../utils/unknown";
@@ -69,6 +69,97 @@ function shouldPreserveEmptyAssistantShell(messages: NormalizedMessage[], index:
   const previous = findNeighborRenderableMessage(messages, index, -1);
   const next = findNeighborRenderableMessage(messages, index, 1);
   return previous?.kind === "tool_use" || next?.kind === "tool_use";
+}
+
+/**
+ * 从 compact_boundary 消息的 compactMetadata（透传的 WebMessage payload）
+ * 提取被遮蔽消息的索引范围与原文列表，供历史回看展开。
+ */
+function extractCompactBoundaryShadowed(compactMetadata: unknown): {
+  shadowedRanges?: Array<{ fromIndex: number; toIndex: number }>;
+  shadowedMessages?: ChatMessage["shadowedMessages"];
+  shadowedDiagnostics?: ChatMessage["shadowedDiagnostics"];
+} {
+  const meta = asRecord(compactMetadata);
+  if (!meta) {
+    return {};
+  }
+  const result: {
+    shadowedRanges?: Array<{ fromIndex: number; toIndex: number }>;
+    shadowedMessages?: ChatMessage["shadowedMessages"];
+    shadowedDiagnostics?: ChatMessage["shadowedDiagnostics"];
+  } = {};
+  const ranges = meta.shadowedRanges;
+  if (
+    Array.isArray(ranges) &&
+    ranges.every(
+      range =>
+        asRecord(range) &&
+        typeof (range as { fromIndex?: unknown }).fromIndex === "number" &&
+        typeof (range as { toIndex?: unknown }).toIndex === "number",
+    )
+  ) {
+    result.shadowedRanges = ranges as Array<{ fromIndex: number; toIndex: number }>;
+  }
+  const diagnostics = meta.shadowedDiagnostics;
+  if (
+    Array.isArray(diagnostics) &&
+    diagnostics.every(diagnostic => {
+      const record = asRecord(diagnostic);
+      return (
+        !!record &&
+        typeof record.code === "string" &&
+        typeof record.message === "string" &&
+        (record.severity === "warning" || record.severity === "error")
+      );
+    })
+  ) {
+    result.shadowedDiagnostics = diagnostics as ChatMessage["shadowedDiagnostics"];
+  }
+  const shadowed = meta.shadowedMessages;
+  if (Array.isArray(shadowed)) {
+    result.shadowedMessages = shadowed
+      .map(message => {
+        const record = asRecord(message);
+        if (!record || typeof record.kind !== "string") {
+          return null;
+        }
+        const normalized: CompactBoundaryShadowedMessage = {
+          id: typeof record.id === "string" ? record.id : undefined,
+          kind: record.kind,
+          role: typeof record.role === "string" ? record.role : undefined,
+          text: typeof record.text === "string" ? record.text : undefined,
+          timestamp: typeof record.timestamp === "string" ? record.timestamp : undefined,
+          toolName: typeof record.toolName === "string" ? record.toolName : undefined,
+          toolCallId: typeof record.toolCallId === "string" ? record.toolCallId : undefined,
+          ok: typeof record.ok === "boolean" ? record.ok : undefined,
+        };
+        if (Array.isArray(record.images)) {
+          const images = record.images
+            .map(image => {
+              const imageRecord = asRecord(image);
+              if (!imageRecord || typeof imageRecord.data !== "string") {
+                return null;
+              }
+              const entry: { data: string; mimeType?: string; name?: string } = { data: imageRecord.data };
+              if (typeof imageRecord.mimeType === "string") {
+                entry.mimeType = imageRecord.mimeType;
+              }
+              if (typeof imageRecord.name === "string") {
+                entry.name = imageRecord.name;
+              }
+              return entry;
+            })
+            .filter((image): image is { data: string; mimeType?: string; name?: string } => image !== null);
+          if (images.length > 0) {
+            normalized.images = images;
+          }
+        }
+        return normalized;
+      })
+      .filter((message): message is CompactBoundaryShadowedMessage => message !== null);
+  }
+  return result;
 }
 
 function convertSingleMessage(
@@ -281,6 +372,7 @@ function convertSingleMessage(
         compactLevel: msg.compactLevel,
         compactStage: msg.compactStage,
         compactStageLabel: msg.compactStageLabel,
+        ...extractCompactBoundaryShadowed(msg.compactMetadata),
       };
 
     case "agent_activity":

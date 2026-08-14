@@ -1,5 +1,6 @@
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
+import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
 
 export type AgentTranscriptEntryType =
@@ -13,7 +14,8 @@ export type AgentTranscriptEntryType =
   | "control_boundary"
   | "session_metadata"
   | "subagent_started"
-  | "subagent_completed";
+  | "subagent_completed"
+  | "injected_context";
 
 export type AgentTranscriptEntryBase = {
   type: AgentTranscriptEntryType;
@@ -69,6 +71,15 @@ export type CompactBoundaryMetadata = {
     fromIndex: number;
     toIndex: number;
   };
+  /**
+   * 被遮蔽（摘要替代）消息的索引范围（含端，压缩输入 messages 序列）。
+   * 压缩不删历史——transcript 原文仍完整保留；重放可据此恢复被摘要
+   * 替代的完整原文（对应 dsh surface replace 语义：遮蔽可逆）。
+   */
+  shadowedRanges?: Array<{
+    fromIndex: number;
+    toIndex: number;
+  }>;
   /**
    * Tools that were available before compact; used by replay to detect missing
    * tool references after compact.
@@ -179,6 +190,15 @@ export type AgentSubagentCompletedTranscriptEntry = AgentTranscriptEntryBase & {
   errored?: boolean;
 };
 
+/**
+ * 注入内容参考条目（对应 dsh「模型可见 = 已记录」）：记忆/项目指令/记忆工具
+ * 提示/方法论等动态注入到 system prompt 的段落原文。仅供审计/回放查询——
+ * 重放投影时不进入模型可见 messages（避免注入内容被当作真实用户消息）。
+ */
+export type AgentInjectedContextTranscriptEntry = AgentTranscriptEntryBase & {
+  type: "injected_context";
+} & InjectionRecord;
+
 export type AgentTranscriptEntry =
   | AgentAcceptedInputTranscriptEntry
   | AgentMessageTranscriptEntry
@@ -188,7 +208,8 @@ export type AgentTranscriptEntry =
   | AgentControlBoundaryTranscriptEntry
   | AgentSessionMetadataTranscriptEntry
   | AgentSubagentStartedTranscriptEntry
-  | AgentSubagentCompletedTranscriptEntry;
+  | AgentSubagentCompletedTranscriptEntry
+  | AgentInjectedContextTranscriptEntry;
 
 export function truncatePreview(input: string, byteCap: number): { preview: string; truncated: boolean } {
   const total = Buffer.byteLength(input, "utf8");
@@ -206,7 +227,12 @@ export function truncatePreview(input: string, byteCap: number): { preview: stri
 }
 
 export type AgentTranscriptDiagnostic = {
-  code: "transcript_missing" | "transcript_too_large" | "transcript_line_invalid" | "transcript_entry_invalid";
+  code:
+    | "transcript_missing"
+    | "transcript_too_large"
+    | "transcript_line_invalid"
+    | "transcript_entry_invalid"
+    | "shadowed_message_alignment";
   severity: "warning" | "error";
   message: string;
   line?: number;
@@ -222,4 +248,21 @@ export function classifyDurableMessageEntry(message: CanonicalMessage): AgentMes
   }
 
   return "durable_message";
+}
+
+/**
+ * 窄化 control_boundary 条目到 compact_boundary 分支（同时收窄
+ * compactMetadata）。此前该 4 连判定在 TranscriptReplay / readSessionMessages
+ * 中逐字重复 4 处，改一处漏三处。
+ */
+export function isCompactBoundaryEntry(entry: AgentTranscriptEntry): entry is AgentTranscriptEntry & {
+  type: "control_boundary";
+  boundary: { kind: "compact"; subtype: "compact_boundary"; compactMetadata: CompactBoundaryMetadata };
+} {
+  return (
+    entry.type === "control_boundary" &&
+    entry.boundary.kind === "compact" &&
+    "subtype" in entry.boundary &&
+    entry.boundary.subtype === "compact_boundary"
+  );
 }

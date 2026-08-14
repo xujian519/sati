@@ -29,11 +29,18 @@ export type TokenAccountingRuntimeOptions = {
   timeoutMs?: number;
   cacheSize?: number;
   /**
-   * 快速通道阈值（默认 0.9）：本地估算 ≤ 可用窗口 × 该比例时直接返回
-   * local 快照，跳过 provider count_tokens 网络调用（每 turn 一次的
+   * 快速通道阈值（默认 0.9）：本地估算 ≤ 可用窗口 × (ratio − guardBand) 时
+   * 直接返回 local 快照，跳过 provider count_tokens 网络调用（每 turn 一次的
    * 全量请求序列化 + 网络往返）。仅当本地估算逼近窗口上限时才精确计数。
    */
   nearLimitRatio?: number;
+  /**
+   * 快速通道保守带（默认 0.05）：判定阈值 = nearLimitRatio − guardBand。
+   * 本地估算（tiktoken + 4/3 padding）已是保守上界，不会偏低——guardBand
+   * 的作用是收窄快速通道区间：估算贴近窗口边界时宁可多一次精确计数，
+   * 避免逐轮增长在精确/快速通道间频繁抖动。
+   */
+  nearLimitGuardBand?: number;
 };
 
 export type CountRequestInputOptions = {
@@ -50,6 +57,7 @@ export type EvaluateRequestBudgetOptions = CountRequestInputOptions & {
 const DEFAULT_COUNT_TIMEOUT_MS = 1_500;
 const DEFAULT_CACHE_SIZE = 256;
 const DEFAULT_NEAR_LIMIT_RATIO = 0.9;
+const DEFAULT_NEAR_LIMIT_GUARD_BAND = 0.05;
 
 export class TokenAccountingRuntime {
   private readonly modelConfig: ModelConfig;
@@ -58,6 +66,7 @@ export class TokenAccountingRuntime {
   private readonly timeoutMs: number;
   private readonly cacheSize: number;
   private readonly nearLimitRatio: number;
+  private readonly nearLimitGuardBand: number;
   private readonly cache = new Map<string, TokenCountResult>();
 
   constructor(options: TokenAccountingRuntimeOptions) {
@@ -67,6 +76,7 @@ export class TokenAccountingRuntime {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_COUNT_TIMEOUT_MS;
     this.cacheSize = Math.max(0, options.cacheSize ?? DEFAULT_CACHE_SIZE);
     this.nearLimitRatio = clamp01(options.nearLimitRatio ?? DEFAULT_NEAR_LIMIT_RATIO);
+    this.nearLimitGuardBand = clamp01(options.nearLimitGuardBand ?? DEFAULT_NEAR_LIMIT_GUARD_BAND);
   }
 
   async countRequestInput(
@@ -105,12 +115,15 @@ export class TokenAccountingRuntime {
   ): Promise<TokenBudgetSnapshot> {
     const usePadding = options.usePadding !== false;
     const reservedOutputTokens = options.reservedOutputTokens ?? 0;
-    // 快速通道：本地估算（tiktoken BPE，毫秒级）显著低于可用窗口时直接返回，
-    // 避免每 turn 一次 provider count_tokens 网络调用（消息逐轮增长时每次全量
-    // 序列化 + 网络往返，是对话热路径的主要开销）。仅当估算逼近窗口时才精确计数。
+    // 快速通道：本地估算（tiktoken BPE + 4/3 padding，毫秒级）显著低于可用窗口时
+    // 直接返回，避免每 turn 一次 provider count_tokens 网络调用（消息逐轮增长时
+    // 每次全量序列化 + 网络往返，是对话热路径的主要开销）。仅当估算逼近窗口时
+    // 才精确计数。判定阈值 = nearLimitRatio − guardBand（padding 已保证上界，
+    // guardBand 收窄快速通道区间，避免边界抖动频繁往返精确计数）。
     const localTokens = this.estimateRequestInput(request, { usePadding });
     const availableWindow = Math.max(1, options.maxContextTokens - reservedOutputTokens);
-    if (localTokens <= availableWindow * this.nearLimitRatio) {
+    const fastPathRatio = Math.max(0, this.nearLimitRatio - this.nearLimitGuardBand);
+    if (localTokens <= availableWindow * fastPathRatio) {
       return this.snapshotFromTokens(localTokens, options.maxContextTokens, {
         reservedOutputTokens,
         source: "local",

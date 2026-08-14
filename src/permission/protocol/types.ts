@@ -32,7 +32,7 @@ export type PermissionDecisionReason =
   | { type: "mode"; mode: PermissionMode; message: string }
   | { type: "rule"; behavior: PermissionRuleBehavior; rule: PermissionRule; message: string }
   | { type: "tool"; toolName: string; message: string }
-  | { type: "safety"; message: string }
+  | { type: "safety"; code?: string; message: string }
   | { type: "runtime"; message: string };
 
 export type PermissionRequest = {

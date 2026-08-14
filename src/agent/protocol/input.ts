@@ -1,7 +1,40 @@
-import type { CanonicalContentBlock } from "../../model/index.js";
+import type { CanonicalContentBlock, CanonicalMessage } from "../../model/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
+import type { InjectionRecord } from "../../context/protocol/types.js";
+import type { AgentControlBoundaryTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
+import type { AgentStatusMessage } from "../loop/modelErrors.js";
 
 export type AgentRunMode = "agent" | "plan" | "ask";
+
+/** AgentLoop 单轮执行输入契约（原定义于 AgentLoop.ts，迁至协议层避免循环依赖）。 */
+export type AgentLoopInput = {
+  sessionId: string;
+  turnId: string;
+  messages: CanonicalMessage[];
+  maxTurns?: number;
+  runMode?: AgentRunMode;
+  permissionMode?: PermissionMode;
+  allowedReadFiles?: string[];
+  /** The user's actual permission preference before plan-mode override. */
+  basePermissionMode?: PermissionMode;
+  /** Allow model-visible plan mode tools for this turn. */
+  allowPlanModeTools?: boolean;
+  canPrompt?: boolean;
+  permissionRules?: Partial<PermissionRuleSet>;
+  abortSignal?: AbortSignal;
+  onDurableMessage?: (message: CanonicalMessage) => void | Promise<void>;
+  onAgentStatusMessage?: (status: AgentStatusMessage) => void | Promise<void>;
+  onCompactPersisted?: (input: {
+    boundary: AgentControlBoundaryTranscriptEntry["boundary"];
+    messages: CanonicalMessage[];
+  }) => void | Promise<void>;
+  /**
+   * 注入内容参考条目回调（「模型可见 = 已记录」）：模型实际看到的动态注入
+   * 段落（记忆/项目指令/记忆工具提示/方法论）原文。调用方落 transcript 为
+   * `injected_context` 条目，重放投影时不进入模型可见 messages。
+   */
+  onInjectedContext?: (input: { injections: InjectionRecord[] }) => void | Promise<void>;
+};
 
 export type AgentInput =
   | { type: "text"; text: string; isMeta?: boolean }

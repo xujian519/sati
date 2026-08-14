@@ -38,6 +38,7 @@ import { resolveKnowledgeDbPaths } from "../src/knowledge/index.js";
 import {
   chunkText,
   deleteDocVectors,
+  finalizeVectorsDb,
   insertVectorChunk,
   listIndexedDocHashes,
   openVectorsDbWriter,
@@ -174,82 +175,77 @@ async function* lawDocs(dbPath: string, limit: number): AsyncGenerator<SourceDoc
 
 async function buildCorpus(
   args: CliArgs,
-  out: string,
+  outDb: DatabaseSync,
   corpus: string,
   docs: AsyncGenerator<SourceDoc>,
   client: EmbeddingClient,
 ): Promise<void> {
-  const outDb = openVectorsDbWriter(out);
-  try {
-    const meta = {
-      corpus,
-      dimensions: client.dimensions || 0,
-      model: args.model,
-      chunkChars: args.chunkChars,
-      chunkOverlap: args.overlap,
-      builtAt: new Date().toISOString(),
-    } satisfies CorpusMeta;
-    if (meta.dimensions <= 0) {
-      throw new Error(`无法确定 embedding 维度（${args.model} 首次响应为空），请检查端点。`);
-    }
-    setCorpusMeta(outDb, meta);
-
-    const indexedHashes = args.force ? new Map<string, string>() : listIndexedDocHashes(outDb, corpus);
-    let indexed = 0;
-    let skipped = 0;
-    let batchTexts: string[] = [];
-    let batchDocIds: string[] = [];
-    let batchChunkIdx: number[] = [];
-    let batchDocHashes: string[] = [];
-
-    const flushBatchAsync = async (): Promise<void> => {
-      if (batchTexts.length === 0) return;
-      const vectors = await client.embed(batchTexts);
-      outDb.exec("BEGIN");
-      for (let i = 0; i < batchTexts.length; i += 1) {
-        const floatVec = Float32Array.from(vectors[i] ?? []);
-        if (floatVec.length !== meta.dimensions) {
-          throw new Error(`embedding 维度不匹配：期望 ${meta.dimensions}，实际 ${floatVec.length}`);
-        }
-        const { values, scale } = quantizeInt8(floatVec);
-        insertVectorChunk(outDb, corpus, batchDocIds[i]!, batchChunkIdx[i]!, values, batchDocHashes[i]!, scale);
-      }
-      outDb.exec("COMMIT");
-      indexed += batchTexts.length;
-      batchTexts = [];
-      batchDocIds = [];
-      batchChunkIdx = [];
-      batchDocHashes = [];
-    };
-
-    let docCount = 0;
-    for await (const doc of docs) {
-      docCount += 1;
-      const chunks = chunkText(doc.text, args.chunkChars, args.overlap);
-      if (chunks.length === 0) continue;
-      const textHash = sha256Text(doc.text);
-      if (indexedHashes.get(doc.id) === textHash) {
-        skipped += 1;
-        continue;
-      }
-      deleteDocVectors(outDb, corpus, doc.id);
-      chunks.forEach((chunk, chunkIndex) => {
-        batchTexts.push(chunk);
-        batchDocIds.push(doc.id);
-        batchChunkIdx.push(chunkIndex);
-        batchDocHashes.push(textHash);
-      });
-      if (batchTexts.length >= args.batchSize) await flushBatchAsync();
-
-      if (docCount % 1000 === 0) {
-        console.log(`[${corpus}] 已处理 ${docCount} 文档（新增 ${indexed} chunk / 跳过 ${skipped}）`);
-      }
-    }
-    await flushBatchAsync();
-    console.log(`[${corpus}] 完成：${docCount} 文档，新增 ${indexed} chunk，跳过 ${skipped}。`);
-  } finally {
-    outDb.close();
+  const meta = {
+    corpus,
+    dimensions: client.dimensions || 0,
+    model: args.model,
+    chunkChars: args.chunkChars,
+    chunkOverlap: args.overlap,
+    builtAt: new Date().toISOString(),
+  } satisfies CorpusMeta;
+  if (meta.dimensions <= 0) {
+    throw new Error(`无法确定 embedding 维度（${args.model} 首次响应为空），请检查端点。`);
   }
+  setCorpusMeta(outDb, meta);
+
+  const indexedHashes = args.force ? new Map<string, string>() : listIndexedDocHashes(outDb, corpus);
+  let indexed = 0;
+  let skipped = 0;
+  let batchTexts: string[] = [];
+  let batchDocIds: string[] = [];
+  let batchChunkIdx: number[] = [];
+  let batchDocHashes: string[] = [];
+
+  const flushBatchAsync = async (): Promise<void> => {
+    if (batchTexts.length === 0) return;
+    const vectors = await client.embed(batchTexts);
+    outDb.exec("BEGIN");
+    for (let i = 0; i < batchTexts.length; i += 1) {
+      const floatVec = Float32Array.from(vectors[i] ?? []);
+      if (floatVec.length !== meta.dimensions) {
+        throw new Error(`embedding 维度不匹配：期望 ${meta.dimensions}，实际 ${floatVec.length}`);
+      }
+      const { values, scale } = quantizeInt8(floatVec);
+      insertVectorChunk(outDb, corpus, batchDocIds[i]!, batchChunkIdx[i]!, values, batchDocHashes[i]!, scale);
+    }
+    outDb.exec("COMMIT");
+    indexed += batchTexts.length;
+    batchTexts = [];
+    batchDocIds = [];
+    batchChunkIdx = [];
+    batchDocHashes = [];
+  };
+
+  let docCount = 0;
+  for await (const doc of docs) {
+    docCount += 1;
+    const chunks = chunkText(doc.text, args.chunkChars, args.overlap);
+    if (chunks.length === 0) continue;
+    const textHash = sha256Text(doc.text);
+    if (indexedHashes.get(doc.id) === textHash) {
+      skipped += 1;
+      continue;
+    }
+    deleteDocVectors(outDb, corpus, doc.id);
+    chunks.forEach((chunk, chunkIndex) => {
+      batchTexts.push(chunk);
+      batchDocIds.push(doc.id);
+      batchChunkIdx.push(chunkIndex);
+      batchDocHashes.push(textHash);
+    });
+    if (batchTexts.length >= args.batchSize) await flushBatchAsync();
+
+    if (docCount % 1000 === 0) {
+      console.log(`[${corpus}] 已处理 ${docCount} 文档（新增 ${indexed} chunk / 跳过 ${skipped}）`);
+    }
+  }
+  await flushBatchAsync();
+  console.log(`[${corpus}] 完成：${docCount} 文档，新增 ${indexed} chunk，跳过 ${skipped}。`);
 }
 
 async function main(): Promise<void> {
@@ -279,22 +275,30 @@ async function main(): Promise<void> {
     `> 输出: ${out}；语料: ${args.corpora.join(", ")}${args.force ? "（强制重建）" : "（增量）"}${args.limit ? `；limit=${args.limit}` : ""}`,
   );
 
-  for (const corpus of args.corpora) {
-    if (corpus === "kg") {
-      if (!paths.patentKgDb) {
-        console.warn(`[kg] patent_kg.db 不存在（${paths.patentKgDb}），跳过。`);
-        continue;
+  // 整个脚本只开一次派生库，全部语料灌入成功后才打就绪戳；
+  // 中断构建的库保持 version=0，读端视为需重建。
+  const outDb = openVectorsDbWriter(out);
+  try {
+    for (const corpus of args.corpora) {
+      if (corpus === "kg") {
+        if (!paths.patentKgDb) {
+          console.warn(`[kg] patent_kg.db 不存在（${paths.patentKgDb}），跳过。`);
+          continue;
+        }
+        await buildCorpus(args, outDb, "kg", kgDocs(paths.patentKgDb, args.limit), client);
+      } else if (corpus === "law") {
+        if (!paths.lawDb) {
+          console.warn(`[law] laws 数据库不存在（${paths.lawDb}），跳过。`);
+          continue;
+        }
+        await buildCorpus(args, outDb, "law", lawDocs(paths.lawDb, args.limit), client);
+      } else {
+        console.warn(`未知语料 ${corpus}（支持 kg/law），跳过。`);
       }
-      await buildCorpus(args, out, "kg", kgDocs(paths.patentKgDb, args.limit), client);
-    } else if (corpus === "law") {
-      if (!paths.lawDb) {
-        console.warn(`[law] laws 数据库不存在（${paths.lawDb}），跳过。`);
-        continue;
-      }
-      await buildCorpus(args, out, "law", lawDocs(paths.lawDb, args.limit), client);
-    } else {
-      console.warn(`未知语料 ${corpus}（支持 kg/law），跳过。`);
     }
+    finalizeVectorsDb(outDb);
+  } finally {
+    outDb.close();
   }
   console.log("> 完成。重启 sati 后 KG/法条语义召回自动生效（探测 vectors.db）。");
 }

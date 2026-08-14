@@ -290,11 +290,21 @@ export type ProviderRetryConfig = {
   jitter?: number;
 };
 
+/** Provider apiKey 来源：配置字面量或环境变量引用（${VAR}）。 */
+export type ApiKeySource = "literal" | "env";
+
 export type ProviderConfig = {
   id: string;
   protocol: ModelProtocol;
   url: string;
   apiKey: string;
+  /**
+   * 原始配置值（字面量或 `${VAR}` 引用；env 源时供请求期惰性重解析，
+   * 使密钥轮换下一次请求即生效，无需重启）。
+   */
+  apiKeyRaw?: string;
+  /** apiKey 来源（缺省 literal）。env 源时 buildProviderHeaders 每次重解析。 */
+  apiKeySource?: ApiKeySource;
   timeoutMs?: number;
   headers: Record<string, string>;
   /** Arbitrary fields merged into every request body (e.g. OpenRouter provider preferences). */

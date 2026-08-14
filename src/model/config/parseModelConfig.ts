@@ -2,6 +2,7 @@ import { ANTHROPIC_DEFAULT_CAPABILITIES, ANTHROPIC_DEFAULT_MULTIMODAL } from "..
 import { OPENAI_DEFAULT_CAPABILITIES, OPENAI_DEFAULT_MULTIMODAL } from "../providers/openai/defaults.js";
 import { GOOGLE_DEFAULT_CAPABILITIES, GOOGLE_DEFAULT_MULTIMODAL } from "../providers/google/defaults.js";
 import type {
+  ApiKeySource,
   ModelConfig,
   ModelDefinition,
   ModelProtocol,
@@ -13,7 +14,7 @@ import { ModelConfigError } from "../protocol/errors.js";
 import { DEFAULT_MULTIMODAL_CONSTRAINTS, isInputModality, type MultimodalConstraints } from "../protocol/multimodal.js";
 import { lookupCatalogModel, lookupCatalogProvider } from "../catalog/index.js";
 import { getCachedOllamaModels } from "../ollama/probe.js";
-import { resolveApiKey, type CredentialEnv } from "./resolveCredentials.js";
+import { isEnvReference, resolveApiKey, type CredentialEnv } from "./resolveCredentials.js";
 import {
   isModelProtocol,
   isRecord,
@@ -119,11 +120,14 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
     models[modelId] = parseModelDefinition(modelId, protocol, rawModel, providerId);
   }
 
+  const apiKeyRef = resolveProviderApiKeyRef(providerId, provider.apiKey, env, catalogProvider?.apiKeyEnvVar);
   return {
     id: providerId,
     protocol,
     url: rawUrl,
-    apiKey: resolveProviderApiKey(providerId, provider.apiKey, env, catalogProvider?.apiKeyEnvVar),
+    apiKey: apiKeyRef.resolved,
+    ...(apiKeyRef.raw !== undefined ? { apiKeyRaw: apiKeyRef.raw } : {}),
+    apiKeySource: apiKeyRef.source,
     timeoutMs: readOptionalPositiveNumber(provider.timeoutMs, "timeoutMs"),
     headers: readStringRecord(provider.headers, "headers"),
     extraBody: isRecord(provider.extraBody) ? (provider.extraBody as Record<string, unknown>) : undefined,
@@ -132,19 +136,39 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
   };
 }
 
-function resolveProviderApiKey(
+type ApiKeyResolution = {
+  /** 一次解析后的密钥（parse 时对 ${VAR} 求值；向后兼容使用点）。 */
+  resolved: string;
+  /** 原始配置值（字面量或 `${VAR}` 引用；undefined 表示无原始值）。 */
+  raw: string | undefined;
+  /** 来源：字面量或环境变量引用。 */
+  source: ApiKeySource;
+};
+
+/**
+ * 解析 provider apiKey 并记录原始引用（引用/值分离）。
+ *
+ * 返回 resolved（parse 时求值一次，供既有消费点）+ raw/source（供请求期
+ * 惰性重解析：env 引用轮换后下一次请求即生效，无需重启）。
+ */
+function resolveProviderApiKeyRef(
   providerId: string,
   value: unknown,
   env?: CredentialEnv,
   catalogEnvVar?: string,
-): string {
+): ApiKeyResolution {
   if (providerId === "ollama" && value === undefined) {
-    return "ollama";
+    return { resolved: "ollama", raw: "ollama", source: "literal" };
   }
   const hasBlankString = typeof value === "string" && value.trim().length === 0;
   const hasConfigValue = value !== undefined && value !== null && !hasBlankString;
-  const effectiveValue = hasConfigValue ? value : catalogEnvVar ? `\${${catalogEnvVar}}` : value;
-  return resolveApiKey(effectiveValue, env);
+  const rawValue = hasConfigValue ? value : catalogEnvVar ? `\${${catalogEnvVar}}` : value;
+  const raw = typeof rawValue === "string" ? rawValue.trim() : undefined;
+  return {
+    resolved: resolveApiKey(rawValue, env),
+    raw,
+    source: isEnvReference(raw) ? "env" : "literal",
+  };
 }
 
 /**

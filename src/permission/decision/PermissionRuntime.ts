@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../../tool/index.js";
 import { buildPlanModeViolationMessage, buildPlanModeBashViolationMessage } from "../../tool/planModeConstraints.js";
 import { matchPermissionRule } from "../policy/matchPermissionRule.js";
+import { ToolGuardRegistry } from "../guard/ToolGuardRegistry.js";
 import type {
   PermissionContext,
   PermissionDecision,
@@ -11,7 +12,21 @@ import type {
   PermissionRule,
 } from "../protocol/types.js";
 
+export type PermissionRuntimeOptions = {
+  /**
+   * 工具级单调 deny Guard 注册表（可选）。Guard 在一切规则判定之前执行，
+   * 其拒绝不能被 allow/ask 规则覆盖、不走 HITL。
+   */
+  guards?: ToolGuardRegistry;
+};
+
 export class PermissionRuntime {
+  private readonly guards: ToolGuardRegistry;
+
+  constructor(options: PermissionRuntimeOptions = {}) {
+    this.guards = options.guards ?? new ToolGuardRegistry();
+  }
+
   async decide(
     tool: SatiToolDefinition,
     input: unknown,
@@ -19,6 +34,20 @@ export class PermissionRuntime {
     toolCallId: string,
   ): Promise<PermissionDecision> {
     const permissionContext = context.permissionContext;
+
+    // 单调 deny Guard：先于一切规则执行。Guard 只拒绝不放行，任何
+    // allow/ask 规则（含 user/session 来源）都不能覆盖其拒绝，也不走 HITL。
+    const guardDenials = await this.guards.evaluateAll(tool, input, context);
+    if (guardDenials.length > 0) {
+      // code 透传供结构化日志/统计（如 EVI-011-notarization）。
+      const codes = guardDenials.map(d => d.code).filter((c): c is string => c !== undefined);
+      return deny({
+        type: "safety",
+        ...(codes.length > 0 ? { code: codes.join(",") } : {}),
+        message: guardDenials.map(d => d.message).join("；"),
+      });
+    }
+
     const sessionAllowRule = findMatchingRule(
       permissionContext.rules.allow.filter(rule => rule.source === "session"),
       tool.name,

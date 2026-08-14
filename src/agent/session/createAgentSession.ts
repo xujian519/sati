@@ -17,6 +17,10 @@ import {
   type AgentProjectSessionStorage,
   type AgentProjectSessionStorageOptions,
 } from "../../session/storage/ProjectSessionStorage.js";
+import { readTranscript } from "../../session/transcript/TranscriptReader.js";
+import { projectMessagesFromTranscript } from "../../session/transcript/TranscriptReplay.js";
+import { JsonlTranscriptWriter } from "../../session/transcript/JsonlTranscriptWriter.js";
+import { createDefaultToolGuardRegistry } from "./defaultToolGuards.js";
 import { AgentSession } from "./AgentSession.js";
 
 export type CreateAgentSessionOptions = {
@@ -51,7 +55,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
   const emitter = options.dependencies.eventEmitter ?? eventBuf?.emitter;
   const toolRuntime = new ToolRuntime(
     options.dependencies.tools.registry,
-    new PermissionRuntime(),
+    new PermissionRuntime({ guards: createDefaultToolGuardRegistry() }),
     options.dependencies.lifecycle,
     emitter,
   );
@@ -105,6 +109,21 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
     },
     options.outputGate,
   );
+  // 运行期 messages 投影化：有持久 transcript 路径时注入投影器——submit 的
+  // 历史消息从 transcript（唯一真源）派生；内存 transcript（无路径）不注入，
+  // AgentSession 回退到 state.messages（无持久层，无漂移可言）。
+  // 投影器绑定实际 writer 的路径（而非 storage.transcriptPath），避免调用方
+  // 传自定义 JsonlTranscriptWriter 时投影读错文件静默产生错误历史。
+  const writerTranscriptPath = transcript instanceof JsonlTranscriptWriter ? transcript.path : undefined;
+  const transcriptPath = writerTranscriptPath ?? storage?.transcriptPath ?? "";
+  const projectMessages =
+    transcriptPath.length > 0
+      ? async () => {
+          const { entries } = await readTranscript(transcriptPath);
+          return projectMessagesFromTranscript(entries);
+        }
+      : undefined;
+
   return {
     session: new AgentSession({
       sessionId: options.sessionId,
@@ -115,6 +134,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
       initialState: options.initialState,
       replayEvents: options.replayEvents,
       lifecycle: dependencies.lifecycle,
+      projectMessages,
     }),
     storage,
   };

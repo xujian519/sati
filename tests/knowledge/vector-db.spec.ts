@@ -5,12 +5,14 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   chunkText,
+  finalizeVectorsDb,
   insertVectorChunk,
   openVectorsDbWriter,
   quantizeInt8,
   setCorpusMeta,
 } from "../../src/knowledge/shared/vector-db-writer.js";
 import { VectorDbSearch } from "../../src/knowledge/shared/vector-db.js";
+import { KnowledgeDbVersionError } from "../../src/knowledge/shared/db-version.js";
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), "sati-vdb-"));
@@ -115,6 +117,7 @@ describe("VectorDbSearch", () => {
       put("doc-a", [1, 0, 0, 0]);
       put("doc-b", [0, 1, 0, 0]);
       put("doc-c", [1, 1, 0, 0]);
+      finalizeVectorsDb(db); // 构建成功标记
       db.close();
 
       const vdb = new VectorDbSearch({ dbPath: path });
@@ -153,6 +156,7 @@ describe("VectorDbSearch", () => {
       put("doc-x", 0, [1, 0, 0]);
       put("doc-x", 1, [0, 1, 0]);
       put("doc-y", 0, [1, 1, 0]);
+      finalizeVectorsDb(db); // 构建成功标记
       db.close();
 
       const vdb = new VectorDbSearch({ dbPath: path });
@@ -178,12 +182,39 @@ describe("VectorDbSearch", () => {
         chunkOverlap: 200,
         builtAt: "t",
       });
+      finalizeVectorsDb(db); // 构建成功标记
       db.close();
 
       const vdb = new VectorDbSearch({ dbPath: path });
       assert.deepEqual(vdb.search("kg", Float32Array.from([1, 0, 0, 0]), 3), []);
       assert.deepEqual(vdb.search("nope", Float32Array.from([1, 0, 0, 0]), 3), []);
       vdb.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("构建中断（未 finalize）的库：读端提示重建而非静默读空库", () => {
+    const dir = makeTempDir();
+    try {
+      const path = join(dir, "vectors.db");
+      // 打开并写 meta 但未 finalizeVectorsDb（模拟灌入中断/失败）。
+      const db = openVectorsDbWriter(path);
+      setCorpusMeta(db, {
+        corpus: "kg",
+        dimensions: 4,
+        model: "test",
+        chunkChars: 1200,
+        chunkOverlap: 200,
+        builtAt: "t",
+      });
+      db.close();
+
+      assert.throws(
+        () => new VectorDbSearch({ dbPath: path }),
+        error => error instanceof KnowledgeDbVersionError && /重建/.test(error.message),
+        "版本过旧（version=0）应提示重建",
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

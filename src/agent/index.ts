@@ -1,6 +1,5 @@
 export { AgentLoop, type AgentLoopInput, type AgentLoopRunResult } from "./loop/AgentLoop.js";
 export { collectToolCalls } from "./loop/collectToolCalls.js";
-export { decideLoopContinuation, type LoopContinuationDecision } from "./loop/decideLoopContinuation.js";
 export { createMissingToolResult, ensureToolResultPairing } from "./loop/ensureToolResultPairing.js";
 export { projectToolResults } from "./loop/projectToolResults.js";
 export { AgentSession, type AgentSessionOptions } from "./session/AgentSession.js";

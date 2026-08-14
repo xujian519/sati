@@ -76,6 +76,22 @@ export interface SubagentChildTool {
   timestamp: Date;
 }
 
+/**
+ * 压缩前被遮蔽原文的扁平化结构（来自 readSessionMessages 的
+ * compact_boundary payload.shadowedMessages，WebMessage 级）。
+ */
+export interface CompactBoundaryShadowedMessage {
+  id?: string;
+  kind: string;
+  role?: string;
+  text?: string;
+  timestamp?: string;
+  toolName?: string;
+  toolCallId?: string;
+  ok?: boolean;
+  images?: Array<{ data: string; mimeType?: string; name?: string }>;
+}
+
 export interface ChatMessage {
   id?: string;
   entryId?: string;
@@ -117,6 +133,12 @@ export interface ChatMessage {
   compactLevel?: number;
   compactStage?: string;
   compactStageLabel?: string;
+  /** 该次压缩被遮蔽消息的索引范围（来自 compact_boundary 持久化元数据）。 */
+  shadowedRanges?: Array<{ fromIndex: number; toIndex: number }>;
+  /** 该次压缩被遮蔽的原文（WebMessage 级扁平化，历史回看展开用）。 */
+  shadowedMessages?: CompactBoundaryShadowedMessage[];
+  /** 被遮蔽历史还原的对齐告警（transcript 投影与压缩输入不一致时非空）。 */
+  shadowedDiagnostics?: Array<{ code: string; severity: "warning" | "error"; message: string }>;
   title?: string;
   detail?: string;
   phase?: string;

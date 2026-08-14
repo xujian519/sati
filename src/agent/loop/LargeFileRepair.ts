@@ -1,5 +1,6 @@
 import type { CanonicalToolCall } from "../../model/index.js";
 import type { SatiToolResult } from "../../tool/index.js";
+import { isRecord } from "./misc.js";
 
 export type LargeFileRepairDecision =
   | { type: "continue"; prompt: string; purpose: string; strip?: "assistant" | "error_pair" }
@@ -295,8 +296,4 @@ function looksLikeLargeFileError(message: string): boolean {
   return /(?:output token|truncated|too large|large file|large artifact|max_output|missing required parameter `content`|required parameter `content` is missing)/iu.test(
     message,
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

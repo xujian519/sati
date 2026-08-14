@@ -66,3 +66,54 @@ test("redactConfig preserves non-secret values untouched", () => {
   assert.deepEqual(redactConfig({ port: 19789, enabled: false }), { port: 19789, enabled: false });
   assert.equal(redactConfig("plain"), "plain");
 });
+
+test("redactConfig：词元+key 命名（secret_key/accessKey/privateKey）同样脱敏", () => {
+  const out = redactConfig({
+    secret_key: "aws-secret",
+    accessKey: "aws-access",
+    privateKey: "pem",
+    clientKey: "ck",
+    refreshKey: "rk",
+  }) as Record<string, unknown>;
+  assert.equal(out.secret_key, "<redacted>");
+  assert.equal(out.accessKey, "<redacted>");
+  assert.equal(out.privateKey, "<redacted>");
+  assert.equal(out.clientKey, "<redacted>");
+  assert.equal(out.refreshKey, "<redacted>");
+});
+
+test("redactConfig：非敏感命名（来源/配置字段）保持原样", () => {
+  const out = redactConfig({
+    apiKeySource: "env",
+    modelConfig: "m",
+    endpoint: "https://x",
+    publicKey: "pub",
+    monkey: "m",
+  }) as Record<string, unknown>;
+  assert.equal(out.apiKeySource, "env");
+  assert.equal(out.modelConfig, "m");
+  assert.equal(out.endpoint, "https://x");
+  assert.equal(out.publicKey, "pub");
+  assert.equal(out.monkey, "m");
+});
+
+test("redactConfig：apiKeyRaw 的 ${VAR} 环境引用保留变量名，字面量才脱敏", () => {
+  const out = redactConfig({
+    model: {
+      providers: {
+        openai: {
+          apiKeyRaw: "${OPENAI_API_KEY}",
+          apiKey: "${OPENAI_API_KEY}",
+        },
+        anthropic: {
+          apiKeyRaw: "sk-ant-literal",
+        },
+      },
+    },
+  }) as { model: { providers: Record<string, Record<string, unknown>> } };
+  const openai = out.model.providers.openai;
+  const anthropic = out.model.providers.anthropic;
+  assert.equal(openai.apiKeyRaw, "${OPENAI_API_KEY}");
+  assert.equal(openai.apiKey, "${OPENAI_API_KEY}");
+  assert.equal(anthropic.apiKeyRaw, "<redacted>");
+});

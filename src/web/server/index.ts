@@ -13,11 +13,11 @@ export {
   type ListWebProjectsOptions,
 } from "./listProjects.js";
 export {
-  flattenCanonicalMessage,
   readSubagentWebMessages,
   readWebSessionMessages,
   type ReadWebSessionMessagesOptions,
 } from "./readSessionMessages.js";
+export { flattenCanonicalMessage } from "./webMessageFlatten.js";
 export {
   DEFAULT_HISTORY_CONTEXT_TOKENS,
   tokenUsageFromTranscript,

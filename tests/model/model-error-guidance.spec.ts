@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatModelRequestFailureMessage, modelFailureAction } from "../../src/agent/loop/AgentLoop.js";
+import { formatModelRequestFailureMessage, modelFailureAction } from "../../src/agent/loop/modelErrors.js";
 import { normalizeModelError } from "../../src/model/errors/normalizeModelError.js";
 import type { CanonicalModelError } from "../../src/model/protocol/errors.js";
 

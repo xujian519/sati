@@ -13,6 +13,8 @@
 import { DatabaseSync } from "node:sqlite";
 import type { EmbeddingClient } from "../../model/embedding/types.js";
 import { cosineSimilarity } from "../../context/vector/cosine.js";
+import { openKnowledgeDb } from "./db-version.js";
+import { KNOWLEDGE_DB } from "./schema-versions.js";
 import { decompressChunk } from "./chunk-compression.js";
 
 export type EmbeddingConsistencySample = {
@@ -52,7 +54,8 @@ export async function checkEmbeddingConsistency(
 
   let db: DatabaseSync;
   try {
-    db = new DatabaseSync(dbPath, { readOnly: true });
+    const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
+    db = opened.db;
   } catch {
     return null;
   }

@@ -2,7 +2,7 @@ import { ModelConfigError } from "../protocol/errors.js";
 
 export type CredentialEnv = Record<string, string | undefined>;
 
-const ENV_REFERENCE_PATTERN = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
+export const ENV_REFERENCE_PATTERN = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 /**
  * Resolve a provider apiKey from raw config.
@@ -40,4 +40,12 @@ export function resolveApiKey(value: unknown, env: CredentialEnv = process.env):
   }
 
   return resolved;
+}
+
+/**
+ * 判断配置值是否为 `${VAR}` 环境变量引用（惰性解析判据）。
+ * @param value 已 trim 的原始配置值。
+ */
+export function isEnvReference(value: string | undefined): boolean {
+  return value !== undefined && ENV_REFERENCE_PATTERN.test(value);
 }

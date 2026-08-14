@@ -21,11 +21,30 @@ export type ContextBoundary = {
   metadata?: Record<string, unknown>;
 };
 
+/**
+ * 注入内容参考条目（「模型可见 = 已记录」）：动态注入到 system prompt 的段落原文。
+ * 带 source 标记落 transcript 供审计/回放查询，不进入模型可见 messages。
+ */
+export type InjectionRecord = {
+  /** 注入来源标识：memory / project_instructions / clawx_memory / methodology。 */
+  source: string;
+  /** 注入段落原文。 */
+  text: string;
+  /** 单 turn 内同一来源多次注入时的段落序号（从 0 起）。 */
+  partIndex?: number;
+};
+
 /** Fully-prepared model context produced by `prepareForModel`. */
 export type ModelContext = {
   messages: CanonicalMessage[];
   systemPrompt?: string;
   systemPromptParts: string[];
+  /**
+   * 动态注入段落来源清单（记忆/项目指令/记忆工具提示等）——「模型可见 =
+   * 已记录」：调用方应把这些段落作为带 source 标记的参考条目落 transcript，
+   * 供审计/回放查询（不进入模型可见 messages）。
+   */
+  injections?: InjectionRecord[];
   tools: CanonicalToolSchema[];
   diagnostics: ContextDiagnostic[];
   boundaries: ContextBoundary[];

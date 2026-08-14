@@ -14,22 +14,29 @@
  * Pagination is offset-based (`cursor` is a stringified integer). We do
  * NOT slice individual content blocks within a message — paging cuts at
  * `WebMessage` boundaries.
+ *
+ * 拆出：webMessageFlatten.ts（CanonicalMessage → WebMessage 扁平化）、
+ * injectWebMessages.ts（压缩边界 / file_artifacts / 错误 turn / agent 状态注入）。
  */
 
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import {
-  flattenToolResultBlockText,
-  type CanonicalContentBlock,
-  type CanonicalImageBlock,
-  type CanonicalMessage,
-} from "../../model/index.js";
+import { type CanonicalMessage } from "../../model/index.js";
 import { listProjectSessions, readTranscript, type SessionInfo } from "../../session/index.js";
 import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";
 import type { WebReadSessionMessagesInput, WebReadSessionMessagesResult } from "../client/protocol.js";
-import type { WebMessage, WebMessageKind, WebMessageRole } from "../client/webMessage.js";
+import type { WebMessage } from "../client/webMessage.js";
 import { tokenUsageFromTranscript } from "./sessionTokenUsage.js";
+import { flattenCanonicalMessage, shouldShowCompactReplacementInWeb } from "./webMessageFlatten.js";
+import {
+  compactBoundaryMetadata,
+  injectAgentStatusMessages,
+  injectErrorTurnMessages,
+  injectFileArtifactMessages,
+  insertCompactBoundaryMessages,
+  type CompactBoundaryInfo,
+} from "./injectWebMessages.js";
 
 export type ReadWebSessionMessagesOptions = {
   projectRoot: string;
@@ -71,6 +78,11 @@ export async function readWebSessionMessages(
       forkUnsupportedContent: webReplay.forkUnsupportedContents[index],
     }),
   );
+
+  // 压缩边界：在对应消息后插入 compact_boundary WebMessage，payload 内嵌
+  // shadowedRanges 与该次压缩被遮蔽的原文（WebMessage 级扁平化，复用同一
+  // 投影），前端展开压缩历史无需额外请求。
+  insertCompactBoundaryMessages(input, flattenedPerMessage, webReplay.compactBoundaries, entries, options);
 
   const allMessages: WebMessage[] = flattenedPerMessage.flat();
 
@@ -162,6 +174,7 @@ export async function readSubagentWebMessages(
         entryTimestamp: webReplay.timestamps[index],
       }),
     );
+  insertCompactBoundaryMessages(input, flattenedPerMessage, webReplay.compactBoundaries, entries, options);
   const allMessages: WebMessage[] = flattenedPerMessage.flat();
 
   return { messages: allMessages, total: allMessages.length };
@@ -265,318 +278,6 @@ function parseCursor(cursor?: string): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-type ProjectionContext = {
-  index: number;
-  sessionKey: string;
-  projectKey?: string;
-  now?: () => Date;
-  /** Actual transcript entry timestamp — preferred over now(). */
-  entryTimestamp?: string;
-  /** Transcript entry id for fork targeting. */
-  entryId?: string;
-  /** True when this entry cannot be fork-prefilled losslessly by the web UI. */
-  forkUnsupportedContent?: boolean;
-};
-
-/**
- * Flatten a CanonicalMessage's content blocks into one or more WebMessages.
- * Adjacent text blocks within the same canonical message merge.
- *
- * Tool-result images get special handling: when an `image` block immediately
- * follows a `tool_result` block (as produced by `projectToolResults`), the
- * image is attached to that tool_result WebMessage instead of being emitted as
- * a separate user-role text message. Without this, read_file image responses
- * would render as a "user" bubble on the right side of the chat — see
- * https://github.com/ — the canonical wire format requires role=user, but the
- * UI semantics want the picture rendered alongside the tool result on the
- * assistant/tool side.
- */
-export function flattenCanonicalMessage(message: CanonicalMessage, context: ProjectionContext): WebMessage[] {
-  const stamp = context.entryTimestamp ?? (context.now ?? (() => new Date()))().toISOString();
-  const out: WebMessage[] = [];
-  const role: WebMessageRole = message.role === "user" ? "user" : "assistant";
-  let textBuffer = "";
-  let pendingImages: NonNullable<WebMessage["images"]> = [];
-  let lastToolResultMessage: WebMessage | undefined;
-
-  const flushText = (): void => {
-    if (!textBuffer && pendingImages.length === 0) return;
-    out.push({
-      id: `${context.sessionKey}-msg-${context.index}-${out.length}`,
-      sessionKey: context.sessionKey,
-      projectKey: context.projectKey,
-      createdAt: stamp,
-      provider: "sati",
-      role,
-      kind: "text",
-      text: textBuffer,
-      ...(pendingImages.length > 0 ? { images: pendingImages } : {}),
-      ...(context.forkUnsupportedContent
-        ? {
-            payload: {
-              forkUnsupportedContent: true,
-              forkUnsupportedReason: "This turn contains attachments or media.",
-            },
-          }
-        : {}),
-      ...(context.entryId ? { entryId: context.entryId } : {}),
-      source: "history",
-    });
-    textBuffer = "";
-    pendingImages = [];
-  };
-
-  for (const block of message.content) {
-    if (block.type !== "image" && block.type !== "tool_result") {
-      // Any other block breaks the tool_result → image association.
-      lastToolResultMessage = undefined;
-    }
-    if (block.type === "image" && lastToolResultMessage && role === "user") {
-      const existing = lastToolResultMessage.images ?? [];
-      lastToolResultMessage.images = [...existing, toWebMessageImage(block)];
-      continue;
-    }
-    flushBlock(
-      block,
-      out,
-      context,
-      stamp,
-      role,
-      () => {
-        flushText();
-      },
-      chunk => {
-        textBuffer += chunk;
-      },
-      image => {
-        pendingImages.push(toWebMessageImage(image));
-      },
-    );
-    if (block.type === "tool_result") {
-      lastToolResultMessage = out[out.length - 1];
-    }
-  }
-  flushText();
-  return out;
-}
-
-function flushBlock(
-  block: CanonicalContentBlock,
-  out: WebMessage[],
-  context: ProjectionContext,
-  stamp: string,
-  role: WebMessageRole,
-  flushText: () => void,
-  appendText: (chunk: string) => void,
-  appendImage: (image: CanonicalImageBlock) => void,
-): void {
-  switch (block.type) {
-    case "text":
-      appendText(block.text);
-      return;
-    case "thinking":
-      flushText();
-      out.push({
-        id: `${context.sessionKey}-thinking-${context.index}-${out.length}`,
-        sessionKey: context.sessionKey,
-        projectKey: context.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "assistant",
-        kind: "thinking",
-        text: block.text,
-        source: "history",
-      });
-      return;
-    case "tool_call":
-      flushText();
-      out.push({
-        id: `${context.sessionKey}-tool-${context.index}-${block.id}`,
-        sessionKey: context.sessionKey,
-        projectKey: context.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "tool",
-        kind: "tool_use",
-        toolCallId: block.id,
-        toolName: block.name,
-        payload: block.input,
-        source: "history",
-      });
-      return;
-    case "tool_result": {
-      flushText();
-      const resultText = flattenToolResultBlockText(block);
-      const errorCode = readToolResultErrorCode(block.raw);
-      const toolName = readToolResultToolName(block.raw);
-      const planData = readPlanData(block.raw);
-      const searchData = readSearchToolData(block.raw);
-      const resultImages: NonNullable<WebMessage["images"]> = [];
-      for (const sub of block.content) {
-        if (sub.type === "image") {
-          resultImages.push(toWebMessageImage(sub));
-        }
-      }
-      out.push({
-        id: `${context.sessionKey}-tool-${context.index}-${block.toolCallId}-result`,
-        sessionKey: context.sessionKey,
-        projectKey: context.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "tool",
-        kind: "tool_result",
-        toolCallId: block.toolCallId,
-        ...(toolName ? { toolName } : {}),
-        ok: !block.isError,
-        text: resultText,
-        ...(errorCode ? { errorCode } : {}),
-        ...(planData || searchData ? { payload: planData ?? searchData } : {}),
-        ...(resultImages.length > 0 ? { images: resultImages } : {}),
-        source: "history",
-      });
-      return;
-    }
-    case "tool_result_reference":
-      flushText();
-      out.push({
-        id: `${context.sessionKey}-tool-${context.index}-${block.toolCallId}-result-ref`,
-        sessionKey: context.sessionKey,
-        projectKey: context.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "tool",
-        kind: "tool_result",
-        toolCallId: block.toolCallId,
-        ok: !block.isError,
-        text: block.preview,
-        resultPath: block.path,
-        payload: {
-          path: block.path,
-          originalBytes: block.originalBytes,
-          hasMore: block.hasMore,
-          mimeType: block.mimeType,
-          reason: block.reason,
-        },
-        source: "history",
-      });
-      return;
-    case "media_reference":
-      flushText();
-      out.push({
-        id: `${context.sessionKey}-media-${context.index}-${out.length}`,
-        sessionKey: context.sessionKey,
-        projectKey: context.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "tool",
-        kind: "tool_result",
-        toolCallId: block.toolCallId,
-        ok: true,
-        text: block.preview,
-        payload: {
-          path: block.path,
-          originalBytes: block.originalBytes,
-          hasMore: block.hasMore,
-          mimeType: block.mimeType,
-          mediaType: block.mediaType,
-          pages: block.pages,
-          detail: block.detail,
-          reason: block.reason,
-        },
-        source: "history",
-      });
-      return;
-    case "image":
-      if (role === "user") {
-        appendImage(block);
-        return;
-      }
-      flushText();
-      out.push({
-        id: `${context.sessionKey}-attachment-${context.index}-${out.length}`,
-        sessionKey: context.sessionKey,
-        projectKey: context.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role,
-        kind: "status",
-        text: `[${block.type} attachment]`,
-        payload: { mimeType: block.mimeType, bytes: "bytes" in block ? block.bytes : undefined },
-        source: "history",
-      });
-      return;
-    case "pdf":
-    case "audio":
-      flushText();
-      const kind: WebMessageKind = "status";
-      out.push({
-        id: `${context.sessionKey}-attachment-${context.index}-${out.length}`,
-        sessionKey: context.sessionKey,
-        projectKey: context.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role,
-        kind,
-        text: `[${block.type} attachment]`,
-        payload: { mimeType: block.mimeType, bytes: "bytes" in block ? block.bytes : undefined },
-        source: "history",
-      });
-      return;
-  }
-}
-
-function toWebMessageImage(block: CanonicalImageBlock): NonNullable<WebMessage["images"]>[number] {
-  return {
-    data: block.source === "url" ? block.data : `data:${block.mimeType};base64,${block.data}`,
-    mimeType: block.mimeType,
-  };
-}
-
-/**
- * Web history is allowed to show persisted messages from incomplete turns so
- * users do not lose tool calls they already saw live. Keep this projection
- * local to the web reader: the core transcript replay still skips incomplete
- * durable messages so agent resume never feeds half-finished tool histories
- * back to the model.
- */
-type CompactBoundaryInfo = {
-  insertAfterMessageIndex: number;
-  timestamp: string;
-  metadata?: Record<string, unknown>;
-};
-
-function isCompactReplacementMessage(message: CanonicalMessage): boolean {
-  return message.metadata?.compactReplacement === true;
-}
-
-function shouldShowCompactReplacementInWeb(message: CanonicalMessage): boolean {
-  return !isCompactReplacementMessage(message);
-}
-
-function compactBoundaryMetadata(entry: AgentTranscriptEntry & { type: "control_boundary" }): Record<string, unknown> {
-  const meta: Record<string, unknown> = {};
-  if (
-    entry.boundary.kind === "compact" &&
-    "subtype" in entry.boundary &&
-    entry.boundary.subtype === "compact_boundary" &&
-    "compactMetadata" in entry.boundary
-  ) {
-    const cm = entry.boundary.compactMetadata as Record<string, unknown>;
-    const { compactionId } = cm;
-    if (typeof compactionId === "string" && compactionId.length > 0) {
-      meta.compactionId = compactionId;
-    }
-    meta.trigger = cm.trigger;
-    meta.preTokens = cm.preTokens;
-    meta.postTokens = cm.postTokens;
-    meta.messagesSummarized = cm.messagesSummarized;
-    meta.level = cm.level;
-    meta.stage = cm.stage;
-    meta.stageLabel = cm.stageLabel;
-  }
-  return meta;
-}
-
 function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
   messages: CanonicalMessage[];
   timestamps: string[];
@@ -633,6 +334,7 @@ function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
             insertAfterMessageIndex: messages.length - 1,
             timestamp: entry.createdAt,
             metadata: compactBoundaryMetadata(entry),
+            boundaryIndex: index,
           });
         }
         break;
@@ -677,6 +379,7 @@ function extractSubagentExecutionMessages(entries: AgentTranscriptEntry[]): {
             insertAfterMessageIndex: messages.length - 1,
             timestamp: entry.createdAt,
             metadata: compactBoundaryMetadata(entry),
+            boundaryIndex: index,
           });
         }
         break;
@@ -715,196 +418,4 @@ function attachSubagentIds(entries: AgentTranscriptEntry[], allMessages: WebMess
     msg.subagentId = subagentQueue[qi];
     qi += 1;
   }
-}
-
-function injectFileArtifactMessages(
-  entries: AgentTranscriptEntry[],
-  allMessages: WebMessage[],
-  sessionKey: string,
-  projectKey?: string,
-): void {
-  const artifactMessages: WebMessage[] = [];
-  const turnsWithToolResults = new Set(
-    entries
-      .filter(
-        entry =>
-          (entry.type === "assistant_message" ||
-            entry.type === "tool_result_message" ||
-            entry.type === "durable_message") &&
-          messageContainsToolResult(entry.message),
-      )
-      .map(entry => entry.turnId),
-  );
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index];
-    if (entry.type !== "file_artifacts" || entry.artifacts.length === 0) continue;
-    const artifacts = turnsWithToolResults.has(entry.turnId)
-      ? entry.artifacts
-      : entry.artifacts.filter(artifact => artifact.source !== "workspace_diff");
-    if (artifacts.length === 0) continue;
-    artifactMessages.push({
-      id: entry.entryId ?? `${sessionKey}-file-artifacts-${entry.turnId}-${entry.sequence}`,
-      sessionKey,
-      projectKey,
-      createdAt: entry.createdAt,
-      provider: "sati",
-      role: "assistant",
-      kind: "file_artifacts",
-      artifacts,
-      payload: { turnId: entry.turnId },
-      source: "history",
-      ...(entry.entryId ? { entryId: entry.entryId } : {}),
-    });
-  }
-
-  for (const artifactMessage of artifactMessages) {
-    let insertAt = allMessages.length;
-    for (let index = allMessages.length - 1; index >= 0; index -= 1) {
-      if (allMessages[index].createdAt <= artifactMessage.createdAt) {
-        insertAt = index + 1;
-        break;
-      }
-      if (index === 0) insertAt = 0;
-    }
-    allMessages.splice(insertAt, 0, artifactMessage);
-  }
-}
-
-function messageContainsToolResult(message: CanonicalMessage): boolean {
-  return message.content.some(block => block.type === "tool_result" || block.type === "tool_result_reference");
-}
-
-/**
- * Scan transcript entries for failed turns (`turn_result` with `type === "error"`)
- * and inject corresponding `WebMessage { kind: 'error' }` into the message list
- * so error banners survive history reload when no visible semantic status
- * already represents the same turn.
- */
-function injectErrorTurnMessages(
-  entries: AgentTranscriptEntry[],
-  allMessages: WebMessage[],
-  sessionKey: string,
-  projectKey?: string,
-): void {
-  const visibleFailureStatusTurnIds = new Set(
-    entries
-      .filter(
-        entry => entry.type === "agent_status_message" && entry.kind === "error" && entry.detail?.visible !== false,
-      )
-      .map(entry => entry.turnId),
-  );
-  const errorMessages: WebMessage[] = [];
-  for (const entry of entries) {
-    if (entry.type !== "turn_result" || entry.result.type !== "error") continue;
-    if (visibleFailureStatusTurnIds.has(entry.turnId)) continue;
-    const errorTexts = entry.result.errors?.map(e => e.message).filter(Boolean) ?? [];
-    const text = errorTexts.length > 0 ? errorTexts.join("\n") : `Turn failed: ${entry.result.stopReason}`;
-    errorMessages.push({
-      id: `${sessionKey}-turn-error-${entry.turnId}`,
-      sessionKey,
-      projectKey,
-      createdAt: entry.createdAt,
-      provider: "sati",
-      role: "error",
-      kind: "error",
-      text,
-      payload: { code: entry.result.stopReason, recoverable: false },
-      source: "history",
-    });
-  }
-  if (errorMessages.length === 0) return;
-
-  for (const errMsg of errorMessages) {
-    let insertAt = allMessages.length;
-    for (let i = allMessages.length - 1; i >= 0; i--) {
-      if (allMessages[i].createdAt <= errMsg.createdAt) {
-        insertAt = i + 1;
-        break;
-      }
-      if (i === 0) insertAt = 0;
-    }
-    allMessages.splice(insertAt, 0, errMsg);
-  }
-}
-
-function injectAgentStatusMessages(
-  entries: AgentTranscriptEntry[],
-  allMessages: WebMessage[],
-  sessionKey: string,
-  projectKey?: string,
-): void {
-  const statusMessages: WebMessage[] = [];
-  for (const entry of entries) {
-    if (entry.type !== "agent_status_message") continue;
-    statusMessages.push({
-      id: entry.entryId ?? `${sessionKey}-agent-status-${entry.turnId}-${entry.sequence}`,
-      sessionKey,
-      projectKey,
-      createdAt: entry.createdAt,
-      provider: "sati",
-      role: entry.kind === "error" ? "error" : "system",
-      kind: entry.kind,
-      text: entry.text,
-      ...(isI18nDescriptor(entry.detail?.messageI18n) ? { contentI18n: entry.detail.messageI18n } : {}),
-      ...(isI18nDescriptor(entry.detail?.userHintI18n) ? { userHintI18n: entry.detail.userHintI18n } : {}),
-      payload: { event: entry.event, ...(entry.detail ? { detail: entry.detail } : {}) },
-      source: "history",
-    });
-  }
-  if (statusMessages.length === 0) return;
-
-  for (const statusMsg of statusMessages) {
-    let insertAt = allMessages.length;
-    for (let i = allMessages.length - 1; i >= 0; i--) {
-      if (allMessages[i].createdAt <= statusMsg.createdAt) {
-        insertAt = i + 1;
-        break;
-      }
-      if (i === 0) insertAt = 0;
-    }
-    allMessages.splice(insertAt, 0, statusMsg);
-  }
-}
-
-function isI18nDescriptor(value: unknown): value is { key: string; params?: Record<string, unknown> } {
-  return typeof value === "object" && value !== null && typeof (value as { key?: unknown }).key === "string";
-}
-
-function readToolResultErrorCode(raw: unknown): string | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const error = (raw as { error?: unknown }).error;
-  if (!error || typeof error !== "object") return undefined;
-  const code = (error as { code?: unknown }).code;
-  return typeof code === "string" && code.length > 0 ? code : undefined;
-}
-
-function readToolResultToolName(raw: unknown): string | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const toolName = (raw as { toolName?: unknown }).toolName;
-  return typeof toolName === "string" && toolName.length > 0 ? toolName : undefined;
-}
-
-function readPlanData(raw: unknown): Record<string, unknown> | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const data = (raw as { data?: unknown }).data;
-  if (!data || typeof data !== "object") return undefined;
-  const d = data as Record<string, unknown>;
-  if (typeof d.planFilePath !== "string") return undefined;
-  return {
-    planFilePath: d.planFilePath,
-    planTitle: d.planTitle,
-    planSummary: d.planSummary,
-  };
-}
-
-function readSearchToolData(raw: unknown): Record<string, unknown> | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const record = raw as { toolName?: unknown; data?: unknown };
-  if (!isSearchToolName(record.toolName)) return undefined;
-  return record.data && typeof record.data === "object" ? (record.data as Record<string, unknown>) : undefined;
-}
-
-function isSearchToolName(name: unknown): boolean {
-  const normalized = typeof name === "string" ? name.toLowerCase() : "";
-  return normalized === "grep" || normalized === "glob";
 }

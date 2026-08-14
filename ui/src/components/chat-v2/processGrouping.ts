@@ -317,7 +317,6 @@ export function isProcessMessage(message: ChatMessage): boolean {
   return Boolean(
     message.isToolUse ||
       message.isTaskNotification ||
-      message.isCompactBoundary ||
       (message.isThinking && !message.isStreaming) ||
       message.type === "tool",
   );

@@ -266,6 +266,11 @@ export class TurnRunner {
             await this.persistDurableMessage(options.sessionId, options.turnId, message, { skipApproval: true });
           }
         },
+        onInjectedContext: async ({ injections }) => {
+          for (const injection of injections) {
+            await this.transcript.recordInjectedContext?.(options.sessionId, options.turnId, injection);
+          }
+        },
       });
       let runResult: TurnRunnerResult | undefined;
       let turnCompletedEvent: Extract<AgentEvent, { type: "turn_completed" }> | undefined;

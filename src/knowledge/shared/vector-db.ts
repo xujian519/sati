@@ -21,6 +21,8 @@ import {
   type ChunkRow,
   type Int8ChunkMatrix,
 } from "./int8-matrix-search.js";
+import { KnowledgeDbVersionError, openKnowledgeDb } from "./db-version.js";
+import { VECTORS_DB } from "./schema-versions.js";
 
 export type VectorDbSearchHit = {
   docId: string;
@@ -41,7 +43,18 @@ export class VectorDbSearch {
   private readonly cache = new Map<string, Int8ChunkMatrix>();
 
   constructor(options: VectorDbSearchOptions) {
-    this.db = new DatabaseSync(options.dbPath, { readOnly: true });
+    // vectors.db 为可重建的派生索引：版本过旧时报错，由上层（assemble.ts）
+    // 降级跳过语义召回，提示重建而非静默读旧格式。
+    const opened = openKnowledgeDb(options.dbPath, VECTORS_DB, { readOnly: true, treatZeroAsStale: true });
+    if (opened.needsRebuild) {
+      opened.db.close();
+      throw new KnowledgeDbVersionError(
+        options.dbPath,
+        "vectors.db 版本过旧，请重新运行 scripts/build-knowledge-vectors.ts 重建",
+        { currentVersion: opened.version, expectedVersion: VECTORS_DB.version },
+      );
+    }
+    this.db = opened.db;
     this.logger = options.logger;
     const rows = this.db.prepare("SELECT corpus, dimensions FROM vector_meta").all() as Array<{
       corpus: string;

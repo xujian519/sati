@@ -14,13 +14,11 @@ import { messageContent, type CanonicalMessage } from "../../model/index.js";
  * Pure function — no class/instance state. Extracted from AgentLoop so the
  * methodology feature can be unit-tested and evolved independently.
  */
-export function applyMethodologyInjection(
-  systemPrompt: string,
-  messages: CanonicalMessage[],
-  inject?: (lastUserMessage: string) => string | null,
-): string {
-  if (!inject) return systemPrompt;
-  let firstUserText: string | undefined;
+/**
+ * 取请求消息中的第一条 user 文本消息（methodology keying 依据）。
+ * 导出供「注入内容落库」记录 methodology 注入段落时复用同一 keying 逻辑。
+ */
+export function findFirstUserText(messages: CanonicalMessage[]): string | undefined {
   for (const message of messages) {
     if (message.role !== "user") continue;
     const parts: string[] = [];
@@ -28,12 +26,29 @@ export function applyMethodologyInjection(
       if (block.type === "text") parts.push(block.text);
     }
     if (parts.length > 0) {
-      firstUserText = parts.join("\n");
-      break;
+      return parts.join("\n");
     }
   }
-  if (firstUserText === undefined) return systemPrompt;
-  const addendum = inject(firstUserText);
+  return undefined;
+}
+
+/**
+ * 单次计算方法论 addendum（keying 于第一条 user 文本）。与拼 system prompt
+ * 分离：调用方可复用同一 addendum 既落库审计又拼 prompt，避免同一 inject
+ * 回调执行两次导致「记录文本 ≠ 模型实际所见」。
+ */
+export function computeMethodologyAddendum(
+  messages: CanonicalMessage[],
+  inject?: (firstUserMessage: string) => string | null,
+): string | undefined {
+  if (!inject) return undefined;
+  const firstUserText = findFirstUserText(messages);
+  if (firstUserText === undefined) return undefined;
+  return inject(firstUserText) || undefined;
+}
+
+/** 把已计算的方法论 addendum 追加到 system prompt（空值原样返回）。 */
+export function applyMethodologyAddendum(systemPrompt: string, addendum: string | undefined): string {
   if (!addendum) return systemPrompt;
   return `${systemPrompt}\n\n${addendum}`;
 }
