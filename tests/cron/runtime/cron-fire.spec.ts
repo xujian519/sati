@@ -133,6 +133,7 @@ function makeFire(options: {
   defaultTimezone?: string;
   onResultDelivery?: CronResultDeliveryHandler;
   onPhaseEvent?: CronPhaseEventCallback;
+  onTurnEvent?: CronFireDependencies["onTurnEvent"];
   activeRuns?: Map<string, CronActiveRun>;
   logger?: CronFireDependencies["logger"];
 }): { fire: CronFire; activeRuns: Map<string, CronActiveRun>; releases: CronTask[] } {
@@ -157,6 +158,7 @@ function makeFire(options: {
       releases.push(task);
     },
     onResultDelivery: options.onResultDelivery,
+    onTurnEvent: options.onTurnEvent,
     logger: options.logger ?? { warn: () => undefined },
     onPhaseEvent: options.onPhaseEvent,
   });
@@ -210,6 +212,67 @@ describe("CronFire.runTask", () => {
     assert.equal(deliveries.length, 1);
     assert.equal(deliveries[0]!.outcome, "completed");
     assert.equal(deliveries[0]!.text, "你好，世界");
+  });
+
+  it("completed：turn 事件经 onTurnEvent 转发（含任务会话标识）", async () => {
+    const task = makeTask();
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "你好，" },
+      { type: "assistant_text_delta", text: "世界" },
+    ]);
+    const { store } = makeFakeStore(task);
+    const forwarded: Array<{ sessionKey: string; channelKey: string; event: GatewayEvent }> = [];
+    const { fire } = makeFire({
+      task,
+      gateway,
+      store,
+      onTurnEvent: (sessionKey, channelKey, event) => {
+        forwarded.push({ sessionKey, channelKey, event });
+      },
+    });
+
+    await fire.runTask(task, "run-1");
+
+    assert.equal(forwarded.length, 3);
+    assert.deepEqual(
+      forwarded.map(item => item.event),
+      [
+        { type: "turn_started", runId: "run-1" },
+        { type: "assistant_text_delta", text: "你好，" },
+        { type: "assistant_text_delta", text: "世界" },
+      ],
+    );
+    // 事件携带任务自身的会话/渠道标识，供广播按会话路由
+    for (const item of forwarded) {
+      assert.equal(item.sessionKey, task.sessionKey);
+      assert.equal(item.channelKey, task.channelKey);
+    }
+  });
+
+  it("onTurnEvent 抛异常不中断 run，仅记录警告", async () => {
+    const task = makeTask();
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "你好" },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const warnings: string[] = [];
+    const { fire } = makeFire({
+      task,
+      gateway,
+      store,
+      onTurnEvent: () => {
+        throw new Error("forwarder down");
+      },
+      logger: { warn: message => warnings.push(message) },
+    });
+
+    await fire.runTask(task, "run-1");
+
+    assert.equal(state.runRecords[0]!.outcome, "completed");
+    assert.equal(warnings.length, 2);
+    assert.ok(warnings.every(message => message.includes("cron turn event delivery failed")));
   });
 
   it("completed 且无返回文本时投递默认文案", async () => {

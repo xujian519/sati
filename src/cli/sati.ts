@@ -146,6 +146,9 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         sessionOverrides,
         logger: cronLogger,
         telemetry,
+        onTurnEvent: (sessionKey, channelKey, event) => {
+          deferredBroadcast?.("cron:turn-event", { sessionKey, channelKey, event });
+        },
         onResultDelivery: delivery => {
           void serverRef
             ?.deliverCronResult(delivery)

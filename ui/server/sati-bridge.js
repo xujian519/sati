@@ -1945,7 +1945,7 @@ export function registerAlwaysOnNotificationForwarding(clients, forwardToSession
   ensureGateway()
     .then(gw => {
       gw.onNotification((name, payload) => {
-        if (name !== "always-on:turn-event") return;
+        if (name !== "always-on:turn-event" && name !== "cron:turn-event") return;
         const { sessionKey, channelKey, event } = payload ?? {};
         if (!sessionKey || !event) return;
 
@@ -2004,7 +2004,7 @@ export function registerAlwaysOnNotificationForwarding(clients, forwardToSession
       });
     })
     .catch(err => {
-      console.warn("[sati-bridge] failed to register always-on notification forwarding:", err?.message || err);
+      console.warn("[sati-bridge] failed to register turn-event notification forwarding:", err?.message || err);
     });
 }
 
