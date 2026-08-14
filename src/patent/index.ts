@@ -477,3 +477,4 @@ export {
   type FigureRetrieveOptions,
 } from "./figure/index.js";
 export * from "./claim-chart/index.js";
+export * from "./document/index.js";
