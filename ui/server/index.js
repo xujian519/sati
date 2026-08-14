@@ -75,8 +75,7 @@ import {
   approvalDecideViaGateway,
   approvalListPendingViaGateway,
   grantSessionPermissionViaGateway,
-  isSessionActiveViaGateway,
-  getActiveTurnSnapshotFramesViaGateway,
+  getSessionActivityViaGateway,
   getActiveSessionIdsViaGateway,
   elicitationRespondViaGateway,
   getRouterDashboardData,
@@ -2653,18 +2652,20 @@ function handleChatConnection(ws, request) {
         if (normalizeSessionId(sessionId)) {
           sessionWatchRegistry.watch(sessionId, ws);
         }
-        const isProcessing = isSessionActiveViaGateway(sessionId);
+        const provider = data.provider || "sati";
         const includeActiveTurnMessages = data.includeActiveTurnMessages !== false;
-        const activeTurnMessages =
-          isProcessing && includeActiveTurnMessages
-            ? await getActiveTurnSnapshotFramesViaGateway(sessionId, data.provider || "sati")
-            : [];
+        // Gateway activity may be unavailable (disconnected, restarting). In
+        // that case report unknown (`isProcessing: null`) instead of inactive
+        // so the UI keeps the session in a synchronizing state rather than
+        // cancelling running subagents or clearing the active run.
+        const activity = await getSessionActivityViaGateway(sessionId, provider, includeActiveTurnMessages);
         writer.send({
           type: "session-status",
           sessionId,
-          provider: data.provider || "sati",
-          isProcessing,
-          activeTurnMessages,
+          provider,
+          isProcessing: activity.isProcessing,
+          activeRunId: activity.activeRunId,
+          activeTurnMessages: activity.activeTurnMessages,
           tokenBudget: getSessionTokenBudget(sessionId),
         });
       } else if (data.type === "get-pending-permissions") {

@@ -1,7 +1,30 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { gatewayEventToFrames, isGatewayUnavailableError } from "./sati-bridge.js";
+import { gatewayEventToFrames, getFallbackSessionActivity, isGatewayUnavailableError } from "./sati-bridge.js";
+
+describe("session activity fallback", () => {
+  it("reports unknown while preserving a locally known run id", () => {
+    expect(getFallbackSessionActivity({ active: true, runId: "run-local" })).toEqual({
+      isProcessing: null,
+      activeRunId: "run-local",
+      activeTurnMessages: [],
+    });
+  });
+
+  it("reports unknown instead of false when local state cannot prove inactivity", () => {
+    expect(getFallbackSessionActivity(undefined)).toEqual({
+      isProcessing: null,
+      activeRunId: null,
+      activeTurnMessages: [],
+    });
+    expect(getFallbackSessionActivity({ active: false, runId: undefined })).toEqual({
+      isProcessing: null,
+      activeRunId: null,
+      activeTurnMessages: [],
+    });
+  });
+});
 
 describe("gatewayEventToFrames agent status errors", () => {
   it("maps tool result detail availability to a mergeable tool_result frame", () => {

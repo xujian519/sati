@@ -35,7 +35,7 @@ type LatestChatMessage = {
   toolId?: string;
   result?: unknown;
   exitCode?: number;
-  isProcessing?: boolean;
+  isProcessing?: boolean | null;
   actualSessionId?: string;
   event?: string;
   status?: unknown;
@@ -271,6 +271,7 @@ interface UseChatRealtimeHandlersArgs {
   onNavigateToSession?: (sessionId: string) => void;
   onWebSocketReconnect?: () => void;
   sessionStore: SessionStore;
+  sendMessage?: (message: Record<string, unknown>) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -299,6 +300,7 @@ export function useChatRealtimeHandlers({
   onNavigateToSession,
   onWebSocketReconnect,
   sessionStore,
+  sendMessage,
 }: UseChatRealtimeHandlersArgs) {
   const { subscribe } = useWebSocket();
 
@@ -306,6 +308,37 @@ export function useChatRealtimeHandlers({
   const thinkingBySessionRef = useRef<Map<string, boolean>>(new Map());
   // Dedup volatile active-turn replay chunks across reconnect/status polls.
   const activeTurnReplaySignatureRef = useRef<Map<string, string>>(new Map());
+  // Pending session-status retries while gateway activity is unknown.
+  const sessionStatusRetryTimersRef = useRef<Map<string, number>>(new Map());
+
+  const clearSessionStatusRetry = useCallback((sessionId: string) => {
+    const timer = sessionStatusRetryTimersRef.current.get(sessionId);
+    if (timer === undefined) return;
+    window.clearTimeout(timer);
+    sessionStatusRetryTimersRef.current.delete(sessionId);
+  }, []);
+
+  const scheduleSessionStatusRetry = useCallback(
+    (sessionId: string) => {
+      if (sessionStatusRetryTimersRef.current.has(sessionId)) return;
+      const timer = window.setTimeout(() => {
+        sessionStatusRetryTimersRef.current.delete(sessionId);
+        sendMessage?.({ type: "check-session-status", sessionId, provider, includeActiveTurnMessages: true });
+      }, 1200);
+      sessionStatusRetryTimersRef.current.set(sessionId, timer);
+    },
+    [provider, sendMessage],
+  );
+
+  useEffect(
+    () => () => {
+      for (const timer of sessionStatusRetryTimersRef.current.values()) {
+        window.clearTimeout(timer);
+      }
+      sessionStatusRetryTimersRef.current.clear();
+    },
+    [],
+  );
 
   const handleMessage = useCallback(
     (latestMessage: LatestChatMessage, fallbackSessionId?: string | null) => {
@@ -440,8 +473,18 @@ export function useChatRealtimeHandlers({
               setTokenBudget(msg.tokenBudget as Record<string, unknown>);
             }
 
-            // Legacy isProcessing format from check-session-status
+            // Legacy isProcessing format from check-session-status. A null
+            // value means gateway activity could not be confirmed (unknown):
+            // keep the current UI state and retry instead of reporting the
+            // session as inactive.
+            if (msg.isProcessing === null) {
+              if (isCurrentSession) {
+                scheduleSessionStatusRetry(statusSessionId);
+              }
+              return;
+            }
             if (msg.isProcessing) {
+              clearSessionStatusRetry(statusSessionId);
               onSessionProcessing?.(statusSessionId);
               if (isCurrentSession) {
                 setIsLoading(true);
@@ -449,6 +492,7 @@ export function useChatRealtimeHandlers({
               }
               return;
             }
+            clearSessionStatusRetry(statusSessionId);
             onSessionInactive?.(statusSessionId);
             onSessionNotProcessing?.(statusSessionId);
             if (isCurrentSession) {
@@ -668,6 +712,7 @@ export function useChatRealtimeHandlers({
 
         case "complete": {
           if (sid) {
+            clearSessionStatusRetry(sid);
             activeTurnReplaySignatureRef.current.delete(sid);
             // Finalize both thinking and content streams
             if (thinkingBySessionRef.current.has(sid)) {
@@ -754,6 +799,7 @@ export function useChatRealtimeHandlers({
             setSatiStatus(null);
           }
           if (sid) {
+            clearSessionStatusRetry(sid);
             activeTurnReplaySignatureRef.current.delete(sid);
             onSessionInactive?.(sid);
             onSessionNotProcessing?.(sid);
@@ -895,6 +941,9 @@ export function useChatRealtimeHandlers({
     },
     [
       provider,
+      sendMessage,
+      clearSessionStatusRetry,
+      scheduleSessionStatusRetry,
       selectedSession,
       currentSessionId,
       setCurrentSessionId,

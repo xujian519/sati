@@ -136,21 +136,36 @@ async function connectWithRetry() {
   throw new Error(`[sati-bridge] gateway connect failed after ${GATEWAY_CONNECT_TIMEOUT_MS}ms${detail}`);
 }
 
+/** @type {ReturnType<typeof createRemoteGateway> | null} */
+let gatewayInstance = null;
+
 function ensureGateway() {
   if (!gatewayPromise) {
-    gatewayPromise = connectWithRetry().catch(error => {
-      // Reset so the next caller retries instead of cementing the
-      // failure forever. The deadline inside connectWithRetry()
-      // already bounds individual attempts.
-      gatewayPromise = null;
-      throw error;
-    });
+    const pending = connectWithRetry()
+      .then(gateway => {
+        if (gatewayPromise === pending) {
+          gatewayInstance = gateway;
+        }
+        return gateway;
+      })
+      .catch(error => {
+        // Reset only if this failed attempt is still current. A newer
+        // caller may already have started a replacement connection.
+        if (gatewayPromise === pending) {
+          gatewayPromise = null;
+          gatewayInstance = null;
+        }
+        throw error;
+      });
+    gatewayPromise = pending;
   }
   return gatewayPromise;
 }
 
-function resetGatewayConnection() {
+function resetGatewayConnection(expectedGateway) {
+  if (expectedGateway && gatewayInstance !== expectedGateway) return;
   gatewayPromise = null;
+  gatewayInstance = null;
 }
 
 export function isGatewayUnavailableError(error) {
@@ -793,8 +808,8 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : String(error);
     const gatewayUnavailable = !gw || isGatewayUnavailableError(error);
-    if (gatewayUnavailable) {
-      resetGatewayConnection();
+    if (gatewayUnavailable && gw) {
+      resetGatewayConnection(gw);
     }
     const message = gatewayUnavailable ? "Sati gateway is unavailable." : rawMessage;
     const statusEvent = gatewayUnavailable
@@ -945,6 +960,46 @@ export async function grantSessionPermissionViaGateway(sessionId, entry) {
 export function isSessionActiveViaGateway(sessionId) {
   if (!isSatiSessionKey(sessionId)) return false;
   return Boolean(sessionState.get(sessionId)?.active);
+}
+
+export function getFallbackSessionActivity(localState) {
+  return {
+    isProcessing: null,
+    activeRunId: localState?.active === true && typeof localState?.runId === "string" ? localState.runId : null,
+    activeTurnMessages: [],
+  };
+}
+
+export async function getSessionActivityViaGateway(sessionId, provider = "sati", includeActiveTurnMessages = true) {
+  if (!isSatiSessionKey(sessionId)) {
+    return { isProcessing: false, activeRunId: null, activeTurnMessages: [] };
+  }
+  const localState = sessionState.get(sessionId);
+  let gw = null;
+  try {
+    gw = await ensureGateway();
+    if (typeof gw.getActiveTurnSnapshot !== "function") {
+      return getFallbackSessionActivity(localState);
+    }
+    const snapshot = await gw.getActiveTurnSnapshot({ sessionKey: sessionId });
+    if (!snapshot || typeof snapshot.active !== "boolean") {
+      return getFallbackSessionActivity(localState);
+    }
+    return {
+      isProcessing: snapshot.active,
+      activeRunId: snapshot.activeRunId ?? null,
+      activeTurnMessages:
+        snapshot.active && includeActiveTurnMessages && Array.isArray(snapshot.events)
+          ? snapshot.events.flatMap(event => gatewayEventToFrames(event, sessionId, provider) || [])
+          : [],
+    };
+  } catch (error) {
+    console.warn("[sati-bridge] failed to read active turn snapshot:", error?.message || error);
+    if (gw && isGatewayUnavailableError(error)) {
+      resetGatewayConnection(gw);
+    }
+    return getFallbackSessionActivity(localState);
+  }
 }
 
 export async function getActiveTurnSnapshotFramesViaGateway(sessionId, provider = "sati") {
