@@ -1,3 +1,9 @@
+/**
+ * 活跃的路由壳：App → AppShellV2 → MainAreaV2 → MainContent，下方各 Tab
+ * 视图从 main-content-v2/* 懒加载（DashboardV2/SkillsV2/CronV2/FilesV2…）。
+ * 命名注意：本文件位于历史目录 main-content/view，而视图在 main-content-v2/——
+ * 目录名"v2"不代表新于本文件，勿按目录名推断新旧（历史迁移遗留的命名）。
+ */
 import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {

@@ -1,3 +1,8 @@
+/**
+ * 活跃聊天界面（组合层）。聊天基础层在 ../chat/（v1 目录：hooks/types/tools/
+ * constants/utils/view 均为本文件与其子组件复用的活跃代码，非死代码）——
+ * 目录名"v1/v2"不代表新旧，chat-v2 仅是组合壳。
+ */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MessageSquare } from "lucide-react";
