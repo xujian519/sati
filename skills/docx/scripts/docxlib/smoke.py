@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
@@ -182,6 +183,26 @@ def run_smoke_test() -> dict[str, Any]:
             assert delivered["status"] == "ok"
             assert file_sha256(final) == file_sha256(candidate)
             checks.append("atomic-delivery")
+
+            # Sati layout: WORK_DIR=<project>/.sati/work/<session>/<turn> with
+            # no PILOTDECK_WORKSPACE_CWD — a relative --out must resolve to the
+            # project root, not .sati/work/<session>.
+            sati_project = root / "sati-project"
+            sati_work = sati_project / ".sati" / "work" / "sess-1" / "turn-1"
+            sati_candidate = sati_work / "docx" / "tmp" / "candidate.docx"
+            sati_candidate.parent.mkdir(parents=True)
+            shutil.copy2(candidate, sati_candidate)
+            os.environ.pop("PILOTDECK_WORKSPACE_CWD", None)
+            os.environ["WORK_DIR"] = str(sati_work)
+            relative_out = "delivered-report.docx"
+            sati_delivery = deliver_docx(sati_candidate, relative_out)
+            assert sati_delivery["status"] == "ok"
+            assert (sati_project / relative_out).is_file()
+            assert not (sati_work / relative_out).exists()
+            checks.append("sati-layout-delivery-root")
+
+            os.environ["WORK_DIR"] = str(work)
+            os.environ["PILOTDECK_WORKSPACE_CWD"] = str(project)
 
             edit_builder = work / "docx" / "tmp" / "edit.py"
             _write(edit_builder, EDIT_BUILDER_SOURCE)

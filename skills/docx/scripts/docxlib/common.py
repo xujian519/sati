@@ -149,7 +149,7 @@ def pilotdeck_work_dir() -> Path | None:
 
 
 def pilotdeck_workspace_root() -> Path:
-    """Return the workspace that owns the current PilotDeck task."""
+    """Return the workspace that owns the current document task."""
     for name in ("PILOTDECK_WORKSPACE_CWD", "PILOTDECK_PROJECT_ROOT"):
         configured = os.environ.get(name, "").strip()
         if configured:
@@ -165,13 +165,10 @@ def pilotdeck_workspace_root() -> Path:
     work_dir = pilotdeck_work_dir()
     if work_dir is not None:
         for ancestor in (work_dir, *work_dir.parents):
-            if (
-                ancestor.name == "work"
-                and ancestor.parent.name == ".pilotdeck"
-            ):
+            if ancestor.name == "work" and ancestor.parent.name in (".pilotdeck", ".sati"):
                 return ancestor.parent.parent.resolve()
         # Standalone tests and manual CLI runs may provide an isolated work
-        # directory without PilotDeck's normal .pilotdeck/work hierarchy.
+        # directory without the normal .pilotdeck/work or .sati/work hierarchy.
         return work_dir.parent.resolve()
     return Path.cwd().resolve()
 
@@ -547,7 +544,7 @@ def assert_safe_mutation(path: str | Path, *, operation: str) -> None:
 def unpacked_copy(source: str | Path) -> Iterator[tuple[Path, Path]]:
     src = require_docx_path(source)
     assert_valid_docx(src)
-    with tempfile.TemporaryDirectory(prefix="pilotdeck_docx_") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="sati_docx_") as temp_dir:
         root = Path(temp_dir)
         package = root / "package"
         package.mkdir()
