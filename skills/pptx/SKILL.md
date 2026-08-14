@@ -34,10 +34,11 @@ Create and modify native PowerPoint files through a reproducible JavaScript work
 
 ## Resolve paths and prepare the runtime
 
-Resolve the directory containing this file as `PPTX_SKILL_ROOT`, then use:
+The host expands `{{SKILL_ROOT_SHELL}}` to this skill's directory when the skill loads, then use:
 
 ```bash
-PPTX="$PPTX_SKILL_ROOT/scripts/pptx.sh"
+SKILL_ROOT={{SKILL_ROOT_SHELL}}
+PPTX="$SKILL_ROOT/scripts/pptx.sh"
 bash "$PPTX" check || bash "$PPTX" fix
 ```
 

@@ -38,10 +38,11 @@ Work with standalone spreadsheet files through a reproducible JavaScript `.mjs` 
 
 ## Prepare the runtime
 
-Resolve the directory containing this file as `SPREADSHEET_SKILL_ROOT`, then run:
+The host expands `{{SKILL_ROOT_SHELL}}` to this skill's directory when the skill loads, then run:
 
 ```bash
-SHEET="$SPREADSHEET_SKILL_ROOT/scripts/spreadsheet.sh"
+SKILL_ROOT={{SKILL_ROOT_SHELL}}
+SHEET="$SKILL_ROOT/scripts/spreadsheet.sh"
 bash "$SHEET" check || bash "$SHEET" fix
 ```
 
