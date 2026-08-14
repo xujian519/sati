@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>专利无效宣告意见</title>
+<style>
+  :root {
+    --doc-firm: var(--sati-doc-firm, "XX 知识产权代理事务所");
+    --doc-confidential: var(--sati-doc-confidential, "机密 · 仅供委托方使用");
+    --doc-disclaimer: var(--sati-doc-disclaimer, "本分析由 AI 辅助生成，不构成正式法律意见。专利申请和专利性判断应由具备资质的专利代理人或专利律师确认。本文件含商业秘密与保密信息，仅限指定接收人使用；未经书面许可不得转发或复制。");
+    --doc-accent: var(--sati-doc-accent, #1f3a5f);
+    --doc-accent-strong: var(--sati-doc-accent-strong, #16324f);
+    --doc-body: var(--sati-doc-body, #1a1a1a);
+    --doc-muted: var(--sati-doc-muted, #6b6b6b);
+    --doc-border: var(--sati-doc-border, #c9c9c9);
+    --doc-header-bg: var(--sati-doc-header-bg, #f6f6f2);
+    --doc-surface: var(--sati-doc-surface, #ffffff);
+    --doc-zebra: var(--sati-doc-zebra, #fbfbf9);
+    --doc-badge-high: var(--sati-doc-danger, #b42318);
+    --doc-badge-mid: var(--sati-doc-warning, #b54708);
+    --doc-badge-low: var(--sati-doc-success, #067647);
+    --doc-font-serif: var(--sati-doc-font-serif, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif);
+    --doc-font-sans: var(--sati-doc-font-sans, "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif);
+    --doc-font-mono: var(--sati-doc-font-mono, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace);
+    --doc-page-margin: var(--sati-doc-page-margin, 16mm 18mm 18mm 18mm);
+    --doc-body-padding: var(--sati-doc-body-padding, 0 18mm);
+    --doc-body-max-width: var(--sati-doc-body-max-width, 174mm);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 12pt; }
+  body {
+    font-family: var(--doc-font-serif);
+    color: var(--doc-body);
+    background: var(--doc-surface);
+    line-height: 1.7;
+    padding: var(--doc-body-padding);
+    max-width: var(--doc-body-max-width);
+    margin: 0 auto;
+  }
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 7mm 0 3mm;
+    border-bottom: 2px solid var(--doc-accent);
+    font-family: var(--doc-font-sans);
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+  }
+  .doc-header .firm { font-weight: 600; color: var(--doc-accent); }
+  .doc-header .firm::before { content: var(--doc-firm); }
+  .doc-header .confidential { letter-spacing: 0.08em; }
+  .doc-header .confidential::before { content: var(--doc-confidential); }
+  .doc-masthead { text-align: center; padding: 8mm 0 4mm; }
+  .doc-masthead .doc-type {
+    display: inline-block;
+    font-family: var(--doc-font-sans);
+    font-size: 9pt;
+    letter-spacing: 0.4em;
+    color: var(--doc-accent);
+    border: 1px solid var(--doc-accent);
+    padding: 1px 10px;
+    margin-bottom: 4mm;
+  }
+  .doc-masthead h1 {
+    font-family: var(--doc-font-sans);
+    font-size: 16pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--doc-accent-strong);
+  }
+  .doc-masthead .doc-number { font-family: var(--doc-font-sans); font-size: 9.5pt; color: var(--doc-muted); margin-top: 2.5mm; }
+  .doc-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.6mm 6mm;
+    width: 100%;
+    margin: 5mm 0 6mm;
+    border: 1px solid var(--doc-border);
+    font-size: 11pt;
+  }
+  .doc-meta dt {
+    font-family: var(--doc-font-sans);
+    font-weight: 600;
+    color: var(--doc-accent);
+    background: var(--doc-header-bg);
+    padding: 1.2mm 4mm;
+    white-space: nowrap;
+  }
+  .doc-meta dd { padding: 1.2mm 4mm; }
+  section { margin: 5mm 0; }
+  h2 {
+    font-family: var(--doc-font-sans);
+    font-size: 13pt;
+    font-weight: 700;
+    color: var(--doc-accent-strong);
+    padding-bottom: 1mm;
+    margin: 6mm 0 3mm;
+    border-bottom: 1px solid var(--doc-border);
+  }
+  h3 {
+    font-family: var(--doc-font-sans);
+    font-size: 11.5pt;
+    font-weight: 600;
+    color: var(--doc-accent);
+    margin: 4mm 0 2mm;
+  }
+  h4 {
+    font-family: var(--doc-font-sans);
+    font-size: 11pt;
+    font-weight: 600;
+    color: var(--doc-body);
+    margin: 3mm 0 1.5mm;
+  }
+  p { margin: 1.5mm 0; text-align: justify; }
+  ol, ul { margin: 1.5mm 0 1.5mm 7mm; }
+  li { margin: 0.8mm 0; }
+  .callout {
+    border: 1px solid var(--doc-border);
+    border-left: 3px solid var(--doc-accent);
+    padding: 3mm 4mm;
+    margin: 3mm 0;
+    font-size: 11pt;
+  }
+  .callout .callout-title {
+    font-family: var(--doc-font-sans);
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: var(--doc-accent);
+    margin-bottom: 1mm;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5pt;
+    margin: 2.5mm 0;
+    font-variant-numeric: tabular-nums;
+  }
+  caption {
+    font-family: var(--doc-font-sans);
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+    text-align: left;
+    margin-bottom: 1mm;
+  }
+  th, td {
+    border: 1px solid var(--doc-border);
+    padding: 1.5mm 2.5mm;
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--doc-font-sans);
+    font-weight: 600;
+    background: var(--doc-header-bg);
+    color: var(--doc-accent-strong);
+    white-space: nowrap;
+  }
+  thead { display: table-header-group; }
+  tbody tr:nth-child(even) { background: var(--doc-zebra); }
+  .num { text-align: right; }
+  .mono { font-family: var(--doc-font-mono); font-size: 9.5pt; }
+  .badge {
+    display: inline-block;
+    font-family: var(--doc-font-sans);
+    font-size: 9pt;
+    line-height: 1.4;
+    padding: 0 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .badge-evidence { border: 1px solid var(--doc-accent); color: var(--doc-accent); }
+  .badge-client { border: 1px solid var(--doc-muted); color: var(--doc-muted); }
+  .badge-model { border: 1px dashed var(--doc-muted); color: var(--doc-muted); }
+  .badge-assumption { border: 1px dashed var(--doc-muted); color: var(--doc-muted); font-style: italic; }
+  .badge-risk-high { background: var(--doc-badge-high); color: #fff; }
+  .badge-risk-mid { background: var(--doc-badge-mid); color: #fff; }
+  .badge-risk-low { background: var(--doc-badge-low); color: #fff; }
+  .assumption-note { font-style: italic; color: var(--doc-muted); }
+  .doc-closing { margin-top: 8mm; }
+  .disclaimer {
+    border: 1px solid var(--doc-border);
+    background: var(--doc-header-bg);
+    padding: 3mm 4mm;
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+    margin: 3mm 0;
+  }
+  .disclaimer::before {
+    content: "免责声明：";
+    font-weight: 700;
+    color: var(--doc-body);
+  }
+  .disclaimer::after { content: var(--doc-disclaimer); }
+  .doc-footer {
+    margin: 6mm 0 4mm;
+    padding-top: 2mm;
+    border-top: 1px solid var(--doc-border);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--doc-font-sans);
+    font-size: 8.5pt;
+    color: var(--doc-muted);
+  }
+  .signature { margin-top: 6mm; display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+  .signature .sign-block { border-top: 1px solid var(--doc-body); padding-top: 1.5mm; font-family: var(--doc-font-sans); font-size: 10pt; }
+  @page { size: A4; margin: var(--doc-page-margin, 16mm 18mm 18mm 18mm); }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: inherit; text-decoration: none; }
+    section { page-break-inside: auto; }
+    h2 { page-break-after: avoid; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+  <header class="doc-header">
+    <span class="firm"></span>
+    <span class="confidential"></span>
+  </header>
+
+  <div class="doc-masthead">
+    <span class="doc-type">无效宣告意见</span>
+    <h1>专利无效宣告意见</h1>
+    <div class="doc-number">意见编号：IV-2026-XXXX · 版本 V1.0</div>
+  </div>
+
+  <dl class="doc-meta">
+    <dt>涉案专利号</dt><dd id="meta-patent-no">________</dd>
+    <dt>专利名称</dt><dd id="meta-patent-title">________</dd>
+    <dt>授权公告日</dt><dd id="meta-grant-date">________</dd>
+    <dt>专利权人</dt><dd id="meta-patentee">________</dd>
+    <dt>请求人 / 委托方</dt><dd id="meta-requester">________</dd>
+    <dt>分析日期</dt><dd id="meta-date">________</dd>
+  </dl>
+
+  <section id="position" aria-label="总体立场">
+    <h2>一、总体立场</h2>
+    <p id="position-summary">请求人认为涉案专利的权利要求 <span class="mono">____</span> 不符合《专利法》第 <span class="mono">____</span> 条的规定，应予无效。具体理由如下：</p>
+    <ol id="position-points">
+      <li>________</li>
+    </ol>
+  </section>
+
+  <section id="claim-analysis" aria-label="涉案专利权利要求分析">
+    <h2>二、涉案专利权利要求分析</h2>
+    <table>
+      <caption>表 1 · 涉案权利要求特征分解</caption>
+      <thead>
+        <tr><th style="width:10%">权利要求</th><th style="width:12%">特征编号</th><th style="width:40%">技术特征</th><th>技术效果 / 作用</th></tr>
+      </thead>
+      <tbody id="claim-feature-table">
+        <tr>
+          <td class="mono">权1</td>
+          <td class="mono">F1</td>
+          <td>________</td>
+          <td>________</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="evidence" aria-label="证据清单">
+    <h2>三、证据清单</h2>
+    <table>
+      <caption>表 2 · 证据与对比文件清单</caption>
+      <thead>
+        <tr>
+          <th style="width:8%">编号</th><th style="width:16%">公开号</th><th style="width:24%">标题</th>
+          <th style="width:12%">公开日</th><th style="width:12%">与涉案专利关系</th><th>可引用段落 / 用途</th>
+        </tr>
+      </thead>
+      <tbody id="evidence-table">
+        <tr>
+          <td class="mono">D1</td>
+          <td class="mono">________</td>
+          <td>________</td>
+          <td class="num">________</td>
+          <td>现有技术（早于优先权日）</td>
+          <td class="mono">________</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="grounds" aria-label="无效理由">
+    <h2>四、无效理由</h2>
+
+    <h3>4.1 权利要求 1 不具备新颖性（专利法第22条第2款）</h3>
+    <h4>事实认定</h4>
+    <p id="nov-facts">________</p>
+    <h4>证据分析</h4>
+    <p id="nov-evidence">________</p>
+    <h4>法条适用与结论</h4>
+    <p id="nov-conclusion">________</p>
+
+    <h3>4.2 权利要求 1 不具备创造性（专利法第22条第3款）</h3>
+    <h4>事实认定</h4>
+    <p id="inv-facts">________</p>
+    <h4>证据分析</h4>
+    <p id="inv-evidence">________</p>
+    <h4>法条适用与结论</h4>
+    <p id="inv-conclusion">________</p>
+
+    <h3>4.3 其他无效理由（客体 / 充分公开 / 清楚支持 / 修改超范围）</h3>
+    <p id="other-grounds">________</p>
+  </section>
+
+  <section id="claim-by-claim" aria-label="逐权利要求结论">
+    <h2>五、逐权利要求无效结论</h2>
+    <table>
+      <caption>表 3 · 逐权利要求结论</caption>
+      <thead>
+        <tr><th style="width:12%">权利要求</th><th style="width:18%">结论</th><th style="width:14%">法条依据</th><th>主要证据 / 理由</th></tr>
+      </thead>
+      <tbody id="claim-conclusion-table">
+        <tr>
+          <td class="mono">权1</td>
+          <td><span class="badge badge-risk-mid">可无效（存疑）</span></td>
+          <td class="mono">A22.3</td>
+          <td>D1+D2 结合具备技术启示</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="citation-log" aria-label="引用日志">
+    <h2>六、引用日志</h2>
+    <p>来源类型与置信度取值见 <span class="mono">references/citation-log.md</span>。</p>
+    <table>
+      <caption>表 4 · 关键断言溯源</caption>
+      <thead>
+        <tr>
+          <th style="width:22%">断言 / 结论</th><th style="width:13%">来源类型</th><th style="width:24%">来源名称</th>
+          <th style="width:12%">日期</th><th style="width:13%">置信度</th><th>定位（pin-cite）</th>
+        </tr>
+      </thead>
+      <tbody id="citation-table">
+        <tr>
+          <td>（断言示例）</td>
+          <td>现有技术文献</td>
+          <td class="mono">D1</td>
+          <td class="num">________</td>
+          <td><span class="badge badge-evidence">证据支撑</span></td>
+          <td class="mono">________</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="conclusion" aria-label="结论与请求">
+    <h2>七、结论与请求</h2>
+    <p id="conclusion-text">综上所述，涉案专利的权利要求 <span class="mono">____</span> 不符合《专利法》第 <span class="mono">____</span> 条的规定，请求专利复审和无效审理部宣告上述权利要求全部/部分无效。</p>
+  </section>
+
+  <div class="doc-closing">
+    <div class="signature">
+      <div class="sign-block">分析人：________</div>
+      <div class="sign-block">审核人：________</div>
+    </div>
+    <div class="disclaimer"></div>
+    <footer class="doc-footer">
+      <span>IV-2026-XXXX · 机密</span>
+      <span id="footer-date">________</span>
+    </footer>
+  </div>
+
+</body>
+</html>

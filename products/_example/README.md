@@ -18,9 +18,18 @@ _example/
   config/
     sati.yaml            ← 覆盖配置示例
   brand/
-    theme.json                ← 品牌主题覆盖（待 BrandConfig 贡献点就绪后生效）
+    theme.json                ← 品牌主题覆盖（UI + 专利文书）
   README.md                   ← 本文件
 ```
+
+## 品牌覆盖
+
+`brand/theme.json` 同时承载 UI 主题与专利文书品牌变量：
+
+- 顶层键（`brand`、`background`、`text` 等）用于 Sati UI/TUI 主题。
+- `documents.patent` 命名空间用于专利文书（`assets/templates/patent/`）品牌注入，可覆盖事务所名称、密级、主色、语义色等。
+
+渲染专利文书时，管线读取 `documents.patent` 并映射为 CSS `--sati-doc-*` 变量注入 HTML。未声明的键沿用 `assets/templates/patent/tokens.css` 默认值。
 
 ## 部署方式
 

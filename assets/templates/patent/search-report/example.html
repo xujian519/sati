@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>专利检索报告 — 示例</title>
+<style>
+  /* 与 assets/template.html 完全一致的样式；本文件为填充示例，仅供风格确认 */
+  :root {
+    --doc-firm: var(--sati-doc-firm, "XX 知识产权代理事务所");
+    --doc-confidential: var(--sati-doc-confidential, "机密 · 仅供委托方使用");
+    --doc-disclaimer: var(--sati-doc-disclaimer, "本分析由 AI 辅助生成，不构成正式法律意见。专利申请和专利性判断应由具备资质的专利代理人或专利律师确认。本文件含商业秘密与保密信息，仅限指定接收人使用；未经书面许可不得转发或复制。");
+    --doc-accent: var(--sati-doc-accent, #1f3a5f);
+    --doc-accent-strong: var(--sati-doc-accent-strong, #16324f);
+    --doc-body: var(--sati-doc-body, #1a1a1a);
+    --doc-muted: var(--sati-doc-muted, #6b6b6b);
+    --doc-border: var(--sati-doc-border, #c9c9c9);
+    --doc-header-bg: var(--sati-doc-header-bg, #f6f6f2);
+    --doc-surface: var(--sati-doc-surface, #ffffff);
+    --doc-zebra: var(--sati-doc-zebra, #fbfbf9);
+    --doc-badge-high: var(--sati-doc-danger, #b42318);
+    --doc-badge-mid: var(--sati-doc-warning, #b54708);
+    --doc-badge-low: var(--sati-doc-success, #067647);
+    --doc-font-serif: var(--sati-doc-font-serif, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif);
+    --doc-font-sans: var(--sati-doc-font-sans, "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif);
+    --doc-font-mono: var(--sati-doc-font-mono, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace);
+    --doc-page-margin: var(--sati-doc-page-margin, 16mm 18mm 18mm 18mm);
+    --doc-body-padding: var(--sati-doc-body-padding, 0 18mm);
+    --doc-body-max-width: var(--sati-doc-body-max-width, 174mm);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 12pt; }
+  body {
+    font-family: var(--doc-font-serif);
+    color: var(--doc-body);
+    background: var(--doc-surface);
+    line-height: 1.7;
+    padding: var(--doc-body-padding);
+    max-width: var(--doc-body-max-width);
+    margin: 0 auto;
+  }
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 7mm 0 3mm;
+    border-bottom: 2px solid var(--doc-accent);
+    font-family: var(--doc-font-sans);
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+  }
+  .doc-header .firm { font-weight: 600; color: var(--doc-accent); }
+  .doc-header .firm::before { content: var(--doc-firm); }
+  .doc-header .confidential { letter-spacing: 0.08em; }
+  .doc-header .confidential::before { content: var(--doc-confidential); }
+  .doc-masthead { text-align: center; padding: 8mm 0 4mm; }
+  .doc-masthead .doc-type {
+    display: inline-block;
+    font-family: var(--doc-font-sans);
+    font-size: 9pt;
+    letter-spacing: 0.4em;
+    color: var(--doc-accent);
+    border: 1px solid var(--doc-accent);
+    padding: 1px 10px;
+    margin-bottom: 4mm;
+  }
+  .doc-masthead h1 {
+    font-family: var(--doc-font-sans);
+    font-size: 16pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--doc-accent-strong);
+  }
+  .doc-masthead .doc-number { font-family: var(--doc-font-sans); font-size: 9.5pt; color: var(--doc-muted); margin-top: 2.5mm; }
+  .doc-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.6mm 6mm;
+    width: 100%;
+    margin: 5mm 0 6mm;
+    border: 1px solid var(--doc-border);
+    font-size: 11pt;
+  }
+  .doc-meta dt {
+    font-family: var(--doc-font-sans);
+    font-weight: 600;
+    color: var(--doc-accent);
+    background: var(--doc-header-bg);
+    padding: 1.2mm 4mm;
+    white-space: nowrap;
+  }
+  .doc-meta dd { padding: 1.2mm 4mm; }
+  section { margin: 5mm 0; }
+  h2 {
+    font-family: var(--doc-font-sans);
+    font-size: 13pt;
+    font-weight: 700;
+    color: var(--doc-accent-strong);
+    padding-bottom: 1mm;
+    margin: 6mm 0 3mm;
+    border-bottom: 1px solid var(--doc-border);
+  }
+  h3 {
+    font-family: var(--doc-font-sans);
+    font-size: 11.5pt;
+    font-weight: 600;
+    color: var(--doc-accent);
+    margin: 4mm 0 2mm;
+  }
+  p { margin: 1.5mm 0; text-align: justify; }
+  ol, ul { margin: 1.5mm 0 1.5mm 7mm; }
+  li { margin: 0.8mm 0; }
+  .callout {
+    border: 1px solid var(--doc-border);
+    border-left: 3px solid var(--doc-accent);
+    padding: 3mm 4mm;
+    margin: 3mm 0;
+    font-size: 11pt;
+  }
+  .callout .callout-title {
+    font-family: var(--doc-font-sans);
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: var(--doc-accent);
+    margin-bottom: 1mm;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5pt;
+    margin: 2.5mm 0;
+    font-variant-numeric: tabular-nums;
+  }
+  caption {
+    font-family: var(--doc-font-sans);
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+    text-align: left;
+    margin-bottom: 1mm;
+  }
+  th, td {
+    border: 1px solid var(--doc-border);
+    padding: 1.5mm 2.5mm;
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--doc-font-sans);
+    font-weight: 600;
+    background: var(--doc-header-bg);
+    color: var(--doc-accent-strong);
+    white-space: nowrap;
+  }
+  thead { display: table-header-group; }
+  tbody tr:nth-child(even) { background: var(--doc-zebra); }
+  .num { text-align: right; }
+  .mono { font-family: var(--doc-font-mono); font-size: 9.5pt; }
+  .break-word { word-break: break-all; }
+  .badge {
+    display: inline-block;
+    font-family: var(--doc-font-sans);
+    font-size: 9pt;
+    line-height: 1.4;
+    padding: 0 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .badge-evidence { border: 1px solid var(--doc-accent); color: var(--doc-accent); }
+  .badge-client   { border: 1px solid var(--doc-muted); color: var(--doc-muted); }
+  .badge-model    { border: 1px dashed var(--doc-muted); color: var(--doc-muted); }
+  .badge-assumption { border: 1px dashed var(--doc-muted); color: var(--doc-muted); font-style: italic; }
+  .badge-risk-high   { background: var(--doc-badge-high); color: #fff; }
+  .badge-risk-mid    { background: var(--doc-badge-mid); color: #fff; }
+  .badge-risk-low    { background: var(--doc-badge-low); color: #fff; }
+  .badge-rel-x { background: var(--doc-badge-high); color: #fff; }
+  .badge-rel-y { background: var(--doc-badge-mid); color: #fff; }
+  .badge-rel-a { border: 1px solid var(--doc-muted); color: var(--doc-muted); }
+  .badge-rel-p { border: 1px dashed var(--doc-accent); color: var(--doc-accent); }
+  .badge-rel-e { border: 1px dashed var(--doc-muted); color: var(--doc-muted); font-style: italic; }
+  .assumption-note { font-style: italic; color: var(--doc-muted); }
+  .doc-closing { margin-top: 8mm; }
+  .disclaimer {
+    border: 1px solid var(--doc-border);
+    background: var(--doc-header-bg);
+    padding: 3mm 4mm;
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+    margin: 3mm 0;
+  }
+  .disclaimer::before {
+    content: "免责声明：";
+    font-weight: 700;
+    color: var(--doc-body);
+  }
+  .disclaimer::after { content: var(--doc-disclaimer); }
+  .doc-footer {
+    margin: 6mm 0 4mm;
+    padding-top: 2mm;
+    border-top: 1px solid var(--doc-border);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--doc-font-sans);
+    font-size: 8.5pt;
+    color: var(--doc-muted);
+  }
+  .signature { margin-top: 6mm; display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+  .signature .sign-block { border-top: 1px solid var(--doc-body); padding-top: 1.5mm; font-family: var(--doc-font-sans); font-size: 10pt; }
+  @page { size: A4; margin: var(--doc-page-margin, 16mm 18mm 18mm 18mm); }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: inherit; text-decoration: none; }
+    section { page-break-inside: auto; }
+    h2 { page-break-after: avoid; }
+    table { page-break-inside: auto; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ⚠ 示例说明：以下为虚构填充样例（智能保温杯），仅用于风格确认。交付时替换为真实案件内容，本注释需删除。 -->
+  <header class="doc-header">
+    <span class="firm"></span>
+    <span class="confidential"></span>
+  </header>
+
+  <div class="doc-masthead">
+    <span class="doc-type">专利检索报告</span>
+    <h1>专利检索报告</h1>
+    <div class="doc-number">报告编号：SR-2026-0031 · 版本 V1.0</div>
+  </div>
+
+  <dl class="doc-meta">
+    <dt>委托方</dt><dd>华新科技有限公司</dd>
+    <dt>发明名称</dt><dd>一种智能保温杯</dd>
+    <dt>案卷号 / 申请号</dt><dd>HX-2026-0715（尚未提交申请）</dd>
+    <dt>检索人</dt><dd>张检索 / AI 辅助</dd>
+    <dt>检索日期</dt><dd>2026-08-10</dd>
+    <dt>数据库范围</dt><dd>CNIPA 公布公告、Google Patents</dd>
+  </dl>
+
+  <section id="task" aria-label="检索任务说明">
+    <h2>一、检索任务说明</h2>
+    <p>针对委托发明「一种智能保温杯」进行可专利性检索，重点覆盖保温杯/电加热容器/温度显示技术领域，检索截止 2026-08-10。</p>
+    <div class="callout">
+      <div class="callout-title">检索目标</div>
+      <p>识别可能影响新颖性、创造性的现有技术文献；为后续可专利性意见、OA 答复或无效程序提供证据基础。</p>
+    </div>
+  </section>
+
+  <section id="strategy" aria-label="检索策略">
+    <h2>二、检索策略</h2>
+    <h3>2.1 关键词与分类号</h3>
+    <table>
+      <caption>表 1 · 检索要素</caption>
+      <thead>
+        <tr><th>要素</th><th>关键词（中/英）</th><th>IPC/CPC 分类号</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>保温杯结构</td><td>保温杯 / vacuum flask / double wall / 真空 / 双层</td><td class="mono">A47G 19/22, A47J 41/00</td></tr>
+        <tr><td>温度显示</td><td>温度显示 / temperature display / 温度传感器</td><td class="mono">G01K 7/00, A47G 19/22</td></tr>
+        <tr><td>加热单元</td><td>加热 / heating element / 电热 / PTC 发热</td><td class="mono">H05B 3/00, A47J 36/24</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.2 检索式与数据库</h3>
+    <table>
+      <caption>表 2 · 检索式执行记录</caption>
+      <thead>
+        <tr><th style="width:8%">轮次</th><th style="width:20%">数据库</th><th>检索式</th><th style="width:10%">命中数</th><th style="width:14%">日期</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">R1</td><td>CNIPA 公布公告</td><td class="break-word mono">("保温杯" OR "真空杯") AND ("双层" OR "真空")</td><td class="num">1,247</td><td class="num">2026-08-10</td></tr>
+        <tr><td class="mono">R2</td><td>CNIPA 公布公告</td><td class="break-word mono">("保温杯" OR "水杯") AND ("温度显示" OR "温度传感器")</td><td class="num">86</td><td class="num">2026-08-10</td></tr>
+        <tr><td class="mono">R3</td><td>Google Patents</td><td class="break-word mono">(vacuum flask OR thermos) AND ("heating element" OR "PTC")</td><td class="num">312</td><td class="num">2026-08-10</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="features" aria-label="技术方案特征">
+    <h2>三、技术方案 / 权利要求特征</h2>
+    <table>
+      <caption>表 3 · 特征分解</caption>
+      <thead>
+        <tr><th style="width:12%">特征编号</th><th style="width:44%">技术特征</th><th>技术效果 / 作用</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">F1</td><td>杯体采用双层真空结构</td><td>阻断热传导与对流，延长保温时长</td></tr>
+        <tr><td class="mono">F2</td><td>杯盖设有温度显示模块</td><td>实时显示水温，温度可视化</td></tr>
+        <tr><td class="mono">F3</td><td>内置加热单元</td><td>水温下降后主动补热，保温时长提升至 12 小时</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="prior-art" aria-label="对比文件清单">
+    <h2>四、对比文件清单</h2>
+    <p>按相关度降序排列。相关度代码：X（高相关）、Y（可结合）、A（背景技术）。</p>
+    <table>
+      <caption>表 4 · 对比文件清单</caption>
+      <thead>
+        <tr>
+          <th style="width:8%">编号</th><th style="width:16%">公开号</th><th style="width:24%">标题</th>
+          <th style="width:12%">公开日</th><th style="width:10%">来源</th><th style="width:8%">相关度</th><th>可引用段落 / 摘要</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">D1</td>
+          <td class="mono">CN20151234567A</td>
+          <td>一种双层真空保温杯</td>
+          <td class="num">2025-05-12</td>
+          <td>CNIPA 公布公告</td>
+          <td><span class="badge badge-rel-x">X</span></td>
+          <td class="mono break-word">¶0015（双层真空杯体）</td>
+        </tr>
+        <tr>
+          <td class="mono">D2</td>
+          <td class="mono">CN20159876543U</td>
+          <td>一种带温度显示的保温杯</td>
+          <td class="num">2024-11-30</td>
+          <td>CNIPA 公布公告</td>
+          <td><span class="badge badge-rel-y">Y</span></td>
+          <td class="mono break-word">¶0009, ¶0012（杯盖温度显示模块）</td>
+        </tr>
+        <tr>
+          <td class="mono">D3</td>
+          <td class="mono">CN20148888888A</td>
+          <td>电加热保温容器及其控制方法</td>
+          <td class="num">2023-08-18</td>
+          <td>CNIPA 公布公告</td>
+          <td><span class="badge badge-rel-y">Y</span></td>
+          <td class="mono break-word">¶0021（加热单元）</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="matrix" aria-label="特征与文件映射">
+    <h2>五、特征—文件映射矩阵</h2>
+    <p>行 = 本申请特征；列 = 对比文件。单元格标注该文件是否公开对应特征，并给出 pin-cite。</p>
+    <table>
+      <caption>表 5 · 特征 vs 对比文件映射</caption>
+      <thead>
+        <tr><th>特征</th><th class="mono">D1</th><th class="mono">D2</th><th class="mono">D3</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">F1 双层真空结构</td><td>公开 <span class="mono">¶0015</span></td><td>未公开</td><td>公开 <span class="mono">¶0008</span></td></tr>
+        <tr><td class="mono">F2 温度显示模块</td><td>未公开</td><td>公开 <span class="mono">¶0009</span></td><td>未公开</td></tr>
+        <tr><td class="mono">F3 内置加热单元</td><td>未公开</td><td>未公开</td><td>公开 <span class="mono">¶0021</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="preliminary" aria-label="初步结论">
+    <h2>六、初步结论</h2>
+    <table>
+      <caption>表 6 · 初步可专利性评估</caption>
+      <thead>
+        <tr><th style="width:22%">授权要件</th><th style="width:16%">结论</th><th style="width:14%">置信度</th><th>主要依据</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>新颖性（专利法第22条第2款）</td><td><span class="badge badge-risk-low">具备</span></td><td><span class="badge badge-evidence">证据支撑</span></td><td>F2、F3 未被 D1 单独公开</td></tr>
+        <tr><td>创造性（专利法第22条第3款）</td><td><span class="badge badge-risk-mid">存疑</span></td><td><span class="badge badge-model">模型推断</span></td><td>D1+D2 结合覆盖 F1+F2；F3 有 D3 公开，需论证技术启示</td></tr>
+      </tbody>
+    </table>
+    <p><strong>进一步建议：</strong>① 补充电加热保温杯领域的 X 文件；② 若 D3 技术领域与本发明相同，需重点分析 D1+D2+D3 结合是否显而易见。</p>
+  </section>
+
+  <section id="citation-log" aria-label="引用日志">
+    <h2>七、引用日志</h2>
+    <p>来源类型与置信度取值见 <span class="mono">references/citation-log.md</span>。</p>
+    <table>
+      <caption>表 7 · 关键断言溯源</caption>
+      <thead>
+        <tr>
+          <th style="width:22%">断言 / 结论</th><th style="width:13%">来源类型</th><th style="width:24%">来源名称</th>
+          <th style="width:12%">日期</th><th style="width:13%">置信度</th><th>定位（pin-cite）</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>D1 公开 F1</td>
+          <td>现有技术文献</td>
+          <td class="mono">CN20151234567A</td>
+          <td class="num">2025-05-12</td>
+          <td><span class="badge badge-evidence">证据支撑</span></td>
+          <td class="mono">¶0015</td>
+        </tr>
+        <tr>
+          <td>D2 公开 F2</td>
+          <td>现有技术文献</td>
+          <td class="mono">CN20159876543U</td>
+          <td class="num">2024-11-30</td>
+          <td><span class="badge badge-evidence">证据支撑</span></td>
+          <td class="mono">¶0009</td>
+        </tr>
+        <tr>
+          <td>D3 公开 F3</td>
+          <td>现有技术文献</td>
+          <td class="mono">CN20148888888A</td>
+          <td class="num">2023-08-18</td>
+          <td><span class="badge badge-evidence">证据支撑</span></td>
+          <td class="mono">¶0021</td>
+        </tr>
+        <tr>
+          <td>创造性存疑</td>
+          <td>模型推断</td>
+          <td>检索报告 SR-2026-0031</td>
+          <td class="num">2026-08-10</td>
+          <td><span class="badge badge-model">模型推断</span></td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="assumptions" aria-label="假设与局限">
+    <h2>八、假设与局限</h2>
+    <ul>
+      <li>检索范围：CNIPA 公布公告 + Google Patents，中文/英文，检索截止 2026-08-10；未穷尽日/韩/德文专利。</li>
+      <li>检索式基于客户提供的技术交底书，若技术方案后续调整，检索边界可能变化。</li>
+      <li class="assumption-note">假设项以斜体标注，均未经验证，不构成本报告的确定结论。</li>
+    </ul>
+  </section>
+
+  <div class="doc-closing">
+    <div class="signature">
+      <div class="sign-block">检索人：________</div>
+      <div class="sign-block">审核人：________</div>
+    </div>
+    <div class="disclaimer"></div>
+    <footer class="doc-footer">
+      <span>SR-2026-0031 · 机密</span>
+      <span>2026-08-10</span>
+    </footer>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,53 @@
+/* assets/templates/patent/tokens.css
+ * Sati 专利文书品牌契约 — CSS 语义变量表。
+ * 所有专利文书模板均引用 --sati-doc-* 变量；事务所/白标产品可覆盖。
+ */
+
+:root {
+  /* ----- 机构与文案品牌 ----- */
+  --sati-doc-firm: "XX 知识产权代理事务所";
+  --sati-doc-confidential: "机密 · 仅供委托方使用";
+  --sati-doc-disclaimer: "本分析由 AI 辅助生成，不构成正式法律意见。专利申请和专利性判断应由具备资质的专利代理人或专利律师确认。本文件含商业秘密与保密信息，仅限指定接收人使用；未经书面许可不得转发或复制。";
+
+  /* ----- 主色与中性色 ----- */
+  --sati-doc-accent: #1f3a5f; /* 藏蓝：标题/表头/抬头下划线 */
+  --sati-doc-accent-strong: #16324f; /* 深主色：H1/H2 */
+  --sati-doc-body: #1a1a1a; /* 正文 */
+  --sati-doc-muted: #6b6b6b; /* 次要文字 */
+  --sati-doc-border: #c9c9c9; /* 边框/分隔线 */
+  --sati-doc-header-bg: #f6f6f2; /* 表头/元数据标签背景 */
+  --sati-doc-surface: #ffffff; /* 页面背景 */
+  --sati-doc-zebra: #fbfbf9; /* 表格斑马行 */
+
+  /* ----- 语义色（结论/风险/置信度） ----- */
+  --sati-doc-danger: #b42318; /* 高风险 / 不具备 / 驳回 */
+  --sati-doc-warning: #b54708; /* 中风险 / 存疑 / 待补 */
+  --sati-doc-success: #067647; /* 低风险 / 具备 / 通过 */
+  --sati-doc-evidence: #1f3a5f; /* 证据支撑 */
+  --sati-doc-client: #6b6b6b; /* 客户提供 */
+  --sati-doc-model: #8a8a8a; /* 模型推断 */
+  --sati-doc-assumption: #6b6b6b; /* 假设 */
+
+  /* ----- 字体族 ----- */
+  --sati-doc-font-serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif;
+  --sati-doc-font-sans: "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif;
+  --sati-doc-font-mono: "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+
+  /* ----- 排版尺度（A4，12pt 基准） ----- */
+  --sati-doc-text-xs: 9pt;
+  --sati-doc-text-sm: 9.5pt;
+  --sati-doc-text-base: 10.5pt;
+  --sati-doc-text-md: 11pt;
+  --sati-doc-text-lg: 11.5pt;
+  --sati-doc-text-xl: 13pt;
+  --sati-doc-text-2xl: 16pt;
+  --sati-doc-leading-body: 1.7;
+  --sati-doc-leading-tight: 1.3;
+
+  /* ----- 间距与尺寸 ----- */
+  --sati-doc-page-margin: 16mm 18mm 18mm 18mm;
+  --sati-doc-body-padding: 0 18mm;
+  --sati-doc-body-max-width: 174mm;
+  --sati-doc-section-gap: 5mm;
+  --sati-doc-section-gap-lg: 6mm;
+}

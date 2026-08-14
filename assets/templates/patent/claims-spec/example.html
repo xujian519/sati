@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>权利要求书与说明书 — 示例</title>
+<style>
+  :root {
+    --doc-firm: var(--sati-doc-firm, "XX 知识产权代理事务所");
+    --doc-confidential: var(--sati-doc-confidential, "机密 · 仅供委托方使用");
+    --doc-disclaimer: var(--sati-doc-disclaimer, "本分析由 AI 辅助生成，不构成正式法律意见。专利申请和专利性判断应由具备资质的专利代理人或专利律师确认。本文件含商业秘密与保密信息，仅限指定接收人使用；未经书面许可不得转发或复制。");
+    --doc-accent: var(--sati-doc-accent, #1f3a5f);
+    --doc-accent-strong: var(--sati-doc-accent-strong, #16324f);
+    --doc-body: var(--sati-doc-body, #1a1a1a);
+    --doc-muted: var(--sati-doc-muted, #6b6b6b);
+    --doc-border: var(--sati-doc-border, #c9c9c9);
+    --doc-header-bg: var(--sati-doc-header-bg, #f6f6f2);
+    --doc-surface: var(--sati-doc-surface, #ffffff);
+    --doc-zebra: var(--sati-doc-zebra, #fbfbf9);
+    --doc-badge-high: var(--sati-doc-danger, #b42318);
+    --doc-badge-mid: var(--sati-doc-warning, #b54708);
+    --doc-badge-low: var(--sati-doc-success, #067647);
+    --doc-font-serif: var(--sati-doc-font-serif, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif);
+    --doc-font-sans: var(--sati-doc-font-sans, "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif);
+    --doc-font-mono: var(--sati-doc-font-mono, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace);
+    --doc-page-margin: var(--sati-doc-page-margin, 16mm 18mm 18mm 18mm);
+    --doc-body-padding: var(--sati-doc-body-padding, 0 18mm);
+    --doc-body-max-width: var(--sati-doc-body-max-width, 174mm);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 12pt; }
+  body {
+    font-family: var(--doc-font-serif);
+    color: var(--doc-body);
+    background: var(--doc-surface);
+    line-height: 1.8;
+    padding: var(--doc-body-padding);
+    max-width: var(--doc-body-max-width);
+    margin: 0 auto;
+  }
+  .doc-header { display: flex; justify-content: space-between; align-items: baseline; padding: 7mm 0 3mm; border-bottom: 2px solid var(--doc-accent); font-family: var(--doc-font-sans); font-size: 9.5pt; color: var(--doc-muted); }
+  .doc-header .firm { font-weight: 600; color: var(--doc-accent); }
+  .doc-header .firm::before { content: var(--doc-firm); }
+  .doc-header .confidential { letter-spacing: 0.08em; }
+  .doc-header .confidential::before { content: var(--doc-confidential); }
+  .doc-masthead { text-align: center; padding: 8mm 0 4mm; }
+  .doc-masthead .doc-type { display: inline-block; font-family: var(--doc-font-sans); font-size: 9pt; letter-spacing: 0.4em; color: var(--doc-accent); border: 1px solid var(--doc-accent); padding: 1px 10px; margin-bottom: 4mm; }
+  .doc-masthead h1 { font-family: var(--doc-font-sans); font-size: 16pt; font-weight: 700; letter-spacing: 0.12em; color: var(--doc-accent-strong); }
+  .doc-masthead .doc-number { font-family: var(--doc-font-sans); font-size: 9.5pt; color: var(--doc-muted); margin-top: 2.5mm; }
+  .doc-meta { display: grid; grid-template-columns: auto 1fr; gap: 0.6mm 6mm; width: 100%; margin: 5mm 0 6mm; border: 1px solid var(--doc-border); font-size: 11pt; }
+  .doc-meta dt { font-family: var(--doc-font-sans); font-weight: 600; color: var(--doc-accent); background: var(--doc-header-bg); padding: 1.2mm 4mm; white-space: nowrap; }
+  .doc-meta dd { padding: 1.2mm 4mm; }
+  section { margin: 5mm 0; }
+  h2 { font-family: var(--doc-font-sans); font-size: 13pt; font-weight: 700; color: var(--doc-accent-strong); padding-bottom: 1mm; margin: 6mm 0 3mm; border-bottom: 1px solid var(--doc-border); }
+  h3 { font-family: var(--doc-font-sans); font-size: 11.5pt; font-weight: 600; color: var(--doc-accent); margin: 4mm 0 2mm; }
+  h4 { font-family: var(--doc-font-sans); font-size: 11pt; font-weight: 600; color: var(--doc-body); margin: 3mm 0 1.5mm; }
+  p { margin: 1.5mm 0; text-align: justify; }
+  ol, ul { margin: 1.5mm 0 1.5mm 7mm; }
+  li { margin: 0.8mm 0; }
+  .claims-section { margin: 5mm 0; }
+  .claim-item { margin: 2mm 0; padding-left: 7mm; text-indent: -7mm; text-align: justify; }
+  .claim-num { font-family: var(--doc-font-sans); font-weight: 700; color: var(--doc-accent-strong); margin-right: 2mm; }
+  .figure-list { margin: 2mm 0; padding-left: 7mm; }
+  .figure-list li { margin: 0.5mm 0; }
+  .abstract-box { border: 1px solid var(--doc-border); padding: 3mm 4mm; margin: 4mm 0; background: var(--doc-header-bg); }
+  .abstract-box h3 { margin-top: 0; border-bottom: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin: 2.5mm 0; font-variant-numeric: tabular-nums; }
+  caption { font-family: var(--doc-font-sans); font-size: 9.5pt; color: var(--doc-muted); text-align: left; margin-bottom: 1mm; }
+  th, td { border: 1px solid var(--doc-border); padding: 1.5mm 2.5mm; vertical-align: top; }
+  th { font-family: var(--doc-font-sans); font-weight: 600; background: var(--doc-header-bg); color: var(--doc-accent-strong); white-space: nowrap; }
+  thead { display: table-header-group; }
+  tbody tr:nth-child(even) { background: var(--doc-zebra); }
+  .num { text-align: right; }
+  .mono { font-family: var(--doc-font-mono); font-size: 9.5pt; }
+  .doc-closing { margin-top: 8mm; }
+  .disclaimer { border: 1px solid var(--doc-border); background: var(--doc-header-bg); padding: 3mm 4mm; font-size: 9.5pt; color: var(--doc-muted); margin: 3mm 0; }
+  .disclaimer::before { content: "免责声明："; font-weight: 700; color: var(--doc-body); }
+  .disclaimer::after { content: var(--doc-disclaimer); }
+  .doc-footer { margin: 6mm 0 4mm; padding-top: 2mm; border-top: 1px solid var(--doc-border); display: flex; justify-content: space-between; font-family: var(--doc-font-sans); font-size: 8.5pt; color: var(--doc-muted); }
+  .signature { margin-top: 6mm; display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+  .signature .sign-block { border-top: 1px solid var(--doc-body); padding-top: 1.5mm; font-family: var(--doc-font-sans); font-size: 10pt; }
+  @page { size: A4; margin: var(--doc-page-margin, 16mm 18mm 18mm 18mm); }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: inherit; text-decoration: none; }
+    section { page-break-inside: auto; }
+    h2 { page-break-after: avoid; }
+    .claim-item { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+  <header class="doc-header">
+    <span class="firm"></span>
+    <span class="confidential"></span>
+  </header>
+
+  <div class="doc-masthead">
+    <span class="doc-type">专利申请文件</span>
+    <h1>权利要求书与说明书</h1>
+    <div class="doc-number">案卷号：CS-2026-0715 · 版本 V1.0</div>
+  </div>
+
+  <dl class="doc-meta">
+    <dt>发明名称</dt><dd>一种智能保温杯</dd>
+    <dt>申请人</dt><dd>华新科技有限公司</dd>
+    <dt>发明人</dt><dd>李明、王芳</dd>
+    <dt>代理人 / 代理机构</dt><dd>张代理 / XX 知识产权代理事务所</dd>
+    <dt>撰写日期</dt><dd>2026-08-14</dd>
+  </dl>
+
+  <section class="claims-section" id="claims" aria-label="权利要求书">
+    <h2>权利要求书</h2>
+
+    <div class="claim-item">
+      <span class="claim-num">1.</span>
+      一种智能保温杯，包括杯体、杯盖、温度显示模块和加热单元，其特征在于，所述杯体为双层真空结构，所述杯盖设有温度显示模块，所述杯体内部设有加热单元，所述加热单元根据所述温度显示模块测得的水温自动启停。
+    </div>
+
+    <div class="claim-item">
+      <span class="claim-num">2.</span>
+      如权利要求 1 所述的智能保温杯，其特征在于，所述温度显示模块包括温度传感器和显示屏，所述显示屏嵌设于所述杯盖上表面。
+    </div>
+
+    <div class="claim-item">
+      <span class="claim-num">3.</span>
+      如权利要求 1 或 2 所述的智能保温杯，其特征在于，所述加热单元为 PTC 陶瓷发热片，所述 PTC 陶瓷发热片贴附于所述杯体内胆外壁。
+    </div>
+
+    <div class="claim-item">
+      <span class="claim-num">4.</span>
+      如权利要求 1 所述的智能保温杯，其特征在于，所述加热单元还包括控制模块，所述控制模块根据预设温度阈值与所述温度显示模块的实测温度控制所述加热单元的启停。
+    </div>
+  </section>
+
+  <section id="specification" aria-label="说明书">
+    <h2>说明书</h2>
+
+    <h3>技术领域</h3>
+    <p>本发明属于日常生活用品领域，具体涉及一种保温杯，尤其涉及一种具有温度显示与自动加热功能的智能保温杯。</p>
+
+    <h3>背景技术</h3>
+    <p>保温杯是一种常用的盛水容器。现有保温杯多采用双层真空结构以延长保温时间，但普遍存在以下问题：一是杯内水温不可视，用户无法判断饮用时机；二是水温下降后无法主动补热，保温时间有限。部分现有技术虽然在杯盖上设置了温度显示模块，但温度显示仅用于查看，未与加热控制联动。</p>
+
+    <h3>发明内容</h3>
+    <p>本发明提供一种智能保温杯，以解决现有保温杯水温不可视且无法主动补热的技术问题。</p>
+    <p>本发明的技术方案如下：一种智能保温杯，包括杯体、杯盖、温度显示模块和加热单元，所述杯体为双层真空结构，所述杯盖设有温度显示模块，所述杯体内部设有加热单元，所述加热单元根据所述温度显示模块测得的水温自动启停。</p>
+    <p>本发明的有益效果：</p>
+    <ul>
+      <li>通过双层真空结构延长基础保温时间；</li>
+      <li>通过温度显示模块实现水温可视化；</li>
+      <li>通过加热单元与温度显示模块联动，在水温低于阈值时自动补热，显著延长有效保温时长。</li>
+    </ul>
+
+    <h3>附图说明</h3>
+    <ul class="figure-list">
+      <li>图 1 为本发明智能保温杯的整体结构示意图；</li>
+      <li>图 2 为本发明加热控制逻辑的模块框图。</li>
+    </ul>
+
+    <h3>具体实施方式</h3>
+    <p>下面结合附图对本发明作进一步说明。</p>
+
+    <h4>实施例 1</h4>
+    <p>参照图 1，本实施例的智能保温杯包括杯体 1、杯盖 2、温度显示模块 3 和加热单元 4。杯体 1 由内胆 11 和外壳 12 构成，内胆 11 与外壳 12 之间形成真空夹层 13。杯盖 2 盖合于杯体 1 的开口处，杯盖 2 上嵌设有温度显示模块 3，用于显示内胆 11 中的水温。杯体 1 内部设有加热单元 4，加热单元 4 贴附于内胆 11 的外壁，用于在水温低于设定阈值时启动加热。</p>
+
+    <h4>实施例 2</h4>
+    <p>参照图 2，控制模块 5 分别与温度显示模块 3 和加热单元 4 电连接。控制模块 5 读取温度显示模块 3 的温度信号，当实测温度低于预设阈值（例如 50℃）时，控制加热单元 4 启动；当实测温度达到或高于预设阈值时，控制加热单元 4 停止。预设阈值可由用户通过设置在杯盖 2 上的按键调节。</p>
+
+    <h4>附图标记说明</h4>
+    <table>
+      <caption>表 1 · 附图标记说明</caption>
+      <thead>
+        <tr><th style="width:15%">标记</th><th>名称</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">1</td><td>杯体</td></tr>
+        <tr><td class="mono">11</td><td>内胆</td></tr>
+        <tr><td class="mono">12</td><td>外壳</td></tr>
+        <tr><td class="mono">13</td><td>真空夹层</td></tr>
+        <tr><td class="mono">2</td><td>杯盖</td></tr>
+        <tr><td class="mono">3</td><td>温度显示模块</td></tr>
+        <tr><td class="mono">4</td><td>加热单元</td></tr>
+        <tr><td class="mono">5</td><td>控制模块</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="abstract" aria-label="摘要">
+    <div class="abstract-box">
+      <h3>摘要</h3>
+      <p>本发明公开一种智能保温杯，包括杯体、杯盖、温度显示模块和加热单元，所述杯体为双层真空结构，所述杯盖设有温度显示模块，所述杯体内部设有加热单元，所述加热单元根据所述温度显示模块测得的水温自动启停。本发明实现水温可视化并主动补热，延长保温时长。</p>
+      <p><strong>摘要附图：</strong>图 <span class="mono">1</span></p>
+    </div>
+  </section>
+
+  <div class="doc-closing">
+    <div class="signature">
+      <div class="sign-block">撰写人：________</div>
+      <div class="sign-block">审核人：________</div>
+    </div>
+    <div class="disclaimer"></div>
+    <footer class="doc-footer">
+      <span>CS-2026-0715 · 机密</span>
+      <span>2026-08-14</span>
+    </footer>
+  </div>
+
+</body>
+</html>

@@ -10,5 +10,21 @@
   "success": "rgb(74,222,128)",
   "warning": "rgb(250,204,21)",
   "error": "rgb(248,113,113)",
-  "permission": "rgb(96,165,250)"
+  "permission": "rgb(96,165,250)",
+  "documents": {
+    "patent": {
+      "firm": "宝宸知识产权代理事务所",
+      "confidential": "机密 · 仅供委托方使用",
+      "accent": "#1f3a5f",
+      "accentStrong": "#16324f",
+      "body": "#1a1a1a",
+      "muted": "#6b6b6b",
+      "border": "#c9c9c9",
+      "headerBg": "#f6f6f2",
+      "surface": "#ffffff",
+      "danger": "#b42318",
+      "warning": "#b54708",
+      "success": "#067647"
+    }
+  }
 }

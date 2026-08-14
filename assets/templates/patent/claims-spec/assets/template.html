@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>权利要求书与说明书</title>
+<style>
+  :root {
+    --doc-firm: var(--sati-doc-firm, "XX 知识产权代理事务所");
+    --doc-confidential: var(--sati-doc-confidential, "机密 · 仅供委托方使用");
+    --doc-disclaimer: var(--sati-doc-disclaimer, "本分析由 AI 辅助生成，不构成正式法律意见。专利申请和专利性判断应由具备资质的专利代理人或专利律师确认。本文件含商业秘密与保密信息，仅限指定接收人使用；未经书面许可不得转发或复制。");
+    --doc-accent: var(--sati-doc-accent, #1f3a5f);
+    --doc-accent-strong: var(--sati-doc-accent-strong, #16324f);
+    --doc-body: var(--sati-doc-body, #1a1a1a);
+    --doc-muted: var(--sati-doc-muted, #6b6b6b);
+    --doc-border: var(--sati-doc-border, #c9c9c9);
+    --doc-header-bg: var(--sati-doc-header-bg, #f6f6f2);
+    --doc-surface: var(--sati-doc-surface, #ffffff);
+    --doc-zebra: var(--sati-doc-zebra, #fbfbf9);
+    --doc-badge-high: var(--sati-doc-danger, #b42318);
+    --doc-badge-mid: var(--sati-doc-warning, #b54708);
+    --doc-badge-low: var(--sati-doc-success, #067647);
+    --doc-font-serif: var(--sati-doc-font-serif, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif);
+    --doc-font-sans: var(--sati-doc-font-sans, "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif);
+    --doc-font-mono: var(--sati-doc-font-mono, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace);
+    --doc-page-margin: var(--sati-doc-page-margin, 16mm 18mm 18mm 18mm);
+    --doc-body-padding: var(--sati-doc-body-padding, 0 18mm);
+    --doc-body-max-width: var(--sati-doc-body-max-width, 174mm);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 12pt; }
+  body {
+    font-family: var(--doc-font-serif);
+    color: var(--doc-body);
+    background: var(--doc-surface);
+    line-height: 1.8;
+    padding: var(--doc-body-padding);
+    max-width: var(--doc-body-max-width);
+    margin: 0 auto;
+  }
+  .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 7mm 0 3mm;
+    border-bottom: 2px solid var(--doc-accent);
+    font-family: var(--doc-font-sans);
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+  }
+  .doc-header .firm { font-weight: 600; color: var(--doc-accent); }
+  .doc-header .firm::before { content: var(--doc-firm); }
+  .doc-header .confidential { letter-spacing: 0.08em; }
+  .doc-header .confidential::before { content: var(--doc-confidential); }
+  .doc-masthead { text-align: center; padding: 8mm 0 4mm; }
+  .doc-masthead .doc-type {
+    display: inline-block;
+    font-family: var(--doc-font-sans);
+    font-size: 9pt;
+    letter-spacing: 0.4em;
+    color: var(--doc-accent);
+    border: 1px solid var(--doc-accent);
+    padding: 1px 10px;
+    margin-bottom: 4mm;
+  }
+  .doc-masthead h1 {
+    font-family: var(--doc-font-sans);
+    font-size: 16pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--doc-accent-strong);
+  }
+  .doc-masthead .doc-number { font-family: var(--doc-font-sans); font-size: 9.5pt; color: var(--doc-muted); margin-top: 2.5mm; }
+  .doc-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.6mm 6mm;
+    width: 100%;
+    margin: 5mm 0 6mm;
+    border: 1px solid var(--doc-border);
+    font-size: 11pt;
+  }
+  .doc-meta dt {
+    font-family: var(--doc-font-sans);
+    font-weight: 600;
+    color: var(--doc-accent);
+    background: var(--doc-header-bg);
+    padding: 1.2mm 4mm;
+    white-space: nowrap;
+  }
+  .doc-meta dd { padding: 1.2mm 4mm; }
+  section { margin: 5mm 0; }
+  h2 {
+    font-family: var(--doc-font-sans);
+    font-size: 13pt;
+    font-weight: 700;
+    color: var(--doc-accent-strong);
+    padding-bottom: 1mm;
+    margin: 6mm 0 3mm;
+    border-bottom: 1px solid var(--doc-border);
+  }
+  h3 {
+    font-family: var(--doc-font-sans);
+    font-size: 11.5pt;
+    font-weight: 600;
+    color: var(--doc-accent);
+    margin: 4mm 0 2mm;
+  }
+  h4 {
+    font-family: var(--doc-font-sans);
+    font-size: 11pt;
+    font-weight: 600;
+    color: var(--doc-body);
+    margin: 3mm 0 1.5mm;
+  }
+  p { margin: 1.5mm 0; text-align: justify; }
+  ol, ul { margin: 1.5mm 0 1.5mm 7mm; }
+  li { margin: 0.8mm 0; }
+  .claims-section { margin: 5mm 0; }
+  .claim-item {
+    margin: 2mm 0;
+    padding-left: 7mm;
+    text-indent: -7mm;
+    text-align: justify;
+  }
+  .claim-num {
+    font-family: var(--doc-font-sans);
+    font-weight: 700;
+    color: var(--doc-accent-strong);
+    margin-right: 2mm;
+  }
+  .figure-list {
+    margin: 2mm 0;
+    padding-left: 7mm;
+  }
+  .figure-list li {
+    margin: 0.5mm 0;
+  }
+  .abstract-box {
+    border: 1px solid var(--doc-border);
+    padding: 3mm 4mm;
+    margin: 4mm 0;
+    background: var(--doc-header-bg);
+  }
+  .abstract-box h3 {
+    margin-top: 0;
+    border-bottom: none;
+  }
+  .callout {
+    border: 1px solid var(--doc-border);
+    border-left: 3px solid var(--doc-accent);
+    padding: 3mm 4mm;
+    margin: 3mm 0;
+    font-size: 11pt;
+  }
+  .callout .callout-title {
+    font-family: var(--doc-font-sans);
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: var(--doc-accent);
+    margin-bottom: 1mm;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5pt;
+    margin: 2.5mm 0;
+    font-variant-numeric: tabular-nums;
+  }
+  caption {
+    font-family: var(--doc-font-sans);
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+    text-align: left;
+    margin-bottom: 1mm;
+  }
+  th, td {
+    border: 1px solid var(--doc-border);
+    padding: 1.5mm 2.5mm;
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--doc-font-sans);
+    font-weight: 600;
+    background: var(--doc-header-bg);
+    color: var(--doc-accent-strong);
+    white-space: nowrap;
+  }
+  thead { display: table-header-group; }
+  tbody tr:nth-child(even) { background: var(--doc-zebra); }
+  .num { text-align: right; }
+  .mono { font-family: var(--doc-font-mono); font-size: 9.5pt; }
+  .badge {
+    display: inline-block;
+    font-family: var(--doc-font-sans);
+    font-size: 9pt;
+    line-height: 1.4;
+    padding: 0 5px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .badge-evidence { border: 1px solid var(--doc-accent); color: var(--doc-accent); }
+  .badge-client { border: 1px solid var(--doc-muted); color: var(--doc-muted); }
+  .badge-model { border: 1px dashed var(--doc-muted); color: var(--doc-muted); }
+  .badge-assumption { border: 1px dashed var(--doc-muted); color: var(--doc-muted); font-style: italic; }
+  .doc-closing { margin-top: 8mm; }
+  .disclaimer {
+    border: 1px solid var(--doc-border);
+    background: var(--doc-header-bg);
+    padding: 3mm 4mm;
+    font-size: 9.5pt;
+    color: var(--doc-muted);
+    margin: 3mm 0;
+  }
+  .disclaimer::before {
+    content: "免责声明：";
+    font-weight: 700;
+    color: var(--doc-body);
+  }
+  .disclaimer::after { content: var(--doc-disclaimer); }
+  .doc-footer {
+    margin: 6mm 0 4mm;
+    padding-top: 2mm;
+    border-top: 1px solid var(--doc-border);
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--doc-font-sans);
+    font-size: 8.5pt;
+    color: var(--doc-muted);
+  }
+  .signature { margin-top: 6mm; display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+  .signature .sign-block { border-top: 1px solid var(--doc-body); padding-top: 1.5mm; font-family: var(--doc-font-sans); font-size: 10pt; }
+  @page { size: A4; margin: var(--doc-page-margin, 16mm 18mm 18mm 18mm); }
+  @media print {
+    body { padding: 0; max-width: none; }
+    a { color: inherit; text-decoration: none; }
+    section { page-break-inside: auto; }
+    h2 { page-break-after: avoid; }
+    .claim-item { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+  <header class="doc-header">
+    <span class="firm"></span>
+    <span class="confidential"></span>
+  </header>
+
+  <div class="doc-masthead">
+    <span class="doc-type">专利申请文件</span>
+    <h1>权利要求书与说明书</h1>
+    <div class="doc-number">案卷号：CS-2026-XXXX · 版本 V1.0</div>
+  </div>
+
+  <dl class="doc-meta">
+    <dt>发明名称</dt><dd id="meta-title">________</dd>
+    <dt>申请人</dt><dd id="meta-applicant">________</dd>
+    <dt>发明人</dt><dd id="meta-inventor">________</dd>
+    <dt>代理人 / 代理机构</dt><dd id="meta-agent">________</dd>
+    <dt>撰写日期</dt><dd id="meta-date">________</dd>
+  </dl>
+
+  <!-- 权利要求书 -->
+  <section class="claims-section" id="claims" aria-label="权利要求书">
+    <h2>权利要求书</h2>
+
+    <div class="claim-item" id="claim-1">
+      <span class="claim-num">1.</span>
+      一种<span id="claim1-subject">________</span>，其特征在于，<span id="claim1-features">________</span>。
+    </div>
+
+    <div class="claim-item" id="claim-2">
+      <span class="claim-num">2.</span>
+      如权利要求 1 所述的<span class="claim-ref-subject">________</span>，其特征在于，<span id="claim2-features">________</span>。
+    </div>
+
+    <div class="claim-item" id="claim-3">
+      <span class="claim-num">3.</span>
+      如权利要求 <span class="mono">__</span> 所述的<span class="claim-ref-subject">________</span>，其特征在于，<span id="claim3-features">________</span>。
+    </div>
+  </section>
+
+  <!-- 说明书 -->
+  <section id="specification" aria-label="说明书">
+    <h2>说明书</h2>
+
+    <h3>技术领域</h3>
+    <p id="spec-field">本发明属于<span id="field-domain">________</span>领域，具体涉及一种<span id="field-subject">________</span>。</p>
+
+    <h3>背景技术</h3>
+    <p id="spec-background">________</p>
+    <p>现有技术存在以下问题：</p>
+    <ul id="spec-problems">
+      <li>________</li>
+    </ul>
+
+    <h3>发明内容</h3>
+    <p id="spec-summary">本发明提供一种<span id="summary-subject">________</span>，以解决上述技术问题。</p>
+    <p>本发明的技术方案如下：</p>
+    <p id="spec-solution">________</p>
+    <p>本发明的有益效果：</p>
+    <ul id="spec-effects">
+      <li>________</li>
+    </ul>
+
+    <h3>附图说明</h3>
+    <ul class="figure-list" id="spec-figures">
+      <li>图 1 为<span id="fig-1">________</span>；</li>
+      <li>图 2 为<span id="fig-2">________</span>。</li>
+    </ul>
+
+    <h3>具体实施方式</h3>
+    <p id="spec-embodiment-intro">下面结合附图对本发明作进一步说明。</p>
+
+    <h4>实施例 1</h4>
+    <p id="embodiment-1">________</p>
+
+    <h4>实施例 2</h4>
+    <p id="embodiment-2">________</p>
+
+    <h4>附图标记说明</h4>
+    <table>
+      <caption>表 1 · 附图标记说明</caption>
+      <thead>
+        <tr><th style="width:15%">标记</th><th>名称</th></tr>
+      </thead>
+      <tbody id="mark-table">
+        <tr><td class="mono">1</td><td>________</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 摘要 -->
+  <section id="abstract" aria-label="摘要">
+    <div class="abstract-box">
+      <h3>摘要</h3>
+      <p id="abstract-text">________</p>
+      <p id="abstract-figure"><strong>摘要附图：</strong>图 <span class="mono">__</span></p>
+    </div>
+  </section>
+
+  <!-- 落款与免责声明 -->
+  <div class="doc-closing">
+    <div class="signature">
+      <div class="sign-block">撰写人：________</div>
+      <div class="sign-block">审核人：________</div>
+    </div>
+    <div class="disclaimer"></div>
+    <footer class="doc-footer">
+      <span>CS-2026-XXXX · 机密</span>
+      <span id="footer-date">________</span>
+    </footer>
+  </div>
+
+</body>
+</html>
