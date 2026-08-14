@@ -12,7 +12,7 @@ rules/
   domains/<name>/          领域规则包（mechanical / medical / chemical / software）
   pack.schema.json         包清单（pack.yaml）的 JSON Schema
   patent/compliance.yaml   专利域合规规则（内置资产，随包发布，rule_check scope=patent 用）
-  patent/nuo-*.yaml        自 XiaoNuo Agent 移植的确定性规则（96 条，
+  patent/nuo-*.yaml        自 XiaoNuo Agent 移植的确定性规则（7 个文件 96 条，
                            由 scripts/port-nuo-rules.ts 转换生成，可重新生成）
   README.md                本规范
 ```
@@ -22,7 +22,7 @@ rules/
 `nuo-*.yaml` 由 `scripts/port-nuo-rules.ts` 从 XiaoNuo Agent 的 `data/rules/` 转换而来，
 采用**双轨策略**：
 
-> **加载状态（2026-08）**：nuo-*.yaml（8 个文件约 96 条）**当前未加载**——
+> **加载状态（2026-08）**：nuo-*.yaml（7 个文件 96 条）**当前未加载**——
 > `loadRuleSetDir(rules/patent)` 在生产代码零调用，`rule_check` 仅加载
 > `compliance.yaml`。这些规则属"沉睡资产"：激活前请先评审其中 `action: block`
 > 的 keyword_blocklist（如 X-REF-003 案例案号模式），避免接通后意外拦截。

@@ -54,7 +54,7 @@ macOS Sonoma (14) 引入了一个叫 `com.apple.provenance` 的扩展属性。�
 
 ## 长期方案路线图
 
-当前(0.1.x):
+当前（0.0.x，与仓库根 `package.json` 版本 lockstep）:
 - ✅ DMG 已 codesign + notarize + staple,通过浏览器/AirDrop 渠道无任何摩擦
 - ✅ `install-sati.sh` 兜底,服务通过 IM 渠道收到 DMG 的同事
 
