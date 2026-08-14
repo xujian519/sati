@@ -20,6 +20,9 @@
  *           approval_list_pending / approval_decide + `approval_pending` /
  *           `approval_resolved` event types.
  *   - 1.3 — 2026-08-13: added optional cron task update method `cron_update`.
+ *           (2026-08-14: `cron_update` response tightened to
+ *           `{updated:true;task}|{updated:false;reason:"not_found"|"running"|"conflict"}`
+ *           union; `projectKey` and `expectedRevision` inputs required.)
  */
 export const SATI_GATEWAY_PROTOCOL_VERSION = "1.3";
 

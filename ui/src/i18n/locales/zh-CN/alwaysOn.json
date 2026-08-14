@@ -206,6 +206,9 @@
       "title": "编辑 Cron 任务",
       "subtitle": "更新该后台任务的提示词或计划。",
       "success": "Cron 任务已更新。",
+      "error": {
+        "conflict": "该任务已在别处被修改，请刷新列表后重试。"
+      },
       "actions": {
         "save": "保存修改",
         "cancel": "返回列表"

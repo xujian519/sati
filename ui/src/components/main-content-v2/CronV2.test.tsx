@@ -271,6 +271,27 @@ describe("CronV2", () => {
     });
   });
 
+  it("surfaces a conflict error when the task was modified elsewhere", async () => {
+    setup([
+      makeJob({
+        id: "job-conflict",
+        prompt: "Conflict me",
+        revision: 3,
+      }),
+    ]);
+    apiMock.cronUpdate.mockResolvedValue(jsonResponse({ updated: false, reason: "conflict" }, false));
+
+    await screen.findByText("Conflict me");
+    fireEvent.click(screen.getByTitle("Edit"));
+    await screen.findByText("Edit Cron Task");
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("This task was modified elsewhere. Refresh the list and try again.")).toBeTruthy();
+    });
+    expect(apiMock.cronUpdate).toHaveBeenCalledWith("job-conflict", expect.objectContaining({ expectedRevision: 3 }));
+  });
+
   it("creates a weekly cron task from selected weekdays", async () => {
     setup([]);
 

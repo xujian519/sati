@@ -206,6 +206,9 @@
       "title": "Edit Cron Task",
       "subtitle": "Update the prompt or schedule of this background task.",
       "success": "Cron task updated.",
+      "error": {
+        "conflict": "This task was modified elsewhere. Refresh the list and try again."
+      },
       "actions": {
         "save": "Save Changes",
         "cancel": "Back to list"
