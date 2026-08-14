@@ -8,6 +8,9 @@ import "./index.css";
 // （见 chat Markdown.tsx 与 code-editor MarkdownPreview.tsx），避免首屏 CSS 携带 69 个字体文件。
 // Initialize i18n
 import "./i18n/config.js";
+import { registerDynamicImportReloadHandler } from "./utils/reloadOnChunkError";
+
+registerDynamicImportReloadHandler();
 
 // Register service worker for PWA + Web Push support
 if ("serviceWorker" in navigator) {
