@@ -12,9 +12,10 @@
  *   - gh CLI installed + authenticated (`gh auth status`)
  *   - Built installers in dist-electron/ (from build-win.bat)
  *
- * Steps: collect Sati-*-win-*.exe → min-size check → read CHANGELOG.md notes
- * → create/update GitHub Release → upload exes + Sati-latest-win-*.exe
- * permalink copies (byte + SHA256 verified) → verify remote sizes via GitHub API.
+ * Steps: collect Sati-<version>-win-<x64|arm64>.exe → min-size check → read
+ * CHANGELOG.md notes → create/update GitHub Release → upload exes +
+ * Sati-latest-win-*.exe permalink copies (byte + SHA256 verified) → verify
+ * remote sizes via GitHub API.
  */
 
 import * as fs from "node:fs";
@@ -130,14 +131,16 @@ if (gitSha === null) {
 }
 
 // ── Collect installers ──
-// 排除 Sati-latest-* permalink 副本：它们由本脚本末尾生成并单独上传，重跑发布时
-// 若被当作普通资产收集会与新版同名文件重复冲突。
+// 只收当前版本的 per-arch 安装包（Sati-<version>-win-<x64|arm64>.exe）。宽松的
+// `Sati-.*-win-.*\.exe` 会把旧配置时代遗留的无架构后缀 `Sati-<ver>-win.exe`
+// （曾出现 830MB 的过期产物）和目录里残留的旧版本安装包一起收进来上传到新
+// release；build-win.bat 会在构建前清理无架构后缀遗留，这里再严格卡一道。
 const exes = fs
   .readdirSync(distDir)
-  .filter(f => /^Sati-.*-win-.*\.exe$/.test(f) && !/^Sati-latest-/.test(f))
+  .filter(f => new RegExp(`^Sati-${version}-win-(x64|arm64)\\.exe$`).test(f))
   .map(f => path.join(distDir, f));
 if (exes.length === 0) {
-  fail(`No Sati-*-win-*.exe found in ${distDir}`);
+  fail(`No Sati-${version}-win-<x64|arm64>.exe found in ${distDir}`);
 }
 
 const MIN_INSTALLER_BYTES = 100_000_000; // mirrors release.sh pd_release_assert_min_installer_size

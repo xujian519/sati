@@ -38,7 +38,7 @@ echo =========================================
 echo  Dir: %DIST_DIR%
 echo.
 
-REM ── 1. Installer EXE ──
+REM -- 1. Installer EXE --
 echo -- 1. Installer EXE --
 
 set "FOUND_EXE="
@@ -51,10 +51,10 @@ for %%f in ("%DIST_DIR%\Sati Setup*.exe" "%DIST_DIR%\Sati-*.exe") do (
 )
 if "%FOUND_EXE%"=="" (
     set /a WARN+=1
-    echo   [WARN] No installer EXE found in %DIST_DIR% (may be --dir build)
+    echo   [WARN] No installer EXE found in %DIST_DIR% ^(may be --dir build^)
 )
 
-REM ── 2. Unpacked app structure ──
+REM -- 2. Unpacked app structure --
 echo.
 echo -- 2. Unpacked app structure --
 
@@ -74,7 +74,7 @@ if exist "%WIN_UNPACKED%\Sati.exe" (
     echo         Looked in: %WIN_UNPACKED%
 )
 
-REM ── 3. Bundled resources ──
+REM -- 3. Bundled resources --
 echo.
 echo -- 3. Bundled resources --
 
@@ -139,7 +139,7 @@ if exist "%RES%\sati-memory-core-bundle.tar" (
 
 :skip_resources
 
-REM ── 4. Bundle extraction smoke test ──
+REM -- 4. Bundle extraction smoke test --
 echo.
 echo -- 4. Bundle extraction smoke test --
 
@@ -185,58 +185,88 @@ if exist "%RES%\sati-memory-core-bundle.tar" (
     )
 )
 
-REM ── 4b. Bundled Node FTS5 check ──
+REM -- 4b. Bundled Node FTS5 check --
 echo.
 echo -- 4b. Bundled Node FTS5 check --
 
 set "NODE_BIN=%RES%\node-bin\node.exe"
 if not exist "%NODE_BIN%" (
     set /a WARN+=1
-    echo   [WARN] Skipping FTS5 check (no bundled node)
+    echo   [WARN] Skipping FTS5 check ^(no bundled node^)
     goto :skip_fts5
 )
 
-REM law_fts 全文检索依赖 node:sqlite 的 FTS5（v22.18+ 才编译进去）；缺失时
-REM MATCH 抛 "no such module: fts5"，检索降级为 LIKE。用打包的 node 建一张
-REM fts5 虚拟表并 MATCH 查询，成功才 PASS。
-"%NODE_BIN%" -e "const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(':memory:'); db.exec('CREATE VIRTUAL TABLE t USING fts5(x)'); db.prepare('INSERT INTO t (x) VALUES (?)').run('hello'); const row = db.prepare('SELECT x FROM t WHERE t MATCH ?').get('hello'); if (!row) process.exit(1); console.log('fts5 ok');" >nul 2>nul
+REM law_fts full-text search depends on node:sqlite FTS5 (compiled in from
+REM v22.18+); without it MATCH throws "no such module: fts5" and search
+REM degrades to LIKE. Create an fts5 virtual table and MATCH against it.
+"%NODE_BIN%" -e "const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(':memory:'); db.exec('CREATE VIRTUAL TABLE t USING fts5(x)'); db.prepare('INSERT INTO t (x) VALUES (?)').run('hello'); const row = db.prepare('SELECT x FROM t WHERE t MATCH ?').get('hello'); if (row == null) process.exit(1); console.log('fts5 ok');" >nul 2>nul
 if errorlevel 1 (
     set /a FAIL+=1
-    echo   [FAIL] Bundled Node lacks FTS5 — law_fts full-text search will degrade to LIKE
+    echo   [FAIL] Bundled Node lacks FTS5 - law_fts full-text search will degrade to LIKE
 ) else (
     set /a PASS+=1
     echo   [PASS] Bundled Node FTS5 available
 )
 :skip_fts5
 
-REM ── 4c. Native modules load check ──
+REM -- 4c. Native modules load check --
 echo.
 echo -- 4c. Native modules load check --
 
 if not exist "%NODE_BIN%" (
     set /a WARN+=1
-    echo   [WARN] Skipping native check (no bundled node)
+    echo   [WARN] Skipping native check ^(no bundled node^)
     goto :skip_native
 )
 if not exist "%CCM_DIR%\node_modules" (
     set /a WARN+=1
-    echo   [WARN] Skipping native check (no sati-main node_modules)
+    echo   [WARN] Skipping native check ^(no sati-main node_modules^)
+    goto :skip_native
+)
+if not exist "%CCUI_DIR%\node_modules" (
+    set /a WARN+=1
+    echo   [WARN] Skipping native check ^(no satiui node_modules^)
     goto :skip_native
 )
 
-REM pnpm --ignore-scripts 会跳过 native 依赖的 install/build 脚本；build-win.bat
-REM 已用 bundled node 重建。此处逐模块 require，任一失败说明重建不完整。
-REM pushd/popd 只在检查期间切换 cwd，避免影响后续 gateway 启动的工作目录。
-pushd "%CCM_DIR%"
+REM Native modules are checked from the tree the runtime actually resolves
+REM them in, against the bundled Node:
+REM   - better-sqlite3 / node-pty are ui deps  -> resolve from the satiui tree
+REM   - sharp / mupdf are root deps            -> resolve from the sati-main tree
+REM     (sharp from its .pnpm vstore dir, mirroring the runtime's
+REM      reconstructPnpmLinks() relinked layout - the bare top-level copy
+REM      cannot see its isolated deps; mupdf is ESM-only, so it needs a
+REM      dynamic import, not require())
+REM Preflight (build-win.bat step 4b) already verified the dev tree; this
+REM re-verifies the extracted artifact.
+pushd "%CCUI_DIR%"
 set NATIVE_OK=0
-for %%m in (better-sqlite3 sharp node-pty mupdf) do (
+for %%m in (better-sqlite3 node-pty) do (
     "%NODE_BIN%" -e "require('%%m')" >nul 2>nul
     if errorlevel 1 (
-        echo   [FAIL] native module "%%m" failed to load
+        echo   [FAIL] native module "%%m" failed to load ^(satiui tree^)
     ) else (
-        echo   [PASS] native module %%m loads
+        echo   [PASS] native module %%m loads ^(satiui tree^)
         set /a NATIVE_OK+=1
     )
+)
+popd
+pushd "%CCM_DIR%"
+"%NODE_BIN%" -e "const fs=require('fs'),p=require('node:path');const d=fs.readdirSync('node_modules/.pnpm').filter(x=>x.startsWith('sharp@'));if (d.length === 0) process.exit(2);const s=require(p.resolve('node_modules/.pnpm',d[0],'node_modules/sharp'));s({create:{width:2,height:2,channels:3,background:'#fff'}}).png().toBuffer().then(()=>process.exit(0)).catch(()=>process.exit(1));" >nul 2>nul
+if errorlevel 2 (
+    echo   [FAIL] sharp vstore dir not found in sati-main tree
+) else if errorlevel 1 (
+    echo   [FAIL] native module sharp failed to load ^(sati-main vstore^)
+) else (
+    echo   [PASS] native module sharp loads ^(sati-main vstore^)
+    set /a NATIVE_OK+=1
+)
+"%NODE_BIN%" --input-type=module -e "const m=await import('mupdf'); if (m == null || m.default == null) process.exit(1);" >nul 2>nul
+if errorlevel 1 (
+    echo   [FAIL] native module mupdf failed to load ^(ESM import^)
+) else (
+    echo   [PASS] native module mupdf loads ^(ESM import^)
+    set /a NATIVE_OK+=1
 )
 popd
 if !NATIVE_OK!==4 (
@@ -248,9 +278,19 @@ if !NATIVE_OK!==4 (
 )
 :skip_native
 
-REM ── 5. Gateway smoke test ──
+REM -- 5. Gateway smoke test --
 echo.
 echo -- 5. Gateway smoke test --
+
+REM Reconstruct pnpm junctions exactly like server-manager.ts does at runtime:
+REM the bare extracted tree cannot resolve isolated transitive deps (e.g.
+REM @google/genai -> p-retry ERR_MODULE_NOT_FOUND) because Windows bsdtar
+REM materialized the vstore junctions as real dirs.
+"%NODE_BIN%" "%~dp0relink-pnpm-win.mjs" "%CCM_DIR%" "%CCUI_DIR%"
+if errorlevel 1 (
+    echo   [FAIL] pnpm link reconstruction failed
+    goto :skip_gateway
+)
 
 set "SATI_HOME=%SANDBOX%\home\.sati"
 mkdir "%SATI_HOME%" 2>nul
@@ -270,49 +310,30 @@ echo       models:
 echo         test-model: {}
 ) > "%SATI_HOME%\sati.yaml"
 
-set "GW_ENTRY=%CCM_DIR%\dist\src\cli\sati.js"
 set "NODE_BIN=%RES%\node-bin\node.exe"
 set GATEWAY_PORT=19789
 
 if not exist "%NODE_BIN%" (
     set /a WARN+=1
-    echo   [WARN] Skipping gateway smoke test (no bundled node)
+    echo   [WARN] Skipping gateway smoke test ^(no bundled node^)
     goto :skip_gateway
 )
-if not exist "%GW_ENTRY%" (
+if not exist "%CCM_DIR%\dist\src\cli\sati.js" (
     set /a WARN+=1
-    echo   [WARN] Skipping gateway smoke test (no gateway entry)
+    echo   [WARN] Skipping gateway smoke test ^(no gateway entry^)
     goto :skip_gateway
 )
 
-echo   Starting Gateway on port %GATEWAY_PORT%...
-set "HOME=%SANDBOX%\home"
-set "GW_LOG=%SANDBOX%\gateway.log"
-start /b "" "%NODE_BIN%" "%GW_ENTRY%" server > "%GW_LOG%" 2>&1
-
-REM Wait up to 30 seconds for /health
-set GW_OK=0
-for /L %%i in (1,1,60) do (
-    if !GW_OK!==0 (
-        curl -s -m 1 "http://127.0.0.1:%GATEWAY_PORT%/health" 2>nul | findstr /c:"ok" >nul 2>nul
-        if !errorlevel!==0 (
-            set GW_OK=1
-        ) else (
-            ping -n 2 127.0.0.1 >nul 2>nul
-        )
-    )
-)
-
-if %GW_OK%==1 (
-    set /a PASS+=1
-    echo   [PASS] Gateway responding on http://127.0.0.1:%GATEWAY_PORT%/health
-) else (
+REM Start the gateway with runtime-equivalent wiring (pnpm vstore relink +
+REM junctions). The bare extracted tree cannot resolve isolated transitive
+REM deps or the edgeclaw-memory-core workspace link.
+"%NODE_BIN%" "%~dp0gateway-smoke-win.mjs" "%CCM_DIR%" "%CCUI_DIR%" "%MEM_DIR%" "%NODE_BIN%" "%SANDBOX%\home" %GATEWAY_PORT%
+if errorlevel 1 (
     set /a FAIL+=1
-    echo   [FAIL] Gateway did not respond within 30s
-    if exist "%GW_LOG%" (
-        echo   Last lines of gateway log:
-        type "%GW_LOG%" 2>nul | more +1
-    )
+    echo   [FAIL] Gateway smoke test failed
+) else (
+    set /a PASS+=1
+    echo   [PASS] Gateway healthy
 )
 
 REM Kill gateway (identity-checked: only kill a Sati gateway process; the
@@ -323,7 +344,7 @@ for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":%GATEWAY_PORT% " ^| 
 
 :skip_gateway
 
-REM ── 6. build-info.json ──
+REM -- 6. build-info.json --
 echo.
 echo -- 6. Build metadata --
 
@@ -335,12 +356,12 @@ if exist "%WIN_UNPACKED%\resources\app.asar" (
     echo   [WARN] Cannot verify build-info inside asar
 )
 
-REM ── Cleanup ──
+REM -- Cleanup --
 if exist "%SANDBOX%" (
     rmdir /s /q "%SANDBOX%" 2>nul
 )
 
-REM ── Summary ──
+REM -- Summary --
 echo.
 echo =========================================
 echo  Summary

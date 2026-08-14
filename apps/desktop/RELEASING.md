@@ -64,10 +64,12 @@ Windows 端没有 macOS 的 `release.sh` 流水线（签名/公证/验证/发布
 四步独立执行，在 **Windows 机器/虚拟机**上运行：
 
 ```bat
-REM 1. 构建（在 apps/desktop 下）——默认 x64；--arm64 打 arm64 包
-build-win.bat
+REM 1. 构建（从仓库根运行，默认 x64；--arm64 打 arm64 包）
+apps\desktop\scripts\build-win.bat
 
 REM 2. L1 制品冒烟（结构 / 运行时 / FTS5 / native 模块 / gateway 健康）
+REM    ——2026-08 起 4b/4c/5 段真实执行（此前被 bat 解析缺陷静默跳过；gateway
+REM     检查含 pnpm vstore 重链 + 运行时同款接线，冷缓存启动需 ~1-2 分钟）
 verify-installer.bat
 
 REM 3. L2 冒烟（UI tab / onboarding / Electron 冷启动；需交互式桌面会话）
@@ -102,8 +104,11 @@ node scripts\publish-win.mjs dist-electron
 `build-win.bat` 已对齐 `release.sh` 的关键门禁：版本 lockstep 校验、`pnpm test`
 测试门禁、Node **v22.23.2**（bundled SQLite 带 FTS5，`law_fts` 全文检索依赖；
 v22.14.0 无 FTS5 会降级为 LIKE）、Node/Bun 下载 SHA256 校验、bundle 排除列表
-（sati-main 从 ~1.1GB 压到 ~600MB）、native 依赖重建（better-sqlite3 / sharp /
-node-pty / mupdf 用 bundled node 逐个 rebuild）。
+（`node_modules/.pnpm/node_modules` hoist 根整体排除——Windows bsdtar 会把它
+的 junction 物化成完整副本，实测占 sati-main tar 44%：1.45GB → ~745MB）、
+native 依赖 **preflight**（better-sqlite3 / sharp / node-pty / mupdf 全部自带
+ABI 正确的预编译产物，`check-native-win.mjs` 用 bundled node 秒级验证加载；
+旧流程每次构建都 node-gyp rebuild 5-15 分钟且无 MSVC 时静默降级）。
 
 差异：
 
