@@ -57,14 +57,18 @@ function validateObject(value: unknown, schema: SatiJsonSchema, path: string, is
     }
   }
 
-  if (schema.additionalProperties === false) {
+  if (schema.additionalProperties !== undefined && schema.additionalProperties !== true) {
     for (const key of Object.keys(objectValue)) {
       if (!(key in properties)) {
-        issues.push({
-          path: `${path}.${key}`,
-          code: "unknown_property",
-          message: `${path}.${key} is not allowed.`,
-        });
+        if (schema.additionalProperties === false) {
+          issues.push({
+            path: `${path}.${key}`,
+            code: "unknown_property",
+            message: `${path}.${key} is not allowed.`,
+          });
+        } else {
+          validateValue(objectValue[key], schema.additionalProperties, `${path}.${key}`, issues);
+        }
       }
     }
   }

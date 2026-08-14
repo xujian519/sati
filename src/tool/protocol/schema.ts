@@ -2,7 +2,7 @@ export type SatiToolInputSchema = {
   type: "object";
   properties?: Record<string, SatiJsonSchema>;
   required?: string[];
-  additionalProperties?: boolean;
+  additionalProperties?: boolean | SatiJsonSchema;
   [key: string]: unknown;
 };
 
@@ -10,7 +10,7 @@ export type SatiJsonSchema = {
   type?: string | string[];
   properties?: Record<string, SatiJsonSchema>;
   required?: string[];
-  additionalProperties?: boolean;
+  additionalProperties?: boolean | SatiJsonSchema;
   items?: SatiJsonSchema;
   enum?: unknown[];
   [key: string]: unknown;
