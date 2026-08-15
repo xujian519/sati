@@ -23,6 +23,10 @@ export function createPatentWorkerValidateTool(): SatiToolDefinition<PatentWorke
 
   return {
     name: "patent_worker_validate",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["PatentWorkerValidate", "worker_contract_check"],
     description:
       "Validate a patent worker's output against its declared contract (required fields). " +

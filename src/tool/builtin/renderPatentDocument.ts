@@ -49,6 +49,10 @@ export type RenderPatentDocumentInput = {
 export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPatentDocumentInput> {
   return {
     name: "render_patent_document",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["RenderPatentDocument", "render_document"],
     title: "Render Patent Document",
     description:

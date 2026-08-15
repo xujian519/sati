@@ -179,6 +179,16 @@ export function createWebFetchTool(
 ): SatiToolDefinition<WebFetchInput, WebFetchOutput> {
   return {
     name: "web_fetch",
+    outputSchema: {
+      type: "object",
+      required: ["url", "fromCache", "mode", "llmUsed"],
+      properties: {
+        url: { type: "string" },
+        fromCache: { type: "boolean" },
+        mode: { type: "string" },
+        llmUsed: { type: "boolean" },
+      },
+    },
     aliases: ["WebFetch"],
     description: WEB_FETCH_DESCRIPTION,
     kind: "network",

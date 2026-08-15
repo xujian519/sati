@@ -42,6 +42,10 @@ const FILE_UNCHANGED_STUB =
 export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
   return {
     name: "read_file",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["Read"],
     description:
       "Reads a file from the current workspace. You can access workspace files directly by using this tool.\n" +

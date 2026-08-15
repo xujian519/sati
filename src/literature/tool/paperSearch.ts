@@ -42,6 +42,15 @@ export function createPaperSearchTool(
 
   return {
     name: "paper_search",
+    outputSchema: {
+      type: "object",
+      required: ["db", "query", "hits"],
+      properties: {
+        db: { type: "string" },
+        query: { type: "string" },
+        hits: { type: "array" },
+      },
+    },
     aliases: ["PaperSearch"],
     description: [
       "- Searches scholarly literature databases (arXiv, OpenAlex, Semantic Scholar, Crossref) — free, no API key required",

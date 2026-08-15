@@ -383,6 +383,15 @@ export function createValidateSpecificationTool(): SatiToolDefinition<
 > {
   return {
     name: "validate_specification",
+    outputSchema: {
+      type: "object",
+      required: ["passed", "score", "violations"],
+      properties: {
+        passed: { type: "boolean" },
+        score: { type: "number" },
+        violations: { type: "array" },
+      },
+    },
     title: "Validate Patent Specification",
     description:
       "验证专利说明书是否符合撰写要求，包括结构完整性、发明名称长度、摘要长度、模糊表述、附图说明一致性、" +

@@ -147,6 +147,18 @@ export function createEgoBrowserTool(
 
   return {
     name: "ego_browser",
+    outputSchema: {
+      type: "object",
+      required: ["output", "stdout", "stderr", "exitCode", "timedOut", "durationMs"],
+      properties: {
+        output: { type: "string" },
+        stdout: { type: "string" },
+        stderr: { type: "string" },
+        exitCode: { type: "integer" },
+        timedOut: { type: "boolean" },
+        durationMs: { type: "integer" },
+      },
+    },
     aliases: ["EgoBrowser"],
     description: EGO_BROWSER_DESCRIPTION,
     kind: "network",

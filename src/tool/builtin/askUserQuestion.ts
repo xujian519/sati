@@ -71,6 +71,15 @@ export type AskUserQuestionOutput = {
 export function createAskUserQuestionTool(): SatiToolDefinition<AskUserQuestionInput, AskUserQuestionOutput> {
   return {
     name: ASK_USER_QUESTION_TOOL_NAME,
+    outputSchema: {
+      type: "object",
+      required: ["questions", "answers"],
+      properties: {
+        questions: { type: "array" },
+        answers: { type: "object" },
+        annotations: { type: "object" },
+      },
+    },
     aliases: ["AskUserQuestion"],
     description: ASK_USER_QUESTION_DESCRIPTION,
     kind: "session",

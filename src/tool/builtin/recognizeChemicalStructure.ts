@@ -68,6 +68,10 @@ export function createRecognizeChemicalStructureTool(
 
   return {
     name: "recognize_chemical_structure",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Recognize Chemical Structure",
     description:
       "识别化学式/化学结构：从化学结构图（图片模式，多模态模型两步分析 + RDKit 校验）或文档文本（文本模式，" +

@@ -109,6 +109,15 @@ export function savePersonalNote(dbPath: string, input: KnowledgeNoteSaveInput):
 export function createKnowledgeNoteSaveTool(): SatiToolDefinition<KnowledgeNoteSaveInput, KnowledgeNoteSaveOutput> {
   return {
     name: "knowledge_note_save",
+    outputSchema: {
+      type: "object",
+      required: ["documentId", "charCount", "reason"],
+      properties: {
+        documentId: { type: "string" },
+        charCount: { type: "integer" },
+        reason: { type: "string" },
+      },
+    },
     title: "Knowledge Note Save",
     description:
       "把项目专利产出（OA 答复要点、无效分析结论、检索心得）沉淀到知识库 personal_note 层，后续检索可召回。" +

@@ -68,6 +68,10 @@ export function createLawSearchTool(
 ): SatiToolDefinition<LawSearchToolInput, LawSearchToolOutput> {
   return {
     name: "law_search",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Law Search",
     description:
       "搜索中国法律法规全文（宝宸知识库 9000+ 部法律）。支持全文关键词检索、按法律层级（法律/行政法规/司法解释/地方性法规/宪法/案例/部门规章）和分类过滤。用于查询法条原文、法律名称、立法依据。",

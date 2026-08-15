@@ -175,6 +175,10 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
 
   return {
     name: "patent_workflow",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["PatentWorkflow", "run_patent_workflow"],
     description:
       "Run a declarative patent workflow: validates the manifest, assembles per-stage outputs into a " +
