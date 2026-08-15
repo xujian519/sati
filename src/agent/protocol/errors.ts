@@ -10,7 +10,8 @@ export type AgentErrorCode =
   | "agent_invalid_state"
   | "agent_unsupported_feature"
   | "agent_tool_error_loop"
-  | "agent_doomloop";
+  | "agent_doomloop"
+  | "agent_turn_interrupted";
 
 export type AgentError = {
   code: AgentErrorCode;

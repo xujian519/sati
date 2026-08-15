@@ -13,12 +13,30 @@ import {
 
 export type PilotConfigListener = (event: PilotConfigReloadEvent) => void;
 
+/**
+ * 最后一次成功加载的配置事实（阶段四 T7.2）：坏快照被拒绝后，服务继续使用
+ * 这一代配置（endpoint 与 key 永不跨代配对）。
+ */
+export type LastGoodFacts = {
+  version: number;
+  loadedAt: string;
+};
+
+/** ISO 时间戳化的 LastGoodFacts（来自快照的 Date）。 */
+function lastGoodFactsOf(snapshot: { version: number; loadedAt: Date }): LastGoodFacts {
+  return { version: snapshot.version, loadedAt: snapshot.loadedAt.toISOString() };
+}
+
 export type PilotConfigStore = {
   getSnapshot(): PilotConfigSnapshot;
   getDiagnostics(): PilotConfigDiagnostic[];
   reload(reason?: string): Promise<PilotConfigSnapshot>;
   subscribe(listener: PilotConfigListener): () => void;
   startWatching(options?: { debounceMs?: number }): () => void;
+  /** 最后一次成功加载的配置事实；从未成功加载时为 undefined。 */
+  getLastGoodFacts(): LastGoodFacts | undefined;
+  /** 连续失败的 reload 次数（持续坏配置告警用）。 */
+  getConsecutiveFailures(): number;
 };
 
 export async function createPilotConfigStore(options: PilotConfigLoadOptions = {}): Promise<PilotConfigStore> {
@@ -36,6 +54,10 @@ class DefaultPilotConfigStore implements PilotConfigStore {
   private readonly listeners = new Set<PilotConfigListener>();
   private reloading: Promise<PilotConfigSnapshot> | undefined;
   private nextVersion: number;
+  // 阶段四 T7.2：last-good-facts 显式化——坏快照保留上一代配置继续服务，
+  // 每次失败都告警（持续坏配置周期告警，而非 dsh 的一次性告警）。
+  private lastGoodFacts: LastGoodFacts | undefined;
+  private consecutiveFailures = 0;
 
   constructor(
     initialSnapshot: PilotConfigSnapshot,
@@ -43,6 +65,8 @@ class DefaultPilotConfigStore implements PilotConfigStore {
   ) {
     this.currentSnapshot = initialSnapshot;
     this.nextVersion = initialSnapshot.version + 1;
+    // 初始加载即视为一代 last-good。
+    this.lastGoodFacts = lastGoodFactsOf(initialSnapshot);
   }
 
   getSnapshot(): PilotConfigSnapshot {
@@ -51,6 +75,14 @@ class DefaultPilotConfigStore implements PilotConfigStore {
 
   getDiagnostics(): PilotConfigDiagnostic[] {
     return [...this.currentSnapshot.diagnostics, ...this.lastReloadDiagnostics];
+  }
+
+  getLastGoodFacts(): LastGoodFacts | undefined {
+    return this.lastGoodFacts;
+  }
+
+  getConsecutiveFailures(): number {
+    return this.consecutiveFailures;
   }
 
   async reload(_reason = "manual"): Promise<PilotConfigSnapshot> {
@@ -71,6 +103,8 @@ class DefaultPilotConfigStore implements PilotConfigStore {
         this.currentSnapshot = nextSnapshot;
         this.nextVersion = nextSnapshot.version + 1;
         this.lastReloadDiagnostics = [];
+        this.lastGoodFacts = lastGoodFactsOf(nextSnapshot);
+        this.consecutiveFailures = 0;
         this.publish({
           previousSnapshot,
           nextSnapshot,
@@ -81,9 +115,14 @@ class DefaultPilotConfigStore implements PilotConfigStore {
         return nextSnapshot;
       })
       .catch((error: unknown) => {
+        this.consecutiveFailures += 1;
         if (error instanceof PilotConfigError) {
           this.lastReloadDiagnostics = error.diagnostics;
         }
+        // 周期告警：每次失败的 reload 都告警并点名沿用中的 last-good 代。
+        console.warn(
+          `[sati] config reload failed (${this.consecutiveFailures}x in a row); keeping last good config (version ${this.lastGoodFacts?.version ?? "none"} from ${this.lastGoodFacts?.loadedAt ?? "-"})`,
+        );
         throw error;
       })
       .finally(() => {

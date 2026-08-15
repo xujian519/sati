@@ -85,6 +85,11 @@ export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
     this.entries.push({ type: "request_header", sessionId, turnId, header });
   }
 
+  // 阶段四 T4.1：内存写入即时可见，durable 边界检查点为 no-op。
+  flushCheckpoint(): void {
+    return undefined;
+  }
+
   snapshotState(): AgentTranscriptWriterState {
     return {
       sequence: this.entries.length,

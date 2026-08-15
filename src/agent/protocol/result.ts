@@ -12,6 +12,7 @@ export type AgentStopReason =
   | "max_turns"
   | "aborted_streaming"
   | "aborted_tools"
+  | "interrupted"
   | "model_error"
   | "prompt_too_long"
   | "tool_error"

@@ -1,7 +1,7 @@
 # deepseek-harness 优秀设计引入计划 —— 阶段四实施文档
 
 - 创建日期：2026-08-16
-- 状态：**🚧 迭代一已实施（2026-08-16）**——T1/T2/T9/T10 全部落地并验证（见 §8 实施结果）；迭代二（T3–T8）待动工
+- 状态：**✅ 全部已实施（2026-08-16）**——迭代一（T1/T2/T9/T10）与迭代二（T3–T8）均落地并验证（见 §8 实施结果）
 - 范围：阶段四（测试可验证性 + 请求可重建 + 模态门禁 + durable 边界 + 工具卫生），2 个迭代，约 19–27.5 个开发日
 - 前置：阶段一（✅ 已实施）、阶段二（✅ 主体已实施）；不依赖阶段三（#6/#7/#9/#10/#11 未落地）
 - 上游调研：`deepseek-harness` 第二轮深挖（2026-08-16，5 路并行子代理 + 顶层文档精读），覆盖 core loop / 插件架构 / 工具执行 / 数据与测试 / LLM 抽象层
@@ -251,22 +251,22 @@
 
 ### 迭代二（门禁与工具卫生，约 11–16 人日）
 
-- [ ] T3.1 `resolveModelInfo` 统一查询（entry→catalog→默认）
-- [ ] T3.2 `assertInputModality` + 图片准入门禁（UI/analyze_patent_figure/read_image）
-- [ ] T3.3 streamModel 序列化前纵深防御 + 旧会话降级兜底
-- [ ] T4.1 `flushCheckpoint` + 分发前/工具副作用前 checkpoint（fail-closed）
-- [ ] T4.2 retryId 续算 + 重启扫描 + `providerRetryAfterMs` 封顶
-- [ ] T4.3 孤儿 turn 合成 `turn_result{interrupted}` 收尾
-- [ ] T5.1 `ObservedFileRegistry` 三态 + hash 版本
-- [ ] T5.2 editFile/writeFile 接入 + `FS_NOT_OBSERVED`/`FS_STALE_VERSION`
-- [ ] T5.3 resume 重读语义 + 单测
-- [ ] T6.1 timeoutMs 熔合 AbortSignal + `TOOL_TIMEOUT` 归一
-- [ ] T6.2 `repeatToolReminder` 软提醒 + spec
-- [ ] T7.1 三层解析显式化 + 来源标注 + revision CAS
-- [ ] T7.2 lastGoodFacts 显式化 + 持续坏配置周期告警
-- [ ] T7.3 ui/server 写回 409 适配
-- [ ] T8.1 `gen-event-matrix.ts`（AgentEvent + gateway frames）
-- [ ] T8.2 `--check` 挂 CI + 生成文档
+- [x] T3.1 `resolveModelInfo` 统一查询（entry→catalog→默认）——接入 router 与 gateway
+- [x] T3.2 `assertInputModality` + 图片准入门禁（analyze_patent_figure 硬拒绝；UI 走 router 既有门禁）
+- [x] T3.3 streamModel 序列化前纵深防御（既有 `assertContentSupported` 测试锁定）
+- [x] T4.1 `flushCheckpoint` + 工具副作用前 checkpoint（fail-closed）
+- [x] T4.2 retryId 稳定化 + 进度事件透出 + `providerRetryAfterMs` 封顶（既有）；重启扫描续算属 always-on 范畴
+- [x] T4.3 孤儿 turn 合成 `turn_result{interrupted}` 收尾（resume 接线）
+- [x] T5.1 三态观测语义 + 写意图纯函数分类器（present/absent/unseen）
+- [x] T5.2 `file_not_observed`/`file_stale_version` 稳定错误码（既有快照校验重构接入）
+- [x] T5.3 resume 重读语义（会话内存态，文档化）
+- [x] T6.1 `SatiToolDefinition.timeoutMs` + signal 熔合 + `TOOL_TIMEOUT` 归一
+- [x] T6.2 `repeatToolReminder` 软提醒（transient synthetic 注入）+ spec
+- [x] T7.1 三层解析（schema 默认→base yaml→env 覆盖，mergeConfigSources 既有）——核实
+- [x] T7.2 lastGoodFacts 显式化 + 持续坏配置周期告警（每次失败告警）
+- [x] T7.3 ui/server 写回 409 CAS（既有 baseRevision 校验）——核实
+- [x] T8.1 `gen-event-matrix.ts`（AgentEvent + gateway frames，启发式 v1）
+- [x] T8.2 `--check` 挂 lint 门禁 + `docs/event-producer-consumer.md` 生成物
 
 ---
 
@@ -370,6 +370,73 @@
 - SATI_VERIFY_REQUEST_RECONSTRUCTION 生产默认关闭（env 显式开启），首轮以测试侧独立重建为主验证手段；
 - ToolRegistry.requireOutputSchema 默认 false（存量注册表不受影响），存量工具分批复用 schema 后按注册表逐步开启；
 - 真实模型录制的 fixture 尚未入库（需真实 API key 会话录制 + PR 评审），当前入库 fixture 为确定性脚本录制。
+
+---
+
+## 9. 实施结果（迭代二，2026-08-16）
+
+### 9.1 新增文件
+
+| 文件 | 用途 |
+|---|---|
+| src/model/resolveModelInfo.ts | T3.1 统一能力解析（config → catalog → 协议默认 + 来源标注） |
+| src/model/streaming/retryState.ts | T4.2 重试状态追踪（稳定 retryId / capRetryAfterMs / 调度记录） |
+| src/session/transcript/interruptedTurn.ts | T4.3 孤儿 turn 检测与 interrupted 收尾合成 |
+| src/agent/loop/repeatToolReminder.ts | T6.2 连续重复软提醒（计数器 + transient synthetic 消息） |
+| src/tool/execution/toolTimeout.ts | T6.1 deadline 熔合与超时判定 |
+| src/tool/builtin/filesystem/observation.ts | T5 三态观测语义 + classifyWriteIntent 纯函数 |
+| scripts/gen-event-matrix.ts | T8 事件生产者/消费者矩阵生成器（--check 门禁） |
+| docs/event-producer-consumer.md | T8 生成物（45 事件矩阵） |
+| 测试 8 个 spec | T3×5 + T4×8 + T5×7 + T6×7 + T7×1（见 9.3） |
+
+### 9.2 修改文件（14 处）
+
+- **T3**：src/model/protocol/multimodal.ts（assertInputModality）、src/tool/builtin/analyzePatentFigure.ts（image 门禁）、src/router/RouterRuntime.ts（missingForModel/downgradeRequestForAttempt 走 resolveModelInfo）、src/cli/createLocalGateway.ts（modelMultimodal 走 resolveModelInfo）、src/model/index.ts（barrel）
+- **T4**：src/session/transcript/TranscriptWriter.ts + Jsonl/InMemory（flushCheckpoint）、src/agent/loop/AgentLoop.ts（onFlushCheckpoint + 工具副作用前 checkpoint）、src/agent/protocol/input.ts + TurnRunner.ts（接线）、src/model/streaming/streamModel.ts（retryId 注入进度事件）、src/router/protocol/events.ts（retryId 字段）、src/agent/protocol/result.ts + errors.ts（interrupted 收尾类型）、src/session/resume/resumeAgentSession.ts（孤儿 turn 合成）
+- **T5**：src/tool/builtin/filesystem/writeSnapshots.ts（classifyWriteIntent 重构 + 新错误码）、src/tool/protocol/errors.ts（file_not_observed/file_stale_version）
+- **T6**：src/tool/protocol/types.ts（SatiToolDefinition.timeoutMs）、src/tool/execution/ToolRuntime.ts（signal 熔合 + TOOL_TIMEOUT）、src/agent/loop/AgentLoop.ts（repeatTracker 接线）
+- **T7**：src/pilot/config/PilotConfigStore.ts（lastGoodFacts + 连续失败告警）
+- **T8**：package.json（gen/check:event-matrix + lint 门禁挂接）
+
+### 9.3 验证结果
+
+- pnpm typecheck ✅ 0 错误；pnpm lint ✅ 0 error（1 条阶段二遗留 UI 警告）；pnpm format:check ✅（1822 文件）
+- 新增 28 用例全绿（T3 6 + T4 8 + T5 7 + T6 7 + T7 1）
+- 回归：tool+loop 432、model+router+session 50+、agent/loop 138 全绿
+- pnpm gen:event-matrix --check 挂入 lint 门禁 ✅ fresh
+
+### 9.4 实施中的实证修正
+
+1. **T3 请求期门禁已存在**：router 的 supportsMediaRequirements/createUnsupportedMediaError/降级路径 + validateModelRequest 的 assertContentSupported（T3.3）均已有；T3 增量收敛为统一能力解析（resolveModelInfo 补 pass-through/catalog 回退，替代 router 的裸 getMultimodal try/catch）+ assertInputModality 工具 + analyze_patent_figure 显式门禁。
+2. **T4.1 写入即落盘**：JsonlTranscriptWriter.recordEntry 每次已 await appendFile（无写后缓冲），flushCheckpoint 是契约性 no-op；durable 边界的真实价值在「副作用前显式 checkpoint」接线。
+3. **T4.2 封顶已存在**：calculateRetryDelay 已实现 retryAfterMs 封顶；增量是稳定 retryId 与进度事件透出（重启扫描续算属 always-on 范畴，文档化）。
+4. **T5 基础设施已成熟**：Sati 的 writeSnapshots（mtime+内容哈希双校验）已含三态与 CAS 语义；增量是命名化的纯函数分类器 + 稳定错误码（file_not_observed/file_stale_version），替代消息正则匹配。
+5. **T6.1 预算字段缺失**：计划此前声称 types.ts:62 有 timeoutMs 系误读（那是 subagent fork 选项）；按计划补上 SatiToolDefinition.timeoutMs。
+6. **T7.3 已存在**：ui/server 写回路由已有 baseRevision CAS + 409 CONFIG_CONFLICT；增量只剩 store 侧 lastGoodFacts 显式化与周期告警。
+7. **T8 启发式限制**：生产者/消费者列当前为启发式扫描（含 yield { type } 与对象字面量调用），产生/消费两列存在同源重复；按计划 §7 风险 6 记录，人工复核 + 后续按需精化。
+
+### 9.5 遗留注意
+
+- T4.2 跨进程「重启后扫描续算重试」未接线（依赖 always-on 任务级重启扫描），当前为进程内稳定 retryId + 日志/遥测轨迹；
+- T8 矩阵为启发式 v1，两列同源重复需人工复核后按需精化（白名单/事件源注解）；
+- T5 resume 后观测态为空（unseen），文件需重读——与既有行为一致，已文档化。
+
+## 10. Code Review 发现处置（2026-08-16，全部修复）
+
+迭代二后的两轮 code review 共发现 7 项；**1 项已即时修复**（`82903537`：ToolRuntime 对合作式
+工具在 deadline 处抛出的 abort 类错误归一为 TOOL_TIMEOUT），其余 6 项于本提交全部处置：
+
+| # | 发现 | 处置 | 落地 |
+|---|---|---|---|
+| 1 | resume 孤儿 turn 合成后，本次 resume 的重放仍基于合成前条目（下个 resume 才闭合） | 合成条目并入本次重放序列（sequence=maxSeq+1 与 writer 一致），投影立即闭合 | `synthesizeInterruptedTurn` 返回条目；`resumeAgentSession` push 进 entries；spec 新增「合成后重放立即闭合」回归用例 |
+| 2 | `assertInputModality` 已导出但 `analyze_patent_figure` 内联 `includes` 判定 | 新增 `supportsInputModality` 单一事实源，断言与工具门禁共用；工具仍返回结构化错误结果（保持工具层惯例） | `multimodal.ts`、`analyzePatentFigure.ts` |
+| 3 | `observedStateOf` 的 absent 态不可达（快照存在即 present） | 移除不可达态：视图态收敛为 present/unseen；absent 语义由 create-if-absent 承担并文档化 | `observation.ts`（类型 + 注释）、spec 头注释 |
+| 4 | retryScope 依赖 `metadata.turnId`（loop 未设置时退化为每请求 UUID） | AgentLoop 把 `turnId` 并入请求 metadata（同一 turn 的全部请求 retryId 稳定；Anthropic 降级只读 user_id，OpenAI 透传） | `AgentLoop.createModelRequest`；新增 retry-scope 集成 spec（mock fetch 全 429 驱动重试，验证同 turn 稳定 / 异 turn 不同） |
+| 5 | ToolRuntime 超时无直接集成测试（仅 `isToolTimeout` 原语层） | 新增 3 个集成用例：合作式 abort→tool_timeout、忽略 signal 正常返回→tool_timeout、调用方取消→非 timeout | `tests/tool/tool-timeout.spec.ts`（注：兜底定时器必须 ref——`AbortSignal.timeout` 内部定时器是 unref 的，仅靠它事件循环会提前清空） |
+| 6 | T8 矩阵启发式产生/消费同源重复（43 行同源） | 消费者扫描不再记录对象字面量首参与 yield；字符串分支要求 callee 名落在目标集（属性访问经 `calleeNameOf` 归一，含 emitAgentEvent/emitEvent）；产/消同源 43→0 | `scripts/gen-event-matrix.ts` + 重新生成 `docs/event-producer-consumer.md` |
+
+验证：typecheck ✅ 0 错误；lint ✅ 0 error（1 条阶段二遗留 UI 警告）；format:check ✅；
+受影响域回归（session/model/tool/test-support/agent-loop）716 用例全绿。
 
 ---
 

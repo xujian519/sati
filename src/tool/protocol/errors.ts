@@ -11,6 +11,8 @@ export type SatiToolErrorCode =
   | "result_too_large"
   | "path_not_allowed"
   | "file_not_found"
+  | "file_not_observed"
+  | "file_stale_version"
   | "file_conflict"
   | "unsupported_tool"
   | "setup_required"

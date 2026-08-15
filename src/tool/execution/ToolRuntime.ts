@@ -16,12 +16,18 @@ import {
   type SatiToolResult,
   type SatiToolSuccessResult,
 } from "../protocol/result.js";
-import type { SatiToolCall, SatiToolRuntimeContext, SatiToolResultContent } from "../protocol/types.js";
+import type {
+  SatiToolCall,
+  SatiToolProgressEvent,
+  SatiToolRuntimeContext,
+  SatiToolResultContent,
+} from "../protocol/types.js";
 import { receiptFromToolExecution } from "../protocol/evidence.js";
 import type { ToolRegistry } from "../registry/ToolRegistry.js";
 import type { AgentEventEmitter } from "../../agent/protocol/events.js";
 import { requiresPromptCapability } from "../userInteractionConstraints.js";
 import { TOOL_OUTPUT_SCHEMA_MISMATCH, validateCanonicalOutput } from "./outputSchemaValidation.js";
+import { fuseToolTimeout, isToolTimeout } from "./toolTimeout.js";
 import { validateToolInput } from "./validateToolInput.js";
 import { formatValidationError } from "./formatValidationError.js";
 import { buildToolErrorRecovery } from "./errorRecovery.js";
@@ -277,19 +283,32 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       currentToolCallId: call.id,
       currentPermissionDecision: decision,
     };
-    const executeContext: SatiToolRuntimeContext = baseContext.progress
-      ? {
-          ...baseContext,
-          progress: event =>
-            baseContext.progress!({
-              ...event,
-              toolCallId: event.toolCallId || call.id,
-              toolName: event.toolName || tool.name,
-            }),
-        }
-      : baseContext;
+    // 阶段四 T6.1：registry 级超时强制——工具自报 timeoutMs 时，把 deadline
+    // 熔合进执行 signal；到期以 TOOL_TIMEOUT 归一（合作式：忽略 signal 的
+    // 工具无法被硬杀，见计划 §7 风险 4）。
+    const fusedAbortSignal =
+      tool.timeoutMs === undefined ? baseContext.abortSignal : fuseToolTimeout(baseContext.abortSignal, tool.timeoutMs);
+    const executeContext: SatiToolRuntimeContext = {
+      ...baseContext,
+      ...(fusedAbortSignal === baseContext.abortSignal ? {} : { abortSignal: fusedAbortSignal }),
+      ...(baseContext.progress
+        ? {
+            progress: (event: SatiToolProgressEvent) =>
+              baseContext.progress!({
+                ...event,
+                toolCallId: event.toolCallId || call.id,
+                toolName: event.toolName || tool.name,
+              }),
+          }
+        : {}),
+    };
     try {
       const output = await tool.execute(executeInput, executeContext);
+      // 阶段四 T6.1：超时判定——工具返回后若熔合信号因 deadline 中止（而非
+      // 调用方取消），归一为结构化 TOOL_TIMEOUT。
+      if (isToolTimeout(fusedAbortSignal, baseContext.abortSignal)) {
+        throw new SatiToolRuntimeError("tool_timeout", `Tool ${tool.name} exceeded its ${tool.timeoutMs}ms budget`);
+      }
       // 阶段四 T9：工具声明 outputSchema 时，成功路径的 canonical data 必须
       // 通过校验。data 缺省（如失败路径只返回 content）不触发校验——schema
       // 声明的是成功契约；data 存在即必须匹配。
@@ -358,7 +377,13 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       await this.recordToolAudit(result, context, startedAtDate);
       return result;
     } catch (error) {
-      const normalized = normalizeToolError(error);
+      // 阶段四 T6.1：合作式工具在 deadline 处观察到熔合 signal 并自行抛出
+      // abort 类错误时，先替换为 TOOL_TIMEOUT，共享下方错误路径（错误码/审计/
+      // 证据闭环一致）。
+      const effectiveError = isToolTimeout(fusedAbortSignal, baseContext.abortSignal)
+        ? new SatiToolRuntimeError("tool_timeout", `Tool ${tool.name} exceeded its ${tool.timeoutMs}ms budget`)
+        : error;
+      const normalized = normalizeToolError(effectiveError);
       await this.dispatchLifecycle("PostToolUseFailure", tool.name, call.id, executeInput, context, {
         error: normalized.message,
         isInterrupt: normalized.code === "tool_aborted",

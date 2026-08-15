@@ -45,6 +45,12 @@ import {
   TurnRuntimeState,
 } from "./turnRuntimeState.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
+import {
+  buildRepeatReminderMessage,
+  REPEAT_REMINDER_THRESHOLD,
+  RepeatTracker,
+  toolCallKey,
+} from "./repeatToolReminder.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { recordModelCall, recordToolResults } from "./doomLoopIntegration.js";
 import {
@@ -161,6 +167,8 @@ type FinishTurnResult = TurnStepContinue | TurnStepReturn;
 
 export class AgentLoop {
   private readonly readFileState: SatiReadFileStateMap;
+  /** 阶段四 T6.2：连续重复工具调用追踪（软提醒用）。 */
+  private readonly repeatTracker: RepeatTracker;
   private readonly writeSnapshots: SatiWriteSnapshotMap;
   private readonly allowedReadFiles: Set<string>;
   private readonly tokenCaps: TokenCapManager;
@@ -176,6 +184,7 @@ export class AgentLoop {
     this.readFileState = cloneReadFileStateMap(seedState?.readFileState);
     this.writeSnapshots = cloneWriteSnapshotMap(seedState?.writeSnapshots);
     this.allowedReadFiles = new Set(seedState?.allowedReadFiles ?? []);
+    this.repeatTracker = new RepeatTracker();
     this.tokenCaps = new TokenCapManager(config, dependencies);
     this.dispatchLifecycle = createLifecycleDispatcher(config, dependencies);
     this.toolContextFactory = new ToolContextFactory({
@@ -1238,6 +1247,11 @@ export class AgentLoop {
       return yield* this.abortTurn(input, state);
     }
 
+    // 阶段四 T4.1：durable 边界检查点——工具副作用（写文件/外呼/子代理）执行
+    // 前强制刷新转录落盘。失败即中止本步（fail-closed：无法保证持久边界就不
+    // 发生副作用）。调用方未接 flushCheckpoint 时是 no-op。
+    await input.onFlushCheckpoint?.();
+
     let results: SatiToolResult[];
     try {
       const toolContext = this.toolContextFactory.createToolContext(input);
@@ -1259,6 +1273,15 @@ export class AgentLoop {
       return yield* this.abortTurn(input, state);
     }
     yield* this.subagentExecutor.drainEventBuffer();
+
+    // 阶段四 T6.2：连续重复软提醒——达到阈值（默认 3 次）后向下一轮请求
+    // 注入一次 transient advisory（不拦截；doomLoop 仍是硬断开）。
+    for (const call of toolCalls) {
+      const count = this.repeatTracker.record(toolCallKey(call.name, call.input));
+      if (count === REPEAT_REMINDER_THRESHOLD) {
+        state.messages = [...state.messages, buildRepeatReminderMessage(call.name, count)];
+      }
+    }
 
     let pairedResults = ensureToolResultPairing(
       toolCalls,
@@ -1868,7 +1891,11 @@ export class AgentLoop {
       temperature: this.config.temperature,
       thinking: this.config.thinking,
       stream: true,
-      metadata: this.config.metadata,
+      // 阶段四 T4.2：请求级 retryScope——把 turnId 并入请求 metadata，使
+      // streamModel 的 retryId 在同一 turn 的全部请求间稳定（跨路由 attempt
+      // 与重试可审计关联）。Anthropic 降级只读 user_id；OpenAI 作为自定义
+      // metadata 透传（可用于仪表盘请求关联）。
+      metadata: { ...this.config.metadata, turnId: input.turnId },
       cacheBreakpoints: prepared.cacheBreakpoints,
     };
   }

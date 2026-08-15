@@ -10,6 +10,7 @@ import test from "node:test";
 import type { CanonicalModelEvent, CanonicalModelRequest } from "../../../src/model/index.js";
 import { createAnalyzePatentFigureTool } from "../../../src/tool/builtin/analyzePatentFigure.js";
 import { SatiToolRuntimeError } from "../../../src/tool/protocol/errors.js";
+import type { MultimodalConstraints } from "../../../src/model/protocol/multimodal.js";
 import type { SatiToolModelClient, SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 
 const STEP1_JSON = JSON.stringify({
@@ -88,6 +89,21 @@ test("analyze_patent_figure: 无模型客户端时返回错误而非抛出", asy
   if (first?.type === "text") {
     assert.ok(first.text.includes("未注入模型客户端"), "应提示模型客户端缺失");
   }
+});
+
+test("analyze_patent_figure: 模型未声明 image 模态时提前拒绝并点名（T3 门禁）", async () => {
+  const tool = createAnalyzePatentFigureTool();
+  const context = {
+    ...baseContext(fakeModel(), process.cwd()),
+    modelMultimodal: { input: ["text"] } satisfies MultimodalConstraints,
+  };
+  const result = await tool.execute({ image_path: "x.png" }, context);
+  const first = result.content[0];
+  assert.equal(first?.type, "text");
+  if (first?.type === "text") {
+    assert.ok(first.text.includes("不支持图片输入"), "应提示当前模型不支持图片输入");
+  }
+  assert.equal(result.metadata?.hint, "model_not_vision_capable");
 });
 
 test("analyze_patent_figure: 图片路径不存在时抛出工具错误", async () => {

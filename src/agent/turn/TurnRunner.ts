@@ -274,6 +274,9 @@ export class TurnRunner {
         onRequestHeader: async header => {
           await this.transcript.recordRequestHeader?.(options.sessionId, options.turnId, header);
         },
+        onFlushCheckpoint: async () => {
+          await this.transcript.flushCheckpoint?.();
+        },
       });
       let runResult: TurnRunnerResult | undefined;
       let turnCompletedEvent: Extract<AgentEvent, { type: "turn_completed" }> | undefined;

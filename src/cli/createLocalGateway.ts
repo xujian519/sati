@@ -84,6 +84,7 @@ import {
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
+import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
 import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
@@ -1553,12 +1554,13 @@ class ProjectRuntimeRegistry {
     // tool call inside the same turn — no roundtrip back to the client
     // needed, even when the client lives in a different process.
     const liveRuleSet = this.getLiveRuleSet(sessionKey);
-    let modelMultimodal: import("../model/index.js").MultimodalConstraints | undefined;
-    try {
-      modelMultimodal = runtime.model.getMultimodal(agent.model.provider, agent.model.model);
-    } catch {
-      // Model or provider not found — fall back to text-only.
-    }
+    // 阶段四 T3：统一能力解析（config → catalog → 协议默认），未知模型按
+    // catalog/默认回退，而非盲目 text-only。
+    const modelMultimodal: import("../model/index.js").MultimodalConstraints | undefined = resolveModelInfo(
+      runtime.model,
+      agent.model.provider,
+      agent.model.model,
+    ).multimodal;
     let maxContextTokens: number | undefined;
     let maxOutputTokens: number | undefined;
     try {

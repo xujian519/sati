@@ -13,6 +13,7 @@ import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../provider
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
 import { buildProviderChatEndpointCandidates, isExpectedProviderResponseShape } from "../providerEndpoint.js";
 import { NetworkFetchError, networkFetch } from "../../network/fetch.js";
+import { createRetryId } from "./retryState.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 // 流式 HTTP 传输常量单一来源（proxy 的 Undici 池共享，避免双源漂移）。
 import {
@@ -34,6 +35,8 @@ export type ModelRuntimeOptions = {
 };
 
 export type ModelStreamRetryProgress = {
+  /** 阶段四 T4.2：本次请求的稳定重试 id（同一 scope 内跨尝试稳定）。 */
+  retryId: string;
   reason: "network_error" | "server_error" | "continuation";
   attempt: number;
   maxAttempts: number;
@@ -129,6 +132,11 @@ export async function* streamModel(
   const { provider } = validateModelRequest(streamingRequest, config);
   const maxRetries = provider.retry?.streamMaxRetries ?? DEFAULT_STREAM_MAX_RETRIES;
   const retryBaseDelay = provider.retry?.baseDelayMs ?? LITELLM_INITIAL_RETRY_DELAY_MS;
+  // 阶段四 T4.2：稳定 retryId——同一请求（含会话 scope）内跨重试尝试稳定，
+  // 经进度事件透出供审计/遥测关联。
+  const retryScope =
+    typeof streamingRequest.metadata?.turnId === "string" ? streamingRequest.metadata.turnId : undefined;
+  const retryId = createRetryId(provider.id, streamingRequest.model, retryScope);
 
   yield {
     type: "request_started",
@@ -147,6 +155,7 @@ export async function* streamModel(
       provider,
       maxRetries,
       retryBaseDelay,
+      retryId,
       checkpoint,
       options,
     });
@@ -170,7 +179,16 @@ export async function* streamModel(
     } catch (error) {
       if (attempt < maxRetries && isRetryableStreamError(error)) {
         const delayMs = calculateRetryDelay(provider, attempt);
-        emitModelRetryProgress(options, "network_error", attempt, maxRetries, delayMs, provider, currentRequest.model);
+        emitModelRetryProgress(
+          options,
+          retryId,
+          "network_error",
+          attempt,
+          maxRetries,
+          delayMs,
+          provider,
+          currentRequest.model,
+        );
         await delay(delayMs, options.signal);
         continue;
       }
@@ -190,6 +208,7 @@ export async function* streamModel(
         const delayMs = calculateRetryDelay(provider, attempt, error.retryAfterMs);
         emitModelRetryProgress(
           options,
+          retryId,
           retryReasonForError(error.code),
           attempt,
           maxRetries,
@@ -248,7 +267,16 @@ export async function* streamModel(
         currentRequest = buildLiteLLMContinuationRequest(currentRequest, checkpoint.get().partialText);
         checkpoint.reset();
         const delayMs = calculateRetryDelay(provider, attempt, retryAfterMsForError(error));
-        emitModelRetryProgress(options, "continuation", attempt, maxRetries, delayMs, provider, currentRequest.model);
+        emitModelRetryProgress(
+          options,
+          retryId,
+          "continuation",
+          attempt,
+          maxRetries,
+          delayMs,
+          provider,
+          currentRequest.model,
+        );
         await delay(delayMs, options.signal);
         continue;
       }
@@ -257,6 +285,7 @@ export async function* streamModel(
         const delayMs = calculateRetryDelay(provider, attempt, retryAfterMsForError(error));
         emitModelRetryProgress(
           options,
+          retryId,
           retryReasonForThrownError(error),
           attempt,
           maxRetries,
@@ -302,6 +331,7 @@ async function* streamGoogleProviderRequest(params: {
   provider: ProviderConfig;
   maxRetries: number;
   retryBaseDelay: number;
+  retryId: string;
   checkpoint: StreamingCheckpointManager;
   options: ModelRuntimeOptions;
 }): AsyncIterable<CanonicalModelEvent> {
@@ -365,6 +395,7 @@ async function* streamGoogleProviderRequest(params: {
         const delayMs = calculateRetryDelay(params.provider, attempt);
         emitModelRetryProgress(
           params.options,
+          params.retryId,
           "continuation",
           attempt,
           params.maxRetries,
@@ -380,6 +411,7 @@ async function* streamGoogleProviderRequest(params: {
         const delayMs = calculateRetryDelay(params.provider, attempt);
         emitModelRetryProgress(
           params.options,
+          params.retryId,
           "network_error",
           attempt,
           params.maxRetries,
@@ -536,6 +568,7 @@ function retryReasonForError(code: string): ModelStreamRetryProgress["reason"] {
 
 function emitModelRetryProgress(
   options: ModelRuntimeOptions,
+  retryId: string,
   reason: ModelStreamRetryProgress["reason"],
   attempt: number,
   maxAttempts: number,
@@ -544,6 +577,7 @@ function emitModelRetryProgress(
   model: string,
 ): void {
   options.onRetryProgress?.({
+    retryId,
     reason,
     attempt: attempt + 1,
     maxAttempts,

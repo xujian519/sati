@@ -13,6 +13,7 @@ import {
 } from "../storage/ProjectSessionStorage.js";
 import { readTranscript } from "../transcript/TranscriptReader.js";
 import { replayTranscriptEntries } from "../transcript/TranscriptReplay.js";
+import { synthesizeInterruptedTurn } from "../transcript/interruptedTurn.js";
 
 /**
  * Optional hook fired once the per-session `storage` has been created. Lets
@@ -63,10 +64,28 @@ export async function resumeAgentSession(options: ResumeAgentSessionOptions): Pr
   });
   const readResult = await readTranscript(storage.transcriptPath);
 
+  const maxSeq = readResult.entries.reduce((m, e) => Math.max(m, e.sequence), 0);
+  const last = readResult.entries[readResult.entries.length - 1];
   if (readResult.entries.length > 0) {
-    const maxSeq = readResult.entries.reduce((m, e) => Math.max(m, e.sequence), 0);
-    const last = readResult.entries[readResult.entries.length - 1];
-    storage.transcript.restoreState(maxSeq, last.entryId ?? null);
+    storage.transcript.restoreState(maxSeq, last?.entryId ?? null);
+  }
+
+  // 阶段四 T4.3：孤儿 turn 收尾——崩溃/强制退出留下的开放 turn 在 resume 时
+  // 合成 turn_result{interrupted}，保证括号平衡与显式的中断状态。合成条目同时
+  // 并入本次重放序列（sequence = maxSeq+1，与 writer 落盘一致），使当前 resume
+  // 的投影立即闭合：不再报 incomplete turn 诊断、该 turn 的 durable 消息照常投影。
+  const synthesized = synthesizeInterruptedTurn(
+    readResult.entries,
+    result => storage.transcript.recordTurnResult(options.sessionId, result.turnId, result),
+    options.sessionId,
+    {
+      nextSequence: maxSeq + 1,
+      parentEntryId: last?.entryId ?? null,
+      now: options.dependencies.now ?? (() => new Date()),
+    },
+  );
+  if (synthesized !== undefined) {
+    readResult.entries.push(synthesized);
   }
 
   const replay = replayTranscriptEntries(readResult.entries);

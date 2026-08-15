@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import type { SatiToolRuntimeContext, SatiWriteSnapshotEntry } from "../../protocol/types.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import { readTextFile } from "./readTextFile.js";
+import { classifyWriteIntent } from "./observation.js";
 
 export function getWriteSnapshot(
   context: SatiToolRuntimeContext,
@@ -58,36 +59,30 @@ export async function validateWriteSnapshotFresh(
   }
 
   const snapshot = getWriteSnapshot(context, absolutePath);
-  if (!snapshot) {
-    throw new SatiToolRuntimeError(
-      "invalid_tool_input",
-      "File has not been read yet. Read it first before writing to it.",
-    );
-  }
-
   const normalizedMtime = Math.floor(fileStat.mtimeMs);
-  if (normalizedMtime === snapshot.mtimeMs) {
-    return { exists: true };
+  const isFullRead = snapshot?.offset === undefined && snapshot?.limit === undefined;
+  // 阶段四 T5：三态观测语义收敛到纯函数分类器；仅全量读且 mtime 不匹配时才
+  // 读盘做内容哈希复核（避免额外 IO）。
+  let hashMatches = false;
+  if (snapshot !== undefined && isFullRead && normalizedMtime !== snapshot.mtimeMs) {
+    hashMatches = hashText(await readTextFile(absolutePath)) === snapshot.contentHash;
   }
-
-  const isFullRead = snapshot.offset === undefined && snapshot.limit === undefined;
-  if (isFullRead) {
-    const previousContent = await readTextFile(absolutePath);
-    const currentHash = hashText(previousContent);
-    if (currentHash === snapshot.contentHash) {
-      return { exists: true };
-    }
-  }
-
-  throw new SatiToolRuntimeError(
-    "invalid_tool_input",
-    "File has changed since the last read. Read it again before writing to it.",
-    {
+  const decision = classifyWriteIntent({
+    path: absolutePath,
+    snapshot,
+    exists: true,
+    mtimeMatches: snapshot !== undefined && normalizedMtime === snapshot.mtimeMs,
+    hashMatches,
+    fullRead: isFullRead,
+  });
+  if (decision.intent === "refuse") {
+    throw new SatiToolRuntimeError(decision.code, decision.message, {
       absolutePath,
-      expectedMtimeMs: snapshot.mtimeMs,
+      expectedMtimeMs: snapshot?.mtimeMs,
       actualMtimeMs: normalizedMtime,
-    },
-  );
+    });
+  }
+  return { exists: true };
 }
 
 export async function ensureWriteSnapshotFresh(

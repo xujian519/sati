@@ -5,7 +5,7 @@ import type {
   ModelProtocol,
   InputModality,
 } from "../model/index.js";
-import { cloneMessages, downgradeUnsupportedContent, ModelRequestError } from "../model/index.js";
+import { cloneMessages, downgradeUnsupportedContent, ModelRequestError, resolveModelInfo } from "../model/index.js";
 import {
   LITELLM_DEFAULT_MAX_RETRIES,
   LITELLM_INITIAL_RETRY_DELAY_MS,
@@ -121,11 +121,9 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
     if (required.length === 0) {
       return [];
     }
-    try {
-      return missingInputModalities(deps.modelRuntime.getMultimodal(ref.provider, ref.model), required);
-    } catch {
-      return [...required];
-    }
+    // 阶段四 T3：统一能力解析（config → catalog → 协议默认），未知模型不再
+    // 被盲目当作 text-only——catalog 已声明的视觉模型可保留其媒体能力。
+    return missingInputModalities(resolveModelInfo(deps.modelRuntime, ref.provider, ref.model).multimodal, required);
   }
 
   function supportsMediaRequirements(ref: RouterModelRef, required: readonly InputModality[]): boolean {
@@ -1042,13 +1040,8 @@ function downgradeRequestForAttempt(
   attempt: RouterModelRef,
   modelRuntime: ModelRuntime,
 ): CanonicalModelRequest {
-  let multimodal: ReturnType<ModelRuntime["getMultimodal"]>;
-  try {
-    multimodal = modelRuntime.getMultimodal(attempt.provider, attempt.model);
-  } catch {
-    // Unknown provider/model should still be reported by validateModelRequest.
-    return request;
-  }
+  // 阶段四 T3：统一能力解析（config → catalog → 协议默认）。
+  const multimodal = resolveModelInfo(modelRuntime, attempt.provider, attempt.model).multimodal;
   const messages = cloneMessages(request.messages);
   downgradeUnsupportedContent(messages, multimodal);
   return { ...request, messages };
@@ -1085,6 +1078,7 @@ async function* streamAttempt(
           type: "sati_router_retry_progress",
           sessionId: ctx.sessionId,
           turnId: ctx.turnId,
+          retryId: progress.retryId,
           attempt: progress.attempt,
           maxAttempts: progress.maxAttempts,
           delayMs: progress.delayMs,

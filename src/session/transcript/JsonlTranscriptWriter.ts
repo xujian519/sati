@@ -76,6 +76,12 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     };
   }
 
+  // 阶段四 T4.1：recordEntry 每次已 await appendFile，无写后缓冲——
+  // durable 边界检查点是 no-op（写入即落盘）。
+  flushCheckpoint(): void {
+    return undefined;
+  }
+
   recordAcceptedInput(
     sessionId: string,
     turnId: string,
