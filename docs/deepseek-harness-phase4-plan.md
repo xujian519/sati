@@ -438,6 +438,43 @@
 验证：typecheck ✅ 0 错误；lint ✅ 0 error（1 条阶段二遗留 UI 警告）；format:check ✅；
 受影响域回归（session/model/tool/test-support/agent-loop）716 用例全绿。
 
+## 11. 遗留项落地（#3/#4，2026-08-16）
+
+§10 处置后剩余的纯增量遗留项中，#3（T8 矩阵精化）与 #4（outputSchema 分批接入）已落地：
+
+### 11.1 #3 事件矩阵精化（`scripts/gen-event-matrix.ts` + 重新生成 `docs/event-producer-consumer.md`）
+
+- **修复事件收集器对 IntersectionTypeNode 的支持**：`GatewayEvent = Metadata & (union)` 此前整族漏收
+  （矩阵只有 AgentEvent 语汇 43 行）；现在 43 → **62 行**（补入 GatewayEvent 家族）。
+- **消费者列补上事件流消费点**：`for await (... of session.submit(...))` / `gateway.submitTurn(...)` 按
+  流入口白名单（submit → AgentEvent，submitTurn → GatewayEvent）记入对应语汇；62 个事件全部有消费者
+  （此前全空）。站点多时折叠为「{callee} 流 ×N」，明细在文档附录「事件流消费点（for-await 语汇流）」
+  （submit ×1 + submitTurn ×26 处渠道/网关消费点）。
+- 产/消同源重复保持 0；--check 门禁 fresh。
+
+### 11.2 #4 outputSchema 分批接入（第二批 8 个存量工具）
+
+首批（T9）3 个专利工具后，本批 8 个返回结构化 data 的存量工具声明 outputSchema 成功契约：
+
+| 工具 | data 契约 |
+|---|---|
+| get_current_time | timezone/iso/local/date/weekday/unixMs |
+| glob | files[]/count/truncated |
+| grep | mode(enums)/files[]/count/truncated |
+| todo_write | todos[]（status enum）/mode(enum)/merge(+可选) |
+| patent_search | query/total/hits[]（7 必现字段）/warnings[] |
+| patent_case_search | total/results[]（via enum）/dbPath? |
+| patent_wiki_search | total/results[]/wikiDir? |
+| search_patent_figure | query/total/indexedCount/method/results[] |
+
+新增 `tests/tool/output-schema-batch.spec.ts`（4 用例）：本批工具均已声明 schema、典型成功 data 对自身
+schema 零违约（契约有效）、可注册到 `requireOutputSchema: true` 注册表（分批接入验收门）、反向违约被检出。
+
+`ToolRegistry.requireOutputSchema` 保持默认 false——存量工具全部声明后统一开启（全局开启仍是后续项）。
+
+验证：typecheck ✅ 0 错误；lint ✅ 0 error（1 条阶段二遗留 UI 警告）；format:check ✅；
+tool 域回归 338 用例全绿。
+
 ---
 
 ## 附：上游依据速查（dsh 路径）

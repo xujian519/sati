@@ -23,6 +23,22 @@ const EVENT_TYPE_FILES = [
   "src/gateway/protocol/frames.ts",
 ];
 
+/** 事件名 → 语汇名（AgentEvent / GatewayEvent / WsFrame）。 */
+type EventVocabMap = Map<string, string[]>;
+
+/**
+ * 事件流消费入口白名单：for-await-of 循环消费对应语汇流的**全部**事件。
+ * submit → AgentSession.submit（AsyncIterable<AgentEvent>）；
+ * submitTurn → Gateway.submitTurn（AsyncIterable<GatewayEvent>）。
+ */
+const STREAM_CONSUMER_ENTRIES: ReadonlyArray<{ callee: string; vocab: string }> = [
+  { callee: "submit", vocab: "AgentEvent" },
+  { callee: "submitTurn", vocab: "GatewayEvent" },
+];
+
+/** 流消费点在主体表格中折叠的站点数上限；超限折叠为「{callee} 流 ×N」并在附录详列。 */
+const MAX_INLINE_STREAM_SITES = 4;
+
 function listTsFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -36,11 +52,16 @@ function listTsFiles(dir: string): string[] {
   return out;
 }
 
-/** 从源码提取某类型名的 union 成员的 type 字面量。 */
-function collectEventTypes(filePath: string, typeNames: string[]): string[] {
+/**
+ * 从源码提取某类型名的 union 成员的 type 字面量（事件名 → 语汇名数组）。
+ * 支持 IntersectionTypeNode（如 `GatewayEvent = Metadata & (union)`——此前仅处理
+ * Union/Parenthesized，GatewayEvent 语汇整族漏收），成员逐层解包后按 TypeLiteral
+ * 的 `type` 属性 StringLiteral 收集。
+ */
+function collectEventTypes(filePath: string, typeNames: string[]): EventVocabMap {
   const source = ts.createSourceFile(filePath, readFileSync(filePath, "utf8"), ts.ScriptTarget.Latest, true);
   const names = new Set(typeNames);
-  const events = new Set<string>();
+  const events = new Map<string, string[]>();
   function visit(node: ts.Node): void {
     if (ts.isTypeAliasDeclaration(node) && names.has(node.name.text)) {
       const typeRefs: ts.Node[] = [node.type];
@@ -51,11 +72,16 @@ function collectEventTypes(filePath: string, typeNames: string[]): string[] {
             if (ts.isPropertySignature(member) && member.name.getText(source) === "type") {
               const literal = member.type;
               if (literal && ts.isLiteralTypeNode(literal) && literal.literal.kind === ts.SyntaxKind.StringLiteral) {
-                events.add((literal.literal as ts.StringLiteral).text);
+                const name = (literal.literal as ts.StringLiteral).text;
+                const vocabs = events.get(name) ?? [];
+                if (!vocabs.includes(node.name.text)) vocabs.push(node.name.text);
+                events.set(name, vocabs);
               }
             }
           }
         } else if (ts.isUnionTypeNode(current)) {
+          typeRefs.push(...current.types);
+        } else if (ts.isIntersectionTypeNode(current)) {
           typeRefs.push(...current.types);
         } else if (ts.isParenthesizedTypeNode(current)) {
           typeRefs.push(current.type);
@@ -65,7 +91,7 @@ function collectEventTypes(filePath: string, typeNames: string[]): string[] {
     ts.forEachChild(node, visit);
   }
   visit(source);
-  return [...events].sort();
+  return events;
 }
 
 type Site = { file: string; line: number };
@@ -155,6 +181,34 @@ function collectSites(dir: string, calleeNames: string[], mode: CollectMode): Ma
   return sites;
 }
 
+/**
+ * 事件流消费点：`for await (const x of <callee>(...))` 循环，callee 名落在
+ * 流入口白名单（submit / submitTurn）时，把该站点记入对应语汇的流消费集合
+ * （该循环消费该语汇流的**全部**事件，无法归因到单个事件名）。
+ */
+function collectStreamConsumers(dir: string): Map<string, Site[]> {
+  const sites = new Map<string, Site[]>();
+  for (const file of listTsFiles(dir)) {
+    const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+    function visit(node: ts.Node): void {
+      if (ts.isForOfStatement(node) && node.awaitModifier !== undefined && ts.isCallExpression(node.expression)) {
+        const calleeName = calleeNameOf(node.expression.expression);
+        const entry = STREAM_CONSUMER_ENTRIES.find(e => e.callee === calleeName);
+        if (entry !== undefined) {
+          const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+          const site = { file: relative(REPO_ROOT, file), line };
+          const list = sites.get(entry.vocab) ?? [];
+          list.push(site);
+          sites.set(entry.vocab, list);
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+  }
+  return sites;
+}
+
 function extractTypeLiteral(node: ts.Node, source: ts.SourceFile): string | undefined {
   let value: string | undefined;
   function visit(n: ts.Node): void {
@@ -170,15 +224,32 @@ function extractTypeLiteral(node: ts.Node, source: ts.SourceFile): string | unde
   return value;
 }
 
+/** 站点去重（同一 file:line 只出现一次）。 */
+function dedupeSites(sites: Site[]): Site[] {
+  const seen = new Set<string>();
+  const out: Site[] = [];
+  for (const site of sites) {
+    const key = site.file + ":" + site.line;
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(site);
+    }
+  }
+  return out;
+}
+
 function renderMatrix(): string {
-  const events: string[] = [];
+  const eventVocabs = new Map<string, string[]>();
   for (const file of EVENT_TYPE_FILES) {
     const full = join(REPO_ROOT, file);
     if (!existsSync(full)) continue;
     const typeName = file.includes("events.ts") ? "AgentEvent" : file.includes("frames") ? "WsFrame" : "GatewayEvent";
-    events.push(...collectEventTypes(full, [typeName]));
+    for (const [name, vocabs] of collectEventTypes(full, [typeName])) {
+      const existing = eventVocabs.get(name) ?? [];
+      eventVocabs.set(name, [...new Set([...existing, ...vocabs])]);
+    }
   }
-  const uniqueEvents = [...new Set(events)].sort();
+  const uniqueEvents = [...eventVocabs.keys()].sort();
   // emit-like 调用名集合：除 emit/dispatch 外含 emitAgentEvent/emitEvent
   // （属性访问经 calleeNameOf 归一后按名匹配，补回旧启发式 calleeName===undefined
   // 曾覆盖的这两类字符串事件名调用点）。
@@ -188,23 +259,60 @@ function renderMatrix(): string {
     "producer",
   );
   const consumers = collectSites(join(REPO_ROOT, "src"), ["on", "subscribe"], "consumer");
+  const streamConsumers = collectStreamConsumers(join(REPO_ROOT, "src"));
+
   const lines: string[] = [
     "<!-- Generated by scripts/gen-event-matrix.ts - do not edit by hand. Run `pnpm gen:event-matrix` to regenerate. -->",
     "",
     "# 事件生产者/消费者矩阵（阶段四 T8）",
     "",
-    "从源码生成：事件名取自 discriminated union 的 type 字面量；生产者为 emit/dispatch/emitAgentEvent/",
-    "emitEvent 字符串事件名调用点、对象字面量首参调用点与 yield { type } 泵；消费者为 on/subscribe",
-    "字符串订阅调用点。本代码库的 AgentEvent 消费经生成器/类型化 sink 完成（无 on 订阅），故消费者",
-    "列多为空属正常。改事件后运行 `pnpm gen:event-matrix --check`（CI 门禁）。",
+    "从源码生成：事件名取自 discriminated union 的 type 字面量（含交叉类型如 GatewayEvent，见附录）；生产者为",
+    "emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字面量首参调用点与 yield { type } 泵；",
+    "消费者为 on/subscribe 字符串订阅调用点 + 事件流消费点（for-await 语汇流，折叠为「{callee} 流 ×N」，明细见附录）。",
+    "改事件后运行 `pnpm gen:event-matrix --check`（CI 门禁）。",
     "",
     "| 事件 | 生产者 | 消费者 |",
     "| --- | --- | --- |",
   ];
   for (const event of uniqueEvents) {
     const ps = (producers.get(event) ?? []).map(s => s.file + ":" + s.line).join(", ") || "-";
-    const cs = (consumers.get(event) ?? []).map(s => s.file + ":" + s.line).join(", ") || "-";
+    const vocabs = eventVocabs.get(event) ?? [];
+    const exact = consumers.get(event) ?? [];
+    const stream = dedupeSites(vocabs.flatMap(v => streamConsumers.get(v) ?? []));
+    const csParts: string[] = exact.map(s => s.file + ":" + s.line);
+    for (const entry of STREAM_CONSUMER_ENTRIES) {
+      if (!vocabs.includes(entry.vocab)) continue;
+      const sites = dedupeSites(streamConsumers.get(entry.vocab) ?? []);
+      if (sites.length === 0) continue;
+      if (sites.length <= MAX_INLINE_STREAM_SITES) {
+        csParts.push(...sites.map(s => s.file + ":" + s.line));
+      } else {
+        csParts.push(entry.callee + " 流 ×" + sites.length);
+      }
+    }
+    const cs = csParts.length > 0 ? csParts.join(", ") : "-";
     lines.push("| " + event + " | " + ps + " | " + cs + " |");
+  }
+
+  // 附录：事件流消费点明细（流入口白名单的 for-await 站点）。
+  const anyStream = STREAM_CONSUMER_ENTRIES.some(e => (streamConsumers.get(e.vocab) ?? []).length > 0);
+  if (anyStream) {
+    lines.push(
+      "",
+      "### 事件流消费点（for-await 语汇流）",
+      "",
+      "以下站点以 `for await` 消费对应语汇流的**全部**事件（流入口白名单：`submit` → AgentEvent，",
+      "`submitTurn` → GatewayEvent）。主体表格的消费者列把这类消费折叠为「{callee} 流 ×N」。",
+      "",
+      "| 流入口 | 语汇 | 消费站点 |",
+      "| --- | --- | --- |",
+    );
+    for (const entry of STREAM_CONSUMER_ENTRIES) {
+      const sites = dedupeSites(streamConsumers.get(entry.vocab) ?? []);
+      if (sites.length === 0) continue;
+      const rendered = sites.map(s => s.file + ":" + s.line).join(", ");
+      lines.push("| " + entry.callee + " | " + entry.vocab + " | " + rendered + " |");
+    }
   }
   return lines.join("\n") + "\n";
 }

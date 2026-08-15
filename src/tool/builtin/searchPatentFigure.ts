@@ -81,6 +81,20 @@ export function createSearchPatentFigureTool(
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["query", "total", "indexedCount", "method", "results"],
+      additionalProperties: false,
+      properties: {
+        query: { type: "string" },
+        total: { type: "integer" },
+        indexedCount: { type: "integer" },
+        method: { type: "string" },
+        note: { type: "string" },
+        hint: { type: "string" },
+        results: { type: "array", items: { type: "object" } },
+      },
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context) => {

@@ -100,6 +100,17 @@ export function createGrepTool(): SatiToolDefinition<GrepInput> {
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["mode", "files", "count", "truncated"],
+      additionalProperties: false,
+      properties: {
+        mode: { type: "string", enum: ["content", "files_with_matches", "count"] },
+        files: { type: "array", items: { type: "string" } },
+        count: { type: "integer" },
+        truncated: { type: "boolean" },
+      },
+    },
     maxResultBytes: 200_000,
     isReadOnly: () => true,
     isConcurrencySafe: () => true,

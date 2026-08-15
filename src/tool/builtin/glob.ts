@@ -72,6 +72,16 @@ export function createGlobTool(): SatiToolDefinition<GlobInput> {
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["files", "count", "truncated"],
+      additionalProperties: false,
+      properties: {
+        files: { type: "array", items: { type: "string" } },
+        count: { type: "integer" },
+        truncated: { type: "boolean" },
+      },
+    },
     maxResultBytes: 200_000,
     isReadOnly: () => true,
     isConcurrencySafe: () => true,

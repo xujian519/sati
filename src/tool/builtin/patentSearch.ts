@@ -93,6 +93,33 @@ export function createPatentSearchTool(
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["query", "total", "hits", "warnings"],
+      additionalProperties: false,
+      properties: {
+        query: { type: "string" },
+        total: { type: "integer" },
+        hits: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["patent", "title", "assignee", "publicationDate", "priorityDate", "abstract", "url"],
+            additionalProperties: false,
+            properties: {
+              patent: { type: "string" },
+              title: { type: "string" },
+              assignee: { type: "string" },
+              publicationDate: { type: "string" },
+              priorityDate: { type: "string" },
+              abstract: { type: "string" },
+              url: { type: "string" },
+            },
+          },
+        },
+        warnings: { type: "array", items: { type: "string" } },
+      },
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     isOpenWorld: () => true,

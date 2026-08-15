@@ -149,6 +149,34 @@ export function createPatentCaseSearchTool(
       },
       required: ["query"],
     },
+    outputSchema: {
+      type: "object",
+      required: ["total", "results"],
+      additionalProperties: false,
+      properties: {
+        total: { type: "integer" },
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["documentId", "docType", "title", "charCount", "via"],
+            properties: {
+              documentId: { type: "string" },
+              docType: { type: "string" },
+              title: { type: "string" },
+              decisionNumber: { type: "string" },
+              caseNumber: { type: "string" },
+              court: { type: "string" },
+              source: { type: "string" },
+              charCount: { type: "integer" },
+              snippet: { type: "string" },
+              via: { type: "string", enum: ["fts", "like", "semantic"] },
+            },
+          },
+        },
+        dbPath: { type: "string" },
+      },
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     checkAvailability: () => {
