@@ -23,6 +23,7 @@
     "dev": "node scripts/dev-launcher.mjs",
     "test": "npm run build && node --test --test-force-exit --test-timeout 60000 \"dist/tests/**/*.test.js\" \"dist/tests/**/*.spec.js\"",
     "test:patent-eval": "npm run build && node scripts/patent-eval.mjs --mode graph --suite tests/patent/benchmark/fixtures/patent-exam-real-a22.json --max-cases 1",
+    "record:replay": "tsx scripts/record-llm-replay.ts",
     "pretypecheck": "pnpm --filter edgeclaw-memory-core build",
     "typecheck": "tsc --noEmit && pnpm --filter edgeclaw-memory-core typecheck",
     "lint": "eslint src tests scripts apps/desktop && pnpm --filter sati-ui lint",

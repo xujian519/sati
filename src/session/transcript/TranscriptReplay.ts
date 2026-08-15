@@ -128,6 +128,10 @@ export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentT
         // 注入内容参考条目（记忆/指令/方法论）：仅供审计/回放查询，
         // 不进入模型可见 messages 投影。
         break;
+      case "request_header":
+        // 阶段四 T2：发送前请求头快照（log-only）。仅供审计与重建对拍，
+        // 不进入模型可见 messages 投影。
+        break;
     }
   }
 

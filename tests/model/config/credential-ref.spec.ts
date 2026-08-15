@@ -3,7 +3,7 @@ import test from "node:test";
 import { parseModelConfig } from "../../../src/model/config/parseModelConfig.js";
 import { buildProviderHeaders } from "../../../src/model/streaming/streamModel.js";
 import { redactConfig } from "../../../src/pilot/config/redact.js";
-import { ModelConfigError } from "../../../src/model/protocol/errors.js";
+import { ModelRequestError } from "../../../src/model/protocol/errors.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../../../src/model/protocol/capabilities.js";
 import type { ProviderConfig } from "../../../src/model/protocol/canonical.js";
 
@@ -135,7 +135,9 @@ test("buildProviderHeaders：env 引用解析失败抛错（fail-loud，不静�
   });
   assert.throws(
     () => buildProviderHeaders(provider, {}),
-    (error: unknown) => error instanceof ModelConfigError,
+    // 阶段四 T10：请求路径把凭证 seam 的稳定双码转成 ModelRequestError，
+    // 使 router 可将其原样带入 CanonicalModelError.code（fail-loud 语义不变）。
+    (error: unknown) => error instanceof ModelRequestError && error.code === "missing_credential",
   );
 });
 

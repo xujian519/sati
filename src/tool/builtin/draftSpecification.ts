@@ -92,6 +92,30 @@ export function createDraftSpecificationTool(): SatiToolDefinition<DraftSpecific
       },
       required: ["title"],
     },
+    // 阶段四 T9：canonical 输出契约（成功路径 data 必须匹配）。
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        title: { type: "string" },
+        tech_domain: { type: "string", enum: ["mechanical", "electrical", "chemical", "software", "general"] },
+        patent_type: { type: "string", enum: ["invention", "utility_model"] },
+        sections: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              content: { type: "string" },
+              placeholder: { type: "boolean" },
+            },
+            required: ["name", "content", "placeholder"],
+          },
+        },
+        warnings: { type: "array", items: { type: "string" } },
+      },
+      required: ["title", "tech_domain", "patent_type", "sections", "warnings"],
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async input => {

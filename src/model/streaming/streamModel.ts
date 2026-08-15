@@ -7,7 +7,7 @@ import { buildModelRequest } from "../request/buildModelRequest.js";
 import { validateModelRequest } from "../request/validateModelRequest.js";
 import { resolveApiKey, type CredentialEnv } from "../config/resolveCredentials.js";
 import type { CanonicalModelEvent, CanonicalModelRequest, ModelConfig, ProviderConfig } from "../protocol/canonical.js";
-import { ModelProviderError, parseRetryAfterHeader } from "../protocol/errors.js";
+import { ModelConfigError, ModelProviderError, ModelRequestError, parseRetryAfterHeader } from "../protocol/errors.js";
 import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../providers/google/stream.js";
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
@@ -741,10 +741,20 @@ export function buildProviderHeaders(provider: ProviderConfig, env: CredentialEn
  * - literal 源：用 parse 期已解析的 apiKey（trim 防御线内调用方直传）。
  */
 function resolveApiKeyAtRequest(provider: ProviderConfig, env: CredentialEnv): string {
-  if (provider.apiKeySource === "env" && provider.apiKeyRaw !== undefined) {
-    return resolveApiKey(provider.apiKeyRaw, env);
+  try {
+    if (provider.apiKeySource === "env" && provider.apiKeyRaw !== undefined) {
+      return resolveApiKey(provider.apiKeyRaw, env);
+    }
+    return provider.apiKey.trim();
+  } catch (error) {
+    // 阶段四 T10：把凭证 seam 的稳定双码（missing_credential / invalid_credential）
+    // 转为 ModelRequestError，使 router 的 canonicalizeModelRequestError 将其
+    // 原样带入 CanonicalModelError.code，供 agent loop 分类与提示路由。
+    if (error instanceof ModelConfigError) {
+      throw new ModelRequestError(error.code, error.message, error.details);
+    }
+    throw error;
   }
-  return provider.apiKey.trim();
 }
 
 async function safeReadJson(response: Response): Promise<unknown> {

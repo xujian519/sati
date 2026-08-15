@@ -1,13 +1,30 @@
 import type { CanonicalToolSchema } from "../../model/index.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 
+/** 注册表选项（阶段四 T9）。 */
+export type ToolRegistryOptions = {
+  /**
+   * 新工具 canonical 输出契约强制：为 true 时，未声明 outputSchema 的工具
+   * 在注册期 fail-loud。默认 false（存量注册表不受影响；存量工具分批复用
+   * schema 后按注册表逐步开启）。
+   */
+  requireOutputSchema?: boolean;
+};
+
 export class ToolRegistry {
   private readonly toolsByName = new Map<string, SatiToolDefinition>();
   private readonly aliases = new Map<string, string>();
   /** 排序后的工具列表缓存（惰性构建，注册表变更时失效）。 */
   private sortedCache: SatiToolDefinition[] | null = null;
 
+  constructor(private readonly options: ToolRegistryOptions = {}) {}
+
   register(tool: SatiToolDefinition): void {
+    if (this.options.requireOutputSchema === true && tool.outputSchema === undefined) {
+      throw new Error(
+        `Tool ${tool.name} is missing its canonical outputSchema (phase 4 T9: new tools must declare one).`,
+      );
+    }
     if (this.toolsByName.has(tool.name)) {
       throw new Error(`Tool ${tool.name} is already registered.`);
     }

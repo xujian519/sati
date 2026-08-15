@@ -133,6 +133,20 @@ export function createClaimChartTool(): SatiToolDefinition<ClaimChartInput, Clai
       },
       required: ["mode", "claim_text", "targets"],
     },
+    // 阶段四 T9：canonical 输出契约（成功路径 data 必须匹配；失败路径只返回
+    // content 不带 data，按 T9 语义不触发校验）。
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        ok: { type: "boolean" },
+        chart: { type: "object" },
+        jsonPath: { type: "string" },
+        mdPath: { type: "string" },
+        error: { type: "string" },
+      },
+      required: ["ok"],
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context: SatiToolRuntimeContext) => {

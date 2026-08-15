@@ -4,6 +4,7 @@ import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
 import type {
   AgentControlBoundaryTranscriptEntry,
+  AgentRequestHeaderSnapshot,
   AgentStatusMessageTranscriptEntry,
   AgentTranscriptEntry,
   SessionMetadataValue,
@@ -35,6 +36,8 @@ export type AgentTranscriptWriter = {
   ): void | Promise<void>;
   /** 注入内容参考条目（模型实际看到的记忆/指令/方法论段落原文，不进入重放投影）。 */
   recordInjectedContext?(sessionId: string, turnId: string, injection: InjectionRecord): void | Promise<void>;
+  /** 发送前请求头快照（阶段四 T2，log-only，不进入重放投影）。 */
+  recordRequestHeader?(sessionId: string, turnId: string, header: AgentRequestHeaderSnapshot): void | Promise<void>;
   recordEntry?(entry: AgentTranscriptEntry): void | Promise<void>;
   snapshotState?(): AgentTranscriptWriterState;
 };

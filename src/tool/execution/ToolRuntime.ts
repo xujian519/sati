@@ -1,7 +1,7 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import { PermissionRuntime } from "../../permission/index.js";
 import type { LifecycleRuntime, SatiHookEffect } from "../../lifecycle/index.js";
-import { toolError, normalizeToolError } from "../protocol/errors.js";
+import { normalizeToolError, SatiToolRuntimeError, toolError } from "../protocol/errors.js";
 import type { SatiToolErrorCode } from "../protocol/errors.js";
 import {
   PLAN_MODE_ALLOWED_TOOLS,
@@ -21,6 +21,7 @@ import { receiptFromToolExecution } from "../protocol/evidence.js";
 import type { ToolRegistry } from "../registry/ToolRegistry.js";
 import type { AgentEventEmitter } from "../../agent/protocol/events.js";
 import { requiresPromptCapability } from "../userInteractionConstraints.js";
+import { TOOL_OUTPUT_SCHEMA_MISMATCH, validateCanonicalOutput } from "./outputSchemaValidation.js";
 import { validateToolInput } from "./validateToolInput.js";
 import { formatValidationError } from "./formatValidationError.js";
 import { buildToolErrorRecovery } from "./errorRecovery.js";
@@ -289,6 +290,23 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       : baseContext;
     try {
       const output = await tool.execute(executeInput, executeContext);
+      // 阶段四 T9：工具声明 outputSchema 时，成功路径的 canonical data 必须
+      // 通过校验。data 缺省（如失败路径只返回 content）不触发校验——schema
+      // 声明的是成功契约；data 存在即必须匹配。
+      if (tool.outputSchema !== undefined && output.data !== undefined) {
+        const violations = validateCanonicalOutput(output.data, tool.outputSchema);
+        if (violations.length > 0) {
+          const shown = violations.slice(0, 5).join("; ");
+          const suffix = violations.length > 5 ? " (+" + String(violations.length - 5) + " more)" : "";
+          // 必须抛 SatiToolRuntimeError（Error 子类）：normalizeToolError 对
+          // 非 Error 值一律归一为 tool_execution_failed，会吞掉本结构化错误码。
+          throw new SatiToolRuntimeError(
+            TOOL_OUTPUT_SCHEMA_MISMATCH,
+            `Tool ${tool.name} canonical output violates its outputSchema: ${shown}${suffix}`,
+            { violations },
+          );
+        }
+      }
       const maxResultBytes = tool.maxResultBytes ?? context.maxResultBytes;
       const previewLimit = applyResultSizeLimit(output.content, maxResultBytes);
       const completedAt = now(context).toISOString();

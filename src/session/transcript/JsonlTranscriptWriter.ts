@@ -12,6 +12,7 @@ import {
   SUBAGENT_SUMMARY_PREVIEW_BYTES,
   type AgentControlBoundaryTranscriptEntry,
   type AgentMessageTranscriptEntry,
+  type AgentRequestHeaderSnapshot,
   type AgentSubagentCompletedTranscriptEntry,
   type AgentSubagentStartedTranscriptEntry,
   type AgentTranscriptEntry,
@@ -145,6 +146,14 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       source: injection.source,
       text: injection.text,
       ...(injection.partIndex !== undefined ? { partIndex: injection.partIndex } : {}),
+    });
+  }
+
+  recordRequestHeader(sessionId: string, turnId: string, header: AgentRequestHeaderSnapshot): Promise<void> {
+    return this.recordEntry({
+      type: "request_header",
+      ...this.baseEntry(sessionId, turnId),
+      header,
     });
   }
 

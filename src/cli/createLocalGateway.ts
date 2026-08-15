@@ -83,6 +83,7 @@ import {
   parsePluginMcpServers,
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
+import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
 import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
@@ -744,9 +745,13 @@ class ProjectRuntimeRegistry {
     }
 
     const snapshot = loadPilotConfig({ projectRoot, env: this.options.env });
-    const model = this.options.modelFactory
+    const baseModel = this.options.modelFactory
       ? this.options.modelFactory(snapshot)
       : createModelRuntime(snapshot.config.model);
+    // Phase 4 T1: replay seam hooks. SATI_LLM_REPLAY_RECORD_ROOT records every
+    // stream the gateway drives; SATI_LLM_REPLAY_ROOT replays a fixture without
+    // an API key. Unset in normal operation (applyReplayEnvHooks is a no-op).
+    const model = applyReplayEnvHooks(baseModel, this.options.env);
     const tokenAccounting = new TokenAccountingRuntime({
       modelConfig: snapshot.config.model,
     });
