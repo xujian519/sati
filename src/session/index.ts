@@ -57,6 +57,13 @@ export {
   type ResumeAgentSessionOptions,
   type ResumeAgentSessionResult,
 } from "./resume/resumeAgentSession.js";
+export {
+  TaskResumeScanner,
+  RESUME_TURN_MARKER,
+  RESUME_TURN_MESSAGE,
+  type TaskResumeScannerOptions,
+  type TaskResumeScanResult,
+} from "./resume/TaskResumeScanner.js";
 export { InMemoryTranscriptWriter, type InMemoryTranscriptEntry } from "./transcript/InMemoryTranscriptWriter.js";
 export {
   JsonlTranscriptWriter,

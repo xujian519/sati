@@ -57,6 +57,8 @@ export const ENV_KEY = {
   VERSION: "VERSION",
   /** 网关记忆诊断开关（SATI_MEMORY_DIAGNOSTICS）。 */
   MEMORY_DIAGNOSTICS: "MEMORY_DIAGNOSTICS",
+  /** 跨进程重启续算开关（SATI_TASK_RESUME_ENABLED，默认开）。 */
+  TASK_RESUME_ENABLED: "TASK_RESUME_ENABLED",
 } as const;
 
 /** 品牌前缀：品牌键 = `${BRAND_PREFIX}${中性键}`，仅本文件允许出现。 */

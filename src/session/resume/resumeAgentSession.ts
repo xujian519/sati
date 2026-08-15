@@ -1,4 +1,5 @@
 import { createAgentSessionStateFromReplay, type AgentSession } from "../../agent/session/AgentSession.js";
+import type { AgentTranscriptWriter } from "../transcript/TranscriptWriter.js";
 import {
   createAgentSessionWithStorage,
   type CreateAgentSessionOptions,
@@ -54,6 +55,11 @@ export type ResumeAgentSessionResult = {
   transcriptPath: string;
   diagnostics: ReturnType<typeof replayTranscriptEntries>["diagnostics"];
   metadata: SessionMetadataValue;
+  /**
+   * 会话转录写入器（跨进程重启续算 T-A 接线用）：宿主可据此把
+   * retry_schedule 等 log-only 轨迹写入同一 transcript 权威序列。
+   */
+  writer: AgentTranscriptWriter;
 };
 
 export async function resumeAgentSession(options: ResumeAgentSessionOptions): Promise<ResumeAgentSessionResult> {
@@ -127,5 +133,6 @@ export async function resumeAgentSession(options: ResumeAgentSessionOptions): Pr
     transcriptPath: storage.transcriptPath,
     diagnostics: [...readResult.diagnostics, ...replay.diagnostics],
     metadata: metadataStore.getSnapshot(),
+    writer: storage.transcript,
   };
 }

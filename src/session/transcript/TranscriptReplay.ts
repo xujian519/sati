@@ -132,6 +132,10 @@ export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentT
         // 阶段四 T2：发送前请求头快照（log-only）。仅供审计与重建对拍，
         // 不进入模型可见 messages 投影。
         break;
+      case "retry_schedule":
+        // 跨进程重启续算 T-A：重试调度参考（log-only）。仅供审计与跨进程恢复
+        // 定位续算点，不进入模型可见 messages 投影。
+        break;
     }
   }
 
