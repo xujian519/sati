@@ -377,7 +377,13 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       await this.recordToolAudit(result, context, startedAtDate);
       return result;
     } catch (error) {
-      const normalized = normalizeToolError(error);
+      // 阶段四 T6.1：合作式工具在 deadline 处观察到熔合 signal 并自行抛出
+      // abort 类错误时，先替换为 TOOL_TIMEOUT，共享下方错误路径（错误码/审计/
+      // 证据闭环一致）。
+      const effectiveError = isToolTimeout(fusedAbortSignal, baseContext.abortSignal)
+        ? new SatiToolRuntimeError("tool_timeout", `Tool ${tool.name} exceeded its ${tool.timeoutMs}ms budget`)
+        : error;
+      const normalized = normalizeToolError(effectiveError);
       await this.dispatchLifecycle("PostToolUseFailure", tool.name, call.id, executeInput, context, {
         error: normalized.message,
         isInterrupt: normalized.code === "tool_aborted",
