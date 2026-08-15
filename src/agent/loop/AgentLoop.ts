@@ -33,6 +33,7 @@ import { requiresPromptCapability } from "../../tool/userInteractionConstraints.
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
 import { repairToolName } from "../../model/streaming/repairToolName.js";
 import { applyMethodologyAddendum, computeMethodologyAddendum } from "./methodologyInjection.js";
+import { buildRequestHeaderSnapshot, verifyRequestHeaderSnapshot } from "./requestInvariant.js";
 import { projectToolResults } from "./projectToolResults.js";
 import { resolveOutputTokenRetryBump } from "./outputTokenRetry.js";
 import type { LargeFileRepairDecision } from "./LargeFileRepair.js";
@@ -439,6 +440,13 @@ export class AgentLoop {
     request: CanonicalModelRequest,
     decision: RouterDecision,
   ): AsyncGenerator<AgentEvent, StreamModelResponseResult, unknown> {
+    // 阶段四 T2：发送前落 request_header 快照（log-only，供审计与重建对拍）。
+    // 写入失败即中止本步（fail-closed：无法记录请求头就不发送）。
+    const requestHeader = buildRequestHeaderSnapshot(request, decision);
+    await input.onRequestHeader?.(requestHeader);
+    if (process.env.SATI_VERIFY_REQUEST_RECONSTRUCTION === "1") {
+      verifyRequestHeaderSnapshot(requestHeader, request, decision);
+    }
     const assembler = createModelMessageAssemblerState();
     try {
       for await (const event of this.dependencies.router.execute(decision, request, {

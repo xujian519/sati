@@ -2,7 +2,11 @@ import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
-import type { AgentControlBoundaryTranscriptEntry, SessionMetadataValue } from "./TranscriptEntry.js";
+import type {
+  AgentControlBoundaryTranscriptEntry,
+  AgentRequestHeaderSnapshot,
+  SessionMetadataValue,
+} from "./TranscriptEntry.js";
 import type { AgentStatusMessageInput, AgentTranscriptWriter, AgentTranscriptWriterState } from "./TranscriptWriter.js";
 
 export type InMemoryTranscriptEntry =
@@ -24,7 +28,8 @@ export type InMemoryTranscriptEntry =
       turnId: string;
       boundary: AgentControlBoundaryTranscriptEntry["boundary"];
     }
-  | ({ type: "injected_context"; sessionId: string; turnId: string } & InjectionRecord);
+  | ({ type: "injected_context"; sessionId: string; turnId: string } & InjectionRecord)
+  | { type: "request_header"; sessionId: string; turnId: string; header: AgentRequestHeaderSnapshot };
 
 export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
   readonly entries: InMemoryTranscriptEntry[] = [];
@@ -74,6 +79,10 @@ export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
 
   recordInjectedContext(sessionId: string, turnId: string, injection: InjectionRecord): void {
     this.entries.push({ type: "injected_context", sessionId, turnId, ...injection });
+  }
+
+  recordRequestHeader(sessionId: string, turnId: string, header: AgentRequestHeaderSnapshot): void {
+    this.entries.push({ type: "request_header", sessionId, turnId, header });
   }
 
   snapshotState(): AgentTranscriptWriterState {

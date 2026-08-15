@@ -44,10 +44,44 @@ export function isPromptTooLong(error: CanonicalModelError): boolean {
   return false;
 }
 
+/** 凭证 seam 稳定双码（阶段四 T10）：missing 可修复、invalid 重试无意义。 */
+export function isMissingCredentialError(error: CanonicalModelError): boolean {
+  return error.code === "missing_credential";
+}
+
+/** 凭证 seam 稳定双码（阶段四 T10）：格式非法，绝不自动重试。 */
+export function isInvalidCredentialError(error: CanonicalModelError): boolean {
+  return error.code === "invalid_credential";
+}
+
 export function classifyModelError(error: CanonicalModelError): {
   stopReason: AgentTurnResult["stopReason"];
   error: ReturnType<typeof agentError>;
 } {
+  if (isMissingCredentialError(error)) {
+    return {
+      stopReason: "model_error",
+      error: agentError(
+        "agent_model_error",
+        error.message,
+        error,
+        error.userHint ??
+          "No API key is configured for this provider. Add an apiKey (or a ${VAR} environment reference) in your model config and retry.",
+      ),
+    };
+  }
+  if (isInvalidCredentialError(error)) {
+    return {
+      stopReason: "model_error",
+      error: agentError(
+        "agent_model_error",
+        error.message,
+        error,
+        error.userHint ??
+          "The configured API key contains characters an HTTP header cannot carry (line break or control characters). Fix the key value and retry.",
+      ),
+    };
+  }
   if (isPromptTooLong(error)) {
     return {
       stopReason: "prompt_too_long",

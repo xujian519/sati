@@ -7,6 +7,7 @@ export type SatiToolErrorCode =
   | "tool_execution_failed"
   | "tool_aborted"
   | "tool_timeout"
+  | "tool_output_schema_mismatch"
   | "result_too_large"
   | "path_not_allowed"
   | "file_not_found"

@@ -139,6 +139,44 @@ export function createDraftClaimsTool(): SatiToolDefinition<DraftClaimsInput, Dr
       },
       required: ["invention_name", "technical_features"],
     },
+    // 阶段四 T9：canonical 输出契约（成功路径 data 必须匹配）。
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        invention_name: { type: "string" },
+        tech_domain: { type: "string", enum: ["mechanical", "electrical", "chemical", "software", "general"] },
+        claims: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              number: { type: "integer" },
+              type: { type: "string", enum: ["independent", "dependent"] },
+              text: { type: "string" },
+              refersTo: { type: "integer" },
+            },
+            required: ["number", "type", "text"],
+          },
+        },
+        violations: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              rule: { type: "string" },
+              severity: { type: "string", enum: ["error", "warning"] },
+              claimNumber: { type: "integer" },
+              message: { type: "string" },
+              suggestion: { type: "string" },
+            },
+            required: ["rule", "severity", "message"],
+          },
+        },
+        warnings: { type: "array", items: { type: "string" } },
+      },
+      required: ["invention_name", "tech_domain", "claims", "violations", "warnings"],
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async input => {

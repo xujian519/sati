@@ -1,7 +1,10 @@
 import type { CanonicalContentBlock, CanonicalMessage } from "../../model/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
-import type { AgentControlBoundaryTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
+import type {
+  AgentControlBoundaryTranscriptEntry,
+  AgentRequestHeaderSnapshot,
+} from "../../session/transcript/TranscriptEntry.js";
 import type { AgentStatusMessage } from "../loop/modelErrors.js";
 
 export type AgentRunMode = "agent" | "plan" | "ask";
@@ -34,6 +37,11 @@ export type AgentLoopInput = {
    * `injected_context` 条目，重放投影时不进入模型可见 messages。
    */
   onInjectedContext?: (input: { injections: InjectionRecord[] }) => void | Promise<void>;
+  /**
+   * 发送前请求头快照回调（阶段四 T2）：调用方落 transcript 为
+   * request_header 条目（log-only，重放投影不进入 messages）。
+   */
+  onRequestHeader?: (header: AgentRequestHeaderSnapshot) => void | Promise<void>;
 };
 
 export type AgentInput =

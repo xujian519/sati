@@ -21,6 +21,7 @@ import { receiptFromToolExecution } from "../protocol/evidence.js";
 import type { ToolRegistry } from "../registry/ToolRegistry.js";
 import type { AgentEventEmitter } from "../../agent/protocol/events.js";
 import { requiresPromptCapability } from "../userInteractionConstraints.js";
+import { TOOL_OUTPUT_SCHEMA_MISMATCH, validateCanonicalOutput } from "./outputSchemaValidation.js";
 import { validateToolInput } from "./validateToolInput.js";
 import { formatValidationError } from "./formatValidationError.js";
 import { buildToolErrorRecovery } from "./errorRecovery.js";
@@ -289,6 +290,21 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       : baseContext;
     try {
       const output = await tool.execute(executeInput, executeContext);
+      // 阶段四 T9：工具声明 outputSchema 时，成功路径的 canonical data 必须
+      // 通过校验。data 缺省（如失败路径只返回 content）不触发校验——schema
+      // 声明的是成功契约；data 存在即必须匹配。
+      if (tool.outputSchema !== undefined && output.data !== undefined) {
+        const violations = validateCanonicalOutput(output.data, tool.outputSchema);
+        if (violations.length > 0) {
+          const shown = violations.slice(0, 5).join("; ");
+          const suffix = violations.length > 5 ? " (+" + String(violations.length - 5) + " more)" : "";
+          throw toolError(
+            TOOL_OUTPUT_SCHEMA_MISMATCH,
+            `Tool ${tool.name} canonical output violates its outputSchema: ${shown}${suffix}`,
+            { violations },
+          );
+        }
+      }
       const maxResultBytes = tool.maxResultBytes ?? context.maxResultBytes;
       const previewLimit = applyResultSizeLimit(output.content, maxResultBytes);
       const completedAt = now(context).toISOString();

@@ -15,7 +15,8 @@ export type AgentTranscriptEntryType =
   | "session_metadata"
   | "subagent_started"
   | "subagent_completed"
-  | "injected_context";
+  | "injected_context"
+  | "request_header";
 
 export type AgentTranscriptEntryBase = {
   type: AgentTranscriptEntryType;
@@ -199,6 +200,35 @@ export type AgentInjectedContextTranscriptEntry = AgentTranscriptEntryBase & {
   type: "injected_context";
 } & InjectionRecord;
 
+/**
+ * 发送前请求头快照（阶段四 T2）：每次 LLM 请求的路由决策、输出上限与
+ * system/tools 摘要。请求由这些决策唯一决定，审计与重建对拍据此验证
+ * 「发给模型的内容可从 transcript 重建」。
+ */
+export type AgentRequestHeaderSnapshot = {
+  /** 路由决定的 provider（实际发送目标）。 */
+  provider: string;
+  /** 路由决定的 model（实际发送目标）。 */
+  model: string;
+  /** 发送时的输出上限（路由后 clamp 值）。 */
+  maxOutputTokens?: number;
+  /** system prompt 的 sha256 摘要（不含 raw/元数据）。 */
+  systemPromptDigest: string;
+  /** 工具 schema 的 sha256 摘要（名称 + inputSchema，不含 raw）。 */
+  toolSchemaDigest: string;
+  /** 请求消息条数（辅助重建对齐诊断）。 */
+  messageCount: number;
+};
+
+/**
+ * request/header 参考条目（log-only）：仅供审计与重建对拍，重放投影时
+ * 不进入模型可见 messages（对应 dsh「模型可见 = 已记录」的请求侧）。
+ */
+export type AgentRequestHeaderTranscriptEntry = AgentTranscriptEntryBase & {
+  type: "request_header";
+  header: AgentRequestHeaderSnapshot;
+};
+
 export type AgentTranscriptEntry =
   | AgentAcceptedInputTranscriptEntry
   | AgentMessageTranscriptEntry
@@ -209,7 +239,8 @@ export type AgentTranscriptEntry =
   | AgentSessionMetadataTranscriptEntry
   | AgentSubagentStartedTranscriptEntry
   | AgentSubagentCompletedTranscriptEntry
-  | AgentInjectedContextTranscriptEntry;
+  | AgentInjectedContextTranscriptEntry
+  | AgentRequestHeaderTranscriptEntry;
 
 export function truncatePreview(input: string, byteCap: number): { preview: string; truncated: boolean } {
   const total = Buffer.byteLength(input, "utf8");

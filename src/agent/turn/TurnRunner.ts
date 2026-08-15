@@ -271,6 +271,9 @@ export class TurnRunner {
             await this.transcript.recordInjectedContext?.(options.sessionId, options.turnId, injection);
           }
         },
+        onRequestHeader: async header => {
+          await this.transcript.recordRequestHeader?.(options.sessionId, options.turnId, header);
+        },
       });
       let runResult: TurnRunnerResult | undefined;
       let turnCompletedEvent: Extract<AgentEvent, { type: "turn_completed" }> | undefined;
