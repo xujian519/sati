@@ -369,7 +369,7 @@
 
 - SATI_VERIFY_REQUEST_RECONSTRUCTION 生产默认关闭（env 显式开启），首轮以测试侧独立重建为主验证手段；
 - ToolRegistry.requireOutputSchema 默认 false（存量注册表不受影响），存量工具分批复用 schema 后按注册表逐步开启；
-- 真实模型录制的 fixture 尚未入库（需真实 API key 会话录制 + PR 评审），当前入库 fixture 为确定性脚本录制。
+- 真实模型录制的 fixture 已入库（DeepSeek v4 flash，见 §11.3）；现有确定性脚本录制 fixture 保留（CI 无 key 可跑）。
 
 ---
 
@@ -484,6 +484,23 @@ schema 零违约（契约有效）、可注册到强制注册表（分批接入�
 
 验证：typecheck ✅ 0 错误；lint ✅ 0 error（1 条阶段二遗留 UI 警告）；format:check ✅；
 完整套件（含强制注册表）全绿。
+
+### 11.3 真实模型 fixture 入库（DeepSeek v4 flash，2026-08-16）
+
+此前入库的 fixture 为确定性 ScriptedModelRuntime 录制（CI 无 key 可跑）；真实模型 fixture 需
+API key 会话录制。利用 ~/.sati/sati.yaml 已配置的 DeepSeek provider（deepseek-v4-flash）完成
+首个真实模型 fixture：
+
+- **录制**：新增 `scripts/record-real-fixture.ts`（真实 ModelRuntime + applyReplayEnvHooks 录制包装
+  + enabled:false router + 内置注册表 + AgentSession，装配与重放 spec 完全一致）。真实会话含一次
+  glob 工具调用 + 总结（2 个流，43+923 事件），`pnpm record:replay` 校验通过。
+- **fixture**：`tests/fixtures/llm-replay/deepseek-v4-flash-basic/`（records.jsonl + manifest.json，
+  已脱敏——不含请求头/key，只有 canonical 事件流）。
+- **重放测试**：`tests/test-support/llm-replay-real.spec.ts`——无 key 重放完整 AgentLoop 回路
+  （createReplayModelRuntime + CapabilityOnlyRuntime 能力桩）：请求键匹配、assertAllConsumed 防少
+  驱动、turn 完成、工具调用与模型叙述保留。
+
+验证：typecheck ✅ 0 错误；lint ✅ 0 error；format:check ✅；完整套件（含新 spec）全绿。
 
 ---
 
