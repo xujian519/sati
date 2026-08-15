@@ -267,6 +267,12 @@ test("请求键稳定：相同请求同键；输出上限参与键；metadata �
   assert.equal(stableSerialize({ a: 1, raw: { providerInternal: true } }), '{"a":1}');
 });
 
+test("stableSerialize 支持共享引用（DAG）且 raw 键剥离", () => {
+  const shared = { inner: 1 };
+  assert.equal(stableSerialize({ a: shared, b: shared }), stableSerialize({ a: { inner: 1 }, b: { inner: 1 } }));
+  assert.equal(stableSerialize({ data: { raw: "x", ok: 1 } }), '{"data":{"ok":1}}');
+});
+
 test("录制中途失败：捕获已产出事件的局部记录并保持错误传播", async () => {
   const fixtureDir = await makeFixtureDir();
   try {

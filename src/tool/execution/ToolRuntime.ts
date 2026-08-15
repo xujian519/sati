@@ -1,7 +1,7 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import { PermissionRuntime } from "../../permission/index.js";
 import type { LifecycleRuntime, SatiHookEffect } from "../../lifecycle/index.js";
-import { toolError, normalizeToolError } from "../protocol/errors.js";
+import { normalizeToolError, SatiToolRuntimeError, toolError } from "../protocol/errors.js";
 import type { SatiToolErrorCode } from "../protocol/errors.js";
 import {
   PLAN_MODE_ALLOWED_TOOLS,
@@ -298,7 +298,9 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
         if (violations.length > 0) {
           const shown = violations.slice(0, 5).join("; ");
           const suffix = violations.length > 5 ? " (+" + String(violations.length - 5) + " more)" : "";
-          throw toolError(
+          // 必须抛 SatiToolRuntimeError（Error 子类）：normalizeToolError 对
+          // 非 Error 值一律归一为 tool_execution_failed，会吞掉本结构化错误码。
+          throw new SatiToolRuntimeError(
             TOOL_OUTPUT_SCHEMA_MISMATCH,
             `Tool ${tool.name} canonical output violates its outputSchema: ${shown}${suffix}`,
             { violations },

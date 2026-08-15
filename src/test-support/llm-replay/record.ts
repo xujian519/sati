@@ -76,7 +76,9 @@ export function createRecordingModelRuntime(inner: ModelRuntime, outDir: string)
           userTexts: summary.userTexts,
           events,
         };
-        writeChain = writeChain.then(() => persistRecord(record));
+        // 串行化写入但吞掉历史拒绝：一次写失败只让本流的 finally 抛错
+        // （fail-loud），不会毒化链上后续流的 await。
+        writeChain = writeChain.catch(() => undefined).then(() => persistRecord(record));
         await writeChain;
       }
     },
