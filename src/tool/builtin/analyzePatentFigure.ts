@@ -99,6 +99,21 @@ export function createAnalyzePatentFigureTool(
         };
       }
 
+      // 阶段四 T3：模态门禁——模型显式声明且不含 image 时提前拒绝并点名模型，
+      // 避免读图/解码后才发现模型不可用（fail-loud 优先于静默降级）。
+      // modelMultimodal 未注入（未知能力）时不拦截，保持原有行为。
+      if (context.modelMultimodal !== undefined && !context.modelMultimodal.input.includes("image")) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "错误：当前模型不支持图片输入（analyze_patent_figure 需要多模态视觉模型）。请在模型配置中切换到支持视觉的模型后重试。",
+            },
+          ],
+          metadata: { error: "unsupported_tool", hint: "model_not_vision_capable" },
+        };
+      }
+
       const resolved = resolveSatiWorkspacePath(input.image_path, context, { mustExist: true });
       if (!resolved.ok) {
         throw new SatiToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);

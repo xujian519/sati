@@ -42,6 +42,11 @@ export type AgentLoopInput = {
    * request_header 条目（log-only，重放投影不进入 messages）。
    */
   onRequestHeader?: (header: AgentRequestHeaderSnapshot) => void | Promise<void>;
+  /**
+   * durable 边界检查点回调（阶段四 T4.1）：工具副作用执行前调用，确保此前
+   * 全部已接受条目落盘。失败即中止本步（fail-closed）；未接线时 no-op。
+   */
+  onFlushCheckpoint?: () => void | Promise<void>;
 };
 
 export type AgentInput =

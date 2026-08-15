@@ -432,6 +432,12 @@ export type SatiToolDefinition<Input = unknown, Output = unknown> = {
   domain?: ToolDomain;
   inputSchema: SatiToolInputSchema;
   outputSchema?: Record<string, unknown>;
+  /**
+   * 合作式执行预算（阶段四 T6.1）：调度层在 ToolRuntime.execute 把 deadline
+   * 熔合进执行 signal，到期按 TOOL_TIMEOUT 归一。忽略 signal 的工具无法被
+   * 硬杀，仅能在其返回后判定超时。
+   */
+  timeoutMs?: number;
   maxResultBytes?: number;
   shouldDefer?: boolean;
   alwaysLoad?: boolean;

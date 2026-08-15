@@ -13,6 +13,7 @@ import {
 } from "../storage/ProjectSessionStorage.js";
 import { readTranscript } from "../transcript/TranscriptReader.js";
 import { replayTranscriptEntries } from "../transcript/TranscriptReplay.js";
+import { buildInterruptedTurnResult, findOpenTurn } from "../transcript/interruptedTurn.js";
 
 /**
  * Optional hook fired once the per-session `storage` has been created. Lets
@@ -67,6 +68,22 @@ export async function resumeAgentSession(options: ResumeAgentSessionOptions): Pr
     const maxSeq = readResult.entries.reduce((m, e) => Math.max(m, e.sequence), 0);
     const last = readResult.entries[readResult.entries.length - 1];
     storage.transcript.restoreState(maxSeq, last.entryId ?? null);
+  }
+
+  // 阶段四 T4.3：孤儿 turn 收尾——崩溃/强制退出留下的开放 turn 在 resume 时
+  // 合成 turn_result{interrupted}，保证括号平衡与显式的中断状态。
+  const openTurn = findOpenTurn(readResult.entries);
+  if (openTurn !== undefined) {
+    await storage.transcript.recordTurnResult(
+      options.sessionId,
+      openTurn.turnId,
+      buildInterruptedTurnResult(
+        options.sessionId,
+        openTurn.turnId,
+        openTurn.startedAt,
+        options.dependencies.now ?? (() => new Date()),
+      ),
+    );
   }
 
   const replay = replayTranscriptEntries(readResult.entries);

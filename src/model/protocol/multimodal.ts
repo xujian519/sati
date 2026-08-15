@@ -26,6 +26,30 @@ export function isInputModality(value: unknown): value is InputModality {
 }
 
 /**
+ * 模态门禁（阶段四 T3）：目标模型未声明接受该模态时 fail-loud。
+ *
+ * 与 downgradeUnsupportedContent（软降级）互补：需要「拒绝并点名模型」的
+ * 场景（工具前置校验、序列化前纵深防御）调用本函数；需要保持流程继续的
+ * 场景（历史会话重放）继续走降级。
+ *
+ * @param constraints - 目标模型的模态约束。
+ * @param modality - 请求携带的模态（image/pdf/audio）。
+ * @param modelLabel - 可选模型名；缺省用中性措辞。
+ */
+export function assertInputModality(
+  constraints: MultimodalConstraints,
+  modality: InputModality,
+  modelLabel?: string,
+): void {
+  if (constraints.input.includes(modality)) return;
+  const who = modelLabel === undefined ? "the current model" : `model "${modelLabel}"`;
+  throw new ModelRequestError(
+    "unsupported_input_modality",
+    `${who} does not accept ${modality} input; switch to a model that supports it or remove the ${modality} content`,
+  );
+}
+
+/**
  * Pre-flight downgrade: replace media blocks the target model cannot accept
  * with descriptive text placeholders.  Mutates `messages` in-place so the
  * caller's cloned request is updated without copying the entire array.

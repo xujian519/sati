@@ -71,6 +71,8 @@ export type RouterRetryProgressEvent = {
   type: "sati_router_retry_progress";
   sessionId: string;
   turnId?: string;
+  /** 阶段四 T4.2：稳定重试 id（同一请求内跨尝试稳定）。 */
+  retryId?: string;
   attempt: number;
   maxAttempts: number;
   delayMs: number;
