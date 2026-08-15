@@ -492,13 +492,15 @@ API key 会话录制。利用 ~/.sati/sati.yaml 已配置的 DeepSeek provider�
 首个真实模型 fixture：
 
 - **录制**：新增 `scripts/record-real-fixture.ts`（真实 ModelRuntime + applyReplayEnvHooks 录制包装
-  + enabled:false router + 内置注册表 + AgentSession，装配与重放 spec 完全一致）。真实会话含一次
-  glob 工具调用 + 总结（2 个流，43+923 事件），`pnpm record:replay` 校验通过。
+  + enabled:false router + 内置注册表 + AgentSession，装配与重放 spec 完全一致）。真实会话为
+  **纯问答任务（无工具调用）**——工具结果会进入下一轮请求消息，任何环境差异（文件集合/排序/
+  mtime/路径）都会破坏请求键；CI 无 key 重放必须环境无关。工具调用循环的覆盖由确定性
+  ScriptedModelRuntime fixture（llm-replay.spec）承担。
 - **fixture**：`tests/fixtures/llm-replay/deepseek-v4-flash-basic/`（records.jsonl + manifest.json，
-  已脱敏——不含请求头/key，只有 canonical 事件流）。
+  已脱敏——不含请求头/key，只有 canonical 事件流；1 个流 268 事件）。
 - **重放测试**：`tests/test-support/llm-replay-real.spec.ts`——无 key 重放完整 AgentLoop 回路
   （createReplayModelRuntime + CapabilityOnlyRuntime 能力桩）：请求键匹配、assertAllConsumed 防少
-  驱动、turn 完成、工具调用与模型叙述保留。
+  驱动、turn 完成、真实模型回答内容保留（CI 与本地一致）。
 
 验证：typecheck ✅ 0 错误；lint ✅ 0 error；format:check ✅；完整套件（含新 spec）全绿。
 
