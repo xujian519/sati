@@ -33,7 +33,9 @@ import { createReplayModelRuntime } from "../../src/test-support/llm-replay/inde
 // 相对路径会解析到不存在的 dist/tests/fixtures），tsx 快路径与 pnpm test 均在 repo 根执行。
 const FIXTURE_DIR = resolve(process.cwd(), "tests/fixtures/llm-replay/deepseek-v4-flash-basic");
 /** 与录制会话完全一致的任务文本（请求键依赖消息/工具/schema 一致性）。 */
-const TASK = "请调用 glob 工具查找当前目录下的 *.md 文件，然后告诉我找到了哪些。";
+// 任务使用确定性工具（read_file 读取仓库内固定文件）：工具结果进入下一轮请求消息，
+// 必须是环境无关的（glob 的结果依赖文件集合/排序，CI 与本地不一致会破坏请求键）。
+const TASK = "请用 read_file 工具读取当前目录下 CLAUDE.md 文件的前 8 行，然后简述这个文件的用途。";
 
 /**
  * 能力查询桩：重放时 stream 被 replay runtime 拦截（不触网），本桩只回答
@@ -115,7 +117,7 @@ test("真实模型 fixture 无 key 重放完整 AgentLoop 回路（deepseek-v4-f
   // 全部录制流都被驱动（无少驱动）；请求键不匹配会在 stream 时 fail-loud。
   assert.doesNotThrow(() => replay.assertAllConsumed());
   assert.equal(completed, true, "重放会话应正常完成（interrupted 之外无异常）");
-  assert.equal(sawToolCall, true, "真实 fixture 应包含一次工具调用（glob）");
+  assert.equal(sawToolCall, true, "真实 fixture 应包含一次工具调用（read_file）");
   assert.ok(assistantText.length > 0, "重放应产出模型文本");
-  assert.match(assistantText, /glob/, "重放输出应保留真实模型对工具调用的叙述");
+  assert.match(assistantText, /read_file|CLAUDE\.md/, "重放输出应保留真实模型对工具调用的叙述");
 });
