@@ -29,7 +29,13 @@ export type InMemoryTranscriptEntry =
       boundary: AgentControlBoundaryTranscriptEntry["boundary"];
     }
   | ({ type: "injected_context"; sessionId: string; turnId: string } & InjectionRecord)
-  | { type: "request_header"; sessionId: string; turnId: string; header: AgentRequestHeaderSnapshot };
+  | { type: "request_header"; sessionId: string; turnId: string; header: AgentRequestHeaderSnapshot }
+  | {
+      type: "retry_schedule";
+      sessionId: string;
+      turnId: string;
+      schedule: import("../../model/streaming/retryState.js").RetrySchedule;
+    };
 
 export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
   readonly entries: InMemoryTranscriptEntry[] = [];
@@ -83,6 +89,14 @@ export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
 
   recordRequestHeader(sessionId: string, turnId: string, header: AgentRequestHeaderSnapshot): void {
     this.entries.push({ type: "request_header", sessionId, turnId, header });
+  }
+
+  recordRetrySchedule(
+    sessionId: string,
+    turnId: string,
+    schedule: import("../../model/streaming/retryState.js").RetrySchedule,
+  ): void {
+    this.entries.push({ type: "retry_schedule", sessionId, turnId, schedule });
   }
 
   // 阶段四 T4.1：内存写入即时可见，durable 边界检查点为 no-op。

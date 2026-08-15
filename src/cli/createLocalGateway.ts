@@ -69,6 +69,7 @@ import {
   type GatewayCronController,
   type GatewayProjectStorageOptions,
   type GatewaySessionContext,
+  type GatewaySubmitTurnInput,
   type ListSessionsInput,
   type ListSessionsResult,
 } from "../gateway/index.js";
@@ -83,6 +84,7 @@ import {
   parsePluginMcpServers,
 } from "../mcp/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
+import { createPolicyKey, normalizeRetryReason } from "../model/streaming/retryState.js";
 import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
 import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
@@ -98,6 +100,8 @@ import {
   type RouterConfig,
 } from "../router/config/schema.js";
 import {
+  RESUME_TURN_MESSAGE,
+  TaskResumeScanner,
   cleanupOrphanToolResults,
   createAgentProjectSessionStorage,
   listProjectSessions,
@@ -429,6 +433,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       }
     })
     .catch(() => undefined);
+  // 跨进程重启续算（T-C）：启动扫描中断任务并提交续算 turn。fire-and-forget，
+  // 不阻塞 gateway 启动；续算 turn 在后台串行驱动。
+  registry.runTaskResumeScan();
   return {
     gateway,
     configStore,
@@ -571,6 +578,13 @@ class ProjectRuntimeRegistry {
    */
   private readonly methodologyRegistry = new MethodologyRegistry();
 
+  /**
+   * 活跃会话的 transcript 写入器（跨进程重启续算 T-A）：buildRouterEventBus 在
+   * `sati_router_retry_progress` 到达时按 sessionId 查表，把 retry_schedule 写入
+   * 该会话的 transcript 权威序列。会话 idle evict 后条目保留（writer 按路径
+   * append，不依赖会话存活；retry 事件只会在会话活跃时到达）。
+   */
+  private readonly sessionWriters = new Map<string, import("../session/index.js").AgentTranscriptWriter>();
   private _extraTools: SatiToolDefinition[];
   private _sessionOverrides: SessionConfigOverrides | undefined;
   private readonly sharedSessionStore = new SessionRouterStore({
@@ -647,6 +661,28 @@ class ProjectRuntimeRegistry {
             this.gateway?.broadcastRetryProgress(event);
           } catch {
             /* best-effort */
+          }
+          // 跨进程重启续算 T-A：重试调度写入该会话 transcript 权威序列（log-only）。
+          // 事件含 sessionId/turnId；无 turnId（子代理上下文）或会话未登记时跳过。
+          try {
+            if (typeof event.turnId === "string") {
+              const writer = this.sessionWriters.get(event.sessionId);
+              if (writer?.recordRetrySchedule) {
+                void writer.recordRetrySchedule(event.sessionId, event.turnId, {
+                  retryId: event.retryId ?? "",
+                  provider: event.provider,
+                  model: event.model,
+                  policyKey: createPolicyKey(),
+                  attempt: event.attempt,
+                  maxAttempts: event.maxAttempts,
+                  delayMs: event.delayMs,
+                  reason: normalizeRetryReason(event.reason),
+                  scheduledAt: this.options.now().toISOString(),
+                });
+              }
+            }
+          } catch {
+            /* best-effort, never crash the agent loop */
           }
         }
       },
@@ -1090,7 +1126,52 @@ class ProjectRuntimeRegistry {
       collectFileArtifacts: this.shouldCollectFileArtifacts(prepared.runtime),
       outputGate: prepared.patentOutputGate,
     });
+    // 跨进程重启续算 T-A：登记会话转录写入器，供 retry_schedule 轨迹落盘。
+    this.sessionWriters.set(context.sessionKey, resumed.writer);
     return resumed.session;
+  }
+
+  /**
+   * 跨进程重启续算（T-C）：gateway 启动时扫描中断任务并提交续算 turn。
+   * fire-and-forget（宿主在 build 流程调用，不阻塞启动）。
+   *
+   * 续算 = 以新 turn 提交（RESUME_TURN_MESSAGE）；gateway 内部 createSession
+   * 会 resume 会话（旧开放 turn 由 resumeAgentSession 合成 interrupted 收尾），
+   * 新 turn 基于 transcript 重建的上下文继续，任务自动续算到完成。
+   */
+  runTaskResumeScan(): void {
+    const enabled = brandEnv(this.options.env, ENV_KEY.TASK_RESUME_ENABLED) !== "0";
+    if (!enabled) return;
+    const gateway = this.gateway;
+    if (!gateway) return;
+    const scanner = new TaskResumeScanner({
+      projectRoot: this.options.fallbackProjectRoot,
+      pilotHome: this.options.pilotHome,
+      submitResumeTurn: async sessionKey => {
+        const input: GatewaySubmitTurnInput = {
+          sessionKey,
+          channelKey: "cron",
+          message: RESUME_TURN_MESSAGE,
+          canPrompt: false,
+        };
+        // 消费全部事件使续算 turn 驱动到完成（串行，避免并发写同一会话）。
+        for await (const _event of gateway.submitTurn(input)) {
+          // drain
+        }
+      },
+      hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
+    });
+    void scanner
+      .scan()
+      .then(result => {
+        if (result.resumed > 0) {
+          console.log(
+            `[sati] Task resume: scanned=${result.scanned}, resumed=${result.resumed}, ` +
+              `skippedPartial=${result.skippedPartial}, skippedApprovals=${result.skippedApprovals}`,
+          );
+        }
+      })
+      .catch(() => undefined);
   }
 
   async recreateSession(context: GatewaySessionContext, previousSession: AgentSession) {

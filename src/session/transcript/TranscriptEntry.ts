@@ -1,4 +1,5 @@
 import type { CanonicalMessage } from "../../model/index.js";
+import type { RetrySchedule } from "../../model/streaming/retryState.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
@@ -16,7 +17,8 @@ export type AgentTranscriptEntryType =
   | "subagent_started"
   | "subagent_completed"
   | "injected_context"
-  | "request_header";
+  | "request_header"
+  | "retry_schedule";
 
 export type AgentTranscriptEntryBase = {
   type: AgentTranscriptEntryType;
@@ -229,6 +231,16 @@ export type AgentRequestHeaderTranscriptEntry = AgentTranscriptEntryBase & {
   header: AgentRequestHeaderSnapshot;
 };
 
+/**
+ * 重试调度参考条目（阶段四 T4.2 后续 / 跨进程重启续算 T-A）：进程内重试决策的
+ * log-only 落盘。仅供审计与跨进程恢复（扫描器按 retryId/policyKey 定位续算点），
+ * 重放投影时不进入模型可见消息、不驱动 turn 判定（不进 ACTIVITY_ENTRY_TYPES）。
+ */
+export type AgentRetryScheduleTranscriptEntry = AgentTranscriptEntryBase & {
+  type: "retry_schedule";
+  schedule: RetrySchedule;
+};
+
 export type AgentTranscriptEntry =
   | AgentAcceptedInputTranscriptEntry
   | AgentMessageTranscriptEntry
@@ -240,7 +252,8 @@ export type AgentTranscriptEntry =
   | AgentSubagentStartedTranscriptEntry
   | AgentSubagentCompletedTranscriptEntry
   | AgentInjectedContextTranscriptEntry
-  | AgentRequestHeaderTranscriptEntry;
+  | AgentRequestHeaderTranscriptEntry
+  | AgentRetryScheduleTranscriptEntry;
 
 export function truncatePreview(input: string, byteCap: number): { preview: string; truncated: boolean } {
   const total = Buffer.byteLength(input, "utf8");

@@ -417,7 +417,7 @@
 
 ### 9.5 遗留注意
 
-- T4.2 跨进程「重启后扫描续算重试」未接线（依赖 always-on 任务级重启扫描），当前为进程内稳定 retryId + 日志/遥测轨迹；
+- T4.2 跨进程「重启后扫描续算重试」**已落地**（2026-08-16，独立专项 `docs/cross-process-retry-resume-plan.md`）：`TaskResumeScanner` 启动扫描 (a) 形态断点并提交续算 turn，重试轨迹 `retry_schedule` 进 transcript 权威序列；当前为进程内稳定 retryId + 跨进程重启续算双轨；
 - T8 矩阵为启发式 v1，两列同源重复需人工复核后按需精化（白名单/事件源注解）；
 - T5 resume 后观测态为空（unseen），文件需重读——与既有行为一致，已文档化。
 

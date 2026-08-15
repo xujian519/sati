@@ -61,6 +61,64 @@ export function capRetryAfterMs(retryAfterMs: number, maxDelayMs = 8000): number
 }
 
 /**
+ * 重试策略稳定指纹（跨进程重启续算 T-A 的 policyKey 维度）。
+ *
+ * 同一 provider 的 retry 配置（baseDelayMs/maxDelayMs/jitter/streamMaxRetries/
+ * requestMaxRetries/maxStreamingDurationMs/streamIdleTimeoutMs/repeatedChunkLimit）
+ * 哈希为稳定键——配置变更则 policyKey 变化，重启后按 (turn, step, provider, policyKey)
+ * 定位续算点时可区分「同 provider 不同重试策略」的请求。无显式 retry 配置时
+ * （最常见，走全默认）返回常量 "default"。
+ */
+export type RetryPolicyConfig = {
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  jitter?: number;
+  streamMaxRetries?: number;
+  requestMaxRetries?: number;
+  maxStreamingDurationMs?: number;
+  streamIdleTimeoutMs?: number;
+  repeatedChunkLimit?: number;
+};
+
+export function createPolicyKey(retry?: RetryPolicyConfig): string {
+  if (retry === undefined) return "default";
+  const entries = Object.entries(retry)
+    .filter(([, value]) => value !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  if (entries.length === 0) return "default";
+  return createHash("sha256").update(JSON.stringify(entries)).digest("hex").slice(0, 12);
+}
+
+/**
+ * 重试原因归一（跨进程重启续算 T-A）：RouterRetryProgressEvent.reason 比
+ * RetrySchedule.reason 多 zero_usage / overloaded 两个 router 层原因，落盘前
+ * 归并为 RetrySchedule 的四值域（zero_usage 与 overloaded 均视为 server_error
+ * 的保守归并）。
+ */
+export type RetryProgressReason =
+  | "rate_limit"
+  | "server_error"
+  | "network_error"
+  | "zero_usage"
+  | "overloaded"
+  | "continuation";
+
+export function normalizeRetryReason(reason: RetryProgressReason | string): RetryReason {
+  switch (reason) {
+    case "network_error":
+    case "rate_limit":
+    case "continuation":
+      return reason;
+    case "server_error":
+    case "zero_usage":
+    case "overloaded":
+      return "server_error";
+    default:
+      return "server_error";
+  }
+}
+
+/**
  * 进程内重试状态追踪器：记录每次重试调度，供诊断/遥测快照。
  */
 export class RetryStateTracker {

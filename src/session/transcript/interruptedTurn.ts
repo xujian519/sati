@@ -132,3 +132,55 @@ export function synthesizeInterruptedTurn(
     result,
   };
 }
+
+/**
+ * 请求级开放请求（跨进程重启续算 T-B）：识别「request_header 已落、响应未到」
+ * 的断点请求，构成 step 粒度续算点。
+ *
+ * 形态（见计划 §2.0 前提 4 / §2.2）：
+ *   - `a`：request_header 之后同 turn 无任何 durable 消息——请求完全未响应，可续算；
+ *   - `b`：request_header 之后同 turn 已有部分 durable 消息（流式残片）——
+ *     append-only 无法删除残片，首期不自动续算（沿用 interrupted 收尾 + 人工重发）。
+ *
+ * 只返回最后一个开放请求；turn 已闭合（该 turn 出现 turn_result）则返回 undefined。
+ */
+export type OpenRequest = {
+  turnId: string;
+  provider: string;
+  model: string;
+  /** 断点请求条目的 sequence（与 writer 的 sequence 一致，供审计对齐）。 */
+  sequence: number;
+  form: "a" | "b";
+};
+
+export function findOpenRequest(entries: readonly AgentTranscriptEntry[]): OpenRequest | undefined {
+  let candidate: OpenRequest | undefined;
+  for (const entry of entries) {
+    if (entry.type === "turn_result") {
+      if (candidate !== undefined && entry.turnId === candidate.turnId) {
+        candidate = undefined;
+      }
+      continue;
+    }
+    if (entry.type === "request_header") {
+      candidate = {
+        turnId: entry.turnId,
+        provider: entry.header.provider,
+        model: entry.header.model,
+        sequence: entry.sequence,
+        form: "a",
+      };
+      continue;
+    }
+    if (
+      entry.type === "assistant_message" ||
+      entry.type === "tool_result_message" ||
+      entry.type === "durable_message"
+    ) {
+      if (candidate !== undefined && entry.turnId === candidate.turnId) {
+        candidate = { ...candidate, form: "b" };
+      }
+    }
+  }
+  return candidate;
+}

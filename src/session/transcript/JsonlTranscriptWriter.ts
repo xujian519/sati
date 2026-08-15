@@ -163,6 +163,18 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     });
   }
 
+  recordRetrySchedule(
+    sessionId: string,
+    turnId: string,
+    schedule: import("../../model/streaming/retryState.js").RetrySchedule,
+  ): Promise<void> {
+    return this.recordEntry({
+      type: "retry_schedule",
+      ...this.baseEntry(sessionId, turnId),
+      schedule,
+    });
+  }
+
   recordControlBoundary(
     sessionId: string,
     turnId: string,

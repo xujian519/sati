@@ -38,6 +38,12 @@ export type AgentTranscriptWriter = {
   recordInjectedContext?(sessionId: string, turnId: string, injection: InjectionRecord): void | Promise<void>;
   /** 发送前请求头快照（阶段四 T2，log-only，不进入重放投影）。 */
   recordRequestHeader?(sessionId: string, turnId: string, header: AgentRequestHeaderSnapshot): void | Promise<void>;
+  /** 重试调度参考（跨进程重启续算 T-A，log-only，不进入重放投影）。 */
+  recordRetrySchedule?(
+    sessionId: string,
+    turnId: string,
+    schedule: import("../../model/streaming/retryState.js").RetrySchedule,
+  ): void | Promise<void>;
   /** durable 边界检查点（阶段四 T4.1）：确保此前全部条目已落盘。无缓冲写入的实现为 no-op。 */
   flushCheckpoint?(): void | Promise<void>;
   recordEntry?(entry: AgentTranscriptEntry): void | Promise<void>;
