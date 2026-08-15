@@ -19,7 +19,8 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
 
-const [ccmDir, ccuiDir, memDir, nodeExe, homeDir, portStr] = process.argv.slice(2);
+// ccuiDir 保留位置以匹配调用方（verify-installer.bat）传参，脚本本身不使用。
+const [ccmDir, _ccuiDir, memDir, nodeExe, homeDir, portStr] = process.argv.slice(2);
 const port = Number(portStr);
 
 function fail(msg) {

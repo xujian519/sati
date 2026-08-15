@@ -1002,15 +1002,6 @@ export async function getSessionActivityViaGateway(sessionId, provider = "sati",
   }
 }
 
-export async function getActiveTurnSnapshotFramesViaGateway(sessionId, provider = "sati") {
-  if (!isSatiSessionKey(sessionId)) return [];
-  const gw = await ensureGateway();
-  if (typeof gw.getActiveTurnSnapshot !== "function") return [];
-  const snapshot = await gw.getActiveTurnSnapshot({ sessionKey: sessionId });
-  if (!snapshot?.active || !Array.isArray(snapshot.events)) return [];
-  return snapshot.events.flatMap(event => gatewayEventToFrames(event, sessionId, provider) || []);
-}
-
 export function getActiveSessionIdsViaGateway() {
   return [...sessionState.values()].filter(state => state.active).map(state => state.sessionKey);
 }

@@ -7,6 +7,7 @@
  */
 
 import {
+  SatiDocumentInputError,
   renderPatentDocument as renderDocument,
   type DocumentTemplateId,
   type RenderFormat,
@@ -161,7 +162,7 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
         };
       } catch (err) {
         // 用户输入错误（非法文件名/案卷号/模板）归为 invalid_tool_input。
-        if (err instanceof Error && /^(非法输出文件名|非法案卷号|未知模板)/.test(err.message)) {
+        if (err instanceof SatiDocumentInputError) {
           throw new SatiToolRuntimeError("invalid_tool_input", err.message, { tool: "render_patent_document" });
         }
         const message = err instanceof Error ? err.message : String(err);

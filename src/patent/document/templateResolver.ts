@@ -5,6 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SatiDocumentInputError } from "./errors.js";
 import type { DocumentTemplateId } from "./types.js";
 
 /** 模板系统根目录（随仓库分发）。 */
@@ -49,7 +50,7 @@ export function resolveTemplate(template: DocumentTemplateId): { root: string; h
   const manifest = readTemplateManifest();
   const available = manifest.templates ?? [];
   if (!available.includes(template)) {
-    throw new Error(`未知模板 "${template}"（可用: ${available.join(", ") || "无"}）`);
+    throw new SatiDocumentInputError(`未知模板 "${template}"（可用: ${available.join(", ") || "无"}）`);
   }
   const htmlPath = join(root, template, "assets", "template.html");
   if (!existsSync(htmlPath)) {

@@ -7,6 +7,7 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { caseOutputsDir } from "../paths.js";
 import { buildBrandStyle, loadBrandFromPath, mergeBrand } from "./brandInjector.js";
+import { SatiDocumentInputError } from "./errors.js";
 import { renderPdf } from "./pdfRenderer.js";
 import { readTemplateHtml } from "./templateResolver.js";
 import type { DocumentRenderInput, DocumentRenderResult, RenderFormat } from "./types.js";
@@ -22,14 +23,14 @@ const SAFE_CASE_ID_PATTERN = /^(?!.*\.\.)[A-Za-z0-9._\-\u4e00-\u9fa5]{1,120}$/;
 
 function sanitizeOutputName(name: string): string {
   if (!SAFE_NAME_PATTERN.test(name)) {
-    throw new Error(`非法输出文件名: ${JSON.stringify(name)}`);
+    throw new SatiDocumentInputError(`非法输出文件名: ${JSON.stringify(name)}`);
   }
   return name;
 }
 
 function sanitizeCaseId(caseId: string): string {
   if (!SAFE_CASE_ID_PATTERN.test(caseId)) {
-    throw new Error(`非法案卷号: ${JSON.stringify(caseId)}`);
+    throw new SatiDocumentInputError(`非法案卷号: ${JSON.stringify(caseId)}`);
   }
   return caseId;
 }

@@ -941,7 +941,6 @@ export function useChatRealtimeHandlers({
     },
     [
       provider,
-      sendMessage,
       clearSessionStatusRetry,
       scheduleSessionStatusRetry,
       selectedSession,

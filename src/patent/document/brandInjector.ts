@@ -61,7 +61,8 @@ export function buildBrandStyle(brand: DocumentBrand): string {
   const lines: string[] = [":root {"];
   for (const [key, value] of Object.entries(brand)) {
     const cssVar = BRAND_KEY_TO_CSS_VAR[key];
-    if (cssVar === undefined || value === undefined) continue;
+    // 跳过未知键与空值（空串/纯空白会生成 `--x: ;` 无效声明）。
+    if (cssVar === undefined || value === undefined || value.trim() === "") continue;
     const formatted = QUOTED_VARS.has(cssVar) ? `"${cssValueEscape(value)}"` : cssValueEscape(value);
     lines.push(`  ${cssVar}: ${formatted};`);
   }

@@ -57,14 +57,22 @@ export class CronTaskStore {
   async updateTask(taskId: string, update: (task: CronTask) => CronTask | undefined): Promise<CronTask | undefined> {
     return this.mutateTaskFile(async file => {
       let updated: CronTask | undefined;
+      let changed = false;
       const tasks = file.tasks.flatMap(task => {
         if (task.taskId !== taskId) {
           return [task];
         }
-        updated = update(task);
-        return updated ? [updated] : [];
+        const next = update(task);
+        updated = next;
+        // 无变更（CAS 失败返回原引用）时跳过写盘，避免高频竞争下无谓 IO。
+        if (next !== task) {
+          changed = true;
+        }
+        return next ? [next] : [];
       });
-      await this.writeTaskFile({ schemaVersion: 1, tasks: sortTasks(tasks) });
+      if (changed) {
+        await this.writeTaskFile({ schemaVersion: 1, tasks: sortTasks(tasks) });
+      }
       return updated;
     });
   }
