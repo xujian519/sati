@@ -67,7 +67,7 @@
 
 ## 7. 打印导出（A4 PDF）
 
-骨架已含 `@page { size: A4 }` 与跨页表头重复（`thead { display: table-header-group }`）。页号由导出管线注入，不要在 HTML 里手工写页码。导出示例（复用 `skills/frontend-slides/scripts/export-pdf.sh` 的 Playwright 基建，改为文档模式）：
+骨架已含 `@page { size: A4 }` 与跨页表头重复（`thead { display: table-header-group }`）。内置 `render_patent_document` 工具经 headless Chrome CLI 打印且禁用页眉页脚，不注入页号；如需页码请用下方 Playwright 方式导出，不要在 HTML 里手工写页码。导出示例（复用 `skills/frontend-slides/scripts/export-pdf.sh` 的 Playwright 基建，改为文档模式）：
 
 ```js
 import { chromium } from "playwright";

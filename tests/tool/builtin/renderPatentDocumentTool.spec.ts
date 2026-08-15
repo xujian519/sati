@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createRenderPatentDocumentTool } from "../../../src/tool/builtin/renderPatentDocument.js";
+import { SatiToolRuntimeError } from "../../../src/tool/protocol/errors.js";
 import { createBuiltinRegistry } from "../../../src/tool/registry/createBuiltinRegistry.js";
 import { makeToolContext } from "../context-fixture.js";
 
@@ -47,16 +48,38 @@ test("render_patent_document 工具执行并返回 file 产物块", async () => 
   assert.match(html, /工具渲染测试/);
 });
 
-test("render_patent_document 工具未知模板 fail-closed", async () => {
+test("render_patent_document 工具未知模板 fail-closed 抛错", async () => {
   const tool = createRenderPatentDocumentTool();
-  const res = await tool.execute(
-    {
-      template: "no-such-template",
-      output_name: "bad",
-      sections: {},
+  await assert.rejects(
+    tool.execute(
+      {
+        template: "no-such-template",
+        output_name: "bad",
+        sections: {},
+      },
+      makeToolContext(),
+    ),
+    (err: unknown) => {
+      if (!(err instanceof SatiToolRuntimeError)) return false;
+      assert.equal(err.code, "invalid_tool_input");
+      assert.match(err.message, /未知模板/);
+      return true;
     },
-    makeToolContext(),
   );
-  const text = res.content.map(c => (c.type === "text" ? c.text : "")).join("");
-  assert.match(text, /未知模板|未知/);
+});
+
+test("render_patent_document 工具非法 format fail-closed 抛错", async () => {
+  const tool = createRenderPatentDocumentTool();
+  await assert.rejects(
+    tool.execute(
+      {
+        template: "patentability-opinion",
+        output_name: "bad-format",
+        format: "pptx",
+        sections: {},
+      },
+      makeToolContext(),
+    ),
+    (err: unknown) => err instanceof SatiToolRuntimeError && err.code === "invalid_tool_input",
+  );
 });

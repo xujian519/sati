@@ -16,7 +16,7 @@ template:
   preview:
     type: html
     entry: assets/template.html
-  exports: [html, pdf, md]
+  exports: [html, pdf]
 ---
 
 # 专利无效宣告意见 / 无效请求书模板

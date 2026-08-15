@@ -15,7 +15,7 @@ template:
   preview:
     type: html
     entry: assets/template.html
-  exports: [html, pdf, md]
+  exports: [html, pdf]
 ---
 
 # 权利要求书与说明书模板

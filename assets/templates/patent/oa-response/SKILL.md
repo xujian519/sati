@@ -15,7 +15,7 @@ template:
   preview:
     type: html
     entry: assets/template.html
-  exports: [html, pdf, md]
+  exports: [html, pdf]
 ---
 
 # 审查意见答复 / 意见陈述书模板

@@ -44,4 +44,6 @@ export type DocumentRenderResult = {
   pdfPath?: string;
   /** PDF 生成失败原因（HTML 已生成时的降级提示）。 */
   pdfError?: string;
+  /** 非致命告警（未命中的 section id、品牌配置缺失等）。 */
+  warnings?: string[];
 };

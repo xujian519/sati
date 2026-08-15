@@ -15,7 +15,7 @@ template:
   preview:
     type: html
     entry: assets/template.html
-  exports: [html, pdf, md]
+  exports: [html, pdf]
 ---
 
 # 专利检索报告模板

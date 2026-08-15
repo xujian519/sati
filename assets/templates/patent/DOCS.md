@@ -159,7 +159,7 @@ await page.pdf({
 
 ### 页码
 
-单文件 HTML 不内置页码；PDF 导出时由打印引擎注入。如需显式页码，在导出脚本中通过 `@page { @bottom-center { content: counter(page) } }` 注入。
+单文件 HTML 不内置页码。内置 `render_patent_document` 工具经 headless Chrome CLI 打印（`--print-to-pdf-no-header`），不生成页眉页脚/页码；如需显式页码，按各模板 `references/conventions.md` §打印导出 的 Playwright 方式导出（`displayHeaderFooter: true` + `footerTemplate`，Chromium 不支持 `@page` margin-box 页码）。
 
 ### 分页控制
 

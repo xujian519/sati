@@ -8,6 +8,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -38,6 +39,17 @@ export function findChrome(): string | undefined {
   return undefined;
 }
 
+/**
+ * Chrome 沙箱标志：仅在 root 环境（Linux 容器/CI）下禁用沙箱；
+ * 普通桌面用户保持沙箱开启，避免无谓降低 Chrome 安全姿态。
+ */
+function sandboxFlags(): string[] {
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    return ["--no-sandbox", "--disable-setuid-sandbox"];
+  }
+  return [];
+}
+
 /** 调用 headless Chrome 将 HTML 打印为 PDF。 */
 export async function renderPdf(
   htmlPath: string,
@@ -51,13 +63,12 @@ export async function renderPdf(
   const args = [
     "--headless",
     "--disable-gpu",
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
+    ...sandboxFlags(),
     "--run-all-compositor-stages-before-draw",
     "--virtual-time-budget=5000",
-    `--print-to-pdf-no-header`,
+    "--print-to-pdf-no-header",
     `--print-to-pdf=${pdfPath}`,
-    `file://${htmlPath}`,
+    pathToFileURL(htmlPath).href,
   ];
 
   try {

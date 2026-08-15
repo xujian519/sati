@@ -167,3 +167,127 @@ test("系统 Chrome 存在时可生成 PDF", async () => {
     cleanup(dir);
   }
 });
+
+test("容器型 section id 注入不破坏结构", async () => {
+  const dir = makeTempDir();
+  try {
+    const result = await renderPatentDocument(
+      {
+        template: "patentability-opinion",
+        outputName: "container-inject",
+        outputDir: dir,
+        format: "html",
+        sections: { "executive-summary": "<h3>新摘要</h3><p>内容 A</p>" },
+      },
+      process.cwd(),
+    );
+    const html = readFileSync(result.htmlPath, "utf8");
+    assert.match(html, /<section id="executive-summary"[^>]*>\s*<h3>新摘要<\/h3><p>内容 A<\/p>\s*<\/section>/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("未命中/非法 section id 返回警告且不污染 HTML", async () => {
+  const dir = makeTempDir();
+  try {
+    const result = await renderPatentDocument(
+      {
+        template: "patentability-opinion",
+        outputName: "warn-ids",
+        outputDir: dir,
+        format: "html",
+        sections: { "meta-title": "正常", "no-such-id": "丢弃", "../bad": "非法" },
+      },
+      process.cwd(),
+    );
+    assert.ok(result.warnings !== undefined);
+    assert.match(result.warnings.join(" "), /no-such-id/);
+    const html = readFileSync(result.htmlPath, "utf8");
+    assert.match(html, /正常/);
+    assert.doesNotMatch(html, /丢弃/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("非法案卷号 fail-closed（防路径穿越）", async () => {
+  const dir = makeTempDir();
+  try {
+    await assert.rejects(
+      renderPatentDocument(
+        {
+          template: "patentability-opinion",
+          outputName: "escape",
+          caseId: "../../etc",
+          format: "html",
+          sections: {},
+        },
+        dir,
+      ),
+      /非法案卷号/,
+    );
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("品牌 CSS 值剔除破坏性字符（防注入）", () => {
+  const css = buildBrandStyle({ accent: "#123; } body { display:none", firm: 'A"B' });
+  assert.equal((css.match(/\{/g) ?? []).length, 1);
+  assert.equal((css.match(/\}/g) ?? []).length, 1);
+  assert.doesNotMatch(css, /\{ body|\} body/);
+  assert.match(css, /--sati-doc-firm: "A\\"B";/);
+});
+
+test("重复渲染同名文档可覆盖（原子写）", async () => {
+  const dir = makeTempDir();
+  try {
+    await renderPatentDocument(
+      {
+        template: "patentability-opinion",
+        outputName: "dup",
+        outputDir: dir,
+        format: "html",
+        sections: { "meta-title": "第一版" },
+      },
+      process.cwd(),
+    );
+    const result = await renderPatentDocument(
+      {
+        template: "patentability-opinion",
+        outputName: "dup",
+        outputDir: dir,
+        format: "html",
+        sections: { "meta-title": "第二版" },
+      },
+      process.cwd(),
+    );
+    const html = readFileSync(result.htmlPath, "utf8");
+    assert.match(html, /第二版/);
+    assert.doesNotMatch(html, /第一版/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("显式 brandPath 不存在时返回警告并回退默认", async () => {
+  const dir = makeTempDir();
+  try {
+    const result = await renderPatentDocument(
+      {
+        template: "patentability-opinion",
+        outputName: "missing-brand",
+        outputDir: dir,
+        format: "html",
+        brandPath: join(dir, "not-there.json"),
+        sections: { "meta-title": "品牌回退测试" },
+      },
+      process.cwd(),
+    );
+    assert.ok(result.warnings !== undefined);
+    assert.match(result.warnings.join(" "), /品牌配置文件不存在/);
+  } finally {
+    cleanup(dir);
+  }
+});

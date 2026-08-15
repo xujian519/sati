@@ -62,14 +62,18 @@ export function buildBrandStyle(brand: DocumentBrand): string {
   for (const [key, value] of Object.entries(brand)) {
     const cssVar = BRAND_KEY_TO_CSS_VAR[key];
     if (cssVar === undefined || value === undefined) continue;
-    const formatted = QUOTED_VARS.has(cssVar) ? `"${cssValueEscape(value)}"` : value;
+    const formatted = QUOTED_VARS.has(cssVar) ? `"${cssValueEscape(value)}"` : cssValueEscape(value);
     lines.push(`  ${cssVar}: ${formatted};`);
   }
   lines.push("}");
   return lines.join("\n");
 }
 
-/** 对 CSS content/string 值做最小转义：反斜杠、双引号、换行。 */
+/**
+ * 对 CSS 值做最小转义：未引号值（颜色/字体等）剔除会破坏 CSS 结构的
+ * 分号与花括号，并转义反斜杠；引号值额外转义双引号与换行。
+ */
 function cssValueEscape(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\A ");
+  const withoutBraces = value.replace(/[{};]/g, "").replace(/\\/g, "\\\\").replace(/\n/g, "\\A ");
+  return withoutBraces.replace(/"/g, '\\"');
 }

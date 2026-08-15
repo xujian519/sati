@@ -6,8 +6,25 @@
  * Chrome 打印为 PDF。
  */
 
-import { renderPatentDocument as renderDocument } from "../../patent/document/index.js";
+import {
+  renderPatentDocument as renderDocument,
+  type DocumentTemplateId,
+  type RenderFormat,
+} from "../../patent/document/index.js";
+import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
+
+/** 支持的模板 id（与 assets/templates/patent/manifest.json 保持一致）。 */
+const TEMPLATE_IDS: readonly DocumentTemplateId[] = [
+  "patentability-opinion",
+  "search-report",
+  "oa-response",
+  "claims-spec",
+  "invalidation-opinion",
+];
+
+/** 支持的输出格式。 */
+const FORMATS: readonly ("html" | "pdf" | "both")[] = ["html", "pdf", "both"];
 
 export type RenderPatentDocumentInput = {
   /** 模板 id：patentability-opinion / search-report / oa-response / claims-spec / invalidation-opinion */
@@ -38,7 +55,7 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
       "Injects brand variables (firm name, confidentiality, colors) from theme.json or explicit `brand`, " +
       "then replaces template sections by element id using `sections`. Templates: patentability-opinion, " +
       "search-report, oa-response, claims-spec, invalidation-opinion. Outputs a `.html` file; when " +
-      "format is 'pdf' or 'both' and Chrome/Chromium is available, also outputs a `.pdf' via headless " +
+      "format is 'pdf' or 'both' and Chrome/Chromium is available, also outputs a `.pdf` via headless " +
       "print-to-PDF.",
     kind: "custom",
     domain: "patent",
@@ -79,14 +96,30 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
     isReadOnly: () => false,
     isConcurrencySafe: () => true,
     async execute(input, context: SatiToolRuntimeContext) {
+      // 输入契约校验（fail-closed；即使绕过 schema 校验也在此拦截）。
+      if (!TEMPLATE_IDS.includes(input.template as DocumentTemplateId)) {
+        throw new SatiToolRuntimeError(
+          "invalid_tool_input",
+          `未知模板 "${input.template}"（可用: ${TEMPLATE_IDS.join(", ")}）`,
+          { tool: "render_patent_document", template: input.template },
+        );
+      }
+      const format = (input.format ?? "both") as RenderFormat;
+      if (!FORMATS.includes(format)) {
+        throw new SatiToolRuntimeError("invalid_tool_input", `非法 format "${input.format}"`, {
+          tool: "render_patent_document",
+          format: input.format,
+        });
+      }
+
       try {
         const result = await renderDocument(
           {
-            template: input.template as never,
+            template: input.template as DocumentTemplateId,
             outputName: input.output_name,
             caseId: input.case_id,
             outputDir: input.output_dir,
-            format: (input.format as "html" | "pdf" | "both" | undefined) ?? "both",
+            format,
             sections: input.sections,
             brand: input.brand,
             brandPath: input.brand_path,
@@ -99,6 +132,9 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
           lines.push(`PDF: ${result.pdfPath}`);
         } else if (result.pdfError !== undefined) {
           lines.push(`PDF 未生成: ${result.pdfError}`);
+        }
+        if (result.warnings !== undefined && result.warnings.length > 0) {
+          lines.push(`提示: ${result.warnings.join("；")}`);
         }
 
         return {
@@ -124,10 +160,14 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
           ],
         };
       } catch (err) {
+        // 用户输入错误（非法文件名/案卷号/模板）归为 invalid_tool_input。
+        if (err instanceof Error && /^(非法输出文件名|非法案卷号|未知模板)/.test(err.message)) {
+          throw new SatiToolRuntimeError("invalid_tool_input", err.message, { tool: "render_patent_document" });
+        }
         const message = err instanceof Error ? err.message : String(err);
-        return {
-          content: [{ type: "text", text: `render_patent_document 失败: ${message}` }],
-        };
+        throw new SatiToolRuntimeError("tool_execution_failed", `render_patent_document 执行失败: ${message}`, {
+          tool: "render_patent_document",
+        });
       }
     },
   };

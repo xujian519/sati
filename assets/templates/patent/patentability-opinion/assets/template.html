@@ -9,7 +9,7 @@
    * 可专利性分析意见 — 文书骨架
    * 约定：单文件 HTML、全部样式内联、A4 打印适配。
    * 品牌契约注入点：仅需改写 :root 变量（所名/密级/主色/字体）。
-   * 页号由导出管线注入（见 references/conventions.md §打印导出）。
+   * 内置渲染管线不注入页号；如需页码按 references/conventions.md §打印导出 的 Playwright 方式导出。
    * ============================================================ */
   /* 品牌变量由 Sati 文书品牌契约注入（见 assets/templates/patent/DOCS.md）。
    * agent 渲染时禁止改写这些变量；品牌覆盖走 tokens.css / products/<标识>/brand/theme.json。 */

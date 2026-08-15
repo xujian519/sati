@@ -544,8 +544,11 @@ ok "satiui bundle: ${PDUI_MB}MB → $(basename "$PDUI_BUNDLE")"
 # vendor/ holds pnpm workspace deps linked into node_modules (e.g.
 # node_modules/nuo-patent -> ../vendor/nuo-patent); without it the packaged
 # runtime can't resolve those packages at startup.
+# dist/assets/ holds the bundled patent document templates (copied by the root
+# build); render_patent_document resolves them relative to the module location,
+# so they must ship inside the bundle.
 rm -f "$PDM_BUNDLE"
-PDM_ITEMS=(src/ dist/src/ scripts/ skills/ node_modules/ vendor/)
+PDM_ITEMS=(src/ dist/src/ dist/assets/ scripts/ skills/ node_modules/ vendor/)
 [[ -d "${SATI_MAIN_DIR}/gateway" ]] && PDM_ITEMS+=(gateway/)
 for f in package.json bunfig.toml preload.ts proxy.ts router.ts \
          sati-config.ts tsconfig.json; do
