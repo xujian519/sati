@@ -134,6 +134,12 @@ function getExitPlanAction(answer: SatiElicitationAnswer): "continue_planning" |
 export function createEnterPlanModeTool(): SatiToolDefinition<Record<string, never>> {
   return {
     name: "enter_plan_mode",
+    outputSchema: {
+      type: "object",
+      required: ["requestedMode"],
+      additionalProperties: false,
+      properties: { requestedMode: { const: "plan" } },
+    },
     aliases: ["EnterPlanMode"],
     description: ENTER_PLAN_MODE_DESCRIPTION,
     kind: "session",
@@ -163,6 +169,19 @@ export function createEnterPlanModeTool(): SatiToolDefinition<Record<string, nev
 export function createExitPlanModeTool(): SatiToolDefinition<ExitPlanModeInput, ExitPlanModeOutput> {
   return {
     name: "exit_plan_mode",
+    outputSchema: {
+      type: "object",
+      required: ["plan", "action"],
+      properties: {
+        plan: { type: "string" },
+        action: { type: "string" },
+        feedback: { type: "string" },
+        requestedMode: { type: "string" },
+        planFilePath: { type: "string" },
+        planTitle: { type: "string" },
+        planSummary: { type: "string" },
+      },
+    },
     aliases: ["ExitPlanMode"],
     description: EXIT_PLAN_MODE_DESCRIPTION,
     kind: "session",

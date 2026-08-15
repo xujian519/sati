@@ -7,6 +7,10 @@ export type StructuredOutputInput = {
 export function createStructuredOutputTool(): SatiToolDefinition<StructuredOutputInput> {
   return {
     name: "structured_output",
+    outputSchema: {
+      // data 为任意 JSON 值（input.value 透传）：不约束 type，仅占位声明。
+      properties: {},
+    },
     aliases: ["StructuredOutput"],
     description: "Return a final structured output payload for non-interactive hosts.",
     kind: "structured_output",

@@ -117,6 +117,16 @@ export function createAgentTool(
 
   return {
     name: "agent",
+    outputSchema: {
+      type: "object",
+      required: ["subagentType", "description", "text"],
+      properties: {
+        subagentType: { type: "string" },
+        description: { type: "string" },
+        text: { type: "string" },
+        usage: { type: "object" },
+      },
+    },
     aliases: ["Agent", "Task"],
     description,
     kind: "agent",

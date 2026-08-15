@@ -51,6 +51,11 @@ export function createPatentLegalStatusTool(
 
   return {
     name: "patent_legal_status",
+    outputSchema: {
+      type: "object",
+      required: ["results"],
+      properties: { results: { type: "array" } },
+    },
     aliases: ["PatentLegalStatus", "patent_status"],
     title: "Patent Legal Status",
     description: [

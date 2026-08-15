@@ -12,6 +12,10 @@ export type ReadSkillDeps = {
 export function createReadSkillTool(deps: ReadSkillDeps): SatiToolDefinition<ReadSkillInput> {
   return {
     name: "read_skill",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["ReadSkill"],
     description:
       "Load a skill recipe by name and return its resolved SKILL.md path with the full content. " +

@@ -31,6 +31,14 @@ export function createPaperListSourcesTool(
 
   return {
     name: "paper_list_sources",
+    outputSchema: {
+      type: "object",
+      required: ["sources", "domains"],
+      properties: {
+        sources: { type: "array" },
+        domains: { type: "array" },
+      },
+    },
     aliases: ["PaperListSources"],
     description: [
       "- Lists the scholarly literature databases available to search via `paper_search`",

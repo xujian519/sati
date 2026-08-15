@@ -193,7 +193,8 @@ export type CreateBuiltinRegistryOptions = {
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
-  const registry = new ToolRegistry();
+  // 阶段四 T9 收尾：全部内置工具已声明 outputSchema，注册表开启强制（新工具未声明即 fail-loud）。
+  const registry = new ToolRegistry({ requireOutputSchema: true });
   registry.register(annotate(createGetCurrentTimeTool(), "session"));
   registry.register(annotate(createReadFileTool(), "filesystem"));
   registry.register(annotate(createSendAttachmentTool(), "session"));

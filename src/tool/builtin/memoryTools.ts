@@ -72,6 +72,10 @@ export function createMemoryOverviewTool(
 ): SatiToolDefinition<MemoryOverviewInput, MemoryOverviewOutput> {
   return {
     name: "memory_overview",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Memory Overview",
     description:
       "Return the ClawXMemory status overview: memory freshness, indexing backlog, last flush/dream timestamps, and runtime health. Use this for questions about memory state before drilling into specific records.",
@@ -92,6 +96,10 @@ export function createMemoryListTool(
 ): SatiToolDefinition<MemoryListInput, MemoryListOutput> {
   return {
     name: "memory_list",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Memory List",
     description:
       "Browse file-based user, feedback, and project memory manifest entries. Optionally filter by kind, free-text query, scope, and limit.",
@@ -141,6 +149,10 @@ export function createMemorySearchTool(
 ): SatiToolDefinition<MemorySearchInput, MemorySearchOutput> {
   return {
     name: "memory_search",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Memory Search",
     description:
       "Search durable long-term memory (preferences, collaboration rules, project progress across sessions). Run this before answering questions that may depend on earlier sessions, then use memory_get only for the exact file ids you need to verify.",
@@ -167,6 +179,10 @@ export function createMemoryGetTool(
 ): SatiToolDefinition<MemoryGetInput, MemoryGetOutput> {
   return {
     name: "memory_get",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Memory Get",
     description:
       "Read the exact memory file records for the given ids (returned by memory_list or memory_search). Use only for the specific files you need to verify.",
@@ -199,6 +215,10 @@ export function createMemoryFlushTool(
 ): SatiToolDefinition<MemoryFlushInput, MemoryFlushOutput> {
   return {
     name: "memory_flush",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Memory Flush",
     description:
       "Extract memory from recent sessions now. Use when the user asks why a just-finished conversation is not visible in memory yet, or explicitly wants recent memory extracted immediately.",
@@ -229,6 +249,10 @@ export function createMemoryDreamTool(
 ): SatiToolDefinition<MemoryDreamInput, MemoryDreamOutput> {
   return {
     name: "memory_dream",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Memory Dream",
     description:
       "Run memory maintenance: cleanup, duplicate merge, and manifest repair. Use when the user asks for memory cleanup or consolidation.",

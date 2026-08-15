@@ -452,9 +452,9 @@
   （submit ×1 + submitTurn ×26 处渠道/网关消费点）。
 - 产/消同源重复保持 0；--check 门禁 fresh。
 
-### 11.2 #4 outputSchema 分批接入（第二批 8 个存量工具）
+### 11.2 #4 outputSchema 分批接入（第二批 8 个 + 第三批收尾，注册表强制开启）
 
-首批（T9）3 个专利工具后，本批 8 个返回结构化 data 的存量工具声明 outputSchema 成功契约：
+首批（T9）3 个专利工具后，第二批 8 个返回结构化 data 的存量工具声明 outputSchema 成功契约：
 
 | 工具 | data 契约 |
 |---|---|
@@ -467,13 +467,23 @@
 | patent_wiki_search | total/results[]/wikiDir? |
 | search_patent_figure | query/total/indexedCount/method/results[] |
 
-新增 `tests/tool/output-schema-batch.spec.ts`（4 用例）：本批工具均已声明 schema、典型成功 data 对自身
-schema 零违约（契约有效）、可注册到 `requireOutputSchema: true` 注册表（分批接入验收门）、反向违约被检出。
+**第三批（收尾）**：剩余全部内置工具声明 outputSchema——精确契约（bash/edit_file/web_search/web_fetch/
+enter+exit_plan_mode/ask_user_question/ego_browser/patent_legal_status/patent_eval/paper_search/
+paper_list_sources/knowledge_note_save/validate_specification/agent/analyze_patent_figure/patent_pdf_download/
+patent_kg_query）+ 宽松顶层约束（判别联合/复杂 data：patent_metadata/evaluate_evidence/patent_plan_task/
+patent_worker_validate/patent_workflow/patent_workflow_run/flexible_plan/law_search/render_patent_document/
+rule_check/read_file/recognize_chemical_structure）+ 条件注册工具（memory×6/task×5/read_skill）+
+structured_output（任意 JSON，仅占位声明）。
 
-`ToolRegistry.requireOutputSchema` 保持默认 false——存量工具全部声明后统一开启（全局开启仍是后续项）。
+**注册表强制开启**：`createBuiltinRegistry` 改为 `new ToolRegistry({ requireOutputSchema: true })`——
+新工具未声明 outputSchema 即注册期 fail-loud（T9 收尾目标达成）。
+
+新增/更新 `tests/tool/output-schema-batch.spec.ts`（5 用例）：第二批工具均已声明 schema、典型成功 data 对自身
+schema 零违约（契约有效）、可注册到强制注册表（分批接入验收门）、反向违约被检出、默认注册表 46 工具全覆盖
+（强制开启前置）+ 条件工具（memory/task/read_skill）在强制注册表可注册。
 
 验证：typecheck ✅ 0 错误；lint ✅ 0 error（1 条阶段二遗留 UI 警告）；format:check ✅；
-tool 域回归 338 用例全绿。
+完整套件（含强制注册表）全绿。
 
 ---
 

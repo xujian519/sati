@@ -146,6 +146,10 @@ export function createTaskCreateTool(
 ): SatiToolDefinition<TaskCreateInput, TaskCreateOutput> {
   return {
     name: "task_create",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["TaskCreate"],
     description:
       "Spawn a shell command as a detached background task. Returns immediately with a taskId; it does not automatically push completion output back into the model context. For long-running tasks that should finish, call task_wait immediately after task_create so the final output returns to the current context. Use task_output only for progress checks, not manual sleep polling. Use task_stop for long-lived services/watchers.",
@@ -194,6 +198,10 @@ export function createTaskCreateTool(
 export function createTaskListTool(runtime?: BackgroundTaskRuntime): SatiToolDefinition<TaskListInput, TaskListOutput> {
   return {
     name: "task_list",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["TaskList"],
     description: "List background tasks (optionally filter by agentId / status / kind).",
     kind: "shell",
@@ -274,6 +282,10 @@ export function createTaskOutputTool(
 ): SatiToolDefinition<TaskOutputInput, TaskOutputResult> {
   return {
     name: "task_output",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["TaskOutput"],
     description:
       "Read newly-produced output for a background task (incremental progress polling). Use task_wait when you need to block until a finite task completes. Use nextOffset for the next read. Stop polling when status is completed, failed, or cancelled and nextOffset >= totalBytes.",
@@ -328,6 +340,10 @@ export function createTaskOutputTool(
 export function createTaskWaitTool(runtime?: BackgroundTaskRuntime): SatiToolDefinition<TaskWaitInput, TaskWaitResult> {
   return {
     name: "task_wait",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["TaskWait"],
     description:
       "Block until a background task finishes or timeoutMs elapses, then return the task status and output. Use this immediately after task_create for finite long-running commands such as builds, tests, conversions, downloads, or batch scripts. It does not stop the task when timeoutMs elapses; call task_wait again or task_output for progress.",
@@ -421,6 +437,10 @@ export function createTaskWaitTool(runtime?: BackgroundTaskRuntime): SatiToolDef
 export function createTaskStopTool(runtime?: BackgroundTaskRuntime): SatiToolDefinition<TaskStopInput, TaskStopResult> {
   return {
     name: "task_stop",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["TaskStop"],
     description: "Stop a background task (SIGTERM → grace → SIGKILL).",
     kind: "shell",

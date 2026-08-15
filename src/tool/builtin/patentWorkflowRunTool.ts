@@ -94,6 +94,10 @@ export function createPatentWorkflowRunTool(
 
   return {
     name: "patent_workflow_run",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["PatentWorkflowRun", "run_patent_atoms"],
     description:
       "Automatically execute a declarative patent workflow (atom stages) or a domain graph. Manifest path: " +

@@ -39,6 +39,10 @@ export type PatentPlanTaskInput = {
 export function createPatentPlanTaskTool(): SatiToolDefinition<PatentPlanTaskInput> {
   return {
     name: "patent_plan_task",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["PatentPlanTask", "plan_task_state"],
     description:
       "Human-in-the-loop plan state machine for patent tasks: transition (whitelist-checked " +

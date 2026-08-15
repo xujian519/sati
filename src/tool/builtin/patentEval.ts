@@ -53,6 +53,17 @@ const PASS_LINE = 0.7;
 export function createPatentEvalTool(): SatiToolDefinition<PatentEvalInput, PatentEvalOutput> {
   return {
     name: "patent_eval",
+    outputSchema: {
+      type: "object",
+      required: ["mode", "score", "passed", "details", "summary"],
+      properties: {
+        mode: { type: "string" },
+        score: { type: "number" },
+        passed: { type: "boolean" },
+        details: { type: "object" },
+        summary: { type: "string" },
+      },
+    },
     title: "Patent Evaluation",
     description:
       "评估专利相关产出的质量（报告/检索/流程/引用/综合）。返回结构化评分和通过/失败判定。支持 5 种评估模式（report/retrieval/workflow/citations/comprehensive），在提交人工复核前使用可提前发现质量问题。",

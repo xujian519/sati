@@ -87,6 +87,10 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
 
   return {
     name: "rule_check",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["RuleCheck", "constitutional_check"],
     description:
       "Run deterministic constitutional rule checks (keyword blocklist / pattern / structural / citation range / synonym match) " +

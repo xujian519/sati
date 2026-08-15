@@ -77,6 +77,20 @@ export function createBashTool(options?: CreateBashToolOptions): SatiToolDefinit
 
   return {
     name: "bash",
+    outputSchema: {
+      type: "object",
+      required: ["command", "exitCode", "stdout", "stderr", "timedOut", "durationMs", "outputState", "assertions"],
+      properties: {
+        command: { type: "string" },
+        exitCode: { type: "integer" },
+        stdout: { type: "string" },
+        stderr: { type: "string" },
+        timedOut: { type: "boolean" },
+        durationMs: { type: "integer" },
+        outputState: { type: "string" },
+        assertions: { type: "object" },
+      },
+    },
     aliases: ["Bash"],
     description: BASH_TOOL_DESCRIPTION,
     kind: "shell",

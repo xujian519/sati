@@ -147,6 +147,16 @@ export function createPatentPdfDownloadTool(
 
   return {
     name: "patent_pdf_download",
+    outputSchema: {
+      type: "object",
+      required: ["results", "outputDir"],
+      properties: {
+        results: { type: "array" },
+        summary: { type: "object" },
+        outputDir: { type: "string" },
+        recorded: { type: "boolean" },
+      },
+    },
     description: DESCRIPTION,
     kind: "network",
     domain: "patent",

@@ -232,6 +232,10 @@ const ACTIONS_LABEL = "create / get / run / confirm / rollback / add / remove / 
 export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToolDefinition<FlexiblePlanToolInput> {
   return {
     name: "flexible_plan",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["FlexiblePlan", "flexible_plan_task"],
     description:
       "Flexible plan for patent cases (stage-level HITL): create a plan (optional IPC technical-field " +

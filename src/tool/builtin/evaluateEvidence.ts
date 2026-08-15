@@ -88,6 +88,10 @@ export function createEvaluateEvidenceTool(deps?: {
 
   return {
     name: "evaluate_evidence",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     title: "Evaluate Evidence",
     description:
       "对专利证据做确定性三性判定（相关性/合法性/真实性）与类型特定检查（电子证据/互联网公开/使用公开四要件/域外证据/公知常识），" +

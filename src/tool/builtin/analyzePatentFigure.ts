@@ -53,6 +53,16 @@ export function createAnalyzePatentFigureTool(
 
   return {
     name: "analyze_patent_figure",
+    outputSchema: {
+      type: "object",
+      required: ["figureType", "usable", "components", "warnings"],
+      properties: {
+        figureType: { type: "string" },
+        usable: { type: "boolean" },
+        components: { type: "array" },
+        warnings: { type: "array" },
+      },
+    },
     title: "Analyze Patent Figure",
     description:
       "分析专利说明书附图：识别附图类型（结构图/流程图/电路图/方框图/示意图/分解图/剖视图）、提取组件与连接关系、" +

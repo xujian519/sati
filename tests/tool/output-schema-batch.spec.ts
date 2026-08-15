@@ -12,6 +12,9 @@ import test from "node:test";
 import { validateCanonicalOutput } from "../../src/tool/execution/outputSchemaValidation.js";
 import { ToolRegistry } from "../../src/tool/registry/ToolRegistry.js";
 import { createBuiltinRegistry } from "../../src/tool/registry/createBuiltinRegistry.js";
+import { createMemoryOverviewTool } from "../../src/tool/builtin/memoryTools.js";
+import { createTaskCreateTool } from "../../src/tool/builtin/taskTools.js";
+import { createReadSkillTool } from "../../src/tool/builtin/readSkill.js";
 
 /** 本批工具的典型成功 data（严格符合各工具声明的 outputSchema 契约）。 */
 const SAMPLE_DATA: Record<string, unknown> = {
@@ -92,6 +95,26 @@ test("本批工具可注册到 requireOutputSchema: true 的注册表", () => {
   }
 });
 
+test("createBuiltinRegistry 已开启强制：全部内置工具均声明 outputSchema，条件工具亦可注册", () => {
+  const registry = createBuiltinRegistry();
+  const missing = registry.list().filter(tool => tool.outputSchema === undefined);
+  assert.deepEqual(
+    missing.map(t => t.name),
+    [],
+    `内置注册表应无缺 schema 工具（强制开启前全部声明）：${missing.map(t => t.name).join(", ")}`,
+  );
+  // 条件注册工具（memory/task/read_skill）在强制注册表上同样可注册。
+  const strict = new ToolRegistry({ requireOutputSchema: true });
+  const conditional = [
+    createMemoryOverviewTool({} as never),
+    createTaskCreateTool({} as never),
+    createReadSkillTool({} as never),
+  ];
+  for (const tool of conditional) {
+    assert.ok(tool.outputSchema !== undefined, `${tool.name} 应声明 outputSchema`);
+    assert.doesNotThrow(() => strict.register(tool), `${tool.name} 在强制注册表下应可注册`);
+  }
+});
 test("schema 反向违约被检出（契约真的生效）", () => {
   const registry = createBuiltinRegistry();
   const globTool = registry.get("glob")!;

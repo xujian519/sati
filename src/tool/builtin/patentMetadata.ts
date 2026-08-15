@@ -97,6 +97,10 @@ export function createPatentMetadataTool(
 
   return {
     name: "patent_metadata",
+    outputSchema: {
+      type: "object",
+      properties: {},
+    },
     aliases: ["PatentMetadata", "get_patent_metadata"],
     title: "Patent Metadata Lookup",
     description: [
