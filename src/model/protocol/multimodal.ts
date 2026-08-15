@@ -26,6 +26,16 @@ export function isInputModality(value: unknown): value is InputModality {
 }
 
 /**
+ * 目标模型是否接受该模态（单一事实源：断言、工具前置门禁、降级共用）。
+ *
+ * @param constraints - 目标模型的模态约束。
+ * @param modality - 请求携带的模态（image/pdf/audio）。
+ */
+export function supportsInputModality(constraints: MultimodalConstraints, modality: InputModality): boolean {
+  return constraints.input.includes(modality);
+}
+
+/**
  * 模态门禁（阶段四 T3）：目标模型未声明接受该模态时 fail-loud。
  *
  * 与 downgradeUnsupportedContent（软降级）互补：需要「拒绝并点名模型」的
@@ -41,7 +51,7 @@ export function assertInputModality(
   modality: InputModality,
   modelLabel?: string,
 ): void {
-  if (constraints.input.includes(modality)) return;
+  if (supportsInputModality(constraints, modality)) return;
   const who = modelLabel === undefined ? "the current model" : `model "${modelLabel}"`;
   throw new ModelRequestError(
     "unsupported_input_modality",

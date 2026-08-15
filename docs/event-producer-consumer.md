@@ -2,51 +2,53 @@
 
 # 事件生产者/消费者矩阵（阶段四 T8）
 
-从源码生成：事件名取自 discriminated union 的 type 字面量；生产者为 emit/dispatch 调用点；
-消费者为 on/subscribe 调用点。改事件后运行 `pnpm gen:event-matrix --check`（CI 门禁）。
+从源码生成：事件名取自 discriminated union 的 type 字面量；生产者为 emit/dispatch/emitAgentEvent/
+emitEvent 字符串事件名调用点、对象字面量首参调用点与 yield { type } 泵；消费者为 on/subscribe
+字符串订阅调用点。本代码库的 AgentEvent 消费经生成器/类型化 sink 完成（无 on 订阅），故消费者
+列多为空属正常。改事件后运行 `pnpm gen:event-matrix --check`（CI 门禁）。
 
 | 事件 | 生产者 | 消费者 |
 | --- | --- | --- |
-| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:770, src/gateway/client/InProcessGateway.ts:351 | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:770, src/gateway/client/InProcessGateway.ts:351 |
-| assistant_message | src/agent/loop/AgentLoop.ts:760, src/agent/loop/AgentLoop.ts:1646 | src/agent/loop/AgentLoop.ts:760, src/agent/loop/AgentLoop.ts:1646 |
-| compact_completed | src/context/compaction/CompactionEngine.ts:274 | src/context/compaction/CompactionEngine.ts:274 |
-| compact_started | src/context/compaction/CompactionEngine.ts:170 | src/context/compaction/CompactionEngine.ts:170 |
-| context_budget | src/agent/loop/AgentLoop.ts:422, src/agent/loop/AgentLoop.ts:435 | src/agent/loop/AgentLoop.ts:422, src/agent/loop/AgentLoop.ts:435 |
+| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:770, src/gateway/client/InProcessGateway.ts:351 | - |
+| assistant_message | src/agent/loop/AgentLoop.ts:760, src/agent/loop/AgentLoop.ts:1646 | - |
+| compact_completed | src/context/compaction/CompactionEngine.ts:274 | - |
+| compact_started | src/context/compaction/CompactionEngine.ts:170 | - |
+| context_budget | src/agent/loop/AgentLoop.ts:422, src/agent/loop/AgentLoop.ts:435 | - |
 | doomloop_signal | - | - |
-| elicitation_requested | src/cli/createLocalGateway.ts:1395, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | src/cli/createLocalGateway.ts:1395, src/gateway/elicitation/GatewayElicitationChannel.ts:101 |
+| elicitation_requested | src/cli/createLocalGateway.ts:1395, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | - |
 | elicitation_resolved | - | - |
-| empty_output_recovery | src/agent/loop/AgentLoop.ts:1584 | src/agent/loop/AgentLoop.ts:1584 |
-| file_artifacts | src/agent/turn/TurnRunner.ts:208, src/agent/turn/TurnRunner.ts:229, src/agent/turn/TurnRunner.ts:310, src/agent/turn/TurnRunner.ts:323, src/session/transcript/InMemoryTranscriptWriter.ts:61, src/session/transcript/JsonlTranscriptWriter.ts:125 | src/agent/turn/TurnRunner.ts:208, src/agent/turn/TurnRunner.ts:229, src/agent/turn/TurnRunner.ts:310, src/agent/turn/TurnRunner.ts:323, src/session/transcript/InMemoryTranscriptWriter.ts:61, src/session/transcript/JsonlTranscriptWriter.ts:125 |
-| input_accepted | src/agent/turn/TurnRunner.ts:187, src/session/transcript/TranscriptReplay.ts:73 | src/agent/turn/TurnRunner.ts:187, src/session/transcript/TranscriptReplay.ts:73 |
-| instructions_loaded | src/agent/loop/AgentLoop.ts:1839 | src/agent/loop/AgentLoop.ts:1839 |
-| mode_change_requested | src/agent/loop/AgentLoop.ts:1329 | src/agent/loop/AgentLoop.ts:1329 |
-| model_event | src/agent/loop/AgentLoop.ts:467 | src/agent/loop/AgentLoop.ts:467 |
+| empty_output_recovery | src/agent/loop/AgentLoop.ts:1584 | - |
+| file_artifacts | src/agent/turn/TurnRunner.ts:208, src/agent/turn/TurnRunner.ts:229, src/agent/turn/TurnRunner.ts:310, src/agent/turn/TurnRunner.ts:323, src/session/transcript/InMemoryTranscriptWriter.ts:61, src/session/transcript/JsonlTranscriptWriter.ts:125 | - |
+| input_accepted | src/agent/turn/TurnRunner.ts:187, src/session/transcript/TranscriptReplay.ts:73 | - |
+| instructions_loaded | src/agent/loop/AgentLoop.ts:1839 | - |
+| mode_change_requested | src/agent/loop/AgentLoop.ts:1329 | - |
+| model_event | src/agent/loop/AgentLoop.ts:467 | - |
 | model_recovery_failed | - | - |
-| model_request_started | src/agent/loop/AgentLoop.ts:372 | src/agent/loop/AgentLoop.ts:372 |
-| permission_denied | src/tool/execution/ToolRuntime.ts:250 | src/tool/execution/ToolRuntime.ts:250 |
-| permission_requested | src/tool/execution/ToolRuntime.ts:209 | src/tool/execution/ToolRuntime.ts:209 |
-| post_tool_execute | src/tool/execution/ToolRuntime.ts:335, src/tool/execution/ToolRuntime.ts:385 | src/tool/execution/ToolRuntime.ts:335, src/tool/execution/ToolRuntime.ts:385 |
-| pre_tool_execute | src/tool/execution/ToolRuntime.ts:134 | src/tool/execution/ToolRuntime.ts:134 |
+| model_request_started | src/agent/loop/AgentLoop.ts:372 | - |
+| permission_denied | src/tool/execution/ToolRuntime.ts:250 | - |
+| permission_requested | src/tool/execution/ToolRuntime.ts:209 | - |
+| post_tool_execute | src/tool/execution/ToolRuntime.ts:335, src/tool/execution/ToolRuntime.ts:391 | - |
+| pre_tool_execute | src/tool/execution/ToolRuntime.ts:134 | - |
 | retry_progress | - | - |
 | session_aborted | - | - |
-| session_ended | src/agent/session/AgentSession.ts:134 | src/agent/session/AgentSession.ts:134 |
-| session_started | src/agent/session/AgentSession.ts:67 | src/agent/session/AgentSession.ts:67 |
-| setup_completed | src/agent/session/AgentSession.ts:90 | src/agent/session/AgentSession.ts:90 |
-| stop_failure | src/agent/loop/AgentLoop.ts:482, src/agent/loop/AgentLoop.ts:1021 | src/agent/loop/AgentLoop.ts:482, src/agent/loop/AgentLoop.ts:1021 |
-| stop_requested | src/agent/loop/AgentLoop.ts:1194 | src/agent/loop/AgentLoop.ts:1194 |
-| subagent_completed | src/agent/loop/toolContext.ts:255 | src/agent/loop/toolContext.ts:255 |
-| subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/agent/sub/SubAgentSession.ts:196 |
-| subagent_started | src/agent/loop/toolContext.ts:148 | src/agent/loop/toolContext.ts:148 |
-| subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/agent/loop/subagentExecutor.ts:168 |
-| subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/agent/sub/SubAgentSession.ts:204 |
-| subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/agent/sub/SubAgentSession.ts:212 |
-| token_cap_adjusted | src/agent/loop/AgentLoop.ts:630, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:875, src/agent/loop/AgentLoop.ts:897, src/agent/loop/AgentLoop.ts:981 | src/agent/loop/AgentLoop.ts:630, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:875, src/agent/loop/AgentLoop.ts:897, src/agent/loop/AgentLoop.ts:981 |
-| tool_calls_detected | src/agent/loop/AgentLoop.ts:1245 | src/agent/loop/AgentLoop.ts:1245 |
-| tool_result | src/agent/loop/AgentLoop.ts:1336 | src/agent/loop/AgentLoop.ts:1336 |
-| tool_results_projected | src/agent/loop/AgentLoop.ts:800, src/agent/loop/AgentLoop.ts:1366 | src/agent/loop/AgentLoop.ts:800, src/agent/loop/AgentLoop.ts:1366 |
-| turn_completed | src/agent/loop/AgentLoop.ts:1627, src/agent/loop/AgentLoop.ts:1679, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:326, src/gateway/client/InProcessGateway.ts:2050, src/session/transcript/TranscriptReplay.ts:102 | src/agent/loop/AgentLoop.ts:1627, src/agent/loop/AgentLoop.ts:1679, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:326, src/gateway/client/InProcessGateway.ts:2050, src/session/transcript/TranscriptReplay.ts:102 |
-| turn_continued | src/agent/loop/AgentLoop.ts:641, src/agent/loop/AgentLoop.ts:779, src/agent/loop/AgentLoop.ts:859, src/agent/loop/AgentLoop.ts:922, src/agent/loop/AgentLoop.ts:938, src/agent/loop/AgentLoop.ts:950, src/agent/loop/AgentLoop.ts:992, src/agent/loop/AgentLoop.ts:1544, src/agent/loop/AgentLoop.ts:1608, src/agent/loop/AgentLoop.ts:1994 | src/agent/loop/AgentLoop.ts:641, src/agent/loop/AgentLoop.ts:779, src/agent/loop/AgentLoop.ts:859, src/agent/loop/AgentLoop.ts:922, src/agent/loop/AgentLoop.ts:938, src/agent/loop/AgentLoop.ts:950, src/agent/loop/AgentLoop.ts:992, src/agent/loop/AgentLoop.ts:1544, src/agent/loop/AgentLoop.ts:1608, src/agent/loop/AgentLoop.ts:1994 |
-| turn_failed | src/agent/loop/AgentLoop.ts:1624, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 | src/agent/loop/AgentLoop.ts:1624, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 |
-| turn_started | src/agent/turn/TurnRunner.ts:143 | src/agent/turn/TurnRunner.ts:143 |
-| user_prompt_submitted | src/agent/turn/TurnRunner.ts:201 | src/agent/turn/TurnRunner.ts:201 |
-| warning | src/agent/loop/AgentLoop.ts:1178 | src/agent/loop/AgentLoop.ts:1178 |
+| session_ended | src/agent/session/AgentSession.ts:134 | - |
+| session_started | src/agent/session/AgentSession.ts:67 | - |
+| setup_completed | src/agent/session/AgentSession.ts:90 | - |
+| stop_failure | src/agent/loop/AgentLoop.ts:482, src/agent/loop/AgentLoop.ts:1021 | - |
+| stop_requested | src/agent/loop/AgentLoop.ts:1194 | - |
+| subagent_completed | src/agent/loop/toolContext.ts:255 | - |
+| subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | - |
+| subagent_started | src/agent/loop/toolContext.ts:148 | - |
+| subagent_status | src/agent/loop/subagentExecutor.ts:168 | - |
+| subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | - |
+| subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | - |
+| token_cap_adjusted | src/agent/loop/AgentLoop.ts:630, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:875, src/agent/loop/AgentLoop.ts:897, src/agent/loop/AgentLoop.ts:981 | - |
+| tool_calls_detected | src/agent/loop/AgentLoop.ts:1245 | - |
+| tool_result | src/agent/loop/AgentLoop.ts:1336 | - |
+| tool_results_projected | src/agent/loop/AgentLoop.ts:800, src/agent/loop/AgentLoop.ts:1366 | - |
+| turn_completed | src/agent/loop/AgentLoop.ts:1627, src/agent/loop/AgentLoop.ts:1679, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:326, src/gateway/client/InProcessGateway.ts:2050, src/session/transcript/TranscriptReplay.ts:102 | - |
+| turn_continued | src/agent/loop/AgentLoop.ts:641, src/agent/loop/AgentLoop.ts:779, src/agent/loop/AgentLoop.ts:859, src/agent/loop/AgentLoop.ts:922, src/agent/loop/AgentLoop.ts:938, src/agent/loop/AgentLoop.ts:950, src/agent/loop/AgentLoop.ts:992, src/agent/loop/AgentLoop.ts:1544, src/agent/loop/AgentLoop.ts:1608, src/agent/loop/AgentLoop.ts:1998 | - |
+| turn_failed | src/agent/loop/AgentLoop.ts:1624, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 | - |
+| turn_started | src/agent/turn/TurnRunner.ts:143 | - |
+| user_prompt_submitted | src/agent/turn/TurnRunner.ts:201 | - |
+| warning | src/agent/loop/AgentLoop.ts:1178 | - |

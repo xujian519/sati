@@ -421,6 +421,23 @@
 - T8 矩阵为启发式 v1，两列同源重复需人工复核后按需精化（白名单/事件源注解）；
 - T5 resume 后观测态为空（unseen），文件需重读——与既有行为一致，已文档化。
 
+## 10. Code Review 发现处置（2026-08-16，全部修复）
+
+迭代二后的两轮 code review 共发现 7 项；**1 项已即时修复**（`82903537`：ToolRuntime 对合作式
+工具在 deadline 处抛出的 abort 类错误归一为 TOOL_TIMEOUT），其余 6 项于本提交全部处置：
+
+| # | 发现 | 处置 | 落地 |
+|---|---|---|---|
+| 1 | resume 孤儿 turn 合成后，本次 resume 的重放仍基于合成前条目（下个 resume 才闭合） | 合成条目并入本次重放序列（sequence=maxSeq+1 与 writer 一致），投影立即闭合 | `synthesizeInterruptedTurn` 返回条目；`resumeAgentSession` push 进 entries；spec 新增「合成后重放立即闭合」回归用例 |
+| 2 | `assertInputModality` 已导出但 `analyze_patent_figure` 内联 `includes` 判定 | 新增 `supportsInputModality` 单一事实源，断言与工具门禁共用；工具仍返回结构化错误结果（保持工具层惯例） | `multimodal.ts`、`analyzePatentFigure.ts` |
+| 3 | `observedStateOf` 的 absent 态不可达（快照存在即 present） | 移除不可达态：视图态收敛为 present/unseen；absent 语义由 create-if-absent 承担并文档化 | `observation.ts`（类型 + 注释）、spec 头注释 |
+| 4 | retryScope 依赖 `metadata.turnId`（loop 未设置时退化为每请求 UUID） | AgentLoop 把 `turnId` 并入请求 metadata（同一 turn 的全部请求 retryId 稳定；Anthropic 降级只读 user_id，OpenAI 透传） | `AgentLoop.createModelRequest`；新增 retry-scope 集成 spec（mock fetch 全 429 驱动重试，验证同 turn 稳定 / 异 turn 不同） |
+| 5 | ToolRuntime 超时无直接集成测试（仅 `isToolTimeout` 原语层） | 新增 3 个集成用例：合作式 abort→tool_timeout、忽略 signal 正常返回→tool_timeout、调用方取消→非 timeout | `tests/tool/tool-timeout.spec.ts`（注：兜底定时器必须 ref——`AbortSignal.timeout` 内部定时器是 unref 的，仅靠它事件循环会提前清空） |
+| 6 | T8 矩阵启发式产生/消费同源重复（43 行同源） | 消费者扫描不再记录对象字面量首参与 yield；字符串分支要求 callee 名落在目标集（属性访问经 `calleeNameOf` 归一，含 emitAgentEvent/emitEvent）；产/消同源 43→0 | `scripts/gen-event-matrix.ts` + 重新生成 `docs/event-producer-consumer.md` |
+
+验证：typecheck ✅ 0 错误；lint ✅ 0 error（1 条阶段二遗留 UI 警告）；format:check ✅；
+受影响域回归（session/model/tool/test-support/agent-loop）716 用例全绿。
+
 ---
 
 ## 附：上游依据速查（dsh 路径）

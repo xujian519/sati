@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AgentTranscriptEntry } from "../../src/session/transcript/TranscriptEntry.js";
+import { replayTranscriptEntries } from "../../src/session/transcript/TranscriptReplay.js";
 import {
   buildInterruptedTurnResult,
   findOpenTurn,
@@ -60,29 +61,68 @@ test("buildInterruptedTurnResult：interrupted 收尾形状", () => {
   assert.equal(result.completedAt, "2026-08-16T02:00:00.000Z");
 });
 
-test("synthesizeInterruptedTurn：开放时触发回调，否则不触发", () => {
+test("synthesizeInterruptedTurn：开放时触发回调并返回合成条目，否则 undefined", () => {
   const openEntries: AgentTranscriptEntry[] = [entry({ type: "durable_message", turnId: "t3", message: {} as never })];
   let called = 0;
-  synthesizeInterruptedTurn(
+  const synthesized = synthesizeInterruptedTurn(
     openEntries,
     () => {
       called += 1;
     },
     "s1",
-    "2026-08-16T01:00:00.000Z",
+    {
+      nextSequence: 5,
+      parentEntryId: null,
+      now: () => new Date("2026-08-16T02:00:00.000Z"),
+    },
   );
   assert.equal(called, 1);
+  assert.ok(synthesized !== undefined);
+  assert.equal(synthesized.type, "turn_result");
+  assert.equal(synthesized.turnId, "t3");
+  assert.equal(synthesized.sequence, 5);
+  assert.equal(synthesized.createdAt, "2026-08-16T02:00:00.000Z");
+  assert.equal(synthesized.result.stopReason, "interrupted");
+  assert.equal(synthesized.result.errors?.[0]?.code, "agent_turn_interrupted");
+
   const closedEntries: AgentTranscriptEntry[] = [
     entry({ type: "durable_message", turnId: "t3", message: {} as never }),
     entry({ type: "turn_result", turnId: "t3", result: {} as never }),
   ];
-  synthesizeInterruptedTurn(
+  const none = synthesizeInterruptedTurn(
     closedEntries,
     () => {
       called += 1;
     },
     "s1",
-    "2026-08-16T01:00:00.000Z",
+    { nextSequence: 6 },
   );
   assert.equal(called, 1);
+  assert.equal(none, undefined);
+});
+
+test("合成条目并入条目序列后，重放立即闭合开放 turn（不再报 incomplete turn）", () => {
+  const durable: AgentTranscriptEntry = entry({
+    type: "durable_message",
+    turnId: "t1",
+    message: { role: "user", content: [{ type: "text", text: "hi" }] },
+  });
+  const entries: AgentTranscriptEntry[] = [entry({ type: "accepted_input", turnId: "t1", messages: [] }), durable];
+
+  // 合成前：开放 turn 的 durable 消息被丢弃并报诊断。
+  const before = replayTranscriptEntries(entries);
+  assert.ok(before.diagnostics.some(d => d.code === "transcript_entry_invalid"));
+  assert.equal(before.messages.length, 0);
+
+  // 合成 + 并入序列后：turn 闭合，消息投影、turn_completed 事件出现。
+  const synthesized = synthesizeInterruptedTurn(entries, () => {}, "s1", { nextSequence: 3 });
+  assert.ok(synthesized !== undefined);
+  entries.push(synthesized);
+  const after = replayTranscriptEntries(entries);
+  assert.equal(
+    after.diagnostics.some(d => d.code === "transcript_entry_invalid"),
+    false,
+  );
+  assert.ok(after.messages.some(m => m.content.some(b => b.type === "text" && b.text === "hi")));
+  assert.ok(after.events.some(e => e.type === "turn_completed" && e.turnId === "t1"));
 });

@@ -1,8 +1,9 @@
 /**
- * 文件观测三态语义测试（阶段四 T5）。
+ * 文件观测语义测试（阶段四 T5）。
  *
  * 覆盖：classifyWriteIntent 全矩阵（create/overwrite/未观测拒绝/版本过期拒绝/
- * 全量读哈希复核兜底）、observedStateOf 三态映射。
+ * 全量读哈希复核兜底）、observedStateOf 两态映射（present/unseen；absent 由
+ * create-if-absent 承担，不单独记录）。
  */
 import assert from "node:assert/strict";
 import test from "node:test";

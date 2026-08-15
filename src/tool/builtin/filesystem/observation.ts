@@ -1,20 +1,22 @@
 /**
- * 文件观测三态语义与写意图分类（阶段四 T5）。
+ * 文件观测语义与写意图分类（阶段四 T5）。
  *
  * 模型对工作区文件的写操作前置「必须先读」：注册表按路径记录观测状态——
- * present（读过，快照含 mtime/内容哈希）/ absent（观测到不存在）/ unseen
- * （未观测）。写意图分类纯函数给出确定性裁决：create（文件不存在）／
- * overwrite（存在且版本新鲜）／refuse（未观测 file_not_observed，或版本
- * 过期 file_stale_version）。与 dsh fs-observation-policy 的
- * FS_NOT_OBSERVED / FS_STALE_VERSION 语义对应。
+ * present（读过，快照含 mtime/内容哈希）/ unseen（未观测）。写意图分类纯函数
+ * 给出确定性裁决：create（文件不存在）／overwrite（存在且版本新鲜）／refuse
+ * （未观测 file_not_observed，或版本过期 file_stale_version）。与 dsh
+ * fs-observation-policy 的 FS_NOT_OBSERVED / FS_STALE_VERSION 语义对应。
+ *
+ * 「观测到不存在」（absent）不单独记录：文件不存在时写入经 create-if-absent
+ * 直接放行（无覆盖风险），无需快照标记——故视图态只有 present/unseen 两态。
  *
  * resume 语义：观测状态是会话内存态，resume 后为空（unseen），文件需重读
  * 后方可写——与既有 readFileState/writeSnapshots 行为一致。
  */
 import type { SatiWriteSnapshotEntry } from "../../protocol/types.js";
 
-/** 文件观测三态。 */
-export type ObservedFileState = "present" | "absent" | "unseen";
+/** 文件观测视图态（present 有快照 / unseen 未观测；absent 由 create-if-absent 承担）。 */
+export type ObservedFileState = "present" | "unseen";
 
 export type WriteIntentDecision =
   | { intent: "create" }
@@ -62,12 +64,14 @@ export function classifyWriteIntent(input: {
 }
 
 /**
- * 观测状态视图：有快照且文件存在为 present；快照缺失为 unseen；
- * 快照存在但记录的是「观测到不存在」为 absent（当前实现用快照存在与否表示，
- * 保留该函数作为三态模型的显式文档化视图）。
+ * 观测状态视图：有快照为 present；快照缺失为 unseen。
+ *
+ * 历史实现曾声明 absent（观测到不存在）第三态，但注册表从不记录缺失观测
+ * （create-if-absent 已覆盖该语义），absent 实际不可达——移除该态，视图与
+ * 实现一致。
  *
  * @param snapshot - 观测快照（可能缺省）。
- * @returns 三态之一。
+ * @returns 两态之一。
  */
 export function observedStateOf(snapshot: SatiWriteSnapshotEntry | undefined): ObservedFileState {
   return snapshot === undefined ? "unseen" : "present";

@@ -1891,7 +1891,11 @@ export class AgentLoop {
       temperature: this.config.temperature,
       thinking: this.config.thinking,
       stream: true,
-      metadata: this.config.metadata,
+      // 阶段四 T4.2：请求级 retryScope——把 turnId 并入请求 metadata，使
+      // streamModel 的 retryId 在同一 turn 的全部请求间稳定（跨路由 attempt
+      // 与重试可审计关联）。Anthropic 降级只读 user_id；OpenAI 作为自定义
+      // metadata 透传（可用于仪表盘请求关联）。
+      metadata: { ...this.config.metadata, turnId: input.turnId },
       cacheBreakpoints: prepared.cacheBreakpoints,
     };
   }

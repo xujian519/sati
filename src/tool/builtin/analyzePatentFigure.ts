@@ -13,6 +13,7 @@
  * 见 src/patent/figure/prompts.ts 的说明。
  */
 
+import { supportsInputModality } from "../../model/protocol/multimodal.js";
 import { analyzePatentFigure, DEFAULT_FIGURE_MODEL, DEFAULT_FIGURE_PROVIDER } from "../../patent/figure/analyze.js";
 import { DEFAULT_FIGURE_INDEX_RELATIVE_PATH, upsertFigureIndex } from "../../patent/figure/index-store.js";
 import { loadFigureImage } from "../../patent/figure/preprocess.js";
@@ -102,7 +103,9 @@ export function createAnalyzePatentFigureTool(
       // 阶段四 T3：模态门禁——模型显式声明且不含 image 时提前拒绝并点名模型，
       // 避免读图/解码后才发现模型不可用（fail-loud 优先于静默降级）。
       // modelMultimodal 未注入（未知能力）时不拦截，保持原有行为。
-      if (context.modelMultimodal !== undefined && !context.modelMultimodal.input.includes("image")) {
+      // 判定复用 supportsInputModality（与 assertInputModality 同一事实源）；
+      // 此处返回结构化错误结果而非抛错，保持工具层「输入级拒绝返回结果」惯例。
+      if (context.modelMultimodal !== undefined && !supportsInputModality(context.modelMultimodal, "image")) {
         return {
           content: [
             {
