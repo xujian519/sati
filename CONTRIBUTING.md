@@ -115,6 +115,21 @@ cd ui && pnpm test    # UI 测试
 
 修改核心模块（`agent/` `router/` `tool/` `session/` 等）必须附相应测试。
 
+### 视觉验证
+
+凡涉及 UI 渲染（组件 / 样式 / 布局 / 主题 / 动画）的变更，必须在 PR 中完成**视觉验证**，不能仅以"单元测试通过"替代。PR 模板的"视觉验证"节为强制填写项，具体要求见 [PR 模板](./.github/PULL_REQUEST_TEMPLATE.md)。
+
+要点：
+
+- **触发条件**：改动命中 `ui/src/` 的组件、样式（Tailwind / CSS）、布局、主题（`DarkModeToggle`）、或 shadcn/ui 组件行为。
+- **必附证据**：Before / After 对比截图或录屏，置于 PR"视觉验证 → 证据"折叠区。
+- **双主题**：亮色 + 暗色均须无错位、无对比度问题。
+- **双语言**：中文 (zh-CN) 与英文 (en) 下文案无截断 / 溢出 / 折行异常。
+- **状态覆盖**：默认、hover、disabled、loading、empty、error 六态。
+- **响应式**：桌面（≥1280）、平板、移动断点下布局正常。
+- **桌面端**：Electron（mac / win）专属 UI 变更须在对应平台验证。
+- 浏览器控制台无新增 error / warning。
+
 ### 测试注意事项（性能与调用方式）
 
 实测基线（Apple Silicon 14 核、warm cache）：
@@ -138,6 +153,7 @@ cd ui && pnpm test    # UI 测试
 - [ ] 未引入 `any` / `@ts-ignore`
 - [ ] 相关文档已更新（README、docs/ 等）
 - [ ] 核心模块改动附有测试
+- [ ] UI 变更已在 PR 中完成视觉验证（双主题 / 双语言 / 状态 / 响应式）
 
 ## 行为准则
 
