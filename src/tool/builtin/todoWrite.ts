@@ -145,6 +145,31 @@ export function createTodoWriteTool(): SatiToolDefinition<TodoWriteInput, TodoWr
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["todos", "mode", "merge"],
+      additionalProperties: false,
+      properties: {
+        markdown: { type: "string" },
+        todos: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["content", "status"],
+            properties: {
+              id: { type: "string" },
+              content: { type: "string" },
+              status: { type: "string", enum: ["pending", "in_progress", "completed", "cancelled"] },
+              priority: { type: "string" },
+            },
+          },
+        },
+        mode: { type: "string", enum: ["read", "markdown", "structured"] },
+        merge: { type: "boolean" },
+        reason: { type: "string" },
+        diagnostics: { type: "object" },
+      },
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context): Promise<SatiToolExecutionOutput<TodoWriteOutput>> => {

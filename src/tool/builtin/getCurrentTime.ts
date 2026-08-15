@@ -31,6 +31,19 @@ export function createGetCurrentTimeTool(): SatiToolDefinition<GetCurrentTimeInp
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["timezone", "iso", "local", "date", "weekday", "unixMs"],
+      additionalProperties: false,
+      properties: {
+        timezone: { type: "string" },
+        iso: { type: "string" },
+        local: { type: "string" },
+        date: { type: "string" },
+        weekday: { type: "string" },
+        unixMs: { type: "integer" },
+      },
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context) => {

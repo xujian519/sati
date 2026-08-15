@@ -110,6 +110,30 @@ export function createPatentWikiSearchTool(): SatiToolDefinition<PatentWikiSearc
       },
       required: ["query"],
     },
+    outputSchema: {
+      type: "object",
+      required: ["total", "results"],
+      additionalProperties: false,
+      properties: {
+        total: { type: "integer" },
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "title", "relativePath"],
+            properties: {
+              id: { type: "string" },
+              title: { type: "string" },
+              relativePath: { type: "string" },
+              concept: { type: "string" },
+              domain: { type: "string" },
+              body: { type: "string" },
+            },
+          },
+        },
+        wikiDir: { type: "string" },
+      },
+    },
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     checkAvailability: () => {
