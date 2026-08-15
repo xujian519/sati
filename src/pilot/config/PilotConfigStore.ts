@@ -121,13 +121,7 @@ class DefaultPilotConfigStore implements PilotConfigStore {
         }
         // 周期告警：每次失败的 reload 都告警并点名沿用中的 last-good 代。
         console.warn(
-          "[sati] config reload failed (" +
-            this.consecutiveFailures +
-            "x in a row); keeping last good config (version " +
-            (this.lastGoodFacts?.version ?? "none") +
-            " from " +
-            (this.lastGoodFacts?.loadedAt ?? "-") +
-            ")",
+          `[sati] config reload failed (${this.consecutiveFailures}x in a row); keeping last good config (version ${this.lastGoodFacts?.version ?? "none"} from ${this.lastGoodFacts?.loadedAt ?? "-"})`,
         );
         throw error;
       })

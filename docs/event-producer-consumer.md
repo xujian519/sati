@@ -8,21 +8,21 @@
 | 事件 | 生产者 | 消费者 |
 | --- | --- | --- |
 | agent_status | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:770, src/gateway/client/InProcessGateway.ts:351 | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:770, src/gateway/client/InProcessGateway.ts:351 |
-| assistant_message | src/agent/loop/AgentLoop.ts:755, src/agent/loop/AgentLoop.ts:1641 | src/agent/loop/AgentLoop.ts:755, src/agent/loop/AgentLoop.ts:1641 |
+| assistant_message | src/agent/loop/AgentLoop.ts:760, src/agent/loop/AgentLoop.ts:1646 | src/agent/loop/AgentLoop.ts:760, src/agent/loop/AgentLoop.ts:1646 |
 | compact_completed | src/context/compaction/CompactionEngine.ts:274 | src/context/compaction/CompactionEngine.ts:274 |
 | compact_started | src/context/compaction/CompactionEngine.ts:170 | src/context/compaction/CompactionEngine.ts:170 |
-| context_budget | src/agent/loop/AgentLoop.ts:417, src/agent/loop/AgentLoop.ts:430 | src/agent/loop/AgentLoop.ts:417, src/agent/loop/AgentLoop.ts:430 |
+| context_budget | src/agent/loop/AgentLoop.ts:422, src/agent/loop/AgentLoop.ts:435 | src/agent/loop/AgentLoop.ts:422, src/agent/loop/AgentLoop.ts:435 |
 | doomloop_signal | - | - |
 | elicitation_requested | src/cli/createLocalGateway.ts:1395, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | src/cli/createLocalGateway.ts:1395, src/gateway/elicitation/GatewayElicitationChannel.ts:101 |
 | elicitation_resolved | - | - |
-| empty_output_recovery | src/agent/loop/AgentLoop.ts:1579 | src/agent/loop/AgentLoop.ts:1579 |
+| empty_output_recovery | src/agent/loop/AgentLoop.ts:1584 | src/agent/loop/AgentLoop.ts:1584 |
 | file_artifacts | src/agent/turn/TurnRunner.ts:208, src/agent/turn/TurnRunner.ts:229, src/agent/turn/TurnRunner.ts:310, src/agent/turn/TurnRunner.ts:323, src/session/transcript/InMemoryTranscriptWriter.ts:61, src/session/transcript/JsonlTranscriptWriter.ts:125 | src/agent/turn/TurnRunner.ts:208, src/agent/turn/TurnRunner.ts:229, src/agent/turn/TurnRunner.ts:310, src/agent/turn/TurnRunner.ts:323, src/session/transcript/InMemoryTranscriptWriter.ts:61, src/session/transcript/JsonlTranscriptWriter.ts:125 |
 | input_accepted | src/agent/turn/TurnRunner.ts:187, src/session/transcript/TranscriptReplay.ts:73 | src/agent/turn/TurnRunner.ts:187, src/session/transcript/TranscriptReplay.ts:73 |
-| instructions_loaded | src/agent/loop/AgentLoop.ts:1834 | src/agent/loop/AgentLoop.ts:1834 |
-| mode_change_requested | src/agent/loop/AgentLoop.ts:1324 | src/agent/loop/AgentLoop.ts:1324 |
-| model_event | src/agent/loop/AgentLoop.ts:462 | src/agent/loop/AgentLoop.ts:462 |
+| instructions_loaded | src/agent/loop/AgentLoop.ts:1839 | src/agent/loop/AgentLoop.ts:1839 |
+| mode_change_requested | src/agent/loop/AgentLoop.ts:1329 | src/agent/loop/AgentLoop.ts:1329 |
+| model_event | src/agent/loop/AgentLoop.ts:467 | src/agent/loop/AgentLoop.ts:467 |
 | model_recovery_failed | - | - |
-| model_request_started | src/agent/loop/AgentLoop.ts:367 | src/agent/loop/AgentLoop.ts:367 |
+| model_request_started | src/agent/loop/AgentLoop.ts:372 | src/agent/loop/AgentLoop.ts:372 |
 | permission_denied | src/tool/execution/ToolRuntime.ts:250 | src/tool/execution/ToolRuntime.ts:250 |
 | permission_requested | src/tool/execution/ToolRuntime.ts:209 | src/tool/execution/ToolRuntime.ts:209 |
 | post_tool_execute | src/tool/execution/ToolRuntime.ts:335, src/tool/execution/ToolRuntime.ts:385 | src/tool/execution/ToolRuntime.ts:335, src/tool/execution/ToolRuntime.ts:385 |
@@ -32,21 +32,21 @@
 | session_ended | src/agent/session/AgentSession.ts:134 | src/agent/session/AgentSession.ts:134 |
 | session_started | src/agent/session/AgentSession.ts:67 | src/agent/session/AgentSession.ts:67 |
 | setup_completed | src/agent/session/AgentSession.ts:90 | src/agent/session/AgentSession.ts:90 |
-| stop_failure | src/agent/loop/AgentLoop.ts:477, src/agent/loop/AgentLoop.ts:1016 | src/agent/loop/AgentLoop.ts:477, src/agent/loop/AgentLoop.ts:1016 |
-| stop_requested | src/agent/loop/AgentLoop.ts:1189 | src/agent/loop/AgentLoop.ts:1189 |
+| stop_failure | src/agent/loop/AgentLoop.ts:482, src/agent/loop/AgentLoop.ts:1021 | src/agent/loop/AgentLoop.ts:482, src/agent/loop/AgentLoop.ts:1021 |
+| stop_requested | src/agent/loop/AgentLoop.ts:1194 | src/agent/loop/AgentLoop.ts:1194 |
 | subagent_completed | src/agent/loop/toolContext.ts:255 | src/agent/loop/toolContext.ts:255 |
 | subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/agent/sub/SubAgentSession.ts:196 |
 | subagent_started | src/agent/loop/toolContext.ts:148 | src/agent/loop/toolContext.ts:148 |
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/agent/loop/subagentExecutor.ts:168 |
 | subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/agent/sub/SubAgentSession.ts:204 |
 | subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/agent/sub/SubAgentSession.ts:212 |
-| token_cap_adjusted | src/agent/loop/AgentLoop.ts:625, src/agent/loop/AgentLoop.ts:843, src/agent/loop/AgentLoop.ts:870, src/agent/loop/AgentLoop.ts:892, src/agent/loop/AgentLoop.ts:976 | src/agent/loop/AgentLoop.ts:625, src/agent/loop/AgentLoop.ts:843, src/agent/loop/AgentLoop.ts:870, src/agent/loop/AgentLoop.ts:892, src/agent/loop/AgentLoop.ts:976 |
-| tool_calls_detected | src/agent/loop/AgentLoop.ts:1240 | src/agent/loop/AgentLoop.ts:1240 |
-| tool_result | src/agent/loop/AgentLoop.ts:1331 | src/agent/loop/AgentLoop.ts:1331 |
-| tool_results_projected | src/agent/loop/AgentLoop.ts:795, src/agent/loop/AgentLoop.ts:1361 | src/agent/loop/AgentLoop.ts:795, src/agent/loop/AgentLoop.ts:1361 |
-| turn_completed | src/agent/loop/AgentLoop.ts:1622, src/agent/loop/AgentLoop.ts:1674, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:326, src/gateway/client/InProcessGateway.ts:2050, src/session/transcript/TranscriptReplay.ts:102 | src/agent/loop/AgentLoop.ts:1622, src/agent/loop/AgentLoop.ts:1674, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:326, src/gateway/client/InProcessGateway.ts:2050, src/session/transcript/TranscriptReplay.ts:102 |
-| turn_continued | src/agent/loop/AgentLoop.ts:636, src/agent/loop/AgentLoop.ts:774, src/agent/loop/AgentLoop.ts:854, src/agent/loop/AgentLoop.ts:917, src/agent/loop/AgentLoop.ts:933, src/agent/loop/AgentLoop.ts:945, src/agent/loop/AgentLoop.ts:987, src/agent/loop/AgentLoop.ts:1539, src/agent/loop/AgentLoop.ts:1603, src/agent/loop/AgentLoop.ts:1989 | src/agent/loop/AgentLoop.ts:636, src/agent/loop/AgentLoop.ts:774, src/agent/loop/AgentLoop.ts:854, src/agent/loop/AgentLoop.ts:917, src/agent/loop/AgentLoop.ts:933, src/agent/loop/AgentLoop.ts:945, src/agent/loop/AgentLoop.ts:987, src/agent/loop/AgentLoop.ts:1539, src/agent/loop/AgentLoop.ts:1603, src/agent/loop/AgentLoop.ts:1989 |
-| turn_failed | src/agent/loop/AgentLoop.ts:1619, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 | src/agent/loop/AgentLoop.ts:1619, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 |
+| token_cap_adjusted | src/agent/loop/AgentLoop.ts:630, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:875, src/agent/loop/AgentLoop.ts:897, src/agent/loop/AgentLoop.ts:981 | src/agent/loop/AgentLoop.ts:630, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:875, src/agent/loop/AgentLoop.ts:897, src/agent/loop/AgentLoop.ts:981 |
+| tool_calls_detected | src/agent/loop/AgentLoop.ts:1245 | src/agent/loop/AgentLoop.ts:1245 |
+| tool_result | src/agent/loop/AgentLoop.ts:1336 | src/agent/loop/AgentLoop.ts:1336 |
+| tool_results_projected | src/agent/loop/AgentLoop.ts:800, src/agent/loop/AgentLoop.ts:1366 | src/agent/loop/AgentLoop.ts:800, src/agent/loop/AgentLoop.ts:1366 |
+| turn_completed | src/agent/loop/AgentLoop.ts:1627, src/agent/loop/AgentLoop.ts:1679, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:326, src/gateway/client/InProcessGateway.ts:2050, src/session/transcript/TranscriptReplay.ts:102 | src/agent/loop/AgentLoop.ts:1627, src/agent/loop/AgentLoop.ts:1679, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:326, src/gateway/client/InProcessGateway.ts:2050, src/session/transcript/TranscriptReplay.ts:102 |
+| turn_continued | src/agent/loop/AgentLoop.ts:641, src/agent/loop/AgentLoop.ts:779, src/agent/loop/AgentLoop.ts:859, src/agent/loop/AgentLoop.ts:922, src/agent/loop/AgentLoop.ts:938, src/agent/loop/AgentLoop.ts:950, src/agent/loop/AgentLoop.ts:992, src/agent/loop/AgentLoop.ts:1544, src/agent/loop/AgentLoop.ts:1608, src/agent/loop/AgentLoop.ts:1994 | src/agent/loop/AgentLoop.ts:641, src/agent/loop/AgentLoop.ts:779, src/agent/loop/AgentLoop.ts:859, src/agent/loop/AgentLoop.ts:922, src/agent/loop/AgentLoop.ts:938, src/agent/loop/AgentLoop.ts:950, src/agent/loop/AgentLoop.ts:992, src/agent/loop/AgentLoop.ts:1544, src/agent/loop/AgentLoop.ts:1608, src/agent/loop/AgentLoop.ts:1994 |
+| turn_failed | src/agent/loop/AgentLoop.ts:1624, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 | src/agent/loop/AgentLoop.ts:1624, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 |
 | turn_started | src/agent/turn/TurnRunner.ts:143 | src/agent/turn/TurnRunner.ts:143 |
 | user_prompt_submitted | src/agent/turn/TurnRunner.ts:201 | src/agent/turn/TurnRunner.ts:201 |
-| warning | src/agent/loop/AgentLoop.ts:1173 | src/agent/loop/AgentLoop.ts:1173 |
+| warning | src/agent/loop/AgentLoop.ts:1178 | src/agent/loop/AgentLoop.ts:1178 |

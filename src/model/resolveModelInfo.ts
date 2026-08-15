@@ -63,17 +63,25 @@ export function resolveModelInfo(
     };
   }
   const protocol = runtime.getProviderProtocol(providerId);
-  const multimodal =
-    protocol === "anthropic"
-      ? ANTHROPIC_DEFAULT_MULTIMODAL
-      : protocol === "google"
-        ? GOOGLE_DEFAULT_MULTIMODAL
-        : protocol === "openai" || protocol === "openai-responses"
-          ? OPENAI_DEFAULT_MULTIMODAL
-          : DEFAULT_MULTIMODAL_CONSTRAINTS;
+  const multimodal = protocolDefaultMultimodal(protocol);
   return {
     capabilities: DEFAULT_MODEL_CAPABILITIES,
     multimodal,
     source: "default",
   };
+}
+
+/** provider 协议 → 该协议默认多模态约束（未知协议回退 text-only）。 */
+function protocolDefaultMultimodal(protocol: string | undefined): MultimodalConstraints {
+  switch (protocol) {
+    case "anthropic":
+      return ANTHROPIC_DEFAULT_MULTIMODAL;
+    case "google":
+      return GOOGLE_DEFAULT_MULTIMODAL;
+    case "openai":
+    case "openai-responses":
+      return OPENAI_DEFAULT_MULTIMODAL;
+    default:
+      return DEFAULT_MULTIMODAL_CONSTRAINTS;
+  }
 }

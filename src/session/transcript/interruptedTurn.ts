@@ -39,11 +39,9 @@ export function findOpenTurn(
       }
       continue;
     }
-    if (ACTIVITY_ENTRY_TYPES.has(entry.type)) {
-      if (entry.turnId !== openTurnId) {
-        openTurnId = entry.turnId;
-        openStartedAt = entry.createdAt;
-      }
+    if (ACTIVITY_ENTRY_TYPES.has(entry.type) && entry.turnId !== openTurnId) {
+      openTurnId = entry.turnId;
+      openStartedAt = entry.createdAt;
     }
   }
   return openTurnId === undefined || openStartedAt === undefined

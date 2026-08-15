@@ -71,13 +71,7 @@ export function buildRepeatReminderMessage(toolName: string, count: number): Can
     content: [
       {
         type: "text",
-        text:
-          "注意：你已连续 " +
-          count +
-          " 次调用 " +
-          toolName +
-          "（参数相同或高度相似）。如果上一步没有改变任何状态或取得新信息，请停止重复该调用，" +
-          "改为总结现状、换一种方式推进，或向用户说明阻塞原因。",
+        text: `注意：你已连续 ${count} 次调用 ${toolName}（参数相同或高度相似）。如果上一步没有改变任何状态或取得新信息，请停止重复该调用，改为总结现状、换一种方式推进，或向用户说明阻塞原因。`,
       },
     ],
     // transient：仅注入下一轮请求，消费后随 transient 提示一并过期。
