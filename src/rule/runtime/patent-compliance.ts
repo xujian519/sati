@@ -114,7 +114,6 @@ export function loadActivationOverrides(): ActivationOverrides {
         warnings.push(`激活覆盖文件解析失败 ${path}: ${doc.errors[0]?.message ?? "unknown"}`);
         continue;
       }
-      const root = doc.toJS() as Record<string, unknown> | null;
       const raw = asRecord(asRecord(doc.toJS())?.overrides) ?? {};
       const byId = new Map<string, Partial<ConstitutionalRule>>();
       for (const [id, value] of Object.entries(raw)) {

@@ -9,7 +9,6 @@ import type {
   Provider,
   SessionPermissionGrantResult,
 } from "../../types/types";
-import { CompactBoundaryRow } from "./CompactBoundaryRow";
 import {
   DOCUMENT_SELECTION_ATTACHMENT_KIND,
   type DocumentSelectionReference,
@@ -25,6 +24,7 @@ import type { Project } from "../../../../types/app";
 import { ToolRenderer, shouldHideToolResult } from "../../tools";
 import { CollapsibleDisplay } from "../../tools/components";
 import DocumentReferenceChip from "../../../chat-v2/DocumentReferenceChip";
+import { CompactBoundaryRow } from "./CompactBoundaryRow";
 import { Markdown } from "./Markdown";
 import MessageCopyControl from "./MessageCopyControl";
 import ImageLightbox, { type LightboxImage } from "./ImageLightbox";
