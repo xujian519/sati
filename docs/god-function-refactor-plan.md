@@ -145,7 +145,9 @@ src/patent/
 
 **DoD**：`runWorkflow` ≤ 100 行（编排骨架），`runStageOnce` ≤ 80 行；`workflow/` 目录化后原 `workflow.js` 导入路径全部可用；等价性测试 + 全量 patent spec 绿。
 
-> ✅ **A7 轮次 2 已完成（2026-08-16）**：`signalMatches`/`compileSignal`/`signalFor`（带缓存）→ `src/patent/workflow/signal.ts`（纯函数）；workflow.ts 删两处闭包，`signalFor(stage, signalCache)` 显式传缓存。新增 `tests/patent/workflow/signal.spec.ts`（6 用例：否定词窗口/句界排除/g-flag 跨调用重置/空匹配不死循环/无 retry undefined/缓存同引用 + g 标志断言）。空匹配语义经实测锁定：位置 0 空匹配时 before 恒空串 → 恒触发。剩余轮次（runStageOnce 参数化）为 A10。
+> ✅ **A7 轮次 2 已完成（2026-08-16）**：`signalMatches`/`compileSignal`/`signalFor`（带缓存）→ `src/patent/workflow/signal.ts`（纯函数）；workflow.ts 删两处闭包，`signalFor(stage, signalCache)` 显式传缓存。新增 `tests/patent/workflow/signal.spec.ts`（6 用例：否定词窗口/句界排除/g-flag 跨调用重置/空匹配不死循环/无 retry undefined/缓存同引用 + g 标志断言）。空匹配语义经实测锁定：位置 0 空匹配时 before 恒空串 → 恒触发。
+
+> ✅ **A10 轮次 3 已完成（2026-08-16）**：`runStageOnce` → `src/patent/workflow/executor.ts`（`RunStageOnceOptions` 显式参数化：handlers/atoms/provider/executor/maxRetries/approvalGrants/ctx，消除 7 个闭包变量捕获；副作用时序契约逐字保留——`Object.assign(state, segment)` 时机、主输出键 outputSchema[0]、degraded 前缀、approvedGate 注入）。workflow.ts 再 -65 行（累计 751 → ~220）；并行组与串行调用点统一传 `stageOptions`。新增 `tests/patent/workflow/executor.spec.ts`（6 例：handler 输出合并/executor 回退/重试成功/degraded 前缀/审批门放行标记+APPROVED 占位/InterruptStageError 传播）。**workflow.ts 拆解完成**（DoD 中 runWorkflow ≤100 行的"编排骨架"深化——轮次 4 并行窗口/回退分支再抽——按方案标注为可选深化项，当前 runWorkflow ~170 行含主循环，等价性测试全绿）。轨道 A 仅剩 A11（InProcessGateway）。
 
 ---
 
