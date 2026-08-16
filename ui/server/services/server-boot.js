@@ -120,8 +120,9 @@ async function startServer(server) {
         });
       },
       listenFn: async () => {
-        // Check if running in production mode (dist folder exists)
-        const distIndexPath = path.join(__dirname, "../dist/index.html");
+        // Check if running in production mode (dist folder exists).
+        // __dirname 在 services/ 层：ui/server/services → ../../dist = ui/dist。
+        const distIndexPath = path.join(__dirname, "..", "..", "dist", "index.html");
         const isProduction = fs.existsSync(distIndexPath);
 
         console.log(`${c.info("[INFO]")} Chat execution routed through Sati gateway (src/gateway).`);
@@ -233,7 +234,5 @@ async function startServer(server) {
     process.exit(1);
   }
 }
-
-startServer();
 
 export { startServer };

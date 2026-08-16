@@ -14,6 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const installMode = fs.existsSync(path.join(__dirname, "..", "..", ".git")) ? "git" : "npm";
+// Dev-mode SPA fallback redirect target (see `/{*splat}` handler below).
+const VITE_PORT = process.env.VITE_PORT || 5173;
 
 // ANSI color codes for terminal output
 const colors = {

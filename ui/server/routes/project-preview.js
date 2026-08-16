@@ -6,7 +6,9 @@
  */
 
 import { Router } from "express";
+import fs from "fs";
 import { promises as fsPromises } from "fs";
+import path from "path";
 import { authenticateToken } from "../middleware/auth.js";
 import {
   getConfiguredOfficePreviewService,
@@ -26,6 +28,7 @@ import {
   OFFICE_PDF_PREVIEW_EXTENSIONS,
   getFileExtension,
   resolvePathInProject,
+  setPreviewContentType,
   streamFileWithRange,
 } from "../services/filesystem.js";
 import { extractProjectDirectory } from "../projects.js";
