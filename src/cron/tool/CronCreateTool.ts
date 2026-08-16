@@ -1,7 +1,7 @@
 import type { SatiToolDefinition } from "../../tool/index.js";
 import type { CronCreateInput, CronCreateResult } from "../protocol/types.js";
 import type { GatewayChannelKey } from "../../gateway/index.js";
-import { CRON_SCHEDULE_SCHEMA } from "./CronSchemas.js";
+import { CRON_SCHEDULE_SCHEMA, CRON_TASK_SCHEMA } from "./CronSchemas.js";
 import type { CronToolRuntime } from "./CronToolRuntime.js";
 
 export function createCronCreateTool(runtime: CronToolRuntime): SatiToolDefinition<CronCreateInput, CronCreateResult> {
@@ -11,6 +11,13 @@ export function createCronCreateTool(runtime: CronToolRuntime): SatiToolDefiniti
     description:
       "Create a one-time or recurring background Cron task that submits future work back into a session. For relative reminders like 'in 10 minutes', use schedule.type='delay'. For absolute natural-language times like tonight, tomorrow morning, or next Monday, call get_current_time first to resolve the current local time/timezone, then pass a future schedule.type='once' runAt.",
     kind: "session",
+    outputSchema: {
+      type: "object",
+      required: ["task"],
+      properties: {
+        task: CRON_TASK_SCHEMA,
+      },
+    },
     inputSchema: {
       type: "object",
       required: ["message", "schedule"],

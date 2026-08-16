@@ -328,11 +328,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     // eslint-disable-next-line prefer-const -- assigned once later; closures above reference the binding before assignment
     let serverRef: Awaited<ReturnType<typeof startSatiServer>> | undefined;
 
-    async function hotStartWeixinChannel(): Promise<void> {
+    async function hotStartWeixinChannel(options: { forceRelogin?: boolean } = {}): Promise<void> {
       if (!serverRef) return;
       const savedWeixin = await channelStatePersistence.load<WeixinSessionMapperState>("weixin");
       await serverRef.hotStartChannel(
         new WeixinChannel({
+          forceRelogin: options.forceRelogin ?? false,
           mapper: savedWeixin ? new WeixinSessionMapper(savedWeixin) : undefined,
           onStateChange: state => channelStatePersistence.save("weixin", state),
         }),
@@ -504,7 +505,9 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       if (!serverRef) {
         return { requested: false, requestedAt, reason: "unsupported" };
       }
-      await hotStartWeixinChannel();
+      // forceRelogin：UI「重新登录」按钮触发的 prepare_weixin_login 强制走扫码
+      // 流程，不受残留（可能已失效）凭证影响，确保新二维码一定会生成。
+      await hotStartWeixinChannel({ forceRelogin: true });
       return { requested: true, requestedAt };
     });
     bindServer(server);

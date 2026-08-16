@@ -1,0 +1,105 @@
+# nuo 规则激活评审覆盖（2026-08-16 评审，专项 docs/nuo-rules-activation-plan.md）
+#
+# 轻量补丁：仅列被评审调整 action 的规则；加载时按 id 做字段级合并（仅覆盖 action），
+# 未列规则保持原 action。本文件是评审结论的机器可读权威；逐条评审理由与样本验证见
+# rules/README.md「nuo 规则激活评审（2026-08-16）」章节。
+#
+# 评审原则：nuo 规则分两类语义——
+#   1. keyword_blocklist（出现即违规）：与输出门禁「禁止性合规」语义匹配，可保留 block；
+#   2. structural_analysis（缺失即违规 = 期望模式/完整性检查）：与「产物完整性自检」匹配，
+#      不适合输出门禁「强制挂起审批」，按完整性提醒价值降级 warn（追加提示）或 log（仅记录）。
+version: "1.0"
+
+overrides:
+  # ---- block → review（编造风险保留人工关注，但词有正常合规用法）----
+  CON-102:
+    action: review
+    reason: "「编造/虚构/捏造」在合规自我表述中高频出现（如『不存在虚构的技术效果』），block 误伤严重；保留人工关注编造风险"
+
+  # ---- block → warn（完整性期望 → 完整性提醒，不强制审批）----
+  EX-CLM-001:
+    action: warn
+    reason: "误伤『讨论清楚性规则』的合规建议（『应避免使用大约/左右』）；关键词「大约/左右/优选地」在分析讨论中正常出现"
+  EX-SEL-004:
+    action: warn
+    reason: "误伤『防窃听装置』等合法专利主题；公序良俗需人工留意但不宜硬拦（后续可补 negationContext：防/反/抑制放行）"
+  EX-CLM-002:
+    action: warn
+    reason: "完整性提醒（权利要求是否以说明书为依据）；不完整 ≠ 违规，不应强制审批"
+  EX-CMP-001:
+    action: warn
+    reason: "完整性提醒（计算机程序技术方案三要素）"
+  EX-DIS-002:
+    action: warn
+    reason: "完整性提醒（说明书发明内容三要素：技术问题/方案/效果）"
+  EX-INV-001:
+    action: warn
+    reason: "完整性提醒（创造性三步法框架四要素）"
+  EX-PRC-001:
+    action: warn
+    reason: "OA 高频场景提醒（修改不得超范围）"
+  CON-101:
+    action: warn
+    reason: "完整性提醒（发明定义技术方案三要素）"
+  CON-201:
+    action: warn
+    reason: "完整性提醒（充分公开能够实现）"
+  CON-302:
+    action: warn
+    reason: "完整性提醒（权利要求以说明书为依据）"
+  CON-401:
+    action: warn
+    reason: "完整性提醒（创造性非显而易见性）"
+  CON-501:
+    action: warn
+    reason: "OA 高频场景提醒（修改不超范围）"
+  CON-502:
+    action: warn
+    reason: "OA 高频场景提醒（修改不得扩大保护范围）"
+  PR-CLM-001:
+    action: warn
+    reason: "撰写完整性提醒（独立权利要求布局：一种+其特征在于）"
+  PR-OA-001:
+    action: warn
+    reason: "OA 完整性提醒（逐点回应所有审查意见）"
+
+  # ---- block → log（语义弱 / pattern 过宽 / 领域窄 / 重复，仅 rule_check 可检）----
+  CON-COMP-0104:
+    action: log
+    reason: "单 element pattern=「审查指南」，缺失即违规语义错乱（讨论不应以是否提及『审查指南』判定合规）"
+  EX-SEL-001:
+    action: log
+    reason: "pattern 含「组织」等宽泛词，缺失即违规无意义"
+  EX-SEL-002:
+    action: log
+    reason: "pattern 含「诊断/治疗」宽泛词，医疗专利讨论正常出现，缺失即违规无意义"
+  EX-SEL-003:
+    action: log
+    reason: "pattern 含「算法/经营」宽泛词，缺失即违规无意义"
+  IPC-B60-INV-003:
+    action: log
+    reason: "车辆领域过窄（IPC 单一场景），自动门禁价值低"
+  IPC-GEN-INV-001:
+    action: log
+    reason: "与 EX-INV-001（三步法框架）重复，保留后者 warn 即可"
+  JD-DEF-003:
+    action: log
+    reason: "判例领域单 element pattern 宽泛"
+  JD-DMG-002:
+    action: log
+    reason: "判例领域（惩罚性赔偿）非主场景"
+  JD-DMG-003:
+    action: log
+    reason: "判例领域单 element pattern 宽泛"
+  JD-INF-003:
+    action: log
+    reason: "判例领域单 element pattern 宽泛"
+  JD-PRC-002:
+    action: log
+    reason: "判例领域单 element pattern 宽泛"
+  CON-301:
+    action: log
+    reason: "pattern 含「清楚/限定」宽泛词，缺失即违规无意义"
+  PR-OA-002:
+    action: log
+    reason: "与 CON-501/502（修改超范围）重复"

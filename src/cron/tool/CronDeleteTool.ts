@@ -8,6 +8,14 @@ export function createCronDeleteTool(runtime: CronToolRuntime): SatiToolDefiniti
     title: "Delete Cron Task",
     description: "Delete a scheduled Cron task and cancel its future triggers.",
     kind: "session",
+    outputSchema: {
+      type: "object",
+      required: ["deleted"],
+      properties: {
+        deleted: { type: "boolean" },
+        stoppedRunId: { type: "string" },
+      },
+    },
     inputSchema: {
       type: "object",
       required: ["taskId"],

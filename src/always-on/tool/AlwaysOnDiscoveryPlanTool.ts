@@ -42,6 +42,16 @@ export function createAlwaysOnDiscoveryPlanTool(
     description:
       "Save the single discovery plan for this Always-On fire. Returns plan_quota_exhausted if called more than once per fire. Plan content must follow the Sati Always-On plan markdown contract.",
     kind: "session",
+    outputSchema: {
+      type: "object",
+      required: ["ok", "planId", "planFilePath", "dedupeKey"],
+      properties: {
+        ok: { type: "boolean" },
+        planId: { type: "string" },
+        planFilePath: { type: "string" },
+        dedupeKey: { type: "string" },
+      },
+    },
     inputSchema: {
       type: "object",
       required: ["title", "summary", "rationale", "dedupeKey", "content"],

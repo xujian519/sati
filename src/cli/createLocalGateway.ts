@@ -89,6 +89,7 @@ import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
 import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
 import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
+import { loadPatentFullRuleSet, RuleOutputGate, selectGateRules } from "../rule/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig, resolvePilotHome, type PilotProxyConfig } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
@@ -1548,17 +1549,27 @@ class ProjectRuntimeRegistry {
         verdict,
       });
     };
+    // 规则驱动门禁（B 链）：只接入「出现即违规」的 keyword_blocklist 规则子集
+    // （structural_analysis 缺失即违规对任意输出海量误报，仅 rule_check 自检用）。
+    // 加载失败（含规则资产缺失/损坏）→ 空规则集降级放行 + 告警。
+    const fullRuleSet = loadPatentFullRuleSet();
+    if (fullRuleSet.warnings.length > 0) {
+      console.warn(`[RuleOutputGate] 专利规则集加载告警: ${fullRuleSet.warnings.join("; ")}`);
+    }
+    const ruleGate = new RuleOutputGate(selectGateRules(fullRuleSet.ruleSet));
     const patentOutputGate = new PatentOutputGate({
       riskKeywords: [],
       absolutePhrases: [],
       enableCitationGate: false,
+      ruleGate,
       // 时钟与 Agent 层注入对齐（TurnRunner/AgentLoop 共用 this.options.now）
       now: () => this.options.now().getTime(),
       onPending: pending => {
         // 注册进 gateway 审批总线 + 广播 approval_pending（审批 UI 展示入口）。
         const gw = this.gateway;
         const textPreview = extractMessageText(pending.processed).trim().slice(0, 500);
-        const triggerKeyword = pending.info.approvalKeywordsHit[0] ?? "approval";
+        // 关键词审批词优先；否则回退到规则门禁命中的规则 id（含法律依据语义）
+        const triggerKeyword = pending.info.approvalKeywordsHit[0] ?? pending.ruleViolations?.[0]?.ruleId ?? "approval";
         if (gw) {
           gw.getApprovalBus().register({
             sessionKey,

@@ -31,8 +31,13 @@ const CHECK_TYPES: readonly RuleCheckType[] = [
   "synonym_match",
 ];
 
+/** 类型守卫：值是否为合法 RuleAction（与 ACTIONS 单一事实源一致）。 */
+export function isRuleAction(value: unknown): value is RuleAction {
+  return typeof value === "string" && ACTIONS.includes(value as RuleAction);
+}
+
 /** 把任意值规整为纯对象（yaml Document.toJS 产物），非对象返回 null。 */
-function asRecord(value: unknown): Record<string, unknown> | null {
+export function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
@@ -368,4 +373,24 @@ export function mergeRuleSets(ruleSets: RuleSet[]): RuleSet {
     }
   }
   return { rules: [...byId.values()] };
+}
+
+/**
+ * 字段级覆盖规则（按 id 浅合并，不改未覆盖字段）。
+ * 与 mergeRuleSets（整条覆盖）互补：用于「评审补丁」场景——只改 action 而不重写
+ * 整条规则（避免复制 name/check 等字段漂移）。overrides 中未命中 id 的规则原样保留，
+ * overrides 中引用不存在 id 的条目被忽略（由调用方决定是否告警）。
+ */
+export function applyRuleOverrides(
+  ruleSet: RuleSet,
+  overrides: ReadonlyMap<string, Partial<ConstitutionalRule>>,
+): RuleSet {
+  if (overrides.size === 0) return ruleSet;
+  return {
+    version: ruleSet.version,
+    rules: ruleSet.rules.map(rule => {
+      const override = overrides.get(rule.id);
+      return override === undefined ? rule : { ...rule, ...override };
+    }),
+  };
 }

@@ -55,8 +55,12 @@ export {
   type RuleOutputGateResult,
 } from "./runtime/output-gate.js";
 export {
+  loadActivationOverrides,
   loadPatentComplianceRuleSet,
   loadPatentElectricalRuleSet,
+  loadPatentFullRuleSet,
+  selectGateRules,
+  type ActivationOverrides,
   type PatentComplianceLoadResult,
 } from "./runtime/patent-compliance.js";
 export {

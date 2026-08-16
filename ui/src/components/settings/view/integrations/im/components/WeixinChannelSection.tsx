@@ -151,8 +151,11 @@ export default function WeixinChannelSection({ status, onSaved }: WeixinChannelS
       return;
     }
 
+    // "expired" 是通道自愈的瞬态：通道会立即重新发起扫码登录，新 qrUrl 即将
+    // 到来，不应把轮询打回 error 终态（qr-poll 对 expired 返回 pending）。
+    // 仅 failed/stopped 视为终态。
     if (
-      (runtimeState === "failed" || runtimeState === "expired" || runtimeState === "stopped") &&
+      (runtimeState === "failed" || runtimeState === "stopped") &&
       isRuntimeCurrent(status.runtime, requestStartedAt)
     ) {
       clearLoginTimers();

@@ -140,4 +140,61 @@ describe("WeixinChannelSection", () => {
 
     expect(screen.getByAltText("WeChat QR Code").getAttribute("src")).toContain("fresh-qr");
   });
+
+  it("auto-shows the self-healed QR after an expired session without clicking", async () => {
+    mocks.authenticatedFetch.mockResolvedValue({
+      json: async () => ({
+        pending: true,
+        qrUrl: "https://example.test/healed-qr",
+        runtime: {
+          state: "waiting_for_login",
+          qrUrl: "https://example.test/healed-qr",
+          updatedAt: "2026-07-23T06:00:00.000Z",
+        },
+      }),
+    });
+
+    const { rerender } = render(
+      <WeixinChannelSection
+        status={{
+          enabled: true,
+          hasCredentials: false,
+          accountId: null,
+          runtime: {
+            state: "expired",
+            updatedAt: "2026-07-23T05:59:59.000Z",
+            message: "微信登录已过期，请重新扫码登录",
+          },
+        }}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    // 初始 expired：展示过期提示，不展示二维码
+    expect(screen.queryByAltText("WeChat QR Code")).toBeNull();
+    expect(screen.getAllByText("gateway.weixin.expired").length).toBeGreaterThan(0);
+
+    // 通道自愈后（waiting_for_login + qrUrl）：无需点击，二维码自动出现
+    rerender(
+      <WeixinChannelSection
+        status={{
+          enabled: true,
+          hasCredentials: false,
+          accountId: null,
+          runtime: {
+            state: "waiting_for_login",
+            qrUrl: "https://example.test/healed-qr",
+            updatedAt: "2026-07-23T06:00:00.000Z",
+          },
+        }}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByAltText("WeChat QR Code").getAttribute("src")).toContain("healed-qr");
+    });
+    // 自愈路径不发起新的扫码会话（不调 qr-begin）
+    expect(mocks.authenticatedFetch.mock.calls.some(([url]) => url === "/api/gateway/weixin/qr-begin")).toBe(false);
+  });
 });

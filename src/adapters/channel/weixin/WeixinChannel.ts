@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { ILinkClient, loginWithQR, MessageItemType } from "weixin-ilink";
@@ -60,6 +60,12 @@ export type WeixinChannelOptions = {
   clientFactory?: (options: ClientOptions) => WeixinIlinkClient;
   loginWithQR?: typeof loginWithQR;
   onStateChange?: (state: WeixinSessionMapperState) => void;
+  /**
+   * 强制重新登录：start() 时忽略已保存的（可能已失效）凭证，清理凭据文件并
+   * 直接发起扫码登录。UI「重新登录」/过期自愈场景使用，避免残留失效 token
+   * 让通道继续走轮询或让 UI qr-poll 误报已登录。
+   */
+  forceRelogin?: boolean;
 };
 
 type SavedCredentials = {
@@ -115,6 +121,7 @@ export class WeixinChannel implements ChannelAdapter {
   private readonly clientFactory: (options: ClientOptions) => WeixinIlinkClient;
   private readonly login: typeof loginWithQR;
   private readonly onStateChange?: (state: WeixinSessionMapperState) => void;
+  private readonly forceRelogin: boolean;
 
   private gateway?: Gateway;
   private logger?: ChannelLogger;
@@ -152,6 +159,7 @@ export class WeixinChannel implements ChannelAdapter {
     this.clientFactory = options.clientFactory ?? this.defaultClientFactory;
     this.login = options.loginWithQR ?? loginWithQR;
     this.onStateChange = options.onStateChange;
+    this.forceRelogin = options.forceRelogin ?? false;
     this.attachmentStore = new ImAttachmentStore({
       rootDir: join(homedir(), ".sati", "im-attachments"),
       channelKey: this.channelKey,
@@ -166,12 +174,20 @@ export class WeixinChannel implements ChannelAdapter {
     this.startGeneration++;
     this.loopAbort = new AbortController();
 
-    const creds = this.loadCredentials();
-    if (creds) {
-      this.logger?.info?.(`weixin: loaded saved credentials (account: ${creds.accountId})`);
-      this.startPollingWithCredentials(creds);
-    } else {
+    if (this.forceRelogin) {
+      // 用户主动要求重新登录：清理（可能已失效的）凭据并直接扫码，
+      // 避免残留失效 token 让通道继续走轮询或让 UI qr-poll 误判已登录。
+      this.logger?.info?.("weixin: forceRelogin requested, clearing credentials and starting QR login");
+      this.removeCredentials();
       this.startQrLoginInBackground(this.startGeneration);
+    } else {
+      const creds = this.loadCredentials();
+      if (creds) {
+        this.logger?.info?.(`weixin: loaded saved credentials (account: ${creds.accountId})`);
+        this.startPollingWithCredentials(creds);
+      } else {
+        this.startQrLoginInBackground(this.startGeneration);
+      }
     }
 
     return {
@@ -365,17 +381,32 @@ export class WeixinChannel implements ChannelAdapter {
   }
 
   private async pollLoop(): Promise<void> {
-    if (!this.client) return;
-
     while (!this.loopAbort.signal.aborted) {
+      // 每次迭代取当前 client：rebuildClientAfterPollError 会替换实例，
+      // 过期自愈分支会置空，不能用循环外捕获的引用。
+      const client = this.client;
+      if (!client) return;
       try {
-        const resp = await this.client.poll();
+        const resp = await client.poll();
         if (resp.errcode === -14) {
-          this.logger?.error?.("weixin: session expired (errcode -14), need re-login");
-          console.error("[weixin] Session 过期，请删除凭证文件并重启以重新扫码登录:");
-          console.error(`[weixin]   rm ${this.credentialsPath}`);
+          this.logger?.error?.("weixin: session expired (errcode -14), clearing credentials and re-logging in via QR");
+          console.error("[weixin] Session 已过期，正在清除失效凭证并自动重新扫码登录...");
+          // 1) 清除失效凭证：UI qr-poll 依赖该文件判断登录态，残留文件会导致
+          //    界面误报"已登录"而不展示新二维码；
+          // 2) 释放 client 与 pollPromise：解除 startPollingWithCredentials 的
+          //    "poll loop already running" 重复启动守卫，使后续 QR 登录成功后可
+          //    重新拉起轮询。
+          this.removeCredentials();
+          this.client = undefined;
+          this.pollPromise = null;
           this.reportStatus("expired", "微信登录已过期，请重新扫码登录");
-          await this.notifyActiveChats(WEIXIN_SESSION_EXPIRED_TEXT);
+          // 自动重新发起扫码登录：onQRCode 会以 waiting_for_login + qrUrl 上报，
+          // 桌面端/Web UI 即可直接展示新二维码，无需用户手动操作。
+          // 注意：必须紧接着同步启动（reportStatus 同步写盘），不要在前面 await
+          // notifyActiveChats——否则 runtime-status.json 会停留在只有 "expired"
+          // 的窗口，UI 的自动轮询在该状态下不会刷新，新二维码将永远到不了界面。
+          this.startQrLoginInBackground(this.startGeneration);
+          void this.notifyActiveChats(WEIXIN_SESSION_EXPIRED_TEXT);
           break;
         }
 
@@ -1018,6 +1049,17 @@ export class WeixinChannel implements ChannelAdapter {
       }
     }
     return null;
+  }
+
+  private removeCredentials(): void {
+    const candidatePaths = [this.credentialsPath, join(homedir(), ".pilotdeck", "weixin-credentials.json")];
+    for (const path of candidatePaths) {
+      try {
+        if (existsSync(path)) rmSync(path, { force: true });
+      } catch (e) {
+        this.logger?.error?.(`weixin: failed to remove credentials at ${path}: ${e}`);
+      }
+    }
   }
 
   private saveCredentials(creds: SavedCredentials): void {
