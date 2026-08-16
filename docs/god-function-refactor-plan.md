@@ -180,6 +180,8 @@ shared/
 
 **DoD**：`kg-store.ts` ≤ 80 行（门面）；`searchByKeywordOr` ≤ 40 行（拆后）；knowledge 全量 spec 绿。
 
+> ✅ **A3 轮次 1（kg-store 侧）已完成（2026-08-16）**：行映射纯函数 → `src/knowledge/shared/kg/row-mapper.ts`（`toNode`/`parseLawRefsCount`/`FtsHit`/`NodeRow`）；kg-store.ts 删除私有 `toNode` 与模块级 `parseLawRefsCount`（-45 行）。新增 `tests/knowledge/kg-row-mapper.spec.ts`（4 用例：unified law_refs JSON / legacy law_refs_count 优先 / 空列映射 / 解析失败回退）。
+
 ---
 
 ### 5.4 `src/knowledge/legal/legal-search.ts`（391 行 → 门面 + 4 个纯件）
@@ -209,6 +211,8 @@ legal/
 **风险**：`extractLawKeywords` 是跨域共享点（两处 import 必须同步改）；粘性降级 `ftsDegraded` 置位语义不可拆散；集成测试缺库假绿——重构期以自包含 spec 扩为行为基线。
 
 **DoD**：`legal-search.ts` ≤ 120 行；`searchFts`/`searchFtsKeywords` 消除 SQL 复制（共用常量）；knowledge 全量 spec 绿。
+
+> ✅ **A3 轮次 1（legal-search 侧）已完成（2026-08-16）**：`extractLawKeywords`/`SPLIT_WORDS` → `src/knowledge/legal/keywords.ts`（纯函数）；`legal-search.ts` 改 import + 本地 re-export（导出面不变）；**两处跨域 import 同步改**（knowledge-law-search.ts:25、case-law-search.ts:22 → `./keywords.js`/`../legal/keywords.js`，消除对 LegalSearchEngine 文件的耦合）；新增 `tests/knowledge/legal-keywords.spec.ts`（5 用例：切词/无虚词/2 字过滤/空查询/max 截断）。
 
 ---
 

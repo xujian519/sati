@@ -19,7 +19,7 @@ import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
-import { extractLawKeywords } from "../legal/legal-search.js";
+import { extractLawKeywords } from "../legal/keywords.js";
 import type { KnowledgeEmbeddingSearch } from "../shared/knowledge-embeddings.js";
 import type { CaseLawChunk, CaseLawHit, CaseLawSearchOptions } from "./types.js";
 

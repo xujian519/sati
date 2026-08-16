@@ -3,6 +3,9 @@ import { openKnowledgeDb } from "../shared/db-version.js";
 import { LAWS_DB } from "../shared/schema-versions.js";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
+import { extractLawKeywords } from "./keywords.js";
+
+export { extractLawKeywords } from "./keywords.js";
 
 /**
  * 法律全文搜索引擎（基于宝宸知识库 laws-full-local.db / laws-full.db）。
@@ -17,39 +20,7 @@ import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from 
  * 此时整体降级 LIKE，避免工具执行崩溃。
  */
 
-/** 长查询切词用的虚词/疑问词（按这些词切分后取 ≥3 字片段）。 */
-const SPLIT_WORDS = [
-  "的",
-  "是",
-  "吗",
-  "呢",
-  "什么",
-  "如何",
-  "怎么",
-  "是否",
-  "哪些",
-  "一个",
-  "一种",
-  "以及",
-  "如果",
-  "那么",
-];
-
-/**
- * 把长查询切分为 ≥3 字的关键词片段（trigram tokenizer 要求 3+ 字符）。
- * 例："专利侵权的赔偿标准是什么" → ["专利侵权", "赔偿标准"]
- */
-export function extractLawKeywords(query: string, max = 4): string[] {
-  let rest = query;
-  for (const w of SPLIT_WORDS) {
-    rest = rest.split(w).join("\n");
-  }
-  const fragments = rest
-    .split(/\s+/)
-    .map(f => f.trim())
-    .filter(f => Array.from(f).length >= FTS_MIN_RUNES);
-  return fragments.slice(0, max);
-}
+/** 长查询切词（extractLawKeywords 见 ./keywords.ts，被 case-law/knowledge-law 跨域复用）。 */
 
 type LawRow = {
   id: string;

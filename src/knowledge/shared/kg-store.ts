@@ -3,6 +3,7 @@ import type { KgNode } from "../patent/types.js";
 import { FTS_MIN_RUNES } from "./fts.js";
 import { openKnowledgeDb } from "./db-version.js";
 import { KNOWLEDGE_DB } from "./schema-versions.js";
+import { toNode, type FtsHit, type NodeRow } from "./kg/row-mapper.js";
 
 /**
  * 知识图谱只读存储（双 schema 兼容）。
@@ -40,31 +41,6 @@ const MAX_OR_TERMS = 8;
 export type KgSearchOptions = {
   /** 匹配模式：phrase=整体短语（默认，保持既有行为）；or=分词 OR（多词召回）。 */
   mode?: "phrase" | "or";
-};
-
-/** 单条 FTS5 命中（nodes_fts 返回原始行）。 */
-type FtsHit = {
-  id: string;
-  name: string | null;
-  title: string | null;
-};
-
-/** 节点行（列集随 schema 变化：unified 有 law_refs JSON，legacy 有 law_refs_count + version）。 */
-type NodeRow = {
-  id: string;
-  node_type: string | null;
-  name: string | null;
-  title: string | null;
-  content: string | null;
-  /** unified schema：law_refs JSON 文本数组。 */
-  law_refs?: string | null;
-  /** legacy schema：law_refs_count 整数。 */
-  law_refs_count?: number | null;
-  source: string | null;
-  full_ref: string | null;
-  chapter: string | null;
-  article_number: string | null;
-  version?: string | null;
 };
 
 export class KgStore {
@@ -172,26 +148,9 @@ export class KgStore {
   getNode(id: string): KgNode | undefined {
     if (this.nodeCache.has(id)) return this.nodeCache.get(id);
     const row = this.stmtGetNode.get(id) as NodeRow | undefined;
-    const node = row ? this.toNode(row) : undefined;
+    const node = row ? toNode(row) : undefined;
     this.nodeCache.set(id, node);
     return node;
-  }
-
-  /** 行 → KgNode 映射（unified: law_refs JSON 解析；legacy: law_refs_count + version）。 */
-  private toNode(row: NodeRow): KgNode {
-    return {
-      id: row.id,
-      nodeType: row.node_type ?? "",
-      name: row.name ?? undefined,
-      title: row.title ?? undefined,
-      content: row.content ?? undefined,
-      lawRefsCount: row.law_refs_count ?? (row.law_refs !== undefined ? parseLawRefsCount(row.law_refs) : undefined),
-      source: row.source ?? undefined,
-      fullRef: row.full_ref ?? undefined,
-      chapter: row.chapter ?? undefined,
-      articleNumber: row.article_number ?? undefined,
-      version: row.version ?? undefined,
-    };
   }
 
   /** 按关键词搜索节点（FTS5 MATCH；短查询或缺失 FTS 时降级 LIKE）。 */
@@ -391,16 +350,5 @@ export class KgStore {
   close(): void {
     this.nodeCache.clear();
     this.db.close();
-  }
-}
-
-/** knowledge.db kg_nodes.law_refs 为 TEXT JSON 数组；解析失败返回 undefined。 */
-function parseLawRefsCount(lawRefs: string | null): number | undefined {
-  if (!lawRefs) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(lawRefs);
-    return Array.isArray(parsed) ? parsed.length : undefined;
-  } catch {
-    return undefined;
   }
 }

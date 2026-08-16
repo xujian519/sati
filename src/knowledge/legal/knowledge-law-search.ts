@@ -22,7 +22,7 @@ import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
-import { extractLawKeywords } from "./legal-search.js";
+import { extractLawKeywords } from "./keywords.js";
 
 /** 引擎构造选项（全部可选；不传时行为与旧签名完全一致）。 */
 export type KnowledgeLawSearchOptions2 = {
