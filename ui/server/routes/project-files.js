@@ -9,10 +9,13 @@ import { Router } from "express";
 import { promises as fsPromises } from "fs";
 import path from "path";
 import mime from "mime-types";
+import JSZip from "jszip";
 import { authenticateToken } from "../middleware/auth.js";
 import {
+  addDirectoryToZip,
   expandWorkspacePath,
   getFileTree,
+  getSafeZipFilename,
   getWindowsDriveSuggestions,
   isWindowsDriveBrowserRoot,
   resolvePathInProject,
@@ -20,6 +23,8 @@ import {
   streamFileWithRange,
   validatePathInProject,
 } from "../services/filesystem.js";
+import { contentDispositionAttachment } from "../utils/downloadHeaders.js";
+import { WORKSPACES_ROOT, validateWorkspacePath } from "./projects.js";
 import { clearProjectDirectoryCache, extractProjectDirectory } from "../projects.js";
 import { resolveManagedMemoryFile } from "../services/memoryService.js";
 
@@ -56,8 +61,8 @@ router.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
 
     // Security check - ensure path is accessible
     try {
-      await fs.promises.access(resolvedPath);
-      const stats = await fs.promises.stat(resolvedPath);
+      await fsPromises.access(resolvedPath);
+      const stats = await fsPromises.stat(resolvedPath);
 
       if (!stats.isDirectory()) {
         return res.status(400).json({ error: "Path is not a directory" });
@@ -128,18 +133,18 @@ router.post("/api/create-folder", authenticateToken, async (req, res) => {
     const targetPath = validation.resolvedPath || resolvedInput;
     const parentDir = path.dirname(targetPath);
     try {
-      await fs.promises.access(parentDir);
+      await fsPromises.access(parentDir);
     } catch (err) {
       return res.status(404).json({ error: "Parent directory does not exist" });
     }
     try {
-      await fs.promises.access(targetPath);
+      await fsPromises.access(targetPath);
       return res.status(409).json({ error: "Folder already exists" });
     } catch (err) {
       // Folder doesn't exist, which is what we want
     }
     try {
-      await fs.promises.mkdir(targetPath, { recursive: false });
+      await fsPromises.mkdir(targetPath, { recursive: false });
       res.json({ success: true, path: targetPath });
     } catch (mkdirError) {
       if (mkdirError.code === "EEXIST") {

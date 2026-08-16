@@ -12,6 +12,7 @@ import { authenticateWebSocket } from "../middleware/auth.js";
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "../constants/config.js";
 import { getPluginPort } from "../utils/plugin-process-manager.js";
 import { createNormalizedMessage } from "../sati-message.js";
+import { handleShellConnection } from "./shell.js";
 import {
   abortViaGateway,
   approvalDecideViaGateway,
@@ -67,6 +68,28 @@ export function createChatWebSocketServer(server) {
       return true;
     },
   });
+
+  // WebSocket connection handler that routes based on URL path
+  wss.on("connection", (ws, request) => {
+    const url = request.url;
+    console.log("[INFO] Client connected to:", url);
+
+    // Parse URL to get pathname without query parameters
+    const urlObj = new URL(url, "http://localhost");
+    const pathname = urlObj.pathname;
+
+    if (pathname === "/shell") {
+      handleShellConnection(ws);
+    } else if (pathname === "/ws") {
+      handleChatConnection(ws, request);
+    } else if (pathname.startsWith("/plugin-ws/")) {
+      handlePluginWsProxy(ws, pathname);
+    } else {
+      console.log("[WARN] Unknown WebSocket path:", pathname);
+      ws.close();
+    }
+  });
+
   return wss;
 }
 
@@ -113,27 +136,6 @@ function handlePluginWsProxy(clientWs, pathname) {
     if (upstream.readyState === WebSocket.OPEN) upstream.close();
   });
 }
-
-// WebSocket connection handler that routes based on URL path
-wss.on("connection", (ws, request) => {
-  const url = request.url;
-  console.log("[INFO] Client connected to:", url);
-
-  // Parse URL to get pathname without query parameters
-  const urlObj = new URL(url, "http://localhost");
-  const pathname = urlObj.pathname;
-
-  if (pathname === "/shell") {
-    handleShellConnection(ws);
-  } else if (pathname === "/ws") {
-    handleChatConnection(ws, request);
-  } else if (pathname.startsWith("/plugin-ws/")) {
-    handlePluginWsProxy(ws, pathname);
-  } else {
-    console.log("[WARN] Unknown WebSocket path:", pathname);
-    ws.close();
-  }
-});
 
 /**
  * WebSocket Writer - Wrapper for WebSocket to match SSEStreamWriter interface

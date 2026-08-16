@@ -23,7 +23,8 @@ import { MEMORY_DASHBOARD_DIR } from "./memory.js";
 
 const router = Router();
 
-const installMode = fs.existsSync(path.join(import.meta.dirname, "..", "..", ".git")) ? "git" : "npm";
+// index.js 以 ui/server 为基准算 `../../.git`；本模块在 routes/ 层，需多上一级。
+const installMode = fs.existsSync(path.join(import.meta.dirname, "..", "..", "..", ".git")) ? "git" : "npm";
 
 router.get("/health", (req, res) => {
   res.json({
@@ -78,7 +79,7 @@ router.get("/api/agents/runtime-config", authenticateToken, (_req, res) => {
 // hanging on an unanswered fetch.
 const PROVIDER_REMOVED_PATHS = ["/api/cursor", "/api/codex", "/api/gemini", "/api/cli"];
 for (const removedPrefix of PROVIDER_REMOVED_PATHS) {
-  app.use(removedPrefix, (_req, res) => {
+  router.use(removedPrefix, (_req, res) => {
     res.status(410).json({
       error: "endpoint_removed",
       message: `Provider endpoint ${removedPrefix} was removed during the Sati-only migration.`,
@@ -120,7 +121,7 @@ router.get("/api/always-on/cron-jobs", authenticateToken, async (_req, res) => {
   }
 });
 
-app.post("/api/always-on/cron-jobs", authenticateToken, async (req, res) => {
+router.post("/api/always-on/cron-jobs", authenticateToken, async (req, res) => {
   try {
     const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
     const projectKey = typeof req.body?.projectKey === "string" ? req.body.projectKey : "";
@@ -156,7 +157,7 @@ app.post("/api/always-on/cron-jobs", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req, res) => {
+router.put("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req, res) => {
   try {
     const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
     const schedule = req.body?.schedule;
@@ -192,7 +193,7 @@ app.put("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req, res) 
   }
 });
 
-app.post("/api/always-on/cron-jobs/:taskId/run-now", authenticateToken, async (req, res) => {
+router.post("/api/always-on/cron-jobs/:taskId/run-now", authenticateToken, async (req, res) => {
   try {
     const gateway = await getSatiGateway();
     const result = await gateway.cronRunNow({
@@ -206,7 +207,7 @@ app.post("/api/always-on/cron-jobs/:taskId/run-now", authenticateToken, async (r
   }
 });
 
-app.post("/api/always-on/cron-jobs/:taskId/stop", authenticateToken, async (req, res) => {
+router.post("/api/always-on/cron-jobs/:taskId/stop", authenticateToken, async (req, res) => {
   try {
     const gateway = await getSatiGateway();
     const result = await gateway.cronStop({
@@ -220,7 +221,7 @@ app.post("/api/always-on/cron-jobs/:taskId/stop", authenticateToken, async (req,
   }
 });
 
-app.delete("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req, res) => {
+router.delete("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req, res) => {
   try {
     const gateway = await getSatiGateway();
     const result = await gateway.cronDelete({
@@ -273,7 +274,7 @@ router.get("/api/ccr/stats/sessions/:sessionId", authenticateToken, (req, res) =
   }
 });
 
-app.post("/api/ccr/stats/reset", authenticateToken, (_req, res) => {
+router.post("/api/ccr/stats/reset", authenticateToken, (_req, res) => {
   // Reset would require reaching into per-project TokenStatsCollector
   // instances; that is not exposed today. Surface a clear hint instead
   // of silently no-oping.
@@ -283,7 +284,7 @@ app.post("/api/ccr/stats/reset", authenticateToken, (_req, res) => {
   });
 });
 
-app.put("/api/ccr/config", authenticateToken, (_req, res) => {
+router.put("/api/ccr/config", authenticateToken, (_req, res) => {
   res.status(501).json({
     error: "not_implemented",
     message: "Routing configuration is owned by Sati config (~/.sati/sati.yaml). Edit it directly via /api/config.",
