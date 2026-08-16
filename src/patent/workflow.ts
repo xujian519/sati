@@ -19,15 +19,7 @@
  * 本文件保留执行器本体并 re-export 全部导出（消费方 import "./workflow.js" 零改动）。
  */
 
-import {
-  APPROVAL_GRANTED_KEY,
-  APPROVAL_GRANTED_OUTPUT,
-  type PipelineState,
-  globalAtomRegistry,
-  globalStageHandlerRegistry,
-  isApprovalGateHandler,
-  isInterruptStageError,
-} from "./atoms/index.js";
+import { type PipelineState, globalAtomRegistry, globalStageHandlerRegistry } from "./atoms/index.js";
 import {
   WorkflowError,
   type StageExecutor,
@@ -40,6 +32,7 @@ import {
   type WorkflowStageResult,
 } from "./workflow/types.js";
 import { signalFor, signalMatches } from "./workflow/signal.js";
+import { runStageOnce } from "./workflow/executor.js";
 
 // ---- 门面再导出（保持 "./workflow.js" 消费面不变） ----
 export { WorkflowError };
@@ -157,70 +150,15 @@ export async function runWorkflow(
   // 信号正则预编译（manifest 常量，避免每次执行/回退重新编译；判定逻辑见 ./workflow/signal.ts）。
   const signalCache = new Map<string, RegExp>();
 
-  /**
-   * 执行单个 stage（含重试循环与 degraded 输出构造），不处理信号回退。
-   * 供串行路径与并行组共用。
-   */
-  const runStageOnce = async (
-    stage: WorkflowStage,
-  ): Promise<{ output: string; retries: number; interrupted?: WorkflowInterrupt }> => {
-    const handler = stage.atom !== undefined ? handlers.lookup(stage.atom) : undefined;
-    let output = "";
-    let retries = 0;
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-      try {
-        if (handler) {
-          // 已人工批准的审批门：把放行标记注入 handler 执行态，由 ApprovalGateHandler
-          // 统一判定放行（与图路径同一契约）；此处不跳过执行。
-          const approvedGate = isApprovalGateHandler(handler) && options.approvalGrants?.includes(stage.id);
-          // 阶段静态参数合并进执行态（不污染共享 state，仅本次 handler 可见）。
-          const execState = stage.params !== undefined ? { ...state, ...stage.params } : state;
-          if (approvedGate) {
-            execState[APPROVAL_GRANTED_KEY] = true;
-          }
-          const segment = await handler.execute({ state: execState, provider: options.provider });
-          Object.assign(state, segment);
-          // 主输出键 = atom.outputSchema[0]（对齐 Mady 约定，文本/JSON 均可）；兜底按 stage.id 引用。
-          const mainKey = stage.atom !== undefined ? atoms.lookup(stage.atom)?.outputSchema?.[0] : undefined;
-          const raw = mainKey !== undefined ? segment[mainKey] : undefined;
-          output = typeof raw === "string" ? raw : raw === undefined ? "" : JSON.stringify(raw, null, 2);
-          if (output.trim().length === 0) output = String(state[stage.id] ?? "");
-          // 已批准审批门放行后无实质输出：占位避免被标记 degraded（语义 = 已人工批准）。
-          if (approvedGate && output.trim().length === 0) {
-            output = APPROVAL_GRANTED_OUTPUT;
-          }
-          state[stage.id] = output;
-        } else if (executor) {
-          output = (await executor(stage, ctx)) ?? "";
-        }
-        if (output.trim().length > 0) break;
-        lastError = new Error("阶段执行未产生输出");
-      } catch (err) {
-        if (isInterruptStageError(err)) {
-          return { output: "", retries, interrupted: { stageId: stage.id, message: err.message, data: err.data } };
-        }
-        lastError = err;
-        retries += 1;
-        if (attempt >= maxRetries) {
-          output = "";
-          break;
-        }
-      }
-      retries = attempt + 1;
-    }
-
-    if (
-      output.trim().length === 0 &&
-      lastError !== undefined &&
-      !(lastError instanceof Error && lastError.message === "阶段执行未产生输出")
-    ) {
-      // 保留错误信息到输出，便于诊断；仍标记 degraded。
-      // 用结构化标记前缀（而非中文字面量），避免与 executor 正常输出冲突。
-      output = `[WORKFLOW_DEGRADED] ${stage.id}: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
-    }
-    return { output, retries };
+  // 单阶段执行（重试循环 + degraded 构造）见 ./workflow/executor.ts（参数化，供串行/并行共用）。
+  const stageOptions = {
+    handlers,
+    atoms,
+    provider: options.provider,
+    executor,
+    maxRetries,
+    approvalGrants: options.approvalGrants,
+    ctx,
   };
 
   const pushResult = (stage: WorkflowStage, outcome: { output: string; retries: number }): void => {
@@ -254,7 +192,7 @@ export async function runWorkflow(
       // 并行组：各 stage 独立执行（无 retry → 组内不可能触发信号回退；
       // interrupted 在组内全部完成后按顺序处理，与串行 break 语义一致）。
       const group = manifest.stages.slice(index, index + window);
-      const outcomes = await Promise.all(group.map(stage => runStageOnce(stage)));
+      const outcomes = await Promise.all(group.map(stage => runStageOnce(stage, state, stageOptions)));
       let groupInterrupted: WorkflowInterrupt | undefined;
       for (let gi = 0; gi < outcomes.length; gi += 1) {
         const outcome = outcomes[gi]!;
@@ -273,7 +211,7 @@ export async function runWorkflow(
     }
 
     const stage = manifest.stages[index]!;
-    const outcome = await runStageOnce(stage);
+    const outcome = await runStageOnce(stage, state, stageOptions);
     if (outcome.interrupted) {
       interrupted = outcome.interrupted;
       break;
