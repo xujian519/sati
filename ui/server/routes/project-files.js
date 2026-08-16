@@ -24,8 +24,8 @@ import {
   validatePathInProject,
 } from "../services/filesystem.js";
 import { contentDispositionAttachment } from "../utils/downloadHeaders.js";
-import { WORKSPACES_ROOT, validateWorkspacePath } from "./projects.js";
-import { clearProjectDirectoryCache, extractProjectDirectory } from "../projects.js";
+import { WORKSPACES_ROOT, validateWorkspacePath } from "./projects.js"; // 旧 projects 子路径路由
+import { clearProjectDirectoryCache, extractProjectDirectory } from "../projects.js"; // 项目目录解析工具
 import { resolveManagedMemoryFile } from "../services/memoryService.js";
 
 const router = Router();

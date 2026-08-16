@@ -21,7 +21,7 @@ import { startEnabledPluginServers, stopAllPlugins } from "../utils/plugin-proce
 import { startSatiConfigWatcher, stopSatiConfigWatcher } from "./satiConfigWatcher.js";
 import { DISABLE_LOCAL_AUTH } from "../constants/config.js";
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const __dirname = import.meta.dirname;
 
 // ANSI color codes for terminal output
 const colors = {
