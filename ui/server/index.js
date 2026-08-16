@@ -82,7 +82,6 @@ import {
   getRouterSessionStats,
   getRouterStatsSummary,
   getSatiGateway,
-  registerAlwaysOnNotificationForwarding,
   getSessionTokenBudget,
 } from "./sati-bridge.js";
 import sessionManager from "./sessionManager.js";
@@ -140,6 +139,15 @@ import {
 import { uploadFilesHandler } from "./services/uploads.js";
 import { officePreviewPdfRateLimiter, officePreviewStatusRateLimiter } from "./services/rate-limit.js";
 import {
+  broadcastChatFrame,
+  broadcastConfigReloaded,
+  broadcastProgress,
+  broadcastToSessionWatchers,
+  connectedClients,
+  normalizeSessionId,
+  sessionWatchRegistry,
+} from "./websocket/broadcast.js";
+import {
   closeMemoryServices,
   resolveManagedMemoryFile,
   startMemoryScheduler,
@@ -155,7 +163,6 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from "./midd
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "./constants/config.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
 import { contentDispositionAttachment } from "./utils/downloadHeaders.js";
-import { createSessionWatchRegistry } from "./session-watch-registry.js";
 
 // Sati-only mode: chat execution always goes through src/gateway via
 // cursor-cli, openai-codex, gemini-cli) has been removed.
@@ -182,94 +189,6 @@ const WATCHER_IGNORED_PATTERNS = [
 const WATCHER_DEBOUNCE_MS = 300;
 let projectsWatchers = [];
 let projectsWatcherDebounceTimer = null;
-const connectedClients = new Set();
-const sessionWatchRegistry = createSessionWatchRegistry();
-registerAlwaysOnNotificationForwarding(connectedClients, (sessionId, frame) => {
-  // Always-On gateway notifications do not carry the originating UI socket.
-  // Delivering them to every tab caused unrelated sessions' live status
-  // (notably compaction progress) to race in the frontend. A tab explicitly
-  // watches its displayed session, so that registry is the routing authority.
-  broadcastToSessionWatchers(sessionId, frame, undefined);
-});
-let isGetProjectsRunning = false; // Flag to prevent reentrant calls
-
-function normalizeSessionId(value) {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function broadcastChatFrame(frame, originWs, userId) {
-  const payload = JSON.stringify(frame);
-  const delivered = new Set();
-  const frameSessionId = normalizeSessionId(frame?.sessionId);
-
-  if (frameSessionId) {
-    const watchers = sessionWatchRegistry.getWatchers(frameSessionId);
-    watchers.forEach(client => {
-      if (client.readyState !== WebSocket.OPEN) return;
-      if ((client.__satiUserId ?? null) !== userId) return;
-      client.send(payload);
-      delivered.add(client);
-    });
-  }
-
-  if (originWs.readyState === WebSocket.OPEN && !delivered.has(originWs)) {
-    originWs.send(payload);
-    delivered.add(originWs);
-  }
-
-  // Reconnect fail-safe: if the origin websocket closed and no watcher
-  // received the frame yet, fan out to same-user sockets.
-  if (delivered.size === 0) {
-    connectedClients.forEach(client => {
-      if (client.readyState !== WebSocket.OPEN) return;
-      if ((client.__satiUserId ?? null) !== userId) return;
-      client.send(payload);
-    });
-  }
-}
-
-function broadcastToSessionWatchers(sessionId, frame, userId, excludeWs = null) {
-  const normalizedSessionId = normalizeSessionId(sessionId);
-  if (!normalizedSessionId) return;
-  const payload = JSON.stringify(frame);
-  const watchers = sessionWatchRegistry.getWatchers(normalizedSessionId);
-  watchers.forEach(client => {
-    if (client === excludeWs) return;
-    if (client.readyState !== WebSocket.OPEN) return;
-    // `undefined` denotes a gateway-originated event with no submitting
-    // user. Its recipient set is already constrained by the session watch.
-    if (userId !== undefined && (client.__satiUserId ?? null) !== userId) return;
-    client.send(payload);
-  });
-}
-
-// Broadcast progress to all connected WebSocket clients
-function broadcastProgress(progress) {
-  const message = JSON.stringify({
-    type: "loading_progress",
-    ...progress,
-  });
-  connectedClients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
-}
-
-// Broadcasts ~/.sati/sati.yaml reload events (from UI saves or external file edits)
-// to every connected WebSocket client so open Settings tabs refresh instantly.
-function broadcastConfigReloaded(payload) {
-  const message = JSON.stringify({ type: "config:reloaded", ...payload });
-  connectedClients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
-}
-process.on("sati:config-broadcast", broadcastConfigReloaded);
-
 async function setupProjectsWatcher() {
   const chokidar = (await import("chokidar")).default;
 
