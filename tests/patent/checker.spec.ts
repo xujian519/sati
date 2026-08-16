@@ -292,6 +292,43 @@ test("推理模式: 四相同标准缺步骤 → 阻断", () => {
   assert.equal(r!.level, 0);
 });
 
+test("reasoningPatternRules: 4 组条数 = 7/6/5/6 且 id 唯一", () => {
+  const rs = reasoningPatternRules();
+  const byGroup = (prefix: string) => rs.filter(r => r.id.startsWith(prefix)).length;
+  assert.equal(byGroup("REASON-CREATIVITY-"), 7, "创造性组应为 7 条");
+  assert.equal(byGroup("REASON-NOVELTY-"), 6, "新颖性组应为 6 条");
+  assert.equal(byGroup("REASON-CLAIMS-"), 5, "权利要求/说明书组应为 5 条");
+  assert.equal(byGroup("REASON-OTHER-"), 6, "其他组应为 6 条");
+  assert.equal(
+    new Set(rs.map(r => r.id)).size,
+    rs.length,
+    "规则 id 必须唯一（RuleEngine 以 id 建 Map，重复会静默覆盖）",
+  );
+});
+
+test("推理模式: pathElements 为 string[][] 层级（每步至少命中其一）", () => {
+  const rs = reasoningPatternRules();
+  const sample = rs.find(r => r.id === "REASON-CREATIVITY-01A");
+  assert.ok(sample, "REASON-CREATIVITY-01A 应存在");
+  const steps = sample.pathElements;
+  assert.ok(Array.isArray(steps), "REASON-CREATIVITY-01A 应声明 pathElements");
+  if (!steps) return;
+  for (const step of steps) {
+    assert.ok(Array.isArray(step) && step.length >= 1, `路径步骤 ${JSON.stringify(step)} 应为非空数组`);
+  }
+  // 抽样其余三组各一条规则，校验嵌套层级
+  for (const id of ["REASON-NOVELTY-01A", "REASON-CLAIMS-01", "REASON-OTHER-04"]) {
+    const rule = rs.find(r => r.id === id);
+    assert.ok(rule, `${id} 应存在`);
+    if (rule.pathElements) {
+      assert.ok(
+        rule.pathElements.every(s => Array.isArray(s)),
+        `${id} pathElements 应为 string[][]`,
+      );
+    }
+  }
+});
+
 // =============================================================================
 // 说明书域规则（patent_spec，spec-checklist 规则化）
 // =============================================================================
