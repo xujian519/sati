@@ -4,6 +4,7 @@ import { LATEST_PROTOCOL_VERSION, type JSONRPCMessage } from "@modelcontextproto
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { McpClient, McpClientError } from "../../../src/mcp/client/McpClient.js";
+import { buildTransport } from "../../../src/mcp/client/transport.js";
 
 test("McpClient keeps stdio clients idle before connection", () => {
   const client = new McpClient({ id: "stdio-test", transport: "stdio", command: "node" });
@@ -25,14 +26,14 @@ test("McpClient routes streamable_http fetches with bounded timeouts", async () 
     calls.push({ input, init, timeoutMs: options?.timeoutMs });
     return new Response("{}");
   };
-  const client = new McpClient(
+
+  const built = buildTransport(
     { id: "http-test", transport: "streamable_http", url: "https://mcp.example.test/mcp" },
     { callTimeoutMs: 12_345, handshakeTimeoutMs: 2_345, fetch: fetchImpl as typeof fetch },
   );
-
-  const transport = (client as unknown as { buildTransport(): unknown }).buildTransport();
-  assert.ok(transport instanceof StreamableHTTPClientTransport);
-  const transportFetch = (transport as unknown as { _fetch?: typeof fetch })._fetch;
+  assert.ok(built.transport instanceof StreamableHTTPClientTransport);
+  assert.equal(built.perSessionDir, null);
+  const transportFetch = (built.transport as unknown as { _fetch?: typeof fetch })._fetch;
   assert.equal(typeof transportFetch, "function");
 
   await transportFetch?.("https://mcp.example.test/mcp", { method: "GET" });

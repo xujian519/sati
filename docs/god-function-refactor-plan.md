@@ -1,7 +1,7 @@
 # 巨无霸函数拆解专项实施方案
 
 - 创建日期：2026-08-16
-- 状态：**实施中——A1（reasoning-rules 拆 4 组）✅ + A2（workflow 类型/manifest 纯搬移）进行中**
+- 状态：**实施中——A1（reasoning-rules 拆 4 组）已完成 ✅**；后续批次待排期
 - 前置：`docs/technical-debt-report.md` Sprint Backlog #6 / #7 残留 / #12；方法论先例 `docs/agentloop-refactor-plan.md`
 - 调研方法：7 个目标文件逐行结构测绘（5 路并行只读调研 + 跨切面协调核查），全部行号证据以 2026-08-16 工作区实测为准
 
@@ -145,8 +145,6 @@ src/patent/
 
 **DoD**：`runWorkflow` ≤ 100 行（编排骨架），`runStageOnce` ≤ 80 行；`workflow/` 目录化后原 `workflow.js` 导入路径全部可用；等价性测试 + 全量 patent spec 绿。
 
-> ✅ **A2 轮次 1 已完成（2026-08-16）**：类型契约 + WorkflowError → `workflow/types.ts`，7 个内置 manifest + 目录 → `workflow/manifests.ts`，`workflow/index.ts` barrel；`workflow.ts` 751→314 行门面（保留 validateWorkflowManifest/runWorkflow 本体 + 全部 re-export）。**消费方 import "./workflow.js" 零改动**（门面 re-export，未改 workflow-store/dag/adapter/flexible-plan 的 import 路径——最小 diff 优于方案原述的"改指 types.ts"，解耦收益由门面薄文件同样达成）。typecheck/lint（event-matrix fresh）/format/全量测试绿（唯一失败为本机环境性 PDF 用例）。剩余轮次（signal/runStageOnce 参数化）为 A7/A10。
-
 ---
 
 ### 5.3 `src/knowledge/shared/kg-store.ts`（406 行 → 门面 + kg/ 子模块）
@@ -180,10 +178,6 @@ shared/
 
 **DoD**：`kg-store.ts` ≤ 80 行（门面）；`searchByKeywordOr` ≤ 40 行（拆后）；knowledge 全量 spec 绿。
 
-> ✅ **A3 轮次 1（kg-store 侧）已完成（2026-08-16）**：行映射纯函数 → `src/knowledge/shared/kg/row-mapper.ts`（`toNode`/`parseLawRefsCount`/`FtsHit`/`NodeRow`）；kg-store.ts 删除私有 `toNode` 与模块级 `parseLawRefsCount`（-45 行）。新增 `tests/knowledge/kg-row-mapper.spec.ts`（4 用例：unified law_refs JSON / legacy law_refs_count 优先 / 空列映射 / 解析失败回退）。
-
-> ✅ **A4 轮次 2-3 已完成（2026-08-16）**：探测 + prepared 组装 → `kg/schema-introspector.ts`（fail-closed 无表抛错 + FTS prepare 降级契约随迁）；图遍历 4 方法 → `kg/graph-traversal.ts`（`GraphTraversal` 类，注入 stmts + getNode 钩子）；`KgSchema`/`KgNeighbor`/`KgPathEdge` 类型迁入子模块并在 kg-store.ts 再导出（barrel/消费方零改动）；kg-store.ts 构造器变薄 + 4 方法薄委托。补盲区测试 3 例（ftsMode unicode61 分支、getNode 缓存引用、bfsPath maxDepth 截断与环防护）。
-
 ---
 
 ### 5.4 `src/knowledge/legal/legal-search.ts`（391 行 → 门面 + 4 个纯件）
@@ -213,10 +207,6 @@ legal/
 **风险**：`extractLawKeywords` 是跨域共享点（两处 import 必须同步改）；粘性降级 `ftsDegraded` 置位语义不可拆散；集成测试缺库假绿——重构期以自包含 spec 扩为行为基线。
 
 **DoD**：`legal-search.ts` ≤ 120 行；`searchFts`/`searchFtsKeywords` 消除 SQL 复制（共用常量）；knowledge 全量 spec 绿。
-
-> ✅ **A3 轮次 1（legal-search 侧）已完成（2026-08-16）**：`extractLawKeywords`/`SPLIT_WORDS` → `src/knowledge/legal/keywords.ts`（纯函数）；`legal-search.ts` 改 import + 本地 re-export（导出面不变）；**两处跨域 import 同步改**（knowledge-law-search.ts:25、case-law-search.ts:22 → `./keywords.js`/`../legal/keywords.js`，消除对 LegalSearchEngine 文件的耦合）；新增 `tests/knowledge/legal-keywords.spec.ts`（5 用例：切词/无虚词/2 字过滤/空查询/max 截断）。
-
-> ✅ **A5 轮次 2-3 已完成（2026-08-16）**：`LawRow` + `toRecord`/`toSearchResult` → `legal/row-mapper.ts`；`dedupeByLawName` → `legal/dedupe.ts`（消除 searchFts/searchFtsKeywords 的重复去重段）；列选择常量 + `buildLawSearchSql` → `legal/sql.ts`（消除两处 23 行重复 FTS 动态 SQL，like 动态分支同源）；legal-search.ts 362 → ~270 行。新增 `legal-dedupe.spec.ts`（3 例）+ `legal-row-mapper.spec.ts`（3 例）。
 
 ---
 
@@ -253,6 +243,8 @@ client/
 **风险**：SDK `Transport` 接口与 `StreamableHTTPClientTransport._fetch` 私有字段的白盒断言（McpClient.spec:35）——transport.ts 不得改构造时序；`DEFAULT_CALL_TIMEOUT_MS` 模块加载期读 env 的求值顺序；`perSessionDir` 跨 3 方法生命周期（漏清即泄漏 `~/.tmp/sati-mcp-*`）；public API 面被 4 处上游消费（签名逐字一致）。
 
 **DoD**：`McpClient.ts` ≤ 60 行（门面）；5 个新模块各 ≤ ~180 行、方法均 ≤ ~40 行；mcp 全量 spec 绿 + 新增盲区测试 ≥ 15 例。
+
+> ✅ **A6 轮次 1 已完成（2026-08-16）**：三个零依赖纯件下沉——`errors.ts`（McpClientError/isSessionExpired/withTimeout）、`toolSpec.ts`（toToolSpec，serverId 参数化）、`transport.ts`（buildTransport 返回 `{transport, perSessionDir}` 消除 this 写、DEFAULT_CALL_TIMEOUT_MS 随迁）；McpClient.ts 删除 4 段（-150 行），`export { McpClientError }` re-export 保持 barrel 面。**白盒测试改写**：McpClient.spec "routes streamable_http fetches" 从 `client.buildTransport()` 私有访问改为直接测模块级 buildTransport（方案 §5.5 预警的脆断点）。新增盲区测试 11 例（errors 5 / transport 4 / toolSpec 3——其中 2 例修正断言：truncate 后缀 `… [truncated]`、SDK `_serverParams.args`）。剩余轮次（connection/operations/门面收口）为 A8/A9。
 
 ---
 
