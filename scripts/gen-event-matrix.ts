@@ -278,7 +278,6 @@ function renderMatrix(): string {
     const ps = (producers.get(event) ?? []).map(s => s.file + ":" + s.line).join(", ") || "-";
     const vocabs = eventVocabs.get(event) ?? [];
     const exact = consumers.get(event) ?? [];
-    const stream = dedupeSites(vocabs.flatMap(v => streamConsumers.get(v) ?? []));
     const csParts: string[] = exact.map(s => s.file + ":" + s.line);
     for (const entry of STREAM_CONSUMER_ENTRIES) {
       if (!vocabs.includes(entry.vocab)) continue;
