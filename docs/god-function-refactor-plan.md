@@ -1,7 +1,7 @@
 # 巨无霸函数拆解专项实施方案
 
 - 创建日期：2026-08-16
-- 状态：**实施中——A1（reasoning-rules 拆 4 组）已完成 ✅**；后续批次待排期
+- 状态：**实施中——A1（reasoning-rules 拆 4 组）✅ + A2（workflow 类型/manifest 纯搬移）进行中**
 - 前置：`docs/technical-debt-report.md` Sprint Backlog #6 / #7 残留 / #12；方法论先例 `docs/agentloop-refactor-plan.md`
 - 调研方法：7 个目标文件逐行结构测绘（5 路并行只读调研 + 跨切面协调核查），全部行号证据以 2026-08-16 工作区实测为准
 
@@ -144,6 +144,8 @@ src/patent/
 **风险**：轮次 3 不得改变 `runStageOnce` 副作用顺序（`Object.assign(state, segment)` 时机、输出键解析、degraded 前缀 `[WORKFLOW_DEGRADED]`）；`approvalGrants` 经 `APPROVAL_GRANTED_KEY` 注入 execState 的逻辑不可漏参；manifest 数据搬移一字不改（结构被 2 个 spec 断言）；g-flag 正则跨调用状态污染。
 
 **DoD**：`runWorkflow` ≤ 100 行（编排骨架），`runStageOnce` ≤ 80 行；`workflow/` 目录化后原 `workflow.js` 导入路径全部可用；等价性测试 + 全量 patent spec 绿。
+
+> ✅ **A2 轮次 1 已完成（2026-08-16）**：类型契约 + WorkflowError → `workflow/types.ts`，7 个内置 manifest + 目录 → `workflow/manifests.ts`，`workflow/index.ts` barrel；`workflow.ts` 751→314 行门面（保留 validateWorkflowManifest/runWorkflow 本体 + 全部 re-export）。**消费方 import "./workflow.js" 零改动**（门面 re-export，未改 workflow-store/dag/adapter/flexible-plan 的 import 路径——最小 diff 优于方案原述的"改指 types.ts"，解耦收益由门面薄文件同样达成）。typecheck/lint（event-matrix fresh）/format/全量测试绿（唯一失败为本机环境性 PDF 用例）。剩余轮次（signal/runStageOnce 参数化）为 A7/A10。
 
 ---
 
