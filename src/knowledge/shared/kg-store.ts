@@ -4,6 +4,8 @@ import { FTS_MIN_RUNES } from "./fts.js";
 import { openKnowledgeDb } from "./db-version.js";
 import { KNOWLEDGE_DB } from "./schema-versions.js";
 import { toNode, type FtsHit, type NodeRow } from "./kg/row-mapper.js";
+import { introspectKgStore, type KgSchema } from "./kg/schema-introspector.js";
+import { GraphTraversal, type KgNeighbor, type KgPathEdge } from "./kg/graph-traversal.js";
 
 /**
  * 知识图谱只读存储（双 schema 兼容）。
@@ -17,20 +19,9 @@ import { toNode, type FtsHit, type NodeRow } from "./kg/row-mapper.js";
  * 关键词检索，查询均在毫秒级。
  */
 
-export type KgSchema = "unified" | "legacy";
-
-export type KgNeighbor = {
-  /** 邻居节点 id */
-  targetId: string;
-  /** 关系类型（CITES / RELATED_TO / SIMILAR_TO / CONTAINS / DEFINES…） */
-  relation: string;
-};
-
-export type KgPathEdge = {
-  source: string;
-  target: string;
-  relation: string;
-};
+// 类型再导出（定义见 kg/ 子模块，保持 "./kg-store.js" 导出面不变）
+export type { KgSchema };
+export type { KgNeighbor, KgPathEdge };
 
 /** 分词模式的分隔符（空格 + 中文标点）。 */
 const OR_SEPARATOR_RE = /[\s，。？！、；：,.;!?]+/;
@@ -50,85 +41,32 @@ export class KgStore {
   private readonly schema: KgSchema;
   /** 表结构探测结果：trigram FTS 表优先（scripts/migrate-kg-fts-trigram.mjs 生成），否则 unicode61 旧表；无 FTS 时为 null。 */
   private readonly ftsTable: string | null;
+  private readonly graphTraversal: GraphTraversal;
 
   // 热路径 prepared statements（prepare 一次反复复用，避免每次执行重新编译 SQL）
   private readonly stmtGetNode: StatementSync;
   private readonly stmtLikeSearch: StatementSync;
   private readonly stmtFtsSearch: StatementSync | null;
-  private readonly stmtNeighbors: StatementSync;
-  private readonly stmtNeighborsByRelation: StatementSync;
-  private readonly stmtListByType: StatementSync;
 
   constructor(dbPath: string) {
     const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
     this.db = opened.db;
-
-    // 表结构探测：knowledge.db 统一 schema（kg_nodes/kg_edges/kg_nodes_fts，trigram）
-    // 优先；patent_kg.db 旧 schema（nodes/edges/nodes_fts*）兼容保留。
-    const hasUnified = this.tableExists("kg_nodes");
-    const hasLegacy = this.tableExists("nodes");
-    if (!hasUnified && !hasLegacy) {
-      throw new Error(`KgStore: 未找到知识图谱表（kg_nodes/nodes 均不存在），dbPath=${dbPath}`);
-    }
-    this.schema = hasUnified ? "unified" : "legacy";
-    const nodeTable = hasUnified ? "kg_nodes" : "nodes";
-
-    const ftsRow = this.db
-      .prepare(
-        hasUnified
-          ? "SELECT name FROM sqlite_master WHERE type='table' AND name = 'kg_nodes_fts' LIMIT 1"
-          : "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('nodes_fts_trigram', 'nodes_fts') ORDER BY CASE name WHEN 'nodes_fts_trigram' THEN 0 ELSE 1 END LIMIT 1",
-      )
-      .get() as { name: string } | undefined;
-    this.ftsTable = ftsRow?.name ?? null;
-
-    // unified: law_refs 为 TEXT JSON 数组（无 version）；legacy: law_refs_count 整数 + version。
-    const nodeColumns = hasUnified
-      ? "id, node_type, name, title, content, law_refs, source, full_ref, chapter, article_number"
-      : "id, node_type, name, title, content, law_refs_count, source, full_ref, chapter, article_number, version";
-    this.stmtGetNode = this.db.prepare(`SELECT ${nodeColumns} FROM ${nodeTable} WHERE id = ?`);
-
-    this.stmtLikeSearch = this.db.prepare(
-      `SELECT id FROM ${nodeTable}
-       WHERE name LIKE ? ESCAPE '\\' OR title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
-       LIMIT ?`,
+    // 探测 + prepared 组装（schema-introspector）：fail-closed（无表抛错）与
+    // FTS prepare 降级（旧 Node 无 FTS5/trigram）契约由 introspectKgStore 承担。
+    const introspected = introspectKgStore(this.db, dbPath);
+    this.schema = introspected.schema;
+    this.ftsTable = introspected.ftsTable;
+    this.stmtGetNode = introspected.statements.stmtGetNode;
+    this.stmtLikeSearch = introspected.statements.stmtLikeSearch;
+    this.stmtFtsSearch = introspected.statements.stmtFtsSearch;
+    this.graphTraversal = new GraphTraversal(
+      {
+        stmtNeighbors: introspected.statements.stmtNeighbors,
+        stmtNeighborsByRelation: introspected.statements.stmtNeighborsByRelation,
+        stmtListByType: introspected.statements.stmtListByType,
+      },
+      id => this.getNode(id),
     );
-    // 知识库可能未建 FTS（或运行时 SQLite 未编译 FTS5/trigram——如桌面端捆绑
-    // 旧 Node），prepare MATCH 会抛错：捕获后降级 LIKE（等价 legal-search 的
-    // 能力探测语义），避免构造函数崩溃导致整个 KgStore 不可用。
-    this.stmtFtsSearch = null;
-    if (this.ftsTable !== null) {
-      try {
-        // unified：kg_nodes_fts 为 contentless（列仅 name/title/content，内容不存储），
-        // rowid 即 kg_nodes.rowid，须 JOIN 回源取 id/name/title。
-        this.stmtFtsSearch = this.db.prepare(
-          hasUnified
-            ? "SELECT k.id, k.name, k.title FROM kg_nodes_fts f JOIN kg_nodes k ON k.rowid = f.rowid WHERE kg_nodes_fts MATCH ? LIMIT ?"
-            : `SELECT id, name, title FROM ${this.ftsTable} WHERE ${this.ftsTable} MATCH ? LIMIT ?`,
-        );
-      } catch {
-        this.stmtFtsSearch = null;
-      }
-    }
-    this.stmtNeighbors = this.db.prepare(
-      hasUnified
-        ? "SELECT target_id AS target, relation FROM kg_edges WHERE source_id = ? LIMIT ?"
-        : "SELECT target, relation FROM edges WHERE source = ? LIMIT ?",
-    );
-    this.stmtNeighborsByRelation = this.db.prepare(
-      hasUnified
-        ? "SELECT target_id AS target, relation FROM kg_edges WHERE source_id = ? AND relation = ? LIMIT ?"
-        : "SELECT target, relation FROM edges WHERE source = ? AND relation = ? LIMIT ?",
-    );
-    this.stmtListByType = this.db.prepare(`SELECT id FROM ${nodeTable} WHERE node_type = ? LIMIT ?`);
-  }
-
-  /** 表是否存在于库中（sqlite_master 探测）。 */
-  private tableExists(name: string): boolean {
-    const row = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?").get(name) as
-      | { name: string }
-      | undefined;
-    return row !== undefined;
   }
 
   /** 当前生效的 schema（诊断用）。 */
@@ -284,67 +222,22 @@ export class KgStore {
 
   /** 查询节点的出向邻居（按 relation 过滤可选）。 */
   getNeighbors(nodeId: string, relation?: string, limit = 20): KgNeighbor[] {
-    if (relation) {
-      const rows = this.stmtNeighborsByRelation.all(nodeId, relation, limit) as Array<{
-        target: string;
-        relation: string;
-      }>;
-      return rows.map(r => ({ targetId: r.target, relation: r.relation }));
-    }
-    const rows = this.stmtNeighbors.all(nodeId, limit) as Array<{ target: string; relation: string }>;
-    return rows.map(r => ({ targetId: r.target, relation: r.relation }));
+    return this.graphTraversal.getNeighbors(nodeId, relation, limit);
   }
 
   /** BFS 最短路径（有向图，沿出边遍历）。找不到返回 null。 */
   bfsPath(fromId: string, toId: string, maxDepth = 5): KgPathEdge[] | null {
-    if (fromId === toId) return [];
-    const visited = new Set<string>([fromId]);
-    const queue: Array<{ id: string; path: KgPathEdge[] }> = [{ id: fromId, path: [] }];
-
-    while (queue.length > 0) {
-      const { id, path } = queue.shift()!;
-      if (path.length >= maxDepth) continue;
-      const neighbors = this.getNeighbors(id, undefined, 100);
-      for (const n of neighbors) {
-        if (visited.has(n.targetId)) continue;
-        const nextPath = [...path, { source: id, target: n.targetId, relation: n.relation }];
-        if (n.targetId === toId) return nextPath;
-        visited.add(n.targetId);
-        queue.push({ id: n.targetId, path: nextPath });
-      }
-    }
-    return null;
+    return this.graphTraversal.bfsPath(fromId, toId, maxDepth);
   }
 
   /** 按类型列出节点（用于图谱浏览/过滤）。 */
   listByType(nodeType: string, limit = 50): KgNode[] {
-    const rows = this.stmtListByType.all(nodeType, limit) as Array<{ id: string }>;
-    return rows.map(r => this.getNode(r.id)).filter((n): n is KgNode => n !== undefined);
+    return this.graphTraversal.listByType(nodeType, limit);
   }
 
   /** 展开某个节点的邻居（去重后），附带节点详情。 */
   expandNeighbors(nodeId: string, relation?: string, depth = 2, limit = 20): Array<{ node: KgNode; relation: string }> {
-    const seen = new Set<string>([nodeId]);
-    const result: Array<{ node: KgNode; relation: string }> = [];
-    let frontier = [{ id: nodeId, relation: "" }];
-
-    for (let d = 0; d < depth && frontier.length > 0; d++) {
-      const next: Array<{ id: string; relation: string }> = [];
-      for (const { id } of frontier) {
-        const neighbors = this.getNeighbors(id, relation, limit);
-        for (const n of neighbors) {
-          if (seen.has(n.targetId)) continue;
-          seen.add(n.targetId);
-          const node = this.getNode(n.targetId);
-          if (node) {
-            result.push({ node, relation: n.relation });
-            next.push({ id: n.targetId, relation: n.relation });
-          }
-        }
-      }
-      frontier = next;
-    }
-    return result;
+    return this.graphTraversal.expandNeighbors(nodeId, relation, depth, limit);
   }
 
   close(): void {

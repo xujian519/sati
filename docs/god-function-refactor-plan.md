@@ -182,6 +182,8 @@ shared/
 
 > ✅ **A3 轮次 1（kg-store 侧）已完成（2026-08-16）**：行映射纯函数 → `src/knowledge/shared/kg/row-mapper.ts`（`toNode`/`parseLawRefsCount`/`FtsHit`/`NodeRow`）；kg-store.ts 删除私有 `toNode` 与模块级 `parseLawRefsCount`（-45 行）。新增 `tests/knowledge/kg-row-mapper.spec.ts`（4 用例：unified law_refs JSON / legacy law_refs_count 优先 / 空列映射 / 解析失败回退）。
 
+> ✅ **A4 轮次 2-3 已完成（2026-08-16）**：探测 + prepared 组装 → `kg/schema-introspector.ts`（fail-closed 无表抛错 + FTS prepare 降级契约随迁）；图遍历 4 方法 → `kg/graph-traversal.ts`（`GraphTraversal` 类，注入 stmts + getNode 钩子）；`KgSchema`/`KgNeighbor`/`KgPathEdge` 类型迁入子模块并在 kg-store.ts 再导出（barrel/消费方零改动）；kg-store.ts 构造器变薄 + 4 方法薄委托。补盲区测试 3 例（ftsMode unicode61 分支、getNode 缓存引用、bfsPath maxDepth 截断与环防护）。
+
 ---
 
 ### 5.4 `src/knowledge/legal/legal-search.ts`（391 行 → 门面 + 4 个纯件）
