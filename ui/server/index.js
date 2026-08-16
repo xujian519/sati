@@ -67,15 +67,7 @@ import {
   searchConversations,
 } from "./projects.js";
 import {
-  runChatViaGateway,
-  abortViaGateway,
-  decidePermissionViaGateway,
-  approvalDecideViaGateway,
   approvalListPendingViaGateway,
-  grantSessionPermissionViaGateway,
-  getSessionActivityViaGateway,
-  getActiveSessionIdsViaGateway,
-  elicitationRespondViaGateway,
   getRouterDashboardData,
   getRouterSessionStats,
   getRouterStatsSummary,
@@ -136,32 +128,23 @@ import {
 import { uploadFilesHandler } from "./services/uploads.js";
 import { officePreviewPdfRateLimiter, officePreviewStatusRateLimiter } from "./services/rate-limit.js";
 import {
-  broadcastChatFrame,
-  broadcastConfigReloaded,
-  broadcastProgress,
-  broadcastToSessionWatchers,
-  connectedClients,
-  normalizeSessionId,
-  sessionWatchRegistry,
-} from "./websocket/broadcast.js";
-import {
   closeMemoryServices,
   resolveManagedMemoryFile,
   startMemoryScheduler,
   stopMemoryScheduler,
 } from "./services/memoryService.js";
-import { createNormalizedMessage } from "./sati-message.js";
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from "./utils/plugin-process-manager.js";
 import { initializeDatabase, sessionNamesDb, applyCustomSessionNames, userDb } from "./database/db.js";
 import { configureWebPush } from "./services/vapid-keys.js";
 
 import { runServerStartupBeforeListen, startServerAfterStartup } from "./services/server-startup.js";
-import { validateApiKey, authenticateToken, authenticateWebSocket } from "./middleware/auth.js";
+import { validateApiKey, authenticateToken } from "./middleware/auth.js";
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "./constants/config.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
 import { contentDispositionAttachment } from "./utils/downloadHeaders.js";
 import { setupProjectsWatcher } from "./services/projects-watcher.js";
 import { handleShellConnection } from "./websocket/shell.js";
+import { createChatWebSocketServer } from "./websocket/chat.js";
 
 // Sati-only mode: chat execution always goes through src/gateway via
 // cursor-cli, openai-codex, gemini-cli) has been removed.
@@ -170,44 +153,8 @@ const VALID_PROVIDERS = ["sati"];
 const app = express();
 const server = http.createServer(app);
 
-// Single WebSocket server that handles both paths
-const wss = new WebSocketServer({
-  server,
-  verifyClient: info => {
-    console.log("WebSocket connection attempt to:", info.req.url);
-
-    // Platform / no-login mode: allow connection without token
-    if (IS_PLATFORM || DISABLE_LOCAL_AUTH) {
-      const user = authenticateWebSocket(null); // Returns first DB user
-      if (!user) {
-        console.log("[WARN] WebSocket auth bypass: No user found in database");
-        return false;
-      }
-      info.req.user = user;
-      console.log("[OK] WebSocket authenticated (bypass) for user:", user.username);
-      return true;
-    }
-
-    // Normal mode: verify token
-    // Extract token from query parameters or headers
-    const url = new URL(info.req.url, "http://localhost");
-    const token = url.searchParams.get("token") || info.req.headers.authorization?.split(" ")[1];
-
-    // Verify token
-    const user = authenticateWebSocket(token);
-    if (!user) {
-      console.log("[WARN] WebSocket authentication failed");
-      return false;
-    }
-
-    // Store user info in the request for later use
-    info.req.user = user;
-    console.log("[OK] WebSocket authenticated for user:", user.username);
-    return true;
-  },
-});
-
-// Make WebSocket server available to routes
+// Single WebSocket server that handles both paths（wss 创建见 ./websocket/chat.js）
+const wss = createChatWebSocketServer(server);
 app.locals.wss = wss;
 
 app.use(cors({ exposedHeaders: ["X-Refreshed-Token"] }));
@@ -1424,359 +1371,6 @@ app.post("/api/projects/:projectName/files/upload", authenticateToken, uploadFil
  * Proxy an authenticated client WebSocket to a plugin's internal WS server.
  * Auth is enforced by verifyClient before this function is reached.
  */
-function handlePluginWsProxy(clientWs, pathname) {
-  const pluginName = pathname.replace("/plugin-ws/", "");
-  if (!pluginName || /[^a-zA-Z0-9_-]/.test(pluginName)) {
-    clientWs.close(4400, "Invalid plugin name");
-    return;
-  }
-
-  const port = getPluginPort(pluginName);
-  if (!port) {
-    clientWs.close(4404, "Plugin not running");
-    return;
-  }
-
-  const upstream = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-
-  upstream.on("open", () => {
-    console.log(`[Plugins] WS proxy connected to "${pluginName}" on port ${port}`);
-  });
-
-  // Relay messages bidirectionally
-  upstream.on("message", data => {
-    if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data);
-  });
-  clientWs.on("message", data => {
-    if (upstream.readyState === WebSocket.OPEN) upstream.send(data);
-  });
-
-  // Propagate close in both directions
-  upstream.on("close", () => {
-    if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
-  });
-  clientWs.on("close", () => {
-    if (upstream.readyState === WebSocket.OPEN) upstream.close();
-  });
-
-  upstream.on("error", err => {
-    console.error(`[Plugins] WS proxy error for "${pluginName}":`, err.message);
-    if (clientWs.readyState === WebSocket.OPEN) clientWs.close(4502, "Upstream error");
-  });
-  clientWs.on("error", () => {
-    if (upstream.readyState === WebSocket.OPEN) upstream.close();
-  });
-}
-
-// WebSocket connection handler that routes based on URL path
-wss.on("connection", (ws, request) => {
-  const url = request.url;
-  console.log("[INFO] Client connected to:", url);
-
-  // Parse URL to get pathname without query parameters
-  const urlObj = new URL(url, "http://localhost");
-  const pathname = urlObj.pathname;
-
-  if (pathname === "/shell") {
-    handleShellConnection(ws);
-  } else if (pathname === "/ws") {
-    handleChatConnection(ws, request);
-  } else if (pathname.startsWith("/plugin-ws/")) {
-    handlePluginWsProxy(ws, pathname);
-  } else {
-    console.log("[WARN] Unknown WebSocket path:", pathname);
-    ws.close();
-  }
-});
-
-/**
- * WebSocket Writer - Wrapper for WebSocket to match SSEStreamWriter interface
- *
- * Provider files use `createNormalizedMessage()` from `providers/types.js` and
- * adapter `normalizeMessage()` to produce unified NormalizedMessage events.
- * The writer simply serialises and sends.
- */
-class WebSocketWriter {
-  constructor(ws, userId = null) {
-    this.ws = ws;
-    this.sessionId = null;
-    this.userId = userId;
-    this.isWebSocketWriter = true; // Marker for transport detection
-  }
-
-  send(data) {
-    const message = JSON.stringify(data);
-    if (this.ws.readyState === 1) {
-      // WebSocket.OPEN
-      this.ws.send(message);
-      return;
-    }
-
-    // A chat turn can outlive the browser WebSocket that submitted it
-    // (refresh, reconnect, dev-client hiccup). Keep the gateway stream live
-    // by handing subsequent frames to the user's replacement connection.
-    connectedClients.forEach(client => {
-      if (client.readyState !== 1) return; // WebSocket.OPEN
-      if (client.__satiUserId !== this.userId) return;
-      client.send(message);
-    });
-  }
-
-  updateWebSocket(newRawWs) {
-    this.ws = newRawWs;
-  }
-
-  setSessionId(sessionId) {
-    this.sessionId = sessionId;
-  }
-
-  getSessionId() {
-    return this.sessionId;
-  }
-}
-
-// Handle chat WebSocket connections
-function handleChatConnection(ws, request) {
-  console.log("[INFO] Chat WebSocket connected");
-
-  // Add to connected clients for project updates
-  const userId = request?.user?.id ?? request?.user?.userId ?? null;
-  ws.__satiUserId = userId;
-  connectedClients.add(ws);
-  // Sati's cron manager lives inside `sati server`;
-  // no legacy daemon lease is needed.
-  let cleanedUp = false;
-
-  // Wrap WebSocket with writer for consistent interface with SSEStreamWriter
-  const writer = new WebSocketWriter(ws, userId);
-  const streamWriter = {
-    send: data => broadcastChatFrame(data, ws, userId),
-  };
-
-  ws.on("message", async message => {
-    try {
-      const data = JSON.parse(message);
-
-      if (data.type === "ping") return;
-      const requestSessionId = normalizeSessionId(data.sessionId);
-
-      if (data.type === "watch-session") {
-        if (requestSessionId) {
-          sessionWatchRegistry.watch(requestSessionId, ws);
-        }
-        return;
-      }
-
-      if (data.type === "unwatch-session") {
-        if (requestSessionId) {
-          sessionWatchRegistry.unwatch(requestSessionId, ws);
-        }
-        return;
-      }
-
-      if (
-        data.type === "sati-command" ||
-        // Deprecated: legacy per-provider frame types kept for back-compat.
-        data.type === "claude-command" ||
-        data.type === "cursor-command" ||
-        data.type === "codex-command" ||
-        data.type === "gemini-command"
-      ) {
-        console.log("[DEBUG] User message:", data.command || "[Continue/Resume]");
-        console.log("📁 Project:", data.options?.projectPath || data.options?.cwd || "Unknown");
-        console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
-        const commandSessionId = normalizeSessionId(data.options?.sessionId || data.options?.sessionKey);
-        if (commandSessionId) {
-          sessionWatchRegistry.watch(commandSessionId, ws);
-          const userVisibleInput =
-            typeof data.options?.userVisibleInput === "string" ? data.options.userVisibleInput.trim() : "";
-          if (userVisibleInput) {
-            const nowIso = new Date().toISOString();
-            const provider = data.options?.providerHint || "sati";
-            const optimisticUserFrame = createNormalizedMessage({
-              id: `local_ws_user_${crypto.randomUUID()}`,
-              sessionId: commandSessionId,
-              provider,
-              kind: "text",
-              role: "user",
-              content: userVisibleInput,
-              ...(Array.isArray(data.options?.attachments) && data.options.attachments.length > 0
-                ? { attachments: data.options.attachments }
-                : {}),
-              timestamp: nowIso,
-            });
-            const optimisticStatusFrame = createNormalizedMessage({
-              id: `local_ws_status_${crypto.randomUUID()}`,
-              sessionId: commandSessionId,
-              provider,
-              kind: "status",
-              text: "Processing",
-              canInterrupt: true,
-              timestamp: nowIso,
-            });
-            // The submitting tab already rendered its optimistic user row.
-            // Push only to sibling watchers so they mirror instantly.
-            broadcastToSessionWatchers(commandSessionId, optimisticUserFrame, userId, ws);
-            broadcastToSessionWatchers(commandSessionId, optimisticStatusFrame, userId, ws);
-          }
-        }
-        const providerHint = data.options?.providerHint || data.type.replace("-command", "");
-        await runChatViaGateway(data.command, data.options, streamWriter, providerHint);
-      } else if (data.type === "abort-session") {
-        console.log("[DEBUG] Abort session request:", data.sessionId);
-        const provider = data.provider || "sati";
-        const success = await abortViaGateway(data.sessionId, provider);
-        writer.send(
-          createNormalizedMessage({
-            kind: "complete",
-            exitCode: success ? 0 : 1,
-            aborted: true,
-            success,
-            sessionId: data.sessionId,
-            provider,
-          }),
-        );
-      } else if (data.type === "permission-response") {
-        if (data.requestId) {
-          await decidePermissionViaGateway(data.requestId, data.allow ? "allow" : "deny", {
-            remember: Boolean(data.rememberEntry),
-            reason: data.message,
-          });
-          const resolvedSessionId = normalizeSessionId(data.sessionId);
-          if (resolvedSessionId) {
-            broadcastToSessionWatchers(
-              resolvedSessionId,
-              createNormalizedMessage({
-                kind: "permission_cancelled",
-                requestId: data.requestId,
-                sessionId: resolvedSessionId,
-                provider: data.provider || "sati",
-              }),
-              userId,
-            );
-          }
-        }
-      } else if (data.type === "approval-response") {
-        // 输出门禁 HITL 审批：通过/拒绝一条挂起审批（verdict: adopted | rejected）。
-        const verdict = data.verdict === "adopted" ? "adopted" : "rejected";
-        const result = await approvalDecideViaGateway(
-          data.sessionId,
-          data.pendingIndex,
-          verdict,
-          typeof data.feedback === "string" ? data.feedback : undefined,
-        );
-        const resolvedSessionId = normalizeSessionId(data.sessionId);
-        if (result?.delivered && resolvedSessionId) {
-          // 通知同会话 watchers 移除审批卡片（乐观移除的兜底广播）。
-          broadcastToSessionWatchers(
-            resolvedSessionId,
-            createNormalizedMessage({
-              kind: "approval_resolved",
-              pendingIndex: data.pendingIndex,
-              verdict,
-              sessionId: resolvedSessionId,
-              provider: data.provider || "sati",
-            }),
-            userId,
-          );
-        }
-      } else if (data.type === "session-permission-grant") {
-        const result = await grantSessionPermissionViaGateway(data.sessionId, data.entry);
-        ws.send(
-          JSON.stringify({
-            type: "session-permission-grant-result",
-            requestId: typeof data.requestId === "string" ? data.requestId : null,
-            sessionId: data.sessionId,
-            entry: data.entry,
-            granted: result.granted === true,
-            ...(typeof result.entry === "string" ? { grantedEntry: result.entry } : {}),
-          }),
-        );
-      } else if (data.type === "elicitation-response") {
-        if (data.requestId) {
-          await elicitationRespondViaGateway(data.requestId, data.answer);
-          const resolvedSessionId = normalizeSessionId(data.sessionId);
-          if (resolvedSessionId) {
-            broadcastToSessionWatchers(
-              resolvedSessionId,
-              createNormalizedMessage({
-                kind: "permission_cancelled",
-                requestId: data.requestId,
-                sessionId: resolvedSessionId,
-                provider: data.provider || "sati",
-              }),
-              userId,
-            );
-          }
-        }
-      } else if (data.type === "check-session-status") {
-        const sessionId = data.sessionId;
-        if (normalizeSessionId(sessionId)) {
-          sessionWatchRegistry.watch(sessionId, ws);
-        }
-        const provider = data.provider || "sati";
-        const includeActiveTurnMessages = data.includeActiveTurnMessages !== false;
-        // Gateway activity may be unavailable (disconnected, restarting). In
-        // that case report unknown (`isProcessing: null`) instead of inactive
-        // so the UI keeps the session in a synchronizing state rather than
-        // cancelling running subagents or clearing the active run.
-        const activity = await getSessionActivityViaGateway(sessionId, provider, includeActiveTurnMessages);
-        writer.send({
-          type: "session-status",
-          sessionId,
-          provider,
-          isProcessing: activity.isProcessing,
-          activeRunId: activity.activeRunId,
-          activeTurnMessages: activity.activeTurnMessages,
-          tokenBudget: getSessionTokenBudget(sessionId),
-        });
-      } else if (data.type === "get-pending-permissions") {
-        // Pending-permission introspection is gateway-internal. The
-        // permission_request event already contains everything the
-        // UI needs, so the response is now an empty stub.
-        writer.send({
-          type: "pending-permissions-response",
-          sessionId: data.sessionId,
-          data: [],
-        });
-      } else if (data.type === "get-active-sessions") {
-        const ids = getActiveSessionIdsViaGateway();
-        // Keep the four-provider keys so the legacy UI store does
-        // not need to change shape; everything routes through
-        // Sati under the hood.
-        writer.send({
-          type: "active-sessions",
-          sessions: { claude: ids, cursor: [], codex: [], gemini: [], sati: ids },
-        });
-      }
-    } catch (error) {
-      console.error("[ERROR] Chat WebSocket error:", error.message);
-      writer.send({
-        type: "error",
-        error: error.message,
-      });
-    }
-  });
-
-  const cleanup = () => {
-    if (cleanedUp) return;
-    cleanedUp = true;
-    // Remove from connected clients
-    connectedClients.delete(ws);
-    sessionWatchRegistry.removeClient(ws);
-  };
-
-  ws.on("close", (code, reason) => {
-    const reasonText = reason?.toString?.() || "";
-    console.log(`🔌 Chat client disconnected code=${code}${reasonText ? ` reason=${reasonText}` : ""}`);
-    cleanup();
-  });
-  ws.on("error", () => {
-    cleanup();
-  });
-}
-
-// Handle shell WebSocket connections
 // Mixed chat attachment upload endpoint. Images are returned as data URLs for
 // multimodal input/previews and are also staged under the project so the agent
 // can operate on the same bytes by path; other files are staged by path only.
