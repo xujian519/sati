@@ -383,7 +383,7 @@ ui/server/
 
 **DoD**：index.js ≤ 400 行（entry 组装）；12 个新模块各 ≤ 500 行；`pnpm --filter sati-ui test` 全绿；冒烟点清单逐项通过。
 
-> ✅ **B1-B4 + B5-1 已完成（2026-08-16/17）**：B1 services 纯函数层（#59，index 3845→3013）、B2 broadcast 状态中枢（#60，单一来源）、B3 projects-watcher（#61）、B4a shell.js（#62）、B4b chat.js（#63，index →~1971）、B5-1 system.js（#64，index →1658）。剩余 B5-2~6（project-sessions/project-files/project-preview/project-uploads/token-usage）+ B6 收尾。
+> ✅ **轨道 B 全部完成（2026-08-17）**：B1 services 纯函数层（#59）、B2 broadcast 状态中枢（#60）、B3 projects-watcher（#61）、B4a shell.js（#62）、B4b chat.js（#63）、B5-1 system.js（#64）、B5-2 project-sessions.js（#66）、B5-3 project-files.js（#67）、B5-4 project-preview.js（#68）、B5-5 project-uploads.js（#69）、B5-6 token-usage.js（#70）、B6 index.js 收尾（#71，445→244）。**index.js 3845 → 244 行（-94%），DoD 全部达成**：单文件 ≤500、index.js ≤400（entry 组装）、pnpm --filter sati-ui test 501 全绿。12 个新模块：websocket/{broadcast,chat,shell}、services/{filesystem,uploads,projects-watcher,rate-limit,server-boot}、routes/{system,project-sessions,project-files,project-preview,project-uploads,token-usage}。**巨无霸函数拆解专项（轨道 A + 轨道 B）全部完成 ✅**
 
 ---
 
