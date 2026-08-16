@@ -383,6 +383,8 @@ ui/server/
 
 **DoD**：index.js ≤ 400 行（entry 组装）；12 个新模块各 ≤ 500 行；`pnpm --filter sati-ui test` 全绿；冒烟点清单逐项通过。
 
+> ✅ **B1-B4 + B5-1 已完成（2026-08-16/17）**：B1 services 纯函数层（#59，index 3845→3013）、B2 broadcast 状态中枢（#60，单一来源）、B3 projects-watcher（#61）、B4a shell.js（#62）、B4b chat.js（#63，index →~1971）、B5-1 system.js（#64，index →1658）。剩余 B5-2~6（project-sessions/project-files/project-preview/project-uploads/token-usage）+ B6 收尾。
+
 ---
 
 ## 6. 排期与批次
