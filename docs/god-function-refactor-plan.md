@@ -216,6 +216,8 @@ legal/
 
 > ✅ **A3 轮次 1（legal-search 侧）已完成（2026-08-16）**：`extractLawKeywords`/`SPLIT_WORDS` → `src/knowledge/legal/keywords.ts`（纯函数）；`legal-search.ts` 改 import + 本地 re-export（导出面不变）；**两处跨域 import 同步改**（knowledge-law-search.ts:25、case-law-search.ts:22 → `./keywords.js`/`../legal/keywords.js`，消除对 LegalSearchEngine 文件的耦合）；新增 `tests/knowledge/legal-keywords.spec.ts`（5 用例：切词/无虚词/2 字过滤/空查询/max 截断）。
 
+> ✅ **A5 轮次 2-3 已完成（2026-08-16）**：`LawRow` + `toRecord`/`toSearchResult` → `legal/row-mapper.ts`；`dedupeByLawName` → `legal/dedupe.ts`（消除 searchFts/searchFtsKeywords 的重复去重段）；列选择常量 + `buildLawSearchSql` → `legal/sql.ts`（消除两处 23 行重复 FTS 动态 SQL，like 动态分支同源）；legal-search.ts 362 → ~270 行。新增 `legal-dedupe.spec.ts`（3 例）+ `legal-row-mapper.spec.ts`（3 例）。
+
 ---
 
 ### 5.5 `src/mcp/client/McpClient.ts`（425 行 → 薄门面 + 5 个单向依赖模块）

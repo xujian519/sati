@@ -4,6 +4,9 @@ import { LAWS_DB } from "../shared/schema-versions.js";
 import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
 import { extractLawKeywords } from "./keywords.js";
+import { buildLawSearchSql, LAW_SEARCH_COLUMNS, LAW_SEARCH_COLUMNS_FTS } from "./sql.js";
+import { dedupeByLawName } from "./dedupe.js";
+import { toRecord, toSearchResult, type LawRow } from "./row-mapper.js";
 
 export { extractLawKeywords } from "./keywords.js";
 
@@ -21,22 +24,6 @@ export { extractLawKeywords } from "./keywords.js";
  */
 
 /** 长查询切词（extractLawKeywords 见 ./keywords.ts，被 case-law/knowledge-law 跨域复用）。 */
-
-type LawRow = {
-  id: string;
-  level: string;
-  name: string;
-  filename: string | null;
-  publish: string | null;
-  expired: number;
-  category_id: number;
-  subtitle: string | null;
-  valid_from: string | null;
-  content: string | null;
-  category_name: string | null;
-  /** FTS5 BM25 分数（负值，越大越相关；仅 FTS 路径有值）。 */
-  fts_rank?: number | null;
-};
 
 export type LegalSearchOptions = {
   /** 返回条数上限（默认 10）。 */
@@ -73,9 +60,7 @@ export class LegalSearchEngine implements LegalSearchSource {
     // 基础（无 level/category 过滤）版本，热路径上避免逐次 prepare；
     // 带过滤条件的查询仍走动态 SQL（调用频率低）。
     this.stmtSearchLike = this.db.prepare(`
-      SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
-             l.category_id, l.subtitle, l.valid_from, l.content,
-             c.name AS category_name
+      SELECT ${LAW_SEARCH_COLUMNS}
       FROM law l
       JOIN category c ON c.id = l.category_id
       WHERE (l.name LIKE ? ESCAPE '\\' OR l.content LIKE ? ESCAPE '\\')
@@ -89,10 +74,7 @@ export class LegalSearchEngine implements LegalSearchSource {
     if (this.hasFts) {
       try {
         this.stmtSearchFts = this.db.prepare(`
-      SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
-             l.category_id, l.subtitle, l.valid_from, l.content,
-             c.name AS category_name,
-             bm25(law_fts) AS fts_rank
+      SELECT ${LAW_SEARCH_COLUMNS_FTS}
       FROM law_fts
       JOIN law l ON l.name = law_fts.name
       JOIN category c ON c.id = l.category_id
@@ -106,9 +88,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       }
     }
     this.stmtFindByName = this.db.prepare(`
-      SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
-              l.category_id, l.subtitle, l.valid_from, l.content,
-              c.name AS category_name
+      SELECT ${LAW_SEARCH_COLUMNS}
       FROM law l
       JOIN category c ON c.id = l.category_id
       WHERE l.name LIKE ? ESCAPE '\\'
@@ -116,9 +96,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       LIMIT ?
     `);
     this.stmtGetById = this.db.prepare(`
-      SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
-              l.category_id, l.subtitle, l.valid_from, l.content,
-              c.name AS category_name
+      SELECT ${LAW_SEARCH_COLUMNS}
       FROM law l
       JOIN category c ON c.id = l.category_id
       WHERE l.id = ?
@@ -167,19 +145,19 @@ export class LegalSearchEngine implements LegalSearchSource {
       }
     }
 
-    return rows.map(row => this.toSearchResult(row));
+    return rows.map(row => toSearchResult(row));
   }
 
   /** 按名称精确/模糊查找法律（返回全部版本记录）。 */
   findByName(name: string, limit = 10): LawRecord[] {
     const rows = this.stmtFindByName.all(`%${name.replace(/[%_\\]/g, m => `\\${m}`)}%`, limit) as LawRow[];
-    return rows.map(this.toRecord);
+    return rows.map(toRecord);
   }
 
   /** 按 id（主键）精确查询。 */
   getById(id: string): LawRecord | undefined {
     const row = this.stmtGetById.get(id) as LawRow | undefined;
-    return row ? this.toRecord(row) : undefined;
+    return row ? toRecord(row) : undefined;
   }
 
   /** 批量按 id 查询（一次 IN 查询，替代循环 getById 的逐次 prepare+执行）。 */
@@ -193,15 +171,13 @@ export class LegalSearchEngine implements LegalSearchSource {
     const placeholders = uniqueIds.map(() => "?").join(", ");
     const rows = this.db
       .prepare(`
-      SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
-              l.category_id, l.subtitle, l.valid_from, l.content,
-              c.name AS category_name
+      SELECT ${LAW_SEARCH_COLUMNS}
       FROM law l
       JOIN category c ON c.id = l.category_id
       WHERE l.id IN (${placeholders})
     `)
       .all(...uniqueIds) as LawRow[];
-    return rows.map(this.toRecord);
+    return rows.map(toRecord);
   }
 
   /** 列出全部分类（category 表）。 */
@@ -228,42 +204,11 @@ export class LegalSearchEngine implements LegalSearchSource {
     if (!options.level && !options.category) {
       rows = this.stmtSearchFts!.all(`"${escaped}"`, limit * 3) as LawRow[];
     } else {
-      let sql = `
-        SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
-               l.category_id, l.subtitle, l.valid_from, l.content,
-               c.name AS category_name,
-               bm25(law_fts) AS fts_rank
-        FROM law_fts
-        JOIN law l ON l.name = law_fts.name
-        JOIN category c ON c.id = l.category_id
-        WHERE law_fts MATCH ?
-          AND (l.expired = 0 OR l.expired IS NULL)
-      `;
-      const params: Array<string | number> = [`"${escaped}"`];
-      if (options.level) {
-        sql += " AND l.level = ?";
-        params.push(options.level);
-      }
-      if (options.category) {
-        sql += " AND c.name = ?";
-        params.push(options.category);
-      }
-      // 先按发布时间倒序再按相关度：同名多版本去重时保留现行有效的最新版
-      sql += " ORDER BY l.publish DESC, bm25(law_fts) LIMIT ?";
-      params.push(limit * 3); // 放大取数，供 JS 层按 name 去重
-      rows = this.db.prepare(sql).all(...params) as LawRow[];
+      const { sql, params } = buildLawSearchSql("fts", options);
+      rows = this.db.prepare(sql).all(`"${escaped}"`, ...params, limit * 3) as LawRow[];
     }
-
-    // 按 name 去重，保留最新发布版本的记录
-    const seen = new Set<string>();
-    const deduped: LawRow[] = [];
-    for (const row of rows) {
-      if (seen.has(row.name)) continue;
-      seen.add(row.name);
-      deduped.push(row);
-      if (deduped.length >= limit) break;
-    }
-    return deduped;
+    // 放大取数（limit * 3）后按 name 去重，保留最新发布版本
+    return dedupeByLawName(rows, limit);
   }
 
   /** 多个关键词 OR 组合的 FTS 查询（用于长查询切词降级）。 */
@@ -273,40 +218,10 @@ export class LegalSearchEngine implements LegalSearchSource {
     if (!options.level && !options.category) {
       rows = this.stmtSearchFts!.all(escaped, limit * 3) as LawRow[];
     } else {
-      let sql = `
-        SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
-               l.category_id, l.subtitle, l.valid_from, l.content,
-               c.name AS category_name,
-               bm25(law_fts) AS fts_rank
-        FROM law_fts
-        JOIN law l ON l.name = law_fts.name
-        JOIN category c ON c.id = l.category_id
-        WHERE law_fts MATCH ?
-          AND (l.expired = 0 OR l.expired IS NULL)
-      `;
-      const params: Array<string | number> = [escaped];
-      if (options.level) {
-        sql += " AND l.level = ?";
-        params.push(options.level);
-      }
-      if (options.category) {
-        sql += " AND c.name = ?";
-        params.push(options.category);
-      }
-      sql += " ORDER BY l.publish DESC, bm25(law_fts) LIMIT ?";
-      params.push(limit * 3);
-      rows = this.db.prepare(sql).all(...params) as LawRow[];
+      const { sql, params } = buildLawSearchSql("fts", options);
+      rows = this.db.prepare(sql).all(escaped, ...params, limit * 3) as LawRow[];
     }
-
-    const seen = new Set<string>();
-    const deduped: LawRow[] = [];
-    for (const row of rows) {
-      if (seen.has(row.name)) continue;
-      seen.add(row.name);
-      deduped.push(row);
-      if (deduped.length >= limit) break;
-    }
-    return deduped;
+    return dedupeByLawName(rows, limit);
   }
 
   private searchLike(keyword: string, options: LegalSearchOptions, limit: number): LawRow[] {
@@ -315,48 +230,9 @@ export class LegalSearchEngine implements LegalSearchSource {
     if (!options.level && !options.category) {
       rows = this.stmtSearchLike.all(pattern, pattern, limit) as LawRow[];
     } else {
-      let sql = `
-        SELECT l.id, l.level, l.name, l.filename, l.publish, l.expired,
-               l.category_id, l.subtitle, l.valid_from, l.content,
-               c.name AS category_name
-        FROM law l
-        JOIN category c ON c.id = l.category_id
-        WHERE (l.name LIKE ? ESCAPE '\\' OR l.content LIKE ? ESCAPE '\\')
-          AND (l.expired = 0 OR l.expired IS NULL)
-      `;
-      const params: Array<string | number> = [pattern, pattern];
-      if (options.level) {
-        sql += " AND l.level = ?";
-        params.push(options.level);
-      }
-      if (options.category) {
-        sql += " AND c.name = ?";
-        params.push(options.category);
-      }
-      sql += ' ORDER BY l.publish DESC, l."order" LIMIT ?';
-      params.push(limit);
-      rows = this.db.prepare(sql).all(...params) as LawRow[];
+      const { sql, params } = buildLawSearchSql("like", options);
+      rows = this.db.prepare(sql).all(pattern, pattern, ...params, limit) as LawRow[];
     }
     return rows;
-  }
-
-  private toRecord(row: LawRow): LawRecord {
-    return {
-      id: row.id,
-      level: row.level,
-      name: row.name,
-      filename: row.filename ?? undefined,
-      publish: row.publish ?? undefined,
-      expired: row.expired,
-      categoryId: row.category_id,
-      subtitle: row.subtitle ?? undefined,
-      validFrom: row.valid_from ?? undefined,
-      content: row.content ?? undefined,
-      categoryName: row.category_name ?? undefined,
-    };
-  }
-
-  private toSearchResult(row: LawRow): LawSearchResult {
-    return { ...this.toRecord(row), score: row.fts_rank ?? 0 };
   }
 }
