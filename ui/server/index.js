@@ -53,17 +53,7 @@ import JSZip from "jszip";
 import { getSplatPath } from "./utils/splatPath.js";
 import { getOpenUrlSpawnCommand } from "./utils/processSpawn.js";
 
-import {
-  getProjects,
-  getSessions,
-  renameProject,
-  deleteSession,
-  deleteProject,
-  addProjectManually,
-  extractProjectDirectory,
-  clearProjectDirectoryCache,
-  searchConversations,
-} from "./projects.js";
+import { extractProjectDirectory, clearProjectDirectoryCache } from "./projects.js";
 import { approvalListPendingViaGateway, getSessionTokenBudget } from "./sati-bridge.js";
 import gitRoutes from "./routes/git.js";
 import authRoutes from "./routes/auth.js";
@@ -115,6 +105,7 @@ import {
   validatePathInProject,
 } from "./services/filesystem.js";
 import { uploadFilesHandler } from "./services/uploads.js";
+import projectSessionsRoutes from "./routes/project-sessions.js";
 import systemRoutes from "./routes/system.js";
 import { officePreviewPdfRateLimiter, officePreviewStatusRateLimiter } from "./services/rate-limit.js";
 import {
@@ -124,7 +115,7 @@ import {
   stopMemoryScheduler,
 } from "./services/memoryService.js";
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from "./utils/plugin-process-manager.js";
-import { initializeDatabase, sessionNamesDb, applyCustomSessionNames, userDb } from "./database/db.js";
+import { initializeDatabase, userDb } from "./database/db.js";
 import { configureWebPush } from "./services/vapid-keys.js";
 
 import { runServerStartupBeforeListen, startServerAfterStartup } from "./services/server-startup.js";
@@ -138,7 +129,6 @@ import { createChatWebSocketServer } from "./websocket/chat.js";
 
 // Sati-only mode: chat execution always goes through src/gateway via
 // cursor-cli, openai-codex, gemini-cli) has been removed.
-const VALID_PROVIDERS = ["sati"];
 
 const app = express();
 const server = http.createServer(app);
@@ -258,166 +248,7 @@ app.use(
 // /api/system/update was the V1 "Update available" banner backend; the
 // VersionUpgradeModal that consumed it was removed during the V1 cleanup.
 
-app.get("/api/projects", authenticateToken, async (req, res) => {
-  try {
-    const projects = await getProjects(broadcastProgress);
-    res.json(projects);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get("/api/projects/:projectName/sessions", authenticateToken, async (req, res) => {
-  try {
-    const { limit = 5, offset = 0 } = req.query;
-    const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
-    applyCustomSessionNames(result.sessions, "sati");
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Rename project endpoint
-app.put("/api/projects/:projectName/rename", authenticateToken, async (req, res) => {
-  try {
-    const { displayName } = req.body;
-    await renameProject(req.params.projectName, displayName);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete session endpoint
-app.delete("/api/projects/:projectName/sessions/:sessionId", authenticateToken, async (req, res) => {
-  try {
-    const { projectName, sessionId } = req.params;
-    console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
-    await deleteSession(projectName, sessionId, {
-      sessionKind: req.query.sessionKind || null,
-      parentSessionId: req.query.parentSessionId || null,
-      relativeTranscriptPath: req.query.relativeTranscriptPath || null,
-    });
-    sessionNamesDb.deleteName(sessionId, "sati");
-    console.log(`[API] Session ${sessionId} deleted successfully`);
-    res.json({ success: true });
-  } catch (error) {
-    console.error(`[API] Error deleting session ${req.params.sessionId}:`, error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Rename session endpoint
-app.put("/api/sessions/:sessionId/rename", authenticateToken, async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9._-]/g, "");
-    if (!safeSessionId || safeSessionId !== String(sessionId)) {
-      return res.status(400).json({ error: "Invalid sessionId" });
-    }
-    const { summary, provider } = req.body;
-    if (!summary || typeof summary !== "string" || summary.trim() === "") {
-      return res.status(400).json({ error: "Summary is required" });
-    }
-    if (summary.trim().length > 500) {
-      return res.status(400).json({ error: "Summary must not exceed 500 characters" });
-    }
-    if (!provider || !VALID_PROVIDERS.includes(provider)) {
-      return res.status(400).json({ error: `Provider must be one of: ${VALID_PROVIDERS.join(", ")}` });
-    }
-    sessionNamesDb.setName(safeSessionId, provider, summary.trim());
-    res.json({ success: true });
-  } catch (error) {
-    console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete project endpoint (force=true to delete with sessions)
-app.delete("/api/projects/:projectName", authenticateToken, async (req, res) => {
-  try {
-    const { projectName } = req.params;
-    const force = req.query.force === "true";
-    await deleteProject(projectName, force);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Create project endpoint
-app.post("/api/projects/create", authenticateToken, async (req, res) => {
-  try {
-    const { path: projectPath } = req.body;
-
-    if (!projectPath || !projectPath.trim()) {
-      return res.status(400).json({ error: "Project path is required" });
-    }
-
-    const project = await addProjectManually(projectPath.trim());
-    res.json({ success: true, project });
-  } catch (error) {
-    console.error("Error creating project:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Search conversations content (SSE streaming)
-app.get("/api/search/conversations", authenticateToken, async (req, res) => {
-  const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
-  const parsedLimit = Number.parseInt(String(req.query.limit), 10);
-  const limit = Number.isNaN(parsedLimit) ? 50 : Math.max(1, Math.min(parsedLimit, 100));
-
-  if (query.length < 2) {
-    return res.status(400).json({ error: "Query must be at least 2 characters" });
-  }
-
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
-
-  let closed = false;
-  const abortController = new AbortController();
-  req.on("close", () => {
-    closed = true;
-    abortController.abort();
-  });
-
-  try {
-    await searchConversations(
-      query,
-      limit,
-      ({ projectResult, totalMatches, scannedProjects, totalProjects }) => {
-        if (closed) return;
-        if (projectResult) {
-          res.write(
-            `event: result\ndata: ${JSON.stringify({ projectResult, totalMatches, scannedProjects, totalProjects })}\n\n`,
-          );
-        } else {
-          res.write(`event: progress\ndata: ${JSON.stringify({ totalMatches, scannedProjects, totalProjects })}\n\n`);
-        }
-      },
-      abortController.signal,
-    );
-    if (!closed) {
-      res.write(`event: done\ndata: {}\n\n`);
-    }
-  } catch (error) {
-    console.error("Error searching conversations:", error);
-    if (!closed) {
-      res.write(`event: error\ndata: ${JSON.stringify({ error: "Search failed" })}\n\n`);
-    }
-  } finally {
-    if (!closed) {
-      res.end();
-    }
-  }
-});
-
+app.use(projectSessionsRoutes);
 app.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
   try {
     const { path: dirPath } = req.query;
