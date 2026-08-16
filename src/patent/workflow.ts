@@ -39,6 +39,7 @@ import {
   type WorkflowStage,
   type WorkflowStageResult,
 } from "./workflow/types.js";
+import { signalFor, signalMatches } from "./workflow/signal.js";
 
 // ---- 门面再导出（保持 "./workflow.js" 消费面不变） ----
 export { WorkflowError };
@@ -153,36 +154,8 @@ export async function runWorkflow(
   const stageIds = new Map(manifest.stages.map((s, i) => [s.id, i]));
   // 回退计数（局部 Map，不污染 PipelineState；跨阶段重入持久，防无限回退）。
   const rewindCounts = new Map<string, number>();
-  // 信号正则预编译（manifest 常量，避免每次执行/回退重新编译）。
+  // 信号正则预编译（manifest 常量，避免每次执行/回退重新编译；判定逻辑见 ./workflow/signal.ts）。
   const signalCache = new Map<string, RegExp>();
-  const signalFor = (stage: WorkflowStage): RegExp | undefined => {
-    if (stage.retry === undefined) return undefined;
-    const cached = signalCache.get(stage.id);
-    if (cached !== undefined) return cached;
-    // g 标志必需：signalMatches 用 exec 遍历全部匹配位置（无 g 时 exec 每次从头匹配 → 死循环）
-    const compiled = new RegExp(stage.retry.whenOutputMatches, "gi");
-    signalCache.set(stage.id, compiled);
-    return compiled;
-  };
-
-  /**
-   * 信号触发判定：匹配位置前窗口内出现否定词（不/未/无/没，无句界分隔）
-   * 时视为否定性表述（"未发现不一致""不缺少任何特征"），不触发回退。
-   */
-  const signalMatches = (text: string, signal: RegExp): boolean => {
-    let match: RegExpExecArray | null;
-    const RE = /[不未无没]/;
-    signal.lastIndex = 0; // 带 g 标志的正则跨调用保留 lastIndex：回退重入前必须重置，否则 exec 直接返回 null
-    while ((match = signal.exec(text)) !== null) {
-      const start = Math.max(0, match.index - 12);
-      const before = text.slice(start, match.index);
-      if (!before.includes("。") && !before.includes("；") && !before.includes(";") && !RE.test(before)) {
-        return true;
-      }
-      if (match[0].length === 0) signal.lastIndex += 1;
-    }
-    return false;
-  };
 
   /**
    * 执行单个 stage（含重试循环与 degraded 输出构造），不处理信号回退。
@@ -310,7 +283,7 @@ export async function runWorkflow(
     // 一致性重试循环（对齐 Mady check_consistency 条件回退边）：输出触发信号时
     // 回退到 rewindTo 阶段重新执行（含中间阶段），覆盖被回退阶段的旧结果与 state。
     if (output.trim().length > 0 && stage.retry !== undefined) {
-      const signal = signalFor(stage);
+      const signal = signalFor(stage, signalCache);
       if (signal !== undefined && signalMatches(output, signal)) {
         const rewindTo = stage.retry.rewindTo ?? stage.id;
         const rewindIndex = stageIds.get(rewindTo)!;
