@@ -246,7 +246,9 @@ client/
 
 **DoD**：`McpClient.ts` ≤ 60 行（门面）；5 个新模块各 ≤ ~180 行、方法均 ≤ ~40 行；mcp 全量 spec 绿 + 新增盲区测试 ≥ 15 例。
 
-> ✅ **A6 轮次 1 已完成（2026-08-16）**：三个零依赖纯件下沉——`errors.ts`（McpClientError/isSessionExpired/withTimeout）、`toolSpec.ts`（toToolSpec，serverId 参数化）、`transport.ts`（buildTransport 返回 `{transport, perSessionDir}` 消除 this 写、DEFAULT_CALL_TIMEOUT_MS 随迁）；McpClient.ts 删除 4 段（-150 行），`export { McpClientError }` re-export 保持 barrel 面。**白盒测试改写**：McpClient.spec "routes streamable_http fetches" 从 `client.buildTransport()` 私有访问改为直接测模块级 buildTransport（方案 §5.5 预警的脆断点）。新增盲区测试 11 例（errors 5 / transport 4 / toolSpec 3——其中 2 例修正断言：truncate 后缀 `… [truncated]`、SDK `_serverParams.args`）。剩余轮次（connection/operations/门面收口）为 A8/A9。
+> ✅ **A6 轮次 1 已完成（2026-08-16）**：三个零依赖纯件下沉——`errors.ts`（McpClientError/isSessionExpired/withTimeout）、`toolSpec.ts`（toToolSpec，serverId 参数化）、`transport.ts`（buildTransport 返回 `{transport, perSessionDir}` 消除 this 写、DEFAULT_CALL_TIMEOUT_MS 随迁）；McpClient.ts 删除 4 段（-150 行），`export { McpClientError }` re-export 保持 barrel 面。**白盒测试改写**：McpClient.spec "routes streamable_http fetches" 从 `client.buildTransport()` 私有访问改为直接测模块级 buildTransport（方案 §5.5 预警的脆断点）。新增盲区测试 11 例（errors 5 / transport 4 / toolSpec 3——其中 2 例修正断言：truncate 后缀 `… [truncated]`、SDK `_serverParams.args`）。
+
+> ✅ **A8 轮次 2 已完成（2026-08-16）**：连接状态机 → `client/connection.ts`（`McpConnection`：8 字段 + start/runConnect/requireClient/callWithReconnect/reconnect/recycle/close/peekInstructions/cleanupSessionDir，**"同步置空引用再 await close"并发不变式与 reconnectInFlight 单飞守卫逐字保留**；listToolsCache 随迁并暴露 getToolsCache/setToolsCache）；McpClient.ts 318 → ~110 行组合门面（保留 start() 委托——McpRuntime.ts:59 消费）。新增 `tests/mcp/client/connection.spec.ts`（6 例：start 幂等/失败重置/close 幂等+缓存清理/会话过期单飞重连/-32001 回收后新连接恢复）。剩余轮次（operations/门面收口）为 A9。
 
 ---
 
