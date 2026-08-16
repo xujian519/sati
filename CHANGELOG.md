@@ -2,6 +2,23 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.0.30 - 2026-08-16
+
+> **版本目标（2026-08-16）**：nuo 专利规则激活专项——把 96 条沉睡的确定性专利规则（XiaoNuo 移植）激活为生产能力，接入 `rule_check` 显式自检（A 链）与规则驱动输出门禁（B 链）；附 31 条 `action: block` 逐条评审与降级补丁。
+
+### Added
+- **nuo 规则激活评审**：31 条 `action: block` 逐条评审（样本验证实证 3 处 keyword 误伤）——2 保留 block（占位专利号/编造案号，零误伤）、1 降 review、15 降 warn（完整性提醒）、13 降 log（语义弱/过宽/重复）；48 warn + 17 log 批量复核全量接入。评审结论落 `rules/README.md`，机器可读权威落 `rules/patent/activation-overrides.yaml`（轻量补丁，加载时字段级覆盖 action）
+- **A 链（`rule_check` 显式自检）**：新增 `scope=patent-full` = compliance + nuo 全量（100 条，经 override 降级后 2 block / 2 review / 66 warn / 30 log）；存量 `scope=patent` 保持 4 条不变；`loadPatentFullRuleSet()`（显式 nuo 清单，规避 evidence-rules/synonyms 等非宪法资产误加载）+ `loadActivationOverrides()` + `applyRuleOverrides()`（字段级合并，与整条覆盖的 `mergeRuleSets` 互补）
+- **B 链（规则驱动输出门禁）**：`RuleOutputGate` 首次接入生产输出路径——`PatentOutputGate` 内部集成可选 `ruleGate`（两段式串接：关键词门禁 → 规则门禁），block/review 命中复用既有 `GatewayApprovalBus` 审批闭环（挂起可放行/拒绝），warn 命中追加合规提示；`selectGateRules()` 只保留「出现即违规」的 keyword_blocklist 规则（nuo 9 条，排除 compliance PAT-* 与 structural_analysis）；`PendingPatentMessage.ruleViolations` 供审批 UI 展示规则依据
+
+### Docs
+- `docs/nuo-rules-activation-plan.md`（专项实施计划：调研/评审/三链接线/实证修正/验收）
+- `rules/README.md` 新增「nuo 规则激活评审（2026-08-16）」章节（31 条逐条结论表 + 样本验证记录 + 4 项遗留）
+- `docs/technical-debt-report.md` 中期项 #9 勾选完成
+
+### Test
+- 新增 `tests/rule/patent-full-rule-set.spec.ts`（7 用例：规则数/降级生效/字段级合并/目录容错）+ `tests/patent/output-gate-rule.spec.ts`（6 用例：block 挂起/warn 提示/零污染/降级放行/两段式串接）；patent 域 355 + rule 域 104 用例全绿
+
 ## v0.0.29 - 2026-08-16
 
 > **版本目标（2026-08-16）**：deepseek-harness 优秀设计引入进入阶段四并全部落地（两个迭代 T1–T10）——测试可验证性（LLM 重放）、请求可重建（request invariant）、凭证双码、工具 outputSchema 强制、durable 边界、跨进程任务续算；另落地专利文档渲染管线与 cron 加固。

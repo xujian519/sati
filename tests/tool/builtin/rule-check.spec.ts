@@ -52,7 +52,7 @@ test("rule_check unknown scope is not silently clean", async () => {
   const text = result.content.map(c => (c.type === "text" ? c.text : "")).join("");
   // 未知 scope 显式提示"未加载规则"，避免"静默零违规"误判合规
   assert.match(text, /未加载任何规则/);
-  assert.match(text, /patent, patent-electrical, pack/);
+  assert.match(text, /patent, patent-electrical, patent-full, pack/);
   assert.doesNotMatch(text, /无违规/);
 });
 

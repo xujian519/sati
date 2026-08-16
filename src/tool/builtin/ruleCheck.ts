@@ -3,6 +3,7 @@ import {
   evaluateText,
   loadPatentComplianceRuleSet,
   loadPatentElectricalRuleSet,
+  loadPatentFullRuleSet,
   loadRulePack,
   loadSynonymsAsset,
   resolveRulePackManifestPath,
@@ -30,7 +31,7 @@ export type RuleCheckDeps = {
 };
 
 /** rule_check 支持的规则集 scope（description 与运行时报错共用）。 */
-const AVAILABLE_SCOPES = "patent, patent-electrical, pack";
+const AVAILABLE_SCOPES = "patent, patent-electrical, patent-full, pack";
 
 /**
  * `rule_check` — 宪法规则检查工具。
@@ -75,6 +76,8 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
       ruleSet = loadPatentComplianceRuleSet().ruleSet;
     } else if (scope === "patent-electrical") {
       ruleSet = loadPatentElectricalRuleSet().ruleSet;
+    } else if (scope === "patent-full") {
+      ruleSet = loadPatentFullRuleSet().ruleSet;
     } else {
       ruleSet = { rules: [] };
     }
@@ -97,6 +100,7 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
       "against the given text and return violations with severity, action and legal basis. " +
       "Use before publishing compliance-sensitive output (e.g. patent conclusions, legal opinions). " +
       `Scopes: 'patent' (general patent compliance), 'patent-electrical' (H-section electrical rules + general compliance), ` +
+      `'patent-full' (general compliance + full nuo patent rule set, activation-reviewed), ` +
       "or 'pack' (layered rule pack assembled from the project manifest .sati/rules.yaml: base + domains + overrides).",
     kind: "session",
     inputSchema: {

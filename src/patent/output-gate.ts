@@ -1,4 +1,5 @@
 import type { CanonicalContentBlock, CanonicalMessage } from "../model/index.js";
+import type { RuleOutputGate, RuleViolation } from "../rule/index.js";
 import { processPatentOutput, type QualityGateResult } from "./quality-gate.js";
 import { createApprovalRecord, type ApprovalStore } from "./approval.js";
 
@@ -30,6 +31,8 @@ export type PendingPatentMessage = {
   processed: CanonicalMessage;
   /** 门禁判定结果 */
   info: QualityGateResult;
+  /** 规则门禁违规清单（配置 ruleGate 时才有；供审批 UI 展示规则依据，含 warn/block/review） */
+  ruleViolations?: RuleViolation[];
   /** 产生消息的会话/轮次（processMessage 传入，供审批 UI 定位与审计） */
   sessionId?: string;
   turnId?: string;
@@ -42,6 +45,12 @@ export type PatentOutputGateOptions = {
   absolutePhrases?: string[];
   disclaimer?: string;
   enableCitationGate?: boolean;
+  /**
+   * 规则驱动门禁（可选）：关键词门禁之后串接。block/review 命中同样挂起审批
+   * （复用同一 pending/approve/reject 流程控制），warn 命中追加合规提示。
+   * 未配置时行为与历史一致（仅关键词门禁）。
+   */
+  ruleGate?: RuleOutputGate;
   /** 挂起队列容量上限（默认 100）：超出时放弃挂起、直接入库（不丢消息）。 */
   maxPending?: number;
   /** 挂起消息 TTL 毫秒（默认 0 = 不过期）：超期未审批自动清理并告警。 */
@@ -114,16 +123,24 @@ export class PatentOutputGate {
       enableCitationGate: this.options.enableCitationGate,
     });
 
-    const processed = info.text === text ? message : replaceLastTextBlock(message, info.text);
+    // 第二段：规则驱动门禁（可选）。关键词门禁产物作为输入，规则 warn 追加在关键词处理后；
+    // block/review 命中与关键词审批命中同走挂起审批（D3 两段式串接，不合并两套语义）。
+    const ruleResult = this.options.ruleGate?.process(info.text);
+    const finalText = ruleResult?.text ?? info.text;
+    // info.text 同步为最终入库文本（含规则 warn 追加），保持门禁判定与入库内容一致
+    const mergedInfo: QualityGateResult = ruleResult === undefined ? info : { ...info, text: finalText };
 
-    if (info.needsApproval && this.options.onPending && context?.skipApproval !== true) {
+    const processed = finalText === text ? message : replaceLastTextBlock(message, finalText);
+
+    const needsApproval = mergedInfo.needsApproval || (ruleResult?.needsApproval ?? false);
+    if (needsApproval && this.options.onPending && context?.skipApproval !== true) {
       const maxPending = this.options.maxPending ?? 100;
       if (this.pending.size >= maxPending) {
         // 队列已满：放弃挂起、直接入库（fail-open，保证用户可见回复不丢失；
         // 风险内容仍带免责声明/存疑提示。security 权衡已记录：严格合规场景
         // 应提高 maxPending 并确保审批端及时消费，或改为 fail-closed 拒绝输出）。
         console.warn(`[PatentOutputGate] 挂起队列已满（${maxPending}），审批词消息直接入库`);
-        return { message: processed, needsApproval: false, info };
+        return { message: processed, needsApproval: false, info: mergedInfo };
       }
       const index = this.nextIndex;
       this.nextIndex += 1;
@@ -131,7 +148,8 @@ export class PatentOutputGate {
         index,
         message,
         processed,
-        info,
+        info: mergedInfo,
+        ruleViolations: ruleResult?.violations,
         sessionId: context?.sessionId,
         turnId: context?.turnId,
         createdAt: this.now(),
@@ -140,10 +158,10 @@ export class PatentOutputGate {
       // onPending 不在挂起时立即触发：等待宿主转录写入确认后由 flushPending 触发
       // （D1：避免写入失败时审批端感知到悬空挂起条目；restore() 语义保留给会话恢复）。
       this.unflushed.add(index);
-      return { message: processed, needsApproval: true, pendingIndex: index, info };
+      return { message: processed, needsApproval: true, pendingIndex: index, info: mergedInfo };
     }
 
-    return { message: processed, needsApproval: false, info };
+    return { message: processed, needsApproval: false, info: mergedInfo };
   }
 
   /**
@@ -228,7 +246,7 @@ export class PatentOutputGate {
       pendingIndex: pending.index,
       sessionId: pending.sessionId,
       turnId: pending.turnId,
-      triggerKeyword: pending.info.approvalKeywordsHit[0] ?? "unknown",
+      triggerKeyword: pending.info.approvalKeywordsHit[0] ?? pending.ruleViolations?.[0]?.ruleId ?? "unknown",
       originalOutputPreview: extractMessageText(pending.message),
       verdict: decision.verdict,
       ...(decision.modifiedOutput !== undefined ? { modifiedOutput: decision.modifiedOutput } : {}),
