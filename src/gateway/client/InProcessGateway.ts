@@ -3,12 +3,11 @@ import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { DiscoveryPlanService } from "../../always-on/web/DiscoveryPlanService.js";
-import type { AgentEvent, AgentInput, AgentTurnResult, AgentError } from "../../agent/index.js";
+import type { AgentEvent, AgentInput, AgentTurnResult } from "../../agent/index.js";
 import {
   flattenToolResultBlockText,
   type CanonicalContentBlock,
   type CanonicalMessage,
-  type CanonicalModelError,
   type CanonicalModelEvent,
 } from "../../model/index.js";
 import { contentToText } from "../../tool/index.js";
@@ -105,10 +104,23 @@ import type {
 } from "../../extension/skills/types.js";
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import type { TelemetryClient, TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
+import {
+  extensionForMime,
+  limitGatewayToolResultPreview,
+  previewUnknown,
+  safeGatewayPathPart,
+  sanitizeGatewayToolData,
+} from "./toolResultSanitize.js";
+import { providerErrorFromAgentError, providerErrorFromModelError } from "./providerError.js";
+import {
+  PLAN_COMMAND_USAGE,
+  normalizeGatewayModeForLegacyInput,
+  normalizeGatewayRunMode,
+  normalizePlanCommandInput,
+} from "./normalizers.js";
 
-const PLAN_COMMAND_USAGE = "用法：/plan <任务>\n例如：/plan 设计一个新功能";
-const MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS = 20_000;
-const MAX_GATEWAY_TOOL_DATA_STRING_CHARS = 4_000;
+// 门面再导出（定义见 ./normalizers.js，保持 "./client/InProcessGateway.js" 导出面不变）
+export { normalizeGatewayModeForLegacyInput, normalizeGatewayRunMode } from "./normalizers.js";
 
 export type InProcessGatewayOptions = {
   now?: () => Date;
@@ -1121,26 +1133,6 @@ function createGatewayFailureStatus(args: {
   };
 }
 
-export function normalizeGatewayModeForLegacyInput(value: unknown): GatewaySubmitTurnInput["mode"] | undefined {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-  if (value === "default" || value === "plan" || value === "bypassPermissions") {
-    return value;
-  }
-  return "default";
-}
-
-export function normalizeGatewayRunMode(value: unknown): GatewaySubmitTurnInput["runMode"] | undefined {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-  if (value === "agent" || value === "plan" || value === "ask") {
-    return value;
-  }
-  return "agent";
-}
-
 function emitSessionTelemetry(
   telemetry: TelemetryClient | undefined,
   event: AgentEvent,
@@ -1895,68 +1887,6 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
   }
 }
 
-function limitGatewayToolResultPreview(text: string): string {
-  if (text.length <= MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS) {
-    return text;
-  }
-  const marker = `\n\n... [Gateway preview truncated: ${text.length - MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS} characters omitted; full result remains available through persisted tool-result references when shown to the model.] ...\n\n`;
-  const available = Math.max(0, MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS - marker.length);
-  const headLength = Math.ceil(available / 2);
-  const tailLength = Math.floor(available / 2);
-  return `${text.slice(0, headLength)}${marker}${text.slice(-tailLength)}`;
-}
-
-function sanitizeGatewayToolData(value: unknown): Record<string, unknown> {
-  const sanitized = sanitizeGatewayToolDataValue(value);
-  return isRecord(sanitized) ? sanitized : { value: sanitized };
-}
-
-function sanitizeGatewayToolDataValue(value: unknown): unknown {
-  if (typeof value === "string") {
-    return limitGatewayToolDataString(value);
-  }
-  if (Array.isArray(value)) {
-    return value.map(sanitizeGatewayToolDataValue);
-  }
-  if (isRecord(value)) {
-    const output: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) {
-      output[key] = sanitizeGatewayToolDataValue(item);
-    }
-    return output;
-  }
-  return value;
-}
-
-function limitGatewayToolDataString(
-  value: string,
-): string | { preview: string; originalChars: number; originalBytes: number; truncated: true } {
-  if (value.length <= MAX_GATEWAY_TOOL_DATA_STRING_CHARS) {
-    return value;
-  }
-  return {
-    preview: headTailString(value, MAX_GATEWAY_TOOL_DATA_STRING_CHARS, "Gateway data string truncated"),
-    originalChars: value.length,
-    originalBytes: Buffer.byteLength(value, "utf8"),
-    truncated: true,
-  };
-}
-
-function headTailString(text: string, maxChars: number, label: string): string {
-  if (text.length <= maxChars) {
-    return text;
-  }
-  const marker = `\n\n... [${label}: ${text.length - maxChars} characters omitted] ...\n\n`;
-  const available = Math.max(0, maxChars - marker.length);
-  const headLength = Math.ceil(available / 2);
-  const tailLength = Math.floor(available / 2);
-  return `${text.slice(0, headLength)}${marker}${text.slice(-tailLength)}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function mapModelEvent(event: CanonicalModelEvent, runId: string): GatewayEvent[] {
   switch (event.type) {
     case "text_delta":
@@ -2012,36 +1942,6 @@ function mapSubagentModelEvent(event: Extract<AgentEvent, { type: "subagent_mode
   }
 }
 
-function normalizePlanCommandInput(input: GatewaySubmitTurnInput): GatewaySubmitTurnInput | undefined {
-  const parsed = parsePlanCommand(input.message);
-  if (!parsed.isPlanCommand) {
-    return input;
-  }
-  if (!parsed.message) {
-    return undefined;
-  }
-  return {
-    ...input,
-    message: parsed.message,
-    runMode: "plan",
-    mode: "plan",
-    basePermissionMode: input.basePermissionMode ?? input.mode ?? "default",
-    allowPlanModeTools: true,
-  };
-}
-
-function parsePlanCommand(message: string): { isPlanCommand: boolean; message: string } {
-  const trimmed = message.trim();
-  const match = trimmed.match(/^\/plan(?:\s+([\s\S]*))?$/u);
-  if (!match) {
-    return { isPlanCommand: false, message };
-  }
-  return {
-    isPlanCommand: true,
-    message: (match[1] ?? "").trim(),
-  };
-}
-
 function mapTurnCompleted(result: AgentTurnResult): GatewayEvent[] {
   const events: GatewayEvent[] = [];
   if (result.structuredOutput !== undefined) {
@@ -2049,26 +1949,6 @@ function mapTurnCompleted(result: AgentTurnResult): GatewayEvent[] {
   }
   events.push({ type: "turn_completed", usage: result.usage, finishReason: result.stopReason });
   return events;
-}
-
-function previewUnknown(value: unknown): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function safeGatewayPathPart(value: string): string {
-  return (
-    value
-      .trim()
-      .replace(/[^A-Za-z0-9_.-]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "value"
-  );
 }
 
 const ATTACHMENT_PATH_NOTE_MARKER = "[Registered attachment files in this session:]";
@@ -2273,72 +2153,4 @@ async function attachmentsToContentBlocks(
   }
 
   return { blocks, directContentPaths, hasDiagnostics: diagnostics.length > 0 };
-}
-
-function providerErrorFromAgentError(error: AgentError): GatewayEventProviderError | undefined {
-  const details = error.details;
-  if (!details || typeof details !== "object") return undefined;
-  return providerErrorFromRecord(details as Record<string, unknown>);
-}
-
-function providerErrorFromModelError(error: CanonicalModelError): GatewayEventProviderError {
-  return {
-    provider: error.provider,
-    protocol: error.protocol,
-    status: error.status,
-    code: error.code,
-    message: error.message,
-    raw: stringifyProviderRaw(error.raw),
-  };
-}
-
-type GatewayEventProviderError = NonNullable<Extract<GatewayEvent, { type: "error" }>["providerError"]>;
-
-function providerErrorFromRecord(details: Record<string, unknown>): GatewayEventProviderError | undefined {
-  const provider = stringOrUndefined(details.provider);
-  const protocol = stringOrUndefined(details.protocol);
-  const status = numberOrUndefined(details.status);
-  const code = stringOrUndefined(details.code);
-  const message = stringOrUndefined(details.message);
-  const raw = stringifyProviderRaw(details.raw);
-  if (!provider && !protocol && status === undefined && !code && !message && !raw) return undefined;
-  return { provider, protocol, status, code, message, raw };
-}
-
-function stringifyProviderRaw(raw: unknown): string | undefined {
-  if (raw === undefined || raw === null) return undefined;
-  const text = typeof raw === "string" ? raw : safeJsonStringify(raw);
-  if (!text) return undefined;
-  return text.length > 1_200 ? `${text.slice(0, 1_200)}…` : text;
-}
-
-function stringOrUndefined(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function numberOrUndefined(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function safeJsonStringify(value: unknown): string | undefined {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function extensionForMime(mimeType: string): string {
-  switch (mimeType.toLowerCase()) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/png":
-      return "png";
-    case "image/gif":
-      return "gif";
-    case "image/webp":
-      return "webp";
-    default:
-      return "bin";
-  }
 }

@@ -9,64 +9,64 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 
 | 事件 | 生产者 | 消费者 |
 | --- | --- | --- |
-| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:801, src/gateway/client/InProcessGateway.ts:351 | src/gateway/client/InProcessGateway.ts:490, submitTurn 流 ×27 |
+| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:801, src/gateway/client/InProcessGateway.ts:363 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×27 |
 | approval_pending | - | submitTurn 流 ×27 |
 | approval_resolved | - | submitTurn 流 ×27 |
-| assistant_attachment | src/gateway/client/InProcessGateway.ts:1693 | submitTurn 流 ×27 |
-| assistant_message | src/agent/loop/AgentLoop.ts:760, src/agent/loop/AgentLoop.ts:1646 | src/gateway/client/InProcessGateway.ts:490 |
-| assistant_text_delta | src/gateway/client/InProcessGateway.ts:322 | submitTurn 流 ×27 |
+| assistant_attachment | src/gateway/client/InProcessGateway.ts:1685 | submitTurn 流 ×27 |
+| assistant_message | src/agent/loop/AgentLoop.ts:760, src/agent/loop/AgentLoop.ts:1646 | src/gateway/client/InProcessGateway.ts:502 |
+| assistant_text_delta | src/gateway/client/InProcessGateway.ts:334 | submitTurn 流 ×27 |
 | assistant_thinking_delta | - | submitTurn 流 ×27 |
-| compact_completed | src/context/compaction/CompactionEngine.ts:274 | src/gateway/client/InProcessGateway.ts:490 |
-| compact_started | src/context/compaction/CompactionEngine.ts:170 | src/gateway/client/InProcessGateway.ts:490 |
+| compact_completed | src/context/compaction/CompactionEngine.ts:274 | src/gateway/client/InProcessGateway.ts:502 |
+| compact_started | src/context/compaction/CompactionEngine.ts:170 | src/gateway/client/InProcessGateway.ts:502 |
 | config_changed | - | submitTurn 流 ×27 |
-| context_budget | src/agent/loop/AgentLoop.ts:422, src/agent/loop/AgentLoop.ts:435 | src/gateway/client/InProcessGateway.ts:490, submitTurn 流 ×27 |
-| doomloop_signal | - | src/gateway/client/InProcessGateway.ts:490 |
+| context_budget | src/agent/loop/AgentLoop.ts:422, src/agent/loop/AgentLoop.ts:435 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×27 |
+| doomloop_signal | - | src/gateway/client/InProcessGateway.ts:502 |
 | elicitation_cancelled | src/gateway/elicitation/GatewayElicitationChannel.ts:108, src/gateway/elicitation/GatewayElicitationChannel.ts:114 | submitTurn 流 ×27 |
 | elicitation_request | src/gateway/elicitation/GatewayElicitationChannel.ts:87 | submitTurn 流 ×27 |
-| elicitation_requested | src/cli/createLocalGateway.ts:1477, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | src/gateway/client/InProcessGateway.ts:490 |
-| elicitation_resolved | - | src/gateway/client/InProcessGateway.ts:490 |
-| empty_output_recovery | src/agent/loop/AgentLoop.ts:1584 | src/gateway/client/InProcessGateway.ts:490 |
-| error | src/adapters/channel/qq/qqbot-gateway.ts:93, src/adapters/channel/qq/qqbot-gateway.ts:279, src/cli/sati.ts:945, src/gateway/client/InProcessGateway.ts:362, src/model/providers/openai-responses/stream.ts:128, src/model/streaming/streamModel.ts:222, src/model/streaming/streamModel.ts:227, src/model/streaming/streamModel.ts:426, src/router/RouterRuntime.ts:515, src/router/RouterRuntime.ts:577, src/router/RouterRuntime.ts:611, src/router/RouterRuntime.ts:918 | src/adapters/channel/api-server/ApiServerChannel.ts:472, src/adapters/channel/discord/DiscordChannel.ts:112, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:139, src/adapters/channel/mattermost/MattermostChannel.ts:119, src/adapters/channel/qq/QQChannel.ts:87, src/adapters/channel/qq/qqbot-gateway.ts:92, src/adapters/channel/sms/SmsChannel.ts:312, src/adapters/channel/webhook/WebhookChannel.ts:462, src/adapters/channel/wecom/WeComChannel.ts:330, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:65, src/adapters/channel/whatsapp/WhatsAppChannel.ts:80, src/always-on/runtime/SignalWatcher.ts:50, src/always-on/workspace/GitWorktreeProvider.ts:149, src/always-on/workspace/SnapshotCopyProvider.ts:166, src/always-on/workspace/WorkspaceApply.ts:32, src/always-on/workspace/WorkspaceApply.ts:153, src/cli/ExtensionWatchManager.ts:139, src/extension/hooks/execution/CommandHookExecutor.ts:80, src/gateway/server/websocket.ts:23, src/session/artifacts/FileArtifactCollector.ts:338, src/task/runtime/BackgroundTaskRuntime.ts:248, src/tool/builtin/bash/commandRunner.ts:59, src/tool/builtin/bash/commandRunner.ts:158, src/tool/builtin/executeCode.ts:573, src/tool/builtin/executeCode.ts:616, src/tool/builtin/executeCode.ts:667, src/tool/builtin/executeCode.ts:675, src/tool/builtin/executeCodeRpc.ts:95, src/tool/builtin/filesystem/ripgrep.ts:65, src/tool/builtin/filesystem/syntaxDiagnostics.ts:392, submitTurn 流 ×27 |
-| file_artifacts | src/agent/turn/TurnRunner.ts:208, src/agent/turn/TurnRunner.ts:229, src/agent/turn/TurnRunner.ts:310, src/agent/turn/TurnRunner.ts:323, src/session/transcript/InMemoryTranscriptWriter.ts:67, src/session/transcript/JsonlTranscriptWriter.ts:125 | src/gateway/client/InProcessGateway.ts:490, submitTurn 流 ×27 |
-| input_accepted | src/agent/turn/TurnRunner.ts:187, src/session/transcript/TranscriptReplay.ts:73 | src/gateway/client/InProcessGateway.ts:490 |
-| instructions_loaded | src/agent/loop/AgentLoop.ts:1839 | src/gateway/client/InProcessGateway.ts:490 |
-| mode_change_requested | src/agent/loop/AgentLoop.ts:1329 | src/gateway/client/InProcessGateway.ts:490 |
-| model_event | src/agent/loop/AgentLoop.ts:467 | src/gateway/client/InProcessGateway.ts:490 |
-| model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:490 |
-| model_request_started | src/agent/loop/AgentLoop.ts:372 | src/gateway/client/InProcessGateway.ts:490, submitTurn 流 ×27 |
-| permission_denied | src/tool/execution/ToolRuntime.ts:250 | src/gateway/client/InProcessGateway.ts:490 |
+| elicitation_requested | src/cli/createLocalGateway.ts:1477, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | src/gateway/client/InProcessGateway.ts:502 |
+| elicitation_resolved | - | src/gateway/client/InProcessGateway.ts:502 |
+| empty_output_recovery | src/agent/loop/AgentLoop.ts:1584 | src/gateway/client/InProcessGateway.ts:502 |
+| error | src/adapters/channel/qq/qqbot-gateway.ts:93, src/adapters/channel/qq/qqbot-gateway.ts:279, src/cli/sati.ts:945, src/gateway/client/InProcessGateway.ts:374, src/model/providers/openai-responses/stream.ts:128, src/model/streaming/streamModel.ts:222, src/model/streaming/streamModel.ts:227, src/model/streaming/streamModel.ts:426, src/router/RouterRuntime.ts:515, src/router/RouterRuntime.ts:577, src/router/RouterRuntime.ts:611, src/router/RouterRuntime.ts:918 | src/adapters/channel/api-server/ApiServerChannel.ts:472, src/adapters/channel/discord/DiscordChannel.ts:112, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:139, src/adapters/channel/mattermost/MattermostChannel.ts:119, src/adapters/channel/qq/QQChannel.ts:87, src/adapters/channel/qq/qqbot-gateway.ts:92, src/adapters/channel/sms/SmsChannel.ts:312, src/adapters/channel/webhook/WebhookChannel.ts:462, src/adapters/channel/wecom/WeComChannel.ts:330, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:65, src/adapters/channel/whatsapp/WhatsAppChannel.ts:80, src/always-on/runtime/SignalWatcher.ts:50, src/always-on/workspace/GitWorktreeProvider.ts:149, src/always-on/workspace/SnapshotCopyProvider.ts:166, src/always-on/workspace/WorkspaceApply.ts:32, src/always-on/workspace/WorkspaceApply.ts:153, src/cli/ExtensionWatchManager.ts:139, src/extension/hooks/execution/CommandHookExecutor.ts:80, src/gateway/server/websocket.ts:23, src/session/artifacts/FileArtifactCollector.ts:338, src/task/runtime/BackgroundTaskRuntime.ts:248, src/tool/builtin/bash/commandRunner.ts:59, src/tool/builtin/bash/commandRunner.ts:158, src/tool/builtin/executeCode.ts:573, src/tool/builtin/executeCode.ts:616, src/tool/builtin/executeCode.ts:667, src/tool/builtin/executeCode.ts:675, src/tool/builtin/executeCodeRpc.ts:95, src/tool/builtin/filesystem/ripgrep.ts:65, src/tool/builtin/filesystem/syntaxDiagnostics.ts:392, submitTurn 流 ×27 |
+| file_artifacts | src/agent/turn/TurnRunner.ts:208, src/agent/turn/TurnRunner.ts:229, src/agent/turn/TurnRunner.ts:310, src/agent/turn/TurnRunner.ts:323, src/session/transcript/InMemoryTranscriptWriter.ts:67, src/session/transcript/JsonlTranscriptWriter.ts:125 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×27 |
+| input_accepted | src/agent/turn/TurnRunner.ts:187, src/session/transcript/TranscriptReplay.ts:73 | src/gateway/client/InProcessGateway.ts:502 |
+| instructions_loaded | src/agent/loop/AgentLoop.ts:1839 | src/gateway/client/InProcessGateway.ts:502 |
+| mode_change_requested | src/agent/loop/AgentLoop.ts:1329 | src/gateway/client/InProcessGateway.ts:502 |
+| model_event | src/agent/loop/AgentLoop.ts:467 | src/gateway/client/InProcessGateway.ts:502 |
+| model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:502 |
+| model_request_started | src/agent/loop/AgentLoop.ts:372 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×27 |
+| permission_denied | src/tool/execution/ToolRuntime.ts:250 | src/gateway/client/InProcessGateway.ts:502 |
 | permission_request | src/gateway/permission/createGatewayPermissionHook.ts:71 | submitTurn 流 ×27 |
-| permission_requested | src/tool/execution/ToolRuntime.ts:209 | src/gateway/client/InProcessGateway.ts:490 |
+| permission_requested | src/tool/execution/ToolRuntime.ts:209 | src/gateway/client/InProcessGateway.ts:502 |
 | plan_mode_changed | - | submitTurn 流 ×27 |
-| post_tool_execute | src/tool/execution/ToolRuntime.ts:335, src/tool/execution/ToolRuntime.ts:391 | src/gateway/client/InProcessGateway.ts:490 |
-| pre_tool_execute | src/tool/execution/ToolRuntime.ts:134 | src/gateway/client/InProcessGateway.ts:490 |
-| retry_progress | - | src/gateway/client/InProcessGateway.ts:490 |
-| session_aborted | - | src/gateway/client/InProcessGateway.ts:490 |
-| session_ended | src/agent/session/AgentSession.ts:134 | src/gateway/client/InProcessGateway.ts:490 |
-| session_started | src/agent/session/AgentSession.ts:67 | src/gateway/client/InProcessGateway.ts:490 |
-| setup_completed | src/agent/session/AgentSession.ts:90 | src/gateway/client/InProcessGateway.ts:490 |
-| stop_failure | src/agent/loop/AgentLoop.ts:482, src/agent/loop/AgentLoop.ts:1021 | src/gateway/client/InProcessGateway.ts:490 |
-| stop_requested | src/agent/loop/AgentLoop.ts:1194 | src/gateway/client/InProcessGateway.ts:490 |
-| structured_output | src/gateway/client/InProcessGateway.ts:2048 | submitTurn 流 ×27 |
-| subagent_completed | src/agent/loop/toolContext.ts:255 | src/gateway/client/InProcessGateway.ts:490 |
-| subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/gateway/client/InProcessGateway.ts:490 |
-| subagent_started | src/agent/loop/toolContext.ts:148 | src/gateway/client/InProcessGateway.ts:490 |
-| subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:490 |
-| subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:490 |
-| subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:490 |
-| token_cap_adjusted | src/agent/loop/AgentLoop.ts:630, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:875, src/agent/loop/AgentLoop.ts:897, src/agent/loop/AgentLoop.ts:981 | src/gateway/client/InProcessGateway.ts:490 |
+| post_tool_execute | src/tool/execution/ToolRuntime.ts:335, src/tool/execution/ToolRuntime.ts:391 | src/gateway/client/InProcessGateway.ts:502 |
+| pre_tool_execute | src/tool/execution/ToolRuntime.ts:134 | src/gateway/client/InProcessGateway.ts:502 |
+| retry_progress | - | src/gateway/client/InProcessGateway.ts:502 |
+| session_aborted | - | src/gateway/client/InProcessGateway.ts:502 |
+| session_ended | src/agent/session/AgentSession.ts:134 | src/gateway/client/InProcessGateway.ts:502 |
+| session_started | src/agent/session/AgentSession.ts:67 | src/gateway/client/InProcessGateway.ts:502 |
+| setup_completed | src/agent/session/AgentSession.ts:90 | src/gateway/client/InProcessGateway.ts:502 |
+| stop_failure | src/agent/loop/AgentLoop.ts:482, src/agent/loop/AgentLoop.ts:1021 | src/gateway/client/InProcessGateway.ts:502 |
+| stop_requested | src/agent/loop/AgentLoop.ts:1194 | src/gateway/client/InProcessGateway.ts:502 |
+| structured_output | src/gateway/client/InProcessGateway.ts:1948 | submitTurn 流 ×27 |
+| subagent_completed | src/agent/loop/toolContext.ts:255 | src/gateway/client/InProcessGateway.ts:502 |
+| subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/gateway/client/InProcessGateway.ts:502 |
+| subagent_started | src/agent/loop/toolContext.ts:148 | src/gateway/client/InProcessGateway.ts:502 |
+| subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:502 |
+| subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:502 |
+| subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:502 |
+| token_cap_adjusted | src/agent/loop/AgentLoop.ts:630, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:875, src/agent/loop/AgentLoop.ts:897, src/agent/loop/AgentLoop.ts:981 | src/gateway/client/InProcessGateway.ts:502 |
 | tool_call_finished | - | submitTurn 流 ×27 |
 | tool_call_started | - | submitTurn 流 ×27 |
-| tool_calls_detected | src/agent/loop/AgentLoop.ts:1245 | src/gateway/client/InProcessGateway.ts:490 |
-| tool_result | src/agent/loop/AgentLoop.ts:1336 | src/gateway/client/InProcessGateway.ts:490 |
-| tool_result_detail_available | src/gateway/client/InProcessGateway.ts:1681, src/gateway/client/InProcessGateway.ts:1687, src/gateway/client/InProcessGateway.ts:1707 | submitTurn 流 ×27 |
-| tool_results_projected | src/agent/loop/AgentLoop.ts:800, src/agent/loop/AgentLoop.ts:1366 | src/gateway/client/InProcessGateway.ts:490 |
-| turn_completed | src/agent/loop/AgentLoop.ts:1627, src/agent/loop/AgentLoop.ts:1679, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:326, src/gateway/client/InProcessGateway.ts:2050, src/session/transcript/TranscriptReplay.ts:102 | src/gateway/client/InProcessGateway.ts:490, submitTurn 流 ×27 |
-| turn_continued | src/agent/loop/AgentLoop.ts:641, src/agent/loop/AgentLoop.ts:779, src/agent/loop/AgentLoop.ts:859, src/agent/loop/AgentLoop.ts:922, src/agent/loop/AgentLoop.ts:938, src/agent/loop/AgentLoop.ts:950, src/agent/loop/AgentLoop.ts:992, src/agent/loop/AgentLoop.ts:1544, src/agent/loop/AgentLoop.ts:1608, src/agent/loop/AgentLoop.ts:1998 | src/gateway/client/InProcessGateway.ts:490 |
-| turn_failed | src/agent/loop/AgentLoop.ts:1624, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 | src/gateway/client/InProcessGateway.ts:490 |
-| turn_started | src/agent/turn/TurnRunner.ts:143 | src/gateway/client/InProcessGateway.ts:490, submitTurn 流 ×27 |
-| user_prompt_submitted | src/agent/turn/TurnRunner.ts:201 | src/gateway/client/InProcessGateway.ts:490 |
-| warning | src/agent/loop/AgentLoop.ts:1178 | src/gateway/client/InProcessGateway.ts:490 |
+| tool_calls_detected | src/agent/loop/AgentLoop.ts:1245 | src/gateway/client/InProcessGateway.ts:502 |
+| tool_result | src/agent/loop/AgentLoop.ts:1336 | src/gateway/client/InProcessGateway.ts:502 |
+| tool_result_detail_available | src/gateway/client/InProcessGateway.ts:1673, src/gateway/client/InProcessGateway.ts:1679, src/gateway/client/InProcessGateway.ts:1699 | submitTurn 流 ×27 |
+| tool_results_projected | src/agent/loop/AgentLoop.ts:800, src/agent/loop/AgentLoop.ts:1366 | src/gateway/client/InProcessGateway.ts:502 |
+| turn_completed | src/agent/loop/AgentLoop.ts:1627, src/agent/loop/AgentLoop.ts:1679, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:338, src/gateway/client/InProcessGateway.ts:1950, src/session/transcript/TranscriptReplay.ts:102 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×27 |
+| turn_continued | src/agent/loop/AgentLoop.ts:641, src/agent/loop/AgentLoop.ts:779, src/agent/loop/AgentLoop.ts:859, src/agent/loop/AgentLoop.ts:922, src/agent/loop/AgentLoop.ts:938, src/agent/loop/AgentLoop.ts:950, src/agent/loop/AgentLoop.ts:992, src/agent/loop/AgentLoop.ts:1544, src/agent/loop/AgentLoop.ts:1608, src/agent/loop/AgentLoop.ts:1998 | src/gateway/client/InProcessGateway.ts:502 |
+| turn_failed | src/agent/loop/AgentLoop.ts:1624, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 | src/gateway/client/InProcessGateway.ts:502 |
+| turn_started | src/agent/turn/TurnRunner.ts:143 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×27 |
+| user_prompt_submitted | src/agent/turn/TurnRunner.ts:201 | src/gateway/client/InProcessGateway.ts:502 |
+| warning | src/agent/loop/AgentLoop.ts:1178 | src/gateway/client/InProcessGateway.ts:502 |
 | worktree_created | - | submitTurn 流 ×27 |
 | worktree_removed | - | submitTurn 流 ×27 |
 
@@ -77,5 +77,5 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 
 | 流入口 | 语汇 | 消费站点 |
 | --- | --- | --- |
-| submit | AgentEvent | src/gateway/client/InProcessGateway.ts:490 |
+| submit | AgentEvent | src/gateway/client/InProcessGateway.ts:502 |
 | submitTurn | GatewayEvent | src/adapters/channel/api-server/ApiServerChannel.ts:346, src/adapters/channel/api-server/ApiServerChannel.ts:418, src/adapters/channel/bluebubbles/BlueBubblesChannel.ts:181, src/adapters/channel/cli/CliChannel.ts:77, src/adapters/channel/dingtalk/DingTalkChannel.ts:224, src/adapters/channel/discord/DiscordChannel.ts:198, src/adapters/channel/email/EmailChannel.ts:302, src/adapters/channel/feishu/FeishuChannel.ts:587, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:275, src/adapters/channel/matrix/MatrixChannel.ts:207, src/adapters/channel/mattermost/MattermostChannel.ts:215, src/adapters/channel/qq/QQChannel.ts:237, src/adapters/channel/qq/QQChannel.ts:309, src/adapters/channel/signal/SignalChannel.ts:227, src/adapters/channel/slack/SlackChannel.ts:210, src/adapters/channel/sms/SmsChannel.ts:250, src/adapters/channel/telegram/TelegramChannel.ts:177, src/adapters/channel/tui/TuiChannel.ts:75, src/adapters/channel/webhook/WebhookChannel.ts:281, src/adapters/channel/wecom/WeComChannel.ts:937, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:262, src/adapters/channel/weixin/WeixinChannel.ts:754, src/adapters/channel/whatsapp/WhatsAppChannel.ts:241, src/always-on/runtime/DiscoveryFire.ts:1138, src/cli/createLocalGateway.ts:1159, src/cron/runtime/CronFire.ts:95, src/gateway/server/GatewayWsConnection.ts:128 |

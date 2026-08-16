@@ -306,6 +306,10 @@ client/
 
 **DoD**：`InProcessGateway.ts` ≤ ~900 行（类本体）；6 个新模块各 ≤ ~500 行、单函数 ≤ ~100 行（`mapAgentEventForTurn`/`emitSessionTelemetry` 拆分后）；新增直接单测 ≥ 20 例（消除"零直接单测"标记）；事件矩阵再生成后 `--check` 绿。
 
+> ✅ **A11 前置轮已完成（2026-08-16，PR #53）**：治理全仓唯一涉及 InProcessGateway.ts 的源码扫描伪测试——`weixin-settings-runtime-flow.spec.ts` "Gateway protocol exposes prepare_weixin_login RPC" 改为行为断言（协议面 frames/WS/RemoteGateway 源码断言保留——不参与拆解；InProcessGateway 注入回调透传 + 未注入降级 unsupported）。
+
+> ✅ **A11 轮 1 已完成（2026-08-16）**：三个零依赖纯件下沉——`toolResultSanitize.ts`（预览截断/data 递归清洗/headTail/pathPart/MIME 扩展 + 2 常量）、`providerError.ts`（AgentError/ModelError/Record → providerError 映射 + 守卫）、`normalizers.ts`（mode/runMode 归一化 + /plan 解析 + PLAN_COMMAND_USAGE）；InProcessGateway.ts 2344 → 2173（-171），`export { normalizeGatewayModeForLegacyInput, normalizeGatewayRunMode }` re-export 保持导出面。**本轮不触事件 emit 面，event-matrix fresh**。新增盲区测试 15 例（toolResultSanitize 6 / providerError 4 / normalizers 5——headTailString 测试经实测修正 maxChars 需大于 marker 长度）。剩余轮次（eventMapping/attachments+telemetry/收尾）为 A11 轮 2-4。
+
 ---
 
 ### 5.7 `ui/server/index.js`（3845 行 → entry 组装骨架 + 12 个新模块）
