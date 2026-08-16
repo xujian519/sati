@@ -8,6 +8,16 @@ export function createCronStopTool(runtime: CronToolRuntime): SatiToolDefinition
     title: "Stop Cron Run",
     description: "Stop a currently running Cron run. One-time tasks are removed after being stopped.",
     kind: "session",
+    outputSchema: {
+      type: "object",
+      required: ["stopped"],
+      properties: {
+        stopped: { type: "boolean" },
+        taskId: { type: "string" },
+        runId: { type: "string" },
+        deletedOneTimeTask: { type: "boolean" },
+      },
+    },
     inputSchema: {
       type: "object",
       additionalProperties: false,

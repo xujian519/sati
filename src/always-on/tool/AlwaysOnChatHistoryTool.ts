@@ -44,6 +44,27 @@ export function createAlwaysOnChatHistoryTool(
       "Use the sessionId from the chat digest in the discovery prompt to expand a session of interest. " +
       "Only available during Always-On discovery (Phase 1).",
     kind: "session",
+    outputSchema: {
+      type: "object",
+      required: ["sessionId", "title", "messageCount", "conversation"],
+      properties: {
+        sessionId: { type: "string" },
+        title: { type: "string" },
+        messageCount: { type: "integer" },
+        conversation: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["role", "text", "createdAt"],
+            properties: {
+              role: { type: "string", enum: ["user", "assistant"] },
+              text: { type: "string" },
+              createdAt: { type: "string" },
+            },
+          },
+        },
+      },
+    },
     inputSchema: {
       type: "object",
       required: ["sessionId"],

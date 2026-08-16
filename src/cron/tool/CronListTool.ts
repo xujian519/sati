@@ -1,5 +1,6 @@
 import type { SatiToolDefinition } from "../../tool/index.js";
 import type { CronListInput, CronListResult } from "../protocol/types.js";
+import { CRON_RUN_RECORD_SCHEMA, CRON_TASK_SCHEMA } from "./CronSchemas.js";
 import type { CronToolRuntime } from "./CronToolRuntime.js";
 
 export function createCronListTool(runtime: CronToolRuntime): SatiToolDefinition<CronListInput, CronListResult> {
@@ -8,6 +9,20 @@ export function createCronListTool(runtime: CronToolRuntime): SatiToolDefinition
     title: "List Cron Tasks",
     description: "List scheduled Cron tasks and optionally recent Cron run history.",
     kind: "session",
+    outputSchema: {
+      type: "object",
+      required: ["tasks"],
+      properties: {
+        tasks: {
+          type: "array",
+          items: CRON_TASK_SCHEMA,
+        },
+        recentRuns: {
+          type: "array",
+          items: CRON_RUN_RECORD_SCHEMA,
+        },
+      },
+    },
     inputSchema: {
       type: "object",
       additionalProperties: false,
