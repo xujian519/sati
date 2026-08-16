@@ -385,6 +385,14 @@ ui/server/
 
 > ✅ **轨道 B 全部完成（2026-08-17）**：B1 services 纯函数层（#59）、B2 broadcast 状态中枢（#60）、B3 projects-watcher（#61）、B4a shell.js（#62）、B4b chat.js（#63）、B5-1 system.js（#64）、B5-2 project-sessions.js（#66）、B5-3 project-files.js（#67）、B5-4 project-preview.js（#68）、B5-5 project-uploads.js（#69）、B5-6 token-usage.js（#70）、B6 index.js 收尾（#71，445→244）。**index.js 3845 → 244 行（-94%），DoD 全部达成**：单文件 ≤500、index.js ≤400（entry 组装）、pnpm --filter sati-ui test 501 全绿。12 个新模块：websocket/{broadcast,chat,shell}、services/{filesystem,uploads,projects-watcher,rate-limit,server-boot}、routes/{system,project-sessions,project-files,project-preview,project-uploads,token-usage}。**巨无霸函数拆解专项（轨道 A + 轨道 B）全部完成 ✅**
 
+> ✅ **冒烟清单执行（2026-08-17，PR #73）**：按 §5.7 手工冒烟逐项验证，**发现并修复分片引入的运行时缺陷**（vitest 单测未加载这些模块，CI 全绿但服务从未真正启动过）：
+> - **致命（服务无法启动）**：`system.js` 8 处顶层 `app.*` 未定义引用（模块加载即崩）；`chat.js` 顶层 `wss.on` 未定义引用 + 缺 `handleShellConnection` import；`server-boot.js` 顶层孤儿 `startServer()`（undefined server 崩溃）。
+> - **请求级（命中才崩）**：`project-files.js` 缺 `JSZip`/`addDirectoryToZip`/`getSafeZipFilename`/`contentDispositionAttachment`/`WORKSPACES_ROOT`/`validateWorkspacePath` import（download/browse-filesystem/create-folder 500）；`project-preview.js` 缺 `fs`/`path`/`setPreviewContentType`（preview 500）；`index.js` SPA dev 回退 `VITE_PORT` 未定义。
+> - **次要**：`system.js` installMode 层级（routes/ 层 `../../.git` → 误报 npm）；`server-boot.js` dist 判断路径（services/ 层 `../dist` → 误报非生产模式）。
+> - **冒烟结果**：9 项清单全部通过（`/health` installMode=git、`/api/projects`、文件读写/上传、preview、ccr、always-on、`/ws` chat+shell pty echo、SPA 回退、taskmaster 模块端点 4/4）。`pnpm --filter sati-ui test` 501 全绿无回归。
+> - **环境性限制**：`download` 端点受 `~/.sati` 内 3.7GB 文件超 Node fs 2GiB 上限（`ERR_FS_FILE_TOO_LARGE`，数据问题非代码缺陷）；taskmaster 广播端到端触发需真实 task-master CLI，接线经代码审阅确认（`app.locals.wss` 注入 + `req.app.locals.wss` 读取 + `/ws` 通道实测正常）。
+> - **教训**：`ui/server` 不在 eslint 覆盖范围（ui lint 只跑 `src/`）——no-undef 类缺陷 CI 完全漏检；冒烟前用 eslint no-undef 全量扫描 ui/server 可一次抓完所有未定义引用。
+
 ---
 
 ## 6. 排期与批次
