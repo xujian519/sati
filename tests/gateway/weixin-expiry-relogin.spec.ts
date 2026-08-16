@@ -94,6 +94,22 @@ test("expired session (errcode -14) clears credentials and auto-starts QR login"
     ),
     "fresh QR url should be reported after auto re-login",
   );
+  // 顺序契约：expired 必须早于自愈后的 waiting_for_login+qrUrl。通道在上报
+  // expired 后必须同步启动扫码登录（不能先 await notifyActiveChats），否则 UI
+  // 会停留在 expired 且停止轮询，新二维码永远到不了界面。
+  const expiredIdx = updates.findIndex(u => u.channelKey === "weixin" && u.update.state === "expired");
+  const qrIdx = updates.findIndex(
+    u => u.channelKey === "weixin" && u.update.state === "waiting_for_login" && u.update.qrUrl !== undefined,
+  );
+  assert.ok(expiredIdx !== -1 && qrIdx !== -1, "both expired and fresh-QR updates must be present");
+  assert.ok(expiredIdx < qrIdx, "expired must be reported before the self-healed QR url");
+  // 且 expired 与首个 waiting_for_login（无论是否带 qrUrl）之间不应再隔其它状态：
+  // 自愈必须同步衔接，保证 runtime-status.json 中 expired 只是瞬时状态。
+  const firstWaitingIdx = updates.findIndex(u => u.channelKey === "weixin" && u.update.state === "waiting_for_login");
+  assert.ok(
+    firstWaitingIdx !== -1 && firstWaitingIdx <= qrIdx && firstWaitingIdx - expiredIdx <= 1,
+    "QR login must start immediately after the expired report (no async gap)",
+  );
 
   await (handle as Awaited<ReturnType<WeixinChannel["start"]>>).stop("test");
 });

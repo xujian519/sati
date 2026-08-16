@@ -480,7 +480,10 @@ router.get("/weixin/qr-poll", (_req, res) => {
     return res.json({ ok: true, accountId: credentials?.accountId ?? runtime?.accountId ?? null });
   }
 
-  if (runtime?.state === "failed" || runtime?.state === "expired" || runtime?.state === "stopped") {
+  // "expired" 是通道自愈的瞬态：通道会立即清理凭据并重新发起扫码登录
+  // （waiting_for_login + qrUrl）。这里返回 pending 让 UI 继续轮询并拾取新二维码，
+  // 不能当作终态返回 error——否则 UI 会停止轮询，二维码永远不再出现。
+  if (runtime?.state === "failed" || runtime?.state === "stopped") {
     return res.json({
       ok: false,
       error: runtime.error || runtime.message || "微信登录未完成",

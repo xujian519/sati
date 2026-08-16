@@ -1,5 +1,5 @@
 import express from "express";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
@@ -188,6 +188,69 @@ describe("gateway WeCom routes", () => {
   });
 });
 
+describe("gateway Weixin routes", () => {
+  it("reports pending (not terminal error) while weixin runtime is expired", async () => {
+    const { request, pilotHome } = await createGatewayApp({});
+    writeRuntimeStatus(pilotHome, {
+      weixin: {
+        channelKey: "weixin",
+        state: "expired",
+        updatedAt: new Date().toISOString(),
+        message: "微信登录已过期，请重新扫码登录",
+      },
+    });
+
+    // 过期是通道自愈瞬态：通道会立即重新发起扫码登录（waiting_for_login + qrUrl）。
+    // qr-poll 必须返回 pending 让 UI 继续轮询拾取新二维码，而不是 ok:false 终态。
+    const poll = await request("/api/gateway/weixin/qr-poll");
+    expect(poll.pending).toBe(true);
+    expect(poll.ok).toBeUndefined();
+    expect(poll.error).toBeUndefined();
+  });
+
+  it("returns pending with qrUrl while weixin runtime is waiting_for_login", async () => {
+    const { request, pilotHome } = await createGatewayApp({});
+    writeRuntimeStatus(pilotHome, {
+      weixin: {
+        channelKey: "weixin",
+        state: "waiting_for_login",
+        updatedAt: new Date().toISOString(),
+        qrUrl: "https://wechat.example/fresh-qr",
+      },
+    });
+
+    const poll = await request("/api/gateway/weixin/qr-poll");
+    expect(poll.pending).toBe(true);
+    expect(poll.qrUrl).toBe("https://wechat.example/fresh-qr");
+  });
+
+  it("returns ok with accountId once weixin is connected", async () => {
+    const { request, pilotHome } = await createGatewayApp({});
+    writeRuntimeStatus(pilotHome, {
+      weixin: {
+        channelKey: "weixin",
+        state: "connected",
+        updatedAt: new Date().toISOString(),
+        accountId: "wx-account",
+      },
+    });
+
+    const poll = await request("/api/gateway/weixin/qr-poll");
+    expect(poll.ok).toBe(true);
+    expect(poll.accountId).toBe("wx-account");
+  });
+});
+
+function writeRuntimeStatus(pilotHome, channels) {
+  const dir = join(pilotHome, "channels");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "runtime-status.json"),
+    JSON.stringify({ updatedAt: new Date().toISOString(), channels }),
+    "utf-8",
+  );
+}
+
 async function createGatewayApp(initialConfig) {
   const pilotHome = mkdtempSync(join(tmpdir(), "sati-wecom-gateway-"));
   tempDirs.push(pilotHome);
@@ -216,6 +279,7 @@ async function createGatewayApp(initialConfig) {
   app.use("/api/gateway", gatewayRoutes);
 
   return {
+    pilotHome,
     configPath,
     request: (path, init) => requestJson(app, path, init),
   };

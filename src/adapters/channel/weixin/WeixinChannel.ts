@@ -400,10 +400,13 @@ export class WeixinChannel implements ChannelAdapter {
           this.client = undefined;
           this.pollPromise = null;
           this.reportStatus("expired", "微信登录已过期，请重新扫码登录");
-          await this.notifyActiveChats(WEIXIN_SESSION_EXPIRED_TEXT);
           // 自动重新发起扫码登录：onQRCode 会以 waiting_for_login + qrUrl 上报，
           // 桌面端/Web UI 即可直接展示新二维码，无需用户手动操作。
+          // 注意：必须紧接着同步启动（reportStatus 同步写盘），不要在前面 await
+          // notifyActiveChats——否则 runtime-status.json 会停留在只有 "expired"
+          // 的窗口，UI 的自动轮询在该状态下不会刷新，新二维码将永远到不了界面。
           this.startQrLoginInBackground(this.startGeneration);
+          void this.notifyActiveChats(WEIXIN_SESSION_EXPIRED_TEXT);
           break;
         }
 
