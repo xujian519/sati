@@ -148,3 +148,51 @@ test("kg-store: 无 FTS 表时 phrase 与 or 均降级 LIKE", t => {
     "无 FTS 表 or 模式应 LIKE 命中",
   );
 });
+
+test("kg-store: ftsMode 返回 unicode61（legacy nodes_fts 默认 tokenizer）", t => {
+  const store = withStore(t);
+  assert.equal(store.ftsMode(), "unicode61");
+});
+
+test("kg-store: getNode 缓存命中返回同一对象引用", t => {
+  const store = withStore(t);
+  const first = store.getNode("n1");
+  const second = store.getNode("n1");
+  assert.ok(first !== undefined, "节点应可查询");
+  assert.equal(first, second, "第二次查询应命中 nodeCache 返回同一对象引用");
+});
+
+test("kg-store: bfsPath maxDepth 截断与环防护", t => {
+  const dir = mkdtempSync(join(tmpdir(), "kg-store-bfs-"));
+  const dbPath = join(dir, "bfs.db");
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE nodes (id TEXT PRIMARY KEY, node_type TEXT, name TEXT, title TEXT, content TEXT, law_refs_count INTEGER, source TEXT, full_ref TEXT, chapter TEXT, article_number TEXT, version TEXT);
+    CREATE TABLE edges (source TEXT, target TEXT, relation TEXT);
+    CREATE VIRTUAL TABLE nodes_fts USING fts5(id, name, title, content);
+  `);
+  const insert = db.prepare(`INSERT INTO nodes (id, node_type, name) VALUES (?, ?, ?)`);
+  for (let i = 1; i <= 8; i++) insert.run(`n${i}`, "Concept", `节点${i}`);
+  const insertEdge = db.prepare(`INSERT INTO edges (source, target, relation) VALUES (?, ?, 'NEXT')`);
+  // 链：n1→n2→…→n8；环：n8→n1（BFS visited 防重入，不应死循环）
+  for (let i = 1; i < 8; i++) insertEdge.run(`n${i}`, `n${i + 1}`);
+  insertEdge.run("n8", "n1");
+  db.close();
+  const store = new KgStore(dbPath);
+  t.after(() => {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  // 默认 maxDepth=5：n1→n8 需 7 跳超出 → null（截断而非崩溃）
+  assert.equal(store.bfsPath("n1", "n8"), null);
+  // 深度内可达：n1→n5 需 4 跳 ≤ 5 → 找到
+  const path = store.bfsPath("n1", "n5");
+  assert.ok(path !== null, "深度内可达应找到路径");
+  assert.equal(path!.length, 4);
+  // 环内寻路：n8→n1→n2（visited 防重入，不死循环）
+  const viaCycle = store.bfsPath("n8", "n2", 10);
+  assert.ok(viaCycle !== null, "环中寻路应成功");
+  assert.equal(viaCycle!.length, 2);
+  // fromId === toId 快速返回空路径
+  assert.deepEqual(store.bfsPath("n1", "n1"), []);
+});
