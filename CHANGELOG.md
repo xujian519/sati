@@ -2,6 +2,42 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.0.29 - 2026-08-16
+
+> **版本目标（2026-08-16）**：deepseek-harness 优秀设计引入进入阶段四并全部落地（两个迭代 T1–T10）——测试可验证性（LLM 重放）、请求可重建（request invariant）、凭证双码、工具 outputSchema 强制、durable 边界、跨进程任务续算；另落地专利文档渲染管线与 cron 加固。
+
+### Added
+- **阶段四迭代一（测试与请求可验证性）**：LLM 重放测试基础设施（`src/test-support/llm-replay/`：record/replay/sidecar 注入/`assertConsumed` + `scripts/record-llm-replay.ts`），无 API key 走完整 agent 回路；`request_header` 快照条目（log-only，记 digest 不记正文）+ `requestInvariant` 重建对拍器（`SATI_VERIFY_REQUEST_RECONSTRUCTION`）；凭证双错误码 `MISSING_CREDENTIAL` / `INVALID_CREDENTIAL`（`assertUsableCredential`）；工具 canonical `outputSchema` 强制校验（`TOOL_OUTPUT_SCHEMA_MISMATCH`）与注册表 `requireOutputSchema` 选项
+- **阶段四迭代二（门禁与工具卫生）**：`resolveModelInfo` 统一能力解析（entry→catalog→默认 + 来源标注）+ `assertInputModality` 模态门禁（analyze_patent_figure 显式 image 门禁）；durable 边界检查点（`flushCheckpoint` + 工具副作用前 checkpoint fail-closed + 稳定 `retryId` + 孤儿 turn `interrupted` 收尾）；文件观测三态（`src/tool/builtin/filesystem/observation.ts`，稳定错误码 `file_not_observed` / `file_stale_version`）；工具超时强制（`SatiToolDefinition.timeoutMs` + signal 熔合 + `TOOL_TIMEOUT`）+ 连续重复工具软提醒（`repeatToolReminder`）；配置 last-good-facts 显式化 + 持续坏配置周期告警；事件生产者/消费者矩阵生成器（`scripts/gen-event-matrix.ts` + `--check` 挂 lint 门禁 + `docs/event-producer-consumer.md` 生成物）
+- **T9 收尾（outputSchema 全覆盖）**：全部内置工具声明 `outputSchema` 成功契约（46 个默认工具 + 条件注册工具 memory×6/task×5/read_skill），`createBuiltinRegistry` 开启 `requireOutputSchema: true`（新工具未声明即注册期 fail-loud）
+- **跨进程任务续算**：`TaskResumeScanner` 启动扫描 (a) 形态断点（`request_header` 后无 durable 消息）→ 经 `gateway.submitTurn` 自动续算；重试轨迹 `retry_schedule` 条目进 transcript 权威序列（log-only）+ `policyKey`；`SATI_TASK_RESUME_ENABLED` 开关（默认开）；详见 `docs/cross-process-retry-resume-plan.md`
+- **真实模型 LLM-replay fixture**：DeepSeek v4 flash 真实会话录制（纯问答，无工具调用）入库 `tests/fixtures/llm-replay/deepseek-v4-flash-basic/`，CI 无 key 重放完整 AgentLoop 回路（`llm-replay-real.spec.ts`）
+- **专利文档渲染管线**：`src/patent/document/`（templateResolver/brandInjector/pdfRenderer）+ `render_patent_document` 内置工具（domain: patent），5 个专利文书模板（可专利性意见/检索报告/OA答复/权利要求+说明书/无效意见），品牌 CSS 变量注入（theme.json 覆盖），HTML 落盘 + 可选 Chrome headless 打印 PDF；`assets/templates/patent/` 模板资产（build 拷贝）
+- **cron 加固**：revision 乐观并发（写回 CAS 409 `CONFIG_CONFLICT`）+ 闰日调度 + cron turn 事件桥接 web chat + 编辑冲突错误本地化
+
+### Changed
+- `SatiJsonSchema.additionalProperties` 扩展支持 schema 对象（嵌套约束）
+- skills：docx 技能采用上游 understand→build→review 工作流；pdf/pptx/spreadsheets 迁移 `SKILL_ROOT` 占位符；docx deliver 相对输出解析到 `.sati` workspace 布局；清理剩余 PilotDeck 品牌残留
+- 事件矩阵启发式精化：消费者列补事件流消费点（`for await` 语汇流）、产/消同源重复归零、GatewayEvent 家族补入（43→62 行）
+
+### Fixed
+- 文档渲染管线错误加固（render 错误兜底 + 桌面打包对齐）
+- UI：陈旧动态 chunk 崩溃恢复（reloadOnChunkError）、gateway 状态不可用时保持 active session、cron revision 编辑接线到 API 面
+- 桌面端 L1 验证步骤 4b/4c/5 此前从未实际执行的问题
+- 移除 UI 死文件并标注 v1/v2 命名；nanoid override 升级至 3.3.18
+
+### Perf
+- Windows 桌面打包从 40–90 分钟降至约 4 分钟（`apps/desktop/scripts/build-win.bat` 等，详见 `docs/windows-packaging-speed-plan.md`）
+
+### Test
+- 新增 phase4 测试 70+ 用例（llm-replay 8 + request-invariant 6 + credential-codes 6 + output-schema-validation 7 + output-schema-batch 5 + resolve-model-info + tool-timeout 6 + repeat-tool-reminder 4 + interrupted-turn 6 + retry-scope/state + env-hooks 等）+ 文档渲染（293 行 spec）+ 跨进程续算（T-A/T-B 9 + T-C 7）全绿；全量后端测试 2792 pass
+
+### Docs
+- `docs/deepseek-harness-phase4-plan.md`（阶段四实施文档：调研/任务/实施结果/Code Review 处置/遗留项落地）
+- `docs/cross-process-retry-resume-plan.md`（跨进程续算专项计划 v0.2 + 实施结果）
+- `docs/event-producer-consumer.md`（事件矩阵生成物，重新生成）
+- 记录 2026-08-14 债务清理审计（`docs/technical-debt-report.md`）
+
 ## v0.0.28 - 2026-08-14
 
 > **版本目标（2026-08-14）**：以内部工程质量迭代为主——AgentLoop 核心重构（模块化拆解 + 遮蔽式压缩重放 + Web 消息投影收敛）与权限守卫体系落地，spill 溢出存储运维补强，TRIZ 确定性查表与 claim-chart 校验收尾加固。

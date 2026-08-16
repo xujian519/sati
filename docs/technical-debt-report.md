@@ -141,7 +141,7 @@ CLAUDE.md 宣称的"protocol/runtime/config 三层 + index.ts barrel"：26 个�
 
 1. **立即（半天内，可验证）**：`.reasonix` 加入 .gitignore 并 `git rm --cached`。 — ✅ 已完成（`ccc2d582`）
 2. **短期**：把 `edgeclaw-memory-core` 移入 `pnpm-workspace.yaml`、删除独立 `package-lock.json`、`lib/` 产物改为构建时生成不入库；为 `router/`、`cron/`、`permission/` 补最小行为测试；统一 i18n 三份 JSON 的 key。 — ✅ 大部分已完成（子包入 workspace、测试补齐、i18n 对齐均已落地；`lib/` 产物入库问题仍待处理）
-3. **中期**：确定 `ui/server` 的演进方向（要么收敛到 `src/` 的 TS 分层并只 import barrel，要么逐步迁到 gateway API）——这是消除双后端/双 WebSocket/双记忆运行时的唯一路径；拆分 `AgentLoop.ts` 与 `InProcessGateway.ts`；完成全仓品牌收敛（README.zh.md、products 示例、pilotdeck-* 文件）。 — ⏳ 部分（S1 冻结增量已落地，见 `docs/design/gateway-protocol-versioning.md` Part B；品牌收敛✅ 已完成（2026-08-13 收尾：pilotdeck 双轨死代码删除、provider 标识统一、兼容层标注 `legacy(pre-rebrand)`，见 `docs/brand-unification-plan.md`）；AgentLoop 拆分为剩余工作；双后端按 2026-08-14 决策保留，不列为债务）
+3. **中期**：确定 `ui/server` 的演进方向（要么收敛到 `src/` 的 TS 分层并只 import barrel，要么逐步迁到 gateway API）——这是消除双后端/双 WebSocket/双记忆运行时的唯一路径；拆分 `AgentLoop.ts` 与 `InProcessGateway.ts`；完成全仓品牌收敛（README.zh.md、products 示例、pilotdeck-* 文件）。 — ⏳ 部分（S1 冻结增量已落地，见 `docs/design/gateway-protocol-versioning.md` Part B；品牌收敛✅ 已完成（2026-08-13 收尾：pilotdeck 双轨死代码删除、provider 标识统一、兼容层标注 `legacy(pre-rebrand)`，见 `docs/brand-unification-plan.md`）；AgentLoop✅ 已拆解（2026-08-14 v0.0.28：4685 行拆为 8 模块 + phase4 再增 requestInvariant/repeatToolReminder，见 `docs/agentloop-refactor-plan.md`）；`InProcessGateway` 拆分为剩余工作；双后端按 2026-08-14 决策保留，不列为债务）
 4. **持续**：建立统一 logger 接入 telemetry；治理 130+ 静默 catch；统一 React/Express/katex 版本策略；重写 CLAUDE.md 使其与实际一致（否则会持续误导后续修改）。 — ⏳ 部分（CLAUDE.md 已重写对齐实际；logger / 静默 catch / 版本策略未启动）
 
 ---

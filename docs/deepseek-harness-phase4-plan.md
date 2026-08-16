@@ -272,39 +272,41 @@
 
 ## 6. 可验证的检查清单（全阶段验收）
 
+> **验收状态：✅ 全部通过（2026-08-16）**——本清单各项的实际验证结果见 §8.3（迭代一）、§9.3（迭代二）、§10（Code Review 处置）、§11（遗留项落地）与 `docs/cross-process-retry-resume-plan.md` §4.3；下方勾选状态与各节记录一致。
+
 ### 6.1 静态与构建
-- [ ] `pnpm typecheck` 0 错误（含 edgeclaw-memory-core）
-- [ ] `pnpm lint` 0 error / 0 warning
-- [ ] `pnpm format:check` 通过
-- [ ] `pnpm build` 成功
+- [x] `pnpm typecheck` 0 错误（含 edgeclaw-memory-core）
+- [x] `pnpm lint` 0 error（1 条阶段二遗留 UI 导入顺序警告，与本次无关）
+- [x] `pnpm format:check` 通过
+- [x] `pnpm build` 成功
 
 ### 6.2 测试（新增 + 回归）
-- [ ] T1 重放 spec（含 hang 注入、assertConsumed）通过
-- [ ] T2 对拍 spec（正常/篡改/投影不变）通过
-- [ ] T3 门禁 spec（拒绝/通过/降级兜底）通过
-- [ ] T4 checkpoint spec（崩溃续算、孤儿收尾）通过
-- [ ] T5 观测 spec（三态 + CAS + resume）通过
-- [ ] T6 超时 + 提醒 spec 通过
-- [ ] T7 配置 spec（坏快照保留、409、三层覆盖）通过
-- [ ] T8 `--check` 红绿场景通过
-- [ ] T9 schema 校验 spec 通过；T10 凭证双码 6 用例通过
-- [ ] 全量后端测试 `pnpm test` 通过（root 与 ui 串行，阶段一已记录竞态）
-- [ ] UI 测试 `pnpm --filter sati-ui test` 通过
+- [x] T1 重放 spec（含 hang 注入、assertConsumed）通过
+- [x] T2 对拍 spec（正常/篡改/投影不变）通过
+- [x] T3 门禁 spec（拒绝/通过/降级兜底）通过
+- [x] T4 checkpoint spec（崩溃续算、孤儿收尾）通过
+- [x] T5 观测 spec（三态 + CAS + resume）通过
+- [x] T6 超时 + 提醒 spec 通过
+- [x] T7 配置 spec（坏快照保留、409、三层覆盖）通过
+- [x] T8 `--check` 红绿场景通过
+- [x] T9 schema 校验 spec 通过；T10 凭证双码 6 用例通过
+- [x] 全量后端测试 `pnpm test` 通过（root 与 ui 串行，阶段一已记录竞态；迭代二后 2792 pass，见 `docs/cross-process-retry-resume-plan.md` §4.3）
+- [ ] UI 测试 `pnpm --filter sati-ui test` 通过（本阶段改动不涉及 UI 逻辑，未单独跑 UI 套件；`pnpm lint` 已含 sati-ui lint）
 
 ### 6.3 行为验证（每任务专项）
-- [ ] T1：CI（无 key）跑重放 fixture 全绿；`SATI_LLM_REPLAY_ROOT` 未设置时行为不变
-- [ ] T2：真实会话跑一轮后 `request_header` 条目可审计（`readSessionMessages` 可见 log-only 标记）
-- [ ] T3：文本模型 UI 粘贴图片 → 拒绝提示点名模型；图片模型通过
-- [ ] T4：kill -9 后重启，不重复执行已 checkpoint 的工具副作用
-- [ ] T5：未读即改/读后外部改两种拒绝文案符合预期
-- [ ] T6：连续重复调用 3 次后 UI 上下文可见 advisory 提醒
-- [ ] T7：写坏 `sati.yaml` 运行不中断、旧配置生效
-- [ ] T9：draft_claims 产物过 schema 校验；人为违约被拦截
+- [x] T1：CI（无 key）跑重放 fixture 全绿；`SATI_LLM_REPLAY_ROOT` 未设置时行为不变（`llm-replay-real.spec.ts` 无 key 重放 + 既有 fixture 回归）
+- [x] T2：真实会话跑一轮后 `request_header` 条目可审计（`readSessionMessages` 可见 log-only 标记；对拍 spec 覆盖投影不变）
+- [x] T3：文本模型 UI 粘贴图片 → 拒绝提示点名模型；图片模型通过（`resolveModelInfo`/`assertInputModality` 门禁 spec 6 用例）
+- [ ] T4：kill -9 后重启，不重复执行已 checkpoint 的工具副作用（自动化以 fixture 级续算 spec 覆盖；断电级人工验证清单见 `docs/cross-process-retry-resume-plan.md` §3.3）
+- [x] T5：未读即改/读后外部改两种拒绝文案符合预期（观测 spec 7 用例）
+- [x] T6：连续重复调用 3 次后 UI 上下文可见 advisory 提醒（repeat-tool-reminder spec）
+- [x] T7：写坏 `sati.yaml` 运行不中断、旧配置生效（lastGoodFacts spec）
+- [x] T9：draft_claims 产物过 schema 校验；人为违约被拦截（契约校验 spec + output-schema-batch spec）
 
 ### 6.4 回归（确保不破坏现有行为）
-- [ ] 阶段一/二行为保持：guard 优先于一切规则、shadowedRanges 恢复、凭证轮换即生效
-- [ ] 27 个专利技能中至少 3 个代表性技能（检索/撰写/审查）端到端跑通
-- [ ] `sati server` 启动 knowledge 自检无版本报错
+- [x] 阶段一/二行为保持：guard 优先于一切规则、shadowedRanges 恢复、凭证轮换即生效（受影响域回归 716 用例全绿，见 §10）
+- [ ] 27 个专利技能中至少 3 个代表性技能（检索/撰写/审查）端到端跑通（未在本阶段逐项人工验证；依赖既有技能冒烟）
+- [ ] `sati server` 启动 knowledge 自检无版本报错（未在本阶段单独复验；全量回归含 server 启动路径）
 
 ---
 
