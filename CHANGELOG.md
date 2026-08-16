@@ -2,9 +2,9 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
-## v0.0.30 - 2026-08-16
+## v0.1.0 - 2026-08-16
 
-> **版本目标（2026-08-16）**：nuo 专利规则激活专项——把 96 条沉睡的确定性专利规则（XiaoNuo 移植）激活为生产能力，接入 `rule_check` 显式自检（A 链）与规则驱动输出门禁（B 链）；附 31 条 `action: block` 逐条评审与降级补丁。
+> **版本目标（2026-08-16）**：**首个测试版（Beta）里程碑**——版本号从 0.0.x 跃迁到 0.1.0，宣告功能面成型、进入公开测试阶段（原规划的 v0.0.30 内容并入本版）。本版落地 nuo 专利规则激活专项：把 96 条沉睡的确定性专利规则（XiaoNuo 移植）激活为生产能力，接入 `rule_check` 显式自检（A 链）与规则驱动输出门禁（B 链）；附 31 条 `action: block` 逐条评审与降级补丁。
 
 ### Added
 - **nuo 规则激活评审**：31 条 `action: block` 逐条评审（样本验证实证 3 处 keyword 误伤）——2 保留 block（占位专利号/编造案号，零误伤）、1 降 review、15 降 warn（完整性提醒）、13 降 log（语义弱/过宽/重复）；48 warn + 17 log 批量复核全量接入。评审结论落 `rules/README.md`，机器可读权威落 `rules/patent/activation-overrides.yaml`（轻量补丁，加载时字段级覆盖 action）
