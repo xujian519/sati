@@ -46,7 +46,10 @@ test("attachments: collectRegisteredAttachmentReadFiles 收集真实文件、跳
     const allowed = await collectRegisteredAttachmentReadFiles(atts);
     assert.ok(allowed.includes(realFile), "真实文件应被收集");
     assert.ok(!allowed.some(p => p.includes("missing")), "缺失文件应跳过");
-    assert.equal(allowed.length, 2, "resolve + realpath 两个规范化路径（macOS /tmp 为 symlink）");
+    // resolve 与 realpath 在 /tmp 为 symlink 的平台（macOS）是两个规范化路径，
+    // Linux 上相同——断言去重后唯一且至少一条。
+    assert.equal(new Set(allowed).size, allowed.length, "路径应去重");
+    assert.ok(allowed.length >= 1);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
