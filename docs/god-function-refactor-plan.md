@@ -248,7 +248,9 @@ client/
 
 > ✅ **A6 轮次 1 已完成（2026-08-16）**：三个零依赖纯件下沉——`errors.ts`（McpClientError/isSessionExpired/withTimeout）、`toolSpec.ts`（toToolSpec，serverId 参数化）、`transport.ts`（buildTransport 返回 `{transport, perSessionDir}` 消除 this 写、DEFAULT_CALL_TIMEOUT_MS 随迁）；McpClient.ts 删除 4 段（-150 行），`export { McpClientError }` re-export 保持 barrel 面。**白盒测试改写**：McpClient.spec "routes streamable_http fetches" 从 `client.buildTransport()` 私有访问改为直接测模块级 buildTransport（方案 §5.5 预警的脆断点）。新增盲区测试 11 例（errors 5 / transport 4 / toolSpec 3——其中 2 例修正断言：truncate 后缀 `… [truncated]`、SDK `_serverParams.args`）。
 
-> ✅ **A8 轮次 2 已完成（2026-08-16）**：连接状态机 → `client/connection.ts`（`McpConnection`：8 字段 + start/runConnect/requireClient/callWithReconnect/reconnect/recycle/close/peekInstructions/cleanupSessionDir，**"同步置空引用再 await close"并发不变式与 reconnectInFlight 单飞守卫逐字保留**；listToolsCache 随迁并暴露 getToolsCache/setToolsCache）；McpClient.ts 318 → ~110 行组合门面（保留 start() 委托——McpRuntime.ts:59 消费）。新增 `tests/mcp/client/connection.spec.ts`（6 例：start 幂等/失败重置/close 幂等+缓存清理/会话过期单飞重连/-32001 回收后新连接恢复）。剩余轮次（operations/门面收口）为 A9。
+> ✅ **A8 轮次 2 已完成（2026-08-16）**：连接状态机 → `client/connection.ts`（`McpConnection`：8 字段 + start/runConnect/requireClient/callWithReconnect/reconnect/recycle/close/peekInstructions/cleanupSessionDir，**"同步置空引用再 await close"并发不变式与 reconnectInFlight 单飞守卫逐字保留**；listToolsCache 随迁并暴露 getToolsCache/setToolsCache）；McpClient.ts 318 → ~110 行组合门面（保留 start() 委托——McpRuntime.ts:59 消费）。新增 `tests/mcp/client/connection.spec.ts`（6 例：start 幂等/失败重置/close 幂等+缓存清理/会话过期单飞重连/-32001 回收后新连接恢复）。
+
+> ✅ **A9 轮次 3-4 已完成（2026-08-16）**：RPC 包装 → `client/operations.ts`（`McpClientOperations`：listTools LRU 缓存 + callTool + listResources/readResource，经 connection.callWithReconnect 执行）；McpClient.ts 收口为纯门面（~95 行，spec/options + 6 个委托 + re-export），barrel 面零改动。新增 `tests/mcp/client/operations.spec.ts`（3 例：TTL 缓存命中/缓存失效重取/通用错误映射 mcp_call_failed；调试期修复 fake 计数 bug——Object.assign 后 state 与 transport 属性分裂）。**McpClient 拆解全部完成**：425 行 → 门面 95 + connection 280 + operations 75 + errors 60 + transport 95 + toolSpec 30，累计新增盲区测试 26 例。
 
 ---
 

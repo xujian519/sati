@@ -24,23 +24,18 @@
  * Sati-style `mcp_*` error codes via the `code` field on the thrown
  * error, so the caller can map them back to `SatiToolErrorCode`.
  *
- * 拆分注记（A8 轮次 2）：连接状态机已迁至 ./connection.ts（8 字段 +
- * start/runConnect/callWithReconnect/reconnect/recycle/close），本文件为
- * 组合门面：spec/options + 连接委托 + RPC 包装（listTools/callTool/
- * listResources/readResource）。
+ * 拆分注记（A8/A9）：连接状态机 → ./connection.ts；RPC 包装 →
+ * ./operations.ts；本文件为组合门面（spec/options + 委托），
+ * `McpClientOptions` 与 re-export 保持 barrel 面不变。
  */
 
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { recursivelySanitizeUnicode } from "../runtime/sanitize.js";
 import type { SatiMcpResource, SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
-import { toToolSpec } from "./toolSpec.js";
-import { DEFAULT_CALL_TIMEOUT_MS } from "./transport.js";
 import { McpConnection } from "./connection.js";
+import { McpClientOperations } from "./operations.js";
 
 // 门面再导出（定义见 ./errors.js，保持 "./client/McpClient.js" 导出面不变）
 export { McpClientError } from "./errors.js";
-
-const LIST_TOOLS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type McpClientOptions = {
   callTimeoutMs?: number;
@@ -54,12 +49,14 @@ export type McpClientOptions = {
 
 export class McpClient {
   private readonly connection: McpConnection;
+  private readonly operations: McpClientOperations;
 
   constructor(
     public readonly spec: SatiMcpServerSpec,
     private readonly options: McpClientOptions = {},
   ) {
     this.connection = new McpConnection(spec, options);
+    this.operations = new McpClientOperations(spec, options, this.connection);
   }
 
   getStatus(): SatiMcpStatus {
@@ -76,55 +73,27 @@ export class McpClient {
   }
 
   /** M6 — LRU-cached tools/list. */
-  async listTools(): Promise<SatiMcpToolSpec[]> {
-    const cached = this.connection.getToolsCache();
-    if (cached && cached.expiresAt > Date.now()) return cached.tools;
-
-    const sdkResult = await this.connection.callWithReconnect(client =>
-      client.listTools(undefined, { timeout: this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS }),
-    );
-
-    const tools = (sdkResult.tools ?? []).map((tool: unknown) => toToolSpec(tool, this.spec.id));
-    this.connection.setToolsCache({
-      tools,
-      expiresAt: Date.now() + LIST_TOOLS_CACHE_TTL_MS,
-    });
-    return tools;
+  listTools(): Promise<SatiMcpToolSpec[]> {
+    return this.operations.listTools();
   }
 
   /** M3 + M5 + M14 + M15 — call a tool with timeout + auto-reconnect once. */
-  async callTool(
+  callTool(
     toolName: string,
     args: unknown,
     options: { signal?: AbortSignal; timeoutMs?: number } = {},
   ): Promise<{ content: unknown; isError?: boolean }> {
-    const timeoutMs = options.timeoutMs ?? this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
-    const result = await this.connection.callWithReconnect(client =>
-      client.callTool({ name: toolName, arguments: (args ?? {}) as Record<string, unknown> }, undefined, {
-        timeout: timeoutMs,
-        signal: options.signal,
-      }),
-    );
-    return {
-      content: recursivelySanitizeUnicode(result.content),
-      isError: typeof result.isError === "boolean" ? result.isError : undefined,
-    };
+    return this.operations.callTool(toolName, args, options);
   }
 
   /** List resources advertised by this server (MCP resources capability). */
-  async listResources(): Promise<{ resources: SatiMcpResource[] }> {
-    const result = await this.connection.callWithReconnect(client =>
-      client.listResources(undefined, { timeout: this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS }),
-    );
-    return { resources: recursivelySanitizeUnicode(result.resources) };
+  listResources(): Promise<{ resources: SatiMcpResource[] }> {
+    return this.operations.listResources();
   }
 
   /** Read a resource by URI (MCP resources capability). */
-  async readResource(uri: string): Promise<{ contents: unknown }> {
-    const result = await this.connection.callWithReconnect(client =>
-      client.readResource({ uri }, { timeout: this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS }),
-    );
-    return { contents: recursivelySanitizeUnicode(result.contents) };
+  readResource(uri: string): Promise<{ contents: unknown }> {
+    return this.operations.readResource(uri);
   }
 
   async close(): Promise<void> {
