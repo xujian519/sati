@@ -25,22 +25,19 @@
  * error, so the caller can map them back to `SatiToolErrorCode`.
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { recursivelySanitizeUnicode } from "../runtime/sanitize.js";
-import { truncateMcpToolDescription } from "../runtime/truncate.js";
-import { buildMcpToolWireName } from "../protocol/wireName.js";
-import { networkFetch } from "../../network/fetch.js";
-import { brandEnv, ENV_KEY } from "../../env.js";
 import type { SatiMcpResource, SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
 import { APP_VERSION } from "../../version.js";
+import { McpClientError, isSessionExpired, withTimeout } from "./errors.js";
+import { toToolSpec } from "./toolSpec.js";
+import { buildTransport, DEFAULT_CALL_TIMEOUT_MS } from "./transport.js";
 
-const DEFAULT_CALL_TIMEOUT_MS = parseInt(brandEnv(process.env, ENV_KEY.MCP_TOOL_TIMEOUT_MS) ?? "60000", 10);
+// 门面再导出（定义见 ./errors.js，保持 "./client/McpClient.js" 导出面不变）
+export { McpClientError } from "./errors.js";
+
 const LIST_TOOLS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type McpClientOptions = {
@@ -52,22 +49,6 @@ export type McpClientOptions = {
   /** Optional fetch override for testing streamable HTTP transports. */
   fetch?: typeof fetch;
 };
-
-export class McpClientError extends Error {
-  constructor(
-    message: string,
-    public readonly code:
-      | "mcp_handshake_failed"
-      | "mcp_call_timeout"
-      | "mcp_session_expired"
-      | "mcp_call_failed"
-      | "mcp_unsupported_transport",
-    public readonly serverId?: string,
-  ) {
-    super(message);
-    this.name = "McpClientError";
-  }
-}
 
 type ListToolsCache = {
   expiresAt: number;
@@ -111,7 +92,9 @@ export class McpClient {
 
   private async runConnect(): Promise<void> {
     this.status = "connecting";
-    const transport = this.buildTransport();
+    const built = buildTransport(this.spec, this.options);
+    const transport = built.transport;
+    if (built.perSessionDir !== null) this.perSessionDir = built.perSessionDir;
     const client = new Client({ name: "sati", version: APP_VERSION }, { capabilities: { elicitation: {} } });
     const handshakeMs = this.options.handshakeTimeoutMs ?? 10_000;
     try {
@@ -153,53 +136,6 @@ export class McpClient {
     return typeof value === "string" ? value : undefined;
   }
 
-  private buildTransport(): Transport {
-    if (this.options.transportFactory) {
-      return this.options.transportFactory(this.spec);
-    }
-    if (this.spec.transport === "stdio") {
-      let args = this.spec.args;
-      if (this.spec.perSession) {
-        const dir = mkdtempSync(join(tmpdir(), `sati-mcp-${this.spec.id}-`));
-        this.perSessionDir = dir;
-        args = [...(args ?? []), `--user-data-dir=${dir}`];
-      }
-      return new StdioClientTransport({
-        command: this.spec.command,
-        args,
-        env: this.spec.env,
-        cwd: this.spec.cwd,
-      });
-    }
-    if (this.spec.transport === "streamable_http") {
-      const url = new URL(this.spec.url);
-      return new StreamableHTTPClientTransport(url, {
-        requestInit: { headers: this.spec.headers ?? {} },
-        fetch: (input, init) => {
-          const method = String(init?.method ?? "GET").toUpperCase();
-          const fetchImpl = this.options.fetch;
-          return (fetchImpl ?? networkFetch)(input as RequestInfo, init, {
-            timeoutMs:
-              method === "POST"
-                ? (this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS)
-                : (this.options.handshakeTimeoutMs ?? 10_000),
-            retry: {
-              maxRetries: 1,
-              baseDelayMs: 500,
-              maxDelayMs: 5_000,
-            },
-          });
-        },
-      });
-    }
-    const fallback = this.spec as SatiMcpServerSpec;
-    throw new McpClientError(
-      `Unsupported transport: ${(fallback as { transport: string }).transport}`,
-      "mcp_unsupported_transport",
-      fallback.id,
-    );
-  }
-
   /** M6 — LRU-cached tools/list. */
   async listTools(): Promise<SatiMcpToolSpec[]> {
     const cached = this.listToolsCache;
@@ -209,7 +145,7 @@ export class McpClient {
       client.listTools(undefined, { timeout: this.options.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS }),
     );
 
-    const tools = (sdkResult.tools ?? []).map((tool: unknown) => this.toToolSpec(tool));
+    const tools = (sdkResult.tools ?? []).map((tool: unknown) => toToolSpec(tool, this.spec.id));
     this.listToolsCache = {
       tools,
       expiresAt: Date.now() + LIST_TOOLS_CACHE_TTL_MS,
@@ -271,7 +207,7 @@ export class McpClient {
       const client = await this.requireClient();
       return await fn(client);
     } catch (err) {
-      if (this.isSessionExpired(err) && !this.reconnectInFlight) {
+      if (isSessionExpired(err) && !this.reconnectInFlight) {
         this.reconnectInFlight = true;
         try {
           await this.reconnect();
@@ -297,13 +233,6 @@ export class McpClient {
         this.spec.id,
       );
     }
-  }
-
-  private isSessionExpired(err: unknown): boolean {
-    const e = err as { code?: number; message?: string; statusCode?: number } | null;
-    if (!e) return false;
-    if (e.statusCode === 404) return true;
-    return /session.*expired/i.test(e.message ?? "");
   }
 
   /**
@@ -386,40 +315,4 @@ export class McpClient {
       // best effort cleanup
     }
   }
-
-  private toToolSpec(raw: unknown): SatiMcpToolSpec {
-    const sanitized = recursivelySanitizeUnicode(raw) as {
-      name: string;
-      description?: string;
-      inputSchema?: unknown;
-      annotations?: SatiMcpToolSpec["annotations"];
-      _meta?: Record<string, unknown>;
-    };
-    const wireName = buildMcpToolWireName(this.spec.id, sanitized.name);
-    return {
-      serverId: this.spec.id,
-      toolName: sanitized.name,
-      wireName,
-      description: truncateMcpToolDescription(sanitized.description ?? ""),
-      inputSchema: sanitized.inputSchema ?? { type: "object", properties: {} },
-      annotations: sanitized.annotations,
-      meta: sanitized._meta,
-    };
-  }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorFactory: () => Error): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(errorFactory()), timeoutMs);
-    promise.then(
-      v => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      e => {
-        clearTimeout(timer);
-        reject(e);
-      },
-    );
-  });
 }
