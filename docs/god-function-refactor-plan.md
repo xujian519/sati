@@ -145,6 +145,8 @@ src/patent/
 
 **DoD**：`runWorkflow` ≤ 100 行（编排骨架），`runStageOnce` ≤ 80 行；`workflow/` 目录化后原 `workflow.js` 导入路径全部可用；等价性测试 + 全量 patent spec 绿。
 
+> ✅ **A7 轮次 2 已完成（2026-08-16）**：`signalMatches`/`compileSignal`/`signalFor`（带缓存）→ `src/patent/workflow/signal.ts`（纯函数）；workflow.ts 删两处闭包，`signalFor(stage, signalCache)` 显式传缓存。新增 `tests/patent/workflow/signal.spec.ts`（6 用例：否定词窗口/句界排除/g-flag 跨调用重置/空匹配不死循环/无 retry undefined/缓存同引用 + g 标志断言）。空匹配语义经实测锁定：位置 0 空匹配时 before 恒空串 → 恒触发。剩余轮次（runStageOnce 参数化）为 A10。
+
 ---
 
 ### 5.3 `src/knowledge/shared/kg-store.ts`（406 行 → 门面 + kg/ 子模块）
