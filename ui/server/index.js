@@ -7,52 +7,18 @@ installGlobalProxy();
 
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const installMode = fs.existsSync(path.join(__dirname, "..", "..", ".git")) ? "git" : "npm";
+const __dirname = import.meta.dirname;
 // Dev-mode SPA fallback redirect target (see `/{*splat}` handler below).
 const VITE_PORT = process.env.VITE_PORT || 5173;
-
-// ANSI color codes for terminal output
-const colors = {
-  reset: "\x1b[0m",
-  bright: "\x1b[1m",
-  cyan: "\x1b[36m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  dim: "\x1b[2m",
-};
-
-const c = {
-  info: text => `${colors.cyan}${text}${colors.reset}`,
-  ok: text => `${colors.green}${text}${colors.reset}`,
-  warn: text => `${colors.yellow}${text}${colors.reset}`,
-  tip: text => `${colors.blue}${text}${colors.reset}`,
-  bright: text => `${colors.bright}${text}${colors.reset}`,
-  dim: text => `${colors.dim}${text}${colors.reset}`,
-};
 
 assertRequiredSatiEnv();
 console.log("SERVER_PORT from runtime config:", process.env.SERVER_PORT);
 
 import express from "express";
-import { WebSocketServer, WebSocket } from "ws";
-import crypto from "crypto";
-import os from "os";
 import http from "http";
 import cors from "cors";
-import { promises as fsPromises } from "fs";
-// Uses the global fetch (Node >= 22); the node-fetch dependency was removed.
-import mime from "mime-types";
-import JSZip from "jszip";
 
-import { extractProjectDirectory } from "./projects.js";
-import { approvalListPendingViaGateway } from "./sati-bridge.js";
 import gitRoutes from "./routes/git.js";
 import authRoutes from "./routes/auth.js";
 import mcpRoutes from "./routes/mcp.js";
@@ -66,17 +32,10 @@ import configRoutes from "./routes/config.js";
 import gatewayRoutes from "./routes/gateway.js";
 import agentRoutes from "./routes/agent.js";
 import updateRoutes from "./routes/update.js";
-import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from "./routes/projects.js";
+import projectsRoutes from "./routes/projects.js";
 import userRoutes from "./routes/user.js";
 import pluginsRoutes from "./routes/plugins.js";
 import messagesRoutes from "./routes/messages.js";
-import {
-  addDirectoryToZip,
-  getSafeZipFilename,
-  permToRwx,
-  setPreviewContentType,
-  validateFilename,
-} from "./services/filesystem.js";
 import projectPreviewRoutes from "./routes/project-preview.js";
 import projectUploadsRoutes from "./routes/project-uploads.js";
 import tokenUsageRoutes from "./routes/token-usage.js";
@@ -86,14 +45,8 @@ import systemRoutes from "./routes/system.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
-import { contentDispositionAttachment } from "./utils/downloadHeaders.js";
-import { setupProjectsWatcher } from "./services/projects-watcher.js";
-import { handleShellConnection } from "./websocket/shell.js";
 import { createChatWebSocketServer } from "./websocket/chat.js";
 import { startServer } from "./services/server-boot.js";
-
-// Sati-only mode: chat execution always goes through src/gateway via
-// cursor-cli, openai-codex, gemini-cli) has been removed.
 
 const app = express();
 const server = http.createServer(app);
@@ -175,15 +128,6 @@ app.use("/api/agent", agentRoutes);
 // Self-update API Routes (protected)
 app.use("/api/update", authenticateToken, updateRoutes);
 
-// The runtime model is read from ~/.sati/sati.yaml. Enumerate every
-// configured provider/model pair so the chat composer can render real
-// model options instead of a hardcoded stub. On a fresh install (no
-// sati.yaml yet) the lists come back empty and the UI shows the
-// "configure a model first" state rather than a fake model name.
-// Sati routing dashboard. The `/api/ccr/*` URL family was kept for
-// frontend back-compat (Dashboard tab + useRouterSettings) but the data
-// now comes from `src/router/stats/TokenStatsCollector` via the
-
 // 系统路由（health/ccr/always-on/memory-dashboard，见 ./routes/system.js）
 app.use(systemRoutes);
 // Serve public files (like api-docs.html)
@@ -206,12 +150,6 @@ app.use(
     },
   }),
 );
-
-// API Routes (protected)
-// /api/config endpoint removed - no longer needed
-// Frontend now uses window.location for WebSocket URLs.
-// /api/system/update was the V1 "Update available" banner backend; the
-// VersionUpgradeModal that consumed it was removed during the V1 cleanup.
 
 app.use(projectSessionsRoutes);
 app.use(projectFilesRoutes);

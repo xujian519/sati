@@ -12,7 +12,6 @@ import { authenticateWebSocket } from "../middleware/auth.js";
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "../constants/config.js";
 import { getPluginPort } from "../utils/plugin-process-manager.js";
 import { createNormalizedMessage } from "../sati-message.js";
-import { handleShellConnection } from "./shell.js";
 import {
   abortViaGateway,
   approvalDecideViaGateway,
@@ -24,6 +23,7 @@ import {
   grantSessionPermissionViaGateway,
   runChatViaGateway,
 } from "../sati-bridge.js";
+import { handleShellConnection } from "./shell.js";
 import {
   broadcastChatFrame,
   broadcastToSessionWatchers,
@@ -38,45 +38,30 @@ export function createChatWebSocketServer(server) {
     verifyClient: info => {
       console.log("WebSocket connection attempt to:", info.req.url);
 
-      // Platform / no-login mode: allow connection without token
-      if (IS_PLATFORM || DISABLE_LOCAL_AUTH) {
-        const user = authenticateWebSocket(null); // Returns first DB user
-        if (!user) {
-          console.log("[WARN] WebSocket auth bypass: No user found in database");
-          return false;
-        }
-        info.req.user = user;
-        console.log("[OK] WebSocket authenticated (bypass) for user:", user.username);
-        return true;
-      }
+      // Platform / no-login mode skips token validation; otherwise extract the
+      // token from the query string or Authorization header.
+      const bypass = IS_PLATFORM || DISABLE_LOCAL_AUTH;
+      const token = bypass
+        ? null
+        : new URL(info.req.url, "http://localhost").searchParams.get("token") ||
+          info.req.headers.authorization?.split(" ")[1];
 
-      // Normal mode: verify token
-      // Extract token from query parameters or headers
-      const url = new URL(info.req.url, "http://localhost");
-      const token = url.searchParams.get("token") || info.req.headers.authorization?.split(" ")[1];
-
-      // Verify token
       const user = authenticateWebSocket(token);
       if (!user) {
-        console.log("[WARN] WebSocket authentication failed");
+        console.log(`[WARN] WebSocket authentication failed${bypass ? " (bypass)" : ""}`);
         return false;
       }
 
-      // Store user info in the request for later use
       info.req.user = user;
-      console.log("[OK] WebSocket authenticated for user:", user.username);
+      console.log(`[OK] WebSocket authenticated for user: ${user.username}`);
       return true;
     },
   });
 
   // WebSocket connection handler that routes based on URL path
   wss.on("connection", (ws, request) => {
-    const url = request.url;
-    console.log("[INFO] Client connected to:", url);
-
-    // Parse URL to get pathname without query parameters
-    const urlObj = new URL(url, "http://localhost");
-    const pathname = urlObj.pathname;
+    const pathname = new URL(request.url, "http://localhost").pathname;
+    console.log("[INFO] Client connected to:", pathname);
 
     if (pathname === "/shell") {
       handleShellConnection(ws);
