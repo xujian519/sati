@@ -308,7 +308,9 @@ client/
 
 > ✅ **A11 前置轮已完成（2026-08-16，PR #53）**：治理全仓唯一涉及 InProcessGateway.ts 的源码扫描伪测试——`weixin-settings-runtime-flow.spec.ts` "Gateway protocol exposes prepare_weixin_login RPC" 改为行为断言（协议面 frames/WS/RemoteGateway 源码断言保留——不参与拆解；InProcessGateway 注入回调透传 + 未注入降级 unsupported）。
 
-> ✅ **A11 轮 1 已完成（2026-08-16）**：三个零依赖纯件下沉——`toolResultSanitize.ts`（预览截断/data 递归清洗/headTail/pathPart/MIME 扩展 + 2 常量）、`providerError.ts`（AgentError/ModelError/Record → providerError 映射 + 守卫）、`normalizers.ts`（mode/runMode 归一化 + /plan 解析 + PLAN_COMMAND_USAGE）；InProcessGateway.ts 2344 → 2173（-171），`export { normalizeGatewayModeForLegacyInput, normalizeGatewayRunMode }` re-export 保持导出面。**本轮不触事件 emit 面，event-matrix fresh**。新增盲区测试 15 例（toolResultSanitize 6 / providerError 4 / normalizers 5——headTailString 测试经实测修正 maxChars 需大于 marker 长度）。剩余轮次（eventMapping/attachments+telemetry/收尾）为 A11 轮 2-4。
+> ✅ **A11 轮 1 已完成（2026-08-16）**：三个零依赖纯件下沉——`toolResultSanitize.ts`（预览截断/data 递归清洗/headTail/pathPart/MIME 扩展 + 2 常量）、`providerError.ts`（AgentError/ModelError/Record → providerError 映射 + 守卫）、`normalizers.ts`（mode/runMode 归一化 + /plan 解析 + PLAN_COMMAND_USAGE）；InProcessGateway.ts 2344 → 2173（-171），`export { normalizeGatewayModeForLegacyInput, normalizeGatewayRunMode }` re-export 保持导出面。**注意（实测教训）：轮 1 虽不触事件 emit 面，但行号移动仍使事件矩阵 stale——必须 `pnpm gen:event-matrix` 再生成**（CI 捕获后已补）。新增盲区测试 15 例（toolResultSanitize 6 / providerError 4 / normalizers 5——headTailString 测试经实测修正 maxChars 需大于 marker 长度）。
+
+> ✅ **A11 轮 2 已完成（2026-08-16）**：事件映射 → `client/eventMapping.ts`（clone/runId 助手 + mapAgentEvent(export)/mapAgentEventForTurn/mapModelEvent/mapSubagentModelEvent/mapTurnCompleted；**mapAgentEventForTurn 的 tool_result 分支含 tmp 落盘 IO——本文件非纯函数**）；InProcessGateway.ts 2156 → 1669（-487），`export { mapAgentEvent }` re-export 保持 gateway/index.ts barrel 面（map-agent-event-runid/tool-result-preview 两个直连测试经 re-export 正常）。**事件矩阵再生成**（assistant_attachment/structured_output/tool_call_finished 生产者归属变化，diff 49 行）。新增盲区测试 4 例（structured_output 顺序/大结果落盘/未映射空数组/turn_failed providerError）。剩余轮次（attachments+telemetry/收尾）为 A11 轮 3-4。
 
 ---
 
