@@ -33,8 +33,10 @@ describe("提示词常量（业务语义快照）", () => {
     assert.ok(DREAM_FILE_GLOBAL_PLAN_SYSTEM_PROMPT.includes("global audit planner"));
     assert.ok(DREAM_FILE_GLOBAL_PLAN_SYSTEM_PROMPT.includes("reorganization plan"));
   });
-  it("画像重写提示词存在", () => {
-    assert.ok(USER_PROFILE_REWRITE_SYSTEM_PROMPT.length > 100);
+  it("画像重写提示词锚定核心契约（JSON 形状 + 吸收审计）", () => {
+    assert.ok(USER_PROFILE_REWRITE_SYSTEM_PROMPT.includes('"identity_background_markdown"'));
+    assert.ok(USER_PROFILE_REWRITE_SYSTEM_PROMPT.includes("note_absorption"));
+    assert.ok(USER_PROFILE_REWRITE_SYSTEM_PROMPT.includes('"absorbed"'));
   });
   it("超时常量值", () => {
     assert.equal(DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS, 600_000);
