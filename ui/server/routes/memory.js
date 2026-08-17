@@ -6,6 +6,11 @@ import { fileURLToPath } from "url";
 // edgeclaw-memory-core 是独立 workspace 子包，sati-memory-core-bundle 只打包
 // package.json + lib/ + ui-source/（见 apps/desktop/scripts/release.sh），
 // 改 import 子包 src/ 源码入口会破坏桌面打包链路；lib/ 是其公共 API 编译产物。
+// 打包后解析路径由 server-manager.ts 显式支持（srcLink → sati-main/dist/src +
+// memSrcLink → 提取的 bundle），请勿改为包名导入（node_modules symlink 在
+// release tar 中被剥掉，依赖启动期重建的 hoistedLink/memNodeModLink，属未验证路径）。
+// lib/ 漂移窗口已被根 package.json 的 prebuild/predev/preserver 钩子消除
+// （`pnpm --filter edgeclaw-memory-core build` 在每次 dev/build/server 启动时重建）。
 import { MemoryBundleValidationError } from "../../../src/context/memory/edgeclaw-memory-core/lib/index.js";
 import { readSatiConfigFile, writeSatiConfig } from "../services/satiConfig.js";
 import { reloadSatiConfig } from "../services/satiConfigReloader.js";
