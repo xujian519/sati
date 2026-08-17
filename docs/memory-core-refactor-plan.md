@@ -1,7 +1,7 @@
 # edgeclaw-memory-core 拆解+补测试专项实施方案
 
 - 创建日期：2026-08-17
-- 状态：**实施中**（批次 0-4 完成，批次 5 进行中）
+- 状态：**全部完成 ✅（2026-08-17）**——批次 0-6 落地，子包测试 222 例全绿
 - 前置：`docs/technical-debt-report.md` 待决事项 #1（子包 5 个 >1000 行文件零测试）；方法论先例 `docs/god-function-refactor-plan.md`
 - 目标：对 5 个大文件先补行为基线测试（characterization），再按职责聚类拆分；子包测试从 0 起步覆盖核心路径
 
@@ -76,10 +76,11 @@ edgeclaw-memory-core 是 Sati 记忆核心的独立 workspace 子包（17 个 TS
 - **批次 2**：heartbeat 纯 helper 下沉 heartbeat-helpers.ts（1019→690 行）+ 23 基线测试——✅ 已完成
 - **批次 3**：dream-review 拆出 6 个子模块（dream-types/paths/detail/trace/mappers/validators，1532→1072 行）+ 25 基线测试——✅ 已完成
 - **批次 4**：sqlite 模块级 helper 下沉 sqlite-helpers.ts（2024→1728 行）+ 23 测试；file-memory 拆出 4 子模块（constants/text/markdown/manifest，1632→1161 行）+ 25 测试——✅ 已完成
-- **批次 5**：llm-extraction 已下沉 G1/G4（llm-json/request-retry）+ G6（llm-normalizers）+ G7（llm-hints）+ G2/G3（llm-prompts，3745→2191 行）+ 77 测试——✅ 已完成；剩余 G8 编排门面（类方法拆分：extractFileMemoryCandidates 439 行等）——⏳ 下一轮（方法级拆分，需先补类方法行为基线）
-- **批次 6**：收尾——方案文档状态更新、全量验证、root 全绿、PR
+- **批次 5**：llm-extraction 模块级下沉（G1/G4 llm-json+request-retry、G6 llm-normalizers、G7 llm-hints、G2/G3 llm-prompts、抽取 llm-extraction-item、HTTP llm-http）——✅ 已完成
+- **批次 5c（G8）**：类方法级拆分——extractFileMemoryCandidates 438→154（信号/归一/过滤/提示词/userPrompt 全纯函数化）、callStructuredJson 190→116（请求体/重试执行下沉 llm-http）、selectRecallProject 108→49、selectIndexProject 116→56（prompt 构造 + 判定下沉）——✅ 已完成；剩余编排骨架（extract 154/callStructuredJson 116/createMemoryNote 100）按 god-function 先例口径接受
+- **批次 6**：收尾——方案文档、全量验证、PR #88（主体）+ G8 分支 PR——✅ 已完成
 
-> 状态：子包测试 185 例全绿；root memory 55 用例绿。5 个大文件已处理 4 个（heartbeat 690 / dream-review 1072 / sqlite 1728 / file-memory 1161），llm-extraction 2191 行（G1-G4/G6/G7 下沉，类本体 ~1500 行含 17 方法）。
+> 状态：子包测试 **222 例**全绿；root memory 55 用例绿。5 个大文件全部拆解 + 22 个新模块；llm-extraction 3745→1669 行（类方法全部 ≤116 行，业务逻辑全下沉）。
 
 ## 5. 验收标准
 

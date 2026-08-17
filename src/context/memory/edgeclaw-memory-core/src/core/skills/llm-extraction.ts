@@ -82,6 +82,20 @@ import {
   stripMarkdownSyntax,
 } from "./llm-hints.js";
 import {
+  EXTRACTION_SYSTEM_PROMPT_LINES,
+  extractFocusSignals,
+  filterExtractionCandidate,
+  normalizeExtractionItem,
+  resolveIndexAssignment,
+  resolveSelectedProject,
+} from "./llm-extraction-item.js";
+import {
+  buildProviderRequest,
+  executeWithRetryRequest,
+  looksLikeEnvVarName,
+  normalizeProviderApi,
+} from "./llm-http.js";
+import {
   DEFAULT_DREAM_CLUSTER_PLAN_TIMEOUT_MS,
   DEFAULT_DREAM_CLUSTER_REFINE_TIMEOUT_MS,
   DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS,
@@ -120,6 +134,9 @@ import {
   normalizeIdentityBackgroundSectionMarkdown,
   renderIdentityBackgroundMarkdownFromItems,
   serializeTurnsForPrompt,
+  buildSelectIndexProjectPrompt,
+  buildSelectRecallProjectPrompt,
+  buildExtractionUserPrompt,
 } from "./llm-prompts.js";
 
 type LoggerLike = {
@@ -616,53 +633,6 @@ function extractGoogleGenerateContentText(payload: unknown): string {
   return text;
 }
 
-function normalizeProviderApi(value: string): string {
-  const api = value.trim().toLowerCase();
-  return api === "gemini" ? "google" : api;
-}
-
-/**
- * 推理模型（deepseek-v4 系列/deepseek-reasoner/kimi-k2 系列/kimi-k3 等）
- * 官方约束 temperature 不可修改（kimi 传其他值报错、deepseek-v4 思考模式
- * 静默忽略）。直连构造 body 时须省略显式 temperature。
- */
-function shouldOmitTemperature(model: string): boolean {
-  return /deepseek-v4|deepseek-reasoner|deepseek-r1|kimi-k2|kimi-k3/.test(model.toLowerCase());
-}
-
-function buildGoogleGenerateContentUrl(baseUrl: string, model: string): string {
-  const url = new URL(stripTrailingSlash(baseUrl));
-  const parts = url.pathname.split("/").filter(Boolean);
-  const last = parts.at(-1);
-  const apiVersion = last === "v1" || last === "v1beta" ? last : "v1beta";
-  const baseParts = last === "v1" || last === "v1beta" ? parts.slice(0, -1) : parts;
-  url.pathname = `/${[
-    ...baseParts,
-    apiVersion,
-    "models",
-    `${encodeURIComponent(normalizeGoogleModelId(model))}:generateContent`,
-  ].join("/")}`;
-  url.search = "";
-  url.hash = "";
-  return url.toString();
-}
-
-function normalizeGoogleModelId(model: string): string {
-  const withoutProvider = model.trim().startsWith("google/") ? model.trim().slice("google/".length) : model.trim();
-  if (withoutProvider === "gemini-3-pro") return "gemini-3-pro-preview";
-  if (withoutProvider === "gemini-3.1-pro") return "gemini-3.1-pro-preview";
-  if (withoutProvider === "gemini-3-flash") return "gemini-3-flash-preview";
-  if (withoutProvider === "gemini-3.1-flash" || withoutProvider === "gemini-3.1-flash-preview") {
-    return "gemini-3-flash-preview";
-  }
-  if (withoutProvider === "gemini-3.1-flash-lite") return "gemini-3.1-flash-lite-preview";
-  return withoutProvider;
-}
-
-function looksLikeEnvVarName(value: string): boolean {
-  return /^[A-Z0-9_]+$/.test(value);
-}
-
 type MemoryTelemetryLike = {
   trackFeatureLoopStage?: (input: Record<string, unknown>) => void;
   trackError?: (error: unknown, input?: Record<string, unknown>) => void;
@@ -800,107 +770,26 @@ export class LlmMemoryExtractor {
     const headers = new Headers(selection.headers);
     if (!headers.has("content-type")) headers.set("content-type", "application/json");
     const apiType = normalizeProviderApi(selection.api);
-    let url = "";
-    let body: Record<string, unknown>;
-
-    if (apiType === "openai-responses" || apiType === "responses") {
-      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${apiKey}`);
-      url = `${selection.baseUrl}/responses`;
-      body = {
-        model: selection.model,
-        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
-        input: [
-          { role: "system", content: input.systemPrompt },
-          { role: "user", content: input.userPrompt },
-        ],
-      };
-    } else if (apiType === "anthropic") {
-      if (!headers.has("x-api-key")) headers.set("x-api-key", apiKey);
-      if (!headers.has("anthropic-version")) headers.set("anthropic-version", "2023-06-01");
-      url = `${selection.baseUrl}/v1/messages`;
-      body = {
-        model: selection.model,
-        max_tokens: 65536,
-        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
-        system: input.systemPrompt,
-        messages: [{ role: "user", content: input.userPrompt }],
-      };
-    } else if (apiType === "google") {
-      if (!headers.has("x-goog-api-key")) headers.set("x-goog-api-key", apiKey);
-      url = buildGoogleGenerateContentUrl(selection.baseUrl, selection.model);
-      body = {
-        systemInstruction: { parts: [{ text: input.systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: input.userPrompt }] }],
-        generationConfig: {
-          temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
-          responseMimeType: "application/json",
-        },
-      };
-    } else {
-      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${apiKey}`);
-      url = `${selection.baseUrl}/chat/completions`;
-      body = {
-        model: selection.model,
-        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
-        stream: false,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: input.systemPrompt },
-          { role: "user", content: input.userPrompt },
-        ],
-      };
-    }
-
-    const executeOnce = async (payloadBody: Record<string, unknown>): Promise<Response> => {
-      const controller = new AbortController();
-      const timeoutMs = resolveRequestTimeoutMs(input.timeoutMs);
-      const timeoutId = timeoutMs === null ? null : setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        return await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payloadBody),
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (timeoutMs !== null && error instanceof Error && error.name === "AbortError") {
-          throw new Error(`${input.requestLabel} request timed out after ${timeoutMs}ms`);
-        }
-        throw error;
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-      }
-    };
-
-    const executeWithRetry = async (payloadBody: Record<string, unknown>): Promise<Response> => {
-      let lastError: unknown = null;
-      for (let attempt = 0; attempt < DEFAULT_REQUEST_MAX_ATTEMPTS; attempt += 1) {
-        try {
-          const response = await executeOnce(payloadBody);
-          if (response.ok) return response;
-          const errorText = await response.text();
-          const error = Object.assign(
-            new Error(`${input.requestLabel} request failed (${response.status}): ${truncate(errorText, 300)}`),
-            { status: response.status },
-          );
-          lastError = error;
-          if (!REQUEST_RETRYABLE_STATUS_CODES.has(response.status) || attempt >= DEFAULT_REQUEST_MAX_ATTEMPTS - 1) {
-            throw error;
-          }
-        } catch (error) {
-          lastError = error;
-          if (!isTransientRequestError(error) || attempt >= DEFAULT_REQUEST_MAX_ATTEMPTS - 1) {
-            throw error;
-          }
-        }
-        await sleep(computeRetryDelayMs(attempt));
-      }
-      throw lastError instanceof Error ? lastError : new Error(`${input.requestLabel} request failed`);
-    };
-
+    const {
+      url,
+      body,
+      headers: requestHeaders,
+    } = buildProviderRequest({
+      apiType,
+      selection,
+      systemPrompt: input.systemPrompt,
+      userPrompt: input.userPrompt,
+      apiKey,
+    });
     let response: Response;
     try {
-      response = await executeWithRetry(body);
+      response = await executeWithRetryRequest({
+        url,
+        headers: requestHeaders,
+        body,
+        requestLabel: input.requestLabel,
+        timeoutMs: input.timeoutMs,
+      });
     } catch (error) {
       if (!("response_format" in body)) {
         telemetry?.trackError?.(error, {
@@ -921,7 +810,13 @@ export class LlmMemoryExtractor {
       const fallbackBody = { ...body };
       delete fallbackBody.response_format;
       try {
-        response = await executeWithRetry(fallbackBody);
+        response = await executeWithRetryRequest({
+          url,
+          headers: requestHeaders,
+          body: fallbackBody,
+          requestLabel: input.requestLabel,
+          timeoutMs: input.timeoutMs,
+        });
       } catch (fallbackError) {
         telemetry?.trackError?.(fallbackError, {
           module: "memory",
@@ -1426,17 +1321,7 @@ export class LlmMemoryExtractor {
   }): Promise<MemoryRoute> {
     try {
       const parsed = await this.callStructuredJsonWithDebug<{ route?: unknown }>({
-        systemPrompt: [
-          "You decide whether the current query should trigger long-term memory recall.",
-          "Return JSON only with a single field route.",
-          "Valid route values: none, user, project, mix.",
-          "Use none unless the query clearly needs long-term memory.",
-          "Use user only when the query is asking about stable personal identity/background facts about who the user is, such as name, profession, long-term role context, life background, or durable relationships.",
-          "Do not use user for reply preferences, language choices, formatting rules, style guidance, file/tool boundaries, or delivery rules; those belong to project.",
-          "Use project when the query only needs current project memory, including project facts, collaboration rules, delivery style, file boundaries, or project status.",
-          "Use mix only when the query genuinely needs both current project memory and the user's stable identity/background at the same time.",
-          "Do not use mix just because both could be helpful; choose mix only when both are actually necessary to answer well.",
-        ].join("\n"),
+        systemPrompt: EXTRACTION_SYSTEM_PROMPT_LINES.join("\n"),
         userPrompt: JSON.stringify(
           {
             query: input.query,
@@ -1473,56 +1358,16 @@ export class LlmMemoryExtractor {
     if (input.shortlist.length === 0) return {};
     const fallbackProject = chooseBestRecallProjectFallback(input.shortlist);
     const allowEmpty = Boolean(input.allowEmpty);
+    const { systemPrompt, userPrompt } = buildSelectRecallProjectPrompt({
+      query: input.query,
+      recentUserMessages: input.recentUserMessages,
+      shortlist: input.shortlist,
+      allowEmpty,
+    });
     try {
       const parsed = await this.callStructuredJsonWithDebug<{ selected_project_id?: unknown; reason?: unknown }>({
-        systemPrompt: [
-          allowEmpty
-            ? "You choose the most relevant existing formal project for long-term memory recall only when one clearly matches the current query."
-            : "You choose the single most relevant formal project for long-term memory recall.",
-          "Return JSON only with selected_project_id and reason.",
-          allowEmpty
-            ? "Select at most one project from the provided shortlist."
-            : "You must select exactly one project from the provided shortlist.",
-          "Use the current query first, then recent user messages only for continuation/disambiguation.",
-          "Do not infer a project from assistant wording.",
-          "Similar project names are distinct by default; shared domain, shared workflow, or shared feedback do not make them the same project.",
-          "If the query explicitly names one shortlist project, prefer that exact project instead of broadening to a nearby or umbrella project.",
-          allowEmpty
-            ? "If the current query introduces or switches to a new project that is not represented in the shortlist, return an empty selected_project_id."
-            : "If the current query introduces or switches to a new project, still choose the best shortlist project.",
-          allowEmpty
-            ? "If no shortlist project is clearly relevant, return an empty selected_project_id."
-            : "If multiple shortlist projects remain plausible, still choose the best one.",
-          allowEmpty
-            ? "If multiple shortlist projects are plausible but evidence is not decisive, return an empty selected_project_id."
-            : "When multiple shortlist projects are plausible, never return empty; choose the best match.",
-          "When relevance is comparable, prefer general_local over workspace_external.",
-          allowEmpty
-            ? "Use empty selected_project_id to skip project-scoped recall for a new or unrelated project; do not force unrelated memory into an existing project."
-            : "Never return an empty selected_project_id when the shortlist is non-empty.",
-        ].join("\n"),
-        userPrompt: JSON.stringify(
-          {
-            query: input.query,
-            recent_user_messages: (input.recentUserMessages ?? [])
-              .slice(-4)
-              .map(message => truncateForPrompt(message.content, 220)),
-            shortlist: input.shortlist.map(project => ({
-              project_id: project.projectId,
-              project_name: project.projectName,
-              description: truncateForPrompt(project.description, 180),
-              status: project.status,
-              source_type: project.sourceType ?? "unknown",
-              updated_at: project.updatedAt,
-              shortlist_score: project.score,
-              shortlist_exact: project.exact,
-              shortlist_source: project.source,
-              matched_text: truncateForPrompt(project.matchedText, 180),
-            })),
-          },
-          null,
-          2,
-        ),
+        systemPrompt,
+        userPrompt,
         requestLabel: "File memory project selection",
         timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_PROJECT_SELECTION_TIMEOUT_MS,
         ...(input.agentId ? { agentId: input.agentId } : {}),
@@ -1530,32 +1375,13 @@ export class LlmMemoryExtractor {
         parse: raw => JSON.parse(extractFirstJsonObject(raw)) as { selected_project_id?: unknown; reason?: unknown },
       });
       const selectedProjectId = typeof parsed.selected_project_id === "string" ? parsed.selected_project_id.trim() : "";
-      const matched = input.shortlist.find(project => project.projectId === selectedProjectId);
-      if (matched) {
-        return {
-          projectId: matched.projectId,
-          ...(typeof parsed.reason === "string" && parsed.reason.trim()
-            ? { reason: truncateForPrompt(parsed.reason, 220) }
-            : {}),
-        };
-      }
-      if (allowEmpty) {
-        return {
-          ...(typeof parsed.reason === "string" && parsed.reason.trim()
-            ? { reason: truncateForPrompt(parsed.reason, 220) }
-            : {
-                reason: selectedProjectId
-                  ? "Model returned a project id outside the shortlist."
-                  : "Model returned no matching project.",
-              }),
-        };
-      }
-      return {
-        projectId: fallbackProject.projectId,
-        ...(typeof parsed.reason === "string" && parsed.reason.trim()
-          ? { reason: truncateForPrompt(parsed.reason, 220) }
-          : { reason: `Fallback selected ${fallbackProject.projectName}; model returned no valid project id.` }),
-      };
+      return resolveSelectedProject({
+        selectedProjectId,
+        shortlist: input.shortlist,
+        allowEmpty,
+        fallbackProject,
+        parsedReason: parsed.reason,
+      });
     } catch (error) {
       this.logger?.warn?.(`[clawxmemory] file memory project selection fallback: ${String(error)}`);
       if (allowEmpty) {
@@ -1586,64 +1412,21 @@ export class LlmMemoryExtractor {
         reason: "No existing General projects are available for index assignment.",
       };
     }
+    const { systemPrompt, userPrompt } = buildSelectIndexProjectPrompt({
+      candidate: input.candidate,
+      candidatePreview: input.candidatePreview,
+      focusTurn: input.focusTurn,
+      recentUserMessages: input.recentUserMessages,
+      shortlist: input.shortlist,
+    });
     try {
       const parsed = await this.callStructuredJsonWithDebug<{
         decision?: unknown;
         selected_project_id?: unknown;
         reason?: unknown;
       }>({
-        systemPrompt: [
-          "You assign a newly generated long-term memory item to a General Chat project.",
-          "This is index-time memory assignment, not recall.",
-          "Return JSON only with decision, selected_project_id, and reason.",
-          "decision must be one of: attach_existing, create_new.",
-          "The primary evidence is candidate_memory_preview: the memory item that will be written.",
-          "Use the focus user turn and recent user messages only as supporting context for disambiguation.",
-          "Choose attach_existing only when the candidate clearly belongs to exactly one existing General project.",
-          "Choose create_new when the candidate is a new project, evidence is insufficient, multiple projects remain plausible, or the match is only a broad domain similarity.",
-          "Do not attach just because projects share a category such as SaaS, copywriting, Xiaohongshu, marketing, planning, or content creation.",
-          "All shortlist projects are General-local assignment targets; never infer or write to an external workspace.",
-          "If decision is attach_existing, selected_project_id must be one id from the shortlist.",
-          "If decision is create_new, selected_project_id must be an empty string.",
-        ].join("\n"),
-        userPrompt: JSON.stringify(
-          {
-            candidate: {
-              type: input.candidate.type,
-              name: truncateForPrompt(input.candidate.name, 120),
-              description: truncateForPrompt(input.candidate.description, 220),
-              rule: input.candidate.rule ? truncateForPrompt(input.candidate.rule, 220) : null,
-              summary: input.candidate.summary ? truncateForPrompt(input.candidate.summary, 220) : null,
-              why: input.candidate.why ? truncateForPrompt(input.candidate.why, 220) : null,
-              how_to_apply: input.candidate.howToApply ? truncateForPrompt(input.candidate.howToApply, 220) : null,
-              stage: input.candidate.stage ? truncateForPrompt(input.candidate.stage, 220) : null,
-              decisions: (input.candidate.decisions ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
-              constraints: (input.candidate.constraints ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
-              next_steps: (input.candidate.nextSteps ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
-              blockers: (input.candidate.blockers ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
-              timeline: (input.candidate.timeline ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
-              notes: (input.candidate.notes ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
-            },
-            candidate_memory_preview: truncateForPrompt(input.candidatePreview, 1600),
-            focus_user_turn: truncateForPrompt(input.focusTurn.content, 360),
-            recent_user_messages: (input.recentUserMessages ?? [])
-              .slice(-4)
-              .map(message => truncateForPrompt(message.content, 220)),
-            shortlist: input.shortlist.map(project => ({
-              project_id: project.projectId,
-              project_name: project.projectName,
-              description: truncateForPrompt(project.description, 180),
-              status: project.status,
-              updated_at: project.updatedAt,
-              shortlist_score: project.score,
-              shortlist_exact: project.exact,
-              shortlist_source: project.source,
-              matched_text: truncateForPrompt(project.matchedText, 180),
-            })),
-          },
-          null,
-          2,
-        ),
+        systemPrompt,
+        userPrompt,
         requestLabel: "File memory project assignment",
         timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_PROJECT_SELECTION_TIMEOUT_MS,
         ...(input.agentId ? { agentId: input.agentId } : {}),
@@ -1655,29 +1438,12 @@ export class LlmMemoryExtractor {
             reason?: unknown;
           },
       });
-      const decision = parsed.decision === "attach_existing" ? "attach_existing" : "create_new";
-      const selectedProjectId = typeof parsed.selected_project_id === "string" ? parsed.selected_project_id.trim() : "";
-      const matched = input.shortlist.find(project => project.projectId === selectedProjectId);
-      const reason =
-        typeof parsed.reason === "string" && parsed.reason.trim() ? truncateForPrompt(parsed.reason, 260) : "";
-      if (decision === "attach_existing" && matched) {
-        return {
-          decision: "attach_existing",
-          projectId: matched.projectId,
-          ...(reason ? { reason } : {}),
-        };
-      }
-      return {
-        decision: "create_new",
-        ...(reason
-          ? { reason }
-          : {
-              reason:
-                decision === "attach_existing"
-                  ? "Model selected an invalid project id."
-                  : "Model chose to create a new General project.",
-            }),
-      };
+      return resolveIndexAssignment({
+        decision: parsed.decision,
+        selectedProjectId: typeof parsed.selected_project_id === "string" ? parsed.selected_project_id.trim() : "",
+        shortlist: input.shortlist,
+        parsedReason: parsed.reason,
+      });
     } catch (error) {
       this.logger?.warn?.(`[clawxmemory] file memory project assignment fallback: ${String(error)}`);
       return {
@@ -1758,101 +1524,41 @@ export class LlmMemoryExtractor {
     debugTrace?: PromptDebugSink;
     decisionTrace?: (debug: FileMemoryExtractionDebug) => void;
   }): Promise<MemoryCandidate[]> {
-    const focusMessages = input.messages.filter(message => message.role === "user");
+    const signals = extractFocusSignals({
+      messages: input.messages,
+      batchContextMessages: input.batchContextMessages?.length ? input.batchContextMessages : input.messages,
+      knownProjects: input.knownProjects ?? [],
+    });
+    const focusMessages = signals.focusMessages;
     if (focusMessages.length === 0) return [];
     const batchContextMessages = input.batchContextMessages?.length ? input.batchContextMessages : input.messages;
-    const focusText = focusMessages
-      .filter(message => message.role === "user")
-      .map(message => message.content)
-      .join("\n");
-    const explicitProjectName = extractProjectNameHint(focusText);
-    const explicitProjectDescriptor = extractProjectDescriptorHint(focusText);
-    const explicitProjectStage = extractProjectStageHint(focusText);
-    const explicitTimeline = extractTimelineHints(focusText);
-    const explicitGoal = extractSingleHint(focusText, /目标(?:是|为|:|：)?\s*([^。；;\n]+)/i);
-    const explicitBlocker = extractSingleHint(focusText, /当前卡点(?:是|为)?([^。；;\n]+)/i);
-    const genericProjectAnchor = hasGenericProjectAnchor(focusText);
-    const uniqueBatchProjectName = extractUniqueBatchProjectName(batchContextMessages);
-    const selectedKnownProject = selectKnownProjectHint(focusText, input.knownProjects ?? []);
-    const contextProjectName = selectedKnownProject?.projectName ?? uniqueBatchProjectName;
-    const projectFollowUpSignal = looksLikeProjectFollowUpText(focusText);
-    const projectRiskSignal = looksLikeProjectRiskText(focusText);
-    const projectScopeSignal = looksLikeProjectScopeText(focusText);
-    const projectDefinitionSignal = Boolean(
-      explicitProjectName ||
-        explicitProjectDescriptor ||
-        explicitProjectStage ||
-        explicitGoal ||
-        explicitBlocker ||
-        explicitTimeline.length > 0 ||
-        projectRiskSignal ||
-        projectScopeSignal ||
-        looksLikeConcreteProjectMemoryText(focusText),
-    );
-    const feedbackInstructionSignal = looksLikeCollaborationRuleText(focusText);
-
+    const {
+      focusText,
+      explicitProjectName,
+      explicitProjectDescriptor,
+      explicitProjectStage,
+      explicitTimeline,
+      explicitGoal,
+      explicitBlocker,
+      genericProjectAnchor,
+      selectedKnownProject,
+      contextProjectName,
+      projectFollowUpSignal,
+      projectRiskSignal,
+      projectScopeSignal,
+      projectDefinitionSignal,
+      feedbackInstructionSignal,
+    } = signals;
+    const userPrompt = buildExtractionUserPrompt({
+      timestamp: input.timestamp,
+      knownProjects: input.knownProjects ?? [],
+      batchContextMessages,
+      focusMessages,
+    });
     try {
       const parsed = await this.callStructuredJsonWithDebug<{ items?: unknown[] }>({
-        systemPrompt: [
-          "You extract long-term memory candidates for one focus conversation turn using recent session context since the last indexing cursor.",
-          "Return JSON only with an items array.",
-          "Allowed item.type values: user, feedback, project.",
-          "Discard anything that is too transient or not useful across future sessions.",
-          "Use the batch context to interpret ambiguous references in the focus turn, but only emit memories justified by the focus user turn itself.",
-          "known_projects contains the durable identity of the current workspace project.",
-          "The assistant replies in the batch context are supporting context only. Never create a memory candidate from assistant wording alone.",
-          "For user items only keep stable personal identity/background facts or durable relationships. Never place project state, collaboration rules, reply preferences, language choices, style rules, or file boundaries inside user memory.",
-          "If a first-person statement is really about how the assistant should collaborate, write, format, reply, or operate on files, it is feedback, not user.",
-          "Global-seeming reply preferences and personal file boundaries still belong to feedback in this runtime. Examples: '默认使用中文输出', '如果有结论先给结论再给细节', '不要改动我的 .gitignore 文件', '我更关心项目进度、风险和上线阻塞点'.",
-          "If the focus turn tells the assistant how to collaborate, deliver, report, format, or structure outputs, that is feedback, not project.",
-          "If the focus turn says how outputs should be delivered, such as title count, body order, cover copy, progress update order, or reply structure, you must classify it as feedback rather than project.",
-          "For feedback items always provide rule, why, and how_to_apply.",
-          "For feedback items: why means why the user gave this feedback, usually a past incident, strong preference, or explicit dissatisfaction. Do not invent a reason if the transcript does not contain one.",
-          "For feedback items: how_to_apply means when or where this guidance should be applied, such as during progress updates, reviews, or project replies. Do not restate the rule verbatim if the application context is unclear.",
-          "If the transcript gives a rule but not enough evidence for why or how_to_apply, return an empty string for those fields.",
-          "Feedback belongs to the current project workflow; if project_id is unclear you may omit it because the runtime already knows the current project.",
-          "If the batch context contains the current project identity, you may attach project_id to the feedback item; leaving it empty is also acceptable in current-project mode.",
-          "If the focus user turn explicitly asks the assistant to remember something long-term, such as '请记住', '帮我记住', or 'remember this', treat that as a stronger signal that durable memory should be extracted.",
-          "That stronger signal is still based on the raw user text itself. Do not rely on any hidden remember flag or external rule; decide only from the visible transcript content.",
-          "For project items always prefer name plus description. project_id is optional and only refers to the current project identity when supplied.",
-          "If you only know the project's human-readable title, put it in name and leave project_id empty.",
-          "Do not put a human-readable project title only inside project_id.",
-          "For project items provide stage, decisions, constraints, next_steps, blockers, and absolute-date timeline entries when dates are mentioned. You may omit project_id when the project identity is still unclear.",
-          "A project-definition turn is about project name, what the project is, its stage, goals, blockers, milestones, or timeline. A delivery rule alone is never a project item.",
-          "Treat explicit project-definition statements as project memory even without a remember command. Examples: '这个项目先叫 Boreal', '它是一个本地知识库整理工具', '目前还在设计阶段'.",
-          "Natural follow-up turns can still be project memory even when they do not repeat the project name.",
-          "If the batch context already contains the current project identity, and the focus turn says things like '这个项目接下来最该补的是...', '这个方向还差...', '先把镜头顺序模板化', or mentions stage, priorities, blockers, constraints, target audience, or content angle, emit a project item for that current project.",
-          "If known_projects contains the current project identity and the focus turn states current scope, retained tools, risks, blockers, or project follow-up facts without repeating the project name, attach the memory to that current project instead of inventing a new top-level project.",
-          "Do not require the focus turn to repeat the project name when the batch context already makes the project identity unique.",
-          "Treat explicit collaboration instructions as feedback. Example: '在这个项目里，每次给我交付时都先给3个标题，再给正文，再给封面文案。'",
-          "When a transcript names a project, describes what the project is, or states its current stage, emit a project item unless the content is obviously too transient.",
-          "Do not create placeholder project names like overview, project, or memory-item.",
-          "Generic anchors such as '这个项目' only become project memory when the batch context provides a unique project identity.",
-          'If no durable memory should be saved, return {"items":[]}.',
-        ].join("\n"),
-        userPrompt: JSON.stringify(
-          {
-            timestamp: input.timestamp,
-            known_projects: (input.knownProjects ?? []).slice(0, 20).map(project => ({
-              identity_key: project.identityKey,
-              project_id: project.projectId ?? "",
-              project_name: project.projectName,
-              description: truncateForPrompt(project.description, 180),
-              scope: project.scope,
-              updated_at: project.updatedAt,
-            })),
-            batch_context: batchContextMessages.map(message => ({
-              role: message.role,
-              content: truncateForPrompt(message.content, 260),
-            })),
-            focus_user_turn: focusMessages.map(message => ({
-              role: message.role,
-              content: truncateForPrompt(message.content, 320),
-            })),
-          },
-          null,
-          2,
-        ),
+        systemPrompt: EXTRACTION_SYSTEM_PROMPT_LINES.join("\n"),
+        userPrompt,
         requestLabel: "File memory extraction",
         timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_EXTRACTION_TIMEOUT_MS,
         ...(input.agentId ? { agentId: input.agentId } : {}),
@@ -1877,193 +1583,14 @@ export class LlmMemoryExtractor {
       const parsedItems = parsed.items.filter(isRecord);
       const items = parsedItems
         .map((item): MemoryCandidate | null => {
-          const type =
-            item.type === "feedback" || item.type === "project" ? item.type : item.type === "user" ? "user" : null;
-          if (!type) {
-            discarded.push({
-              reason: "invalid_schema",
-              summary: typeof item.type === "string" ? `Unsupported type: ${item.type}` : "Missing candidate type.",
-            });
-            return null;
-          }
-          const rawName = typeof item.name === "string" ? truncateForPrompt(item.name, 80) : "";
-          const rawProjectName = typeof item.project_name === "string" ? truncateForPrompt(item.project_name, 80) : "";
-          const rawProjectId = typeof item.project_id === "string" ? truncateForPrompt(item.project_id, 80) : "";
-          const rawContent =
-            typeof item.content === "string" ? truncateForPrompt(normalizeWhitespace(item.content), 280) : "";
-          const feedbackRule =
-            typeof item.rule === "string" ? truncateForPrompt(normalizeWhitespace(item.rule), 220) : "";
-          const rawDescription = typeof item.description === "string" ? truncateForPrompt(item.description, 180) : "";
-          const rawSummary = typeof item.summary === "string" ? truncateForPrompt(item.summary, 180) : "";
-          const rawStage = typeof item.stage === "string" ? truncateForPrompt(item.stage, 220) : "";
-          const rawGoal = typeof item.goal === "string" ? truncateForPrompt(normalizeWhitespace(item.goal), 180) : "";
-          const rawDecisions = normalizeStringArray(item.decisions, 10);
-          const rawConstraints = normalizeStringArray(item.constraints, 10);
-          const rawNextSteps = normalizeStringArray(item.next_steps, 10);
-          const rawBlockers = normalizeStringArray(item.blockers, 10);
-          const timeline = normalizeStringArray(item.timeline, 10);
-          const rawNotes = normalizeStringArray(item.notes, 10);
-          const structuredProjectSummary = truncateForPrompt(
-            rawDecisions[0] ||
-              rawConstraints[0] ||
-              rawNextSteps[0] ||
-              rawBlockers[0] ||
-              timeline[0] ||
-              rawNotes[0] ||
-              "",
-            180,
-          );
-          if (type === "feedback" && !feedbackRule) {
-            discarded.push({
-              reason: "invalid_schema",
-              candidateType: type,
-              ...(rawName || typeof item.name === "string"
-                ? { candidateName: rawName || String(item.name).trim() }
-                : {}),
-              summary: "Feedback candidate missing a non-empty rule.",
-            });
-            return null;
-          }
-          const candidateType = type;
-          const shouldPinToKnownProject = Boolean(selectedKnownProject && !explicitProjectName);
-          const projectNameFallback =
-            candidateType === "project"
-              ? truncateForPrompt(
-                  explicitProjectName ||
-                    (shouldPinToKnownProject ? (selectedKnownProject?.projectName ?? "") : "") ||
-                    rawName ||
-                    rawProjectName ||
-                    (isLikelyHumanReadableProjectIdentifier(rawProjectId) ? rawProjectId : "") ||
-                    extractProjectNameFromContent(rawContent) ||
-                    contextProjectName,
-                  80,
-                )
-              : "";
-          const description =
-            rawDescription ||
-            (typeof item.profile === "string"
-              ? truncateForPrompt(item.profile, 180)
-              : rawContent
-                ? sanitizeProjectDescriptionText(rawContent, projectNameFallback)
-                : rawSummary
-                  ? rawSummary
-                  : feedbackRule
-                    ? truncateForPrompt(feedbackRule, 180)
-                    : rawGoal
-                      ? rawGoal
-                      : explicitProjectDescriptor
-                        ? explicitProjectDescriptor
-                        : explicitGoal
-                          ? explicitGoal
-                          : rawStage
-                            ? truncateForPrompt(rawStage, 180)
-                            : explicitProjectStage
-                              ? truncateForPrompt(explicitProjectStage, 180)
-                              : structuredProjectSummary);
-          const normalizedProjectDescription =
-            candidateType === "project" &&
-            structuredProjectSummary &&
-            (!description || description === explicitProjectDescriptor || description === explicitGoal)
-              ? structuredProjectSummary
-              : description;
-          const name =
-            candidateType === "user"
-              ? "user-profile"
-              : candidateType === "feedback"
-                ? truncateForPrompt(rawName || deriveFeedbackCandidateName(feedbackRule), 80)
-                : projectNameFallback;
-          const preferences = candidateType === "user" ? [] : normalizeStringArray(item.preferences, 10);
-          const constraints = candidateType === "user" ? [] : rawConstraints;
-          const decisions =
-            candidateType === "project" && projectScopeSignal
-              ? uniqueStrings([...rawDecisions, normalizeWhitespace(stripExplicitRememberLead(focusText))], 10)
-              : rawDecisions;
-          const nextSteps = rawNextSteps;
-          const blockers =
-            candidateType === "project" && projectRiskSignal
-              ? uniqueStrings([...rawBlockers, normalizeWhitespace(stripExplicitRememberLead(focusText))], 10)
-              : rawBlockers;
-          const notes =
-            candidateType === "project" && !projectScopeSignal && !projectRiskSignal
-              ? rawNotes
-              : uniqueStrings(rawNotes, 10);
-          const relationships = normalizeStringArray(item.relationships, 10);
-          const hasUserPayload = Boolean(
-            normalizedProjectDescription ||
-              rawContent ||
-              (typeof item.profile === "string" && normalizeWhitespace(item.profile)) ||
-              (typeof item.summary === "string" && normalizeWhitespace(item.summary)) ||
-              relationships.length > 0,
-          );
-          if (candidateType === "project" && (!name || !description)) {
-            discarded.push({
-              reason: "invalid_schema",
-              candidateType,
-              ...(name || rawName ? { candidateName: name || rawName } : {}),
-              summary: "Candidate missing a stable name or description.",
-            });
-            return null;
-          }
-          if (candidateType === "user" && (!name || !hasUserPayload)) {
-            discarded.push({
-              reason: "invalid_schema",
-              candidateType,
-              candidateName: "user-profile",
-              summary: "User candidate did not contain any durable profile content.",
-            });
-            return null;
-          }
-          if (candidateType === "project" && isGenericProjectCandidateName(name)) {
-            discarded.push({
-              reason: "generic_project_name",
-              candidateType,
-              candidateName: name,
-              summary: description,
-            });
-            return null;
-          }
-          return {
-            type: candidateType,
-            scope: candidateType === "user" ? "global" : "project",
-            ...(() => {
-              if (candidateType !== "project" && candidateType !== "feedback") return {};
-              if (typeof item.project_id === "string" && isStableFormalProjectId(item.project_id)) {
-                return { projectId: item.project_id.trim() };
-              }
-              if (selectedKnownProject?.projectId && isStableFormalProjectId(selectedKnownProject.projectId)) {
-                return { projectId: selectedKnownProject.projectId };
-              }
-              return {};
-            })(),
-            name,
-            description: normalizedProjectDescription,
-            ...(input.sessionKey ? { sourceSessionKey: input.sessionKey } : {}),
-            capturedAt: input.timestamp,
-            ...(typeof item.profile === "string"
-              ? { profile: truncateForPrompt(item.profile, 280) }
-              : rawContent
-                ? { profile: rawContent }
-                : {}),
-            ...(typeof item.summary === "string" ? { summary: truncateForPrompt(item.summary, 280) } : {}),
-            ...(preferences.length > 0 ? { preferences } : {}),
-            ...(constraints.length > 0 ? { constraints } : {}),
-            ...(relationships.length > 0 ? { relationships } : {}),
-            ...(candidateType === "feedback" && feedbackRule ? { rule: feedbackRule } : {}),
-            ...(typeof item.why === "string" && sanitizeFeedbackSectionText(item.why) && candidateType === "feedback"
-              ? { why: truncateForPrompt(sanitizeFeedbackSectionText(item.why), 280) }
-              : {}),
-            ...(typeof item.how_to_apply === "string" &&
-            sanitizeFeedbackSectionText(item.how_to_apply) &&
-            candidateType === "feedback"
-              ? { howToApply: truncateForPrompt(sanitizeFeedbackSectionText(item.how_to_apply), 280) }
-              : {}),
-            ...(candidateType === "project" && rawStage ? { stage: rawStage } : {}),
-            decisions,
-            nextSteps,
-            blockers,
-            timeline,
-            notes,
-          };
+          const result = normalizeExtractionItem({
+            item,
+            signals,
+            ...(input.sessionKey ? { sessionKey: input.sessionKey } : {}),
+            timestamp: input.timestamp,
+          });
+          if (result.discarded) discarded.push(result.discarded);
+          return result.candidate;
         })
         .filter((item): item is MemoryCandidate => Boolean(item));
       const filtered = items.filter(item => {
@@ -2089,56 +1616,9 @@ export class LlmMemoryExtractor {
           ...(item.blockers ?? []),
           ...(item.timeline ?? []),
         ].join(" ");
-        if (item.type === "user") {
-          return true;
-        }
-        if (item.type === "project") {
-          if (feedbackInstructionSignal && !projectDefinitionSignal) {
-            discarded.push({
-              reason: "violates_feedback_project_boundary",
-              candidateType: item.type,
-              candidateName: item.name,
-              summary: item.description,
-            });
-            return false;
-          }
-          if (genericProjectAnchor && !projectDefinitionSignal && !contextProjectName) {
-            discarded.push({
-              reason: "generic_anchor_without_unique_project",
-              candidateType: item.type,
-              candidateName: item.name,
-              summary: item.description,
-            });
-            return false;
-          }
-          if (
-            genericProjectAnchor &&
-            !projectDefinitionSignal &&
-            contextProjectName &&
-            !hasStructuredProjectEvidence &&
-            !projectFollowUpSignal &&
-            !looksLikeConcreteProjectMemoryText(text) &&
-            !looksLikeProjectFollowUpText(text)
-          ) {
-            discarded.push({
-              reason: "generic_anchor_without_project_definition",
-              candidateType: item.type,
-              candidateName: item.name,
-              summary: item.description,
-            });
-            return false;
-          }
-        }
-        if (item.type === "feedback" && projectDefinitionSignal && !feedbackInstructionSignal) {
-          discarded.push({
-            reason: "violates_feedback_project_boundary",
-            candidateType: item.type,
-            candidateName: item.name,
-            summary: item.description,
-          });
-          return false;
-        }
-        return true;
+        const result = filterExtractionCandidate({ item, signals, hasStructuredProjectEvidence, text });
+        if (result.discarded) discarded.push(result.discarded);
+        return result.keep;
       });
       const syntheticProjectFallback =
         filtered.length === 0 &&
