@@ -189,7 +189,17 @@ describe("mergeCandidates / sameOrigin / sortEntries", () => {
     const record = { capturedAt: "2026-01-01", sourceSessionKey: "sk", type: "project" } as never;
     const candidate = { capturedAt: "2026-01-01", sourceSessionKey: "sk", type: "project" } as never;
     assert.equal(sameOrigin(record, candidate), true);
-    assert.equal(sameOrigin(record, { ...candidate, type: "user" } as never), false);
+    assert.equal(
+      sameOrigin(record, {
+        capturedAt: "2026-01-01",
+        sourceSessionKey: "sk",
+        type: "user",
+        scope: "project",
+        name: "N",
+        description: "D",
+      }),
+      false,
+    );
   });
   it("sortEntries updatedAt 降序 + path 升序", () => {
     const sorted = sortEntries([

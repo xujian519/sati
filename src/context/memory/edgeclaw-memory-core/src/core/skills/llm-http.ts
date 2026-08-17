@@ -58,7 +58,7 @@ function looksLikeEnvVarName(value: string): boolean {
   return /^[A-Z0-9_]+$/.test(value);
 }
 
-export interface ProviderRequestSelection {
+interface ProviderRequestSelection {
   provider: string;
   model: string;
   api: string;

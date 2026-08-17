@@ -59,10 +59,10 @@ describe("dream-trace 基建", () => {
   });
   it("pushStep 追加并递增 stepId", () => {
     const trace = createDreamTrace("manual");
-    pushStep(trace, "review", "Review", "success", "in", "out");
+    pushStep(trace, "project_header_scan", "Review", "success", "in", "out");
     assert.equal(trace.steps.length, 1);
     assert.equal(trace.steps[0]?.stepId, `${trace.dreamTraceId}:step:1`);
-    pushStep(trace, "finish", "Finish", "success", "in", "out");
+    pushStep(trace, "project_cluster_plan", "Finish", "success", "in", "out");
     assert.equal(trace.steps[1]?.stepId, `${trace.dreamTraceId}:step:2`);
   });
   it("mutation 构造审计条目", () => {

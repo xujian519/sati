@@ -1,10 +1,11 @@
 // dream-review 的用户路径守卫（从 dream-review.ts 拆出，G2 聚类，逐字搬移）。
 // 用户画像与用户笔记的路径保护语义：这些路径永不被 dream 删除/重写。
+// 常量仅模块内使用，不导出（孤儿导出清理，见 code-review F2）。
 
-export const INTERNAL_USER_PROFILE_RELATIVE_PATH = "UserIdentity/user-profile.md";
-export const EXPOSED_USER_PROFILE_RELATIVE_PATH = "global/UserIdentity/user-profile.md";
-export const INTERNAL_USER_NOTE_PREFIX = "UserIdentityNotes/";
-export const EXPOSED_USER_NOTE_PREFIX = "global/UserIdentityNotes/";
+const INTERNAL_USER_PROFILE_RELATIVE_PATH = "UserIdentity/user-profile.md";
+const EXPOSED_USER_PROFILE_RELATIVE_PATH = "global/UserIdentity/user-profile.md";
+const INTERNAL_USER_NOTE_PREFIX = "UserIdentityNotes/";
+const EXPOSED_USER_NOTE_PREFIX = "global/UserIdentityNotes/";
 
 function normalizeDreamRelativePath(relativePath: string): string {
   return relativePath.replace(/\\/g, "/");

@@ -73,7 +73,10 @@ describe("buildProviderRequest 4 分支", () => {
       apiKey: "key",
     });
     assert.equal(headers.get("x-goog-api-key"), "key");
-    assert.equal(body.generationConfig?.responseMimeType, "application/json");
+    assert.equal(
+      (body.generationConfig as { responseMimeType?: string } | undefined)?.responseMimeType,
+      "application/json",
+    );
   });
   it("chat/completions 分支（response_format + stream:false）", () => {
     const { url, body, headers } = buildProviderRequest({

@@ -48,7 +48,6 @@ function resolveRequestTimeoutMs(timeoutMs: number | undefined): number | null {
 
 export {
   DEFAULT_REQUEST_MAX_ATTEMPTS,
-  DEFAULT_REQUEST_RETRY_BASE_DELAY_MS,
   REQUEST_RETRYABLE_STATUS_CODES,
   computeRetryDelayMs,
   getErrorStatusCode,

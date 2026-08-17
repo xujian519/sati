@@ -79,6 +79,7 @@ edgeclaw-memory-core 是 Sati 记忆核心的独立 workspace 子包（17 个 TS
 - **批次 5**：llm-extraction 模块级下沉（G1/G4 llm-json+request-retry、G6 llm-normalizers、G7 llm-hints、G2/G3 llm-prompts、抽取 llm-extraction-item、HTTP llm-http）——✅ 已完成
 - **批次 5c（G8）**：类方法级拆分——extractFileMemoryCandidates 438→154（信号/归一/过滤/提示词/userPrompt 全纯函数化）、callStructuredJson 190→116（请求体/重试执行下沉 llm-http）、selectRecallProject 108→49、selectIndexProject 116→56（prompt 构造 + 判定下沉）——✅ 已完成；剩余编排骨架（extract 154/callStructuredJson 116/createMemoryNote 100）按 god-function 先例口径接受
 - **批次 6**：收尾——方案文档、全量验证、PR #88（主体）+ G8 分支 PR——✅ 已完成
+- **剩余深化候选（2026-08-17 code-review 标注，非本次范围）**：dream-review.run() 523 行（13 pushStep + 5 extractor 调用）、heartbeat.runHeartbeat() 476 行——两个巨型编排方法，与 G8 同档风险/收益权衡，作为下一轮拆解自然候选；无行为缺陷、测试全绿，延期接受
 
 > 状态：子包测试 **222 例**全绿；root memory 55 用例绿。5 个大文件全部拆解 + 22 个新模块；llm-extraction 3745→1669 行（类方法全部 ≤116 行，业务逻辑全下沉）。
 
