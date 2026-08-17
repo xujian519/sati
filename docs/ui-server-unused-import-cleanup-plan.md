@@ -1,6 +1,6 @@
 # ui/server 未使用 import 与死代码治理方案
 
-> 状态：执行中（2026-08）｜范围：`ui/server/`（不含 `ui/src/`）
+> 状态：✅ 已完成（2026-08，10 commits）｜范围：`ui/server/`（不含 `ui/src/`）
 > 来源：用户发现 ui/server 存在大量历史遗留未使用 import（projects.js/agent.js/commands.js 等约 40+ 处，含 CURSOR_MODELS 等死常量），要求制订方案并执行。
 
 ## 一、根因
@@ -47,6 +47,23 @@ ui/server 在所有 lint 门禁的盲区：
 - `pnpm --filter sati-ui test`（vitest 全量，含 commands/gateway/memory/config/user/sati-bridge 测试）
 - `cd ui && pnpm lint && pnpm typecheck`
 - 根 `pnpm lint`（防事件矩阵等误伤）＋ `pnpm format:check`
+
+## 六、执行记录（10 commits，全部验证绿）
+
+| commit | 内容 |
+|---|---|
+| `71bc13a7` | docs: 本方案文档 |
+| `a13703bf` | refactor: 删 15 处未使用 import |
+| `f6de9ab7` | refactor: 65 处可选 catch 绑定 |
+| `4679569d` | refactor: commands.js 11 处未用 handler 形参 |
+| `f0b315ee` | refactor: 6 处死常量/死函数 + 4 处赋值未用 |
+| `d640f7e3` | refactor: memory.js 字段剥离改 `key: _binding`（保语义） |
+| `847c0535` | chore: 删 modelConstants 死 export + 清理 test mock |
+| `428a0bda` | refactor: 删死文件 cli.js / always-on-slash.js |
+| `3b9fa80a` | chore: 开闸——ui lint 扩到 `src/ server/` + `--max-warnings 0` |
+| `fb579853` | chore: 级联删孤儿模块 claude-runtime-config.js / modelConstants.js |
+
+验证：`pnpm --filter sati-ui lint`（新门禁）✓、vitest 85 文件 501 测试 ✓、ui typecheck ✓、根 lint（含事件矩阵）✓、biome format:check 1891 文件 ✓。
 
 ## 五、风险与回滚
 
