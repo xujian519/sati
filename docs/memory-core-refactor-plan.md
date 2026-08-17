@@ -1,7 +1,7 @@
 # edgeclaw-memory-core 拆解+补测试专项实施方案
 
 - 创建日期：2026-08-17
-- 状态：**实施中**（批次 0-3 完成，批次 4-5 进行中）
+- 状态：**实施中**（批次 0-4 完成，批次 5 进行中）
 - 前置：`docs/technical-debt-report.md` 待决事项 #1（子包 5 个 >1000 行文件零测试）；方法论先例 `docs/god-function-refactor-plan.md`
 - 目标：对 5 个大文件先补行为基线测试（characterization），再按职责聚类拆分；子包测试从 0 起步覆盖核心路径
 
@@ -75,11 +75,11 @@ edgeclaw-memory-core 是 Sati 记忆核心的独立 workspace 子包（17 个 TS
 - **批次 1**：死代码清理（llm-extraction 11 项 ~130 行 + sqlite sameDreamRuntimeState + heartbeat 2 死 import）+ 首批拆解（llm-json.ts / request-retry.ts）+ 42 基线测试——✅ 已完成
 - **批次 2**：heartbeat 纯 helper 下沉 heartbeat-helpers.ts（1019→690 行）+ 23 基线测试——✅ 已完成
 - **批次 3**：dream-review 拆出 6 个子模块（dream-types/paths/detail/trace/mappers/validators，1532→1072 行）+ 25 基线测试——✅ 已完成
-- **批次 4**：sqlite（MemoryRepository 90 方法按域聚类）+ file-memory（FileMemoryStore 8 簇切片）
-- **批次 5**：llm-extraction 剩余（G2 提示词 / G3 prompt 构造 / G5 类型 / G6 归一化 / G7 hints / G8 编排门面）
+- **批次 4**：sqlite 模块级 helper 下沉 sqlite-helpers.ts（2024→1728 行）+ 23 测试；file-memory 拆出 4 子模块（constants/text/markdown/manifest，1632→1161 行）+ 25 测试——✅ 已完成
+- **批次 5**：llm-extraction 剩余（G2 提示词 / G3 prompt 构造 / G5 类型 / G6 归一化 / G7 hints / G8 编排门面，约 2900 行）——⏳ 进行中
 - **批次 6**：收尾——方案文档状态更新、全量验证、root 全绿、PR
 
-> 状态：子包测试 90 例全绿（基线 65 + dream 25）；root memory 55 用例绿。
+> 状态：子包测试 138 例全绿；root memory 55 用例绿。5 个大文件已处理 4 个（heartbeat 690 / dream-review 1072 / sqlite 1728 / file-memory 1161），llm-extraction 已下沉 G1/G4。
 
 ## 5. 验收标准
 
