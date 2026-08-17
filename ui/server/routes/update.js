@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { spawn, exec, execFile } from "child_process";
+import { spawn, execFile } from "child_process";
 import { promisify } from "util";
 import {
   cancelDesktopUpdateDownload,
@@ -17,7 +17,6 @@ import {
   resolveRestartCommand,
 } from "../services/updateRuntime.js";
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,10 +27,6 @@ const router = express.Router();
 
 let updateInProgress = false;
 let lastUpdateResult = null;
-
-function execInProject(cmd) {
-  return execAsync(cmd, { cwd: PROJECT_ROOT, maxBuffer: 10 * 1024 * 1024 });
-}
 
 function execGit(args) {
   return execFileAsync("git", args, { cwd: PROJECT_ROOT, maxBuffer: 10 * 1024 * 1024 });

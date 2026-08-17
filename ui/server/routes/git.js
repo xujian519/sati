@@ -194,7 +194,7 @@ async function getCurrentBranchName(projectPath) {
     if (branchName) {
       return branchName;
     }
-  } catch (error) {
+  } catch {
     // Fall back to rev-parse for detached HEAD and older git edge cases.
   }
 
@@ -494,7 +494,7 @@ router.get("/file-with-diff", async (req, res) => {
             cwd: repositoryRootPath,
           });
           oldContent = headContent;
-        } catch (error) {
+        } catch {
           // File might be newly added to git (staged but not committed)
           oldContent = "";
         }
@@ -531,7 +531,7 @@ router.post("/initial-commit", async (req, res) => {
     try {
       await spawnAsync("git", ["rev-parse", "HEAD"], { cwd: projectPath });
       return res.status(400).json({ error: "Repository already has commits. Use regular commit instead." });
-    } catch (error) {
+    } catch {
       // No HEAD - this is good, we can create initial commit
     }
 
@@ -602,7 +602,7 @@ router.post("/revert-local-commit", async (req, res) => {
 
     try {
       await spawnAsync("git", ["rev-parse", "--verify", "HEAD"], { cwd: projectPath });
-    } catch (error) {
+    } catch {
       return res.status(400).json({
         error: "No local commit to revert",
         details: "This repository has no commit yet.",
@@ -791,7 +791,7 @@ router.get("/commits", async (req, res) => {
           cwd: projectPath,
         });
         commit.stats = stats.trim().split("\n").pop(); // Get the summary line
-      } catch (error) {
+      } catch {
         commit.stats = "";
       }
     }
@@ -1083,7 +1083,7 @@ router.get("/remote-status", async (req, res) => {
       });
       trackingBranch = stdout.trim();
       remoteName = trackingBranch.split("/")[0]; // Extract remote name (e.g., "origin/main" -> "origin")
-    } catch (error) {
+    } catch {
       return res.json({
         hasRemote,
         hasUpstream: false,
@@ -1139,7 +1139,7 @@ router.post("/fetch", async (req, res) => {
         cwd: projectPath,
       });
       remoteName = stdout.trim().split("/")[0]; // Extract remote name
-    } catch (error) {
+    } catch {
       // No upstream, try to fetch from origin anyway
       console.log("No upstream configured, using origin as fallback");
     }
@@ -1185,7 +1185,7 @@ router.post("/pull", async (req, res) => {
       const tracking = stdout.trim();
       remoteName = tracking.split("/")[0]; // Extract remote name
       remoteBranch = tracking.split("/").slice(1).join("/"); // Extract branch name
-    } catch (error) {
+    } catch {
       // No upstream, use fallback
       console.log("No upstream configured, using origin/branch as fallback");
     }
@@ -1256,7 +1256,7 @@ router.post("/push", async (req, res) => {
       const tracking = stdout.trim();
       remoteName = tracking.split("/")[0]; // Extract remote name
       remoteBranch = tracking.split("/").slice(1).join("/"); // Extract branch name
-    } catch (error) {
+    } catch {
       // No upstream, use fallback
       console.log("No upstream configured, using origin/branch as fallback");
     }
@@ -1343,7 +1343,7 @@ router.post("/publish", async (req, res) => {
         });
       }
       remoteName = remotes.includes("origin") ? "origin" : remotes[0];
-    } catch (error) {
+    } catch {
       return res.status(400).json({
         error: "No remote repository configured. Add a remote with: git remote add origin <url>",
       });

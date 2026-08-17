@@ -160,10 +160,6 @@ function enqueueTaskWithKeys(keys, task) {
   return next;
 }
 
-function enqueueWorkspaceTask(dataDir, task) {
-  return enqueueTaskWithKeys([path.resolve(dataDir)], task);
-}
-
 function enqueueMaintenanceTask(dataDir, task) {
   return enqueueTaskWithKeys([path.resolve(dataDir), GLOBAL_MAINTENANCE_TASK_KEY], task);
 }

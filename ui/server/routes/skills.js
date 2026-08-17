@@ -29,7 +29,6 @@
 import express from "express";
 import { promises as fs } from "fs";
 import path from "path";
-import os from "os";
 import { fileURLToPath } from "url";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -116,13 +115,6 @@ function userSkillsRoot() {
 
 function projectSkillsRoot(projectPath) {
   return path.join(projectPath, PROJECT_DIR, SKILLS_SUBDIR);
-}
-
-function expandHome(p) {
-  if (typeof p !== "string" || !p) return p;
-  if (p === "~") return os.homedir();
-  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
-  return p;
 }
 
 /**
