@@ -18,6 +18,7 @@
       "!skills/**",
       "!products/**",
       "!vendor/**",
+      "!assets/patent/pdf-link-extract.js",
       "!src/knowledge/patent/wiki/**",
       "!tests/patent/benchmark/fixtures/**",
       "!tests/fixtures/**",

@@ -890,6 +890,11 @@ class ProjectRuntimeRegistry {
               },
             }
           : {}),
+      // Pass the YAML-configured patents.downloadDir through to the built-in
+      // `patent_pdf_download` tool (runtime-live: read at every execution).
+      ...(snapshot.config.patents?.downloadDir
+        ? { patentPdfDownload: { patentsConfigProvider: () => snapshot.config.patents } }
+        : {}),
     });
     for (const tool of this._extraTools) {
       tools.register(tool);

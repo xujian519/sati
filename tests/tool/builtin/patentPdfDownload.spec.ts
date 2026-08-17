@@ -126,7 +126,11 @@ test("patent_pdf_download: execute rescues fallback items via fetch to ok/http",
   const runner = new FakeRunner();
   runner.result = { exitCode: 0, stdout: "", stderr: OK_OUTPUT, timedOut: false, durationMs: 1200 };
   const fetchImpl: typeof fetch = async () =>
-    new Response("%PDF-1.4 fake pdf content", { status: 200, headers: { "content-type": "application/pdf" } });
+    // P1-01：写盘前拒绝 <500 字节的响应，mock 内容需超过阈值
+    new Response(`%PDF-1.4 fake pdf content ${"x".repeat(600)}`, {
+      status: 200,
+      headers: { "content-type": "application/pdf" },
+    });
   const outputDir = mkdtempSync(join(tmpdir(), "sati-pdf-dl-rescue-"));
   const tool = createPatentPdfDownloadTool({ session: makeSession(runner), fetchImpl });
 
