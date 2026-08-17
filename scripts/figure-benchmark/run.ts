@@ -12,6 +12,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { loadPilotConfig } from "../../src/pilot/config/loadPilotConfig.js";
 import { createModelRuntime, type ModelRuntime } from "../../src/model/index.js";
 import { createAnalyzePatentFigureTool } from "../../src/tool/builtin/analyzePatentFigure.js";
@@ -377,7 +378,16 @@ async function main() {
   console.log(`结果已保存: ${resultPath}`);
 }
 
-main().catch((error: unknown) => {
-  console.error("基准运行失败:", error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+// 仅在"直接运行脚本"时执行基准（tsx scripts/figure-benchmark/run.ts）。
+// 测试（run.spec.ts）import 本模块仅取纯函数（computeElectricalMetrics 等），
+// 若无守卫，import 即触发 main()：本机有 manifest + 真实模型凭据时会跑完整
+// 16 图基准（单图 100-200s + 真实 API 费用）；CI 无 manifest 时则 process.exit(1)
+// 杀掉测试子进程（被 --test-force-exit 时序掩盖才未爆红）。
+const isDirectRun = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  main().catch((error: unknown) => {
+    console.error("基准运行失败:", error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  });
+}
