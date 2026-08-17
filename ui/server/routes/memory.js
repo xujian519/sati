@@ -115,10 +115,6 @@ function normalizeSearchText(value) {
     .trim();
 }
 
-function isExternalRecordPath(relativePath) {
-  return typeof relativePath === "string" && relativePath.startsWith("external:");
-}
-
 function summarizeEntries(entries) {
   const projectEntries = entries.filter(entry => entry.type === "project");
   const feedbackEntries = entries.filter(entry => entry.type === "feedback");
@@ -141,7 +137,13 @@ function normalizeGeneralDisplayProject(repository, project) {
     includeDeprecated: false,
     includeExternal: false,
   });
-  const { sourceWorkspacePath, sourceProjectId, externalLogicalProjectId, localMirrorProjectId, ...rest } = project;
+  const {
+    sourceWorkspacePath: _sourceWorkspacePath,
+    sourceProjectId: _sourceProjectId,
+    externalLogicalProjectId: _externalLogicalProjectId,
+    localMirrorProjectId: _localMirrorProjectId,
+    ...rest
+  } = project;
   return {
     ...rest,
     sourceType: "general_local",
