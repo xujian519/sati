@@ -447,7 +447,7 @@ router.get("/config/read", async (req, res) => {
         configPath = filepath;
         console.log(`✅ Found Claude config at: ${filepath}`);
         break;
-      } catch (error) {
+      } catch {
         // File doesn't exist or is not valid JSON, try next
         console.log(`ℹ️ Config not found or invalid at: ${filepath}`);
       }

@@ -359,7 +359,7 @@ router.get("/feishu/qr-poll", async (req, res) => {
 
     // Still pending
     res.json({ pending: true });
-  } catch (err) {
+  } catch {
     res.json({ pending: true });
   }
 });

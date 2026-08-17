@@ -38,7 +38,7 @@ export async function getSystemGitConfig() {
       git_name: nameResult.stdout.trim() || null,
       git_email: emailResult.stdout.trim() || null,
     };
-  } catch (error) {
+  } catch {
     return { git_name: null, git_email: null };
   }
 }

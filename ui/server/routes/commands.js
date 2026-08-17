@@ -510,7 +510,7 @@ Custom commands can be created in:
     try {
       await fs.access(satiMdPath);
       exists = true;
-    } catch (err) {
+    } catch {
       // File doesn't exist
     }
 

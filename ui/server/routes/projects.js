@@ -403,7 +403,7 @@ router.post("/create-workspace", async (req, res) => {
             error: "Directory already exists",
             details: `The destination path "${clonePath}" already exists. Please choose a different location or remove the existing directory.`,
           });
-        } catch (err) {
+        } catch {
           // Directory doesn't exist, which is what we want
         }
 
@@ -417,7 +417,7 @@ router.post("/create-workspace", async (req, res) => {
             if (stats.isDirectory()) {
               await fs.rm(clonePath, { recursive: true, force: true });
             }
-          } catch (cleanupError) {
+          } catch {
             // Directory doesn't exist or cleanup failed - ignore
           }
           throw new Error(`Failed to clone repository: ${error.message}`);
@@ -532,7 +532,7 @@ router.get("/clone-progress", async (req, res) => {
       });
       res.end();
       return;
-    } catch (err) {
+    } catch {
       // Directory doesn't exist, which is what we want
     }
 
@@ -543,7 +543,7 @@ router.get("/clone-progress", async (req, res) => {
         url.username = githubToken;
         url.password = "";
         cloneUrl = url.toString();
-      } catch (error) {
+      } catch {
         // SSH URL or invalid - use as-is
       }
     }
@@ -637,7 +637,7 @@ function cloneGitHubRepository(githubUrl, destinationPath, githubToken = null) {
         url.username = githubToken;
         url.password = "";
         cloneUrl = url.toString();
-      } catch (error) {
+      } catch {
         // SSH URL - use as-is
       }
     }

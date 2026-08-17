@@ -72,7 +72,7 @@ router.get("/api/projects/:projectName/sessions/:sessionId/token-usage", authent
               return fullPath;
             }
           }
-        } catch (error) {
+        } catch {
           // Skip directories we can't read
         }
         return null;
@@ -114,7 +114,7 @@ router.get("/api/projects/:projectName/sessions/:sessionId/token-usage", authent
             }
             break; // Stop after finding the latest token count
           }
-        } catch (parseError) {
+        } catch {
           // Skip lines that can't be parsed
           continue;
         }
@@ -180,7 +180,7 @@ router.get("/api/projects/:projectName/sessions/:sessionId/token-usage", authent
 
           break; // Stop after finding the latest assistant message
         }
-      } catch (parseError) {
+      } catch {
         // Skip lines that can't be parsed
         continue;
       }

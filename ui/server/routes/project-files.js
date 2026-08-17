@@ -66,7 +66,7 @@ router.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
       if (!stats.isDirectory()) {
         return res.status(400).json({ error: "Path is not a directory" });
       }
-    } catch (err) {
+    } catch {
       return res.status(404).json({ error: "Directory not accessible" });
     }
 
@@ -94,7 +94,7 @@ router.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
     let resolvedWorkspaceRoot = defaultRoot;
     try {
       resolvedWorkspaceRoot = await fsPromises.realpath(defaultRoot);
-    } catch (error) {
+    } catch {
       // Use default root as-is if realpath fails
     }
     if (resolvedPath === resolvedWorkspaceRoot) {
@@ -133,13 +133,13 @@ router.post("/api/create-folder", authenticateToken, async (req, res) => {
     const parentDir = path.dirname(targetPath);
     try {
       await fsPromises.access(parentDir);
-    } catch (err) {
+    } catch {
       return res.status(404).json({ error: "Parent directory does not exist" });
     }
     try {
       await fsPromises.access(targetPath);
       return res.status(409).json({ error: "Folder already exists" });
-    } catch (err) {
+    } catch {
       // Folder doesn't exist, which is what we want
     }
     try {
@@ -371,7 +371,7 @@ router.get("/api/projects/:projectName/files", authenticateToken, async (req, re
     // Check if path exists
     try {
       await fsPromises.access(actualPath);
-    } catch (e) {
+    } catch {
       return res.status(404).json({ error: `Project path not found: ${actualPath}` });
     }
 

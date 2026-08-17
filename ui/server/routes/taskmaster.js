@@ -144,7 +144,7 @@ async function detectTaskMasterFolder(projectPath) {
       try {
         await fsPromises.access(filePath, fs.constants.R_OK);
         fileStatus[file] = true;
-      } catch (error) {
+      } catch {
         fileStatus[file] = false;
         if (file === "tasks/tasks.json") {
           hasEssentialFiles = false;
@@ -466,7 +466,7 @@ router.get("/next/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -511,7 +511,7 @@ router.get("/next/:projectName", async (req, res) => {
       if (stdout.trim()) {
         try {
           nextTaskData = JSON.parse(stdout);
-        } catch (parseError) {
+        } catch {
           // If not JSON, treat as plain text
           nextTaskData = { message: stdout.trim() };
         }
@@ -575,7 +575,7 @@ router.get("/tasks/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -588,7 +588,7 @@ router.get("/tasks/:projectName", async (req, res) => {
     // Check if tasks file exists
     try {
       await fsPromises.access(tasksFilePath);
-    } catch (error) {
+    } catch {
       return res.json({
         projectName,
         tasks: [],
@@ -688,7 +688,7 @@ router.get("/prd/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -700,7 +700,7 @@ router.get("/prd/:projectName", async (req, res) => {
     // Check if docs directory exists
     try {
       await fsPromises.access(docsPath, fs.constants.R_OK);
-    } catch (error) {
+    } catch {
       return res.json({
         projectName,
         prdFiles: [],
@@ -779,7 +779,7 @@ router.post("/prd/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -846,7 +846,7 @@ router.get("/prd/:projectName/:fileName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -858,7 +858,7 @@ router.get("/prd/:projectName/:fileName", async (req, res) => {
     // Check if file exists
     try {
       await fsPromises.access(filePath, fs.constants.R_OK);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "PRD file not found",
         message: `File "${fileName}" does not exist`,
@@ -909,7 +909,7 @@ router.delete("/prd/:projectName/:fileName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -921,7 +921,7 @@ router.delete("/prd/:projectName/:fileName", async (req, res) => {
     // Check if file exists
     try {
       await fsPromises.access(filePath, fs.constants.F_OK);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "PRD file not found",
         message: `File "${fileName}" does not exist`,
@@ -967,7 +967,7 @@ router.post("/init/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -982,7 +982,7 @@ router.post("/init/:projectName", async (req, res) => {
         error: "TaskMaster already initialized",
         message: "TaskMaster is already configured for this project",
       });
-    } catch (error) {
+    } catch {
       // Directory doesn't exist, we can proceed
     }
 
@@ -1063,7 +1063,7 @@ router.post("/add-task/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -1157,7 +1157,7 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -1289,7 +1289,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -1301,7 +1301,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
     // Check if PRD file exists
     try {
       await fsPromises.access(prdPath, fs.constants.F_OK);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "PRD file not found",
         message: `File "${fileName}" does not exist in .taskmaster/docs/`,
@@ -1838,7 +1838,7 @@ router.post("/apply-template/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,

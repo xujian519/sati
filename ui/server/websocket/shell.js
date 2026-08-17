@@ -198,7 +198,7 @@ function handleShellConnection(ws) {
             if (!stats.isDirectory()) {
               throw new Error("Not a directory");
             }
-          } catch (pathErr) {
+          } catch {
             ws.send(JSON.stringify({ type: "error", message: "Invalid project path" }));
             return;
           }

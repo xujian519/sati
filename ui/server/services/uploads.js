@@ -115,7 +115,7 @@ const uploadFilesHandler = async (req, res) => {
       if (relativePaths) {
         try {
           filePaths = JSON.parse(relativePaths);
-        } catch (e) {
+        } catch {
           console.log("[DEBUG] Failed to parse relativePaths:", relativePaths);
         }
       }

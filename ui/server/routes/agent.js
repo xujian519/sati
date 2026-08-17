@@ -359,12 +359,12 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
               `Directory ${cloneDir} already exists with a different repository (${existingUrl}). Expected: ${githubUrl}`,
             );
           }
-        } catch (gitError) {
+        } catch {
           throw new Error(
             `Directory ${cloneDir} already exists but is not a valid git repository or git command failed`,
           );
         }
-      } catch (accessError) {
+      } catch {
         // Directory doesn't exist - proceed with clone
       }
 
@@ -516,7 +516,7 @@ class ResponseCollector {
         if (parsed.sessionId) {
           this.sessionId = parsed.sessionId;
         }
-      } catch (e) {
+      } catch {
         // Not JSON, ignore
       }
     } else if (data && data.sessionId) {
@@ -575,7 +575,7 @@ class ResponseCollector {
           ) {
             assistantMessages.push(parsed.data);
           }
-        } catch (e) {
+        } catch {
           // Not JSON, skip
         }
       }
@@ -600,7 +600,7 @@ class ResponseCollector {
       if (typeof msg === "string") {
         try {
           data = JSON.parse(msg);
-        } catch (e) {
+        } catch {
           continue;
         }
       }
@@ -933,7 +933,7 @@ router.post("/", validateExternalApiKey, async (req, res) => {
       // Verify the path exists
       try {
         await fs.access(finalProjectPath);
-      } catch (error) {
+      } catch {
         throw new Error(`Project path does not exist: ${finalProjectPath}`);
       }
     }
