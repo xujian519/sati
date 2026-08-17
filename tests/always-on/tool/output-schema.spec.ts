@@ -13,16 +13,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validateCanonicalOutput } from "../../../src/tool/execution/outputSchemaValidation.js";
 import { ToolRegistry } from "../../../src/tool/registry/ToolRegistry.js";
+import type { AlwaysOnRunContextRegistry } from "../../../src/always-on/runtime/AlwaysOnRunContextRegistry.js";
 import { createAlwaysOnChatHistoryTool } from "../../../src/always-on/tool/AlwaysOnChatHistoryTool.js";
 import { createAlwaysOnDiscoveryPlanTool } from "../../../src/always-on/tool/AlwaysOnDiscoveryPlanTool.js";
 import { createAlwaysOnReportTool } from "../../../src/always-on/tool/AlwaysOnReportTool.js";
 import { createAlwaysOnWorkspaceTool } from "../../../src/always-on/tool/AlwaysOnWorkspaceTool.js";
 
 const TOOLS = [
-  createAlwaysOnChatHistoryTool({ runContexts: {} as never }),
-  createAlwaysOnDiscoveryPlanTool({ runContexts: {} as never }),
-  createAlwaysOnReportTool({ runContexts: {} as never }),
-  createAlwaysOnWorkspaceTool({ runContexts: {} as never }),
+  createAlwaysOnChatHistoryTool({ runContexts: {} as unknown as AlwaysOnRunContextRegistry }),
+  createAlwaysOnDiscoveryPlanTool({ runContexts: {} as unknown as AlwaysOnRunContextRegistry }),
+  createAlwaysOnReportTool({ runContexts: {} as unknown as AlwaysOnRunContextRegistry }),
+  createAlwaysOnWorkspaceTool({ runContexts: {} as unknown as AlwaysOnRunContextRegistry }),
 ];
 
 /** 各工具典型成功 data（与 execute 返回值中的 data 字段一致）。 */
