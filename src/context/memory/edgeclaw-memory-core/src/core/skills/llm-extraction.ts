@@ -82,6 +82,12 @@ import {
   stripMarkdownSyntax,
 } from "./llm-hints.js";
 import {
+  EXTRACTION_SYSTEM_PROMPT_LINES,
+  extractFocusSignals,
+  filterExtractionCandidate,
+  normalizeExtractionItem,
+} from "./llm-extraction-item.js";
+import {
   DEFAULT_DREAM_CLUSTER_PLAN_TIMEOUT_MS,
   DEFAULT_DREAM_CLUSTER_REFINE_TIMEOUT_MS,
   DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS,
@@ -1426,17 +1432,7 @@ export class LlmMemoryExtractor {
   }): Promise<MemoryRoute> {
     try {
       const parsed = await this.callStructuredJsonWithDebug<{ route?: unknown }>({
-        systemPrompt: [
-          "You decide whether the current query should trigger long-term memory recall.",
-          "Return JSON only with a single field route.",
-          "Valid route values: none, user, project, mix.",
-          "Use none unless the query clearly needs long-term memory.",
-          "Use user only when the query is asking about stable personal identity/background facts about who the user is, such as name, profession, long-term role context, life background, or durable relationships.",
-          "Do not use user for reply preferences, language choices, formatting rules, style guidance, file/tool boundaries, or delivery rules; those belong to project.",
-          "Use project when the query only needs current project memory, including project facts, collaboration rules, delivery style, file boundaries, or project status.",
-          "Use mix only when the query genuinely needs both current project memory and the user's stable identity/background at the same time.",
-          "Do not use mix just because both could be helpful; choose mix only when both are actually necessary to answer well.",
-        ].join("\n"),
+        systemPrompt: EXTRACTION_SYSTEM_PROMPT_LINES.join("\n"),
         userPrompt: JSON.stringify(
           {
             query: input.query,
@@ -1758,38 +1754,31 @@ export class LlmMemoryExtractor {
     debugTrace?: PromptDebugSink;
     decisionTrace?: (debug: FileMemoryExtractionDebug) => void;
   }): Promise<MemoryCandidate[]> {
-    const focusMessages = input.messages.filter(message => message.role === "user");
+    const signals = extractFocusSignals({
+      messages: input.messages,
+      batchContextMessages: input.batchContextMessages?.length ? input.batchContextMessages : input.messages,
+      knownProjects: input.knownProjects ?? [],
+    });
+    const focusMessages = signals.focusMessages;
     if (focusMessages.length === 0) return [];
     const batchContextMessages = input.batchContextMessages?.length ? input.batchContextMessages : input.messages;
-    const focusText = focusMessages
-      .filter(message => message.role === "user")
-      .map(message => message.content)
-      .join("\n");
-    const explicitProjectName = extractProjectNameHint(focusText);
-    const explicitProjectDescriptor = extractProjectDescriptorHint(focusText);
-    const explicitProjectStage = extractProjectStageHint(focusText);
-    const explicitTimeline = extractTimelineHints(focusText);
-    const explicitGoal = extractSingleHint(focusText, /目标(?:是|为|:|：)?\s*([^。；;\n]+)/i);
-    const explicitBlocker = extractSingleHint(focusText, /当前卡点(?:是|为)?([^。；;\n]+)/i);
-    const genericProjectAnchor = hasGenericProjectAnchor(focusText);
-    const uniqueBatchProjectName = extractUniqueBatchProjectName(batchContextMessages);
-    const selectedKnownProject = selectKnownProjectHint(focusText, input.knownProjects ?? []);
-    const contextProjectName = selectedKnownProject?.projectName ?? uniqueBatchProjectName;
-    const projectFollowUpSignal = looksLikeProjectFollowUpText(focusText);
-    const projectRiskSignal = looksLikeProjectRiskText(focusText);
-    const projectScopeSignal = looksLikeProjectScopeText(focusText);
-    const projectDefinitionSignal = Boolean(
-      explicitProjectName ||
-        explicitProjectDescriptor ||
-        explicitProjectStage ||
-        explicitGoal ||
-        explicitBlocker ||
-        explicitTimeline.length > 0 ||
-        projectRiskSignal ||
-        projectScopeSignal ||
-        looksLikeConcreteProjectMemoryText(focusText),
-    );
-    const feedbackInstructionSignal = looksLikeCollaborationRuleText(focusText);
+    const {
+      focusText,
+      explicitProjectName,
+      explicitProjectDescriptor,
+      explicitProjectStage,
+      explicitTimeline,
+      explicitGoal,
+      explicitBlocker,
+      genericProjectAnchor,
+      selectedKnownProject,
+      contextProjectName,
+      projectFollowUpSignal,
+      projectRiskSignal,
+      projectScopeSignal,
+      projectDefinitionSignal,
+      feedbackInstructionSignal,
+    } = signals;
 
     try {
       const parsed = await this.callStructuredJsonWithDebug<{ items?: unknown[] }>({
@@ -1877,193 +1866,14 @@ export class LlmMemoryExtractor {
       const parsedItems = parsed.items.filter(isRecord);
       const items = parsedItems
         .map((item): MemoryCandidate | null => {
-          const type =
-            item.type === "feedback" || item.type === "project" ? item.type : item.type === "user" ? "user" : null;
-          if (!type) {
-            discarded.push({
-              reason: "invalid_schema",
-              summary: typeof item.type === "string" ? `Unsupported type: ${item.type}` : "Missing candidate type.",
-            });
-            return null;
-          }
-          const rawName = typeof item.name === "string" ? truncateForPrompt(item.name, 80) : "";
-          const rawProjectName = typeof item.project_name === "string" ? truncateForPrompt(item.project_name, 80) : "";
-          const rawProjectId = typeof item.project_id === "string" ? truncateForPrompt(item.project_id, 80) : "";
-          const rawContent =
-            typeof item.content === "string" ? truncateForPrompt(normalizeWhitespace(item.content), 280) : "";
-          const feedbackRule =
-            typeof item.rule === "string" ? truncateForPrompt(normalizeWhitespace(item.rule), 220) : "";
-          const rawDescription = typeof item.description === "string" ? truncateForPrompt(item.description, 180) : "";
-          const rawSummary = typeof item.summary === "string" ? truncateForPrompt(item.summary, 180) : "";
-          const rawStage = typeof item.stage === "string" ? truncateForPrompt(item.stage, 220) : "";
-          const rawGoal = typeof item.goal === "string" ? truncateForPrompt(normalizeWhitespace(item.goal), 180) : "";
-          const rawDecisions = normalizeStringArray(item.decisions, 10);
-          const rawConstraints = normalizeStringArray(item.constraints, 10);
-          const rawNextSteps = normalizeStringArray(item.next_steps, 10);
-          const rawBlockers = normalizeStringArray(item.blockers, 10);
-          const timeline = normalizeStringArray(item.timeline, 10);
-          const rawNotes = normalizeStringArray(item.notes, 10);
-          const structuredProjectSummary = truncateForPrompt(
-            rawDecisions[0] ||
-              rawConstraints[0] ||
-              rawNextSteps[0] ||
-              rawBlockers[0] ||
-              timeline[0] ||
-              rawNotes[0] ||
-              "",
-            180,
-          );
-          if (type === "feedback" && !feedbackRule) {
-            discarded.push({
-              reason: "invalid_schema",
-              candidateType: type,
-              ...(rawName || typeof item.name === "string"
-                ? { candidateName: rawName || String(item.name).trim() }
-                : {}),
-              summary: "Feedback candidate missing a non-empty rule.",
-            });
-            return null;
-          }
-          const candidateType = type;
-          const shouldPinToKnownProject = Boolean(selectedKnownProject && !explicitProjectName);
-          const projectNameFallback =
-            candidateType === "project"
-              ? truncateForPrompt(
-                  explicitProjectName ||
-                    (shouldPinToKnownProject ? (selectedKnownProject?.projectName ?? "") : "") ||
-                    rawName ||
-                    rawProjectName ||
-                    (isLikelyHumanReadableProjectIdentifier(rawProjectId) ? rawProjectId : "") ||
-                    extractProjectNameFromContent(rawContent) ||
-                    contextProjectName,
-                  80,
-                )
-              : "";
-          const description =
-            rawDescription ||
-            (typeof item.profile === "string"
-              ? truncateForPrompt(item.profile, 180)
-              : rawContent
-                ? sanitizeProjectDescriptionText(rawContent, projectNameFallback)
-                : rawSummary
-                  ? rawSummary
-                  : feedbackRule
-                    ? truncateForPrompt(feedbackRule, 180)
-                    : rawGoal
-                      ? rawGoal
-                      : explicitProjectDescriptor
-                        ? explicitProjectDescriptor
-                        : explicitGoal
-                          ? explicitGoal
-                          : rawStage
-                            ? truncateForPrompt(rawStage, 180)
-                            : explicitProjectStage
-                              ? truncateForPrompt(explicitProjectStage, 180)
-                              : structuredProjectSummary);
-          const normalizedProjectDescription =
-            candidateType === "project" &&
-            structuredProjectSummary &&
-            (!description || description === explicitProjectDescriptor || description === explicitGoal)
-              ? structuredProjectSummary
-              : description;
-          const name =
-            candidateType === "user"
-              ? "user-profile"
-              : candidateType === "feedback"
-                ? truncateForPrompt(rawName || deriveFeedbackCandidateName(feedbackRule), 80)
-                : projectNameFallback;
-          const preferences = candidateType === "user" ? [] : normalizeStringArray(item.preferences, 10);
-          const constraints = candidateType === "user" ? [] : rawConstraints;
-          const decisions =
-            candidateType === "project" && projectScopeSignal
-              ? uniqueStrings([...rawDecisions, normalizeWhitespace(stripExplicitRememberLead(focusText))], 10)
-              : rawDecisions;
-          const nextSteps = rawNextSteps;
-          const blockers =
-            candidateType === "project" && projectRiskSignal
-              ? uniqueStrings([...rawBlockers, normalizeWhitespace(stripExplicitRememberLead(focusText))], 10)
-              : rawBlockers;
-          const notes =
-            candidateType === "project" && !projectScopeSignal && !projectRiskSignal
-              ? rawNotes
-              : uniqueStrings(rawNotes, 10);
-          const relationships = normalizeStringArray(item.relationships, 10);
-          const hasUserPayload = Boolean(
-            normalizedProjectDescription ||
-              rawContent ||
-              (typeof item.profile === "string" && normalizeWhitespace(item.profile)) ||
-              (typeof item.summary === "string" && normalizeWhitespace(item.summary)) ||
-              relationships.length > 0,
-          );
-          if (candidateType === "project" && (!name || !description)) {
-            discarded.push({
-              reason: "invalid_schema",
-              candidateType,
-              ...(name || rawName ? { candidateName: name || rawName } : {}),
-              summary: "Candidate missing a stable name or description.",
-            });
-            return null;
-          }
-          if (candidateType === "user" && (!name || !hasUserPayload)) {
-            discarded.push({
-              reason: "invalid_schema",
-              candidateType,
-              candidateName: "user-profile",
-              summary: "User candidate did not contain any durable profile content.",
-            });
-            return null;
-          }
-          if (candidateType === "project" && isGenericProjectCandidateName(name)) {
-            discarded.push({
-              reason: "generic_project_name",
-              candidateType,
-              candidateName: name,
-              summary: description,
-            });
-            return null;
-          }
-          return {
-            type: candidateType,
-            scope: candidateType === "user" ? "global" : "project",
-            ...(() => {
-              if (candidateType !== "project" && candidateType !== "feedback") return {};
-              if (typeof item.project_id === "string" && isStableFormalProjectId(item.project_id)) {
-                return { projectId: item.project_id.trim() };
-              }
-              if (selectedKnownProject?.projectId && isStableFormalProjectId(selectedKnownProject.projectId)) {
-                return { projectId: selectedKnownProject.projectId };
-              }
-              return {};
-            })(),
-            name,
-            description: normalizedProjectDescription,
-            ...(input.sessionKey ? { sourceSessionKey: input.sessionKey } : {}),
-            capturedAt: input.timestamp,
-            ...(typeof item.profile === "string"
-              ? { profile: truncateForPrompt(item.profile, 280) }
-              : rawContent
-                ? { profile: rawContent }
-                : {}),
-            ...(typeof item.summary === "string" ? { summary: truncateForPrompt(item.summary, 280) } : {}),
-            ...(preferences.length > 0 ? { preferences } : {}),
-            ...(constraints.length > 0 ? { constraints } : {}),
-            ...(relationships.length > 0 ? { relationships } : {}),
-            ...(candidateType === "feedback" && feedbackRule ? { rule: feedbackRule } : {}),
-            ...(typeof item.why === "string" && sanitizeFeedbackSectionText(item.why) && candidateType === "feedback"
-              ? { why: truncateForPrompt(sanitizeFeedbackSectionText(item.why), 280) }
-              : {}),
-            ...(typeof item.how_to_apply === "string" &&
-            sanitizeFeedbackSectionText(item.how_to_apply) &&
-            candidateType === "feedback"
-              ? { howToApply: truncateForPrompt(sanitizeFeedbackSectionText(item.how_to_apply), 280) }
-              : {}),
-            ...(candidateType === "project" && rawStage ? { stage: rawStage } : {}),
-            decisions,
-            nextSteps,
-            blockers,
-            timeline,
-            notes,
-          };
+          const result = normalizeExtractionItem({
+            item,
+            signals,
+            ...(input.sessionKey ? { sessionKey: input.sessionKey } : {}),
+            timestamp: input.timestamp,
+          });
+          if (result.discarded) discarded.push(result.discarded);
+          return result.candidate;
         })
         .filter((item): item is MemoryCandidate => Boolean(item));
       const filtered = items.filter(item => {
@@ -2089,56 +1899,9 @@ export class LlmMemoryExtractor {
           ...(item.blockers ?? []),
           ...(item.timeline ?? []),
         ].join(" ");
-        if (item.type === "user") {
-          return true;
-        }
-        if (item.type === "project") {
-          if (feedbackInstructionSignal && !projectDefinitionSignal) {
-            discarded.push({
-              reason: "violates_feedback_project_boundary",
-              candidateType: item.type,
-              candidateName: item.name,
-              summary: item.description,
-            });
-            return false;
-          }
-          if (genericProjectAnchor && !projectDefinitionSignal && !contextProjectName) {
-            discarded.push({
-              reason: "generic_anchor_without_unique_project",
-              candidateType: item.type,
-              candidateName: item.name,
-              summary: item.description,
-            });
-            return false;
-          }
-          if (
-            genericProjectAnchor &&
-            !projectDefinitionSignal &&
-            contextProjectName &&
-            !hasStructuredProjectEvidence &&
-            !projectFollowUpSignal &&
-            !looksLikeConcreteProjectMemoryText(text) &&
-            !looksLikeProjectFollowUpText(text)
-          ) {
-            discarded.push({
-              reason: "generic_anchor_without_project_definition",
-              candidateType: item.type,
-              candidateName: item.name,
-              summary: item.description,
-            });
-            return false;
-          }
-        }
-        if (item.type === "feedback" && projectDefinitionSignal && !feedbackInstructionSignal) {
-          discarded.push({
-            reason: "violates_feedback_project_boundary",
-            candidateType: item.type,
-            candidateName: item.name,
-            summary: item.description,
-          });
-          return false;
-        }
-        return true;
+        const result = filterExtractionCandidate({ item, signals, hasStructuredProjectEvidence, text });
+        if (result.discarded) discarded.push(result.discarded);
+        return result.keep;
       });
       const syntheticProjectFallback =
         filtered.length === 0 &&
