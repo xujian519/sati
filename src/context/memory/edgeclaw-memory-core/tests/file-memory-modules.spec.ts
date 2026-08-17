@@ -25,6 +25,7 @@ import {
 } from "../src/core/file-markdown.js";
 import { CURRENT_PROJECT_ID, DEFAULT_PROJECT_STATUS, TMP_PROJECT_ID } from "../src/core/file-constants.js";
 import { mergeCandidates, normalizeProjectStatus, sameOrigin, sortEntries } from "../src/core/file-manifest.js";
+import type { MemoryCandidate, MemoryManifestEntry } from "../src/core/types.js";
 
 describe("file-text 文本工具", () => {
   it("slugify 归一（小写/连字符/中文保留）", () => {
@@ -105,19 +106,20 @@ describe("markdown 段解析", () => {
 
 describe("body 构建", () => {
   it("buildUserBody 身份背景（空时占位）", () => {
-    const body = buildUserBody({ type: "user", name: "U", description: "" } as never);
+    const body = buildUserBody({ type: "user", scope: "global", name: "U", description: "" } satisfies MemoryCandidate);
     assert.ok(body.includes("## 身份背景"));
     assert.ok(body.includes("暂无稳定用户画像信息"));
   });
   it("buildProjectBody 各 section 渲染", () => {
     const body = buildProjectBody({
       type: "project",
+      scope: "project",
       name: "P",
       description: "D",
       stage: "in_progress",
       decisions: ["d1"],
       summary: "s",
-    } as never);
+    } satisfies MemoryCandidate);
     assert.ok(body.includes("## Current Stage"));
     assert.ok(body.includes("## Decisions"));
     assert.ok(body.includes("- d1"));
@@ -126,31 +128,49 @@ describe("body 构建", () => {
   it("buildFeedbackBody Rule/Why/How/Notes", () => {
     const body = buildFeedbackBody({
       type: "feedback",
+      scope: "project",
       name: "F",
       description: "D",
       rule: "R",
       why: "W",
       howToApply: "H",
       notes: ["n1"],
-    } as never);
+    } satisfies MemoryCandidate);
     assert.ok(body.includes("## Rule"));
     assert.ok(body.includes("## Why"));
     assert.ok(body.includes("## How To Apply"));
     assert.ok(body.includes("- n1"));
   });
   it("buildRecordBody 分派：user/feedback/project/general_project_meta", () => {
-    assert.ok(buildRecordBody({ type: "user", name: "U", description: "" } as never).includes("身份背景"));
     assert.ok(
-      buildRecordBody({ type: "feedback", name: "F", description: "D", rule: "R" } as never).includes("## Rule"),
+      buildRecordBody({ type: "user", scope: "global", name: "U", description: "" } satisfies MemoryCandidate).includes(
+        "身份背景",
+      ),
     );
     assert.ok(
-      buildRecordBody({ type: "project", name: "P", description: "D", summary: "s" } as never).includes("## Summary"),
+      buildRecordBody({
+        type: "feedback",
+        scope: "project",
+        name: "F",
+        description: "D",
+        rule: "R",
+      } satisfies MemoryCandidate).includes("## Rule"),
+    );
+    assert.ok(
+      buildRecordBody({
+        type: "project",
+        scope: "project",
+        name: "P",
+        description: "D",
+        summary: "s",
+      } satisfies MemoryCandidate).includes("## Summary"),
     );
     const general = buildRecordBody({
       type: "general_project_meta",
+      scope: "project",
       name: "G",
       description: "desc",
-    } as never);
+    } satisfies MemoryCandidate);
     assert.ok(general.includes("## Status"));
     assert.ok(general.includes(DEFAULT_PROJECT_STATUS));
   });
@@ -158,36 +178,85 @@ describe("body 构建", () => {
 
 describe("buildFrontmatter / candidateDescription", () => {
   it("project 候选默认 CURRENT_PROJECT_ID", () => {
-    const fm = buildFrontmatter({ type: "project", name: "P", description: "D" } as never);
+    const fm = buildFrontmatter({
+      type: "project",
+      scope: "project",
+      name: "P",
+      description: "D",
+    } satisfies MemoryCandidate);
     assert.equal(fm.scope, "project");
     assert.equal(fm.projectId, CURRENT_PROJECT_ID);
   });
   it("user 候选 scope=global 无 projectId", () => {
-    const fm = buildFrontmatter({ type: "user", name: "U", description: "D" } as never);
+    const fm = buildFrontmatter({
+      type: "user",
+      scope: "global",
+      name: "U",
+      description: "D",
+    } satisfies MemoryCandidate);
     assert.equal(fm.scope, "global");
     assert.equal("projectId" in fm, false);
   });
   it("candidateDescription 兜底链", () => {
-    assert.equal(candidateDescription({ type: "project", name: "P" } as never), "P");
-    assert.equal(candidateDescription({ type: "feedback", name: "F", rule: "R" } as never), "R");
+    assert.equal(
+      candidateDescription({ type: "project", scope: "project", name: "P", description: "" } satisfies MemoryCandidate),
+      "P",
+    );
+    assert.equal(
+      candidateDescription({
+        type: "feedback",
+        scope: "project",
+        name: "F",
+        description: "",
+        rule: "R",
+      } satisfies MemoryCandidate),
+      "R",
+    );
   });
 });
 
 describe("mergeCandidates / sameOrigin / sortEntries", () => {
   it("user 合并：preferences/constraints 并集去重", () => {
     const merged = mergeCandidates(
-      { type: "user", name: "U", description: "d1", preferences: ["a"] } as never,
-      { type: "user", name: "U", description: "d2", preferences: ["b", "a"] } as never,
+      { type: "user", scope: "global", name: "U", description: "d1", preferences: ["a"] } satisfies MemoryCandidate,
+      {
+        type: "user",
+        scope: "global",
+        name: "U",
+        description: "d2",
+        preferences: ["b", "a"],
+      } satisfies MemoryCandidate,
     );
     assert.deepEqual(merged.preferences, ["a", "b"]);
   });
   it("不同类型不合并（返回 primary）", () => {
-    const primary = { type: "project", name: "P" } as never;
-    assert.equal(mergeCandidates(primary, { type: "user", name: "U" } as never), primary);
+    const primary = { type: "project", scope: "project", name: "P", description: "" } satisfies MemoryCandidate;
+    assert.equal(
+      mergeCandidates(primary, { type: "user", scope: "global", name: "U", description: "" } satisfies MemoryCandidate),
+      primary,
+    );
   });
   it("sameOrigin 按 capturedAt+sourceSessionKey+type 判定", () => {
-    const record = { capturedAt: "2026-01-01", sourceSessionKey: "sk", type: "project" } as never;
-    const candidate = { capturedAt: "2026-01-01", sourceSessionKey: "sk", type: "project" } as never;
+    const record: MemoryManifestEntry = {
+      file: "r.md",
+      relativePath: "r.md",
+      absolutePath: "/tmp/r.md",
+      name: "N",
+      description: "D",
+      type: "project",
+      scope: "project",
+      updatedAt: "2026-01-01",
+      capturedAt: "2026-01-01",
+      sourceSessionKey: "sk",
+    };
+    const candidate: MemoryCandidate = {
+      type: "project",
+      scope: "project",
+      name: "N",
+      description: "D",
+      capturedAt: "2026-01-01",
+      sourceSessionKey: "sk",
+    };
     assert.equal(sameOrigin(record, candidate), true);
     assert.equal(
       sameOrigin(record, {
@@ -203,9 +272,27 @@ describe("mergeCandidates / sameOrigin / sortEntries", () => {
   });
   it("sortEntries updatedAt 降序 + path 升序", () => {
     const sorted = sortEntries([
-      { relativePath: "b.md", updatedAt: "2026-01-02" },
-      { relativePath: "a.md", updatedAt: "2026-01-02" },
-    ] as never);
+      {
+        file: "b.md",
+        relativePath: "b.md",
+        absolutePath: "/tmp/b.md",
+        name: "B",
+        description: "D",
+        type: "project",
+        scope: "project",
+        updatedAt: "2026-01-02",
+      },
+      {
+        file: "a.md",
+        relativePath: "a.md",
+        absolutePath: "/tmp/a.md",
+        name: "A",
+        description: "D",
+        type: "project",
+        scope: "project",
+        updatedAt: "2026-01-02",
+      },
+    ] satisfies MemoryManifestEntry[]);
     assert.deepEqual(
       sorted.map(e => (e as { relativePath: string }).relativePath),
       ["a.md", "b.md"],
