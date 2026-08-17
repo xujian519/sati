@@ -54,6 +54,11 @@ type PersistedData = {
 const MAX_HOURLY_BUCKETS = 72;
 const MAX_SESSIONS = 200;
 
+/** 异步落盘：缓冲达到该字节数即触发一次 flush（O_APPEND 单次 write 原子追加）。 */
+const FLUSH_BATCH_BYTES = 64 * 1024;
+/** 定时兜底 flush 间隔（unref，不阻止进程退出）。 */
+const FLUSH_INTERVAL_MS = 1_000;
+
 export class TokenStatsCollector {
   private readonly enabled: boolean;
   private readonly jsonlPath: string | undefined;
@@ -62,6 +67,13 @@ export class TokenStatsCollector {
   private data: PersistedData;
   private recentRecords: RouterStatsRecord[] = [];
   private fd: number | undefined;
+
+  // 异步写缓冲：observe() 热路径只入内存队列，定时/批量异步落盘，
+  // 不再每请求同步磁盘 I/O（阻塞事件循环）。
+  private pendingLines: string[] = [];
+  private pendingBytes = 0;
+  private flushTimer: NodeJS.Timeout | undefined;
+  private flushChain: Promise<void> = Promise.resolve();
 
   constructor(config: RouterStatsConfig | undefined) {
     this.enabled = config?.enabled ?? false;
@@ -90,6 +102,7 @@ export class TokenStatsCollector {
       } catch {
         /* will fall back to per-write open */
       }
+      this.startFlushTimer();
     } else {
       this.data = createPersistedData();
     }
@@ -137,9 +150,8 @@ export class TokenStatsCollector {
     }
     this.pruneSessions();
 
-    // Append immediately — no batching needed; O_APPEND is atomic for
-    // small writes on Linux/macOS so concurrent collectors are safe.
-    this.appendRecord(record);
+    // 入内存缓冲，异步批量落盘（O_APPEND 单次 write 原子追加，多实例并发安全）。
+    this.enqueueRecord(record);
   }
 
   snapshot(): RouterStatsAggregate {
@@ -167,13 +179,17 @@ export class TokenStatsCollector {
   }
 
   async flush(): Promise<void> {
-    // With JSONL append-only writes, there is nothing to batch-flush.
-    // This method is kept for API compatibility (called by shutdown).
+    // 确保所有 pending 记录已落盘（shutdown 调用；定时器 unref 不阻塞退出）。
+    await this.scheduleFlush();
+    await this.flushChain;
   }
 
   clear(): void {
     this.data = createPersistedData();
     this.recentRecords = [];
+    // 清空统计语义：丢弃未落盘的 pending 记录，并截断文件。
+    this.pendingLines = [];
+    this.pendingBytes = 0;
     if (this.jsonlPath) {
       try {
         fs.writeFileSync(this.jsonlPath, "", "utf-8");
@@ -184,6 +200,9 @@ export class TokenStatsCollector {
   }
 
   dispose(): void {
+    this.stopFlushTimer();
+    // 冷路径兜底：同步写掉剩余缓冲（与旧实现行为一致），避免丢记录。
+    this.drainSync();
     if (this.fd !== undefined) {
       try {
         fs.closeSync(this.fd);
@@ -196,13 +215,67 @@ export class TokenStatsCollector {
 
   // ── JSONL persistence ──────────────────────────────────────────────
 
-  private appendRecord(record: RouterStatsRecord): void {
+  private enqueueRecord(record: RouterStatsRecord): void {
     const line = JSON.stringify(record) + "\n";
+    this.pendingLines.push(line);
+    this.pendingBytes += line.length;
+    if (this.pendingBytes >= FLUSH_BATCH_BYTES) {
+      void this.scheduleFlush();
+    }
+  }
+
+  private startFlushTimer(): void {
+    if (this.flushTimer) return;
+    this.flushTimer = setInterval(() => void this.scheduleFlush(), FLUSH_INTERVAL_MS);
+    this.flushTimer.unref();
+  }
+
+  private stopFlushTimer(): void {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = undefined;
+    }
+  }
+
+  /** 取走当前缓冲并排队异步写入；串行化保证写入顺序与旧实现一致。 */
+  private scheduleFlush(): Promise<void> {
+    if (this.pendingLines.length === 0) return this.flushChain;
+    const payload = this.pendingLines.join("");
+    this.pendingLines = [];
+    this.pendingBytes = 0;
+    this.flushChain = this.flushChain
+      .then(() => this.writePayload(payload))
+      .catch(() => {
+        /* best-effort */
+      });
+    return this.flushChain;
+  }
+
+  private writePayload(payload: string): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => resolve();
+      if (this.fd !== undefined) {
+        const buf = Buffer.from(payload, "utf8");
+        // position=null：O_APPEND 单次 write 原子追加，多实例并发安全。
+        fs.write(this.fd, buf, 0, buf.length, null, done);
+      } else if (this.jsonlPath) {
+        fs.appendFile(this.jsonlPath, payload, "utf-8", done);
+      } else {
+        done();
+      }
+    });
+  }
+
+  private drainSync(): void {
+    if (this.pendingLines.length === 0) return;
+    const payload = this.pendingLines.join("");
+    this.pendingLines = [];
+    this.pendingBytes = 0;
     try {
       if (this.fd !== undefined) {
-        fs.writeSync(this.fd, line);
+        fs.writeSync(this.fd, payload);
       } else if (this.jsonlPath) {
-        fs.appendFileSync(this.jsonlPath, line, "utf-8");
+        fs.appendFileSync(this.jsonlPath, payload, "utf-8");
       }
     } catch {
       /* best-effort */
