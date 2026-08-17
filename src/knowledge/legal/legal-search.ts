@@ -1,7 +1,7 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { openKnowledgeDb } from "../shared/db-version.js";
 import { LAWS_DB } from "../shared/schema-versions.js";
-import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
+import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms, sqliteHasFts5 } from "../shared/fts.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
 import { extractLawKeywords } from "./keywords.js";
 import { buildLawSearchSql, LAW_SEARCH_COLUMNS, LAW_SEARCH_COLUMNS_FTS } from "./sql.js";
@@ -162,7 +162,7 @@ export class LegalSearchEngine implements LegalSearchSource {
 
   /** 批量按 id 查询（一次 IN 查询，替代循环 getById 的逐次 prepare+执行）。 */
   getByIds(ids: string[]): LawRecord[] {
-    const uniqueIds = Array.from(new Set(ids.filter((id): id is string => typeof id === "string" && id.length > 0)));
+    const uniqueIds = Array.from(new Set(ids.filter(id => id.length > 0)));
     if (uniqueIds.length === 0) return [];
     if (uniqueIds.length === 1) {
       const record = this.getById(uniqueIds[0]!);
@@ -199,28 +199,23 @@ export class LegalSearchEngine implements LegalSearchSource {
     // trigram 分词对引号敏感：整体作为 phrase 查询。
     // 注意：law_fts 与 law 表的 rowid **不对齐**（不同导入批次），
     // 正确关联键是 name（同名多版本在 JS 层去重，保留 bm25 最高者）。
-    const escaped = keyword.replace(/"/g, '""');
-    let rows: LawRow[];
-    if (!options.level && !options.category) {
-      rows = this.stmtSearchFts!.all(`"${escaped}"`, limit * 3) as LawRow[];
-    } else {
-      const { sql, params } = buildLawSearchSql("fts", options);
-      rows = this.db.prepare(sql).all(`"${escaped}"`, ...params, limit * 3) as LawRow[];
-    }
-    // 放大取数（limit * 3）后按 name 去重，保留最新发布版本
-    return dedupeByLawName(rows, limit);
+    return this.searchFtsWithQuery(escapeFtsPhrase(keyword), options, limit);
   }
 
   /** 多个关键词 OR 组合的 FTS 查询（用于长查询切词降级）。 */
   private searchFtsKeywords(keywords: string[], options: LegalSearchOptions, limit: number): LawRow[] {
-    const escaped = keywords.map(k => `"${k.replace(/"/g, '""')}"`).join(" OR ");
+    return this.searchFtsWithQuery(joinFtsOrTerms(keywords), options, limit);
+  }
+
+  private searchFtsWithQuery(query: string, options: LegalSearchOptions, limit: number): LawRow[] {
     let rows: LawRow[];
     if (!options.level && !options.category) {
-      rows = this.stmtSearchFts!.all(escaped, limit * 3) as LawRow[];
+      rows = this.stmtSearchFts!.all(query, limit * 3) as LawRow[];
     } else {
       const { sql, params } = buildLawSearchSql("fts", options);
-      rows = this.db.prepare(sql).all(escaped, ...params, limit * 3) as LawRow[];
+      rows = this.db.prepare(sql).all(query, ...params, limit * 3) as LawRow[];
     }
+    // 放大取数（limit * 3）后按 name 去重，保留最新发布版本
     return dedupeByLawName(rows, limit);
   }
 

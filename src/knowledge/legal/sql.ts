@@ -14,6 +14,20 @@ export const LAW_SEARCH_COLUMNS_FTS = `${LAW_SEARCH_COLUMNS}, bm25(law_fts) AS f
 
 export type LawSearchFilter = { level?: string; category?: string };
 
+function buildFilterClauses(filter: LawSearchFilter): { sql: string; params: string[] } {
+  const clauses: string[] = [];
+  const params: string[] = [];
+  if (filter.level) {
+    clauses.push("AND l.level = ?");
+    params.push(filter.level);
+  }
+  if (filter.category) {
+    clauses.push("AND c.name = ?");
+    params.push(filter.category);
+  }
+  return { sql: clauses.join(" "), params };
+}
+
 /**
  * 动态 SQL 构建（带 level/category 过滤；无过滤走热路径 prepared statements）。
  *
@@ -24,43 +38,28 @@ export type LawSearchFilter = { level?: string; category?: string };
  *   `[pattern, pattern, ...params, limit]`）。
  */
 export function buildLawSearchSql(kind: "fts" | "like", filter: LawSearchFilter): { sql: string; params: string[] } {
+  const { sql: filterSql, params: filterParams } = buildFilterClauses(filter);
   if (kind === "fts") {
-    let sql = `
-      SELECT ${LAW_SEARCH_COLUMNS_FTS}
-      FROM law_fts
-      JOIN law l ON l.name = law_fts.name
+    return {
+      sql: `SELECT ${LAW_SEARCH_COLUMNS_FTS}
+        FROM law_fts
+        JOIN law l ON l.name = law_fts.name
+        JOIN category c ON c.id = l.category_id
+        WHERE law_fts MATCH ?
+          AND (l.expired = 0 OR l.expired IS NULL)
+          ${filterSql}
+        ORDER BY l.publish DESC, bm25(law_fts) LIMIT ?`,
+      params: filterParams,
+    };
+  }
+  return {
+    sql: `SELECT ${LAW_SEARCH_COLUMNS}
+      FROM law l
       JOIN category c ON c.id = l.category_id
-      WHERE law_fts MATCH ?
+      WHERE (l.name LIKE ? ESCAPE '\\' OR l.content LIKE ? ESCAPE '\\')
         AND (l.expired = 0 OR l.expired IS NULL)
-    `;
-    const params: string[] = [];
-    if (filter.level) {
-      sql += " AND l.level = ?";
-      params.push(filter.level);
-    }
-    if (filter.category) {
-      sql += " AND c.name = ?";
-      params.push(filter.category);
-    }
-    sql += " ORDER BY l.publish DESC, bm25(law_fts) LIMIT ?";
-    return { sql, params };
-  }
-  let sql = `
-    SELECT ${LAW_SEARCH_COLUMNS}
-    FROM law l
-    JOIN category c ON c.id = l.category_id
-    WHERE (l.name LIKE ? ESCAPE '\\' OR l.content LIKE ? ESCAPE '\\')
-      AND (l.expired = 0 OR l.expired IS NULL)
-  `;
-  const params: string[] = [];
-  if (filter.level) {
-    sql += " AND l.level = ?";
-    params.push(filter.level);
-  }
-  if (filter.category) {
-    sql += " AND c.name = ?";
-    params.push(filter.category);
-  }
-  sql += ' ORDER BY l.publish DESC, l."order" LIMIT ?';
-  return { sql, params };
+        ${filterSql}
+      ORDER BY l.publish DESC, l."order" LIMIT ?`,
+    params: filterParams,
+  };
 }

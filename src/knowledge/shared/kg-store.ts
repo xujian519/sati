@@ -1,6 +1,6 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { KgNode } from "../patent/types.js";
-import { FTS_MIN_RUNES } from "./fts.js";
+import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms } from "./fts.js";
 import { openKnowledgeDb } from "./db-version.js";
 import { KNOWLEDGE_DB } from "./schema-versions.js";
 import { toNode, type FtsHit, type NodeRow } from "./kg/row-mapper.js";
@@ -101,8 +101,7 @@ export class KgStore {
 
     let ids: string[];
     if (this.stmtFtsSearch !== null && runes.length >= FTS_MIN_RUNES) {
-      const escaped = trimmed.replace(/"/g, '""');
-      const rows = this.stmtFtsSearch!.all(`"${escaped}"`, limit) as FtsHit[];
+      const rows = this.stmtFtsSearch!.all(escapeFtsPhrase(trimmed), limit) as FtsHit[];
       ids = rows.map(r => r.id);
       // FTS 词级匹配未命中且无分隔符时降级 LIKE 子串：unicode61 下长句/短语常无完整 token，
       // 子串匹配比 token 完全匹配宽松（如 "以说明书为依据" 作为 token 不存在时仍可命中正文）。
@@ -198,10 +197,7 @@ export class KgStore {
     }
 
     if (ftsTerms.length > 0) {
-      const match = ftsTerms
-        .slice(0, MAX_OR_TERMS)
-        .map(term => `"${term.replace(/"/g, '""')}"`)
-        .join(" OR ");
+      const match = joinFtsOrTerms(ftsTerms.slice(0, MAX_OR_TERMS));
       const rows = this.stmtFtsSearch!.all(match, limit) as FtsHit[];
       for (const row of rows) ids.add(row.id);
     }

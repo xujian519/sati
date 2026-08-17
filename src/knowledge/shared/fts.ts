@@ -23,3 +23,13 @@ export function sqliteHasFts5(db: DatabaseSync): boolean {
     return false;
   }
 }
+
+/** 转义 FTS5 phrase 中的双引号，并包裹成双引号 phrase。 */
+export function escapeFtsPhrase(phrase: string): string {
+  return `"${phrase.replace(/"/g, '""')}"`;
+}
+
+/** 把多个词条构建为 FTS5 OR 查询表达式。 */
+export function joinFtsOrTerms(terms: string[]): string {
+  return terms.map(escapeFtsPhrase).join(" OR ");
+}
