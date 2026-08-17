@@ -12,16 +12,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validateCanonicalOutput } from "../../../src/tool/execution/outputSchemaValidation.js";
 import { ToolRegistry } from "../../../src/tool/registry/ToolRegistry.js";
+import type { CronToolRuntime } from "../../../src/cron/tool/CronToolRuntime.js";
 import { createCronCreateTool } from "../../../src/cron/tool/CronCreateTool.js";
 import { createCronDeleteTool } from "../../../src/cron/tool/CronDeleteTool.js";
 import { createCronListTool } from "../../../src/cron/tool/CronListTool.js";
 import { createCronStopTool } from "../../../src/cron/tool/CronStopTool.js";
 
 const TOOLS = [
-  createCronCreateTool({} as never),
-  createCronListTool({} as never),
-  createCronDeleteTool({} as never),
-  createCronStopTool({} as never),
+  createCronCreateTool({} as unknown as CronToolRuntime),
+  createCronListTool({} as unknown as CronToolRuntime),
+  createCronDeleteTool({} as unknown as CronToolRuntime),
+  createCronStopTool({} as unknown as CronToolRuntime),
 ];
 
 /** 各工具典型成功 data（与 execute 返回值中的 data 字段一致）。 */

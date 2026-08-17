@@ -839,7 +839,8 @@ async function* readServerSentEvents(
 ): AsyncIterable<ServerSentEvent> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
+  // 分片累积用数组 + join，避免每 chunk 一次不可变字符串全量复制（O(n²) 拼接）。
+  const parts: string[] = [];
   const effectiveIdleMs = idleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS;
   const cancelReader = () => {
     reader.cancel(signal?.reason).catch(() => undefined);
@@ -858,19 +859,23 @@ async function* readServerSentEvents(
       throwIfAborted(signal);
       const { value, done } = readResult;
       if (done) {
-        buffer += decoder.decode();
+        parts.push(decoder.decode());
         break;
       }
 
-      buffer += decoder.decode(value, { stream: true });
+      parts.push(decoder.decode(value, { stream: true }));
+      const buffer = parts.join("");
       const chunks = buffer.split(/\n\n/);
-      buffer = chunks.pop() ?? "";
+      parts.length = 0;
+      const tail = chunks.pop() ?? "";
+      if (tail.length > 0) parts.push(tail);
 
       for (const chunk of chunks) {
         yield* parseServerSentEventChunk(chunk);
       }
     }
 
+    const buffer = parts.join("");
     if (buffer.trim().length > 0) {
       for (const event of parseServerSentEventChunk(buffer)) {
         yield event;

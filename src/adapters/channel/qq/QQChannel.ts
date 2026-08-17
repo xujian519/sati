@@ -96,12 +96,17 @@ export class QQChannel implements ChannelAdapter {
       this.logger?.info?.(
         `qq: [group_msg] group=${event.group_openid} user=${event.author.member_openid} content="${event.content}"`,
       );
-      void this.handleGroupMessage(event);
+      // fire-and-forget：异常统一落日志（不吞错），避免未处理拒绝
+      void this.handleGroupMessage(event).catch(error =>
+        this.logger?.error?.(`qq: handleGroupMessage error: ${error instanceof Error ? error.message : String(error)}`),
+      );
     });
 
     this.botGateway.on("c2c_message", (event: QQC2CMessageEvent) => {
       this.logger?.info?.(`qq: [c2c_msg] user=${event.author.user_openid} content="${event.content}"`);
-      void this.handleC2CMessage(event);
+      void this.handleC2CMessage(event).catch(error =>
+        this.logger?.error?.(`qq: handleC2CMessage error: ${error instanceof Error ? error.message : String(error)}`),
+      );
     });
 
     try {

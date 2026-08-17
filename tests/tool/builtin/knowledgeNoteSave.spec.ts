@@ -135,7 +135,10 @@ test("工具 execute：正常保存返回插入消息", async t => {
     if (prevDb === undefined) delete process.env.SATI_KNOWLEDGE_DB;
     else process.env.SATI_KNOWLEDGE_DB = prevDb;
   });
-  const missing = await tool.execute({ title: "", content: "x" } as never, makeToolContext());
+  const missing = await tool.execute(
+    { title: "", content: "x" } as unknown as Parameters<typeof tool.execute>[0],
+    makeToolContext(),
+  );
   const text = missing.content[0]?.type === "text" ? missing.content[0].text : "";
   assert.ok(text.includes("title 与 content 均不能为空"));
 });

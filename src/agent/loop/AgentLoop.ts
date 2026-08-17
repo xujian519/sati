@@ -368,7 +368,7 @@ export class AgentLoop {
     this.dispatchLifecycle(input, "PreModelRequest", {
       provider: request.provider,
       model: request.model,
-    }).catch(() => {});
+    }).catch(error => console.warn("[agent] PreModelRequest lifecycle dispatch failed:", error));
     yield {
       type: "model_request_started",
       sessionId: input.sessionId,
@@ -1835,7 +1835,7 @@ export class AgentLoop {
     if (options.emitInstructionEvents !== false) {
       this.dispatchLifecycle(input, "InstructionsLoaded", {
         hasSystemPrompt: !!prepared.systemPrompt,
-      }).catch(() => {});
+      }).catch(error => console.warn("[agent] InstructionsLoaded lifecycle dispatch failed:", error));
       this.dependencies.eventEmitter?.({
         type: "instructions_loaded",
         sessionId: input.sessionId,
@@ -2054,7 +2054,7 @@ export class AgentLoop {
         boundary,
         messages: markCompactReplacementMessages(compact.messages),
       }),
-    ).catch(() => {});
+    ).catch(error => console.warn("[agent] onCompactPersisted failed:", error));
   }
 
   private repairTextExtractedToolNames(

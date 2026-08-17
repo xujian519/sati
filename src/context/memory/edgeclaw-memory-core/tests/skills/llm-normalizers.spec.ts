@@ -16,6 +16,7 @@ import {
   normalizeMemoryRoute,
   normalizeStringArray,
 } from "../../src/core/skills/llm-normalizers.js";
+import type { ProjectShortlistCandidate } from "../../src/core/types.js";
 
 describe("clampConfidence", () => {
   it("钳制 0-1 + NaN 兜底", () => {
@@ -128,11 +129,44 @@ describe("normalizeDreamCluster / normalizeGeneralProjectMetaMergeGroup", () => 
 });
 
 describe("chooseBestRecallProjectFallback 四级排序", () => {
-  const shortlist = [
-    { projectId: "a", projectName: "A", exact: 0, score: 1, sourceType: "general_local", updatedAt: "2026-01-01" },
-    { projectId: "b", projectName: "B", exact: 1, score: 0, sourceType: "workspace_external", updatedAt: "2026-01-02" },
-    { projectId: "c", projectName: "C", exact: 1, score: 5, sourceType: "general_local", updatedAt: "2026-01-03" },
-  ] as never;
+  const shortlist: ProjectShortlistCandidate[] = [
+    {
+      projectId: "a",
+      projectName: "A",
+      description: "D",
+      status: "active",
+      updatedAt: "2026-01-01",
+      exact: 0,
+      score: 1,
+      sourceType: "general_local",
+      source: "recent",
+      matchedText: "",
+    },
+    {
+      projectId: "b",
+      projectName: "B",
+      description: "D",
+      status: "active",
+      updatedAt: "2026-01-02",
+      exact: 1,
+      score: 0,
+      sourceType: "workspace_external",
+      source: "recent",
+      matchedText: "",
+    },
+    {
+      projectId: "c",
+      projectName: "C",
+      description: "D",
+      status: "active",
+      updatedAt: "2026-01-03",
+      exact: 1,
+      score: 5,
+      sourceType: "general_local",
+      source: "recent",
+      matchedText: "",
+    },
+  ];
   it("exact → score → sourcePriority → updatedAt 优先级", () => {
     const best = chooseBestRecallProjectFallback(shortlist);
     assert.equal((best as { projectId: string }).projectId, "c");

@@ -69,19 +69,63 @@ export async function checkEmbeddingConsistency(
     // gateway 启动（见 buildKnowledgeResolvers 的 fire-and-forget 调用）。
     // 压缩 BLOB 的字节长度与明文长度无关，length 过滤移到 JS：解压后落在 100..500
     // 字符才入样本，不足则跳过（全部不达标时 valid 为空 → 返回 null，与旧行为一致）。
-    const rows = db
-      .prepare(
-        `SELECT c.content, e.vector, e.dim, ${hasScale ? "e.scale" : "1.0"} AS scale
-         FROM chunks c JOIN embeddings e ON e.chunk_id = c.id
-         ORDER BY RANDOM() LIMIT ?`,
-      )
-      .all(sampleSize) as Array<{
+    //
+    // 采样方式：不用 `ORDER BY RANDOM()`（对 144K 行全量排序 + 每行 RANDOM() 是 7s 的
+    // 主凶），改为 chunks 的 rowid 随机起点 + 按 rowid 顺序向前取 sampleSize 行——
+    // 单次索引范围扫描 O(log n + sampleSize)，rowid 有空洞时多轮补齐（去重）。
+    const sampled: Array<{
+      rowid: number;
       content: string | Uint8Array | null;
       vector: Uint8Array;
       dim: number;
       scale: number;
-    }>;
-    if (rows.length === 0) return null;
+    }> = [];
+    const maxRowid = (db.prepare("SELECT COALESCE(MAX(rowid), 0) AS m FROM chunks").get() as { m: number }).m;
+    if (maxRowid > 0) {
+      const stmtSample = db.prepare(
+        `SELECT c.rowid AS rowid, c.content, e.vector, e.dim, ${hasScale ? "e.scale" : "1.0"} AS scale
+         FROM chunks c JOIN embeddings e ON e.chunk_id = c.id
+         WHERE c.rowid > ?
+         ORDER BY c.rowid
+         LIMIT ?`,
+      );
+      const seenRowids = new Set<number>();
+      // rowid 随机起点均匀落在 [0, maxRowid)，起点靠后/空洞时一轮取不满，多轮补齐；
+      // 4 轮上限保证最坏情况（库几乎为空或全是空洞）不会无限循环。
+      for (let attempt = 0; attempt < 4 && sampled.length < sampleSize; attempt += 1) {
+        const start = Math.floor(Math.random() * maxRowid);
+        const batch = stmtSample.all(start, sampleSize - sampled.length) as Array<{
+          rowid: number;
+          content: string | Uint8Array | null;
+          vector: Uint8Array;
+          dim: number;
+          scale: number;
+        }>;
+        for (const row of batch) {
+          if (seenRowids.has(row.rowid)) continue;
+          seenRowids.add(row.rowid);
+          sampled.push(row);
+        }
+      }
+      // 确定性兜底：随机轮次后仍不足（极小库/密集空洞），从开头顺序补齐——
+      // 保证样本数稳定且互不重复（仅最坏情形带轻微前向偏差，一致性自检可接受）。
+      if (sampled.length < sampleSize) {
+        const batch = stmtSample.all(0, sampleSize - sampled.length) as Array<{
+          rowid: number;
+          content: string | Uint8Array | null;
+          vector: Uint8Array;
+          dim: number;
+          scale: number;
+        }>;
+        for (const row of batch) {
+          if (seenRowids.has(row.rowid)) continue;
+          seenRowids.add(row.rowid);
+          sampled.push(row);
+        }
+      }
+    }
+    if (sampled.length === 0) return null;
+    const rows = sampled;
     const decoded = rows
       .map(row => ({ ...row, content: decompressChunk(row.content) }))
       .filter(row => row.content.length >= 100 && row.content.length <= 500);

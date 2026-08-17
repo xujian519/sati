@@ -13,6 +13,7 @@ import {
   splitProfileFacts,
   stripMarkdownSyntax,
 } from "../../src/core/skills/llm-hints.js";
+import type { ProjectIdentityHint } from "../../src/core/types.js";
 
 describe("isStableFormalProjectId / isGenericProjectCandidateName", () => {
   it("project_xxx 判定", () => {
@@ -63,10 +64,24 @@ describe("sanitizeFeedbackSectionText", () => {
 });
 
 describe("selectKnownProjectHint", () => {
-  const known = [
-    { projectId: "p1", projectName: "Alpha 项目", description: "检索", updatedAt: "2026-01-01" },
-    { projectId: "p2", projectName: "Beta", description: "其他", updatedAt: "2026-01-02" },
-  ] as never;
+  const known: ProjectIdentityHint[] = [
+    {
+      identityKey: "p1",
+      projectId: "p1",
+      projectName: "Alpha 项目",
+      description: "检索",
+      updatedAt: "2026-01-01",
+      scope: "formal",
+    },
+    {
+      identityKey: "p2",
+      projectId: "p2",
+      projectName: "Beta",
+      description: "其他",
+      updatedAt: "2026-01-02",
+      scope: "formal",
+    },
+  ];
   it("唯一精确匹配命中", () => {
     const hit = selectKnownProjectHint("关于 Alpha 项目的事情", known);
     assert.equal((hit as { projectId: string }).projectId, "p1");

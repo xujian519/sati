@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { AgentTranscriptEntry } from "../../../src/session/transcript/TranscriptEntry.js";
+import type { AgentRequestHeaderSnapshot } from "../../../src/session/transcript/TranscriptEntry.js";
+import type { AgentTurnResult } from "../../../src/agent/protocol/result.js";
 import { InMemoryTranscriptWriter } from "../../../src/session/transcript/InMemoryTranscriptWriter.js";
 import { JsonlTranscriptWriter } from "../../../src/session/transcript/JsonlTranscriptWriter.js";
 import { readTranscript } from "../../../src/session/transcript/TranscriptReader.js";
@@ -26,6 +28,24 @@ function schedule(overrides: Partial<RetrySchedule> = {}): RetrySchedule {
     reason: "network_error",
     scheduledAt: "2026-08-16T00:00:00.000Z",
     ...overrides,
+  };
+}
+
+function requestHeader(provider: string, model: string): AgentRequestHeaderSnapshot {
+  return { provider, model, systemPromptDigest: "abc", toolSchemaDigest: "def", messageCount: 1 };
+}
+
+function turnResult(turnId: string): AgentTurnResult {
+  return {
+    type: "success",
+    sessionId: "s1",
+    turnId,
+    stopReason: "completed",
+    usage: {},
+    permissionDenials: [],
+    turns: 1,
+    startedAt: "2026-08-16T00:00:00.000Z",
+    completedAt: "2026-08-16T00:01:00.000Z",
   };
 }
 
@@ -80,17 +100,7 @@ test("JsonlTranscriptWriter.recordRetrySchedule：落盘可读回 + 重放 log-o
       toolSchemaDigest: "def",
       messageCount: 1,
     });
-    await writer.recordTurnResult("s1", "t1", {
-      type: "completed",
-      sessionId: "s1",
-      turnId: "t1",
-      stopReason: "completed",
-      usage: {},
-      permissionDenials: [],
-      turns: 1,
-      startedAt: "2026-08-16T00:00:00.000Z",
-      completedAt: "2026-08-16T00:01:00.000Z",
-    } as never);
+    await writer.recordTurnResult("s1", "t1", turnResult("t1"));
     const { entries } = await readTranscript(path);
     const retry = entries.find(e => e.type === "retry_schedule");
     assert.ok(retry, "retry_schedule 条目应可读回");
@@ -112,7 +122,7 @@ test("findOpenRequest：(a) 形态——request_header 后无 durable，可续�
       type: "request_header",
       turnId: "t1",
       sequence: 2,
-      header: { provider: "deepseek", model: "deepseek-v4-flash" } as never,
+      header: requestHeader("deepseek", "deepseek-v4-flash"),
     }),
   ];
   const open = findOpenRequest(entries);
@@ -126,13 +136,13 @@ test("findOpenRequest：(b) 形态——request_header 后已有部分 durable�
       type: "request_header",
       turnId: "t1",
       sequence: 2,
-      header: { provider: "deepseek", model: "deepseek-v4-flash" } as never,
+      header: requestHeader("deepseek", "deepseek-v4-flash"),
     }),
     entry({
       type: "durable_message",
       turnId: "t1",
       sequence: 3,
-      message: { role: "assistant", content: "部分响应" } as never,
+      message: { role: "assistant", content: [{ type: "text", text: "部分响应" }] },
     }),
   ];
   const open = findOpenRequest(entries);
@@ -142,8 +152,8 @@ test("findOpenRequest：(b) 形态——request_header 后已有部分 durable�
 test("findOpenRequest：turn 已闭合（有 turn_result）返回 undefined", () => {
   const entries: AgentTranscriptEntry[] = [
     entry({ type: "accepted_input", turnId: "t1", messages: [] }),
-    entry({ type: "request_header", turnId: "t1", header: {} as never }),
-    entry({ type: "turn_result", turnId: "t1", result: {} as never }),
+    entry({ type: "request_header", turnId: "t1", header: requestHeader("deepseek", "deepseek-v4-flash") }),
+    entry({ type: "turn_result", turnId: "t1", result: turnResult("t1") }),
   ];
   assert.equal(findOpenRequest(entries), undefined);
 });
@@ -156,14 +166,14 @@ test("findOpenRequest：无 request_header 返回 undefined", () => {
 test("findOpenRequest：多 turn——只返回最后一个开放请求", () => {
   const entries: AgentTranscriptEntry[] = [
     entry({ type: "accepted_input", turnId: "t1", messages: [] }),
-    entry({ type: "request_header", turnId: "t1", header: {} as never }),
-    entry({ type: "turn_result", turnId: "t1", result: {} as never }),
+    entry({ type: "request_header", turnId: "t1", header: requestHeader("deepseek", "deepseek-v4-flash") }),
+    entry({ type: "turn_result", turnId: "t1", result: turnResult("t1") }),
     entry({ type: "accepted_input", turnId: "t2", messages: [] }),
     entry({
       type: "request_header",
       turnId: "t2",
       sequence: 9,
-      header: { provider: "openai", model: "gpt-4o" } as never,
+      header: requestHeader("openai", "gpt-4o"),
     }),
   ];
   const open = findOpenRequest(entries);

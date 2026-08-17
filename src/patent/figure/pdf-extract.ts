@@ -9,7 +9,7 @@
  * 复用现有 VLM 两步法识别电路图。文本坐标用于后续图文对齐。
  */
 
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import * as mupdf from "mupdf";
 
 export type PdfExtractOptions = {
@@ -217,9 +217,10 @@ export function renderPdfPageAsBase64(
 }
 
 /**
- * 读取文件并提取 PDF 页面（便捷函数）。
+ * 读取文件并提取 PDF 页面（便捷函数）。异步读文件（fs/promises），
+ * 避免工具执行路径上的同步 I/O 阻塞事件循环。
  */
-export function extractPdfPagesFromFile(filePath: string, opts?: PdfExtractOptions): PdfExtractedPage[] {
-  const buffer = readFileSync(filePath);
+export async function extractPdfPagesFromFile(filePath: string, opts?: PdfExtractOptions): Promise<PdfExtractedPage[]> {
+  const buffer = await readFile(filePath);
   return extractPdfPages(buffer, opts);
 }

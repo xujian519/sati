@@ -162,6 +162,35 @@ test("kg-store: getNode 缓存命中返回同一对象引用", t => {
   assert.equal(first, second, "第二次查询应命中 nodeCache 返回同一对象引用");
 });
 
+test("kg-store: nodeCache LRU 上限淘汰（防 116K 节点无界膨胀）", t => {
+  const dir = mkdtempSync(join(tmpdir(), "kg-store-lru-"));
+  const dbPath = join(dir, "lru.db");
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE nodes (id TEXT PRIMARY KEY, node_type TEXT, name TEXT, title TEXT, content TEXT, law_refs_count INTEGER, source TEXT, full_ref TEXT, chapter TEXT, article_number TEXT, version TEXT);
+    CREATE TABLE edges (source TEXT, target TEXT, relation TEXT);
+  `);
+  const insert = db.prepare(`INSERT INTO nodes (id, node_type, name) VALUES (?, 'Concept', ?)`);
+  const N = 9000; // > NODE_CACHE_MAX(8192)
+  for (let i = 0; i < N; i++) insert.run(`n${i}`, `节点${i}`);
+  db.close();
+  const store = new KgStore(dbPath);
+  t.after(() => {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  for (let i = 0; i < N; i++) store.getNode(`n${i}`);
+  assert.equal(store.nodeCacheSize(), 8192, "缓存条目数应被 LRU 上限钳制");
+  // 最早插入的节点已被淘汰：再次访问应重新查询并刷新访问序（缓存仍封顶）
+  const rehit = store.getNode("n0");
+  assert.ok(rehit !== undefined, "被淘汰节点应能从 DB 重新查询");
+  assert.equal(store.nodeCacheSize(), 8192, "重新命中后缓存仍应封顶");
+  // 缺失节点也占用缓存（undefined 缓存），同样受上限约束
+  const missing = store.getNode("nope");
+  assert.equal(missing, undefined);
+  assert.equal(store.nodeCacheSize(), 8192);
+});
+
 test("kg-store: bfsPath maxDepth 截断与环防护", t => {
   const dir = mkdtempSync(join(tmpdir(), "kg-store-bfs-"));
   const dbPath = join(dir, "bfs.db");

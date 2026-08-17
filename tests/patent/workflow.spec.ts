@@ -10,8 +10,8 @@ import {
   runWorkflow,
   validateWorkflowManifest,
   type WorkflowContext,
-  type WorkflowManifest,
   type WorkflowStage,
+  type WorkflowManifest,
 } from "../../src/patent/index.js";
 
 // 审批门测试需要全局原子注册表（approval-gate handler）；幂等。
@@ -42,7 +42,7 @@ test("validateWorkflowManifest rejects malformed manifests", () => {
         id: "w",
         name: "x",
         caseType: "y",
-        stages: [{ id: "a", strategy: "magic", description: "d" } as never],
+        stages: [{ id: "a", strategy: "magic" as unknown as WorkflowStage["strategy"], description: "d" }],
       }),
     WorkflowError,
   );

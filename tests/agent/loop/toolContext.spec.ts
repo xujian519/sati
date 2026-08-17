@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AgentRuntimeConfig } from "../../../src/agent/runtime/AgentRuntimeConfig.js";
-import type { AgentRuntimeDependencies } from "../../../src/agent/runtime/AgentRuntimeDependencies.js";
+import type {
+  AgentRuntimeDependencies,
+  AgentRouterRuntime,
+} from "../../../src/agent/runtime/AgentRuntimeDependencies.js";
 import type { PermissionContext } from "../../../src/permission/index.js";
 import { ToolContextFactory } from "../../../src/agent/loop/toolContext.js";
 import { createLifecycleDispatcher } from "../../../src/agent/loop/misc.js";
 import type { AgentLoopInput } from "../../../src/agent/protocol/input.js";
+import type { RouterDecision } from "../../../src/router/protocol/decision.js";
+import type { CanonicalModelRequest } from "../../../src/model/index.js";
+import type { PlanFileManager } from "../../../src/tool/builtin/planFile.js";
+import type { PlanTodoStateManager } from "../../../src/agent/runtime/PlanTodoState.js";
+import type { ToolRegistry } from "../../../src/tool/registry/ToolRegistry.js";
+import type { SatiPlanTodoStateHandle } from "../../../src/tool/protocol/types.js";
 
 /**
  * ToolContextFactory 行为基线测试（AgentLoop 拆解轮次 3）。
@@ -37,16 +46,28 @@ function makeConfig(overrides: ConfigOverrides = {}): AgentRuntimeConfig {
   };
 }
 
+function emptyDecision(): RouterDecision {
+  return {
+    provider: "test",
+    model: "test-model",
+    scenarioType: "default",
+    isSubagent: false,
+    orchestrating: false,
+    resolvedFrom: "fallback",
+    mutations: {},
+  };
+}
+
 function makeDeps(overrides: Partial<AgentRuntimeDependencies> = {}): AgentRuntimeDependencies {
   return {
     router: {
       stream: async function* () {},
-      decide: async () => ({}) as never,
+      decide: async () => emptyDecision(),
       execute: async function* () {},
     },
     tools: {
       scheduler: { executeAll: async () => [] },
-      registry: {} as never,
+      registry: {} as unknown as ToolRegistry,
     },
     ...overrides,
   };
@@ -111,8 +132,8 @@ test("createToolContext：model.stream 适配器转发到 router（isMainAgent=f
   const config = makeConfig();
   const dependencies = makeDeps({
     router: {
-      stream: stream as never,
-      decide: async () => ({}) as never,
+      stream: stream as unknown as AgentRouterRuntime["stream"],
+      decide: async () => emptyDecision(),
       execute: async function* () {},
     },
   });
@@ -126,7 +147,7 @@ test("createToolContext：model.stream 适配器转发到 router（isMainAgent=f
     dispatchLifecycle: createLifecycleDispatcher(config, dependencies),
   });
   const ctx = factory.createToolContext(makeInput());
-  const iter = ctx.model!.stream({ model: "m" } as never, undefined);
+  const iter = ctx.model!.stream({ model: "m" } as unknown as CanonicalModelRequest, undefined);
   await iter[Symbol.asyncIterator]().next();
   assert.equal(seen.length, 1);
   const options = (seen[0] as { options: Record<string, unknown> }).options;
@@ -142,9 +163,9 @@ test("createToolContext：planFileManager 存在时注入 planDirectoryPath/plan
     deps: {
       planFileManager: {
         getPlanDirectoryPath: () => planDir,
-        resolvePlanFilePath: (filePath: string) => `/resolved/${filePath}`,
-        readPlanFile: async (filePath: string) => `content:${filePath}`,
-      } as never,
+        resolvePlanFilePath: (filePath: string, _cwd: string) => `/resolved/${filePath}`,
+        readPlanFile: (filePath: string, _cwd: string) => `content:${filePath}`,
+      } satisfies PlanFileManager,
     },
   });
   const ctx = factory.createToolContext(makeInput());
@@ -157,8 +178,8 @@ test("createToolContext：planTodoManager 命中时注入 planTodo", () => {
   const { factory } = makeFactory({
     deps: {
       planTodoManager: {
-        forSession: (sessionId: string) => (sessionId === "/proj::sess-1" ? { pending: 2 } : undefined),
-      } as never,
+        forSession: () => ({ pending: 2 }) as unknown as SatiPlanTodoStateHandle,
+      } satisfies PlanTodoStateManager,
     },
   });
   const ctx = factory.createToolContext(makeInput());
@@ -199,7 +220,7 @@ test("buildSubagentForkApi：fork 未知子代理类型时抛错", async () => {
 
 test("createLifecycleDispatcher：未注入 lifecycle 返回空结果", async () => {
   const dispatcher = createLifecycleDispatcher(makeConfig(), makeDeps());
-  const result = await dispatcher(makeInput(), "PreModelRequest" as never, {});
+  const result = await dispatcher(makeInput(), "PreModelRequest", {});
   assert.deepEqual(result, {
     effects: [],
     messages: [],
@@ -218,9 +239,9 @@ test("createLifecycleDispatcher：注入 lifecycle 时转发参数", async () =>
         seen.push(args);
         return { effects: [], messages: [], events: [], blockingErrors: [], nonBlockingErrors: [] };
       },
-    } as never,
+    } as unknown as NonNullable<AgentRuntimeDependencies["lifecycle"]>,
   });
-  const result = await dispatcher(makeInput(), "SubagentStart" as never, { subagentId: "s1" });
+  const result = await dispatcher(makeInput(), "SubagentStart", { subagentId: "s1" });
   assert.deepEqual(result.blockingErrors, []);
   assert.equal(seen.length, 1);
   const args = seen[0] as {

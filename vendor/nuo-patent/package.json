@@ -20,5 +20,8 @@
     "cheerio": "^1.0.0",
     "domhandler": "^6.0.1",
     "undici": "^8.10.0"
+  },
+  "scripts": {
+    "postinstall": "node scripts/verify-checksums.mjs"
   }
 }

@@ -155,6 +155,38 @@ describe("executeWithRetryRequest", () => {
     }
   });
 
+  it("可重试码持续失败直到上限耗尽（calls===3）", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      return new Response("server error", { status: 500 });
+    };
+    try {
+      await assert.rejects(executeWithRetryRequest(request), /request failed \(500\)/);
+      assert.equal(calls, 3, "可重试码应重试至 DEFAULT_REQUEST_MAX_ATTEMPTS 后抛错");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("瞬态网络错误（fetch failed）重试后成功", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("fetch failed");
+      return new Response("{}", { status: 200 });
+    };
+    try {
+      const response = await executeWithRetryRequest(request);
+      assert.equal(response.status, 200);
+      assert.equal(calls, 2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("超时抛 timeout 错误", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (_url, init) => {
