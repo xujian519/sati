@@ -14,7 +14,7 @@ import {
   sameMessage,
   tokenizeSearchText,
 } from "../../src/core/pipeline/heartbeat-helpers.js";
-import type { L0SessionRecord, MemoryMessage } from "../../src/core/types.js";
+import type { L0SessionRecord, MemoryMessage, ReadableProjectCatalogEntry } from "../../src/core/types.js";
 
 const msg = (role: "user" | "assistant", content: string): MemoryMessage => ({ role, content }) as MemoryMessage;
 
@@ -106,26 +106,44 @@ describe("tokenizeSearchText", () => {
 });
 
 describe("buildGeneralProjectShortlist 打分排序", () => {
-  const catalog = [
+  const catalog: ReadableProjectCatalogEntry[] = [
     {
-      logicalProjectId: "p1",
+      projectId: "p1",
       projectName: "Alpha 项目",
       description: "检索",
       status: "in_progress",
+      createdAt: "2026-01-01T00:00:00Z",
       updatedAt: "2026-01-01T00:00:00Z",
+      relativePath: "projects/p1/meta.md",
+      absolutePath: "/tmp/projects/p1/meta.md",
+      workspaceMode: "single",
+      workspacePath: "/tmp",
+      workspaceName: "tmp",
       sourceType: "workspace_external",
-      summary: { latestMemoryAt: "2026-01-02T00:00:00Z" },
+      logicalProjectId: "p1",
+      readOnly: true,
+      hasLocalMirror: true,
+      summary: { totalEntries: 0, projectEntries: 0, feedbackEntries: 0, latestMemoryAt: "2026-01-02T00:00:00Z" },
     },
     {
-      logicalProjectId: "p2",
+      projectId: "p2",
       projectName: "Beta 项目",
       description: "无关描述",
       status: "planned",
+      createdAt: "2026-01-03T00:00:00Z",
       updatedAt: "2026-01-03T00:00:00Z",
+      relativePath: "projects/p2/meta.md",
+      absolutePath: "/tmp/projects/p2/meta.md",
+      workspaceMode: "single",
+      workspacePath: "/tmp",
+      workspaceName: "tmp",
       sourceType: "general_local",
-      summary: {},
+      logicalProjectId: "p2",
+      readOnly: false,
+      hasLocalMirror: false,
+      summary: { totalEntries: 0, projectEntries: 0, feedbackEntries: 0 },
     },
-  ] as never;
+  ];
   it("命中查询词的项目排前", () => {
     const result = buildGeneralProjectShortlist(catalog, "Alpha 检索");
     assert.equal(result[0]?.projectId, "p1");
@@ -142,21 +160,23 @@ describe("buildCandidateMemoryPreview", () => {
   it("project 候选渲染标题/类型/描述", () => {
     const preview = buildCandidateMemoryPreview({
       type: "project",
+      scope: "project",
       name: "P",
       description: "D",
-    } as never);
+    });
     assert.ok(preview.includes("# P"));
     assert.ok(preview.includes("type: project"));
   });
   it("feedback 候选渲染 Rule/Why/How", () => {
     const preview = buildCandidateMemoryPreview({
       type: "feedback",
+      scope: "project",
       name: "F",
       description: "D",
       rule: "R",
       why: "W",
       howToApply: "H",
-    } as never);
+    });
     assert.ok(preview.includes("## Rule"));
     assert.ok(preview.includes("## Why"));
     assert.ok(preview.includes("## How To Apply"));
