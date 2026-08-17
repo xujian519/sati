@@ -78,7 +78,7 @@ class SessionManager {
   getProjectSessions(projectPath) {
     const sessions = [];
 
-    for (const [id, session] of this.sessions) {
+    for (const [, session] of this.sessions) {
       if (session.projectPath === projectPath) {
         sessions.push({
           id: session.id,

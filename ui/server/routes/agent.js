@@ -259,44 +259,6 @@ async function getCommitMessages(projectPath, limit = 5) {
 }
 
 /**
- * Create a new branch on GitHub using the API
- * @param {Octokit} octokit - Octokit instance
- * @param {string} owner - Repository owner
- * @param {string} repo - Repository name
- * @param {string} branchName - Name of the new branch
- * @param {string} baseBranch - Base branch to branch from (default: 'main')
- * @returns {Promise<void>}
- */
-async function createGitHubBranch(octokit, owner, repo, branchName, baseBranch = "main") {
-  try {
-    // Get the SHA of the base branch
-    const { data: ref } = await octokit.git.getRef({
-      owner,
-      repo,
-      ref: `heads/${baseBranch}`,
-    });
-
-    const baseSha = ref.object.sha;
-
-    // Create the new branch
-    await octokit.git.createRef({
-      owner,
-      repo,
-      ref: `refs/heads/${branchName}`,
-      sha: baseSha,
-    });
-
-    console.log(`✅ Created branch '${branchName}' on GitHub`);
-  } catch (error) {
-    if (error.status === 422 && error.message.includes("Reference already exists")) {
-      console.log(`ℹ️ Branch '${branchName}' already exists on GitHub`);
-    } else {
-      throw error;
-    }
-  }
-}
-
-/**
  * Create a pull request on GitHub
  * @param {Octokit} octokit - Octokit instance
  * @param {string} owner - Repository owner
@@ -388,12 +350,7 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
         windowsHide: process.platform === "win32",
       });
 
-      let stdout = "";
       let stderr = "";
-
-      gitProcess.stdout.on("data", data => {
-        stdout += data.toString();
-      });
 
       gitProcess.stderr.on("data", data => {
         stderr += data.toString();
@@ -1099,10 +1056,6 @@ router.post("/", validateExternalApiKey, async (req, res) => {
 
           await new Promise((resolve, reject) => {
             let stderr = "";
-            let stdout = "";
-            pushProcess.stdout.on("data", data => {
-              stdout += data.toString();
-            });
             pushProcess.stderr.on("data", data => {
               stderr += data.toString();
             });

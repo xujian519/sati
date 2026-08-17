@@ -43,14 +43,13 @@ async function checkTaskMasterInstallation() {
     });
 
     let output = "";
-    let errorOutput = "";
 
     child.stdout.on("data", data => {
       output += data.toString();
     });
 
-    child.stderr.on("data", data => {
-      errorOutput += data.toString();
+    child.stderr.on("data", () => {
+      // Drain stderr without accumulating (output not consumed by callers)
     });
 
     child.on("close", code => {
