@@ -83,7 +83,7 @@
     "slice-ansi": "^9.0.0",
     "string-width": "^8.2.2",
     "turndown": "^7.2.4",
-    "undici": "^8.9.0",
+    "undici": "^8.10.0",
     "weixin-ilink": "^0.1.0",
     "ws": "^8.21.1",
     "yaml": "^2.8.4"
