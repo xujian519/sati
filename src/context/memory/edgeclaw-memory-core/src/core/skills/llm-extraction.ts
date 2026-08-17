@@ -88,6 +88,12 @@ import {
   normalizeExtractionItem,
 } from "./llm-extraction-item.js";
 import {
+  buildProviderRequest,
+  executeWithRetryRequest,
+  looksLikeEnvVarName,
+  normalizeProviderApi,
+} from "./llm-http.js";
+import {
   DEFAULT_DREAM_CLUSTER_PLAN_TIMEOUT_MS,
   DEFAULT_DREAM_CLUSTER_REFINE_TIMEOUT_MS,
   DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS,
@@ -622,53 +628,6 @@ function extractGoogleGenerateContentText(payload: unknown): string {
   return text;
 }
 
-function normalizeProviderApi(value: string): string {
-  const api = value.trim().toLowerCase();
-  return api === "gemini" ? "google" : api;
-}
-
-/**
- * 推理模型（deepseek-v4 系列/deepseek-reasoner/kimi-k2 系列/kimi-k3 等）
- * 官方约束 temperature 不可修改（kimi 传其他值报错、deepseek-v4 思考模式
- * 静默忽略）。直连构造 body 时须省略显式 temperature。
- */
-function shouldOmitTemperature(model: string): boolean {
-  return /deepseek-v4|deepseek-reasoner|deepseek-r1|kimi-k2|kimi-k3/.test(model.toLowerCase());
-}
-
-function buildGoogleGenerateContentUrl(baseUrl: string, model: string): string {
-  const url = new URL(stripTrailingSlash(baseUrl));
-  const parts = url.pathname.split("/").filter(Boolean);
-  const last = parts.at(-1);
-  const apiVersion = last === "v1" || last === "v1beta" ? last : "v1beta";
-  const baseParts = last === "v1" || last === "v1beta" ? parts.slice(0, -1) : parts;
-  url.pathname = `/${[
-    ...baseParts,
-    apiVersion,
-    "models",
-    `${encodeURIComponent(normalizeGoogleModelId(model))}:generateContent`,
-  ].join("/")}`;
-  url.search = "";
-  url.hash = "";
-  return url.toString();
-}
-
-function normalizeGoogleModelId(model: string): string {
-  const withoutProvider = model.trim().startsWith("google/") ? model.trim().slice("google/".length) : model.trim();
-  if (withoutProvider === "gemini-3-pro") return "gemini-3-pro-preview";
-  if (withoutProvider === "gemini-3.1-pro") return "gemini-3.1-pro-preview";
-  if (withoutProvider === "gemini-3-flash") return "gemini-3-flash-preview";
-  if (withoutProvider === "gemini-3.1-flash" || withoutProvider === "gemini-3.1-flash-preview") {
-    return "gemini-3-flash-preview";
-  }
-  if (withoutProvider === "gemini-3.1-flash-lite") return "gemini-3.1-flash-lite-preview";
-  return withoutProvider;
-}
-
-function looksLikeEnvVarName(value: string): boolean {
-  return /^[A-Z0-9_]+$/.test(value);
-}
-
 type MemoryTelemetryLike = {
   trackFeatureLoopStage?: (input: Record<string, unknown>) => void;
   trackError?: (error: unknown, input?: Record<string, unknown>) => void;
@@ -806,107 +765,26 @@ export class LlmMemoryExtractor {
     const headers = new Headers(selection.headers);
     if (!headers.has("content-type")) headers.set("content-type", "application/json");
     const apiType = normalizeProviderApi(selection.api);
-    let url = "";
-    let body: Record<string, unknown>;
-
-    if (apiType === "openai-responses" || apiType === "responses") {
-      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${apiKey}`);
-      url = `${selection.baseUrl}/responses`;
-      body = {
-        model: selection.model,
-        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
-        input: [
-          { role: "system", content: input.systemPrompt },
-          { role: "user", content: input.userPrompt },
-        ],
-      };
-    } else if (apiType === "anthropic") {
-      if (!headers.has("x-api-key")) headers.set("x-api-key", apiKey);
-      if (!headers.has("anthropic-version")) headers.set("anthropic-version", "2023-06-01");
-      url = `${selection.baseUrl}/v1/messages`;
-      body = {
-        model: selection.model,
-        max_tokens: 65536,
-        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
-        system: input.systemPrompt,
-        messages: [{ role: "user", content: input.userPrompt }],
-      };
-    } else if (apiType === "google") {
-      if (!headers.has("x-goog-api-key")) headers.set("x-goog-api-key", apiKey);
-      url = buildGoogleGenerateContentUrl(selection.baseUrl, selection.model);
-      body = {
-        systemInstruction: { parts: [{ text: input.systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: input.userPrompt }] }],
-        generationConfig: {
-          temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
-          responseMimeType: "application/json",
-        },
-      };
-    } else {
-      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${apiKey}`);
-      url = `${selection.baseUrl}/chat/completions`;
-      body = {
-        model: selection.model,
-        temperature: shouldOmitTemperature(selection.model) ? undefined : 0,
-        stream: false,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: input.systemPrompt },
-          { role: "user", content: input.userPrompt },
-        ],
-      };
-    }
-
-    const executeOnce = async (payloadBody: Record<string, unknown>): Promise<Response> => {
-      const controller = new AbortController();
-      const timeoutMs = resolveRequestTimeoutMs(input.timeoutMs);
-      const timeoutId = timeoutMs === null ? null : setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        return await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(payloadBody),
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (timeoutMs !== null && error instanceof Error && error.name === "AbortError") {
-          throw new Error(`${input.requestLabel} request timed out after ${timeoutMs}ms`);
-        }
-        throw error;
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-      }
-    };
-
-    const executeWithRetry = async (payloadBody: Record<string, unknown>): Promise<Response> => {
-      let lastError: unknown = null;
-      for (let attempt = 0; attempt < DEFAULT_REQUEST_MAX_ATTEMPTS; attempt += 1) {
-        try {
-          const response = await executeOnce(payloadBody);
-          if (response.ok) return response;
-          const errorText = await response.text();
-          const error = Object.assign(
-            new Error(`${input.requestLabel} request failed (${response.status}): ${truncate(errorText, 300)}`),
-            { status: response.status },
-          );
-          lastError = error;
-          if (!REQUEST_RETRYABLE_STATUS_CODES.has(response.status) || attempt >= DEFAULT_REQUEST_MAX_ATTEMPTS - 1) {
-            throw error;
-          }
-        } catch (error) {
-          lastError = error;
-          if (!isTransientRequestError(error) || attempt >= DEFAULT_REQUEST_MAX_ATTEMPTS - 1) {
-            throw error;
-          }
-        }
-        await sleep(computeRetryDelayMs(attempt));
-      }
-      throw lastError instanceof Error ? lastError : new Error(`${input.requestLabel} request failed`);
-    };
-
+    const {
+      url,
+      body,
+      headers: requestHeaders,
+    } = buildProviderRequest({
+      apiType,
+      selection,
+      systemPrompt: input.systemPrompt,
+      userPrompt: input.userPrompt,
+      apiKey,
+    });
     let response: Response;
     try {
-      response = await executeWithRetry(body);
+      response = await executeWithRetryRequest({
+        url,
+        headers: requestHeaders,
+        body,
+        requestLabel: input.requestLabel,
+        timeoutMs: input.timeoutMs,
+      });
     } catch (error) {
       if (!("response_format" in body)) {
         telemetry?.trackError?.(error, {
@@ -927,7 +805,13 @@ export class LlmMemoryExtractor {
       const fallbackBody = { ...body };
       delete fallbackBody.response_format;
       try {
-        response = await executeWithRetry(fallbackBody);
+        response = await executeWithRetryRequest({
+          url,
+          headers: requestHeaders,
+          body: fallbackBody,
+          requestLabel: input.requestLabel,
+          timeoutMs: input.timeoutMs,
+        });
       } catch (fallbackError) {
         telemetry?.trackError?.(fallbackError, {
           module: "memory",
