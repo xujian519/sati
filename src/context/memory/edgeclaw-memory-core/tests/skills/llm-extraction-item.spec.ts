@@ -6,6 +6,8 @@ import {
   extractFocusSignals,
   filterExtractionCandidate,
   normalizeExtractionItem,
+  resolveIndexAssignment,
+  resolveSelectedProject,
   type ExtractionFocusSignals,
 } from "../../src/core/skills/llm-extraction-item.js";
 import type { MemoryMessage } from "../../src/core/types.js";
@@ -168,5 +170,64 @@ describe("filterExtractionCandidate", () => {
       text: "text",
     });
     assert.equal(result.keep, true);
+  });
+});
+
+describe("resolveSelectedProject 三路判定", () => {
+  const shortlist = [{ projectId: "p1", projectName: "Alpha", updatedAt: "2026-01-01" }] as never;
+  const fallback = { projectId: "p1", projectName: "Alpha", updatedAt: "2026-01-01" } as never;
+  it("命中 shortlist 返回 projectId", () => {
+    const result = resolveSelectedProject({
+      selectedProjectId: "p1",
+      shortlist,
+      allowEmpty: true,
+      fallbackProject: fallback,
+      parsedReason: "match",
+    });
+    assert.deepEqual(result, { projectId: "p1", reason: "match" });
+  });
+  it("allowEmpty + 未命中返回 reason（区分 outside/空）", () => {
+    assert.equal(
+      resolveSelectedProject({ selectedProjectId: "p9", shortlist, allowEmpty: true, fallbackProject: fallback })
+        ?.reason,
+      "Model returned a project id outside the shortlist.",
+    );
+    assert.equal(
+      resolveSelectedProject({ selectedProjectId: "", shortlist, allowEmpty: true, fallbackProject: fallback })?.reason,
+      "Model returned no matching project.",
+    );
+  });
+  it("非 allowEmpty 未命中回退 fallbackProject", () => {
+    const result = resolveSelectedProject({
+      selectedProjectId: "p9",
+      shortlist,
+      allowEmpty: false,
+      fallbackProject: fallback,
+    });
+    assert.equal(result?.projectId, "p1");
+    assert.ok(result?.reason?.includes("Fallback selected Alpha"));
+  });
+});
+
+describe("resolveIndexAssignment 两路判定", () => {
+  const shortlist = [{ projectId: "p1", projectName: "Alpha", updatedAt: "2026-01-01" }] as never;
+  it("attach_existing + 命中返回 projectId", () => {
+    const result = resolveIndexAssignment({
+      decision: "attach_existing",
+      selectedProjectId: "p1",
+      shortlist,
+      parsedReason: "r",
+    });
+    assert.deepEqual(result, { decision: "attach_existing", projectId: "p1", reason: "r" });
+  });
+  it("attach_existing 但 id 无效 → create_new 降级", () => {
+    const result = resolveIndexAssignment({ decision: "attach_existing", selectedProjectId: "p9", shortlist });
+    assert.equal(result?.decision, "create_new");
+    assert.equal(result?.reason, "Model selected an invalid project id.");
+  });
+  it("create_new → create_new（默认 reason）", () => {
+    const result = resolveIndexAssignment({ decision: "create_new", selectedProjectId: "", shortlist });
+    assert.equal(result?.decision, "create_new");
+    assert.ok(result?.reason?.includes("create a new General project"));
   });
 });

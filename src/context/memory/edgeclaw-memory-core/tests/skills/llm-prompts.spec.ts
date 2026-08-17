@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildSelectIndexProjectPrompt,
+  buildSelectRecallProjectPrompt,
   DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS,
   DEFAULT_FILE_MEMORY_EXTRACTION_TIMEOUT_MS,
   DREAM_FILE_GLOBAL_PLAN_SYSTEM_PROMPT,
@@ -173,5 +175,66 @@ describe("buildDreamClusterPlanPrompt", () => {
       headers: [{ relativePath: "a.md", name: "A", description: "D", updatedAt: "2026-01-01" }],
     } as never);
     assert.ok(prompt.includes("a.md"));
+  });
+});
+
+describe("buildSelectRecallProjectPrompt", () => {
+  const input = {
+    query: "q",
+    recentUserMessages: [msg("user", "recent")],
+    shortlist: [
+      {
+        projectId: "p1",
+        projectName: "Alpha",
+        description: "D",
+        status: "active",
+        updatedAt: "2026-01-01",
+        score: 1,
+        exact: 0,
+        source: "recent",
+        matchedText: "",
+      },
+    ],
+    allowEmpty: true,
+  };
+  it("allowEmpty 模式含空选择指令", () => {
+    const { systemPrompt } = buildSelectRecallProjectPrompt(input);
+    assert.ok(systemPrompt.includes("empty selected_project_id"));
+  });
+  it("userPrompt 含 query 与 shortlist 映射", () => {
+    const { userPrompt } = buildSelectRecallProjectPrompt(input);
+    assert.ok(userPrompt.includes('"query": "q"'));
+    assert.ok(userPrompt.includes("shortlist_score"));
+  });
+});
+
+describe("buildSelectIndexProjectPrompt", () => {
+  const input = {
+    candidate: { type: "project", name: "P", description: "D" },
+    candidatePreview: "preview",
+    focusTurn: msg("user", "focus"),
+    recentUserMessages: [],
+    shortlist: [
+      {
+        projectId: "p1",
+        projectName: "Alpha",
+        description: "D",
+        status: "active",
+        updatedAt: "2026-01-01",
+        score: 1,
+        exact: 0,
+        source: "recent",
+        matchedText: "",
+      },
+    ],
+  };
+  it("systemPrompt 含 attach_existing/create_new 语义", () => {
+    const { systemPrompt } = buildSelectIndexProjectPrompt(input as never);
+    assert.ok(systemPrompt.includes("attach_existing"));
+    assert.ok(systemPrompt.includes("create_new"));
+  });
+  it("userPrompt 含 candidate_memory_preview", () => {
+    const { userPrompt } = buildSelectIndexProjectPrompt(input as never);
+    assert.ok(userPrompt.includes("candidate_memory_preview"));
   });
 });

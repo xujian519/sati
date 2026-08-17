@@ -32,7 +32,7 @@ import {
   stripExplicitRememberLead,
 } from "./llm-hints.js";
 import type { FileMemoryExtractionDiscardedCandidate } from "./llm-extraction.js";
-import type { MemoryCandidate, MemoryMessage, ProjectIdentityHint } from "../types.js";
+import type { MemoryCandidate, MemoryMessage, ProjectIdentityHint, ProjectShortlistCandidate } from "../types.js";
 
 // 抽取系统提示词（extractFileMemoryCandidates 的内联提示词提取为常量）。
 export const EXTRACTION_SYSTEM_PROMPT_LINES = [
@@ -414,4 +414,69 @@ export function filterExtractionCandidate(input: {
     };
   }
   return { keep: true };
+}
+
+export function resolveSelectedProject(input: {
+  selectedProjectId: string;
+  shortlist: ProjectShortlistCandidate[];
+  allowEmpty: boolean;
+  fallbackProject: ProjectShortlistCandidate;
+  parsedReason?: unknown;
+}): { projectId?: string; reason?: string } {
+  const { selectedProjectId, shortlist, allowEmpty, fallbackProject, parsedReason } = input;
+  const matched = shortlist.find(project => project.projectId === selectedProjectId);
+  const reason = typeof parsedReason === "string" && parsedReason.trim() ? truncateForPrompt(parsedReason, 220) : "";
+  if (matched) {
+    return {
+      projectId: matched.projectId,
+      ...(reason ? { reason } : {}),
+    };
+  }
+  if (allowEmpty) {
+    return {
+      ...(reason
+        ? { reason }
+        : {
+            reason: selectedProjectId
+              ? "Model returned a project id outside the shortlist."
+              : "Model returned no matching project.",
+          }),
+    };
+  }
+  return {
+    projectId: fallbackProject.projectId,
+    ...(reason
+      ? { reason }
+      : { reason: `Fallback selected ${fallbackProject.projectName}; model returned no valid project id.` }),
+  };
+}
+
+export function resolveIndexAssignment(input: {
+  decision: unknown;
+  selectedProjectId: string;
+  shortlist: ProjectShortlistCandidate[];
+  parsedReason?: unknown;
+}): { decision: "attach_existing" | "create_new"; projectId?: string; reason?: string } {
+  const { decision: rawDecision, selectedProjectId, shortlist, parsedReason } = input;
+  const decision = rawDecision === "attach_existing" ? "attach_existing" : "create_new";
+  const matched = shortlist.find(project => project.projectId === selectedProjectId);
+  const reason = typeof parsedReason === "string" && parsedReason.trim() ? truncateForPrompt(parsedReason, 260) : "";
+  if (decision === "attach_existing" && matched) {
+    return {
+      decision: "attach_existing",
+      projectId: matched.projectId,
+      ...(reason ? { reason } : {}),
+    };
+  }
+  return {
+    decision: "create_new",
+    ...(reason
+      ? { reason }
+      : {
+          reason:
+            decision === "attach_existing"
+              ? "Model selected an invalid project id."
+              : "Model chose to create a new General project.",
+        }),
+  };
 }

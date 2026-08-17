@@ -17,7 +17,13 @@ import type {
   LlmGeneralProjectMetaMergeInput,
   LlmGeneralProjectMetaMergeOutput,
 } from "./llm-extraction.js";
-import type { MemoryCandidate, MemoryMessage, MemoryUserSummary, ProjectMetaRecord } from "../types.js";
+import type {
+  MemoryCandidate,
+  MemoryMessage,
+  MemoryUserSummary,
+  ProjectMetaRecord,
+  ProjectShortlistCandidate,
+} from "../types.js";
 
 const DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS = 600_000;
 const DEFAULT_DREAM_FILE_PROJECT_REWRITE_TIMEOUT_MS = 300_000;
@@ -801,6 +807,127 @@ function buildGeneralProjectMetaMergePrompt(input: LlmGeneralProjectMetaMergeInp
     null,
     2,
   );
+}
+
+export function buildSelectRecallProjectPrompt(input: {
+  query: string;
+  recentUserMessages?: MemoryMessage[];
+  shortlist: ProjectShortlistCandidate[];
+  allowEmpty: boolean;
+}): { systemPrompt: string; userPrompt: string } {
+  const { query, recentUserMessages, shortlist, allowEmpty } = input;
+  const systemPrompt = [
+    allowEmpty
+      ? "You choose the most relevant existing formal project for long-term memory recall only when one clearly matches the current query."
+      : "You choose the single most relevant formal project for long-term memory recall.",
+    "Return JSON only with selected_project_id and reason.",
+    allowEmpty
+      ? "Select at most one project from the provided shortlist."
+      : "You must select exactly one project from the provided shortlist.",
+    "Use the current query first, then recent user messages only for continuation/disambiguation.",
+    "Do not infer a project from assistant wording.",
+    "Similar project names are distinct by default; shared domain, shared workflow, or shared feedback do not make them the same project.",
+    "If the query explicitly names one shortlist project, prefer that exact project instead of broadening to a nearby or umbrella project.",
+    allowEmpty
+      ? "If the current query introduces or switches to a new project that is not represented in the shortlist, return an empty selected_project_id."
+      : "If the current query introduces or switches to a new project, still choose the best shortlist project.",
+    allowEmpty
+      ? "If no shortlist project is clearly relevant, return an empty selected_project_id."
+      : "If multiple shortlist projects remain plausible, still choose the best one.",
+    allowEmpty
+      ? "If multiple shortlist projects are plausible but evidence is not decisive, return an empty selected_project_id."
+      : "When multiple shortlist projects are plausible, never return empty; choose the best match.",
+    "When relevance is comparable, prefer general_local over workspace_external.",
+    allowEmpty
+      ? "Use empty selected_project_id to skip project-scoped recall for a new or unrelated project; do not force unrelated memory into an existing project."
+      : "Never return an empty selected_project_id when the shortlist is non-empty.",
+  ].join("\n");
+  const userPrompt = JSON.stringify(
+    {
+      query,
+      recent_user_messages: (recentUserMessages ?? [])
+        .slice(-4)
+        .map(message => truncateForPrompt(message.content, 220)),
+      shortlist: shortlist.map(project => ({
+        project_id: project.projectId,
+        project_name: project.projectName,
+        description: truncateForPrompt(project.description, 180),
+        status: project.status,
+        source_type: project.sourceType ?? "unknown",
+        updated_at: project.updatedAt,
+        shortlist_score: project.score,
+        shortlist_exact: project.exact,
+        shortlist_source: project.source,
+        matched_text: truncateForPrompt(project.matchedText, 180),
+      })),
+    },
+    null,
+    2,
+  );
+  return { systemPrompt, userPrompt };
+}
+
+export function buildSelectIndexProjectPrompt(input: {
+  candidate: MemoryCandidate;
+  candidatePreview: string;
+  focusTurn: MemoryMessage;
+  recentUserMessages?: MemoryMessage[];
+  shortlist: ProjectShortlistCandidate[];
+}): { systemPrompt: string; userPrompt: string } {
+  const { candidate, candidatePreview, focusTurn, recentUserMessages, shortlist } = input;
+  const systemPrompt = [
+    "You assign a newly generated long-term memory item to a General Chat project.",
+    "This is index-time memory assignment, not recall.",
+    "Return JSON only with decision, selected_project_id, and reason.",
+    "decision must be one of: attach_existing, create_new.",
+    "The primary evidence is candidate_memory_preview: the memory item that will be written.",
+    "Use the focus user turn and recent user messages only as supporting context for disambiguation.",
+    "Choose attach_existing only when the candidate clearly belongs to exactly one existing General project.",
+    "Choose create_new when the candidate is a new project, evidence is insufficient, multiple projects remain plausible, or the match is only a broad domain similarity.",
+    "Do not attach just because projects share a category such as SaaS, copywriting, Xiaohongshu, marketing, planning, or content creation.",
+    "All shortlist projects are General-local assignment targets; never infer or write to an external workspace.",
+    "If decision is attach_existing, selected_project_id must be one id from the shortlist.",
+    "If decision is create_new, selected_project_id must be an empty string.",
+  ].join("\n");
+  const userPrompt = JSON.stringify(
+    {
+      candidate: {
+        type: candidate.type,
+        name: truncateForPrompt(candidate.name, 120),
+        description: truncateForPrompt(candidate.description, 220),
+        rule: candidate.rule ? truncateForPrompt(candidate.rule, 220) : null,
+        summary: candidate.summary ? truncateForPrompt(candidate.summary, 220) : null,
+        why: candidate.why ? truncateForPrompt(candidate.why, 220) : null,
+        how_to_apply: candidate.howToApply ? truncateForPrompt(candidate.howToApply, 220) : null,
+        stage: candidate.stage ? truncateForPrompt(candidate.stage, 220) : null,
+        decisions: (candidate.decisions ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+        constraints: (candidate.constraints ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+        next_steps: (candidate.nextSteps ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+        blockers: (candidate.blockers ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+        timeline: (candidate.timeline ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+        notes: (candidate.notes ?? []).slice(0, 10).map(item => truncateForPrompt(item, 160)),
+      },
+      candidate_memory_preview: truncateForPrompt(candidatePreview, 1600),
+      focus_user_turn: truncateForPrompt(focusTurn.content, 360),
+      recent_user_messages: (recentUserMessages ?? [])
+        .slice(-4)
+        .map(message => truncateForPrompt(message.content, 220)),
+      shortlist: shortlist.map(project => ({
+        project_id: project.projectId,
+        project_name: project.projectName,
+        description: truncateForPrompt(project.description, 180),
+        status: project.status,
+        updated_at: project.updatedAt,
+        shortlist_score: project.score,
+        shortlist_exact: project.exact,
+        shortlist_source: project.source,
+        matched_text: truncateForPrompt(project.matchedText, 180),
+      })),
+    },
+    null,
+    2,
+  );
+  return { systemPrompt, userPrompt };
 }
 
 export {
