@@ -17,7 +17,7 @@
  * block until the downstream pipeline supports them.
  */
 
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { SatiToolRuntimeError } from "../../tool/protocol/errors.js";
 import type {
@@ -83,7 +83,7 @@ function buildToolDefinition(
           );
         }
         return {
-          content: marshalMcpContent(content, client.spec.transport === "stdio" ? client.spec.cwd : undefined),
+          content: await marshalMcpContent(content, client.spec.transport === "stdio" ? client.spec.cwd : undefined),
           data: content,
           metadata: {
             mcp: { serverId: spec.serverId, toolName: spec.toolName, wireName: spec.wireName },
@@ -131,7 +131,7 @@ type McpContentBlock = { type: string; [key: string]: unknown };
  * user-specified `filename` (which `@playwright/mcp` saves without returning
  * base64 data) still render inline in the chat UI.
  */
-function marshalMcpContent(raw: unknown, cwd?: string): SatiToolResultContent[] {
+async function marshalMcpContent(raw: unknown, cwd?: string): Promise<SatiToolResultContent[]> {
   if (!Array.isArray(raw)) return [{ type: "json", value: raw }];
 
   const result: SatiToolResultContent[] = [];
@@ -156,7 +156,7 @@ function marshalMcpContent(raw: unknown, cwd?: string): SatiToolResultContent[] 
   if (!hasImageBlock && cwd) {
     for (const block of raw as McpContentBlock[]) {
       if (block?.type === "text" && typeof block.text === "string") {
-        const images = extractFileImages(block.text as string, cwd);
+        const images = await extractFileImages(block.text as string, cwd);
         for (const img of images) result.push(img);
       }
     }
@@ -177,13 +177,13 @@ const IMAGE_LINK_RE = /\[.*?\]\((\.[^)]*\.(?:png|jpe?g|gif|webp))\)/gi;
  * Extract image file references from Markdown text, read the files from disk,
  * and return them as base64 image blocks.
  */
-function extractFileImages(text: string, cwd: string): SatiToolResultContent[] {
+async function extractFileImages(text: string, cwd: string): Promise<SatiToolResultContent[]> {
   const results: SatiToolResultContent[] = [];
   for (const match of text.matchAll(IMAGE_LINK_RE)) {
     const relPath = match[1];
     try {
       const absPath = resolvePath(cwd, relPath);
-      const data = readFileSync(absPath);
+      const data = await readFile(absPath);
       const ext = relPath.split(".").pop()?.toLowerCase() ?? "png";
       const mimeType =
         ext === "jpg" || ext === "jpeg"

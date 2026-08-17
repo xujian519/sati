@@ -81,7 +81,8 @@ export class PersonalNoteVectorIndex extends SemanticDocumentIndex {
     // 先捕获快照再读数据：同步期间的新写入会使快照变化，触发下次重同步，
     // 避免“末尾重读快照”的 TOCTOU 把同步窗口内新增的笔记长期漏索引。
     const snapshot = this.store.snapshotVersion();
-    const rows = this.store.list();
+    // 分页拉取（单条 SQL 的 JOIN + 解压规模有界），聚合语义与 list() 一致。
+    const rows = this.store.listAllPaged();
     const entries: VectorIndexEntry[] = [];
     const current = new Set<string>();
     for (const row of rows) {
