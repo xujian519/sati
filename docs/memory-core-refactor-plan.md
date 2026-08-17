@@ -76,10 +76,10 @@ edgeclaw-memory-core 是 Sati 记忆核心的独立 workspace 子包（17 个 TS
 - **批次 2**：heartbeat 纯 helper 下沉 heartbeat-helpers.ts（1019→690 行）+ 23 基线测试——✅ 已完成
 - **批次 3**：dream-review 拆出 6 个子模块（dream-types/paths/detail/trace/mappers/validators，1532→1072 行）+ 25 基线测试——✅ 已完成
 - **批次 4**：sqlite 模块级 helper 下沉 sqlite-helpers.ts（2024→1728 行）+ 23 测试；file-memory 拆出 4 子模块（constants/text/markdown/manifest，1632→1161 行）+ 25 测试——✅ 已完成
-- **批次 5**：llm-extraction 下沉 G6 归一化（llm-normalizers.ts）+ G7 hints（llm-hints.ts，3445→2939 行）+ 30 测试——✅ 已完成；剩余 G2/G3 提示词（与 Llm* 接口交错）+ G8 编排门面——⏳ 下一轮
+- **批次 5**：llm-extraction 已下沉 G1/G4（llm-json/request-retry）+ G6（llm-normalizers）+ G7（llm-hints）+ G2/G3（llm-prompts，3745→2191 行）+ 77 测试——✅ 已完成；剩余 G8 编排门面（类方法拆分：extractFileMemoryCandidates 439 行等）——⏳ 下一轮（方法级拆分，需先补类方法行为基线）
 - **批次 6**：收尾——方案文档状态更新、全量验证、root 全绿、PR
 
-> 状态：子包测试 168 例全绿；root memory 55 用例绿。5 个大文件已处理 4 个（heartbeat 690 / dream-review 1072 / sqlite 1728 / file-memory 1161），llm-extraction 2939 行（G1/G4/G6/G7 已下沉）。
+> 状态：子包测试 185 例全绿；root memory 55 用例绿。5 个大文件已处理 4 个（heartbeat 690 / dream-review 1072 / sqlite 1728 / file-memory 1161），llm-extraction 2191 行（G1-G4/G6/G7 下沉，类本体 ~1500 行含 17 方法）。
 
 ## 5. 验收标准
 
