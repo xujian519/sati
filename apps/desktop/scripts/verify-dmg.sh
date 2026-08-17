@@ -206,17 +206,18 @@ fi
 # ─────────────── Runtime smoke (Gateway + UI + bridge) ───────────────
 hdr "6–8. Gateway + UI server + bridge smoke test"
 
-PORT="$(node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();});' 2>/dev/null || echo 28790)"
 # 18789 belongs to openclaw on dev machines; the desktop runtime reads the
 # real gateway port from sati.yaml (`gatewayPort`, e.g. 19789 here). For an
-# isolated smoke test we pick a fresh free port instead of hardcoding any
+# isolated smoke test we pick fresh free ports instead of hardcoding any
 # real-world port, so a running openclaw / Sati instance can't be hit (or
 # hit back) during verification.
 pick_free_port() {
-  node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();});' 2>/dev/null || echo 28791
+  node -e 'const s=require("net").createServer();s.listen(0,()=>{console.log(s.address().port);s.close();});' 2>/dev/null || echo "$1"
 }
-GATEWAY_PORT="$(pick_free_port)"
-while [[ "$GATEWAY_PORT" == "$PORT" ]]; do GATEWAY_PORT="$(pick_free_port)"; done
+# fallback 值不同：node 不可用时避免下方 while 死循环
+PORT="$(pick_free_port 28790)"
+GATEWAY_PORT="$(pick_free_port 28791)"
+while [[ "$GATEWAY_PORT" == "$PORT" ]]; do GATEWAY_PORT="$(pick_free_port 28791)"; done
 
 # V2 schema — must match loadPilotConfig() (schemaVersion + agent + model).
 SATI_HOME="$SANDBOX/home/.sati"
@@ -271,12 +272,6 @@ fi
 if [[ ! -e "$SANDBOX/node_modules" ]]; then
   ln -sfn "$CCM_DIR/node_modules" "$SANDBOX/node_modules"
   pass "Symlinked \$SANDBOX/node_modules → sati-main/node_modules (ESM resolve)"
-fi
-
-# src: ui/server imports ../../src/web/server/*.js — compiled JS lives in sati-main/dist/src
-if [[ -d "$CCM_DIR/dist/src" && ! -e "$SANDBOX/src" ]]; then
-  ln -sfn "$CCM_DIR/dist/src" "$SANDBOX/src"
-  pass "Symlinked \$SANDBOX/src → sati-main/dist/src"
 fi
 
 # GATEWAY_PORT is a fresh free port picked above, so there is no stale
