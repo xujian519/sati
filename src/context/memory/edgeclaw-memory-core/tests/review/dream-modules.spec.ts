@@ -4,7 +4,14 @@ import { describe, it } from "node:test";
 import { isDreamUserNotePath, isDreamUserProfilePath } from "../../src/core/review/dream-paths.js";
 import { previewMarkdown, sortEntries, truncate } from "../../src/core/review/dream-detail.js";
 import { createDreamTrace, mutation, pushStep } from "../../src/core/review/dream-trace.js";
-import { toDreamMetaInput, toHeaderInput, toRefinedCandidate } from "../../src/core/review/dream-mappers.js";
+import {
+  toDreamMetaInput,
+  toDreamRecordInput,
+  toHeaderInput,
+  toRefinedCandidate,
+} from "../../src/core/review/dream-mappers.js";
+import type { FileMemoryStore } from "../../src/core/file-memory.js";
+import type { MemoryCandidate, MemoryFileRecord } from "../../src/core/types.js";
 import {
   selectUserNoteWindow,
   validateExclusiveClusters,
@@ -74,6 +81,31 @@ describe("dream-trace 基建", () => {
 });
 
 describe("dream-mappers 数据映射", () => {
+  const fakeStore = (candidate: MemoryCandidate): FileMemoryStore =>
+    ({ toCandidate: () => candidate }) as unknown as FileMemoryStore;
+
+  const makeRecord = (partial: {
+    relativePath: string;
+    type: MemoryFileRecord["type"];
+    projectId?: string;
+    capturedAt?: string;
+    sourceSessionKey?: string;
+  }): MemoryFileRecord => ({
+    file: `files/${partial.relativePath}`,
+    relativePath: partial.relativePath,
+    absolutePath: `/tmp/${partial.relativePath}`,
+    name: "N",
+    description: "D",
+    type: partial.type,
+    scope: partial.type === "user" ? "global" : "project",
+    ...(partial.projectId ? { projectId: partial.projectId } : {}),
+    updatedAt: "2026-01-01",
+    ...(partial.capturedAt ? { capturedAt: partial.capturedAt } : {}),
+    ...(partial.sourceSessionKey ? { sourceSessionKey: partial.sourceSessionKey } : {}),
+    content: "# body",
+    preview: "body",
+  });
+
   it("toDreamMetaInput 透传字段 + 可选字段条件展开", () => {
     const meta = {
       projectId: "p1",
@@ -108,6 +140,77 @@ describe("dream-mappers 数据映射", () => {
     assert.equal(candidate.type, "project");
     assert.equal(candidate.body, "body\n");
     assert.equal(candidate.capturedAt, "2026-01-01");
+  });
+  it("toDreamRecordInput project 记录展开 project 字段", () => {
+    const record = makeRecord({ relativePath: "p.md", type: "project", projectId: "p1" });
+    const candidate: MemoryCandidate = {
+      type: "project",
+      scope: "project",
+      projectId: "p1",
+      name: "N",
+      description: "D",
+      body: "body",
+      stage: "in_progress",
+      decisions: ["d1"],
+      constraints: [],
+      nextSteps: ["n1"],
+      blockers: [],
+      timeline: ["t1"],
+      notes: ["note"],
+      summary: "sum",
+    };
+    const input = toDreamRecordInput(fakeStore(candidate), record);
+    assert.equal(input.entryId, "p.md");
+    assert.equal(input.relativePath, "p.md");
+    assert.equal(input.type, "project");
+    assert.equal(input.scope, "project");
+    assert.equal(input.projectId, "p1");
+    assert.equal(input.isTmp, false);
+    assert.equal(input.name, "N");
+    assert.equal(input.content, "# body");
+    assert.equal(input.project?.stage, "in_progress");
+    assert.deepEqual(input.project?.decisions, ["d1"]);
+    assert.equal("feedback" in input, false);
+  });
+  it("toDreamRecordInput feedback 记录展开 feedback 字段", () => {
+    const record = makeRecord({ relativePath: "f.md", type: "feedback" });
+    const candidate: MemoryCandidate = {
+      type: "feedback",
+      scope: "project",
+      name: "F",
+      description: "D",
+      body: "body",
+      rule: "R",
+      why: "W",
+      howToApply: "H",
+      notes: ["n"],
+    };
+    const input = toDreamRecordInput(fakeStore(candidate), record);
+    assert.equal(input.type, "feedback");
+    assert.equal(input.feedback?.rule, "R");
+    assert.equal(input.feedback?.why, "W");
+    assert.equal(input.feedback?.howToApply, "H");
+    assert.deepEqual(input.feedback?.notes, ["n"]);
+    assert.equal("project" in input, false);
+  });
+  it("toDreamRecordInput 可选字段条件展开（capturedAt/sourceSessionKey）", () => {
+    const candidate: MemoryCandidate = { type: "project", scope: "project", name: "N", description: "D", body: "b" };
+    const withMeta = toDreamRecordInput(
+      fakeStore(candidate),
+      makeRecord({ relativePath: "p.md", type: "project", capturedAt: "2026-02-01", sourceSessionKey: "sk1" }),
+    );
+    assert.equal(withMeta.capturedAt, "2026-02-01");
+    assert.equal(withMeta.sourceSessionKey, "sk1");
+    const bare = toDreamRecordInput(fakeStore(candidate), makeRecord({ relativePath: "p2.md", type: "project" }));
+    assert.equal("capturedAt" in bare, false);
+    assert.equal("sourceSessionKey" in bare, false);
+  });
+  it("toDreamRecordInput type 归一（非 feedback → project）", () => {
+    const candidate: MemoryCandidate = { type: "project", scope: "project", name: "N", description: "D", body: "b" };
+    for (const type of ["project", "user", "general_project_meta"] as const) {
+      const input = toDreamRecordInput(fakeStore(candidate), makeRecord({ relativePath: "x.md", type }));
+      assert.equal(input.type, "project");
+    }
   });
 });
 

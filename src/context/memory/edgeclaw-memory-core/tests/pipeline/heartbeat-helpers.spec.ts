@@ -178,11 +178,12 @@ describe("createBatchTrace / buildIndexTraceId / normalizeTrigger", () => {
     assert.equal(trace.batchSummary.segmentCount, 1);
     assert.equal(trace.batchSummary.fromTimestamp, "2026-01-01T00:00:00Z");
   });
-  it("buildIndexTraceId 确定性（同输入同输出）", () => {
-    assert.equal(
-      buildIndexTraceId("sk", "2026-01-01T00:00:00Z", ["l0-1"]),
-      buildIndexTraceId("sk", "2026-01-01T00:00:00Z", ["l0-1"]),
-    );
+  it("buildIndexTraceId 格式 + 确定性 + 输入区分", () => {
+    const traceId = buildIndexTraceId("sk", "2026-01-01T00:00:00Z", ["l0-1"]);
+    assert.match(traceId, /^index_trace_[0-9a-f]{10}$/);
+    assert.equal(traceId, buildIndexTraceId("sk", "2026-01-01T00:00:00Z", ["l0-1"]));
+    assert.notEqual(traceId, buildIndexTraceId("other-sk", "2026-01-01T00:00:00Z", ["l0-1"]));
+    assert.notEqual(traceId, buildIndexTraceId("sk", "2026-01-01T00:00:00Z", ["l0-2"]));
   });
   it("normalizeTrigger 映射 scheduled/manual_sync", () => {
     assert.equal(normalizeTrigger("scheduled run"), "scheduled");
