@@ -1,22 +1,6 @@
 // llm-extraction 的提示词模板与 prompt 构造（从 llm-extraction.ts 拆出，G2/G3 聚类，逐字搬移）。
 // 全部为数据/纯函数（字符串模板与 JSON 构造），无 IO。Llm* 类型 type-only 引自
 // llm-extraction.js（编译后擦除，无运行时环）。
-import { normalizeWhitespace, truncate, truncateForPrompt, uniqueStrings } from "./llm-normalizers.js";
-import { splitProfileFacts, stripMarkdownSyntax } from "./llm-hints.js";
-import type {
-  LlmDreamClusterPlanInput,
-  LlmDreamClusterPlanOutput,
-  LlmDreamClusterRefineInput,
-  LlmDreamClusterRefineOutput,
-  LlmDreamFileGlobalPlanInput,
-  LlmDreamFileGlobalPlanOutput,
-  LlmDreamFileProjectRewriteInput,
-  LlmDreamFileProjectRewriteOutput,
-  LlmDreamProjectMetaReviewInput,
-  LlmDreamProjectMetaReviewOutput,
-  LlmGeneralProjectMetaMergeInput,
-  LlmGeneralProjectMetaMergeOutput,
-} from "./llm-extraction.js";
 import type {
   MemoryCandidate,
   MemoryMessage,
@@ -25,6 +9,16 @@ import type {
   ProjectMetaRecord,
   ProjectShortlistCandidate,
 } from "../types.js";
+import { normalizeWhitespace, truncate, truncateForPrompt, uniqueStrings } from "./llm-normalizers.js";
+import { splitProfileFacts, stripMarkdownSyntax } from "./llm-hints.js";
+import type {
+  LlmDreamClusterPlanInput,
+  LlmDreamClusterRefineInput,
+  LlmDreamFileGlobalPlanInput,
+  LlmDreamFileProjectRewriteInput,
+  LlmDreamProjectMetaReviewInput,
+  LlmGeneralProjectMetaMergeInput,
+} from "./llm-extraction.js";
 
 const DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS = 600_000;
 const DEFAULT_DREAM_FILE_PROJECT_REWRITE_TIMEOUT_MS = 300_000;
@@ -174,8 +168,6 @@ Use this exact JSON shape:
   "note_absorption": [{"note_index": 0, "absorbed": true}, {"note_index": 1, "absorbed": false}]
 }
 `.trim();
-
-const STABLE_FORMAL_PROJECT_ID_PATTERN = /^project_[a-z0-9]+$/;
 
 const DREAM_FILE_GLOBAL_PLAN_SYSTEM_PROMPT = `
 You are the Dream global audit planner for a file-memory system.

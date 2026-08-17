@@ -3,15 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { nowIso } from "./utils/id.js";
 import { CURRENT_PROJECT_ID, DEFAULT_PROJECT_STATUS, PROJECT_META_FILE } from "./file-constants.js";
-import {
-  normalizeDescription,
-  normalizeWhitespace,
-  parseBoolean,
-  parseInteger,
-  parseStringArray,
-  splitLines,
-  uniqueStrings,
-} from "./file-text.js";
+import { normalizeDescription, normalizeWhitespace, splitLines, uniqueStrings } from "./file-text.js";
 import { parseFrontmatterBlock } from "./file-markdown.js";
 import type { GeneralProjectSourceKind, MemoryCandidate, MemoryManifestEntry, ProjectMetaRecord } from "./types.js";
 

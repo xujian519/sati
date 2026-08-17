@@ -1,13 +1,8 @@
 // llm-extraction 的抽取候选归一化（从 extractFileMemoryCandidates 拆出，行为等价）。
 // 纯函数：信号提取 / 单条候选归一 / 边界过滤，discarded 经返回值传出（无副作用）。
 // 依赖 hints（G7）与 normalizers（G6），hints/normalizers 不依赖本文件，无环。
-import {
-  normalizeStringArray,
-  normalizeWhitespace,
-  truncateForPrompt,
-  uniqueStrings,
-  isRecord,
-} from "./llm-normalizers.js";
+import type { MemoryCandidate, MemoryMessage, ProjectIdentityHint, ProjectShortlistCandidate } from "../types.js";
+import { normalizeStringArray, normalizeWhitespace, truncateForPrompt, uniqueStrings } from "./llm-normalizers.js";
 import {
   deriveFeedbackCandidateName,
   extractProjectDescriptorHint,
@@ -32,7 +27,6 @@ import {
   stripExplicitRememberLead,
 } from "./llm-hints.js";
 import type { FileMemoryExtractionDiscardedCandidate } from "./llm-extraction.js";
-import type { MemoryCandidate, MemoryMessage, ProjectIdentityHint, ProjectShortlistCandidate } from "../types.js";
 
 // 抽取系统提示词（extractFileMemoryCandidates 的内联提示词提取为常量）。
 export const EXTRACTION_SYSTEM_PROMPT_LINES = [

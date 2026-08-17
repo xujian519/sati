@@ -24,7 +24,11 @@ export default [
       "vendor/**",
       "apps/desktop/dist/**",
       "apps/desktop/dist-electron/**",
-      "src/context/memory/edgeclaw-memory-core/**",
+      // edgeclaw-memory-core 子包：src/ 纳入 lint（2026-08-17 开闸清 116 处），
+      // 但 ui-source/（浏览器端代码，根 globals 仅 node）与 lib/（构建产物）
+      // 不适用根 lint 规则，局部排除。
+      "src/context/memory/edgeclaw-memory-core/ui-source/**",
+      "src/context/memory/edgeclaw-memory-core/lib/**",
     ],
   },
   js.configs.recommended,

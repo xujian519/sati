@@ -1,6 +1,8 @@
 // llm-extraction 的归一化/校验层（从 llm-extraction.ts 拆出，G6 聚类，逐字搬移）。
 // 纯函数：无 IO、无外部状态，可独立单测。Llm*/Raw* 类型 type-only 引自
 // llm-extraction.js（编译后擦除，无运行时环）。
+import { truncate as truncateBase } from "../utils/text.js";
+import type { MemoryRoute, ProjectShortlistCandidate } from "../types.js";
 import type {
   LlmDreamCluster,
   LlmDreamFileGlobalPlanProject,
@@ -8,8 +10,6 @@ import type {
   LlmDreamProjectMetaReviewOutput,
   LlmGeneralProjectMetaMergeGroup,
 } from "./llm-extraction.js";
-import { truncate as truncateBase } from "../utils/text.js";
-import type { MemoryRoute, ProjectShortlistCandidate } from "../types.js";
 
 // 本地类型（与 llm-extraction.ts 内同名定义逐字一致，非导出）。
 type ProviderHeaders = Record<string, string> | undefined;

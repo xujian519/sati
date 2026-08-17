@@ -1,33 +1,15 @@
 import type {
-  DreamTraceMutation,
   DreamTraceOutcome,
   DreamTraceRecord,
   DreamTraceStep,
-  MemoryCandidate,
   MemoryFileRecord,
   MemoryManifestEntry,
   ProjectMetaRecord,
-  RetrievalTraceDetail,
-  TraceI18nText,
 } from "../types.js";
-import type { HeartbeatStats } from "../pipeline/heartbeat.js";
-import {
-  LlmMemoryExtractor,
-  type LlmGeneralProjectMetaMergeGroup,
-  type LlmDreamCluster,
-  type LlmDreamClusterHeaderInput,
-  type LlmDreamFileProjectMetaInput,
-  type LlmDreamFileRecordInput,
-} from "../skills/llm-extraction.js";
+import { LlmMemoryExtractor, type LlmGeneralProjectMetaMergeGroup } from "../skills/llm-extraction.js";
 import { MemoryRepository } from "../storage/sqlite.js";
 import { traceI18n } from "../trace-i18n.js";
 import { hashText, nowIso } from "../utils/id.js";
-import { truncate as truncateBase } from "../utils/text.js";
-import {
-  kvDetail as kvDetailBase,
-  listDetail as listDetailBase,
-  jsonDetail as jsonDetailBase,
-} from "../utils/detail.js";
 import {
   DREAM_CLUSTER_MAX_FILES,
   DREAM_HEADER_SCAN_LIMIT,
@@ -35,23 +17,12 @@ import {
   DREAM_META_PROJECT_CONTEXT_LIMIT,
   DreamExecutionResult,
   DreamReviewRunnerOptions,
-  DreamRewriteOutcome,
-  DreamRunResult,
   type LoggerLike,
   type CategoryDreamResult,
   type GeneralProjectMergeResult,
 } from "./dream-types.js";
-import { isDreamUserNotePath, isDreamUserProfilePath, normalizeDreamRelativePath } from "./dream-paths.js";
-import {
-  jsonDetail,
-  kvDetail,
-  listDetail,
-  normalizeWhitespace,
-  previewMarkdown,
-  sortEntries,
-  sortProjectMetas,
-  truncate,
-} from "./dream-detail.js";
+import { isDreamUserNotePath, isDreamUserProfilePath } from "./dream-paths.js";
+import { jsonDetail, kvDetail, listDetail, previewMarkdown, sortEntries, sortProjectMetas } from "./dream-detail.js";
 import { createDreamTrace, mutation, pushStep } from "./dream-trace.js";
 import { toDreamMetaInput, toDreamRecordInput, toHeaderInput, toRefinedCandidate } from "./dream-mappers.js";
 import {

@@ -1,7 +1,7 @@
 // llm-extraction 的项目 hint/信号启发式（从 llm-extraction.ts 拆出，G7 聚类，逐字搬移）。
 // 纯函数：全部为正则/信号判定与候选合成，无 IO。正则链顺序决定输出（首中即返）。
-import { truncateForPrompt, normalizeWhitespace, truncate, uniqueStrings } from "./llm-normalizers.js";
 import type { MemoryCandidate, MemoryMessage, ProjectIdentityHint } from "../types.js";
+import { truncateForPrompt, normalizeWhitespace, truncate, uniqueStrings } from "./llm-normalizers.js";
 
 const STABLE_FORMAL_PROJECT_ID_PATTERN = /^project_[a-z0-9]+$/;
 
