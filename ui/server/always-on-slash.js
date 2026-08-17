@@ -1,4 +1,4 @@
-import { extractProjectDirectory, getProjectCronJobsOverview } from "./projects.js";
+import { getProjectCronJobsOverview } from "./projects.js";
 import { getProjectDiscoveryPlansOverview, rerunDiscoveryPlan } from "./discovery-plans.js";
 import { getSatiGateway } from "./sati-bridge.js";
 import { sortCronJobsByCreatedAt } from "./utils/cronJobSort.js";

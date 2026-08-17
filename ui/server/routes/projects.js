@@ -3,7 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import os from "os";
-import { addProjectManually, extractProjectDirectory } from "../projects.js";
+import { addProjectManually } from "../projects.js";
 import {
   getProjectDiscoveryPlansOverview,
   getProjectDiscoveryPlanReport,

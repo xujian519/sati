@@ -15,7 +15,6 @@ import { promises as fsPromises } from "fs";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import os from "os";
 import { extractProjectDirectory } from "../projects.js";
 import { detectTaskMasterMCPServer } from "../utils/mcp-detector.js";
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from "../utils/taskmaster-websocket.js";
