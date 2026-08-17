@@ -99,7 +99,10 @@ async function handleHttpRequest(
       return;
     }
   }
-  if (options.staticAssetsPath && serveStaticAsset(resolve(options.staticAssetsPath), url.pathname, response)) {
+  if (
+    options.staticAssetsPath &&
+    serveStaticAsset(resolve(options.staticAssetsPath), url.pathname, response, request)
+  ) {
     return;
   }
   response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });

@@ -12,7 +12,7 @@
  * 两者都失败则返回 `status: "failed"` 并保留 `pdfUrl` 供手动重试，不中断其余专利。
  */
 
-import { createWriteStream, readFileSync } from "node:fs";
+import { createWriteStream } from "node:fs";
 import { appendFile, mkdir, readFile, rename, stat, unlink } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
@@ -73,7 +73,7 @@ const PDF_LINK_EXTRACT_JS = String.raw`(() => {
  * 改动无需重新构建）。源码态（src/tool/builtin/）上溯 3 级到仓库根，dist 态
  * （dist/src/tool/builtin/）上溯 4 级；两处候选都缺失时回退内嵌备份。
  */
-function loadPdfLinkExtractJs(): string {
+async function loadPdfLinkExtractJs(): Promise<string> {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     join(here, "..", "..", "..", "assets", "patent", "pdf-link-extract.js"),
@@ -81,7 +81,7 @@ function loadPdfLinkExtractJs(): string {
   ];
   for (const candidate of candidates) {
     try {
-      const js = readFileSync(candidate, "utf8");
+      const js = await readFile(candidate, "utf8");
       // 与 Python 端对齐：首行须为版本标记，否则视为损坏回退内嵌备份。
       if (/^\/\/ PDF_LINK_EXTRACT_VERSION=\d+$/.test(js.split("\n", 1)[0] ?? "")) {
         return js;
@@ -447,7 +447,7 @@ export function createPatentPdfDownloadTool(
 
       const spaceName = session.taskSpaceName("patent-download", sessionIdForSpace(context).slice(0, 12));
       const recordPath = record ? join(outputDir, "recording.webm") : undefined;
-      const script = buildDownloadScript({
+      const script = await buildDownloadScript({
         spaceName,
         patents: pending,
         outputDir,
@@ -835,7 +835,7 @@ type DownloadScriptParams = {
  * `status: "fallback"` 与 CDN URL，由 Sati 侧 fetch 兜底。screencast 同理
  * 按能力探测（`typeof page !== 'undefined'`）。
  */
-function buildDownloadScript(params: DownloadScriptParams): string {
+async function buildDownloadScript(params: DownloadScriptParams): Promise<string> {
   const { spaceName, patents, outputDir, pageTimeoutSec, downloadTimeoutMs, record, recordPath } = params;
   const numsJson = JSON.stringify(patents);
   const outDirJson = JSON.stringify(outputDir);
@@ -896,7 +896,7 @@ function buildDownloadScript(params: DownloadScriptParams): string {
   lines.push("      }");
   lines.push("      if (!onPage) throw new Error('page mismatch');");
   // 先提取 CDN PDF 链接：按钮/锚点两条触发路径与 Sati 侧 fetch 兜底共用。
-  lines.push(`      pdfUrl = await js(String.raw\`${escapeTemplateContent(loadPdfLinkExtractJs())}\`);`);
+  lines.push(`      pdfUrl = await js(String.raw\`${escapeTemplateContent(await loadPdfLinkExtractJs())}\`);`);
   lines.push("      if (!pdfUrl) throw new Error('no pdf link');");
   lines.push("      if (!canIntercept) {");
   lines.push(

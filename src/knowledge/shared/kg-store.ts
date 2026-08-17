@@ -37,6 +37,8 @@ export type KgSearchOptions = {
 export class KgStore {
   private readonly db: DatabaseSync;
   private readonly nodeCache = new Map<string, KgNode | undefined>();
+  /** 节点缓存 LRU 上限：防 116K 节点无界膨胀（设计为"轻量缓存"，全量驻留无意义）。 */
+  private static readonly NODE_CACHE_MAX = 8192;
   /** 生效的 schema：unified=knowledge.db（kg_nodes），legacy=patent_kg.db（nodes）。 */
   private readonly schema: KgSchema;
   /** 表结构探测结果：trigram FTS 表优先（scripts/migrate-kg-fts-trigram.mjs 生成），否则 unicode61 旧表；无 FTS 时为 null。 */
@@ -82,13 +84,28 @@ export class KgStore {
     return this.ftsTable === "nodes_fts_trigram" ? "trigram" : "unicode61";
   }
 
-  /** 按 id 查询节点（带缓存）。 */
+  /** 按 id 查询节点（带 LRU 缓存，上限 NODE_CACHE_MAX）。 */
   getNode(id: string): KgNode | undefined {
-    if (this.nodeCache.has(id)) return this.nodeCache.get(id);
+    if (this.nodeCache.has(id)) {
+      const cached = this.nodeCache.get(id);
+      // LRU：命中刷新访问顺序（Map 迭代序 = 插入序）
+      this.nodeCache.delete(id);
+      this.nodeCache.set(id, cached);
+      return cached;
+    }
     const row = this.stmtGetNode.get(id) as NodeRow | undefined;
     const node = row ? toNode(row) : undefined;
     this.nodeCache.set(id, node);
+    if (this.nodeCache.size > KgStore.NODE_CACHE_MAX) {
+      const oldest = this.nodeCache.keys().next().value;
+      if (oldest !== undefined) this.nodeCache.delete(oldest);
+    }
     return node;
+  }
+
+  /** 当前节点缓存条目数（诊断/测试用）。 */
+  nodeCacheSize(): number {
+    return this.nodeCache.size;
   }
 
   /** 按关键词搜索节点（FTS5 MATCH；短查询或缺失 FTS 时降级 LIKE）。 */

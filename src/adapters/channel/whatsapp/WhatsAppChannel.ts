@@ -45,6 +45,8 @@ export class WhatsAppChannel implements ChannelAdapter {
   private readonly elicitation = new ImElicitationHelper();
   private readonly permissions = new ImPermissionHelper();
   private running = false;
+  /** pollOnce 重入守卫：单次轮询未完成时跳过下一轮（防慢网络下轮询重叠）。 */
+  private polling = false;
 
   constructor(options: WhatsAppChannelOptions = {}) {
     this.mapper = options.mapper ?? new WhatsAppSessionMapper();
@@ -148,7 +150,8 @@ export class WhatsAppChannel implements ChannelAdapter {
   }
 
   private async pollOnce(): Promise<void> {
-    if (!this.running) return;
+    if (!this.running || this.polling) return;
+    this.polling = true;
     try {
       const res = await fetch(`${this.bridgeUrl}/messages`, { signal: this.pollAbort.signal });
       if (!res.ok) {
@@ -165,6 +168,8 @@ export class WhatsAppChannel implements ChannelAdapter {
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       this.logger?.error?.(`whatsapp: poll error: ${e}`);
+    } finally {
+      this.polling = false;
     }
   }
 

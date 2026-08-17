@@ -159,7 +159,7 @@ export class TurnRunner {
       if (artifacts.length > 0) {
         await Promise.resolve(
           this.transcript.recordFileArtifacts?.(options.sessionId, options.turnId, artifacts),
-        ).catch(() => {});
+        ).catch(error => console.warn("[agent] recordFileArtifacts failed:", error));
       }
       return artifacts;
     };
@@ -362,7 +362,9 @@ export class TurnRunner {
   }
 
   private async recordErrorResult(_options: TurnRunnerOptions, result: AgentTurnResult): Promise<void> {
-    await Promise.resolve(this.transcript.recordTurnResult(result.sessionId, result.turnId, result)).catch(() => {});
+    await Promise.resolve(this.transcript.recordTurnResult(result.sessionId, result.turnId, result)).catch(error =>
+      console.warn("[agent] recordTurnResult failed:", error),
+    );
   }
 
   private async recordTurnFailureStatus(
@@ -371,7 +373,7 @@ export class TurnRunner {
   ): Promise<AgentStatusMessageInput> {
     const status = this.createTurnFailureStatus(error);
     await Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status)).catch(
-      () => {},
+      recordError => console.warn("[agent] recordAgentStatusMessage failed:", recordError),
     );
     return status;
   }
@@ -447,7 +449,7 @@ export class TurnRunner {
             }
           }
         })
-        .catch(() => {})
+        .catch(error => console.warn("[agent] session title generation failed:", error))
         .finally(() => {
           pending.completed = true;
           cleanup();

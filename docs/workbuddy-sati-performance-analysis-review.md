@@ -149,3 +149,23 @@
 | 5. 流拼接改数组 join | ✅ | `streamModel.ts`（SSE 帧缓冲 parts 数组）、`StreamingCheckpoint.ts`（parts + 非空白字符计数，`hasSubstantialContent` 语义等价）、`CompactionEngine.ts`（摘要 textParts） |
 
 新增测试：`tests/context/budget/tokenizer-cache.spec.ts`（缓存命中/互不串扰/病态外推/自然语言全量/LRU 上限，5 例）、`tests/router/token-stats-collector.spec.ts`（flush 落盘/批量阈值/同步兜底/clear/disabled，5 例）。验证：`pnpm typecheck` ✓、改动文件 eslint 0 错误、biome 格式化 ✓、context/router/streaming 全量测试绿。
+
+---
+
+## 实施状态回写（第二批 + 第三批已完成，2026-08-17）
+
+| 计划项 | 状态 | 落点 |
+|---|---|---|
+| 6. embedding-consistency RANDOM() 采样 | ✅ | `src/knowledge/shared/embedding-consistency.ts`：`ORDER BY RANDOM()`（144K 行全量排序，启动阻塞 ~7s）→ chunks rowid 随机起点 + rowid 顺序前向扫描（O(log n + sampleSize)），4 轮去重补齐 + 开头顺序确定性兜底（极小库/空洞下样本数稳定） |
+| 7. kg-store nodeCache LRU/TTL | ✅ | `src/knowledge/shared/kg-store.ts`：nodeCache 加 `NODE_CACHE_MAX=8192` LRU 上限（Map 迭代序淘汰 + 命中刷新），新增 `nodeCacheSize()` 诊断；116K 节点不再无界驻留 |
+| 8. RouterRuntime token 计数增量 | ✅ | `src/router/utils/countTokens.ts`：`countMessagesTokens` 由全量 join 一次计数 → 逐消息计数求和——追加消息只编码新消息，旧消息 sha1 命中；`RouterRuntime` 4 处调用（176/609/857/893）自动受益，重试循环不再整串重编码 |
+| 9. staticAssets 合并 stat + ETag | ✅ | `src/gateway/server/staticAssets.ts`：4 次 existsSync+statSync → 按 errno 区分的单次 statSync；新增 ETag（size-mtimeMs）输出 + If-None-Match 304 协商（缓存命中零文件读取）；`GatewayServer.ts` 传入 request 头 |
+| 10. cloneGatewayEvent 改 structuredClone | ✅ | `src/gateway/client/eventMapping.ts`：`JSON.parse(JSON.stringify)` → `structuredClone`（重放录制/重建路径，语义等价无字符串往返） |
+| 11. 监听器显式清理 + 重连回归测试 | ✅ | `src/gateway/client/GatewayWsClient.ts`：`resetConnection`/`detachSocketListeners`——重连前先摘旧 socket 监听器并确定性失败旧 pending/streams（不再依赖 close 事件送达）；connect 重置 `this.hello`（修旧握手残留）；`close()` 同步收尾。新增 `tests/gateway/client/gateway-ws-client-reconnect.spec.ts`（3 例：重连 hello 取新连接/close 拒绝 pending/重连时旧 pending 立即失败） |
+| 12. 工具路径 readFileSync → fs/promises | ✅ | `PluginToToolBridge.ts`（MCP 图片提取）、`planMode.ts`（exit_plan_mode 读计划文件）、`patentPdfDownload.ts`（loadPdfLinkExtractJs/buildDownloadScript 异步化）、`pdf-extract.ts`（extractPdfPagesFromFile 异步）——工具执行路径不再同步 I/O；保留 chart.ts 预读缓存设计与 WeixinChannel 凭据同步路径（误标项不动） |
+| 13. case-law 过滤 prepare 缓存 | ✅ | `src/knowledge/case-law/case-law-search.ts`：动态 SQL（FTS 过滤 + LIKE 过滤两条路径）按 SQL 文本 prepare 缓存 Map，同一过滤组合只 prepare 一次；close() 清理 |
+| 14. personal-note list() LIMIT/分页 | ✅ | `src/knowledge/personal-note/personal-note-store.ts`：`list({limit, offset})` 分页选项（默认全量语义不变）+ `listAllPaged()` 分页全量；`PersonalNoteVectorIndex.doSync` 改用分页拉取，单条 SQL 的 JOIN+解压规模有界 |
+| 15. fire-and-forget 统一日志 + poll 守卫 | ✅ | `AgentLoop.ts` 3 处 dispatchLifecycle/onCompactPersisted、`TurnRunner.ts` 4 处（recordTurnResult/recordAgentStatusMessage/recordFileArtifacts/标题生成）`.catch(() => {})` → `console.warn` 落日志；`QQChannel` 两个 void 调用加 `.catch(logger.error)`；`WhatsAppChannel.pollOnce` 加 `polling` 重入守卫（慢网络下轮询不重叠） |
+| 16. CJK token 计数微基准门禁 | ✅ | `tests/context/budget/tokenizer-benchmark.spec.ts`（4 例）：高重复病态 ~40KB 走抽样外推且 <5s、低重复 ~45KB 全量编码 <5s、缓存命中 <200ms、短文本不抽样——防 tokenizer/缓存实现回退 |
+
+新增/更新测试：`tests/gateway/client/gateway-ws-client-reconnect.spec.ts`（3 例）、`tests/gateway/static-assets.spec.ts`（7 例：200+ETag/SPA 回退/304/穿越不泄漏/缺失资源）、`tests/router/utils/count-messages-tokens.spec.ts`（3 例：全缓存命中/增量仅编码新消息/空序列）、`tests/context/budget/tokenizer-benchmark.spec.ts`（4 例）、`tests/knowledge/kg-store.spec.ts`（+LRU 上限 1 例）、`tests/knowledge/personal-note.spec.ts`（+分页 2 例）、`tests/knowledge/embedding-consistency.spec.ts`（+rowid 采样去重 1 例）。验证：`pnpm typecheck` ✓、`pnpm lint`（含 event-matrix 重新生成）✓、`pnpm format:check` ✓、gateway/knowledge/router/agent/mcp/tool/context 全量测试绿。
