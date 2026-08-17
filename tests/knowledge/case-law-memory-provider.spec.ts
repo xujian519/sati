@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CaseLawMemoryProvider } from "../../src/knowledge/case-law/case-law-memory-provider.js";
+import {
+  CaseLawMemoryProvider,
+  type CaseLawMemoryProviderOptions,
+} from "../../src/knowledge/case-law/case-law-memory-provider.js";
 import { fuseCaseLawHits } from "../../src/knowledge/case-law/rrf.js";
 import type { CaseLawHit } from "../../src/knowledge/case-law/types.js";
 import type { MemoryRetrieveInput } from "../../src/context/memory/MemoryResolver.js";
@@ -35,7 +38,7 @@ function makeEngine(overrides: Partial<Record<"search" | "searchSemantic", unkno
     get semanticAvailable() {
       return false;
     },
-  } as never;
+  } as unknown as CaseLawMemoryProviderOptions["engine"];
 }
 
 function input(overrides: Partial<MemoryRetrieveInput> = {}): MemoryRetrieveInput {

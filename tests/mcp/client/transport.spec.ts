@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildTransport, DEFAULT_CALL_TIMEOUT_MS } from "../../../src/mcp/client/transport.js";
+import type { SatiMcpServerSpec } from "../../../src/mcp/protocol/types.js";
 import { McpClientError } from "../../../src/mcp/client/errors.js";
 
 test("buildTransport: stdio perSession 创建临时目录并注入 --user-data-dir", () => {
@@ -39,7 +40,12 @@ test("buildTransport: stdio 非 perSession 不建临时目录", () => {
 
 test("buildTransport: 未知 transport 抛 mcp_unsupported_transport", () => {
   assert.throws(
-    () => buildTransport({ id: "t3", transport: "sse" as never, url: "https://x.test/sse" }, {}),
+    () =>
+      buildTransport(
+        // 故意构造非法 transport 的 spec（错误路径测试）
+        { id: "t3", transport: "sse", url: "https://x.test/sse" } as unknown as SatiMcpServerSpec,
+        {},
+      ),
     (err: unknown) => err instanceof McpClientError && err.code === "mcp_unsupported_transport",
   );
 });

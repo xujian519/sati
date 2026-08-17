@@ -9,6 +9,7 @@ import { LegalMemoryProvider } from "../../src/knowledge/legal/legal-memory-prov
 import { LegalSearchEngine } from "../../src/knowledge/legal/legal-search.js";
 import { PatentMemoryProvider } from "../../src/knowledge/patent/patent-memory-provider.js";
 import type { PatentKgAdapter } from "../../src/knowledge/patent/patent-kg-adapter.js";
+import type { WikiCardLoader } from "../../src/knowledge/patent/wiki-card-loader.js";
 
 function makeInput(query: string): MemoryRetrieveInput {
   return { query, sessionId: "s1", projectRoot: "/tmp", recentMessages: [] };
@@ -107,13 +108,13 @@ describe("patent-memory-provider", () => {
       formatAsContext: (id: string) => `卡片正文 ${id}`,
     };
     const general = new PatentMemoryProvider({
-      wikiLoader: loader as never,
+      wikiLoader: loader as unknown as WikiCardLoader,
       enableStandards: false,
       enableGraph: false,
       cardLimit: 2,
     });
     const oa = new PatentMemoryProvider({
-      wikiLoader: loader as never,
+      wikiLoader: loader as unknown as WikiCardLoader,
       enableStandards: false,
       enableGraph: false,
       cardLimit: 2,
@@ -134,7 +135,7 @@ describe("patent-memory-provider", () => {
       formatAsContext: (id: string) => `卡片正文 ${id}`,
     };
     const provider = new PatentMemoryProvider({
-      wikiLoader: loader as never,
+      wikiLoader: loader as unknown as WikiCardLoader,
       enableStandards: false,
       enableGraph: false,
       cardLimit: 2,

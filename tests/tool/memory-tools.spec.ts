@@ -10,6 +10,7 @@ import {
   createMemorySearchTool,
 } from "../../src/tool/builtin/memoryTools.js";
 import { SatiToolRuntimeError } from "../../src/tool/protocol/errors.js";
+import type { SatiToolDefinition } from "../../src/tool/protocol/types.js";
 import { makeToolContext } from "./context-fixture.js";
 
 type ServiceCalls = {
@@ -134,11 +135,15 @@ describe("memory_* builtin tools", () => {
       createMemorySearchTool(service),
       createMemoryGetTool(service),
     ]) {
-      assert.equal(tool.isReadOnly({} as never), true, `${tool.name} should be read-only`);
-      assert.equal(tool.isConcurrencySafe({} as never), true, `${tool.name} should be concurrency-safe`);
+      // isReadOnly/isConcurrencySafe 不消费 input（只返回工具定义常量），
+      // 用空 input 类型探针调用；工具断言为 Record<string, never> input 形态。
+      const probe = tool as unknown as SatiToolDefinition<Record<string, never>, unknown>;
+      assert.equal(probe.isReadOnly({}), true, `${tool.name} should be read-only`);
+      assert.equal(probe.isConcurrencySafe({}), true, `${tool.name} should be concurrency-safe`);
     }
     for (const tool of [createMemoryFlushTool(service), createMemoryDreamTool(service)]) {
-      assert.equal(tool.isReadOnly({} as never), false, `${tool.name} should not be read-only`);
+      const probe = tool as unknown as SatiToolDefinition<Record<string, never>, unknown>;
+      assert.equal(probe.isReadOnly({}), false, `${tool.name} should not be read-only`);
     }
   });
 
