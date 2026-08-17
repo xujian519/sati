@@ -34,14 +34,12 @@ export class GraphTraversal {
 
   /** 查询节点的出向邻居（按 relation 过滤可选）。 */
   getNeighbors(nodeId: string, relation?: string, limit = 20): KgNeighbor[] {
-    if (relation) {
-      const rows = this.stmts.stmtNeighborsByRelation.all(nodeId, relation, limit) as Array<{
-        target: string;
-        relation: string;
-      }>;
-      return rows.map(r => ({ targetId: r.target, relation: r.relation }));
-    }
-    const rows = this.stmts.stmtNeighbors.all(nodeId, limit) as Array<{ target: string; relation: string }>;
+    const rows = relation
+      ? (this.stmts.stmtNeighborsByRelation.all(nodeId, relation, limit) as Array<{
+          target: string;
+          relation: string;
+        }>)
+      : (this.stmts.stmtNeighbors.all(nodeId, limit) as Array<{ target: string; relation: string }>);
     return rows.map(r => ({ targetId: r.target, relation: r.relation }));
   }
 

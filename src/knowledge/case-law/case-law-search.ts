@@ -16,7 +16,7 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { openKnowledgeDb } from "../shared/db-version.js";
 import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
-import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
+import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms, sqliteHasFts5 } from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import { extractLawKeywords } from "../legal/keywords.js";
@@ -375,27 +375,21 @@ export class CaseLawSearchEngine {
 
   private searchFts(keyword: string, options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
     // trigram 分词对引号敏感：整体作为 phrase 查询（与 law_fts 同策略）。
-    const escaped = keyword.replace(/"/g, '""');
-    const query = `"${escaped}"`;
+    return this.searchFtsWithQuery(escapeFtsPhrase(keyword), options, limit);
+  }
+
+  /** 多个关键词 OR 组合的 FTS 查询（用于长查询切词降级）。 */
+  private searchFtsKeywords(keywords: string[], options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
+    return this.searchFtsWithQuery(joinFtsOrTerms(keywords), options, limit);
+  }
+
+  private searchFtsWithQuery(query: string, options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
     let rows: CaseLawRow[];
     if (this.stmtSearchFts !== null && !hasCaseLawFilters(options)) {
       rows = this.stmtSearchFts.all(query, limit * FETCH_MULTIPLIER) as CaseLawRow[];
     } else {
       const { sql, filterParams } = this.buildFtsQuery(options);
       rows = this.db.prepare(sql).all(query, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
-    }
-    return this.backfillContent(this.dedupeByDocument(rows, limit));
-  }
-
-  /** 多个关键词 OR 组合的 FTS 查询（用于长查询切词降级）。 */
-  private searchFtsKeywords(keywords: string[], options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
-    const escaped = keywords.map(k => `"${k.replace(/"/g, '""')}"`).join(" OR ");
-    let rows: CaseLawRow[];
-    if (this.stmtSearchFts !== null && !hasCaseLawFilters(options)) {
-      rows = this.stmtSearchFts.all(escaped, limit * FETCH_MULTIPLIER) as CaseLawRow[];
-    } else {
-      const { sql, filterParams } = this.buildFtsQuery(options);
-      rows = this.db.prepare(sql).all(escaped, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
     }
     return this.backfillContent(this.dedupeByDocument(rows, limit));
   }

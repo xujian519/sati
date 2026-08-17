@@ -18,7 +18,7 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { openKnowledgeDb } from "../shared/db-version.js";
 import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
-import { FTS_MIN_RUNES, sqliteHasFts5 } from "../shared/fts.js";
+import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms, sqliteHasFts5 } from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
@@ -208,7 +208,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
 
   /** 批量按 documents.id 查询（一次 IN 查询）。 */
   getByIds(ids: string[]): LawRecord[] {
-    const unique = Array.from(new Set(ids.filter((id): id is string => typeof id === "string" && id.length > 0)));
+    const unique = Array.from(new Set(ids.filter(id => id.length > 0)));
     if (unique.length === 0) return [];
     if (unique.length === 1) {
       const record = this.getById(unique[0]!);
@@ -245,14 +245,15 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   }
 
   private searchFts(keyword: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
-    const escaped = keyword.replace(/"/g, '""');
-    const rows = this.withLevelFilter(`"${escaped}"`, options, limit * FETCH_MULTIPLIER) as DocChunkRow[];
-    return this.backfillContent(this.dedupeByDocument(rows, limit));
+    return this.searchFtsWithQuery(escapeFtsPhrase(keyword), options, limit);
   }
 
   private searchFtsKeywords(keywords: string[], options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
-    const escaped = keywords.map(k => `"${k.replace(/"/g, '""')}"`).join(" OR ");
-    const rows = this.withLevelFilter(escaped, options, limit * FETCH_MULTIPLIER) as DocChunkRow[];
+    return this.searchFtsWithQuery(joinFtsOrTerms(keywords), options, limit);
+  }
+
+  private searchFtsWithQuery(query: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
+    const rows = this.withLevelFilter(query, options, limit * FETCH_MULTIPLIER) as DocChunkRow[];
     return this.backfillContent(this.dedupeByDocument(rows, limit));
   }
 
@@ -271,25 +272,19 @@ export class KnowledgeLawSearch implements LegalSearchSource {
 
   /** FTS 查询 + 可选 level 过滤（动态 SQL；无过滤走预编译热路径）。 */
   private withLevelFilter(match: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
-    if (!options.level && !options.category) {
+    if (!options.level) {
       return this.stmtSearchFts!.all(match, limit) as DocChunkRow[];
     }
-    let sql = `
+    const sql = `
       SELECT d.id AS document_id, d.title, d.level, d.source,
              NULL AS content, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
-      WHERE docs_fts MATCH ? AND d.doc_type = 'law_article'
+      WHERE docs_fts MATCH ? AND d.doc_type = 'law_article' AND d.level = ?
+      ORDER BY bm25(docs_fts) LIMIT ?
     `;
-    const params: Array<string | number> = [match];
-    if (options.level) {
-      sql += " AND d.level = ?";
-      params.push(options.level);
-    }
-    sql += " ORDER BY bm25(docs_fts) LIMIT ?";
-    params.push(limit);
-    return this.db.prepare(sql).all(...params) as DocChunkRow[];
+    return this.db.prepare(sql).all(match, options.level, limit) as DocChunkRow[];
   }
 
   private searchLike(keyword: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
