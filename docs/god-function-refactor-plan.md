@@ -1,7 +1,7 @@
 # 巨无霸函数拆解专项实施方案
 
 - 创建日期：2026-08-16
-- 状态：**实施中——A1（reasoning-rules 拆 4 组）已完成 ✅**；后续批次待排期
+- 状态：**全部完成 ✅（2026-08-17）**——轨道 A（A1-A11，PR #43-#58）+ 轨道 B（B1-B6，PR #59-#73）全部落地（index.js 3845→244 行）；分片后打包校验路径同步修复（verify-dmg.sh 检查 `server/services/server-boot.js`，PR #84）
 - 前置：`docs/technical-debt-report.md` Sprint Backlog #6 / #7 残留 / #12；方法论先例 `docs/agentloop-refactor-plan.md`
 - 调研方法：7 个目标文件逐行结构测绘（5 路并行只读调研 + 跨切面协调核查），全部行号证据以 2026-08-16 工作区实测为准
 

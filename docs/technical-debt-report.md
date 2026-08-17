@@ -10,6 +10,8 @@
 
 必须客观说明：**代码卫生基本面不差**（详见"健康面"），问题集中在架构与工程组织，而非代码质量散乱。
 
+> **2026-08-17 注记**：巨无霸函数拆解专项（AgentLoop / InProcessGateway / workflow / kg-store / legal-search / McpClient / `ui/server/index.js` 等）已全部完成，见 `docs/god-function-refactor-plan.md`。本报告 P1/P2 中引用的 `ui/server/index.js:412`、`index.js:779-808`、`kg-store.ts:246` 等**行号均为审计时快照，已随拆解失效**，仅作历史记录；当前实现位置以拆解计划 §5 各轮记录为准。
+
 ---
 
 ## 已处理项（2026-08-03，全面修复会话）

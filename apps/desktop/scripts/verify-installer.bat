@@ -157,6 +157,19 @@ if exist "%RES%\satiui-bundle.tar" (
         set /a FAIL+=1
         echo   [FAIL] server\index.js missing after extraction
     )
+    if exist "%CCUI_DIR%\server\services\server-boot.js" (
+        findstr /C:"SATI_DESKTOP" "%CCUI_DIR%\server\services\server-boot.js" >nul
+        if not errorlevel 1 (
+            set /a PASS+=1
+            echo   [PASS] ui server boot skips browser auto-open when SATI_DESKTOP=1
+        ) else (
+            set /a FAIL+=1
+            echo   [FAIL] server-boot.js lacks SATI_DESKTOP guard - bundle is stale
+        )
+    ) else (
+        set /a FAIL+=1
+        echo   [FAIL] server\services\server-boot.js missing after extraction - bundle is stale
+    )
 )
 
 set "CCM_DIR=%SANDBOX%\sati-main"
