@@ -324,12 +324,13 @@ export class CompactionEngine {
       cacheBreakpoints: [],
     };
 
-    let text = "";
+    // 摘要可长达 20K token：用数组累积 + 末尾 join，避免每 delta 一次 O(n²) 字符串拼接。
+    const textParts: string[] = [];
     let usage: CanonicalUsage | undefined;
     for await (const event of this.options.model.stream(request, signal)) {
       switch (event.type) {
         case "text_delta":
-          text += event.text;
+          textParts.push(event.text);
           break;
         case "usage":
           usage = event.usage;
@@ -340,6 +341,7 @@ export class CompactionEngine {
           break;
       }
     }
+    const text = textParts.join("");
 
     return {
       message: {
