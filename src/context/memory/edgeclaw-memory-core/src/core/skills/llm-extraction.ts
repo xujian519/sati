@@ -9,37 +9,16 @@ import type {
   RecallHeaderEntry,
   RetrievalPromptDebug,
 } from "../types.js";
-import { truncate as truncateBase } from "../utils/text.js";
-import {
-  DEFAULT_REQUEST_MAX_ATTEMPTS,
-  REQUEST_RETRYABLE_STATUS_CODES,
-  computeRetryDelayMs,
-  isTimeoutError,
-  isTransientRequestError,
-  resolveRequestTimeoutMs,
-  sleep,
-} from "./request-retry.js";
-import {
-  extractFirstJsonObject,
-  extractLooseJsonEnvelope,
-  extractLooseJsonBooleanProperty,
-  extractLooseJsonStringProperty,
-  tryParseLooseMemoryCreatePayload,
-  type RawMemoryCreatePayload,
-} from "./llm-json.js";
+import { isTimeoutError } from "./request-retry.js";
+import { extractFirstJsonObject, tryParseLooseMemoryCreatePayload, type RawMemoryCreatePayload } from "./llm-json.js";
 import {
   chooseBestRecallProjectFallback,
-  clampConfidence,
   isRecord,
-  normalizeBoolean,
   normalizeDreamCluster,
   normalizeDreamFileEntryIds,
   normalizeDreamFileGlobalPlanProject,
-  normalizeDreamFileMergeReason,
-  normalizeDreamFileProjectId,
   normalizeDreamFileProjectMetaPayload,
   normalizeDreamFileProjectRewriteFile,
-  normalizeDreamFileProjectStatus,
   normalizeDreamProjectMetaReview,
   normalizeGeneralProjectMetaMergeGroup,
   normalizeMemoryRoute,
@@ -49,37 +28,11 @@ import {
   stripTrailingSlash,
   truncate,
   truncateForPrompt,
-  uniqueStrings,
 } from "./llm-normalizers.js";
 import {
   buildSyntheticProjectFollowUpCandidate,
-  deriveFeedbackCandidateName,
-  extractProjectDescriptorHint,
-  extractProjectNameFromContent,
-  extractProjectNameHint,
-  extractProjectStageHint,
-  extractSingleHint,
-  extractTimelineHints,
-  extractUniqueBatchProjectName,
-  hasGenericProjectAnchor,
   isGenericProjectCandidateName,
-  isLikelyHumanReadableProjectIdentifier,
-  isStableFormalProjectId,
-  looksLikeCollaborationRuleText,
   looksLikeConcreteProjectMemoryText,
-  looksLikeProjectBlockerText,
-  looksLikeProjectConstraintText,
-  looksLikeProjectFollowUpText,
-  looksLikeProjectNextStepText,
-  looksLikeProjectRiskText,
-  looksLikeProjectScopeText,
-  projectIdentityTerms,
-  sanitizeFeedbackSectionText,
-  sanitizeProjectDescriptionText,
-  selectKnownProjectHint,
-  splitProfileFacts,
-  stripExplicitRememberLead,
-  stripMarkdownSyntax,
 } from "./llm-hints.js";
 import {
   EXTRACTION_SYSTEM_PROMPT_LINES,
@@ -116,7 +69,6 @@ import {
   PROJECT_NOTE_CREATE_SYSTEM_PROMPT,
   USER_NOTE_CREATE_SYSTEM_PROMPT,
   USER_PROFILE_REWRITE_SYSTEM_PROMPT,
-  buildConversationTurns,
   buildDreamClusterPlanPrompt,
   buildDreamClusterPlanSystemPrompt,
   buildDreamClusterRefinePrompt,
@@ -127,13 +79,7 @@ import {
   buildGeneralProjectMetaMergePrompt,
   buildIndexPromptWindow,
   buildRewrittenUserProfileCandidate,
-  buildUserProfileBodyFromSectionMarkdown,
   buildUserProfileRewritePrompt,
-  extractIdentityBackgroundFactsFromProfileBody,
-  findFocusTurnIndex,
-  normalizeIdentityBackgroundSectionMarkdown,
-  renderIdentityBackgroundMarkdownFromItems,
-  serializeTurnsForPrompt,
   buildSelectIndexProjectPrompt,
   buildSelectRecallProjectPrompt,
   buildExtractionUserPrompt,
@@ -206,17 +152,6 @@ interface RawMemoryClassificationPayload {
   labels?: unknown;
 }
 
-interface RawDreamFileGlobalPlanProjectPayload {
-  plan_key?: unknown;
-  target_project_id?: unknown;
-  project_name?: unknown;
-  description?: unknown;
-  status?: unknown;
-  merge_reason?: unknown;
-  evidence_entry_ids?: unknown;
-  retained_entry_ids?: unknown;
-}
-
 interface RawDreamFileGlobalPlanPayload {
   summary?: unknown;
   duplicate_topic_count?: unknown;
@@ -226,33 +161,11 @@ interface RawDreamFileGlobalPlanPayload {
   deleted_entry_ids?: unknown;
 }
 
-interface RawDreamFileProjectRewriteFilePayload {
-  type?: unknown;
-  name?: unknown;
-  description?: unknown;
-  source_entry_ids?: unknown;
-  stage?: unknown;
-  decisions?: unknown;
-  constraints?: unknown;
-  next_steps?: unknown;
-  blockers?: unknown;
-  timeline?: unknown;
-  notes?: unknown;
-  rule?: unknown;
-  why?: unknown;
-  how_to_apply?: unknown;
-}
-
 interface RawDreamFileProjectRewritePayload {
   summary?: unknown;
   project_meta?: unknown;
   files?: unknown;
   deleted_entry_ids?: unknown;
-}
-
-interface RawDreamClusterPayload {
-  member_relative_paths?: unknown;
-  reason?: unknown;
 }
 
 interface RawDreamClusterPlanPayload {
@@ -273,12 +186,6 @@ interface RawProjectMetaReviewPayload {
   project_name?: unknown;
   description?: unknown;
   status?: unknown;
-}
-
-interface RawGeneralProjectMetaMergeGroupPayload {
-  keeper_project_id?: unknown;
-  duplicate_project_ids?: unknown;
-  reason?: unknown;
 }
 
 interface RawGeneralProjectMetaMergePlanPayload {
@@ -1541,12 +1448,10 @@ export class LlmMemoryExtractor {
       explicitGoal,
       explicitBlocker,
       genericProjectAnchor,
-      selectedKnownProject,
       contextProjectName,
       projectFollowUpSignal,
       projectRiskSignal,
       projectScopeSignal,
-      projectDefinitionSignal,
       feedbackInstructionSignal,
     } = signals;
     const userPrompt = buildExtractionUserPrompt({

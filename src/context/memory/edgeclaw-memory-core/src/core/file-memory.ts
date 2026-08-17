@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type {
   GeneralProjectSourceKind,
@@ -22,12 +22,9 @@ import {
   DEFAULT_PROJECT_STATUS,
   DEFAULT_USER_PROFILE_RELATIVE_PATH,
   FEEDBACK_DIR,
-  GLOBAL_DIR,
   MANIFEST_FILE,
   PROJECT_DIR,
   PROJECT_META_FILE,
-  TMP_PROJECT_ID,
-  USER_DIR,
   USER_NOTES_DIR,
   CURRENT_PROJECT_ID,
 } from "./file-constants.js";
@@ -35,22 +32,15 @@ import {
   ensureDir,
   normalizeDescription,
   normalizeWhitespace,
-  parseBoolean,
-  parseInteger,
-  parseStringArray,
   previewContent,
   slugify,
-  splitLines,
   trimContentLines,
   uniqueStrings,
 } from "./file-text.js";
 import {
-  buildFeedbackBody,
   buildFrontmatter,
   buildGeneralProjectMetaBody,
-  buildProjectBody,
   buildRecordBody,
-  buildUserBody,
   candidateDescription,
   parseFactSection,
   parseFrontmatterBlock,
@@ -58,7 +48,6 @@ import {
   parseMarkdownSections,
   parseParagraphSection,
   renderFrontmatter,
-  splitFactText,
 } from "./file-markdown.js";
 import {
   mergeCandidates,

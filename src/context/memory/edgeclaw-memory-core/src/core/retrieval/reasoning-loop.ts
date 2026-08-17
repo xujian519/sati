@@ -10,7 +10,6 @@ import type {
   RetrievalPromptDebug,
   TraceI18nText,
   RetrievalTrace,
-  RetrievalTraceDetail,
   RetrievalResult,
   RecallMode,
 } from "../types.js";
@@ -19,7 +18,6 @@ import { MemoryRepository } from "../storage/sqlite.js";
 import { traceI18n } from "../trace-i18n.js";
 import { hashText, nowIso } from "../utils/id.js";
 import { kvDetail, listDetail, jsonDetail } from "../utils/detail.js";
-import { decodeEscapedUnicodeText, decodeEscapedUnicodeValue, truncate } from "../utils/text.js";
 import { SEMANTIC_SEARCH_LIMIT, fuseManifestWithSemantic } from "./semantic-fusion.js";
 
 const RECALL_CACHE_TTL_MS = 30_000;
@@ -68,10 +66,6 @@ function normalizeQueryKey(query: string): string {
 
 function buildTraceId(prefix: string, seed: string): string {
   return `${prefix}_${hashText(`${seed}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`)}`;
-}
-
-function previewText(value: string, max = 220): string {
-  return truncate(decodeEscapedUnicodeText(value).trim(), max);
 }
 
 function hasUserSummary(userSummary: MemoryUserSummary): boolean {

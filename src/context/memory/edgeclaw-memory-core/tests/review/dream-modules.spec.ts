@@ -1,11 +1,7 @@
 // dream-review 子模块行为基线测试（G2-G6 从 dream-review.ts 拆出，函数体逐字搬移）。
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  isDreamUserNotePath,
-  isDreamUserProfilePath,
-  normalizeDreamRelativePath,
-} from "../../src/core/review/dream-paths.js";
+import { isDreamUserNotePath, isDreamUserProfilePath } from "../../src/core/review/dream-paths.js";
 import { previewMarkdown, sortEntries, truncate } from "../../src/core/review/dream-detail.js";
 import { createDreamTrace, mutation, pushStep } from "../../src/core/review/dream-trace.js";
 import { toDreamMetaInput, toHeaderInput, toRefinedCandidate } from "../../src/core/review/dream-mappers.js";

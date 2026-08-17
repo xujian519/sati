@@ -1,26 +1,22 @@
 import type {
-  IndexTraceRecord,
-  IndexTraceStep,
-  IndexTraceStoredResult,
   IndexingSettings,
   L0SessionRecord,
   MemoryCandidate,
   MemoryFileRecord,
   MemoryMessage,
   ProjectMetaRecord,
-  ProjectShortlistCandidate,
   ReadableProjectCatalogEntry,
   RetrievalPromptDebug,
-  TraceI18nText,
 } from "../types.js";
 import { LlmMemoryExtractor, type MemoryClassificationLabel } from "../skills/llm-extraction.js";
 import { MemoryRepository } from "../storage/sqlite.js";
+import { traceI18n } from "../trace-i18n.js";
+import { buildL0IndexId, nowIso } from "../utils/id.js";
+import { kvDetail, jsonDetail } from "../utils/detail.js";
 import {
   buildCandidateMemoryPreview,
   buildCandidateRoutingQuery,
   buildGeneralProjectShortlist,
-  buildIndexTraceId,
-  commonPrefixLength,
   createBatchTrace,
   createStep,
   deriveFocusTurns,
@@ -29,22 +25,13 @@ import {
   flattenBatchMessages,
   hasNewContent,
   inferStorageKind,
-  mergeSessionMessages,
   normalizeTrigger,
   noteDetail,
   previewText,
-  sameMessage,
   textDetail,
-  tokenizeSearchText,
 } from "./heartbeat-helpers.js";
 
-import { traceI18n } from "../trace-i18n.js";
-import { buildL0IndexId, hashText, nowIso } from "../utils/id.js";
-import { kvDetail, jsonDetail } from "../utils/detail.js";
-import { decodeEscapedUnicodeText } from "../utils/text.js";
-
 const LAST_INDEXED_AT_STATE_KEY = "lastIndexedAt" as const;
-const GENERAL_INDEX_PROJECT_CANDIDATE_LIMIT = 30;
 /**
  * Max unindexed L0 records processed per session key in a single heartbeat
  * run. A chatty session can otherwise drain an unbounded backlog (one LLM

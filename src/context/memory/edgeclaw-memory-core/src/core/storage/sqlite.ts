@@ -1,12 +1,11 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import {
   type CaseTraceRecord,
   type ClearMemoryScope,
   type DashboardOverview,
   type DreamRollbackResult,
   type DreamRuntimeStateSnapshot,
-  type DreamPipelineStatus,
   type DreamTraceRecord,
   type IndexTraceRecord,
   type IndexingSettings,
@@ -39,20 +38,12 @@ import {
 import { hashText, nowIso } from "../utils/id.js";
 import {
   MemoryBundleValidationError,
-  clampInt,
   createSiblingTempPath,
-  hasLegacyMultiProjectPath,
   isGlobalRelativePath,
   isPathWithinRoot,
-  isRecord,
   normalizeIndexTraceRecord,
   normalizeL0Row,
   normalizeMemoryBundle,
-  normalizeMessages,
-  normalizeRelativePath,
-  normalizeSnapshotFileRecord,
-  normalizeSnapshotRelativePath,
-  normalizeString,
   normalizeDreamTraceRecord,
   parseJson,
   readSnapshotFiles,
@@ -62,7 +53,6 @@ import {
   sanitizeTraceArray,
   snapshotVersionFromFiles,
   sortManifestEntries,
-  sortSnapshotFiles,
   toExposedGlobalRelativePath,
   toInternalGlobalRelativePath,
 } from "./sqlite-helpers.js";
@@ -89,7 +79,6 @@ const LAST_DREAM_SUMMARY_STATE_KEY = "lastDreamSummary" as const;
 const RECENT_CASE_TRACES_STATE_KEY = "recentCaseTraces" as const;
 const RECENT_INDEX_TRACES_STATE_KEY = "recentIndexTraces" as const;
 const RECENT_DREAM_TRACES_STATE_KEY = "recentDreamTraces" as const;
-const GLOBAL_MEMORY_PREFIX = "global/";
 const GLOBAL_USER_PROFILE_RELATIVE_PATH = "UserIdentity/user-profile.md";
 const GLOBAL_USER_NOTES_RELATIVE_DIR = "UserIdentityNotes";
 const LAST_DREAM_SNAPSHOT_DIR = "last_dream";
