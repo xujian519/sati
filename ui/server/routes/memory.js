@@ -2,6 +2,10 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+// 有意保留的 src 深层 import（check-ui-server-boundary 白名单例外）：
+// edgeclaw-memory-core 是独立 workspace 子包，sati-memory-core-bundle 只打包
+// package.json + lib/ + ui-source/（见 apps/desktop/scripts/release.sh），
+// 改 import 子包 src/ 源码入口会破坏桌面打包链路；lib/ 是其公共 API 编译产物。
 import { MemoryBundleValidationError } from "../../../src/context/memory/edgeclaw-memory-core/lib/index.js";
 import { readSatiConfigFile, writeSatiConfig } from "../services/satiConfig.js";
 import { reloadSatiConfig } from "../services/satiConfigReloader.js";

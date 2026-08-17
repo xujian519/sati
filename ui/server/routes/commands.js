@@ -10,8 +10,8 @@ import { readSatiConfigFile, resolveModel } from "../services/satiConfig.js";
 import { resolvePilotHome } from "../utils/pilotPaths.js";
 import { CLAWHUB_NOT_FOUND_MESSAGE, getClawhubPath } from "../utils/clawhub.js";
 import { executeTurnkeySlashCommand } from "../turnkey-slash.js";
-import { getRegisteredCommands } from "../../../src/adapters/channel/protocol/ChannelCommandRegistry.js";
-import { runChatSearchFormatted } from "../../../src/cli/commands/chatSearch.js";
+import { getRegisteredCommands } from "../../../src/adapters/channel/protocol/index.js";
+import { runChatSearchFormatted } from "../../../src/cli/commands/index.js";
 
 const execFileAsync = promisify(execFile);
 

@@ -15,6 +15,7 @@ export { computeNextCronRunAt, computeNextRunAt } from "./runtime/CronSchedule.j
 export { isValidCronTimezone, resolveCronTimezone } from "./CronTimezone.js";
 export { resolveCronPaths, cronRunEventsPath, type CronPaths } from "./storage/CronPaths.js";
 export { CronTaskStore } from "./storage/CronTaskStore.js";
+export { mapCronRunOutcome } from "./protocol/types.js";
 export type {
   CronCreateInput,
   CronCreateResult,

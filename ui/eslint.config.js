@@ -104,6 +104,12 @@ export default tseslint.config(
     // unused-imports（warn，与 src 一致）：ui/server 曾是 lint 盲区（ui lint 只跑 src/），
     // 2026-08 清理 102 处遗留未使用 import/死代码后开闸，防止再累积。
     // 详见 docs/ui-server-unused-import-cleanup-plan.md。
+    //
+    // no-restricted-paths 说明（2026-08-17）：该规则对 ui/server 的 NodeNext 风格
+    // .js specifier 实际不生效（unrs-resolver 不做 .js→.ts 回退，解析失败即静默跳过，
+    // 增减 except 均不触发——实测）。真实门禁是 scripts/check-ui-server-boundary.mjs
+    // （挂 ui lint，纯路径静态校验）。except 列表保留为"意图文档 + 未来 resolver
+    // 修复后的兜底"，内容与 check-ui-server-boundary 白名单同步。
     files: ["server/**/*.{js,mjs}"],
     plugins: { "import-x": importX, "unused-imports": unusedImports },
     rules: {
@@ -115,33 +121,22 @@ export default tseslint.config(
               target: "./server",
               from: "../src",
               except: [
-                // src/cli/proxy.js (sati-bridge.js:47)
+                // barrel 入口（2026-08-17 收口后清单，与 check-ui-server-boundary 白名单同步）
+                "web/server/index.js",
+                "cron/index.js",
+                // 有意保留：cli 根单文件、轻依赖；顶层 cli barrel 会连带 createLocalGateway 全树
                 "cli/proxy.js",
-                // src/gateway/index.js (sati-bridge.js:57)
+                "cli/commands/index.js",
+                "context/budget/index.js",
                 "gateway/index.js",
-                // src/status/agentStatus.js (sati-bridge.js:58)
-                "status/agentStatus.js",
-                // src/web/client/eventMapping.js — 共享 GatewayEvent→帧映射
-                // (sati-bridge.js / ui/src/chat 浏览器直连共用一份)
-                "web/client/eventMapping.js",
-                // src/web/server/legacySessionPresentation.js (projects.js:26)
-                "web/server/legacySessionPresentation.js",
-                // src/cron/protocol/types.js (projects.js:33)
-                "cron/protocol/types.js",
-                // src/context/budget/compactBudget.js (sati-bridge.js:48)
-                "context/budget/compactBudget.js",
-                // src/context/memory/edgeclaw-memory-core/lib/index.js (routes/memory.js:5)
+                "status/index.js",
+                "web/client/index.js",
+                "model/index.js",
+                "network/index.js",
+                "adapters/channel/protocol/index.js",
+                "pilot/index.js",
+                // 有意保留：edgeclaw-memory-core 独立子包，bundle 只打包 lib/
                 "context/memory/edgeclaw-memory-core/lib/index.js",
-                // src/model/providerEndpoint.js (routes/config.js:30)
-                "model/providerEndpoint.js",
-                // src/network/fetch.js (routes/config.js:31)
-                "network/fetch.js",
-                // src/adapters/channel/protocol/ChannelCommandRegistry.js (routes/commands.js:14)
-                "adapters/channel/protocol/ChannelCommandRegistry.js",
-                // src/cli/commands/chatSearch.js (routes/commands.js:15)
-                "cli/commands/chatSearch.js",
-                // src/pilot/config/parseGatewayConfig.js (services/satiConfig.js:6)
-                "pilot/config/parseGatewayConfig.js",
               ],
             },
           ],
