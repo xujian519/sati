@@ -6,6 +6,7 @@
       "!**/node_modules/**",
       "!**/dist/**",
       "!**/coverage/**",
+      "!.pnpm-store/**",
       "!src/context/memory/edgeclaw-memory-core/lib/**",
       "!.reasonix/**",
       "!.qoder/**",

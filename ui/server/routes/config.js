@@ -27,9 +27,9 @@ import {
   buildProviderModelsEndpointCandidates,
   isExpectedProviderModelsResponseShape,
   isExpectedProviderResponseShape,
-} from "../../../src/model/providerEndpoint.js";
-import { ollamaOrigin } from "../../../src/model/ollama/probe.js";
-import { NetworkFetchError, networkFetch } from "../../../src/network/fetch.js";
+  ollamaOrigin,
+} from "../../../src/model/index.js";
+import { NetworkFetchError, networkFetch } from "../../../src/network/index.js";
 import {
   OFFICE_PREVIEW_SERVICE_BUILTIN,
   OFFICE_PREVIEW_SERVICE_LIBREOFFICE,

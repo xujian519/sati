@@ -133,3 +133,16 @@ export {
 export * from "./catalog/index.js";
 export * from "./embedding/index.js";
 export { DEFAULT_MODEL_PROVIDER, DEFAULT_MODEL_ID } from "./defaults.js";
+// ui/server 桥接层消费（barrel 收口面，见 check-ui-server-boundary 门禁）：
+// providerEndpoint 与 ollama probe 供 ui/server/routes/config.js 使用。
+export {
+  buildProviderChatEndpoint,
+  buildProviderChatEndpointCandidates,
+  buildProviderModelsEndpoint,
+  buildProviderModelsEndpointCandidates,
+  isExpectedProviderModelsResponseShape,
+  isExpectedProviderResponseShape,
+  normalizeGoogleProbeModel,
+  type ProviderEndpointProtocol,
+} from "./providerEndpoint.js";
+export { ollamaOrigin, type OllamaModelInfo } from "./ollama/probe.js";

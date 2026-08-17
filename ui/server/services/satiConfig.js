@@ -3,7 +3,7 @@ import fsPromises from "fs/promises";
 import os from "os";
 import path from "path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { parseGatewayConfig } from "../../../src/pilot/config/parseGatewayConfig.js";
+import { parseGatewayConfig } from "../../../src/pilot/index.js";
 
 // Source of truth: ~/.sati/sati.yaml. The disk format and the
 // "internal" config object are the same V2 schema — no more adapter layer.

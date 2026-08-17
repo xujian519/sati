@@ -23,7 +23,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src/ server/ --max-warnings 0",
+    "lint": "eslint src/ server/ --max-warnings 0 && node ../scripts/check-ui-server-boundary.mjs",
     "lint:fix": "eslint src/ server/ --fix",
     "test": "vitest run",
     "test:watch": "vitest",

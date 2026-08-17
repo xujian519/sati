@@ -44,8 +44,11 @@ import fs from "node:fs";
 import { promises as fsPromises } from "node:fs";
 import { randomUUID } from "node:crypto";
 
+// 有意保留 src/cli/proxy.js 直接 import（check-ui-server-boundary 白名单）：
+// proxy.ts 是 cli 根单文件、轻依赖；经 src/cli/index.ts barrel 会连带加载
+// createLocalGateway（gateway+agent+tool+patent 全树），拉大 ui/server 加载面。
 import { installGlobalProxy } from "../../src/cli/proxy.js";
-import { buildCompactTokenBudget } from "../../src/context/budget/compactBudget.js";
+import { buildCompactTokenBudget } from "../../src/context/budget/index.js";
 await installGlobalProxy();
 
 import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from "./utils/pilotPaths.js";
@@ -55,14 +58,14 @@ import { resolvePilotHome, createProjectId, sanitizeSessionIdForPath } from "./u
 // rewriting the offending @type annotation below to `ReturnType<typeof
 // createRemoteGateway>`, which is why this import can live on `src/` again.)
 import { createRemoteGateway } from "../../src/gateway/index.js";
-import { createVisibleErrorStatusDetail } from "../../src/status/agentStatus.js";
+import { createVisibleErrorStatusDetail } from "../../src/status/index.js";
 // Shared GatewayEvent → chat-frame mapping (single source of truth shared
 // with the browser direct-connect path).
 import {
   isVisibleFailureAgentStatus,
   mapGatewayEventToFrames,
   normalizeToolDisplayName,
-} from "../../src/web/client/eventMapping.js";
+} from "../../src/web/client/index.js";
 import { createNormalizedMessage } from "./sati-message.js";
 import { readPermissionSettings } from "./services/permissionSettings.js";
 

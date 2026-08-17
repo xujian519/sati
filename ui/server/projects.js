@@ -22,14 +22,14 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { getSatiGateway } from "./sati-bridge.js";
-import { mapLegacySessionPresentation } from "../../src/web/server/legacySessionPresentation.js";
+import { mapLegacySessionPresentation } from "../../src/web/server/index.js";
 import {
   resolvePilotHome,
   createProjectId,
   createCollisionResistantProjectId,
   sanitizeSessionIdForPath,
 } from "./utils/pilotPaths.js";
-import { mapCronRunOutcome } from "../../src/cron/protocol/types.js";
+import { mapCronRunOutcome } from "../../src/cron/index.js";
 import { applyCustomSessionNames } from "./database/db.js";
 
 // Optional taskmaster detection. Read once per project; lightweight.
