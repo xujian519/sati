@@ -93,10 +93,10 @@ RES="$APP/Contents/Resources"
                                         || fail "bun-bin/bun missing or not executable"
 [[ -f "$RES/satiui-bundle.tar" ]] && pass "satiui-bundle.tar present ($(du -sh "$RES/satiui-bundle.tar" | awk '{print $1}'))" \
                                         || fail "satiui-bundle.tar missing"
-if tar -xOf "$RES/satiui-bundle.tar" server/index.js 2>/dev/null | grep -q 'SATI_DESKTOP'; then
+if tar -xOf "$RES/satiui-bundle.tar" server/services/server-boot.js 2>/dev/null | grep -q 'SATI_DESKTOP'; then
   pass "ui server bundle skips browser auto-open when SATI_DESKTOP=1"
 else
-  fail "satiui-bundle.tar is stale: server/index.js still runs 'open' on listen — rebuild bundle from ui/"
+  fail "satiui-bundle.tar is stale: server boot still runs 'open' on listen — rebuild bundle from ui/"
 fi
 [[ -f "$RES/sati-main-bundle.tar" ]] && pass "sati-main-bundle.tar present ($(du -sh "$RES/sati-main-bundle.tar" | awk '{print $1}'))" \
                                         || fail "sati-main-bundle.tar missing"
