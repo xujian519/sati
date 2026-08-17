@@ -199,18 +199,18 @@ kg-fts-tokenizer=ready(trigram)（运行时项，kgFtsMode 静态近似：kg_nod
 
 1. **B1 向量检索 ~195ms/次，同步阻塞主线程**（int8-matrix-search.ts:121-150）：每次查询对全部 144K 向量做 1.47 亿次 int8 乘加；无 ANN/剪枝/阈值；库中 `ivf_index`/`index_meta` 为**空表（0 行，建表残留）且全仓零代码引用**。冷加载 353ms + 141MB 内存。这是全部检索路径中唯一"明显感知"的卡点。
 2. **B2 判例引擎 ~100ms**（case-law-search.ts:155-164）：裸 SQL 0.15ms vs 引擎 102ms——开销不在 SQL 而在取回 top-N 全文后逐行 `sati_uncompress()` gzip 解压 + JS 后处理（FETCH_MULTIPLIER=5 → LIMIT 50）。法规引擎同理（28–64ms）。
-3. **B3 LIKE 降级最坏情况全表扫描**（kg-store.ts:112-116, 233-249）：count 形态 103ms；引擎查询因 LIMIT 下推提前终止（实测 0.02ms），但**无命中/冷门词仍须扫全表 214,824 行**；`patent_kg_query` 工具强制 `mode:"or"` 使 LIKE 成为常态路径。
+3. **B3 LIKE 降级最坏情况全表扫描**（kg-store.ts:98-113，searchByKeywordOr/likeSearch 现位置；原 L112-116, 233-249 已随 2026-08-16 拆解失效）：count 形态 103ms；引擎查询因 LIMIT 下推提前终止（实测 0.02ms），但**无命中/冷门词仍须扫全表 214,824 行**；`patent_kg_query` 工具强制 `mode:"or"` 使 LIKE 成为常态路径。
 4. **B4 FTS 索引体积 2,431MB 占库 68%**：docs_fts trigram contentless 索引远大于正文（chunks 512MB 且 62% 已源头 gzip 压缩）——磁盘/分发/IO 成本，非查询延迟问题；kg_nodes_fts 另占 152MB。trigram 索引 ~2x 体积放大是社区已知特性（见 §5.2）。
 5. **B5 同步 `DatabaseSync` 全链路无超时**：38 处同步 API 调用阻塞主线程，无 statement timeout/并发限制/熔断（熔断器仅保护 embedding/rerank HTTP 路）。当前数据量下延迟尚可接受，属结构性风险。
 6. **B6 embeddings 缺 (document_id, chunk_id) 复合索引**：矩阵加载的键集分页排序走单列索引 + 末项 TEMP B-TREE（EXPLAIN 证实，45ms）——当前量级无害，但随库增长线性劣化。
-7. **B7 构造期探测成本**：KnowledgeEmbeddingSearch 每次构造跑 COUNT + GROUP BY dim（37ms）；KgStore 热路径存在动态 prepare（kg-store.ts:246，多词 LIKE SQL 每查询重编译）。
-8. **B8 图谱 BFS/展开宽度风险**（kg-store.ts:337-355）：maxDepth=5 × 每层 LIMIT 100（CITES_EVIDENCE 类边 74K 条），最坏队列膨胀；nodeCache 为无上限 Map（可缓存全部 21.4 万节点）。当前索引完备（每跳 0.15ms）未实测出问题，属规模风险。
+7. **B7 构造期探测成本**：KnowledgeEmbeddingSearch 每次构造跑 COUNT + GROUP BY dim（37ms）；KgStore 热路径存在动态 prepare（kg-store.ts:132 `likeSearchTerms`，多词 LIKE SQL 每查询重编译）。
+8. **B8 图谱 BFS/展开宽度风险**（kg/graph-traversal.ts，2026-08-16 从 kg-store.ts 拆出；原 L337-355 已失效）：maxDepth=5 × 每层 LIMIT 100（CITES_EVIDENCE 类边 74K 条），最坏队列膨胀；nodeCache 为无上限 Map（可缓存全部 21.4 万节点）。当前索引完备（每跳 0.15ms）未实测出问题，属规模风险。
 
 **被证伪的候选**：FTS 热词 `ORDER BY bm25 LIMIT` 全量排序——EXPLAIN 确显示 `USE TEMP B-TREE FOR ORDER BY`，但 66K 命中行内存排序实测仅 1.8ms，非瓶颈。此前的"1-10s 预期"不成立。
 
 ### 4.4 可观测性缺口清单
 
-1. FTS→LIKE 运行中降级（ftsDegraded、短词/未命中回退）无日志、无指标（kg-store.ts:210-215 等）
+1. FTS→LIKE 运行中降级（ftsDegraded、短词/未命中回退）无日志、无指标（legal-search.ts:41-143 `ftsDegraded` 分支；原 kg-store.ts:210-215 为审计时位置）
 2. 3 处 `catch {}` 空捕获静默吞错：case-law-search.ts:214-216（判例语义）、:230-232（笔记语义）、patentCaseSearch.ts:208-211（工具语义回退）
 3. `KnowledgeRuntimeStats` 纯计数器，无耗时/分位数字段（knowledge-stats.ts:46-130）
 4. telemetry 零 knowledge 引用——无持续遥测，只能经 gateway `knowledge_capabilities` 按需拉取
@@ -310,7 +310,7 @@ kg-fts-tokenizer=ready(trigram)（运行时项，kgFtsMode 静态近似：kg_nod
 
 | # | 建议 | 问题 | 预期收益 | 实现成本 | 风险 |
 |---|---|---|---|---|---|
-| L1 | 热路径动态 prepare 缓存（kg-store.ts:246 多词 LIKE SQL 每查询重编译） | B7 | 微（<1ms 级） | 低 | 低 |
+| L1 | 热路径动态 prepare 缓存（kg-store.ts:132 `likeSearchTerms` 多词 LIKE SQL 每查询重编译） | B7 | 微（<1ms 级） | 低 | 低 |
 | L2 | 工具层检索缓存（patent_case_search 等每次全量执行引擎查询，provider 层已有 60s TtlCache 但工具直调无缓存） | B2（辅助） | 重复查询省 100ms 级 | 中（缓存语义设计） | 中（缓存一致性） |
 | L3 | A3/A7/A8 文档与行为修复（一致性自检门控或文档更正、SATI_CASE_DB 行为文档化、migrate 提示区分 schema） | A3/A7/A8 | 文档与行为一致 | 低 | 低 |
 | L4 | chunks 压缩现状文档化（62% 已源头压缩；trim --compress-chunks 对已压库无操作） | 档 B 发现 | 避免后续误判"压缩失效" | 极低（注释/文档） | 低 |

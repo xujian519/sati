@@ -35,7 +35,7 @@
 
 | # | 文件 | 规模 | 死因验证 |
 | --- | --- | --- | --- |
-| 1 | `ui/server/pilotdeck-bridge.js` | 67KB | 唯一入口 `ui/server/index.js:88` 已切 `sati-bridge.js`；函数签名 diff 证明 `sati-bridge.js` 是超集（多出 `readGatewayToken`/`tokenBudgetFromCompact`/`approvalDecideViaGateway`/`approvalListPendingViaGateway`/`loadPersistedStatsFromDiskUncached`） |
+| 1 | `ui/server/pilotdeck-bridge.js` | 67KB | 唯一入口 `ui/server/index.js:88` 已切 `sati-bridge.js`（注：index.js 已于 2026-08-17 分片为 entry 组装骨架，行号失效）；函数签名 diff 证明 `sati-bridge.js` 是超集（多出 `readGatewayToken`/`tokenBudgetFromCompact`/`approvalDecideViaGateway`/`approvalListPendingViaGateway`/`loadPersistedStatsFromDiskUncached`） |
 | 2 | `ui/server/pilotdeck-message.js` | 1KB | 仅被 #1 引用 |
 | 3 | `ui/server/pilotdeck-bridge.test.js` | 5.7KB | #1 的测试 |
 | 4 | `ui/server/services/pilotdeckConfig.js` | 27KB | `satiConfig.js` 是超集（多出 provider 全量校验、`SATI_*` 环境变量、旧 home 回退）；仅被 #5/#6 引用 |
