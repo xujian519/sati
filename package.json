@@ -63,7 +63,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
-    "@larksuiteoapi/node-sdk": "^1.72.0",
+    "@larksuiteoapi/node-sdk": "^1.73.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@rdkit/rdkit": "2025.3.4-1.0.0",
     "@vscode/ripgrep": "^1.18.0",
