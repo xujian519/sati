@@ -21,6 +21,7 @@ import type {
   MemoryCandidate,
   MemoryMessage,
   MemoryUserSummary,
+  ProjectIdentityHint,
   ProjectMetaRecord,
   ProjectShortlistCandidate,
 } from "../types.js";
@@ -928,6 +929,38 @@ export function buildSelectIndexProjectPrompt(input: {
     2,
   );
   return { systemPrompt, userPrompt };
+}
+
+export function buildExtractionUserPrompt(input: {
+  timestamp: string;
+  knownProjects: ProjectIdentityHint[];
+  batchContextMessages: MemoryMessage[];
+  focusMessages: MemoryMessage[];
+}): string {
+  const { timestamp, knownProjects, batchContextMessages, focusMessages } = input;
+  return JSON.stringify(
+    {
+      timestamp,
+      known_projects: knownProjects.slice(0, 20).map(project => ({
+        identity_key: project.identityKey,
+        project_id: project.projectId ?? "",
+        project_name: project.projectName,
+        description: truncateForPrompt(project.description, 180),
+        scope: project.scope,
+        updated_at: project.updatedAt,
+      })),
+      batch_context: batchContextMessages.map(message => ({
+        role: message.role,
+        content: truncateForPrompt(message.content, 260),
+      })),
+      focus_user_turn: focusMessages.map(message => ({
+        role: message.role,
+        content: truncateForPrompt(message.content, 320),
+      })),
+    },
+    null,
+    2,
+  );
 }
 
 export {

@@ -136,6 +136,7 @@ import {
   serializeTurnsForPrompt,
   buildSelectIndexProjectPrompt,
   buildSelectRecallProjectPrompt,
+  buildExtractionUserPrompt,
 } from "./llm-prompts.js";
 
 type LoggerLike = {
@@ -1548,69 +1549,16 @@ export class LlmMemoryExtractor {
       projectDefinitionSignal,
       feedbackInstructionSignal,
     } = signals;
-
+    const userPrompt = buildExtractionUserPrompt({
+      timestamp: input.timestamp,
+      knownProjects: input.knownProjects ?? [],
+      batchContextMessages,
+      focusMessages,
+    });
     try {
       const parsed = await this.callStructuredJsonWithDebug<{ items?: unknown[] }>({
-        systemPrompt: [
-          "You extract long-term memory candidates for one focus conversation turn using recent session context since the last indexing cursor.",
-          "Return JSON only with an items array.",
-          "Allowed item.type values: user, feedback, project.",
-          "Discard anything that is too transient or not useful across future sessions.",
-          "Use the batch context to interpret ambiguous references in the focus turn, but only emit memories justified by the focus user turn itself.",
-          "known_projects contains the durable identity of the current workspace project.",
-          "The assistant replies in the batch context are supporting context only. Never create a memory candidate from assistant wording alone.",
-          "For user items only keep stable personal identity/background facts or durable relationships. Never place project state, collaboration rules, reply preferences, language choices, style rules, or file boundaries inside user memory.",
-          "If a first-person statement is really about how the assistant should collaborate, write, format, reply, or operate on files, it is feedback, not user.",
-          "Global-seeming reply preferences and personal file boundaries still belong to feedback in this runtime. Examples: '默认使用中文输出', '如果有结论先给结论再给细节', '不要改动我的 .gitignore 文件', '我更关心项目进度、风险和上线阻塞点'.",
-          "If the focus turn tells the assistant how to collaborate, deliver, report, format, or structure outputs, that is feedback, not project.",
-          "If the focus turn says how outputs should be delivered, such as title count, body order, cover copy, progress update order, or reply structure, you must classify it as feedback rather than project.",
-          "For feedback items always provide rule, why, and how_to_apply.",
-          "For feedback items: why means why the user gave this feedback, usually a past incident, strong preference, or explicit dissatisfaction. Do not invent a reason if the transcript does not contain one.",
-          "For feedback items: how_to_apply means when or where this guidance should be applied, such as during progress updates, reviews, or project replies. Do not restate the rule verbatim if the application context is unclear.",
-          "If the transcript gives a rule but not enough evidence for why or how_to_apply, return an empty string for those fields.",
-          "Feedback belongs to the current project workflow; if project_id is unclear you may omit it because the runtime already knows the current project.",
-          "If the batch context contains the current project identity, you may attach project_id to the feedback item; leaving it empty is also acceptable in current-project mode.",
-          "If the focus user turn explicitly asks the assistant to remember something long-term, such as '请记住', '帮我记住', or 'remember this', treat that as a stronger signal that durable memory should be extracted.",
-          "That stronger signal is still based on the raw user text itself. Do not rely on any hidden remember flag or external rule; decide only from the visible transcript content.",
-          "For project items always prefer name plus description. project_id is optional and only refers to the current project identity when supplied.",
-          "If you only know the project's human-readable title, put it in name and leave project_id empty.",
-          "Do not put a human-readable project title only inside project_id.",
-          "For project items provide stage, decisions, constraints, next_steps, blockers, and absolute-date timeline entries when dates are mentioned. You may omit project_id when the project identity is still unclear.",
-          "A project-definition turn is about project name, what the project is, its stage, goals, blockers, milestones, or timeline. A delivery rule alone is never a project item.",
-          "Treat explicit project-definition statements as project memory even without a remember command. Examples: '这个项目先叫 Boreal', '它是一个本地知识库整理工具', '目前还在设计阶段'.",
-          "Natural follow-up turns can still be project memory even when they do not repeat the project name.",
-          "If the batch context already contains the current project identity, and the focus turn says things like '这个项目接下来最该补的是...', '这个方向还差...', '先把镜头顺序模板化', or mentions stage, priorities, blockers, constraints, target audience, or content angle, emit a project item for that current project.",
-          "If known_projects contains the current project identity and the focus turn states current scope, retained tools, risks, blockers, or project follow-up facts without repeating the project name, attach the memory to that current project instead of inventing a new top-level project.",
-          "Do not require the focus turn to repeat the project name when the batch context already makes the project identity unique.",
-          "Treat explicit collaboration instructions as feedback. Example: '在这个项目里，每次给我交付时都先给3个标题，再给正文，再给封面文案。'",
-          "When a transcript names a project, describes what the project is, or states its current stage, emit a project item unless the content is obviously too transient.",
-          "Do not create placeholder project names like overview, project, or memory-item.",
-          "Generic anchors such as '这个项目' only become project memory when the batch context provides a unique project identity.",
-          'If no durable memory should be saved, return {"items":[]}.',
-        ].join("\n"),
-        userPrompt: JSON.stringify(
-          {
-            timestamp: input.timestamp,
-            known_projects: (input.knownProjects ?? []).slice(0, 20).map(project => ({
-              identity_key: project.identityKey,
-              project_id: project.projectId ?? "",
-              project_name: project.projectName,
-              description: truncateForPrompt(project.description, 180),
-              scope: project.scope,
-              updated_at: project.updatedAt,
-            })),
-            batch_context: batchContextMessages.map(message => ({
-              role: message.role,
-              content: truncateForPrompt(message.content, 260),
-            })),
-            focus_user_turn: focusMessages.map(message => ({
-              role: message.role,
-              content: truncateForPrompt(message.content, 320),
-            })),
-          },
-          null,
-          2,
-        ),
+        systemPrompt: EXTRACTION_SYSTEM_PROMPT_LINES.join("\n"),
+        userPrompt,
         requestLabel: "File memory extraction",
         timeoutMs: input.timeoutMs ?? DEFAULT_FILE_MEMORY_EXTRACTION_TIMEOUT_MS,
         ...(input.agentId ? { agentId: input.agentId } : {}),
