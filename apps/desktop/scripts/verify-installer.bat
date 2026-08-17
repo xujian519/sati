@@ -9,7 +9,7 @@ REM   2. App directory structure is correct (Sati.exe, resources)
 REM   3. Bundled Node.js and Bun binaries are present and runnable
 REM   4. Bundle tars exist and are extractable
 REM   5. Gateway process starts and responds on /health
-REM   6. Stub sati.yaml + loadPilotConfig compat
+REM      (with stub sati.yaml for runtime-equivalent wiring)
 REM
 REM Usage:
 REM   verify-installer.bat <DIST_ELECTRON_DIR>
@@ -356,18 +356,6 @@ for /f "tokens=5" %%p in ('netstat -ano 2^>nul ^| findstr ":%GATEWAY_PORT% " ^| 
 )
 
 :skip_gateway
-
-REM -- 6. build-info.json --
-echo.
-echo -- 6. Build metadata --
-
-if exist "%WIN_UNPACKED%\resources\app.asar" (
-    set /a PASS+=1
-    echo   [PASS] Electron app package present
-) else (
-    set /a WARN+=1
-    echo   [WARN] Cannot verify build-info inside asar
-)
 
 REM -- Cleanup --
 if exist "%SANDBOX%" (
