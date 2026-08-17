@@ -336,6 +336,7 @@ info "Spawning UI server: $CCUI_DIR/server/index.js (port $PORT)"
   SATI_GATEWAY_URL="ws://127.0.0.1:${GATEWAY_PORT}/ws" \
   SATI_MAIN_DIR="$CCM_DIR" \
   BUN_BIN="$RES/bun-bin/bun" \
+  SATI_DESKTOP=1 \
   NO_COLOR=1 FORCE_COLOR=0 \
   "$RES/node-bin/node" server/index.js \
     > "$SRV_LOG" 2>&1 &
