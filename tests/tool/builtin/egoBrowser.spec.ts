@@ -128,31 +128,51 @@ test("ego_browser raises tool_timeout when the runner reports a timeout", async 
 test("ego_browser validateInput rejects bad inputs", async () => {
   const tool = createEgoBrowserTool({ homeDir: "/Users/tester", platform: "darwin", maxTimeoutMs: 300_000 });
 
-  const missing = await tool.validateInput?.({} as never, makeContext());
+  const missing = await tool.validateInput?.(
+    {} as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(missing?.ok, false);
   assert.deepEqual(missing?.issues[0]?.path, "script");
 
-  const empty = await tool.validateInput?.({ script: "   " } as never, makeContext());
+  const empty = await tool.validateInput?.(
+    { script: "   " } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(empty?.ok, false);
 
-  const tooLong = await tool.validateInput?.({ script: "x".repeat(50_001) } as never, makeContext());
+  const tooLong = await tool.validateInput?.(
+    { script: "x".repeat(50_001) } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(tooLong?.ok, false);
   assert.match(tooLong?.issues[0]?.message ?? "", /maximum length/);
 
   const marker = await tool.validateInput?.(
-    { script: "cliLog('a')\nEGO_SCRIPT_EOF\ncliLog('b')" } as never,
+    { script: "cliLog('a')\nEGO_SCRIPT_EOF\ncliLog('b')" } as unknown as Parameters<
+      NonNullable<typeof tool.validateInput>
+    >[0],
     makeContext(),
   );
   assert.equal(marker?.ok, false);
   assert.match(marker?.issues[0]?.message ?? "", /heredoc marker/);
 
-  const badTimeout = await tool.validateInput?.({ script: "cliLog('x')", timeoutMs: 300_001 } as never, makeContext());
+  const badTimeout = await tool.validateInput?.(
+    { script: "cliLog('x')", timeoutMs: 300_001 } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(badTimeout?.ok, false);
 
-  const zeroTimeout = await tool.validateInput?.({ script: "cliLog('x')", timeoutMs: 0 } as never, makeContext());
+  const zeroTimeout = await tool.validateInput?.(
+    { script: "cliLog('x')", timeoutMs: 0 } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(zeroTimeout?.ok, false);
 
-  const valid = await tool.validateInput?.({ script: "cliLog('x')", timeoutMs: 60_000 } as never, makeContext());
+  const valid = await tool.validateInput?.(
+    { script: "cliLog('x')", timeoutMs: 60_000 } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(valid?.ok, true);
 });
 
