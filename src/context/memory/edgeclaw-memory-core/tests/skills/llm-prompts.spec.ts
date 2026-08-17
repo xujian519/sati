@@ -87,6 +87,9 @@ describe("buildIndexPromptWindow", () => {
         description: "D",
         status: "active",
         updatedAt: "2026-01-01",
+        createdAt: "2026-01-01",
+        relativePath: "p1",
+        absolutePath: "/projects/p1",
       },
     });
     assert.ok(window.includes("current_project_meta"));
@@ -196,7 +199,7 @@ describe("buildSelectRecallProjectPrompt", () => {
       },
     ],
     allowEmpty: true,
-  };
+  } satisfies Parameters<typeof buildSelectRecallProjectPrompt>[0];
   it("allowEmpty 模式含空选择指令", () => {
     const { systemPrompt } = buildSelectRecallProjectPrompt(input);
     assert.ok(systemPrompt.includes("empty selected_project_id"));
@@ -210,7 +213,7 @@ describe("buildSelectRecallProjectPrompt", () => {
 
 describe("buildSelectIndexProjectPrompt", () => {
   const input = {
-    candidate: { type: "project", name: "P", description: "D" },
+    candidate: { type: "project", scope: "project", name: "P", description: "D" },
     candidatePreview: "preview",
     focusTurn: msg("user", "focus"),
     recentUserMessages: [],
@@ -227,9 +230,9 @@ describe("buildSelectIndexProjectPrompt", () => {
         matchedText: "",
       },
     ],
-  };
+  } satisfies Parameters<typeof buildSelectIndexProjectPrompt>[0];
   it("systemPrompt 含 attach_existing/create_new 语义", () => {
-    const { systemPrompt } = buildSelectIndexProjectPrompt(input as never);
+    const { systemPrompt } = buildSelectIndexProjectPrompt(input);
     assert.ok(systemPrompt.includes("attach_existing"));
     assert.ok(systemPrompt.includes("create_new"));
   });

@@ -308,7 +308,6 @@ export {
   normalizeMemoryRoute,
   normalizeStringArray,
   normalizeWhitespace,
-  recallProjectSourcePriority,
   sanitizeHeaders,
   stripTrailingSlash,
   truncate,

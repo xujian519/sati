@@ -118,7 +118,6 @@ function tryParseLooseMemoryCreatePayload(raw: string): RawMemoryCreatePayload |
 
 export {
   decodeLooseJsonString,
-  escapeRegexLiteral,
   extractFirstJsonObject,
   extractLooseJsonBooleanProperty,
   extractLooseJsonEnvelope,
