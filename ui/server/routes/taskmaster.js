@@ -15,7 +15,6 @@ import { promises as fsPromises } from "fs";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
-import os from "os";
 import { extractProjectDirectory } from "../projects.js";
 import { detectTaskMasterMCPServer } from "../utils/mcp-detector.js";
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from "../utils/taskmaster-websocket.js";
@@ -32,6 +31,44 @@ function spawnCli(command, args, options = {}) {
 }
 
 /**
+ * Run a CLI command via spawnCli and capture its output.
+ * @param {string} command - Command to run
+ * @param {string[]} args - Command arguments
+ * @param {{cwd?: string, shell?: boolean, stdin?: string}} [options] - Spawn options, plus optional stdin input
+ * @returns {Promise<{code: number|null, stdout: string, stderr: string}>}
+ */
+function runCliProcess(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawnCli(command, args, {
+      ...options,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", data => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on("data", data => {
+      stderr += data.toString();
+    });
+
+    child.on("close", code => {
+      resolve({ code, stdout, stderr });
+    });
+
+    child.on("error", reject);
+
+    if (options.stdin) {
+      child.stdin.write(options.stdin);
+    }
+    child.stdin.end();
+  });
+}
+
+/**
  * Check if TaskMaster CLI is installed globally
  * @returns {Promise<Object>} Installation status result
  */
@@ -44,14 +81,13 @@ async function checkTaskMasterInstallation() {
     });
 
     let output = "";
-    let errorOutput = "";
 
     child.stdout.on("data", data => {
       output += data.toString();
     });
 
-    child.stderr.on("data", data => {
-      errorOutput += data.toString();
+    child.stderr.on("data", () => {
+      // Drain stderr without accumulating (output not consumed by callers)
     });
 
     child.on("close", code => {
@@ -145,7 +181,7 @@ async function detectTaskMasterFolder(projectPath) {
       try {
         await fsPromises.access(filePath, fs.constants.R_OK);
         fileStatus[file] = true;
-      } catch (error) {
+      } catch {
         fileStatus[file] = false;
         if (file === "tasks/tasks.json") {
           hasEssentialFiles = false;
@@ -239,6 +275,25 @@ async function detectTaskMasterFolder(projectPath) {
 
 // MCP detection is now handled by the centralized utility
 
+/**
+ * Determine the combined TaskMaster + MCP configuration status for a project.
+ * @param {{hasTaskmaster: boolean, hasEssentialFiles: boolean}} taskMasterResult - TaskMaster folder detection result
+ * @param {{hasMCPServer: boolean, isConfigured: boolean}} mcpResult - MCP server detection result
+ * @returns {"fully-configured"|"taskmaster-only"|"mcp-only"|"not-configured"}
+ */
+function determineTaskStatus(taskMasterResult, mcpResult) {
+  if (taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles) {
+    if (mcpResult.hasMCPServer && mcpResult.isConfigured) {
+      return "fully-configured";
+    }
+    return "taskmaster-only";
+  }
+  if (mcpResult.hasMCPServer && mcpResult.isConfigured) {
+    return "mcp-only";
+  }
+  return "not-configured";
+}
+
 // API Routes
 
 /**
@@ -316,16 +371,7 @@ router.get("/detect/:projectName", async (req, res) => {
     ]);
 
     // Determine overall status
-    let status = "not-configured";
-    if (taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles) {
-      if (mcpResult.hasMCPServer && mcpResult.isConfigured) {
-        status = "fully-configured";
-      } else {
-        status = "taskmaster-only";
-      }
-    } else if (mcpResult.hasMCPServer && mcpResult.isConfigured) {
-      status = "mcp-only";
-    }
+    const status = determineTaskStatus(taskMasterResult, mcpResult);
 
     const responseData = {
       projectName,
@@ -378,16 +424,7 @@ router.get("/detect-all", async (req, res) => {
         ]);
 
         // Determine status
-        let status = "not-configured";
-        if (taskMasterResult.hasTaskmaster && taskMasterResult.hasEssentialFiles) {
-          if (mcpResult.hasMCPServer && mcpResult.isConfigured) {
-            status = "fully-configured";
-          } else {
-            status = "taskmaster-only";
-          }
-        } else if (mcpResult.hasMCPServer && mcpResult.isConfigured) {
-          status = "mcp-only";
-        }
+        const status = determineTaskStatus(taskMasterResult, mcpResult);
 
         return {
           projectName: project.name,
@@ -467,7 +504,7 @@ router.get("/next/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -476,43 +513,21 @@ router.get("/next/:projectName", async (req, res) => {
 
     // Try to execute task-master next command
     try {
-      const nextTaskCommand = spawnCli("task-master", ["next"], {
+      const { code, stdout, stderr } = await runCliProcess("task-master", ["next"], {
         cwd: projectPath,
-        stdio: ["pipe", "pipe", "pipe"],
         shell: true,
       });
 
-      let stdout = "";
-      let stderr = "";
-
-      nextTaskCommand.stdout.on("data", data => {
-        stdout += data.toString();
-      });
-
-      nextTaskCommand.stderr.on("data", data => {
-        stderr += data.toString();
-      });
-
-      await new Promise((resolve, reject) => {
-        nextTaskCommand.on("close", code => {
-          if (code === 0) {
-            resolve();
-          } else {
-            reject(new Error(`task-master next failed with code ${code}: ${stderr}`));
-          }
-        });
-
-        nextTaskCommand.on("error", error => {
-          reject(error);
-        });
-      });
+      if (code !== 0) {
+        throw new Error(`task-master next failed with code ${code}: ${stderr}`);
+      }
 
       // Parse the output - task-master next usually returns JSON
       let nextTaskData = null;
       if (stdout.trim()) {
         try {
           nextTaskData = JSON.parse(stdout);
-        } catch (parseError) {
+        } catch {
           // If not JSON, treat as plain text
           nextTaskData = { message: stdout.trim() };
         }
@@ -576,7 +591,7 @@ router.get("/tasks/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -589,7 +604,7 @@ router.get("/tasks/:projectName", async (req, res) => {
     // Check if tasks file exists
     try {
       await fsPromises.access(tasksFilePath);
-    } catch (error) {
+    } catch {
       return res.json({
         projectName,
         tasks: [],
@@ -689,7 +704,7 @@ router.get("/prd/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -701,7 +716,7 @@ router.get("/prd/:projectName", async (req, res) => {
     // Check if docs directory exists
     try {
       await fsPromises.access(docsPath, fs.constants.R_OK);
-    } catch (error) {
+    } catch {
       return res.json({
         projectName,
         prdFiles: [],
@@ -780,7 +795,7 @@ router.post("/prd/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -847,7 +862,7 @@ router.get("/prd/:projectName/:fileName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -859,7 +874,7 @@ router.get("/prd/:projectName/:fileName", async (req, res) => {
     // Check if file exists
     try {
       await fsPromises.access(filePath, fs.constants.R_OK);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "PRD file not found",
         message: `File "${fileName}" does not exist`,
@@ -910,7 +925,7 @@ router.delete("/prd/:projectName/:fileName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -922,7 +937,7 @@ router.delete("/prd/:projectName/:fileName", async (req, res) => {
     // Check if file exists
     try {
       await fsPromises.access(filePath, fs.constants.F_OK);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "PRD file not found",
         message: `File "${fileName}" does not exist`,
@@ -968,7 +983,7 @@ router.post("/init/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -983,58 +998,41 @@ router.post("/init/:projectName", async (req, res) => {
         error: "TaskMaster already initialized",
         message: "TaskMaster is already configured for this project",
       });
-    } catch (error) {
+    } catch {
       // Directory doesn't exist, we can proceed
     }
 
     // Run taskmaster init command
-    const initProcess = spawnCli("npx", ["task-master", "init"], {
+    const { code, stdout, stderr } = await runCliProcess("npx", ["task-master", "init"], {
       cwd: projectPath,
-      stdio: ["pipe", "pipe", "pipe"],
       shell: true,
+      stdin: "yes\n",
     });
 
-    let stdout = "";
-    let stderr = "";
-
-    initProcess.stdout.on("data", data => {
-      stdout += data.toString();
-    });
-
-    initProcess.stderr.on("data", data => {
-      stderr += data.toString();
-    });
-
-    initProcess.on("close", code => {
-      if (code === 0) {
-        // Broadcast TaskMaster project update via WebSocket
-        if (req.app.locals.wss) {
-          broadcastTaskMasterProjectUpdate(req.app.locals.wss, projectName, {
-            hasTaskmaster: true,
-            status: "initialized",
-          });
-        }
-
-        res.json({
-          projectName,
-          projectPath,
-          message: "TaskMaster initialized successfully",
-          output: stdout,
-          timestamp: new Date().toISOString(),
-        });
-      } else {
-        console.error("TaskMaster init failed:", stderr);
-        res.status(500).json({
-          error: "Failed to initialize TaskMaster",
-          message: stderr || stdout,
-          code,
+    if (code === 0) {
+      // Broadcast TaskMaster project update via WebSocket
+      if (req.app.locals.wss) {
+        broadcastTaskMasterProjectUpdate(req.app.locals.wss, projectName, {
+          hasTaskmaster: true,
+          status: "initialized",
         });
       }
-    });
 
-    // Send 'yes' responses to automated prompts
-    initProcess.stdin.write("yes\n");
-    initProcess.stdin.end();
+      res.json({
+        projectName,
+        projectPath,
+        message: "TaskMaster initialized successfully",
+        output: stdout,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.error("TaskMaster init failed:", stderr);
+      res.status(500).json({
+        error: "Failed to initialize TaskMaster",
+        message: stderr || stdout,
+        code,
+      });
+    }
   } catch (error) {
     console.error("TaskMaster init error:", error);
     res.status(500).json({
@@ -1064,7 +1062,7 @@ router.post("/add-task/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -1090,52 +1088,36 @@ router.post("/add-task/:projectName", async (req, res) => {
     }
 
     // Run task-master add-task command
-    const addTaskProcess = spawnCli("npx", args, {
+    const { code, stdout, stderr } = await runCliProcess("npx", args, {
       cwd: projectPath,
-      stdio: ["pipe", "pipe", "pipe"],
       shell: true,
     });
 
-    let stdout = "";
-    let stderr = "";
+    console.log("Add task process completed with code:", code);
+    console.log("Stdout:", stdout);
+    console.log("Stderr:", stderr);
 
-    addTaskProcess.stdout.on("data", data => {
-      stdout += data.toString();
-    });
-
-    addTaskProcess.stderr.on("data", data => {
-      stderr += data.toString();
-    });
-
-    addTaskProcess.on("close", code => {
-      console.log("Add task process completed with code:", code);
-      console.log("Stdout:", stdout);
-      console.log("Stderr:", stderr);
-
-      if (code === 0) {
-        // Broadcast task update via WebSocket
-        if (req.app.locals.wss) {
-          broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
-        }
-
-        res.json({
-          projectName,
-          projectPath,
-          message: "Task added successfully",
-          output: stdout,
-          timestamp: new Date().toISOString(),
-        });
-      } else {
-        console.error("Add task failed:", stderr);
-        res.status(500).json({
-          error: "Failed to add task",
-          message: stderr || stdout,
-          code,
-        });
+    if (code === 0) {
+      // Broadcast task update via WebSocket
+      if (req.app.locals.wss) {
+        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
       }
-    });
 
-    addTaskProcess.stdin.end();
+      res.json({
+        projectName,
+        projectPath,
+        message: "Task added successfully",
+        output: stdout,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.error("Add task failed:", stderr);
+      res.status(500).json({
+        error: "Failed to add task",
+        message: stderr || stdout,
+        code,
+      });
+    }
   } catch (error) {
     console.error("Add task error:", error);
     res.status(500).json({
@@ -1158,7 +1140,7 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -1167,53 +1149,37 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
 
     // If only updating status, use set-status command
     if (status && Object.keys(req.body).length === 1) {
-      const setStatusProcess = spawnCli(
+      const { code, stdout, stderr } = await runCliProcess(
         "npx",
         ["task-master-ai", "set-status", `--id=${taskId}`, `--status=${status}`],
         {
           cwd: projectPath,
-          stdio: ["pipe", "pipe", "pipe"],
           shell: true,
         },
       );
 
-      let stdout = "";
-      let stderr = "";
-
-      setStatusProcess.stdout.on("data", data => {
-        stdout += data.toString();
-      });
-
-      setStatusProcess.stderr.on("data", data => {
-        stderr += data.toString();
-      });
-
-      setStatusProcess.on("close", code => {
-        if (code === 0) {
-          // Broadcast task update via WebSocket
-          if (req.app.locals.wss) {
-            broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
-          }
-
-          res.json({
-            projectName,
-            projectPath,
-            taskId,
-            message: "Task status updated successfully",
-            output: stdout,
-            timestamp: new Date().toISOString(),
-          });
-        } else {
-          console.error("Set task status failed:", stderr);
-          res.status(500).json({
-            error: "Failed to update task status",
-            message: stderr || stdout,
-            code,
-          });
+      if (code === 0) {
+        // Broadcast task update via WebSocket
+        if (req.app.locals.wss) {
+          broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
         }
-      });
 
-      setStatusProcess.stdin.end();
+        res.json({
+          projectName,
+          projectPath,
+          taskId,
+          message: "Task status updated successfully",
+          output: stdout,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.error("Set task status failed:", stderr);
+        res.status(500).json({
+          error: "Failed to update task status",
+          message: stderr || stdout,
+          code,
+        });
+      }
     } else {
       // For other updates, use update-task command with a prompt describing the changes
       const updates = [];
@@ -1224,49 +1190,37 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
 
       const prompt = `Update task with the following changes: ${updates.join(", ")}`;
 
-      const updateProcess = spawnCli("npx", ["task-master-ai", "update-task", `--id=${taskId}`, `--prompt=${prompt}`], {
-        cwd: projectPath,
-        stdio: ["pipe", "pipe", "pipe"],
-        shell: true,
-      });
+      const { code, stdout, stderr } = await runCliProcess(
+        "npx",
+        ["task-master-ai", "update-task", `--id=${taskId}`, `--prompt=${prompt}`],
+        {
+          cwd: projectPath,
+          shell: true,
+        },
+      );
 
-      let stdout = "";
-      let stderr = "";
-
-      updateProcess.stdout.on("data", data => {
-        stdout += data.toString();
-      });
-
-      updateProcess.stderr.on("data", data => {
-        stderr += data.toString();
-      });
-
-      updateProcess.on("close", code => {
-        if (code === 0) {
-          // Broadcast task update via WebSocket
-          if (req.app.locals.wss) {
-            broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
-          }
-
-          res.json({
-            projectName,
-            projectPath,
-            taskId,
-            message: "Task updated successfully",
-            output: stdout,
-            timestamp: new Date().toISOString(),
-          });
-        } else {
-          console.error("Update task failed:", stderr);
-          res.status(500).json({
-            error: "Failed to update task",
-            message: stderr || stdout,
-            code,
-          });
+      if (code === 0) {
+        // Broadcast task update via WebSocket
+        if (req.app.locals.wss) {
+          broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
         }
-      });
 
-      updateProcess.stdin.end();
+        res.json({
+          projectName,
+          projectPath,
+          taskId,
+          message: "Task updated successfully",
+          output: stdout,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        console.error("Update task failed:", stderr);
+        res.status(500).json({
+          error: "Failed to update task",
+          message: stderr || stdout,
+          code,
+        });
+      }
     }
   } catch (error) {
     console.error("Update task error:", error);
@@ -1290,7 +1244,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -1302,7 +1256,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
     // Check if PRD file exists
     try {
       await fsPromises.access(prdPath, fs.constants.F_OK);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "PRD file not found",
         message: `File "${fileName}" does not exist in .taskmaster/docs/`,
@@ -1323,49 +1277,33 @@ router.post("/parse-prd/:projectName", async (req, res) => {
     args.push("--research"); // Use research for better PRD parsing
 
     // Run task-master parse-prd command
-    const parsePRDProcess = spawnCli("npx", args, {
+    const { code, stdout, stderr } = await runCliProcess("npx", args, {
       cwd: projectPath,
-      stdio: ["pipe", "pipe", "pipe"],
       shell: true,
     });
 
-    let stdout = "";
-    let stderr = "";
-
-    parsePRDProcess.stdout.on("data", data => {
-      stdout += data.toString();
-    });
-
-    parsePRDProcess.stderr.on("data", data => {
-      stderr += data.toString();
-    });
-
-    parsePRDProcess.on("close", code => {
-      if (code === 0) {
-        // Broadcast task update via WebSocket
-        if (req.app.locals.wss) {
-          broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
-        }
-
-        res.json({
-          projectName,
-          projectPath,
-          prdFile: fileName,
-          message: "PRD parsed and tasks generated successfully",
-          output: stdout,
-          timestamp: new Date().toISOString(),
-        });
-      } else {
-        console.error("Parse PRD failed:", stderr);
-        res.status(500).json({
-          error: "Failed to parse PRD",
-          message: stderr || stdout,
-          code,
-        });
+    if (code === 0) {
+      // Broadcast task update via WebSocket
+      if (req.app.locals.wss) {
+        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectName);
       }
-    });
 
-    parsePRDProcess.stdin.end();
+      res.json({
+        projectName,
+        projectPath,
+        prdFile: fileName,
+        message: "PRD parsed and tasks generated successfully",
+        output: stdout,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.error("Parse PRD failed:", stderr);
+      res.status(500).json({
+        error: "Failed to parse PRD",
+        message: stderr || stdout,
+        code,
+      });
+    }
   } catch (error) {
     console.error("Parse PRD error:", error);
     res.status(500).json({
@@ -1839,7 +1777,7 @@ router.post("/apply-template/:projectName", async (req, res) => {
     let projectPath;
     try {
       projectPath = await extractProjectDirectory(projectName);
-    } catch (error) {
+    } catch {
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,

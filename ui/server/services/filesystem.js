@@ -61,7 +61,7 @@ const getWindowsDriveSuggestions = async () => {
         name: drivePath,
         type: "directory",
       };
-    } catch (error) {
+    } catch {
       return null;
     }
   });
@@ -333,7 +333,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
         const otherPerm = mode & 7;
         item.permissions = ((mode >> 6) & 7).toString() + ((mode >> 3) & 7).toString() + (mode & 7).toString();
         item.permissionsRwx = permToRwx(ownerPerm) + permToRwx(groupPerm) + permToRwx(otherPerm);
-      } catch (statError) {
+      } catch {
         // If stat fails, provide default values
         item.size = 0;
         item.modified = null;
@@ -347,7 +347,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
           // Check if we can access the directory before trying to read it
           await fsPromises.access(item.path, fs.constants.R_OK);
           item.children = await getFileTree(item.path, maxDepth, currentDepth + 1, showHidden);
-        } catch (e) {
+        } catch {
           // Silently skip directories we can't access (permission denied, etc.)
           item.children = [];
         }

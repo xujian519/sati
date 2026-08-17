@@ -100,8 +100,12 @@ export default tseslint.config(
     // ui/server 边界：禁止直接导入 src/ 内部实现（CLAUDE.md「ui/ 不得直接导入 src/」）。
     // 白名单 = 现存迁移中的合法入口；每个条目收敛后（走 gateway 协议或 barrel）即从 except 摘除。
     // 新增的 ui/server → src/ 导入会被拦截（error）。
+    //
+    // unused-imports（warn，与 src 一致）：ui/server 曾是 lint 盲区（ui lint 只跑 src/），
+    // 2026-08 清理 102 处遗留未使用 import/死代码后开闸，防止再累积。
+    // 详见 docs/ui-server-unused-import-cleanup-plan.md。
     files: ["server/**/*.{js,mjs}"],
-    plugins: { "import-x": importX },
+    plugins: { "import-x": importX, "unused-imports": unusedImports },
     rules: {
       "import-x/no-restricted-paths": [
         "error",
@@ -143,6 +147,17 @@ export default tseslint.config(
           ],
         },
       ],
+      "unused-imports/no-unused-imports": "warn",
+      "unused-imports/no-unused-vars": [
+        "warn",
+        {
+          vars: "all",
+          varsIgnorePattern: "^_",
+          args: "after-used",
+          argsIgnorePattern: "^_",
+        },
+      ],
+      "no-unused-vars": "off",
     },
   },
 );

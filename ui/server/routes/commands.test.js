@@ -48,14 +48,6 @@ describe("commands routes", () => {
 });
 
 async function createCommandsApp() {
-  vi.doMock("../../shared/modelConstants.js", () => ({
-    CODEX_MODELS: [],
-    CURSOR_MODELS: [],
-  }));
-  vi.doMock("../utils/claude-runtime-config.js", () => ({
-    getClaudeRuntimeModelConfig: vi.fn(() => ({})),
-    getClaudeRuntimeModelValues: vi.fn(() => []),
-  }));
   vi.doMock("../services/satiConfig.js", () => ({
     readSatiConfigFile: vi.fn(() => ({ config: {} })),
     resolveModel: vi.fn(model => model),

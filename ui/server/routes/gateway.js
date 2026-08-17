@@ -27,10 +27,6 @@ const FEISHU_ACCOUNTS_URLS = {
   feishu: "https://accounts.feishu.cn",
   lark: "https://accounts.larksuite.com",
 };
-const FEISHU_OPEN_URLS = {
-  feishu: "https://open.feishu.cn",
-  lark: "https://open.larksuite.com",
-};
 const REGISTRATION_PATH = "/oauth/v1/app/registration";
 
 async function notifyGatewayReload() {
@@ -359,7 +355,7 @@ router.get("/feishu/qr-poll", async (req, res) => {
 
     // Still pending
     res.json({ pending: true });
-  } catch (err) {
+  } catch {
     res.json({ pending: true });
   }
 });

@@ -40,7 +40,7 @@ export async function detectTaskMasterMCPServer() {
         configData = JSON.parse(fileContent);
         configPath = filepath;
         break;
-      } catch (error) {
+      } catch {
         // File doesn't exist or is not valid JSON, try next
         continue;
       }
@@ -172,7 +172,7 @@ export async function getAllMCPServers() {
         configData = JSON.parse(fileContent);
         configPath = filepath;
         break;
-      } catch (error) {
+      } catch {
         continue;
       }
     }

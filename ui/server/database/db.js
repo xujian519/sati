@@ -618,7 +618,7 @@ const appConfigDb = {
     try {
       const row = db.prepare("SELECT value FROM app_config WHERE key = ?").get(key);
       return row?.value || null;
-    } catch (err) {
+    } catch {
       return null;
     }
   },
