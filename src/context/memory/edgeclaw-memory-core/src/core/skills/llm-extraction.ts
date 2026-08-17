@@ -10,6 +10,23 @@ import type {
   RetrievalPromptDebug,
 } from "../types.js";
 import { truncate as truncateBase } from "../utils/text.js";
+import {
+  DEFAULT_REQUEST_MAX_ATTEMPTS,
+  REQUEST_RETRYABLE_STATUS_CODES,
+  computeRetryDelayMs,
+  isTimeoutError,
+  isTransientRequestError,
+  resolveRequestTimeoutMs,
+  sleep,
+} from "./request-retry.js";
+import {
+  extractFirstJsonObject,
+  extractLooseJsonEnvelope,
+  extractLooseJsonBooleanProperty,
+  extractLooseJsonStringProperty,
+  tryParseLooseMemoryCreatePayload,
+  type RawMemoryCreatePayload,
+} from "./llm-json.js";
 
 type LoggerLike = {
   info?: (...args: unknown[]) => void;
@@ -19,10 +36,6 @@ type LoggerLike = {
 
 type ProviderHeaders = Record<string, string> | undefined;
 type PromptDebugSink = (debug: RetrievalPromptDebug) => void;
-
-const REQUEST_RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
-const DEFAULT_REQUEST_MAX_ATTEMPTS = 3;
-const DEFAULT_REQUEST_RETRY_BASE_DELAY_MS = 1_000;
 
 export interface FileMemoryExtractionDiscardedCandidate {
   reason: string;
@@ -37,46 +50,6 @@ export interface FileMemoryExtractionDebug {
   discarded: FileMemoryExtractionDiscardedCandidate[];
   finalCandidates: MemoryCandidate[];
   fallbackApplied?: string;
-}
-
-function isTimeoutError(error: unknown): boolean {
-  return error instanceof Error && (error.name === "AbortError" || /timeout/i.test(error.message));
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function getErrorStatusCode(error: unknown): number | null {
-  if (
-    error &&
-    typeof error === "object" &&
-    "status" in error &&
-    typeof (error as { status?: unknown }).status === "number"
-  ) {
-    return (error as { status: number }).status;
-  }
-  return null;
-}
-
-function isTransientRequestError(error: unknown): boolean {
-  const status = getErrorStatusCode(error);
-  if (status !== null) return REQUEST_RETRYABLE_STATUS_CODES.has(status);
-  if (isTimeoutError(error)) return true;
-  if (!(error instanceof Error)) return false;
-  return /(fetch failed|network|econnreset|econnrefused|etimedout|socket hang up|temporar|rate limit|too many requests)/i.test(
-    error.message,
-  );
-}
-
-function computeRetryDelayMs(attemptIndex: number): number {
-  return DEFAULT_REQUEST_RETRY_BASE_DELAY_MS * 2 ** attemptIndex;
-}
-
-function resolveRequestTimeoutMs(timeoutMs: number | undefined): number | null {
-  if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs)) return 30_000;
-  if (timeoutMs <= 0) return null;
-  return timeoutMs;
 }
 
 interface ModelSelection {
@@ -120,14 +93,6 @@ interface RawMemoryClassificationLabelPayload {
 interface RawMemoryClassificationPayload {
   should_store?: unknown;
   labels?: unknown;
-}
-
-interface RawMemoryCreatePayload {
-  skip?: unknown;
-  reason?: unknown;
-  name?: unknown;
-  description?: unknown;
-  markdown?: unknown;
 }
 
 interface RawDreamFileGlobalPlanProjectPayload {
@@ -519,56 +484,6 @@ export interface LlmDreamProjectMetaReviewOutput {
   };
 }
 
-const EXTRACTION_SYSTEM_PROMPT = `
-You are a memory indexing engine for a conversational assistant.
-
-Your job is to convert a visible user/assistant conversation into durable memory indexes.
-
-Rules:
-- Only use information explicitly present in the conversation.
-- Ignore system prompts, tool scaffolding, hidden reasoning, formatting artifacts, and operational chatter.
-- Be conservative. If something is ambiguous, omit it.
-- Track projects only when they look like a real ongoing effort, task stream, research topic, implementation effort, or recurring problem worth revisiting later.
-- "Project" here is broad: it can be a workstream, submission, research effort, health/problem thread, or other ongoing topic the user is likely to revisit.
-- If the conversation contains multiple independent ongoing threads, return multiple project items instead of collapsing them into one.
-- Repeated caregiving, illness handling, symptom tracking, recovery follow-up, or other ongoing real-world problem-solving threads should be treated as projects when the user is actively managing them.
-- Example: "friend has diarrhea / user buys medicine / later reports recovery" is a project-like thread.
-- Example: "preparing an EMNLP submission" is another independent project-like thread.
-- Do not treat casual one-off mentions as projects.
-- Extract facts only when they are likely to matter in future conversations: preferences, constraints, goals, identity, long-lived context, stable relationships, or durable project context.
-- The facts are intermediate material for a later global profile rewrite, so prefer stable facts over temporary situation notes.
-- Natural-language output fields must use the dominant language of the user messages. If user messages are mixed, prefer the most recent user language. Keys and enums must stay in English.
-- Each project summary must be a compact 1-2 sentence project memory, not a generic status line.
-- A good project summary should preserve: what the project is, what stage it is in now, and the next step / blocker / missing info when available.
-- Do not output vague summaries like "the user is working on this project", "progress is going well", "things are okay", or "handling something" unless the project-specific context is also included.
-- latest_progress must stay short and only capture the newest meaningful update, newest blocker, or newest confirmation state.
-- Return valid JSON only. No markdown fences, no commentary.
-
-Use this exact JSON shape:
-{
-  "summary": "short session summary",
-  "situation_time_info": "short time-aware progress line",
-  "facts": [
-    {
-      "category": "preference | profile | goal | constraint | relationship | project | context | other",
-      "subject": "stable english key fragment",
-      "value": "durable fact text",
-      "confidence": 0.0
-    }
-  ],
-  "projects": [
-    {
-      "key": "stable english identifier, lower-kebab-case",
-      "name": "project name as the user would recognize it",
-      "status": "planned | in_progress | done",
-      "summary": "rolling 1-2 sentence summary: what this project is + current phase + next step/blocker when known",
-      "latest_progress": "short latest meaningful progress or blocker, without repeating the full project background",
-      "confidence": 0.0
-    }
-  ]
-}
-`.trim();
-
 const USER_PROFILE_REWRITE_SYSTEM_PROMPT = `
 You rewrite the single "身份背景" section of a global user profile for a conversational memory system.
 
@@ -919,15 +834,6 @@ function resolveAgentPrimaryModel(config: Record<string, unknown>, agentId?: str
     return defaultsModel.primary.trim();
   }
 
-  return undefined;
-}
-
-function detectPreferredOutputLanguage(messages: MemoryMessage[]): string | undefined {
-  const userText = messages
-    .filter(message => message.role === "user")
-    .map(message => message.content)
-    .join("\n");
-  if (/[\u4e00-\u9fff]/.test(userText)) return "Simplified Chinese";
   return undefined;
 }
 
@@ -1361,120 +1267,6 @@ function buildGeneralProjectMetaMergePrompt(input: LlmGeneralProjectMetaMergeInp
   );
 }
 
-function extractFirstJsonObject(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) throw new Error("Empty extraction response");
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed;
-
-  const start = trimmed.indexOf("{");
-  if (start < 0) throw new Error("No JSON object found in extraction response");
-
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let index = start; index < trimmed.length; index += 1) {
-    const char = trimmed[index]!;
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-    if (char === "{") depth += 1;
-    if (char === "}") {
-      depth -= 1;
-      if (depth === 0) return trimmed.slice(start, index + 1);
-    }
-  }
-
-  throw new Error("Incomplete JSON object in extraction response");
-}
-
-function extractLooseJsonEnvelope(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) throw new Error("Empty extraction response");
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start < 0 || end <= start) {
-    throw new Error("No JSON envelope found in extraction response");
-  }
-  return trimmed.slice(start, end + 1);
-}
-
-function escapeRegexLiteral(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function decodeLooseJsonString(value: string): string {
-  return value
-    .replace(/\\r\\n/g, "\n")
-    .replace(/\\n/g, "\n")
-    .replace(/\\r/g, "\r")
-    .replace(/\\t/g, "\t")
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, "\\");
-}
-
-function extractLooseJsonBooleanProperty(source: string, key: string): boolean | undefined {
-  const match = source.match(new RegExp(`"${escapeRegexLiteral(key)}"\\s*:\\s*(true|false)`, "i"));
-  if (!match) return undefined;
-  return match[1]?.toLowerCase() === "true";
-}
-
-function extractLooseJsonStringProperty(source: string, key: string, nextKeys: string[]): string | undefined {
-  const escapedKey = escapeRegexLiteral(key);
-  const nextKeyPattern = nextKeys.map(item => escapeRegexLiteral(item)).join("|");
-  const pattern =
-    nextKeys.length > 0
-      ? new RegExp(`"${escapedKey}"\\s*:\\s*"([\\s\\S]*?)"\\s*,\\s*"(${nextKeyPattern})"\\s*:`, "i")
-      : new RegExp(`"${escapedKey}"\\s*:\\s*"([\\s\\S]*)"\\s*}\\s*$`, "i");
-  const match = source.match(pattern);
-  return match?.[1] ? decodeLooseJsonString(match[1]) : undefined;
-}
-
-function tryParseLooseMemoryCreatePayload(raw: string): RawMemoryCreatePayload | null {
-  const envelope = extractLooseJsonEnvelope(raw);
-  const payload: RawMemoryCreatePayload = {
-    ...(extractLooseJsonBooleanProperty(envelope, "skip") !== undefined
-      ? { skip: extractLooseJsonBooleanProperty(envelope, "skip") }
-      : {}),
-    ...(extractLooseJsonStringProperty(envelope, "reason", ["name", "description", "markdown"])
-      ? { reason: extractLooseJsonStringProperty(envelope, "reason", ["name", "description", "markdown"]) }
-      : {}),
-    ...(extractLooseJsonStringProperty(envelope, "name", ["description", "markdown"])
-      ? { name: extractLooseJsonStringProperty(envelope, "name", ["description", "markdown"]) }
-      : {}),
-    ...(extractLooseJsonStringProperty(envelope, "description", ["markdown"])
-      ? { description: extractLooseJsonStringProperty(envelope, "description", ["markdown"]) }
-      : {}),
-    ...(extractLooseJsonStringProperty(envelope, "markdown", [])
-      ? { markdown: extractLooseJsonStringProperty(envelope, "markdown", []) }
-      : {}),
-  };
-  return typeof payload.name === "string" &&
-    typeof payload.description === "string" &&
-    typeof payload.markdown === "string"
-    ? payload
-    : null;
-}
-
-function slugifyKeyPart(value: string): string {
-  const normalized = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "item";
-}
-
 function clampConfidence(value: unknown, fallback: number): number {
   if (typeof value !== "number" || Number.isNaN(value)) return fallback;
   return Math.max(0, Math.min(1, value));
@@ -1700,34 +1492,8 @@ function uniqueStrings(items: readonly string[], maxItems: number): string[] {
   return Array.from(new Set(items.map(item => item.trim()).filter(Boolean))).slice(0, maxItems);
 }
 
-function pickLongest(left: string, right: string): string {
-  const a = normalizeWhitespace(left);
-  const b = normalizeWhitespace(right);
-  if (!a) return b;
-  if (!b) return a;
-  return b.length >= a.length ? b : a;
-}
-
 function stripExplicitRememberLead(text: string): string {
   return normalizeWhitespace(text);
-}
-
-function splitPreferenceHints(text: string): string[] {
-  const normalized = text
-    .replace(/\r/g, "\n")
-    .replace(/[：:]/g, "\n")
-    .replace(/[；;]/g, "\n")
-    .split("\n")
-    .map(line => normalizeWhitespace(line))
-    .filter(Boolean);
-  return Array.from(
-    new Set(
-      normalized
-        .map(line => stripExplicitRememberLead(line))
-        .filter(Boolean)
-        .filter(line => line.length >= 4),
-    ),
-  ).slice(0, 10);
 }
 
 function splitProfileFacts(text: string): string[] {
@@ -1755,51 +1521,6 @@ function stripMarkdownSyntax(text: string): string {
 
 function isStableFormalProjectId(value: string | undefined): boolean {
   return STABLE_FORMAL_PROJECT_ID_PATTERN.test((value ?? "").trim());
-}
-
-function canonicalizeUserFact(value: string): string {
-  return normalizeWhitespace(value)
-    .toLowerCase()
-    .replace(/[，。；;,:：.!?]/g, "")
-    .replace(/^技术栈常用/, "常用")
-    .replace(/^主要使用/, "使用")
-    .replace(/^我(?:现在)?常用/, "常用")
-    .replace(/^我(?:平时)?更?习惯(?:使用)?/, "习惯")
-    .replace(/^习惯(?:使用)?/, "习惯")
-    .replace(/^使用/, "")
-    .replace(/\s+/g, "");
-}
-
-function dedupeFactsAgainstSection(items: string[], excluded: string[]): string[] {
-  const excludedKeys = new Set(excluded.map(item => canonicalizeUserFact(item)).filter(Boolean));
-  const seen = new Set<string>();
-  const next: string[] = [];
-  for (const item of items) {
-    const normalized = normalizeWhitespace(item);
-    const key = canonicalizeUserFact(normalized);
-    if (!normalized || !key || excludedKeys.has(key) || seen.has(key)) continue;
-    seen.add(key);
-    next.push(normalized);
-  }
-  return next;
-}
-
-function normalizeUserSectionItems(value: unknown, maxItems: number): string[] {
-  if (typeof value === "string") {
-    return splitProfileFacts(stripMarkdownSyntax(value)).slice(0, maxItems);
-  }
-  return normalizeStringArray(value, maxItems);
-}
-
-function cleanUserIdentitySummary(input: { identityBackground: string[] }): {
-  identityBackground: string[];
-} {
-  return {
-    identityBackground: uniqueStrings(
-      input.identityBackground.flatMap(item => splitProfileFacts(stripMarkdownSyntax(item))),
-      20,
-    ),
-  };
 }
 
 function looksLikeCollaborationRuleText(text: string): boolean {
@@ -2085,27 +1806,6 @@ function normalizeBoolean(value: unknown, fallback = false): boolean {
     if (normalized === "false") return false;
   }
   return fallback;
-}
-
-function uniqueById<T>(items: T[], getId: (item: T) => string): T[] {
-  const seen = new Set<string>();
-  const next: T[] = [];
-  for (const item of items) {
-    const id = getId(item);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    next.push(item);
-  }
-  return next;
-}
-
-function fallbackEvidenceNote(lines: string[], fallback = ""): string {
-  const normalized = lines
-    .map(line => normalizeWhitespace(line))
-    .filter(Boolean)
-    .slice(0, 8);
-  const joined = normalized.join("\n");
-  return truncate(joined || normalizeWhitespace(fallback), 800);
 }
 
 function extractChatCompletionsText(payload: unknown): string {

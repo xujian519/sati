@@ -474,14 +474,6 @@ function readSnapshotFiles(rootDir: string): MemorySnapshotFileRecord[] {
   return files;
 }
 
-function sameDreamRuntimeState(left: DreamRuntimeStateSnapshot, right: DreamRuntimeStateSnapshot): boolean {
-  return (
-    (left.lastDreamAt ?? "") === (right.lastDreamAt ?? "") &&
-    (left.lastDreamStatus ?? "") === (right.lastDreamStatus ?? "") &&
-    (left.lastDreamSummary ?? "") === (right.lastDreamSummary ?? "")
-  );
-}
-
 export class MemoryRepository {
   private readonly dbPath: string;
   private readonly db: SqlDatabase;

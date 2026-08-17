@@ -17,8 +17,8 @@ import { LlmMemoryExtractor, type MemoryClassificationLabel } from "../skills/ll
 import { MemoryRepository } from "../storage/sqlite.js";
 import { traceI18n } from "../trace-i18n.js";
 import { buildL0IndexId, hashText, nowIso } from "../utils/id.js";
-import { kvDetail, listDetail, jsonDetail } from "../utils/detail.js";
-import { decodeEscapedUnicodeText, decodeEscapedUnicodeValue } from "../utils/text.js";
+import { kvDetail, jsonDetail } from "../utils/detail.js";
+import { decodeEscapedUnicodeText } from "../utils/text.js";
 
 const LAST_INDEXED_AT_STATE_KEY = "lastIndexedAt" as const;
 const GENERAL_INDEX_PROJECT_CANDIDATE_LIMIT = 30;
