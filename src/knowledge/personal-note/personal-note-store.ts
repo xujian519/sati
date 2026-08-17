@@ -25,6 +25,25 @@ export type PersonalNoteRow = {
   indexedAt: string;
 };
 
+/** list() 分页选项（不传时保持全量语义）。 */
+export type PersonalNoteListOptions = {
+  /** 返回行数上限（作用于 JOIN 行粒度，聚合后可能少于该值）。 */
+  limit?: number;
+  /** 跳过行数（配合 limit 分页）。 */
+  offset?: number;
+};
+
+/** 分页单页行数（listAllPaged 用；聚合前合并，文档跨页不拆散）。 */
+const PAGE_SIZE = 256;
+
+type PersonalNoteRowSql = {
+  id: string;
+  title: string;
+  indexed_at: string;
+  chunk_index: number;
+  content: string;
+};
+
 export class PersonalNoteStore {
   private readonly db: DatabaseSync;
 
@@ -36,23 +55,52 @@ export class PersonalNoteStore {
   }
 
   /**
-   * 列出全部 project personal_note（id/title/content/indexedAt）。
+   * 列出 project personal_note（id/title/content/indexedAt）。
    * 读取失败时异常上抛（不降级为空数组）——由 PersonalNoteVectorIndex 的
    * search() catch 降级，避免把瞬时读错误当作"笔记清空"触发 stale 整体删除。
    */
-  list(): PersonalNoteRow[] {
-    const rows = this.db
-      .prepare(
-        `SELECT d.id AS id, d.title AS title, d.indexed_at AS indexed_at,
-                c.chunk_index AS chunk_index, sati_uncompress(c.content) AS content
-         FROM documents d
-         JOIN chunks c ON c.document_id = d.id
-         WHERE d.source = 'project' AND d.doc_type = 'personal_note'
-         ORDER BY d.indexed_at DESC, c.chunk_index ASC`,
-      )
-      .all() as Array<{ id: string; title: string; indexed_at: string; chunk_index: number; content: string }>;
+  list(options: PersonalNoteListOptions = {}): PersonalNoteRow[] {
+    return this.aggregate(this.queryRows(options.limit, options.offset));
+  }
 
-    // 一个 document 可能多 chunk：按 id 聚合正文（保持 chunk_index 顺序）。
+  /**
+   * 分页拉取全部笔记（每页 PAGE_SIZE 行，聚合语义与 list() 一致）。
+   * 供语义索引全量同步使用：单条 SQL 的 JOIN + sati_uncompress 规模有界，
+   * 避免一次全量无界扫描（docs 数量增长时内存与单语句耗时可控）。
+   */
+  listAllPaged(pageSize = PAGE_SIZE): PersonalNoteRow[] {
+    const rows: PersonalNoteRowSql[] = [];
+    let offset = 0;
+    for (;;) {
+      const page = this.queryRows(pageSize, offset);
+      rows.push(...page);
+      if (page.length < pageSize) break;
+      offset += pageSize;
+    }
+    return this.aggregate(rows);
+  }
+
+  private queryRows(limit: number | undefined, offset: number | undefined): PersonalNoteRowSql[] {
+    let sql = `SELECT d.id AS id, d.title AS title, d.indexed_at AS indexed_at,
+                      c.chunk_index AS chunk_index, sati_uncompress(c.content) AS content
+               FROM documents d
+               JOIN chunks c ON c.document_id = d.id
+               WHERE d.source = 'project' AND d.doc_type = 'personal_note'
+               ORDER BY d.indexed_at DESC, c.chunk_index ASC`;
+    const params: Array<string | number> = [];
+    if (limit !== undefined && limit > 0) {
+      sql += " LIMIT ?";
+      params.push(limit);
+    }
+    if (offset !== undefined && offset > 0) {
+      sql += " OFFSET ?";
+      params.push(offset);
+    }
+    return this.db.prepare(sql).all(...params) as PersonalNoteRowSql[];
+  }
+
+  /** 一个 document 可能多 chunk：按 id 聚合正文（保持 chunk_index 顺序）。 */
+  private aggregate(rows: PersonalNoteRowSql[]): PersonalNoteRow[] {
     const byId = new Map<string, PersonalNoteRow & { parts: string[] }>();
     for (const row of rows) {
       let entry = byId.get(row.id);

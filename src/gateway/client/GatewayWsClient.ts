@@ -57,6 +57,8 @@ export class GatewayWsClient {
   private readonly streams = new Map<string, AsyncEventQueue<GatewayEvent>>();
   private readonly notificationHandlers: GatewayWsNotificationHandler[] = [];
   private ws?: WebSocket;
+  /** 当前 socket 上注册的监听器引用（重连/关闭时显式摘除，防旧 socket 事件污染新连接）。 */
+  private wsHandlers?: { onMessage: (event: MessageEvent) => void; onClose: () => void };
   private hello?: WsHelloOk;
 
   constructor(private readonly options: GatewayWsClientOptions) {}
@@ -66,11 +68,24 @@ export class GatewayWsClient {
   }
 
   async connect(): Promise<WsHelloOk> {
+    // 重连安全：先摘除旧 socket 监听器、拒绝其挂起请求/流，再关旧 socket。
+    // 若直接复用旧 socket 的 close 回调，旧连接的关闭事件会错误地拒绝新连接
+    // 的 pending 请求（pending/streams 为实例共享状态）。
+    if (this.ws) {
+      this.resetConnection("Gateway connection replaced by reconnect.");
+    } else {
+      this.detachSocketListeners();
+    }
+    this.hello = undefined; // 新连接需重新握手，避免旧 hello 提前结束新 connect() 的等待
+
     const ws = new WebSocket(this.options.url);
     this.ws = ws;
     await waitForOpen(ws);
-    ws.addEventListener("message", event => this.handleMessage(String(event.data ?? "")));
-    ws.addEventListener("close", () => this.closePending(new Error("Gateway WebSocket closed.")));
+    const onMessage = (event: MessageEvent) => this.handleMessage(String(event.data ?? ""));
+    const onClose = () => this.closePending(new Error("Gateway WebSocket closed."));
+    this.wsHandlers = { onMessage, onClose };
+    ws.addEventListener("message", onMessage);
+    ws.addEventListener("close", onClose);
     ws.send(
       JSON.stringify({
         type: "hello",
@@ -132,7 +147,26 @@ export class GatewayWsClient {
   }
 
   close(): void {
-    this.ws?.close();
+    this.resetConnection("Gateway WebSocket closed.");
+  }
+
+  /** 摘除当前 socket 的监听器并关闭连接；挂起请求/流以 reason 失败（确定性收尾，不依赖 close 事件送达）。 */
+  private resetConnection(reason: string): void {
+    this.detachSocketListeners();
+    this.closePending(new Error(reason));
+    const ws = this.ws;
+    this.ws = undefined;
+    if (ws && ws.readyState !== WebSocket.CLOSED) {
+      ws.close();
+    }
+  }
+
+  private detachSocketListeners(): void {
+    if (this.ws && this.wsHandlers) {
+      this.ws.removeEventListener("message", this.wsHandlers.onMessage);
+      this.ws.removeEventListener("close", this.wsHandlers.onClose);
+    }
+    this.wsHandlers = undefined;
   }
 
   private send(frame: unknown): void {

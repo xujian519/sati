@@ -14,7 +14,9 @@ test("patent_wiki_search: 工具只读且可用", async () => {
   const tool = createPatentWikiSearchTool();
   assert.equal(tool.name, "patent_wiki_search");
   assert.equal(tool.isReadOnly({ query: "x" }), true);
-  const availability = (await tool.checkAvailability?.({} as never)) as { ok: boolean } | undefined;
+  const availability = (await tool.checkAvailability?.(
+    {} as unknown as Parameters<NonNullable<typeof tool.checkAvailability>>[0],
+  )) as { ok: boolean } | undefined;
   assert.ok(availability?.ok, "内置 wiki 目录应可用");
 });
 

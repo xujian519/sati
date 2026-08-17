@@ -86,7 +86,7 @@
 #### 可选卫生项（2026-08-14 决策保留后登记，纯卫生不动架构，做不做都行）
 
 1. **深层 import 收口**：`ui/server → src/` 深层 import 实测 18 处（含测试文件；排除测试 15 处；08-12 审计为 20 处/9 文件），改为统一走 `src/<module>/index.ts` barrel——纯防御，防止未来核心重构（如模块内文件移动）静默破坏桥接层。
-2. **停用编译产物直连**：`ui/server/routes/memory.js:5` 直接 import `edgeclaw-memory-core/lib/index.js` 编译产物，源码改动需手动重编译才生效（漂移风险点），可改用子包源码入口。
+2. **停用编译产物直连**：`ui/server/routes/memory.js:5` 直接 import `edgeclaw-memory-core/lib/index.js` 编译产物，源码改动需手动重编译才生效（漂移风险点），可改用子包源码入口。 — ✅ **决策维持（2026-08-17 复核）**：非债务。`server-manager.ts` 启动时为该相对路径显式建 `srcLink` + `memSrcLink`（打包时 node_modules symlink 被剥掉、dist/src 仅空 stub），是受支持的一等解析路径；"漂移窗口"已被根 `package.json` 的 `prebuild/predev/preserver` 钩子（`pnpm --filter edgeclaw-memory-core build`）消除。改包名导入会依赖启动期重建的 hoistedLink/memNodeModLink（未验证路径），禁止。`memory.js` 头部注释已补全理由。
 3. **`ui/server/index.js` 机械分片**：3839 行纯拆分（routes / middleware / services / websocket 四类），不改逻辑 → DoD：拆后单文件 ≤ 500 行，entry 只做组装，`pnpm --filter sati-ui test` 全绿。
 
 ### 2. 内嵌子包 `edgeclaw-memory-core`：包内嵌包 + 双构建 + 产物入库

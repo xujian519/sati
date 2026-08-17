@@ -22,6 +22,9 @@ export default [
       "skills/**",
       "products/**",
       "vendor/**",
+      // P2-07 单一事实源资产：浏览器侧脚本（document 等 DOM API），
+      // 不经根 lint（node globals）校验，版本标记/转义约束由加载端把关。
+      "assets/patent/**",
       "apps/desktop/dist/**",
       "apps/desktop/dist-electron/**",
       // edgeclaw-memory-core 子包：src/ 纳入 lint（2026-08-17 开闸清 116 处），

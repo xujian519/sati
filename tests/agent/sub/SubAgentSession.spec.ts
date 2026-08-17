@@ -13,6 +13,7 @@ import type { SatiCommandRunner } from "../../../src/tool/builtin/bash/commandRu
 import { createExecuteCodeTool } from "../../../src/tool/builtin/executeCode.js";
 import { ToolRuntime } from "../../../src/tool/execution/ToolRuntime.js";
 import { ToolRegistry, type SatiToolDefinition, type SatiToolRuntimeContext } from "../../../src/tool/index.js";
+import type { SatiToolScheduler } from "../../../src/tool/scheduler/ToolScheduler.js";
 
 const FINAL_REPORT = [
   "Scope: inspected inputs",
@@ -155,7 +156,7 @@ test("explore subagent does not probe tool safety before execution", async () =>
       router: createRouter(),
       tools: {
         registry,
-        scheduler: {} as never,
+        scheduler: {} as unknown as SatiToolScheduler,
       },
     },
     parentSessionId: "parent-session",

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import type { SatiElicitationAnswer, SatiElicitationRequest } from "../elicitation/SatiElicitationChannel.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
@@ -222,7 +222,7 @@ export function createExitPlanModeTool(): SatiToolDefinition<ExitPlanModeInput, 
       }
       let plan: string;
       try {
-        plan = readFileSync(resolvedPlanFilePath, "utf8").trim();
+        plan = (await readFile(resolvedPlanFilePath, "utf8")).trim();
       } catch {
         throw new SatiToolRuntimeError(
           "invalid_tool_input",

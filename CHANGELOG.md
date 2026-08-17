@@ -2,6 +2,35 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.1 - 2026-08-17
+
+> **版本目标（2026-08-17）**：首个 Beta（0.1.0）之后的工程质量与性能迭代版本——巨无霸函数拆解专项（轨道 A/B）全部收尾、edgeclaw-memory-core 拆解与 lint 开闸、`as never` 类型逃逸批量清理、性能两批卡点修复，另含专利搜索与下载模块优化 Sprint 1-3。
+
+### Refactor
+- 拆解专项轨道 A 收尾：workflow 目录化（signal/executor 下沉）、legal-search 拆 4 纯件、kg-store 3 子模块、McpClient 收口为纯门面（operations/connection/errors/toolSpec/transport 下沉）、InProcessGateway 四轮下沉（~2344→1057 行，toolResultSanitize / providerError / normalizers / eventMapping / telemetry / attachments 6 模块）
+- 拆解专项轨道 B 收尾：`ui/server/index.js` 3845→244 行，12 个新模块（websocket/{broadcast,chat,shell}、services/{filesystem,uploads,projects-watcher,rate-limit,server-boot}、routes/{system,project-sessions,project-files,project-preview,project-uploads,token-usage}）；冒烟修复分片运行时缺陷后二次精简
+- edgeclaw-memory-core：5 大文件拆解 + llm-extraction 类方法级拆分（G8）+ 孤儿导出清理 + lint 开闸（清 132 处未使用 import/死代码）+ 测试纳入 typecheck
+- ui/server 深层 import 收口到 src barrel（14 处）+ 边界门禁脚本鲁棒性增强（`check-ui-server-boundary.mjs`：注释/字符串剥离 + .cjs 覆盖 + 白名单自检）
+- 桌面端 verify-dmg / verify-installer 精简（端口函数统一 + 死代码/重复检查删除）
+
+### Perf
+- 第一批性能卡点修复：token 计数缓存 + 统计异步落盘 + 流式数组累积（#105）
+- 第二、三批性能卡点修复：随机采样/LRU/token 增量/静态资产/重连清理/异步 IO/prepare 缓存/分页/日志/基准门禁（#106）
+
+### Feat
+- 专利搜索与下载模块优化 Sprint 1-3 全量落地（16 任务）（#101）
+
+### Test
+- 移除 `as never` 类型逃逸共 137 处（分散测试 20 + patent 域 31 + toolContext 10 + output-schema 8 + session 16 + file-memory 18 + edgeclaw 27 + egoBrowser 7）
+- InProcessGateway 前置伪测试治理：submitTurn 核心路径盲区测试、prepare_weixin_login 伪测试改行为断言；memory.js 设计标注 + memory-core 测试增强（债务 Tier1 风险消除）
+
+### Fixed
+- ui/server 分片引入的运行时缺陷：缺 import / barrel 缺失导出 `isVisibleFailureAgentStatus`（ui/server 启动即崩）
+- verify-dmg 检查 `SATI_DESKTOP` 守卫的新位置（server/services/server-boot.js）
+
+### Docs
+- 拆解专项计划/进度/收尾文档更新（轨道 A/B 完成注记、ui/server-unused-import-cleanup-plan、拆解专项残留引用清理）
+
 ## v0.1.0 - 2026-08-16
 
 > **版本目标（2026-08-16）**：**首个测试版（Beta）里程碑**——版本号从 0.0.x 跃迁到 0.1.0，宣告功能面成型、进入公开测试阶段（原规划的 v0.0.30 内容并入本版）。本版落地 nuo 专利规则激活专项：把 96 条沉睡的确定性专利规则（XiaoNuo 移植）激活为生产能力，接入 `rule_check` 显式自检（A 链）与规则驱动输出门禁（B 链）；附 31 条 `action: block` 逐条评审与降级补丁。

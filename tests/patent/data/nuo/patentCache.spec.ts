@@ -10,6 +10,8 @@ import {
   cachedSearchPatents,
   isScrapeResultCacheable,
   isSearchResultCacheable,
+  searchCacheKey,
+  searchResultTtlMs,
 } from "../../../../src/patent/data/nuo/patentCache.js";
 
 function makeSearchResult(overrides: Partial<PatentSearchResult> = {}): PatentSearchResult {
@@ -239,5 +241,79 @@ describe("cachedSearchPatents / cachedScrapePatent", () => {
     await wrapped("US11452699B2");
     await wrapped("US11452699B2");
     assert.equal(calls, 1);
+  });
+});
+
+describe("P3-01 TTL 分层", () => {
+  it("分类：零命中 1min / 法律状态 5min / 其余 2h", () => {
+    const empty = makeSearchResult({ hits: [], total: 0 });
+    assert.equal(searchResultTtlMs(searchCacheKey("thermal", 10), empty), 60 * 1000, "零命中 1min");
+
+    const withHits = makeSearchResult();
+    assert.equal(
+      searchResultTtlMs(searchCacheKey("法律状态 CN115690481A", 10), withHits),
+      5 * 60 * 1000,
+      "中文法律状态关键词 5min",
+    );
+    assert.equal(
+      searchResultTtlMs(searchCacheKey("legal status US11452699B2", 10), withHits),
+      5 * 60 * 1000,
+      "英文 legal status 5min（大小写不敏感）",
+    );
+    assert.equal(
+      searchResultTtlMs(searchCacheKey("无效宣告审查决定", 10), withHits),
+      5 * 60 * 1000,
+      "无效类关键词 5min",
+    );
+
+    assert.equal(searchResultTtlMs(searchCacheKey("thermal", 10), withHits), 2 * 60 * 60 * 1000, "其余 2h");
+  });
+
+  it("零命中类：TTL 到期后重拉（注入 1ms 分类 TTL 模拟到期）", async () => {
+    let calls = 0;
+    const impl = async () => {
+      calls += 1;
+      return makeSearchResult({ hits: [], total: 0 });
+    };
+    const wrapped = cachedSearchPatents(impl, { ttlFor: () => 1 });
+    await wrapped("thermal");
+    await wrapped("thermal");
+    assert.equal(calls, 1, "分类 TTL 内命中");
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await wrapped("thermal");
+    assert.equal(calls, 2, "零命中类 TTL 到期后重拉");
+  });
+
+  it("法律状态类：TTL 到期后重拉（注入 1ms 分类 TTL 模拟到期）", async () => {
+    let calls = 0;
+    const impl = async () => {
+      calls += 1;
+      return makeSearchResult();
+    };
+    const wrapped = cachedSearchPatents(impl, { ttlFor: () => 1 });
+    await wrapped("法律状态 CN115690481A");
+    await wrapped("法律状态 CN115690481A");
+    assert.equal(calls, 1, "分类 TTL 内命中");
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await wrapped("法律状态 CN115690481A");
+    assert.equal(calls, 2, "法律状态类 TTL 到期后重拉");
+  });
+
+  it("其余类：默认 2h 内命中、ttlFor 返回 undefined 时回退默认 TTL", async () => {
+    let calls = 0;
+    const impl = async () => {
+      calls += 1;
+      return makeSearchResult();
+    };
+    const wrapped = cachedSearchPatents(impl);
+    await wrapped("thermal");
+    await wrapped("thermal");
+    assert.equal(calls, 1, "其余类默认 2h 内命中");
+    // ttlFor 返回 undefined → 回退构造时 ttlMs（1ms），到期重拉
+    const fallback = cachedSearchPatents(impl, { ttlMs: 1, ttlFor: () => undefined });
+    await fallback("thermal");
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await fallback("thermal");
+    assert.equal(calls, 3, "ttlFor 未命中时回退默认 TTL，到期后重拉");
   });
 });

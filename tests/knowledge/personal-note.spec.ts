@@ -96,6 +96,41 @@ test("PersonalNoteStore.snapshotVersion 随笔记新增变化", t => {
   store.close();
 });
 
+test("PersonalNoteStore.list 支持 LIMIT/OFFSET 分页", t => {
+  const { dbPath } = withFixture(t);
+  for (let i = 1; i <= 5; i++) {
+    savePersonalNote(dbPath, { title: `笔记${i}`, content: `正文内容${i}`, project: "proj-a" });
+  }
+  const store = new PersonalNoteStore(dbPath);
+  const all = store.list();
+  assert.equal(all.length, 5);
+
+  const page1 = store.list({ limit: 2 });
+  assert.equal(page1.length, 2, "limit=2 应只返回 2 条");
+  const page2 = store.list({ limit: 2, offset: 2 });
+  assert.equal(page2.length, 2, "offset=2 后应返回后续 2 条");
+  const tail = store.list({ limit: 2, offset: 4 });
+  assert.equal(tail.length, 1, "末页应只返回剩余 1 条");
+
+  const ids = [page1, page2, tail].flatMap(rows => rows.map(r => r.id));
+  assert.equal(new Set(ids).size, 5, "分页各页不应重复且应覆盖全部笔记");
+  assert.deepEqual(new Set(ids), new Set(all.map(r => r.id)), "分页并集应等于全量集合");
+  store.close();
+});
+
+test("PersonalNoteStore.listAllPaged 与 list 全量语义一致（分页聚合）", t => {
+  const { dbPath } = withFixture(t);
+  for (let i = 1; i <= 5; i++) {
+    savePersonalNote(dbPath, { title: `笔记${i}`, content: `正文内容${i}`, project: "proj-a" });
+  }
+  const store = new PersonalNoteStore(dbPath);
+  const all = store.list();
+  const paged = store.listAllPaged(2);
+  assert.equal(paged.length, all.length, "分页拉取应与全量条数一致");
+  assert.deepEqual(paged.map(r => r.id).sort(), all.map(r => r.id).sort(), "分页拉取应覆盖全部笔记");
+  store.close();
+});
+
 test("PersonalNoteVectorIndex.search 语义命中沉淀笔记", async t => {
   const { dbPath, dir } = withFixture(t);
   savePersonalNote(dbPath, {

@@ -4,7 +4,19 @@ import { describe, it } from "node:test";
 import { isDreamUserNotePath, isDreamUserProfilePath } from "../../src/core/review/dream-paths.js";
 import { previewMarkdown, sortEntries, truncate } from "../../src/core/review/dream-detail.js";
 import { createDreamTrace, mutation, pushStep } from "../../src/core/review/dream-trace.js";
-import { toDreamMetaInput, toHeaderInput, toRefinedCandidate } from "../../src/core/review/dream-mappers.js";
+import {
+  toDreamMetaInput,
+  toDreamRecordInput,
+  toHeaderInput,
+  toRefinedCandidate,
+} from "../../src/core/review/dream-mappers.js";
+import type { FileMemoryStore } from "../../src/core/file-memory.js";
+import type {
+  MemoryCandidate,
+  MemoryFileRecord,
+  MemoryManifestEntry,
+  ProjectMetaRecord,
+} from "../../src/core/types.js";
 import {
   selectUserNoteWindow,
   validateExclusiveClusters,
@@ -36,11 +48,38 @@ describe("dream-detail 文本工具", () => {
     assert.equal(previewMarkdown("## 标题\n内容  行", 200), "标题 内容 行");
   });
   it("sortEntries updatedAt 降序 + 路径升序 tiebreak", () => {
-    const entries = [
-      { relativePath: "b.md", updatedAt: "2026-01-02" },
-      { relativePath: "a.md", updatedAt: "2026-01-02" },
-      { relativePath: "c.md", updatedAt: "2026-01-03" },
-    ] as never;
+    const entries: MemoryManifestEntry[] = [
+      {
+        file: "b.md",
+        relativePath: "b.md",
+        absolutePath: "/tmp/b.md",
+        name: "B",
+        description: "D",
+        type: "project",
+        scope: "project",
+        updatedAt: "2026-01-02",
+      },
+      {
+        file: "a.md",
+        relativePath: "a.md",
+        absolutePath: "/tmp/a.md",
+        name: "A",
+        description: "D",
+        type: "project",
+        scope: "project",
+        updatedAt: "2026-01-02",
+      },
+      {
+        file: "c.md",
+        relativePath: "c.md",
+        absolutePath: "/tmp/c.md",
+        name: "C",
+        description: "D",
+        type: "project",
+        scope: "project",
+        updatedAt: "2026-01-03",
+      },
+    ];
     const sorted = sortEntries(entries);
     assert.deepEqual(
       sorted.map(e => (e as { relativePath: string }).relativePath),
@@ -74,27 +113,50 @@ describe("dream-trace 基建", () => {
 });
 
 describe("dream-mappers 数据映射", () => {
+  const fakeStore = (candidate: MemoryCandidate): FileMemoryStore =>
+    ({ toCandidate: () => candidate }) as unknown as FileMemoryStore;
+
+  const makeRecord = (partial: {
+    relativePath: string;
+    type: MemoryFileRecord["type"];
+    projectId?: string;
+    capturedAt?: string;
+    sourceSessionKey?: string;
+  }): MemoryFileRecord => ({
+    file: `files/${partial.relativePath}`,
+    relativePath: partial.relativePath,
+    absolutePath: `/tmp/${partial.relativePath}`,
+    name: "N",
+    description: "D",
+    type: partial.type,
+    scope: partial.type === "user" ? "global" : "project",
+    ...(partial.projectId ? { projectId: partial.projectId } : {}),
+    updatedAt: "2026-01-01",
+    ...(partial.capturedAt ? { capturedAt: partial.capturedAt } : {}),
+    ...(partial.sourceSessionKey ? { sourceSessionKey: partial.sourceSessionKey } : {}),
+    content: "# body",
+    preview: "body",
+  });
+
   it("toDreamMetaInput 透传字段 + 可选字段条件展开", () => {
-    const meta = {
+    const meta: ProjectMetaRecord = {
       projectId: "p1",
       projectName: "Alpha",
       description: "desc",
       status: "in_progress",
+      createdAt: "2026-01-01",
       updatedAt: "2026-01-01",
+      relativePath: "projects/p1/meta.md",
+      absolutePath: "/tmp/projects/p1/meta.md",
       sourceKind: "general_local",
-    } as never;
+    };
     const input = toDreamMetaInput(meta);
     assert.equal(input.projectId, "p1");
     assert.equal(input.sourceKind, "general_local");
     assert.equal("dreamUpdatedAt" in input, false);
   });
   it("toHeaderInput 四字段映射", () => {
-    const input = toHeaderInput({
-      relativePath: "p.md",
-      name: "N",
-      description: "D",
-      updatedAt: "2026-01-01",
-    } as never);
+    const input = toHeaderInput(makeRecord({ relativePath: "p.md", type: "project" }));
     assert.deepEqual(input, { relativePath: "p.md", name: "N", description: "D", updatedAt: "2026-01-01" });
   });
   it("toRefinedCandidate 生成 project 候选（body 补换行）", () => {
@@ -103,11 +165,82 @@ describe("dream-mappers 数据映射", () => {
       name: "N",
       description: "D",
       markdown: "body",
-      sourceRecord: { capturedAt: "2026-01-01" } as never,
+      sourceRecord: makeRecord({ relativePath: "r.md", type: "project", capturedAt: "2026-01-01" }),
     });
     assert.equal(candidate.type, "project");
     assert.equal(candidate.body, "body\n");
     assert.equal(candidate.capturedAt, "2026-01-01");
+  });
+  it("toDreamRecordInput project 记录展开 project 字段", () => {
+    const record = makeRecord({ relativePath: "p.md", type: "project", projectId: "p1" });
+    const candidate: MemoryCandidate = {
+      type: "project",
+      scope: "project",
+      projectId: "p1",
+      name: "N",
+      description: "D",
+      body: "body",
+      stage: "in_progress",
+      decisions: ["d1"],
+      constraints: [],
+      nextSteps: ["n1"],
+      blockers: [],
+      timeline: ["t1"],
+      notes: ["note"],
+      summary: "sum",
+    };
+    const input = toDreamRecordInput(fakeStore(candidate), record);
+    assert.equal(input.entryId, "p.md");
+    assert.equal(input.relativePath, "p.md");
+    assert.equal(input.type, "project");
+    assert.equal(input.scope, "project");
+    assert.equal(input.projectId, "p1");
+    assert.equal(input.isTmp, false);
+    assert.equal(input.name, "N");
+    assert.equal(input.content, "# body");
+    assert.equal(input.project?.stage, "in_progress");
+    assert.deepEqual(input.project?.decisions, ["d1"]);
+    assert.equal("feedback" in input, false);
+  });
+  it("toDreamRecordInput feedback 记录展开 feedback 字段", () => {
+    const record = makeRecord({ relativePath: "f.md", type: "feedback" });
+    const candidate: MemoryCandidate = {
+      type: "feedback",
+      scope: "project",
+      name: "F",
+      description: "D",
+      body: "body",
+      rule: "R",
+      why: "W",
+      howToApply: "H",
+      notes: ["n"],
+    };
+    const input = toDreamRecordInput(fakeStore(candidate), record);
+    assert.equal(input.type, "feedback");
+    assert.equal(input.feedback?.rule, "R");
+    assert.equal(input.feedback?.why, "W");
+    assert.equal(input.feedback?.howToApply, "H");
+    assert.deepEqual(input.feedback?.notes, ["n"]);
+    assert.equal("project" in input, false);
+  });
+  it("toDreamRecordInput 可选字段条件展开（capturedAt/sourceSessionKey）", () => {
+    const candidate: MemoryCandidate = { type: "project", scope: "project", name: "N", description: "D", body: "b" };
+    const withMeta = toDreamRecordInput(
+      fakeStore(candidate),
+      makeRecord({ relativePath: "p.md", type: "project", capturedAt: "2026-02-01", sourceSessionKey: "sk1" }),
+    );
+    assert.equal(withMeta.capturedAt, "2026-02-01");
+    assert.equal(withMeta.sourceSessionKey, "sk1");
+    const bare = toDreamRecordInput(fakeStore(candidate), makeRecord({ relativePath: "p2.md", type: "project" }));
+    assert.equal("capturedAt" in bare, false);
+    assert.equal("sourceSessionKey" in bare, false);
+  });
+  it("toDreamRecordInput type 归一（非 feedback → project）", () => {
+    const candidate: MemoryCandidate = { type: "project", scope: "project", name: "N", description: "D", body: "b" };
+    for (const type of ["project", "user", "general_project_meta"] as const) {
+      const input = toDreamRecordInput(fakeStore(candidate), makeRecord({ relativePath: "x.md", type }));
+      assert.equal(input.type, "project");
+    }
   });
 });
 
@@ -167,8 +300,18 @@ describe("validateExclusiveClusters 丢弃规则", () => {
 });
 
 describe("selectUserNoteWindow 预算", () => {
-  const note = (path: string, content: string, updatedAt: string) =>
-    ({ relativePath: path, content, updatedAt }) as never;
+  const note = (path: string, content: string, updatedAt: string): MemoryFileRecord => ({
+    file: path,
+    relativePath: path,
+    absolutePath: `/tmp/${path}`,
+    name: "N",
+    description: "D",
+    type: "user",
+    scope: "global",
+    updatedAt,
+    content,
+    preview: "",
+  });
   it("按预算选择 + 超预算单条跳过不饿死窗口", () => {
     const records = [
       note("big.md", "x".repeat(121_000), "2026-01-03"),
@@ -185,11 +328,17 @@ describe("selectUserNoteWindow 预算", () => {
 });
 
 describe("validateGeneralProjectMergeGroups keeper 规则", () => {
-  const metas = [
-    { projectId: "p1", projectName: "A", description: "", status: "active", updatedAt: "2026-01-01" },
-    { projectId: "p2", projectName: "B", description: "", status: "active", updatedAt: "2026-01-01" },
-    { projectId: "p3", projectName: "C", description: "", status: "active", updatedAt: "2026-01-01" },
-  ] as never;
+  const meta = (projectId: string, name: string): ProjectMetaRecord => ({
+    projectId,
+    projectName: name,
+    description: "",
+    status: "active",
+    createdAt: "2026-01-01",
+    updatedAt: "2026-01-01",
+    relativePath: `projects/${projectId}/meta.md`,
+    absolutePath: `/tmp/projects/${projectId}/meta.md`,
+  });
+  const metas = [meta("p1", "A"), meta("p2", "B"), meta("p3", "C")];
   it("未知 keeper 整组丢弃", () => {
     const result = validateGeneralProjectMergeGroups({
       metas,

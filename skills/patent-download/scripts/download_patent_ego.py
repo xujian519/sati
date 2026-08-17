@@ -14,16 +14,21 @@
 
 import argparse
 import concurrent.futures
+import hashlib
 import json
 import os
+import random
 import re
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import ssl
 from datetime import date
 from pathlib import Path
+from typing import Union
 
 EGO_BROWSER_CMD = os.environ.get('EGO_BROWSER_CMD', 'ego-browser')
 # 默认输出到智能体当前工作空间下的 专利原文/ 目录（可用 -o 覆盖）
@@ -31,6 +36,10 @@ DEFAULT_OUTPUT_DIR = os.path.join(os.getcwd(), '专利原文')
 
 # 确保 ego-browser 在 PATH 中
 os.environ['PATH'] = os.path.expanduser('~/.local/bin') + ':' + os.environ.get('PATH', '')
+
+# P0-02：默认完整校验 SSL 证书链；--no-verify-ssl 显式 opt-in 时才关闭
+#（仅企业内网 MITM 代理等特殊场景，由用户在报错引导下显式开启）
+NO_VERIFY_SSL = False
 
 # 并发下载线程数（CDN 下载是 IO 密集，网络带宽允许时可调大）
 DEFAULT_DOWNLOAD_WORKERS = 4
@@ -43,6 +52,27 @@ DOWNLOAD_TIMEOUT_SEC = 60
 # 下载分块大小（64KB）
 DOWNLOAD_CHUNK_SIZE = 64 * 1024
 
+# P2-02：下载失败指数退避重试（与 TS fetchPdfFallback 同参数：最多 3 次、
+# base 1s、factor 2、上限 30s + 25% jitter；429/5xx 与网络错误重试，
+# 404/403 与魔数错误属确定性失败，不重试）
+DOWNLOAD_RETRY_ATTEMPTS = 3
+DOWNLOAD_RETRY_BASE_DELAY_SEC = 1.0
+DOWNLOAD_RETRY_FACTOR = 2
+DOWNLOAD_RETRY_MAX_DELAY_SEC = 30.0
+DOWNLOAD_RETRY_STATUSES = {408, 409, 425, 429, 500, 502, 503, 504}
+
+# P2-03：产物命名契约统一为 <num>.pdf（与 TS 侧一致，MANIFEST 互相识别）；
+# --with-title 恢复旧命名 <num>_<title>.pdf 作为兼容开关
+USE_TITLE_SUFFIX = False
+# P2-03：MANIFEST 断点续传文件（<outputDir>/.MANIFEST.jsonl，append 追加式）
+MANIFEST_FILE = '.MANIFEST.jsonl'
+
+# P2-07：PDF 链接提取 JS 单一事实源（assets/patent/pdf-link-extract.js，与 TS 工具
+# patentPdfDownload.ts 两端共用）。脚本路径 skills/patent-download/scripts/ 上溯
+# 三级即仓库根；独立分发（文件缺失）时回退内嵌备份 _PDF_LINK_EXTRACT_JS_BACKUP。
+PDF_LINK_EXTRACT_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'assets', 'patent', 'pdf-link-extract.js')
+
 
 def normalize_patent_number(patent_num: str) -> str:
     """标准化专利号格式"""
@@ -51,12 +81,63 @@ def normalize_patent_number(patent_num: str) -> str:
     return patent_num
 
 
+def validate_patent_numbers(patent_numbers: list) -> list:
+    """P1-02：专利号归一化后拒绝路径穿越字符（\\ 与 ..），防止文件名拼接逃逸。
+
+    归一化已去除 / 与空白；保留绝对路径/自定义目录能力（-o 不限制）。
+    返回规范化后的列表；非法输入直接报错退出。
+    """
+    normalized = [normalize_patent_number(n) for n in patent_numbers]
+    for n in normalized:
+        if '\\' in n or '..' in n:
+            raise SystemExit(f"错误: 专利号包含非法路径字符（拒绝）: {n}")
+    return normalized
+
+
+# P2-07：内嵌备份（与 assets/patent/pdf-link-extract.js 内容一致，含 allLinks 兜底；
+# 同样遵守无反引号与 ${ 的约束，便于 String.raw 模板嵌入）
+_PDF_LINK_EXTRACT_JS_BACKUP = '''(() => {
+  const links = document.querySelectorAll('a[href*=".pdf"]');
+  for (const link of links) {
+    if (link.href && (link.href.includes('storage.googleapis.com') || link.href.includes('patentimages'))) return link.href;
+  }
+  for (const link of links) { if (link.href) return link.href; }
+  // Google Patents 新版把 PDF URL 放在某些 data 属性或按钮附近，兜底扫描全部 href
+  const allLinks = [...document.querySelectorAll('a[href]')];
+  for (const link of allLinks) {
+    if (link.href && (link.href.includes('.pdf') || link.href.includes('download'))) return link.href;
+  }
+  return null;
+})()'''
+
+
+def _load_pdf_extract_js() -> str:
+    """P2-07：读取单一事实源 pdf-link-extract.js（首行版本标记校验）。
+
+    读文件失败（独立分发场景）或首行版本标记缺失（内容可能被误改）时，
+    回退内嵌备份 _PDF_LINK_EXTRACT_JS_BACKUP 并打印警告便于排查。
+    """
+    try:
+        with open(PDF_LINK_EXTRACT_PATH, 'r', encoding='utf-8') as f:
+            source = f.read()
+        first_line = source.splitlines()[0] if source.splitlines() else ''
+        if re.match(r'^// PDF_LINK_EXTRACT_VERSION=\d+$', first_line):
+            return source
+        print(f"警告: {PDF_LINK_EXTRACT_PATH} 缺少版本标记，回退内嵌备份", file=sys.stderr)
+    except OSError as e:
+        print(f"警告: 读取 {PDF_LINK_EXTRACT_PATH} 失败（{e}），回退内嵌备份", file=sys.stderr)
+    return _PDF_LINK_EXTRACT_JS_BACKUP
+
+
 def _build_batch_ego_script(patent_numbers: list) -> str:
     """
     构造单次 ego-browser 脚本：复用同一 task space / tab 循环打开所有专利页，
     逐篇提取 PDF 链接与标题，cliLog 输出带专利号前缀的行。
     """
     nums = [normalize_patent_number(n) for n in patent_numbers]
+    # P2-07：提取 JS 来自单一事实源；嵌入 String.raw 模板前转义反引号与 ${（
+    # 文件/备份已约定不出现，此处防御性处理，防止误改内容截断模板字面量）
+    escaped_extract_js = _load_pdf_extract_js().replace('\\', '\\\\').replace('`', '\\`').replace('${', '\\${')
     lines = [
         f"const task = await useOrCreateTaskSpace('patent-download-batch');",
         "const nums = " + json.dumps(nums) + ";",
@@ -80,20 +161,7 @@ def _build_batch_ego_script(patent_numbers: list) -> str:
         "      if (!onPage) await wait(1);",
         "    }",
         "    if (!onPage) throw new Error('page mismatch: ' + num);",
-        "    const pdfUrl = await js(String.raw`(() => {",
-        "      const links = document.querySelectorAll('a[href*=\".pdf\"]');",
-        "      for (const link of links) {",
-        "        if (link.href && link.href.includes('.pdf')) {",
-        "          if (link.href.includes('storage.googleapis.com') || link.href.includes('patentimages')) {",
-        "            return link.href;",
-        "          }",
-        "        }",
-        "      }",
-        "      for (const link of links) {",
-        "        if (link.href) return link.href;",
-        "      }",
-        "      return null;",
-        "    })()`);",
+        "    const pdfUrl = await js(String.raw`" + escaped_extract_js + "`);",
         "    const title = await js(String.raw`(() => {",
         "      const headings = document.querySelectorAll('h1, h2, h3');",
         "      for (const h of headings) {",
@@ -167,66 +235,153 @@ def extract_pdf_urls_with_ego(patent_numbers: list) -> dict:
         return {'success': False, 'error': f'ego-browser 执行异常: {str(e)}'}
 
 
-def download_pdf_from_url(pdf_url: str, output_path: str, timeout: int = DOWNLOAD_TIMEOUT_SEC) -> dict:
+def _should_retry_urllib_error(err: Exception) -> bool:
+    """P2-02：urllib 异常分类——429/5xx 与网络层错误（超时/连接重置/DNS 等）
+    重试；404/403（HTTPError 不在重试集）与应用层错误（魔数/内容过小）确定性失败。
+    注意 HTTPError 是 URLError 的子类，需先查 HTTPError。
+    """
+    if isinstance(err, urllib.error.HTTPError):
+        return err.code in DOWNLOAD_RETRY_STATUSES
+    # 仅网络层错误可重试；URLError/TimeoutError/ConnectionError 均为 OSError 子类，
+    # 其余 OSError（FileNotFoundError/PermissionError 等本地确定性错误）不重试。
+    if isinstance(err, (urllib.error.URLError, TimeoutError, ConnectionError)):
+        return True
+    return False
+
+
+def download_pdf_from_url(pdf_url: str, output_path: Union[Path, str], timeout: int = DOWNLOAD_TIMEOUT_SEC) -> dict:
     """
     从 CDN URL 流式下载 PDF 到 output_path（64KB 分块边读边写，先写 .tmp
     再原子重命名；避免整篇 PDF 全量进内存，1-20MB 文件内存占用从 ~20MB 降到 ~64KB）。
     校验 PDF 魔数（%PDF），非 PDF 内容不落盘。
+    失败按 _should_retry_urllib_error 分类指数退避重试（最多 3 次）。
     """
     ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    if NO_VERIFY_SSL:
+        # 显式 opt-in（--no-verify-ssl）：默认不再禁用证书校验
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
 
-    tmp_path = None
-    try:
-        req = urllib.request.Request(pdf_url, headers={
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-        })
-        with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
-            # 先读头部校验魔数
-            head = resp.read(4)
-            if head != b'%PDF':
-                return {'success': False, 'error': f'下载的内容不是有效的PDF（magic={head!r}）'}
+    # 兼容 str 调用方；内部统一按 Path 使用 .name/.parent
+    output_path = output_path if isinstance(output_path, Path) else Path(output_path)
 
-            # 流式写 .tmp
-            fd, tmp_path = tempfile.mkstemp(prefix=output_path.name + '.', suffix='.tmp', dir=str(output_path.parent))
-            size = 0
-            with os.fdopen(fd, 'wb') as f:
-                f.write(head)
-                size += len(head)
-                while True:
-                    chunk = resp.read(DOWNLOAD_CHUNK_SIZE)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    size += len(chunk)
+    last_err = None
+    for attempt in range(DOWNLOAD_RETRY_ATTEMPTS):
+        tmp_path = None
+        try:
+            req = urllib.request.Request(pdf_url, headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            })
+            with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
+                # 先读头部校验魔数
+                head = resp.read(4)
+                if head != b'%PDF':
+                    return {'success': False, 'error': f'下载的内容不是有效的PDF（magic={head!r}）'}
 
-            if size < 100:
-                os.unlink(tmp_path)
+                # 流式写 .tmp（顺带计算 SHA-1，供 MANIFEST 记录）
+                fd, tmp_path = tempfile.mkstemp(prefix=output_path.name + '.', suffix='.tmp', dir=str(output_path.parent))
+                size = 0
+                sha1 = hashlib.sha1()
+                with os.fdopen(fd, 'wb') as f:
+                    f.write(head)
+                    sha1.update(head)
+                    size += len(head)
+                    while True:
+                        chunk = resp.read(DOWNLOAD_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        sha1.update(chunk)
+                        size += len(chunk)
+
+                if size < 500:
+                    os.unlink(tmp_path)
+                    tmp_path = None
+                    return {'success': False, 'error': f'下载内容过小（{size} bytes），疑似错误页'}
+
+                os.replace(tmp_path, str(output_path))
                 tmp_path = None
-                return {'success': False, 'error': f'下载内容过小（{size} bytes），疑似错误页'}
+                return {'success': True, 'path': str(output_path), 'size': size, 'sha1': sha1.hexdigest(), 'pdf_url': pdf_url}
 
-            os.replace(tmp_path, str(output_path))
-            tmp_path = None
-            return {'success': True, 'path': str(output_path), 'size': size, 'pdf_url': pdf_url}
+        except Exception as e:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+            last_err = e
+            if attempt < DOWNLOAD_RETRY_ATTEMPTS - 1 and _should_retry_urllib_error(e):
+                delay = DOWNLOAD_RETRY_BASE_DELAY_SEC * (DOWNLOAD_RETRY_FACTOR ** attempt)
+                delay = min(delay, DOWNLOAD_RETRY_MAX_DELAY_SEC)
+                delay += random.uniform(0, max(1.0, delay * 0.25))
+                time.sleep(delay)
+                continue
+            return {'success': False, 'error': f'下载失败: {str(e)}'}
 
-    except Exception as e:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-        return {'success': False, 'error': f'下载失败: {str(e)}'}
+    # 理论不可达（最后一次尝试已 return），兜底
+    return {'success': False, 'error': f'下载失败: {str(last_err)}'}
 
 
-def download_one(num: str, item: dict, output_dir: Path) -> dict:
-    """下载单个专利（供线程池调用）：跳过已存在文件，提取失败直接返回。"""
+def _artifact_path(output_dir: Path, num: str, title: str) -> Path:
+    """P2-03：产物命名契约——默认 <num>.pdf（与 TS 侧一致，MANIFEST 互相识别）；
+    --with-title 时保留旧命名 <num>_<safe_title>.pdf 兼容历史产物。"""
+    if USE_TITLE_SUFFIX:
+        safe_title = re.sub(r'[<>:"/\\|?*]', '', title or num)[:60]
+        return output_dir / f"{num}_{safe_title}.pdf"
+    return output_dir / f"{num}.pdf"
+
+
+def load_manifest(output_dir: Path) -> dict:
+    """P2-03：加载 MANIFEST（按 patent 去重，最后一条 wins）。
+
+    单行损坏容忍跳过（仅影响该条目续传）；文件整体损坏（无任何有效行）
+    时改名 .bak 保护现场并返回空。
+    """
+    manifest_path = output_dir / MANIFEST_FILE
+    if not manifest_path.exists():
+        return {}
+    entries = {}
+    valid_lines = 0
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get('status') == 'ok' and entry.get('patent'):
+                        entries[entry['patent']] = entry
+                    valid_lines += 1
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+    except OSError:
+        return {}
+    if valid_lines <= 0:
+        try:
+            manifest_path.rename(manifest_path.with_suffix('.jsonl.bak'))
+        except OSError:
+            pass
+        return {}
+    return entries
+
+
+def save_manifest_entry(output_dir: Path, entry: dict) -> None:
+    """P2-03：追加一条 MANIFEST 记录（append 式，重复行由加载去重兜底）。"""
+    manifest_path = output_dir / MANIFEST_FILE
+    with open(manifest_path, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+
+
+def download_one(num: str, item: dict, output_dir: Path, force: bool = False) -> dict:
+    """下载单个专利（供线程池调用）：跳过已存在文件，提取失败直接返回。
+    force=True 时绕过"已存在跳过"（--force 强制重跑）。"""
     if not item.get('pdf_url'):
         return {'success': False, 'num': num, 'error': '未找到PDF下载链接'}
 
-    safe_title = re.sub(r'[<>:"/\\|?*]', '', item.get('title') or num)[:60]
-    file_path = output_dir / f"{num}_{safe_title}.pdf"
-    if file_path.exists() and file_path.stat().st_size > 100:
+    # MANIFEST 记录绝对路径：跨 cwd 重跑（续传判断 Path(entry['path'])）也能命中。
+    file_path = _artifact_path(output_dir, num, item.get('title') or num).resolve()
+    if not force and file_path.exists() and file_path.stat().st_size > 500:
         return {'success': True, 'num': num, 'path': str(file_path), 'size': file_path.stat().st_size, 'skipped': True}
 
     result = download_pdf_from_url(item['pdf_url'], file_path)
@@ -248,8 +403,17 @@ def main():
     parser.add_argument('--open', action='store_true', help='下载后自动打开PDF')
     parser.add_argument('-j', '--jobs', type=int, default=DEFAULT_DOWNLOAD_WORKERS,
                         help=f'并发下载线程数（默认 {DEFAULT_DOWNLOAD_WORKERS}）')
+    parser.add_argument('--no-verify-ssl', action='store_true',
+                        help='禁用 SSL 证书校验（仅企业内网 MITM 代理等特殊场景；默认完整校验）')
+    parser.add_argument('--with-title', action='store_true',
+                        help='产物命名保留标题后缀（<专利号>_<标题>.pdf，兼容旧产物；默认 <专利号>.pdf）')
+    parser.add_argument('--force', action='store_true',
+                        help='忽略 MANIFEST 断点续传，强制重跑全部专利')
 
     args = parser.parse_args()
+    global NO_VERIFY_SSL, USE_TITLE_SUFFIX
+    NO_VERIFY_SSL = args.no_verify_ssl
+    USE_TITLE_SUFFIX = args.with_title
 
     # 收集专利号
     patent_numbers = list(args.patent_numbers)
@@ -265,6 +429,9 @@ def main():
         print("\n错误: 请提供至少一个专利号")
         sys.exit(1)
 
+    # P1-02：路径穿越防御（归一化后拒绝 \ 与 ..），不限制绝对路径能力
+    patent_numbers = validate_patent_numbers(patent_numbers)
+
     # 设置输出目录
     if args.output:
         output_dir = Path(args.output)
@@ -277,9 +444,35 @@ def main():
     print(f"并发下载线程: {max(1, args.jobs)}")
     print("=" * 50)
 
+    # P2-03：加载 MANIFEST（断点续传）——status=ok 且磁盘 size 匹配的直接跳过；
+    # --force 时全部视为未下载。
+    manifest = load_manifest(output_dir)
+    pending = []
+    for num in patent_numbers:
+        entry = manifest.get(num)
+        if (not args.force and entry and entry.get('path')
+                and Path(entry['path']).exists()
+                and Path(entry['path']).stat().st_size == entry.get('size')):
+            continue  # 命中续传，跳过
+        pending.append(num)
+    skipped_n = len(patent_numbers) - len(pending)
+    if skipped_n:
+        print(f"  ↻ 断点续传命中：{skipped_n} 篇已下载，跳过（--force 可强制重跑）")
+
+    # 旧命名产物提示（不自动删除）
+    for num in patent_numbers:
+        if not (output_dir / f"{num}.pdf").exists():
+            old = list(output_dir.glob(f"{num}_*.pdf"))
+            if old:
+                print(f"  ⚠ 检测到旧命名产物 {old[0].name}（新契约为 {num}.pdf），未自动删除，请手动处理")
+
+    if not pending:
+        print("全部专利已在 MANIFEST 中，无需下载")
+        return 0
+
     # 步骤1: 单次 ego-browser 会话批量提取所有 PDF URL
-    print(f"\n[提取] 一次浏览器会话批量打开 {len(patent_numbers)} 篇 Google Patents 页面...")
-    extract_result = extract_pdf_urls_with_ego(patent_numbers)
+    print(f"\n[提取] 一次浏览器会话批量打开 {len(pending)} 篇 Google Patents 页面...")
+    extract_result = extract_pdf_urls_with_ego(pending)
 
     if not extract_result['success']:
         print(f"  ✗ 批量提取失败: {extract_result['error']}")
@@ -295,7 +488,7 @@ def main():
     fail_count = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as executor:
         future_map = {
-            executor.submit(download_one, num, item, output_dir): num
+            executor.submit(download_one, num, item, output_dir, args.force): num
             for num, item in items.items()
         }
         for future in concurrent.futures.as_completed(future_map):
@@ -310,6 +503,16 @@ def main():
                 skipped = ' (已存在，跳过)' if result.get('skipped') else ''
                 print(f"  ✓ [{num}] {result.get('title', '')} · {size_kb:.1f} KB{skipped}")
                 success_count += 1
+                # P2-03：成功条目追加进 MANIFEST（下次执行命中即跳过）
+                if not result.get('skipped'):
+                    save_manifest_entry(output_dir, {
+                        'patent': num,
+                        'status': 'ok',
+                        'path': str(result['path']),
+                        'size': result['size'],
+                        'sha1': result.get('sha1', ''),
+                        'ts': int(time.time()),
+                    })
                 if args.open and not result.get('skipped'):
                     subprocess.run(['open', str(result['path'])])
             else:

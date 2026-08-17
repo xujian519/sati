@@ -78,7 +78,7 @@ function createFakeSession(
 
 async function drain(gateway: InProcessGateway, input: object): Promise<Array<{ type: string; code?: string }>> {
   const events: Array<{ type: string; code?: string }> = [];
-  for await (const event of gateway.submitTurn(input as never)) {
+  for await (const event of gateway.submitTurn(input as unknown as Parameters<InProcessGateway["submitTurn"]>[0])) {
     events.push(event as { type: string; code?: string });
   }
   return events;

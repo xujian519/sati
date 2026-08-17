@@ -12,6 +12,7 @@ import { sha256, stableStringify } from "./hash.js";
 import { mergeConfigSources } from "./merge.js";
 import { parseMemoryConfig } from "./parseMemoryConfig.js";
 import { parseAdaptersConfig, parseGatewayConfig } from "./parseGatewayConfig.js";
+import { parsePatentsConfig } from "./parsePatentsConfig.js";
 import { parseToolsConfig } from "./parseToolsConfig.js";
 import { redactConfig } from "./redact.js";
 import {
@@ -118,6 +119,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
   const cron = parseCronConfig(rawConfig.cron, diagnostics);
   const tools = parseToolsConfig(rawConfig.tools, diagnostics);
+  const patents = parsePatentsConfig(rawConfig.patents, diagnostics);
   const telemetry = parseTelemetryConfig(rawConfig.telemetry);
   const proxy = parseProxyConfig(rawConfig, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
@@ -133,6 +135,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
     alwaysOn,
     cron,
     tools,
+    patents,
     telemetry,
     proxy,
   });
@@ -154,6 +157,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
       ...(alwaysOn ? { alwaysOn } : {}),
       ...(cron ? { cron } : {}),
       ...(tools ? { tools } : {}),
+      ...(patents ? { patents } : {}),
       telemetry,
       ...(proxy ? { proxy } : {}),
     },
@@ -302,6 +306,7 @@ function validateTopLevel(rawConfig: PilotRawConfig, diagnostics: PilotConfigDia
     "cron",
     "tools",
     "proxy",
+    "patents",
     // Reserved namespace for ui/server (Web UI Express bridge). The Sati
     // gateway does not parse `webui.*` itself but tolerates it so a single
     // ~/.sati/sati.yaml can carry both gateway-side and ui-side

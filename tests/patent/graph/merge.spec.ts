@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GraphMergeError, mergeWithSchema, type GraphState } from "../../../src/patent/graph/index.js";
+import { GraphMergeError, mergeWithSchema, type GraphState, type Reducer } from "../../../src/patent/graph/index.js";
 
 const results = (entries: Array<[string, GraphState]>): Array<{ node: string; delta: GraphState }> =>
   entries.map(([node, delta]) => ({ node, delta }));
@@ -69,5 +69,8 @@ test("mergeWithSchema fail_on_conflict: 首次写入不冲突", () => {
 
 test("mergeWithSchema: 未知 reducer 抛错", () => {
   const state: GraphState = {};
-  assert.throws(() => mergeWithSchema(state, results([["n1", { k: 1 }]]), { k: "bogus" as never }), /未知 Reducer/);
+  assert.throws(
+    () => mergeWithSchema(state, results([["n1", { k: 1 }]]), { k: "bogus" as unknown as Reducer }),
+    /未知 Reducer/,
+  );
 });

@@ -8,8 +8,9 @@ import type { PatentSearchResult } from "nuo-patent";
 import { createPatentSearchTool } from "../../../src/tool/builtin/patentSearch.js";
 import { createNuoSearchProvider } from "../../../src/patent/data/nuo/searchProvider.js";
 import { SatiToolRuntimeError } from "../../../src/tool/protocol/errors.js";
+import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 
-const context = { env: {}, cwd: "/", projectRoot: "/", abortSignal: undefined } as never;
+const context = { env: {}, cwd: "/", projectRoot: "/", abortSignal: undefined } as unknown as SatiToolRuntimeContext;
 
 function makeSearchResult(overrides: Partial<PatentSearchResult> = {}): PatentSearchResult {
   return {

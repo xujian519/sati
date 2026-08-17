@@ -40,7 +40,7 @@ test("telemetry: model_event request_started 触发 trackFeatureLoopStage", () =
   const fakeTelemetry = {
     trackFeatureLoopStage: (input: Record<string, unknown>) => calls.push(input),
     trackError: () => {},
-  } as never;
+  } as unknown as Parameters<typeof emitSessionTelemetry>[0];
   emitSessionTelemetry(
     fakeTelemetry,
     {

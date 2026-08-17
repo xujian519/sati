@@ -43,6 +43,7 @@ export type PilotRawConfig = {
   telemetry?: unknown;
   proxy?: unknown;
   webui?: unknown;
+  patents?: unknown;
 };
 
 export type PilotExtensionConfig = {
@@ -306,6 +307,12 @@ export type PilotTelemetryConfig = {
   enabled: boolean;
 };
 
+/** 专利域全局配置（patents.*，可选）。 */
+export type PilotPatentsConfig = {
+  /** patent_pdf_download 未显式传 outputDir 时的全局下载目录。 */
+  downloadDir?: string;
+};
+
 export type PilotConfig = {
   agent: PilotAgentConfig;
   model: ModelConfig;
@@ -319,6 +326,7 @@ export type PilotConfig = {
   tools?: PilotToolsConfig;
   telemetry?: PilotTelemetryConfig;
   proxy?: PilotProxyConfig;
+  patents?: PilotPatentsConfig;
 };
 
 export type PilotConfigSnapshot = {
