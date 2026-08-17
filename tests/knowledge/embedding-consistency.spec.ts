@@ -101,6 +101,22 @@ test("embedding-consistency: knowledge.db 不可用返回 null（不视为失败
   assert.equal(result, null);
 });
 
+test("embedding-consistency: rowid 采样（替代 ORDER BY RANDOM）在较大库中不重复采样", async () => {
+  // 2000 行：rowid 采样需返回 sampleSize 个互不重复的样本（seenRowids 去重）。
+  const chunks = Array.from({ length: 2000 }, (_, i) => ({
+    content: `采样锚点文本 ${i}。用于验证 rowid 起点采样不重复且覆盖可达。`.repeat(4),
+    vector: [1, 0, 0, 0],
+  }));
+  const dbPath = createKnowledgeDb(chunks);
+  const result = await checkEmbeddingConsistency(dbPath, makeConsistentClient(), { sampleSize: 8, threshold: 0.9 });
+  assert.ok(result, "应返回自检结果");
+  assert.equal(result.sampleCount, 8, "应恰好采样 8 个互不重复锚点");
+  const texts = result!.samples.map(s => s.text);
+  assert.equal(new Set(texts).size, 8, "采样文本不应重复");
+  assert.equal(result!.ok, true);
+  rmSync(dbPath, { recursive: false, force: true });
+});
+
 test("embedding-consistency: 空 embeddings 库返回 null", async () => {
   const dbPath = createKnowledgeDb([]);
   const result = await checkEmbeddingConsistency(dbPath, makeConsistentClient());
