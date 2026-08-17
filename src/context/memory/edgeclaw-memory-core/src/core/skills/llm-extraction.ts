@@ -27,6 +27,60 @@ import {
   tryParseLooseMemoryCreatePayload,
   type RawMemoryCreatePayload,
 } from "./llm-json.js";
+import {
+  chooseBestRecallProjectFallback,
+  clampConfidence,
+  isRecord,
+  normalizeBoolean,
+  normalizeDreamCluster,
+  normalizeDreamFileEntryIds,
+  normalizeDreamFileGlobalPlanProject,
+  normalizeDreamFileMergeReason,
+  normalizeDreamFileProjectId,
+  normalizeDreamFileProjectMetaPayload,
+  normalizeDreamFileProjectRewriteFile,
+  normalizeDreamFileProjectStatus,
+  normalizeDreamProjectMetaReview,
+  normalizeGeneralProjectMetaMergeGroup,
+  normalizeMemoryRoute,
+  normalizeStringArray,
+  normalizeWhitespace,
+  sanitizeHeaders,
+  stripTrailingSlash,
+  truncate,
+  truncateForPrompt,
+  uniqueStrings,
+} from "./llm-normalizers.js";
+import {
+  buildSyntheticProjectFollowUpCandidate,
+  deriveFeedbackCandidateName,
+  extractProjectDescriptorHint,
+  extractProjectNameFromContent,
+  extractProjectNameHint,
+  extractProjectStageHint,
+  extractSingleHint,
+  extractTimelineHints,
+  extractUniqueBatchProjectName,
+  hasGenericProjectAnchor,
+  isGenericProjectCandidateName,
+  isLikelyHumanReadableProjectIdentifier,
+  isStableFormalProjectId,
+  looksLikeCollaborationRuleText,
+  looksLikeConcreteProjectMemoryText,
+  looksLikeProjectBlockerText,
+  looksLikeProjectConstraintText,
+  looksLikeProjectFollowUpText,
+  looksLikeProjectNextStepText,
+  looksLikeProjectRiskText,
+  looksLikeProjectScopeText,
+  projectIdentityTerms,
+  sanitizeFeedbackSectionText,
+  sanitizeProjectDescriptionText,
+  selectKnownProjectHint,
+  splitProfileFacts,
+  stripExplicitRememberLead,
+  stripMarkdownSyntax,
+} from "./llm-hints.js";
 
 type LoggerLike = {
   info?: (...args: unknown[]) => void;
@@ -757,32 +811,6 @@ Use this exact JSON shape:
 }
 `.trim();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-// llm-extraction 的截断语义：无省略号、截断后 trim（用于 LLM prompt 与存储，避免多余后缀）
-function truncate(value: string, maxLength: number): string {
-  return truncateBase(value, maxLength, { ellipsis: false, trim: true });
-}
-
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function stripTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, "");
-}
-
-function sanitizeHeaders(headers: unknown): ProviderHeaders {
-  if (!isRecord(headers)) return undefined;
-  const next: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (typeof value === "string" && value.trim()) next[key] = value;
-  }
-  return Object.keys(next).length > 0 ? next : undefined;
-}
-
 function parseModelRef(
   modelRef: string | undefined,
   config: Record<string, unknown>,
@@ -1265,547 +1293,6 @@ function buildGeneralProjectMetaMergePrompt(input: LlmGeneralProjectMetaMergeInp
     null,
     2,
   );
-}
-
-function clampConfidence(value: unknown, fallback: number): number {
-  if (typeof value !== "number" || Number.isNaN(value)) return fallback;
-  return Math.max(0, Math.min(1, value));
-}
-
-function normalizeDreamFileProjectId(value: unknown, allowedProjectIds: ReadonlySet<string>): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = normalizeWhitespace(value);
-  return normalized && allowedProjectIds.has(normalized) ? normalized : undefined;
-}
-
-function normalizeDreamFileEntryIds(items: unknown, allowedEntryIds: ReadonlySet<string>, maxItems = 200): string[] {
-  if (!Array.isArray(items)) return [];
-  return Array.from(
-    new Set(
-      items
-        .filter((item): item is string => typeof item === "string")
-        .map(item => normalizeWhitespace(item))
-        .filter(item => item && allowedEntryIds.has(item)),
-    ),
-  ).slice(0, maxItems);
-}
-
-function normalizeDreamFileProjectStatus(value: unknown): string {
-  const normalized = typeof value === "string" ? normalizeWhitespace(value) : "";
-  return truncate(normalized || "active", 80);
-}
-
-function normalizeDreamFileMergeReason(
-  value: unknown,
-): "rename" | "alias_equivalence" | "duplicate_formal_project" | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = normalizeWhitespace(value).toLowerCase();
-  switch (normalized) {
-    case "rename":
-    case "alias_equivalence":
-    case "duplicate_formal_project":
-      return normalized;
-    default:
-      return undefined;
-  }
-}
-
-function normalizeDreamFileGlobalPlanProject(
-  item: unknown,
-  allowedEntryIds: ReadonlySet<string>,
-  allowedProjectIds: ReadonlySet<string>,
-  fallbackIndex: number,
-): LlmDreamFileGlobalPlanProject | null {
-  if (!isRecord(item)) return null;
-  const retainedEntryIds = normalizeDreamFileEntryIds(item.retained_entry_ids, allowedEntryIds, 400);
-  if (retainedEntryIds.length === 0) return null;
-  const planKey =
-    typeof item.plan_key === "string"
-      ? truncate(normalizeWhitespace(item.plan_key), 120)
-      : `dream-plan-${fallbackIndex + 1}`;
-  const projectName =
-    typeof item.project_name === "string" ? truncate(normalizeWhitespace(item.project_name), 120) : "";
-  const description = typeof item.description === "string" ? truncate(normalizeWhitespace(item.description), 320) : "";
-  if (!projectName || !description) return null;
-  const targetProjectId = normalizeDreamFileProjectId(item.target_project_id, allowedProjectIds);
-  const mergeReason = normalizeDreamFileMergeReason(item.merge_reason);
-  return {
-    planKey,
-    ...(targetProjectId ? { targetProjectId } : {}),
-    projectName,
-    description,
-    status: normalizeDreamFileProjectStatus(item.status),
-    ...(mergeReason ? { mergeReason } : {}),
-    evidenceEntryIds: normalizeDreamFileEntryIds(item.evidence_entry_ids, allowedEntryIds, 80),
-    retainedEntryIds,
-  };
-}
-
-function normalizeDreamFileProjectMetaPayload(
-  value: unknown,
-  fallback: { projectName: string; description: string; status: string },
-): { projectName: string; description: string; status: string } {
-  if (!isRecord(value)) return fallback;
-  const projectName =
-    typeof value.project_name === "string"
-      ? truncate(normalizeWhitespace(value.project_name), 120)
-      : fallback.projectName;
-  const description =
-    typeof value.description === "string"
-      ? truncate(normalizeWhitespace(value.description), 320)
-      : fallback.description;
-  return {
-    projectName: projectName || fallback.projectName,
-    description: description || fallback.description,
-    status: normalizeDreamFileProjectStatus(value.status ?? fallback.status),
-  };
-}
-
-function normalizeDreamFileProjectRewriteFile(
-  item: unknown,
-  allowedEntryIds: ReadonlySet<string>,
-): LlmDreamFileProjectRewriteOutputFile | null {
-  if (!isRecord(item)) return null;
-  const type = item.type === "project" || item.type === "feedback" ? item.type : null;
-  if (!type) return null;
-  const sourceEntryIds = normalizeDreamFileEntryIds(item.source_entry_ids, allowedEntryIds, 200);
-  if (sourceEntryIds.length === 0) return null;
-  const name = typeof item.name === "string" ? truncate(normalizeWhitespace(item.name), 120) : "";
-  const description = typeof item.description === "string" ? truncate(normalizeWhitespace(item.description), 320) : "";
-  if (!name || !description) return null;
-  if (type === "project") {
-    const stage = typeof item.stage === "string" ? truncate(normalizeWhitespace(item.stage), 220) : "";
-    return {
-      type,
-      name,
-      description,
-      sourceEntryIds,
-      ...(stage ? { stage } : {}),
-      decisions: uniqueStrings(normalizeStringArray(item.decisions, 20), 20),
-      constraints: uniqueStrings(normalizeStringArray(item.constraints, 20), 20),
-      nextSteps: uniqueStrings(normalizeStringArray(item.next_steps, 20), 20),
-      blockers: uniqueStrings(normalizeStringArray(item.blockers, 20), 20),
-      timeline: uniqueStrings(normalizeStringArray(item.timeline, 20), 20),
-      notes: uniqueStrings(normalizeStringArray(item.notes, 20), 20),
-    };
-  }
-  const rule = typeof item.rule === "string" ? truncate(normalizeWhitespace(item.rule), 320) : "";
-  if (!rule) return null;
-  return {
-    type,
-    name,
-    description,
-    sourceEntryIds,
-    rule,
-    ...(typeof item.why === "string" && normalizeWhitespace(item.why)
-      ? { why: truncate(normalizeWhitespace(item.why), 320) }
-      : {}),
-    ...(typeof item.how_to_apply === "string" && normalizeWhitespace(item.how_to_apply)
-      ? { howToApply: truncate(normalizeWhitespace(item.how_to_apply), 320) }
-      : {}),
-    notes: uniqueStrings(normalizeStringArray(item.notes, 20), 20),
-  };
-}
-
-function normalizeDreamCluster(item: unknown, allowedRelativePaths: ReadonlySet<string>): LlmDreamCluster | null {
-  if (!isRecord(item)) return null;
-  const memberRelativePaths = normalizeDreamFileEntryIds(item.member_relative_paths, allowedRelativePaths, 32);
-  if (memberRelativePaths.length === 0) return null;
-  const reason = typeof item.reason === "string" ? truncate(normalizeWhitespace(item.reason), 320) : "";
-  return {
-    memberRelativePaths,
-    reason,
-  };
-}
-
-function normalizeGeneralProjectMetaMergeGroup(item: unknown): LlmGeneralProjectMetaMergeGroup | null {
-  if (!isRecord(item)) return null;
-  const keeperProjectId = typeof item.keeper_project_id === "string" ? normalizeWhitespace(item.keeper_project_id) : "";
-  const duplicateProjectIds = normalizeStringArray(item.duplicate_project_ids, 100)
-    .map(projectId => normalizeWhitespace(projectId))
-    .filter(Boolean);
-  if (!keeperProjectId || duplicateProjectIds.length === 0) return null;
-  const reason = typeof item.reason === "string" ? truncate(normalizeWhitespace(item.reason), 320) : "";
-  return {
-    keeperProjectId,
-    duplicateProjectIds: Array.from(new Set(duplicateProjectIds)),
-    reason,
-  };
-}
-
-function normalizeDreamProjectMetaReview(
-  payload: RawProjectMetaReviewPayload,
-  fallback: { projectName: string; description: string; status: string },
-): LlmDreamProjectMetaReviewOutput {
-  return {
-    shouldUpdate: normalizeBoolean(payload.should_update, false),
-    reason: typeof payload.reason === "string" ? truncate(normalizeWhitespace(payload.reason), 320) : "",
-    projectMeta: {
-      projectName:
-        typeof payload.project_name === "string"
-          ? truncate(normalizeWhitespace(payload.project_name), 120) || fallback.projectName
-          : fallback.projectName,
-      description:
-        typeof payload.description === "string"
-          ? truncate(normalizeWhitespace(payload.description), 320) || fallback.description
-          : fallback.description,
-      status: normalizeDreamFileProjectStatus(payload.status ?? fallback.status),
-    },
-  };
-}
-
-function truncateForPrompt(value: string, maxLength: number): string {
-  return truncate(normalizeWhitespace(value), maxLength);
-}
-
-function recallProjectSourcePriority(project: ProjectShortlistCandidate): number {
-  if (project.sourceType === "general_local" || project.sourceType === "workspace_external_mirror") return 2;
-  if (project.sourceType === "workspace_external") return 1;
-  return 0;
-}
-
-function chooseBestRecallProjectFallback(shortlist: ProjectShortlistCandidate[]): ProjectShortlistCandidate {
-  return (
-    [...shortlist].sort((left, right) => {
-      if (right.exact !== left.exact) return right.exact - left.exact;
-      if (right.score !== left.score) return right.score - left.score;
-      const sourcePriorityDelta = recallProjectSourcePriority(right) - recallProjectSourcePriority(left);
-      if (sourcePriorityDelta !== 0) return sourcePriorityDelta;
-      return right.updatedAt.localeCompare(left.updatedAt);
-    })[0] ?? shortlist[0]
-  );
-}
-
-function normalizeStringArray(items: unknown, maxItems: number): string[] {
-  if (typeof items === "string" && items.trim()) {
-    return [items.trim()].slice(0, maxItems);
-  }
-  if (!Array.isArray(items)) return [];
-  return items
-    .filter((item): item is string => typeof item === "string")
-    .map(item => item.trim())
-    .filter(Boolean)
-    .slice(0, maxItems);
-}
-
-function uniqueStrings(items: readonly string[], maxItems: number): string[] {
-  return Array.from(new Set(items.map(item => item.trim()).filter(Boolean))).slice(0, maxItems);
-}
-
-function stripExplicitRememberLead(text: string): string {
-  return normalizeWhitespace(text);
-}
-
-function splitProfileFacts(text: string): string[] {
-  return uniqueStrings(
-    text
-      .replace(/\r/g, "\n")
-      .split(/\n|[，,；;。.!?]/)
-      .map(line => normalizeWhitespace(line))
-      .filter(line => line.length >= 2),
-    20,
-  );
-}
-
-function stripMarkdownSyntax(text: string): string {
-  return normalizeWhitespace(
-    text
-      .replace(/\r/g, "\n")
-      .replace(/^#{1,6}\s*/gm, "")
-      .replace(/^\s*[-*+]\s*/gm, "")
-      .replace(/`+/g, "")
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1"),
-  );
-}
-
-function isStableFormalProjectId(value: string | undefined): boolean {
-  return STABLE_FORMAL_PROJECT_ID_PATTERN.test((value ?? "").trim());
-}
-
-function looksLikeCollaborationRuleText(text: string): boolean {
-  const normalized = normalizeWhitespace(text);
-  return (
-    /(以后回答|回答时|回复时|同步进展|代码示例|先给结论|先说完成了什么|不要写成|怎么和我协作|怎么交付|怎么汇报|请你|交付时|汇报|review|评审|写法|输出格式|回复格式|格式化输出)/i.test(
-      normalized,
-    ) ||
-    /((给我|你|请按|每次).{0,12}(交付|输出|回复|汇报).{0,20}(标题|正文|封面文案))|((先给|再给).{0,12}(标题|正文|封面文案))/i.test(
-      normalized,
-    )
-  );
-}
-
-function deriveFeedbackCandidateName(text: string): string {
-  const normalized = normalizeWhitespace(text);
-  if (/(交付|标题|正文|封面文案)/i.test(normalized)) return "delivery-rule";
-  if (/(汇报|同步进展|风险|完成了什么)/i.test(normalized)) return "reporting-rule";
-  if (/(格式|风格|写法|回复时|回答时)/i.test(normalized)) return "format-rule";
-  return "collaboration-rule";
-}
-
-function looksLikeConcreteProjectMemoryText(text: string): boolean {
-  return /(目标是|当前卡点|里程碑|要出可演示版本|要给团队试用|阶段|进展|deadline|blocker|next step|版本|试用|发布|第一版|只做|先做|不碰|约束|限制|一期范围|当前范围|保留|新增一级|memory tab|当前风险|跨会话召回|project\.meta|当前 project)/i.test(
-    normalizeWhitespace(text),
-  );
-}
-
-function looksLikeProjectRiskText(text: string): boolean {
-  return /(当前风险|风险是|主要风险|核心风险|跨会话召回|project\.meta|当前 project|召回[^。；;\n]*project|召回[^。；;\n]*当前项目)/i.test(
-    normalizeWhitespace(text),
-  );
-}
-
-function looksLikeProjectScopeText(text: string): boolean {
-  return /(一期范围|当前范围|本期范围|替换旧记忆|保留[^。；;\n]*(?:memory_overview|memory_list|memory_search|memory_get|memory_flush|memory_dream)|新增一级[^。；;\n]*memory tab|新增[^。；;\n]*memory tab|memory_overview|memory_list|memory_search|memory_get|memory_flush|memory_dream)/i.test(
-    normalizeWhitespace(text),
-  );
-}
-
-function looksLikeProjectFollowUpText(text: string): boolean {
-  const normalized = normalizeWhitespace(stripExplicitRememberLead(text));
-  if (!normalized) return false;
-  return /(接下来|下一步|下个阶段|最该补|还差|先做|先把|优先|先补|最优先|当前卡点|卡点|阻塞|受众|定位|内容角度|角度|约束|限制|不要碰|别碰|统一成|模板化|目标人群|适合打给|更适合打给|核心约束|镜头顺序|标题锚点|开头三秒)/i.test(
-    normalized,
-  );
-}
-
-function looksLikeProjectNextStepText(text: string): boolean {
-  return /(接下来|下一步|最该补|还差|先做|先把|优先|先补|最优先)/i.test(normalizeWhitespace(text));
-}
-
-function looksLikeProjectConstraintText(text: string): boolean {
-  return /(约束|限制|不要|别碰|统一成|模板化|必须|只能|先别|不碰)/i.test(normalizeWhitespace(text));
-}
-
-function looksLikeProjectBlockerText(text: string): boolean {
-  return /(卡点|阻塞|难点|问题在于|麻烦是|还差)/i.test(normalizeWhitespace(text));
-}
-
-function extractUniqueBatchProjectName(messages: MemoryMessage[]): string {
-  const names = new Map<string, string>();
-  for (const message of messages.filter(entry => entry.role === "user")) {
-    const value = extractProjectNameHint(message.content);
-    if (!value) continue;
-    const key = value.toLowerCase();
-    if (!names.has(key)) names.set(key, value);
-  }
-  return names.size === 1 ? (Array.from(names.values())[0] ?? "") : "";
-}
-
-function extractProjectDescriptorHint(text: string): string {
-  const patterns = [
-    /(?:它|这个项目|该项目|项目)\s*是(?:一个)?\s*([^。；;\n，,]+)/i,
-    /(?:这是|这会是)(?:一个)?\s*([^。；;\n，,]+)/i,
-  ];
-  for (const pattern of patterns) {
-    const match = pattern.exec(text);
-    const value = match?.[1] ? normalizeWhitespace(match[1]) : "";
-    if (value) return truncateForPrompt(value, 220);
-  }
-  return "";
-}
-
-function extractProjectStageHint(text: string): string {
-  const normalized = normalizeWhitespace(stripExplicitRememberLead(text));
-  if (!normalized) return "";
-  const patterns = [
-    /((?:目前|现在|当前)[^。；;\n，,]*?(?:设计阶段|开发阶段|测试阶段|规划阶段|调研阶段|原型阶段|实现阶段|上线阶段))/i,
-    /((?:还在|正在|处于)[^。；;\n，,]*?(?:设计阶段|开发阶段|测试阶段|规划阶段|调研阶段|原型阶段|实现阶段|上线阶段))/i,
-    /((?:目前|现在|当前|还在|正在|处于)[^。；;\n，,]*?(?:验证阶段|摸索阶段|试水阶段))/i,
-    /((?:[^。；;\n，,]{0,24})(?:验证阶段|摸索阶段|试水阶段))/i,
-    /((?:设计阶段|开发阶段|测试阶段|规划阶段|调研阶段|原型阶段|实现阶段|上线阶段))/i,
-    /((?:验证阶段|摸索阶段|试水阶段))/i,
-  ];
-  for (const pattern of patterns) {
-    const match = pattern.exec(normalized);
-    const value = match?.[1] ? truncateForPrompt(normalizeWhitespace(match[1]), 220) : "";
-    if (value) return value;
-  }
-  return "";
-}
-
-function extractProjectNameHint(text: string): string {
-  const patterns = [
-    /(?:先叫它|先叫|叫它|叫做|项目名(?:字)?(?:先)?叫(?:做)?)\s*[“"'《]?([^。；;\n，,：:（）()]{2,80})/i,
-    /项目[，, ]*(?:先)?叫(?:做)?\s*[“"'《]?([^。；;\n，,：:（）()]{2,80})/i,
-  ];
-  for (const pattern of patterns) {
-    const match = pattern.exec(text);
-    const value = match?.[1] ? normalizeWhitespace(match[1]) : "";
-    if (value) return truncate(value, 80);
-  }
-  return "";
-}
-
-function hasGenericProjectAnchor(text: string): boolean {
-  return /(?:这个项目|该项目|本项目|这个东西|这件事)/i.test(normalizeWhitespace(text));
-}
-
-function projectIdentityTerms(project: ProjectIdentityHint): string[] {
-  return uniqueStrings(
-    [project.projectName]
-      .map(item => normalizeWhitespace(item).toLowerCase())
-      .filter(item => item.length > 0 && item.length <= 80 && !/[。！？!?]/.test(item)),
-    20,
-  );
-}
-
-function selectKnownProjectHint(text: string, knownProjects: ProjectIdentityHint[]): ProjectIdentityHint | undefined {
-  if (knownProjects.length === 0) return undefined;
-  const normalized = normalizeWhitespace(text).toLowerCase();
-  if (!normalized) return undefined;
-  const exactMatches = knownProjects.filter(project =>
-    projectIdentityTerms(project).some(term => term && normalized.includes(term)),
-  );
-  if (exactMatches.length === 1) {
-    return exactMatches[0];
-  }
-  const projectFollowUpSignal =
-    hasGenericProjectAnchor(text) ||
-    looksLikeProjectFollowUpText(text) ||
-    looksLikeConcreteProjectMemoryText(text) ||
-    looksLikeProjectRiskText(text) ||
-    looksLikeProjectScopeText(text);
-  if (knownProjects.length === 1 && projectFollowUpSignal) {
-    return knownProjects[0];
-  }
-  return undefined;
-}
-
-function isGenericProjectCandidateName(name: string): boolean {
-  const normalized = normalizeWhitespace(name).toLowerCase();
-  return normalized === "" || ["overview", "project", "project-item", "memory-item"].includes(normalized);
-}
-
-function isLikelyHumanReadableProjectIdentifier(value: string): boolean {
-  const normalized = normalizeWhitespace(value);
-  if (!normalized) return false;
-  if (isStableFormalProjectId(normalized)) return false;
-  if (isGenericProjectCandidateName(normalized)) return false;
-  return normalized.length >= 2 && normalized.length <= 80;
-}
-
-function extractProjectNameFromContent(content: string): string {
-  const normalized = normalizeWhitespace(content);
-  if (!normalized) return "";
-  const patterns = [
-    /(?:项目名称|项目名|名称)\s*[:：]\s*([^\n。；;，,（）()]{2,80})/i,
-    /(?:项目是|项目叫|先叫)\s*[“"'《]?([^。；;\n，,：:（）()]{2,80})/i,
-  ];
-  for (const pattern of patterns) {
-    const match = pattern.exec(normalized);
-    const value = match?.[1] ? normalizeWhitespace(match[1]) : "";
-    if (value) return truncate(value, 80);
-  }
-  return "";
-}
-
-function sanitizeProjectDescriptionText(text: string, projectName: string): string {
-  const normalized = normalizeWhitespace(text);
-  if (!normalized) return "";
-  let next = normalized.replace(/^(?:项目名称|项目名|名称)\s*[:：]\s*/i, "").replace(/^(?:项目叫|项目是|先叫)\s*/i, "");
-  if (projectName) {
-    const escaped = projectName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    next = next
-      .replace(new RegExp(`^${escaped}\\s*[（(][^)）]+[)）]?[:：]?\\s*`), "")
-      .replace(new RegExp(`^${escaped}[:：]?\\s*`), "");
-  }
-  next = next.replace(/^[：:，,。；;\s]+/, "");
-  return truncateForPrompt(normalizeWhitespace(next), 180);
-}
-
-function extractTimelineHints(text: string): string[] {
-  const lines = text
-    .replace(/\r/g, "\n")
-    .split(/\n|(?<=[。！？!?])/)
-    .map(line => normalizeWhitespace(line))
-    .filter(Boolean);
-  return Array.from(new Set(lines.filter(line => /\b20\d{2}-\d{2}-\d{2}\b/.test(line)))).slice(0, 10);
-}
-
-function extractSingleHint(text: string, pattern: RegExp): string {
-  const match = pattern.exec(text);
-  return match?.[1] ? truncateForPrompt(match[1], 220) : "";
-}
-
-function sanitizeFeedbackSectionText(value: string | undefined): string {
-  const normalized = normalizeWhitespace(value ?? "");
-  if (!normalized) return "";
-  if (
-    [
-      /explicit project collaboration preference captured from the user/i,
-      /project anchor is not formalized yet/i,
-      /project-local collaboration instruction without a formal project id yet/i,
-      /project-local collaboration instruction for the current project/i,
-      /project-local collaboration rule rather than a standalone project memory/i,
-      /follow this collaboration rule in future project replies unless the user overrides it/i,
-      /apply this rule only after dream attaches it to a formal project context/i,
-      /keep it in temporary project memory until dream can attach it to the right project/i,
-      /apply this rule in the current project context/i,
-      /keep this as current-project feedback memory/i,
-    ].some(pattern => pattern.test(normalized))
-  ) {
-    return "";
-  }
-  return normalized;
-}
-
-function buildSyntheticProjectFollowUpCandidate(input: {
-  focusText: string;
-  timestamp: string;
-  sessionKey?: string;
-  uniqueBatchProjectName: string;
-  explicitProjectName: string;
-  explicitProjectDescriptor: string;
-  explicitProjectStage: string;
-  explicitTimeline: string[];
-  explicitGoal: string;
-  explicitBlocker: string;
-}): MemoryCandidate | null {
-  const normalizedFocus = truncateForPrompt(normalizeWhitespace(stripExplicitRememberLead(input.focusText)), 220);
-  if (!normalizedFocus) return null;
-  const projectName = truncateForPrompt(input.explicitProjectName || input.uniqueBatchProjectName, 80);
-  if (!projectName || isGenericProjectCandidateName(projectName)) return null;
-  const description = truncateForPrompt(
-    input.explicitProjectDescriptor || input.explicitGoal || input.explicitProjectStage || normalizedFocus,
-    180,
-  );
-  const projectScopeSignal = looksLikeProjectScopeText(normalizedFocus);
-  const projectRiskSignal = looksLikeProjectRiskText(normalizedFocus);
-  return {
-    type: "project",
-    scope: "project",
-    name: projectName,
-    description,
-    ...(input.sessionKey ? { sourceSessionKey: input.sessionKey } : {}),
-    capturedAt: input.timestamp,
-    ...(input.explicitProjectStage ? { stage: input.explicitProjectStage } : {}),
-    ...(projectScopeSignal ? { decisions: [normalizedFocus] } : {}),
-    ...(looksLikeProjectConstraintText(normalizedFocus) ? { constraints: [normalizedFocus] } : {}),
-    ...(looksLikeProjectNextStepText(normalizedFocus) ? { nextSteps: [normalizedFocus] } : {}),
-    ...(input.explicitBlocker || looksLikeProjectBlockerText(normalizedFocus) || projectRiskSignal
-      ? { blockers: uniqueStrings([input.explicitBlocker, normalizedFocus].filter(Boolean), 4) }
-      : {}),
-    ...(input.explicitTimeline.length > 0 ? { timeline: input.explicitTimeline } : {}),
-    notes: projectScopeSignal || projectRiskSignal ? [] : [normalizedFocus],
-  };
-}
-
-function normalizeMemoryRoute(value: unknown): MemoryRoute {
-  if (value === "user" || value === "project" || value === "mix" || value === "none") {
-    return value;
-  }
-  return "none";
-}
-
-function normalizeBoolean(value: unknown, fallback = false): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === "true") return true;
-    if (normalized === "false") return false;
-  }
-  return fallback;
 }
 
 function extractChatCompletionsText(payload: unknown): string {
