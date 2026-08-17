@@ -19,6 +19,6 @@
   "dependencies": {
     "cheerio": "^1.0.0",
     "domhandler": "^6.0.1",
-    "undici": "^8.4.1"
+    "undici": "^8.10.0"
   }
 }
