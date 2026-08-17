@@ -22,6 +22,29 @@ import {
   toExposedGlobalRelativePath,
   toInternalGlobalRelativePath,
 } from "../../src/core/storage/sqlite-helpers.js";
+import type { IndexTraceRecord } from "../../src/core/types.js";
+
+function traceRecord(overrides: Partial<IndexTraceRecord> = {}): IndexTraceRecord {
+  // isNoOp/displayStatus 故意不设默认：normalizeIndexTraceRecord 用
+  // typeof 检查区分"未提供（派生）"与"显式值"，测试两种路径。
+  return {
+    indexTraceId: "t1",
+    sessionKey: "sk",
+    trigger: "manual_sync",
+    startedAt: "2026-01-01T00:00:00Z",
+    status: "completed",
+    batchSummary: {
+      l0Ids: [],
+      segmentCount: 1,
+      focusUserTurnCount: 0,
+      fromTimestamp: "2026-01-01T00:00:00Z",
+      toTimestamp: "2026-01-01T00:00:00Z",
+    },
+    steps: [],
+    storedResults: [],
+    ...overrides,
+  } as IndexTraceRecord;
+}
 
 describe("normalizeMessages", () => {
   it("过滤非对象、默认 role=user/content 空串", () => {
@@ -136,19 +159,12 @@ describe("sanitizeTraceArray", () => {
 
 describe("normalizeIndexTraceRecord 派生字段", () => {
   it("completed+空结果 → isNoOp=true, displayStatus=No-op", () => {
-    const record = normalizeIndexTraceRecord({
-      status: "completed",
-      storedResults: [],
-    } as never);
+    const record = normalizeIndexTraceRecord(traceRecord({ status: "completed", storedResults: [] }));
     assert.equal(record.isNoOp, true);
     assert.equal(record.displayStatus, "No-op");
   });
   it("显式 isNoOp 优先", () => {
-    const record = normalizeIndexTraceRecord({
-      status: "completed",
-      isNoOp: false,
-      storedResults: [],
-    } as never);
+    const record = normalizeIndexTraceRecord(traceRecord({ status: "completed", isNoOp: false, storedResults: [] }));
     assert.equal(record.isNoOp, false);
   });
 });
@@ -160,11 +176,14 @@ describe("clampInt / sanitizeIndexingSettings", () => {
     assert.equal(clampInt("abc", 7, 0, 100), 7);
   });
   it("reasoningMode 非法值回退默认", () => {
-    const settings = sanitizeIndexingSettings({ reasoningMode: "bogus" }, {
-      reasoningMode: "answer_first",
-      autoIndexIntervalMinutes: 60,
-      autoDreamIntervalMinutes: 1440,
-    } as never);
+    const settings = sanitizeIndexingSettings(
+      { reasoningMode: "bogus" },
+      {
+        reasoningMode: "answer_first",
+        autoIndexIntervalMinutes: 60,
+        autoDreamIntervalMinutes: 1440,
+      },
+    );
     assert.equal(settings.reasoningMode, "answer_first");
   });
 });
@@ -181,9 +200,27 @@ describe("global 路径归一", () => {
 describe("排序与快照工具", () => {
   it("sortManifestEntries updatedAt 降序 + path tiebreak", () => {
     const sorted = sortManifestEntries([
-      { relativePath: "b.md", updatedAt: "2026-01-02" },
-      { relativePath: "a.md", updatedAt: "2026-01-02" },
-    ] as never);
+      {
+        file: "b.md",
+        relativePath: "b.md",
+        absolutePath: "/tmp/b.md",
+        name: "B",
+        description: "D",
+        type: "project",
+        scope: "project",
+        updatedAt: "2026-01-02",
+      },
+      {
+        file: "a.md",
+        relativePath: "a.md",
+        absolutePath: "/tmp/a.md",
+        name: "A",
+        description: "D",
+        type: "project",
+        scope: "project",
+        updatedAt: "2026-01-02",
+      },
+    ]);
     assert.deepEqual(
       sorted.map(e => (e as { relativePath: string }).relativePath),
       ["a.md", "b.md"],

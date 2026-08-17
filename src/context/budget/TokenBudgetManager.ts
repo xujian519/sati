@@ -66,6 +66,14 @@ const ROUGH_PADDING_NUMERATOR = 4;
 const ROUGH_PADDING_DENOMINATOR = 3;
 
 /**
+ * 4/3 上界推导（与 `estimateForMessagesWithPadding` 同公式）。导出供
+ * TokenAccountingRuntime 一次估算 raw/padded 两个变体，避免同一请求重复编码。
+ */
+export function paddedEstimate(raw: number): number {
+  return raw === 0 ? 0 : Math.ceil((raw * ROUGH_PADDING_NUMERATOR) / ROUGH_PADDING_DENOMINATOR);
+}
+
+/**
  * Token budget estimator backed by o200k_base tiktoken encoding.
  *
  * Text / code / tool argument blocks are measured with the real BPE
@@ -180,9 +188,7 @@ export class TokenBudgetManager {
    * estimator and the provider's tokenizer.
    */
   estimateForMessagesWithPadding(messages: CanonicalMessage[]): number {
-    const raw = this.estimateForMessages(messages);
-    if (raw === 0) return 0;
-    return Math.ceil((raw * ROUGH_PADDING_NUMERATOR) / ROUGH_PADDING_DENOMINATOR);
+    return paddedEstimate(this.estimateForMessages(messages));
   }
 
   evaluate(

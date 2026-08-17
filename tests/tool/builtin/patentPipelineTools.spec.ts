@@ -13,6 +13,7 @@ import {
   WorkflowError,
 } from "../../../src/patent/index.js";
 import { PlanTaskStateMachine, replanTasks, syncPlanToTasks, hashStep } from "../../../src/patent/plantask.js";
+import type { WorkflowStrategy } from "../../../src/patent/workflow/types.js";
 import { WorkerRegistry, validateWorkerOutput, defaultPatentWorkers } from "../../../src/patent/worker-contract.js";
 import { createPatentWorkflowTool, runRuleGate } from "../../../src/tool/builtin/patentWorkflowTool.js";
 import { createPatentPlanTaskTool } from "../../../src/tool/builtin/patentPlanTaskTool.js";
@@ -87,7 +88,7 @@ describe("patent workflow 执行器（workflow.ts 接线）", () => {
           id: "x",
           name: "y",
           caseType: "z",
-          stages: [{ id: "a", strategy: "bogus" as never, description: "d" }],
+          stages: [{ id: "a", strategy: "bogus" as unknown as WorkflowStrategy, description: "d" }],
         }),
       WorkflowError,
     );
@@ -351,7 +352,10 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
 
   it("patent_plan_task 工具：未知 action fail-closed（不返回 undefined）", async () => {
     const tool = createPatentPlanTaskTool();
-    const res = await tool.execute({ action: "fly_to_moon" as never }, makeToolContext());
+    const res = await tool.execute(
+      { action: "fly_to_moon" as unknown as Parameters<typeof tool.execute>[0]["action"] },
+      makeToolContext(),
+    );
     assert.ok(textOf(res).includes("未知操作"), `应返回未知操作提示: ${textOf(res)}`);
   });
 
@@ -454,7 +458,7 @@ describe("patent_workflow 工具：caseId 持久化（workflow-runs/ 子目录�
             text: `阶段 ${stageId} 输出`,
           })),
         },
-        { cwd: dir } as never,
+        makeToolContext({ cwd: dir }),
       );
       const text = textOf(res);
       const expected = join(dir, "data", "cases", "case-001", "workflow-runs", "case-001__patent_novelty_v1.json");
@@ -481,7 +485,7 @@ describe("patent_workflow 工具：caseId 持久化（workflow-runs/ 子目录�
     const dir = await mkdtemp(join(tmpdir(), "sati-pwf-"));
     try {
       const tool = createPatentWorkflowTool();
-      const res = await tool.execute({ caseId: dir, outputs: [] }, { cwd: dir } as never);
+      const res = await tool.execute({ caseId: dir, outputs: [] }, makeToolContext({ cwd: dir }));
       const text = textOf(res);
       const key = dir.split(/[\\/]/).pop()!;
       const expected = join(dir, "workflow-runs", `${key}__patent_novelty_v1.json`);
@@ -499,7 +503,7 @@ describe("patent_workflow 工具：caseId 持久化（workflow-runs/ 子目录�
     const dir = await mkdtemp(join(tmpdir(), "sati-pwf-"));
     try {
       const tool = createPatentWorkflowTool();
-      const res = await tool.execute({ outputs: [] }, { cwd: dir } as never);
+      const res = await tool.execute({ outputs: [] }, makeToolContext({ cwd: dir }));
       assert.ok(textOf(res).includes("持久化: 未启用（未提供 caseId）"), textOf(res));
       const store = new JsonFileWorkflowRunStore(join(dir, "data", "cases"));
       assert.deepEqual(await store.listRuns(), [], "不应写入任何 run 文件");

@@ -63,27 +63,44 @@ const OK_OUTPUT = [
 test("patent_pdf_download: validateInput rejects empty/oversized/invalid inputs", async () => {
   const tool = createPatentPdfDownloadTool({ session: makeSession(new FakeRunner()) });
 
-  const missing = await tool.validateInput?.({} as never, makeContext());
+  const missing = await tool.validateInput?.(
+    {} as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(missing?.ok, false);
   assert.deepEqual(missing?.issues[0]?.path, "patents");
 
-  const empty = await tool.validateInput?.({ patents: [] } as never, makeContext());
+  const empty = await tool.validateInput?.(
+    { patents: [] } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(empty?.ok, false);
 
   const tooMany = await tool.validateInput?.(
-    { patents: Array.from({ length: 51 }, (_, i) => `CN${i}`) } as never,
+    { patents: Array.from({ length: 51 }, (_, i) => `CN${i}`) } as unknown as Parameters<
+      NonNullable<typeof tool.validateInput>
+    >[0],
     makeContext(),
   );
   assert.equal(tooMany?.ok, false);
   assert.match(tooMany?.issues[0]?.message ?? "", /maximum of 50/);
 
-  const badTimeout = await tool.validateInput?.({ patents: ["CN1"], timeoutMs: 300_001 } as never, makeContext());
+  const badTimeout = await tool.validateInput?.(
+    { patents: ["CN1"], timeoutMs: 300_001 } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(badTimeout?.ok, false);
 
-  const badPageTimeout = await tool.validateInput?.({ patents: ["CN1"], pageTimeoutSec: 1 } as never, makeContext());
+  const badPageTimeout = await tool.validateInput?.(
+    { patents: ["CN1"], pageTimeoutSec: 1 } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(badPageTimeout?.ok, false);
 
-  const valid = await tool.validateInput?.({ patents: ["cn-1", "CN-1", "US1"] } as never, makeContext());
+  const valid = await tool.validateInput?.(
+    { patents: ["cn-1", "CN-1", "US1"] } as unknown as Parameters<NonNullable<typeof tool.validateInput>>[0],
+    makeContext(),
+  );
   assert.equal(valid?.ok, true);
   // 去重 + 归一化
   const normalized = (valid?.ok ? valid.input : null) as { patents?: string[] } | null;
@@ -126,7 +143,11 @@ test("patent_pdf_download: execute rescues fallback items via fetch to ok/http",
   const runner = new FakeRunner();
   runner.result = { exitCode: 0, stdout: "", stderr: OK_OUTPUT, timedOut: false, durationMs: 1200 };
   const fetchImpl: typeof fetch = async () =>
-    new Response("%PDF-1.4 fake pdf content", { status: 200, headers: { "content-type": "application/pdf" } });
+    // P1-01：写盘前拒绝 <500 字节的响应，mock 内容需超过阈值
+    new Response(`%PDF-1.4 fake pdf content ${"x".repeat(600)}`, {
+      status: 200,
+      headers: { "content-type": "application/pdf" },
+    });
   const outputDir = mkdtempSync(join(tmpdir(), "sati-pdf-dl-rescue-"));
   const tool = createPatentPdfDownloadTool({ session: makeSession(runner), fetchImpl });
 

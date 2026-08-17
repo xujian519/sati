@@ -39,6 +39,10 @@ function classifyPath(path: string): PilotConfigChangeClass {
   if (path.startsWith("proxy.") || path === "proxy") {
     return "runtime-live";
   }
+  if (path.startsWith("patents.")) {
+    // 工具每次执行时经注入通道读取，改配置立即生效。
+    return "runtime-live";
+  }
   return "next-runtime";
 }
 

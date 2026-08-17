@@ -10,9 +10,23 @@ import {
   resolveSelectedProject,
   type ExtractionFocusSignals,
 } from "../../src/core/skills/llm-extraction-item.js";
-import type { MemoryMessage } from "../../src/core/types.js";
+import type { MemoryCandidate, MemoryMessage, ProjectShortlistCandidate } from "../../src/core/types.js";
 
 const msg = (role: "user" | "assistant", content: string): MemoryMessage => ({ role, content }) as MemoryMessage;
+
+function makeShortlist(projectId: string, projectName: string): ProjectShortlistCandidate {
+  return {
+    projectId,
+    projectName,
+    description: "D",
+    status: "active",
+    updatedAt: "2026-01-01",
+    score: 1,
+    exact: 0,
+    source: "recent",
+    matchedText: "",
+  };
+}
 
 function baseSignals(overrides: Partial<ExtractionFocusSignals> = {}): ExtractionFocusSignals {
   return {
@@ -132,7 +146,7 @@ describe("normalizeExtractionItem", () => {
 });
 
 describe("filterExtractionCandidate", () => {
-  const project = { type: "project", name: "P", description: "D", scope: "project" } as never;
+  const project: MemoryCandidate = { type: "project", name: "P", description: "D", scope: "project" };
   it("feedback 信号 + 无 project 定义 → project 丢弃", () => {
     const result = filterExtractionCandidate({
       item: project,
@@ -155,7 +169,7 @@ describe("filterExtractionCandidate", () => {
   });
   it("user 恒保留", () => {
     const result = filterExtractionCandidate({
-      item: { type: "user", name: "U", scope: "global" } as never,
+      item: { type: "user", name: "U", scope: "global", description: "" },
       signals: baseSignals(),
       hasStructuredProjectEvidence: false,
       text: "",
@@ -174,8 +188,8 @@ describe("filterExtractionCandidate", () => {
 });
 
 describe("resolveSelectedProject 三路判定", () => {
-  const shortlist = [{ projectId: "p1", projectName: "Alpha", updatedAt: "2026-01-01" }] as never;
-  const fallback = { projectId: "p1", projectName: "Alpha", updatedAt: "2026-01-01" } as never;
+  const shortlist = [makeShortlist("p1", "Alpha")];
+  const fallback = makeShortlist("p1", "Alpha");
   it("命中 shortlist 返回 projectId", () => {
     const result = resolveSelectedProject({
       selectedProjectId: "p1",
@@ -210,7 +224,7 @@ describe("resolveSelectedProject 三路判定", () => {
 });
 
 describe("resolveIndexAssignment 两路判定", () => {
-  const shortlist = [{ projectId: "p1", projectName: "Alpha", updatedAt: "2026-01-01" }] as never;
+  const shortlist = [makeShortlist("p1", "Alpha")];
   it("attach_existing + 命中返回 projectId", () => {
     const result = resolveIndexAssignment({
       decision: "attach_existing",

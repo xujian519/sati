@@ -111,6 +111,12 @@ export class CaseLawSearchEngine {
   private readonly stmtGetChunkAt: StatementSync;
   private readonly stmtCount: StatementSync;
 
+  /**
+   * 动态 SQL（带过滤组合）的 prepare 缓存：同一 SQL 形状只 prepare 一次。
+   * 过滤组合数量有界（docType/court/excludeSource 的布尔组合），Map 不会无限膨胀。
+   */
+  private readonly preparedCache = new Map<string, StatementSync>();
+
   /** 语义召回源（可选；gateway 注入后启用判例语义叠加）。 */
   private semantic?: CaseLawSemanticSource;
 
@@ -342,7 +348,18 @@ export class CaseLawSearchEngine {
   }
 
   close(): void {
+    this.preparedCache.clear();
     this.db.close();
+  }
+
+  /** 动态 SQL（带过滤组合）prepare 缓存：同形状 SQL 复用 StatementSync。 */
+  private prepareCached(sql: string): StatementSync {
+    let stmt = this.preparedCache.get(sql);
+    if (!stmt) {
+      stmt = this.db.prepare(sql);
+      this.preparedCache.set(sql, stmt);
+    }
+    return stmt;
   }
 
   /** 构建 FTS 查询（固定投影 + 可选过滤；带过滤时拼接动态 SQL）。 */
@@ -389,7 +406,7 @@ export class CaseLawSearchEngine {
       rows = this.stmtSearchFts.all(query, limit * FETCH_MULTIPLIER) as CaseLawRow[];
     } else {
       const { sql, filterParams } = this.buildFtsQuery(options);
-      rows = this.db.prepare(sql).all(query, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
+      rows = this.prepareCached(sql).all(query, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
     }
     return this.backfillContent(this.dedupeByDocument(rows, limit));
   }
@@ -439,7 +456,7 @@ export class CaseLawSearchEngine {
       }
       sql += " LIMIT ?";
       params.push(limit);
-      rows = this.db.prepare(sql).all(...params) as CaseLawRow[];
+      rows = this.prepareCached(sql).all(...params) as CaseLawRow[];
     }
     return rows.map(row => this.toHit(row, null, "like"));
   }

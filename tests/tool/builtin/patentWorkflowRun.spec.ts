@@ -101,7 +101,7 @@ function textOf(result: { content: Array<{ type: string; text?: string }> }): st
 test("disclosure manifest 原子全流程执行，review_gate 中断且 draft_claims 未执行", async () => {
   registerBuiltinAtoms();
   const tool = createPatentWorkflowRunTool({ model: mockModel(disclosureResponder), search: mockSearch });
-  const res = await tool.execute({ input: DISCLOSURE_INPUT }, { cwd: "/tmp" } as never);
+  const res = await tool.execute({ input: DISCLOSURE_INPUT }, makeToolContext({ cwd: "/tmp" }));
   const text = textOf(res);
 
   assert.match(text, /patent_workflow_run\(patent_disclosure_v1\)/);
@@ -266,7 +266,7 @@ test("caseId 持久化：run JSON + Mermaid 图写入 workflow-runs 目录", asy
   const dir = mkdtempSync(join(tmpdir(), "wf-run-test-"));
   try {
     const tool = createPatentWorkflowRunTool({ model: mockModel(disclosureResponder), search: mockSearch });
-    const res = await tool.execute({ input: DISCLOSURE_INPUT, caseId: "case-123" }, { cwd: dir } as never);
+    const res = await tool.execute({ input: DISCLOSURE_INPUT, caseId: "case-123" }, makeToolContext({ cwd: dir }));
     const text = textOf(res);
     const runsDir = join(dir, "data", "cases", "case-123", "workflow-runs");
     assert.match(text, /持久化:/);
@@ -292,7 +292,11 @@ test("createBuiltinRegistry 注册 patent_workflow_run（domain: patent）", () 
   const tool = registry.get("patent_workflow_run");
   assert.ok(tool, "patent_workflow_run 应已注册");
   assert.equal(tool!.domain, "patent");
-  assert.equal(tool!.isReadOnly({ input: "x" } as never), false, "原子执行有 LLM/持久化副作用，非只读");
+  assert.equal(
+    tool!.isReadOnly({ input: "x" } as unknown as Parameters<typeof tool.isReadOnly>[0]),
+    false,
+    "原子执行有 LLM/持久化副作用，非只读",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -353,9 +357,10 @@ function inventivenessResponder(prompt: string): string {
 test("graph=inventiveness 图自动执行 → 审批门中断 + 检查点输出", async () => {
   registerBuiltinAtoms();
   const tool = createPatentWorkflowRunTool({ model: mockModel(inventivenessResponder), search: mockSearch });
-  const res = await tool.execute({ graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器" }, {
-    cwd: "/tmp",
-  } as never);
+  const res = await tool.execute(
+    { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器" },
+    makeToolContext({ cwd: "/tmp" }),
+  );
   const text = textOf(res);
   assert.match(text, /patent_workflow_run\(graph=inventiveness\)/);
   assert.match(text, /审批门暂停/);
@@ -371,7 +376,7 @@ test("graph=inventiveness 断点续跑：中断后 resumeCheckpointId 从检查�
     // 第一次：approval 中断（默认全局 handler），返回 checkpointId。
     const first = await tool.execute(
       { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器", caseId: "graph-resume-1" },
-      { cwd: dir } as never,
+      makeToolContext({ cwd: dir }),
     );
     const firstText = textOf(first);
     assert.match(firstText, /审批门暂停/);
@@ -399,7 +404,7 @@ test("graph=inventiveness 断点续跑：中断后 resumeCheckpointId 从检查�
         caseId: "graph-resume-1",
         resumeCheckpointId: checkpointMatch[1],
       },
-      { cwd: dir } as never,
+      makeToolContext({ cwd: dir }),
     );
     const resumedText = textOf(resumed);
     assert.match(resumedText, /完成状态: completed/);
@@ -437,7 +442,7 @@ test("graph=novelty 图自动执行（含数值范围节点）", async () => {
   const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: mockSearch });
   const res = await tool.execute(
     { graph: "novelty", input: "一种分拣装置，温度范围为 50-80°C，包含传送带与识别传感器" },
-    { cwd: "/tmp" } as never,
+    makeToolContext({ cwd: "/tmp" }),
   );
   const text = textOf(res);
   assert.match(text, /patent_workflow_run\(graph=novelty\)/);

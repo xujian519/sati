@@ -7,8 +7,9 @@ import { describe, it } from "node:test";
 import type { PatentData, ScrapeResult } from "nuo-patent";
 import { createPatentMetadataTool } from "../../../src/tool/builtin/patentMetadata.js";
 import { SatiToolRuntimeError } from "../../../src/tool/protocol/errors.js";
+import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 
-const context = { env: {}, cwd: "/", projectRoot: "/", abortSignal: undefined } as never;
+const context = { env: {}, cwd: "/", projectRoot: "/", abortSignal: undefined } as unknown as SatiToolRuntimeContext;
 
 /** 构造 nuo-patent PatentData fixture（JSON 字符串字段）。 */
 function makePatentData(): PatentData {

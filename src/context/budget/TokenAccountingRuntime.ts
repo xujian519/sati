@@ -11,7 +11,12 @@ import {
   type ProviderConfig,
 } from "../../model/index.js";
 import { buildProviderHeaders } from "../../model/streaming/streamModel.js";
-import { TokenBudgetManager, type TokenBudgetEvaluateOptions, type TokenBudgetSnapshot } from "./TokenBudgetManager.js";
+import {
+  TokenBudgetManager,
+  paddedEstimate,
+  type TokenBudgetEvaluateOptions,
+  type TokenBudgetSnapshot,
+} from "./TokenBudgetManager.js";
 
 export type TokenCountSource = "provider" | "local";
 
@@ -115,12 +120,15 @@ export class TokenAccountingRuntime {
   ): Promise<TokenBudgetSnapshot> {
     const usePadding = options.usePadding !== false;
     const reservedOutputTokens = options.reservedOutputTokens ?? 0;
+    // 单次估算 raw/padded 两个变体（消息计数只算一遍，padding 由 raw 推导），
+    // 消除此前 fast-path 2 次 / slow-path 3 次的全量 tiktoken 编码（P0-2）。
+    const estimate = this.estimateRequestInputOnce(request);
+    const localTokens = usePadding ? estimate.padded : estimate.raw;
     // 快速通道：本地估算（tiktoken BPE + 4/3 padding，毫秒级）显著低于可用窗口时
     // 直接返回，避免每 turn 一次 provider count_tokens 网络调用（消息逐轮增长时
     // 每次全量序列化 + 网络往返，是对话热路径的主要开销）。仅当估算逼近窗口时
     // 才精确计数。判定阈值 = nearLimitRatio − guardBand（padding 已保证上界，
     // guardBand 收窄快速通道区间，避免边界抖动频繁往返精确计数）。
-    const localTokens = this.estimateRequestInput(request, { usePadding });
     const availableWindow = Math.max(1, options.maxContextTokens - reservedOutputTokens);
     const fastPathRatio = Math.max(0, this.nearLimitRatio - this.nearLimitGuardBand);
     if (localTokens <= availableWindow * fastPathRatio) {
@@ -128,7 +136,7 @@ export class TokenAccountingRuntime {
         reservedOutputTokens,
         source: "local",
         exact: false,
-        displayTokens: usePadding ? this.estimateRequestInput(request) : undefined,
+        displayTokens: usePadding ? estimate.raw : undefined,
         budgetTokens: usePadding ? localTokens : undefined,
       });
     }
@@ -139,8 +147,8 @@ export class TokenAccountingRuntime {
       source: counted.source,
       exact: counted.exact,
       estimatorError: counted.estimatorError,
-      displayTokens: counted.exact ? undefined : this.estimateRequestInput(request),
-      budgetTokens: usePadding ? this.estimateRequestInput(request, { usePadding: true }) : undefined,
+      displayTokens: counted.exact ? undefined : estimate.raw,
+      budgetTokens: usePadding ? estimate.padded : undefined,
     });
   }
 
@@ -180,12 +188,23 @@ export class TokenAccountingRuntime {
   }
 
   estimateRequestInput(request: CanonicalModelRequest, options: TokenBudgetEvaluateOptions = {}): number {
-    const messages = options.usePadding
-      ? this.tokenBudget.estimateForMessagesWithPadding(request.messages)
-      : this.tokenBudget.estimateMessagesTokens(request.messages);
+    const estimate = this.estimateRequestInputOnce(request);
+    return options.usePadding ? estimate.padded : estimate.raw;
+  }
+
+  /**
+   * 单次估算 raw（无 padding）与 padded（消息部分 4/3 上界）两个变体。
+   * 消息只编码一遍，padding 由 raw 推导——供 `evaluateRequestBudget` 复用，
+   * 避免同一请求的 displayTokens/budgetTokens 重复全量编码。
+   */
+  private estimateRequestInputOnce(request: CanonicalModelRequest): { raw: number; padded: number } {
+    const rawMessages = this.tokenBudget.estimateMessagesTokens(request.messages);
     const system = request.systemPrompt ? this.tokenBudget.estimateTextTokens(request.systemPrompt) : 0;
     const tools = estimateToolSchemas(this.tokenBudget, request.tools ?? []);
-    return messages + system + tools;
+    return {
+      raw: rawMessages + system + tools,
+      padded: paddedEstimate(rawMessages) + system + tools,
+    };
   }
 
   private async countWithProvider(

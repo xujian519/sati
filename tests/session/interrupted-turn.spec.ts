@@ -7,12 +7,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AgentTranscriptEntry } from "../../src/session/transcript/TranscriptEntry.js";
+import type { AgentTurnResult } from "../../src/agent/protocol/result.js";
 import { replayTranscriptEntries } from "../../src/session/transcript/TranscriptReplay.js";
 import {
   buildInterruptedTurnResult,
   findOpenTurn,
   synthesizeInterruptedTurn,
 } from "../../src/session/transcript/interruptedTurn.js";
+
+function turnResult(turnId: string): AgentTurnResult {
+  return {
+    type: "success",
+    sessionId: "s1",
+    turnId,
+    stopReason: "completed",
+    usage: {},
+    permissionDenials: [],
+    turns: 1,
+    startedAt: "2026-08-16T00:00:00.000Z",
+    completedAt: "2026-08-16T00:01:00.000Z",
+  };
+}
 
 function entry(
   overrides: Partial<AgentTranscriptEntry> & { type: AgentTranscriptEntry["type"]; turnId: string },
@@ -32,7 +47,7 @@ test("findOpenTurn：无活动返回 undefined", () => {
 test("findOpenTurn：全部 turn 已收尾返回 undefined", () => {
   const entries: AgentTranscriptEntry[] = [
     entry({ type: "accepted_input", turnId: "t1", messages: [] }),
-    entry({ type: "turn_result", turnId: "t1", result: {} as never }),
+    entry({ type: "turn_result", turnId: "t1", result: turnResult("t1") }),
   ];
   assert.equal(findOpenTurn(entries), undefined);
 });
@@ -40,8 +55,19 @@ test("findOpenTurn：全部 turn 已收尾返回 undefined", () => {
 test("findOpenTurn：最后一个 turn 未收尾即开放，并返回起始时间", () => {
   const entries: AgentTranscriptEntry[] = [
     entry({ type: "accepted_input", turnId: "t1", messages: [] }),
-    entry({ type: "turn_result", turnId: "t1", result: {} as never }),
-    entry({ type: "request_header", turnId: "t2", header: {} as never, createdAt: "2026-08-16T01:00:00.000Z" }),
+    entry({ type: "turn_result", turnId: "t1", result: turnResult("t1") }),
+    entry({
+      type: "request_header",
+      turnId: "t2",
+      header: {
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+        systemPromptDigest: "abc",
+        toolSchemaDigest: "def",
+        messageCount: 1,
+      },
+      createdAt: "2026-08-16T01:00:00.000Z",
+    }),
   ];
   const open = findOpenTurn(entries);
   assert.deepEqual(open, { turnId: "t2", startedAt: "2026-08-16T01:00:00.000Z" });
@@ -62,7 +88,9 @@ test("buildInterruptedTurnResult：interrupted 收尾形状", () => {
 });
 
 test("synthesizeInterruptedTurn：开放时触发回调并返回合成条目，否则 undefined", () => {
-  const openEntries: AgentTranscriptEntry[] = [entry({ type: "durable_message", turnId: "t3", message: {} as never })];
+  const openEntries: AgentTranscriptEntry[] = [
+    entry({ type: "durable_message", turnId: "t3", message: { role: "user", content: [] } }),
+  ];
   let called = 0;
   const synthesized = synthesizeInterruptedTurn(
     openEntries,
@@ -86,8 +114,8 @@ test("synthesizeInterruptedTurn：开放时触发回调并返回合成条目，�
   assert.equal(synthesized.result.errors?.[0]?.code, "agent_turn_interrupted");
 
   const closedEntries: AgentTranscriptEntry[] = [
-    entry({ type: "durable_message", turnId: "t3", message: {} as never }),
-    entry({ type: "turn_result", turnId: "t3", result: {} as never }),
+    entry({ type: "durable_message", turnId: "t3", message: { role: "user", content: [] } }),
+    entry({ type: "turn_result", turnId: "t3", result: turnResult("t3") }),
   ];
   const none = synthesizeInterruptedTurn(
     closedEntries,

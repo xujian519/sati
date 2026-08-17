@@ -24,7 +24,9 @@ import {
 import { providerErrorFromAgentError, providerErrorFromModelError } from "./providerError.js";
 
 export function cloneGatewayEvent(event: GatewayEvent): GatewayEvent {
-  return JSON.parse(JSON.stringify(event)) as GatewayEvent;
+  // structuredClone 优于 JSON.parse(JSON.stringify)：保留 undefined 语义、
+  // 无字符串往返开销；GatewayEvent 为纯 JSON 数据（协议帧），无函数/符号。
+  return structuredClone(event);
 }
 
 export function getGatewayEventRunId(event: GatewayEvent): string | undefined {

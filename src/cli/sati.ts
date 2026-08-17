@@ -28,6 +28,8 @@ Commands:
   tui                           Interactive terminal UI (requires a TTY)
   server                        Start the sati server (gateway + web)
   gateway setup <channel>       Set up an IM channel (feishu|weixin|wecom)
+  config set <key.path> <value> Set a nested config value in sati.yaml
+  config delete <key.path>      Delete a nested config value from sati.yaml
   cron <list|create|delete|stop> Manage cron tasks (requires a running server)
   chat                          Search chat history
   browsers [--doctor] [--json]  Probe browser backends (ego lite / BrowserOS neo / browser-use / @playwright/mcp)
@@ -560,6 +562,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     return;
   }
 
+  if (command === "config") {
+    const { runConfigCommand } = await import("./commands/configSet.js");
+    await runConfigCommand(argv.slice(1));
+    return;
+  }
+
   if (command === "cron") {
     await handleCronCommand(argv.slice(1));
     return;
@@ -591,6 +599,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
   if (command === "chat") {
     const { runChatSearchCli } = await import("./commands/chatSearch.js");
     await runChatSearchCli(argv.slice(1));
+    return;
+  }
+
+  if (command === "patent-search") {
+    const { main: runPatentSearchCli } = await import("./commands/patentSearch.js");
+    process.exitCode = await runPatentSearchCli(argv.slice(1));
     return;
   }
 

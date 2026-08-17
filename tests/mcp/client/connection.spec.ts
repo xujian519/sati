@@ -86,7 +86,7 @@ test("connection: start 失败后重置 connectPromise（下次重试）", async
             async close() {},
             set onmessage(_fn) {},
             get onmessage() {
-              return undefined as never;
+              return undefined as unknown as Transport["onmessage"];
             },
           };
           return stuck;

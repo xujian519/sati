@@ -33,8 +33,10 @@ describe("提示词常量（业务语义快照）", () => {
     assert.ok(DREAM_FILE_GLOBAL_PLAN_SYSTEM_PROMPT.includes("global audit planner"));
     assert.ok(DREAM_FILE_GLOBAL_PLAN_SYSTEM_PROMPT.includes("reorganization plan"));
   });
-  it("画像重写提示词存在", () => {
-    assert.ok(USER_PROFILE_REWRITE_SYSTEM_PROMPT.length > 100);
+  it("画像重写提示词锚定核心契约（JSON 形状 + 吸收审计）", () => {
+    assert.ok(USER_PROFILE_REWRITE_SYSTEM_PROMPT.includes('"identity_background_markdown"'));
+    assert.ok(USER_PROFILE_REWRITE_SYSTEM_PROMPT.includes("note_absorption"));
+    assert.ok(USER_PROFILE_REWRITE_SYSTEM_PROMPT.includes('"absorbed"'));
   });
   it("超时常量值", () => {
     assert.equal(DEFAULT_DREAM_FILE_PLAN_TIMEOUT_MS, 600_000);
@@ -113,7 +115,7 @@ describe("buildDreamFileGlobalPlanPrompt", () => {
       ],
       records: [],
       agentId: "agent-1",
-    } as never);
+    });
     assert.ok(prompt.includes("governance_scope"));
     assert.ok(prompt.includes("project_id"));
   });
@@ -121,20 +123,32 @@ describe("buildDreamFileGlobalPlanPrompt", () => {
 
 describe("buildUserProfileRewritePrompt", () => {
   const existingProfile: MemoryUserSummary = {
-    scope: "global",
-    relativePath: "global/UserIdentity/user-profile.md",
-    files: [{ relativePath: "p.md", content: "x".repeat(5000), type: "user" }],
-  } as never;
+    identityBackground: [],
+    files: [
+      {
+        file: "global/UserIdentity/user-profile.md",
+        relativePath: "p.md",
+        absolutePath: "/tmp/p.md",
+        name: "N",
+        description: "D",
+        type: "user",
+        scope: "global",
+        updatedAt: "2026-01-01",
+        content: "x".repeat(5000),
+        preview: "",
+      },
+    ],
+  };
   it("existing profile 截断 3200 + candidates 参与", () => {
     const prompt = buildUserProfileRewritePrompt({
       existingProfile,
       candidates: [{ type: "user", scope: "global", name: "U", description: "D" }],
-    } as never);
+    });
     assert.ok(prompt.length < 5000, "existing profile 超出截断预算");
     assert.ok(prompt.includes("existing_profile_markdown"));
   });
   it("无 existing profile 时字段为 null", () => {
-    const prompt = buildUserProfileRewritePrompt({ existingProfile: null, candidates: [] } as never);
+    const prompt = buildUserProfileRewritePrompt({ existingProfile: null, candidates: [] });
     assert.ok(prompt.includes("null"));
   });
 });
@@ -165,7 +179,7 @@ describe("buildGeneralProjectMetaMergePrompt", () => {
       projectMetas: [
         { projectId: "p1", projectName: "P", description: "D", status: "active", updatedAt: "2026-01-01" },
       ],
-    } as never);
+    });
     assert.ok(prompt.includes("general_project_meta_merge_plan"));
     assert.ok(prompt.includes('"project_id": "p1"'));
   });
@@ -176,7 +190,7 @@ describe("buildDreamClusterPlanPrompt", () => {
     const prompt = buildDreamClusterPlanPrompt({
       kind: "project",
       headers: [{ relativePath: "a.md", name: "A", description: "D", updatedAt: "2026-01-01" }],
-    } as never);
+    });
     assert.ok(prompt.includes("a.md"));
   });
 });
@@ -237,7 +251,7 @@ describe("buildSelectIndexProjectPrompt", () => {
     assert.ok(systemPrompt.includes("create_new"));
   });
   it("userPrompt 含 candidate_memory_preview", () => {
-    const { userPrompt } = buildSelectIndexProjectPrompt(input as never);
+    const { userPrompt } = buildSelectIndexProjectPrompt(input);
     assert.ok(userPrompt.includes("candidate_memory_preview"));
   });
 });
