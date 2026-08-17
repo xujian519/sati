@@ -1,7 +1,7 @@
 # edgeclaw-memory-core 拆解+补测试专项实施方案
 
 - 创建日期：2026-08-17
-- 状态：**调研进行中**（5 路并行测绘，2/5 完成）
+- 状态：**实施中**（批次 0-3 完成，批次 4-5 进行中）
 - 前置：`docs/technical-debt-report.md` 待决事项 #1（子包 5 个 >1000 行文件零测试）；方法论先例 `docs/god-function-refactor-plan.md`
 - 目标：对 5 个大文件先补行为基线测试（characterization），再按职责聚类拆分；子包测试从 0 起步覆盖核心路径
 
@@ -72,20 +72,14 @@ edgeclaw-memory-core 是 Sati 记忆核心的独立 workspace 子包（17 个 TS
 ## 4. 批次规划
 
 - **批次 0**：测试基建（package.json test 脚本 + tsx 验证）——✅ 已完成
-- **批次 1**：死代码清理（llm-extraction 14 项 ~130 行 + sqlite sameDreamRuntimeState + heartbeat 2 死 import），先删缩小拆解面，逐项 grep 确认零引用
-- **批次 2**：行为基线测试（拆解前提，按风险排序逐文件补）：
-  - 2a llm-extraction 解析/请求层（extractFirstJsonObject / loose json / 重试判定 / note_absorption 安全 / provider 形态）
-  - 2b llm-extraction 归一/信号层（normalizeDream* / hint 正则 / 分类归一 / 提示词快照）
-  - 2c sqlite 归一化纯函数 + :memory: CRUD 基线
-  - 2d file-memory markdown / 路径守卫纯函数
-  - 2e dream-review validateExclusiveClusters 等 + heartbeat 纯 helper
-- **批次 3+**：逐文件拆解（由小到大）：
-  - 3a heartbeat（最小 1019）：runHeartbeat 477 行主方法拆解 + 20 helper 聚类
-  - 3b dream-review（1532）：G1-G6 平移 + 4 个执行方法拆分
-  - 3c sqlite（2024）：MemoryRepository 90 方法按域聚类（storage/ 子模块）
-  - 3d file-memory（1632）：FileMemoryStore 8 簇切片
-  - 3e llm-extraction（3745，最大最后）：G1-G8 下沉（llm-http/prompts/loose-json/normalizers/hints/operations）
-- **批次 4**：收尾——方案文档状态更新、全量验证、root 全绿
+- **批次 1**：死代码清理（llm-extraction 11 项 ~130 行 + sqlite sameDreamRuntimeState + heartbeat 2 死 import）+ 首批拆解（llm-json.ts / request-retry.ts）+ 42 基线测试——✅ 已完成
+- **批次 2**：heartbeat 纯 helper 下沉 heartbeat-helpers.ts（1019→690 行）+ 23 基线测试——✅ 已完成
+- **批次 3**：dream-review 拆出 6 个子模块（dream-types/paths/detail/trace/mappers/validators，1532→1072 行）+ 25 基线测试——✅ 已完成
+- **批次 4**：sqlite（MemoryRepository 90 方法按域聚类）+ file-memory（FileMemoryStore 8 簇切片）
+- **批次 5**：llm-extraction 剩余（G2 提示词 / G3 prompt 构造 / G5 类型 / G6 归一化 / G7 hints / G8 编排门面）
+- **批次 6**：收尾——方案文档状态更新、全量验证、root 全绿、PR
+
+> 状态：子包测试 90 例全绿（基线 65 + dream 25）；root memory 55 用例绿。
 
 ## 5. 验收标准
 
