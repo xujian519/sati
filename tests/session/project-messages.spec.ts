@@ -123,7 +123,7 @@ function fakeTurnRunner(onRunMessages: (messages: unknown[]) => void): TurnRunne
         completedAt: createdAt,
       };
       yield { type: "turn_completed", sessionId: "s", turnId: "t1", result };
-      return { result, messages: [] as never[] };
+      return { result, messages: [] };
     },
     approvePendingOutput: () => true,
     rejectPendingOutput: () => true,
