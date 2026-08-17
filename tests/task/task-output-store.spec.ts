@@ -104,14 +104,27 @@ test("close clears memory but keeps totalBytes", () => {
 });
 
 test("disk spill appends overflow chunks to <dir>/<taskId>.log", async () => {
-  const { readFile } = await import("node:fs/promises");
+  const { readFile, access } = await import("node:fs/promises");
   const dir = mkdtempSync(join(tmpdir(), "sati-task-spill-"));
   tempDirs.push(dir);
   const store = new TaskOutputStore({ taskId: "task-x", diskSpillDir: dir });
   store.append("first chunk");
   store.append("second chunk");
-  // Spill is queued asynchronously; wait for the microtask drain.
-  await new Promise(resolve => setTimeout(resolve, 50));
-  const onDisk = await readFile(join(dir, "task-x.log"), "utf8");
+  // Spill is flushed asynchronously; poll until the file appears instead of
+  // relying on a fixed delay (slow CI filesystems can exceed 50 ms).
+  const spillFile = join(dir, "task-x.log");
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    try {
+      await access(spillFile);
+      break;
+    } catch {
+      if (Date.now() > deadline) {
+        throw new Error(`spill file was not created within 5s: ${spillFile}`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+  const onDisk = await readFile(spillFile, "utf8");
   assert.equal(onDisk, "first chunksecond chunk");
 });
