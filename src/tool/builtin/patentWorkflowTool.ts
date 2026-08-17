@@ -328,6 +328,11 @@ export type WorkflowProviderDeps = {
   modelId?: string;
   /** 检索器（缺省 nuo-patent 的 searchPatents，经 createNuoSearchProvider 适配）。 */
   search?: StageProvider["search"];
+  /**
+   * per-node 模型覆盖映射（P2-1 模型分层）：callLLM 的 modelHint 标识（如 "cheap"/"strong"）
+   * → { provider?, model }。缺省空 = 忽略 modelHint，全部节点用默认模型（行为不变）。
+   */
+  modelHints?: Record<string, { provider?: string; model: string }>;
 };
 
 export type WorkflowProviderContext = {
@@ -395,9 +400,11 @@ export function buildWorkflowProvider(
         jsonSchema !== undefined && typeof jsonSchema === "object" && jsonSchema !== null
           ? { name: "structured_output", schema: jsonSchema as Record<string, unknown>, strict: true }
           : undefined;
+      // 模型分层（P2-1）：modelHint 命中映射时覆盖 provider/model，未命中用默认。
+      const hint = opts?.modelHint !== undefined ? deps.modelHints?.[opts.modelHint] : undefined;
       const request: CanonicalModelRequest = {
-        provider: deps.provider ?? DEFAULT_MODEL_PROVIDER,
-        model: deps.modelId ?? DEFAULT_MODEL_ID,
+        provider: hint?.provider ?? deps.provider ?? DEFAULT_MODEL_PROVIDER,
+        model: hint?.model ?? deps.modelId ?? DEFAULT_MODEL_ID,
         messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
         maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
         temperature: opts?.temperature ?? 0,

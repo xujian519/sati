@@ -1,7 +1,7 @@
 import type { CanonicalContentBlock, CanonicalMessage } from "../model/index.js";
 import type { RuleOutputGate, RuleViolation } from "../rule/index.js";
 import { processPatentOutput, type QualityGateResult } from "./quality-gate.js";
-import { createApprovalRecord, type ApprovalStore } from "./approval.js";
+import { createApprovalRecord, type ApprovalRecord, type ApprovalStore } from "./approval.js";
 
 /**
  * PatentOutputGate — 把质量门禁接入 Agent 输出流。
@@ -63,6 +63,12 @@ export type PatentOutputGateOptions = {
   onRejected?: (pending: PendingPatentMessage) => void | Promise<void>;
   /** 审批审计存储（可选）：approve/reject 时追加 ApprovalRecord（决策留痕）。未配置则零开销。 */
   approvalStore?: ApprovalStore;
+  /**
+   * 决策反馈回调（可选，P2-4）：verdict = modified/rejected 时触发，携带审计记录
+   * （含原文摘录与人工反馈）。宿主可接线写入 `data/cases/<caseId>/inventiveness-feedback.jsonl`
+   * （见 feedback/inventiveness-feedback.ts）；未配置零开销。
+   */
+  onDecisionFeedback?: (record: ApprovalRecord) => void | Promise<void>;
   /** 可注入时钟（毫秒时间戳；默认 Date.now）。与 TurnRunner/AgentLoop 的 now 注入保持一致。 */
   now?: () => number;
 };
@@ -235,13 +241,11 @@ export class PatentOutputGate {
     return true;
   }
 
-  /** 审计留痕（approve/reject 时调用；store 未配置时零开销，不阻塞流程）。 */
+  /** 审计留痕 + 决策反馈回流（approve/reject 时调用；store/回调未配置时零开销，不阻塞流程）。 */
   private recordApproval(
     pending: PendingPatentMessage,
     decision: { verdict: "adopted" | "modified" | "rejected"; modifiedOutput?: string; feedback?: string },
   ): void {
-    const store = this.options.approvalStore;
-    if (!store) return;
     const record = createApprovalRecord({
       pendingIndex: pending.index,
       sessionId: pending.sessionId,
@@ -253,11 +257,25 @@ export class PatentOutputGate {
       ...(decision.feedback !== undefined ? { feedback: decision.feedback } : {}),
       now: this.options.now !== undefined ? () => new Date(this.now()) : undefined,
     });
-    const result = store.saveRecord(record);
-    if (result && typeof (result as Promise<void>).catch === "function") {
-      (result as Promise<void>).catch(err => {
+    const store = this.options.approvalStore;
+    if (store) {
+      this.swallowRejection(store.saveRecord(record), err => {
         console.error("[PatentOutputGate] 审批审计写入失败:", err);
       });
+    }
+    // 决策反馈回流（P2-4）：modified/rejected 时交给宿主接线（写 feedback 文件等），
+    // 不依赖 approvalStore 是否配置。
+    if (decision.verdict !== "adopted") {
+      const sink = this.options.onDecisionFeedback;
+      if (sink) {
+        try {
+          this.swallowRejection(sink(record), err => {
+            console.error("[PatentOutputGate] 决策反馈回调失败:", err);
+          });
+        } catch (err) {
+          console.error("[PatentOutputGate] 决策反馈回调失败:", err);
+        }
+      }
     }
   }
 
@@ -310,6 +328,13 @@ export class PatentOutputGate {
     return extractMessageText(message).trim().length > 0;
   }
 
+  /** 吞掉回调/写库返回的 rejected promise（避免 unhandled rejection）；同步抛错由调用方 try/catch 处理。 */
+  private swallowRejection(result: unknown, onError: (err: unknown) => void): void {
+    if (result && typeof (result as Promise<void>).catch === "function") {
+      (result as Promise<void>).catch(onError);
+    }
+  }
+
   /** 安全调用回调：吞掉同步抛错与 rejected promise，避免 unhandled rejection。 */
   private safeInvoke(
     callback: ((pending: PendingPatentMessage) => void | Promise<void>) | undefined,
@@ -317,12 +342,9 @@ export class PatentOutputGate {
   ): void {
     if (!callback) return;
     try {
-      const result = callback(pending);
-      if (result && typeof (result as Promise<void>).catch === "function") {
-        (result as Promise<void>).catch(err => {
-          console.error("[PatentOutputGate] callback failed:", err);
-        });
-      }
+      this.swallowRejection(callback(pending), err => {
+        console.error("[PatentOutputGate] callback failed:", err);
+      });
     } catch (err) {
       console.error("[PatentOutputGate] callback failed:", err);
     }

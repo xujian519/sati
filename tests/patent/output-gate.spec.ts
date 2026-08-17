@@ -140,6 +140,27 @@ test("approve removes pending; notifyCommitted fires onApproved; reject discards
   assert.equal(gate.reject(b.pendingIndex), false, "already rejected index returns false");
 });
 
+test("onDecisionFeedback: reject/modified 触发回调携带 ApprovalRecord（P2-4），adopted 不触发", () => {
+  const feedbacks: Array<{ verdict: string; feedback?: string }> = [];
+  const gate = new PatentOutputGate({
+    onPending: () => {},
+    onDecisionFeedback: record => {
+      feedbacks.push({ verdict: record.verdict, feedback: record.feedback });
+    },
+  });
+  const a = gate.processMessage(assistantMessage("专利结论：A。"));
+  const b = gate.processMessage(assistantMessage("专利结论：B。"));
+  assert.ok(a.pendingIndex !== undefined && b.pendingIndex !== undefined);
+
+  // reject（带反馈）→ 回调触发。
+  assert.equal(gate.reject(a.pendingIndex, "s", "创造性论证不充分"), true);
+  assert.deepEqual(feedbacks, [{ verdict: "rejected", feedback: "创造性论证不充分" }]);
+
+  // approve（adopted）→ 不触发（仅 adopted 之外的决策回流）。
+  gate.approve(b.pendingIndex);
+  assert.equal(feedbacks.length, 1, "adopted 不触发决策反馈回调");
+});
+
 test("maxPending overflow falls back to persist (no message loss)", () => {
   const gate = new PatentOutputGate({ onPending: () => {}, maxPending: 1 });
   const first = gate.processMessage(assistantMessage("专利结论：第一条。"));

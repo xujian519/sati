@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   Evaluator,
   createGraphRunner,
@@ -16,6 +19,17 @@ import {
 } from "../../src/patent/index.js";
 
 registerBuiltinAtoms();
+
+/** 从测试产物向上定位仓库根目录（对齐 benchmark/loader.ts 的 repoRoot 策略）。 */
+function repoRoot(fromUrl: string): string {
+  let dir = dirname(fileURLToPath(fromUrl));
+  for (;;) {
+    if (existsSync(join(dir, "tsconfig.json"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) throw new Error("未找到仓库根目录（向上查找 tsconfig.json 失败）");
+    dir = parent;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // metrics
@@ -125,6 +139,26 @@ test("defaultDomainGraphMap: 按 caseId/businessTask/expected 映射子图", () 
     }),
     "inventiveness",
   );
+});
+
+test("a22.3 fixture：创造性专属基准可加载、全部映射到 inventiveness 图、方向标记合法", () => {
+  const path = join(repoRoot(import.meta.url), "tests/patent/benchmark/fixtures/patent-exam-real-a22.3.json");
+  const fixture = JSON.parse(readFileSync(path, "utf8")) as { suite: string; caseCount: number; cases: EvalCase[] };
+  assert.equal(fixture.suite, "patent-exam-real-a22.3");
+  assert.equal(fixture.cases.length, fixture.caseCount);
+  assert.ok(fixture.cases.length >= 8 && fixture.cases.length <= 10, "首批 8-10 条");
+  let inventive = 0;
+  let notInventive = 0;
+  for (const c of fixture.cases) {
+    assert.equal(defaultDomainGraphMap(c), "inventiveness", `${c.id} 应映射到 inventiveness 图`);
+    assert.ok(Array.isArray(c.requiredCitations) && c.requiredCitations.length > 0, `${c.id} 缺 requiredCitations`);
+    const marks = c.expected.split("\n").filter(line => /^结论：(具备|不具备)创造性\s*$/.test(line));
+    assert.equal(marks.length, 1, `${c.id} expected 应恰好含一个单行结论方向标记`);
+    if (marks[0]!.includes("不具备创造性")) notInventive += 1;
+    else inventive += 1;
+  }
+  assert.ok(inventive >= 3, `具备创造性方向至少 3 条（实际 ${inventive}）`);
+  assert.ok(notInventive >= 3, `不具备创造性方向至少 3 条（实际 ${notInventive}）`);
 });
 
 test("createGraphRunner + Evaluator: 图模式跑 fixture 并产出指标", async () => {

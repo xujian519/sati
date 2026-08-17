@@ -9,6 +9,10 @@ import {
   runGraphWithCheckpoints,
   grantApproval,
   DOMAIN_GRAPHS,
+  caseInventivenessFeedbackPath,
+  loadInventivenessFeedback,
+  summarizeInventivenessFeedback,
+  llmJudge,
   type DomainGraphName,
   type GraphCheckpoint,
   type GraphRunResult,
@@ -79,6 +83,16 @@ export type PatentWorkflowRunInput = {
   chartTargets?: string;
   /** 检索结果上限（缺省 5，透传给 provider.search）。 */
   maxResults?: number;
+  /**
+   * 图模式检索反思回路最大重检次数（缺省 2，0 = 关闭回路保持旧行为）。
+   * 覆盖不足时自动换检索式补检，最多重检该次数后放行 closest。
+   */
+  retrievalRounds?: number;
+  /**
+   * LLM Judge 双轨质量分（缺省关闭）：>0 时对图模式的结论报告打 0-1 分
+   * （N 次采样取中位数），附在结果尾部，不改变规则门判级。
+   */
+  judgeSamples?: number;
 };
 
 /** provider 装配字段（model/provider/modelId/search）单一来源见 patentWorkflowTool 的 WorkflowProviderDeps。 */
@@ -163,6 +177,16 @@ export function createPatentWorkflowRunTool(
         maxResults: {
           type: "number",
           description: "Max prior-art search results (default 5).",
+        },
+        retrievalRounds: {
+          type: "number",
+          description:
+            "Graph-mode retrieval-reflection rounds (default 2, 0 disables the reflection loop): when search coverage is insufficient the graph re-queries up to this many times before proceeding to closest.",
+        },
+        judgeSamples: {
+          type: "number",
+          description:
+            "LLM Judge quality score (default off): when >0, scores the graph conclusion report 0-1 (median of N samples) and appends it to the result — advisory only, does not change the rule-gate verdict.",
         },
       },
     },
@@ -341,8 +365,25 @@ async function executeGraphRun(
     chartTargets: input.chartTargets,
   });
 
+  // HITL 反馈回流（P2-4）：同 case 历史人工反馈注入 conclude 提示（仅提示，不强制）。
+  if (graphName === "inventiveness" && input.caseId !== undefined) {
+    const feedbackPath = join(context.cwd ?? process.cwd(), caseInventivenessFeedbackPath(input.caseId));
+    const history = await loadInventivenessFeedback(feedbackPath).catch(() => []);
+    const summary = summarizeInventivenessFeedback(history);
+    if (summary.length > 0) workflowCtx.inventiveness_feedback_history = summary;
+  }
+
   // 检查点：caseId 提供时持久化到 <caseDir>/workflow-runs/checkpoints/，否则内存。
-  const graph = def.build({ handlers: deps.handlers ?? globalStageHandlerRegistry }).compile(def.entry);
+  const graph = def
+    .build({
+      handlers: deps.handlers ?? globalStageHandlerRegistry,
+      // 检索反思回路开关：retrievalRounds 透传给 inventiveness 图的 retrieval.maxRounds
+      // （缺省 2 = 最多重检 2 次；0 = 关闭回路保持旧行为）。novelty/enablement 忽略该选项。
+      ...(graphName === "inventiveness" && input.retrievalRounds !== undefined
+        ? { retrieval: { maxRounds: input.retrievalRounds } }
+        : {}),
+    })
+    .compile(def.entry);
   const graphId = `patent_${graphName}`;
   let store;
   let persistNote = "持久化: 未启用（未提供 caseId）";
@@ -392,7 +433,35 @@ async function executeGraphRun(
     ? `检查点: ${checkpointId}${result.interrupted !== undefined ? "（中断可续跑）" : ""}`
     : "检查点: 无";
 
+  // LLM Judge 双轨质量分（P2-3）：judgeSamples > 0 且未中断时对结论报告打分，
+  // 仅作交付参考，不改变规则门判级；评分失败/无结论报告时输出说明不报错。
+  let judgeNote = "";
+  const judgeSamples = input.judgeSamples;
+  if (judgeSamples !== undefined && judgeSamples > 0 && result.interrupted === undefined) {
+    const report = String(result.state.inventiveness_conclusion ?? "");
+    if (report.trim().length === 0) {
+      judgeNote = "\n🧭 LLM Judge：无结论报告（结论节点降级），跳过评分";
+    } else {
+      const score = await llmJudge(
+        { callLLM: (prompt, opts) => provider.callLLM!(prompt, opts) },
+        input.input,
+        report,
+        undefined,
+        { samples: judgeSamples, temperature: 0 },
+      );
+      judgeNote =
+        score !== undefined
+          ? `\n🧭 LLM Judge 质量分（双轨参考，不影响规则门判级）: ${score.toFixed(3)}`
+          : "\n🧭 LLM Judge：评分失败（采样解析异常）";
+    }
+  }
+
   return {
-    content: [{ type: "text", text: renderGraphResultText({ graph: graphName, result, persistNote, checkpointNote }) }],
+    content: [
+      {
+        type: "text",
+        text: renderGraphResultText({ graph: graphName, result, persistNote, checkpointNote }) + judgeNote,
+      },
+    ],
   };
 }
