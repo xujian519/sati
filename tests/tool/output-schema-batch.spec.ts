@@ -106,9 +106,9 @@ test("createBuiltinRegistry 已开启强制：全部内置工具均声明 output
   // 条件注册工具（memory/task/read_skill）在强制注册表上同样可注册。
   const strict = new ToolRegistry({ requireOutputSchema: true });
   const conditional = [
-    createMemoryOverviewTool({} as never),
-    createTaskCreateTool({} as never),
-    createReadSkillTool({} as never),
+    createMemoryOverviewTool({} as unknown as Parameters<typeof createMemoryOverviewTool>[0]),
+    createTaskCreateTool(),
+    createReadSkillTool({} as unknown as Parameters<typeof createReadSkillTool>[0]),
   ];
   for (const tool of conditional) {
     assert.ok(tool.outputSchema !== undefined, `${tool.name} 应声明 outputSchema`);

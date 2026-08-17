@@ -45,7 +45,7 @@ function makeOptions(overrides: Partial<TokenAccountingRuntimeOptions> = {}): To
           },
         },
       },
-    } as never,
+    } as unknown as TokenAccountingRuntimeOptions["modelConfig"],
     ...overrides,
   } as TokenAccountingRuntimeOptions;
 }

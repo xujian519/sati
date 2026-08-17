@@ -121,7 +121,7 @@ function createLineReader(socket: Socket): () => Promise<string> {
 test("execute_code read-only probe handles missing input", () => {
   const tool = createExecuteCodeTool();
 
-  assert.equal(tool.isReadOnly({} as never), false);
+  assert.equal(tool.isReadOnly({} as unknown as Parameters<typeof tool.isReadOnly>[0]), false);
 });
 
 test("disabling web search removes it from the registry but keeps web fetch", () => {
