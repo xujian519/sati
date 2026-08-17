@@ -6,8 +6,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { LegalStatusChecker, LegalStatusResult } from "nuo-patent";
 import { createPatentLegalStatusTool } from "../../../src/tool/builtin/patentLegalStatus.js";
+import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 
-const context = { env: {}, cwd: "/", projectRoot: "/", abortSignal: undefined } as never;
+const context = { env: {}, cwd: "/", projectRoot: "/", abortSignal: undefined } as unknown as SatiToolRuntimeContext;
 
 function makeResult(patentNumber: string, overrides: Partial<LegalStatusResult> = {}): LegalStatusResult {
   return {

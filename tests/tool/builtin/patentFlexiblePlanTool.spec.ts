@@ -111,7 +111,10 @@ test("create 缺 caseType / 缺 caseId fail-closed 返回文本而非抛错", as
     assert.match(textOf(noCaseType), /create 需要 caseType/);
     const noCaseId = await tool.execute({ action: "get" }, ctx);
     assert.match(textOf(noCaseId), /caseId 不能为空/);
-    const unknown = await tool.execute({ action: "fly" as never, caseId: "fp-2" }, ctx);
+    const unknown = await tool.execute(
+      { action: "fly" as unknown as Parameters<typeof tool.execute>[0]["action"], caseId: "fp-2" },
+      ctx,
+    );
     assert.match(textOf(unknown), /未知操作/);
   });
 });
