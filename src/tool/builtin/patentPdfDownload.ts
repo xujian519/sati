@@ -12,8 +12,16 @@
  * 两者都失败则返回 `status: "failed"` 并保留 `pdfUrl` 供手动重试，不中断其余专利。
  */
 
-import { writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { createWriteStream, readFileSync } from "node:fs";
+import { appendFile, mkdir, readFile, rename, stat, unlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { brandEnv, ENV_KEY } from "../../env.js";
+import { APP_VERSION } from "../../version.js";
 import { networkFetch } from "../../network/index.js";
 import type { PermissionResult } from "../../permission/index.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
@@ -41,7 +49,11 @@ const FETCH_FALLBACK_TIMEOUT_MS = 60_000;
  */
 const PATENT_DOWNLOAD_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-/** Google Patents 专利页内提取 PDF CDN 链接的浏览器侧 JS（buildDownloadScript 内嵌）。 */
+/**
+ * Google Patents 专利页内提取 PDF CDN 链接的浏览器侧 JS（buildDownloadScript 内嵌）。
+ * P2-07：唯一事实源为 assets/patent/pdf-link-extract.js（每次 execute 热加载）；
+ * 本常量为内嵌回退备份（文件缺失时使用，内容须与文件一致）。
+ */
 const PDF_LINK_EXTRACT_JS = String.raw`(() => {
   const links = document.querySelectorAll('a[href*=".pdf"]');
   for (const link of links) {
@@ -55,6 +67,41 @@ const PDF_LINK_EXTRACT_JS = String.raw`(() => {
   }
   return null;
 })()`;
+
+/**
+ * P2-07：加载单一事实源 assets/patent/pdf-link-extract.js（每次构建脚本时热加载，
+ * 改动无需重新构建）。源码态（src/tool/builtin/）上溯 3 级到仓库根，dist 态
+ * （dist/src/tool/builtin/）上溯 4 级；两处候选都缺失时回退内嵌备份。
+ */
+function loadPdfLinkExtractJs(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(here, "..", "..", "..", "assets", "patent", "pdf-link-extract.js"),
+    join(here, "..", "..", "..", "..", "assets", "patent", "pdf-link-extract.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const js = readFileSync(candidate, "utf8");
+      // 与 Python 端对齐：首行须为版本标记，否则视为损坏回退内嵌备份。
+      if (/^\/\/ PDF_LINK_EXTRACT_VERSION=\d+$/.test(js.split("\n", 1)[0] ?? "")) {
+        return js;
+      }
+      console.warn(`[patent_pdf_download] ${candidate} 缺少 PDF_LINK_EXTRACT_VERSION 版本标记，回退内嵌备份`);
+    } catch {
+      // 继续下一个候选路径
+    }
+  }
+  return PDF_LINK_EXTRACT_JS;
+}
+
+/**
+ * 嵌入 String.raw 模板前的防御性转义：反引号与 `${` 会截断模板字面量。
+ * 反斜杠刻意不转义（会破坏 JS 正则语义，如 `/\d+/`）；资产注释已声明内容
+ * 不得含反引号/插值占位符，本转义 + 版本标记校验为编辑违约时的兜底。
+ */
+function escapeTemplateContent(js: string): string {
+  return js.replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+}
 
 /** 探测页面是否存在 "Download PDF" 按钮/链接（不点击）。 */
 const FIND_DOWNLOAD_PDF_JS = String.raw`(() => {
@@ -90,6 +137,8 @@ export type PatentPdfDownloadInput = {
   timeoutMs?: number;
   /** 是否录屏留证（screencast，输出到 outputDir/recording.webm），默认 false。 */
   record?: boolean;
+  /** P2-03：忽略 MANIFEST 断点续传，强制重跑全部专利（默认 false）。 */
+  force?: boolean;
 };
 
 /** ego-browser 脚本返回的条目（脚本侧只产生 ok / fallback，由 Sati 侧兜底后升格为公共契约）。 */
@@ -109,8 +158,13 @@ export type PatentDownloadItem = {
   /** 提取到的 CDN PDF 链接（诊断 / 手动重试用）。 */
   pdfUrl?: string;
   error?: string;
-  /** 落盘方式：browser=ego-browser 下载拦截（复用登录态），http=fetch 兜底。 */
-  method?: "browser" | "http";
+  /**
+   * 落盘方式：browser=ego-browser 下载拦截（复用登录态），http=fetch 兜底，
+   * skip=P2-03 MANIFEST 断点续传命中（文件已存在且 size 匹配，未发起网络请求）。
+   */
+  method?: "browser" | "http" | "skip";
+  /** P3-02：fetch 兜底路径的下载耗时（毫秒）；browser/脚本侧耗时不可按篇拆分，省略。 */
+  durationMs?: number;
 };
 
 export type PatentPdfDownloadOutput = {
@@ -121,6 +175,11 @@ export type PatentPdfDownloadOutput = {
   recorded?: string;
 };
 
+/** 与 pilot config `patents` 节同形的窄类型（避免 tool 层依赖 pilot 包）。 */
+export type PatentPdfDownloadPatentsConfig = {
+  downloadDir?: string;
+};
+
 export type CreatePatentPdfDownloadToolOptions = {
   /** 测试缝：注入 session（默认真实 EgoBrowserSession）。 */
   session?: EgoBrowserSession;
@@ -128,6 +187,8 @@ export type CreatePatentPdfDownloadToolOptions = {
   sessionIdForSpace?: (context: SatiToolRuntimeContext) => string;
   /** 测试缝：fetch 兜底下载使用的 fetch 实现（默认真实网络，经 networkFetch 走全局代理）。 */
   fetchImpl?: typeof fetch;
+  /** 每次执行时读取 `patents.*` 配置（P2-05，runtime-live）：未传 outputDir 时回退到配置的全局下载目录。 */
+  patentsConfigProvider?: () => PatentPdfDownloadPatentsConfig | undefined;
 };
 
 const DESCRIPTION = `Download patent PDFs from Google Patents, preferring the user's ego-browser (ego lite) for in-browser download interception so authorized PDFs work with the browser session's login state. When in-browser interception is unavailable or fails, the tool falls back to fetching the extracted CDN PDF URL directly over HTTP and writes it to disk.
@@ -144,6 +205,7 @@ export function createPatentPdfDownloadTool(
   const session = options.session ?? new EgoBrowserSession();
   const sessionIdForSpace = options.sessionIdForSpace ?? (context => context.sessionId);
   const fetchImpl = options.fetchImpl;
+  const patentsConfigProvider = options.patentsConfigProvider;
 
   return {
     name: "patent_pdf_download",
@@ -193,6 +255,10 @@ export function createPatentPdfDownloadTool(
           type: "boolean",
           description: "Record the browser session to <outputDir>/recording.webm (default false).",
         },
+        force: {
+          type: "boolean",
+          description: "Ignore the .MANIFEST.jsonl resume state and re-download all patents (default false).",
+        },
       },
     },
     maxResultBytes: MAX_OUTPUT_BYTES,
@@ -208,14 +274,19 @@ export function createPatentPdfDownloadTool(
       return { ok: true };
     },
     checkPermissions: async (input, context): Promise<PermissionResult> => {
-      void input;
-      void context;
+      // P1-02：解析后路径在 workspace 之外时，追加越界提示（保留绝对路径能力，
+      // 由用户决定放行或拒绝，而非静默拒绝）。
+      const resolved = resolveOutputDir(input?.outputDir, context.cwd, patentsConfigProvider?.());
+      const rel = relative(context.cwd, resolved);
+      const isOutside = rel !== "" && (rel.startsWith("..") || isAbsolute(rel));
+      const outsideNote = isOutside ? " The output directory is outside the current workspace." : "";
+      const message = `Downloading patent PDFs to the workspace requires permission.${outsideNote}`;
       return {
         type: "ask",
         reason: {
           type: "tool",
           toolName: "patent_pdf_download",
-          message: "Downloading patent PDFs to the workspace requires permission.",
+          message,
         },
         request: {
           toolCallId: "",
@@ -224,7 +295,7 @@ export function createPatentPdfDownloadTool(
           reason: {
             type: "tool",
             toolName: "patent_pdf_download",
-            message: "Downloading patent PDFs to the workspace requires permission.",
+            message,
           },
           options: [
             { id: "allow_once", label: "Allow download" },
@@ -238,7 +309,8 @@ export function createPatentPdfDownloadTool(
       if (!input || typeof input !== "object") {
         return { ok: false, issues: [{ path: "", code: "invalid_type", message: "input must be an object" }] };
       }
-      const { patents, outputDir, pageTimeoutSec, downloadTimeoutMs, timeoutMs } = input as PatentPdfDownloadInput;
+      const { patents, outputDir, pageTimeoutSec, downloadTimeoutMs, timeoutMs, force } =
+        input as PatentPdfDownloadInput;
 
       if (!Array.isArray(patents) || patents.length === 0) {
         return { ok: false, issues: [{ path: "patents", code: "required", message: "patents is required" }] };
@@ -258,6 +330,21 @@ export function createPatentPdfDownloadTool(
           ok: false,
           issues: [
             { path: "patents", code: "invalid_schema", message: `patents exceeds the maximum of ${MAX_PATENTS}` },
+          ],
+        };
+      }
+      // P1-02：归一化（已去除 / 与空白）后仍含 \ 或 .. 的专利号会污染文件名
+      // 拼接（Windows 分隔符 / 目录穿越），直接拒绝。
+      const traversal = unique.filter(n => n.includes("\\") || n.includes(".."));
+      if (traversal.length > 0) {
+        return {
+          ok: false,
+          issues: [
+            {
+              path: "patents",
+              code: "invalid_schema",
+              message: `patents contain path traversal characters: ${traversal.join(", ")}`,
+            },
           ],
         };
       }
@@ -303,6 +390,12 @@ export function createPatentPdfDownloadTool(
           issues: [{ path: "timeoutMs", code: "invalid_schema", message: "timeoutMs must be between 1 and 300000" }],
         };
       }
+      if (force !== undefined && typeof force !== "boolean") {
+        return {
+          ok: false,
+          issues: [{ path: "force", code: "invalid_type", message: "force must be a boolean" }],
+        };
+      }
       return { ok: true, input: { ...(input as PatentPdfDownloadInput), patents: unique } };
     },
     execute: async (
@@ -315,7 +408,7 @@ export function createPatentPdfDownloadTool(
       }
 
       const patents = [...new Set(input.patents.map(normalizePatentNumber).filter(n => n.length > 0))];
-      const outputDir = resolveOutputDir(input.outputDir, context.cwd);
+      const outputDir = resolveOutputDir(input.outputDir, context.cwd, patentsConfigProvider?.());
       session.ensureDir(outputDir);
       const pageTimeoutSec = input.pageTimeoutSec ?? 20;
       const downloadTimeoutMs = input.downloadTimeoutMs ?? 60_000;
@@ -323,12 +416,40 @@ export function createPatentPdfDownloadTool(
         input.timeoutMs ??
         Math.min(MAX_DEFAULT_TIMEOUT_MS, Math.max(MIN_DEFAULT_TIMEOUT_MS, patents.length * PER_PATENT_TIMEOUT_MS));
       const record = input.record === true;
+      const force = input.force === true;
+
+      // P2-03 断点续传：加载 MANIFEST（按 patent 去重，最后一条 wins），
+      // status=ok 且磁盘 size 匹配的专利跳过，不打开 Google Patents 页；
+      // --force 时全部视为未下载。
+      const manifest = await loadManifest(outputDir);
+      const skipped: PatentDownloadItem[] = [];
+      let pending = patents;
+      if (!force) {
+        pending = [];
+        for (const patent of patents) {
+          const entry = manifest.get(patent);
+          if (entry?.path && entry.size !== undefined && (await fileSizeMatches(entry.path, entry.size))) {
+            skipped.push({ patent, status: "ok", path: entry.path, method: "skip" });
+          } else {
+            pending.push(patent);
+          }
+        }
+      }
+      if (pending.length === 0) {
+        const summary = { total: patents.length, ok: patents.length, failed: 0 };
+        // P3-02：全部命中 MANIFEST 也是批次结束，同样埋点。
+        await appendDownloadLog(skipped, summary, context.env);
+        return {
+          content: [{ type: "text", text: formatSummary(summary, outputDir, undefined, skipped) }],
+          data: { results: skipped, summary, outputDir, recorded: undefined },
+        };
+      }
 
       const spaceName = session.taskSpaceName("patent-download", sessionIdForSpace(context).slice(0, 12));
       const recordPath = record ? join(outputDir, "recording.webm") : undefined;
       const script = buildDownloadScript({
         spaceName,
-        patents,
+        patents: pending,
         outputDir,
         pageTimeoutSec,
         downloadTimeoutMs,
@@ -376,17 +497,40 @@ export function createPatentPdfDownloadTool(
       const results = await Promise.all(
         scriptResults.map(item => fetchPdfFallback(item, outputDir, { signal: context.abortSignal, fetchImpl })),
       );
-      const summary = summarize(results, patents.length);
+      // P2-03：下载成功的条目追加进 MANIFEST（append 式，加载时按 patent 去重，
+      // 最后一条 wins）；下次执行 status=ok 且 size 匹配的直接跳过。
+      // 落盘文件不可读（竞态/路径失效）时放弃续传记录，不阻断下载结果。
+      for (const r of results) {
+        if (r.status === "ok" && r.path) {
+          try {
+            const st = await stat(r.path);
+            await saveManifestEntry(outputDir, {
+              patent: r.patent,
+              status: "ok",
+              path: r.path,
+              size: st.size,
+              sha1: await sha1OfFile(r.path),
+              ts: Date.now(),
+            });
+          } catch {
+            // 续传记录失败不影响本次下载结果
+          }
+        }
+      }
+      const allResults = [...skipped, ...results];
+      const summary = summarize(allResults, patents.length);
+      // P3-02：批次结束追加一行结构化埋点（失败静默）。
+      await appendDownloadLog(allResults, summary, context.env);
       const recorded = record && !result.output.includes("EGO_RECORD_FAILED:") ? recordPath : undefined;
       return {
         content: [
           {
             type: "text",
-            text: formatSummary(summary, outputDir, recorded, results),
+            text: formatSummary(summary, outputDir, recorded, allResults),
           },
         ],
         data: {
-          results,
+          results: allResults,
           summary,
           outputDir,
           recorded,
@@ -400,12 +544,135 @@ export function createPatentPdfDownloadTool(
   };
 }
 
-function resolveOutputDir(outputDir: string | undefined, cwd: string): string {
+/** P3-02：下载成功率埋点文件（<APP_HOME|~/.sati>/logs/patent-download.jsonl，append 追加式）。 */
+const DOWNLOAD_LOG_REL = join("logs", "patent-download.jsonl");
+
+/**
+ * P3-02：批次结束后追加一行 JSONL 埋点：{ts, total, ok, failed, perPatent, clientVersion}。
+ * 路径用仓库惯例 <APP_HOME|~/.sati>/logs/；目录不存在自动创建；任何失败静默忽略，
+ * 遥测尽力而为，不阻断下载主流程。
+ */
+async function appendDownloadLog(
+  results: readonly PatentDownloadItem[],
+  summary: { total: number; ok: number; failed: number },
+  env?: NodeJS.ProcessEnv,
+): Promise<void> {
+  try {
+    const home = brandEnv(env ?? process.env, ENV_KEY.HOME) || join(homedir(), ".sati");
+    const logPath = join(home, DOWNLOAD_LOG_REL);
+    await mkdir(dirname(logPath), { recursive: true });
+    const entry = {
+      ts: Date.now(),
+      total: summary.total,
+      ok: summary.ok,
+      failed: summary.failed,
+      perPatent: results.map(r => ({
+        num: r.patent,
+        status: r.status,
+        method: r.method,
+        durationMs: r.durationMs,
+        errorCode: r.error,
+      })),
+      clientVersion: APP_VERSION,
+    };
+    await appendFile(logPath, JSON.stringify(entry) + "\n", { encoding: "utf8" });
+  } catch {
+    // 埋点失败静默（磁盘满/权限问题等不阻断下载结果）
+  }
+}
+
+/** P2-03：MANIFEST 文件名（<outputDir>/.MANIFEST.jsonl，append 追加式）。 */
+const MANIFEST_FILE = ".MANIFEST.jsonl";
+
+/** P2-03：MANIFEST 条目——每行一个 JSON，字段与 Python 侧契约一致。 */
+export type PatentManifestEntry = {
+  patent: string;
+  status: "ok" | "failed";
+  path?: string;
+  size?: number;
+  sha1?: string;
+  ts: number;
+};
+
+/** P2-03：磁盘文件大小与 MANIFEST 记录一致才算命中续传（不存在/异常视为不匹配）。 */
+async function fileSizeMatches(path: string, expectedSize: number): Promise<boolean> {
+  try {
+    const st = await stat(path);
+    return st.size === expectedSize;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * P2-03：加载 MANIFEST。按 patent 键去重（append 式积累的重复行最后一条 wins）；
+ * 损坏行容忍跳过（仅影响该条目的续传），文件不存在返回空。
+ */
+async function loadManifest(outputDir: string): Promise<Map<string, PatentManifestEntry>> {
+  const manifestPath = join(outputDir, MANIFEST_FILE);
+  let raw: string;
+  try {
+    raw = await readFile(manifestPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Map();
+    throw error;
+  }
+  const byPatent = new Map<string, PatentManifestEntry>();
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const entry = JSON.parse(trimmed) as PatentManifestEntry;
+      if (entry && typeof entry.patent === "string" && entry.status === "ok") {
+        byPatent.set(entry.patent, entry);
+      }
+    } catch {
+      // 单行损坏：跳过该行，其余行仍生效
+    }
+  }
+  return byPatent;
+}
+
+/** P2-03：追加一条 MANIFEST 记录（成功后调用；--force 不清除历史，靠去重忽略旧行）。 */
+async function saveManifestEntry(outputDir: string, entry: PatentManifestEntry): Promise<void> {
+  const manifestPath = join(outputDir, MANIFEST_FILE);
+  await appendFile(manifestPath, JSON.stringify(entry) + "\n", "utf8");
+}
+
+/** P2-03：计算文件 SHA-1（写 MANIFEST 用；跳过判定只看 size，不读全文）。 */
+async function sha1OfFile(path: string): Promise<string> {
+  const data = await readFile(path);
+  return createHash("sha1").update(data).digest("hex");
+}
+
+/** 当天日期子目录名（YYYY-MM-DD）：下载目录按日归档。 */
+function datePartOf(now: Date): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * 展开路径开头的 `~`/`~/` 为 $HOME：Node 的 path.resolve 不自动展开，
+ * `downloadDir: ~/Patents` 会被当作 cwd 下的字面量目录（parsePatentsConfig
+ * docstring 示例即如此书写）。仅处理 `~` 与 `~/` 前缀（~user 形式罕见不处理）。
+ */
+function expandTilde(p: string): string {
+  if (p === "~") return homedir();
+  if (p.startsWith("~/")) return join(homedir(), p.slice(2));
+  return p;
+}
+
+function resolveOutputDir(
+  outputDir: string | undefined,
+  cwd: string,
+  patentsConfig: PatentPdfDownloadPatentsConfig | undefined,
+): string {
   if (outputDir) {
     return resolve(cwd, outputDir);
   }
-  const now = new Date();
-  const datePart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const datePart = datePartOf(new Date());
+  if (patentsConfig?.downloadDir) {
+    return resolve(expandTilde(patentsConfig.downloadDir), datePart);
+  }
   return resolve(cwd, "专利原文", datePart);
 }
 
@@ -430,17 +697,38 @@ function formatSummary(
       const retry = r.pdfUrl ? `；可手动重试：${r.pdfUrl}` : "";
       lines.push(`- ${r.patent}: 失败（${r.error ?? "unknown"}${retry}）`);
     } else {
-      const method = r.method === "http" ? "（fetch 兜底）" : "";
+      const method = METHOD_LABELS[r.method ?? ""] ?? "";
       lines.push(`- ${r.patent}: ${r.path ?? "ok"}${method}`);
     }
   }
   return lines.join("\n");
 }
 
+/** PDF 魔数（%PDF-，5 字节）。 */
+const PDF_MAGIC = "%PDF-";
+
+/** 落盘方式的中文标注（formatSummary 行内后缀）。 */
+const METHOD_LABELS: Record<string, string> = {
+  http: "（fetch 兜底）",
+  skip: "（已下载，跳过）",
+};
+/** 错误页判定下限：小于该字节数的响应视为错误页不落盘（与 Python 侧阈值统一）。 */
+const MIN_PDF_BYTES = 500;
+
 /**
  * 浏览器拦截条目兜底：脚本返回 fallback（已提取 CDN URL）时，用 fetch 直接下载落盘。
  * 成功升格为 ok（method=http）；失败或无 URL 可重试则标记 failed（保留 pdfUrl 供手动重试）。
+ *
+ * 落盘安全（P1-01）：写入前校验 PDF 魔数与最小长度，Content-Type 为 text/html 时拒绝
+ * （宽松策略，application/octet-stream 等不误杀）；先写 .tmp 再原子 rename，
+ * 避免进程中断留下半写文件。
+ *
+ * 重试（P2-02）：复用 networkFetch 内置重试（指数退避 jitteredBackoff，base 1000ms ×2，
+ * 与 Python 侧同参数）——HTTP 408/409/425/429/5xx 与网络错误（ECONNRESET/ETIMEDOUT 等）
+ * 重试至多 3 次；404/403 与魔数错误属于确定性失败，不重试立即返回。
  */
+const FETCH_RETRY_MAX_ATTEMPTS = 3;
+
 async function fetchPdfFallback(
   item: ScriptDownloadItem,
   outputDir: string,
@@ -452,19 +740,70 @@ async function fetchPdfFallback(
   if (!item.pdfUrl) {
     return { patent: item.patent, status: "failed", error: item.error };
   }
+  const start = Date.now();
+  const target = join(outputDir, `${item.patent}.pdf`);
+  const tmp = `${target}.tmp`;
   try {
-    const target = join(outputDir, `${item.patent}.pdf`);
     const res = await networkFetch(
       item.pdfUrl,
       { headers: { "User-Agent": PATENT_DOWNLOAD_USER_AGENT, Accept: "application/pdf" } },
-      { timeoutMs: FETCH_FALLBACK_TIMEOUT_MS, signal: options.signal, fetchImpl: options.fetchImpl },
+      {
+        timeoutMs: FETCH_FALLBACK_TIMEOUT_MS,
+        signal: options.signal,
+        fetchImpl: options.fetchImpl,
+        retry: { maxRetries: FETCH_RETRY_MAX_ATTEMPTS - 1 },
+      },
     );
     if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.length === 0) throw new Error("empty PDF response");
-    await writeFile(target, buffer);
-    return { patent: item.patent, status: "ok", path: target, pdfUrl: item.pdfUrl, method: "http" };
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType.toLowerCase().includes("text/html")) {
+      throw new Error(`unexpected Content-Type: ${contentType}`);
+    }
+    if (!res.body) throw new Error(`response too small (0 bytes), likely an error page`);
+    // P2-04 流式写盘：先读首个 chunk 校验 PDF 魔数（不匹配立即取消并拒绝），
+    // 再把剩余流 pipe 到 .tmp（20MB PDF 不再整读入内存，峰值仅一个 chunk）。
+    const reader = res.body.getReader();
+    const first = await reader.read();
+    const firstBuf = first.done ? Buffer.alloc(0) : Buffer.from(first.value);
+    if (firstBuf.length < PDF_MAGIC.length) {
+      throw new Error(`response too small (${firstBuf.length} bytes), likely an error page`);
+    }
+    const magic = firstBuf.subarray(0, PDF_MAGIC.length).toString();
+    if (magic !== PDF_MAGIC) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`invalid PDF magic: ${JSON.stringify(magic)}`);
+    }
+    let size = firstBuf.length;
+    const rest = new Readable({
+      read() {
+        reader.read().then(
+          ({ done, value }) => {
+            if (done) {
+              this.push(null);
+              return;
+            }
+            size += value.length;
+            this.push(Buffer.from(value));
+          },
+          (err: unknown) => this.destroy(err instanceof Error ? err : new Error(String(err))),
+        );
+      },
+    });
+    const out = createWriteStream(tmp);
+    out.write(firstBuf);
+    await pipeline(rest, out);
+    if (size < MIN_PDF_BYTES) throw new Error(`response too small (${size} bytes), likely an error page`);
+    await rename(tmp, target);
+    return {
+      patent: item.patent,
+      status: "ok",
+      path: target,
+      pdfUrl: item.pdfUrl,
+      method: "http",
+      durationMs: Date.now() - start,
+    };
   } catch (fetchErr) {
+    await unlink(tmp).catch(() => {});
     const reason = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
     const base = item.error ? `${item.error}; ` : "";
     return {
@@ -472,6 +811,7 @@ async function fetchPdfFallback(
       status: "failed",
       pdfUrl: item.pdfUrl,
       error: `${base}fetch fallback failed: ${reason}`,
+      durationMs: Date.now() - start,
     };
   }
 }
@@ -556,7 +896,7 @@ function buildDownloadScript(params: DownloadScriptParams): string {
   lines.push("      }");
   lines.push("      if (!onPage) throw new Error('page mismatch');");
   // 先提取 CDN PDF 链接：按钮/锚点两条触发路径与 Sati 侧 fetch 兜底共用。
-  lines.push(`      pdfUrl = await js(String.raw\`${PDF_LINK_EXTRACT_JS}\`);`);
+  lines.push(`      pdfUrl = await js(String.raw\`${escapeTemplateContent(loadPdfLinkExtractJs())}\`);`);
   lines.push("      if (!pdfUrl) throw new Error('no pdf link');");
   lines.push("      if (!canIntercept) {");
   lines.push(

@@ -53,6 +53,57 @@ function toItem(h: PatentSearchHit): PatentSearchHitItem {
   };
 }
 
+/**
+ * 提取专利号的基号（去 kind code）：`CN115690481A`→`CN115690481`，
+ * `US11452699B2`→`US11452699`。无 kind code 的号返回 undefined（不参与分桶）。
+ */
+export function baseNumber(patent: string): string | undefined {
+  const match = /^([A-Z]{2}\d+)[A-Z]\d?$/.exec(patent);
+  return match?.[1];
+}
+
+/**
+ * P2-06：按基号分桶去重（Google Patents 常返回同申请公开 A / 授权 B / 分案 C
+ * 多篇高度相似文本）。同基号保留 publicationDate 最新一篇（无日期视为最旧），
+ * 结果保持原 hits 顺序；被合并统计写入 warnings。跨号分案不识别（已知边界）。
+ */
+export function dedupeByFamily(
+  hits: readonly PatentSearchHit[],
+  baseWarnings: readonly string[],
+): { hits: PatentSearchHit[]; warnings: string[] } {
+  const bestByBase = new Map<string, PatentSearchHit>();
+  const kept = new Set<string>();
+  const dropped = new Map<string, number>();
+
+  for (const hit of hits) {
+    const base = baseNumber(hit.patent);
+    if (base === undefined) continue;
+    const current = bestByBase.get(base);
+    if (current === undefined) {
+      bestByBase.set(base, hit);
+      kept.add(hit.patent);
+      continue;
+    }
+    // publication_date 为 YYYY-MM-DD，字典序即时间序；无日期视为最旧。
+    if ((hit.publication_date ?? "") > (current.publication_date ?? "")) {
+      bestByBase.set(base, hit);
+      kept.delete(current.patent);
+      kept.add(hit.patent);
+    }
+    dropped.set(base, (dropped.get(base) ?? 0) + 1);
+  }
+
+  // 保留：各基号桶的最优篇 + 未参与分桶（无 kind code）的号。
+  const deduped = hits.filter(h => kept.has(h.patent) || baseNumber(h.patent) === undefined);
+  const warnings = [...baseWarnings];
+  for (const [base, count] of dropped) {
+    const best = bestByBase.get(base);
+    const date = best?.publication_date ? ` ${best.publication_date}` : "";
+    warnings.push(`family 去重：${base}* 的 ${count + 1} 篇公开/授权变体合并为 1 篇（保留 ${best?.patent}${date}）`);
+  }
+  return { hits: deduped, warnings };
+}
+
 export function createPatentSearchTool(
   options?: CreatePatentSearchToolOptions,
 ): SatiToolDefinition<PatentSearchInput, PatentSearchOutput> {
@@ -148,7 +199,9 @@ export function createPatentSearchTool(
         throw new SatiToolRuntimeError("tool_execution_failed", failure, { tool: "patent_search", query });
       }
 
-      const hits = result.hits.map(toItem);
+      // P2-06：family 去重——同基号（公开/授权变体）只留 publicationDate 最新一篇。
+      const { hits: dedupedHits, warnings } = dedupeByFamily(result.hits, result.warnings);
+      const hits = dedupedHits.map(toItem);
       const lines = hits.map(h =>
         [
           `## ${h.title || h.patent}`,
@@ -168,7 +221,7 @@ export function createPatentSearchTool(
             ),
           },
         ],
-        data: { query, total: result.total, hits, warnings: result.warnings },
+        data: { query, total: result.total, hits, warnings },
         metadata: { query, count: hits.length },
       };
     },
