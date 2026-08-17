@@ -40,6 +40,7 @@ export {
   type WebSubmitTurnInput,
 } from "./protocol.js";
 export {
+  isVisibleFailureAgentStatus,
   isVisibleFailureStatusDetail,
   limitToolResultPreview,
   mapGatewayEventToFrames,
