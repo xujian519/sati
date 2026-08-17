@@ -301,7 +301,7 @@ async function executeSearchCommand(args, context) {
 }
 
 const builtInHandlers = {
-  "/help": async (args, context) => {
+  "/help": async () => {
     const helpText = `# Sati Commands
 
 ## Built-in Commands
@@ -343,7 +343,7 @@ Custom commands can be created in:
     };
   },
 
-  "/clear": async (args, context) => {
+  "/clear": async () => {
     return {
       type: "builtin",
       action: "clear",
@@ -353,7 +353,7 @@ Custom commands can be created in:
     };
   },
 
-  "/model": async (args, context) => {
+  "/model": async args => {
     const { config } = readSatiConfigFile();
     const mainRef = config?.agent?.model || "";
     const resolved = resolveModel(config, mainRef, { allowMissing: true });
@@ -451,7 +451,7 @@ Custom commands can be created in:
     };
   },
 
-  "/status": async (args, context) => {
+  "/status": async () => {
     const packageJsonPath = path.join(path.dirname(__dirname), "..", "package.json");
     let version = "unknown";
     let packageName = "sati";
@@ -527,7 +527,7 @@ Custom commands can be created in:
     };
   },
 
-  "/config": async (args, context) => {
+  "/config": async () => {
     return {
       type: "builtin",
       action: "config",
@@ -537,7 +537,7 @@ Custom commands can be created in:
     };
   },
 
-  "/rewind": async (args, context) => {
+  "/rewind": async args => {
     const steps = args[0] ? parseInt(args[0]) : 1;
 
     if (isNaN(steps) || steps < 1) {
@@ -567,7 +567,7 @@ Custom commands can be created in:
   "/find": executeSearchCommand,
   "/grep": executeSearchCommand,
 
-  "/update": async (args, context) => {
+  "/update": async args => {
     const subcommand = (args && args[0]) || "apply";
 
     if (subcommand === "check") {
