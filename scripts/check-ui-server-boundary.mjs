@@ -43,14 +43,14 @@ const ALLOWED_SRC_PATHS = new Set([
 ]);
 
 // 提取 import/export from / require() / import() 的字符串 specifier。
+// 三个捕获组对应三种形态，matchAll 后取首个非空组。
 const SPECIFIER_RE =
   /(?:import|export)\s+(?:[^'"]*?\s+from\s*)?["']([^"']+)["']|require\(["']([^"']+)["']\)|import\(["']([^"']+)["']\)/g;
 
 function collectFiles(dir, out = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    const st = statSync(full);
-    if (st.isDirectory()) {
+    if (statSync(full).isDirectory()) {
       collectFiles(full, out);
     } else if (/\.(js|mjs)$/.test(entry) && !/\.test\./.test(entry)) {
       out.push(full);
@@ -63,13 +63,12 @@ function main() {
   const violations = [];
   for (const file of collectFiles(UI_SERVER_ROOT)) {
     const source = readFileSync(file, "utf8");
-    let match;
-    SPECIFIER_RE.lastIndex = 0;
-    while ((match = SPECIFIER_RE.exec(source)) !== null) {
-      const specifier = match[1] ?? match[2] ?? match[3];
+    for (const match of source.matchAll(SPECIFIER_RE)) {
+      const specifier = match.slice(1).find(Boolean);
       if (!specifier || !specifier.startsWith(".")) continue;
       const resolved = normalize(resolve(dirname(file), specifier));
-      if (resolved === SRC_ROOT || !resolved.startsWith(SRC_ROOT + sep)) continue;
+      // import 目录在 Node ESM 中直接报错，无需防御 resolved === SRC_ROOT。
+      if (!resolved.startsWith(SRC_ROOT + sep)) continue;
       const rel = relative(SRC_ROOT, resolved).split(sep).join("/");
       if (!ALLOWED_SRC_PATHS.has(rel)) {
         const line = source.slice(0, match.index).split("\n").length;
