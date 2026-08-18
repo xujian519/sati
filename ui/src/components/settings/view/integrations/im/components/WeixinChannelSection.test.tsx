@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../../../../utils/api", () => ({
   authenticatedFetch: mocks.authenticatedFetch,
   // 无 token 时原样返回 URL（与真实实现一致）
-  appendAuthToken: url => url,
+  appendAuthToken: (url: string) => url,
 }));
 
 vi.mock("react-i18next", () => ({
