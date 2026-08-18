@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>专利实务研修班海报</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Noto Sans SC", sans-serif;
+    background: #fafaf8;
+    color: #0a0a0a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .poster {
+    width: 1080px;
+    max-width: 100%;
+    aspect-ratio: 9 / 16;
+    background:
+      radial-gradient(circle at 80% 10%, rgba(31,58,95,0.10) 0, transparent 34%),
+      linear-gradient(180deg, #f7f5ee 0%, #efece0 100%);
+    border: 1px solid #d4d1c5;
+    padding: 56px 56px 48px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .poster::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(#1B365D 1px, transparent 1px);
+    background-size: 32px 32px;
+    opacity: 0.06;
+    pointer-events: none;
+  }
+  .tag {
+    display: inline-block;
+    border: 1px solid #1B365D;
+    color: #1B365D;
+    padding: 4px 14px;
+    font-size: 14px;
+    letter-spacing: .3em;
+    align-self: flex-start;
+  }
+  .main { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  h1 { font-size: 64px; line-height: 1.05; font-weight: 900; letter-spacing: .02em; }
+  .sub { font-size: 24px; color: #6b665b; margin-top: 16px; }
+  .info { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 40px; }
+  .info div { border-top: 2px solid #1B365D; padding-top: 8px; font-size: 18px; }
+  .info b { display: block; font-size: 14px; color: #6b665b; margin-bottom: 4px; }
+  .cta { margin-top: 32px; background: #1B365D; color: #f5f4ed; padding: 16px 24px; font-size: 20px; text-align: center; }
+  .foot { display: flex; justify-content: space-between; margin-top: 24px; font-size: 13px; color: #6b665b; }
+  @media (max-width: 600px) {
+    body { padding: 8px; }
+    .poster { padding: 24px; }
+    h1 { font-size: 36px; }
+    .info { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="poster">
+  <div class="tag">Sati 知产学院</div>
+  <div class="main">
+    <h1>专利实务<br>研修班</h1>
+    <p class="sub">从交底书到授权：权利要求撰写与审查意见答复</p>
+    <div class="info">
+      <div><b>时间</b>2026 年 9 月 12 日 14:00–17:00</div>
+      <div><b>地点</b>北京 · 线上直播</div>
+      <div><b>对象</b>企业 IPR / 专利工程师</div>
+      <div><b>报名</b>扫描二维码或联系课程助手</div>
+    </div>
+    <div class="cta">限时开放 200 个名额</div>
+  </div>
+  <div class="foot">
+    <span>主办：Sati 正念智能体</span>
+    <span>咨询：training@sati.example</span>
+  </div>
+</div>
+</body>
+</html>

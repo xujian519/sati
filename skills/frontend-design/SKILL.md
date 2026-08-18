@@ -9,6 +9,7 @@ Use this skill when creating or reviewing frontend UI where visual quality matte
 
 ## Workflow
 
+0. When creating HTML deliverables, first read `{{SKILL_ROOT_SHELL}}/../../assets/prompts/html/shared-design-directives.md` and `{{SKILL_ROOT_SHELL}}/../../assets/prompts/html/html-delivery-checklist.md`.
 1. Clarify the product context, target user, and page goal.
 2. Establish visual hierarchy before writing code: primary action, secondary action, supporting content.
 3. Choose a deliberate visual direction instead of generic gradients and cards.

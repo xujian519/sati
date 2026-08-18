@@ -29,6 +29,28 @@ Sati 围绕专利业务的真实链路构建能力：
 - **可扩展，随业务生长**：49 个专利技能（其中 33 个专家角色可作为子代理被调度，另有 4 个内置通用子代理预设）、23 个专利域内置工具 + 免费无 key 学术论文检索（arXiv / OpenAlex / Semantic Scholar / Crossref 四源）、原生支持 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)、多模态模型路由与 DeepSeek / Kimi / GLM / MiniMax / Qwen 等国产模型开箱即用，技能与工具可随团队的审查实践持续沉淀。
 
 
+## 🎨 HTML 交付物
+
+Sati 内置了面向专业交付的单文件 HTML 技能与导出工具：
+
+- **共享设计约束**：`assets/prompts/html/shared-design-directives.md` 统一约束 CJK 字体、8px 网格、对比度、真实数据与单文件输出。
+- **模板技能**：
+  - `html-data-report`：CSV/Excel/JSON → 可视化数据报告
+  - `html-editorial-doc`：长文、客户函、法律备忘录
+  - `html-poster`：单页海报
+  - `html-social-card`：微信/知乎/社交分享卡
+  - `html-meeting-notes`：会议纪要 / 决策日志
+  - `html-finance-report`：季度财报 / 经营分析
+  - `html-patent-briefing-deck`：16:9 专利分析简报 Deck
+- **导出脚本**：
+  - `node scripts/export-html.mjs wechat <input.html> [output.html]`
+  - `node scripts/export-html.mjs png <input.html> [output.png] [--width W --height H]`
+  - `node scripts/export-html.mjs pdf <input.html> [output.pdf]`
+  - `node scripts/export-html.mjs zhihu <input.html> [output.html]`
+  - `node scripts/export-html.mjs check <input.html>`
+  - **内置工具**：agent 可直接调用 `export_html`（`html_path` + `targets` + 可选 `output_dir`），无需通过 bash。
+- **质量检查**：`pnpm check:html-templates` 校验所有 HTML 模板契约，并已挂入 `pnpm lint`。
+
 ## 📦 安装与快速开始
 
 我们提供了 macOS/Linux 与 Windows PowerShell 下的一键安装脚本，以及适合开发者的源码启动方式。

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>事务所月度案件数据报告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --ink: #0a0a0a;
+    --muted: #6b6b6b;
+    --line: #e5e7eb;
+    --accent: #1f3a5f;
+    --accent-2: #3b82f6;
+    --good: #067647;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Noto Sans SC", "Inter", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+    padding: 32px 16px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  header { margin-bottom: 24px; }
+  .kicker { font-size: 14px; letter-spacing: .08em; color: var(--muted); }
+  h1 { font-size: 32px; line-height: 1.2; margin: 8px 0 4px; }
+  .meta { color: var(--muted); font-size: 14px; }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .card .label { font-size: 13px; color: var(--muted); }
+  .card .value { font-size: 28px; font-weight: 800; margin-top: 4px; }
+  .card .delta { font-size: 13px; margin-top: 4px; }
+  .up { color: var(--good); }
+  .down { color: #b42318; }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; margin: 16px 0; }
+  h2 { font-size: 20px; margin-bottom: 16px; }
+  .chart-box { position: relative; height: 280px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; }
+  th { background: #f3f4f6; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #fafafa; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 16px; }
+  summary { cursor: pointer; font-weight: 600; }
+  @media (max-width: 600px) {
+    h1 { font-size: 26px; }
+    .cards { grid-template-columns: 1fr 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">数据报告 · 内部经营</div>
+    <h1>事务所月度案件数据报告</h1>
+    <div class="meta">数据区间：2026 年 1 月 – 9 月 · 来源：Sati 案件管理系统导出</div>
+  </header>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">累计新案</div>
+      <div class="value">284</div>
+      <div class="delta up">较去年同期 +12.7%</div>
+    </div>
+    <div class="card">
+      <div class="label">本月新案</div>
+      <div class="value">34</div>
+      <div class="delta up">较上月 +6.3%</div>
+    </div>
+    <div class="card">
+      <div class="label">平均处理周期</div>
+      <div class="value">18 天</div>
+      <div class="delta down">较上月 +1 天</div>
+    </div>
+    <div class="card">
+      <div class="label">客户满意度</div>
+      <div class="value">96%</div>
+      <div class="delta up">保持稳定</div>
+    </div>
+  </div>
+
+  <section>
+    <h2>月度新案趋势</h2>
+    <div class="chart-box"><canvas id="trendChart"></canvas></div>
+  </section>
+
+  <section>
+    <h2>案件类型分布</h2>
+    <div class="chart-box"><canvas id="typeChart"></canvas></div>
+  </section>
+
+  <section>
+    <h2>月度明细</h2>
+    <table>
+      <thead>
+        <tr><th>月份</th><th class="num">新案数</th><th class="num">结案数</th><th class="num">平均周期（天）</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1 月</td><td class="num">26</td><td class="num">24</td><td class="num">16</td></tr>
+        <tr><td>2 月</td><td class="num">18</td><td class="num">20</td><td class="num">15</td></tr>
+        <tr><td>3 月</td><td class="num">31</td><td class="num">28</td><td class="num">17</td></tr>
+        <tr><td>4 月</td><td class="num">29</td><td class="num">31</td><td class="num">18</td></tr>
+        <tr><td>5 月</td><td class="num">35</td><td class="num">30</td><td class="num">19</td></tr>
+        <tr><td>6 月</td><td class="num">30</td><td class="num">33</td><td class="num">18</td></tr>
+        <tr><td>7 月</td><td class="num">32</td><td class="num">29</td><td class="num">17</td></tr>
+        <tr><td>8 月</td><td class="num">49</td><td class="num">41</td><td class="num">20</td></tr>
+        <tr><td>9 月</td><td class="num">34</td><td class="num">38</td><td class="num">18</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>关键洞察</h2>
+    <ul>
+      <li>8 月新案数达到峰值 49 件，主要由外观设计批量申请贡献。</li>
+      <li>平均处理周期在 5 月和 8 月略升至 19–20 天，建议关注审查意见答复资源分配。</li>
+      <li>结案率整体稳定，1–9 月累计结案 274 件，接近同期新案数。</li>
+    </ul>
+    <details>
+      <summary>方法论与假设</summary>
+      <p>数据来自 Sati 案件管理系统导出，统计口径为当月立案/结案；满意度来自季度客户回访，样本量为 82 家客户。</p>
+    </details>
+  </section>
+</div>
+<script>
+  (function () {
+    var months = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月"];
+    var newCases = [26, 18, 31, 29, 35, 30, 32, 49, 34];
+    var closedCases = [24, 20, 28, 31, 30, 33, 29, 41, 38];
+    new Chart(document.getElementById("trendChart"), {
+      type: "line",
+      data: {
+        labels: months,
+        datasets: [
+          { label: "新案数", data: newCases, borderColor: "#1f3a5f", backgroundColor: "rgba(31,58,95,0.08)", tension: 0.3 },
+          { label: "结案数", data: closedCases, borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.06)", tension: 0.3 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom" } }
+      }
+    });
+    new Chart(document.getElementById("typeChart"), {
+      type: "doughnut",
+      data: {
+        labels: ["发明", "实用新型", "外观设计", "复审/无效"],
+        datasets: [{ data: [142, 88, 36, 18], backgroundColor: ["#1f3a5f", "#3b82f6", "#f59e0b", "#e5e7eb"] }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right" } } }
+    });
+  })();
+</script>
+</body>
+</html>

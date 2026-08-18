@@ -48,6 +48,15 @@ export type SkillRoleConfig = {
   };
 };
 
+/** HTML 模板元数据（可选，供模板筛选/UI 标签展示）。 */
+export type SkillTemplateMeta = {
+  mode?: "doc" | "deck" | "data-report" | "poster" | "social-card" | "prototype" | "office" | "frame";
+  scenario?: "patent" | "legal" | "finance" | "product" | "operation" | "design" | "personal";
+  surface?: "long-page" | "a4" | "16:9" | "1600x900" | "1080x1920" | "auto";
+  preview?: string;
+  designSystem?: string;
+};
+
 export type SkillSummary = {
   slug: string;
   name: string;
@@ -68,6 +77,8 @@ export type SkillSummary = {
   mtime: number | null;
   /** `type: "role"` 时的角色配置；普通 skill 为 null。 */
   role?: SkillRoleConfig | null;
+  /** HTML 模板元数据；非 HTML 模板为 null。 */
+  template?: SkillTemplateMeta | null;
 };
 
 export type SkillsListInput = {

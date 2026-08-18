@@ -39,6 +39,14 @@ type SkillsV2Props = {
 
 type SkillScope = "builtin" | "user" | "project";
 
+type SkillTemplateMeta = {
+  mode?: string;
+  scenario?: string;
+  surface?: string;
+  preview?: string;
+  designSystem?: string;
+};
+
 type Skill = {
   slug: string;
   name: string;
@@ -51,6 +59,7 @@ type Skill = {
   overriddenBy?: "user" | "project";
   overridesBuiltin?: boolean;
   mtime: number | null;
+  template?: SkillTemplateMeta | null;
 };
 
 type SkillsListResponse = {
@@ -760,6 +769,11 @@ function ListSection({
                       v{s.version}
                     </span>
                   ) : null}
+                  {s.template ? (
+                    <span className="shrink-0 rounded bg-brand-100 px-1 py-px text-[10px] text-brand-700 dark:bg-brand-950/50 dark:text-brand-300">
+                      {s.template.mode ?? "html"}
+                    </span>
+                  ) : null}
                   {s.overriddenBy ? (
                     <span className="shrink-0 rounded bg-neutral-200 px-1 py-px text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                       {t("skillsTab.overridden", { defaultValue: "overridden" })}
@@ -925,6 +939,20 @@ function SkillDetail({
         </div>
         {skill.description ? (
           <p className="mt-1 text-xxs text-neutral-500 dark:text-neutral-400">{skill.description}</p>
+        ) : null}
+        {skill.template ? (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {[skill.template.mode, skill.template.scenario, skill.template.surface, skill.template.designSystem]
+              .filter(Boolean)
+              .map(tag => (
+                <span
+                  key={tag}
+                  className="rounded bg-brand-100 px-1.5 py-0.5 text-[10px] text-brand-700 dark:bg-brand-950/50 dark:text-brand-300"
+                >
+                  {tag}
+                </span>
+              ))}
+          </div>
         ) : null}
         <div className="mt-1 truncate font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
           {skill.skillDir}

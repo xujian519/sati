@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>专利简报：电池热管理装置</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: "Noto Sans SC", "Inter", sans-serif;
+    background: #0a0f1c;
+    color: #f5f4ed;
+  }
+  .deck { height: 100vh; height: 100dvh; }
+  .slide {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(24px, 5vw, 72px);
+    position: relative;
+  }
+  .slide.active { display: flex; }
+  .kicker { font-size: clamp(12px, 1.4vw, 18px); letter-spacing: .12em; color: #9ca3af; }
+  h1 { font-size: clamp(32px, 6vw, 80px); line-height: 1.1; margin: 16px 0; }
+  h2 { font-size: clamp(22px, 3.4vw, 44px); line-height: 1.15; margin-bottom: 24px; }
+  p { font-size: clamp(16px, 1.8vw, 22px); line-height: 1.6; color: #d1d5db; max-width: 65ch; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: clamp(12px, 2vw, 24px); margin-top: 24px; }
+  .card { background: rgba(255,255,255,0.04); border: 1px solid #262626; border-radius: 8px; padding: clamp(14px, 2vw, 24px); }
+  .card b { display: block; font-size: clamp(18px, 2vw, 26px); margin-bottom: 6px; }
+  .card span { font-size: clamp(13px, 1.3vw, 16px); color: #9ca3af; line-height: 1.5; }
+  .nav { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #4b5563; border: 0; cursor: pointer; }
+  .dot.active { background: #60a5fa; }
+  .counter { position: fixed; bottom: 22px; right: 24px; font-size: 13px; color: #6b7280; z-index: 10; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="deck">
+  <section class="slide active">
+    <div class="kicker">Sati 专利简报</div>
+    <h1>电池热管理装置<br>专利分析简报</h1>
+    <p>客户：远景能源科技 · 2026 年 8 月 · 机密</p>
+  </section>
+
+  <section class="slide">
+    <h2>技术背景与问题</h2>
+    <p>现有均温板与冷板分体布置，热传导路径长，导致电芯温差偏大。本方案将相变材料腔体与冷板流道通过毛细结构连通，提升温度均匀性。</p>
+  </section>
+
+  <section class="slide">
+    <h2>检索与对比文件</h2>
+    <div class="grid">
+      <div class="card"><b>D1</b><span>CN112345678A · 公开均温板，未公开相变腔体毛细连通结构</span></div>
+      <div class="card"><b>D2</b><span>US20230012345A1 · 公开冷板流道，未公开相变材料腔体</span></div>
+      <div class="card"><b>关键区别</b><span>“毛细结构连通相变腔体与冷板流道”未被单独公开</span></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <h2>权利要求策略</h2>
+    <p>独立权利要求 1 覆盖“均温板 + 相变材料腔体 + 毛细连通”结构；从属权利要求建议布局温度控制策略与制造方法。</p>
+  </section>
+
+  <section class="slide">
+    <h2>结论与建议</h2>
+    <p>初步判断具备新颖性；创造性需补充温度均匀性对比数据。建议 2 周内启动正式申请，并同步准备美国临时申请。</p>
+  </section>
+</div>
+<div class="nav" id="nav"></div>
+<div class="counter" id="counter">1 / 5</div>
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+    var nav = document.getElementById("nav");
+    var counter = document.getElementById("counter");
+    var current = 0;
+    slides.forEach(function (_, i) {
+      var dot = document.createElement("button");
+      dot.className = "dot" + (i === 0 ? " active" : "");
+      dot.setAttribute("aria-label", "第 " + (i + 1) + " 页");
+      dot.addEventListener("click", function () { go(i); });
+      nav.appendChild(dot);
+    });
+    var dots = Array.prototype.slice.call(nav.children);
+    function go(i) {
+      current = Math.max(0, Math.min(slides.length - 1, i));
+      slides.forEach(function (s, j) { s.classList.toggle("active", j === current); });
+      dots.forEach(function (d, j) { d.classList.toggle("active", j === current); });
+      counter.textContent = (current + 1) + " / " + slides.length;
+    }
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); go(current + 1); }
+      if (e.key === "ArrowLeft") { e.preventDefault(); go(current - 1); }
+    });
+  })();
+</script>
+</body>
+</html>

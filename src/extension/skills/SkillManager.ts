@@ -18,6 +18,7 @@ import type {
   SkillScanResult,
   SkillScope,
   SkillSummary,
+  SkillTemplateMeta,
   SkillValidateInput,
   SkillValidationIssue,
   SkillValidationResult,
@@ -550,6 +551,42 @@ function parseCompatFrontmatter(fmRaw: string): Record<string, unknown> {
   return result;
 }
 
+/** 解析 HTML 模板元数据；未知枚举值降级为 undefined，不阻断加载。 */
+function parseTemplateMeta(fm: Record<string, unknown>): SkillTemplateMeta | null {
+  const mode = fm.mode;
+  const scenario = fm.scenario;
+  const surface = fm.surface;
+  const preview = typeof fm.preview === "string" ? fm.preview.trim() : undefined;
+  const designSystem = typeof fm.design_system === "string" ? fm.design_system.trim() : undefined;
+  if (
+    mode === undefined &&
+    scenario === undefined &&
+    surface === undefined &&
+    preview === undefined &&
+    designSystem === undefined
+  ) {
+    return null;
+  }
+  const template: SkillTemplateMeta = {};
+  if (typeof mode === "string") {
+    const allowed = ["doc", "deck", "data-report", "poster", "social-card", "prototype", "office", "frame"];
+    if (allowed.includes(mode)) template.mode = mode as SkillTemplateMeta["mode"];
+  }
+  if (typeof scenario === "string") {
+    const allowed = ["patent", "legal", "finance", "product", "operation", "design", "personal"];
+    if (allowed.includes(scenario)) template.scenario = scenario as SkillTemplateMeta["scenario"];
+  }
+  if (typeof surface === "string") {
+    const allowed = ["long-page", "a4", "16:9", "1600x900", "1080x1920", "auto"];
+    if (allowed.includes(surface)) template.surface = surface as SkillTemplateMeta["surface"];
+  }
+  if (preview && !preview.includes("..") && !preview.startsWith("/")) {
+    template.preview = preview;
+  }
+  if (designSystem) template.designSystem = designSystem;
+  return template;
+}
+
 /** 解析 SKILL.md frontmatter 中的角色配置（type: "role"）；非法字段容错忽略。 */
 async function readSkillMeta(skillDir: string, scope: SkillScope): Promise<SkillSummary | null> {
   const skillFile = join(skillDir, "SKILL.md");
@@ -579,6 +616,7 @@ async function readSkillMeta(skillDir: string, scope: SkillScope): Promise<Skill
     readonly: scope === "builtin",
     mtime,
     role: isRole ? parseRoleConfig(fm) : null,
+    template: parseTemplateMeta(fm),
   };
 }
 

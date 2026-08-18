@@ -43,6 +43,7 @@ import { createValidateSpecificationTool } from "../builtin/validateSpecificatio
 import { createPatentWorkflowTool } from "../builtin/patentWorkflowTool.js";
 import { createPatentWorkflowRunTool } from "../builtin/patentWorkflowRunTool.js";
 import { createPatentPlanTaskTool } from "../builtin/patentPlanTaskTool.js";
+import { createExportHtmlTool } from "../builtin/exportHtml.js";
 import { createRenderPatentDocumentTool } from "../builtin/renderPatentDocument.js";
 import { createFlexiblePlanTool } from "../builtin/patentFlexiblePlanTool.js";
 import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
@@ -190,6 +191,11 @@ export type CreateBuiltinRegistryOptions = {
    * 按源开关 / 设置 OpenAlex polite pool 邮箱 / Semantic Scholar 提额 key。
    */
   paperSearch?: CreateLiteratureRegistryOptions | false;
+  /**
+   * `export_html` builtin（HTML 交付物导出）。Registered by default.
+   * Pass `false` to keep it out of the registry.
+   */
+  exportHtml?: false;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -253,6 +259,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createExitPlanModeTool(), "session"));
   }
   registry.register(annotate(createTodoWriteTool(), "session"));
+  if (options?.exportHtml !== false) {
+    registry.register(annotate(createExportHtmlTool(), "html"));
+  }
   if (options?.patent !== false) {
     // 内置 Pipeline 原子（Atom 契约 + StageHandler）装配：幂等，同名覆盖。
     registerBuiltinAtoms();
