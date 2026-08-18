@@ -10,7 +10,7 @@
 
 import { GraphBuilder, type GraphState } from "../index.js";
 import { getStateObject, getStateString } from "../state.js";
-import { checkEffectQuantification, checkNumericRangeCoverage } from "../../spec/index.js";
+import { checkEffectQuantification, checkNumericRangeCoverage, formatRange } from "../../spec/index.js";
 import { globalStageHandlerRegistry, type StageHandlerRegistry } from "../../atoms/index.js";
 import { handlerNode, llmNode, resolveInput, ruleGateNode } from "./shared.js";
 
@@ -41,17 +41,17 @@ export function splitSpecSections(text: string): Record<string, string> {
   const boundaries: Array<{ index: number; section: string }> = [];
   for (let i = 0; i < lines.length; i += 1) {
     const match = SPEC_SECTION_HEADING_RE.exec(lines[i]?.trim() ?? "");
-    if (match !== null) boundaries.push({ index: i, section: match[1] ?? "" });
+    if (match !== null) boundaries.push({ index: i, section: match[1]! });
   }
   if (boundaries.length === 0) return { full: text };
   const result: Record<string, string> = {};
   for (let i = 0; i < boundaries.length; i += 1) {
-    const start = boundaries[i]?.index ?? 0;
-    const end = i + 1 < boundaries.length ? (boundaries[i + 1]?.index ?? lines.length) : lines.length;
-    result[boundaries[i]?.section ?? ""] = lines.slice(start, end).join("\n");
+    const start = boundaries[i]!.index;
+    const end = i + 1 < boundaries.length ? boundaries[i + 1]!.index : lines.length;
+    result[boundaries[i]!.section] = lines.slice(start, end).join("\n");
   }
-  if ((boundaries[0]?.index ?? 0) > 0) {
-    result.preamble = lines.slice(0, boundaries[0]?.index).join("\n");
+  if (boundaries[0]!.index > 0) {
+    result.preamble = lines.slice(0, boundaries[0]!.index).join("\n");
   }
   return result;
 }
@@ -68,7 +68,7 @@ export function buildSpecContext(
   const sections = getStateObject(state, "spec_section_texts");
   const keys = Object.keys(sections);
   if (keys.length === 0) {
-    const text = resolveInput(state, ["text", "source_text", "spec", "input"]);
+    const text = resolveInput(state, SPEC_INPUT_KEYS);
     return text.slice(0, budget);
   }
   const ordered = [
@@ -91,6 +91,9 @@ export function buildSpecContext(
 
 /** 说明书上下文拼接预算（字符）。 */
 const SPEC_CONTEXT_BUDGET = 8000;
+
+/** 输入文本在 workflowCtx 中的候选键（对齐 buildWorkflowRunContext 的统一映射）。 */
+const SPEC_INPUT_KEYS = ["text", "source_text", "spec", "input"];
 
 /** 说明书结构完整性检查（确定性：五部分出现情况）。 */
 function checkSections(text: string): { present: string[]; missing: string[] } {
@@ -188,8 +191,8 @@ export function detectTechnicalDomain(text: string): { domain: string; name: str
   return { domain: "generic", name: "通用", requirements: [] };
 }
 
-const domainRulesNode = async (ctx: { state: GraphState }): Promise<Record<string, unknown>> => {
-  const text = resolveInput(ctx.state, ["text", "source_text", "spec", "input"]);
+const domainRulesNode = async ({ state }: { state: GraphState }): Promise<Record<string, unknown>> => {
+  const text = resolveInput(state, SPEC_INPUT_KEYS);
   const detected = detectTechnicalDomain(text);
   return {
     technical_domain: detected.domain,
@@ -215,13 +218,11 @@ export function runSpecPrechecks(text: string): {
   const embodimentCount = (text.match(EMBODIMENT_RE) ?? []).length;
   const { endpointMissing, midpointMissing } = checkNumericRangeCoverage(text);
   const vagueEffects = checkEffectQuantification(text);
-  const format = (r: { min: number; max: number; unit: string }): string =>
-    `${r.min}-${r.max}${r.unit === "°" ? "℃" : r.unit}`;
   return {
     embodiment_count: embodimentCount,
     has_embodiment: embodimentCount > 0,
-    numeric_range_endpoint_missing: endpointMissing.map(format),
-    numeric_range_midpoint_missing: midpointMissing.map(format),
+    numeric_range_endpoint_missing: endpointMissing.map(formatRange),
+    numeric_range_midpoint_missing: midpointMissing.map(formatRange),
     vague_effect_sentences: vagueEffects.slice(0, 5),
   };
 }
@@ -300,7 +301,7 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
 
   // load：确定性节点，读取说明书并做结构统计与章节切片。
   builder.addNode("load", async ({ state }) => {
-    const text = resolveInput(state, ["text", "source_text", "spec", "input"]);
+    const text = resolveInput(state, SPEC_INPUT_KEYS);
     const sections = checkSections(text);
     return {
       spec_length: text.length,
@@ -310,7 +311,7 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
     };
   });
   builder.addNode("spec_prechecks", async ({ state }) => {
-    const text = resolveInput(state, ["text", "source_text", "spec", "input"]);
+    const text = resolveInput(state, SPEC_INPUT_KEYS);
     return { spec_prechecks: runSpecPrechecks(text) };
   });
   builder.addNode(
