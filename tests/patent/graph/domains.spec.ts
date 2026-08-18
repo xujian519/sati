@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildSpecContext, runSpecPrechecks, splitSpecSections } from "../../../src/patent/graph/domains/enablement.js";
 import {
   StageHandlerRegistry,
   buildEnablementGraph,
@@ -310,6 +311,108 @@ test("enablement: load 节点确定性结构检查", async () => {
   assert.deepEqual(result.state.spec_sections_present, ["技术领域", "具体实施方式"]);
   const missing = result.state.spec_sections_missing;
   assert.ok(Array.isArray(missing) && missing.includes("背景技术"));
+});
+
+test("splitSpecSections: 标准五部分切分（含摘要与 preamble）", () => {
+  const text = [
+    "一种装置",
+    "技术领域",
+    "本发明涉及……",
+    "背景技术",
+    "现有技术……",
+    "发明内容",
+    "技术方案……",
+    "附图说明",
+    "图1……",
+    "具体实施方式",
+    "实施例1：……",
+    "摘要",
+    "本申请公开……",
+  ].join("\n");
+  const sections = splitSpecSections(text);
+  assert.ok(sections["技术领域"]!.includes("本发明涉及"));
+  assert.ok(sections["具体实施方式"]!.includes("实施例1"));
+  assert.ok(sections["摘要"]!.includes("本申请公开"));
+  assert.ok(sections.preamble!.includes("一种装置"));
+});
+
+test("splitSpecSections: 带编号/【】标题与无标题 fallback", () => {
+  const numbered = "1. 技术领域\n内容A\n【发明内容】\n内容B\n";
+  const s1 = splitSpecSections(numbered);
+  assert.ok(s1["技术领域"]!.includes("内容A"));
+  assert.ok(s1["发明内容"]!.includes("内容B"));
+  assert.deepEqual(splitSpecSections("无任何标题的纯文本"), { full: "无任何标题的纯文本" });
+});
+
+test("buildSpecContext: 优先章节在前、预算内截断、无切片回退全文", () => {
+  const state = {
+    spec_section_texts: { 具体实施方式: "E".repeat(6000), 发明内容: "C".repeat(4000), 背景技术: "B" },
+    text: "全文",
+  };
+  const ctx = buildSpecContext(state, ["具体实施方式", "发明内容"], 8000);
+  assert.ok(ctx.startsWith("## 具体实施方式"), "优先章节应在前");
+  assert.ok(ctx.length <= 8000 + 100, "预算内截断");
+  const fallback = buildSpecContext({ text: "ABCDEFG" }, ["具体实施方式"], 5);
+  assert.equal(fallback, "ABCDE");
+});
+
+test("runSpecPrechecks: 实施例计数/数值范围端点/效果定量", () => {
+  const ok = runSpecPrechecks("实施例1：温度为 20-90℃，实施例2：温度为 20℃，实施例3：温度为 90℃，效果显著提高 30%");
+  assert.equal(ok.has_embodiment, true);
+  assert.ok(ok.embodiment_count >= 3);
+  assert.deepEqual(ok.numeric_range_endpoint_missing, []);
+  assert.deepEqual(ok.numeric_range_midpoint_missing, ["20-90℃"]);
+  const missing = runSpecPrechecks("实施例1：温度为 20-90℃。效果好。");
+  assert.deepEqual(missing.numeric_range_endpoint_missing, ["20-90℃"]);
+  assert.ok(missing.vague_effect_sentences.some(s => s.includes("效果好")));
+  assert.equal(runSpecPrechecks("仅给出技术方案描述，未记载任何实施示例").has_embodiment, false);
+});
+
+test("enablement: 五情形与平衡条件进入 prompt（§2.1.3 全覆盖）+ claim 注入", async () => {
+  const prompts: string[] = [];
+  const provider: StageProvider = {
+    callLLM: async prompt => {
+      prompts.push(prompt);
+      if (prompt.includes("充分公开审查报告")) {
+        return JSON.stringify({
+          sufficiently_disclosed: true,
+          confidence: "high",
+          key_rationale: "ok",
+          report: "充分公开审查报告：说明书清楚完整，本领域技术人员能够实现。",
+        });
+      }
+      if (prompt.includes("结构完整性")) {
+        return JSON.stringify({ missing_sections: [], completeness_ok: true, notes: "ok" });
+      }
+      if (prompt.includes("清楚性")) {
+        return JSON.stringify({ issues: [], clarity_ok: true });
+      }
+      if (prompt.includes("能够实现性")) {
+        return JSON.stringify({ gaps: [], enablement_ok: true, skilled_person_assessment: "可实现" });
+      }
+      return "默认";
+    },
+  };
+  const graph = buildEnablementGraph({ handlers: passthroughHandlers() }).compile("load");
+  await graph.run(
+    { text: "技术领域：化学。发明内容：…。具体实施方式：实施例1…", claim: "1. 一种化合物…" },
+    { provider },
+  );
+  const enablementPrompt = prompts.find(p => p.includes("第三步：能够实现性")) ?? "";
+  for (const clause of [
+    "(1) 只给出任务",
+    "(2) 给出了技术手段但含糊不清",
+    "(3) 给出了技术手段但不能解决",
+    "(4) 方案由多个技术手段构成",
+    "(5) 需实验证据证实",
+  ]) {
+    assert.ok(enablementPrompt.includes(clause), `缺少 §2.1.3 情形: ${clause}`);
+  }
+  for (const balance of ["公知常识", "至少解决一个技术问题", "效果夸大通常不构成"]) {
+    assert.ok(enablementPrompt.includes(balance), `缺少平衡条件: ${balance}`);
+  }
+  assert.ok(enablementPrompt.includes("1. 一种化合物…"), "权利要求应注入 enablement prompt");
+  assert.ok(enablementPrompt.includes("判断对象"), "应声明判断对象为权利要求");
 });
 
 // ---------------------------------------------------------------------------

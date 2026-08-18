@@ -369,6 +369,8 @@ export function buildWorkflowRunContext(opts: {
   maxResults?: number;
   /** claim-chart 阶段的目标对象 JSON（[{id,kind,title?,source_path?}]）；缺省为空。 */
   chartTargets?: string;
+  /** 权利要求书全文（可选）：单独传入时 claim 键指向它（A26.3 enablement 图按权利要求判断）；缺省回退 input。 */
+  claimText?: string;
 }): WorkflowContext {
   return {
     caseId: opts.caseId,
@@ -376,7 +378,7 @@ export function buildWorkflowRunContext(opts: {
     text: opts.input,
     source_text: opts.input,
     extraction_input: opts.input,
-    claim: opts.input,
+    claim: opts.claimText ?? opts.input,
     chart_targets: opts.chartTargets ?? "",
     max_results: String(opts.maxResults ?? 5),
   };
