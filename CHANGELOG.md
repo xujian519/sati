@@ -2,6 +2,26 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.3 - 2026-08-18
+
+> **版本目标（2026-08-18）**：申请撰写 SOP 可执行化（`docs/patent-drafting-sop-plan.md` 四迭代，PR #112-#115）——`patent_drafting_v1` 撰写 manifest 一键执行（从技术交底书到权利要求书+说明书+校验报告），HITL 审批门断点续跑，worker 契约接入执行引擎，SOP 引用静态门禁与单一数据源治理，全链路确定性验收。
+
+### Feat
+- feat(patent): `patent_drafting_v1` 撰写 manifest（22 阶段，映射 `prosecution-draft.yaml` 12 步 SOP）——PFE 提取→HITL 确认解构→检索→检索质量门→逐特征对比→充分公开审查→`draft-claims`→`draft-spec`→反套话门→HITL 定稿；`patent_workflow_run(manifestId="patent_drafting_v1")` 一键执行，工具收尾自动跑确定性规则门
+- feat(patent): 新原子 `draft-spec`（说明书七部分 LLM 撰写 + `validateDraftSpec` 确定性校验：章节完整性/效果定量/数值范围端点+中间值/名称长度）、`quality-gate`（`checkSearchQuality` 检索门槛：对比文件≥3 篇/相关度 X·Y·A 标注/全文≥2 篇/布尔+IPC 检索式）、`slop-gate`（slop-engine 5 维评分，总分<35 判需修订）；内置原子 11→14
+- feat(patent): manifest 路径 HITL 断点续跑——`JsonFileManifestCheckpointStore` 每阶段落盘（`<caseDir>/workflow-runs/`），`resumeCheckpointId` 续跑跳过已完成阶段（LLM 副作用不重放），`approveStageIds` 批准审批门后继续
+- feat(patent): worker 契约接入执行引擎——`WorkflowStage.worker` 声明后产出经 `validateWorkerOutput` 校验（`workerValidation` 附结果，仅提示不改变 degraded 判定），`WorkerMonitor` 记录真实运行统计；撰写 manifest 的 search 阶段标注 `patent-search-commander` 契约
+- feat(patent): subagent_type 别名映射 8 条（cap01 手册下划线名 `technical_analyzer` 等 → 真实注册 kebab 角色 `patent-analyzer` 等），旧命名照常可调度
+- feat(patent): 新增 3 个 provision 条款角色 SKILL.md（`provision-disclosure` P-A05 / `provision-drafting-claims` P-D01 / `provision-drafting-spec` P-D02，type: role 可经 `agent` 调度）
+- feat(patent): SOP 治理双门禁——`check:patent-sop`（`scripts/check-patent-sop-references.mjs` 校验手册/YAML 引用的工具/角色/worker/manifest/原子五类真实存在，幽灵引用即红）+ `check:patent-workflow-docs`（`scripts/gen-patent-workflow-docs.ts` 以 `builtinPatentManifests` 为唯一真相生成 `assets/workflows/patent/generated/*.yaml` 人读快照，幂等校验）；均挂根 lint
+- docs(patent): CAP01 编排手册修订——§2 意图路由表加 manifestId 列（撰写→`patent_drafting_v1`）；§3.5 改 kebab 注册名+别名说明；6 个幽灵工具（`plan_workflow`/`suggest_checkers`/`run_checker_review`/`list_checkers`/`list_workers`/`run_patent_rules`/`tool_search`）替换为真实工具（`patent_workflow_run`/`flexible_plan`/`patent_eval`/`rule_check`/`mcp_status` 等）
+
+### Test
+- 新增 `tests/patent/drafting-sop.spec.ts`（17 用例：原子契约/行为/纯函数三态/manifest 结构/全链路跑通至审批门中断）、`tests/patent/workflow-resume.spec.ts`（7 用例：断点续跑不重放 LLM/审批门放行续跑/checkpoint 往返/worker 契约三态/monitor 统计）、`tests/patent/drafting-sop-fullrun.spec.ts`（2 用例：mock provider + 批准全部审批门 → 22 阶段完整跑通，撰写产物断言）
+- `tests/test-support/llm-replay-drafting.spec.ts` 重放骨架（真实 key 录制 fixture 缺失时跳过，录制后自动生效；录制流程注释于文件头）
+- `tests/skills/patent-roles.spec.ts` SKILLS_ROOT 路径修复（`findRepoRoot` 向上定位仓库根，兼容源/dist 双布局，18 个 ENOENT 失败转绿）
+- 修复：工具 inputSchema 描述性改动不再破坏 llm-replay fixture 请求键（`resumeCheckpointId` 描述恢复原样，说明移入工具 description——`toolSchemaDigest` 含 inputSchema，改后须重录 fixture）
+
 ## v0.1.2 - 2026-08-18
 
 > **版本目标（2026-08-18）**：专利创造性判断（A22.3 三步法）质量优化 P0+P1+P2 落地（`docs/patent-inventiveness-optimization-plan.md`）——检索反思回路、LLM 节点韧性、对比文件公开日、D2 组合建模、引用真实性硬校验、结论方向指标与 a22.3 专属基准，以及 P2 批次的并行化/模型分层、IPC 领域注入、LLM Judge 双轨与 HITL 反馈回流。
