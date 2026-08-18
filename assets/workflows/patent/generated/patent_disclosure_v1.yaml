@@ -1,0 +1,67 @@
+# 由 scripts/gen-patent-workflow-docs.ts 从 src/patent/workflow/manifests.ts 生成——请勿手改。
+# 引擎执行真相：builtinPatentManifests（TS 单一数据源）；本文件为审计/人读快照。
+# 修改流程：编辑 manifests.ts → pnpm gen:patent-workflow-docs → 提交两处。
+manifestId: patent_disclosure_v1
+name: 技术交底书披露分析
+caseType: disclosure_analysis
+checkDomains:
+  - patent_disclosure
+  - patent_claims
+validation:
+  requireAllSteps: true
+  maxRetries: 2
+stages:
+  - id: preprocess
+    strategy: chain
+    description: 预处理技术交底书，分段与去噪
+  - id: extract_problem
+    strategy: sub_agent
+    atom: extract
+    description: 提取待解决的技术问题
+  - id: extract_features
+    strategy: sub_agent
+    atom: extract
+    description: 提取技术特征
+  - id: extract_effects
+    strategy: sub_agent
+    atom: extract
+    description: 提取技术效果
+  - id: merge
+    strategy: chain
+    atom: merge
+    description: 融合 PFE 三元组（问题↔特征↔效果交叉引用）
+  - id: groundedness
+    strategy: chain
+    atom: groundedness
+    description: 评估提取特征在原文中的依据（低分特征反馈）
+  - id: consistency
+    strategy: chain
+    retry:
+      whenOutputMatches: 不一致|矛盾|缺少|孤立
+      rewindTo: extract_problem
+      maxRetries: 1
+    description: PFE 一致性检查（特征-效果因果链闭合、无孤立特征）
+  - id: generate_keywords
+    strategy: chain
+    atom: keywords
+    description: 生成检索关键词（上位/下位/同义词）
+  - id: search
+    strategy: react
+    atom: search
+    description: 检索现有技术文献（证据片段注入新颖性评估）
+  - id: novelty
+    strategy: chain
+    atom: novelty
+    description: 逐特征新颖性初判（单独对比原则 + 证据引用）
+  - id: report
+    strategy: chain
+    description: 生成披露分析报告（创新点/保护建议）
+  - id: review_gate
+    strategy: chain
+    atom: approval-gate
+    description: 人工复核披露分析报告（中断等待确认）
+  - id: draft_claims
+    strategy: chain
+    atom: draft-claims
+    description: 基于 PFE 与新颖性结果直出权利要求草稿（独立+从属）
+

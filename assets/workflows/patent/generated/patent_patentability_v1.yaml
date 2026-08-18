@@ -1,0 +1,26 @@
+# 由 scripts/gen-patent-workflow-docs.ts 从 src/patent/workflow/manifests.ts 生成——请勿手改。
+# 引擎执行真相：builtinPatentManifests（TS 单一数据源）；本文件为审计/人读快照。
+# 修改流程：编辑 manifests.ts → pnpm gen:patent-workflow-docs → 提交两处。
+manifestId: patent_patentability_v1
+name: 可专利性检索与权利要求布局
+caseType: novelty_search
+checkDomains:
+  - patent_novelty
+validation:
+  requireAllSteps: true
+  maxRetries: 2
+stages:
+  - id: parse
+    strategy: chain
+    description: 解析技术方案与权利要求
+  - id: claim-chart
+    strategy: chain
+    atom: claim-chart
+    description: 权利要求要素级映射到最接近现有技术（mode=patentability）
+  - id: draft
+    strategy: chain
+    description: 基于区别特征布局权利要求（规避 D1）（原子路径不支持，收口模式）
+  - id: approval
+    strategy: chain
+    description: 人工确认权利要求布局
+

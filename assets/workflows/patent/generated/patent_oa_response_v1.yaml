@@ -1,0 +1,27 @@
+# 由 scripts/gen-patent-workflow-docs.ts 从 src/patent/workflow/manifests.ts 生成——请勿手改。
+# 引擎执行真相：builtinPatentManifests（TS 单一数据源）；本文件为审计/人读快照。
+# 修改流程：编辑 manifests.ts → pnpm gen:patent-workflow-docs → 提交两处。
+manifestId: patent_oa_response_v1
+name: 审查意见答复
+caseType: oa_response
+checkDomains:
+  - patent_claims
+  - patent_inventiveness
+validation:
+  requireAllSteps: true
+  maxRetries: 2
+stages:
+  - id: parse
+    strategy: chain
+    description: 解析审查意见与权利要求
+  - id: claim-chart
+    strategy: chain
+    atom: claim-chart
+    description: 权利要求要素级映射到审查员引用对比文件（mode=oa-response）
+  - id: draft
+    strategy: chain
+    description: 撰写意见陈述书（新颖性陈述 + 三步法，消费 claim-chart）
+  - id: approval
+    strategy: chain
+    description: 人工确认答复书
+

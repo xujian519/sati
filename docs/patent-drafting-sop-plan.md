@@ -161,6 +161,11 @@
 - **实现要点**：按 `src/test-support/llm-replay/` 流程录制 `patent_drafting_v1` 全链路真实会话 → fixture 入库 → CI 无 key 重放断言完整跑通（含审批门中断点）；使"撰写流程可运行"成为 CI 断言
 - **验证**：`pnpm record:replay` + `pnpm test`（llm-replay-real.spec.ts 模式）
 
+> ✅ **迭代四完成记录（2026-08）**：T11-T12 全部落地。实现偏差/补充：
+> 1. T11 新增 `scripts/gen-patent-workflow-docs.ts`：以 `builtinPatentManifests` 为唯一真相，生成 `assets/workflows/patent/generated/<manifestId>.yaml`（8 个 manifest 人读快照：manifestId/name/caseType/checkDomains/validation/stages[id,strategy,atom,worker,retry,description]）；`gen:patent-workflow-docs` + `check:patent-workflow-docs`（--check 幂等）挂根 lint；`prosecution-draft.yaml` 头部标注"引擎执行以 patent_drafting_v1 为准，本文件为人工 SOP 参考"；负向测试（篡改快照 → exit 1）通过。
+> 2. T12 分两轨落地：① **确定性全链路验收**（无 key、CI 可跑）`tests/patent/drafting-sop-fullrun.spec.ts`——mock provider + 批准全部 5 个审批门 → 22 阶段完整跑通，断言权利要求/说明书/质量门/反套话门产物 + worker 契约校验（search 阶段命中 patent-search-commander）；② **llm-replay 重放骨架** `tests/test-support/llm-replay-drafting.spec.ts`——fixture（`tests/fixtures/llm-replay/patent-drafting/`）缺失时跳过，录制后自动生效（录制流程注释于文件头：需真实模型 key + 交互批准 5 个 HITL 门；fixture 请求键含 inputSchema digest，工具 schema 改动后需重录）。
+> 3. 全链路测试发现的真实约束：groundedness 原子需要 `state.source_text`（ctx 直接传 runWorkflow 时须显式提供，工具层 buildWorkflowRunContext 已映射）。
+
 ## 4. 实施顺序与依赖
 
 ```

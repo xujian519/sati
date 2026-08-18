@@ -1,3 +1,7 @@
+# ⚠️ 引擎执行真相：`patent_drafting_v1`（src/patent/workflow/manifests.ts，人读快照见
+# generated/patent_drafting_v1.yaml）。本文件为人工编排 SOP 参考（worker/HITL 语义
+# 比 manifest 更详细），引擎不直接消费；两侧修改须同步，防漂移门禁：
+# pnpm check:patent-workflow-docs。
 # 所有 HITL 检查点使用编号选择协议：选项用数字编号，必须包含"其他意见"选项
 template_id: prosecution-draft
 name: 申请撰写辅助

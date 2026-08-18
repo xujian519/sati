@@ -1,0 +1,104 @@
+# 由 scripts/gen-patent-workflow-docs.ts 从 src/patent/workflow/manifests.ts 生成——请勿手改。
+# 引擎执行真相：builtinPatentManifests（TS 单一数据源）；本文件为审计/人读快照。
+# 修改流程：编辑 manifests.ts → pnpm gen:patent-workflow-docs → 提交两处。
+manifestId: patent_drafting_v1
+name: 申请撰写辅助
+caseType: drafting
+checkDomains:
+  - patent_disclosure
+  - patent_claims
+validation:
+  requireAllSteps: true
+  maxRetries: 2
+stages:
+  - id: preprocess
+    strategy: chain
+    description: 预处理技术交底书（透传输入）
+  - id: extract_problem
+    strategy: sub_agent
+    atom: extract
+    description: 提取待解决的技术问题
+  - id: extract_features
+    strategy: sub_agent
+    atom: extract
+    description: 提取技术特征
+  - id: extract_effects
+    strategy: sub_agent
+    atom: extract
+    description: 提取技术效果
+  - id: merge
+    strategy: chain
+    atom: merge
+    description: 融合 PFE 三元组（问题↔特征↔效果交叉引用）
+  - id: groundedness
+    strategy: chain
+    atom: groundedness
+    description: 评估提取特征在原文中的依据（低分特征反馈）
+  - id: consistency
+    strategy: chain
+    atom: reasoning
+    retry:
+      whenOutputMatches: 不一致|矛盾|缺少|孤立
+      rewindTo: extract_problem
+      maxRetries: 1
+    description: PFE 一致性检查（问题-手段-效果链闭合、无孤立特征）
+  - id: deconstruct_approval
+    strategy: chain
+    atom: approval-gate
+    description: HITL：确认发明解构与核心特征（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+  - id: figure
+    strategy: chain
+    description: 附图分析（主代理经 analyze_patent_figure 完成后透传）
+  - id: chemistry
+    strategy: chain
+    description: 化学式核验（主代理经 recognize_chemical_structure 完成后透传）
+  - id: generate_keywords
+    strategy: chain
+    atom: keywords
+    description: 生成检索关键词（上位/下位/同义词）
+  - id: search
+    strategy: react
+    atom: search
+    worker: patent-search-commander
+    description: 检索现有技术文献（证据注入下游对比）
+  - id: search_quality
+    strategy: chain
+    atom: quality-gate
+    description: 检索质量门槛（对比文件≥3 篇/相关度标注/全文≥2 篇/布尔+IPC 检索式）
+  - id: search_approval
+    strategy: chain
+    atom: approval-gate
+    description: HITL：确认对比文件列表与相关性（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+  - id: prior_art_compare
+    strategy: chain
+    atom: novelty
+    description: 本发明 vs 检索结果逐特征对比（区别特征输出，撰写避重复必步）
+  - id: compare_approval
+    strategy: chain
+    atom: approval-gate
+    description: HITL：确认与现有技术的区别特征（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+  - id: disclosure
+    strategy: chain
+    atom: reasoning
+    description: 充分公开审查（A26.3）与权利要求/说明书撰写改进建议
+  - id: disclosure_approval
+    strategy: chain
+    atom: approval-gate
+    description: HITL：审核充分公开与撰写建议（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+  - id: draft_claims
+    strategy: chain
+    atom: draft-claims
+    description: 基于 PFE 与新颖性结果直出权利要求草稿（独立+从属）
+  - id: draft_spec
+    strategy: chain
+    atom: draft-spec
+    description: 撰写说明书七部分（技术领域/背景/发明内容/附图说明/实施方式/摘要）+ 确定性合规校验
+  - id: slop_clean
+    strategy: chain
+    atom: slop-gate
+    description: 反套话 5 维评分门（总分<35 判需修订）
+  - id: final_approval
+    strategy: chain
+    atom: approval-gate
+    description: HITL：确认权利要求书与说明书定稿（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+
