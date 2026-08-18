@@ -62,6 +62,7 @@ export {
   patentOaResponseManifest,
   patentInvalidationManifest,
   patentInfringementManifest,
+  patentDraftingManifest,
   builtinPatentManifests,
   type BuiltinPatentManifest,
 } from "./workflow.js";
@@ -338,8 +339,24 @@ export {
   MergeHandler,
   draftClaimsAtom,
   DraftClaimsHandler,
+  draftSpecAtom,
+  DraftSpecHandler,
+  validateDraftSpec,
+  qualityGateAtom,
+  QualityGateHandler,
+  slopGateAtom,
+  SlopGateHandler,
+  type SpecViolation,
   type PFETriple,
 } from "./atoms/index.js";
+
+export {
+  checkSearchQuality,
+  MIN_DOCS,
+  MIN_RELATEDNESS_MARKS,
+  MIN_FULLTEXT_MARKS,
+  type SearchQualityResult,
+} from "./quality/index.js";
 
 export {
   type PlanTaskState,
