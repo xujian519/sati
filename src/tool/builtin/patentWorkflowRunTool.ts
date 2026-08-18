@@ -4,6 +4,7 @@ import {
   runWorkflow,
   validateWorkflowManifest,
   JsonFileWorkflowRunStore,
+  JsonFileManifestCheckpointStore,
   InMemoryCheckpointStore,
   JsonFileCheckpointStore,
   runGraphWithCheckpoints,
@@ -16,6 +17,7 @@ import {
   type DomainGraphName,
   type GraphCheckpoint,
   type GraphRunResult,
+  type ManifestCheckpoint,
   type WorkflowManifest,
 } from "../../patent/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
@@ -127,7 +129,8 @@ export function createPatentWorkflowRunTool(
       "deterministic rule gate) in one call — e.g. graph=inventiveness runs the A22.3 three-step analysis end-to-end. " +
       "Provide the input as 'input'. The review gate pauses the run (reports interrupted + checkpointId); re-invoking " +
       "with resumeCheckpointId continues from the pause point (the gate pauses again), while approveCheckpointId " +
-      "grants the gate and resumes past it. Manifest path: approveStageIds skips approved gates on rerun. " +
+      "grants the gate and resumes past it. Manifest path: approveStageIds skips approved gates on rerun; " +
+      "resumeCheckpointId (with caseId) resumes past completed stages from the manifest checkpoint. " +
       "When caseId is provided, run results, the Mermaid " +
       "diagram, and graph checkpoints are persisted under <caseDir>/workflow-runs/. Requires a model client.",
     kind: "session",
@@ -257,12 +260,44 @@ export function createPatentWorkflowRunTool(
 
       // caseId 持久化（复用收口工具目录约定）：runWorkflow 内 saveRun JSON，执行后补 .mmd。
       const persistTarget = resolveRunPersistTarget(input.caseId, manifest.id, context?.cwd ?? process.cwd());
+
+      // 断点续跑（T10，manifest 模式）：resumeCheckpointId 提供时从上次检查点继续
+      // （跳过已完成阶段；配合 approveStageIds 放行审批门）。无 caseId 时不可续跑。
+      let resumeFrom: ManifestCheckpoint | undefined;
+      const checkpointDir = persistTarget?.runsDir;
+      if (input.resumeCheckpointId !== undefined && checkpointDir !== undefined) {
+        const store = new JsonFileManifestCheckpointStore(checkpointDir);
+        resumeFrom = await store.load(input.resumeCheckpointId);
+        if (resumeFrom === undefined) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `patent_workflow_run: 检查点 "${input.resumeCheckpointId}" 不存在（${checkpointDir}）。请先执行一次产生检查点，或去掉 resumeCheckpointId 从零开始。`,
+              },
+            ],
+          };
+        }
+      } else if (input.resumeCheckpointId !== undefined) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "patent_workflow_run: manifest 模式断点续跑需要 caseId（检查点持久化目录）。请提供 caseId。",
+            },
+          ],
+        };
+      }
+
       const result = await runWorkflow(manifest, workflowCtx, executor, {
         handlers: deps.handlers ?? globalStageHandlerRegistry,
         atoms: globalAtomRegistry,
         provider,
         persist: persistTarget ? new JsonFileWorkflowRunStore(persistTarget.runsDir) : undefined,
         runId: persistTarget?.runId,
+        // 断点续跑：resumeFrom 跳过已完成阶段；checkpointStore 每阶段落盘。
+        ...(resumeFrom !== undefined ? { resumeFrom } : {}),
+        ...(checkpointDir !== undefined ? { checkpointStore: new JsonFileManifestCheckpointStore(checkpointDir) } : {}),
         // 已人工批准的审批门：重跑时跳过（放行），未批准的照常中断。
         ...(input.approveStageIds !== undefined && input.approveStageIds.length > 0
           ? { approvalGrants: input.approveStageIds }

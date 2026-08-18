@@ -355,7 +355,13 @@ export const patentDraftingManifest: WorkflowManifest = {
       description: "生成检索关键词（上位/下位/同义词）",
       atom: "keywords",
     },
-    { id: "search", strategy: "react", description: "检索现有技术文献（证据注入下游对比）", atom: "search" },
+    {
+      id: "search",
+      strategy: "react",
+      description: "检索现有技术文献（证据注入下游对比）",
+      atom: "search",
+      worker: "patent-search-commander",
+    },
     {
       id: "search_quality",
       strategy: "chain",
