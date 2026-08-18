@@ -5,8 +5,8 @@
  * - extract.ts：extract（结构化抽取）/ merge（PFE 融合）
  * - compare.ts：compare（特征对比）/ novelty（逐特征新颖性）
  * - reason.ts：reasoning（自由推理）/ groundedness（原文依据过滤）
- * - draft.ts：draft-claims（权利要求草稿）
- * - gate.ts：approval-gate（人机审批门）
+ * - draft.ts：draft-claims（权利要求草稿）/ draft-spec（说明书草稿+校验）
+ * - gate.ts：approval-gate（人机审批门）/ quality-gate（检索质量门槛）/ slop-gate（反套话评分门）
  * - chart.ts：claim-chart（要素级证据网格）
  */
 
@@ -37,12 +37,23 @@ export {
   GroundednessHandler,
   GROUNDEDNESS_THRESHOLD,
 } from "./reason.js";
-export { draftClaimsAtom, DraftClaimsHandler } from "./draft.js";
+export {
+  draftClaimsAtom,
+  DraftClaimsHandler,
+  draftSpecAtom,
+  DraftSpecHandler,
+  validateDraftSpec,
+  type SpecViolation,
+} from "./draft.js";
 export {
   approvalGateAtom,
   ApprovalGateHandler,
   APPROVAL_GRANTED_KEY,
   APPROVAL_GRANTED_OUTPUT,
   isApprovalGateHandler,
+  qualityGateAtom,
+  QualityGateHandler,
+  slopGateAtom,
+  SlopGateHandler,
 } from "./gate.js";
 export { claimChartAtom, ClaimChartHandler } from "./chart.js";

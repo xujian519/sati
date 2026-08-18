@@ -269,6 +269,171 @@ export const patentInfringementManifest: WorkflowManifest = {
 };
 
 /**
+ * 内置：申请撰写辅助 manifest（撰写场景，对应 assets/workflows/patent/prosecution-draft.yaml 12 步 SOP）。
+ *
+ * 全链路：PFE 提取 → 一致性 → HITL 确认解构 → 附图/化学（主代理工具完成，
+ * 无原子透传）→ 关键词/检索 → 检索质量门（quality-gate）→ HITL 确认对比文件 →
+ * 逐特征对比（novelty，区别特征输出）→ HITL 确认区别特征 → 充分公开审查
+ * （reasoning）→ HITL 审核 → draft-claims → draft-spec（含确定性校验）→
+ * slop-gate（反套话评分）→ HITL 定稿。
+ *
+ * 说明：
+ * - figure / chemistry 阶段无原子：StageProvider 契约无图片/文件通道，由主代理
+ *   先行调用 analyze_patent_figure / recognize_chemical_structure 并写入阶段文本
+ *   （无原子阶段在 patent_workflow_run 下透传输入，不降级）。
+ * - 规则门（rule-gate）不设阶段：消费方 patent_workflow / patent_workflow_run
+ *   在收尾时按 checkDomains 自动运行确定性规则门（dual-track checker）。
+ * - 一致性检查用 reasoning 原子（比对 disclosure manifest 的透传语义更强），
+ *   输出命中"不一致/矛盾/缺少/孤立"时回退 extract_problem 重做（最多 1 次）。
+ */
+export const patentDraftingManifest: WorkflowManifest = {
+  id: "patent_drafting_v1",
+  name: "申请撰写辅助",
+  caseType: "drafting",
+  stages: [
+    { id: "preprocess", strategy: "chain", description: "预处理技术交底书（透传输入）" },
+    {
+      id: "extract_problem",
+      strategy: "sub_agent",
+      description: "提取待解决的技术问题",
+      atom: "extract",
+      params: { extraction_type: "提取待解决的技术问题（严格输出 problems 数组）", output_key: "problems" },
+    },
+    {
+      id: "extract_features",
+      strategy: "sub_agent",
+      description: "提取技术特征",
+      atom: "extract",
+      params: { extraction_type: "提取技术特征（严格输出 features 数组）", output_key: "features" },
+    },
+    {
+      id: "extract_effects",
+      strategy: "sub_agent",
+      description: "提取技术效果",
+      atom: "extract",
+      params: { extraction_type: "提取技术效果（严格输出 effects 数组）", output_key: "effects" },
+    },
+    { id: "merge", strategy: "chain", description: "融合 PFE 三元组（问题↔特征↔效果交叉引用）", atom: "merge" },
+    {
+      id: "groundedness",
+      strategy: "chain",
+      description: "评估提取特征在原文中的依据（低分特征反馈）",
+      atom: "groundedness",
+    },
+    {
+      id: "consistency",
+      strategy: "chain",
+      description: "PFE 一致性检查（问题-手段-效果链闭合、无孤立特征）",
+      atom: "reasoning",
+      params: {
+        reasoning_prompt:
+          "对以下 PFE 三元组做一致性检查：特征-效果因果链是否闭合、有无孤立特征（无问题/无效果关联的特征）。" +
+          "严格输出 JSON：{ consistent: boolean, issues: string[] }。issues 为空数组表示一致。",
+      },
+      retry: {
+        whenOutputMatches: "不一致|矛盾|缺少|孤立",
+        rewindTo: "extract_problem",
+        maxRetries: 1,
+      },
+    },
+    {
+      id: "deconstruct_approval",
+      strategy: "chain",
+      description: "HITL：确认发明解构与核心特征（编号选择：1=确认/2=修改/3=退回/4=其他意见）",
+      atom: "approval-gate",
+      params: { review_context: "确认发明七维解构与核心特征（1=确认/2=修改/3=退回/4=其他意见）" },
+    },
+    { id: "figure", strategy: "chain", description: "附图分析（主代理经 analyze_patent_figure 完成后透传）" },
+    {
+      id: "chemistry",
+      strategy: "chain",
+      description: "化学式核验（主代理经 recognize_chemical_structure 完成后透传）",
+    },
+    {
+      id: "generate_keywords",
+      strategy: "chain",
+      description: "生成检索关键词（上位/下位/同义词）",
+      atom: "keywords",
+    },
+    { id: "search", strategy: "react", description: "检索现有技术文献（证据注入下游对比）", atom: "search" },
+    {
+      id: "search_quality",
+      strategy: "chain",
+      description: "检索质量门槛（对比文件≥3 篇/相关度标注/全文≥2 篇/布尔+IPC 检索式）",
+      atom: "quality-gate",
+    },
+    {
+      id: "search_approval",
+      strategy: "chain",
+      description: "HITL：确认对比文件列表与相关性（编号选择：1=确认/2=修改/3=退回/4=其他意见）",
+      atom: "approval-gate",
+      params: { review_context: "确认对比文件列表与相关性（1=确认/2=修改/3=退回/4=其他意见）" },
+    },
+    {
+      id: "prior_art_compare",
+      strategy: "chain",
+      description: "本发明 vs 检索结果逐特征对比（区别特征输出，撰写避重复必步）",
+      atom: "novelty",
+      params: {
+        novelty_scope: "申请撰写场景：逐特征对比现有技术，输出区别特征与可写入权利要求的特征（撰写避重复）",
+      },
+    },
+    {
+      id: "compare_approval",
+      strategy: "chain",
+      description: "HITL：确认与现有技术的区别特征（编号选择：1=确认/2=修改/3=退回/4=其他意见）",
+      atom: "approval-gate",
+      params: { review_context: "确认与现有技术的区别特征（1=确认/2=修改/3=退回/4=其他意见）" },
+    },
+    {
+      id: "disclosure",
+      strategy: "chain",
+      description: "充分公开审查（A26.3）与权利要求/说明书撰写改进建议",
+      atom: "reasoning",
+      params: {
+        reasoning_prompt:
+          "你是充分公开审查专家（A26.3 清楚/完整/能够实现）。审查技术交底书/说明书是否充分公开，结合区别特征" +
+          "给出权利要求与说明书撰写改进建议（引用附图标记须与图面一致，化学方案引用核验结论）。" +
+          "输出章节式报告：disclosure_review（现状评估/缺陷清单/撰写改进建议）。",
+      },
+    },
+    {
+      id: "disclosure_approval",
+      strategy: "chain",
+      description: "HITL：审核充分公开与撰写建议（编号选择：1=确认/2=修改/3=退回/4=其他意见）",
+      atom: "approval-gate",
+      params: { review_context: "审核充分公开与撰写建议（1=确认/2=修改/3=退回/4=其他意见）" },
+    },
+    {
+      id: "draft_claims",
+      strategy: "chain",
+      description: "基于 PFE 与新颖性结果直出权利要求草稿（独立+从属）",
+      atom: "draft-claims",
+    },
+    {
+      id: "draft_spec",
+      strategy: "chain",
+      description: "撰写说明书七部分（技术领域/背景/发明内容/附图说明/实施方式/摘要）+ 确定性合规校验",
+      atom: "draft-spec",
+    },
+    {
+      id: "slop_clean",
+      strategy: "chain",
+      description: "反套话 5 维评分门（总分<35 判需修订）",
+      atom: "slop-gate",
+    },
+    {
+      id: "final_approval",
+      strategy: "chain",
+      description: "HITL：确认权利要求书与说明书定稿（编号选择：1=确认/2=修改/3=退回/4=其他意见）",
+      atom: "approval-gate",
+      params: { review_context: "确认权利要求书与说明书定稿（1=确认/2=修改/3=退回/4=其他意见）" },
+    },
+  ],
+  validation: { requireAllSteps: true, maxRetries: 2 },
+};
+
+/**
  * 内置 manifest 目录（单一数据源）。
  *
  * 消费方（patent_workflow 工具）经此遍历注册 manifest，并按条目读取确定性
@@ -294,4 +459,5 @@ export const builtinPatentManifests: readonly BuiltinPatentManifest[] = [
     checkDomains: ["patent_invalidation", "patent_novelty", "patent_inventiveness"],
   },
   { manifest: patentInfringementManifest, checkDomains: ["patent_infringement"] },
+  { manifest: patentDraftingManifest, checkDomains: ["patent_disclosure", "patent_claims"] },
 ];

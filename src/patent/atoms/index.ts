@@ -60,13 +60,21 @@ export {
   GROUNDEDNESS_THRESHOLD,
   draftClaimsAtom,
   DraftClaimsHandler,
+  draftSpecAtom,
+  DraftSpecHandler,
+  validateDraftSpec,
   approvalGateAtom,
   ApprovalGateHandler,
   APPROVAL_GRANTED_KEY,
   APPROVAL_GRANTED_OUTPUT,
   isApprovalGateHandler,
+  qualityGateAtom,
+  QualityGateHandler,
+  slopGateAtom,
+  SlopGateHandler,
   claimChartAtom,
   ClaimChartHandler,
+  type SpecViolation,
   type PFETriple,
 } from "./handlers/builtin/index.js";
 
@@ -85,7 +93,10 @@ export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.noveltyAtom);
   globalAtomRegistry.register(builtin.mergeAtom);
   globalAtomRegistry.register(builtin.draftClaimsAtom);
+  globalAtomRegistry.register(builtin.draftSpecAtom);
   globalAtomRegistry.register(builtin.approvalGateAtom);
+  globalAtomRegistry.register(builtin.qualityGateAtom);
+  globalAtomRegistry.register(builtin.slopGateAtom);
   globalAtomRegistry.register(builtin.claimChartAtom);
 
   globalStageHandlerRegistry.register(new builtin.SearchHandler());
@@ -97,6 +108,9 @@ export function registerBuiltinAtoms(): void {
   globalStageHandlerRegistry.register(new builtin.NoveltyHandler());
   globalStageHandlerRegistry.register(new builtin.MergeHandler());
   globalStageHandlerRegistry.register(new builtin.DraftClaimsHandler());
+  globalStageHandlerRegistry.register(new builtin.DraftSpecHandler());
   globalStageHandlerRegistry.register(new builtin.ApprovalGateHandler());
+  globalStageHandlerRegistry.register(new builtin.QualityGateHandler());
+  globalStageHandlerRegistry.register(new builtin.SlopGateHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimChartHandler());
 }

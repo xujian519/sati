@@ -105,3 +105,21 @@ export function checkEffectQuantification(text: string): string[] {
   }
   return hits;
 }
+
+// =============================================================================
+// 说明书章节完整性检测（五部分，对齐 validate_specification 的 REQUIRED_SECTIONS）
+// =============================================================================
+
+/** 说明书必需章节（标题正则，与 validate_specification 工具层一致）。 */
+export const REQUIRED_SPEC_SECTIONS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
+  { name: "技术领域", pattern: /^#{1,3}\s*技术领域/m },
+  { name: "背景技术", pattern: /^#{1,3}\s*背景技术/m },
+  { name: "发明内容", pattern: /^#{1,3}\s*发明内容/m },
+  { name: "附图说明", pattern: /^#{1,3}\s*附图说明/m },
+  { name: "具体实施方式", pattern: /^#{1,3}\s*具体实施方式/m },
+];
+
+/** 返回缺失的说明书章节名列表（空数组 = 五部分齐全）。 */
+export function checkSectionCompleteness(text: string): string[] {
+  return REQUIRED_SPEC_SECTIONS.filter(section => !section.pattern.test(text)).map(section => section.name);
+}

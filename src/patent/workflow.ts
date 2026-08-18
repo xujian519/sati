@@ -51,6 +51,7 @@ export type {
 export {
   builtinPatentManifests,
   patentDisclosureManifest,
+  patentDraftingManifest,
   patentInfringementManifest,
   patentInventivenessManifest,
   patentInvalidationManifest,

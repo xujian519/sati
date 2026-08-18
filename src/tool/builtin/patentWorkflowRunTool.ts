@@ -120,7 +120,9 @@ export function createPatentWorkflowRunTool(
     aliases: ["PatentWorkflowRun", "run_patent_atoms"],
     description:
       "Automatically execute a declarative patent workflow (atom stages) or a domain graph. Manifest path: " +
-      "patent_disclosure_v1 (PFE extraction → prior-art search → per-feature novelty → review gate → claims draft). " +
+      "patent_disclosure_v1 (PFE extraction → prior-art search → per-feature novelty → review gate → claims draft), " +
+      "patent_drafting_v1 (disclosure pipeline → prior-art compare → drafting: claims draft + specification draft + " +
+      "deterministic spec validation + slop score gate; HITL at deconstruct/search/compare/disclosure/final). " +
       "Graph path (graph=novelty|inventiveness|enablement): runs a full domain graph (LLM nodes + patent search + " +
       "deterministic rule gate) in one call — e.g. graph=inventiveness runs the A22.3 three-step analysis end-to-end. " +
       "Provide the input as 'input'. The review gate pauses the run (reports interrupted + checkpointId); re-invoking " +
