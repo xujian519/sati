@@ -317,7 +317,9 @@ export function runRuleGate(
 // LLM 客户端 + 检索器 → StageProvider，避免两处各自维护装配逻辑漂移）
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+// 2026-08 修复：deepseek-v4 默认思考（thinking），4096 max_tokens 会被思考 token 耗尽
+// 导致 content 空（实测响应为空）；提到 16384 后正常（实测）。
+const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
 
 export type WorkflowProviderDeps = {
   /** 模型客户端（缺省取 context.model；二者皆无时 buildWorkflowProvider 返回 undefined）。 */
@@ -339,6 +341,13 @@ export type WorkflowProviderContext = {
   model?: SatiToolModelClient;
   /** 案例标识：透出到 StageProvider.caseId，供 claim-chart 等原子落盘/核验合并。 */
   caseId?: string;
+  /**
+   * 会话主模型标识（来自 SatiToolRuntimeContext.provider/modelId）：
+   * deps 未显式指定 provider/modelId 时继承会话模型，避免回退默认
+   * openrouter/kimi 在未配置环境下恒降级（2026-08 修复）。
+   */
+  provider?: string;
+  modelId?: string;
 };
 
 /** 收集 stream 事件为完整文本（对齐 web_fetch 二次模型调用模式）。 */
@@ -403,10 +412,11 @@ export function buildWorkflowProvider(
           ? { name: "structured_output", schema: jsonSchema as Record<string, unknown>, strict: true }
           : undefined;
       // 模型分层（P2-1）：modelHint 命中映射时覆盖 provider/model，未命中用默认。
+      // 缺省链：deps 显式 > 会话模型（context.provider/modelId）> 全局默认（openrouter/kimi）。
       const hint = opts?.modelHint !== undefined ? deps.modelHints?.[opts.modelHint] : undefined;
       const request: CanonicalModelRequest = {
-        provider: hint?.provider ?? deps.provider ?? DEFAULT_MODEL_PROVIDER,
-        model: hint?.model ?? deps.modelId ?? DEFAULT_MODEL_ID,
+        provider: hint?.provider ?? deps.provider ?? context.provider ?? DEFAULT_MODEL_PROVIDER,
+        model: hint?.model ?? deps.modelId ?? context.modelId ?? DEFAULT_MODEL_ID,
         messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
         maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
         temperature: opts?.temperature ?? 0,

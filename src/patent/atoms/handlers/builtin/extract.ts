@@ -62,14 +62,20 @@ export class ExtractHandler implements StageHandler {
     return parseLlmJson(
       res.raw,
       (parsed, raw) => {
-        if (!Array.isArray(parsed.features)) return null;
+        // 按 output_key 检查对应字段（2026-08 修复：此前统一检查 parsed.features，
+        // problems/effects 路 LLM 输出无 features → 解析恒失败 → problems/effects
+        // 永不写入 state → merge 产生空 problem → consistency 误判孤立 → retry 循环）。
+        if (outputKey === "features" && !Array.isArray(parsed.features)) return null;
+        if (outputKey === "problems" && !Array.isArray(parsed.problems)) return null;
+        if (outputKey === "effects" && !Array.isArray(parsed.effects)) return null;
         if (outputKey === "features" || outputKey === "problems" || outputKey === "effects") {
           const segment: PipelineState = { extraction_result: raw };
           if (outputKey === "features") segment.features = parsed.features;
-          if (outputKey === "problems" && Array.isArray(parsed.problems)) segment.problems = parsed.problems;
-          if (outputKey === "effects" && Array.isArray(parsed.effects)) segment.effects = parsed.effects;
+          if (outputKey === "problems") segment.problems = parsed.problems;
+          if (outputKey === "effects") segment.effects = parsed.effects;
           return segment;
         }
+        // 无 output_key（旧行为）：全量写。
         return {
           extraction_result: raw,
           features: parsed.features,

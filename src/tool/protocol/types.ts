@@ -313,6 +313,13 @@ export type SatiToolRuntimeContext = {
    */
   model?: SatiToolModelClient;
   /**
+   * 会话主模型标识（provider/modelId）：供工具二次模型调用继承
+   * （如 patent_workflow_run 工具内部原子执行的 LLM 请求）。
+   * 缺省时工具回退各自默认值（如 openrouter/kimi）。
+   */
+  provider?: string;
+  modelId?: string;
+  /**
    * Optional user-elicitation channel used by `ask_user_question` and any
    * tool that requests a synchronous user answer. The host (Gateway / TUI /
    * CLI / Feishu) wires this in. Absent when no UI is connected; affected
