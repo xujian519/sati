@@ -23,15 +23,15 @@
 
 ## 2. 意图 → Workflow 路由表
 
-| 用户意图（关键词） | template_id | 必选前置 |
-|------------------|-------------|----------|
-| 审查意见、答复、一通、二通、补正 | `office-action-response` | CAP02 |
-| 侵权、全面覆盖、等同 | `infringement-analysis` | 双端 CAP02 |
-| 无效、复审、驳回 | `invalidation-response` | CAP02 + 检索 |
-| 撰写、交底、申请 | `prosecution-draft` | CAP02 |
-| 检索、现有技术、调查 | `prior-art-survey` | 检索链 |
+| 用户意图（关键词） | template_id | manifestId（引擎可执行） | 必选前置 |
+|------------------|-------------|--------------------------|----------|
+| 审查意见、答复、一通、二通、补正 | `office-action-response` | `patent_oa_response_v1` | CAP02 |
+| 侵权、全面覆盖、等同 | `infringement-analysis` | `patent_infringement_v1` | 双端 CAP02 |
+| 无效、复审、驳回 | `invalidation-response` | `patent_invalidation_v1` | CAP02 + 检索 |
+| 撰写、交底、申请 | `prosecution-draft` | **`patent_drafting_v1`** | CAP02 |
+| 检索、现有技术、调查 | `prior-art-survey` | —（检索链） | 检索链 |
 
-**执行 SOP**：按上表 template_id 拟定计划 → 用户确认计划 → `patent_workflow_run` 执行 workflow。
+**执行 SOP**：按上表 template_id 拟定计划 → 用户确认计划 → `patent_workflow_run(manifestId=…)` 执行 workflow。
 
 若 sati.md 已写推荐模板，**必须与上表一致**；不一致时以 sati.md 为准并说明理由。
 
@@ -40,6 +40,8 @@
 ## 3. Worker 能力目录
 
 ### 3.1 基础设施 worker（Work 工序层 W-*）
+
+> 注册状态：`patent-technical-analyzer` 已注册于 `defaultPatentWorkers`（可经 `patent_worker_validate` 校验契约）；其余 worker 为 SOP 工序角色（规划补齐，见 docs/patent-drafting-sop-plan.md 迭代三 T8），当前由 orchestrator 以 `agent` 子代理 + 手册 prompt 调度。
 
 | worker | W-ID | 职责 | 典型输出 |
 |--------|------|------|----------|
@@ -94,16 +96,19 @@ Lazy：`reasoning-conflicting-application`、`reasoning-routine-selection`、`re
 
 ### 3.5 子代理角色（checker / 专家）
 
-| subagent_type | 用途 |
+> **命名**：下表为 skills/*/SKILL.md `type: role` 注册的 **kebab 名称**（`agent` 工具 `subagent_type` 使用）。
+> 手册旧下划线名（technical_analyzer/novelty_checker/…）经 `agent` 工具别名映射兼容（T5，见 src/tool/builtin/agent.ts 的 SUBAGENT_TYPE_ALIASES）。
+
+| subagent_type（注册名） | 用途 |
 |---------------|------|
-| `technical_analyzer` | CAP02 深度分析（与 worker 同名能力，灵活单点调用） |
-| `novelty_checker` | 新颖性专项复核 |
-| `creativity_checker` | 创造性三步法复核 |
-| `infringement_checker` | 侵权对比复核 |
-| `invalidity_checker` | 无效理由与证据链复核 |
-| `retriever` | 检索式构建与对比文件筛选 |
-| `quality_checker` | 终稿一致性/规范性 |
-| `reviewer` | 形式+实质审查 |
+| `patent-analyzer` | CAP02 深度分析（与 worker 同名能力，灵活单点调用） |
+| `patent-novelty-checker` | 新颖性专项复核 |
+| `patent-creativity-checker` | 创造性三步法复核 |
+| `patent-infringement-checker` | 侵权对比复核 |
+| `patent-invalidity-checker` | 无效理由与证据链复核 |
+| `patent-retriever` | 检索式构建与对比文件筛选 |
+| `patent-quality-checker` | 终稿一致性/规范性 |
+| `patent-reviewer` | 形式+实质审查 |
 
 ### 3.6 内置分析工具（worker 直接调用，非 worker 调度）
 
@@ -134,7 +139,7 @@ patent-technical-analyzer (CAP02) → technical-analysis-report.md
     ↓
 provision-* / domain-* / rule-engine（按 provisions 路由）
     ↓                                ↓
-                              [run_patent_rules → 规则验证]
+                              [rule_check(scope=pack) → 规则验证]
     ↓
 patent-oa-response-drafter / provision-drafting-* （撰写类）
     ↓
@@ -151,7 +156,7 @@ artifact-quality-check → [达标 → 交付；不达标 → 退回修订]
 - 新颖性/创造性/撰写/答复结论：**无** `technical-analysis-report.md` 不得出最终法律结论
 - 侵权分析：**无** 涉案专利与被控方案双端解构不得出侵权判定
 - 答复书：**无** 条款分析 md 不得调用 `patent-oa-response-drafter` 定稿
-- 终稿前：必须运行 `suggest_checkers` 触发 CAP09 checker 复核
+- 终稿前：必须运行 `patent_eval` 质量预检 + 经 HITL 触发 CAP09 checker 复核
 
 ---
 
@@ -160,7 +165,7 @@ artifact-quality-check → [达标 → 交付；不达标 → 退回修订]
 1. 调度 `rule-explorer`，获取 `provision_ids`、`reasoningPatterns`、`ipc_hints`
 2. 对 lazy 条款/推理 worker，直接用 `agent(subagent_type="provision-priority", ...)` 等名称调用
 3. 对每个 `ipc_hints` 项，按需调度 `domain-{IPC}-inventiveness` 等领域 worker
-4. 不确定可用 worker 时：先 `list_workers`，再选择
+4. 不确定可用 worker 时：查看 `src/patent/worker-contract.ts` 的 `defaultPatentWorkers()` 目录（已注册 6 个），再选择
 
 ---
 
@@ -168,22 +173,21 @@ artifact-quality-check → [达标 → 交付；不达标 → 退回修订]
 
 | 需求 | 工具 / worker |
 |------|---------------|
-| 读案卷、sati.md、converted | `read`、`glob` |
+| 读案卷、sati.md、converted | `read_file`、`glob` |
 | 法条与 Wiki 规则 | `law_search`、`patent_wiki_search`、`rule-explorer` |
 | 法条-概念图谱路径 | `patent_kg_query` |
-| 结构化 SOP | `patent_workflow` / `patent_workflow_run` |
+| 结构化 SOP | `patent_workflow` / `patent_workflow_run`（manifestId） |
 | 单步专家任务 | `agent` |
-| 列已注册 worker | `list_workers` |
+| worker 契约校验 | `patent_worker_validate`（目录见 `src/patent/worker-contract.ts`） |
 | 对比文件检索 | `patent-search-planner` → `patent-search-executor` |
 | 专利全文获取 | `patent-downloader` |
 | 技术分析与对比矩阵 | `patent-technical-analyzer` |
 | 文档转换（init 阶段） | `bash` 运行 markitdown 转换（产出放 converted/） |
 | 答复/说明书撰写 | `patent-oa-response-drafter` / `provision-drafting-*` |
-| 反 AI 套话 + 5维评分 | `patent-slop-cleaner`（内置 slop 引擎，总分<35须修订） |
-| Checker 复核（CAP09） | `suggest_checkers` → `run_checker_review` |
-| 列 Checker 目录 | `list_checkers` |
-| 子代理角色 | 按 `subagent_type` 名称直接经 `agent` 调度（technical_analyzer/novelty_checker 等） |
-| 规则引擎（YAML 规则检查） | `rule_check`（scope=patent） |
+| 反 AI 套话 + 5维评分 | `patent-slop-cleaner`（内置 slop 引擎，总分<35须修订；确定性门见 `slop-gate` 原子） |
+| Checker 复核（CAP09） | `patent_eval`（确定性质量门）→ HITL 人工复核 |
+| 子代理角色 | 按 `subagent_type` 名称直接经 `agent` 调度（patent-analyzer/patent-novelty-checker 等 kebab 注册名；手册旧下划线名经别名兼容，见 §3.5） |
+| 规则引擎（YAML 规则检查） | `rule_check`（scope=patent / pack） |
 | 产出质量门槛 | `patent_eval`（确定性质量门） |
 
 ### 外部检索补充（P2）
@@ -230,12 +234,12 @@ artifact-quality-check → [达标 → 交付；不达标 → 退回修订]
 
 workflow 模板中带 `[HITL]` 的步骤会暂停；系统在 checkpoint **之前**按下表的映射自动调度复核子代理（交互会话默认开启）。
 
-| workflow 步骤 (worker) | 建议 Checker (K-*) | 角色 subagent_type |
+| workflow 步骤 (worker) | 建议 Checker (K-*) | 角色 subagent_type（kebab 注册名） |
 |------------------------|-------------------|-------------------|
-| CAP02 技术分析 (`patent-technical-analyzer`) | K-02 | `creativity_checker` |
-| 答复书撰写 (`patent-oa-response-drafter`) | K-07, K-06 | `reviewer`, `quality_checker` |
-| 条款新颖性/创造性结论后 | K-01, K-02 | `novelty_checker`, `creativity_checker` |
-| 侵权对比后 | K-03 | `infringement_checker` |
+| CAP02 技术分析 (`patent-technical-analyzer`) | K-02 | `patent-creativity-checker` |
+| 答复书撰写 (`patent-oa-response-drafter`) | K-07, K-06 | `patent-reviewer`, `patent-quality-checker` |
+| 条款新颖性/创造性结论后 | K-01, K-02 | `patent-novelty-checker`, `patent-creativity-checker` |
+| 侵权对比后 | K-03 | `patent-infringement-checker` |
 
 **自动调度行为**（workflow 执行时）：
 
@@ -247,9 +251,8 @@ workflow 模板中带 `[HITL]` 的步骤会暂停；系统在 checkpoint **之�
 **手动调度**（总调度 orchestrator）：
 
 ```
-suggest_checkers                    # 按 outputs/ 推荐 Checker
-run_checker_review(checker_role_id="reviewer", target="答复书定稿复核")
-agent(subagent_type="reviewer", ...) # 等价备选
+patent_eval(mode="comprehensive")   # 确定性质量预检（替代 CAP09 推荐）
+agent(subagent_type="patent-reviewer", ...) # 复核子代理
 ```
 
 **CAP09 结构化结论**：Checker 输出 `pass` | `needs_revision` | `blocked` JSON，写入 `*.verdict.json`。聚合为 `blocked` 时不得定稿。
@@ -269,17 +272,19 @@ agent(subagent_type="reviewer", ...) # 等价备选
 
 ### 审查意见答复
 
-`plan_workflow(office-action-response)` 或手动链：
+`patent_workflow_run(manifestId="patent_oa_response_v1")`（OA 答复内置 manifest）或手动链：
 
-`project-probe` → `rule-explorer` → `patent-search-planner` + `patent-search-executor`（必经）→ `patent-technical-analyzer`（含附图/化学式核验，见 §3.6）→ `provision-disclosure` + `provision-claims-clarity`（按驳回类型）→ `run_patent_rules`（规则验证）→ `patent-oa-response-drafter`（定稿前 rule_check scope=pack）→ `reviewer`/`quality_checker`（HITL）→ `patent-slop-cleaner` → `artifact-quality-check`（终检）
+`project-probe` → `rule-explorer` → `patent-search-planner` + `patent-search-executor`（必经）→ `patent-technical-analyzer`（含附图/化学式核验，见 §3.6）→ `provision-disclosure` + `provision-claims-clarity`（按驳回类型）→ `rule_check`（scope=pack，规则验证）→ `patent-oa-response-drafter`（定稿前 rule_check scope=pack）→ `patent-reviewer`/`patent-quality-checker`（HITL）→ `patent-slop-cleaner` → `patent_eval`（终检）
 
 ### 申请撰写
 
-`prosecution-draft`：`project-probe` → `rule-explorer` → `patent-technical-analyzer`（CAP02 解构）→ 附图分析（`analyze_patent_figure`）+ 化学式核验（`recognize_chemical_structure`，按案卷内容触发）→ 检索链 → 现有技术 CAP02 对比 → `provision-disclosure` → `patent-slop-cleaner` → 规则门禁（`rule_check` scope=pack）
+**一键路径**：`patent_workflow_run(manifestId="patent_drafting_v1")`——PFE 提取 → HITL 确认解构 → 检索 → 检索质量门（`quality-gate`）→ HITL 确认对比文件 → 逐特征对比 → HITL 确认区别特征 → 充分公开审查 → HITL 审核 → `draft-claims` → `draft-spec`（含确定性校验）→ `slop-gate` → HITL 定稿；规则门由工具收尾自动执行。
+
+**手动链**（对应 prosecution-draft SOP）：`project-probe` → `rule-explorer` → `patent-technical-analyzer`（CAP02 解构）→ 附图分析（`analyze_patent_figure`）+ 化学式核验（`recognize_chemical_structure`，按案卷内容触发）→ 检索链 → 现有技术 CAP02 对比 → `provision-disclosure` → `patent-slop-cleaner` → 规则门禁（`rule_check` scope=pack）
 
 ### 创造性/新颖性无效
 
-`invalidation-response`：`CAP02`（含对比文件附图证据固化，`analyze_patent_figure`）→ `patent-search-planner/executor` → `provision-novelty` + `provision-inventiveness`（定稿前 `rule_check` scope=pack）→ 必要时 `creativity_checker`
+`invalidation-response`：`CAP02`（含对比文件附图证据固化，`analyze_patent_figure`）→ `patent-search-planner/executor` → `provision-novelty` + `provision-inventiveness`（定稿前 `rule_check` scope=pack）→ 必要时 `patent-creativity-checker`
 
 ### 侵权
 
@@ -305,12 +310,12 @@ Sati 专利智能体**不受专利 worker 边界限制**。完成专利任务时
 
 | 层级 | 手段 | 何时使用 |
 |------|------|----------|
-| 1 | `plan_workflow` + 专利 worker | 标准 SOP、可复用案卷链路 |
-| 2 | `agent` 子代理 | 单点专家（checker、retriever、technical_analyzer） |
+| 1 | `patent_workflow_run` / `flexible_plan` + 专利 worker | 标准 SOP、可复用案卷链路 |
+| 2 | `agent` 子代理 | 单点专家（patent-reviewer、patent-retriever、patent-analyzer） |
 | 3 | `knowledge_*` + `rule-explorer` | 法条、Wiki、图谱 |
-| 4 | **Skills**（read 加载） | 文档处理、专利检索、stop-patent-slop、CNIPA 等已安装技能 |
-| 5 | **`bash` / `edit` / `write`** | 跑 markitdown 转换、安装依赖、修 workflow/工具代码 |
-| 6 | **`tool_search` + MCP** | 发现 CodeGraph、浏览器、外部 MCP 工具 |
+| 4 | **Skills**（read_skill 加载） | 文档处理、专利检索、stop-patent-slop、CNIPA 等已安装技能 |
+| 5 | **`bash` / `edit_file` / `write_file`** | 跑 markitdown 转换、安装依赖、修 workflow/工具代码 |
+| 6 | **MCP 工具**（`mcp_status` / `list_mcp_resources`） | 发现 CodeGraph、浏览器、外部 MCP 工具 |
 | 7 | **Skills / 内置工具** | `/patent-agent`、`/patent-writer` 等 Skills，`patent_workflow_run`、`patent_plan_task` 等内置工具 |
 
 ### 路径约定
@@ -321,6 +326,6 @@ Sati 专利智能体**不受专利 worker 边界限制**。完成专利任务时
 ### 阻塞时 escalation
 
 1. worker 失败 → 读日志 / outputs，用 `agent` 换子代理或缩小任务
-2. 脚本/依赖缺失 → `bash` 安装或运行，必要时 `edit` 修复实现
+2. 脚本/依赖缺失 → `bash` 安装或运行，必要时 `edit_file` 修复实现
 3. 知识库空 → 提示用户将 knowledge.db / laws-full.db 等数据放入 `~/.sati/knowledge/` 目录（或以 `SATI_KNOWLEDGE_DIR` 指定）
 4. 仍无法完成 → 向用户说明已尝试的手段与缺失资源，**不得**伪造法律结论或对比文件
