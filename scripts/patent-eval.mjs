@@ -24,6 +24,10 @@
  *   node scripts/patent-eval.mjs --model deepseek/deepseek-v4-flash   # 换模型
  *   node scripts/patent-eval.mjs --suite tests/patent/benchmark/fixtures/patent-exam-real-a22.json \
  *       --check-domain patent_novelty                                 # 换 suite 与检查域
+ *   node scripts/patent-eval.mjs --suite tests/patent/benchmark/fixtures/patent-exam-real-a22.3.json \
+ *       --mode graph --model deepseek/deepseek-v4-pro                 # a22.3 创造性专属基准（图模式，含结论方向指标）
+ *   node scripts/patent-eval.mjs --suite tests/patent/benchmark/fixtures/patent-exam-real-a22.3.json \
+ *       --mode text --check-domain patent_inventiveness               # a22.3 单文本模式（规则门域为创造性）
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -161,18 +165,33 @@ async function main() {
 
   // 图模式：领域子图自动执行（三性）→ 规则门 + expected 指标（Evaluator 汇总）。
   if (opts.mode === "graph") {
+    // 捕获外层 provider 字符串（本分支 const provider 为 StageProvider 对象，遮蔽外层）。
+    const providerId = opts.model.slice(0, slash);
     const provider = {
       callLLM: async (prompt, callOpts) => {
-        const res = await runtime.complete({
-          provider,
+        const base = {
+          provider: providerId,
           model,
           messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
           maxOutputTokens: 4096,
           temperature: callOpts?.temperature ?? 0,
-          ...(callOpts?.jsonSchema
-            ? { outputSchema: { name: "structured_output", schema: callOpts.jsonSchema, strict: true } }
-            : {}),
-        });
+        };
+        let res;
+        try {
+          res = await runtime.complete(
+            callOpts?.jsonSchema
+              ? { ...base, outputSchema: { name: "structured_output", schema: callOpts.jsonSchema, strict: true } }
+              : base,
+          );
+        } catch (err) {
+          // 模型不支持 response_format 结构化输出时降级为普通调用（prompt 已内嵌 JSON 要求），
+          // 避免全节点降级（如 deepseek-v4-pro 实际不支持 structured output）。
+          if (callOpts?.jsonSchema && /response_format|structured|output_schema/i.test(String(err?.message ?? ""))) {
+            res = await runtime.complete(base);
+          } else {
+            throw err;
+          }
+        }
         return res.content
           .filter(b => b.type === "text")
           .map(b => b.text)

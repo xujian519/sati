@@ -2,6 +2,28 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.2 - 2026-08-18
+
+> **版本目标（2026-08-18）**：专利创造性判断（A22.3 三步法）质量优化 P0+P1+P2 落地（`docs/patent-inventiveness-optimization-plan.md`）——检索反思回路、LLM 节点韧性、对比文件公开日、D2 组合建模、引用真实性硬校验、结论方向指标与 a22.3 专属基准，以及 P2 批次的并行化/模型分层、IPC 领域注入、LLM Judge 双轨与 HITL 反馈回流。
+
+### Feat
+- feat(patent): 创造性图检索反思回路——`recall_check` 覆盖度检查 + `refine_query` 确定性补检（最多 2 次重检，降级/解析失败直接放行）+ union 多轮去重 + `converge_prior_art` top-N 收敛；`patent_workflow_run` 新增 `retrievalRounds`（缺省 2，0 = 关闭回路保持旧行为）
+- feat(patent): `llmNode` 重试 + JSON required 校验——`maxAttempts`/`timeoutMs`（`Promise.race` 超时，不扩展 `callLLM` 接口），瞬时错误与结构化输出校验失败自动重试，耗尽才降级
+- feat(patent): `prior_art` 携带公开日（`publication_date` 透传）+ `closest` 逐篇标注公开日并判断是否早于申请日/优先权日；`build_query` 检索式带申请日时间基准（`after:YYYYMMDD`）
+- feat(patent): `combination`（D2 组合）节点——组合动机/技术障碍/反向教导（teaching away）显式建模，输出拼接 hint/conclude 论证
+- feat(patent): `citation_gate` 引用真实性校验——结论引用（专利号/文档标识）与检索结果比对，未接地引用经 `ruleGateNode(precomputedFailures)` 并入规则门（既有 pass → needs_revision，blocked/needs_revision 保持；novelty/enablement 不传行为不变）
+- feat(patent): `conclusion_direction` 结论方向指标（只认 `结论：具备创造性`/`结论：不具备创造性` 单行标记，旧 suite 恒为 1）+ a22.3 专属基准 fixture（10 条，具备/不具备各 ≥3）
+- fix(patent): `patent-eval.mjs` graph 模式 provider 变量遮蔽 + 模型不支持 structured output 时降级为普通调用（prompt 内嵌 JSON 要求）
+- feat(patent): P2-1 并行化 + 模型分层——hint/secondary 同超步并行（SuperStep fan-out）；9 个 LLM 节点 `modelHint` 标识（cheap×4 / strong×5）经 `StageProvider.callLLM` 透传，`buildWorkflowProvider({ modelHints })` 按节点映射模型，未配置时行为不变
+- feat(patent): P2-2 IPC 领域知识注入——`domain_inject` 确定性节点经 `classifyIpc` 把命中部的 `inventivenessFocus`（化学"预料不到的技术效果"等）注入 closest/diff/hint 提示；领域规则包（medical/mechanical/inventiveness.yaml）复用不重复实现
+- feat(patent): P2-3 LLM Judge 双轨——`patent_workflow_run({ judgeSamples })` 对结论报告打 0-1 分（N 次采样中位数）附结果尾部，仅参考不改变规则门判级，缺省关闭
+- feat(patent): P2-4 HITL 反馈回流——读侧已接线：`patent_workflow_run`（graph=inventiveness + caseId）读取 `data/cases/<caseId>/inventiveness-feedback.jsonl` 历史反馈注入 conclude 提示（仅提示，不强制）；写侧为宿主接线点：`PatentOutputGate.onDecisionFeedback` 回调暴露审批 modified/rejected 的 `ApprovalRecord`（`feedback/inventiveness-feedback.ts` 纯函数 + paths 约定已就绪，gateway 审批上下文暂无 caseId，生产接线待宿主侧落地）
+
+### Test
+- 新增 44 个测试：`graph/llm-node.spec.ts`（重试/超时/校验/降级）、`graph/citation-check.spec.ts`（引用提取/接地/合并规则）、`patent/metrics.spec.ts`（结论方向指标）、`data/nuo/searchProvider.spec.ts`（公开日透传）、domains.spec/patentWorkflowRun.spec 增补回路与工具开关断言
+- P2 新增：`feedback/inventiveness-feedback.spec.ts`（回流闭环）、output-gate 决策反馈回调、domains.spec 并行/模型分层/领域注入、patentWorkflowRun.spec Judge 双轨与反馈注入
+- 重录 `tests/fixtures/llm-replay/deepseek-v4-flash-basic`（工具 schema 变更后按显式流程重录，重放测试恢复通过）
+
 ## v0.1.1 - 2026-08-17
 
 > **版本目标（2026-08-17）**：首个 Beta（0.1.0）之后的工程质量与性能迭代版本——巨无霸函数拆解专项（轨道 A/B）全部收尾、edgeclaw-memory-core 拆解与 lint 开闸、`as never` 类型逃逸批量清理、性能两批卡点修复，另含专利搜索与下载模块优化 Sprint 1-3。

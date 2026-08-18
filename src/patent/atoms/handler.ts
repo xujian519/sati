@@ -40,14 +40,19 @@ export type StageProvider = {
   caseId?: string;
   /**
    * 调用 LLM 获得输出。jsonSchema 提供时要求结构化输出（handler 尝试解析 JSON）。
+   * modelHint 提供 per-node 模型覆盖标识（如 "cheap"/"strong"），由宿主 provider
+   * 按需映射到具体模型；未配置映射时忽略（用默认模型，行为不变）。
    * 缺省实现缺失时，依赖 LLM 的 handler（extract/compare/reasoning）降级。
    */
-  callLLM?: (prompt: string, opts?: { jsonSchema?: unknown; temperature?: number }) => Promise<string>;
+  callLLM?: (
+    prompt: string,
+    opts?: { jsonSchema?: unknown; temperature?: number; modelHint?: string },
+  ) => Promise<string>;
   /** 检索现有技术。缺省实现缺失时 search 阶段降级。 */
   search?: (
     query: string,
     opts?: { maxResults?: number },
-  ) => Promise<Array<{ title: string; snippet: string; url?: string }>>;
+  ) => Promise<Array<{ title: string; snippet: string; url?: string; publication_date?: string }>>;
 };
 
 export type StageExecuteInput = {

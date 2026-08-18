@@ -5,7 +5,13 @@
  * 指标函数按名注册（keyword_recall / citation_completeness / rule_gate_pass / jaccard）。
  */
 
-import { citationCompleteness, jaccardSimilarity, keywordRecall, ruleGatePass } from "./metrics.js";
+import {
+  citationCompleteness,
+  conclusionDirection,
+  jaccardSimilarity,
+  keywordRecall,
+  ruleGatePass,
+} from "./metrics.js";
 
 /** 单条评测用例（对齐 tests/patent/benchmark/types.ts 的 PatentExamCase 子集）。 */
 export type EvalCase = {
@@ -66,6 +72,8 @@ export const DEFAULT_METRICS: Record<string, (outcome: MetricInput) => number> =
   citation_completeness: outcome => citationCompleteness(outcome.output, outcome.required ?? []),
   rule_gate_pass: outcome => ruleGatePass(outcome.verdict),
   jaccard: outcome => jaccardSimilarity(outcome.expected, outcome.output),
+  // 结论方向指标：expected 无固定单行标记（旧 suite）时恒为 1，不影响旧分数。
+  conclusion_direction: outcome => conclusionDirection(outcome.expected, outcome.output),
 };
 
 export type EvaluatorOptions = {

@@ -13,7 +13,10 @@ import {
   registerBuiltinAtoms,
 } from "../../../src/patent/atoms/index.js";
 import { createPatentWorkflowRunTool } from "../../../src/tool/builtin/patentWorkflowRunTool.js";
+import { buildWorkflowProvider } from "../../../src/tool/builtin/patentWorkflowTool.js";
 import { createBuiltinRegistry } from "../../../src/tool/registry/createBuiltinRegistry.js";
+import { DEFAULT_MODEL_ID } from "../../../src/model/index.js";
+import { appendInventivenessFeedback, caseInventivenessFeedbackPath } from "../../../src/patent/index.js";
 
 /**
  * patent_workflow_run（原子自动执行）接线测试。
@@ -305,6 +308,9 @@ test("createBuiltinRegistry 注册 patent_workflow_run（domain: patent）", () 
 
 /** inventiveness 三步法 prompt 响应器。 */
 function inventivenessResponder(prompt: string): string {
+  if (prompt.includes("覆盖度")) {
+    return JSON.stringify({ adequate: true, covered_features: ["传送带", "识别传感器"], missing_features: [] });
+  }
   if (prompt.includes("创造性分析专家")) {
     return JSON.stringify({
       features: ["传送带", "识别传感器"],
@@ -322,6 +328,15 @@ function inventivenessResponder(prompt: string): string {
       technical_field: "机械分拣",
       disclosed_features: ["传送带"],
       rationale: "技术领域相同且公开特征最多",
+    });
+  }
+  if (prompt.includes("是否存在可与最接近现有技术")) {
+    return JSON.stringify({
+      candidate_documents: ["D2"],
+      combinable: false,
+      motivation: "D2 无结合启示",
+      obstacles: [],
+      teaching_away: false,
     });
   }
   if (prompt.includes("三步法第二步")) {
@@ -448,4 +463,143 @@ test("graph=novelty 图自动执行（含数值范围节点）", async () => {
   assert.match(text, /patent_workflow_run\(graph=novelty\)/);
   assert.match(text, /numeric_ranges/);
   assert.match(text, /新颖性分析报告/);
+});
+
+test("graph=inventiveness retrievalRounds=0 关闭检索反思回路（工具层透传）", async () => {
+  registerBuiltinAtoms();
+  let searchCalls = 0;
+  const countingSearch: StageProvider["search"] = async (_query, _opts) => {
+    searchCalls += 1;
+    return [{ title: "D1", snippet: "s", url: "u" }];
+  };
+  const tool = createPatentWorkflowRunTool({ model: mockModel(inventivenessResponder), search: countingSearch });
+  const res = await tool.execute(
+    { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器", retrievalRounds: 0 },
+    makeToolContext({ cwd: "/tmp" }),
+  );
+  // 回路关闭：search 只执行一次（审批门中断前），且无 recall_check 相关输出。
+  assert.equal(searchCalls, 1, "retrievalRounds=0 时不应进入检索回路");
+  assert.doesNotMatch(textOf(res), /inventiveness_recall_exhausted/);
+  assert.match(textOf(res), /审批门暂停/);
+});
+
+test("graph=inventiveness retrievalRounds=1 限制重检 1 次（工具层透传）", async () => {
+  registerBuiltinAtoms();
+  let searchCalls = 0;
+  const countingSearch: StageProvider["search"] = async (_query, _opts) => {
+    searchCalls += 1;
+    return [{ title: "D1", snippet: "s", url: "u" }];
+  };
+  // recall 恒判覆盖不足 → 应重检 1 次（共 2 次检索）后写 exhausted 放行。
+  const responder = (prompt: string): string => {
+    if (prompt.includes("覆盖度")) {
+      return JSON.stringify({ adequate: false, covered_features: [], missing_features: ["识别传感器"] });
+    }
+    return inventivenessResponder(prompt);
+  };
+  const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: countingSearch });
+  const res = await tool.execute(
+    { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器", retrievalRounds: 1 },
+    makeToolContext({ cwd: "/tmp" }),
+  );
+  assert.equal(searchCalls, 2, "retrievalRounds=1 时首轮 + 1 次重检");
+  assert.match(textOf(res), /inventiveness_recall_exhausted/);
+});
+
+test("buildWorkflowProvider: modelHint 映射覆盖模型（P2-1 模型分层），未命中用默认", async () => {
+  const seen: string[] = [];
+  const model: SatiToolModelClient = {
+    async *stream(request: CanonicalModelRequest) {
+      seen.push(request.model);
+      yield textDelta("ok");
+    },
+  };
+  const provider = buildWorkflowProvider({ model, modelHints: { cheap: { model: "deepseek-v4-flash" } } });
+  assert.ok(provider?.callLLM, "应装配 callLLM");
+  const out = await provider!.callLLM!("prompt", { modelHint: "cheap" });
+  assert.equal(out, "ok");
+  assert.equal(seen[0], "deepseek-v4-flash", "命中 cheap 映射应覆盖模型");
+  // 未命中 hint → 默认模型（行为不变）。
+  await provider!.callLLM!("prompt", { modelHint: "no_such_hint" });
+  assert.equal(seen[1], DEFAULT_MODEL_ID, "未命中映射应回退默认模型");
+  // 不传 hint → 默认模型。
+  await provider!.callLLM!("prompt");
+  assert.equal(seen[2], DEFAULT_MODEL_ID, "无 hint 应使用默认模型");
+});
+
+test("graph=inventiveness judgeSamples 开启 → LLM Judge 质量分附在结果尾部（P2-3）", async () => {
+  registerBuiltinAtoms();
+  const responder = (prompt: string): string => {
+    if (prompt.includes("你是专利领域质量评估法官")) {
+      return JSON.stringify({ score: 0.8, rationale: "三步法论证完整" });
+    }
+    return inventivenessResponder(prompt);
+  };
+  // 放行 approval 使图完整跑完（judge 仅在未中断时执行）。
+  const passthroughApproval = {
+    name: "approval-gate",
+    category: "gate" as const,
+    execute: async () => ({ review_passed: true }),
+  };
+  const handlers = new StageHandlerRegistry();
+  for (const h of globalStageHandlerRegistry.list()) handlers.register(h);
+  handlers.register(passthroughApproval);
+  const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: mockSearch, handlers });
+  const res = await tool.execute(
+    { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器", judgeSamples: 1 },
+    makeToolContext({ cwd: "/tmp" }),
+  );
+  const text = textOf(res);
+  assert.match(text, /LLM Judge 质量分/);
+  assert.match(text, /0\.800/);
+  assert.match(text, /不影响规则门判级/);
+});
+
+test("graph=inventiveness 缺省不启用 LLM Judge（P2-3 默认关闭）", async () => {
+  registerBuiltinAtoms();
+  const tool = createPatentWorkflowRunTool({ model: mockModel(inventivenessResponder), search: mockSearch });
+  const res = await tool.execute(
+    { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器" },
+    makeToolContext({ cwd: "/tmp" }),
+  );
+  assert.doesNotMatch(textOf(res), /LLM Judge/);
+});
+
+test("graph=inventiveness 同 case 历史反馈注入 conclude 提示（P2-4 HITL 反馈回流）", async () => {
+  registerBuiltinAtoms();
+  const dir = mkdtempSync(join(tmpdir(), "wf-feedback-"));
+  try {
+    // 先写一条历史反馈（模拟此前审批驳回）。
+    const file = join(dir, caseInventivenessFeedbackPath("fb-case"));
+    await appendInventivenessFeedback(file, {
+      caseId: "fb-case",
+      originalOutputPreview: "结论：具备创造性",
+      verdict: "rejected",
+      feedback: "D1 已公开区别特征",
+      decidedAt: "2026-08-18T00:00:00.000Z",
+    });
+    let concludePrompt = "";
+    const responder = (prompt: string): string => {
+      if (prompt.includes("综合三步法")) concludePrompt = prompt;
+      return inventivenessResponder(prompt);
+    };
+    const passthroughApproval = {
+      name: "approval-gate",
+      category: "gate" as const,
+      execute: async () => ({ review_passed: true }),
+    };
+    const handlers = new StageHandlerRegistry();
+    for (const h of globalStageHandlerRegistry.list()) handlers.register(h);
+    handlers.register(passthroughApproval);
+    const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: mockSearch, handlers });
+    const res = await tool.execute(
+      { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器", caseId: "fb-case" },
+      makeToolContext({ cwd: dir }),
+    );
+    assert.match(textOf(res), /完成状态: completed/);
+    assert.ok(concludePrompt.includes("历史人工反馈"), "conclude prompt 应含历史反馈摘要");
+    assert.ok(concludePrompt.includes("D1 已公开区别特征"), "应含反馈内容");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -89,6 +89,16 @@ description: "专利创造性分析：三步法（最接近现有技术→区别
 - 分析结论必须经人工审阅后方可交付（HITL）
 - **本分析由 AI 辅助生成，不构成正式法律意见。创造性判断应由具备资质的专利代理人或专利律师确认。**
 
+## 图形态自动执行（patent_workflow_run graph=inventiveness）
+
+除收口路径外，可调用 `patent_workflow_run({ graph: "inventiveness", input })` 自动执行完整三步法图（LLM 节点 + 检索 + 确定性规则门 + 引用真实性校验），一次调用产出结论：
+
+- **检索反思回路**：`recall_check` 评估检索覆盖度，覆盖不足自动换检索式补检（`refine_query`，最多 2 次重检），多轮结果 union 去重后收敛；`retrievalRounds: 0` 可关闭回路保持旧行为
+- **时间基准**：检索式以申请日/优先权日为基准（`after:YYYYMMDD` 日期限定），候选逐篇标注公开日（仅早于申请日的构成现有技术，可用于创造性评价）
+- **D2 组合建模**：`combination` 节点显式评估 D1+D2 组合动机/技术障碍/反向教导（teaching away），输出拼接进技术启示与结论论证
+- **引用真实性硬校验**：`citation_gate` 比对结论引用与检索结果（专利号/文档标识提取），未接地引用使规则门判级 needs_revision（既有 blocked/needs_revision 保持）
+- 审批门 HITL 语义不变：默认停在 approval 暂停，`approveCheckpointId` 批准后放行，`resumeCheckpointId` 断点续跑
+
 ## 收口校验（必做）
 
 1. 调用 `patent_workflow`（`manifestId: "patent_inventiveness_v1"`），按阶段 id 传入各阶段产出文本

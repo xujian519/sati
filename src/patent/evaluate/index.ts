@@ -13,6 +13,9 @@ export {
   citationCompleteness,
   ruleGatePass,
   jaccardSimilarity,
+  conclusionDirection,
+  extractDirection,
+  extractActualDirection,
 } from "./metrics.js";
 export {
   Evaluator,

@@ -39,6 +39,9 @@ export function createNuoSearchProvider(options?: CreateNuoSearchProviderOptions
         title: h.title || h.patent,
         snippet: h.abstract,
         url: h.url,
+        // 公开日（nuo-patent PatentSearchHit 字段）透传，供图节点做时间基准校验；
+        // 空字符串时输出 undefined，保持旧 provider 形状向后兼容。
+        publication_date: h.publication_date || undefined,
       }));
     },
   };

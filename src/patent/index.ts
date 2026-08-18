@@ -31,9 +31,18 @@ export {
   CASE_ROOT_REL,
   CASE_OUTPUTS_REL,
   CASE_WORKFLOW_RUNS_REL,
+  CASE_INVENTIVENESS_FEEDBACK_FILE,
   caseOutputsDir,
   caseWorkflowRunsDir,
+  caseInventivenessFeedbackPath,
 } from "./paths.js";
+
+export {
+  appendInventivenessFeedback,
+  loadInventivenessFeedback,
+  summarizeInventivenessFeedback,
+  type InventivenessFeedbackRecord,
+} from "./feedback/inventiveness-feedback.js";
 
 export {
   type WorkflowStage,

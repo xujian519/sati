@@ -49,3 +49,73 @@ export function jaccardSimilarity(expected: string, actual: string): number {
   const inter = [...a].filter(k => b.has(k)).length;
   return inter / union.size;
 }
+
+// ---------------------------------------------------------------------------
+// conclusionDirection —— 结论方向指标（a22.3 创造性专属基准）
+// ---------------------------------------------------------------------------
+
+/**
+ * 结论方向标记（M0-1 fixture 固定单行）：`结论：具备创造性` / `结论：不具备创造性`。
+ * 仅匹配带"结论："前缀的表述（正文其他含"创造"的句子不参与方向判定）。
+ */
+const DIRECTION_RE = /结论[:：]\s*(不?)\s*具备创造性/g;
+
+/** 提取文本中的结论方向（矛盾输出返回 undefined）。 */
+export function extractDirection(text: string): "inventive" | "not_inventive" | undefined {
+  const matches = [...text.matchAll(DIRECTION_RE)];
+  if (matches.length === 0) return undefined;
+  const negative = matches.filter(m => m[1] === "不").length;
+  const positive = matches.length - negative;
+  if (negative > 0 && positive === 0) return "not_inventive";
+  if (positive > 0 && negative === 0) return "inventive";
+  return undefined; // 同时出现正反标记（矛盾）→ 无法判定
+}
+
+/**
+ * 结论方向指标：actual 结论方向与 expected 标记一致 → 1，否则 0。
+ * expected 只认 M0-1 固定单行标记（`结论：具备创造性` / `结论：不具备创造性`）；
+ * actual 侧只扫描创造性结论区块（`## inventiveness_conclusion`，找不到时回退整段），
+ * 用紧邻否定检测区分"不具备创造性"/"缺乏创造性"/"无法确立创造性"等否定表述与
+ * 肯定表述（疑问句"是否具备创造性"不参与）。expected 无唯一标记或无法解析 → 1
+ * （不影响旧 suite：a26.3/a22 等 expected 均无该标记）。
+ */
+export function conclusionDirection(expected: string, actual: string): number {
+  const expectedDirection = extractDirection(expected);
+  if (expectedDirection === undefined) return 1;
+  const actualDirection = extractActualDirection(conclusionSection(actual));
+  if (actualDirection === undefined) return 0;
+  return actualDirection === expectedDirection ? 1 : 0;
+}
+
+/** 提取创造性结论区块（图模式结论键；找不到时回退整段，兼容单文本模式）。 */
+function conclusionSection(output: string): string {
+  const marker = "## inventiveness_conclusion";
+  const idx = output.indexOf(marker);
+  if (idx === -1) return output;
+  const next = output.indexOf("\n## ", idx + marker.length);
+  return next === -1 ? output.slice(idx) : output.slice(idx, next);
+}
+
+/** 否定表述模式："不/未/无/非/缺乏/没有/无法/难以 + 情态词 + （具备/具有/存在）? + 创造性"。 */
+const NEGATED_PHRASE_RE =
+  /(?:不|未|无|非|缺乏|没有|无法|难以)(?:能|会|认为|视为|确立|认定|构成|满足|通过)?\s*.{0,6}?\s*创造性/g;
+/** 肯定表述模式："具备/具有/存在 + 创造性"（排除"是否具备创造性"等疑问句）。 */
+const POSITIVE_PHRASE_RE = /(?<!是否)(?:具备|具有|存在)\s*创造性/g;
+
+/**
+ * 提取 actual 中的结论方向：统计"创造性"出现的否定/肯定占比
+ * （"不具备创造性"/"缺乏创造性"/"无法确立创造性"为否定；"具备/具有创造性"为肯定）。
+ * 全部否定 → not_inventive；全部肯定 → inventive；矛盾或无出现 → undefined。
+ *
+ * 局限（计划文档认可的启发式）：引述审查员否定意见的句子（如"审查员认为不具备创造性，
+ * 但本申请具备创造性"）会同时计入正反 → undefined → 得 0 分；如需更稳可做末句加权。
+ */
+export function extractActualDirection(text: string): "inventive" | "not_inventive" | undefined {
+  const posTotal = [...text.matchAll(POSITIVE_PHRASE_RE)].length;
+  NEGATED_PHRASE_RE.lastIndex = 0;
+  const negCount = [...text.matchAll(NEGATED_PHRASE_RE)].length;
+  const posCount = Math.max(0, posTotal - negCount);
+  if (negCount > 0 && posCount === 0) return "not_inventive";
+  if (posCount > 0 && negCount === 0) return "inventive";
+  return undefined; // 矛盾（正反并存）或无方向表述
+}
