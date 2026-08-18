@@ -1,0 +1,37 @@
+# 由 scripts/gen-patent-workflow-docs.ts 从 src/patent/workflow/manifests.ts 生成——请勿手改。
+# 引擎执行真相：builtinPatentManifests（TS 单一数据源）；本文件为审计/人读快照。
+# 修改流程：编辑 manifests.ts → pnpm gen:patent-workflow-docs → 提交两处。
+manifestId: patent_inventiveness_v1
+name: 专利创造性分析
+caseType: inventiveness_analysis
+checkDomains:
+  - patent_inventiveness
+validation:
+  requireAllSteps: true
+  maxRetries: 2
+stages:
+  - id: parse
+    strategy: chain
+    description: 解析权利要求/技术方案，构建所属领域技术人员画像，确定申请日/优先权日时间基准
+  - id: search
+    strategy: react
+    description: 检索现有技术文献，筛选最接近现有技术候选（技术领域→技术问题→发明构思）
+  - id: closest
+    strategy: chain
+    description: 三步法 Step1：确定最接近的现有技术（候选多时逐个试判）
+  - id: diff
+    strategy: chain
+    description: 三步法 Step2：实质对比确定区别技术特征，客观确定实际解决的技术问题（不得包含解决手段）
+  - id: hint
+    strategy: chain
+    description: 三步法 Step3：技术启示判断（改进动机/结合启示/公知常识/发明构思/逻辑推理与有限试验）
+  - id: secondary
+    strategy: chain
+    description: 辅助判断因素复核（预料不到的技术效果/长期渴望难题/克服技术偏见/商业成功）
+  - id: conclude
+    strategy: chain
+    description: 生成创造性结论（高/中/低/无，附置信度）+ 反事后诸葛亮自检
+  - id: approval
+    strategy: chain
+    description: 人工确认分析结论（HITL）
+
