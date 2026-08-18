@@ -62,6 +62,18 @@ const { result, checkpointId } = await runGraphWithCheckpoints(graph, { input: "
 （`numeric_range` 数值范围专项判定 / `domain_rules` 化学·计算机·机械领域特殊要求），
 末端接 checker 规则门收口（`rule_gate` 节点写 `rule_gate_verdict` / `rule_gate_failures`）。
 
+### 充分公开子图（enablement）专项增强（2026-08）
+
+`buildEnablementGraph` 除三步审查 LLM 节点（completeness/clarity/enablement/conclude）外：
+
+| 节点/输入 | 类型 | 职责 |
+|---|---|---|
+| `load` 章节切片 | 确定性 | `splitSpecSections` 按行首标题切分五部分+摘要 → `spec_section_texts`；LLM 节点经 `buildSpecContext` 按"具体实施方式优先"的章节序拼接（长说明书不再头部 8K 截断漏判实施例） |
+| `spec_prechecks` | 确定性 | 数值范围端点/中间值实施例（`checkNumericRangeCoverage`）、实施例计数、效果数据定量性（`checkEffectQuantification`）——纯函数共享自 `src/patent/spec/checks.ts`（validate_specification 同源） |
+| `domain_rules` | 确定性 | 技术领域检测扩展为 6 域：化学/医药、生物（保藏两条件）、电学（连接关系/信号流）、计算机、机械、通用 |
+| `claimText` 输入 | 工具参数 | `patent_workflow_run({graph:"enablement", claimText})` 独立传入权利要求——enablement/conclude 节点按"权利要求保护的技术方案"判断（缺省回退 input） |
+| enablement 提示 | LLM prompt | 显式列出审查指南 §2.1.3 五种无法实现情形（(1)-(5)）+ 平衡条件（本领域技术人员视角/常识可省略/至少一个技术问题成立/效果可预期无需实验数据/夸大效果通常不构成） |
+
 ### 创造性子图（inventiveness）专项节点（2026-08 优化）
 
 `buildInventivenessGraph` 除三步法 LLM 节点（parse/build_query/closest/diff/hint/

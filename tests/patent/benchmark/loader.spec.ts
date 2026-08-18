@@ -15,7 +15,7 @@ import type { BusinessTask, ClientRole } from "./types.js";
 const EXPECTED_SUITES: Record<string, number> = {
   "business-patentability": 19,
   "business-drafting": 15,
-  "business-file-review": 20,
+  "business-file-review": 23,
   "business-oa-response": 12,
   "business-infringement": 6,
   "business-invalidation": 124,
