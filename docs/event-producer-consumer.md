@@ -48,9 +48,9 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | stop_failure | src/agent/loop/AgentLoop.ts:482, src/agent/loop/AgentLoop.ts:1021 | src/gateway/client/InProcessGateway.ts:486 |
 | stop_requested | src/agent/loop/AgentLoop.ts:1194 | src/gateway/client/InProcessGateway.ts:486 |
 | structured_output | src/gateway/client/eventMapping.ts:510 | submitTurn 流 ×27 |
-| subagent_completed | src/agent/loop/toolContext.ts:255 | src/gateway/client/InProcessGateway.ts:486 |
+| subagent_completed | src/agent/loop/toolContext.ts:259 | src/gateway/client/InProcessGateway.ts:486 |
 | subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/gateway/client/InProcessGateway.ts:486 |
-| subagent_started | src/agent/loop/toolContext.ts:148 | src/gateway/client/InProcessGateway.ts:486 |
+| subagent_started | src/agent/loop/toolContext.ts:152 | src/gateway/client/InProcessGateway.ts:486 |
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:486 |
 | subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:486 |
 | subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:486 |

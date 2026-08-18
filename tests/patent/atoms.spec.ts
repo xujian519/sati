@@ -315,6 +315,35 @@ test("ExtractHandler：无 output_key 保持旧行为（全量写）", async () 
   assert.deepEqual(out.effects, []);
 });
 
+test("ExtractHandler：problems/effects 路 LLM 只返回对应字段时正确写入（2026-08 修复）", async () => {
+  // 真实 LLM 按 output_key 只返回对应字段（无 features）——此前 parse 恒失败，
+  // problems/effects 永不写入 state（merge 空 problem → consistency 误判孤立）。
+  const h = LookupStageHandler("extract")!;
+  const partialProvider: StageProvider = {
+    callLLM: async prompt => {
+      if (prompt.includes("提取待解决的技术问题")) return JSON.stringify({ problems: ["保温时间短"] });
+      if (prompt.includes("提取技术效果")) return JSON.stringify({ effects: ["保温 8 小时"] });
+      return JSON.stringify({ features: ["双层真空结构"] });
+    },
+  };
+  const problems = await h.execute({
+    state: { text: "交底书", output_key: "problems", extraction_type: "提取待解决的技术问题" },
+    provider: partialProvider,
+  });
+  assert.deepEqual(problems.problems, ["保温时间短"], "problems 路应写入 problems（LLM 仅返回 problems）");
+  assert.equal(problems.features, undefined);
+  const effects = await h.execute({
+    state: { text: "交底书", output_key: "effects", extraction_type: "提取技术效果" },
+    provider: partialProvider,
+  });
+  assert.deepEqual(effects.effects, ["保温 8 小时"], "effects 路应写入 effects（LLM 仅返回 effects）");
+  const features = await h.execute({
+    state: { text: "交底书", output_key: "features", extraction_type: "提取技术特征" },
+    provider: partialProvider,
+  });
+  assert.deepEqual(features.features, ["双层真空结构"]);
+});
+
 test("MergeHandler：PFE 按索引配对为三元组", async () => {
   const h = LookupStageHandler("merge")!;
   const out = await h.execute({

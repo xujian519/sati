@@ -50,7 +50,10 @@ export class ReasoningHandler implements StageHandler {
 /** 拼接非元数据状态为文本块（reasoning 无显式输入时的兜底）。 */
 function formatStateForReasoning(state: PipelineState): string {
   const blocks: string[] = [];
-  for (const [key, value] of Object.entries(state)) {
+  // 按键名排序（2026-08 修复）：并行组（extract 三路）写入 state 的顺序在
+  // 录制/重放间可能不同，Object.entries 插入序 → 拼接文本不同 → llm-replay
+  // 请求键失配；排序使输出确定性。
+  for (const [key, value] of Object.entries(state).sort(([a], [b]) => a.localeCompare(b))) {
     if (key.startsWith("_")) continue; // 跳过 _error 等元数据
     if (typeof value === "string" && value.trim().length > 0) {
       blocks.push(`## ${key}\n${value}`);

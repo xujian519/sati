@@ -813,7 +813,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsStreaming: true,
           supportsParallelToolCalls: true,
           supportsThinking: true, // 默认思考，thinking.type + reasoning_effort（现 high/max）
-          supportsJsonSchema: true,
+          supportsJsonSchema: false, // 实测 response_format=json_schema 被拒（2026-08），降级 prompt 内嵌 JSON
           supportsSystemPrompt: true,
           supportsPromptCache: true, // usage.prompt_cache_hit_tokens
           maxContextTokens: 1048576,
@@ -829,7 +829,7 @@ export const PROVIDER_CATALOG: ProviderCatalog = {
           supportsStreaming: true,
           supportsParallelToolCalls: true,
           supportsThinking: true, // 默认思考，thinking.type + reasoning_effort（low/high/max）
-          supportsJsonSchema: true,
+          supportsJsonSchema: false, // 实测 response_format=json_schema 被拒（2026-08），降级 prompt 内嵌 JSON
           supportsSystemPrompt: true,
           supportsPromptCache: true, // usage.prompt_cache_hit_tokens
           maxContextTokens: 1048576,

@@ -80,6 +80,10 @@ export class ToolContextFactory {
             isMainAgent: false,
           }),
       },
+      // 会话主模型标识：工具二次模型调用（patent_workflow_run 原子执行等）继承，
+      // 避免回退到默认 provider（openrouter）导致未配置时恒降级。
+      provider: config.provider,
+      modelId: config.model,
       elicitation: dependencies.elicitation,
       fileHistory: dependencies.fileHistory,
       subagentDepth: config.subagentDepth ?? 0,
