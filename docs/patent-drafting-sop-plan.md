@@ -1,6 +1,6 @@
 # 专利撰写 SOP 可执行化优化计划（patent-drafting-sop-plan）
 
-> 状态：草案（待批准）
+> 状态：✅ **已完成（2026-08-18，四迭代全部落地，PR #112-#115）**
 > 关联：`assets/workflows/patent/prosecution-draft.yaml`、`assets/prompts/patent/cap01-orchestrator.md`、
 > `src/patent/workflow/manifests.ts`、`src/patent/atoms/handlers/builtin/`、`src/patent/worker-contract.ts`
 
