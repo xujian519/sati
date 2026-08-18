@@ -228,3 +228,6 @@ __pycache__/
 
 # Chrome remote-debugging instance profile (browser automation)
 .chrome-debug/
+
+# DSH harness workspace data
+/.dsh/

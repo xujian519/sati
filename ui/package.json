@@ -93,6 +93,7 @@
     "multer": "^2.2.0",
     "node-pty": "^1.1.0-beta34",
     "pdfjs-dist": "^6.2.108",
+    "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-dropzone": "^20.1.0",
