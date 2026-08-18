@@ -2,6 +2,7 @@ import express from "express";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
+import qrcode from "qrcode";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { suppressNextWatchEvent } from "../services/satiConfigWatcher.js";
 import { reloadSatiConfig } from "../services/satiConfigReloader.js";
@@ -449,6 +450,32 @@ router.post("/weixin/qr-begin", async (_req, res) => {
     res.json({ ok: true, requestedAt: result.requestedAt || requestedAt });
   } catch (error) {
     res.json({ ok: false, requestedAt, error: error.message || "请求微信后台通道准备二维码失败" });
+  }
+});
+
+// 本地二维码生成：将登录 URL 字符串编码为 PNG，避免教育网等环境无法访问
+// 境外 api.qrserver.com 导致二维码无法渲染。
+const QR_IMAGE_MAX_DATA_LENGTH = 2048;
+
+router.get("/qr-image", async (req, res) => {
+  const data = typeof req.query.data === "string" ? req.query.data : "";
+  if (!data) {
+    return res.status(400).json({ error: "Missing data parameter" });
+  }
+  if (data.length > QR_IMAGE_MAX_DATA_LENGTH) {
+    return res.status(400).json({ error: "data parameter too long" });
+  }
+  try {
+    const png = await qrcode.toBuffer(data, {
+      width: 200,
+      margin: 1,
+      errorCorrectionLevel: "M",
+    });
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "private, max-age=60");
+    res.send(png);
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Failed to generate QR code" });
   }
 });
 

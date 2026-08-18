@@ -281,6 +281,7 @@ async function createGatewayApp(initialConfig) {
   return {
     pilotHome,
     configPath,
+    app,
     request: (path, init) => requestJson(app, path, init),
   };
 }
@@ -306,3 +307,43 @@ function jsonResponse(payload) {
     text: async () => JSON.stringify(payload),
   };
 }
+
+describe("gateway QR image route", () => {
+  async function qrRequest(app, path) {
+    const server = app.listen(0);
+    try {
+      const { port } = server.address();
+      return await nativeFetch(`http://127.0.0.1:${port}${path}`);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
+  }
+
+  it("generates a PNG locally for a valid data URL", async () => {
+    const { app } = await createGatewayApp({});
+    const res = await qrRequest(app, `/api/gateway/qr-image?data=${encodeURIComponent("https://example.com/login")}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("image/png");
+    const buf = Buffer.from(await res.arrayBuffer());
+    // PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
+    expect(buf.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+    expect(buf.length).toBeGreaterThan(200);
+  });
+
+  it("rejects requests without data", async () => {
+    const { app } = await createGatewayApp({});
+    const res = await qrRequest(app, "/api/gateway/qr-image");
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("Missing");
+  });
+
+  it("rejects overly long data payloads", async () => {
+    const { app } = await createGatewayApp({});
+    const res = await qrRequest(app, `/api/gateway/qr-image?data=${"a".repeat(3000)}`);
+
+    expect(res.status).toBe(400);
+  });
+});

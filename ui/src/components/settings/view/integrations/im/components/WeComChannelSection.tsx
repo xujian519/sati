@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Check, CheckCircle2, KeyRound, Loader2, MessageSquare, QrCode, XCircle } from "lucide-react";
 import { Button } from "../../../../../../shared/view/ui";
-import { authenticatedFetch } from "../../../../../../utils/api";
+import { appendAuthToken, authenticatedFetch } from "../../../../../../utils/api";
 import { SettingsCard, SettingsSection } from "../../../../shared/view";
 import { cn } from "../../../../../../lib/utils";
 import type { GatewayStatus, TestResult, WeComAccessPolicy } from "../types";
@@ -250,7 +250,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                 <div className="space-y-3">
                   <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-white p-4 dark:bg-white">
                     <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}`}
+                      src={appendAuthToken(`/api/gateway/qr-image?data=${encodeURIComponent(qrUrl)}`)}
                       alt="WeCom QR Code"
                       className="h-[200px] w-[200px]"
                     />

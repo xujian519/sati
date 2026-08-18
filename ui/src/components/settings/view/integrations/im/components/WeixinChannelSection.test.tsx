@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../../../../utils/api", () => ({
   authenticatedFetch: mocks.authenticatedFetch,
+  // 无 token 时原样返回 URL（与真实实现一致）
+  appendAuthToken: url => url,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -80,7 +82,11 @@ describe("WeixinChannelSection", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByAltText("WeChat QR Code").getAttribute("src")).toContain("existing-qr");
+      const src = screen.getByAltText("WeChat QR Code").getAttribute("src") ?? "";
+      expect(src).toContain("existing-qr");
+      // 二维码必须走本地端点，不得依赖境外 api.qrserver.com（教育网不可达）
+      expect(src).toContain("/api/gateway/qr-image");
+      expect(src).not.toContain("qrserver.com");
     });
     expect(screen.getAllByText("gateway.weixin.waitingForLogin")).toHaveLength(2);
     expect(mocks.authenticatedFetch.mock.calls.some(([url]) => url === "/api/gateway/weixin/qr-begin")).toBe(false);
