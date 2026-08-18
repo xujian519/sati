@@ -190,6 +190,8 @@
 | R4：静态检查误报（手册非代码措辞） | 门禁噪音 | 白名单段 + 只解析表格/代码块内的引用 |
 | R5：T4 阶段映射偏离原 YAML 语义 | SOP 行为变化 | 每阶段注释标注对应 YAML step；验收对照原 12 步 checklist |
 
+> ✅ **后续补齐（2026-08-18）**：T8 的"其余 provision-* 角色按需补齐"完成——新增 19 个条款角色 SKILL.md（预注册组 9：novelty/inventiveness/utility/eligibility/claims-clarity/amendment/prior-art/infringement-literal/infringement-equivalent；lazy 组 10：unity/design-auth/claim-construction/indirect-infringement/defenses/damages/ownership/invalidity-procedure/reexamination/priority），每个含法条依据、审查框架、审查步骤、输出契约 requiredFields 与 HITL 提示；provision-* 角色共 22 个全部可经 `agent` 工具调度。同步：检查脚本白名单移除 19 个已注册条目（subagent_types 26→45）；`patent-roles.spec.ts` 扩展 ALL_ROLE_SLUGS（9 patent + 22 provision，62 用例）；cap01 §3.2 标注角色已注册；README 数字更新（49 个专利技能 / 33 个专家角色）。
+
 ## 6. 验收标准（完成定义）
 
 1. `patent_workflow_run(manifestId=patent_drafting_v1)` 在 mock provider 下全链路跑通（tests/patent/ 断言）。

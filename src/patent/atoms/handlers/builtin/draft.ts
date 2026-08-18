@@ -231,7 +231,7 @@ export class DraftSpecHandler implements StageHandler {
     if (!res.ok) return res.error;
     return parseLlmJson(
       res.raw,
-      (parsed, raw) => {
+      parsed => {
         if (!Array.isArray(parsed.sections)) return null;
         const title = String(parsed.title ?? "").trim();
         const sections = parsed.sections

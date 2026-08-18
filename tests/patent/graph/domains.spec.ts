@@ -643,7 +643,7 @@ test("inventiveness: 仅 1 篇 prior_art 时 combination 正常流转（combinab
       }
       return base.callLLM!(prompt);
     },
-    search: async query => {
+    search: async () => {
       // 单轮单篇：仅 D1。
       return [{ title: "D1", snippet: "s", url: "u", publication_date: "2022-01-01" }];
     },
