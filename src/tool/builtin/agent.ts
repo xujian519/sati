@@ -300,6 +300,22 @@ export function buildAskModeAgentToolSchema(): {
   return { description, inputSchema };
 }
 
+/**
+ * 手册名 → 真实注册角色别名（cap01-orchestrator.md §3.5 的下划线命名 →
+ * skills 目录下 SKILL.md type: role 注册的 kebab 命名）。与手册同步维护；
+ * check-patent-sop-references.mjs 校验两侧一致性。
+ */
+const SUBAGENT_TYPE_ALIASES: Readonly<Record<string, string>> = {
+  technical_analyzer: "patent-analyzer",
+  novelty_checker: "patent-novelty-checker",
+  creativity_checker: "patent-creativity-checker",
+  infringement_checker: "patent-infringement-checker",
+  invalidity_checker: "patent-invalidity-checker",
+  retriever: "patent-retriever",
+  quality_checker: "patent-quality-checker",
+  reviewer: "patent-reviewer",
+};
+
 function normalizeRequestedSubagentType(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   if (!trimmed) {
@@ -315,7 +331,9 @@ function normalizeRequestedSubagentType(value: string | undefined): string | und
   if (normalized === "plan" || normalized === "verify") {
     return normalized;
   }
-  return trimmed;
+  // 手册旧名（下划线）→ 真实注册角色（kebab）；命中映射即转换，未命中保持原样。
+  const alias = SUBAGENT_TYPE_ALIASES[normalized];
+  return alias ?? trimmed;
 }
 
 async function runFullFork(args: {

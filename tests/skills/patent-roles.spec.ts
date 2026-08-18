@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { parse as parseYaml } from "yaml";
 import { parseRoleConfig } from "../../src/extension/skills/roleConfig.js";
@@ -16,7 +17,23 @@ import type { SkillSummary } from "../../src/extension/skills/types.js";
  * frontmatter `type: "role"` with tools/domains/omitTools/readOnly/systemPrompt;
  * role id = skill slug.
  */
-const SKILLS_ROOT = resolve(import.meta.dirname, "../../../skills");
+
+/**
+ * 仓库根（向上找含 package.json 的目录）。
+ * 兼容源运行（tests/skills/…，深度 2）与编译后运行（dist/tests/skills/…，深度 3），
+ * 避免相对路径在两种布局下偏移（此前 "../../../skills" 在源布局指向仓库外）。
+ */
+function findRepoRoot(dir: string): string {
+  let current = dir;
+  for (;;) {
+    if (existsSync(join(current, "package.json"))) return current;
+    const parent = dirname(current);
+    if (parent === current) throw new Error("无法定位仓库根（向上未找到 package.json）");
+    current = parent;
+  }
+}
+
+const SKILLS_ROOT = join(findRepoRoot(import.meta.dirname), "skills");
 
 const ROLE_SLUGS = [
   "patent-retriever",

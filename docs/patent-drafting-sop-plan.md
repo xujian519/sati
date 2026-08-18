@@ -116,6 +116,12 @@
   - §3.1-3.2 worker 表 → 标注哪些已注册（defaultPatentWorkers）、哪些规划补齐（T8）
 - **验证**：T6 脚本对修订后手册零缺失
 
+> ✅ **迭代二完成记录（2026-08）**：T5-T7 全部落地。实现偏差/补充：
+> 1. T5 别名映射表落 `src/tool/builtin/agent.ts` 的 `SUBAGENT_TYPE_ALIASES`（8 条），`normalizeRequestedSubagentType` 命中即转换；测试 `agent-subagent-type.spec.ts` 追加 8 组映射断言 + 未知类型 fail-closed 断言。
+> 2. T6 脚本实际校验 5 类引用：工具名（builtin + law-search-tool）、subagent_type（内置 4 + skills type:role + 别名键）、worker（defaultPatentWorkers）、**manifest id**（manifests.ts `patent_*_vN`）、**原子名**（atoms/handlers/builtin 的 name，允许连字符）——manifest/原子两类是脚本开发中补加的权威清单；挂根 lint（`check:patent-sop`）；负向测试（注入幽灵引用 → exit 1）通过。
+> 3. T7 修订 10+ 处：§2 路由表加 manifestId 列（撰写→`patent_drafting_v1`）；§3.1 worker 表标注注册状态；§3.5 改 kebab + 别名说明；§6/§7/§8/§10 幽灵工具全部替换（`plan_workflow`→`patent_workflow_run`/`flexible_plan`、`list_workers`→worker 契约目录、`suggest_checkers`/`run_checker_review`/`list_checkers`→`patent_eval`+HITL、`run_patent_rules`→`rule_check(scope=pack)`、`tool_search`→`mcp_status`/`list_mcp_resources`、`read/edit/write`→`read_file/edit_file/write_file`）；白名单幽灵条目已移除（手册不再引用即门禁生效）。
+> 4. 顺手修复：`tests/skills/patent-roles.spec.ts` 的 `SKILLS_ROOT` 路径 bug（`../../../skills` 指向仓库外 → `../../skills`），18 个原本 ENOENT 失败的测试转绿。
+
 ### 迭代三：完整性（P1）
 
 #### T8 — 补齐 provision-* 撰写角色 SKILL.md
