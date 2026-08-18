@@ -429,6 +429,47 @@ test("graph=inventiveness 断点续跑：中断后 resumeCheckpointId 从检查�
   }
 });
 
+test("graph=enablement + claimText → 权利要求独立注入图 state", async () => {
+  registerBuiltinAtoms();
+  const responder = (prompt: string): string => {
+    if (prompt.includes("充分公开审查报告")) {
+      return JSON.stringify({
+        sufficiently_disclosed: false,
+        confidence: "medium",
+        key_rationale: "缺少实施例",
+        report: "充分公开审查报告：说明书公开不充分，缺少实施例，本领域技术人员无法实现。",
+      });
+    }
+    if (prompt.includes("结构完整性")) {
+      return JSON.stringify({ missing_sections: [], completeness_ok: true, notes: "ok" });
+    }
+    if (prompt.includes("清楚性")) {
+      return JSON.stringify({ issues: [], clarity_ok: true });
+    }
+    if (prompt.includes("能够实现性")) {
+      return JSON.stringify({
+        gaps: ["§2.1.3(2) 手段含糊"],
+        enablement_ok: false,
+        skilled_person_assessment: "无法实现",
+      });
+    }
+    return "{}";
+  };
+  const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: mockSearch });
+  const res = await tool.execute(
+    {
+      graph: "enablement",
+      input: "技术领域：化学。发明内容：…。具体实施方式：实施例1…",
+      claimText: "1. 一种催化剂，其活性组分包含氧化铝。",
+    },
+    makeToolContext({ cwd: "/tmp" }),
+  );
+  const text = textOf(res);
+  assert.match(text, /patent_workflow_run\(graph=enablement\)/);
+  // claim 独立传入：claim 键保持独立文本（与 text 区分）。
+  assert.ok(text.includes("1. 一种催化剂，其活性组分包含氧化铝。"), "claimText 应进入图 state");
+});
+
 test("graph=novelty 图自动执行（含数值范围节点）", async () => {
   registerBuiltinAtoms();
   const responder = (prompt: string): string => {

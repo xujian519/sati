@@ -76,6 +76,11 @@ export type PatentWorkflowRunInput = {
   /** 初始材料（技术交底书等），映射为各原子读取的 text/source_text/extraction_input。 */
   input: string;
   /**
+   * 权利要求书全文（可选，A26.3 enablement 图专用）：单独传入时 enablement/conclude
+   * 节点按"权利要求保护的技术方案"判断；缺省回退 input（与 text 相同）。
+   */
+  claimText?: string;
+  /**
    * claim-chart 阶段的目标对象 JSON（[{id,kind,title?,source_path?}]）；缺省为空
    * （只拆分要素，逐行映射留待后续补充）。kind 取值 prior-art（对比文件）/
    * product（被控产品）。
@@ -169,6 +174,11 @@ export function createPatentWorkflowRunTool(
           type: "string",
           description: "Initial material (e.g. the technical disclosure text) consumed by the extract atoms.",
         },
+        claimText: {
+          type: "string",
+          description:
+            "Optional claim text (for graph=enablement): when provided, the enablement/conclude nodes judge the claimed technical solution; defaults to the input text.",
+        },
         chartTargets: {
           type: "string",
           description:
@@ -237,6 +247,7 @@ export function createPatentWorkflowRunTool(
         input: input.input,
         maxResults: input.maxResults,
         chartTargets: input.chartTargets,
+        claimText: input.claimText,
       });
 
       // 无 atom 阶段（preprocess/report）：透传输入文本（等价"未预处理"），不 degraded。
@@ -363,6 +374,7 @@ async function executeGraphRun(
     input: input.input,
     maxResults: input.maxResults,
     chartTargets: input.chartTargets,
+    claimText: input.claimText,
   });
 
   // HITL 反馈回流（P2-4）：同 case 历史人工反馈注入 conclude 提示（仅提示，不强制）。
