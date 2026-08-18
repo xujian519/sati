@@ -58,6 +58,8 @@
 
 **预注册（可直接 agent 调度）**：
 
+> ✅ 全部条款角色已注册为 type: role（`skills/provision-*/SKILL.md`，22 个），经 `agent` 工具按 `subagent_type`（即角色名）直接调度；check-patent-sop-references.mjs 校验手册引用存在性。
+
 | worker | 条款 | 前置 artifact |
 |--------|------|---------------|
 | `provision-novelty` | P-A01 新颖性 | CAP02 报告 |
@@ -76,7 +78,7 @@
 
 `provision-unity`（P-A08）、`provision-design-auth`（P-A09）、`provision-claim-construction`（P-B01）、`provision-indirect-infringement`（P-B04）、`provision-defenses`（P-B05）、`provision-damages`（P-B06）、`provision-ownership`（P-C01）、`provision-invalidity-procedure`（P-C02）、`provision-reexamination`（P-C03）、`provision-priority`（P-C05）、`provision-drafting-spec`（P-D02）
 
-Lazy worker 通过 `agent` 工具按名称调度即可；系统自动按需注册。
+Lazy worker 通过 `agent` 工具按名称调度即可（角色同已注册）。
 
 ### 3.3 推理 worker（reasoning-*）
 
