@@ -142,6 +142,13 @@
 - **实现要点**：复用 `src/patent/graph` 的 `JsonFileCheckpointStore` 语义——每阶段完成即落盘 `{runId}.checkpoint.json`（stage id + 输出 + 已批准 gate 标记）；resume 时跳过已确认阶段、approval-gate 经 `APPROVAL_GRANTED_KEY` 放行（与图路径同契约，gate.ts 注释已预留）；HITL 中断后主代理重新调用即可续跑
 - **测试**：`tests/patent/workflow-resume.spec.ts`——中断后 resume 断言前序阶段不重跑、审批门放行
 
+> ✅ **迭代三完成记录（2026-08）**：T8-T10 全部落地。实现偏差/补充：
+> 1. T8 新增 3 个 provision 角色 SKILL.md（`skills/provision-{disclosure,drafting-claims,drafting-spec}/SKILL.md`，均 type: role，systemPrompt 对齐 cap00 契约 + 输出契约 requiredFields）；`WORKER_ROLE_MAP` 增补 3 条（同 worker/role 名）；检查脚本白名单移除已注册条目（subagent_types 23→26）；`worker-contract.spec.ts` 映射断言改为"内置 worker 全覆盖"（允许额外条目）。
+> 2. T9 `WorkflowStage.worker` + `WorkflowStageResult.workerValidation`（仅提示，不改变 degraded 判定）+ `WorkerMonitor` 经 `WorkflowRunOptions.monitor` 接入 runWorkflow；校验实现于 `executor.ts` runStageOnce（workers Map 复用构建）；`patent_drafting_v1` 的 search 阶段标注 `worker: "patent-search-commander"`（首次运行即提示检索式/对比文件/公开日缺失 → 引导主代理补全检索元数据）。
+> 3. T10 新模块 `src/patent/workflow/checkpoint.ts`（`JsonFileManifestCheckpointStore` 复用 JsonFileStore 原子写 + `restoreFromCheckpoint`/`stageToCheckpointStage`）；`WorkflowRunOptions` 增 `resumeFrom`/`checkpointStore`；runWorkflow 恢复已完成阶段与 state、已放行 gate 并入 approvalGrants；`patent_workflow_run` 的 `resumeCheckpointId` 支持 manifest 模式（需 caseId，检查点落 `<caseDir>/workflow-runs/`）。
+> 4. 测试：`tests/patent/workflow-resume.spec.ts` 7 用例（中断→检查点→resume 不重放 LLM；resume+approvalGrants 放行至完成；checkpoint 文件往返；worker 契约 valid/invalid/未命中三态 + monitor 统计）。
+> 5. **教训（llm-replay fixture 键敏感性）**：`requestInvariant` 的 toolSchemaDigest = digest(tools.map({name, inputSchema}))——**工具 inputSchema 的任何改动（含纯描述性文本）都会改变请求键哈希，使既有 llm-replay fixture 失配**（本次 resumeCheckpointId 描述改动即触发 llm-replay-real.spec.ts 回归）。规则：inputSchema 描述只做语义性修改；说明性文字放工具顶层 description（不参与 digest）。改 inputSchema 后必须重录 fixture（scripts/record-real-fixture.ts）。
+
 ### 迭代四：治理与验收（P2）
 
 #### T11 — 单一数据源：YAML 工作流与 manifest 统一

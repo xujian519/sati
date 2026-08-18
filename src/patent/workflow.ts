@@ -32,7 +32,10 @@ import {
   type WorkflowStageResult,
 } from "./workflow/types.js";
 import { signalFor, signalMatches } from "./workflow/signal.js";
-import { runStageOnce } from "./workflow/executor.js";
+import { buildDefaultWorkerMap, runStageOnce } from "./workflow/executor.js";
+import { restoreFromCheckpoint, stageToCheckpointStage } from "./workflow/checkpoint.js";
+import type { WorkerExecutionRecord, WorkerOutputValidation } from "./worker-contract.js";
+import type { ManifestCheckpoint } from "./workflow/types.js";
 
 // ---- 门面再导出（保持 "./workflow.js" 消费面不变） ----
 export { WorkflowError };
@@ -41,6 +44,9 @@ export type {
   WorkflowContext,
   WorkflowInterrupt,
   WorkflowManifest,
+  ManifestCheckpoint,
+  ManifestCheckpointStage,
+  ManifestCheckpointStore,
   WorkflowRunOptions,
   WorkflowRunResult,
   WorkflowRunStore,
@@ -48,6 +54,11 @@ export type {
   WorkflowStageResult,
   WorkflowStrategy,
 } from "./workflow/types.js";
+export {
+  JsonFileManifestCheckpointStore,
+  restoreFromCheckpoint,
+  stageToCheckpointStage,
+} from "./workflow/checkpoint.js";
 export {
   builtinPatentManifests,
   patentDisclosureManifest,
@@ -141,9 +152,20 @@ export async function runWorkflow(
     }
   }
 
+  // 断点续跑（T10）：提供 resumeFrom 时跳过已完成阶段，从检查点恢复结果与 state；
+  // 已放行审批门并入 approvalGrants（同一放行契约，审批门重放时直接放行）。
   const state: PipelineState = { ...ctx };
   const results: WorkflowStageResult[] = [];
   let interrupted: WorkflowInterrupt | undefined;
+  let startIndex = 0;
+  let approvalGrants = options.approvalGrants;
+  if (options.resumeFrom !== undefined) {
+    const restored = restoreFromCheckpoint(options.resumeFrom);
+    results.push(...restored.results);
+    Object.assign(state, restored.state);
+    startIndex = options.resumeFrom.stageIndex;
+    approvalGrants = [...new Set([...(approvalGrants ?? []), ...restored.approvalGrants])];
+  }
 
   const stageIds = new Map(manifest.stages.map((s, i) => [s.id, i]));
   // 回退计数（局部 Map，不污染 PipelineState；跨阶段重入持久，防无限回退）。
@@ -152,17 +174,39 @@ export async function runWorkflow(
   const signalCache = new Map<string, RegExp>();
 
   // 单阶段执行（重试循环 + degraded 构造）见 ./workflow/executor.ts（参数化，供串行/并行共用）。
+  const workerMap = buildDefaultWorkerMap();
   const stageOptions = {
     handlers,
     atoms,
     provider: options.provider,
     executor,
     maxRetries,
-    approvalGrants: options.approvalGrants,
+    approvalGrants,
     ctx,
+    workers: workerMap,
   };
 
-  const pushResult = (stage: WorkflowStage, outcome: { output: string; retries: number }): void => {
+  /** 落检查点（可选）：每阶段完成后持久化已完成结果与阶段间 state。 */
+  const saveCheckpoint = async (index: number): Promise<void> => {
+    if (options.checkpointStore === undefined) return;
+    const checkpointId = options.runId ?? manifest.id;
+    const checkpoint: ManifestCheckpoint = {
+      id: checkpointId,
+      manifestId: manifest.id,
+      stageIndex: index,
+      completedStages: results.map(stageToCheckpointStage),
+      state: { ...state },
+      approvalGrants: approvalGrants ?? [],
+      updatedAt: new Date().toISOString(),
+    };
+    await options.checkpointStore.save(checkpoint);
+  };
+
+  const pushResult = (
+    stage: WorkflowStage,
+    outcome: { output: string; retries: number; workerValidation?: WorkerOutputValidation },
+  ): void => {
+    const workerValidation = outcome.workerValidation;
     results.push({
       stageId: stage.id,
       strategy: stage.strategy,
@@ -170,7 +214,33 @@ export async function runWorkflow(
       degraded: outcome.output.trim().length === 0 || outcome.output.startsWith("[WORKFLOW_DEGRADED]"),
       retries: outcome.retries,
       ...(stage.atom !== undefined ? { atom: stage.atom } : {}),
+      ...(workerValidation !== undefined
+        ? {
+            workerValidation: {
+              workerName: workerValidation.workerName,
+              valid: workerValidation.valid,
+              missingHardFields: workerValidation.missingHardFields,
+              missingSoftFields: workerValidation.missingSoftFields,
+            },
+          }
+        : {}),
     });
+    // Worker 执行监控（真实运行统计，供审计）。
+    if (workerValidation !== undefined && options.monitor !== undefined) {
+      const record: WorkerExecutionRecord = {
+        workerName: workerValidation.workerName,
+        inputValid: true,
+        outputValid: workerValidation.valid,
+        degraded: workerValidation.degraded,
+        startedAt: Date.now(),
+        durationMs: 0,
+        note:
+          workerValidation.missingHardFields.length > 0
+            ? `硬性契约缺失: ${workerValidation.missingHardFields.join("、")}`
+            : undefined,
+      };
+      options.monitor.record(record);
+    }
   };
 
   // 并行窗口上限：无 retry（无信号回退风险）且**同 atom** 的连续阶段才可并行
@@ -179,7 +249,7 @@ export async function runWorkflow(
   // 与"审批门后不再执行"语义不符，故中断型阶段一律不进并行组。
   const MAX_PARALLEL_STAGES = 4;
 
-  for (let index = 0; index < manifest.stages.length; ) {
+  for (let index = startIndex; index < manifest.stages.length; ) {
     // 计算可并行窗口（从当前 stage 起，连续且无 retry、同 atom 的阶段）。
     let window = 1;
     const groupAtom = manifest.stages[index]!.atom;
@@ -208,6 +278,7 @@ export async function runWorkflow(
         break;
       }
       index += window;
+      await saveCheckpoint(index);
       continue;
     }
 
@@ -239,6 +310,7 @@ export async function runWorkflow(
             ...(stage.atom !== undefined ? { atom: stage.atom } : {}),
           });
           index += 1;
+          await saveCheckpoint(index);
           continue;
         }
         // 覆盖从 rewindTo 起的结果与 state 键（防陈旧输出被兜底复用），回退重执行。
@@ -252,8 +324,9 @@ export async function runWorkflow(
       }
     }
 
-    pushResult(stage, { output, retries });
+    pushResult(stage, { output, retries, workerValidation: outcome.workerValidation });
     index += 1;
+    await saveCheckpoint(index);
   }
 
   const degradedSteps = results.filter(r => r.degraded).map(r => r.stageId);

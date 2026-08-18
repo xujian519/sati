@@ -27,10 +27,13 @@ test("search worker: allowedTools 含专利数据工具（修正后）", () => {
   }
 });
 
-test("WORKER_ROLE_MAP 覆盖全部 6 个 worker 且角色无重复", () => {
+test("WORKER_ROLE_MAP 覆盖全部 6 个内置 worker 且角色无重复", () => {
   const workers = defaultPatentWorkers().map(w => w.name);
   const mapped = WORKER_ROLE_MAP.map(e => e.worker);
-  assert.deepEqual([...mapped].sort(), [...workers].sort(), "映射表应覆盖全部内置 worker");
+  // 内置 worker 必须全部被映射（映射表可含额外条目，如 skills/provision-* 角色）。
+  for (const worker of workers) {
+    assert.ok(mapped.includes(worker), `内置 worker ${worker} 应被映射`);
+  }
   const roles = WORKER_ROLE_MAP.filter(e => e.role !== undefined).map(e => e.role!);
   assert.equal(new Set(roles).size, roles.length, "worker→角色映射不应重复");
   const oa = WORKER_ROLE_MAP.find(e => e.worker === "patent-oa-writer");

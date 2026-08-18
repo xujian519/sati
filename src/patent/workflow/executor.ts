@@ -19,6 +19,8 @@ import {
   isApprovalGateHandler,
   isInterruptStageError,
 } from "../atoms/index.js";
+import type { WorkerContract, WorkerOutputValidation } from "../worker-contract.js";
+import { defaultPatentWorkers, validateWorkerOutput } from "../worker-contract.js";
 import type { StageExecutor, WorkflowContext, WorkflowInterrupt, WorkflowStage } from "./types.js";
 
 export type RunStageOnceOptions = {
@@ -29,6 +31,16 @@ export type RunStageOnceOptions = {
   maxRetries: number;
   approvalGrants?: string[];
   ctx: WorkflowContext;
+  /** worker 契约目录（name → 契约）；缺省构建 defaultPatentWorkers 目录。 */
+  workers?: Map<string, WorkerContract>;
+};
+
+export type StageOnceOutcome = {
+  output: string;
+  retries: number;
+  interrupted?: WorkflowInterrupt;
+  /** worker 契约校验结果（stage.worker 命中目录时）。 */
+  workerValidation?: WorkerOutputValidation;
 };
 
 /**
@@ -39,7 +51,7 @@ export async function runStageOnce(
   stage: WorkflowStage,
   state: PipelineState,
   options: RunStageOnceOptions,
-): Promise<{ output: string; retries: number; interrupted?: WorkflowInterrupt }> {
+): Promise<StageOnceOutcome> {
   const handler = stage.atom !== undefined ? options.handlers.lookup(stage.atom) : undefined;
   let output = "";
   let retries = 0;
@@ -96,5 +108,20 @@ export async function runStageOnce(
     // 用结构化标记前缀（而非中文字面量），避免与 executor 正常输出冲突。
     output = `[WORKFLOW_DEGRADED] ${stage.id}: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
   }
-  return { output, retries };
+  // Worker 契约校验（仅提示，不改变 degraded 判定）：stage.worker 声明且命中目录时，
+  // 用 requiredFields 子串校验阶段产出；缺失清单附到结果供 HITL/审计展示。
+  let workerValidation: WorkerOutputValidation | undefined;
+  if (stage.worker !== undefined && output.trim().length > 0) {
+    const workers = options.workers ?? buildDefaultWorkerMap();
+    const contract = workers.get(stage.worker);
+    if (contract !== undefined) {
+      workerValidation = validateWorkerOutput(contract, output);
+    }
+  }
+  return { output, retries, workerValidation };
+}
+
+/** 构建 defaultPatentWorkers 目录（轻量；runWorkflow 复用同一 Map 避免重复构建）。 */
+export function buildDefaultWorkerMap(): Map<string, WorkerContract> {
+  return new Map(defaultPatentWorkers().map(worker => [worker.name, worker]));
 }

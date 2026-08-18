@@ -7,6 +7,7 @@
  */
 
 import type { AtomRegistry, StageHandlerRegistry, StageProvider } from "../atoms/index.js";
+import type { WorkerMonitor } from "../worker-contract.js";
 
 export type WorkflowStrategy = "chain" | "react" | "sub_agent";
 
@@ -19,6 +20,12 @@ export type WorkflowStage = {
    * 声明后 runWorkflow 按 atom 分发到 StageHandler；缺省回退 executor。
    */
   atom?: string;
+  /**
+   * 可选：Worker 契约名（defaultPatentWorkers 目录，如 "patent-search-commander"）。
+   * 声明且命中目录时，阶段产出经 validateWorkerOutput 校验 requiredFields，
+   * 结果附加到 WorkflowStageResult.workerValidation（仅提示，不改变 degraded 判定）。
+   */
+  worker?: string;
   /**
    * 可选：传递给 StageHandler 的静态参数（执行前合并进 PipelineState，handler 经 state 读取）。
    * 用于同一原子在不同阶段的差异化配置（如 extract 三路的 output_key / extraction_type）。
@@ -81,6 +88,19 @@ export type WorkflowRunOptions = {
   persist?: WorkflowRunStore;
   /** 持久化键（runId），用于区分同一 manifest 的多次执行；缺省 manifestId。 */
   runId?: string;
+  /**
+   * Worker 执行监控（可选）：声明 worker 契约的阶段产出校验后记录执行统计。
+   * 仅当 stage.worker 命中 defaultPatentWorkers 目录时产生记录。
+   */
+  monitor?: WorkerMonitor;
+  /**
+   * 断点续跑（可选）：提供上次中断的检查点后，跳过已完成阶段（从检查点恢复
+   * 阶段输出与 state），从 stageIndex 继续执行；配合 approvalGrants 实现
+   * "批准审批门后续跑"。见 ./workflow/checkpoint.js。
+   */
+  resumeFrom?: ManifestCheckpoint;
+  /** 断点续跑：每阶段完成后保存检查点（可选）。 */
+  checkpointStore?: ManifestCheckpointStore;
 };
 
 export type WorkflowStageResult = {
@@ -92,6 +112,16 @@ export type WorkflowStageResult = {
   retries: number;
   /** 该阶段声明的原子名（如有） */
   atom?: string;
+  /**
+   * 该阶段声明的 worker 契约校验结果（worker 字段命中 defaultPatentWorkers 时）。
+   * 仅提示（缺失字段清单），不改变 degraded 判定。
+   */
+  workerValidation?: {
+    workerName: string;
+    valid: boolean;
+    missingHardFields: string[];
+    missingSoftFields: string[];
+  };
 };
 
 export type WorkflowInterrupt = {
@@ -119,10 +149,51 @@ export type WorkflowRunResult = {
  * save/load/list 三接口；此处持久化对象为 patent 域的 WorkflowRunResult）。
  * 实现见 ./workflow-store.js（InMemory / JsonFile 两种后端）。
  */
-export interface WorkflowRunStore {
+export type WorkflowRunStore = {
   saveRun(result: WorkflowRunResult, runId?: string): Promise<void>;
   loadRun(runId: string): Promise<WorkflowRunResult | undefined>;
   listRuns(): Promise<string[]>;
+};
+
+// ---------------------------------------------------------------------------
+// 断点续跑（T10）：ManifestCheckpoint 与存储（对齐 graph 的 CheckpointStore 语义）
+// ---------------------------------------------------------------------------
+
+/** 已完成的阶段结果快照（用于 resume 恢复结果列表）。 */
+export type ManifestCheckpointStage = {
+  stageId: string;
+  strategy: WorkflowStrategy;
+  output: string;
+  degraded: boolean;
+  retries: number;
+  atom?: string;
+  workerValidation?: {
+    workerName: string;
+    valid: boolean;
+    missingHardFields: string[];
+    missingSoftFields: string[];
+  };
+};
+
+/** manifest 路径断点：已完成阶段 + 阶段间 state + 已放行审批门。 */
+export type ManifestCheckpoint = {
+  /** 检查点 id（持久化键，如 "caseX__patent_drafting_v1"）。 */
+  id: string;
+  manifestId: string;
+  /** 已完成阶段数（resume 从该索引继续；等价 completedStages.length）。 */
+  stageIndex: number;
+  completedStages: ManifestCheckpointStage[];
+  /** 阶段间 PipelineState（含各阶段产出键，不含 ctx 元数据）。 */
+  state: Record<string, unknown>;
+  /** 已人工放行的审批门阶段 id（resume 时经 approvalGrants 语义跳过）。 */
+  approvalGrants: string[];
+  updatedAt: string;
+};
+
+/** 断点存储契约（save/load 两接口；实现见 ./checkpoint.js）。 */
+export interface ManifestCheckpointStore {
+  save(checkpoint: ManifestCheckpoint): Promise<void>;
+  load(id: string): Promise<ManifestCheckpoint | undefined>;
 }
 
 export class WorkflowError extends Error {

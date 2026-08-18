@@ -234,10 +234,12 @@ export class WorkerMonitor {
 /**
  * Worker → 角色映射表（审计用）。
  *
- * 代码内 worker 契约（defaultPatentWorkers）与 skills/patent-* 的 type: role 角色
- * 是两套命名体系（kebab-case worker vs 角色 slug），语义存在对应但标识符分叉。
- * 本表显式记录对应关系，避免任一侧增删时静默漂移；`patent-oa-writer` 当前
- * 无对应 type: role 角色（OA 答复是技能 patent-oa-response 而非角色）。
+ * 代码内 worker 契约（defaultPatentWorkers）与 skills/patent-*、skills/provision-*
+ * 的 type: role 角色是两套命名体系（kebab-case worker vs 角色 slug），语义存在
+ * 对应但标识符分叉。本表显式记录对应关系，避免任一侧增删时静默漂移；
+ * `patent-oa-writer` 当前无对应 type: role 角色（OA 答复是技能 patent-oa-response
+ * 而非角色）。provision-* 条款 worker 为 SOP 工序角色（skills/provision-*，迭代三
+ * T8 补齐），经 agent 工具按 subagent_type 调度。
  */
 export const WORKER_ROLE_MAP: ReadonlyArray<{ worker: string; role?: string; note?: string }> = [
   { worker: "patent-technical-analyzer", role: "patent-analyzer", note: "PFE 三要素提取" },
@@ -246,6 +248,13 @@ export const WORKER_ROLE_MAP: ReadonlyArray<{ worker: string; role?: string; not
   { worker: "patent-inventiveness-analyzer", role: "patent-creativity-checker", note: "A22.3 三步法" },
   { worker: "quality_checker", role: "patent-quality-checker", note: "质量复核" },
   { worker: "patent-oa-writer", role: undefined, note: "无对应 type: role 角色（OA 答复为技能）" },
+  { worker: "provision-disclosure", role: "provision-disclosure", note: "P-A05 充分公开（T8 新增角色）" },
+  {
+    worker: "provision-drafting-claims",
+    role: "provision-drafting-claims",
+    note: "P-D01 权利要求撰写（T8 新增角色）",
+  },
+  { worker: "provision-drafting-spec", role: "provision-drafting-spec", note: "P-D02 说明书撰写（T8 新增角色）" },
 ];
 
 /** 内置专利 worker 目录（移植 Mady DefaultWorkers 的专利相关条目，工具名适配 Sati）。 */

@@ -52,9 +52,15 @@ export {
   type WorkflowRunOptions,
   type WorkflowRunStore,
   type WorkflowInterrupt,
+  type ManifestCheckpoint,
+  type ManifestCheckpointStage,
+  type ManifestCheckpointStore,
   WorkflowError,
   validateWorkflowManifest,
   runWorkflow,
+  JsonFileManifestCheckpointStore,
+  restoreFromCheckpoint,
+  stageToCheckpointStage,
   patentNoveltyManifest,
   patentDisclosureManifest,
   patentInventivenessManifest,
@@ -372,6 +378,7 @@ export {
 
 export {
   WorkerRegistry,
+  WorkerMonitor,
   validateWorkerOutput,
   defaultPatentWorkers,
   WORKER_ROLE_MAP,
