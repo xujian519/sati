@@ -4,13 +4,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBuiltinRegistry } from "../../../src/tool/registry/createBuiltinRegistry.js";
-import { TeamDb } from "../../../src/agent/team/index.js";
+import { TeamDb, type TeamScheduler } from "../../../src/agent/team/index.js";
 
 test("createBuiltinRegistry：team options 注入后 9 工具注册且 domain 正确", () => {
   const root = mkdtempSync(join(tmpdir(), "sati-registry-team-"));
   const db = new TeamDb(join(root, "teams.db"));
   try {
-    const scheduler = {} as never;
+    const scheduler = {} as TeamScheduler;
     const emit = () => true;
     const registry = createBuiltinRegistry({ team: { db, scheduler, emit } });
     const domains = new Map<string, string>();
@@ -44,9 +44,10 @@ test("createBuiltinRegistry：team options 注入后 9 工具注册且 domain �
     for (const name of ["team_update_task", "team_send_message", "team_status"]) {
       assert.equal(domains.get(name), "team", name);
     }
-    // 未传 team options 时不注册
+    // 未传 team options 时不注册；注册块是纯增量（恰好 9 个新工具）
     const plain = createBuiltinRegistry({});
     assert.equal(plain.get("team_create"), undefined);
+    assert.equal(registry.list().length - plain.list().length, 9);
   } finally {
     db.close();
     rmSync(root, { recursive: true, force: true });
