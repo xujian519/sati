@@ -99,15 +99,19 @@ test("transaction：提交成功全部生效；中途抛错整体回滚（T8 rev
     });
     assert.equal(db.isArchived("t1"), true);
     assert.equal(db.isRetired("team:t1:m1"), true);
-    // 回滚路径：事务内抛错后外状态不变（archivedAt 未置位 + 成员未退休）
+    // 回滚路径：失败事务内必须有真实写入（archiveTeam 对已归档团队是 WHERE 守卫下的 0 行 no-op，
+    // 单靠它钉不住 ROLLBACK）——insertRetired 为新 key 的真实 INSERT，抛错后断言其未生效，
+    // 若 transaction 助手没有 ROLLBACK 本用例即红。
     assert.throws(
       () =>
         db.transaction(() => {
+          db.insertRetired("team:t1:m99", "m99", "team_archived");
           db.archiveTeam("t1", "2026-08-20T01:00:00.000Z");
           throw new Error("boom");
         }),
       /boom/,
     );
+    assert.equal(db.isRetired("team:t1:m99"), false, "失败事务内的真实写入（insertRetired）已回滚");
     assert.equal(db.getTeam("t1")?.archivedAt, "2026-08-20T00:00:00.000Z", "第二次归档已回滚，保持首次提交值");
     assert.equal(db.isArchived("t1"), true);
     assert.equal(db.isRetired("team:t1:m1"), true, "成员退休保持首次提交值");
