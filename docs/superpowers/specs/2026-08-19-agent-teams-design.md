@@ -37,15 +37,15 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 
 | 需求 | 复用 |
 |---|---|
-| 成员会话执行 | AgentLoop（`src/agent/loop/AgentLoop.ts`） |
-| 转录即真源 | JsonlTranscriptWriter（`src/session/transcript/`，`forSubagent` 已派生 sidechain writer） |
+| 成员会话执行 | gateway.submitTurn 整条链（TurnRunner + PatentOutputGate + 事件广播），与 always-on/cron 同构（`src/agent/turn/TurnRunner.ts`，`src/gateway/`） |
+| 转录即真源 | JsonlTranscriptWriter（`src/session/transcript/`），成员转录独立子目录（见 L0） |
 | 冷恢复重放 | TaskResumeScanner 的 `restoreState`/`replayTranscriptEntries` 思路（`src/session/resume/`） |
-| idle 触发源 | `subagent_*` 事件面 + `subagent_status` 心跳（`src/agent/protocol/events.ts:103-130`） |
+| 成员回合事件 | 成员内部复用 AgentEvent 流（`subagent_*` 执行语义），对外映射为 TeamEvent 广播 |
 | LLM 路由快照 | `resolveModelInfo`（`src/model/resolveModelInfo.ts`） |
 | 权限 | PermissionRuntime + ToolGuard 链 + visibleDomains 裁剪（`src/permission/`、`src/agent/sub/scopeTools.ts`） |
-| 审批冒泡 | GatewayApprovalBus（`src/gateway/approval/`）+ 现有审批卡片 |
+| 审批冒泡 | GatewayApprovalBus + 新增跨会话转发层（见 L0）+ 现有审批卡片 |
 | 事件推送 | gateway 广播 `broadcastToSessionWatchers`（`ui/server/websocket/broadcast.js`） |
-| 成员-角色映射 | WORKER_ROLE_MAP（`src/patent/worker-contract.ts:244`）+ SKILL.md role 注册表 |
+| 成员-角色映射 | SKILL.md role 注册表（成员注册机制）+ WORKER_ROLE_MAP 仅作映射参考（`src/patent/worker-contract.ts:244`） |
 
 **一回合数据流**：队长 `team_create_task` → teams.db（磁盘真相）→ 成员回合结束 emit `member_idle` → 调度器 withTeamLock 原子认领 → `beginTaskAttempt(attemptId)` 写盘 → 邮箱投递 + followup 唤醒成员 → 成员从转录重建跑新一轮（独立会话）→ `team_update_task(attemptId)` 落盘 → 依赖解锁 → 下一轮认领。全程 TeamEvent 进事件矩阵 + gateway 广播 → UI 浮层渲染。
 
@@ -53,27 +53,28 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 
 **成员 = 独立持久化会话**（与主会话平级，非 sidechain）：
 
-- **创建**（`team_add_member`）：成员记录写入 teams.db（memberId、角色 slug、LLM 路由快照），首次唤醒创建转录（复用 JsonlTranscriptWriter 全链路，路径沿用会话级转录目录约定）
-- **唤醒**（followup）：从成员转录重建消息列表 → 追加 followup 消息 → `AgentLoop.run({sessionId: memberSessionId, turnId, messages, ...})` 跑一轮。turnId 单调递增（`${memberId}-t{n}`，与现有 `${subagentId}-t0` 格式同构）
+- **创建**（`team_add_member`）：成员记录写入 teams.db（memberId、角色 slug、LLM 路由快照），首次唤醒创建转录。**转录隔离**：成员转录写独立子目录（项目 chatDir 下 `members/<memberId>.jsonl`，`listProjectSessions` 不枚举子目录）——TaskResumeScanner 扫不到成员转录，成员的冷恢复由团队调度器独家负责，两个冷恢复机制互不打架
+- **唤醒**（followup）：从成员转录重建消息列表 → 追加 followup 消息 → 构造成员 sessionKey 的 `gateway.submitTurn`（与 TaskResumeScanner 的 `submitResumeTurn` 接线同构）跑一轮。**不直接拼 AgentLoop**——必须走 submitTurn 整条链，保住 TurnRunner 内的 PatentOutputGate（审批门禁）、事件广播与 usage 记账。turnId 单调递增（`${memberId}-t{n}`，与现有 `${subagentId}-t0` 格式同构）
 - **LLM 路由快照**：创建时 `resolveModelInfo` 解析 provider/model/reasoningEffort 持久化；冷恢复时同步读取恢复同一路由；跨路由用目标模型默认档（不继承不适用 effort）
 - **冷恢复**：gateway 启动时调度器扫描 teams.db——成员状态从磁盘重建（idle/working）；stranded 任务（claimed/in_progress 但成员 idle 或不在）→ invalidate 旧 capability → 生成新 attempt 重新认领
-- **退休 deny-list**：`team_remove_member` 记录到 `retired_members`，拦截冷恢复意外复活
-- **成员空闲信号**：成员回合正常结束（无 pending followup）→ emit 成员 idle（复用 subagent_status 心跳机制扩展为"回合结束"边）→ 调度器触发
+- **退休 deny-list**：`team_remove_member` 记录到 `retired_members`，拦截冷恢复意外复活；转派 quiesce 与归档也复用此表拒绝迟到 update（见 L2）
+- **成员回合事件**：成员回合内部仍是 AgentEvent 流（subagent_* 执行语义保留），回合结束（无 pending followup）由调度器映射为 TeamEvent `member_idle` 广播——不在 subagent_* 事件面上扩展语义，避免"一次性 fork"与"持续成员"两套语义混用
+- **审批冒泡转发层**（新增组件，非纯复用）：GatewayApprovalBus 按 sessionKey 分桶，成员挂起的审批不会自动出现在队长 UI。新增转发层：成员 approval_pending → 转发到队长会话 watcher（审批卡片标注成员身份）→ 队长 approve/reject 经 `approvalDecide` 回写成员 sessionKey。M1 随底座落地（无审批场景可先空转）
 
 ## 三、L1 · 持久化 + 事件面
 
 **teams.db**（`~/.sati/teams/teams.db`，node:sqlite `DatabaseSync` + `db-version` 迁移模式，参照 `src/knowledge/shared/db-version.ts`）。知识库 knowledge.db 语义为只读消费，团队状态独立成库。
 
 表结构（首版最小集）：
-- `teams`（id、name、captainSessionId、createdAt、archivedAt?）
+- `teams`（id、name、captainSessionId、maxConcurrentMembers、createdAt、archivedAt?）
 - `members`（id、teamId、roleSlug、modelRoute JSON、status、sessionId）
-- `tasks`（id、teamId、title、description、status、dependencies JSON、assigneeId?、attempt、attemptId、handoffId?、blockedByCount、createdAt、updatedAt）
+- `tasks`（id、teamId、title、description、status、dependencies JSON、assigneeId?、attempt、attemptId、handoffId?、blockedByCount、maxAttempts、createdAt、updatedAt）
 - `messages`（teamId、from、to、body、deliveryClaimedAt?、deliveredAt?、readAt?）— 邮箱
-- `retired_members`（sessionId、memberId、reason）— 冷恢复 deny-list
+- `retired_members`（sessionId、memberId、reason）— 冷恢复 deny-list / quiesce 迟到写拒绝
 
-**TeamEvent 事件族**（`src/agent/team/protocol/events.ts`，进事件矩阵门禁）：`team_created` / `member_added` / `member_removed` / `member_status` / `member_idle` / `task_created` / `task_claimed` / `task_updated` / `task_completed` / `task_failed` / `message_delivered` / `team_archived` 等。全部事件入事件矩阵（`pnpm gen:event-matrix` 重新生成 + `check:event-matrix` 门禁），gateway 广播按会话扇出。
+**TeamEvent 事件族**（`src/agent/team/protocol/events.ts`，进事件矩阵门禁）：`team_created` / `member_added` / `member_removed` / `member_status` / `member_idle` / `task_created` / `task_claimed` / `task_updated` / `task_completed` / `task_failed` / `message_delivered` / `team_archived` 等。全部事件入事件矩阵（`pnpm gen:event-matrix` 重新生成 + `check:event-matrix` 门禁），gateway 广播按会话扇出。**gateway 协议不升版**：TeamEvent 复用现有事件广播通道（agent_event 帧），无新增方法，协议保持 1.3。
 
-**归档而非删除**：`team_delete` 把团队及任务/消息 move 到 archive（表内 `archivedAt` 标记或归档表），历史可回放复盘。
+**归档而非删除**：`team_delete` 前先 quiesce 全部活跃成员（cancel 当前回合 + retired 标记，同转派路径），随后把团队及任务/消息 move 到 archive（表内 `archivedAt` 标记或归档表），历史可回放复盘。
 
 ## 四、L2 · 任务池协议内核
 
@@ -81,7 +82,7 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 
 **attempt 能力机制**（dsh 最硬核设计，存储换 SQLite）：
 - 每次执行携带单调 `attempt` 计数 + 唯一 `attemptId`；`team_update_task` 必须携带当前 `attemptId`
-- **转派/重试**：先 `invalidateTaskAttempt`（清 attemptId、生成 `handoffId`、状态回 pending）→ 中断旧成员 → **等待其安静（quiesce）** → 才开启新 attempt——迟到更新永远无法覆盖新结果（stale-attempt 拒绝）
+- **转派/重试**：先 `invalidateTaskAttempt`（清 attemptId、生成 `handoffId`、状态回 pending）→ cancel 旧成员当前回合 + 写入 retired 标记（其后续 update 一律拒绝）→ 新 attempt 才开启。**quiesce 有收敛保证**：旧成员死循环不安静时超时（默认 60s）强制开启新 attempt，迟到更新由 stale-attempt 拒绝兜底——不依赖"旧成员主动安静"
 
 **并发安全**：per-team 内存锁（promise 链串行化，`withTeamLock`，参照 dsh scheduler 的原子认领）。Sati 单 gateway 进程常驻，无 dsh 的多进程文件不一致问题；SQLite 事务兜底持久层一致性。
 
@@ -89,6 +90,8 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 - 每次触发在锁内重读最新状态，找该成员的 owned open task（冷恢复重试）或 next ready task（依赖已满足，优先指派给自己的、其次未指派的）→ `beginTaskAttempt` 写盘 → 邮箱投递 + followup 唤醒
 - 唤醒失败回滚：仅回滚自己那次派发的 ticket（校验 attemptId），不覆盖并发队长的转派
 - **消息投递优先于新任务**：先 flush 未读邮箱（投递租约 60s 内不重复投递），成功才 ack；损坏行跳过不阻塞团队
+- **并发闸**：认领受 `teams.maxConcurrentMembers`（默认 4）限制，超闸任务保持 pending 排队——token 成本可控，不只靠"建议 3-5 成员"
+- **队长离线**：队长会话关闭时调度暂停认领（在途成员回合跑完即停）；队长会话恢复后调度自动恢复
 
 ## 五、L3 · 工具面 + 角色注册表
 
@@ -96,10 +99,11 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 
 | 工具 | 可见性 |
 |---|---|
-| `team_create` / `team_add_member` / `team_remove_member` / `team_create_task` / `team_reassign_task` / `team_delete` | 仅队长 |
-| `team_claim_task` / `team_update_task` / `team_send_message` / `team_status` | 队长 + 成员 |
+| `team_create` / `team_add_member` / `team_remove_member` / `team_create_task` / `team_claim_task` / `team_reassign_task` / `team_delete` | 仅队长 |
+| `team_update_task` / `team_send_message` / `team_status` | 队长 + 成员 |
 
 - `team_create_task` 支持 `dependencies` + `assignee`
+- `team_claim_task` 仅队长：语义 = 指派任务给指定成员（提前锁定 assignee）。成员侧不暴露——认领由调度器独家负责，消除手动 claim 与自动认领的双路径竞态（dsh 是纯手动 claim；Sati 自动为主，队长 claim 仅作指派）
 - `team_reassign_task` `assignee=captain` 即队长接管
 - `team_send_message` 拒绝冒名 from
 - 成员工具面按角色 domain 裁剪（沿用 `visibleDomains`/`hiddenDomains`，scopeTools.ts 逻辑）；`team_*` 管理类工具在成员侧隐藏
@@ -120,6 +124,8 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 
 角色定义 = tools/domains/omitTools/systemPrompt；成员实例参数 = model/reasoningEffort（路由快照）。
 
+**注册机制（两套体系不混用）**：成员角色一律经 SKILL.md `type: role` 注册表注册（`registerRoleDefinition`）——上表「现有 worker/角色」列仅表示对齐关系。WORKER_ROLE_MAP 属专利 workflow 的 worker 契约（`validateWorkerOutput` 语境），不是成员注册机制，只作映射参考不直接复用。
+
 ## 六、L4 · 活动面板
 
 **位置与形态**：右上角浮层（`ChatHistorySearchBar` top-4 right-4 定位先例）+ 折叠浮标（团队进度 + 活跃成员点）；展开浮层：团队进度条 + 成员列表（状态/当前任务/未读邮箱角标）+ 紧凑任务 DAG + 归档回放入口。Esc 或点击外部收起。
@@ -129,7 +135,7 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 - 连线：quadratic bezier 曲线，hover 高亮上下游链（上游/下游节点 + 连线），点击固定、Esc 取消
 - `prefers-reduced-motion` 尊重；键盘可聚焦
 
-**数据通道**：gateway 事件推送——TeamEvent 经 `broadcastToSessionWatchers` 按会话扇出；低频团队状态事件走 `latestMessage`（自动过滤流式噪声），DAG 结构刷新与成员状态走 `subscribe()` 逐帧。**不轮询**（与 dsh 1s 轮询的妥协区别）。
+**数据通道**：gateway 事件推送——TeamEvent 经 `broadcastToSessionWatchers` 按会话扇出。**全部走 `subscribe()` 逐帧通道**，不走 `latestMessage` 单槽（latestMessage 是覆盖语义，7 成员状态突发时会丢帧）；流式噪声过滤逻辑下沉到 team-panel 自己的消费层。**不轮询**（与 dsh 1s 轮询的妥协区别）。
 
 **组件**：`ui/src/components/team-panel/`（view/hooks/types/constants/utils feature-folder），状态管理沿用 Context + useState（无 zustand，参照 `TaskMasterContext` 模式）；i18n 新增 `team.json` namespace（en + zh-CN 双注册，注意 zh-CN 现有 tasks namespace 未注册的坑）。
 
@@ -141,15 +147,16 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 | 转派竞争 | 全程持锁 + handoffId 校验后才提交 |
 | 唤醒失败 | 只回滚自己的 ticket（校验 attemptId），不覆盖并发转派 |
 | 模型不守仪式 | 面板如实反映磁盘真相，队长以 status/文件为准汇总 |
-| 成员回合失败 | 任务回 pending + 重试上限 → 超限转派/队长接管 |
+| 成员回合失败 | 任务回 pending + per-task `maxAttempts`（默认 3，可配）→ 超限转派/队长接管 |
 | 成员死循环 | doomloop_signal 硬断 + repeatToolReminder 软提醒（沿用） |
-| 权限 | PermissionRuntime + ToolGuard 链沿用；成员审批冒泡到队长会话 → 用户审批卡片 |
+| 权限 | PermissionRuntime + ToolGuard 链沿用；成员审批经转发层冒泡到队长会话 → 用户审批卡片（标注成员身份） |
+| 队长离线 | 调度暂停认领；审批挂起超时（默认 30 分钟）自动转派回队长队列；会话恢复后调度自动恢复 |
 | 邮箱损坏行 | 跳过不阻塞团队 |
 | 进程重启 | 冷恢复扫描（见 L0） |
 
 ## 八、测试与验证
 
-1. **单元测试**：任务状态机转移表（非法迁移拒绝）、attempt 迟到写拒绝、邮箱投递租约、调度器认领顺序、DAG 分层布局纯函数
+1. **单元测试**：任务状态机转移表（非法迁移拒绝）、attempt 迟到写拒绝、邮箱投递租约、调度器认领顺序（含并发闸/队长离线暂停）、maxAttempts 超限转派、DAG 分层布局纯函数、成员转录与 TaskResumeScanner 的隔离（不被误扫）
 2. **故障注入验证矩阵**（`scripts/team-stress-verify.mjs`，dsh 式）：8 成员 × 31 节点多层 DAG + 并发接管/移除 + 迟到写入风暴（50 次）+ 冷重启（4 开放任务）+ 认领竞争（7 路）+ 终态覆盖（40 次）+ 消息突发（42 条）+ 最终归档
 3. **真实专利案例 E2E**：申请案 4-7 角色并行（检索→分析→撰写→审查）跑通 + 面板全程可视化 + 归档回放
 4. **UI 单测**：浮层组件渲染 + DAG 布局纯函数 + mock gateway 事件（参照 `useChatRealtimeHandlers.test.tsx` 模式）
@@ -159,7 +166,7 @@ UI：`ui/src/components/team-panel/`（feature-folder）。
 
 | 里程碑 | 内容 | 验证出口 |
 |---|---|---|
-| M1 | L0 durable 成员底座（创建/唤醒/冷恢复/路由快照 + 单测） | 单测 + 手动续聊 |
+| M1 | L0 durable 成员底座（创建/唤醒/冷恢复/路由快照/转录隔离/审批转发层 + 单测） | 成员会话冷恢复单测 + 与 TaskResumeScanner 的隔离测试（成员转录不被误扫）+ 手动续聊 |
 | M2 | L1+L2 协议（任务池/attempt/邮箱/调度 + teams.db + TeamEvent） | 单测 + 故障注入矩阵 |
 | M3 | L3 工具面 + 角色注册表（7 角色对齐/新增 + 提示词协议） | 工具单测 + llm-replay 重录 |
 | M4 | L4 活动面板（浮层 + SVG DAG + 事件推送 + i18n） | UI 单测 + 真实案例 E2E |
