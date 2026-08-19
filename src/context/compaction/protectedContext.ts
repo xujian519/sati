@@ -1,4 +1,5 @@
 import type { CanonicalMessage } from "../../model/index.js";
+import { isRealUserRequestMessage } from "./toolPairIntegrity.js";
 
 export const DEFAULT_PROTECTED_TOOL_RESULT_NAMES: ReadonlySet<string> = new Set([
   "read_skill",
@@ -94,9 +95,24 @@ export function collectProtectedTurnIndexes(
       )
     ) {
       protectedIndexes.add(turn.index);
+      // 被保护 turn 前面的最近用户请求 turn 一并保留（#513）：保护内容
+      // 保留其发起请求锚点，模型仍能定位该保护 turn 的任务来源。
+      const requestAnchorIndex = findLatestUserRequestTurnIndex(turns, turn.index);
+      if (requestAnchorIndex !== undefined) {
+        protectedIndexes.add(requestAnchorIndex);
+      }
     }
   }
   return protectedIndexes;
+}
+
+function findLatestUserRequestTurnIndex(turns: MessageTurn[], atOrBefore: number): number | undefined {
+  for (let index = Math.min(atOrBefore, turns.length - 1); index >= 0; index -= 1) {
+    if (turns[index]!.messages.some(isRealUserRequestMessage)) {
+      return turns[index]!.index;
+    }
+  }
+  return undefined;
 }
 
 export function isProtectedContextMessage(

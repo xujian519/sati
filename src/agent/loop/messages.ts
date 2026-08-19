@@ -4,6 +4,7 @@
  * 全部为确定性消息变换，无运行期状态；可独立测试。
  */
 
+import { truncateHeadPreservingCheckpoint } from "../../context/compaction/CompactionEngine.js";
 import {
   messageContent,
   textFromMessage,
@@ -66,11 +67,9 @@ export function appendPlanModeReminder(messages: CanonicalMessage[]): CanonicalM
   ];
 }
 
-/** Keep only the trailing `keepRatio` portion of the message history. */
+/** Keep a bounded tail without dropping the user request that initiated it. */
 export function truncateHeadKeepRatio(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
-  const ratio = Math.max(0.05, Math.min(1, keepRatio));
-  const keep = Math.max(1, Math.floor(messages.length * ratio));
-  return messages.slice(-keep);
+  return truncateHeadPreservingCheckpoint(messages, keepRatio);
 }
 
 /**

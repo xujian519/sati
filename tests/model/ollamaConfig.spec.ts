@@ -94,8 +94,8 @@ test("Ollama provider builds OpenAI-compatible chat completions body", () => {
 
   assert.equal(body.model, "llama3.1:8b");
   assert.equal(body.stream, true);
-  // 模型能力不再来自写死的 catalog 条目：maxOutputTokens 回落协议默认 65536。
-  assert.equal(body.max_tokens, 65536);
+  // 模型能力不再来自写死的 catalog 条目：maxOutputTokens 回落协议默认 32768。
+  assert.equal(body.max_tokens, 32768);
   assert.deepEqual(body.messages, [
     { role: "system", content: "You are concise." },
     { role: "user", content: "hello" },

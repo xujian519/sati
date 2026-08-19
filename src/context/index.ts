@@ -82,6 +82,7 @@ export {
   COMPACT_SYSTEM_PROMPT_DEFAULT,
   buildPostCompactMessages,
   truncateHead,
+  truncateHeadPreservingCheckpoint,
   type CompactionEngineOptions,
   type CompactionInput,
   type CompactionResult,

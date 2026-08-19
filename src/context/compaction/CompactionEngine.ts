@@ -13,6 +13,7 @@ import {
   collectToolCallIds,
   collectToolResultIds,
   ensureTrailingUserMessage,
+  isRealUserRequestMessage,
   stripUnpairedToolCalls,
   stripUnpairedToolResults,
 } from "./toolPairIntegrity.js";
@@ -26,6 +27,7 @@ import {
 import {
   buildMarkdownSummarySystemPrompt,
   buildMarkdownSummaryUserPrompt,
+  COMPACT_SUMMARY_PREFIX,
   validateSummaryMarkdownStructure,
   wrapSummaryMessage,
 } from "./summaryBuilders.js";
@@ -406,6 +408,12 @@ function planFullCompactionMessages(
   const prefixTurns = turns.slice(0, tailStartTurn);
   const tail = turns.slice(tailStartTurn).flatMap(turn => turn.messages);
   const protectedIndexes = collectProtectedGroupIndexes(prefixTurns, { protectedToolNames });
+  // 保留被遮蔽区段中最近的用户请求组：压缩后尾部若无请求锚点，模型失去
+  // "这次任务是谁发起的"上下文，恢复请求无法定位当前任务（#513）。
+  const requestAnchorIndex = findLatestUserRequestGroupIndex(turns, tailStartTurn);
+  if (requestAnchorIndex !== undefined && requestAnchorIndex < tailStartTurn) {
+    protectedIndexes.add(requestAnchorIndex);
+  }
   const protectedMessages: CanonicalMessage[] = [];
   const messagesToSummarize: CanonicalMessage[] = [];
   // 被遮蔽消息的原始索引（分组保序切分原始数组，游标累计即原始位置）。
@@ -462,6 +470,106 @@ export function truncateHead(messages: CanonicalMessage[], keepRatio: number): C
   const ratio = clamp(keepRatio, 0.05, 1);
   const keep = Math.max(1, Math.floor(messages.length * ratio));
   return messages.slice(-keep);
+}
+
+/**
+ * Tail truncation that keeps the most recent user request that initiated the
+ * kept suffix. Without the anchor, the model loses "who started this task"
+ * context and cannot locate the current task after head truncation (#513).
+ */
+function truncateTailPreservingToolPairs(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
+  if (messages.length === 0) return [];
+  const rawTail = truncateHead(messages, keepRatio);
+  const tailStartIndex = messages.length - rawTail.length;
+  let requestAnchorIndex: number | undefined;
+  for (let index = tailStartIndex; index >= 0; index -= 1) {
+    if (isRealUserRequestMessage(messages[index]!)) {
+      requestAnchorIndex = index;
+      break;
+    }
+  }
+  const liveTail =
+    requestAnchorIndex !== undefined && requestAnchorIndex < tailStartIndex
+      ? [messages[requestAnchorIndex]!, ...rawTail]
+      : rawTail;
+  const resultIds = collectToolResultIds(liveTail);
+  const pairedCalls = stripUnpairedToolCalls(liveTail, resultIds);
+  const callIds = collectToolCallIds(pairedCalls);
+  return stripUnpairedToolResults(pairedCalls, callIds);
+}
+
+/**
+ * Emergency projection that keeps accepted checkpoint messages before the
+ * newest live suffix. Used only after summary and snip could not fit.
+ */
+export function truncateHeadPreservingCheckpoint(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
+  const checkpoint = splitCheckpointPrefix(messages);
+  if (checkpoint.stablePrefix.length === 0) {
+    return ensureTrailingUserMessage(truncateTailPreservingToolPairs(messages, keepRatio));
+  }
+  return ensureTrailingUserMessage([
+    ...checkpoint.stablePrefix,
+    ...truncateTailPreservingToolPairs(checkpoint.liveMessages, keepRatio),
+  ]);
+}
+
+/**
+ * Split the accepted checkpoint prefix (boundary + summary pairs) from the
+ * live messages. Legacy snapshots may contain multiple boundary/summary
+ * pairs; collect every accepted summary so the next successful pass can
+ * replace them with one rolling checkpoint.
+ */
+function splitCheckpointPrefix(messages: CanonicalMessage[]): {
+  stablePrefix: CanonicalMessage[];
+  previousSummaries: CanonicalMessage[];
+  liveMessages: CanonicalMessage[];
+} {
+  let index = 0;
+  const previousSummaries: CanonicalMessage[] = [];
+  while (
+    index + 1 < messages.length &&
+    isCompactBoundaryMessage(messages[index]!) &&
+    isWrappedSummaryMessage(messages[index + 1]!)
+  ) {
+    previousSummaries.push(messages[index + 1]!);
+    index += 2;
+  }
+  return {
+    stablePrefix: messages.slice(0, index),
+    previousSummaries,
+    liveMessages: messages.slice(index),
+  };
+}
+
+function isCompactBoundaryMessage(message: CanonicalMessage): boolean {
+  return (
+    message.role === "user" &&
+    message.content.some(block => block.type === "text" && block.text.startsWith("<compact-boundary"))
+  );
+}
+
+function isWrappedSummaryMessage(message: CanonicalMessage): boolean {
+  return (
+    message.role === "assistant" &&
+    message.content.some(block => block.type === "text" && block.text.startsWith(COMPACT_SUMMARY_PREFIX))
+  );
+}
+
+/**
+ * Find the most recent group (at or before `atOrBefore`) that contains a
+ * real end-user request, so truncation can keep the request that initiated
+ * the retained tail.
+ */
+function findLatestUserRequestGroupIndex(
+  groups: Array<{ index: number; messages: CanonicalMessage[] }>,
+  atOrBefore: number,
+): number | undefined {
+  for (let index = Math.min(atOrBefore, groups.length - 1); index >= 0; index -= 1) {
+    if (groups[index]!.messages.some(isRealUserRequestMessage)) {
+      return groups[index]!.index;
+    }
+  }
+  return undefined;
 }
 
 function clamp(value: number, min: number, max: number): number {

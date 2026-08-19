@@ -3,6 +3,7 @@ import {
   collectToolCallIds,
   collectToolResultIds,
   ensureTrailingUserMessage,
+  isRealUserRequestMessage,
   stripUnpairedToolCalls,
   stripUnpairedToolResults,
 } from "./toolPairIntegrity.js";
@@ -103,12 +104,15 @@ export class SnipEngine {
     for (let index = 0; index < Math.min(this.keepHeadTurns, turns.length); index += 1) {
       keepIndexes.add(index);
     }
-    for (
-      let index = Math.max(this.keepHeadTurns, turns.length - this.keepTailTurns);
-      index < turns.length;
-      index += 1
-    ) {
+    const tailStartIndex = Math.max(this.keepHeadTurns, turns.length - this.keepTailTurns);
+    for (let index = tailStartIndex; index < turns.length; index += 1) {
       keepIndexes.add(index);
+    }
+    // 保留被剪区段中最近的用户请求 turn：snip 后模型仍能定位发起当前任务的
+    // 请求锚点（#513）。
+    const requestAnchorIndex = findLatestUserRequestGroupIndex(turns, tailStartIndex);
+    if (requestAnchorIndex !== undefined) {
+      keepIndexes.add(requestAnchorIndex);
     }
     for (const index of collectProtectedTurnIndexes(messages, {
       protectedToolNames: this.protectedToolNames,
@@ -192,6 +196,15 @@ function stitchKeptTurnsWithBoundaries(
     out.push(createSnipBoundary(skipped, headTurns, tailTurns));
   }
   return out;
+}
+
+function findLatestUserRequestGroupIndex(groups: CanonicalMessage[][], atOrBefore: number): number | undefined {
+  for (let index = Math.min(atOrBefore, groups.length - 1); index >= 0; index -= 1) {
+    if (groups[index]!.some(isRealUserRequestMessage)) {
+      return index;
+    }
+  }
+  return undefined;
 }
 
 function isToolResultOnly(message: CanonicalMessage): boolean {

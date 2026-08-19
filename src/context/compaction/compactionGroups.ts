@@ -4,6 +4,7 @@
 
 import type { CanonicalMessage } from "../../model/index.js";
 import { collectToolNamesByCallId, isProtectedContextMessage } from "./protectedContext.js";
+import { isRealUserRequestMessage } from "./toolPairIntegrity.js";
 
 export function splitMessagesIntoCompactionGroups(
   messages: CanonicalMessage[],
@@ -90,7 +91,7 @@ function hasProtectedContextMessage(
 }
 
 function isStandaloneUserRequestGroup(messages: CanonicalMessage[]): boolean {
-  return messages.length === 1 && messages[0]!.role === "user" && !isToolResultOnlyMessage(messages[0]!);
+  return messages.length === 1 && isRealUserRequestMessage(messages[0]!);
 }
 
 function isToolResultOnlyMessage(message: CanonicalMessage): boolean {

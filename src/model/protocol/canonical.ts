@@ -140,6 +140,8 @@ export type CanonicalMessageMetadata = {
   /** Message replaces compacted history and is omitted from the visible transcript. */
   compactReplacement?: boolean;
   purpose?: string;
+  /** Originating tool call for projected supplemental result messages. */
+  toolCallId?: string;
   forkCarryover?: {
     sourceSessionId: string;
     sourceTurnId?: string;
