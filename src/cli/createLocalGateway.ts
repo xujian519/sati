@@ -15,6 +15,7 @@ import {
   type CreateAgentSessionOptions,
 } from "../agent/index.js";
 import { resolveRoutedModelMaxContextTokens } from "../agent/runtime/modelContextWindow.js";
+import type { TeamToolsOptions } from "../tool/builtin/team/index.js";
 import {
   TeamApprovalForwarder,
   TeamDb,
@@ -582,6 +583,14 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 先成员扫描（唤醒断点成员续算原 attempt）后 stranded 扫描（invalidate + re-claim），
   // 避免双扫描交错对同一成员双重唤醒（scanTeamMembers 内另有唤醒前状态复查兜底）。
   // fire-and-forget，不阻塞 gateway 启动；无成员时扫描立即空转结束。
+  // M3 Task 9：team_* 工具装配——setter 注入（teamDb/teamScheduler 构造晚于首次
+  // resolve，注入后 invalidate 清缓存，会话创建重建 runtime 时经 createBuiltinRegistry
+  // options.team 注册 9 工具）。emit 与 TeamScheduler 构造（上方）同构：TeamEvent → gateway 广播。
+  registry.setTeamTools({
+    db: teamDb,
+    scheduler: teamScheduler,
+    emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),
+  });
   void (async () => {
     teamDb.resetMemberStatuses();
     await runMemberScan();
@@ -750,6 +759,8 @@ class ProjectRuntimeRegistry {
   private readonly sessionWriters = new Map<string, import("../session/index.js").AgentTranscriptWriter>();
   private _extraTools: SatiToolDefinition[];
   private _sessionOverrides: SessionConfigOverrides | undefined;
+  /** team_* 工具装配（M3）：createLocalGateway 经 setTeamTools 注入，resolve 时透传 createBuiltinRegistry。 */
+  private teamTools?: TeamToolsOptions;
   private readonly sharedSessionStore = new SessionRouterStore({
     now: () => this.options.now().getTime(),
   });
@@ -925,6 +936,19 @@ class ProjectRuntimeRegistry {
   }
 
   /**
+   * 团队工具装配（M3 Task 9）：teamDb/teamScheduler 在 createLocalGateway 函数体内
+   * 构造，晚于本类首次 resolve()，故经 setter 注入并 invalidate 清缓存——后续会话
+   * 创建重建 runtime 时 createBuiltinRegistry 收到 options.team，注册 9 个 team_*
+   * 工具（管理面 6 工具 domain "team:manage"、作业面 3 工具 domain "team"）。
+   * 与配置热重载的 invalidate 语义一致；注入时点无会话消费者（model router /
+   * memoryService 随重建恢复）。
+   */
+  setTeamTools(team: TeamToolsOptions): void {
+    this.teamTools = team;
+    this.invalidate();
+  }
+
+  /**
    * Set the working directory override for a specific session.
    * Used by the Web UI execution path to point an agent session at
    * an isolated workspace (git-worktree / snapshot-copy) without
@@ -1012,6 +1036,7 @@ class ProjectRuntimeRegistry {
     });
 
     const tools = createBuiltinRegistry({
+      ...(this.teamTools ? { team: this.teamTools } : {}),
       backgroundTasks: { runtime: backgroundTasks },
       searchPatentFigure: { embeddingClient },
       ...(memory?.service ? { memory: { service: memory.service } } : {}),
