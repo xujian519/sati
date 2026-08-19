@@ -83,17 +83,16 @@ async function validateSkill(skillDir) {
 
   // HTML 模板元数据校验（可选）：mode/scenario/surface 未知时 warn；preview 文件缺失时 hard。
   if (fm.mode || fm.scenario || fm.surface || fm.preview || fm.design_system) {
-    const modes = new Set(["doc", "deck", "data-report", "poster", "social-card", "prototype", "office", "frame"]);
-    const scenarios = new Set(["patent", "legal", "finance", "product", "operation", "design", "personal"]);
-    const surfaces = new Set(["long-page", "a4", "16:9", "1600x900", "1080x1920", "auto"]);
-    if (typeof fm.mode === "string" && !modes.has(fm.mode)) {
-      issues.push(`warn: ${slug} mode "${fm.mode}" is not in the known enum`);
-    }
-    if (typeof fm.scenario === "string" && !scenarios.has(fm.scenario)) {
-      issues.push(`warn: ${slug} scenario "${fm.scenario}" is not in the known enum`);
-    }
-    if (typeof fm.surface === "string" && !surfaces.has(fm.surface)) {
-      issues.push(`warn: ${slug} surface "${fm.surface}" is not in the known enum`);
+    const enums = [
+      ["mode", new Set(["doc", "deck", "data-report", "poster", "social-card", "prototype", "office", "frame"])],
+      ["scenario", new Set(["patent", "legal", "finance", "product", "operation", "design", "personal"])],
+      ["surface", new Set(["long-page", "a4", "16:9", "1600x900", "1080x1920", "auto"])],
+    ];
+    for (const [key, allowed] of enums) {
+      const value = fm[key];
+      if (typeof value === "string" && !allowed.has(value)) {
+        issues.push(`warn: ${slug} ${key} "${value}" is not in the known enum`);
+      }
     }
     if (typeof fm.preview === "string" && fm.preview.trim()) {
       const previewPath = join(skillDir, fm.preview);

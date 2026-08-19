@@ -73,13 +73,18 @@ function readInput(input) {
   return abs;
 }
 
+/** 解析输出路径（缺省时替换输入文件扩展名）并确保父目录存在。 */
+function prepareOutput(input, output, fallbackExt) {
+  const abs = safeOutputPath(output ?? input.replace(extname(input), fallbackExt));
+  mkdirSync(dirname(abs), { recursive: true });
+  return abs;
+}
+
 async function exportWechat(input, output) {
   const { default: juice } = await import("juice");
   const html = readFileSync(input, "utf8");
   const inlined = juice(html, { preserveMediaQueries: true, applyStyleTags: true, removeStyleTags: false });
-  const out = output ?? input.replace(extname(input), "-wechat.html");
-  const abs = safeOutputPath(out);
-  mkdirSync(dirname(abs), { recursive: true });
+  const abs = prepareOutput(input, output, "-wechat.html");
   writeFileSync(abs, inlined, "utf8");
   console.log(`WeChat HTML: ${abs}`);
 }
@@ -94,9 +99,7 @@ function chromeFlags(args) {
 async function exportPng(input, output, width, height) {
   const chrome = findChrome();
   if (!chrome) fail("Chrome/Chromium not found (set SATI_CHROME_PATH or CHROME_PATH)");
-  const out = output ?? input.replace(extname(input), ".png");
-  const abs = safeOutputPath(out);
-  mkdirSync(dirname(abs), { recursive: true });
+  const abs = prepareOutput(input, output, ".png");
   const flags = [
     "--headless",
     "--disable-gpu",
@@ -116,9 +119,7 @@ async function exportPng(input, output, width, height) {
 async function exportPdf(input, output) {
   const chrome = findChrome();
   if (!chrome) fail("Chrome/Chromium not found (set SATI_CHROME_PATH or CHROME_PATH)");
-  const out = output ?? input.replace(extname(input), ".pdf");
-  const abs = safeOutputPath(out);
-  mkdirSync(dirname(abs), { recursive: true });
+  const abs = prepareOutput(input, output, ".pdf");
   const flags = [
     "--headless",
     "--disable-gpu",
@@ -135,14 +136,11 @@ async function exportPdf(input, output) {
 }
 
 function exportZhihu(input, output) {
-  let html = readFileSync(input, "utf8");
-  html = html.replace(/<mjx-container[^>]*>([\s\S]*?)<\/mjx-container>/gi, (_m, inner) => {
+  const html = readFileSync(input, "utf8").replace(/<mjx-container[^>]*>([\s\S]*?)<\/mjx-container>/gi, (_m, inner) => {
     const encoded = Buffer.from(inner.replace(/<[^>]*>/g, "")).toString("base64");
     return `<span data-eeimg="1" data-formula="${encoded}"></span>`;
   });
-  const out = output ?? input.replace(extname(input), "-zhihu.html");
-  const abs = safeOutputPath(out);
-  mkdirSync(dirname(abs), { recursive: true });
+  const abs = prepareOutput(input, output, "-zhihu.html");
   writeFileSync(abs, html, "utf8");
   console.log(`Zhihu HTML: ${abs}`);
 }

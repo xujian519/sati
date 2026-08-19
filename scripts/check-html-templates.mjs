@@ -13,7 +13,7 @@
 // 退出码：0 通过；1 hard 失败；2 仅 warning。
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +29,14 @@ const PLACEHOLDER_PATTERNS = [
   /此处填[写入]?/,
   /〔?占位[符文]?/,
 ];
+
+function hard(issues, message) {
+  issues.push(`hard: ${message}`);
+}
+
+function warn(issues, message) {
+  issues.push(`warn: ${message}`);
+}
 
 function parseFrontmatter(content) {
   if (!content.startsWith("---")) return {};
@@ -48,49 +56,47 @@ function isHtmlTemplateDir(dir) {
   if (!existsSync(skillPath)) return false;
   const content = readFileSync(skillPath, "utf8");
   const fm = parseFrontmatter(content);
-  return /^html-/.test(dir) || Boolean(fm.mode);
+  return basename(dir).startsWith("html-") || Boolean(fm.mode);
 }
 
 function checkHtmlFile(htmlPath, issues) {
-  let html;
-  try {
-    html = readFileSync(htmlPath, "utf8");
-  } catch {
-    issues.push(`hard: missing example.html: ${htmlPath}`);
+  if (!existsSync(htmlPath)) {
+    hard(issues, `missing example.html: ${htmlPath}`);
     return;
   }
+  const html = readFileSync(htmlPath, "utf8");
   const trimmed = html.trim();
   if (!trimmed.startsWith("<!DOCTYPE html") && !trimmed.startsWith("<!doctype html")) {
-    issues.push(`hard: ${htmlPath} must start with <!DOCTYPE html>`);
+    hard(issues, `${htmlPath} must start with <!DOCTYPE html>`);
   }
   if (!html.includes("</html>")) {
-    issues.push(`hard: ${htmlPath} must end with </html>`);
+    hard(issues, `${htmlPath} must end with </html>`);
   }
   if (!/<html[^>]*\blang=["']?[A-Za-z-]+/i.test(html)) {
-    issues.push(`warn: ${htmlPath} should declare a lang attribute`);
+    warn(issues, `${htmlPath} should declare a lang attribute`);
   }
   if (!/(Noto\s+Sans\s+SC|Noto\s+Serif\s+SC|Source\s+Han\s+Sans|Source\s+Han\s+Serif)/.test(html)) {
-    issues.push(`hard: ${htmlPath} must include a CJK font stack`);
+    hard(issues, `${htmlPath} must include a CJK font stack`);
   }
   for (const pattern of PLACEHOLDER_PATTERNS) {
     if (pattern.test(html)) {
-      issues.push(`hard: ${htmlPath} contains placeholder text matching ${pattern}`);
+      hard(issues, `${htmlPath} contains placeholder text matching ${pattern}`);
     }
   }
   if (
     /src\s*=\s*["']\.{0,2}\/[^"']*\.(png|jpe?g|gif|webp|svg)/i.test(html) ||
     /src\s*=\s*["'](?:images?|assets|static)\//i.test(html)
   ) {
-    issues.push(`hard: ${htmlPath} must not reference local images`);
+    hard(issues, `${htmlPath} must not reference local images`);
   }
   const size = statSync(htmlPath).size;
   if (size > MAX_EXAMPLE_BYTES) {
-    issues.push(`hard: ${htmlPath} exceeds 5MB (${size} bytes)`);
+    hard(issues, `${htmlPath} exceeds 5MB (${size} bytes)`);
   }
 }
 
 function checkTemplateDir(dir) {
-  const slug = resolve(dir).split(/[\\/]/).pop();
+  const slug = basename(dir);
   const issues = [];
   const skillPath = join(dir, "SKILL.md");
   const examplePath = join(dir, "example.html");
@@ -99,29 +105,39 @@ function checkTemplateDir(dir) {
   const licensePath = join(dir, "LICENSE");
 
   if (!existsSync(skillPath)) {
-    issues.push(`hard: ${slug}/SKILL.md missing`);
+    hard(issues, `${slug}/SKILL.md missing`);
     return { slug, issues };
   }
   const skill = readFileSync(skillPath, "utf8");
   const fm = parseFrontmatter(skill);
   if (!fm.name || !fm.description) {
-    issues.push(`hard: ${slug}/SKILL.md frontmatter missing name or description`);
+    hard(issues, `${slug}/SKILL.md frontmatter missing name or description`);
   }
   if (!skill.includes(SHARED_DIRECTIVES)) {
-    issues.push(`hard: ${slug}/SKILL.md must reference ${SHARED_DIRECTIVES}`);
+    hard(issues, `${slug}/SKILL.md must reference ${SHARED_DIRECTIVES}`);
   }
   if (!existsSync(examplePath)) {
-    issues.push(`hard: ${slug}/example.html missing`);
+    hard(issues, `${slug}/example.html missing`);
   } else {
     checkHtmlFile(examplePath, issues);
   }
   if (!existsSync(checklistPath)) {
-    issues.push(`hard: ${slug}/references/checklist.md missing`);
+    hard(issues, `${slug}/references/checklist.md missing`);
   }
   if (!existsSync(sourcePath) && !existsSync(licensePath)) {
-    issues.push(`warn: ${slug} should include references/SOURCE.md or LICENSE for attribution`);
+    warn(issues, `${slug} should include references/SOURCE.md or LICENSE for attribution`);
   }
   return { slug, issues };
+}
+
+/** 打印问题并按 hard/warn 分类；退出码由调用方决定。 */
+function report(title, issues) {
+  const hards = issues.filter(i => i.includes("hard:"));
+  const warns = issues.filter(i => i.includes("warn:"));
+  console.log(title);
+  for (const w of warns) console.log(`  ${w}`);
+  for (const h of hards) console.log(`  ${h}`);
+  return { hards, warns };
 }
 
 function main() {
@@ -138,11 +154,7 @@ function main() {
     }
     const issues = [];
     checkHtmlFile(abs, issues);
-    const hards = issues.filter(i => i.startsWith("hard:"));
-    const warns = issues.filter(i => i.startsWith("warn:"));
-    console.log(`Checked 1 HTML file: ${abs}`);
-    for (const w of warns) console.log(`  ${w}`);
-    for (const h of hards) console.log(`  ${h}`);
+    const { hards, warns } = report(`Checked 1 HTML file: ${abs}`, issues);
     if (hards.length) process.exit(1);
     console.log(warns.length ? "HTML file passed with warnings." : "HTML file passed.");
     return;
@@ -167,19 +179,8 @@ function main() {
     process.exit(0);
   }
   const allIssues = results.flatMap(r => r.issues.map(i => `${r.slug}: ${i}`));
-  const hards = allIssues.filter(i => i.includes("hard:"));
-  const warns = allIssues.filter(i => i.includes("warn:"));
-  console.log(`Checked ${results.length} html templates`);
-  for (const r of results) console.log(`  ${r.slug} (${r.issues.length} issues)`);
-  if (warns.length) {
-    console.log(`\nWarnings (${warns.length}):`);
-    for (const w of warns) console.log(`  ${w}`);
-  }
-  if (hards.length) {
-    console.log(`\nHard failures (${hards.length}):`);
-    for (const h of hards) console.log(`  ${h}`);
-    process.exit(1);
-  }
+  const { hards, warns } = report(`Checked ${results.length} html templates`, allIssues);
+  if (hards.length) process.exit(1);
   if (warns.length) process.exit(2);
   console.log("\nAll html templates valid.");
 }

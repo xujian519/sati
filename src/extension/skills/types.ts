@@ -48,11 +48,29 @@ export type SkillRoleConfig = {
   };
 };
 
+/** HTML 模板 mode 的合法取值。 */
+export const TEMPLATE_MODES = [
+  "doc",
+  "deck",
+  "data-report",
+  "poster",
+  "social-card",
+  "prototype",
+  "office",
+  "frame",
+] as const;
+
+/** HTML 模板 scenario 的合法取值。 */
+export const TEMPLATE_SCENARIOS = ["patent", "legal", "finance", "product", "operation", "design", "personal"] as const;
+
+/** HTML 模板 surface 的合法取值。 */
+export const TEMPLATE_SURFACES = ["long-page", "a4", "16:9", "1600x900", "1080x1920", "auto"] as const;
+
 /** HTML 模板元数据（可选，供模板筛选/UI 标签展示）。 */
 export type SkillTemplateMeta = {
-  mode?: "doc" | "deck" | "data-report" | "poster" | "social-card" | "prototype" | "office" | "frame";
-  scenario?: "patent" | "legal" | "finance" | "product" | "operation" | "design" | "personal";
-  surface?: "long-page" | "a4" | "16:9" | "1600x900" | "1080x1920" | "auto";
+  mode?: (typeof TEMPLATE_MODES)[number];
+  scenario?: (typeof TEMPLATE_SCENARIOS)[number];
+  surface?: (typeof TEMPLATE_SURFACES)[number];
   preview?: string;
   designSystem?: string;
 };

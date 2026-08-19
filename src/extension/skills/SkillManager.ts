@@ -4,28 +4,31 @@ import { basename, isAbsolute, join, posix, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { getPilotExtensionPaths } from "../../pilot/paths.js";
 import { isRoleFrontmatter, parseRoleConfig } from "./roleConfig.js";
-import type {
-  SkillAddressInput,
-  SkillCreateInput,
-  SkillCreateResult,
-  SkillDeleteInput,
-  SkillDeleteResult,
-  SkillImportInput,
-  SkillImportResult,
-  SkillReadResult,
-  SkillScanFolder,
-  SkillScanInput,
-  SkillScanResult,
-  SkillScope,
-  SkillSummary,
-  SkillTemplateMeta,
-  SkillValidateInput,
-  SkillValidationIssue,
-  SkillValidationResult,
-  SkillWriteInput,
-  SkillWriteResult,
-  SkillsListInput,
-  SkillsListResult,
+import {
+  TEMPLATE_MODES,
+  TEMPLATE_SCENARIOS,
+  TEMPLATE_SURFACES,
+  type SkillAddressInput,
+  type SkillCreateInput,
+  type SkillCreateResult,
+  type SkillDeleteInput,
+  type SkillDeleteResult,
+  type SkillImportInput,
+  type SkillImportResult,
+  type SkillReadResult,
+  type SkillScanFolder,
+  type SkillScanInput,
+  type SkillScanResult,
+  type SkillScope,
+  type SkillSummary,
+  type SkillTemplateMeta,
+  type SkillValidateInput,
+  type SkillValidationIssue,
+  type SkillValidationResult,
+  type SkillWriteInput,
+  type SkillWriteResult,
+  type SkillsListInput,
+  type SkillsListResult,
 } from "./types.js";
 
 /**
@@ -551,11 +554,22 @@ function parseCompatFrontmatter(fmRaw: string): Record<string, unknown> {
   return result;
 }
 
+/** 从 frontmatter 取值并按白名单过滤枚举字段；缺失或非法时返回 undefined。 */
+function pickTemplateField<T extends string>(
+  fm: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const value = fm[key];
+  if (typeof value !== "string") return undefined;
+  return allowed.includes(value as T) ? (value as T) : undefined;
+}
+
 /** 解析 HTML 模板元数据；未知枚举值降级为 undefined，不阻断加载。 */
 function parseTemplateMeta(fm: Record<string, unknown>): SkillTemplateMeta | null {
-  const mode = fm.mode;
-  const scenario = fm.scenario;
-  const surface = fm.surface;
+  const mode = pickTemplateField(fm, "mode", TEMPLATE_MODES);
+  const scenario = pickTemplateField(fm, "scenario", TEMPLATE_SCENARIOS);
+  const surface = pickTemplateField(fm, "surface", TEMPLATE_SURFACES);
   const preview = typeof fm.preview === "string" ? fm.preview.trim() : undefined;
   const designSystem = typeof fm.design_system === "string" ? fm.design_system.trim() : undefined;
   if (
@@ -568,18 +582,9 @@ function parseTemplateMeta(fm: Record<string, unknown>): SkillTemplateMeta | nul
     return null;
   }
   const template: SkillTemplateMeta = {};
-  if (typeof mode === "string") {
-    const allowed = ["doc", "deck", "data-report", "poster", "social-card", "prototype", "office", "frame"];
-    if (allowed.includes(mode)) template.mode = mode as SkillTemplateMeta["mode"];
-  }
-  if (typeof scenario === "string") {
-    const allowed = ["patent", "legal", "finance", "product", "operation", "design", "personal"];
-    if (allowed.includes(scenario)) template.scenario = scenario as SkillTemplateMeta["scenario"];
-  }
-  if (typeof surface === "string") {
-    const allowed = ["long-page", "a4", "16:9", "1600x900", "1080x1920", "auto"];
-    if (allowed.includes(surface)) template.surface = surface as SkillTemplateMeta["surface"];
-  }
+  if (mode !== undefined) template.mode = mode;
+  if (scenario !== undefined) template.scenario = scenario;
+  if (surface !== undefined) template.surface = surface;
   if (preview && !preview.includes("..") && !preview.startsWith("/")) {
     template.preview = preview;
   }
