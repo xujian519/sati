@@ -18,8 +18,14 @@ import { resolveRoutedModelMaxContextTokens } from "../agent/runtime/modelContex
 import {
   TeamApprovalForwarder,
   TeamDb,
+  TeamScheduler,
   defaultTeamDbPath,
+  invalidateTaskAttempt,
+  scanStrandedTasks,
   scanTeamMembers,
+  toGatewayEvent,
+  wakeMember,
+  type ScanStrandedTasksResult,
   type ScanTeamMembersResult,
 } from "../agent/team/index.js";
 import {
@@ -215,6 +221,10 @@ export type TeamSubsystemHandle = {
   db: TeamDb;
   /** 冷恢复扫描。启动时 fire-and-forget 调用；返回 Promise 供测试 await 接线面。 */
   runMemberScan: () => Promise<ScanTeamMembersResult>;
+  /** M2：任务池调度器（事件驱动；M3 起由 team_* 工具驱动）。 */
+  scheduler: TeamScheduler;
+  /** M2：冷恢复 stranded 任务扫描（启动时与 runMemberScan 串行执行）。 */
+  runStrandedScan: () => Promise<ScanStrandedTasksResult>;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
@@ -441,11 +451,10 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // teams.db 打开/迁移失败选择 fail-fast：团队数据是写真源（成员注册即落库），
   // 静默降级会掩盖成员缺失；与 knowledge 只读降级（消费侧容错）不同。
   const teamDb = new TeamDb(defaultTeamDbPath(pilotHome, env));
-  // gateway 注入接线（emitForSession/approvalDecide 类型兼容性编译期验证），
-  // handleMemberEvent 的实际消费由 M2 调度器把 wakeMember 的 onEvent 接到 forwarder 后生效。
-  // M1 已知限制：冷恢复唤醒（scanTeamMembers → wakeMember）的 turn 无 onEvent 通道，
-  // 其 approval_pending 不冒泡到队长；M2 调度器直调 wakeMember 时接线补齐。
-  // eslint-disable-next-line unused-imports/no-unused-vars -- M1 空转基座，M2 消费
+  // gateway 注入接线（emitForSession/approvalDecide 类型兼容性编译期验证）。
+  // handleMemberEvent 由 M2 调度器 wake 包装层的 onEvent 消费（下方 teamScheduler 接线）。
+  // M1 已知限制保持：冷恢复唤醒（scanTeamMembers → wakeMember）的 turn 无 onEvent 通道，
+  // 其 approval_pending 不冒泡到队长（scanner 直调 wakeMember 未传 onEvent，M2 不改 scanner 类型）。
   const teamForwarder = new TeamApprovalForwarder({
     db: teamDb,
     emitForSession: (sessionKey, event) => gateway.emitForSession(sessionKey, event),
@@ -466,6 +475,52 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         return result;
       })
       .catch(() => ({ scanned: 0, resumed: 0 }));
+  // ── 团队调度器接线（M2）：事件驱动调度器 + M1 已知限制闭环 ──
+  // wake 包装层：调 wakeMember 并在 onEvent 内捕获 turn_completed → onMemberIdle，
+  // 成员回合结束自动触发下一任务派发 + member_idle 广播（M1 冷恢复 turn 无 onEvent
+  // 通道的限制保持——scanner 直调 wakeMember 未传 onEvent，M2 不改 scanner 类型）。
+  // onMemberIdle 的异步 rejection 静默吞掉（onEvent 契约：回调不得抛出，也不得以
+  // 异步 rejection 影响回合；dispose 后锁队列里残留的踢腿自然失败被吞）。
+  // ⚠️ 锁持有说明（既定设计）：wake 全程 await 回合 → 团队锁被持有至回合结束；
+  // M2 范围（冷恢复 + 编程式入口）可接受，M3 工具驱动前再收窄锁范围。
+  const teamScheduler = new TeamScheduler({
+    db: teamDb,
+    emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),
+    wake: async (memberId, message) => {
+      try {
+        // 成员快照一次读取（onEvent 内每事件复用；handleMemberEvent 需要 teamId/sessionKey）。
+        // 读在 try 内：wake 永不抛错（db 已关等竞态统一走 catch → false 回滚路径）
+        const member = teamDb.getMember(memberId);
+        await wakeMember(teamDb, gateway, memberId, message, {
+          onEvent: event => {
+            // 审批冒泡（M1 Task 6 接线点）：成员回合的 approval_pending → 队长会话 watcher
+            if (member !== undefined) {
+              teamForwarder.handleMemberEvent(member, event);
+            }
+            // M1 已知限制闭环：回合结束 → onMemberIdle（下一任务派发 + member_idle 广播）
+            if (event.type === "turn_completed" && member?.teamId !== undefined) {
+              void teamScheduler.onMemberIdle(member.teamId, memberId).catch(() => undefined);
+            }
+          },
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  });
+  // M2：stranded 任务冷恢复——invalidate 旧 attempt（生成 handoffId 拒绝迟到写）
+  // 后交调度器 kickMember：锁内重读成员状态 + ownedOpenTask 优先 → 自动 re-claim。
+  const runStrandedScan = (): Promise<ScanStrandedTasksResult> =>
+    scanStrandedTasks({
+      db: teamDb,
+      invalidateAndKick: async (teamId, taskId, memberId) => {
+        const task = teamDb.getTask(teamId, taskId);
+        if (task === undefined) return;
+        teamDb.updateTask(invalidateTaskAttempt(task, {}));
+        await teamScheduler.kickMember(teamId, memberId);
+      },
+    });
   // Startup sweep: reclaim .sati/tool-results/ directories whose transcript
   // no longer exists (crash leftovers, deleted sessions). Fire-and-forget —
   // must not block gateway startup.
@@ -481,14 +536,28 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 跨进程重启续算（T-C）：启动扫描中断任务并提交续算 turn。fire-and-forget，
   // 不阻塞 gateway 启动；续算 turn 在后台串行驱动。
   registry.runTaskResumeScan();
-  // 团队成员冷恢复（M1）：扫描 members 表对 (a) 形态断点成员重唤醒。
+  // 团队成员冷恢复（M1）+ stranded 任务回收（M2）：串行编排（Task 6 code review 修复）。
+  // resetMemberStatuses 先行：进程重启后不存在存活 turn，崩溃残留的 working 必为死状态，
+  // 不重置则 working-skip/stranded 判定会让崩溃成员永久失去冷恢复；
+  // 先成员扫描（唤醒断点成员续算原 attempt）后 stranded 扫描（invalidate + re-claim），
+  // 避免双扫描交错对同一成员双重唤醒（scanTeamMembers 内另有唤醒前状态复查兜底）。
   // fire-and-forget，不阻塞 gateway 启动；无成员时扫描立即空转结束。
-  void runMemberScan();
+  void (async () => {
+    teamDb.resetMemberStatuses();
+    await runMemberScan();
+    await runStrandedScan();
+  })().catch(() => undefined);
   return {
     gateway,
     configStore,
     registry,
     dispose: () => {
+      // 先关 db 后 registry.invalidate 存在窗口：invalidate 回调可能再触 db 读。
+      // dispose 后调度器闭包仍可能被在途回合的事件触发（turn_completed → onMemberIdle
+      // → kickMember），但每次迭代以 db 读开头：db.close() 后首读即抛，rejection 由
+      // onMemberIdle 的 .catch 与 wake 包装层 catch 收敛，循环在下一迭代自然终止，
+      // 至多 drain 一个在途回合。db.close() 幂等守卫已防双关。
+      // teamScheduler 无资源需释放（内存锁 + 闭包，锁队列随进程退出自然回收）。
       teamDb.close();
       registry.invalidate();
       router?.shutdown();
@@ -512,7 +581,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       gateway.setAlwaysOnRerunPlan(update.alwaysOnRerunPlan);
       gateway.setDiscoveryPlanService(update.discoveryPlanService);
     },
-    teamSubsystem: { db: teamDb, runMemberScan },
+    teamSubsystem: { db: teamDb, runMemberScan, scheduler: teamScheduler, runStrandedScan },
   };
 }
 

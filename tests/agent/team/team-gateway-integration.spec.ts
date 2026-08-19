@@ -92,3 +92,184 @@ test("集成：成员唤醒经 submitTurn 整条链产出转录，冷恢复可�
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("集成：任务图变更 → 调度器原子认领 → 成员转录产出（fake model）", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-team-integration2-"));
+  // 最小 sati.yaml 与 M1 测试相同：createLocalGateway 对空目录要求 agent/model 段合法。
+  await writeFile(
+    join(root, "sati.yaml"),
+    [
+      "schemaVersion: 1",
+      "agent:",
+      "  model: deepseek/deepseek-v4-flash",
+      "model:",
+      "  providers:",
+      "    deepseek:",
+      "      apiKey: test-key",
+      "      models:",
+      "        deepseek-v4-flash: {}",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  const result = createLocalGateway({
+    projectRoot: root,
+    pilotHome: root,
+    env: {},
+    __testModelFactory: (): ModelRuntime => ({
+      stream: async function* () {
+        yield { type: "text_delta", text: "已完成。" };
+      },
+      complete: async () => {
+        throw new Error("unused");
+      },
+      getCapabilities: () => DEFAULT_MODEL_CAPABILITIES,
+      getMultimodal: () => ({ input: ["text"] }),
+      getProviderProtocol: () => undefined,
+      getProviderBaseUrl: () => undefined,
+    }),
+  });
+  try {
+    const team = result.teamSubsystem;
+    team.db.upsertTeam({
+      id: "t1",
+      name: "专利团队",
+      captainSessionKey: "cap-1",
+      createdAt: "2026-08-20T00:00:00.000Z",
+    });
+    createTeamMember(team.db, {
+      teamId: "t1",
+      memberId: "m1",
+      roleSlug: "researcher",
+      modelRoute: { provider: "fake", model: "fake-model" },
+    });
+    team.db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "检索 D2",
+      description: "",
+      status: "pending",
+      dependencies: [],
+      attempt: 0,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+
+    // onTaskGraphChanged 整条链：锁内原子认领 → wake 包装层 → wakeMember → submitTurn。
+    // 注意：此调用会 await 完整成员回合（wake 全程持有团队锁——M2 既定锁语义）。
+    await team.scheduler.onTaskGraphChanged("t1");
+    assert.equal(team.db.getTask("t1", "t1")?.status, "claimed");
+
+    // 成员回合真实跑完（fake model 单轮结束）→ 转录落盘（回合完成权威条目 turn_result；
+    // 转录无 turn_completed 条目——那是 GatewayEvent 类型，与 transcript entry 不同名）。
+    const { readTranscript } = await import("../../../src/session/transcript/TranscriptReader.js");
+    const { getPilotProjectChatDir } = await import("../../../src/pilot/index.js");
+    const { sanitizeSessionIdForPath } = await import("../../../src/session/storage/ProjectSessionStorage.js");
+    const chatDir = getPilotProjectChatDir(root, root);
+    const transcript = await readTranscript(join(chatDir, `${sanitizeSessionIdForPath("team:t1:m1")}.jsonl`));
+    assert.ok(transcript.entries.length > 0, "成员转录应有条目");
+    assert.ok(
+      transcript.entries.some(entry => entry.type === "turn_result"),
+      "回合完成应落 turn_result",
+    );
+
+    // 回合结束 onEvent → onMemberIdle → 锁内 re-claim 同一任务（M2 无 team 工具完成任务，
+    // re-claim 循环属既定调度语义；dispose 后残留踢腿的 db-closed rejection 由 wake 包装层
+    // .catch 收敛，无 unhandled rejection——见 onMemberIdle 的 catch 接线注释）。
+  } finally {
+    result.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("集成：stranded 任务（claimed + 成员 idle）→ runStrandedScan invalidate + re-claim", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-team-integration3-"));
+  await writeFile(
+    join(root, "sati.yaml"),
+    [
+      "schemaVersion: 1",
+      "agent:",
+      "  model: deepseek/deepseek-v4-flash",
+      "model:",
+      "  providers:",
+      "    deepseek:",
+      "      apiKey: test-key",
+      "      models:",
+      "        deepseek-v4-flash: {}",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  const result = createLocalGateway({
+    projectRoot: root,
+    pilotHome: root,
+    env: {},
+    __testModelFactory: (): ModelRuntime => ({
+      stream: async function* () {
+        yield { type: "text_delta", text: "已完成。" };
+      },
+      complete: async () => {
+        throw new Error("unused");
+      },
+      getCapabilities: () => DEFAULT_MODEL_CAPABILITIES,
+      getMultimodal: () => ({ input: ["text"] }),
+      getProviderProtocol: () => undefined,
+      getProviderBaseUrl: () => undefined,
+    }),
+  });
+  try {
+    const team = result.teamSubsystem;
+    team.db.upsertTeam({
+      id: "t1",
+      name: "专利团队",
+      captainSessionKey: "cap-1",
+      createdAt: "2026-08-20T00:00:00.000Z",
+    });
+    createTeamMember(team.db, {
+      teamId: "t1",
+      memberId: "m1",
+      roleSlug: "researcher",
+      modelRoute: { provider: "fake", model: "fake-model" },
+    });
+    // 制造 stranded 任务：claimed + assignee 成员 idle（进程崩溃残留形态）
+    team.db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "检索 D2",
+      description: "",
+      status: "claimed",
+      assigneeId: "m1",
+      dependencies: [],
+      attempt: 1,
+      attemptId: "old-attempt",
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+
+    const scan = await team.runStrandedScan();
+    assert.equal(scan.stranded, 1);
+
+    // invalidate（回 pending + 新 handoffId）→ kickMember 锁内 re-claim：任务回到 claimed。
+    // 注意：re-claim 回合结束时 turn_completed → onMemberIdle 会再触发一轮 re-claim
+    //（M2 无 team 工具在回合内完成任务，re-claim 循环属既定调度语义），且该轮 re-claim
+    // 可能在断言前完成（锁队列 microtask 顺序，Node 内确定）。故 attempt 断言用不变量
+    // 形式（严格大于初始值），不锁定具体轮数；handoffId 清空证明 beginTaskAttempt 生效。
+    const task = team.db.getTask("t1", "t1");
+    assert.equal(task?.status, "claimed");
+    assert.ok(task !== undefined && task.attempt >= 2, `attempt 应至少 re-claim 一轮（实际 ${task?.attempt}）`);
+    assert.ok(
+      task?.attemptId !== undefined && task?.attemptId !== "old-attempt",
+      "attemptId 应被替换（新 attempt 生效）",
+    );
+    assert.equal(task?.handoffId, undefined);
+  } finally {
+    result.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
