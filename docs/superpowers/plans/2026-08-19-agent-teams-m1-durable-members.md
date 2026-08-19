@@ -383,8 +383,8 @@ test("构造：team:<teamId>:<memberId> 格式", () => {
 
 test("解析：合法 key 往返", () => {
   assert.deepEqual(parseMemberSessionKey("team:t1:m1"), { teamId: "t1", memberId: "m1" });
-  // teamId 本身含冒号时按第一个冒号切分
-  assert.deepEqual(parseMemberSessionKey("team:a:b:m1"), { teamId: "a:b", memberId: "m1" });
+  // memberId 本身含冒号时按第一个冒号切分（teamId 不得含冒号——注册侧保证）
+  assert.deepEqual(parseMemberSessionKey("team:a:b:m1"), { teamId: "a", memberId: "b:m1" });
 });
 
 test("解析：非成员 key 返回 null", () => {
@@ -506,7 +506,7 @@ export function isInternalSession(sessionId: string): boolean {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `pnpm build && node --test dist/tests/agent/team/protocol/member-key.spec.js dist/tests/session/storage/session-list-internal.spec.js`
-Expected: PASS（7 个测试全绿）
+Expected: PASS（6 个测试全绿）
 
 - [ ] **Step 5: 提交**
 
