@@ -23,8 +23,16 @@ export type TeamActor = {
 };
 
 /**
+ * 成员会话形态前缀（对齐 SessionList.ts 的 TEAM_MEMBER_SESSION_PATTERN /^team[:\-]/：
+ * 原始形态 `team:` 与 Windows 净化形态 `team-`（转录文件名回读）都是成员会话，
+ * 即便解析失败也一律 fail-closed，绝不判为队长）。
+ */
+const TEAM_MEMBER_SESSION_PATTERN = /^team[:\-]/;
+
+/**
  * 成员会话 key 解析：复用 agent/team 既有 parseMemberSessionKey（首个冒号切分语义），
  * 仅做契约适配——null 或 memberId 为空串（"team:t1:"）返回 undefined。
+ * 解析失败 = 未知成员形态（畸形/净化），由 resolveActor/isCaptainSession 统一 fail-closed。
  */
 export function parseTeamSessionKey(sessionKey: string): { teamId: string; memberId: string } | undefined {
   const parsed = parseMemberSessionKey(sessionKey);
@@ -35,32 +43,35 @@ export function parseTeamSessionKey(sessionKey: string): { teamId: string; membe
 }
 
 /**
- * 队长会话判定：非 `team:` 前缀的普通会话即队长会话（M2 惯例 captainSessionKey="cap-1" 等主会话 key）。
- * 注意：Windows 净化形态 `team-*`（SessionList TEAM_MEMBER_SESSION_PATTERN /^team[:\-]/，
- * 转录文件名回读）同样解析不出成员身份，本布尔在语义上将其算作"非成员会话"；
- * 管理操作放行必须经 resolveActor 的 fail-closed 判定（净化形态返回 undefined），不可直接用本函数。
+ * 队长会话判定：成员会话形态（`team:` / `team-` 前缀）一律返回 false——
+ * 该类 key 明确是成员形态，只是可能畸形/净化解析不了，绝不是队长会话；
+ * 非成员形态的普通会话即队长会话（M2 惯例 captainSessionKey="cap-1" 等主会话 key）。
  */
 export function isCaptainSession(sessionKey: string): boolean {
-  return parseTeamSessionKey(sessionKey) === undefined;
+  return !TEAM_MEMBER_SESSION_PATTERN.test(sessionKey);
 }
 
 export function resolveActor(sessionKey: string | undefined): TeamActor | undefined {
   if (sessionKey === undefined) {
     return undefined;
   }
-  // Windows 净化形态（`team:` → `team-`，转录文件名回读）：原始冒号信息丢失不可解析，
-  // fail-closed 返回 undefined，不得误判为队长放行管理操作（fail-open 越权方向）。
-  if (sessionKey.startsWith("team-")) {
-    return undefined;
-  }
   const parsed = parseTeamSessionKey(sessionKey);
   if (parsed !== undefined) {
     return { ...parsed, captain: false };
   }
+  // 成员会话形态解析失败（空 teamId/空 memberId 等畸形 + Windows 净化形态 `team-`）：
+  // 信息丢失不可解析，fail-closed 返回 undefined，不得误判为队长放行管理操作（fail-open 越权方向）。
+  if (TEAM_MEMBER_SESSION_PATTERN.test(sessionKey)) {
+    return undefined;
+  }
   return { teamId: "", memberId: "", captain: true };
 }
 
-/** 成员级操作守卫：仅本团队成员可执行；返回成员 id。拒绝语义见稳定错误码。 */
+/**
+ * 成员级操作守卫：仅本团队成员可执行；返回成员 id。拒绝语义见稳定错误码。
+ * 调用方须先经 resolveActor 解析会话：`team[:\-]` 形态的畸形/净化 key 解析为 undefined
+ * （fail-closed），工具侧应在解析失败时直接拒绝，不会走到本守卫。
+ */
 export function requireTeamMember(db: TeamDb, actor: TeamActor, teamId: string): string {
   if (actor.captain) {
     throw new SatiToolRuntimeError("team_not_member", "队长会话不是团队成员，不能执行成员级操作");
