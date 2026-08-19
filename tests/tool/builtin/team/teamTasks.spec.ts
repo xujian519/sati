@@ -327,3 +327,152 @@ test("team_reassign_task：非本队队长（cap-b）拒绝（T5 同队校验）
     (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_captain",
   );
 });
+
+test("team_reassign_task：幽灵/他队/退休成员拒绝（I1），校验不落盘", async () => {
+  const { db, tools, insertTask } = setup();
+  insertTask({
+    id: "a",
+    teamId: "t1",
+    subject: "A",
+    description: "",
+    status: "claimed",
+    assigneeId: "m1",
+    dependencies: [],
+    attempt: 1,
+    attemptId: "attempt-1",
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+  });
+  db.upsertTeam({ id: "t2", name: "t2", captainSessionKey: "cap-2", createdAt: "2026-08-20T00:00:00.000Z" });
+  createTeamMember(db, {
+    teamId: "t2",
+    memberId: "m-x",
+    roleSlug: "researcher",
+    modelRoute: { provider: "fake", model: "fake-model" },
+  });
+  db.insertRetired(db.getMember("m2")!.sessionKey, "m2", "test-retired");
+  // 幽灵成员（不存在）→ team_not_member
+  await assert.rejects(
+    () => tools.reassign.execute({ teamId: "t1", taskId: "a", memberId: "no-such" }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_member",
+  );
+  // 他队成员（m-x 属于 t2）→ team_not_member
+  await assert.rejects(
+    () => tools.reassign.execute({ teamId: "t1", taskId: "a", memberId: "m-x" }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_member",
+  );
+  // 退休成员（m2）→ team_member_retired
+  await assert.rejects(
+    () => tools.reassign.execute({ teamId: "t1", taskId: "a", memberId: "m2" }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_member_retired",
+  );
+  // 校验失败不落盘：任务保持原样（attemptId 未失效）
+  const task = db.getTask("t1", "a")!;
+  assert.equal(task.status, "claimed");
+  assert.equal(task.assigneeId, "m1");
+  assert.equal(task.attemptId, "attempt-1");
+});
+
+test("team_update_task：队长取消 pending 任务豁免 attemptId 校验（I2），成员路径仍 fail-closed", async () => {
+  const { db, events, tools, insertTask } = setup();
+  insertTask({
+    id: "a",
+    teamId: "t1",
+    subject: "A",
+    description: "",
+    status: "pending",
+    dependencies: [],
+    attempt: 0,
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+  });
+  insertTask({
+    id: "b",
+    teamId: "t1",
+    subject: "B",
+    description: "",
+    status: "pending",
+    dependencies: ["a"],
+    attempt: 0,
+    reassigning: false,
+    blockedByCount: 1,
+    maxAttempts: 3,
+  });
+  insertTask({
+    id: "c",
+    teamId: "t1",
+    subject: "C",
+    description: "",
+    status: "pending",
+    assigneeId: "m1",
+    dependencies: [],
+    attempt: 0,
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+  });
+  // 队长取消 blocked 任务：pending 任务无 attemptId，豁免校验（attemptId 传任意值）
+  await tools.updateTask.execute({ teamId: "t1", taskId: "a", status: "cancelled", attemptId: "stale-any" }, {
+    sessionId: "cap-1",
+  } as never);
+  const a = db.getTask("t1", "a")!;
+  assert.equal(a.status, "cancelled");
+  assert.ok(events.some(e => e.type === "task_updated" && e.taskId === "a" && e.status === "cancelled"));
+  // 注意：unsatisfiedDependencies 只认 completed——cancelled 不等于完成，下游 b 仍阻塞（M2 语义）
+  const b = db.getTask("t1", "b")!;
+  assert.equal(b.blockedByCount, 1, "cancelled ≠ completed：下游依赖仍未满足");
+  // 成员路径不豁免：名下 pending 任务取消 → attemptId 恒缺失 → stale_attempt
+  await assert.rejects(
+    () =>
+      tools.updateTask.execute({ teamId: "t1", taskId: "c", status: "cancelled", attemptId: "stale-any" }, {
+        sessionId: "team:t1:m1",
+      } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_stale_attempt",
+  );
+});
+
+test("team_update_task：成员失败 → failed + attemptId 保留 + task_failed 事件 + output 清空（M6/M7）", async () => {
+  const { db, events, tools, insertTask } = setup();
+  insertTask({
+    id: "a",
+    teamId: "t1",
+    subject: "A",
+    description: "",
+    status: "in_progress",
+    assigneeId: "m1",
+    dependencies: [],
+    attempt: 1,
+    attemptId: "attempt-1",
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+    output: "旧输出",
+  });
+  await tools.updateTask.execute(
+    { teamId: "t1", taskId: "a", status: "failed", attemptId: "attempt-1", reason: "超时" },
+    { sessionId: "team:t1:m1" } as never,
+  );
+  const a = db.getTask("t1", "a")!;
+  assert.equal(a.status, "failed");
+  assert.equal(a.attemptId, "attempt-1", "终态保留 attemptId（队长可审计）");
+  assert.equal(a.output, undefined, "M7：非 completed 终态清 output");
+  assert.ok(events.some(e => e.type === "task_failed" && e.taskId === "a" && e.reason === "超时"));
+});
+
+test("team_create_task：subject 空白 / maxAttempts 非法拒绝（M5）", async () => {
+  const { tools } = setup();
+  await assert.rejects(
+    () => tools.createTask.execute({ teamId: "t1", subject: "  " }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "invalid_tool_input",
+  );
+  await assert.rejects(
+    () => tools.createTask.execute({ teamId: "t1", subject: "X", maxAttempts: 0 }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "invalid_tool_input",
+  );
+  await assert.rejects(
+    () => tools.createTask.execute({ teamId: "t1", subject: "X", maxAttempts: 2.5 }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "invalid_tool_input",
+  );
+});
