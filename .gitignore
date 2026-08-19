@@ -231,3 +231,6 @@ __pycache__/
 
 # DSH harness workspace data
 /.dsh/
+
+# Superpowers skill local workspace data (brainstorm sessions etc)
+.superpowers/
