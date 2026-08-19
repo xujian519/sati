@@ -1347,6 +1347,11 @@ export type TeamSubsystemHandle = {
   - `resetMemberStatuses()`（Task 6 已实现）：进程重启后不存在存活 turn，崩溃残留的 working 必为死状态，必须先行重置，否则 working-skip/stranded 判定会让崩溃成员永久失去冷恢复
   - 串行 await（先成员扫描后 stranded 扫描）：避免双扫描交错对同一成员双重唤醒（scanTeamMembers 内另有唤醒前状态复查兜底）
 - **M1 已知限制闭环**：`wakeMember` 的 `onEvent` 接线——调度器唤醒成员时捕获 `turn_completed` → `teamScheduler.onMemberIdle(teamId, memberId)`（`wake` 包装层内实现；turn 内 `approval_pending` 仍经既有 TeamApprovalForwarder 转发，冷恢复 turn 的审批冒泡由此接通）
+- **实现修正（最终 code review，b77ce85a）**：
+  - 冷恢复 turn 审批冒泡接线兑现：`scanTeamMembers` 增 `onEvent?` 透传（per-member 闭包），`runMemberScan` 接 `TeamApprovalForwarder.handleMemberEvent`——上方"由此接通"承诺闭环
+  - C1：stranded invalidate 进团队锁 + 锁内复查（任务仍 claimed/in_progress、成员非 working 且未退休才 invalidate）——防扫描快照与调度器锁内 claim 的 TOCTOU 双执行；kickMember 留在锁外（自身锁内，避免重入死锁）
+  - C2：re-claim 有界——`turn_completed` 后检查 ownedOpenTask，`attempt >= maxAttempts` 且 `validateAttemptUpdate` 通过 → 置 `failed` 终止循环（M2 无 team 工具在回合内完成任务，原"回合结束持续 re-claim"收敛为最多 maxAttempts 轮；集成测试由时序断言改为轮询收敛断言，偶发挂起消除）
+  - 顺手项：`assigneeId === "captain"` 任务跳过 stranded 判定；`isCaptainOnline` 未接线（默认常在线）与 `message_delivered` 批次 sender 语义以注释标注留 M3
 - dispose 竞态注释（M1 遗留 #5）：`dispose` 内 `teamDb.close()` 前的顺序注释——「先关 db 后 registry.invalidate 存在窗口：invalidate 回调可能再触 db 读。M2 调度器已注入 emit/wake 闭包，dispose 后闭包调用由 gateway 生命周期保证不再触发；db.close() 幂等守卫已防双关」；并加 `teamScheduler` 无资源需释放的注释
 
 - [ ] **Step 2: 集成测试追加**（`tests/agent/team/team-gateway-integration.spec.ts`，M1 测试后追加用例）
@@ -1517,7 +1522,7 @@ git commit -m "docs(agent): 团队岗位-角色映射表 + 5 缺位角色资产�
 
 ## 收尾验证
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`（全量回归基线：M1 为 3306 tests / 3303 pass / 0 fail / 3 skip，M2 后应增加 ~40 用例）
+- [ ] `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`（全量回归基线：M1 为 3306 tests / 3303 pass / 0 fail / 3 skip；M2 实况 3346 tests / 3343 pass / 0 fail / 3 skip，含最终审查修复新增 1 用例）
 - [ ] `node scripts/team-stress-verify.mjs`（8/8 场景）
 - [ ] `pnpm check:event-matrix`（TeamEvent 已入矩阵）
 - [ ] 事件矩阵 diff 仅含 team_event 相关行（纯机械）
@@ -1527,3 +1532,4 @@ git commit -m "docs(agent): 团队岗位-角色映射表 + 5 缺位角色资产�
 - M3：10 个 `team_*` 工具（`src/tool/builtin/team*.ts`，domain: team）+ 角色注册接线（Task 10 资产 → `registerRoleDefinition`）+ `patent-team-composition` 角色化；llm-replay fixture 在 toolSchema 稳定后重录
 - M4：活动面板（`ui/src/components/team-panel/` + 手写 SVG DAG + 事件消费）
 - 归档/删除（quiesce + `team_archived`）的完整流程随 M3 工具面落地
+- M3：`isCaptainOnline` 接线 gateway 在线状态（当前默认常在线，代码注释已标注）；`message_delivered` 事件 payload 演进（当前批次粒度取首条 sender，完整 sender 列表随协议演进）；`blockedByCount` 随任务更新工具维护（当前依赖判定走 dependencies 数组，字段为 M3 预留）
