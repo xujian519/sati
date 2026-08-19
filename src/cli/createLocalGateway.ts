@@ -94,6 +94,7 @@ import {
   GATEWAY_PERMISSION_CALLBACK_NAME,
   createGatewayPermissionHook,
 } from "../gateway/permission/createGatewayPermissionHook.js";
+import { SessionPresence } from "../gateway/server/sessionPresence.js";
 import {
   McpRuntime,
   createMcpToolDefinitionsFromRuntime,
@@ -219,6 +220,8 @@ export type CreateLocalGatewayResult = {
   updateSubsystems: (update: SubsystemUpdate) => void;
   /** 团队子系统句柄（M1）：teams.db + 冷恢复扫描。M2 起扩展调度器/任务池入口。 */
   teamSubsystem: TeamSubsystemHandle;
+  /** M3：captain 在线判定句柄（sati.ts 透传给 startGatewayServer 的 ws 连接层）。 */
+  sessionPresence: SessionPresence;
 };
 
 export type TeamSubsystemHandle = {
@@ -455,6 +458,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // teams.db 打开/迁移失败选择 fail-fast：团队数据是写真源（成员注册即落库），
   // 静默降级会掩盖成员缺失；与 knowledge 只读降级（消费侧容错）不同。
   const teamDb = new TeamDb(defaultTeamDbPath(pilotHome, env));
+  // M3（I3 闭环）：captain 在线判定——gateway ws 连接活跃追踪（unknown 容错在线，
+  // 协议不升版）。sati.ts 透传本实例给 startGatewayServer 后即真实生效。
+  const sessionPresence = new SessionPresence();
   // gateway 注入接线（emitForSession/approvalDecide 类型兼容性编译期验证）。
   // handleMemberEvent 由 M2 调度器 wake 包装层 + 冷恢复扫描（下方 runMemberScan 的 onEvent）
   // 双路径消费——调度器路径与 scanner 路径的 approval_pending 均冒泡到队长 watcher。
@@ -489,11 +495,12 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 异步 rejection 影响回合；dispose 后锁队列里残留的踢腿自然失败被吞）。
   // ⚠️ 锁持有说明（既定设计）：wake 全程 await 回合 → 团队锁被持有至回合结束；
   // M2 范围（冷恢复 + 编程式入口）可接受，M3 工具驱动前再收窄锁范围。
-  // I3（code review）标注：isCaptainOnline 未接线（默认常在线）——设计承诺"队长离线
-  // 暂停认领"随 M3 接线 gateway 在线状态（captainSessionKey → watcher 活跃判定）。
+  // I3（code review）闭环：captain 离线（连接断开超宽限窗）→ 暂停新认领；
+  // unknown（纯 in-process/CLI 场景）容错视为在线，不阻塞成员工作。
   const teamScheduler = new TeamScheduler({
     db: teamDb,
     emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),
+    isCaptainOnline: captainSessionKey => sessionPresence.isActive(captainSessionKey),
     wake: async (memberId, message) => {
       try {
         // 成员快照一次读取（onEvent 内每事件复用；handleMemberEvent 需要 teamId/sessionKey）。
@@ -590,8 +597,11 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       // → kickMember），但每次迭代以 db 读开头：db.close() 后首读即抛，rejection 由
       // onMemberIdle 的 .catch 与 wake 包装层 catch 收敛，循环在下一迭代自然终止，
       // 至多 drain 一个在途回合。db.close() 幂等守卫已防双关。
-      // teamScheduler 无资源需释放（内存锁 + 闭包，锁队列随进程退出自然回收）。
+      // teamScheduler 无资源需释放（内存锁 + 闭包，锁队列随进程退出自然回收）；
+      // 调度器闭包持有 sessionPresence（isCaptainOnline 数据源），已随下方 clear() 释放。
       teamDb.close();
+      // M3：闭包持有 sessionPresence（isCaptainOnline 数据源）——dispose 时清空活跃记录
+      sessionPresence.clear();
       registry.invalidate();
       router?.shutdown();
       stopConfigWatching();
@@ -615,6 +625,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       gateway.setDiscoveryPlanService(update.discoveryPlanService);
     },
     teamSubsystem: { db: teamDb, runMemberScan, scheduler: teamScheduler, runStrandedScan },
+    sessionPresence,
   };
 }
 
