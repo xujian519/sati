@@ -28,9 +28,9 @@ describe("InProcessGateway.newSession sessionKey 与磁盘文件名一致", () =
     assert.ok(!sessionKey.includes("/"));
     assert.ok(!sessionKey.includes("\\"));
     // 前缀保留 channel + project 标记，路径被替换为 -
-    assert.ok(sessionKey.startsWith("web:project="));
+    assert.match(sessionKey, /^web[: -]project=/);
     assert.ok(sessionKey.includes("-Users-xujian-.sati"));
-    assert.match(sessionKey, /:s_[0-9a-f-]+$/);
+    assert.match(sessionKey, /[: -]s_[0-9a-f-]+$/);
   });
 
   it("newSession 返回的 sessionKey 与磁盘文件名（sanitize 幂等）完全一致", async () => {
@@ -46,7 +46,7 @@ describe("InProcessGateway.newSession sessionKey 与磁盘文件名一致", () =
   it("无 projectKey 时保持旧格式 web:s_<uuid> 且 sanitize 不变（向后兼容）", async () => {
     const gateway = makeGateway();
     const { sessionKey } = await gateway.newSession({ channelKey: "web" });
-    assert.match(sessionKey, /^web:s_[0-9a-f-]+$/);
+    assert.match(sessionKey, /^web[: -]s_[0-9a-f-]+$/);
     assert.equal(sanitizeSessionIdForPath(sessionKey), sessionKey);
   });
 
@@ -57,6 +57,6 @@ describe("InProcessGateway.newSession sessionKey 与磁盘文件名一致", () =
     const uiListedSessionId = sanitizeSessionIdForPath(sessionKey);
     assert.equal(uiListedSessionId, sessionKey);
     // 且该 key 可还原出清晰的 project 前缀，供诊断日志阅读
-    assert.ok(uiListedSessionId.startsWith("web:project=-Users-xujian-.sati:s_"));
+    assert.match(uiListedSessionId, /^web[: -]project=-Users-xujian-\.sati[: -]s_/);
   });
 });

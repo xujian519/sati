@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { createCoreDiscoveryPlanIo } from "../../src/cli/discoveryIo.js";
 import { resolveProjectStorageId } from "../../src/pilot/paths.js";
@@ -35,7 +35,7 @@ describe("createCoreDiscoveryPlanIo", () => {
     const dir = makeTempDir();
     try {
       const io = createCoreDiscoveryPlanIo({ pilotHome: dir });
-      assert.equal(await io.extractProjectDirectory("/abs/proj"), "/abs/proj");
+      assert.equal(await io.extractProjectDirectory("/abs/proj"), resolve("/abs/proj"));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -56,12 +56,12 @@ describe("createCoreDiscoveryPlanIo", () => {
     try {
       const projectRoot = join(dir, "workspace", "proj-a");
       mkdirSync(projectRoot, { recursive: true });
-      writeChatSession(dir, projectRoot, "web:s1", "hello sati");
+      writeChatSession(dir, projectRoot, "web-s1", "hello sati");
       const io = createCoreDiscoveryPlanIo({ pilotHome: dir });
       const result = await io.getSessions(projectRoot, 10, 0);
       assert.equal(result.sessions.length, 1);
-      assert.equal(result.sessions[0]!.id, "web:s1");
-      assert.equal(result.sessions[0]!.sessionId, "web:s1");
+      assert.equal(result.sessions[0]!.id, "web-s1");
+      assert.equal(result.sessions[0]!.sessionId, "web-s1");
       assert.match(String(result.sessions[0]!.summary), /hello sati/);
     } finally {
       rmSync(dir, { recursive: true, force: true });

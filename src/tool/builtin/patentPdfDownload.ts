@@ -83,7 +83,8 @@ async function loadPdfLinkExtractJs(): Promise<string> {
     try {
       const js = await readFile(candidate, "utf8");
       // 与 Python 端对齐：首行须为版本标记，否则视为损坏回退内嵌备份。
-      if (/^\/\/ PDF_LINK_EXTRACT_VERSION=\d+$/.test(js.split("\n", 1)[0] ?? "")) {
+      // CRLF 检出（Windows autocrlf）下首行尾含 \r，按行尾容错匹配。
+      if (/^\/\/ PDF_LINK_EXTRACT_VERSION=\d+\r?$/.test(js.split(/\r?\n/, 1)[0] ?? "")) {
         return js;
       }
       console.warn(`[patent_pdf_download] ${candidate} 缺少 PDF_LINK_EXTRACT_VERSION 版本标记，回退内嵌备份`);

@@ -102,14 +102,19 @@ test("空 title/content 跳过", t => {
 });
 
 test("保存后可被 CaseLawSearchEngine 全文检索召回", t => {
-  const dbPath = withFixture(t);
+  // 自管清理顺序：engine.close() 必须先于 rmSync（after 钩子按注册序执行，
+  // 若复用 withFixture 的 rm 钩子，Windows 上句柄未释放导致 EBUSY）。
+  const { dbPath, dir } = createFixture();
   savePersonalNote(dbPath, {
     title: "无效分析结论：区别特征与预料不到效果",
     content: "无效宣告分析中，区别特征产生了预料不到的技术效果。",
     project: "proj-b",
   });
   const engine = new CaseLawSearchEngine(dbPath);
-  t.after(() => engine.close());
+  t.after(() => {
+    engine.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
   const hits = engine.search("预料不到的技术效果", { limit: 5 });
   assert.ok(hits.length >= 1, "FTS 应召回沉淀的笔记");
   assert.equal(hits[0]?.docType, "personal_note");

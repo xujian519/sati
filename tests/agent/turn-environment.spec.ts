@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { buildTurnEnvironment } from "../../src/agent/loop/misc.js";
 
 test("turn environment provides an isolated Sati-owned work directory", () => {
@@ -11,7 +11,7 @@ test("turn environment provides an isolated Sati-owned work directory", () => {
   assert.equal(env.KEEP_ME, "yes");
   assert.equal(env.SESSION_ID, "web:s_123/unsafe");
   assert.equal(env.TURN_ID, "turn:456 unsafe");
-  assert.equal(env.WORK_DIR, join(cwd, ".sati", "work", "web-s_123-unsafe", "turn-456-unsafe"));
+  assert.equal(env.WORK_DIR, join(resolve(cwd), ".sati", "work", "web-s_123-unsafe", "turn-456-unsafe"));
 });
 
 test("turn environment inherits the process environment when no override is configured", () => {

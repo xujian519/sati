@@ -113,7 +113,7 @@ test("read_file auto-shrinks oversized persisted tool-result ref ranges", async 
     assert.match(text, /persisted tool result was too large for the requested range/);
     assert.match(
       text,
-      /Continue with read_file\({ file_path: "\.sati\/tool-results\/refs\/result-0001\.txt", offset: \d+, limit: \d+ }\)/,
+      /Continue with read_file\({ file_path: "\.sati[\\/]tool-results[\\/]refs[\\/]result-0001\.txt", offset: \d+, limit: \d+ }\)/,
     );
     assert.equal((result.data as { autoPaged?: boolean }).autoPaged, true);
     assert.ok((result.data as { endLine?: number }).endLine! < 200);

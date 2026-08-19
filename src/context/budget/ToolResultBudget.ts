@@ -263,7 +263,9 @@ export class ToolResultBudget {
       const aliasPath = resolve(refsDir, `result-${String(index).padStart(4, "0")}.${normalizedExt || "txt"}`);
       try {
         await copyFile(sourcePath, aliasPath, fsConstants.COPYFILE_EXCL);
-        return relative(workspaceRoot, aliasPath);
+        // readFilePath 是协议级 workspace-relative 路径（供 read_file 的
+        // file_path 直接使用），统一 `/` 分隔保证跨平台稳定。
+        return relative(workspaceRoot, aliasPath).replace(/\\/g, "/");
       } catch (error) {
         if (isFileExistsError(error)) {
           continue;

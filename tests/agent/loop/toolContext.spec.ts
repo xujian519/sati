@@ -109,7 +109,10 @@ test("createToolContext：基础字段组装（sessionId/turnId/cwd/env）", () 
   const env = ctx.env!;
   assert.equal(env.SESSION_ID, "/proj::sess-1");
   assert.equal(env.TURN_ID, "turn-1");
-  assert.equal(env.WORK_DIR?.startsWith("/proj/.sati/work/"), true);
+  // WORK_DIR = <cwd>/.sati/work/<safeSessionId>/<safeTurnId>；sessionId
+  // "/proj::sess-1" 经 safeWorkPathSegment 得 "proj-sess-1"（连续非法字符
+  // 合并为单个 `-`）。分隔符随平台（\ 或 /）。
+  assert.match(env.WORK_DIR ?? "", /[\\/]\.sati[\\/]work[\\/]proj-sess-1[\\/]turn-1$/);
   assert.equal(ctx.now!().toISOString(), "2026-08-14T00:00:00.000Z");
 });
 
