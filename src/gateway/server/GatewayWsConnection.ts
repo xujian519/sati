@@ -17,7 +17,11 @@ export type GatewayWsConnectionOptions = {
 export class GatewayWsConnection {
   private authed = false;
   private readonly presence: SessionPresence | undefined;
-  /** 最近一帧携带的 sessionKey（onClose 注销用）。 */
+  /**
+   * 最近一帧携带的 sessionKey（onClose 注销用）。
+   * 已知限制（连接级单槽位）：同 sessionKey 多连接并存时，任一关闭即触发 close
+   * （宽限窗 + 下一帧 touch 复位兜底，误判方向 fail-safe）；连接内交错多 key 时仅最后 key 注销。
+   */
   private lastSessionKey: string | undefined;
   private readonly inFlightSessions = new Set<string>();
   /** submit_turn 事件流发送缓冲：16ms 窗口合并，减少长轮次数千事件的 write/syscall。 */
