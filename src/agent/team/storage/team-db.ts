@@ -24,6 +24,37 @@ export type TeamMemberRow = {
   createdAt: string;
 };
 
+export type TeamTaskRow = {
+  id: string; // team 内唯一（"t1"…），由调用方生成
+  teamId: string;
+  subject: string;
+  description: string;
+  status: "pending" | "claimed" | "in_progress" | "completed" | "failed" | "cancelled";
+  assigneeId?: string; // 成员 id 或 "captain"
+  dependencies: string[];
+  attempt: number;
+  attemptId?: string;
+  handoffId?: string;
+  reassigning: boolean;
+  blockedByCount: number;
+  maxAttempts: number;
+  output?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TeamMessageRow = {
+  id: string;
+  teamId: string;
+  sender: string; // "captain" 或成员 id
+  recipient: string; // 成员 id 或 "captain"
+  content: string;
+  createdAt: string;
+  deliveryClaimedAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+};
+
 type TeamDbRow = { id: string; name: string; captain_session_key: string; created_at: string };
 type MemberDbRow = {
   id: string;
@@ -33,6 +64,35 @@ type MemberDbRow = {
   status: string;
   session_key: string;
   created_at: string;
+};
+type TaskDbRow = {
+  id: string;
+  team_id: string;
+  subject: string;
+  description: string;
+  status: string;
+  assignee_id: string | null;
+  dependencies_json: string;
+  attempt: number;
+  attempt_id: string | null;
+  handoff_id: string | null;
+  reassigning: number;
+  blocked_by_count: number;
+  max_attempts: number;
+  output: string | null;
+  created_at: string;
+  updated_at: string;
+};
+type MessageDbRow = {
+  id: string;
+  team_id: string;
+  sender: string;
+  recipient: string;
+  content: string;
+  created_at: string;
+  delivery_claimed_at: string | null;
+  delivered_at: string | null;
+  read_at: string | null;
 };
 
 const MIGRATIONS: string[] = [
@@ -58,6 +118,38 @@ const MIGRATIONS: string[] = [
     reason TEXT NOT NULL,
     retired_at TEXT NOT NULL
   );`,
+  // v2：任务池 + 成员邮箱（M2）
+  `CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL CHECK (status IN ('pending','claimed','in_progress','completed','failed','cancelled')),
+    assignee_id TEXT,
+    dependencies_json TEXT NOT NULL DEFAULT '[]',
+    attempt INTEGER NOT NULL DEFAULT 0,
+    attempt_id TEXT,
+    handoff_id TEXT,
+    reassigning INTEGER NOT NULL DEFAULT 0,
+    blocked_by_count INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 3,
+    output TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (team_id, id)
+  );
+  CREATE TABLE IF NOT EXISTS messages (
+    id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    sender TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    delivery_claimed_at TEXT,
+    delivered_at TEXT,
+    read_at TEXT,
+    PRIMARY KEY (team_id, id)
+  );`,
 ];
 
 function toTeamRow(row: TeamDbRow): TeamRow {
@@ -78,6 +170,41 @@ function toMemberRow(row: MemberDbRow): TeamMemberRow {
     status: row.status === "working" ? "working" : "idle",
     sessionKey: row.session_key,
     createdAt: row.created_at,
+  };
+}
+
+function toTaskRow(row: TaskDbRow): TeamTaskRow {
+  return {
+    id: row.id,
+    teamId: row.team_id,
+    subject: row.subject,
+    description: row.description,
+    status: row.status as TeamTaskRow["status"],
+    assigneeId: row.assignee_id ?? undefined,
+    dependencies: JSON.parse(row.dependencies_json) as string[],
+    attempt: row.attempt,
+    attemptId: row.attempt_id ?? undefined,
+    handoffId: row.handoff_id ?? undefined,
+    reassigning: row.reassigning === 1,
+    blockedByCount: row.blocked_by_count,
+    maxAttempts: row.max_attempts,
+    output: row.output ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toMessageRow(row: MessageDbRow): TeamMessageRow {
+  return {
+    id: row.id,
+    teamId: row.team_id,
+    sender: row.sender,
+    recipient: row.recipient,
+    content: row.content,
+    createdAt: row.created_at,
+    deliveryClaimedAt: row.delivery_claimed_at ?? undefined,
+    deliveredAt: row.delivered_at ?? undefined,
+    readAt: row.read_at ?? undefined,
   };
 }
 
@@ -163,6 +290,101 @@ export class TeamDb {
   isRetired(sessionKey: string): boolean {
     const row = this.db.prepare("SELECT 1 FROM retired_members WHERE session_key = ?").get(sessionKey);
     return row !== undefined;
+  }
+
+  listTasks(teamId: string): TeamTaskRow[] {
+    const rows = this.db
+      .prepare("SELECT * FROM tasks WHERE team_id = ? ORDER BY created_at ASC")
+      .all(teamId) as TaskDbRow[];
+    return rows.map(toTaskRow);
+  }
+
+  getTask(teamId: string, taskId: string): TeamTaskRow | undefined {
+    const row = this.db.prepare("SELECT * FROM tasks WHERE team_id = ? AND id = ?").get(teamId, taskId) as
+      | TaskDbRow
+      | undefined;
+    return row ? toTaskRow(row) : undefined;
+  }
+
+  insertTask(row: TeamTaskRow): void {
+    this.db
+      .prepare(
+        `INSERT INTO tasks (id, team_id, subject, description, status, assignee_id, dependencies_json,
+          attempt, attempt_id, handoff_id, reassigning, blocked_by_count, max_attempts, output, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        row.id,
+        row.teamId,
+        row.subject,
+        row.description,
+        row.status,
+        row.assigneeId ?? null,
+        JSON.stringify(row.dependencies),
+        row.attempt,
+        row.attemptId ?? null,
+        row.handoffId ?? null,
+        row.reassigning ? 1 : 0,
+        row.blockedByCount,
+        row.maxAttempts,
+        row.output ?? null,
+        row.createdAt,
+        row.updatedAt,
+      );
+  }
+
+  updateTask(row: TeamTaskRow): void {
+    this.db
+      .prepare(
+        `UPDATE tasks SET subject = ?, description = ?, status = ?, assignee_id = ?, dependencies_json = ?,
+          attempt = ?, attempt_id = ?, handoff_id = ?, reassigning = ?, blocked_by_count = ?, max_attempts = ?,
+          output = ?, updated_at = ?
+         WHERE team_id = ? AND id = ?`,
+      )
+      .run(
+        row.subject,
+        row.description,
+        row.status,
+        row.assigneeId ?? null,
+        JSON.stringify(row.dependencies),
+        row.attempt,
+        row.attemptId ?? null,
+        row.handoffId ?? null,
+        row.reassigning ? 1 : 0,
+        row.blockedByCount,
+        row.maxAttempts,
+        row.output ?? null,
+        row.updatedAt,
+        row.teamId,
+        row.id,
+      );
+  }
+
+  listMessages(teamId: string, recipient?: string): TeamMessageRow[] {
+    const rows = recipient
+      ? (this.db
+          .prepare("SELECT * FROM messages WHERE team_id = ? AND recipient = ? ORDER BY created_at ASC")
+          .all(teamId, recipient) as MessageDbRow[])
+      : (this.db
+          .prepare("SELECT * FROM messages WHERE team_id = ? ORDER BY created_at ASC")
+          .all(teamId) as MessageDbRow[]);
+    return rows.map(toMessageRow);
+  }
+
+  // 插入时不含投递状态（deliveryClaimedAt/deliveredAt/readAt 由 updateMessage 生命周期管理，insert 传入会被忽略）
+  insertMessage(row: TeamMessageRow): void {
+    this.db
+      .prepare(`INSERT INTO messages (id, team_id, sender, recipient, content, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(row.id, row.teamId, row.sender, row.recipient, row.content, row.createdAt);
+  }
+
+  updateMessage(row: TeamMessageRow): void {
+    // 仅更新投递生命周期三列；其余列（含 content）不可变
+    this.db
+      .prepare(
+        `UPDATE messages SET delivery_claimed_at = ?, delivered_at = ?, read_at = ? WHERE team_id = ? AND id = ?`,
+      )
+      .run(row.deliveryClaimedAt ?? null, row.deliveredAt ?? null, row.readAt ?? null, row.teamId, row.id);
   }
 
   close(): void {
