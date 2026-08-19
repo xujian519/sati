@@ -433,6 +433,37 @@ test("team_update_task：队长取消 pending 任务豁免 attemptId 校验（I2
   );
 });
 
+test("team_update_task：队长对 claimed 任务取消不豁免 attemptId（I2 边界：非 pending 不豁免）", async () => {
+  const { db, tools, insertTask } = setup();
+  insertTask({
+    id: "a",
+    teamId: "t1",
+    subject: "A",
+    description: "",
+    status: "claimed",
+    assigneeId: "m1",
+    dependencies: [],
+    attempt: 1,
+    attemptId: "attempt-1",
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+  });
+  // claimed 任务已有 attempt 语义：即使目标是 cancelled、调用者是队长，错误 attemptId 仍 fail-closed
+  await assert.rejects(
+    () =>
+      tools.updateTask.execute({ teamId: "t1", taskId: "a", status: "cancelled", attemptId: "wrong-attempt" }, {
+        sessionId: "cap-1",
+      } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_stale_attempt",
+  );
+  // 正确 attemptId 可取消（对照：claimed → cancelled 合法，且校验通过）
+  await tools.updateTask.execute({ teamId: "t1", taskId: "a", status: "cancelled", attemptId: "attempt-1" }, {
+    sessionId: "cap-1",
+  } as never);
+  assert.equal(db.getTask("t1", "a")!.status, "cancelled");
+});
+
 test("team_update_task：成员失败 → failed + attemptId 保留 + task_failed 事件 + output 清空（M6/M7）", async () => {
   const { db, events, tools, insertTask } = setup();
   insertTask({
