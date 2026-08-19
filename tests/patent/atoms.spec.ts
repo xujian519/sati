@@ -152,6 +152,23 @@ test("ReasoningHandler：无显式输入时拼接状态为上下文", async () =
   assert.equal(out.reasoning_output, "推理结论");
 });
 
+test("ReasoningHandler：同源多键按值去重（text/source_text 同值只喂一次）", async () => {
+  const h = LookupStageHandler("reasoning")!;
+  let prompt = "";
+  const captureProvider: StageProvider = {
+    callLLM: async p => {
+      prompt = p;
+      return "推理结论";
+    },
+  };
+  const input = "同一份交底书原文";
+  await h.execute({ state: { text: input, source_text: input, extraction_input: input }, provider: captureProvider });
+  // 三个键同值：按值去重后只喂一次（修复前重复喂 3 次，每次运行多付冗余 token）。
+  assert.equal(prompt.split(input).length - 1, 1, "同值键去重后正文只出现一次");
+  assert.doesNotMatch(prompt, /## text/, "后序同值键被跳过（去重保留排序最前的键名）");
+  assert.ok(prompt.includes("## extraction_input"), "排序最前的键保留为块头");
+});
+
 test("ApprovalGateHandler：抛 InterruptStageError（不返回）", async () => {
   const h = LookupStageHandler("approval-gate")!;
   await assert.rejects(

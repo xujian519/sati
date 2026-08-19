@@ -318,6 +318,14 @@ export async function runWorkflow(
         results.splice(rewindIndex);
         for (const rewinded of manifest.stages.slice(rewindIndex)) {
           delete state[rewinded.id];
+          // 清理原子输出键（2026-08 修复）：只删 stage-id 键时，重跑中某路解析
+          // 失败（如 extract 非 JSON 保留原文）会残留旧一代数组，下游 merge
+          // 混用两代提取结果且无降级告警。
+          if (rewinded.atom !== undefined) {
+            for (const key of atoms.lookup(rewinded.atom)?.outputSchema ?? []) {
+              delete state[key];
+            }
+          }
         }
         index = rewindIndex;
         continue;

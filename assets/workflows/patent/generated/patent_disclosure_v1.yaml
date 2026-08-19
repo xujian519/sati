@@ -36,6 +36,7 @@ stages:
     description: 评估提取特征在原文中的依据（低分特征反馈）
   - id: consistency
     strategy: chain
+    atom: reasoning
     retry:
       whenOutputMatches: 不一致|矛盾|缺少|孤立
       rewindTo: extract_problem

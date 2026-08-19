@@ -28,6 +28,14 @@ export const patentNoveltyManifest: WorkflowManifest = {
 };
 
 /**
+ * PFE 一致性检查 reasoning_prompt（disclosure 与 drafting 共用，2026-08 提取：
+ * 此前两处逐字重复，改一致性契约（JSON 形状/信号词）须两处同步，防漂移）。
+ */
+const PFE_CONSISTENCY_PROMPT =
+  "对以下 PFE 三元组做一致性检查：特征-效果因果链是否闭合、有无孤立特征（无问题/无效果关联的特征）。" +
+  "严格输出 JSON：{ consistent: boolean, issues: string[] }。issues 为空数组表示一致。";
+
+/**
  * 内置：技术交底书披露分析 manifest（移植 Mady disclosure/graph.go 的 PFE 管线）。
  *
  * PFE（Problem/Feature/Effect）三元组提取：problem/features/effects 三路提取
@@ -37,8 +45,8 @@ export const patentNoveltyManifest: WorkflowManifest = {
  * 逐特征新颖性初判（单独对比原则 + 证据引用）→ 报告 → review_gate 人工复核
  * （中断等待确认）→ draft_claims 直出权利要求草稿。
  *
- * 注意：本 manifest 声明了内置原子（extract / merge / groundedness / keywords /
- * search / novelty / approval-gate / draft-claims），消费方需注入 provider
+ * 注意：本 manifest 声明了内置原子（extract / merge / groundedness / reasoning /
+ * keywords / search / novelty / approval-gate / draft-claims），消费方需注入 provider
  * （LLM/检索器）与内置原子注册表（registerBuiltinAtoms）执行。prior-art 注入链
  * （generate_keywords → search → novelty）在 provider.search 缺失时降级
  * （evidence_coverage=none），不中断管线（对齐 Mady fail-open 语义）。
@@ -81,6 +89,8 @@ export const patentDisclosureManifest: WorkflowManifest = {
       id: "consistency",
       strategy: "chain",
       description: "PFE 一致性检查（特征-效果因果链闭合、无孤立特征）",
+      atom: "reasoning",
+      params: { reasoning_prompt: PFE_CONSISTENCY_PROMPT },
       retry: {
         whenOutputMatches: "不一致|矛盾|缺少|孤立",
         rewindTo: "extract_problem",
@@ -283,8 +293,8 @@ export const patentInfringementManifest: WorkflowManifest = {
  *   （无原子阶段在 patent_workflow_run 下透传输入，不降级）。
  * - 规则门（rule-gate）不设阶段：消费方 patent_workflow / patent_workflow_run
  *   在收尾时按 checkDomains 自动运行确定性规则门（dual-track checker）。
- * - 一致性检查用 reasoning 原子（比对 disclosure manifest 的透传语义更强），
- *   输出命中"不一致/矛盾/缺少/孤立"时回退 extract_problem 重做（最多 1 次）。
+ * - 一致性检查用 reasoning 原子，输出命中"不一致/矛盾/缺少/孤立"信号时
+ *   回退 extract_problem 重做（最多 1 次）。
  */
 export const patentDraftingManifest: WorkflowManifest = {
   id: "patent_drafting_v1",
@@ -325,11 +335,7 @@ export const patentDraftingManifest: WorkflowManifest = {
       strategy: "chain",
       description: "PFE 一致性检查（问题-手段-效果链闭合、无孤立特征）",
       atom: "reasoning",
-      params: {
-        reasoning_prompt:
-          "对以下 PFE 三元组做一致性检查：特征-效果因果链是否闭合、有无孤立特征（无问题/无效果关联的特征）。" +
-          "严格输出 JSON：{ consistent: boolean, issues: string[] }。issues 为空数组表示一致。",
-      },
+      params: { reasoning_prompt: PFE_CONSISTENCY_PROMPT },
       retry: {
         whenOutputMatches: "不一致|矛盾|缺少|孤立",
         rewindTo: "extract_problem",

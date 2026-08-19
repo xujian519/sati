@@ -38,6 +38,9 @@ const provider: StageProvider = {
         feedback: "特征B依据不足",
       });
     }
+    if (prompt.includes("一致性检查")) {
+      return JSON.stringify({ consistent: true, issues: [] });
+    }
     if (prompt.includes("检索关键词")) {
       return JSON.stringify({ keywords: ["分拣", "自动化", "传感器"] });
     }
@@ -174,6 +177,98 @@ test("manifestToGraph: retry 回退与 runWorkflow 等价（回退重跑 extract
   }
 });
 
+test("manifestToGraph: consistency 输出 consistent:false JSON → 回退 extract 三路重跑（图路径 retry 闭环）", async () => {
+  let extractCalls = 0;
+  let consistencyCalls = 0;
+  const countingProvider: StageProvider = {
+    ...provider,
+    callLLM: async prompt => {
+      if (prompt.includes("技术分析助手")) {
+        extractCalls += 1;
+        // 两轮返回值不同：回退后 state 必须来自第二轮（不残留首轮数组）
+        const round = extractCalls <= 3 ? 1 : 2;
+        return JSON.stringify({
+          features: [`特征${round}A`, `特征${round}B`],
+          problems: [`问题${round}`],
+          effects: [`效果${round}`],
+        });
+      }
+      if (prompt.includes("一致性检查")) {
+        consistencyCalls += 1;
+        // issues 无信号词且含否定词干扰——consistent:false 机器判据必须触发回退
+        return consistencyCalls === 1
+          ? JSON.stringify({ consistent: false, issues: ["问题与效果关联均缺失"] })
+          : JSON.stringify({ consistent: true, issues: [] });
+      }
+      return provider.callLLM!(prompt);
+    },
+  };
+  const executor = async (stage: WorkflowStage): Promise<string> => {
+    if (stage.id === "report") return "披露分析报告";
+    return `[${stage.id}] 完成`;
+  };
+  const input = "一种自动化分拣装置";
+  const ctx = { input, text: input, source_text: input, extraction_input: input };
+  const graph = manifestToGraph(patentDisclosureManifest, {
+    handlers: globalStageHandlerRegistry,
+    atoms: globalAtomRegistry,
+    executor,
+    provider: countingProvider,
+  });
+  const gr = await graph.run({ ...ctx });
+  // extract 三路首轮 + 回退重跑 = 6 次；consistency 2 次；中断于 review_gate。
+  assert.equal(extractCalls, 6, "extract 三路各执行 2 次（首轮 + 回退重跑）");
+  assert.equal(consistencyCalls, 2, "consistency 第一轮判不一致触发回退，第二轮判一致");
+  assert.equal(gr.completed, false);
+  assert.equal(gr.interrupted?.node, "review_gate");
+  // 回退重跑后 state 来自第二轮（无首轮残留）
+  assert.deepEqual(gr.state.features, ["特征2A", "特征2B"]);
+  assert.deepEqual(gr.state.problems, ["问题2"]);
+  assert.equal(gr.state.consistency, JSON.stringify({ consistent: true, issues: [] }));
+});
+
+test("manifestToGraph: 回退重跑中某路提取解析失败 → 旧一代键被清理（不残留混代）", async () => {
+  let extractCalls = 0;
+  let consistencyCalls = 0;
+  const flakyProvider: StageProvider = {
+    ...provider,
+    callLLM: async prompt => {
+      if (prompt.includes("技术分析助手")) {
+        extractCalls += 1;
+        // 第 5 次 extract 调用 = 回退重跑中的 extract_features：LLM 输出非 JSON（解析失败）
+        if (extractCalls === 5) return "这不是 JSON";
+        return JSON.stringify({ features: ["特征A"], problems: ["问题1"], effects: ["效果1"] });
+      }
+      if (prompt.includes("一致性检查")) {
+        consistencyCalls += 1;
+        return consistencyCalls === 1
+          ? JSON.stringify({ consistent: false, issues: ["问题与效果关联均缺失"] })
+          : JSON.stringify({ consistent: true, issues: [] });
+      }
+      return provider.callLLM!(prompt);
+    },
+  };
+  const executor = async (stage: WorkflowStage): Promise<string> => {
+    if (stage.id === "report") return "披露分析报告";
+    return `[${stage.id}] 完成`;
+  };
+  const input = "一种自动化分拣装置";
+  const ctx = { input, text: input, source_text: input, extraction_input: input };
+  const graph = manifestToGraph(patentDisclosureManifest, {
+    handlers: globalStageHandlerRegistry,
+    atoms: globalAtomRegistry,
+    executor,
+    provider: flakyProvider,
+  });
+  const gr = await graph.run({ ...ctx });
+  // 解析失败的键被 rewind 清理（修复前只删 stage-id 键 → 残留首轮数组 ["特征A"] 混入下游）。
+  assert.equal(extractCalls, 6, "仍完成回退重跑（extract 三路各 2 次）");
+  assert.equal(gr.state.features, undefined, "features 键被清理（解析失败不残留旧一代数组）");
+  assert.deepEqual(gr.state.problems, ["问题1"], "重跑成功的一路正常写回");
+  assert.equal(gr.completed, false);
+  assert.equal(gr.interrupted?.node, "review_gate");
+});
+
 /** 第 1 次返回"存在不一致"（触发回退），之后"一致"；记录调用次数。 */
 function makeFlakyExecutor(): { fn: (stage: WorkflowStage) => Promise<string>; calls: () => number } {
   const state = { calls: 0 };
@@ -201,7 +296,6 @@ test("manifestToGraph: disclosure 全流程（放行审批）与 runWorkflow 输
   handlers.register(passthroughApproval);
 
   const executor = async (stage: WorkflowStage): Promise<string> => {
-    if (stage.id === "consistency") return "PFE 一致，因果链闭合";
     if (stage.id === "report") return "披露分析报告：方案具备创新点与保护建议";
     return `[${stage.id}] 完成`;
   };
@@ -229,11 +323,12 @@ test("manifestToGraph: disclosure 全流程（放行审批）与 runWorkflow 输
     const wfOutput = wf.stages.find(s => s.stageId === stage.id)?.output;
     assert.equal(gr.state[stage.id], wfOutput, `阶段 ${stage.id} 输出对齐`);
   }
+  // consistency 走 reasoning 原子（LLM 产出 JSON），非 executor 透传。
+  assert.equal(gr.state.consistency, JSON.stringify({ consistent: true, issues: [] }));
 });
 
 test("manifestToGraph: approval-gate 中断（两路径一致暂停）", async () => {
   const executor = async (stage: WorkflowStage): Promise<string> => {
-    if (stage.id === "consistency") return "PFE 一致，因果链闭合";
     if (stage.id === "report") return "报告";
     return `[${stage.id}] 完成`;
   };

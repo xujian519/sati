@@ -185,7 +185,8 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
       "structured WorkflowRunResult with degraded-step marking and a summary, then runs the deterministic " +
       "rule gate (dual-track checker) over the outputs and appends the pass/needs_revision/blocked verdict. " +
       "Built-in manifests: patent_novelty_v1 (parse → search → compare → conclude → approval), " +
-      "patent_disclosure_v1 (preprocess → extract → merge → consistency → report → approval) and " +
+      "patent_disclosure_v1 (preprocess → extract problems/features/effects → merge → groundedness → " +
+      "consistency → keywords → search → novelty → report → review gate → draft claims) and " +
       "patent_inventiveness_v1 (parse → search → closest → diff → hint → secondary → conclude → approval). " +
       "Use to finalize " +
       "multi-stage patent analyses (novelty / disclosure / inventiveness) with a single verifiable result record. " +
