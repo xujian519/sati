@@ -64,6 +64,9 @@ export function createTeamSendMessageTool(
       if (input.content.trim() === "") {
         throw new SatiToolRuntimeError("invalid_tool_input", "消息内容不能为空");
       }
+      // sessionId 缺失（actor === undefined）或队长会话按 captain 放行是有意的（T4 决策延续）：
+      // `team:` 前缀畸形形态已在上方 fail-closed 拦截，此处 undefined 只可能是无 sessionId 的主会话直调；
+      // 与 update_task 的差异显式化——mailbox 消息 sender 审计接受该形态（主会话=队长），任务归属不接受。
       const senderId = actor === undefined || actor.captain ? "captain" : requireTeamMember(db, actor, input.teamId);
       let messageId = "";
       await withTeamLock(input.teamId, async () => {

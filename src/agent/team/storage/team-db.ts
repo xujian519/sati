@@ -12,6 +12,8 @@ export type TeamRow = {
   name: string;
   captainSessionKey: string;
   createdAt: string;
+  /** M3：归档时刻（ISO）；undefined = 未归档。归档不可逆（无 unarchive）。 */
+  archivedAt?: string;
 };
 
 export type TeamMemberRow = {
@@ -55,7 +57,13 @@ export type TeamMessageRow = {
   readAt?: string;
 };
 
-type TeamDbRow = { id: string; name: string; captain_session_key: string; created_at: string };
+type TeamDbRow = {
+  id: string;
+  name: string;
+  captain_session_key: string;
+  created_at: string;
+  archived_at: string | null;
+};
 type MemberDbRow = {
   id: string;
   team_id: string;
@@ -150,6 +158,8 @@ const MIGRATIONS: string[] = [
     read_at TEXT,
     PRIMARY KEY (team_id, id)
   );`,
+  // v3：团队归档（M3）——archived_at 置位后调度器跳过该团队、成员全退休
+  `ALTER TABLE teams ADD COLUMN archived_at TEXT;`,
 ];
 
 function toTeamRow(row: TeamDbRow): TeamRow {
@@ -158,6 +168,7 @@ function toTeamRow(row: TeamDbRow): TeamRow {
     name: row.name,
     captainSessionKey: row.captain_session_key,
     createdAt: row.created_at,
+    archivedAt: row.archived_at ?? undefined,
   };
 }
 
@@ -258,6 +269,21 @@ export class TeamDb {
   listTeams(): TeamRow[] {
     const rows = this.db.prepare("SELECT * FROM teams ORDER BY created_at ASC").all() as TeamDbRow[];
     return rows.map(toTeamRow);
+  }
+
+  /** 归档团队：置 archived_at（仅未归档团队可归档）。返回是否生效。 */
+  archiveTeam(teamId: string, archivedAt: string): boolean {
+    const result = this.db
+      .prepare("UPDATE teams SET archived_at = ? WHERE id = ? AND archived_at IS NULL")
+      .run(archivedAt, teamId);
+    return result.changes > 0;
+  }
+
+  isArchived(teamId: string): boolean {
+    const row = this.db.prepare("SELECT archived_at FROM teams WHERE id = ?").get(teamId) as
+      | { archived_at: string | null }
+      | undefined;
+    return row !== undefined && row.archived_at !== null;
   }
 
   insertMember(row: TeamMemberRow): void {
