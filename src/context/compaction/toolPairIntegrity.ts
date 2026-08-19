@@ -108,6 +108,23 @@ export function isRealUserRequestMessage(message: CanonicalMessage): boolean {
 }
 
 /**
+ * Index of the most recent group (at or before `atOrBefore`) that contains a
+ * real end-user request, so truncation/sniping can keep the request that
+ * initiated the retained tail. Group indexes are positional (0-based).
+ */
+export function findLatestUserRequestGroupIndex(
+  groups: readonly CanonicalMessage[][],
+  atOrBefore: number,
+): number | undefined {
+  for (let index = Math.min(atOrBefore, groups.length - 1); index >= 0; index -= 1) {
+    if (groups[index]!.some(isRealUserRequestMessage)) {
+      return index;
+    }
+  }
+  return undefined;
+}
+
+/**
  * If the last message is role=assistant, append a sentinel user message so
  * providers that reject assistant-message prefill (e.g. Amazon Bedrock) do
  * not return 400.  No-op when messages is empty or already ends with user.

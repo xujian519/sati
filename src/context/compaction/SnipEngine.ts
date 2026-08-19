@@ -3,7 +3,7 @@ import {
   collectToolCallIds,
   collectToolResultIds,
   ensureTrailingUserMessage,
-  isRealUserRequestMessage,
+  findLatestUserRequestGroupIndex,
   stripUnpairedToolCalls,
   stripUnpairedToolResults,
 } from "./toolPairIntegrity.js";
@@ -196,15 +196,6 @@ function stitchKeptTurnsWithBoundaries(
     out.push(createSnipBoundary(skipped, headTurns, tailTurns));
   }
   return out;
-}
-
-function findLatestUserRequestGroupIndex(groups: CanonicalMessage[][], atOrBefore: number): number | undefined {
-  for (let index = Math.min(atOrBefore, groups.length - 1); index >= 0; index -= 1) {
-    if (groups[index]!.some(isRealUserRequestMessage)) {
-      return index;
-    }
-  }
-  return undefined;
 }
 
 function isToolResultOnly(message: CanonicalMessage): boolean {

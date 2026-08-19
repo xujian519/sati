@@ -13,6 +13,7 @@ import {
   collectToolCallIds,
   collectToolResultIds,
   ensureTrailingUserMessage,
+  findLatestUserRequestGroupIndex,
   isRealUserRequestMessage,
   stripUnpairedToolCalls,
   stripUnpairedToolResults,
@@ -410,7 +411,11 @@ function planFullCompactionMessages(
   const protectedIndexes = collectProtectedGroupIndexes(prefixTurns, { protectedToolNames });
   // 保留被遮蔽区段中最近的用户请求组：压缩后尾部若无请求锚点，模型失去
   // "这次任务是谁发起的"上下文，恢复请求无法定位当前任务（#513）。
-  const requestAnchorIndex = findLatestUserRequestGroupIndex(turns, tailStartTurn);
+  // group.index 恒等于数组位置（compactionGroups.ts），位置即组索引。
+  const requestAnchorIndex = findLatestUserRequestGroupIndex(
+    turns.map(turn => turn.messages),
+    tailStartTurn,
+  );
   if (requestAnchorIndex !== undefined && requestAnchorIndex < tailStartTurn) {
     protectedIndexes.add(requestAnchorIndex);
   }
@@ -516,27 +521,22 @@ export function truncateHeadPreservingCheckpoint(messages: CanonicalMessage[], k
 /**
  * Split the accepted checkpoint prefix (boundary + summary pairs) from the
  * live messages. Legacy snapshots may contain multiple boundary/summary
- * pairs; collect every accepted summary so the next successful pass can
- * replace them with one rolling checkpoint.
+ * pairs; all of them are preserved verbatim in the stable prefix.
  */
 function splitCheckpointPrefix(messages: CanonicalMessage[]): {
   stablePrefix: CanonicalMessage[];
-  previousSummaries: CanonicalMessage[];
   liveMessages: CanonicalMessage[];
 } {
   let index = 0;
-  const previousSummaries: CanonicalMessage[] = [];
   while (
     index + 1 < messages.length &&
     isCompactBoundaryMessage(messages[index]!) &&
     isWrappedSummaryMessage(messages[index + 1]!)
   ) {
-    previousSummaries.push(messages[index + 1]!);
     index += 2;
   }
   return {
     stablePrefix: messages.slice(0, index),
-    previousSummaries,
     liveMessages: messages.slice(index),
   };
 }
@@ -553,23 +553,6 @@ function isWrappedSummaryMessage(message: CanonicalMessage): boolean {
     message.role === "assistant" &&
     message.content.some(block => block.type === "text" && block.text.startsWith(COMPACT_SUMMARY_PREFIX))
   );
-}
-
-/**
- * Find the most recent group (at or before `atOrBefore`) that contains a
- * real end-user request, so truncation can keep the request that initiated
- * the retained tail.
- */
-function findLatestUserRequestGroupIndex(
-  groups: Array<{ index: number; messages: CanonicalMessage[] }>,
-  atOrBefore: number,
-): number | undefined {
-  for (let index = Math.min(atOrBefore, groups.length - 1); index >= 0; index -= 1) {
-    if (groups[index]!.messages.some(isRealUserRequestMessage)) {
-      return groups[index]!.index;
-    }
-  }
-  return undefined;
 }
 
 function clamp(value: number, min: number, max: number): number {

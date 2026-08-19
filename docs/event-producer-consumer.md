@@ -16,8 +16,8 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | assistant_message | src/agent/loop/AgentLoop.ts:573, src/agent/loop/AgentLoop.ts:603, src/agent/loop/AgentLoop.ts:849, src/agent/loop/AgentLoop.ts:884, src/agent/loop/AgentLoop.ts:918, src/agent/loop/AgentLoop.ts:1821 | src/gateway/client/InProcessGateway.ts:486 |
 | assistant_text_delta | src/gateway/client/InProcessGateway.ts:318 | submitTurn 流 ×27 |
 | assistant_thinking_delta | - | submitTurn 流 ×27 |
-| compact_completed | src/context/compaction/CompactionEngine.ts:276 | src/gateway/client/InProcessGateway.ts:486 |
-| compact_started | src/context/compaction/CompactionEngine.ts:172 | src/gateway/client/InProcessGateway.ts:486 |
+| compact_completed | src/context/compaction/CompactionEngine.ts:277 | src/gateway/client/InProcessGateway.ts:486 |
+| compact_started | src/context/compaction/CompactionEngine.ts:173 | src/gateway/client/InProcessGateway.ts:486 |
 | config_changed | - | submitTurn 流 ×27 |
 | context_budget | src/agent/loop/AgentLoop.ts:428, src/agent/loop/AgentLoop.ts:441 | src/gateway/client/InProcessGateway.ts:486, submitTurn 流 ×27 |
 | doomloop_signal | - | src/gateway/client/InProcessGateway.ts:486 |
