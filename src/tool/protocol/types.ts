@@ -77,6 +77,7 @@ export type SatiToolKind =
   | "session"
   | "agent"
   | "structured_output"
+  | "team"
   | "custom";
 
 /**
