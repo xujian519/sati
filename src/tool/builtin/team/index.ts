@@ -10,6 +10,7 @@ export {
   resolveActor,
   requireTeamMember,
   requireCaptain,
+  requireTeamCaptain,
   requireRegisteredRole,
   defaultModelRoute,
 } from "./teamUtils.js";
