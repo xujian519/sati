@@ -8,3 +8,10 @@ export {
   type MemberGateway,
   type WakeMemberOptions,
 } from "./member/member-waker.js";
+export {
+  scanTeamMembers,
+  TEAM_MEMBER_RESUME_MARKER,
+  TEAM_MEMBER_RESUME_MESSAGE,
+  type ScanTeamMembersOptions,
+  type ScanTeamMembersResult,
+} from "./member/member-scanner.js";
