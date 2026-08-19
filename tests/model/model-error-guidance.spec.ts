@@ -83,6 +83,20 @@ test("billing and rate limit guidance distinguish provider-side fixes", () => {
   assert.match(modelFailureAction(rateLimit).userHint, /reduce concurrency|switch/);
 });
 
+test("mid-stream connection interruption (terminated) is normalized to timeout network guidance, not settings", () => {
+  // openai adapter 流内 error chunk 经 normalizeModelError 语义归一化后，
+  // "terminated" 应归类为 timeout（网络、可重试），提示不得再落 settings 兜底。
+  const error = normalizeModelError("deepseek", "openai", { error: { message: "terminated" } });
+
+  assert.equal(error.code, "timeout");
+  assert.equal(error.retryable, true);
+
+  const action = modelFailureAction(error);
+  assert.equal(action.fixTarget, "network");
+  assert.doesNotMatch(action.userHint, /base URL\/API key\/model/);
+  assert.match(action.userHint, /network|proxy|provider status/i);
+});
+
 test("unknown provider errors still give actionable settings and provider checks", () => {
   const action = modelFailureAction({
     provider: "custom",

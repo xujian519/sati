@@ -250,7 +250,10 @@ export async function* streamModel(
             sawCompletionSentinel = true;
           }
           if (event.type === "error") {
-            throw new ModelProviderError(event.error);
+            // 流内 error chunk（openai/openai-responses/anthropic adapter 手工构造，
+            // code/retryable 未经语义分类）在此统一归一化，保证 code/retryable/userHint
+            // 对重试、router fallback、UI 元数据等下游一致；如 "terminated" 归为 timeout。
+            throw new ModelProviderError(normalizeModelError(provider.id, provider.protocol, event.error));
           }
           streamGuard.observe(event);
           checkpoint.onEvent(event);
@@ -497,7 +500,8 @@ function isRetryableRequestError(error: unknown): boolean {
       msg.includes("timeout") ||
       msg.includes("etimedout") ||
       msg.includes("epipe") ||
-      msg.includes("econnrefused")
+      msg.includes("econnrefused") ||
+      msg.includes("terminated")
     );
   }
   return false;
@@ -532,7 +536,8 @@ function isRetryableStreamError(error: unknown): boolean {
       msg.includes("aborted") ||
       msg.includes("timeout") ||
       msg.includes("epipe") ||
-      msg.includes("econnrefused")
+      msg.includes("econnrefused") ||
+      msg.includes("terminated")
     );
   }
   return false;
