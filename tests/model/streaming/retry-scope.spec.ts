@@ -70,3 +70,67 @@ test("retryScope：同一 turnId 的两次请求 retryId 稳定，不同 turnId 
   assert.ok(other.length > 0);
   assert.notEqual(other[0], first[0]);
 });
+
+test("request-level terminated fetch error is retried once, then completes", async () => {
+  let attempts = 0;
+  const progress: ModelStreamRetryProgress[] = [];
+  // 第一次 fetch 抛 "terminated"（连接被对端中断的典型消息），第二次成功。
+  const successBody = [
+    'data: {"id":"1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":"stop"}]}',
+    "",
+    "data: [DONE]",
+    "",
+    "",
+  ].join("\n");
+  const transport = (async (): Promise<Response> => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("terminated");
+    return new Response(successBody, { headers: { "content-type": "text/event-stream" } });
+  }) as ModelTransport;
+
+  const events: string[] = [];
+  for await (const event of streamModel(makeRequest("turn-terminated"), makeConfig(), {
+    fetch: transport,
+    onRetryProgress: p => progress.push(p),
+  })) {
+    events.push(event.type);
+  }
+
+  assert.equal(attempts, 2, "首次 terminated 应触发一次重试后成功完成");
+  assert.ok(progress.length >= 1, "应上报重试进度");
+  assert.ok(events.includes("message_end"), "重试后应正常结束流");
+});
+
+test("mid-stream SSE error chunk (terminated) is retried once, then completes", async () => {
+  // 生产场景：DeepSeek 等 OpenAI 协议在 SSE 流内返回 error chunk
+  // （{"error":{"message":"terminated"}}）。adapter 手工构造的
+  // CanonicalModelError（retryable=false）经 normalizeModelError 归一化后
+  // 归为 timeout（retryable=true），应触发一次自动重试而非直接终止。
+  let attempts = 0;
+  const progress: ModelStreamRetryProgress[] = [];
+  const errorBody = 'data: {"error": {"message": "terminated"}}\n\n';
+  const successBody = [
+    'data: {"id":"1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":"stop"}]}',
+    "",
+    "data: [DONE]",
+    "",
+    "",
+  ].join("\n");
+  const transport = (async (): Promise<Response> => {
+    attempts += 1;
+    if (attempts === 1) return new Response(errorBody, { headers: { "content-type": "text/event-stream" } });
+    return new Response(successBody, { headers: { "content-type": "text/event-stream" } });
+  }) as ModelTransport;
+
+  const events: string[] = [];
+  for await (const event of streamModel(makeRequest("turn-stream-error"), makeConfig(), {
+    fetch: transport,
+    onRetryProgress: p => progress.push(p),
+  })) {
+    events.push(event.type);
+  }
+
+  assert.equal(attempts, 2, "流内 error chunk 应触发一次重试后成功完成");
+  assert.ok(progress.length >= 1, "应上报重试进度");
+  assert.ok(events.includes("message_end"), "重试后应正常结束流");
+});
