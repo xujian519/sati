@@ -20,6 +20,7 @@ import {
   TeamDb,
   TeamScheduler,
   defaultTeamDbPath,
+  attemptsExhausted,
   invalidateTaskAttempt,
   ownedOpenTask,
   scanStrandedTasks,
@@ -515,7 +516,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
               const open = ownedOpenTask(teamDb.listTasks(member.teamId), memberId);
               if (open !== undefined) {
                 const fresh = teamDb.getTask(member.teamId, open.id);
-                if (fresh !== undefined && fresh.attempt >= fresh.maxAttempts) {
+                if (fresh !== undefined && attemptsExhausted(fresh)) {
                   const guard = validateAttemptUpdate(fresh, fresh.attemptId);
                   if (guard === undefined) {
                     teamDb.updateTask({ ...fresh, status: "failed", updatedAt: new Date().toISOString() });
