@@ -17,7 +17,12 @@ export type SatiToolErrorCode =
   | "unsupported_tool"
   | "setup_required"
   | "plan_mode_violation"
-  | "ask_mode_violation";
+  | "ask_mode_violation"
+  | "team_actor_unknown"
+  | "team_not_member"
+  | "team_member_retired"
+  | "team_not_captain"
+  | "team_unknown_role";
 
 export type SatiToolError = {
   code: SatiToolErrorCode;
