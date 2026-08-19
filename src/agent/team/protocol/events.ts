@@ -2,7 +2,8 @@
  * TeamEvent 事件族（M2）：团队编排层的对外事件契约。
  * 广播通道：经 gateway 复用现有事件帧（GatewayEvent team_event 变体）按队长会话扇出，
  * 协议不升版（无新增方法）；Web 客户端未知帧走 default 忽略（M4 再消费）。
- * 全部事件入事件矩阵（pnpm gen:event-matrix 重新生成 + check:event-matrix 门禁）。
+ * TeamEvent 变体经 team_event 网关帧入事件矩阵；嵌套变体字段不在 v1 启发式追踪范围
+ *（pnpm gen:event-matrix 重新生成 + check:event-matrix 门禁）。
  */
 import type { TeamTaskStatus } from "../taskpool/task-status.js";
 
