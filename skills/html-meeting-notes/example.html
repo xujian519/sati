@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>会议纪要：专利布局周例会</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --ink: #0a0a0a;
+    --muted: #6b6b6b;
+    --line: #e5e7eb;
+    --accent: #1f3a5f;
+    --accent-2: #3b82f6;
+    --good: #067647;
+    --warn: #b54708;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Noto Sans SC", "Inter", sans-serif; background: var(--bg); color: var(--ink); line-height: 1.6; padding: 32px 16px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
+  h1 { font-size: 28px; line-height: 1.2; }
+  .meta { color: var(--muted); font-size: 14px; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px 24px; }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
+  h2 { font-size: 18px; margin-bottom: 12px; }
+  ul, ol { padding-left: 20px; }
+  li { margin: 4px 0; }
+  .decision { border-left: 3px solid var(--accent); background: #f3f4f6; padding: 12px 16px; margin: 8px 0; border-radius: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; }
+  th { background: #f3f4f6; font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+  .status-todo { background: #fef3c7; color: var(--warn); }
+  .status-done { background: #dcfce7; color: var(--good); }
+  .next { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  @media (max-width: 600px) { h1 { font-size: 22px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>专利布局周例会纪要</h1>
+    <div class="meta">
+      <span>时间：2026 年 8 月 18 日 10:00–11:00</span>
+      <span>地点：线上</span>
+      <span>参会：张律、李工、王 IPR、赵顾问</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>议程</h2>
+    <ol>
+      <li>上周行动项回顾</li>
+      <li>电池热管理新方案专利布局讨论</li>
+      <li>海外申请预算确认</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>决议</h2>
+    <div class="decision">对“均温板 + 相变材料”方案启动 2 件中国发明专利申请，优先布局独立权利要求。</div>
+    <div class="decision">美国临时申请在 9 月 30 日前提交，委托美国代理所准备。</div>
+    <div class="decision">年度海外预算追加 20 万元，用于 PCT 国家阶段进入。</div>
+  </section>
+
+  <section>
+    <h2>行动项</h2>
+    <table>
+      <thead><tr><th>事项</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>补充温度均匀性实验数据</td><td>李工</td><td>8/25</td><td><span class="badge status-todo">进行中</span></td></tr>
+        <tr><td>确定美国代理所并启动临时申请</td><td>张律</td><td>9/05</td><td><span class="badge status-todo">进行中</span></td></tr>
+        <tr><td>更新专利预算表</td><td>王 IPR</td><td>8/21</td><td><span class="badge status-done">已完成</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>下次会议</h2>
+    <div class="next">
+      <span>时间：2026 年 8 月 25 日 10:00</span>
+      <span>议题：实验数据评审与权利要求初稿</span>
+      <span>负责人：李工</span>
+    </div>
+  </section>
+</div>
+</body>
+</html>

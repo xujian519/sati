@@ -90,6 +90,7 @@ export type ToolDomain =
   | "shell"
   | "network"
   | "search"
+  | "html"
   | "document"
   | "analysis"
   | "drafting"

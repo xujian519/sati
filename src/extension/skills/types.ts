@@ -48,6 +48,33 @@ export type SkillRoleConfig = {
   };
 };
 
+/** HTML 模板 mode 的合法取值。 */
+export const TEMPLATE_MODES = [
+  "doc",
+  "deck",
+  "data-report",
+  "poster",
+  "social-card",
+  "prototype",
+  "office",
+  "frame",
+] as const;
+
+/** HTML 模板 scenario 的合法取值。 */
+export const TEMPLATE_SCENARIOS = ["patent", "legal", "finance", "product", "operation", "design", "personal"] as const;
+
+/** HTML 模板 surface 的合法取值。 */
+export const TEMPLATE_SURFACES = ["long-page", "a4", "16:9", "1600x900", "1080x1920", "auto"] as const;
+
+/** HTML 模板元数据（可选，供模板筛选/UI 标签展示）。 */
+export type SkillTemplateMeta = {
+  mode?: (typeof TEMPLATE_MODES)[number];
+  scenario?: (typeof TEMPLATE_SCENARIOS)[number];
+  surface?: (typeof TEMPLATE_SURFACES)[number];
+  preview?: string;
+  designSystem?: string;
+};
+
 export type SkillSummary = {
   slug: string;
   name: string;
@@ -68,6 +95,8 @@ export type SkillSummary = {
   mtime: number | null;
   /** `type: "role"` 时的角色配置；普通 skill 为 null。 */
   role?: SkillRoleConfig | null;
+  /** HTML 模板元数据；非 HTML 模板为 null。 */
+  template?: SkillTemplateMeta | null;
 };
 
 export type SkillsListInput = {

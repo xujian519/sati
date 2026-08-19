@@ -21,6 +21,7 @@ export function resolveRoutedModelMaxContextTokens(input: ResolveRoutedModelMaxC
   try {
     return input.modelRuntime.getCapabilities(input.provider, input.model).maxContextTokens;
   } catch {
+    // 能力探测失败（未知模型/远端未返回能力）→ 回退 agent 配置值。
     return undefined;
   }
 }

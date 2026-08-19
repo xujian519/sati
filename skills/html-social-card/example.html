@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>社交分享卡：专利检索要点</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Noto Sans SC", sans-serif;
+    background: #fafaf8;
+    color: #0a0a0a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .card {
+    width: 1600px;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    background:
+      radial-gradient(circle at 85% 20%, rgba(31,58,95,0.12) 0, transparent 32%),
+      #f7f5ee;
+    border: 1px solid #e5e7eb;
+    padding: 72px 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  .source { display: flex; align-items: center; gap: 12px; font-size: 18px; color: #1B365D; font-weight: 700; }
+  .source::before { content: ""; width: 12px; height: 12px; background: #1B365D; border-radius: 50%; }
+  .body h1 { font-size: 64px; line-height: 1.1; font-weight: 900; letter-spacing: .01em; max-width: 900px; }
+  .body p { font-size: 28px; color: #6b665b; margin-top: 20px; max-width: 780px; }
+  .meta { display: flex; justify-content: space-between; align-items: center; font-size: 18px; color: #6b665b; }
+  .cta { background: #1B365D; color: #f5f4ed; padding: 14px 28px; font-size: 18px; border-radius: 6px; }
+  @media (max-width: 700px) {
+    body { padding: 8px; }
+    .card { padding: 28px; }
+    .body h1 { font-size: 36px; }
+    .body p { font-size: 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="source">Sati 正念智能体 · 知产小贴士</div>
+  <div class="body">
+    <h1>专利检索别只搜关键词</h1>
+    <p>按 IPC 分类号 + 申请日范围 + 引用关系组合检索，召回率更高。</p>
+  </div>
+  <div class="meta">
+    <span>每周一条 · 2026 年第 33 期</span>
+    <span class="cta">关注获取更多</span>
+  </div>
+</div>
+</body>
+</html>

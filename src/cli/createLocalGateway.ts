@@ -1110,10 +1110,10 @@ class ProjectRuntimeRegistry {
         if (runtime.mcpRuntime) {
           registerMcpAuxTools(runtime.tools, runtime.mcpRuntime);
         }
-      } catch (err) {
+      } catch (error) {
         console.warn(
           `[sati] MCP runtime startup partial-failed for project ${runtime.projectRoot}:`,
-          (err as Error).message,
+          error instanceof Error ? error.message : String(error),
         );
       }
     })();
@@ -1259,8 +1259,11 @@ class ProjectRuntimeRegistry {
             }
           }
         }
-      } catch (err) {
-        console.warn(`[sati] Per-session MCP startup failed for ${context.sessionKey}:`, (err as Error).message);
+      } catch (error) {
+        console.warn(
+          `[sati] Per-session MCP startup failed for ${context.sessionKey}:`,
+          error instanceof Error ? error.message : String(error),
+        );
       }
     } else if (perSpecs && perSpecs.length > 0) {
       console.warn(

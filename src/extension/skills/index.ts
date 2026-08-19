@@ -34,6 +34,7 @@ export type {
   SkillScanResult,
   SkillScope,
   SkillSummary,
+  SkillTemplateMeta,
   SkillValidateInput,
   SkillValidationIssue,
   SkillValidationResult,

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2026 年第二季度经营分析报告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --ink: #0a0a0a;
+    --muted: #6b6b6b;
+    --line: #e5e7eb;
+    --accent: #1f3a5f;
+    --accent-2: #3b82f6;
+    --good: #067647;
+    --warn: #b54708;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Noto Sans SC", "Inter", sans-serif; background: var(--bg); color: var(--ink); line-height: 1.6; padding: 32px 16px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  header { margin-bottom: 24px; }
+  .kicker { color: var(--muted); font-size: 14px; letter-spacing: .08em; }
+  h1 { font-size: 32px; line-height: 1.2; margin: 8px 0 4px; }
+  .meta { color: var(--muted); font-size: 14px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 24px 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  .card .label { font-size: 13px; color: var(--muted); }
+  .card .value { font-size: 26px; font-weight: 800; margin-top: 4px; }
+  .card .delta { font-size: 13px; margin-top: 4px; }
+  .up { color: var(--good); }
+  .down { color: var(--warn); }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; margin: 16px 0; }
+  h2 { font-size: 20px; margin-bottom: 16px; }
+  .chart-box { position: relative; height: 280px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; }
+  th { background: #f3f4f6; font-weight: 600; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  details { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 16px; }
+  summary { cursor: pointer; font-weight: 600; }
+  @media (max-width: 600px) { h1 { font-size: 26px; } .cards { grid-template-columns: 1fr 1fr; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  @media print { body { background: #fff; } section { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">经营分析 · 内部财务</div>
+    <h1>2026 年第二季度经营分析报告</h1>
+    <div class="meta">报告期间：2026 Q2 · 数据来源：财务系统 + CRM 导出</div>
+  </header>
+
+  <div class="cards">
+    <div class="card"><div class="label">营业收入</div><div class="value">¥1,280 万</div><div class="delta up">环比 +12.5%</div></div>
+    <div class="card"><div class="label">毛利</div><div class="value">¥560 万</div><div class="delta up">毛利率 43.8%</div></div>
+    <div class="card"><div class="label">经营现金流</div><div class="value">¥310 万</div><div class="delta down">环比 -8.1%</div></div>
+    <div class="card"><div class="label">活跃客户</div><div class="value">128 家</div><div class="delta up">净增 16 家</div></div>
+  </div>
+
+  <section>
+    <h2>收入与支出趋势</h2>
+    <div class="chart-box"><canvas id="trendChart"></canvas></div>
+  </section>
+
+  <section>
+    <h2>P&L 概要</h2>
+    <table>
+      <thead><tr><th>科目</th><th class="num">Q2（万元）</th><th class="num">Q1（万元）</th></tr></thead>
+      <tbody>
+        <tr><td>营业收入</td><td class="num">1,280</td><td class="num">1,138</td></tr>
+        <tr><td>营业成本</td><td class="num">720</td><td class="num">660</td></tr>
+        <tr><td>毛利</td><td class="num">560</td><td class="num">478</td></tr>
+        <tr><td>销售费用</td><td class="num">210</td><td class="num">188</td></tr>
+        <tr><td>研发费用</td><td class="num">240</td><td class="num">225</td></tr>
+        <tr><td>净利润</td><td class="num">92</td><td class="num">54</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>重点结论</h2>
+    <ul>
+      <li>Q2 营收环比增长 12.5%，主要由续费客户增购驱动。</li>
+      <li>研发费用保持高位，现金流环比下降但仍在健康区间。</li>
+      <li>活跃客户净增 16 家，销售转化率提升至 21%。</li>
+    </ul>
+    <details>
+      <summary>方法论与假设</summary>
+      <p>数据来自财务系统与 CRM 导出，不含未开票合同；毛利为收入减直接成本口径。</p>
+    </details>
+  </section>
+</div>
+<script>
+  (function () {
+    var months = ["1月", "2月", "3月", "4月", "5月", "6月"];
+    var revenue = [360, 380, 398, 410, 428, 442];
+    var cost = [210, 220, 230, 238, 244, 238];
+    new Chart(document.getElementById("trendChart"), {
+      type: "line",
+      data: {
+        labels: months,
+        datasets: [
+          { label: "收入（万元）", data: revenue, borderColor: "#1f3a5f", backgroundColor: "rgba(31,58,95,0.08)", tension: 0.3 },
+          { label: "支出（万元）", data: cost, borderColor: "#3b82f6", backgroundColor: "rgba(59,130,246,0.06)", tension: 0.3 }
+        ]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } } }
+    });
+  })();
+</script>
+</body>
+</html>

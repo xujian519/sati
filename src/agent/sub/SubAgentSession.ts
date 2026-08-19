@@ -139,7 +139,7 @@ export class SubAgentSession {
         await this.options.sidechainTranscript.recordDurableMessage(
           this.options.subagentSessionId,
           turnId,
-          event.type === "assistant_message" ? event.message : event.message,
+          event.message,
         );
       }
     }

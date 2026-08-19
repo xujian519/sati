@@ -1,10 +1,6 @@
-import type { ChannelAdapter, ChannelHandle } from "../adapters/index.js";
+import { FeishuChannel, QQChannel, WeixinChannel, type ChannelAdapter, type ChannelHandle } from "../adapters/index.js";
 import type { CronResultDelivery } from "../cron/index.js";
-import { FeishuChannel } from "../adapters/index.js";
-import { WeixinChannel } from "../adapters/index.js";
-import { QQChannel } from "../adapters/index.js";
-import type { Gateway } from "../gateway/index.js";
-import { startGatewayServer, type GatewayServer } from "../gateway/index.js";
+import { startGatewayServer, type Gateway, type GatewayServer } from "../gateway/index.js";
 import { resolvePilotHome, type PilotConfig } from "../pilot/index.js";
 import {
   createChannelRuntimeStatusReporter,

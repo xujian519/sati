@@ -9,6 +9,7 @@ Use this skill after building or modifying web UI. It helps the agent review whe
 
 ## Checklist
 
+0. When reviewing HTML deliverables, first read `{{SKILL_ROOT_SHELL}}/../../assets/prompts/html/shared-design-directives.md` and `{{SKILL_ROOT_SHELL}}/../../assets/prompts/html/html-delivery-checklist.md`.
 1. Layout: consistent alignment, predictable grid, no accidental crowding.
 2. Typography: readable sizes, clear hierarchy, line length under control.
 3. Color: sufficient contrast, semantic states, no random palette mixing.
@@ -17,6 +18,7 @@ Use this skill after building or modifying web UI. It helps the agent review whe
 6. Accessibility: keyboard focus, labels, alt text, contrast, reduced motion where relevant.
 7. Product states: loading, empty, error, offline, and success states exist when needed.
 8. Polish: spacing, borders, shadows, icon sizes, and copy tone feel consistent.
+9. Single-file HTML deliverables: `<!DOCTYPE html>` start, inline CSS/JS, no lorem ipsum, no local image dependencies.
 
 ## Output
 

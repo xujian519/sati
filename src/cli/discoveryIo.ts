@@ -43,6 +43,21 @@ function getRunsDir(pilotHome: string, projectRoot: string): string {
   return join(getAlwaysOnRoot(pilotHome, projectRoot), "runs");
 }
 
+/** Resolve a project name to an absolute path: explicit path → custom extractor → pilotHome fallback. */
+async function resolveProjectRoot(
+  pilotHome: string,
+  projectName: string,
+  extract?: (projectName: string) => Promise<string>,
+): Promise<string> {
+  if (isAbsolute(projectName)) {
+    return resolve(projectName);
+  }
+  if (extract) {
+    return extract(projectName);
+  }
+  return resolve(pilotHome, "projects", projectName);
+}
+
 export function createCoreDiscoveryPlanIo(options: CreateCoreDiscoveryPlanIoOptions): DiscoveryPlanIo {
   const { pilotHome } = options;
   const runHistory = new AlwaysOnRunHistoryService({
@@ -67,22 +82,10 @@ export function createCoreDiscoveryPlanIo(options: CreateCoreDiscoveryPlanIoOpti
   });
 
   return {
-    extractProjectDirectory: async projectName => {
-      if (isAbsolute(projectName)) {
-        return resolve(projectName);
-      }
-      if (options.extractProjectDirectory) {
-        return options.extractProjectDirectory(projectName);
-      }
-      // Fallback: treat the name as a project directory under pilotHome.
-      return resolve(pilotHome, "projects", projectName);
-    },
+    extractProjectDirectory: async projectName =>
+      resolveProjectRoot(pilotHome, projectName, options.extractProjectDirectory),
     getSessions: async (projectName, limit, offset) => {
-      const projectRoot = isAbsolute(projectName)
-        ? resolve(projectName)
-        : options.extractProjectDirectory
-          ? await options.extractProjectDirectory(projectName)
-          : resolve(pilotHome, "projects", projectName);
+      const projectRoot = await resolveProjectRoot(pilotHome, projectName, options.extractProjectDirectory);
       const sessions = await listProjectSessions({
         projectRoot,
         pilotHome,

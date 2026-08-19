@@ -182,6 +182,8 @@ If images were provided, the slide outline already incorporates them from Step 1
 - [html-template.md](html-template.md) — HTML architecture and JS features
 - [viewport-base.css](viewport-base.css) — Mandatory CSS (include in full)
 - [animation-patterns.md](animation-patterns.md) — Animation reference for the chosen feeling
+- [shared-design-directives.md]({{SKILL_ROOT_SHELL}}/../../assets/prompts/html/shared-design-directives.md) — Sati shared HTML constraints
+- [html-delivery-checklist.md]({{SKILL_ROOT_SHELL}}/../../assets/prompts/html/html-delivery-checklist.md) — Delivery self-check
 
 **Key requirements:**
 
