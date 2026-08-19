@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createLocalGateway } from "../../../src/cli/createLocalGateway.js";
-import { createTeamMember, wakeMember } from "../../../src/agent/team/index.js";
+import { createTeamMember, wakeMember, type TeamTaskRow } from "../../../src/agent/team/index.js";
 import type { ModelRuntime } from "../../../src/model/index.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../../../src/model/protocol/capabilities.js";
 
@@ -161,10 +161,29 @@ test("集成：任务图变更 → 调度器原子认领 → 成员转录产出�
     // onTaskGraphChanged 整条链：锁内原子认领 → wake 包装层 → wakeMember → submitTurn。
     // 注意：此调用会 await 完整成员回合（wake 全程持有团队锁——M2 既定锁语义）。
     await team.scheduler.onTaskGraphChanged("t1");
-    assert.equal(team.db.getTask("t1", "t1")?.status, "claimed");
 
-    // 成员回合真实跑完（fake model 单轮结束）→ 转录落盘（回合完成权威条目 turn_result；
-    // 转录无 turn_completed 条目——那是 GatewayEvent 类型，与 transcript entry 不同名）。
+    // C2 后 re-claim 循环有界：M2 无 team 工具在回合内完成任务，回合结束 onMemberIdle
+    // 会 re-claim 同一任务；attempt 达 maxAttempts（3）仍无进展 → 置 failed 终止循环。
+    // 后台链在 microtask/事件循环推进（fire-and-forget），断言不依赖"返回后已完成 N 轮"
+    // 的时序假设——轮询等待任务收敛到 failed（上限 400×25ms=10s：测试环境每轮回合
+    // 触发 auto-compaction 需 1-2s，窗口须覆盖 3 轮）。
+    let task: TeamTaskRow | undefined;
+    for (let i = 0; i < 400; i += 1) {
+      task = team.db.getTask("t1", "t1");
+      if (task?.status === "failed") {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.equal(task?.status, "failed", "attempt 达 maxAttempts 后任务置 failed（有界 re-claim 循环）");
+    assert.ok(
+      task !== undefined && task.attempt >= 1 && task.attempt <= task.maxAttempts,
+      `attempt 应在 [1, maxAttempts] 内（实际 ${task?.attempt}）`,
+    );
+
+    // 成员回合真实跑完（fake model 单轮结束，含 re-claim 各轮）→ 转录落盘
+    //（回合完成权威条目 turn_result；转录无 turn_completed 条目——那是 GatewayEvent
+    // 类型，与 transcript entry 不同名）。
     const { readTranscript } = await import("../../../src/session/transcript/TranscriptReader.js");
     const { getPilotProjectChatDir } = await import("../../../src/pilot/index.js");
     const { sanitizeSessionIdForPath } = await import("../../../src/session/storage/ProjectSessionStorage.js");
@@ -175,10 +194,6 @@ test("集成：任务图变更 → 调度器原子认领 → 成员转录产出�
       transcript.entries.some(entry => entry.type === "turn_result"),
       "回合完成应落 turn_result",
     );
-
-    // 回合结束 onEvent → onMemberIdle → 锁内 re-claim 同一任务（M2 无 team 工具完成任务，
-    // re-claim 循环属既定调度语义；dispose 后残留踢腿的 db-closed rejection 由 wake 包装层
-    // .catch 收敛，无 unhandled rejection——见 onMemberIdle 的 catch 接线注释）。
   } finally {
     result.dispose();
     await rm(root, { recursive: true, force: true });
@@ -255,14 +270,24 @@ test("集成：stranded 任务（claimed + 成员 idle）→ runStrandedScan inv
     const scan = await team.runStrandedScan();
     assert.equal(scan.stranded, 1);
 
-    // invalidate（回 pending + 新 handoffId）→ kickMember 锁内 re-claim：任务回到 claimed。
-    // 注意：re-claim 回合结束时 turn_completed → onMemberIdle 会再触发一轮 re-claim
-    //（M2 无 team 工具在回合内完成任务，re-claim 循环属既定调度语义），且该轮 re-claim
-    // 可能在断言前完成（锁队列 microtask 顺序，Node 内确定）。故 attempt 断言用不变量
-    // 形式（严格大于初始值），不锁定具体轮数；handoffId 清空证明 beginTaskAttempt 生效。
-    const task = team.db.getTask("t1", "t1");
-    assert.equal(task?.status, "claimed");
-    assert.ok(task !== undefined && task.attempt >= 2, `attempt 应至少 re-claim 一轮（实际 ${task?.attempt}）`);
+    // invalidate（回 pending + 新 handoffId）→ kickMember 锁内 re-claim；C2 后有界循环：
+    // re-claim 回合结束 turn_completed → onMemberIdle 继续 re-claim，attempt 达 maxAttempts
+    // 仍无进展 → 置 failed 终止。后台链在 microtask/事件循环推进，断言不依赖时序假设——
+    // 轮询等待任务收敛到 failed（上限 400×25ms=10s：测试环境每轮回合触发
+    // auto-compaction 需 1-2s，窗口须覆盖 re-claim 各轮）。
+    let task: TeamTaskRow | undefined;
+    for (let i = 0; i < 400; i += 1) {
+      task = team.db.getTask("t1", "t1");
+      if (task?.status === "failed") {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.equal(task?.status, "failed", "re-claim 有界循环后任务 failed");
+    assert.ok(
+      task !== undefined && task.attempt >= 2 && task.attempt <= task.maxAttempts,
+      `attempt 应至少 re-claim 一轮且不超 maxAttempts（实际 ${task?.attempt}）`,
+    );
     assert.ok(
       task?.attemptId !== undefined && task?.attemptId !== "old-attempt",
       "attemptId 应被替换（新 attempt 生效）",

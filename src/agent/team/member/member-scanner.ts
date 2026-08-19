@@ -13,7 +13,8 @@ import { getPilotProjectChatDir } from "../../../pilot/index.js";
 import { sanitizeSessionIdForPath } from "../../../session/storage/ProjectSessionStorage.js";
 import { readTranscript } from "../../../session/transcript/TranscriptReader.js";
 import { findOpenRequest } from "../../../session/transcript/interruptedTurn.js";
-import type { TeamDb } from "../storage/team-db.js";
+import type { GatewayEvent } from "../../../gateway/protocol/types.js";
+import type { TeamDb, TeamMemberRow } from "../storage/team-db.js";
 import { wakeMember, type MemberGateway } from "./member-waker.js";
 
 export const TEAM_MEMBER_RESUME_MARKER = "[team-resume]";
@@ -28,6 +29,9 @@ export type ScanTeamMembersOptions = {
   resumeMessage?: string;
   /** 成员会话是否有挂起审批（输出门禁态在 gateway 内存，崩溃即失，须跳过）。 */
   hasPendingApprovals?: (sessionKey: string) => boolean;
+  /** 成员回合事件透传（M2 最终审查 I1 接线点）：冷恢复 turn 的 approval_pending 冒泡
+   *  到队长 watcher——宿主把回调接到 TeamApprovalForwarder.handleMemberEvent。 */
+  onEvent?: (member: TeamMemberRow, event: GatewayEvent) => void;
 };
 
 export type ScanTeamMembersResult = {
@@ -65,7 +69,11 @@ export async function scanTeamMembers(options: ScanTeamMembersOptions): Promise<
       if (fresh === undefined || fresh.status !== "idle" || options.db.isRetired(fresh.sessionKey)) {
         continue;
       }
-      await wakeMember(options.db, options.gateway, member.id, options.resumeMessage ?? TEAM_MEMBER_RESUME_MESSAGE);
+      // I1（code review）：直调 wakeMember 补传 onEvent——冷恢复 turn 的事件（含
+      // approval_pending）透传给宿主，M1"冷恢复审批不冒泡"限制在此闭环（M2 由此接通）。
+      await wakeMember(options.db, options.gateway, member.id, options.resumeMessage ?? TEAM_MEMBER_RESUME_MESSAGE, {
+        onEvent: event => options.onEvent?.(member, event),
+      });
       resumed += 1;
     } catch {
       // 单个成员失败（转录缺失/损坏）不阻塞其余成员；无转录 = 从未唤醒，跳过。
@@ -103,6 +111,11 @@ export async function scanStrandedTasks(options: ScanStrandedTasksOptions): Prom
         continue;
       }
       if (task.assigneeId === undefined) {
+        continue;
+      }
+      // 队长任务（assigneeId="captain"）无成员行：不属 stranded 语义——队长会话由队长
+      // 自己驱动，不在成员冷恢复/re-claim 范围，跳过防误 invalidate（顺手项 1）。
+      if (task.assigneeId === "captain") {
         continue;
       }
       const member = members.get(task.assigneeId);
