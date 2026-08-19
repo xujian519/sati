@@ -13,6 +13,7 @@
  *
  * 专利区环境变量（`SATI_KNOWLEDGE_*` / `SATI_RULES_DIR` 等）位于 Sati 独有模块
  * （src/knowledge、src/rule），不与上游共享，保持原样，不在本层收敛。
+ * 团队区（`SATI_TEAMS_DB`，src/agent/team）同理——M1 起独有，不收敛。
  */
 
 export type EnvLike = Record<string, string | undefined>;
