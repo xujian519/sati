@@ -24,12 +24,19 @@ test("parseTeamSessionKey：成员 key 解析；captain/非法 key 返回 undefi
 test("isCaptainSession / resolveActor", () => {
   assert.equal(isCaptainSession("cap-1"), true);
   assert.equal(isCaptainSession("team:t1:m1"), false);
+  // 成员会话形态（team: / team- 前缀）即便解析失败也不是队长会话
+  assert.equal(isCaptainSession("team-t1-m1"), false);
+  assert.equal(isCaptainSession("team:t1:"), false);
   assert.deepEqual(resolveActor("cap-1"), { teamId: "", memberId: "", captain: true });
   assert.deepEqual(resolveActor("team:t1:m1"), { teamId: "t1", memberId: "m1", captain: false });
   assert.equal(resolveActor(undefined), undefined);
   // Windows 净化形态（SessionList TEAM_MEMBER_SESSION_PATTERN /^team[:\-]/，转录文件名回读）：
   // 信息丢失不可解析，fail-closed 返回 undefined，不得误判为队长放行管理操作。
   assert.equal(resolveActor("team-t1-m1"), undefined);
+  // 畸形成员形态（空 teamId / 空 memberId / 裸前缀）同样 fail-closed，绝不判为队长
+  assert.equal(resolveActor("team:t1:"), undefined);
+  assert.equal(resolveActor("team::m1"), undefined);
+  assert.equal(resolveActor("team:"), undefined);
 });
 
 test("requireCaptain：队长通过；成员/未知会话拒绝", () => {
