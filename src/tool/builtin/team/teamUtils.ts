@@ -109,8 +109,13 @@ export function requireRegisteredRole(roleSlug: string): void {
   }
 }
 
-/** 成员模型路由缺省值（M3）：未显式指定 LLM 路由时的缺省回退，装配时覆盖（T5-T8 接线会传 context 会话主模型）。 */
-export const defaultModelRoute = {
-  provider: "deepseek",
-  model: "deepseek-v4-flash",
-} as const;
+/** 成员模型路由缺省值（M3）：继承队长会话主模型（context provider/modelId），缺省与项目默认一致。 */
+export function defaultModelRoute(context: { provider?: string; modelId?: string }): {
+  provider: string;
+  model: string;
+} {
+  return {
+    provider: context.provider ?? "deepseek",
+    model: context.modelId ?? "deepseek-v4-flash",
+  };
+}

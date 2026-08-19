@@ -19,9 +19,16 @@ export type SatiToolErrorCode =
   | "plan_mode_violation"
   | "ask_mode_violation"
   | "team_actor_unknown"
-  | "team_not_member"
+  | "team_already_archived"
+  | "team_bad_transition"
   | "team_member_retired"
+  | "team_not_assignee"
   | "team_not_captain"
+  | "team_not_found"
+  | "team_not_member"
+  | "team_stale_attempt"
+  | "team_task_not_found"
+  | "team_task_terminal"
   | "team_unknown_role";
 
 export type SatiToolError = {
