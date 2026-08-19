@@ -235,6 +235,32 @@ export type TeamSubsystemHandle = {
   runStrandedScan: () => Promise<ScanStrandedTasksResult>;
 };
 
+/**
+ * M3（复审观察项 3 闭环 + C2 共享化）：成员回合结束的统一收口——
+ * C2 检查（attempt 达 maxAttempts 仍无进展 → 置 failed 终止 re-claim 循环）+ onMemberIdle 续派。
+ * wake 包装层与 scanner 冷恢复路径共用（两路径行为对齐）。
+ * 参数传递 teamScheduler 消除顺序依赖（本函数定义于 runMemberScan/teamScheduler 之前，无闭包捕获）；
+ * onMemberIdle 的 rejection 静默吞掉（onEvent 契约：回调不得抛出）。
+ */
+function handleMemberTurnCompleted(
+  db: TeamDb,
+  teamSchedulerRef: TeamScheduler,
+  teamId: string,
+  memberId: string,
+): void {
+  const open = ownedOpenTask(db.listTasks(teamId), memberId);
+  if (open !== undefined) {
+    const fresh = db.getTask(teamId, open.id);
+    if (fresh !== undefined && attemptsExhausted(fresh)) {
+      const guard = validateAttemptUpdate(fresh, fresh.attemptId);
+      if (guard === undefined) {
+        db.updateTask({ ...fresh, status: "failed", updatedAt: new Date().toISOString() });
+      }
+    }
+  }
+  void teamSchedulerRef.onMemberIdle(teamId, memberId).catch(() => undefined);
+}
+
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
   const baseEnv = options.env ?? process.env;
   const projectRoot = resolve(options.projectRoot ?? process.cwd());
@@ -479,7 +505,13 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
       // I1（code review）：冷恢复 turn 的 approval_pending 冒泡到队长 watcher——
       // scanner 直调 wakeMember 现传 onEvent（M1 已知限制在此闭环，计划 1349 行承诺兑现）。
-      onEvent: (member, event) => teamForwarder.handleMemberEvent(member, event),
+      onEvent: (member, event) => {
+        teamForwarder.handleMemberEvent(member, event);
+        // M3（复审观察项 3）：冷恢复回合结束 → 与 wake 包装层同款收口（C2 + onMemberIdle 续派）
+        if (event.type === "turn_completed" && member.teamId !== undefined) {
+          handleMemberTurnCompleted(teamDb, teamScheduler, member.teamId, member.id);
+        }
+      },
     })
       .then(result => {
         if (result.resumed > 0) {
@@ -513,25 +545,10 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
             if (member !== undefined) {
               teamForwarder.handleMemberEvent(member, event);
             }
-            // M1 已知限制闭环：回合结束 → onMemberIdle（下一任务派发 + member_idle 广播）
+            // M1 已知限制闭环 + M3（复审观察项 3）：回合结束 → C2 检查 + onMemberIdle
+            //（下一任务派发 + member_idle 广播）；与 scanner 冷恢复路径共用共享函数收口。
             if (event.type === "turn_completed" && member?.teamId !== undefined) {
-              // C2（code review）：re-claim 有界——M2 无 team 工具在回合内完成任务，
-              // 回合结束后 onMemberIdle 会 re-claim 同一任务；attempt 达 maxAttempts 仍
-              // 无进展（含回合失败）→ 置 failed 终止循环，兑现设计文档 L2"超限失败"
-              // 承诺（转派/队长接管留 M3）。此检查在 wake 锁内（wake 全程持有团队锁），
-              // 无 TOCTOU；validateAttemptUpdate 防终态/已被 invalidate（attemptId 已清）
-              // 的任务被误置 failed（fail-closed）。
-              const open = ownedOpenTask(teamDb.listTasks(member.teamId), memberId);
-              if (open !== undefined) {
-                const fresh = teamDb.getTask(member.teamId, open.id);
-                if (fresh !== undefined && attemptsExhausted(fresh)) {
-                  const guard = validateAttemptUpdate(fresh, fresh.attemptId);
-                  if (guard === undefined) {
-                    teamDb.updateTask({ ...fresh, status: "failed", updatedAt: new Date().toISOString() });
-                  }
-                }
-              }
-              void teamScheduler.onMemberIdle(member.teamId, memberId).catch(() => undefined);
+              handleMemberTurnCompleted(teamDb, teamScheduler, member.teamId, memberId);
             }
           },
         });
