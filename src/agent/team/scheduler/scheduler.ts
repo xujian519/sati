@@ -88,7 +88,8 @@ export class TeamScheduler {
   /** 团队级触发：对每个 idle 成员给一件就绪工作。 */
   async kickTeam(teamId: string): Promise<void> {
     const team = this.db.getTeam(teamId);
-    if (team === undefined || !this.isCaptainOnline(team.captainSessionKey)) return;
+    // M3：归档团队跳过调度（与 isCaptainOnline 同点——archived 或 captain 离线 → 暂停认领）
+    if (team === undefined || team.archivedAt !== undefined || !this.isCaptainOnline(team.captainSessionKey)) return;
     const members = this.db.listMembers().filter(m => m.teamId === teamId);
     for (const member of members) {
       if (member.status !== "idle") continue;
@@ -99,7 +100,8 @@ export class TeamScheduler {
   /** 成员级触发：邮箱投递优先，其次 ownedOpenTask/nextReadyTask 原子认领。 */
   async kickMember(teamId: string, memberId: string): Promise<void> {
     const team = this.db.getTeam(teamId);
-    if (team === undefined || !this.isCaptainOnline(team.captainSessionKey)) return;
+    // M3：归档团队跳过调度（与 isCaptainOnline 同点——archived 或 captain 离线 → 暂停认领）
+    if (team === undefined || team.archivedAt !== undefined || !this.isCaptainOnline(team.captainSessionKey)) return;
     const member = this.db.getMember(memberId);
     if (
       member === undefined ||

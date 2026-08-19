@@ -1,5 +1,5 @@
 /**
- * TeamDb v2：tasks/messages 两表 CRUD + user_version 升到 2。
+ * TeamDb v2：tasks/messages 两表 CRUD + user_version 升到 3（v3 archived_at 迁移后基线为 3）。
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -19,10 +19,10 @@ const TASK_BASE = {
   updatedAt: "2026-08-20T00:00:00.000Z",
 };
 
-test("v2 迁移：tasks/messages 表可用，userVersion=2", () => {
+test("v2 迁移：tasks/messages 表可用，userVersion=3", () => {
   const db = new TeamDb(":memory:");
   try {
-    assert.equal(db.userVersion(), 2);
+    assert.equal(db.userVersion(), 3);
     db.insertTask({ id: "t1", ...TASK_BASE });
     const task = db.getTask("t1", "t1");
     assert.equal(task?.subject, "撰写答复稿");

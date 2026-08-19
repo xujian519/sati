@@ -104,6 +104,27 @@ test("team_send_message：成员互发（sender=memberId）；空内容/畸形�
   );
 });
 
+test("跨队成员会话（team:t2:x）调 t1 的 send_message / status → team_not_member", async () => {
+  const { db, tools } = setup();
+  // 另建 t2 团队 + x 成员：跨队成员会话是 requireTeamMember 的核心负路径
+  db.upsertTeam({ id: "t2", name: "t2", captainSessionKey: "cap-2", createdAt: "2026-08-20T00:00:00.000Z" });
+  createTeamMember(db, {
+    teamId: "t2",
+    memberId: "x",
+    roleSlug: "researcher",
+    modelRoute: { provider: "fake", model: "fake-model" },
+  });
+  await assert.rejects(
+    () =>
+      tools.sendMessage.execute({ teamId: "t1", recipient: "m1", content: "x" }, { sessionId: "team:t2:x" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_member",
+  );
+  await assert.rejects(
+    () => tools.status.execute({ teamId: "t1" }, { sessionId: "team:t2:x" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_member",
+  );
+});
+
 test("team_status：三视图只读（脏数据降级/任务含 attemptId+handoffId+output/空团队/畸形会话）", async () => {
   const { db, tools } = setup();
   // 脏数据成员：modelRouteJson 非法 → 视图降级为空对象（对齐 scheduler 损坏行跳过语义，过 outputSchema object 校验）

@@ -13,10 +13,10 @@ function openDb(): TeamDb {
   return new TeamDb(":memory:");
 }
 
-test("迁移：首次打开建表，user_version 升到 2", () => {
+test("迁移：首次打开建表，user_version 升到 3", () => {
   const db = openDb();
   try {
-    assert.equal(db.userVersion(), 2);
+    assert.equal(db.userVersion(), 3);
     assert.deepEqual(db.listMembers(), []);
   } finally {
     db.close();
@@ -32,6 +32,7 @@ test("teams：upsert 与读取往返", () => {
       name: "专利团队",
       captainSessionKey: "cap-1",
       createdAt: "2026-08-19T00:00:00.000Z",
+      archivedAt: undefined,
     });
     // upsert 幂等：同名覆盖
     db.upsertTeam({ id: "t1", name: "改名", captainSessionKey: "cap-1", createdAt: "2026-08-19T00:00:00.000Z" });
@@ -75,6 +76,25 @@ test("retired_members：登记与查询", () => {
     db.insertRetired("team:t1:m1", "m1", "removed");
   } finally {
     db.close();
+  }
+});
+
+test("teams.db v3：archived_at 列迁移 + archiveTeam/isArchived", () => {
+  // 先以 v2 建库，再升 v3 验证迁移
+  const root = mkdtempSync(join(tmpdir(), "sati-team-db-v3-"));
+  const db = new TeamDb(join(root, "teams.db"));
+  try {
+    db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });
+    assert.equal(db.isArchived("t1"), false);
+    assert.equal(db.archiveTeam("t1", "2026-08-20T00:00:00.000Z"), true);
+    assert.equal(db.isArchived("t1"), true);
+    assert.equal(db.getTeam("t1")?.archivedAt, "2026-08-20T00:00:00.000Z");
+    assert.equal(db.archiveTeam("t1", "2026-08-20T00:01:00.000Z"), false, "重复归档返回 false");
+    // 未知团队
+    assert.equal(db.archiveTeam("no-such", "2026-08-20T00:00:00.000Z"), false);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
