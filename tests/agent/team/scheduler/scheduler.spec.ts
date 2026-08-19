@@ -178,7 +178,7 @@ test("唤醒失败回滚：只回滚自己的 ticket（attemptId 校验），成
 });
 
 test("邮箱优先：未读消息先投递（fallbackMailboxPrompt），投递成功才 ack", async () => {
-  const { db, scheduler, wakes, root } = await setup();
+  const { db, scheduler, wakes, emits, root } = await setup();
   try {
     db.insertMessage({
       id: "m1",
@@ -188,10 +188,24 @@ test("邮箱优先：未读消息先投递（fallbackMailboxPrompt），投递�
       content: "补充检索 D2 参数",
       createdAt: "2026-08-20T00:00:00.000Z",
     });
+    db.insertMessage({
+      id: "m2",
+      teamId: "t1",
+      sender: "m2",
+      recipient: "m1",
+      content: "补充检索 D3 参数",
+      createdAt: "2026-08-20T00:00:01.000Z",
+    });
     await scheduler.kickMember("t1", "m1");
     assert.equal(wakes.length, 1);
     assert.match(wakes[0]?.message ?? "", /补充检索 D2 参数/);
     assert.ok(db.listMessages("t1", "m1")[0]?.deliveredAt);
+    // M3：批次 payload 断言——senders 完整列表（createdAt ASC 顺序），sender 保留首条（兼容）
+    const delivered = emits.find(e => e.event.type === "message_delivered")?.event;
+    assert.ok(delivered !== undefined, "邮箱投递应发射 message_delivered");
+    assert.equal(delivered.type, "message_delivered");
+    assert.deepEqual(delivered.senders, ["captain", "m2"]); // 两 sender 批次完整列表
+    assert.equal(delivered.sender, delivered.senders[0]); // sender = 首条，兼容既有消费方
   } finally {
     db.close();
     await rm(root, { recursive: true, force: true });
