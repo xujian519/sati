@@ -162,3 +162,70 @@ test("team_remove_member：退休 + 名下 open 任务 invalidate 回池 + membe
   assert.equal(task.reassigning, true); // 回池暂缓自动派发
   assert.ok(events.some(e => e.type === "member_removed" && e.memberId === "m1"));
 });
+
+test("team_add_member/team_remove_member：非本队队长拒绝（同队校验）", async () => {
+  const { db, tools } = setup();
+  db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });
+  registerTestRole("test-searcher");
+  try {
+    // 主会话 cap-b 不是 t1 的队长：add/remove 均拒绝
+    await assert.rejects(
+      () => tools.addMember.execute({ teamId: "t1", roleSlug: "test-searcher" }, { sessionId: "cap-b" } as never),
+      (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_captain",
+    );
+    await assert.rejects(
+      () => tools.removeMember.execute({ teamId: "t1", memberId: "m1" }, { sessionId: "cap-b" } as never),
+      (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_captain",
+    );
+  } finally {
+    unregisterRoleDefinition("test-searcher");
+  }
+});
+
+test("team_remove_member：未知团队/跨队 memberId/终态任务保持/二次移除拒绝", async () => {
+  const { db, tools } = setup();
+  db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });
+  db.upsertTeam({ id: "t2", name: "t2", captainSessionKey: "cap-2", createdAt: "2026-08-20T00:00:00.000Z" });
+  createTeamMember(db, {
+    teamId: "t1",
+    memberId: "m1",
+    roleSlug: "test-researcher",
+    modelRoute: { provider: "fake", model: "fake-model" },
+  });
+  db.insertTask({
+    id: "task-done",
+    teamId: "t1",
+    subject: "s",
+    description: "",
+    status: "completed",
+    assigneeId: "m1",
+    dependencies: [],
+    attempt: 1,
+    attemptId: "a1",
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+    createdAt: "2026-08-20T00:00:00.000Z",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+  });
+  // 未知团队 → team_not_found
+  await assert.rejects(
+    () => tools.removeMember.execute({ teamId: "no-such", memberId: "m1" }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_found",
+  );
+  // 跨队 memberId（m1 属于 t1，对 t2 移除）→ team_not_member
+  await assert.rejects(
+    () => tools.removeMember.execute({ teamId: "t2", memberId: "m1" }, { sessionId: "cap-2" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_member",
+  );
+  // 正常移除：终态任务保持终态不变（不 invalidate）
+  await tools.removeMember.execute({ teamId: "t1", memberId: "m1" }, { sessionId: "cap-1" } as never);
+  const done = db.getTask("t1", "task-done")!;
+  assert.equal(done.status, "completed");
+  assert.equal(done.attemptId, "a1");
+  // 二次移除 → team_member_retired
+  await assert.rejects(
+    () => tools.removeMember.execute({ teamId: "t1", memberId: "m1" }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_member_retired",
+  );
+});

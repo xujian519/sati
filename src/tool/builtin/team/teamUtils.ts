@@ -4,7 +4,7 @@
  * 由 createLocalGateway 经 createBuiltinRegistry options.team 装配（T5-T8 接线）。
  */
 import { parseMemberSessionKey } from "../../../agent/team/index.js";
-import type { TeamDb, TeamScheduler, TeamEventEmitter } from "../../../agent/team/index.js";
+import type { TeamDb, TeamRow, TeamScheduler, TeamEventEmitter } from "../../../agent/team/index.js";
 import { listRegisteredRoleIds } from "../../../agent/sub/builtinSubagentTypes.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 
@@ -98,8 +98,32 @@ export function requireCaptain(actor: TeamActor | undefined): void {
     throw new SatiToolRuntimeError("team_actor_unknown", "无法判定调用者会话身份（sessionId 缺失）");
   }
   if (!actor.captain) {
-    throw new SatiToolRuntimeError("team_not_captain", "该操作仅限队长会话执行");
+    throw new SatiToolRuntimeError("team_not_captain", "该操作仅队长会话执行");
   }
+}
+
+/**
+ * 管理类工具的同队校验（锁内调用）：会话须为队长形态 + 团队存在 + 是该团队队长。
+ * 返回团队行（避免调用方二次 getTeam，且 emit 应以 team.captainSessionKey 路由事件）。
+ * 失败抛 team_actor_unknown / team_not_found / team_not_captain。
+ * 注意：resolveActor 对队长会话返回 teamId 空串，无法直接比较——故接收原始 sessionId 判定。
+ */
+export function requireTeamCaptain(db: TeamDb, sessionId: string | undefined, teamId: string): TeamRow {
+  const actor = resolveActor(sessionId);
+  if (actor === undefined) {
+    throw new SatiToolRuntimeError("team_actor_unknown", "无法判定调用者会话身份（sessionId 缺失）");
+  }
+  if (!actor.captain) {
+    throw new SatiToolRuntimeError("team_not_captain", "仅队长（主会话）可执行团队管理操作");
+  }
+  const team = db.getTeam(teamId);
+  if (team === undefined) {
+    throw new SatiToolRuntimeError("team_not_found", `团队不存在：${teamId}`);
+  }
+  if (team.captainSessionKey !== sessionId) {
+    throw new SatiToolRuntimeError("team_not_captain", `仅团队 ${teamId} 的队长可执行此操作`);
+  }
+  return team;
 }
 
 /** 角色校验：roleSlug 必须已注册（内置预设或 SKILL.md type: role 动态注册）。 */

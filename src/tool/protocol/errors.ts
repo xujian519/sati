@@ -20,6 +20,7 @@ export type SatiToolErrorCode =
   | "ask_mode_violation"
   | "team_actor_unknown"
   | "team_already_archived"
+  | "team_already_exists" // M3 T5 新增：team_create 随机 teamId 碰撞（8 位前缀，理论概率极低，碰撞即响亮失败）
   | "team_bad_transition"
   | "team_member_retired"
   | "team_not_assignee"

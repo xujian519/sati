@@ -1,7 +1,8 @@
 /**
  * 团队管理工具（M3）：team_create / team_add_member / team_remove_member。
- * 全部为管理面（domain: "team:manage"，Task 9 注册打标）——requireCaptain 自守；
- * 建队/招募/移除均锁内 read-modify-write，事件锁内发出，调度锁外触发（既有惯例）。
+ * 全部为管理面（domain: "team:manage"，Task 9 注册打标）——requireTeamCaptain 同队自守；
+ * 建队/招募/移除均锁内 read-modify-write，事件锁内发出；本批 3 工具均不触发调度
+ * （remove_member 回池任务置 reassigning 由 nextReadyTask 跳过，队长经事件知情）。
  */
 import { randomUUID } from "node:crypto";
 import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
@@ -16,9 +17,13 @@ import {
   defaultModelRoute,
   requireCaptain,
   requireRegisteredRole,
+  requireTeamCaptain,
   resolveActor,
   type TeamToolsOptions,
 } from "./teamUtils.js";
+
+/** 移除成员缺省原因（队长未提供时）。 */
+const REMOVED_REASON_DEFAULT = "removed_by_captain";
 
 export type TeamCreateInput = { name: string; memberRoleSlugs?: string[] };
 export type TeamCreateOutput = {
@@ -75,6 +80,10 @@ export function createTeamCreateTool(options: TeamToolsOptions): SatiToolDefinit
       const teamId = `t-${randomUUID().slice(0, 8)}`;
       const members: Array<{ memberId: string; roleSlug: string }> = [];
       await withTeamLock(teamId, async () => {
+        // 随机 8 位前缀碰撞理论概率极低，但一旦发生即响亮失败（upsert 会静默覆盖）
+        if (db.getTeam(teamId) !== undefined) {
+          throw new SatiToolRuntimeError("team_already_exists", `团队 id 碰撞，请重试：${teamId}`);
+        }
         db.upsertTeam({
           id: teamId,
           name: input.name,
@@ -136,14 +145,10 @@ export function createTeamAddMemberTool(
     isConcurrencySafe: () => true,
     isDestructive: () => false,
     execute: async (input, context): Promise<SatiToolExecutionOutput<TeamAddMemberOutput>> => {
-      const actor = resolveActor(context.sessionId);
-      requireCaptain(actor);
       requireRegisteredRole(input.roleSlug);
       let memberId = "";
       await withTeamLock(input.teamId, async () => {
-        if (db.getTeam(input.teamId) === undefined) {
-          throw new SatiToolRuntimeError("team_not_found", `团队不存在：${input.teamId}`);
-        }
+        const team = requireTeamCaptain(db, context.sessionId, input.teamId);
         memberId = `m-${randomUUID().slice(0, 8)}`;
         createTeamMember(db, {
           teamId: input.teamId,
@@ -151,7 +156,12 @@ export function createTeamAddMemberTool(
           roleSlug: input.roleSlug,
           modelRoute: defaultModelRoute(context),
         });
-        emit(context.sessionId, { type: "member_added", teamId: input.teamId, memberId, roleSlug: input.roleSlug });
+        emit(team.captainSessionKey, {
+          type: "member_added",
+          teamId: input.teamId,
+          memberId,
+          roleSlug: input.roleSlug,
+        });
       });
       return {
         content: [{ type: "text", text: `team_add_member memberId=${memberId} role=${input.roleSlug}` }],
@@ -192,9 +202,8 @@ export function createTeamRemoveMemberTool(
     isConcurrencySafe: () => true,
     isDestructive: () => true,
     execute: async (input, context): Promise<SatiToolExecutionOutput<TeamRemoveMemberOutput>> => {
-      const actor = resolveActor(context.sessionId);
-      requireCaptain(actor);
       await withTeamLock(input.teamId, async () => {
+        const team = requireTeamCaptain(db, context.sessionId, input.teamId);
         const member = db.getMember(input.memberId);
         if (member === undefined || member.teamId !== input.teamId) {
           throw new SatiToolRuntimeError("team_not_member", `团队成员不存在：${input.memberId}`);
@@ -202,17 +211,17 @@ export function createTeamRemoveMemberTool(
         if (db.isRetired(member.sessionKey)) {
           throw new SatiToolRuntimeError("team_member_retired", `团队成员已退休：${input.memberId}`);
         }
-        db.insertRetired(member.sessionKey, member.id, input.reason ?? "removed_by_captain");
+        db.insertRetired(member.sessionKey, member.id, input.reason ?? REMOVED_REASON_DEFAULT);
         // 名下 open 任务 invalidate 回池（reassigning 暂缓自动派发，等队长处置）
         for (const task of db.listTasks(input.teamId)) {
           if (task.assigneeId !== member.id || TERMINAL_TASK_STATUSES.includes(task.status)) continue;
           db.updateTask(invalidateTaskAttempt(task, { reassigning: true }));
         }
-        emit(context.sessionId, {
+        emit(team.captainSessionKey, {
           type: "member_removed",
           teamId: input.teamId,
           memberId: member.id,
-          reason: input.reason ?? "removed_by_captain",
+          reason: input.reason ?? REMOVED_REASON_DEFAULT,
         });
       });
       return {
