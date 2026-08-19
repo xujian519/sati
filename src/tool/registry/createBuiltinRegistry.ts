@@ -68,6 +68,18 @@ import {
   createPaperSearchTool,
   type CreateLiteratureRegistryOptions,
 } from "../../literature/index.js";
+import {
+  createTeamCreateTool,
+  createTeamAddMemberTool,
+  createTeamRemoveMemberTool,
+  createTeamCreateTaskTool,
+  createTeamUpdateTaskTool,
+  createTeamReassignTaskTool,
+  createTeamSendMessageTool,
+  createTeamStatusTool,
+  createTeamArchiveTool,
+  type TeamToolsOptions,
+} from "../builtin/team/index.js";
 import type { SatiToolDefinition, ToolDomain } from "../protocol/types.js";
 import { ToolRegistry } from "./ToolRegistry.js";
 
@@ -196,6 +208,12 @@ export type CreateBuiltinRegistryOptions = {
    * Pass `false` to keep it out of the registry.
    */
   exportHtml?: false;
+  /**
+   * team_* 工具（M3）：团队编排工具面——9 工具（建队/招募/退休/任务/消息/状态/归档）。
+   * 注入 createLocalGateway 的 teamDb + teamScheduler + 广播闭包；未传则不注册。
+   * 管理面 6 工具 domain "team:manage"（仅 captain），作业面 3 工具 domain "team"（成员可见）。
+   */
+  team?: TeamToolsOptions;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -314,6 +332,20 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   if (options?.readSkill) {
     registry.register(annotate(createReadSkillTool(options.readSkill), "session"));
+  }
+  if (options?.team) {
+    const { db, scheduler, emit } = options.team;
+    // 管理面（team:manage，仅 captain）
+    registry.register(annotate(createTeamCreateTool({ db, scheduler, emit }), "team:manage"));
+    registry.register(annotate(createTeamAddMemberTool({ db, scheduler, emit }), "team:manage"));
+    registry.register(annotate(createTeamRemoveMemberTool({ db, scheduler, emit }), "team:manage"));
+    registry.register(annotate(createTeamCreateTaskTool({ db, scheduler, emit }), "team:manage"));
+    registry.register(annotate(createTeamReassignTaskTool({ db, scheduler, emit }), "team:manage"));
+    registry.register(annotate(createTeamArchiveTool({ db, scheduler, emit }), "team:manage"));
+    // 作业面（team，成员角色可见）
+    registry.register(annotate(createTeamUpdateTaskTool({ db, scheduler, emit }), "team"));
+    registry.register(annotate(createTeamSendMessageTool({ db, scheduler, emit }), "team"));
+    registry.register(annotate(createTeamStatusTool({ db, scheduler, emit }), "team"));
   }
   return registry;
 }
