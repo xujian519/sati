@@ -76,7 +76,7 @@ const ISSUES_URL = `${REPO_URL}/issues`;
  * shared by macOS's native About panel and the Windows About dialog. Result:
  *
  *   Sati
- *   Version 0.1.2
+ *   Version 0.1.3
  *   build a2f682b · 2026-04-30
  *   Copyright …
  *
@@ -107,7 +107,7 @@ function readBuildInfo(): { version: string; versionLine: string; copyright: str
   const date = info.buildDate ?? null;
 
   // macOS shows `version` in parentheses under the main version line. The
-  // canonical "Version 0.1.2 (build a2f682b · 2026-04-30)" format puts the
+  // canonical "Version 0.1.3 (build a2f682b · 2026-04-30)" format puts the
   // human-friendly version in `applicationVersion` and provenance in `version`.
   const versionLine = sha && date ? `build ${sha} · ${date}` : "dev build";
 
