@@ -76,8 +76,8 @@ test("空文本不触碰 tokenizer", () => {
 
 test("高重复度长文本走样本外推路径（mode=sample），且计数与全量编码同数量级", () => {
   resetTokenCache();
-  // 病态样本：超过 1KB 的高度重复中文模式文本（BPE 合并链不提前终止，
-  // 实测 1KB 样本编码 ≈ 550ms，远超 150ms 阈值）。
+  // 病态样本：超过采样长度的高度重复中文模式文本（BPE 合并链不提前终止，
+  // 实测 512 字符样本编码 ≈ 130ms，远超 80ms 阈值）。
   const pathological = "专利权利要求书技术方案实施例".repeat(400); // 400 × 14 chars ≈ 5.6KB
   assert.ok(pathological.length > 1024);
   const guarded = countTokensGuarded(pathological);

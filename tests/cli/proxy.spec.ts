@@ -28,10 +28,26 @@ test("createLongTimeoutOptions returns bounded transport options", () => {
   assert.ok(options.connections > 0);
 });
 
-test("installGlobalProxy with no proxy configured returns undefined", async () => {
-  // The process env may contain proxy vars in CI; force an explicit env read
-  // by calling installGlobalProxy with a falsy explicit URL is not possible,
-  // so guard: if no env proxy is present, direct dispatcher is installed.
+test("installGlobalProxy with no proxy configured returns undefined", async t => {
+  // 本机/CI 环境可能注入 HTTP(S)_PROXY 等变量，先清空再断言“无代理”分支，
+  // 保证测试不依赖宿主环境（hermetic）。
+  const proxyKeys = [
+    "SATI_PROXY",
+    "PILOTDECK_PROXY",
+    "https_proxy",
+    "HTTPS_PROXY",
+    "http_proxy",
+    "HTTP_PROXY",
+  ] as const;
+  const saved = new Map<string, string | undefined>(proxyKeys.map(k => [k, process.env[k]]));
+  for (const k of proxyKeys) delete process.env[k];
+  t.after(() => {
+    for (const [k, v] of saved) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
   const result = await installGlobalProxy(undefined, undefined);
   assert.equal(result, undefined);
 });
