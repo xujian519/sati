@@ -23,6 +23,7 @@
     "dev": "node scripts/dev-launcher.mjs",
     "test": "npm run build && node --test --test-force-exit --test-timeout 60000 \"dist/tests/**/*.test.js\" \"dist/tests/**/*.spec.js\"",
     "test:patent-eval": "npm run build && node scripts/patent-eval.mjs --mode graph --suite tests/patent/benchmark/fixtures/patent-exam-real-a22.json --max-cases 1",
+    "test:team-stress": "pnpm build && node scripts/team-stress-verify.mjs",
     "record:replay": "tsx scripts/record-llm-replay.ts",
     "gen:event-matrix": "tsx scripts/gen-event-matrix.ts",
     "check:event-matrix": "tsx scripts/gen-event-matrix.ts --check",
