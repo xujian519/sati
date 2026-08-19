@@ -16,7 +16,13 @@ import { randomUUID } from "node:crypto";
 import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
 import { withTeamLock } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
-import { TEAM_MEMBER_SESSION_PATTERN, requireTeamMember, resolveActor, type TeamToolsOptions } from "./teamUtils.js";
+import {
+  TEAM_MEMBER_SESSION_PATTERN,
+  assertTeamActive,
+  requireTeamMember,
+  resolveActor,
+  type TeamToolsOptions,
+} from "./teamUtils.js";
 
 export type TeamSendMessageInput = { teamId: string; recipient: string; content: string };
 export type TeamSendMessageOutput = { messageId: string; teamId: string; recipient: string; sender: string };
@@ -74,6 +80,8 @@ export function createTeamSendMessageTool(
         if (team === undefined) {
           throw new SatiToolRuntimeError("team_not_found", `团队不存在：${input.teamId}`);
         }
+        // F4：归档后只读——队长不再向归档团队投递消息（成员路径已因全员退休被 team_member_retired 挡住）
+        assertTeamActive(team);
         const recipient = db.getMember(input.recipient);
         if (recipient === undefined || recipient.teamId !== input.teamId) {
           throw new SatiToolRuntimeError("team_not_member", `收件人不存在：${input.recipient}`);

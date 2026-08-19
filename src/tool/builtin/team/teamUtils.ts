@@ -128,6 +128,17 @@ export function requireTeamCaptain(db: TeamDb, sessionId: string | undefined, te
   return team;
 }
 
+/**
+ * 归档态门禁（T8 review F4）：归档后团队只读（设计语义「任务/消息保留只读」墓碑）。
+ * 变更类工具在 requireTeamCaptain 拿到 TeamRow 后调用（与 requireTeamCaptain 同点判定），
+ * 已归档抛 team_already_archived——防止归档后继续产生变更（如 add_member 产生未退休僵尸成员）。
+ */
+export function assertTeamActive(team: TeamRow): void {
+  if (team.archivedAt !== undefined) {
+    throw new SatiToolRuntimeError("team_already_archived", `团队已归档：${team.id}`);
+  }
+}
+
 /** 角色校验：roleSlug 必须已注册（内置预设或 SKILL.md type: role 动态注册）。 */
 export function requireRegisteredRole(roleSlug: string): void {
   if (!listRegisteredRoleIds().includes(roleSlug)) {

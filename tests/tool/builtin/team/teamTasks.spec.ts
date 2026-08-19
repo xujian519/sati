@@ -84,6 +84,46 @@ test("team_create_task：建任务 + blockedByCount 按依赖重算 + task_creat
   assert.ok(events.some(e => e.type === "task_created" && e.taskId === data.taskId));
 });
 
+test("归档后只读：create_task / update_task（队长路径）/ reassign 报 team_already_archived（T8 review F4）", async () => {
+  const { db, tools, insertTask } = setup();
+  insertTask({
+    id: "a",
+    teamId: "t1",
+    subject: "A",
+    description: "",
+    status: "claimed",
+    assigneeId: "m1",
+    dependencies: [],
+    attempt: 1,
+    attemptId: "attempt-1",
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+  });
+  db.archiveTeam("t1", "2026-08-20T00:00:00.000Z");
+  await assert.rejects(
+    () => tools.createTask.execute({ teamId: "t1", subject: "X" }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_already_archived",
+  );
+  // update_task 队长路径（成员路径已因全员退休被 team_member_retired 天然挡住，不在此测）
+  await assert.rejects(
+    () =>
+      tools.updateTask.execute(
+        { teamId: "t1", taskId: "a", status: "completed", attemptId: "attempt-1", output: "x" },
+        { sessionId: "cap-1" } as never,
+      ),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_already_archived",
+  );
+  await assert.rejects(
+    () => tools.reassign.execute({ teamId: "t1", taskId: "a", memberId: "m1" }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_already_archived",
+  );
+  const task = db.getTask("t1", "a")!;
+  assert.equal(task.status, "claimed", "门禁拒绝不产生任何副作用");
+  assert.equal(task.attempt, 1);
+  assert.equal(db.listTasks("t1").length, 1, "未新建任务");
+});
+
 test("team_create_task：依赖不存在拒绝；未知团队拒绝；成员会话拒绝", async () => {
   const { tools } = setup();
   await assert.rejects(

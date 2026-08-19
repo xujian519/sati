@@ -79,8 +79,46 @@ test("retired_members：登记与查询", () => {
   }
 });
 
+test("transaction：提交成功全部生效；中途抛错整体回滚（T8 review I-1）", () => {
+  const db = openDb();
+  try {
+    db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });
+    db.insertMember({
+      id: "m1",
+      teamId: "t1",
+      roleSlug: "researcher",
+      modelRouteJson: "{}",
+      status: "idle",
+      sessionKey: "team:t1:m1",
+      createdAt: "2026-08-20T00:00:00.000Z",
+    });
+    // 提交路径：事务内全部写入生效
+    db.transaction(() => {
+      db.archiveTeam("t1", "2026-08-20T00:00:00.000Z");
+      db.insertRetired("team:t1:m1", "m1", "team_archived");
+    });
+    assert.equal(db.isArchived("t1"), true);
+    assert.equal(db.isRetired("team:t1:m1"), true);
+    // 回滚路径：事务内抛错后外状态不变（archivedAt 未置位 + 成员未退休）
+    assert.throws(
+      () =>
+        db.transaction(() => {
+          db.archiveTeam("t1", "2026-08-20T01:00:00.000Z");
+          throw new Error("boom");
+        }),
+      /boom/,
+    );
+    assert.equal(db.getTeam("t1")?.archivedAt, "2026-08-20T00:00:00.000Z", "第二次归档已回滚，保持首次提交值");
+    assert.equal(db.isArchived("t1"), true);
+    assert.equal(db.isRetired("team:t1:m1"), true, "成员退休保持首次提交值");
+  } finally {
+    db.close();
+  }
+});
+
 test("teams.db v3：archived_at 列迁移 + archiveTeam/isArchived", () => {
-  // 先以 v2 建库，再升 v3 验证迁移
+  // T8 review M-1 注释诚实化：本用例验证 v3 归档字段往返（new TeamDb(path) 一次跑完 v1→v3），
+  // 真实 v2 旧库升级见下方「迁移：v2 旧库升级到 v3」用例
   const root = mkdtempSync(join(tmpdir(), "sati-team-db-v3-"));
   const db = new TeamDb(join(root, "teams.db"));
   try {
@@ -94,6 +132,91 @@ test("teams.db v3：archived_at 列迁移 + archiveTeam/isArchived", () => {
     assert.equal(db.archiveTeam("no-such", "2026-08-20T00:00:00.000Z"), false);
   } finally {
     db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("迁移：真实 v2 旧库（user_version=2 + 旧数据）升级到 v3，旧行 archivedAt 为 undefined（T8 review M-1）", () => {
+  const root = mkdtempSync(join(tmpdir(), "sati-team-db-v2up-"));
+  const dbPath = join(root, "teams.db");
+  try {
+    // 裸 DatabaseSync 按 v1+v2 schema 建库并置 user_version=2，模拟升级前的真实旧库
+    const raw = new DatabaseSync(dbPath);
+    raw.exec(`
+      CREATE TABLE teams (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        captain_session_key TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE members (
+        id TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL,
+        role_slug TEXT NOT NULL,
+        model_route_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('idle','working')),
+        session_key TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE retired_members (
+        session_key TEXT PRIMARY KEY,
+        member_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        retired_at TEXT NOT NULL
+      );
+      CREATE TABLE tasks (
+        id TEXT NOT NULL,
+        team_id TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL CHECK (status IN ('pending','claimed','in_progress','completed','failed','cancelled')),
+        assignee_id TEXT,
+        dependencies_json TEXT NOT NULL DEFAULT '[]',
+        attempt INTEGER NOT NULL DEFAULT 0,
+        attempt_id TEXT,
+        handoff_id TEXT,
+        reassigning INTEGER NOT NULL DEFAULT 0,
+        blocked_by_count INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        output TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (team_id, id)
+      );
+      CREATE TABLE messages (
+        id TEXT NOT NULL,
+        team_id TEXT NOT NULL,
+        sender TEXT NOT NULL,
+        recipient TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        delivery_claimed_at TEXT,
+        delivered_at TEXT,
+        read_at TEXT,
+        PRIMARY KEY (team_id, id)
+      );
+      PRAGMA user_version = 2;
+    `);
+    raw
+      .prepare("INSERT INTO teams (id, name, captain_session_key, created_at) VALUES (?, ?, ?, ?)")
+      .run("t-old", "旧团队", "cap-old", "2026-08-01T00:00:00.000Z");
+    raw.close();
+    // 以 TeamDb 重开：v2 → v3 迁移补 archived_at 列，旧行该字段保持 NULL（= undefined）
+    const db = new TeamDb(dbPath);
+    try {
+      assert.equal(db.userVersion(), 3);
+      assert.deepEqual(db.getTeam("t-old"), {
+        id: "t-old",
+        name: "旧团队",
+        captainSessionKey: "cap-old",
+        createdAt: "2026-08-01T00:00:00.000Z",
+        archivedAt: undefined,
+      });
+      assert.equal(db.isArchived("t-old"), false);
+    } finally {
+      db.close();
+    }
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

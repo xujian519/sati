@@ -45,13 +45,18 @@ export function createTeamArchiveTool(
           throw new SatiToolRuntimeError("team_already_archived", `团队已归档：${input.teamId}`);
         }
         const archivedAt = new Date().toISOString();
-        db.archiveTeam(input.teamId, archivedAt);
-        // 成员全退休（reason: "team_archived"）——退休成员不再被唤醒
-        for (const member of db.listMembers().filter(m => m.teamId === input.teamId)) {
-          if (!db.isRetired(member.sessionKey)) {
-            db.insertRetired(member.sessionKey, member.id, "team_archived");
+        // I-1 review（T8）：归档 + 成员退休同一事务（原子化）——中途失败整体回滚，
+        // 不留「已归档但成员未退休 / 已退休但未归档」的半态（僵尸成员可被唤醒的窗口）。
+        db.transaction(() => {
+          db.archiveTeam(input.teamId, archivedAt);
+          // 成员全退休（reason: "team_archived"）——退休成员不再被唤醒
+          for (const member of db.listMembers().filter(m => m.teamId === input.teamId)) {
+            if (!db.isRetired(member.sessionKey)) {
+              db.insertRetired(member.sessionKey, member.id, "team_archived");
+            }
           }
-        }
+        });
+        // emit 在事务提交后（锁内、事务外）：内存广播失败不回滚已提交的数据（I-1 review）
         emit(team.captainSessionKey, { type: "team_archived", teamId: input.teamId });
       });
       return {

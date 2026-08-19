@@ -282,6 +282,66 @@ test("队长离线：暂停认领（在途回合不派新任务）", async () =>
   }
 });
 
+test("归档团队：kickTeam/kickMember 跳过（有就绪任务 + idle 成员 → 不建 attempt、无 wake，T8 review F2a）", async () => {
+  const { db, scheduler, wakes, root } = await setup();
+  try {
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "x",
+      description: "",
+      status: "pending",
+      dependencies: [],
+      attempt: 0,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    db.archiveTeam("t1", "2026-08-20T00:00:00.000Z");
+    await scheduler.kickTeam("t1");
+    await scheduler.kickMember("t1", "m1");
+    assert.equal(wakes.length, 0, "归档团队不唤醒任何成员");
+    const task = db.getTask("t1", "t1")!;
+    assert.equal(task.status, "pending");
+    assert.equal(task.attempt, 0, "未创建 attempt");
+    assert.equal(task.assigneeId, undefined);
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("归档团队：成员未退休也跳过 kickMember（钉住 archivedAt 检查本身而非退休副作用，T8 review F2b）", async () => {
+  const { db, scheduler, wakes, root } = await setup();
+  try {
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "x",
+      description: "",
+      status: "pending",
+      dependencies: [],
+      attempt: 0,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    // 手工构造：仅归档、不退休成员（正常归档会全退休——此处隔离出 archivedAt 检查本身）
+    db.archiveTeam("t1", "2026-08-20T00:00:00.000Z");
+    assert.equal(db.isRetired(db.getMember("m1")!.sessionKey), false, "前置：成员未退休");
+    await scheduler.kickMember("t1", "m1");
+    assert.equal(wakes.length, 0, "archivedAt 置位即跳过，与成员退休与否无关");
+    assert.equal(db.getTask("t1", "t1")?.status, "pending");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("onMemberIdle：成员完成依赖链首任务后 idle → 触发接手下一任务（member_idle 广播）", async () => {
   const { db, scheduler, wakes, emits, root } = await setup();
   try {

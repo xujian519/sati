@@ -66,6 +66,31 @@ test("team_archive：置 archivedAt + 成员全退休 + team_archived 事件 + �
   }
 });
 
+test("team_archive：emit 失败不回滚已提交数据（事务提交后广播，T8 review I-1）", async () => {
+  const root = mkdtempSync(join(tmpdir(), "sati-team-archive-emit-"));
+  const db = new TeamDb(join(root, "teams.db"));
+  const emit: TeamEventEmitter = () => {
+    throw new Error("emit-boom");
+  };
+  const archive = createTeamArchiveTool({ db, scheduler: {} as unknown as TeamScheduler, emit });
+  db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });
+  createTeamMember(db, {
+    teamId: "t1",
+    memberId: "m1",
+    roleSlug: "researcher",
+    modelRoute: { provider: "fake", model: "fake-model" },
+  });
+  try {
+    await assert.rejects(() => archive.execute({ teamId: "t1" }, { sessionId: "cap-1" } as never), /emit-boom/);
+    // 数据已在事务内提交：广播失败仅使调用报错，归档与退休保持生效（emit 不回滚数据）
+    assert.ok(db.getTeam("t1")!.archivedAt !== undefined, "archivedAt 已提交");
+    assert.ok(db.isRetired(db.getMember("m1")!.sessionKey), "成员已退休");
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("team_archive：未知团队/成员会话拒绝", async () => {
   const root = mkdtempSync(join(tmpdir(), "sati-team-archive2-"));
   const db = new TeamDb(join(root, "teams.db"));

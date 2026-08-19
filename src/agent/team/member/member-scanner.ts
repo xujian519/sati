@@ -105,6 +105,11 @@ export async function scanStrandedTasks(options: ScanStrandedTasksOptions): Prom
   let stranded = 0;
   const allMembers = db.listMembers();
   for (const team of db.listTeams()) {
+    // I-1 review（T8）：归档团队整体跳过——成员已全退休、任务保留只读，
+    // 冷启动不再空扫归档团队（检查点与 scheduler kickTeam 顺序一致：team 存在 → archivedAt → 后续）。
+    if (team.archivedAt !== undefined) {
+      continue;
+    }
     const members = new Map(allMembers.filter(m => m.teamId === team.id).map(m => [m.id, m]));
     for (const task of db.listTasks(team.id)) {
       if (task.status !== "claimed" && task.status !== "in_progress") {
