@@ -1,0 +1,384 @@
+/**
+ * 团队任务池工具（M3）：team_create_task / team_update_task / team_reassign_task。
+ * create/reassign 为管理面（domain: "team:manage"）；update_task 为作业面（domain: "team"）——
+ * 成员回合内完成任务的关键路径：assignee 校验 + validateAttemptUpdate（stale-attempt fail-closed）
+ * + transitionError 校验 → 锁内置终态 → blockedByCount 重算 → 锁外调度（下游解锁）。
+ *
+ * 同队校验（T5 review 定型）：三个工具的身份校验全部在锁内执行——
+ * create/reassign 用 requireTeamCaptain（替代锁外 requireCaptain + 锁内 getTeam 检查，
+ * team_not_found 语义一致），事件一律路由到 team.captainSessionKey（真实队长，不假设调用者）。
+ * update_task 锁内按身份分流：成员路径 requireTeamMember（assignee 校验），
+ * 队长路径 requireTeamCaptain（跳过 assignee 校验但 attemptId 仍校验，计划语义）。
+ * 锁外调度（onTaskGraphChanged/kickMember）：scheduler 内部自己拿团队锁，防重入死锁（M2 C1 惯例）。
+ */
+import { randomUUID } from "node:crypto";
+import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
+import {
+  TERMINAL_TASK_STATUSES,
+  transitionError,
+  unsatisfiedDependencies,
+  validateAttemptUpdate,
+  invalidateTaskAttempt,
+  withTeamLock,
+  type TeamDb,
+  type TeamTaskRow,
+} from "../../../agent/team/index.js";
+import { SatiToolRuntimeError } from "../../protocol/errors.js";
+import { requireTeamCaptain, requireTeamMember, resolveActor, type TeamToolsOptions } from "./teamUtils.js";
+
+/** 锁内重算团队全部任务的 blockedByCount（dependencies 未完成计数，与调度器 unsatisfiedDependencies 一致）。 */
+function recomputeBlockedByCount(db: TeamDb, teamId: string): void {
+  for (const t of db.listTasks(teamId)) {
+    const count = unsatisfiedDependencies(db.listTasks(teamId), t.dependencies).length;
+    if (count !== t.blockedByCount) {
+      db.updateTask({ ...t, blockedByCount: count, updatedAt: t.updatedAt });
+    }
+  }
+}
+
+export type TeamCreateTaskInput = {
+  teamId: string;
+  subject: string;
+  description?: string;
+  dependencies?: string[];
+  maxAttempts?: number;
+};
+export type TeamCreateTaskOutput = {
+  teamId: string;
+  taskId: string;
+  subject: string;
+  status: string;
+  blockedByCount: number;
+};
+
+export function createTeamCreateTaskTool(
+  options: TeamToolsOptions,
+): SatiToolDefinition<TeamCreateTaskInput, TeamCreateTaskOutput> {
+  const { db, scheduler, emit } = options;
+  return {
+    name: "team_create_task",
+    outputSchema: {
+      type: "object",
+      required: ["teamId", "taskId", "subject", "status", "blockedByCount"],
+      properties: {
+        teamId: { type: "string" },
+        taskId: { type: "string" },
+        subject: { type: "string" },
+        status: { type: "string" },
+        blockedByCount: { type: "number" },
+      },
+    },
+    description:
+      "Create a task in the team task pool with optional dependencies (task ids that must complete first) and maxAttempts (default 3). The scheduler auto-claims ready tasks to idle members. Captain-only.",
+    kind: "team",
+    inputSchema: {
+      type: "object",
+      required: ["teamId", "subject"],
+      additionalProperties: false,
+      properties: {
+        teamId: { type: "string", description: "Team id." },
+        subject: { type: "string", description: "Task subject (shown in the member's assignment prompt)." },
+        description: { type: "string", description: "Optional task description." },
+        dependencies: {
+          type: "array",
+          items: { type: "string" },
+          description: "Task ids that must be 'completed' before this task is dispatched.",
+        },
+        maxAttempts: {
+          type: "number",
+          description: "Attempt cap before the task is marked failed (default 3).",
+        },
+      },
+    },
+    isReadOnly: () => false,
+    isConcurrencySafe: () => true,
+    isDestructive: () => false,
+    execute: async (input, context): Promise<SatiToolExecutionOutput<TeamCreateTaskOutput>> => {
+      let taskId = "";
+      let blockedByCount = 0;
+      await withTeamLock(input.teamId, async () => {
+        const team = requireTeamCaptain(db, context.sessionId, input.teamId);
+        const known = db.listTasks(input.teamId);
+        for (const dep of input.dependencies ?? []) {
+          if (!known.some(t => t.id === dep)) {
+            throw new SatiToolRuntimeError("team_task_not_found", `依赖任务不存在：${dep}`);
+          }
+        }
+        taskId = `t-${randomUUID().slice(0, 8)}`;
+        const deps = input.dependencies ?? [];
+        blockedByCount = unsatisfiedDependencies(known, deps).length;
+        const row: TeamTaskRow = {
+          id: taskId,
+          teamId: input.teamId,
+          subject: input.subject,
+          description: input.description ?? "",
+          status: "pending",
+          dependencies: deps,
+          attempt: 0,
+          reassigning: false,
+          blockedByCount,
+          maxAttempts: input.maxAttempts ?? 3,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        db.insertTask(row);
+        emit(team.captainSessionKey, {
+          type: "task_created",
+          teamId: input.teamId,
+          taskId,
+          subject: input.subject,
+          dependencies: deps,
+        });
+      });
+      // 锁外触发调度（scheduler 内部自己拿锁，防重入死锁——M2 C1 惯例；fire-and-forget）
+      void scheduler.onTaskGraphChanged(input.teamId).catch(() => undefined);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `team_create_task taskId=${taskId} subject=${input.subject} blockedBy=${blockedByCount}`,
+          },
+        ],
+        data: { teamId: input.teamId, taskId, subject: input.subject, status: "pending", blockedByCount },
+      };
+    },
+  };
+}
+
+export type TeamUpdateTaskInput = {
+  teamId: string;
+  taskId: string;
+  status: "completed" | "failed" | "cancelled";
+  attemptId: string;
+  output?: string;
+  reason?: string;
+};
+export type TeamUpdateTaskOutput = {
+  teamId: string;
+  taskId: string;
+  status: string;
+  attempt: number;
+  assigneeId?: string;
+  output?: string;
+};
+
+export function createTeamUpdateTaskTool(
+  options: TeamToolsOptions,
+): SatiToolDefinition<TeamUpdateTaskInput, TeamUpdateTaskOutput> {
+  const { db, scheduler, emit } = options;
+  return {
+    name: "team_update_task",
+    outputSchema: {
+      type: "object",
+      required: ["teamId", "taskId", "status", "attempt"],
+      properties: {
+        teamId: { type: "string" },
+        taskId: { type: "string" },
+        status: { type: "string" },
+        attempt: { type: "number" },
+        assigneeId: { type: "string" },
+        output: { type: "string" },
+      },
+    },
+    description:
+      "Advance a task to a terminal state. Members may only update tasks assigned to themselves; the captain may update any task. Pass the attemptId from the assignment prompt — writes with a stale attemptId are rejected (fail-closed). 'completed' accepts output; 'failed' accepts reason; 'cancelled' accepts neither. Completing a task unlocks its dependents for dispatch.",
+    kind: "team",
+    inputSchema: {
+      type: "object",
+      required: ["teamId", "taskId", "status", "attemptId"],
+      additionalProperties: false,
+      properties: {
+        teamId: { type: "string", description: "Team id." },
+        taskId: { type: "string", description: "Task id." },
+        status: {
+          type: "string",
+          enum: ["completed", "failed", "cancelled"],
+          description: "Terminal status to move to.",
+        },
+        attemptId: {
+          type: "string",
+          description: "Current attemptId (from the assignment prompt). Required — guards against stale writes.",
+        },
+        output: { type: "string", description: "Completion output (status=completed)." },
+        reason: { type: "string", description: "Failure reason (status=failed)." },
+      },
+    },
+    isReadOnly: () => false,
+    isConcurrencySafe: () => true,
+    isDestructive: () => false,
+    execute: async (input, context): Promise<SatiToolExecutionOutput<TeamUpdateTaskOutput>> => {
+      // 锁内身份分流（T5 review）：成员路径 requireTeamMember（assignee 校验），
+      // 队长路径 requireTeamCaptain（同队校验，跳过 assignee 校验但 attemptId 仍校验）。
+      // 成员会话形态解析失败（畸形/净化）或 sessionId 缺失 → 走队长路径的
+      // requireTeamCaptain → team_actor_unknown（fail-closed，绝不放行）。
+      const actor = resolveActor(context.sessionId);
+      let memberId: string | undefined;
+      let captainKey = "";
+      let next: TeamTaskRow | undefined;
+      await withTeamLock(input.teamId, async () => {
+        if (actor !== undefined && !actor.captain) {
+          memberId = requireTeamMember(db, actor, input.teamId);
+          const team = db.getTeam(input.teamId);
+          if (team === undefined) {
+            throw new SatiToolRuntimeError("team_not_found", `团队不存在：${input.teamId}`);
+          }
+          captainKey = team.captainSessionKey;
+        } else {
+          captainKey = requireTeamCaptain(db, context.sessionId, input.teamId).captainSessionKey;
+        }
+        const task = db.getTask(input.teamId, input.taskId);
+        if (task === undefined) {
+          throw new SatiToolRuntimeError("team_task_not_found", `任务不存在：${input.taskId}`);
+        }
+        if (memberId !== undefined && task.assigneeId !== memberId) {
+          throw new SatiToolRuntimeError("team_not_assignee", `任务 ${input.taskId} 不属于当前成员`);
+        }
+        const guard = validateAttemptUpdate(task, input.attemptId);
+        if (guard !== undefined) {
+          throw new SatiToolRuntimeError("team_stale_attempt", guard);
+        }
+        const transition = transitionError(task.status, input.status);
+        if (transition !== undefined) {
+          throw new SatiToolRuntimeError("team_bad_transition", transition);
+        }
+        next = {
+          ...task,
+          status: input.status,
+          ...(input.status === "completed" ? { output: input.output ?? "" } : {}),
+          updatedAt: new Date().toISOString(),
+        };
+        db.updateTask(next);
+        recomputeBlockedByCount(db, input.teamId); // 本任务终态可能解锁下游
+      });
+      if (next !== undefined) {
+        if (input.status === "completed") {
+          emit(captainKey, {
+            type: "task_completed",
+            teamId: input.teamId,
+            taskId: input.taskId,
+            memberId: next.assigneeId ?? "",
+            attempt: next.attempt,
+            output: next.output,
+          });
+        } else if (input.status === "failed") {
+          emit(captainKey, {
+            type: "task_failed",
+            teamId: input.teamId,
+            taskId: input.taskId,
+            memberId: next.assigneeId ?? "",
+            attempt: next.attempt,
+            reason: input.reason,
+          });
+        } else {
+          emit(captainKey, {
+            type: "task_updated",
+            teamId: input.teamId,
+            taskId: input.taskId,
+            status: next.status,
+            attemptId: next.attemptId,
+          });
+        }
+        // 锁外触发调度：下游依赖可能解锁（onTaskGraphChanged 内部自己拿锁，防重入死锁；fire-and-forget）
+        void scheduler.onTaskGraphChanged(input.teamId).catch(() => undefined);
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `team_update_task taskId=${input.taskId} status=${input.status} attempt=${next?.attempt ?? 0}`,
+          },
+        ],
+        data: {
+          teamId: input.teamId,
+          taskId: input.taskId,
+          status: next?.status ?? input.status,
+          attempt: next?.attempt ?? 0,
+          ...(next?.assigneeId !== undefined ? { assigneeId: next.assigneeId } : {}),
+          ...(next?.output !== undefined ? { output: next.output } : {}),
+        },
+      };
+    },
+  };
+}
+
+export type TeamReassignTaskInput = { teamId: string; taskId: string; memberId?: string; reason?: string };
+export type TeamReassignTaskOutput = { teamId: string; taskId: string; status: string; assigneeId?: string };
+
+export function createTeamReassignTaskTool(
+  options: TeamToolsOptions,
+): SatiToolDefinition<TeamReassignTaskInput, TeamReassignTaskOutput> {
+  const { db, scheduler, emit } = options;
+  return {
+    name: "team_reassign_task",
+    outputSchema: {
+      type: "object",
+      required: ["teamId", "taskId", "status"],
+      properties: {
+        teamId: { type: "string" },
+        taskId: { type: "string" },
+        status: { type: "string" },
+        assigneeId: { type: "string" },
+      },
+    },
+    description:
+      "Reassign a non-terminal task: to a specific member (immediately re-dispatched to them) or back to the pool without a memberId (held in 'reassigning' state, not auto-dispatched until reassigned again). The previous attemptId becomes stale — late writes are rejected. Captain-only.",
+    kind: "team",
+    inputSchema: {
+      type: "object",
+      required: ["teamId", "taskId"],
+      additionalProperties: false,
+      properties: {
+        teamId: { type: "string", description: "Team id." },
+        taskId: { type: "string", description: "Task id." },
+        memberId: {
+          type: "string",
+          description: "Target member id. Omit to return the task to the pool (held, not auto-dispatched).",
+        },
+        reason: { type: "string", description: "Optional reassignment reason." },
+      },
+    },
+    isReadOnly: () => false,
+    isConcurrencySafe: () => true,
+    isDestructive: () => true,
+    execute: async (input, context): Promise<SatiToolExecutionOutput<TeamReassignTaskOutput>> => {
+      let assigned: { status: string; assigneeId?: string } | undefined;
+      await withTeamLock(input.teamId, async () => {
+        const team = requireTeamCaptain(db, context.sessionId, input.teamId);
+        const task = db.getTask(input.teamId, input.taskId);
+        if (task === undefined) {
+          throw new SatiToolRuntimeError("team_task_not_found", `任务不存在：${input.taskId}`);
+        }
+        if (TERMINAL_TASK_STATUSES.includes(task.status)) {
+          throw new SatiToolRuntimeError("team_task_terminal", `终态任务不可转派：${input.taskId}`);
+        }
+        const fromMemberId = task.assigneeId ?? "";
+        const next =
+          input.memberId === undefined
+            ? invalidateTaskAttempt(task, { reassigning: true }) // 回池：暂缓自动派发
+            : invalidateTaskAttempt(task, { nextAssigneeId: input.memberId }); // 指定成员：可被 nextReadyTask 命中
+        db.updateTask(next);
+        emit(team.captainSessionKey, {
+          type: "task_reassigned",
+          teamId: input.teamId,
+          taskId: input.taskId,
+          fromMemberId,
+          toMemberId: input.memberId ?? "",
+        });
+        assigned = { status: next.status, ...(next.assigneeId !== undefined ? { assigneeId: next.assigneeId } : {}) };
+      });
+      // 锁外 kickMember（kickMember 内部自己拿锁，防重入死锁——T5 review 定型；fire-and-forget）
+      if (input.memberId !== undefined) {
+        void scheduler.kickMember(input.teamId, input.memberId).catch(() => undefined);
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `team_reassign_task taskId=${input.taskId} assignee=${input.memberId ?? "pool"}`,
+          },
+        ],
+        data: { teamId: input.teamId, taskId: input.taskId, ...assigned! },
+      };
+    },
+  };
+}
