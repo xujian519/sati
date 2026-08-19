@@ -57,7 +57,7 @@
 
 | 卡 | 模块 | 规模/热点 | 状态 |
 |---|---|---|---|
-| C01 | src/agent | 44 文件/8.1K 行；AgentLoop.ts 2127（loop 模块族） | ⬜ |
+| C01 | src/agent | 44 文件/8.1K 行；AgentLoop.ts 2127（loop 模块族） | ✅ 2026-08-19 |
 | C02 | src/cli | 15/5.3K；createLocalGateway.ts 1942、sati.ts 1021（console 热点 54 处） | ✅ 2026-08-18 |
 | C03 | src/model/catalog | providers.ts 1766 | ⬜ |
 | C04 | src/model 其余 | streaming/streamModel.ts 995、embedding、resolveModelInfo | ⬜ |
@@ -120,8 +120,21 @@
 | 日期 | 卡号 | 模块 | 审阅发现摘要 | 提交数 | 状态 |
 |---|---|---|---|---|---|
 | 2026-08-18 | C02 | src/cli | P1 渠道构建重复×2 / 死 try-catch；P2 错误强转×2 / 路径解析重复；P3 横幅错位 / 重复 import；记录不处理：DEFAULT_USER=xujian、双份 readStringFlag；P0 无 | 2（refactor + docs） | ✅ |
+| 2026-08-19 | C01 | src/agent | P1 同分支三元死代码×1；P2 `void ctx` 命名不一致 / 无参 catch 缺注释×2；P2 记录不处理：TurnRunner 失败收尾 4 处相似块（细节差异大，抽取有漂移风险）、AgentLoop `errors![0]!` 断言 ~20 处（结构性，需 errors 类型重构）；P0 无 | 1（refactor） | ✅ |
 
 ### 日卡记录
+
+#### C01 src/agent（2026-08-19）
+
+- **审阅发现**：
+  - P1 SubAgentSession.ts:142 同分支三元死代码（`? event.message : event.message`）→ 已删除
+  - P2 doomLoop.ts `void ctx;` 占位（其余检测器均用 `_ctx` 前缀约定）→ 统一为 `_ctx`
+  - P3 AgentLoop.ts:1359 / modelContextWindow.ts:23 无参 catch 缺注释 → 补意图注释（均为防御式回退，非吞错）
+  - P2 记录不处理：TurnRunner 失败收尾 4 处相似块（recordErrorResult/flushReadySessionTitle 细节各异，抽取有行为漂移风险）；AgentLoop `result.errors![0]!` 非空断言 ~20 处（结构性问题，需重构 AgentTurnResult.errors 类型，保守档不碰）；PlanTodoState `normalized.id!`（有构造保证，可接受）
+  - P0：无行为缺陷。模块整体质量高（零 any、6 处无参 catch 均有明确意图）
+- **精炼项**：SubAgentSession 死三元删除、doomLoop 参数命名统一、2 处 catch 补注释
+- **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` ✅（含 event-matrix 重生成，纯行号偏移）；`biome check src/agent` ✅；agent 测试 150/150 ✅
+- **提交**：`refactor(agent): drop dead ternary, unify doomLoop param naming, document fallback catches`
 
 #### C02 src/cli（2026-08-18）
 
