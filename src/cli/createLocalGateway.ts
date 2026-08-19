@@ -16,6 +16,13 @@ import {
 } from "../agent/index.js";
 import { resolveRoutedModelMaxContextTokens } from "../agent/runtime/modelContextWindow.js";
 import {
+  TeamApprovalForwarder,
+  TeamDb,
+  defaultTeamDbPath,
+  scanTeamMembers,
+  type ScanTeamMembersResult,
+} from "../agent/team/index.js";
+import {
   AutoCompactionPolicy,
   CachedMicroCompactionEngine,
   CompactionEngine,
@@ -200,6 +207,14 @@ export type CreateLocalGatewayResult = {
    * AlwaysOnManager / CronManager in response to a config change.
    */
   updateSubsystems: (update: SubsystemUpdate) => void;
+  /** 团队子系统句柄（M1）：teams.db + 冷恢复扫描。M2 起扩展调度器/任务池入口。 */
+  teamSubsystem: TeamSubsystemHandle;
+};
+
+export type TeamSubsystemHandle = {
+  db: TeamDb;
+  /** 冷恢复扫描。启动时 fire-and-forget 调用；返回 Promise 供测试 await 接线面。 */
+  runMemberScan: () => Promise<ScanTeamMembersResult>;
 };
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
@@ -422,6 +437,35 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // build a `GatewayElicitationChannel` against this gateway's bus +
   // emit-sink (B1).
   registry.setGateway(gateway);
+  // ── 团队子系统（M1）：durable 成员底座 ──
+  // teams.db 打开/迁移失败选择 fail-fast：团队数据是写真源（成员注册即落库），
+  // 静默降级会掩盖成员缺失；与 knowledge 只读降级（消费侧容错）不同。
+  const teamDb = new TeamDb(defaultTeamDbPath(pilotHome, env));
+  // gateway 注入接线（emitForSession/approvalDecide 类型兼容性编译期验证），
+  // handleMemberEvent 的实际消费由 M2 调度器把 wakeMember 的 onEvent 接到 forwarder 后生效。
+  // M1 已知限制：冷恢复唤醒（scanTeamMembers → wakeMember）的 turn 无 onEvent 通道，
+  // 其 approval_pending 不冒泡到队长；M2 调度器直调 wakeMember 时接线补齐。
+  // eslint-disable-next-line unused-imports/no-unused-vars -- M1 空转基座，M2 消费
+  const teamForwarder = new TeamApprovalForwarder({
+    db: teamDb,
+    emitForSession: (sessionKey, event) => gateway.emitForSession(sessionKey, event),
+    approvalDecide: input => gateway.approvalDecide(input),
+  });
+  const runMemberScan = (): Promise<ScanTeamMembersResult> =>
+    scanTeamMembers({
+      db: teamDb,
+      gateway,
+      projectRoot: fallbackProjectRoot,
+      pilotHome,
+      hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
+    })
+      .then(result => {
+        if (result.resumed > 0) {
+          console.log(`[sati] Team member resume: scanned=${result.scanned}, resumed=${result.resumed}`);
+        }
+        return result;
+      })
+      .catch(() => ({ scanned: 0, resumed: 0 }));
   // Startup sweep: reclaim .sati/tool-results/ directories whose transcript
   // no longer exists (crash leftovers, deleted sessions). Fire-and-forget —
   // must not block gateway startup.
@@ -437,11 +481,15 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 跨进程重启续算（T-C）：启动扫描中断任务并提交续算 turn。fire-and-forget，
   // 不阻塞 gateway 启动；续算 turn 在后台串行驱动。
   registry.runTaskResumeScan();
+  // 团队成员冷恢复（M1）：扫描 members 表对 (a) 形态断点成员重唤醒。
+  // fire-and-forget，不阻塞 gateway 启动；无成员时扫描立即空转结束。
+  void runMemberScan();
   return {
     gateway,
     configStore,
     registry,
     dispose: () => {
+      teamDb.close();
       registry.invalidate();
       router?.shutdown();
       stopConfigWatching();
@@ -464,6 +512,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       gateway.setAlwaysOnRerunPlan(update.alwaysOnRerunPlan);
       gateway.setDiscoveryPlanService(update.discoveryPlanService);
     },
+    teamSubsystem: { db: teamDb, runMemberScan },
   };
 }
 
