@@ -26,8 +26,10 @@ export type TeamActor = {
  * 成员会话形态前缀（对齐 SessionList.ts 的 TEAM_MEMBER_SESSION_PATTERN /^team[:\-]/：
  * 原始形态 `team:` 与 Windows 净化形态 `team-`（转录文件名回读）都是成员会话，
  * 即便解析失败也一律 fail-closed，绝不判为队长）。
+ * 导出供 teamMailbox/teamStatus 对畸形/净化成员会话做 fail-closed（对齐 update_task 行为，
+ * 防止 sender 审计失真为 "captain"）。
  */
-const TEAM_MEMBER_SESSION_PATTERN = /^team[:\-]/;
+export const TEAM_MEMBER_SESSION_PATTERN = /^team[:\-]/;
 
 /**
  * 成员会话 key 解析：复用 agent/team 既有 parseMemberSessionKey（首个冒号切分语义），
