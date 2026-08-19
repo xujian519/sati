@@ -241,6 +241,10 @@ export type TeamSubsystemHandle = {
  * wake 包装层与 scanner 冷恢复路径共用（两路径行为对齐）。
  * 参数传递 teamScheduler 消除顺序依赖（本函数定义于 runMemberScan/teamScheduler 之前，无闭包捕获）；
  * onMemberIdle 的 rejection 静默吞掉（onEvent 契约：回调不得抛出）。
+ * 锁语义与 fail-closed 安全论证：wake 路径在 wake 锁内执行（wake 全程持有团队锁），无 TOCTOU；
+ * scanner 冷恢复路径无团队锁（scanTeamMembers 直调 wakeMember，不经 scheduler 的 withTeamLock）——
+ * 锁外执行存在 TOCTOU 窗口，置 failed 前靠 validateAttemptUpdate 三拒兜底（终态拒绝 / attemptId
+ * 已清拒绝 / attemptId 不匹配拒绝，fail-closed）；漏判场景下个 turn_completed 再检查，最终收敛。
  */
 function handleMemberTurnCompleted(
   db: TeamDb,
