@@ -10,6 +10,7 @@ import {
   isCaptainSession,
   resolveActor,
   requireTeamMember,
+  requireCaptain,
   requireRegisteredRole,
 } from "../../../../src/tool/builtin/team/teamUtils.js";
 
@@ -26,6 +27,21 @@ test("isCaptainSession / resolveActor", () => {
   assert.deepEqual(resolveActor("cap-1"), { teamId: "", memberId: "", captain: true });
   assert.deepEqual(resolveActor("team:t1:m1"), { teamId: "t1", memberId: "m1", captain: false });
   assert.equal(resolveActor(undefined), undefined);
+  // Windows 净化形态（SessionList TEAM_MEMBER_SESSION_PATTERN /^team[:\-]/，转录文件名回读）：
+  // 信息丢失不可解析，fail-closed 返回 undefined，不得误判为队长放行管理操作。
+  assert.equal(resolveActor("team-t1-m1"), undefined);
+});
+
+test("requireCaptain：队长通过；成员/未知会话拒绝", () => {
+  assert.doesNotThrow(() => requireCaptain({ teamId: "", memberId: "", captain: true }));
+  assert.throws(
+    () => requireCaptain({ teamId: "t1", memberId: "m1", captain: false }),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_captain",
+  );
+  assert.throws(
+    () => requireCaptain(undefined),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_actor_unknown",
+  );
 });
 
 test("requireTeamMember：成员通过；captain/异队/退休/未知成员拒绝", () => {
@@ -54,6 +70,18 @@ test("requireTeamMember：成员通过；captain/异队/退休/未知成员拒�
     assert.throws(
       () => requireTeamMember(db, { teamId: "t1", memberId: "no-such", captain: false }, "t1"),
       (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_actor_unknown",
+    );
+    // M5：memberId 在 db 中已注册但属于 t2，actor 声称 teamId t1 → team_not_member（成员行归属校验）
+    db.upsertTeam({ id: "t2", name: "t2", captainSessionKey: "cap-2", createdAt: "2026-08-20T00:00:00.000Z" });
+    createTeamMember(db, {
+      teamId: "t2",
+      memberId: "m2",
+      roleSlug: "researcher",
+      modelRoute: { provider: "fake", model: "fake-model" },
+    });
+    assert.throws(
+      () => requireTeamMember(db, { teamId: "t1", memberId: "m2", captain: false }, "t1"),
+      (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_member",
     );
     db.insertRetired(member.sessionKey, "m1", "test");
     assert.throws(

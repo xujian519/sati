@@ -3,7 +3,7 @@
  * 供 teamManagement/teamTasks/teamMailbox/teamStatus/teamArchive 五个工具文件复用；
  * 由 createLocalGateway 经 createBuiltinRegistry options.team 装配（T5-T8 接线）。
  */
-import { MEMBER_SESSION_PREFIX } from "../../../agent/team/index.js";
+import { parseMemberSessionKey } from "../../../agent/team/index.js";
 import type { TeamDb, TeamScheduler, TeamEventEmitter } from "../../../agent/team/index.js";
 import { listRegisteredRoleIds } from "../../../agent/sub/builtinSubagentTypes.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
@@ -22,21 +22,35 @@ export type TeamActor = {
   captain: boolean;
 };
 
-/** 成员会话 key 正则：`team:<teamId>:<memberId>`，按第一个冒号切分（memberId 允许含冒号）。 */
-const TEAM_SESSION_KEY_RE = /^team:([^:]+):(.+)$/;
-
+/**
+ * 成员会话 key 解析：复用 agent/team 既有 parseMemberSessionKey（首个冒号切分语义），
+ * 仅做契约适配——null 或 memberId 为空串（"team:t1:"）返回 undefined。
+ */
 export function parseTeamSessionKey(sessionKey: string): { teamId: string; memberId: string } | undefined {
-  const match = TEAM_SESSION_KEY_RE.exec(sessionKey);
-  return match ? { teamId: match[1], memberId: match[2] } : undefined;
+  const parsed = parseMemberSessionKey(sessionKey);
+  if (parsed === null || parsed.memberId === "") {
+    return undefined;
+  }
+  return parsed;
 }
 
-/** 队长会话判定：非 `team:` 前缀的普通会话即队长会话（M2 惯例 captainSessionKey="cap-1" 等主会话 key）。 */
+/**
+ * 队长会话判定：非 `team:` 前缀的普通会话即队长会话（M2 惯例 captainSessionKey="cap-1" 等主会话 key）。
+ * 注意：Windows 净化形态 `team-*`（SessionList TEAM_MEMBER_SESSION_PATTERN /^team[:\-]/，
+ * 转录文件名回读）同样解析不出成员身份，本布尔在语义上将其算作"非成员会话"；
+ * 管理操作放行必须经 resolveActor 的 fail-closed 判定（净化形态返回 undefined），不可直接用本函数。
+ */
 export function isCaptainSession(sessionKey: string): boolean {
-  return !sessionKey.startsWith(MEMBER_SESSION_PREFIX);
+  return parseTeamSessionKey(sessionKey) === undefined;
 }
 
 export function resolveActor(sessionKey: string | undefined): TeamActor | undefined {
   if (sessionKey === undefined) {
+    return undefined;
+  }
+  // Windows 净化形态（`team:` → `team-`，转录文件名回读）：原始冒号信息丢失不可解析，
+  // fail-closed 返回 undefined，不得误判为队长放行管理操作（fail-open 越权方向）。
+  if (sessionKey.startsWith("team-")) {
     return undefined;
   }
   const parsed = parseTeamSessionKey(sessionKey);
@@ -67,9 +81,12 @@ export function requireTeamMember(db: TeamDb, actor: TeamActor, teamId: string):
   return actor.memberId;
 }
 
-/** 队长级操作守卫：非队长会话抛 team_not_captain。 */
+/** 队长级操作守卫：未解析出会话身份抛 team_actor_unknown；非队长会话抛 team_not_captain。 */
 export function requireCaptain(actor: TeamActor | undefined): void {
-  if (actor === undefined || !actor.captain) {
+  if (actor === undefined) {
+    throw new SatiToolRuntimeError("team_actor_unknown", "无法判定调用者会话身份（sessionId 缺失）");
+  }
+  if (!actor.captain) {
     throw new SatiToolRuntimeError("team_not_captain", "该操作仅限队长会话执行");
   }
 }
@@ -81,7 +98,7 @@ export function requireRegisteredRole(roleSlug: string): void {
   }
 }
 
-/** 成员模型路由缺省值（M3）：未显式指定 LLM 路由时的回退。 */
+/** 成员模型路由缺省值（M3）：未显式指定 LLM 路由时的缺省回退，装配时覆盖（T5-T8 接线会传 context 会话主模型）。 */
 export const defaultModelRoute = {
   provider: "deepseek",
   model: "deepseek-v4-flash",
