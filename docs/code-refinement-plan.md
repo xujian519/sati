@@ -58,7 +58,7 @@
 | 卡 | 模块 | 规模/热点 | 状态 |
 |---|---|---|---|
 | C01 | src/agent | 44 文件/8.1K 行；AgentLoop.ts 2127（loop 模块族） | ⬜ |
-| C02 | src/cli | 15/5.3K；createLocalGateway.ts 1942、sati.ts 1021（console 热点 54 处） | 🔄 |
+| C02 | src/cli | 15/5.3K；createLocalGateway.ts 1942、sati.ts 1021（console 热点 54 处） | ✅ 2026-08-18 |
 | C03 | src/model/catalog | providers.ts 1766 | ⬜ |
 | C04 | src/model 其余 | streaming/streamModel.ts 995、embedding、resolveModelInfo | ⬜ |
 | C05 | src/gateway | 32/5.9K；InProcessGateway.ts 1057、protocol/server | ⬜ |
@@ -119,7 +119,7 @@
 
 | 日期 | 卡号 | 模块 | 审阅发现摘要 | 提交数 | 状态 |
 |---|---|---|---|---|---|
-| 2026-08-18 | C02 | src/cli | 见日卡记录 | — | 🔄 |
+| 2026-08-18 | C02 | src/cli | P1 渠道构建重复×2 / 死 try-catch；P2 错误强转×2 / 路径解析重复；P3 横幅错位 / 重复 import；记录不处理：DEFAULT_USER=xujian、双份 readStringFlag；P0 无 | 2（refactor + docs） | ✅ |
 
 ### 日卡记录
 
