@@ -37,14 +37,17 @@ import {
  *
  * 与 `patent_workflow`（收口语义：主代理产出文本 → 工具收口校验）互补：
  * 本工具**注入 provider 自动执行声明了 atom 的阶段**——LLM（`context.model`
- * 或 deps.model）驱动 extract/merge/groundedness/keywords/novelty/draft-claims，
- * nuo-patent 检索驱动 search；无 atom 阶段（preprocess/report）透传输入文本。
+ * 或 deps.model）驱动 extract/merge/groundedness/reasoning/keywords/novelty/
+ * draft-claims，nuo-patent 检索驱动 search；无 atom 阶段（preprocess/report）
+ * 透传输入文本（consistency 已声明 reasoning 原子，不再透传原文）。
  *
  * 审批门语义：disclosure manifest 的 review_gate 阶段（approval-gate 原子）执行时
  * 抛 InterruptStageError → 工作流**暂停**（返回 interrupted，后续阶段不执行）。
- * 注意：本工具**无断点续跑能力**——再次调用会从零重跑全部阶段并再次在
- * 审批门暂停。人工确认后的 draft_claims 等后续阶段，应由主代理基于
- * interrupted 结果 + 收口语义（patent_workflow 工具）或自定义 manifest 继续。
+ * 断点续跑（manifest 模式）：提供 resumeCheckpointId + caseId 时从上次检查点继续
+ * （跳过已完成阶段），approveStageIds 放行已批准审批门；无 caseId 时不可续跑。
+ * 图模式（graph=…）另支持 resumeCheckpointId / approveCheckpointId（见 execute）。
+ * 人工确认后的 draft_claims 等后续阶段，可由主代理基于 interrupted 结果 +
+ * 收口语义（patent_workflow 工具）或自定义 manifest 继续。
  *
  * 接线状态（2026-08）：本工具是原子执行路径的唯一生产消费方——此前 10 个内置
  * 原子 handler 与 createNuoSearchProvider 均无生产调用（详见 src/patent/workflow.ts

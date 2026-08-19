@@ -50,16 +50,24 @@ export class ReasoningHandler implements StageHandler {
 /** 拼接非元数据状态为文本块（reasoning 无显式输入时的兜底）。 */
 function formatStateForReasoning(state: PipelineState): string {
   const blocks: string[] = [];
+  const seen = new Set<string>();
   // 按键名排序（2026-08 修复）：并行组（extract 三路）写入 state 的顺序在
   // 录制/重放间可能不同，Object.entries 插入序 → 拼接文本不同 → llm-replay
   // 请求键失配；排序使输出确定性。
   for (const [key, value] of Object.entries(state).sort(([a], [b]) => a.localeCompare(b))) {
     if (key.startsWith("_")) continue; // 跳过 _error 等元数据
+    let block: string | undefined;
     if (typeof value === "string" && value.trim().length > 0) {
-      blocks.push(`## ${key}\n${value}`);
+      block = value;
     } else if (Array.isArray(value) && value.length > 0) {
-      blocks.push(`## ${key}\n${JSON.stringify(value, null, 2)}`);
+      block = JSON.stringify(value, null, 2);
     }
+    if (block === undefined) continue;
+    // 按值去重（2026-08 修复）：同一输入映射多键（text/source_text/
+    // extraction_input/claim 同源），重复喂给模型每次运行多付约 4 倍冗余 token。
+    if (seen.has(block)) continue;
+    seen.add(block);
+    blocks.push(`## ${key}\n${block}`);
   }
   return blocks.join("\n\n") || "(无可用上下文)";
 }

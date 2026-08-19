@@ -193,6 +193,39 @@ test("runWorkflow：否定式表述不触发回退（未发现不一致）", asy
   assert.equal(result.degradedSteps.length, 0);
 });
 
+test("runWorkflow：consistency 输出 consistent:false JSON 触发回退（机器判据优先于 issues 文案）", async () => {
+  const manifest: WorkflowManifest = {
+    id: "json_signal",
+    name: "JSON 信号测试",
+    caseType: "disclosure_analysis",
+    stages: [
+      { id: "extract", strategy: "chain", description: "提取特征" },
+      {
+        id: "consistency",
+        strategy: "chain",
+        description: "一致性检查",
+        retry: { whenOutputMatches: "不一致|矛盾|缺少|孤立", rewindTo: "extract", maxRetries: 1 },
+      },
+    ],
+    validation: { requireAllSteps: true },
+  };
+  let extractCalls = 0;
+  const executor = async (stage: WorkflowStage) => {
+    if (stage.id === "extract") {
+      extractCalls += 1;
+      return "特征A";
+    }
+    // issues 无信号词且含否定词干扰（"缺失"）——consistent:false 必须触发回退
+    return extractCalls === 1
+      ? JSON.stringify({ consistent: false, issues: ["问题与效果关联均缺失"] })
+      : JSON.stringify({ consistent: true, issues: [] });
+  };
+  const result = await runWorkflow(manifest, { input: "交底书" }, executor);
+  assert.equal(extractCalls, 2, "consistent:false 应触发回退重跑");
+  assert.equal(result.completed, true);
+  assert.equal(result.degradedSteps.length, 0);
+});
+
 test("runWorkflow：回退后 stage 状态被回滚（不残留陈旧输出）", async () => {
   const manifest: WorkflowManifest = {
     id: "state_rollback",
@@ -253,7 +286,14 @@ test("patentDisclosureManifest：结构与 retry 声明合法", () => {
   const consistency = patentDisclosureManifest.stages.find(s => s.id === "consistency")!;
   assert.equal(consistency.retry?.rewindTo, "extract_problem");
   assert.match(consistency.retry!.whenOutputMatches, /不一致|矛盾|缺少|孤立/);
-  // 原子声明：三路提取 + merge + groundedness + 检索关键词 + 检索 + 新颖性 + 复核门 + 草稿撰写
+  // consistency 声明 reasoning 原子（对齐 drafting_v1）：LLM 严格输出 JSON 契约，
+  // 修复"透传原文 + 信号误回退"缺陷（防回归）。
+  assert.equal(consistency.atom, "reasoning");
+  assert.match(
+    String(consistency.params?.reasoning_prompt ?? ""),
+    /严格输出 JSON：\{ consistent: boolean, issues: string\[\] \}/,
+  );
+  // 原子声明：三路提取 + merge + groundedness + 一致性 + 检索关键词 + 检索 + 新颖性 + 复核门 + 草稿撰写
   const atoms = patentDisclosureManifest.stages.filter(s => s.atom !== undefined).map(s => s.atom);
   assert.deepEqual([...new Set(atoms)].sort(), [
     "approval-gate",
@@ -263,6 +303,7 @@ test("patentDisclosureManifest：结构与 retry 声明合法", () => {
     "keywords",
     "merge",
     "novelty",
+    "reasoning",
     "search",
   ]);
   // 三路提取经 stage.params 分键（① 修复覆盖：extract_problem 只写 problems 等）

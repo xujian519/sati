@@ -62,6 +62,9 @@ function disclosureResponder(prompt: string): string {
   if (prompt.includes("提取技术效果")) {
     return JSON.stringify({ features: [], problems: [], effects: ["保温时长提升至12小时"] });
   }
+  if (prompt.includes("一致性检查")) {
+    return JSON.stringify({ consistent: true, issues: [] });
+  }
   if (prompt.includes("评估以下每个提取的技术特征")) {
     return JSON.stringify({
       scores: [
@@ -117,6 +120,8 @@ test("disclosure manifest 原子全流程执行，review_gate 中断且 draft_cl
   assert.match(text, /extract_effects \[atom:extract\]/);
   assert.match(text, /merge \[atom:merge\]/);
   assert.match(text, /groundedness \[atom:groundedness\]/);
+  assert.match(text, /consistency \[atom:reasoning\]/);
+  assert.doesNotMatch(text, /✅ consistency:/, "consistency 已声明 reasoning 原子，不应走透传格式");
   assert.match(text, /generate_keywords \[atom:keywords\]/);
   assert.match(text, /search \[atom:search\]/);
   assert.match(text, /novelty \[atom:novelty\]/);
@@ -138,6 +143,102 @@ test("merge 产出 PFE 三元组，novelty 产出逐特征判定（状态流打�
   assert.match(text, /现有保温杯无法长时间保温/);
   // novelty 主输出 = novelty_result（逐特征 assessments；渲染预览截断到 80 字符，断言行前缀）
   assert.match(text, /novelty \[atom:novelty\]: \{"assessments"/);
+});
+
+test("consistency 判不一致 → 回退重跑 extract 三路 → 第二次一致通过（retry 闭环）", async () => {
+  registerBuiltinAtoms();
+  const calls = { extract_problem: 0, extract_features: 0, extract_effects: 0, consistency: 0 };
+  const responder = (prompt: string): string => {
+    if (prompt.includes("提取待解决的技术问题")) {
+      calls.extract_problem += 1;
+      return JSON.stringify({ features: [], problems: ["现有保温杯无法长时间保温"], effects: [] });
+    }
+    if (prompt.includes("提取技术特征")) {
+      calls.extract_features += 1;
+      return JSON.stringify({
+        features: ["杯体双层真空结构", "杯盖温度显示模块", "内置加热单元"],
+        problems: [],
+        effects: [],
+      });
+    }
+    if (prompt.includes("提取技术效果")) {
+      calls.extract_effects += 1;
+      return JSON.stringify({ features: [], problems: [], effects: ["保温时长提升至12小时"] });
+    }
+    if (prompt.includes("一致性检查")) {
+      calls.consistency += 1;
+      // 第一轮判不一致（issues 含"孤立"命中回退信号），回退重跑后第二轮判一致。
+      return calls.consistency === 1
+        ? JSON.stringify({ consistent: false, issues: ["特征'内置加热单元'孤立，无效果关联"] })
+        : JSON.stringify({ consistent: true, issues: [] });
+    }
+    return disclosureResponder(prompt);
+  };
+  const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: mockSearch });
+  const res = await tool.execute({ input: DISCLOSURE_INPUT }, makeToolContext({ cwd: "/tmp" }));
+  const text = textOf(res);
+  // 回退：extract 三路 + consistency 各执行 2 次（首轮 + 回退重跑），retry 不耗尽。
+  assert.equal(calls.extract_problem, 2);
+  assert.equal(calls.extract_features, 2);
+  assert.equal(calls.extract_effects, 2);
+  assert.equal(calls.consistency, 2);
+  assert.doesNotMatch(text, /RETRY_EXHAUSTED/);
+  assert.doesNotMatch(text, /⚠️ 降级/);
+  // 回退重跑不残留首轮阶段记录；仍中断于 review_gate 等待人工确认。
+  assert.equal(text.match(/✅ extract_problem/g)?.length, 1, "回退后只保留最终执行记录");
+  assert.match(text, /暂停等待人工确认/);
+});
+
+test("consistency 恒判不一致 → RETRY_EXHAUSTED 降级但管线继续（fail-safe）", async () => {
+  registerBuiltinAtoms();
+  const responder = (prompt: string): string => {
+    if (prompt.includes("一致性检查")) {
+      return JSON.stringify({ consistent: false, issues: ["特征'内置加热单元'孤立，无效果关联"] });
+    }
+    return disclosureResponder(prompt);
+  };
+  const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: mockSearch });
+  const res = await tool.execute({ input: DISCLOSURE_INPUT }, makeToolContext({ cwd: "/tmp" }));
+  const text = textOf(res);
+  // maxRetries=1：首轮 + 回退 1 次后仍不一致 → 耗尽降级，整体 incomplete。
+  assert.match(text, /\[WORKFLOW_RETRY_EXHAUSTED\] consistency/);
+  assert.match(text, /⚠️ 降级/);
+  assert.match(text, /完成状态: incomplete/);
+  // 一致性降级不中断管线：仍前进至 review_gate 暂停。
+  assert.match(text, /暂停等待人工确认/);
+});
+
+test("回退重跑中 extract_features 解析失败：旧一代键被清理，merge 不混代（F2 回归）", async () => {
+  registerBuiltinAtoms();
+  const calls = { extract_features: 0, consistency: 0 };
+  const responder = (prompt: string): string => {
+    if (prompt.includes("提取技术特征")) {
+      calls.extract_features += 1;
+      // 首轮正常产出 features；回退重跑时 LLM 输出非 JSON（解析失败场景）
+      return calls.extract_features === 1
+        ? JSON.stringify({ features: ["杯体双层真空结构"], problems: [], effects: [] })
+        : "这不是 JSON";
+    }
+    if (prompt.includes("一致性检查")) {
+      calls.consistency += 1;
+      // 第一轮判不一致（issues 无信号词，机器判据生效）触发回退；重跑后判一致
+      return calls.consistency === 1
+        ? JSON.stringify({ consistent: false, issues: ["问题与效果关联均缺失"] })
+        : JSON.stringify({ consistent: true, issues: [] });
+    }
+    return disclosureResponder(prompt);
+  };
+  const tool = createPatentWorkflowRunTool({ model: mockModel(responder), search: mockSearch });
+  const res = await tool.execute({ input: DISCLOSURE_INPUT }, makeToolContext());
+  const text = textOf(res);
+  // merge 的 features 必须来自重跑结果（解析失败 → 空数组），而非残留首轮数组
+  // （修复前只删 stage-id 键：T1 三元组混入首轮特征"杯体双层真空结构"）。
+  assert.match(text, /"features": \[\],/, "merge 三元组的 features 为空（无首轮残留）");
+  assert.doesNotMatch(text, /杯体双层真空结构/, "首轮提取的特征被清理，未混入 merge 三元组");
+  assert.equal(calls.extract_features, 2);
+  assert.equal(calls.consistency, 2);
+  assert.doesNotMatch(text, /RETRY_EXHAUSTED/);
+  assert.match(text, /暂停等待人工确认/);
 });
 
 test("LLM 输出非 JSON：extract 降级保留原文，流程 fail-open 直至审批门中断", async () => {

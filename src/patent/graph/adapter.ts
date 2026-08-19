@@ -11,6 +11,7 @@
 
 import type { WorkflowContext, WorkflowManifest, WorkflowStage } from "../workflow.js";
 import { validateWorkflowManifest } from "../workflow.js";
+import { signalMatches } from "../workflow/signal.js";
 import type { AtomRegistry, StageHandler, StageHandlerRegistry, StageProvider } from "../atoms/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry, isInterruptStageError } from "../atoms/index.js";
 import type { EdgeRouter, GraphNode, GraphState, StateDelta } from "./types.js";
@@ -87,7 +88,7 @@ export function manifestToGraph(manifest: WorkflowManifest, deps: ManifestToGrap
     const stage = manifest.stages[i]!;
     const nextId = manifest.stages[i + 1]?.id ?? GRAPH_END;
     if (stage.retry !== undefined) {
-      builder.setConditionalEdge(stage.id, makeRetryRouter(stage, manifest.stages, nextId));
+      builder.setConditionalEdge(stage.id, makeRetryRouter(stage, manifest.stages, nextId, atoms));
     } else {
       builder.addEdge(stage.id, nextId);
     }
@@ -131,36 +132,26 @@ function makeStageNode(
 }
 
 // ---------------------------------------------------------------------------
-// retry 信号回退（与 workflow.ts signalMatches 语义对齐）
+// retry 信号回退（信号判定复用 ./workflow/signal.js 单一实现，防语义漂移）
 // ---------------------------------------------------------------------------
-
-/** 否定词窗口：命中位置前 12 字符内出现 [不未无没] 且无句界分隔 → 否定表述，不触发回退。 */
-function signalMatches(text: string, signal: RegExp): boolean {
-  const RE = /[不未无没]/;
-  signal.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = signal.exec(text)) !== null) {
-    const start = Math.max(0, match.index - 12);
-    const before = text.slice(start, match.index);
-    if (!before.includes("。") && !before.includes("；") && !before.includes(";") && !RE.test(before)) {
-      return true;
-    }
-    if (match[0].length === 0) signal.lastIndex += 1;
-  }
-  return false;
-}
 
 /** 重试计数/超限标记 key（state 内部键，带 __ 前缀防污染业务数据）。 */
 const rewindCountKey = (stageId: string): string => `_rewind_count_${stageId}`;
 const retryExhaustedKey = (stageId: string): string => `${stageId}__retry_exhausted`;
 
 /** retry 阶段 → 条件边 router：命中信号回退 rewindTo，否则继续 nextId。 */
-function makeRetryRouter(stage: WorkflowStage, stages: WorkflowStage[], nextId: string): EdgeRouter {
+function makeRetryRouter(
+  stage: WorkflowStage,
+  stages: WorkflowStage[],
+  nextId: string,
+  atoms: AtomRegistry,
+): EdgeRouter {
   const retry = stage.retry!;
   const rewindTo = retry.rewindTo ?? stage.id;
   const maxRetries = retry.maxRetries ?? 1;
   const signal = new RegExp(retry.whenOutputMatches, "gi");
-  // 被回退阶段集合（rewindTo .. 当前阶段），回退时删除其 state 键防陈旧复用。
+  // 被回退阶段集合（rewindTo .. 当前阶段），回退时删除其 state 键与原子输出键
+  // 防陈旧复用（对齐 runWorkflow 的 rewind 清理语义）。
   const rewindIndex = stages.findIndex(s => s.id === rewindTo);
   const currentIndex = stages.findIndex(s => s.id === stage.id);
   const rewindedIds =
@@ -181,6 +172,12 @@ function makeRetryRouter(stage: WorkflowStage, stages: WorkflowStage[], nextId: 
     state[countKey] = count + 1;
     for (const id of rewindedIds) {
       delete (state as GraphState)[id];
+      const atom = stages.find(s => s.id === id)?.atom;
+      if (atom !== undefined) {
+        for (const key of atoms.lookup(atom)?.outputSchema ?? []) {
+          delete (state as GraphState)[key];
+        }
+      }
     }
     return [rewindTo];
   };

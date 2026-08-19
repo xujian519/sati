@@ -34,6 +34,24 @@ test("signalMatches: 空匹配不死循环（空窗口恒触发）", () => {
   assert.equal(signalMatches("abc", signal), true);
 });
 
+test("signalMatches: JSON 对象 consistent:false 直接命中（绕开 issues 措辞与否定词窗口）", () => {
+  const signal = compileSignal("不一致|矛盾|缺少|孤立");
+  // issues 含否定词窗口干扰（"孤立"前 12 字符内有"无"）——机器判据优先，仍命中
+  assert.equal(signalMatches('{"consistent": false, "issues": ["特征无效果关联，孤立"]}', signal), true);
+  // issues 无任何信号词——consistent:false 仍是机器判据
+  assert.equal(signalMatches('{"consistent": false, "issues": ["问题与效果关联均缺失"]}', signal), true);
+  // consistent:true 不命中（即使 issues 文案含信号词，以机器判据为准）
+  assert.equal(signalMatches('{"consistent": true, "issues": ["缺少证据"]}', signal), false);
+});
+
+test("signalMatches: consistent 非布尔 / 杂散文本回退关键词扫描", () => {
+  const signal = compileSignal("不一致|矛盾|缺少|孤立");
+  // 字符串字段不是机器判据；"false" 无信号词 → 不命中
+  assert.equal(signalMatches('{"consistent": "false"}', signal), false);
+  // 前后杂散文本非严格 JSON：回退关键词扫描，正文无信号词 → 不命中
+  assert.equal(signalMatches('前文 {"consistent": false} 结尾', signal), false);
+});
+
 test("signalFor: 无 retry 返回 undefined；有 retry 编译并缓存同引用", () => {
   const cache = new Map<string, RegExp>();
   const plain: WorkflowStage = { id: "s1", strategy: "chain", description: "d" };
