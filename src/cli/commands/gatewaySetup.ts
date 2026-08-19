@@ -56,9 +56,9 @@ export async function runGatewaySetup(argv: string[]): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
   try {
-    console.log("\n╔══════════════════════════════════════════════════╗");
-    console.log("║  Sati Gateway Setup                        ║");
-    console.log("║  配置 IM 平台连接                                ║");
+    console.log("╔══════════════════════════════════════════════════╗");
+    console.log(`║  Sati Gateway Setup${" ".repeat(30)}║`);
+    console.log(`║  配置 IM 平台连接${" ".repeat(32)}║`);
     console.log("╚══════════════════════════════════════════════════╝\n");
 
     const platform = argv[0]?.toLowerCase();
@@ -207,23 +207,17 @@ async function attemptFeishuQRCreation(
 
   if (answer !== "y" && answer !== "yes") return null;
 
-  try {
-    console.log("\n正在生成二维码...");
-    const larkDomain =
-      domain === "lark"
-        ? (Lark.Domain?.Lark ?? "https://open.larksuite.com")
-        : (Lark.Domain?.Feishu ?? "https://open.feishu.cn");
+  console.log("\n正在生成二维码...");
+  const larkDomain =
+    domain === "lark"
+      ? (Lark.Domain?.Lark ?? "https://open.larksuite.com")
+      : (Lark.Domain?.Feishu ?? "https://open.feishu.cn");
 
-    console.log(`\n请在浏览器中访问以下链接，使用飞书扫码授权：`);
-    console.log(`  ${larkDomain}/app\n`);
-    console.log("创建应用后，将 App ID 和 App Secret 粘贴到下方。\n");
+  console.log(`\n请在浏览器中访问以下链接，使用飞书扫码授权：`);
+  console.log(`  ${larkDomain}/app\n`);
+  console.log("创建应用后，将 App ID 和 App Secret 粘贴到下方。\n");
 
-    return null;
-  } catch (e) {
-    console.log(`\n自动创建失败: ${e instanceof Error ? e.message : String(e)}`);
-    console.log("将使用手动输入模式。\n");
-    return null;
-  }
+  return null;
 }
 
 async function testFeishuCredentials(
