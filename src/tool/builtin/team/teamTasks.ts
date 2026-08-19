@@ -32,7 +32,13 @@ import {
   type TeamTaskRow,
 } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
-import { requireTeamCaptain, requireTeamMember, resolveActor, type TeamToolsOptions } from "./teamUtils.js";
+import {
+  assertTeamActive,
+  requireTeamCaptain,
+  requireTeamMember,
+  resolveActor,
+  type TeamToolsOptions,
+} from "./teamUtils.js";
 
 /** 锁内重算团队全部任务的 blockedByCount（dependencies 未完成计数，与调度器 unsatisfiedDependencies 一致）。 */
 function recomputeBlockedByCount(db: TeamDb, teamId: string): void {
@@ -114,6 +120,7 @@ export function createTeamCreateTaskTool(
       let blockedByCount = 0;
       await withTeamLock(input.teamId, async () => {
         const team = requireTeamCaptain(db, context.sessionId, input.teamId);
+        assertTeamActive(team); // F4：归档后只读——不再向已归档团队投新任务
         const known = db.listTasks(input.teamId);
         for (const dep of input.dependencies ?? []) {
           if (!known.some(t => t.id === dep)) {
@@ -246,7 +253,10 @@ export function createTeamUpdateTaskTool(
           }
           captainKey = team.captainSessionKey;
         } else {
-          captainKey = requireTeamCaptain(db, context.sessionId, input.teamId).captainSessionKey;
+          // 队长路径（F4：归档后只读；成员路径已因全员退休被 team_member_retired 天然挡住，无需重复）
+          const team = requireTeamCaptain(db, context.sessionId, input.teamId);
+          assertTeamActive(team);
+          captainKey = team.captainSessionKey;
         }
         const task = db.getTask(input.teamId, input.taskId);
         if (task === undefined) {
@@ -372,6 +382,7 @@ export function createTeamReassignTaskTool(
       let assigned: { status: string; assigneeId?: string } | undefined;
       await withTeamLock(input.teamId, async () => {
         const team = requireTeamCaptain(db, context.sessionId, input.teamId);
+        assertTeamActive(team); // F4：归档后只读——转派属于变更类操作
         const task = db.getTask(input.teamId, input.taskId);
         if (task === undefined) {
           throw new SatiToolRuntimeError("team_task_not_found", `任务不存在：${input.taskId}`);

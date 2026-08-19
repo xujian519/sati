@@ -14,6 +14,7 @@ import {
 } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import {
+  assertTeamActive,
   defaultModelRoute,
   requireCaptain,
   requireRegisteredRole,
@@ -149,6 +150,7 @@ export function createTeamAddMemberTool(
       let memberId = "";
       await withTeamLock(input.teamId, async () => {
         const team = requireTeamCaptain(db, context.sessionId, input.teamId);
+        assertTeamActive(team); // F4：归档后只读——拒绝产生未退休僵尸成员
         memberId = `m-${randomUUID().slice(0, 8)}`;
         createTeamMember(db, {
           teamId: input.teamId,
@@ -204,6 +206,7 @@ export function createTeamRemoveMemberTool(
     execute: async (input, context): Promise<SatiToolExecutionOutput<TeamRemoveMemberOutput>> => {
       await withTeamLock(input.teamId, async () => {
         const team = requireTeamCaptain(db, context.sessionId, input.teamId);
+        assertTeamActive(team); // F4：归档后只读——成员退休不可再移除（也防半态清理绕路）
         const member = db.getMember(input.memberId);
         if (member === undefined || member.teamId !== input.teamId) {
           throw new SatiToolRuntimeError("team_not_member", `团队成员不存在：${input.memberId}`);

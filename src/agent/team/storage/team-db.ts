@@ -252,6 +252,23 @@ export class TeamDb {
     return (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
   }
 
+  /**
+   * 通用同步事务：复用 migrate() 的 BEGIN/COMMIT/ROLLBACK 模式（T8 review I-1 引入）。
+   * 事务内任一步抛错即回滚并 rethrow；提交成功后才对外可见。node:sqlite 单连接串行，
+   * 本方法不重入（事务内不得再嵌套调用）。
+   */
+  transaction<T>(fn: () => T): T {
+    this.db.exec("BEGIN");
+    try {
+      const result = fn();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   upsertTeam(team: TeamRow): void {
     this.db
       .prepare(

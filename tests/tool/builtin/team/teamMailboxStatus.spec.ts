@@ -104,6 +104,24 @@ test("team_send_message：成员互发（sender=memberId）；空内容/畸形�
   );
 });
 
+test("归档后只读：team_send_message（队长路径）报 team_already_archived（T8 review F4）", async () => {
+  const { db, kicked, tools } = setup();
+  db.archiveTeam("t1", "2026-08-20T00:00:00.000Z");
+  await assert.rejects(
+    () => tools.sendMessage.execute({ teamId: "t1", recipient: "m1", content: "x" }, { sessionId: "cap-1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_already_archived",
+  );
+  assert.equal(db.listMessages("t1", "m1").length, 0, "门禁拒绝不落库");
+  assert.equal(kicked.length, 0, "门禁拒绝不触发唤醒");
+  // 成员路径：正常归档使成员全退休，由 requireTeamMember 的 team_member_retired 天然挡住（F4 无需重复门禁）
+  db.insertRetired(db.getMember("m1")!.sessionKey, "m1", "team_archived");
+  await assert.rejects(
+    () =>
+      tools.sendMessage.execute({ teamId: "t1", recipient: "m1", content: "x" }, { sessionId: "team:t1:m1" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_member_retired",
+  );
+});
+
 test("跨队成员会话（team:t2:x）调 t1 的 send_message / status → team_not_member", async () => {
   const { db, tools } = setup();
   // 另建 t2 团队 + x 成员：跨队成员会话是 requireTeamMember 的核心负路径

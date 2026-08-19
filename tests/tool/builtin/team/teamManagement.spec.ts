@@ -182,6 +182,34 @@ test("team_add_member/team_remove_member：非本队队长拒绝（同队校验�
   }
 });
 
+test("归档后只读：team_add_member / team_remove_member 报 team_already_archived（T8 review F4）", async () => {
+  const { db, tools } = setup();
+  db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });
+  createTeamMember(db, {
+    teamId: "t1",
+    memberId: "m1",
+    roleSlug: "test-researcher",
+    modelRoute: { provider: "fake", model: "fake-model" },
+  });
+  registerTestRole("test-searcher");
+  try {
+    db.archiveTeam("t1", "2026-08-20T00:00:00.000Z");
+    // add_member 最严重：归档后招募会产生未退休僵尸成员（设计文档墓碑语义：任务/消息保留只读）
+    await assert.rejects(
+      () => tools.addMember.execute({ teamId: "t1", roleSlug: "test-searcher" }, { sessionId: "cap-1" } as never),
+      (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_already_archived",
+    );
+    await assert.rejects(
+      () => tools.removeMember.execute({ teamId: "t1", memberId: "m1" }, { sessionId: "cap-1" } as never),
+      (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_already_archived",
+    );
+    assert.equal(db.getMember("m1")!.status, "idle", "门禁拒绝不产生任何副作用");
+    assert.equal(db.listMembers().length, 1, "未产生新成员");
+  } finally {
+    unregisterRoleDefinition("test-searcher");
+  }
+});
+
 test("team_remove_member：未知团队/跨队 memberId/终态任务保持/二次移除拒绝", async () => {
   const { db, tools } = setup();
   db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });

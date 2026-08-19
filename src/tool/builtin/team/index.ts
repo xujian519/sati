@@ -16,5 +16,6 @@ export {
   requireCaptain,
   requireTeamCaptain,
   requireRegisteredRole,
+  assertTeamActive,
   defaultModelRoute,
 } from "./teamUtils.js";
