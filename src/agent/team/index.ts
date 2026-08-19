@@ -15,3 +15,4 @@ export {
   type ScanTeamMembersOptions,
   type ScanTeamMembersResult,
 } from "./member/member-scanner.js";
+export { TeamApprovalForwarder, type TeamApprovalForwarderOptions } from "./member/approval-forwarder.js";
