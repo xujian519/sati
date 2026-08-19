@@ -19,6 +19,16 @@ export {
 } from "./member/member-scanner.js";
 export { TeamApprovalForwarder, type TeamApprovalForwarderOptions } from "./member/approval-forwarder.js";
 export { MAILBOX_LEASE_MS, unreadMessages, claimDelivery, expiredClaims } from "./mailbox/mailbox.js";
+export { withTeamLock } from "./scheduler/lock.js";
+export {
+  TeamScheduler,
+  type TeamSchedulerOptions,
+  type DispatchTicket,
+  ownedOpenTask,
+  nextReadyTask,
+  assignmentPrompt,
+  fallbackMailboxPrompt,
+} from "./scheduler/scheduler.js";
 export {
   TASK_TRANSITIONS,
   TERMINAL_TASK_STATUSES,
