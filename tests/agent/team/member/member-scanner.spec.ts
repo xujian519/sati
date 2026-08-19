@@ -224,6 +224,43 @@ test("冷恢复：working 成员跳过（可能在跑回合，不得并发唤醒
   }
 });
 
+test("冷恢复：onEvent 透传成员回合事件（I1 审批冒泡接线点）", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-team-scan-"));
+  const db = new TeamDb(join(root, "teams.db"));
+  const recorded = { messages: [] as string[] };
+  const seen: Array<{ memberId: string; eventType: string }> = [];
+  try {
+    db.upsertTeam({ id: "t1", name: "专利团队", captainSessionKey: "cap-1", createdAt: "2026-08-19T00:00:00.000Z" });
+    createTeamMember(db, {
+      teamId: "t1",
+      memberId: "m-broken",
+      roleSlug: "x",
+      modelRoute: { provider: "p", model: "m" },
+    });
+    // (a) 形态断点：request_header 已落、响应未到
+    await writeMemberTranscript(root, "team:t1:m-broken", [
+      acceptedInput("team:t1:m-broken", "t1", 1, "开始检索"),
+      requestHeader("team:t1:m-broken", "t1", 2),
+    ]);
+    const result = await scanTeamMembers({
+      db,
+      gateway: makeGateway(recorded),
+      projectRoot: root,
+      pilotHome: root,
+      resumeMessage: "[team-resume] 继续未完成的工作",
+      onEvent: (member, event) => seen.push({ memberId: member.id, eventType: event.type }),
+    });
+    assert.equal(result.scanned, 1);
+    assert.equal(result.resumed, 1);
+    // 唤醒成员回合的每事件透传给 onEvent（宿主接 TeamApprovalForwarder.handleMemberEvent
+    // 即冷恢复 turn 的 approval_pending 冒泡到队长 watcher——M1 限制闭环）
+    assert.deepEqual(seen, [{ memberId: "m-broken", eventType: "turn_completed" }]);
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("冷恢复：(b) 形态断点成员（流式残片）跳过，不自动续算", async () => {
   const root = await mkdtemp(join(tmpdir(), "sati-team-scan-"));
   const db = new TeamDb(join(root, "teams.db"));

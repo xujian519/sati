@@ -141,6 +141,8 @@ export class TeamScheduler {
               : { ...message, deliveryClaimedAt: undefined },
           );
         }
+        // I4（code review）标注：批次粒度事件——sender 取批次首条；多 sender 批次的
+        // 完整列表随 M3 事件 payload 演进（当前 payload 承载单 sender 字段）。
         if (accepted)
           this.emit(team.captainSessionKey, {
             type: "message_delivered",

@@ -181,6 +181,8 @@ await scenario(2, "并发接管（handoff 竞态 → 旧 attempt 拒绝）", asy
 });
 
 // ── 场景 3：迟到写入风暴（50 次旧 attemptId）→ 全拒、终态不变 ────────────────
+// M5（code review）标注：db 层 updateTask 不校验 attemptId（校验在调度器代码路径）——
+// 此处直调 validateAttemptUpdate 验证契约（调度器/工具收尾门依赖同一纯函数）。
 await scenario(3, "迟到写入风暴（50 次旧 attemptId 全拒）", async db => {
   const teamId = "t1";
   db.insertTask(
@@ -269,6 +271,8 @@ await scenario(5, "认领竞争（7 路并发 kickMember 恰好一个生效）",
 });
 
 // ── 场景 6：终态覆盖（40 次含 undefined 的 updateTask 尝试全拒）───────────────
+// M5（code review）标注：db 层 updateTask 不校验 attemptId（校验在调度器代码路径）——
+// 此处直调 validateAttemptUpdate 验证契约（含 undefined attemptId 的终态覆盖防护）。
 await scenario(6, "终态覆盖（40 次含 undefined attemptId 全拒）", async db => {
   const teamId = "t1";
   db.insertTask(makeTask(teamId, "task-a", { status: "completed", attempt: 2, attemptId: "a2", output: "final" }));

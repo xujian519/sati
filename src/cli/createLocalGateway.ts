@@ -21,10 +21,13 @@ import {
   TeamScheduler,
   defaultTeamDbPath,
   invalidateTaskAttempt,
+  ownedOpenTask,
   scanStrandedTasks,
   scanTeamMembers,
   toGatewayEvent,
+  validateAttemptUpdate,
   wakeMember,
+  withTeamLock,
   type ScanStrandedTasksResult,
   type ScanTeamMembersResult,
 } from "../agent/team/index.js";
@@ -452,9 +455,8 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 静默降级会掩盖成员缺失；与 knowledge 只读降级（消费侧容错）不同。
   const teamDb = new TeamDb(defaultTeamDbPath(pilotHome, env));
   // gateway 注入接线（emitForSession/approvalDecide 类型兼容性编译期验证）。
-  // handleMemberEvent 由 M2 调度器 wake 包装层的 onEvent 消费（下方 teamScheduler 接线）。
-  // M1 已知限制保持：冷恢复唤醒（scanTeamMembers → wakeMember）的 turn 无 onEvent 通道，
-  // 其 approval_pending 不冒泡到队长（scanner 直调 wakeMember 未传 onEvent，M2 不改 scanner 类型）。
+  // handleMemberEvent 由 M2 调度器 wake 包装层 + 冷恢复扫描（下方 runMemberScan 的 onEvent）
+  // 双路径消费——调度器路径与 scanner 路径的 approval_pending 均冒泡到队长 watcher。
   const teamForwarder = new TeamApprovalForwarder({
     db: teamDb,
     emitForSession: (sessionKey, event) => gateway.emitForSession(sessionKey, event),
@@ -467,6 +469,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       projectRoot: fallbackProjectRoot,
       pilotHome,
       hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
+      // I1（code review）：冷恢复 turn 的 approval_pending 冒泡到队长 watcher——
+      // scanner 直调 wakeMember 现传 onEvent（M1 已知限制在此闭环，计划 1349 行承诺兑现）。
+      onEvent: (member, event) => teamForwarder.handleMemberEvent(member, event),
     })
       .then(result => {
         if (result.resumed > 0) {
@@ -477,12 +482,14 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       .catch(() => ({ scanned: 0, resumed: 0 }));
   // ── 团队调度器接线（M2）：事件驱动调度器 + M1 已知限制闭环 ──
   // wake 包装层：调 wakeMember 并在 onEvent 内捕获 turn_completed → onMemberIdle，
-  // 成员回合结束自动触发下一任务派发 + member_idle 广播（M1 冷恢复 turn 无 onEvent
-  // 通道的限制保持——scanner 直调 wakeMember 未传 onEvent，M2 不改 scanner 类型）。
+  // 成员回合结束自动触发下一任务派发 + member_idle 广播（M1 冷恢复 turn 审批冒泡
+  // 限制已由 runMemberScan 的 onEvent 接线闭环——下方 I1 注释）。
   // onMemberIdle 的异步 rejection 静默吞掉（onEvent 契约：回调不得抛出，也不得以
   // 异步 rejection 影响回合；dispose 后锁队列里残留的踢腿自然失败被吞）。
   // ⚠️ 锁持有说明（既定设计）：wake 全程 await 回合 → 团队锁被持有至回合结束；
   // M2 范围（冷恢复 + 编程式入口）可接受，M3 工具驱动前再收窄锁范围。
+  // I3（code review）标注：isCaptainOnline 未接线（默认常在线）——设计承诺"队长离线
+  // 暂停认领"随 M3 接线 gateway 在线状态（captainSessionKey → watcher 活跃判定）。
   const teamScheduler = new TeamScheduler({
     db: teamDb,
     emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),
@@ -499,6 +506,22 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
             }
             // M1 已知限制闭环：回合结束 → onMemberIdle（下一任务派发 + member_idle 广播）
             if (event.type === "turn_completed" && member?.teamId !== undefined) {
+              // C2（code review）：re-claim 有界——M2 无 team 工具在回合内完成任务，
+              // 回合结束后 onMemberIdle 会 re-claim 同一任务；attempt 达 maxAttempts 仍
+              // 无进展（含回合失败）→ 置 failed 终止循环，兑现设计文档 L2"超限失败"
+              // 承诺（转派/队长接管留 M3）。此检查在 wake 锁内（wake 全程持有团队锁），
+              // 无 TOCTOU；validateAttemptUpdate 防终态/已被 invalidate（attemptId 已清）
+              // 的任务被误置 failed（fail-closed）。
+              const open = ownedOpenTask(teamDb.listTasks(member.teamId), memberId);
+              if (open !== undefined) {
+                const fresh = teamDb.getTask(member.teamId, open.id);
+                if (fresh !== undefined && fresh.attempt >= fresh.maxAttempts) {
+                  const guard = validateAttemptUpdate(fresh, fresh.attemptId);
+                  if (guard === undefined) {
+                    teamDb.updateTask({ ...fresh, status: "failed", updatedAt: new Date().toISOString() });
+                  }
+                }
+              }
               void teamScheduler.onMemberIdle(member.teamId, memberId).catch(() => undefined);
             }
           },
@@ -515,9 +538,18 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     scanStrandedTasks({
       db: teamDb,
       invalidateAndKick: async (teamId, taskId, memberId) => {
-        const task = teamDb.getTask(teamId, taskId);
-        if (task === undefined) return;
-        teamDb.updateTask(invalidateTaskAttempt(task, {}));
+        // C1（code review）：invalidate 进团队锁 + 锁内复查——stranded 判定基于扫描
+        // 起点快照，与调度器锁内 claim 存在 TOCTOU（启动扫描 fire-and-forget 与就绪后
+        // 调度并发）；成员 working（活跃回合）或任务已被并发转派的不得 invalidate
+        // （防同一任务双执行）。kickMember 留在锁外（kickMember 内部自己拿锁，避免重入死锁）。
+        await withTeamLock(teamId, async () => {
+          const task = teamDb.getTask(teamId, taskId);
+          const member = teamDb.getMember(memberId);
+          if (task === undefined || member === undefined) return;
+          if (task.status !== "claimed" && task.status !== "in_progress") return;
+          if (member.status === "working" || teamDb.isRetired(member.sessionKey)) return;
+          teamDb.updateTask(invalidateTaskAttempt(task, {}));
+        });
         await teamScheduler.kickMember(teamId, memberId);
       },
     });
