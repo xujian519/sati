@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-export { TeamDb, type TeamRow, type TeamMemberRow, type TeamTaskRow } from "./storage/team-db.js";
+export { TeamDb, type TeamRow, type TeamMemberRow, type TeamTaskRow, type TeamMessageRow } from "./storage/team-db.js";
 export { MEMBER_SESSION_PREFIX, memberSessionKey, parseMemberSessionKey } from "./protocol/member-key.js";
 export { createTeamMember, type MemberModelRoute, type CreateTeamMemberOptions } from "./member/member-registry.js";
 export {
@@ -18,6 +18,7 @@ export {
   type ScanTeamMembersResult,
 } from "./member/member-scanner.js";
 export { TeamApprovalForwarder, type TeamApprovalForwarderOptions } from "./member/approval-forwarder.js";
+export { MAILBOX_LEASE_MS, unreadMessages, claimDelivery, expiredClaims } from "./mailbox/mailbox.js";
 export {
   TASK_TRANSITIONS,
   TERMINAL_TASK_STATUSES,
