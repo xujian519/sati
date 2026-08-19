@@ -255,6 +255,11 @@ export class TeamDb {
     return row ? toTeamRow(row) : undefined;
   }
 
+  listTeams(): TeamRow[] {
+    const rows = this.db.prepare("SELECT * FROM teams ORDER BY created_at ASC").all() as TeamDbRow[];
+    return rows.map(toTeamRow);
+  }
+
   insertMember(row: TeamMemberRow): void {
     this.db
       .prepare(
@@ -266,6 +271,12 @@ export class TeamDb {
 
   updateMemberStatus(id: string, status: "idle" | "working"): void {
     this.db.prepare("UPDATE members SET status = ? WHERE id = ?").run(status, id);
+  }
+
+  /** 进程冷启动时重置全部成员为 idle：崩溃残留的 working 必为死状态（无存活 turn），
+   * 由宿主在启动扫描前调用（否则冷恢复会永久跳过这些成员）。 */
+  resetMemberStatuses(): void {
+    this.db.prepare("UPDATE members SET status = 'idle'").run();
   }
 
   getMember(id: string): TeamMemberRow | undefined {

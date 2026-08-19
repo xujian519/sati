@@ -190,6 +190,40 @@ test("冷恢复：有挂起审批的断点成员跳过", async () => {
   }
 });
 
+test("冷恢复：working 成员跳过（可能在跑回合，不得并发唤醒）", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-team-scan-"));
+  const db = new TeamDb(join(root, "teams.db"));
+  const recorded = { messages: [] as string[] };
+  try {
+    db.upsertTeam({ id: "t1", name: "专利团队", captainSessionKey: "cap-1", createdAt: "2026-08-19T00:00:00.000Z" });
+    createTeamMember(db, {
+      teamId: "t1",
+      memberId: "m-working",
+      roleSlug: "x",
+      modelRoute: { provider: "p", model: "m" },
+    });
+    db.updateMemberStatus("m-working", "working");
+    // 转录是 (a) 形态断点——若没有状态检查会被误唤醒
+    await writeMemberTranscript(root, "team:t1:m-working", [
+      acceptedInput("team:t1:m-working", "t1", 1, "开始检索"),
+      requestHeader("team:t1:m-working", "t1", 2),
+    ]);
+    const result = await scanTeamMembers({
+      db,
+      gateway: makeGateway(recorded),
+      projectRoot: root,
+      pilotHome: root,
+    });
+    // scanned 为扫描范围数（同 hasPendingApprovals 跳过语义），working 成员在范围内但被跳过
+    assert.equal(result.scanned, 1);
+    assert.equal(result.resumed, 0);
+    assert.deepEqual(recorded.messages, []);
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("冷恢复：(b) 形态断点成员（流式残片）跳过，不自动续算", async () => {
   const root = await mkdtemp(join(tmpdir(), "sati-team-scan-"));
   const db = new TeamDb(join(root, "teams.db"));
