@@ -760,7 +760,7 @@ class ProjectRuntimeRegistry {
   private _extraTools: SatiToolDefinition[];
   private _sessionOverrides: SessionConfigOverrides | undefined;
   /** team_* 工具装配（M3）：createLocalGateway 经 setTeamTools 注入，resolve 时透传 createBuiltinRegistry。 */
-  private teamTools?: TeamToolsOptions;
+  private _teamTools?: TeamToolsOptions;
   private readonly sharedSessionStore = new SessionRouterStore({
     now: () => this.options.now().getTime(),
   });
@@ -942,9 +942,14 @@ class ProjectRuntimeRegistry {
    * 工具（管理面 6 工具 domain "team:manage"、作业面 3 工具 domain "team"）。
    * 与配置热重载的 invalidate 语义一致；注入时点无会话消费者（model router /
    * memoryService 随重建恢复）。
+   *
+   * 覆盖语义：重复调用 = 引用替换 + 再次 invalidate（会 close 已缓存 runtime 的
+   * memoryService 并 shutdown 其 model router）。必须在任何会话创建之前调用——
+   * invalidate 之后首个会话创建即含 team_* 工具；调用后创建的 runtime 直接含
+   * team_* 工具，不再受 invalidate 影响（除非配置热重载等再次重建）。
    */
   setTeamTools(team: TeamToolsOptions): void {
-    this.teamTools = team;
+    this._teamTools = team;
     this.invalidate();
   }
 
@@ -1036,7 +1041,7 @@ class ProjectRuntimeRegistry {
     });
 
     const tools = createBuiltinRegistry({
-      ...(this.teamTools ? { team: this.teamTools } : {}),
+      ...(this._teamTools ? { team: this._teamTools } : {}),
       backgroundTasks: { runtime: backgroundTasks },
       searchPatentFigure: { embeddingClient },
       ...(memory?.service ? { memory: { service: memory.service } } : {}),
