@@ -28,6 +28,7 @@ export type SatiToolErrorCode =
   | "team_not_found"
   | "team_not_member"
   | "team_stale_attempt"
+  | "team_task_exists" // M3 T7：create_task 任务 id 碰撞（8 位前缀，理论概率极低，碰撞即响亮失败；语义：任务已存在）
   | "team_task_not_found"
   | "team_task_terminal"
   | "team_unknown_role";

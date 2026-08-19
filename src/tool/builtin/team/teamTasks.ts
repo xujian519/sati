@@ -13,10 +13,11 @@
  * 锁外调度（onTaskGraphChanged/kickMember）：scheduler 内部自己拿团队锁，防重入死锁（M2 C1 惯例）。
  *
  * Q review 修复（2026-08-20）：I1 reassign 指定成员补存在/同队/退休校验（team_not_member /
- * team_member_retired）；I2 队长路径对 pending → cancelled 豁免 attemptId 校验（白名单允许但
- * pending 任务 attemptId 恒缺失；claimed/in_progress 仍强制 fail-closed）；M1 reassign 删除
- * reason 死字段；M4 create_task 任务 id 碰撞检查（team_task_not_found）；M5 subject 非空白 +
- * maxAttempts 正整数校验（invalid_tool_input）；M7 非 completed 终态清 output。
+ * team_member_retired）；I2 队长路径对 pending → cancelled 豁免 attemptId 校验（T7 补豁免条件说明：
+ * memberId === undefined && task.status === "pending" && input.status === "cancelled"——白名单允许但
+ * pending 任务 attemptId 恒缺失；claimed/in_progress 仍强制 fail-closed（豁免精度边界，见 spec 断言））；
+ * M1 reassign 删除 reason 死字段；M4 create_task 任务 id 碰撞检查（T7 改抛 team_task_exists）；
+ * M5 subject 非空白 + maxAttempts 正整数校验（invalid_tool_input）；M7 非 completed 终态清 output。
  */
 import { randomUUID } from "node:crypto";
 import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
@@ -120,9 +121,11 @@ export function createTeamCreateTaskTool(
           }
         }
         taskId = `t-${randomUUID().slice(0, 8)}`;
-        // 8 位前缀碰撞理论概率极低，但一旦发生即响亮失败（insert 主键冲突会抛出难读的 SQLite 错误）
+        // 8 位前缀碰撞理论概率极低，但一旦发生即响亮失败（insert 主键冲突会抛出难读的 SQLite 错误）。
+        // T7 修正：任务已存在却抛「不存在」语义颠倒，改抛 team_task_exists（任务确实存在，只是 id 撞了）。
+        // 该路径运行时不可达（taskId 内部生成 `t-<uuid8>`，无法从 input 指定），不做运行时单测。
         if (db.getTask(input.teamId, taskId) !== undefined) {
-          throw new SatiToolRuntimeError("team_task_not_found", `任务 id 碰撞，请重试：${taskId}`);
+          throw new SatiToolRuntimeError("team_task_exists", `任务 id 碰撞，请重试：${taskId}`);
         }
         const deps = input.dependencies ?? [];
         blockedByCount = unsatisfiedDependencies(known, deps).length;
@@ -200,7 +203,7 @@ export function createTeamUpdateTaskTool(
       },
     },
     description:
-      "Advance a task to a terminal state. Members may only update tasks assigned to themselves; the captain may update any task. Pass the attemptId from the assignment prompt — writes with a stale attemptId are rejected (fail-closed). 'completed' accepts output; 'failed' accepts reason; 'cancelled' accepts neither. Completing a task unlocks its dependents for dispatch.",
+      "Advance a task to a terminal state. Members may only update tasks assigned to themselves; the captain may update any task. Pass the attemptId from the assignment prompt — writes with a stale attemptId are rejected (fail-closed). One exemption: the captain may cancel a 'pending' task without a matching attemptId (no attempt has begun, attemptId is always absent); 'claimed'/'in_progress' tasks are never exempted. 'completed' accepts output; 'failed' accepts reason; 'cancelled' accepts neither. Completing a task unlocks its dependents for dispatch.",
     kind: "team",
     inputSchema: {
       type: "object",
