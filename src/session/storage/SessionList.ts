@@ -1,10 +1,16 @@
-import { readdir } from "node:fs/promises";
+import { open, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { TtlCache } from "../../shared/ttl-cache.js";
-import { readSessionLite, type SessionLiteFile } from "./SessionLiteReader.js";
+import { mergeMetadata } from "../metadata/SessionMetadataStore.js";
+import type { SessionMetadataValue } from "../transcript/TranscriptEntry.js";
+import { readSessionLite, SESSION_LITE_READ_BYTES, type SessionLiteFile } from "./SessionLiteReader.js";
 
 const ALWAYS_ON_AUXILIARY_PATTERN = /^always-on-(discovery|workspace|report)[:\-]/;
+/** 会话元数据兜底扫描的分块大小（避开把超大 JSONL 记录整行载入内存）。 */
+const SESSION_METADATA_SCAN_CHUNK_BYTES = 64 * 1024;
+/** 非 session_metadata 行超过该字节数即丢弃（如 base64 图片输入），继续向后找。 */
+const MAX_SESSION_METADATA_LINE_BYTES = 128 * 1024;
 
 /**
  * chatDir 扫描结果缓存：以目录文件快照做快速失效判断。
@@ -101,13 +107,9 @@ async function scanChatDirUncached(chatDir: string): Promise<{ sessions: Session
   const jsonlNames = names.filter(name => name.endsWith(".jsonl"));
   const sessions: SessionInfo[] = [];
   for (const name of jsonlNames) {
-    const lite = await readSessionLite(join(chatDir, name));
-    if (!lite) {
-      continue;
-    }
     const sessionId = name.slice(0, -".jsonl".length);
     // 注意：不传 projectRoot，cwd 由调用方盖章（缓存快照不含 cwd）。
-    const info = parseSessionInfoFromLite(sessionId, lite);
+    const info = await readSessionInfo(join(chatDir, name), sessionId);
     if (info) {
       sessions.push(info);
     }
@@ -129,6 +131,212 @@ function arraysEqual(left: string[], right: string[]): boolean {
     if (left[index] !== right[index]) return false;
   }
   return true;
+}
+
+/**
+ * 会话列表条目的完整读取：fast path（head+tail 预览）→ tail 快照 → 全文件
+ * 分块扫描兜底。大附件（base64 图片等）会把首个 JSONL 记录撑过 64KiB 预览
+ * 窗口，fast path 丢 metadata 时用尾部 isSnapshot 快照或全文件扫描补齐，
+ * 保证旧的 head 标题不会掩盖更新的超大尾部记录。
+ */
+export async function readSessionInfo(
+  path: string,
+  sessionId: string,
+  projectRoot?: string,
+): Promise<SessionInfo | null> {
+  const lite = await readSessionLite(path);
+  if (!lite) return null;
+
+  const fastInfo = parseSessionInfoFromLite(sessionId, lite, projectRoot);
+  if (fastInfo && lite.size <= SESSION_LITE_READ_BYTES) return fastInfo;
+  const tailSnapshot = readLatestTailSnapshot(lite);
+  if (tailSnapshot) {
+    const snapshotInfo = parseSessionInfoFromMetadata(sessionId, lite, tailSnapshot, projectRoot);
+    if (snapshotInfo) return mergeSessionInfo(fastInfo, snapshotInfo);
+  }
+
+  // 预览未含完整的最新 metadata 记录时，全文件分块扫描兜底。
+  const metadata = await readLastSessionMetadata(path);
+  const metadataInfo = metadata ? parseSessionInfoFromMetadata(sessionId, lite, metadata, projectRoot) : null;
+  return mergeSessionInfo(fastInfo, metadataInfo);
+}
+
+function mergeSessionInfo(fastInfo: SessionInfo | null, metadataInfo: SessionInfo | null): SessionInfo | null {
+  if (!metadataInfo) return fastInfo;
+  if (!fastInfo) return metadataInfo;
+  return {
+    ...fastInfo,
+    ...metadataInfo,
+    firstPrompt: metadataInfo.firstPrompt ?? fastInfo.firstPrompt,
+    createdAt: metadataInfo.createdAt ?? fastInfo.createdAt,
+  };
+}
+
+function readLatestTailSnapshot(lite: SessionLiteFile): SessionMetadataValue | undefined {
+  if (lite.size <= SESSION_LITE_READ_BYTES) {
+    return undefined;
+  }
+
+  // tail 从任意字节偏移开始，首行可能是残缺的（只取该行之后）。
+  // 之后的完整 metadata 记录必然更新。metadata 记录是增量 patch，
+  // 只有 reappendTail() 写显式完整快照，普通尾部 patch 不能跳过标题恢复。
+  let latestMetadata: SessionMetadataValue | undefined;
+  const lines = lite.tail.split(/\r?\n/);
+  for (const line of lines.slice(1)) {
+    if (!line.includes('"type":"session_metadata"')) continue;
+    const metadata = parseSessionMetadataLine(line);
+    if (!metadata) return undefined;
+    latestMetadata = metadata;
+  }
+  if (
+    latestMetadata?.isSnapshot === true &&
+    (latestMetadata.title?.trim() ||
+      latestMetadata.aiTitle?.trim() ||
+      latestMetadata.lastPrompt?.trim() ||
+      latestMetadata.firstPrompt?.trim())
+  ) {
+    return latestMetadata;
+  }
+  return undefined;
+}
+
+function parseSessionInfoFromMetadata(
+  sessionId: string,
+  lite: SessionLiteFile,
+  metadata: SessionMetadataValue,
+  projectRoot?: string,
+): SessionInfo | null {
+  const summary = metadata.title ?? metadata.aiTitle ?? metadata.lastPrompt ?? metadata.firstPrompt;
+  if (!summary?.trim()) return null;
+  const firstCreatedAt = firstJsonStringField(lite.head, "createdAt");
+  return {
+    sessionId,
+    summary,
+    lastModified: lite.mtime,
+    fileSize: lite.size,
+    customTitle: metadata.title,
+    aiTitle: metadata.aiTitle,
+    firstPrompt: metadata.firstPrompt,
+    cwd: projectRoot,
+    createdAt: firstCreatedAt ? Date.parse(firstCreatedAt) : undefined,
+    tag: metadata.tag,
+    parentSessionId: metadata.parentSessionId,
+    forkedFromTurnId: metadata.forkedFromTurnId,
+  };
+}
+
+/**
+ * 只扫描严格 session_metadata 记录，同时避免把超大 JSONL 记录
+ * （如 base64 图片输入）整行载入内存。非 metadata 行超过
+ * MAX_SESSION_METADATA_LINE_BYTES 即丢弃继续向后扫。
+ */
+async function readLastSessionMetadata(path: string): Promise<SessionMetadataValue | undefined> {
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(path, "r");
+    const buffer = Buffer.allocUnsafe(SESSION_METADATA_SCAN_CHUNK_BYTES);
+    let lastMetadata: SessionMetadataValue | undefined;
+    let lineChunks: Buffer[] = [];
+    let lineBytes = 0;
+    let lineTooLarge = false;
+    let lineIsSessionMetadata = false;
+
+    const append = (segment: Buffer): void => {
+      if (segment.length === 0) return;
+      lineBytes += segment.length;
+      if (lineTooLarge) return;
+
+      // 转录记录把 `type` 序列化在最前：行首缓冲前缀即可在超大行
+      // 触发上限前识别出 metadata 记录（大 fork firstPrompt 也保留）。
+      if (!lineIsSessionMetadata) {
+        const prefix = Buffer.concat([...lineChunks, segment]).toString("utf8");
+        lineIsSessionMetadata = prefix.includes('"type":"session_metadata"');
+      }
+      if (!lineIsSessionMetadata && lineBytes > MAX_SESSION_METADATA_LINE_BYTES) {
+        lineChunks = [];
+        lineTooLarge = true;
+        return;
+      }
+      lineChunks.push(Buffer.from(segment));
+    };
+
+    const finishLine = (): void => {
+      if (!lineTooLarge) {
+        const metadata = parseSessionMetadataLine(Buffer.concat(lineChunks).toString("utf8").replace(/\r$/, ""));
+        if (metadata) lastMetadata = mergeMetadata(lastMetadata ?? {}, metadata);
+      }
+      lineChunks = [];
+      lineBytes = 0;
+      lineTooLarge = false;
+      lineIsSessionMetadata = false;
+    };
+
+    let position = 0;
+    while (true) {
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+      if (bytesRead === 0) break;
+      position += bytesRead;
+
+      let start = 0;
+      for (
+        let newline = buffer.indexOf(0x0a, start);
+        newline !== -1 && newline < bytesRead;
+        newline = buffer.indexOf(0x0a, start)
+      ) {
+        append(buffer.subarray(start, newline));
+        finishLine();
+        start = newline + 1;
+      }
+      append(buffer.subarray(start, bytesRead));
+    }
+    if (lineBytes > 0 || lineChunks.length > 0) finishLine();
+    return lastMetadata;
+  } catch {
+    return undefined;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+function parseSessionMetadataLine(line: string): SessionMetadataValue | undefined {
+  if (!line.includes('"type":"session_metadata"')) return undefined;
+  try {
+    const entry = JSON.parse(line) as unknown;
+    if (!isRecord(entry) || entry.type !== "session_metadata" || !isRecord(entry.metadata)) {
+      return undefined;
+    }
+    const metadata = entry.metadata;
+    const parsed: SessionMetadataValue = {};
+    if (metadata.isSnapshot === true) {
+      parsed.isSnapshot = true;
+    }
+    const stringFields = [
+      "title",
+      "aiTitle",
+      "tag",
+      "firstPrompt",
+      "lastPrompt",
+      "parentSessionId",
+      "forkedFromTurnId",
+    ] as const;
+    for (const field of stringFields) {
+      const value = stringValue(metadata[field]);
+      if (value !== undefined) {
+        parsed[field] = value;
+      }
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 export function parseSessionInfoFromLite(

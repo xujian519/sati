@@ -27,8 +27,8 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | elicitation_resolved | - | src/gateway/client/InProcessGateway.ts:486 |
 | empty_output_recovery | src/agent/loop/AgentLoop.ts:1753 | src/gateway/client/InProcessGateway.ts:486 |
 | error | src/adapters/channel/qq/qqbot-gateway.ts:93, src/adapters/channel/qq/qqbot-gateway.ts:279, src/cli/sati.ts:961, src/gateway/client/InProcessGateway.ts:358, src/model/providers/openai-responses/stream.ts:128, src/model/streaming/streamModel.ts:189, src/model/streaming/streamModel.ts:238, src/model/streaming/streamModel.ts:244, src/model/streaming/streamModel.ts:249, src/model/streaming/streamModel.ts:326, src/model/streaming/streamModel.ts:484, src/router/RouterRuntime.ts:514, src/router/RouterRuntime.ts:576, src/router/RouterRuntime.ts:610, src/router/RouterRuntime.ts:889 | src/adapters/channel/api-server/ApiServerChannel.ts:472, src/adapters/channel/discord/DiscordChannel.ts:112, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:139, src/adapters/channel/mattermost/MattermostChannel.ts:119, src/adapters/channel/qq/QQChannel.ts:87, src/adapters/channel/qq/qqbot-gateway.ts:92, src/adapters/channel/sms/SmsChannel.ts:312, src/adapters/channel/webhook/WebhookChannel.ts:462, src/adapters/channel/wecom/WeComChannel.ts:330, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:65, src/adapters/channel/whatsapp/WhatsAppChannel.ts:82, src/always-on/runtime/SignalWatcher.ts:50, src/always-on/workspace/GitWorktreeProvider.ts:149, src/always-on/workspace/SnapshotCopyProvider.ts:166, src/always-on/workspace/WorkspaceApply.ts:32, src/always-on/workspace/WorkspaceApply.ts:153, src/cli/ExtensionWatchManager.ts:139, src/extension/hooks/execution/CommandHookExecutor.ts:80, src/gateway/server/websocket.ts:23, src/session/artifacts/FileArtifactCollector.ts:338, src/task/runtime/BackgroundTaskRuntime.ts:248, src/tool/builtin/bash/commandRunner.ts:59, src/tool/builtin/bash/commandRunner.ts:158, src/tool/builtin/executeCode.ts:573, src/tool/builtin/executeCode.ts:616, src/tool/builtin/executeCode.ts:667, src/tool/builtin/executeCode.ts:675, src/tool/builtin/executeCodeRpc.ts:95, src/tool/builtin/filesystem/ripgrep.ts:65, src/tool/builtin/filesystem/syntaxDiagnostics.ts:392, submitTurn 流 ×27 |
-| file_artifacts | src/agent/turn/TurnRunner.ts:208, src/agent/turn/TurnRunner.ts:229, src/agent/turn/TurnRunner.ts:310, src/agent/turn/TurnRunner.ts:323, src/session/transcript/InMemoryTranscriptWriter.ts:67, src/session/transcript/JsonlTranscriptWriter.ts:125 | src/gateway/client/InProcessGateway.ts:486, submitTurn 流 ×27 |
-| input_accepted | src/agent/turn/TurnRunner.ts:187, src/session/transcript/TranscriptReplay.ts:73 | src/gateway/client/InProcessGateway.ts:486 |
+| file_artifacts | src/agent/turn/TurnRunner.ts:214, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:316, src/agent/turn/TurnRunner.ts:329, src/session/transcript/InMemoryTranscriptWriter.ts:67, src/session/transcript/JsonlTranscriptWriter.ts:125 | src/gateway/client/InProcessGateway.ts:486, submitTurn 流 ×27 |
+| input_accepted | src/agent/turn/TurnRunner.ts:193, src/session/transcript/TranscriptReplay.ts:73 | src/gateway/client/InProcessGateway.ts:486 |
 | instructions_loaded | src/agent/loop/AgentLoop.ts:2014 | src/gateway/client/InProcessGateway.ts:486 |
 | mode_change_requested | src/agent/loop/AgentLoop.ts:1497 | src/gateway/client/InProcessGateway.ts:486 |
 | model_event | src/agent/loop/AgentLoop.ts:473 | src/gateway/client/InProcessGateway.ts:486 |
@@ -42,9 +42,9 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | pre_tool_execute | src/tool/execution/ToolRuntime.ts:134 | src/gateway/client/InProcessGateway.ts:486 |
 | retry_progress | - | src/gateway/client/InProcessGateway.ts:486 |
 | session_aborted | - | src/gateway/client/InProcessGateway.ts:486 |
-| session_ended | src/agent/session/AgentSession.ts:134 | src/gateway/client/InProcessGateway.ts:486 |
-| session_started | src/agent/session/AgentSession.ts:67 | src/gateway/client/InProcessGateway.ts:486 |
-| setup_completed | src/agent/session/AgentSession.ts:90 | src/gateway/client/InProcessGateway.ts:486 |
+| session_ended | src/agent/session/AgentSession.ts:136 | src/gateway/client/InProcessGateway.ts:486 |
+| session_started | src/agent/session/AgentSession.ts:69 | src/gateway/client/InProcessGateway.ts:486 |
+| setup_completed | src/agent/session/AgentSession.ts:92 | src/gateway/client/InProcessGateway.ts:486 |
 | stop_failure | src/agent/loop/AgentLoop.ts:488, src/agent/loop/AgentLoop.ts:612, src/agent/loop/AgentLoop.ts:927, src/agent/loop/AgentLoop.ts:1189 | src/gateway/client/InProcessGateway.ts:486 |
 | stop_requested | src/agent/loop/AgentLoop.ts:1362 | src/gateway/client/InProcessGateway.ts:486 |
 | structured_output | src/gateway/client/eventMapping.ts:510 | submitTurn 流 ×27 |
@@ -61,11 +61,11 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | tool_result | src/agent/loop/AgentLoop.ts:1504 | src/gateway/client/InProcessGateway.ts:486 |
 | tool_result_detail_available | src/gateway/client/eventMapping.ts:235, src/gateway/client/eventMapping.ts:241, src/gateway/client/eventMapping.ts:261 | submitTurn 流 ×27 |
 | tool_results_projected | src/agent/loop/AgentLoop.ts:968, src/agent/loop/AgentLoop.ts:1535 | src/gateway/client/InProcessGateway.ts:486 |
-| turn_completed | src/agent/loop/AgentLoop.ts:1796, src/agent/loop/AgentLoop.ts:1854, src/agent/turn/TurnRunner.ts:183, src/agent/turn/TurnRunner.ts:213, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:332, src/gateway/client/InProcessGateway.ts:322, src/gateway/client/eventMapping.ts:512, src/session/transcript/TranscriptReplay.ts:102 | src/gateway/client/InProcessGateway.ts:486, submitTurn 流 ×27 |
+| turn_completed | src/agent/loop/AgentLoop.ts:1796, src/agent/loop/AgentLoop.ts:1854, src/agent/turn/TurnRunner.ts:188, src/agent/turn/TurnRunner.ts:219, src/agent/turn/TurnRunner.ts:241, src/agent/turn/TurnRunner.ts:338, src/gateway/client/InProcessGateway.ts:322, src/gateway/client/eventMapping.ts:512, src/session/transcript/TranscriptReplay.ts:102 | src/gateway/client/InProcessGateway.ts:486, submitTurn 流 ×27 |
 | turn_continued | src/agent/loop/AgentLoop.ts:730, src/agent/loop/AgentLoop.ts:947, src/agent/loop/AgentLoop.ts:1027, src/agent/loop/AgentLoop.ts:1090, src/agent/loop/AgentLoop.ts:1106, src/agent/loop/AgentLoop.ts:1118, src/agent/loop/AgentLoop.ts:1160, src/agent/loop/AgentLoop.ts:1713, src/agent/loop/AgentLoop.ts:1777, src/agent/loop/AgentLoop.ts:2173 | src/gateway/client/InProcessGateway.ts:486 |
-| turn_failed | src/agent/loop/AgentLoop.ts:1793, src/agent/turn/TurnRunner.ts:182, src/agent/turn/TurnRunner.ts:212, src/agent/turn/TurnRunner.ts:234, src/agent/turn/TurnRunner.ts:331 | src/gateway/client/InProcessGateway.ts:486 |
-| turn_started | src/agent/turn/TurnRunner.ts:143 | src/gateway/client/InProcessGateway.ts:486, submitTurn 流 ×27 |
-| user_prompt_submitted | src/agent/turn/TurnRunner.ts:201 | src/gateway/client/InProcessGateway.ts:486 |
+| turn_failed | src/agent/loop/AgentLoop.ts:1793, src/agent/turn/TurnRunner.ts:187, src/agent/turn/TurnRunner.ts:218, src/agent/turn/TurnRunner.ts:240, src/agent/turn/TurnRunner.ts:337 | src/gateway/client/InProcessGateway.ts:486 |
+| turn_started | src/agent/turn/TurnRunner.ts:148 | src/gateway/client/InProcessGateway.ts:486, submitTurn 流 ×27 |
+| user_prompt_submitted | src/agent/turn/TurnRunner.ts:207 | src/gateway/client/InProcessGateway.ts:486 |
 | warning | src/agent/loop/AgentLoop.ts:1346 | src/gateway/client/InProcessGateway.ts:486 |
 | worktree_created | - | submitTurn 流 ×27 |
 | worktree_removed | - | submitTurn 流 ×27 |

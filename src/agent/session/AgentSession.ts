@@ -5,6 +5,7 @@ import type { AgentEvent } from "../protocol/events.js";
 import type { AgentInput, AgentSubmitOptions } from "../protocol/input.js";
 import type { AgentSessionState as AgentSessionStateShape } from "../protocol/state.js";
 import type { AgentTranscriptReplayResult } from "../../session/transcript/TranscriptReplay.js";
+import type { SessionMetadataValue } from "../../session/transcript/TranscriptEntry.js";
 import type { TurnRunner } from "../turn/TurnRunner.js";
 import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
 import type { AgentLoopSeedState } from "../loop/AgentLoop.js";
@@ -40,6 +41,7 @@ export type AgentSessionRuntimeReloadSnapshot = {
   transcriptPath: string;
   transcriptWriterState?: AgentTranscriptWriterState;
   fileState?: AgentLoopSeedState;
+  metadata?: SessionMetadataValue;
 };
 
 export class AgentSession {
@@ -151,6 +153,7 @@ export class AgentSession {
       transcriptPath: runtime.runtimeContext.transcriptPath,
       transcriptWriterState: runtime.transcriptWriterState,
       fileState: this.options.turnRunner.snapshotFileState(),
+      metadata: runtime.metadata,
     };
   }
 
