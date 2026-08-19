@@ -30,7 +30,9 @@ function run(cwd, args) {
 }
 
 if (files.length > 0) {
-  run(process.cwd(), ["biome", "format", "--write", ...files]);
+  // --no-errors-on-unmatched: biome.json ignores 数据目录（tests/fixtures/** 等），
+  // staged 文件全被 ignore 时 biome format 会以非零退出——这不属于格式错误，应放行。
+  run(process.cwd(), ["biome", "format", "--write", "--no-errors-on-unmatched", ...files]);
 }
 if (rootFiles.length > 0) {
   run(process.cwd(), ["eslint", "--fix", ...rootFiles]);
