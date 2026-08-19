@@ -1357,6 +1357,7 @@ export class AgentLoop {
         state.messages = applied.messages;
         appendedMessages = applied.appendedMessages ?? projected;
       } catch {
+        // applyToolResults 失败（如 spill 落盘错误）：回退原始投影，保证工具结果不丢。
         state.messages.push(...projected);
       }
     } else {

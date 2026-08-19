@@ -83,8 +83,7 @@ export class ToolCallLoopDetector implements DoomLoopDetector {
 
   constructor(private readonly maxRepeats = 3) {}
 
-  recordModelCall(ctx: DetectorContext, obs: ModelCallObservation): DoomLoopSignal | undefined {
-    void ctx;
+  recordModelCall(_ctx: DetectorContext, obs: ModelCallObservation): DoomLoopSignal | undefined {
     // 模型输出了文本 = 换话题：清空同参窗口。
     if (obs.text.trim().length > 0) {
       this.window = [];
