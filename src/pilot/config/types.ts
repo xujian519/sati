@@ -70,6 +70,8 @@ export type PilotAgentConfig = {
   maxOutputTokens?: number;
   thinking?: { enabled: boolean; budgetTokens?: number };
   subagents?: {
+    /** Optional default model/caps for forked subagents. Omitted or "inherit" means inherit the parent agent's model. */
+    default?: PilotAgentModelSelection;
     timeoutMs?: number;
   };
 };

@@ -346,7 +346,7 @@ export class AgentLoop {
   ): AsyncGenerator<AgentEvent, PrepareModelCallResult, unknown> {
     let pendingContextBudget: TokenBudgetSnapshot | undefined;
     const ctx = this.dependencies.context;
-    const preRoutingMaxContextTokens = this.tokenCaps.currentMaxContextTokens(this.config.provider, this.config.model);
+    const preRoutingMaxContextTokens = this.tokenCaps.preRoutingMaxContextTokens();
     if (ctx?.tryAutoCompact) {
       const reservedOutputTokens = this.tokenCaps.getReservedOutputTokens();
       const compact = yield* this.runAutoCompact(state, input, {
