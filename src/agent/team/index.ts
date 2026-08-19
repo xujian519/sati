@@ -32,6 +32,8 @@ export {
   attemptsExhausted,
   type TaskAttemptResult,
 } from "./taskpool/attempt.js";
+export { toGatewayEvent } from "./protocol/broadcast.js";
+export type { TeamEvent, TeamEventEmitter } from "./protocol/events.js";
 
 /** teams.db 默认路径（pilotHome 下）；`SATI_TEAMS_DB` 环境变量可覆盖（测试/治理用）。 */
 export function defaultTeamDbPath(pilotHome: string, env: Record<string, string | undefined> = process.env): string {

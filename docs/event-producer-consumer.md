@@ -54,6 +54,7 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:486 |
 | subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:486 |
 | subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:486 |
+| team_event | - | submitTurn 流 ×28 |
 | token_cap_adjusted | src/agent/loop/AgentLoop.ts:656, src/agent/loop/AgentLoop.ts:957, src/agent/loop/AgentLoop.ts:984, src/agent/loop/AgentLoop.ts:1006, src/agent/loop/AgentLoop.ts:1094 | src/gateway/client/InProcessGateway.ts:486 |
 | tool_call_finished | - | submitTurn 流 ×28 |
 | tool_call_started | - | submitTurn 流 ×28 |

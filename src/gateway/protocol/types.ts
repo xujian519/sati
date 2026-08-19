@@ -230,6 +230,15 @@ export type GatewayEvent = GatewayTurnScopedEventMetadata &
      */
     | { type: "approval_resolved"; sessionKey: string; pendingIndex: number; verdict: "adopted" | "rejected" }
     /**
+     * 团队编排事件（M2）：TeamEvent 事件族经现有广播通道按队长会话扇出。
+     * 协议不升版（复用 agent_event 帧，无新增方法）；Web 端 M4 起消费，未知帧忽略。
+     */
+    | {
+        type: "team_event";
+        teamId: string;
+        event: import("../../agent/team/protocol/events.js").TeamEvent;
+      }
+    /**
      * B1 elicitation request: a tool (`ask_user_question`) wants the host
      * channel to render a multiple-choice dialog. The host MUST eventually
      * call `Gateway.respondElicitation({ requestId, answer })` so the
