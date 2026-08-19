@@ -18,7 +18,15 @@ export type TeamEvent =
   | { type: "task_completed"; teamId: string; taskId: string; memberId: string; attempt: number; output?: string }
   | { type: "task_failed"; teamId: string; taskId: string; memberId: string; attempt: number; reason?: string }
   | { type: "task_reassigned"; teamId: string; taskId: string; fromMemberId: string; toMemberId: string }
-  | { type: "message_delivered"; teamId: string; recipient: string; sender: string }
+  | {
+      type: "message_delivered";
+      teamId: string;
+      recipient: string;
+      /** 批次首条发送者（= senders[0]，兼容既有消费方）。 */
+      sender: string;
+      /** M3：批次完整发送者列表（additive——协议不升版，Web 客户端未知字段忽略）。 */
+      senders: string[];
+    }
   | { type: "team_archived"; teamId: string };
 
 /**
