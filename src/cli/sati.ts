@@ -257,6 +257,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       bindServer,
       isProjectBusy,
       updateSubsystems,
+      sessionPresence,
     } = createLocalGateway({
       projectRoot,
       pilotHome,
@@ -475,6 +476,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         gateway,
         port: readPort(argv) ?? (Number.isFinite(envPort) ? envPort : 19789),
         staticAssetsPath: resolve(projectRoot, "ui/dist"),
+        presence: sessionPresence,
         feishu: feishuChannel,
         weixin: weixinChannel,
         qq: qqChannel,

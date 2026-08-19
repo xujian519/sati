@@ -9,6 +9,7 @@ import { createWebSocketAcceptValue, TextWebSocketConnection } from "./websocket
 import { GatewayWsConnection } from "./GatewayWsConnection.js";
 import { ensureGatewayAuthToken } from "./authToken.js";
 import { serveStaticAsset } from "./staticAssets.js";
+import type { SessionPresence } from "./sessionPresence.js";
 
 export type GatewayServerOptions = {
   gateway: Gateway;
@@ -17,6 +18,8 @@ export type GatewayServerOptions = {
   token?: string;
   staticAssetsPath?: string;
   serverVersion?: string;
+  /** M3：连接活跃追踪实例（satiServer 透传 createLocalGateway 的 sessionPresence）。 */
+  presence?: SessionPresence;
   feishuWebhook?: (request: IncomingMessage, response: ServerResponse, body: string) => Promise<boolean> | boolean;
   /**
    * Resolves a `projectKey` (as supplied by the Web UI) to an absolute
@@ -141,6 +144,7 @@ function handleUpgrade(
     gateway: options.gateway,
     token,
     serverVersion: options.serverVersion ?? APP_VERSION,
+    presence: options.presence,
   });
   connections.add(conn);
   conn.onClose(() => connections.delete(conn));

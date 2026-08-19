@@ -4,15 +4,21 @@ import { SATI_GATEWAY_PROTOCOL_VERSION, isProtocolCompatible } from "../protocol
 import { notConfigured } from "../protocol/notConfigured.js";
 import { SkillManagerError, SkillValidationError } from "../../extension/skills/index.js";
 import { TextWebSocketConnection } from "./websocket.js";
+import type { SessionPresence } from "./sessionPresence.js";
 
 export type GatewayWsConnectionOptions = {
   gateway: Gateway;
   token: string;
   serverVersion: string;
+  /** M3：连接活跃追踪（可选——未注入时零开销，不破坏既有构造点/测试）。 */
+  presence?: SessionPresence;
 };
 
 export class GatewayWsConnection {
   private authed = false;
+  private readonly presence: SessionPresence | undefined;
+  /** 最近一帧携带的 sessionKey（onClose 注销用）。 */
+  private lastSessionKey: string | undefined;
   private readonly inFlightSessions = new Set<string>();
   /** submit_turn 事件流发送缓冲：16ms 窗口合并，减少长轮次数千事件的 write/syscall。 */
   private readonly pendingTexts: string[] = [];
@@ -23,7 +29,14 @@ export class GatewayWsConnection {
     private readonly ws: TextWebSocketConnection,
     private readonly options: GatewayWsConnectionOptions,
   ) {
+    this.presence = options.presence;
     ws.onMessage(message => void this.handleMessage(message));
+    ws.onClose(() => {
+      // M3：连接关闭注销活跃（宽限窗内仍算在线，防瞬断误判）
+      if (this.lastSessionKey !== undefined) {
+        this.presence?.close(this.lastSessionKey);
+      }
+    });
     ws.onClose(() => this.abortInFlightTurns());
     // 连接关闭时清理发送缓冲与定时器（防悬空定时器/内存残留）
     ws.onClose(() => {
@@ -119,8 +132,13 @@ export class GatewayWsConnection {
 
   private async handleRequest(frame: WsRequestFrame): Promise<void> {
     try {
+      // M3：任何请求帧都刷新连接活跃（submit_turn 分支继续使用本变量）
+      const sessionKey = (frame.params as { sessionKey?: string } | undefined)?.sessionKey;
+      if (sessionKey !== undefined && sessionKey !== "") {
+        this.lastSessionKey = sessionKey;
+        this.presence?.touch(sessionKey);
+      }
       if (frame.method === "submit_turn") {
-        const sessionKey = (frame.params as { sessionKey?: string } | undefined)?.sessionKey;
         if (sessionKey) this.inFlightSessions.add(sessionKey);
         let seq = 0;
         let lastCompleted: GatewayEvent | undefined;
