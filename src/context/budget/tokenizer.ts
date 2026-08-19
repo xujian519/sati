@@ -26,10 +26,14 @@ export function getTokenizer(): Tiktoken {
 const TOKEN_CACHE_MAX = 4096;
 const tokenCache = new Map<string, number>();
 
-/** 超过该长度时先编码 1KB 样本试探（按 UTF-16 code unit 计）。 */
-const SAMPLE_CHARS = 1024;
-/** 样本编码超过该耗时即判定为病态输入，改用密度外推。自然语言 1KB ≈ 10-20ms，病态 ≥ 数百 ms。 */
-const PATHOLOGICAL_SAMPLE_THRESHOLD_MS = 150;
+/**
+ * 超过该长度时先编码样本试探（按 UTF-16 code unit 计）。
+ * 512 字符：病态重复文本样本编码约数百 ms（实测重复中文 ≈ 130ms），
+ * 自然语言仅 ≈ 4ms；比 1KB 样本便宜 4 倍，降低 CI 并行争用下的抖动。
+ */
+const SAMPLE_CHARS = 512;
+/** 样本编码超过该耗时即判定为病态输入，改用密度外推。自然语言 512 字符 ≈ 4ms，病态 ≥ 数十 ms。 */
+const PATHOLOGICAL_SAMPLE_THRESHOLD_MS = 80;
 
 function cacheKey(text: string): string {
   return createHash("sha1").update(text).digest("hex");
