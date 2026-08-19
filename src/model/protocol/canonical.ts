@@ -276,7 +276,7 @@ export type ProviderRetryConfig = {
   requestMaxRetries?: number;
   /** Max retries for dropped SSE streams. Default 2. */
   streamMaxRetries?: number;
-  /** First-token / idle timeout (ms) for streaming responses. Defaults through request timeout when omitted. */
+  /** First-token / idle timeout (ms) for streaming responses. Defaults to 600000ms when omitted. */
   streamIdleTimeoutMs?: number;
   /** Maximum streaming duration (ms). Default disabled. */
   maxStreamingDurationMs?: number;

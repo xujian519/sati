@@ -12,7 +12,6 @@ import {
   LITELLM_MAX_RETRY_DELAY_MS,
   LITELLM_RETRY_JITTER,
 } from "../model/streaming/streamModel.js";
-import { buildLiteLLMContinuationRequest } from "../model/streaming/continuationRequest.js";
 import type { TelemetryClient } from "../telemetry/index.js";
 import { DEFAULT_SUBAGENT_POLICY, type RouterConfig, type RouterModelRef } from "./config/schema.js";
 import type { SatiCustomRouter, CustomRouterRegistry } from "./customRouter/customRouter.js";
@@ -762,38 +761,10 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
             transientRetryCount++;
             continue;
           }
-          if (
-            hasYieldedContent &&
-            isMidStreamRateLimitError(outcome.error) &&
-            transientRetryCount < transientRetryMax
-          ) {
-            const partialText = extractPartialText(outcome.buffered);
-            if (partialText.length > 0) {
-              const midDelay =
-                outcome.error.retryAfterMs != null
-                  ? Math.min(outcome.error.retryAfterMs, transientMaxDelayMs)
-                  : calculateLiteLLMRetryDelay(transientRetryCount, transientBaseDelayMs, transientMaxDelayMs);
-              console.warn(
-                `[Sati] midStreamRetry: ${outcome.error.code} after partial content ` +
-                  `(attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(midDelay)}ms)`,
-              );
-              events.emit({
-                type: "sati_router_retry_progress",
-                sessionId: ctx.sessionId,
-                turnId: ctx.turnId,
-                attempt: transientRetryCount + 1,
-                maxAttempts: transientRetryMax,
-                delayMs: Math.round(midDelay),
-                reason: classifyRetryReason(outcome.error.code),
-                provider: attempt.provider,
-                model: attempt.model,
-              });
-              await abortableDelay(midDelay, ctx.abortSignal);
-              attemptRequest = buildLiteLLMContinuationRequest(attemptRequest, partialText);
-              transientRetryCount++;
-              continue;
-            }
-          }
+          // mid-stream continuation 已移除：流中段失败（rate_limit/overloaded）
+          // 统一由 streamModel 的 streamInterruption 机制（#511）接管——部分
+          // 内容由 AgentLoop 恢复链续接，router 不再手工拼接 continuation
+          // request（避免与 checkpoint 累积的双重续接）。
           for (const queued of pending) {
             yield queued;
           }
@@ -1208,10 +1179,6 @@ function classifyNetworkErrorCode(error: unknown): string {
   return "network_error";
 }
 
-function isMidStreamRateLimitError(error: import("../model/index.js").CanonicalModelError): boolean {
-  return error.code === "rate_limit_error" || error.code === "overloaded_error";
-}
-
 function classifyRetryReason(
   errorCode: string,
 ): "rate_limit" | "server_error" | "network_error" | "zero_usage" | "overloaded" {
@@ -1245,14 +1212,4 @@ function createUnsupportedMediaError(
       `that supports required input modalities: ${requiredText}. Missing: ${missingText}.`,
     retryable: false,
   };
-}
-
-function extractPartialText(buffered: CanonicalModelEvent[]): string {
-  let text = "";
-  for (const ev of buffered) {
-    if (ev.type === "text_delta") {
-      text += ev.text;
-    }
-  }
-  return text;
 }

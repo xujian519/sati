@@ -42,6 +42,8 @@ import {
   MAX_JSON_SELF_CORRECT_RETRIES,
   MAX_OUTPUT_RECOVERY_LIMIT,
   MAX_SAME_INVALID_FINGERPRINT,
+  MAX_STREAM_INTERRUPTION_RECOVERIES,
+  MAX_UNKNOWN_FINISH_RECOVERIES,
   TurnRuntimeState,
 } from "./turnRuntimeState.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
@@ -71,13 +73,17 @@ import {
   addEmptyReasoningContentMarkers,
   appendPlanModeReminder,
   buildPartialTextToolCallRecoveryPrompt,
+  buildStreamInterruptionRecoveryPrompt,
+  buildUnknownFinishRecoveryPrompt,
   isMissingReasoningContentError,
   markCompactReplacementMessages,
   normalizeMessagesForModelRequest,
+  safeFinalTextMessage,
   splitTransientPrompts,
   stripImagesFromMessages,
   stripTrailingErrorPair,
   truncateHeadKeepRatio,
+  withoutThinkingBlocks,
 } from "./messages.js";
 import {
   annotateRepeatedToolFailures,
@@ -541,9 +547,91 @@ export class AgentLoop {
     );
     if (fatalReason) state.doomLoopFatalReason = fatalReason;
 
+    if (assembled.error) {
+      // 错误路径（含 streamInterruption）由 run() 主循环转交 handleModelError
+      // 恢复/终止。这里不得在正常路径落库/emit 未经验证的 assistantMessage——
+      // 它可能含半截工具调用（如完整文本回退解析出的 tool_call 块），恢复响应
+      // 到达前被取消时绝不能持久化。
+      return { kind: "proceed", assembled, assistantMessage, toolCalls };
+    }
+
+    // 未知 finishReason：流正常结束（有 message_end）但 provider 未给出可识别
+    // 的完成原因，且无错误、无半截工具调用。注入恢复提示续接（最多
+    // MAX_UNKNOWN_FINISH_RECOVERIES 次），让模型从可见文本处继续。
+    if (
+      !assembled.error &&
+      assembled.hasMessageEnd &&
+      !assembled.hasPartialTextToolCall &&
+      assembled.finishReason === "unknown"
+    ) {
+      if (state.unknownFinishRecoveryCount < MAX_UNKNOWN_FINISH_RECOVERIES) {
+        state.unknownFinishRecoveryCount++;
+        const partialTextMessage = withoutThinkingBlocks(assistantMessage);
+        if (toolCalls.length === 0 && textFromMessage(partialTextMessage).trim().length > 0) {
+          state.finalMessage = partialTextMessage;
+          state.messages.push(partialTextMessage);
+          yield {
+            type: "assistant_message",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            message: partialTextMessage,
+          };
+          await input.onDurableMessage?.(partialTextMessage);
+        }
+        return yield* this.continueWithTransientPrompt(
+          state,
+          input,
+          buildUnknownFinishRecoveryPrompt(toolCalls),
+          "unknown_finish_recovery",
+        );
+      }
+
+      const error = agentError(
+        "agent_model_error",
+        `Unknown finish reason recovery exhausted after ${MAX_UNKNOWN_FINISH_RECOVERIES} attempts.`,
+        undefined,
+        "The provider repeatedly ended the stream without a recognized finish reason. Retry the turn or switch providers.",
+      );
+      const exhaustedMessage = safeFinalTextMessage(
+        assistantMessage,
+        assembled.hasPartialTextToolCall || assembled.hasTextFallbackToolCalls,
+        toolCalls,
+      );
+      state.finalMessage = exhaustedMessage;
+      if (exhaustedMessage) {
+        state.messages.push(exhaustedMessage);
+        yield {
+          type: "assistant_message",
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          message: exhaustedMessage,
+        };
+        await input.onDurableMessage?.(exhaustedMessage);
+      }
+      await this.dispatchLifecycle(input, "StopFailure", { error: error.message });
+      yield { type: "stop_failure", sessionId: input.sessionId, turnId: input.turnId, error: error.message };
+      const result = this.createTurnResult(input, {
+        type: "error",
+        stopReason: "model_error",
+        usage: state.usage,
+        permissionDenials: state.permissionDenials,
+        turns: state.turnCount,
+        startedAt: state.startedAt,
+        finalMessage: state.finalMessage,
+        structuredOutput: state.structuredOutput,
+        errors: [error],
+      });
+      yield await this.emitStatus(input, createModelRequestFailedStatus({ error }));
+      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+    }
+    state.unknownFinishRecoveryCount = 0;
+
     if (assembled.hasPartialTextToolCall) {
       if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
         state.maxOutputRecoveryCount++;
+        // 当前 assistant 消息含不安全的工具片段：恢复响应到达前若被取消，
+        // 绝不能把它作为最终消息返回/落库。
+        state.finalMessage = undefined;
         return yield* this.continueWithTransientPrompt(
           state,
           input,
@@ -555,6 +643,7 @@ export class AgentLoop {
       const detail = assembled.partialTextToolCall
         ? `${assembled.partialTextToolCall.format}/${assembled.partialTextToolCall.reason}`
         : "unknown partial text tool-call";
+      state.finalMessage = safeFinalTextMessage(assistantMessage, true, toolCalls);
       const result = this.createTurnResult(input, {
         type: "error",
         stopReason: "model_error",
@@ -773,6 +862,85 @@ export class AgentLoop {
   ): AsyncGenerator<AgentEvent, ModelErrorRecoveredResult, unknown> {
     const ctx = this.dependencies.context;
     if (assembled.error) {
+      // 流中断恢复：streamModel 在流完成前断连（idle 超时/连接断开/网络错误）
+      // 时以 streamInterruption 错误上抛，不再整体重试（会重复已收到的文本）。
+      // 已产生的部分内容按中断阶段处理：phase=text 且无工具片段 → 可见文本先
+      // 落库再续接；有任何工具片段 → 绝不落库（恢复响应到达前被取消也不把
+      // 半截工具调用作为最终消息）。最多 MAX_STREAM_INTERRUPTION_RECOVERIES
+      // 次；耗尽走错误面。
+      if (assembled.error.streamInterruption) {
+        if (state.streamInterruptionRecoveryCount < MAX_STREAM_INTERRUPTION_RECOVERIES) {
+          state.streamInterruptionRecoveryCount++;
+          const hasTextToolCall =
+            assembled.hasPartialTextToolCall || assembled.hasTextFallbackToolCalls || toolCalls.length > 0;
+          if (hasTextToolCall) {
+            state.finalMessage = undefined;
+          }
+          if (assembled.error.streamInterruption.phase === "text" && !hasTextToolCall) {
+            const partialTextMessage = withoutThinkingBlocks(assembled.message);
+            if (textFromMessage(partialTextMessage).trim().length > 0) {
+              state.finalMessage = partialTextMessage;
+              state.messages.push(partialTextMessage);
+              yield {
+                type: "assistant_message",
+                sessionId: input.sessionId,
+                turnId: input.turnId,
+                message: partialTextMessage,
+              };
+              await input.onDurableMessage?.(partialTextMessage);
+            }
+          }
+          const recoveryPrompt = hasTextToolCall
+            ? buildPartialTextToolCallRecoveryPrompt(assembled.partialTextToolCall)
+            : buildStreamInterruptionRecoveryPrompt(assembled.error.streamInterruption);
+          return yield* this.continueWithTransientPrompt(
+            state,
+            input,
+            recoveryPrompt,
+            hasTextToolCall ? "max_output_recovery" : "stream_interruption_recovery",
+          );
+        }
+
+        const error = agentError(
+          "agent_model_error",
+          `Stream interruption recovery exhausted after ${MAX_STREAM_INTERRUPTION_RECOVERIES} attempts (${assembled.error.streamInterruption.phase}).`,
+          assembled.error,
+          "The model stream repeatedly disconnected. Retry the turn or switch providers.",
+        );
+        const exhaustedMessage = safeFinalTextMessage(
+          assembled.message,
+          assembled.hasPartialTextToolCall || assembled.hasTextFallbackToolCalls,
+          toolCalls,
+        );
+        state.finalMessage = exhaustedMessage;
+        if (exhaustedMessage) {
+          state.messages.push(exhaustedMessage);
+          yield {
+            type: "assistant_message",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            message: exhaustedMessage,
+          };
+          await input.onDurableMessage?.(exhaustedMessage);
+        }
+        await this.dispatchLifecycle(input, "StopFailure", { error: error.message });
+        yield { type: "stop_failure", sessionId: input.sessionId, turnId: input.turnId, error: error.message };
+        const result = this.createTurnResult(input, {
+          type: "error",
+          stopReason: "model_error",
+          usage: state.usage,
+          permissionDenials: state.permissionDenials,
+          turns: state.turnCount,
+          startedAt: state.startedAt,
+          finalMessage: state.finalMessage,
+          structuredOutput: state.structuredOutput,
+          errors: [error],
+        });
+        yield await this.emitStatus(input, createModelRequestFailedStatus({ error, modelError: assembled.error }));
+        return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      }
+      state.streamInterruptionRecoveryCount = 0;
+
       if (!state.hasAttemptedReasoningContentRetry && isMissingReasoningContentError(assembled.error)) {
         state.hasAttemptedReasoningContentRetry = true;
         state.messages = addEmptyReasoningContentMarkers(state.messages);
@@ -1630,8 +1798,9 @@ export class AgentLoop {
   }
 
   /**
-   * 中止时捕获已部分生成的 assistant 消息（有内容才落库），供 abort 出口
-   * 复用。此前 streamModelResponse 的 catch / 正常路径两处逐字重复。
+   * 中止时捕获已部分生成的 assistant 消息，供 abort 出口复用。经
+   * safeFinalTextMessage 过滤：半截工具调用（含文本编码）绝不落库，思考块
+   * 不回显——取消时不把不安全的工具片段持久化给用户/转录。
    */
   private async *captureAbortedPartial(
     state: TurnRuntimeState,
@@ -1639,18 +1808,23 @@ export class AgentLoop {
     assembler: ReturnType<typeof createModelMessageAssemblerState>,
   ): AsyncGenerator<AgentEvent, void, unknown> {
     const partialAssembled = assembleAssistantMessage(assembler);
-    if (partialAssembled.message.content.length > 0) {
-      state.finalMessage = partialAssembled.message;
-      state.messages.push(partialAssembled.message);
+    const safePartialMessage = safeFinalTextMessage(
+      partialAssembled.message,
+      partialAssembled.hasPartialTextToolCall || partialAssembled.hasTextFallbackToolCalls,
+      partialAssembled.toolCalls,
+    );
+    if (safePartialMessage) {
+      state.finalMessage = safePartialMessage;
+      state.messages.push(safePartialMessage);
       state.expireConsumedTransientPrompts();
       state.usage = mergeUsage(state.usage, partialAssembled.usage);
       yield {
         type: "assistant_message",
         sessionId: input.sessionId,
         turnId: input.turnId,
-        message: partialAssembled.message,
+        message: safePartialMessage,
       };
-      await input.onDurableMessage?.(partialAssembled.message);
+      await input.onDurableMessage?.(safePartialMessage);
     }
   }
 

@@ -20,6 +20,7 @@ export type ModelMessageAssemblerState = {
   thinkingSignature?: string;
   usage: CanonicalUsage;
   finishReason?: CanonicalFinishReason;
+  hasMessageEnd: boolean;
   error?: CanonicalModelError;
   toolCalls: CanonicalToolCall[];
   hasRepairedToolCalls?: boolean;
@@ -33,6 +34,7 @@ export type ModelMessageAssemblerState = {
 export type AssembledAssistantMessage = {
   message: CanonicalMessage;
   finishReason: CanonicalFinishReason;
+  hasMessageEnd: boolean;
   usage?: CanonicalUsage;
   toolCalls: CanonicalToolCall[];
   error?: CanonicalModelError;
@@ -51,6 +53,7 @@ export function createModelMessageAssemblerState(): ModelMessageAssemblerState {
     thinkingBuffer: "",
     thinkingReasoningContentBuffer: "",
     usage: {},
+    hasMessageEnd: false,
     toolCalls: [],
   };
 }
@@ -88,6 +91,7 @@ export function applyModelEventToAssembler(state: ModelMessageAssemblerState, ev
     case "message_end":
       flushTextBuffers(state);
       state.finishReason = event.finishReason;
+      state.hasMessageEnd = true;
       return;
     case "usage":
       state.usage = mergeUsage(state.usage, event.usage);
@@ -145,6 +149,7 @@ export function assembleAssistantMessage(state: ModelMessageAssemblerState): Ass
       content: [...state.content],
     },
     finishReason: state.finishReason ?? (state.error ? "error" : "unknown"),
+    hasMessageEnd: state.hasMessageEnd,
     usage: hasUsage(state.usage) ? state.usage : undefined,
     toolCalls: [...state.toolCalls],
     error: state.error,
