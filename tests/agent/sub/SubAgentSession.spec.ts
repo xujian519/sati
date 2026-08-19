@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test, { afterEach } from "node:test";
 import type { AgentRuntimeConfig } from "../../../src/agent/runtime/AgentRuntimeConfig.js";
+import { loadPilotConfig } from "../../../src/pilot/config/index.js";
+import { PilotConfigError } from "../../../src/pilot/config/types.js";
+import { PILOT_CONFIG_FILE_NAME } from "../../../src/pilot/paths.js";
 import type {
   AgentRouterRuntime,
   AgentRuntimeDependencies,
@@ -230,6 +236,255 @@ test("read-only subagent evaluates bash safety from the real command", async () 
   assert.equal(writeResult.type, "error");
   assert.equal(writeResult.type === "error" ? writeResult.error.code : "", "ask_mode_violation");
   assert.deepEqual(commands, ["pwd"], "blocked command must not reach the shell runner");
+});
+
+// ==== 上游 #510 移植：agent.subagents.default（sati.yaml + SATI_HOME 适配） ====
+
+const tempPilotHomes: string[] = [];
+
+afterEach(() => {
+  for (const dir of tempPilotHomes.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function writePilotConfig(raw: string): string {
+  const pilotHome = mkdtempSync(join(tmpdir(), "sati-subagent-config-"));
+  tempPilotHomes.push(pilotHome);
+  writeFileSync(join(pilotHome, PILOT_CONFIG_FILE_NAME), raw, "utf8");
+  return pilotHome;
+}
+
+function loadInlinePilotConfig(raw: string) {
+  const pilotHome = writePilotConfig(raw);
+  return loadPilotConfig({ env: { SATI_HOME: pilotHome } });
+}
+
+function pilotConfigWithSubagentDefault(defaultValue: string): string {
+  return `
+schemaVersion: 1
+agent:
+  model: main/main-model
+  subagents:
+    default: ${defaultValue}
+model:
+  providers:
+    main:
+      protocol: openai
+      url: https://example.invalid/v1
+      apiKey: test
+      models:
+        main-model: {}
+    child:
+      protocol: openai
+      url: https://example.invalid/v1
+      apiKey: test
+      models:
+        child-model: {}
+`;
+}
+
+test("agent.subagents.default inherit keeps subagent model unset", () => {
+  const snapshot = loadInlinePilotConfig(pilotConfigWithSubagentDefault("inherit"));
+
+  assert.equal(snapshot.config.agent.subagents?.default, undefined);
+  assert.equal(
+    snapshot.diagnostics.some(diagnostic => diagnostic.path === "agent.subagents.default"),
+    false,
+  );
+});
+
+test("agent.subagents.default resolves a configured model", () => {
+  const snapshot = loadInlinePilotConfig(pilotConfigWithSubagentDefault("child/child-model"));
+
+  assert.deepEqual(snapshot.config.agent.subagents?.default, {
+    id: "child/child-model",
+    provider: "child",
+    model: "child-model",
+  });
+});
+
+test("agent.subagents.default inherits with a warning when provider is missing", () => {
+  const snapshot = loadInlinePilotConfig(pilotConfigWithSubagentDefault("missing/child-model"));
+
+  assert.equal(snapshot.config.agent.subagents?.default, undefined);
+  assert.deepEqual(
+    snapshot.diagnostics.find(diagnostic => diagnostic.path === "agent.subagents.default"),
+    {
+      code: "CONFIG_AGENT_SUBAGENT_PROVIDER_NOT_FOUND",
+      severity: "warning",
+      message: "agent.subagents.default references unknown provider missing. Inheriting agent.model instead.",
+      path: "agent.subagents.default",
+      recoverable: true,
+    },
+  );
+});
+
+test("agent.subagents.default inherits with a warning when model is missing", () => {
+  const snapshot = loadInlinePilotConfig(pilotConfigWithSubagentDefault("child/missing-model"));
+
+  assert.equal(snapshot.config.agent.subagents?.default, undefined);
+  assert.equal(
+    snapshot.diagnostics.find(diagnostic => diagnostic.path === "agent.subagents.default")?.code,
+    "CONFIG_AGENT_SUBAGENT_MODEL_NOT_FOUND",
+  );
+});
+
+test("agent.subagents.default inherits with a warning when malformed", () => {
+  const snapshot = loadInlinePilotConfig(pilotConfigWithSubagentDefault("missing-format"));
+
+  assert.equal(snapshot.config.agent.subagents?.default, undefined);
+  assert.equal(
+    snapshot.diagnostics.find(diagnostic => diagnostic.path === "agent.subagents.default")?.code,
+    "CONFIG_AGENT_SUBAGENT_MODEL_INVALID",
+  );
+});
+
+test("agent.model still fails fast when provider is missing", () => {
+  assert.throws(
+    () =>
+      loadInlinePilotConfig(`
+schemaVersion: 1
+agent:
+  model: missing/main-model
+  subagents:
+    default: child/child-model
+model:
+  providers:
+    child:
+      protocol: openai
+      url: https://example.invalid/v1
+      apiKey: test
+      models:
+        child-model: {}
+`),
+    error =>
+      error instanceof PilotConfigError &&
+      error.diagnostics.some(diagnostic => diagnostic.code === "CONFIG_AGENT_PROVIDER_NOT_FOUND"),
+  );
+});
+
+test("subagent config uses configured default model without copying caps to top-level overrides", () => {
+  const registry = new ToolRegistry();
+  const session = new SubAgentSession({
+    definition: SUBAGENT_DEFINITIONS["general-purpose"],
+    directive: "Inspect the provided files.",
+    parentConfig: {
+      ...parentConfig(),
+      provider: "main",
+      model: "main-model",
+      modelMultimodal: { input: ["text"] },
+      maxContextTokens: 100000,
+      maxOutputTokens: 20000,
+      subagentModel: {
+        provider: "child",
+        model: "child-model",
+        modelMultimodal: { input: ["text", "image"] },
+        maxContextTokens: 32000,
+        maxOutputTokens: 4096,
+      },
+    },
+    parentDependencies: {
+      router: createRouter(),
+      tools: {
+        registry,
+        scheduler: {} as never,
+      },
+    },
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
+    subagentSessionId: "subagent-session",
+    subagentId: "subagent-1",
+  }) as unknown as TestableSubAgentSession;
+
+  const config = session.buildConfig();
+
+  assert.equal(config.provider, "child");
+  assert.equal(config.model, "child-model");
+  assert.deepEqual(config.modelMultimodal, { input: ["text", "image"] });
+  assert.equal(config.maxContextTokens, undefined);
+  assert.equal(config.maxOutputTokens, undefined);
+  assert.deepEqual(config.subagentModel, {
+    provider: "child",
+    model: "child-model",
+    modelMultimodal: { input: ["text", "image"] },
+    maxContextTokens: 32000,
+    maxOutputTokens: 4096,
+  });
+  assert.equal(config.isSubagent, true);
+});
+
+test("subagent config inherits parent model when no default is configured", () => {
+  const registry = new ToolRegistry();
+  const session = sessionFor(SUBAGENT_DEFINITIONS["general-purpose"], registry);
+
+  const config = session.buildConfig();
+
+  assert.equal(config.provider, "test");
+  assert.equal(config.model, "test-model");
+  assert.equal(config.isSubagent, true);
+});
+
+test("configured subagent default remains a router baseline, not a router override", async () => {
+  const seen: Array<{ stage: "decide" | "execute"; provider: string; model: string }> = [];
+  const router: AgentRouterRuntime = {
+    decide: async ({ request }) => {
+      seen.push({ stage: "decide", provider: request.provider, model: request.model });
+      return {
+        provider: "routed",
+        model: "tier-model",
+        scenarioType: "default",
+        isSubagent: true,
+        orchestrating: false,
+        resolvedFrom: "tokenSaver",
+        mutations: {},
+      };
+    },
+    execute: async function* (_decision, request) {
+      seen.push({ stage: "execute", provider: request.provider, model: request.model });
+      yield { type: "text_delta", text: FINAL_REPORT };
+      yield {
+        type: "usage",
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      };
+    },
+    stream: async function* () {
+      yield { type: "text_delta", text: FINAL_REPORT };
+    },
+  } as AgentRouterRuntime;
+  const registry = new ToolRegistry();
+  const session = new SubAgentSession({
+    definition: SUBAGENT_DEFINITIONS["general-purpose"],
+    directive: "Inspect routing.",
+    parentConfig: {
+      ...parentConfig(),
+      provider: "main",
+      model: "main-model",
+      subagentModel: {
+        provider: "child",
+        model: "child-model",
+      },
+    },
+    parentDependencies: {
+      router,
+      tools: {
+        registry,
+        scheduler: {} as never,
+      },
+    },
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
+    subagentSessionId: "subagent-session",
+    subagentId: "subagent-1",
+  });
+
+  const report = await session.run();
+
+  assert.deepEqual(seen, [
+    { stage: "decide", provider: "child", model: "child-model" },
+    { stage: "execute", provider: "routed", model: "tier-model" },
+  ]);
+  assert.equal(report.markdown, FINAL_REPORT);
 });
 
 test("read-only execute_code checks the real code instead of crashing on registry setup", async () => {

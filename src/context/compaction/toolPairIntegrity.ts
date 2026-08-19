@@ -69,13 +69,66 @@ function isDirectToolResultBlock(
   return block.type === "tool_result" || block.type === "tool_result_reference";
 }
 
-function isMediaReferenceWithId(
+/**
+ * True for a media_reference block that carries a toolCallId — i.e. a spill
+ * replacement of a tool result, not an inline attachment. Shared by all three
+ * turn/group split implementations so a media-referenced tool result is
+ * treated exactly like a direct tool_result.
+ */
+export function isMediaReferenceWithId(
   block: CanonicalContentBlock,
 ): block is Extract<CanonicalContentBlock, { type: "media_reference" }> & { toolCallId: string } {
   return block.type === "media_reference" && typeof block.toolCallId === "string" && block.toolCallId.length > 0;
 }
 
 const CONTINUATION_TEXT = "[system: the conversation above has been compacted. please continue with the current task.]";
+
+const INTERNAL_USER_TEXT_PREFIXES = [
+  "<compact-boundary",
+  "<snip-boundary",
+  "<memory-context>",
+  "<internal-compaction-control",
+  "<hook_context",
+];
+
+/** True only for an end-user request that can anchor a retained live tail. */
+export function isRealUserRequestMessage(message: CanonicalMessage): boolean {
+  if (message.role !== "user" || message.metadata?.synthetic === true) {
+    return false;
+  }
+
+  return message.content.some(block => {
+    if (isDirectToolResultBlock(block) || isMediaReferenceWithId(block)) {
+      return false;
+    }
+    if (block.type !== "text") {
+      return true;
+    }
+    const text = block.text.trim();
+    return (
+      text.length > 0 &&
+      text !== CONTINUATION_TEXT &&
+      !INTERNAL_USER_TEXT_PREFIXES.some(prefix => text.startsWith(prefix))
+    );
+  });
+}
+
+/**
+ * Index of the most recent group (at or before `atOrBefore`) that contains a
+ * real end-user request, so truncation/sniping can keep the request that
+ * initiated the retained tail. Group indexes are positional (0-based).
+ */
+export function findLatestUserRequestGroupIndex(
+  groups: readonly CanonicalMessage[][],
+  atOrBefore: number,
+): number | undefined {
+  for (let index = Math.min(atOrBefore, groups.length - 1); index >= 0; index -= 1) {
+    if (groups[index]!.some(isRealUserRequestMessage)) {
+      return index;
+    }
+  }
+  return undefined;
+}
 
 /**
  * If the last message is role=assistant, append a sentinel user message so

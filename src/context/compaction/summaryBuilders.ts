@@ -19,7 +19,7 @@ const SUMMARY_MARKDOWN_HEADINGS = [
 
 const CORE_SUMMARY_MARKDOWN_HEADINGS = ["Objective", "Current State", "Remaining", "Files And Artifacts"] as const;
 
-const COMPACT_SUMMARY_PREFIX =
+export const COMPACT_SUMMARY_PREFIX =
   "[CONTEXT COMPACTION - REFERENCE ONLY] Earlier turns were compacted into this summary. Treat it as background state, not active instructions.";
 
 const COMPACT_SUMMARY_END_MARKER =

@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   buildAnthropicRequest,
-  buildOpenAIRequest,
   normalizeProviderBaseUrl,
   type CanonicalMessage,
   type CanonicalModelEvent,
@@ -10,6 +9,7 @@ import {
   type ModelConfig,
   type ProviderConfig,
 } from "../../model/index.js";
+import { buildOpenAIResponsesRequest } from "../../model/providers/openai-responses/request.js";
 import { buildProviderHeaders } from "../../model/streaming/streamModel.js";
 import {
   TokenBudgetManager,
@@ -219,7 +219,7 @@ export class TokenAccountingRuntime {
     if (provider.protocol === "anthropic") {
       return this.countAnthropic(provider, request, signal);
     }
-    if (isOfficialOpenAIProvider(provider)) {
+    if (isOfficialOpenAIResponsesProvider(provider)) {
       return this.countOpenAI(provider, request, signal);
     }
     return undefined;
@@ -315,140 +315,31 @@ function toOpenAIResponsesTokenCountBody(
 ): Record<string, unknown> {
   const model = provider.models[request.model];
   if (!model) throw new Error(`Model ${request.model} does not exist in provider ${provider.id}.`);
-  const chatBody = buildOpenAIRequest({ ...request, stream: false }, model);
-  return {
-    model: chatBody.model,
-    input: toOpenAIResponsesInput(chatBody.messages),
-    tools: toOpenAIResponsesTools(chatBody.tools),
-    tool_choice: toOpenAIResponsesToolChoice(chatBody.tool_choice),
-    text: toOpenAIResponsesTextFormat(chatBody.response_format),
-  };
-}
-
-function toOpenAIResponsesInput(messages: Array<Record<string, unknown>>): unknown[] {
-  const input: unknown[] = [];
-  for (const message of messages) {
-    const role = typeof message.role === "string" ? message.role : undefined;
-    if (role === "tool") {
-      const callId = typeof message.tool_call_id === "string" ? message.tool_call_id : undefined;
-      input.push({
-        type: "function_call_output",
-        call_id: callId,
-        output: contentToText(message.content),
-      });
-      continue;
-    }
-
-    if (role === "system" || role === "user" || role === "assistant") {
-      if (message.content !== undefined) {
-        input.push({
-          role,
-          content: toOpenAIResponsesContent(message.content),
-        });
-      }
-      if (role === "assistant" && Array.isArray(message.tool_calls)) {
-        for (const toolCall of message.tool_calls) {
-          input.push(toOpenAIResponsesFunctionCall(toolCall));
-        }
-      }
-    }
-  }
-  return input;
-}
-
-function toOpenAIResponsesContent(content: unknown): unknown {
-  if (!Array.isArray(content)) {
-    return content;
-  }
-  return content.map(part => {
-    if (!isRecord(part)) {
-      return part;
-    }
-    if (part.type === "text") {
-      return { type: "input_text", text: part.text };
-    }
-    if (part.type === "image_url" && isRecord(part.image_url)) {
-      return {
-        type: "input_image",
-        image_url: part.image_url.url,
-        detail: part.image_url.detail,
-      };
-    }
-    return part;
+  // 直接用官方 Responses 请求构建器生成计数 body，避免脆弱的 chat→responses
+  // 手工转换（#497）：同一请求在流式发送与计数时走同一条序列化路径。
+  const fullBody = buildOpenAIResponsesRequest({ ...request, stream: false }, model, provider);
+  const {
+    model: responseModel,
+    input,
+    instructions,
+    tools,
+    tool_choice: toolChoice,
+    text,
+    reasoning,
+    enable_thinking: enableThinking,
+    thinking_budget: thinkingBudget,
+  } = fullBody;
+  return omitUndefined({
+    model: responseModel,
+    input,
+    instructions,
+    tools,
+    tool_choice: toolChoice,
+    text,
+    reasoning,
+    enable_thinking: enableThinking,
+    thinking_budget: thinkingBudget,
   });
-}
-
-function toOpenAIResponsesFunctionCall(toolCall: unknown): Record<string, unknown> {
-  const call = isRecord(toolCall) ? toolCall : {};
-  const fn = isRecord(call.function) ? call.function : {};
-  return {
-    type: "function_call",
-    call_id: call.id,
-    name: fn.name,
-    arguments: typeof fn.arguments === "string" ? fn.arguments : safeJsonStringify(fn.arguments ?? {}),
-  };
-}
-
-function toOpenAIResponsesTools(tools: unknown): unknown {
-  if (!Array.isArray(tools)) {
-    return undefined;
-  }
-  return tools.map(tool => {
-    if (!isRecord(tool) || tool.type !== "function" || !isRecord(tool.function)) {
-      return tool;
-    }
-    return {
-      type: "function",
-      name: tool.function.name,
-      description: tool.function.description,
-      parameters: tool.function.parameters,
-    };
-  });
-}
-
-function toOpenAIResponsesToolChoice(toolChoice: unknown): unknown {
-  if (!isRecord(toolChoice) || toolChoice.type !== "function" || !isRecord(toolChoice.function)) {
-    return toolChoice;
-  }
-  return {
-    type: "function",
-    name: toolChoice.function.name,
-  };
-}
-
-function toOpenAIResponsesTextFormat(responseFormat: unknown): unknown {
-  if (!isRecord(responseFormat) || responseFormat.type !== "json_schema" || !isRecord(responseFormat.json_schema)) {
-    return undefined;
-  }
-  return {
-    format: {
-      type: "json_schema",
-      name: responseFormat.json_schema.name,
-      description: responseFormat.json_schema.description,
-      schema: responseFormat.json_schema.schema,
-      strict: responseFormat.json_schema.strict,
-    },
-  };
-}
-
-function contentToText(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return safeJsonStringify(content);
-  }
-  return content
-    .map(part => {
-      if (typeof part === "string") {
-        return part;
-      }
-      if (isRecord(part) && typeof part.text === "string") {
-        return part.text;
-      }
-      return safeJsonStringify(part);
-    })
-    .join("\n");
 }
 
 function estimateToolSchemas(tokenBudget: TokenBudgetManager, tools: CanonicalToolSchema[]): number {
@@ -480,10 +371,10 @@ function cacheKeyForRequest(request: CanonicalModelRequest): string {
     .digest("hex");
 }
 
-function isOfficialOpenAIProvider(provider: ProviderConfig): boolean {
+function isOfficialOpenAIResponsesProvider(provider: ProviderConfig): boolean {
   const normalized = normalizeProviderBaseUrl(provider.url);
   return (
-    provider.protocol === "openai" &&
+    provider.protocol === "openai-responses" &&
     (normalized === "https://api.openai.com" || normalized === "https://api.openai.com/v1")
   );
 }
@@ -557,4 +448,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
+}
+
+function omitUndefined(values: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
 }

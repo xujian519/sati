@@ -21,6 +21,15 @@ export type TokenCapConfig = {
   model: string;
   maxContextTokens?: number;
   maxOutputTokens?: number;
+  /** Marks the agent as a subagent. When set with subagentModel, parent config caps are ignored. */
+  isSubagent?: boolean;
+  /** Optional default model/caps for forked subagents. Omitted means inherit this agent's model. */
+  subagentModel?: {
+    provider: string;
+    model: string;
+    maxContextTokens?: number;
+    maxOutputTokens?: number;
+  };
 };
 
 /** AgentLoop dependencies 中提供模型 token 限额的查询函数。 */
@@ -63,7 +72,8 @@ export class TokenCapManager {
     // 只查一次避免新旧 API 双查询且优先级相反。
     return (
       transient ??
-      this.config.maxContextTokens ??
+      this.getBaselineSubagentTokenLimits(provider, model)?.maxContextTokens ??
+      this.currentConfigMaxContextTokens() ??
       this.getModelTokenLimits(provider, model)?.maxContextTokens ??
       1_000_000
     );
@@ -73,7 +83,10 @@ export class TokenCapManager {
     const transient = this.transientTokenCaps.get(this.tokenCapKey(provider, model));
     const modelMaxOutputTokens = this.getModelTokenLimits(provider, model)?.maxOutputTokens;
     const requested =
-      transient?.attemptMaxOutputTokens ?? transient?.requestedMaxOutputTokens ?? this.config.maxOutputTokens;
+      transient?.attemptMaxOutputTokens ??
+      transient?.requestedMaxOutputTokens ??
+      this.getBaselineSubagentTokenLimits(provider, model)?.maxOutputTokens ??
+      this.currentConfigMaxOutputTokens();
     const candidates = [requested, transient?.hardMaxOutputTokens].filter(
       (value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0,
     );
@@ -86,6 +99,42 @@ export class TokenCapManager {
       candidates.push(modelMaxOutputTokens);
     }
     return candidates.length > 0 ? Math.min(...candidates.map(value => Math.floor(value))) : undefined;
+  }
+
+  /** 子代理带显式模型覆盖时，父级配置 caps 一律忽略（#510）。 */
+  private hasSubagentModelOverride(): boolean {
+    return this.config.isSubagent === true && this.config.subagentModel !== undefined;
+  }
+
+  private getBaselineSubagentTokenLimits(
+    provider: string,
+    model: string,
+  ): { maxContextTokens?: number; maxOutputTokens?: number } | undefined {
+    if (!this.hasSubagentModelOverride()) {
+      return undefined;
+    }
+    const baseline = this.config.subagentModel;
+    if (!baseline || baseline.provider !== provider || baseline.model !== model) {
+      return undefined;
+    }
+    return {
+      maxContextTokens: baseline.maxContextTokens,
+      maxOutputTokens: baseline.maxOutputTokens,
+    };
+  }
+
+  private currentConfigMaxContextTokens(): number | undefined {
+    if (this.hasSubagentModelOverride()) {
+      return undefined;
+    }
+    return this.config.maxContextTokens;
+  }
+
+  private currentConfigMaxOutputTokens(): number | undefined {
+    if (this.hasSubagentModelOverride()) {
+      return undefined;
+    }
+    return this.config.maxOutputTokens;
   }
 
   getReservedOutputTokens(provider?: string, model?: string): number {

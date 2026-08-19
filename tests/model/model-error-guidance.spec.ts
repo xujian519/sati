@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { formatModelRequestFailureMessage, modelFailureAction } from "../../src/agent/loop/modelErrors.js";
+import { NetworkFetchError } from "../../src/network/fetch.js";
 import { normalizeModelError } from "../../src/model/errors/normalizeModelError.js";
 import type { CanonicalModelError } from "../../src/model/protocol/errors.js";
 
@@ -42,7 +43,7 @@ test("model_not_found guidance points users to local model settings", () => {
   assert.equal(action.userHintI18n.params?.provider, "modelbest-openai");
 });
 
-test("stream idle timeout is classified as timeout with network and timeoutMs guidance", () => {
+test("stream idle timeout is classified as timeout with stream idle guidance", () => {
   const error = normalizeModelError(
     "modelbest-openai",
     "openai",
@@ -50,13 +51,32 @@ test("stream idle timeout is classified as timeout with network and timeoutMs gu
   );
 
   assert.equal(error.code, "timeout");
-  assert.match(error.userHint ?? "", /timeoutMs/);
+  assert.match(error.userHint ?? "", /streamIdleTimeoutMs/);
+  assert.equal(error.settingsFix?.configPath, "model.providers.<id>.retry.streamIdleTimeoutMs");
   assert.match(error.userHint ?? "", /network|proxy|provider status/i);
 
   const action = modelFailureAction(error);
   assert.equal(action.fixTarget, "network");
-  assert.match(action.userHint, /timeoutMs/);
+  assert.match(action.userHint, /streamIdleTimeoutMs/);
   assert.match(action.userHint, /network|proxy|provider status/i);
+  assert.equal(action.userHintI18n.key, "chat:agentStatus.modelRequestFailed.actions.streamIdleTimeout");
+});
+
+test("request timeout keeps timeoutMs guidance distinct from stream idle timeout", () => {
+  const error = normalizeModelError(
+    "modelbest-openai",
+    "openai",
+    new NetworkFetchError("network_timeout", "Model request timed out after 30000ms."),
+  );
+
+  assert.equal(error.code, "timeout");
+  assert.match(error.userHint ?? "", /timeoutMs/);
+  assert.equal(error.settingsFix?.configPath, "model.providers.<id>.timeoutMs");
+
+  const action = modelFailureAction(error);
+  assert.equal(action.fixTarget, "network");
+  assert.match(action.userHint, /timeoutMs/);
+  assert.equal(action.userHintI18n.key, "chat:agentStatus.modelRequestFailed.actions.timeout");
 });
 
 test("billing and rate limit guidance distinguish provider-side fixes", () => {

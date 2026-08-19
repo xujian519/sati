@@ -4,7 +4,15 @@
  * 全部为确定性消息变换，无运行期状态；可独立测试。
  */
 
-import { messageContent, type CanonicalMessage, type PartialTextToolCallInfo } from "../../model/index.js";
+import { truncateHeadPreservingCheckpoint } from "../../context/compaction/CompactionEngine.js";
+import {
+  messageContent,
+  textFromMessage,
+  type CanonicalMessage,
+  type CanonicalToolCall,
+  type PartialTextToolCallInfo,
+} from "../../model/index.js";
+import type { StreamInterruption } from "../../model/protocol/errors.js";
 import type { SatiToolErrorResult } from "../../tool/index.js";
 
 export const PLAN_MODE_REMINDER_MESSAGE = [
@@ -59,11 +67,9 @@ export function appendPlanModeReminder(messages: CanonicalMessage[]): CanonicalM
   ];
 }
 
-/** Keep only the trailing `keepRatio` portion of the message history. */
+/** Keep a bounded tail without dropping the user request that initiated it. */
 export function truncateHeadKeepRatio(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
-  const ratio = Math.max(0.05, Math.min(1, keepRatio));
-  const keep = Math.max(1, Math.floor(messages.length * ratio));
-  return messages.slice(-keep);
+  return truncateHeadPreservingCheckpoint(messages, keepRatio);
 }
 
 /**
@@ -190,7 +196,7 @@ function mergeMessageMetadata(
 
 export function buildPartialTextToolCallRecoveryPrompt(partial: PartialTextToolCallInfo | undefined): string {
   const evidence = partial
-    ? `Detected partial text tool-call syntax (${partial.format}/${partial.reason}). Preview: ${partial.preview}`
+    ? `Detected partial text tool-call syntax (${partial.format}/${partial.reason}).`
     : "Detected partial text tool-call syntax.";
   return [
     "The previous response contained partial tool-call XML/text and could not be safely executed.",
@@ -198,6 +204,52 @@ export function buildPartialTextToolCallRecoveryPrompt(partial: PartialTextToolC
     "Resend the complete intended tool call with all required parameters, or continue in visible text if no tool is needed.",
     "Do not repeat dangling XML/tool-call fragments.",
   ].join("\n");
+}
+
+/** 去掉 thinking 块后的消息副本（thinking 不回显给用户，也不参与续接判定）。 */
+export function withoutThinkingBlocks(message: CanonicalMessage): CanonicalMessage {
+  return {
+    ...message,
+    content: messageContent(message).filter(block => block.type !== "thinking"),
+  };
+}
+
+/**
+ * 流中断/未知 finish 恢复出口的安全最终文本消息：
+ * - 存在任何 tool call（含文本编码的半截调用）→ 不产出最终消息（绝不把
+ *   半截工具调用持久化给用户/转录）；
+ * - 否则去掉 thinking 块后，无实质文本 → undefined，有实质文本 → 文本消息。
+ */
+export function safeFinalTextMessage(
+  message: CanonicalMessage,
+  hasPartialTextToolCall: boolean | undefined,
+  toolCalls: CanonicalToolCall[],
+): CanonicalMessage | undefined {
+  if (hasPartialTextToolCall || toolCalls.length > 0) {
+    return undefined;
+  }
+  const textMessage = withoutThinkingBlocks(message);
+  return textFromMessage(textMessage).trim().length > 0 ? textMessage : undefined;
+}
+
+/** 流中断恢复提示（按中断阶段定制）。 */
+export function buildStreamInterruptionRecoveryPrompt(interruption: StreamInterruption): string {
+  if (interruption.phase === "tool_call") {
+    const tools = interruption.activeToolCalls?.map(call => call.name || "unknown").filter(Boolean) ?? [];
+    const toolLabel = tools.length > 0 ? ` (${tools.slice(0, 3).join(", ")})` : "";
+    return [
+      `The previous model stream disconnected while generating a tool call${toolLabel}. No incomplete tool call was executed.`,
+      "Continue the original task from the current workspace state. Inspect relevant files before writing.",
+      "Do not retry the same large atomic write. Create or extend the artifact through small focused write_file or edit_file calls, keeping each tool call well under 8K output tokens.",
+    ].join("\n");
+  }
+  if (interruption.phase === "reasoning") {
+    return "The previous model stream disconnected during reasoning. Continue the original task directly from the current workspace state; do not repeat analysis or recap.";
+  }
+  if (interruption.phase === "text") {
+    return "The previous model stream disconnected mid-response. Continue exactly where the visible response ended; do not repeat prior text or recap.";
+  }
+  return "The previous model stream disconnected before producing a response. Continue the original task directly from the current workspace state.";
 }
 
 export function appendTextToFirstContent(

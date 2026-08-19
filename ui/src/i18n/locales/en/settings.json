@@ -868,7 +868,7 @@
           },
           "streamIdleTimeoutMs": {
             "label": "Stream idle timeout (ms)",
-            "description": "Abort a stream if no data is received for this duration."
+            "description": "Abort a stream if no data is received for this duration. Defaults to 600000 ms."
           },
           "baseDelayMs": { "label": "Base delay (ms)", "description": "Initial delay before the first retry." },
           "maxDelayMs": { "label": "Max delay (ms)", "description": "Maximum delay between retries." }

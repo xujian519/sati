@@ -3,6 +3,30 @@ import { hasUsableSecret, isMaskedSecret, secretDisplayValue } from "../../../sh
 import type { SatiConfig } from "../types";
 import { patch } from "./patch";
 
+function splitModelRef(value: unknown): { providerId: string; modelId: string } | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const slash = trimmed.indexOf("/");
+  if (slash <= 0 || slash === trimmed.length - 1) return null;
+  return { providerId: trimmed.slice(0, slash), modelId: trimmed.slice(slash + 1) };
+}
+
+export function clearSubagentDefaultForRemovedProvider(config: SatiConfig, providerId: string): SatiConfig {
+  const parsed = splitModelRef(config.agent?.subagents?.default);
+  if (!parsed || parsed.providerId !== providerId) return config;
+  return patch(config, ["agent", "subagents", "default"], "inherit");
+}
+
+export function clearSubagentDefaultForRemovedModel(
+  config: SatiConfig,
+  providerId: string,
+  modelId: string,
+): SatiConfig {
+  const parsed = splitModelRef(config.agent?.subagents?.default);
+  if (!parsed || parsed.providerId !== providerId || parsed.modelId !== modelId) return config;
+  return patch(config, ["agent", "subagents", "default"], "inherit");
+}
+
 function rewriteProviderRef(value: unknown, oldProviderId: string, newProviderId: string): unknown {
   const oldPrefix = `${oldProviderId}/`;
   if (typeof value !== "string" || !value.startsWith(oldPrefix)) return value;

@@ -72,6 +72,7 @@ export class SessionMetadataStore {
     }
     await this.options.transcript.recordSessionMetadata(this.options.sessionId, turnId, {
       ...snapshot,
+      isSnapshot: true,
       updatedAt: this.now().toISOString(),
     });
   }

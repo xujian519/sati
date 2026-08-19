@@ -422,7 +422,7 @@ export default function ProviderCard({ providerId, provider, onSave, onRemove, c
               >
                 <NumberInput
                   value={draftProvider.retry?.streamIdleTimeoutMs}
-                  placeholder="30000"
+                  placeholder="600000"
                   onChange={v =>
                     update({
                       retry: { ...draftProvider.retry, streamIdleTimeoutMs: v },

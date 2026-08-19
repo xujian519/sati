@@ -118,6 +118,8 @@ export type AgentControlBoundaryTranscriptEntry = AgentTranscriptEntryBase & {
 };
 
 export type SessionMetadataValue = {
+  /** Marks a metadata entry written by `reappendTail()` as a full snapshot. */
+  isSnapshot?: true;
   title?: string;
   aiTitle?: string;
   tag?: string;

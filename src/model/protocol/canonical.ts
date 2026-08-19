@@ -140,6 +140,8 @@ export type CanonicalMessageMetadata = {
   /** Message replaces compacted history and is omitted from the visible transcript. */
   compactReplacement?: boolean;
   purpose?: string;
+  /** Originating tool call for projected supplemental result messages. */
+  toolCallId?: string;
   forkCarryover?: {
     sourceSessionId: string;
     sourceTurnId?: string;
@@ -276,7 +278,7 @@ export type ProviderRetryConfig = {
   requestMaxRetries?: number;
   /** Max retries for dropped SSE streams. Default 2. */
   streamMaxRetries?: number;
-  /** First-token / idle timeout (ms) for streaming responses. Defaults through request timeout when omitted. */
+  /** First-token / idle timeout (ms) for streaming responses. Defaults to 600000ms when omitted. */
   streamIdleTimeoutMs?: number;
   /** Maximum streaming duration (ms). Default disabled. */
   maxStreamingDurationMs?: number;

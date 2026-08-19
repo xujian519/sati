@@ -3,7 +3,11 @@ import { findCatalogProviderById, type CatalogProvider } from "../../../../../sh
 import type { ConfigSaveOptions, ConfigSaveResult } from "../../../../../hooks/useSatiConfig";
 import { patch } from "../utils/patch";
 import type { SatiConfig, V2Provider } from "../types";
-import { rewriteProviderRefs } from "../utils/providerRefs";
+import {
+  clearSubagentDefaultForRemovedModel,
+  clearSubagentDefaultForRemovedProvider,
+  rewriteProviderRefs,
+} from "../utils/providerRefs";
 import { PageSectionHeader } from "../../../shared/view";
 import CatalogPicker from "./CatalogPicker";
 import ProviderCard from "./ProviderCard";
@@ -30,7 +34,7 @@ export default function ModelsSection({ config, onChange }: ModelsSectionProps) 
   const removeProvider = async (id: string) => {
     const next = { ...providers };
     delete next[id];
-    await applyChange(patch(config, ["model", "providers"], next));
+    await applyChange(clearSubagentDefaultForRemovedProvider(patch(config, ["model", "providers"], next), id));
   };
 
   const buildRenamedConfig = (oldId: string, newId: string) => {
@@ -58,7 +62,17 @@ export default function ModelsSection({ config, onChange }: ModelsSectionProps) 
       return { ok: false, error: t("satiConfig.panels.models.providerIdDuplicate") };
     }
     const targetId = trimmed || oldId;
-    const nextConfig = patch(renamed.config, ["model", "providers", targetId], provider);
+    let nextConfig = patch(renamed.config, ["model", "providers", targetId], provider);
+    if (targetId === oldId) {
+      const previousModels = providers[oldId]?.models ?? {};
+      const nextModels = provider.models ?? {};
+      for (const modelId of Object.keys(previousModels)) {
+        // `in` 会沿原型链命中（如 "toString"），必须只查自有属性。
+        if (!Object.prototype.hasOwnProperty.call(nextModels, modelId)) {
+          nextConfig = clearSubagentDefaultForRemovedModel(nextConfig, targetId, modelId);
+        }
+      }
+    }
     return applyChange(
       nextConfig,
       targetId !== oldId ? { providerRenames: [{ from: oldId, to: targetId }] } : undefined,

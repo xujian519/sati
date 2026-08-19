@@ -4,6 +4,7 @@
 
 import type { CanonicalMessage } from "../../model/index.js";
 import { collectToolNamesByCallId, isProtectedContextMessage } from "./protectedContext.js";
+import { isMediaReferenceWithId, isRealUserRequestMessage } from "./toolPairIntegrity.js";
 
 export function splitMessagesIntoCompactionGroups(
   messages: CanonicalMessage[],
@@ -90,13 +91,17 @@ function hasProtectedContextMessage(
 }
 
 function isStandaloneUserRequestGroup(messages: CanonicalMessage[]): boolean {
-  return messages.length === 1 && messages[0]!.role === "user" && !isToolResultOnlyMessage(messages[0]!);
+  return messages.length === 1 && isRealUserRequestMessage(messages[0]!);
 }
 
 function isToolResultOnlyMessage(message: CanonicalMessage): boolean {
   return (
     message.content.length > 0 &&
-    message.content.every(block => block.type === "tool_result" || block.type === "tool_result_reference")
+    // 与 SnipEngine/protectedContext 语义一致：media_reference-with-id 是工具
+    // 结果的溢出替换，不得视为新的用户请求起点（#513 坐标系统统一）。
+    message.content.every(
+      block => block.type === "tool_result" || block.type === "tool_result_reference" || isMediaReferenceWithId(block),
+    )
   );
 }
 

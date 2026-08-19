@@ -7,7 +7,13 @@ import { buildModelRequest } from "../request/buildModelRequest.js";
 import { validateModelRequest } from "../request/validateModelRequest.js";
 import { resolveApiKey, type CredentialEnv } from "../config/resolveCredentials.js";
 import type { CanonicalModelEvent, CanonicalModelRequest, ModelConfig, ProviderConfig } from "../protocol/canonical.js";
-import { ModelConfigError, ModelProviderError, ModelRequestError, parseRetryAfterHeader } from "../protocol/errors.js";
+import {
+  type CanonicalModelError,
+  ModelConfigError,
+  ModelProviderError,
+  ModelRequestError,
+  parseRetryAfterHeader,
+} from "../protocol/errors.js";
 import { parseModelResponse } from "../response/parseModelResponse.js";
 import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../providers/google/stream.js";
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
@@ -177,6 +183,15 @@ export async function* streamModel(
     try {
       response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal, options);
     } catch (error) {
+      if (isRetryableStreamError(error) && checkpoint.interruption().phase !== "empty") {
+        // 连接层失败但流已有部分内容：不再整体重试（会重复已收到的文本），
+        // 以 streamInterruption 错误上抛，由 AgentLoop 恢复链续接。
+        yield {
+          type: "error",
+          error: streamInterruptionError(provider, error, checkpoint),
+        };
+        return;
+      }
       if (attempt < maxRetries && isRetryableStreamError(error)) {
         const delayMs = calculateRetryDelay(provider, attempt);
         emitModelRetryProgress(
@@ -218,6 +233,13 @@ export async function* streamModel(
         );
         await delay(delayMs, options.signal);
         continue;
+      }
+      if (error.retryable && checkpoint.interruption().phase !== "empty") {
+        yield {
+          type: "error",
+          error: streamInterruptionError(provider, new ModelProviderError(error), checkpoint),
+        };
+        return;
       }
       yield { type: "error", error };
       return;
@@ -266,9 +288,9 @@ export async function* streamModel(
       }
       streamCompleted = true;
     } catch (error) {
-      if (attempt < maxRetries && isRetryableStreamError(error) && checkpoint.hasSubstantialContent()) {
+      if (attempt < maxRetries && isRetryableStreamError(error) && checkpoint.canContinueText()) {
         currentRequest = buildLiteLLMContinuationRequest(currentRequest, checkpoint.get().partialText);
-        checkpoint.reset();
+        // 不 reset：partialText 跨尝试累积，续接后的文本以 checkpoint 为基追加。
         const delayMs = calculateRetryDelay(provider, attempt, retryAfterMsForError(error));
         emitModelRetryProgress(
           options,
@@ -284,7 +306,7 @@ export async function* streamModel(
         continue;
       }
 
-      if (isRetryableStreamError(error) && attempt < maxRetries) {
+      if (isRetryableStreamError(error) && attempt < maxRetries && checkpoint.interruption().phase === "empty") {
         const delayMs = calculateRetryDelay(provider, attempt, retryAfterMsForError(error));
         emitModelRetryProgress(
           options,
@@ -300,6 +322,13 @@ export async function* streamModel(
         continue;
       }
 
+      if (isRetryableStreamError(error)) {
+        yield {
+          type: "error",
+          error: streamInterruptionError(provider, error, checkpoint),
+        };
+        return;
+      }
       throw error;
     }
 
@@ -342,12 +371,14 @@ async function* streamGoogleProviderRequest(params: {
 
   for (let attempt = 0; attempt <= params.maxRetries; attempt++) {
     throwIfAborted(params.options.signal);
+    const streamAbort = new AbortController();
+    const detachAbort = params.options.signal ? forwardAbort(params.options.signal, streamAbort) : undefined;
     try {
       const body = withGoogleAbortSignal(
         buildModelRequest(currentRequest, {
           providers: { [params.provider.id]: params.provider },
         }) as Record<string, unknown>,
-        params.options.signal,
+        streamAbort.signal,
       );
       if (brandEnv(process.env, ENV_KEY.DUMP_REQUEST) === "1") {
         const fs = await import("node:fs");
@@ -358,17 +389,40 @@ async function* streamGoogleProviderRequest(params: {
         console.log(`[model-debug] Request dumped to ${dumpPath} (model=${currentRequest.model})`);
       }
 
-      const client = (params.options.googleClientFactory ?? createGoogleClient)(params.provider);
-      const stream = await client.models.generateContentStream(body as unknown as GoogleRequestBody);
+      // Google SDK 把 HttpOptions.timeout 应用于整个 HTTP 请求。流式场景下
+      // 用下面的 per-read idle watchdog 兜底，因此既不传 idle 超时也不传
+      // provider 请求超时给 SDK。
+      const client = (params.options.googleClientFactory ?? createGoogleClient)({
+        ...params.provider,
+        timeoutMs: undefined,
+      });
+      const streamIdleTimeoutMs = resolveStreamIdleTimeout(params.provider, params.options);
+      const abortForIdleTimeout = (error: StreamIdleTimeoutError) => streamAbort.abort(error);
+      const stream = await withIdleTimeout(
+        () => client.models.generateContentStream(body as unknown as GoogleRequestBody),
+        streamIdleTimeoutMs,
+        params.options.signal,
+        abortForIdleTimeout,
+      );
       const state = createGoogleStreamState();
       let sawTerminalEvent = false;
       const streamGuard = createStreamGuard(params.provider);
 
-      for await (const chunk of stream) {
+      while (true) {
+        const { value: chunk, done } = await withIdleTimeout(
+          () => stream.next(),
+          streamIdleTimeoutMs,
+          params.options.signal,
+          abortForIdleTimeout,
+        );
+        if (done) {
+          break;
+        }
         throwIfAborted(params.options.signal);
         streamGuard.checkDuration();
         for (const event of normalizeGoogleStreamEvent(chunk, state)) {
-          if (event.type === "message_end" || event.type === "error") {
+          const terminalEvent = event.type === "message_end" || event.type === "error";
+          if (terminalEvent) {
             sawTerminalEvent = true;
           }
           if (event.type === "error") {
@@ -377,24 +431,25 @@ async function* streamGoogleProviderRequest(params: {
           streamGuard.observe(event);
           params.checkpoint.onEvent(event);
           yield event;
+          if (terminalEvent) {
+            void stream.return(undefined).catch(() => undefined);
+            return;
+          }
         }
       }
       streamGuard.checkDuration();
 
       if (!sawTerminalEvent && !state.ended) {
-        yield { type: "message_end", finishReason: "unknown", raw: undefined };
+        throw new IncompleteStreamError();
       }
       return;
     } catch (error) {
       throwIfGoogleAbort(error, params.options.signal);
       const providerError = toProviderError(params.provider, error);
-      if (
-        attempt < params.maxRetries &&
-        isRetryableGoogleStreamError(providerError, error) &&
-        params.checkpoint.hasSubstantialContent()
-      ) {
+      const retryable = isRetryableGoogleStreamError(providerError, error);
+      if (attempt < params.maxRetries && retryable && params.checkpoint.canContinueText()) {
         currentRequest = buildLiteLLMContinuationRequest(currentRequest, params.checkpoint.get().partialText);
-        params.checkpoint.reset();
+        // 不 reset：partialText 跨尝试累积，续接后的文本以 checkpoint 为基追加。
         const delayMs = calculateRetryDelay(params.provider, attempt);
         emitModelRetryProgress(
           params.options,
@@ -410,7 +465,7 @@ async function* streamGoogleProviderRequest(params: {
         continue;
       }
 
-      if (isRetryableGoogleStreamError(providerError, error) && attempt < params.maxRetries) {
+      if (retryable && attempt < params.maxRetries && params.checkpoint.interruption().phase === "empty") {
         const delayMs = calculateRetryDelay(params.provider, attempt);
         emitModelRetryProgress(
           params.options,
@@ -426,8 +481,15 @@ async function* streamGoogleProviderRequest(params: {
         continue;
       }
 
-      yield { type: "error", error: providerError.error };
+      yield {
+        type: "error",
+        error: retryable
+          ? streamInterruptionError(params.provider, providerError, params.checkpoint)
+          : providerError.error,
+      };
       return;
+    } finally {
+      detachAbort?.();
     }
   }
 }
@@ -464,6 +526,21 @@ function toProviderError(provider: ProviderConfig, error: unknown): ModelProvide
     return error;
   }
   return new ModelProviderError(normalizeModelError(provider.id, provider.protocol, error, extractStatus(error)));
+}
+
+/**
+ * 流在完成前中断（idle 超时/连接断开/网络错误）时产出的错误：在规范化
+ * 错误上附加 `streamInterruption` 元数据（中断阶段 + 活动工具调用信息），
+ * 供 AgentLoop 恢复链判断如何续接。错误本身带 retryable，但调用方
+ * 不应整体重试（会重复已收到的文本），而是以本错误终止尝试。
+ */
+function streamInterruptionError(
+  provider: ProviderConfig,
+  error: unknown,
+  checkpoint: StreamingCheckpointManager,
+): CanonicalModelError {
+  const providerError = toProviderError(provider, error).error;
+  return { ...providerError, streamInterruption: checkpoint.interruption() };
 }
 
 function extractStatus(error: unknown): number | undefined {
@@ -667,7 +744,12 @@ async function sendProviderRequest(
     ? setTimeout(
         () =>
           controller.abort(
-            new NetworkFetchError("network_timeout", `Model request timed out after ${effectiveTimeoutMs}ms.`),
+            new NetworkFetchError(
+              "network_timeout",
+              stream
+                ? `Stream idle timeout: no data received for ${effectiveTimeoutMs}ms`
+                : `Model request timed out after ${effectiveTimeoutMs}ms.`,
+            ),
           ),
         effectiveTimeoutMs,
       )
@@ -682,7 +764,7 @@ async function sendProviderRequest(
       body: JSON.stringify(finalBody),
       signal: controller.signal,
     };
-    return await sendWithEndpointFallback(provider, stream, transport, fetchOptions);
+    return await sendWithEndpointFallback(provider, stream, transport, fetchOptions, effectiveTimeoutMs);
   } catch (error) {
     if (signal?.aborted) {
       throw createAbortError(signal.reason);
@@ -712,6 +794,7 @@ async function sendWithEndpointFallback(
   stream: boolean,
   transport: ModelTransport,
   fetchOptions: RequestInit,
+  timeoutMs: number | undefined,
 ): Promise<Response> {
   const endpoints = buildProviderChatEndpointCandidates({ protocol: provider.protocol, baseUrl: provider.url });
   let lastResponse: Response | undefined;
@@ -719,7 +802,7 @@ async function sendWithEndpointFallback(
     const response = await networkFetch(endpoint, fetchOptions, {
       signal: fetchOptions.signal instanceof AbortSignal ? fetchOptions.signal : undefined,
       fetchImpl: transport === fetch ? undefined : transport,
-      timeoutMs: provider.timeoutMs,
+      timeoutMs,
       retry: { maxRetries: 0, retryOnPost: true },
     });
     if (await shouldUseEndpointResponse(provider, response, stream, endpoints.length)) {
@@ -805,7 +888,9 @@ async function safeReadJson(response: Response): Promise<unknown> {
   }
 }
 
-const DEFAULT_STREAM_IDLE_TIMEOUT_MS = LITELLM_DEFAULT_REQUEST_TIMEOUT_MS;
+// 流 idle 超时与请求超时解耦：idle 缺省 600s（LITELLM_COMPLETION_HTTP_FALLBACK_MS），
+// 不再回退到 provider.timeoutMs（那是整请求超时，语义不同）。
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = LITELLM_COMPLETION_HTTP_FALLBACK_MS;
 
 class StreamIdleTimeoutError extends Error {
   constructor(idleMs: number) {
@@ -860,7 +945,7 @@ async function* readServerSentEvents(
   try {
     while (true) {
       throwIfAborted(signal);
-      const readResult = await readWithIdleTimeout(reader, effectiveIdleMs, signal);
+      const readResult = await withIdleTimeout(() => reader.read(), effectiveIdleMs, signal);
       throwIfAborted(signal);
       const { value, done } = readResult;
       if (done) {
@@ -910,37 +995,50 @@ function* parseServerSentEventChunk(chunk: string): Iterable<ServerSentEvent> {
   }
 }
 
-function readWithIdleTimeout(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
+/**
+ * 给任意异步操作（SSE reader.read()、Google 生成器 next()）套 idle watchdog：
+ * idleMs 内无结果即 reject StreamIdleTimeoutError；onIdleTimeout 可选回调
+ * 供调用方同步中止底层操作（如 abort Google 流）。
+ */
+function withIdleTimeout<T>(
+  operation: () => Promise<T>,
   idleMs: number,
   signal?: AbortSignal,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+  onIdleTimeout?: (error: StreamIdleTimeoutError) => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
     let settled = false;
+    const onAbort = () => {
+      if (!settled) {
+        settled = true;
+        if (timer) clearTimeout(timer);
+        reject(createAbortError(signal?.reason));
+      }
+    };
+    // timer 必须先于 addEventListener 初始化：onAbort 闭包引用它，const 声明
+    // 在闭包定义之后、注册之前赋值，任何实际调用都发生在赋值完成之后。
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
-        reject(new StreamIdleTimeoutError(idleMs));
+        const error = new StreamIdleTimeoutError(idleMs);
+        onIdleTimeout?.(error);
+        // 三种结局（timer/abort/settle）都必须移除 listener：timer 分支
+        // 之前漏移，listener 会留在调用方 signal 上直到该 signal 自身 abort。
+        if (signal) signal.removeEventListener("abort", onAbort);
+        reject(error);
       }
     }, idleMs);
     if (typeof timer === "object" && "unref" in timer) {
       (timer as NodeJS.Timeout).unref();
     }
-    const onAbort = () => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        reject(createAbortError(signal?.reason));
-      }
-    };
     if (signal) {
       signal.addEventListener("abort", onAbort, { once: true });
     }
-    reader.read().then(
+    operation().then(
       result => {
         if (!settled) {
           settled = true;
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
           if (signal) signal.removeEventListener("abort", onAbort);
           resolve(result);
         }
@@ -948,7 +1046,7 @@ function readWithIdleTimeout(
       err => {
         if (!settled) {
           settled = true;
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
           if (signal) signal.removeEventListener("abort", onAbort);
           reject(err);
         }
@@ -957,16 +1055,13 @@ function readWithIdleTimeout(
   });
 }
 
-function resolveStreamIdleTimeout(provider: ProviderConfig, options?: ModelRuntimeOptions): number {
+export function resolveStreamIdleTimeout(provider: ProviderConfig, options?: ModelRuntimeOptions): number {
   if (typeof options?.streamTimeoutMs === "number" && options.streamTimeoutMs > 0) {
     return options.streamTimeoutMs;
   }
   const retry = provider.retry;
   if (retry && typeof retry.streamIdleTimeoutMs === "number" && retry.streamIdleTimeoutMs > 0) {
     return retry.streamIdleTimeoutMs;
-  }
-  if (typeof provider.timeoutMs === "number" && provider.timeoutMs > 0) {
-    return provider.timeoutMs;
   }
   return DEFAULT_STREAM_IDLE_TIMEOUT_MS;
 }

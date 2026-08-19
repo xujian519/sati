@@ -109,6 +109,7 @@ test("LifecycleRuntime.dispatch maps additional_context effects to user messages
       text: '<hook_context source="plugin-a">\nctx body\n</hook_context>',
     },
   ]);
+  assert.deepEqual(result.messages[0]!.metadata, { synthetic: true, purpose: "hook_context" });
 });
 
 test("LifecycleRuntime.dispatch passes through effects, events and errors untouched", async () => {
