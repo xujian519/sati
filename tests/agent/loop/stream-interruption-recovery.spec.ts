@@ -65,42 +65,42 @@ test("agent loop drops interrupted tool calls and continues with a chunked-write
   assert.doesNotMatch(JSON.stringify(recoveryRequest.messages), /\"content\":\"partial/);
 });
 
-test("agent loop recovers an unknown finish reason before treating the turn as successful", async () => {
+test("agent loop treats an unknown finish reason as a normal completion", async () => {
   const requests: CanonicalModelRequest[] = [];
   const loop = createLoop(
     async function* (_decision, request) {
       requests.push(request);
-      if (requests.length === 1) {
-        yield { type: "message_start", role: "assistant" };
-        yield { type: "text_delta", text: "partial" };
-        yield { type: "message_end", finishReason: "unknown" };
-        return;
-      }
       yield { type: "message_start", role: "assistant" };
-      yield { type: "text_delta", text: "recovered" };
-      yield { type: "message_end", finishReason: "stop" };
+      yield { type: "text_delta", text: "complete answer" };
+      yield { type: "message_end", finishReason: "unknown" };
     },
     () => undefined,
   );
 
-  const events: Array<{ type: string }> = [];
+  const events: Array<{ type: string; message?: { content: Array<{ type: string; text?: string }> } }> = [];
   for await (const event of loop.run({
     sessionId: "unknown-finish",
     turnId: "turn-1",
     messages: [{ role: "user", content: [{ type: "text", text: "write an answer" }] }],
   })) {
-    events.push(event);
+    events.push(event as (typeof events)[number]);
   }
 
-  assert.equal(requests.length, 2);
-  assert.ok(events.some(event => event.type === "turn_continued"));
-  assert.ok(!events.some(event => event.type === "unknown_finish_reason"));
-  const recoveryText = requests[1]!.messages.at(-1)?.content[0];
-  assert.equal(recoveryText?.type, "text");
-  assert.match(recoveryText?.type === "text" ? recoveryText.text : "", /without a recognized finish reason/);
+  // 未知 finishReason 视为正常完成：响应内容是完整的，不注入恢复提示、
+  // 不进入恢复链（每次成功响应都被误判为中断会在 2 次后使 turn 失败）。
+  assert.equal(requests.length, 1);
+  assert.ok(!events.some(event => event.type === "turn_continued"));
+  assert.ok(!events.some(event => event.type === "turn_failed"));
+  const assistantEvent = events.find(event => event.type === "assistant_message");
+  assert.ok(assistantEvent?.message);
+  const text = assistantEvent
+    .message!.content.filter(block => block.type === "text")
+    .map(block => block.text ?? "")
+    .join("");
+  assert.match(text, /complete answer/);
 });
 
-test("unknown finish with partial Hermes tool text uses the specialized recovery", async () => {
+test("unknown finish with partial tool text enters the partial-text recovery", async () => {
   const requests: CanonicalModelRequest[] = [];
   let scheduledToolCalls = 0;
   const partialToolText = '<tool_call>{"name":"write_file","arguments":{"path":"deck.mjs"';
@@ -355,21 +355,28 @@ test("stream interruption exhaustion persists the final safe text fragment", asy
   assert.ok(durable.some(text => text.includes("final-fragment-3")));
 });
 
-test("unknown finish exhaustion persists the final safe text fragment", async () => {
+test("unknown finish with empty response completes via the empty-response retry", async () => {
+  const requests: CanonicalModelRequest[] = [];
   const durable: string[] = [];
-  let attempt = 0;
   const loop = createLoop(
-    async function* (_decision, _request) {
-      attempt++;
+    async function* (_decision, request) {
+      requests.push(request);
+      if (requests.length === 1) {
+        // 无文本、无工具调用的空响应 + unknown finish：走 empty-response 恢复链。
+        yield { type: "message_start", role: "assistant" };
+        yield { type: "message_end", finishReason: "unknown" };
+        return;
+      }
       yield { type: "message_start", role: "assistant" };
-      yield { type: "text_delta", text: "unknown-fragment-" + attempt };
-      yield { type: "message_end", finishReason: "unknown" };
+      yield { type: "text_delta", text: "recovered" };
+      yield { type: "message_end", finishReason: "stop" };
     },
     () => undefined,
   );
 
-  for await (const _event of loop.run({
-    sessionId: "unknown-exhausted",
+  const events: Array<{ type: string }> = [];
+  for await (const event of loop.run({
+    sessionId: "unknown-empty",
     turnId: "turn-1",
     messages: [{ role: "user", content: [{ type: "text", text: "answer" }] }],
     onDurableMessage: async message => {
@@ -381,10 +388,16 @@ test("unknown finish exhaustion persists the final safe text fragment", async ()
       );
     },
   })) {
-    // Consume the complete recovery flow.
+    events.push(event);
   }
 
-  assert.ok(durable.some(text => text.includes("unknown-fragment-3")));
+  assert.equal(requests.length, 2);
+  assert.ok(events.some(event => event.type === "turn_continued"));
+  assert.ok(!events.some(event => event.type === "turn_failed"));
+  const retryText = requests[1]!.messages.at(-1)?.content[0];
+  assert.equal(retryText?.type, "text");
+  assert.match(retryText?.type === "text" ? retryText.text : "", /Your previous response was empty/);
+  assert.ok(durable.some(text => text.includes("recovered")));
 });
 
 test("partial text tool-call exhaustion clears unsafe finalMessage", async () => {

@@ -1,5 +1,5 @@
 import type { CanonicalMessage } from "../../model/index.js";
-import { isRealUserRequestMessage } from "./toolPairIntegrity.js";
+import { findLatestUserRequestGroupIndex, isMediaReferenceWithId } from "./toolPairIntegrity.js";
 
 export const DEFAULT_PROTECTED_TOOL_RESULT_NAMES: ReadonlySet<string> = new Set([
   "read_skill",
@@ -85,6 +85,9 @@ export function collectProtectedTurnIndexes(
   const toolNamesByCallId = collectToolNamesByCallId(messages);
   const protectedIndexes = new Set<number>();
   const turns = splitMessagesIntoTurns(messages);
+  // 预计算一次消息数组，复用共享 findLatestUserRequestGroupIndex（turn 位置
+  // 与 group index 恒等），避免与 SnipEngine/CompactionEngine 各持一份实现。
+  const turnMessages = turns.map(turn => turn.messages);
   for (const turn of turns) {
     if (
       turn.messages.some(message =>
@@ -97,22 +100,13 @@ export function collectProtectedTurnIndexes(
       protectedIndexes.add(turn.index);
       // 被保护 turn 前面的最近用户请求 turn 一并保留（#513）：保护内容
       // 保留其发起请求锚点，模型仍能定位该保护 turn 的任务来源。
-      const requestAnchorIndex = findLatestUserRequestTurnIndex(turns, turn.index);
+      const requestAnchorIndex = findLatestUserRequestGroupIndex(turnMessages, turn.index);
       if (requestAnchorIndex !== undefined) {
         protectedIndexes.add(requestAnchorIndex);
       }
     }
   }
   return protectedIndexes;
-}
-
-function findLatestUserRequestTurnIndex(turns: MessageTurn[], atOrBefore: number): number | undefined {
-  for (let index = Math.min(atOrBefore, turns.length - 1); index >= 0; index -= 1) {
-    if (turns[index]!.messages.some(isRealUserRequestMessage)) {
-      return turns[index]!.index;
-    }
-  }
-  return undefined;
 }
 
 export function isProtectedContextMessage(
@@ -155,5 +149,9 @@ function hasMemoryContext(message: CanonicalMessage): boolean {
 
 function isToolResultOnly(message: CanonicalMessage): boolean {
   if (message.content.length === 0) return false;
-  return message.content.every(block => block.type === "tool_result" || block.type === "tool_result_reference");
+  // 与 SnipEngine 语义一致：media_reference-with-id 是工具结果的溢出替换，
+  // 不得视为新的用户请求起点（#513 坐标系统统一）。
+  return message.content.every(
+    block => block.type === "tool_result" || block.type === "tool_result_reference" || isMediaReferenceWithId(block),
+  );
 }

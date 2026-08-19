@@ -81,7 +81,6 @@ export {
   COMPACT_MAX_OUTPUT_TOKENS,
   COMPACT_SYSTEM_PROMPT_DEFAULT,
   buildPostCompactMessages,
-  truncateHead,
   truncateHeadPreservingCheckpoint,
   type CompactionEngineOptions,
   type CompactionInput,

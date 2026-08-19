@@ -1008,24 +1008,29 @@ function withIdleTimeout<T>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let settled = false;
+    const onAbort = () => {
+      if (!settled) {
+        settled = true;
+        if (timer) clearTimeout(timer);
+        reject(createAbortError(signal?.reason));
+      }
+    };
+    // timer 必须先于 addEventListener 初始化：onAbort 闭包引用它，const 声明
+    // 在闭包定义之后、注册之前赋值，任何实际调用都发生在赋值完成之后。
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
         const error = new StreamIdleTimeoutError(idleMs);
         onIdleTimeout?.(error);
+        // 三种结局（timer/abort/settle）都必须移除 listener：timer 分支
+        // 之前漏移，listener 会留在调用方 signal 上直到该 signal 自身 abort。
+        if (signal) signal.removeEventListener("abort", onAbort);
         reject(error);
       }
     }, idleMs);
     if (typeof timer === "object" && "unref" in timer) {
       (timer as NodeJS.Timeout).unref();
     }
-    const onAbort = () => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        reject(createAbortError(signal?.reason));
-      }
-    };
     if (signal) {
       signal.addEventListener("abort", onAbort, { once: true });
     }
@@ -1033,7 +1038,7 @@ function withIdleTimeout<T>(
       result => {
         if (!settled) {
           settled = true;
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
           if (signal) signal.removeEventListener("abort", onAbort);
           resolve(result);
         }
@@ -1041,7 +1046,7 @@ function withIdleTimeout<T>(
       err => {
         if (!settled) {
           settled = true;
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
           if (signal) signal.removeEventListener("abort", onAbort);
           reject(err);
         }

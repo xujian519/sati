@@ -471,7 +471,7 @@ export function compressIndexRanges(indexes: readonly number[]): Array<{ fromInd
  * Last-resort head truncation: keep the trailing `keepRatio` portion (legacy
  * `truncateHeadForPTLRetry` 25% slice). Single-shot per turn (decision §3.1 #8).
  */
-export function truncateHead(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
+function truncateHead(messages: CanonicalMessage[], keepRatio: number): CanonicalMessage[] {
   const ratio = clamp(keepRatio, 0.05, 1);
   const keep = Math.max(1, Math.floor(messages.length * ratio));
   return messages.slice(-keep);

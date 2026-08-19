@@ -79,14 +79,6 @@ export class TokenCapManager {
     );
   }
 
-  /** Pre-routing baseline: subagents with an explicit model override skip parent caps entirely. */
-  preRoutingMaxContextTokens(): number {
-    if (this.config.isSubagent && this.config.subagentModel) {
-      return 1_000_000;
-    }
-    return this.currentMaxContextTokens(this.config.provider, this.config.model);
-  }
-
   currentMaxOutputTokens(provider: string, model: string): number | undefined {
     const transient = this.transientTokenCaps.get(this.tokenCapKey(provider, model));
     const modelMaxOutputTokens = this.getModelTokenLimits(provider, model)?.maxOutputTokens;
@@ -109,11 +101,16 @@ export class TokenCapManager {
     return candidates.length > 0 ? Math.min(...candidates.map(value => Math.floor(value))) : undefined;
   }
 
+  /** 子代理带显式模型覆盖时，父级配置 caps 一律忽略（#510）。 */
+  private hasSubagentModelOverride(): boolean {
+    return this.config.isSubagent === true && this.config.subagentModel !== undefined;
+  }
+
   private getBaselineSubagentTokenLimits(
     provider: string,
     model: string,
   ): { maxContextTokens?: number; maxOutputTokens?: number } | undefined {
-    if (this.config.isSubagent !== true) {
+    if (!this.hasSubagentModelOverride()) {
       return undefined;
     }
     const baseline = this.config.subagentModel;
@@ -127,14 +124,14 @@ export class TokenCapManager {
   }
 
   private currentConfigMaxContextTokens(): number | undefined {
-    if (this.config.isSubagent && this.config.subagentModel) {
+    if (this.hasSubagentModelOverride()) {
       return undefined;
     }
     return this.config.maxContextTokens;
   }
 
   private currentConfigMaxOutputTokens(): number | undefined {
-    if (this.config.isSubagent && this.config.subagentModel) {
+    if (this.hasSubagentModelOverride()) {
       return undefined;
     }
     return this.config.maxOutputTokens;

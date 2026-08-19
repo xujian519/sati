@@ -4,6 +4,7 @@ import {
   collectToolResultIds,
   ensureTrailingUserMessage,
   findLatestUserRequestGroupIndex,
+  isMediaReferenceWithId,
   stripUnpairedToolCalls,
   stripUnpairedToolResults,
 } from "./toolPairIntegrity.js";
@@ -201,9 +202,6 @@ function stitchKeptTurnsWithBoundaries(
 function isToolResultOnly(message: CanonicalMessage): boolean {
   if (message.content.length === 0) return false;
   return message.content.every(
-    block =>
-      block.type === "tool_result" ||
-      block.type === "tool_result_reference" ||
-      (block.type === "media_reference" && typeof block.toolCallId === "string" && block.toolCallId.length > 0),
+    block => block.type === "tool_result" || block.type === "tool_result_reference" || isMediaReferenceWithId(block),
   );
 }

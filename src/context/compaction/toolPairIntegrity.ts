@@ -69,7 +69,13 @@ function isDirectToolResultBlock(
   return block.type === "tool_result" || block.type === "tool_result_reference";
 }
 
-function isMediaReferenceWithId(
+/**
+ * True for a media_reference block that carries a toolCallId — i.e. a spill
+ * replacement of a tool result, not an inline attachment. Shared by all three
+ * turn/group split implementations so a media-referenced tool result is
+ * treated exactly like a direct tool_result.
+ */
+export function isMediaReferenceWithId(
   block: CanonicalContentBlock,
 ): block is Extract<CanonicalContentBlock, { type: "media_reference" }> & { toolCallId: string } {
   return block.type === "media_reference" && typeof block.toolCallId === "string" && block.toolCallId.length > 0;

@@ -24,8 +24,6 @@ export const MAX_JSON_SELF_CORRECT_RETRIES = 3;
 export const MAX_SAME_INVALID_FINGERPRINT = 3;
 /** 流中断（streamInterruption 错误）恢复上限（超过即走错误面）。 */
 export const MAX_STREAM_INTERRUPTION_RECOVERIES = 2;
-/** 未知 finishReason（无错误、有 message_end）恢复上限。 */
-export const MAX_UNKNOWN_FINISH_RECOVERIES = 2;
 
 export class TurnRuntimeState {
   messages: CanonicalMessage[];
@@ -49,7 +47,6 @@ export class TurnRuntimeState {
   consecutiveEmptyCount = 0;
   jsonSelfCorrectCount = 0;
   streamInterruptionRecoveryCount = 0;
-  unknownFinishRecoveryCount = 0;
   // 电路断路器（invalid_tool_input 指纹）
   lastInvalidFingerprint: string | undefined;
   sameInvalidFingerprintCount = 0;

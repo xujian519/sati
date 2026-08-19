@@ -43,7 +43,6 @@ import {
   MAX_OUTPUT_RECOVERY_LIMIT,
   MAX_SAME_INVALID_FINGERPRINT,
   MAX_STREAM_INTERRUPTION_RECOVERIES,
-  MAX_UNKNOWN_FINISH_RECOVERIES,
   TurnRuntimeState,
 } from "./turnRuntimeState.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
@@ -74,7 +73,6 @@ import {
   appendPlanModeReminder,
   buildPartialTextToolCallRecoveryPrompt,
   buildStreamInterruptionRecoveryPrompt,
-  buildUnknownFinishRecoveryPrompt,
   isMissingReasoningContentError,
   markCompactReplacementMessages,
   normalizeMessagesForModelRequest,
@@ -352,7 +350,7 @@ export class AgentLoop {
   ): AsyncGenerator<AgentEvent, PrepareModelCallResult, unknown> {
     let pendingContextBudget: TokenBudgetSnapshot | undefined;
     const ctx = this.dependencies.context;
-    const preRoutingMaxContextTokens = this.tokenCaps.preRoutingMaxContextTokens();
+    const preRoutingMaxContextTokens = this.tokenCaps.currentMaxContextTokens(this.config.provider, this.config.model);
     if (ctx?.tryAutoCompact) {
       const reservedOutputTokens = this.tokenCaps.getReservedOutputTokens();
       const compact = yield* this.runAutoCompact(state, input, {
@@ -555,76 +553,14 @@ export class AgentLoop {
       return { kind: "proceed", assembled, assistantMessage, toolCalls };
     }
 
-    // 未知 finishReason：流正常结束（有 message_end）但 provider 未给出可识别
-    // 的完成原因，且无错误、无半截工具调用。注入恢复提示续接（最多
-    // MAX_UNKNOWN_FINISH_RECOVERIES 次），让模型从可见文本处继续。
-    if (
-      !assembled.error &&
-      assembled.hasMessageEnd &&
-      !assembled.hasPartialTextToolCall &&
-      assembled.finishReason === "unknown"
-    ) {
-      if (state.unknownFinishRecoveryCount < MAX_UNKNOWN_FINISH_RECOVERIES) {
-        state.unknownFinishRecoveryCount++;
-        const partialTextMessage = withoutThinkingBlocks(assistantMessage);
-        if (toolCalls.length === 0 && textFromMessage(partialTextMessage).trim().length > 0) {
-          state.finalMessage = partialTextMessage;
-          state.messages.push(partialTextMessage);
-          yield {
-            type: "assistant_message",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            message: partialTextMessage,
-          };
-          await input.onDurableMessage?.(partialTextMessage);
-        }
-        return yield* this.continueWithTransientPrompt(
-          state,
-          input,
-          buildUnknownFinishRecoveryPrompt(toolCalls),
-          "unknown_finish_recovery",
-        );
-      }
-
-      const error = agentError(
-        "agent_model_error",
-        `Unknown finish reason recovery exhausted after ${MAX_UNKNOWN_FINISH_RECOVERIES} attempts.`,
-        undefined,
-        "The provider repeatedly ended the stream without a recognized finish reason. Retry the turn or switch providers.",
-      );
-      const exhaustedMessage = safeFinalTextMessage(
-        assistantMessage,
-        assembled.hasPartialTextToolCall || assembled.hasTextFallbackToolCalls,
-        toolCalls,
-      );
-      state.finalMessage = exhaustedMessage;
-      if (exhaustedMessage) {
-        state.messages.push(exhaustedMessage);
-        yield {
-          type: "assistant_message",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          message: exhaustedMessage,
-        };
-        await input.onDurableMessage?.(exhaustedMessage);
-      }
-      await this.dispatchLifecycle(input, "StopFailure", { error: error.message });
-      yield { type: "stop_failure", sessionId: input.sessionId, turnId: input.turnId, error: error.message };
-      const result = this.createTurnResult(input, {
-        type: "error",
-        stopReason: "model_error",
-        usage: state.usage,
-        permissionDenials: state.permissionDenials,
-        turns: state.turnCount,
-        startedAt: state.startedAt,
-        finalMessage: state.finalMessage,
-        structuredOutput: state.structuredOutput,
-        errors: [error],
-      });
-      yield await this.emitStatus(input, createModelRequestFailedStatus({ error }));
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
-    }
-    state.unknownFinishRecoveryCount = 0;
+    // 未知 finishReason（有 message_end 但未映射）：视为正常完成。OpenAI
+    // 兼容代理/本地推理服务常返回未枚举的 finish_reason（eos_token 等），
+    // 其响应内容（文本/工具调用）是完整的——注入恢复提示会把每次成功响应
+    // 拖入恢复链并在 2 次后使整个 turn 失败。真正的断流由 streamInterruption
+    // 错误路径覆盖，空响应由下方 empty-response 恢复链处理。
+    // 正常装配即视为恢复成功：连续中断计数在此清零，与 unknownFinish 恢复
+    // 语义对称——恢复流成功产出后下一次可独立恢复的中断重新计数。
+    state.streamInterruptionRecoveryCount = 0;
 
     if (assembled.hasPartialTextToolCall) {
       if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
@@ -643,7 +579,8 @@ export class AgentLoop {
       const detail = assembled.partialTextToolCall
         ? `${assembled.partialTextToolCall.format}/${assembled.partialTextToolCall.reason}`
         : "unknown partial text tool-call";
-      state.finalMessage = safeFinalTextMessage(assistantMessage, true, toolCalls);
+      // 半截文本工具调用无安全最终文本（safeFinalTextMessage 恒 undefined）。
+      state.finalMessage = undefined;
       const result = this.createTurnResult(input, {
         type: "error",
         stopReason: "model_error",
@@ -875,10 +812,10 @@ export class AgentLoop {
             assembled.hasPartialTextToolCall || assembled.hasTextFallbackToolCalls || toolCalls.length > 0;
           if (hasTextToolCall) {
             state.finalMessage = undefined;
-          }
-          if (assembled.error.streamInterruption.phase === "text" && !hasTextToolCall) {
+          } else {
             const partialTextMessage = withoutThinkingBlocks(assembled.message);
-            if (textFromMessage(partialTextMessage).trim().length > 0) {
+            const hasVisibleText = textFromMessage(partialTextMessage).trim().length > 0;
+            if (assembled.error.streamInterruption.phase === "text" && hasVisibleText) {
               state.finalMessage = partialTextMessage;
               state.messages.push(partialTextMessage);
               yield {
@@ -888,6 +825,10 @@ export class AgentLoop {
                 message: partialTextMessage,
               };
               await input.onDurableMessage?.(partialTextMessage);
+            } else {
+              // reasoning/empty 阶段中断（或无可保留文本）：恢复响应到达前被
+              // 取消时，不得把 thinking-only 原始消息作为最终消息持久化。
+              state.finalMessage = undefined;
             }
           }
           const recoveryPrompt = hasTextToolCall
@@ -1133,6 +1074,10 @@ export class AgentLoop {
       // pick up where it was cut off (up to MAX_OUTPUT_RECOVERY_LIMIT).
       // Phase C — exhausted: fall through to error surfacing.
       if (assembled.error.code === "max_output_reached") {
+        // 输出触顶的响应含截断内容（可能带半截工具调用语法）：Phase A/B 恢复
+        // 响应到达前被取消时，绝不能把 :540 的原始消息作为最终消息持久化
+        // （与 partial-text 恢复路径的清理一致）。
+        state.finalMessage = undefined;
         // Phase A
         if (!state.hasAttemptedOutputRetry) {
           state.hasAttemptedOutputRetry = true;

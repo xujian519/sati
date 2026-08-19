@@ -252,18 +252,6 @@ export function buildStreamInterruptionRecoveryPrompt(interruption: StreamInterr
   return "The previous model stream disconnected before producing a response. Continue the original task directly from the current workspace state.";
 }
 
-/** 未知 finishReason 恢复提示。 */
-export function buildUnknownFinishRecoveryPrompt(toolCalls: CanonicalToolCall[]): string {
-  if (toolCalls.length > 0) {
-    return [
-      "The previous response ended without a recognized finish reason after generating tool calls. No tool call was executed.",
-      "Continue the original task from the current workspace state. Inspect relevant files before acting.",
-      "Do not repeat the same large atomic write. Use small focused write_file or edit_file calls.",
-    ].join("\n");
-  }
-  return "The previous response ended without a recognized finish reason. Continue exactly where the visible response ended; do not repeat prior text or recap.";
-}
-
 export function appendTextToFirstContent(
   content: SatiToolErrorResult["content"],
   suffix: string,

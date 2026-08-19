@@ -260,7 +260,9 @@ export class SubAgentSession {
         ? {
             provider: subagentModel.provider,
             model: subagentModel.model,
-            ...(subagentModel.modelMultimodal ? { modelMultimodal: subagentModel.modelMultimodal } : {}),
+            // 未指定时显式覆盖为 undefined：不继承父级视觉能力，避免子代理
+            // 模型不支持图片却被按多模态请求发送（C3）。
+            modelMultimodal: subagentModel.modelMultimodal,
           }
         : {}),
       // Ask mode performs read-only checks against each tool call's real

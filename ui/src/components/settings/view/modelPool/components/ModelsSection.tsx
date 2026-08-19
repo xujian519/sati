@@ -67,7 +67,8 @@ export default function ModelsSection({ config, onChange }: ModelsSectionProps) 
       const previousModels = providers[oldId]?.models ?? {};
       const nextModels = provider.models ?? {};
       for (const modelId of Object.keys(previousModels)) {
-        if (!(modelId in nextModels)) {
+        // `in` 会沿原型链命中（如 "toString"），必须只查自有属性。
+        if (!Object.prototype.hasOwnProperty.call(nextModels, modelId)) {
           nextConfig = clearSubagentDefaultForRemovedModel(nextConfig, targetId, modelId);
         }
       }

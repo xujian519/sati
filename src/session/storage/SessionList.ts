@@ -182,7 +182,10 @@ function readLatestTailSnapshot(lite: SessionLiteFile): SessionMetadataValue | u
   // 只有 reappendTail() 写显式完整快照，普通尾部 patch 不能跳过标题恢复。
   let latestMetadata: SessionMetadataValue | undefined;
   const lines = lite.tail.split(/\r?\n/);
-  for (const line of lines.slice(1)) {
+  // 首行通常残缺（tail 从任意字节偏移开始），但也可能恰为完整 metadata
+  // 记录——能解析则不跳过，否则最新的快照记录会被静默丢弃。
+  const startIndex = parseSessionMetadataLine(lines[0]!) !== undefined ? 0 : 1;
+  for (const line of lines.slice(startIndex)) {
     if (!line.includes('"type":"session_metadata"')) continue;
     const metadata = parseSessionMetadataLine(line);
     if (!metadata) return undefined;

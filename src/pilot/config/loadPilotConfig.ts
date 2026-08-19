@@ -460,7 +460,9 @@ function parseSubagentDefaultModelSelection(
     return undefined;
   }
 
-  if (!provider.models[modelId]) {
+  // UI 侧允许模型定义为 null（resolveModel 容错），这里只拒绝真正缺失的
+  // key——falsy 检查会把合法的 null 定义误判为不存在。
+  if (!Object.prototype.hasOwnProperty.call(provider.models, modelId)) {
     diagnostics.push({
       code: "CONFIG_AGENT_SUBAGENT_MODEL_NOT_FOUND",
       severity: "warning",
@@ -524,7 +526,8 @@ function parseAgentModelSelection(
     throw new Error("Unreachable after fatal agent provider diagnostic.");
   }
 
-  if (!provider.models[modelId]) {
+  // 同上：null 定义合法，只拒绝真正缺失的 key。
+  if (!Object.prototype.hasOwnProperty.call(provider.models, modelId)) {
     diagnostics.push({
       code: "CONFIG_AGENT_MODEL_NOT_FOUND",
       severity: "fatal",
