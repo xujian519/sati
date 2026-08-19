@@ -7,6 +7,13 @@ import type { SessionMetadataValue } from "../transcript/TranscriptEntry.js";
 import { readSessionLite, SESSION_LITE_READ_BYTES, type SessionLiteFile } from "./SessionLiteReader.js";
 
 const ALWAYS_ON_AUXILIARY_PATTERN = /^always-on-(discovery|workspace|report)[:\-]/;
+/**
+ * 团队成员会话前缀：`team:` 原始形态 + `team-` Windows 净化形态
+ * （sanitizeSessionIdForPath 在非 macOS 平台把 `:` 替换为 `-`，转录文件名回读成
+ * sessionId 时必须同时匹配）。与 src/agent/team/protocol/member-key.ts 的
+ * MEMBER_SESSION_PREFIX 保持同步。
+ */
+const TEAM_MEMBER_SESSION_PATTERN = /^team[:\-]/;
 /** 会话元数据兜底扫描的分块大小（避开把超大 JSONL 记录整行载入内存）。 */
 const SESSION_METADATA_SCAN_CHUNK_BYTES = 64 * 1024;
 /** 非 session_metadata 行超过该字节数即丢弃（如 base64 图片输入），继续向后找。 */
@@ -36,8 +43,8 @@ const chatDirCache = new TtlCache<string, ChatDirCacheEntry>({
   maxSize: CHAT_DIR_CACHE_MAX,
 });
 
-function isInternalSession(sessionId: string): boolean {
-  return ALWAYS_ON_AUXILIARY_PATTERN.test(sessionId);
+export function isInternalSession(sessionId: string): boolean {
+  return ALWAYS_ON_AUXILIARY_PATTERN.test(sessionId) || TEAM_MEMBER_SESSION_PATTERN.test(sessionId);
 }
 
 export type SessionInfo = {
