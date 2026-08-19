@@ -100,6 +100,8 @@ export type ToolDomain =
   | "literature"
   | "agent"
   | "session"
+  | "team"
+  | "team:manage"
   | "mcp"
   | "custom";
 
