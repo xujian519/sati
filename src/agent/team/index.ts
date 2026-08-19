@@ -12,10 +12,13 @@ export {
 } from "./member/member-waker.js";
 export {
   scanTeamMembers,
+  scanStrandedTasks,
   TEAM_MEMBER_RESUME_MARKER,
   TEAM_MEMBER_RESUME_MESSAGE,
   type ScanTeamMembersOptions,
   type ScanTeamMembersResult,
+  type ScanStrandedTasksOptions,
+  type ScanStrandedTasksResult,
 } from "./member/member-scanner.js";
 export { TeamApprovalForwarder, type TeamApprovalForwarderOptions } from "./member/approval-forwarder.js";
 export { MAILBOX_LEASE_MS, unreadMessages, claimDelivery, expiredClaims } from "./mailbox/mailbox.js";

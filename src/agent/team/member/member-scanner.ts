@@ -41,6 +41,12 @@ export async function scanTeamMembers(options: ScanTeamMembersOptions): Promise<
   const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
   let resumed = 0;
   for (const member of members) {
+    // 显式状态检查（M1 遗留 #2）：working 成员可能在跑回合，不得并发唤醒。
+    // 依赖宿主在启动扫描前调用 TeamDb.resetMemberStatuses()——崩溃残留的 working 必为死状态，
+    // 不重置则本跳过会让这些成员永久失去冷恢复。
+    if (member.status !== "idle") {
+      continue;
+    }
     try {
       const path = join(chatDir, `${sanitizeSessionIdForPath(member.sessionKey)}.jsonl`);
       const { entries } = await readTranscript(path);
@@ -54,6 +60,11 @@ export async function scanTeamMembers(options: ScanTeamMembersOptions): Promise<
       if (options.hasPendingApprovals?.(member.sessionKey)) {
         continue;
       }
+      // 读转录是异步间隙：与 stranded 扫描交错时成员可能已被唤醒/退休，收敛 TOCTOU
+      const fresh = options.db.getMember(member.id);
+      if (fresh === undefined || fresh.status !== "idle" || options.db.isRetired(fresh.sessionKey)) {
+        continue;
+      }
       await wakeMember(options.db, options.gateway, member.id, options.resumeMessage ?? TEAM_MEMBER_RESUME_MESSAGE);
       resumed += 1;
     } catch {
@@ -62,4 +73,50 @@ export async function scanTeamMembers(options: ScanTeamMembersOptions): Promise<
     }
   }
   return { scanned: members.length, resumed };
+}
+
+export type ScanStrandedTasksOptions = {
+  db: TeamDb;
+  /** 回调：stranded 任务的 invalidate + 重新认领（Task 7 接线到 TeamScheduler.kickMember）。 */
+  invalidateAndKick: (teamId: string, taskId: string, memberId: string) => Promise<void>;
+};
+
+export type ScanStrandedTasksResult = { stranded: number };
+
+/**
+ * 冷恢复（M2 扩展）：stranded 任务 = claimed/in_progress 但 assignee 成员 idle
+ * （或成员已退休/不存在）→ invalidate 旧 attempt（生成 handoffId 拒绝迟到写）
+ * → 回调重新认领（新 attempt）。依赖未满足/终态任务不处理。
+ * 不抛错：单任务失败跳过，宿主负责日志（与 scanTeamMembers 契约一致——
+ * 逐项工作容错，存储层错误上抛由宿主兜底）。
+ * 宿主编排约束：与 scanTeamMembers 串行执行（先成员扫描后 stranded 扫描），
+ * 避免交错双重唤醒同一成员（scanTeamMembers 内另有唤醒前状态复查兜底）。
+ */
+export async function scanStrandedTasks(options: ScanStrandedTasksOptions): Promise<ScanStrandedTasksResult> {
+  const { db, invalidateAndKick } = options;
+  let stranded = 0;
+  const allMembers = db.listMembers();
+  for (const team of db.listTeams()) {
+    const members = new Map(allMembers.filter(m => m.teamId === team.id).map(m => [m.id, m]));
+    for (const task of db.listTasks(team.id)) {
+      if (task.status !== "claimed" && task.status !== "in_progress") {
+        continue;
+      }
+      if (task.assigneeId === undefined) {
+        continue;
+      }
+      const member = members.get(task.assigneeId);
+      const isStranded = member === undefined || db.isRetired(member.sessionKey) || member.status !== "working";
+      if (!isStranded) {
+        continue;
+      }
+      try {
+        await invalidateAndKick(team.id, task.id, task.assigneeId);
+        stranded += 1;
+      } catch {
+        // 单任务失败不阻塞团队扫描
+      }
+    }
+  }
+  return { stranded };
 }
