@@ -46,11 +46,15 @@ describe("createBackup (F3/F4/F5/F10)", () => {
     assert.equal(result.backup.backupFileName, getBackupFileName(file, 3));
     assert.equal(result.backup.version, 3);
     assert.equal(result.backup.backupTime.toISOString(), "2026-08-09T00:00:00.000Z");
-    assert.equal(result.backup.mode !== undefined && result.backup.mode & 0o777, 0o640);
+    if (process.platform !== "win32") {
+      assert.equal(result.backup.mode !== undefined && result.backup.mode & 0o777, 0o640);
+    }
 
     const backupPath = join(backupDir, result.backup.backupFileName);
     assert.equal(readFileSync(backupPath, "utf-8"), "hello\nworld\n");
-    assert.equal(statSync(backupPath).mode & 0o777, 0o640, "备份文件应保留源模式");
+    if (process.platform !== "win32") {
+      assert.equal(statSync(backupPath).mode & 0o777, 0o640, "备份文件应保留源模式");
+    }
   });
 
   it("源文件不存在（ENOENT）返回 null 备份，且不创建备份目录（lazy mkdir）", async () => {
@@ -112,7 +116,9 @@ describe("restoreBackup (F9/F10/F11)", () => {
 
     assert.equal(result.outcome, "restored");
     assert.equal(readFileSync(file, "utf-8"), "original\n");
-    assert.equal(statSync(file).mode & 0o777, 0o640, "恢复后应还原记录的模式");
+    if (process.platform !== "win32") {
+      assert.equal(statSync(file).mode & 0o777, 0o640, "恢复后应还原记录的模式");
+    }
   });
 
   it("恢复时自动创建目标文件的父目录", async () => {
@@ -175,6 +181,8 @@ describe("createBackup → restoreBackup 往返", () => {
     const result = await restoreBackup({ filePath: file, backup, backupDir });
     assert.equal(result.outcome, "restored");
     assert.equal(readFileSync(file, "utf-8"), "line1\nline2\nline3\n");
-    assert.equal(statSync(file).mode & 0o777, 0o604);
+    if (process.platform !== "win32") {
+      assert.equal(statSync(file).mode & 0o777, 0o604);
+    }
   });
 });

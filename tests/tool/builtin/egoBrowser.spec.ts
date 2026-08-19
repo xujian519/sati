@@ -63,7 +63,7 @@ test("ego_browser builds a quoted heredoc command and injects ~/.local/bin into 
   assert.match(command, /^ego-browser nodejs <<'EGO_SCRIPT_EOF'\n/);
   assert.match(command, /\nEGO_SCRIPT_EOF$/);
   assert.ok(command.includes(script), "script must be passed through verbatim");
-  assert.ok(options.env?.PATH?.includes("/Users/tester/.local/bin"), "PATH must include ~/.local/bin");
+  assert.ok(options.env?.PATH?.includes(join("/Users/tester", ".local", "bin")), "PATH must include ~/.local/bin");
 });
 
 test("ego_browser returns cliLog stdout as content and data on success", async () => {

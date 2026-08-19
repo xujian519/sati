@@ -52,23 +52,30 @@ export class KgStore {
 
   constructor(dbPath: string) {
     const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
-    this.db = opened.db;
-    // 探测 + prepared 组装（schema-introspector）：fail-closed（无表抛错）与
-    // FTS prepare 降级（旧 Node 无 FTS5/trigram）契约由 introspectKgStore 承担。
-    const introspected = introspectKgStore(this.db, dbPath);
-    this.schema = introspected.schema;
-    this.ftsTable = introspected.ftsTable;
-    this.stmtGetNode = introspected.statements.stmtGetNode;
-    this.stmtLikeSearch = introspected.statements.stmtLikeSearch;
-    this.stmtFtsSearch = introspected.statements.stmtFtsSearch;
-    this.graphTraversal = new GraphTraversal(
-      {
-        stmtNeighbors: introspected.statements.stmtNeighbors,
-        stmtNeighborsByRelation: introspected.statements.stmtNeighborsByRelation,
-        stmtListByType: introspected.statements.stmtListByType,
-      },
-      id => this.getNode(id),
-    );
+    try {
+      // 探测 + prepared 组装（schema-introspector）：fail-closed（无表抛错）与
+      // FTS prepare 降级（旧 Node 无 FTS5/trigram）契约由 introspectKgStore 承担。
+      const introspected = introspectKgStore(opened.db, dbPath);
+      this.db = opened.db;
+      this.schema = introspected.schema;
+      this.ftsTable = introspected.ftsTable;
+      this.stmtGetNode = introspected.statements.stmtGetNode;
+      this.stmtLikeSearch = introspected.statements.stmtLikeSearch;
+      this.stmtFtsSearch = introspected.statements.stmtFtsSearch;
+      this.graphTraversal = new GraphTraversal(
+        {
+          stmtNeighbors: introspected.statements.stmtNeighbors,
+          stmtNeighborsByRelation: introspected.statements.stmtNeighborsByRelation,
+          stmtListByType: introspected.statements.stmtListByType,
+        },
+        id => this.getNode(id),
+      );
+    } catch (error) {
+      // fail-closed 抛错路径必须释放句柄：否则 Windows 上测试/进程清理
+      // 无法删除/替换数据库文件（EBUSY）。
+      opened.db.close();
+      throw error;
+    }
   }
 
   /** 当前生效的 schema（诊断用）。 */

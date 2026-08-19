@@ -85,7 +85,9 @@ describe("JsonlTranscriptWriter recordEntry 写链", () => {
     await writer.recordAcceptedInput("s1", "t1", [userMessage("x")]);
 
     assert.equal(existsSync(path), true);
-    assert.equal(statSync(path).mode & 0o777, 0o600);
+    if (process.platform !== "win32") {
+      assert.equal(statSync(path).mode & 0o777, 0o600);
+    }
   });
 
   it("recordEntry 保留显式 sequence（max）并链接自定义 entryId", async () => {
@@ -210,7 +212,7 @@ describe("JsonlTranscriptWriter forSubagent 侧链 (C3.S2)", () => {
     const handle = writer.forSubagent("sa-1");
     assert.equal(handle.subagentId, "sa-1");
     assert.equal(handle.transcriptPath, sidePath);
-    assert.equal(writer.relativeSubagentPath("sa-1"), "subs/sa-1.jsonl");
+    assert.equal(writer.relativeSubagentPath("sa-1"), join("subs", "sa-1.jsonl"));
 
     await handle.writer.recordAcceptedInput("sa-1", "t1", [userMessage("side")]);
 

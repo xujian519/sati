@@ -75,7 +75,9 @@ async function collectMarkdownFiles(directory: string): Promise<string[]> {
   }
 
   for (const entry of entries) {
-    const fullPath = `${directory}/${entry}`;
+    // join 而非字符串模板：Windows 上模板产生混合分隔符（`\dir/file`），
+    // 返回的 path 不稳定，且与 readFile/stat 接受的规范形式不一致。
+    const fullPath = join(directory, entry);
     let entryStat;
     try {
       entryStat = await stat(fullPath);

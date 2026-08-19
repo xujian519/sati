@@ -154,7 +154,7 @@ test("toolResultsDirFor sanitizes session ids like transcripts", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "sati-cleanup-path-"));
   try {
     const dir = toolResultsDirFor(projectRoot, "always-on/discovery:project=/a/b:run=r1");
-    assert.match(dir, /tool-results[\/\\]always-on-discovery:project=-a-b:run=r1$/);
+    assert.match(dir, /tool-results[\/\\]always-on-discovery[: -]project=-a-b[: -]run=r1$/);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }

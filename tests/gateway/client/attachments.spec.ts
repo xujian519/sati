@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ChannelAttachment } from "../../../src/gateway/protocol/types.js";
 import {
   buildAttachmentPathNote,
@@ -14,17 +14,23 @@ import {
 
 test("attachments: buildAttachmentPathNote 去重 + 注入 marker + 引导语", () => {
   const atts: ChannelAttachment[] = [
-    { type: "file", name: "a.txt", path: "/tmp/a.txt" },
-    { type: "file", name: "a-dup.txt", path: "/tmp/a.txt" }, // 同一路径去重
-    { type: "file", path: "/tmp/no-name.txt" },
+    { type: "file", name: "a.txt", path: resolve("/tmp/a.txt") },
+    { type: "file", name: "a-dup.txt", path: resolve("/tmp/a.txt") }, // 同一路径去重
+    { type: "file", path: resolve("/tmp/no-name.txt") },
   ] as unknown as ChannelAttachment[];
-  const note = buildAttachmentPathNote(atts, new Set(["/tmp/a.txt", "/tmp/no-name.txt"]), new Set(), false);
+  const note = buildAttachmentPathNote(
+    atts,
+    new Set([resolve("/tmp/a.txt"), resolve("/tmp/no-name.txt")]),
+    new Set(),
+    false,
+  );
   assert.ok(note);
   const noteText = (note as unknown as { text: string }).text;
   assert.match(noteText, /\[Registered attachment files in this session:\]/);
   const lines = noteText.split("\n").filter((l: string) => l.startsWith("- "));
   assert.equal(lines.length, 2, "同名路径应去重为一行");
-  assert.match(lines[0]!, /a\.txt: \/tmp\/a\.txt/);
+  assert.match(lines[0]!, /a\.txt: /);
+  assert.ok(lines[0]!.includes(resolve("/tmp/a.txt")), "行内容应包含解析后的注册路径");
 });
 
 test("attachments: buildAttachmentPathNote 无 allowed 路径返回 undefined", () => {
@@ -97,6 +103,7 @@ test("attachments: isReadFileInspectableAttachment 判定", () => {
 });
 
 test("attachments: safeAllowedAttachmentPath 集合校验", () => {
-  assert.equal(safeAllowedAttachmentPath("/tmp/a.txt", new Set(["/tmp/a.txt"])), "/tmp/a.txt");
-  assert.equal(safeAllowedAttachmentPath("/tmp/b.txt", new Set(["/tmp/a.txt"])), undefined);
+  const allowed = new Set([resolve("/tmp/a.txt")]);
+  assert.equal(safeAllowedAttachmentPath(resolve("/tmp/a.txt"), allowed), resolve("/tmp/a.txt"));
+  assert.equal(safeAllowedAttachmentPath(resolve("/tmp/b.txt"), allowed), undefined);
 });

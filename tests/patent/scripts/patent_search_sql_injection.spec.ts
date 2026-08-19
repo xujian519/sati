@@ -20,6 +20,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+/** Windows 无 /bin/bash；动态 mock 用例依赖 bash 解释器，不可用时跳过。 */
+const BASH_AVAILABLE = (() => {
+  try {
+    execFileSync("/bin/bash", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 // 候选根：源码态（tests/patent/scripts/ 上溯 3 级）与 dist 态（上溯 4 级），
 // 与 tests/patent/tool/patentPdfDownload-extractjs.spec.ts 同款探测（skills/ 不入 dist）
 const here = dirname(fileURLToPath(import.meta.url));
@@ -114,7 +124,7 @@ test("静态断言：P2-01 全文索引分支用 plainto_tsquery + 统一 statem
   assert.ok(SCRIPT_SOURCE.includes('PSQL_VARS+=(-v kw="$2")'));
 });
 
-test("动态 mock：注入载荷以 -v 值形式传给 psql，不内联进 SQL 文本", () => {
+test("动态 mock：注入载荷以 -v 值形式传给 psql，不内联进 SQL 文本", { skip: !BASH_AVAILABLE }, () => {
   const payload = "x'; DROP TABLE patents; --";
   const { logFile, stdinLog } = setupMockRun(["--keyword", payload]);
   const args = readMockArgs(logFile);
@@ -132,19 +142,19 @@ test("动态 mock：注入载荷以 -v 值形式传给 psql，不内联进 SQL �
   assert.ok(!sql.includes("DROP TABLE"), "SQL 文本不应包含注入载荷");
 });
 
-test("动态 mock：IPC 注入载荷被白名单校验拒绝", () => {
+test("动态 mock：IPC 注入载荷被白名单校验拒绝", { skip: !BASH_AVAILABLE }, () => {
   assert.throws(() => setupMockRun(["--ipc", "G06; DROP TABLE patents; --"]), /格式不合法/);
 });
 
-test("动态 mock：limit 非数字被白名单校验拒绝", () => {
+test("动态 mock：limit 非数字被白名单校验拒绝", { skip: !BASH_AVAILABLE }, () => {
   assert.throws(() => setupMockRun(["--limit", "20; DROP"]), /必须为正整数/);
 });
 
-test("动态 mock：日期非法格式被白名单校验拒绝", () => {
+test("动态 mock：日期非法格式被白名单校验拒绝", { skip: !BASH_AVAILABLE }, () => {
   assert.throws(() => setupMockRun(["--date-range", "2024-01-01", "2024/12/31"]), /日期格式必须为 YYYY-MM-DD/);
 });
 
-test("动态 mock：正常关键词以变量值传递且 SQL 结构完好", () => {
+test("动态 mock：正常关键词以变量值传递且 SQL 结构完好", { skip: !BASH_AVAILABLE }, () => {
   const { logFile, stdinLog } = setupMockRun(["--keyword", "人工智能", "--limit", "3"]);
   const args = readMockArgs(logFile);
 
@@ -156,7 +166,7 @@ test("动态 mock：正常关键词以变量值传递且 SQL 结构完好", () =
   assert.ok(sql.includes("LIMIT :limit_num;"));
 });
 
-test("动态 mock：--keyword-indexed 载荷以 -v kw= 传递且走 plainto_tsquery", () => {
+test("动态 mock：--keyword-indexed 载荷以 -v kw= 传递且走 plainto_tsquery", { skip: !BASH_AVAILABLE }, () => {
   const payload = "人工智能 芯片; DROP TABLE patents; --";
   const { logFile, stdinLog } = setupMockRun(["--keyword-indexed", payload, "--limit", "5"]);
   const args = readMockArgs(logFile);

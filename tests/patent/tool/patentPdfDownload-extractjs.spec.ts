@@ -39,7 +39,8 @@ const EXTRACT_JS_REL = "assets/patent/pdf-link-extract.js";
 function readExtractJs(): string {
   const path = findRepoFile(EXTRACT_JS_REL);
   assert.ok(path, "pdf-link-extract.js 应存在");
-  return readFileSync(path, "utf8");
+  // CRLF 检出（Windows autocrlf）不影响内容语义：统一为 LF 再断言
+  return readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 }
 
 /** 去掉头部注释行后的 IIFE 主体（与两端内嵌备份比对用）。 */
@@ -66,7 +67,8 @@ test("TS 内嵌备份与文件 IIFE 主体逐字符一致", t => {
     t.skip("dist 产物不含源码，跳过一致性断言");
     return;
   }
-  const tsSource = readFileSync(tsPath, "utf8");
+  // Windows autocrlf 检出为 CRLF：与文件侧统一为 LF 再逐字符比对
+  const tsSource = readFileSync(tsPath, "utf8").replace(/\r\n/g, "\n");
   const match = /const PDF_LINK_EXTRACT_JS = String\.raw`([\s\S]*?)`;/.exec(tsSource);
   assert.ok(match, "应找到 PDF_LINK_EXTRACT_JS 常量");
 
@@ -79,7 +81,8 @@ test("Python 内嵌备份与文件 IIFE 主体逐字符一致", t => {
     t.skip("dist 产物不含 Python 源码，跳过一致性断言");
     return;
   }
-  const pySource = readFileSync(pyPath, "utf8");
+  // Windows autocrlf 检出为 CRLF：与文件侧统一为 LF 再逐字符比对
+  const pySource = readFileSync(pyPath, "utf8").replace(/\r\n/g, "\n");
   const match = /_PDF_LINK_EXTRACT_JS_BACKUP = '''([\s\S]*?)'''/.exec(pySource);
   assert.ok(match, "应找到 _PDF_LINK_EXTRACT_JS_BACKUP 常量");
 
@@ -128,7 +131,8 @@ test("集成：生成脚本热加载文件内容（含版本标记行）", async
   await tool.execute({ patents: [PATENT] }, makeContext(cwd));
 
   assert.ok(session.captured.length > 0, "应执行至少一次 ego 脚本");
-  const downloadScript = session.captured[session.captured.length - 1] ?? "";
+  // 热加载的是磁盘原始内容（Windows CRLF 检出）；与 LF 化的 IIFE 主体比对前统一换行。
+  const downloadScript = (session.captured[session.captured.length - 1] ?? "").replace(/\r\n/g, "\n");
   // 版本标记行只存在于文件（备份无此注释行）——出现即证明热加载读到单一事实源。
   assert.ok(downloadScript.includes("PDF_LINK_EXTRACT_VERSION=1"), "脚本应内嵌文件内容（热加载）");
   assert.ok(downloadScript.includes(extractIife(readExtractJs())), "脚本应包含完整 IIFE 主体");

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
 import test from "node:test";
 import { matchPermissionRule } from "../../src/permission/policy/matchPermissionRule.js";
 import {
@@ -58,13 +59,13 @@ test("bash rule without command input does not match", () => {
 });
 
 test("file path pattern matches absolute path", () => {
-  const r = rule({ toolName: "read_file", pattern: "/home/u/**/notes.md" });
-  assert.equal(matchPermissionRule(r, "read_file", { file_path: "/home/u/a/b/notes.md" }, ctx()), true);
-  assert.equal(matchPermissionRule(r, "read_file", { file_path: "/home/u/a/b/other.md" }, ctx()), false);
+  const r = rule({ toolName: "read_file", pattern: resolve("/home/u/**/notes.md") });
+  assert.equal(matchPermissionRule(r, "read_file", { file_path: resolve("/home/u/a/b/notes.md") }, ctx()), true);
+  assert.equal(matchPermissionRule(r, "read_file", { file_path: resolve("/home/u/a/b/other.md") }, ctx()), false);
 });
 
 test("file path pattern matches absolute pattern against relative input", () => {
-  const r = rule({ toolName: "read_file", pattern: "/home/u/proj/src/**" });
+  const r = rule({ toolName: "read_file", pattern: resolve("/home/u/proj/src/**") });
   const c = ctx("/home/u/proj");
   assert.equal(matchPermissionRule(r, "read_file", { file_path: "src/tool/x.ts" }, c), true);
   assert.equal(matchPermissionRule(r, "read_file", { file_path: "./src/tool/x.ts" }, c), true);

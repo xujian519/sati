@@ -71,13 +71,15 @@ function int8Vec(values: number[]): Buffer {
 
 function withStore(t: test.TestContext, options?: { docTypes?: string[] }): KnowledgeEmbeddingSearch {
   const { search, dir } = createStore();
-  t.after(() => {
-    search.close();
-    rmSync(dir, { recursive: true, force: true });
-  });
-  return options
+  const instance = options
     ? new KnowledgeEmbeddingSearch({ dbPath: join(dir, "knowledge.db"), docTypes: options.docTypes })
     : search;
+  t.after(() => {
+    instance.close();
+    if (instance !== search) search.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  return instance;
 }
 
 test("knowledge-embeddings: available 与维度探测", t => {
@@ -254,13 +256,14 @@ test("knowledge-embeddings: 不同 docTypes 过滤不共享缓存", t => {
 });
 
 test("knowledge-embeddings: createKnowledgeEmbeddingSearch 复用同 dbPath+docTypes 实例", t => {
-  const { dir } = createStore();
+  const { search: unusedSearch, dir } = createStore();
   const dbPath = join(dir, "knowledge.db");
   const options = { dbPath, docTypes: ["case"] };
 
   const first = createKnowledgeEmbeddingSearch(options);
   const second = createKnowledgeEmbeddingSearch(options);
   t.after(() => {
+    unusedSearch.close();
     rmSync(dir, { recursive: true, force: true });
   });
 

@@ -99,7 +99,9 @@ export class WikiCardLoader {
       const cachedFiles = this.tryLoadScanCache();
       if (cachedFiles) {
         for (const entry of cachedFiles) {
-          this.byId.set(entry.meta.id, entry.meta);
+          // 旧缓存（Windows 上曾以 `\` 分隔写入）读入时统一规范化为 `/`。
+          const id = entry.meta.id.replace(/\\/g, "/");
+          this.byId.set(id, { ...entry.meta, id });
         }
         fromCache = true;
       }
@@ -121,13 +123,16 @@ export class WikiCardLoader {
       }
       for (const file of files) {
         const rel = relative(this.wikiPath, file);
-        const id = rel.replace(/\.md$/, "");
+        // Windows: relative() 返回 `\` 分隔。卡片 id 是协议级相对路径语义
+        // （searchIn/listDir 按 `/` 前缀匹配、card-index 也以 `/` 引用），
+        // 统一为 `/` 分隔，保证跨平台一致。
+        const id = rel.replace(/\\/g, "/").replace(/\.md$/, "");
         const title = this.titleFromFileName(id);
         const meta: WikiCardMeta = { id, title, relativePath: rel };
 
         // patent-cards 卡片头部含 `- 概念: X` 元数据行，提取增强索引；
         // 同时记录 mtime，缓存验证时据此感知内容原地修改（文件名不变）。
-        if (rel.startsWith("patent-cards/")) {
+        if (id.startsWith("patent-cards/")) {
           try {
             const head = readFileSync(file, "utf8").split("\n").slice(0, 20).join("\n");
             const metadata = this.extractMetadata(head);

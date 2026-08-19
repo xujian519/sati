@@ -275,11 +275,12 @@ describe("P3-01 TTL 分层", () => {
       calls += 1;
       return makeSearchResult({ hits: [], total: 0 });
     };
-    const wrapped = cachedSearchPatents(impl, { ttlFor: () => 1 });
+    // 50ms 而非 1ms：Windows 事件循环 tick 即可超 1ms，两次连续调用会被误判过期。
+    const wrapped = cachedSearchPatents(impl, { ttlFor: () => 50 });
     await wrapped("thermal");
     await wrapped("thermal");
     assert.equal(calls, 1, "分类 TTL 内命中");
-    await new Promise(resolve => setTimeout(resolve, 5));
+    await new Promise(resolve => setTimeout(resolve, 80));
     await wrapped("thermal");
     assert.equal(calls, 2, "零命中类 TTL 到期后重拉");
   });
@@ -290,11 +291,11 @@ describe("P3-01 TTL 分层", () => {
       calls += 1;
       return makeSearchResult();
     };
-    const wrapped = cachedSearchPatents(impl, { ttlFor: () => 1 });
+    const wrapped = cachedSearchPatents(impl, { ttlFor: () => 50 });
     await wrapped("法律状态 CN115690481A");
     await wrapped("法律状态 CN115690481A");
     assert.equal(calls, 1, "分类 TTL 内命中");
-    await new Promise(resolve => setTimeout(resolve, 5));
+    await new Promise(resolve => setTimeout(resolve, 80));
     await wrapped("法律状态 CN115690481A");
     assert.equal(calls, 2, "法律状态类 TTL 到期后重拉");
   });
@@ -309,10 +310,10 @@ describe("P3-01 TTL 分层", () => {
     await wrapped("thermal");
     await wrapped("thermal");
     assert.equal(calls, 1, "其余类默认 2h 内命中");
-    // ttlFor 返回 undefined → 回退构造时 ttlMs（1ms），到期重拉
-    const fallback = cachedSearchPatents(impl, { ttlMs: 1, ttlFor: () => undefined });
+    // ttlFor 返回 undefined → 回退构造时 ttlMs（50ms），到期重拉
+    const fallback = cachedSearchPatents(impl, { ttlMs: 50, ttlFor: () => undefined });
     await fallback("thermal");
-    await new Promise(resolve => setTimeout(resolve, 5));
+    await new Promise(resolve => setTimeout(resolve, 80));
     await fallback("thermal");
     assert.equal(calls, 3, "ttlFor 未命中时回退默认 TTL，到期后重拉");
   });

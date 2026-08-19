@@ -70,7 +70,7 @@ test("egoSession: runScript builds quoted heredoc, injects ~/.local/bin into PAT
   const { command, options } = runner.calls[0]!;
   assert.match(command, /^ego-browser nodejs <<'EGO_SCRIPT_EOF'\n/);
   assert.match(command, /\nEGO_SCRIPT_EOF$/);
-  assert.ok(options.env?.PATH?.includes("/Users/tester/.local/bin"));
+  assert.ok(options.env?.PATH?.includes(join("/Users/tester", ".local", "bin")));
   assert.equal(options.timeoutMs, 10_000);
   assert.equal(result.output, "TITLE: demo\n");
   assert.equal(result.exitCode, 0);
