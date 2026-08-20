@@ -104,11 +104,13 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
         },
         style: {
           ...DOCUMENT_STYLE_JSON_SCHEMA,
-          description: "Typography/layout overrides (font size, line height, page margin, font family, color, brand). Higher priority than brand/theme.json.",
+          description:
+            "Typography/layout overrides (font size, line height, page margin, font family, color, brand). Higher priority than brand/theme.json.",
         },
         style_preset: {
           type: "string",
-          description: "Style preset name from products/<product>/brand/style-presets/; explicit `style` overrides the preset",
+          description:
+            "Style preset name from products/<product>/brand/style-presets/; explicit `style` overrides the preset",
         },
       },
     },

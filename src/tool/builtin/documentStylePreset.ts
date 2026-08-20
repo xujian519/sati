@@ -53,7 +53,7 @@ export function createDocumentStylePresetTool(): SatiToolDefinition<DocumentStyl
       properties: {
         action: {
           type: "string",
-          enum: ["save", "list", "get", "delete"],
+          enum: [...ACTIONS],
           description: "save=保存预设 / list=列出预设 / get=读取单个预设 / delete=删除预设",
         },
         name: { type: "string", description: "预设名（save/get/delete 必需）" },
@@ -90,10 +90,10 @@ export function createDocumentStylePresetTool(): SatiToolDefinition<DocumentStyl
           if (presets.length === 0) {
             return { content: [{ type: "text", text: "尚无样式预设（save 后可复用）" }] };
           }
-          const lines = presets.map((p) => `- ${p.name}${p.description ? `：${p.description}` : ""}`);
+          const lines = presets.map(p => `- ${p.name}${p.description ? `：${p.description}` : ""}`);
           return {
             content: [{ type: "text", text: `样式预设（${presets.length}）:\n${lines.join("\n")}` }],
-            data: presets.map((p) => ({ name: p.name, description: p.description, updatedAt: p.updatedAt })),
+            data: presets.map(p => ({ name: p.name, description: p.description, updatedAt: p.updatedAt })),
           };
         }
         case "get": {

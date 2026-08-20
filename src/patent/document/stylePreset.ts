@@ -39,7 +39,7 @@ export function saveStylePreset(presetDir: string, preset: StylePreset): string 
 /** 列出所有预设（按名称排序），缺目录返回空数组。 */
 export function listStylePresets(presetDir: string): StylePreset[] {
   if (!existsSync(presetDir)) return [];
-  const files = readdirSync(presetDir).filter((f) => f.endsWith(".json"));
+  const files = readdirSync(presetDir).filter(f => f.endsWith(".json"));
   const presets: StylePreset[] = [];
   for (const f of files) {
     try {

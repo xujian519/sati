@@ -172,7 +172,7 @@ export async function renderPatentDocument(input: DocumentRenderInput, cwd: stri
   let html = readTemplateHtml(input.template);
   const brandCss = buildBrandStyle(brand);
   const styleCss = style !== undefined ? buildStyleOverrides(style) : "";
-  const combinedCss = [brandCss, styleCss].filter((s) => s !== "").join("\n");
+  const combinedCss = [brandCss, styleCss].filter(s => s !== "").join("\n");
   html = injectBrandCss(html, combinedCss);
   const injected = injectSections(html, input.sections ?? {});
   html = injected.html;
