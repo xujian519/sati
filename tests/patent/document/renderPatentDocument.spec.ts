@@ -291,3 +291,53 @@ test("显式 brandPath 不存在时返回警告并回退默认", async () => {
     cleanup(dir);
   }
 });
+
+test("style 覆盖经 token 引用链生效（claims-spec 模板已 token 化）", async () => {
+  const dir = makeTempDir();
+  try {
+    const result = await renderPatentDocument(
+      {
+        template: "claims-spec",
+        outputName: "style-token",
+        outputDir: dir,
+        format: "html",
+        style: { fontSize: { base: "14pt", x2l: "20pt" }, leading: { body: "1.8" } },
+        sections: {},
+      },
+      process.cwd(),
+    );
+    const html = readFileSync(result.htmlPath, "utf8");
+    // 注入的 CSS 覆盖存在
+    assert.match(html, /--sati-doc-text-base: 14pt;/);
+    assert.match(html, /--sati-doc-text-2xl: 20pt;/);
+    assert.match(html, /--sati-doc-leading-body: 1\.8;/);
+    // 模板正文引用 token（引用链完整 → 覆盖对渲染生效）
+    assert.match(html, /html \{ font-size: var\(--doc-text-base\); \}/);
+    assert.match(html, /line-height: var\(--doc-leading-body\);/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("oa-response 模板同样 token 化（标题/表格引用 token）", async () => {
+  const dir = makeTempDir();
+  try {
+    const result = await renderPatentDocument(
+      {
+        template: "oa-response",
+        outputName: "oa-token",
+        outputDir: dir,
+        format: "html",
+        style: { fontSize: { sm: "11pt", xl: "15pt" } },
+        sections: {},
+      },
+      process.cwd(),
+    );
+    const html = readFileSync(result.htmlPath, "utf8");
+    assert.match(html, /--sati-doc-text-sm: 11pt;/);
+    assert.match(html, /font-size: var\(--doc-text-xl\);/);
+    assert.match(html, /font-size: var\(--doc-text-sm\);/);
+  } finally {
+    cleanup(dir);
+  }
+});

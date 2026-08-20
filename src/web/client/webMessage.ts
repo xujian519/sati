@@ -309,6 +309,7 @@ export function applyWebGatewayEvent(
                   text: limitToolResultPreview(event.resultPreview) ?? m.text,
                   ...(eventImages ? { images: eventImages } : {}),
                   ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
+                  ...(event.data !== undefined ? { payload: event.data } : {}),
                 }
               : m,
           ),
@@ -328,6 +329,7 @@ export function applyWebGatewayEvent(
         text: limitToolResultPreview(event.resultPreview),
         ...(eventImages ? { images: eventImages } : {}),
         ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
+        ...(event.data !== undefined ? { payload: event.data } : {}),
         source: "live",
       };
       return {

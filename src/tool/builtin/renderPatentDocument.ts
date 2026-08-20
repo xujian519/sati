@@ -9,6 +9,8 @@
 import {
   SatiDocumentInputError,
   renderPatentDocument as renderDocument,
+  DOCUMENT_STYLE_JSON_SCHEMA,
+  type DocumentStyle,
   type DocumentTemplateId,
   type RenderFormat,
 } from "../../patent/document/index.js";
@@ -44,6 +46,10 @@ export type RenderPatentDocumentInput = {
   brand?: Record<string, string>;
   /** 显式品牌配置文件路径（缺省 products/_example/brand/theme.json）。 */
   brand_path?: string;
+  /** 排版参数覆盖（结构化；优先级高于 brand / theme.json）。 */
+  style?: DocumentStyle;
+  /** 样式预设名（加载 style-presets/<name>.json；显式 style 覆盖预设）。 */
+  style_preset?: string;
 };
 
 export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPatentDocumentInput> {
@@ -96,6 +102,14 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
           type: "string",
           description: "Path to theme.json brand config (defaults to products/_example/brand/theme.json)",
         },
+        style: {
+          ...DOCUMENT_STYLE_JSON_SCHEMA,
+          description: "Typography/layout overrides (font size, line height, page margin, font family, color, brand). Higher priority than brand/theme.json.",
+        },
+        style_preset: {
+          type: "string",
+          description: "Style preset name from products/<product>/brand/style-presets/; explicit `style` overrides the preset",
+        },
       },
     },
     isReadOnly: () => false,
@@ -128,6 +142,8 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
             sections: input.sections,
             brand: input.brand,
             brandPath: input.brand_path,
+            style: input.style,
+            stylePreset: input.style_preset,
           },
           context.cwd,
         );

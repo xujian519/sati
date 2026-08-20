@@ -53,4 +53,6 @@
   --sati-doc-body-max-width: 160mm; /* 210mm - 25mm - 25mm */
   --sati-doc-section-gap: 5mm;
   --sati-doc-section-gap-lg: 6mm;
+  --sati-doc-paragraph-gap: 1.5mm; /* 段落间距 */
+  --sati-doc-indent: 0; /* 首行缩进（0 表示不缩进；中文文书可设 2em） */
 }

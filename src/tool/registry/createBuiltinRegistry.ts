@@ -45,6 +45,8 @@ import { createPatentWorkflowRunTool } from "../builtin/patentWorkflowRunTool.js
 import { createPatentPlanTaskTool } from "../builtin/patentPlanTaskTool.js";
 import { createExportHtmlTool } from "../builtin/exportHtml.js";
 import { createRenderPatentDocumentTool } from "../builtin/renderPatentDocument.js";
+import { createDocumentStylePresetTool } from "../builtin/documentStylePreset.js";
+import { createDocumentStylePanelTool } from "../builtin/documentStylePanel.js";
 import { createFlexiblePlanTool } from "../builtin/patentFlexiblePlanTool.js";
 import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
 import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
@@ -287,6 +289,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createDraftClaimsTool(), "patent"));
     registry.register(annotate(createClaimChartTool(), "patent"));
     registry.register(annotate(createRenderPatentDocumentTool(), "patent"));
+    registry.register(annotate(createDocumentStylePresetTool(), "patent"));
+    registry.register(annotate(createDocumentStylePanelTool(), "patent"));
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
     registry.register(annotate(createPatentWorkflowTool(), "patent"));
