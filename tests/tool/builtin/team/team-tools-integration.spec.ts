@@ -240,6 +240,10 @@ test("工具驱动全链：建队→招募→建任务→调度器认领→成�
     // 建任务：A 无依赖、B 依赖 A（阻塞计数 1，解锁前不被调度）
     const taskA = await tools.teamCreateTask.execute({ teamId, subject: "检索对比文件 A" }, captainCtx);
     const taskAId = taskA.data!.taskId;
+    // M2（T12 复审）：ticket 在创建返回后立即就绪——attemptId 由 getTicket 闭包在每次
+    // 模型请求时实时读取（beginTaskAttempt 认领时写入），无需等认领轮询，消除首回合
+    // 时序隐含竞态（ticket 赋值是同步的，先于任何异步 kickMember 唤醒链）。
+    ticket = { teamId, taskId: taskAId };
     const taskB = await tools.teamCreateTask.execute(
       { teamId, subject: "撰写创造性分析 B", dependencies: [taskAId] },
       captainCtx,
@@ -249,9 +253,8 @@ test("工具驱动全链：建队→招募→建任务→调度器认领→成�
     assert.equal(teamDb.getTask(teamId, taskBId)?.status, "pending");
 
     // 调度器认领 A（kickTeam → kickMember → beginTaskAttempt 写 attemptId）；
-    // 此后成员回合的模型请求经 getTicket 闭包实时读取 attemptId
+    // 成员回合的模型请求经 getTicket 闭包实时读取 attemptId
     await pollUntil(() => teamDb.getTask(teamId, taskAId)?.status === "claimed");
-    ticket = { teamId, taskId: taskAId };
 
     // 成员回合内 fake model 发 tool_call 调 team_update_task(completed) → A 终结（attempt 1）
     await pollUntil(() => teamDb.getTask(teamId, taskAId)?.status === "completed");
@@ -331,11 +334,12 @@ test("scanner 冷恢复回合结束续派：断点成员被重唤醒，未完成
   const { result, root } = await makeGateway("coldrecovery", textOnlyModel);
   const teamDb = result.teamSubsystem.db;
   try {
-    // 启动期 fire-and-forget 扫描（runMemberScan + runStrandedScan）在 createLocalGateway
-    // 返回后的微任务排空期对空库 no-op——先让出一个宏任务保证其完成，再写入成员/任务/转录，
-    // 避免启动 stranded 扫描 invalidate+re-claim 本测试的遗留任务（会使显式 runMemberScan
-    // 的 resumed 恒为 0，且转录写入与在途回合竞态）。
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // 启动期 fire-and-forget 扫描（runMemberScan + runStrandedScan）完成信号：空库扫描
+    // 立即空转结束，await 后再写入成员/任务/转录——避免启动 stranded 扫描 invalidate+re-claim
+    // 本测试的遗留任务（会使显式 runMemberScan 的 resumed 恒为 0，且转录写入与在途回合竞态）。
+    // T12 复审 M4：显式信号取代 setTimeout 排干——与实现细节解耦，scanTeamMembers 未来
+    // 增加异步读也不引入竞态。
+    await result.teamSubsystem.startupScanDone;
     teamDb.upsertTeam({
       id: TEAM_ID,
       name: "冷恢复团队",
