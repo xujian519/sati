@@ -95,6 +95,17 @@ test("panelTouch：面板心跳使直连关闭会话保持在线；心跳停超�
   assert.equal(p.isActive("web-1", t0 + 999_999_999 + SESSION_PRESENCE_GRACE_MS - 1), true);
 });
 
+test("panelTouch：面板停更超窗后 CLI 帧 touch 到达 → 恢复在线（S1 评审：直连活动复活面板判定）", () => {
+  const p = new SessionPresence();
+  const t0 = 1_000_000;
+  p.touch("k", t0); // CLI 直连帧（S1：touch 同步刷新面板时间线）
+  p.panelTouch("k", t0 + 100); // 面板心跳
+  assert.equal(p.isActive("k", t0 + 100 + SESSION_PRESENCE_GRACE_MS + 1), false, "面板停更超窗离线");
+  // 「CLI 直连 + 面板关闭」共用 key：面板已关（心跳停），但 CLI 帧继续到达 → 直连活动即在线
+  p.touch("k", t0 + 200);
+  assert.equal(p.isActive("k", t0 + 200 + SESSION_PRESENCE_GRACE_MS - 1), true, "直连活动复活面板判定 → 在线");
+});
+
 test("panelTouch：面板信号对 web 会话是权威下线信号（直连宽限窗不掩盖面板停更）", () => {
   const p = new SessionPresence();
   const t0 = 1_000_000;

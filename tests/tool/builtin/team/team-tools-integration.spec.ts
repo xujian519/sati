@@ -312,8 +312,11 @@ test("isCaptainOnline 离线暂停：队长离线超宽限窗后新任务不被�
     await pollUntil(() => teamDb.getTask(TEAM_ID, t1.data!.taskId)?.status === "claimed");
     assert.equal(teamDb.getMember("m1")?.status, "working");
 
-    // 队长显式离线且超过宽限窗（closedAt 早于 now-GRACE → isActive=false，持久 known-offline）
-    presence.close(CAPTAIN_SESSION, Date.now() - (SESSION_PRESENCE_GRACE_MS + 1_000));
+    // 队长显式离线且超过宽限窗（S1 后 touch 同步刷新面板时间线——离线须「全静默」：
+    // 直连关闭与最后帧均早于 now-GRACE → isActive=false，持久 known-offline）
+    const offlineSince = Date.now() - (SESSION_PRESENCE_GRACE_MS + 1_000);
+    presence.touch(CAPTAIN_SESSION, offlineSince);
+    presence.close(CAPTAIN_SESSION, offlineSince);
     assert.equal(presence.isActive(CAPTAIN_SESSION), false);
 
     // 新任务 T2：kickTeam/kickMember 均命中 isCaptainOnline=false → 不派发，保持 pending
