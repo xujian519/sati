@@ -181,6 +181,12 @@ export type InProcessGatewayOptions = {
    */
   knowledgeCapabilities?: (input: KnowledgeCapabilitiesInput) => Promise<KnowledgeCapabilitiesResult>;
   /**
+   * M4：面板心跳 delegate — wired by `createLocalGateway` to
+   * `SessionPresence.panelTouch`（浏览器经 ui/server relay 的活跃上报，
+   * 维护 Web 在线判定）。powers the `panel_heartbeat` protocol method.
+   */
+  panelHeartbeat?: (input: { sessionKeys: string[] }) => Promise<{ touched: number }>;
+  /**
    * Optional non-blocking post-turn callback. Used by createLocalGateway to
    * coalesce project-level memory maintenance after a turn has fully ended.
    */
@@ -770,6 +776,13 @@ export class InProcessGateway implements Gateway {
     // 此处仅兜底从总线移除（宿主未配置回调时保证不残留）。UI 侧在决策返回后乐观移除。
     this.approvalBus.remove(input.sessionKey, input.pendingIndex);
     return { delivered: true };
+  }
+
+  async panelHeartbeat(input: { sessionKeys: string[] }): Promise<{ touched: number }> {
+    if (!this.options.panelHeartbeat) {
+      throw new Error("panel_heartbeat is not configured. Wire `panelHeartbeat` via createLocalGateway.");
+    }
+    return this.options.panelHeartbeat(input);
   }
 
   async grantSessionPermission(

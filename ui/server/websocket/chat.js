@@ -32,6 +32,36 @@ import {
   sessionWatchRegistry,
 } from "./broadcast.js";
 
+// M4：浏览器会话活跃表（Web 下线判定）——浏览器消息到达即刷新（按 ws 连接引用计数），
+// 浏览器连接关闭即移除（精确下线信号：gateway 侧看不到浏览器关闭——浏览器流量经本
+// relay 的共享 ws 连接转发，不触发 gateway onClose）。引用计数防多标签页同会话误删：
+// 任一标签关闭不丢另个标签页的活跃性。由 team-presence 心跳聚合上报 gateway
+// （panel_heartbeat → SessionPresence.panelTouch），gateway 侧超宽限窗判离线。
+const browserSessionActivity = new Map(); // sessionKey -> Set<ws>
+
+function touchBrowserSession(sessionKey, ws) {
+  if (!sessionKey || !ws) return;
+  let connections = browserSessionActivity.get(sessionKey);
+  if (!connections) {
+    connections = new Set();
+    browserSessionActivity.set(sessionKey, connections);
+  }
+  connections.add(ws);
+}
+
+function untrackBrowserSessions(ws) {
+  for (const [sessionKey, connections] of browserSessionActivity) {
+    if (connections.delete(ws) && connections.size === 0) {
+      browserSessionActivity.delete(sessionKey);
+    }
+  }
+}
+
+/** M4：当前活跃浏览器会话 key 快照（team-presence 心跳聚合用；浏览器全关即空表）。 */
+export function getBrowserActiveKeys() {
+  return [...browserSessionActivity.keys()];
+}
+
 export function createChatWebSocketServer(server) {
   const wss = new WebSocketServer({
     server,
@@ -193,6 +223,10 @@ function handleChatConnection(ws, request) {
       if (data.type === "ping") return;
       const requestSessionId = normalizeSessionId(data.sessionId);
 
+      // M4：任何浏览器帧到达都刷新会话活跃（含 watch-session / 只读面板帧——
+      // 面板停留不算离线）；连接关闭时在 cleanup 内 untrackBrowserSessions 移除。
+      touchBrowserSession(requestSessionId, ws);
+
       if (data.type === "watch-session") {
         if (requestSessionId) {
           sessionWatchRegistry.watch(requestSessionId, ws);
@@ -219,7 +253,9 @@ function handleChatConnection(ws, request) {
         console.log("📁 Project:", data.options?.projectPath || data.options?.cwd || "Unknown");
         console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
         const commandSessionId = normalizeSessionId(data.options?.sessionId || data.options?.sessionKey);
+        // M4：sati-command 的会话 key 在 options 内（data.sessionId 可能缺省），单独刷新活跃
         if (commandSessionId) {
+          touchBrowserSession(commandSessionId, ws);
           sessionWatchRegistry.watch(commandSessionId, ws);
           const userVisibleInput =
             typeof data.options?.userVisibleInput === "string" ? data.options.userVisibleInput.trim() : "";
@@ -397,6 +433,8 @@ function handleChatConnection(ws, request) {
     // Remove from connected clients
     connectedClients.delete(ws);
     sessionWatchRegistry.removeClient(ws);
+    // M4：浏览器连接关闭 → 移除该连接跟踪的会话活跃（其他标签页的引用不受影响）
+    untrackBrowserSessions(ws);
   };
 
   ws.on("close", (code, reason) => {

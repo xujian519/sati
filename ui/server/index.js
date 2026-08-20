@@ -45,7 +45,9 @@ import systemRoutes from "./routes/system.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
-import { createChatWebSocketServer } from "./websocket/chat.js";
+import { createChatWebSocketServer, getBrowserActiveKeys } from "./websocket/chat.js";
+import { startTeamPresenceHeartbeat } from "./team-presence.js";
+import { getSatiGateway } from "./sati-bridge.js";
 import { startServer } from "./services/server-boot.js";
 
 const app = express();
@@ -54,6 +56,20 @@ const server = http.createServer(app);
 // Single WebSocket server that handles both paths（wss 创建见 ./websocket/chat.js）
 const wss = createChatWebSocketServer(server);
 app.locals.wss = wss;
+
+// M4：团队面板心跳——每 30s 把活跃浏览器会话 key 上报 gateway panel_heartbeat
+// （gateway SessionPresence.panelTouch 维护 Web 在线判定）。gateway 经
+// getSatiGateway 惰性连接（ensureGateway 单例，断线自动重连）；旧 gateway
+// 无 panelHeartbeat 能力时心跳失败仅告警（feature-detect 不阻塞）。
+startTeamPresenceHeartbeat({
+  getBrowserActiveKeys,
+  heartbeat: async keys => {
+    const gw = await getSatiGateway();
+    if (typeof gw?.panelHeartbeat === "function") {
+      await gw.panelHeartbeat({ sessionKeys: keys });
+    }
+  },
+});
 
 app.use(cors({ exposedHeaders: ["X-Refreshed-Token"] }));
 app.use(

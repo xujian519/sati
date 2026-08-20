@@ -147,6 +147,10 @@ export class RemoteGateway implements Gateway {
     return (await this.client.request("cron_run_now", input)) as CronRunNowResult;
   }
 
+  async panelHeartbeat(input: { sessionKeys: string[] }): Promise<{ touched: number }> {
+    return (await this.client.request("panel_heartbeat", input)) as { touched: number };
+  }
+
   async respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }> {
     return (await this.client.request("elicitation_respond", input)) as { delivered: boolean };
   }

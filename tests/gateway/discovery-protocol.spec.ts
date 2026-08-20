@@ -82,9 +82,10 @@ function makeGateway(service: DiscoveryPlanService | undefined, extra: Record<st
 }
 
 describe("gateway 协议版本", () => {
-  it("discovery 协议方法扩展后版本为 1.1（审批方法扩展后为 1.2，cron 更新方法为 1.3）", () => {
-    // 1.1 = discovery-plan 可选方法；1.2 = 输出门禁 HITL 审批可选方法；1.3 = cron_update 可选方法。
-    assert.ok(["1.1", "1.2", "1.3"].includes(SATI_GATEWAY_PROTOCOL_VERSION));
+  it("discovery 协议方法扩展后版本为 1.1（审批方法扩展后为 1.2，cron 更新方法为 1.3，panel_heartbeat 为 1.4）", () => {
+    // 1.1 = discovery-plan 可选方法；1.2 = 输出门禁 HITL 审批可选方法；1.3 = cron_update 可选方法；
+    // 1.4 = team-activity-panel 可选方法（panel_heartbeat / team_panel_snapshot / team_tool_call）。
+    assert.ok(["1.1", "1.2", "1.3", "1.4"].includes(SATI_GATEWAY_PROTOCOL_VERSION));
   });
 });
 
