@@ -680,7 +680,11 @@ export interface Gateway {
    * M4：面板心跳上报（ui/server relay 汇总活跃浏览器会话 key；gateway 侧
    * panelTouch 维护 Web 在线判定——浏览器关闭不触发 gateway onClose，以心跳
    * 停更 + 宽限窗判离线）。返回本次实际 touch 的会话数。
-   * Optional — 旧实现无此能力时 hosts 应 feature-detect。
+   * Optional — 旧实现无此能力时 hosts 应 feature-detect；未接线时返回
+   * `error.code = "not_configured"` 兜底结果（S3 评审统一形态）。
    */
-  panelHeartbeat?(input: { sessionKeys: string[] }): Promise<{ touched: number }>;
+  panelHeartbeat?(input: { sessionKeys: string[] }): Promise<{
+    touched: number;
+    error?: { code: string; message: string };
+  }>;
 }

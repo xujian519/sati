@@ -5,8 +5,11 @@
  * 且持续离线直到下次 touch 复位（known-offline 是持久知识，不做惰性删除，
  * 否则 key 翻回 unknown → 在线，isCaptainOnline 会出现离线→在线振荡）。
  * 宽限窗默认 60s：瞬断重连不误判离线。
- * M4：面板心跳（panelTouch）是独立时间线——浏览器关闭不触发 gateway onClose，
- * 以心跳停更 + 独立宽限窗判定 Web 下线（两条时间线互不复位）。
+ * M4：面板心跳（panelTouch）维持 Web 下线判定——浏览器关闭不触发 gateway onClose，
+ * 以心跳停更 + 宽限窗判定 Web 下线。直连帧（touch）同步刷新面板时间线（S1 评审）：
+ * 「CLI 直连 + 面板关闭」共用 key 时直连帧即活跃信号，面板停更不误杀仍在操作的会话；
+ * 全静默（无帧且无心跳）超宽限窗才判离线。panelTouch 只刷新面板时间线，不清 closedAt
+ * （面板心跳不是直连——直连维度仍以 touch/close 为准）。
  *
  * Map 有界性：sessionKey 是持久会话标识（通道会话/团队成员会话），非每请求键——
  * 自然有界，不会无限增长；不做 TTL 清理以保 known-offline 语义稳定。
@@ -26,15 +29,18 @@ type PresenceEntry = {
 export class SessionPresence {
   private readonly entries = new Map<string, PresenceEntry>();
 
-  /** 连接收到任一帧：注册/刷新活跃。 */
+  /** 连接收到任一帧：注册/刷新活跃。直连帧即活跃信号（S1 评审），同步刷新面板时间线。 */
   touch(sessionKey: string, now: number = Date.now()): void {
     const entry = this.entries.get(sessionKey);
     if (entry === undefined) {
-      this.entries.set(sessionKey, { lastSeenAt: now });
+      this.entries.set(sessionKey, { lastSeenAt: now, panelSeenAt: now });
       return;
     }
     entry.lastSeenAt = now;
     entry.closedAt = undefined;
+    // 帧到 = 用户活着：面板权威判定（isActive 分支）以最近帧/心跳为准，
+    // 消灭「CLI 直连 + 面板关闭」共用 key 的误杀（面板停更不掩盖直连活动）。
+    entry.panelSeenAt = now;
   }
 
   /** 连接关闭：记录关闭时刻（宽限窗内仍算在线，防瞬断误判）。重复 close 幂等，不后移 closedAt。 */
@@ -51,7 +57,7 @@ export class SessionPresence {
   /**
    * 面板心跳（M4）：浏览器经 ui/server relay 周期上报活跃会话；面板关闭 = 心跳停 →
    * 超宽限窗离线。只复位离线判定（known-offline → 在线），不清 closedAt（面板心跳
-   * 不是直连——直连维度仍以 touch/close 为准，两条时间线独立）。
+   * 不是直连——直连维度仍以 touch/close 为准；touch 会同步刷新面板时间线，反向不成立）。
    */
   panelTouch(sessionKey: string, now: number = Date.now()): void {
     const entry = this.entries.get(sessionKey);
@@ -69,16 +75,20 @@ export class SessionPresence {
    *
    * M4 关键语义：经 ui/server relay 的 Web 会话只有共享连接（永不关闭），
    * closedAt 恒为 undefined——若直连活跃直接短路为 true，面板停更永远无法判离线
-   * （M3 I1 fail-open 复现）。故「直连活跃 + 有面板信号」的条目以面板心跳为准：
-   * 心跳停更超宽限窗 → 离线；纯直连（CLI/TUI，无面板信号）语义不变。
+   * （M3 I1 fail-open 复现）。故「直连活跃 + 有面板信号」的条目以面板时间线为准。
+   * S1 评审融合：touch（直连帧）同步刷新面板时间线，直连活跃会话的面板信号恒新鲜
+   * （CLI 帧到 = 用户活着，面板关闭不误杀）；纯面板会话由 panelTouch 刷新；
+   * 全静默（无帧且无心跳）超宽限窗 → 离线。纯直连「从未见过任何帧/心跳」仅存在于
+   * unknown key（→ true 容错），一旦见过帧即纳入统一活跃语义。
    */
   isActive(sessionKey: string, now: number = Date.now()): boolean {
     const entry = this.entries.get(sessionKey);
     if (entry === undefined) return true;
     const directActive = entry.closedAt === undefined || now - entry.closedAt < SESSION_PRESENCE_GRACE_MS;
     if (directActive) {
-      // 无面板信号 = 纯直连（CLI/TUI），直连即在线；有面板信号 = Web 经 relay 会话，
-      // 浏览器关闭不触发 gateway onClose，以面板心跳停更 + 宽限窗判离线。
+      // 无面板信号 = 仅 close 登记的 key（未见任何帧/心跳），直连即在线；
+      // 有面板信号 = 活跃语义统一（S1：touch/panelTouch 都刷新面板时间线），
+      // 停更超宽限窗 → 离线（Web 经 relay 会话 closedAt 恒 undefined，以此判 Web 下线）。
       if (entry.panelSeenAt === undefined) return true;
       return now - entry.panelSeenAt < SESSION_PRESENCE_GRACE_MS;
     }

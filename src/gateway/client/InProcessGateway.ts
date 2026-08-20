@@ -778,9 +778,14 @@ export class InProcessGateway implements Gateway {
     return { delivered: true };
   }
 
-  async panelHeartbeat(input: { sessionKeys: string[] }): Promise<{ touched: number }> {
+  async panelHeartbeat(input: { sessionKeys: string[] }): Promise<{
+    touched: number;
+    error?: { code: string; message: string };
+  }> {
     if (!this.options.panelHeartbeat) {
-      throw new Error("panel_heartbeat is not configured. Wire `panelHeartbeat` via createLocalGateway.");
+      // 未接线统一兜底形态（S3 评审）：与 GatewayWsConnection 的 notConfigured 出口一致，
+      // 可选能力降级为结果而非抛错（feature-detect 语义）。
+      return notConfigured({ touched: 0 }, "Panel heartbeat is not configured on this gateway.");
     }
     return this.options.panelHeartbeat(input);
   }

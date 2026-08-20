@@ -116,6 +116,13 @@ describe("InProcessGateway 新增 discovery 方法", () => {
     assert.equal(applyResult.cycle, null);
   });
 
+  it("panelHeartbeat 未接线时返回 not_configured 结果而非抛错（S3 评审兜底形态）", async () => {
+    const gateway = makeGateway(undefined);
+    const result = await gateway.panelHeartbeat({ sessionKeys: ["s1"] });
+    assert.equal(result.touched, 0);
+    assert.equal(result.error?.code, "not_configured");
+  });
+
   it("alwaysOnApplyCycle 委托 service.applyCycle（queue → apply → finalize 在 service 内）", async () => {
     const { service, calls } = makeStubService();
     const gateway = makeGateway(service, {
