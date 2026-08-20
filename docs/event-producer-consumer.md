@@ -31,10 +31,10 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | input_accepted | src/agent/turn/TurnRunner.ts:193, src/session/transcript/TranscriptReplay.ts:73 | src/gateway/client/InProcessGateway.ts:502 |
 | instructions_loaded | src/agent/loop/AgentLoop.ts:1959 | src/gateway/client/InProcessGateway.ts:502 |
 | member_added | src/tool/builtin/team/teamManagement.ts:104, src/tool/builtin/team/teamManagement.ts:161 | - |
-| member_idle | src/agent/team/scheduler/scheduler.ts:265 | - |
+| member_idle | src/agent/team/scheduler/scheduler.ts:275 | - |
 | member_removed | src/tool/builtin/team/teamManagement.ts:223 | - |
 | member_status | - | - |
-| message_delivered | src/agent/team/scheduler/scheduler.ts:197 | - |
+| message_delivered | src/agent/team/scheduler/scheduler.ts:207 | - |
 | mode_change_requested | src/agent/loop/AgentLoop.ts:1442 | src/gateway/client/InProcessGateway.ts:502 |
 | model_event | src/agent/loop/AgentLoop.ts:471 | src/gateway/client/InProcessGateway.ts:502 |
 | model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:502 |
@@ -59,12 +59,12 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:502 |
 | subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:502 |
 | subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:502 |
-| task_claimed | src/agent/team/scheduler/scheduler.ts:221 | - |
+| task_claimed | src/agent/team/scheduler/scheduler.ts:231 | - |
 | task_completed | src/tool/builtin/team/teamTasks.ts:292 | - |
 | task_created | src/tool/builtin/team/teamTasks.ts:154 | - |
 | task_failed | src/tool/builtin/team/teamTasks.ts:301 | - |
 | task_reassigned | src/tool/builtin/team/teamTasks.ts:410 | - |
-| task_retried | src/agent/team/scheduler/scheduler.ts:154 | - |
+| task_retried | src/agent/team/scheduler/scheduler.ts:164 | - |
 | task_updated | src/tool/builtin/team/teamTasks.ts:310 | - |
 | team_archived | src/tool/builtin/team/teamArchive.ts:60 | - |
 | team_created | src/tool/builtin/team/teamManagement.ts:94 | - |

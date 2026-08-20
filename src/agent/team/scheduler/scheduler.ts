@@ -11,7 +11,7 @@
  *   team_update_task 等团队工具要取同一把锁，持锁唤醒会重入死锁；
  * - 队长离线：isCaptainOnline 返回 false 时暂停认领（在途回合跑完即停）。
  */
-import type { TeamDb, TeamMessageRow, TeamTaskRow } from "../storage/team-db.js";
+import type { TeamDb, TeamMessageRow, TeamTaskRow, TeamRow } from "../storage/team-db.js";
 import { TERMINAL_TASK_STATUSES, unsatisfiedDependencies } from "../taskpool/task-status.js";
 import { beginTaskAttempt, invalidateTaskAttempt, attemptsExhausted } from "../taskpool/attempt.js";
 import { retryFailedTask } from "../taskpool/retry.js";
@@ -88,11 +88,22 @@ export class TeamScheduler {
     this.isCaptainOnline = options.isCaptainOnline ?? (() => true);
   }
 
+  /**
+   * 调度门槛（精简 B4 提取）：返回可调度团队（存在 + 未归档 + 队长在线），否则 undefined。
+   * kickTeam/kickMember 同点判定——archived 或 captain 离线 → 暂停认领（在途回合跑完即停）。
+   * 返回团队行兼作事件路由（emit 需 captainSessionKey），免二次查询。
+   */
+  private getDispatchableTeam(teamId: string): TeamRow | undefined {
+    const team = this.db.getTeam(teamId);
+    if (team === undefined || team.archivedAt !== undefined || !this.isCaptainOnline(team.captainSessionKey)) {
+      return undefined;
+    }
+    return team;
+  }
+
   /** 团队级触发：对每个 idle 成员给一件就绪工作。 */
   async kickTeam(teamId: string): Promise<void> {
-    const team = this.db.getTeam(teamId);
-    // M3：归档团队跳过调度（与 isCaptainOnline 同点——archived 或 captain 离线 → 暂停认领）
-    if (team === undefined || team.archivedAt !== undefined || !this.isCaptainOnline(team.captainSessionKey)) return;
+    if (this.getDispatchableTeam(teamId) === undefined) return;
     const members = this.db.listMembers().filter(m => m.teamId === teamId);
     for (const member of members) {
       if (member.status !== "idle") continue;
@@ -102,9 +113,8 @@ export class TeamScheduler {
 
   /** 成员级触发：邮箱投递优先，其次 ownedOpenTask/nextReadyTask 原子认领。 */
   async kickMember(teamId: string, memberId: string): Promise<void> {
-    const team = this.db.getTeam(teamId);
-    // M3：归档团队跳过调度（与 isCaptainOnline 同点——archived 或 captain 离线 → 暂停认领）
-    if (team === undefined || team.archivedAt !== undefined || !this.isCaptainOnline(team.captainSessionKey)) return;
+    const team = this.getDispatchableTeam(teamId);
+    if (team === undefined) return;
     const member = this.db.getMember(memberId);
     if (
       member === undefined ||

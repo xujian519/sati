@@ -5,6 +5,12 @@ export { MEMBER_SESSION_PREFIX, memberSessionKey, parseMemberSessionKey } from "
 export { createTeamMember, type MemberModelRoute, type CreateTeamMemberOptions } from "./member/member-registry.js";
 export { parseModelRouteJson } from "./member/modelRouteJson.js";
 export {
+  toMemberView,
+  toTaskView,
+  type TeamMemberView,
+  type TeamTaskView,
+} from "./views.js";
+export {
   wakeMember,
   TeamMemberNotFoundError,
   TeamMemberRetiredError,

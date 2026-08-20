@@ -236,20 +236,16 @@ export class TeamDb {
       throw new Error(`teams.db schema version ${current} is newer than supported (${MIGRATIONS.length})`);
     }
     for (let version = current; version < MIGRATIONS.length; version += 1) {
-      this.db.exec("BEGIN");
-      try {
+      // 每版本一事务（精简 B1）：复用 transaction() 原语，替代重复的 BEGIN/COMMIT/ROLLBACK 样板
+      this.transaction(() => {
         this.db.exec(MIGRATIONS[version]);
         this.db.exec(`PRAGMA user_version = ${version + 1}`);
-        this.db.exec("COMMIT");
-      } catch (error) {
-        this.db.exec("ROLLBACK");
-        throw error;
-      }
+      });
     }
   }
 
   /**
-   * 通用同步事务：复用 migrate() 的 BEGIN/COMMIT/ROLLBACK 模式（T8 review I-1 引入）。
+   * 通用同步事务原语：migrate() 与变更类多步操作共用（T8 review I-1 引入）。
    * 事务内任一步抛错即回滚并 rethrow；提交成功后才对外可见。node:sqlite 单连接串行，
    * 本方法不重入（事务内不得再嵌套调用）。
    */
