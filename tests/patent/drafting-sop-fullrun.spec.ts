@@ -9,8 +9,8 @@ import {
 
 /**
  * T12 确定性全链路验收（docs/patent-drafting-sop-plan.md 迭代四）：
- * mock provider + 批准全部审批门 → patent_drafting_v1 22 阶段完整跑通，
- * 断言撰写产物（权利要求/说明书/质量门/反套话门）全部产出。
+ * mock provider + 批准全部审批门 → patent_drafting_v1 全部阶段完整跑通，
+ * 断言撰写产物（权利要求/说明书/覆盖矩阵/质量门/反套话门）全部产出。
  *
  * 本测试是"撰写流程完整可运行"的确定性断言（无 key、CI 可跑）；
  * 真实模型录制的 llm-replay fixture 重放见
@@ -26,7 +26,7 @@ const ALL_GATES = [
   "final_approval",
 ];
 
-/** mock provider：按 prompt 内容返回各原子所需 JSON（覆盖 22 阶段全部 LLM 调用）。 */
+/** mock provider：按 prompt 内容返回各原子所需 JSON（覆盖全部阶段 LLM 调用）。 */
 function fullRunProvider(): StageProvider {
   return {
     callLLM: async prompt => {
@@ -57,6 +57,11 @@ function fullRunProvider(): StageProvider {
         return JSON.stringify({
           claims: ["1. 一种双层真空保温容器，其特征在于，包括双层真空结构。"],
           notes: "独权含必要特征",
+        });
+      }
+      if (prompt.includes("实施例覆盖矩阵")) {
+        return JSON.stringify({
+          claims: [{ claimId: "claim_1", features: ["双层真空结构"], embodimentRefs: ["embodiment_1"] }],
         });
       }
       if (prompt.includes("说明书撰写专家")) {
@@ -93,7 +98,10 @@ test("T12: patent_drafting_v1 全链路（批准全部审批门）完整跑通",
 
   const result = await runWorkflow(
     patentDraftingManifest,
-    { text: "交底书：双层真空保温容器", source_text: "交底书：双层真空保温容器" },
+    {
+      text: "交底书：双层真空保温容器",
+      source_text: "交底书：双层真空保温容器。实施例 1：真空度 0.1Pa，保温 8 小时。",
+    },
     executor,
     { provider, approvalGrants: ALL_GATES },
   );
@@ -102,7 +110,7 @@ test("T12: patent_drafting_v1 全链路（批准全部审批门）完整跑通",
   assert.equal(result.completed, true, `应完成（summary: ${result.summary}）`);
   assert.equal(result.interrupted, undefined, "批准全部审批门后不应中断");
   assert.deepEqual(result.degradedSteps, [], "全链路不应有降级阶段");
-  assert.equal(result.stages.length, patentDraftingManifest.stages.length, "22 阶段全部执行");
+  assert.equal(result.stages.length, patentDraftingManifest.stages.length, "全部阶段执行");
 
   const output = (id: string): string => {
     const stage = result.stages.find(s => s.stageId === id);

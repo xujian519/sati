@@ -57,3 +57,4 @@ export {
   SlopGateHandler,
 } from "./gate.js";
 export { claimChartAtom, ClaimChartHandler } from "./chart.js";
+export { claimEmbodimentMapperAtom, ClaimEmbodimentMapperHandler } from "./mapper.js";

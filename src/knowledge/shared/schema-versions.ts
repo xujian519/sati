@@ -34,3 +34,14 @@ export const VECTORS_DB = {
   applicationId: 0x56454354, // "VECT"
   kind: "derived",
 } as const satisfies OpenKnowledgeDbSpec;
+
+/**
+ * provenance.db（per-case 决策链）与 approval-audit.db（全局审批审计）：
+ * 运行期采集的追加审计日志，**不可从真源重灌**——标 source，版本不符 fail-loud 拒开，
+ * 绝不走 derived 的 needsRebuild（静默重建会销毁审计历史，见 docs/patent-provenance-claim-coverage-plan.md P3）。
+ */
+export const PROVENANCE_DB = {
+  version: 1,
+  applicationId: 0x50524f56, // "PROV"
+  kind: "source",
+} as const satisfies OpenKnowledgeDbSpec;

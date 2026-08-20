@@ -111,6 +111,8 @@ import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
 import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
 import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
+import { isProvenanceEnabled } from "../patent/provenance/index.js";
+import { SqliteApprovalStore } from "../patent/provenance/approval-store.js";
 import { loadPatentFullRuleSet, RuleOutputGate, selectGateRules } from "../rule/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig, resolvePilotHome, type PilotProxyConfig } from "../pilot/index.js";
@@ -194,6 +196,11 @@ export type CreateLocalGatewayOptions = {
    */
   autoElicitation?: boolean;
   telemetry?: TelemetryClient;
+  /**
+   * 决策溯源旁路（审批审计落盘全局库）：默认关（零开销）；
+   * 可经环境变量 `SATI_PROVENANCE=1` 开启（双通道，方案 P6）。
+   */
+  enableProvenance?: boolean;
 };
 
 export type SubsystemUpdate = {
@@ -339,6 +346,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     modelFactory: options.__testModelFactory,
     autoElicitation: options.autoElicitation,
     telemetry,
+    enableProvenance: options.enableProvenance,
     onProjectActivated: activeProjectRoot => extensionWatchManager.watchProject(activeProjectRoot),
   });
   const defaultRuntime = registry.resolve();
@@ -814,6 +822,8 @@ type ProjectRuntimeRegistryOptions = {
   modelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
   autoElicitation?: boolean;
   telemetry: TelemetryClient;
+  /** 决策溯源旁路开关（见 CreateLocalGatewayOptions.enableProvenance）。 */
+  enableProvenance?: boolean;
   onProjectActivated?: (projectRoot: string) => void;
 };
 
@@ -1906,11 +1916,26 @@ class ProjectRuntimeRegistry {
       console.warn(`[RuleOutputGate] 专利规则集加载告警: ${fullRuleSet.warnings.join("; ")}`);
     }
     const ruleGate = new RuleOutputGate(selectGateRules(fullRuleSet.ruleSet));
+    // 决策溯源旁路（P6 双通道单点）：默认关 → approvalStore 不配置，output-gate 零开销。
+    const enableProvenance = isProvenanceEnabled({
+      enableProvenance: this.options.enableProvenance,
+      env: this.options.env,
+    });
+    // 评审 I2：gateway 程序化开启时同步进程级 env，使同一进程内工具层
+    // （openProvenanceCollector 读 process.env）与 gateway 判定同源，避免半开状态。
+    if (enableProvenance && process.env.SATI_PROVENANCE !== "1") {
+      process.env.SATI_PROVENANCE = "1";
+    }
+    // 评审 I3：审批审计库打开失败（目录只读/损坏/魔数不符）只降级为不落盘，
+    // 绝不拖垮 gateway（构造期 fail-open；saveRecord 已内建 fail-open）。
+    const approvalStore = enableProvenance ? createApprovalStoreSafely() : undefined;
     const patentOutputGate = new PatentOutputGate({
       riskKeywords: [],
       absolutePhrases: [],
       enableCitationGate: false,
       ruleGate,
+      // 审批审计落盘（全局库；写入失败不阻断审批）
+      ...(approvalStore !== undefined ? { approvalStore } : {}),
       // 时钟与 Agent 层注入对齐（TurnRunner/AgentLoop 共用 this.options.now）
       now: () => this.options.now().getTime(),
       onPending: pending => {
@@ -2343,4 +2368,18 @@ function syncRoleDefinitions(pluginRuntime: PluginRuntime, builtinSkillsRoot?: s
   // M3 T15：skills/patent-teams/ 嵌套目录（自身无 SKILL.md，一级扫描跳过），
   // 经同一 roleFromContribution → registerRoleDefinition 路径补注册。
   registerNestedTeamRoleDefinitions(builtinSkillsRoot);
+}
+
+/**
+ * 安全构造审批审计库（评审 I3）：库打不开（目录只读/损坏/魔数不符）时降级为
+ * 不注入 approvalStore（审批留痕不落盘），绝不抛错拖垮 gateway；saveRecord 侧
+ * 已内建 fail-open。返回 undefined = 不落盘。
+ */
+function createApprovalStoreSafely(): SqliteApprovalStore | undefined {
+  try {
+    return new SqliteApprovalStore();
+  } catch (err) {
+    console.error("[SqliteApprovalStore] 审批审计库打开失败，审批留痕降级为不落盘:", err);
+    return undefined;
+  }
 }

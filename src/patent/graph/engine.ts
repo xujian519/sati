@@ -41,18 +41,32 @@ export type CompiledGraphDef = {
 };
 
 /** 链式图构建 API（对齐 Mady PregelGraph）。 */
+export type GraphBuilderOptions = {
+  /**
+   * 节点注册统一入口钩子（溯源包装用）：每次 addNode 注册前调用，
+   * 返回包装后的节点（含裸箭头函数节点，评审 P9）；缺省原样注册。
+   */
+  onAddNode?: (name: string, node: GraphNode) => GraphNode;
+};
+
 export class GraphBuilder {
   private readonly nodes = new Map<string, GraphNode>();
   private readonly edges = new Map<string, string[]>();
   private readonly conditionalEdges = new Map<string, EdgeRouter>();
   private readonly nodePolicies = new Map<string, NodePolicy>();
   private schema: MergeSchema = {};
+  private readonly onAddNode?: (name: string, node: GraphNode) => GraphNode;
+
+  constructor(options?: GraphBuilderOptions) {
+    this.onAddNode = options?.onAddNode;
+  }
 
   /** 注册节点（GRAPH_END 为保留哨兵，不可注册）。 */
   addNode(name: string, node: GraphNode): this {
     if (name === GRAPH_END) throw new GraphEngineError(`"${GRAPH_END}" 为保留哨兵，不可注册为节点`);
     if (!name.trim()) throw new GraphEngineError("节点名不能为空");
-    this.nodes.set(name, node);
+    const effective = this.onAddNode?.(name, node) ?? node;
+    this.nodes.set(name, effective);
     return this;
   }
 

@@ -21,6 +21,8 @@ export type BuildNoveltyGraphOptions = {
   ruleGate?: boolean;
   /** 注入 approval-gate 审批门（缺省 true：HITL 暂停；自动执行/评测场景置 false 直达规则门）。 */
   includeApproval?: boolean;
+  /** 溯源包装钩子（ProvenanceCollector.wrapNode）：addNode 统一入口，透传 GraphBuilder。 */
+  onAddNode?: (name: string, node: GraphNode) => GraphNode;
 };
 
 const NOVELTY_SCOPE = "单独对比原则（新颖性，专利法 A22.2）";
@@ -125,7 +127,7 @@ const numericRangeNode: GraphNode = async ({ state, provider }) => {
 /** 构建新颖性分析子图（A22.2）。 */
 export function buildNoveltyGraph(options: BuildNoveltyGraphOptions = {}): GraphBuilder {
   const handlers = options.handlers ?? globalStageHandlerRegistry;
-  const builder = new GraphBuilder();
+  const builder = new GraphBuilder({ onAddNode: options.onAddNode });
 
   const extract = handlers.lookup("extract");
   if (extract === undefined) throw new Error("buildNoveltyGraph: 缺少内置原子 extract（请先 registerBuiltinAtoms）");
@@ -205,3 +207,17 @@ export function buildNoveltyGraph(options: BuildNoveltyGraphOptions = {}): Graph
 
   return builder;
 }
+
+/**
+ * 节点输入声明表（溯源 derivedFrom 链，评审 P9/P13）：节点名 → 上游 state keys。
+ * 仅覆盖需要决策链的 LLM/推理节点；rule_gate/approval 不声明（rule_gate 经
+ * collectStateText 读全量、审批门由 approval_gate 记录）。缺失/漂移只记产出不伪造因果。
+ */
+export const NOVELTY_INPUT_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
+  extract: [],
+  keywords: [],
+  search: ["keywords"],
+  compare: ["features", "prior_art"],
+  numeric_range: [],
+  conclude: ["novelty_result", "novelty_conclusion", "numeric_range_result", "evidence_coverage"],
+};

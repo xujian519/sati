@@ -11,6 +11,8 @@
  * 设计原则：审计写入不阻塞审批流程（fail-open）；store 未配置时零开销。
  */
 
+import type { RuleViolation } from "../rule/index.js";
+
 export type ApprovalVerdict = "adopted" | "modified" | "rejected";
 
 export type ApprovalRecord = {
@@ -28,6 +30,11 @@ export type ApprovalRecord = {
   /** rejected 时的人工反馈理由 */
   feedback?: string;
   decidedAt: string;
+  /** 溯源扩展（provenance 旁路，可选）：output_gate 在 agent 消息层，无 case 归属时留空。 */
+  caseId?: string;
+  runId?: string;
+  /** 规则门禁违规清单（ruleGate 命中挂起时才有；供审计链 derivedFrom 溯源）。 */
+  ruleViolations?: RuleViolation[];
 };
 
 export type ApprovalStore = {
@@ -68,6 +75,9 @@ export function createApprovalRecord(input: {
   verdict: ApprovalVerdict;
   modifiedOutput?: string;
   feedback?: string;
+  caseId?: string;
+  runId?: string;
+  ruleViolations?: RuleViolation[];
   now?: () => Date;
 }): ApprovalRecord {
   return {
@@ -79,6 +89,9 @@ export function createApprovalRecord(input: {
     verdict: input.verdict,
     ...(input.modifiedOutput !== undefined ? { modifiedOutput: input.modifiedOutput } : {}),
     ...(input.feedback !== undefined ? { feedback: input.feedback } : {}),
+    ...(input.caseId !== undefined ? { caseId: input.caseId } : {}),
+    ...(input.runId !== undefined ? { runId: input.runId } : {}),
+    ...(input.ruleViolations !== undefined ? { ruleViolations: input.ruleViolations } : {}),
     decidedAt: (input.now ?? (() => new Date()))().toISOString(),
   };
 }

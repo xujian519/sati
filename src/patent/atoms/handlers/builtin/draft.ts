@@ -168,6 +168,77 @@ export function validateDraftSpec(specText: string, title?: string): { passed: b
   return { passed: violations.every(v => v.severity !== "error"), violations };
 }
 
+/**
+ * 追加实施例覆盖缺口 warning（T7，评审 I1/I2/I3 扩展）：读 claim-embodiment-mapper
+ * 产出的 claim_coverage_result（矩阵+check+可选 missingClaims/droppedRefs/claims_empty），
+ * 把无实施例支撑的特征、LLM 漏项权项、幻觉实施例引用、空矩阵追加为 warning 级违规——
+ * 不翻转 passed（validateDraftSpec 只判 error）；矩阵缺失/降级/非 JSON 时跳过
+ * （fail-open，撰写流程不受影响）。
+ */
+function appendCoverageWarnings(
+  validation: { passed: boolean; violations: SpecViolation[] },
+  state: PipelineState,
+): { passed: boolean; violations: SpecViolation[] } {
+  const raw = getStateString(state, "claim_coverage_result");
+  if (raw.length === 0) return validation;
+  let matrix:
+    | {
+        check?: { missingEmbodiment?: Array<{ claimId: string; feature: string }> };
+        claims_empty?: unknown;
+        missingClaims?: unknown;
+        droppedRefs?: unknown;
+      }
+    | undefined;
+  try {
+    matrix = JSON.parse(raw) as typeof matrix;
+  } catch {
+    return validation;
+  }
+  const violations = [...validation.violations];
+  const missing = matrix?.check?.missingEmbodiment;
+  if (missing !== undefined) {
+    for (const m of missing) {
+      violations.push({
+        rule: "claim_embodiment_coverage",
+        severity: "warning",
+        message: `权利要求特征 "${m.feature}"（${m.claimId}）在交底书实施例中无支撑，请在具体实施方式中补充对应实施例`,
+      });
+    }
+  }
+  // 评审 I1：LLM 漏项权项（claims_draft 存在但矩阵缺失）——覆盖预检被静默绕过的兜底
+  if (Array.isArray(matrix?.missingClaims)) {
+    for (const claimId of matrix.missingClaims) {
+      if (typeof claimId !== "string") continue;
+      violations.push({
+        rule: "claim_coverage_missing_claim",
+        severity: "warning",
+        message: `权利要求 ${claimId} 未出现在实施例覆盖矩阵中（LLM 可能漏项），请人工核对`,
+      });
+    }
+  }
+  // 评审 I2：幻觉实施例引用（LLM 引用交底书中不存在的实施例，被骨架剔除）
+  const droppedRefs = matrix?.droppedRefs;
+  if (Array.isArray(droppedRefs) && droppedRefs.length > 0) {
+    const refs = droppedRefs.filter((r): r is string => typeof r === "string");
+    if (refs.length > 0) {
+      violations.push({
+        rule: "claim_coverage_dropped_refs",
+        severity: "warning",
+        message: `LLM 引用了交底书中不存在的实施例（${refs.join("、")}），已剔除，请人工核对`,
+      });
+    }
+  }
+  // 评审 I3：空矩阵（LLM 未产出任何权项映射）——"无数据"而非"无缺口"
+  if (matrix?.claims_empty === true) {
+    violations.push({
+      rule: "claim_coverage_empty",
+      severity: "warning",
+      message: "实施例覆盖矩阵为空（LLM 未产出任何权项映射），请人工核对",
+    });
+  }
+  return violations.length === validation.violations.length ? validation : { ...validation, violations };
+}
+
 const SPEC_SECTION_ORDER = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式", "摘要"];
 
 /** 组装说明书 Markdown：固定章节顺序 + 标题，未知章节追加末尾。 */
@@ -241,12 +312,12 @@ export class DraftSpecHandler implements StageHandler {
             content: String((s as Record<string, unknown>).content ?? ""),
           }));
         const specText = renderSpecMarkdown(title, sections);
-        const validation = validateDraftSpec(specText, title);
+        const validation = appendCoverageWarnings(validateDraftSpec(specText, title), state);
         return { spec_draft: specText, spec_validation: JSON.stringify(validation, null, 2) };
       },
       raw => {
         // 非 JSON 输出：原文作为说明书草稿，仍跑确定性校验（章节可能缺失，如实报告）。
-        const validation = validateDraftSpec(raw);
+        const validation = appendCoverageWarnings(validateDraftSpec(raw), state);
         return { spec_draft: raw, spec_validation: JSON.stringify(validation, null, 2) };
       },
     );

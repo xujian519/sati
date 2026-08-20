@@ -196,9 +196,16 @@ export function validateWorkerOutput(
 /** Worker 执行监控：记录执行记录并聚合统计。 */
 export class WorkerMonitor {
   private readonly records: WorkerExecutionRecord[] = [];
+  private readonly onRecord?: (record: WorkerExecutionRecord) => void;
+
+  /** onRecord 为可选旁路（审计落盘等）；缺省 no-op 零开销（对齐 fail-open）。 */
+  constructor(options?: { onRecord?: (record: WorkerExecutionRecord) => void }) {
+    this.onRecord = options?.onRecord;
+  }
 
   record(record: WorkerExecutionRecord): void {
     this.records.push(record);
+    this.onRecord?.(record);
   }
 
   /** 按 worker 聚合统计（成功率 / 违约计数 / P99 时延）。 */

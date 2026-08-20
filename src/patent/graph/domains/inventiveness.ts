@@ -29,6 +29,8 @@ export type BuildInventivenessGraphOptions = {
   ruleGate?: boolean;
   /** 注入 approval-gate 审批门（缺省 true：HITL 暂停；自动执行/评测场景置 false 直达规则门）。 */
   includeApproval?: boolean;
+  /** 溯源包装钩子（ProvenanceCollector.wrapNode）：addNode 统一入口，透传 GraphBuilder。 */
+  onAddNode?: (name: string, node: GraphNode) => GraphNode;
   /**
    * 检索反思回路：覆盖不足时最多重检 maxRounds 次（缺省 2，0 = 禁用回路保持旧行为）。
    * 多轮检索结果按 union 合并去重，放行 closest 前收敛为最近轮优先的前 8 篇。
@@ -237,7 +239,7 @@ const domainInjectNode: GraphNode = async ({ state }) => {
 /** 构建创造性分析子图（A22.3 三步法）。 */
 export function buildInventivenessGraph(options: BuildInventivenessGraphOptions = {}): GraphBuilder {
   const handlers = options.handlers ?? globalStageHandlerRegistry;
-  const builder = new GraphBuilder();
+  const builder = new GraphBuilder({ onAddNode: options.onAddNode });
   const combinationEnabled = options.combination !== false;
   const citationGateEnabled = options.citationGate !== false;
   const withRuleGate = options.ruleGate !== false;
@@ -609,3 +611,32 @@ export function extractInventivenessResult(state: GraphState): {
     return {};
   }
 }
+
+/**
+ * 节点输入声明表（溯源 derivedFrom 链，评审 P9/P13）：节点名 → 上游 state keys。
+ * 仅覆盖需要决策链的 LLM/推理节点；rule_gate/approval/citation_gate 不声明
+ * （rule_gate 经 collectStateText 读全量、审批门由 approval_gate 记录）。
+ * 声明缺失/漂移时只记产出不伪造因果（fail-open 诚实降级）。
+ */
+export const INVENTIVENESS_INPUT_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
+  parse: [],
+  domain_inject: [],
+  build_query: ["inventiveness_parse"],
+  prepare_query: ["inventiveness_query", "inventiveness_parse"],
+  search: ["query"],
+  recall_check: ["prior_art", "search_summary"],
+  refine_query: ["inventiveness_recall", "inventiveness_query"],
+  converge_prior_art: ["prior_art"],
+  closest: ["inventiveness_parse", "inventiveness_domain_focus"],
+  diff: ["inventiveness_parse", "inventiveness_closest"],
+  combination: ["inventiveness_closest", "inventiveness_diff", "prior_art"],
+  hint: ["inventiveness_parse", "inventiveness_diff", "inventiveness_combination"],
+  secondary: ["inventiveness_parse"],
+  conclude: [
+    "inventiveness_closest",
+    "inventiveness_diff",
+    "inventiveness_combination",
+    "inventiveness_hint",
+    "inventiveness_secondary",
+  ],
+};
