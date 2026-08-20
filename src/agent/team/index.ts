@@ -53,6 +53,7 @@ export {
   type TaskAttemptResult,
 } from "./taskpool/attempt.js";
 export { retryFailedTask } from "./taskpool/retry.js";
+export { detectDependencyCycle } from "./taskpool/cycle.js";
 export { toGatewayEvent } from "./protocol/broadcast.js";
 export type { TeamEvent, TeamEventEmitter } from "./protocol/events.js";
 

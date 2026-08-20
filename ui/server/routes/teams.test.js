@@ -147,7 +147,7 @@ describe("teams panel routes", () => {
     });
 
     expect(status).toBe(400);
-    expect(body).toEqual({ touched: 0 });
+    expect(body).toEqual({ touched: 0, error: { code: "invalid_request", message: "sessionKeys 必须为数组" } });
     expect(gateway.panelHeartbeat).not.toHaveBeenCalled();
   });
 

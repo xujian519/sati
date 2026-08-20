@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
 import {
   TERMINAL_TASK_STATUSES,
+  detectDependencyCycle,
   transitionError,
   unsatisfiedDependencies,
   validateAttemptUpdate,
@@ -134,7 +135,14 @@ export function createTeamCreateTaskTool(
         if (db.getTask(input.teamId, taskId) !== undefined) {
           throw new SatiToolRuntimeError("team_task_exists", `任务 id 碰撞，请重试：${taskId}`);
         }
-        const deps = input.dependencies ?? [];
+        // M4（质量审阅）：依赖输入去重（重复 id 令 blockedByCount/事件 payload 失真）。
+        // I3（质量审阅）：成环检测——防御性接入（create 时刻依赖只能指向既有任务，
+        // 图论上必不成环；依赖未来可变时此即唯一防线，见 taskpool/cycle.ts）。
+        const deps = [...new Set(input.dependencies ?? [])];
+        const cycle = detectDependencyCycle(known, taskId, deps);
+        if (cycle !== undefined) {
+          throw new SatiToolRuntimeError("team_task_cycle", `任务依赖成环：${cycle.join(" → ")}`);
+        }
         blockedByCount = unsatisfiedDependencies(known, deps).length;
         const row: TeamTaskRow = {
           id: taskId,

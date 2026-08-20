@@ -75,8 +75,10 @@ export async function scanTeamMembers(options: ScanTeamMembersOptions): Promise<
         onEvent: event => options.onEvent?.(member, event),
       });
       resumed += 1;
-    } catch {
+    } catch (error) {
       // 单个成员失败（转录缺失/损坏）不阻塞其余成员；无转录 = 从未唤醒，跳过。
+      // I1（code review）：宿主 fire-and-forget 无日志兜底，此处显式记录，失败可观测。
+      console.error(`[sati] Team member resume failed: ${member.id}`, error);
       continue;
     }
   }
@@ -131,8 +133,9 @@ export async function scanStrandedTasks(options: ScanStrandedTasksOptions): Prom
       try {
         await invalidateAndKick(team.id, task.id, task.assigneeId);
         stranded += 1;
-      } catch {
-        // 单任务失败不阻塞团队扫描
+      } catch (error) {
+        // 单任务失败不阻塞团队扫描；I1（code review）：显式记录，失败可观测。
+        console.error(`[sati] Team stranded task reclaim failed: ${task.id}`, error);
       }
     }
   }

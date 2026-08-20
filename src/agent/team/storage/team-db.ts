@@ -2,6 +2,11 @@
  * 团队状态库（teams.db）最小实现：node:sqlite DatabaseSync + user_version 迁移。
  * M1 仅三表（teams/members/retired_members）；tasks/messages 表随 M2 以 v2 迁移加入。
  * 语义与 knowledge.db 不同：knowledge.db 只读消费，本库是团队状态的读写真源。
+ *
+ * ⚠️ 单进程边界（质量审阅 I4）：本库无 WAL/多进程并发协调（DatabaseSync 单连接），
+ * 进程内并发由 withTeamLock（per-team 内存锁）串行化，进程崩溃安全由冷恢复
+ * （resetMemberStatuses + scanTeamMembers + scanStrandedTasks）负责——多 gateway
+ * 进程共享同一 teams.db 文件不在支持范围内（任务认领竞态无跨进程锁）。
  */
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";

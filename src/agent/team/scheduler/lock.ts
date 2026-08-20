@@ -13,7 +13,10 @@ export async function withTeamLock<T>(key: string, operation: () => Promise<T>):
   });
   const tail = previous.then(() => gate);
   queues.set(key, tail);
-  await previous;
+  // 防御（质量审阅 C1）：tail 链经归纳证明永不 reject（gate 仅 resolve、previous 为上一 tail），
+  // 但未来若引入 reject 源，裸 await previous 会跳过 finally（release 不调用）→ 队列残留、后续调用者永久挂起。
+  // .catch 吞掉毒化链，锁自愈：当前调用者照常执行。
+  await previous.catch(() => undefined);
   try {
     return await operation();
   } finally {
