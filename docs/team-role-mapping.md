@@ -4,7 +4,7 @@
 > 对照：Sati 既有 `skills/` 下 `type: role` 角色（grep 统计 32 个，`skills/<name>/SKILL.md` 结构）
 > 日期：2026-08-20
 >
-> **接线状态：本表仅做资产映射，不做注册。** 注册接线（`registerRoleDefinition` + `visibleDomains` 裁剪）明确留 M3——本任务只产出资产与映射，M3 落地前下列角色映射不可直接按 `subagent_type` / 团队 roleSlug 调度。
+> **接线状态：已落地（M3）。** 12 岗全部经 `registerRoleDefinition` 注册（5 新增角色补全 frontmatter 后注册；7 复用岗以团队变体角色资产注册，见下方映射表「复用/新增」列变更为「变体」）。角色可按 `subagent_type` / 团队 roleSlug 调度。
 
 ## 一、总览
 
@@ -12,18 +12,18 @@
 
 ## 二、映射表
 
-| 团队岗位 | role id | Sati 角色映射 | 复用/新增 | 差异说明 |
+| 团队岗位 | role id | Sati 角色映射 | 新增/变体 | 差异说明 |
 |---|---|---|---|---|
 | 案件管理员 | `case-manager` | — | **新增** | 流程中立型管理岗位（案卷/期限/补充循环），Sati 无对应角色，见 `skills/patent-teams/case-manager/SKILL.md` |
-| 检索员 | `researcher` | `patent-retriever` | 复用 | 职责高度重合（多源检索 + 三段式报告）。差异：dsh 岗位含**覆盖度评估与可专利性初判**，`patent-retriever` 聚焦检索与报告输出，覆盖度自评需在 M3 接线时以 systemPrompt 补充或由 captain（主会话，调度与收口方）在成员简报中要求 |
-| 撰写员 | `drafter` | `patent-writer` + `provision-drafting-claims` + `provision-drafting-spec` | 复用 | `patent-writer` 覆盖权利要求/说明书/摘要撰写（对接 `draft_claims`/`draft_specification`）；两个 provision worker 为 P-D01/P-D02 条款级撰写，按作业类型选用。差异：dsh 岗位含**逐特征比对**（撰写后自检），可比对 `patent-novelty-checker` 或交由对立审查员红队评审覆盖 |
-| 技术专家 | `technical-expert` | `patent-analyzer` + `patent-electrical-agent` | 复用 | `patent-analyzer` 做技术方案解构/四层对比/区别特征识别；电学领域（IPC H 部）补 `patent-electrical-agent`。差异：dsh 岗位含**实施例可实施性与效果数据真实性核验**（识别夸大/虚构技术陈述），`patent-analyzer` 偏技术分析，需 M3 接线时补充真实性核验指令 |
-| 对立审查员 | `adversarial-reviewer` | `patent-reviewer` + `patent-quality-checker` | 复用 | 审查方红队视角：`patent-reviewer`（格式 + A26.3/A26.4/A31.1 内容审查）与 `patent-quality-checker`（保护范围/撰写质量/授权前景多维评分）均为 `readOnly`，与"红队评审不改稿"的分工吻合。差异：dsh 岗位含**程序表述审查**（如答复期限表述），期限类核验由案件管理员承担，不在此角色重复 |
+| 检索员 | `researcher` | `patent-retriever` | 变体（基底 `patent-retriever`） | 职责高度重合（多源检索 + 三段式报告）。差异：dsh 岗位含**覆盖度评估与可专利性初判**，`patent-retriever` 聚焦检索与报告输出；覆盖度自评已由变体角色 systemPrompt 补充（差异资产 `skills/patent-teams/researcher/SKILL.md`，T15 落地），或由 captain（主会话，调度与收口方）在成员简报中要求 |
+| 撰写员 | `drafter` | `patent-writer` + `provision-drafting-claims` + `provision-drafting-spec` | 变体（基底 `patent-writer` + 2 provision） | `patent-writer` 覆盖权利要求/说明书/摘要撰写（对接 `draft_claims`/`draft_specification`）；两个 provision worker 为 P-D01/P-D02 条款级撰写，按作业类型选用。差异：dsh 岗位含**逐特征比对**（撰写后自检），已由变体角色补充（差异资产 `skills/patent-teams/drafter/SKILL.md`，T15 落地），亦可比对 `patent-novelty-checker` 或交由对立审查员红队评审覆盖 |
+| 技术专家 | `technical-expert` | `patent-analyzer` + `patent-electrical-agent` | 变体（基底 `patent-analyzer` + `patent-electrical-agent`） | `patent-analyzer` 做技术方案解构/四层对比/区别特征识别；电学领域（IPC H 部）补 `patent-electrical-agent`。差异：dsh 岗位含**实施例可实施性与效果数据真实性核验**（识别夸大/虚构技术陈述），`patent-analyzer` 偏技术分析；真实性核验指令已由变体角色补充（差异资产 `skills/patent-teams/technical-expert/SKILL.md`，T15 落地） |
+| 对立审查员 | `adversarial-reviewer` | `patent-reviewer` + `patent-quality-checker` | 变体（基底 `patent-reviewer` + `patent-quality-checker`） | 审查方红队视角：`patent-reviewer`（格式 + A26.3/A26.4/A31.1 内容审查）与 `patent-quality-checker`（保护范围/撰写质量/授权前景多维评分）均为 `readOnly`，与"红队评审不改稿"的分工吻合。差异：dsh 岗位含**程序表述审查**（如答复期限表述），期限类核验由案件管理员承担，不在此角色重复；变体角色资产 `skills/patent-teams/adversarial-reviewer/SKILL.md`（T15 落地） |
 | 申请人代理 | `applicant-counsel` | — | **新增** | 申请人方立场（范围最大化/争辩策略），Sati 既有撰写类角色均为中立代理人立场、无立场型代理角色，见 `skills/patent-teams/applicant-counsel/SKILL.md` |
 | 形式审查员 | `formal-examiner` | — | **新增** | 初步审查视角（形式缺陷/补正彻底性）；`patent-formal-exam` 为技能资产（流程方法论）而非 `type: role` 角色，无法直接调度，见 `skills/patent-teams/formal-examiner/SKILL.md` |
-| 无效请求人 | `invalidity-petitioner` | `patent-invalidity-checker` + `provision-invalidity-procedure` | 复用 | `patent-invalidity-checker`（无效理由/证据组合 ≥3 策略/成功率，`readOnly`）与 P-C02（A45/A46 程序梳理）覆盖主职责。差异：dsh 岗位含**预判专利权人应对**，需 M3 接线时补充对抗预判指令 |
-| 专利权人 | `patentee-defender` | `patent-invalidity-checker`（视角复用）+ `provision-defenses` / `provision-infringement-literal` / `provision-infringement-equivalent` / `provision-damages` | 复用 | 防御/主张立场：无效场景反向复用 `patent-invalidity-checker`（质证/反证/修改换维持）；诉讼场景复用 P-B02/P-B03（侵权比对）、P-B06（判赔计算）、P-B05（预演对方抗辩）。差异：既有角色均为中立分析视角，**防御/主张立场需在 M3 接线时以 systemPrompt 显式反转声明** |
-| 合议组/裁判 | `adjudicator` | `patent-reviewer` + `provision-reexamination` | 复用 | 中立裁判：`patent-reviewer`（审查基准） + P-C03（A41 复审程序：前置审查/合议审查/复审决定）。差异：dsh 岗位含**双方论点对抗评估、证据采信、结果预判**，需 M3 接线时补充中立裁判指令（不参与任一方策略起草） |
+| 无效请求人 | `invalidity-petitioner` | `patent-invalidity-checker` + `provision-invalidity-procedure` | 变体（基底 `patent-invalidity-checker` + `provision-invalidity-procedure`） | `patent-invalidity-checker`（无效理由/证据组合 ≥3 策略/成功率，`readOnly`）与 P-C02（A45/A46 程序梳理）覆盖主职责。差异：dsh 岗位含**预判专利权人应对**，对抗预判指令已由变体角色补充（差异资产 `skills/patent-teams/invalidity-petitioner/SKILL.md`，T15 落地） |
+| 专利权人 | `patentee-defender` | `patent-invalidity-checker`（视角复用）+ `provision-defenses` / `provision-infringement-literal` / `provision-infringement-equivalent` / `provision-damages` | 变体（基底 `patent-invalidity-checker` + 4 provision） | 防御/主张立场：无效场景反向复用 `patent-invalidity-checker`（质证/反证/修改换维持）；诉讼场景复用 P-B02/P-B03（侵权比对）、P-B06（判赔计算）、P-B05（预演对方抗辩）。差异：既有角色均为中立分析视角，**防御/主张立场已由变体角色以 systemPrompt 显式反转声明**（差异资产 `skills/patent-teams/patentee-defender/SKILL.md`，T15 落地） |
+| 合议组/裁判 | `adjudicator` | `patent-reviewer` + `provision-reexamination` | 变体（基底 `patent-reviewer` + `provision-reexamination`） | 中立裁判：`patent-reviewer`（审查基准） + P-C03（A41 复审程序：前置审查/合议审查/复审决定）。差异：dsh 岗位含**双方论点对抗评估、证据采信、结果预判**，中立裁判指令（不参与任一方策略起草）已由变体角色补充（差异资产 `skills/patent-teams/adjudicator/SKILL.md`，T15 落地） |
 | 被告代理人 | `defendant-counsel` | — | **新增** | 抗辩方立场（不侵权/现有技术抗辩/禁反言/提无效反制），Sati 无抗辩方角色（`provision-defenses` 为条款 worker，无立场声明），见 `skills/patent-teams/defendant-counsel/SKILL.md` |
 | 技术调查官 | `tech-investigator` | — | **新增** | 中立技术查明岗位，与技术专家（我方立场）区分，Sati 无中立技术调查角色，见 `skills/patent-teams/tech-investigator/SKILL.md` |
 
@@ -39,11 +39,11 @@
 | 被告代理人 | 抗辩方 | 不侵权/现有技术抗辩、禁反言与捐献排除等同、提无效反制、豁免抗辩 | `skills/patent-teams/defendant-counsel/SKILL.md` |
 | 技术调查官 | 中立技术查明 | 实施例/特征比对/等同的技术维度独立判断，输出中立技术事实意见 | `skills/patent-teams/tech-investigator/SKILL.md` |
 
-## 四、注册接线（明确留 M3，不在本任务范围）
+## 四、注册接线（M3 已落地）
 
-- 本表与 `skills/patent-teams/` 5 个角色资产**不注册**：不调 `registerRoleDefinition`、不改 `src/`、不改 `assets/`、不改 `rules/`
-- M3 接线点：5 个新增角色按 `skills/` 下 `type: role` SKILL.md 惯例补全 frontmatter（`tools`/`omitTools`/`readOnly`/`systemPrompt`）后经 `registerRoleDefinition` 注册；`domains` 以各文件"工具域建议"小节为准做 `visibleDomains` 裁剪
-- 复用角色的立场/职责差异（上表"差异说明"列）在 M3 接线时以 systemPrompt 补充，不改既有角色资产
+- 5 个新增角色（`case-manager`/`formal-examiner`/`applicant-counsel`/`defendant-counsel`/`tech-investigator`）已按 `skills/` 下 `type: role` SKILL.md 惯例补全 frontmatter（`tools`/`omitTools`/`readOnly`/`systemPrompt`；`domains` 以各文件"工具域建议"小节为准 + 追加 `"team"` 作业面）并经 `registerRoleDefinition` 注册，可按 `subagent_type` / 团队 roleSlug 调度
+- 7 个复用岗的立场/职责差异以团队变体角色资产落地（`skills/patent-teams/<id>/SKILL.md`，T15 创建）：复用既有角色的工具/审查能力基底，差异经变体 frontmatter（systemPrompt/domains/omitTools）补充，不改既有角色资产
+- 本任务不涉及 `src/` 改动（角色经既有 skills 加载路径进子代理注册表）、不改 `assets/`、不改 `rules/`
 
 ## 五、参照资产
 
