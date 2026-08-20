@@ -51,6 +51,13 @@ const TEAM_ID = "t1";
 const CAPTAIN_SESSION = "cap-1";
 const ROLE_SLUG = "patent-retriever"; // 真实 skill 角色：首会话 syncRoleDefinitions 重注册后仍存活
 
+/**
+ * 挂起等待上限：与 pollUntil 默认 400×25ms（10s）轮询上限同值。hang 链条
+ * （ticket 已设置 → 首调必发 tool_call → 回填续调必走 hangCount===1 分支）当前
+ * 是确定的，若未来重构使续调不挂起，裸 await 会无限挂起等 CI 超时——故带超时等待。
+ */
+const HANG_TIMEOUT_MS = 10_000;
+
 const SATI_YAML = [
   "schemaVersion: 1",
   "agent:",
@@ -562,7 +569,14 @@ test("失败任务自动转派：成员回合置 failed（未耗尽）→ 调度
     assert.equal(failedTask.attempt, 1);
     assert.ok(failedTask.attemptId, "首轮 attemptId 存在");
     const oldAttemptId = failedTask.attemptId!;
-    await firstHang; // m1 已进入挂起（回合未结束，m1 保持 working，kickTeam 跳过）
+    // m1 已进入挂起（回合未结束，m1 保持 working，kickTeam 跳过）；带超时等待，
+    // 防续调挂起逻辑未来被重构后本测试无限挂起（与文件内轮询点 10s 上限一致）。
+    await Promise.race([
+      firstHang,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("firstHang 超时（m1 未进入挂起）")), HANG_TIMEOUT_MS),
+      ),
+    ]);
 
     // 测试线程补招 m2（addMember 不触发调度）→ 手动触发任务图变更：
     // m2（idle）锁内重置 + 认领同一任务 attempt 2，回合内
@@ -578,9 +592,12 @@ test("失败任务自动转派：成员回合置 failed（未耗尽）→ 调度
     assert.ok(final.attemptId !== undefined && final.attemptId !== oldAttemptId, "attemptId 换新");
 
     // 放行 m1 回合收尾（turn 完成 → onMemberIdle → kickMember 无任务可派，m1 回 idle；
-    // 不覆盖转派结果）
+    // 不覆盖转派结果）。m1 idle 的写入发生在 onMemberIdle 内部（fire-and-forget），
+    // 其尾部 kickMember 可能晚于 idle 轮询点完成——加短稳定窗钉住"不覆盖"断言，
+    // 防迟到的锁内写入在断言后才落盘而未被捕获。
     releaseHang();
     await pollUntil(() => teamDb.getMember(m1)?.status === "idle");
+    await new Promise(resolve => setTimeout(resolve, 200)); // 让 fire-and-forget kickMember 收尾
     assert.equal(teamDb.getTask(teamId, taskId)?.status, "completed", "m1 收尾不覆盖转派结果");
 
     // m2 收到的 assignmentPrompt 经 submitTurn input.message 透传进成员回合：

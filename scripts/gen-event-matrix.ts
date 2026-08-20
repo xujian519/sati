@@ -18,13 +18,15 @@ import ts from "typescript";
 
 const REPO_ROOT = resolve(import.meta.dirname, "..");
 const OUTPUT_PATH = join(REPO_ROOT, "docs", "event-producer-consumer.md");
-const EVENT_TYPE_FILES = [
-  "src/agent/protocol/events.ts",
-  "src/gateway/protocol/types.ts",
-  "src/gateway/protocol/frames.ts",
+/** 事件声明语汇文件 → 语汇类型名。显式映射，不靠路径 includes 推断：未来新增任何
+ * 含 "team/" 的非 TeamEvent 语汇文件不会被路径约定静默误标。 */
+const EVENT_TYPE_FILES: Array<{ file: string; typeName: string }> = [
+  { file: "src/agent/protocol/events.ts", typeName: "AgentEvent" },
+  { file: "src/gateway/protocol/types.ts", typeName: "GatewayEvent" },
+  { file: "src/gateway/protocol/frames.ts", typeName: "WsFrame" },
   // M4（Task 11）：TeamEvent 变体（task_retried 等）入矩阵——emit 调用点（scheduler/
   // 工具层）在 collectSites 已扫描，缺的是声明语汇解析；team_event 网关帧行不变。
-  "src/agent/team/protocol/events.ts",
+  { file: "src/agent/team/protocol/events.ts", typeName: "TeamEvent" },
 ];
 
 /** 事件名 → 语汇名（AgentEvent / GatewayEvent / WsFrame）。 */
@@ -152,6 +154,10 @@ function calleeNameOf(callee: ts.Expression): string | undefined {
  * 去重修正：消费者扫描不再把对象字面量首参与 yield 记入（否则同一调用点会
  * 同时出现在生产/消费两列——同源重复）；字符串字面量分支要求 callee 名落在
  * 目标集内（属性访问经 calleeNameOf 归一，避免 emitter.on("x") 被误记为生产者）。
+ *
+ * 边界：字符串事件名形态的事件名必须落在声明的矩阵事件名集合内才进入渲染；
+ * Node EventEmitter 直传形态（首参字符串 + 第二参对象含 type 字面量）属已知
+ * 近似面（启发式 v1），当前无污染站点。
  */
 function collectSites(dir: string, calleeNames: string[], mode: CollectMode): Map<string, Site[]> {
   const sites = new Map<string, Site[]>();
@@ -273,18 +279,10 @@ function dedupeSites(sites: Site[]): Site[] {
 
 function renderMatrix(): string {
   const eventVocabs = new Map<string, string[]>();
-  for (const file of EVENT_TYPE_FILES) {
-    const full = join(REPO_ROOT, file);
+  for (const entry of EVENT_TYPE_FILES) {
+    const full = join(REPO_ROOT, entry.file);
     if (!existsSync(full)) continue;
-    // 路径区分：team/protocol/events.ts 的 alias 名为 TeamEvent（非 AgentEvent）。
-    const typeName = file.includes("team/")
-      ? "TeamEvent"
-      : file.includes("events.ts")
-        ? "AgentEvent"
-        : file.includes("frames")
-          ? "WsFrame"
-          : "GatewayEvent";
-    for (const [name, vocabs] of collectEventTypes(full, [typeName])) {
+    for (const [name, vocabs] of collectEventTypes(full, [entry.typeName])) {
       const existing = eventVocabs.get(name) ?? [];
       eventVocabs.set(name, [...new Set([...existing, ...vocabs])]);
     }
