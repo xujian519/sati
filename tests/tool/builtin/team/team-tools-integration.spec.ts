@@ -171,6 +171,85 @@ function completingMemberModel(
   };
 }
 
+/**
+ * 成员回合内失败→转派后完成模型（M4 Task 11 自动转派全链）：新回合首调发 tool_call
+ * 调 team_update_task——attempt 1 发 failed（未耗尽 maxAttempts，可自动转派），
+ * attempt >= 2 发 completed（接手成员认领后完成）；工具结果回填后的首个续调
+ * await hang 挂起（成员回合未结束、成员保持 working——测试线程在转派完成后
+ * releaseHang 放行，避免接手成员的回合在同一 hang 上死锁：仅首个回填挂起，
+ * 后续回合直接通过）。其余语义与 completingMemberModel 同款（ticket 闭包实时
+ * 读 attemptId/attempt、空串哨兵 fail-closed）。
+ */
+function retryThenCompleteModel(
+  getTicket:
+    | (() =>
+        | {
+            teamId: string;
+            taskId: string;
+            attemptId: string | undefined;
+            attempt: number;
+          }
+        | undefined)
+    | undefined,
+  hang: Promise<void>,
+  onFirstHang: () => void,
+): ModelRuntime {
+  let hangCount = 0;
+  return {
+    stream: async function* (request: CanonicalModelRequest) {
+      yield { type: "message_start", role: "assistant" };
+      const last = request.messages[request.messages.length - 1];
+      const lastHasToolResult = last?.content.some(block => block.type === "tool_result") ?? false;
+      const ticket = getTicket?.();
+      if (!lastHasToolResult && ticket !== undefined) {
+        const status = ticket.attempt <= 1 ? "failed" : "completed";
+        yield {
+          type: "tool_call_end",
+          toolCall: {
+            id: "retry-member-call",
+            name: "team_update_task",
+            input: {
+              teamId: ticket.teamId,
+              taskId: ticket.taskId,
+              status,
+              attemptId: ticket.attemptId ?? "",
+              ...(status === "failed"
+                ? { reason: "集成测试模拟失败（未耗尽，可自动转派）" }
+                : { output: `集成测试转派后完成任务 ${ticket.taskId}` }),
+            },
+          },
+        };
+        yield { type: "message_end", finishReason: "tool_call" };
+      } else {
+        hangCount += 1;
+        if (hangCount === 1) {
+          onFirstHang();
+          await hang; // 首个回填挂起：m1 回合停在此处，等测试触发转派后放行
+        }
+        yield { type: "text_delta", text: "本回合结束。" };
+        yield { type: "message_end", finishReason: "stop" };
+      }
+    },
+    complete: async () => {
+      throw new Error("unused");
+    },
+    getCapabilities: () => ({
+      supportsToolUse: true,
+      supportsStreaming: true,
+      supportsParallelToolCalls: false,
+      supportsThinking: false,
+      supportsJsonSchema: false,
+      supportsSystemPrompt: true,
+      supportsPromptCache: false,
+      maxContextTokens: 64000,
+      maxOutputTokens: 8192,
+    }),
+    getMultimodal: () => ({ input: ["text"] }),
+    getProviderProtocol: () => undefined,
+    getProviderBaseUrl: () => undefined,
+  };
+}
+
 /** 团队工具 factory 直调（事件链路由 emit 用 no-op，由 gateway 集成用例覆盖）。 */
 function makeTools(db: TeamDb, scheduler: TeamScheduler) {
   const emit: TeamEventEmitter = () => true;
@@ -405,6 +484,127 @@ test("scanner 冷恢复回合结束续派：断点成员被重唤醒，未完成
     assert.notEqual(final.attemptId, "old-attempt"); // 重派路径使用全新 attemptId
     assert.equal(final.handoffId, undefined);
     assert.equal(teamDb.getMember("m1")?.status, "idle");
+  } finally {
+    await disposeGateway(result, root);
+  }
+});
+
+/**
+ * 失败任务自动转派全链（M4 Task 11）：m1 回合内 team_update_task(failed)（未耗尽）
+ * → 测试线程触发 onTaskGraphChanged → 调度器锁内重置回池（task_retried）→ m2
+ * （idle）认领同一任务 attempt 2 → m2 回合内 team_update_task(completed) 完成。
+ * 断言行为面（assignee m2 / attempt 2 / attemptId 换新 / 最终 completed）+ m2 收到
+ * assignmentPrompt（submitTurn input.message 透传，转录 accepted_input 含 Attempt: 2）。
+ *
+ * 时序设计（关键）：team_update_task(failed) 工具自身会 fire-and-forget 触发
+ * onTaskGraphChanged，若 m2 已就位会在 m1 回合进行中就完成转派（failed 中间态
+ * 极短、不可轮询）。故建队时**只加 m1**：failed 后 kickTeam 无其他 idle 成员可派，
+ * failed 状态稳定可断言；随后测试线程 addMember(m2)（不触发调度）并手动
+ * onTaskGraphChanged 完成转派，时序完全可控。m1 模型在工具结果回填后 await hang
+ * （回合未结束、m1 保持 working、kickTeam 跳过），测试在转派完成后 releaseHang
+ * 放行；m2 回填续调不挂起（hangCount>1 直接过）——避免 m2 回合在 hang 上死锁。
+ */
+test("失败任务自动转派：成员回合置 failed（未耗尽）→ 调度器重置回池 → 其他 idle 成员认领", async () => {
+  // 模型闭包在 createLocalGateway 内部创建（db 句柄尚不可得）：经容器延迟引用——
+  // const 直接捕获会触发 TS2454（use before assigned），let 触发 ESLint prefer-const。
+  const refs: { db: TeamDb | undefined } = { db: undefined };
+  let ticket: { teamId: string; taskId: string } | undefined;
+  // 在 Promise executor 中同步赋值（releaseHang/firstHangWaited 在构造完成时已就绪）
+  let releaseHang!: () => void;
+  let firstHangWaited!: () => void;
+  const hang = new Promise<void>(resolve => {
+    releaseHang = resolve;
+  });
+  const firstHang = new Promise<void>(resolve => {
+    firstHangWaited = resolve;
+  });
+  const memberModel = retryThenCompleteModel(
+    () => {
+      if (ticket === undefined) return undefined;
+      const task = refs.db?.getTask(ticket.teamId, ticket.taskId);
+      if (task === undefined) return undefined;
+      return { ...ticket, attemptId: task.attemptId, attempt: task.attempt };
+    },
+    hang,
+    firstHangWaited,
+  );
+  const { result, root } = await makeGateway("autoretry", () => memberModel);
+  const teamDb = result.teamSubsystem.db;
+  refs.db = teamDb;
+  const teamScheduler = result.teamSubsystem.scheduler;
+  const tools = makeTools(teamDb, teamScheduler);
+  // 会话准备前角色表尚未从 skills 加载：显式注册真实 skill 角色（同 fullchain 用例）。
+  registerRoleDefinition({
+    id: ROLE_SLUG,
+    description: "专利检索型团队成员（自动转派集成测试显式注册）",
+    allowedTools: ["*"],
+    visibleDomains: ["patent", "search", "team"],
+    omitProjectInstructions: false,
+    omitGitStatus: false,
+    isReadOnly: false,
+    systemPromptSuffix: "",
+  });
+  try {
+    const captainCtx = { sessionId: CAPTAIN_SESSION } as never;
+    const created = await tools.teamCreate.execute({ name: "自动转派团队" }, captainCtx);
+    const teamId = created.data!.teamId;
+    // 先只加 m1：failed 后无人可派，failed 中间态稳定（否则 failed 工具的
+    // fire-and-forget onTaskGraphChanged 会在 m1 回合进行中立即完成转派）。
+    const m1 = (await tools.teamAddMember.execute({ teamId, roleSlug: ROLE_SLUG }, captainCtx)).data!.memberId;
+    const taskOut = await tools.teamCreateTask.execute({ teamId, subject: "失败转派任务 T" }, captainCtx);
+    const taskId = taskOut.data!.taskId;
+    ticket = { teamId, taskId };
+
+    // m1 回合内 team_update_task(failed)：等任务 failed（attempt 1、assignee m1）
+    await pollUntil(() => teamDb.getTask(teamId, taskId)?.status === "failed");
+    const failedTask = teamDb.getTask(teamId, taskId)!;
+    assert.equal(failedTask.assigneeId, m1, "首轮由 m1 认领");
+    assert.equal(failedTask.attempt, 1);
+    assert.ok(failedTask.attemptId, "首轮 attemptId 存在");
+    const oldAttemptId = failedTask.attemptId!;
+    await firstHang; // m1 已进入挂起（回合未结束，m1 保持 working，kickTeam 跳过）
+
+    // 测试线程补招 m2（addMember 不触发调度）→ 手动触发任务图变更：
+    // m2（idle）锁内重置 + 认领同一任务 attempt 2，回合内
+    // team_update_task(completed) 完成（wake 链 await 完整成员回合）
+    const m2 = (await tools.teamAddMember.execute({ teamId, roleSlug: ROLE_SLUG }, captainCtx)).data!.memberId;
+    assert.notEqual(m1, m2, "双成员");
+    await teamScheduler.onTaskGraphChanged(teamId);
+    await pollUntil(() => teamDb.getTask(teamId, taskId)?.status === "completed");
+    const final = teamDb.getTask(teamId, taskId)!;
+    assert.equal(final.status, "completed", "转派后任务完成");
+    assert.equal(final.assigneeId, m2, "转派给 idle 的 m2");
+    assert.equal(final.attempt, 2, "attempt 由 beginTaskAttempt 递增到 2");
+    assert.ok(final.attemptId !== undefined && final.attemptId !== oldAttemptId, "attemptId 换新");
+
+    // 放行 m1 回合收尾（turn 完成 → onMemberIdle → kickMember 无任务可派，m1 回 idle；
+    // 不覆盖转派结果）
+    releaseHang();
+    await pollUntil(() => teamDb.getMember(m1)?.status === "idle");
+    assert.equal(teamDb.getTask(teamId, taskId)?.status, "completed", "m1 收尾不覆盖转派结果");
+
+    // m2 收到的 assignmentPrompt 经 submitTurn input.message 透传进成员回合：
+    // 转录 accepted_input 应含 "Attempt: 2" 与新 attemptId
+    const { readTranscript } = await import("../../../../src/session/transcript/TranscriptReader.js");
+    const { getPilotProjectChatDir } = await import("../../../../src/pilot/index.js");
+    const { sanitizeSessionIdForPath } = await import("../../../../src/session/storage/ProjectSessionStorage.js");
+    const chatDir = getPilotProjectChatDir(root, root);
+    const m2Path = join(chatDir, `${sanitizeSessionIdForPath(memberSessionKey(teamId, m2))}.jsonl`);
+    let acceptedInput: unknown;
+    for (let i = 0; i < 400; i += 1) {
+      try {
+        const t = await readTranscript(m2Path);
+        acceptedInput = t.entries.find(e => e.type === "accepted_input");
+        if (acceptedInput !== undefined) break;
+      } catch {
+        // 转录尚未落盘，重试
+      }
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.ok(acceptedInput !== undefined, "m2 回合应有 accepted_input 转录");
+    const text = JSON.stringify(acceptedInput);
+    assert.match(text, /Attempt: 2/, "m2 assignmentPrompt 含 attempt 2");
+    assert.match(text, new RegExp(`Attempt id: ${final.attemptId}`), "m2 assignmentPrompt 含新 attemptId");
   } finally {
     await disposeGateway(result, root);
   }
