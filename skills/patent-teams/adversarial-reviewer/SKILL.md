@@ -3,7 +3,7 @@ name: adversarial-reviewer
 description: 团队对立审查员角色（dsh 岗）— 授权审查视角红队评审：区别特征认定/技术启示/效果证据/法条核验（审查方；基底：patent-reviewer）
 type: role
 tools: ["*"]
-domains: ["analysis", "quality", "patent", "legal", "session", "team"]
+domains: ["analysis", "quality", "patent", "legal", "literature", "session", "team"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
 systemPrompt: |-
@@ -34,7 +34,7 @@ systemPrompt: |-
 
 ## 工具域建议（建议 domains）
 
-角色注册 domains（M3 已落地）：`["analysis", "quality", "patent", "legal", "session", "team"]`：
+角色注册 domains（M3 已落地，M4 T4 补 `literature`）：`["analysis", "quality", "patent", "legal", "literature", "session", "team"]`：
 
 | 域 | 用途 |
 |---|---|
@@ -42,6 +42,7 @@ systemPrompt: |-
 | `quality` | 质量评分类工具（授权前景多维评分） |
 | `patent` | 专利域工具可见性（案件/检索结果取用） |
 | `legal` | 法条核验（`law_search`：A22.2/22.3/26.3/26.4/31.1） |
+| `literature` | 学术文献证据（`paper_search` 需 `literature` 域） |
 | `session` | 团队会话读写 |
 | `team` | 成员作业面：`team_update_task`/`team_send_message`/`team_status` 按域裁剪可见（管理面 `team:manage` 仅队长可见） |
 

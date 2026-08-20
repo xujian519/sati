@@ -3,7 +3,7 @@ name: applicant-counsel
 description: 申请人代理角色 — 权利要求范围最大化：扩张机会、从权布局、合并修改备选、争辩策略（申请人方立场）
 type: role
 tools: ["*"]
-domains: ["drafting", "legal", "patent", "analysis", "session", "team"]
+domains: ["drafting", "legal", "literature", "patent", "analysis", "session", "team"]
 omitTools: ["execute_code"]
 readOnly: false
 systemPrompt: |-
@@ -38,7 +38,7 @@ systemPrompt: |-
 
 ## 工具域建议（建议 domains）
 
-角色注册 domains（M3 已落地：经 registerRoleDefinition 注册，可按 subagent_type / 团队 roleSlug 调度）：`["drafting", "legal", "patent", "analysis", "session", "team"]`：
+角色注册 domains（M3 已落地：经 registerRoleDefinition 注册，可按 subagent_type / 团队 roleSlug 调度，M4 T4 补 `literature`）：`["drafting", "legal", "literature", "patent", "analysis", "session", "team"]`：
 
 > 注：域为语义分组，工具实际按 metadata domain 裁剪（未标注 domain 的工具始终可见）；表中"用途"列提及的具体工具仅示意该域的能力取向，其 metadata domain 不一定等于所在列语义域。
 
@@ -46,6 +46,7 @@ systemPrompt: |-
 |---|---|
 | `drafting` | 争辩稿/修改方案起草（如 `draft_claims`） |
 | `legal` | 法条核验（A33 修改超范围、A26.4 清楚性依据） |
+| `literature` | 学术文献证据（`paper_search` 需 `literature` 域） |
 | `patent` | 专利域工具可见性 |
 | `analysis` | 区别特征/审查意见分析 |
 | `session` | 团队会话读写 |
