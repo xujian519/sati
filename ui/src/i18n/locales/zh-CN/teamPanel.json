@@ -1,0 +1,48 @@
+{
+  "loading": "团队面板加载中…",
+  "opSucceeded": "操作成功",
+  "opFailed": "操作失败",
+  "overview": {
+    "title": "团队",
+    "createPlaceholder": "新团队名称…",
+    "create": "新建团队",
+    "memberCount": "{{count}} 名成员",
+    "taskCount": "{{count}} 个任务",
+    "captainOnline": "在线",
+    "captainOffline": "离线",
+    "archived": "已归档",
+    "noTeams": "暂无团队，先创建一个。"
+  },
+  "members": {
+    "title": "成员",
+    "add": "添加成员",
+    "rolePlaceholder": "选择角色…",
+    "statusIdle": "空闲",
+    "statusWorking": "工作中",
+    "retired": "已退休",
+    "modelRoute": "{{provider}} / {{model}}"
+  },
+  "tasks": {
+    "title": "任务",
+    "statusPending": "待认领",
+    "statusClaimed": "已认领",
+    "statusInProgress": "进行中",
+    "statusCompleted": "已完成",
+    "statusFailed": "失败",
+    "statusCancelled": "已取消",
+    "attempt": "第 {{count}} 次尝试",
+    "blockedBy": "被 {{count}} 个依赖阻塞",
+    "unassigned": "未分配",
+    "reassign": "转派",
+    "reassignPlaceholder": "指派给…",
+    "empty": "暂无任务"
+  },
+  "archive": {
+    "button": "归档团队",
+    "confirmBody": "归档团队 {{name}}？此操作不可逆。"
+  },
+  "events": {
+    "title": "事件流",
+    "empty": "暂无团队事件。事件订阅接线后，实时事件流将显示在此处。"
+  }
+}

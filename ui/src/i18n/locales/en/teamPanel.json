@@ -1,0 +1,48 @@
+{
+  "loading": "Loading team panel…",
+  "opSucceeded": "Operation succeeded",
+  "opFailed": "Operation failed",
+  "overview": {
+    "title": "Teams",
+    "createPlaceholder": "New team name…",
+    "create": "Create Team",
+    "memberCount": "{{count}} members",
+    "taskCount": "{{count}} tasks",
+    "captainOnline": "Online",
+    "captainOffline": "Offline",
+    "archived": "Archived",
+    "noTeams": "No teams yet. Create one to start."
+  },
+  "members": {
+    "title": "Members",
+    "add": "Add Member",
+    "rolePlaceholder": "Select role…",
+    "statusIdle": "Idle",
+    "statusWorking": "Working",
+    "retired": "Retired",
+    "modelRoute": "{{provider}} / {{model}}"
+  },
+  "tasks": {
+    "title": "Tasks",
+    "statusPending": "Pending",
+    "statusClaimed": "Claimed",
+    "statusInProgress": "In Progress",
+    "statusCompleted": "Completed",
+    "statusFailed": "Failed",
+    "statusCancelled": "Cancelled",
+    "attempt": "Attempt {{count}}",
+    "blockedBy": "Blocked by {{count}}",
+    "unassigned": "Unassigned",
+    "reassign": "Reassign",
+    "reassignPlaceholder": "Assign to…",
+    "empty": "No tasks yet"
+  },
+  "archive": {
+    "button": "Archive Team",
+    "confirmBody": "Archive {{name}}? This is irreversible."
+  },
+  "events": {
+    "title": "Events",
+    "empty": "No team events yet. The live stream will appear here once event subscription is wired up."
+  }
+}
