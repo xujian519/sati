@@ -149,6 +149,7 @@ import { SkillManager, migrateLegacyBundledSkillCopies } from "../extension/skil
 import { createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
 import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
+import { registerNestedTeamRoleDefinitions } from "./teamRoleAssembly.js";
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
@@ -1483,7 +1484,7 @@ class ProjectRuntimeRegistry {
   private async prepareSessionRuntime(context: GatewaySessionContext) {
     const runtime = this.resolve(context.projectKey);
     await runtime.pluginRuntime.refresh();
-    syncRoleDefinitions(runtime.pluginRuntime);
+    syncRoleDefinitions(runtime.pluginRuntime, this.options.builtinSkillsRoot);
     await this.ensureMcpReady(runtime);
     const contributions = runtime.pluginRuntime.snapshotContributions();
 
@@ -2235,7 +2236,7 @@ function cleanEnvValue(value: string | undefined): string | undefined {
  * 内置预设过滤而漏清理），再注册当前全部角色。
  * 内置 4 个预设（SUBAGENT_DEFINITIONS）不受影响。
  */
-function syncRoleDefinitions(pluginRuntime: PluginRuntime): void {
+function syncRoleDefinitions(pluginRuntime: PluginRuntime, builtinSkillsRoot?: string): void {
   for (const id of listRegisteredRoleIds()) {
     unregisterRoleDefinition(id);
   }
@@ -2245,4 +2246,7 @@ function syncRoleDefinitions(pluginRuntime: PluginRuntime): void {
       registerRoleDefinition(definition);
     }
   }
+  // M3 T15：skills/patent-teams/ 嵌套目录（自身无 SKILL.md，一级扫描跳过），
+  // 经同一 roleFromContribution → registerRoleDefinition 路径补注册。
+  registerNestedTeamRoleDefinitions(builtinSkillsRoot);
 }
