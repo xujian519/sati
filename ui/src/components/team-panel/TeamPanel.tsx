@@ -12,7 +12,8 @@ import { EventStream } from "./EventStream";
  */
 export function TeamPanel({ sessionId }: { sessionId?: string | null }) {
   const { t } = useTranslation("teamPanel");
-  const { snapshot, loading, error, refresh, callAction } = useTeamPanel();
+  // I1：sessionId 透传给数据层，面板操作以当前会话身份执行（POST /action 携带 sessionKey）
+  const { snapshot, loading, error, refresh, callAction } = useTeamPanel(sessionId);
 
   // 初始占位：snapshot 未就绪且 loading 中（T8 定案：以 snapshot === null 为初始分支，不依赖 loading 单独分支）
   if (loading && snapshot === null) {
