@@ -43,6 +43,9 @@ import { isImeEnterEvent } from "../../../utils/ime";
 import { useFileMentions } from "./useFileMentions";
 import { type SlashCommand, useSlashCommands } from "./useSlashCommands";
 
+/** 草稿落盘防抖窗口（ms）：击键停止 500ms 后才写 localStorage。 */
+const DRAFT_SAVE_DEBOUNCE_MS = 500;
+
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
@@ -1110,6 +1113,15 @@ export function useChatComposerState({
     inputValueRef.current = input;
   }, [input]);
 
+  // 未落盘的草稿（防抖窗口内）：卸载/页面卸载前同步 flush。
+  const pendingDraftRef = useRef<{ key: string; value: string } | null>(null);
+  const flushPendingDraft = () => {
+    const pending = pendingDraftRef.current;
+    if (!pending) return;
+    pendingDraftRef.current = null;
+    safeLocalStorage.setItem(pending.key, pending.value);
+  };
+
   useEffect(() => {
     if (!isLoading) {
       if (queuedBusySendRef.current && handleSubmitRef.current) {
@@ -1124,15 +1136,34 @@ export function useChatComposerState({
     }
   }, [isLoading]);
 
+  // 草稿防抖保存：连续击键不落盘（localStorage.setItem 是同步主线程 I/O），
+  // 停顿 DRAFT_SAVE_DEBOUNCE_MS 后写一次；卸载/页面卸载前 flush 未落盘值，
+  // 保证停顿未满即切走/关闭时不丢草稿。空输入同步删除（低频路径）。
   useEffect(() => {
     const key = activeDraftStorageKeyRef.current;
     if (!key) return;
-    if (input !== "") {
-      safeLocalStorage.setItem(key, input);
-    } else {
+    if (input === "") {
+      pendingDraftRef.current = null;
       safeLocalStorage.removeItem(key);
+      return;
     }
+    pendingDraftRef.current = { key, value: input };
+    const timer = setTimeout(() => {
+      pendingDraftRef.current = null;
+      safeLocalStorage.setItem(key, input);
+    }, DRAFT_SAVE_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      flushPendingDraft();
+    };
   }, [input]);
+
+  // 页面卸载（刷新/关闭）前 flush 未落盘草稿——cleanup 在路由切换时也会跑，
+  // 但整页关闭不触发组件 cleanup，需 beforeunload 兜底。
+  useEffect(() => {
+    window.addEventListener("beforeunload", flushPendingDraft);
+    return () => window.removeEventListener("beforeunload", flushPendingDraft);
+  }, []);
 
   useEffect(() => {
     const previousKey = activeDraftStorageKeyRef.current;

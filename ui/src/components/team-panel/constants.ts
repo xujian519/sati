@@ -1,7 +1,7 @@
 import type { TeamWireEvent } from "./types";
 
-/** 面板快照轮询间隔（ms）。 */
-export const TEAM_PANEL_POLL_MS = 5_000;
+/** 面板快照轮询间隔（ms）。10s：面板数据低动态（任务/成员状态），对齐 CronV2/AlwaysOn 15s 量级。 */
+export const TEAM_PANEL_POLL_MS = 10_000;
 
 /** Docked 态面板宽度（px）。 */
 export const TEAM_PANEL_DEFAULT_WIDTH = 380;
