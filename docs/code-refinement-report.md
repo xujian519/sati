@@ -4,7 +4,7 @@
 - 终审日期：2026-08-20
 - 执行范围：`src/`、`ui/src`、`ui/server`、`tests/`、`scripts/`
 
-## 一、执行状态：4/42 张日卡
+## 一、执行状态：5/42 张日卡（含 C42 终审）
 
 | 阶段 | 卡 | 状态 |
 |---|---|---|
@@ -15,7 +15,7 @@
 | 阶段 4 横切收尾 | C36-C41（tests 审阅 ×2、scripts、console、any、catch/TODO） | ⬜ 6 张未做 |
 | **C42 终审** | 本报告 + 技术债注记 | ✅ 本次完成 |
 
-进度 9.5%（4/42）；无 P0 行为缺陷遗留（C01-C04 审阅发现均为 P1/P2/P3，记录不处理的项已登记在各卡记录中）。
+完成 5 张（C01-C04 精炼卡 + C42 终审卡），**C05-C41 共 37 张未做**；进度 5/42（11.9%）。无 P0 行为缺陷遗留（C01-C04 审阅发现均为 P1/P2/P3，记录不处理的项已登记在各卡记录中）。
 
 ## 二、指标对比（2026-08-18 基线 → 2026-08-20 实测）
 
@@ -24,7 +24,7 @@
 | 裸 console（src + ui/server） | 657 | <300 | **670** | ↑13：功能增量（团队编排 M1-M4、StylePanel、模型功能）大于 C01-C04 清理量；C39 横切卡未做 |
 | `any`/`@ts-expect-error`（src + ui/src） | 20 | ≤10 | **21** | ↑1：C40 未做 |
 | 无参 `catch {`（src + ui/src） | 485 | 显著下降 | **501** | ↑16：C41 未做 |
-| TODO/FIXME/HACK | 24 | ≤5 | **27** | ↑3：C41 未做 |
+| TODO/FIXME/HACK（src + ui + ui/server + tests，grep `TODO\|FIXME\|HACK` 口径） | 24 | ≤5 | **27** | ↑3：C41 未做 |
 | 后端测试 | 873（08-02）→ 3346（M2 时点） | — | **3529 pass / 0 fail / 3 skip** | 团队编排 M1-M4 + 面板 + StylePanel 增量测试 |
 
 **结论**：四项指标均未达目标，且较基线小幅回升——精炼只完成 4 张卡，清理量不足以覆盖同期功能增长。指标达标依赖 C39-C41 横切卡执行（console 收束、any 收敛、catch 治理），属预期中的进度缺口，非执行异常。
@@ -47,8 +47,8 @@
 
 ## 五、遗留清单（未完成卡 → 后续推进）
 
-1. **C05-C41 共 38 张卡**：按进度表优先级继续（阶段 1 剩余 gateway/context/tool 优先）
-2. **C39 裸 console 收束**：670 处（目标 <300）——优先 `sati.ts`(54)、`createLocalGateway.ts`(24) 热点
+1. **C05-C41 共 37 张卡**：按进度表优先级继续（阶段 1 剩余 gateway/context/tool 优先）
+2. **C39 裸 console 收束**：670 处（目标 <300）——优先 `sati.ts`(54)、`createLocalGateway.ts`(31) 热点
 3. **C40 any 收敛**：21 处（目标 ≤10）——优先主链路 `planMode.ts`(6)、`MessageProjector.ts`(5)
 4. **C41 catch/TODO 治理**：501 处无参 catch、27 处 TODO/FIXME（需逐条核实业务语义）
 5. **llm-replay 纪律提示**：任何工具 inputSchema 改动（含描述文本）与新增默认工具都会破坏 fixture——新增工具优先条件注册（`team_*`/`document_style_*` 先例），改 inputSchema 后须走重录流程

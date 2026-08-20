@@ -346,10 +346,10 @@ Top 5 热点（本次 `grep -c` 实测）：
 
 ---
 
-# 2026-08-20 注记（C42 代码精炼终审跟进）
+## 2026-08-20 注记（C42 代码精炼终审跟进）
 
 - 背景：`docs/code-refinement-plan.md` 保守档第 42 张终审卡 + 团队编排 M1-M4 / StylePanel 并行落地
-- 关联文档：`docs/code-refinement-report.md`（终审报告）、`docs/superpowers/plans/2026-08-20-agent-teams-{m2,m3,m4}*.md`
+- 关联文档：`docs/code-refinement-report.md`（终审报告）、`docs/superpowers/plans/2026-08-20-agent-teams-m2-taskpool-scheduler.md`、`docs/superpowers/plans/2026-08-20-agent-teams-m3-team-tools.md`、`docs/superpowers/plans/2026-08-20-agent-teams-m4-activity-panel.md`
 
 ## 遗留清单状态更新
 
@@ -365,7 +365,7 @@ Top 5 热点（本次 `grep -c` 实测）：
 ## 新增/确认的债务项（08-20 复核）
 
 1. **团队编排模块规模**：`src/agent/team/` 约 20 文件（scheduler.ts、member-waker.ts、team-db.ts 为核心），活动面板 `ui/src/components/team-panel/` 浮层版约 12 文件——均属新功能增量，未列入精炼轮转计划（阶段 3 C27-C35 未覆盖 team-panel），后续补卡
-2. **条件注册工具集纪律**：`team_*`（9 工具）与 `document_style_*`（2 工具）均为条件注册——无参 `createBuiltinRegistry()` 工具集 = 44 个，与 llm-replay fixture 绑定；**新增默认工具会破坏 fixture**，须条件注册或重录（CLAUDE.md 与 `code-refinement-report.md` §五.5 已记载）
+2. **条件注册工具集纪律**：`team_*`（9 工具）与 `document_style_*`（2 工具）均为条件注册——**重放对齐注册表（`createBuiltinRegistry({ askUserQuestion: false, planMode: false })`）= 44 个**，与 llm-replay fixture 绑定；无参注册表 = 47 个（多 `ask_user_question`/`enter_plan_mode`/`exit_plan_mode`，**不匹配** fixture）。**新增默认注册工具会破坏 fixture**，须条件注册或重录（CLAUDE.md 与 `code-refinement-report.md` §五.5 已记载）
 3. **四项指标回升**：console 670 / any 21 / catch 501 / TODO 27（基线 657/20/485/24）——功能增量大于精炼清理量，C39-C41 横切卡未执行所致
 4. **并行工作流文件占用**（08-20 观测）：TokenAccountingRuntime/SessionRouter/kg-store/case-law-search/patentCache/TranscriptChain 等存在未提交的优化改动（WeakMap 键缓存、summary 提取等），由并行窗口持有，提交时须精确路径分离
 

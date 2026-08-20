@@ -113,7 +113,7 @@
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ⬜ |
 | C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ⬜ |
 | C41 | 无参 catch 治理 + TODO/FIXME 核实 | ⬜ |
-| C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 4/42，38 卡遗留） |
+| C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 5/42，C05-C41 共 37 卡遗留） |
 
 ## 五、进度表（每日更新）
 
