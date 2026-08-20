@@ -30,6 +30,7 @@ import skillsRoutes from "./routes/skills.js";
 import settingsRoutes from "./routes/settings.js";
 import configRoutes from "./routes/config.js";
 import gatewayRoutes from "./routes/gateway.js";
+import teamsRoutes from "./routes/teams.js";
 import agentRoutes from "./routes/agent.js";
 import updateRoutes from "./routes/update.js";
 import projectsRoutes from "./routes/projects.js";
@@ -128,6 +129,9 @@ app.use("/api/config", authenticateToken, configRoutes);
 
 // Gateway IM channel setup routes (protected)
 app.use("/api/gateway", authenticateToken, gatewayRoutes);
+
+// 团队活动面板 API Routes (protected) — 全部经 gateway 协议方法转发（M4）
+app.use("/api/teams", authenticateToken, teamsRoutes);
 
 // User API Routes (protected)
 app.use("/api/user", authenticateToken, userRoutes);
