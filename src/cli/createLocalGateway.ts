@@ -96,6 +96,8 @@ import {
   createGatewayPermissionHook,
 } from "../gateway/permission/createGatewayPermissionHook.js";
 import { SessionPresence } from "../gateway/server/sessionPresence.js";
+import { buildTeamPanelSnapshot } from "../gateway/teamPanel.js";
+import { SatiToolRuntimeError } from "../tool/protocol/errors.js";
 import {
   McpRuntime,
   createMcpToolDefinitionsFromRuntime,
@@ -444,6 +446,30 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         sessionPresence.panelTouch(key);
       }
       return { touched: input.sessionKeys.length };
+    },
+    // M4（团队活动面板，T6）：数据面——TeamDb 直查 + presence 在线态快照，
+    // 不触发模型回路。teamDb 声明于 gateway 之后（团队子系统区块），闭包延迟引用。
+    teamPanelSnapshot: async (_input: { sessionKey?: string }) => {
+      return buildTeamPanelSnapshot(teamDb, sessionPresence);
+    },
+    // M4（团队活动面板，T6）：操作面——直调既有 team_* 工具。权限自守
+    // （requireTeamCaptain/requireTeamMember 基于 context.sessionId）、TeamEvent
+    // 广播走工具层既有链（emit 经 TeamToolsOptions 注入），面板不重复实现语义。
+    // 工具经 registry.resolve(fallbackProjectRoot).tools 取当前项目 runtime 注册表
+    // （setTeamTools 注入后含 9 个 team_* 工具；面板操作在启动扫描后发生，时序安全）。
+    teamToolCall: async (input: { tool: string; input: Record<string, unknown>; sessionKey?: string }) => {
+      const tool = registry.resolve(fallbackProjectRoot).tools.get(input.tool);
+      if (!tool) {
+        return { ok: false, error: { code: "team_unknown_tool", message: `工具 ${input.tool} 不存在` } };
+      }
+      try {
+        const out = await tool.execute(input.input as never, { sessionId: input.sessionKey ?? "" } as never);
+        return { ok: true, data: out.data };
+      } catch (error) {
+        const code = error instanceof SatiToolRuntimeError ? error.code : "tool_execution_failed";
+        const message = error instanceof Error ? error.message : String(error);
+        return { ok: false, error: { code, message } };
+      }
     },
     async reloadConfig() {
       let changedPaths: string[] = [];

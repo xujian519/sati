@@ -687,4 +687,13 @@ export interface Gateway {
     touched: number;
     error?: { code: string; message: string };
   }>;
+
+  /** M4：团队面板快照（TeamDb 直查 + presence 在线态；不触发模型回路）。 */
+  teamPanelSnapshot?(input: { sessionKey?: string }): Promise<{ teams: unknown[] }>;
+  /** M4：面板操作——直调既有 team_* 工具（权限 requireTeamCaptain/requireTeamMember + TeamEvent 广播走工具层）。 */
+  teamToolCall?(input: { tool: string; input: Record<string, unknown>; sessionKey?: string }): Promise<{
+    ok: boolean;
+    data?: unknown;
+    error?: { code: string; message: string };
+  }>;
 }

@@ -269,6 +269,21 @@ export class GatewayWsConnection {
           return this.options.gateway.panelHeartbeat(frame.params as never);
         }
         return Promise.resolve(notConfigured({ touched: 0 }, "Panel heartbeat not available"));
+      case "team_panel_snapshot":
+        if (this.options.gateway.teamPanelSnapshot) {
+          return this.options.gateway.teamPanelSnapshot(frame.params as never);
+        }
+        return Promise.resolve(notConfigured({ teams: [] }, "Team panel snapshot not available"));
+      case "team_tool_call":
+        if (this.options.gateway.teamToolCall) {
+          return this.options.gateway.teamToolCall(frame.params as never);
+        }
+        return Promise.resolve(
+          notConfigured(
+            { ok: false, error: { code: "not_configured", message: "Team tool call not available" } },
+            "Team tool call not available",
+          ),
+        );
       case "elicitation_respond":
         return this.options.gateway.respondElicitation(frame.params as never);
       case "permission_decide":
