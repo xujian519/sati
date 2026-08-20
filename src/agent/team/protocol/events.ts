@@ -20,6 +20,15 @@ export type TeamEvent =
   | { type: "task_failed"; teamId: string; taskId: string; memberId: string; attempt: number; reason?: string }
   | { type: "task_reassigned"; teamId: string; taskId: string; fromMemberId: string; toMemberId: string }
   | {
+      type: "task_retried";
+      teamId: string;
+      taskId: string;
+      /** 重置后的当前 attempt（计次由 beginTaskAttempt 再 +1）。 */
+      attempt: number;
+      /** 失败时的 assignee（上次尝试者）；可 undefined（如无人认领失败）。 */
+      memberId?: string;
+    }
+  | {
       type: "message_delivered";
       teamId: string;
       recipient: string;

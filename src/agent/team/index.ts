@@ -46,6 +46,7 @@ export {
   attemptsExhausted,
   type TaskAttemptResult,
 } from "./taskpool/attempt.js";
+export { retryFailedTask, retryableFailedTasks } from "./taskpool/retry.js";
 export { toGatewayEvent } from "./protocol/broadcast.js";
 export type { TeamEvent, TeamEventEmitter } from "./protocol/events.js";
 
