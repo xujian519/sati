@@ -10,23 +10,25 @@
  */
 
 /**
- * 解析为正整数（>0）。非法输入返回 undefined。
- * 语义对齐 createLocalGateway.readPositiveIntegerEnv：
- * parseInt + trim + finite + >0，Math.floor 兜底（parseInt 结果恒为整数）。
+ * 解析为不小于 `minInclusive` 的整数（parseInt 十进制前缀语义）。
+ * 非法输入返回 undefined。Math.floor 兜底（parseInt 结果恒为整数，与
+ * 原 createLocalGateway.readPositiveIntegerEnv / telemetry 解析一致）。
  */
-export function parsePositiveInt(value: string | undefined): number | undefined {
+function parseBoundedInt(value: string | undefined, minInclusive: number): number | undefined {
   if (value === undefined) return undefined;
   const parsed = Number.parseInt(value.trim(), 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  if (!Number.isFinite(parsed) || parsed < minInclusive) return undefined;
   return Math.floor(parsed);
+}
+
+/** 解析为正整数（>0）。非法输入返回 undefined。 */
+export function parsePositiveInt(value: string | undefined): number | undefined {
+  return parseBoundedInt(value, 1);
 }
 
 /** 解析为非负整数（>=0）。非法输入返回 undefined。 */
 export function parseNonNegativeInt(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number.parseInt(value.trim(), 10);
-  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
-  return Math.floor(parsed);
+  return parseBoundedInt(value, 0);
 }
 
 /** env 读取：正整数解析失败时回退 fallback（对齐 telemetry/collector 原实现）。 */
