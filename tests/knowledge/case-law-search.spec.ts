@@ -44,6 +44,10 @@ function createEngine(includeFts = true): { engine: CaseLawSearchEngine; dir: st
   insertDoc.run("d2", "raw", "judgment", "某专利侵权判决", null, "最高人民法院", null, 200, 1);
   insertDoc.run("d3", "raw", "case", "另一无效决定", "999999999", null, "777777", 100, 1);
   insertDoc.run("d4", "wiki", "case", "创造性-审查标准-磨削抛光", null, null, null, 150, 1);
+  // P1 转义用例：d5 title 含字面 %（搜 "100%" 应字面匹配）；d6 为通配对照
+  // （% 若被当作通配符会误命中 d6，字面匹配则只有 d5）。
+  insertDoc.run("d5", "raw", "case", "100% 有效率方案", null, null, null, 120, 1);
+  insertDoc.run("d6", "raw", "case", "100X有效率方案", null, null, null, 90, 1);
 
   const insertChunk = db.prepare(
     `INSERT INTO chunks (id, document_id, chunk_index, chunk_type, heading, content, char_count)
@@ -54,6 +58,8 @@ function createEngine(includeFts = true): { engine: CaseLawSearchEngine; dir: st
   insertChunk.run(3, "d2", 0, "判决书正文：创造性判断应采用三步法框架进行认定。", 120);
   insertChunk.run(4, "d3", 0, "本决定认为权利要求不具备新颖性。", 80);
   insertChunk.run(5, "d4", 0, "创造性审查标准：技术启示的判断应当结合本领域技术人员认知。", 150);
+  insertChunk.run(6, "d5", 0, "本案权利要求清楚，无需过多说明。", 90);
+  insertChunk.run(7, "d6", 0, "本案权利要求清楚，无需过多说明。", 90);
 
   if (includeFts) {
     // contentless 表：content 参数被忽略（不存储），仅建立索引词。
@@ -65,6 +71,8 @@ function createEngine(includeFts = true): { engine: CaseLawSearchEngine; dir: st
     insertFts.run(3, "某专利侵权判决", "判决书正文：创造性判断应采用三步法框架进行认定。");
     insertFts.run(4, "另一无效决定", "本决定认为权利要求不具备新颖性。");
     insertFts.run(5, "创造性-审查标准-磨削抛光", "创造性审查标准：技术启示的判断应当结合本领域技术人员认知。");
+    insertFts.run(6, "100% 有效率方案", "本案权利要求清楚，无需过多说明。");
+    insertFts.run(7, "100X有效率方案", "本案权利要求清楚，无需过多说明。");
   }
   db.close();
   return { engine: new CaseLawSearchEngine(dbPath), dir };
@@ -126,11 +134,12 @@ test("case-law: court 过滤（子串匹配）", t => {
 
 test("case-law: 2 字查询直接走 LIKE 降级（trigram 需 3+ 字符）", t => {
   const engine = withEngine(t);
-  // "认为" 出现在 d1 最长 chunk 与 d3 的 content（LIKE 路径取每文档最长 chunk 作片段）
-  const hits = engine.search("认为");
+  // 2 字查询：P1 两阶段只走阶段 1 title 直查（content 全扫是分钟级卡点，
+  // 设计内牺牲 content 召回）。"无效" 命中 d1/d3 的 title。
+  const hits = engine.search("无效");
   assert.ok(
-    hits.some(h => h.documentId === "d1" && h.snippet.includes("认为")),
-    "LIKE 应子串命中 d1",
+    hits.some(h => h.documentId === "d1"),
+    "LIKE 应 title 命中 d1",
   );
   assert.ok(
     hits.every(h => h.via === "like"),
@@ -141,7 +150,8 @@ test("case-law: 2 字查询直接走 LIKE 降级（trigram 需 3+ 字符）", t 
 test("case-law: 无 docs_fts 表时整体降级 LIKE", t => {
   const engine = withEngine(t, false);
   assert.equal(engine.ftsAvailable, false);
-  const hits = engine.search("认为");
+  // 无 FTS 走 LIKE 两阶段：2 字 "无效" title 直查命中 d1/d3
+  const hits = engine.search("无效");
   assert.ok(
     hits.some(h => h.documentId === "d1"),
     "无 FTS 时 LIKE 仍应命中 d1",
@@ -180,7 +190,7 @@ test("case-law: 空查询与 limit 生效", t => {
 
 test("case-law: count 统计", t => {
   const engine = withEngine(t);
-  assert.equal(engine.count(), 4);
+  assert.equal(engine.count(), 6);
 });
 
 test("case-law: excludeSource 排除 wiki 审查标准卡片", t => {
@@ -214,10 +224,11 @@ test("case-law: 无过滤热路径走预编译语句，重复调用结果稳定"
   assert.ok(first.length >= 1);
 });
 
-test("case-law: LIKE 降级路径走预编译 stmtSearchLike，重复调用稳定", t => {
+test("case-law: LIKE 降级路径走预编译语句，重复调用稳定", t => {
   const engine = withEngine(t);
-  const first = engine.search("认为");
-  const second = engine.search("认为");
+  // 2 字查询 title 直查（无过滤走构造器预编译 stmtLikeTitle）
+  const first = engine.search("无效");
+  const second = engine.search("无效");
   assert.ok(first.length >= 1, "2 字查询应命中");
   assert.deepEqual(
     first.map(h => h.documentId).sort(),
@@ -227,5 +238,122 @@ test("case-law: LIKE 降级路径走预编译 stmtSearchLike，重复调用稳�
   assert.ok(
     first.every(h => h.via === "like"),
     "2 字查询应标注 via=like",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// P1：LIKE 两阶段（2026-08）——UDF 不出现在 SQL，content 扫描受限且有截断信号。
+// 无 FTS engine 强制走 LIKE；fixture 依赖：
+//   d1 title 含 无效 / 最长 chunk 含 三步法（title 与 content 分开可验证阶段归属）
+//   d2 title 含 侵权 / content 含 三步法框架（content-only 命中）
+//   d3 title 含 无效 / content 含 新颖性（content-only 命中）
+//   d5 title 含 字面 100% / d6 title 含 100X（转义对照）
+// ---------------------------------------------------------------------------
+test("P1: 阶段 1 title 直查命中，snippet 回源最长 chunk", t => {
+  const engine = withEngine(t, false);
+  const hits = engine.search("无效");
+  const d1 = hits.find(h => h.documentId === "d1");
+  assert.ok(d1, "title 命中 d1");
+  assert.ok(d1.snippet.includes("三步法"), "snippet 应回源 d1 最长 chunk（chunk0）");
+  assert.equal(d1.chunkIndex, 0, "chunkIndex 应为回源的最长 chunk 索引");
+  assert.equal(d1.via, "like");
+});
+
+test("P1: 3+ 字 content-only 命中（阶段 2 JS 侧解压匹配）", t => {
+  const engine = withEngine(t, false);
+  // "新颖性" 只在 d3 的 content（title 均不含）；无 FTS → 阶段 2 受限扫描命中
+  const hits = engine.search("新颖性");
+  assert.ok(
+    hits.some(h => h.documentId === "d3" && h.snippet.includes("新颖性")),
+    "阶段 2 应 content 命中 d3",
+  );
+  assert.equal(engine.likeScanCapped, false, "fixture 文档数远小于扫描上限，不应截断");
+});
+
+test("P1: 2 字查询只走阶段 1，content-only 命中不再返回（设计内牺牲）", t => {
+  const engine = withEngine(t, false);
+  // "认为" 只在 d1 最长 chunk 的 content（title 不含）；2 字不触发阶段 2
+  const hits = engine.search("认为");
+  assert.equal(hits.length, 0, "2 字 content 命中应被牺牲（避免分钟级全扫）");
+  assert.equal(engine.likeScanCapped, false);
+});
+
+test("P1: 1 字查询只走阶段 1 title 直查", t => {
+  const engine = withEngine(t, false);
+  const hits = engine.search("无");
+  assert.ok(
+    hits.some(h => h.documentId === "d1"),
+    "1 字 title 命中保留",
+  );
+  assert.equal(hits.length, 2, "d1/d3 title 均含 无");
+});
+
+test("P1: title 中的 % 与 _ 字面转义（不当作通配符）", t => {
+  const engine = withEngine(t, false);
+  // 无 FTS 强制 LIKE；"100%" 4 rune，title 命中 d5 即停（阶段 2 不扫 content）
+  const hits = engine.search("100%");
+  assert.ok(
+    hits.some(h => h.documentId === "d5"),
+    "应字面命中 d5（title 含 100%）",
+  );
+  assert.ok(!hits.some(h => h.documentId === "d6"), "% 不得当作通配符误命中 d6（100X）");
+});
+
+test("P1: 过滤组合（docType + court + excludeSource）在阶段 2 生效", t => {
+  const engine = withEngine(t, false);
+  // "三步法框架" 在 d2 content；docType=judgment 时阶段 2 候选仅剩 d2
+  const hits = engine.search("三步法框架", { docType: "judgment" });
+  assert.ok(
+    hits.some(h => h.documentId === "d2" && h.snippet.includes("三步法框架")),
+    "docType 过滤下阶段 2 应命中 d2",
+  );
+  assert.ok(
+    hits.every(h => h.docType === "judgment"),
+    "应只返回 judgment",
+  );
+  // excludeSource 排除 wiki：d4（source=wiki）在阶段 2 候选中被剔除
+  const rawOnly = engine.search("三步法框架", { excludeSource: "wiki" });
+  assert.ok(
+    rawOnly.every(h => h.source !== "wiki"),
+    "excludeSource 应作用于阶段 2 候选",
+  );
+  // 无过滤时 d2 亦可被 content 命中（对照）
+  const noFilter = engine.search("三步法框架");
+  assert.ok(noFilter.some(h => h.documentId === "d2"));
+});
+
+test("P1: 阶段 2 扫描上限截断置 likeScanCapped", t => {
+  const { engine, dir } = createEngine(false);
+  engine.close();
+  const capped = new CaseLawSearchEngine(join(dir, "test.db"), { likeScanCap: 2 });
+  t.after(() => {
+    capped.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  // cap=2：候选按 id 升序只扫 d1/d2；"新颖性" 在 d3（超出扫描窗口）→ 截断且无命中
+  const hits = capped.search("新颖性");
+  assert.equal(hits.length, 0, "d3 超出扫描窗口（cap=2）");
+  assert.equal(capped.likeScanCapped, true, "候选数达上限应置截断信号");
+  // 窗口内的命中仍工作：d2 的 "三步法框架" 在 cap=2 窗口内
+  const inWindow = capped.search("三步法框架");
+  assert.ok(
+    inWindow.some(h => h.documentId === "d2"),
+    "扫描窗口内 content 命中保留",
+  );
+});
+
+test("P1: SATI_LIKE_TWO_PHASE=0 等价——构造注入 likeTwoPhase:false 走旧单阶段 SQL", t => {
+  const { engine, dir } = createEngine(false);
+  engine.close();
+  const legacy = new CaseLawSearchEngine(join(dir, "test.db"), { likeTwoPhase: false });
+  t.after(() => {
+    legacy.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  // 旧路径：2 字 "认为" 经 UDF 解压 content 命中 d1（与两阶段行为不同）
+  const hits = legacy.search("认为");
+  assert.ok(
+    hits.some(h => h.documentId === "d1" && h.snippet.includes("认为")),
+    "回滚路径应保留 content 命中",
   );
 });
