@@ -60,7 +60,7 @@
 | C01 | src/agent | 44 文件/8.1K 行；AgentLoop.ts 2127（loop 模块族） | ✅ 2026-08-19 |
 | C02 | src/cli | 15/5.3K；createLocalGateway.ts 1942、sati.ts 1021（console 热点 54 处） | ✅ 2026-08-18 |
 | C03 | src/model/catalog | providers.ts 1766 | ✅ 2026-08-20 |
-| C04 | src/model 其余 | streaming/streamModel.ts 995、embedding、resolveModelInfo | ⬜ |
+| C04 | src/model 其余 | streaming/streamModel.ts 995、embedding、resolveModelInfo | ✅ 2026-08-20 |
 | C05 | src/gateway | 32/5.9K；InProcessGateway.ts 1057、protocol/server | ⬜ |
 | C06 | src/context 非 memory | projection、budget、compression、vectors | ⬜ |
 | C07 | src/context/memory 主包 | EdgeClawMemoryProvider 等（不含子包） | ⬜ |
@@ -122,6 +122,7 @@
 | 2026-08-18 | C02 | src/cli | P1 渠道构建重复×2 / 死 try-catch；P2 错误强转×2 / 路径解析重复；P3 横幅错位 / 重复 import；记录不处理：DEFAULT_USER=xujian、双份 readStringFlag；P0 无 | 2（refactor + docs） | ✅ |
 | 2026-08-19 | C01 | src/agent | P1 同分支三元死代码×1；P2 `void ctx` 命名不一致 / 无参 catch 缺注释×2；P2 记录不处理：TurnRunner 失败收尾 4 处相似块（细节差异大，抽取有漂移风险）、AgentLoop `errors![0]!` 断言 ~20 处（结构性，需 errors 类型重构）；P0 无 | 1（refactor） | ✅ |
 | 2026-08-20 | C03 | src/model/catalog | P2 openai/openai-responses models 块逐字节一致（5728B×2）→ 提取 OPENAI_SHARED_MODELS（-174 行）；P2 记录不处理：multimodal 模板重复 / 数字下划线风格 / minimax PascalCase 与 volc_ark snake_case 配置键；P0 无 | 1（refactor） | ✅ |
+| 2026-08-20 | C04 | src/model 其余 | P2 streamModel debug-dump ×2 / 重试警告 ×2 → 提取辅助函数；P2 findBalanced 两函数泛化合并；P2 死代码：providers/registry.ts 零消费、providerEndpoint 单变体 ×2、looksLikeUnparsedToolCall、extractStructuredOutput 死分支；P2 记录不处理：repairOpenAIToolPairing 兜底 / splitThinkContent FSM 重复 / 9 文件解析助手重复 / repairToolName 平局守卫（修复=行为变更）；P0 无 | 3（refactor×2 + docs） | ✅ |
 
 ### 日卡记录
 
@@ -160,6 +161,19 @@
 - **精炼项**：OPENAI_SHARED_MODELS 提取（openai/openai-responses 共享模型定义）
 - **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅（eslint 全仓 + event-matrix/patent-sop/workflow-docs/html-templates 4 check fresh）；`biome check .`（2093 文件）✅；`pnpm test` 3504 pass / 0 fail ✅；改前/改后 `PROVIDER_CATALOG` JSON 逐字节一致（行为等价）✅
 - **提交**：`refactor(model): extract shared OpenAI model catalog between protocols`
+
+#### C04 src/model 其余（2026-08-20）
+
+- **审阅发现**：
+  - P2 streamModel.ts：model-debug dump 块 ×2（动态 import fs/os/path + 写盘 + log）→ 提取 `dumpRequestForDebug`；complete() 重试 console.warn ×2 → 提取 `warnCompleteRetry`（顺带 `(error as Error).message` → `instanceof Error` 保真）
+  - P2 parseTextToolCalls.ts：`findBalancedJsonObjectEnd`/`findBalancedJsonArrayEnd` 逐行相同（仅 {/} 与 [/] 之别）→ 泛化合并为 `findBalancedEnd`（-33 行，16 用例行为等价验证）；`hasQwenMarker` 冗余转发 → 合并
+  - P2 死代码删除：`providers/registry.ts`（ModelProviderRegistry 全仓零消费）、`providerEndpoint.ts` 单变体转发 ×2（Candidates 变体保留）、`toolCallFormats.ts` `looksLikeUnparsedToolCall`、`extractStructuredOutput.ts` 不可达分支
+  - P3 清理：clone/multimodal 冗余 `as` 强转 ×3、`contentBlockToInputModality` 多余 export、`_messageIndex`/`_provider` 参数、`TRANSIENT_ERROR_TYPES` 提升模块级、JSDoc 修正 ×2（probe stale-while-revalidate / resolve 配置错误限定）、防御式 catch 补注释 ×3、openai/stream JSDoc 重复句
+  - P2 记录不处理：`repairOpenAIToolPairing` 与 `splitThinkContent` FSM（行为敏感/无直接单测）；9 文件重复的 `asRecord/readString` 等解析助手（跨文件重构）；`repairToolName` 平局守卫边界缺陷（修复=行为变更需决策）；8 处 console 诊断日志（C39 横切）；`google/stream.ts` `ended` 字段（子代理误判为只写不读，实有 streamModel.ts:442 读取点，未动）
+  - P1/P0：无行为缺陷
+- **精炼项**：重复提取（streamModel ×2 组、findBalanced 合并）、死代码/未使用导出删除（4 处）、类型/命名/注释清理（约 12 处）
+- **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅（event-matrix 重生成，纯行号偏移）；`biome check src/model` ✅（全仓 format:check 红系用户未提交的 `assets/templates/patent/tokens.css` 排版改动，非本次引入）；`pnpm test` 3504 pass / 0 fail ✅；`extractTextToolCalls` 16 用例改前/改后行为等价（剔除随机 id）✅
+- **提交**：`refactor(model): extract stream debug/retry helpers, unify balanced JSON parsing`、`refactor(model): drop dead exports, remove redundant casts, document fallback catches`、`docs: regenerate event matrix (streamModel line shifts)`
 
 ## 六、基线（2026-08-18 实测）
 
