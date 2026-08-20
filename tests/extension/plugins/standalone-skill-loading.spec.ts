@@ -101,6 +101,53 @@ test("畸形 frontmatter 降级不抛错：无闭合围栏 / 非法 yaml 均为�
   }
 });
 
+test("空 frontmatter（围栏内仅空行）解析为空对象，正文保留（end+5 偏移契约）", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-yaml-empty-"));
+  try {
+    const skillDir = join(root, "empty-fm");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"), "---\n\n---\n\n# body\n", "utf8");
+    const loaded = await loadSkillFromPath(skillDir, "global");
+    assert.deepEqual(loaded.skills?.[0]?.frontmatter, {});
+    assert.match(loaded.skills?.[0]?.content ?? "", /# body/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("纯标量 frontmatter 走非对象守卫：解析为空对象，正文保留", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-yaml-scalar-"));
+  try {
+    const skillDir = join(root, "scalar-fm");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "SKILL.md"), "---\nplain\n---\n\n# body\n", "utf8");
+    const loaded = await loadSkillFromPath(skillDir, "global");
+    assert.deepEqual(loaded.skills?.[0]?.frontmatter, {});
+    assert.match(loaded.skills?.[0]?.content ?? "", /# body/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("含冒号值行 frontmatter 触发 yaml 严格解析错误 → 整体降级为空对象且不抛错", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-yaml-colon-"));
+  try {
+    const skillDir = join(root, "colon-fm");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      "---\nname: t\ndescription: Handles OA: responses.\n---\n\n# body\n",
+      "utf8",
+    );
+    const loaded = await loadSkillFromPath(skillDir, "global");
+    assert.ok(loaded.skills, "单行非法（Nested mappings）→ 整体降级，不抛错");
+    assert.deepEqual(loaded.skills?.[0]?.frontmatter, {});
+    assert.match(loaded.skills?.[0]?.content ?? "", /# body/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a plugin skill directory used as the configured base never derives a parent namespace", () => {
   const skillDir = join("tmp", "office", "skills", "docx");
   assert.equal(getPluginCommandName("office", join(skillDir, "SKILL.md"), skillDir), "office:docx");
