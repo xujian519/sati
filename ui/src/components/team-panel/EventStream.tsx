@@ -28,7 +28,6 @@ type TeamWireEvent = {
   taskId?: string;
   memberId?: string;
   attempt?: number;
-  timestamp?: string;
   /** 本地自增 React key（非后端字段）。 */
   _eventId?: number;
   [key: string]: unknown;
@@ -50,12 +49,6 @@ const describeEvent = (event: TeamWireEvent): string => {
   if (typeof event.attempt === "number") parts.push(`attempt:${event.attempt}`);
   if (event.teamId !== undefined) parts.push(event.teamId);
   return parts.filter(Boolean).join(" · ");
-};
-
-const formatTime = (timestamp: string | undefined): string => {
-  const parsed = timestamp !== undefined ? Date.parse(timestamp) : NaN;
-  if (!Number.isFinite(parsed)) return "";
-  return new Date(parsed).toLocaleTimeString();
 };
 
 export function EventStream({ sessionId }: { sessionId?: string | null }) {
@@ -109,9 +102,6 @@ export function EventStream({ sessionId }: { sessionId?: string | null }) {
               <span className="min-w-0 flex-1 truncate font-mono text-xs text-neutral-500 dark:text-neutral-400">
                 {describeEvent(event)}
               </span>
-              <time className="shrink-0 text-[10px] text-neutral-400 dark:text-neutral-500">
-                {formatTime(event.timestamp)}
-              </time>
             </li>
           ))}
         </ul>

@@ -65,13 +65,15 @@ router.post("/action", async (req, res, next) => {
 /**
  * POST /api/teams/heartbeat
  * 面板心跳：汇总活跃浏览器会话 key 上报 gateway（SessionPresence.panelTouch）。
- * sessionKeys 非数组 → 400。
+ * sessionKeys 非数组 → 400（形状与 gateway panelHeartbeat 契约一致：touched + error，质量审阅 M5）。
  */
 router.post("/heartbeat", async (req, res, next) => {
   try {
     const { sessionKeys } = req.body || {};
     if (!Array.isArray(sessionKeys)) {
-      return res.status(400).json({ touched: 0 });
+      return res
+        .status(400)
+        .json({ touched: 0, error: { code: "invalid_request", message: "sessionKeys 必须为数组" } });
     }
     const gw = await getSatiGatewayWithReset();
     const result = await gw.panelHeartbeat({ sessionKeys });

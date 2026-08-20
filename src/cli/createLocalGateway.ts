@@ -32,6 +32,7 @@ import {
   withTeamLock,
   type ScanStrandedTasksResult,
   type ScanTeamMembersResult,
+  type TeamEvent,
 } from "../agent/team/index.js";
 import {
   AutoCompactionPolicy,
@@ -262,6 +263,7 @@ function handleMemberTurnCompleted(
   teamSchedulerRef: TeamScheduler,
   teamId: string,
   memberId: string,
+  emitTeamEvent: (captainSessionKey: string, event: TeamEvent) => boolean,
 ): void {
   const open = ownedOpenTask(db.listTasks(teamId), memberId);
   if (open !== undefined) {
@@ -270,6 +272,19 @@ function handleMemberTurnCompleted(
       const guard = validateAttemptUpdate(fresh, fresh.attemptId);
       if (guard === undefined) {
         db.updateTask({ ...fresh, status: "failed", updatedAt: new Date().toISOString() });
+        // I2（code review）：置 failed 同步补发 task_failed（对齐 teamTasks 工具路径的事件形状；
+        // 队长会话扇出，团队行缺失时跳过——任务归属团队必存在，此处仅防御）。
+        const team = db.getTeam(teamId);
+        if (team !== undefined) {
+          emitTeamEvent(team.captainSessionKey, {
+            type: "task_failed",
+            teamId,
+            taskId: fresh.id,
+            memberId: open.assigneeId ?? "",
+            attempt: fresh.attempt,
+            reason: "attempts_exhausted",
+          });
+        }
       }
     }
   }
@@ -550,6 +565,11 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // teams.db 打开/迁移失败选择 fail-fast：团队数据是写真源（成员注册即落库），
   // 静默降级会掩盖成员缺失；与 knowledge 只读降级（消费侧容错）不同。
   const teamDb = new TeamDb(defaultTeamDbPath(pilotHome, env));
+  // TeamEvent 广播收口（质量审阅 I2）：三处 emit 语义同构（scheduler / 工具集 / 本地函数），
+  // 收敛为单一闭包——handleMemberTurnCompleted 补发 task_failed 事件（C2 判失败不再静默）。
+  const emitTeamEvent = (captainSessionKey: string, event: TeamEvent): boolean => {
+    return gateway.emitForSession(captainSessionKey, toGatewayEvent(event));
+  };
   // sessionPresence 声明已上移至 gateway 创建前（panelHeartbeat delegate 闭包引用，
   // 见上方 M3 注释）；此处仅沿用实例。
   // gateway 注入接线（emitForSession/approvalDecide 类型兼容性编译期验证）。
@@ -568,7 +588,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       // 消费者 finally 内 router.endTurn 已执行、会话槽已释放——之后才返回），
       // 此刻续派与 warm 路径锁内串行等效，不会命中 session_busy。
       for (const { teamId, memberId } of completed) {
-        handleMemberTurnCompleted(teamDb, teamScheduler, teamId, memberId);
+        handleMemberTurnCompleted(teamDb, teamScheduler, teamId, memberId, emitTeamEvent);
       }
     };
     return scanTeamMembers({
@@ -623,7 +643,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 持久化不丢失、C2 有界重试）；CLI/TUI 直连 ws 路径正常。M4 面板接线时以浏览器连接级信号为准。
   const teamScheduler = new TeamScheduler({
     db: teamDb,
-    emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),
+    emit: emitTeamEvent,
     isCaptainOnline: captainSessionKey => sessionPresence.isActive(captainSessionKey),
     wake: async (memberId, message) => {
       try {
@@ -637,7 +657,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         const completed: Array<{ teamId: string; memberId: string }> = [];
         const reclaimCompleted = (): void => {
           for (const { teamId, memberId: m } of completed) {
-            handleMemberTurnCompleted(teamDb, teamScheduler, teamId, m);
+            handleMemberTurnCompleted(teamDb, teamScheduler, teamId, m, emitTeamEvent);
           }
         };
         let ok = false;
@@ -715,7 +735,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   registry.setTeamTools({
     db: teamDb,
     scheduler: teamScheduler,
-    emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),
+    emit: emitTeamEvent,
   });
   // T12 复审 M4：启动扫描完成信号（显式可 await——测试不再用 setTimeout 排干猜测时序）
   // Minor-1 兜底：存储层异常经 catch 记录（console.error 含扫描标识）且不 reject——
