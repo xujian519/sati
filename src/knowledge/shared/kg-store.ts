@@ -142,11 +142,14 @@ export class KgStore {
 
   /** LIKE 子串检索（name/title/content 任一包含即命中）。 */
   private likeSearch(keyword: string, limit: number): Array<{ id: string }> {
-    // 1 字查询守卫：LIKE %单字% 命中数万节点（kg_nodes 21 万行全表扫描），纯噪音，
-    // 直接拒绝（对齐 searchByKeywordOr 的 1 字丢弃策略 :186 注释）。2 字查询保留：
-    // 「新颖/驳回」等专利域高频词 FTS trigram 不可用（<3 rune），LIKE 有命中时
-    // 靠 LIMIT 提前退出（实测 ~5ms），无命中全表扫 ~121ms 属可接受尾部延迟。
-    if (Array.from(keyword).length < 2) return [];
+    // <3 rune 查询守卫（审查 #23）：LIKE %单字%/%两字% 在 kg_nodes 21 万行上全表
+    // 扫描——1 字命中数万节点纯噪音；2 字词匹配密度参差：「新颖」级高频词靠
+    // LIMIT 提前退出虽快（~5ms），中频词（反悔/等同）需扫数万行才集满，输出
+    // 按表行序截断、相关性无保证，无命中时 121ms 尾部延迟每次查询都付。FTS
+    // trigram 对 <3 rune 本无能力，拒绝后 2 字查询返回空（与 or 模式丢弃策略
+    // 一致，注释与行为不再矛盾）。注：likeSearchTerms 的多词合并保留 2 字
+    // （窗口子词召回）——单次扫描内多 OR 子句无额外扫描成本。
+    if (Array.from(keyword).length < FTS_MIN_RUNES) return [];
     const pattern = this.likePattern(keyword);
     return this.stmtLikeSearch.all(pattern, pattern, pattern, limit) as Array<{ id: string }>;
   }
@@ -236,8 +239,9 @@ export class KgStore {
       for (const row of this.likeSearchTerms(mergedTerms, limit)) ids.add(row.id);
     }
 
-    // 兜底：候选词均未命中时整体 LIKE 一次（带分隔符短语的子串匹配无意义，跳过）
-    if (ids.size === 0 && !hasSeparators && chars.length >= 2) {
+    // 兜底：候选词均未命中时整体 LIKE 一次（带分隔符短语的子串匹配无意义，
+    // <3 rune 由 likeSearch 守卫拒绝，条件与守卫语义对齐）
+    if (ids.size === 0 && !hasSeparators && chars.length >= FTS_MIN_RUNES) {
       for (const row of this.likeSearch(trimmed, limit)) ids.add(row.id);
     }
 

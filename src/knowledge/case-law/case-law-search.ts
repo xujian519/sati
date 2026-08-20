@@ -18,6 +18,7 @@ import { openKnowledgeDb } from "../shared/db-version.js";
 import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
 import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms, sqliteHasFts5 } from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
+import { prepareCached } from "../../shared/sqlite.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import { extractLawKeywords } from "../legal/keywords.js";
 import type { KnowledgeEmbeddingSearch } from "../shared/knowledge-embeddings.js";
@@ -405,16 +406,6 @@ export class CaseLawSearchEngine {
     this.db.close();
   }
 
-  /** 动态 SQL（带过滤组合）prepare 缓存：同形状 SQL 复用 StatementSync。 */
-  private prepareCached(sql: string): StatementSync {
-    let stmt = this.preparedCache.get(sql);
-    if (!stmt) {
-      stmt = this.db.prepare(sql);
-      this.preparedCache.set(sql, stmt);
-    }
-    return stmt;
-  }
-
   /** 构建 FTS 查询（固定投影 + 可选过滤；带过滤时拼接动态 SQL）。 */
   private buildFtsQuery(options: CaseLawSearchOptions): { sql: string; filterParams: Array<string | null> } {
     let sql = `
@@ -459,7 +450,11 @@ export class CaseLawSearchEngine {
       rows = this.stmtSearchFts.all(query, limit * FETCH_MULTIPLIER) as CaseLawRow[];
     } else {
       const { sql, filterParams } = this.buildFtsQuery(options);
-      rows = this.prepareCached(sql).all(query, ...filterParams, limit * FETCH_MULTIPLIER) as CaseLawRow[];
+      rows = prepareCached(this.preparedCache, this.db, sql).all(
+        query,
+        ...filterParams,
+        limit * FETCH_MULTIPLIER,
+      ) as CaseLawRow[];
     }
     return this.backfillContent(this.dedupeByDocument(rows, limit));
   }
@@ -557,7 +552,7 @@ export class CaseLawSearchEngine {
         WHERE d.title LIKE ? ESCAPE '\\'${clauses.length > 0 ? ` AND ${clauses.join(" AND ")}` : ""}
         LIMIT ?
       `;
-      rows = this.prepareCached(sql).all(pattern, ...params, limit) as CaseLawRow[];
+      rows = prepareCached(this.preparedCache, this.db, sql).all(pattern, ...params, limit) as CaseLawRow[];
     }
     // title 直查不 JOIN chunks → 逐行回源最长 chunk 作片段（点查 ~0.04ms/行 × limit ≤ 50，
     // 保持旧语义「片段 = 最长 chunk」；文档异常缺失时回落空 snippet 不阻断）。
@@ -577,7 +572,10 @@ export class CaseLawSearchEngine {
         ORDER BY d.rowid
         LIMIT ?
       `;
-      const candidates = this.prepareCached(sql).all(...params, this.likeScanCap) as CaseLawRow[];
+      const candidates = prepareCached(this.preparedCache, this.db, sql).all(
+        ...params,
+        this.likeScanCap,
+      ) as CaseLawRow[];
       this.likeScanTruncated = candidates.length >= this.likeScanCap;
       // 双端小写后字面匹配：旧 LIKE 语义大小写不敏感，JS includes 是大小写敏感的
       // ——大写查询（如「ABC 公司」）会漏掉小写正文（#4b）。
@@ -628,7 +626,7 @@ export class CaseLawSearchEngine {
       }
       sql += " LIMIT ?";
       params.push(limit);
-      rows = this.prepareCached(sql).all(...params) as CaseLawRow[];
+      rows = prepareCached(this.preparedCache, this.db, sql).all(...params) as CaseLawRow[];
     }
     return rows.map(row => this.toHit(row, null, "like"));
   }

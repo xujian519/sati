@@ -140,3 +140,27 @@ test("P4: 预热失败吞错并重置单飞（下次可重试）", async () => {
   assert.equal(retry.chunkCount, 0);
   rmSync(dirOf(dbPath), { recursive: true, force: true });
 });
+
+test("P4 #9a: 预热失败后冷却期内 tryWarm/search 不触发新加载（backoff 防重试风暴）", async () => {
+  const dbPath = createVectorDb(10);
+  const broken = new KnowledgeEmbeddingSearch({ dbPath, logger: silentLogger, docTypes: ["case"] });
+  broken.close(); // 句柄失效 → 预热必然失败
+  await broken.loadAsync(); // 失败 → lastLoadFailureAt 置位，进入冷却期
+  assert.equal(broken.ready, false);
+
+  // 冷却期内：tryWarm 返回 false 且不创建新加载单飞
+  assert.equal(broken.tryWarm(), false, "冷却期内应跳过（防重试风暴）");
+  // search 未 ready 时走同一 tryWarm 路径：同样不创建新尝试
+  const hits = broken.search(Float32Array.from([1, 0, 0, 0]), 5);
+  assert.deepEqual(hits, [], "未 ready 返回空");
+  const state = broken as unknown as { loadingPromise: unknown };
+  assert.equal(state.loadingPromise, undefined, "冷却期内不得创建加载单飞（每次尝试都是全量 144K chunk 加载）");
+
+  // 冷却期外：恢复触发（白盒把失败时间戳拨回 0 模拟冷却期满）
+  (broken as unknown as { lastLoadFailureAt: number }).lastLoadFailureAt = 0;
+  assert.equal(broken.tryWarm(), true, "冷却期外应恢复触发（按查询重试）");
+  assert.ok(state.loadingPromise !== undefined, "重试应创建加载单飞");
+  await (state.loadingPromise as Promise<unknown>); // 再次失败也吞错，无异常
+  assert.equal(broken.ready, false);
+  rmSync(dirOf(dbPath), { recursive: true, force: true });
+});

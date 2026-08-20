@@ -66,6 +66,12 @@ const matrixCache = new Map<string, Int8ChunkMatrix>();
 // COUNT 扫描，8 个项目即 16 次全表扫描，显著拖慢启动。
 const instanceCache = new Map<string, KnowledgeEmbeddingSearch>();
 
+// 预热失败重试冷却（#9a）：持续故障下避免每次语义查询都触发一次全量加载
+// 尝试（144K chunk 分页加载，1-5s 事件循环占用）——失败后进入冷却期，
+// tryWarm 在冷却期内不再触发；冷却期满后下一条语义查询自然重试（按查询
+// 重试），预热通道不因一次失败而永久关闭，也不打爆事件循环。
+const RETRY_BACKOFF_MS = 30_000;
+
 /** 工厂：同 dbPath+docTypes 复用已构造实例（构造期全表 COUNT 只做一次）。 */
 export function createKnowledgeEmbeddingSearch(options: KnowledgeEmbeddingSearchOptions): KnowledgeEmbeddingSearch {
   const key = `${options.dbPath}|${(options.docTypes ?? []).join(",")}`;
@@ -95,6 +101,8 @@ export class KnowledgeEmbeddingSearch {
   private data?: Int8ChunkMatrix;
   /** 异步预热单飞 promise（并发预热只触发一次；失败重置可重试）。 */
   private loadingPromise?: Promise<Int8ChunkMatrix>;
+  /** 最近一次预热失败时间戳（backoff：冷却期内 tryWarm 不触发新加载尝试）。 */
+  private lastLoadFailureAt = 0;
 
   constructor(options: KnowledgeEmbeddingSearchOptions) {
     const opened = openKnowledgeDb(options.dbPath, KNOWLEDGE_DB, { readOnly: true });
@@ -154,10 +162,23 @@ export class KnowledgeEmbeddingSearch {
       return searchChunkMatrix(this.loadSync(), queryVector, limit);
     }
     if (!this.data) {
-      void this.loadAsync();
+      this.tryWarm();
       return [];
     }
     return searchChunkMatrix(this.data, queryVector, limit);
+  }
+
+  /**
+   * 未 ready 时按 backoff 触发后台预热（#9a/#9b）。已加载或加载进行中返回
+   * true；最近一次失败后冷却期内返回 false（不触发——防重试风暴）；冷却期
+   * 外触发 loadAsync（单飞）并返回 true。语义路调用方在 ready=false 时用它
+   * 保持预热通道（预热失败不永久关闭语义路），同时省掉无意义的 embed 调用。
+   */
+  tryWarm(): boolean {
+    if (this.data || this.loadingPromise) return true;
+    if (Date.now() - this.lastLoadFailureAt < RETRY_BACKOFF_MS) return false;
+    void this.loadAsync();
+    return true;
   }
 
   /** 生效的 doc_type 过滤（诊断用）。 */
@@ -210,6 +231,7 @@ export class KnowledgeEmbeddingSearch {
     if (this.data) return Promise.resolve(this.data);
     this.loadingPromise ??= this.loadAsyncInner().catch(error => {
       this.loadingPromise = undefined;
+      this.lastLoadFailureAt = Date.now();
       this.logger?.warn?.(
         `[knowledge-embeddings] 异步预热失败，语义路降级跳过: ${error instanceof Error ? error.message : String(error)}`,
       );
