@@ -12,3 +12,9 @@ export type {
   ProvenanceSource,
 } from "./types.js";
 export { ProvenanceStore } from "./provenance-store.js";
+export {
+  ProvenanceCollector,
+  type ApprovalGateRecord,
+  type ProvenanceCollectorOptions,
+} from "./collector.js";
+export { resolveProvenanceRunId, type ResolveProvenanceRunIdOptions } from "./run-id.js";

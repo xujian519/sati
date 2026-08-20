@@ -27,7 +27,7 @@ T9 RDF 导出：条件触发（出现真实消费方），不排期
 | T0 | 设计 2 纯函数（校验 + 骨架解析） | 无 | 0.5–1 天 | ✅ 已落地（17/17 测试绿，typecheck/eslint/biome 绿） |
 | T1 | 设计 1 存储底座（schema + store + paths） | 无 | 1 天 | ✅ 已落地（9/9 测试绿，typecheck/eslint/biome 绿） |
 | T2 | 全局审批审计库（output_gate 落盘） | T1 | 1–1.5 天 | ✅ 已落地（6/6 测试绿，typecheck/eslint/biome 绿） |
-| T3 | 审批门旁路 + runId 生成 | T1 | 1 天 | ☐ |
+| T3 | 审批门旁路 + runId 生成 | T1 | 1 天 | ✅ 已落地（6/6 测试绿，typecheck/eslint/biome 绿） |
 | T4 | Worker 执行落盘 | T1 | 0.5–1 天 | ☐ |
 | T5 | 审计导出 + enableProvenance 开关 | T1–T4 | 1 天 | ☐ |
 | T6 | claim-embodiment-mapper 原子 | T0 | 1–1.5 天 | ☐ |
@@ -105,7 +105,7 @@ T9 RDF 导出：条件触发（出现真实消费方），不排期
 
 ---
 
-## T3：审批门旁路 + runId 生成 — 1 天
+## T3：审批门旁路 + runId 生成 — 1 天 ✅ 已落地（2026-08-20）
 
 **目标**：manifest/图两条审批门路径的放行与挂起可溯源（per-case 库）。
 

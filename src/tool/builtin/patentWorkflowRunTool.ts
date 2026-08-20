@@ -21,6 +21,8 @@ import {
   type WorkflowManifest,
 } from "../../patent/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
+import { ProvenanceCollector, ProvenanceStore, resolveProvenanceRunId } from "../../patent/provenance/index.js";
+import { caseProvenanceDir } from "../../patent/paths.js";
 import type { SatiToolDefinition, SatiToolModelClient } from "../protocol/types.js";
 import {
   buildWorkflowProvider,
@@ -292,6 +294,14 @@ export function createPatentWorkflowRunTool(
         };
       }
 
+      // 溯源旁路（T3）：SATI_PROVENANCE=1 + caseId 时收集审批门挂起/放行；resume 复用 runId。
+      const provenanceCollector = openProvenanceCollector({
+        caseId: input.caseId,
+        cwd: context?.cwd ?? process.cwd(),
+        runKey: manifest.id,
+        resume: input.resumeCheckpointId !== undefined,
+      });
+
       const result = await runWorkflow(manifest, workflowCtx, executor, {
         handlers: deps.handlers ?? globalStageHandlerRegistry,
         atoms: globalAtomRegistry,
@@ -306,6 +316,26 @@ export function createPatentWorkflowRunTool(
           ? { approvalGrants: input.approveStageIds }
           : {}),
       });
+
+      // 审批门溯源：放行集合 = 显式 approveStageIds ∪ resume 合并的 approvalGrants
+      // （幂等键保证 resume 自动放行不重复记录）；挂起 = result.interrupted。
+      if (provenanceCollector !== null) {
+        try {
+          const granted = new Set([...(input.approveStageIds ?? []), ...(resumeFrom?.approvalGrants ?? [])]);
+          for (const stageId of granted) {
+            provenanceCollector.recordApprovalGate({ stageId, kind: "granted" });
+          }
+          if (result.interrupted !== undefined) {
+            provenanceCollector.recordApprovalGate({
+              stageId: result.interrupted.stageId,
+              kind: "pending",
+              message: result.interrupted.message,
+            });
+          }
+        } finally {
+          provenanceCollector.close();
+        }
+      }
 
       const persistNote = persistTarget
         ? await writeRunArtifacts(persistTarget, manifest, result)
@@ -343,6 +373,28 @@ export function createPatentWorkflowRunTool(
       };
     },
   };
+}
+
+/**
+ * 打开溯源收集器（T3）：`SATI_PROVENANCE=1` 且提供 caseId 时构造 per-case collector，
+ * 否则返回 null（零开销）。runId 实例化（方案 P2）：续跑（resume）复用既有 runId，
+ * 新运行新建。导出供接线测试。
+ */
+export function openProvenanceCollector(options: {
+  caseId?: string;
+  cwd: string;
+  runKey: string;
+  resume: boolean;
+}): ProvenanceCollector | null {
+  if (process.env.SATI_PROVENANCE !== "1" || options.caseId === undefined) return null;
+  const runId = resolveProvenanceRunId({
+    caseId: options.caseId,
+    cwd: options.cwd,
+    runKey: options.runKey,
+    resume: options.resume,
+  });
+  const dbPath = join(caseProvenanceDir(options.caseId, options.cwd), "provenance.db");
+  return new ProvenanceCollector({ store: new ProvenanceStore(dbPath), runId, caseId: options.caseId });
 }
 
 // ---------------------------------------------------------------------------
@@ -457,29 +509,60 @@ async function executeGraphRun(
       : input.resumeCheckpointId !== undefined
         ? { checkpointId: input.resumeCheckpointId, grant: false }
         : undefined;
-  let resumeFrom: GraphCheckpoint | undefined;
-  if (resumeSpec !== undefined) {
-    resumeFrom = resumeSpec.grant
-      ? await grantApproval(store, resumeSpec.checkpointId)
-      : await store.load(resumeSpec.checkpointId);
-    if (resumeFrom === undefined) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `patent_workflow_run: 检查点 "${resumeSpec.checkpointId}" 不存在（可用 checkpoints 目录下的 id）。`,
-          },
-        ],
-      };
-    }
-  }
 
-  const { result, checkpointId } = await runGraphWithCheckpoints(graph, workflowCtx, {
-    store,
-    graphId,
-    provider,
-    resumeFrom,
+  // 溯源旁路（T3）：SATI_PROVENANCE=1 + caseId 时收集审批门挂起/放行；resume 复用 runId。
+  const provenanceCollector = openProvenanceCollector({
+    caseId: input.caseId,
+    cwd: context?.cwd ?? process.cwd(),
+    runKey: graphId,
+    resume: resumeSpec !== undefined,
   });
+
+  let resumeFrom: GraphCheckpoint | undefined;
+  let result: GraphRunResult;
+  let checkpointId: string | undefined;
+  try {
+    if (resumeSpec !== undefined) {
+      if (resumeSpec.grant) {
+        resumeFrom = await grantApproval(store, resumeSpec.checkpointId);
+        // 审批门放行旁路：以检查点标识本次放行（幂等键防 resume 重放重复）。
+        provenanceCollector?.recordApprovalGate({
+          stageId: `checkpoint:${resumeSpec.checkpointId}`,
+          kind: "granted",
+        });
+      } else {
+        resumeFrom = await store.load(resumeSpec.checkpointId);
+      }
+      if (resumeFrom === undefined) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `patent_workflow_run: 检查点 "${resumeSpec.checkpointId}" 不存在（可用 checkpoints 目录下的 id）。`,
+            },
+          ],
+        };
+      }
+    }
+
+    ({ result, checkpointId } = await runGraphWithCheckpoints(graph, workflowCtx, {
+      store,
+      graphId,
+      provider,
+      resumeFrom,
+    }));
+
+    // 审批门挂起旁路（中断节点名 = 审批门）。
+    if (result.interrupted !== undefined) {
+      provenanceCollector?.recordApprovalGate({
+        stageId: result.interrupted.node,
+        kind: "pending",
+        message: result.interrupted.message,
+      });
+    }
+  } finally {
+    provenanceCollector?.close();
+  }
 
   const checkpointNote = checkpointId
     ? `检查点: ${checkpointId}${result.interrupted !== undefined ? "（中断可续跑）" : ""}`

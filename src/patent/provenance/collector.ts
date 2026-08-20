@@ -1,0 +1,69 @@
+/**
+ * src/patent/provenance — 溯源收集器（ProvenanceCollector）。
+ *
+ * 本期（T3）实现审批门溯源（pending/granted 两类 activity）；T8 扩展
+ * wrapGraphBuilder 图节点收集与降级记录。旁路写入，不改动既有逻辑。
+ *
+ * activity.id 幂等键：`${runId}:approval_gate:${stageId}:${kind}`——
+ * 同 run 同审批门同状态只记一次（resume 重放安全）；新运行因 runId 实例化
+ * （run-id.ts）天然区分，不覆盖前次审计历史。
+ */
+
+import { ProvenanceStore } from "./provenance-store.js";
+
+export type ProvenanceCollectorOptions = {
+  store: ProvenanceStore;
+  runId: string;
+  caseId: string | null;
+};
+
+export type ApprovalGateRecord = {
+  /** manifest stageId 或图节点名（graph 审批门放行时用 "checkpoint:<id>"）。 */
+  stageId: string;
+  kind: "pending" | "granted";
+  /** 复核上下文 / 审批说明。 */
+  message?: string;
+  /** 决策时刻（缺省 Date.now）。 */
+  at?: number;
+};
+
+export class ProvenanceCollector {
+  readonly runId: string;
+  readonly caseId: string | null;
+  private readonly store: ProvenanceStore;
+
+  constructor(options: ProvenanceCollectorOptions) {
+    this.store = options.store;
+    this.runId = options.runId;
+    this.caseId = options.caseId;
+  }
+
+  /** 记录一条审批门活动（挂起 pending / 放行 granted）。 */
+  recordApprovalGate(record: ApprovalGateRecord): void {
+    const id = `${this.runId}:approval_gate:${record.stageId}:${record.kind}`;
+    this.store.upsertAgent({ id: "human", kind: "human", name: "审批人" });
+    this.store.upsertActivity({
+      id,
+      source: "approval_gate",
+      name: record.kind,
+      caseId: this.caseId,
+      runId: this.runId,
+      startedAt: record.at ?? Date.now(),
+      agentId: "human",
+      inputIds: [],
+    });
+    this.store.upsertEntity({
+      id: `entity:${id}`,
+      kind: "approval",
+      value: JSON.stringify({ stageId: record.stageId, kind: record.kind, message: record.message ?? "" }),
+      caseId: this.caseId,
+      generatedByActivityId: id,
+      derivedFromIds: [],
+    });
+  }
+
+  /** 释放句柄（工具调用结束时调用）。 */
+  close(): void {
+    this.store.close();
+  }
+}
