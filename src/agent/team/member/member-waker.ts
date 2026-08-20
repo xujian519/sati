@@ -7,6 +7,7 @@
  */
 import type { GatewayEvent, GatewaySubmitTurnInput } from "../../../gateway/protocol/types.js";
 import type { TeamDb } from "../storage/team-db.js";
+import { parseModelRouteJson } from "./modelRouteJson.js";
 
 export type MemberGateway = Pick<import("../../../gateway/protocol/types.js").Gateway, "submitTurn">;
 
@@ -46,11 +47,19 @@ export async function wakeMember(
   }
   db.updateMemberStatus(memberId, "working");
   try {
+    // M4：消费创建时快照的 modelRoute——provider/model 任一缺失不传（脏数据/缺项
+    // 走既有行为：会话模型不覆盖，不阻塞唤醒）
+    const route = parseModelRouteJson(member.modelRouteJson);
+    const modelRoute =
+      route.provider !== undefined && route.model !== undefined
+        ? { provider: route.provider, model: route.model }
+        : undefined;
     const input: GatewaySubmitTurnInput = {
       sessionKey: member.sessionKey,
       channelKey: "cron",
       message: followupMessage,
       canPrompt: false,
+      ...(modelRoute !== undefined ? { modelRoute } : {}),
       ...(options.syntheticMessages ? { syntheticMessages: options.syntheticMessages } : {}),
     };
     for await (const event of gateway.submitTurn(input)) {

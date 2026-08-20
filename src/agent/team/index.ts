@@ -3,6 +3,7 @@ import { join } from "node:path";
 export { TeamDb, type TeamRow, type TeamMemberRow, type TeamTaskRow, type TeamMessageRow } from "./storage/team-db.js";
 export { MEMBER_SESSION_PREFIX, memberSessionKey, parseMemberSessionKey } from "./protocol/member-key.js";
 export { createTeamMember, type MemberModelRoute, type CreateTeamMemberOptions } from "./member/member-registry.js";
+export { parseModelRouteJson } from "./member/modelRouteJson.js";
 export {
   wakeMember,
   TeamMemberNotFoundError,

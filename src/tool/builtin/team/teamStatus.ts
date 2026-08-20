@@ -9,7 +9,7 @@
  * 抛 team_actor_unknown，与 update_task 对同形态会话行为一致。
  */
 import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
-import type { TeamTaskStatus } from "../../../agent/team/index.js";
+import { parseModelRouteJson, type TeamTaskStatus } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import {
   TEAM_MEMBER_SESSION_PATTERN,
@@ -18,24 +18,6 @@ import {
   resolveActor,
   type TeamToolsOptions,
 } from "./teamUtils.js";
-
-/**
- * modelRouteJson 解析：脏数据（非法 JSON / 非对象）降级为空对象——
- * 视图不抛错、不阻塞整个成员列表（对齐 scheduler 损坏行跳过语义），
- * 且 `{}` 能过 outputSchema 的 `modelRoute: { type: "object" }` 校验
- * （自研校验器 isPlainObject 拒绝 null）。
- */
-function parseModelRoute(json: string): unknown {
-  try {
-    const parsed = JSON.parse(json) as unknown;
-    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed;
-    }
-  } catch {
-    // 非法 JSON：走降级
-  }
-  return {};
-}
 
 export type TeamStatusInput = { teamId: string };
 export type TeamStatusOutput = {
@@ -151,7 +133,7 @@ export function createTeamStatusTool(options: TeamToolsOptions): SatiToolDefinit
           memberId: m.id,
           roleSlug: m.roleSlug,
           status: m.status,
-          modelRoute: parseModelRoute(m.modelRouteJson),
+          modelRoute: parseModelRouteJson(m.modelRouteJson),
           retired: db.isRetired(m.sessionKey),
         }));
       const tasks = db.listTasks(input.teamId).map(t => ({

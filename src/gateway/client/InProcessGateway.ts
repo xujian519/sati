@@ -412,6 +412,7 @@ export class InProcessGateway implements Gateway {
           sessionKey: input.sessionKey,
           projectKey: input.projectKey,
           channelKey: input.channelKey,
+          ...(input.modelRoute !== undefined ? { modelRoute: input.modelRoute } : {}),
         });
         if (input.timeoutMs !== undefined && Number.isFinite(input.timeoutMs) && input.timeoutMs > 0) {
           timeoutHandle = setTimeout(() => {

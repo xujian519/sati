@@ -1394,7 +1394,7 @@ class ProjectRuntimeRegistry {
     const prepared = await this.prepareSessionRuntime(context);
     const resumed = await resumeAgentSession({
       sessionId: context.sessionKey,
-      config: this.createAgentConfig(prepared.runtime, context.sessionKey),
+      config: this.createAgentConfig(prepared.runtime, context),
       dependencies: prepared.baseDependencies,
       projectStorage: prepared.runtime.projectStorage,
       extendDependencies: prepared.extendDependencies,
@@ -1467,7 +1467,7 @@ class ProjectRuntimeRegistry {
     const extensionDependencies = prepared.extendDependencies(storage);
     const { session } = createAgentSessionWithStorage({
       sessionId: context.sessionKey,
-      config: this.createAgentConfig(prepared.runtime, context.sessionKey),
+      config: this.createAgentConfig(prepared.runtime, context),
       dependencies: mergeSessionDependencies(prepared.baseDependencies, extensionDependencies),
       storage,
       transcript: storage.transcript,
@@ -1912,29 +1912,37 @@ class ProjectRuntimeRegistry {
     };
   }
 
-  private createAgentConfig(runtime: ProjectRuntime, sessionKey: string): CreateAgentSessionOptions["config"] {
+  private createAgentConfig(
+    runtime: ProjectRuntime,
+    context: GatewaySessionContext,
+  ): CreateAgentSessionOptions["config"] {
     const agent = runtime.snapshot.config.agent;
-    const override = this._sessionOverrides?.get(sessionKey);
+    const override = this._sessionOverrides?.get(context.sessionKey);
     const permissionMode = override?.permissionMode ?? this.options.permissionMode;
     const cwd = override?.cwd ?? runtime.projectRoot;
+    // M4：会话级模型路由覆盖（团队成员唤醒传快照 modelRoute）——仅覆盖本次会话的
+    // provider/model，不改全局配置、不动 PilotConfigStore。缺省回落项目默认模型。
+    const modelRoute = context.modelRoute;
+    const provider = modelRoute?.provider ?? agent.model.provider;
+    const model = modelRoute?.model ?? agent.model.model;
     // Hand `PermissionContext` the same live rule-set reference the
     // gateway permission hook owns (see `getLiveRuleSet`). With this
     // shared reference, an "allow + remember" decision pushed by the
     // hook is visible to `PermissionRuntime.decide` on the very next
     // tool call inside the same turn — no roundtrip back to the client
     // needed, even when the client lives in a different process.
-    const liveRuleSet = this.getLiveRuleSet(sessionKey);
+    const liveRuleSet = this.getLiveRuleSet(context.sessionKey);
     // 阶段四 T3：统一能力解析（config → catalog → 协议默认），未知模型按
     // catalog/默认回退，而非盲目 text-only。
     const modelMultimodal: import("../model/index.js").MultimodalConstraints | undefined = resolveModelInfo(
       runtime.model,
-      agent.model.provider,
-      agent.model.model,
+      provider,
+      model,
     ).multimodal;
     let maxContextTokens: number | undefined;
     let maxOutputTokens: number | undefined;
     try {
-      const caps = runtime.model.getCapabilities(agent.model.provider, agent.model.model);
+      const caps = runtime.model.getCapabilities(provider, model);
       maxContextTokens = agent.maxContextTokens ?? caps.maxContextTokens;
       maxOutputTokens = caps.maxOutputTokens;
     } catch {
@@ -1981,8 +1989,8 @@ class ProjectRuntimeRegistry {
       };
     }
     return {
-      provider: agent.model.provider,
-      model: agent.model.model,
+      provider,
+      model,
       modelMultimodal,
       cwd,
       permissionMode,
