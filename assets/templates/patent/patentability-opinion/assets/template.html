@@ -6,13 +6,10 @@
 <title>可专利性分析意见</title>
 <style>
   /* ============================================================
-   * 可专利性分析意见 — 文书骨架
-   * 约定：单文件 HTML、全部样式内联、A4 打印适配。
-   * 品牌契约注入点：仅需改写 :root 变量（所名/密级/主色/字体）。
-   * 内置渲染管线不注入页号；如需页码按 references/conventions.md §打印导出 的 Playwright 方式导出。
+   * 可专利性分析意见 — 文书骨架（v2 排版规范）
+   * 正文 小四 12pt + 仿宋 + 1.5 倍行距；标题黑体；A4 页边距 上20 下20 左25 右25。
+   * 品牌变量由 assets/templates/patent/tokens.css 注入；agent 不改样式。
    * ============================================================ */
-  /* 品牌变量由 Sati 文书品牌契约注入（见 assets/templates/patent/DOCS.md）。
-   * agent 渲染时禁止改写这些变量；品牌覆盖走 tokens.css / products/<标识>/brand/theme.json。 */
   :root {
     --doc-firm: var(--sati-doc-firm, "XX 知识产权代理事务所");
     --doc-confidential: var(--sati-doc-confidential, "机密 · 仅供委托方使用");
@@ -28,25 +25,25 @@
     --doc-badge-high: var(--sati-doc-danger, #b42318);
     --doc-badge-mid: var(--sati-doc-warning, #b54708);
     --doc-badge-low: var(--sati-doc-success, #067647);
-    --doc-font-serif: var(--sati-doc-font-serif, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif);
+    --doc-font-serif: var(--sati-doc-font-serif, "FangSong", "仿宋", "FangSong_GB2312", "STFangsong", "SimSun", serif);
     --doc-font-sans: var(--sati-doc-font-sans, "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif);
     --doc-font-mono: var(--sati-doc-font-mono, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace);
-    --doc-page-margin: var(--sati-doc-page-margin, 16mm 18mm 18mm 18mm);
-    --doc-body-padding: var(--sati-doc-body-padding, 0 18mm);
-    --doc-body-max-width: var(--sati-doc-body-max-width, 174mm);
+    --doc-page-margin: var(--sati-doc-page-margin, 20mm 25mm 20mm 25mm);
+    --doc-body-padding: var(--sati-doc-body-padding, 0 25mm);
+    --doc-body-max-width: var(--sati-doc-body-max-width, 160mm);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
   html { font-size: 12pt; }
-
   body {
     font-family: var(--doc-font-serif);
     color: var(--doc-body);
     background: var(--doc-surface);
-    line-height: 1.7;
+    font-size: 12pt; /* 小四正文 */
+    line-height: 1.5; /* 1.5 倍行距 */
+    text-justify: inter-ideograph;
     padding: var(--doc-body-padding);
-    max-width: var(--doc-body-max-width);  /* A4 内容宽 */
+    max-width: var(--doc-body-max-width);
     margin: 0 auto;
   }
 
@@ -58,7 +55,7 @@
     padding: 7mm 0 3mm;
     border-bottom: 2px solid var(--doc-accent);
     font-family: var(--doc-font-sans);
-    font-size: 9.5pt;
+    font-size: 10.5pt;
     color: var(--doc-muted);
   }
   .doc-header .firm { font-weight: 600; color: var(--doc-accent); }
@@ -84,37 +81,34 @@
     letter-spacing: 0.12em;
     color: var(--doc-accent-strong);
   }
-  .doc-masthead .doc-number {
-    font-family: var(--doc-font-sans);
-    font-size: 9.5pt;
-    color: var(--doc-muted);
-    margin-top: 2.5mm;
-  }
+  .doc-masthead .doc-number { font-family: var(--doc-font-sans); font-size: 10.5pt; color: var(--doc-muted); margin-top: 2.5mm; }
 
   .doc-meta {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.6mm 6mm;
+    grid-template-columns: 34mm 1fr;
+    gap: 0;
     width: 100%;
     margin: 5mm 0 6mm;
     border: 1px solid var(--doc-border);
-    font-size: 11pt;
+    font-size: 10.5pt;
   }
   .doc-meta dt {
     font-family: var(--doc-font-sans);
     font-weight: 600;
     color: var(--doc-accent);
     background: var(--doc-header-bg);
-    padding: 1.2mm 4mm;
+    padding: 1.5mm 4mm;
     white-space: nowrap;
+    border-bottom: 1px solid var(--doc-border);
   }
-  .doc-meta dd { padding: 1.2mm 4mm; }
+  .doc-meta dd { padding: 1.5mm 4mm; border-bottom: 1px solid var(--doc-border); }
+  .doc-meta dt:last-of-type, .doc-meta dd:last-of-type { border-bottom: none; }
 
   /* ---------- 章节与标题 ---------- */
   section { margin: 5mm 0; }
   h2 {
     font-family: var(--doc-font-sans);
-    font-size: 13pt;
+    font-size: 14pt;
     font-weight: 700;
     color: var(--doc-accent-strong);
     padding-bottom: 1mm;
@@ -123,7 +117,7 @@
   }
   h3 {
     font-family: var(--doc-font-sans);
-    font-size: 11.5pt;
+    font-size: 12pt;
     font-weight: 600;
     color: var(--doc-accent);
     margin: 4mm 0 2mm;
@@ -140,12 +134,12 @@
     border-left: 3px solid var(--doc-accent);
     padding: 3mm 4mm;
     margin: 3mm 0;
-    font-size: 11pt;
+    font-size: 12pt;
   }
   .callout .callout-title {
     font-family: var(--doc-font-sans);
     font-weight: 700;
-    font-size: 10.5pt;
+    font-size: 12pt;
     color: var(--doc-accent);
     margin-bottom: 1mm;
   }
@@ -160,7 +154,7 @@
   }
   caption {
     font-family: var(--doc-font-sans);
-    font-size: 9.5pt;
+    font-size: 9pt;
     color: var(--doc-muted);
     text-align: left;
     margin-bottom: 1mm;
@@ -169,6 +163,7 @@
     border: 1px solid var(--doc-border);
     padding: 1.5mm 2.5mm;
     vertical-align: top;
+    line-height: 1.5;
   }
   th {
     font-family: var(--doc-font-sans);
@@ -177,10 +172,10 @@
     color: var(--doc-accent-strong);
     white-space: nowrap;
   }
-  thead { display: table-header-group; }   /* 打印跨页表头重复 */
+  thead { display: table-header-group; }
   tbody tr:nth-child(even) { background: var(--doc-zebra); }
   .num { text-align: right; }
-  .mono { font-family: var(--doc-font-mono); font-size: 9.5pt; }
+  .mono { font-family: var(--doc-font-mono); font-size: 10.5pt; }
 
   /* ---------- 置信度 / 风险徽标 ---------- */
   .badge {
@@ -192,10 +187,10 @@
     border-radius: 2px;
     white-space: nowrap;
   }
-  .badge-evidence { border: 1px solid var(--doc-accent); color: var(--doc-accent); }      /* 证据支撑 */
-  .badge-client   { border: 1px solid var(--doc-muted); color: var(--doc-muted); }        /* 客户提供 */
-  .badge-model    { border: 1px dashed var(--doc-muted); color: var(--doc-muted); }      /* 模型推断 */
-  .badge-assumption { border: 1px dashed var(--doc-muted); color: var(--doc-muted); font-style: italic; } /* 假设 */
+  .badge-evidence { border: 1px solid var(--doc-accent); color: var(--doc-accent); }
+  .badge-client   { border: 1px solid var(--doc-muted); color: var(--doc-muted); }
+  .badge-model    { border: 1px dashed var(--doc-muted); color: var(--doc-muted); }
+  .badge-assumption { border: 1px dashed var(--doc-muted); color: var(--doc-muted); font-style: italic; }
   .badge-risk-high   { background: var(--doc-badge-high); color: #fff; }
   .badge-risk-mid    { background: var(--doc-badge-mid); color: #fff; }
   .badge-risk-low    { background: var(--doc-badge-low); color: #fff; }
@@ -208,7 +203,7 @@
     border: 1px solid var(--doc-border);
     background: var(--doc-header-bg);
     padding: 3mm 4mm;
-    font-size: 9.5pt;
+    font-size: 9pt;
     color: var(--doc-muted);
     margin: 3mm 0;
   }
@@ -217,9 +212,7 @@
     font-weight: 700;
     color: var(--doc-body);
   }
-  .disclaimer::after {
-    content: var(--doc-disclaimer);
-  }
+  .disclaimer::after { content: var(--doc-disclaimer); }
   .doc-footer {
     margin: 6mm 0 4mm;
     padding-top: 2mm;
@@ -227,14 +220,14 @@
     display: flex;
     justify-content: space-between;
     font-family: var(--doc-font-sans);
-    font-size: 8.5pt;
+    font-size: 9pt;
     color: var(--doc-muted);
   }
-  .signature { margin-top: 6mm; display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
-  .signature .sign-block { border-top: 1px solid var(--doc-body); padding-top: 1.5mm; font-family: var(--doc-font-sans); font-size: 10pt; }
+  .signature { margin-top: 8mm; display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; }
+  .signature .sign-block { border-top: 1px solid var(--doc-body); padding-top: 1.5mm; font-family: var(--doc-font-sans); font-size: 12pt; }
 
   /* ---------- 打印 ---------- */
-  @page { size: A4; margin: var(--doc-page-margin, 16mm 18mm 18mm 18mm); }
+  @page { size: A4; margin: var(--doc-page-margin, 20mm 25mm 20mm 25mm); }
   @media print {
     body { padding: 0; max-width: none; }
     a { color: inherit; text-decoration: none; }
@@ -247,7 +240,6 @@
 </head>
 <body>
 
-  <!-- 页眉：所名 + 密级 -->
   <header class="doc-header">
     <span class="firm" id="firm-name"></span>
     <span class="confidential"></span>
@@ -259,7 +251,6 @@
     <div class="doc-number">文档编号：PA-2026-XXXX · 版本 V1.0</div>
   </div>
 
-  <!-- 案件信息 -->
   <dl class="doc-meta">
     <dt>委托方</dt><dd id="meta-client">________</dd>
     <dt>发明名称</dt><dd id="meta-title">________</dd>
@@ -268,7 +259,6 @@
     <dt>分析日期</dt><dd id="meta-date">________</dd>
   </dl>
 
-  <!-- 结论摘要 -->
   <section id="executive-summary" aria-label="结论摘要">
     <h2>一、结论摘要</h2>
     <p>受托方对委托发明「<span id="sum-title">________</span>」进行了可专利性分析。逐项结论如下：</p>
@@ -292,13 +282,11 @@
     </div>
   </section>
 
-  <!-- 分析依据与判断标准 -->
   <section id="basis" aria-label="分析依据与判断标准">
     <h2>二、分析依据与判断标准</h2>
     <p>本意见依据现行《专利法》（2020 修正）、《专利法实施细则》（2023 修订）及《专利审查指南》作出。判断标准：新颖性采用单独对比原则；创造性采用三步法；客体按技术方案三要素判断。法条原文与审查指南章节定位见引用日志。</p>
   </section>
 
-  <!-- 技术方案解析 -->
   <section id="claim-decomposition" aria-label="技术方案解析">
     <h2>三、技术方案解析</h2>
     <p>将发明方案分解为如下技术特征（按 PFE 三元组：技术问题 / 技术特征 / 技术效果）：</p>
@@ -315,7 +303,6 @@
     <p><strong>要解决的技术问题：</strong>（原文表述）</p>
   </section>
 
-  <!-- 逐特征比对 -->
   <section id="feature-comparison" aria-label="逐特征比对">
     <h2>四、逐特征比对</h2>
     <p>以最接近的现有技术 D1（见证据清单）为基准，逐特征比对如下；每条映射标注引证定位（pin-cite）与置信度。</p>
@@ -345,7 +332,6 @@
     <p><strong>区别技术特征：</strong>（如 F2、F3）</p>
   </section>
 
-  <!-- 创造性判断 -->
   <section id="inventiveness" aria-label="创造性判断">
     <h2>五、创造性判断（三步法）</h2>
     <h3>5.1 确定最接近的现有技术</h3>
@@ -356,7 +342,6 @@
     <p>（逐项分析区别特征是否被 D2/D3 公开、是否属于公知常识、有无相反教导；"容易想到"类断言必须附证据或标注假设）</p>
   </section>
 
-  <!-- 其他授权要件 -->
   <section id="other-requirements" aria-label="其他授权要件">
     <h2>六、其他授权要件</h2>
     <table>
@@ -373,7 +358,6 @@
     </table>
   </section>
 
-  <!-- 证据清单 -->
   <section id="evidence" aria-label="证据与对比文件清单">
     <h2>七、证据与对比文件清单</h2>
     <table>
@@ -390,7 +374,6 @@
     </table>
   </section>
 
-  <!-- 引用日志 -->
   <section id="citation-log" aria-label="引用日志">
     <h2>八、引用日志</h2>
     <p>本意见每条关键结论均可溯源。来源类型与置信度取值见 <span class="mono">references/citation-log.md</span>；无证据支撑的推断一律标注为"模型推断"或"假设"，不作确定性表述。</p>
@@ -415,7 +398,6 @@
     </table>
   </section>
 
-  <!-- 假设与局限 -->
   <section id="assumptions" aria-label="假设与局限">
     <h2>九、假设与局限</h2>
     <ul>
@@ -425,7 +407,6 @@
     </ul>
   </section>
 
-  <!-- 落款与免责声明 -->
   <div class="doc-closing">
     <div class="signature">
       <div class="sign-block">分析人：________</div>

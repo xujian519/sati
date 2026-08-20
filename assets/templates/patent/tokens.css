@@ -1,5 +1,6 @@
 /* assets/templates/patent/tokens.css
- * Sati 专利文书品牌契约 — CSS 语义变量表。
+ * Sati 专利文书品牌契约 — CSS 语义变量表（v2）
+ * 排版规范：正文 小四 12pt + 仿宋 + 1.5 倍行距；标题黑体；A4 页边距 上20 下20 左25 右25。
  * 所有专利文书模板均引用 --sati-doc-* 变量；事务所/白标产品可覆盖。
  */
 
@@ -29,25 +30,27 @@
   --sati-doc-assumption: #6b6b6b; /* 假设 */
 
   /* ----- 字体族 ----- */
-  --sati-doc-font-serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif;
-  --sati-doc-font-sans: "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif;
-  --sati-doc-font-mono: "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+  --sati-doc-font-serif:
+    "FangSong", "仿宋", "FangSong_GB2312", "STFangsong", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif; /* 正文：仿宋 */
+  --sati-doc-font-sans:
+    "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif; /* 标题/表头：黑体 */
+  --sati-doc-font-mono: "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace; /* 编号/公开号 */
 
-  /* ----- 排版尺度（A4，12pt 基准） ----- */
-  --sati-doc-text-xs: 9pt;
-  --sati-doc-text-sm: 9.5pt;
-  --sati-doc-text-base: 10.5pt;
-  --sati-doc-text-md: 11pt;
-  --sati-doc-text-lg: 11.5pt;
-  --sati-doc-text-xl: 13pt;
-  --sati-doc-text-2xl: 16pt;
-  --sati-doc-leading-body: 1.7;
-  --sati-doc-leading-tight: 1.3;
+  /* ----- 排版尺度（A4，小四 12pt 基准） ----- */
+  --sati-doc-text-xs: 9pt; /* 小五：页脚/免责小注 */
+  --sati-doc-text-sm: 10.5pt; /* 五号：表格/表注/元数据 */
+  --sati-doc-text-base: 12pt; /* 小四：正文 */
+  --sati-doc-text-md: 12pt; /* 小四：H4 级标题（加粗区分） */
+  --sati-doc-text-lg: 12pt; /* 小四：H3 级标题（加粗区分） */
+  --sati-doc-text-xl: 14pt; /* 四号：H2 节标题 */
+  --sati-doc-text-2xl: 16pt; /* 三号：文书主标题 H1 */
+  --sati-doc-leading-body: 1.5; /* 正文行距 */
+  --sati-doc-leading-tight: 1.3; /* 紧凑行距（表格/引用块） */
 
-  /* ----- 间距与尺寸 ----- */
-  --sati-doc-page-margin: 16mm 18mm 18mm 18mm;
-  --sati-doc-body-padding: 0 18mm;
-  --sati-doc-body-max-width: 174mm;
+  /* ----- 页面与间距 ----- */
+  --sati-doc-page-margin: 20mm 25mm 20mm 25mm; /* 上 右 下 左 */
+  --sati-doc-body-padding: 0 25mm; /* 屏幕预览：左右 25mm（与 @page 左右一致） */
+  --sati-doc-body-max-width: 160mm; /* 210mm - 25mm - 25mm */
   --sati-doc-section-gap: 5mm;
   --sati-doc-section-gap-lg: 6mm;
 }
