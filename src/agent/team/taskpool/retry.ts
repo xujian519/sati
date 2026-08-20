@@ -1,8 +1,8 @@
 /**
  * 失败任务自动转派（M4）：failed 且未耗尽 maxAttempts 的任务重置回 pending 重入
- * 可认领池（attempt 保留，计次由 beginTaskAttempt 再 +1），由调度器下一次
- * 锁内认领自然派发——成员失败 → onTaskGraphChanged → kickTeam → 锁内重置 →
- * nextReadyTask 认领给（另一）idle 成员。
+ * 可认领池（attempt 保留，计次由 beginTaskAttempt 再 +1），由调度器锁内
+ * 重置后重取快照、同次锁内认领自然派发——成员失败 → onTaskGraphChanged →
+ * kickTeam → 锁内重置 + 重取快照 → nextReadyTask 认领给 idle 成员。
  * 防环：attempt >= maxAttempts 即终态（attemptsExhausted），不重置。
  * 与 invalidateTaskAttempt 的关系：语义同为「回 pending」，但自动转派必须
  * reassigning 保持 false（nextReadyTask 跳过 reassigning 任务，置位将无人认领）、
