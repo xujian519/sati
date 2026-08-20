@@ -798,6 +798,28 @@ export class LlmMemoryExtractor {
     }
   }
 
+  /**
+   * Dream 步骤容错：LLM 空响应/JSON 解析失败（executeWithRetry 重试后仍失败）
+   * 时降级为「跳过该步骤」的安全结果——单簇/单项目失败不中断整次 Dream 维护。
+   * 网络/超时等非解析类错误继续向上抛（已重试仍失败属真故障，保持可观测）。
+   */
+  private async dreamStepWithParseFallback<T>(requestLabel: string, run: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        /Empty extraction response|No JSON object found|Incomplete JSON object|Unexpected end of JSON input|Unexpected token/i.test(
+          message,
+        )
+      ) {
+        this.logger?.warn?.(`[clawxmemory] ${requestLabel} 降级跳过（LLM 空响应/JSON 解析失败）: ${message}`);
+        return fallback;
+      }
+      throw error;
+    }
+  }
+
   async rewriteUserProfile(input: {
     existingProfile: MemoryUserSummary | null;
     candidates: MemoryCandidate[];
@@ -1029,26 +1051,35 @@ export class LlmMemoryExtractor {
       };
     }
     const allowedRelativePaths = new Set(input.headers.map(header => header.relativePath));
-    const parsed = await this.callStructuredJsonWithDebug<RawDreamClusterPlanPayload>({
-      systemPrompt: buildDreamClusterPlanSystemPrompt(input.kind),
-      userPrompt: buildDreamClusterPlanPrompt(input),
-      requestLabel: input.kind === "project" ? "Dream project cluster plan" : "Dream feedback cluster plan",
-      timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_CLUSTER_PLAN_TIMEOUT_MS,
-      ...(input.agentId ? { agentId: input.agentId } : {}),
-      ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-      parse: raw => JSON.parse(extractFirstJsonObject(raw)) as RawDreamClusterPlanPayload,
-    });
-    return {
-      summary:
-        typeof parsed.summary === "string"
-          ? truncate(normalizeWhitespace(parsed.summary), 320)
-          : `Dream ${input.kind} cluster plan completed.`,
-      clusters: Array.isArray(parsed.clusters)
-        ? parsed.clusters
-            .map(cluster => normalizeDreamCluster(cluster, allowedRelativePaths))
-            .filter((cluster): cluster is LlmDreamCluster => Boolean(cluster))
-        : [],
-    };
+    return this.dreamStepWithParseFallback(
+      input.kind === "project" ? "Dream project cluster plan" : "Dream feedback cluster plan",
+      async () => {
+        const parsed = await this.callStructuredJsonWithDebug<RawDreamClusterPlanPayload>({
+          systemPrompt: buildDreamClusterPlanSystemPrompt(input.kind),
+          userPrompt: buildDreamClusterPlanPrompt(input),
+          requestLabel: input.kind === "project" ? "Dream project cluster plan" : "Dream feedback cluster plan",
+          timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_CLUSTER_PLAN_TIMEOUT_MS,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+          ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
+          parse: raw => JSON.parse(extractFirstJsonObject(raw)) as RawDreamClusterPlanPayload,
+        });
+        return {
+          summary:
+            typeof parsed.summary === "string"
+              ? truncate(normalizeWhitespace(parsed.summary), 320)
+              : `Dream ${input.kind} cluster plan completed.`,
+          clusters: Array.isArray(parsed.clusters)
+            ? parsed.clusters
+                .map(cluster => normalizeDreamCluster(cluster, allowedRelativePaths))
+                .filter((cluster): cluster is LlmDreamCluster => Boolean(cluster))
+            : [],
+        };
+      },
+      {
+        summary: `Dream ${input.kind} cluster plan skipped (LLM response empty).`,
+        clusters: [],
+      },
+    );
   }
 
   async refineDreamCluster(input: LlmDreamClusterRefineInput): Promise<LlmDreamClusterRefineOutput> {
@@ -1058,26 +1089,35 @@ export class LlmMemoryExtractor {
         file: null,
       };
     }
-    const parsed = await this.callStructuredJsonWithDebug<RawDreamClusterRefinePayload>({
-      systemPrompt: buildDreamClusterRefineSystemPrompt(input.kind),
-      userPrompt: buildDreamClusterRefinePrompt(input),
-      requestLabel: input.kind === "project" ? "Dream project cluster refine" : "Dream feedback cluster refine",
-      timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_CLUSTER_REFINE_TIMEOUT_MS,
-      ...(input.agentId ? { agentId: input.agentId } : {}),
-      ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-      parse: raw => JSON.parse(extractFirstJsonObject(raw)) as RawDreamClusterRefinePayload,
-    });
-    const name = typeof parsed.name === "string" ? truncate(normalizeWhitespace(parsed.name), 120) : "";
-    const description =
-      typeof parsed.description === "string" ? truncate(normalizeWhitespace(parsed.description), 320) : "";
-    const markdown = typeof parsed.markdown === "string" ? parsed.markdown.trim() : "";
-    return {
-      summary:
-        typeof parsed.summary === "string"
-          ? truncate(normalizeWhitespace(parsed.summary), 320)
-          : `Dream ${input.kind} cluster refine completed.`,
-      file: name && description && markdown ? { name, description, markdown } : null,
-    };
+    return this.dreamStepWithParseFallback(
+      input.kind === "project" ? "Dream project cluster refine" : "Dream feedback cluster refine",
+      async () => {
+        const parsed = await this.callStructuredJsonWithDebug<RawDreamClusterRefinePayload>({
+          systemPrompt: buildDreamClusterRefineSystemPrompt(input.kind),
+          userPrompt: buildDreamClusterRefinePrompt(input),
+          requestLabel: input.kind === "project" ? "Dream project cluster refine" : "Dream feedback cluster refine",
+          timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_CLUSTER_REFINE_TIMEOUT_MS,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+          ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
+          parse: raw => JSON.parse(extractFirstJsonObject(raw)) as RawDreamClusterRefinePayload,
+        });
+        const name = typeof parsed.name === "string" ? truncate(normalizeWhitespace(parsed.name), 120) : "";
+        const description =
+          typeof parsed.description === "string" ? truncate(normalizeWhitespace(parsed.description), 320) : "";
+        const markdown = typeof parsed.markdown === "string" ? parsed.markdown.trim() : "";
+        return {
+          summary:
+            typeof parsed.summary === "string"
+              ? truncate(normalizeWhitespace(parsed.summary), 320)
+              : `Dream ${input.kind} cluster refine completed.`,
+          file: name && description && markdown ? { name, description, markdown } : null,
+        };
+      },
+      {
+        summary: `Dream ${input.kind} cluster refine skipped (LLM response empty).`,
+        file: null,
+      },
+    );
   }
 
   async planGeneralProjectMetaMerges(
@@ -1117,16 +1157,26 @@ export class LlmMemoryExtractor {
       description: input.currentMeta.description,
       status: input.currentMeta.status,
     };
-    const parsed = await this.callStructuredJsonWithDebug<RawProjectMetaReviewPayload>({
-      systemPrompt: DREAM_PROJECT_META_REVIEW_SYSTEM_PROMPT,
-      userPrompt: buildDreamProjectMetaReviewPrompt(input),
-      requestLabel: "Dream project meta review",
-      timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_PROJECT_META_REVIEW_TIMEOUT_MS,
-      ...(input.agentId ? { agentId: input.agentId } : {}),
-      ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
-      parse: raw => JSON.parse(extractFirstJsonObject(raw)) as RawProjectMetaReviewPayload,
-    });
-    return normalizeDreamProjectMetaReview(parsed, fallback);
+    return this.dreamStepWithParseFallback(
+      "Dream project meta review",
+      async () => {
+        const parsed = await this.callStructuredJsonWithDebug<RawProjectMetaReviewPayload>({
+          systemPrompt: DREAM_PROJECT_META_REVIEW_SYSTEM_PROMPT,
+          userPrompt: buildDreamProjectMetaReviewPrompt(input),
+          requestLabel: "Dream project meta review",
+          timeoutMs: input.timeoutMs ?? DEFAULT_DREAM_PROJECT_META_REVIEW_TIMEOUT_MS,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+          ...(input.debugTrace ? { debugTrace: input.debugTrace } : {}),
+          parse: raw => JSON.parse(extractFirstJsonObject(raw)) as RawProjectMetaReviewPayload,
+        });
+        return normalizeDreamProjectMetaReview(parsed, fallback);
+      },
+      {
+        shouldUpdate: false,
+        reason: "Dream project meta review skipped (LLM response empty).",
+        projectMeta: fallback,
+      },
+    );
   }
 
   async planDreamFileMemory(input: LlmDreamFileGlobalPlanInput): Promise<LlmDreamFileGlobalPlanOutput> {

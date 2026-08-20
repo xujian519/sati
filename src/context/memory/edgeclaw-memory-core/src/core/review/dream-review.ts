@@ -33,7 +33,7 @@ import {
 
 // 公共 API 面（core/index.ts 经 export * 直出，消费方依赖）：
 // DreamRewriteOutcome/DreamRunResult/DreamExecutionResult 定义已下沉 dream-types.ts。
-export { DreamExecutionResult, DreamRewriteOutcome, DreamRunResult } from "./dream-types.js";
+export type { DreamExecutionResult, DreamRewriteOutcome, DreamRunResult } from "./dream-types.js";
 
 export class DreamRewriteRunner {
   private readonly logger?: LoggerLike;
