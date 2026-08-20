@@ -567,6 +567,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // wake 返回后，与 scanner 冷恢复路径同款（下方 onEvent 内 completed 收集）。
   // I3（code review）闭环：captain 离线（连接断开超宽限窗）→ 暂停新认领；
   // unknown（纯 in-process/CLI 场景）容错视为在线，不阻塞成员工作。
+  // ⚠️ 最终复审 I1（已知边界）：Web 主路径经 ui/server relay 单条共享 ws 连接（sati-bridge 单例），
+  // 浏览器关闭不触发 gateway onClose → Web 用户下线判定不生效（fail-open 回到 M2 行为：成员成果
+  // 持久化不丢失、C2 有界重试）；CLI/TUI 直连 ws 路径正常。M4 面板接线时以浏览器连接级信号为准。
   const teamScheduler = new TeamScheduler({
     db: teamDb,
     emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),

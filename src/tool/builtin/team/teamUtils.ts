@@ -6,6 +6,7 @@
 import { parseMemberSessionKey } from "../../../agent/team/index.js";
 import type { TeamDb, TeamRow, TeamScheduler, TeamEventEmitter } from "../../../agent/team/index.js";
 import { listRegisteredRoleIds } from "../../../agent/sub/builtinSubagentTypes.js";
+import { DEFAULT_MODEL_ID, DEFAULT_MODEL_PROVIDER } from "../../../model/defaults.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 
 /** team_* 工具的装配选项：由 createLocalGateway 注入（db=teams.db，scheduler=TeamScheduler 实例，emit=TeamEvent 广播出口）。 */
@@ -146,13 +147,17 @@ export function requireRegisteredRole(roleSlug: string): void {
   }
 }
 
-/** 成员模型路由缺省值（M3）：继承队长会话主模型（context provider/modelId），缺省与项目默认一致。 */
+/**
+ * 成员模型路由缺省值（M3）：继承队长会话主模型（context provider/modelId），缺省与项目默认一致
+ * （最终复审 M1：回退引用 defaults 常量，消除硬编码漂移；当前仅快照存储——wakeMember 未消费，
+ * 成员会话实际模型走项目默认配置，M4 接线消费点）。
+ */
 export function defaultModelRoute(context: { provider?: string; modelId?: string }): {
   provider: string;
   model: string;
 } {
   return {
-    provider: context.provider ?? "deepseek",
-    model: context.modelId ?? "deepseek-v4-flash",
+    provider: context.provider ?? DEFAULT_MODEL_PROVIDER,
+    model: context.modelId ?? DEFAULT_MODEL_ID,
   };
 }
