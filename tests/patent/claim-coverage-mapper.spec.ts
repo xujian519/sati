@@ -53,23 +53,31 @@ test("正常抽取：矩阵 + 确定性校验写入 state，落盘 outputs/claim
 });
 
 test("骨架交叉校验：引用交底书中不存在的实施例 → 剔除 → 特征判为无支撑", async () => {
-  const result = await handler.execute({
-    state: state(),
-    provider: provider(
-      async () =>
-        JSON.stringify({
-          claims: [{ claimId: "claim_1", features: ["加热模块", "风扇"], embodimentRefs: ["embodiment_99"] }],
-        }),
-      "case-1",
-    ),
-  });
-  const parsed = JSON.parse(result.claim_coverage_result as string) as {
-    claims: Array<{ embodimentRefs: string[]; uncoveredFeatures: string[] }>;
-    check: { missingEmbodiment: Array<{ claimId: string; feature: string }> };
-  };
-  assert.deepEqual(parsed.claims[0]!.embodimentRefs, []);
-  assert.deepEqual(parsed.claims[0]!.uncoveredFeatures, ["加热模块", "风扇"]);
-  assert.equal(parsed.check.missingEmbodiment.length, 2);
+  const cwd = mkdtempSync(join(tmpdir(), "mapper-skeleton-"));
+  const originalCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    const result = await handler.execute({
+      state: state(),
+      provider: provider(
+        async () =>
+          JSON.stringify({
+            claims: [{ claimId: "claim_1", features: ["加热模块", "风扇"], embodimentRefs: ["embodiment_99"] }],
+          }),
+        "case-1",
+      ),
+    });
+    const parsed = JSON.parse(result.claim_coverage_result as string) as {
+      claims: Array<{ embodimentRefs: string[]; uncoveredFeatures: string[] }>;
+      check: { missingEmbodiment: Array<{ claimId: string; feature: string }> };
+    };
+    assert.deepEqual(parsed.claims[0]!.embodimentRefs, []);
+    assert.deepEqual(parsed.claims[0]!.uncoveredFeatures, ["加热模块", "风扇"]);
+    assert.equal(parsed.check.missingEmbodiment.length, 2);
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test("parse 失败（非 JSON）：保留原文不降级（extract 骨架行为）", async () => {
