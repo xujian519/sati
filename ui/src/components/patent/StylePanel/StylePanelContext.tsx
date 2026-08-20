@@ -34,7 +34,7 @@ export function StylePanelProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const closePanel = useCallback(() => {
-    setState(prev => (prev.open ? { ...EMPTY_STATE } : prev));
+    setState(prev => (prev.open ? EMPTY_STATE : prev));
   }, []);
 
   const updateStyle = useCallback((style: DocumentStyle) => {

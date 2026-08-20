@@ -35,6 +35,13 @@ function defaultPresetDir(cwd: string): string {
   return resolvePresetDirFromBrandPath(resolve(cwd, DEFAULT_BRAND_PATH));
 }
 
+function requireName(action: string, name: string | undefined): string {
+  if (name === undefined || name.trim() === "") {
+    throw new SatiToolRuntimeError("invalid_tool_input", `${action} 需要 name`, { tool: "document_style_preset" });
+  }
+  return name;
+}
+
 export function createDocumentStylePresetTool(): SatiToolDefinition<DocumentStylePresetInput> {
   return {
     name: "document_style_preset",
@@ -70,19 +77,17 @@ export function createDocumentStylePresetTool(): SatiToolDefinition<DocumentStyl
       const presetDir = defaultPresetDir(context.cwd);
       switch (input.action) {
         case "save": {
-          if (input.name === undefined || input.name.trim() === "") {
-            throw new SatiToolRuntimeError("invalid_tool_input", "save 需要 name", { tool: "document_style_preset" });
-          }
+          const name = requireName("save", input.name);
           if (input.style === undefined) {
             throw new SatiToolRuntimeError("invalid_tool_input", "save 需要 style", { tool: "document_style_preset" });
           }
           const path = saveStylePreset(presetDir, {
-            name: input.name,
+            name,
             description: input.description,
             style: input.style,
           });
           return {
-            content: [{ type: "text", text: `已保存样式预设 "${input.name}" → ${path}` }],
+            content: [{ type: "text", text: `已保存样式预设 "${name}" → ${path}` }],
           };
         }
         case "list": {
@@ -97,22 +102,18 @@ export function createDocumentStylePresetTool(): SatiToolDefinition<DocumentStyl
           };
         }
         case "get": {
-          if (input.name === undefined || input.name.trim() === "") {
-            throw new SatiToolRuntimeError("invalid_tool_input", "get 需要 name", { tool: "document_style_preset" });
-          }
-          const preset = loadStylePreset(presetDir, input.name);
+          const name = requireName("get", input.name);
+          const preset = loadStylePreset(presetDir, name);
           return {
             content: [{ type: "text", text: JSON.stringify(preset, null, 2) }],
             data: preset,
           };
         }
         case "delete": {
-          if (input.name === undefined || input.name.trim() === "") {
-            throw new SatiToolRuntimeError("invalid_tool_input", "delete 需要 name", { tool: "document_style_preset" });
-          }
-          const ok = deleteStylePreset(presetDir, input.name);
+          const name = requireName("delete", input.name);
+          const ok = deleteStylePreset(presetDir, name);
           return {
-            content: [{ type: "text", text: ok ? `已删除样式预设 "${input.name}"` : `预设不存在: ${input.name}` }],
+            content: [{ type: "text", text: ok ? `已删除样式预设 "${name}"` : `预设不存在: ${name}` }],
           };
         }
       }

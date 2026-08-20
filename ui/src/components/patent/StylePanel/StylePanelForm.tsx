@@ -13,6 +13,17 @@ type StylePanelFormProps = {
 
 const FONT_SIZE_OPTIONS = ["9pt", "10.5pt", "12pt", "14pt", "16pt", "18pt", "20pt"];
 
+/** 字号字段（子键 → i18n key），与 COLOR_FIELDS 同为数据驱动渲染。 */
+const FONT_SIZE_FIELDS: Array<[keyof NonNullable<DocumentStyle["fontSize"]>, string]> = [
+  ["xs", "fontSize.xs"],
+  ["sm", "fontSize.sm"],
+  ["base", "fontSize.base"],
+  ["md", "fontSize.md"],
+  ["lg", "fontSize.lg"],
+  ["xl", "fontSize.xl"],
+  ["x2l", "fontSize.x2l"],
+];
+
 const COLOR_FIELDS: Array<[keyof NonNullable<DocumentStyle["color"]>, string]> = [
   ["accent", "color.accent"],
   ["accentStrong", "color.accentStrong"],
@@ -88,26 +99,10 @@ export default function StylePanelForm({ style, onChange }: StylePanelFormProps)
       <section className="flex flex-col gap-1.5">
         <h3 className="text-[12px] font-semibold text-neutral-800 dark:text-neutral-100">{t("group.fontSize")}</h3>
         <div className="grid grid-cols-2 gap-2">
-          {renderSelectRow("fontSize.xs", fontSize.xs, t("placeholder.default"), v =>
-            onChange(updateGroup(style, "fontSize", { xs: v })),
-          )}
-          {renderSelectRow("fontSize.sm", fontSize.sm, t("placeholder.default"), v =>
-            onChange(updateGroup(style, "fontSize", { sm: v })),
-          )}
-          {renderSelectRow("fontSize.base", fontSize.base, t("placeholder.default"), v =>
-            onChange(updateGroup(style, "fontSize", { base: v })),
-          )}
-          {renderSelectRow("fontSize.md", fontSize.md, t("placeholder.default"), v =>
-            onChange(updateGroup(style, "fontSize", { md: v })),
-          )}
-          {renderSelectRow("fontSize.lg", fontSize.lg, t("placeholder.default"), v =>
-            onChange(updateGroup(style, "fontSize", { lg: v })),
-          )}
-          {renderSelectRow("fontSize.xl", fontSize.xl, t("placeholder.default"), v =>
-            onChange(updateGroup(style, "fontSize", { xl: v })),
-          )}
-          {renderSelectRow("fontSize.x2l", fontSize.x2l, t("placeholder.default"), v =>
-            onChange(updateGroup(style, "fontSize", { x2l: v })),
+          {FONT_SIZE_FIELDS.map(([key, i18nKey]) =>
+            renderSelectRow(i18nKey, fontSize[key], t("placeholder.default"), v =>
+              onChange(updateGroup(style, "fontSize", { [key]: v })),
+            ),
           )}
         </div>
       </section>
