@@ -1,5 +1,6 @@
 import { normalizeModelError } from "../errors/normalizeModelError.js";
 import { brandEnv, ENV_KEY } from "../../env.js";
+import { readDurationEnvMs } from "../../shared/env/index.js";
 import { createGoogleClient, type GoogleClientFactory } from "../providers/google/client.js";
 import { parseGoogleResponse } from "../providers/google/response.js";
 import type { GoogleRequestBody } from "../providers/google/request.js";
@@ -65,8 +66,8 @@ export const LITELLM_HTTP_SO_KEEPALIVE = false;
 export const LITELLM_HTTP_TCP_KEEPIDLE_SECONDS = 60;
 export const LITELLM_HTTP_TCP_KEEPINTVL_SECONDS = 30;
 export const LITELLM_HTTP_TCP_KEEPCNT = 5;
-export const LITELLM_STREAM_MAX_DURATION_MS: number | undefined = readOptionalPositiveEnvMs(
-  "LITELLM_MAX_STREAMING_DURATION_SECONDS",
+export const LITELLM_STREAM_MAX_DURATION_MS: number | undefined = readDurationEnvMs(
+  process.env.LITELLM_MAX_STREAMING_DURATION_SECONDS,
   1000,
 );
 
@@ -1062,18 +1063,6 @@ export function resolveStreamIdleTimeout(provider: ProviderConfig, options?: Mod
     return retry.streamIdleTimeoutMs;
   }
   return DEFAULT_STREAM_IDLE_TIMEOUT_MS;
-}
-
-function readOptionalPositiveEnvMs(name: string, multiplier: number): number | undefined {
-  const raw = process.env[name];
-  if (raw === undefined || raw.trim() === "") {
-    return undefined;
-  }
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    return undefined;
-  }
-  return value * multiplier;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

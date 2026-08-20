@@ -3,6 +3,7 @@ import { dirname, resolve, join as joinPath } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import { brandEnv, ENV_KEY } from "../env.js";
+import { parsePositiveInt } from "../shared/env/index.js";
 import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
 import type { PilotConfigDiagnostic } from "../pilot/config/types.js";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
@@ -2066,7 +2067,7 @@ class ProjectRuntimeRegistry {
       maxContextTokens = agent.maxContextTokens;
     }
     maxOutputTokens =
-      readPositiveIntegerEnv(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ??
+      parsePositiveInt(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ??
       agent.maxOutputTokens ??
       maxOutputTokens;
     const subagentModel = agent.subagents?.default;
@@ -2099,8 +2100,7 @@ class ProjectRuntimeRegistry {
         ...(subagentMaxOutputTokens !== undefined
           ? {
               maxOutputTokens:
-                readPositiveIntegerEnv(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ??
-                subagentMaxOutputTokens,
+                parsePositiveInt(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ?? subagentMaxOutputTokens,
             }
           : {}),
       };
@@ -2265,13 +2265,6 @@ function buildDefaultAutoOrchestrate() {
   };
 }
 
-function readPositiveIntegerEnv(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number.parseInt(value.trim(), 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
-  return Math.floor(parsed);
-}
-
 export function buildBrowserUseArgs(
   baseArgs: string[],
   outputDir: string,
@@ -2284,8 +2277,8 @@ export function buildBrowserUseArgs(
     args,
     "--timeout-action",
     String(
-      readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_ACTION_MS)) ??
-        readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_ACTION_TIMEOUT_MS)) ??
+      parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_ACTION_MS)) ??
+        parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_ACTION_TIMEOUT_MS)) ??
         DEFAULT_BROWSER_ACTION_TIMEOUT_MS,
     ),
   );
@@ -2293,8 +2286,8 @@ export function buildBrowserUseArgs(
     args,
     "--timeout-navigation",
     String(
-      readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_NAVIGATION_MS)) ??
-        readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_NAVIGATION_TIMEOUT_MS)) ??
+      parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_NAVIGATION_MS)) ??
+        parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_NAVIGATION_TIMEOUT_MS)) ??
         DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS,
     ),
   );
