@@ -151,6 +151,22 @@ export class RemoteGateway implements Gateway {
     return (await this.client.request("panel_heartbeat", input)) as { touched: number };
   }
 
+  async teamPanelSnapshot(input: { sessionKey?: string }): Promise<{ teams: unknown[] }> {
+    return (await this.client.request("team_panel_snapshot", input)) as { teams: unknown[] };
+  }
+
+  async teamToolCall(input: {
+    tool: string;
+    input: Record<string, unknown>;
+    sessionKey?: string;
+  }): Promise<{ ok: boolean; data?: unknown; error?: { code: string; message: string } }> {
+    return (await this.client.request("team_tool_call", input)) as {
+      ok: boolean;
+      data?: unknown;
+      error?: { code: string; message: string };
+    };
+  }
+
   async respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }> {
     return (await this.client.request("elicitation_respond", input)) as { delivered: boolean };
   }
