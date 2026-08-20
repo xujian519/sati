@@ -1285,6 +1285,13 @@ class ProjectRuntimeRegistry {
           logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
         });
         setCaseLawSemanticSource(createCaseLawSemanticSource(texts => embeddingClient!.embed(texts), caseEmbeddings));
+        // P4 向量预热：异步分页加载（每页 setImmediate 让出）不阻塞 gateway 启动，
+        // 因此 setTimeout 0 即安全——首个语义检索前矩阵大概率已就绪（ready），
+        // 未就绪时 search 也会返回 [] 并兜底触发预热，不产生 embed 浪费
+        // （case-law searchSemantic 未 ready 跳过语义路）。
+        setTimeout(() => {
+          void caseEmbeddings.loadAsync();
+        }, 0);
       } catch (error) {
         console.warn("[sati] knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
       }
