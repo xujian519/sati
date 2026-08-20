@@ -22,12 +22,21 @@ async function fetchSnapshot(): Promise<TeamPanelSnapshot> {
   return (await response.json()) as TeamPanelSnapshot;
 }
 
-/** 调用面板操作（POST /api/teams/action，直调既有 team_* 工具）。 */
-async function callTool(tool: string, input: Record<string, unknown>): Promise<PanelActionResult> {
+/**
+ * 调用面板操作（POST /api/teams/action，直调既有 team_* 工具）。
+ * sessionKey 透传（I1）：面板操作以当前会话身份执行——队长工具 requireTeamCaptain
+ * 按 context.sessionId 同队校验，缺省会落到空串弱身份（fail-open + 互斥 + 审批扇出
+ * 丢失）。无会话时不携带该字段，保持后端缺省 fail-closed 语义。
+ */
+async function callTool(tool: string, input: Record<string, unknown>, sessionKey?: string): Promise<PanelActionResult> {
+  const body: Record<string, unknown> = { tool, input };
+  if (sessionKey !== undefined) {
+    body.sessionKey = sessionKey;
+  }
   const response = await fetchWithAuth("/api/teams/action", {
     method: "POST",
     suppressServerErrorToast: true,
-    body: JSON.stringify({ tool, input }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     // ui/server 无自定义 error handler：500 时 next(error) 落 Express 默认 handler 返回 HTML，
@@ -40,8 +49,10 @@ async function callTool(tool: string, input: Record<string, unknown>): Promise<P
 /**
  * 团队活动面板数据层：快照轮询 + 操作调用。
  * 事件流由 useSessionWatch 既有链路订阅，见 Task 9 接线。
+ * @param sessionId 当前会话 id（I1：操作身份锚定）；空/undefined 时操作不携带
+ * sessionKey，后端缺省 fail-closed（绝不锚定空串身份）。
  */
-export function useTeamPanel() {
+export function useTeamPanel(sessionId?: string | null) {
   const [snapshot, setSnapshot] = useState<TeamPanelSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,14 +81,14 @@ export function useTeamPanel() {
 
   const callAction = useCallback(
     async (tool: string, input: Record<string, unknown>) => {
-      const result = await callTool(tool, input);
+      const result = await callTool(tool, input, sessionId ?? undefined);
       if (result.ok) {
         // 成功时立即刷新，不等下一轮询
         void refresh({ silent: true });
       }
       return result;
     },
-    [refresh],
+    [refresh, sessionId],
   );
 
   return { snapshot, loading, error, refresh, callAction };

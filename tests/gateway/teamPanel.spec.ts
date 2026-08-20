@@ -11,6 +11,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TeamDb, createTeamMember } from "../../src/agent/team/index.js";
+import { registerRoleDefinition } from "../../src/agent/sub/builtinSubagentTypes.js";
 import { SessionPresence } from "../../src/gateway/server/sessionPresence.js";
 import { buildTeamPanelSnapshot, listTeamsForPanel } from "../../src/gateway/teamPanel.js";
 import { createLocalGateway } from "../../src/cli/createLocalGateway.js";
@@ -242,6 +243,117 @@ test("teamToolCall 接线：前缀白名单 fail-closed + 未知工具 + SatiToo
     });
     assert.equal(update.ok, false);
     assert.equal(update.error?.code, "team_not_captain", "缺 sessionKey 需队长工具 fail-closed（team_not_captain）");
+  } finally {
+    result.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * I1 修复成功路径（M4 最终审查）：teamToolCall 携带真实 sessionKey → 建队/招募/改任务
+ * 全部成功（身份锚定真实 key，不再互斥），异身份被拒（team_not_captain，证明锚定
+ * 真实而非空串）。与既有 fail-closed 用例（缺省 sessionKey → team_not_captain）互补。
+ */
+test("teamToolCall 携带 sessionKey：建队/招募/改任务锚定真实身份，异身份被拒（I1 成功路径）", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-panel-i1-"));
+  await writeFile(
+    join(root, "sati.yaml"),
+    [
+      "schemaVersion: 1",
+      "agent:",
+      "  model: deepseek/deepseek-v4-flash",
+      "model:",
+      "  providers:",
+      "    deepseek:",
+      "      apiKey: test-key",
+      "      models:",
+      "        deepseek-v4-flash: {}",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  const result = createLocalGateway({
+    projectRoot: root,
+    pilotHome: root,
+    // 隔离外部环境（SATI_TEAMS_DB 等）：teams.db 必须落在 mkdtemp 临时目录内
+    env: {},
+    __testModelFactory: (): ModelRuntime => ({
+      stream: async function* () {
+        yield { type: "text_delta", text: "ok" };
+      },
+      complete: async () => {
+        throw new Error("unused");
+      },
+      getCapabilities: () => DEFAULT_MODEL_CAPABILITIES,
+      getMultimodal: () => ({ input: ["text"] }),
+      getProviderProtocol: () => undefined,
+      getProviderBaseUrl: () => undefined,
+    }),
+  });
+  try {
+    await result.teamSubsystem.startupScanDone;
+    const gw = result.gateway;
+    // team_add_member 需 requireRegisteredRole：显式注册真实 skill 角色
+    // （team-tools-integration 同款；本用例不触发首会话 syncRoleDefinitions）
+    registerRoleDefinition({
+      id: "patent-retriever",
+      description: "专利检索型团队成员（teamPanel I1 集成测试显式注册）",
+      allowedTools: ["*"],
+      visibleDomains: ["patent", "search", "team"],
+      omitProjectInstructions: false,
+      omitGitStatus: false,
+      isReadOnly: false,
+      systemPromptSuffix: "",
+    });
+    // 1. 面板身份建队：captainSessionKey 锚定真实 sessionKey（而非空串）
+    const created = await gw.teamToolCall!({
+      tool: "team_create",
+      input: { name: "面板建队" },
+      sessionKey: "channel:web-1",
+    });
+    assert.equal(created.ok, true);
+    const data = created.data as { teamId: string; captainSessionKey: string };
+    assert.equal(data.captainSessionKey, "channel:web-1", "队长身份锚定真实 sessionKey");
+    const teamId = data.teamId;
+    // 2. 同一身份招募成员（requireRegisteredRole + requireTeamCaptain 同队校验通过）
+    const added = await gw.teamToolCall!({
+      tool: "team_add_member",
+      input: { teamId, roleSlug: "patent-retriever" },
+      sessionKey: "channel:web-1",
+    });
+    assert.equal(added.ok, true, "同身份招募成员成功");
+    // 3. 直插 pending 任务（测试面确定性，规避调度器副作用）→ 同一身份改任务成功
+    // （队长路径 pending→cancelled 豁免 attemptId 校验，无需伪造 attempt）
+    result.teamSubsystem.db.insertTask({
+      id: "a",
+      teamId,
+      subject: "面板任务",
+      description: "",
+      status: "pending",
+      assigneeId: undefined,
+      dependencies: [],
+      attempt: 0,
+      attemptId: undefined,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    const updated = await gw.teamToolCall!({
+      tool: "team_update_task",
+      input: { teamId, taskId: "a", status: "cancelled", attemptId: "" },
+      sessionKey: "channel:web-1",
+    });
+    assert.equal(updated.ok, true, "同身份改任务成功（不再 team_not_captain）");
+    // 4. 异身份（另一主会话）改任务被拒——身份锚定真实而非空串
+    const other = await gw.teamToolCall!({
+      tool: "team_update_task",
+      input: { teamId, taskId: "a", status: "cancelled", attemptId: "" },
+      sessionKey: "channel:cli-1",
+    });
+    assert.equal(other.ok, false);
+    assert.equal(other.error?.code, "team_not_captain", "异身份被拒（同队校验生效）");
   } finally {
     result.dispose();
     await rm(root, { recursive: true, force: true });
