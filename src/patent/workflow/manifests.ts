@@ -423,6 +423,12 @@ export const patentDraftingManifest: WorkflowManifest = {
       atom: "draft-claims",
     },
     {
+      id: "claim_coverage",
+      strategy: "chain",
+      description: "权利要求-实施例覆盖矩阵：校验每个权利要求特征有实施例支撑（缺口反馈给说明书撰写）",
+      atom: "claim-embodiment-mapper",
+    },
+    {
       id: "draft_spec",
       strategy: "chain",
       description: "撰写说明书七部分（技术领域/背景/发明内容/附图说明/实施方式/摘要）+ 确定性合规校验",

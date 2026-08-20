@@ -168,6 +168,39 @@ export function validateDraftSpec(specText: string, title?: string): { passed: b
   return { passed: violations.every(v => v.severity !== "error"), violations };
 }
 
+/**
+ * 追加实施例覆盖缺口 warning（T7）：读 claim-embodiment-mapper 产出的
+ * claim_coverage_result（矩阵+check），把无实施例支撑的特征追加为 warning 级
+ * 违规——不翻转 passed（validateDraftSpec 只判 error）；矩阵缺失/降级/非 JSON
+ * 时跳过（fail-open，撰写流程不受影响）。
+ */
+function appendCoverageWarnings(
+  validation: { passed: boolean; violations: SpecViolation[] },
+  state: PipelineState,
+): { passed: boolean; violations: SpecViolation[] } {
+  const raw = getStateString(state, "claim_coverage_result");
+  if (raw.length === 0) return validation;
+  let matrix: { check?: { missingEmbodiment?: Array<{ claimId: string; feature: string }> } } | undefined;
+  try {
+    matrix = JSON.parse(raw) as typeof matrix;
+  } catch {
+    return validation;
+  }
+  const missing = matrix?.check?.missingEmbodiment;
+  if (missing === undefined || missing.length === 0) return validation;
+  return {
+    ...validation,
+    violations: [
+      ...validation.violations,
+      ...missing.map(m => ({
+        rule: "claim_embodiment_coverage",
+        severity: "warning" as const,
+        message: `权利要求特征 "${m.feature}"（${m.claimId}）在交底书实施例中无支撑，请在具体实施方式中补充对应实施例`,
+      })),
+    ],
+  };
+}
+
 const SPEC_SECTION_ORDER = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式", "摘要"];
 
 /** 组装说明书 Markdown：固定章节顺序 + 标题，未知章节追加末尾。 */
@@ -241,12 +274,12 @@ export class DraftSpecHandler implements StageHandler {
             content: String((s as Record<string, unknown>).content ?? ""),
           }));
         const specText = renderSpecMarkdown(title, sections);
-        const validation = validateDraftSpec(specText, title);
+        const validation = appendCoverageWarnings(validateDraftSpec(specText, title), state);
         return { spec_draft: specText, spec_validation: JSON.stringify(validation, null, 2) };
       },
       raw => {
         // 非 JSON 输出：原文作为说明书草稿，仍跑确定性校验（章节可能缺失，如实报告）。
-        const validation = validateDraftSpec(raw);
+        const validation = appendCoverageWarnings(validateDraftSpec(raw), state);
         return { spec_draft: raw, spec_validation: JSON.stringify(validation, null, 2) };
       },
     );
