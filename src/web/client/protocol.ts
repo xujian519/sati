@@ -124,6 +124,13 @@ export type WebGatewayEvent = WebGatewayEventMetadata &
         state: "ok" | "warning" | "blocking";
       }
     | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
+    | {
+        // 团队编排事件（M2）：TeamEvent 事件族经现有广播通道按队长会话扇出。
+        // 镜像 canonical `GatewayEvent.team_event`（src/gateway/protocol/types.ts）。
+        type: "team_event";
+        teamId: string;
+        event: import("../../agent/team/protocol/events.js").TeamEvent;
+      }
     | { type: "turn_completed"; usage: Record<string, number>; finishReason: string }
     | {
         type: "error";

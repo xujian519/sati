@@ -21,6 +21,7 @@ import {
   GitBranch,
   Settings as SettingsIcon,
   Trash2,
+  Users,
 } from "lucide-react";
 import type { TFunction } from "i18next";
 import type { AppTab, Project, ProjectSession } from "../../types/app";
@@ -246,6 +247,7 @@ export type SidebarV2Props = {
   onRequestDeleteProject: (project: Project) => void;
   onRequestDeleteSession: (project: Project, session: ProjectSession) => void;
   onShowSettings: () => void;
+  onOpenTeamPanel?: () => void;
   onDeselectProject?: () => void;
   onResetProjectSessionPreview?: (projectName: string) => void;
   onCollapse?: () => void;
@@ -296,6 +298,7 @@ export default function SidebarV2({
   onRequestDeleteProject,
   onRequestDeleteSession,
   onShowSettings,
+  onOpenTeamPanel,
   onDeselectProject,
   onResetProjectSessionPreview,
   onCollapse,
@@ -1189,6 +1192,20 @@ export default function SidebarV2({
       </div>
 
       <div className="border-t border-neutral-200/80 bg-gradient-to-b from-transparent to-neutral-100/40 px-2 py-2.5 dark:border-neutral-800/80 dark:to-neutral-950/40">
+        {onOpenTeamPanel ? (
+          <button
+            type="button"
+            onClick={onOpenTeamPanel}
+            aria-label={t("tabs.team", { defaultValue: "Team" }) as string}
+            title={t("tabs.team", { defaultValue: "Team" }) as string}
+            className="group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium text-neutral-600 transition-all duration-200 hover:bg-white hover:text-brand-600 hover:shadow-xs dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-200/60 transition group-hover:bg-brand-50 group-hover:text-brand-600 dark:bg-neutral-800/60 dark:group-hover:bg-brand-900/30 dark:group-hover:text-brand-300">
+              <Users className="h-3.5 w-3.5" strokeWidth={1.75} />
+            </span>
+            <span>{t("tabs.team", { defaultValue: "Team" })}</span>
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onShowSettings}

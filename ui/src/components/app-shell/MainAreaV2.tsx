@@ -11,6 +11,7 @@ import {
   Radio,
   Search,
   Sparkles,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -50,6 +51,7 @@ const DASHBOARD_TABS: Tab[] = [
   { id: "memory", labelKey: "tabs.memory", icon: Database },
   { id: "always-on", labelKey: "tabs.alwaysOn", icon: Radio },
   { id: "cron", labelKey: "tabs.cron", icon: Clock },
+  { id: "team", labelKey: "tabs.team", icon: Users },
 ];
 
 const ACTIVE_TOOL_BUTTON_CLASS =

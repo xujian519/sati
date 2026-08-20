@@ -7,8 +7,12 @@ import { TeamPanel } from "./TeamPanel";
 // mock 形态对齐 useTeamPanel.test.tsx / useSatiConfig.test.tsx：vi.mock 注入
 // authenticatedFetch（自造 { ok, json } 响应对象）。react-i18next 已由根 vitest.setup.ts
 // 全局 mock（t 返回 key 或 defaultValue），无需在此重复 mock。
+// EventStream（Task 10 接线后）消费 useWebSocket：mock 空连接（subscribe 返回取消函数）。
 vi.mock("../../utils/api", () => ({
   authenticatedFetch: vi.fn(),
+}));
+vi.mock("../../contexts/WebSocketContext", () => ({
+  useWebSocket: () => ({ ws: null, sendMessage: vi.fn(), subscribe: () => () => {} }),
 }));
 
 const mockedFetch = vi.mocked(authenticatedFetch);
