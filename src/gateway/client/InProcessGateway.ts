@@ -412,7 +412,8 @@ export class InProcessGateway implements Gateway {
           sessionKey: input.sessionKey,
           projectKey: input.projectKey,
           channelKey: input.channelKey,
-          ...(input.modelRoute !== undefined ? { modelRoute: input.modelRoute } : {}),
+          // 浅拷贝（质量评审 M6）：防调用方复用 input 对象原地突变，污染已缓存会话 context
+          ...(input.modelRoute ? { modelRoute: { ...input.modelRoute } } : {}),
         });
         if (input.timeoutMs !== undefined && Number.isFinite(input.timeoutMs) && input.timeoutMs > 0) {
           timeoutHandle = setTimeout(() => {
