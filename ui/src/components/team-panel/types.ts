@@ -35,3 +35,6 @@ export type PanelTeam = {
 export type TeamPanelSnapshot = { teams: PanelTeam[] };
 
 export type PanelActionResult = { ok: true; data: unknown } | { ok: false; error: { code: string; message: string } };
+
+/** 面板操作签名（容器向子视图透传的 callAction，直调 gateway team_* 工具链）。 */
+export type PanelAction = (tool: string, input: Record<string, unknown>) => Promise<PanelActionResult>;

@@ -27,6 +27,7 @@ import enAlwaysOn from "./locales/en/alwaysOn.json";
 import enRouting from "./locales/en/routing.json";
 // eslint-disable-next-line import-x/order
 import enTasks from "./locales/en/tasks.json";
+import enTeamPanel from "./locales/en/teamPanel.json";
 
 import zhCommon from "./locales/zh-CN/common.json";
 import zhSettings from "./locales/zh-CN/settings.json";
@@ -37,6 +38,7 @@ import zhAlwaysOn from "./locales/zh-CN/alwaysOn.json";
 import zhRouting from "./locales/zh-CN/routing.json";
 // eslint-disable-next-line import-x/order
 import zhCodeEditor from "./locales/zh-CN/codeEditor.json";
+import zhTeamPanel from "./locales/zh-CN/teamPanel.json";
 
 import { languages } from "./languages.js";
 
@@ -67,6 +69,7 @@ i18n
         tasks: enTasks,
         alwaysOn: enAlwaysOn,
         routing: enRouting,
+        teamPanel: enTeamPanel,
       },
       "zh-CN": {
         common: zhCommon,
@@ -77,6 +80,7 @@ i18n
         codeEditor: zhCodeEditor,
         alwaysOn: zhAlwaysOn,
         routing: zhRouting,
+        teamPanel: zhTeamPanel,
       },
     },
 
@@ -84,7 +88,7 @@ i18n
     fallbackLng: "en",
     debug: import.meta.env.DEV,
 
-    ns: ["common", "settings", "auth", "sidebar", "chat", "codeEditor", "tasks", "alwaysOn", "routing"],
+    ns: ["common", "settings", "auth", "sidebar", "chat", "codeEditor", "tasks", "alwaysOn", "routing", "teamPanel"],
     defaultNS: "common",
     keySeparator: ".",
     nsSeparator: ":",
