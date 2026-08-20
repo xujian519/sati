@@ -98,7 +98,7 @@ dsh-agent-teams 是 DeepSeek Harness（DSH，开源 AI agent 宿主，cordis 插
 | 能力面 | Sati 现状 |
 |---|---|
 | 子代理 | `agent` 工具（`src/tool/builtin/agent.ts`）+ `subagent_type` 预设 / SKILL.md 角色，`SubAgentSession`（`src/agent/sub/`）fork 一次性运行：子代理跑完一个循环后返回 5 字段报告回流父代理，sidechain 转录 |
-| 工作流 | 声明式 workflow（`src/workflow/`：DAG + SafeEvaluator + checkpoint + worker-contract），flexible-plan 阶段级计划，plantask HITL 状态机，专利域 `JsonFileManifestCheckpointStore` 断点续跑（`resumeCheckpointId` / `approveStageIds`） |
+| 工作流 | 声明式 workflow（`src/workflow/`：DAG + SafeEvaluator + checkpoint + worker-contract），flexible-plan 阶段级计划，plantask HITL 状态机（以上通用）；专利域 `JsonFileManifestCheckpointStore` 断点续跑（`src/patent/workflow/checkpoint.ts`，`resumeCheckpointId` / `approveStageIds`） |
 | 任务 | `src/task/` 是**后台 bash 任务运行时**（`BackgroundTaskRuntime`：spawn 分离进程 + 输出环形缓冲），不是多智能体任务池 |
 | 常驻执行 | `src/always-on/`：Discovery 计划/报告/工作周期 + workspace 隔离；`src/cron/` 定时任务 |
 | 记忆 | 白盒记忆（`src/context/memory/`，EdgeClawMemoryProvider + edgeclaw-memory-core 子包）、知识库 `knowledge.db`（图谱/判例/法规/wiki）、Dream Mode 压缩与回滚 |
