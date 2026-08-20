@@ -186,6 +186,14 @@ export type InProcessGatewayOptions = {
    * 维护 Web 在线判定）。powers the `panel_heartbeat` protocol method.
    */
   panelHeartbeat?: (input: { sessionKeys: string[] }) => Promise<{ touched: number }>;
+  /** M4：团队面板快照 delegate（TeamDb 直查 + presence 在线态；不触发模型回路）。 */
+  teamPanelSnapshot?: (input: { sessionKey?: string }) => Promise<{ teams: unknown[] }>;
+  /** M4：面板操作 delegate——直调既有 team_* 工具（权限/事件走工具层既有链）。 */
+  teamToolCall?: (input: {
+    tool: string;
+    input: Record<string, unknown>;
+    sessionKey?: string;
+  }) => Promise<{ ok: boolean; data?: unknown; error?: { code: string; message: string } }>;
   /**
    * Optional non-blocking post-turn callback. Used by createLocalGateway to
    * coalesce project-level memory maintenance after a turn has fully ended.
@@ -788,6 +796,29 @@ export class InProcessGateway implements Gateway {
       return notConfigured({ touched: 0 }, "Panel heartbeat is not configured on this gateway.");
     }
     return this.options.panelHeartbeat(input);
+  }
+
+  async teamPanelSnapshot(input: { sessionKey?: string }): Promise<{ teams: unknown[] }> {
+    if (!this.options.teamPanelSnapshot) {
+      // 未接线统一兜底形态：与 GatewayWsConnection 的 notConfigured 出口一致。
+      return notConfigured({ teams: [] }, "Team panel snapshot is not configured on this gateway.");
+    }
+    return this.options.teamPanelSnapshot(input);
+  }
+
+  async teamToolCall(input: {
+    tool: string;
+    input: Record<string, unknown>;
+    sessionKey?: string;
+  }): Promise<{ ok: boolean; data?: unknown; error?: { code: string; message: string } }> {
+    if (!this.options.teamToolCall) {
+      // 未接线统一兜底形态：与 GatewayWsConnection 的 notConfigured 出口一致。
+      return notConfigured(
+        { ok: false, error: { code: "not_configured", message: "Team tool call is not configured on this gateway." } },
+        "Team tool call is not configured on this gateway.",
+      );
+    }
+    return this.options.teamToolCall(input);
   }
 
   async grantSessionPermission(

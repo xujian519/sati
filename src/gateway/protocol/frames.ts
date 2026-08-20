@@ -62,7 +62,9 @@ export type WsGatewayMethod =
   | "always_on_archive_cycle"
   | "always_on_apply_cycle"
   | "knowledge_capabilities"
-  | "panel_heartbeat";
+  | "panel_heartbeat"
+  | "team_panel_snapshot"
+  | "team_tool_call";
 
 export type WsRequestFrame = {
   type: "request";
