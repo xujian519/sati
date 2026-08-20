@@ -343,3 +343,36 @@ Top 5 热点（本次 `grep -c` 实测）：
 10. **裸 console 按模块收束到 `src/telemetry/` wrapper**：从 `sati.ts`（54 处）→ `createLocalGateway.ts`（24 处）→ `streamModel.ts`（4 处，主链路最关键），每 PR 只改 1–2 个模块 → DoD：每 Sprint 末 `grep -c console.log src/$module` 计数下降可验证。
 11. **111 处 any 主链路收敛**：优先级 `tool/builtin/planMode.ts(6)` → `context/projection/MessageProjector.ts(5)` → `router/RouterRuntime.ts(4)` → `gateway/client/InProcessGateway.ts(3)` → 其余 60 外围模块 → DoD：主链路 any 清零，外围 any 加 `// SAFETY: ...` 注释说明原因并附类型守卫位置。
 12. **`ui/server/index.js` 3839 行分片**：按 routes / middleware / services / websocket 四类拆出独立文件，纯机械拆分不改逻辑 → DoD：拆出后单文件 ≤ 500 行，`ui/server/index.js` ≤ 400 行（作为 entry 只做组装），`pnpm --filter sati-ui test` 全绿。
+
+---
+
+# 2026-08-20 注记（C42 代码精炼终审跟进）
+
+- 背景：`docs/code-refinement-plan.md` 保守档第 42 张终审卡 + 团队编排 M1-M4 / StylePanel 并行落地
+- 关联文档：`docs/code-refinement-report.md`（终审报告）、`docs/superpowers/plans/2026-08-20-agent-teams-{m2,m3,m4}*.md`
+
+## 遗留清单状态更新
+
+| 项 | 状态 |
+|---|---|
+| 巨无霸函数拆解（McpClient/reasoning-rules/kg-store/legal-search/workflow/AgentLoop/InProcessGateway） | ✅ 已完成（08-14~08-17，PR #43-#57）——本报告 §三/§五历史条目维持 |
+| `ui/server` 双后端 | ✅ 决策保留（08-14），仅卫生子项（深层 import 收口等）登记未做 |
+| 团队编排 M1-M4 新增模块 | ✅ 已落地（agent/team 任务池/调度器/邮箱/TeamEvent + 9 工具 + 面板）——新增债务见下 |
+| llm-replay fixture 失配（render_patent_document inputSchema 加 style + 新增 2 工具） | ✅ 已修复（08-20）：document_style 工具条件注册 + 录制/重放工具集对齐 + 真实 DeepSeek 重录 |
+| 代码精炼 C42 终审 | ✅ 本注记 + `docs/code-refinement-report.md` |
+| 代码精炼 C05-C41（38 卡） | ⬜ 未做（进度 4/42，见终审报告 §五遗留清单） |
+
+## 新增/确认的债务项（08-20 复核）
+
+1. **团队编排模块规模**：`src/agent/team/` 约 20 文件（scheduler.ts、member-waker.ts、team-db.ts 为核心），活动面板 `ui/src/components/team-panel/` 浮层版约 12 文件——均属新功能增量，未列入精炼轮转计划（阶段 3 C27-C35 未覆盖 team-panel），后续补卡
+2. **条件注册工具集纪律**：`team_*`（9 工具）与 `document_style_*`（2 工具）均为条件注册——无参 `createBuiltinRegistry()` 工具集 = 44 个，与 llm-replay fixture 绑定；**新增默认工具会破坏 fixture**，须条件注册或重录（CLAUDE.md 与 `code-refinement-report.md` §五.5 已记载）
+3. **四项指标回升**：console 670 / any 21 / catch 501 / TODO 27（基线 657/20/485/24）——功能增量大于精炼清理量，C39-C41 横切卡未执行所致
+4. **并行工作流文件占用**（08-20 观测）：TokenAccountingRuntime/SessionRouter/kg-store/case-law-search/patentCache/TranscriptChain 等存在未提交的优化改动（WeakMap 键缓存、summary 提取等），由并行窗口持有，提交时须精确路径分离
+
+## 下次审计基线（可复现）
+
+```bash
+pnpm typecheck && pnpm lint && pnpm format:check   # 全绿（lint 挂 4 门禁）
+pnpm build && node --test $(find dist/tests -name '*.spec.js' -o -name '*.test.js')  # 3529 pass / 0 fail / 3 skip
+pnpm record:replay tests/fixtures/llm-replay/deepseek-v4-flash-basic  # fixture valid（08-20 重录）
+```
