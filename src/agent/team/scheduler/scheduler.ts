@@ -6,10 +6,12 @@
  * - ownedOpenTask（成员名下 claimed/in_progress）优先于 nextReadyTask（依赖满足；
  *   先指派给自己的、其次未指派；reassigning 跳过）；
  * - 并发闸：working 成员数达 maxConcurrentMembers（默认 4）不派新任务（邮箱仍投递）；
- * - 唤醒失败回滚：锁内校验 attemptId 只回滚自己那次派发，不覆盖并发转派；
+ * - 唤醒失败回滚：重取锁校验 attemptId 只回滚自己那次派发，不覆盖并发转派；
+ * - 锁外唤醒（M3 定型）：认领在锁内完成，成员回合全程不持团队锁——回合内
+ *   team_update_task 等团队工具要取同一把锁，持锁唤醒会重入死锁；
  * - 队长离线：isCaptainOnline 返回 false 时暂停认领（在途回合跑完即停）。
  */
-import type { TeamDb, TeamTaskRow } from "../storage/team-db.js";
+import type { TeamDb, TeamMessageRow, TeamTaskRow } from "../storage/team-db.js";
 import { unsatisfiedDependencies } from "../taskpool/task-status.js";
 import { beginTaskAttempt, invalidateTaskAttempt } from "../taskpool/attempt.js";
 import { claimDelivery, unreadMessages } from "../mailbox/mailbox.js";
@@ -111,7 +113,13 @@ export class TeamScheduler {
     )
       return;
 
-    await withTeamLock(teamId, async () => {
+    // 锁内认领（read-modify-write 原子），锁外唤醒：成员回合全程不持团队锁——
+    // 回合内 team_update_task 等团队工具要取同一把锁，持锁唤醒会重入死锁
+    //（M3 集成测试暴露；与「锁外调度防重入死锁」惯例一致）。
+    type KickPlan =
+      | { kind: "mailbox"; unread: TeamMessageRow[] }
+      | { kind: "task"; task: TeamTaskRow; next: TeamTaskRow; attemptId: string };
+    const plan = await withTeamLock(teamId, async (): Promise<KickPlan | undefined> => {
       // 锁内重读成员状态：pre-check 与锁获取之间存在 TOCTOU 窗口
       //（kickTeam/onMemberIdle 双触发并发），防对已 working 成员重复派发。
       const current = this.db.getMember(memberId);
@@ -121,7 +129,7 @@ export class TeamScheduler {
         current.status !== "idle" ||
         this.db.isRetired(current.sessionKey)
       )
-        return;
+        return undefined;
 
       // 1) 邮箱优先
       const unread = unreadMessages(this.db.listMessages(teamId, memberId), Date.now());
@@ -130,69 +138,83 @@ export class TeamScheduler {
         for (const message of claimDelivery(unread, claimedAt)) {
           this.db.updateMessage(message);
         }
-        const accepted = await this.wake(
-          memberId,
-          fallbackMailboxPrompt(unread.map(m => ({ sender: m.sender, content: m.content }))),
-        );
+        return { kind: "mailbox", unread };
+      }
+
+      // 2) 任务认领（锁内 read-modify-write）
+      const tasks = this.db.listTasks(teamId);
+      const task = ownedOpenTask(tasks, memberId) ?? nextReadyTask(tasks, memberId);
+      if (task === undefined) return undefined;
+      const working = this.db.listMembers().filter(m => m.teamId === teamId && m.status === "working").length;
+      if (task.status === "pending" && working >= this.maxConcurrentMembers) return undefined; // 并发闸（重试自己的 open task 不受闸限）
+
+      const { task: next, attemptId } = beginTaskAttempt(task, memberId);
+      this.db.updateTask(next);
+      this.db.updateMemberStatus(memberId, "working");
+      return { kind: "task", task, next, attemptId };
+    });
+    if (plan === undefined) return;
+
+    if (plan.kind === "mailbox") {
+      // 锁外唤醒（成员回合不持团队锁）
+      const accepted = await this.wake(
+        memberId,
+        fallbackMailboxPrompt(plan.unread.map(m => ({ sender: m.sender, content: m.content }))),
+      );
+      // 锁内 ack：仅回写仍属于本次投递租约的消息（成功置 deliveredAt / 失败释放租约可重投）
+      await withTeamLock(teamId, async () => {
         const fresh = this.db.listMessages(teamId, memberId);
         for (const message of fresh) {
-          if (!unread.some(u => u.id === message.id)) continue;
+          if (!plan.unread.some(u => u.id === message.id)) continue;
           this.db.updateMessage(
             accepted
               ? { ...message, deliveredAt: new Date().toISOString() }
               : { ...message, deliveryClaimedAt: undefined },
           );
         }
-        // M3（I4 闭环）：批次粒度 payload——senders 完整列表，sender 保留首条（兼容）
-        if (accepted)
-          this.emit(team.captainSessionKey, {
-            type: "message_delivered",
-            teamId,
-            recipient: memberId,
-            sender: unread[0]?.sender ?? "captain",
-            senders: unread.map(m => m.sender),
-          });
-        return;
-      }
-
-      // 2) 任务认领（锁内 read-modify-write）
-      const tasks = this.db.listTasks(teamId);
-      const task = ownedOpenTask(tasks, memberId) ?? nextReadyTask(tasks, memberId);
-      if (task === undefined) return;
-      const working = this.db.listMembers().filter(m => m.teamId === teamId && m.status === "working").length;
-      if (task.status === "pending" && working >= this.maxConcurrentMembers) return; // 并发闸（重试自己的 open task 不受闸限）
-
-      const { task: next, attemptId } = beginTaskAttempt(task, memberId);
-      this.db.updateTask(next);
-      this.db.updateMemberStatus(memberId, "working");
-
-      const accepted = await this.wake(
-        memberId,
-        assignmentPrompt({
-          taskId: task.id,
-          memberId,
-          attempt: next.attempt,
-          attemptId,
-          subject: task.subject,
-          ...(task.description ? { description: task.description } : {}),
-        }),
-      );
-      if (accepted) {
-        // 认领事件在 wake 接受后发出：失败回滚时不广播"已认领"（对比邮箱路径的 ack 语义）
+      });
+      // M3（I4 闭环）：批次粒度 payload——senders 完整列表，sender 保留首条（兼容）
+      if (accepted)
         this.emit(team.captainSessionKey, {
-          type: "task_claimed",
+          type: "message_delivered",
           teamId,
-          taskId: task.id,
-          memberId,
-          attempt: next.attempt,
-          attemptId,
+          recipient: memberId,
+          sender: plan.unread[0]?.sender ?? "captain",
+          senders: plan.unread.map(m => m.sender),
         });
-        return;
-      }
+      return;
+    }
 
-      // 3) 唤醒失败回滚：只回滚自己的 ticket（attemptId 校验），不覆盖并发转派
-      const fresh = this.db.getTask(teamId, task.id);
-      if (fresh === undefined || fresh.attemptId !== attemptId) {
+    // 任务路径：锁外唤醒（回合全程不持团队锁——成员回合内团队工具需取锁，防重入死锁）
+    const accepted = await this.wake(
+      memberId,
+      assignmentPrompt({
+        taskId: plan.task.id,
+        memberId,
+        attempt: plan.next.attempt,
+        attemptId: plan.attemptId,
+        subject: plan.task.subject,
+        ...(plan.task.description ? { description: plan.task.description } : {}),
+      }),
+    );
+    if (accepted) {
+      // 认领事件在 wake 接受后发出：失败回滚时不广播"已认领"（对比邮箱路径的 ack 语义）
+      this.emit(team.captainSessionKey, {
+        type: "task_claimed",
+        teamId,
+        taskId: plan.task.id,
+        memberId,
+        attempt: plan.next.attempt,
+        attemptId: plan.attemptId,
+      });
+      return;
+    }
+
+    // 3) 唤醒失败回滚：重新取锁，只回滚自己的 ticket（attemptId 校验），不覆盖并发转派。
+    // 成员回 idle 保持原语义（本成员从未真正开始回合，须回 idle）。
+    await withTeamLock(teamId, async () => {
+      const fresh = this.db.getTask(teamId, plan.task.id);
+      if (fresh === undefined || fresh.attemptId !== plan.attemptId) {
         // 任务已被并发转派/改写：不回滚他人 ticket，但本成员从未真正开始回合，须回 idle
         this.db.updateMemberStatus(memberId, "idle");
         return;

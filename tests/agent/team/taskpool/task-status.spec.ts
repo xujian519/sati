@@ -10,7 +10,8 @@ import {
 
 test("终态无出边；白名单迁移矩阵完整", () => {
   assert.deepEqual(TASK_TRANSITIONS.pending, ["claimed", "cancelled"]);
-  assert.deepEqual(TASK_TRANSITIONS.claimed, ["in_progress", "failed", "cancelled"]);
+  // M3：claimed → completed 直连（调度器认领后成员回合 team_update_task 一步完成）
+  assert.deepEqual(TASK_TRANSITIONS.claimed, ["in_progress", "completed", "failed", "cancelled"]);
   assert.deepEqual(TASK_TRANSITIONS.in_progress, ["completed", "failed", "cancelled"]);
   for (const terminal of TERMINAL_TASK_STATUSES) {
     assert.deepEqual(TASK_TRANSITIONS[terminal], []);
@@ -20,6 +21,7 @@ test("终态无出边；白名单迁移矩阵完整", () => {
 test("transitionError：非法迁移返回错误，同态/合法返回 undefined", () => {
   assert.equal(transitionError("pending", "completed"), 'task status cannot move from "pending" to "completed"');
   assert.equal(transitionError("claimed", "in_progress"), undefined);
+  assert.equal(transitionError("claimed", "completed"), undefined, "M3 成员完成路径：claimed → completed 直连合法");
   assert.equal(transitionError("completed", "completed"), undefined);
 });
 
