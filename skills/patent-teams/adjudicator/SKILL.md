@@ -3,7 +3,7 @@ name: adjudicator
 description: 团队合议组/裁判角色（dsh 岗）— 双方论点对抗评估、证据采信、结果预判（中立裁判；基底：patent-reviewer）
 type: role
 tools: ["*"]
-domains: ["analysis", "quality", "patent", "legal", "session", "team"]
+domains: ["analysis", "quality", "patent", "legal", "literature", "session", "team"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
 systemPrompt: |-
@@ -35,7 +35,7 @@ systemPrompt: |-
 
 ## 工具域建议（建议 domains）
 
-角色注册 domains（M3 已落地）：`["analysis", "quality", "patent", "legal", "session", "team"]`：
+角色注册 domains（M3 已落地，M4 T4 补 `literature`）：`["analysis", "quality", "patent", "legal", "literature", "session", "team"]`：
 
 | 域 | 用途 |
 |---|---|
@@ -43,6 +43,7 @@ systemPrompt: |-
 | `quality` | 质量评分类工具（授权前景基准） |
 | `patent` | 专利域工具可见性（案件/证据取用） |
 | `legal` | 法条核验（`law_search`：复审/无效/诉讼程序条款） |
+| `literature` | 学术文献证据（`paper_search` 需 `literature` 域） |
 | `session` | 团队会话读写 |
 | `team` | 成员作业面：`team_update_task`/`team_send_message`/`team_status` 按域裁剪可见（管理面 `team:manage` 仅队长可见） |
 

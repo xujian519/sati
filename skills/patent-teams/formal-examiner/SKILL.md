@@ -3,7 +3,7 @@ name: formal-examiner
 description: 形式审查员角色 — 形式缺陷清单核验：文件齐全性、格式规范、附图清晰度、著录项目、签字盖章；补正彻底性判定（审查方·初步审查）
 type: role
 tools: ["*"]
-domains: ["quality", "patent", "legal", "filesystem", "session", "team"]
+domains: ["quality", "patent", "legal", "literature", "filesystem", "session", "team"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
 systemPrompt: |-
@@ -35,7 +35,7 @@ systemPrompt: |-
 
 ## 工具域建议（建议 domains）
 
-角色注册 domains（M3 已落地：经 registerRoleDefinition 注册，可按 subagent_type / 团队 roleSlug 调度）：`["quality", "patent", "legal", "filesystem", "session", "team"]`，并已声明 `readOnly: true`（只读审查，补正书由撰写员起草）：
+角色注册 domains（M3 已落地：经 registerRoleDefinition 注册，可按 subagent_type / 团队 roleSlug 调度，M4 T4 补 `literature`）：`["quality", "patent", "legal", "literature", "filesystem", "session", "team"]`，并已声明 `readOnly: true`（只读审查，补正书由撰写员起草）：
 
 > 注：域为语义分组，工具实际按 metadata domain 裁剪（未标注 domain 的工具始终可见）；表中"用途"列提及的具体工具仅示意该域的能力取向，其 metadata domain 不一定等于所在列语义域。
 
@@ -44,6 +44,7 @@ systemPrompt: |-
 | `quality` | 质量/格式审查类工具（如 `validate_specification`） |
 | `patent` | 专利域工具可见性 |
 | `legal` | 形式条款法条核验（A26.2/A26.5） |
+| `literature` | 学术文献证据（`paper_search` 需 `literature` 域） |
 | `filesystem` | 读取待审申请文件 |
 | `session` | 团队会话读写 |
 | `team` | 成员作业面：`team_update_task`/`team_send_message`/`team_status` 按域裁剪可见（管理面 `team:manage` 仅队长可见） |

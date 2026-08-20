@@ -3,7 +3,7 @@ name: case-manager
 description: 案件管理员角色 — 立案登记与案卷目录、交底书接收、反馈申请人补充资料循环、期限/节点监控、补充合格判定收口（流程中立）
 type: role
 tools: ["*"]
-domains: ["patent", "legal", "filesystem", "session", "team"]
+domains: ["patent", "legal", "literature", "filesystem", "session", "team"]
 omitTools: ["execute_code"]
 readOnly: false
 systemPrompt: |-
@@ -37,7 +37,7 @@ systemPrompt: |-
 
 ## 工具域建议（建议 domains）
 
-角色注册 domains（M3 已落地：经 registerRoleDefinition 注册，可按 subagent_type / 团队 roleSlug 调度）：`["patent", "legal", "filesystem", "session", "team"]`：
+角色注册 domains（M3 已落地：经 registerRoleDefinition 注册，可按 subagent_type / 团队 roleSlug 调度，M4 T4 补 `literature`）：`["patent", "legal", "literature", "filesystem", "session", "team"]`：
 
 > 注：域为语义分组，工具实际按 metadata domain 裁剪（未标注 domain 的工具始终可见）；表中"用途"列提及的具体工具仅示意该域的能力取向，其 metadata domain 不一定等于所在列语义域。
 
@@ -45,6 +45,7 @@ systemPrompt: |-
 |---|---|
 | `patent` | 专利域工具可见性（案件/案卷语境） |
 | `legal` | 期限法条核验（`law_search`：答复期限/复审期限/年费） |
+| `literature` | 学术文献证据（`paper_search` 需 `literature` 域） |
 | `filesystem` | 案卷目录与落盘文件管理 |
 | `session` | 团队会话读写 |
 | `team` | 成员作业面：`team_update_task`/`team_send_message`/`team_status` 按域裁剪可见（管理面 `team:manage` 仅队长可见） |
