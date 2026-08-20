@@ -91,3 +91,86 @@ test("M6: 插件目录增删 → 指纹变 → 重扫", async () => {
     await rm(pilotHome, { recursive: true, force: true });
   }
 });
+
+test("M6 #8a: 嵌套 commands 文件内容编辑（目录 mtime 不变）→ 递归指纹 → 重扫可见", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-m6-nested-"));
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-m6-home-"));
+  try {
+    const pluginDir = join(projectRoot, ".sati", "plugins", "deep");
+    await mkdir(join(pluginDir, "commands", "sub"), { recursive: true });
+    await writeFile(join(pluginDir, "plugin.json"), JSON.stringify({ name: "deep", version: "0.0.1" }), "utf8");
+    await writeFile(join(pluginDir, "commands", "sub", "task.md"), "---\nname: task\n---\n\n# Task v1\n", "utf8");
+    const runtime = makeRuntime(projectRoot, pilotHome);
+    const first = await runtime.refreshWithReport();
+    const content = () => runtime.snapshot().find(p => p.name === "deep")?.commands?.[0]?.content;
+    assert.match(content() ?? "", /# Task v1/);
+
+    // 覆盖写嵌套文件：目录 mtime 不变（文件内容更新不触目录 mtime）——旧指纹
+    // 只 stat 根部条目会漏检并命中缓存（编辑被 TTL 延迟 10s）。
+    await writeFile(
+      join(pluginDir, "commands", "sub", "task.md"),
+      "---\nname: task\n---\n\n# Task v2 - nested edit\n",
+      "utf8",
+    );
+    const second = await runtime.refreshWithReport();
+    assert.notEqual(second.next, first.next, "指纹变化应触发重扫（非缓存命中共享引用）");
+    assert.match(content() ?? "", /# Task v2/, "嵌套文件编辑后新内容立即可见");
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("M6 #8c: 部分加载失败不写指纹缓存，修复后立即可见", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-m6-fail-"));
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-m6-home-"));
+  try {
+    const brokenDir = join(projectRoot, ".sati", "plugins", "broken");
+    await mkdir(brokenDir, { recursive: true }); // 无 plugin.json → 加载失败
+    await writeSkill(projectRoot, "docx", "Create Word documents.", "# DOCX");
+    const runtime = makeRuntime(projectRoot, pilotHome);
+
+    await runtime.refreshWithReport();
+    assert.equal(runtime.snapshot().length, 1, "好插件加载，坏插件被过滤");
+    const cacheOf = (r: PluginRuntime) => (r as unknown as { fingerprintCache: unknown }).fingerprintCache;
+    assert.equal(cacheOf(runtime), null, "存在加载失败时不得写指纹缓存（失败不被固化）");
+
+    // 修复坏插件：写合法 plugin.json
+    await writeFile(join(brokenDir, "plugin.json"), JSON.stringify({ name: "broken", version: "0.0.1" }), "utf8");
+    await runtime.refreshWithReport();
+    assert.ok(
+      runtime.snapshot().some(p => p.name === "broken"),
+      "修复后坏插件出现",
+    );
+    assert.notEqual(cacheOf(runtime), null, "全部加载成功后写缓存");
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("M6 #8d: 缓存命中时按实际 registry 状态计算 diff（外部改动不被吞掉）", async () => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-m6-diff-"));
+  const pilotHome = await mkdtemp(join(tmpdir(), "sati-m6-home-"));
+  try {
+    await writeSkill(projectRoot, "docx", "Create Word documents.", "# DOCX");
+    const runtime = makeRuntime(projectRoot, pilotHome);
+    await runtime.refreshWithReport(); // 建立指纹缓存
+
+    // 模拟外部改动清空 registry（命中路径 replaceAll 前 previous 与实际不同）
+    const registry = (runtime as unknown as { registry: { replaceAll(plugins: unknown[]): void } }).registry;
+    registry.replaceAll([]);
+
+    const second = await runtime.refreshWithReport(); // 指纹未变且 TTL 内 → 命中
+    assert.equal(second.next.length, 1, "命中恢复缓存内容");
+    assert.deepEqual(
+      second.added.map(p => p.name),
+      ["docx"],
+      "命中时 added 应反映恢复的差异（不得恒为空数组）",
+    );
+    assert.deepEqual(second.removed, [], "previous 为空则 removed 为空");
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});

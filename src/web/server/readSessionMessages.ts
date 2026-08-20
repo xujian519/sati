@@ -62,6 +62,13 @@ type WebMessagesCacheEntry = {
   size: number;
   allMessages: WebMessage[];
   incompleteTurnIds: string[];
+  /** tokenUsage 快照（与 allMessages 同批次构建）。命中路径展示与用量来自
+   * 同一快照——消除「命中缓存后二次读文件」的双 stat TOCTOU（读到新文件、
+   * 展示旧缓存的不一致）。依赖 maxContextTokens/maxOutputTokens，命中时须
+   * 与构建时一致（下方两条键控字段）。 */
+  tokenUsage: Record<string, unknown> | undefined;
+  maxContextTokens?: number;
+  maxOutputTokens?: number;
 };
 
 const webMessagesCache = new Map<string, WebMessagesCacheEntry>();
@@ -101,16 +108,21 @@ export async function readWebSessionMessages(
 
   let allMessages: WebMessage[];
   let incompleteTurnIds: string[];
-  let entries: AgentTranscriptEntry[];
-  if (cached !== undefined && cached.mtimeMs === fileStat!.mtimeMs && cached.size === fileStat!.size) {
+  let tokenUsage: Record<string, unknown> | undefined;
+  if (
+    cached !== undefined &&
+    cached.mtimeMs === fileStat!.mtimeMs &&
+    cached.size === fileStat!.size &&
+    cached.maxContextTokens === options.maxContextTokens &&
+    cached.maxOutputTokens === options.maxOutputTokens
+  ) {
     touchWebMessagesCache(transcriptPath, cached);
     allMessages = cached.allMessages;
     incompleteTurnIds = cached.incompleteTurnIds;
-    const read = await readTranscript(transcriptPath); // tokenUsage 每请求计算（轻量扫描，不进缓存）
-    entries = read.entries;
+    tokenUsage = cached.tokenUsage; // 命中即 0 文件访问：展示与用量同快照（无 TOCTOU）
   } else {
     const read = await readTranscript(transcriptPath);
-    entries = read.entries;
+    const entries = read.entries;
     const webReplay = extractWebVisibleMessages(entries);
     const entryTimestamps = webReplay.timestamps;
     const entryIds = webReplay.entryIds;
@@ -141,14 +153,24 @@ export async function readWebSessionMessages(
     }
     injectAgentStatusMessages(entries, allMessages, input.sessionKey, input.projectKey);
     injectErrorTurnMessages(entries, allMessages, input.sessionKey, input.projectKey);
+    tokenUsage = tokenUsageFromTranscript(entries, options);
     // 注：incomplete turn status 依赖当前时间，不入缓存——统一返回路径重建。
     if (fileStat) {
-      touchWebMessagesCache(transcriptPath, {
-        mtimeMs: fileStat.mtimeMs,
-        size: fileStat.size,
-        allMessages,
-        incompleteTurnIds,
-      });
+      // 写缓存前复验：read 完成后文件未再变化才落缓存（消除 stat→read 窗口
+      // 的「标记旧 mtime/size、内容新」双 stat TOCTOU——否则缓存标记与内容
+      // 不一致，命中时展示旧快照而 tokenUsage 来自新文件）。
+      const afterStat = await stat(transcriptPath).catch(() => undefined);
+      if (afterStat !== undefined && afterStat.mtimeMs === fileStat.mtimeMs && afterStat.size === fileStat.size) {
+        touchWebMessagesCache(transcriptPath, {
+          mtimeMs: fileStat.mtimeMs,
+          size: fileStat.size,
+          allMessages,
+          incompleteTurnIds,
+          tokenUsage,
+          maxContextTokens: options.maxContextTokens,
+          maxOutputTokens: options.maxOutputTokens,
+        });
+      }
     }
   }
 
@@ -167,7 +189,7 @@ export async function readWebSessionMessages(
     messages,
     nextCursor: input.limit && offset + messages.length < total ? String(offset + messages.length) : undefined,
     total,
-    tokenUsage: tokenUsageFromTranscript(entries, options),
+    tokenUsage,
     session: {
       sessionId: sessionInfo?.sessionId ?? input.sessionKey,
       sessionKey: input.sessionKey,

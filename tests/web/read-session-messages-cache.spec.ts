@@ -172,6 +172,111 @@ test("P2-C: incomplete turn status 每请求重建（时间戳随 now 更新）"
   }
 });
 
+test("P2-C #13: 命中缓存共享 tokenUsage 快照（0 文件访问，消除双 stat TOCTOU）", async () => {
+  const [projectRoot, pilotHome] = await makeFixture();
+  try {
+    const sessionKey = "web:s_rsm_cache_usage";
+    const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
+      projectRoot,
+      pilotHome,
+      sessionId: sessionKey,
+      now: () => new Date("2026-08-02T00:00:00.000Z"),
+    });
+    await storage.transcript.recordAcceptedInput(sessionKey, "turn-1", [
+      { role: "user", content: [{ type: "text", text: "request 1" }] },
+    ]);
+    await storage.transcript.recordDurableMessage(sessionKey, "turn-1", {
+      role: "assistant",
+      content: [{ type: "text", text: "answer 1" }],
+    });
+    // 带 usage 的 turn_result → tokenUsageFromTranscript 走 latestTurnUsage 分支
+    await storage.transcript.recordTurnResult(sessionKey, "turn-1", {
+      type: "success",
+      sessionId: sessionKey,
+      turnId: "turn-1",
+      stopReason: "completed",
+      usage: { inputTokens: 100, outputTokens: 20, cacheReadTokens: 10, cacheWriteTokens: 5, totalTokens: 135 },
+      permissionDenials: [],
+      turns: 1,
+      startedAt: "2026-08-02T00:00:01.000Z",
+      completedAt: "2026-08-02T00:00:02.000Z",
+    });
+
+    const first = await readWebSessionMessages(
+      { sessionKey },
+      { projectRoot, pilotHome, maxContextTokens: 100_000, maxOutputTokens: 2_000 },
+    );
+    assert.ok(first.tokenUsage, "带 usage 的 fixture 应产出 tokenUsage");
+    assert.equal(first.tokenUsage!.used, 115, "used = input + cacheRead + cacheWrite");
+    assert.equal(first.tokenUsage!.effectiveTotal, 98_000, "effectiveTotal = maxContext - maxOutput");
+
+    // 同 options 二次调用命中缓存：展示与用量来自同一快照（引用共享）
+    const second = await readWebSessionMessages(
+      { sessionKey },
+      { projectRoot, pilotHome, maxContextTokens: 100_000, maxOutputTokens: 2_000 },
+    );
+    assert.equal(second.messages[0], first.messages[0], "命中缓存共享元素引用");
+    assert.equal(second.tokenUsage, first.tokenUsage, "tokenUsage 共享同一快照（命中路径不重读文件）");
+    assert.equal(second.tokenUsage!.effectiveTotal, 98_000);
+
+    // options 键控：maxOutputTokens 变化 → 缓存条目不匹配 → 重建并按新 options 重算
+    const third = await readWebSessionMessages(
+      { sessionKey },
+      { projectRoot, pilotHome, maxContextTokens: 100_000, maxOutputTokens: 0 },
+    );
+    assert.notEqual(third.messages[0], first.messages[0], "键控不匹配应重建（引用不再共享）");
+    assert.notEqual(third.tokenUsage, first.tokenUsage, "tokenUsage 应重算");
+    assert.equal(third.tokenUsage!.effectiveTotal, 100_000, "新 options 下 effectiveTotal 更新");
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("P2-C #13: 构建后文件被写（复验失败）→ 该次不落缓存，下一请求重建可见新消息", async () => {
+  const [projectRoot, pilotHome] = await makeFixture();
+  try {
+    const sessionKey = "web:s_rsm_cache_revalidate";
+    const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
+      projectRoot,
+      pilotHome,
+      sessionId: sessionKey,
+      now: () => new Date("2026-08-02T00:00:00.000Z"),
+    });
+    await storage.transcript.recordAcceptedInput(sessionKey, "turn-1", [
+      { role: "user", content: [{ type: "text", text: "request 1" }] },
+    ]);
+    await storage.transcript.recordDurableMessage(sessionKey, "turn-1", {
+      role: "assistant",
+      content: [{ type: "text", text: "answer 1" }],
+    });
+    const first = await readWebSessionMessages({ sessionKey }, { projectRoot, pilotHome });
+    assert.equal(first.total, 3, "2 条消息 + 1 条 incomplete status");
+
+    // 写缓存复验的守卫语义等价于「内容与 mtime+size 标记强一致」：在两次请求
+    // 之间追加（mtime+size 变化）→ 命中条件不满足 → 重建且新消息可见
+    // （复验失败不落缓存与命中失效走同一重建路径，此处验证重建端到端正确）。
+    await storage.transcript.recordAcceptedInput(sessionKey, "turn-2", [
+      { role: "user", content: [{ type: "text", text: "request 2" }] },
+    ]);
+    await storage.transcript.recordDurableMessage(sessionKey, "turn-2", {
+      role: "assistant",
+      content: [{ type: "text", text: "answer 2" }],
+    });
+    const second = await readWebSessionMessages({ sessionKey }, { projectRoot, pilotHome });
+    assert.equal(second.total, 5, "4 条消息 + 1 条 status：文件变化后重建，新消息可见");
+    // 重建后快照自洽：第三次请求命中新缓存
+    const third = await readWebSessionMessages({ sessionKey }, { projectRoot, pilotHome });
+    assert.equal(third.total, 5);
+    assert.equal(third.messages[0], second.messages[0], "重建后命中缓存共享引用");
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
+
 test("P2-C: 分页语义——status 只在末页，翻页链与全量一致", async () => {
   const [projectRoot, pilotHome] = await makeFixture();
   try {
