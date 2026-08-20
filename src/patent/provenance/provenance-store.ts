@@ -61,6 +61,7 @@ export class ProvenanceStore {
   private readonly db: DatabaseSync;
   private readonly stmtUpsertActivity: StatementSync;
   private readonly stmtUpsertEntity: StatementSync;
+  private readonly stmtUpsertEntityLatest: StatementSync;
   private readonly stmtUpsertAgent: StatementSync;
   private readonly stmtListActivities: StatementSync;
   private readonly stmtListActivitiesByCase: StatementSync;
@@ -115,6 +116,11 @@ export class ProvenanceStore {
       `);
       this.stmtUpsertEntity = this.db.prepare(`
         INSERT OR IGNORE INTO entity
+          (id, kind, value, case_id, generated_by, derived_from, degraded)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      this.stmtUpsertEntityLatest = this.db.prepare(`
+        INSERT OR REPLACE INTO entity
           (id, kind, value, case_id, generated_by, derived_from, degraded)
         VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
@@ -177,21 +183,15 @@ export class ProvenanceStore {
    */
   upsertEntityLatest(entity: ProvenanceEntity): void {
     this.assertOpen();
-    this.db
-      .prepare(
-        `INSERT OR REPLACE INTO entity
-          (id, kind, value, case_id, generated_by, derived_from, degraded)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        entity.id,
-        entity.kind,
-        entity.value,
-        entity.caseId,
-        entity.generatedByActivityId ?? null,
-        JSON.stringify(entity.derivedFromIds),
-        entity.degraded === true ? 1 : 0,
-      );
+    this.stmtUpsertEntityLatest.run(
+      entity.id,
+      entity.kind,
+      entity.value,
+      entity.caseId,
+      entity.generatedByActivityId ?? null,
+      JSON.stringify(entity.derivedFromIds),
+      entity.degraded === true ? 1 : 0,
+    );
   }
 
   /** 幂等写入执行者。 */

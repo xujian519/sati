@@ -2379,7 +2379,7 @@ function createApprovalStoreSafely(): SqliteApprovalStore | undefined {
   try {
     return new SqliteApprovalStore();
   } catch (err) {
-    console.error("[ProvenanceCollector] 审批审计库打开失败，审批留痕降级为不落盘:", err);
+    console.error("[SqliteApprovalStore] 审批审计库打开失败，审批留痕降级为不落盘:", err);
     return undefined;
   }
 }

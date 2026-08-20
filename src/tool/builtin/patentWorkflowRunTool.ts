@@ -276,7 +276,17 @@ export function createPatentWorkflowRunTool(
       // （跳过已完成阶段；配合 approveStageIds 放行审批门）。无 caseId 时不可续跑。
       let resumeFrom: ManifestCheckpoint | undefined;
       const checkpointDir = persistTarget?.runsDir;
-      if (input.resumeCheckpointId !== undefined && checkpointDir !== undefined) {
+      if (input.resumeCheckpointId !== undefined) {
+        if (checkpointDir === undefined) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "patent_workflow_run: manifest 模式断点续跑需要 caseId（检查点持久化目录）。请提供 caseId。",
+              },
+            ],
+          };
+        }
         const store = new JsonFileManifestCheckpointStore(checkpointDir);
         resumeFrom = await store.load(input.resumeCheckpointId);
         if (resumeFrom === undefined) {
@@ -289,15 +299,6 @@ export function createPatentWorkflowRunTool(
             ],
           };
         }
-      } else if (input.resumeCheckpointId !== undefined) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: "patent_workflow_run: manifest 模式断点续跑需要 caseId（检查点持久化目录）。请提供 caseId。",
-            },
-          ],
-        };
       }
 
       // 溯源旁路（T3）：SATI_PROVENANCE=1 + caseId 时收集审批门挂起/放行；resume 复用 runId。
@@ -449,7 +450,10 @@ function renderGraphResultText(opts: {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => {
       // 防御：state 值可能为 undefined（JSON.stringify(undefined) 返回 undefined）。
-      const text = typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value);
+      let text: string;
+      if (typeof value === "string") text = value;
+      else if (value === undefined) text = "";
+      else text = JSON.stringify(value);
       const preview = text.length > 0 ? `${text.slice(0, 80)}${text.length > 80 ? "…" : ""}` : "(空)";
       return `- ${key}: ${preview}`;
     });

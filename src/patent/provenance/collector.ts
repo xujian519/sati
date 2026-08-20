@@ -45,9 +45,22 @@ export class ProvenanceCollector {
     this.caseId = options.caseId;
   }
 
+  /**
+   * fail-open 统一包装（评审 C1）：审计写失败绝不外泄——wrapNode 场景下外泄会把
+   * 成功节点翻转成 node_failed 并丢弃其产出（engine 把 promise reject 当节点失败）。
+   * 所有写操作必须经此包装，新增写方法不得绕过。
+   */
+  private failOpen(what: string, fn: () => void): void {
+    try {
+      fn();
+    } catch (err) {
+      console.error(`[ProvenanceCollector] ${what}:`, err);
+    }
+  }
+
   /** 记录一条审批门活动（挂起 pending / 放行 granted）。 */
   recordApprovalGate(record: ApprovalGateRecord): void {
-    try {
+    this.failOpen(`审批门记录 (${record.stageId})`, () => {
       const id = `${this.runId}:approval_gate:${record.stageId}:${record.kind}`;
       this.store.upsertAgent({ id: "human", kind: "human", name: "审批人" });
       this.store.upsertActivity({
@@ -68,16 +81,13 @@ export class ProvenanceCollector {
         generatedByActivityId: id,
         derivedFromIds: [],
       });
-    } catch (err) {
-      // fail-open（评审 C1）：审计写失败绝不外泄——wrapNode 场景下外泄会把成功节点
-      // 翻转成 node_failed 并丢弃其产出（engine 把 promise reject 当节点失败）。
-      console.error(`[ProvenanceCollector] 审批门记录失败 (${record.stageId}):`, err);
-    }
+    });
   }
 
   /** 记录一条 worker 契约执行（activity + output_file entity）。 */
   recordWorker(input: { record: WorkerExecutionRecord; outputPath?: string }): void {
-    try {
+    // 评审 C2：onRecord 无 try/catch 时 store 抛错会经 monitor.record 上抛中止整个 workflow。
+    this.failOpen(`worker 记录 (${input.record.workerName})`, () => {
       // 评审 I4：id 用执行时刻（record.startedAt）而非进程内自增 seq——
       // resume 续跑新 collector 的 seq 从 0 起，会与崩溃前记录 id 碰撞并被
       // INSERT OR IGNORE 静默丢弃；执行时刻在 resume 重跑时天然不同。
@@ -103,11 +113,7 @@ export class ProvenanceCollector {
         derivedFromIds: [],
         degraded: input.record.degraded,
       });
-    } catch (err) {
-      // fail-open：worker 记录失败不影响工作流运行（评审 C2：onRecord 无 try/catch 时
-      // store 抛错会经 monitor.record 上抛中止整个 workflow）。
-      console.error(`[ProvenanceCollector] worker 记录失败 (${input.record.workerName}):`, err);
-    }
+    });
   }
 
   /** 更新当前超步号（图路径，工具层 onSuperStepStart 调用）。 */
@@ -136,7 +142,7 @@ export class ProvenanceCollector {
     declaredInputKeys?: readonly string[];
     startedAt: number;
   }): void {
-    try {
+    this.failOpen(`图节点记录 (${input.name})`, () => {
       const activityId = `${this.runId}:graph_node:${input.name}:${this.currentStep}`;
       const written = Object.keys(input.delta);
       // 评审 I1：只记录已产生的快照键（悬空引用不写 inputIds，避免导出"输入"指向不存在实体）
@@ -171,17 +177,13 @@ export class ProvenanceCollector {
           degraded: key.endsWith(DEGRADATION_SUFFIX),
         });
       }
-    } catch (err) {
-      // fail-open（评审 C1）：wrapNode 场景下审计写失败外泄会把成功节点翻转成
-      // node_failed 并丢弃其产出（engine 把 promise reject 当节点失败）。
-      console.error(`[ProvenanceCollector] 图节点记录失败 (${input.name}):`, err);
-    }
+    });
   }
 
   /** 记录全图降级标记（结果侧，评审 P9：覆盖引擎级直接写 state 的降级路径）。 */
   recordDegradations(marks: readonly DegradationMark[]): void {
     for (const mark of marks) {
-      try {
+      this.failOpen(`降级记录 (${mark.reason})`, () => {
         const id = `${this.runId}:degradation:${mark.reason}:${mark.message}`;
         this.store.upsertActivity({
           id,
@@ -202,9 +204,7 @@ export class ProvenanceCollector {
           derivedFromIds: [],
           degraded: true,
         });
-      } catch (err) {
-        console.error(`[ProvenanceCollector] 降级记录失败 (${mark.reason}):`, err);
-      }
+      });
     }
   }
 

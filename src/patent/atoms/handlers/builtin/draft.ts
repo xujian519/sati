@@ -217,8 +217,9 @@ function appendCoverageWarnings(
     }
   }
   // 评审 I2：幻觉实施例引用（LLM 引用交底书中不存在的实施例，被骨架剔除）
-  if (Array.isArray(matrix?.droppedRefs) && matrix!.droppedRefs.length > 0) {
-    const refs = (matrix!.droppedRefs as unknown[]).filter((r): r is string => typeof r === "string");
+  const droppedRefs = matrix?.droppedRefs;
+  if (Array.isArray(droppedRefs) && droppedRefs.length > 0) {
+    const refs = droppedRefs.filter((r): r is string => typeof r === "string");
     if (refs.length > 0) {
       violations.push({
         rule: "claim_coverage_dropped_refs",

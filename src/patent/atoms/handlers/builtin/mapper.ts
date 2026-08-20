@@ -126,6 +126,8 @@ export class ClaimEmbodimentMapperHandler implements StageHandler {
         }
         // 骨架交叉校验（评审 I2）：被剔除的幻觉引用记入 droppedRefs（可见而非静默吞掉）
         const droppedRefs: string[] = [];
+        // 评审 M3：按 claimId 去重（保留首条），避免特征重复计入缺口/误报跨权项重复
+        const seenClaimIds = new Set<string>();
         const claims: ClaimCoverageEntry[] = parsed.claims
           .filter(
             // 评审 M3：类型谓词补 !Array.isArray（数组元素 typeof === "object" 亦为真）
@@ -140,8 +142,11 @@ export class ClaimEmbodimentMapperHandler implements StageHandler {
             const allRefs = Array.isArray(c.embodimentRefs)
               ? c.embodimentRefs.filter((e): e is string => typeof e === "string")
               : [];
-            const validRefs = allRefs.filter(e => skeleton.has(e));
-            droppedRefs.push(...allRefs.filter(e => !skeleton.has(e)));
+            const validRefs: string[] = [];
+            for (const ref of allRefs) {
+              if (skeleton.has(ref)) validRefs.push(ref);
+              else droppedRefs.push(ref);
+            }
             const embodimentRefs = [...new Set(validRefs)];
             const uncoveredFeatures = embodimentRefs.length === 0 ? [...features] : [];
             const coverage: ClaimCoverageLevel = embodimentRefs.length > 0 ? "full" : "none";
@@ -154,8 +159,11 @@ export class ClaimEmbodimentMapperHandler implements StageHandler {
             };
           })
           .filter(c => c.claimId.length > 0)
-          // 评审 M3：按 claimId 去重（保留首条），避免特征重复计入缺口/误报跨权项重复
-          .filter((c, index, arr) => arr.findIndex(x => x.claimId === c.claimId) === index);
+          .filter(c => {
+            if (seenClaimIds.has(c.claimId)) return false;
+            seenClaimIds.add(c.claimId);
+            return true;
+          });
 
         const matrix: ClaimEmbodimentCoverage = { caseId: provider?.caseId ?? "", claims, degraded: false };
         matrixToPersist = matrix;
