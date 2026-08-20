@@ -35,6 +35,7 @@
     "unassigned": "未分配",
     "reassign": "转派",
     "reassignPlaceholder": "指派给…",
+    "optionFormat": "{{memberId}}（{{roleSlug}}）",
     "empty": "暂无任务"
   },
   "archive": {

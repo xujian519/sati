@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import type { PanelTeam } from "./types";
+import type { PanelActionResult, PanelTeam } from "./types";
 
 type TeamOverviewProps = {
   teams: PanelTeam[];
-  onCreate: (name: string) => Promise<boolean>;
+  /** 建队回调：返回完整 ActionResult，失败时展示具体后端 message（与成员/任务反馈链路一致）。 */
+  onCreate: (name: string) => Promise<PanelActionResult>;
   onCreated: () => void;
 };
 
@@ -26,13 +27,14 @@ export function TeamOverview({ teams, onCreate, onCreated }: TeamOverviewProps) 
     setBusy(true);
     setFeedback(null);
     try {
-      const ok = await onCreate(trimmed);
-      if (ok) {
+      const r = await onCreate(trimmed);
+      if (r.ok) {
         setName("");
         setFeedback({ kind: "ok", text: t("opSucceeded") });
         onCreated();
       } else {
-        setFeedback({ kind: "error", text: t("opFailed") });
+        // I1：后端契约错误（如 team_not_captain / team_already_exists）：具体 message 直接展示，不走 i18n
+        setFeedback({ kind: "error", text: r.error.message });
       }
     } catch (err) {
       // 网络失败等异常：运行时错误消息直接展示（与 useTeamPanel 的 error 语义一致，不走 i18n）

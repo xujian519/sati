@@ -25,10 +25,8 @@ import enChat from "./locales/en/chat.json";
 import enCodeEditor from "./locales/en/codeEditor.json";
 import enAlwaysOn from "./locales/en/alwaysOn.json";
 import enRouting from "./locales/en/routing.json";
-// eslint-disable-next-line import-x/order
 import enTasks from "./locales/en/tasks.json";
 import enTeamPanel from "./locales/en/teamPanel.json";
-
 import zhCommon from "./locales/zh-CN/common.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhAuth from "./locales/zh-CN/auth.json";
@@ -36,10 +34,8 @@ import zhSidebar from "./locales/zh-CN/sidebar.json";
 import zhChat from "./locales/zh-CN/chat.json";
 import zhAlwaysOn from "./locales/zh-CN/alwaysOn.json";
 import zhRouting from "./locales/zh-CN/routing.json";
-// eslint-disable-next-line import-x/order
 import zhCodeEditor from "./locales/zh-CN/codeEditor.json";
 import zhTeamPanel from "./locales/zh-CN/teamPanel.json";
-
 import { languages } from "./languages.js";
 
 const getSavedLanguage = () => {

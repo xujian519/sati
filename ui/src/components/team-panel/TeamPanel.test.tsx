@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { authenticatedFetch } from "../../utils/api";
 import type { TeamPanelSnapshot } from "./types";
@@ -73,5 +73,32 @@ describe("TeamPanel", () => {
     expect(screen.getByText(/检索对比文件/)).toBeDefined();
     // 事件流空态容器存在
     expect(screen.getByText(/events.empty/)).toBeDefined();
+  });
+
+  it("建队失败展示具体后端 message（I1 反馈链路）", async () => {
+    // panel 快照正常；team_create 返回契约错误（如非队长）
+    mockedFetch.mockImplementation((url: string) => {
+      if (url === "/api/teams/panel") {
+        return Promise.resolve(response(snapshotBody));
+      }
+      return Promise.resolve(response({ ok: false, error: { code: "team_not_captain", message: "只有队长可以建队" } }));
+    });
+
+    render(<TeamPanel />);
+    await screen.findByText(/t1/);
+
+    fireEvent.change(screen.getByPlaceholderText("overview.createPlaceholder"), {
+      target: { value: "new-team" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /overview\.create/ }));
+
+    // 具体后端 message 直接展示（不经过 i18n）
+    expect(await screen.findByText(/只有队长可以建队/)).toBeDefined();
+    // 失败不清空输入框（可重试）
+    expect((screen.getByPlaceholderText("overview.createPlaceholder") as HTMLInputElement).value).toBe("new-team");
+    // 快照 fetch 未被污染
+    await waitFor(() => {
+      expect(mockedFetch.mock.calls.filter(([url]) => url === "/api/teams/panel").length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

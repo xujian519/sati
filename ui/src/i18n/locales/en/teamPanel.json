@@ -35,6 +35,7 @@
     "unassigned": "Unassigned",
     "reassign": "Reassign",
     "reassignPlaceholder": "Assign to…",
+    "optionFormat": "{{memberId}} ({{roleSlug}})",
     "empty": "No tasks yet"
   },
   "archive": {
