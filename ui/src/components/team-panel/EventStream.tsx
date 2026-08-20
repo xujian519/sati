@@ -34,7 +34,7 @@ type TeamWireEvent = {
   [key: string]: unknown;
 };
 
-/** 事件族徽章配色（按 type 精确映射；未知按前缀分类，兜底中性灰）。 */
+/** 事件族徽章配色（按 type 精确映射；未知事件兜底中性灰）。 */
 const EVENT_STYLE: Record<string, string> = {
   task_claimed: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400",
   task_completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400",
@@ -43,13 +43,9 @@ const EVENT_STYLE: Record<string, string> = {
   message_delivered: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400",
 };
 
-const styleForEventType = (type: string): string => {
-  const exact = EVENT_STYLE[type];
-  if (exact !== undefined) return exact;
-  if (type.startsWith("task_")) return "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400";
-  if (type.startsWith("member_")) return "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300";
-  return "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300";
-};
+const FALLBACK_EVENT_STYLE = "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300";
+
+const styleForEventType = (type: string): string => EVENT_STYLE[type] ?? FALLBACK_EVENT_STYLE;
 
 const describeEvent = (event: TeamWireEvent): string => {
   const parts = [event.taskId, event.memberId];
