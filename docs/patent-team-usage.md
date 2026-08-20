@@ -27,7 +27,7 @@ Agent 会依据内置组建模板 `skills/patent-team-composition/SKILL.md` 自�
 | 入口 | 能力 | 说明 |
 |---|---|---|
 | **对话式**（推荐） | 全部 9 个 `team_*` 工具 | 队长会话自然语言驱动；建任务 DAG、角色简报、审批、收口都在这 |
-| **Web 团队面板** | 建队 / 添加成员 / 转派任务 / 归档 / 实时事件流 | 侧边栏底部 **Team** 按钮进入；**无建任务表单**——任务下发与审批必须走对话 |
+| **Web 团队面板** | 建队 / 添加成员 / 转派任务 / 归档 / 实时事件流 | 侧边栏底部 **Team** 按钮开关（对话界面右上角伴随浮层，见第六节）；**无建任务表单**——任务下发与审批必须走对话 |
 
 ## 三、9 个 `team_*` 工具速查
 
@@ -75,14 +75,17 @@ Agent 会依据内置组建模板 `skills/patent-team-composition/SKILL.md` 自�
 
 ## 六、主界面显示
 
-**入口**：侧边栏底部 "Team" 按钮（Users 图标，`ui/src/components/app-shell/SidebarV2.tsx:1199`）→ 主内容区切到团队面板 tab（`ui/src/components/main-content/view/MainContent.tsx:763`，组件在 `ui/src/components/team-panel/`）。
+**入口**：侧边栏底部 "Team" 按钮（Users 图标，开关式 `aria-pressed`，`ui/src/components/app-shell/SidebarV2.tsx:1202`）→ 对话界面**右上角伴随浮层**（`FloatingTeamPanel`，`ui/src/components/team-panel/floating-team-panel.tsx`，经 `MainContent.tsx:1060` lazy 挂载）——对话为主、监控同屏，替代 M4 的整页 tab。
+
+**三态布局**：chat 主界面 + 宽屏 → **Docked** 380px 常驻右列（对话礼让）；Files 模式 / 窗口 <1040 / 移动端 → **Overlay** 右上覆盖（`min(420px, 92vw)`，不挤压原布局）；**收起态** → 右上角浮标药丸（团队数 + 活动脉冲点），事件到达且挂载超 4s（settle 窗口防加载闪动）自动展开一次，手动收起后不再自动展开（意图优先），折叠偏好存 `localStorage["sati:team-panel-collapsed"]`。
 
 | 界面区域 | 显示内容 |
 |---|---|
-| **团队卡网格** | 队名 + 队 id、归档黄徽章、**队长在线圆点**（绿=在线 / 灰=离线，离线超 60s 宽限后调度暂停）、成员数、任务数；末尾虚线"新建团队"卡 |
-| **成员网格** | 每成员一张卡：状态圆点（idle 灰 / working 绿 / retired 浅灰 + 半透明）、成员 id、模型路由（provider / model）、角色徽章 |
-| **任务看板** | 每行：彩色状态徽章（pending 灰 / claimed 蓝 / in_progress 琥珀 / completed 绿 / failed 红 / cancelled 灰）+ subject + attempt 次数 + 阻塞数 + 负责人；非终态任务带"转派"下拉；右上"归档团队"（二次确认） |
-| **事件流** | 底部实时滚动（50 条窗口）：14 种 TeamEvent 彩色徽章（`task_claimed` 蓝 / `task_completed` 绿 / `task_failed` 红 / `task_retried` 琥珀 / `message_delivered` 紫…）+ `taskId · memberId · attempt:N` 描述 |
+| **团队 chips** | 活动团队横排 chips（选中高亮）+ 归档团队折叠区；**会话跟随**——当前会话为队长的团队自动选中，chips 可手动切换 |
+| **队长摘要** | 队长卡（**在线圆点**：绿=在线 / 灰=离线，离线超 60s 宽限后调度暂停）+ 派发摘要（已向 N 名成员派发 M 个任务）+ **分段进度条**（每任务一段按状态着色）+ 图例 + 一句话摘要 + "归档团队"（二次确认） |
+| **任务 DAG** | 依赖关系可视化：SVG 节点 92×30、按依赖深度分列、贝塞尔边、hover 高亮上下游、无依赖任务自动并排；非终态节点点击内联转派（无建任务表单——任务下发与审批必须走对话） |
+| **成员树** | 默认折叠成员树：状态圆点（idle 灰 / working 绿 / retired 浅灰）、成员 id、模型路由（provider / model）、角色徽章、当前任务 + 完成计数；展开后带"添加成员"表单 |
+| **最近动态** | 底部最后 3 条事件（14 种 TeamEvent 彩色徽章）；事件同时驱动 DAG 节点/成员行**脉冲指示**（最近 5 条事件窗口）与浮标活动点 |
 | **聊天区（队长会话）** | 成员审批冒泡为输入框上方靛蓝审批卡片（见第五节）；聊天流内可随时对话指挥成员 |
 
 **数据通道**：快照 `POST /api/teams/panel`（5s 轮询，sessionKey 留空 = 全部团队）+ 操作 `POST /api/teams/action`（直调 `team_*` 工具）+ WebSocket `kind:"team_event"` 实时流（经 `ui/server` 中转 + `session-watch-registry` 广播）。网关协议 1.4 新增三个可选方法：`panelHeartbeat`（Web 下线判定，`ui/server/team-presence.js` 每 30s 心跳）/ `teamPanelSnapshot` / `teamToolCall`。
@@ -98,7 +101,7 @@ Agent 会依据内置组建模板 `skills/patent-team-composition/SKILL.md` 自�
 
 ## 八、已知限制
 
-1. 事件流仅在队长会话有活跃 turn 时实时投递，否则事件丢失——由面板 5s 快照轮询兜底（`EventStream.tsx` 注释）
+1. 事件流仅在队长会话有活跃 turn 时实时投递，否则事件丢失——由面板 5s 快照轮询兜底（`hooks/use-team-activity.ts` 注释）
 2. 冷恢复（重启后续跑）turn 的 `approval_pending` 不冒泡到队长（M1 遗留；调度器直调 `wakeMember` 路径已接线）
 3. 成员卡只显示工作状态（idle/working/retired），无浏览器在线态；在线态仅队长圆点体现
 
