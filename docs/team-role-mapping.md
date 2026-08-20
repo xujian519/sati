@@ -4,7 +4,7 @@
 > 对照：Sati 既有 `skills/` 下 `type: role` 角色（grep 统计 32 个，`skills/<name>/SKILL.md` 结构）
 > 日期：2026-08-20
 >
-> **接线状态：已落地（M3）。** 12 岗全部经 `registerRoleDefinition` 注册（5 新增角色补全 frontmatter 后注册；7 复用岗以团队变体角色资产注册，见下方映射表「复用/新增」列变更为「变体」）。角色可按 `subagent_type` / 团队 roleSlug 调度。
+> **接线状态：T14 资产就绪，注册接线 T15 落地。** 12 岗角色资产与映射已就绪（5 新增角色 frontmatter 补全；7 复用岗以团队变体角色资产呈现，见下方映射表「复用/新增」列变更为「变体」）。`skills/patent-teams/` 二级目录角色（本表 12 岗）的注册装配路径（skills 加载递归扫描）由 M3 T15 接线——当前经 `subagent_type` / 团队 roleSlug 调度尚不可用，T15 落地后本表更新为「已注册可调度」。
 
 ## 一、总览
 
@@ -39,11 +39,11 @@
 | 被告代理人 | 抗辩方 | 不侵权/现有技术抗辩、禁反言与捐献排除等同、提无效反制、豁免抗辩 | `skills/patent-teams/defendant-counsel/SKILL.md` |
 | 技术调查官 | 中立技术查明 | 实施例/特征比对/等同的技术维度独立判断，输出中立技术事实意见 | `skills/patent-teams/tech-investigator/SKILL.md` |
 
-## 四、注册接线（M3 已落地）
+## 四、注册接线（T15 落地；本表先行资产）
 
-- 5 个新增角色（`case-manager`/`formal-examiner`/`applicant-counsel`/`defendant-counsel`/`tech-investigator`）已按 `skills/` 下 `type: role` SKILL.md 惯例补全 frontmatter（`tools`/`omitTools`/`readOnly`/`systemPrompt`；`domains` 以各文件"工具域建议"小节为准 + 追加 `"team"` 作业面）并经 `registerRoleDefinition` 注册，可按 `subagent_type` / 团队 roleSlug 调度
-- 7 个复用岗的立场/职责差异以团队变体角色资产落地（`skills/patent-teams/<id>/SKILL.md`，T15 创建）：复用既有角色的工具/审查能力基底，差异经变体 frontmatter（systemPrompt/domains/omitTools）补充，不改既有角色资产
-- 本任务不涉及 `src/` 改动（角色经既有 skills 加载路径进子代理注册表）、不改 `assets/`、不改 `rules/`
+- 现状（T14）：5 个新增角色（`case-manager`/`formal-examiner`/`applicant-counsel`/`defendant-counsel`/`tech-investigator`）已按 `skills/` 下 `type: role` SKILL.md 惯例补全 frontmatter（`tools`/`omitTools`/`readOnly`/`systemPrompt`；`domains` 以各文件"工具域建议"小节为准 + 追加 `"team"` 作业面），但**尚未注册**：当前运行时角色注册仅经插件贡献路径（`createLocalGateway.syncRoleDefinitions` → `roleFromContribution`，遍历 `pluginRuntime.getAllSkills()`），skills 扫描只检查一层子目录（`discoverSkillPaths` / `listSkillsIn`），`skills/patent-teams/`（自身无 SKILL.md）整目录被跳过；7 个变体角色资产由 T15 创建
+- T15 接线：为 `skills/patent-teams/` 补注册装配路径（skills 加载递归扫描 → `roleFromSkill`/`rolesFromSkills` → `registerRoleDefinition`），完成后 12 岗（5 新增 + 7 变体）可按 `subagent_type` / 团队 roleSlug 调度，届时本表更新为已注册
+- 本任务不涉及 `src/` 改动（注册装配路径属 T15）、不改 `assets/`、不改 `rules/`
 
 ## 五、参照资产
 

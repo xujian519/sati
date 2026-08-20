@@ -37,7 +37,7 @@ systemPrompt: |-
 
 ## 工具域建议（建议 domains）
 
-角色注册 domains（M3 已落地）：`["patent", "legal", "filesystem", "session", "team"]`（`"team"` 为成员作业面域，`team_update_task`/`team_send_message`/`team_status` 按此裁剪可见）：
+角色注册 domains（frontmatter 已就绪，注册装配 T15 落地）：`["patent", "legal", "filesystem", "session", "team"]`：
 
 > 注：域为语义分组，工具实际按 metadata domain 裁剪（未标注 domain 的工具始终可见）；表中"用途"列提及的具体工具仅示意该域的能力取向，其 metadata domain 不一定等于所在列语义域。
 
@@ -47,6 +47,7 @@ systemPrompt: |-
 | `legal` | 期限法条核验（`law_search`：答复期限/复审期限/年费） |
 | `filesystem` | 案卷目录与落盘文件管理 |
 | `session` | 团队会话读写 |
+| `team` | 成员作业面：`team_update_task`/`team_send_message`/`team_status` 按域裁剪可见（管理面 `team:manage` 仅队长可见） |
 
 ## 协作边界
 

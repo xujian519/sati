@@ -3,7 +3,7 @@ name: defendant-counsel
 description: 被告代理人角色 — 不侵权/现有技术抗辩、禁反言与捐献排除等同、提无效反制、豁免抗辩（抗辩方立场）
 type: role
 tools: ["*"]
-domains: ["analysis", "patent", "legal", "search", "session", "team"]
+domains: ["analysis", "patent", "legal", "search", "literature", "session", "team"]
 omitTools: ["execute_code"]
 readOnly: false
 systemPrompt: |-
@@ -39,7 +39,7 @@ systemPrompt: |-
 
 ## 工具域建议（建议 domains）
 
-角色注册 domains（M3 已落地）：`["analysis", "patent", "legal", "search", "session", "team"]`（`"team"` 为成员作业面域，`team_update_task`/`team_send_message`/`team_status` 按此裁剪可见）：
+角色注册 domains（frontmatter 已就绪，注册装配 T15 落地）：`["analysis", "patent", "legal", "search", "literature", "session", "team"]`：
 
 > 注：域为语义分组，工具实际按 metadata domain 裁剪（未标注 domain 的工具始终可见）；表中"用途"列提及的具体工具仅示意该域的能力取向，其 metadata domain 不一定等于所在列语义域。
 
@@ -49,7 +49,9 @@ systemPrompt: |-
 | `patent` | 专利域工具可见性 |
 | `legal` | 抗辩法条核验（A62 现有技术抗辩、禁反言规则） |
 | `search` | 现有技术抗辩证据检索 |
+| `literature` | 学术文献检索（`paper_search`，现有技术抗辩证据补充） |
 | `session` | 团队会话读写 |
+| `team` | 成员作业面：`team_update_task`/`team_send_message`/`team_status` 按域裁剪可见（管理面 `team:manage` 仅队长可见） |
 
 ## 协作边界
 
