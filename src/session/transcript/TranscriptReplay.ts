@@ -48,7 +48,158 @@ export function projectMessagesFromTranscript(entries: AgentTranscriptEntry[]): 
   return replayTranscriptEntries(entries).messages;
 }
 
+/**
+ * P2-B 投影缓存：transcript 是追加型日志，每次 submit 全量重投影 O(N)
+ * （N = 条目数，压缩后仍线性增长）。按「entries 长度 + 尾部 entryId 衔接」
+ * 键控缓存投影结果（依赖 P2-A 增量读取的旧字节不变保证；entries 元素共享
+ * 引用）：
+ *   - 完全命中（length 相同 + 尾部 entryId 相同）：0 次扫描，返回缓存 result；
+ *   - 增量命中（length 增长 + 前段尾部衔接 + 新增 slice 无 boundary）：
+ *     只投影新增 slice（O(增量)），复用缓存数组原地 append；
+ *   - 其他（替换重写 / 新 boundary 遮蔽历史）：全量重投影。
+ * ⚠️ 契约：调用方不得修改返回值（TurnRunner/AgentSession 已遵守；
+ * tests/session/transcript/transcript-replay-cache.spec.ts 固化）。
+ */
+const PROJECTION_CACHE_MAX = 16;
+
+type ProjectionCacheEntry = {
+  entriesLength: number;
+  lastEntryId?: string;
+  completedTurnIds: Set<string>;
+  /** 已产生「incomplete turn」warning 的 turnId（增量补全 turn 时移除旧 warning）。 */
+  warningTurnIds: Set<string>;
+  result: AgentTranscriptReplayResult;
+};
+
+/** 按 entries.length 索引的 LRU 投影缓存（length 唯一；多 session 同 length 冲突由尾部校验拦截）。 */
+const projectionCache = new Map<number, ProjectionCacheEntry>();
+
+function lastEntryIdOf(entries: AgentTranscriptEntry[]): string | undefined {
+  return entries[entries.length - 1]?.entryId;
+}
+
+/** 尾部衔接校验：entries 前 cachedLength 条与缓存建立时一致（追加不改旧字节）。 */
+function tailMatches(entries: AgentTranscriptEntry[], cachedLength: number, lastEntryId?: string): boolean {
+  if (cachedLength === 0) return true;
+  if (entries.length < cachedLength) return false;
+  return entries[cachedLength - 1]?.entryId === lastEntryId;
+}
+
+function touchProjectionCache(cacheKey: number, entry: ProjectionCacheEntry): void {
+  projectionCache.delete(cacheKey);
+  projectionCache.set(cacheKey, entry);
+  if (projectionCache.size > PROJECTION_CACHE_MAX) {
+    const oldest = projectionCache.keys().next().value;
+    if (oldest !== undefined) projectionCache.delete(oldest);
+  }
+}
+
 export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResult {
+  const cacheKey = entries.length;
+  const cached = projectionCache.get(cacheKey);
+
+  // 分支 1：完全命中（length 相同 + 尾部 entryId 相同 = 内容未变）。
+  if (
+    cached !== undefined &&
+    entries.length === cached.entriesLength &&
+    tailMatches(entries, cached.entriesLength, cached.lastEntryId)
+  ) {
+    touchProjectionCache(cacheKey, cached);
+    return cached.result;
+  }
+
+  // 分支 2：增量命中（长度增长 + 前段衔接；新 slice 无 boundary 时安全）。
+  if (
+    cached !== undefined &&
+    entries.length > cached.entriesLength &&
+    tailMatches(entries, cached.entriesLength, cached.lastEntryId)
+  ) {
+    const slice = entries.slice(cached.entriesLength);
+    if (!slice.some(isCompactBoundaryEntry)) {
+      appendProjection(slice, cached);
+      cached.entriesLength = entries.length;
+      cached.lastEntryId = lastEntryIdOf(entries);
+      touchProjectionCache(cacheKey, cached);
+      return cached.result;
+    }
+  }
+
+  // 分支 3：全量重投影。
+  const result = replayFull(entries);
+  projectionCache.set(cacheKey, {
+    entriesLength: entries.length,
+    lastEntryId: lastEntryIdOf(entries),
+    completedTurnIds: new Set(entries.filter(entry => entry.type === "turn_result").map(entry => entry.turnId)),
+    warningTurnIds: new Set(),
+    result,
+  });
+  if (projectionCache.size > PROJECTION_CACHE_MAX) {
+    const oldest = projectionCache.keys().next().value;
+    if (oldest !== undefined) projectionCache.delete(oldest);
+  }
+  return result;
+}
+
+/** 增量投影：仅处理缓存后新增的 slice（调用方保证 slice 无 boundary、前段衔接）。 */
+function appendProjection(entries: AgentTranscriptEntry[], cache: ProjectionCacheEntry): void {
+  const result = cache.result;
+  const completedTurnIds = cache.completedTurnIds;
+  for (const entry of entries) {
+    switch (entry.type) {
+      case "accepted_input":
+        result.messages.push(...cloneMessages(entry.messages));
+        result.events.push({
+          type: "input_accepted",
+          sessionId: entry.sessionId,
+          turnId: entry.turnId,
+          messages: cloneMessages(entry.messages),
+        });
+        break;
+      case "assistant_message":
+      case "tool_result_message":
+      case "durable_message":
+        if (!completedTurnIds.has(entry.turnId)) {
+          result.diagnostics.push({
+            code: "transcript_entry_invalid",
+            severity: "warning",
+            message: `Skipping durable message for incomplete turn ${entry.turnId}.`,
+          });
+          cache.warningTurnIds.add(entry.turnId);
+          break;
+        }
+        result.messages.push(cloneMessage(entry.message));
+        result.events.push(projectMessageEvent(entry.sessionId, entry.turnId, entry.message));
+        break;
+      case "turn_result":
+        if (cache.warningTurnIds.has(entry.turnId)) {
+          // 该 turn 的 durable 消息之前因 turn 未完成被跳过（warning 已记入）；
+          // 现在 turn 补全——全量投影不会产生该 warning，增量投影须移除，
+          // 否则与全量结果不一致。
+          cache.warningTurnIds.delete(entry.turnId);
+          result.diagnostics = result.diagnostics.filter(
+            diagnostic => !(diagnostic.message === `Skipping durable message for incomplete turn ${entry.turnId}.`),
+          );
+        }
+        completedTurnIds.add(entry.turnId);
+        result.usage = mergeUsage(result.usage, entry.result.usage);
+        result.permissionDenials.push(...entry.result.permissionDenials);
+        result.events.push({
+          type: "turn_completed",
+          sessionId: entry.sessionId,
+          turnId: entry.turnId,
+          result: cloneTurnResult(entry.result),
+        });
+        break;
+      case "session_metadata":
+        result.metadata = mergeMetadata(result.metadata, entry.metadata);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResult {
   const lastBoundaryIndex = findLastCompactBoundaryIndex(entries);
   const messages: CanonicalMessage[] = [];
   const events: AgentEvent[] = [];

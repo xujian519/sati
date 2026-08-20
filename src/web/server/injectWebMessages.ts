@@ -107,20 +107,20 @@ export function compactBoundaryMetadata(
 }
 
 /**
- * 把按 createdAt 升序收集的新消息插入到 allMessages 的对应时间位置
- * （倒序扫描 + splice）。三个 inject 函数此前逐字重复此循环。
+ * 把按 createdAt 升序收集的新消息插入到 allMessages 的对应时间位置。
+ * 单调游标：allMessages 与 newMessages 均按 createdAt 升序（transcript 是
+ * 追加日志，写入时间单调），双指针线性归并——替代旧的「每条倒序全扫找
+ * 插入点」（O(N×M) 扫描，长会话每条注入都从尾部扫一遍）。等值（createdAt
+ * 相同）时新消息插在等值旧消息之后，与旧行为一致。
  */
 function injectMessagesSortedByTimestamp(allMessages: WebMessage[], newMessages: WebMessage[]): void {
+  let cursor = 0;
   for (const message of newMessages) {
-    let insertAt = allMessages.length;
-    for (let index = allMessages.length - 1; index >= 0; index -= 1) {
-      if (allMessages[index].createdAt <= message.createdAt) {
-        insertAt = index + 1;
-        break;
-      }
-      if (index === 0) insertAt = 0;
+    while (cursor < allMessages.length && allMessages[cursor]!.createdAt <= message.createdAt) {
+      cursor += 1;
     }
-    allMessages.splice(insertAt, 0, message);
+    allMessages.splice(cursor, 0, message);
+    cursor += 1; // 越过刚插入的自身（后续消息只可能插在其后）
   }
 }
 

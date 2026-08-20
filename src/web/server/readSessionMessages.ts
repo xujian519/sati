@@ -19,6 +19,8 @@
  * injectWebMessages.ts（压缩边界 / file_artifacts / 错误 turn / agent 状态注入）。
  */
 
+import { stat } from "node:fs/promises";
+import type { Stats } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { type CanonicalMessage } from "../../model/index.js";
 import { listProjectSessions, readTranscript, type SessionInfo } from "../../session/index.js";
@@ -47,6 +49,32 @@ export type ReadWebSessionMessagesOptions = {
   now?: () => Date;
 };
 
+/**
+ * P2-C 构建缓存：UI 轮询/翻页每次请求都走 extract+flatten+inject 全量重建
+ * （长会话 O(N×M)，H5 卡点）。transcript 未变（mtime+size，与 P2-A 增量读取
+ * 同校验）时直接 slice 命中。LRU 上限 32（多会话同时活跃）。
+ * createIncompleteTurnStatusMessage 依赖当前时间 → 移出缓存每请求重建。
+ */
+const WEB_MESSAGES_CACHE_MAX = 32;
+
+type WebMessagesCacheEntry = {
+  mtimeMs: number;
+  size: number;
+  allMessages: WebMessage[];
+  incompleteTurnIds: string[];
+};
+
+const webMessagesCache = new Map<string, WebMessagesCacheEntry>();
+
+function touchWebMessagesCache(key: string, entry: WebMessagesCacheEntry): void {
+  webMessagesCache.delete(key);
+  webMessagesCache.set(key, entry);
+  if (webMessagesCache.size > WEB_MESSAGES_CACHE_MAX) {
+    const oldest = webMessagesCache.keys().next().value;
+    if (oldest !== undefined) webMessagesCache.delete(oldest);
+  }
+}
+
 export async function readWebSessionMessages(
   input: WebReadSessionMessagesInput,
   options: ReadWebSessionMessagesOptions,
@@ -61,50 +89,84 @@ export async function readWebSessionMessages(
         ...options,
         projectRoot: effectiveProjectRoot,
       });
-  const { entries } = await readTranscript(transcriptPath);
-  const webReplay = extractWebVisibleMessages(entries);
-  const entryTimestamps = webReplay.timestamps;
-  const entryIds = webReplay.entryIds;
-  const incompleteTurnIds = extractIncompleteTurnIds(entries);
-
-  const flattenedPerMessage: WebMessage[][] = webReplay.messages.map((message, index) =>
-    flattenCanonicalMessage(message, {
-      index,
-      sessionKey: input.sessionKey,
-      projectKey: input.projectKey,
-      now: options.now,
-      entryTimestamp: entryTimestamps[index],
-      entryId: entryIds[index],
-      forkUnsupportedContent: webReplay.forkUnsupportedContents[index],
-    }),
-  );
-
-  // 压缩边界：在对应消息后插入 compact_boundary WebMessage，payload 内嵌
-  // shadowedRanges 与该次压缩被遮蔽的原文（WebMessage 级扁平化，复用同一
-  // 投影），前端展开压缩历史无需额外请求。
-  insertCompactBoundaryMessages(input, flattenedPerMessage, webReplay.compactBoundaries, entries, options);
-
-  const allMessages: WebMessage[] = flattenedPerMessage.flat();
-
-  attachSubagentIds(entries, allMessages);
-  if (resolve(effectiveProjectRoot) !== resolve(options.pilotHome)) {
-    injectFileArtifactMessages(entries, allMessages, input.sessionKey, input.projectKey);
+  // P2-C 构建缓存：transcript 未变（mtime+size，与 P2-A 增量读取同校验）时
+  // 直接 slice 命中，跳过 extract+flatten+inject 全量重建（H5 卡点）。
+  let fileStat: Stats | undefined;
+  try {
+    fileStat = await stat(transcriptPath);
+  } catch {
+    fileStat = undefined; // ENOENT 等：走完整构建（readTranscript 给 missing 诊断）
   }
-  injectAgentStatusMessages(entries, allMessages, input.sessionKey, input.projectKey);
-  injectErrorTurnMessages(entries, allMessages, input.sessionKey, input.projectKey);
-  if (incompleteTurnIds.length > 0) {
-    allMessages.push(createIncompleteTurnStatusMessage(input, incompleteTurnIds, options));
+  const cached = fileStat ? webMessagesCache.get(transcriptPath) : undefined;
+
+  let allMessages: WebMessage[];
+  let incompleteTurnIds: string[];
+  let entries: AgentTranscriptEntry[];
+  if (cached !== undefined && cached.mtimeMs === fileStat!.mtimeMs && cached.size === fileStat!.size) {
+    touchWebMessagesCache(transcriptPath, cached);
+    allMessages = cached.allMessages;
+    incompleteTurnIds = cached.incompleteTurnIds;
+    const read = await readTranscript(transcriptPath); // tokenUsage 每请求计算（轻量扫描，不进缓存）
+    entries = read.entries;
+  } else {
+    const read = await readTranscript(transcriptPath);
+    entries = read.entries;
+    const webReplay = extractWebVisibleMessages(entries);
+    const entryTimestamps = webReplay.timestamps;
+    const entryIds = webReplay.entryIds;
+    incompleteTurnIds = extractIncompleteTurnIds(entries);
+
+    const flattenedPerMessage: WebMessage[][] = webReplay.messages.map((message, index) =>
+      flattenCanonicalMessage(message, {
+        index,
+        sessionKey: input.sessionKey,
+        projectKey: input.projectKey,
+        now: options.now,
+        entryTimestamp: entryTimestamps[index],
+        entryId: entryIds[index],
+        forkUnsupportedContent: webReplay.forkUnsupportedContents[index],
+      }),
+    );
+
+    // 压缩边界：在对应消息后插入 compact_boundary WebMessage，payload 内嵌
+    // shadowedRanges 与该次压缩被遮蔽的原文（WebMessage 级扁平化，复用同一
+    // 投影），前端展开压缩历史无需额外请求。
+    insertCompactBoundaryMessages(input, flattenedPerMessage, webReplay.compactBoundaries, entries, options);
+
+    allMessages = flattenedPerMessage.flat();
+
+    attachSubagentIds(entries, allMessages);
+    if (resolve(effectiveProjectRoot) !== resolve(options.pilotHome)) {
+      injectFileArtifactMessages(entries, allMessages, input.sessionKey, input.projectKey);
+    }
+    injectAgentStatusMessages(entries, allMessages, input.sessionKey, input.projectKey);
+    injectErrorTurnMessages(entries, allMessages, input.sessionKey, input.projectKey);
+    // 注：incomplete turn status 依赖当前时间，不入缓存——统一返回路径重建。
+    if (fileStat) {
+      touchWebMessagesCache(transcriptPath, {
+        mtimeMs: fileStat.mtimeMs,
+        size: fileStat.size,
+        allMessages,
+        incompleteTurnIds,
+      });
+    }
   }
 
+  // 统一返回路径：status 每请求重建（时间戳 = 当前时间）；只出现在最后一页
+  // （slice 到达 allMessages 末尾时附加）。
+  const status =
+    incompleteTurnIds.length > 0 ? createIncompleteTurnStatusMessage(input, incompleteTurnIds, options) : undefined;
+  const total = allMessages.length + (status ? 1 : 0);
   const offset = parseCursor(input.cursor);
   const limit = input.limit ?? allMessages.length;
   const sliceEnd = limit === 0 ? allMessages.length : offset + limit;
   const slice = allMessages.slice(offset, sliceEnd);
+  const messages = status !== undefined && sliceEnd >= allMessages.length ? [...slice, status] : slice;
 
   return {
-    messages: slice,
-    nextCursor: input.limit && offset + slice.length < allMessages.length ? String(offset + slice.length) : undefined,
-    total: allMessages.length,
+    messages,
+    nextCursor: input.limit && offset + messages.length < total ? String(offset + messages.length) : undefined,
+    total,
     tokenUsage: tokenUsageFromTranscript(entries, options),
     session: {
       sessionId: sessionInfo?.sessionId ?? input.sessionKey,
