@@ -13,6 +13,7 @@ import {
   LITELLM_RETRY_JITTER,
 } from "../model/streaming/streamModel.js";
 import type { TelemetryClient } from "../telemetry/index.js";
+import { computeBackoffDelay } from "../shared/retry/index.js";
 import { DEFAULT_SUBAGENT_POLICY, type RouterConfig, type RouterModelRef } from "./config/schema.js";
 import type { SatiCustomRouter, CustomRouterRegistry } from "./customRouter/customRouter.js";
 import { noopCustomRouterRegistry } from "./customRouter/customRouter.js";
@@ -713,10 +714,16 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
             transientRetryEnabled &&
             transientRetryCount < transientRetryMax
           ) {
-            const delay =
-              outcome.error.retryAfterMs != null
-                ? Math.min(outcome.error.retryAfterMs, transientMaxDelayMs)
-                : calculateLiteLLMRetryDelay(transientRetryCount, transientBaseDelayMs, transientMaxDelayMs);
+            const delay = computeBackoffDelay(
+              transientRetryCount,
+              {
+                baseMs: transientBaseDelayMs,
+                capMs: transientMaxDelayMs,
+                growth: "linear",
+                jitterRatio: LITELLM_RETRY_JITTER,
+              },
+              outcome.error.retryAfterMs ?? undefined,
+            );
             console.warn(
               `[Sati] transientRetry: ${outcome.error.code} (attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(delay)}ms)`,
             );
@@ -1187,12 +1194,6 @@ function classifyRetryReason(
   if (errorCode === "server_error") return "server_error";
   if (errorCode === "network_error" || errorCode === "timeout") return "network_error";
   return "server_error";
-}
-
-function calculateLiteLLMRetryDelay(attempt: number, baseDelayMs: number, maxDelayMs: number): number {
-  const deterministicDelay = baseDelayMs * (attempt + 1);
-  const jitterDelay = deterministicDelay * LITELLM_RETRY_JITTER * Math.random();
-  return Math.min(deterministicDelay + jitterDelay, maxDelayMs);
 }
 
 function createUnsupportedMediaError(
