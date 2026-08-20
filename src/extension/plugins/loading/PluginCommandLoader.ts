@@ -56,7 +56,7 @@ function isSkillFile(filePath: string): boolean {
 
 async function loadMarkdownContribution(filePath: string, name: string): Promise<LoadedPluginCommand> {
   const raw = await readFile(filePath, "utf8");
-  const parsed = parseMarkdownFrontmatter(raw);
+  const parsed = parseMarkdownFrontmatter(raw, filePath);
   return {
     name,
     path: filePath,
@@ -94,7 +94,10 @@ async function collectMarkdownFiles(directory: string): Promise<string[]> {
   return output;
 }
 
-function parseMarkdownFrontmatter(raw: string): { frontmatter: Record<string, unknown>; content: string } {
+function parseMarkdownFrontmatter(
+  raw: string,
+  filePath: string,
+): { frontmatter: Record<string, unknown>; content: string } {
   if (!raw.startsWith("---\n")) {
     return { frontmatter: {}, content: raw };
   }
@@ -108,8 +111,10 @@ function parseMarkdownFrontmatter(raw: string): { frontmatter: Record<string, un
     if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
       frontmatter = parsed as Record<string, unknown>;
     }
-  } catch {
-    // 非法 yaml：降级为空对象（与既有「解析失败不抛错」契约一致）
+  } catch (error) {
+    // 非法 yaml：记录 warn 后降级为空对象（既有「解析失败不抛错」契约保持；
+    // warn 风格对齐 src/cli/teamRoleAssembly.ts parseSkillFrontmatter）
+    console.warn(`[plugin-loader] frontmatter yaml 解析失败，降级为空对象: ${filePath}`, error);
   }
   return { frontmatter, content: raw.slice(end + 5) };
 }
