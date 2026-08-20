@@ -18,7 +18,7 @@ test("创建：写库并返回完整行", () => {
       teamId: "t1",
       memberId: "m1",
       roleSlug: "patent-searcher",
-      modelRoute: { provider: "deepseek", model: "deepseek-v4-flash", reasoningEffort: "low" },
+      modelRoute: { provider: "deepseek", model: "deepseek-v4-flash" },
       now: () => new Date("2026-08-19T08:00:00.000Z"),
     });
     assert.equal(row.sessionKey, "team:t1:m1");
@@ -27,7 +27,6 @@ test("创建：写库并返回完整行", () => {
     assert.deepEqual(JSON.parse(row.modelRouteJson), {
       provider: "deepseek",
       model: "deepseek-v4-flash",
-      reasoningEffort: "low",
     });
     assert.equal(db.getMember("m1")?.roleSlug, "patent-searcher");
   } finally {

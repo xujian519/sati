@@ -14,7 +14,6 @@ export {
 export {
   scanTeamMembers,
   scanStrandedTasks,
-  TEAM_MEMBER_RESUME_MARKER,
   TEAM_MEMBER_RESUME_MESSAGE,
   type ScanTeamMembersOptions,
   type ScanTeamMembersResult,
@@ -22,7 +21,7 @@ export {
   type ScanStrandedTasksResult,
 } from "./member/member-scanner.js";
 export { TeamApprovalForwarder, type TeamApprovalForwarderOptions } from "./member/approval-forwarder.js";
-export { MAILBOX_LEASE_MS, unreadMessages, claimDelivery, expiredClaims } from "./mailbox/mailbox.js";
+export { MAILBOX_LEASE_MS, unreadMessages, claimDelivery } from "./mailbox/mailbox.js";
 export { withTeamLock } from "./scheduler/lock.js";
 export {
   TeamScheduler,
@@ -47,7 +46,7 @@ export {
   attemptsExhausted,
   type TaskAttemptResult,
 } from "./taskpool/attempt.js";
-export { retryFailedTask, retryableFailedTasks } from "./taskpool/retry.js";
+export { retryFailedTask } from "./taskpool/retry.js";
 export { toGatewayEvent } from "./protocol/broadcast.js";
 export type { TeamEvent, TeamEventEmitter } from "./protocol/events.js";
 

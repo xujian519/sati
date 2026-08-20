@@ -14,12 +14,17 @@ function openDb(): TeamDb {
 }
 
 test("迁移：首次打开建表，user_version 升到 3", () => {
-  const db = openDb();
+  const root = mkdtempSync(join(tmpdir(), "sati-team-db-mig-"));
+  const db = new TeamDb(join(root, "teams.db"));
   try {
-    assert.equal(db.userVersion(), 3);
+    // userVersion() 已移除（生产零引用）——外部连接直查 PRAGMA 钉住迁移版本
+    const raw = new DatabaseSync(join(root, "teams.db"));
+    assert.equal((raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
+    raw.close();
     assert.deepEqual(db.listMembers(), []);
   } finally {
     db.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -97,7 +102,7 @@ test("transaction：提交成功全部生效；中途抛错整体回滚（T8 rev
       db.archiveTeam("t1", "2026-08-20T00:00:00.000Z");
       db.insertRetired("team:t1:m1", "m1", "team_archived");
     });
-    assert.equal(db.isArchived("t1"), true);
+    assert.notEqual(db.getTeam("t1")?.archivedAt, undefined);
     assert.equal(db.isRetired("team:t1:m1"), true);
     // 回滚路径：失败事务内必须有真实写入（archiveTeam 对已归档团队是 WHERE 守卫下的 0 行 no-op，
     // 单靠它钉不住 ROLLBACK）——insertRetired 为新 key 的真实 INSERT，抛错后断言其未生效，
@@ -113,23 +118,21 @@ test("transaction：提交成功全部生效；中途抛错整体回滚（T8 rev
     );
     assert.equal(db.isRetired("team:t1:m99"), false, "失败事务内的真实写入（insertRetired）已回滚");
     assert.equal(db.getTeam("t1")?.archivedAt, "2026-08-20T00:00:00.000Z", "第二次归档已回滚，保持首次提交值");
-    assert.equal(db.isArchived("t1"), true);
     assert.equal(db.isRetired("team:t1:m1"), true, "成员退休保持首次提交值");
   } finally {
     db.close();
   }
 });
 
-test("teams.db v3：archived_at 列迁移 + archiveTeam/isArchived", () => {
+test("teams.db v3：archived_at 列迁移 + archiveTeam/archivedAt", () => {
   // T8 review M-1 注释诚实化：本用例验证 v3 归档字段往返（new TeamDb(path) 一次跑完 v1→v3），
   // 真实 v2 旧库升级见下方「迁移：v2 旧库升级到 v3」用例
   const root = mkdtempSync(join(tmpdir(), "sati-team-db-v3-"));
   const db = new TeamDb(join(root, "teams.db"));
   try {
     db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });
-    assert.equal(db.isArchived("t1"), false);
+    assert.equal(db.getTeam("t1")?.archivedAt, undefined);
     assert.equal(db.archiveTeam("t1", "2026-08-20T00:00:00.000Z"), true);
-    assert.equal(db.isArchived("t1"), true);
     assert.equal(db.getTeam("t1")?.archivedAt, "2026-08-20T00:00:00.000Z");
     assert.equal(db.archiveTeam("t1", "2026-08-20T00:01:00.000Z"), false, "重复归档返回 false");
     // 未知团队
@@ -208,7 +211,10 @@ test("迁移：真实 v2 旧库（user_version=2 + 旧数据）升级到 v3，�
     // 以 TeamDb 重开：v2 → v3 迁移补 archived_at 列，旧行该字段保持 NULL（= undefined）
     const db = new TeamDb(dbPath);
     try {
-      assert.equal(db.userVersion(), 3);
+      // userVersion() 已移除——外部连接直查 PRAGMA 钉住 v2→v3 迁移落点
+      const verifyRaw = new DatabaseSync(dbPath);
+      assert.equal((verifyRaw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
+      verifyRaw.close();
       assert.deepEqual(db.getTeam("t-old"), {
         id: "t-old",
         name: "旧团队",
@@ -216,7 +222,6 @@ test("迁移：真实 v2 旧库（user_version=2 + 旧数据）升级到 v3，�
         createdAt: "2026-08-01T00:00:00.000Z",
         archivedAt: undefined,
       });
-      assert.equal(db.isArchived("t-old"), false);
     } finally {
       db.close();
     }

@@ -248,10 +248,6 @@ export class TeamDb {
     }
   }
 
-  userVersion(): number {
-    return (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-  }
-
   /**
    * 通用同步事务：复用 migrate() 的 BEGIN/COMMIT/ROLLBACK 模式（T8 review I-1 引入）。
    * 事务内任一步抛错即回滚并 rethrow；提交成功后才对外可见。node:sqlite 单连接串行，
@@ -294,13 +290,6 @@ export class TeamDb {
       .prepare("UPDATE teams SET archived_at = ? WHERE id = ? AND archived_at IS NULL")
       .run(archivedAt, teamId);
     return result.changes > 0;
-  }
-
-  isArchived(teamId: string): boolean {
-    const row = this.db.prepare("SELECT archived_at FROM teams WHERE id = ?").get(teamId) as
-      | { archived_at: string | null }
-      | undefined;
-    return row !== undefined && row.archived_at !== null;
   }
 
   insertMember(row: TeamMemberRow): void {

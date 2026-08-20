@@ -21,7 +21,6 @@ describe("teams panel routes", () => {
             captainOnline: true,
             members: [],
             tasks: [],
-            unreadForCaptain: 0,
           },
         ],
       })),

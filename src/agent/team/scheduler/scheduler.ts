@@ -198,7 +198,7 @@ export class TeamScheduler {
           type: "message_delivered",
           teamId,
           recipient: memberId,
-          sender: plan.unread[0]?.sender ?? "captain",
+          sender: plan.unread[0]!.sender,
           senders: plan.unread.map(m => m.sender),
         });
       return;

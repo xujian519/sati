@@ -49,7 +49,6 @@ const snapshotBody: TeamPanelSnapshot = {
           blockedByCount: 0,
         },
       ],
-      unreadForCaptain: 0,
     },
   ],
 };

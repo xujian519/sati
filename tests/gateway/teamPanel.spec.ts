@@ -1,7 +1,7 @@
 /**
- * M4 团队活动面板数据面（T6）：buildTeamPanelSnapshot / listTeamsForPanel 纯函数。
+ * M4 团队活动面板数据面（T6）：buildTeamPanelSnapshot 纯函数。
  * TeamDb 直查 + SessionPresence 合并在线态；不依赖工具注册表（数据面）。
- * T6 评审补强（M4）：多团队聚合隔离、快照自身 archivedAt 透出、未读数（F1 公式）、
+ * T6 评审补强（M4）：多团队聚合隔离、快照自身 archivedAt 透出、
  * teamToolCall 接线错误码分支（前缀白名单/未知工具/SatiToolRuntimeError 透传/fail-closed）。
  */
 import assert from "node:assert/strict";
@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { TeamDb, createTeamMember } from "../../src/agent/team/index.js";
 import { registerRoleDefinition } from "../../src/agent/sub/builtinSubagentTypes.js";
 import { SessionPresence } from "../../src/gateway/server/sessionPresence.js";
-import { buildTeamPanelSnapshot, listTeamsForPanel } from "../../src/gateway/teamPanel.js";
+import { buildTeamPanelSnapshot } from "../../src/gateway/teamPanel.js";
 import { createLocalGateway } from "../../src/cli/createLocalGateway.js";
 import type { ModelRuntime } from "../../src/model/index.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../../src/model/protocol/capabilities.js";
@@ -72,37 +72,7 @@ test("buildTeamPanelSnapshot：团队 + 成员（含在线态/roleSlug/modelRout
   assert.equal(snap2.teams[0]!.captainOnline, false, "直连关闭超宽限窗 → 离线");
 });
 
-test('unreadForCaptain：recipient="captain" 未投递计数，已投递不计（F1 公式对齐存储约定）', () => {
-  const { db } = setup();
-  const presence = new SessionPresence();
-  const createdAt = "2026-08-20T00:00:00.000Z";
-  // insertMessage 忽略投递状态列（由 updateMessage 生命周期管理），未投递 = 仅 insert
-  db.insertMessage({ id: "m1", teamId: "t1", sender: "m1", recipient: "captain", content: "检索完成报告", createdAt });
-  // 已投递 = insert 后 updateMessage 置 deliveredAt
-  db.insertMessage({
-    id: "m2",
-    teamId: "t1",
-    sender: "m1",
-    recipient: "captain",
-    content: "已读过的旧消息",
-    createdAt,
-  });
-  db.updateMessage({
-    id: "m2",
-    teamId: "t1",
-    sender: "m1",
-    recipient: "captain",
-    content: "x",
-    createdAt,
-    deliveredAt: "2026-08-20T00:05:00.000Z",
-  });
-  // 异队收件人（非 captain）不计入本队队长收件箱
-  db.insertMessage({ id: "m3", teamId: "t1", sender: "m1", recipient: "m1", content: "成员间消息", createdAt });
-  const snap = buildTeamPanelSnapshot(db, presence, 1_000_000);
-  assert.equal(snap.teams[0]!.unreadForCaptain, 1, "仅 recipient=captain 且未投递计数");
-});
-
-test("多团队聚合隔离：成员/任务/未读数互不串，status 与 archivedAt 透出", () => {
+test("多团队聚合隔离：成员/任务互不串，status 与 archivedAt 透出", () => {
   const { db } = setup();
   // t2：独立成员（working 态）+ 任务 + 归档
   db.upsertTeam({ id: "t2", name: "撰写组", captainSessionKey: "cap-2", createdAt: "2026-08-20T00:00:00.000Z" });
@@ -129,14 +99,6 @@ test("多团队聚合隔离：成员/任务/未读数互不串，status 与 arch
     createdAt: "2026-08-20T00:00:00.000Z",
     updatedAt: "2026-08-20T00:00:00.000Z",
   });
-  db.insertMessage({
-    id: "m1",
-    teamId: "t2",
-    sender: "m2",
-    recipient: "captain",
-    content: "t2 未读",
-    createdAt: "2026-08-20T00:00:00.000Z",
-  });
   assert.equal(db.archiveTeam("t2", "2026-08-20T00:00:00.000Z"), true, "t2 归档");
 
   const snap = buildTeamPanelSnapshot(db, new SessionPresence(), 1_000_000);
@@ -148,8 +110,7 @@ test("多团队聚合隔离：成员/任务/未读数互不串，status 与 arch
   assert.equal(t1.members[0]!.memberId, "m1");
   assert.equal(t1.tasks.length, 1);
   assert.equal(t1.tasks[0]!.taskId, "a");
-  assert.equal(t1.unreadForCaptain, 0);
-  // t2：成员 status/attemptId 透出、未读数 1、archivedAt 透出（快照自身，非仅 listTeamsForPanel）
+  // t2：成员 status/attemptId 透出、archivedAt 透出（快照自身）
   assert.equal(t2.members.length, 1);
   assert.equal(t2.members[0]!.memberId, "m2");
   assert.equal(t2.members[0]!.status, "working", "成员 working 态透出");
@@ -157,20 +118,8 @@ test("多团队聚合隔离：成员/任务/未读数互不串，status 与 arch
   assert.equal(t2.tasks[0]!.taskId, "b");
   assert.equal(t2.tasks[0]!.status, "in_progress");
   assert.equal(t2.tasks[0]!.attemptId, "att-1");
-  assert.equal(t2.unreadForCaptain, 1, "t2 队长未读独立计数");
   assert.equal(t2.archivedAt, "2026-08-20T00:00:00.000Z", "快照自身透出 archivedAt");
   assert.equal(t1.archivedAt, undefined, "未归档团队不含 archivedAt");
-});
-
-test("listTeamsForPanel：含归档态（archivedAt）与无队团队", () => {
-  const { db } = setup();
-  // upsertTeam 的 SQL 不含 archived_at 列（归档不可逆，仅经 archiveTeam 置位）——
-  // 与 TeamDb 实际 API 对齐（计划假设 upsertTeam 可写 archivedAt，实际不写）。
-  db.upsertTeam({ id: "t2", name: "已归档", captainSessionKey: "cap-2", createdAt: "2026-08-20T00:00:00.000Z" });
-  assert.equal(db.archiveTeam("t2", "2026-08-20T00:00:00.000Z"), true, "archiveTeam 置位生效");
-  const teams = listTeamsForPanel(db);
-  assert.equal(teams.length, 2);
-  assert.equal(teams.find(t => t.id === "t2")!.archivedAt, "2026-08-20T00:00:00.000Z");
 });
 
 test("teamToolCall 接线：前缀白名单 fail-closed + 未知工具 + SatiToolRuntimeError 透传 + 缺 sessionKey 需队长工具拒绝", async () => {

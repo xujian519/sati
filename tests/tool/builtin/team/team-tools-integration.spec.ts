@@ -364,7 +364,7 @@ test("工具驱动全链：建队→招募→建任务→调度器认领→成�
 
     // 归档：团队归档 + 成员退休
     await tools.teamArchive.execute({ teamId }, captainCtx);
-    assert.equal(teamDb.isArchived(teamId), true);
+    assert.notEqual(teamDb.getTeam(teamId)?.archivedAt, undefined);
     assert.equal(teamDb.isRetired(memberSessionKey(teamId, memberId)), true);
   } finally {
     await disposeGateway(result, root);
