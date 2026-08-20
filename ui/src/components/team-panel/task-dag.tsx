@@ -1,14 +1,8 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
-import {
-  computeDagLayout,
-  DAG_NODE_H,
-  DAG_NODE_W,
-  FALLBACK_TASK_FILL,
-  TASK_STATUS_FILL,
-  TERMINAL_TASK_STATUSES,
-} from "./dag-model";
+import { recentEventsOf, SELECT_CLASS } from "./constants";
+import { computeDagLayout, DAG_NODE_H, DAG_NODE_W, TASK_STATUS_FILL, TERMINAL_TASK_STATUSES } from "./dag-model";
 import { FeedbackBanner } from "./FeedbackBanner";
 import { useActionFeedback } from "./hooks/useActionFeedback";
 import type { PanelAction, PanelTask, PanelTeam, TeamWireEvent } from "./types";
@@ -21,9 +15,6 @@ type TaskDagProps = {
     events: TeamWireEvent[];
   };
 };
-
-/** 脉冲窗口：最近 N 条全局事件中出现的任务视为"活跃"。 */
-const RECENT_WINDOW = 5;
 
 /** 非终态任务：可选中转派。 */
 const isReassignable = (task: PanelTask): boolean => !TERMINAL_TASK_STATUSES.has(task.status);
@@ -43,15 +34,14 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
 
   const layout = useMemo(() => computeDagLayout(team.tasks), [team.tasks]);
 
-  // 节点坐标索引：边渲染取 DagNode 几何（byId 仅 PanelTask，无 x/y）
+  // 节点坐标索引（边渲染取 DagNode 几何；selectedTask 亦经其取 task）
   const nodeByTaskId = useMemo(
     () => new Map(layout.nodes.map(node => [node.task.taskId, node] as const)),
     [layout.nodes],
   );
 
-  // hover 上下游集合：从边集合构建邻接，双向 BFS
-  const { dependents, dependsOn, byId } = useMemo(() => {
-    const byId = new Map(team.tasks.map(task => [task.taskId, task] as const));
+  // 邻接表（自边集合构建）：hover 时双向 BFS 高亮上下游
+  const { dependents, dependsOn } = useMemo(() => {
     const dependents = new Map<string, Set<string>>(); // 被谁依赖
     const dependsOn = new Map<string, Set<string>>(); // 依赖谁
     for (const edge of layout.edges) {
@@ -62,8 +52,8 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
       dependerSet.add(edge.to);
       dependents.set(edge.from, dependerSet);
     }
-    return { dependents, dependsOn, byId };
-  }, [team.tasks, layout.edges]);
+    return { dependents, dependsOn };
+  }, [layout.edges]);
 
   // hover 上下游集合：hover 时其余节点降透明
   const relatedSet = useMemo(() => {
@@ -89,11 +79,11 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
 
   // 最近活动任务：驱动节点脉冲（按团队过滤——事件带 teamId，避免他队事件误归属）
   const recentTaskIds = useMemo(() => {
-    const recent = activity.events.filter(event => event.teamId === team.id).slice(-RECENT_WINDOW);
+    const recent = recentEventsOf(activity.events, team.id);
     return new Set(recent.map(event => event.taskId).filter((id): id is string => id !== undefined));
   }, [activity.events, team.id]);
 
-  const selectedTask = selectedTaskId !== null ? byId.get(selectedTaskId) : undefined;
+  const selectedTask = selectedTaskId !== null ? nodeByTaskId.get(selectedTaskId)?.task : undefined;
   const idleMembers = team.members.filter(member => !member.retired && member.status === "idle");
 
   const handleReassign = async () => {
@@ -138,9 +128,8 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
         >
           {/* 边：源右中点 → 目标左中点，三次贝塞尔 */}
           {layout.edges.map(edge => {
-            const from = nodeByTaskId.get(edge.from);
-            const to = nodeByTaskId.get(edge.to);
-            if (from === undefined || to === undefined) return null;
+            const from = nodeByTaskId.get(edge.from)!; // 边端点均为有效任务，节点表完整覆盖
+            const to = nodeByTaskId.get(edge.to)!;
             const x1 = from.x + DAG_NODE_W;
             const y1 = from.y + DAG_NODE_H / 2;
             const x2 = to.x;
@@ -160,10 +149,14 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
           })}
 
           {layout.nodes.map(node => {
-            const fill = TASK_STATUS_FILL[node.task.status] ?? FALLBACK_TASK_FILL;
+            const fill = TASK_STATUS_FILL[node.task.status] ?? TASK_STATUS_FILL.pending;
             const dim = relatedSet !== null && !relatedSet.has(node.task.taskId);
             const recent = recentTaskIds.has(node.task.taskId);
             const selected = node.task.taskId === selectedTaskId;
+            // 边框三态：选中 > 最近活动（脉冲）> 默认
+            let borderClass = "border-neutral-200 dark:border-neutral-800";
+            if (recent) borderClass = "animate-pulse border-neutral-300 dark:border-neutral-700";
+            if (selected) borderClass = "border-brand-400 ring-1 ring-brand-400";
             return (
               <foreignObject
                 key={node.task.taskId}
@@ -184,13 +177,11 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
                   }}
                   onMouseEnter={() => setHoveredTaskId(node.task.taskId)}
                   onMouseLeave={() => setHoveredTaskId(null)}
-                  className={`flex h-full w-full flex-col justify-center gap-0.5 rounded-md border bg-white px-1.5 py-1 text-left dark:bg-neutral-950 ${
-                    selected
-                      ? "border-brand-400 ring-1 ring-brand-400"
-                      : recent
-                        ? "animate-pulse border-neutral-300 dark:border-neutral-700"
-                        : "border-neutral-200 dark:border-neutral-800"
-                  } ${isReassignable(node.task) ? "cursor-pointer hover:border-neutral-300 dark:hover:border-neutral-600" : "cursor-default"}`}
+                  className={`flex h-full w-full flex-col justify-center gap-0.5 rounded-md border bg-white px-1.5 py-1 text-left dark:bg-neutral-950 ${borderClass} ${
+                    isReassignable(node.task)
+                      ? "cursor-pointer hover:border-neutral-300 dark:hover:border-neutral-600"
+                      : "cursor-default"
+                  }`}
                 >
                   <span className="flex items-center gap-1">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: fill }} />
@@ -227,7 +218,7 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
               value={reassignFor}
               onChange={event => setReassignFor(event.target.value)}
               aria-label={`${t("tasks.reassign")} ${selectedTask.taskId}`}
-              className="h-8 min-w-0 flex-1 rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
+              className={SELECT_CLASS}
             >
               <option value="" disabled>
                 {t("tasks.reassignPlaceholder")}

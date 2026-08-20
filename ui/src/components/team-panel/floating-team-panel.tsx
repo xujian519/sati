@@ -151,10 +151,11 @@ export function FloatingTeamPanel({ sessionId, docked, isMobile, onClose }: Floa
   const mountedAtRef = useRef(Date.now());
   // 已读事件水位：收起/展开面板时记下最新事件 id，浮标脉冲只在有新事件时亮
   const seenEventIdRef = useRef<number | null>(null);
+  const latestEventId = latestEvent !== null ? latestEvent._eventId : undefined;
 
   const markSeen = () => {
-    if (latestEvent !== null && latestEvent._eventId !== undefined) {
-      seenEventIdRef.current = latestEvent._eventId;
+    if (latestEventId !== undefined) {
+      seenEventIdRef.current = latestEventId;
     }
   };
 
@@ -163,7 +164,7 @@ export function FloatingTeamPanel({ sessionId, docked, isMobile, onClose }: Floa
     if (view === "expanded" || userCollapsedRef.current) return;
     if (Date.now() - mountedAtRef.current < TEAM_PANEL_SETTLE_MS) return;
     if (latestEvent !== null && latestEvent._eventId !== undefined) {
-      seenEventIdRef.current = latestEvent._eventId;
+      seenEventIdRef.current = latestEvent._eventId; // 自动展开即已读（同 markSeen 语义）
     }
     writeStoredCollapsed(false);
     setView("expanded");
@@ -239,9 +240,7 @@ export function FloatingTeamPanel({ sessionId, docked, isMobile, onClose }: Floa
   // 收起态：右上角浮标（团队数 + 活动脉冲点，z-30 低于 Files 助手/工具面板的 z-40）
   if (view === "collapsed") {
     const hasActivity =
-      latestEvent !== null &&
-      latestEvent._eventId !== undefined &&
-      (seenEventIdRef.current === null || latestEvent._eventId > seenEventIdRef.current);
+      latestEventId !== undefined && (seenEventIdRef.current === null || latestEventId > seenEventIdRef.current);
     return (
       <button
         type="button"

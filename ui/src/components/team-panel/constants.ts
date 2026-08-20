@@ -34,6 +34,18 @@ export const describeEvent = (event: TeamWireEvent): string => {
   return parts.filter(Boolean).join(" · ");
 };
 
+/** 最近活动窗口：DAG 节点与成员行脉冲共用的"最近 N 条本团队事件"切片。 */
+const RECENT_EVENTS_WINDOW = 5;
+
+/** 取本团队最近 RECENT_EVENTS_WINDOW 条事件（task-dag / member-tree 共用，单点维护）。 */
+export function recentEventsOf(events: TeamWireEvent[], teamId: string): TeamWireEvent[] {
+  return events.filter(event => event.teamId === teamId).slice(-RECENT_EVENTS_WINDOW);
+}
+
+/** 表单 select 共享样式（member-tree 添加成员 / task-dag 转派目标共用）。 */
+export const SELECT_CLASS =
+  "h-8 min-w-0 flex-1 rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300";
+
 /**
  * 团队角色可选清单（12 岗）——以 `skills/patent-teams/` 目录实际角色为准：
  * case-manager / researcher / drafter / technical-expert / adversarial-reviewer /

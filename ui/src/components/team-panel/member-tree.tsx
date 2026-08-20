@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { Button } from "../ui/button";
-import { TEAM_ROLE_OPTIONS } from "./constants";
+import { recentEventsOf, SELECT_CLASS, TEAM_ROLE_OPTIONS } from "./constants";
 import { TERMINAL_TASK_STATUSES } from "./dag-model";
 import { FeedbackBanner } from "./FeedbackBanner";
 import { useActionFeedback } from "./hooks/useActionFeedback";
@@ -16,9 +16,6 @@ type MemberTreeProps = {
     events: TeamWireEvent[];
   };
 };
-
-/** 脉冲窗口：最近 N 条本团队事件中出现的成员视为"活跃"。 */
-const RECENT_WINDOW = 5;
 
 /** 成员状态圆点（与旧 MemberGrid 一致）。 */
 const STATUS_DOT: Record<PanelMember["status"], string> = {
@@ -37,12 +34,11 @@ export function MemberTree({ team, onAction, activity }: MemberTreeProps) {
   const [roleSlug, setRoleSlug] = useState("");
   const { busy, feedback, runAction } = useActionFeedback();
 
-  // 最近 RECENT_WINDOW 条本团队事件涉及的 memberId（事件流顺序即新鲜度；
+  // 最近 RECENT_EVENTS_WINDOW 条本团队事件涉及的 memberId（事件流顺序即新鲜度；
   // 按 teamId 过滤，避免他队事件误归属）
   const recentMemberIds = useMemo(() => {
-    const recent = activity.events.filter(event => event.teamId === team.id).slice(-RECENT_WINDOW);
     const memberIds = new Set<string>();
-    for (const event of recent) {
+    for (const event of recentEventsOf(activity.events, team.id)) {
       if (event.memberId !== undefined) memberIds.add(event.memberId);
     }
     return memberIds;
@@ -51,7 +47,7 @@ export function MemberTree({ team, onAction, activity }: MemberTreeProps) {
   const currentTaskOf = (member: PanelMember): PanelTask | undefined =>
     team.tasks.find(task => task.assigneeId === member.memberId && !TERMINAL_TASK_STATUSES.has(task.status));
 
-  const statsOf = (member: PanelMember) => {
+  const statsOf = (member: PanelMember): { done: number; total: number } => {
     const owned = team.tasks.filter(task => task.assigneeId === member.memberId);
     const done = owned.filter(task => task.status === "completed").length;
     return { done, total: owned.length };
@@ -96,6 +92,17 @@ export function MemberTree({ team, onAction, activity }: MemberTreeProps) {
               const recent = recentMemberIds.has(member.memberId);
               const modelRoute = member.modelRoute;
               const hasModelRoute = modelRoute.provider !== undefined && modelRoute.model !== undefined;
+              // 状态文本优先级：退休 > 当前任务 > working > idle
+              let statusText: string;
+              if (member.retired) {
+                statusText = t("members.retired");
+              } else if (currentTask !== undefined) {
+                statusText = t("members.currentTask", { subject: currentTask.subject });
+              } else if (member.status === "working") {
+                statusText = t("members.statusWorking");
+              } else {
+                statusText = t("members.statusIdle");
+              }
               return (
                 <div
                   key={member.memberId}
@@ -127,13 +134,7 @@ export function MemberTree({ team, onAction, activity }: MemberTreeProps) {
                       </span>
                     </div>
                     <div className="mt-0.5 truncate text-xs text-neutral-400 dark:text-neutral-500">
-                      {member.retired
-                        ? t("members.retired")
-                        : currentTask !== undefined
-                          ? t("members.currentTask", { subject: currentTask.subject })
-                          : member.status === "working"
-                            ? t("members.statusWorking")
-                            : t("members.statusIdle")}
+                      {statusText}
                       {hasModelRoute ? (
                         <span className="ml-1.5 font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
                           {t("members.modelRoute", {
@@ -152,17 +153,14 @@ export function MemberTree({ team, onAction, activity }: MemberTreeProps) {
             })
           )}
 
-          {/* 添加成员表单（自旧 MemberGrid 迁移；归档团队只读，不渲染） */}
-          {team.archivedAt !== undefined ? (
-            <p className="pt-1 text-xs text-neutral-400 dark:text-neutral-500">{t("members.archivedReadonly")}</p>
-          ) : null}
+          {/* 添加成员表单（自旧 MemberGrid 迁移）；归档团队只读，仅提示 */}
           {team.archivedAt === undefined ? (
             <div className="flex items-center gap-2 pt-1">
               <select
                 value={roleSlug}
                 onChange={event => setRoleSlug(event.target.value)}
                 aria-label={t("members.rolePlaceholder")}
-                className="h-8 min-w-0 flex-1 rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
+                className={SELECT_CLASS}
               >
                 <option value="" disabled>
                   {t("members.rolePlaceholder")}
@@ -177,7 +175,9 @@ export function MemberTree({ team, onAction, activity }: MemberTreeProps) {
                 {t("members.add")}
               </Button>
             </div>
-          ) : null}
+          ) : (
+            <p className="pt-1 text-xs text-neutral-400 dark:text-neutral-500">{t("members.archivedReadonly")}</p>
+          )}
         </div>
       ) : null}
 

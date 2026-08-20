@@ -1,7 +1,6 @@
 {
   "loading": "团队面板加载中…",
   "opSucceeded": "操作成功",
-  "opFailed": "操作失败",
   "overview": {
     "createPlaceholder": "新团队名称…",
     "create": "新建团队",
@@ -41,14 +40,10 @@
   "tasks": {
     "title": "任务",
     "parallelTitle": "并行",
-    "statusPending": "待认领",
-    "statusClaimed": "已认领",
     "statusInProgress": "进行中",
     "statusCompleted": "已完成",
     "statusFailed": "失败",
-    "statusCancelled": "已取消",
     "attempt": "第 {{count}} 次尝试",
-    "unassigned": "未分配",
     "reassign": "转派",
     "reassignPlaceholder": "指派给…",
     "optionFormat": "{{memberId}}（{{roleSlug}}）",

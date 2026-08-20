@@ -1,7 +1,6 @@
 {
   "loading": "Loading team panel…",
   "opSucceeded": "Operation succeeded",
-  "opFailed": "Operation failed",
   "overview": {
     "createPlaceholder": "New team name…",
     "create": "Create Team",
@@ -41,14 +40,10 @@
   "tasks": {
     "title": "Tasks",
     "parallelTitle": "Parallel",
-    "statusPending": "Pending",
-    "statusClaimed": "Claimed",
     "statusInProgress": "In Progress",
     "statusCompleted": "Completed",
     "statusFailed": "Failed",
-    "statusCancelled": "Cancelled",
     "attempt": "Attempt {{count}}",
-    "unassigned": "Unassigned",
     "reassign": "Reassign",
     "reassignPlaceholder": "Assign to…",
     "optionFormat": "{{memberId}} ({{roleSlug}})",

@@ -51,10 +51,11 @@ export const TASK_STATUS_FILL: Record<string, string> = {
   cancelled: "#737373", // neutral-500
 };
 
-export const FALLBACK_TASK_FILL = "#a3a3a3";
-
-/** 终态任务（与后端 TERMINAL_TASK_STATUSES 一致）：不可转派。 */
-export const TERMINAL_TASK_STATUSES = new Set(["completed", "failed", "cancelled"]);
+/** 终态任务（与后端 TERMINAL_TASK_STATUSES 一致）：不可转派。 */ export const TERMINAL_TASK_STATUSES = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+]);
 
 /**
  * 计算 DAG 布局。
@@ -97,8 +98,7 @@ export function computeDagLayout(tasks: PanelTask[]): DagLayout {
         return;
       }
       if (visited.has(taskId)) return;
-      const task = byId.get(taskId);
-      if (task === undefined) return;
+      const task = byId.get(taskId)!; // 入口与递归依赖均已过 validDep，必然命中
       visited.add(taskId);
       stack.push(taskId);
       for (const depId of task.dependencies) {
@@ -116,8 +116,7 @@ export function computeDagLayout(tasks: PanelTask[]): DagLayout {
     if (cycleMembers.has(taskId)) return 0;
     const cached = depthOf.get(taskId);
     if (cached !== undefined) return cached;
-    const task = byId.get(taskId);
-    if (task === undefined) return 0;
+    const task = byId.get(taskId)!; // 与 findCycle 同理，必然命中
     let depth = 0;
     for (const depId of task.dependencies) {
       if (!validDep(task, depId)) continue;
