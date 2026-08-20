@@ -171,7 +171,9 @@ export function applyResultSizeLimit(
   };
 }
 
-function truncateUtf8(value: string, maxBytes: number): string {
+/** 字节安全截断（#25 审查后导出供 egoSession 等外部复用）：按 maxBytes 截断
+ * 但不撕裂多字节 UTF-8 字符（尾部半个字符替换为 U+FFFD 后剥除）。 */
+export function truncateUtf8(value: string, maxBytes: number): string {
   const bytes = Buffer.from(value, "utf8");
   if (bytes.byteLength <= maxBytes) {
     return value;

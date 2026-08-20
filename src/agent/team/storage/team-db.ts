@@ -11,6 +11,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
+import { prepareCached } from "../../../shared/sqlite.js";
 
 export type TeamRow = {
   id: string;
@@ -242,7 +243,9 @@ export class TeamDb {
   }
 
   private migrate(): void {
-    const current = (this.prepareCached("PRAGMA user_version").get() as { user_version: number }).user_version;
+    const current = (
+      prepareCached(this.preparedCache, this.db, "PRAGMA user_version").get() as { user_version: number }
+    ).user_version;
     if (current > MIGRATIONS.length) {
       throw new Error(`teams.db schema version ${current} is newer than supported (${MIGRATIONS.length})`);
     }
@@ -273,86 +276,112 @@ export class TeamDb {
   }
 
   upsertTeam(team: TeamRow): void {
-    this.prepareCached(
+    prepareCached(
+      this.preparedCache,
+      this.db,
       `INSERT INTO teams (id, name, captain_session_key, created_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, captain_session_key = excluded.captain_session_key`,
     ).run(team.id, team.name, team.captainSessionKey, team.createdAt);
   }
 
   getTeam(id: string): TeamRow | undefined {
-    const row = this.prepareCached("SELECT * FROM teams WHERE id = ?").get(id) as TeamDbRow | undefined;
+    const row = prepareCached(this.preparedCache, this.db, "SELECT * FROM teams WHERE id = ?").get(id) as
+      | TeamDbRow
+      | undefined;
     return row ? toTeamRow(row) : undefined;
   }
 
   listTeams(): TeamRow[] {
-    const rows = this.prepareCached("SELECT * FROM teams ORDER BY created_at ASC").all() as TeamDbRow[];
+    const rows = prepareCached(
+      this.preparedCache,
+      this.db,
+      "SELECT * FROM teams ORDER BY created_at ASC",
+    ).all() as TeamDbRow[];
     return rows.map(toTeamRow);
   }
 
   /** 归档团队：置 archived_at（仅未归档团队可归档）。返回是否生效。 */
   archiveTeam(teamId: string, archivedAt: string): boolean {
-    const result = this.prepareCached("UPDATE teams SET archived_at = ? WHERE id = ? AND archived_at IS NULL").run(
-      archivedAt,
-      teamId,
-    );
+    const result = prepareCached(
+      this.preparedCache,
+      this.db,
+      "UPDATE teams SET archived_at = ? WHERE id = ? AND archived_at IS NULL",
+    ).run(archivedAt, teamId);
     return result.changes > 0;
   }
 
   insertMember(row: TeamMemberRow): void {
-    this.prepareCached(
+    prepareCached(
+      this.preparedCache,
+      this.db,
       `INSERT INTO members (id, team_id, role_slug, model_route_json, status, session_key, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).run(row.id, row.teamId, row.roleSlug, row.modelRouteJson, row.status, row.sessionKey, row.createdAt);
   }
 
   updateMemberStatus(id: string, status: "idle" | "working"): void {
-    this.prepareCached("UPDATE members SET status = ? WHERE id = ?").run(status, id);
+    prepareCached(this.preparedCache, this.db, "UPDATE members SET status = ? WHERE id = ?").run(status, id);
   }
 
   /** 进程冷启动时重置全部成员为 idle：崩溃残留的 working 必为死状态（无存活 turn），
    * 由宿主在启动扫描前调用（否则冷恢复会永久跳过这些成员）。 */
   resetMemberStatuses(): void {
-    this.prepareCached("UPDATE members SET status = 'idle'").run();
+    prepareCached(this.preparedCache, this.db, "UPDATE members SET status = 'idle'").run();
   }
 
   getMember(id: string): TeamMemberRow | undefined {
-    const row = this.prepareCached("SELECT * FROM members WHERE id = ?").get(id) as MemberDbRow | undefined;
+    const row = prepareCached(this.preparedCache, this.db, "SELECT * FROM members WHERE id = ?").get(id) as
+      | MemberDbRow
+      | undefined;
     return row ? toMemberRow(row) : undefined;
   }
 
   listMembers(): TeamMemberRow[] {
-    const rows = this.prepareCached("SELECT * FROM members ORDER BY created_at ASC").all() as MemberDbRow[];
+    const rows = prepareCached(
+      this.preparedCache,
+      this.db,
+      "SELECT * FROM members ORDER BY created_at ASC",
+    ).all() as MemberDbRow[];
     return rows.map(toMemberRow);
   }
 
   insertRetired(sessionKey: string, memberId: string, reason: string): void {
-    this.prepareCached(
+    prepareCached(
+      this.preparedCache,
+      this.db,
       `INSERT INTO retired_members (session_key, member_id, reason, retired_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(session_key) DO UPDATE SET reason = excluded.reason, retired_at = excluded.retired_at`,
     ).run(sessionKey, memberId, reason, new Date().toISOString());
   }
 
   isRetired(sessionKey: string): boolean {
-    const row = this.prepareCached("SELECT 1 FROM retired_members WHERE session_key = ?").get(sessionKey);
+    const row = prepareCached(this.preparedCache, this.db, "SELECT 1 FROM retired_members WHERE session_key = ?").get(
+      sessionKey,
+    );
     return row !== undefined;
   }
 
   listTasks(teamId: string): TeamTaskRow[] {
-    const rows = this.prepareCached("SELECT * FROM tasks WHERE team_id = ? ORDER BY created_at ASC").all(
-      teamId,
-    ) as TaskDbRow[];
+    const rows = prepareCached(
+      this.preparedCache,
+      this.db,
+      "SELECT * FROM tasks WHERE team_id = ? ORDER BY created_at ASC",
+    ).all(teamId) as TaskDbRow[];
     return rows.map(toTaskRow);
   }
 
   getTask(teamId: string, taskId: string): TeamTaskRow | undefined {
-    const row = this.prepareCached("SELECT * FROM tasks WHERE team_id = ? AND id = ?").get(teamId, taskId) as
-      | TaskDbRow
-      | undefined;
+    const row = prepareCached(this.preparedCache, this.db, "SELECT * FROM tasks WHERE team_id = ? AND id = ?").get(
+      teamId,
+      taskId,
+    ) as TaskDbRow | undefined;
     return row ? toTaskRow(row) : undefined;
   }
 
   insertTask(row: TeamTaskRow): void {
-    this.prepareCached(
+    prepareCached(
+      this.preparedCache,
+      this.db,
       `INSERT INTO tasks (id, team_id, subject, description, status, assignee_id, dependencies_json,
           attempt, attempt_id, handoff_id, reassigning, blocked_by_count, max_attempts, output, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -377,7 +406,9 @@ export class TeamDb {
   }
 
   updateTask(row: TeamTaskRow): void {
-    this.prepareCached(
+    prepareCached(
+      this.preparedCache,
+      this.db,
       `UPDATE tasks SET subject = ?, description = ?, status = ?, assignee_id = ?, dependencies_json = ?,
           attempt = ?, attempt_id = ?, handoff_id = ?, reassigning = ?, blocked_by_count = ?, max_attempts = ?,
           output = ?, updated_at = ?
@@ -403,38 +434,35 @@ export class TeamDb {
 
   listMessages(teamId: string, recipient?: string): TeamMessageRow[] {
     const rows = recipient
-      ? (this.prepareCached("SELECT * FROM messages WHERE team_id = ? AND recipient = ? ORDER BY created_at ASC").all(
-          teamId,
-          recipient,
-        ) as MessageDbRow[])
-      : (this.prepareCached("SELECT * FROM messages WHERE team_id = ? ORDER BY created_at ASC").all(
-          teamId,
-        ) as MessageDbRow[]);
+      ? (prepareCached(
+          this.preparedCache,
+          this.db,
+          "SELECT * FROM messages WHERE team_id = ? AND recipient = ? ORDER BY created_at ASC",
+        ).all(teamId, recipient) as MessageDbRow[])
+      : (prepareCached(
+          this.preparedCache,
+          this.db,
+          "SELECT * FROM messages WHERE team_id = ? ORDER BY created_at ASC",
+        ).all(teamId) as MessageDbRow[]);
     return rows.map(toMessageRow);
   }
 
   // 插入时不含投递状态（deliveryClaimedAt/deliveredAt/readAt 由 updateMessage 生命周期管理，insert 传入会被忽略）
   insertMessage(row: TeamMessageRow): void {
-    this.prepareCached(
+    prepareCached(
+      this.preparedCache,
+      this.db,
       `INSERT INTO messages (id, team_id, sender, recipient, content, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(row.id, row.teamId, row.sender, row.recipient, row.content, row.createdAt);
   }
 
   updateMessage(row: TeamMessageRow): void {
     // 仅更新投递生命周期三列；其余列（含 content）不可变
-    this.prepareCached(
+    prepareCached(
+      this.preparedCache,
+      this.db,
       `UPDATE messages SET delivery_claimed_at = ?, delivered_at = ?, read_at = ? WHERE team_id = ? AND id = ?`,
     ).run(row.deliveryClaimedAt ?? null, row.deliveredAt ?? null, row.readAt ?? null, row.teamId, row.id);
-  }
-
-  /** prepare 缓存：同形状 SQL 复用 StatementSync（参见 preparedCache 注释）。 */
-  private prepareCached(sql: string): StatementSync {
-    let stmt = this.preparedCache.get(sql);
-    if (!stmt) {
-      stmt = this.db.prepare(sql);
-      this.preparedCache.set(sql, stmt);
-    }
-    return stmt;
   }
 
   close(): void {
