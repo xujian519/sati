@@ -88,9 +88,11 @@ export function buildTeamPanelSnapshot(
           ...(t.handoffId !== undefined ? { handoffId: t.handoffId } : {}),
           ...(t.output !== undefined ? { output: t.output } : {}),
         })),
-      // 队长收件箱未投递消息（recipient = captainSessionKey 且 deliveredAt 未置位）
-      unreadForCaptain: db.listMessages(team.id, team.captainSessionKey).filter(m => m.deliveredAt === undefined)
-        .length,
+      // 队长收件箱未投递消息（T6 评审 F1）：recipient 存储约定为成员 id 或 "captain"
+      // （TeamDb 注释；team_send_message 明令不能发队长，全库唯一 insertMessage 只写成员 id）——
+      // 对齐约定用字面量 "captain" 而非 captainSessionKey（后者永不命中恒 0；
+      // 将来若开放队长收件路径，面板无需改动即正确计数）。
+      unreadForCaptain: db.listMessages(team.id, "captain").filter(m => m.deliveredAt === undefined).length,
     })),
   };
 }
