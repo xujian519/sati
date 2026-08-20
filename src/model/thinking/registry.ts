@@ -324,8 +324,14 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
     ? ["low", "high", "max"]
     : ["high", "max"];
   // medium 按官方映射到 high；xhigh/max 取最高档 max，其余 clamp。
-  const effort =
-    mode === "xhigh" || mode === "max" ? "max" : mode === "medium" ? "high" : clampEffort(mode, allowedEffort);
+  let effort: NonNullable<ThinkingPlan["effort"]>;
+  if (mode === "xhigh" || mode === "max") {
+    effort = "max";
+  } else if (mode === "medium") {
+    effort = "high";
+  } else {
+    effort = clampEffort(mode, allowedEffort);
+  }
   return {
     mode,
     enabled: true,
@@ -355,12 +361,14 @@ function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
     const plan: ThinkingPlan = { mode, enabled: true, omitTemperature: true };
     if (isK3) {
       // k3 官方仅 low/high/max 三档；medium 就近取 high（与 DeepSeek 官方映射一致）。
-      const effort =
-        mode === "xhigh" || mode === "max"
-          ? "max"
-          : mode === "medium"
-            ? "high"
-            : clampEffort(mode, ["low", "high", "max"]);
+      let effort: NonNullable<ThinkingPlan["effort"]>;
+      if (mode === "xhigh" || mode === "max") {
+        effort = "max";
+      } else if (mode === "medium") {
+        effort = "high";
+      } else {
+        effort = clampEffort(mode, ["low", "high", "max"]);
+      }
       plan.effort = effort;
       plan.bodyPatch = { reasoning_effort: effort };
     }
