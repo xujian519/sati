@@ -26,11 +26,10 @@ export function TeamPanel() {
       {error !== null ? <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
       <TeamOverview
         teams={teams}
-        onCreated={() => void refresh()}
-        onCreate={async name => {
-          const r = await callAction("team_create", { name });
-          return r.ok;
-        }}
+        // M2：操作成功后 silent 刷新——避免「操作成功」反馈与「快照拉取失败」error 同屏矛盾
+        onCreated={() => void refresh({ silent: true })}
+        // I1：透传完整 ActionResult——失败分支由 TeamOverview 展示具体后端 message（与成员/任务反馈链路一致）
+        onCreate={name => callAction("team_create", { name })}
       />
       {teams
         .filter(team => team.archivedAt === undefined)

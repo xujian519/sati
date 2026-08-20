@@ -134,14 +134,14 @@ export function TaskBoard({ team, onAction }: TaskBoardProps) {
                       value={reassignFor[task.taskId] ?? ""}
                       onChange={event => setReassignFor(prev => ({ ...prev, [task.taskId]: event.target.value }))}
                       aria-label={`${t("tasks.reassign")} ${task.taskId}`}
-                      className="h-8 rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-700 focus:border-neutral-400 focus:outline-hidden dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
+                      className="h-8 rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
                     >
                       <option value="" disabled>
                         {t("tasks.reassignPlaceholder")}
                       </option>
                       {idleMembers.map(member => (
                         <option key={member.memberId} value={member.memberId}>
-                          {member.memberId}（{member.roleSlug}）
+                          {t("tasks.optionFormat", { memberId: member.memberId, roleSlug: member.roleSlug })}
                         </option>
                       ))}
                     </select>

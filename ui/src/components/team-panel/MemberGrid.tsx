@@ -56,7 +56,7 @@ export function MemberGrid({ team, onAction }: MemberGridProps) {
             value={roleSlug}
             onChange={event => setRoleSlug(event.target.value)}
             aria-label={t("members.rolePlaceholder")}
-            className="h-8 rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-700 focus:border-neutral-400 focus:outline-hidden dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
+            className="h-8 rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-700 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-300"
           >
             <option value="" disabled>
               {t("members.rolePlaceholder")}
