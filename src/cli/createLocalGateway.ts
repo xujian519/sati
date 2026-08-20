@@ -663,11 +663,13 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),
   });
   // T12 复审 M4：启动扫描完成信号（显式可 await——测试不再用 setTimeout 排干猜测时序）
+  // Minor-1 兜底：存储层异常经 catch 记录（console.error 含扫描标识）且不 reject——
+  // 信号语义 = 扫描已尝试完成，无论成败；与修复前 void IIFE 的吞错行为等价。
   const startupScanDone = (async () => {
     teamDb.resetMemberStatuses();
     await runMemberScan();
     await runStrandedScan();
-  })().catch(() => undefined);
+  })().catch(error => console.error("[sati] Team startup scan failed:", error));
   return {
     gateway,
     configStore,
