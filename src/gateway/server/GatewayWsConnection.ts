@@ -264,6 +264,11 @@ export class GatewayWsConnection {
         return this.options.gateway.cronStop(frame.params as never);
       case "cron_run_now":
         return this.options.gateway.cronRunNow(frame.params as never);
+      case "panel_heartbeat":
+        if (this.options.gateway.panelHeartbeat) {
+          return this.options.gateway.panelHeartbeat(frame.params as never);
+        }
+        return Promise.resolve(notConfigured({ touched: 0 }, "Panel heartbeat not available"));
       case "elicitation_respond":
         return this.options.gateway.respondElicitation(frame.params as never);
       case "permission_decide":

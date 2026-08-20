@@ -675,4 +675,12 @@ export interface Gateway {
    * Optional — 不拥有知识库装配的 gateway 实现可缺省；host 应做 feature-detect。
    */
   knowledgeCapabilities?(input: KnowledgeCapabilitiesInput): Promise<KnowledgeCapabilitiesResult>;
+
+  /**
+   * M4：面板心跳上报（ui/server relay 汇总活跃浏览器会话 key；gateway 侧
+   * panelTouch 维护 Web 在线判定——浏览器关闭不触发 gateway onClose，以心跳
+   * 停更 + 宽限窗判离线）。返回本次实际 touch 的会话数。
+   * Optional — 旧实现无此能力时 hosts 应 feature-detect。
+   */
+  panelHeartbeat?(input: { sessionKeys: string[] }): Promise<{ touched: number }>;
 }

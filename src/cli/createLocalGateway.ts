@@ -392,6 +392,11 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       : undefined,
   });
   const skillManager = new SkillManager({ pilotHome, builtinSkillsRoot });
+  // M3（I3 闭环）：captain 在线判定——gateway ws 连接活跃追踪（unknown 容错在线，
+  // 协议不升版）。sati.ts 透传本实例给 startGatewayServer 后即真实生效。
+  // 声明置于 gateway 创建前：panelHeartbeat delegate（M4）闭包引用本实例，
+  // 避免块级作用域"先使用后声明"编译错误。
+  const sessionPresence = new SessionPresence();
   const gateway = new InProcessGateway(router, {
     now,
     serverInfo: { mode: "in_process", projectKey: projectRoot },
@@ -432,6 +437,14 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     listProjects: () => listWebProjects({ pilotHome }),
     describeProject: input => describeWebProject(input.projectKey, { pilotHome }),
     knowledgeCapabilities: input => Promise.resolve(registry.knowledgeCapabilitiesReport(input?.projectKey)),
+    // M4（Web 下线判定）：面板心跳 → SessionPresence.panelTouch（浏览器经 ui/server
+    // relay 周期上报；浏览器关闭不触发 gateway onClose，以心跳停 + 宽限窗判离线）。
+    panelHeartbeat: async (input: { sessionKeys: string[] }) => {
+      for (const key of input.sessionKeys) {
+        sessionPresence.panelTouch(key);
+      }
+      return { touched: input.sessionKeys.length };
+    },
     async reloadConfig() {
       let changedPaths: string[] = [];
       const unsubscribe = configStore.subscribe(event => {
@@ -498,9 +511,8 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // teams.db 打开/迁移失败选择 fail-fast：团队数据是写真源（成员注册即落库），
   // 静默降级会掩盖成员缺失；与 knowledge 只读降级（消费侧容错）不同。
   const teamDb = new TeamDb(defaultTeamDbPath(pilotHome, env));
-  // M3（I3 闭环）：captain 在线判定——gateway ws 连接活跃追踪（unknown 容错在线，
-  // 协议不升版）。sati.ts 透传本实例给 startGatewayServer 后即真实生效。
-  const sessionPresence = new SessionPresence();
+  // sessionPresence 声明已上移至 gateway 创建前（panelHeartbeat delegate 闭包引用，
+  // 见上方 M3 注释）；此处仅沿用实例。
   // gateway 注入接线（emitForSession/approvalDecide 类型兼容性编译期验证）。
   // handleMemberEvent 由 M2 调度器 wake 包装层 + 冷恢复扫描（下方 runMemberScan 的 onEvent）
   // 双路径消费——调度器路径与 scanner 路径的 approval_pending 均冒泡到队长 watcher。

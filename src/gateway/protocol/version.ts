@@ -23,8 +23,12 @@
  *           (2026-08-14: `cron_update` response tightened to
  *           `{updated:true;task}|{updated:false;reason:"not_found"|"running"|"conflict"}`
  *           union; `projectKey` and `expectedRevision` inputs required.)
+ *   - 1.4 — 2026-08-20: added optional team-activity-panel methods
+ *           `panel_heartbeat` (browser activity heartbeat →
+ *           SessionPresence.panelTouch, M4 Web 下线判定) /
+ *           `team_panel_snapshot` / `team_tool_call` (MINOR，feature-detect)。
  */
-export const SATI_GATEWAY_PROTOCOL_VERSION = "1.3";
+export const SATI_GATEWAY_PROTOCOL_VERSION = "1.4";
 
 /**
  * Handshake compatibility check: clients and servers with the same MAJOR
