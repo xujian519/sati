@@ -39,7 +39,7 @@ systemPrompt: |-
 
 ## 工具域建议（建议 domains）
 
-角色注册 domains（frontmatter 已就绪，注册装配 T15 落地）：`["analysis", "patent", "legal", "search", "literature", "session", "team"]`：
+角色注册 domains（M3 已落地：经 registerRoleDefinition 注册，可按 subagent_type / 团队 roleSlug 调度）：`["analysis", "patent", "legal", "search", "literature", "session", "team"]`：
 
 > 注：域为语义分组，工具实际按 metadata domain 裁剪（未标注 domain 的工具始终可见）；表中"用途"列提及的具体工具仅示意该域的能力取向，其 metadata domain 不一定等于所在列语义域。
 
