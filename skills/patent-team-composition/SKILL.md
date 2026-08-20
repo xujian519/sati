@@ -11,12 +11,12 @@ description: 专利案持久团队组建模板。当 Sati 团队编排层可用�
 
 ## 前置条件
 
-- 环境提供 `team_*` 工具（Sati 团队编排层 M3 起全量可用：`team_create` / `team_add_member` / `team_create_task` / `team_update_task` / `team_reassign_task` / `team_send_message` / `team_status` / `team_archive`；dsh 的 `agent_teams_*` 工具名在 Sati 侧对应为 `team_*`）；否则回退单会话 + `agent` 工具子代理（`subagent_type`，如 `patent-retriever` / `patent-reviewer`）专家互评。
+- 环境提供 `team_*` 工具（Sati 团队编排层 M3 起全量可用：`team_create` / `team_add_member` / `team_remove_member` / `team_create_task` / `team_update_task` / `team_reassign_task` / `team_send_message` / `team_status` / `team_archive`；dsh 的 `agent_teams_*` 工具名在 Sati 侧对应为 `team_*`）；否则回退单会话 + `agent` 工具子代理（`subagent_type`，如 `patent-retriever` / `patent-reviewer`）专家互评。
 - 一个 captain（主会话）同时只领导一个活跃团队；建队前确认无未收口的团队。
 - 团队成员默认继承 captain 的 LLM 路由与 effort，不指定 provider/model；仅当用户明确要求异构团队（如"检索用 X 模型"）时才传 provider + model。
 - 并发闸（**Sati 差异**）：dsh 单团队成员上限 8（插件 `maxMembers` 默认 8）在 Sati 无对应注册上限，改由调度器并发闸约束——`maxConcurrentMembers` 默认 4（deployment 可调），working 成员数达闸限不派新任务（成员邮箱仍投递，pending 任务排队等待空闲成员）；七个场景包成员数（6-7 人）可超过并发闸，按 DAG 依赖逐批分派即可。
 - Sati 团队编排层既有事实：M1 落地 durable 成员底座（teams.db 持久化团队/成员/任务/消息，成员为独立持久化会话，sessionKey `team:<teamId>:<memberId>`，主会话任 captain 收口）；M2 落地任务池（状态机 + attempt 计数）与事件驱动调度器（按 DAG 依赖分派 + `maxConcurrentMembers` 并发闸 + 成员邮箱投递）。
-- 角色 id 与 M2 协议 roleSlug 自由字符串一致，直接可用；角色注册接线参照 `skills/` 下 `type: role` SKILL.md 惯例（domains 含 "patent" 的检索型角色自动可见）。
+- 角色 id 与 M2 协议 roleSlug 自由字符串一致，可直接作为 `team_add_member` 的 role 取值；`skills/patent-teams/` 角色的注册装配（递归扫描路径）由 M3 T15 接线，参照 `skills/` 下 `type: role` SKILL.md 惯例（domains 含 "patent" 的检索型角色自动可见）。
 
 ## 角色总表
 
