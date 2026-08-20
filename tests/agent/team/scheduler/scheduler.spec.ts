@@ -270,6 +270,46 @@ test("唤醒失败且任务已被并发转派：不回滚他人 ticket，成员�
   }
 });
 
+test("唤醒失败且任务已在 wake 期间被推进到终态：不回滚终态，成员回 idle（T12 I1）", async () => {
+  const dbHolder: { db?: TeamDb } = {};
+  const { db, scheduler, root } = await setup({
+    wake: async () => {
+      // 模拟锁外唤醒窗口内队长经 team_update_task 把任务推进到 completed（终态保留 attemptId）
+      const fresh = dbHolder.db!.getTask("t1", "t1")!;
+      dbHolder.db!.updateTask({ ...fresh, status: "completed", updatedAt: "2026-08-20T00:00:01.000Z" });
+      return false;
+    },
+  });
+  dbHolder.db = db;
+  try {
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "x",
+      description: "",
+      status: "pending",
+      dependencies: [],
+      attempt: 0,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    await scheduler.kickTeam("t1");
+    const task = db.getTask("t1", "t1")!;
+    // attemptId 校验对终态仍成立（completed 保留 attemptId）——终态防护必须拦截回滚：
+    // 不回滚成 pending（工具层已发 task_completed 事件，回滚会造成数据与事件不一致 + 二次执行）
+    assert.equal(task.status, "completed");
+    assert.ok(task.attemptId); // 认领写入的 attemptId 保留
+    assert.equal(task.handoffId, undefined); // invalidateTaskAttempt 会换新 handoffId——未被触发
+    assert.equal(db.getMember("m1")?.status, "idle"); // 本成员从未真正开始回合，回 idle
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("队长离线：暂停认领（在途回合不派新任务）", async () => {
   const { db, scheduler, wakes, root } = await setup({ isCaptainOnline: () => false });
   try {

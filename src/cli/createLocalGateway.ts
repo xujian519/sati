@@ -233,6 +233,12 @@ export type TeamSubsystemHandle = {
   scheduler: TeamScheduler;
   /** M2：冷恢复 stranded 任务扫描（启动时与 runMemberScan 串行执行）。 */
   runStrandedScan: () => Promise<ScanStrandedTasksResult>;
+  /**
+   * 启动期串行扫描（resetMemberStatuses → runMemberScan → runStrandedScan）完成信号。
+   * 启动时 fire-and-forget 调用不阻塞 gateway 就绪；测试/宿主可 await 此信号确保
+   * 扫描已空跑完再写入数据（T12 复审 M4：取代 setTimeout 排干，与实现细节解耦）。
+   */
+  startupScanDone: Promise<unknown>;
 };
 
 /**
@@ -579,6 +585,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
             handleMemberTurnCompleted(teamDb, teamScheduler, teamId, m);
           }
         };
+        let ok = false;
         try {
           await wakeMember(teamDb, gateway, memberId, message, {
             onEvent: event => {
@@ -593,8 +600,11 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
               }
             },
           });
+          ok = true;
         } finally {
-          reclaimCompleted();
+          // M1（T12 复审）：仅正常路径收口——抛错路径交给外层 kickMember 回滚统一处理
+          //（回滚里成员回 idle；此处再续派 onMemberIdle 会踩掉并发重认领写下的 working 状态）
+          if (ok) reclaimCompleted();
         }
         return true;
       } catch {
@@ -652,7 +662,8 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     scheduler: teamScheduler,
     emit: (captainSessionKey, event) => gateway.emitForSession(captainSessionKey, toGatewayEvent(event)),
   });
-  void (async () => {
+  // T12 复审 M4：启动扫描完成信号（显式可 await——测试不再用 setTimeout 排干猜测时序）
+  const startupScanDone = (async () => {
     teamDb.resetMemberStatuses();
     await runMemberScan();
     await runStrandedScan();
@@ -694,7 +705,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       gateway.setAlwaysOnRerunPlan(update.alwaysOnRerunPlan);
       gateway.setDiscoveryPlanService(update.discoveryPlanService);
     },
-    teamSubsystem: { db: teamDb, runMemberScan, scheduler: teamScheduler, runStrandedScan },
+    teamSubsystem: { db: teamDb, runMemberScan, scheduler: teamScheduler, runStrandedScan, startupScanDone },
     sessionPresence,
   };
 }

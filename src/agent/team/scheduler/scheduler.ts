@@ -12,7 +12,7 @@
  * - 队长离线：isCaptainOnline 返回 false 时暂停认领（在途回合跑完即停）。
  */
 import type { TeamDb, TeamMessageRow, TeamTaskRow } from "../storage/team-db.js";
-import { unsatisfiedDependencies } from "../taskpool/task-status.js";
+import { TERMINAL_TASK_STATUSES, unsatisfiedDependencies } from "../taskpool/task-status.js";
 import { beginTaskAttempt, invalidateTaskAttempt } from "../taskpool/attempt.js";
 import { claimDelivery, unreadMessages } from "../mailbox/mailbox.js";
 import type { TeamEventEmitter } from "../protocol/events.js";
@@ -216,6 +216,14 @@ export class TeamScheduler {
       const fresh = this.db.getTask(teamId, plan.task.id);
       if (fresh === undefined || fresh.attemptId !== plan.attemptId) {
         // 任务已被并发转派/改写：不回滚他人 ticket，但本成员从未真正开始回合，须回 idle
+        this.db.updateMemberStatus(memberId, "idle");
+        return;
+      }
+      // I1（T12 复审）：终态防护——锁外唤醒窗口内队长可经 team_update_task 把任务推进
+      // 到终态（completed/failed/cancelled 均保留 attemptId），attemptId 校验仍通过；
+      // 终态任务不得 invalidate（工具层已发 task_completed/task_failed 事件，回滚会制造
+      // 数据与事件不一致，且 pending 可能被重派二次执行）。同款防护见 member-scanner/teamTasks。
+      if (TERMINAL_TASK_STATUSES.includes(fresh.status)) {
         this.db.updateMemberStatus(memberId, "idle");
         return;
       }
