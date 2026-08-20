@@ -13,7 +13,8 @@
  */
 import type { TeamDb, TeamMessageRow, TeamTaskRow } from "../storage/team-db.js";
 import { TERMINAL_TASK_STATUSES, unsatisfiedDependencies } from "../taskpool/task-status.js";
-import { beginTaskAttempt, invalidateTaskAttempt } from "../taskpool/attempt.js";
+import { beginTaskAttempt, invalidateTaskAttempt, attemptsExhausted } from "../taskpool/attempt.js";
+import { retryFailedTask } from "../taskpool/retry.js";
 import { claimDelivery, unreadMessages } from "../mailbox/mailbox.js";
 import type { TeamEventEmitter } from "../protocol/events.js";
 import { withTeamLock } from "./lock.js";
@@ -143,6 +144,22 @@ export class TeamScheduler {
 
       // 2) 任务认领（锁内 read-modify-write）
       const tasks = this.db.listTasks(teamId);
+      // M4：失败任务自动转派——锁内把 failed 未耗尽任务重置回 pending（幂等，
+      // 重置后不再 failed），使 nextReadyTask 能重新认领；attempt 上限防无限循环。
+      const retried = tasks.filter(t => t.status === "failed" && !attemptsExhausted(t));
+      for (const stale of retried) {
+        const fresh = this.db.getTask(teamId, stale.id);
+        if (fresh === undefined || fresh.status !== "failed") continue; // 锁内重读防并发改写
+        if (attemptsExhausted(fresh)) continue;
+        this.db.updateTask(retryFailedTask(fresh));
+        this.emit(team.captainSessionKey, {
+          type: "task_retried",
+          teamId,
+          taskId: fresh.id,
+          attempt: fresh.attempt,
+          ...(fresh.assigneeId !== undefined ? { memberId: fresh.assigneeId } : {}),
+        });
+      }
       const task = ownedOpenTask(tasks, memberId) ?? nextReadyTask(tasks, memberId);
       if (task === undefined) return undefined;
       const working = this.db.listMembers().filter(m => m.teamId === teamId && m.status === "working").length;
