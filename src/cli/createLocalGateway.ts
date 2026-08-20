@@ -241,8 +241,10 @@ export type TeamSubsystemHandle = {
  * wake 包装层与 scanner 冷恢复路径共用（两路径行为对齐）。
  * 参数传递 teamScheduler 消除顺序依赖（本函数定义于 runMemberScan/teamScheduler 之前，无闭包捕获）；
  * onMemberIdle 的 rejection 静默吞掉（onEvent 契约：回调不得抛出）。
- * 锁语义与 fail-closed 安全论证：wake 路径在 wake 锁内执行（wake 全程持有团队锁），无 TOCTOU；
- * scanner 冷恢复路径无团队锁（scanTeamMembers 直调 wakeMember，不经 scheduler 的 withTeamLock）——
+ * 调用时机：两路径均在 turn 完全 unwinding 之后调用（wake 包装层收集 completed 于 wake 返回后、
+ * scanner 收集于 scan 的 .then/.catch）——回合期间不持团队锁（M3 锁范围收窄，避免回合内
+ * team_update_task 重入死锁），此刻续派不会命中 session_busy。
+ * 锁语义与 fail-closed 安全论证：两条路径均无团队锁（wake 包装层锁外、scanner 直调 wakeMember）——
  * 锁外执行存在 TOCTOU 窗口，置 failed 前靠 validateAttemptUpdate 三拒兜底（终态拒绝 / attemptId
  * 已清拒绝 / attemptId 不匹配拒绝，fail-closed）；漏判场景下个 turn_completed 再检查，最终收敛。
  */
@@ -500,8 +502,18 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     emitForSession: (sessionKey, event) => gateway.emitForSession(sessionKey, event),
     approvalDecide: input => gateway.approvalDecide(input),
   });
-  const runMemberScan = (): Promise<ScanTeamMembersResult> =>
-    scanTeamMembers({
+  const runMemberScan = (): Promise<ScanTeamMembersResult> => {
+    // 冷恢复回合结束（turn_completed）的成员收口集合（每成员至多一次）。
+    const completed: Array<{ teamId: string; memberId: string }> = [];
+    const reclaimCompleted = (): void => {
+      // 恢复回合已完全收尾（wakeMember 仅在 submitTurn 生成器完全 unwinding——
+      // 消费者 finally 内 router.endTurn 已执行、会话槽已释放——之后才返回），
+      // 此刻续派与 warm 路径锁内串行等效，不会命中 session_busy。
+      for (const { teamId, memberId } of completed) {
+        handleMemberTurnCompleted(teamDb, teamScheduler, teamId, memberId);
+      }
+    };
+    return scanTeamMembers({
       db: teamDb,
       gateway,
       projectRoot: fallbackProjectRoot,
@@ -511,9 +523,16 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       // scanner 直调 wakeMember 现传 onEvent（M1 已知限制在此闭环，计划 1349 行承诺兑现）。
       onEvent: (member, event) => {
         teamForwarder.handleMemberEvent(member, event);
-        // M3（复审观察项 3）：冷恢复回合结束 → 与 wake 包装层同款收口（C2 + onMemberIdle 续派）
+        // M3（复审观察项 3）：冷恢复回合结束 → 与 wake 包装层同款收口（C2 + onMemberIdle 续派）。
+        // 只在事件回调内登记、不立即续派：冷恢复路径无团队锁（scanTeamMembers 直调
+        // wakeMember，不经 scheduler 的 withTeamLock），回合结束事件在 submitTurn
+        // 生成器迭代内同步送达——立即续派会在生成器 unwinding（消费者 finally 内
+        // router.endTurn）之前发起下一次 wake，beginTurn 判 busy（session_busy
+        // 事件流空转、wake 包装层照常返回 true）→ 任务卡 claimed 永不续派；
+        // 延后宏任务同样不可靠（pump 收尾可跨宏任务）。warm 路径同款延后
+        //（wake 包装层收集 completed、wake 返回后收口，见下方 teamScheduler 接线）。
         if (event.type === "turn_completed" && member.teamId !== undefined) {
-          handleMemberTurnCompleted(teamDb, teamScheduler, member.teamId, member.id);
+          completed.push({ teamId: member.teamId, memberId: member.id });
         }
       },
     })
@@ -521,17 +540,24 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         if (result.resumed > 0) {
           console.log(`[sati] Team member resume: scanned=${result.scanned}, resumed=${result.resumed}`);
         }
+        reclaimCompleted();
         return result;
       })
-      .catch(() => ({ scanned: 0, resumed: 0 }));
+      .catch(() => {
+        reclaimCompleted();
+        return { scanned: 0, resumed: 0 };
+      });
+  };
   // ── 团队调度器接线（M2）：事件驱动调度器 + M1 已知限制闭环 ──
   // wake 包装层：调 wakeMember 并在 onEvent 内捕获 turn_completed → onMemberIdle，
   // 成员回合结束自动触发下一任务派发 + member_idle 广播（M1 冷恢复 turn 审批冒泡
   // 限制已由 runMemberScan 的 onEvent 接线闭环——下方 I1 注释）。
   // onMemberIdle 的异步 rejection 静默吞掉（onEvent 契约：回调不得抛出，也不得以
   // 异步 rejection 影响回合；dispose 后锁队列里残留的踢腿自然失败被吞）。
-  // ⚠️ 锁持有说明（既定设计）：wake 全程 await 回合 → 团队锁被持有至回合结束；
-  // M2 范围（冷恢复 + 编程式入口）可接受，M3 工具驱动前再收窄锁范围。
+  // M3 锁范围收窄（原"wake 全程持有团队锁"已废弃）：认领在调度器锁内完成，成员
+  // 回合全程不持团队锁——回合内 team_update_task 等团队工具取同一把锁，持锁唤醒
+  // 会重入死锁（M3 集成测试暴露）；回合结束收口（C2 + onMemberIdle 续派）延后至
+  // wake 返回后，与 scanner 冷恢复路径同款（下方 onEvent 内 completed 收集）。
   // I3（code review）闭环：captain 离线（连接断开超宽限窗）→ 暂停新认领；
   // unknown（纯 in-process/CLI 场景）容错视为在线，不阻塞成员工作。
   const teamScheduler = new TeamScheduler({
@@ -543,19 +569,33 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         // 成员快照一次读取（onEvent 内每事件复用；handleMemberEvent 需要 teamId/sessionKey）。
         // 读在 try 内：wake 永不抛错（db 已关等竞态统一走 catch → false 回滚路径）
         const member = teamDb.getMember(memberId);
-        await wakeMember(teamDb, gateway, memberId, message, {
-          onEvent: event => {
-            // 审批冒泡（M1 Task 6 接线点）：成员回合的 approval_pending → 队长会话 watcher
-            if (member !== undefined) {
-              teamForwarder.handleMemberEvent(member, event);
-            }
-            // M1 已知限制闭环 + M3（复审观察项 3）：回合结束 → C2 检查 + onMemberIdle
-            //（下一任务派发 + member_idle 广播）；与 scanner 冷恢复路径共用共享函数收口。
-            if (event.type === "turn_completed" && member?.teamId !== undefined) {
-              handleMemberTurnCompleted(teamDb, teamScheduler, member.teamId, memberId);
-            }
-          },
-        });
+        // 回合结束收口延后到 wake 返回后（M3 锁范围收窄：kickMember 已锁外唤醒，团队锁
+        // 不再跨回合持有——turn_completed 在 submitTurn 生成器迭代内同步送达，若在事件
+        // 回调内立即续派会先于消费者 finally 的 endTurn 命中 session_busy；wake 返回时
+        // 生成器已完全 unwinding、endTurn 已执行、会话槽已释放，与 scanner 冷恢复路径同款）。
+        const completed: Array<{ teamId: string; memberId: string }> = [];
+        const reclaimCompleted = (): void => {
+          for (const { teamId, memberId: m } of completed) {
+            handleMemberTurnCompleted(teamDb, teamScheduler, teamId, m);
+          }
+        };
+        try {
+          await wakeMember(teamDb, gateway, memberId, message, {
+            onEvent: event => {
+              // 审批冒泡（M1 Task 6 接线点）：成员回合的 approval_pending → 队长会话 watcher
+              if (member !== undefined) {
+                teamForwarder.handleMemberEvent(member, event);
+              }
+              // M1 已知限制闭环 + M3（复审观察项 3）：回合结束 → C2 检查 + onMemberIdle
+              //（下一任务派发 + member_idle 广播）；与 scanner 冷恢复路径共用共享函数收口。
+              if (event.type === "turn_completed" && member?.teamId !== undefined) {
+                completed.push({ teamId: member.teamId, memberId });
+              }
+            },
+          });
+        } finally {
+          reclaimCompleted();
+        }
         return true;
       } catch {
         return false;
