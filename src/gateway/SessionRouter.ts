@@ -5,6 +5,8 @@ export type GatewaySessionContext = {
   sessionKey: string;
   projectKey?: string;
   channelKey: string;
+  /** Per-session model route override (M4, team member wake): applied to the session config at creation. */
+  modelRoute?: { provider: string; model: string };
 };
 
 export type GatewaySessionFactory = (context: GatewaySessionContext) => AgentSession | Promise<AgentSession>;
@@ -268,5 +270,6 @@ function mergeSessionContext(current: GatewaySessionContext, next: GatewaySessio
     sessionKey: next.sessionKey,
     channelKey: next.channelKey || current.channelKey,
     projectKey: current.projectKey ?? next.projectKey,
+    modelRoute: current.modelRoute ?? next.modelRoute,
   };
 }
