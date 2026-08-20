@@ -18,3 +18,10 @@ export {
   type ProvenanceCollectorOptions,
 } from "./collector.js";
 export { resolveProvenanceRunId, type ResolveProvenanceRunIdOptions } from "./run-id.js";
+export { isProvenanceEnabled, type ProvenanceEnabledOptions } from "./config.js";
+export {
+  exportProvenance,
+  csvEscape,
+  type ExportProvenanceOptions,
+  type ProvenanceExportFormat,
+} from "./export.js";

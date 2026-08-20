@@ -22,7 +22,12 @@ import {
 } from "../../patent/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
 import { defaultPatentWorkers, WorkerMonitor } from "../../patent/index.js";
-import { ProvenanceCollector, ProvenanceStore, resolveProvenanceRunId } from "../../patent/provenance/index.js";
+import {
+  isProvenanceEnabled,
+  ProvenanceCollector,
+  ProvenanceStore,
+  resolveProvenanceRunId,
+} from "../../patent/provenance/index.js";
 import { caseProvenanceDir } from "../../patent/paths.js";
 import type { SatiToolDefinition, SatiToolModelClient } from "../protocol/types.js";
 import {
@@ -400,7 +405,7 @@ export function openProvenanceCollector(options: {
   runKey: string;
   resume: boolean;
 }): ProvenanceCollector | null {
-  if (process.env.SATI_PROVENANCE !== "1" || options.caseId === undefined) return null;
+  if (!isProvenanceEnabled() || options.caseId === undefined) return null;
   const runId = resolveProvenanceRunId({
     caseId: options.caseId,
     cwd: options.cwd,

@@ -111,6 +111,7 @@ import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
 import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
 import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
+import { isProvenanceEnabled } from "../patent/provenance/index.js";
 import { SqliteApprovalStore } from "../patent/provenance/approval-store.js";
 import { loadPatentFullRuleSet, RuleOutputGate, selectGateRules } from "../rule/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
@@ -1915,11 +1916,11 @@ class ProjectRuntimeRegistry {
       console.warn(`[RuleOutputGate] 专利规则集加载告警: ${fullRuleSet.warnings.join("; ")}`);
     }
     const ruleGate = new RuleOutputGate(selectGateRules(fullRuleSet.ruleSet));
-    // 决策溯源旁路（P6 双通道）：options.enableProvenance 优先，回退 SATI_PROVENANCE=1；
-    // 默认关 → approvalStore 不配置，output-gate 零开销（fail-open 语义不变）。
-    const enableProvenance =
-      this.options.enableProvenance ??
-      (this.options.env?.SATI_PROVENANCE === "1" || process.env.SATI_PROVENANCE === "1");
+    // 决策溯源旁路（P6 双通道单点）：默认关 → approvalStore 不配置，output-gate 零开销。
+    const enableProvenance = isProvenanceEnabled({
+      enableProvenance: this.options.enableProvenance,
+      env: this.options.env,
+    });
     const patentOutputGate = new PatentOutputGate({
       riskKeywords: [],
       absolutePhrases: [],
