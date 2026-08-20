@@ -111,6 +111,7 @@ import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
 import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
 import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
+import { SqliteApprovalStore } from "../patent/provenance/approval-store.js";
 import { loadPatentFullRuleSet, RuleOutputGate, selectGateRules } from "../rule/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig, resolvePilotHome, type PilotProxyConfig } from "../pilot/index.js";
@@ -194,6 +195,11 @@ export type CreateLocalGatewayOptions = {
    */
   autoElicitation?: boolean;
   telemetry?: TelemetryClient;
+  /**
+   * 决策溯源旁路（审批审计落盘全局库）：默认关（零开销）；
+   * 可经环境变量 `SATI_PROVENANCE=1` 开启（双通道，方案 P6）。
+   */
+  enableProvenance?: boolean;
 };
 
 export type SubsystemUpdate = {
@@ -339,6 +345,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     modelFactory: options.__testModelFactory,
     autoElicitation: options.autoElicitation,
     telemetry,
+    enableProvenance: options.enableProvenance,
     onProjectActivated: activeProjectRoot => extensionWatchManager.watchProject(activeProjectRoot),
   });
   const defaultRuntime = registry.resolve();
@@ -814,6 +821,8 @@ type ProjectRuntimeRegistryOptions = {
   modelFactory?: (snapshot: PilotConfigSnapshot) => ModelRuntime;
   autoElicitation?: boolean;
   telemetry: TelemetryClient;
+  /** 决策溯源旁路开关（见 CreateLocalGatewayOptions.enableProvenance）。 */
+  enableProvenance?: boolean;
   onProjectActivated?: (projectRoot: string) => void;
 };
 
@@ -1906,11 +1915,18 @@ class ProjectRuntimeRegistry {
       console.warn(`[RuleOutputGate] 专利规则集加载告警: ${fullRuleSet.warnings.join("; ")}`);
     }
     const ruleGate = new RuleOutputGate(selectGateRules(fullRuleSet.ruleSet));
+    // 决策溯源旁路（P6 双通道）：options.enableProvenance 优先，回退 SATI_PROVENANCE=1；
+    // 默认关 → approvalStore 不配置，output-gate 零开销（fail-open 语义不变）。
+    const enableProvenance =
+      this.options.enableProvenance ??
+      (this.options.env?.SATI_PROVENANCE === "1" || process.env.SATI_PROVENANCE === "1");
     const patentOutputGate = new PatentOutputGate({
       riskKeywords: [],
       absolutePhrases: [],
       enableCitationGate: false,
       ruleGate,
+      // 审批审计落盘（全局库；写入失败不阻断审批）
+      ...(enableProvenance ? { approvalStore: new SqliteApprovalStore() } : {}),
       // 时钟与 Agent 层注入对齐（TurnRunner/AgentLoop 共用 this.options.now）
       now: () => this.options.now().getTime(),
       onPending: pending => {
