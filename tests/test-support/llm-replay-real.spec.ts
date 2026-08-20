@@ -96,7 +96,10 @@ test("真实模型 fixture 无 key 重放完整 AgentLoop 回路（deepseek-v4-f
   const replay = createReplayModelRuntime(FIXTURE_DIR, new CapabilityOnlyRuntime());
   const now = () => new Date();
   const router = createRouterRuntime({ enabled: false }, { modelRuntime: replay, now });
-  const registry = createBuiltinRegistry();
+  // 工具集须与录制时（fixture manifest toolNames）逐字节一致：fixture 录制于
+  // ask_user_question / plan_mode 工具加入之前，重放时排除这两个非核心默认工具
+  // （请求键 toolSchemaDigest 含工具列表，多注册即 NO_REPLAY_RECORD 失配）。
+  const registry = createBuiltinRegistry({ askUserQuestion: false, planMode: false });
   const session = createAgentSession({
     sessionId: "replay-real-" + randomUUID().slice(0, 8),
     config: makeConfig(process.cwd()),

@@ -36,7 +36,12 @@ const baseModel = createModelRuntime(snapshot.config.model);
 const model = applyReplayEnvHooks(baseModel, { ...env, [REPLAY_RECORD_ROOT_ENV]: outDir });
 const now = () => new Date();
 const router = createRouterRuntime({ enabled: false }, { modelRuntime: model, now });
-const registry = createBuiltinRegistry();
+const registry = createBuiltinRegistry({
+  // 与 tests/test-support/llm-replay-real.spec.ts 对齐：排除默认注册的交互工具
+  // （ask_user_question / plan_mode），使录制/重放请求键 toolSchemaDigest 一致。
+  askUserQuestion: false,
+  planMode: false,
+});
 const permissionContext = createDefaultPermissionContext({
   cwd: projectRoot,
   mode: "bypassPermissions",

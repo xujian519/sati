@@ -167,6 +167,13 @@ export type CreateBuiltinRegistryOptions = {
    */
   readSkill?: ReadSkillDeps | false;
   /**
+   * `document_style_panel` / `document_style_preset`（文书排版调参面板）工具。
+   * **Opt-in**：无参 `createBuiltinRegistry()` 不注册——保持与 llm-replay fixture
+   * 录制时的工具集一致（请求键 toolSchemaDigest 含工具列表，新增工具即破坏既有
+   * fixture，须重录或条件注册；team_* 工具同先例）。createLocalGateway 传 `{}` 注册。
+   */
+  documentStyle?: Record<string, never>;
+  /**
    * `enter_plan_mode` / `exit_plan_mode` builtins. Registered by default —
    * these lightweight skeleton tools let the model request a permission-mode
    * switch to plan (read-only) and back. Pass `false` to skip.
@@ -289,8 +296,11 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createDraftClaimsTool(), "patent"));
     registry.register(annotate(createClaimChartTool(), "patent"));
     registry.register(annotate(createRenderPatentDocumentTool(), "patent"));
-    registry.register(annotate(createDocumentStylePresetTool(), "patent"));
-    registry.register(annotate(createDocumentStylePanelTool(), "patent"));
+    if (options?.documentStyle !== undefined) {
+      // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
+      registry.register(annotate(createDocumentStylePresetTool(), "patent"));
+      registry.register(annotate(createDocumentStylePanelTool(), "patent"));
+    }
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
     registry.register(annotate(createPatentWorkflowTool(), "patent"));
