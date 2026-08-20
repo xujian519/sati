@@ -17,7 +17,7 @@
  *    getSubagentDefinition("case-manager") 可调度解析。
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,7 +49,7 @@ const TEAM_ROLE_IDS = [
 ];
 
 /** 最小角色 frontmatter（含多行 systemPrompt 块与数组字段，验证 yaml 解析完整性）。 */
-function roleFrontmatter(slug: string, extra = ""): string {
+function roleFrontmatter(slug: string, extra = "", readOnly = true): string {
   return [
     "---",
     `name: ${slug}`,
@@ -58,7 +58,7 @@ function roleFrontmatter(slug: string, extra = ""): string {
     'tools: ["*"]',
     'domains: ["patent", "team"]',
     'omitTools: ["execute_code"]',
-    "readOnly: true",
+    `readOnly: ${readOnly}`,
     "systemPrompt: |-",
     `  你是模拟团队角色 ${slug}，立场指令块需完整保留。`,
     "  第二行立场指令。",
@@ -69,14 +69,14 @@ function roleFrontmatter(slug: string, extra = ""): string {
   ].join("\n");
 }
 
-/** 在临时目录模拟 skills/patent-teams/ 结构，返回根目录。 */
+/** 在临时目录模拟 skills/patent-teams/ 结构，返回根目录。drafter 岗走 readOnly: false 分支。 */
 function makeFakeTeamRolesRoot(): { root: string; count: number } {
   const root = mkdtempSync(join(tmpdir(), "sati-team-roles-"));
   const teamRolesDir = join(root, "patent-teams");
   mkdirSync(teamRolesDir, { recursive: true });
   for (const slug of TEAM_ROLE_IDS) {
     mkdirSync(join(teamRolesDir, slug));
-    writeFileSync(join(teamRolesDir, slug, "SKILL.md"), roleFrontmatter(slug), "utf8");
+    writeFileSync(join(teamRolesDir, slug, "SKILL.md"), roleFrontmatter(slug, "", slug !== "drafter"), "utf8");
   }
   // 非角色文件（无 type: role）应被跳过
   mkdirSync(join(teamRolesDir, "plain-skill"));
@@ -107,10 +107,16 @@ test("registerNestedTeamRoleDefinitions 注册嵌套目录全部团队角色（�
       );
       assert.ok(definition?.systemPromptSuffix?.includes("第二行立场指令"), `${id} 的 systemPrompt 第二行应保留`);
       assert.ok(definition?.visibleDomains?.includes("team"), `${id} 的 domains 应含 "team" 成员作业面`);
-      assert.equal(definition?.isReadOnly, true, `${id} 的 readOnly 应生效`);
+      // readOnly 双分支：drafter 模拟岗为 false，其余岗为 true
+      if (id === "drafter") {
+        assert.equal(definition?.isReadOnly, false, "readOnly: false 分支应生效（drafter 模拟岗）");
+      } else {
+        assert.equal(definition?.isReadOnly, true, `${id} 的 readOnly: true 应生效`);
+      }
     }
   } finally {
     for (const id of TEAM_ROLE_IDS) unregisterRoleDefinition(id);
+    rmSync(root, { recursive: true, force: true });
   }
   for (const id of TEAM_ROLE_IDS) {
     assert.equal(getSubagentDefinition(id), undefined, `${id} 清理后应回退未注册`);
@@ -118,13 +124,20 @@ test("registerNestedTeamRoleDefinitions 注册嵌套目录全部团队角色（�
 });
 
 test("registerNestedTeamRoleDefinitions 对缺失/空目录静默返回 0", () => {
-  assert.equal(registerNestedTeamRoleDefinitions(undefined), 0);
-  assert.equal(registerNestedTeamRoleDefinitions(""), 0);
-  const root = mkdtempSync(join(tmpdir(), "sati-no-roles-"));
-  assert.equal(registerNestedTeamRoleDefinitions(root), 0, "无 patent-teams 子目录时应返回 0 不报错");
-  const nested = mkdtempSync(join(tmpdir(), "sati-empty-roles-"));
-  mkdirSync(join(nested, "patent-teams"));
-  assert.equal(registerNestedTeamRoleDefinitions(nested), 0, "patent-teams 为空目录时应返回 0");
+  const roots: string[] = [];
+  try {
+    assert.equal(registerNestedTeamRoleDefinitions(undefined), 0);
+    assert.equal(registerNestedTeamRoleDefinitions(""), 0);
+    const root = mkdtempSync(join(tmpdir(), "sati-no-roles-"));
+    roots.push(root);
+    assert.equal(registerNestedTeamRoleDefinitions(root), 0, "无 patent-teams 子目录时应返回 0 不报错");
+    const nested = mkdtempSync(join(tmpdir(), "sati-empty-roles-"));
+    roots.push(nested);
+    mkdirSync(join(nested, "patent-teams"));
+    assert.equal(registerNestedTeamRoleDefinitions(nested), 0, "patent-teams 为空目录时应返回 0");
+  } finally {
+    for (const r of roots) rmSync(r, { recursive: true, force: true });
+  }
 });
 
 const SATI_YAML = [
