@@ -143,6 +143,23 @@ test("跨队成员会话（team:t2:x）调 t1 的 send_message / status → team
   );
 });
 
+test("跨队队长会话（cap-2）调 t1 的 send_message / status → team_not_captain（最终复审 I2）", async () => {
+  const { db, tools } = setup();
+  // 另建 t2 团队：异队队长（t2 的 captainSessionKey）不得向 t1 投递消息（防伪造 sender="captain"）或读取 t1 快照
+  db.upsertTeam({ id: "t2", name: "t2", captainSessionKey: "cap-2", createdAt: "2026-08-20T00:00:00.000Z" });
+  await assert.rejects(
+    () => tools.sendMessage.execute({ teamId: "t1", recipient: "m1", content: "x" }, { sessionId: "cap-2" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_captain",
+  );
+  await assert.rejects(
+    () => tools.status.execute({ teamId: "t1" }, { sessionId: "cap-2" } as never),
+    (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "team_not_captain",
+  );
+  // 同队队长路径不回归：cap-1 调 t1 仍正常
+  const out = await tools.status.execute({ teamId: "t1" }, { sessionId: "cap-1" } as never);
+  assert.equal(out.data!.team.id, "t1");
+});
+
 test("team_status：三视图只读（脏数据降级/任务含 attemptId+handoffId+output/空团队/畸形会话）", async () => {
   const { db, tools } = setup();
   // 脏数据成员：modelRouteJson 非法 → 视图降级为空对象（对齐 scheduler 损坏行跳过语义，过 outputSchema object 校验）

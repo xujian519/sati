@@ -19,6 +19,7 @@ import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import {
   TEAM_MEMBER_SESSION_PATTERN,
   assertTeamActive,
+  requireTeamCaptain,
   requireTeamMember,
   resolveActor,
   type TeamToolsOptions,
@@ -73,7 +74,18 @@ export function createTeamSendMessageTool(
       // sessionId 缺失（actor === undefined）或队长会话按 captain 放行是有意的（T4 决策延续）：
       // `team:` 前缀畸形形态已在上方 fail-closed 拦截，此处 undefined 只可能是无 sessionId 的主会话直调；
       // 与 update_task 的差异显式化——mailbox 消息 sender 审计接受该形态（主会话=队长），任务归属不接受。
-      const senderId = actor === undefined || actor.captain ? "captain" : requireTeamMember(db, actor, input.teamId);
+      // 队长路径同队校验（最终复审 I2）：异队队长会话（sessionKey ≠ team.captainSessionKey）不得向
+      // 本队投递消息——防伪造 sender="captain" 指令与审计失真，与 update_task 的 requireTeamCaptain
+      // 对齐；actor === undefined（无 sessionId 主会话直调）保持 T4 决议放行（主会话=队长语义）。
+      let senderId: string;
+      if (actor === undefined) {
+        senderId = "captain";
+      } else if (actor.captain) {
+        requireTeamCaptain(db, context.sessionId, input.teamId);
+        senderId = "captain";
+      } else {
+        senderId = requireTeamMember(db, actor, input.teamId);
+      }
       let messageId = "";
       await withTeamLock(input.teamId, async () => {
         const team = db.getTeam(input.teamId);

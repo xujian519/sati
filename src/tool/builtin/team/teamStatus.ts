@@ -11,7 +11,13 @@
 import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
 import type { TeamTaskStatus } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
-import { TEAM_MEMBER_SESSION_PATTERN, requireTeamMember, resolveActor, type TeamToolsOptions } from "./teamUtils.js";
+import {
+  TEAM_MEMBER_SESSION_PATTERN,
+  requireTeamCaptain,
+  requireTeamMember,
+  resolveActor,
+  type TeamToolsOptions,
+} from "./teamUtils.js";
 
 /**
  * modelRouteJson 解析：脏数据（非法 JSON / 非对象）降级为空对象——
@@ -129,6 +135,10 @@ export function createTeamStatusTool(options: TeamToolsOptions): SatiToolDefinit
       }
       if (actor !== undefined && !actor.captain) {
         requireTeamMember(db, actor, input.teamId); // 成员校验（仅校验身份，不返回使用）
+      } else if (actor !== undefined) {
+        // 队长路径同队校验（最终复审 I2）：异队队长会话不得读取本队快照（跨队信息泄露面）；
+        // actor === undefined（无 sessionId 主会话直调）保持放行（只读无审计面）。
+        requireTeamCaptain(db, context.sessionId, input.teamId);
       }
       const team = db.getTeam(input.teamId);
       if (team === undefined) {
