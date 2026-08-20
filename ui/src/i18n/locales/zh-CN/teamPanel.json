@@ -3,15 +3,27 @@
   "opSucceeded": "操作成功",
   "opFailed": "操作失败",
   "overview": {
-    "title": "团队",
     "createPlaceholder": "新团队名称…",
     "create": "新建团队",
-    "memberCount": "{{count}} 名成员",
-    "taskCount": "{{count}} 个任务",
     "captainOnline": "在线",
     "captainOffline": "离线",
     "archived": "已归档",
     "noTeams": "暂无团队，先创建一个。"
+  },
+  "panel": {
+    "title": "团队活动",
+    "collapse": "收起面板",
+    "close": "关闭面板",
+    "pillExpand": "展开团队面板",
+    "teamsEmpty": "暂无团队，先创建一个。",
+    "archivedTeams": "已归档"
+  },
+  "captain": {
+    "dispatched": "已向 {{members}} 名成员派发 {{tasks}} 个任务",
+    "summaryDone": "摘要已完成"
+  },
+  "progress": {
+    "legend": "进度"
   },
   "members": {
     "title": "成员",
@@ -20,10 +32,15 @@
     "statusIdle": "空闲",
     "statusWorking": "工作中",
     "retired": "已退休",
-    "modelRoute": "{{provider}} / {{model}}"
+    "modelRoute": "{{provider}} / {{model}}",
+    "currentTask": "当前任务：{{subject}}",
+    "expand": "展开成员",
+    "collapse": "收起成员",
+    "empty": "暂无成员"
   },
   "tasks": {
     "title": "任务",
+    "parallelTitle": "并行",
     "statusPending": "待认领",
     "statusClaimed": "已认领",
     "statusInProgress": "进行中",
@@ -42,8 +59,11 @@
     "button": "归档团队",
     "confirmBody": "归档团队 {{name}}？此操作不可逆。"
   },
+  "pill": {
+    "teamCount": "{{count}} 个团队",
+    "newActivity": "有新动态"
+  },
   "events": {
-    "title": "事件流",
-    "empty": "暂无团队事件。团队会话活跃时，实时事件流将显示在此处。"
+    "recent": "最近动态"
   }
 }

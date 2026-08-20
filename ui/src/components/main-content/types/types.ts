@@ -77,6 +77,9 @@ export type MainContentProps = {
   /** When the URL uses /session/<file> by mistake, open the file in the editor. */
   misroutedFileFromUrl?: string | null;
   onMisroutedFileUrlHandled?: () => void;
+  /** 团队活动浮层开关（侧边栏 Team 按钮控制；关闭时整个浮层卸载）。 */
+  teamPanelOpen?: boolean;
+  onTeamPanelClose?: () => void;
 };
 
 export type MainContentStateViewProps = {

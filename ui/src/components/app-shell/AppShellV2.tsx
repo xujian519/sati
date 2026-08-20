@@ -92,6 +92,8 @@ export default function AppShellV2() {
 
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
+  // 团队活动浮层开关（侧边栏 Team 按钮切换；非 AppTab，无 URL 路由）
+  const [teamPanelOpen, setTeamPanelOpen] = useState(false);
   const { ws, sendMessage, latestMessage, isConnected, subscribe } = useWebSocket();
   const wasConnectedRef = useRef(false);
   // Guards the URL→selectedProject sync effect against clobbering a project
@@ -605,7 +607,8 @@ export default function AppShellV2() {
       onRequestDeleteProject={handleRequestDeleteProject}
       onRequestDeleteSession={handleRequestDeleteSession}
       onShowSettings={onShowSettings}
-      onOpenTeamPanel={() => handleSelectTab("team")}
+      onOpenTeamPanel={() => setTeamPanelOpen(prev => !prev)}
+      isTeamPanelOpen={teamPanelOpen}
       onDeselectProject={handleDeselectProject}
       onResetProjectSessionPreview={handleResetProjectSessionPreview}
       onCollapse={onCollapseSidebar}
@@ -690,6 +693,8 @@ export default function AppShellV2() {
               externalMessageUpdate={externalMessageUpdate}
               misroutedFileFromUrl={misroutedFileFromUrl}
               onMisroutedFileUrlHandled={handleMisroutedFileUrlHandled}
+              teamPanelOpen={teamPanelOpen}
+              onTeamPanelClose={() => setTeamPanelOpen(false)}
             />
           </main>
 

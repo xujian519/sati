@@ -140,6 +140,8 @@ function propsFor(activeTab: AppTab, setActiveTab = vi.fn()) {
     onStartNewSession: vi.fn(),
     onShowSettings: vi.fn(),
     externalMessageUpdate: 0,
+    teamPanelOpen: false,
+    onTeamPanelClose: vi.fn(),
   } as unknown as ComponentProps<typeof MainContent>;
 }
 
