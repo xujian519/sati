@@ -101,6 +101,48 @@ test("resolveProvenanceRunId：损坏的 run.json → 新建 runId", () => {
   }
 });
 
+test("recordWorker：worker activity + output_file entity 落盘（含降级透传）", () => {
+  withEnv("1", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "provenance-hooks-"));
+    try {
+      const collector = openProvenanceCollector({
+        caseId: "case-1",
+        cwd,
+        runKey: "patent_drafting_v1",
+        resume: false,
+      })!;
+      assert.ok(collector !== null);
+      collector.recordWorker({
+        record: {
+          workerName: "patent-technical-analyzer",
+          inputValid: true,
+          outputValid: false,
+          degraded: true,
+          startedAt: 1724100000000,
+          durationMs: 800,
+        },
+        outputPath: "data/cases/case-1/outputs/technical-analysis.md",
+      });
+      collector.close();
+
+      const store = new ProvenanceStore(join(caseProvenanceDir("case-1", cwd), "provenance.db"));
+      const activities = store.listActivities("case-1");
+      assert.equal(activities.length, 1);
+      assert.equal(activities[0]!.source, "worker");
+      assert.equal(activities[0]!.name, "patent-technical-analyzer");
+      assert.equal(activities[0]!.durationMs, 800);
+      const entities = store.listEntities("case-1");
+      assert.equal(entities.length, 1);
+      assert.equal(entities[0]!.kind, "output_file");
+      assert.equal(entities[0]!.value, "data/cases/case-1/outputs/technical-analysis.md");
+      assert.equal(entities[0]!.degraded, true);
+      store.close();
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("recordApprovalGate：pending/granted 幂等（同 stage 同 kind 二次记录仍一条）", () => {
   withEnv("1", () => {
     const cwd = mkdtempSync(join(tmpdir(), "provenance-hooks-"));

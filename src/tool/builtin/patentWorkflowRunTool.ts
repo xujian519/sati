@@ -21,6 +21,7 @@ import {
   type WorkflowManifest,
 } from "../../patent/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
+import { defaultPatentWorkers, WorkerMonitor } from "../../patent/index.js";
 import { ProvenanceCollector, ProvenanceStore, resolveProvenanceRunId } from "../../patent/provenance/index.js";
 import { caseProvenanceDir } from "../../patent/paths.js";
 import type { SatiToolDefinition, SatiToolModelClient } from "../protocol/types.js";
@@ -302,12 +303,25 @@ export function createPatentWorkflowRunTool(
         resume: input.resumeCheckpointId !== undefined,
       });
 
+      // Worker 执行监控（T4）：装配 monitor 使生产路径产生 worker 记录（此前
+      // runWorkflow 未传 monitor，workflow.ts 的 monitor.record 为死路径）；
+      // onRecord 旁路审计落盘（outputPath 从 worker 契约 outputs[0].path 推导）。
+      const workerMonitor = new WorkerMonitor({
+        onRecord: record => {
+          if (provenanceCollector === null) return;
+          const contract = defaultPatentWorkers().find(w => w.name === record.workerName);
+          const outputPath = contract?.outputs?.[0]?.path?.replace(/\{caseId\}/g, input.caseId ?? "");
+          provenanceCollector.recordWorker({ record, outputPath });
+        },
+      });
+
       const result = await runWorkflow(manifest, workflowCtx, executor, {
         handlers: deps.handlers ?? globalStageHandlerRegistry,
         atoms: globalAtomRegistry,
         provider,
         persist: persistTarget ? new JsonFileWorkflowRunStore(persistTarget.runsDir) : undefined,
         runId: persistTarget?.runId,
+        monitor: workerMonitor,
         // 断点续跑：resumeFrom 跳过已完成阶段；checkpointStore 每阶段落盘。
         ...(resumeFrom !== undefined ? { resumeFrom } : {}),
         ...(checkpointDir !== undefined ? { checkpointStore: new JsonFileManifestCheckpointStore(checkpointDir) } : {}),

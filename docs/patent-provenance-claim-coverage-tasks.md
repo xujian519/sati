@@ -28,7 +28,7 @@ T9 RDF 导出：条件触发（出现真实消费方），不排期
 | T1 | 设计 1 存储底座（schema + store + paths） | 无 | 1 天 | ✅ 已落地（9/9 测试绿，typecheck/eslint/biome 绿） |
 | T2 | 全局审批审计库（output_gate 落盘） | T1 | 1–1.5 天 | ✅ 已落地（6/6 测试绿，typecheck/eslint/biome 绿） |
 | T3 | 审批门旁路 + runId 生成 | T1 | 1 天 | ✅ 已落地（6/6 测试绿，typecheck/eslint/biome 绿） |
-| T4 | Worker 执行落盘 | T1 | 0.5–1 天 | ☐ |
+| T4 | Worker 执行落盘 | T1 | 0.5–1 天 | ✅ 已落地（7/7 测试绿，typecheck/eslint/biome 绿） |
 | T5 | 审计导出 + enableProvenance 开关 | T1–T4 | 1 天 | ☐ |
 | T6 | claim-embodiment-mapper 原子 | T0 | 1–1.5 天 | ☐ |
 | T7 | manifest 接入 + draft-spec 联动 + 门禁收尾 | T6 | 1 天 | ☐ |
@@ -129,7 +129,7 @@ T9 RDF 导出：条件触发（出现真实消费方），不排期
 
 ---
 
-## T4：Worker 执行落盘 — 0.5–1 天
+## T4：Worker 执行落盘 — 0.5–1 天 ✅ 已落地（2026-08-20）
 
 **目标**：worker 契约执行留痕（当前生产路径是死点，方案 P4）。
 
