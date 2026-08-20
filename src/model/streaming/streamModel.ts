@@ -102,10 +102,7 @@ export async function complete(request: CanonicalModelRequest, config: ModelConf
     } catch (error) {
       if (attempt < maxRetries && isRetryableRequestError(error)) {
         const delayMs = retryBaseDelay * (attempt + 1);
-        console.warn(
-          `[Sati] complete() retry: ${(error as Error).message} ` +
-            `(attempt ${attempt + 1}/${maxRetries}, delay=${delayMs}ms)`,
-        );
+        warnCompleteRetry(error, attempt, maxRetries, delayMs);
         await delay(delayMs, options.signal);
         continue;
       }
