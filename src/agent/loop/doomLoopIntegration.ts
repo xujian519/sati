@@ -89,7 +89,7 @@ export function observeToolResults(
     const observation: ToolCallObservation = {
       name: call.name,
       args: call.input,
-      result: result ? flattenToolResultText(result) : "",
+      result: result ? truncateObservationText(flattenToolResultText(result)) : "",
     };
     signals.push(...doomLoop.recordToolResult(observation));
   }
@@ -138,4 +138,20 @@ function flattenToolResultText(result: SatiToolResult): string {
     })
     .join("\n")
     .trim();
+}
+
+/**
+ * M2：观测文本上限——完整工具结果副本截为「首 60% + 省略标记 + 尾 40%」，
+ * 防整文件 read_file 等超长结果整份进入 detector（observations 完整文本
+ * 副本原是本批发现的中危卡点）。截断对空结果/重复检测精度无实质影响：
+ * 判定基于工具名 + 结果指纹与首尾片段，中段差异不改变分类。
+ */
+export const DOOMLOOP_OBSERVATION_TEXT_LIMIT = 2048;
+const DOOMLOOP_OBSERVATION_ELLIPSIS = "\n…[truncated]…\n";
+
+export function truncateObservationText(text: string, limit = DOOMLOOP_OBSERVATION_TEXT_LIMIT): string {
+  if (text.length <= limit) return text;
+  const head = Math.floor(limit * 0.6);
+  const tail = Math.max(0, limit - head - DOOMLOOP_OBSERVATION_ELLIPSIS.length);
+  return `${text.slice(0, head)}${DOOMLOOP_OBSERVATION_ELLIPSIS}${text.slice(text.length - tail)}`;
 }

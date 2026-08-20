@@ -93,13 +93,18 @@ test("kg-store: or 模式多词召回（FTS OR 词级匹配）", t => {
   assert.ok(ids.includes("n2"), "or 模式应命中含 三步法 token 的节点");
 });
 
-test("kg-store: or 模式 2 字词 LIKE 兜底", t => {
+test("kg-store: or 模式 2 字词拒绝（<3 rune 守卫，无噪音召回）", t => {
   const store = withStore(t);
+  // 2 字词 FTS trigram 无法匹配（需 ≥3 rune）；LIKE %反悔% 在 21 万行表上全表
+  // 扫描且输出按表行序截断（相关性无保证）——与 1 字词同构，守卫直接拒绝。
   const nodes = store.searchByKeyword("反悔", 10, { mode: "or" });
-  assert.ok(
-    nodes.some(n => n.id === "n3"),
-    "2 字词 FTS token 无法匹配，应 LIKE 子串命中",
-  );
+  assert.equal(nodes.length, 0, "2 字词不得落 LIKE 产生任意召回");
+});
+
+test("kg-store: phrase 模式 2 字词同样受 <3 rune 守卫", t => {
+  const store = withStore(t);
+  const nodes = store.searchByKeyword("反悔");
+  assert.equal(nodes.length, 0, "phrase 2 字查询同受守卫（FTS 与 LIKE 均不可用）");
 });
 
 test("kg-store: or 模式 4-5 字无分隔词窗口子词召回", t => {

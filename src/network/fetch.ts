@@ -1,3 +1,5 @@
+import { computeBackoffDelay } from "../shared/retry/index.js";
+
 export type NetworkErrorCode =
   | "network_timeout"
   | "network_dns_error"
@@ -243,13 +245,9 @@ function shouldRetryStatus(status: number, configured?: readonly number[]): bool
 }
 
 function resolveRetryDelay(attempt: number, retry: NetworkRetryOptions, retryAfterHeader?: string | null): number {
-  const retryAfter = parseRetryAfterHeader(retryAfterHeader);
   const cap = retry.maxDelayMs ?? DEFAULT_MAX_DELAY_MS;
-  if (retryAfter !== undefined) return Math.min(cap, retryAfter);
   const base = retry.baseDelayMs ?? DEFAULT_BASE_DELAY_MS;
-  const exponential = Math.min(cap, base * 2 ** attempt);
-  const jitter = Math.floor(Math.random() * Math.max(1, Math.floor(exponential * 0.25)));
-  return Math.min(cap, exponential + jitter);
+  return computeBackoffDelay(attempt, { baseMs: base, capMs: cap }, parseRetryAfterHeader(retryAfterHeader));
 }
 
 function parseRetryAfterHeader(headerValue: string | null | undefined): number | undefined {

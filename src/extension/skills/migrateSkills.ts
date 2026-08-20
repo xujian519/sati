@@ -1,7 +1,7 @@
 import { access, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { getPilotExtensionPaths } from "../../pilot/paths.js";
+import { getPilotExtensionPaths } from "../../shared/paths/index.js";
 import { SkillManager, SkillManagerError, SkillValidationError } from "./SkillManager.js";
 import type { SkillImportResult, SkillScope, SkillValidationResult } from "./types.js";
 

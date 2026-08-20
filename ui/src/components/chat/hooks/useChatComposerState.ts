@@ -43,6 +43,9 @@ import { isImeEnterEvent } from "../../../utils/ime";
 import { useFileMentions } from "./useFileMentions";
 import { type SlashCommand, useSlashCommands } from "./useSlashCommands";
 
+/** 草稿落盘防抖窗口（ms）：击键停止 500ms 后才写 localStorage。 */
+const DRAFT_SAVE_DEBOUNCE_MS = 500;
+
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
@@ -1110,6 +1113,15 @@ export function useChatComposerState({
     inputValueRef.current = input;
   }, [input]);
 
+  // 未落盘的草稿（防抖窗口内）：卸载/页面卸载前同步 flush。
+  const pendingDraftRef = useRef<{ key: string; value: string } | null>(null);
+  const flushPendingDraft = () => {
+    const pending = pendingDraftRef.current;
+    if (!pending) return;
+    pendingDraftRef.current = null;
+    safeLocalStorage.setItem(pending.key, pending.value);
+  };
+
   useEffect(() => {
     if (!isLoading) {
       if (queuedBusySendRef.current && handleSubmitRef.current) {
@@ -1124,15 +1136,37 @@ export function useChatComposerState({
     }
   }, [isLoading]);
 
+  // 草稿防抖保存：连续击键不落盘（localStorage.setItem 是同步主线程 I/O），
+  // 停顿 DRAFT_SAVE_DEBOUNCE_MS 后写一次。cleanup 只清 timer 不 flush——每次
+  // input 变化（防抖重置）都会跑 cleanup，flush 会把上一版击键立即落盘、
+  // 击穿防抖（回到每击键同步写盘）；flush 只保留给防抖届满（timer 回调）、
+  // 真实卸载与页面卸载（下方两个 effect）。空输入同步删除（低频路径）。
   useEffect(() => {
     const key = activeDraftStorageKeyRef.current;
     if (!key) return;
-    if (input !== "") {
-      safeLocalStorage.setItem(key, input);
-    } else {
+    if (input === "") {
+      pendingDraftRef.current = null;
       safeLocalStorage.removeItem(key);
+      return;
     }
+    pendingDraftRef.current = { key, value: input };
+    const timer = setTimeout(() => {
+      pendingDraftRef.current = null;
+      safeLocalStorage.setItem(key, input);
+    }, DRAFT_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [input]);
+
+  // 组件真实卸载（路由切换/关闭）时 flush 未落盘草稿——empty-deps effect 的
+  // cleanup 只在卸载执行，防抖 effect 的依赖重跑不会触发它。
+  useEffect(() => flushPendingDraft, []);
+
+  // 页面卸载（刷新/关闭）前 flush 未落盘草稿——整页关闭不触发组件卸载 cleanup，
+  // 需 beforeunload 兜底。
+  useEffect(() => {
+    window.addEventListener("beforeunload", flushPendingDraft);
+    return () => window.removeEventListener("beforeunload", flushPendingDraft);
+  }, []);
 
   useEffect(() => {
     const previousKey = activeDraftStorageKeyRef.current;

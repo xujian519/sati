@@ -12,6 +12,7 @@ test("history replay restores structured agent file artifacts", async () => {
   try {
     const sessionKey = "web:s_file_artifacts";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,
@@ -64,6 +65,7 @@ test("history replay hides Agent file artifacts in general conversations", async
   try {
     const sessionKey = "web:s_general_file_artifacts";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot: pilotHome,
       pilotHome,
       sessionId: sessionKey,

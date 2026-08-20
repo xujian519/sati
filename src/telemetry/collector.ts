@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { normalizeProviderBaseUrl } from "../model/normalizeProviderBaseUrl.js";
-import { resolvePilotHome } from "../pilot/paths.js";
+import { resolvePilotHome } from "../shared/paths/index.js";
+import { readBoolEnv, readIntEnv, readNonNegativeIntEnv } from "../shared/env/index.js";
 import { hashTelemetryId, resolveTelemetryRuntimeContext } from "./context.js";
 import { TelemetrySender } from "./sender.js";
 import {
@@ -139,7 +140,7 @@ export function createTelemetryCollector(input: CreateTelemetryCollectorInput = 
 }
 
 function resolveTelemetryConfig(env: Record<string, string | undefined>, pilotHomeOverride?: string): TelemetryConfig {
-  const enabled = parseEnabledFlag(env.ANALYTICS_ENABLED, false);
+  const enabled = readBoolEnv(env.ANALYTICS_ENABLED, false);
   const pilotHome = pilotHomeOverride ?? resolvePilotHome(env);
   const queueFilePath = env.ANALYTICS_QUEUE_FILE
     ? resolve(env.ANALYTICS_QUEUE_FILE)
@@ -148,11 +149,11 @@ function resolveTelemetryConfig(env: Record<string, string | undefined>, pilotHo
   return {
     enabled,
     baseUrl: (env.ANALYTICS_BASE_URL ?? DEFAULT_BASE_URL).trim(),
-    flushIntervalMs: parsePositiveInt(env.ANALYTICS_FLUSH_INTERVAL_MS, 5000),
-    batchSize: parsePositiveInt(env.ANALYTICS_BATCH_SIZE, 20),
-    timeoutMs: parsePositiveInt(env.ANALYTICS_TIMEOUT_MS, 4000),
-    maxRetries: parseNonNegativeInt(env.ANALYTICS_MAX_RETRIES, 3),
-    maxQueueSize: parsePositiveInt(env.ANALYTICS_MAX_QUEUE_SIZE, 2000),
+    flushIntervalMs: readIntEnv(env.ANALYTICS_FLUSH_INTERVAL_MS, 5000),
+    batchSize: readIntEnv(env.ANALYTICS_BATCH_SIZE, 20),
+    timeoutMs: readIntEnv(env.ANALYTICS_TIMEOUT_MS, 4000),
+    maxRetries: readNonNegativeIntEnv(env.ANALYTICS_MAX_RETRIES, 3),
+    maxQueueSize: readIntEnv(env.ANALYTICS_MAX_QUEUE_SIZE, 2000),
     queueFilePath,
   };
 }
@@ -249,24 +250,6 @@ function normalizeErrorCode(error: unknown): string {
     return error.name || "Error";
   }
   return "UnknownError";
-}
-
-function parseEnabledFlag(value: string | undefined, fallback: boolean): boolean {
-  if (value == null) return fallback;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "0" || normalized === "false" || normalized === "off") return false;
-  if (normalized === "1" || normalized === "true" || normalized === "on") return true;
-  return fallback;
-}
-
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function parseNonNegativeInt(value: string | undefined, fallback: number): number {
-  const parsed = Number.parseInt(value ?? "", 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function normalizeModule(value: string): TelemetryModule {

@@ -1,6 +1,6 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { dirname } from "node:path";
-import { getPilotConfigFilePath, resolvePilotHome } from "../paths.js";
+import { getPilotConfigFilePath, resolvePilotHome } from "../../shared/paths/index.js";
 import { classifyConfigChanges, diffConfigSnapshots } from "./classifyChanges.js";
 import { loadPilotConfig } from "./loadPilotConfig.js";
 import {

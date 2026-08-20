@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { getPilotProjectChatDir } from "../../pilot/paths.js";
+import { getPilotProjectChatDir } from "../../shared/paths/index.js";
 import { sanitizeSessionIdForPath } from "../storage/ProjectSessionStorage.js";
 import { readSessionInfo, isInternalSession, type SessionInfo } from "../storage/SessionList.js";
 

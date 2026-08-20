@@ -9,7 +9,7 @@
 
 import { promises as fs } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { resolvePilotHome } from "../../pilot/paths.js";
+import { resolvePilotHome } from "../../shared/paths/index.js";
 
 // ---------------------------------------------------------------------------
 // Constants

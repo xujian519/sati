@@ -2,7 +2,7 @@
  * 测试: src/patent/data/nuo/patentCache — 检索/点查结果缓存（LRU + TTL + 并发合并）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import type { PatentSearchResult, ScrapeResult } from "nuo-patent";
 import {
   AsyncResultCache,
@@ -10,6 +10,7 @@ import {
   cachedSearchPatents,
   isScrapeResultCacheable,
   isSearchResultCacheable,
+  resetPatentCacheSingletons,
   searchCacheKey,
   searchResultTtlMs,
 } from "../../../../src/patent/data/nuo/patentCache.js";
@@ -178,6 +179,11 @@ describe("isSearchResultCacheable / isScrapeResultCacheable", () => {
 });
 
 describe("cachedSearchPatents / cachedScrapePatent", () => {
+  // 无 options 调用共享进程级缓存单例（跨用例同 key 可能互串），每个用例前清空。
+  beforeEach(() => {
+    resetPatentCacheSingletons();
+  });
+
   it("同一检索式 TTL 内只打一次底层", async () => {
     let calls = 0;
     const impl = async () => {
@@ -241,6 +247,51 @@ describe("cachedSearchPatents / cachedScrapePatent", () => {
     await wrapped("US11452699B2");
     await wrapped("US11452699B2");
     assert.equal(calls, 1);
+  });
+
+  it("#11: 不同 impl 共享缓存互不污染（同一业务 key 各自打底层）", async () => {
+    let callsA = 0;
+    let callsB = 0;
+    const implA = async () => {
+      callsA += 1;
+      return makeSearchResult({ query: "thermal" });
+    };
+    const implB = async () => {
+      callsB += 1;
+      return makeSearchResult({ query: "thermal", total: 999 });
+    };
+    const wrappedA = cachedSearchPatents(implA);
+    const wrappedB = cachedSearchPatents(implB);
+    // 同一检索式先由 A 缓存
+    await wrappedA("thermal");
+    await wrappedA("thermal");
+    assert.equal(callsA, 1, "同一 impl 内 TTL 命中（共享缓存语义保持）");
+    // B 用同一业务 key：不得命中 A 的缓存（不同 impl 结果可能不同）
+    await wrappedB("thermal");
+    assert.equal(callsB, 1, "B 第一次调用不得命中 A 的缓存（互不污染）");
+    await wrappedB("thermal");
+    assert.equal(callsB, 1, "B 自己的缓存命中（TTL 内）");
+    // A 的缓存不受 B 影响
+    await wrappedA("thermal");
+    assert.equal(callsA, 1, "A 的缓存仍命中");
+  });
+
+  it("#11: 同一 impl 函数引用跨包装调用共享缓存（registry 重建语义）", async () => {
+    let calls = 0;
+    const impl = async () => {
+      calls += 1;
+      return makeSearchResult();
+    };
+    // 模拟 registry 重建：同一 impl 重新包装两次
+    const first = cachedSearchPatents(impl);
+    await first("thermal");
+    const second = cachedSearchPatents(impl);
+    await second("thermal");
+    assert.equal(calls, 1, "同一 impl 跨重建应共享缓存（M9：不重新 spawn 浏览器）");
+    // reset 后失效
+    resetPatentCacheSingletons();
+    await second("thermal");
+    assert.equal(calls, 2, "reset 后缓存失效");
   });
 });
 

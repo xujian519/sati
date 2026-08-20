@@ -51,10 +51,89 @@ export function emptyChunkMatrix(dimensions: number): Int8ChunkMatrix {
   };
 }
 
+/** 分页加载的跨页累计状态（ingestChunkPage 的收集桶）。 */
+type ChunkLoadState = {
+  docOffsets: Map<string, { start: number; end: number }>;
+  chunkBuffers: Int8Array[];
+  norms: number[];
+  maxAbs: number[];
+  currentDocId: string | null;
+  currentStart: number;
+  index: number;
+};
+
+/** 初始化分页累计状态。 */
+function createChunkLoadState(): ChunkLoadState {
+  return {
+    docOffsets: new Map(),
+    chunkBuffers: [],
+    norms: [],
+    maxAbs: [],
+    currentDocId: null,
+    currentStart: 0,
+    index: 0,
+  };
+}
+
 /**
- * 键集分页加载：按 (document_id, chunk_id) 有序扫描（WHERE (document_id, chunk_id) >
+ * 消化一页行（sync/async 加载共用）：decode 量化、预计算范数与 Hölder maxAbs、
+ * 按文档折叠 [start, end) 区间。返回页末行供游标推进。
+ */
+function ingestChunkPage(rows: ChunkRow[], decode: (raw: Uint8Array) => Int8Array, state: ChunkLoadState): ChunkRow {
+  for (const row of rows) {
+    const chunk = decode(row.vector);
+    state.chunkBuffers.push(chunk);
+    state.norms.push(l2Norm(chunk));
+    // Hölder 上界剪枝预计算：每 chunk 的 max|v|（int8 域 ≤127）。
+    let chunkMaxAbs = 0;
+    for (let i = 0; i < chunk.length; i += 1) {
+      const a = Math.abs(chunk[i] ?? 0);
+      if (a > chunkMaxAbs) chunkMaxAbs = a;
+    }
+    state.maxAbs.push(chunkMaxAbs);
+    if (row.document_id !== state.currentDocId) {
+      if (state.currentDocId !== null) {
+        state.docOffsets.set(state.currentDocId, { start: state.currentStart, end: state.index });
+      }
+      state.currentDocId = row.document_id;
+      state.currentStart = state.index;
+    }
+    state.index += 1;
+  }
+  return rows[rows.length - 1]!;
+}
+
+/** 分页结束收尾：平铺大数组 + onLoaded 打点 + 组装矩阵。 */
+function finalizeChunkMatrix(
+  state: ChunkLoadState,
+  dimensions: number,
+  onLoaded?: (docCount: number, chunkCount: number) => void,
+): Int8ChunkMatrix {
+  if (state.currentDocId !== null) {
+    state.docOffsets.set(state.currentDocId, { start: state.currentStart, end: state.index });
+  }
+
+  const vectors = new Int8Array(state.chunkBuffers.length * dimensions);
+  for (let i = 0; i < state.chunkBuffers.length; i += 1) {
+    vectors.set(state.chunkBuffers[i]!, i * dimensions);
+  }
+
+  onLoaded?.(state.docOffsets.size, state.index);
+  return {
+    dimensions,
+    docOffsets: state.docOffsets,
+    vectors,
+    norms: Float32Array.from(state.norms),
+    maxAbs: Int8Array.from(state.maxAbs),
+    chunkCount: state.index,
+  };
+}
+
+/**
+ * 键集分页加载（同步）：按 (document_id, chunk_id) 有序扫描（WHERE (document_id, chunk_id) >
  * (?, ?) 走主键/索引前缀，避免 OFFSET 分页在大偏移下重复扫描前序行），按文档折叠
  * [start, end) 区间。向量经 decode 转为 int8 后平铺进大数组，同时预计算每 chunk 范数。
+ * 全程阻塞事件循环（首次加载 144K chunk 可达秒级）——异步不阻塞版本见 loadChunkMatrixAsync。
  */
 export function loadChunkMatrix(
   source: ChunkPageSource,
@@ -62,42 +141,14 @@ export function loadChunkMatrix(
   decode: (raw: Uint8Array) => Int8Array,
   onLoaded?: (docCount: number, chunkCount: number) => void,
 ): Int8ChunkMatrix {
-  const docOffsets = new Map<string, { start: number; end: number }>();
-  const chunkBuffers: Int8Array[] = [];
-  const norms: number[] = [];
-  const maxAbs: number[] = [];
-
-  let currentDocId: string | null = null;
-  let currentStart = 0;
-  let index = 0;
-
+  const state = createChunkLoadState();
   let cursorDocId: string | undefined;
   let cursorChunkId = 0;
   while (true) {
     const rows =
       cursorDocId === undefined ? source.pageFirst(PAGE_SIZE) : source.pageNext(cursorDocId, cursorChunkId, PAGE_SIZE);
     if (rows.length === 0) break;
-    for (const row of rows) {
-      const chunk = decode(row.vector);
-      chunkBuffers.push(chunk);
-      norms.push(l2Norm(chunk));
-      // Hölder 上界剪枝预计算：每 chunk 的 max|v|（int8 域 ≤127）。
-      let chunkMaxAbs = 0;
-      for (let i = 0; i < chunk.length; i += 1) {
-        const a = Math.abs(chunk[i] ?? 0);
-        if (a > chunkMaxAbs) chunkMaxAbs = a;
-      }
-      maxAbs.push(chunkMaxAbs);
-      if (row.document_id !== currentDocId) {
-        if (currentDocId !== null) {
-          docOffsets.set(currentDocId, { start: currentStart, end: index });
-        }
-        currentDocId = row.document_id;
-        currentStart = index;
-      }
-      index += 1;
-    }
-    const last = rows[rows.length - 1]!;
+    const last = ingestChunkPage(rows, decode, state);
     // 防御：游标必须严格前进，否则（如分页源列名与 ChunkRow 契约不符）会无限循环
     // 读到同一页直至进程 abort——此处显式失败便于快速定位调用方。
     if (last.document_id === cursorDocId && last.chunk_id === cursorChunkId) {
@@ -106,24 +157,37 @@ export function loadChunkMatrix(
     cursorDocId = last.document_id;
     cursorChunkId = last.chunk_id;
   }
-  if (currentDocId !== null) {
-    docOffsets.set(currentDocId, { start: currentStart, end: index });
-  }
+  return finalizeChunkMatrix(state, dimensions, onLoaded);
+}
 
-  const vectors = new Int8Array(chunkBuffers.length * dimensions);
-  for (let i = 0; i < chunkBuffers.length; i += 1) {
-    vectors.set(chunkBuffers[i]!, i * dimensions);
+/**
+ * 键集分页加载（异步，P4 向量预热）：与 loadChunkMatrix 相同语义，但每页之间
+ * await setImmediate 让出事件循环——144K chunk 分 29 页加载期间不阻塞启动/其他
+ * 请求，每页处理 ~5ms 的 CPU 片段保持事件循环响应。结果与同步路径逐字节一致。
+ */
+export async function loadChunkMatrixAsync(
+  source: ChunkPageSource,
+  dimensions: number,
+  decode: (raw: Uint8Array) => Int8Array,
+  onLoaded?: (docCount: number, chunkCount: number) => void,
+): Promise<Int8ChunkMatrix> {
+  const state = createChunkLoadState();
+  let cursorDocId: string | undefined;
+  let cursorChunkId = 0;
+  while (true) {
+    // 让出点：每页处理前归还事件循环（setImmediate 保证在 I/O 回调之后）。
+    await new Promise<void>(resolve => setImmediate(resolve));
+    const rows =
+      cursorDocId === undefined ? source.pageFirst(PAGE_SIZE) : source.pageNext(cursorDocId, cursorChunkId, PAGE_SIZE);
+    if (rows.length === 0) break;
+    const last = ingestChunkPage(rows, decode, state);
+    if (last.document_id === cursorDocId && last.chunk_id === cursorChunkId) {
+      throw new Error("int8-matrix-search: 键集分页游标未前进，分页源未按 (document_id, chunk_id) 有序返回");
+    }
+    cursorDocId = last.document_id;
+    cursorChunkId = last.chunk_id;
   }
-
-  onLoaded?.(docOffsets.size, index);
-  return {
-    dimensions,
-    docOffsets,
-    vectors,
-    norms: Float32Array.from(norms),
-    maxAbs: Int8Array.from(maxAbs),
-    chunkCount: index,
-  };
+  return finalizeChunkMatrix(state, dimensions, onLoaded);
 }
 
 /**

@@ -1,5 +1,6 @@
 import { normalizeModelError } from "../errors/normalizeModelError.js";
 import { brandEnv, ENV_KEY } from "../../env.js";
+import { readDurationEnvMs } from "../../shared/env/index.js";
 import { createGoogleClient, type GoogleClientFactory } from "../providers/google/client.js";
 import { parseGoogleResponse } from "../providers/google/response.js";
 import type { GoogleRequestBody } from "../providers/google/request.js";
@@ -19,6 +20,7 @@ import { createGoogleStreamState, normalizeGoogleStreamEvent } from "../provider
 import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
 import { buildProviderChatEndpointCandidates, isExpectedProviderResponseShape } from "../providerEndpoint.js";
 import { NetworkFetchError, networkFetch } from "../../network/fetch.js";
+import { computeBackoffDelay } from "../../shared/retry/index.js";
 import { createRetryId } from "./retryState.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 // 流式 HTTP 传输常量单一来源（proxy 的 Undici 池共享，避免双源漂移）。
@@ -65,8 +67,8 @@ export const LITELLM_HTTP_SO_KEEPALIVE = false;
 export const LITELLM_HTTP_TCP_KEEPIDLE_SECONDS = 60;
 export const LITELLM_HTTP_TCP_KEEPINTVL_SECONDS = 30;
 export const LITELLM_HTTP_TCP_KEEPCNT = 5;
-export const LITELLM_STREAM_MAX_DURATION_MS: number | undefined = readOptionalPositiveEnvMs(
-  "LITELLM_MAX_STREAMING_DURATION_SECONDS",
+export const LITELLM_STREAM_MAX_DURATION_MS: number | undefined = readDurationEnvMs(
+  process.env.LITELLM_MAX_STREAMING_DURATION_SECONDS,
   1000,
 );
 
@@ -619,16 +621,14 @@ function isRetryableStreamError(error: unknown): boolean {
 }
 
 function calculateRetryDelay(provider: ProviderConfig, attempt: number, retryAfterMs?: number): number {
-  if (retryAfterMs !== undefined) {
-    const maxDelayMs = provider.retry?.maxDelayMs ?? LITELLM_MAX_RETRY_DELAY_MS;
-    return Math.min(retryAfterMs, maxDelayMs);
-  }
   const baseDelayMs = provider.retry?.baseDelayMs ?? LITELLM_INITIAL_RETRY_DELAY_MS;
   const maxDelayMs = provider.retry?.maxDelayMs ?? LITELLM_MAX_RETRY_DELAY_MS;
   const jitter = provider.retry?.jitter ?? LITELLM_RETRY_JITTER;
-  const deterministicDelay = baseDelayMs * (attempt + 1);
-  const jitterDelay = deterministicDelay * jitter * Math.random();
-  return Math.min(deterministicDelay + jitterDelay, maxDelayMs);
+  return computeBackoffDelay(
+    attempt,
+    { baseMs: baseDelayMs, capMs: maxDelayMs, growth: "linear", jitterRatio: jitter },
+    retryAfterMs,
+  );
 }
 
 function retryAfterMsForError(error: unknown): number | undefined {
@@ -1062,18 +1062,6 @@ export function resolveStreamIdleTimeout(provider: ProviderConfig, options?: Mod
     return retry.streamIdleTimeoutMs;
   }
   return DEFAULT_STREAM_IDLE_TIMEOUT_MS;
-}
-
-function readOptionalPositiveEnvMs(name: string, multiplier: number): number | undefined {
-  const raw = process.env[name];
-  if (raw === undefined || raw.trim() === "") {
-    return undefined;
-  }
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    return undefined;
-  }
-  return value * multiplier;
 }
 
 function throwIfAborted(signal?: AbortSignal): void {

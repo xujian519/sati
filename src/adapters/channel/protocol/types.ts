@@ -7,6 +7,8 @@ export type ChannelLogger = {
   info?(message: string, metadata?: Record<string, unknown>): void;
   warn?(message: string, metadata?: Record<string, unknown>): void;
   error?(message: string, metadata?: Record<string, unknown>): void;
+  /** 降噪级（连续失败等高频重复日志，实现方可静默丢弃）。 */
+  debug?(message: string, metadata?: Record<string, unknown>): void;
 };
 
 export type ChannelStartDeps = {

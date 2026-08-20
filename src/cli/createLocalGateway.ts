@@ -3,6 +3,7 @@ import { dirname, resolve, join as joinPath } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import { brandEnv, ENV_KEY } from "../env.js";
+import { parsePositiveInt } from "../shared/env/index.js";
 import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
 import type { PilotConfigDiagnostic } from "../pilot/config/types.js";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
@@ -772,6 +773,8 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       router?.shutdown();
       stopConfigWatching();
       stopExtensionWatching();
+      // M4：路由事件缓冲同步收尾（250ms 定时器已 unref，退出前 flush 防尾部丢失）
+      registry.routerEventBus?.flush?.();
       if (ownsTelemetry) {
         void telemetry.shutdown();
       }
@@ -873,10 +876,16 @@ type ProjectRuntime = {
 
 const DEFAULT_BROWSER_ACTION_TIMEOUT_MS = 30_000;
 const DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS = 90_000;
+/** M5：任务续算扫描启动延时——避开启动期 transcript 读盘竞争。 */
+const TASK_RESUME_SCAN_DELAY_MS = 3_000;
+/** M4：路由事件审计落盘批量 flush 间隔（unref，不持 event loop）。 */
+const ROUTER_EVENT_FLUSH_INTERVAL_MS = 250;
 
 class ProjectRuntimeRegistry {
   private readonly runtimes = new Map<string, ProjectRuntime>();
   private gateway?: InProcessGateway;
+  /** M4：路由事件审计总线（resolve 时创建，createLocalGateway dispose 经此 flush 缓冲）。 */
+  routerEventBus: RouterEventBus | null = null;
   /**
    * Per-session live permission rules used when no `sessionOverrides`
    * entry exists. Same array reference is handed to:
@@ -982,13 +991,36 @@ class ProjectRuntimeRegistry {
     } catch {
       /* best-effort migration */
     }
+    // M4：逐事件 appendFileSync 改缓冲 + 250ms 批量 flush。events.jsonl 仅供
+    // 人工审计（bootstrap-sati-config 注释），无程序化消费/重建路径——尾部
+    // 丢失可接受；flush timer unref 不持 event loop，dispose 时同步 flush 收尾。
+    const pendingEvents: RouterEvent[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushPendingEvents = () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      if (pendingEvents.length === 0) return;
+      const batch = pendingEvents.splice(0, pendingEvents.length);
+      try {
+        appendFileSync(eventsPath, batch.map(event => JSON.stringify(event)).join("\n") + "\n");
+      } catch {
+        /* best-effort, never crash the agent loop */
+      }
+    };
+    const scheduleFlush = () => {
+      if (flushTimer !== null) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        flushPendingEvents();
+      }, ROUTER_EVENT_FLUSH_INTERVAL_MS);
+      flushTimer.unref?.();
+    };
     return {
       emit: (event: RouterEvent) => {
-        try {
-          appendFileSync(eventsPath, JSON.stringify(event) + "\n");
-        } catch {
-          /* best-effort, never crash the agent loop */
-        }
+        pendingEvents.push(event);
+        scheduleFlush();
         if (event.type === "sati_router_retry_progress") {
           try {
             this.gateway?.broadcastRetryProgress(event);
@@ -1019,6 +1051,7 @@ class ProjectRuntimeRegistry {
           }
         }
       },
+      flush: flushPendingEvents,
     };
   }
 
@@ -1156,7 +1189,7 @@ class ProjectRuntimeRegistry {
       now: this.options.now,
       customRouterRegistry: pluginRuntime,
       loadSkillPrompt: extensionId => pluginRuntime.loadSkillPrompt(extensionId),
-      events: this.buildRouterEventBus(),
+      events: (this.routerEventBus = this.buildRouterEventBus()),
       telemetry: this.options.telemetry,
     });
     const backgroundTasks = new BackgroundTaskRuntime({
@@ -1285,6 +1318,13 @@ class ProjectRuntimeRegistry {
           logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
         });
         setCaseLawSemanticSource(createCaseLawSemanticSource(texts => embeddingClient!.embed(texts), caseEmbeddings));
+        // P4 向量预热：异步分页加载（每页 setImmediate 让出）不阻塞 gateway 启动，
+        // 因此 setTimeout 0 即安全——首个语义检索前矩阵大概率已就绪（ready），
+        // 未就绪时 search 也会返回 [] 并兜底触发预热，不产生 embed 浪费
+        // （case-law searchSemantic 未 ready 跳过语义路）。
+        setTimeout(() => {
+          void caseEmbeddings.loadAsync();
+        }, 0);
       } catch (error) {
         console.warn("[sati] knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
       }
@@ -1497,6 +1537,9 @@ class ProjectRuntimeRegistry {
    * 续算 = 以新 turn 提交（RESUME_TURN_MESSAGE）；gateway 内部 createSession
    * 会 resume 会话（旧开放 turn 由 resumeAgentSession 合成 interrupted 收尾），
    * 新 turn 基于 transcript 重建的上下文继续，任务自动续算到完成。
+   *
+   * M5：扫描延时 3s 启动——避开启动期 transcript 全量读竞争（会话恢复/列表
+   * 首屏），延后到事件循环空闲后再触发。
    */
   runTaskResumeScan(): void {
     const enabled = brandEnv(this.options.env, ENV_KEY.TASK_RESUME_ENABLED) !== "0";
@@ -1520,17 +1563,19 @@ class ProjectRuntimeRegistry {
       },
       hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
     });
-    void scanner
-      .scan()
-      .then(result => {
-        if (result.resumed > 0) {
-          console.log(
-            `[sati] Task resume: scanned=${result.scanned}, resumed=${result.resumed}, ` +
-              `skippedPartial=${result.skippedPartial}, skippedApprovals=${result.skippedApprovals}`,
-          );
-        }
-      })
-      .catch(() => undefined);
+    setTimeout(() => {
+      void scanner
+        .scan()
+        .then(result => {
+          if (result.resumed > 0) {
+            console.log(
+              `[sati] Task resume: scanned=${result.scanned}, resumed=${result.resumed}, ` +
+                `skippedPartial=${result.skippedPartial}, skippedApprovals=${result.skippedApprovals}`,
+            );
+          }
+        })
+        .catch(() => undefined);
+    }, TASK_RESUME_SCAN_DELAY_MS);
   }
 
   async recreateSession(context: GatewaySessionContext, previousSession: AgentSession) {
@@ -1871,6 +1916,9 @@ class ProjectRuntimeRegistry {
               handle.writer.recordAcceptedInput(sessionId, turnId, messages),
             recordDurableMessage: (sessionId, turnId, message) =>
               handle.writer.recordDurableMessage(sessionId, turnId, message),
+            // 子代理收尾时排空 sidechain 写缓冲：sidechain 无 turn_result 强制
+            // flush，仅靠 50ms 兜底定时器（unref）——进程在间隔内退出丢尾条。
+            flush: () => handle.writer.flushCheckpoint(),
             transcriptRelativePath: storage.transcript.relativeSubagentPath(subagentId),
           };
         },
@@ -2059,7 +2107,7 @@ class ProjectRuntimeRegistry {
       maxContextTokens = agent.maxContextTokens;
     }
     maxOutputTokens =
-      readPositiveIntegerEnv(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ??
+      parsePositiveInt(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ??
       agent.maxOutputTokens ??
       maxOutputTokens;
     const subagentModel = agent.subagents?.default;
@@ -2092,8 +2140,7 @@ class ProjectRuntimeRegistry {
         ...(subagentMaxOutputTokens !== undefined
           ? {
               maxOutputTokens:
-                readPositiveIntegerEnv(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ??
-                subagentMaxOutputTokens,
+                parsePositiveInt(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ?? subagentMaxOutputTokens,
             }
           : {}),
       };
@@ -2258,13 +2305,6 @@ function buildDefaultAutoOrchestrate() {
   };
 }
 
-function readPositiveIntegerEnv(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number.parseInt(value.trim(), 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
-  return Math.floor(parsed);
-}
-
 export function buildBrowserUseArgs(
   baseArgs: string[],
   outputDir: string,
@@ -2277,8 +2317,8 @@ export function buildBrowserUseArgs(
     args,
     "--timeout-action",
     String(
-      readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_ACTION_MS)) ??
-        readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_ACTION_TIMEOUT_MS)) ??
+      parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_ACTION_MS)) ??
+        parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_ACTION_TIMEOUT_MS)) ??
         DEFAULT_BROWSER_ACTION_TIMEOUT_MS,
     ),
   );
@@ -2286,8 +2326,8 @@ export function buildBrowserUseArgs(
     args,
     "--timeout-navigation",
     String(
-      readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_NAVIGATION_MS)) ??
-        readPositiveIntegerEnv(brandEnv(env, ENV_KEY.BROWSER_NAVIGATION_TIMEOUT_MS)) ??
+      parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_NAVIGATION_MS)) ??
+        parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_NAVIGATION_TIMEOUT_MS)) ??
         DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS,
     ),
   );

@@ -21,6 +21,7 @@ import { accessSync, constants as fsConstants, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { NodeShellCommandRunner, type SatiCommandRunner } from "../../../tool/builtin/bash/commandRunner.js";
+import { truncateUtf8 } from "../../../tool/protocol/result.js";
 
 const DEFAULT_COMMAND_NAME = "ego-browser";
 const DEFAULT_TIMEOUT_MS = 90_000;
@@ -232,8 +233,12 @@ export class EgoBrowserSession {
     return candidates.some(isExecutableFile);
   }
 
+  /** 合并输出按 maxOutputBytes 字节截断（#25 复用 tool 层 truncateUtf8：UTF-8
+   * 字节安全，避免 CJK 下按字符截断实际超 3 倍字节预算——字段名本义即字节）。 */
   private truncate(text: string): string {
-    return text.length > this.maxOutputBytes ? `${text.slice(0, this.maxOutputBytes)}…\n[output truncated]` : text;
+    return Buffer.byteLength(text, "utf8") > this.maxOutputBytes
+      ? `${truncateUtf8(text, this.maxOutputBytes)}…\n[output truncated]`
+      : text;
   }
 }
 

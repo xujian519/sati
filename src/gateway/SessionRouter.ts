@@ -1,4 +1,5 @@
 import type { AgentSession } from "../agent/index.js";
+import type { CanonicalMessage } from "../model/protocol/canonical.js";
 import type { GatewaySessionInfo, ListSessionsInput, ListSessionsResult } from "./protocol/types.js";
 
 export type GatewaySessionContext = {
@@ -165,9 +166,7 @@ export class SessionRouter {
         return {
           sessionId: snapshot.sessionId,
           sessionKey,
-          summary:
-            snapshot.messages.flatMap(message => message.content).find(block => block.type === "text")?.text ??
-            sessionKey,
+          summary: firstTextSummary(snapshot.messages) ?? sessionKey,
           lastModified: record.lastUsedAt,
         };
       }),
@@ -248,6 +247,18 @@ export class SessionRouter {
   private nowMs(): number {
     return this.now().getTime();
   }
+}
+
+/**
+ * 会话摘要 = 首条 text 消息。早停扫描：不展开全部 content 块（原 flatMap().find()
+ * 会先物化全部消息的 content 数组，长会话 O(总块数)）。首条消息通常即文本 → O(1)。
+ */
+function firstTextSummary(messages: CanonicalMessage[]): string | undefined {
+  for (const message of messages) {
+    const text = message.content.find(block => block.type === "text")?.text;
+    if (text !== undefined) return text;
+  }
+  return undefined;
 }
 
 function snapshotEvictedSession(sessionKey: string, record: SessionRecord): SessionEvictionSnapshot {

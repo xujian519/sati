@@ -180,6 +180,14 @@ export class LegalMemoryProvider implements MemoryResolver {
     const hasKnowledge = knowledgeEmbeddings?.available === true;
     const hasLegacy = vectorDb?.hasCorpus("law") === true;
     if (!hasKnowledge && !hasLegacy) return [];
+    // #9c ready 门（P4 异步预热）：knowledge 路矩阵未加载时跳过——embed 结果
+    // 对空矩阵毫无意义（一次浪费的 embed API 调用）；同时经 tryWarm 保持预热
+    // 通道（单飞 + 失败 backoff 冷却），矩阵就绪后语义路自动恢复，不永久关闭。
+    const readyKnowledge = hasKnowledge && knowledgeEmbeddings.ready === true;
+    if (hasKnowledge && !readyKnowledge) {
+      knowledgeEmbeddings.tryWarm();
+    }
+    if (!readyKnowledge && !hasLegacy) return [];
     return guarded(
       this.semanticBreaker,
       [],
@@ -190,7 +198,7 @@ export class LegalMemoryProvider implements MemoryResolver {
         const queryVec = Float32Array.from(queryVector);
         // 优先 knowledge.db embeddings（复用 XiaoNuo 产物，docTypes=law_article）。
         let ids: string[];
-        if (hasKnowledge && knowledgeEmbeddings) {
+        if (readyKnowledge && knowledgeEmbeddings) {
           ids = knowledgeEmbeddings.search(queryVec, this.limit * 2).map(hit => hit.docId);
         } else if (vectorDb) {
           ids = vectorDb.search("law", queryVec, this.limit * 2).map(hit => hit.docId);

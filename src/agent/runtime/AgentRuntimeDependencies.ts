@@ -79,6 +79,12 @@ export type AgentSubagentTranscriptHooks = {
       metadata?: Record<string, unknown>,
     ): Promise<void>;
     recordDurableMessage(sessionId: string, turnId: string, message: CanonicalMessage): Promise<void>;
+    /**
+     * 可选：子代理收尾时排空 sidechain 写缓冲（sidechain 无 turn_result /
+     * flushCheckpoint 调用点，仅靠 50ms 兜底定时器——进程在间隔内退出会丢
+     * 尾条）。agent loop 在 subagent run 收尾后调用（成功/失败两路）。
+     */
+    flush?(): Promise<void>;
     transcriptRelativePath: string;
   };
 };

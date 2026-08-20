@@ -12,6 +12,7 @@ test("web history shows original transcript while hiding compact replacement mes
   try {
     const sessionKey = "web:s_compact_replay";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,

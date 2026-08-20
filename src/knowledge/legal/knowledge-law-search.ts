@@ -18,6 +18,7 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { openKnowledgeDb } from "../shared/db-version.js";
 import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
+import { prepareCached } from "../../shared/sqlite.js";
 import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms, sqliteHasFts5 } from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
@@ -71,6 +72,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   /** 按 (document_id, chunk_index) 取命中 chunk（FTS 延迟解压回源，保持"命中 chunk"语义）。 */
   private readonly stmtGetChunkAt: StatementSync;
   private readonly stmtCount: StatementSync;
+  /** 动态 SQL（带过滤组合）prepare 缓存：同形状 SQL 复用 StatementSync。 */
+  private readonly preparedCache = new Map<string, StatementSync>();
 
   constructor(dbPath: string, options: KnowledgeLawSearchOptions2 = {}) {
     this.logger = options.logger;
@@ -241,6 +244,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   }
 
   close(): void {
+    this.preparedCache.clear();
     this.db.close();
   }
 
@@ -284,7 +288,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       WHERE docs_fts MATCH ? AND d.doc_type = 'law_article' AND d.level = ?
       ORDER BY bm25(docs_fts) LIMIT ?
     `;
-    return this.db.prepare(sql).all(match, options.level, limit) as DocChunkRow[];
+    return prepareCached(this.preparedCache, this.db, sql).all(match, options.level, limit) as DocChunkRow[];
   }
 
   private searchLike(keyword: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
@@ -310,7 +314,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     }
     sql += " ORDER BY d.char_count DESC LIMIT ?";
     params.push(limit);
-    return this.db.prepare(sql).all(...params) as DocChunkRow[];
+    return prepareCached(this.preparedCache, this.db, sql).all(...params) as DocChunkRow[];
   }
 
   /** 按文档去重（一文档一行，保留 bm25 最优 chunk——排序后首个出现的行）。 */

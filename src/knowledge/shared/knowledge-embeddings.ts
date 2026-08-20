@@ -23,7 +23,15 @@ import { DatabaseSync } from "node:sqlite";
 import { quantizeInt8 } from "../../context/vector/cosine.js";
 import { openKnowledgeDb } from "./db-version.js";
 import { KNOWLEDGE_DB } from "./schema-versions.js";
-import { loadChunkMatrix, searchChunkMatrix, type ChunkRow, type Int8ChunkMatrix } from "./int8-matrix-search.js";
+import {
+  emptyChunkMatrix,
+  loadChunkMatrix,
+  loadChunkMatrixAsync,
+  searchChunkMatrix,
+  type ChunkPageSource,
+  type ChunkRow,
+  type Int8ChunkMatrix,
+} from "./int8-matrix-search.js";
 
 export type KnowledgeEmbeddingHit = {
   /** documents.id（如 "raw:无效复审决定:..." / "wiki:..." / "law:..."）。 */
@@ -37,6 +45,12 @@ export type KnowledgeEmbeddingSearchOptions = {
   logger?: { warn?: (...args: unknown[]) => void };
   /** 可选 doc_type 白名单（如 ["case","judgment"] / ["law_article"]）；缺省全部。 */
   docTypes?: string[];
+  /**
+   * 同步加载开关（默认 false=异步预热）。注入 true 或环境变量
+   * SATI_EMBEDDINGS_SYNC_LOAD=1 时回滚旧行为：首次 search 同步阻塞加载
+   * （144K chunk 量化实测 1-5s 事件循环阻塞）。测试用。
+   */
+  syncLoad?: boolean;
 };
 
 // 进程级共享矩阵缓存：同一 dbPath+docTypes 的 int8 量化矩阵只加载一次。
@@ -51,6 +65,12 @@ const matrixCache = new Map<string, Int8ChunkMatrix>();
 // 多个历史项目逐一 list_sessions）都会对 144069 行 embeddings 表做全表
 // COUNT 扫描，8 个项目即 16 次全表扫描，显著拖慢启动。
 const instanceCache = new Map<string, KnowledgeEmbeddingSearch>();
+
+// 预热失败重试冷却（#9a）：持续故障下避免每次语义查询都触发一次全量加载
+// 尝试（144K chunk 分页加载，1-5s 事件循环占用）——失败后进入冷却期，
+// tryWarm 在冷却期内不再触发；冷却期满后下一条语义查询自然重试（按查询
+// 重试），预热通道不因一次失败而永久关闭，也不打爆事件循环。
+const RETRY_BACKOFF_MS = 30_000;
 
 /** 工厂：同 dbPath+docTypes 复用已构造实例（构造期全表 COUNT 只做一次）。 */
 export function createKnowledgeEmbeddingSearch(options: KnowledgeEmbeddingSearchOptions): KnowledgeEmbeddingSearch {
@@ -76,7 +96,13 @@ export class KnowledgeEmbeddingSearch {
   private readonly joinSql: string;
   private readonly filterSql: string;
   private readonly filterParams: string[];
+  /** 同步加载开关（env SATI_EMBEDDINGS_SYNC_LOAD=1 或构造注入 true 回滚旧行为）。 */
+  private readonly syncLoad: boolean;
   private data?: Int8ChunkMatrix;
+  /** 异步预热单飞 promise（并发预热只触发一次；失败重置可重试）。 */
+  private loadingPromise?: Promise<Int8ChunkMatrix>;
+  /** 最近一次预热失败时间戳（backoff：冷却期内 tryWarm 不触发新加载尝试）。 */
+  private lastLoadFailureAt = 0;
 
   constructor(options: KnowledgeEmbeddingSearchOptions) {
     const opened = openKnowledgeDb(options.dbPath, KNOWLEDGE_DB, { readOnly: true });
@@ -84,6 +110,7 @@ export class KnowledgeEmbeddingSearch {
     this.logger = options.logger;
     this.docTypes = options.docTypes;
     this.dbPath = options.dbPath;
+    this.syncLoad = options.syncLoad ?? process.env.SATI_EMBEDDINGS_SYNC_LOAD === "1";
 
     const filterList = this.docTypes && this.docTypes.length > 0 ? this.docTypes : undefined;
     this.joinSql = filterList ? " JOIN documents d ON d.id = e.document_id" : "";
@@ -113,19 +140,50 @@ export class KnowledgeEmbeddingSearch {
     return this.data?.chunkCount ?? 0;
   }
 
-  /** 生效的 doc_type 过滤（诊断用）。 */
-  docTypeFilter(): string[] | undefined {
-    return this.docTypes;
+  /**
+   * 语义矩阵是否已加载完成（异步预热未完成时为 false）。未 ready 时
+   * search 返回空数组并触发后台预热；调用方可用此 getter 提前跳过语义路
+   * （省 embed API 调用），关键词路不受影响。
+   */
+  get ready(): boolean {
+    return this.data !== undefined;
   }
 
   /**
    * 语义 top-k：queryVector（float）与已加载 chunk 求 int8 余弦，
    * 文档得分 = 其 chunk 最高余弦。无数据、维度不匹配或查询过短返回空数组。
+   * 异步默认下矩阵未加载时返回 [] 并触发后台预热（首次语义查询让位预热，
+   * 后续查询立即命中；SATI_EMBEDDINGS_SYNC_LOAD=1 回滚同步阻塞加载）。
    */
   search(queryVector: Float32Array, limit: number): KnowledgeEmbeddingHit[] {
     if (!this.available || limit <= 0) return [];
     if (queryVector.length !== this.dimensions) return [];
-    return searchChunkMatrix(this.load(), queryVector, limit);
+    if (this.syncLoad) {
+      return searchChunkMatrix(this.loadSync(), queryVector, limit);
+    }
+    if (!this.data) {
+      this.tryWarm();
+      return [];
+    }
+    return searchChunkMatrix(this.data, queryVector, limit);
+  }
+
+  /**
+   * 未 ready 时按 backoff 触发后台预热（#9a/#9b）。已加载或加载进行中返回
+   * true；最近一次失败后冷却期内返回 false（不触发——防重试风暴）；冷却期
+   * 外触发 loadAsync（单飞）并返回 true。语义路调用方在 ready=false 时用它
+   * 保持预热通道（预热失败不永久关闭语义路），同时省掉无意义的 embed 调用。
+   */
+  tryWarm(): boolean {
+    if (this.data || this.loadingPromise) return true;
+    if (Date.now() - this.lastLoadFailureAt < RETRY_BACKOFF_MS) return false;
+    void this.loadAsync();
+    return true;
+  }
+
+  /** 生效的 doc_type 过滤（诊断用）。 */
+  docTypeFilter(): string[] | undefined {
+    return this.docTypes;
   }
 
   close(): void {
@@ -146,24 +204,61 @@ export class KnowledgeEmbeddingSearch {
     return row.c;
   }
 
-  private load(): Int8ChunkMatrix {
+  /** 同步加载（SATI_EMBEDDINGS_SYNC_LOAD=1 / syncLoad:true 回滚路径；旧行为）。 */
+  private loadSync(): Int8ChunkMatrix {
     if (this.data) return this.data;
+    const cached = this.takeSharedMatrix();
+    if (cached) return cached;
+    const data = loadChunkMatrix(
+      this.buildSource(),
+      this.dimensions,
+      raw => decodeVector(raw, this.dimensions),
+      (docCount, chunkCount) =>
+        this.logger?.warn?.(`[knowledge-embeddings] 已加载：${docCount} docs / ${chunkCount} chunks。`),
+    );
+    this.data = data;
+    this.putSharedMatrix(data);
+    return data;
+  }
 
-    // 进程级共享：命中缓存直接复用已量化矩阵，避免重复加载 144069 chunk。
-    const cacheKey = `${this.dbPath}|${(this.docTypes ?? []).join(",")}`;
-    const cached = matrixCache.get(cacheKey);
-    if (cached) {
-      // LRU 命中：刷新访问顺序
-      matrixCache.delete(cacheKey);
-      matrixCache.set(cacheKey, cached);
-      this.logger?.warn?.(`[knowledge-embeddings] 复用共享矩阵（${cached.chunkCount} chunks，key=${cacheKey}）`);
-      this.data = cached;
-      return cached;
-    }
+  /**
+   * 异步预热（P4，默认路径）：分页加载每页间让出事件循环（见
+   * loadChunkMatrixAsync），不阻塞启动/请求。单飞：并发调用共享同一次加载；
+   * 失败吞错并重置单飞（下次可重试），返回空矩阵不抛——预热失败仅降级语义路。
+   * gateway 启动后经 setTimeout 主动调用；search 未 ready 时也会触发兜底。
+   */
+  loadAsync(): Promise<Int8ChunkMatrix> {
+    if (this.data) return Promise.resolve(this.data);
+    this.loadingPromise ??= this.loadAsyncInner().catch(error => {
+      this.loadingPromise = undefined;
+      this.lastLoadFailureAt = Date.now();
+      this.logger?.warn?.(
+        `[knowledge-embeddings] 异步预热失败，语义路降级跳过: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return this.data ?? emptyChunkMatrix(this.dimensions);
+    });
+    return this.loadingPromise;
+  }
 
-    const dimensions = this.dimensions;
+  private async loadAsyncInner(): Promise<Int8ChunkMatrix> {
+    if (this.data) return this.data;
+    const cached = this.takeSharedMatrix();
+    if (cached) return cached;
+    const data = await loadChunkMatrixAsync(
+      this.buildSource(),
+      this.dimensions,
+      raw => decodeVector(raw, this.dimensions),
+      (docCount, chunkCount) =>
+        this.logger?.warn?.(`[knowledge-embeddings] 已加载：${docCount} docs / ${chunkCount} chunks。`),
+    );
+    this.data = data;
+    this.putSharedMatrix(data);
+    return data;
+  }
+
+  /** 键集分页源（fixed SQL；与 loadChunkMatrix 契约一致，sync/async 共用）。 */
+  private buildSource(): ChunkPageSource {
     const filterParams = this.filterParams;
-
     // 键集分页加载（WHERE (document_id, chunk_id) > (?, ?) 走主键/索引前缀，
     // 避免 OFFSET 分页在大偏移下重复扫描前序行；ORDER BY 与排序一致，天然有序）。
     const pageFirst = this.db.prepare(
@@ -175,25 +270,34 @@ export class KnowledgeEmbeddingSearch {
        ${this.filterSql ? "AND" : "WHERE"} (e.document_id > ? OR (e.document_id = ? AND e.chunk_id > ?))
        ORDER BY e.document_id, e.chunk_id LIMIT ?`,
     );
+    return {
+      pageFirst: limit => pageFirst.all(...filterParams, limit) as ChunkRow[],
+      pageNext: (docId, chunkId, limit) => pageNext.all(...filterParams, docId, docId, chunkId, limit) as ChunkRow[],
+    };
+  }
 
-    const data = loadChunkMatrix(
-      {
-        pageFirst: limit => pageFirst.all(...filterParams, limit) as ChunkRow[],
-        pageNext: (docId, chunkId, limit) => pageNext.all(...filterParams, docId, docId, chunkId, limit) as ChunkRow[],
-      },
-      dimensions,
-      raw => decodeVector(raw, dimensions),
-      (docCount, chunkCount) =>
-        this.logger?.warn?.(`[knowledge-embeddings] 已加载：${docCount} docs / ${chunkCount} chunks。`),
-    );
-    this.data = data;
-    // LRU 写入共享缓存（超上限淘汰最久未用）
+  /** 进程级共享矩阵缓存命中（LRU 触摸）；未命中返回 undefined。 */
+  private takeSharedMatrix(): Int8ChunkMatrix | undefined {
+    const cacheKey = `${this.dbPath}|${(this.docTypes ?? []).join(",")}`;
+    const cached = matrixCache.get(cacheKey);
+    if (cached) {
+      // LRU 命中：刷新访问顺序
+      matrixCache.delete(cacheKey);
+      matrixCache.set(cacheKey, cached);
+      this.logger?.warn?.(`[knowledge-embeddings] 复用共享矩阵（${cached.chunkCount} chunks，key=${cacheKey}）`);
+      this.data = cached;
+    }
+    return cached;
+  }
+
+  /** 写入进程级共享矩阵缓存（超上限淘汰最久未用）。 */
+  private putSharedMatrix(data: Int8ChunkMatrix): void {
+    const cacheKey = `${this.dbPath}|${(this.docTypes ?? []).join(",")}`;
     matrixCache.set(cacheKey, data);
     if (matrixCache.size > MAX_MATRIX_CACHE) {
       const oldest = matrixCache.keys().next().value;
       if (oldest !== undefined) matrixCache.delete(oldest);
     }
-    return data;
   }
 }
 

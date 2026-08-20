@@ -30,10 +30,13 @@ import { ProcessLiveStatus, ProcessRunHeader, StreamingThinkingPreview, type Pro
 import { formatProcessDuration } from "./processTraceUtils";
 import {
   buildRenderableMessageItems,
+  getLastMessageTurnStart,
   getLiveProcessDetailMessages,
   getLiveProcessGroupStep,
   getLiveProcessGroups,
   getWebFetchWaitingStep,
+  isEmptyAssistantShell,
+  isProcessMessage,
   shouldRenderLiveProcessGroup,
   shouldShowWebFetchWaitingHint,
   splitLiveProcessGroupDetailMessages,
@@ -182,20 +185,28 @@ export function estimateMessageItemHeight(item: RenderableMessageItem): number {
   );
 }
 
+// P3-5：前缀和（itemHeights → 每项起始偏移）拆为可复用纯函数。调用方 useMemo
+// 缓存（依赖 measuredItemHeights 引用，级联命中时稳定），避免每个滚动帧全量 O(N)
+// 重建——虚拟滚动滚动事件频率远高于内容变化频率。
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildPrefixOffsets(itemHeights: number[]): number[] {
+  const prefixOffsets = [0];
+  for (const height of itemHeights) {
+    prefixOffsets.push(prefixOffsets[prefixOffsets.length - 1] + Math.max(1, height));
+  }
+  return prefixOffsets;
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function getVirtualMessageWindow(
   itemHeights: number[],
   scrollTop: number,
   viewportHeight: number,
   overscan = MESSAGE_WINDOW_OVERSCAN,
+  prefixOffsets = buildPrefixOffsets(itemHeights),
 ): VirtualMessageWindow {
   if (itemHeights.length === 0) {
     return { startIndex: 0, endIndex: 0, topPadding: 0, bottomPadding: 0, totalHeight: 0 };
-  }
-
-  const prefixOffsets = [0];
-  for (const height of itemHeights) {
-    prefixOffsets.push(prefixOffsets[prefixOffsets.length - 1] + Math.max(1, height));
   }
 
   const totalHeight = prefixOffsets[prefixOffsets.length - 1];
@@ -345,6 +356,13 @@ function MessagesPaneV2({
   const generatedMessageKeyCounterRef = useRef(0);
   const measuredHeightsRef = useRef<Map<string, number>>(new Map());
   const heightVersionRafRef = useRef<number | null>(null);
+  // P3-4 增量缓存：{消息前缀, isAssistantWorking, 构建结果}。命中时返回缓存引用，
+  // 使 renderableMessageItems 引用在流式 process tick 间稳定（见下方 useMemo）。
+  const renderableItemsCacheRef = useRef<{
+    messages: ChatMessage[];
+    isAssistantWorking: boolean;
+    result: RenderableMessageItem[];
+  } | null>(null);
   const [heightVersion, setHeightVersion] = useState(0);
   const [scrollViewport, setScrollViewport] = useState({ scrollTop: 0, height: 0 });
   const [expandedProcessRows, setExpandedProcessRows] = useState<Map<string, boolean>>(() => new Map());
@@ -499,10 +517,55 @@ function MessagesPaneV2({
     }
     return groupsByAnchor;
   }, [liveProcessGroups]);
-  const renderableMessageItems = useMemo(
-    () => buildRenderableMessageItems(renderableMessages, { isAssistantWorking }),
-    [isAssistantWorking, renderableMessages],
-  );
+  const renderableMessageItems = useMemo(() => {
+    const cached = renderableItemsCacheRef.current;
+    if (
+      cached !== null &&
+      cached.isAssistantWorking === isAssistantWorking &&
+      renderableMessages.length > cached.messages.length
+    ) {
+      const prev = cached.messages;
+      let prefixMatches = true;
+      for (let index = 0; index < prev.length; index += 1) {
+        if (prev[index] !== renderableMessages[index]) {
+          prefixMatches = false;
+          break;
+        }
+      }
+      if (prefixMatches) {
+        // 增量安全条件（可证明输出不变）：
+        //  a) 新增消息全部可折叠/过滤（process 消息被 live 折叠、shell 空壳被
+        //     filter 移除）→ 不产生新 item；user/prose/流式 thinking 等
+        //     → 可能产生 item，全量重算（保守）。
+        //  b) 旧输出中最后 turn 无 item（liveTurn 的折叠判定依赖 liveTurn 内
+        //     全部消息——新增 process 消息可能使旧 standalone thinking 组
+        //     转为折叠，因此最后 turn 已有 item 时必须全量）。
+        // 满足 a+b 时旧结果引用可直接复用，下游 keyedMessageItems /
+        // measuredItemHeights / prefixOffsets 全部级联命中。
+        let appendedOnlyCollapsible = true;
+        for (let index = prev.length; index < renderableMessages.length; index += 1) {
+          const message = renderableMessages[index];
+          if (message && (isProcessMessage(message) || isEmptyAssistantShell(message))) continue;
+          appendedOnlyCollapsible = false;
+          break;
+        }
+        const lastTurnStart = getLastMessageTurnStart(prev);
+        let lastTurnHasItems = false;
+        for (let index = cached.result.length - 1; index >= 0; index -= 1) {
+          if (cached.result[index].originalIndex < lastTurnStart) break;
+          lastTurnHasItems = true;
+          break;
+        }
+        if (appendedOnlyCollapsible && !lastTurnHasItems) {
+          renderableItemsCacheRef.current = { messages: renderableMessages, isAssistantWorking, result: cached.result };
+          return cached.result;
+        }
+      }
+    }
+    const result = buildRenderableMessageItems(renderableMessages, { isAssistantWorking });
+    renderableItemsCacheRef.current = { messages: renderableMessages, isAssistantWorking, result };
+    return result;
+  }, [isAssistantWorking, renderableMessages]);
   const keyedMessageItems = useMemo<KeyedRenderableMessageItem[]>(
     () =>
       renderableMessageItems.map((item, index) => ({
@@ -518,6 +581,12 @@ function MessagesPaneV2({
     return keyedMessageItems.map(item => measuredHeightsRef.current.get(item.itemKey) ?? item.estimatedHeight);
   }, [heightVersion, keyedMessageItems]);
   const shouldVirtualizeMessages = keyedMessageItems.length > MESSAGE_VIRTUALIZATION_THRESHOLD;
+  // P3-5：前缀和 useMemo 缓存——依赖 measuredItemHeights 引用而非 scrollTop，
+  // 滚动 tick 不再每帧全量重算前缀和（级联命中：流式 process tick 引用稳定）。
+  const prefixOffsets = useMemo(
+    () => (shouldVirtualizeMessages ? buildPrefixOffsets(measuredItemHeights) : []),
+    [measuredItemHeights, shouldVirtualizeMessages],
+  );
   const virtualWindow = useMemo(
     () =>
       shouldVirtualizeMessages
@@ -526,6 +595,7 @@ function MessagesPaneV2({
             scrollViewport.scrollTop,
             scrollViewport.height,
             MESSAGE_WINDOW_OVERSCAN,
+            prefixOffsets,
           )
         : {
             startIndex: 0,
@@ -537,6 +607,7 @@ function MessagesPaneV2({
     [
       keyedMessageItems.length,
       measuredItemHeights,
+      prefixOffsets,
       scrollViewport.height,
       scrollViewport.scrollTop,
       shouldVirtualizeMessages,

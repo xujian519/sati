@@ -14,5 +14,5 @@ export {
   resolvePilotHome,
   type PilotExtensionPaths,
   type PilotPathEnv,
-} from "./paths.js";
+} from "../shared/paths/index.js";
 export * from "./config/index.js";

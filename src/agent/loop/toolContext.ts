@@ -190,6 +190,9 @@ export class ToolContextFactory {
           }
         } catch (err) {
           composedAbort.cleanup();
+          // 失败也排空 sidechain 写缓冲：子代理异常中断时已记录的 durable
+          // 消息必须落盘（父 turn 的 subagent_completed 落盘前 sidechain 完整）。
+          await sidechain?.flush?.();
           await this.finalizeSubagent(input, {
             subagentId,
             subagentType: def.id,
@@ -201,6 +204,9 @@ export class ToolContextFactory {
           throw err;
         }
         composedAbort.cleanup();
+        // 成功收尾：排空 sidechain 写缓冲（无 turn_result 强制 flush，仅靠
+        // 50ms 兜底定时器——进程在间隔内退出会丢 sidechain 尾条）。
+        await sidechain?.flush?.();
 
         await this.finalizeSubagent(input, {
           subagentId,

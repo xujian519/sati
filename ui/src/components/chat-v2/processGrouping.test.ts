@@ -4,8 +4,10 @@ import type { ChatMessage } from "../chat/types/types";
 import { normalizedToChatMessages } from "../chat/hooks/useChatMessages";
 import {
   buildRenderableMessageItems,
+  getLastMessageTurnStart,
   getLiveProcessGroups,
   hasPendingWebFetchInRunningGroup,
+  mergeRenderableItemSequences,
   shouldShowWebFetchWaitingHint,
   splitLiveProcessGroupDetailMessages,
   type LiveProcessGroup,
@@ -507,5 +509,84 @@ describe("processGrouping", () => {
         empty,
       ]).map(message => message.id),
     ).toEqual(["u1", "read-1", "a-empty"]);
+  });
+});
+
+describe("getLastMessageTurnStart（P3-4 增量缓存归属判定）", () => {
+  it("返回最后一个 user 消息索引（turn 按 user 切分）", () => {
+    const messages: ChatMessage[] = [
+      user("u1"),
+      assistant("a1", "answer"),
+      tool("t1", "Read", { file_path: "x" }),
+      user("u2"),
+      assistant("a2", "answer"),
+      tool("t2", "Bash", { command: "ls" }),
+    ];
+    expect(getLastMessageTurnStart(messages)).toBe(3);
+  });
+
+  it("无 user 消息时整体为单 turn（start=0）", () => {
+    const messages: ChatMessage[] = [assistant("a1", "answer"), tool("t1", "Read", { file_path: "x" })];
+    expect(getLastMessageTurnStart(messages)).toBe(0);
+  });
+
+  it("只有一条 user 消息在末尾（lastTurn 延伸到数组末尾）", () => {
+    const messages: ChatMessage[] = [assistant("a1", "answer"), user("u1")];
+    expect(getLastMessageTurnStart(messages)).toBe(1);
+  });
+});
+
+describe("mergeRenderableItemSequences（P3-3 归并与参考实现等价）", () => {
+  function item(id: string, originalIndex: number, emptyShell = false): RenderableMessageItem {
+    return {
+      message: emptyShell ? { ...assistant(id, "") } : { ...user(id) },
+      originalIndex,
+      beforeRunAttachment: null,
+      afterRunAttachment: null,
+      beforeProcessAttachments: [],
+      afterProcessAttachments: [],
+    };
+  }
+
+  function reference(sequences: RenderableMessageItem[][], collapsedIndices: Set<number>): RenderableMessageItem[] {
+    return sequences
+      .flat()
+      .filter(i => !collapsedIndices.has(i.originalIndex))
+      .filter(i => !(i.message.content === ""))
+      .sort((a, b) => a.originalIndex - b.originalIndex);
+  }
+
+  it("items/synthetic 单调 + summary 乱序时归并结果与 filter+sort 一致", () => {
+    const items = [item("m0", 0), item("m2", 2), item("m5", 5)];
+    const synthetic = [item("s1", 1), item("s4", 4)];
+    const summary = [item("sum3", 3), item("sum6", 6)];
+    const merged = mergeRenderableItemSequences([items, synthetic, summary], new Set());
+    expect(merged.map(i => i.originalIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(merged).toEqual(reference([items, synthetic, summary], new Set()));
+  });
+
+  it("归并时过滤折叠索引与空壳", () => {
+    const items = [item("m0", 0), item("m1", 1), item("shell", 2, true)];
+    const synthetic = [item("s3", 3)];
+    const collapsed = new Set([1]);
+    const merged = mergeRenderableItemSequences([items, synthetic], collapsed);
+    expect(merged.map(i => i.originalIndex)).toEqual([0, 3]);
+    expect(merged).toEqual(reference([items, synthetic], collapsed));
+  });
+
+  it("空序列与全折叠输入", () => {
+    expect(mergeRenderableItemSequences([], new Set())).toEqual([]);
+    const only = [item("m0", 0, true)];
+    expect(mergeRenderableItemSequences([only], new Set())).toEqual([]);
+    expect(mergeRenderableItemSequences([only], new Set([0]))).toEqual([]);
+  });
+
+  it("originalIndex 含空隙/重复跨序列时保持与参考一致（无稳定序依赖）", () => {
+    const a = [item("a0", 0), item("a2", 2), item("a2b", 2)];
+    const b = [item("b1", 1), item("b2c", 2)];
+    const merged = mergeRenderableItemSequences([a, b], new Set());
+    // 归并取最小头：index 2 的三项按输入序列顺序（a 的两个在前、b 的一个在后）输出
+    expect(merged.map(i => i.originalIndex)).toEqual([0, 1, 2, 2, 2]);
+    expect(merged.map(i => i.message.id)).toEqual(["a0", "b1", "a2", "a2b", "b2c"]);
   });
 });

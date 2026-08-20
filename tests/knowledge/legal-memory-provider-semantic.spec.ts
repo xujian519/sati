@@ -62,9 +62,11 @@ function makeStubVectorDb(hits: VectorDbSearchHit[]): VectorDbSearch {
 function makeStubKnowledgeEmbeddings(hits: KnowledgeEmbeddingHit[]): KnowledgeEmbeddingSearch {
   return {
     available: true,
+    ready: true,
     loadedChunkCount: () => hits.length,
     docTypeFilter: () => ["law_article"],
     search: () => hits,
+    tryWarm: () => true,
     close: () => {},
   } as unknown as KnowledgeEmbeddingSearch;
 }
@@ -146,6 +148,53 @@ describe("legal-memory-provider 法条语义召回", () => {
     });
     const result = await provider.retrieve(makeInput("侵权赔偿的法定标准"));
     assert.equal(result.systemContext, undefined);
+  });
+
+  it("#9c: knowledgeEmbeddings 未 ready 时不调 embed API 并触发预热（ready 门）", async () => {
+    const embedCalls: string[][] = [];
+    const embedding: EmbeddingClient = {
+      dimensions: 2,
+      async embed(texts: string[]): Promise<number[][]> {
+        embedCalls.push(texts);
+        return texts.map(text => [text.includes("赔偿") ? 1 : 0, text.includes("侵权") ? 1 : 0]);
+      },
+      async healthCheck(): Promise<boolean> {
+        return true;
+      },
+    };
+    let warmed = 0;
+    const notReady = {
+      available: true,
+      ready: false,
+      tryWarm: () => {
+        warmed += 1;
+        return true;
+      },
+    } as unknown as KnowledgeEmbeddingSearch;
+    const provider = new LegalMemoryProvider(makeStubEngine(), {
+      embedding,
+      knowledgeEmbeddings: notReady,
+      limit: 2,
+    });
+    const result = await provider.retrieve(makeInput("侵权赔偿的法定标准"));
+    assert.equal(result.systemContext, undefined, "未 ready 时不注入语义结果");
+    assert.equal(embedCalls.length, 0, "矩阵未加载时不得调用 embed API（结果对空矩阵毫无意义）");
+    assert.equal(warmed, 1, "应触发预热保持通道（tryWarm 单飞 + backoff 防风暴）");
+  });
+
+  it("#9c: knowledge 未 ready 但 legacy vectorDb 可用时仍走 legacy 语义路（embed 必要）", async () => {
+    const provider = new LegalMemoryProvider(makeStubEngine(), {
+      embedding: makeStubEmbedding(),
+      knowledgeEmbeddings: {
+        available: true,
+        ready: false,
+        tryWarm: () => true,
+      } as unknown as KnowledgeEmbeddingSearch,
+      vectorDb: makeStubVectorDb([{ docId: "law-1", score: 0.9 }]),
+      limit: 1,
+    });
+    const result = await provider.retrieve(makeInput("侵权赔偿的法定标准"));
+    assert.ok(result.systemContext?.includes("专利法"), "legacy 语义路不受 knowledge ready 门影响");
   });
 
   it("FTS 命中与知识库语义命中 RRF 融合", async () => {

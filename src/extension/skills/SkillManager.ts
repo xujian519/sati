@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join, posix, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { getPilotExtensionPaths } from "../../pilot/paths.js";
+import { getPilotExtensionPaths } from "../../shared/paths/index.js";
 import { isRoleFrontmatter, parseRoleConfig } from "./roleConfig.js";
 import {
   TEMPLATE_MODES,

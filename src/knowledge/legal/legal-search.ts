@@ -2,6 +2,7 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { openKnowledgeDb } from "../shared/db-version.js";
 import { LAWS_DB } from "../shared/schema-versions.js";
 import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms, sqliteHasFts5 } from "../shared/fts.js";
+import { prepareCached } from "../../shared/sqlite.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
 import { extractLawKeywords } from "./keywords.js";
 import { buildLawSearchSql, LAW_SEARCH_COLUMNS, LAW_SEARCH_COLUMNS_FTS } from "./sql.js";
@@ -47,6 +48,8 @@ export class LegalSearchEngine implements LegalSearchSource {
   private readonly stmtGetById: StatementSync;
   private readonly stmtGetCategories: StatementSync;
   private readonly stmtCount: StatementSync;
+  /** 动态 SQL（带过滤组合）prepare 缓存：同形状 SQL 复用 StatementSync。 */
+  private readonly preparedCache = new Map<string, StatementSync>();
 
   constructor(dbPath: string) {
     const opened = openKnowledgeDb(dbPath, LAWS_DB, { readOnly: true });
@@ -192,6 +195,7 @@ export class LegalSearchEngine implements LegalSearchSource {
   }
 
   close(): void {
+    this.preparedCache.clear();
     this.db.close();
   }
 
@@ -213,7 +217,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       rows = this.stmtSearchFts!.all(query, limit * 3) as LawRow[];
     } else {
       const { sql, params } = buildLawSearchSql("fts", options);
-      rows = this.db.prepare(sql).all(query, ...params, limit * 3) as LawRow[];
+      rows = prepareCached(this.preparedCache, this.db, sql).all(query, ...params, limit * 3) as LawRow[];
     }
     // 放大取数（limit * 3）后按 name 去重，保留最新发布版本
     return dedupeByLawName(rows, limit);
@@ -226,7 +230,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       rows = this.stmtSearchLike.all(pattern, pattern, limit) as LawRow[];
     } else {
       const { sql, params } = buildLawSearchSql("like", options);
-      rows = this.db.prepare(sql).all(pattern, pattern, ...params, limit) as LawRow[];
+      rows = prepareCached(this.preparedCache, this.db, sql).all(pattern, pattern, ...params, limit) as LawRow[];
     }
     return rows;
   }

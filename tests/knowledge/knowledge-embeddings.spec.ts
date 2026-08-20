@@ -17,6 +17,9 @@ import { quantizeInt8 } from "../../src/context/vector/cosine.js";
  *   d1(case)  : c1=[1,0,0,0] c2=[0.9,0,0,0]（两个 chunk 验证文档级聚合）
  *   d2(law_article): c3=[0,1,0,0]
  *   d3(case)  : c4=[0,0,1,0]
+ *
+ * 注：本文件测试"检索正确性"语义，统一注入 syncLoad:true 保持同步加载
+ * （P4 后默认异步预热，异步行为见 embeddings-async-load.spec.ts）。
  */
 function createStore(): { search: KnowledgeEmbeddingSearch; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), "knowledge-embeddings-test-"));
@@ -54,7 +57,7 @@ function createStore(): { search: KnowledgeEmbeddingSearch; dir: string } {
   insEmb.run(c3, "d2", floatVec([0, 1, 0, 0]));
   insEmb.run(c4, "d3", floatVec([0, 0, 1, 0]));
   db.close();
-  return { search: new KnowledgeEmbeddingSearch({ dbPath }), dir };
+  return { search: new KnowledgeEmbeddingSearch({ dbPath, syncLoad: true }), dir };
 }
 
 function floatVec(values: number[]): Buffer {
@@ -72,7 +75,7 @@ function int8Vec(values: number[]): Buffer {
 function withStore(t: test.TestContext, options?: { docTypes?: string[] }): KnowledgeEmbeddingSearch {
   const { search, dir } = createStore();
   const instance = options
-    ? new KnowledgeEmbeddingSearch({ dbPath: join(dir, "knowledge.db"), docTypes: options.docTypes })
+    ? new KnowledgeEmbeddingSearch({ dbPath: join(dir, "knowledge.db"), docTypes: options.docTypes, syncLoad: true })
     : search;
   t.after(() => {
     instance.close();
@@ -194,7 +197,7 @@ test("knowledge-embeddings: 异常向量长度（超维）安全截断", t => {
     `INSERT INTO embeddings (chunk_id, document_id, vector, dim, indexed_at) VALUES (?, 'd1', ?, 4, '2026-01-01')`,
   ).run(c1, floatVec([1, 0, 0, 0, 0.5, 0.5]));
   db.close();
-  const s = new KnowledgeEmbeddingSearch({ dbPath });
+  const s = new KnowledgeEmbeddingSearch({ dbPath, syncLoad: true });
   t.after(() => {
     s.close();
     rmSync(dir, { recursive: true, force: true });
@@ -208,7 +211,7 @@ test("knowledge-embeddings: 同 dbPath+docTypes 复用共享矩阵，不重复�
   const { search: first, dir } = createStore();
   const dbPath = join(dir, "knowledge.db");
   const logs: string[] = [];
-  const second = new KnowledgeEmbeddingSearch({ dbPath, logger: { warn: m => logs.push(String(m)) } });
+  const second = new KnowledgeEmbeddingSearch({ dbPath, syncLoad: true, logger: { warn: m => logs.push(String(m)) } });
 
   t.after(() => {
     first.close();
@@ -237,6 +240,7 @@ test("knowledge-embeddings: 不同 docTypes 过滤不共享缓存", t => {
   const filtered = new KnowledgeEmbeddingSearch({
     dbPath,
     docTypes: ["law_article"],
+    syncLoad: true,
     logger: { warn: m => logs.push(String(m)) },
   });
 

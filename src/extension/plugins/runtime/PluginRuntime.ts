@@ -1,3 +1,5 @@
+import { lstat, readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { resolvePluginDirectories } from "../discovery/PluginDirectoryResolver.js";
 import { discoverPluginPaths, discoverSkillPaths } from "../discovery/discoverLocalPlugins.js";
 import { loadPluginFromPath, loadSkillFromPath } from "../loading/PluginLoader.js";
@@ -11,6 +13,9 @@ import { renderSkillContent } from "../../skills/renderSkillContent.js";
 import type { SkillRoleConfig } from "../../skills/types.js";
 import { PluginRegistry } from "./PluginRegistry.js";
 import { truncateMcpInstructionString } from "./truncateMcpString.js";
+
+/** M6：插件/技能 load 指纹缓存 TTL（stat 粒度漏检兜底，10s 后强制重扫）。 */
+const PLUGIN_FINGERPRINT_TTL_MS = 10_000;
 
 /**
  * Static MCP server contribution shape callers can rely on. Manifests load
@@ -90,8 +95,56 @@ export class PluginRuntime {
    * 保持不变——每次都重新加载，不做时间窗口缓存（文件系统变更必须立即可见）。
    */
   private inFlightRefresh: Promise<SatiLoadedPlugin[]> | null = null;
+  /**
+   * M6：插件/技能 load 结果指纹缓存。指纹 = 各发现文件 mtime+size 拼接；
+   * TTL 兜底（stat 粒度漏检的极端情况 10s 后强制重扫）。命中时跳过逐文件
+   * 读盘解析（会话并发创建每会话一次 refresh → 只扫一次盘）。文件内容
+   * 变更 → mtime 变化 → 指纹变 → 立即重扫，变更可见性语义不变。
+   */
+  private fingerprintCache: { fingerprint: string; plugins: SatiLoadedPlugin[]; at: number } | null = null;
 
   constructor(private readonly options: PluginRuntimeOptions) {}
+
+  /**
+   * M6：发现路径列表 → mtime+size 指纹。discover 返回的是目录路径（插件目录 /
+   * SKILL.md 所在目录），目录 mtime 只随子项增删变化——内容编辑须靠文件自身
+   * mtime+size 捕捉。加载实际读取面 = plugin.json + hooks + commands/skills/
+   * output-styles 内任意嵌套 .md（collectMarkdownFiles 递归），故指纹须递归
+   * 覆盖整棵目录树（#8a：嵌套文件内容编辑不得被 TTL 延迟）；条目按名称排序，
+   * 保证 readdir 序无关的确定性指纹（#8b）。
+   */
+  private async fingerprintOf(files: Array<{ path: string }>): Promise<string> {
+    let fingerprint = "";
+    for (const file of files) {
+      const st = await stat(file.path).catch(() => null);
+      fingerprint += `${file.path}:${st?.mtimeMs ?? 0}:${st?.size ?? 0}`;
+      if (st?.isDirectory()) {
+        fingerprint += await this.treeFingerprint(file.path);
+      }
+      fingerprint += ";";
+    }
+    return fingerprint;
+  }
+
+  /** 目录树全文件指纹（递归 + 排序；不跟随目录符号链接——外部大目录会放大递归成本）。 */
+  private async treeFingerprint(dir: string): Promise<string> {
+    const entries = (await readdir(dir).catch(() => [] as string[])).sort();
+    let out = "";
+    for (const entry of entries) {
+      const fullPath = join(dir, entry);
+      const linkSt = await lstat(fullPath).catch(() => null);
+      if (!linkSt) continue;
+      if (linkSt.isDirectory() && !linkSt.isSymbolicLink()) {
+        out += `|${entry}:d`;
+        out += await this.treeFingerprint(fullPath);
+      } else {
+        // 文件/符号链接统一 stat（跟随链接取目标 mtime+size，链接目标变更亦能捕捉）
+        const st = await stat(fullPath).catch(() => null);
+        out += `|${entry}:${st?.mtimeMs ?? 0}:${st?.size ?? 0}`;
+      }
+    }
+    return out;
+  }
 
   snapshot(): SatiLoadedPlugin[] {
     return this.registry.list();
@@ -246,6 +299,20 @@ export class PluginRuntime {
         { path: paths.projectSkillsDir, source: "project" },
       ]),
     ]);
+    // M6：指纹命中（文件未变且 TTL 内）→ 直接复用上次 load 结果，跳过读盘解析。
+    const fingerprint = await this.fingerprintOf([...discovered, ...discoveredSkills]);
+    const cached = this.fingerprintCache;
+    if (cached !== null && cached.fingerprint === fingerprint && Date.now() - cached.at < PLUGIN_FINGERPRINT_TTL_MS) {
+      this.registry.replaceAll(cached.plugins);
+      return {
+        previous,
+        next: cached.plugins,
+        // #8d：命中时也按实际 registry 状态计算 diff——previous 可能被外部
+        // 改动（registry 非只由本方法维护），空数组会让消费者漏掉增量处理。
+        added: cached.plugins.filter(plugin => !hasPlugin(previous, plugin)),
+        removed: previous.filter(plugin => !hasPlugin(cached.plugins, plugin)),
+      };
+    }
     const [loaded, loadedSkills] = await Promise.all([
       Promise.all(discovered.map(plugin => loadPluginFromPath(plugin.path, plugin.source).catch(() => undefined))),
       Promise.all(discoveredSkills.map(s => loadSkillFromPath(s.path, s.source).catch(() => undefined))),
@@ -255,6 +322,11 @@ export class PluginRuntime {
       ...loaded.filter(isLoadedPlugin),
       ...loadedSkills.filter(isLoadedPlugin),
     ];
+    // #8c：部分加载失败不写指纹缓存——失败多为瞬时（IO 抖动/锁），缓存会把
+    // 失败结果固化到 TTL（命中时跳过失败项且不重试）；失败态重扫成本低
+    // （目录小），全成功才享受缓存是正确取舍。
+    const loadFailed = loaded.some(item => item === undefined) || loadedSkills.some(item => item === undefined);
+    this.fingerprintCache = loadFailed ? null : { fingerprint, plugins, at: Date.now() };
     this.registry.replaceAll(plugins);
     return {
       previous,

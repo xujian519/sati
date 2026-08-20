@@ -39,18 +39,52 @@ export type JsonlTranscriptWriterOptions = {
    * to `<dirname(path)>/<subagentId>.jsonl`.
    */
   subagentTranscriptPath?: (subagentId: string) => string;
+  /**
+   * M3 写缓冲：pending 序列化行字节数达到该阈值即落盘（默认 64KB）。
+   * 0 = 直写（每次 recordEntry 立即落盘，旧行为回滚）。可用环境变量
+   * SATI_TRANSCRIPT_FLUSH_THRESHOLD_BYTES 覆盖（显式传参优先）。
+   */
+  flushThresholdBytes?: number;
+  /** 缓冲兜底定时器间隔（默认 50ms）：无显式 flushCheckpoint 时自动落盘。 */
+  flushIntervalMs?: number;
 };
+
+const DEFAULT_FLUSH_THRESHOLD_BYTES = 64 * 1024;
+const DEFAULT_FLUSH_INTERVAL_MS = 50;
 
 export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   private sequence = 0;
-  private writeChain: Promise<void> = Promise.resolve();
   private lastEntryId: string | null = null;
   private readonly now: () => Date;
+  private readonly flushThresholdBytes: number;
+  private readonly flushIntervalMs: number;
   /** 目录是否已确认存在（mkdir recursive 每次 syscall，仅首次需要）。 */
   private dirReady = false;
 
+  /** M3 写缓冲：已接受但未落盘的序列化行（顺序 = 入队顺序）。 */
+  private pendingLines: string[] = [];
+  private pendingBytes = 0;
+  /** 与 pendingLines 一一对应的条目落盘 ack（resolve/reject 由所在批次写入完成时触发）。 */
+  private pendingAcks: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
+  /**
+   * 写入串行链：每个 flush 批次 = 链上一个阶段，按入队顺序落盘。链自身保证
+   * 批次串行（后一批在前一批 resolve 后才开始），不需要独立的 flushing 防重入
+   * 标志——去掉标志后 flushCheckpoint 在批次在途时也能把新批次链上并等待链尾，
+   * 修复「flush 中入队的条目在 checkpoint resolve 时仍未落盘」的竞态（#3）。
+   * 链保持可继续：批次错误经 ack/lastFlushError 传播后由 then 的第二参数消费。
+   */
+  private writeChain: Promise<void> = Promise.resolve();
+  private flushTimer: ReturnType<typeof setTimeout> | undefined;
+  /** 最近一次落盘失败（flushCheckpoint 边界传播一次后清除；条目级错误经 ack 传播）。 */
+  private lastFlushError: unknown;
+
   constructor(private readonly options: JsonlTranscriptWriterOptions) {
     this.now = options.now ?? (() => new Date());
+    const envThreshold = Number.parseInt(process.env.SATI_TRANSCRIPT_FLUSH_THRESHOLD_BYTES ?? "", 10);
+    const threshold =
+      options.flushThresholdBytes ?? (Number.isFinite(envThreshold) ? envThreshold : DEFAULT_FLUSH_THRESHOLD_BYTES);
+    this.flushThresholdBytes = threshold >= 0 ? threshold : 0;
+    this.flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
   }
 
   /** 实际落盘的 transcript 文件路径（供投影器等读取方绑定真实 writer）。 */
@@ -76,10 +110,31 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     };
   }
 
-  // 阶段四 T4.1：recordEntry 每次已 await appendFile，无写后缓冲——
-  // durable 边界检查点是 no-op（写入即落盘）。
-  flushCheckpoint(): void {
-    return undefined;
+  /**
+   * 阶段四 T4.1 durable 边界检查点（M3 后为真 flush）：确保此前已接受的
+   * 全部条目落盘。TurnRunner 在每组工具副作用前 await（fail-closed：
+   * 落盘失败 → 错误传播给该调用方，工具不执行）。幂等，可安全重复调用。
+   *
+   * 竞态说明：flushPending 无在途批次守卫（批次串行由 writeChain 链保证），
+   * 本方法在批次 in-flight 时调用会把当前 pending 链到链尾并返回**链尾**的
+   * promise——等待所有已入队批次（含刚链上的）排空，修复「flush 中入队条目
+   * 在 checkpoint resolve 时仍未落盘」的窗口（检查点后崩溃即丢 durable 边界）。
+   */
+  flushCheckpoint(): Promise<void> {
+    if (this.flushTimer !== undefined) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = undefined;
+    }
+    this.flushPending();
+    return this.writeChain.then(() => {
+      // 边界级错误传播（fail-closed：TurnRunner 在工具副作用前 await 时可见）。
+      // 传播一次后清除——后续 flushCheckpoint 恢复正常，不重复报旧错。
+      if (this.lastFlushError !== undefined) {
+        const error = this.lastFlushError;
+        this.lastFlushError = undefined;
+        throw error;
+      }
+    });
   }
 
   recordAcceptedInput(
@@ -187,23 +242,89 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     });
   }
 
+  /**
+   * M3 写缓冲：条目序列化后入队（不立即落盘）。落盘时机：
+   *  - 显式 flushCheckpoint()（durable 边界，TurnRunner 每组工具副作用前 await）；
+   *  - turn_result（resume 完整性：跨进程续算依赖 turn_result 权威标志，连同
+   *    其前全部 pending 消息一次落盘）；
+   *  - pending 字节 ≥ flushThresholdBytes（64KB 默认）；
+   *  - flushIntervalMs 兜底定时器（50ms）。
+   * 返回 promise 语义：该条目（含其前条目，同一批次一次 appendFile）已落盘时
+   * resolve；落盘失败 reject（错误传播，fail-closed 与旧行为一致）。
+   */
   recordEntry(entry: AgentTranscriptEntry): Promise<void> {
     this.sequence = Math.max(this.sequence, entry.sequence);
     this.lastEntryId = entry.entryId ?? this.lastEntryId;
-    this.writeChain = this.writeChain.then(async () => {
-      if (!this.dirReady) {
-        await mkdir(dirname(this.options.path), { recursive: true, mode: 0o700 });
-        this.dirReady = true;
-      }
-      try {
-        await appendFile(this.options.path, `${JSON.stringify(entry)}\n`, { encoding: "utf8", mode: 0o600 });
-      } catch (error) {
-        // 目录可能被外部删除/移动：重置 dirReady 以便下次写入自愈（重新 mkdir）
-        this.dirReady = false;
-        throw error;
-      }
+    const line = `${JSON.stringify(entry)}\n`;
+    this.pendingLines.push(line);
+    // UTF-8 字节而非 UTF-16 units：appendFile 以 UTF-8 落盘，units 会把
+    // CJK 内容的阈值晚触发 ~3 倍（64KB 阈值实际缓冲 ~192KB）。
+    this.pendingBytes += Buffer.byteLength(line, "utf8");
+    // ack 必须先于 flush 入队：flushPending 会 splice 当前 pendingAcks，
+    // 若在其后入队，该条目的 promise 将无人 resolve（永久挂起）。
+    const ackPromise = new Promise<void>((resolve, reject) => {
+      this.pendingAcks.push({ resolve, reject });
     });
-    return this.writeChain;
+
+    if (this.flushThresholdBytes === 0) {
+      // 回滚（SATI_TRANSCRIPT_FLUSH_THRESHOLD_BYTES=0）：每条立即落盘（旧行为）。
+      this.flushPending();
+    } else if (entry.type === "turn_result") {
+      this.flushPending();
+    } else if (this.pendingBytes >= this.flushThresholdBytes) {
+      this.flushPending();
+    } else {
+      this.scheduleFlushTimer();
+    }
+    return ackPromise;
+  }
+
+  /**
+   * 调度一个批次落盘（不 await）。批次 = 当前全部 pending 行，一次 appendFile。
+   * 无在途守卫：批次直接链到 writeChain 尾部（链自身保证串行），flush 期间
+   * 新入队的条目被 splice 进下一个批次——flushCheckpoint 返回链尾等待全部排空。
+   */
+  private flushPending(): void {
+    const lines = this.pendingLines.splice(0);
+    const acks = this.pendingAcks.splice(0);
+    this.pendingBytes = 0;
+    if (lines.length === 0) return;
+    this.writeChain = this.writeChain
+      .then(async () => {
+        if (!this.dirReady) {
+          await mkdir(dirname(this.options.path), { recursive: true, mode: 0o700 });
+          this.dirReady = true;
+        }
+        try {
+          await appendFile(this.options.path, lines.join(""), { encoding: "utf8", mode: 0o600 });
+        } catch (error) {
+          // 目录可能被外部删除/移动：重置 dirReady 以便下次写入自愈（重新 mkdir）
+          this.dirReady = false;
+          throw error;
+        }
+      })
+      .then(
+        () => {
+          for (const ack of acks) ack.resolve();
+        },
+        (error: unknown) => {
+          // 错误传播：本批次条目 reject（调用方 await recordEntry 可见，
+          // fail-closed）；链不 rethrow（保持可继续）——dirReady 已重置，
+          // 后续批次经自愈重新 mkdir 后恢复写入。
+          this.lastFlushError = error;
+          for (const ack of acks) ack.reject(error);
+        },
+      );
+  }
+
+  private scheduleFlushTimer(): void {
+    if (this.flushTimer !== undefined) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = undefined;
+      this.flushPending();
+    }, this.flushIntervalMs);
+    // unref：不阻止进程退出（turn 边界必有 turn_result 强制 flush，此处仅兜底）。
+    this.flushTimer.unref?.();
   }
 
   /**
@@ -274,7 +395,12 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   forSubagent(subagentId: string, now?: () => Date): SubagentTranscriptHandle {
     const path =
       this.options.subagentTranscriptPath?.(subagentId) ?? defaultSubagentPath(this.options.path, subagentId);
-    const writer = new JsonlTranscriptWriter({ path, now: now ?? this.now });
+    const writer = new JsonlTranscriptWriter({
+      path,
+      now: now ?? this.now,
+      flushThresholdBytes: this.flushThresholdBytes,
+      flushIntervalMs: this.flushIntervalMs,
+    });
     return { subagentId, writer, transcriptPath: path };
   }
 

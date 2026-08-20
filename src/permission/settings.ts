@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { resolvePilotHome } from "../pilot/paths.js";
+import { resolvePilotHome } from "../shared/paths/index.js";
 import type { PermissionRule, PermissionRuleSet } from "./protocol/types.js";
 
 export type PermissionSettings = {
