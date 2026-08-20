@@ -455,3 +455,107 @@ test("ownedOpenTask 优先：claimed/in_progress 且 assignee 成员的先重试
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("M4 自动转派：failed 未耗尽任务同次 kick 内重置并认领（task_retried 广播 + attempt 递增）", async () => {
+  const { db, scheduler, wakes, emits, root } = await setup();
+  try {
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "x",
+      description: "",
+      status: "failed",
+      assigneeId: "m1",
+      dependencies: [],
+      attempt: 1,
+      attemptId: "a1",
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    await scheduler.kickTeam("t1");
+    const task = db.getTask("t1", "t1")!;
+    // 同一次 kick 锁会话内完成「重置 → 重取快照 → 认领」，不滞留 pending 等下一次触发
+    assert.equal(task.status, "claimed");
+    assert.equal(task.attempt, 2, "重试计次由 beginTaskAttempt +1");
+    assert.ok(task.attemptId);
+    assert.equal(task.assigneeId, "m1", "首个 idle 成员（m1）认领");
+    assert.equal(wakes.length, 1, "单次 kick 完成转派，无额外唤醒");
+    const retried = emits.find(e => e.event.type === "task_retried")?.event;
+    assert.ok(retried !== undefined, "应广播 task_retried");
+    assert.equal(retried.type, "task_retried");
+    assert.equal(retried.taskId, "t1");
+    assert.equal(retried.attempt, 1, "attempt 为重置前当前值");
+    assert.equal(retried.memberId, "m1", "memberId = 失败时 assignee");
+    assert.ok(emits.some(e => e.event.type === "task_claimed"));
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("M4 自动转派：失败者不 idle 时，其他 idle 成员同次 kick 认领（不落回失败者本人）", async () => {
+  const { db, scheduler, wakes, root } = await setup();
+  try {
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "x",
+      description: "",
+      status: "failed",
+      assigneeId: "m1",
+      dependencies: [],
+      attempt: 1,
+      attemptId: "a1",
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    db.updateMemberStatus("m1", "working"); // 失败者仍在回合中，非 idle
+    await scheduler.kickTeam("t1");
+    const task = db.getTask("t1", "t1")!;
+    assert.equal(task.status, "claimed");
+    assert.equal(task.assigneeId, "m2", "转派给 idle 的 m2");
+    assert.equal(task.attempt, 2);
+    assert.equal(wakes.length, 1);
+    assert.equal(wakes[0]?.memberId, "m2");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("M4 自动转派防环：attempt 耗尽（attempt >= maxAttempts）保持 failed 终态，不重置不认领", async () => {
+  const { db, scheduler, wakes, emits, root } = await setup();
+  try {
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "x",
+      description: "",
+      status: "failed",
+      assigneeId: "m1",
+      dependencies: [],
+      attempt: 3,
+      attemptId: "a1",
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    await scheduler.kickTeam("t1");
+    const task = db.getTask("t1", "t1")!;
+    assert.equal(task.status, "failed", "耗尽即终态");
+    assert.equal(task.attempt, 3);
+    assert.equal(wakes.length, 0, "无成员被唤醒");
+    assert.ok(!emits.some(e => e.event.type === "task_retried"), "不广播 task_retried");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

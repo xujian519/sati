@@ -143,10 +143,9 @@ export class TeamScheduler {
       }
 
       // 2) 任务认领（锁内 read-modify-write）
-      const tasks = this.db.listTasks(teamId);
       // M4：失败任务自动转派——锁内把 failed 未耗尽任务重置回 pending（幂等，
       // 重置后不再 failed），使 nextReadyTask 能重新认领；attempt 上限防无限循环。
-      const retried = tasks.filter(t => t.status === "failed" && !attemptsExhausted(t));
+      const retried = this.db.listTasks(teamId).filter(t => t.status === "failed" && !attemptsExhausted(t));
       for (const stale of retried) {
         const fresh = this.db.getTask(teamId, stale.id);
         if (fresh === undefined || fresh.status !== "failed") continue; // 锁内重读防并发改写
@@ -160,6 +159,9 @@ export class TeamScheduler {
           ...(fresh.assigneeId !== undefined ? { memberId: fresh.assigneeId } : {}),
         });
       }
+      // M4：重置后重取快照——刚重置回 pending 的任务本次 kick 即可认领
+      //（同次锁内完成，不会滞留 pending 等下一次触发）
+      const tasks = this.db.listTasks(teamId);
       const task = ownedOpenTask(tasks, memberId) ?? nextReadyTask(tasks, memberId);
       if (task === undefined) return undefined;
       const working = this.db.listMembers().filter(m => m.teamId === teamId && m.status === "working").length;
