@@ -1137,8 +1137,10 @@ export function useChatComposerState({
   }, [isLoading]);
 
   // 草稿防抖保存：连续击键不落盘（localStorage.setItem 是同步主线程 I/O），
-  // 停顿 DRAFT_SAVE_DEBOUNCE_MS 后写一次；卸载/页面卸载前 flush 未落盘值，
-  // 保证停顿未满即切走/关闭时不丢草稿。空输入同步删除（低频路径）。
+  // 停顿 DRAFT_SAVE_DEBOUNCE_MS 后写一次。cleanup 只清 timer 不 flush——每次
+  // input 变化（防抖重置）都会跑 cleanup，flush 会把上一版击键立即落盘、
+  // 击穿防抖（回到每击键同步写盘）；flush 只保留给防抖届满（timer 回调）、
+  // 真实卸载与页面卸载（下方两个 effect）。空输入同步删除（低频路径）。
   useEffect(() => {
     const key = activeDraftStorageKeyRef.current;
     if (!key) return;
@@ -1152,14 +1154,15 @@ export function useChatComposerState({
       pendingDraftRef.current = null;
       safeLocalStorage.setItem(key, input);
     }, DRAFT_SAVE_DEBOUNCE_MS);
-    return () => {
-      clearTimeout(timer);
-      flushPendingDraft();
-    };
+    return () => clearTimeout(timer);
   }, [input]);
 
-  // 页面卸载（刷新/关闭）前 flush 未落盘草稿——cleanup 在路由切换时也会跑，
-  // 但整页关闭不触发组件 cleanup，需 beforeunload 兜底。
+  // 组件真实卸载（路由切换/关闭）时 flush 未落盘草稿——empty-deps effect 的
+  // cleanup 只在卸载执行，防抖 effect 的依赖重跑不会触发它。
+  useEffect(() => flushPendingDraft, []);
+
+  // 页面卸载（刷新/关闭）前 flush 未落盘草稿——整页关闭不触发组件卸载 cleanup，
+  // 需 beforeunload 兜底。
   useEffect(() => {
     window.addEventListener("beforeunload", flushPendingDraft);
     return () => window.removeEventListener("beforeunload", flushPendingDraft);
