@@ -155,35 +155,60 @@ export function searchResultTtlMs(key: string, value: PatentSearchResult): numbe
   return DEFAULT_SEARCH_TTL_MS;
 }
 
+// 进程级共享缓存单例（默认配置路径）：createBuiltinRegistry / createNuoSearchProvider
+// 随 runtime 重建会丢弃旧缓存实例，导致同一检索式在新会话重新 spawn ego-browser
+// （30s 超时 + 15s 缓冲）。数据缓存无配置依赖，跨会话共享安全。
+// 测试隔离：同 key 缓存可能跨用例互串，spec 在 beforeEach 调 resetPatentCacheSingletons()。
+let sharedSearchCache: AsyncResultCache<PatentSearchResult> | undefined;
+let sharedScrapeCache: AsyncResultCache<ScrapeResult> | undefined;
+
+/** 清空共享缓存单例（测试隔离用；生产路径无调用）。 */
+export function resetPatentCacheSingletons(): void {
+  sharedSearchCache?.clear();
+  sharedScrapeCache?.clear();
+}
+
 /**
  * 包装 nuo-patent `searchPatents`：LRU 缓存 + 并发合并 + TTL 分层。
  * 返回同签名函数，可作 `createPatentSearchTool({ search })` 或
  * `createNuoSearchProvider({ search })` 的默认实现。
+ * 无自定义 options 时共享进程级缓存单例（跨 registry 重建存活）；
+ * 传 options（测试/特殊 TTL）时新建独立缓存，语义与旧实现一致。
  */
 export function cachedSearchPatents(
   impl: (query: string, options?: { limit?: number }) => Promise<PatentSearchResult>,
   options: PatentCacheOptions<PatentSearchResult> = {},
 ): (query: string, options?: { limit?: number }) => Promise<PatentSearchResult> {
-  const cache = new AsyncResultCache<PatentSearchResult>({
-    ...options,
-    ttlMs: options.ttlMs ?? DEFAULT_SEARCH_TTL_MS,
-    ttlFor: options.ttlFor ?? searchResultTtlMs,
-  });
+  const hasCustomOptions = Object.keys(options).length > 0;
+  const cache = hasCustomOptions ? createSearchCache(options) : (sharedSearchCache ??= createSearchCache());
   return async (query, opts) => {
     const limit = opts?.limit ?? 10;
     return cache.getOrLoad(searchCacheKey(query, limit), () => impl(query, { limit }), isSearchResultCacheable);
   };
 }
 
+/** 构造检索缓存（默认 TTL 分层：零命中 1min / 法律状态 5min / 其余 2h）。 */
+function createSearchCache(options: PatentCacheOptions<PatentSearchResult> = {}): AsyncResultCache<PatentSearchResult> {
+  return new AsyncResultCache<PatentSearchResult>({
+    ...options,
+    ttlMs: options.ttlMs ?? DEFAULT_SEARCH_TTL_MS,
+    ttlFor: options.ttlFor ?? searchResultTtlMs,
+  });
+}
+
 /**
  * 包装 nuo-patent `scrapePatent`：LRU 缓存 + 并发合并。
  * 仅缓存 success 的结果；NOT_FOUND/超时/解析失败不缓存（下次重试仍可触达源）。
+ * 无自定义 options 时共享进程级缓存单例（同上）。
  */
 export function cachedScrapePatent(
   impl: (patent: string, options?: { returnAbstract?: boolean; returnLegal?: boolean }) => Promise<ScrapeResult>,
   options: PatentCacheOptions<ScrapeResult> = {},
 ): (patent: string, options?: { returnAbstract?: boolean; returnLegal?: boolean }) => Promise<ScrapeResult> {
-  const cache = new AsyncResultCache<ScrapeResult>(options);
+  const hasCustomOptions = Object.keys(options).length > 0;
+  const cache = hasCustomOptions
+    ? new AsyncResultCache<ScrapeResult>(options)
+    : (sharedScrapeCache ??= new AsyncResultCache<ScrapeResult>(options));
   return async (patent, opts) => {
     const returnAbstract = opts?.returnAbstract ?? true;
     const returnLegal = opts?.returnLegal ?? true;

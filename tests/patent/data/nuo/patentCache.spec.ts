@@ -2,7 +2,7 @@
  * 测试: src/patent/data/nuo/patentCache — 检索/点查结果缓存（LRU + TTL + 并发合并）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
 import type { PatentSearchResult, ScrapeResult } from "nuo-patent";
 import {
   AsyncResultCache,
@@ -10,6 +10,7 @@ import {
   cachedSearchPatents,
   isScrapeResultCacheable,
   isSearchResultCacheable,
+  resetPatentCacheSingletons,
   searchCacheKey,
   searchResultTtlMs,
 } from "../../../../src/patent/data/nuo/patentCache.js";
@@ -178,6 +179,11 @@ describe("isSearchResultCacheable / isScrapeResultCacheable", () => {
 });
 
 describe("cachedSearchPatents / cachedScrapePatent", () => {
+  // 无 options 调用共享进程级缓存单例（跨用例同 key 可能互串），每个用例前清空。
+  beforeEach(() => {
+    resetPatentCacheSingletons();
+  });
+
   it("同一检索式 TTL 内只打一次底层", async () => {
     let calls = 0;
     const impl = async () => {

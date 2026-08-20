@@ -353,8 +353,15 @@ function estimateToolSchemas(tokenBudget: TokenBudgetManager, tools: CanonicalTo
   return total;
 }
 
+// 同一 request 对象引用在 get/setCachedProviderCount 中成对出现（同一次循环迭代），
+// WeakMap 弱引用缓存避免对同一对象重复 deep-sort + stringify（长历史请求的键计算
+// 为 O(N log N) + 大字符串分配）。对象可变时调用方新建引用，不会命中陈旧键。
+const requestKeyCache = new WeakMap<CanonicalModelRequest, string>();
+
 function cacheKeyForRequest(request: CanonicalModelRequest): string {
-  return createHash("sha256")
+  const cached = requestKeyCache.get(request);
+  if (cached !== undefined) return cached;
+  const key = createHash("sha256")
     .update(
       stableJson({
         provider: request.provider,
@@ -369,6 +376,8 @@ function cacheKeyForRequest(request: CanonicalModelRequest): string {
       }),
     )
     .digest("hex");
+  requestKeyCache.set(request, key);
+  return key;
 }
 
 function isOfficialOpenAIResponsesProvider(provider: ProviderConfig): boolean {

@@ -142,6 +142,11 @@ export class KgStore {
 
   /** LIKE 子串检索（name/title/content 任一包含即命中）。 */
   private likeSearch(keyword: string, limit: number): Array<{ id: string }> {
+    // 1 字查询守卫：LIKE %单字% 命中数万节点（kg_nodes 21 万行全表扫描），纯噪音，
+    // 直接拒绝（对齐 searchByKeywordOr 的 1 字丢弃策略 :186 注释）。2 字查询保留：
+    // 「新颖/驳回」等专利域高频词 FTS trigram 不可用（<3 rune），LIKE 有命中时
+    // 靠 LIMIT 提前退出（实测 ~5ms），无命中全表扫 ~121ms 属可接受尾部延迟。
+    if (Array.from(keyword).length < 2) return [];
     const pattern = this.likePattern(keyword);
     return this.stmtLikeSearch.all(pattern, pattern, pattern, limit) as Array<{ id: string }>;
   }

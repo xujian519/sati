@@ -128,19 +128,26 @@ function findLongestPathWithVisited(node: TranscriptChainNode, visited: Set<stri
     // Cycle guard: never revisit an entry already on the current path.
     return [];
   }
-  const nextVisited = new Set(visited);
   if (node.entry.entryId) {
-    nextVisited.add(node.entry.entryId);
+    visited.add(node.entry.entryId);
   }
-  if (node.children.length === 0) {
-    return [node.entry];
-  }
-  let best: AgentTranscriptEntry[] = [];
-  for (const child of node.children) {
-    const childPath = findLongestPathWithVisited(child, nextVisited);
-    if (childPath.length > best.length) {
-      best = childPath;
+  try {
+    if (node.children.length === 0) {
+      return [node.entry];
+    }
+    let best: AgentTranscriptEntry[] = [];
+    for (const child of node.children) {
+      const childPath = findLongestPathWithVisited(child, visited);
+      if (childPath.length > best.length) {
+        best = childPath;
+      }
+    }
+    return [node.entry, ...best];
+  } finally {
+    // 回溯删除：共享 visited 集合，兄弟分支互不可见本路径标记——与原来
+    // 每层 `new Set(visited)` 复制的语义等价，但为 O(1) 而非 O(深度) 分配。
+    if (node.entry.entryId) {
+      visited.delete(node.entry.entryId);
     }
   }
-  return [node.entry, ...best];
 }
