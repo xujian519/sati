@@ -107,6 +107,11 @@ export interface NormalizedMessage {
    * `sati-bridge.js#tool_call_finished` and `chatPermissions.ts`.
    */
   errorCode?: string;
+  /**
+   * 工具返回的结构化 data（经 bridge `tool_call_finished` 透传，如
+   * `document_style_panel` 的 { kind, htmlPath, style }）。
+   */
+  payload?: unknown;
   resultPath?: string;
   text?: string;
   reasoningContent?: string;

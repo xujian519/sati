@@ -1,0 +1,82 @@
+{
+  "panel": {
+    "title": "文书排版调参",
+    "close": "关闭面板",
+    "exportHint": "导出 PDF 由 agent 重新渲染，保持工具审计"
+  },
+  "group": {
+    "fontSize": "字号",
+    "leading": "行距",
+    "page": "页面布局",
+    "spacing": "间距",
+    "font": "字体",
+    "color": "颜色",
+    "brand": "页眉与落款"
+  },
+  "fontSize": {
+    "xs": "小五（页脚/小注）",
+    "sm": "五号（表格/元数据）",
+    "base": "小四（正文）",
+    "md": "H4 标题",
+    "lg": "H3 标题",
+    "xl": "H2 节标题",
+    "x2l": "H1 主标题"
+  },
+  "leading": {
+    "body": "正文行距",
+    "tight": "紧凑行距"
+  },
+  "page": {
+    "margin": "页边距（上 右 下 左）",
+    "padding": "正文内边距",
+    "bodyMaxWidth": "正文最大宽度"
+  },
+  "spacing": {
+    "sectionGap": "节间距",
+    "sectionGapLg": "大节间距"
+  },
+  "font": {
+    "serif": "正文字体（仿宋）",
+    "sans": "标题字体（黑体）",
+    "mono": "等宽字体（编号）"
+  },
+  "color": {
+    "accent": "主色",
+    "accentStrong": "深主色",
+    "body": "正文",
+    "muted": "次要文字",
+    "border": "边框",
+    "headerBg": "表头背景",
+    "surface": "页面背景",
+    "zebra": "斑马行",
+    "danger": "高风险",
+    "warning": "中风险",
+    "success": "低风险"
+  },
+  "brand": {
+    "firm": "事务所名称",
+    "confidential": "密级标记",
+    "disclaimer": "免责声明"
+  },
+  "placeholder": {
+    "default": "默认",
+    "firm": "如：XX 知识产权代理事务所",
+    "confidential": "如：机密 · 仅供委托方使用",
+    "disclaimer": "如：本分析由 AI 辅助生成，不构成正式法律意见…"
+  },
+  "preview": {
+    "title": "文书排版实时预览",
+    "noProject": "未选择项目，无法读取文书文件",
+    "readFailed": "读取文书文件失败",
+    "retry": "重试"
+  },
+  "actions": {
+    "exportHtml": "导出 HTML",
+    "savePreset": "保存预设",
+    "exportPdf": "导出 PDF",
+    "copyStyle": "复制参数",
+    "copied": "已复制",
+    "reset": "重置",
+    "presetPlaceholder": "预设名称…"
+  }
+}

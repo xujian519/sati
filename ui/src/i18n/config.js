@@ -27,6 +27,7 @@ import enAlwaysOn from "./locales/en/alwaysOn.json";
 import enRouting from "./locales/en/routing.json";
 import enTasks from "./locales/en/tasks.json";
 import enTeamPanel from "./locales/en/teamPanel.json";
+import enStylePanel from "./locales/en/stylePanel.json";
 import zhCommon from "./locales/zh-CN/common.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhAuth from "./locales/zh-CN/auth.json";
@@ -36,6 +37,7 @@ import zhAlwaysOn from "./locales/zh-CN/alwaysOn.json";
 import zhRouting from "./locales/zh-CN/routing.json";
 import zhCodeEditor from "./locales/zh-CN/codeEditor.json";
 import zhTeamPanel from "./locales/zh-CN/teamPanel.json";
+import zhStylePanel from "./locales/zh-CN/stylePanel.json";
 import { languages } from "./languages.js";
 
 const getSavedLanguage = () => {
@@ -66,6 +68,7 @@ i18n
         alwaysOn: enAlwaysOn,
         routing: enRouting,
         teamPanel: enTeamPanel,
+        stylePanel: enStylePanel,
       },
       "zh-CN": {
         common: zhCommon,
@@ -77,6 +80,7 @@ i18n
         alwaysOn: zhAlwaysOn,
         routing: zhRouting,
         teamPanel: zhTeamPanel,
+        stylePanel: zhStylePanel,
       },
     },
 

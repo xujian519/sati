@@ -216,6 +216,9 @@ export function mapGatewayEventToFrames(
             : {}),
           ...(event.toolName === "ask_user_question" && event.data ? { toolUseResult: event.data } : {}),
           ...(isSearchToolName(event.toolName) && event.data ? { toolUseResult: event.data } : {}),
+          // 通用结构化数据通道：工具返回 data（如 document_style_panel 的
+          // { kind, htmlPath, style }）透传为 payload，前端面板据此打开。
+          ...(event.data !== undefined ? { payload: event.data } : {}),
         },
       ];
     }
