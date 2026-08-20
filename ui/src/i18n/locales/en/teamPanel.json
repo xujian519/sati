@@ -44,6 +44,6 @@
   },
   "events": {
     "title": "Events",
-    "empty": "No team events yet. The live stream will appear here once event subscription is wired up."
+    "empty": "No team events yet. The live stream will appear here while a team session is active."
   }
 }

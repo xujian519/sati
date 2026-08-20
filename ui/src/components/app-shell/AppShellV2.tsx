@@ -605,6 +605,7 @@ export default function AppShellV2() {
       onRequestDeleteProject={handleRequestDeleteProject}
       onRequestDeleteSession={handleRequestDeleteSession}
       onShowSettings={onShowSettings}
+      onOpenTeamPanel={() => handleSelectTab("team")}
       onDeselectProject={handleDeselectProject}
       onResetProjectSessionPreview={handleResetProjectSessionPreview}
       onCollapse={onCollapseSidebar}

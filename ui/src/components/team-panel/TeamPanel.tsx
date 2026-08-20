@@ -8,8 +8,9 @@ import { EventStream } from "./EventStream";
 /**
  * 团队活动面板（M4 全操作）：概览（建队）+ 成员 + 任务 + 事件流。
  * 操作经 callAction 走 gateway 工具链（/api/teams/action → team_* 工具）。
+ * sessionId：当前会话（EventStream 事件订阅 watch 用，可选——无会话时仅轮询兜底）。
  */
-export function TeamPanel() {
+export function TeamPanel({ sessionId }: { sessionId?: string | null }) {
   const { t } = useTranslation("teamPanel");
   const { snapshot, loading, error, refresh, callAction } = useTeamPanel();
 
@@ -39,7 +40,7 @@ export function TeamPanel() {
             <TaskBoard team={team} onAction={callAction} />
           </div>
         ))}
-      <EventStream />
+      <EventStream sessionId={sessionId} />
     </div>
   );
 }

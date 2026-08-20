@@ -354,6 +354,11 @@ export function mapGatewayEventToFrames(
     case "agent_status":
       return agentStatusToFrames(event, base);
 
+    case "team_event":
+      // 团队编排事件（M2）：TeamEvent 载荷整包透传（不转聊天帧语义），
+      // UI 事件流按 kind:"team_event" 消费（EventStream.tsx）。
+      return [{ ...base, kind: "team_event", teamId: event.teamId, event: event.event }];
+
     default:
       return [];
   }

@@ -28,7 +28,8 @@
     "dashboard": "Routing",
     "memory": "Memory",
     "skills": "Skills",
-    "cron": "Cron"
+    "cron": "Cron",
+    "team": "Team"
   },
   "dashboardSwitcher": {
     "open": "Open dashboards menu",

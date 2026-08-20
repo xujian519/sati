@@ -49,6 +49,9 @@ const DashboardV2 = React.lazy(() => import("../../main-content-v2/DashboardV2")
 const TasksV2 = React.lazy(() => import("../../main-content-v2/TasksV2"));
 const MemoryPanel = React.lazy(() => import("./memory/MemoryPanel"));
 const SkillsV2 = React.lazy(() => import("../../main-content-v2/SkillsV2"));
+const TeamPanel = React.lazy(() =>
+  import("../../team-panel/TeamPanel").then(module => ({ default: module.TeamPanel })),
+);
 
 function TabSkeleton() {
   return (
@@ -567,7 +570,7 @@ function SplitBody(props: SplitBodyProps) {
   // Skills, Routing, Memory, and Always-On are auxiliary dashboards paired
   // with chat. Files stays a separate explorer + artifact + assistant mode.
   const isPlugin = typeof activeTab === "string" && activeTab.startsWith("plugin:");
-  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks"]);
+  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks", "team"]);
   const isFullScreenTool = fullScreenToolTabs.has(activeTab) || isPlugin;
   const isDashboardPanel = DASHBOARD_PANEL_TABS.has(activeTab);
   const dashboardPanelTab = isDashboardPanel ? (activeTab as DashboardPanelTab) : null;
@@ -757,6 +760,7 @@ function SplitBody(props: SplitBodyProps) {
       );
     }
     if (activeTab === "cron") return <CronV2 />;
+    if (activeTab === "team") return <TeamPanel sessionId={selectedSession?.id ?? null} />;
     if (activeTab === "dashboard")
       return (
         <DashboardV2
