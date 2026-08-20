@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { CaseLawSearchEngine } from "../../src/knowledge/case-law/case-law-search.js";
+import { CaseLawSearchEngine, createCaseLawSemanticSource } from "../../src/knowledge/case-law/case-law-search.js";
+import { KnowledgeEmbeddingSearch } from "../../src/knowledge/shared/knowledge-embeddings.js";
 
 /**
  * CaseLawSearchEngine 单元测试。
@@ -59,7 +60,8 @@ function createEngine(includeFts = true): { engine: CaseLawSearchEngine; dir: st
   insertChunk.run(4, "d3", 0, "本决定认为权利要求不具备新颖性。", 80);
   insertChunk.run(5, "d4", 0, "创造性审查标准：技术启示的判断应当结合本领域技术人员认知。", 150);
   insertChunk.run(6, "d5", 0, "本案权利要求清楚，无需过多说明。", 90);
-  insertChunk.run(7, "d6", 0, "本案权利要求清楚，无需过多说明。", 90);
+  // d6 content 追加英文小写（P1 #4b 大小写不敏感对照：大写查询应命中小写正文）
+  insertChunk.run(7, "d6", 0, "本案权利要求清楚，无需过多说明。A novel reactor design is disclosed.", 90);
 
   if (includeFts) {
     // contentless 表：content 参数被忽略（不存储），仅建立索引词。
@@ -72,7 +74,7 @@ function createEngine(includeFts = true): { engine: CaseLawSearchEngine; dir: st
     insertFts.run(4, "另一无效决定", "本决定认为权利要求不具备新颖性。");
     insertFts.run(5, "创造性-审查标准-磨削抛光", "创造性审查标准：技术启示的判断应当结合本领域技术人员认知。");
     insertFts.run(6, "100% 有效率方案", "本案权利要求清楚，无需过多说明。");
-    insertFts.run(7, "100X有效率方案", "本案权利要求清楚，无需过多说明。");
+    insertFts.run(7, "100X有效率方案", "本案权利要求清楚，无需过多说明。A novel reactor design is disclosed.");
   }
   db.close();
   return { engine: new CaseLawSearchEngine(dbPath), dir };
@@ -134,8 +136,7 @@ test("case-law: court 过滤（子串匹配）", t => {
 
 test("case-law: 2 字查询直接走 LIKE 降级（trigram 需 3+ 字符）", t => {
   const engine = withEngine(t);
-  // 2 字查询：P1 两阶段只走阶段 1 title 直查（content 全扫是分钟级卡点，
-  // 设计内牺牲 content 召回）。"无效" 命中 d1/d3 的 title。
+  // 2 字查询：P1 两阶段 title 直查先行（"无效" 命中 d1/d3 的 title）。
   const hits = engine.search("无效");
   assert.ok(
     hits.some(h => h.documentId === "d1"),
@@ -150,7 +151,7 @@ test("case-law: 2 字查询直接走 LIKE 降级（trigram 需 3+ 字符）", t 
 test("case-law: 无 docs_fts 表时整体降级 LIKE", t => {
   const engine = withEngine(t, false);
   assert.equal(engine.ftsAvailable, false);
-  // 无 FTS 走 LIKE 两阶段：2 字 "无效" title 直查命中 d1/d3
+  // 无 FTS 走 LIKE 两阶段：2 字 "无效" title 直查命中 d1/d3（阶段 2 亦放行）
   const hits = engine.search("无效");
   assert.ok(
     hits.some(h => h.documentId === "d1"),
@@ -270,12 +271,21 @@ test("P1: 3+ 字 content-only 命中（阶段 2 JS 侧解压匹配）", t => {
   assert.equal(engine.likeScanCapped, false, "fixture 文档数远小于扫描上限，不应截断");
 });
 
-test("P1: 2 字查询只走阶段 1，content-only 命中不再返回（设计内牺牲）", t => {
+test("P1: 2 字查询放行阶段 2（#4a 门槛放宽），content-only 命中按 rowid 升序", t => {
   const engine = withEngine(t, false);
-  // "认为" 只在 d1 最长 chunk 的 content（title 不含）；2 字不触发阶段 2
+  // "认为" 只在 d1/d3 的 content（title 不含）；#4a 起 2 字触发阶段 2 受限扫描
+  // （cap 兜底，1 字仍只走阶段 1）。命中顺序 = 候选 rowid 升序（#19）。
   const hits = engine.search("认为");
-  assert.equal(hits.length, 0, "2 字 content 命中应被牺牲（避免分钟级全扫）");
-  assert.equal(engine.likeScanCapped, false);
+  assert.deepEqual(
+    hits.map(h => h.documentId),
+    ["d1", "d3"],
+    "2 字 content 命中按 rowid 升序返回（d1 rowid=1, d3 rowid=4）",
+  );
+  assert.ok(
+    hits.every(h => h.snippet.includes("认为")),
+    "snippet 应含关键词",
+  );
+  assert.equal(engine.likeScanCapped, false, "fixture 文档数远小于扫描上限，不应截断");
 });
 
 test("P1: 1 字查询只走阶段 1 title 直查", t => {
@@ -290,7 +300,7 @@ test("P1: 1 字查询只走阶段 1 title 直查", t => {
 
 test("P1: title 中的 % 与 _ 字面转义（不当作通配符）", t => {
   const engine = withEngine(t, false);
-  // 无 FTS 强制 LIKE；"100%" 4 rune，title 命中 d5 即停（阶段 2 不扫 content）
+  // 无 FTS 强制 LIKE；"100%" 4 rune 触发阶段 2，但 content 无字面 "100%" → 只 title 命中
   const hits = engine.search("100%");
   assert.ok(
     hits.some(h => h.documentId === "d5"),
@@ -356,4 +366,105 @@ test("P1: SATI_LIKE_TWO_PHASE=0 等价——构造注入 likeTwoPhase:false 走�
     hits.some(h => h.documentId === "d1" && h.snippet.includes("认为")),
     "回滚路径应保留 content 命中",
   );
+});
+
+test("P1: 大小写不敏感（#4b 双端小写）——大写查询命中小写正文", t => {
+  const engine = withEngine(t, false);
+  // d6 content 含小写 "reactor"（title 不含）；旧 JS includes 大小写敏感会漏掉
+  // 大写查询（如「ABC 公司」搜小写正文）——双端 toLowerCase 后字面等价旧 LIKE。
+  const hits = engine.search("REACTOR");
+  assert.ok(
+    hits.some(h => h.documentId === "d6" && h.snippet.includes("reactor")),
+    "大写查询应命中小写 content",
+  );
+  // 反向：小写查询命中大写正文（fixture 无大写正文，用混合大小写词确认无崩溃）
+  const lower = engine.search("reactor");
+  assert.ok(
+    lower.some(h => h.documentId === "d6"),
+    "小写查询命中一致",
+  );
+});
+
+test("P1: LIKE 截断后 FTS 干净路径不残留信号（#20 入口统一清零）", t => {
+  const { engine, dir } = createEngine(true);
+  engine.close();
+  const e = new CaseLawSearchEngine(join(dir, "test.db"), { likeScanCap: 2 });
+  t.after(() => {
+    e.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  // FTS 无命中（乱造词）→ LIKE 阶段 2 截断（cap=2 只扫 d1/d2）
+  const missed = e.search("xyzzy发明");
+  assert.equal(missed.length, 0, "乱造词 FTS/LIKE 均无命中");
+  assert.equal(e.likeScanCapped, true, "LIKE 阶段 2 达上限应置截断信号");
+  // 随后 FTS 干净命中：入口统一清零 → 不再残留上次 LIKE 的截断值
+  const hit = e.search("创造性");
+  assert.ok(hit.length >= 1, "FTS 应命中");
+  assert.equal(e.likeScanCapped, false, "FTS 路径不残留 LIKE 截断信号（入口清零）");
+});
+
+test("P1: LIKE 模式超长降级空结果（pattern too complex 不抛异常）", t => {
+  const engine = withEngine(t, false);
+  // SQLite LIKE 模式长度上限（默认 50000 字节）：超长查询串（如整篇文书
+  // 粘贴）执行时会抛 "LIKE or GLOB pattern too complex"。应降级返回空结果，
+  // 而不是让检索流程中断（provider 层记 "判例检索异常"）。
+  const huge = "发明".repeat(30000);
+  const hits = engine.search(huge);
+  assert.equal(hits.length, 0, "超长 LIKE 模式应降级空结果而非抛异常");
+});
+
+test("P4 #9b: semantic 未 ready 时 searchSemantic 触发预热（死门修复）", async t => {
+  // 独立 fixture（documents/chunks/embeddings 三表，dim=4，与
+  // embeddings-async-load.spec.ts 同构）：engine 注入未加载的真实
+  // KnowledgeEmbeddingSearch → searchSemantic 应触发预热（tryWarm），
+  // 而不是静默跳过让语义路永久死亡。
+  const dir = mkdtempSync(join(tmpdir(), "case-law-semantic-"));
+  const dbPath = join(dir, "test.db");
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE documents (
+      id TEXT PRIMARY KEY, source TEXT NOT NULL, doc_type TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent',
+      title TEXT NOT NULL, file_path TEXT, module TEXT, priority TEXT, level TEXT, publish_date TEXT,
+      case_number TEXT, court TEXT, decision_number TEXT, article_number TEXT, content_hash TEXT,
+      indexed_at TEXT NOT NULL, char_count INTEGER DEFAULT 0, chunk_count INTEGER DEFAULT 0
+    );
+    CREATE TABLE chunks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT NOT NULL REFERENCES documents(id),
+      chunk_index INTEGER NOT NULL, chunk_type TEXT NOT NULL, content TEXT NOT NULL, char_count INTEGER DEFAULT 0
+    );
+    CREATE TABLE embeddings (id INTEGER PRIMARY KEY AUTOINCREMENT, chunk_id INTEGER NOT NULL, document_id TEXT NOT NULL, vector BLOB NOT NULL, model TEXT NOT NULL DEFAULT 'bge-m3', dim INTEGER NOT NULL DEFAULT 4, indexed_at TEXT NOT NULL, norm REAL NOT NULL DEFAULT 0.0);
+  `);
+  db.prepare(
+    `INSERT INTO documents (id, source, doc_type, title, indexed_at) VALUES ('d1', 'raw', 'case', '专利无效复审决定', '2026-01-01')`,
+  ).run();
+  const chunkId = db
+    .prepare(`INSERT INTO chunks (document_id, chunk_index, chunk_type, content) VALUES ('d1', 0, 'text', '内容')`)
+    .run().lastInsertRowid as number;
+  const buf = Buffer.alloc(4 * 4);
+  [1, 0, 0, 0].forEach((v, j) => buf.writeFloatLE(v, j * 4));
+  db.prepare(
+    `INSERT INTO embeddings (chunk_id, document_id, vector, dim, norm, indexed_at) VALUES (?, 'd1', ?, 4, 1.0, '2026-01-01')`,
+  ).run(chunkId, buf);
+  db.close();
+
+  const engine = new CaseLawSearchEngine(dbPath);
+  const embeddings = new KnowledgeEmbeddingSearch({ dbPath, logger: { warn: () => {} }, docTypes: ["case"] });
+  t.after(() => {
+    engine.close();
+    embeddings.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  engine.setSemantic(createCaseLawSemanticSource(async texts => texts.map(() => [1, 0, 0, 0]), embeddings));
+
+  assert.equal(embeddings.ready, false, "前置：语义矩阵未加载");
+  const first = await engine.searchSemantic("创造性", 5);
+  assert.deepEqual(first, [], "未 ready 时语义路跳过（无 embed 浪费）");
+  // 死门修复：searchSemantic 应已触发后台预热——等待同一单飞完成
+  await embeddings.loadAsync();
+  assert.equal(embeddings.ready, true, "searchSemantic 应触发预热（预热通道不被关闭）");
+  // 预热完成后语义路正常命中
+  const second = await engine.searchSemantic("创造性", 5);
+  assert.ok(second.length >= 1, "预热完成后语义路应命中");
+  assert.equal(second[0]!.documentId, "d1");
+  assert.equal(second[0]!.via, "semantic");
 });

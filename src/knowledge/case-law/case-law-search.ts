@@ -292,24 +292,30 @@ export class CaseLawSearchEngine {
     // 1. 判例语义：embed query → top-k → 回源。
     //    ready 检查（P4 异步预热）：矩阵未加载时跳过语义路——省一次 embed API
     //    调用（embed 结果对空矩阵毫无意义），关键词路不受影响。
+    //    #9b 死门修复：未 ready 时经 tryWarm 保持预热通道——gateway 的一次性
+    //    预热失败后，由后续语义查询按冷却期（backoff）重试，语义路不永久死亡。
     const source = this.semantic;
-    if (source && source.search.available && source.search.ready) {
-      try {
-        const queryVector = await source.embed(trimmed);
-        if (queryVector.length > 0) {
-          for (const hit of source.search.search(queryVector, limit)) {
-            if (results.length >= limit) break;
-            const row = this.stmtGetDocById.get(hit.docId) as CaseLawRow | undefined;
-            if (!row || seen.has(row.document_id)) continue;
-            seen.add(row.document_id);
-            results.push(this.toHit(row, null, "semantic"));
+    if (source && source.search.available) {
+      if (!source.search.ready) {
+        source.search.tryWarm();
+      } else {
+        try {
+          const queryVector = await source.embed(trimmed);
+          if (queryVector.length > 0) {
+            for (const hit of source.search.search(queryVector, limit)) {
+              if (results.length >= limit) break;
+              const row = this.stmtGetDocById.get(hit.docId) as CaseLawRow | undefined;
+              if (!row || seen.has(row.document_id)) continue;
+              seen.add(row.document_id);
+              results.push(this.toHit(row, null, "semantic"));
+            }
           }
+        } catch (error) {
+          // 判例语义路失败降级（不阻断 personal_note 路与关键词路）。
+          this.logger?.warn?.(
+            `[sati] 判例语义召回失败，降级跳过: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
-      } catch (error) {
-        // 判例语义路失败降级（不阻断 personal_note 路与关键词路）。
-        this.logger?.warn?.(
-          `[sati] 判例语义召回失败，降级跳过: ${error instanceof Error ? error.message : String(error)}`,
-        );
       }
     }
 
@@ -342,6 +348,9 @@ export class CaseLawSearchEngine {
 
   /** 判例全文搜索：FTS5 BM25 优先，短查询/无 FTS 时降级 LIKE；结果按文档去重（一文档一行）。 */
   search(keyword: string, options: CaseLawSearchOptions = {}): CaseLawHit[] {
+    // 每次检索入口清零截断信号：FTS/legacy/异常路径不再残留上次 LIKE 扫描的
+    // 旧值（likeScanCapped getter 语义 = 「本次 search 是否截断」）。
+    this.likeScanTruncated = false;
     const limit = Math.min(Math.max(options.limit ?? 5, 1), MAX_LIMIT);
     const trimmed = keyword.trim();
     if (!trimmed) return [];
@@ -495,9 +504,25 @@ export class CaseLawSearchEngine {
   private searchLike(keyword: string, options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
     // LIKE 回退计数（设计内降级路径：短词/未命中/FTS 降级；不 warn 避免噪音）。
     this.stats?.recordLikeFallback();
-    return this.likeTwoPhase
-      ? this.searchLikeTwoPhase(keyword, options, limit)
-      : this.searchLikeLegacy(keyword, options, limit);
+    try {
+      return this.likeTwoPhase
+        ? this.searchLikeTwoPhase(keyword, options, limit)
+        : this.searchLikeLegacy(keyword, options, limit);
+    } catch (error) {
+      // SQLite LIKE 模式长度上限（默认 50000 字节）——超长查询串（如整篇文书
+      // 粘贴）执行时抛 "LIKE or GLOB pattern too complex"。降级返回空结果
+      // 而非中断检索：语义路（searchSemantic）独立于此方法仍可召回，关键词
+      // 路也不会让整个检索流程崩溃。
+      if (/pattern too complex/i.test(error instanceof Error ? error.message : String(error))) {
+        this.logger?.warn?.(
+          `[sati] case-law LIKE 模式超限（${Array.from(keyword).length} 字），降级空结果: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return [];
+      }
+      throw error;
+    }
   }
 
   /**
@@ -507,16 +532,16 @@ export class CaseLawSearchEngine {
    *           延迟可接受，命中靠 LIMIT 提前退出）。命中行 snippet 由 JS 层对
    *           top-limit 回源最长 chunk（stmtGetDocById，与 FTS backfillContent
    *           同模式），保持旧语义「片段 = 最长 chunk」。
-   *   阶段 2（title 不足 limit 且 runes ≥ 3）：documents 直查候选（按 id 升序，
-   *           上限 likeScanCap 篇），JS 侧 decompressChunk + indexOf 字面匹配
-   *           （等价旧 LIKE 转义语义）。1-2 字查询只走阶段 1——2 字高频词
-   *           content 全扫是分钟级卡点，设计内牺牲 content 召回（title 命中保留）。
+   *   阶段 2（title 不足 limit 且 runes ≥ 2）：documents 直查候选（按 rowid
+   *           升序，上限 likeScanCap 篇），JS 侧 decompressChunk + 双端小写
+   *           字面匹配（等价旧 LIKE 转义语义）。1 字查询只走阶段 1——1 字
+   *           content 全扫是分钟级卡点，设计内牺牲 content 召回（title 命中保留）；
+   *           2 字及以上放行受限扫描（cap 兜底，可接受）。
    *   截断信号：likeScanCapped getter 供工具层提示「仅扫描前 N 篇」。
    *   顺序差异属预期变化：阶段 1 行序（SQLite 自然序）+ 阶段 2 按 id 升序，
    *   不再是旧 SQL 的文档内自然序。
    */
   private searchLikeTwoPhase(keyword: string, options: CaseLawSearchOptions, limit: number): CaseLawHit[] {
-    this.likeScanTruncated = false;
     const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
 
     // 阶段 1：title 直查
@@ -541,25 +566,28 @@ export class CaseLawSearchEngine {
       return this.toHit(full ?? row, null, "like");
     });
 
-    // 阶段 2：受限 content 扫描（title 不足 limit 且 ≥3 字；1-2 字只走阶段 1）
-    if (hits.length < limit && Array.from(keyword).length >= 3) {
+    // 阶段 2：受限 content 扫描（title 不足 limit 且 ≥2 字；1 字只走阶段 1）
+    if (hits.length < limit && Array.from(keyword).length >= 2) {
       const seen = new Set(rows.map(row => row.document_id));
       const { clauses, params } = this.buildLikeClauses(options);
       const sql = `
         SELECT d.id AS document_id, d.doc_type, d.title, d.decision_number, d.case_number,
                d.court, d.source, d.module, d.char_count, NULL AS chunk_index, NULL AS content
         FROM documents d${clauses.length > 0 ? ` WHERE ${clauses.join(" AND ")}` : ""}
-        ORDER BY d.id
+        ORDER BY d.rowid
         LIMIT ?
       `;
       const candidates = this.prepareCached(sql).all(...params, this.likeScanCap) as CaseLawRow[];
       this.likeScanTruncated = candidates.length >= this.likeScanCap;
+      // 双端小写后字面匹配：旧 LIKE 语义大小写不敏感，JS includes 是大小写敏感的
+      // ——大写查询（如「ABC 公司」）会漏掉小写正文（#4b）。
+      const needle = keyword.toLowerCase();
       for (const row of candidates) {
         if (hits.length >= limit) break;
         if (seen.has(row.document_id)) continue;
         const full = this.stmtGetDocById.get(row.document_id) as CaseLawRow | undefined;
         if (!full) continue;
-        if (decompressChunk(full.content).includes(keyword)) {
+        if (decompressChunk(full.content).toLowerCase().includes(needle)) {
           seen.add(row.document_id);
           hits.push(this.toHit(full, null, "like"));
         }
