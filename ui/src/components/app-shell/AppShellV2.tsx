@@ -23,6 +23,7 @@ import { resolveMarkdownFileHref } from "../chat/utils/resolveMarkdownFileHref";
 import type { SessionNavigationOptions } from "../main-content/types/types";
 import { ConnectionBanner } from "../ui/ConnectionBanner";
 import ErrorBoundary from "../main-content/view/ErrorBoundary";
+import { StylePanelHost } from "../patent/StylePanel";
 import SidebarV2 from "./SidebarV2";
 import MainAreaV2 from "./MainAreaV2";
 import { chooseDefaultProject } from "./appShellSelection";
@@ -742,6 +743,16 @@ export default function AppShellV2() {
                 document.body,
               )
             : null}
+
+          {/* 文书排版调参面板（document_style_panel 工具 → tool_call_finished payload 打开） */}
+          <StylePanelHost
+            sendMessage={sendMessage}
+            subscribe={subscribe}
+            projectName={selectedProject?.name ?? ""}
+            projectPath={selectedProject?.fullPath || selectedProject?.path || ""}
+            sessionId={selectedSession?.id ?? null}
+            provider="sati"
+          />
         </div>
       </div>
     </ErrorBoundary>

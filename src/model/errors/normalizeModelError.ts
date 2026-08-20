@@ -48,7 +48,7 @@ export function normalizeModelError(
     readString(source?.type) ??
     statusCodeToCode(status, message);
 
-  const hint = resolveUserHint(code, message, status, provider);
+  const hint = resolveUserHint(code, message, provider);
 
   const result: CanonicalModelError = {
     provider,
@@ -243,7 +243,6 @@ function statusCodeToCode(status: number | undefined, message?: string): string 
 function resolveUserHint(
   code: string,
   message: string,
-  status?: number,
   provider?: string,
 ): { userHint?: string; settingsFix?: SettingsFix } {
   switch (code) {

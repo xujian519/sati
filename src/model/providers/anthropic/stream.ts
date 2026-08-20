@@ -17,6 +17,8 @@ export type AnthropicStreamState = {
   failedToolCalls: FailedToolCall[];
 };
 
+const TRANSIENT_ERROR_TYPES = new Set(["overloaded_error", "rate_limit_error", "api_error", "timeout_error"]);
+
 export function createAnthropicStreamState(): AnthropicStreamState {
   return {
     toolCalls: new Map(),
@@ -60,7 +62,6 @@ export function normalizeAnthropicStreamEvent(
     case "error": {
       const errObj = asRecord(event.error);
       const errType = readString(errObj.type) ?? "provider_error";
-      const TRANSIENT_ERROR_TYPES = new Set(["overloaded_error", "rate_limit_error", "api_error", "timeout_error"]);
       const errMessage = readString(errObj.message) ?? "Anthropic stream error.";
       const retryAfterMs = parseRetryAfterFromMessage(errMessage);
       return [

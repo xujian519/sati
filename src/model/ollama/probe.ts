@@ -140,7 +140,7 @@ export async function probeOllamaInstalledModels(
   return normalizeModelsBody(compatibleBody);
 }
 
-/** 同步读取探测缓存；未命中或已过期返回 null。 */
+/** 同步读取探测缓存；未命中返回 null，已过期返回 stale 数据并触发后台刷新。 */
 export function getCachedOllamaModels(baseUrl: string): OllamaModelInfo[] | null {
   const entry = cache.get(baseUrl);
   if (!entry) return null;

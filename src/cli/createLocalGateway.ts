@@ -1203,6 +1203,8 @@ class ProjectRuntimeRegistry {
       ...(this._teamTools ? { team: this._teamTools } : {}),
       backgroundTasks: { runtime: backgroundTasks },
       searchPatentFigure: { embeddingClient },
+      // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
+      documentStyle: {},
       ...(memory?.service ? { memory: { service: memory.service } } : {}),
       readSkill: {
         loader: name => pluginRuntime.loadSkillPrompt(name),

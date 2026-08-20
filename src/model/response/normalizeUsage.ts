@@ -33,7 +33,13 @@ export function normalizeOpenAIUsage(raw: unknown): CanonicalUsage | undefined {
     : isRecord(raw.input_tokens_details)
       ? raw.input_tokens_details
       : undefined;
-  const cacheReadTokens = readNumber(details?.cached_tokens) ?? readNumber(raw.cache_read_input_tokens);
+  // DeepSeek（openai 兼容）在 usage 顶层给 prompt_cache_hit_tokens/prompt_cache_miss_tokens：
+  // 命中量计入 cacheReadTokens；miss 属于本次输入，经 inputTokens 计算自然落位（不映射为写入量，
+  // DeepSeek 无 cache write 计量）。部分版本同时带 details.cached_tokens，优先级最高。
+  const cacheReadTokens =
+    readNumber(details?.cached_tokens) ??
+    readNumber(raw.prompt_cache_hit_tokens) ??
+    readNumber(raw.cache_read_input_tokens);
   const cacheWriteTokens = readNumber(details?.cache_write_tokens) ?? readNumber(raw.cache_creation_input_tokens);
 
   const inputTokens =

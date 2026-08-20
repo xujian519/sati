@@ -68,11 +68,11 @@ type OpenAIResponsesTool = {
 export function buildOpenAIResponsesRequest(
   request: CanonicalModelRequest,
   model: ModelDefinition,
-  _provider?: ProviderConfig,
+  provider?: ProviderConfig,
 ): OpenAIResponsesRequestBody {
   const thinkingPlan = resolveThinkingPlan(
     request.thinking,
-    _provider ?? { id: "openai", protocol: "openai-responses", url: "", apiKey: "", headers: {}, models: {} },
+    provider ?? { id: "openai", protocol: "openai-responses", url: "", apiKey: "", headers: {}, models: {} },
     model,
   );
   throwIfUnsupportedThinkingPlan(thinkingPlan, request);

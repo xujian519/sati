@@ -75,9 +75,7 @@ export function buildOpenAIRequest(
     model,
   );
   throwIfUnsupportedThinkingPlan(thinkingPlan, request);
-  const messages = repairOpenAIToolPairing(
-    request.messages.flatMap((message, messageIndex) => toOpenAIMessages(message, messageIndex)),
-  );
+  const messages = repairOpenAIToolPairing(request.messages.flatMap(message => toOpenAIMessages(message)));
   if (request.systemPrompt) {
     messages.unshift({ role: "system", content: request.systemPrompt });
   }
@@ -139,7 +137,7 @@ export function buildOpenAIRequest(
   return body;
 }
 
-function toOpenAIMessages(message: CanonicalMessage, _messageIndex: number): OpenAIMessage[] {
+function toOpenAIMessages(message: CanonicalMessage): OpenAIMessage[] {
   if (message.role === "user") {
     return toOpenAIUserMessages(message);
   }

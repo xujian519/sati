@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>可专利性分析意见 — 示例</title>
 <style>
-  /* 与 assets/template.html 完全一致的样式；本文件为填充示例，仅供风格确认 */
-  /* 品牌变量由 Sati 文书品牌契约注入（见 assets/templates/patent/DOCS.md）。
-   * 本示例使用默认值；agent 渲染时禁止改写这些变量。 */
+  /* ============================================================
+   * 可专利性分析意见 — 文书骨架（v2 排版规范）
+   * 正文 小四 12pt + 仿宋 + 1.5 倍行距；标题黑体；A4 页边距 上20 下20 左25 右25。
+   * 品牌变量由 assets/templates/patent/tokens.css 注入；agent 不改样式。
+   * ============================================================ */
   :root {
     --doc-firm: var(--sati-doc-firm, "XX 知识产权代理事务所");
     --doc-confidential: var(--sati-doc-confidential, "机密 · 仅供委托方使用");
@@ -23,28 +25,38 @@
     --doc-badge-high: var(--sati-doc-danger, #b42318);
     --doc-badge-mid: var(--sati-doc-warning, #b54708);
     --doc-badge-low: var(--sati-doc-success, #067647);
-    --doc-font-serif: var(--sati-doc-font-serif, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", Georgia, serif);
+    --doc-font-serif: var(--sati-doc-font-serif, "FangSong", "仿宋", "FangSong_GB2312", "STFangsong", "SimSun", serif);
     --doc-font-sans: var(--sati-doc-font-sans, "Noto Sans CJK SC", "Source Han Sans SC", "Heiti SC", "SimHei", "PingFang SC", sans-serif);
     --doc-font-mono: var(--sati-doc-font-mono, "SF Mono", "Cascadia Mono", "JetBrains Mono", Consolas, monospace);
-    --doc-page-margin: var(--sati-doc-page-margin, 16mm 18mm 18mm 18mm);
-    --doc-body-padding: var(--sati-doc-body-padding, 0 18mm);
-    --doc-body-max-width: var(--sati-doc-body-max-width, 174mm);
+    --doc-page-margin: var(--sati-doc-page-margin, 20mm 25mm 20mm 25mm);
+    --doc-body-padding: var(--sati-doc-body-padding, 0 25mm);
+    --doc-body-max-width: var(--sati-doc-body-max-width, 160mm);
+    --doc-text-xs: var(--sati-doc-text-xs, 9pt);
+    --doc-text-sm: var(--sati-doc-text-sm, 10.5pt);
+    --doc-text-base: var(--sati-doc-text-base, 12pt);
+    --doc-text-md: var(--sati-doc-text-md, 12pt);
+    --doc-text-lg: var(--sati-doc-text-lg, 12pt);
+    --doc-text-xl: var(--sati-doc-text-xl, 14pt);
+    --doc-text-2xl: var(--sati-doc-text-2xl, 16pt);
+    --doc-leading-body: var(--sati-doc-leading-body, 1.5);
+    --doc-leading-tight: var(--sati-doc-leading-tight, 1.3);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html { font-size: 12pt; }
-
+  html { font-size: var(--doc-text-base); }
   body {
     font-family: var(--doc-font-serif);
     color: var(--doc-body);
     background: var(--doc-surface);
-    line-height: 1.7;
+    font-size: var(--doc-text-base); /* 小四正文 */
+    line-height: var(--doc-leading-body); /* 1.5 倍行距 */
+    text-justify: inter-ideograph;
     padding: var(--doc-body-padding);
     max-width: var(--doc-body-max-width);
     margin: 0 auto;
   }
 
+  /* ---------- 文书抬头 ---------- */
   .doc-header {
     display: flex;
     justify-content: space-between;
@@ -52,7 +64,7 @@
     padding: 7mm 0 3mm;
     border-bottom: 2px solid var(--doc-accent);
     font-family: var(--doc-font-sans);
-    font-size: 9.5pt;
+    font-size: var(--doc-text-sm);
     color: var(--doc-muted);
   }
   .doc-header .firm { font-weight: 600; color: var(--doc-accent); }
@@ -64,7 +76,7 @@
   .doc-masthead .doc-type {
     display: inline-block;
     font-family: var(--doc-font-sans);
-    font-size: 9pt;
+    font-size: var(--doc-text-xs);
     letter-spacing: 0.4em;
     color: var(--doc-accent);
     border: 1px solid var(--doc-accent);
@@ -73,41 +85,39 @@
   }
   .doc-masthead h1 {
     font-family: var(--doc-font-sans);
-    font-size: 16pt;
+    font-size: var(--doc-text-2xl);
     font-weight: 700;
     letter-spacing: 0.12em;
     color: var(--doc-accent-strong);
   }
-  .doc-masthead .doc-number {
-    font-family: var(--doc-font-sans);
-    font-size: 9.5pt;
-    color: var(--doc-muted);
-    margin-top: 2.5mm;
-  }
+  .doc-masthead .doc-number { font-family: var(--doc-font-sans); font-size: var(--doc-text-sm); color: var(--doc-muted); margin-top: 2.5mm; }
 
   .doc-meta {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.6mm 6mm;
+    grid-template-columns: 34mm 1fr;
+    gap: 0;
     width: 100%;
     margin: 5mm 0 6mm;
     border: 1px solid var(--doc-border);
-    font-size: 11pt;
+    font-size: var(--doc-text-sm);
   }
   .doc-meta dt {
     font-family: var(--doc-font-sans);
     font-weight: 600;
     color: var(--doc-accent);
     background: var(--doc-header-bg);
-    padding: 1.2mm 4mm;
+    padding: 1.5mm 4mm;
     white-space: nowrap;
+    border-bottom: 1px solid var(--doc-border);
   }
-  .doc-meta dd { padding: 1.2mm 4mm; }
+  .doc-meta dd { padding: 1.5mm 4mm; border-bottom: 1px solid var(--doc-border); }
+  .doc-meta dt:last-of-type, .doc-meta dd:last-of-type { border-bottom: none; }
 
+  /* ---------- 章节与标题 ---------- */
   section { margin: 5mm 0; }
   h2 {
     font-family: var(--doc-font-sans);
-    font-size: 13pt;
+    font-size: var(--doc-text-xl);
     font-weight: 700;
     color: var(--doc-accent-strong);
     padding-bottom: 1mm;
@@ -116,7 +126,7 @@
   }
   h3 {
     font-family: var(--doc-font-sans);
-    font-size: 11.5pt;
+    font-size: var(--doc-text-lg);
     font-weight: 600;
     color: var(--doc-accent);
     margin: 4mm 0 2mm;
@@ -125,6 +135,7 @@
   ol, ul { margin: 1.5mm 0 1.5mm 7mm; }
   li { margin: 0.8mm 0; }
 
+  /* ---------- 结论摘要 ---------- */
   .verdict-table th, .verdict-table td { text-align: left; }
 
   .callout {
@@ -132,26 +143,27 @@
     border-left: 3px solid var(--doc-accent);
     padding: 3mm 4mm;
     margin: 3mm 0;
-    font-size: 11pt;
+    font-size: var(--doc-text-base);
   }
   .callout .callout-title {
     font-family: var(--doc-font-sans);
     font-weight: 700;
-    font-size: 10.5pt;
+    font-size: var(--doc-text-base);
     color: var(--doc-accent);
     margin-bottom: 1mm;
   }
 
+  /* ---------- 表格 ---------- */
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 10.5pt;
+    font-size: var(--doc-text-sm);
     margin: 2.5mm 0;
     font-variant-numeric: tabular-nums;
   }
   caption {
     font-family: var(--doc-font-sans);
-    font-size: 9.5pt;
+    font-size: var(--doc-text-xs);
     color: var(--doc-muted);
     text-align: left;
     margin-bottom: 1mm;
@@ -160,6 +172,7 @@
     border: 1px solid var(--doc-border);
     padding: 1.5mm 2.5mm;
     vertical-align: top;
+    line-height: var(--doc-leading-body);
   }
   th {
     font-family: var(--doc-font-sans);
@@ -171,12 +184,13 @@
   thead { display: table-header-group; }
   tbody tr:nth-child(even) { background: var(--doc-zebra); }
   .num { text-align: right; }
-  .mono { font-family: var(--doc-font-mono); font-size: 9.5pt; }
+  .mono { font-family: var(--doc-font-mono); font-size: var(--doc-text-sm); }
 
+  /* ---------- 置信度 / 风险徽标 ---------- */
   .badge {
     display: inline-block;
     font-family: var(--doc-font-sans);
-    font-size: 9pt;
+    font-size: var(--doc-text-xs);
     line-height: 1.4;
     padding: 0 5px;
     border-radius: 2px;
@@ -192,12 +206,13 @@
 
   .assumption-note { font-style: italic; color: var(--doc-muted); }
 
+  /* ---------- 页脚 / 免责声明 ---------- */
   .doc-closing { margin-top: 8mm; }
   .disclaimer {
     border: 1px solid var(--doc-border);
     background: var(--doc-header-bg);
     padding: 3mm 4mm;
-    font-size: 9.5pt;
+    font-size: var(--doc-text-xs);
     color: var(--doc-muted);
     margin: 3mm 0;
   }
@@ -206,9 +221,7 @@
     font-weight: 700;
     color: var(--doc-body);
   }
-  .disclaimer::after {
-    content: var(--doc-disclaimer);
-  }
+  .disclaimer::after { content: var(--doc-disclaimer); }
   .doc-footer {
     margin: 6mm 0 4mm;
     padding-top: 2mm;
@@ -216,13 +229,14 @@
     display: flex;
     justify-content: space-between;
     font-family: var(--doc-font-sans);
-    font-size: 8.5pt;
+    font-size: var(--doc-text-xs);
     color: var(--doc-muted);
   }
-  .signature { margin-top: 6mm; display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
-  .signature .sign-block { border-top: 1px solid var(--doc-body); padding-top: 1.5mm; font-family: var(--doc-font-sans); font-size: 10pt; }
+  .signature { margin-top: 8mm; display: grid; grid-template-columns: 1fr 1fr; gap: 12mm; }
+  .signature .sign-block { border-top: 1px solid var(--doc-body); padding-top: 1.5mm; font-family: var(--doc-font-sans); font-size: var(--doc-text-base); }
 
-  @page { size: A4; margin: var(--doc-page-margin, 16mm 18mm 18mm 18mm); }
+  /* ---------- 打印 ---------- */
+  @page { size: A4; margin: var(--doc-page-margin, 20mm 25mm 20mm 25mm); }
   @media print {
     body { padding: 0; max-width: none; }
     a { color: inherit; text-decoration: none; }

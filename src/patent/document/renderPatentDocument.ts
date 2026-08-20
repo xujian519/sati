@@ -7,10 +7,12 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { caseOutputsDir } from "../paths.js";
 import { buildBrandStyle, loadBrandFromPath, mergeBrand } from "./brandInjector.js";
+import { buildStyleOverrides, mergeDocumentStyle } from "./style.js";
+import { loadStylePreset, resolvePresetDirFromBrandPath } from "./stylePreset.js";
 import { SatiDocumentInputError } from "./errors.js";
 import { renderPdf } from "./pdfRenderer.js";
 import { readTemplateHtml } from "./templateResolver.js";
-import type { DocumentRenderInput, DocumentRenderResult, RenderFormat } from "./types.js";
+import type { DocumentRenderInput, DocumentRenderResult, DocumentStyle, RenderFormat } from "./types.js";
 
 /** 默认品牌配置文件路径（相对仓库根）。 */
 const DEFAULT_BRAND_PATH = "products/_example/brand/theme.json";
@@ -157,8 +159,21 @@ export async function renderPatentDocument(input: DocumentRenderInput, cwd: stri
   const fromConfig = loadBrandFromPath(brandPath.path);
   const brand = mergeBrand(input.brand, fromConfig);
 
+  // 加载样式预设（如指定），显式 style 覆盖预设（分组级深合并）。
+  let style: DocumentStyle | undefined;
+  if (input.stylePreset !== undefined) {
+    const presetDir = resolvePresetDirFromBrandPath(brandPath.path);
+    const preset = loadStylePreset(presetDir, input.stylePreset);
+    style = mergeDocumentStyle(preset.style, input.style);
+  } else {
+    style = input.style;
+  }
+
   let html = readTemplateHtml(input.template);
-  html = injectBrandCss(html, buildBrandStyle(brand));
+  const brandCss = buildBrandStyle(brand);
+  const styleCss = style !== undefined ? buildStyleOverrides(style) : "";
+  const combinedCss = [brandCss, styleCss].filter(s => s !== "").join("\n");
+  html = injectBrandCss(html, combinedCss);
   const injected = injectSections(html, input.sections ?? {});
   html = injected.html;
   if (injected.skippedIds.length > 0) {
