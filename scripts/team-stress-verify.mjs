@@ -74,7 +74,7 @@ function addMembers(db, teamId, count) {
 
 /** 汇总统计：场景总数 / 失败时异常向上抛（退出码 1）。 */
 let passed = 0;
-const total = 8;
+const total = 9;
 
 async function scenario(seq, name, fn) {
   let db;
@@ -356,6 +356,100 @@ await scenario(8, "最终归档（team_archived 事件发出）", async db => {
     received.some(e => e.type === "team_archived" && e.teamId === teamId),
     "emit 回调收到 team_archived",
   );
+});
+
+// ── 场景 9：工具驱动——create/update 写入路径 + blockedByCount 解锁 + reassign 回池 ──
+// M3：team_* 工具层为薄封装（复用 M2 原子），此处以工具工厂直驱验证写入路径与
+// blockedByCount 维护（成员回合完成路径的等价性由集成测试覆盖）。
+await scenario(9, "工具驱动写入路径（create/update/reassign + blockedByCount 解锁）", async () => {
+  const root = mkdtempSync(join(tmpdir(), "sati-team-stress-tools-"));
+  const db = new TeamDb(join(root, "teams.db"));
+  const events = [];
+  const emit = (_k, ev) => {
+    events.push(ev);
+    return true;
+  };
+  // 伪调度器：记录 onTaskGraphChanged/kickMember 调用（锁外触发点；工具 fire-and-forget）
+  const scheduler = {
+    onTaskGraphChanged: async () => {},
+    kickMember: async () => {},
+  };
+  const { createTeamCreateTool, createTeamCreateTaskTool, createTeamUpdateTaskTool, createTeamReassignTaskTool } =
+    await import("../dist/src/tool/builtin/team/index.js");
+  const tools = {
+    create: createTeamCreateTool({ db, scheduler, emit }),
+    createTask: createTeamCreateTaskTool({ db, scheduler, emit }),
+    updateTask: createTeamUpdateTaskTool({ db, scheduler, emit }),
+    reassign: createTeamReassignTaskTool({ db, scheduler, emit }),
+  };
+  const capCtx = { sessionId: "cap-1", provider: "fake", modelId: "fake-model" };
+
+  // 建队（roleSlug 兜底：工具内 requireRegisteredRole 校验——先注册测试角色）。
+  // 注：registerRoleDefinition 幂等（Map.set 语义，脚本进程级单次运行），无需 unregister。
+  const { registerRoleDefinition } = await import("../dist/src/agent/sub/builtinSubagentTypes.js");
+  registerRoleDefinition({
+    id: "stress-tool-member",
+    description: "test",
+    allowedTools: [],
+    omitProjectInstructions: false,
+    omitGitStatus: false,
+    isReadOnly: false,
+    systemPromptSuffix: "test",
+  });
+  try {
+    const created = (await tools.create.execute({ name: "stress", memberRoleSlugs: ["stress-tool-member"] }, capCtx))
+      .data;
+    const { teamId } = created;
+    const { memberId } = created.members[0];
+
+    // 20 任务链（t1 → t2 → … 线性依赖）：create 后 blockedByCount 逐级 +1
+    let prev;
+    const chain = [];
+    for (let i = 1; i <= 20; i += 1) {
+      const out = (
+        await tools.createTask.execute(
+          { teamId, subject: `t${i}`, ...(prev !== undefined ? { dependencies: [prev] } : {}) },
+          capCtx,
+        )
+      ).data;
+      assert.ok(out.taskId, `任务 ${i} 创建成功`);
+      assert.equal(out.blockedByCount, i === 1 ? 0 : 1, `t${i} blockedByCount=${i === 1 ? 0 : 1}`);
+      chain.push(out.taskId);
+      prev = out.taskId;
+    }
+
+    // 转派语义（完成循环前）：pending 任务指定成员后 assignee 落位（回 pending 非终态）
+    const reassigned = (await tools.reassign.execute({ teamId, taskId: chain[1], memberId }, capCtx)).data;
+    assert.equal(reassigned.assigneeId, memberId, "t2 指定成员后 assignee 落位");
+    assert.equal(reassigned.status, "pending", "t2 转派后回 pending（非终态）");
+    assert.equal(db.getTask(teamId, chain[1]).assigneeId, memberId, "db 侧 assignee 落位");
+
+    // 成员逐级完成（模拟回合内 update_task）：每完成一级，下一级 blockedByCount 归 0
+    for (let i = 1; i <= 20; i += 1) {
+      const task = db.getTask(teamId, chain[i - 1]);
+      // 模拟调度器认领：beginTaskAttempt 置 claimed + attemptId
+      const { task: claimed, attemptId } = beginTaskAttempt(task, memberId);
+      db.updateTask(claimed);
+      // 成员回合内完成（sessionId = 成员会话 key，assignee 校验通过）
+      await tools.updateTask.execute(
+        { teamId, taskId: chain[i - 1], status: "completed", attemptId, output: `完成 ${i}` },
+        { sessionId: `team:${teamId}:${memberId}` },
+      );
+      assert.equal(db.getTask(teamId, chain[i - 1]).status, "completed", `t${i} 完成`);
+      if (i < 20) {
+        assert.equal(db.getTask(teamId, chain[i]).blockedByCount, 0, `t${i + 1} 依赖解锁`);
+      }
+    }
+
+    // 已完成任务拒绝转派（team_task_terminal）
+    await assert.rejects(
+      () => tools.reassign.execute({ teamId, taskId: chain[0] }, capCtx),
+      e => e?.code === "team_task_terminal",
+    );
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 console.log(`team-stress-verify: ${passed}/${total} scenarios passed`);
