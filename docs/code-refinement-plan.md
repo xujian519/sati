@@ -158,7 +158,7 @@
   - P2 providers.ts：openai 与 openai-responses 的 models 块逐字节一致（5728 字节 × 2，9 个模型）→ 提取 `OPENAI_SHARED_MODELS` 共享常量（`Record<string, CatalogModelEntry>` 显式标注，防上下文类型丢失导致 multimodal.input 拓宽为 string[]），两协议 spread 引用，净 -174 行
   - P2 记录不处理：multimodal 模板重复（`{ input, maxImagesPerRequest: 20, supportedImageMimeTypes, imageDetail }` 约 20 处，提取共享模板会耦合全部模型，改动面大收益有限）；数字字面量下划线风格不统一（1048576 vs 1_048_576 等，纯风格 diff 噪音大）；minimax 模型 id PascalCase（MiniMax-M3 等）/ volc_ark provider id snake_case（配置键，改则破坏兼容）
   - P3 aliases 空数组冗余（无害）；P0 无行为缺陷。数据文件注释质量高（deprecated 标注 / 实测反馈 / 官方文档引用）
-- **精炼项**：OPENAI_SHARED_MODELS 提取（openai/openai-responses 共享模型定义）
+- **精炼项**：OPENAI_SHARED_MODELS 提取（openai/openai-responses 共享模型定义）。⚠️ 两协议 `models` 为浅拷贝共享同一批对象引用——当前 catalog 全链路只读；若未来需按协议特化某模型能力，将对应条目移出共享块（常量上方注释已写明）
 - **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅（eslint 全仓 + event-matrix/patent-sop/workflow-docs/html-templates 4 check fresh）；`biome check .`（2093 文件）✅；`pnpm test` 3504 pass / 0 fail ✅；改前/改后 `PROVIDER_CATALOG` JSON 逐字节一致（行为等价）✅
 - **提交**：`refactor(model): extract shared OpenAI model catalog between protocols`
 
@@ -174,6 +174,7 @@
 - **精炼项**：重复提取（streamModel ×2 组、findBalanced 合并）、死代码/未使用导出删除（4 处）、类型/命名/注释清理（约 12 处）
 - **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅（event-matrix 重生成，纯行号偏移）；`biome check src/model` ✅（全仓 format:check 红系用户未提交的 `assets/templates/patent/tokens.css` 排版改动，非本次引入）；`pnpm test` 3504 pass / 0 fail ✅；`extractTextToolCalls` 16 用例改前/改后行为等价（剔除随机 id）✅
 - **提交**：`refactor(model): extract stream debug/retry helpers, unify balanced JSON parsing`、`refactor(model): drop dead exports, remove redundant casts, document fallback catches`、`docs: regenerate event matrix (streamModel line shifts)`
+- **审查后续（code-review，2026-08-20）**：审查发现 complete() 非 google 路径重试警告漏提取（初始仅提取 google 路径）→ 补齐 `warnCompleteRetry`；新增 `tests/model/streaming/parse-text-tool-calls.spec.ts`（12 用例）锁定五格式解析行为
 
 ## 六、基线（2026-08-18 实测）
 
