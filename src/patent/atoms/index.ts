@@ -74,10 +74,11 @@ export {
   SlopGateHandler,
   claimChartAtom,
   ClaimChartHandler,
+  claimEmbodimentMapperAtom,
+  ClaimEmbodimentMapperHandler,
   type SpecViolation,
   type PFETriple,
 } from "./handlers/builtin/index.js";
-
 import { globalAtomRegistry } from "./atom.js";
 import { globalStageHandlerRegistry } from "./handler.js";
 import * as builtin from "./handlers/builtin/index.js";
@@ -98,6 +99,7 @@ export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.qualityGateAtom);
   globalAtomRegistry.register(builtin.slopGateAtom);
   globalAtomRegistry.register(builtin.claimChartAtom);
+  globalAtomRegistry.register(builtin.claimEmbodimentMapperAtom);
 
   globalStageHandlerRegistry.register(new builtin.SearchHandler());
   globalStageHandlerRegistry.register(new builtin.ExtractHandler());
@@ -113,4 +115,5 @@ export function registerBuiltinAtoms(): void {
   globalStageHandlerRegistry.register(new builtin.QualityGateHandler());
   globalStageHandlerRegistry.register(new builtin.SlopGateHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimChartHandler());
+  globalStageHandlerRegistry.register(new builtin.ClaimEmbodimentMapperHandler());
 }

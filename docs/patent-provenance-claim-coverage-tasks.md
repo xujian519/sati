@@ -30,7 +30,7 @@ T9 RDF 导出：条件触发（出现真实消费方），不排期
 | T3 | 审批门旁路 + runId 生成 | T1 | 1 天 | ✅ 已落地（6/6 测试绿，typecheck/eslint/biome 绿） |
 | T4 | Worker 执行落盘 | T1 | 0.5–1 天 | ✅ 已落地（7/7 测试绿，typecheck/eslint/biome 绿） |
 | T5 | 审计导出 + enableProvenance 开关 | T1–T4 | 1 天 | ✅ 已落地（7/7 测试绿，typecheck/eslint/biome 绿） |
-| T6 | claim-embodiment-mapper 原子 | T0 | 1–1.5 天 | ☐ |
+| T6 | claim-embodiment-mapper 原子 | T0 | 1–1.5 天 | ✅ 已落地（6/6 测试绿，typecheck/eslint/biome 绿） |
 | T7 | manifest 接入 + draft-spec 联动 + 门禁收尾 | T6 | 1 天 | ☐ |
 | T8 | 图节点决策链（wrapGraphBuilder + 结论树） | T1（存储接口冻结） | 3–4 天 | ☐ |
 | T9 | RDF 导出（条件触发） | T5 | 不排期 | ☐ |
@@ -172,7 +172,7 @@ T9 RDF 导出：条件触发（出现真实消费方），不排期
 
 ---
 
-## T6：claim-embodiment-mapper 原子 — 1–1.5 天
+## T6：claim-embodiment-mapper 原子 — 1–1.5 天 ✅ 已落地（2026-08-20）
 
 **目标**：设计 2 的核心原子（依赖 T0 纯函数）。
 
