@@ -99,6 +99,16 @@ vi.mock("../../plugins/view/PluginTabContent", () => ({
   default: () => null,
 }));
 
+vi.mock("../../team-panel/floating-team-panel", () => ({
+  FloatingTeamPanel: (props: { docked: boolean; onClose: () => void }) => (
+    <div data-testid="floating-team-panel" data-docked={String(props.docked)}>
+      <button type="button" onClick={props.onClose}>
+        close team panel
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock("./ErrorBoundary", () => ({
   default: ({ children }: { children: ReactNode }) => children,
 }));
@@ -222,5 +232,23 @@ describe("MainContent file workspace routing", () => {
         })
         .getAttribute("aria-valuenow"),
     ).toBe("396");
+  });
+
+  it("teamPanelOpen=true 时挂载团队浮层并接线 onTeamPanelClose；chat 模式 docked=true", async () => {
+    const onTeamPanelClose = vi.fn();
+    render(<MainContent {...propsFor("chat")} teamPanelOpen onTeamPanelClose={onTeamPanelClose} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("floating-team-panel")).not.toBeNull();
+    });
+    expect(screen.getByTestId("floating-team-panel").getAttribute("data-docked")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "close team panel" }));
+    expect(onTeamPanelClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("teamPanelOpen=false 时不挂载团队浮层", () => {
+    render(<MainContent {...propsFor("chat")} />);
+    expect(screen.queryByTestId("floating-team-panel")).toBeNull();
   });
 });

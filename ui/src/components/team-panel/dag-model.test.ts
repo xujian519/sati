@@ -54,6 +54,36 @@ describe("computeDagLayout", () => {
     expect(byId.get("b")!.depth).toBe(0);
   });
 
+  test("环 + 非环节点：深度不受输入顺序影响（环归 0，依赖者 depth 1）", () => {
+    // 旧实现单遍 DFS：p 先算时会把调用链（含非环祖先 p）误入环集合，
+    // p 深度 0；p 后算时深度 1——同一张图两种布局。
+    const make = () => [task("p", ["a"]), task("a", ["b"]), task("b", ["a"])];
+    const forward = new Map(computeDagLayout(make()).nodes.map(node => [node.task.taskId, node]));
+    expect(forward.get("a")!.depth).toBe(0);
+    expect(forward.get("b")!.depth).toBe(0);
+    expect(forward.get("p")!.depth).toBe(1);
+    const reversed = new Map(computeDagLayout([...make()].reverse()).nodes.map(node => [node.task.taskId, node]));
+    expect(reversed.get("a")!.depth).toBe(0);
+    expect(reversed.get("b")!.depth).toBe(0);
+    expect(reversed.get("p")!.depth).toBe(1);
+  });
+
+  test("两个独立环 + 公共依赖者：两环成员各自归 0，依赖者按链长计深", () => {
+    const layout = computeDagLayout([
+      task("a", ["b"]),
+      task("b", ["a"]), // 环 1：a↔b
+      task("c", ["d"]),
+      task("d", ["c"]), // 环 2：c↔d
+      task("top", ["a", "c"]), // 同时依赖两环
+    ]);
+    const byId = new Map(layout.nodes.map(node => [node.task.taskId, node]));
+    expect(byId.get("a")!.depth).toBe(0);
+    expect(byId.get("b")!.depth).toBe(0);
+    expect(byId.get("c")!.depth).toBe(0);
+    expect(byId.get("d")!.depth).toBe(0);
+    expect(byId.get("top")!.depth).toBe(1);
+  });
+
   test("悬空依赖与自依赖被忽略", () => {
     const layout = computeDagLayout([
       task("a", ["ghost", "a"]), // 悬空 + 自依赖

@@ -53,7 +53,7 @@ const snapshotBody: TeamPanelSnapshot = {
         {
           taskId: "t_1",
           subject: "检索对比文件",
-          status: "done",
+          status: "completed",
           attempt: 1,
           dependencies: [],
           blockedByCount: 0,
@@ -159,8 +159,7 @@ describe("FloatingTeamPanel", () => {
       expect(screen.getAllByText("OA答复组").length).toBeGreaterThanOrEqual(2);
     });
     // team_2 的 DAG：t_a → t_b 两个节点
-    const { container } = document.body ? { container: document.body } : { container: document.body };
-    expect(container.querySelectorAll("[data-task-id]")).toHaveLength(2);
+    expect(document.body.querySelectorAll("[data-task-id]")).toHaveLength(2);
   });
 
   it("空态：展示建队表单；创建失败 → 反馈横幅显示后端契约 message", async () => {

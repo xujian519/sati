@@ -1,3 +1,5 @@
+import type { TeamWireEvent } from "./types";
+
 /** 面板快照轮询间隔（ms）。 */
 export const TEAM_PANEL_POLL_MS = 5_000;
 
@@ -12,6 +14,25 @@ export const TEAM_PANEL_SETTLE_MS = 4_000;
 
 /** 折叠态持久化键（裸键，与 MainContent 的 sati:* 惯例一致）。 */
 export const TEAM_PANEL_COLLAPSED_KEY = "sati:team-panel-collapsed";
+
+/** 事件族徽章配色（按 type 精确映射；未知事件兜底中性灰）。 */
+export const EVENT_STYLE: Record<string, string> = {
+  task_claimed: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400",
+  task_completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400",
+  task_failed: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400",
+  task_retried: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400",
+  message_delivered: "bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400",
+};
+
+export const FALLBACK_EVENT_STYLE = "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300";
+
+/** 事件行描述：taskId · memberId · attempt:N · teamId（空格 join，缺省段跳过）。 */
+export const describeEvent = (event: TeamWireEvent): string => {
+  const parts = [event.taskId, event.memberId];
+  if (typeof event.attempt === "number") parts.push(`attempt:${event.attempt}`);
+  if (event.teamId !== undefined) parts.push(event.teamId);
+  return parts.filter(Boolean).join(" · ");
+};
 
 /**
  * 团队角色可选清单（12 岗）——以 `skills/patent-teams/` 目录实际角色为准：

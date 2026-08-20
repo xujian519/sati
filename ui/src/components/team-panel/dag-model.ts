@@ -40,7 +40,7 @@ export type DagLayout = {
 
 /**
  * 任务状态填充色（供 DAG 节点与队长分段进度条共用，单点维护）。
- * 与 TaskBoard 徽章的 TASK_STATUS_STYLE 语义一致，此处为色块/描边用色。
+ * 色块/描边用色语义与已删除的 TaskBoard 徽章样式一致。
  */
 export const TASK_STATUS_FILL: Record<string, string> = {
   pending: "#a3a3a3", // neutral-400
@@ -59,7 +59,10 @@ export const TERMINAL_TASK_STATUSES = new Set(["completed", "failed", "cancelled
 /**
  * 计算 DAG 布局。
  * - 邻接：忽略悬空依赖（指向不存在任务 ID）与自依赖（后端脏数据防御）
- * - 深度：记忆化 DFS，visiting 集防环（环上节点按 depth 0 兜底，不挂死）
+ * - 环：两遍法——第一遍纯环检测（栈闭合点精确识别环成员，只入 cycleMembers），
+ *   第二遍深度计算时环成员短路归 0、其余记忆化（第一遍已保证无可达环，缓存
+ *   不会因环冲突中毒）；消除旧实现的顺序依赖：环检测把调用链上非环祖先误入
+ *   cycleMembers，导致同一张图因 tasks 顺序不同而产出不同深度
  * - 行：层内按 taskId 字典序（确定性输出，测试可断言）
  * - isParallel：无有效依赖边时 true（组件端切换并排网格）
  */
@@ -82,36 +85,48 @@ export function computeDagLayout(tasks: PanelTask[]): DagLayout {
   }
   const edgeList = [...edges.values()];
 
-  // 依赖深度：记忆化 DFS，visiting 集防环（环成员 depth 归 0 兜底，输出仍确定性）
-  const depthOf = new Map<string, number>();
-  const visiting = new Set<string>();
+  // 第一遍：环检测（栈记录当前调用路径；闭合点时栈中从该点到栈顶即环成员）。
   const cycleMembers = new Set<string>();
+  {
+    const visited = new Set<string>();
+    const stack: string[] = [];
+    const findCycle = (taskId: string): void => {
+      const closedIdx = stack.indexOf(taskId);
+      if (closedIdx !== -1) {
+        for (let i = closedIdx; i < stack.length; i++) cycleMembers.add(stack[i]);
+        return;
+      }
+      if (visited.has(taskId)) return;
+      const task = byId.get(taskId);
+      if (task === undefined) return;
+      visited.add(taskId);
+      stack.push(taskId);
+      for (const depId of task.dependencies) {
+        if (!validDep(task, depId)) continue;
+        findCycle(depId);
+      }
+      stack.pop();
+    };
+    for (const task of tasks) findCycle(task.taskId);
+  }
+
+  // 第二遍：依赖深度（环成员短路 0；其余记忆化 DFS——无可达环，缓存安全）
+  const depthOf = new Map<string, number>();
   const computeDepth = (taskId: string): number => {
+    if (cycleMembers.has(taskId)) return 0;
     const cached = depthOf.get(taskId);
     if (cached !== undefined) return cached;
     const task = byId.get(taskId);
     if (task === undefined) return 0;
-    if (visiting.has(taskId)) {
-      // 环冲突：当前调用链（visiting）即环成员，后续统一归 0
-      for (const member of visiting) cycleMembers.add(member);
-      return 0;
-    }
-    visiting.add(taskId);
     let depth = 0;
     for (const depId of task.dependencies) {
       if (!validDep(task, depId)) continue;
       depth = Math.max(depth, computeDepth(depId) + 1);
     }
-    visiting.delete(taskId);
     depthOf.set(taskId, depth);
     return depth;
   };
-  const depths = new Map(
-    tasks.map(task => {
-      const depth = computeDepth(task.taskId);
-      return [task.taskId, cycleMembers.has(task.taskId) ? 0 : depth] as const;
-    }),
-  );
+  const depths = new Map(tasks.map(task => [task.taskId, computeDepth(task.taskId)] as const));
 
   // 分层：行 = 层内 taskId 字典序
   const byDepth = new Map<number, string[]>();

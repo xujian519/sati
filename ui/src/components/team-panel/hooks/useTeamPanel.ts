@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { authenticatedFetch } from "../../../utils/api";
 import { TEAM_PANEL_POLL_MS } from "../constants";
 import type { PanelActionResult, TeamPanelSnapshot } from "../types";
@@ -24,9 +24,10 @@ async function fetchSnapshot(): Promise<TeamPanelSnapshot> {
 
 /**
  * 调用面板操作（POST /api/teams/action，直调既有 team_* 工具）。
- * sessionKey 透传（I1）：面板操作以当前会话身份执行——队长工具 requireTeamCaptain
- * 按 context.sessionId 同队校验，缺省会落到空串弱身份（fail-open + 互斥 + 审批扇出
- * 丢失）。无会话时不携带该字段，保持后端缺省 fail-closed 语义。
+ * sessionKey 透传（I1）：面板操作以当前会话身份执行——createLocalGateway 的
+ * teamToolCall 以 `sessionId ?? ""` 注入工具上下文，requireTeamCaptain 按
+ * context.sessionId 同队校验：无会话（空串）或非队长会话时校验失败，操作被
+ * fail-closed 拒绝（不锚定弱身份）。
  */
 async function callTool(tool: string, input: Record<string, unknown>, sessionKey?: string): Promise<PanelActionResult> {
   const body: Record<string, unknown> = { tool, input };
@@ -56,12 +57,17 @@ export function useTeamPanel(sessionId?: string | null) {
   const [snapshot, setSnapshot] = useState<TeamPanelSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 首快照就绪后，后台轮询不再翻转 loading（避免每 5s 一次占位闪烁）
+  const hasSnapshotRef = useRef(false);
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
-    setLoading(true);
+    // 仅首快照（或失败重试）置 loading；快照就绪后的轮询不翻转，避免占位闪烁
+    const isFirst = !hasSnapshotRef.current;
+    if (isFirst) setLoading(true);
     try {
       const next = await fetchSnapshot();
       setSnapshot(next);
+      hasSnapshotRef.current = true;
       setError(null);
     } catch (err) {
       // silent 刷新（操作成功后的即时刷新）失败不覆盖 error 语义，避免误导
@@ -69,7 +75,7 @@ export function useTeamPanel(sessionId?: string | null) {
         setError(err instanceof Error ? err.message : String(err));
       }
     } finally {
-      setLoading(false);
+      if (isFirst) setLoading(false);
     }
   }, []);
 

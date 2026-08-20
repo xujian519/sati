@@ -15,12 +15,11 @@
     "collapse": "Collapse panel",
     "close": "Close panel",
     "pillExpand": "Expand team panel",
-    "teamsEmpty": "No teams yet. Create one to start.",
-    "archivedTeams": "Archived"
+    "archivedTeams": "Archived ({{count}})"
   },
   "captain": {
     "dispatched": "Dispatched {{tasks}} tasks to {{members}} members",
-    "summaryDone": "Summary ready"
+    "summaryDone": "{{done}}/{{total}} done · {{active}} in progress"
   },
   "progress": {
     "legend": "Progress"
@@ -36,7 +35,8 @@
     "currentTask": "Working on: {{subject}}",
     "expand": "Show members",
     "collapse": "Hide members",
-    "empty": "No members yet"
+    "empty": "No members yet",
+    "archivedReadonly": "Archived team is read-only."
   },
   "tasks": {
     "title": "Tasks",
@@ -48,7 +48,6 @@
     "statusFailed": "Failed",
     "statusCancelled": "Cancelled",
     "attempt": "Attempt {{count}}",
-    "blockedBy": "Blocked by {{count}}",
     "unassigned": "Unassigned",
     "reassign": "Reassign",
     "reassignPlaceholder": "Assign to…",

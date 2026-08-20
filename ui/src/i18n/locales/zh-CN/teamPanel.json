@@ -15,12 +15,11 @@
     "collapse": "收起面板",
     "close": "关闭面板",
     "pillExpand": "展开团队面板",
-    "teamsEmpty": "暂无团队，先创建一个。",
-    "archivedTeams": "已归档"
+    "archivedTeams": "已归档 ({{count}})"
   },
   "captain": {
     "dispatched": "已向 {{members}} 名成员派发 {{tasks}} 个任务",
-    "summaryDone": "摘要已完成"
+    "summaryDone": "{{done}}/{{total}} 已完成 · {{active}} 进行中"
   },
   "progress": {
     "legend": "进度"
@@ -36,7 +35,8 @@
     "currentTask": "当前任务：{{subject}}",
     "expand": "展开成员",
     "collapse": "收起成员",
-    "empty": "暂无成员"
+    "empty": "暂无成员",
+    "archivedReadonly": "归档团队为只读。"
   },
   "tasks": {
     "title": "任务",
@@ -48,7 +48,6 @@
     "statusFailed": "失败",
     "statusCancelled": "已取消",
     "attempt": "第 {{count}} 次尝试",
-    "blockedBy": "被 {{count}} 个依赖阻塞",
     "unassigned": "未分配",
     "reassign": "转派",
     "reassignPlaceholder": "指派给…",

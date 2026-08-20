@@ -11,8 +11,7 @@ import {
 } from "./dag-model";
 import { FeedbackBanner } from "./FeedbackBanner";
 import { useActionFeedback } from "./hooks/useActionFeedback";
-import type { TeamWireEvent } from "./hooks/use-team-activity";
-import type { PanelAction, PanelTask, PanelTeam } from "./types";
+import type { PanelAction, PanelTask, PanelTeam, TeamWireEvent } from "./types";
 
 type TaskDagProps = {
   team: PanelTeam;
@@ -88,11 +87,11 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
     return new Set([...ancestors, ...descendants]);
   }, [hoveredTaskId, dependsOn, dependents]);
 
-  // 最近活动任务：驱动节点脉冲
+  // 最近活动任务：驱动节点脉冲（按团队过滤——事件带 teamId，避免他队事件误归属）
   const recentTaskIds = useMemo(() => {
-    const recent = activity.events.slice(-RECENT_WINDOW);
+    const recent = activity.events.filter(event => event.teamId === team.id).slice(-RECENT_WINDOW);
     return new Set(recent.map(event => event.taskId).filter((id): id is string => id !== undefined));
-  }, [activity.events]);
+  }, [activity.events, team.id]);
 
   const selectedTask = selectedTaskId !== null ? byId.get(selectedTaskId) : undefined;
   const idleMembers = team.members.filter(member => !member.retired && member.status === "idle");
@@ -130,12 +129,11 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
 
       <div className="overflow-x-auto rounded-md border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-950">
         <svg
-          width="100%"
+          width={layout.width}
           height={layout.height}
-          viewBox={`0 0 ${layout.width} ${layout.height}`}
           role="img"
           aria-label={t("tasks.title")}
-          className="block min-w-full"
+          className="block"
           data-testid="task-dag"
         >
           {/* 边：源右中点 → 目标左中点，三次贝塞尔 */}
@@ -148,7 +146,7 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
             const x2 = to.x;
             const y2 = to.y + DAG_NODE_H / 2;
             const midX = (x1 + x2) / 2;
-            const dim = hoveredTaskId !== null && relatedSet !== null && !relatedSet.has(edge.from);
+            const dim = relatedSet !== null && !relatedSet.has(edge.from);
             return (
               <path
                 key={`${edge.from}->${edge.to}`}
@@ -163,7 +161,7 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
 
           {layout.nodes.map(node => {
             const fill = TASK_STATUS_FILL[node.task.status] ?? FALLBACK_TASK_FILL;
-            const dim = hoveredTaskId !== null && relatedSet !== null && !relatedSet.has(node.task.taskId);
+            const dim = relatedSet !== null && !relatedSet.has(node.task.taskId);
             const recent = recentTaskIds.has(node.task.taskId);
             const selected = node.task.taskId === selectedTaskId;
             return (
@@ -200,8 +198,18 @@ export function TaskDag({ team, onAction, activity }: TaskDagProps) {
                       {node.task.taskId}
                     </span>
                   </span>
-                  <span className="truncate text-[10px] leading-tight text-neutral-800 dark:text-neutral-200">
-                    {node.task.subject}
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="truncate text-[10px] leading-tight text-neutral-800 dark:text-neutral-200">
+                      {node.task.subject}
+                    </span>
+                    {node.task.attempt > 1 ? (
+                      <span
+                        className="shrink-0 rounded-sm bg-amber-100 px-1 font-mono text-[8px] font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-400"
+                        title={t("tasks.attempt", { count: node.task.attempt })}
+                      >
+                        ×{node.task.attempt}
+                      </span>
+                    ) : null}
                   </span>
                 </button>
               </foreignObject>

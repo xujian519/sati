@@ -66,16 +66,15 @@ describe("useTeamActivity", () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it("eventsForTask / eventsForMember 反向索引与 latestEvent", () => {
+  it("latestEvent 指向最新一条；事件保留 taskId/memberId/attempt 字段（消费端自 events 派生索引）", () => {
     const { result } = renderHook(() => useTeamActivity());
 
     emitFrame({ kind: "team_event", event: { type: "task_claimed", taskId: "t1", memberId: "m1" } });
     emitFrame({ kind: "team_event", event: { type: "task_completed", taskId: "t2", memberId: "m1" } });
-    emitFrame({ kind: "team_event", event: { type: "task_retried", taskId: "t1", memberId: "m2" } });
+    emitFrame({ kind: "team_event", event: { type: "task_retried", taskId: "t1", memberId: "m2", attempt: 2 } });
 
-    expect(result.current.eventsForTask("t1").map(event => event.type)).toEqual(["task_claimed", "task_retried"]);
-    expect(result.current.eventsForTask("ghost")).toEqual([]);
-    expect(result.current.eventsForMember("m1").map(event => event.type)).toEqual(["task_claimed", "task_completed"]);
     expect(result.current.latestEvent?.type).toBe("task_retried");
+    expect(result.current.events.map(event => event.taskId)).toEqual(["t1", "t2", "t1"]);
+    expect(result.current.events[2].attempt).toBe(2);
   });
 });

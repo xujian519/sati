@@ -13,10 +13,10 @@ type CaptainSummaryProps = {
 const activeStatuses = new Set(["claimed", "in_progress"]);
 
 /** 图例：进行中 / 已完成 / 失败 三态（claimed+in_progress 收敛为"进行中"）。 */
-const LEGEND: Array<{ statuses: string[]; fill: string; labelKey: string }> = [
-  { statuses: ["claimed", "in_progress"], fill: TASK_STATUS_FILL.in_progress, labelKey: "tasks.statusInProgress" },
-  { statuses: ["completed"], fill: TASK_STATUS_FILL.completed, labelKey: "tasks.statusCompleted" },
-  { statuses: ["failed"], fill: TASK_STATUS_FILL.failed, labelKey: "tasks.statusFailed" },
+const LEGEND: Array<{ fill: string; labelKey: string }> = [
+  { fill: TASK_STATUS_FILL.in_progress, labelKey: "tasks.statusInProgress" },
+  { fill: TASK_STATUS_FILL.completed, labelKey: "tasks.statusCompleted" },
+  { fill: TASK_STATUS_FILL.failed, labelKey: "tasks.statusFailed" },
 ];
 
 /**
@@ -30,7 +30,9 @@ export function CaptainSummary({ team, onAction }: CaptainSummaryProps) {
 
   const done = team.tasks.filter(task => task.status === "completed").length;
   const active = team.tasks.filter(task => activeStatuses.has(task.status)).length;
-  const activeMembers = team.members.filter(member => !member.retired).length;
+  // 派发摘要只统计已归属的任务与拥有任务的成员（未分配任务不计入"已派发"）
+  const assignedTasks = team.tasks.filter(task => task.assigneeId !== undefined);
+  const dispatchedMembers = new Set(assignedTasks.map(task => task.assigneeId!)).size;
 
   const handleArchive = async () => {
     // 归档不可逆，二次确认
@@ -53,13 +55,15 @@ export function CaptainSummary({ team, onAction }: CaptainSummaryProps) {
             </span>
           ) : null}
         </div>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void handleArchive()}>
-          {t("archive.button")}
-        </Button>
+        {team.archivedAt === undefined ? (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void handleArchive()}>
+            {t("archive.button")}
+          </Button>
+        ) : null}
       </div>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        {t("captain.dispatched", { tasks: team.tasks.length, members: activeMembers })}
+        {t("captain.dispatched", { tasks: assignedTasks.length, members: dispatchedMembers })}
       </p>
 
       {team.tasks.length > 0 ? (
