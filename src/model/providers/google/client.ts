@@ -57,6 +57,7 @@ export function resolveGoogleEndpoint(rawUrl: string): { baseUrl?: string; apiVe
     url.hash = "";
     return { baseUrl: url.toString(), apiVersion: "" };
   } catch {
+    // URL 解析失败：回退原始字符串作为 baseUrl（apiVersion 为空）。
     return { baseUrl: trimmed, apiVersion: "" };
   }
 }

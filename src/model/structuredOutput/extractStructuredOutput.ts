@@ -1,4 +1,4 @@
-import type { CanonicalModelResponse } from "../protocol/canonical.js";
+import type { CanonicalContentBlock, CanonicalModelResponse } from "../protocol/canonical.js";
 import { ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME } from "../providers/anthropic/request.js";
 
 export type StructuredOutputExtraction =
@@ -36,7 +36,8 @@ export function extractStructuredOutput(
   options: ExtractStructuredOutputOptions = {},
 ): StructuredOutputExtraction {
   const toolBlocks = response.content.filter(
-    block => block.type === "tool_call" && block.name === ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME,
+    (block): block is Extract<CanonicalContentBlock, { type: "tool_call" }> =>
+      block.type === "tool_call" && block.name === ANTHROPIC_STRUCTURED_OUTPUT_TOOL_NAME,
   );
 
   if (toolBlocks.length > 1) {
@@ -45,9 +46,6 @@ export function extractStructuredOutput(
 
   if (toolBlocks.length === 1) {
     const tool = toolBlocks[0]!;
-    if (tool.type !== "tool_call") {
-      return { ok: false, reason: "no_payload" };
-    }
     const value = tool.input;
     if (options.validate && !options.validate(value)) {
       return { ok: false, reason: "schema_mismatch" };

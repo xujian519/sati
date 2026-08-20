@@ -1,9 +1,4 @@
-import type {
-  CanonicalContentBlock,
-  CanonicalMessage,
-  CanonicalToolCallBlock,
-  CanonicalToolResultBlock,
-} from "./canonical.js";
+import type { CanonicalContentBlock, CanonicalMessage } from "./canonical.js";
 
 export function messageContent(message: Pick<CanonicalMessage, "content">): CanonicalContentBlock[] {
   return Array.isArray(message.content) ? message.content : [];
@@ -23,17 +18,15 @@ export function messageContent(message: Pick<CanonicalMessage, "content">): Cano
  */
 export function cloneContentBlock(block: CanonicalContentBlock): CanonicalContentBlock {
   if (block.type === "tool_result") {
-    const tr = block as CanonicalToolResultBlock;
     return {
-      ...tr,
-      content: tr.content.map(item => ({ ...item })),
+      ...block,
+      content: block.content.map(item => ({ ...item })),
     };
   }
   if (block.type === "tool_call") {
-    const tc = block as CanonicalToolCallBlock;
     return {
-      ...tc,
-      input: tc.input !== undefined ? structuredClone(tc.input) : tc.input,
+      ...block,
+      input: block.input !== undefined ? structuredClone(block.input) : block.input,
     };
   }
   return { ...block };

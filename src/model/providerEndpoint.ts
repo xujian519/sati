@@ -74,15 +74,6 @@ export function normalizeGoogleProbeModel(model: string): string {
   return withoutProvider;
 }
 
-export function buildProviderChatEndpoint(input: {
-  protocol: ProviderEndpointProtocol;
-  baseUrl: string;
-  model?: string;
-  googleMethod?: string;
-}): string {
-  return buildProviderChatEndpointCandidates(input)[0] || "";
-}
-
 export function buildProviderChatEndpointCandidates(input: {
   protocol: ProviderEndpointProtocol;
   baseUrl: string;
@@ -103,10 +94,6 @@ export function buildProviderChatEndpointCandidates(input: {
     return buildEndpointCandidates(normalizedBase, "v1beta", `models/${model}:${method}`);
   }
   return buildEndpointCandidates(input.baseUrl, "v1", "chat/completions");
-}
-
-export function buildProviderModelsEndpoint(input: { protocol: ProviderEndpointProtocol; baseUrl: string }): string {
-  return buildProviderModelsEndpointCandidates(input)[0] || "";
 }
 
 export function buildProviderModelsEndpointCandidates(input: {

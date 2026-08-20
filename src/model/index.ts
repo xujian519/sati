@@ -3,7 +3,6 @@ export { normalizeProviderBaseUrl } from "./normalizeProviderBaseUrl.js";
 export { resolveModelInfo, type ModelInfoSource, type ResolvedModelInfo } from "./resolveModelInfo.js";
 export { parseModelConfig, type ParseModelConfigOptions } from "./config/parseModelConfig.js";
 export { resolveApiKey, type CredentialEnv } from "./config/resolveCredentials.js";
-export { ModelProviderRegistry, type ModelProviderAdapter } from "./providers/registry.js";
 export { buildModelRequest, type ProviderRequestBody } from "./request/buildModelRequest.js";
 export {
   materializeMediaReferences,
@@ -136,9 +135,7 @@ export { DEFAULT_MODEL_PROVIDER, DEFAULT_MODEL_ID } from "./defaults.js";
 // ui/server 桥接层消费（barrel 收口面，见 check-ui-server-boundary 门禁）：
 // providerEndpoint 与 ollama probe 供 ui/server/routes/config.js 使用。
 export {
-  buildProviderChatEndpoint,
   buildProviderChatEndpointCandidates,
-  buildProviderModelsEndpoint,
   buildProviderModelsEndpointCandidates,
   isExpectedProviderModelsResponseShape,
   isExpectedProviderResponseShape,

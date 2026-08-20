@@ -45,8 +45,6 @@ const THINK_CLOSE = "</think>";
  * FSM-based parser that splits `<think>...</think>` tags from streamed
  * `delta.content` into separate `thinking_delta` / `text_delta` events.
  * Handles tags split across multiple chunks via `state.tagBuffer`.
- *
- * FSM that splits reasoning tags from streamed content deltas.
  */
 export function splitThinkContent(content: string, state: OpenAIStreamState, raw: unknown): CanonicalModelEvent[] {
   const events: CanonicalModelEvent[] = [];

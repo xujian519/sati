@@ -34,10 +34,6 @@ export function detectFormatByText(text: string): ToolCallFormatDefinition | und
   return registry.find(format => format.markers.some(marker => text.includes(marker)));
 }
 
-export function looksLikeUnparsedToolCall(text: string): boolean {
-  return detectFormatByText(text) !== undefined;
-}
-
 export function getSelfCorrectPrompt(formatId: string | undefined, failedText: string): string {
   const selected = getFormatById(formatId) ?? detectFormatByText(failedText) ?? registry[0];
   const excerpt = failedText.trim().slice(0, 2_000);

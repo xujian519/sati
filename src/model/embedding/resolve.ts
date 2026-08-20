@@ -6,7 +6,7 @@
  *      provider 配置体系，含 Ollama 无鉴权占位特判）；
  *   2. `baseUrl` 形态：独立端点（url + apiKey + model 直配）。
  *
- * 校验失败返回 undefined + warning 诊断——语义检索是**可选增强**，
+ * 配置错误（未知 provider / 缺端点）时返回 undefined + warning 诊断——语义检索是**可选增强**，
  * 未配置/失败时现有 keyword 检索路径原样工作。
  */
 

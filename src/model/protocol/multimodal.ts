@@ -89,7 +89,7 @@ export function downgradeUnsupportedContent(messages: CanonicalMessage[], constr
           }
         }
         if (changed) {
-          (block as { content: CanonicalToolResultContentBlock[] }).content = newContent;
+          block.content = newContent;
         }
         continue;
       }
@@ -120,7 +120,7 @@ function mediaBlockToPlaceholder(
   return undefined;
 }
 
-export function contentBlockToInputModality(block: CanonicalContentBlock): InputModality | undefined {
+function contentBlockToInputModality(block: CanonicalContentBlock): InputModality | undefined {
   switch (block.type) {
     case "text":
       return "text";

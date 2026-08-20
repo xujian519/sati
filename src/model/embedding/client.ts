@@ -128,6 +128,7 @@ export function createOpenAiEmbeddingClient(config: EmbeddingEndpointConfig): Em
         await postEmbeddings([HEALTH_CHECK_TEXT]);
         return true;
       } catch {
+        // 探测失败即视为端点不可用，不冒泡（语义检索是可选的增强路径）。
         return false;
       }
     },

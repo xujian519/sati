@@ -187,6 +187,7 @@ export function createRerankClient(config: RerankEndpointConfig): RerankClient {
         await postRerank("ping", ["ping"]);
         return true;
       } catch {
+        // 探测失败即视为端点不可用，不冒泡（rerank 是可选的增强路径）。
         return false;
       }
     },
