@@ -28,7 +28,7 @@ export const claimEmbodimentMapperAtom: Atom = {
   name: "claim-embodiment-mapper",
   description: "权利要求-实施例覆盖矩阵：LLM 抽取（权项特征 + 实施例引用）+ 骨架交叉校验 + 覆盖缺口检测",
   category: "extract",
-  inputSchema: ["source_text", "claims_draft", "pfe_triples"],
+  inputSchema: ["source_text", "claims_draft"],
   outputSchema: ["claim_coverage_result"],
 };
 
@@ -58,6 +58,16 @@ const MAPPER_SCHEMA = {
   },
   required: ["claims"],
 } as const;
+
+/** 从 claims_draft 解析权利要求编号集合（行首 "N." / "N、" / "N．"，对齐 claim-chart splitClaimSegments）。 */
+function parseClaimNumbers(claimsDraft: string): number[] {
+  const numbers: number[] = [];
+  for (const line of claimsDraft.split(/\n/)) {
+    const m = /^\s*(\d+)[.、．]\s*/.exec(line);
+    if (m !== null) numbers.push(Number(m[1]));
+  }
+  return [...new Set(numbers)];
+}
 
 export class ClaimEmbodimentMapperHandler implements StageHandler {
   readonly name = "claim-embodiment-mapper";
@@ -102,17 +112,37 @@ export class ClaimEmbodimentMapperHandler implements StageHandler {
       res.raw,
       parsed => {
         if (!Array.isArray(parsed.claims)) return null;
+        // 空矩阵（评审 I3）：显式标记而非静默"无缺口"——下游据此提示"无数据"而非"全通过"
+        if (parsed.claims.length === 0) {
+          const empty: ClaimEmbodimentCoverage = { caseId: provider?.caseId ?? "", claims: [], degraded: false };
+          matrixToPersist = empty;
+          return {
+            claim_coverage_result: JSON.stringify({
+              ...empty,
+              check: checkClaimEmbodimentCoverage(empty),
+              claims_empty: true,
+            }),
+          };
+        }
+        // 骨架交叉校验（评审 I2）：被剔除的幻觉引用记入 droppedRefs（可见而非静默吞掉）
+        const droppedRefs: string[] = [];
         const claims: ClaimCoverageEntry[] = parsed.claims
-          .filter((c): c is Record<string, unknown> => c !== null && typeof c === "object")
+          .filter(
+            // 评审 M3：类型谓词补 !Array.isArray（数组元素 typeof === "object" 亦为真）
+            (c): c is Record<string, unknown> => c !== null && typeof c === "object" && !Array.isArray(c),
+          )
           .map(c => {
             const claimId = typeof c.claimId === "string" ? c.claimId : "";
             const features = Array.isArray(c.features)
               ? c.features.filter((f): f is string => typeof f === "string")
               : [];
             // 骨架交叉校验：引用不存在的实施例剔除（缺口由确定性规则推导）
-            const embodimentRefs = Array.isArray(c.embodimentRefs)
-              ? [...new Set(c.embodimentRefs.filter((e): e is string => typeof e === "string" && skeleton.has(e)))]
+            const allRefs = Array.isArray(c.embodimentRefs)
+              ? c.embodimentRefs.filter((e): e is string => typeof e === "string")
               : [];
+            const validRefs = allRefs.filter(e => skeleton.has(e));
+            droppedRefs.push(...allRefs.filter(e => !skeleton.has(e)));
+            const embodimentRefs = [...new Set(validRefs)];
             const uncoveredFeatures = embodimentRefs.length === 0 ? [...features] : [];
             const coverage: ClaimCoverageLevel = embodimentRefs.length > 0 ? "full" : "none";
             return {
@@ -123,13 +153,31 @@ export class ClaimEmbodimentMapperHandler implements StageHandler {
               uncoveredFeatures,
             };
           })
-          .filter(c => c.claimId.length > 0);
+          .filter(c => c.claimId.length > 0)
+          // 评审 M3：按 claimId 去重（保留首条），避免特征重复计入缺口/误报跨权项重复
+          .filter((c, index, arr) => arr.findIndex(x => x.claimId === c.claimId) === index);
 
         const matrix: ClaimEmbodimentCoverage = { caseId: provider?.caseId ?? "", claims, degraded: false };
         matrixToPersist = matrix;
         // 确定性校验（三字段：missingEmbodiment/badClaimIds/duplicateFeatures）并入结果
         const check = checkClaimEmbodimentCoverage(matrix);
-        return { claim_coverage_result: JSON.stringify({ ...matrix, check }) };
+        // 评审 I1：claims_draft 锚定——草稿存在但矩阵缺失的编号并入结果（LLM 漏项可见）
+        const draftNumbers = parseClaimNumbers(claimsDraft);
+        const outputNumbers = new Set(
+          claims.map(c => {
+            const m = /^claim_(\d+)$/.exec(c.claimId);
+            return m === null ? -1 : Number(m[1]);
+          }),
+        );
+        const missingClaims = draftNumbers.filter(n => !outputNumbers.has(n)).map(n => `claim_${n}`);
+        return {
+          claim_coverage_result: JSON.stringify({
+            ...matrix,
+            check,
+            ...(missingClaims.length > 0 ? { missingClaims } : {}),
+            ...(droppedRefs.length > 0 ? { droppedRefs } : {}),
+          }),
+        };
       },
       // parse 失败：保留原文不降级（extract 骨架行为，评审 P5-设计2#9）
       raw => ({ claim_coverage_result: raw }),

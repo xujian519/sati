@@ -96,3 +96,14 @@ test("同时出现多类问题：无支撑 + 编号断裂 + 重复特征互不�
   assert.deepEqual(result.badClaimIds, ["claim_2"]);
   assert.deepEqual(result.duplicateFeatures, ["特征X"]);
 });
+
+test("防 DoS（评审 C1）：超上界编号计入 badClaimIds 且不做 O(n) 扫描；非法编号不挂死", () => {
+  // 1001 超上界 → 计 badClaimIds，不触发 1..1001 之外的循环
+  const over = checkClaimEmbodimentCoverage(matrix([entry("claim_1001", ["特征A"], ["embodiment_1"])]));
+  assert.deepEqual(over.badClaimIds, ["claim_1001"]);
+  assert.deepEqual(over.missingEmbodiment, []);
+  // 超大数字（Number 精度外的 400 位 9）→ Number 溢出 Infinity → 守卫后不挂死
+  const huge = checkClaimEmbodimentCoverage(matrix([entry(`claim_${"9".repeat(400)}`, ["特征A"], ["embodiment_1"])]));
+  assert.equal(huge.badClaimIds.length, 1);
+  assert.deepEqual(huge.missingEmbodiment, []);
+});

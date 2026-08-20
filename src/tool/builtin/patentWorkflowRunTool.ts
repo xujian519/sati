@@ -310,7 +310,8 @@ export function createPatentWorkflowRunTool(
 
       // Worker 执行监控（T4）：装配 monitor 使生产路径产生 worker 记录（此前
       // runWorkflow 未传 monitor，workflow.ts 的 monitor.record 为死路径）；
-      // onRecord 旁路审计落盘（outputPath 从 worker 契约 outputs[0].path 推导）。
+      // onRecord 旁路审计落盘（outputPath 从 worker 契约 outputs[0].path 推导；
+      // recordWorker 内部 fail-open，store 抛错不外泄，评审 C2）。
       const workerMonitor = new WorkerMonitor({
         onRecord: record => {
           if (provenanceCollector === null) return;
@@ -320,21 +321,31 @@ export function createPatentWorkflowRunTool(
         },
       });
 
-      const result = await runWorkflow(manifest, workflowCtx, executor, {
-        handlers: deps.handlers ?? globalStageHandlerRegistry,
-        atoms: globalAtomRegistry,
-        provider,
-        persist: persistTarget ? new JsonFileWorkflowRunStore(persistTarget.runsDir) : undefined,
-        runId: persistTarget?.runId,
-        monitor: workerMonitor,
-        // 断点续跑：resumeFrom 跳过已完成阶段；checkpointStore 每阶段落盘。
-        ...(resumeFrom !== undefined ? { resumeFrom } : {}),
-        ...(checkpointDir !== undefined ? { checkpointStore: new JsonFileManifestCheckpointStore(checkpointDir) } : {}),
-        // 已人工批准的审批门：重跑时跳过（放行），未批准的照常中断。
-        ...(input.approveStageIds !== undefined && input.approveStageIds.length > 0
-          ? { approvalGrants: input.approveStageIds }
-          : {}),
-      });
+      // 评审 C2：runWorkflow 抛错（含 store 异常）也必须释放 collector 句柄
+      // （DatabaseSync 无 GC finalizer 保证，Windows 上不关闭无法删库/替换，EBUSY）。
+      let result;
+      try {
+        result = await runWorkflow(manifest, workflowCtx, executor, {
+          handlers: deps.handlers ?? globalStageHandlerRegistry,
+          atoms: globalAtomRegistry,
+          provider,
+          persist: persistTarget ? new JsonFileWorkflowRunStore(persistTarget.runsDir) : undefined,
+          runId: persistTarget?.runId,
+          monitor: workerMonitor,
+          // 断点续跑：resumeFrom 跳过已完成阶段；checkpointStore 每阶段落盘。
+          ...(resumeFrom !== undefined ? { resumeFrom } : {}),
+          ...(checkpointDir !== undefined
+            ? { checkpointStore: new JsonFileManifestCheckpointStore(checkpointDir) }
+            : {}),
+          // 已人工批准的审批门：重跑时跳过（放行），未批准的照常中断。
+          ...(input.approveStageIds !== undefined && input.approveStageIds.length > 0
+            ? { approvalGrants: input.approveStageIds }
+            : {}),
+        });
+      } catch (err) {
+        provenanceCollector?.close();
+        throw err;
+      }
 
       // 审批门溯源：放行集合 = 显式 approveStageIds ∪ resume 合并的 approvalGrants
       // （幂等键保证 resume 自动放行不重复记录）；挂起 = result.interrupted。
@@ -587,10 +598,11 @@ async function executeGraphRun(
       provenanceCollector?.recordDegradations(result.degraded);
     }
 
-    // 审批门挂起旁路（中断节点名 = 审批门）。
+    // 审批门挂起旁路（评审 I5：与 granted 同口径——均用 checkpoint 标识，
+    // 否则 pending 用节点名、granted 用 checkpoint id 两条记录无法按 stageId 关联）。
     if (result.interrupted !== undefined) {
       provenanceCollector?.recordApprovalGate({
-        stageId: result.interrupted.node,
+        stageId: `checkpoint:${checkpointId ?? "unknown"}`,
         kind: "pending",
         message: result.interrupted.message,
       });

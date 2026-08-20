@@ -124,3 +124,62 @@ test("无 caseId：不落盘（跳过，claim-chart 先例）", async () => {
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("空矩阵（评审 I3）：返回 claims_empty 标记而非静默无缺口", async () => {
+  const result = await handler.execute({
+    state: state(),
+    provider: provider(async () => JSON.stringify({ claims: [] })),
+  });
+  assert.equal(result._error, undefined);
+  const parsed = JSON.parse(result.claim_coverage_result as string) as { claims_empty: boolean };
+  assert.equal(parsed.claims_empty, true);
+});
+
+test("LLM 漏项（评审 I1）：claims_draft 存在但矩阵缺失的编号并入 missingClaims", async () => {
+  const result = await handler.execute({
+    state: state(), // claims_draft 含 claim_1、claim_2
+    provider: provider(async () =>
+      JSON.stringify({ claims: [{ claimId: "claim_1", features: ["加热模块"], embodimentRefs: ["embodiment_1"] }] }),
+    ),
+  });
+  const parsed = JSON.parse(result.claim_coverage_result as string) as { missingClaims: string[] };
+  assert.deepEqual(parsed.missingClaims, ["claim_2"]);
+});
+
+test("幻觉引用（评审 I2）：骨架剔除的 refs 记入 droppedRefs（可见而非静默）", async () => {
+  const result = await handler.execute({
+    state: state(), // source_text 无「实施例 99」
+    provider: provider(async () =>
+      JSON.stringify({
+        claims: [{ claimId: "claim_1", features: ["加热模块"], embodimentRefs: ["embodiment_99", "embodiment_1"] }],
+      }),
+    ),
+  });
+  const parsed = JSON.parse(result.claim_coverage_result as string) as {
+    claims: Array<{ embodimentRefs: string[] }>;
+    droppedRefs: string[];
+  };
+  assert.deepEqual(parsed.claims[0]!.embodimentRefs, ["embodiment_1"]); // 合法引用保留
+  assert.deepEqual(parsed.droppedRefs, ["embodiment_99"]); // 幻觉引用可见
+});
+
+test("重复 claimId（评审 M3）：按 claimId 去重保留首条，不误报跨权项重复", async () => {
+  const result = await handler.execute({
+    state: state(),
+    provider: provider(async () =>
+      JSON.stringify({
+        claims: [
+          { claimId: "claim_1", features: ["加热模块"], embodimentRefs: ["embodiment_1"] },
+          { claimId: "claim_1", features: ["风扇"], embodimentRefs: ["embodiment_2"] },
+        ],
+      }),
+    ),
+  });
+  const parsed = JSON.parse(result.claim_coverage_result as string) as {
+    claims: Array<{ features: string[] }>;
+    check: { duplicateFeatures: string[] };
+  };
+  assert.equal(parsed.claims.length, 1);
+  assert.deepEqual(parsed.claims[0]!.features, ["加热模块"]);
+  assert.deepEqual(parsed.check.duplicateFeatures, []);
+});

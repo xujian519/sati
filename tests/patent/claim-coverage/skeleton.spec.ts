@@ -14,6 +14,14 @@ test("中文数字：实施例一 ~ 实施例十", () => {
   assert.deepEqual(extractEmbodimentIds("实施例一至实施例十"), ["embodiment_1", "embodiment_10"]);
 });
 
+test("多字中文数字（评审 I2）：实施例十一 ~ 实施例十九 解析为 11-19", () => {
+  assert.deepEqual(extractEmbodimentIds("实施例十一与实施例十九"), ["embodiment_11", "embodiment_19"]);
+});
+
+test("多字中文数字不支持写法（评审 I2）：实施例九十 不猜测解析（避免误判）", () => {
+  assert.deepEqual(extractEmbodimentIds("实施例九十"), []);
+});
+
 test("去重：同一编号多次出现 → 单条", () => {
   assert.deepEqual(extractEmbodimentIds("实施例1 详述，实施例1 变形，实施例 2"), ["embodiment_1", "embodiment_2"]);
 });

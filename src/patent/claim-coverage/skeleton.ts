@@ -9,7 +9,7 @@
  * 下二者尚不存在）。
  */
 
-/** 中文数字 一~十 → 阿拉伯数字（交底书常见"实施例一"，十以上按多字中文数字暂不支持）。 */
+/** 中文数字 一~十 → 阿拉伯数字（交底书常见"实施例一"）。 */
 const CN_DIGITS: Readonly<Record<string, number>> = {
   一: 1,
   二: 2,
@@ -23,8 +23,21 @@ const CN_DIGITS: Readonly<Record<string, number>> = {
   十: 10,
 };
 
-/** 「实施例 1」「实施例2」「实施方式三」等；编号为 1-3 位阿拉伯数字或单个中文数字（后向数字边界防 1000 截成 100）。 */
-const EMBODIMENT_RE = /(?:实施例|实施方式)\s*([0-9]{1,3}|[一二三四五六七八九十])(?!\d)/g;
+/**
+ * 中文数字解析（评审 I2 扩展）：单字（一~十）→ 1-10；「十X」（X=一~九）→ 11-19；
+ * 其他多字写法（如"二十"、"九十"）不支持 → undefined（诚实不猜测，避免误解析）。
+ */
+function parseCnNumber(raw: string): number | undefined {
+  if (raw.length === 1) return CN_DIGITS[raw];
+  if (raw.length === 2 && raw[0] === "十") {
+    const unit = CN_DIGITS[raw[1]];
+    return unit !== undefined && unit < 10 ? 10 + unit : undefined;
+  }
+  return undefined;
+}
+
+/** 「实施例 1」「实施例2」「实施方式三」「实施例十一」等；编号为 1-3 位阿拉伯数字或 1-2 位中文数字（后向数字边界）。 */
+const EMBODIMENT_RE = /(?:实施例|实施方式)\s*([0-9]{1,3}|[一二三四五六七八九十]{1,2})(?!\d)/g;
 
 /** 提取实施例编号列表（去重 + 按数字升序，确定性输出）。 */
 export function extractEmbodimentIds(text: string): string[] {
@@ -32,8 +45,8 @@ export function extractEmbodimentIds(text: string): string[] {
   for (const match of text.matchAll(EMBODIMENT_RE)) {
     const raw = match[1];
     if (raw === undefined) continue;
-    const num = CN_DIGITS[raw] ?? Number(raw);
-    if (Number.isInteger(num) && num >= 1) {
+    const num = /^\d+$/.test(raw) ? Number(raw) : parseCnNumber(raw);
+    if (num !== undefined && Number.isInteger(num) && num >= 1) {
       ids.add(`embodiment_${num}`);
     }
   }

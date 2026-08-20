@@ -1921,13 +1921,21 @@ class ProjectRuntimeRegistry {
       enableProvenance: this.options.enableProvenance,
       env: this.options.env,
     });
+    // 评审 I2：gateway 程序化开启时同步进程级 env，使同一进程内工具层
+    // （openProvenanceCollector 读 process.env）与 gateway 判定同源，避免半开状态。
+    if (enableProvenance && process.env.SATI_PROVENANCE !== "1") {
+      process.env.SATI_PROVENANCE = "1";
+    }
+    // 评审 I3：审批审计库打开失败（目录只读/损坏/魔数不符）只降级为不落盘，
+    // 绝不拖垮 gateway（构造期 fail-open；saveRecord 已内建 fail-open）。
+    const approvalStore = enableProvenance ? createApprovalStoreSafely() : undefined;
     const patentOutputGate = new PatentOutputGate({
       riskKeywords: [],
       absolutePhrases: [],
       enableCitationGate: false,
       ruleGate,
       // 审批审计落盘（全局库；写入失败不阻断审批）
-      ...(enableProvenance ? { approvalStore: new SqliteApprovalStore() } : {}),
+      ...(approvalStore !== undefined ? { approvalStore } : {}),
       // 时钟与 Agent 层注入对齐（TurnRunner/AgentLoop 共用 this.options.now）
       now: () => this.options.now().getTime(),
       onPending: pending => {
@@ -2360,4 +2368,18 @@ function syncRoleDefinitions(pluginRuntime: PluginRuntime, builtinSkillsRoot?: s
   // M3 T15：skills/patent-teams/ 嵌套目录（自身无 SKILL.md，一级扫描跳过），
   // 经同一 roleFromContribution → registerRoleDefinition 路径补注册。
   registerNestedTeamRoleDefinitions(builtinSkillsRoot);
+}
+
+/**
+ * 安全构造审批审计库（评审 I3）：库打不开（目录只读/损坏/魔数不符）时降级为
+ * 不注入 approvalStore（审批留痕不落盘），绝不抛错拖垮 gateway；saveRecord 侧
+ * 已内建 fail-open。返回 undefined = 不落盘。
+ */
+function createApprovalStoreSafely(): SqliteApprovalStore | undefined {
+  try {
+    return new SqliteApprovalStore();
+  } catch (err) {
+    console.error("[ProvenanceCollector] 审批审计库打开失败，审批留痕降级为不落盘:", err);
+    return undefined;
+  }
 }

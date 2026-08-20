@@ -34,10 +34,10 @@ export class ProvenanceCollector {
   readonly runId: string;
   readonly caseId: string | null;
   private readonly store: ProvenanceStore;
-  /** worker 记录序号：同 run 同 worker 多次执行仍唯一（worker 记录为运行期实时产生，无重放语义）。 */
-  private workerSeq = 0;
   /** 当前超步号（图路径）：由工具层 onSuperStepStart 更新；非图场景不参与。 */
   private currentStep = 0;
+  /** 已写入快照的 state key 集合（评审 I1：inputIds 存在性校验，悬空引用不写）。 */
+  private readonly writtenSnapshotKeys = new Set<string>();
 
   constructor(options: ProvenanceCollectorOptions) {
     this.store = options.store;
@@ -47,53 +47,67 @@ export class ProvenanceCollector {
 
   /** 记录一条审批门活动（挂起 pending / 放行 granted）。 */
   recordApprovalGate(record: ApprovalGateRecord): void {
-    const id = `${this.runId}:approval_gate:${record.stageId}:${record.kind}`;
-    this.store.upsertAgent({ id: "human", kind: "human", name: "审批人" });
-    this.store.upsertActivity({
-      id,
-      source: "approval_gate",
-      name: record.kind,
-      caseId: this.caseId,
-      runId: this.runId,
-      startedAt: record.at ?? Date.now(),
-      agentId: "human",
-      inputIds: [],
-    });
-    this.store.upsertEntity({
-      id: `entity:${id}`,
-      kind: "approval",
-      value: JSON.stringify({ stageId: record.stageId, kind: record.kind, message: record.message ?? "" }),
-      caseId: this.caseId,
-      generatedByActivityId: id,
-      derivedFromIds: [],
-    });
+    try {
+      const id = `${this.runId}:approval_gate:${record.stageId}:${record.kind}`;
+      this.store.upsertAgent({ id: "human", kind: "human", name: "审批人" });
+      this.store.upsertActivity({
+        id,
+        source: "approval_gate",
+        name: record.kind,
+        caseId: this.caseId,
+        runId: this.runId,
+        startedAt: record.at ?? Date.now(),
+        agentId: "human",
+        inputIds: [],
+      });
+      this.store.upsertEntity({
+        id: `entity:${id}`,
+        kind: "approval",
+        value: JSON.stringify({ stageId: record.stageId, kind: record.kind, message: record.message ?? "" }),
+        caseId: this.caseId,
+        generatedByActivityId: id,
+        derivedFromIds: [],
+      });
+    } catch (err) {
+      // fail-open（评审 C1）：审计写失败绝不外泄——wrapNode 场景下外泄会把成功节点
+      // 翻转成 node_failed 并丢弃其产出（engine 把 promise reject 当节点失败）。
+      console.error(`[ProvenanceCollector] 审批门记录失败 (${record.stageId}):`, err);
+    }
   }
 
   /** 记录一条 worker 契约执行（activity + output_file entity）。 */
   recordWorker(input: { record: WorkerExecutionRecord; outputPath?: string }): void {
-    this.workerSeq += 1;
-    const id = `${this.runId}:worker:${input.record.workerName}:${this.workerSeq}`;
-    this.store.upsertAgent({ id: input.record.workerName, kind: "system", name: input.record.workerName });
-    this.store.upsertActivity({
-      id,
-      source: "worker",
-      name: input.record.workerName,
-      caseId: this.caseId,
-      runId: this.runId,
-      startedAt: input.record.startedAt,
-      durationMs: input.record.durationMs,
-      agentId: input.record.workerName,
-      inputIds: [],
-    });
-    this.store.upsertEntity({
-      id: `entity:${id}`,
-      kind: "output_file",
-      value: input.outputPath ?? "",
-      caseId: this.caseId,
-      generatedByActivityId: id,
-      derivedFromIds: [],
-      degraded: input.record.degraded,
-    });
+    try {
+      // 评审 I4：id 用执行时刻（record.startedAt）而非进程内自增 seq——
+      // resume 续跑新 collector 的 seq 从 0 起，会与崩溃前记录 id 碰撞并被
+      // INSERT OR IGNORE 静默丢弃；执行时刻在 resume 重跑时天然不同。
+      const id = `${this.runId}:worker:${input.record.workerName}:${input.record.startedAt}`;
+      this.store.upsertAgent({ id: input.record.workerName, kind: "system", name: input.record.workerName });
+      this.store.upsertActivity({
+        id,
+        source: "worker",
+        name: input.record.workerName,
+        caseId: this.caseId,
+        runId: this.runId,
+        startedAt: input.record.startedAt,
+        durationMs: input.record.durationMs,
+        agentId: input.record.workerName,
+        inputIds: [],
+      });
+      this.store.upsertEntity({
+        id: `entity:${id}`,
+        kind: "output_file",
+        value: input.outputPath ?? "",
+        caseId: this.caseId,
+        generatedByActivityId: id,
+        derivedFromIds: [],
+        degraded: input.record.degraded,
+      });
+    } catch (err) {
+      // fail-open：worker 记录失败不影响工作流运行（评审 C2：onRecord 无 try/catch 时
+      // store 抛错会经 monitor.record 上抛中止整个 workflow）。
+      console.error(`[ProvenanceCollector] worker 记录失败 (${input.record.workerName}):`, err);
+    }
   }
 
   /** 更新当前超步号（图路径，工具层 onSuperStepStart 调用）。 */
@@ -122,60 +136,75 @@ export class ProvenanceCollector {
     declaredInputKeys?: readonly string[];
     startedAt: number;
   }): void {
-    const activityId = `${this.runId}:graph_node:${input.name}:${this.currentStep}`;
-    const written = Object.keys(input.delta);
-    const inputIds = (input.declaredInputKeys ?? []).map(k => `${this.runId}:snapshot:${k}`);
-    this.store.upsertAgent({ id: "system", kind: "system", name: "图引擎节点" });
-    this.store.upsertActivity({
-      id: activityId,
-      source: "graph_node",
-      name: input.name,
-      caseId: this.caseId,
-      runId: this.runId,
-      stepIndex: this.currentStep,
-      startedAt: input.startedAt,
-      agentId: "system",
-      inputIds,
-    });
-    for (const key of written) {
-      // 内部键（_ 前缀，如 _prior_art_converged）不记录为快照；__degradation 后缀记录为降级快照。
-      if (key.startsWith("_") && !key.endsWith(DEGRADATION_SUFFIX)) continue;
-      this.store.upsertEntityLatest({
-        id: `${this.runId}:snapshot:${key}`,
-        kind: "state_snapshot",
-        value:
-          typeof input.delta[key] === "string" ? (input.delta[key] as string) : JSON.stringify(input.delta[key] ?? ""),
+    try {
+      const activityId = `${this.runId}:graph_node:${input.name}:${this.currentStep}`;
+      const written = Object.keys(input.delta);
+      // 评审 I1：只记录已产生的快照键（悬空引用不写 inputIds，避免导出"输入"指向不存在实体）
+      const validInputs = (input.declaredInputKeys ?? []).filter(k => this.writtenSnapshotKeys.has(k));
+      const inputIds = validInputs.map(k => `${this.runId}:snapshot:${k}`);
+      this.store.upsertAgent({ id: "system", kind: "system", name: "图引擎节点" });
+      this.store.upsertActivity({
+        id: activityId,
+        source: "graph_node",
+        name: input.name,
         caseId: this.caseId,
-        generatedByActivityId: activityId,
-        derivedFromIds: [],
-        degraded: key.endsWith(DEGRADATION_SUFFIX),
+        runId: this.runId,
+        stepIndex: this.currentStep,
+        startedAt: input.startedAt,
+        agentId: "system",
+        inputIds,
       });
+      for (const key of written) {
+        // 内部键（_ 前缀，如 _prior_art_converged）不记录为快照；__degradation 后缀记录为降级快照。
+        if (key.startsWith("_") && !key.endsWith(DEGRADATION_SUFFIX)) continue;
+        this.writtenSnapshotKeys.add(key);
+        this.store.upsertEntityLatest({
+          id: `${this.runId}:snapshot:${key}`,
+          kind: "state_snapshot",
+          value:
+            typeof input.delta[key] === "string"
+              ? (input.delta[key] as string)
+              : JSON.stringify(input.delta[key] ?? ""),
+          caseId: this.caseId,
+          generatedByActivityId: activityId,
+          derivedFromIds: [],
+          degraded: key.endsWith(DEGRADATION_SUFFIX),
+        });
+      }
+    } catch (err) {
+      // fail-open（评审 C1）：wrapNode 场景下审计写失败外泄会把成功节点翻转成
+      // node_failed 并丢弃其产出（engine 把 promise reject 当节点失败）。
+      console.error(`[ProvenanceCollector] 图节点记录失败 (${input.name}):`, err);
     }
   }
 
   /** 记录全图降级标记（结果侧，评审 P9：覆盖引擎级直接写 state 的降级路径）。 */
   recordDegradations(marks: readonly DegradationMark[]): void {
     for (const mark of marks) {
-      const id = `${this.runId}:degradation:${mark.reason}:${mark.message}`;
-      this.store.upsertActivity({
-        id,
-        source: "degradation",
-        name: mark.reason,
-        caseId: this.caseId,
-        runId: this.runId,
-        startedAt: Date.now(),
-        agentId: "system",
-        inputIds: [],
-      });
-      this.store.upsertEntity({
-        id: `entity:${id}`,
-        kind: "state_snapshot",
-        value: mark.message,
-        caseId: this.caseId,
-        generatedByActivityId: id,
-        derivedFromIds: [],
-        degraded: true,
-      });
+      try {
+        const id = `${this.runId}:degradation:${mark.reason}:${mark.message}`;
+        this.store.upsertActivity({
+          id,
+          source: "degradation",
+          name: mark.reason,
+          caseId: this.caseId,
+          runId: this.runId,
+          startedAt: Date.now(),
+          agentId: "system",
+          inputIds: [],
+        });
+        this.store.upsertEntity({
+          id: `entity:${id}`,
+          kind: "state_snapshot",
+          value: mark.message,
+          caseId: this.caseId,
+          generatedByActivityId: id,
+          derivedFromIds: [],
+          degraded: true,
+        });
+      } catch (err) {
+        console.error(`[ProvenanceCollector] 降级记录失败 (${mark.reason}):`, err);
+      }
     }
   }
 

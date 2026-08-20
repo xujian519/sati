@@ -215,9 +215,9 @@ export function buildNoveltyGraph(options: BuildNoveltyGraphOptions = {}): Graph
  */
 export const NOVELTY_INPUT_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
   extract: [],
-  keywords: ["features"],
-  search: ["query"],
+  keywords: [],
+  search: ["keywords"],
   compare: ["features", "prior_art"],
-  numeric_range: ["novelty_result", "novelty_conclusion"],
+  numeric_range: [],
   conclude: ["novelty_result", "novelty_conclusion", "numeric_range_result", "evidence_coverage"],
 };

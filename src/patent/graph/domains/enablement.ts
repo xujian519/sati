@@ -494,9 +494,9 @@ export function extractEnablementResult(state: GraphState): {
 export const ENABLEMENT_INPUT_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
   load: [],
   spec_prechecks: [],
-  completeness: ["spec_prechecks"],
+  completeness: [],
   clarity: [],
-  enablement: ["enablement_completeness", "enablement_clarity"],
+  enablement: ["spec_prechecks"],
   domain_rules: [],
-  conclude: ["enablement_completeness", "enablement_clarity", "enablement_enablement", "domain_rules"],
+  conclude: ["enablement_completeness", "enablement_clarity", "enablement_enablement"],
 };

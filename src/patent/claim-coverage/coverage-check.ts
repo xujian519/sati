@@ -14,6 +14,9 @@ import type { ClaimEmbodimentCoverage, CoverageCheckResult } from "./types.js";
 /** claimId 格式：claim_<数字>（对齐矩阵骨架命名，与 claim-chart 的 "1a/1b" 规则不兼容）。 */
 const CLAIM_ID_RE = /^claim_(\d+)$/;
 
+/** 权利要求编号上界（防 DoS：超界编号直接计 badClaimIds，不做连续性扫描）。 */
+const MAX_CLAIM_NO = 1000;
+
 /** 特征文本归一化：去首尾空白；空串不参与判定。 */
 function normalizeFeature(text: string): string {
   return text.trim();
@@ -23,6 +26,7 @@ export function checkClaimEmbodimentCoverage(matrix: ClaimEmbodimentCoverage): C
   const missingEmbodiment: CoverageCheckResult["missingEmbodiment"] = [];
   const badClaimIds: string[] = [];
   const claimNumbers: number[] = [];
+  const invalidClaimIds: string[] = [];
   const featureOwners = new Map<string, string[]>();
 
   for (const claim of matrix.claims) {
@@ -32,6 +36,12 @@ export function checkClaimEmbodimentCoverage(matrix: ClaimEmbodimentCoverage): C
       continue;
     }
     const claimNo = Number(m[1]);
+    // 评审 C1：限界 1..MAX_CLAIM_NO——超界/非有限编号计 badClaimIds 且不参与连续性扫描
+    // （LLM 单条输出如 "claim_" + 大数字不得触发 O(n) 循环挂死进程）。
+    if (!Number.isInteger(claimNo) || claimNo < 1 || claimNo > MAX_CLAIM_NO) {
+      invalidClaimIds.push(claim.claimId);
+      continue;
+    }
     claimNumbers.push(claimNo);
 
     // 特征去重 + 去空白，保持判定确定性
@@ -52,7 +62,8 @@ export function checkClaimEmbodimentCoverage(matrix: ClaimEmbodimentCoverage): C
     }
   }
 
-  // 编号连续性：1..max 内缺号即断裂（与 claim-chart element-validator 的"跳号"思想一致）
+  // 编号连续性：仅对界内编号（1..MAX_CLAIM_NO）做 1..max 缺号扫描（与 claim-chart
+  // element-validator 的"跳号"思想一致）；非法/超界编号已在上方计 badClaimIds。
   if (claimNumbers.length > 0) {
     const max = Math.max(...claimNumbers);
     const present = new Set(claimNumbers);
@@ -60,6 +71,7 @@ export function checkClaimEmbodimentCoverage(matrix: ClaimEmbodimentCoverage): C
       if (!present.has(n)) badClaimIds.push(`claim_${n}`);
     }
   }
+  badClaimIds.push(...invalidClaimIds);
 
   // 跨权项重复特征（提示性）
   const duplicateFeatures: string[] = [];
