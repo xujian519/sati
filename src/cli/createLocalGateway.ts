@@ -1921,10 +1921,22 @@ class ProjectRuntimeRegistry {
     const permissionMode = override?.permissionMode ?? this.options.permissionMode;
     const cwd = override?.cwd ?? runtime.projectRoot;
     // M4：会话级模型路由覆盖（团队成员唤醒传快照 modelRoute）——仅覆盖本次会话的
-    // provider/model，不改全局配置、不动 PilotConfigStore。缺省回落项目默认模型。
+    // provider/model，不改全局配置、不动 PilotConfigStore。整体应用（质量评审 M3）：
+    // provider/model 双字段非空才覆盖——WS 线协议可直传部分字段（编译期约束管不到
+    // 线协议），任一缺失整体回落项目默认，避免 provider 与 model 拼错对。
+    let provider = agent.model.provider;
+    let model = agent.model.model;
     const modelRoute = context.modelRoute;
-    const provider = modelRoute?.provider ?? agent.model.provider;
-    const model = modelRoute?.model ?? agent.model.model;
+    if (
+      modelRoute !== undefined &&
+      typeof modelRoute.provider === "string" &&
+      modelRoute.provider.length > 0 &&
+      typeof modelRoute.model === "string" &&
+      modelRoute.model.length > 0
+    ) {
+      provider = modelRoute.provider;
+      model = modelRoute.model;
+    }
     // Hand `PermissionContext` the same live rule-set reference the
     // gateway permission hook owns (see `getLiveRuleSet`). With this
     // shared reference, an "allow + remember" decision pushed by the

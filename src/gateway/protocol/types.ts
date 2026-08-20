@@ -135,7 +135,11 @@ export type GatewaySubmitTurnInput = {
   maxTurns?: number;
   /** Hard wall-clock limit for this turn. The gateway aborts and closes the session when exceeded. */
   timeoutMs?: number;
-  /** Team member model route override (M4): applied to the session config for this turn. */
+  /**
+   * Team member model route override (M4): applied to the session config at
+   * session creation and sticky for cached sessions — the model is baked when
+   * the session is created, later turns reuse it.
+   */
   modelRoute?: { provider: string; model: string };
   telemetry?: {
     ownerModule?: TelemetryModule;

@@ -270,6 +270,9 @@ function mergeSessionContext(current: GatewaySessionContext, next: GatewaySessio
     sessionKey: next.sessionKey,
     channelKey: next.channelKey || current.channelKey,
     projectKey: current.projectKey ?? next.projectKey,
+    // 锚点说明（质量评审 M4）：modelRoute 保留会话创建时的路由——模型在会话创建时
+    // 生效，后续唤醒复用缓存会话（创建后不可再改）；channelKey 用 next 是因会话归属
+    // 不可漂移。两者锚点方向不同是有意的。
     modelRoute: current.modelRoute ?? next.modelRoute,
   };
 }

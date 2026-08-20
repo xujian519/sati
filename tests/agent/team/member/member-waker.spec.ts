@@ -161,3 +161,25 @@ test("wakeMember：成员快照 modelRoute 传入 submitTurn input（M4 消费�
     db.close();
   }
 });
+
+test("唤醒：modelRouteJson 为部分字段（仅 provider）时 input 无 modelRoute 字段（质量评审 M2）", async () => {
+  const root = mkdtempSync(join(tmpdir(), "sati-waker-"));
+  const db = new TeamDb(join(root, "teams.db"));
+  try {
+    db.upsertTeam({ id: "t1", name: "t", captainSessionKey: "cap-1", createdAt: "2026-08-20T00:00:00.000Z" });
+    db.insertMember({
+      id: "m-partial",
+      teamId: "t1",
+      roleSlug: "researcher",
+      modelRouteJson: JSON.stringify({ provider: "x" }),
+      status: "idle",
+      sessionKey: "team:t1:m-partial",
+      createdAt: "2026-08-20T00:00:00.000Z",
+    });
+    const recorded = { inputs: [] as GatewaySubmitTurnInput[] };
+    await wakeMember(db, makeFakeGateway(recorded), "m-partial", "followup");
+    assert.equal(recorded.inputs[0]?.modelRoute, undefined, "部分字段不传 modelRoute（不覆盖会话模型）");
+  } finally {
+    db.close();
+  }
+});
