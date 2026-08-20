@@ -35,6 +35,10 @@ import { WeixinSessionMapper, type WeixinSessionMapperState } from "./WeixinSess
 
 const CREDENTIALS_PATH = join(homedir(), ".sati", "weixin-credentials.json");
 const POLL_RETRY_DELAY_MS = 3000;
+/** 连续失败指数退避封顶：3s→6s→12s→24s→48s→60s，避免长时间网络故障时空转刷屏。 */
+const POLL_RETRY_MAX_DELAY_MS = 60_000;
+/** 连续失败日志降噪：首个错误与每第 N 次打 error/warn 级，其余降 debug。 */
+const POLL_RETRY_LOG_EVERY = 20;
 const WEIXIN_ACTIVITY_DELAY_MS = 10 * 60 * 1000;
 const WEIXIN_ACTIVITY_UPDATE_THROTTLE_MS = 10 * 60 * 1000;
 const WEIXIN_DEFAULT_TURN_TIMEOUT_MS = 0;
@@ -380,6 +384,33 @@ export class WeixinChannel implements ChannelAdapter {
     this.reportChannelStatus?.(this.channelKey, { state, message, ...details });
   }
 
+  /**
+   * 连续失败指数退避：3s→6s→12s→24s→48s→60s 封顶。成功 poll 重置
+   * consecutivePollErrors 后回到初始延迟。
+   */
+  private nextPollRetryDelayMs(): number {
+    if (this.consecutivePollErrors <= 0) return POLL_RETRY_DELAY_MS;
+    const exponent = Math.min(this.consecutivePollErrors - 1, 5);
+    return Math.min(POLL_RETRY_DELAY_MS * 2 ** exponent, POLL_RETRY_MAX_DELAY_MS);
+  }
+
+  /**
+   * 连续失败日志降噪：首个错误与每第 N 次打 error/warn 级（含完整错误信息），
+   * 其余失败降 debug——长时间网络故障（如 DNS/代理中断）不再刷屏。
+   */
+  private logPollFailure(level: "warn" | "error", message: string): void {
+    const attempt = this.consecutivePollErrors;
+    if (attempt === 1 || attempt % POLL_RETRY_LOG_EVERY === 0) {
+      if (level === "warn") {
+        this.logger?.warn?.(`weixin: ${message} (attempt #${attempt})`);
+      } else {
+        this.logger?.error?.(`weixin: ${message} (attempt #${attempt})`);
+      }
+    } else {
+      this.logger?.debug?.(`weixin: ${message} (attempt #${attempt}, suppressed)`);
+    }
+  }
+
   private async pollLoop(): Promise<void> {
     while (!this.loopAbort.signal.aborted) {
       // 每次迭代取当前 client：rebuildClientAfterPollError 会替换实例，
@@ -411,9 +442,10 @@ export class WeixinChannel implements ChannelAdapter {
         }
 
         if (resp.ret !== 0 && resp.ret !== undefined) {
-          this.logger?.warn?.(`weixin: poll ret=${resp.ret} errmsg=${resp.errmsg}`);
+          this.consecutivePollErrors++;
+          this.logPollFailure("warn", `poll ret=${resp.ret} errmsg=${resp.errmsg}`);
           await this.notifyConnectionLost();
-          await this.sleep(POLL_RETRY_DELAY_MS);
+          await this.sleep(this.nextPollRetryDelayMs());
           continue;
         }
 
@@ -439,10 +471,10 @@ export class WeixinChannel implements ChannelAdapter {
       } catch (e) {
         if (this.loopAbort.signal.aborted) break;
         this.consecutivePollErrors++;
-        this.logger?.error?.(`weixin: poll error #${this.consecutivePollErrors}: ${formatWeixinError(e)}`);
+        this.logPollFailure("error", `poll error #${this.consecutivePollErrors}: ${formatWeixinError(e)}`);
         await this.notifyConnectionLost();
         this.rebuildClientAfterPollError(e);
-        await this.sleep(POLL_RETRY_DELAY_MS);
+        await this.sleep(this.nextPollRetryDelayMs());
       }
     }
   }
