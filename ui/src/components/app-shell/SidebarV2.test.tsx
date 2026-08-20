@@ -20,7 +20,7 @@ const project: Project = {
   sessions: [],
 };
 
-function renderSidebar(selectedProject: Project | null, onCollapse?: () => void) {
+function renderSidebar(selectedProject: Project | null, onCollapse?: () => void, onOpenTeamPanel?: () => void) {
   const props: ComponentProps<typeof SidebarV2> = {
     projects: [general, project],
     selectedProject,
@@ -34,6 +34,7 @@ function renderSidebar(selectedProject: Project | null, onCollapse?: () => void)
     onRequestDeleteProject: vi.fn(),
     onRequestDeleteSession: vi.fn(),
     onShowSettings: vi.fn(),
+    onOpenTeamPanel,
     onCollapse,
   };
 
@@ -112,5 +113,23 @@ describe("SidebarV2 collapse button", () => {
     fireEvent.click(button);
 
     expect(onCollapse).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SidebarV2 team panel entry", () => {
+  it("hides the team button when no onOpenTeamPanel handler is provided", () => {
+    renderSidebar(null);
+
+    expect(screen.queryByRole("button", { name: "Team" })).toBeNull();
+  });
+
+  it("renders the team button and fires onOpenTeamPanel on click", () => {
+    const onOpenTeamPanel = vi.fn();
+    renderSidebar(null, undefined, onOpenTeamPanel);
+
+    const button = screen.getByRole("button", { name: "Team" });
+    fireEvent.click(button);
+
+    expect(onOpenTeamPanel).toHaveBeenCalledTimes(1);
   });
 });
