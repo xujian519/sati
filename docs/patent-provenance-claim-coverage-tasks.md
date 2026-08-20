@@ -32,7 +32,7 @@ T9 RDF 导出：条件触发（出现真实消费方），不排期
 | T5 | 审计导出 + enableProvenance 开关 | T1–T4 | 1 天 | ✅ 已落地（7/7 测试绿，typecheck/eslint/biome 绿） |
 | T6 | claim-embodiment-mapper 原子 | T0 | 1–1.5 天 | ✅ 已落地（6/6 测试绿，typecheck/eslint/biome 绿） |
 | T7 | manifest 接入 + draft-spec 联动 + 门禁收尾 | T6 | 1 天 | ✅ 已落地（19/19 测试绿，workflow-docs 门禁绿，typecheck/eslint/biome 绿） |
-| T8 | 图节点决策链（wrapGraphBuilder + 结论树） | T1（存储接口冻结） | 3–4 天 | ☐ |
+| T8 | 图节点决策链（wrapGraphBuilder + 结论树） | T1（存储接口冻结） | 3–4 天 | ✅ 已落地（4/4 测试绿，typecheck/eslint/biome 绿） |
 | T9 | RDF 导出（条件触发） | T5 | 不排期 | ☐ |
 
 ---
@@ -222,7 +222,7 @@ T9 RDF 导出：条件触发（出现真实消费方），不排期
 
 ---
 
-## T8：图节点决策链（wrapGraphBuilder + 结论树）— 3–4 天
+## T8：图节点决策链（wrapGraphBuilder + 结论树）— 3–4 天 ✅ 已落地（2026-08-20）
 
 **目标**：G1 缺口——图路径结论的可回溯决策链（依赖 T1 存储接口冻结）。
 

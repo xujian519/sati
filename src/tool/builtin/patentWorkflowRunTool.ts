@@ -21,7 +21,7 @@ import {
   type WorkflowManifest,
 } from "../../patent/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
-import { defaultPatentWorkers, WorkerMonitor } from "../../patent/index.js";
+import { DOMAIN_INPUT_DECLARATIONS, defaultPatentWorkers, type GraphNode, WorkerMonitor } from "../../patent/index.js";
 import {
   isProvenanceEnabled,
   ProvenanceCollector,
@@ -466,6 +466,7 @@ async function executeGraphRun(
 ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
   const graphName = input.graph!;
   const def = DOMAIN_GRAPHS[graphName];
+  const graphId = `patent_${graphName}`;
   // caseId 透出：claim-chart 等原子按 provider.caseId 落盘/核验合并（与 manifest 路径一致）。
   const provider = buildWorkflowProvider(deps, { ...context, caseId: input.caseId });
   if (!provider) {
@@ -496,29 +497,6 @@ async function executeGraphRun(
     if (summary.length > 0) workflowCtx.inventiveness_feedback_history = summary;
   }
 
-  // 检查点：caseId 提供时持久化到 <caseDir>/workflow-runs/checkpoints/，否则内存。
-  const graph = def
-    .build({
-      handlers: deps.handlers ?? globalStageHandlerRegistry,
-      // 检索反思回路开关：retrievalRounds 透传给 inventiveness 图的 retrieval.maxRounds
-      // （缺省 2 = 最多重检 2 次；0 = 关闭回路保持旧行为）。novelty/enablement 忽略该选项。
-      ...(graphName === "inventiveness" && input.retrievalRounds !== undefined
-        ? { retrieval: { maxRounds: input.retrievalRounds } }
-        : {}),
-    })
-    .compile(def.entry);
-  const graphId = `patent_${graphName}`;
-  let store;
-  let persistNote = "持久化: 未启用（未提供 caseId）";
-  if (input.caseId !== undefined) {
-    const persistTarget = resolveRunPersistTarget(input.caseId, graphId, context.cwd ?? process.cwd());
-    if (persistTarget !== undefined) {
-      store = new JsonFileCheckpointStore(join(persistTarget.runsDir, "checkpoints"));
-      persistNote = `持久化: checkpoints 目录 ${join(persistTarget.runsDir, "checkpoints")}`;
-    }
-  }
-  store ??= new InMemoryCheckpointStore();
-
   // 审批/续跑：approveCheckpointId 优先——批准审批门（写入放行标记）后从该检查点
   // 继续，审批门节点重放时放行、后续节点执行；否则 resumeCheckpointId 直接续跑
   // （不改变审批门状态，门会再次暂停等待审批）。
@@ -529,13 +507,42 @@ async function executeGraphRun(
         ? { checkpointId: input.resumeCheckpointId, grant: false }
         : undefined;
 
-  // 溯源旁路（T3）：SATI_PROVENANCE=1 + caseId 时收集审批门挂起/放行；resume 复用 runId。
+  // 溯源旁路（T3/T8）：SATI_PROVENANCE=1 + caseId 时收集审批门/图节点/降级；resume 复用 runId。
   const provenanceCollector = openProvenanceCollector({
     caseId: input.caseId,
     cwd: context?.cwd ?? process.cwd(),
     runKey: graphId,
     resume: resumeSpec !== undefined,
   });
+
+  // 检查点：caseId 提供时持久化到 <caseDir>/workflow-runs/checkpoints/，否则内存。
+  const graph = def
+    .build({
+      handlers: deps.handlers ?? globalStageHandlerRegistry,
+      // 检索反思回路开关：retrievalRounds 透传给 inventiveness 图的 retrieval.maxRounds
+      // （缺省 2 = 最多重检 2 次；0 = 关闭回路保持旧行为）。novelty/enablement 忽略该选项。
+      ...(graphName === "inventiveness" && input.retrievalRounds !== undefined
+        ? { retrieval: { maxRounds: input.retrievalRounds } }
+        : {}),
+      // 图节点溯源（T8）：addNode 统一入口包装（含裸节点），声明表缺失只记产出不伪造因果。
+      ...(provenanceCollector !== null
+        ? {
+            onAddNode: (name: string, node: GraphNode) =>
+              provenanceCollector!.wrapNode(name, node, DOMAIN_INPUT_DECLARATIONS[graphName][name]),
+          }
+        : {}),
+    })
+    .compile(def.entry);
+  let store;
+  let persistNote = "持久化: 未启用（未提供 caseId）";
+  if (input.caseId !== undefined) {
+    const persistTarget = resolveRunPersistTarget(input.caseId, graphId, context.cwd ?? process.cwd());
+    if (persistTarget !== undefined) {
+      store = new JsonFileCheckpointStore(join(persistTarget.runsDir, "checkpoints"));
+      persistNote = `持久化: checkpoints 目录 ${join(persistTarget.runsDir, "checkpoints")}`;
+    }
+  }
+  store ??= new InMemoryCheckpointStore();
 
   let resumeFrom: GraphCheckpoint | undefined;
   let result: GraphRunResult;
@@ -569,7 +576,16 @@ async function executeGraphRun(
       graphId,
       provider,
       resumeFrom,
+      // 超步钩子（T8）：collector 维护 currentStep（GraphNodeContext 无 stepIndex，评审 P9）。
+      onSuperStepStart: async step => {
+        provenanceCollector?.setCurrentStep(step);
+      },
     }));
+
+    // 全图降级标记（结果侧，覆盖引擎级直接写 state 的降级路径，评审 P9）。
+    if (result.degraded.length > 0) {
+      provenanceCollector?.recordDegradations(result.degraded);
+    }
 
     // 审批门挂起旁路（中断节点名 = 审批门）。
     if (result.interrupted !== undefined) {

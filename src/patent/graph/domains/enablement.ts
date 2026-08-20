@@ -8,7 +8,7 @@
  * 对齐 Mady domains/enablement（5 节点 + domain_rules.go 领域特殊规则）。
  */
 
-import { GraphBuilder, type GraphState } from "../index.js";
+import { GraphBuilder, type GraphNode, type GraphState } from "../index.js";
 import { getStateObject, getStateString } from "../state.js";
 import { checkEffectQuantification, checkNumericRangeCoverage, formatRange } from "../../spec/index.js";
 import { globalStageHandlerRegistry, type StageHandlerRegistry } from "../../atoms/index.js";
@@ -20,6 +20,8 @@ export type BuildEnablementGraphOptions = {
   ruleGate?: boolean;
   /** 注入 approval-gate 审批门（缺省 true：HITL 暂停；自动执行/评测场景置 false 直达规则门）。 */
   includeApproval?: boolean;
+  /** 溯源包装钩子（ProvenanceCollector.wrapNode）：addNode 统一入口，透传 GraphBuilder。 */
+  onAddNode?: (name: string, node: GraphNode) => GraphNode;
 };
 
 // ---------------------------------------------------------------------------
@@ -296,7 +298,7 @@ const CONCLUDE_SCHEMA = {
 /** 构建充分公开分析子图（A26.3）。 */
 export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}): GraphBuilder {
   const handlers = options.handlers ?? globalStageHandlerRegistry;
-  const builder = new GraphBuilder();
+  const builder = new GraphBuilder({ onAddNode: options.onAddNode });
   const approval = handlers.lookup("approval-gate");
 
   // load：确定性节点，读取说明书并做结构统计与章节切片。
@@ -482,3 +484,19 @@ export function extractEnablementResult(state: GraphState): {
     return {};
   }
 }
+
+/**
+ * 节点输入声明表（溯源 derivedFrom 链，评审 P9/P13）：节点名 → 上游 state keys。
+ * 仅覆盖需要决策链的 LLM/推理节点；rule_gate/approval/domain_rules 不声明
+ * （rule_gate 经 collectStateText 读全量、审批门由 approval_gate 记录）。
+ * 缺失/漂移只记产出不伪造因果。
+ */
+export const ENABLEMENT_INPUT_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
+  load: [],
+  spec_prechecks: [],
+  completeness: ["spec_prechecks"],
+  clarity: [],
+  enablement: ["enablement_completeness", "enablement_clarity"],
+  domain_rules: [],
+  conclude: ["enablement_completeness", "enablement_clarity", "enablement_enablement", "domain_rules"],
+};

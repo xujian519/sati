@@ -170,6 +170,30 @@ export class ProvenanceStore {
     );
   }
 
+  /**
+   * 覆盖写入实体（INSERT OR REPLACE）：图节点状态快照专用——同 key 被 LWW 重写
+   * （如 inventiveness_query 每轮 refine 更新）时快照反映**最新值**；resume 重放
+   * 覆盖为相同值，幂等语义不受影响。
+   */
+  upsertEntityLatest(entity: ProvenanceEntity): void {
+    this.assertOpen();
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO entity
+          (id, kind, value, case_id, generated_by, derived_from, degraded)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        entity.id,
+        entity.kind,
+        entity.value,
+        entity.caseId,
+        entity.generatedByActivityId ?? null,
+        JSON.stringify(entity.derivedFromIds),
+        entity.degraded === true ? 1 : 0,
+      );
+  }
+
   /** 幂等写入执行者。 */
   upsertAgent(agent: ProvenanceAgent): void {
     this.assertOpen();

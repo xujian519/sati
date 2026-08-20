@@ -153,6 +153,7 @@ export {
   type RuleGateState,
   // 三性领域子图注册表
   DOMAIN_GRAPHS,
+  DOMAIN_INPUT_DECLARATIONS,
   type DomainGraphName,
 } from "./graph/index.js";
 
