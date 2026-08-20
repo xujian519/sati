@@ -49,8 +49,8 @@ const DashboardV2 = React.lazy(() => import("../../main-content-v2/DashboardV2")
 const TasksV2 = React.lazy(() => import("../../main-content-v2/TasksV2"));
 const MemoryPanel = React.lazy(() => import("./memory/MemoryPanel"));
 const SkillsV2 = React.lazy(() => import("../../main-content-v2/SkillsV2"));
-const TeamPanel = React.lazy(() =>
-  import("../../team-panel/TeamPanel").then(module => ({ default: module.TeamPanel })),
+const FloatingTeamPanel = React.lazy(() =>
+  import("../../team-panel/floating-team-panel").then(module => ({ default: module.FloatingTeamPanel })),
 );
 
 function TabSkeleton() {
@@ -158,6 +158,8 @@ function MainContent({
   externalMessageUpdate,
   misroutedFileFromUrl,
   onMisroutedFileUrlHandled,
+  teamPanelOpen,
+  onTeamPanelClose,
 }: MainContentProps) {
   const { i18n } = useTranslation();
   const { preferences } = useUiPreferences();
@@ -435,6 +437,8 @@ function MainContent({
           onFileDelete={handleFileDelete}
           onSelectProjectByName={onSelectProjectByName}
           isMobile={isMobile}
+          teamPanelOpen={teamPanelOpen}
+          onTeamPanelClose={onTeamPanelClose}
           editorSidebarProps={{
             editorTabs,
             activeEditorTabId,
@@ -515,6 +519,8 @@ type SplitBodyProps = {
   onFileDelete: (deletedPath: string) => void;
   onSelectProjectByName?: (projectName: string) => void;
   isMobile: boolean;
+  teamPanelOpen?: boolean;
+  onTeamPanelClose?: () => void;
   editorSidebarProps: EditorSidebarProps;
 };
 
@@ -563,6 +569,8 @@ function SplitBody(props: SplitBodyProps) {
     onFileDelete,
     onSelectProjectByName,
     isMobile,
+    teamPanelOpen,
+    onTeamPanelClose,
     editorSidebarProps,
   } = props;
 
@@ -570,7 +578,7 @@ function SplitBody(props: SplitBodyProps) {
   // Skills, Routing, Memory, and Always-On are auxiliary dashboards paired
   // with chat. Files stays a separate explorer + artifact + assistant mode.
   const isPlugin = typeof activeTab === "string" && activeTab.startsWith("plugin:");
-  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks", "team"]);
+  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks"]);
   const isFullScreenTool = fullScreenToolTabs.has(activeTab) || isPlugin;
   const isDashboardPanel = DASHBOARD_PANEL_TABS.has(activeTab);
   const dashboardPanelTab = isDashboardPanel ? (activeTab as DashboardPanelTab) : null;
@@ -760,7 +768,6 @@ function SplitBody(props: SplitBodyProps) {
       );
     }
     if (activeTab === "cron") return <CronV2 />;
-    if (activeTab === "team") return <TeamPanel sessionId={selectedSession?.id ?? null} />;
     if (activeTab === "dashboard")
       return (
         <DashboardV2
@@ -1047,6 +1054,18 @@ function SplitBody(props: SplitBodyProps) {
           </div>
           <MessageSquare className="mt-3 h-4 w-4 text-neutral-400 dark:text-neutral-500" strokeWidth={1.7} />
         </div>
+      ) : null}
+
+      {/* 团队活动浮层：docked（对话礼让常驻列）/ overlay（Files/窄屏/移动端/dashboard 同屏覆盖）*/}
+      {teamPanelOpen ? (
+        <Suspense fallback={null}>
+          <FloatingTeamPanel
+            sessionId={selectedSession?.id ?? null}
+            docked={showChat && !isFiles && !dashboardPanelTab && !isNarrowWorkbench && !isMobile}
+            isMobile={isMobile}
+            onClose={onTeamPanelClose ?? (() => undefined)}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

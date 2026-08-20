@@ -248,6 +248,8 @@ export type SidebarV2Props = {
   onRequestDeleteSession: (project: Project, session: ProjectSession) => void;
   onShowSettings: () => void;
   onOpenTeamPanel?: () => void;
+  /** 浮层开态：Team 按钮呈激活色（aria-pressed）。 */
+  isTeamPanelOpen?: boolean;
   onDeselectProject?: () => void;
   onResetProjectSessionPreview?: (projectName: string) => void;
   onCollapse?: () => void;
@@ -299,6 +301,7 @@ export default function SidebarV2({
   onRequestDeleteSession,
   onShowSettings,
   onOpenTeamPanel,
+  isTeamPanelOpen,
   onDeselectProject,
   onResetProjectSessionPreview,
   onCollapse,
@@ -1196,11 +1199,22 @@ export default function SidebarV2({
           <button
             type="button"
             onClick={onOpenTeamPanel}
+            aria-pressed={isTeamPanelOpen}
             aria-label={t("tabs.team", { defaultValue: "Team" }) as string}
             title={t("tabs.team", { defaultValue: "Team" }) as string}
-            className="group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium text-neutral-600 transition-all duration-200 hover:bg-white hover:text-brand-600 hover:shadow-xs dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
+            className={`group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-all duration-200 ${
+              isTeamPanelOpen
+                ? "bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300"
+                : "text-neutral-600 hover:bg-white hover:text-brand-600 hover:shadow-xs dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
+            }`}
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-neutral-200/60 transition group-hover:bg-brand-50 group-hover:text-brand-600 dark:bg-neutral-800/60 dark:group-hover:bg-brand-900/30 dark:group-hover:text-brand-300">
+            <span
+              className={`flex h-6 w-6 items-center justify-center rounded-md transition ${
+                isTeamPanelOpen
+                  ? "bg-brand-100 text-brand-600 dark:bg-brand-900/50 dark:text-brand-300"
+                  : "bg-neutral-200/60 group-hover:bg-brand-50 group-hover:text-brand-600 dark:bg-neutral-800/60 dark:group-hover:bg-brand-900/30 dark:group-hover:text-brand-300"
+              }`}
+            >
               <Users className="h-3.5 w-3.5" strokeWidth={1.75} />
             </span>
             <span>{t("tabs.team", { defaultValue: "Team" })}</span>

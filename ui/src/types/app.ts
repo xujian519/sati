@@ -14,7 +14,6 @@ export type AppTab =
   | "skills"
   | "preview"
   | "dashboard"
-  | "team"
   | `plugin:${string}`;
 
 export type AlwaysOnSessionTarget =

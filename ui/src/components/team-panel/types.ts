@@ -1,3 +1,15 @@
+/** TeamEvent 变体的 wire 形态（浏览器侧局部收窄，不导入 src/）。 */
+export type TeamWireEvent = {
+  type: string;
+  teamId?: string;
+  taskId?: string;
+  memberId?: string;
+  attempt?: number;
+  /** 本地自增 React key（非后端字段）。 */
+  _eventId?: number;
+  [key: string]: unknown;
+};
+
 /** 面板快照（与 gateway team_panel_snapshot 契约对应；ui 侧类型本地声明，不导入 src/）。 */
 export type PanelMember = {
   memberId: string;

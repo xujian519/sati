@@ -1,17 +1,27 @@
 {
   "loading": "Loading team panel…",
   "opSucceeded": "Operation succeeded",
-  "opFailed": "Operation failed",
   "overview": {
-    "title": "Teams",
     "createPlaceholder": "New team name…",
     "create": "Create Team",
-    "memberCount": "{{count}} members",
-    "taskCount": "{{count}} tasks",
     "captainOnline": "Online",
     "captainOffline": "Offline",
     "archived": "Archived",
     "noTeams": "No teams yet. Create one to start."
+  },
+  "panel": {
+    "title": "Team Activity",
+    "collapse": "Collapse panel",
+    "close": "Close panel",
+    "pillExpand": "Expand team panel",
+    "archivedTeams": "Archived ({{count}})"
+  },
+  "captain": {
+    "dispatched": "Dispatched {{tasks}} tasks to {{members}} members",
+    "summaryDone": "{{done}}/{{total}} done · {{active}} in progress"
+  },
+  "progress": {
+    "legend": "Progress"
   },
   "members": {
     "title": "Members",
@@ -20,19 +30,20 @@
     "statusIdle": "Idle",
     "statusWorking": "Working",
     "retired": "Retired",
-    "modelRoute": "{{provider}} / {{model}}"
+    "modelRoute": "{{provider}} / {{model}}",
+    "currentTask": "Working on: {{subject}}",
+    "expand": "Show members",
+    "collapse": "Hide members",
+    "empty": "No members yet",
+    "archivedReadonly": "Archived team is read-only."
   },
   "tasks": {
     "title": "Tasks",
-    "statusPending": "Pending",
-    "statusClaimed": "Claimed",
+    "parallelTitle": "Parallel",
     "statusInProgress": "In Progress",
     "statusCompleted": "Completed",
     "statusFailed": "Failed",
-    "statusCancelled": "Cancelled",
     "attempt": "Attempt {{count}}",
-    "blockedBy": "Blocked by {{count}}",
-    "unassigned": "Unassigned",
     "reassign": "Reassign",
     "reassignPlaceholder": "Assign to…",
     "optionFormat": "{{memberId}} ({{roleSlug}})",
@@ -42,8 +53,12 @@
     "button": "Archive Team",
     "confirmBody": "Archive {{name}}? This is irreversible."
   },
+  "pill": {
+    "teamCount_one": "{{count}} team",
+    "teamCount_other": "{{count}} teams",
+    "newActivity": "New activity"
+  },
   "events": {
-    "title": "Events",
-    "empty": "No team events yet. The live stream will appear here while a team session is active."
+    "recent": "Recent"
   }
 }
