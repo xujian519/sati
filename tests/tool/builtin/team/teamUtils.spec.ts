@@ -7,7 +7,6 @@ import { TeamDb, createTeamMember } from "../../../../src/agent/team/index.js";
 import { SatiToolRuntimeError } from "../../../../src/tool/protocol/errors.js";
 import {
   parseTeamSessionKey,
-  isCaptainSession,
   resolveActor,
   requireTeamMember,
   requireCaptain,
@@ -21,12 +20,7 @@ test("parseTeamSessionKey：成员 key 解析；captain/非法 key 返回 undefi
   assert.equal(parseTeamSessionKey("team:t1"), undefined);
 });
 
-test("isCaptainSession / resolveActor", () => {
-  assert.equal(isCaptainSession("cap-1"), true);
-  assert.equal(isCaptainSession("team:t1:m1"), false);
-  // 成员会话形态（team: / team- 前缀）即便解析失败也不是队长会话
-  assert.equal(isCaptainSession("team-t1-m1"), false);
-  assert.equal(isCaptainSession("team:t1:"), false);
+test("resolveActor", () => {
   assert.deepEqual(resolveActor("cap-1"), { teamId: "", memberId: "", captain: true });
   assert.deepEqual(resolveActor("team:t1:m1"), { teamId: "t1", memberId: "m1", captain: false });
   assert.equal(resolveActor(undefined), undefined);

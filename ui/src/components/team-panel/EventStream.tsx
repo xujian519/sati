@@ -45,8 +45,6 @@ const EVENT_STYLE: Record<string, string> = {
 
 const FALLBACK_EVENT_STYLE = "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300";
 
-const styleForEventType = (type: string): string => EVENT_STYLE[type] ?? FALLBACK_EVENT_STYLE;
-
 const describeEvent = (event: TeamWireEvent): string => {
   const parts = [event.taskId, event.memberId];
   if (typeof event.attempt === "number") parts.push(`attempt:${event.attempt}`);
@@ -104,7 +102,7 @@ export function EventStream({ sessionId }: { sessionId?: string | null }) {
               className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-950"
             >
               <span
-                className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-medium ${styleForEventType(event.type)}`}
+                className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-medium ${EVENT_STYLE[event.type] ?? FALLBACK_EVENT_STYLE}`}
               >
                 {event.type}
               </span>

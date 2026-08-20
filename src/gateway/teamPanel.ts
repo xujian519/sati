@@ -35,17 +35,9 @@ export type PanelTeam = {
     handoffId?: string;
     output?: string;
   }>;
-  unreadForCaptain: number;
 };
 
-/** 全部团队（含归档）的面板列表；成员/任务按团队聚合。 */
-export function listTeamsForPanel(db: TeamDb): Array<{ id: string; name: string; archivedAt?: string }> {
-  return db
-    .listTeams()
-    .map(t => ({ id: t.id, name: t.name, ...(t.archivedAt !== undefined ? { archivedAt: t.archivedAt } : {}) }));
-}
-
-/** 面板快照：团队 + 成员在线/角色 + 任务 + 队长未读消息数（captainSessionKey 收件箱）。 */
+/** 面板快照：团队 + 成员在线/角色 + 任务。 */
 export function buildTeamPanelSnapshot(
   db: TeamDb,
   presence: SessionPresence,
@@ -88,11 +80,6 @@ export function buildTeamPanelSnapshot(
           ...(t.handoffId !== undefined ? { handoffId: t.handoffId } : {}),
           ...(t.output !== undefined ? { output: t.output } : {}),
         })),
-      // 队长收件箱未投递消息（T6 评审 F1）：recipient 存储约定为成员 id 或 "captain"
-      // （TeamDb 注释；team_send_message 明令不能发队长，全库唯一 insertMessage 只写成员 id）——
-      // 对齐约定用字面量 "captain" 而非 captainSessionKey（后者永不命中恒 0；
-      // 将来若开放队长收件路径，面板无需改动即正确计数）。
-      unreadForCaptain: db.listMessages(team.id, "captain").filter(m => m.deliveredAt === undefined).length,
     })),
   };
 }

@@ -29,7 +29,6 @@ export type PanelTeam = {
   captainOnline: boolean;
   members: PanelMember[];
   tasks: PanelTask[];
-  unreadForCaptain: number;
 };
 
 export type TeamPanelSnapshot = { teams: PanelTeam[] };

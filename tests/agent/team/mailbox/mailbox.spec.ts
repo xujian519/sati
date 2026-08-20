@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   MAILBOX_LEASE_MS,
   claimDelivery,
-  expiredClaims,
   unreadMessages,
   type TeamMessageRow,
 } from "../../../../src/agent/team/index.js";
@@ -44,31 +43,9 @@ test("claimDelivery：仅认领未认领消息，返回认领后的完整列表�
   assert.equal(next[1]?.deliveryClaimedAt, claimedAt);
 });
 
-test("expiredClaims：已认领未投递且超租约的（用于释放重投）", () => {
-  const now = 1756000000000;
-  const rows = [
-    msg("a", { deliveryClaimedAt: new Date(now - MAILBOX_LEASE_MS - 1).toISOString() }),
-    msg("b", { deliveryClaimedAt: new Date(now - 1000).toISOString() }),
-    msg("c", { deliveredAt: "2026-08-20T00:00:00.000Z" }),
-  ];
-  assert.deepEqual(
-    expiredClaims(rows, now).map(m => m.id),
-    ["a"],
-  );
-});
-
 test("claimDelivery：已认领行保留原租约不被覆盖", () => {
   const rows = [msg("a", { deliveryClaimedAt: "2026-08-20T00:00:30.000Z" }), msg("b")];
   const next = claimDelivery(rows, "2026-08-20T00:01:00.000Z");
   assert.equal(next[0]?.deliveryClaimedAt, "2026-08-20T00:00:30.000Z");
   assert.equal(next[1]?.deliveryClaimedAt, "2026-08-20T00:01:00.000Z");
-});
-
-test("expiredClaims：恰好等于租约边界（now - LEASE_MS）不算过期（严格小于）", () => {
-  const now = 1756000000000;
-  const atBoundary = msg("x", { deliveryClaimedAt: new Date(now - MAILBOX_LEASE_MS).toISOString() });
-  assert.deepEqual(
-    expiredClaims([atBoundary], now).map(m => m.id),
-    [],
-  );
 });

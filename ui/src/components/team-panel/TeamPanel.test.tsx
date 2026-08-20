@@ -54,7 +54,6 @@ const snapshotBody: TeamPanelSnapshot = {
           assigneeId: "m_researcher",
         },
       ],
-      unreadForCaptain: 0,
     },
   ],
 };

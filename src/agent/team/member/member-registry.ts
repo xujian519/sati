@@ -9,7 +9,6 @@ import { memberSessionKey } from "../protocol/member-key.js";
 export type MemberModelRoute = {
   provider: string;
   model: string;
-  reasoningEffort?: string;
 };
 
 export type CreateTeamMemberOptions = {

@@ -10,7 +10,6 @@ export { createTeamArchiveTool } from "./teamArchive.js";
 export type { TeamToolsOptions } from "./teamUtils.js";
 export {
   parseTeamSessionKey,
-  isCaptainSession,
   resolveActor,
   requireTeamMember,
   requireCaptain,

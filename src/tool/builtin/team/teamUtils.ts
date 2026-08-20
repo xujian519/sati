@@ -45,15 +45,6 @@ export function parseTeamSessionKey(sessionKey: string): { teamId: string; membe
   return parsed;
 }
 
-/**
- * 队长会话判定：成员会话形态（`team:` / `team-` 前缀）一律返回 false——
- * 该类 key 明确是成员形态，只是可能畸形/净化解析不了，绝不是队长会话；
- * 非成员形态的普通会话即队长会话（M2 惯例 captainSessionKey="cap-1" 等主会话 key）。
- */
-export function isCaptainSession(sessionKey: string): boolean {
-  return !TEAM_MEMBER_SESSION_PATTERN.test(sessionKey);
-}
-
 export function resolveActor(sessionKey: string | undefined): TeamActor | undefined {
   if (sessionKey === undefined) {
     return undefined;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { TeamTaskRow } from "../../../../src/agent/team/index.js";
-import { retryFailedTask, retryableFailedTasks } from "../../../../src/agent/team/index.js";
+import { retryFailedTask } from "../../../../src/agent/team/index.js";
 
 function task(overrides: Partial<TeamTaskRow>): TeamTaskRow {
   return {
@@ -22,15 +22,6 @@ function task(overrides: Partial<TeamTaskRow>): TeamTaskRow {
     ...overrides,
   };
 }
-
-test("retryableFailedTasks：failed 且 attempt < maxAttempts 可重试；终态/耗尽/非 failed 不可", () => {
-  const base = task({});
-  assert.deepEqual(retryableFailedTasks([base]), ["t1"], "failed + attempt 1/3 可重试");
-  assert.deepEqual(retryableFailedTasks([task({ status: "completed" })]), [], "completed 不可重试");
-  assert.deepEqual(retryableFailedTasks([task({ attempt: 3, maxAttempts: 3 })]), [], "attempt 达上限不可重试");
-  assert.deepEqual(retryableFailedTasks([task({ status: "cancelled" })]), [], "cancelled 不可重试");
-  assert.deepEqual(retryableFailedTasks([task({ status: "pending" })]), [], "pending 非 failed 不可重试");
-});
 
 test("retryFailedTask：failed → pending 重入池，attempt 保留（beginTaskAttempt 再 +1），清 attemptId/assignee/output/handoffId，reassigning 保持 false", () => {
   const out = retryFailedTask(task({ output: "半成品", handoffId: "h-1", reassigning: true }));

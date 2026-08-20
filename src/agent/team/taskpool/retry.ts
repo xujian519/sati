@@ -11,11 +11,6 @@
 import type { TeamTaskRow } from "../storage/team-db.js";
 import { attemptsExhausted } from "./attempt.js";
 
-/** failed 且未耗尽可自动转派的任务 id 列表（纯函数）。 */
-export function retryableFailedTasks(tasks: readonly TeamTaskRow[]): string[] {
-  return tasks.filter(t => t.status === "failed" && !attemptsExhausted(t)).map(t => t.id);
-}
-
 /** 单个失败任务重置为 pending 重入池；不可重试（耗尽/非 failed）原样返回（幂等）。 */
 export function retryFailedTask(task: TeamTaskRow): TeamTaskRow {
   if (task.status !== "failed" || attemptsExhausted(task)) return task;
