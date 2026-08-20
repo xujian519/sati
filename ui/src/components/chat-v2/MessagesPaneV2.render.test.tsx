@@ -3,7 +3,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatRunMode } from "../chat/types/types";
-import MessagesPaneV2 from "./MessagesPaneV2";
+import MessagesPaneV2, { buildPrefixOffsets, getVirtualMessageWindow } from "./MessagesPaneV2";
 import { getContextStatus } from "./ComposerV2";
 
 beforeAll(() => {
@@ -945,5 +945,28 @@ describe("MessagesPaneV2 render behavior", () => {
 
     expect(screen.getByText("First assistant line.").closest(".chat-message")?.className).toContain("pb-4");
     expect(screen.getByText("First assistant line.").closest(".chat-message")?.className).not.toContain("pb-8");
+  });
+});
+
+describe("buildPrefixOffsets（P3-5 前缀和缓存）", () => {
+  it("空数组 → [0]", () => {
+    expect(buildPrefixOffsets([])).toEqual([0]);
+  });
+
+  it("常规高度 → 递增前缀和", () => {
+    expect(buildPrefixOffsets([100, 200, 50])).toEqual([0, 100, 300, 350]);
+  });
+
+  it("非正高度按下限 1 计入", () => {
+    expect(buildPrefixOffsets([0, -5, 120])).toEqual([0, 1, 2, 122]);
+  });
+
+  it("getVirtualMessageWindow 显式 prefixOffsets 与默认计算一致", () => {
+    const heights = [100, 200, 50, 300];
+    const prefixOffsets = buildPrefixOffsets(heights);
+    const withDefault = getVirtualMessageWindow(heights, 0, 400);
+    const withCached = getVirtualMessageWindow(heights, 0, 400, 12, prefixOffsets);
+    expect(withCached).toEqual(withDefault);
+    expect(withCached.totalHeight).toBe(650);
   });
 });

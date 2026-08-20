@@ -146,6 +146,18 @@ function createMessageTurns(messages: ChatMessage[]): MessageTurn[] {
   }));
 }
 
+/**
+ * P3-4：最后 turn 的 start 索引（增量缓存判断「新增消息归属」用）。
+ * turn 按 user 消息切分并延伸到数组末尾，因此「新增非 user 消息」必属
+ * 最后 turn；无 user 消息时整体为单 turn（start=0）。
+ */
+export function getLastMessageTurnStart(messages: ChatMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].type === "user") return index;
+  }
+  return 0;
+}
+
 function findTurnIndexByPosition(turns: MessageTurn[], index: number): number {
   return turns.findIndex(turn => index >= turn.start && index < turn.end);
 }
@@ -682,6 +694,10 @@ export function buildRenderableMessageItems(
   const items: RenderableMessageItem[] = [];
   const itemsByIndex = new Map<number, RenderableMessageItem>();
   const syntheticItems: RenderableMessageItem[] = [];
+  // turn.summary 消息在 turns 循环内追加——若直接 push 进 items 会破坏其
+  // originalIndex 单调性（summary 索引位于已 push 元素之间），迫使尾部全量
+  // sort。移出到独立数组，循环后排序（数量 ≤ turns，排序廉价）参与三路归并。
+  const summaryItems: RenderableMessageItem[] = [];
   const collapsedIndices = new Set<number>();
   const turns = createMessageTurns(messages);
   const liveTurn = options.isAssistantWorking ? turns[turns.length - 1] : null;
@@ -749,6 +765,10 @@ export function buildRenderableMessageItems(
 
   attachSummariesToTurns(messages, turns);
 
+  // P3-2 单调游标：items 按 originalIndex 递增构造（summary 已移出），
+  // turns.start 递增 → find 可换双指针。游标只前进不后退，跨 turn 总移动
+  // O(N)（原实现每 turn 从数组头线性 find，最坏 O(N×T)）。
+  let firstVisibleItemCursor = 0;
   turns.forEach((turn, turnIndex) => {
     const isLatestTurn = turnIndex === turns.length - 1;
     if (options.isAssistantWorking && isLatestTurn) {
@@ -768,8 +788,11 @@ export function buildRenderableMessageItems(
       if (turnStartMessage?.type === "user" && turnStartItem) {
         turnStartItem.afterRunAttachment = runAttachment;
       } else {
-        const firstVisibleItem = items.find(item => item.originalIndex >= turn.start && item.originalIndex < turn.end);
-        if (firstVisibleItem) {
+        while (firstVisibleItemCursor < items.length && items[firstVisibleItemCursor].originalIndex < turn.start) {
+          firstVisibleItemCursor += 1;
+        }
+        const firstVisibleItem = items[firstVisibleItemCursor];
+        if (firstVisibleItem && firstVisibleItem.originalIndex < turn.end) {
           firstVisibleItem.beforeRunAttachment = runAttachment;
         }
       }
@@ -779,7 +802,7 @@ export function buildRenderableMessageItems(
 
     if (segments.length === 0) {
       if (turn.summary && hasAgentActivitySummaryDetails(turn.summary.message)) {
-        items.push({
+        summaryItems.push({
           message: turn.summary.message,
           originalIndex: turn.summary.originalIndex,
           beforeRunAttachment: null,
@@ -834,10 +857,51 @@ export function buildRenderableMessageItems(
     }
   });
 
-  return [...items, ...syntheticItems]
-    .filter(item => !collapsedIndices.has(item.originalIndex))
-    .filter(item => !isEmptyRenderableMessageItem(item))
-    .sort((a, b) => a.originalIndex - b.originalIndex);
+  // P3-3 有序归并替代尾部全量 sort：items（消息序单调）、syntheticItems
+  // （startIndex 序单调）已有序；summaryItems 数量少先排序。归并同时应用
+  // collapsed/isEmpty 过滤。保险丝：输出须严格单调（等价于原 sort 结果），
+  // 违反（理论上不可能）回退原 sort 保证正确。
+  summaryItems.sort((a, b) => a.originalIndex - b.originalIndex);
+  const merged = mergeRenderableItemSequences([items, syntheticItems, summaryItems], collapsedIndices);
+  for (let i = 1; i < merged.length; i += 1) {
+    if (merged[i].originalIndex <= merged[i - 1].originalIndex) {
+      return [...items, ...syntheticItems, ...summaryItems]
+        .filter(item => !collapsedIndices.has(item.originalIndex))
+        .filter(item => !isEmptyRenderableMessageItem(item))
+        .sort((a, b) => a.originalIndex - b.originalIndex);
+    }
+  }
+  return merged;
+}
+
+/**
+ * P3-3：K 路归并多个已按 originalIndex 递增的序列，归并时过滤折叠/空壳。
+ * 每步比较各序列头（K 小且固定），总 O(K×N)；不改变输入的相对顺序。
+ * 导出供等价性测试（与「filter + sort」参考实现 diff）。
+ */
+export function mergeRenderableItemSequences(
+  sequences: RenderableMessageItem[][],
+  collapsedIndices: Set<number>,
+): RenderableMessageItem[] {
+  const result: RenderableMessageItem[] = [];
+  const cursors = new Array<number>(sequences.length).fill(0);
+  for (;;) {
+    let best = -1;
+    for (let s = 0; s < sequences.length; s += 1) {
+      if (cursors[s] >= sequences[s].length) continue;
+      if (best < 0 || sequences[s][cursors[s]].originalIndex < sequences[best][cursors[best]].originalIndex) {
+        best = s;
+      }
+    }
+    if (best < 0) break;
+    const item = sequences[best][cursors[best]];
+    cursors[best] += 1;
+    if (collapsedIndices.has(item.originalIndex) || isEmptyRenderableMessageItem(item)) {
+      continue;
+    }
+    result.push(item);
+  }
+  return result;
 }
 
 export function getLiveProcessDetailMessages(messages: ChatMessage[]): ChatMessage[] {

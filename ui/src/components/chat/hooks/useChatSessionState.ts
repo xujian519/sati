@@ -390,7 +390,12 @@ export function useChatSessionState({
   prevActiveSessionRef.current = activeSessionId;
 
   const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : EMPTY_NORMALIZED_MESSAGES;
-  const activityStoreMessages = activeSessionId ? (sessionStore.getActivityMessages?.(activeSessionId) ?? []) : [];
+  // 空分支用模块级常量（与 storeMessages 同款模式）：保持引用稳定，使下方
+  // activityMessages useMemo 依赖不随渲染变化（exhaustive-deps），同时保留
+  // 「slot.activityMessages 引用替换 → 重算」的引用级失效语义。
+  const activityStoreMessages = activeSessionId
+    ? (sessionStore.getActivityMessages?.(activeSessionId) ?? EMPTY_NORMALIZED_MESSAGES)
+    : EMPTY_NORMALIZED_MESSAGES;
   const subagentLinks = activeSessionId ? sessionStore.getSessionSlot?.(activeSessionId)?.subagentLinks : undefined;
 
   // Reset viewHiddenCount when store messages change
@@ -431,7 +436,10 @@ export function useChatSessionState({
     return all;
   }, [storeMessages, viewHiddenCount, pendingUserMessage, activeSessionId, pendingTargetSessionId, subagentLinks]);
 
-  const activityMessages = normalizedToChatMessages(activityStoreMessages);
+  // 流式 tick 高频 render：activityStoreMessages 引用在 store 未更新时稳定
+  // （slot.activityMessages 只在 upsertActivity/setActivities 时替换），
+  // useMemo 命中跳过每 tick 的 normalizedToChatMessages 全量转换（P3-1）。
+  const activityMessages = useMemo(() => normalizedToChatMessages(activityStoreMessages), [activityStoreMessages]);
 
   /* ---------------------------------------------------------------- */
   /*  addMessage / clearMessages / rewindMessages                     */
