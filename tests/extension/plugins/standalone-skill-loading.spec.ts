@@ -35,6 +35,72 @@ test("standalone skills expose only their slug without a parent-directory namesp
   }
 });
 
+test("frontmatter 多行 systemPrompt（|- 块）完整解析，不含字面量 '|-'", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-yaml-frontmatter-"));
+  try {
+    const skillDir = join(root, "analyzer");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      `---\nname: analyzer\ndescription: Analyze patents.\nsystemPrompt: |-\n  你是专利分析师。\n  只输出结论。\n---\n\n# body\n`,
+      "utf8",
+    );
+    const loaded = await loadSkillFromPath(skillDir, "global");
+    const skill = loaded.skills?.[0];
+    assert.equal(skill?.name, "analyzer");
+    assert.equal(
+      skill?.frontmatter.systemPrompt,
+      "你是专利分析师。\n只输出结论。",
+      "多行块完整解析（|- 为 strip 折叠，剥离结尾换行）",
+    );
+    assert.equal(skill?.frontmatter.description, "Analyze patents.");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("frontmatter 数组字段（domains/tools）保留为数组", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-yaml-domains-"));
+  try {
+    const skillDir = join(root, "searcher");
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      `---\nname: searcher\ndescription: Search.\ndomains: [patent, literature]\ntools: [paper_search, patent_search]\n---\n\n# body\n`,
+      "utf8",
+    );
+    const loaded = await loadSkillFromPath(skillDir, "global");
+    const skill = loaded.skills?.[0];
+    assert.deepEqual(skill?.frontmatter.domains, ["patent", "literature"]);
+    assert.deepEqual(skill?.frontmatter.tools, ["paper_search", "patent_search"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("畸形 frontmatter 降级不抛错：无闭合围栏 / 非法 yaml 均为空对象 + 全文内容", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-yaml-broken-"));
+  try {
+    const skillDir = join(root, "broken");
+    await mkdir(skillDir, { recursive: true });
+    // 无闭合围栏：整篇视为内容，frontmatter 为空
+    await writeFile(join(skillDir, "SKILL.md"), "---\nname: broken\n# 无闭合围栏\n\n# body\n", "utf8");
+    let loaded = await loadSkillFromPath(skillDir, "global");
+    assert.ok(loaded.skills, "无闭合围栏 → 不抛错，frontmatter 为空，全文为内容");
+    assert.deepEqual(loaded.skills?.[0]?.frontmatter, {});
+    assert.match(loaded.skills?.[0]?.content ?? "", /# 无闭合围栏/);
+
+    // 闭合围栏存在但 yaml 不可解析：空对象 + 正文保留
+    await writeFile(join(skillDir, "SKILL.md"), "---\nname: [unclosed\n---\n\n# body\n", "utf8");
+    loaded = await loadSkillFromPath(skillDir, "global");
+    assert.ok(loaded.skills, "非法 yaml → 不抛错");
+    assert.deepEqual(loaded.skills?.[0]?.frontmatter, {});
+    assert.match(loaded.skills?.[0]?.content ?? "", /# body/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a plugin skill directory used as the configured base never derives a parent namespace", () => {
   const skillDir = join("tmp", "office", "skills", "docx");
   assert.equal(getPluginCommandName("office", join(skillDir, "SKILL.md"), skillDir), "office:docx");
