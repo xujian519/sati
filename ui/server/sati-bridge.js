@@ -187,6 +187,40 @@ export async function getSatiGateway() {
   return ensureGateway();
 }
 
+/**
+ * 面板等纯转发面使用的 gateway 访问器（M4 T7 quality I1）：死连接自动复位，
+ * 避免永久 500。
+ *
+ * ensureGateway 成功后连接被缓存；gateway 进程重启后 WebSocket 断开，缓存中的
+ * client.request 抛 "Gateway WebSocket is not connected."（GatewayWsClient.send）
+ * ——本函数返回 Proxy 包装的 gateway：方法调用抛出 isGatewayUnavailableError
+ * 类错误时先 resetGatewayConnection（清缓存，下次调用重新连接）再继续抛错。
+ * 与 runChatViaGateway / getSessionActivityViaGateway 的既有三元组
+ * （catch → isGatewayUnavailableError 判定 → resetGatewayConnection）等价，
+ * 只是把复位收敛到访问器内部，调用方只需在 catch 里记录日志并转发错误。
+ *
+ * @returns {ReturnType<typeof createRemoteGateway>}
+ */
+export async function getSatiGatewayWithReset() {
+  const gateway = await ensureGateway();
+  return new Proxy(gateway, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function") return value;
+      return async (...args) => {
+        try {
+          return await value.apply(target, args);
+        } catch (error) {
+          if (isGatewayUnavailableError(error)) {
+            resetGatewayConnection(target);
+          }
+          throw error;
+        }
+      };
+    },
+  });
+}
+
 export function getSatiRepoRoot() {
   return REPO_ROOT;
 }
