@@ -247,3 +247,59 @@ test("teamToolCall 接线：前缀白名单 fail-closed + 未知工具 + SatiToo
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("冒烟：createLocalGateway 拉起 → gateway.teamPanelSnapshot() 返回 teams 数组（闭包延迟引用接线，M4 T11）", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-panel-smoke-"));
+  await writeFile(
+    join(root, "sati.yaml"),
+    [
+      "schemaVersion: 1",
+      "agent:",
+      "  model: deepseek/deepseek-v4-flash",
+      "model:",
+      "  providers:",
+      "    deepseek:",
+      "      apiKey: test-key",
+      "      models:",
+      "        deepseek-v4-flash: {}",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  const result = createLocalGateway({
+    projectRoot: root,
+    pilotHome: root,
+    env: {},
+    __testModelFactory: (): ModelRuntime => ({
+      stream: async function* () {
+        yield { type: "text_delta", text: "ok" };
+      },
+      complete: async () => {
+        throw new Error("unused");
+      },
+      getCapabilities: () => DEFAULT_MODEL_CAPABILITIES,
+      getMultimodal: () => ({ input: ["text"] }),
+      getProviderProtocol: () => undefined,
+      getProviderBaseUrl: () => undefined,
+    }),
+  });
+  try {
+    // teamPanelSnapshot 内部延迟引用 teamDb（声明于 gateway 之后）——此冒烟钉住
+    // 真实接线：建队后快照可见（T7 REST 路由测试用 mock gateway，未覆盖该闭包）。
+    await result.teamSubsystem.startupScanDone;
+    result.teamSubsystem.db.upsertTeam({
+      id: "t1",
+      name: "调研组",
+      captainSessionKey: "cap-1",
+      createdAt: "2026-08-20T00:00:00.000Z",
+    });
+    const snap = await result.gateway.teamPanelSnapshot!({ sessionKey: "cap-1" });
+    assert.ok(Array.isArray(snap.teams), "teams 为数组形态");
+    assert.equal(snap.teams.length, 1);
+    assert.equal((snap.teams[0] as { id: string }).id, "t1");
+    assert.equal((snap.teams[0] as { name: string }).name, "调研组");
+  } finally {
+    result.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});

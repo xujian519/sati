@@ -9,6 +9,9 @@
  * 6) 终态覆盖：40 次终态任务 updateTask 尝试 → 全部拒绝
  * 7) 消息突发：42 条未读消息 → 调度器按租约逐批投递、无丢
  * 8) 最终归档：全部任务终态后 team_archived 事件发出
+ * 9) 工具驱动：create/update/reassign 写入路径 + blockedByCount 解锁（M3）
+ * 10) 失败自动转派收敛：3 成员 × 5 任务链，前两任务首次 attempt 失败（未耗尽）
+ *     → 锁内重置回池 → 其他 idle 成员认领 → 全部 completed；转派次数 ≤ maxAttempts 总余量（M4）
  * 退出码 0=全过；任一断言失败即抛错退出 1。
  */
 import assert from "node:assert/strict";
@@ -88,7 +91,7 @@ function addMembers(db, teamId, count) {
 
 /** 汇总统计：场景总数 / 失败时异常向上抛（退出码 1）。 */
 let passed = 0;
-const total = 9;
+const total = 10;
 
 async function scenario(seq, name, fn) {
   let db;
@@ -468,6 +471,76 @@ await scenario(9, "工具驱动写入路径（create/update/reassign + blockedBy
   assert.equal(events.filter(e => e?.type === "task_created").length, 20, "20 次 task_created");
   assert.equal(events.filter(e => e?.type === "task_completed").length, 20, "20 次 task_completed");
   assert.equal(events.filter(e => e?.type === "task_reassigned").length, 1, "reassign 事件恰好 1 次");
+});
+
+// ── 场景 10：失败自动转派收敛（3 成员 × 5 任务链，前两任务首次 attempt 失败）────
+// M4：failed 未耗尽任务在 kickMember 锁内重置回 pending（task_retried 事件）→ 同次
+// kick 重取快照认领给其他 idle 成员；attempt 达 maxAttempts 防无限循环。
+// wake 模拟：t1/t2 首次 attempt 置 failed（回 idle），其余/后续 attempt 直接 completed。
+await scenario(10, "失败自动转派收敛（前两任务失败未耗尽 → 转派后全部完成）", async db => {
+  const teamId = "t1";
+  addMembers(db, teamId, 3);
+  // 5 任务线性依赖链 t1 → t2 → … → t5（依赖完成才解锁，转派发生在同次 kick 锁内）
+  let prev;
+  for (let i = 1; i <= 5; i += 1) {
+    db.insertTask(makeTask(teamId, `t${i}`, prev !== undefined ? { dependencies: [prev] } : {}));
+    prev = `t${i}`;
+  }
+
+  let retriedCount = 0;
+  let failedRounds = 0;
+  const scheduler = new TeamScheduler({
+    db,
+    emit: (captain, event) => {
+      if (event.type === "task_retried") retriedCount += 1;
+      return true;
+    },
+    wake: async memberId => {
+      const open = ownedOpenTask(db.listTasks(teamId), memberId);
+      if (open !== undefined) {
+        assert.equal(validateAttemptUpdate(open, open.attemptId), undefined, "wake 内 attemptId 必须有效");
+        // 前两任务（t1/t2）首次 attempt 失败（未耗尽 maxAttempts=3）→ 自动转派；
+        // 其余（含失败任务的第二次 attempt）直接完成
+        if ((open.id === "t1" || open.id === "t2") && open.attempt === 1) {
+          db.updateTask({ ...open, status: "failed", updatedAt: now() });
+          db.updateMemberStatus(memberId, "idle");
+          failedRounds += 1;
+        } else {
+          db.updateTask({ ...open, status: "completed", output: "done", updatedAt: now() });
+          db.updateMemberStatus(memberId, "idle");
+        }
+      }
+      return true;
+    },
+  });
+
+  // 事件驱动：任务图每次变更触发一轮派发，直至全部完成（100 轮上限防挂死）
+  for (let round = 0; round < 100; round += 1) {
+    await scheduler.onTaskGraphChanged(teamId);
+    if (db.listTasks(teamId).every(t => t.status === "completed")) break;
+  }
+
+  const tasks = db.listTasks(teamId);
+  assert.equal(tasks.length, 5, "5 任务全部存在");
+  assert.ok(
+    tasks.every(t => t.status === "completed"),
+    "失败自动转派后 5 任务全部 completed",
+  );
+  assert.equal(failedRounds, 2, "恰好 2 次失败（t1/t2 首次 attempt）");
+  assert.equal(retriedCount, 2, "task_retried 事件恰好 2 次（两次失败均自动转派）");
+  // 转派次数 ≤ maxAttempts 总余量（Σ maxAttempts = 15）——防环保证不无限转派
+  const totalBudget = tasks.reduce((s, t) => s + t.maxAttempts, 0);
+  assert.ok(retriedCount <= totalBudget, `转派次数 ${retriedCount} ≤ maxAttempts 总余量 ${totalBudget}`);
+  assert.ok(
+    tasks.every(t => t.attempt <= t.maxAttempts),
+    "无 attempt 超 maxAttempts",
+  );
+  // 被转派任务由其他成员接手完成（t1/t2 的 assignee 非首次失败者专属，attempt=2 落位）
+  const t1 = tasks.find(t => t.id === "t1");
+  const t2 = tasks.find(t => t.id === "t2");
+  assert.equal(t1.attempt, 2, "t1 转派后 attempt 2（首次失败 + 接手完成）");
+  assert.equal(t2.attempt, 2, "t2 转派后 attempt 2");
+  assert.ok(t1.assigneeId !== undefined && t2.assigneeId !== undefined, "t1/t2 由成员完成");
 });
 
 console.log(`team-stress-verify: ${passed}/${total} scenarios passed`);

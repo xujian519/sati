@@ -4,7 +4,8 @@
  * 解析 TS AST：从事件类型声明（discriminated union 的 type 字面量）提取事件
  * 名，从 emit/dispatch 调用点提取生产者，从 on/subscribe 调用点提取消费者，
  * 生成 docs/event-producer-consumer.md。--check 模式与已生成文件比对（CI 门禁，
- * 防事件改版漏订）。第一期覆盖 src/agent 与 src/gateway 两套事件语汇。
+ * 防事件改版漏订）。第一期覆盖 src/agent 与 src/gateway 两套事件语汇；
+ * M4（Task 11）追加 src/agent/team 的 TeamEvent 语汇（task_retried 等变体入矩阵）。
  *
  * 用法：
  *   pnpm tsx scripts/gen-event-matrix.ts           # 生成/覆盖文档
@@ -21,6 +22,9 @@ const EVENT_TYPE_FILES = [
   "src/agent/protocol/events.ts",
   "src/gateway/protocol/types.ts",
   "src/gateway/protocol/frames.ts",
+  // M4（Task 11）：TeamEvent 变体（task_retried 等）入矩阵——emit 调用点（scheduler/
+  // 工具层）在 collectSites 已扫描，缺的是声明语汇解析；team_event 网关帧行不变。
+  "src/agent/team/protocol/events.ts",
 ];
 
 /** 事件名 → 语汇名（AgentEvent / GatewayEvent / WsFrame）。 */
@@ -139,8 +143,10 @@ function calleeNameOf(callee: ts.Expression): string | undefined {
 
 /**
  * 扫描生产者/消费者调用点（启发式 v1，见计划 §7 风险 6）：
- * - 生产者：emit/dispatch 调用、以及任意首参为含 type 字面量的
- *   对象表达式（含 yield { type }）——覆盖 AgentLoop 生成器事件泵；
+ * - 生产者：emit/dispatch 调用、以及任意含 type 字面量的对象表达式
+ *   参数（首参优先，M4 Task 11 起扩展到第二参——团队 emit 为
+ *   emit(captainSessionKey, event) 两参形态；含 yield { type }）——
+ *   覆盖 AgentLoop 生成器事件泵与 TeamEvent 广播；
  * - 消费者：首参为字符串字面量的 on/subscribe 调用。
  *
  * 去重修正：消费者扫描不再把对象字面量首参与 yield 记入（否则同一调用点会
@@ -155,18 +161,45 @@ function collectSites(dir: string, calleeNames: string[], mode: CollectMode): Ma
     function visit(node: ts.Node): void {
       if (ts.isCallExpression(node)) {
         const calleeName = calleeNameOf(node.expression);
+        // 对象字面量参数：首参保持既有行为（不检查 callee 名——yield/emit 首参
+        // 形态兼容）；第二参（emit(captain, event) 形态——团队 TeamEvent 广播、
+        // emitForSession(sessionKey, event)）要求 callee 落在事件发射器集合内，
+        // 防止 createTurnResult(input, { type: "error" }) 之类普通调用被误记为生产点。
         const first = node.arguments[0];
-        if (first !== undefined) {
-          if (ts.isObjectLiteralExpression(first)) {
-            if (mode === "producer") {
-              const eventName = eventNameFromExpression(first, source);
-              if (eventName !== undefined) {
-                recordSite(sites, eventName, file, source, node);
-              }
-            }
-          } else if (ts.isStringLiteral(first) && calleeName !== undefined && names.has(calleeName)) {
-            recordSite(sites, first.text, file, source, node);
+        const firstIsObject =
+          first !== undefined &&
+          (ts.isObjectLiteralExpression(first) ||
+            (ts.isAsExpression(first) && ts.isObjectLiteralExpression(first.expression)));
+        const second = node.arguments[1];
+        const secondIsObject =
+          second !== undefined &&
+          (ts.isObjectLiteralExpression(second) ||
+            (ts.isAsExpression(second) && ts.isObjectLiteralExpression(second.expression)));
+        const stringArg = node.arguments[0];
+        let recorded = false;
+        if (firstIsObject && mode === "producer") {
+          const eventName = eventNameFromExpression(first!, source);
+          if (eventName !== undefined) {
+            recordSite(sites, eventName, file, source, node);
+            recorded = true;
           }
+        } else if (secondIsObject && calleeName !== undefined && names.has(calleeName) && mode === "producer") {
+          const eventName = eventNameFromExpression(second!, source);
+          if (eventName !== undefined) {
+            recordSite(sites, eventName, file, source, node);
+            recorded = true;
+          }
+        }
+        // 字符串事件名调用（emit("event", payload) 形态）——首参为对象字面量时
+        // 不检查（既有语义）；第二参对象无 type 字段时回退（emitAgentEvent("x", {..})）。
+        if (
+          !recorded &&
+          stringArg !== undefined &&
+          ts.isStringLiteral(stringArg) &&
+          calleeName !== undefined &&
+          names.has(calleeName)
+        ) {
+          recordSite(sites, stringArg.text, file, source, node);
         }
       } else if (mode === "producer" && ts.isYieldExpression(node) && node.expression !== undefined) {
         const eventName = eventNameFromExpression(node.expression, source);
@@ -243,7 +276,14 @@ function renderMatrix(): string {
   for (const file of EVENT_TYPE_FILES) {
     const full = join(REPO_ROOT, file);
     if (!existsSync(full)) continue;
-    const typeName = file.includes("events.ts") ? "AgentEvent" : file.includes("frames") ? "WsFrame" : "GatewayEvent";
+    // 路径区分：team/protocol/events.ts 的 alias 名为 TeamEvent（非 AgentEvent）。
+    const typeName = file.includes("team/")
+      ? "TeamEvent"
+      : file.includes("events.ts")
+        ? "AgentEvent"
+        : file.includes("frames")
+          ? "WsFrame"
+          : "GatewayEvent";
     for (const [name, vocabs] of collectEventTypes(full, [typeName])) {
       const existing = eventVocabs.get(name) ?? [];
       eventVocabs.set(name, [...new Set([...existing, ...vocabs])]);
@@ -252,10 +292,12 @@ function renderMatrix(): string {
   const uniqueEvents = [...eventVocabs.keys()].sort();
   // emit-like 调用名集合：除 emit/dispatch 外含 emitAgentEvent/emitEvent
   // （属性访问经 calleeNameOf 归一后按名匹配，补回旧启发式 calleeName===undefined
-  // 曾覆盖的这两类字符串事件名调用点）。
+  // 曾覆盖的这两类字符串事件名调用点）；emitForSession 为 M4（Task 11）追加——
+  // emit(captain, event)/emitForSession(sessionKey, event) 第二参对象字面量形态
+  // 的 TeamEvent 广播（scheduler/网关链路）须入生产者矩阵。
   const producers = collectSites(
     join(REPO_ROOT, "src"),
-    ["emit", "dispatch", "emitAgentEvent", "emitEvent"],
+    ["emit", "dispatch", "emitAgentEvent", "emitEvent", "emitForSession"],
     "producer",
   );
   const consumers = collectSites(join(REPO_ROOT, "src"), ["on", "subscribe"], "consumer");

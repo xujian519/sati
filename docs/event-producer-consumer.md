@@ -9,9 +9,9 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 
 | 事件 | 生产者 | 消费者 |
 | --- | --- | --- |
-| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:801, src/gateway/client/InProcessGateway.ts:361 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×28 |
-| approval_pending | - | submitTurn 流 ×28 |
-| approval_resolved | - | submitTurn 流 ×28 |
+| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:634, src/adapters/channel/weixin/WeixinChannel.ts:801, src/cli/createLocalGateway.ts:923, src/gateway/client/InProcessGateway.ts:361 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×28 |
+| approval_pending | src/cli/createLocalGateway.ts:1912 | submitTurn 流 ×28 |
+| approval_resolved | src/cli/createLocalGateway.ts:1874 | submitTurn 流 ×28 |
 | assistant_attachment | src/gateway/client/eventMapping.ts:247 | submitTurn 流 ×28 |
 | assistant_message | src/agent/loop/AgentLoop.ts:786, src/agent/loop/AgentLoop.ts:821, src/agent/loop/AgentLoop.ts:859, src/agent/loop/AgentLoop.ts:1766 | src/gateway/client/InProcessGateway.ts:502 |
 | assistant_text_delta | src/gateway/client/InProcessGateway.ts:332 | submitTurn 流 ×28 |
@@ -30,6 +30,11 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | file_artifacts | src/agent/turn/TurnRunner.ts:214, src/agent/turn/TurnRunner.ts:235, src/agent/turn/TurnRunner.ts:316, src/agent/turn/TurnRunner.ts:329, src/session/transcript/InMemoryTranscriptWriter.ts:67, src/session/transcript/JsonlTranscriptWriter.ts:125 | src/gateway/client/InProcessGateway.ts:502, submitTurn 流 ×28 |
 | input_accepted | src/agent/turn/TurnRunner.ts:193, src/session/transcript/TranscriptReplay.ts:73 | src/gateway/client/InProcessGateway.ts:502 |
 | instructions_loaded | src/agent/loop/AgentLoop.ts:1959 | src/gateway/client/InProcessGateway.ts:502 |
+| member_added | src/tool/builtin/team/teamManagement.ts:104, src/tool/builtin/team/teamManagement.ts:161 | - |
+| member_idle | src/agent/team/scheduler/scheduler.ts:265 | - |
+| member_removed | src/tool/builtin/team/teamManagement.ts:223 | - |
+| member_status | - | - |
+| message_delivered | src/agent/team/scheduler/scheduler.ts:197 | - |
 | mode_change_requested | src/agent/loop/AgentLoop.ts:1442 | src/gateway/client/InProcessGateway.ts:502 |
 | model_event | src/agent/loop/AgentLoop.ts:471 | src/gateway/client/InProcessGateway.ts:502 |
 | model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:502 |
@@ -54,6 +59,15 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:502 |
 | subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:502 |
 | subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:502 |
+| task_claimed | src/agent/team/scheduler/scheduler.ts:221 | - |
+| task_completed | src/tool/builtin/team/teamTasks.ts:292 | - |
+| task_created | src/tool/builtin/team/teamTasks.ts:154 | - |
+| task_failed | src/tool/builtin/team/teamTasks.ts:301 | - |
+| task_reassigned | src/tool/builtin/team/teamTasks.ts:410 | - |
+| task_retried | src/agent/team/scheduler/scheduler.ts:154 | - |
+| task_updated | src/tool/builtin/team/teamTasks.ts:310 | - |
+| team_archived | src/tool/builtin/team/teamArchive.ts:60 | - |
+| team_created | src/tool/builtin/team/teamManagement.ts:94 | - |
 | team_event | - | submitTurn 流 ×28 |
 | token_cap_adjusted | src/agent/loop/AgentLoop.ts:656, src/agent/loop/AgentLoop.ts:957, src/agent/loop/AgentLoop.ts:984, src/agent/loop/AgentLoop.ts:1006, src/agent/loop/AgentLoop.ts:1094 | src/gateway/client/InProcessGateway.ts:502 |
 | tool_call_finished | - | submitTurn 流 ×28 |
