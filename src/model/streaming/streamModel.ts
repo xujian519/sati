@@ -87,10 +87,7 @@ export async function complete(request: CanonicalModelRequest, config: ModelConf
       } catch (error) {
         if (attempt < maxRetries && isRetryableRequestError(error)) {
           const delayMs = retryBaseDelay * (attempt + 1);
-          console.warn(
-            `[Sati] complete() retry: ${(error as Error).message} ` +
-              `(attempt ${attempt + 1}/${maxRetries}, delay=${delayMs}ms)`,
-          );
+          warnCompleteRetry(error, attempt, maxRetries, delayMs);
           await delay(delayMs, options.signal);
           continue;
         }
@@ -171,14 +168,7 @@ export async function* streamModel(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     throwIfAborted(options.signal);
     const body = buildModelRequest(currentRequest, config);
-    if (brandEnv(process.env, ENV_KEY.DUMP_REQUEST) === "1") {
-      const fs = await import("node:fs");
-      const os = await import("node:os");
-      const path = await import("node:path");
-      const dumpPath = path.join(os.tmpdir(), `sati_request_${Date.now()}.json`);
-      fs.writeFileSync(dumpPath, JSON.stringify(body, null, 2));
-      console.log(`[model-debug] Request dumped to ${dumpPath} (model=${currentRequest.model})`);
-    }
+    await dumpRequestForDebug(body, currentRequest.model);
     let response: Response;
     try {
       response = await sendProviderRequest(provider, body, true, options.fetch ?? fetch, options.signal, options);
@@ -338,6 +328,24 @@ export async function* streamModel(
   }
 }
 
+/** SATI_DUMP_REQUEST=1 时把请求体落盘到系统临时目录并打印路径（模型调试用）。 */
+async function dumpRequestForDebug(body: unknown, modelId: string): Promise<void> {
+  if (brandEnv(process.env, ENV_KEY.DUMP_REQUEST) !== "1") {
+    return;
+  }
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const dumpPath = path.join(os.tmpdir(), `sati_request_${Date.now()}.json`);
+  fs.writeFileSync(dumpPath, JSON.stringify(body, null, 2));
+  console.log(`[model-debug] Request dumped to ${dumpPath} (model=${modelId})`);
+}
+
+function warnCompleteRetry(error: unknown, attempt: number, maxRetries: number, delayMs: number): void {
+  const detail = error instanceof Error ? error.message : String(error);
+  console.warn(`[Sati] complete() retry: ${detail} (attempt ${attempt + 1}/${maxRetries}, delay=${delayMs}ms)`);
+}
+
 async function sendGoogleCompleteRequest(
   provider: ProviderConfig,
   request: CanonicalModelRequest,
@@ -380,14 +388,7 @@ async function* streamGoogleProviderRequest(params: {
         }) as Record<string, unknown>,
         streamAbort.signal,
       );
-      if (brandEnv(process.env, ENV_KEY.DUMP_REQUEST) === "1") {
-        const fs = await import("node:fs");
-        const os = await import("node:os");
-        const path = await import("node:path");
-        const dumpPath = path.join(os.tmpdir(), `sati_request_${Date.now()}.json`);
-        fs.writeFileSync(dumpPath, JSON.stringify(body, null, 2));
-        console.log(`[model-debug] Request dumped to ${dumpPath} (model=${currentRequest.model})`);
-      }
+      await dumpRequestForDebug(body, currentRequest.model);
 
       // Google SDK 把 HttpOptions.timeout 应用于整个 HTTP 请求。流式场景下
       // 用下面的 per-read idle watchdog 兜底，因此既不传 idle 超时也不传

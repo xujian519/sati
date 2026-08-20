@@ -398,7 +398,7 @@ function collectHermesJsonBlocks(text: string): {
       continue;
     }
 
-    const jsonEnd = findBalancedJsonObjectEnd(text, jsonStart);
+    const jsonEnd = findBalancedEnd(text, jsonStart, "{", "}");
     if (jsonEnd === undefined) {
       partialToolCall ??= partialInfo("hermes_json", "truncated_json_inside_tool_call", text.slice(start));
       break;
@@ -447,7 +447,7 @@ function collectTaggedJsonObjects(
       continue;
     }
 
-    const jsonEnd = findBalancedJsonObjectEnd(text, jsonStart);
+    const jsonEnd = findBalancedEnd(text, jsonStart, "{", "}");
     if (jsonEnd === undefined) {
       partialToolCall ??= partialInfo(format, "truncated_json_after_tool_marker", text.slice(start));
       break;
@@ -484,7 +484,7 @@ function collectMistralJsonArrayBlocks(text: string): {
       continue;
     }
 
-    const jsonEnd = findBalancedJsonArrayEnd(text, jsonStart);
+    const jsonEnd = findBalancedEnd(text, jsonStart, "[", "]");
     if (jsonEnd === undefined) {
       partialToolCall ??= partialInfo("mistral", "truncated_tool_calls_json_array", text.slice(start));
       break;
@@ -502,7 +502,7 @@ function collectMistralJsonArrayBlocks(text: string): {
   return { blocks, partialToolCall };
 }
 
-function findBalancedJsonObjectEnd(text: string, start: number): number | undefined {
+function findBalancedEnd(text: string, start: number, open: string, close: string): number | undefined {
   let depth = 0;
   let inString = false;
   let escaped = false;
@@ -525,49 +525,11 @@ function findBalancedJsonObjectEnd(text: string, start: number): number | undefi
       inString = true;
       continue;
     }
-    if (ch === "{") {
+    if (ch === open) {
       depth++;
       continue;
     }
-    if (ch === "}") {
-      depth--;
-      if (depth === 0) {
-        return i + 1;
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function findBalancedJsonArrayEnd(text: string, start: number): number | undefined {
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (ch === "\\") {
-        escaped = true;
-      } else if (ch === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === "[") {
-      depth++;
-      continue;
-    }
-    if (ch === "]") {
+    if (ch === close) {
       depth--;
       if (depth === 0) {
         return i + 1;
@@ -659,10 +621,6 @@ function hasFormatMarker(text: string, format: PartialTextToolCallFormat): boole
 }
 
 function hasQwenMarker(text: string): boolean {
-  return hasQwenSpecificMarker(text);
-}
-
-function hasQwenSpecificMarker(text: string): boolean {
   return /<function=|<\/function>|<parameter=|<\/parameter>/u.test(text);
 }
 
