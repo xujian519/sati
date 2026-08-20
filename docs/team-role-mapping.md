@@ -45,6 +45,7 @@
 - **12 岗**（5 新增 + 7 变体）：`case-manager`/`researcher`/`drafter`/`technical-expert`/`adversarial-reviewer`/`applicant-counsel`/`formal-examiner`/`invalidity-petitioner`/`patentee-defender`/`adjudicator`/`defendant-counsel`/`tech-investigator`，全部经 registerRoleDefinition 注册，可按 `subagent_type` / 团队 roleSlug 调度
 - **运行时验证**（M3 完成判据）：`tests/cli/team-role-assembly.spec.ts` 集成用例——真实 `createLocalGateway`（fake model）+ sati.yaml，消费一个 turn 触发首会话准备后断言 `listRegisteredRoleIds()` 含 12 岗 id（真实运行时装配，非文件存在性）
 - 已知既有缺陷（T15 范围外）：`skills/` 一层子目录角色经插件贡献路径注册时，frontmatter 由简易解析器读取（`PluginCommandLoader.parseMarkdownFrontmatter`），多行 `systemPrompt` 块与数组字段（`domains`/`omitTools`）会丢失；`skills/patent-teams/` 嵌套目录角色经 T15 补丁（yaml 解析）注册，内容完整。修复 plugin 链路简易解析属独立事项，未纳入 T15
+- **已知边界（domains 缺口，T15 复审记录）**：部分岗 domains 未含 `"literature"`/`"legal"`（adjudicator/adversarial-reviewer/applicant-counsel/case-manager/formal-examiner 缺 literature；drafter 缺 legal+literature；tech-investigator 缺 legal——后者为其中立技术查明定位的设计意图），相应角色不可见 `paper_search`/`law_search`；文献检索职责由 researcher（含 literature）承担，法条核验以案件管理员/既有检索工具为准。资产经 spec 逐字批准，补全列 backlog
 
 ## 五、参照资产
 
