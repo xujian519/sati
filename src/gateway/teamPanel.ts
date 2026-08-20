@@ -2,11 +2,11 @@
  * 团队活动面板数据（M4，T6）：gateway 侧纯函数——TeamDb 直查 + SessionPresence
  * 合并在线态，产出面板快照。不依赖工具注册表（数据面）；操作面（team_tool_call）
  * 在 createLocalGateway 内直调工具，权限/校验/事件走工具层既有链。
- * modelRoute 解析复用 team_status 视图同款 parseModelRouteJson（T2 收紧的全有或全无
- * 语义）：面板与 team_status 两视图不分裂（残缺路由统一展示 {}，不穿透成会话覆盖）。
+ * 成员/任务视图复用 views.ts 共享映射（精简 B2）：面板与 team_status 两视图不分裂——
+ * 残缺路由统一降级 {}（parseModelRouteJson 全有或全无语义），不穿透成会话覆盖。
  */
-import type { TeamDb, TeamTaskRow } from "../agent/team/index.js";
-import { parseModelRouteJson } from "../agent/team/index.js";
+import type { TeamDb, TeamMemberView, TeamTaskView } from "../agent/team/index.js";
+import { toMemberView, toTaskView } from "../agent/team/index.js";
 import type { SessionPresence } from "./server/sessionPresence.js";
 
 export type PanelTeam = {
@@ -16,25 +16,9 @@ export type PanelTeam = {
   createdAt: string;
   archivedAt?: string;
   captainOnline: boolean;
-  members: Array<{
-    memberId: string;
-    roleSlug: string;
-    status: "idle" | "working";
-    modelRoute: { provider?: string; model?: string };
-    retired: boolean;
-  }>;
-  tasks: Array<{
-    taskId: string;
-    subject: string;
-    status: TeamTaskRow["status"];
-    attempt: number;
-    attemptId?: string;
-    assigneeId?: string;
-    dependencies: string[];
-    blockedByCount: number;
-    handoffId?: string;
-    output?: string;
-  }>;
+  // 成员/任务视图形状与 team_status 工具共用（views.ts 单点定义，防两视图分裂）
+  members: TeamMemberView[];
+  tasks: TeamTaskView[];
 };
 
 /** 面板快照：团队 + 成员在线/角色 + 任务。 */
@@ -57,29 +41,8 @@ export function buildTeamPanelSnapshot(
       createdAt: team.createdAt,
       ...(team.archivedAt !== undefined ? { archivedAt: team.archivedAt } : {}),
       captainOnline: presence.isActive(team.captainSessionKey, now),
-      members: members
-        .filter(m => m.teamId === team.id)
-        .map(m => ({
-          memberId: m.id,
-          roleSlug: m.roleSlug,
-          status: m.status,
-          modelRoute: parseModelRouteJson(m.modelRouteJson),
-          retired: db.isRetired(m.sessionKey),
-        })),
-      tasks: tasks
-        .filter(t => t.teamId === team.id)
-        .map(t => ({
-          taskId: t.id,
-          subject: t.subject,
-          status: t.status,
-          attempt: t.attempt,
-          ...(t.attemptId !== undefined ? { attemptId: t.attemptId } : {}),
-          ...(t.assigneeId !== undefined ? { assigneeId: t.assigneeId } : {}),
-          dependencies: t.dependencies,
-          blockedByCount: t.blockedByCount,
-          ...(t.handoffId !== undefined ? { handoffId: t.handoffId } : {}),
-          ...(t.output !== undefined ? { output: t.output } : {}),
-        })),
+      members: members.filter(m => m.teamId === team.id).map(m => toMemberView(db, m)),
+      tasks: tasks.filter(t => t.teamId === team.id).map(toTaskView),
     })),
   };
 }

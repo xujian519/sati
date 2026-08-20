@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import { TEAM_ROLE_OPTIONS } from "./constants";
+import { FeedbackBanner } from "./FeedbackBanner";
+import { useActionFeedback } from "./hooks/useActionFeedback";
 import type { PanelAction, PanelMember, PanelTeam } from "./types";
 
 type MemberGridProps = {
@@ -21,27 +23,14 @@ const STATUS_DOT: Record<PanelMember["status"], string> = {
 export function MemberGrid({ team, onAction }: MemberGridProps) {
   const { t } = useTranslation("teamPanel");
   const [roleSlug, setRoleSlug] = useState<string>("");
-  const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const { busy, feedback, runAction } = useActionFeedback();
 
   const handleAdd = async () => {
-    if (roleSlug === "" || busy) return;
-    setBusy(true);
-    setFeedback(null);
-    try {
-      const r = await onAction("team_add_member", { teamId: team.id, roleSlug });
-      if (r.ok) {
-        setRoleSlug("");
-        setFeedback({ kind: "ok", text: t("opSucceeded") });
-      } else {
-        // 后端契约错误（如 team_not_captain）：运行时消息直接展示，不走 i18n
-        setFeedback({ kind: "error", text: r.error.message });
-      }
-    } catch (err) {
-      setFeedback({ kind: "error", text: err instanceof Error ? err.message : String(err) });
-    } finally {
-      setBusy(false);
-    }
+    if (roleSlug === "") return;
+    await runAction(
+      () => onAction("team_add_member", { teamId: team.id, roleSlug }),
+      () => setRoleSlug(""),
+    );
   };
 
   return (
@@ -120,17 +109,7 @@ export function MemberGrid({ team, onAction }: MemberGridProps) {
         ))}
       </div>
 
-      {feedback !== null ? (
-        <div
-          className={`rounded-md p-3 text-sm ${
-            feedback.kind === "ok"
-              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-              : "bg-destructive/10 text-destructive"
-          }`}
-        >
-          {feedback.text}
-        </div>
-      ) : null}
+      <FeedbackBanner feedback={feedback} />
     </section>
   );
 }

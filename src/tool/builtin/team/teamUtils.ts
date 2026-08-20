@@ -62,6 +62,18 @@ export function resolveActor(sessionKey: string | undefined): TeamActor | undefi
 }
 
 /**
+ * 畸形/净化成员会话 fail-closed（精简 B3 提取，语义承 M3）：sessionId 命中成员会话形态
+ * （`team[:\-]`）但 resolveActor 解析失败（actor === undefined）时抛 team_actor_unknown——
+ * 信息丢失不可判定身份，绝不放行（防 sender 审计失真为 "captain"，与 update_task 同形态
+ * 会话行为对齐）。teamMailbox/teamStatus 共用；sessionId 缺失（undefined）不受影响。
+ */
+export function assertActorParseable(actor: TeamActor | undefined, sessionId: string | undefined): void {
+  if (actor === undefined && TEAM_MEMBER_SESSION_PATTERN.test(sessionId ?? "")) {
+    throw new SatiToolRuntimeError("team_actor_unknown", "无法判定调用者会话身份（成员会话形态畸形）");
+  }
+}
+
+/**
  * 成员级操作守卫：仅本团队成员可执行；返回成员 id。拒绝语义见稳定错误码。
  * 调用方须先经 resolveActor 解析会话：`team[:\-]` 形态的畸形/净化 key 解析为 undefined
  * （fail-closed），工具侧应在解析失败时直接拒绝，不会走到本守卫。

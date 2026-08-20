@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
+import { FeedbackBanner } from "./FeedbackBanner";
+import { useActionFeedback } from "./hooks/useActionFeedback";
 import type { PanelAction, PanelTask, PanelTeam } from "./types";
 
 type TaskBoardProps = {
@@ -37,54 +39,25 @@ const TERMINAL_TASK_STATUSES = new Set(["completed", "failed", "cancelled"]);
 export function TaskBoard({ team, onAction }: TaskBoardProps) {
   const { t } = useTranslation("teamPanel");
   const [reassignFor, setReassignFor] = useState<Record<string, string>>({});
-  const [busyTask, setBusyTask] = useState<string | null>(null);
-  const [archiving, setArchiving] = useState(false);
-  const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  // 转派/归档共享 busy（C2 提取）：低频面板操作互斥，任一进行中两按钮同禁
+  const { busy, feedback, runAction } = useActionFeedback();
 
   // 可转派目标：非退休的 idle 成员（working 成员已有任务在身）
   const idleMembers = team.members.filter(member => !member.retired && member.status === "idle");
 
-  const showFeedback = (kind: "ok" | "error", text: string) => {
-    setFeedback({ kind, text });
-  };
-
   const handleReassign = async (task: PanelTask) => {
     const memberId = reassignFor[task.taskId];
-    if (memberId === undefined || memberId === "" || busyTask !== null) return;
-    setBusyTask(task.taskId);
-    try {
-      const r = await onAction("team_reassign_task", { teamId: team.id, taskId: task.taskId, memberId });
-      if (r.ok) {
-        setReassignFor(prev => ({ ...prev, [task.taskId]: "" }));
-        showFeedback("ok", t("opSucceeded"));
-      } else {
-        // 后端契约错误（如 team_not_captain / 终态）：运行时消息直接展示，不走 i18n
-        showFeedback("error", r.error.message);
-      }
-    } catch (err) {
-      showFeedback("error", err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusyTask(null);
-    }
+    if (memberId === undefined || memberId === "") return;
+    await runAction(
+      () => onAction("team_reassign_task", { teamId: team.id, taskId: task.taskId, memberId }),
+      () => setReassignFor(prev => ({ ...prev, [task.taskId]: "" })),
+    );
   };
 
   const handleArchive = async () => {
-    if (archiving) return;
     // 归档不可逆，二次确认
     if (!window.confirm(t("archive.confirmBody", { name: team.name }))) return;
-    setArchiving(true);
-    try {
-      const r = await onAction("team_archive", { teamId: team.id });
-      if (r.ok) {
-        showFeedback("ok", t("opSucceeded"));
-      } else {
-        showFeedback("error", r.error.message);
-      }
-    } catch (err) {
-      showFeedback("error", err instanceof Error ? err.message : String(err));
-    } finally {
-      setArchiving(false);
-    }
+    await runAction(() => onAction("team_archive", { teamId: team.id }));
   };
 
   return (
@@ -94,7 +67,7 @@ export function TaskBoard({ team, onAction }: TaskBoardProps) {
           <h3 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{t("tasks.title")}</h3>
           <span className="text-xs text-neutral-500 dark:text-neutral-400">{team.tasks.length}</span>
         </div>
-        <Button size="sm" variant="outline" disabled={archiving} onClick={() => void handleArchive()}>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void handleArchive()}>
           {t("archive.button")}
         </Button>
       </div>
@@ -148,7 +121,7 @@ export function TaskBoard({ team, onAction }: TaskBoardProps) {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={busyTask !== null || (reassignFor[task.taskId] ?? "") === ""}
+                      disabled={busy || (reassignFor[task.taskId] ?? "") === ""}
                       onClick={() => void handleReassign(task)}
                     >
                       {t("tasks.reassign")}
@@ -161,17 +134,7 @@ export function TaskBoard({ team, onAction }: TaskBoardProps) {
         </div>
       )}
 
-      {feedback !== null ? (
-        <div
-          className={`rounded-md p-3 text-sm ${
-            feedback.kind === "ok"
-              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
-              : "bg-destructive/10 text-destructive"
-          }`}
-        >
-          {feedback.text}
-        </div>
-      ) : null}
+      <FeedbackBanner feedback={feedback} />
     </section>
   );
 }

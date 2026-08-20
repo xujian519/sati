@@ -5,14 +5,15 @@
  * 对齐 scheduler「损坏行跳过不阻塞」语义，且降级值过 outputSchema object 校验）/retired；
  * 任务视图含 status/attempt/attemptId/assigneeId/dependencies/blockedByCount/handoffId/output。
  * 全锁外纯查询（只读无锁）；成员校验仅校验身份（不返回使用）。
- * 会话 fail-closed（quality review）：畸形/净化成员会话（pattern 命中但解析失败）
- * 抛 team_actor_unknown，与 update_task 对同形态会话行为一致。
+ * 会话 fail-closed（assertActorParseable）：畸形/净化成员会话抛 team_actor_unknown，
+ * 与 update_task 对同形态会话行为一致。
  */
 import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
-import { parseModelRouteJson, type TeamTaskStatus } from "../../../agent/team/index.js";
+import type { TeamMemberView, TeamTaskView } from "../../../agent/team/index.js";
+import { toMemberView, toTaskView } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import {
-  TEAM_MEMBER_SESSION_PATTERN,
+  assertActorParseable,
   requireTeamCaptain,
   requireTeamMember,
   resolveActor,
@@ -22,25 +23,9 @@ import {
 export type TeamStatusInput = { teamId: string };
 export type TeamStatusOutput = {
   team: { id: string; name: string; captainSessionKey: string; createdAt: string };
-  members: Array<{
-    memberId: string;
-    roleSlug: string;
-    status: "idle" | "working";
-    modelRoute: unknown;
-    retired: boolean;
-  }>;
-  tasks: Array<{
-    taskId: string;
-    subject: string;
-    status: TeamTaskStatus;
-    attempt: number;
-    attemptId?: string;
-    assigneeId?: string;
-    dependencies: string[];
-    blockedByCount: number;
-    handoffId?: string;
-    output?: string;
-  }>;
+  // 成员/任务视图与活动面板共用 views.ts 单点定义（防两视图分裂）
+  members: TeamMemberView[];
+  tasks: TeamTaskView[];
 };
 
 export function createTeamStatusTool(options: TeamToolsOptions): SatiToolDefinition<TeamStatusInput, TeamStatusOutput> {
@@ -110,11 +95,8 @@ export function createTeamStatusTool(options: TeamToolsOptions): SatiToolDefinit
     isDestructive: () => false,
     execute: async (input, context): Promise<SatiToolExecutionOutput<TeamStatusOutput>> => {
       const actor = resolveActor(context.sessionId);
-      // 畸形/净化成员会话（pattern 命中但解析失败，actor === undefined）fail-closed：
-      // 信息丢失不可判定身份，绝不放行
-      if (actor === undefined && TEAM_MEMBER_SESSION_PATTERN.test(context.sessionId ?? "")) {
-        throw new SatiToolRuntimeError("team_actor_unknown", "无法判定调用者会话身份（成员会话形态畸形）");
-      }
+      // 畸形/净化成员会话 fail-closed（assertActorParseable）：信息丢失不可判定身份，绝不放行
+      assertActorParseable(actor, context.sessionId);
       if (actor !== undefined && !actor.captain) {
         requireTeamMember(db, actor, input.teamId); // 成员校验（仅校验身份，不返回使用）
       } else if (actor !== undefined) {
@@ -129,25 +111,8 @@ export function createTeamStatusTool(options: TeamToolsOptions): SatiToolDefinit
       const members = db
         .listMembers()
         .filter(m => m.teamId === input.teamId)
-        .map(m => ({
-          memberId: m.id,
-          roleSlug: m.roleSlug,
-          status: m.status,
-          modelRoute: parseModelRouteJson(m.modelRouteJson),
-          retired: db.isRetired(m.sessionKey),
-        }));
-      const tasks = db.listTasks(input.teamId).map(t => ({
-        taskId: t.id,
-        subject: t.subject,
-        status: t.status,
-        attempt: t.attempt,
-        ...(t.attemptId !== undefined ? { attemptId: t.attemptId } : {}),
-        ...(t.assigneeId !== undefined ? { assigneeId: t.assigneeId } : {}),
-        dependencies: t.dependencies,
-        blockedByCount: t.blockedByCount,
-        ...(t.handoffId !== undefined ? { handoffId: t.handoffId } : {}),
-        ...(t.output !== undefined ? { output: t.output } : {}),
-      }));
+        .map(m => toMemberView(db, m));
+      const tasks = db.listTasks(input.teamId).map(toTaskView);
       return {
         content: [
           {

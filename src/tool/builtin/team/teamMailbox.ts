@@ -8,7 +8,7 @@
  * （scheduler.ts kickMember 邮箱投递成功分支，批次粒度），本工具只落库 + kickMember，
  * 不 emit——避免工具内事件与调度器投递事件双发导致语义漂移（T11 接线只改调度器投递点）。
  *
- * 会话 fail-closed（quality review）：畸形/净化成员会话（`team:t1:` / `team-t1-` 等，
+ * 会话 fail-closed（assertActorParseable）：畸形/净化成员会话（`team:t1:` / `team-t1-` 等，
  * pattern 命中但解析失败）抛 team_actor_unknown——不得按 captain 语义放行
  * （否则 sender 审计失真为 "captain"），与 update_task 对同形态会话行为一致。
  */
@@ -17,7 +17,7 @@ import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol
 import { withTeamLock } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import {
-  TEAM_MEMBER_SESSION_PATTERN,
+  assertActorParseable,
   assertTeamActive,
   requireTeamCaptain,
   requireTeamMember,
@@ -62,11 +62,9 @@ export function createTeamSendMessageTool(
     isDestructive: () => false,
     execute: async (input, context): Promise<SatiToolExecutionOutput<TeamSendMessageOutput>> => {
       const actor = resolveActor(context.sessionId);
-      // 畸形/净化成员会话（pattern 命中但解析失败，actor === undefined）fail-closed：
-      // 信息丢失不可判定身份，绝不放行（防止 sender 审计失真为 "captain"）
-      if (actor === undefined && TEAM_MEMBER_SESSION_PATTERN.test(context.sessionId ?? "")) {
-        throw new SatiToolRuntimeError("team_actor_unknown", "无法判定调用者会话身份（成员会话形态畸形）");
-      }
+      // 畸形/净化成员会话 fail-closed（assertActorParseable）：信息丢失不可判定身份，
+      // 绝不放行（防止 sender 审计失真为 "captain"）
+      assertActorParseable(actor, context.sessionId);
       // 输入校验（锁外，纯函数；M5 风格对齐 create_task subject 校验）
       if (input.content.trim() === "") {
         throw new SatiToolRuntimeError("invalid_tool_input", "消息内容不能为空");
