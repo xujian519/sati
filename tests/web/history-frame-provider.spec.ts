@@ -12,6 +12,7 @@ test("newly generated history frames carry provider=sati and source=history", as
   try {
     const sessionKey = "web:s_history_provider";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,
@@ -56,6 +57,7 @@ test("incomplete-turn status frame carries provider=sati and source=history", as
   try {
     const sessionKey = "web:s_history_provider_incomplete";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,

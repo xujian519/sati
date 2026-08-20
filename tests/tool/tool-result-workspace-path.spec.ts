@@ -30,6 +30,7 @@ test("large tool results are persisted under workspace .sati and readable by rea
   const pilotHome = await mkdtemp(join(tmpdir(), "sati-home-"));
   try {
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: "web:s_test",
@@ -81,6 +82,7 @@ test("large tool result read_file aliases are short and sequential", async () =>
   const pilotHome = await mkdtemp(join(tmpdir(), "sati-home-"));
   try {
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: "web:s_test",
@@ -129,6 +131,7 @@ test("persisted reference preview carries a read_file retrieval hint within budg
   const pilotHome = await mkdtemp(join(tmpdir(), "sati-home-"));
   try {
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: "web:s_test",
@@ -176,6 +179,7 @@ test("CJK preview stays within byte budget (head/tail byte-aware)", async () => 
   const pilotHome = await mkdtemp(join(tmpdir(), "sati-home-"));
   try {
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: "web:s_test",

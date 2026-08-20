@@ -90,7 +90,7 @@ test("JsonlTranscriptWriter.recordRetrySchedule：落盘可读回 + 重放 log-o
   const dir = await mkdtemp(join(tmpdir(), "sati-retry-sched-"));
   try {
     const path = join(dir, "s1.jsonl");
-    const writer = new JsonlTranscriptWriter({ path });
+    const writer = new JsonlTranscriptWriter({ path, flushThresholdBytes: 0 });
     await writer.recordAcceptedInput("s1", "t1", []);
     await writer.recordRetrySchedule("s1", "t1", schedule());
     await writer.recordRequestHeader("s1", "t1", {

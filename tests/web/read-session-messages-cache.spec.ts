@@ -22,6 +22,7 @@ function makeFixture() {
 
 async function seedSession(sessionKey: string, projectRoot: string, pilotHome: string, turns: number): Promise<void> {
   const storage = createAgentProjectSessionStorage({
+    flushThresholdBytes: 0,
     projectRoot,
     pilotHome,
     sessionId: sessionKey,
@@ -74,6 +75,7 @@ test("P2-C: transcript 追加后缓存失效重建，新消息可见", async () 
     const sessionKey = "web:s_rsm_cache_invalidated";
     // 复用同一 storage 实例（sequence 连续），先写 turn-1
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,
@@ -138,6 +140,7 @@ test("P2-C: incomplete turn status 每请求重建（时间戳随 now 更新）"
   try {
     const sessionKey = "web:s_rsm_cache_status";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,
@@ -174,6 +177,7 @@ test("P2-C: 分页语义——status 只在末页，翻页链与全量一致", a
   try {
     const sessionKey = "web:s_rsm_cache_paging";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,

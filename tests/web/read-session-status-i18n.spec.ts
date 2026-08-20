@@ -12,6 +12,7 @@ test("history replay preserves agent status i18n metadata and user hint", async 
   try {
     const sessionKey = "web:s_status_i18n";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,
@@ -57,6 +58,7 @@ test("history token usage restores latest non-empty turn past latest empty turn 
   try {
     const sessionKey = "web:s_token_usage_restore";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,
@@ -113,6 +115,7 @@ test("history token usage prefers persisted context budget snapshot", async () =
   try {
     const sessionKey = "web:s_token_budget_restore";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,
@@ -165,6 +168,7 @@ test("history token usage reflects the latest compact boundary after context bud
   try {
     const sessionKey = "web:s_compact_token_budget";
     const storage = createAgentProjectSessionStorage({
+      flushThresholdBytes: 0,
       projectRoot,
       pilotHome,
       sessionId: sessionKey,

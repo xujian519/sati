@@ -16,6 +16,12 @@ export type AgentProjectSessionStorageOptions = {
   pilotHome: string;
   sessionId: string;
   now?: () => Date;
+  /**
+   * M3 写缓冲阈值透传（默认 64KB 缓冲；0 = 直写）。测试 fixture 传 0 保持
+   * 「await record 后立即可读」的旧语义；生产路径走默认缓冲，
+   * durable 边界由 flushCheckpoint / turn_result 强制 flush 保证。
+   */
+  flushThresholdBytes?: number;
 };
 
 export type AgentProjectSessionStorage = {
@@ -97,6 +103,7 @@ export function createAgentProjectSessionStorage(
       path: transcriptPath,
       now: options.now,
       subagentTranscriptPath,
+      ...(options.flushThresholdBytes !== undefined ? { flushThresholdBytes: options.flushThresholdBytes } : {}),
     }),
   };
 }
