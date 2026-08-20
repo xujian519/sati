@@ -107,6 +107,7 @@ export class ProvenanceStore {
           model TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_activity_run ON activity (run_id);
+        CREATE INDEX IF NOT EXISTS idx_activity_case ON activity (case_id);
         CREATE INDEX IF NOT EXISTS idx_entity_case ON entity (case_id);
       `);
       this.stmtUpsertActivity = this.db.prepare(`
