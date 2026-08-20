@@ -33,6 +33,18 @@ import { formatValidationError } from "./formatValidationError.js";
 import { buildToolErrorRecovery } from "./errorRecovery.js";
 import { repairToolName } from "./repairToolName.js";
 
+/**
+ * 审计记录非阻塞投递：同步实现立即执行；异步实现 fire-and-forget
+ * （拒绝吞掉，审计失败不影响工具执行路径）。审计是可选旁路记录，
+ * 工具调用不应串行等待审计写入（recordPermission/recordTool 类型均为
+ * `void | Promise<void>`，await 空操作或慢实现都会阻塞热路径）。
+ */
+function deliverAuditRecord(record: void | Promise<void> | undefined): void {
+  if (record instanceof Promise) {
+    void record.catch(() => {});
+  }
+}
+
 export class ToolRuntime {
   constructor(
     private readonly registry: ToolRegistry,
@@ -231,17 +243,19 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
         };
       }
     }
-    await context.auditRecorder?.recordPermission({
-      type: "permission",
-      sessionId: context.sessionId,
-      turnId: context.turnId,
-      toolCallId: call.id,
-      toolName: tool.name,
-      mode: context.permissionContext.mode,
-      decision: decision.type,
-      reason: decision.reason,
-      createdAt: now(context).toISOString(),
-    });
+    deliverAuditRecord(
+      context.auditRecorder?.recordPermission({
+        type: "permission",
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        toolCallId: call.id,
+        toolName: tool.name,
+        mode: context.permissionContext.mode,
+        decision: decision.type,
+        reason: decision.reason,
+        createdAt: now(context).toISOString(),
+      }),
+    );
 
     if (decision.type === "deny") {
       await this.dispatchLifecycle("PermissionDenied", tool.name, call.id, executeInput, context, {
@@ -374,7 +388,7 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
           resultText: flattenToolOutputText(output.content),
         }),
       );
-      await this.recordToolAudit(result, context, startedAtDate);
+      this.recordToolAudit(result, context, startedAtDate);
       return result;
     } catch (error) {
       // 阶段四 T6.1：合作式工具在 deadline 处观察到熔合 signal 并自行抛出
@@ -417,7 +431,7 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
           resultText: normalized.message,
         }),
       );
-      await this.recordToolAudit(result, context, startedAtDate);
+      this.recordToolAudit(result, context, startedAtDate);
       return result;
     }
   }
@@ -433,7 +447,7 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
   ): Promise<SatiToolErrorResult> {
     const startedAtDate = new Date(startedAt);
     const result = this.createErrorResult(toolCallId, toolName, code, message, startedAt, context, details);
-    await this.recordToolAudit(result, context, startedAtDate);
+    this.recordToolAudit(result, context, startedAtDate);
     return result;
   }
 
@@ -469,23 +483,21 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
     };
   }
 
-  private async recordToolAudit(
-    result: SatiToolResult,
-    context: SatiToolRuntimeContext,
-    startedAt: Date,
-  ): Promise<void> {
-    await context.auditRecorder?.recordTool({
-      type: "tool",
-      sessionId: context.sessionId,
-      turnId: context.turnId,
-      toolCallId: result.toolCallId,
-      toolName: result.toolName,
-      status: result.type === "success" ? "success" : "error",
-      errorCode: result.type === "error" ? result.error.code : undefined,
-      startedAt: result.startedAt,
-      completedAt: result.completedAt,
-      durationMs: new Date(result.completedAt).getTime() - startedAt.getTime(),
-    });
+  private recordToolAudit(result: SatiToolResult, context: SatiToolRuntimeContext, startedAt: Date): void {
+    deliverAuditRecord(
+      context.auditRecorder?.recordTool({
+        type: "tool",
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+        toolCallId: result.toolCallId,
+        toolName: result.toolName,
+        status: result.type === "success" ? "success" : "error",
+        errorCode: result.type === "error" ? result.error.code : undefined,
+        startedAt: result.startedAt,
+        completedAt: result.completedAt,
+        durationMs: new Date(result.completedAt).getTime() - startedAt.getTime(),
+      }),
+    );
   }
 
   private async dispatchLifecycle(

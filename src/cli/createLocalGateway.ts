@@ -773,6 +773,8 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       router?.shutdown();
       stopConfigWatching();
       stopExtensionWatching();
+      // M4：路由事件缓冲同步收尾（250ms 定时器已 unref，退出前 flush 防尾部丢失）
+      registry.routerEventBus?.flush?.();
       if (ownsTelemetry) {
         void telemetry.shutdown();
       }
@@ -874,10 +876,16 @@ type ProjectRuntime = {
 
 const DEFAULT_BROWSER_ACTION_TIMEOUT_MS = 30_000;
 const DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS = 90_000;
+/** M5：任务续算扫描启动延时——避开启动期 transcript 读盘竞争。 */
+const TASK_RESUME_SCAN_DELAY_MS = 3_000;
+/** M4：路由事件审计落盘批量 flush 间隔（unref，不持 event loop）。 */
+const ROUTER_EVENT_FLUSH_INTERVAL_MS = 250;
 
 class ProjectRuntimeRegistry {
   private readonly runtimes = new Map<string, ProjectRuntime>();
   private gateway?: InProcessGateway;
+  /** M4：路由事件审计总线（resolve 时创建，createLocalGateway dispose 经此 flush 缓冲）。 */
+  routerEventBus: RouterEventBus | null = null;
   /**
    * Per-session live permission rules used when no `sessionOverrides`
    * entry exists. Same array reference is handed to:
@@ -983,13 +991,36 @@ class ProjectRuntimeRegistry {
     } catch {
       /* best-effort migration */
     }
+    // M4：逐事件 appendFileSync 改缓冲 + 250ms 批量 flush。events.jsonl 仅供
+    // 人工审计（bootstrap-sati-config 注释），无程序化消费/重建路径——尾部
+    // 丢失可接受；flush timer unref 不持 event loop，dispose 时同步 flush 收尾。
+    const pendingEvents: RouterEvent[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushPendingEvents = () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      if (pendingEvents.length === 0) return;
+      const batch = pendingEvents.splice(0, pendingEvents.length);
+      try {
+        appendFileSync(eventsPath, batch.map(event => JSON.stringify(event)).join("\n") + "\n");
+      } catch {
+        /* best-effort, never crash the agent loop */
+      }
+    };
+    const scheduleFlush = () => {
+      if (flushTimer !== null) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        flushPendingEvents();
+      }, ROUTER_EVENT_FLUSH_INTERVAL_MS);
+      flushTimer.unref?.();
+    };
     return {
       emit: (event: RouterEvent) => {
-        try {
-          appendFileSync(eventsPath, JSON.stringify(event) + "\n");
-        } catch {
-          /* best-effort, never crash the agent loop */
-        }
+        pendingEvents.push(event);
+        scheduleFlush();
         if (event.type === "sati_router_retry_progress") {
           try {
             this.gateway?.broadcastRetryProgress(event);
@@ -1020,6 +1051,7 @@ class ProjectRuntimeRegistry {
           }
         }
       },
+      flush: flushPendingEvents,
     };
   }
 
@@ -1157,7 +1189,7 @@ class ProjectRuntimeRegistry {
       now: this.options.now,
       customRouterRegistry: pluginRuntime,
       loadSkillPrompt: extensionId => pluginRuntime.loadSkillPrompt(extensionId),
-      events: this.buildRouterEventBus(),
+      events: (this.routerEventBus = this.buildRouterEventBus()),
       telemetry: this.options.telemetry,
     });
     const backgroundTasks = new BackgroundTaskRuntime({
@@ -1505,6 +1537,9 @@ class ProjectRuntimeRegistry {
    * 续算 = 以新 turn 提交（RESUME_TURN_MESSAGE）；gateway 内部 createSession
    * 会 resume 会话（旧开放 turn 由 resumeAgentSession 合成 interrupted 收尾），
    * 新 turn 基于 transcript 重建的上下文继续，任务自动续算到完成。
+   *
+   * M5：扫描延时 3s 启动——避开启动期 transcript 全量读竞争（会话恢复/列表
+   * 首屏），延后到事件循环空闲后再触发。
    */
   runTaskResumeScan(): void {
     const enabled = brandEnv(this.options.env, ENV_KEY.TASK_RESUME_ENABLED) !== "0";
@@ -1528,17 +1563,19 @@ class ProjectRuntimeRegistry {
       },
       hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
     });
-    void scanner
-      .scan()
-      .then(result => {
-        if (result.resumed > 0) {
-          console.log(
-            `[sati] Task resume: scanned=${result.scanned}, resumed=${result.resumed}, ` +
-              `skippedPartial=${result.skippedPartial}, skippedApprovals=${result.skippedApprovals}`,
-          );
-        }
-      })
-      .catch(() => undefined);
+    setTimeout(() => {
+      void scanner
+        .scan()
+        .then(result => {
+          if (result.resumed > 0) {
+            console.log(
+              `[sati] Task resume: scanned=${result.scanned}, resumed=${result.resumed}, ` +
+                `skippedPartial=${result.skippedPartial}, skippedApprovals=${result.skippedApprovals}`,
+            );
+          }
+        })
+        .catch(() => undefined);
+    }, TASK_RESUME_SCAN_DELAY_MS);
   }
 
   async recreateSession(context: GatewaySessionContext, previousSession: AgentSession) {

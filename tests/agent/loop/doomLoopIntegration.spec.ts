@@ -11,6 +11,7 @@ import {
   observeToolResults,
   recordModelCall,
   recordToolResults,
+  truncateObservationText,
 } from "../../../src/agent/loop/doomLoopIntegration.js";
 
 function userMessage(text: string): CanonicalMessage {
@@ -199,4 +200,41 @@ test("textFromMessage：拼接文本块、跳过非文本块", () => {
     ],
   };
   assert.equal(textFromMessage(message), "甲\n乙");
+});
+
+// ---------------------------------------------------------------------------
+// M2 观测文本截断
+// ---------------------------------------------------------------------------
+
+test("truncateObservationText：短文本原样返回", () => {
+  assert.equal(truncateObservationText("short result"), "short result");
+  assert.equal(truncateObservationText(""), "");
+});
+
+test("truncateObservationText：恰好等于上限不截断", () => {
+  const text = "x".repeat(2048);
+  assert.equal(truncateObservationText(text), text);
+});
+
+test("truncateObservationText：超限保留首尾 + 省略标记，总长不超上限", () => {
+  const head = "A".repeat(2000);
+  const tail = "B".repeat(2000);
+  const out = truncateObservationText(head + tail);
+  assert.ok(out.length <= 2048, `截断后长度 ${out.length} 应 ≤ 2048`);
+  assert.ok(out.startsWith("A".repeat(1200)), "保留首部");
+  assert.ok(out.includes("\n…[truncated]…\n"), "含省略标记");
+  // 尾部长 = limit - head - ellipsis（与实现同式计算，避免魔数漂移）。
+  const tailLen = 2048 - Math.floor(2048 * 0.6) - "\n…[truncated]…\n".length;
+  assert.ok(out.endsWith("B".repeat(tailLen)), "保留尾部");
+});
+
+test("observeToolResults：长结果进观测前截断，不破坏同参重复判定", () => {
+  const d = new DoomLoop([new ToolCallLoopDetector(2)], { fatal: true });
+  d.reset(1);
+  const long = "x".repeat(5000);
+  const call = toolCall("read_file", { file_path: "f" });
+  assert.equal(observeToolResults(d, [call], [successResult(long)])?.signals.length, 0);
+  const observed = observeToolResults(d, [call], [successResult(long)]);
+  assert.equal(observed?.signals.length, 1, "截断后两轮观测 key 相同，重复检测照常命中");
+  assert.equal(observed?.signals[0]?.detector, "toolCallLoop");
 });

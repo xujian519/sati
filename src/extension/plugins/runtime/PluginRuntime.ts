@@ -1,3 +1,5 @@
+import { readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { resolvePluginDirectories } from "../discovery/PluginDirectoryResolver.js";
 import { discoverPluginPaths, discoverSkillPaths } from "../discovery/discoverLocalPlugins.js";
 import { loadPluginFromPath, loadSkillFromPath } from "../loading/PluginLoader.js";
@@ -11,6 +13,9 @@ import { renderSkillContent } from "../../skills/renderSkillContent.js";
 import type { SkillRoleConfig } from "../../skills/types.js";
 import { PluginRegistry } from "./PluginRegistry.js";
 import { truncateMcpInstructionString } from "./truncateMcpString.js";
+
+/** M6：插件/技能 load 指纹缓存 TTL（stat 粒度漏检兜底，10s 后强制重扫）。 */
+const PLUGIN_FINGERPRINT_TTL_MS = 10_000;
 
 /**
  * Static MCP server contribution shape callers can rely on. Manifests load
@@ -90,8 +95,38 @@ export class PluginRuntime {
    * 保持不变——每次都重新加载，不做时间窗口缓存（文件系统变更必须立即可见）。
    */
   private inFlightRefresh: Promise<SatiLoadedPlugin[]> | null = null;
+  /**
+   * M6：插件/技能 load 结果指纹缓存。指纹 = 各发现文件 mtime+size 拼接；
+   * TTL 兜底（stat 粒度漏检的极端情况 10s 后强制重扫）。命中时跳过逐文件
+   * 读盘解析（会话并发创建每会话一次 refresh → 只扫一次盘）。文件内容
+   * 变更 → mtime 变化 → 指纹变 → 立即重扫，变更可见性语义不变。
+   */
+  private fingerprintCache: { fingerprint: string; plugins: SatiLoadedPlugin[]; at: number } | null = null;
 
   constructor(private readonly options: PluginRuntimeOptions) {}
+
+  /**
+   * M6：发现路径列表 → mtime+size 指纹。discover 返回的是目录路径（插件目录 /
+   * SKILL.md 所在目录），目录 mtime 只随子项增删变化——内容编辑须靠目录内
+   * 文件自身的 mtime+size 捕捉，因此对目录根部条目逐项 stat（不递归，
+   * 加载只读根部 plugin.json/SKILL.md；references 等子目录内容不参与解析）。
+   */
+  private async fingerprintOf(files: Array<{ path: string }>): Promise<string> {
+    let fingerprint = "";
+    for (const file of files) {
+      const st = await stat(file.path).catch(() => null);
+      fingerprint += `${file.path}:${st?.mtimeMs ?? 0}:${st?.size ?? 0}`;
+      if (st?.isDirectory()) {
+        const entries = await readdir(file.path).catch(() => []);
+        for (const entry of entries) {
+          const childSt = await stat(join(file.path, entry)).catch(() => null);
+          fingerprint += `|${entry}:${childSt?.mtimeMs ?? 0}:${childSt?.size ?? 0}`;
+        }
+      }
+      fingerprint += ";";
+    }
+    return fingerprint;
+  }
 
   snapshot(): SatiLoadedPlugin[] {
     return this.registry.list();
@@ -246,6 +281,18 @@ export class PluginRuntime {
         { path: paths.projectSkillsDir, source: "project" },
       ]),
     ]);
+    // M6：指纹命中（文件未变且 TTL 内）→ 直接复用上次 load 结果，跳过读盘解析。
+    const fingerprint = await this.fingerprintOf([...discovered, ...discoveredSkills]);
+    const cached = this.fingerprintCache;
+    if (cached !== null && cached.fingerprint === fingerprint && Date.now() - cached.at < PLUGIN_FINGERPRINT_TTL_MS) {
+      this.registry.replaceAll(cached.plugins);
+      return {
+        previous,
+        next: cached.plugins,
+        added: [],
+        removed: [],
+      };
+    }
     const [loaded, loadedSkills] = await Promise.all([
       Promise.all(discovered.map(plugin => loadPluginFromPath(plugin.path, plugin.source).catch(() => undefined))),
       Promise.all(discoveredSkills.map(s => loadSkillFromPath(s.path, s.source).catch(() => undefined))),
@@ -255,6 +302,7 @@ export class PluginRuntime {
       ...loaded.filter(isLoadedPlugin),
       ...loadedSkills.filter(isLoadedPlugin),
     ];
+    this.fingerprintCache = { fingerprint, plugins, at: Date.now() };
     this.registry.replaceAll(plugins);
     return {
       previous,

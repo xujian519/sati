@@ -47,6 +47,8 @@ export class LegalSearchEngine implements LegalSearchSource {
   private readonly stmtGetById: StatementSync;
   private readonly stmtGetCategories: StatementSync;
   private readonly stmtCount: StatementSync;
+  /** 动态 SQL（带过滤组合）prepare 缓存：同形状 SQL 复用 StatementSync。 */
+  private readonly preparedCache = new Map<string, StatementSync>();
 
   constructor(dbPath: string) {
     const opened = openKnowledgeDb(dbPath, LAWS_DB, { readOnly: true });
@@ -192,7 +194,18 @@ export class LegalSearchEngine implements LegalSearchSource {
   }
 
   close(): void {
+    this.preparedCache.clear();
     this.db.close();
+  }
+
+  /** 动态 SQL（带过滤组合）prepare 缓存：同形状 SQL 复用 StatementSync。 */
+  private prepareCached(sql: string): StatementSync {
+    let stmt = this.preparedCache.get(sql);
+    if (!stmt) {
+      stmt = this.db.prepare(sql);
+      this.preparedCache.set(sql, stmt);
+    }
+    return stmt;
   }
 
   private searchFts(keyword: string, options: LegalSearchOptions, limit: number): LawRow[] {
@@ -213,7 +226,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       rows = this.stmtSearchFts!.all(query, limit * 3) as LawRow[];
     } else {
       const { sql, params } = buildLawSearchSql("fts", options);
-      rows = this.db.prepare(sql).all(query, ...params, limit * 3) as LawRow[];
+      rows = this.prepareCached(sql).all(query, ...params, limit * 3) as LawRow[];
     }
     // 放大取数（limit * 3）后按 name 去重，保留最新发布版本
     return dedupeByLawName(rows, limit);
@@ -226,7 +239,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       rows = this.stmtSearchLike.all(pattern, pattern, limit) as LawRow[];
     } else {
       const { sql, params } = buildLawSearchSql("like", options);
-      rows = this.db.prepare(sql).all(pattern, pattern, ...params, limit) as LawRow[];
+      rows = this.prepareCached(sql).all(pattern, pattern, ...params, limit) as LawRow[];
     }
     return rows;
   }

@@ -93,4 +93,6 @@ export type RouterEvent =
 
 export type RouterEventBus = {
   emit(event: RouterEvent): void;
+  /** M4：同步落盘缓冲（dispose/退出收尾用）。可选——实现可不提供。 */
+  flush?: () => void;
 };
