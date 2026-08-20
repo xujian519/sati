@@ -6,7 +6,7 @@
  * construct the service identically.
  *
  * Core-resolved dependencies:
- *   - pilotHome / project-id resolution (`src/pilot/paths.ts`)
+ *   - pilotHome / project-id resolution (`src/shared/paths/index.ts`)
  *   - workspace apply/dispose (`src/always-on/workspace/WorkspaceApply.ts`)
  *   - discovery state cleanup (`src/always-on/storage/DiscoveryStateStore.ts`)
  *
@@ -15,7 +15,7 @@
  * `DiscoveryPlanServiceDeps` shape stays internal; hosts only depend on the
  * minimal `DiscoveryPlanIo` contract.
  */
-import { resolvePilotHome, resolveProjectStorageId } from "../../pilot/paths.js";
+import { resolvePilotHome, resolveProjectStorageId } from "../../shared/paths/index.js";
 import { resolveAlwaysOnPaths } from "../storage/AlwaysOnPaths.js";
 import { DiscoveryStateStore } from "../storage/DiscoveryStateStore.js";
 import { applyWorktreeToProject, disposeWorkspace } from "../workspace/WorkspaceApply.js";

@@ -2,7 +2,7 @@
  * Tiny LRU map: insertion-order Map + on-get refresh.
  * Used by the worktree resolution chain to memoize per-cwd results.
  *
- * Why not a npm dep: keeps `src/session/worktree/` zero-deps and fits one file.
+ * Why not a npm dep: keeps `src/shared/paths/` zero-deps and fits one file.
  * Behaviour is byte-stable across Node versions: relies on Map's insertion-order
  * iteration, guaranteed by the spec (ECMA-262 §24.1).
  */

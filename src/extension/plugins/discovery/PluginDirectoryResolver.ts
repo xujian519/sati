@@ -1,5 +1,5 @@
-import type { PilotExtensionPaths } from "../../../pilot/paths.js";
-import { getPilotExtensionPaths } from "../../../pilot/paths.js";
+import type { PilotExtensionPaths } from "../../../shared/paths/index.js";
+import { getPilotExtensionPaths } from "../../../shared/paths/index.js";
 
 export type PluginDirectoryResolverInput = {
   projectRoot: string;

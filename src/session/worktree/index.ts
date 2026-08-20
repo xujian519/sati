@@ -1,7 +1,7 @@
-export { findGitRoot } from "./findGitRoot.js";
-export { resolveCanonicalRoot } from "./resolveCanonicalRoot.js";
+export { findGitRoot, __clearFindGitRootCacheForTesting } from "../../shared/paths/index.js";
+export { resolveCanonicalRoot, __clearResolveCanonicalRootCacheForTesting } from "../../shared/paths/index.js";
 export {
   findCanonicalProjectRoot,
   __clearWorktreeCachesForTesting,
-} from "./findCanonicalProjectRoot.js";
-export { LRUMap } from "./LRUMap.js";
+} from "../../shared/paths/index.js";
+export { LRUMap } from "../../shared/paths/index.js";

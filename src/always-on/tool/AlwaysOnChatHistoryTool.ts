@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { SatiToolRuntimeError } from "../../tool/protocol/errors.js";
 import type { SatiToolDefinition } from "../../tool/protocol/types.js";
-import { getPilotProjectChatDir } from "../../pilot/paths.js";
+import { getPilotProjectChatDir } from "../../shared/paths/index.js";
 import { readTranscript } from "../../session/transcript/TranscriptReader.js";
 import { replayTranscriptEntries } from "../../session/transcript/TranscriptReplay.js";
 import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";

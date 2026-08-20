@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { getPilotProjectChatDir } from "../../pilot/paths.js";
+import { getPilotProjectChatDir } from "../../shared/paths/index.js";
 import { listProjectSessions } from "../../session/storage/SessionList.js";
 import { readSessionLite } from "../../session/storage/SessionLiteReader.js";
 

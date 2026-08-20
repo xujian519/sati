@@ -6,7 +6,7 @@ import { parseModelConfig } from "../../model/config/parseModelConfig.js";
 import { warmOllamaModels } from "../../model/ollama/probe.js";
 import { isRecord } from "../../model/config/schema.js";
 import { ModelConfigError } from "../../model/protocol/errors.js";
-import { getPilotConfigFilePath, getPilotMemoryRootDir, resolvePilotHome } from "../paths.js";
+import { getPilotConfigFilePath, getPilotMemoryRootDir, resolvePilotHome } from "../../shared/paths/index.js";
 import { parseRouterConfig } from "../../router/config/parseRouterConfig.js";
 import { sha256, stableStringify } from "./hash.js";
 import { mergeConfigSources } from "./merge.js";

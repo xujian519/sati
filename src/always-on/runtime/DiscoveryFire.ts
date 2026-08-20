@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../gateway/index.js";
-import { getPilotProjectChatDir } from "../../pilot/paths.js";
+import { getPilotProjectChatDir } from "../../shared/paths/index.js";
 import { buildChatDigest } from "../context/ChatDigestBuilder.js";
 import type { AlwaysOnConfig } from "../config/parseAlwaysOnConfig.js";
 import { buildFallbackReport, parseReportMarkdown, type ReportMetadata } from "../contracts/ReportContract.js";

@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { createProjectId } from "../../pilot/paths.js";
+import { createProjectId } from "../../shared/paths/index.js";
 
 const ROOT_DIR_NAME = "cron";
 

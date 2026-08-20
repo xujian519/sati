@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CanonicalUsage } from "../../model/index.js";
 import type { RouterStatsConfig } from "../config/schema.js";
-import { resolvePilotHome } from "../../pilot/paths.js";
+import { resolvePilotHome } from "../../shared/paths/index.js";
 import type { RouterDecision } from "../protocol/decision.js";
 import { lookupModelPricing } from "../utils/modelPricing.js";
 

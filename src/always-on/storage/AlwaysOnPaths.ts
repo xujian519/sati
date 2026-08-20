@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { resolveProjectStorageId } from "../../pilot/paths.js";
+import { resolveProjectStorageId } from "../../shared/paths/index.js";
 
 const ROOT_DIR_NAME = "always-on";
 

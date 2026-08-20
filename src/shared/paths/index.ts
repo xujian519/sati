@@ -11,8 +11,15 @@ export {
   getPilotProjectConfigFilePath,
   getPilotProjectChatDir,
   getPilotProjectChatDirAsync,
+  getPilotMemoryRootDir,
   resolvePilotHome,
   type PilotExtensionPaths,
   type PilotPathEnv,
-} from "../shared/paths/index.js";
-export * from "./config/index.js";
+} from "./pilotPaths.js";
+export {
+  findCanonicalProjectRoot,
+  __clearWorktreeCachesForTesting,
+} from "./findCanonicalProjectRoot.js";
+export { findGitRoot, __clearFindGitRootCacheForTesting } from "./findGitRoot.js";
+export { resolveCanonicalRoot, __clearResolveCanonicalRootCacheForTesting } from "./resolveCanonicalRoot.js";
+export { LRUMap } from "./LRUMap.js";
