@@ -395,6 +395,37 @@ describe("JsonlTranscriptWriter M3 写缓冲", () => {
     assert.equal(readEntries(path).length, 1);
   });
 
+  it("flush 在途时入队 + flushCheckpoint：等全部批次排空（不提前 resolve）", async () => {
+    const dir = makeTranscriptDir();
+    const path = join(dir, "session.jsonl");
+    const writer = new JsonlTranscriptWriter({ path, now: FIXED_NOW });
+
+    // a 触发批次 A（appendFile 异步在途）；b 在批次 A 完成前入队 → 批次 B。
+    // 旧实现有 flushing 防重入守卫：b 留在 pending，flushCheckpoint 只等批次 A
+    // 就 resolve（b 未落盘）——本测试固化「checkpoint resolve 时全部已落盘」。
+    void writer.recordAcceptedInput("s1", "t1", [userMessage("a")]);
+    void writer.recordAcceptedInput("s1", "t1", [userMessage("b")]);
+    await writer.flushCheckpoint();
+
+    const entries = readEntries(path);
+    assert.deepEqual(
+      entries.map(e => e.sequence),
+      [1, 2],
+      "flushCheckpoint resolve 时在途批次与新入队批次都已落盘",
+    );
+  });
+
+  it("字节阈值按 UTF-8 字节计算（CJK 内容不晚触发）", async () => {
+    const dir = makeTranscriptDir();
+    const path = join(dir, "session.jsonl");
+    // 100 个 CJK 字符 = 300 UTF-8 字节但仅 100 UTF-16 units：旧实现按 units
+    // 计（< 300 不触发，中文内容阈值晚 ~3 倍），修复后按字节计立即落盘。
+    const writer = new JsonlTranscriptWriter({ path, now: FIXED_NOW, flushThresholdBytes: 300 });
+
+    await writer.recordAcceptedInput("s1", "t1", [userMessage("正".repeat(100))]);
+    assert.equal(existsSync(path), true, "UTF-8 字节达阈值自动落盘");
+  });
+
   it("定时器兜底：无显式 flush 时 flushIntervalMs 后落盘", async () => {
     const dir = makeTranscriptDir();
     const path = join(dir, "session.jsonl");

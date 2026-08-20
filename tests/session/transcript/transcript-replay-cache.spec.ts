@@ -213,9 +213,10 @@ test("P2-B: 增量补全 turn 时旧 warning 移除（与全量一致）", () =>
   assert.deepEqual(doneResult.diagnostics, full.diagnostics, "增量与全量诊断一致");
 });
 
-test("P2-B: 多会话交替调用（同 length 冲突）各自正确", () => {
+test("P2-B: 多会话交替调用（按首条 entryId 键控）各自正确且互不驱逐", () => {
   seq = 0;
-  // 两个会话恰好同为 3 条（length 冲突）：缓存互踢但结果必须各自正确
+  // 两个会话恰好同为 3 条：旧 length 键控会互踢（缓存零收益）；新键控按
+  // 首条 entryId 区分序列身份——各自缓存稳定命中，二次调用零重投影。
   const sessionA = [userInput("A-问", "ta"), assistantMessage("A-答", "ta"), turnResult("ta")];
   const sessionB = [
     { ...userInput("B-问", "tb"), sessionId: "sb" },
@@ -227,15 +228,33 @@ test("P2-B: 多会话交替调用（同 length 冲突）各自正确", () => {
   const secondA = replayTranscriptEntries(sessionA);
   const secondB = replayTranscriptEntries(sessionB);
 
+  assert.equal(secondA, firstA, "A 会话二次调用完全命中（同 result 引用，零重投影）");
+  assert.equal(secondB, firstB, "B 会话二次调用完全命中（不被 A 驱逐）");
   assert.deepEqual(
     secondA.messages.map(m => (m.content[0]?.type === "text" ? m.content[0].text : "")),
     ["A-问", "A-答"],
-    "A 会话内容正确（缓存被 B 互踢后重新投影）",
+    "A 会话内容正确",
   );
   assert.deepEqual(
     secondB.messages.map(m => (m.content[0]?.type === "text" ? m.content[0].text : "")),
     ["B-问", "B-答"],
+    "B 会话内容正确",
   );
-  assert.deepEqual(secondA.messages, firstA.messages, "A 会话同内容投影稳定");
-  assert.deepEqual(secondB.messages, firstB.messages, "B 会话同内容投影稳定");
+});
+
+test("P2-B: 首条 entryId 缺失（InMemoryWriter）禁用缓存直接全量", () => {
+  seq = 0;
+  const entries = [userInput("你好", "t1"), assistantMessage("回复", "t1"), turnResult("t1")];
+  // 模拟无 entryId 的 writer（InMemoryTranscriptWriter）：全部条目无 entryId
+  const noId = entries.map(({ entryId: _entryId, ...rest }) => rest);
+  const first = replayTranscriptEntries(noId);
+  const second = replayTranscriptEntries(noId);
+  // 无 entryId 无法区分序列身份：不参与缓存（同输入不同对象也须各自正确，
+  // 且不得因 undefined 键控误命中其他会话）。
+  assert.deepEqual(
+    second.messages.map(m => (m.content[0]?.type === "text" ? m.content[0].text : "")),
+    ["你好", "回复"],
+    "无 entryId 输入投影正确",
+  );
+  assert.notEqual(second.messages, first.messages, "无缓存路径每次全量重建，不共享引用");
 });

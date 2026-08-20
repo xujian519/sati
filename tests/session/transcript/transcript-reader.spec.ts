@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { readTranscript } from "../../../src/session/transcript/TranscriptReader.js";
+import type { AgentTranscriptEntry } from "../../../src/session/transcript/TranscriptEntry.js";
+
+/** 提取 accepted_input 首条文本（union 判别收窄）。 */
+function acceptedInputText(entry: AgentTranscriptEntry | undefined): string {
+  if (entry === undefined || entry.type !== "accepted_input") return "";
+  const content = entry.messages[0]?.content[0];
+  return content?.type === "text" ? content.text : "";
+}
 
 const tempDirs: string[] = [];
 
@@ -137,14 +145,14 @@ describe("TranscriptReader tail-append 增量读取", () => {
     );
   });
 
-  it("快路径命中返回共享元素浅拷贝", async () => {
+  it("快路径命中返回共享元素浅拷贝（诊断数组为拷贝）", async () => {
     const path = makeTranscriptPath();
     writeTranscript(path, [entryLine("s1", 1, "内容")]);
     const first = await readTranscript(path);
     const second = await readTranscript(path);
     assert.notEqual(second.entries, first.entries, "数组应为新拷贝");
     assert.equal(second.entries[0], first.entries[0], "元素应共享引用");
-    assert.equal(second.diagnostics, first.diagnostics, "诊断数组共享引用（与旧行为一致）");
+    assert.notEqual(second.diagnostics, first.diagnostics, "诊断数组应为拷贝（防御消费者 push 污染进程级状态）");
   });
 
   it("半行拼接：写一半 → 诊断占位 → 补全 → entry 到达", async () => {
@@ -170,6 +178,7 @@ describe("TranscriptReader tail-append 增量读取", () => {
       "拼接后 entry 到达且无重复",
     );
     assert.equal(done.entries[1]?.turnId, "t2");
+    assert.equal(done.diagnostics.length, 0, "半行补全后其 line_invalid 诊断应被治愈（不累积）");
   });
 
   it("增量诊断行号接续文件行号", async () => {
@@ -181,6 +190,106 @@ describe("TranscriptReader tail-append 增量读取", () => {
     const result = await readTranscript(path);
     assert.equal(result.diagnostics.length, 1);
     assert.equal(result.diagnostics[0]?.line, 3, "增量段诊断行号应为文件绝对行号");
+  });
+
+  it("多次增量后诊断行号不漂移（尾空段不算行）", async () => {
+    const path = makeTranscriptPath();
+    writeTranscript(path, [entryLine("s1", 1, "一"), entryLine("s1", 2, "二")]);
+    await readTranscript(path);
+    // 三次追加（每次都 \n 结尾 → 每轮末段为空段）：旧实现每轮 lineCount +1
+    // 漂移，坏行诊断行号逐轮错位；新实现与全量解析一致。
+    writeFileSync(path, entryLine("s1", 3, "三"), { flag: "a" });
+    await readTranscript(path);
+    writeFileSync(path, entryLine("s1", 4, "四"), { flag: "a" });
+    await readTranscript(path);
+    writeFileSync(path, entryLine("s1", 5, "五"), { flag: "a" });
+    await readTranscript(path);
+    writeFileSync(path, "NOT_JSON\n", { flag: "a" });
+    const result = await readTranscript(path);
+    assert.equal(result.diagnostics.length, 1);
+    assert.equal(result.diagnostics[0]?.line, 6, "多次增量后行号仍为文件绝对行号");
+
+    // 对照全量解析同文件
+    const fresh = makeTranscriptPath();
+    writeFileSync(
+      fresh,
+      [
+        entryLine("s1", 1, "一"),
+        entryLine("s1", 2, "二"),
+        entryLine("s1", 3, "三"),
+        entryLine("s1", 4, "四"),
+        entryLine("s1", 5, "五"),
+        "NOT_JSON\n",
+      ].join(""),
+    );
+    const full = await readTranscript(fresh);
+    assert.equal(full.diagnostics[0]?.line, result.diagnostics[0]?.line, "增量与全量诊断行号一致");
+  });
+
+  it("UTF-8 多字节撕裂：半行切在字符中间，补全后内容完整", async () => {
+    const path = makeTranscriptPath();
+    writeTranscript(path, [entryLine("s1", 1, "一")]);
+    await readTranscript(path);
+
+    // 第 2 行含中文，把切片点定在第一个「正」的第 2 字节（多字节字符中间）
+    const line2 = entryLine("s1", 2, "正".repeat(10));
+    const line2Bytes = Buffer.from(line2, "utf8");
+    const firstCharByteStart = Buffer.byteLength(line2.slice(0, line2.indexOf("正")));
+    const cut = firstCharByteStart + 1; // 第一个「正」3 字节中的中间字节
+    writeFileSync(path, line2Bytes.subarray(0, cut), { flag: "a" });
+    const mid = await readTranscript(path);
+    assert.equal(mid.entries.length, 1, "撕裂半行不解析");
+
+    writeFileSync(path, line2Bytes.subarray(cut), { flag: "a" });
+    const done = await readTranscript(path);
+    const text = acceptedInputText(done.entries[1]);
+    assert.equal(text, "正".repeat(10), "拼接后中文字符完整（无 U+FFFD 混入）");
+    assert.ok(!text.includes("�"), "不得包含替换字符");
+    assert.equal(done.diagnostics.length, 0);
+  });
+
+  it("头部指纹守卫：sequence 递增的会话替换（stat 三维全合理）→ 全量重读", async () => {
+    const path = makeTranscriptPath();
+    writeTranscript(path, [entryLine("s1", 1, "旧一"), entryLine("s1", 2, "旧二"), entryLine("s1", 3, "旧三")]);
+    await readTranscript(path);
+    // 替换为另一会话：size 更大、mtime 更新、sequence 单调递增（4,5,6）——
+    // 旧守卫 1/2/3b 全部放行会静默合并两会话条目；头部指纹不同 → 全量。
+    writeTranscript(path, [entryLine("s2", 4, "新四"), entryLine("s2", 5, "新五"), entryLine("s2", 6, "新六")]);
+    const result = await readTranscript(path);
+    assert.deepEqual(
+      result.entries.map(e => e.sequence),
+      [4, 5, 6],
+      "替换后只含新会话条目（不静默合并旧内容）",
+    );
+    assert.equal(result.entries[0]?.sessionId, "s2");
+  });
+
+  it("同 mtime+size 替换：快路径周期校验兜底可见（最迟一个校验周期）", async () => {
+    process.env.SATI_TRANSCRIPT_VERIFY_MS = "50";
+    try {
+      const path = makeTranscriptPath();
+      const original = entryLine("s1", 1, "AAA");
+      writeTranscript(path, [original]);
+      // 先固定 mtime（过去时刻）再读入：state.mtimeMs 精确等于文件 mtime，
+      // 后续覆盖 + utimes 重置同值 → stat 三维完全一致。
+      const fixedMtime = new Date("2020-01-01T00:00:00.000Z");
+      utimesSync(path, fixedMtime, fixedMtime);
+      await readTranscript(path);
+
+      // 同长度覆盖（内容不同）+ mtime 重置：stat 三维完全一致
+      writeFileSync(path, original.replace("AAA", "BBB"));
+      utimesSync(path, fixedMtime, fixedMtime);
+      // 校验周期内：快路径命中返回旧内容（设计行为：最迟一个周期可见）
+      const stale = await readTranscript(path);
+      assert.equal(acceptedInputText(stale.entries[0]), "AAA", "周期内快路径命中（陈旧但一致，非错乱）");
+
+      // 越过校验周期：头部指纹差异 → 全量重读 → 新内容可见
+      await new Promise(resolve => setTimeout(resolve, 80));
+      const fresh = await readTranscript(path);
+      assert.equal(acceptedInputText(fresh.entries[0]), "BBB", "同 mtime+size 替换最迟一个校验周期内可见");
+    } finally {
+      delete process.env.SATI_TRANSCRIPT_VERIFY_MS;
+    }
   });
 
   it("sequence 回退守卫：文件被替换重写 → 全量重读", async () => {

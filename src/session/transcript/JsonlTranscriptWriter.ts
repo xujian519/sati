@@ -66,10 +66,14 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   private pendingBytes = 0;
   /** 与 pendingLines 一一对应的条目落盘 ack（resolve/reject 由所在批次写入完成时触发）。 */
   private pendingAcks: Array<{ resolve: () => void; reject: (error: unknown) => void }> = [];
-  /** 写入串行链：批次按入队顺序落盘；链保持可继续（批次错误经 ack/lastFlushError 传播）。 */
+  /**
+   * 写入串行链：每个 flush 批次 = 链上一个阶段，按入队顺序落盘。链自身保证
+   * 批次串行（后一批在前一批 resolve 后才开始），不需要独立的 flushing 防重入
+   * 标志——去掉标志后 flushCheckpoint 在批次在途时也能把新批次链上并等待链尾，
+   * 修复「flush 中入队的条目在 checkpoint resolve 时仍未落盘」的竞态（#3）。
+   * 链保持可继续：批次错误经 ack/lastFlushError 传播后由 then 的第二参数消费。
+   */
   private writeChain: Promise<void> = Promise.resolve();
-  /** 是否有 flush 批次在途（防重入；链上残留由 flushPending 的 finally 兜底）。 */
-  private flushing = false;
   private flushTimer: ReturnType<typeof setTimeout> | undefined;
   /** 最近一次落盘失败（flushCheckpoint 边界传播一次后清除；条目级错误经 ack 传播）。 */
   private lastFlushError: unknown;
@@ -110,6 +114,11 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
    * 阶段四 T4.1 durable 边界检查点（M3 后为真 flush）：确保此前已接受的
    * 全部条目落盘。TurnRunner 在每组工具副作用前 await（fail-closed：
    * 落盘失败 → 错误传播给该调用方，工具不执行）。幂等，可安全重复调用。
+   *
+   * 竞态说明：flushPending 无在途批次守卫（批次串行由 writeChain 链保证），
+   * 本方法在批次 in-flight 时调用会把当前 pending 链到链尾并返回**链尾**的
+   * promise——等待所有已入队批次（含刚链上的）排空，修复「flush 中入队条目
+   * 在 checkpoint resolve 时仍未落盘」的窗口（检查点后崩溃即丢 durable 边界）。
    */
   flushCheckpoint(): Promise<void> {
     if (this.flushTimer !== undefined) {
@@ -248,7 +257,9 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     this.lastEntryId = entry.entryId ?? this.lastEntryId;
     const line = `${JSON.stringify(entry)}\n`;
     this.pendingLines.push(line);
-    this.pendingBytes += line.length;
+    // UTF-8 字节而非 UTF-16 units：appendFile 以 UTF-8 落盘，units 会把
+    // CJK 内容的阈值晚触发 ~3 倍（64KB 阈值实际缓冲 ~192KB）。
+    this.pendingBytes += Buffer.byteLength(line, "utf8");
     // ack 必须先于 flush 入队：flushPending 会 splice 当前 pendingAcks，
     // 若在其后入队，该条目的 promise 将无人 resolve（永久挂起）。
     const ackPromise = new Promise<void>((resolve, reject) => {
@@ -268,14 +279,16 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     return ackPromise;
   }
 
-  /** 调度一个批次落盘（不 await）。批次 = 当前全部 pending 行，一次 appendFile。 */
+  /**
+   * 调度一个批次落盘（不 await）。批次 = 当前全部 pending 行，一次 appendFile。
+   * 无在途守卫：批次直接链到 writeChain 尾部（链自身保证串行），flush 期间
+   * 新入队的条目被 splice 进下一个批次——flushCheckpoint 返回链尾等待全部排空。
+   */
   private flushPending(): void {
-    if (this.flushing) return; // 在途批次完成后由其 finally 兜底处理新 pending
     const lines = this.pendingLines.splice(0);
     const acks = this.pendingAcks.splice(0);
     this.pendingBytes = 0;
     if (lines.length === 0) return;
-    this.flushing = true;
     this.writeChain = this.writeChain
       .then(async () => {
         if (!this.dirReady) {
@@ -301,11 +314,7 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
           this.lastFlushError = error;
           for (const ack of acks) ack.reject(error);
         },
-      )
-      .finally(() => {
-        this.flushing = false;
-        this.flushPending(); // 链上残留（错误跳过或 flush 期间新入队）继续
-      });
+      );
   }
 
   private scheduleFlushTimer(): void {

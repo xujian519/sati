@@ -34,6 +34,24 @@ const TRANSCRIPT_CACHE_MAX = 32;
 /** tail-append 增量状态上限（path 数，LRU 淘汰）。 */
 const TAIL_STATE_MAX = 64;
 
+/**
+ * 文件头部指纹字节数（替换检测：同 mtime+size 替换 / 换会话 rename）。
+ * 512 覆盖条目身份前缀（sessionId/turnId/sequence/createdAt/entryId）与
+ * 常见正文差异区；同结构仅深正文不同的覆盖主要靠 mtime+size 主守卫，
+ * 指纹是 stat 不可见场景（同长度覆盖 / cp -p 替换）的兜底。
+ */
+const FIRST_BYTES_CHECK = 512;
+/**
+ * 快路径兜底校验周期：mtime+size 未变时热路径 0 IO；同尺寸覆盖（cp -p /
+ * 同长度原地改写）stat 不可见，每周期对头部指纹一次（最迟该周期内可见，
+ * 与旧 5s TTL 语义一致）。默认 5s；SATI_TRANSCRIPT_VERIFY_MS 覆盖（测试
+ * 用短周期验证兜底，每次调用读 env 与 SATI_TRANSCRIPT_TAIL 惯例一致）。
+ */
+function verifyTtlMs(): number {
+  const env = Number.parseInt(process.env.SATI_TRANSCRIPT_VERIFY_MS ?? "", 10);
+  return Number.isFinite(env) && env > 0 ? env : 5_000;
+}
+
 type TranscriptCacheEntry = {
   entries: AgentTranscriptEntry[];
   diagnostics: AgentTranscriptDiagnostic[];
@@ -60,6 +78,10 @@ type TranscriptTailState = {
   lineCount: number;
   /** tail 半行所在的文件行号（有 tail 时；拼接行复用它，避免行号漂移）。 */
   tailLineNumber?: number;
+  /** 上次全量读取时的文件头部 FIRST_BYTES_CHECK 字节（替换检测指纹；空文件为 0 长度）。 */
+  firstBytes: Buffer;
+  /** 上次头部指纹校验时间戳（快路径 5s 兜底，见 VERIFY_TTL_MS）。 */
+  lastVerifyAt: number;
   /** 并发读取串行化链（同 path 一次只跑一个 stat+read 步）。 */
   pending?: Promise<unknown>;
 };
@@ -75,6 +97,8 @@ function getTailState(path: string): TranscriptTailState {
       size: 0,
       tail: Buffer.alloc(0),
       lineCount: 0,
+      firstBytes: Buffer.alloc(0),
+      lastVerifyAt: 0,
     };
     tailStates.set(path, state);
     // LRU 上限：淘汰最久未触摸的 path（getTailState 命中时刷新位置）。
@@ -136,7 +160,17 @@ async function readTailStep(
 
   // 快路径：mtime+size 未变 → 共享元素浅拷贝（0 次文件读取）。
   if (state.entries !== undefined && fileStat.mtimeMs === state.mtimeMs && fileStat.size === state.size) {
-    return { entries: [...state.entries], diagnostics: state.diagnostics };
+    // 兜底校验：同 mtime+size 的替换（cp -p / rsync -t / 同长度原地改写）stat
+    // 不可见，周期性对头部指纹——差异即全量重读（热路径 0 IO 保持，替换最迟
+    // 一个校验周期内可见，与旧 5s TTL 语义一致）。
+    if (Date.now() - state.lastVerifyAt >= verifyTtlMs() && state.firstBytes.length > 0) {
+      const head = await readFirstBytes(path);
+      if (head !== undefined && !head.equals(state.firstBytes)) {
+        return readFullAndCache(path, fileStat, state);
+      }
+      state.lastVerifyAt = Date.now();
+    }
+    return { entries: [...state.entries], diagnostics: [...state.diagnostics] };
   }
 
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_TRANSCRIPT_READ_BYTES;
@@ -172,7 +206,7 @@ async function readTailStep(
 
 /**
  * 增量读取 [上次行边界, EOF)：与遗留半行拼接后解析新行。
- * 失败（读取期间截断 / sequence 回退）返回 undefined → 调用方全量重读。
+ * 失败（读取期间截断 / 头部指纹不匹配 / sequence 回退）返回 undefined → 调用方全量重读。
  */
 async function tryReadIncremental(
   path: string,
@@ -191,6 +225,16 @@ async function tryReadIncremental(
   let bytesRead = 0;
   const handle = await open(path, "r");
   try {
+    // 守卫 3c：头部指纹不匹配 = 文件被替换（换会话 / 路径错误 rename 时
+    // size/mtime/sequence 可能全部"更合理"），静默合并新旧内容会产出错误
+    // 投影 → 全量重读。仅 stat 三维守卫覆盖不了此场景。
+    if (state.firstBytes.length > 0) {
+      const head = Buffer.alloc(FIRST_BYTES_CHECK);
+      const { bytesRead: headRead } = await handle.read(head, 0, FIRST_BYTES_CHECK, 0);
+      if (!head.subarray(0, headRead).equals(state.firstBytes)) {
+        return undefined;
+      }
+    }
     ({ bytesRead } = await handle.read(buffer, 0, length, start));
   } finally {
     await handle.close();
@@ -200,34 +244,48 @@ async function tryReadIncremental(
     return undefined;
   }
 
+  // 字节级切分（按 \n，段尾剥 \r）：半行保留原始字节——字符串 re-encode
+  // 会把多字节字符切开处的撕裂字节变成 U+FFFD（3 字节），拼接后 JSON 内容
+  // 错乱。原始字节拼接后 toString 还原完整字符。
   const combined = Buffer.concat([state.tail, buffer]);
-  const text = combined.toString("utf8");
-  const rawLines = text.split(/\r?\n/);
-  const segmentCount = rawLines.length;
+  const lines = splitBufferLines(combined);
+  const segmentCount = lines.length;
   // 段内第 0 行行号：有遗留半行时复用其占位行号，否则接在已见最后行之后。
   const firstLineNumber = state.tail.length > 0 ? (state.tailLineNumber ?? state.lineCount + 1) : state.lineCount + 1;
-  const lastLineNumber = firstLineNumber + segmentCount - 1;
+  // 尾空段（文件以 \n 结尾）不算行——与 parseTranscript 的 lineCount 语义
+  // 一致，否则增量/全量行号漂移 +1 且每次增量继续累加。
+  const lastLineNumber = firstLineNumber + segmentCount - 1 - (lines[segmentCount - 1]!.length === 0 ? 1 : 0);
 
   const newEntries: AgentTranscriptEntry[] = [];
   const newDiagnostics: AgentTranscriptDiagnostic[] = [];
-  let tail = Buffer.alloc(0);
+  let tail: Buffer | undefined;
   let tailLineNumber: number | undefined;
   for (let index = 0; index < segmentCount; index += 1) {
-    const line = rawLines[index]!;
+    const line = lines[index]!;
     const lineNumber = firstLineNumber + index;
-    if (index === segmentCount - 1 && !line.trim()) {
+    if (index === segmentCount - 1 && line.length === 0) {
       // 段末空段（文件以 \n 结尾）：tail 清空。
       continue;
     }
-    const parsed = parseLine(line, lineNumber);
+    const parsed = parseLine(line.toString("utf8"), lineNumber);
     if (parsed.entry !== undefined) newEntries.push(parsed.entry);
     if (parsed.diagnostic !== undefined) newDiagnostics.push(parsed.diagnostic);
     if (index === segmentCount - 1 && !parsed.complete) {
-      // 段末无 \n 结尾且不是完整 JSON 行 → 半行，保留字节等下一轮拼接。
+      // 段末无 \n 结尾且不是完整 JSON 行 → 半行，保留原始字节等下一轮拼接。
       // （诊断照常记入：本轮看到的不完整行。）
-      tail = Buffer.from(line, "utf8");
+      tail = line;
       tailLineNumber = lineNumber;
     }
+  }
+
+  // 半行补全治愈诊断：上轮遗留 tail 本轮被拼入（无论该行补全成功还是仍是
+  // 坏行），移除其历史 line_invalid 诊断（旧实现每次全量重解析自动治愈；
+  // 增量路径不显式移除会导致未终止行诊断无界累积）。坏行会经 newDiagnostics
+  // 重新记入（同 line 号新实例）。
+  if (state.tail.length > 0 && state.tailLineNumber !== undefined) {
+    state.diagnostics = state.diagnostics.filter(
+      diagnostic => !(diagnostic.code === "transcript_line_invalid" && diagnostic.line === state.tailLineNumber),
+    );
   }
 
   // 守卫 3b：sequence 回退（文件被替换重写 / 旧字节被覆盖）→ 全量重读。
@@ -243,10 +301,48 @@ async function tryReadIncremental(
   state.diagnostics.push(...newDiagnostics);
   state.mtimeMs = fileStat.mtimeMs;
   state.size = start + bytesRead;
-  state.tail = tail;
+  state.tail = tail ?? Buffer.alloc(0);
   state.lineCount = lastLineNumber;
-  state.tailLineNumber = tail.length > 0 ? tailLineNumber : undefined;
-  return { entries: [...existing], diagnostics: state.diagnostics };
+  state.tailLineNumber = tail !== undefined ? tailLineNumber : undefined;
+  // 诊断数组返回拷贝（防御消费者 push/排序污染进程级状态）。
+  return { entries: [...existing], diagnostics: [...state.diagnostics] };
+}
+
+/** 按 \n 字节切分行（保留原始字节，段尾剥 \r；末段无 \n 结尾时为半行候选）。 */
+function splitBufferLines(buffer: Buffer): Buffer[] {
+  const lines: Buffer[] = [];
+  let start = 0;
+  for (let index = 0; index < buffer.length; index += 1) {
+    if (buffer[index] === 0x0a) {
+      lines.push(stripTrailingCR(buffer.subarray(start, index)));
+      start = index + 1;
+    }
+  }
+  lines.push(stripTrailingCR(buffer.subarray(start)));
+  return lines;
+}
+
+function stripTrailingCR(line: Buffer): Buffer {
+  if (line.length > 0 && line[line.length - 1] === 0x0d) {
+    return line.subarray(0, line.length - 1);
+  }
+  return line;
+}
+
+/** 读取文件头部指纹字节（替换检测；失败返回 undefined → 调用方保守全量）。 */
+async function readFirstBytes(path: string): Promise<Buffer | undefined> {
+  try {
+    const handle = await open(path, "r");
+    try {
+      const head = Buffer.alloc(FIRST_BYTES_CHECK);
+      const { bytesRead } = await handle.read(head, 0, FIRST_BYTES_CHECK, 0);
+      return head.subarray(0, bytesRead);
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return undefined;
+  }
 }
 
 /** 全量读取 + 解析，重建状态（首次读取 / 守卫触发 / 回滚均经此）。 */
@@ -255,26 +351,31 @@ async function readFullAndCache(
   fileStat: Stats,
   state: TranscriptTailState,
 ): Promise<AgentTranscriptReadResult> {
-  const content = await readFile(path, "utf8");
-  const result = parseTranscript(content);
+  // 原始字节读取：尾半行与头部指纹必须基于字节（解码字符串 re-encode 会
+  // 把撕裂字节 U+FFFD 编码成 EF BF BD，与增量路径的原始字节拼接后错乱）。
+  const content = await readFile(path);
+  const result = parseTranscript(content.toString("utf8"));
   state.entries = result.entries;
   state.diagnostics = result.diagnostics;
   state.mtimeMs = fileStat.mtimeMs;
   state.size = fileStat.size;
-  // 尾部半行：无 \n 结尾且最后一段不是合法 JSON → 保留字节（该段解析失败
-  // 的诊断已由 parseTranscript 记入；下一轮增量拼接成功后 entry 补达）。
+  // 头部指纹（替换检测；头部 JSON 为 ASCII，解码往返无损）。
+  state.firstBytes = content.subarray(0, FIRST_BYTES_CHECK);
+  state.lastVerifyAt = Date.now();
+  // 尾部半行：无 \n 结尾且最后一段不是合法 JSON → 保留原始字节（该段解析
+  // 失败的诊断已由 parseTranscript 记入；下一轮增量拼接成功后 entry 补达）。
   state.tail = extractTrailingTail(content);
   state.lineCount = result.lineCount;
   state.tailLineNumber = state.tail.length > 0 ? result.lineCount : undefined;
-  return { entries: [...result.entries], diagnostics: result.diagnostics };
+  return { entries: [...result.entries], diagnostics: [...result.diagnostics] };
 }
 
-/** 无 \n 结尾且非完整 JSON 行的尾段字节（否则空）。 */
-function extractTrailingTail(content: string): Buffer {
-  if (content === "" || content.endsWith("\n")) return Buffer.alloc(0);
-  const last = content.slice(content.lastIndexOf("\n") + 1);
-  if (last.trim() === "" || isJsonLine(last)) return Buffer.alloc(0);
-  return Buffer.from(last, "utf8");
+/** 无 \n 结尾且非完整 JSON 行的尾段原始字节（否则空）。 */
+function extractTrailingTail(content: Buffer): Buffer {
+  if (content.length === 0 || content[content.length - 1] === 0x0a) return Buffer.alloc(0);
+  const last = stripTrailingCR(content.subarray(content.lastIndexOf(0x0a) + 1));
+  if (last.length === 0 || isJsonLine(last.toString("utf8"))) return Buffer.alloc(0);
+  return last;
 }
 
 type ParsedLine = {

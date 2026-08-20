@@ -1916,6 +1916,9 @@ class ProjectRuntimeRegistry {
               handle.writer.recordAcceptedInput(sessionId, turnId, messages),
             recordDurableMessage: (sessionId, turnId, message) =>
               handle.writer.recordDurableMessage(sessionId, turnId, message),
+            // 子代理收尾时排空 sidechain 写缓冲：sidechain 无 turn_result 强制
+            // flush，仅靠 50ms 兜底定时器（unref）——进程在间隔内退出丢尾条。
+            flush: () => handle.writer.flushCheckpoint(),
             transcriptRelativePath: storage.transcript.relativeSubagentPath(subagentId),
           };
         },
