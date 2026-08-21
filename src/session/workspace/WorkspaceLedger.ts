@@ -247,8 +247,7 @@ function applyCoreEdit(state: WorkspaceLedgerState, note: WorkspaceNoteInput, re
   const live = state.core.filter(entry => entry.live);
   const parked = state.core.filter(entry => !entry.live);
   const slotIndex = note.coreSlot - 1;
-  const alreadyLive = state.core.some(entry => entry.text === text && entry.live);
-  if (alreadyLive) {
+  if (live.some(entry => entry.text === text)) {
     rejected.push("that core entry is already live.");
     return;
   }
@@ -259,12 +258,13 @@ function applyCoreEdit(state: WorkspaceLedgerState, note: WorkspaceNoteInput, re
   // Promote the entry into a live slot. Drop any parked copy so promoting a
   // parked concept never leaves a duplicate, and demote the displaced live
   // entry (live:false) so the "at most two live" invariant holds.
+  const newEntry: WorkspaceCoreEntry = { text, live: true };
   const parkedWithout = parked.filter(entry => entry.text !== text);
   const displaced = live[slotIndex];
   if (slotIndex === live.length) {
-    state.core = [...live, { text, live: true }, ...parkedWithout];
+    state.core = [...live, newEntry, ...parkedWithout];
   } else if (displaced !== undefined) {
-    const nextLive = live.map((entry, index) => (index === slotIndex ? { text, live: true } : entry));
+    const nextLive = live.map((entry, index) => (index === slotIndex ? newEntry : entry));
     state.core = [...nextLive, ...parkedWithout, { ...displaced, live: false }];
   }
 }
