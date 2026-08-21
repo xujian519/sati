@@ -70,17 +70,6 @@ function toolPairSafeTruncate(
     cutIndex++;
   }
 
-  // Also skip if we'd start on an assistant message with tool_calls
-  // whose results come right after — include the whole tool exchange.
-  // But check: if the message at cutIndex is assistant with tool_calls,
-  // we should include it only if the *following* message has matching results.
-  // Since we want to *drop* earlier messages, move cut forward past the
-  // tool exchange.
-  // If the cut would land on an assistant message with tool_calls, the
-  // previous message is the one we'd be orphaning — but we've already moved
-  // past its results, so no action is needed here.
-  void cutIndex;
-
   const sliced = messages.slice(cutIndex);
   return { messages: sliced, droppedCount: cutIndex };
 }

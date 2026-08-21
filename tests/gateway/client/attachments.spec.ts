@@ -58,7 +58,7 @@ test("attachments: collectRegisteredAttachmentReadFiles 收集真实文件、跳
 
 test("attachments: attachmentsToContentBlocks image/text 直通、无附件空结果", async () => {
   const empty = await attachmentsToContentBlocks(undefined);
-  assert.deepEqual(empty, { blocks: [], directContentPaths: new Set(), hasDiagnostics: false });
+  assert.deepEqual(empty, { blocks: [], hasDiagnostics: false });
 
   const image = await attachmentsToContentBlocks([
     { type: "image", content: "aGVsbG8=", mimeType: "image/png", bytes: 5 },

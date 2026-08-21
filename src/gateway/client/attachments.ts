@@ -147,14 +147,12 @@ export async function collectRegisteredAttachmentReadFiles(
 
 export async function attachmentsToContentBlocks(
   attachments: ChannelAttachment[] | undefined,
-): Promise<{ blocks: CanonicalContentBlock[]; directContentPaths: Set<string>; hasDiagnostics: boolean }> {
+): Promise<{ blocks: CanonicalContentBlock[]; hasDiagnostics: boolean }> {
   if (!attachments || attachments.length === 0) {
-    return { blocks: [], directContentPaths: new Set<string>(), hasDiagnostics: false };
+    return { blocks: [], hasDiagnostics: false };
   }
   const blocks: CanonicalContentBlock[] = [];
   const resolverRequests: AttachmentRequest[] = [];
-  const resolverRequestPaths: Array<string | undefined> = [];
-  const directContentPaths = new Set<string>();
   const diagnostics: string[] = [];
 
   for (const att of attachments) {
@@ -166,7 +164,6 @@ export async function attachmentsToContentBlocks(
         mimeType: att.mimeType,
         ...(typeof att.bytes === "number" ? { bytes: att.bytes } : {}),
       });
-      if (att.path) directContentPaths.add(resolve(att.path));
       continue;
     }
 
@@ -178,13 +175,10 @@ export async function attachmentsToContentBlocks(
     if (!att.path) continue;
     if (att.type === "image" || att.mimeType?.startsWith("image/")) {
       resolverRequests.push({ type: "image", path: att.path, mimeType: att.mimeType });
-      resolverRequestPaths.push(resolve(att.path));
     } else if (att.mimeType === "application/pdf" || att.path.toLowerCase().endsWith(".pdf")) {
       resolverRequests.push({ type: "pdf", path: att.path });
-      resolverRequestPaths.push(resolve(att.path));
     } else {
       resolverRequests.push({ type: "file", path: att.path });
-      resolverRequestPaths.push(resolve(att.path));
     }
   }
 
@@ -196,11 +190,6 @@ export async function attachmentsToContentBlocks(
         diagnostics.push(diagnostic.message);
       }
     }
-    if (resolved.blocks.length > 0 && diagnostics.length === 0) {
-      for (const requestPath of resolverRequestPaths) {
-        if (requestPath) directContentPaths.add(requestPath);
-      }
-    }
   }
 
   if (diagnostics.length > 0) {
@@ -210,5 +199,5 @@ export async function attachmentsToContentBlocks(
     });
   }
 
-  return { blocks, directContentPaths, hasDiagnostics: diagnostics.length > 0 };
+  return { blocks, hasDiagnostics: diagnostics.length > 0 };
 }

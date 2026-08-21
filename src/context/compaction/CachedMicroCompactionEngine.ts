@@ -74,8 +74,6 @@ export type CachedMicroCompactionOptions = {
  *   M5 Disabled by default; gated on `sati.context.cachedMicrocompactEnabled`.
  *   M6 Cache breakpoint goes on the message *immediately preceding* the
  *      eligible tool_result message, not on the eligible message itself.
- *   M7 `validateCacheHit(usage)` returns true when `cacheReadTokens > 0`,
- *      surfacing whether the breakpoint actually produced a hit.
  */
 export class CachedMicroCompactionEngine {
   private readonly enabled: boolean;
