@@ -272,3 +272,27 @@ test("engine: nodeDurations 覆盖并行超步与中断节点", async () => {
     ["entry", "gate", "p1", "p2"],
   );
 });
+
+test("engine: failFast 早退与 maxSteps 耗尽时 nodeDurations 仍存在", async () => {
+  const failing = async (): Promise<GraphState> => {
+    throw new Error("boom");
+  };
+  const failFastBuilder = new GraphBuilder();
+  failFastBuilder.addNode("failing", failing).addNode("ok", node("done", true)).addEdge("failing", "ok");
+  const failFastResult = await failFastBuilder.compile("failing").run({}, { failFast: true });
+  assert.equal(failFastResult.completed, false);
+  assert.ok(Array.isArray(failFastResult.nodeDurations));
+  assert.deepEqual(
+    failFastResult.nodeDurations?.map(d => d.node),
+    ["failing"],
+  );
+
+  const loopBuilder = new GraphBuilder();
+  loopBuilder.addNode("loop", node("n", 1)).setConditionalEdge("loop", async () => ["loop"]);
+  const loopResult = await loopBuilder.compile("loop", 5).run({});
+  assert.equal(loopResult.completed, false);
+  assert.ok(Array.isArray(loopResult.nodeDurations));
+  // 受控循环：loop 节点 5 个超步各执行一次，nodeDurations 保留每次执行的耗时记录。
+  assert.equal(loopResult.nodeDurations?.length, 5);
+  assert.ok(loopResult.nodeDurations?.every(d => d.node === "loop"));
+});

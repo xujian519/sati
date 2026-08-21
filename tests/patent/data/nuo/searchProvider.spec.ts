@@ -99,6 +99,21 @@ test("multiSource: 按 url 去重（跨源重复命中只保留一条）", async
   assert.deepEqual(docs.map(d => d.url).sort(), ["https://x/patent/1", "https://x/patent/2"]);
 });
 
+test("multiSource: 无 url 命中按 title 回退去重", async () => {
+  const a = async () => [{ title: "同题", snippet: "s1" }];
+  const b = async () => [
+    { title: "同题", snippet: "s2" },
+    { title: "另一篇", snippet: "s3" },
+  ];
+  const provider = createMultiSourceSearchProvider([a, b]);
+  const docs = await provider.search!("q", { maxResults: 10 });
+  assert.equal(docs.length, 2);
+  assert.deepEqual(
+    docs.map(d => d.title),
+    ["同题", "另一篇"],
+  );
+});
+
 test("multiSource: 单源失败 fail-open（其他源结果保留）", async () => {
   const ok = async () => [sourceDoc("https://x/ok", "OK")];
   const failing = async () => {

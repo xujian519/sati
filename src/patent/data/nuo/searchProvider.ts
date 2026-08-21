@@ -98,15 +98,25 @@ function dedupeSearchHits(
  * - 查询直接透传（arXiv 对自由文本包 `all:`、OpenAlex 自行解析），不做过早的
  *   跨源查询改写；paper 源定位为专利检索的补充检索面。
  * - 单 connector 失败 fail-open（返回空列表），与检索降级语义一致。
+ * - 叠加整体截止时限：挂死的源在超时后按 fail-open 处理，避免把检索段拖到
+ *   分钟级（阶段 1 目标：并行把耗时降到最慢源，而非被最慢源拖垮）。
  * - publication_date 暂不映射（ConnectorHit 无标准日期字段，后续按 extra 增强）。
+ * - 结果内部也按 maxResults 截断（本源可被单独注入为 StageProvider.search）。
  */
+
+/** paper 源单次检索的截止时限（ms）。文献连接器默认 30s 超时 × 重试，这里收得更紧。 */
+const PAPER_SOURCE_TIMEOUT_MS = 15_000;
+
 export function createPaperSearchSource(registry: ConnectorRegistry): SearchSource {
   return async (query, opts) => {
     const maxResults = opts?.maxResults ?? 5;
     const results = await Promise.all(
       registry.all().map(async connector => {
         try {
-          const hits = await connector.search(query, { limit: maxResults });
+          const hits = await connector.search(query, {
+            limit: maxResults,
+            signal: AbortSignal.timeout(PAPER_SOURCE_TIMEOUT_MS),
+          });
           return hits.map(h => ({
             title: h.title,
             snippet: h.summary ?? "",
@@ -117,6 +127,6 @@ export function createPaperSearchSource(registry: ConnectorRegistry): SearchSour
         }
       }),
     );
-    return results.flat();
+    return dedupeSearchHits(results.flat(), maxResults);
   };
 }

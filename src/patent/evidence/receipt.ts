@@ -58,11 +58,15 @@ export class Ledger {
 /**
  * TeamLedger：团队共享证据账本（阶段 2）。
  *
- * 继承 Ledger 的 turn 级内存语义，并把每条 Receipt 追加到团队共享 JSONL 文件
+ * 继承 Ledger 的内存语义，并把每条 Receipt 追加到团队共享 JSONL 文件
  * （路径由调用方注入，如 {caseOutputsDir}/{teamId}/evidence-ledger.jsonl）——
  * 成员各自 record、团队统一可见。按 toolCallId 去重（resume/重放不重复写）。
- * reset() 覆写为「从文件刷新视图」而非清空共享账本，对齐 EvidenceExtension
- * 每 turn 调用 startTurn 的契约，同时保留其他成员已落盘的历史。
+ *
+ * 语义说明（与 turn 级 Ledger 的差异）：list()/byTool() 返回的是**团队全量历史**
+ * （构造时从文件加载 + 本次 record），而非"本轮做过什么"。reset() 覆写为
+ * 「从文件刷新视图」而非清空——供 EvidenceExtension 每 turn 调 startTurn 时
+ * 同步其他成员新落盘的证据；消费方需要"本轮"视图时按 turnId 过滤。
+ * 落盘失败的回执仅内存可见（warn），reset 后不再保留——审计侧以文件为准。
  */
 export class TeamLedger extends Ledger {
   private readonly filePath: string;
@@ -82,8 +86,8 @@ export class TeamLedger extends Ledger {
       mkdirSync(dirname(this.filePath), { recursive: true });
       appendFileSync(this.filePath, JSON.stringify(receipt) + "\n", "utf8");
     } catch (err) {
-      // 落盘失败不阻断工具执行（内存账本已记录；审计侧降级为 warn）。
-      console.warn(`[sati] 团队证据账本落盘失败（内存已记录）: ${this.filePath}`, err);
+      // 落盘失败不阻断工具执行（内存已记录、本 turn 可见；reset 后不保留，审计侧以文件为准）。
+      console.warn(`[sati] 团队证据账本落盘失败（仅内存可见）: ${this.filePath}`, err);
     }
   }
 
@@ -95,10 +99,20 @@ export class TeamLedger extends Ledger {
 
   private load(): void {
     if (!existsSync(this.filePath)) return;
-    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
+    let text: string;
+    try {
+      text = readFileSync(this.filePath, "utf8");
+    } catch (err) {
+      // 读取失败按空账本降级（不阻断成员会话启动；审计侧 warn）。
+      console.warn(`[sati] 团队证据账本读取失败（按空账本继续）: ${this.filePath}`, err);
+      return;
+    }
+    for (const line of text.split("\n")) {
       if (line.trim().length === 0) continue;
       try {
         const receipt = JSON.parse(line) as Receipt;
+        // 缺 toolCallId 的坏行跳过（防 undefined 入 seenIds/账本）。
+        if (typeof receipt.toolCallId !== "string") continue;
         if (this.seenIds.has(receipt.toolCallId)) continue;
         this.seenIds.add(receipt.toolCallId);
         this.receipts.push(receipt);
