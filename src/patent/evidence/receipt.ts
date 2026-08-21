@@ -125,13 +125,7 @@ export class TeamLedger extends Ledger {
     if (this.seenIds.has(receipt.toolCallId)) return;
     this.seenIds.add(receipt.toolCallId);
     super.record(receipt);
-    try {
-      mkdirSync(dirname(this.filePath), { recursive: true });
-      appendFileSync(this.filePath, JSON.stringify(receipt) + "\n", "utf8");
-    } catch (err) {
-      // 落盘失败不阻断工具执行（内存已记录、本 turn 可见；reset 后不保留，审计侧以文件为准）。
-      console.warn(`[sati] 团队证据账本落盘失败（仅内存可见）: ${this.filePath}`, err);
-    }
+    this.appendLine(JSON.stringify(receipt), "团队证据账本");
   }
 
   /** 声明一条团队证据立场（追加到共享账本；同成员+结论+方向+来源去重）。 */
@@ -140,13 +134,7 @@ export class TeamLedger extends Ledger {
     if (this.seenDeclarations.has(key)) return;
     this.seenDeclarations.add(key);
     this.declarations.push(declaration);
-    try {
-      mkdirSync(dirname(this.filePath), { recursive: true });
-      appendFileSync(this.filePath, JSON.stringify(declaration) + "\n", "utf8");
-    } catch (err) {
-      // 与 record 相同的降级语义：内存可见、reset 后不保留，审计侧以文件为准。
-      console.warn(`[sati] 团队证据声明落盘失败（仅内存可见）: ${this.filePath}`, err);
-    }
+    this.appendLine(JSON.stringify(declaration), "团队证据声明");
   }
 
   listDeclarations(): TeamEvidenceDeclaration[] {
@@ -167,32 +155,47 @@ export class TeamLedger extends Ledger {
       if (d.sourceUri !== undefined) bySource.set(d.sourceUri, [...(bySource.get(d.sourceUri) ?? []), d]);
     }
     for (const [claimId, decls] of byClaim) {
-      const supporting = [...new Set(decls.filter(d => d.direction === "supporting").map(d => d.memberId))];
-      const contradicting = [...new Set(decls.filter(d => d.direction === "contradicting").map(d => d.memberId))];
-      if (supporting.length > 0 && contradicting.length > 0) {
-        conflicts.push({
-          type: "claim",
-          subject: claimId,
-          supporting,
-          contradicting,
-          description: `结论 "${claimId}" 在团队内同时被声明为支持与矛盾，存在立场分叉，需队长关注`,
-        });
-      }
+      const conflict = this.conflictFromGroup(
+        "claim",
+        claimId,
+        decls,
+        `结论 "${claimId}" 在团队内同时被声明为支持与矛盾，存在立场分叉，需队长关注`,
+      );
+      if (conflict !== undefined) conflicts.push(conflict);
     }
     for (const [sourceUri, decls] of bySource) {
-      const supporting = [...new Set(decls.filter(d => d.direction === "supporting").map(d => d.memberId))];
-      const contradicting = [...new Set(decls.filter(d => d.direction === "contradicting").map(d => d.memberId))];
-      if (supporting.length > 0 && contradicting.length > 0) {
-        conflicts.push({
-          type: "source",
-          subject: sourceUri,
-          supporting,
-          contradicting,
-          description: `来源 "${sourceUri}" 被不同成员同时引为支持与矛盾，来源可信度存疑`,
-        });
-      }
+      const conflict = this.conflictFromGroup(
+        "source",
+        sourceUri,
+        decls,
+        `来源 "${sourceUri}" 被不同成员同时引为支持与矛盾，来源可信度存疑`,
+      );
+      if (conflict !== undefined) conflicts.push(conflict);
     }
     return conflicts;
+  }
+
+  /** 追加一行到共享账本文件（落盘失败降级为仅内存可见，warn 提示；审计侧以文件为准）。 */
+  private appendLine(line: string, label: string): void {
+    try {
+      mkdirSync(dirname(this.filePath), { recursive: true });
+      appendFileSync(this.filePath, line + "\n", "utf8");
+    } catch (err) {
+      console.warn(`[sati] ${label}落盘失败（仅内存可见）: ${this.filePath}`, err);
+    }
+  }
+
+  /** 声明分组 → 冲突（支持与矛盾并存才构成冲突；两侧成员按 id 去重）。 */
+  private conflictFromGroup(
+    type: TeamEvidenceConflict["type"],
+    subject: string,
+    decls: TeamEvidenceDeclaration[],
+    description: string,
+  ): TeamEvidenceConflict | undefined {
+    const supporting = [...new Set(decls.filter(d => d.direction === "supporting").map(d => d.memberId))];
+    const contradicting = [...new Set(decls.filter(d => d.direction === "contradicting").map(d => d.memberId))];
+    if (supporting.length === 0 || contradicting.length === 0) return undefined;
+    return { type, subject, supporting, contradicting, description };
   }
 
   override reset(): void {
