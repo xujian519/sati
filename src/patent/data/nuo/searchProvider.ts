@@ -91,6 +91,26 @@ function dedupeSearchHits(
   return out;
 }
 
+/** title 归一化（小写 + 去空白/标点/符号）：跨库论文去重的键（同一论文多库收录时 title 一致）。 */
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+}
+
+/** 按归一化 title 去重，保持首现顺序（不截断）。 */
+function dedupeByNormalizedTitle(
+  hits: Array<{ title: string; snippet: string; url?: string; publication_date?: string }>,
+): Array<{ title: string; snippet: string; url?: string; publication_date?: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ title: string; snippet: string; url?: string; publication_date?: string }> = [];
+  for (const hit of hits) {
+    const key = normalizeTitle(hit.title);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(hit);
+  }
+  return out;
+}
+
 /**
  * 学术文献检索源（阶段 1b）：把 literature 域的全部 Connector（arXiv/OpenAlex/
  * Semantic Scholar/Crossref）并行检索，归一化为 StageProvider.search 命中形状。
@@ -101,7 +121,8 @@ function dedupeSearchHits(
  * - 叠加整体截止时限：挂死的源在超时后按 fail-open 处理，避免把检索段拖到
  *   分钟级（阶段 1 目标：并行把耗时降到最慢源，而非被最慢源拖垮）。
  * - publication_date 暂不映射（ConnectorHit 无标准日期字段，后续按 extra 增强）。
- * - 结果内部也按 maxResults 截断（本源可被单独注入为 StageProvider.search）。
+ * - 结果内部先按归一化 title 去重（同一论文多库收录，url 跨源不同）再按 url
+ *   去重并截断到 maxResults（本源可被单独注入为 StageProvider.search）。
  */
 
 /** paper 源单次检索的截止时限（ms）。文献连接器默认 30s 超时 × 重试，这里收得更紧。 */
@@ -127,6 +148,6 @@ export function createPaperSearchSource(registry: ConnectorRegistry): SearchSour
         }
       }),
     );
-    return dedupeSearchHits(results.flat(), maxResults);
+    return dedupeSearchHits(dedupeByNormalizedTitle(results.flat()), maxResults);
   };
 }

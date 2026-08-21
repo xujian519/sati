@@ -458,12 +458,21 @@ function renderGraphResultText(opts: {
       return `- ${key}: ${preview}`;
     });
   const degraded = opts.result.degraded.map(d => `- ${d.severity} [${d.reason}] ${d.message}`);
-  // 节点耗时（阶段 0 检索耗时测量）：按耗时降序，辅助识别检索段 vs LLM 段耗时占比。
-  // resume 续跑只统计本次执行段（中断前的节点耗时未并入）。
-  const durations = (opts.result.nodeDurations ?? [])
-    .slice()
-    .sort((a, b) => b.durationMs - a.durationMs)
-    .map(d => `- ${d.node}: ${d.durationMs}ms`);
+  // 节点耗时（阶段 0 检索耗时测量）：按节点名聚合（受控循环/反思回路下同节点多超步执行），
+  // 按总耗时降序，辅助识别检索段 vs LLM 段耗时占比。resume 续跑只统计本次执行段。
+  const durationByName = new Map<string, { count: number; totalMs: number }>();
+  for (const d of opts.result.nodeDurations ?? []) {
+    const entry = durationByName.get(d.node) ?? { count: 0, totalMs: 0 };
+    entry.count += 1;
+    entry.totalMs += d.durationMs;
+    durationByName.set(d.node, entry);
+  }
+  const durations = [...durationByName.entries()]
+    .sort((a, b) => b[1].totalMs - a[1].totalMs)
+    .map(([node, { count, totalMs }]) => {
+      const mean = count > 0 ? Math.round(totalMs / count) : 0;
+      return count > 1 ? `- ${node}: ${count} 次，总 ${totalMs}ms，均值 ${mean}ms` : `- ${node}: ${totalMs}ms`;
+    });
   return [
     `patent_workflow_run(graph=${opts.graph}): 图引擎执行 ${opts.result.steps} 超步，完成状态: ${completion}`,
     ...keyLines,

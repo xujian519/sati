@@ -181,3 +181,21 @@ test("paperSource: 单 connector 失败 fail-open（其余源结果保留）", a
   assert.equal(docs.length, 1);
   assert.equal(docs[0]!.title, "Paper A");
 });
+
+test("paperSource: 同一论文多库收录按归一化 title 去重（url 跨源不同不判重）", async () => {
+  const registry = new ConnectorRegistry();
+  registry.register(
+    mockConnector("arxiv", [{ id: "a1", title: "Attention Is All You Need", url: "https://arxiv.org/abs/1706.03762" }]),
+  );
+  registry.register(
+    mockConnector("crossref", [{ id: "c1", title: "Attention Is All You Need", url: "https://doi.org/10.5555/123" }]),
+  );
+  registry.register(mockConnector("openalex", [{ id: "o1", title: "Another Paper", url: "https://openalex.org/o1" }]));
+  const source = createPaperSearchSource(registry);
+  const docs = await source("transformer attention", { maxResults: 10 });
+  assert.equal(docs.length, 2);
+  assert.deepEqual(
+    docs.map(d => d.title),
+    ["Attention Is All You Need", "Another Paper"],
+  );
+});
