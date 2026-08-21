@@ -32,6 +32,7 @@ import test from "node:test";
 import { createLocalGateway, type CreateLocalGatewayResult } from "../../../../src/cli/createLocalGateway.js";
 import { TeamDb, createTeamMember, memberSessionKey, type TeamScheduler } from "../../../../src/agent/team/index.js";
 import type { TeamEventEmitter } from "../../../../src/agent/team/protocol/events.js";
+import { WorkerRegistry, defaultPatentWorkers } from "../../../../src/patent/index.js";
 import { SESSION_PRESENCE_GRACE_MS } from "../../../../src/gateway/server/sessionPresence.js";
 import type { ModelRuntime } from "../../../../src/model/index.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../../../../src/model/protocol/capabilities.js";
@@ -258,12 +259,12 @@ function retryThenCompleteModel(
 }
 
 /** 团队工具 factory 直调（事件链路由 emit 用 no-op，由 gateway 集成用例覆盖）。 */
-function makeTools(db: TeamDb, scheduler: TeamScheduler) {
+function makeTools(db: TeamDb, scheduler: TeamScheduler, workerRegistry?: WorkerRegistry) {
   const emit: TeamEventEmitter = () => true;
   return {
     teamCreate: createTeamCreateTool({ db, scheduler, emit }),
     teamAddMember: createTeamAddMemberTool({ db, scheduler, emit }),
-    teamCreateTask: createTeamCreateTaskTool({ db, scheduler, emit }),
+    teamCreateTask: createTeamCreateTaskTool({ db, scheduler, emit, workerRegistry }),
     teamUpdateTask: createTeamUpdateTaskTool({ db, scheduler, emit }),
     teamArchive: createTeamArchiveTool({ db, scheduler, emit }),
   };
@@ -622,6 +623,74 @@ test("失败任务自动转派：成员回合置 failed（未耗尽）→ 调度
     const text = JSON.stringify(acceptedInput);
     assert.match(text, /Attempt: 2/, "m2 assignmentPrompt 含 attempt 2");
     assert.match(text, new RegExp(`Attempt id: ${final.attemptId}`), "m2 assignmentPrompt 含新 attemptId");
+  } finally {
+    await disposeGateway(result, root);
+  }
+});
+
+test("team_create_task：workerName 存在性校验（阶段 3）", async () => {
+  const { result, root } = await makeGateway("worker-name-check", textOnlyModel);
+  const teamDb = result.teamSubsystem.db;
+  const teamScheduler = result.teamSubsystem.scheduler;
+  const registry = new WorkerRegistry();
+  for (const w of defaultPatentWorkers()) registry.register(w);
+  const tools = makeTools(teamDb, teamScheduler, registry);
+  const captainCtx = { sessionId: CAPTAIN_SESSION } as never;
+  try {
+    const created = await tools.teamCreate.execute({ name: "worker 校验团队" }, captainCtx);
+    const teamId = created.data!.teamId;
+
+    // 已注册 workerName：任务创建通过。
+    const ok = await tools.teamCreateTask.execute(
+      { teamId, subject: "检索对比文件", workerName: "patent-search-commander" },
+      captainCtx,
+    );
+    assert.equal(ok.data!.status, "pending");
+
+    // 未注册 workerName：创建被拒（invalid_tool_input）。
+    await assert.rejects(
+      () => tools.teamCreateTask.execute({ teamId, subject: "幽灵 worker", workerName: "no_such_worker" }, captainCtx),
+      /worker 未注册/,
+    );
+  } finally {
+    await disposeGateway(result, root);
+  }
+});
+
+test("team_archive：归档返回材料清单（阶段 4，供 briefing 生成）", async () => {
+  registerRoleDefinition({
+    id: ROLE_SLUG,
+    description: "专利检索型团队成员（归档材料集成测试显式注册）",
+    allowedTools: ["*"],
+    visibleDomains: ["patent", "search", "team"],
+    omitProjectInstructions: false,
+    omitGitStatus: false,
+    isReadOnly: false,
+    systemPromptSuffix: "",
+  });
+  const { result, root } = await makeGateway("archive-materials", textOnlyModel);
+  const teamDb = result.teamSubsystem.db;
+  const teamScheduler = result.teamSubsystem.scheduler;
+  const tools = makeTools(teamDb, teamScheduler);
+  const captainCtx = { sessionId: CAPTAIN_SESSION } as never;
+  try {
+    const created = await tools.teamCreate.execute({ name: "归档材料团队" }, captainCtx);
+    const teamId = created.data!.teamId;
+    await tools.teamAddMember.execute({ teamId, roleSlug: ROLE_SLUG }, captainCtx);
+    await tools.teamCreateTask.execute(
+      { teamId, subject: "检索对比文件", workerName: "patent-search-commander" },
+      captainCtx,
+    );
+
+    const archived = await tools.teamArchive.execute({ teamId }, captainCtx);
+    const first = archived.content[0]!;
+    const text = first.type === "text" ? first.text : "";
+    assert.match(text, /【归档材料清单】/);
+    assert.match(text, /成员（1）/);
+    assert.match(text, /任务（1）/);
+    assert.match(text, /检索对比文件/);
+    assert.match(text, /worker: patent-search-commander/);
+    assert.equal(archived.data!.archived, true);
   } finally {
     await disposeGateway(result, root);
   }
