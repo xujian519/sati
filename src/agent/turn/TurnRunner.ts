@@ -37,6 +37,8 @@ export type TurnRunnerOptions = {
   abortSignal?: AbortSignal;
   /** Synthetic messages appended after user input; stored with metadata.synthetic flag. */
   syntheticMessages?: CanonicalMessage[];
+  /** 本回合系统提示追加段（如团队成员角色提示）；透传给 AgentLoop。 */
+  appendSystemPrompt?: string;
 };
 
 export type TurnRunnerResult = {
@@ -256,6 +258,7 @@ export class TurnRunner {
         allowPlanModeTools: options.allowPlanModeTools,
         canPrompt: options.canPrompt,
         permissionRules: options.permissionRules,
+        appendSystemPrompt: options.appendSystemPrompt,
         abortSignal: options.abortSignal,
         onDurableMessage: msg => this.persistDurableMessage(options.sessionId, options.turnId, msg),
         onAgentStatusMessage: async status => {

@@ -47,6 +47,11 @@ export type AgentLoopInput = {
    * 全部已接受条目落盘。失败即中止本步（fail-closed）；未接线时 no-op。
    */
   onFlushCheckpoint?: () => void | Promise<void>;
+  /**
+   * 本回合系统提示追加段（turn 级，如团队成员角色提示）：追加在组装好的
+   * 系统提示末尾，不替换默认提示；与 planTodo addendum 并存（两者均追加）。
+   */
+  appendSystemPrompt?: string;
 };
 
 export type AgentInput =
@@ -72,4 +77,6 @@ export type AgentSubmitOptions = {
    * visible to the model but filtered out of the Web UI display.
    */
   syntheticMessages?: import("../../model/index.js").CanonicalMessage[];
+  /** 本回合系统提示追加段（如团队成员角色提示）；透传给 TurnRunner/AgentLoop。 */
+  appendSystemPrompt?: string;
 };

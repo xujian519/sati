@@ -8,6 +8,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { createLocalGateway } from "../../../src/cli/createLocalGateway.js";
 import { createTeamMember, wakeMember, type TeamTaskRow } from "../../../src/agent/team/index.js";
+import { registerRoleDefinition, unregisterRoleDefinition } from "../../../src/agent/sub/builtinSubagentTypes.js";
 import type { ModelRuntime } from "../../../src/model/index.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../../../src/model/protocol/capabilities.js";
 
@@ -31,6 +32,17 @@ test("集成：成员唤醒经 submitTurn 整条链产出转录，冷恢复可�
     ].join("\n"),
     "utf8",
   );
+  // 注册角色：成员 roleSlug 命中后注入角色系统提示，fake model 捕获系统提示做端到端断言
+  registerRoleDefinition({
+    id: "patent-searcher",
+    description: "专利检索角色",
+    allowedTools: ["*"],
+    omitProjectInstructions: false,
+    omitGitStatus: false,
+    isReadOnly: false,
+    systemPromptSuffix: "你是专利检索专家，检索前先拆解权利要求。",
+  });
+  const capturedSystemPrompts: string[] = [];
   const result = createLocalGateway({
     projectRoot: root,
     pilotHome: root,
@@ -38,7 +50,8 @@ test("集成：成员唤醒经 submitTurn 整条链产出转录，冷恢复可�
     env: {},
     __testModelFactory: (): ModelRuntime => ({
       // 一次工具调用也不做的单轮模型：直接产出文本后结束
-      stream: async function* () {
+      stream: async function* (request) {
+        capturedSystemPrompts.push(request.systemPrompt ?? "");
         yield { type: "text_delta", text: "已完成检索。" };
       },
       complete: async () => {
@@ -87,8 +100,16 @@ test("集成：成员唤醒经 submitTurn 整条链产出转录，冷恢复可�
     // 健康成员不会被冷恢复误扫（走接线面句柄，覆盖 hasPendingApprovals 闭包与日志路径）
     const scan = await team.runMemberScan();
     assert.equal(scan.resumed, 0);
+
+    // M5：角色系统提示经 submitTurn → session.submit → TurnRunner → AgentLoop
+    // 整条链追加到模型请求系统提示（成员不裁剪工具，仅注入角色提示）
+    assert.ok(
+      capturedSystemPrompts.some(p => p.includes("你是专利检索专家，检索前先拆解权利要求。")),
+      "成员回合模型请求的系统提示应包含已注册角色的 systemPromptSuffix",
+    );
   } finally {
     result.dispose();
+    unregisterRoleDefinition("patent-searcher");
     await rm(root, { recursive: true, force: true });
   }
 });

@@ -109,6 +109,7 @@ export class AgentSession {
       canPrompt: submitOptions.canPrompt,
       permissionRules: submitOptions.permissionRules,
       syntheticMessages: submitOptions.syntheticMessages,
+      appendSystemPrompt: submitOptions.appendSystemPrompt,
       abortSignal: this.state.abortController.signal,
     });
 
