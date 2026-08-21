@@ -61,8 +61,8 @@
 | C02 | src/cli | 15/5.3K；createLocalGateway.ts 1942、sati.ts 1021（console 热点 54 处） | ✅ 2026-08-18 |
 | C03 | src/model/catalog | providers.ts 1766 | ✅ 2026-08-20 |
 | C04 | src/model 其余 | streaming/streamModel.ts 995、embedding、resolveModelInfo | ✅ 2026-08-20 |
-| C05 | src/gateway | 32/5.9K；InProcessGateway.ts 1057、protocol/server | ⬜ |
-| C06 | src/context 非 memory | projection、budget、compression、vectors | ⬜ |
+| C05 | src/gateway | 32/5.9K；InProcessGateway.ts 1057、protocol/server | ✅ 2026-08-21 |
+| C06 | src/context 非 memory | projection、budget、compression、vectors | ✅ 2026-08-21 |
 | C07 | src/context/memory 主包 | EdgeClawMemoryProvider 等（不含子包） | ⬜ |
 | C08 | edgeclaw-memory-core 子包 | sqlite.ts 1716、llm-extraction.ts 1573、file-memory.ts 1147、llm-prompts.ts 997；独立 build 验证 | ⬜ |
 | C09 | src/tool registry/execution/audit | createBuiltinRegistry、ToolRuntime | ⬜ |
@@ -113,7 +113,7 @@
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ⬜ |
 | C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ⬜ |
 | C41 | 无参 catch 治理 + TODO/FIXME 核实 | ⬜ |
-| C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 5/42，C05-C41 共 37 卡遗留） |
+| C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 7/42，C07-C41 共 35 卡遗留） |
 
 ## 五、进度表（每日更新）
 
@@ -123,6 +123,8 @@
 | 2026-08-19 | C01 | src/agent | P1 同分支三元死代码×1；P2 `void ctx` 命名不一致 / 无参 catch 缺注释×2；P2 记录不处理：TurnRunner 失败收尾 4 处相似块（细节差异大，抽取有漂移风险）、AgentLoop `errors![0]!` 断言 ~20 处（结构性，需 errors 类型重构）；P0 无 | 1（refactor） | ✅ |
 | 2026-08-20 | C03 | src/model/catalog | P2 openai/openai-responses models 块逐字节一致（5728B×2）→ 提取 OPENAI_SHARED_MODELS（-174 行）；P2 记录不处理：multimodal 模板重复 / 数字下划线风格 / minimax PascalCase 与 volc_ark snake_case 配置键；P0 无 | 1（refactor） | ✅ |
 | 2026-08-20 | C04 | src/model 其余 | P2 streamModel debug-dump ×2 / 重试警告 ×2 → 提取辅助函数；P2 findBalanced 两函数泛化合并；P2 死代码：providers/registry.ts 零消费、providerEndpoint 单变体 ×2、looksLikeUnparsedToolCall、extractStructuredOutput 死分支；P2 记录不处理：repairOpenAIToolPairing 兜底 / splitThinkContent FSM 重复 / 9 文件解析助手重复 / repairToolName 平局守卫（修复=行为变更）；P0 无 | 3（refactor×2 + docs） | ✅ |
+| 2026-08-21 | C05 | src/gateway | **P0 帧解析异常冒泡**：websocket.ts handleData 中 readClientFrame 抛错 → uncaughtException → 进程退出（安全缺陷）→ 已修复（try/catch + destroy + return）；P2 死代码：InProcessGateway `now` 字段（零消费者）、AsyncQueue fail()/error 字段、buildAttachmentPathNote 死参数、5 处 readonly setter 的 as 断言（readonly 只禁重赋值）；P3 私有化收紧 ×7、嵌套三元 → if/else ×2、无参 catch 补注释 ×6、legacy 断言合并；P3 记录不处理：runMemberScan 转 async（TS 80006 建议，复杂闭包大 diff，保守档跳过） | 4（fix + refactor + docs×2） | ✅ |
+| 2026-08-21 | C06 | src/context 非 memory | P2 死代码批量删除：TokenBudgetManager estimate* 别名 ×2、TokenAccountingRuntime estimateResponseEvents、CachedMicroCompactionEngine validateCacheHit、SnipEngine ×2 + 私有化、MicroCompactionEngine 死常量 ×2、InstructionDiscovery scopeDescription、ToolResultBudget flattenToolResultText、cosineSimilarityInt8、MessageProjector hasToolCalls、AutoCompactionPolicy evaluate（连带 tokenBudget 字段/Options 删除，6 调用点简化）、DefaultContextRuntime truncateSecondKeepRatio 死配置；P3 barrel 7 个已删符号 export 清理、summaryInput 重复 JSDoc、CompactionEngine 嵌套三元、PluginRuntimeExtensionResolver 过时注释；P0/P1 无 | 3（refactor×2 + docs） | ✅ |
 
 ### 日卡记录
 
@@ -175,6 +177,31 @@
 - **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅（event-matrix 重生成，纯行号偏移）；`biome check src/model` ✅（全仓 format:check 红系用户未提交的 `assets/templates/patent/tokens.css` 排版改动，非本次引入）；`pnpm test` 3504 pass / 0 fail ✅；`extractTextToolCalls` 16 用例改前/改后行为等价（剔除随机 id）✅
 - **提交**：`refactor(model): extract stream debug/retry helpers, unify balanced JSON parsing`、`refactor(model): drop dead exports, remove redundant casts, document fallback catches`、`docs: regenerate event matrix (streamModel line shifts)`
 - **审查后续（code-review，2026-08-20）**：审查发现 complete() 非 google 路径重试警告漏提取（初始仅提取 google 路径）→ 补齐 `warnCompleteRetry`；新增 `tests/model/streaming/parse-text-tool-calls.spec.ts`（12 用例）锁定五格式解析行为
+
+#### C05 src/gateway（2026-08-21）
+
+- **审阅发现**：
+  - **P0（安全缺陷）** websocket.ts handleData 的 while 循环中 `readClientFrame` 解析失败时抛出的异常会从 socket data 回调冒泡为 uncaughtException，**直接终止整个进程**（恶意/畸形客户端可远程触发）→ 已修复：try/catch + `socket.destroy()` + return，按非法客户端断开（独立 `fix(gateway)` 提交，不混入 refactor）
+  - P2 死代码：`InProcessGatewayOptions.now` 字段（全仓零消费者；连带 createLocalGateway/Gateway.ts createGateway/2 测试删除传参）；AsyncQueue `fail()`/error 字段（iterator 内 error 分支不可达）；`buildAttachmentPathNote` 死参数 `directContentPaths`（4 参 → 3 参）；InProcessGateway 5 处 readonly options 字段 setter 的 `as` 断言（readonly 只禁止重赋值，断言是噪音）→ 全部删除
+  - P2 eventMapping.ts：context_budget 的 totalContextTokens 双重三元 → `??` 等价简化（数学验证：undefined 语义逐 case 等价）
+  - P3 私有化收紧（export 未外泄）：`withGatewayRunId`/`mapAgentEventForTurn`（同文件内部用）、`attachmentDiagnosticsGuidance`（同文件内部用）、toolResultSanitize 3 常量 + `sanitizeGatewayToolDataValue`
+  - P3 其他：createGatewayPermissionHook 嵌套三元 ×2 → if/else；InProcessGateway legacy 三元链断言合并为单一对象类型断言、冗余 `.catch(() => {})` 删除、687 行 console.warn 补注释；无参 catch 补意图注释 ×6（SessionRouter/memoryDiagnostics/staticAssets/providerError/probeServer ×2）
+  - P3 记录不处理：runMemberScan 转 async（TS 80006 建议；闭包内 .then/.catch 链 + 密集注释，转换 diff 大且零收益，保守档跳过）
+  - P0 之外的 P1：无行为缺陷
+- **精炼项**：P0 修复 1、死代码删除 5 组、断言/三元简化 8 处、私有化 7 处、注释补全 7 处、测试同步 3 处（净 -22 行）
+- **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅（event-matrix 重生成，纯行号偏移：createLocalGateway/InProcessGateway/CompactionEngine 位移）；`biome format --write` 修复 6 处缩进后 `format:check` ✅；`pnpm test` 3640 pass / 0 fail ✅
+- **提交**：`fix(gateway): guard frame parse errors from escaping socket callback`（P0，单独）、`refactor(gateway): drop dead fields and redundant casts, tighten exports`、`docs: regenerate event matrix (gateway/context line shifts)`
+
+#### C06 src/context 非 memory（2026-08-21）
+
+- **审阅发现**：
+  - P2 死代码批量删除：TokenBudgetManager `estimateForFileType`/`estimateBlockTokens`（Legacy 别名零消费，连带删除对应测试用例）；TokenAccountingRuntime `estimateResponseEvents`；CachedMicroCompactionEngine `validateCacheHit`；SnipEngine `projectSnippedView`/`isSnipBoundaryMessage`（`createSnipBoundary` 私有化）；MicroCompactionEngine `MICROCOMPACT_FAILURES_FOLDED`/`MICROCOMPACT_RECOVERED_FAILURE_PREFIX`（仅保留 MICROCOMPACT_CLEARED）；InstructionDiscovery `scopeDescription`（DefaultContextRuntime 保留本地私有副本）；ToolResultBudget `flattenToolResultText`（doomLoopIntegration 用本地副本）；cosine `cosineSimilarityInt8`（`int8Dot` 有测试消费者，保留）；MessageProjector `hasToolCalls`（空 if 清理后失活）；AutoCompactionPolicy `evaluate`（连带删除 tokenBudget 字段/Options/构造参数，6 处调用点简化——evaluateSnapshot 只依赖传入 snapshot，行为零变化）；DefaultContextRuntime `truncateSecondKeepRatio` 死配置（options/常量/字段/赋值，全类零读取，ContextOverflowRecovery 有独立副本）
+  - P3：`src/context/index.ts` barrel 清理 7 个已删符号 export（createToolResultBudgetState/flattenToolResultText/MICROCOMPACT ×2/isSnipBoundaryMessage/projectSnippedView/scopeDescription/AutoCompactionPolicyOptions）；summaryInput.ts 两段逐字重复 JSDoc 删除；CompactionEngine.ts:235 嵌套三元 → if/else；PluginRuntimeExtensionResolver.ts 过时注释更新（"TODO marker" 措辞，聚合器已实现）
+  - P2 连带：createLocalGateway `sharedSessionStore` 死字段 + `SessionRouterStore` import 删除（审阅时误在 gateway 卡中，实为 registry 字段，随 C05 提交）
+  - P0/P1：无行为缺陷
+- **精炼项**：死代码删除 17 组（净 -195 行）、私有化 3 处、barrel 清理 7 处、注释/结构清理 4 处、测试同步 6 处
+- **验证**：`pnpm typecheck` ✅ 0 错误（含 edgeclaw-memory-core）；`pnpm lint` 全量 ✅；`biome format --write` 修复 6 处缩进后 `format:check` ✅；`pnpm test` 3640 pass / 0 fail ✅（context 套件全绿）
+- **提交**：`refactor(context): remove dead compaction/budget helpers and unused config`（与 event-matrix docs 提交共享）
 
 ## 六、基线（2026-08-18 实测）
 

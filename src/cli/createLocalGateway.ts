@@ -149,7 +149,6 @@ import {
 } from "../tool/index.js";
 import type { SatiElicitationChannel, SatiUnavailableToolDiagnostic } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
-import { SessionRouterStore } from "../router/session/SessionRouterStore.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 import { SkillManager, migrateLegacyBundledSkillCopies } from "../extension/skills/index.js";
@@ -425,7 +424,6 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 避免块级作用域"先使用后声明"编译错误。
   const sessionPresence = new SessionPresence();
   const gateway = new InProcessGateway(router, {
-    now,
     serverInfo: { mode: "in_process", projectKey: projectRoot },
     telemetry,
     cron: options.cron,
@@ -939,9 +937,6 @@ class ProjectRuntimeRegistry {
   private _sessionOverrides: SessionConfigOverrides | undefined;
   /** team_* 工具装配（M3）：createLocalGateway 经 setTeamTools 注入，resolve 时透传 createBuiltinRegistry。 */
   private _teamTools?: TeamToolsOptions;
-  private readonly sharedSessionStore = new SessionRouterStore({
-    now: () => this.options.now().getTime(),
-  });
 
   constructor(private readonly options: ProjectRuntimeRegistryOptions) {
     this._extraTools = options.extraTools ? [...options.extraTools] : [];
@@ -1248,6 +1243,8 @@ class ProjectRuntimeRegistry {
       searchPatentFigure: { embeddingClient },
       // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
       documentStyle: {},
+      // J-Space 工作区工具（opt-in：与工作区账本开关联动，避免破坏 fixture 工具集匹配）
+      workspaceLedgerTools: brandEnv(this.options.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
       ...(memory?.service ? { memory: { service: memory.service } } : {}),
       readSkill: {
         loader: name => pluginRuntime.loadSkillPrompt(name),
@@ -1834,7 +1831,7 @@ class ProjectRuntimeRegistry {
         now,
         eventEmitter: eventBuf.emitter,
       });
-      const autoCompactionPolicy = new AutoCompactionPolicy({ tokenBudget });
+      const autoCompactionPolicy = new AutoCompactionPolicy();
       const microcompactEngine = new CachedMicroCompactionEngine({ enabled: true });
       const microCompaction = new MicroCompactionEngine({
         protectedToolNames: DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
@@ -2162,6 +2159,8 @@ class ProjectRuntimeRegistry {
       cwd,
       permissionMode,
       jsonSelfCorrect: true,
+      workspaceLedger: brandEnv(this.options.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
+      metacognitiveControl: brandEnv(this.options.env, ENV_KEY.METACOGNITIVE_CONTROL_ENABLED) === "1",
       ...(subagentRuntimeModel ? { subagentModel: subagentRuntimeModel } : {}),
       subagentTimeoutMs: agent.subagents?.timeoutMs,
       maxContextTokens,

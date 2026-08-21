@@ -103,20 +103,6 @@ export class TokenBudgetManager {
     return countTokens(text);
   }
 
-  /**
-   * Estimate tokens for raw file content. Now delegates to tiktoken
-   * regardless of file extension (the tokenizer handles encoding
-   * density natively). The ext parameter is retained for API compat.
-   */
-  estimateForFileType(content: string, _ext: string | null | undefined): number {
-    return countTokens(content);
-  }
-
-  /** T4: per-block estimate. Public alias retained for legacy callers. */
-  estimateBlockTokens(block: CanonicalContentBlock): number {
-    return this.estimateForBlock(block);
-  }
-
   estimateForBlock(block: CanonicalContentBlock): number {
     switch (block.type) {
       case "text":

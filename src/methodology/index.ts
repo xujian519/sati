@@ -33,3 +33,4 @@ export { fishbone } from "./runtime/components/fishbone.js";
 export { firstPrinciples } from "./runtime/components/first-principles.js";
 export { sixHats } from "./runtime/components/six-hats.js";
 export { triz } from "./runtime/components/triz.js";
+export { bridgeReencode } from "./runtime/components/bridge-reencode.js";

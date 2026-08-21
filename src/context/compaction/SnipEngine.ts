@@ -33,13 +33,12 @@ export type SnipResult = {
 /**
  * Boundary marker injected between the kept head and tail. Looks like a
  * user-visible note (role=user, text content) so providers don't choke on
- * an unknown role. Callers recognize it via `isSnipBoundaryMessage`. The
- * payload is wrapped in an XML-style envelope so it's easy to detect and
- * never mistaken for normal user input.
+ * an unknown role. The payload is wrapped in an XML-style envelope so it's
+ * easy to detect and never mistaken for normal user input.
  */
 const SNIP_BOUNDARY_TEXT_PREFIX = "<snip-boundary";
 
-export function createSnipBoundary(turnsSnipped: number, headTurns: number, tailTurns: number): CanonicalMessage {
+function createSnipBoundary(turnsSnipped: number, headTurns: number, tailTurns: number): CanonicalMessage {
   return {
     role: "user",
     content: [
@@ -49,13 +48,6 @@ export function createSnipBoundary(turnsSnipped: number, headTurns: number, tail
       },
     ],
   };
-}
-
-export function isSnipBoundaryMessage(message: CanonicalMessage): boolean {
-  if (message.role !== "user" || message.content.length !== 1) return false;
-  const block = message.content[0];
-  if (!block || block.type !== "text") return false;
-  return block.text.startsWith(SNIP_BOUNDARY_TEXT_PREFIX);
 }
 
 /**
@@ -74,9 +66,7 @@ export function isSnipBoundaryMessage(message: CanonicalMessage): boolean {
  *      tool_result_only user messages dangling on the other side are also
  *      removed.
  *   S5 Boundary marker injected between head and tail.
- *   S6 `projectSnippedView` filters the input to head+boundary+tail in one
- *      call, used by callers that don't need the dangling-tool report.
- *   S7 Disabled engine returns input unchanged (intentional_difference: legacy
+ *   S6 Disabled engine returns input unchanged (intentional_difference: legacy
  *      uses an explicit SnipTool; Sati uses an automatic policy).
  */
 export class SnipEngine {
@@ -143,15 +133,6 @@ export class SnipEngine {
       danglingToolCallIds: dangling,
     };
   }
-}
-
-/**
- * S6: one-shot projection. Equivalent to `snip(messages).messages` but
- * always returns *some* projection — even if no snip happened, the input
- * is returned verbatim.
- */
-export function projectSnippedView(messages: CanonicalMessage[], options: SnipEngineOptions = {}): CanonicalMessage[] {
-  return new SnipEngine(options).snip(messages).messages;
 }
 
 /**

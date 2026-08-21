@@ -61,6 +61,7 @@ function tryStat(path: string): ReturnType<typeof statSync> | undefined {
   try {
     return statSync(path);
   } catch {
+    // stat 失败（文件不存在/无权限）视为无此文件，走 404 而非异常。
     return undefined;
   }
 }

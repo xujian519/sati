@@ -24,7 +24,6 @@ function createGateway(
   });
   const gateway = new InProcessGateway(router, {
     uuid: () => "run-1",
-    now: () => new Date("2026-07-20T00:00:00.000Z"),
     afterTurnCompleted: opts.afterTurnCompleted,
   });
   return { gateway, aborted, release: () => releaseHang?.() };

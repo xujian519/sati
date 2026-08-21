@@ -12,7 +12,6 @@ export class AsyncQueue<T> {
   private readonly buffer: T[] = [];
   private readonly waiters: Array<{ resolve(value: IteratorResult<T>): void }> = [];
   private closed = false;
-  private error: Error | undefined;
 
   enqueue(value: T): void {
     if (this.closed) return;
@@ -34,19 +33,9 @@ export class AsyncQueue<T> {
     }
   }
 
-  fail(error: Error): void {
-    this.error = error;
-    this.close();
-  }
-
   [Symbol.asyncIterator](): AsyncIterator<T> {
     return {
       next: (): Promise<IteratorResult<T>> => {
-        if (this.error) {
-          const err = this.error;
-          this.error = undefined;
-          return Promise.reject(err);
-        }
         const item = this.buffer.shift();
         if (item !== undefined) {
           return Promise.resolve({ value: item, done: false });

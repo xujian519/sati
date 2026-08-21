@@ -18,12 +18,7 @@ test("attachments: buildAttachmentPathNote 去重 + 注入 marker + 引导语", 
     { type: "file", name: "a-dup.txt", path: resolve("/tmp/a.txt") }, // 同一路径去重
     { type: "file", path: resolve("/tmp/no-name.txt") },
   ] as unknown as ChannelAttachment[];
-  const note = buildAttachmentPathNote(
-    atts,
-    new Set([resolve("/tmp/a.txt"), resolve("/tmp/no-name.txt")]),
-    new Set(),
-    false,
-  );
+  const note = buildAttachmentPathNote(atts, new Set([resolve("/tmp/a.txt"), resolve("/tmp/no-name.txt")]), false);
   assert.ok(note);
   const noteText = (note as unknown as { text: string }).text;
   assert.match(noteText, /\[Registered attachment files in this session:\]/);
@@ -35,7 +30,7 @@ test("attachments: buildAttachmentPathNote 去重 + 注入 marker + 引导语", 
 
 test("attachments: buildAttachmentPathNote 无 allowed 路径返回 undefined", () => {
   const atts = [{ type: "file", name: "x.txt", path: "/tmp/x.txt" }] as unknown as ChannelAttachment[];
-  assert.equal(buildAttachmentPathNote(atts, new Set(), new Set(), false), undefined);
+  assert.equal(buildAttachmentPathNote(atts, new Set(), false), undefined);
 });
 
 test("attachments: collectRegisteredAttachmentReadFiles 收集真实文件、跳过不存在", async () => {
@@ -63,7 +58,7 @@ test("attachments: collectRegisteredAttachmentReadFiles 收集真实文件、跳
 
 test("attachments: attachmentsToContentBlocks image/text 直通、无附件空结果", async () => {
   const empty = await attachmentsToContentBlocks(undefined);
-  assert.deepEqual(empty, { blocks: [], directContentPaths: new Set(), hasDiagnostics: false });
+  assert.deepEqual(empty, { blocks: [], hasDiagnostics: false });
 
   const image = await attachmentsToContentBlocks([
     { type: "image", content: "aGVsbG8=", mimeType: "image/png", bytes: 5 },

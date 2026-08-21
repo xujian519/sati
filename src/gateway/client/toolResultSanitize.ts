@@ -5,8 +5,8 @@
  * 清洗、头尾对称截断、路径安全化、MIME 扩展名映射——零依赖纯函数。
  */
 
-export const MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS = 20_000;
-export const MAX_GATEWAY_TOOL_DATA_STRING_CHARS = 4_000;
+const MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS = 20_000;
+const MAX_GATEWAY_TOOL_DATA_STRING_CHARS = 4_000;
 
 export function limitGatewayToolResultPreview(text: string): string {
   if (text.length <= MAX_GATEWAY_TOOL_RESULT_PREVIEW_CHARS) {
@@ -24,7 +24,7 @@ export function sanitizeGatewayToolData(value: unknown): Record<string, unknown>
   return isRecord(sanitized) ? sanitized : { value: sanitized };
 }
 
-export function sanitizeGatewayToolDataValue(value: unknown): unknown {
+function sanitizeGatewayToolDataValue(value: unknown): unknown {
   if (typeof value === "string") {
     return limitGatewayToolDataString(value);
   }

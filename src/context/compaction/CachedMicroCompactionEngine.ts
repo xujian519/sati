@@ -1,4 +1,4 @@
-import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
+import type { CanonicalMessage } from "../../model/index.js";
 
 /**
  * Subset of tool names whose results are eligible for cached
@@ -74,8 +74,6 @@ export type CachedMicroCompactionOptions = {
  *   M5 Disabled by default; gated on `sati.context.cachedMicrocompactEnabled`.
  *   M6 Cache breakpoint goes on the message *immediately preceding* the
  *      eligible tool_result message, not on the eligible message itself.
- *   M7 `validateCacheHit(usage)` returns true when `cacheReadTokens > 0`,
- *      surfacing whether the breakpoint actually produced a hit.
  */
 export class CachedMicroCompactionEngine {
   private readonly enabled: boolean;
@@ -145,16 +143,5 @@ export class CachedMicroCompactionEngine {
       eligibleToolCallIds,
       applied: cacheBreakpoints.length > 0,
     };
-  }
-
-  /**
-   * M7: confirm a cache hit happened on the previous request. Returns true
-   * when the provider reported any cache_read tokens. Caller can log this
-   * for telemetry; a `false` return is informational only (the breakpoint
-   * is still valid, the cache may simply have been cold).
-   */
-  validateCacheHit(usage: CanonicalUsage | undefined): boolean {
-    if (!usage) return false;
-    return (usage.cacheReadTokens ?? 0) > 0;
   }
 }

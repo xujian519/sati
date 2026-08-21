@@ -10,9 +10,8 @@ import type {
 
 /**
  * Minimal runtime contract; extension owner has agreed to expose
- * `getAllCommands()` / `getAllSkills()` aggregators (review 2026-05). Until
- * those exist, we accept just `snapshot()` and flatMap manually with a TODO
- * marker.
+ * `getAllCommands()` / `getAllSkills()` aggregators (review 2026-05), which
+ * are consumed in preference to flat-mapping `snapshot()` when available.
  *
  * `ExtensionSnapshot` (turn-stable contribution view) is the long-term API;
  * this resolver will be migrated to read it once the extension owner ships it.

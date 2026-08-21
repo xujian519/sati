@@ -66,17 +66,6 @@ export function projectMessagesForSummary(messages: CanonicalMessage[]): Canonic
  * result remains available in the session history; the paired call id is also
  * retained so providers continue to receive a valid tool-call sequence.
  */
-
-/**
- * The tail normally stays verbatim so the agent can immediately continue its
- * most recent work. A single raw tool result can nevertheless be larger than
- * the entire tail allowance (for example, an unbounded page fetch). In that
- * case keeping it verbatim makes full compaction unable to recover at all.
- *
- * This only affects the in-context replacement transcript. The durable tool
- * result remains available in the session history; the paired call id is also
- * retained so providers continue to receive a valid tool-call sequence.
- */
 export function projectOversizedRetainedToolResults(
   messages: CanonicalMessage[],
   toolNamesByCallId: ReadonlyMap<string, string>,

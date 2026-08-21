@@ -38,7 +38,6 @@ export function createGateway(options: CreateGatewayOptions): Gateway {
   });
 
   return new InProcessGateway(router, {
-    now,
     uuid,
     serverInfo: {
       mode: "in_process",

@@ -3,6 +3,7 @@ import type { RetrySchedule } from "../../model/streaming/retryState.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
+import type { WorkspaceLedgerState } from "../workspace/WorkspaceLedger.js";
 
 export type AgentTranscriptEntryType =
   | "accepted_input"
@@ -18,7 +19,8 @@ export type AgentTranscriptEntryType =
   | "subagent_completed"
   | "injected_context"
   | "request_header"
-  | "retry_schedule";
+  | "retry_schedule"
+  | "workspace_state";
 
 export type AgentTranscriptEntryBase = {
   type: AgentTranscriptEntryType;
@@ -243,6 +245,15 @@ export type AgentRetryScheduleTranscriptEntry = AgentTranscriptEntryBase & {
   schedule: RetrySchedule;
 };
 
+/**
+ * 工作区账本快照（J-Space ledger）。append-only、不被压缩遮蔽；重放时从
+ * 转录派生最新账本并重新注入模型可见上下文，从而跨压缩存续。
+ */
+export type AgentWorkspaceStateTranscriptEntry = AgentTranscriptEntryBase & {
+  type: "workspace_state";
+  state: WorkspaceLedgerState;
+};
+
 export type AgentTranscriptEntry =
   | AgentAcceptedInputTranscriptEntry
   | AgentMessageTranscriptEntry
@@ -255,7 +266,8 @@ export type AgentTranscriptEntry =
   | AgentSubagentCompletedTranscriptEntry
   | AgentInjectedContextTranscriptEntry
   | AgentRequestHeaderTranscriptEntry
-  | AgentRetryScheduleTranscriptEntry;
+  | AgentRetryScheduleTranscriptEntry
+  | AgentWorkspaceStateTranscriptEntry;
 
 export function truncatePreview(input: string, byteCap: number): { preview: string; truncated: boolean } {
   const total = Buffer.byteLength(input, "utf8");

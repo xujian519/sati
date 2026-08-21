@@ -29,8 +29,8 @@ test("budget snapshot keeps raw context window separate from explicit output res
 test("thinking budget counts native reasoning content when replayed", () => {
   const manager = new TokenBudgetManager();
 
-  const legacy = manager.estimateBlockTokens({ type: "thinking", text: "short thought" });
-  const replayed = manager.estimateBlockTokens({
+  const legacy = manager.estimateForBlock({ type: "thinking", text: "short thought" });
+  const replayed = manager.estimateForBlock({
     type: "thinking",
     text: "short thought",
     reasoningContent: "native reasoning ".repeat(200),

@@ -135,6 +135,7 @@ function estimateJsonBytes(value: unknown): number {
   try {
     return Buffer.byteLength(JSON.stringify(value), "utf8");
   } catch {
+    // 序列化失败（循环引用/BigInt 等）按 0 字节计，不影响诊断总量。
     return 0;
   }
 }

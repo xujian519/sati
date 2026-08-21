@@ -81,7 +81,15 @@ export class TextWebSocketConnection {
       return;
     }
     while (this.buffer.length >= 2) {
-      const frame = readClientFrame(this.buffer);
+      let frame: ReturnType<typeof readClientFrame>;
+      try {
+        frame = readClientFrame(this.buffer);
+      } catch {
+        // 帧解析失败（未掩码/超大长度声明）：按非法客户端断开，异常不向
+        // socket data 回调外冒泡（否则成为 uncaughtException 致整个进程退出）。
+        this.socket.destroy();
+        return;
+      }
       if (!frame) {
         return;
       }
@@ -96,8 +104,16 @@ export class TextWebSocketConnection {
       }
       if (frame.opcode === 0x1) {
         const message = frame.payload.toString("utf8");
-        for (const handler of this.messageHandlers) {
-          handler(message);
+        try {
+          for (const handler of this.messageHandlers) {
+            handler(message);
+          }
+        } catch (error) {
+          // 消息处理抛错（内部故障或恶意 payload 触发下游异常）：同样不得向
+          // socket data 回调外冒泡（uncaughtException 致进程退出），断开连接。
+          console.warn(`[gateway] message handler threw: ${error instanceof Error ? error.message : String(error)}`);
+          this.socket.destroy();
+          return;
         }
       }
     }

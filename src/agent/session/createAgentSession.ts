@@ -20,6 +20,7 @@ import {
 import { readTranscript } from "../../session/transcript/TranscriptReader.js";
 import { projectMessagesFromTranscript } from "../../session/transcript/TranscriptReplay.js";
 import { JsonlTranscriptWriter } from "../../session/transcript/JsonlTranscriptWriter.js";
+import { WorkspaceLedgerStore } from "../../session/workspace/WorkspaceLedgerStore.js";
 import { createDefaultToolGuardRegistry } from "./defaultToolGuards.js";
 import { AgentSession } from "./AgentSession.js";
 
@@ -62,6 +63,25 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
   const scheduler =
     options.dependencies.tools.scheduler ??
     new ConcurrentToolScheduler(toolRuntime, options.dependencies.tools.registry);
+  // Resolve storage + transcript before building the loop so the per-session
+  // workspace-ledger store (backed by the transcript) can be injected into the
+  // loop dependencies.
+  const storage =
+    options.storage ??
+    (options.projectStorage
+      ? createAgentProjectSessionStorage({
+          ...options.projectStorage,
+          sessionId: options.sessionId,
+          now: options.dependencies.now,
+        })
+      : undefined);
+  const transcript = options.transcript ?? storage?.transcript ?? new InMemoryTranscriptWriter();
+  const writerTranscriptPath = transcript instanceof JsonlTranscriptWriter ? transcript.path : undefined;
+  const transcriptPath = writerTranscriptPath ?? storage?.transcriptPath ?? "";
+  const workspaceLedger =
+    options.config.workspaceLedger === true && transcriptPath.length > 0
+      ? new WorkspaceLedgerStore(transcript, options.sessionId, transcriptPath)
+      : undefined;
   const dependencies: AgentRuntimeDependencies = {
     ...options.dependencies,
     tools: {
@@ -70,18 +90,9 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
     },
     eventEmitter: emitter,
     drainEvents: options.dependencies.drainEvents ?? eventBuf?.drain,
+    ...(workspaceLedger ? { workspaceLedger } : {}),
   };
   const loop = new AgentLoop(options.config, dependencies, options.seedState);
-  const storage =
-    options.storage ??
-    (options.projectStorage
-      ? createAgentProjectSessionStorage({
-          ...options.projectStorage,
-          sessionId: options.sessionId,
-          now: dependencies.now,
-        })
-      : undefined);
-  const transcript = options.transcript ?? storage?.transcript ?? new InMemoryTranscriptWriter();
   const metadataStore = new SessionMetadataStore({
     transcript,
     sessionId: options.sessionId,
@@ -114,8 +125,6 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
   // AgentSession 回退到 state.messages（无持久层，无漂移可言）。
   // 投影器绑定实际 writer 的路径（而非 storage.transcriptPath），避免调用方
   // 传自定义 JsonlTranscriptWriter 时投影读错文件静默产生错误历史。
-  const writerTranscriptPath = transcript instanceof JsonlTranscriptWriter ? transcript.path : undefined;
-  const transcriptPath = writerTranscriptPath ?? storage?.transcriptPath ?? "";
   const projectMessages =
     transcriptPath.length > 0
       ? async () => {

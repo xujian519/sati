@@ -116,6 +116,27 @@ export {
   resolveCanonicalRoot,
 } from "./worktree/index.js";
 export {
+  applyWorkspaceNote,
+  cloneWorkspaceLedgerState,
+  emptyWorkspaceLedger,
+  isWorkspaceLedgerOpen,
+  nextOpenNumber,
+  nextVerifiedNumber,
+  renderWorkspaceCoreDirective,
+  renderWorkspaceLedgerBlock,
+  readLatestWorkspaceState,
+  WorkspaceLedgerStore,
+  MAX_LIVE_CORE,
+  type SatiWorkspaceLedgerProvider,
+  type WorkspaceCoreEntry,
+  type WorkspaceLedgerBlock,
+  type WorkspaceLedgerState,
+  type WorkspaceNoteInput,
+  type WorkspaceNoteResult,
+  type WorkspaceOpenEntry,
+  type WorkspaceVerifiedEntry,
+} from "./workspace/index.js";
+export {
   createBackup,
   FileHistoryStore,
   getBackupFileName,

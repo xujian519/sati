@@ -3,7 +3,6 @@ import {
   buildAnthropicRequest,
   normalizeProviderBaseUrl,
   type CanonicalMessage,
-  type CanonicalModelEvent,
   type CanonicalModelRequest,
   type CanonicalToolSchema,
   type ModelConfig,
@@ -172,19 +171,6 @@ export class TokenAccountingRuntime {
     return options.usePadding
       ? this.tokenBudget.estimateForMessagesWithPadding(messages)
       : this.tokenBudget.estimateMessagesTokens(messages);
-  }
-
-  estimateResponseEvents(events: CanonicalModelEvent[]): number {
-    const chunks: string[] = [];
-    for (const event of events) {
-      if (event.type === "text_delta" || event.type === "thinking_delta") {
-        chunks.push(event.text);
-      } else if (event.type === "tool_call_delta") {
-        chunks.push(event.delta);
-      }
-    }
-    if (chunks.length === 0) return 0;
-    return this.tokenBudget.estimateTextTokens(chunks.join(""));
   }
 
   estimateRequestInput(request: CanonicalModelRequest, options: TokenBudgetEvaluateOptions = {}): number {
@@ -447,6 +433,7 @@ function safeJsonStringify(value: unknown): string {
   try {
     return JSON.stringify(value) ?? "";
   } catch {
+    // 序列化失败（循环引用等）回退空串，计费统计不因此中断。
     return "";
   }
 }

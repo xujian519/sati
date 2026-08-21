@@ -5,6 +5,7 @@ import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
+import type { WorkspaceLedgerState } from "../workspace/WorkspaceLedger.js";
 import {
   classifyDurableMessageEntry,
   truncatePreview,
@@ -227,6 +228,14 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       type: "retry_schedule",
       ...this.baseEntry(sessionId, turnId),
       schedule,
+    });
+  }
+
+  recordWorkspaceState(sessionId: string, turnId: string, state: WorkspaceLedgerState): Promise<void> {
+    return this.recordEntry({
+      type: "workspace_state",
+      ...this.baseEntry(sessionId, turnId),
+      state,
     });
   }
 

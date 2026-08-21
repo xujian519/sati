@@ -24,6 +24,7 @@ export async function probeGatewayServer(options: ProbeGatewayServerOptions = {}
     const token = options.token ?? (await readGatewayAuthToken());
     return { ok: Boolean(token), url, wsUrl: toWsUrl(url), token };
   } catch {
+    // 探测失败（连接拒绝/超时）视为服务不可用，不向调用方抛异常。
     return { ok: false, url, wsUrl: toWsUrl(url) };
   } finally {
     clearTimeout(timeout);
@@ -40,6 +41,7 @@ export async function connectRemoteGatewayIfAvailable(
   try {
     return await createRemoteGateway({ url: probe.wsUrl, token: probe.token, clientName: "cli" });
   } catch {
+    // 连接握手失败按"无可用远端网关"处理，由调用方走本地回退。
     return undefined;
   }
 }

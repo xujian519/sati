@@ -67,4 +67,18 @@ export type AgentRuntimeConfig = {
    * `src/methodology/` for the built-in reasoning-methodology registry.
    */
   methodologyInjection?: (lastUserMessage: string) => string | null;
+  /**
+   * Enable workspace-ledger re-injection and seam writes. Defaults to off so
+   * existing behavior is unchanged. When on, a `workspaceLedger` provider must
+   * be wired via dependencies.
+   */
+  workspaceLedger?: boolean;
+  /**
+   * Enable the metacognitive control interface. Defaults to off. When on, a
+   * metacognitive prompt is appended and a `shaky` confidence tag at the finish
+   * path triggers a retry-with-diagnosis instead of a silent completion.
+   */
+  metacognitiveControl?: boolean;
+  /** Optional metacognitive prompt override; falls back to `buildMetacognitivePrompt()`. */
+  metacognitivePrompt?: string;
 };

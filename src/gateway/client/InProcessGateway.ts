@@ -107,7 +107,6 @@ export { normalizeGatewayModeForLegacyInput, normalizeGatewayRunMode } from "./n
 export { mapAgentEvent } from "./eventMapping.js";
 
 export type InProcessGatewayOptions = {
-  now?: () => Date;
   uuid?: () => string;
   serverInfo?: Partial<GatewayServerInfo>;
   cron?: GatewayCronController;
@@ -214,7 +213,6 @@ type ActiveTurnReplay = {
 };
 
 export class InProcessGateway implements Gateway {
-  private readonly now: () => Date;
   private readonly uuid: () => string;
   /**
    * B1 — registry of active per-session emit sinks. The gateway shares this
@@ -252,7 +250,6 @@ export class InProcessGateway implements Gateway {
     private readonly router: SessionRouter,
     private readonly options: InProcessGatewayOptions = {},
   ) {
-    this.now = options.now ?? (() => new Date());
     this.uuid = options.uuid ?? randomUUID;
   }
 
@@ -464,14 +461,11 @@ export class InProcessGateway implements Gateway {
           }, input.timeoutMs);
         }
         const permissionSettings = readPermissionSettings();
-        const inputMode = normalizeGatewayModeForLegacyInput((input as { mode?: unknown }).mode);
-        const runMode =
-          normalizeGatewayRunMode((input as { runMode?: unknown }).runMode) ??
-          (inputMode === "plan" ? "plan" : "agent");
+        const legacyInput = input as { mode?: unknown; runMode?: unknown; basePermissionMode?: unknown };
+        const inputMode = normalizeGatewayModeForLegacyInput(legacyInput.mode);
+        const runMode = normalizeGatewayRunMode(legacyInput.runMode) ?? (inputMode === "plan" ? "plan" : "agent");
         const permissionMode = inputMode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
-        const basePermissionMode = normalizeGatewayModeForLegacyInput(
-          (input as { basePermissionMode?: unknown }).basePermissionMode,
-        );
+        const basePermissionMode = normalizeGatewayModeForLegacyInput(legacyInput.basePermissionMode);
         const allowPlanModeTools = input.allowPlanModeTools ?? inputMode === "plan";
         const persistedRules = permissionSettingsToRuleSet(permissionSettings);
         const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
@@ -539,7 +533,7 @@ export class InProcessGateway implements Gateway {
                   text: "context_budget",
                   detail: { ...gatewayEvent },
                 },
-              }).catch(() => {});
+              });
             }
             this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
             queue.enqueue(gatewayEvent);
@@ -684,6 +678,7 @@ export class InProcessGateway implements Gateway {
     try {
       await this.options.recordAgentStatusMessage(input);
     } catch (error) {
+      // 状态消息落盘失败不影响 turn 主流程，仅记录告警。
       console.warn("[sati] failed to record gateway status message:", error);
     }
   }
@@ -904,24 +899,23 @@ export class InProcessGateway implements Gateway {
   }
 
   setCronController(cron: GatewayCronController | undefined): void {
-    (this.options as { cron?: GatewayCronController }).cron = cron;
+    this.options.cron = cron;
   }
 
   setAlwaysOnApply(handler: InProcessGatewayOptions["alwaysOnApply"]): void {
-    (this.options as { alwaysOnApply?: InProcessGatewayOptions["alwaysOnApply"] }).alwaysOnApply = handler;
+    this.options.alwaysOnApply = handler;
   }
 
   setAlwaysOnRerunPlan(handler: InProcessGatewayOptions["alwaysOnRerunPlan"]): void {
-    (this.options as { alwaysOnRerunPlan?: InProcessGatewayOptions["alwaysOnRerunPlan"] }).alwaysOnRerunPlan = handler;
+    this.options.alwaysOnRerunPlan = handler;
   }
 
   setDiscoveryPlanService(service: DiscoveryPlanService | undefined): void {
-    (this.options as { discoveryPlanService?: DiscoveryPlanService }).discoveryPlanService = service;
+    this.options.discoveryPlanService = service;
   }
 
   setPrepareWeixinLogin(handler: InProcessGatewayOptions["prepareWeixinLogin"]): void {
-    (this.options as { prepareWeixinLogin?: InProcessGatewayOptions["prepareWeixinLogin"] }).prepareWeixinLogin =
-      handler;
+    this.options.prepareWeixinLogin = handler;
   }
 
   // -------------------------------------------------------------------

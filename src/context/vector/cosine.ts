@@ -59,19 +59,6 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
 }
 
 /**
- * int8 量化向量的余弦相似度（scale 抵消，等价于 float 余弦 + 量化误差）。
- * 适合逐对计算；批量场景建议用 int8Dot + 预计算范数避免重复求范数。
- */
-export function cosineSimilarityInt8(a: Int8Array, b: Int8Array): number {
-  if (a.length !== b.length) return 0;
-  const dot = int8Dot(a, b);
-  const normA = l2Norm(a);
-  const normB = l2Norm(b);
-  if (normA === 0 || normB === 0) return 0;
-  return dot / (normA * normB);
-}
-
-/**
  * 返回分数最高的 k 个下标（降序）。k 很小（≤50）时用选择排序即可。
  */
 export function topK(scores: Float32Array, k: number): Array<{ index: number; score: number }> {

@@ -64,7 +64,7 @@ export type ToolResultBudgetApplyOptions = {
   turnId?: string;
 };
 
-export function createToolResultBudgetState(): ToolResultBudgetState {
+function createToolResultBudgetState(): ToolResultBudgetState {
   return { replacements: new Map(), nextReadFileAliasIndex: 1 };
 }
 
@@ -419,11 +419,6 @@ function headTailPreview(value: string, budgetBytes: number): string {
 function buildRetrievalHint(readFilePath: string | undefined, path: string, originalBytes: number): string {
   const target = readFilePath ?? path;
   return `\n\n[Full result persisted to ${target} (${originalBytes} bytes). Use read_file with file_path="${target}" to read the full content.]`;
-}
-
-/** Helper for tests / inspection. */
-export function flattenToolResultText(block: CanonicalToolResultBlock): string {
-  return flattenToolResultBlockText(block);
 }
 
 function estimateTokens(text: string, byteLength: number): number {

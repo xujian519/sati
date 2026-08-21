@@ -31,6 +31,7 @@
     "gen:patent-workflow-docs": "tsx scripts/gen-patent-workflow-docs.ts",
     "check:patent-workflow-docs": "tsx scripts/gen-patent-workflow-docs.ts --check",
     "check:html-templates": "node scripts/check-html-templates.mjs",
+    "check:skills": "node scripts/validate-skills.mjs",
     "pretypecheck": "pnpm --filter edgeclaw-memory-core build",
     "typecheck": "tsc --noEmit && pnpm --filter edgeclaw-memory-core typecheck",
     "lint": "eslint src tests scripts apps/desktop && pnpm --filter sati-ui lint && pnpm check:event-matrix && pnpm check:patent-sop && pnpm check:patent-workflow-docs && pnpm check:html-templates",

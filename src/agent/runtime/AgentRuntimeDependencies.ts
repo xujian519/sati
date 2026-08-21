@@ -12,6 +12,7 @@ import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { TokenAccountingRuntime } from "../../context/index.js";
 import type { RouterRuntime } from "../../router/index.js";
+import type { SatiWorkspaceLedgerProvider } from "../../session/workspace/WorkspaceLedgerStore.js";
 import type { AgentEvent, AgentEventEmitter } from "../protocol/events.js";
 import type { DoomLoop } from "../loop/doomLoop.js";
 import type { PlanTodoStateManager } from "./PlanTodoState.js";
@@ -152,6 +153,12 @@ export type AgentRuntimeDependencies = {
    * 开关约束）终止当前 turn。未注入时零开销。
    */
   doomLoop?: DoomLoop;
+  /**
+   * 工作区账本 provider（可选）。提供读取/写入五元组账本（Goal/Core/Verified/
+   * Open/Next）的能力；账本从 transcript 派生、每次模型调用前重新注入，从而
+   * 跨压缩存续。未注入时零开销（不注入、不写 seam）。
+   */
+  workspaceLedger?: SatiWorkspaceLedgerProvider;
   eventEmitter?: AgentEventEmitter;
   drainEvents?: () => AgentEvent[];
 };

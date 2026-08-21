@@ -106,7 +106,7 @@ test("auto full compaction retries without protected turns when protected output
   const tokenBudget = new TokenBudgetManager();
   const runtime = new DefaultContextRuntime({
     tokenBudget,
-    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget }),
+    autoCompactionPolicy: new AutoCompactionPolicy(),
     compactionEngine: engine,
     maxContextTokens: 100,
   });
@@ -245,7 +245,7 @@ test("auto full compaction keeps the best compacted result even when it still bl
   const tokenBudget = new TokenBudgetManager();
   const runtime = new DefaultContextRuntime({
     tokenBudget,
-    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget }),
+    autoCompactionPolicy: new AutoCompactionPolicy(),
     compactionEngine: engine,
     maxContextTokens: 100,
   });
@@ -410,7 +410,7 @@ test("auto full compaction summarizes older tool groups inside one user task", a
   const tokenBudget = new TokenBudgetManager();
   const runtime = new DefaultContextRuntime({
     tokenBudget,
-    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget }),
+    autoCompactionPolicy: new AutoCompactionPolicy(),
     compactionEngine: engine,
     maxContextTokens: 100,
   });
@@ -455,7 +455,7 @@ test("blocking auto compaction continues to full summary when micro pruning only
   const tokenBudget = new TokenBudgetManager();
   const runtime = new DefaultContextRuntime({
     tokenBudget,
-    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget }),
+    autoCompactionPolicy: new AutoCompactionPolicy(),
     compactionEngine: engine,
     microCompaction: new MicroCompactionEngine({ keepLatest: 1 }),
     maxContextTokens: 100,
@@ -496,7 +496,7 @@ test("summary failures fall back deterministically and cool down subsequent summ
   const tokenBudget = new TokenBudgetManager();
   const runtime = new DefaultContextRuntime({
     tokenBudget,
-    autoCompactionPolicy: new AutoCompactionPolicy({ tokenBudget }),
+    autoCompactionPolicy: new AutoCompactionPolicy(),
     compactionEngine: engine,
     maxContextTokens: 100,
   });

@@ -126,18 +126,3 @@ export class InstructionDiscovery {
     }
   }
 }
-
-export function scopeDescription(scope: InstructionScope): string {
-  switch (scope) {
-    case "managed":
-      return " (managed instructions, set by administrator)";
-    case "user":
-      return " (user's global instructions for all projects)";
-    case "project":
-      return " (project instructions, checked into the codebase)";
-    case "project-rules":
-      return " (project rule, checked into the codebase)";
-    case "local":
-      return " (user's private project instructions, not checked in)";
-  }
-}
