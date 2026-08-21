@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createNuoSearchProvider } from "../../../../src/patent/data/nuo/searchProvider.js";
+import { ConnectorRegistry } from "../../../../src/literature/index.js";
+import type { Connector, ConnectorHit } from "../../../../src/literature/index.js";
+import {
+  createMultiSourceSearchProvider,
+  createNuoSearchProvider,
+  createPaperSearchSource,
+} from "../../../../src/patent/data/nuo/searchProvider.js";
 
 /** 构造 nuo-patent 形状的检索命中。 */
 function hit(
@@ -62,4 +68,134 @@ test("searchProvider: 无公开日字段的旧命中不报错、不降级", asyn
   const docs = await provider.search!("old query");
   assert.equal(docs.length, 1);
   assert.equal(docs[0]!.publication_date, undefined);
+});
+
+const sourceDoc = (url: string, title: string) => ({ title, snippet: "s", url, publication_date: "2020-01-01" });
+
+test("multiSource: 多源并行（两个源同时在飞，非串行）", async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const barrier = new Promise<void>(resolve => setTimeout(resolve, 30));
+  const makeSource = () => async (): Promise<Array<ReturnType<typeof sourceDoc>>> => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await barrier;
+    inFlight -= 1;
+    return [sourceDoc("u", "t")];
+  };
+  const provider = createMultiSourceSearchProvider([makeSource(), makeSource()]);
+  const docs = await provider.search!("q");
+  assert.equal(docs.length, 1);
+  // 串行实现下 maxInFlight 只会是 1；并行实现应达到 2。
+  assert.equal(maxInFlight, 2);
+});
+
+test("multiSource: 按 url 去重（跨源重复命中只保留一条）", async () => {
+  const a = async () => [sourceDoc("https://x/patent/1", "Patent A")];
+  const b = async () => [sourceDoc("https://x/patent/1", "Patent A 重复"), sourceDoc("https://x/patent/2", "Patent B")];
+  const provider = createMultiSourceSearchProvider([a, b]);
+  const docs = await provider.search!("q", { maxResults: 10 });
+  assert.equal(docs.length, 2);
+  assert.deepEqual(docs.map(d => d.url).sort(), ["https://x/patent/1", "https://x/patent/2"]);
+});
+
+test("multiSource: 无 url 命中按 title 回退去重", async () => {
+  const a = async () => [{ title: "同题", snippet: "s1" }];
+  const b = async () => [
+    { title: "同题", snippet: "s2" },
+    { title: "另一篇", snippet: "s3" },
+  ];
+  const provider = createMultiSourceSearchProvider([a, b]);
+  const docs = await provider.search!("q", { maxResults: 10 });
+  assert.equal(docs.length, 2);
+  assert.deepEqual(
+    docs.map(d => d.title),
+    ["同题", "另一篇"],
+  );
+});
+
+test("multiSource: 单源失败 fail-open（其他源结果保留）", async () => {
+  const ok = async () => [sourceDoc("https://x/ok", "OK")];
+  const failing = async () => {
+    throw new Error("source down");
+  };
+  const provider = createMultiSourceSearchProvider([ok, failing]);
+  const docs = await provider.search!("q");
+  assert.equal(docs.length, 1);
+  assert.equal(docs[0]!.title, "OK");
+});
+
+test("multiSource: maxResults 截断合并结果", async () => {
+  const a = async () => [sourceDoc("https://x/1", "A1"), sourceDoc("https://x/2", "A2")];
+  const b = async () => [sourceDoc("https://x/3", "B1"), sourceDoc("https://x/4", "B2")];
+  const provider = createMultiSourceSearchProvider([a, b]);
+  const docs = await provider.search!("q", { maxResults: 3 });
+  assert.equal(docs.length, 3);
+});
+
+function mockConnector(id: string, hits: ConnectorHit[]): Connector {
+  return {
+    id,
+    name: id,
+    domain: "literature",
+    description: "mock connector",
+    search: async () => hits,
+  };
+}
+
+test("paperSource: 并行检索全部 connector 并归一化命中形状", async () => {
+  const registry = new ConnectorRegistry();
+  registry.register(
+    mockConnector("arxiv", [{ id: "a1", title: "Paper A", summary: "summary A", url: "https://arxiv.org/a1" }]),
+  );
+  registry.register(
+    mockConnector("openalex", [{ id: "o1", title: "Paper O", summary: undefined, url: "https://openalex.org/o1" }]),
+  );
+  const source = createPaperSearchSource(registry);
+  const docs = await source("检索策略：分拣 AND 传感器", { maxResults: 5 });
+  assert.equal(docs.length, 2);
+  assert.deepEqual(
+    docs.map(d => ({ title: d.title, snippet: d.snippet, url: d.url })),
+    [
+      { title: "Paper A", snippet: "summary A", url: "https://arxiv.org/a1" },
+      { title: "Paper O", snippet: "", url: "https://openalex.org/o1" },
+    ],
+  );
+  assert.equal(docs[0]!.publication_date, undefined);
+});
+
+test("paperSource: 单 connector 失败 fail-open（其余源结果保留）", async () => {
+  const registry = new ConnectorRegistry();
+  registry.register(mockConnector("arxiv", [{ id: "a1", title: "Paper A", url: "https://arxiv.org/a1" }]));
+  registry.register({
+    id: "broken",
+    name: "broken",
+    domain: "literature",
+    description: "broken",
+    search: async () => {
+      throw new Error("down");
+    },
+  });
+  const source = createPaperSearchSource(registry);
+  const docs = await source("q", { maxResults: 5 });
+  assert.equal(docs.length, 1);
+  assert.equal(docs[0]!.title, "Paper A");
+});
+
+test("paperSource: 同一论文多库收录按归一化 title 去重（url 跨源不同不判重）", async () => {
+  const registry = new ConnectorRegistry();
+  registry.register(
+    mockConnector("arxiv", [{ id: "a1", title: "Attention Is All You Need", url: "https://arxiv.org/abs/1706.03762" }]),
+  );
+  registry.register(
+    mockConnector("crossref", [{ id: "c1", title: "Attention Is All You Need", url: "https://doi.org/10.5555/123" }]),
+  );
+  registry.register(mockConnector("openalex", [{ id: "o1", title: "Another Paper", url: "https://openalex.org/o1" }]));
+  const source = createPaperSearchSource(registry);
+  const docs = await source("transformer attention", { maxResults: 10 });
+  assert.equal(docs.length, 2);
+  assert.deepEqual(
+    docs.map(d => d.title),
+    ["Attention Is All You Need", "Another Paper"],
+  );
 });

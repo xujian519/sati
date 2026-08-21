@@ -77,6 +77,13 @@ export type RunOptions = {
   onSuperStepStart?: (step: number, activeNodes: string[], state: GraphState) => void | Promise<void>;
 };
 
+/** 单节点执行耗时（阶段 0 检索耗时测量；按节点名字典序排序，确定性输出）。 */
+export type NodeDuration = {
+  node: string;
+  /** 节点执行总耗时（含节点策略重试与超时等待）。 */
+  durationMs: number;
+};
+
 /** 图运行结果。 */
 export type GraphRunResult = {
   state: GraphState;
@@ -86,6 +93,8 @@ export type GraphRunResult = {
   degraded: DegradationMark[];
   /** 中断（审批门等）：存在表示暂停待人工介入，completed=false。 */
   interrupted?: { node: string; message: string; data: Record<string, unknown> };
+  /** 各节点执行耗时（含中断/failFast 前已执行的节点）。 */
+  nodeDurations?: NodeDuration[];
 };
 
 /** 数据级降级标记（见 degradation.ts）。 */

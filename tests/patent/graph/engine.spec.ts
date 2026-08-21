@@ -226,3 +226,73 @@ test("engine: resume 需要 GraphCheckpoint（未接线时行为由 checkpoint �
   assert.equal(result.completed, true);
   assert.equal(result.state.x, 1);
 });
+
+test("engine: nodeDurations 记录全部执行节点（字典序确定性）", async () => {
+  const builder = new GraphBuilder();
+  builder
+    .addNode("zebra", node("z", 1))
+    .addNode("alpha", node("a", 2))
+    .addNode("mid", node("m", 3))
+    .addEdge("zebra", "alpha")
+    .addEdge("alpha", "mid")
+    .addEdge("mid", GRAPH_END);
+  const graph = builder.compile("zebra");
+  const result = await graph.run({});
+  assert.equal(result.completed, true);
+  assert.deepEqual(
+    result.nodeDurations?.map(d => d.node),
+    ["alpha", "mid", "zebra"],
+  );
+  for (const d of result.nodeDurations ?? []) {
+    assert.equal(typeof d.durationMs, "number");
+    assert.ok(d.durationMs >= 0);
+  }
+});
+
+test("engine: nodeDurations 覆盖并行超步与中断节点", async () => {
+  const builder = new GraphBuilder();
+  builder
+    .addNode("entry", node("start", true))
+    .addNode("p1", node("k", 1))
+    .addNode("p2", node("k", 2))
+    .addNode("gate", async () => {
+      throw new GraphInterruptError("暂停", { review_context: "x" });
+    })
+    .addEdge("entry", "p1")
+    .addEdge("entry", "p2")
+    .addEdge("p1", "gate")
+    .addEdge("p2", "gate");
+  const graph = builder.compile("entry");
+  const result = await graph.run({});
+  assert.equal(result.completed, false);
+  assert.equal(result.interrupted?.node, "gate");
+  // 中断前 entry/p1/p2 已执行并计时，gate 节点本身也已计时。
+  assert.deepEqual(
+    result.nodeDurations?.map(d => d.node),
+    ["entry", "gate", "p1", "p2"],
+  );
+});
+
+test("engine: failFast 早退与 maxSteps 耗尽时 nodeDurations 仍存在", async () => {
+  const failing = async (): Promise<GraphState> => {
+    throw new Error("boom");
+  };
+  const failFastBuilder = new GraphBuilder();
+  failFastBuilder.addNode("failing", failing).addNode("ok", node("done", true)).addEdge("failing", "ok");
+  const failFastResult = await failFastBuilder.compile("failing").run({}, { failFast: true });
+  assert.equal(failFastResult.completed, false);
+  assert.ok(Array.isArray(failFastResult.nodeDurations));
+  assert.deepEqual(
+    failFastResult.nodeDurations?.map(d => d.node),
+    ["failing"],
+  );
+
+  const loopBuilder = new GraphBuilder();
+  loopBuilder.addNode("loop", node("n", 1)).setConditionalEdge("loop", async () => ["loop"]);
+  const loopResult = await loopBuilder.compile("loop", 5).run({});
+  assert.equal(loopResult.completed, false);
+  assert.ok(Array.isArray(loopResult.nodeDurations));
+  // 受控循环：loop 节点 5 个超步各执行一次，nodeDurations 保留每次执行的耗时记录。
+  assert.equal(loopResult.nodeDurations?.length, 5);
+  assert.ok(loopResult.nodeDurations?.every(d => d.node === "loop"));
+});

@@ -152,6 +152,11 @@ export type GatewaySubmitTurnInput = {
    * so they are visible to the model but hidden from the Web UI.
    */
   syntheticMessages?: Array<{ text: string; purpose?: string }>;
+  /**
+   * 本回合系统提示追加段（如团队成员角色提示）：透传到 AgentLoop，
+   * 追加在组装好的系统提示末尾（不替换默认提示）。
+   */
+  appendSystemPrompt?: string;
 };
 
 export type GatewayRecordAgentStatusMessageInput = {

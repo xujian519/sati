@@ -6,6 +6,7 @@
  * 由 gateway 内部 resume 路径完成（与 runTaskResumeScan 的续算接线同构）。
  */
 import type { GatewayEvent, GatewaySubmitTurnInput } from "../../../gateway/protocol/types.js";
+import { getSubagentDefinition } from "../../sub/builtinSubagentTypes.js";
 import type { TeamDb } from "../storage/team-db.js";
 import { parseModelRouteJson } from "./modelRouteJson.js";
 
@@ -54,12 +55,18 @@ export async function wakeMember(
       route.provider !== undefined && route.model !== undefined
         ? { provider: route.provider, model: route.model }
         : undefined;
+    // M5：角色系统提示注入——roleSlug 已注册时取其 systemPromptSuffix（角色 prompt
+    // 本体，非子代理共享前缀）作为本回合系统提示追加段；成员仍保有队长全部工具
+    //（不应用 allowedTools/domains/omitTools/isReadOnly 裁剪）。未注册/空提示降级
+    // 不注入（不阻塞唤醒，与 modelRoute 脏数据降级同构）。
+    const rolePrompt = getSubagentDefinition(member.roleSlug)?.systemPromptSuffix?.trim();
     const input: GatewaySubmitTurnInput = {
       sessionKey: member.sessionKey,
       channelKey: "cron",
       message: followupMessage,
       canPrompt: false,
       ...(modelRoute !== undefined ? { modelRoute } : {}),
+      ...(rolePrompt ? { appendSystemPrompt: rolePrompt } : {}),
       ...(options.syntheticMessages ? { syntheticMessages: options.syntheticMessages } : {}),
     };
     for await (const event of gateway.submitTurn(input)) {

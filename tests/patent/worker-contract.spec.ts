@@ -7,6 +7,7 @@ import {
   WorkerRegistryError,
   defaultPatentWorkers,
   validateWorkerOutput,
+  workerAllowedForRole,
 } from "../../src/patent/worker-contract.js";
 
 test("registry registers patent workers and verifies contract completeness", () => {
@@ -46,6 +47,31 @@ test("registry rejects duplicate registration and incomplete definitions", () =>
   registry.register(w);
   assert.throws(() => registry.register(w), WorkerRegistryError);
   assert.throws(() => registry.register({ name: "x", tier: "work", description: "" }), WorkerRegistryError);
+});
+
+test("workerAllowedForRole: 12 岗角色按 tier 白名单判定（阶段 3）", () => {
+  const byName = new Map(defaultPatentWorkers().map(w => [w.name, w]));
+  const searchWorker = byName.get("patent-search-commander")!; // tier: domain
+  const checkerWorker = byName.get("quality_checker")!; // tier: checker
+
+  // researcher 允许 domain（检索 worker），不允许 checker。
+  assert.equal(workerAllowedForRole("researcher", searchWorker), true);
+  assert.equal(workerAllowedForRole("researcher", checkerWorker), false);
+  // adjudicator 允许 checker，不允许 domain。
+  assert.equal(workerAllowedForRole("adjudicator", checkerWorker), true);
+  assert.equal(workerAllowedForRole("adjudicator", searchWorker), false);
+  // case-manager 空白名单：任何 worker 均拒绝。
+  assert.equal(workerAllowedForRole("case-manager", searchWorker), false);
+  // 未登记角色不限制（向后兼容）。
+  assert.equal(workerAllowedForRole("unknown-role", searchWorker), true);
+});
+
+test("workerAllowedForRole: drafter 允许 work/provision 类 worker", () => {
+  const byName = new Map(defaultPatentWorkers().map(w => [w.name, w]));
+  const oaWriter = byName.get("patent-oa-writer")!; // tier: work
+  const analyzer = byName.get("patent-technical-analyzer")!; // tier: work
+  assert.equal(workerAllowedForRole("drafter", oaWriter), true);
+  assert.equal(workerAllowedForRole("drafter", analyzer), true);
 });
 
 test("lazy activation: preRegister=false workers are inactive until activated", () => {

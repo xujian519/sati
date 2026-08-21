@@ -383,6 +383,8 @@ export {
   validateWorkerOutput,
   defaultPatentWorkers,
   WORKER_ROLE_MAP,
+  ROLE_WORKER_TIERS,
+  workerAllowedForRole,
 } from "./worker-contract.js";
 
 export {

@@ -512,6 +512,7 @@ export class InProcessGateway implements Gateway {
             ...persistedRules,
             allow: [...sessionAllowRules, ...persistedRules.allow],
           },
+          appendSystemPrompt: input.appendSystemPrompt,
           ...(syntheticMessages.length > 0 ? { syntheticMessages } : {}),
         })) {
           if (this.turnCompletions.get(input.sessionKey) !== turnDone) {

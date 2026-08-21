@@ -51,7 +51,12 @@ import { createFlexiblePlanTool } from "../builtin/patentFlexiblePlanTool.js";
 import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
 import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
 import { createPatentSearchTool } from "../builtin/patentSearch.js";
-import { registerBuiltinAtoms } from "../../patent/atoms/index.js";
+import { registerBuiltinAtoms, type StageProvider } from "../../patent/atoms/index.js";
+import {
+  createMultiSourceSearchProvider,
+  createNuoSearchProvider,
+  createPaperSearchSource,
+} from "../../patent/data/nuo/searchProvider.js";
 import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateTool.js";
 import { createPatentWikiSearchTool } from "../builtin/patentWikiSearch.js";
 import { createPatentKgQueryTool } from "../builtin/patentKgQuery.js";
@@ -228,6 +233,10 @@ export type CreateBuiltinRegistryOptions = {
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
   // 阶段四 T9 收尾：全部内置工具已声明 outputSchema，注册表开启强制（新工具未声明即 fail-loud）。
   const registry = new ToolRegistry({ requireOutputSchema: true });
+  // 学术文献连接器注册表（阶段 1b）：paper 工具与专利多源检索共享同一实例；
+  // paperSearch=false 时为 undefined（专利多源检索回退 nuo 单源）。
+  const literatureRegistry =
+    options?.paperSearch !== false ? createLiteratureRegistry(options?.paperSearch) : undefined;
   registry.register(annotate(createGetCurrentTimeTool(), "session"));
   registry.register(annotate(createReadFileTool(), "filesystem"));
   registry.register(annotate(createSendAttachmentTool(), "session"));
@@ -304,7 +313,15 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
     registry.register(annotate(createPatentWorkflowTool(), "patent"));
-    registry.register(annotate(createPatentWorkflowRunTool(), "patent"));
+    // 多源检索（阶段 1b）：nuo 专利 + paper 论文并行；paper 禁用时仅 nuo 单源。
+    const searchSources: Array<NonNullable<StageProvider["search"]>> = [];
+    const nuoSearch = createNuoSearchProvider().search;
+    if (nuoSearch !== undefined) searchSources.push(nuoSearch);
+    if (literatureRegistry !== undefined) {
+      searchSources.push(createPaperSearchSource(literatureRegistry));
+    }
+    const search = createMultiSourceSearchProvider(searchSources).search;
+    registry.register(annotate(createPatentWorkflowRunTool({ search }), "patent"));
     registry.register(annotate(createPatentPlanTaskTool(), "patent"));
     registry.register(annotate(createFlexiblePlanTool(), "patent"));
     registry.register(annotate(createPatentWorkerValidateTool(), "patent"));
@@ -331,11 +348,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));
   }
-  if (options?.paperSearch !== false) {
-    // 学术文献检索：两个工具共享同一注册表实例。外层条件已排除 false，
-    // 此处类型为 CreateLiteratureRegistryOptions | undefined。
-    const literatureOptions = options?.paperSearch;
-    const literatureRegistry = createLiteratureRegistry(literatureOptions);
+  if (literatureRegistry !== undefined) {
     registry.register(annotate(createPaperListSourcesTool({ registry: literatureRegistry }), "literature"));
     registry.register(annotate(createPaperSearchTool({ registry: literatureRegistry }), "literature"));
   }
@@ -348,7 +361,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createReadSkillTool(options.readSkill), "session"));
   }
   if (options?.team) {
-    const { db, scheduler, emit } = options.team;
+    const { db, scheduler, emit, workerRegistry } = options.team;
     // 契约：9 个 creator 内部不标注 domain（domain 由注册表集中打标）。
     // annotate 只补不覆盖——若未来 creator 自标 domain，注册后 domain 来源
     // 会不一致（自标优先），改动 creator 时需同步本块约定。
@@ -356,7 +369,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createTeamCreateTool({ db, scheduler, emit }), "team:manage"));
     registry.register(annotate(createTeamAddMemberTool({ db, scheduler, emit }), "team:manage"));
     registry.register(annotate(createTeamRemoveMemberTool({ db, scheduler, emit }), "team:manage"));
-    registry.register(annotate(createTeamCreateTaskTool({ db, scheduler, emit }), "team:manage"));
+    registry.register(annotate(createTeamCreateTaskTool({ db, scheduler, emit, workerRegistry }), "team:manage"));
     registry.register(annotate(createTeamReassignTaskTool({ db, scheduler, emit }), "team:manage"));
     registry.register(annotate(createTeamArchiveTool({ db, scheduler, emit }), "team:manage"));
     // 作业面（team，成员角色可见）

@@ -58,6 +58,8 @@ export type TeamCreateTaskInput = {
   description?: string;
   dependencies?: string[];
   maxAttempts?: number;
+  /** 阶段 3：任务期望执行的专业 worker 契约名（分派时按成员角色 tier 校验）。 */
+  workerName?: string;
 };
 export type TeamCreateTaskOutput = {
   teamId: string;
@@ -70,7 +72,7 @@ export type TeamCreateTaskOutput = {
 export function createTeamCreateTaskTool(
   options: TeamToolsOptions,
 ): SatiToolDefinition<TeamCreateTaskInput, TeamCreateTaskOutput> {
-  const { db, scheduler, emit } = options;
+  const { db, scheduler, emit, workerRegistry } = options;
   return {
     name: "team_create_task",
     outputSchema: {
@@ -104,6 +106,11 @@ export function createTeamCreateTaskTool(
           type: "number",
           description: "Attempt cap before the task is marked failed (default 3).",
         },
+        workerName: {
+          type: "string",
+          description:
+            "Optional worker contract name (e.g. patent-search-commander) the task expects; dispatch-time tier check against the assignee role.",
+        },
       },
     },
     isReadOnly: () => false,
@@ -116,6 +123,14 @@ export function createTeamCreateTaskTool(
       }
       if (input.maxAttempts !== undefined && (!Number.isInteger(input.maxAttempts) || input.maxAttempts < 1)) {
         throw new SatiToolRuntimeError("invalid_tool_input", `maxAttempts 必须为正整数，收到：${input.maxAttempts}`);
+      }
+      // 阶段 3：workerName 存在性校验（锁外，workerRegistry 未注入时跳过——fail-open）。
+      if (
+        input.workerName !== undefined &&
+        workerRegistry !== undefined &&
+        workerRegistry.get(input.workerName) === undefined
+      ) {
+        throw new SatiToolRuntimeError("invalid_tool_input", `worker 未注册：${input.workerName}`);
       }
       let taskId = "";
       let blockedByCount = 0;
@@ -155,6 +170,7 @@ export function createTeamCreateTaskTool(
           reassigning: false,
           blockedByCount,
           maxAttempts: input.maxAttempts ?? 3,
+          workerName: input.workerName,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };

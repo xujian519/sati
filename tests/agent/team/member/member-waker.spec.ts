@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import type { GatewayEvent, GatewaySubmitTurnInput } from "../../../../src/gateway/protocol/types.js";
+import { registerRoleDefinition, unregisterRoleDefinition } from "../../../../src/agent/sub/builtinSubagentTypes.js";
 import {
   TeamDb,
   TeamMemberNotFoundError,
@@ -181,5 +182,62 @@ test("唤醒：modelRouteJson 为部分字段（仅 provider）时 input 无 mod
     assert.equal(recorded.inputs[0]?.modelRoute, undefined, "部分字段不传 modelRoute（不覆盖会话模型）");
   } finally {
     db.close();
+  }
+});
+
+test("唤醒：roleSlug 已注册时注入角色系统提示为 appendSystemPrompt（成员不裁剪工具）", async () => {
+  registerRoleDefinition({
+    id: "patent-searcher",
+    description: "专利检索角色",
+    allowedTools: ["*"],
+    visibleDomains: ["patent"],
+    omitProjectInstructions: false,
+    omitGitStatus: false,
+    isReadOnly: false,
+    systemPromptSuffix: "你是专利检索专家，检索前先拆解权利要求。",
+  });
+  try {
+    const { db, recorded, gateway } = setup();
+    try {
+      await wakeMember(db, gateway, "m1", "继续检索");
+      assert.equal(recorded.inputs[0]?.appendSystemPrompt, "你是专利检索专家，检索前先拆解权利要求。");
+    } finally {
+      db.close();
+    }
+  } finally {
+    unregisterRoleDefinition("patent-searcher");
+  }
+});
+
+test("唤醒：roleSlug 未注册时不注入 appendSystemPrompt（降级不阻塞，与脏数据同构）", async () => {
+  const { db, recorded, gateway } = setup();
+  try {
+    await wakeMember(db, gateway, "m1", "继续检索");
+    assert.equal(recorded.inputs[0]?.appendSystemPrompt, undefined);
+  } finally {
+    db.close();
+  }
+});
+
+test("唤醒：角色 systemPromptSuffix 为空白时不注入 appendSystemPrompt", async () => {
+  registerRoleDefinition({
+    id: "patent-searcher",
+    description: "空白提示角色",
+    allowedTools: ["*"],
+    omitProjectInstructions: false,
+    omitGitStatus: false,
+    isReadOnly: false,
+    systemPromptSuffix: "   ",
+  });
+  try {
+    const { db, recorded, gateway } = setup();
+    try {
+      await wakeMember(db, gateway, "m1", "go");
+      assert.equal(recorded.inputs[0]?.appendSystemPrompt, undefined);
+    } finally {
+      db.close();
+    }
+  } finally {
+    unregisterRoleDefinition("patent-searcher");
   }
 });
