@@ -48,6 +48,9 @@ export function createNuoSearchProvider(options?: CreateNuoSearchProviderOptions
   };
 }
 
+/** 检索命中形状（workflow 原子消费的归一化命中）。 */
+export type SearchHit = { title: string; snippet: string; url?: string; publication_date?: string };
+
 /** 单检索源：与 StageProvider.search 同形状（查询 → 命中列表）。 */
 export type SearchSource = NonNullable<StageProvider["search"]>;
 
@@ -74,21 +77,23 @@ export function createMultiSourceSearchProvider(sources: readonly SearchSource[]
   };
 }
 
-/** 按 url（缺失回退 title）去重，保持首现顺序，截断到 maxResults。 */
-function dedupeSearchHits(
-  hits: Array<{ title: string; snippet: string; url?: string; publication_date?: string }>,
-  maxResults: number,
-): Array<{ title: string; snippet: string; url?: string; publication_date?: string }> {
+/** 按 keyOf 去重（保持首现顺序）；maxResults 提供时截断。 */
+function dedupeBy(hits: SearchHit[], keyOf: (hit: SearchHit) => string, maxResults?: number): SearchHit[] {
   const seen = new Set<string>();
-  const out: Array<{ title: string; snippet: string; url?: string; publication_date?: string }> = [];
+  const out: SearchHit[] = [];
   for (const hit of hits) {
-    const key = hit.url ?? hit.title;
+    const key = keyOf(hit);
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(hit);
-    if (out.length >= maxResults) break;
+    if (maxResults !== undefined && out.length >= maxResults) break;
   }
   return out;
+}
+
+/** 按 url（缺失回退 title）去重并截断。 */
+function dedupeSearchHits(hits: SearchHit[], maxResults: number): SearchHit[] {
+  return dedupeBy(hits, hit => hit.url ?? hit.title, maxResults);
 }
 
 /** title 归一化（小写 + 去空白/标点/符号）：跨库论文去重的键（同一论文多库收录时 title 一致）。 */
@@ -96,19 +101,9 @@ function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
 }
 
-/** 按归一化 title 去重，保持首现顺序（不截断）。 */
-function dedupeByNormalizedTitle(
-  hits: Array<{ title: string; snippet: string; url?: string; publication_date?: string }>,
-): Array<{ title: string; snippet: string; url?: string; publication_date?: string }> {
-  const seen = new Set<string>();
-  const out: Array<{ title: string; snippet: string; url?: string; publication_date?: string }> = [];
-  for (const hit of hits) {
-    const key = normalizeTitle(hit.title);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(hit);
-  }
-  return out;
+/** 按归一化 title 去重（同一论文多库收录，url 跨源不同；不截断）。 */
+function dedupeByNormalizedTitle(hits: SearchHit[]): SearchHit[] {
+  return dedupeBy(hits, hit => normalizeTitle(hit.title));
 }
 
 /**

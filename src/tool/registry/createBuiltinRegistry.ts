@@ -320,12 +320,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     if (literatureRegistry !== undefined) {
       searchSources.push(createPaperSearchSource(literatureRegistry));
     }
-    registry.register(
-      annotate(
-        createPatentWorkflowRunTool({ search: createMultiSourceSearchProvider(searchSources).search }),
-        "patent",
-      ),
-    );
+    const search = createMultiSourceSearchProvider(searchSources).search;
+    registry.register(annotate(createPatentWorkflowRunTool({ search }), "patent"));
     registry.register(annotate(createPatentPlanTaskTool(), "patent"));
     registry.register(annotate(createFlexiblePlanTool(), "patent"));
     registry.register(annotate(createPatentWorkerValidateTool(), "patent"));

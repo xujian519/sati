@@ -165,9 +165,16 @@ type NamedOutcome = { name: string; delta: StateDelta } | { name: string; error:
 /** 恢复起点（resume 用）：state + active + 超步序号。 */
 export type ResumePoint = { state: GraphState; active: string[]; stepIndex: number };
 
-/** 节点耗时按节点名排序（确定性输出；纯字节序，不依赖运行环境 locale）。 */
+/** 节点名比较（纯字节序，不依赖运行环境 locale；与 merge.ts 的确定性排序口径一致）。 */
+function byNodeName(a: NodeDuration, b: NodeDuration): number {
+  if (a.node < b.node) return -1;
+  if (a.node > b.node) return 1;
+  return 0;
+}
+
+/** 节点耗时按节点名排序（确定性输出）。 */
 function sortedNodeDurations(durations: NodeDuration[]): NodeDuration[] {
-  return [...durations].sort((a, b) => (a.node < b.node ? -1 : a.node > b.node ? 1 : 0));
+  return [...durations].sort(byNodeName);
 }
 
 /** SuperStep 主循环（resumeFrom 提供时从指定超步继续）。 */
