@@ -4,6 +4,7 @@ import type { AgentPermissionDenial } from "./result.js";
 export type AgentLoopTransitionReason =
   | "next_turn"
   | "model_error"
+  | "metacognitive_retry"
   | "max_turns"
   | "aborted_streaming"
   | "aborted_tools"

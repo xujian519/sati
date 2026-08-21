@@ -10,6 +10,8 @@
  *   4. Repetition loops (a line repeated 3+ times, or a character run of 20+).
  */
 
+import { COVERAGE_RE } from "../../session/workspace/WorkspaceLedger.js";
+
 /** Symbols that belong to the inner register and nowhere a person reads. */
 export const INNER_ONLY = ["⇒", "⟹", "⟸", "∴", "∵", "⊆", "⊇", "∋", "??", "?!", "💀"];
 
@@ -18,9 +20,6 @@ export const STATE_MARKERS = ["GRRR", "GAAAH", "PHEW", "I see meltdown", "DATA D
 
 const CLAIM_RE =
   /(?:verified|confirmed|validated|tested|proven|already (?:verified|confirmed|tested)|已验证|已经验证|经验证|验证通过|已确认|确认无误|已经测试|经测试|测试通过|已经证明|经证明)/i;
-
-const COVERAGE_RE =
-  /(?:all|each|every|cases?|inputs?|samples?|bounds?|boundaries|edges?|random(?:ized|ised)?|files?|modules?|sections?|lines?|scenarios?|environments?|platforms?|datasets?|records?|routes?|commands?|branches?|ranges?|including|through|up\s+to|Windows|Linux|macOS|Chrome|Firefox|Safari)\b|\b(?:Python|Node(?:\.js)?)\s*\d|\bn\s*[<≤=]\s*\d|(?:覆盖|全部|所有|每个|每条|各条|每项|逐一|逐条|边界|上下限|上限|下限|输入|用例|文件|目录|模块|章节|区段|分段|行数|行号|场景|平台|环境|浏览器|数据集|记录|路径|路由|命令|分支|范围|包括|包含|至多|至少|最多|最少|随机|样本|样例|截至)/i;
 
 const MARKDOWN_FENCE = /^\s{0,3}(`{3,}|~{3,})(.*)$/;
 const MARKDOWN_HEADING = /^\s{0,3}#{1,6}(?:\s|$)/;

@@ -19,6 +19,7 @@ import {
 import type { SatiReadFileStateMap, SatiToolResult, SatiWriteSnapshotMap } from "../../tool/index.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
+import type { AgentLoopTransitionReason } from "../protocol/state.js";
 import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
@@ -1331,6 +1332,8 @@ export class AgentLoop {
         return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
       }
       // 元认知控制：shaky 自评不静默收尾——带诊断重试一次（非空白重试）。
+      // 仅 shaky 触发控制退出（见 spec）；strong/thin 被识别但不改行为——一个
+      // 不改变下一步的自评只是评论，不是监控动作。
       if (this.config.metacognitiveControl === true && !state.hasAttemptedMetacognitiveRetry) {
         const estimate = parseSelfEstimate(assistantText);
         if (estimate.tag === "shaky") {
@@ -1339,6 +1342,7 @@ export class AgentLoop {
             state,
             input,
             buildMetacognitiveRetryPrompt(estimate.diagnosis),
+            "metacognitive_retry",
             "metacognitive_retry",
           );
         }
@@ -1733,9 +1737,10 @@ export class AgentLoop {
     input: AgentLoopInput,
     prompt: string,
     purpose: string,
+    reason: AgentLoopTransitionReason = "model_error",
   ): AsyncGenerator<AgentEvent, TurnStepContinue, unknown> {
     state.pushTransientSyntheticPrompt(prompt, purpose);
-    yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason: "model_error" };
+    yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason };
     return { kind: "continue" };
   }
 
@@ -1973,6 +1978,11 @@ export class AgentLoop {
       tools = filterAskModeTools(toolDefinitions);
     }
     const workspaceLedgerBlock = await this.readWorkspaceLedgerBlock();
+    // Computed once so the model-visible prompt and the injected_context audit
+    // record the exact same text (模型可见 = 已记录).
+    const metacognitiveAddendum = this.config.metacognitiveControl
+      ? (this.config.metacognitivePrompt ?? buildMetacognitivePrompt())
+      : undefined;
     const prepared = await contextRuntime.prepareForModel({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -1987,14 +1997,7 @@ export class AgentLoop {
       maxMessages: this.config.maxContextMessages,
       customSystemPrompt: this.config.systemPrompt,
       appendSystemPrompt:
-        [
-          input.appendSystemPrompt,
-          planTodo?.buildPromptAddendum(),
-          workspaceLedgerBlock?.block,
-          this.config.metacognitiveControl
-            ? (this.config.metacognitivePrompt ?? buildMetacognitivePrompt())
-            : undefined,
-        ]
+        [input.appendSystemPrompt, planTodo?.buildPromptAddendum(), workspaceLedgerBlock?.block, metacognitiveAddendum]
           .filter(Boolean)
           .join("\n\n") || undefined,
       abortSignal: input.abortSignal,
@@ -2033,6 +2036,9 @@ export class AgentLoop {
       }
       if (workspaceLedgerBlock && !workspaceLedgerBlock.empty) {
         injections.push({ source: "workspace_ledger", text: workspaceLedgerBlock.block });
+      }
+      if (metacognitiveAddendum) {
+        injections.push({ source: "metacognitive", text: metacognitiveAddendum });
       }
       const freshInjections = injections.filter(injection => {
         const key = `${injection.source}\u0000${injection.text}`;

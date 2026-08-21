@@ -140,7 +140,7 @@ async function validateSkill(skillDir) {
   if (stats.fileCount > MAX_FILE_COUNT) issues.push(`hard: ${slug} has >${MAX_FILE_COUNT} files`);
   if (stats.totalBytes > MAX_TOTAL_BYTES) issues.push(`hard: ${slug} total size exceeds 50MB`);
 
-  // 知识接线校验：专利/法律职责技能（slug 以 patent-/legal- 开头，或 role.domains 含 patent/legal）
+  // 知识接线校验：专利/法律职责技能（slug 以 patent-/legal- 开头，或顶层 domains 含 patent/legal）
   // 除纯工具/外部数据类豁免外，应至少引用一个知识系统工具（patent_wiki_search / patent_case_search /
   // law_search），防止技能文本完全脱离项目知识系统（knowledge.db）。warn 级（不阻断）。
   const KNOWLEDGE_TOOLS = ["patent_wiki_search", "patent_case_search", "law_search"];

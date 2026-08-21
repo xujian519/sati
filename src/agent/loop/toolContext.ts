@@ -154,12 +154,17 @@ export class ToolContextFactory {
         const sidechain = transcriptHooks?.subagentTranscriptResolver?.(subagentId);
         const transcriptRelativePath = sidechain?.transcriptRelativePath ?? "";
 
+        // 先合成实际下发的 directive（含 broadcast-hub 的 workspace-core 前缀），
+        // 再记录审计——保证审计轨迹与子代理真正收到的 prompt 一致。
+        const workspaceCoreDirective = await this.buildWorkspaceCoreDirective();
+        const effectiveDirective = workspaceCoreDirective ? `${workspaceCoreDirective}\n\n${directive}` : directive;
+
         await transcriptHooks?.recordSubagentStarted?.({
           sessionId: input.sessionId,
           turnId: input.turnId,
           subagentId,
           subagentType: def.id,
-          prompt: directive,
+          prompt: effectiveDirective,
           transcriptRelativePath,
           subagentSessionId,
         });
@@ -175,9 +180,6 @@ export class ToolContextFactory {
           subagentType: def.id,
           toolCallId,
         });
-
-        const workspaceCoreDirective = await this.buildWorkspaceCoreDirective();
-        const effectiveDirective = workspaceCoreDirective ? `${workspaceCoreDirective}\n\n${directive}` : directive;
         const subSession = new SubAgentSession({
           definition: def,
           directive: effectiveDirective,

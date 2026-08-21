@@ -53,9 +53,10 @@ export function createWorkspaceNoteTool(): SatiToolDefinition<WorkspaceNoteInput
     isConcurrencySafe: () => false,
     execute: async (input, context) => {
       if (!context.workspaceLedger) {
+        // 内存会话（无持久 transcript）或未启用功能时均无 provider；说清原因以免误导。
         throw new SatiToolRuntimeError(
           "unsupported_tool",
-          "workspace_note is unavailable because the workspace ledger is not enabled.",
+          "workspace_note is unavailable in this session: the workspace ledger needs a persistent transcript and the workspace-ledger feature enabled.",
         );
       }
       const current = (await context.workspaceLedger.read()) ?? emptyWorkspaceLedger();

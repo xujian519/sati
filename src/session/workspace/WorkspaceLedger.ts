@@ -82,7 +82,7 @@ const SECTION_HEADING = /^##\s+/;
  * exists to prevent: "verified" without scope is a mood, not a result. The
  * ledger enforces coverage on the `by` field.
  */
-const COVERAGE_RE =
+export const COVERAGE_RE =
   /(?:all|each|every|cases?|inputs?|samples?|bounds?|boundaries|edges?|random(?:ized|ised)?|files?|modules?|sections?|lines?|scenarios?|environments?|platforms?|datasets?|records?|routes?|commands?|branches?|ranges?|including|through|up\s+to|Windows|Linux|macOS|Chrome|Firefox|Safari)\b|\b(?:Python|Node(?:\.js)?)\s*\d|\bn\s*[<≤=]\s*\d|(?:覆盖|全部|所有|每个|每条|各条|每项|逐一|逐条|边界|上下限|上限|下限|输入|用例|文件|目录|模块|章节|区段|分段|行数|行号|场景|平台|环境|浏览器|数据集|记录|路径|路由|命令|分支|范围|包括|包含|至多|至少|最多|最少|随机|样本|样例|截至)/i;
 
 export function emptyWorkspaceLedger(): WorkspaceLedgerState {

@@ -6,10 +6,10 @@
  * completes successfully whether or not it finds anything.
  */
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import type { SatiToolDefinition } from "../../protocol/types.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import { scanRegisterLeak } from "../../../context/workspace/registerLeak.js";
+import { resolveSatiWorkspacePath } from "../filesystem/pathSafety.js";
 
 export type WorkspaceShipInput = {
   file: string;
@@ -47,10 +47,14 @@ export function createWorkspaceShipTool(): SatiToolDefinition<WorkspaceShipInput
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     execute: async (input, context) => {
-      const filePath = resolve(context.cwd, input.file);
+      // 与 read_file 一致的路径安全：限制在 workspace 根内，绝对路径不得绕过 cwd。
+      const resolved = resolveSatiWorkspacePath(input.file, context, { mustExist: true });
+      if (!resolved.ok) {
+        throw new SatiToolRuntimeError(resolved.error.code, resolved.error.message, resolved.error.details);
+      }
       let text: string;
       try {
-        text = await readFile(filePath, "utf8");
+        text = await readFile(resolved.absolutePath, "utf8");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new SatiToolRuntimeError(

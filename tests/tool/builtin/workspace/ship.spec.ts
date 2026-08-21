@@ -56,17 +56,18 @@ test("character run is detected", () => {
 
 test("ship tool is report-only and completes regardless", async () => {
   const tool = createWorkspaceShipTool();
-  const context: SatiToolRuntimeContext = {
-    sessionId: "s1",
-    turnId: "t1",
-    cwd: "/tmp",
-    permissionMode: "default",
-    permissionContext: {} as never,
-  };
   const { mkdtemp, writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
   const { tmpdir } = await import("node:os");
+  // cwd 指向临时目录，使待检文件落在 workspace 根内（路径安全校验通过）。
   const dir = await mkdtemp(join(tmpdir(), "ship-"));
+  const context: SatiToolRuntimeContext = {
+    sessionId: "s1",
+    turnId: "t1",
+    cwd: dir,
+    permissionMode: "default",
+    permissionContext: { additionalWorkingDirectories: [] } as never,
+  };
   const cleanPath = join(dir, "clean.md");
   await writeFile(cleanPath, "All files verified across edge inputs.\n", "utf8");
   const cleanOut = await tool.execute({ file: cleanPath }, context);
@@ -86,7 +87,7 @@ test("ship tool reports unreadable file", async () => {
     turnId: "t1",
     cwd: "/tmp",
     permissionMode: "default",
-    permissionContext: {} as never,
+    permissionContext: { additionalWorkingDirectories: [] } as never,
   };
   await assert.rejects(() => tool.execute({ file: "no-such-file.md" }, context));
 });
