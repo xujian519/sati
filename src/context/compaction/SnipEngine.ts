@@ -39,7 +39,7 @@ export type SnipResult = {
  */
 const SNIP_BOUNDARY_TEXT_PREFIX = "<snip-boundary";
 
-export function createSnipBoundary(turnsSnipped: number, headTurns: number, tailTurns: number): CanonicalMessage {
+function createSnipBoundary(turnsSnipped: number, headTurns: number, tailTurns: number): CanonicalMessage {
   return {
     role: "user",
     content: [
@@ -49,13 +49,6 @@ export function createSnipBoundary(turnsSnipped: number, headTurns: number, tail
       },
     ],
   };
-}
-
-export function isSnipBoundaryMessage(message: CanonicalMessage): boolean {
-  if (message.role !== "user" || message.content.length !== 1) return false;
-  const block = message.content[0];
-  if (!block || block.type !== "text") return false;
-  return block.text.startsWith(SNIP_BOUNDARY_TEXT_PREFIX);
 }
 
 /**
@@ -143,15 +136,6 @@ export class SnipEngine {
       danglingToolCallIds: dangling,
     };
   }
-}
-
-/**
- * S6: one-shot projection. Equivalent to `snip(messages).messages` but
- * always returns *some* projection — even if no snip happened, the input
- * is returned verbatim.
- */
-export function projectSnippedView(messages: CanonicalMessage[], options: SnipEngineOptions = {}): CanonicalMessage[] {
-  return new SnipEngine(options).snip(messages).messages;
 }
 
 /**

@@ -46,7 +46,7 @@ function positiveNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
-export function compactBudgetState(ratio: number): TokenWarningState {
+function compactBudgetState(ratio: number): TokenWarningState {
   if (!Number.isFinite(ratio)) return "ok";
   if (ratio >= COMPACT_BLOCKING_RATIO) return "blocking";
   if (ratio >= COMPACT_WARNING_RATIO) return "warning";

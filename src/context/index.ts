@@ -40,8 +40,6 @@ export {
   DEFAULT_MAX_RESULT_SIZE_TOKENS,
   PREVIEW_SIZE_BYTES,
   ToolResultBudget,
-  createToolResultBudgetState,
-  flattenToolResultText,
   type ToolResultBudgetOptions,
   type ToolResultBudgetState,
   type ToolResultReplacementRecord,
@@ -87,16 +85,10 @@ export {
   type CompactionResult,
   type CompactionTrigger,
 } from "./compaction/CompactionEngine.js";
-export {
-  AutoCompactionPolicy,
-  type AutoCompactionDecision,
-  type AutoCompactionPolicyOptions,
-} from "./compaction/AutoCompactionPolicy.js";
+export { AutoCompactionPolicy, type AutoCompactionDecision } from "./compaction/AutoCompactionPolicy.js";
 export {
   MicroCompactionEngine,
   MICROCOMPACT_CLEARED,
-  MICROCOMPACT_FAILURES_FOLDED,
-  MICROCOMPACT_RECOVERED_FAILURE_PREFIX,
   type MicroCompactionInput,
   type MicroCompactionResult,
 } from "./compaction/MicroCompactionEngine.js";
@@ -110,9 +102,6 @@ export {
 export { stripMultimediaFromMessages } from "./compaction/stripMultimedia.js";
 export {
   SnipEngine,
-  createSnipBoundary,
-  isSnipBoundaryMessage,
-  projectSnippedView,
   type SnipEngineOptions,
   type SnipResult,
 } from "./compaction/SnipEngine.js";
@@ -176,7 +165,6 @@ export {
 } from "./memory/createEdgeClawMemoryProviderFromConfig.js";
 export {
   InstructionDiscovery,
-  scopeDescription,
   type InstructionLayer,
   type InstructionScope,
 } from "./instructions/InstructionDiscovery.js";

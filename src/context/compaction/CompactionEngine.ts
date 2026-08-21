@@ -218,23 +218,25 @@ export class CompactionEngine {
       summarySucceeded: summaryError === undefined,
     });
 
-    const diagnostics: ContextDiagnostic[] = summaryError
-      ? [
-          {
-            code: "compact_summary_failed",
-            severity: "warning" as const,
-            message: summaryError,
-          },
-          {
-            code: "compact_summary_fallback_used",
-            severity: "warning" as const,
-            message:
-              "A deterministic fallback summary was used because the LLM summary call failed or is cooling down.",
-          },
-        ]
-      : summaryMessage
-        ? validateSummaryMarkdownStructure(summaryMessage)
-        : [];
+    let diagnostics: ContextDiagnostic[];
+    if (summaryError) {
+      diagnostics = [
+        {
+          code: "compact_summary_failed",
+          severity: "warning" as const,
+          message: summaryError,
+        },
+        {
+          code: "compact_summary_fallback_used",
+          severity: "warning" as const,
+          message: "A deterministic fallback summary was used because the LLM summary call failed or is cooling down.",
+        },
+      ];
+    } else if (summaryMessage) {
+      diagnostics = validateSummaryMarkdownStructure(summaryMessage);
+    } else {
+      diagnostics = [];
+    }
     if (retainedTailExceededBudget && messagesToKeep !== compactPlan.messagesToKeep) {
       diagnostics.push({
         code: "compact_retained_tool_output_truncated",

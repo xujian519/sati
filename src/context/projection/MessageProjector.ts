@@ -76,11 +76,10 @@ function toolPairSafeTruncate(
   // we should include it only if the *following* message has matching results.
   // Since we want to *drop* earlier messages, move cut forward past the
   // tool exchange.
-  if (cutIndex < messages.length && messages[cutIndex].role === "assistant" && hasToolCalls(messages[cutIndex])) {
-    // If the previous message (cutIndex-1) is also assistant with tool_calls,
-    // that's the one we'd be orphaning; this is fine — we've already moved
-    // past its results. No action needed here.
-  }
+  // If the cut would land on an assistant message with tool_calls, the
+  // previous message is the one we'd be orphaning — but we've already moved
+  // past its results, so no action is needed here.
+  void cutIndex;
 
   const sliced = messages.slice(cutIndex);
   return { messages: sliced, droppedCount: cutIndex };
@@ -199,10 +198,6 @@ function collectToolCallIds(message: CanonicalMessage): string[] {
       (block): block is { type: "tool_call"; id: string; name: string; input: unknown } => block.type === "tool_call",
     )
     .map(block => block.id);
-}
-
-function hasToolCalls(message: CanonicalMessage): boolean {
-  return message.content.some(block => block.type === "tool_call");
 }
 
 function isToolResultOnly(message: CanonicalMessage): boolean {
