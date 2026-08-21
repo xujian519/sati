@@ -18,7 +18,15 @@ import { Ledger, contentHash, type Receipt } from "./receipt.js";
 import { createSpan, type EvidenceDirection, type EvidenceSpan } from "./span.js";
 
 export { type EvidenceSpan, type EvidenceDirection, createSpan, isLocatable } from "./span.js";
-export { Ledger, TeamLedger, contentHash, receiptFromToolExecution, type Receipt } from "./receipt.js";
+export {
+  Ledger,
+  TeamLedger,
+  contentHash,
+  receiptFromToolExecution,
+  type Receipt,
+  type TeamEvidenceDeclaration,
+  type TeamEvidenceConflict,
+} from "./receipt.js";
 export { ClaimBinding } from "./claimBinding.js";
 export { ConflictDetector, type EvidenceConflict } from "./conflict.js";
 export {
