@@ -85,7 +85,6 @@ function createGateway(onInput: (input: AgentInput) => void): InProcessGateway {
   });
   return new InProcessGateway(router, {
     uuid: () => "run-1",
-    now: () => new Date("2026-07-20T00:00:00.000Z"),
   });
 }
 

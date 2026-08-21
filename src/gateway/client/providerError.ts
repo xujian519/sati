@@ -58,6 +58,7 @@ export function safeJsonStringify(value: unknown): string | undefined {
   try {
     return JSON.stringify(value);
   } catch {
+    // 序列化失败（循环引用等）回退 String 表示，调用方仍可获得可见信息。
     return String(value);
   }
 }

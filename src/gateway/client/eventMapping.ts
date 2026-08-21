@@ -33,7 +33,7 @@ export function getGatewayEventRunId(event: GatewayEvent): string | undefined {
   return typeof event.runId === "string" && event.runId.trim() ? event.runId.trim() : undefined;
 }
 
-export function withGatewayRunId(event: GatewayEvent, runId: string): GatewayEvent {
+function withGatewayRunId(event: GatewayEvent, runId: string): GatewayEvent {
   if (getGatewayEventRunId(event)) return event;
   return { ...event, runId };
 }
@@ -42,7 +42,7 @@ export function mapAgentEvent(event: AgentEvent, runId: string): GatewayEvent[] 
   return mapAgentEventForTurn(event, runId).map(gatewayEvent => withGatewayRunId(gatewayEvent, runId));
 }
 
-export function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] {
+function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] {
   switch (event.type) {
     case "turn_started":
       return [{ type: "turn_started", runId }];
@@ -297,9 +297,8 @@ export function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayE
     case "context_budget":
       const reservedOutputTokens = event.snapshot.reservedOutputTokens ?? event.snapshot.maxOutputTokens ?? 0;
       const totalContextTokens =
-        event.snapshot.effectiveContextTokens !== undefined
-          ? (event.snapshot.totalContextTokens ?? event.snapshot.effectiveContextTokens + reservedOutputTokens)
-          : (event.snapshot.totalContextTokens ?? event.snapshot.maxContextTokens + reservedOutputTokens);
+        event.snapshot.totalContextTokens ??
+        (event.snapshot.effectiveContextTokens ?? event.snapshot.maxContextTokens) + reservedOutputTokens;
       return [
         {
           type: "context_budget",

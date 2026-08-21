@@ -41,12 +41,7 @@ export async function buildAgentInputWithAttachments(
 ): Promise<AgentInput> {
   const resolvedAttachments = await attachmentsToContentBlocks(attachments);
   const attachmentBlocks = resolvedAttachments.blocks;
-  const pathNote = buildAttachmentPathNote(
-    attachments,
-    new Set(allowedReadFiles),
-    resolvedAttachments.directContentPaths,
-    resolvedAttachments.hasDiagnostics,
-  );
+  const pathNote = buildAttachmentPathNote(attachments, new Set(allowedReadFiles), resolvedAttachments.hasDiagnostics);
   if (attachmentBlocks.length === 0 && !pathNote) {
     return { type: "text", text: message };
   }
@@ -66,7 +61,6 @@ export async function buildAgentInputWithAttachments(
 export function buildAttachmentPathNote(
   attachments: ChannelAttachment[] | undefined,
   allowedReadFiles: Set<string>,
-  directContentPaths: Set<string>,
   hasDiagnostics: boolean,
 ): CanonicalContentBlock | undefined {
   if (!attachments || attachments.length === 0) return undefined;
@@ -98,7 +92,7 @@ export function buildAttachmentPathNote(
   };
 }
 
-export function attachmentDiagnosticsGuidance(attachments: ChannelAttachment[], allowedReadFiles: Set<string>): string {
+function attachmentDiagnosticsGuidance(attachments: ChannelAttachment[], allowedReadFiles: Set<string>): string {
   const hasInspectableAttachment = attachments.some(attachment => {
     if (!attachment.path) return false;
     if (!safeAllowedAttachmentPath(attachment.path, allowedReadFiles)) return false;

@@ -59,13 +59,22 @@ export type CreateGatewayPermissionHookOptions = {
 export function createGatewayPermissionHook(options: CreateGatewayPermissionHookOptions): CallbackHookHandler {
   return async ({ hookInput, signal }) => {
     const toolName = typeof hookInput.toolName === "string" ? hookInput.toolName : "UnknownTool";
-    const toolCallId =
-      typeof hookInput.toolCallId === "string"
-        ? hookInput.toolCallId
-        : typeof hookInput.toolUseId === "string"
-          ? hookInput.toolUseId
-          : "";
-    const payload = "toolInput" in hookInput ? hookInput.toolInput : "input" in hookInput ? hookInput.input : {};
+    let toolCallId: string;
+    if (typeof hookInput.toolCallId === "string") {
+      toolCallId = hookInput.toolCallId;
+    } else if (typeof hookInput.toolUseId === "string") {
+      toolCallId = hookInput.toolUseId;
+    } else {
+      toolCallId = "";
+    }
+    let payload: unknown;
+    if ("toolInput" in hookInput) {
+      payload = hookInput.toolInput;
+    } else if ("input" in hookInput) {
+      payload = hookInput.input;
+    } else {
+      payload = {};
+    }
     const requestId = options.uuid ? options.uuid() : randomUUID();
 
     const delivered = options.emit({

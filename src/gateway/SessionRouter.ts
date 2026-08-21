@@ -266,6 +266,7 @@ function snapshotEvictedSession(sessionKey: string, record: SessionRecord): Sess
   try {
     messageCount = record.session.snapshot().messages.length;
   } catch {
+    // 快照失败（会话已关闭等）按无消息处理，驱逐记录不因此中断。
     messageCount = undefined;
   }
   return {
