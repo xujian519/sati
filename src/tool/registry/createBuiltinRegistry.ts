@@ -98,6 +98,13 @@ function annotate(tool: SatiToolDefinition, domain: ToolDomain): SatiToolDefinit
 }
 
 export type CreateBuiltinRegistryOptions = {
+  /**
+   * Register the J-Space workspace tools (`workspace_note` / `workspace_ship`).
+   * Off by default so the default tool set (and recorded replay fixtures'
+   * toolSchemaDigest) is unchanged; the gateway enables it alongside the
+   * workspace ledger.
+   */
+  workspaceLedgerTools?: boolean;
   bash?: CreateBashToolOptions;
   /**
    * `web_search` defaults to the GLM/Z.AI provider. Pass `false` to skip
@@ -240,8 +247,10 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   const literatureRegistry =
     options?.paperSearch !== false ? createLiteratureRegistry(options?.paperSearch) : undefined;
   registry.register(annotate(createGetCurrentTimeTool(), "session"));
-  registry.register(annotate(createWorkspaceShipTool(), "session"));
-  registry.register(annotate(createWorkspaceNoteTool(), "session"));
+  if (options?.workspaceLedgerTools === true) {
+    registry.register(annotate(createWorkspaceShipTool(), "session"));
+    registry.register(annotate(createWorkspaceNoteTool(), "session"));
+  }
   registry.register(annotate(createReadFileTool(), "filesystem"));
   registry.register(annotate(createSendAttachmentTool(), "session"));
   registry.register(annotate(createGlobTool(), "filesystem"));

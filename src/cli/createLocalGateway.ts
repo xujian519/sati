@@ -1243,6 +1243,8 @@ class ProjectRuntimeRegistry {
       searchPatentFigure: { embeddingClient },
       // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
       documentStyle: {},
+      // J-Space 工作区工具（opt-in：与工作区账本开关联动，避免破坏 fixture 工具集匹配）
+      workspaceLedgerTools: brandEnv(this.options.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
       ...(memory?.service ? { memory: { service: memory.service } } : {}),
       readSkill: {
         loader: name => pluginRuntime.loadSkillPrompt(name),

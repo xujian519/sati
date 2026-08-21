@@ -10,20 +10,7 @@
 import type { MethodologyComponent } from "../../protocol/types.js";
 import { keywordScore } from "./keywordMatch.js";
 
-const TRIGGERS = [
-  "推理",
-  "推导",
-  "分析",
-  "为什么",
-  "原因",
-  "论证",
-  "推导步骤",
-  "reason",
-  "analyze",
-  "derive",
-  "why",
-  "steps",
-];
+const TRIGGERS = ["推理", "推导", "论证", "演绎", "中间概念", "reason", "derive", "deduce", "reasoning"];
 
 export const bridgeReencode: MethodologyComponent = {
   name: "bridge-reencode",
