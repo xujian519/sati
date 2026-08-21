@@ -34,6 +34,7 @@ import { requiresPromptCapability } from "../../tool/userInteractionConstraints.
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
 import { repairToolName } from "../../model/streaming/repairToolName.js";
 import { applyMethodologyAddendum, computeMethodologyAddendum } from "./methodologyInjection.js";
+import { buildMetacognitivePrompt, buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
 import { buildRequestHeaderSnapshot, verifyRequestHeaderSnapshot } from "./requestInvariant.js";
 import { projectToolResults } from "./projectToolResults.js";
 import { resolveOutputTokenRetryBump } from "./outputTokenRetry.js";
@@ -1329,6 +1330,20 @@ export class AgentLoop {
         );
         return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
       }
+      // 元认知控制：shaky 自评不静默收尾——带诊断重试一次（非空白重试）。
+      if (this.config.metacognitiveControl === true && !state.hasAttemptedMetacognitiveRetry) {
+        const estimate = parseSelfEstimate(assistantText);
+        if (estimate.tag === "shaky") {
+          state.hasAttemptedMetacognitiveRetry = true;
+          return yield* this.continueWithTransientPrompt(
+            state,
+            input,
+            buildMetacognitiveRetryPrompt(estimate.diagnosis),
+            "metacognitive_retry",
+          );
+        }
+      }
+
       const finishStatus = createFinishReasonStatus(assembled.finishReason, assistantText);
       if (finishStatus) {
         yield await this.emitStatus(input, finishStatus);
@@ -1972,7 +1987,14 @@ export class AgentLoop {
       maxMessages: this.config.maxContextMessages,
       customSystemPrompt: this.config.systemPrompt,
       appendSystemPrompt:
-        [input.appendSystemPrompt, planTodo?.buildPromptAddendum(), workspaceLedgerBlock?.block]
+        [
+          input.appendSystemPrompt,
+          planTodo?.buildPromptAddendum(),
+          workspaceLedgerBlock?.block,
+          this.config.metacognitiveControl
+            ? (this.config.metacognitivePrompt ?? buildMetacognitivePrompt())
+            : undefined,
+        ]
           .filter(Boolean)
           .join("\n\n") || undefined,
       abortSignal: input.abortSignal,

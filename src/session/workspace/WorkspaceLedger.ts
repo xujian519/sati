@@ -302,7 +302,12 @@ export function renderWorkspaceLedgerBlock(state: WorkspaceLedgerState): Workspa
   const lines: string[] = ["<workspace-state>"];
   lines.push(`Goal: ${state.goal || "(not set)"}`);
   const live = state.core.filter(entry => entry.live);
-  lines.push(`Core: ${live.map(entry => entry.text).join(" | ") || "(none)"}`);
+  if (live.length > 0) {
+    lines.push(`Core (shared hub — read these, write once): ${live.map(entry => entry.text).join(" | ")}`);
+    lines.push("  Resolve any divergent value at the hub, not in a branch.");
+  } else {
+    lines.push(`Core: ${"(none)"}`);
+  }
   const extra = state.core.filter(entry => !entry.live);
   if (extra.length > 0) {
     lines.push(`  (parked: ${extra.map(entry => entry.text).join(" | ")})`);
@@ -323,6 +328,24 @@ export function renderWorkspaceLedgerBlock(state: WorkspaceLedgerState): Workspa
   lines.push(`Next: ${state.next || "(not set)"}`);
   lines.push("</workspace-state>");
   return { block: lines.join("\n"), empty: false };
+}
+
+/**
+ * Render the parent's live `Core` anchors as a `<workspace-core>` directive
+ * prefix for a forked subagent (broadcast hub). Returns undefined when there
+ * are no live anchors, so the subagent directive is unchanged.
+ */
+export function renderWorkspaceCoreDirective(state: WorkspaceLedgerState): string | undefined {
+  const live = state.core.filter(entry => entry.live);
+  if (live.length === 0) return undefined;
+  const lines = [
+    "<workspace-core>",
+    "Shared anchors from the parent workspace (write once, read many).",
+    ...live.map(entry => `- ${entry.text}`),
+    "Read these instead of reconstructing locally; resolve any conflict at the parent hub.",
+    "</workspace-core>",
+  ];
+  return lines.join("\n");
 }
 
 function pad(number: number): string {

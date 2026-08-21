@@ -5,6 +5,7 @@ export {
   isWorkspaceLedgerOpen,
   nextOpenNumber,
   nextVerifiedNumber,
+  renderWorkspaceCoreDirective,
   renderWorkspaceLedgerBlock,
   MAX_LIVE_CORE,
   type WorkspaceCoreEntry,

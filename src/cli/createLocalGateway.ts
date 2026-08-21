@@ -2157,6 +2157,8 @@ class ProjectRuntimeRegistry {
       cwd,
       permissionMode,
       jsonSelfCorrect: true,
+      workspaceLedger: brandEnv(this.options.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
+      metacognitiveControl: brandEnv(this.options.env, ENV_KEY.METACOGNITIVE_CONTROL_ENABLED) === "1",
       ...(subagentRuntimeModel ? { subagentModel: subagentRuntimeModel } : {}),
       subagentTimeoutMs: agent.subagents?.timeoutMs,
       maxContextTokens,

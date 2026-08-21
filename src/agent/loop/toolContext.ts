@@ -16,6 +16,7 @@ import { getSubagentDefinition, listAllSubagentDefinitions } from "../sub/builti
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import type { AgentLoopInput } from "../protocol/input.js";
+import { renderWorkspaceCoreDirective } from "../../session/workspace/WorkspaceLedger.js";
 import { buildTurnEnvironment, composeAbortSignal, type LifecycleDispatcher } from "./misc.js";
 
 /** ToolContextFactory 宿主依赖（由 AgentLoop 组装注入）。 */
@@ -108,6 +109,22 @@ export class ToolContextFactory {
     };
   }
 
+  /**
+   * 渲染父会话工作区账本的 live Core 作为子代理指令前缀（broadcast hub）。
+   * 无账本 provider / 无 live core 时返回 undefined（指令不变）。
+   */
+  private async buildWorkspaceCoreDirective(): Promise<string | undefined> {
+    const provider = this.host.dependencies.workspaceLedger;
+    if (!provider) return undefined;
+    try {
+      const state = await provider.read();
+      if (!state) return undefined;
+      return renderWorkspaceCoreDirective(state);
+    } catch {
+      return undefined;
+    }
+  }
+
   /** 子代理 fork API（agent 工具的回调面）。 */
   buildSubagentForkApi(input: AgentLoopInput): SatiSubagentForkApi {
     const { config, dependencies } = this.host;
@@ -159,9 +176,11 @@ export class ToolContextFactory {
           toolCallId,
         });
 
+        const workspaceCoreDirective = await this.buildWorkspaceCoreDirective();
+        const effectiveDirective = workspaceCoreDirective ? `${workspaceCoreDirective}\n\n${directive}` : directive;
         const subSession = new SubAgentSession({
           definition: def,
-          directive,
+          directive: effectiveDirective,
           parentConfig: {
             ...config,
             subagentDepth: depth + 1,

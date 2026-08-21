@@ -20,6 +20,7 @@ import { fishbone } from "./components/fishbone.js";
 import { firstPrinciples } from "./components/first-principles.js";
 import { sixHats } from "./components/six-hats.js";
 import { triz } from "./components/triz.js";
+import { bridgeReencode } from "./components/bridge-reencode.js";
 
 /** Default component set covering the core analytical/classical scenarios. */
 export const DEFAULT_METHODOLOGY_COMPONENTS: MethodologyComponent[] = [
@@ -31,6 +32,7 @@ export const DEFAULT_METHODOLOGY_COMPONENTS: MethodologyComponent[] = [
   firstPrinciples,
   sixHats,
   triz,
+  bridgeReencode,
 ];
 
 export class MethodologyRegistry {
