@@ -6,6 +6,7 @@
 import { parseMemberSessionKey } from "../../../agent/team/index.js";
 import type { TeamDb, TeamRow, TeamScheduler, TeamEventEmitter } from "../../../agent/team/index.js";
 import { listRegisteredRoleIds } from "../../../agent/sub/builtinSubagentTypes.js";
+import type { WorkerRegistry } from "../../../patent/index.js";
 import { DEFAULT_MODEL_ID, DEFAULT_MODEL_PROVIDER } from "../../../model/defaults.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 
@@ -14,6 +15,8 @@ export type TeamToolsOptions = {
   db: TeamDb;
   scheduler: TeamScheduler;
   emit: TeamEventEmitter;
+  /** 阶段 3：专利 worker 注册表（可选；提供时 team_create_task 校验 workerName 存在性）。 */
+  workerRegistry?: WorkerRegistry;
 };
 
 /** 会话身份解析结果：成员会话携带 teamId/memberId；队长会话无团队信息（teamId/memberId 为空串）。 */

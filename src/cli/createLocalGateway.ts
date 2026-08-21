@@ -112,6 +112,7 @@ import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
 import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
 import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
+import { WorkerRegistry, defaultPatentWorkers } from "../patent/index.js";
 import { isProvenanceEnabled } from "../patent/provenance/index.js";
 import { SqliteApprovalStore } from "../patent/provenance/approval-store.js";
 import { loadPatentFullRuleSet, RuleOutputGate, selectGateRules } from "../rule/index.js";
@@ -650,10 +651,18 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // ⚠️ 最终复审 I1（已知边界）：Web 主路径经 ui/server relay 单条共享 ws 连接（sati-bridge 单例），
   // 浏览器关闭不触发 gateway onClose → Web 用户下线判定不生效（fail-open 回到 M2 行为：成员成果
   // 持久化不丢失、C2 有界重试）；CLI/TUI 直连 ws 路径正常。M4 面板接线时以浏览器连接级信号为准。
+  // 阶段 3：专利 worker 注册表——team_create_task 的 workerName 存在性校验 + 调度器分派
+  // 时的角色 tier 校验共用同一实例（缺省仅内置 6 个 worker，provision-* 条款 worker 未注册
+  // 时不阻塞：workerName 校验与分派校验均 fail-open）。
+  const workerRegistry = new WorkerRegistry();
+  for (const worker of defaultPatentWorkers()) {
+    workerRegistry.register(worker);
+  }
   const teamScheduler = new TeamScheduler({
     db: teamDb,
     emit: emitTeamEvent,
     isCaptainOnline: captainSessionKey => sessionPresence.isActive(captainSessionKey),
+    workerRegistry,
     wake: async (memberId, message) => {
       try {
         // 成员快照一次读取（onEvent 内每事件复用；handleMemberEvent 需要 teamId/sessionKey）。
@@ -745,6 +754,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     db: teamDb,
     scheduler: teamScheduler,
     emit: emitTeamEvent,
+    workerRegistry,
   });
   // T12 复审 M4：启动扫描完成信号（显式可 await——测试不再用 setTimeout 排干猜测时序）
   // Minor-1 兜底：存储层异常经 catch 记录（console.error 含扫描标识）且不 reject——

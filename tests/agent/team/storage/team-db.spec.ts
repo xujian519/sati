@@ -13,13 +13,13 @@ function openDb(): TeamDb {
   return new TeamDb(":memory:");
 }
 
-test("迁移：首次打开建表，user_version 升到 3", () => {
+test("迁移：首次打开建表，user_version 升到 4", () => {
   const root = mkdtempSync(join(tmpdir(), "sati-team-db-mig-"));
   const db = new TeamDb(join(root, "teams.db"));
   try {
     // userVersion() 已移除（生产零引用）——外部连接直查 PRAGMA 钉住迁移版本
     const raw = new DatabaseSync(join(root, "teams.db"));
-    assert.equal((raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
+    assert.equal((raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
     raw.close();
     assert.deepEqual(db.listMembers(), []);
   } finally {
@@ -208,12 +208,12 @@ test("迁移：真实 v2 旧库（user_version=2 + 旧数据）升级到 v3，�
       .prepare("INSERT INTO teams (id, name, captain_session_key, created_at) VALUES (?, ?, ?, ?)")
       .run("t-old", "旧团队", "cap-old", "2026-08-01T00:00:00.000Z");
     raw.close();
-    // 以 TeamDb 重开：v2 → v3 迁移补 archived_at 列，旧行该字段保持 NULL（= undefined）
+    // 以 TeamDb 重开：v2 → v4 迁移补 archived_at + worker_name 列，旧行该字段保持 NULL（= undefined）
     const db = new TeamDb(dbPath);
     try {
-      // userVersion() 已移除——外部连接直查 PRAGMA 钉住 v2→v3 迁移落点
+      // userVersion() 已移除——外部连接直查 PRAGMA 钉住 v2→v4 迁移落点
       const verifyRaw = new DatabaseSync(dbPath);
-      assert.equal((verifyRaw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
+      assert.equal((verifyRaw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
       verifyRaw.close();
       assert.deepEqual(db.getTeam("t-old"), {
         id: "t-old",
@@ -241,5 +241,47 @@ test("迁移保护：高于支持版本（user_version=99）打开即 fail-loud"
     assert.throws(() => new TeamDb(dbPath), /newer than supported/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("tasks v4：worker_name 列存取往返（阶段 3）", () => {
+  const db = openDb();
+  try {
+    db.upsertTeam({ id: "t1", name: "团队", captainSessionKey: "cap-1", createdAt: "2026-08-19T00:00:00.000Z" });
+    db.insertTask({
+      id: "t-1",
+      teamId: "t1",
+      subject: "检索",
+      description: "",
+      status: "pending",
+      dependencies: [],
+      attempt: 0,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      workerName: "patent-search-commander",
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    });
+    const loaded = db.getTask("t1", "t-1");
+    assert.equal(loaded?.workerName, "patent-search-commander");
+    // 无 workerName 的任务读回 undefined（不出现空串噪音）。
+    db.insertTask({
+      id: "t-2",
+      teamId: "t1",
+      subject: "普通任务",
+      description: "",
+      status: "pending",
+      dependencies: [],
+      attempt: 0,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    });
+    assert.equal(db.getTask("t1", "t-2")?.workerName, undefined);
+  } finally {
+    db.close();
   }
 });

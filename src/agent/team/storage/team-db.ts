@@ -47,6 +47,8 @@ export type TeamTaskRow = {
   blockedByCount: number;
   maxAttempts: number;
   output?: string;
+  /** 阶段 3：任务期望执行的专业 worker 契约名（分派时按角色 tier 校验）。 */
+  workerName?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -94,6 +96,7 @@ type TaskDbRow = {
   blocked_by_count: number;
   max_attempts: number;
   output: string | null;
+  worker_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -166,6 +169,8 @@ const MIGRATIONS: string[] = [
   );`,
   // v3：团队归档（M3）——archived_at 置位后调度器跳过该团队、成员全退休
   `ALTER TABLE teams ADD COLUMN archived_at TEXT;`,
+  // v4：任务 worker 契约声明（阶段 3）——worker_name 供分派时角色 tier 校验
+  `ALTER TABLE tasks ADD COLUMN worker_name TEXT;`,
 ];
 
 function toTeamRow(row: TeamDbRow): TeamRow {
@@ -206,6 +211,7 @@ function toTaskRow(row: TaskDbRow): TeamTaskRow {
     blockedByCount: row.blocked_by_count,
     maxAttempts: row.max_attempts,
     output: row.output ?? undefined,
+    workerName: row.worker_name ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -383,8 +389,8 @@ export class TeamDb {
       this.preparedCache,
       this.db,
       `INSERT INTO tasks (id, team_id, subject, description, status, assignee_id, dependencies_json,
-          attempt, attempt_id, handoff_id, reassigning, blocked_by_count, max_attempts, output, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          attempt, attempt_id, handoff_id, reassigning, blocked_by_count, max_attempts, output, worker_name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       row.id,
       row.teamId,
@@ -400,6 +406,7 @@ export class TeamDb {
       row.blockedByCount,
       row.maxAttempts,
       row.output ?? null,
+      row.workerName ?? null,
       row.createdAt,
       row.updatedAt,
     );
@@ -411,7 +418,7 @@ export class TeamDb {
       this.db,
       `UPDATE tasks SET subject = ?, description = ?, status = ?, assignee_id = ?, dependencies_json = ?,
           attempt = ?, attempt_id = ?, handoff_id = ?, reassigning = ?, blocked_by_count = ?, max_attempts = ?,
-          output = ?, updated_at = ?
+          output = ?, worker_name = ?, updated_at = ?
          WHERE team_id = ? AND id = ?`,
     ).run(
       row.subject,
@@ -426,6 +433,7 @@ export class TeamDb {
       row.blockedByCount,
       row.maxAttempts,
       row.output ?? null,
+      row.workerName ?? null,
       row.updatedAt,
       row.teamId,
       row.id,

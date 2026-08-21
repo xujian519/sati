@@ -17,6 +17,8 @@ import { beginTaskAttempt, invalidateTaskAttempt, attemptsExhausted } from "../t
 import { retryFailedTask } from "../taskpool/retry.js";
 import { claimDelivery, unreadMessages } from "../mailbox/mailbox.js";
 import type { TeamEventEmitter } from "../protocol/events.js";
+import { workerAllowedForRole } from "../../../patent/index.js";
+import type { WorkerRegistry } from "../../../patent/index.js";
 import { withTeamLock } from "./lock.js";
 
 export type TeamSchedulerOptions = {
@@ -29,6 +31,8 @@ export type TeamSchedulerOptions = {
   maxConcurrentMembers?: number;
   /** 队长在线判定（默认常在线）；离线暂停认领。 */
   isCaptainOnline?: (captainSessionKey: string) => boolean;
+  /** 阶段 3：专利 worker 注册表（可选；提供时新任务分派按成员角色 tier 校验）。 */
+  workerRegistry?: WorkerRegistry;
 };
 
 export type DispatchTicket = {
@@ -79,6 +83,7 @@ export class TeamScheduler {
   private readonly wake: (memberId: string, message: string) => Promise<boolean>;
   private readonly maxConcurrentMembers: number;
   private readonly isCaptainOnline: (captainSessionKey: string) => boolean;
+  private readonly workerRegistry?: WorkerRegistry;
 
   constructor(options: TeamSchedulerOptions) {
     this.db = options.db;
@@ -86,6 +91,21 @@ export class TeamScheduler {
     this.wake = options.wake;
     this.maxConcurrentMembers = options.maxConcurrentMembers ?? 4;
     this.isCaptainOnline = options.isCaptainOnline ?? (() => true);
+    this.workerRegistry = options.workerRegistry;
+  }
+
+  /**
+   * 阶段 3：成员是否可认领该任务——任务带 workerName 时校验成员角色 tier 权限。
+   * 已认领任务（claimed/in_progress）不受此约束（不夺回）；workerRegistry 未注入
+   * 或 worker 未注册时 fail-open（不阻塞）。
+   */
+  private canMemberClaim(memberId: string, task: TeamTaskRow): boolean {
+    if (task.workerName === undefined || this.workerRegistry === undefined) return true;
+    const worker = this.workerRegistry.get(task.workerName);
+    if (worker === undefined) return true;
+    const member = this.db.getMember(memberId);
+    if (member === undefined) return true;
+    return workerAllowedForRole(member.roleSlug, worker);
   }
 
   /**
@@ -172,7 +192,10 @@ export class TeamScheduler {
       // M4：重置后重取快照——刚重置回 pending 的任务本次 kick 即可认领
       //（同次锁内完成，不会滞留 pending 等下一次触发）
       const tasks = this.db.listTasks(teamId);
-      const task = ownedOpenTask(tasks, memberId) ?? nextReadyTask(tasks, memberId);
+      // 阶段 3：新分派任务按 worker tier 过滤——任务带 workerName 且成员角色无权执行该
+      // tier 时对该成员不可认领（已认领任务不受影响，不夺回；workerRegistry 缺失 fail-open）。
+      const claimable = this.workerRegistry === undefined ? tasks : tasks.filter(t => this.canMemberClaim(memberId, t));
+      const task = ownedOpenTask(tasks, memberId) ?? nextReadyTask(claimable, memberId);
       if (task === undefined) return undefined;
       const working = this.db.listMembers().filter(m => m.teamId === teamId && m.status === "working").length;
       if (task.status === "pending" && working >= this.maxConcurrentMembers) return undefined; // 并发闸（重试自己的 open task 不受闸限）

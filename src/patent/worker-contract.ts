@@ -379,3 +379,34 @@ export function defaultPatentWorkers(): WorkerContract[] {
     },
   ];
 }
+
+/**
+ * 12 岗团队角色 → 允许执行的 worker tier 白名单（阶段 3）。
+ * 基于 skills/patent-team-composition 角色职责与 WorkerTier 语义：
+ * - work：工序（PFE 提取/撰写/OA 答复）；provision：条款级 SOP 工序
+ * - reasoning：法律推理（新颖性/创造性分析）；domain：领域检索/技术判定
+ * - checker：复核/质量门
+ * 空数组 = 该角色不执行专业 worker（流程中立/裁判角色由 captain 直接调度）。
+ * 未登记角色不限制（向后兼容：新增角色默认放开，不意外拒绝）。
+ */
+export const ROLE_WORKER_TIERS: Readonly<Record<string, readonly WorkerTier[]>> = {
+  "case-manager": [],
+  researcher: ["domain"],
+  drafter: ["work", "provision"],
+  "technical-expert": ["work", "domain"],
+  "adversarial-reviewer": ["checker"],
+  "applicant-counsel": ["reasoning"],
+  "formal-examiner": ["checker"],
+  "invalidity-petitioner": ["reasoning"],
+  "patentee-defender": ["reasoning"],
+  adjudicator: ["checker"],
+  "defendant-counsel": ["reasoning"],
+  "tech-investigator": ["domain"],
+};
+
+/** 校验角色是否有权执行某 worker（按 tier 判定；未登记角色不限制）。 */
+export function workerAllowedForRole(roleSlug: string, worker: WorkerContract): boolean {
+  const allowed = ROLE_WORKER_TIERS[roleSlug];
+  if (allowed === undefined) return true;
+  return allowed.includes(worker.tier);
+}
