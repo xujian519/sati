@@ -44,6 +44,12 @@ export type AgentTranscriptWriter = {
     turnId: string,
     schedule: import("../../model/streaming/retryState.js").RetrySchedule,
   ): void | Promise<void>;
+  /** J-Space 工作区账本快照（append-only、不被压缩遮蔽）。 */
+  recordWorkspaceState?(
+    sessionId: string,
+    turnId: string,
+    state: import("../workspace/WorkspaceLedger.js").WorkspaceLedgerState,
+  ): void | Promise<void>;
   /** durable 边界检查点（阶段四 T4.1）：确保此前全部条目已落盘。无缓冲写入的实现为 no-op。 */
   flushCheckpoint?(): void | Promise<void>;
   recordEntry?(entry: AgentTranscriptEntry): void | Promise<void>;

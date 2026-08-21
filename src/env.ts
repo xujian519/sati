@@ -60,6 +60,8 @@ export const ENV_KEY = {
   MEMORY_DIAGNOSTICS: "MEMORY_DIAGNOSTICS",
   /** 跨进程重启续算开关（SATI_TASK_RESUME_ENABLED，默认开）。 */
   TASK_RESUME_ENABLED: "TASK_RESUME_ENABLED",
+  /** J-Space 工作区账本开关（SATI_WORKSPACE_LEDGER_ENABLED，默认关）。 */
+  WORKSPACE_LEDGER_ENABLED: "WORKSPACE_LEDGER_ENABLED",
 } as const;
 
 /** 品牌前缀：品牌键 = `${BRAND_PREFIX}${中性键}`，仅本文件允许出现。 */

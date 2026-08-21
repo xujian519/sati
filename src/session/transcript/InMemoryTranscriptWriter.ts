@@ -35,6 +35,12 @@ export type InMemoryTranscriptEntry =
       sessionId: string;
       turnId: string;
       schedule: import("../../model/streaming/retryState.js").RetrySchedule;
+    }
+  | {
+      type: "workspace_state";
+      sessionId: string;
+      turnId: string;
+      state: import("../workspace/WorkspaceLedger.js").WorkspaceLedgerState;
     };
 
 export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
@@ -97,6 +103,14 @@ export class InMemoryTranscriptWriter implements AgentTranscriptWriter {
     schedule: import("../../model/streaming/retryState.js").RetrySchedule,
   ): void {
     this.entries.push({ type: "retry_schedule", sessionId, turnId, schedule });
+  }
+
+  recordWorkspaceState(
+    sessionId: string,
+    turnId: string,
+    state: import("../workspace/WorkspaceLedger.js").WorkspaceLedgerState,
+  ): void {
+    this.entries.push({ type: "workspace_state", sessionId, turnId, state });
   }
 
   // 阶段四 T4.1：内存写入即时可见，durable 边界检查点为 no-op。

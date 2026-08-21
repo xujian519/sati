@@ -16,6 +16,8 @@ import { createSendAttachmentTool } from "../builtin/sendAttachment.js";
 import { createEnterPlanModeTool, createExitPlanModeTool } from "../builtin/planMode.js";
 import { createStructuredOutputTool } from "../builtin/structuredOutput.js";
 import { createTodoWriteTool } from "../builtin/todoWrite.js";
+import { createWorkspaceNoteTool } from "../builtin/workspace/WorkspaceNoteTool.js";
+import { createWorkspaceShipTool } from "../builtin/workspace/WorkspaceShipTool.js";
 import {
   createTaskCreateTool,
   createTaskListTool,
@@ -238,6 +240,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   const literatureRegistry =
     options?.paperSearch !== false ? createLiteratureRegistry(options?.paperSearch) : undefined;
   registry.register(annotate(createGetCurrentTimeTool(), "session"));
+  registry.register(annotate(createWorkspaceShipTool(), "session"));
+  registry.register(annotate(createWorkspaceNoteTool(), "session"));
   registry.register(annotate(createReadFileTool(), "filesystem"));
   registry.register(annotate(createSendAttachmentTool(), "session"));
   registry.register(annotate(createGlobTool(), "filesystem"));

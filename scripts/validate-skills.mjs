@@ -153,7 +153,7 @@ async function validateSkill(skillDir) {
     "academic-search",
     "chemical-structure-recognition",
   ]);
-  const roleDomains = Array.isArray(fm.role?.domains) ? fm.role.domains : [];
+  const roleDomains = Array.isArray(fm.domains) ? fm.domains : [];
   const isPatentLegalSkill =
     /^patent-|^legal-/.test(slug) || roleDomains.includes("patent") || roleDomains.includes("legal");
   if (isPatentLegalSkill && !KNOWLEDGE_EXEMPT.has(slug)) {
@@ -163,6 +163,43 @@ async function validateSkill(skillDir) {
         `warn: ${slug} is a patent/legal skill but lacks knowledge-system wiring ` +
           `(none of ${KNOWLEDGE_TOOLS.join(" / ")})`,
       );
+    }
+  }
+
+  // 角色 frontmatter 一致性（type: role → 顶层 tools/domains/omitTools/readOnly/systemPrompt）。
+  if (fm.type === "role") {
+    if (!Array.isArray(fm.domains) || fm.domains.length === 0) {
+      issues.push(`hard: ${slug} is a role but has no domains array`);
+    }
+    if (!(Array.isArray(fm.tools) || fm.tools === "*")) {
+      issues.push(`hard: ${slug} is a role but has no tools array (or "*")`);
+    }
+    if (fm.omitTools !== undefined && !Array.isArray(fm.omitTools)) {
+      issues.push(`hard: ${slug} omitTools must be an array`);
+    }
+    if (fm.readOnly !== undefined && typeof fm.readOnly !== "boolean") {
+      issues.push(`hard: ${slug} readOnly must be a boolean`);
+    }
+    if (fm.systemPrompt !== undefined && typeof fm.systemPrompt !== "string") {
+      issues.push(`hard: ${slug} systemPrompt must be a string`);
+    }
+  }
+
+  // 无版本化措辞（作者时校验：SKILL.md 面向模型，不应出现版本营销文案）。
+  // 仅匹配明确的营销短语，避免误伤合法内容（如第三方工具版本号、changelog 分类名）。
+  const versionTalk = /\b(now adds|newly added|this release|upgrade[ds]? from)\b/i;
+  if (versionTalk.test(content)) {
+    issues.push(`warn: ${slug} SKILL.md contains version-talk wording`);
+  }
+
+  // 同族角色 spine 契约（warn 级，宽松）：patent/provision 角色既无 "## " 章节、
+  // 也无实质 systemPrompt（即完全未组织），才视为未组织。避免对多样化章节标题
+  // 与把工作流放在 systemPrompt 的角色过度约束。
+  if (fm.type === "role" && (/^patent-|^provision-/.test(slug) || roleDomains.includes("patent"))) {
+    const hasBodySections = /^##\s+/m.test(content);
+    const hasSystemPrompt = typeof fm.systemPrompt === "string" && fm.systemPrompt.trim().length > 20;
+    if (!hasBodySections && !hasSystemPrompt) {
+      issues.push(`warn: ${slug} is a patent family role but has no structured body or systemPrompt`);
     }
   }
   return { slug, issues, lineCount };

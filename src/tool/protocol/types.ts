@@ -14,6 +14,7 @@ import type {
 import type { AgentRunMode } from "../../agent/protocol/input.js";
 import type { SatiToolAuditRecorder } from "../audit/ToolAuditRecorder.js";
 import type { SatiElicitationChannel } from "../elicitation/SatiElicitationChannel.js";
+import type { SatiWorkspaceLedgerProvider } from "../../session/workspace/WorkspaceLedgerStore.js";
 import type { SatiEvidenceCollector } from "./evidence.js";
 import type { SatiToolInputSchema, SatiToolValidationResult } from "./schema.js";
 
@@ -431,6 +432,13 @@ export type SatiToolRuntimeContext = {
    * such as LSP bridges or editor diff views.
    */
   fileUpdateNotifier?: SatiFileUpdateNotifier;
+  /**
+   * Optional workspace-ledger provider. Wired in by the AgentLoop when
+   * workspace-ledger is enabled; `workspace_note` / `workspace_ship` use it to
+   * read and update the durable ledger. Absent when disabled — the tools report
+   * `unsupported_tool` instead of failing silently.
+   */
+  workspaceLedger?: SatiWorkspaceLedgerProvider;
 };
 
 export type SatiToolDefinition<Input = unknown, Output = unknown> = {

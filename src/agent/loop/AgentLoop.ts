@@ -29,6 +29,7 @@ import type { AutoCompactResult, ContextRecoveryDecision, TokenBudgetSnapshot } 
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 import type { RouterDecision } from "../../router/index.js";
 import type { AgentControlBoundaryTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
+import { renderWorkspaceLedgerBlock, type WorkspaceLedgerBlock } from "../../session/workspace/WorkspaceLedger.js";
 import { requiresPromptCapability } from "../../tool/userInteractionConstraints.js";
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
 import { repairToolName } from "../../model/streaming/repairToolName.js";
@@ -1906,6 +1907,27 @@ export class AgentLoop {
     }
   }
 
+  /**
+   * Read and render the current workspace ledger block (empty when disabled).
+   * Re-reading fresh from the store (backed by the transcript) is what lets the
+   * ledger survive compaction — the block is injected as a system-prompt
+   * addendum rather than living in message history.
+   */
+  private async readWorkspaceLedgerBlock(): Promise<WorkspaceLedgerBlock | undefined> {
+    if (this.config.workspaceLedger !== true || !this.dependencies.workspaceLedger) {
+      return undefined;
+    }
+    try {
+      const state = await this.dependencies.workspaceLedger.read();
+      if (state === undefined) return undefined;
+      const rendered = renderWorkspaceLedgerBlock(state);
+      return rendered.empty ? undefined : rendered;
+    } catch {
+      // Ledger read must never block the request.
+      return undefined;
+    }
+  }
+
   private async createModelRequest(
     messages: CanonicalMessage[],
     input: AgentLoopInput,
@@ -1935,6 +1957,7 @@ export class AgentLoop {
     if (this.config.runMode === "ask") {
       tools = filterAskModeTools(toolDefinitions);
     }
+    const workspaceLedgerBlock = await this.readWorkspaceLedgerBlock();
     const prepared = await contextRuntime.prepareForModel({
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -1949,7 +1972,9 @@ export class AgentLoop {
       maxMessages: this.config.maxContextMessages,
       customSystemPrompt: this.config.systemPrompt,
       appendSystemPrompt:
-        [input.appendSystemPrompt, planTodo?.buildPromptAddendum()].filter(Boolean).join("\n\n") || undefined,
+        [input.appendSystemPrompt, planTodo?.buildPromptAddendum(), workspaceLedgerBlock?.block]
+          .filter(Boolean)
+          .join("\n\n") || undefined,
       abortSignal: input.abortSignal,
     });
 
@@ -1983,6 +2008,9 @@ export class AgentLoop {
       const injections = [...(prepared.injections ?? [])];
       if (methodologyAddendum) {
         injections.push({ source: "methodology", text: methodologyAddendum });
+      }
+      if (workspaceLedgerBlock && !workspaceLedgerBlock.empty) {
+        injections.push({ source: "workspace_ledger", text: workspaceLedgerBlock.block });
       }
       const freshInjections = injections.filter(injection => {
         const key = `${injection.source}\u0000${injection.text}`;

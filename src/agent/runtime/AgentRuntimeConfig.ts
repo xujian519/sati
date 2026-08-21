@@ -67,4 +67,10 @@ export type AgentRuntimeConfig = {
    * `src/methodology/` for the built-in reasoning-methodology registry.
    */
   methodologyInjection?: (lastUserMessage: string) => string | null;
+  /**
+   * Enable workspace-ledger re-injection and seam writes. Defaults to off so
+   * existing behavior is unchanged. When on, a `workspaceLedger` provider must
+   * be wired via dependencies.
+   */
+  workspaceLedger?: boolean;
 };

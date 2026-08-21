@@ -86,6 +86,7 @@ export class ToolContextFactory {
       modelId: config.model,
       elicitation: dependencies.elicitation,
       fileHistory: dependencies.fileHistory,
+      workspaceLedger: dependencies.workspaceLedger,
       subagentDepth: config.subagentDepth ?? 0,
       subagent: this.buildSubagentForkApi(input),
       modelMultimodal: config.modelMultimodal,
