@@ -9,6 +9,8 @@
  * 此处 re-export 供领域层复用。
  */
 
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { SatiEvidenceReceipt } from "../../tool/protocol/evidence.js";
 
 export type Receipt = SatiEvidenceReceipt;
@@ -30,7 +32,7 @@ export function contentHash(text: string): string {
  * 支持按工具名检索 —— 证据/审计消费方据此还原"本轮做过什么"。
  */
 export class Ledger {
-  private receipts: Receipt[] = [];
+  protected receipts: Receipt[] = [];
 
   reset(): void {
     this.receipts = [];
@@ -50,5 +52,59 @@ export class Ledger {
 
   size(): number {
     return this.receipts.length;
+  }
+}
+
+/**
+ * TeamLedger：团队共享证据账本（阶段 2）。
+ *
+ * 继承 Ledger 的 turn 级内存语义，并把每条 Receipt 追加到团队共享 JSONL 文件
+ * （路径由调用方注入，如 {caseOutputsDir}/{teamId}/evidence-ledger.jsonl）——
+ * 成员各自 record、团队统一可见。按 toolCallId 去重（resume/重放不重复写）。
+ * reset() 覆写为「从文件刷新视图」而非清空共享账本，对齐 EvidenceExtension
+ * 每 turn 调用 startTurn 的契约，同时保留其他成员已落盘的历史。
+ */
+export class TeamLedger extends Ledger {
+  private readonly filePath: string;
+  private readonly seenIds = new Set<string>();
+
+  constructor(filePath: string) {
+    super();
+    this.filePath = filePath;
+    this.load();
+  }
+
+  override record(receipt: Receipt): void {
+    if (this.seenIds.has(receipt.toolCallId)) return;
+    this.seenIds.add(receipt.toolCallId);
+    super.record(receipt);
+    try {
+      mkdirSync(dirname(this.filePath), { recursive: true });
+      appendFileSync(this.filePath, JSON.stringify(receipt) + "\n", "utf8");
+    } catch (err) {
+      // 落盘失败不阻断工具执行（内存账本已记录；审计侧降级为 warn）。
+      console.warn(`[sati] 团队证据账本落盘失败（内存已记录）: ${this.filePath}`, err);
+    }
+  }
+
+  override reset(): void {
+    this.receipts = [];
+    this.seenIds.clear();
+    this.load();
+  }
+
+  private load(): void {
+    if (!existsSync(this.filePath)) return;
+    for (const line of readFileSync(this.filePath, "utf8").split("\n")) {
+      if (line.trim().length === 0) continue;
+      try {
+        const receipt = JSON.parse(line) as Receipt;
+        if (this.seenIds.has(receipt.toolCallId)) continue;
+        this.seenIds.add(receipt.toolCallId);
+        this.receipts.push(receipt);
+      } catch {
+        // 坏行跳过（追加写并发时可能读到半行）。
+      }
+    }
   }
 }
