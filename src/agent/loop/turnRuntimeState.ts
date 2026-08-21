@@ -42,6 +42,7 @@ export class TurnRuntimeState {
   hasAttemptedEmptyRetry = false;
   hasAttemptedToolCallRetry = false;
   hasAttemptedReasoningContentRetry = false;
+  hasAttemptedMetacognitiveRetry = false;
   // 恢复计数
   maxOutputRecoveryCount = 0;
   consecutiveEmptyCount = 0;
