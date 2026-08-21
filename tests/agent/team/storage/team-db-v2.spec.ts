@@ -1,5 +1,5 @@
 /**
- * TeamDb v2：tasks/messages 两表 CRUD + user_version 升到 3（v3 archived_at 迁移后基线为 3）。
+ * TeamDb v2：tasks/messages 两表 CRUD + user_version 升到 4（v3 archived_at + v4 worker_name 迁移后基线为 4）。
  */
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -23,13 +23,13 @@ const TASK_BASE = {
   updatedAt: "2026-08-20T00:00:00.000Z",
 };
 
-test("v2 迁移：tasks/messages 表可用，userVersion=3", () => {
+test("v2 迁移：tasks/messages 表可用，userVersion=4", () => {
   const root = mkdtempSync(join(tmpdir(), "sati-team-db-v2-"));
   const db = new TeamDb(join(root, "teams.db"));
   try {
     // userVersion() 已移除（生产零引用）——外部连接直查 PRAGMA 钉住迁移版本
     const raw = new DatabaseSync(join(root, "teams.db"));
-    assert.equal((raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 3);
+    assert.equal((raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
     raw.close();
     db.insertTask({ id: "t1", ...TASK_BASE });
     const task = db.getTask("t1", "t1");
