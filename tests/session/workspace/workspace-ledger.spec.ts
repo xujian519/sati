@@ -13,6 +13,7 @@ import {
   nextOpenNumber,
   renderWorkspaceLedgerBlock,
   type WorkspaceLedgerState,
+  type WorkspaceNoteInput,
 } from "../../../src/session/workspace/WorkspaceLedger.js";
 
 function open(): WorkspaceLedgerState {
@@ -137,6 +138,49 @@ test("core holds at most two live entries and swap is explicit", () => {
   assert.equal(swapped.changed, true);
   const live = swapped.state.core.filter(entry => entry.live);
   assert.equal(live[0]!.text, "delivery — keep the outer register clean");
+});
+
+test("core slot swap demotes the displaced entry and never duplicates", () => {
+  let state = open();
+  state = applyWorkspaceNote(state, { core: "constraints — preserve public behavior" }).state;
+  state = applyWorkspaceNote(state, { core: "evidence — cover all affected files" }).state;
+  // Third entry parked; promote it into slot 1 in a later call.
+  state = applyWorkspaceNote(state, { core: "delivery — keep the outer register clean" }).state;
+  assert.equal(state.core.filter(entry => entry.live).length, 2);
+  assert.equal(state.core.filter(entry => !entry.live).length, 1);
+
+  const swapped = applyWorkspaceNote(state, {
+    core: "delivery — keep the outer register clean",
+    coreSlot: 1,
+  });
+  assert.equal(swapped.changed, true);
+  const live = swapped.state.core.filter(entry => entry.live);
+  const parked = swapped.state.core.filter(entry => !entry.live);
+  // Exactly two live entries survive the swap.
+  assert.equal(live.length, 2);
+  // The displaced "constraints" is demoted to parked, not left live.
+  assert.equal(
+    parked.some(entry => entry.text === "constraints — preserve public behavior"),
+    true,
+  );
+  // No text appears more than once across live + parked.
+  const texts = swapped.state.core.map(entry => entry.text);
+  assert.equal(new Set(texts).size, texts.length);
+});
+
+test("core slot cannot add a live entry beyond the cap", () => {
+  let state = open();
+  state = applyWorkspaceNote(state, { core: "constraints — preserve public behavior" }).state;
+  state = applyWorkspaceNote(state, { core: "evidence — cover all affected files" }).state;
+  // coreSlot is typed 1|2; cast the input to exercise the pure function's
+  // runtime guard against out-of-range slots (as JSON tool input could be).
+  const tooMany = applyWorkspaceNote(state, {
+    core: "delivery — keep the outer register clean",
+    coreSlot: 3,
+  } as unknown as WorkspaceNoteInput);
+  assert.equal(tooMany.changed, false);
+  assert.ok(tooMany.rejected.some(text => text.includes("does not exist")));
+  assert.equal(tooMany.state.core.filter(entry => entry.live).length, 2);
 });
 
 test("mixed note applies valid edits and reports rejected ones", () => {

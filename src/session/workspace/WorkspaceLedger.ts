@@ -252,18 +252,21 @@ function applyCoreEdit(state: WorkspaceLedgerState, note: WorkspaceNoteInput, re
     rejected.push("that core entry is already live.");
     return;
   }
-  if (slotIndex > live.length) {
+  if (slotIndex >= MAX_LIVE_CORE || slotIndex > live.length) {
     rejected.push(`live core slot ${note.coreSlot} does not exist.`);
     return;
   }
+  // Promote the entry into a live slot. Drop any parked copy so promoting a
+  // parked concept never leaves a duplicate, and demote the displaced live
+  // entry (live:false) so the "at most two live" invariant holds.
+  const parkedWithout = parked.filter(entry => entry.text !== text);
   const displaced = live[slotIndex];
   if (slotIndex === live.length) {
-    live.push({ text, live: true });
+    state.core = [...live, { text, live: true }, ...parkedWithout];
   } else if (displaced !== undefined) {
-    live[slotIndex] = { text, live: true };
-    parked.push(displaced);
+    const nextLive = live.map((entry, index) => (index === slotIndex ? { text, live: true } : entry));
+    state.core = [...nextLive, ...parkedWithout, { ...displaced, live: false }];
   }
-  state.core = [...live, ...parked];
 }
 
 function cleanScalar(value: string | undefined): string | null {
