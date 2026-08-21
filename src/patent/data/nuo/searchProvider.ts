@@ -16,6 +16,7 @@
 
 import { searchPatents as searchPatentsImpl } from "nuo-patent";
 import type { StageProvider } from "../../atoms/index.js";
+import type { ConnectorRegistry } from "../../../literature/index.js";
 import { cachedSearchPatents } from "./patentCache.js";
 
 export type CreateNuoSearchProviderOptions = {
@@ -44,5 +45,78 @@ export function createNuoSearchProvider(options?: CreateNuoSearchProviderOptions
         publication_date: h.publication_date || undefined,
       }));
     },
+  };
+}
+
+/** 单检索源：与 StageProvider.search 同形状（查询 → 命中列表）。 */
+export type SearchSource = NonNullable<StageProvider["search"]>;
+
+/**
+ * 多源并行检索 provider：同一查询并行派发给全部源，合并后按 url（缺失时回退
+ * title）去重，截断到 maxResults。单源失败 fail-open（返回空列表，不阻断其他源），
+ * 与检索降级语义一致——并行把检索段耗时从「源耗时之和」降到「最慢源耗时」。
+ */
+export function createMultiSourceSearchProvider(sources: readonly SearchSource[]): StageProvider {
+  return {
+    search: async (query, opts) => {
+      const maxResults = opts?.maxResults ?? 5;
+      const results = await Promise.all(
+        sources.map(async source => {
+          try {
+            return await source(query, { maxResults });
+          } catch {
+            return [];
+          }
+        }),
+      );
+      return dedupeSearchHits(results.flat(), maxResults);
+    },
+  };
+}
+
+/** 按 url（缺失回退 title）去重，保持首现顺序，截断到 maxResults。 */
+function dedupeSearchHits(
+  hits: Array<{ title: string; snippet: string; url?: string; publication_date?: string }>,
+  maxResults: number,
+): Array<{ title: string; snippet: string; url?: string; publication_date?: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ title: string; snippet: string; url?: string; publication_date?: string }> = [];
+  for (const hit of hits) {
+    const key = hit.url ?? hit.title;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(hit);
+    if (out.length >= maxResults) break;
+  }
+  return out;
+}
+
+/**
+ * 学术文献检索源（阶段 1b）：把 literature 域的全部 Connector（arXiv/OpenAlex/
+ * Semantic Scholar/Crossref）并行检索，归一化为 StageProvider.search 命中形状。
+ *
+ * - 查询直接透传（arXiv 对自由文本包 `all:`、OpenAlex 自行解析），不做过早的
+ *   跨源查询改写；paper 源定位为专利检索的补充检索面。
+ * - 单 connector 失败 fail-open（返回空列表），与检索降级语义一致。
+ * - publication_date 暂不映射（ConnectorHit 无标准日期字段，后续按 extra 增强）。
+ */
+export function createPaperSearchSource(registry: ConnectorRegistry): SearchSource {
+  return async (query, opts) => {
+    const maxResults = opts?.maxResults ?? 5;
+    const results = await Promise.all(
+      registry.all().map(async connector => {
+        try {
+          const hits = await connector.search(query, { limit: maxResults });
+          return hits.map(h => ({
+            title: h.title,
+            snippet: h.summary ?? "",
+            url: h.url,
+          }));
+        } catch {
+          return [];
+        }
+      }),
+    );
+    return results.flat();
   };
 }
