@@ -47,6 +47,9 @@ import {
 } from "../../../../src/tool/builtin/team/index.js";
 import { getPilotProjectChatDir } from "../../../../src/pilot/index.js";
 import { sanitizeSessionIdForPath } from "../../../../src/session/storage/ProjectSessionStorage.js";
+import { createBuiltinRegistry } from "../../../../src/tool/registry/createBuiltinRegistry.js";
+import type { SatiToolDefinition } from "../../../../src/tool/protocol/types.js";
+import type { TeamCreateTaskInput, TeamCreateTaskOutput } from "../../../../src/tool/builtin/team/teamTasks.js";
 
 const TEAM_ID = "t1";
 const CAPTAIN_SESSION = "cap-1";
@@ -652,6 +655,47 @@ test("team_create_task：workerName 存在性校验（阶段 3）", async () => 
       () => tools.teamCreateTask.execute({ teamId, subject: "幽灵 worker", workerName: "no_such_worker" }, captainCtx),
       /worker 未注册/,
     );
+  } finally {
+    await disposeGateway(result, root);
+  }
+});
+
+test("team_create_task：createBuiltinRegistry 装配路径透传 workerRegistry（I1 回归）", async () => {
+  const { result, root } = await makeGateway("registry-wiring", textOnlyModel);
+  const teamDb = result.teamSubsystem.db;
+  const registry = new WorkerRegistry();
+  for (const w of defaultPatentWorkers()) registry.register(w);
+  const builtin = createBuiltinRegistry({
+    team: {
+      db: teamDb,
+      scheduler: result.teamSubsystem.scheduler,
+      emit: () => true,
+      workerRegistry: registry,
+    },
+  });
+  const tool = builtin.get("team_create_task") as
+    | SatiToolDefinition<TeamCreateTaskInput, TeamCreateTaskOutput>
+    | undefined;
+  const captainCtx = { sessionId: CAPTAIN_SESSION } as never;
+  try {
+    assert.ok(tool !== undefined, "team_create_task 应经 createBuiltinRegistry 注册");
+    teamDb.upsertTeam({
+      id: TEAM_ID,
+      name: "装配回归团队",
+      captainSessionKey: CAPTAIN_SESSION,
+      createdAt: new Date().toISOString(),
+    });
+    // 幽灵 workerName：拒绝（workerRegistry 已透传，生产路径校验非死代码）
+    await assert.rejects(
+      () => tool!.execute({ teamId: TEAM_ID, subject: "幽灵 worker", workerName: "no_such_worker" }, captainCtx),
+      /worker 未注册/,
+    );
+    // 正对照：已注册 worker 创建通过
+    const ok = await tool!.execute(
+      { teamId: TEAM_ID, subject: "合法 worker", workerName: "patent-search-commander" },
+      captainCtx,
+    );
+    assert.equal(ok.data!.status, "pending");
   } finally {
     await disposeGateway(result, root);
   }

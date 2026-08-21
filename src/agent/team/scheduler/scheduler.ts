@@ -11,14 +11,13 @@
  *   team_update_task 等团队工具要取同一把锁，持锁唤醒会重入死锁；
  * - 队长离线：isCaptainOnline 返回 false 时暂停认领（在途回合跑完即停）。
  */
-import type { TeamDb, TeamMessageRow, TeamTaskRow, TeamRow } from "../storage/team-db.js";
+import type { TeamDb, TeamMemberRow, TeamMessageRow, TeamTaskRow, TeamRow } from "../storage/team-db.js";
 import { TERMINAL_TASK_STATUSES, unsatisfiedDependencies } from "../taskpool/task-status.js";
 import { beginTaskAttempt, invalidateTaskAttempt, attemptsExhausted } from "../taskpool/attempt.js";
 import { retryFailedTask } from "../taskpool/retry.js";
 import { claimDelivery, unreadMessages } from "../mailbox/mailbox.js";
 import type { TeamEventEmitter } from "../protocol/events.js";
-import { workerAllowedForRole } from "../../../patent/index.js";
-import type { WorkerRegistry } from "../../../patent/index.js";
+import { workerAllowedForRole, type WorkerRegistry } from "../../../patent/worker-contract.js";
 import { withTeamLock } from "./lock.js";
 
 export type TeamSchedulerOptions = {
@@ -99,12 +98,10 @@ export class TeamScheduler {
    * 已认领任务（claimed/in_progress）不受此约束（不夺回）；workerRegistry 未注入
    * 或 worker 未注册时 fail-open（不阻塞）。
    */
-  private canMemberClaim(memberId: string, task: TeamTaskRow): boolean {
+  private canMemberClaim(member: TeamMemberRow, task: TeamTaskRow): boolean {
     if (task.workerName === undefined || this.workerRegistry === undefined) return true;
     const worker = this.workerRegistry.get(task.workerName);
     if (worker === undefined) return true;
-    const member = this.db.getMember(memberId);
-    if (member === undefined) return true;
     return workerAllowedForRole(member.roleSlug, worker);
   }
 
@@ -194,7 +191,7 @@ export class TeamScheduler {
       const tasks = this.db.listTasks(teamId);
       // 阶段 3：新分派任务按 worker tier 过滤——任务带 workerName 且成员角色无权执行该
       // tier 时对该成员不可认领（已认领任务不受影响，不夺回；workerRegistry 缺失 fail-open）。
-      const claimable = this.workerRegistry === undefined ? tasks : tasks.filter(t => this.canMemberClaim(memberId, t));
+      const claimable = this.workerRegistry === undefined ? tasks : tasks.filter(t => this.canMemberClaim(current, t));
       const task = ownedOpenTask(tasks, memberId) ?? nextReadyTask(claimable, memberId);
       if (task === undefined) return undefined;
       const working = this.db.listMembers().filter(m => m.teamId === teamId && m.status === "working").length;

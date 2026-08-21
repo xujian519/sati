@@ -361,7 +361,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createReadSkillTool(options.readSkill), "session"));
   }
   if (options?.team) {
-    const { db, scheduler, emit } = options.team;
+    const { db, scheduler, emit, workerRegistry } = options.team;
     // 契约：9 个 creator 内部不标注 domain（domain 由注册表集中打标）。
     // annotate 只补不覆盖——若未来 creator 自标 domain，注册后 domain 来源
     // 会不一致（自标优先），改动 creator 时需同步本块约定。
@@ -369,7 +369,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createTeamCreateTool({ db, scheduler, emit }), "team:manage"));
     registry.register(annotate(createTeamAddMemberTool({ db, scheduler, emit }), "team:manage"));
     registry.register(annotate(createTeamRemoveMemberTool({ db, scheduler, emit }), "team:manage"));
-    registry.register(annotate(createTeamCreateTaskTool({ db, scheduler, emit }), "team:manage"));
+    registry.register(annotate(createTeamCreateTaskTool({ db, scheduler, emit, workerRegistry }), "team:manage"));
     registry.register(annotate(createTeamReassignTaskTool({ db, scheduler, emit }), "team:manage"));
     registry.register(annotate(createTeamArchiveTool({ db, scheduler, emit }), "team:manage"));
     // 作业面（team，成员角色可见）

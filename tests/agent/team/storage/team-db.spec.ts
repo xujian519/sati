@@ -207,6 +207,9 @@ test("迁移：真实 v2 旧库（user_version=2 + 旧数据）升级到 v3，�
     raw
       .prepare("INSERT INTO teams (id, name, captain_session_key, created_at) VALUES (?, ?, ?, ?)")
       .run("t-old", "旧团队", "cap-old", "2026-08-01T00:00:00.000Z");
+    raw
+      .prepare("INSERT INTO tasks (id, team_id, subject, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("t-9", "t-old", "旧任务", "pending", "2026-08-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z");
     raw.close();
     // 以 TeamDb 重开：v2 → v4 迁移补 archived_at + worker_name 列，旧行该字段保持 NULL（= undefined）
     const db = new TeamDb(dbPath);
@@ -222,6 +225,8 @@ test("迁移：真实 v2 旧库（user_version=2 + 旧数据）升级到 v3，�
         createdAt: "2026-08-01T00:00:00.000Z",
         archivedAt: undefined,
       });
+      // 旧 task 行迁移后 worker_name 保持 NULL（= undefined）
+      assert.equal(db.getTask("t-old", "t-9")?.workerName, undefined);
     } finally {
       db.close();
     }
