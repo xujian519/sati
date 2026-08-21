@@ -162,14 +162,14 @@ function resolveMemoryLlm(
   };
   const apiType = cfg.apiType ?? memoryApiTypeForProtocol(providerEntry?.protocol);
   if (apiType !== undefined) {
-    llm.apiType = apiType as EdgeClawMemoryLlmOptions["apiType"];
+    llm.apiType = apiType;
   }
   return llm;
 }
 
 function memoryApiTypeForProtocol(
   protocol: ModelProtocol | undefined,
-): PilotMemoryConfig["apiType"] | "openai-completions" | undefined {
+): EdgeClawMemoryLlmOptions["apiType"] | undefined {
   if (protocol === "anthropic" || protocol === "google") return protocol;
   if (protocol === "openai-responses") return "openai-responses";
   if (protocol === "openai") return "openai-completions";

@@ -1,5 +1,5 @@
 import { TtlCache } from "../../shared/ttl-cache.js";
-import type { TelemetryClient } from "../../telemetry/index.js";
+import type { TelemetryClient, TelemetryErrorCategory } from "../../telemetry/index.js";
 import {
   canonicalMessagesToMemoryMessages,
   type MemoryCaptureTurnInput,
@@ -108,22 +108,19 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
 
   async retrieve(input: MemoryRetrieveInput): Promise<MemoryRetrieveResult> {
     const startedAt = this.now().toISOString();
-    this.options.telemetry?.trackFeatureLoopStage({
-      module: "memory",
-      ownerModule: "memory",
-      executionKind: "memory",
-      phase: "retrieve",
-      loopStage: "loop_start",
-      outcome: "success",
-      sessionId: input.sessionId,
-    });
+    this.trackMemoryStage({ phase: "retrieve", loopStage: "loop_start", sessionId: input.sessionId });
 
     const cacheKey = buildRetrieveCacheKey(input);
     // 命中返回共享引用（含 trace/debug 对象）。调用方（MemoryAttachmentBuilder
     // 等）只读消费，不得改写——缓存条目为进程内只读快照约定。
     const cached = this.retrieveCache.get(cacheKey);
     if (cached !== undefined) {
-      this.trackRetrieveLoopEnd(input.sessionId, { cacheHit: true });
+      this.trackMemoryStage({
+        phase: "retrieve",
+        loopStage: "loop_end",
+        sessionId: input.sessionId,
+        metadata: { cacheHit: true },
+      });
       return cached;
     }
 
@@ -162,7 +159,12 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
       });
       const systemContext = (result.systemContext ?? result.context ?? "").trim();
       if (!systemContext) {
-        this.trackRetrieveLoopEnd(input.sessionId, { injected: false });
+        this.trackMemoryStage({
+          phase: "retrieve",
+          loopStage: "loop_end",
+          sessionId: input.sessionId,
+          metadata: { injected: false },
+        });
         const empty: MemoryRetrieveResult = {
           diagnostics: [
             {
@@ -173,17 +175,22 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
           ],
           metadata: { trace: result.trace, debug: result.debug },
         };
-        this.setCachedRetrieve(cacheKey, empty);
+        this.retrieveCache.set(cacheKey, empty);
         return empty;
       }
 
-      this.trackRetrieveLoopEnd(input.sessionId, { injected: true });
+      this.trackMemoryStage({
+        phase: "retrieve",
+        loopStage: "loop_end",
+        sessionId: input.sessionId,
+        metadata: { injected: true },
+      });
       const success: MemoryRetrieveResult = {
         systemContext,
         diagnostics: [],
         metadata: { trace: result.trace, debug: result.debug },
       };
-      this.setCachedRetrieve(cacheKey, success);
+      this.retrieveCache.set(cacheKey, success);
       return success;
     } catch (error) {
       this.options.telemetry?.trackError(error, {
@@ -207,61 +214,50 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
     }
   }
 
-  private trackRetrieveLoopEnd(sessionId: string, metadata: Record<string, unknown>): void {
+  /**
+   * memory 域 loop stage 遥测统一入口：module/ownerModule/executionKind 恒为
+   * "memory"，phase/loopStage/outcome/errorCategory/metadata 按调用点变化。
+   */
+  private trackMemoryStage(input: {
+    phase: "retrieve" | "capture";
+    loopStage: "loop_start" | "loop_end";
+    sessionId: string;
+    outcome?: "success" | "failed";
+    errorCategory?: TelemetryErrorCategory;
+    metadata?: Record<string, unknown>;
+  }): void {
     this.options.telemetry?.trackFeatureLoopStage({
       module: "memory",
       ownerModule: "memory",
       executionKind: "memory",
-      phase: "retrieve",
-      loopStage: "loop_end",
-      outcome: "success",
-      sessionId,
-      metadata,
+      phase: input.phase,
+      loopStage: input.loopStage,
+      outcome: input.outcome ?? "success",
+      sessionId: input.sessionId,
+      ...(input.errorCategory ? { errorCategory: input.errorCategory } : {}),
+      ...(input.metadata ? { metadata: input.metadata } : {}),
     });
-  }
-
-  private setCachedRetrieve(cacheKey: string, result: MemoryRetrieveResult): void {
-    this.retrieveCache.set(cacheKey, result);
   }
 
   async captureTurn(input: MemoryCaptureTurnInput): Promise<void> {
     const normalizedMessages = canonicalMessagesToMemoryMessages(input.messages, {
       includeForkCarryover: false,
     });
-    this.options.telemetry?.trackFeatureLoopStage({
-      module: "memory",
-      ownerModule: "memory",
-      executionKind: "memory",
-      phase: "capture",
-      loopStage: "loop_start",
-      outcome: "success",
-      sessionId: input.sessionId,
-    });
+    this.trackMemoryStage({ phase: "capture", loopStage: "loop_start", sessionId: input.sessionId });
     try {
       this.options.service.captureTurn(normalizedMessages, {
         sessionKey: input.sessionId,
         timestamp: this.now().toISOString(),
         source: this.options.source ?? "sati",
       });
-      this.options.telemetry?.trackFeatureLoopStage({
-        module: "memory",
-        ownerModule: "memory",
-        executionKind: "memory",
-        phase: "capture",
-        loopStage: "loop_end",
-        outcome: "success",
-        sessionId: input.sessionId,
-      });
+      this.trackMemoryStage({ phase: "capture", loopStage: "loop_end", sessionId: input.sessionId });
     } catch {
-      this.options.telemetry?.trackFeatureLoopStage({
-        module: "memory",
-        ownerModule: "memory",
-        executionKind: "memory",
+      this.trackMemoryStage({
         phase: "capture",
         loopStage: "loop_end",
+        sessionId: input.sessionId,
         outcome: "failed",
         errorCategory: "loop_error",
-        sessionId: input.sessionId,
       });
       // Memory capture should not break the agent turn.
     }

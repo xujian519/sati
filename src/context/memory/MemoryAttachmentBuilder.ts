@@ -169,7 +169,7 @@ function forwardAbort(source: AbortSignal | undefined, target: AbortController):
 
 async function waitForAbort(signal: AbortSignal): Promise<never> {
   if (signal.aborted) {
-    throwAbortError(signal.reason);
+    throw createAbortError(signal.reason);
   }
   return await new Promise<never>((_, reject) => {
     const onAbort = () => {
@@ -178,10 +178,6 @@ async function waitForAbort(signal: AbortSignal): Promise<never> {
     };
     signal.addEventListener("abort", onAbort, { once: true });
   });
-}
-
-function throwAbortError(reason?: unknown): never {
-  throw createAbortError(reason);
 }
 
 function createAbortError(reason?: unknown): Error {
