@@ -18,6 +18,7 @@ import type {
   GraphNode,
   GraphRunResult,
   GraphState,
+  NodeDuration,
   NodePolicy,
   Reducer,
   RunOptions,
@@ -164,6 +165,11 @@ type NamedOutcome = { name: string; delta: StateDelta } | { name: string; error:
 /** 恢复起点（resume 用）：state + active + 超步序号。 */
 export type ResumePoint = { state: GraphState; active: string[]; stepIndex: number };
 
+/** 节点耗时按节点名字典序排序（确定性输出，与合并/降级汇总一致）。 */
+function sortedNodeDurations(durations: NodeDuration[]): NodeDuration[] {
+  return [...durations].sort((a, b) => a.node.localeCompare(b.node));
+}
+
 /** SuperStep 主循环（resumeFrom 提供时从指定超步继续）。 */
 async function runSuperSteps(
   def: CompiledGraphDef,
@@ -176,6 +182,7 @@ async function runSuperSteps(
   let steps = resumeFrom?.stepIndex ?? 0;
   let completed = false;
   let interrupted: GraphRunResult["interrupted"];
+  const durations: NodeDuration[] = [];
 
   for (let step = steps; step < def.maxSteps; step += 1) {
     steps = step;
@@ -188,19 +195,24 @@ async function runSuperSteps(
     const snapshot = cloneState(state);
     const outcomes = await Promise.all(
       active.map(async name => {
-        const node = def.nodes.get(name);
-        if (node === undefined) {
-          return { name, error: new GraphEngineError(`节点 "${name}" 未注册（图定义不一致）`) } as NamedOutcome;
-        }
-        const policy = def.nodePolicies.get(name);
+        const startedAt = Date.now();
         try {
-          const outcome = await runNodeWithPolicy(node, policy, { state: snapshot, provider: opts.provider });
-          return outcome.ok
-            ? ({ name, delta: outcome.delta } as NamedOutcome)
-            : ({ name, error: outcome.error } as NamedOutcome);
-        } catch (err) {
-          // runNodeWithPolicy 不抛普通错误；中断错误穿透至此。
-          return { name, error: err } as NamedOutcome;
+          const node = def.nodes.get(name);
+          if (node === undefined) {
+            return { name, error: new GraphEngineError(`节点 "${name}" 未注册（图定义不一致）`) } as NamedOutcome;
+          }
+          const policy = def.nodePolicies.get(name);
+          try {
+            const outcome = await runNodeWithPolicy(node, policy, { state: snapshot, provider: opts.provider });
+            return outcome.ok
+              ? ({ name, delta: outcome.delta } as NamedOutcome)
+              : ({ name, error: outcome.error } as NamedOutcome);
+          } catch (err) {
+            // runNodeWithPolicy 不抛普通错误；中断错误穿透至此。
+            return { name, error: err } as NamedOutcome;
+          }
+        } finally {
+          durations.push({ node: name, durationMs: Date.now() - startedAt });
         }
       }),
     );
@@ -211,7 +223,14 @@ async function runSuperSteps(
       if ("error" in outcome && isGraphInterruptError(outcome.error)) {
         const interrupt = outcome.error as GraphInterruptError;
         interrupted = { node: outcome.name, message: interrupt.message, data: interrupt.data };
-        return { state, completed: false, steps, degraded: degradationSummary(state), interrupted };
+        return {
+          state,
+          completed: false,
+          steps,
+          degraded: degradationSummary(state),
+          interrupted,
+          nodeDurations: sortedNodeDurations(durations),
+        };
       }
     }
 
@@ -234,7 +253,13 @@ async function runSuperSteps(
       }
     }
     if (failed) {
-      return { state, completed: false, steps, degraded: degradationSummary(state) };
+      return {
+        state,
+        completed: false,
+        steps,
+        degraded: degradationSummary(state),
+        nodeDurations: sortedNodeDurations(durations),
+      };
     }
 
     // 确定性合并（Reducer + 节点名字典序）。
@@ -266,7 +291,19 @@ async function runSuperSteps(
 
   // 循环因 maxSteps 耗尽退出（active 非空）→ 未正常完成（护栏触发）。
   if (!completed && active.length > 0) {
-    return { state, completed: false, steps, degraded: degradationSummary(state) };
+    return {
+      state,
+      completed: false,
+      steps,
+      degraded: degradationSummary(state),
+      nodeDurations: sortedNodeDurations(durations),
+    };
   }
-  return { state, completed, steps, degraded: degradationSummary(state) };
+  return {
+    state,
+    completed,
+    steps,
+    degraded: degradationSummary(state),
+    nodeDurations: sortedNodeDurations(durations),
+  };
 }

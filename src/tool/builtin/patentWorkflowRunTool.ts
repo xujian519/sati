@@ -458,10 +458,16 @@ function renderGraphResultText(opts: {
       return `- ${key}: ${preview}`;
     });
   const degraded = opts.result.degraded.map(d => `- ${d.severity} [${d.reason}] ${d.message}`);
+  // 节点耗时（阶段 0 检索耗时测量）：按耗时降序，辅助识别检索段 vs LLM 段耗时占比。
+  const durations = (opts.result.nodeDurations ?? [])
+    .slice()
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .map(d => `- ${d.node}: ${d.durationMs}ms`);
   return [
     `patent_workflow_run(graph=${opts.graph}): 图引擎执行 ${opts.result.steps} 超步，完成状态: ${completion}`,
     ...keyLines,
     ...(opts.result.degraded.length > 0 ? ["", "⚠️ 降级标记:", ...degraded] : ["", "✅ 无降级"]),
+    ...(durations.length > 0 ? ["", "⏱ 节点耗时:", ...durations] : []),
     `规则门 verdict: ${String(opts.result.state.rule_gate_verdict ?? "（未启用）")}`,
     opts.checkpointNote,
     opts.persistNote,

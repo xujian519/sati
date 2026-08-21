@@ -226,3 +226,49 @@ test("engine: resume 需要 GraphCheckpoint（未接线时行为由 checkpoint �
   assert.equal(result.completed, true);
   assert.equal(result.state.x, 1);
 });
+
+test("engine: nodeDurations 记录全部执行节点（字典序确定性）", async () => {
+  const builder = new GraphBuilder();
+  builder
+    .addNode("zebra", node("z", 1))
+    .addNode("alpha", node("a", 2))
+    .addNode("mid", node("m", 3))
+    .addEdge("zebra", "alpha")
+    .addEdge("alpha", "mid")
+    .addEdge("mid", GRAPH_END);
+  const graph = builder.compile("zebra");
+  const result = await graph.run({});
+  assert.equal(result.completed, true);
+  assert.deepEqual(
+    result.nodeDurations?.map(d => d.node),
+    ["alpha", "mid", "zebra"],
+  );
+  for (const d of result.nodeDurations ?? []) {
+    assert.equal(typeof d.durationMs, "number");
+    assert.ok(d.durationMs >= 0);
+  }
+});
+
+test("engine: nodeDurations 覆盖并行超步与中断节点", async () => {
+  const builder = new GraphBuilder();
+  builder
+    .addNode("entry", node("start", true))
+    .addNode("p1", node("k", 1))
+    .addNode("p2", node("k", 2))
+    .addNode("gate", async () => {
+      throw new GraphInterruptError("暂停", { review_context: "x" });
+    })
+    .addEdge("entry", "p1")
+    .addEdge("entry", "p2")
+    .addEdge("p1", "gate")
+    .addEdge("p2", "gate");
+  const graph = builder.compile("entry");
+  const result = await graph.run({});
+  assert.equal(result.completed, false);
+  assert.equal(result.interrupted?.node, "gate");
+  // 中断前 entry/p1/p2 已执行并计时，gate 节点本身也已计时。
+  assert.deepEqual(
+    result.nodeDurations?.map(d => d.node),
+    ["entry", "gate", "p1", "p2"],
+  );
+});
