@@ -2,6 +2,76 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.5 - 2026-08-21
+
+> **版本目标（2026-08-21）**：v0.1.4 后的工程固化与能力增强——引入 J-Space workspace ledger 与元认知控制（metacognitive control）、团队成员角色提示注入（#135）、专利并行多源检索与图引擎耗时度量，并落实 C05/C06 代码精炼收口与 code-review 修复。
+
+### Feat
+- feat(agent): 引入 J-Space workspace ledger 与控制器工具——core slot 交换 + 不变式强制 + 工作区工具门禁；新增 metacognitive control、broadcast hub 与 bridge-reencode（bridge 重编码触发收窄）
+- feat(tool): `workspace_note`/`workspace_ship` 控制器工具 + `scripts/validate-skills.mjs` 扩展（role frontmatter 一致性 + 无版本营销话术 + 同族角色结构化校验）
+- feat(team): 成员回合注入角色 system prompt（#135）——角色立场指令进入成员 turn
+- feat(patent): 多源并行检索（nuo + paper）+ 图引擎逐节点耗时度量 + 团队共享证据账本（team-shared evidence ledger + 跨成员冲突检测 + worker 契约绑定角色层级检查 + 归档材料摘要）
+
+### Fix
+- fix(agent): workspace ledger 与元认知控制 code-review 修复——core slot 不变式强制 + hasAttemptedMetacognitiveRetry 声明 + 工作区工具门禁收窄
+- fix(gateway): 帧解析错误不逃逸 socket 回调（guard frame parse errors）
+- fix(team): workerRegistry 经 builtin registry 接线（review findings）+ team-db-v2 迁移断言对齐 v4 基线
+- fix(patent): 检索并行化与 ledger 的 code-review 修复（节点耗时聚合/字节序排序/跨库去重）
+
+### Refactor
+- refactor(agent): 简化 workspace ledger core slot 交换 + 修剪死 compaction helpers + 加固 ws handler + 丢弃未用诊断
+- refactor(context/gateway): 移除死 compaction/budget helpers 与未用配置；清理死字段/冗余 cast；收紧导出
+- refactor(patent): ledger 追加与冲突组构建去重 + 检索去重与节点耗时排序简化
+
+### Docs
+- docs: 记录 C05/C06 精炼进度 + 事件矩阵重生（gateway/context 行号漂移）
+
+## v0.1.4 - 2026-08-21
+
+> **版本目标（2026-08-21）**：团队编排层 M1-M4 全面落地——durable 成员底座 → 任务池协议 → 事件驱动调度器 → 团队工具面/活动面板/角色资产 → 失败自动转派与域缺口补全；专利决策溯源与实施例覆盖校验（provenance/claim-coverage）；模型层重构与性能优化批次（批 6 收尾）。
+
+### Feat
+- feat(agent/team): 团队编排层全链路落地——teams.db 存储层（v1/v2/v3 迁移：tasks/messages/archived_at）+ 成员注册/唤醒/冷恢复（wakeMember/scanTeamMembers/createTeamMember）+ 审批冒泡（TeamApprovalForwarder）+ 事件驱动调度器（锁内原子认领/邮箱优先/并发闸/失败回滚）+ 任务池协议（状态机白名单 + attempt 机制）+ 成员邮箱投递租约（未读/认领/过期释放）+ 失败任务自动转派（maxAttempts 防环）
+- feat(tool): 注册 team_* 9 工具（team_create/team_add_member/team_remove_member/team_create_task/team_update_task/team_reassign_task/team_send_message/team_status/team_archive）+ ToolDomain 扩展 team/team:manage
+- feat(gateway): 协议 1.4 panel_heartbeat——Web 下线判定接线 + SessionPresence 连接活跃追踪（宽限窗 60s）+ 面板数据/操作方法（team_panel_snapshot 快照 + team_tool_call 工具直调）
+- feat(ui): 团队活动面板——对话伴随浮层（三态布局 + DAG）+ REST 路由（/api/teams panel/action/heartbeat）+ 概览/成员/任务/事件流视图 + i18n
+- feat(agent): 团队角色资产——7 场景角色包与任务 DAG、12 岗 domains 缺口补全（5 岗补 literature、drafter 补 legal+literature）、7 个团队变体角色（domains 含 team）、composition 角色化、skills/patent-teams 嵌套目录角色装配
+- feat(patent): 决策溯源与实施例覆盖——provenance 存储底座（PROVENANCE_DB）+ 图节点决策链溯源（wrapGraphBuilder）+ worker 执行溯源 + 审批门溯源旁路与 runId 实例化 + 审批审计全局库落盘（output_gate）+ provenance 审计导出（csv/json）+ claim-coverage 纯函数校验与实施例骨架解析 + claim-embodiment-mapper 原子 + drafting 链路实施例覆盖校验接入
+- feat(patent): 文书排版 v2——模板升级 v2 typography spec + 文书排版调参面板（token 化 + style 覆盖 + 预设持久化 + StylePanelHost 挂载 + i18n）
+- feat(model): DeepSeek prompt cache 命中量采集
+
+### Fixed
+- fix(agent/team): 团队编排 code-review 修复——C1 锁防御/I1 可观测/I2 task_failed 补发/I3 依赖环检测 + M2 最终审查（stranded 锁内 invalidate + re-claim 有界 + 冷恢复审批冒泡）+ 集成全链修复（回合内锁死锁/claimed→completed 迁移/warm 续派竞态）+ modelRoute 守卫收紧 + 自动转派重置 + 归档原子化
+- fix(knowledge): 语义路 ready 门/判例召回回退/kg 守卫 + 判例 LIKE 兜底超长模式优雅降级
+- fix(session): transcript 读/写/投影三模块回归修复
+- fix(memory): 空 LLM 抽取响应跳过 dream steps
+- fix(plugin): PluginCommandLoader frontmatter 改 yaml 解析（多行 systemPrompt/数组字段不再截断）+ 解析失败补 warn 与降级测试
+- fix(tokenizer/win): 病态采样样本降至 512 字符 + Windows 平台兼容（路径分隔符统一/EBUSY 句柄释放/CRLF 容错/测试适配）（#128/#129）
+- fix(weixin): 轮询失败指数退避 + 日志限流 + ChannelLogger debug 降噪级字段
+- fix(test): llm-replay fixture 重录——document_style 工具条件注册 + 录制/重放工具集对齐（M3-T16 收尾）
+
+### Perf
+- perf(session): transcript 写缓冲合并落盘 + 投影/构建缓存与单调游标 + tail-append 增量读取 + 向量检索异步预热 + 会话摘要/重放零依赖优化
+- perf(ui): P3 流式 tick 重派生消除（单调游标/有序归并/增量缓存/前缀和）+ 草稿持久化防抖 + 轮询降频
+- perf(knowledge): 判例 LIKE 兜底两阶段化（title 直查 + 受限 content 扫描）
+- perf(patent): activity 表补 case_id 索引（provenance 按案卷查询加速）
+- perf: 批 6 收尾——DoomLoop 观测截断/扫描延迟/插件指纹缓存/事件总线缓冲/审计非阻塞/prepare 缓存
+
+### Refactor
+- refactor(shared): 统一环境变量解析/重试退避/路径工具 + prepareCached 收敛共享 + truncateUtf8 导出复用 + 合并重复 bounded int env 解析器
+- refactor(model): 提取共享 OpenAI 模型目录/流式调试重试助手/统一 balanced JSON 解析 + 清理死导出/冗余 cast + thinking effort 映射 if/else 化
+- refactor(patent/team): 溯源收集与覆盖矩阵简化 + 文书排版面板精简 + 团队编排层死代码清理与重复实现提取
+
+### Test
+- test(agent/team): 团队编排故障注入验证矩阵 8 场景 + 自动转派集成 + stress 场景 9/10 + 事件矩阵 task_retried + 事务回滚用例
+- test(model): 锁定 parseTextToolCalls 解析行为
+- test(shared): 锁定环境变量解析与重试退避等价性
+- test(patent): 内置原子注册断言补 claim-embodiment-mapper（T7 遗留）
+- test(gateway): 帧级 presence touch/close 接线测试
+
+### Docs
+- docs: 多智能体团队调研报告与 3 篇分题笔记 + 事件矩阵再生成 + C03/C04/C42 日常卡片/代码精炼终审报告 + 技术债报告 2026-08-20 注记 + bitfun integration plan + M1-M4 实施计划/设计文档
+
 ## v0.1.3 - 2026-08-19
 
 > **版本目标（2026-08-19）**：v0.1.2 发布后的工程固化——落实 code-review 确认的 15 项发现（#123）、修复 patent workflow 一致性缺陷（#124）、引入多智能体团队编排设计文档（#125），为下一阶段大功能（agent teams）建立稳定基线。
