@@ -60,4 +60,4 @@ Status: implemented
 
 ## 示例（已落地）
 
-见仓库内首个 note（下个非平凡变更时落地）。
+见 `docs/notes/implemented/2026-08-22-development-standards.md`（首个已落地 note，含 `## Alternatives considered`）。
