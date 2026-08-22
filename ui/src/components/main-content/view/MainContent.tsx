@@ -578,7 +578,7 @@ function SplitBody(props: SplitBodyProps) {
   // Skills, Routing, Memory, and Always-On are auxiliary dashboards paired
   // with chat. Files stays a separate explorer + artifact + assistant mode.
   const isPlugin = typeof activeTab === "string" && activeTab.startsWith("plugin:");
-  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks", "session-graph", "map"]);
+  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks"]);
   const isFullScreenTool = fullScreenToolTabs.has(activeTab) || isPlugin;
   const isDashboardPanel = DASHBOARD_PANEL_TABS.has(activeTab);
   const dashboardPanelTab = isDashboardPanel ? (activeTab as DashboardPanelTab) : null;
@@ -780,36 +780,6 @@ function SplitBody(props: SplitBodyProps) {
     if (activeTab === "memory") return <MemoryPanel selectedProject={selectedProject} />;
     if (activeTab === "skills") return <SkillsV2 selectedProject={selectedProject} projects={projects} compact />;
     if (renderTasksAsTool) return <TasksV2 isVisible />;
-    if (activeTab === "session-graph") {
-      const SessionGraphTab = React.lazy(() => import("../../session-graph/SessionGraphTab"));
-      return (
-        <Suspense fallback={<TabSkeleton />}>
-          <SessionGraphTab
-            selectedProject={selectedProject}
-            selectedSession={selectedSession}
-            isMobile={isMobile}
-            latestMessage={latestMessage}
-            onBackToChat={() => setActiveTab("chat")}
-            onNavigateToSession={onNavigateToSession}
-          />
-        </Suspense>
-      );
-    }
-    if (activeTab === "map") {
-      const MapTab = React.lazy(() => import("../../map/MapTab"));
-      return (
-        <Suspense fallback={<TabSkeleton />}>
-          <MapTab
-            selectedProject={selectedProject}
-            selectedSession={selectedSession}
-            _isMobile={isMobile}
-            latestMessage={latestMessage}
-            onBackToChat={() => setActiveTab("chat")}
-            onNavigateToSession={onNavigateToSession}
-          />
-        </Suspense>
-      );
-    }
     if (isPlugin) {
       return (
         <PluginTabContent

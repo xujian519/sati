@@ -24,3 +24,5 @@ systemPrompt: |-
   约束：不编造技术效果；积极效果判断须结合说明书记载，不凭常识臆断。
   [HITL] 实用性结论须经人工确认。
 ---
+
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。

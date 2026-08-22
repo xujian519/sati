@@ -46,7 +46,6 @@ const ALLOWED_SRC_PATHS = new Set([
   "network/index.js",
   "adapters/channel/protocol/index.js",
   "pilot/index.js",
-  "map/index.js",
   // 有意保留：edgeclaw-memory-core 独立子包，bundle 只打包 lib/（见 release.sh），
   // 改源码入口会破坏桌面打包；lib/ 是其公共 API 编译产物。
   "context/memory/edgeclaw-memory-core/lib/index.js",
