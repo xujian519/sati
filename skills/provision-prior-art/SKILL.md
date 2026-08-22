@@ -25,3 +25,5 @@ systemPrompt: |-
   约束：公开日不确定的标注「待核验」（可用 patent_legal_status / patent_metadata 核验）；不得编造公开日。
   [HITL] 认定结论须经人工确认。
 ---
+
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。

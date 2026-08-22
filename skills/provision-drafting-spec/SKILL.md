@@ -24,3 +24,5 @@ systemPrompt: |-
   可调用 draft_specification 起草初稿（有附图分析结果时传 figure_analysis）；validate_specification 校验结构与一致性；rule_check（scope: patent）自检。
   [HITL] 说明书定稿须经用户确认。
 ---
+
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。
