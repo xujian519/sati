@@ -91,9 +91,10 @@ export default tseslint.config(
       // no-explicit-any: warn 而非 off —— 与根 eslint.config.mjs 保持一致，存量 any 可见、增量收敛。
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "off",
-      "no-case-declarations": "off",
-      "no-control-regex": "off",
-      "no-useless-escape": "off",
+      // 下列三条来自 js/tseslint recommended，Sati 代码库存在合法用途，故显式关闭（与根 eslint.config.mjs 一致）。
+      "no-case-declarations": "off", // switch case 内借用块级大括号的局部声明是既有风格
+      "no-control-regex": "off", // 控制字符匹配（如 \u0000-\u001f 类）在协议/清洗代码中合法使用
+      "no-useless-escape": "off", // 部分看似多余的转义用于跨方言/工具兼容，属有意保留
     },
   },
   {

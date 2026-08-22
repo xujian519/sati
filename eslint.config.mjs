@@ -108,9 +108,10 @@ export default [
       // （优先 context/agent/router），存量清单见各文件 lint 输出。
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "off",
-      "no-case-declarations": "off",
-      "no-control-regex": "off",
-      "no-useless-escape": "off",
+      // 下列三条来自 js/tseslint recommended，Sati 代码库存在合法用途，故显式关闭（不用静默）。
+      "no-case-declarations": "off", // switch case 内借用块级大括号的局部声明是既有风格
+      "no-control-regex": "off", // 控制字符匹配（如 \u0000-\u001f 类）在协议/清洗代码中合法使用
+      "no-useless-escape": "off", // 部分看似多余的转义用于跨方言/工具兼容，属有意保留
     },
   },
 ];
