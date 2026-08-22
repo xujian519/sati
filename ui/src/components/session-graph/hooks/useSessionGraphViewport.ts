@@ -7,8 +7,12 @@ export type ViewportState = {
 };
 
 const MIN_SCALE = 0.25;
-const MAX_SCALE = 3;
+const MAX_SCALE = 4;
 const ZOOM_SENSITIVITY = 0.001;
+
+// Footprint matches the rendered SessionGraphNode (220x96).
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 96;
 
 export function useSessionGraphViewport(initialState?: Partial<ViewportState>) {
   const [viewport, setViewport] = useState<ViewportState>({
@@ -115,6 +119,21 @@ export function useSessionGraphViewport(initialState?: Partial<ViewportState>) {
     [],
   );
 
+  const focusNode = useCallback(
+    (node: { position: { x: number; y: number } }, scale?: number) => {
+      const svg = containerRef.current;
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const targetScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale ?? viewport.scale));
+      const centerX = node.position.x + NODE_WIDTH / 2;
+      const centerY = node.position.y + NODE_HEIGHT / 2;
+      const x = rect.width / 2 - centerX * targetScale;
+      const y = rect.height / 2 - centerY * targetScale;
+      setViewport({ x, y, scale: targetScale });
+    },
+    [viewport.scale],
+  );
+
   return {
     containerRef,
     viewport,
@@ -122,6 +141,7 @@ export function useSessionGraphViewport(initialState?: Partial<ViewportState>) {
     setTransform,
     resetViewport,
     fitToBounds,
+    focusNode,
     handlers: {
       onWheel: handleWheel,
       onPointerDown: handlePointerDown,

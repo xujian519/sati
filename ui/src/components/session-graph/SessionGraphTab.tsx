@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Project, ProjectSession, ProjectsUpdatedMessage } from "../../types/app";
 import type { SessionGraphNode } from "./types";
@@ -20,6 +20,7 @@ export type SessionGraphTabProps = {
 
 export default function SessionGraphTab({
   selectedProject,
+  selectedSession,
   isMobile,
   latestMessage,
   onNavigateToSession,
@@ -65,10 +66,11 @@ export default function SessionGraphTab({
     }
   }, [latestMessage, selectedProject, refetch]);
 
-  const { containerRef, viewport, setTransform, resetViewport, fitToBounds, handlers } = useSessionGraphViewport();
+  const { containerRef, viewport, setTransform, resetViewport, fitToBounds, focusNode, handlers } =
+    useSessionGraphViewport();
 
   const handleZoomIn = useCallback(() => {
-    setTransform(prev => ({ ...prev, scale: Math.min(3, prev.scale * 1.2) }));
+    setTransform(prev => ({ ...prev, scale: Math.min(4, prev.scale * 1.2) }));
   }, [setTransform]);
 
   const handleZoomOut = useCallback(() => {
@@ -98,6 +100,29 @@ export default function SessionGraphTab({
     onBackToChat?.();
   }, [onBackToChat]);
 
+  const focusedSessionRef = useRef<string | null>(null);
+  const currentNode = useMemo(
+    () => (selectedSession?.id ? (nodes.find(n => n.sessionId === selectedSession.id) ?? null) : null),
+    [selectedSession?.id, nodes],
+  );
+
+  // Reverse sync: when the current session changes in the chat, follow it on the
+  // map — center the node and highlight it (once per session, not on every nodes rebuild).
+  useEffect(() => {
+    const targetId = selectedSession?.id ?? null;
+    if (!targetId || focusedSessionRef.current === targetId || !currentNode) return;
+    focusedSessionRef.current = targetId;
+    setSelectedNodeId(targetId);
+    focusNode(currentNode);
+  }, [selectedSession?.id, currentNode, focusNode]);
+
+  const handleLocateSession = useCallback(() => {
+    if (!currentNode) return;
+    focusedSessionRef.current = currentNode.sessionId;
+    setSelectedNodeId(currentNode.sessionId);
+    focusNode(currentNode);
+  }, [currentNode, focusNode]);
+
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
       <SessionGraphToolbar
@@ -107,6 +132,7 @@ export default function SessionGraphTab({
         onZoomOut={handleZoomOut}
         onFit={handleFit}
         onBackToChat={onBackToChat ? handleBackToChat : undefined}
+        onLocateSession={currentNode ? handleLocateSession : undefined}
       />
 
       {!selectedProject && (

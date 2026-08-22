@@ -1,4 +1,4 @@
-import { ArrowLeft, GitBranch, Maximize, Minus, Plus, RotateCcw } from "lucide-react";
+import { ArrowLeft, Crosshair, GitBranch, Maximize, Minus, Plus, RotateCcw } from "lucide-react";
 
 export type SessionGraphToolbarProps = {
   scale: number;
@@ -6,6 +6,7 @@ export type SessionGraphToolbarProps = {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFit: () => void;
+  onLocateSession?: () => void;
   onBackToChat?: () => void;
 };
 
@@ -15,6 +16,7 @@ export function SessionGraphToolbar({
   onZoomIn,
   onZoomOut,
   onFit,
+  onLocateSession,
   onBackToChat,
 }: SessionGraphToolbarProps) {
   const buttonClass =
@@ -43,6 +45,17 @@ export function SessionGraphToolbar({
         <button type="button" className={buttonClass} onClick={onReset} title="Reset view" aria-label="Reset view">
           <RotateCcw className="h-3.5 w-3.5" />
         </button>
+        {onLocateSession ? (
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={onLocateSession}
+            title="Locate current session"
+            aria-label="Locate current session"
+          >
+            <Crosshair className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
       {onBackToChat ? (
         <button
