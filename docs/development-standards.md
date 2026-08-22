@@ -215,7 +215,7 @@
 
 ### 第 1 步（✅ 已落地，2026-08-22）
 
-- [x] **G6-a**：新增 `pnpm check` 聚合脚本 = `typecheck && ui typecheck && lint && format:check`（test 慢，不进 check；与 CI quality job 对齐）。
+- [x] **G6-a**：新增 `pnpm check` 聚合脚本 = `typecheck && ui typecheck && lint && format:check`（test 慢，不进 check；与 CI quality job **手工对齐**，非生成——门禁增多时考虑单一聚合器，如 harness 的 run-gates）。
 - [x] **G6-b**：`simple-git-hooks` 加 `pre-push: pnpm typecheck && pnpm --filter sati-ui typecheck`（推送前类型兜底）。
 - [x] **G5-a**：`tests/development-standards/verify-config.spec.ts` 断言 tsconfig 底线开关（根 `strict`/`noFallthroughCasesInSwitch` + UI `strict`）。
 - [x] **G1-a（低）**：开 `noFallthroughCasesInSwitch`，清存量，CI 回归。

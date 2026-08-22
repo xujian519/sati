@@ -23,14 +23,9 @@ function repoRoot(): string {
   return dir;
 }
 
-/** 极简 JSONC 解析：去行注释 `//`、块注释与尾随逗号后 JSON.parse。仅用于 tsconfig（无字符串内嵌 `//`）。 */
+/** 极简 JSONC 解析：去块注释与整行 `//` 注释后 JSON.parse。仅用于 tsconfig——当前两份 tsconfig 的注释均为整行、无尾随逗号；若未来出现行内注释/尾随逗号，会在原位置报 JSON 语法错误（响亮失败，而非静默损坏字符串值）。 */
 function parseJsonc(text: string): unknown {
-  return JSON.parse(
-    text
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/\/\/[^\n]*/g, "")
-      .replace(/,\s*([}\]])/g, "$1"),
-  );
+  return JSON.parse(text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/[^\n]*$/gm, ""));
 }
 
 function readCompilerOptions(rel: string): Record<string, unknown> {

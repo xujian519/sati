@@ -13,7 +13,7 @@
 6. **重放契约**：改任何工具 `inputSchema`（含描述文本）会使 llm-replay fixture 失配，须重录。→ `docs/development-standards.md`
 7. **决策记录**：非平凡变更（改行为/架构/契约/流程/格式）同一 PR 带/更新一条 `docs/notes/` note，含 `## Alternatives considered`。→ `docs/notes/README.md`
 8. **测试**：改核心模块（`agent/` `router/` `tool/` `session/` 等）必须附测试；单测 mock 外部网络；LLM 回路走重放 seam。→ `CONTRIBUTING.md`
-9. **验证顺序**：`pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`。→ `docs/development-standards.md`
+9. **验证顺序**：先跑聚合门禁 `pnpm check`；完整门禁清单（含 `pnpm test`）见 `docs/development-standards.md` 附录 A。
 
 ## 关键环境事实（每会话记住）
 

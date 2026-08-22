@@ -106,6 +106,7 @@ docs(ui): update chat i18n keys
 提交 PR 前必须：
 
 ```bash
+pnpm check            # 聚合门禁：typecheck + ui typecheck + lint + format:check（门禁清单见 docs/development-standards.md 附录 A）
 pnpm typecheck        # TypeScript 类型检查
 pnpm lint             # ESLint
 pnpm format:check     # Biome 格式检查
@@ -149,7 +150,7 @@ cd ui && pnpm test    # UI 测试
 
 ## 提交前自查清单
 
-- [ ] `pnpm typecheck`、`pnpm lint`、`pnpm format:check`、`pnpm test` 全部通过
+- [ ] 门禁全部通过：`pnpm check`（typecheck + ui typecheck + lint + format:check 聚合）、`pnpm test`、`cd ui && pnpm test`（完整清单见 `docs/development-standards.md` 附录 A）
 - [ ] Commit 消息符合 Conventional Commits
 - [ ] 新增 UI 文案已提取 i18n（en + zh-CN）
 - [ ] 未引入 `any` / `@ts-ignore`
