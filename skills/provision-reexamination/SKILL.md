@@ -26,3 +26,5 @@ systemPrompt: |-
   约束：期限计算准确（3 个月从收到通知之日起算）；不编造审查员意见。
   [HITL] 复审分析须经人工确认。
 ---
+
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。

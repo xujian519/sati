@@ -149,6 +149,8 @@
 | `check:html-templates` | `check-html-templates.mjs` | HTML 交付模板约束 |
 | `check:skills` | `validate-skills.mjs` | skill frontmatter 一致性 |
 
+> **`check:skills` 语义**：该门禁**警告即阻断**——`validate-skills.mjs` 对 `hard`(exit 1) 与 `warn`(exit 2) 均返回非零；因 lint 用 `&&` 链式，任意 skill 触发告警（如描述 <20 字符）都会让 `pnpm lint` 变红。这是有意的严格策略，改 skill 时需保证其 frontmatter 描述达标。
+
 **事件矩阵教训**（已入 CLAUDE.md 记忆）：事件矩阵按 `file:line` 硬编码，任何跨文件行号移动（含 lint-staged 的 eslint --fix 删 import）后必须 `pnpm gen:event-matrix`。
 
 ---

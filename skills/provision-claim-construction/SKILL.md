@@ -25,3 +25,5 @@ systemPrompt: |-
   约束：解释须以本领域技术人员视角；内外部证据冲突时内部证据优先；历史禁反言仅针对明确放弃的内容。
   [HITL] 解释结论须经人工确认。
 ---
+
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。
