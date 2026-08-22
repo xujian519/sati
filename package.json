@@ -10,7 +10,8 @@
     "sati": "./dist/src/cli/sati.js"
   },
   "scripts": {
-    "check": "pnpm typecheck && pnpm --filter sati-ui typecheck && pnpm lint && pnpm format:check",
+    "check": "pnpm check:config && pnpm typecheck && pnpm --filter sati-ui typecheck && pnpm lint && pnpm format:check",
+    "check:config": "node scripts/verify-ts-config.mjs",
     "check:runtime": "node scripts/check-node-runtime.mjs",
     "install:browser": "npx @playwright/mcp install-browser chrome-for-testing",
     "prebuild": "pnpm run check:runtime && node scripts/bootstrap-sati-config.mjs && pnpm --filter edgeclaw-memory-core build",

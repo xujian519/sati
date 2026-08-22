@@ -108,6 +108,11 @@ export default [
       // （优先 context/agent/router），存量清单见各文件 lint 输出。
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "off",
+      // 禁 @ts-ignore / @ts-nocheck，允许带说明的 @ts-expect-error —— 与 AGENTS.md 铁律一致
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        { "ts-expect-error": "allow-with-description", "ts-ignore": true, "ts-nocheck": true },
+      ],
       "no-case-declarations": "off",
       "no-control-regex": "off",
       "no-useless-escape": "off",

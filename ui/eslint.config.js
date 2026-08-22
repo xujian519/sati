@@ -91,6 +91,11 @@ export default tseslint.config(
       // no-explicit-any: warn 而非 off —— 与根 eslint.config.mjs 保持一致，存量 any 可见、增量收敛。
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "off",
+      // 禁 @ts-ignore / @ts-nocheck，允许带说明的 @ts-expect-error —— 与根 eslint.config.mjs 及 AGENTS.md 铁律一致
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        { "ts-expect-error": "allow-with-description", "ts-ignore": true, "ts-nocheck": true },
+      ],
       "no-case-declarations": "off",
       "no-control-regex": "off",
       "no-useless-escape": "off",

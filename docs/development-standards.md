@@ -97,7 +97,7 @@
   - `noUncheckedIndexedAccess: true`——数组/索引访问返回 `T | undefined`，消除"读越界 undefined"类缺陷；
   - `exactOptionalPropertyTypes: true`——可选属性不能显式赋 `undefined`，消除"存在但 undefined"语义模糊。
 
-**负控制**：`tests/development-standards/verify-config.spec.ts`（✅ 已落地）断言这些开关为 true，防止"顺手关掉 strict"而 CI 不红。
+**负控制**：`scripts/verify-ts-config.mjs`（`pnpm check:config`，已接入 `pnpm check`）与 `tests/development-standards/verify-config.spec.ts`（✅ 已落地）断言这些开关为 true，防止"顺手关掉 strict"而 CI 不红。
 
 **理由**：类型系统是第一条防线；缺这些开关时 typecheck 名存实亡（参考底稿明确列出为底线）。放弃的备选：靠人工 review 抓索引越界——不可靠且不可扩展。
 
@@ -163,7 +163,7 @@
 
 | 门禁 | 负控制 |
 |---|---|
-| typecheck 底线 | `tests/development-standards/verify-config.spec.ts` 断言开关为 true（✅ 已落地） |
+| typecheck 底线 | `scripts/verify-ts-config.mjs`（`pnpm check:config`）在 `pnpm check` 断言开关为 true（✅ 已落地）；测试级 `verify-config.spec.ts` |
 | lint 规则 | `scripts/lint-contract.spec.ts` 对 fixture 跑 lint 断言非零 |
 | 边界门禁 | `check-ui-server-boundary.mjs` 已有（可加反向 fixture：伪造 ui→src import 断言非零） |
 
@@ -172,6 +172,7 @@
 | 铁律 | 至少这样做 |
 |---|---|
 | `ui/` 不 import `src/` | ✅ 已有 `check-ui-server-boundary.mjs`（eslint 规则对 .js specifier 失效，这是真实门禁） |
+| 禁 `@ts-ignore` / `@ts-nocheck` | ✅ 已有 `ban-ts-comment`（根 + ui eslint，error；`@ts-expect-error` 须带说明） |
 | 事件改版漏订即红 | ✅ 已有 `check:event-matrix` |
 | 版本 lockstep | ✅ 已有 `bump-version.mjs`（可加反向 spec 断言三处一致） |
 | inputSchema 改动破坏 llm-replay fixture | ⚠️ 靠文档记忆；可加 `record:replay` 校验清单门禁 |
@@ -215,7 +216,7 @@
 
 ### 第 1 步（✅ 已落地，2026-08-22）
 
-- [x] **G6-a**：新增 `pnpm check` 聚合脚本 = `typecheck && ui typecheck && lint && format:check`（test 慢，不进 check；与 CI quality job **手工对齐**，非生成——门禁增多时考虑单一聚合器，如 harness 的 run-gates）。
+- [x] **G6-a**：新增 `pnpm check` 聚合脚本 = `check:config && typecheck && ui typecheck && lint && format:check`（test 慢，不进 check；与 CI quality job **手工对齐**，非生成——门禁增多时考虑单一聚合器，如 harness 的 run-gates）。其中 `check:config = scripts/verify-ts-config.mjs` 反向断言 tsconfig 底线开关（配合 G5-a 负控制）。
 - [x] **G6-b**：`simple-git-hooks` 加 `pre-push: pnpm typecheck && pnpm --filter sati-ui typecheck`（推送前类型兜底）。
 - [x] **G5-a**：`tests/development-standards/verify-config.spec.ts` 断言 tsconfig 底线开关（根 `strict`/`noFallthroughCasesInSwitch` + UI `strict`）。
 - [x] **G1-a（低）**：开 `noFallthroughCasesInSwitch`，清存量，CI 回归。
