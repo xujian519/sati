@@ -29,7 +29,8 @@
     "memory": "Memory",
     "skills": "Skills",
     "cron": "Cron",
-    "team": "Team"
+    "team": "Team",
+    "sessionGraph": "Map"
   },
   "dashboardSwitcher": {
     "open": "Open dashboards menu",

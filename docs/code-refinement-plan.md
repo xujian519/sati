@@ -63,7 +63,7 @@
 | C04 | src/model 其余 | streaming/streamModel.ts 995、embedding、resolveModelInfo | ✅ 2026-08-20 |
 | C05 | src/gateway | 32/5.9K；InProcessGateway.ts 1057、protocol/server | ✅ 2026-08-21 |
 | C06 | src/context 非 memory | projection、budget、compression、vectors | ✅ 2026-08-21 |
-| C07 | src/context/memory 主包 | EdgeClawMemoryProvider 等（不含子包） | ⬜ |
+| C07 | src/context/memory 主包 | EdgeClawMemoryProvider 等（不含子包） | ✅ 2026-08-22 |
 | C08 | edgeclaw-memory-core 子包 | sqlite.ts 1716、llm-extraction.ts 1573、file-memory.ts 1147、llm-prompts.ts 997；独立 build 验证 | ⬜ |
 | C09 | src/tool registry/execution/audit | createBuiltinRegistry、ToolRuntime | ⬜ |
 | C10 | src/tool/builtin 上半 | readFile.ts 988、filesystem 组 | ⬜ |
@@ -125,6 +125,7 @@
 | 2026-08-20 | C04 | src/model 其余 | P2 streamModel debug-dump ×2 / 重试警告 ×2 → 提取辅助函数；P2 findBalanced 两函数泛化合并；P2 死代码：providers/registry.ts 零消费、providerEndpoint 单变体 ×2、looksLikeUnparsedToolCall、extractStructuredOutput 死分支；P2 记录不处理：repairOpenAIToolPairing 兜底 / splitThinkContent FSM 重复 / 9 文件解析助手重复 / repairToolName 平局守卫（修复=行为变更）；P0 无 | 3（refactor×2 + docs） | ✅ |
 | 2026-08-21 | C05 | src/gateway | **P0 帧解析异常冒泡**：websocket.ts handleData 中 readClientFrame 抛错 → uncaughtException → 进程退出（安全缺陷）→ 已修复（try/catch + destroy + return）；P2 死代码：InProcessGateway `now` 字段（零消费者）、AsyncQueue fail()/error 字段、buildAttachmentPathNote 死参数、5 处 readonly setter 的 as 断言（readonly 只禁重赋值）；P3 私有化收紧 ×7、嵌套三元 → if/else ×2、无参 catch 补注释 ×6、legacy 断言合并；P3 记录不处理：runMemberScan 转 async（TS 80006 建议，复杂闭包大 diff，保守档跳过） | 4（fix + refactor + docs×2） | ✅ |
 | 2026-08-21 | C06 | src/context 非 memory | P2 死代码批量删除：TokenBudgetManager estimate* 别名 ×2、TokenAccountingRuntime estimateResponseEvents、CachedMicroCompactionEngine validateCacheHit、SnipEngine ×2 + 私有化、MicroCompactionEngine 死常量 ×2、InstructionDiscovery scopeDescription、ToolResultBudget flattenToolResultText、cosineSimilarityInt8、MessageProjector hasToolCalls、AutoCompactionPolicy evaluate（连带 tokenBudget 字段/Options 删除，6 调用点简化）、DefaultContextRuntime truncateSecondKeepRatio 死配置；P3 barrel 7 个已删符号 export 清理、summaryInput 重复 JSDoc、CompactionEngine 嵌套三元、PluginRuntimeExtensionResolver 过时注释；P0/P1 无 | 3（refactor×2 + docs） | ✅ |
+| 2026-08-22 | C07 | src/context/memory 主包 | P2 EdgeClawMemoryProvider telemetry 块 ×5 重复（module/ownerModule/executionKind 恒 "memory"）→ 提取 trackMemoryStage 私有 helper；P3 setCachedRetrieve/trackRetrieveLoopEnd 单行转发内联、semantic-index isServiceClosedError 冗余条件（"this statement…" 被 "statement…" 子串覆盖）、MemoryAttachmentBuilder throwAbortError 单调用点内联、resolveMemoryLlm as 断言消除（memoryApiTypeForProtocol 返回类型收窄为 EdgeClawMemoryLlmOptions["apiType"]，两类型字面量集合相同）；P3 barrel 4 个零消费 type re-export 删除（EdgeClawCaptureTurnResult 等，测试走源文件导入）；P2 记录不处理：CanonicalMessagesToMemoryMessagesOptions 零消费但属公共函数 options 契约类型保留导出；P0/P1 无 | 1（refactor）+ docs | ✅ |
 
 ### 日卡记录
 
@@ -202,6 +203,20 @@
 - **精炼项**：死代码删除 17 组（净 -195 行）、私有化 3 处、barrel 清理 7 处、注释/结构清理 4 处、测试同步 6 处
 - **验证**：`pnpm typecheck` ✅ 0 错误（含 edgeclaw-memory-core）；`pnpm lint` 全量 ✅；`biome format --write` 修复 6 处缩进后 `format:check` ✅；`pnpm test` 3640 pass / 0 fail ✅（context 套件全绿）
 - **提交**：`refactor(context): remove dead compaction/budget helpers and unused config`（与 event-matrix docs 提交共享）
+
+#### C07 src/context/memory 主包（2026-08-22）
+
+- **审阅发现**：
+  - P2 EdgeClawMemoryProvider.ts：trackFeatureLoopStage 调用块 ×5 重复（module/ownerModule/executionKind 恒为 "memory"，phase/loopStage/outcome/errorCategory/metadata 变化，每块 9-11 行）→ 提取 `trackMemoryStage` 私有 helper 统一入口，净 -30 行
+  - P3 冗余抽象内联：`setCachedRetrieve` 单行转发（2 调用点 → 直接 `retrieveCache.set`）、`trackRetrieveLoopEnd` 并入 trackMemoryStage、MemoryAttachmentBuilder `throwAbortError` 单调用点内联
+  - P3 semantic-index.ts isServiceClosedError：第 4 条 `"this statement has been finalized"` 是第 1 条 `"statement has been finalized"` 的超集匹配（includes 子串语义），冗余条件删除
+  - P3 createEdgeClawMemoryProviderFromConfig resolveMemoryLlm：`as EdgeClawMemoryLlmOptions["apiType"]` 断言消除——memoryApiTypeForProtocol 返回类型收窄为 `EdgeClawMemoryLlmOptions["apiType"] | undefined`（核实 EdgeClawMemoryApiType 与 PilotMemoryApiType 字面量集合完全相同，断言是历史遗留噪音）
+  - P3 barrel 清理：src/context/index.ts 删除 EdgeClawMemoryProvider 的 4 个零消费 type re-export（全仓唯一消费者为测试文件，且走源文件相对路径导入）
+  - P2 记录不处理：CanonicalMessagesToMemoryMessagesOptions 类型导出零外部消费，但属公共函数 canonicalMessagesToMemoryMessages 的 options 契约类型，保留导出语义
+  - P0/P1：无行为缺陷。主包整体质量高——零 console/any/TODO，全部 catch 均带意图注释，缓存/并发去重/abort 传播逻辑有充分注释
+- **精炼项**：telemetry helper 提取（5 处收敛）、冗余转发/包装内联 ×4、死条件删除 ×1、as 断言消除 ×1、barrel 死导出清理 ×4（净 -15 行）
+- **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅；`biome format --write` 修复 1 处单行超宽后 `format:check` ✅（2142 文件）；`pnpm test` 3685 pass / 0 fail ✅（context/memory 套件 45/45、context 全套 136/136）
+- **提交**：`refactor(context): unify memory telemetry stage helper, drop redundant abstractions`
 
 ## 六、基线（2026-08-18 实测）
 

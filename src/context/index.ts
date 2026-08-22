@@ -152,13 +152,7 @@ export {
   type MemoryRetrieveInput,
   type MemoryRetrieveResult,
 } from "./memory/MemoryResolver.js";
-export {
-  EdgeClawMemoryProvider,
-  type EdgeClawCaptureTurnResult,
-  type EdgeClawMemoryProviderOptions,
-  type EdgeClawMemoryServiceLike,
-  type EdgeClawRetrieveContextResult,
-} from "./memory/EdgeClawMemoryProvider.js";
+export { EdgeClawMemoryProvider } from "./memory/EdgeClawMemoryProvider.js";
 export {
   createEdgeClawMemoryProviderFromConfig,
   type CreateEdgeClawMemoryProviderOptions,

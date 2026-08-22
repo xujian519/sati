@@ -46,8 +46,7 @@ function isServiceClosedError(error: unknown): boolean {
   return (
     lowered.includes("statement has been finalized") ||
     lowered.includes("database is closed") ||
-    lowered.includes("this database connection is already closed") ||
-    lowered.includes("this statement has been finalized")
+    lowered.includes("this database connection is already closed")
   );
 }
 

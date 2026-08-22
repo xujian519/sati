@@ -56,5 +56,6 @@ export {
   slopGateAtom,
   SlopGateHandler,
 } from "./gate.js";
+export { clarityGateAtom, ClarityGateHandler, renderClarityReport } from "./clarity.js";
 export { claimChartAtom, ClaimChartHandler } from "./chart.js";
 export { claimEmbodimentMapperAtom, ClaimEmbodimentMapperHandler } from "./mapper.js";

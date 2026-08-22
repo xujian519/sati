@@ -12,7 +12,7 @@ import {
   globalStageHandlerRegistry,
   registerBuiltinAtoms,
 } from "../../../src/patent/atoms/index.js";
-import { createPatentWorkflowRunTool } from "../../../src/tool/builtin/patentWorkflowRunTool.js";
+import { createPatentWorkflowRunTool, buildJudgeSection } from "../../../src/tool/builtin/patentWorkflowRunTool.js";
 import { buildWorkflowProvider } from "../../../src/tool/builtin/patentWorkflowTool.js";
 import { createBuiltinRegistry } from "../../../src/tool/registry/createBuiltinRegistry.js";
 import { DEFAULT_MODEL_ID } from "../../../src/model/index.js";
@@ -406,6 +406,96 @@ test("createBuiltinRegistry 注册 patent_workflow_run（domain: patent）", () 
 // ---------------------------------------------------------------------------
 // 图模式（graph=novelty|inventiveness|enablement）
 // ---------------------------------------------------------------------------
+
+/** buildJudgeSection 共享输入（报告 + 机械层判级）。 */
+function judgeSectionBase() {
+  return {
+    graphName: "inventiveness",
+    input: "一种分拣装置，包括传送带与识别传感器",
+    report: "三步法分析报告：D1 为最接近的现有技术，区别特征为识别传感器，具备创造性。",
+    ruleGateVerdict: "needs_revision",
+    ruleGateDomains: ["patent_inventiveness"],
+    samples: 1,
+    singleModelFallback: 0,
+    interrupted: false,
+  };
+}
+
+test("buildJudgeSection：judgeModels 多模型共识 → 分歧标记 + Verdict Envelope", async () => {
+  const provider: StageProvider = {
+    callLLM: async (_prompt, opts) =>
+      opts?.modelHint === "judge-a"
+        ? JSON.stringify({ score: 0.9, rationale: "r1" })
+        : JSON.stringify({ score: 0.5, rationale: "r2" }),
+  };
+  const text = await buildJudgeSection({
+    ...judgeSectionBase(),
+    judges: [
+      { judgeId: "judge:judge-a", model: "model-a", modelHint: "judge-a" },
+      { judgeId: "judge:judge-b", model: "model-b", modelHint: "judge-b" },
+    ],
+    provider,
+  });
+  assert.match(text, /🧭 共识判定/);
+  assert.match(text, /分歧|极差 0.40/);
+  assert.match(text, /Verdict Envelope: overall=disagree/);
+  assert.match(text, /hash=/);
+});
+
+test("buildJudgeSection：多模型一致通过 → pass 共识 + envelope", async () => {
+  const provider: StageProvider = {
+    callLLM: async () => JSON.stringify({ score: 0.8, rationale: "一致认为结论正确" }),
+  };
+  const text = await buildJudgeSection({
+    ...judgeSectionBase(),
+    ruleGateVerdict: "pass",
+    judges: [
+      { judgeId: "judge:judge-a", modelHint: "judge-a" },
+      { judgeId: "judge:judge-b", modelHint: "judge-b" },
+    ],
+    provider,
+  });
+  assert.match(text, /✅ 通过/);
+  assert.match(text, /Verdict Envelope: overall=pass/);
+});
+
+test("buildJudgeSection：单模型 judgeSamples 路径保持向后兼容文本", async () => {
+  const provider: StageProvider = {
+    callLLM: async () => JSON.stringify({ score: 0.75, rationale: "r" }),
+  };
+  const text = await buildJudgeSection({
+    ...judgeSectionBase(),
+    singleModelFallback: 3,
+    judges: [{ judgeId: "default" }],
+    provider,
+  });
+  assert.match(text, /LLM Judge 质量分/);
+  assert.match(text, /0.750/);
+  assert.doesNotMatch(text, /Verdict Envelope/);
+});
+
+test("buildJudgeSection：中断 / 无结论 / 无 LLM → 跳过评分", async () => {
+  const skipped = await buildJudgeSection({
+    ...judgeSectionBase(),
+    interrupted: true,
+    judges: [{ judgeId: "judge:judge-a", modelHint: "judge-a" }],
+    provider: { callLLM: async () => "{}" },
+  });
+  assert.equal(skipped, "");
+  const noReport = await buildJudgeSection({
+    ...judgeSectionBase(),
+    report: "",
+    judges: [{ judgeId: "judge:judge-a", modelHint: "judge-a" }],
+    provider: { callLLM: async () => "{}" },
+  });
+  assert.match(noReport, /无结论报告/);
+  const noLlm = await buildJudgeSection({
+    ...judgeSectionBase(),
+    judges: [{ judgeId: "judge:judge-a", modelHint: "judge-a" }],
+    provider: undefined,
+  });
+  assert.match(noLlm, /无 LLM 通道/);
+});
 
 /** inventiveness 三步法 prompt 响应器。 */
 function inventivenessResponder(prompt: string): string {

@@ -235,6 +235,9 @@ __pycache__/
 # Superpowers skill local workspace data (brainstorm sessions etc)
 .superpowers/
 
+# Git worktrees for isolated feature branches
+.worktrees/
+
 # Brooks-Lint 本地审计工具产物
 .brooks-lint.yaml
 .brooks-lint-history.json

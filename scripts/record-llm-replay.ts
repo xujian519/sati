@@ -8,6 +8,11 @@
  * use and prints its manifest, so fixture reviews and CI gates catch corrupt
  * or under-driven fixtures before they fail a test run.
  *
+ * 键可复现性说明：每条记录的 key 由 replayRequestKey 在录制时确定性生成
+ * （含 tool.inputSchema → toolSchemaDigest）。records.jsonl 不持久化原始请求，
+ * 因此 inputSchema 变更后无法离线"重算键"——正确路径是重录 fixture
+ * （重跑录制流程），而非手工改写记录中的 key 字段。请勿手改 key。
+ *
  * Usage:
  *   pnpm record:replay <fixture-dir>
  */

@@ -181,7 +181,11 @@ test("未匹配请求 fail-loud：router 产出含 NO_REPLAY_RECORD 的 error �
     );
     assert.equal(events.length, 1);
     assert.equal(events[0]!.type, "error");
-    assert.match(String((events[0] as { error: { message?: string } }).error.message), /no recorded stream matches/);
+    const mismatchMessage = String((events[0] as { error: { message?: string } }).error.message);
+    assert.match(mismatchMessage, /no recorded stream matches/);
+    // 诊断增强：附 actual key 与 fixture keys，便于 tools inputSchema 变更导致失配时定位。
+    assert.match(mismatchMessage, /actual key:/);
+    assert.match(mismatchMessage, /fixture keys:/);
   } finally {
     await rm(fixtureDir, { recursive: true, force: true });
   }

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { buildVerdictEnvelope, collectJudgeVotes, renderConsensusText, resolveConsensus } from "../../patent/index.js";
 import {
   builtinPatentManifests,
   runWorkflow,
@@ -20,7 +21,7 @@ import {
   type ManifestCheckpoint,
   type WorkflowManifest,
 } from "../../patent/index.js";
-import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
+import { globalAtomRegistry, globalStageHandlerRegistry, type StageProvider } from "../../patent/atoms/index.js";
 import { DOMAIN_INPUT_DECLARATIONS, defaultPatentWorkers, type GraphNode, WorkerMonitor } from "../../patent/index.js";
 import {
   isProvenanceEnabled,
@@ -111,6 +112,15 @@ export type PatentWorkflowRunInput = {
    * （N 次采样取中位数），附在结果尾部，不改变规则门判级。
    */
   judgeSamples?: number;
+  /**
+   * 多模型共识（缺省关闭）：modelHint 名列表（如 ["judge-a","judge-b"]，经
+   * deps.modelHints 配置各 hint 的 provider/model）。提供时对结论报告做
+   * 多 judge 并行投票 → 中位数 + 离散度分歧检测（spread > 0.25 判 disagree，
+   * 结果附"需人工复核"审计标记，不自动挂 HITL）→ 共识判定 + Verdict Envelope
+   * （typed verdict 审计：机械规则门
+   * 层 + 语义票层 + 共识层，内容哈希防篡改）。缺省走 judgeSamples 单模型路径。
+   */
+  judgeModels?: string[];
 };
 
 /** provider 装配字段（model/provider/modelId/search）单一来源见 patentWorkflowTool 的 WorkflowProviderDeps。 */
@@ -213,6 +223,12 @@ export function createPatentWorkflowRunTool(
           type: "number",
           description:
             "LLM Judge quality score (default off): when >0, scores the graph conclusion report 0-1 (median of N samples) and appends it to the result — advisory only, does not change the rule-gate verdict.",
+        },
+        judgeModels: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Multi-model consensus judges (default off): modelHint ids (e.g. ['judge-a','judge-b'], each mapped via deps.modelHints). When provided, votes from multiple judges → median + spread-based disagreement detection → consensus verdict + Verdict Envelope (typed, hash-sealed). Takes precedence over judgeSamples.",
         },
       },
     },
@@ -635,28 +651,21 @@ async function executeGraphRun(
     ? `检查点: ${checkpointId}${result.interrupted !== undefined ? "（中断可续跑）" : ""}`
     : "检查点: 无";
 
-  // LLM Judge 双轨质量分（P2-3）：judgeSamples > 0 且未中断时对结论报告打分，
-  // 仅作交付参考，不改变规则门判级；评分失败/无结论报告时输出说明不报错。
-  let judgeNote = "";
-  const judgeSamples = input.judgeSamples;
-  if (judgeSamples !== undefined && judgeSamples > 0 && result.interrupted === undefined) {
-    const report = String(result.state.inventiveness_conclusion ?? "");
-    if (report.trim().length === 0) {
-      judgeNote = "\n🧭 LLM Judge：无结论报告（结论节点降级），跳过评分";
-    } else {
-      const score = await llmJudge(
-        { callLLM: (prompt, opts) => provider.callLLM!(prompt, opts) },
-        input.input,
-        report,
-        undefined,
-        { samples: judgeSamples, temperature: 0 },
-      );
-      judgeNote =
-        score !== undefined
-          ? `\n🧭 LLM Judge 质量分（双轨参考，不影响规则门判级）: ${score.toFixed(3)}`
-          : "\n🧭 LLM Judge：评分失败（采样解析异常）";
-    }
-  }
+  // LLM Judge 双轨质量分（P2-3）→ 第三刀升级：judgeModels 提供时走多模型共识链
+  // （collectJudgeVotes → resolveConsensus → Verdict Envelope）；否则保留单模型
+  // N 采样中位数（judgeSamples，向后兼容）。均附在结果尾部、不改变规则门判级。
+  const judgeNote = await buildJudgeSection({
+    graphName,
+    input: input.input,
+    report: String(result.state.inventiveness_conclusion ?? ""),
+    ruleGateVerdict: String(result.state.rule_gate_verdict ?? "unknown"),
+    ruleGateDomains: Array.isArray(result.state.rule_gate_domains) ? (result.state.rule_gate_domains as string[]) : [],
+    judges: assembleGraphJudges(input, deps),
+    samples: input.judgeSamples ?? 1,
+    singleModelFallback: input.judgeSamples ?? 0,
+    interrupted: result.interrupted !== undefined,
+    provider,
+  });
 
   return {
     content: [
@@ -666,4 +675,128 @@ async function executeGraphRun(
       },
     ],
   };
+}
+
+/** 图模式 judge 装配（消费 judgeModels → deps.modelHints；缺省单 judge 走默认模型）。 */
+function assembleGraphJudges(input: PatentWorkflowRunInput, deps: PatentWorkflowRunDeps): NamedJudgeInput[] {
+  const hints = input.judgeModels ?? [];
+  // 无共识配置：单 judge（默认模型）——采样数由调用方控制（judgeSamples）。
+  if (hints.length === 0) {
+    return [{ judgeId: "default" }];
+  }
+  return hints.map(hint => ({
+    judgeId: `judge:${hint}`,
+    ...(deps.modelHints?.[hint]?.provider !== undefined ? { provider: deps.modelHints![hint]!.provider } : {}),
+    ...(deps.modelHints?.[hint]?.model !== undefined ? { model: deps.modelHints![hint]!.model } : {}),
+    ...{ modelHint: hint },
+  }));
+}
+
+/** judge 输入形状（callLLM 由 buildJudgeSection 依 provider + modelHint 注入）。 */
+type NamedJudgeInput = {
+  judgeId: string;
+  provider?: string;
+  model?: string;
+  modelHint?: string;
+};
+
+type JudgeSectionOptions = {
+  graphName: string;
+  /** 题目（graph 输入）。 */
+  input: string;
+  /** 结论报告（conclude 节点产物）。 */
+  report: string;
+  /** 机械层判级（rule_gate_verdict）。 */
+  ruleGateVerdict: string;
+  /** 机械层检查域。 */
+  ruleGateDomains: string[];
+  /** 已装配 judge（含 modelHint；callLLM 由本函数按 provider 注入）。 */
+  judges: NamedJudgeInput[];
+  /** 每 judge 采样数。 */
+  samples: number;
+  /** judgeSamples 单模型兼容路径的采样数（>0 且无 judgeModels 时生效）。 */
+  singleModelFallback: number;
+  /** 是否中断（中断时不评估）。 */
+  interrupted: boolean;
+  /** LLM 通道（judge 调用经 provider.callLLM，modelHint 透传 per-node 覆盖）。 */
+  provider: StageProvider | undefined;
+};
+
+/**
+ * 构建图模式判分段落：judgeModels 多模型共识（votes → consensus → envelope）
+ * 或 judgeSamples 单模型采样（向后兼容文本）。纯逻辑可单测（注入 mock judge）。
+ */
+export async function buildJudgeSection(opts: JudgeSectionOptions): Promise<string> {
+  if (opts.interrupted) return "";
+  const report = opts.report;
+  if (report.trim().length === 0) return "\n🧭 评估：无结论报告（结论节点降级），跳过评分";
+  if (opts.provider?.callLLM === undefined) return "\n🧭 评估：无 LLM 通道，跳过评分";
+  const multimodel = opts.judges.some(j => j.modelHint !== undefined) || opts.judges.length > 1;
+  if (!multimodel && opts.singleModelFallback <= 0) return "";
+
+  if (multimodel) {
+    // 多模型共识链：各 judge 经 provider.callLLM + modelHint（宿主 modelHints 映射 provider/model）。
+    const votes = await collectJudgeVotes(
+      opts.judges.map(j => ({
+        judgeId: j.judgeId,
+        ...(j.provider !== undefined ? { provider: j.provider } : {}),
+        ...(j.model !== undefined ? { model: j.model } : {}),
+        callLLM: (prompt, callOpts) =>
+          opts.provider!.callLLM!(prompt, {
+            ...callOpts,
+            ...(j.modelHint !== undefined ? { modelHint: j.modelHint } : {}),
+          }),
+      })),
+      opts.input,
+      report,
+      undefined,
+      { samples: opts.samples, temperature: 0 },
+    );
+    if (votes.length === 0) return "\n🧭 共识判定：全部 judge 评分失败（跳过）";
+    const verdict = resolveConsensus(votes);
+    if (verdict === undefined) return "\n🧭 共识判定：无可判定票（跳过）";
+    const envelope = buildVerdictEnvelope({
+      artifact: report.slice(0, 120),
+      artifactType: `graph:${opts.graphName}/conclusion`,
+      layers: [
+        {
+          layer: "mechanical",
+          label: "确定性规则门",
+          verdict: opts.ruleGateVerdict,
+          detail: `规则门判级：${opts.ruleGateVerdict}（域：${opts.ruleGateDomains.join(", ") || "未知"}），不因共识改变。`,
+          participants: [...opts.ruleGateDomains],
+          at: new Date().toISOString(),
+        },
+        {
+          layer: "semantic",
+          label: "LLM Judge 多模型打分",
+          verdict: votes.map(v => v.score.toFixed(2)).join(" / "),
+          detail: `共 ${votes.length} 票：${votes.map(v => `${v.judgeId} ${v.score.toFixed(2)}`).join("；")}`,
+          participants: votes.map(v => v.judgeId),
+          at: new Date().toISOString(),
+        },
+        {
+          layer: "consensus",
+          label: "共识判定",
+          verdict: verdict.verdict,
+          detail: `中位 ${verdict.median.toFixed(3)}（阈值 ${verdict.threshold}），极差 ${verdict.spread.toFixed(3)}`,
+          participants: [],
+          at: new Date().toISOString(),
+        },
+      ],
+    });
+    return `\n${renderConsensusText(verdict)}\n🔏 Verdict Envelope: overall=${envelope.overall} | hash=${envelope.hash.slice(0, 16)}…`;
+  }
+
+  // 单模型路径（向后兼容：judgeSamples）。
+  const score = await llmJudge(
+    { callLLM: (prompt, callOpts) => opts.provider!.callLLM!(prompt, callOpts) },
+    opts.input,
+    report,
+    undefined,
+    { samples: opts.singleModelFallback, temperature: 0 },
+  );
+  return score !== undefined
+    ? `\n🧭 LLM Judge 质量分（双轨参考，不影响规则门判级）: ${score.toFixed(3)}`
+    : "\n🧭 LLM Judge：评分失败（采样解析异常）";
 }

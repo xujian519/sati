@@ -167,7 +167,13 @@ export {
   ruleGatePass,
   jaccardSimilarity,
   llmJudge,
+  collectJudgeVotes,
   parseJudgeScore,
+  resolveConsensus,
+  buildVerdictEnvelope,
+  verifyVerdictEnvelope,
+  renderConsensusText,
+  compositeOverall,
   createGraphRunner,
   defaultDomainGraphMap,
   evaluateSingleText,
@@ -178,6 +184,13 @@ export {
   type EvaluatorOptions,
   type LlmJudgeOptions,
   type LlmJudgeClient,
+  type NamedJudge,
+  type JudgeVoteOptions,
+  type JudgeVote,
+  type ConsensusVerdict,
+  type ConsensusOptions,
+  type VerdictLayer,
+  type VerdictEnvelope,
   type GraphRunnerOptions,
 } from "./evaluate/index.js";
 
@@ -276,6 +289,7 @@ export {
   type StructureIssueType,
   type ChecklistItem,
 } from "./slop-engine.js";
+export { buildSlopRevisionHint } from "./retry-hints.js";
 
 export {
   FactBlackboard,
@@ -353,9 +367,27 @@ export {
   QualityGateHandler,
   slopGateAtom,
   SlopGateHandler,
+  clarityGateAtom,
+  ClarityGateHandler,
+  renderClarityReport,
   type SpecViolation,
   type PFETriple,
 } from "./atoms/index.js";
+
+export {
+  CLARITY_DIMENSIONS,
+  CLARITY_THRESHOLD,
+  SIGNAL_WEIGHT,
+  computeClarityScore,
+  detectClaritySignals,
+  formatSignalsForPrompt,
+  signalFor,
+  type ClarityDimension,
+  type ClarityDimensionKey,
+  type ClarityScore,
+  type ClaritySignal,
+  type ClaritySignalKey,
+} from "./clarity/index.js";
 
 export {
   checkSearchQuality,
