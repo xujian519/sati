@@ -108,6 +108,15 @@ export function renderClarityReport(score: ClarityScore, signals: readonly Clari
   return lines.join("\n");
 }
 
+/** fail-open 语义层不可用：降级纯机械评分 + 主输出前缀标记，让 workflow 归入 degradedSteps（审计可见，不中断）。 */
+function failOpenReport(reason: string, signals: readonly ClaritySignal[]): PipelineState {
+  const score = computeClarityScore(undefined, signals);
+  return {
+    clarity_report: `[WORKFLOW_DEGRADED] clarity-gate: ${reason}\n${renderClarityReport(score, signals, false)}`,
+    clarity_score: JSON.stringify(score),
+  };
+}
+
 export class ClarityGateHandler implements StageHandler {
   readonly name = "clarity-gate";
   readonly category = "gate" as const;
@@ -121,15 +130,11 @@ export class ClarityGateHandler implements StageHandler {
     const signals = detectClaritySignals(text);
 
     // 语义层（LLM）：不可用 → 降级纯机械评分（semanticOnly + fail-open 说明，不中断）。
-    // 与 groundedness 的 fail-open 惯例一致：主输出键有值（报告自述降级），
-    // 不提供 _error 键（runStageOnce 的 degraded 判定看主输出键缺失而非 _error）。
+    // 主输出键以 [WORKFLOW_DEGRADED] 前缀标记（runStageOnce/pushResult 据此归入
+    // degradedSteps），而非仅靠报告自述——无 LLM 环境下模糊交底书不得被误认为"门已通过"。
     const missing = requireLlm(provider, "clarity-gate");
     if (missing) {
-      const score = computeClarityScore(undefined, signals);
-      return {
-        clarity_report: renderClarityReport(score, signals, false),
-        clarity_score: JSON.stringify(score),
-      };
+      return failOpenReport("语义层不可用（未配置 LLM），仅机械层评估", signals);
     }
 
     const prompt = [
@@ -152,12 +157,8 @@ export class ClarityGateHandler implements StageHandler {
 
     const res = await callLlm(provider, "clarity-gate", prompt, { schema: CLARITY_SCHEMA, temperature: 0.1 });
     if (!res.ok) {
-      // 语义层失败：fail-open 带警告退化为纯机械层（不中断管线）。
-      const score = computeClarityScore(undefined, signals);
-      return {
-        clarity_report: `[clarity-gate] 语义层不可用（${res.message}），以下为仅机械层评估：\n${renderClarityReport(score, signals, false)}`,
-        clarity_score: JSON.stringify(score),
-      };
+      // 语义层失败：fail-open 带警告退化为纯机械层（不中断管线，但归入 degradedSteps）。
+      return failOpenReport(`语义层不可用（${res.message}），仅机械层评估`, signals);
     }
 
     const parsed = parseLlmJson(
@@ -168,12 +169,8 @@ export class ClarityGateHandler implements StageHandler {
         return { clarity_score: JSON.stringify(score), semantic_scores: raw };
       },
       () => {
-        // JSON 解析失败：退化为纯机械层（报告自述降级）。
-        const score = computeClarityScore(undefined, signals);
-        return {
-          clarity_report: `[clarity-gate] 语义层输出不可解析，以下为仅机械层评估：\n${renderClarityReport(score, signals, false)}`,
-          clarity_score: JSON.stringify(score),
-        };
+        // JSON 解析失败：退化为纯机械层（报告自述降级 + 归入 degradedSteps）。
+        return failOpenReport("语义层输出不可解析，仅机械层评估", signals);
       },
     );
     const rawScore = String(parsed.clarity_score);

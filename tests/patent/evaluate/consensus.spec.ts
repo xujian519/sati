@@ -145,6 +145,9 @@ test("verifyVerdictEnvelope：内容或特征篡改 → 失配 false（防镜像
     layers: [{ ...INPUT_LAYERS[0]!, verdict: "blocked" }, INPUT_LAYERS[1]!, INPUT_LAYERS[2]!],
   };
   assert.equal(verifyVerdictEnvelope(contentTamper), false);
+  // 仅篡改 overall 判级（不动 layers/哈希）：重推导合成值仍为 "pass"，却与伪造值不符 → 失配。
+  const overallTamper = { ...env, overall: "disagree" };
+  assert.equal(verifyVerdictEnvelope(overallTamper), false);
 });
 
 test("compositeOverall：保守序 blocked > disagree > needs_revision > pass", () => {

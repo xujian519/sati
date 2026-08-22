@@ -111,6 +111,20 @@ test("computeClarityScore：边界值——清晰度 0.8（模糊度恰 0.2）�
   assert.ok(s1.passed);
 });
 
+test("computeClarityScore：精确边界——ambiguity 恰为 0.2 → 按 ≤ 通过", () => {
+  // 机械信号仅 enablement 存在（其余三维缺失），语义四维满分：
+  // fused = [0.75, 0.75, 0.75, 1.0] → clarity = 0.75×0.8 + 1.0×0.2 = 0.8，ambiguity 恰 = 0.2。
+  const s = computeClarityScore({ problem: 1, solution: 1, effect: 1, enablement: 1 }, [
+    { key: "problem", present: false },
+    { key: "solution", present: false },
+    { key: "effect", present: false },
+    { key: "enablement", present: true },
+  ]);
+  assert.equal(s.clarity, 0.8);
+  assert.equal(s.ambiguity, CLARITY_THRESHOLD);
+  assert.ok(s.passed, "ambiguity 恰等于门槛时应按 ≤ 通过");
+});
+
 // ---------------------------------------------------------------------------
 // ClarityGateHandler（语义层 + 门语义 + 强制放行）
 // ---------------------------------------------------------------------------

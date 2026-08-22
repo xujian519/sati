@@ -505,7 +505,7 @@ test("clarity_gate 准入语义：未达门槛中断挂 HITL，批准后强制�
   assert.match(gate!.output, /人工强制放行/, "放行报告应带 FORCED 标记");
 });
 
-/** 实测未通过文本（18 段套话 → slop total 33 < 35）。 */
+/** 实测未通过文本（18 段套话 → slop total 29 < 35）。 */
 const FAILING_SPEC_BODY = Array.from({ length: 18 }, () => "综上所述，具有显著进步，保护范围合理。").join("\n\n");
 /** 实测通过文本（total 36；无 changes/issues）。 */
 const CLEAN_SPEC_BODY = [
@@ -522,7 +522,11 @@ test("SlopGateHandler：未通过时输出证据型修订提示（不含评分�
   const hint = String(out.slop_revision_hint);
   assert.ok(hint.length > 0, "未通过时应产出修订提示");
   assert.match(hint, /命中套话表述/);
-  assert.doesNotMatch(hint, /[0-9]|通过线|总分|得分|35|43/);
+  // 只禁评分断言（分数/通过线/维度名），不禁"另有 N 处"这类计数（对齐 retry-hints 收窄模式）。
+  assert.doesNotMatch(
+    hint,
+    /(?:35|43|通过线|总分|分数|得分|[0-9]+\s*分|directness|evidence|rhythm|practicality|concision|满分)/,
+  );
 });
 
 test("SlopGateHandler：通过时不输出修订提示（避免噪音）", async () => {

@@ -6,7 +6,8 @@
  * - 机械层：确定性检查器（RuleGate/quality-gate/slop-gate/validateDraftSpec）
  * - 语义层：LLM Rubric Judge 单模型采样（见 ./llm-judge.ts collectJudgeVotes）
  * - 共识层：多 judge（不同 modelHint/provider）投票 → 中位数 + 离散度 →
- *   分歧检测（spread 超限标 disagree，供 HITL 决策，不静默取中位）
+ *   分歧检测（spread 超限标 disagree，结果尾部附"需人工复核"审计标记，
+ *   不静默取中位；属输出面提示，不自动触发 HITL 中断）
  * - VerdictEnvelope：三层结果封装为不可变审计对象（参与者/时间/内容哈希），
  *   verifyVerdictEnvelope 重算哈希以检出篡改或镜像化（"impossible to game"）。
  *
@@ -104,7 +105,7 @@ export type VerdictEnvelope = {
   layers: VerdictLayer[];
   /** 合成判定（保守序：blocked > disagree > needs_revision > pass）。 */
   overall: string;
-  /** 内容哈希（sha256，覆盖 artifact + layers 稳定序列化；篡改即失配）。 */
+  /** 内容哈希（sha256，覆盖 artifact + layers + overall 稳定序列化；篡改即失配）。 */
   hash: string;
   createdAt: string;
 };
@@ -121,12 +122,17 @@ export function compositeOverall(layers: readonly VerdictLayer[]): string {
   return "unknown";
 }
 
-/** 稳定序列化层（构造与校验共用的唯一序列化路径）。 */
-function serializeEnvelopeCore(env: Pick<VerdictEnvelope, "artifact" | "artifactType" | "layers">): string {
-  return JSON.stringify({ artifact: env.artifact, artifactType: env.artifactType, layers: env.layers });
+/** 稳定序列化层（构造与校验共用的唯一序列化路径；overall 一并封印）。 */
+function serializeEnvelopeCore(env: Pick<VerdictEnvelope, "artifact" | "artifactType" | "layers" | "overall">): string {
+  return JSON.stringify({
+    artifact: env.artifact,
+    artifactType: env.artifactType,
+    layers: env.layers,
+    overall: env.overall,
+  });
 }
 
-/** 构造 Verdict Envelope（计算内容哈希；层顺序强制 mechanical→semantic→consensus）。 */
+/** 构造 Verdict Envelope（计算内容哈希，overall 纳入封印；层顺序强制 mechanical→semantic→consensus）。 */
 export function buildVerdictEnvelope(input: {
   artifact: string;
   artifactType: string;
@@ -136,20 +142,28 @@ export function buildVerdictEnvelope(input: {
   const order: Record<VerdictLayer["layer"], number> = { mechanical: 0, semantic: 1, consensus: 2 };
   const layers = [...input.layers].sort((a, b) => order[a.layer] - order[b.layer]);
   const createdAt = input.now?.() ?? new Date().toISOString();
-  const core = { artifact: input.artifact, artifactType: input.artifactType, layers };
+  const overall = compositeOverall(layers);
+  const core = { artifact: input.artifact, artifactType: input.artifactType, layers, overall };
   return {
     ...core,
-    overall: compositeOverall(layers),
     hash: createHash("sha256").update(serializeEnvelopeCore(core)).digest("hex"),
     createdAt,
   };
 }
 
-/** 校验 envelope 内容哈希（检出篡改/镜像化：任何字段变化 → 失配 false）。 */
+/** 校验 envelope 内容哈希与 overall 一致性（检出篡改/镜像化：任何字段/判级变化 → 失配 false）。 */
 export function verifyVerdictEnvelope(envelope: VerdictEnvelope): boolean {
-  const core = { artifact: envelope.artifact, artifactType: envelope.artifactType, layers: envelope.layers };
+  // 重推导 overall（保守序）并断言与存储值一致：仅篡改 overall 判级而不动 layers
+  // 时，即使重算哈希也无法通过——overall 必须可被 layers 唯一推导（不可镜像化）。
+  const recomputed = compositeOverall(envelope.layers);
+  const core = {
+    artifact: envelope.artifact,
+    artifactType: envelope.artifactType,
+    layers: envelope.layers,
+    overall: recomputed,
+  };
   const expected = createHash("sha256").update(serializeEnvelopeCore(core)).digest("hex");
-  return expected === envelope.hash;
+  return recomputed === envelope.overall && expected === envelope.hash;
 }
 
 /** 渲染共识判定为可读文本（工具结果附加段）。 */

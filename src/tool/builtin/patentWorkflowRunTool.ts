@@ -115,8 +115,9 @@ export type PatentWorkflowRunInput = {
   /**
    * 多模型共识（缺省关闭）：modelHint 名列表（如 ["judge-a","judge-b"]，经
    * deps.modelHints 配置各 hint 的 provider/model）。提供时对结论报告做
-   * 多 judge 并行投票 → 中位数 + 离散度分歧检测（spread > 0.25 判 disagree
-   * 供 HITL）→ 共识判定 + Verdict Envelope（typed verdict 审计：机械规则门
+   * 多 judge 并行投票 → 中位数 + 离散度分歧检测（spread > 0.25 判 disagree，
+   * 结果附"需人工复核"审计标记，不自动挂 HITL）→ 共识判定 + Verdict Envelope
+   * （typed verdict 审计：机械规则门
    * 层 + 语义票层 + 共识层，内容哈希防篡改）。缺省走 judgeSamples 单模型路径。
    */
   judgeModels?: string[];

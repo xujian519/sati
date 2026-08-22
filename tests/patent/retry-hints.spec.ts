@@ -19,7 +19,7 @@ function assertNoScoreAssertion(hint: string): void {
   assert.doesNotMatch(hint, SOS_ASSERTION_PATTERN, `hint 不得携带评分断言: ${hint}`);
 }
 
-/** 实测未通过文本（18 段套话 → total 33 < 35）。 */
+/** 实测未通过文本（18 段套话 → total 29 < 35）。 */
 const FAILING_TEXT = Array.from({ length: 18 }, () => "综上所述，具有显著进步，保护范围合理。").join("\n\n");
 /** 实测通过文本（total 36；无 changes/issues）。 */
 const CLEAN_TEXT = [
