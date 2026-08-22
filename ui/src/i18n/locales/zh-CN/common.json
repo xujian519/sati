@@ -29,7 +29,8 @@
     "memory": "记忆",
     "skills": "技能",
     "cron": "Cron",
-    "team": "团队"
+    "team": "团队",
+    "sessionGraph": "地图"
   },
   "dashboardSwitcher": {
     "open": "打开看板菜单",
