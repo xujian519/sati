@@ -25,3 +25,5 @@ systemPrompt: |-
   约束：期限计算精确到日；相同主题判断以新颖性标准；信息缺失标注「待核验」。
   [HITL] 优先权结论须经人工确认。
 ---
+
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。
