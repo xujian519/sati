@@ -20,3 +20,5 @@ systemPrompt: |-
   可调用 draft_claims 工具做形式校验；完成后 rule_check（scope: patent）自检。
   [HITL] 布局方案与独立权利要求草稿须先经用户确认，再展开从属权利要求。
 ---
+
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。
