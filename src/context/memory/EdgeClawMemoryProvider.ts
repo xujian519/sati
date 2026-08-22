@@ -234,8 +234,8 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
       loopStage: input.loopStage,
       outcome: input.outcome ?? "success",
       sessionId: input.sessionId,
-      ...(input.errorCategory ? { errorCategory: input.errorCategory } : {}),
-      ...(input.metadata ? { metadata: input.metadata } : {}),
+      ...(input.errorCategory !== undefined ? { errorCategory: input.errorCategory } : {}),
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
     });
   }
 
