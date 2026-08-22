@@ -40,6 +40,22 @@ function getMessageText(message: NormalizedMessage): string {
   return String(message.text ?? message.content ?? "").trim();
 }
 
+// Real message contracts carry tool arguments in `toolInput` (live bridge
+// events) or `payload` (webMessageFlatten history rows) — never in text/content.
+function getToolArguments(message: NormalizedMessage): string {
+  const raw = message.toolInput ?? message.payload;
+  if (raw === undefined || raw === null || raw === "") return getMessageText(message);
+  return typeof raw === "string" ? raw : JSON.stringify(raw);
+}
+
+// tool_result spans failures via `isError` (mapWebMessageToNormalized) or
+// `ok === false` (live bridge), with an optional machine-readable `errorCode`.
+function getToolError(message: NormalizedMessage): string | undefined {
+  if (message.isError !== true && message.ok !== false) return undefined;
+  const code = typeof message.errorCode === "string" ? message.errorCode : undefined;
+  return code ? `tool_error:${code}` : "tool_error_failed";
+}
+
 export function messagesToTurns(messages: NormalizedMessage[]): SessionTurn[] {
   const turns: SessionTurn[] = [];
   const toolCalls = new Map<string, FoldedToolProcess>();
@@ -55,7 +71,7 @@ export function messagesToTurns(messages: NormalizedMessage[]): SessionTurn[] {
       toolCalls.set(callId, {
         callId,
         name: message.toolName ?? "tool",
-        arguments: getMessageText(message),
+        arguments: getToolArguments(message),
       });
       continue;
     }
@@ -64,13 +80,16 @@ export function messagesToTurns(messages: NormalizedMessage[]): SessionTurn[] {
       const callId = message.toolId ?? message.entryId ?? "";
       const existing = toolCalls.get(callId);
       const text = getMessageText(message);
+      const error = getToolError(message);
       if (existing) {
         existing.result = text;
+        if (error !== undefined) existing.error = error;
       } else {
         toolCalls.set(callId, {
           callId,
           name: message.toolName ?? "tool",
           result: text,
+          ...(error !== undefined ? { error } : {}),
         });
       }
       continue;

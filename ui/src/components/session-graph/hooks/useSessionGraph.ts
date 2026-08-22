@@ -146,6 +146,10 @@ export function useSessionGraph(project: Project | null): UseSessionGraphResult 
   const [positionsVersion, setPositionsVersion] = useState(0);
 
   useEffect(() => {
+    // Clear the previous project's sessions immediately so the nodes memo
+    // never lays out stale sessions under the new project's storage key.
+    setSessions([]);
+    setTotal(0);
     if (!projectName) {
       positionsRef.current = new Map();
       layoutAppliedRef.current = false;
@@ -243,7 +247,7 @@ export function useSessionGraph(project: Project | null): UseSessionGraphResult 
     loading,
     error,
     total,
-    loadedCount: sessions.length,
+    loadedCount: nodes.length,
     refetch,
     moveNode,
   };

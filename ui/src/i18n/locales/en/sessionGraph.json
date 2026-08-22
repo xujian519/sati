@@ -3,6 +3,8 @@
     "title": "Select a project to view the session map",
     "description": "The session map visualizes branches and relationships between sessions in a project."
   },
+  "loading": "Loading sessions…",
+  "noSessions": "No sessions in this project.",
   "toolbar": {
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",

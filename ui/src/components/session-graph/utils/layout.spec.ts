@@ -34,12 +34,13 @@ describe("buildEdges", () => {
     expect(edges).toEqual([]);
   });
 
-  it("breaks cycles so the surviving edges form a DAG", () => {
+  it("breaks cycles leaving the earliest-created child edge intact", () => {
     const edges = buildEdges([
       makeNode({ sessionId: "a", parentSessionId: "b" }),
       makeNode({ sessionId: "b", parentSessionId: "a" }),
     ]);
-    expect(edges).toHaveLength(1);
+    // Both a->b and b->a are cycles; the deterministic DAG keeps a->b.
+    expect(edges).toEqual([{ from: "a", to: "b", label: undefined }]);
   });
 });
 

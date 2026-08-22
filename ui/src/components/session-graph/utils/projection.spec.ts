@@ -78,4 +78,22 @@ describe("messagesToTurns", () => {
     const turns = messagesToTurns([user("q"), assistant("part one"), assistant("part two")]);
     expect(turns[0].answer).toBe("part one\npart two");
   });
+
+  it("reads tool arguments from toolInput and failure from isError/errorCode", () => {
+    const turns = messagesToTurns([
+      user("q"),
+      { kind: "tool_use", toolId: "t1", toolName: "patent_search", toolInput: { q: "foo", limit: 3 } },
+      { kind: "tool_result", toolId: "t1", content: "denied", isError: true, errorCode: "permission_denied" },
+      assistant("done"),
+    ]);
+    const step = turns[0].process[0];
+    expect(step.arguments).toBe('{"q":"foo","limit":3}');
+    expect(step.error).toBe("tool_error:permission_denied");
+  });
+
+  it("skips role-less thinking rows, matching the real message contract", () => {
+    const turns = messagesToTurns([user("q"), { kind: "thinking", content: "reasoning…" }, assistant("a")]);
+    expect(turns[0].pending).toBe(false);
+    expect(turns[0].answer).toBe("a");
+  });
 });

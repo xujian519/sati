@@ -3,6 +3,8 @@
     "title": "选择项目以查看会话地图",
     "description": "会话地图展示项目内所有会话的分支与关系。"
   },
+  "loading": "正在加载会话…",
+  "noSessions": "该项目暂无会话。",
   "toolbar": {
     "zoomIn": "放大",
     "zoomOut": "缩小",

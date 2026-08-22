@@ -38,23 +38,6 @@ export default function SessionGraphTab({
     }
   }, [selectedNodeId, selectedNode]);
 
-  useEffect(() => {
-    const debug = window as unknown as {
-      __sessionGraphDebug?: unknown;
-      __sessionGraphLogs?: string[];
-    };
-    debug.__sessionGraphDebug = {
-      projectName: selectedProject?.name,
-      nodeCount: nodes.length,
-      edgeCount: edges.length,
-      total,
-      loadedCount,
-      loading,
-      errorMessage: error?.message,
-    };
-    debug.__sessionGraphLogs = debug.__sessionGraphLogs || [];
-  }, [nodes.length, edges.length, total, loadedCount, loading, error, selectedProject?.name]);
-
   // Refresh the graph when the server broadcasts project updates for the
   // currently viewed project.
   useEffect(() => {
@@ -144,7 +127,7 @@ export default function SessionGraphTab({
 
       {selectedProject && loading && (
         <div className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-sm text-neutral-500 dark:text-neutral-400">
-          Loading sessions…
+          {t("loading", { defaultValue: "Loading sessions…" })}
         </div>
       )}
 
@@ -163,7 +146,7 @@ export default function SessionGraphTab({
 
       {selectedProject && !loading && !error && nodes.length === 0 && (
         <div className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-sm text-neutral-500 dark:text-neutral-400">
-          No sessions in this project.
+          {t("noSessions", { defaultValue: "No sessions in this project." })}
         </div>
       )}
 
