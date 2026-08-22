@@ -7,6 +7,7 @@ import {
   Database,
   Folder,
   GitBranch,
+  Map,
   MoreHorizontal,
   PanelLeftOpen,
   Radio,
@@ -368,7 +369,26 @@ function MainAreaV2Content(props: MainAreaV2Props) {
             )}
           >
             <GitBranch className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span>{t("tabs.sessionGraph", { defaultValue: "Map" }) as string}</span>
+            <span>{t("tabs.sessionGraph", { defaultValue: "Graph" }) as string}</span>
+          </button>
+
+          <button
+            type="button"
+            aria-pressed={displayActiveTab === "map"}
+            onClick={() => {
+              setDashboardMenuOpen(false);
+              chatHistorySearch.closeSearch();
+              setActiveTab(displayActiveTab === "map" ? "chat" : "map");
+            }}
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors",
+              displayActiveTab === "map"
+                ? cn("font-medium", ACTIVE_TOOL_BUTTON_CLASS)
+                : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
+            )}
+          >
+            <Map className="h-3.5 w-3.5" strokeWidth={1.75} />
+            <span>{t("tabs.map", { defaultValue: "Map" }) as string}</span>
           </button>
 
           <div ref={dashboardMenuRef} className="relative">

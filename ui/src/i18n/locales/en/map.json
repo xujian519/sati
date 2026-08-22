@@ -1,0 +1,27 @@
+{
+  "title": "Map",
+  "empty": {
+    "title": "Select a project to view the map",
+    "description": "The map visualizes workspaces and sessions as draggable cards.",
+    "noThreads": "No sessions to display in this project."
+  },
+  "loading": "Loading map…",
+  "noWorkspaces": "No workspaces available.",
+  "error": {
+    "loadFailed": "Failed to load map",
+    "retry": "Retry"
+  },
+  "toolbar": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to view",
+    "reset": "Reset view",
+    "backToChat": "Back to chat",
+    "locateSession": "Locate current session"
+  },
+  "status": {
+    "idle": "Idle",
+    "processing": "Processing",
+    "interrupted": "Interrupted"
+  }
+}

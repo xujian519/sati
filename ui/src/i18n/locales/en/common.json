@@ -30,7 +30,8 @@
     "skills": "Skills",
     "cron": "Cron",
     "team": "Team",
-    "sessionGraph": "Map"
+    "sessionGraph": "Graph",
+    "map": "Map"
   },
   "dashboardSwitcher": {
     "open": "Open dashboards menu",

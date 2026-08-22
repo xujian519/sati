@@ -30,7 +30,8 @@
     "skills": "技能",
     "cron": "Cron",
     "team": "团队",
-    "sessionGraph": "地图"
+    "sessionGraph": "图谱",
+    "map": "地图"
   },
   "dashboardSwitcher": {
     "open": "打开看板菜单",

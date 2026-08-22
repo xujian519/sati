@@ -29,6 +29,7 @@ import enTasks from "./locales/en/tasks.json";
 import enTeamPanel from "./locales/en/teamPanel.json";
 import enStylePanel from "./locales/en/stylePanel.json";
 import enSessionGraph from "./locales/en/sessionGraph.json";
+import enMap from "./locales/en/map.json";
 import zhCommon from "./locales/zh-CN/common.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhAuth from "./locales/zh-CN/auth.json";
@@ -40,6 +41,7 @@ import zhCodeEditor from "./locales/zh-CN/codeEditor.json";
 import zhTeamPanel from "./locales/zh-CN/teamPanel.json";
 import zhStylePanel from "./locales/zh-CN/stylePanel.json";
 import zhSessionGraph from "./locales/zh-CN/sessionGraph.json";
+import zhMap from "./locales/zh-CN/map.json";
 import { languages } from "./languages.js";
 
 const getSavedLanguage = () => {
@@ -72,6 +74,7 @@ i18n
         teamPanel: enTeamPanel,
         stylePanel: enStylePanel,
         sessionGraph: enSessionGraph,
+        map: enMap,
       },
       "zh-CN": {
         common: zhCommon,
@@ -85,6 +88,7 @@ i18n
         teamPanel: zhTeamPanel,
         stylePanel: zhStylePanel,
         sessionGraph: zhSessionGraph,
+        map: zhMap,
       },
     },
 
@@ -104,6 +108,7 @@ i18n
       "routing",
       "teamPanel",
       "sessionGraph",
+      "map",
     ],
     defaultNS: "common",
     keySeparator: ".",

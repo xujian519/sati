@@ -15,6 +15,7 @@ export type AppTab =
   | "preview"
   | "dashboard"
   | "session-graph"
+  | "map"
   | `plugin:${string}`;
 
 export type AlwaysOnSessionTarget =
