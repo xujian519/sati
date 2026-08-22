@@ -135,7 +135,6 @@ export default tseslint.config(
                 "network/index.js",
                 "adapters/channel/protocol/index.js",
                 "pilot/index.js",
-                "map/index.js",
                 // 有意保留：edgeclaw-memory-core 独立子包，bundle 只打包 lib/
                 "context/memory/edgeclaw-memory-core/lib/index.js",
               ],

@@ -42,7 +42,6 @@ import projectUploadsRoutes from "./routes/project-uploads.js";
 import tokenUsageRoutes from "./routes/token-usage.js";
 import projectFilesRoutes from "./routes/project-files.js";
 import projectSessionsRoutes from "./routes/project-sessions.js";
-import mapRoutes from "./routes/map.js";
 import systemRoutes from "./routes/system.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
@@ -173,7 +172,6 @@ app.use(
 );
 
 app.use(projectSessionsRoutes);
-app.use(mapRoutes);
 app.use(projectFilesRoutes);
 app.use(projectPreviewRoutes);
 app.use(projectUploadsRoutes);

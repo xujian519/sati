@@ -14,8 +14,6 @@ export type AppTab =
   | "skills"
   | "preview"
   | "dashboard"
-  | "session-graph"
-  | "map"
   | `plugin:${string}`;
 
 export type AlwaysOnSessionTarget =
@@ -194,10 +192,8 @@ export interface ProjectSession {
   updated_at?: string;
   lastActivity?: string;
   messageCount?: number;
-  firstPrompt?: string;
   sessionKind?: ProjectSessionKind;
   parentSessionId?: string;
-  forkedFromTurnId?: string;
   relativeTranscriptPath?: string;
   transcriptKey?: string;
   taskId?: string;
