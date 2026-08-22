@@ -14,6 +14,10 @@ stages:
   - id: preprocess
     strategy: chain
     description: 预处理技术交底书（透传输入）
+  - id: clarity_gate
+    strategy: chain
+    atom: clarity-gate
+    description: 交底书清晰度准入门（四维评分不足时挂 HITL 决策：确认继续/补充/退回）
   - id: extract_problem
     strategy: sub_agent
     atom: extract
@@ -64,7 +68,7 @@ stages:
   - id: search_quality
     strategy: chain
     atom: quality-gate
-    description: 检索质量门槛（对比文件≥3 篇/相关度标注/全文≥2 篇/布尔+IPC 检索式）
+    description: 检索质量门槛（对比文件数量与相关度标注充分、全文覆盖、布尔+IPC 检索式校验）
   - id: search_approval
     strategy: chain
     atom: approval-gate
@@ -100,7 +104,11 @@ stages:
   - id: slop_clean
     strategy: chain
     atom: slop-gate
-    description: 反套话 5 维评分门（总分<35 判需修订）
+    retry:
+      whenOutputMatches: 需修订
+      rewindTo: draft_spec
+      maxRetries: 1
+    description: 反套话评分门（未通过自动带证据提示回退说明书修订）
   - id: final_approval
     strategy: chain
     atom: approval-gate

@@ -293,24 +293,41 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
   };
 }
 
+/** runRuleGate 的最小结果形状（兼容简形调用；工具层传完整 WorkflowRunResult）。 */
+export type RuleGateResultLike = {
+  stages: { degraded: boolean; output: string }[];
+  completed?: boolean;
+  degradedSteps?: string[];
+};
+
 /**
- * 执行确定性规则门：拼接非降级阶段产出 → defaultPatentRules 按域评估 → 聚合判级，
+ * 执行确定性规则门：拼接可评估阶段产出 → defaultPatentRules 按域评估 → 聚合判级，
  * 返回 Markdown 报告片段（含判级结论行 + 失败明细表；全部通过时仅结论行）。
+ *
+ * 可评估性语义（对齐"失败 run 也入评估"的纪律，2026-08）：
+ * - 只要 run 留下非空产出（即使整体未完成/有降级阶段），照常评估，并明确标注
+ *   "仅覆盖已完成产出"——失败 run 不因失败而失去正式评估；
+ * - run 未留下任何可评估文本（全部阶段降级）时**不假装通过**（fail-explicit）：
+ *   空文本对"禁用词型"规则恒通过、对"应出现型"规则恒失败，两者都无意义，
+ *   明确报告"无可评估产出，规则门跳过"。
  */
-export function runRuleGate(
-  result: { stages: { degraded: boolean; output: string }[] },
-  domains: readonly string[],
-): string {
+export function runRuleGate(result: RuleGateResultLike, domains: readonly string[]): string {
   const text = result.stages
     .filter(s => !s.degraded && s.output.trim().length > 0 && !s.output.startsWith("[WORKFLOW_DEGRADED]"))
     .map(s => s.output)
     .join("\n");
+  if (text.trim().length === 0) {
+    const steps = result.degradedSteps ?? [];
+    const degradedDetail = steps.length > 0 ? `（降级阶段: ${steps.join("、")}）` : "";
+    return `确定性门: ⚠️ 无可评估产出，规则门跳过${degradedDetail}——run 未留下可评估证据，请检查失败阶段或重新执行。`;
+  }
   const engine = new RuleEngine();
   engine.registerMany(defaultPatentRules());
   const failures = engine.evaluate(text, { domain: domains });
   const verdict = aggregate(failures);
   const summary = summarizeCheck(verdict, failures);
-  return `${summary}\n${formatRuleResults(failures, verdict)}`;
+  const partialNote = result.completed ? "" : "（注：run 未完整完成，以下评估仅覆盖已完成/未降级的产出）";
+  return `${summary}${partialNote}\n${formatRuleResults(failures, verdict)}`;
 }
 
 // ---------------------------------------------------------------------------

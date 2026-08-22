@@ -26,10 +26,32 @@ const ALL_GATES = [
   "final_approval",
 ];
 
+/** 完整交底书样本（四维信号齐全——clarity-gate 在前置准入直接通过）。 */
+const FULL_DISCLOSURE = [
+  "本发明涉及保温容器技术领域，要解决的技术问题是保温时间短的问题。",
+  "技术方案：采用双层真空结构，包括保温层与内胆，通过真空层降低热传导。",
+  "有益效果：保温时间由 2 小时提升至 8 小时，热损失降低 40%。",
+  "实施例 1：真空度 0.1Pa，壁厚 2mm，保温 8 小时；附图 1 为整体结构示意图。",
+].join("\n");
+
 /** mock provider：按 prompt 内容返回各原子所需 JSON（覆盖全部阶段 LLM 调用）。 */
 function fullRunProvider(): StageProvider {
   return {
     callLLM: async prompt => {
+      if (prompt.includes("交底书质量评估专家")) {
+        return JSON.stringify({
+          problem: 0.9,
+          solution: 0.9,
+          effect: 0.9,
+          enablement: 0.9,
+          reasons: {
+            problem: "交底书明确给出技术问题",
+            solution: "手段完整",
+            effect: "有定量对比",
+            enablement: "有实施例参数",
+          },
+        });
+      }
       if (prompt.includes("提取技术问题")) return JSON.stringify({ problems: ["保温时间短"] });
       if (prompt.includes("提取技术特征")) return JSON.stringify({ features: ["双层真空结构", "隔热层"] });
       if (prompt.includes("提取技术效果")) return JSON.stringify({ effects: ["保温 8 小时"] });
@@ -99,8 +121,8 @@ test("T12: patent_drafting_v1 全链路（批准全部审批门）完整跑通",
   const result = await runWorkflow(
     patentDraftingManifest,
     {
-      text: "交底书：双层真空保温容器",
-      source_text: "交底书：双层真空保温容器。实施例 1：真空度 0.1Pa，保温 8 小时。",
+      text: FULL_DISCLOSURE,
+      source_text: FULL_DISCLOSURE,
     },
     executor,
     { provider, approvalGrants: ALL_GATES },
@@ -141,10 +163,15 @@ test("T12: 全链路含确定性质量门产出（slop 评分可解析）", asyn
   registerBuiltinAtoms();
   const provider = fullRunProvider();
   const executor = async (): Promise<string> => "（透传）";
-  const result = await runWorkflow(patentDraftingManifest, { text: "交底书", source_text: "交底书" }, executor, {
-    provider,
-    approvalGrants: ALL_GATES,
-  });
+  const result = await runWorkflow(
+    patentDraftingManifest,
+    { text: FULL_DISCLOSURE, source_text: FULL_DISCLOSURE },
+    executor,
+    {
+      provider,
+      approvalGrants: ALL_GATES,
+    },
+  );
   // slop-gate 主输出是报告文本；评分 JSON 在 state（经 stage 输出不可见），
   // 但报告文本含五维分数字段（直接性/证据性…）——断言报告结构完整。
   const slop = result.stages.find(s => s.stageId === "slop_clean")!.output;

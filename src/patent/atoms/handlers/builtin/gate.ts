@@ -21,6 +21,7 @@ import {
   getStateString,
 } from "../../handler.js";
 import { checkSearchQuality } from "../../../quality/index.js";
+import { buildSlopRevisionHint } from "../../../retry-hints.js";
 import { analyzeSlop } from "../../../slop-engine.js";
 import { degraded } from "./llm.js";
 
@@ -30,9 +31,13 @@ export const APPROVAL_GRANTED_KEY = "__approval_granted__";
 /** 已批准审批门在 manifest 路径的占位输出（图路径无输出概念，不需要）。 */
 export const APPROVAL_GRANTED_OUTPUT = "APPROVED";
 
-/** 判断 handler 是否为审批门（按 name 契约，供 runWorkflow 注入放行标记）。 */
+/**
+ * 判断 handler 是否为"人工放行型门"（按 name 契约，供 runWorkflow 注入放行标记）。
+ * 放行语义 = 人已批准"继续"（approval-gate：确认产出；clarity-gate：强制跨过
+ * 清晰度门槛——语义同构，均走 approveStageIds / grantApproval 契约）。
+ */
 export function isApprovalGateHandler(handler: StageHandler): boolean {
-  return handler.name === "approval-gate";
+  return handler.name === "approval-gate" || handler.name === "clarity-gate";
 }
 
 export const approvalGateAtom: Atom = {
@@ -67,7 +72,11 @@ export class ApprovalGateHandler implements StageHandler {
 
 export const qualityGateAtom: Atom = {
   name: "quality-gate",
-  description: "检索质量确定性门槛：对比文件≥3 篇、相关度标注、全文标注≥2 篇、布尔+IPC 检索式",
+  // 描述语义契约：只描述"审什么"，不出现数字断言（如"≥3 篇/≥2 篇"）。
+  // 数字断言是评分器内部实现（HITL 报告面保留），worker 可见面剥离——
+  // 对齐隐藏清单纪律，防检索凑数/编造。改动需同步 manifest 阶段描述与
+  // tests/patent/drafting-sop.spec.ts 的防回归断言。
+  description: "检索质量确定性门槛：对比文件数量与相关度标注充分性、全文覆盖、布尔+IPC 检索式",
   category: "gate",
   inputSchema: ["search_summary", "prior_art"],
   outputSchema: ["quality_report"],
@@ -114,7 +123,9 @@ export class QualityGateHandler implements StageHandler {
 
 export const slopGateAtom: Atom = {
   name: "slop-gate",
-  description: "反套话质量门：slop-engine 5 维评分（总分<35 判需修订），输出评分报告",
+  // 描述语义契约：同上——不含"总分<35 判需修订"式数字断言（评分线是评分器
+  // 内部实现，HITL 报告面保留；worker 可见面剥离，防为凑分而改写而非改善）。
+  description: "反套话质量门：slop-engine 多维度初步评分，输出评分报告与证据型修订提示",
   category: "gate",
   inputSchema: ["report_text", "spec_draft", "claims_draft"],
   outputSchema: ["slop_report", "slop_score"],
@@ -135,11 +146,21 @@ export class SlopGateHandler implements StageHandler {
     const analysis = analyzeSlop(text);
     const score = analysis.score;
     const report = [
-      `反套话评分门: ${score.passed ? "✅ 通过" : "⚠️ 需修订"}（总分 ${score.total}/50，通过线 35）`,
+      // HITL 报告面保留评分数字（真实满分 43，通过线 35；勿以 50 为分母——
+      // 与 slop-engine scoreDocument 注释同源）。worker 可见面（retry hint）不含此处数字。
+      `反套话评分门: ${score.passed ? "✅ 通过" : "⚠️ 需修订"}（总分 ${score.total}，通过线 35）`,
       `- 直接性 ${score.directness} | 证据性 ${score.evidence} | 节奏 ${score.rhythm} | 务实性 ${score.practicality} | 简洁性 ${score.concision}`,
       `- 短语规则命中: ${analysis.changes.length} 处`,
       ...(score.passed ? [] : ["- 建议: 按 slop-engine 清理结果修订后重跑 slop-gate"]),
     ].join("\n");
-    return { slop_report: report, slop_score: JSON.stringify(score) };
+    // 证据型修订提示（显式约定：非 outputSchema 键 → 断点回退清理不触及；
+    // 专供 draft-spec 重跑时注入 prompt，见 DraftSpecHandler；不含任何分数/通过线断言）。
+    // 只在未通过（需修订）时生成——通过时不给"修订意见"，避免语义噪音。
+    const segment: PipelineState = { slop_report: report, slop_score: JSON.stringify(score) };
+    if (!score.passed) {
+      const hint = buildSlopRevisionHint(analysis);
+      if (hint !== undefined) segment.slop_revision_hint = hint;
+    }
+    return segment;
   }
 }

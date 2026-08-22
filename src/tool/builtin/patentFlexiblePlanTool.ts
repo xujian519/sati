@@ -244,7 +244,10 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
       "Also add / remove / reorder stages at runtime and complete or abandon the plan. Plans are persisted by " +
       "caseId across calls (unlike patent_plan_task, which is stateless). run executes only unconfirmed stages " +
       "(pending + rolled_back); confirmed stages are frozen, so confirm fixes the output — autoConfirm=true " +
-      "confirms all successful stages at the end of a run.",
+      "confirms all successful stages at the end of a run. " +
+      "For drafting plans, declare a first stage {id:'clarity_gate', atom:'clarity-gate'} before the " +
+      "deconstruction stage: it scores disclosure clarity (mechanical signals + semantic 4-dimension) and " +
+      "pauses at HITL when below the threshold (approve it to force-continue).",
     kind: "session",
     domain: "patent",
     inputSchema: {

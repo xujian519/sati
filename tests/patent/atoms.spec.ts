@@ -55,7 +55,7 @@ test("StageHandlerRegistry 注册/查询/同名覆盖", () => {
   assert.equal(reg.lookup("t"), h2);
 });
 
-test("registerBuiltinAtoms 注册 15 个内置原子与 handler", () => {
+test("registerBuiltinAtoms 注册 16 个内置原子与 handler", () => {
   registerBuiltinAtoms();
   const names = ListAtoms()
     .map(a => a.name)
@@ -64,6 +64,7 @@ test("registerBuiltinAtoms 注册 15 个内置原子与 handler", () => {
     "approval-gate",
     "claim-chart",
     "claim-embodiment-mapper",
+    "clarity-gate",
     "compare",
     "draft-claims",
     "draft-spec",
@@ -191,9 +192,11 @@ test("ApprovalGateHandler：state 含放行标记时直接放行（不中断）"
   assert.deepEqual(out, {});
 });
 
-test("isApprovalGateHandler：按 name 契约识别审批门", () => {
+test("isApprovalGateHandler：按 name 契约识别审批门（含 clarity-gate 强制放行语义）", () => {
   const gate = LookupStageHandler("approval-gate")!;
   assert.equal(isApprovalGateHandler(gate), true);
+  const clarity = LookupStageHandler("clarity-gate")!;
+  assert.equal(isApprovalGateHandler(clarity), true, "clarity-gate 支持人工强制放行");
   const extract = LookupStageHandler("extract")!;
   assert.equal(isApprovalGateHandler(extract), false);
 });

@@ -62,9 +62,12 @@ export async function runStageOnce(
       if (handler) {
         // 已人工批准的审批门：把放行标记注入 handler 执行态，由 ApprovalGateHandler
         // 统一判定放行（与图路径同一契约）；此处不跳过执行。
+        // ⚠️ 执行态必须总为拷贝（含无 params 阶段）：放行标记只许 handler 局部可见，
+        // 直接写共享 state 会污染后续所有审批门（曾因此发生"无 params 的已批准门
+        // 放行后全链路审批门静默放行"的事故，tests/patent/drafting-sop.spec.ts 覆盖）。
         const approvedGate = isApprovalGateHandler(handler) && options.approvalGrants?.includes(stage.id);
         // 阶段静态参数合并进执行态（不污染共享 state，仅本次 handler 可见）。
-        const execState = stage.params !== undefined ? { ...state, ...stage.params } : state;
+        const execState = { ...state, ...(stage.params ?? {}) };
         if (approvedGate) {
           execState[APPROVAL_GRANTED_KEY] = true;
         }

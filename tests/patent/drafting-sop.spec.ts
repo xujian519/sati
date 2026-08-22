@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   builtinPatentManifests,
   checkSearchQuality,
+  clarityGateAtom,
   draftSpecAtom,
   patentDraftingManifest,
+  qualityGateAtom,
   registerBuiltinAtoms,
   runWorkflow,
   slopGateAtom,
@@ -283,6 +285,7 @@ test("patent_drafting_v1 manifest 结构合法且原子全部可解析", () => {
   // 撰写关键阶段存在
   const stageIds = patentDraftingManifest.stages.map(s => s.id);
   for (const id of [
+    "clarity_gate",
     "extract_features",
     "search",
     "search_quality",
@@ -295,10 +298,35 @@ test("patent_drafting_v1 manifest 结构合法且原子全部可解析", () => {
   }
 });
 
+/** 完整交底书样本（四维信号齐全：问题/方案/效果/实施——clarity-gate 全链路通过）。 */
+const FULL_DISCLOSURE = [
+  "本发明涉及保温容器技术领域，要解决的技术问题是保温时间短的问题。",
+  "技术方案：采用双层真空结构，包括保温层与内胆，通过真空层降低热传导。",
+  "有益效果：保温时间由 2 小时提升至 8 小时，热损失降低 40%。",
+  "实施例 1：真空度 0.1Pa，壁厚 2mm，保温 8 小时；附图 1 为整体结构示意图。",
+].join("\n");
+
+/** mock provider 的 clarity-gate 语义打分分支（高分通过——clarity 门在全链路前置）。 */
+const CLARITY_HIGH_SCORE = JSON.stringify({
+  problem: 0.9,
+  solution: 0.9,
+  effect: 0.9,
+  enablement: 0.9,
+  reasons: {
+    problem: "交底书明确给出技术问题",
+    solution: "手段完整",
+    effect: "有定量对比",
+    enablement: "有实施例参数",
+  },
+});
+
 test("patent_drafting_v1：mock provider 全链路跑通至审批门中断", async () => {
   registerBuiltinAtoms();
   const provider: StageProvider = {
     callLLM: async prompt => {
+      if (prompt.includes("交底书质量评估专家")) {
+        return CLARITY_HIGH_SCORE;
+      }
       if (prompt.includes("提取技术问题")) {
         return JSON.stringify({ problems: ["保温时间短"] });
       }
@@ -364,13 +392,22 @@ test("patent_drafting_v1：mock provider 全链路跑通至审批门中断", asy
     ],
   };
   const executor = async (): Promise<string> => "（透传输入）";
-  const result = await runWorkflow(patentDraftingManifest, { text: "交底书：双层真空保温容器" }, executor, {
-    provider,
-  });
+  const result = await runWorkflow(
+    patentDraftingManifest,
+    { text: FULL_DISCLOSURE, source_text: FULL_DISCLOSURE },
+    executor,
+    {
+      provider,
+    },
+  );
 
-  // 全链路在首个审批门（deconstruct_approval）中断
+  // 全链路在首个审批门（deconstruct_approval）中断；clarity_gate 已通过（前置准入）
   assert.equal(result.completed, false);
   assert.equal(result.interrupted?.stageId, "deconstruct_approval");
+  const clarityGate = result.stages.find(s => s.stageId === "clarity_gate");
+  assert.ok(clarityGate, "clarity_gate 应执行");
+  assert.equal(clarityGate!.degraded, false);
+  assert.match(clarityGate!.output, /✅ 通过/);
   // 中断前的原子阶段应正常产出（不降级）
   const extract = result.stages.find(s => s.stageId === "extract_features");
   assert.ok(extract, "extract_features 应执行");
@@ -385,6 +422,7 @@ test("patent_drafting_v1：审批门放行后继续至下一审批门", async ()
   registerBuiltinAtoms();
   const provider: StageProvider = {
     callLLM: async prompt => {
+      if (prompt.includes("交底书质量评估专家")) return CLARITY_HIGH_SCORE;
       if (prompt.includes("提取技术问题")) return JSON.stringify({ problems: ["保温时间短"] });
       if (prompt.includes("提取技术特征")) return JSON.stringify({ features: ["双层真空结构"] });
       if (prompt.includes("提取技术效果")) return JSON.stringify({ effects: ["保温 8 小时"] });
@@ -400,7 +438,7 @@ test("patent_drafting_v1：审批门放行后继续至下一审批门", async ()
   };
   const executor = async (): Promise<string> => "（透传输入）";
   // 批准 deconstruct_approval：放行后继续，在下一个审批门（search_approval 之前的 search_quality 无审批）中断
-  const result = await runWorkflow(patentDraftingManifest, { text: "交底书" }, executor, {
+  const result = await runWorkflow(patentDraftingManifest, { text: FULL_DISCLOSURE }, executor, {
     provider,
     approvalGrants: ["deconstruct_approval"],
   });
@@ -418,4 +456,164 @@ test("builtinPatentManifests 目录含 patent_drafting_v1 且规则门域映射�
   const drafting = builtinPatentManifests.find(e => e.manifest.id === "patent_drafting_v1");
   assert.ok(drafting, "目录应含 patent_drafting_v1");
   assert.deepEqual(drafting!.checkDomains, ["patent_disclosure", "patent_claims"]);
+});
+
+// ---------------------------------------------------------------------------
+// T5: 隐藏清单纪律（2026-08）——worker 可见面剥离评分断言 + 证据驱动重试闭环
+// ---------------------------------------------------------------------------
+
+/** 评分断言正则：数字 / ≥ ≤ / 通过线等。描述文本命中即违规。 */
+const NUMERIC_ASSERTION = /[0-9]|≥|≤|通过线/;
+
+test("隐藏清单：评分原子与 manifest 阶段描述不含数字断言", () => {
+  // 原子描述（经工具 schema/文档可见）只声明"审什么"，不公开评分线/数量门槛。
+  assert.doesNotMatch(qualityGateAtom.description, NUMERIC_ASSERTION);
+  assert.doesNotMatch(slopGateAtom.description, NUMERIC_ASSERTION);
+  assert.doesNotMatch(clarityGateAtom.description, NUMERIC_ASSERTION);
+  // manifest 阶段描述（生成 yaml 快照与 mermaid 的可见文本）同样剥离。
+  const searchQuality = patentDraftingManifest.stages.find(s => s.id === "search_quality");
+  const slopClean = patentDraftingManifest.stages.find(s => s.id === "slop_clean");
+  const clarityGate = patentDraftingManifest.stages.find(s => s.id === "clarity_gate");
+  assert.doesNotMatch(searchQuality!.description, NUMERIC_ASSERTION);
+  assert.doesNotMatch(slopClean!.description, NUMERIC_ASSERTION);
+  assert.doesNotMatch(clarityGate!.description, NUMERIC_ASSERTION);
+});
+
+test("clarity_gate 准入语义：未达门槛中断挂 HITL，批准后强制放行继续", async () => {
+  registerBuiltinAtoms();
+  const lowScoreProvider: StageProvider = {
+    callLLM: async () => JSON.stringify({ problem: 0.2, solution: 0.3, effect: 0.1, enablement: 0.2 }),
+  };
+  const executor = async (): Promise<string> => "（透传输入）";
+
+  // 未批准：中断于 clarity_gate（解构准入拦截，早于任何提取）。
+  const r1 = await runWorkflow(patentDraftingManifest, { text: FULL_DISCLOSURE }, executor, {
+    provider: lowScoreProvider,
+  });
+  assert.equal(r1.completed, false);
+  assert.equal(r1.interrupted?.stageId, "clarity_gate", "低分交底书应在解构前被门拦截");
+  assert.match(r1.interrupted?.message ?? "", /清晰度未达门槛/);
+
+  // 批准（强制放行）：clarity_gate 放行并标记 FORCED，流程推进到下一审批门。
+  const r2 = await runWorkflow(patentDraftingManifest, { text: FULL_DISCLOSURE }, executor, {
+    provider: lowScoreProvider,
+    approvalGrants: ["clarity_gate"],
+  });
+  assert.equal(r2.interrupted?.stageId, "deconstruct_approval", "强制放行后应推进到解构确认门");
+  const gate = r2.stages.find(s => s.stageId === "clarity_gate");
+  assert.ok(gate, "clarity_gate 应执行");
+  assert.match(gate!.output, /人工强制放行/, "放行报告应带 FORCED 标记");
+});
+
+/** 实测未通过文本（18 段套话 → slop total 33 < 35）。 */
+const FAILING_SPEC_BODY = Array.from({ length: 18 }, () => "综上所述，具有显著进步，保护范围合理。").join("\n\n");
+/** 实测通过文本（total 36；无 changes/issues）。 */
+const CLEAN_SPEC_BODY = [
+  "## 具体实施方式",
+  "实施例1：真空度 0.1Pa，保温时间 8 小时（3 组平行测试均值）。",
+  "D1（CN1234567A）保温时间 2 小时，本发明提升至 8 小时。",
+].join("\n\n");
+
+test("SlopGateHandler：未通过时输出证据型修订提示（不含评分断言）", async () => {
+  registerBuiltinAtoms();
+  const h = LookupStageHandler("slop-gate")!;
+  const out = await h.execute({ state: { spec_draft: FAILING_SPEC_BODY } });
+  assert.match(String(out.slop_report), /需修订/);
+  const hint = String(out.slop_revision_hint);
+  assert.ok(hint.length > 0, "未通过时应产出修订提示");
+  assert.match(hint, /命中套话表述/);
+  assert.doesNotMatch(hint, /[0-9]|通过线|总分|得分|35|43/);
+});
+
+test("SlopGateHandler：通过时不输出修订提示（避免噪音）", async () => {
+  registerBuiltinAtoms();
+  const h = LookupStageHandler("slop-gate")!;
+  const out = await h.execute({ state: { report_text: CLEAN_SPEC_BODY } });
+  const score = JSON.parse(String(out.slop_score));
+  assert.equal(score.passed, true, "前置：干净文本应通过");
+  assert.equal(out.slop_revision_hint, undefined);
+});
+
+test("slop_clean 阶段声明有界 retry：未通过自动回退 draft_spec 重跑（证据注入）", async () => {
+  registerBuiltinAtoms();
+  const slopClean = patentDraftingManifest.stages.find(s => s.id === "slop_clean")!;
+  assert.ok(slopClean.retry, "slop_clean 应声明 retry");
+  assert.equal(slopClean.retry!.whenOutputMatches, "需修订");
+  assert.equal(slopClean.retry!.rewindTo, "draft_spec");
+  assert.equal(slopClean.retry!.maxRetries, 1);
+
+  // 最小闭环：draft_spec → slop_clean（信号回退）→ draft_spec 重跑（带证据提示）→ 通过。
+  const manifest = {
+    id: "test_drafting_retry",
+    name: "撰写重试闭环",
+    caseType: "drafting",
+    stages: [
+      { id: "draft_spec", strategy: "chain" as const, description: "撰写说明书", atom: "draft-spec" },
+      {
+        id: "slop_clean",
+        strategy: "chain" as const,
+        description: "反套话评审",
+        atom: "slop-gate",
+        retry: { whenOutputMatches: "需修订", rewindTo: "draft_spec", maxRetries: 1 },
+      },
+    ],
+    validation: { requireAllSteps: true },
+  };
+  const prompts: string[] = [];
+  const provider: StageProvider = {
+    callLLM: async prompt => {
+      prompts.push(prompt);
+      const firstRound = !prompt.includes("上一轮评审意见");
+      const body = firstRound ? FAILING_SPEC_BODY : CLEAN_SPEC_BODY;
+      const sections = [
+        { name: "技术领域", content: "本发明涉及保温容器技术领域。" },
+        { name: "发明内容", content: body },
+        { name: "具体实施方式", content: body },
+      ];
+      return JSON.stringify({ title: "一种保温容器", sections });
+    },
+  };
+  const result = await runWorkflow(manifest, { claims_draft: "1. 一种保温容器。" }, undefined, { provider });
+  assert.ok(result.completed, `闭环应完成: ${result.summary}`);
+  assert.equal(prompts.length, 2, "应恰好重跑一次（有界）");
+  // 第二轮（重跑）prompt 携带证据型修订提示，且不携带评分断言。
+  assert.match(prompts[1]!, /上一轮评审意见/);
+  assert.match(prompts[1]!, /综上所述|填充词/);
+  assert.doesNotMatch(prompts[1]!, /通过线|总分|[0-9]+\s*分/);
+  const draftSpec = result.stages.find(s => s.stageId === "draft_spec");
+  assert.ok(draftSpec && draftSpec.degraded === false);
+});
+
+test("slop_clean：再次未通过 → 重试耗尽降级继续（不无限循环）", async () => {
+  registerBuiltinAtoms();
+  const manifest = {
+    id: "test_drafting_retry_exhaust",
+    name: "撰写重试耗尽",
+    caseType: "drafting",
+    stages: [
+      { id: "draft_spec", strategy: "chain" as const, description: "撰写说明书", atom: "draft-spec" },
+      {
+        id: "slop_clean",
+        strategy: "chain" as const,
+        description: "反套话评审",
+        atom: "slop-gate",
+        retry: { whenOutputMatches: "需修订", rewindTo: "draft_spec", maxRetries: 1 },
+      },
+    ],
+    validation: { requireAllSteps: true },
+  };
+  let calls = 0;
+  const provider: StageProvider = {
+    callLLM: async () => {
+      calls += 1;
+      const sections = [{ name: "发明内容", content: FAILING_SPEC_BODY }];
+      return JSON.stringify({ title: "一种保温容器", sections });
+    },
+  };
+  const result = await runWorkflow(manifest, { claims_draft: "1. 一种保温容器。" }, undefined, { provider });
+  assert.equal(calls, 2, "有界重试恰好 2 次调用");
+  const slopClean = result.stages.find(s => s.stageId === "slop_clean");
+  assert.ok(slopClean, "slop_clean 应保留最终结果");
+  assert.ok(slopClean!.degraded, "重试耗尽应标记降级（fail-explicit，不假装通过）");
+  assert.match(slopClean!.output, /\[WORKFLOW_RETRY_EXHAUSTED\]/);
 });

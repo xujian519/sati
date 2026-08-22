@@ -65,6 +65,9 @@ export function createReplayModelRuntime(fixtureDir: string, base: ModelRuntime)
     const index = queue?.shift();
     if (index === undefined) {
       const summary = requestSummary(request);
+      // 诊断改进：附 actual key 与 fixture 已有 key（工具 schema 变更导致失配时
+      // 可立即定位；消息保留既有前缀以兼容错误消息断言）。
+      const fixtureKeys = [...byKey.keys()].slice(0, 3);
       throw new ReplayError(
         "NO_REPLAY_RECORD",
         "no recorded stream matches this request (provider " +
@@ -73,7 +76,11 @@ export function createReplayModelRuntime(fixtureDir: string, base: ModelRuntime)
           request.model +
           ", tools [" +
           summary.toolNames.join(", ") +
-          "]); record a fresh fixture or update the test to drive the recorded requests",
+          "]); actual key: " +
+          key +
+          "；fixture keys: " +
+          (fixtureKeys.length > 0 ? fixtureKeys.map(k => k.slice(0, 16) + "…").join(", ") : "(空)") +
+          "; record a fresh fixture or update the test to drive the recorded requests",
       );
     }
     consumed.add(index);

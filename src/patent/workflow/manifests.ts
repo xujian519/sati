@@ -285,7 +285,11 @@ export const patentInfringementManifest: WorkflowManifest = {
  * 无原子透传）→ 关键词/检索 → 检索质量门（quality-gate）→ HITL 确认对比文件 →
  * 逐特征对比（novelty，区别特征输出）→ HITL 确认区别特征 → 充分公开审查
  * （reasoning）→ HITL 审核 → draft-claims → draft-spec（含确定性校验）→
- * slop-gate（反套话评分）→ HITL 定稿。
+ * slop-gate（反套话评分，未通过带证据提示回退 draft_spec）→ HITL 定稿。
+ *
+ * 前置准入：preprocess 后先过 clarity_gate（交底书清晰度准入门：四维
+ * 机械信号 + 语义评分融合，不足挂 HITL 决策：1=强制继续/2=补充/3=退回）——
+ * 对齐"输入不清不进入解构"的纪律，PFE 提取之前执行。
  *
  * 说明：
  * - figure / chemistry 阶段无原子：StageProvider 契约无图片/文件通道，由主代理
@@ -302,6 +306,15 @@ export const patentDraftingManifest: WorkflowManifest = {
   caseType: "drafting",
   stages: [
     { id: "preprocess", strategy: "chain", description: "预处理技术交底书（透传输入）" },
+    {
+      id: "clarity_gate",
+      strategy: "chain",
+      // 准入语义：解构/提取前量化交底书质量（机械信号 + 语义四维融合）。
+      // 描述面不含阈值数字（0.2 为评分器默认，HITL 报告面展示）；
+      // 不足时经 HITL 决策（1=强制继续 / 2=补充交底书 / 3=退回）。
+      description: "交底书清晰度准入门（四维评分不足时挂 HITL 决策：确认继续/补充/退回）",
+      atom: "clarity-gate",
+    },
     {
       id: "extract_problem",
       strategy: "sub_agent",
@@ -371,7 +384,9 @@ export const patentDraftingManifest: WorkflowManifest = {
     {
       id: "search_quality",
       strategy: "chain",
-      description: "检索质量门槛（对比文件≥3 篇/相关度标注/全文≥2 篇/布尔+IPC 检索式）",
+      // 描述语义契约：不含数字断言（对比文件≥3 篇/全文≥2 篇等为评分器内部实现，
+      // HITL 报告面保留详情）；worker 可见面仅保留"审什么"。
+      description: "检索质量门槛（对比文件数量与相关度标注充分、全文覆盖、布尔+IPC 检索式校验）",
       atom: "quality-gate",
     },
     {
@@ -437,8 +452,16 @@ export const patentDraftingManifest: WorkflowManifest = {
     {
       id: "slop_clean",
       strategy: "chain",
-      description: "反套话 5 维评分门（总分<35 判需修订）",
+      // 描述语义契约：不含"总分<35"式数字断言（评分线为评分器内部实现）。
+      // 未通过时经 retry 回退 draft_spec 重跑（证据型修订提示注入，有界 1 次），
+      // 彻底失败仍保留输出挂 HITL 定稿。
+      description: "反套话评分门（未通过自动带证据提示回退说明书修订）",
       atom: "slop-gate",
+      retry: {
+        whenOutputMatches: "需修订",
+        rewindTo: "draft_spec",
+        maxRetries: 1,
+      },
     },
     {
       id: "final_approval",

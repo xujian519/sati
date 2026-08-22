@@ -277,6 +277,8 @@ export class DraftSpecHandler implements StageHandler {
     if (input.trim().length === 0) {
       return degraded("draft-spec", "输入为空（state.claims_draft / merge_result / pfe_triples / source_text）");
     }
+    // 证据型修订提示（仅回退重跑时由 slop-gate 写入 state；首次执行无此键 → 空串，prompt 与历史一致）。
+    const hint = getStateString(state, "slop_revision_hint");
     const prompt = [
       "你是中国专利说明书撰写专家（20 年资深代理师）。基于以下技术交底书分析结果与权利要求草稿，撰写专利说明书。",
       "要求：",
@@ -295,6 +297,9 @@ export class DraftSpecHandler implements StageHandler {
       "```",
       input.slice(0, 6000),
       "```",
+      // 断言安全的证据型修订提示（上一轮 slop-gate 的实际发现，不含分数/通过线；
+      // 仅在自动回退重跑时存在——重试提示基于证据而非公开答案，见 retry-hints.ts）。
+      ...(hint.trim().length > 0 ? ["【上一轮评审意见（仅修订参考）】", "```", hint, "```", ""] : []),
       "",
       '请严格输出 JSON：title 为发明名称，sections 为章节数组（name 取"技术领域/背景技术/发明内容/附图说明/具体实施方式/摘要"之一，content 为章节正文）。',
     ].join("\n");

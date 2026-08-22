@@ -307,6 +307,39 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     assert.ok(md.includes("新颖性单独对比原则"));
   });
 
+  it("runRuleGate 单元：无可评估产出（全降级）→ fail-explicit 不假装通过", () => {
+    const md = runRuleGate(
+      {
+        stages: [
+          { degraded: true, output: "[WORKFLOW_DEGRADED] draft_spec: LLM 调用失败" },
+          { degraded: true, output: "" },
+        ],
+        completed: false,
+        degradedSteps: ["draft_spec", "slop_clean"],
+      },
+      ["patent_disclosure"],
+    );
+    assert.ok(md.includes("无可评估产出"), `应明确不可评估: ${md}`);
+    assert.ok(md.includes("规则门跳过"), `应报告跳过: ${md}`);
+    assert.ok(!md.includes("✅ 通过"), "空产物不得报通过");
+  });
+
+  it("runRuleGate 单元：run 未完整完成但留下产出 → 照常评估并标注仅覆盖已完成部分", () => {
+    const md = runRuleGate(
+      {
+        stages: [
+          { degraded: false, output: "本发明具备新颖性，区别特征为双层真空结构。" },
+          { degraded: true, output: "" },
+        ],
+        completed: false,
+        degradedSteps: ["report"],
+      },
+      ["patent_novelty"],
+    );
+    assert.ok(md.includes("run 未完整完成"), `应标注部分评估: ${md}`);
+    assert.ok(md.includes("确定性门"), "留下产出时仍应执行规则门");
+  });
+
   it("patent_plan_task 工具：非法迁移返回错误而非抛错", async () => {
     const tool = createPatentPlanTaskTool();
     const res = await tool.execute(

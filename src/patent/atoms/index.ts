@@ -72,6 +72,9 @@ export {
   QualityGateHandler,
   slopGateAtom,
   SlopGateHandler,
+  clarityGateAtom,
+  ClarityGateHandler,
+  renderClarityReport,
   claimChartAtom,
   ClaimChartHandler,
   claimEmbodimentMapperAtom,
@@ -98,6 +101,7 @@ export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.approvalGateAtom);
   globalAtomRegistry.register(builtin.qualityGateAtom);
   globalAtomRegistry.register(builtin.slopGateAtom);
+  globalAtomRegistry.register(builtin.clarityGateAtom);
   globalAtomRegistry.register(builtin.claimChartAtom);
   globalAtomRegistry.register(builtin.claimEmbodimentMapperAtom);
 
@@ -114,6 +118,7 @@ export function registerBuiltinAtoms(): void {
   globalStageHandlerRegistry.register(new builtin.ApprovalGateHandler());
   globalStageHandlerRegistry.register(new builtin.QualityGateHandler());
   globalStageHandlerRegistry.register(new builtin.SlopGateHandler());
+  globalStageHandlerRegistry.register(new builtin.ClarityGateHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimChartHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimEmbodimentMapperHandler());
 }
