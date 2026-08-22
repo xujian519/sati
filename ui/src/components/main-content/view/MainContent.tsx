@@ -578,7 +578,7 @@ function SplitBody(props: SplitBodyProps) {
   // Skills, Routing, Memory, and Always-On are auxiliary dashboards paired
   // with chat. Files stays a separate explorer + artifact + assistant mode.
   const isPlugin = typeof activeTab === "string" && activeTab.startsWith("plugin:");
-  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks", "session-graph"]);
+  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks", "session-graph", "map"]);
   const isFullScreenTool = fullScreenToolTabs.has(activeTab) || isPlugin;
   const isDashboardPanel = DASHBOARD_PANEL_TABS.has(activeTab);
   const dashboardPanelTab = isDashboardPanel ? (activeTab as DashboardPanelTab) : null;
@@ -788,6 +788,21 @@ function SplitBody(props: SplitBodyProps) {
             selectedProject={selectedProject}
             selectedSession={selectedSession}
             isMobile={isMobile}
+            latestMessage={latestMessage}
+            onBackToChat={() => setActiveTab("chat")}
+            onNavigateToSession={onNavigateToSession}
+          />
+        </Suspense>
+      );
+    }
+    if (activeTab === "map") {
+      const MapTab = React.lazy(() => import("../../map/MapTab"));
+      return (
+        <Suspense fallback={<TabSkeleton />}>
+          <MapTab
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
+            _isMobile={isMobile}
             latestMessage={latestMessage}
             onBackToChat={() => setActiveTab("chat")}
             onNavigateToSession={onNavigateToSession}
