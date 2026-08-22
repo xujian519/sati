@@ -125,6 +125,21 @@ export function applyPersistedPositions(threads: MapThread[], positions: Map<str
   });
 }
 
+/**
+ * Lay out threads on the deterministic auto-grid, then overlay persisted
+ * (user-dragged) positions so a reload or refetch never clobbers the user's
+ * manual layout. Threads with a persisted position keep it; threads without
+ * one keep their grid slot.
+ */
+export function layoutThreads(
+  workspaces: MapWorkspace[],
+  threads: MapThread[],
+  positions: Map<string, Position>,
+): MapThread[] {
+  const grid = computeThreadLayout(workspaces, threads);
+  return applyPersistedPositions(grid, positions);
+}
+
 function sortWorkspacesDeterministic(workspaces: MapWorkspace[]): MapWorkspace[] {
   return [...workspaces].sort((a, b) => {
     if (a.name !== b.name) return a.name.localeCompare(b.name);

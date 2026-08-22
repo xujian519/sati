@@ -7,6 +7,7 @@ import {
   computeColumns,
   computeMapBounds,
   computeThreadLayout,
+  layoutThreads,
   WORKSPACE_AREA_PADDING,
   WORKSPACE_HEADER_HEIGHT,
 } from "./layout";
@@ -116,5 +117,31 @@ describe("buildThreadEdges", () => {
       makeThread({ id: "b", workspaceId: "ws1", parentId: "a" }),
     ]);
     expect(edges.length).toBe(1);
+  });
+});
+
+describe("layoutThreads", () => {
+  it("keeps persisted (dragged) positions over the auto-grid", () => {
+    const ws = makeWorkspace({ id: "ws1", name: "ws1" });
+    const a = makeThread({ id: "a", workspaceId: "ws1" });
+    const b = makeThread({ id: "b", workspaceId: "ws1" });
+    const positions = new Map([["a", { x: 500, y: 400 }]]);
+
+    const result = layoutThreads([ws], [a, b], positions);
+    const pa = result.find(t => t.id === "a")!;
+    const pb = result.find(t => t.id === "b")!;
+    expect(pa.position).toEqual({ x: 500, y: 400 });
+    expect(pb.position.x).toBeGreaterThanOrEqual(0);
+  });
+
+  it("places unpersisted threads on grid slots independently of order", () => {
+    const ws = makeWorkspace({ id: "ws1", name: "ws1" });
+    const a = makeThread({ id: "a", workspaceId: "ws1", title: "alpha" });
+    const b = makeThread({ id: "b", workspaceId: "ws1", title: "beta" });
+    const positions = new Map<string, { x: number; y: number }>();
+
+    const result = layoutThreads([ws], [b, a], positions);
+    // Deterministic sort by title → alpha first.
+    expect(result[0].id).toBe("a");
   });
 });

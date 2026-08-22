@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { MapThread } from "../types";
 
 export const CARD_WIDTH = 220;
@@ -16,6 +17,7 @@ export type MapCardProps = {
 };
 
 function MapCardRaw({ thread, selected, onMove, onClick }: MapCardProps) {
+  const { t } = useTranslation("map");
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -97,7 +99,7 @@ function MapCardRaw({ thread, selected, onMove, onClick }: MapCardProps) {
         style={{ fill: "currentColor" }}
         opacity={0.65}
       >
-        {thread.status}
+        {t(`status.${thread.status}`, { defaultValue: thread.status })}
       </text>
     </g>
   );

@@ -334,6 +334,7 @@ export class WorkspaceStore {
       const removedSet = new Set(removed);
       const hiddenSet = new Set(state.hiddenSessionIds);
       const currentSessionIds = new Set<string>();
+      const managedCwds = new Set<string | null>();
 
       for (const session of sessions) {
         if (!session || typeof session !== "object") continue;
@@ -341,6 +342,7 @@ export class WorkspaceStore {
           continue;
         }
         currentSessionIds.add(session.id);
+        managedCwds.add(session.cwd ?? null);
 
         let workspace = state.workspaces.find(w => w.kind === "project" && w.cwd === session.cwd);
         if (!workspace) {
@@ -386,11 +388,19 @@ export class WorkspaceStore {
         workspace.updatedAt = nowIso();
       }
 
+      // Explicit removals apply globally, but the "drop sessions not seen in this
+      // sync" prune must be scoped to the workspaces this sync actually manages
+      // (i.e. whose cwd was present in the incoming sessions).  Workspaces of
+      // other projects and manual workspaces are left untouched so a per-project
+      // sync never removes another project's threads.
       for (const workspace of state.workspaces) {
+        if (workspace.kind !== "project") continue;
+        const isManaged = managedCwds.has(workspace.cwd);
         workspace.threads = workspace.threads.filter(thread => {
           if (thread.sessionId === null) return true;
           if (hiddenSet.has(thread.sessionId)) return true;
           if (removedSet.has(thread.sessionId)) return false;
+          if (!isManaged) return true;
           return currentSessionIds.has(thread.sessionId);
         });
       }

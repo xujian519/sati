@@ -237,6 +237,35 @@ describe("WorkspaceStore", () => {
     }
   });
 
+  test("syncSessions does not remove threads of other projects", async () => {
+    const { store, cleanup } = makeStore();
+    try {
+      await store.syncSessions(
+        [
+          { id: "s1", title: "A1", cwd: "/project-a" },
+          { id: "s2", title: "A2", cwd: "/project-a" },
+        ],
+        [],
+      );
+
+      // Switch to project-b: this sync must NOT prune project-a's threads.
+      const { summaries, threads } = await store.syncSessions([{ id: "s3", title: "B1", cwd: "/project-b" }], []);
+      assert.equal(summaries.length, 2);
+
+      const a = summaries.find(s => s.cwd === "/project-a");
+      assert.ok(a);
+      assert.equal(a?.threadCount, 2);
+      const b = summaries.find(s => s.cwd === "/project-b");
+      assert.ok(b);
+      assert.equal(b?.threadCount, 1);
+
+      const aThreads = threads.filter(t => t.id === "s1" || t.id === "s2");
+      assert.equal(aThreads.length, 2);
+    } finally {
+      cleanup();
+    }
+  });
+
   test("syncSessions removes threads for removed sessions", async () => {
     const { store, cleanup } = makeStore();
     try {

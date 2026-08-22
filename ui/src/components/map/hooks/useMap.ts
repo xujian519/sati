@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Project, ProjectSession } from "../../../types/app";
 import { api, authenticatedFetch } from "../../../utils/api";
 import type { MapEdge, MapThread, MapWorkspace, Position } from "../types";
-import { applyPersistedPositions, buildThreadEdges, computeThreadLayout } from "../utils/layout";
+import { buildThreadEdges, layoutThreads } from "../utils/layout";
 
 const SESSION_PAGE_SIZE = 100;
 
@@ -86,7 +86,7 @@ function normalizeWorkspaces(raw: unknown[]): MapWorkspace[] {
       if (!item || typeof item !== "object") return null;
       const record = item as Record<string, unknown>;
       const id = String(record.id ?? "");
-      const name = String(record.name ?? record.cwd ?? id);
+      const name = String(record.title ?? record.name ?? record.cwd ?? id);
       const cwd = String(record.cwd ?? name);
       if (!id) return null;
       return {
@@ -221,11 +221,9 @@ export function useMap(project: Project | null): UseMapResult {
   const [error, setError] = useState<Error | null>(null);
   const [version, setVersion] = useState(0);
   const positionsRef = useRef<Map<string, Position>>(new Map());
-  const layoutAppliedRef = useRef(false);
 
   useEffect(() => {
     setThreads([]);
-    layoutAppliedRef.current = false;
     if (!projectName) {
       positionsRef.current = new Map();
     } else {
@@ -249,8 +247,6 @@ export function useMap(project: Project | null): UseMapResult {
         setWorkspaces(fetchedWorkspaces);
         setThreads([]);
       }
-
-      layoutAppliedRef.current = false;
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
@@ -264,21 +260,10 @@ export function useMap(project: Project | null): UseMapResult {
 
   const positionedThreads = useMemo(() => {
     void version;
-    let next = applyPersistedPositions(threads, positionsRef.current);
-
-    if (!layoutAppliedRef.current) {
-      next = computeThreadLayout(workspaces, next);
-      layoutAppliedRef.current = true;
-      for (const thread of next) {
-        positionsRef.current.set(thread.id, { x: thread.position.x, y: thread.position.y });
-      }
-      if (projectName) {
-        savePersistedPositions(projectName, positionsRef.current);
-      }
-    }
-
-    return next;
-  }, [threads, workspaces, version, projectName]);
+    // Always lay out an auto-grid, then overlay persisted (user-dragged)
+    // positions so a reload/refetch never clobbers the user's manual layout.
+    return layoutThreads(workspaces, threads, positionsRef.current);
+  }, [threads, workspaces, version]);
 
   const edges = useMemo<MapEdge[]>(() => buildThreadEdges(positionedThreads), [positionedThreads]);
 
@@ -299,7 +284,6 @@ export function useMap(project: Project | null): UseMapResult {
   );
 
   const refetch = useCallback(() => {
-    layoutAppliedRef.current = false;
     void load();
   }, [load]);
 

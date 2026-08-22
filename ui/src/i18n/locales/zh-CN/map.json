@@ -18,5 +18,10 @@
     "reset": "重置视图",
     "backToChat": "回到聊天",
     "locateSession": "定位当前会话"
+  },
+  "status": {
+    "idle": "空闲",
+    "processing": "处理中",
+    "interrupted": "已中断"
   }
 }

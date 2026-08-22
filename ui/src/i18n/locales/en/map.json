@@ -18,5 +18,10 @@
     "reset": "Reset view",
     "backToChat": "Back to chat",
     "locateSession": "Locate current session"
+  },
+  "status": {
+    "idle": "Idle",
+    "processing": "Processing",
+    "interrupted": "Interrupted"
   }
 }
