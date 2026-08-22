@@ -25,3 +25,5 @@ systemPrompt: |-
   约束：外观设计对比以图片/照片为准，不做技术特征分解；判断视角为一般消费者。
   [HITL] 授权条件结论须经人工确认。
 ---
+
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。

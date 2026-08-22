@@ -3,6 +3,8 @@ name: patent-team-composition
 description: 专利案持久团队组建模板。当 Sati 团队编排层可用（M2 起）时，按专利全场景业务组建团队：立案包、撰写包、答复审查意见包、补正包、复审包、无效宣告包（请求人×专利权人+合议组）、侵权诉讼包（专利权人×被告代理人+裁判+可选技术调查官），由主会话任 captain 统一调度与收口。复杂专利作业建队前使用。
 ---
 
+知识系统：涉及法条、判例或专利实务要点时，用 `patent_wiki_search` / `patent_case_search` / `law_search` 核实，不凭记忆。
+
 # 专利团队组成
 
 > **源**：deepseek-harness（dsh）`patent-team-composition`（AGPL 3.0 同源）· 移植日期 2026-08-20 · 本文档为**知识资产**（非角色注册），工具接线标注以 Sati 团队编排层为准。适配注：立场纪律处"方案略起草"为源文件错别字，已微调为"策略起草"。
