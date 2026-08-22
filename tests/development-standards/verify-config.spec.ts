@@ -1,4 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -48,4 +50,29 @@ test("根 tsconfig 编译器底线开关不被放宽", () => {
 test("UI tsconfig 编译器底线开关不被放宽", () => {
   const opts = readCompilerOptions("ui/tsconfig.json");
   assert.strictEqual(opts.strict, true, "ui strict 必须保持 true");
+});
+
+// 门禁自测（证明"它真的会红"）：用与项目相同的编译器底线开关编译一个违规 fixture，
+// 断言 tsc 非零退出。这验证上述两个开关不是"配置写对了但没在拦"的空转。
+test("typecheck 门禁真的会拦：编译器底线开关对违规报错（自测会红）", () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-verify-"));
+  const fixture = join(dir, "fixture.ts");
+  const tsc = join(repoRoot(), "node_modules", ".bin", "tsc");
+  try {
+    // noFallthroughCasesInSwitch：case 1 穿透到 case 2（无 break）应被拒绝。
+    writeFileSync(
+      fixture,
+      "function f(n: number): void { switch (n) { case 1: console.log('a'); case 2: console.log('b'); } }\n",
+    );
+    const fallthrough = spawnSync(tsc, ["--noEmit", "--noFallthroughCasesInSwitch", fixture], { encoding: "utf8" });
+    assert.ok(fallthrough.status !== 0, "tsc 应在 --noFallthroughCasesInSwitch 下拒绝穿透的 switch");
+    assert.match(String(fallthrough.stdout), /error TS/, "tsc 应输出 error TS…（诊断写 stdout）");
+    // strict（strictNullChecks）：把 null 赋给 string 应被拒绝。
+    writeFileSync(fixture, "const s: string = null;\n");
+    const strict = spawnSync(tsc, ["--noEmit", "--strict", fixture], { encoding: "utf8" });
+    assert.ok(strict.status !== 0, "tsc 应在 --strict 下拒绝 null 赋给 string");
+    assert.match(String(strict.stdout), /error TS/, "tsc 应输出 error TS…（诊断写 stdout）");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
