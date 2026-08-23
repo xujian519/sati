@@ -89,15 +89,15 @@ export class RemoteGateway implements Gateway {
   }
 
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
-    return (await this.client.request("list_sessions", input)) as ListSessionsResult;
+    return this.client.request<ListSessionsResult>("list_sessions", input);
   }
 
   async resumeSession(input: { sessionKey: string }): Promise<{ sessionKey: string }> {
-    return (await this.client.request("resume_session", input)) as { sessionKey: string };
+    return this.client.request<{ sessionKey: string }>("resume_session", input);
   }
 
   async newSession(input: NewSessionInput): Promise<{ sessionKey: string }> {
-    return (await this.client.request("new_session", input)) as { sessionKey: string };
+    return this.client.request<{ sessionKey: string }>("new_session", input);
   }
 
   async closeSession(input: { sessionKey: string; reason?: string }): Promise<void> {
@@ -107,52 +107,49 @@ export class RemoteGateway implements Gateway {
   async recordAgentStatusMessage(
     input: import("../protocol/types.js").GatewayRecordAgentStatusMessageInput,
   ): Promise<{ recorded: boolean }> {
-    return (await this.client.request("record_agent_status_message", input)) as { recorded: boolean };
+    return this.client.request<{ recorded: boolean }>("record_agent_status_message", input);
   }
 
   async describeServer(): Promise<GatewayServerInfo> {
-    return (await this.client.request("describe_server", {})) as GatewayServerInfo;
+    return this.client.request<GatewayServerInfo>("describe_server", {});
   }
 
   async getActiveTurnSnapshot(
     input: import("../protocol/types.js").GatewayActiveTurnSnapshotInput,
   ): Promise<import("../protocol/types.js").GatewayActiveTurnSnapshot> {
-    return (await this.client.request(
-      "active_turn_snapshot",
-      input,
-    )) as import("../protocol/types.js").GatewayActiveTurnSnapshot;
+    return this.client.request<import("../protocol/types.js").GatewayActiveTurnSnapshot>("active_turn_snapshot", input);
   }
 
   async cronCreate(input: CronCreateInput): Promise<CronCreateResult> {
-    return (await this.client.request("cron_create", input)) as CronCreateResult;
+    return this.client.request<CronCreateResult>("cron_create", input);
   }
 
   async cronUpdate(input: CronUpdateInput): Promise<CronUpdateResult> {
-    return (await this.client.request("cron_update", input)) as CronUpdateResult;
+    return this.client.request<CronUpdateResult>("cron_update", input);
   }
 
   async cronList(input: CronListInput): Promise<CronListResult> {
-    return (await this.client.request("cron_list", input)) as CronListResult;
+    return this.client.request<CronListResult>("cron_list", input);
   }
 
   async cronDelete(input: CronDeleteInput): Promise<CronDeleteResult> {
-    return (await this.client.request("cron_delete", input)) as CronDeleteResult;
+    return this.client.request<CronDeleteResult>("cron_delete", input);
   }
 
   async cronStop(input: CronStopInput): Promise<CronStopResult> {
-    return (await this.client.request("cron_stop", input)) as CronStopResult;
+    return this.client.request<CronStopResult>("cron_stop", input);
   }
 
   async cronRunNow(input: CronRunNowInput): Promise<CronRunNowResult> {
-    return (await this.client.request("cron_run_now", input)) as CronRunNowResult;
+    return this.client.request<CronRunNowResult>("cron_run_now", input);
   }
 
   async panelHeartbeat(input: { sessionKeys: string[] }): Promise<{ touched: number }> {
-    return (await this.client.request("panel_heartbeat", input)) as { touched: number };
+    return this.client.request<{ touched: number }>("panel_heartbeat", input);
   }
 
   async teamPanelSnapshot(input: { sessionKey?: string }): Promise<{ teams: unknown[] }> {
-    return (await this.client.request("team_panel_snapshot", input)) as { teams: unknown[] };
+    return this.client.request<{ teams: unknown[] }>("team_panel_snapshot", input);
   }
 
   async teamToolCall(input: {
@@ -160,45 +157,45 @@ export class RemoteGateway implements Gateway {
     input: Record<string, unknown>;
     sessionKey?: string;
   }): Promise<{ ok: boolean; data?: unknown; error?: { code: string; message: string } }> {
-    return (await this.client.request("team_tool_call", input)) as {
+    return this.client.request<{
       ok: boolean;
       data?: unknown;
       error?: { code: string; message: string };
-    };
+    }>("team_tool_call", input);
   }
 
   async respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }> {
-    return (await this.client.request("elicitation_respond", input)) as { delivered: boolean };
+    return this.client.request<{ delivered: boolean }>("elicitation_respond", input);
   }
 
   async permissionDecide(input: GatewayPermissionDecisionInput): Promise<{ delivered: boolean }> {
-    return (await this.client.request("permission_decide", input)) as { delivered: boolean };
+    return this.client.request<{ delivered: boolean }>("permission_decide", input);
   }
 
   async grantSessionPermission(
     input: import("../protocol/types.js").GatewaySessionPermissionGrantInput,
   ): Promise<{ granted: boolean; entry?: string }> {
-    return (await this.client.request("grant_session_permission", input)) as { granted: boolean; entry?: string };
+    return this.client.request<{ granted: boolean; entry?: string }>("grant_session_permission", input);
   }
 
   async readSessionMessages(input: WebReadSessionMessagesInput): Promise<WebReadSessionMessagesResult> {
-    return (await this.client.request("read_session_messages", input)) as WebReadSessionMessagesResult;
+    return this.client.request<WebReadSessionMessagesResult>("read_session_messages", input);
   }
 
   async readSubagentMessages(input: WebReadSubagentMessagesInput): Promise<WebReadSubagentMessagesResult> {
-    return (await this.client.request("read_subagent_messages", input)) as WebReadSubagentMessagesResult;
+    return this.client.request<WebReadSubagentMessagesResult>("read_subagent_messages", input);
   }
 
   async forkSession(input: WebForkSessionInput): Promise<WebForkSessionResult> {
-    return (await this.client.request("fork_session", input)) as WebForkSessionResult;
+    return this.client.request<WebForkSessionResult>("fork_session", input);
   }
 
   async listProjects(): Promise<WebListProjectsResult> {
-    return (await this.client.request("list_projects", {})) as WebListProjectsResult;
+    return this.client.request<WebListProjectsResult>("list_projects", {});
   }
 
   async describeProject(input: WebDescribeProjectInput): Promise<WebProjectSummary> {
-    return (await this.client.request("describe_project", input)) as WebProjectSummary;
+    return this.client.request<WebProjectSummary>("describe_project", input);
   }
 
   async reloadConfig(): Promise<ReloadConfigResult> {
@@ -206,75 +203,75 @@ export class RemoteGateway implements Gateway {
   }
 
   async prepareWeixinLogin(): Promise<PrepareWeixinLoginResult> {
-    return (await this.client.request("prepare_weixin_login", {})) as PrepareWeixinLoginResult;
+    return this.client.request<PrepareWeixinLoginResult>("prepare_weixin_login", {});
   }
 
   async reloadExtensions(input: ReloadExtensionsInput = {}): Promise<ReloadExtensionsResult> {
-    return (await this.client.request("reload_extensions", input)) as ReloadExtensionsResult;
+    return this.client.request<ReloadExtensionsResult>("reload_extensions", input);
   }
 
   async skillsList(input: SkillsListInput): Promise<SkillsListResult> {
-    return (await this.client.request("skill_list", input)) as SkillsListResult;
+    return this.client.request<SkillsListResult>("skill_list", input);
   }
 
   async skillRead(input: SkillAddressInput): Promise<SkillReadResult> {
-    return (await this.client.request("skill_read", input)) as SkillReadResult;
+    return this.client.request<SkillReadResult>("skill_read", input);
   }
 
   async skillWrite(input: SkillWriteInput): Promise<SkillWriteResult> {
-    return (await this.client.request("skill_write", input)) as SkillWriteResult;
+    return this.client.request<SkillWriteResult>("skill_write", input);
   }
 
   async skillCreate(input: SkillCreateInput): Promise<SkillCreateResult> {
-    return (await this.client.request("skill_create", input)) as SkillCreateResult;
+    return this.client.request<SkillCreateResult>("skill_create", input);
   }
 
   async skillDelete(input: SkillDeleteInput): Promise<SkillDeleteResult> {
-    return (await this.client.request("skill_delete", input)) as SkillDeleteResult;
+    return this.client.request<SkillDeleteResult>("skill_delete", input);
   }
 
   async skillImport(input: SkillImportInput): Promise<SkillImportResult> {
-    return (await this.client.request("skill_import", input)) as SkillImportResult;
+    return this.client.request<SkillImportResult>("skill_import", input);
   }
 
   async skillValidate(input: SkillValidateInput): Promise<SkillValidationResult> {
-    return (await this.client.request("skill_validate", input)) as SkillValidationResult;
+    return this.client.request<SkillValidationResult>("skill_validate", input);
   }
 
   async skillScan(input: SkillScanInput): Promise<SkillScanResult> {
-    return (await this.client.request("skill_scan", input)) as SkillScanResult;
+    return this.client.request<SkillScanResult>("skill_scan", input);
   }
 
   async alwaysOnApply(input: AlwaysOnApplyInput): Promise<AlwaysOnApplyResult> {
-    return (await this.client.request("always_on_apply", input)) as AlwaysOnApplyResult;
+    return this.client.request<AlwaysOnApplyResult>("always_on_apply", input);
   }
 
   async alwaysOnRerunPlan(input: AlwaysOnRerunPlanInput): Promise<AlwaysOnRerunPlanResult> {
-    return (await this.client.request("always_on_rerun_plan", input)) as AlwaysOnRerunPlanResult;
+    return this.client.request<AlwaysOnRerunPlanResult>("always_on_rerun_plan", input);
   }
 
   async alwaysOnListPlans(input: AlwaysOnListPlansInput): Promise<AlwaysOnListPlansResult> {
-    return (await this.client.request("always_on_list_plans", input)) as AlwaysOnListPlansResult;
+    return this.client.request<AlwaysOnListPlansResult>("always_on_list_plans", input);
   }
 
   async alwaysOnReadReport(input: AlwaysOnReadReportInput): Promise<AlwaysOnReadReportResult> {
-    return (await this.client.request("always_on_read_report", input)) as AlwaysOnReadReportResult;
+    return this.client.request<AlwaysOnReadReportResult>("always_on_read_report", input);
   }
 
   async alwaysOnListCycles(input: AlwaysOnListCyclesInput): Promise<AlwaysOnListCyclesResult> {
-    return (await this.client.request("always_on_list_cycles", input)) as AlwaysOnListCyclesResult;
+    return this.client.request<AlwaysOnListCyclesResult>("always_on_list_cycles", input);
   }
 
   async alwaysOnArchiveCycle(input: AlwaysOnArchiveCycleInput): Promise<AlwaysOnArchiveCycleResult> {
-    return (await this.client.request("always_on_archive_cycle", input)) as AlwaysOnArchiveCycleResult;
+    return this.client.request<AlwaysOnArchiveCycleResult>("always_on_archive_cycle", input);
   }
 
   async alwaysOnApplyCycle(input: AlwaysOnApplyCycleInput): Promise<AlwaysOnApplyCycleResult> {
-    return (await this.client.request("always_on_apply_cycle", input)) as AlwaysOnApplyCycleResult;
+    return this.client.request<AlwaysOnApplyCycleResult>("always_on_apply_cycle", input);
   }
 
   async knowledgeCapabilities(input: KnowledgeCapabilitiesInput): Promise<KnowledgeCapabilitiesResult> {
-    return (await this.client.request("knowledge_capabilities", input)) as KnowledgeCapabilitiesResult;
+    return this.client.request<KnowledgeCapabilitiesResult>("knowledge_capabilities", input);
   }
 }
 
