@@ -1320,13 +1320,118 @@ router.post("/parse-prd/:projectName", async (req, res) => {
 router.get("/prd-templates", async (req, res) => {
   try {
     // Return built-in templates
-    const templates = [
-      {
-        id: "web-app",
-        name: "Web Application",
-        description: "Template for web application projects with frontend and backend components",
-        category: "web",
-        content: `# Product Requirements Document - Web Application
+    const templates = await getAvailableTemplates();
+
+    res.json({
+      templates,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("PRD templates error:", error);
+    res.status(500).json({
+      error: "Failed to get PRD templates",
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/taskmaster/apply-template/:projectName
+ * Apply a PRD template to create a new PRD file
+ */
+router.post("/apply-template/:projectName", async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const { templateId, fileName = "prd.txt", customizations = {} } = req.body;
+
+    if (!templateId) {
+      return res.status(400).json({
+        error: "Missing required parameter",
+        message: "templateId is required",
+      });
+    }
+
+    // Get project path
+    let projectPath;
+    try {
+      projectPath = await extractProjectDirectory(projectName);
+    } catch {
+      return res.status(404).json({
+        error: "Project not found",
+        message: `Project "${projectName}" does not exist`,
+      });
+    }
+
+    // Get the template content (this would normally fetch from the templates list)
+    const templates = await getAvailableTemplates();
+    const template = templates.find(t => t.id === templateId);
+
+    if (!template) {
+      return res.status(404).json({
+        error: "Template not found",
+        message: `Template "${templateId}" does not exist`,
+      });
+    }
+
+    // Apply customizations to template content
+    let content = template.content;
+
+    // Replace placeholders with customizations
+    for (const [key, value] of Object.entries(customizations)) {
+      const placeholder = `[${key}]`;
+      content = content.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&"), "g"), value);
+    }
+
+    // Ensure .taskmaster/docs directory exists
+    const docsDir = path.join(projectPath, ".taskmaster", "docs");
+    try {
+      await fsPromises.mkdir(docsDir, { recursive: true });
+    } catch (error) {
+      console.error("Failed to create docs directory:", error);
+    }
+
+    const filePath = path.join(docsDir, fileName);
+
+    // Write the template content to the file
+    try {
+      await fsPromises.writeFile(filePath, content, "utf8");
+
+      res.json({
+        projectName,
+        projectPath,
+        templateId,
+        templateName: template.name,
+        fileName,
+        filePath: filePath,
+        message: "PRD template applied successfully",
+        timestamp: new Date().toISOString(),
+      });
+    } catch (writeError) {
+      console.error("Failed to write PRD template:", writeError);
+      return res.status(500).json({
+        error: "Failed to write PRD template",
+        message: writeError.message,
+      });
+    }
+  } catch (error) {
+    console.error("Apply template error:", error);
+    res.status(500).json({
+      error: "Failed to apply PRD template",
+      message: error.message,
+    });
+  }
+});
+
+// Helper function to get available templates
+async function getAvailableTemplates() {
+  // This could be extended to read from files or database
+  return [
+    {
+      id: "web-app",
+      name: "Web Application",
+      description: "Template for web application projects with frontend and backend components",
+      category: "web",
+      content: `# Product Requirements Document - Web Application
 
 ## Overview
 **Product Name:** [Your App Name]
@@ -1395,13 +1500,13 @@ Brief description of what this web application will do and why it's needed.
 - Technical limitations
 - Team size and expertise
 - Timeline constraints`,
-      },
-      {
-        id: "api",
-        name: "REST API",
-        description: "Template for REST API development projects",
-        category: "backend",
-        content: `# Product Requirements Document - REST API
+    },
+    {
+      id: "api",
+      name: "REST API",
+      description: "Template for REST API development projects",
+      category: "backend",
+      content: `# Product Requirements Document - REST API
 
 ## Overview
 **API Name:** [Your API Name]
@@ -1497,13 +1602,13 @@ Description of the API's purpose, target users, and primary use cases.
 - Average response time < 200ms
 - Zero critical security vulnerabilities
 - Developer adoption metrics`,
-      },
-      {
-        id: "mobile-app",
-        name: "Mobile Application",
-        description: "Template for mobile app development projects (iOS/Android)",
-        category: "mobile",
-        content: `# Product Requirements Document - Mobile Application
+    },
+    {
+      id: "mobile-app",
+      name: "Mobile Application",
+      description: "Template for mobile app development projects (iOS/Android)",
+      category: "mobile",
+      content: `# Product Requirements Document - Mobile Application
 
 ## Overview
 **App Name:** [Your App Name]
@@ -1613,13 +1718,13 @@ Brief description of the mobile app's purpose, target audience, and key value pr
 - Daily/Monthly active users
 - App performance metrics
 - Conversion rates`,
-      },
-      {
-        id: "data-analysis",
-        name: "Data Analysis Project",
-        description: "Template for data analysis and visualization projects",
-        category: "data",
-        content: `# Product Requirements Document - Data Analysis Project
+    },
+    {
+      id: "data-analysis",
+      name: "Data Analysis Project",
+      description: "Template for data analysis and visualization projects",
+      category: "data",
+      content: `# Product Requirements Document - Data Analysis Project
 
 ## Overview
 **Project Name:** [Your Analysis Project]
@@ -1741,146 +1846,7 @@ Description of the business problem, data sources, and expected insights.
 - Accuracy of predictions (if applicable)
 - Business impact of recommendations
 - Reproducibility of results`,
-      },
-    ];
-
-    res.json({
-      templates,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    console.error("PRD templates error:", error);
-    res.status(500).json({
-      error: "Failed to get PRD templates",
-      message: error.message,
-    });
-  }
-});
-
-/**
- * POST /api/taskmaster/apply-template/:projectName
- * Apply a PRD template to create a new PRD file
- */
-router.post("/apply-template/:projectName", async (req, res) => {
-  try {
-    const { projectName } = req.params;
-    const { templateId, fileName = "prd.txt", customizations = {} } = req.body;
-
-    if (!templateId) {
-      return res.status(400).json({
-        error: "Missing required parameter",
-        message: "templateId is required",
-      });
-    }
-
-    // Get project path
-    let projectPath;
-    try {
-      projectPath = await extractProjectDirectory(projectName);
-    } catch {
-      return res.status(404).json({
-        error: "Project not found",
-        message: `Project "${projectName}" does not exist`,
-      });
-    }
-
-    // Get the template content (this would normally fetch from the templates list)
-    const templates = await getAvailableTemplates();
-    const template = templates.find(t => t.id === templateId);
-
-    if (!template) {
-      return res.status(404).json({
-        error: "Template not found",
-        message: `Template "${templateId}" does not exist`,
-      });
-    }
-
-    // Apply customizations to template content
-    let content = template.content;
-
-    // Replace placeholders with customizations
-    for (const [key, value] of Object.entries(customizations)) {
-      const placeholder = `[${key}]`;
-      content = content.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&"), "g"), value);
-    }
-
-    // Ensure .taskmaster/docs directory exists
-    const docsDir = path.join(projectPath, ".taskmaster", "docs");
-    try {
-      await fsPromises.mkdir(docsDir, { recursive: true });
-    } catch (error) {
-      console.error("Failed to create docs directory:", error);
-    }
-
-    const filePath = path.join(docsDir, fileName);
-
-    // Write the template content to the file
-    try {
-      await fsPromises.writeFile(filePath, content, "utf8");
-
-      res.json({
-        projectName,
-        projectPath,
-        templateId,
-        templateName: template.name,
-        fileName,
-        filePath: filePath,
-        message: "PRD template applied successfully",
-        timestamp: new Date().toISOString(),
-      });
-    } catch (writeError) {
-      console.error("Failed to write PRD template:", writeError);
-      return res.status(500).json({
-        error: "Failed to write PRD template",
-        message: writeError.message,
-      });
-    }
-  } catch (error) {
-    console.error("Apply template error:", error);
-    res.status(500).json({
-      error: "Failed to apply PRD template",
-      message: error.message,
-    });
-  }
-});
-
-// Helper function to get available templates
-async function getAvailableTemplates() {
-  // This could be extended to read from files or database
-  return [
-    {
-      id: "web-app",
-      name: "Web Application",
-      description: "Template for web application projects",
-      category: "web",
-      content: `# Product Requirements Document - Web Application
-
-## Overview
-**Product Name:** [Your App Name]
-**Version:** 1.0
-**Date:** ${new Date().toISOString().split("T")[0]}
-**Author:** [Your Name]
-
-## Executive Summary
-Brief description of what this web application will do and why it's needed.
-
-## User Stories
-1. As a user, I want [feature] so I can [benefit]
-2. As a user, I want [feature] so I can [benefit]
-3. As a user, I want [feature] so I can [benefit]
-
-## Technical Requirements
-- Frontend framework
-- Backend services
-- Database requirements
-- Security considerations
-
-## Success Metrics
-- User engagement metrics
-- Performance benchmarks
-- Business objectives`,
     },
-    // Add other templates here if needed
   ];
 }
 
