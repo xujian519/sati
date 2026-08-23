@@ -1103,6 +1103,8 @@
 
 ### C. 修复排期建议（Phase 3 → Phase 4）
 
+> 后续批次专项排期（阶段化顺序 / 爆炸半径 / 浏览器验证 / 硬截止）见 `docs/technical-debt/next-batches-schedule.md`。
+
 **立即（P0–P1，短平快，优先做）** — ✅ 1–3 已全部落地（2026-08-23）
 1. 安全：`mcp` 路径穿越读盘（MCP-N02）→ resolvePath 加 `cwd` 包含校验；`permission` 损坏→权限绕过（PERMISSION-N02）→ 损坏时 fail-safe 到 `skipPermissions:false`；`desktop` 端口误杀（DESKTOP-N03）→ 先 `isSatiRuntimeProcess` 校验。✅
 2. 数据一致性：`workflow_failed.error` 用错步骤 id（WORKFLOW-N04）；`ui/server` PRD 模板双份漂移（UISERVER-N05）；`cron` 损坏 tasks.json 被清空（CRON-N02）。✅

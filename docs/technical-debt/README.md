@@ -12,6 +12,7 @@
 |---|---|
 | `backlog.md` | 债务清单（活账本），按模块分节，每条含严重级/位置/影响/建议/状态 |
 | `metrics.md` | 可复现指标基线与趋势（由 `scripts/measure-techdebt.mjs` 生成） |
+| `next-batches-schedule.md` | 后续批次专项排期建议（阶段化顺序、爆炸半径、浏览器验证、硬截止） |
 | `README.md` | 本文件：方法论、清分级规则、如何保持新鲜 |
 
 ## 审计方法论
