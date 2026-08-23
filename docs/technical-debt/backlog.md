@@ -18,7 +18,12 @@
 - **TD-TYPE-002** · 强转/断言债（`as never` / `as XResult` / `as unknown as X` / `as string[]` / `!`）
   - 位置：`gateway/GatewayWsConnection.ts`（43 处 `as never`）、`gateway/client/RemoteGateway.ts`（30 处 `as XResult`）、`model/streaming/streamModel.ts:355-361` 与 `providers/google/request.ts:107`（`as unknown as X` 双强转）、`patent/provenance/provenance-store.ts:250` 与 `evidence/receipt.ts:224`（`as unknown as X`）、`router/config/parseRouterConfig.ts`（4 处 `as string[]`）
   - 影响：让入参/结果/DB 行在编译期失去形状校验，字段错名/类型错位运行时才暴露。
-  - 工作量：L · 严重级：P1 · 状态：triaged
+  - 工作量：L · 严重级：P1 · 状态：**in_progress（2026-08-23 partial）**
+  - 2026-08-23 清理结果（分步见 `docs/type-assertion-cleanup-plan.md`）：
+    - ✅ 已消除：`gateway/client/RemoteGateway.ts` 30 处 `as XResult` → `request<T>` 泛型化（新增 `GatewayWsClient.request<T>`）；`model/providers/google/request.ts:107` 与 `model/streaming/streamModel.ts:355-361` 两处 `as unknown as X` 双强转。
+      - ⚠️ 隐性收益：`google/request.ts` 原 `as unknown as thinkingConfig` 会把小写 `"low"|"medium"|"high"` 直接发给 Gemini 2.5 API，而 SDK 期望大写枚举 `ThinkingLevel.LOW/MEDIUM/HIGH`；已改为显式映射 `GOOGLE_THINKING_LEVEL`，修正了实际序列化值。
+    - 🔒 **保留为必要收窄（won't-fix，非可消除债）**：`knowledge/**` 40 处 `as X[]`（node:sqlite `all()/get()` 无泛型，驱动边界收窄）；`provenance-store.ts:250` 与 `evidence/receipt.ts:224`（`JSON.parse` 断言 + 字段 typeof 守卫，属防御性收窄）；`GatewayWsConnection.ts` 43 处 `as never`（gateway 方法参数擦除泛型边界，需按 method 建参数守卫表，工作量 L 单独排期）；`parseRouterConfig.ts` 4 处 `as string[]`（前置 `Array.isArray + typeof` 守卫后的必要收窄）；`askModeConstraints.ts`/`userInteractionConstraints.ts`/`createLocalGateway.ts`/`proxy.ts` 的 `as never`（存在性探测或跨库/跨泛型边界收窄）。
+    - 结论：本次收敛聚焦**真正可消除且每处有安全收益**的断言；被判定为边界必要收窄的点不强行"消除"（避免把 `as` 挪进 helper 藏起来，或引入新抽象——自身即新的 accidental complexity）。
 
 ### 错误&可观测
 - **TD-CONSOLE-001** · 裸 `console.*` 267 处，`cli` 191 处最热
