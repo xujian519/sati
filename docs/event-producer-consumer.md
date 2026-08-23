@@ -39,12 +39,12 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | model_event | src/agent/loop/AgentLoop.ts:474 | src/gateway/client/InProcessGateway.ts:496 |
 | model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:496 |
 | model_request_started | src/agent/loop/AgentLoop.ts:379 | src/gateway/client/InProcessGateway.ts:496, submitTurn 流 ×28 |
-| permission_denied | src/tool/execution/ToolRuntime.ts:264 | src/gateway/client/InProcessGateway.ts:496 |
+| permission_denied | src/tool/execution/ToolRuntime.ts:265 | src/gateway/client/InProcessGateway.ts:496 |
 | permission_request | src/gateway/permission/createGatewayPermissionHook.ts:80 | submitTurn 流 ×28 |
-| permission_requested | src/tool/execution/ToolRuntime.ts:221 | src/gateway/client/InProcessGateway.ts:496 |
+| permission_requested | src/tool/execution/ToolRuntime.ts:222 | src/gateway/client/InProcessGateway.ts:496 |
 | plan_mode_changed | - | submitTurn 流 ×28 |
-| post_tool_execute | src/tool/execution/ToolRuntime.ts:349, src/tool/execution/ToolRuntime.ts:405 | src/gateway/client/InProcessGateway.ts:496 |
-| pre_tool_execute | src/tool/execution/ToolRuntime.ts:146 | src/gateway/client/InProcessGateway.ts:496 |
+| post_tool_execute | src/tool/execution/ToolRuntime.ts:350, src/tool/execution/ToolRuntime.ts:406 | src/gateway/client/InProcessGateway.ts:496 |
+| pre_tool_execute | src/tool/execution/ToolRuntime.ts:147 | src/gateway/client/InProcessGateway.ts:496 |
 | retry_progress | - | src/gateway/client/InProcessGateway.ts:496 |
 | session_aborted | - | src/gateway/client/InProcessGateway.ts:496 |
 | session_ended | src/agent/session/AgentSession.ts:137 | src/gateway/client/InProcessGateway.ts:496 |
