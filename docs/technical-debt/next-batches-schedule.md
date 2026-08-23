@@ -37,7 +37,7 @@
 ### 阶段一 · 低风险机械收口（优先做）
 **#163 类型强转收敛（P1）**：本质机械、`typecheck` 即自验证、无 UI、爆炸半径小，ROI 最高。按模块切片，每片独立 PR：
 
-1. `gateway/GatewayWsConnection.ts` `as never`(43) → 用 `unknown` + 收窄守卫；
+1. `gateway/GatewayWsConnection.ts` `as never`(43) → **已做**：改 `as GatewayMethodParams<"...">` 具名断言（`typecheck` 自验证，B2 2026-08-23，见 `tests/gateway/server/dispatch.spec.ts`）；**待做**：按 method 参数守卫（方案 B，TD-GATEWAY-002）；
 2. `gateway/client/RemoteGateway.ts` `as XResult`(~30) → 引入 `isXResult` 类守卫或精确结果类型；
 3. `knowledge/**` DB 行 `as X`(29) → 行类型（替代裸 `as X`）；
 4. `model/streaming` · `providers/google` · `patent/provenance` · `evidence/receipt` `as unknown as X` → 类型守卫。

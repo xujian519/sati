@@ -22,7 +22,8 @@
   - 2026-08-23 清理结果（分步见 `docs/type-assertion-cleanup-plan.md`）：
     - ✅ 已消除：`gateway/client/RemoteGateway.ts` 30 处 `as XResult` → `request<T>` 泛型化（新增 `GatewayWsClient.request<T>`）；`model/providers/google/request.ts:107` 与 `model/streaming/streamModel.ts:355-361` 两处 `as unknown as X` 双强转。
       - ⚠️ 隐性收益：`google/request.ts` 原 `as unknown as thinkingConfig` 会把小写 `"low"|"medium"|"high"` 直接发给 Gemini 2.5 API，而 SDK 期望大写枚举 `ThinkingLevel.LOW/MEDIUM/HIGH`；已改为显式映射 `GOOGLE_THINKING_LEVEL`，修正了实际序列化值。
-    - 🔒 **保留为必要收窄（won't-fix，非可消除债）**：`knowledge/**` 40 处 `as X[]`（node:sqlite `all()/get()` 无泛型，驱动边界收窄）；`provenance-store.ts:250` 与 `evidence/receipt.ts:224`（`JSON.parse` 断言 + 字段 typeof 守卫，属防御性收窄）；`GatewayWsConnection.ts` 43 处 `as never`（gateway 方法参数擦除泛型边界，需按 method 建参数守卫表，工作量 L 单独排期）；`parseRouterConfig.ts` 4 处 `as string[]`（前置 `Array.isArray + typeof` 守卫后的必要收窄）；`askModeConstraints.ts`/`userInteractionConstraints.ts`/`createLocalGateway.ts`/`proxy.ts` 的 `as never`（存在性探测或跨库/跨泛型边界收窄）。
+    - 🟡 已消除（2026-08-23 B2 批次）：`GatewayWsConnection.ts` 43 处 `as never` → `as GatewayMethodParams<"...">`（从 `Gateway` 接口推导首参类型的具名断言；消除底部类型滥用，`typecheck` 即自验证，见 `tests/gateway/server/dispatch.spec.ts`）。运行期参数校验仍未接线（见 TD-GATEWAY-002，后续按 method 建守卫）。
+    - 🔒 **保留为必要收窄（won't-fix，非可消除债）**：`knowledge/**` 40 处 `as X[]`（node:sqlite `all()/get()` 无泛型，驱动边界收窄）；`provenance-store.ts:250` 与 `evidence/receipt.ts:224`（`JSON.parse` 断言 + 字段 typeof 守卫，属防御性收窄）；`parseRouterConfig.ts` 4 处 `as string[]`（前置 `Array.isArray + typeof` 守卫后的必要收窄）；`askModeConstraints.ts`/`userInteractionConstraints.ts`/`createLocalGateway.ts`/`proxy.ts` 的 `as never`（存在性探测或跨库/跨泛型边界收窄）。
     - 结论：本次收敛聚焦**真正可消除且每处有安全收益**的断言；被判定为边界必要收窄的点不强行"消除"（避免把 `as` 挪进 helper 藏起来，或引入新抽象——自身即新的 accidental complexity）。
 
 ### 错误&可观测
@@ -198,10 +199,11 @@
   - 类别：A · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/gateway/client/InProcessGateway.ts:1-1103`（复杂块 `:314-621`）
   - 建议：不再整体拆分；仅把 submitTurn 内 telemetry/timeout/permission 脚手架抽成辅助函数。
-- **TD-GATEWAY-002** · 分发器 `frame.params as never` 使全部入参失去类型校验
-  - 类别：B · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/gateway/server/GatewayWsConnection.ts:150,230-385`（43 处 `as never`）；`client/RemoteGateway.ts:92-278`（~30 处 `as XResult`）
-  - 建议：per-method 类型守卫或按 method 窄化 `params`；替换 `as never`。
+- **TD-GATEWAY-002** · 分发器 `frame.params` 缺运行时校验（`as never` 已消除，2026-08-23）
+  - 类别：B · 严重级：P2 · 工作量：M · 状态：**partial（2026-08-23）**
+  - 位置：`src/gateway/server/GatewayWsConnection.ts:153,233-388`（43 处 `as never` → 已改 `as GatewayMethodParams<"...">`）；`client/RemoteGateway.ts:92-278`（~30 处 `as XResult`，已在 TD-TYPE-002 消除）
+  - 已做：`as never` 底部类型滥用消除，改用具名断言（编译期类型正确、可读、随 `Gateway` 接口漂移）；补分发回归测试 `tests/gateway/server/dispatch.spec.ts`。
+  - 待做：`frame.params` 来自 WS 线上 `JSON.parse`，仍是 `unknown` 未经运行时校验——按 method 建参数守卫（`isRecord`/typeof）在边界收窄并回结构化 `gateway_request_failed`，堵住"客户端畸形入参直通 gateway 方法内部"。属方案 B，另批排期。
 - **TD-GATEWAY-003** · 热路径重复序列化（active-turn 重放缓冲）
   - 类别：I · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`src/gateway/client/InProcessGateway.ts:1082-1095`

@@ -6,6 +6,9 @@ import { SkillManagerError, SkillValidationError } from "../../extension/skills/
 import { TextWebSocketConnection } from "./websocket.js";
 import type { SessionPresence } from "./sessionPresence.js";
 
+/** 从 `Gateway` 接口推导某方法的首个参数类型（兼容可选方法 `| undefined` 与内联对象类型）。 */
+type GatewayMethodParams<K extends keyof Gateway> = Parameters<NonNullable<Gateway[K]>>[0];
+
 export type GatewayWsConnectionOptions = {
   gateway: Gateway;
   token: string;
@@ -147,7 +150,9 @@ export class GatewayWsConnection {
         let seq = 0;
         let lastCompleted: GatewayEvent | undefined;
         try {
-          for await (const event of this.options.gateway.submitTurn(frame.params as never)) {
+          for await (const event of this.options.gateway.submitTurn(
+            frame.params as GatewayMethodParams<"submitTurn">,
+          )) {
             if (event.type === "turn_completed") {
               lastCompleted = event;
             }
@@ -227,25 +232,33 @@ export class GatewayWsConnection {
   private dispatchRequest(frame: WsRequestFrame): Promise<unknown> {
     switch (frame.method) {
       case "abort_turn":
-        return this.options.gateway.abortTurn(frame.params as never).then(() => ({ ok: true }));
+        return this.options.gateway
+          .abortTurn(frame.params as GatewayMethodParams<"abortTurn">)
+          .then(() => ({ ok: true }));
       case "list_sessions":
-        return this.options.gateway.listSessions(frame.params as never);
+        return this.options.gateway.listSessions(frame.params as GatewayMethodParams<"listSessions">);
       case "resume_session":
-        return this.options.gateway.resumeSession(frame.params as never);
+        return this.options.gateway.resumeSession(frame.params as GatewayMethodParams<"resumeSession">);
       case "new_session":
-        return this.options.gateway.newSession(frame.params as never);
+        return this.options.gateway.newSession(frame.params as GatewayMethodParams<"newSession">);
       case "close_session":
-        return this.options.gateway.closeSession(frame.params as never).then(() => ({ ok: true }));
+        return this.options.gateway
+          .closeSession(frame.params as GatewayMethodParams<"closeSession">)
+          .then(() => ({ ok: true }));
       case "record_agent_status_message":
         if (this.options.gateway.recordAgentStatusMessage) {
-          return this.options.gateway.recordAgentStatusMessage(frame.params as never);
+          return this.options.gateway.recordAgentStatusMessage(
+            frame.params as GatewayMethodParams<"recordAgentStatusMessage">,
+          );
         }
         return Promise.resolve({ recorded: false });
       case "describe_server":
         return this.options.gateway.describeServer();
       case "active_turn_snapshot":
         if (this.options.gateway.getActiveTurnSnapshot) {
-          return this.options.gateway.getActiveTurnSnapshot(frame.params as never);
+          return this.options.gateway.getActiveTurnSnapshot(
+            frame.params as GatewayMethodParams<"getActiveTurnSnapshot">,
+          );
         }
         return Promise.resolve({
           active: false,
@@ -253,30 +266,30 @@ export class GatewayWsConnection {
           events: [],
         });
       case "cron_create":
-        return this.options.gateway.cronCreate(frame.params as never);
+        return this.options.gateway.cronCreate(frame.params as GatewayMethodParams<"cronCreate">);
       case "cron_update":
-        return this.options.gateway.cronUpdate(frame.params as never);
+        return this.options.gateway.cronUpdate(frame.params as GatewayMethodParams<"cronUpdate">);
       case "cron_list":
-        return this.options.gateway.cronList(frame.params as never);
+        return this.options.gateway.cronList(frame.params as GatewayMethodParams<"cronList">);
       case "cron_delete":
-        return this.options.gateway.cronDelete(frame.params as never);
+        return this.options.gateway.cronDelete(frame.params as GatewayMethodParams<"cronDelete">);
       case "cron_stop":
-        return this.options.gateway.cronStop(frame.params as never);
+        return this.options.gateway.cronStop(frame.params as GatewayMethodParams<"cronStop">);
       case "cron_run_now":
-        return this.options.gateway.cronRunNow(frame.params as never);
+        return this.options.gateway.cronRunNow(frame.params as GatewayMethodParams<"cronRunNow">);
       case "panel_heartbeat":
         if (this.options.gateway.panelHeartbeat) {
-          return this.options.gateway.panelHeartbeat(frame.params as never);
+          return this.options.gateway.panelHeartbeat(frame.params as GatewayMethodParams<"panelHeartbeat">);
         }
         return Promise.resolve(notConfigured({ touched: 0 }, "Panel heartbeat not available"));
       case "team_panel_snapshot":
         if (this.options.gateway.teamPanelSnapshot) {
-          return this.options.gateway.teamPanelSnapshot(frame.params as never);
+          return this.options.gateway.teamPanelSnapshot(frame.params as GatewayMethodParams<"teamPanelSnapshot">);
         }
         return Promise.resolve(notConfigured({ teams: [] }, "Team panel snapshot not available"));
       case "team_tool_call":
         if (this.options.gateway.teamToolCall) {
-          return this.options.gateway.teamToolCall(frame.params as never);
+          return this.options.gateway.teamToolCall(frame.params as GatewayMethodParams<"teamToolCall">);
         }
         return Promise.resolve(
           notConfigured(
@@ -285,31 +298,33 @@ export class GatewayWsConnection {
           ),
         );
       case "elicitation_respond":
-        return this.options.gateway.respondElicitation(frame.params as never);
+        return this.options.gateway.respondElicitation(frame.params as GatewayMethodParams<"respondElicitation">);
       case "permission_decide":
-        return this.options.gateway.permissionDecide(frame.params as never);
+        return this.options.gateway.permissionDecide(frame.params as GatewayMethodParams<"permissionDecide">);
       case "grant_session_permission":
-        return this.options.gateway.grantSessionPermission(frame.params as never);
+        return this.options.gateway.grantSessionPermission(
+          frame.params as GatewayMethodParams<"grantSessionPermission">,
+        );
       case "approval_list_pending":
         if (this.options.gateway.approvalListPending) {
-          return this.options.gateway.approvalListPending(frame.params as never);
+          return this.options.gateway.approvalListPending(frame.params as GatewayMethodParams<"approvalListPending">);
         }
         return Promise.resolve(notConfigured({ pending: [] }, "Approval list not available"));
       case "approval_decide":
         if (this.options.gateway.approvalDecide) {
-          return this.options.gateway.approvalDecide(frame.params as never);
+          return this.options.gateway.approvalDecide(frame.params as GatewayMethodParams<"approvalDecide">);
         }
         return Promise.resolve(notConfigured({ delivered: false }, "Approval decide not available"));
       case "read_session_messages":
-        return this.options.gateway.readSessionMessages(frame.params as never);
+        return this.options.gateway.readSessionMessages(frame.params as GatewayMethodParams<"readSessionMessages">);
       case "read_subagent_messages":
-        return this.options.gateway.readSubagentMessages(frame.params as never);
+        return this.options.gateway.readSubagentMessages(frame.params as GatewayMethodParams<"readSubagentMessages">);
       case "fork_session":
-        return this.options.gateway.forkSession(frame.params as never);
+        return this.options.gateway.forkSession(frame.params as GatewayMethodParams<"forkSession">);
       case "list_projects":
         return this.options.gateway.listProjects();
       case "describe_project":
-        return this.options.gateway.describeProject(frame.params as never);
+        return this.options.gateway.describeProject(frame.params as GatewayMethodParams<"describeProject">);
       case "reload_config":
         if (this.options.gateway.reloadConfig) {
           return this.options.gateway.reloadConfig();
@@ -326,63 +341,89 @@ export class GatewayWsConnection {
         });
       case "reload_extensions":
         if (this.options.gateway.reloadExtensions) {
-          return this.options.gateway.reloadExtensions(frame.params as never);
+          return this.options.gateway.reloadExtensions(frame.params as GatewayMethodParams<"reloadExtensions">);
         }
         return Promise.resolve({ reloaded: false, reason: "unsupported" });
       case "skill_list":
-        return requireSkillMethod(this.options.gateway.skillsList, this.options.gateway)(frame.params as never);
+        return requireSkillMethod(
+          this.options.gateway.skillsList,
+          this.options.gateway,
+        )(frame.params as GatewayMethodParams<"skillsList">);
       case "skill_read":
-        return requireSkillMethod(this.options.gateway.skillRead, this.options.gateway)(frame.params as never);
+        return requireSkillMethod(
+          this.options.gateway.skillRead,
+          this.options.gateway,
+        )(frame.params as GatewayMethodParams<"skillRead">);
       case "skill_write":
-        return requireSkillMethod(this.options.gateway.skillWrite, this.options.gateway)(frame.params as never);
+        return requireSkillMethod(
+          this.options.gateway.skillWrite,
+          this.options.gateway,
+        )(frame.params as GatewayMethodParams<"skillWrite">);
       case "skill_create":
-        return requireSkillMethod(this.options.gateway.skillCreate, this.options.gateway)(frame.params as never);
+        return requireSkillMethod(
+          this.options.gateway.skillCreate,
+          this.options.gateway,
+        )(frame.params as GatewayMethodParams<"skillCreate">);
       case "skill_delete":
-        return requireSkillMethod(this.options.gateway.skillDelete, this.options.gateway)(frame.params as never);
+        return requireSkillMethod(
+          this.options.gateway.skillDelete,
+          this.options.gateway,
+        )(frame.params as GatewayMethodParams<"skillDelete">);
       case "skill_import":
-        return requireSkillMethod(this.options.gateway.skillImport, this.options.gateway)(frame.params as never);
+        return requireSkillMethod(
+          this.options.gateway.skillImport,
+          this.options.gateway,
+        )(frame.params as GatewayMethodParams<"skillImport">);
       case "skill_validate":
-        return requireSkillMethod(this.options.gateway.skillValidate, this.options.gateway)(frame.params as never);
+        return requireSkillMethod(
+          this.options.gateway.skillValidate,
+          this.options.gateway,
+        )(frame.params as GatewayMethodParams<"skillValidate">);
       case "skill_scan":
-        return requireSkillMethod(this.options.gateway.skillScan, this.options.gateway)(frame.params as never);
+        return requireSkillMethod(
+          this.options.gateway.skillScan,
+          this.options.gateway,
+        )(frame.params as GatewayMethodParams<"skillScan">);
       case "always_on_apply":
         if (this.options.gateway.alwaysOnApply) {
-          return this.options.gateway.alwaysOnApply(frame.params as never);
+          return this.options.gateway.alwaysOnApply(frame.params as GatewayMethodParams<"alwaysOnApply">);
         }
         return Promise.resolve(notConfigured({ sessionKey: "" }, "Always-On apply not available"));
       case "always_on_rerun_plan":
         if (this.options.gateway.alwaysOnRerunPlan) {
-          return this.options.gateway.alwaysOnRerunPlan(frame.params as never);
+          return this.options.gateway.alwaysOnRerunPlan(frame.params as GatewayMethodParams<"alwaysOnRerunPlan">);
         }
         return Promise.resolve(notConfigured({ runId: "" }, "Always-On rerun not available"));
       case "always_on_list_plans":
         if (this.options.gateway.alwaysOnListPlans) {
-          return this.options.gateway.alwaysOnListPlans(frame.params as never);
+          return this.options.gateway.alwaysOnListPlans(frame.params as GatewayMethodParams<"alwaysOnListPlans">);
         }
         return Promise.resolve(notConfigured({ plans: [] }, "Always-On plans list not available"));
       case "always_on_read_report":
         if (this.options.gateway.alwaysOnReadReport) {
-          return this.options.gateway.alwaysOnReadReport(frame.params as never);
+          return this.options.gateway.alwaysOnReadReport(frame.params as GatewayMethodParams<"alwaysOnReadReport">);
         }
         return Promise.resolve(notConfigured({ content: "" }, "Always-On report not available"));
       case "always_on_list_cycles":
         if (this.options.gateway.alwaysOnListCycles) {
-          return this.options.gateway.alwaysOnListCycles(frame.params as never);
+          return this.options.gateway.alwaysOnListCycles(frame.params as GatewayMethodParams<"alwaysOnListCycles">);
         }
         return Promise.resolve(notConfigured({ cycles: [] }, "Always-On cycles list not available"));
       case "always_on_archive_cycle":
         if (this.options.gateway.alwaysOnArchiveCycle) {
-          return this.options.gateway.alwaysOnArchiveCycle(frame.params as never);
+          return this.options.gateway.alwaysOnArchiveCycle(frame.params as GatewayMethodParams<"alwaysOnArchiveCycle">);
         }
         return Promise.resolve(notConfigured({ archived: false }, "Always-On archive not available"));
       case "always_on_apply_cycle":
         if (this.options.gateway.alwaysOnApplyCycle) {
-          return this.options.gateway.alwaysOnApplyCycle(frame.params as never);
+          return this.options.gateway.alwaysOnApplyCycle(frame.params as GatewayMethodParams<"alwaysOnApplyCycle">);
         }
         return Promise.resolve(notConfigured({ cycle: null }, "Always-On apply not available"));
       case "knowledge_capabilities":
         if (this.options.gateway.knowledgeCapabilities) {
-          return this.options.gateway.knowledgeCapabilities(frame.params as never);
+          return this.options.gateway.knowledgeCapabilities(
+            frame.params as GatewayMethodParams<"knowledgeCapabilities">,
+          );
         }
         return Promise.resolve(
           notConfigured(
