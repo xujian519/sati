@@ -90,3 +90,48 @@
 | #160 / #164 | ✅ done（PR #165 / #167） |
 | #163 / #162 / #159 / #161 | ⏳ 待做（按 §2 阶段推进） |
 | #150 | ⏳ 待做（硬截止 2026-11-18） |
+
+---
+
+## 7. 复评结论（Brooks-Lint 技术债评估，2026-08-23）
+
+> 依据：对全项目（`src/` 33 模块 + `ui/` + `apps/desktop/` + `scripts/`）的独立扫描 + `backlog.md` 台账交叉核对。本节做**优先级复排与「值与不值为」判断**，不重复 `backlog.md` 逐条条目（那仍是唯一事实源，且已新鲜）。
+
+### 复评观察（增量扫描，台账未系统量化）
+
+- **R5 依赖混乱 · 模块级为正向**：模块级依赖环 **0**、import 扇出均 ≤5、`src→ui` 导入 **0**。R5 的实质债是**类型断言/契约侵蚀**（>90 处 `as`），而非模块环。
+- **8 月新增模块（team M1 / patent graph / clarity / session workspace / patent evaluate）卫生面干净**：无空 `catch {}`、无 `TODO/FIXME`、无 `console.*`、无 `@ts-ignore`；唯一 God function 是 `buildInventivenessGraph`（~356 行）。
+- `patent/graph` 与 `patent/workflow` 的双轨重复（呼应 PATENT-N01）经代码核实：`src/workflow/runtime/` 的 DagEngine/WorkflowEngine/SafeEvaluator 等在全 `src/` 无生产消费方，仅 `patent/workflow-dag.ts` 与 `patent/graph/adapter.ts` 借用 `FlowGraph`/`FlowNodeType`。
+
+### 复排后的优先级（Recommended focus）
+
+| 序 | 项 | 类别/级别 | 判定 | 理由 |
+|---|---|---|---|---|
+| ① | **#163 类型断言收敛**（TD-TYPE-002） | R5 / P1 | **值得清，最先做** | 纯机械、`typecheck` 自验证、无 UI、爆炸半径小、不触发重放契约，ROI 最高 |
+| ② | **#159 前端 God Hook/组件拆分** | R1 / P1 | **值得清，唯一须浏览器验证** | 高价值但高风险；唯一需浏览器（桌面+移动）实测的专项 |
+| ③ | **#162 可观测性收束**（裸 console + 静默 catch） | R2 / P2 | **值得清，可与①穿插滚焊** | 普通工具；改日志方案是 Shotgun Surgery，统一 churn 前先定期 |
+| ④ | **#150 多引擎统一** | R4 / P1 | **值得清，但**须**排期评估** | 已 suppress 至 2026-11-18；勿作快项全量删，先出「删除/合并/降级」结论 |
+| ⑤ | **#161 policy-bridge 接线** | R4 / P2 | **值得清，但最后做** | 全局权限高爆炸半径，须 flag-gated 灰度 + decision note |
+
+### 值得优先动（真正值得清）
+
+- **#163 类型断言**：机械、零新增行为、不触碰 `inputSchema`（不使 llm-replay fixture 失配）。分步切片见 `docs/type-assertion-cleanup-plan.md`；排序决策见 `docs/notes/implemented/2026-08-23-type-assertion-cleanup-priority.md`。
+- **#159 前端 God 组件**：全项目最大可维护性病灶；拆分后必须浏览器验证 + 补组件测试（UI-CHAT-N10）。
+- **#162 可观测性**：267 处裸 `console.*` 与 151 处静默吞错，是唯一横跨所有模块的收敛性债。
+
+### 不建议优先动（判别）
+
+- **#150 双轨引擎**：`src/workflow` 引擎无生产消费者，属死重量而非活跃 bug；带硬截止（2026-11-18），排期评估前置，勿在无结论前删。
+- **#161 policy-bridge**：影响全局工具拦截，勿当快项直接全量接入。
+- **8 月新增核心模块自带的「已知限制」**（如 team 冷恢复 turn 的 approval_pending 不冒泡，M2 接线点）属**有意设计 + 有 owner**，按台账记为 intentional，不进此排期。
+
+### 复评对既有排期的对齐与修正
+
+- **无冲突**：§2 阶段一「#163 先做」、阶段二「#159 需浏览器验证」、阶段三「#161 灰度 / #150 硬截止」均与本复评一致。
+- **修正一处强调**：本复评把 **#163 与 #162 的 `cli` 部分**并列为「低风险机械收口」，并明确 #163 是**全项目 ROI 最高的单项**（机械、自验证、无 UI），建议作为独立切片先行落地。
+- **新增一条散落但根因同源**：`planModeConstraints`/`askModeConstraints` 工具白名单、`AgentSessionState`/`loop/misc` usage 合并、literature 4 连接器 limit/authors/toHit 属于**小决策重复（R3）**，既有台账未并列为独立条目，建议下次改对应文件时顺带收敛。
+
+### 复评边界
+
+- 本复评基于静态扫描 + 台账交叉，未在浏览器实测 #159；#159 落地后须按用户规则浏览器验证（桌面 + 移动）。
+- 每一步若改工具 `inputSchema`（含描述文本）须重录 llm-replay fixture（铁律 6）；本排期各项均不触达。

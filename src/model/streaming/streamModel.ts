@@ -351,14 +351,14 @@ async function sendGoogleCompleteRequest(
   options: ModelRuntimeOptions,
 ): Promise<unknown> {
   try {
-    const body = withGoogleAbortSignal(
+    const body = withGoogleAbortSignal<GoogleRequestBody>(
       buildModelRequest(request, {
         providers: { [provider.id]: provider },
-      }) as Record<string, unknown>,
+      }) as GoogleRequestBody,
       options.signal,
     );
     const client = (options.googleClientFactory ?? createGoogleClient)(provider);
-    return await client.models.generateContent(body as unknown as GoogleRequestBody);
+    return await client.models.generateContent(body);
   } catch (error) {
     throwIfGoogleAbort(error, options.signal);
     throw toProviderError(provider, error);
@@ -381,10 +381,10 @@ async function* streamGoogleProviderRequest(params: {
     const streamAbort = new AbortController();
     const detachAbort = params.options.signal ? forwardAbort(params.options.signal, streamAbort) : undefined;
     try {
-      const body = withGoogleAbortSignal(
+      const body = withGoogleAbortSignal<GoogleRequestBody>(
         buildModelRequest(currentRequest, {
           providers: { [params.provider.id]: params.provider },
-        }) as Record<string, unknown>,
+        }) as GoogleRequestBody,
         streamAbort.signal,
       );
       await dumpRequestForDebug(body, currentRequest.model);
@@ -399,7 +399,7 @@ async function* streamGoogleProviderRequest(params: {
       const streamIdleTimeoutMs = resolveStreamIdleTimeout(params.provider, params.options);
       const abortForIdleTimeout = (error: StreamIdleTimeoutError) => streamAbort.abort(error);
       const stream = await withIdleTimeout(
-        () => client.models.generateContentStream(body as unknown as GoogleRequestBody),
+        () => client.models.generateContentStream(body),
         streamIdleTimeoutMs,
         params.options.signal,
         abortForIdleTimeout,
@@ -507,16 +507,14 @@ function isRetryableGoogleStreamError(providerError: ModelProviderError, raw: un
   return providerError.error.retryable || isRetryableStreamError(raw);
 }
 
-function withGoogleAbortSignal(
-  body: Record<string, unknown>,
-  signal: AbortSignal | undefined,
-): Record<string, unknown> {
+function withGoogleAbortSignal<T extends object>(body: T, signal: AbortSignal | undefined): T {
   if (!signal) {
     return body;
   }
+  const record = body as Record<string, unknown>;
   const config =
-    body.config && typeof body.config === "object"
-      ? { ...(body.config as Record<string, unknown>), abortSignal: signal }
+    record.config && typeof record.config === "object"
+      ? { ...(record.config as Record<string, unknown>), abortSignal: signal }
       : { abortSignal: signal };
   return { ...body, config };
 }

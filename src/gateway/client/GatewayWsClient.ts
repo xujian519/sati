@@ -130,11 +130,13 @@ export class GatewayWsClient {
     });
   }
 
-  request(method: WsGatewayMethod, params: unknown): Promise<unknown> {
+  request<T = unknown>(method: WsGatewayMethod, params: unknown): Promise<T> {
     const id = randomUUID();
     this.send({ type: "request", id, method, params });
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+    return new Promise<T>((resolve, reject) => {
+      // resolve 期望 T，而 PendingRequest 统一按 unknown 存储；这里只做参数位置的
+      // 逆变标注（运行时语义不变），调用侧得以按 method 精确回推返回类型。
+      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
     });
   }
 
