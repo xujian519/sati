@@ -677,7 +677,8 @@
   - 位置：`src/pilot/config/loadPilotConfig.ts:35-165` + 全文件 784 行
   - 建议：按子系统拆parse+assemble，或拆为 `parse`+`assemble` 两纯函数。
 - **TD-PILOT-N03** · `warmOllamaProviders` fire-and-forget 无错误处理（未捕获拒绝）
-  - 类别：C · 严重级：P2 · 工作量：S · 状态：new
+  - 类别：C · 严重级：P2 · 工作量：S · 状态：**done（已修复 2026-08-23）**
+  - 修复：`warmOllamaModels` 与 `getCachedOllamaModels`（stale-while-revalidate 后台刷新）的 fire-and-forget 调用加 `.catch(() => {})`（预热为 best-effort，ollama 不可达时忽略，不再 unhandledRejection）；`warmOllamaModels` 增可选 `options.fetchImpl` 透传以便注入失败 fetch。新增 `tests/model/ollamaConfig.spec.ts` 的「warmOllamaModels swallows unreachable-ollama rejection」用例（监听 unhandledRejection 断言不触发）。typecheck/lint/biome/测试全绿。
   - 位置：`loadPilotConfig.ts:599`；`src/model/ollama/probe.ts:159-186`
   - 影响：`warmOllamaModels` 是 `void` 丢弃 promise，`probeOllamaModelsCached` 无 `.catch`，每次加载若 ollama 不可达即 unhandledRejection。建议：在 `probe.ts` 链尾加 `.catch(()=>{})`。
 - **TD-PILOT-N04** · reload 失败仅 `console.warn`，无结构化上报
