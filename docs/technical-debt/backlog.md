@@ -454,8 +454,9 @@
   - 位置：`src/always-on/web/DiscoveryPlanService.ts:626-635`、`:215-269`、`:639-663`
   - 影响：本地 `WorkCycleRecord` 类型 + 自建 readPlanStore/writePlanStore 读同一磁盘 JSON，与 `DiscoveryPlanStore`/`WorkCycleStore` 双轨解析契约可独立漂移。建议：web 层复用 `DiscoveryPlanStore`/`WorkCycleStore`。
 - **TD-ALWAYSON-N03** · `execution.*` 与 `workspace.gitLfs` 配置被解析/校验但从未接线
-  - 类别：F · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/always-on/config/parseAlwaysOnConfig.ts:30-32,375-385,343`
+  - 类别：F · 严重级：P2 · 工作量：S · 状态：**done（已修复 2026-08-23）**
+  - 修复：`drainTurn`（DiscoveryFire.ts）调用 `gateway.submitTurn` 时接线 `maxTurns: config.execution.maxTurns` 与 `timeoutMs: config.execution.timeoutMinutes*60*1000`（submitTurn 支持这两个限制，使常驻执行受步数/墙钟防护）。`maxToolCalls` 与 `workspace.gitLfs` 因 gateway/workspace 管线暂无对应消费点，改为解析时提交 `ALWAYS_ON_EXECUTION_MAX_TOOL_CALLS_IGNORED`/`ALWAYS_ON_WORKSPACE_GIT_LFS_IGNORED` 告警诊断，不再静默失效。新增 `tests/always-on/config/parseAlwaysOnConfig.spec.ts` 两用例。typecheck/lint/biome/always-on 测试 183 全绿。
+  - 位置：`src/always-on/config/parseAlwaysOnConfig.ts:30-32,375-385,343`；`src/always-on/runtime/DiscoveryFire.ts:1138`
   - 影响：`alwaysOn.execution.maxTurns/maxToolCalls/timeoutMinutes` 与 `alwaysOn.workspace.gitLfs` 全仓无任何消费点（`drainTurn` 调 `gateway.submitTurn` 时未传），用户配置这些字段实际不生效。建议：要么接线，要么删除并标记 deprecated。
   - 证据：跨仓 grep `maxTurns|maxToolCalls|timeoutMinutes|gitLfs` 仅命中 parse 文件，`always-on` 内无消费。
 - **TD-ALWAYSON-N04** · 事件落盘静默吞错，削弱可观测性
