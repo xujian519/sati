@@ -523,7 +523,7 @@ export class InProcessGateway implements Gateway {
           });
           for (const gatewayEvent of mapAgentEvent(event, runId)) {
             if (gatewayEvent.type === "context_budget") {
-              this.recordGatewayStatusMessage({
+              void this.recordGatewayStatusMessage({
                 sessionKey: input.sessionKey,
                 turnId: runId,
                 projectKey: input.projectKey,

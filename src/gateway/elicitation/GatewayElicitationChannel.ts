@@ -93,7 +93,7 @@ export class GatewayElicitationChannel implements SatiElicitationChannel {
         questions: request.questions,
         metadata: request.metadata,
       });
-      this.options.dispatchHook?.("Elicitation", {
+      void this.options.dispatchHook?.("Elicitation", {
         requestId,
         toolName: request.toolName,
         toolCallId: request.toolCallId,

@@ -103,7 +103,8 @@ export class SlackChannel implements ChannelAdapter {
         }
       });
 
-      app.error(async (err: unknown) => {
+      // app.error 期望 void 回调：回调体无 await，去掉 async 以免返回未处理的 Promise（no-misused-promises）。
+      app.error((err: unknown) => {
         this.logger?.error?.(`slack: bolt error: ${err}`);
       });
 

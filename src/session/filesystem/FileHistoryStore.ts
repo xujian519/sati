@@ -136,7 +136,7 @@ export class FileHistoryStore {
         this.options.warn?.(`file-history: skipping backup for ${absPath} (size > ${this.options.maxFileBytes} bytes)`);
       }
       snapshot.trackedFileBackups[absPath] = result.backup;
-      this.cacheMtime(absPath);
+      void this.cacheMtime(absPath);
 
       this.recordTranscript(snapshot, "update");
     });

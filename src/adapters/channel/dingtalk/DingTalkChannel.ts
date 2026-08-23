@@ -101,7 +101,7 @@ export class DingTalkChannel implements ChannelAdapter {
         this.logger?.info?.(`dingtalk: stopping (${reason ?? "no reason"})`);
         if (this.client) {
           try {
-            this.client.disconnect();
+            await this.client.disconnect();
           } catch {
             /* best effort */
           }

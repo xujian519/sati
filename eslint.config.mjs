@@ -32,10 +32,54 @@ export default [
       // 不适用根 lint 规则，局部排除。
       "src/context/memory/edgeclaw-memory-core/ui-source/**",
       "src/context/memory/edgeclaw-memory-core/lib/**",
+      // 负控制 fixture(故意违规,仅供 tests/development-standards/lint-contract.spec.ts 校验),
+      // 不进入常规 lint,避免污染 pnpm lint。
+      "tests/development-standards/lint-fixtures/**",
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    // 类型感知 lint(G2, docs/development-standards.md §7 第 2 步)：
+    // no-floating-promises / no-misused-promises 需要 projectService(type-aware)。
+    // 这是外部规范《AI 原生开发规范》里"agent loop 里丢失的 promise"最高价值缺陷类的落地。
+    // 分步收敛：先只对 src/(核心后端)开；tests/scripts 暂未 type-aware,属分批第一步。
+    files: ["src/**/*.{ts,tsx,mts,cts}"],
+    // edgeclaw-memory-core 是独立 workspace 子包(有独立 tsconfig);
+    // root tsconfig exclude 它,projectService 无法解析其 tests/** → 需在此层排除,
+    // 否则报 Parsing error(其 src/ 仍由下方主 block 以根规则 lint)。
+    ignores: ["src/context/memory/edgeclaw-memory-core/**"],
+    languageOptions: {
+      parserOptions: { projectService: true },
+    },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": "error",
+      // 危险 API 禁令(disallowed-methods)仅对核心后端 src/ 生效。child_process.exec/execSync
+      // 经 shell 解释命令存在注入面；Sati 已用 execFile/execFileSync(数组参数)替代。
+      // 豁免:apps/desktop(桌面壳 + release 脚本,刻意的同步 shell 构建/平台命令)与
+      // tests/scripts(构建/工具层)。核心运行时(src/)是注入风险的主轮廓。
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "node:child_process",
+              importNames: ["exec", "execSync"],
+              message:
+                "禁止 child_process.exec/execSync：命令经 shell 解释存在注入面。用 execFile/execFileSync(数组参数)替代；确需 shell 时用 spawn 且勿拼接用户输入。",
+            },
+            {
+              name: "child_process",
+              importNames: ["exec", "execSync"],
+              message:
+                "禁止 child_process.exec/execSync：命令经 shell 解释存在注入面。用 execFile/execFileSync(数组参数)替代；确需 shell 时用 spawn 且勿拼接用户输入。",
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: [
       "src/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",

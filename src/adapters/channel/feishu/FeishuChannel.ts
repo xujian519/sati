@@ -239,7 +239,7 @@ export class FeishuChannel implements ChannelAdapter {
         this.logger?.info?.(`feishu: stopping (${reason ?? "no reason"})`);
         if (this.wsClient && typeof this.wsClient.stop === "function") {
           try {
-            this.wsClient.stop();
+            await this.wsClient.stop();
           } catch {
             /* best effort */
           }
