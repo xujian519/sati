@@ -128,7 +128,7 @@ export class MatrixChannel implements ChannelAdapter {
         this.logger?.info?.(`matrix: stopping (${reason ?? "no reason"})`);
         if (this.client) {
           try {
-            this.client.stop();
+            await this.client.stop();
           } catch {
             /* best effort */
           }

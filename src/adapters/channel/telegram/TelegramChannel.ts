@@ -94,7 +94,8 @@ export class TelegramChannel implements ChannelAdapter {
         this.logger?.info?.(`telegram: webhook mode at ${this.webhookUrl}`);
       } else {
         await bot.api.deleteWebhook();
-        bot.start({ drop_pending_updates: false });
+        // bot.start 启动长轮询并挂起直到 bot 停止：await 会阻塞方法返回，故显式 void（fire-and-forget）。
+        void bot.start({ drop_pending_updates: false });
         this.logger?.info?.("telegram: long-polling started");
       }
 

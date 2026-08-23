@@ -124,7 +124,7 @@ export class DiscordChannel implements ChannelAdapter {
         this.logger?.info?.(`discord: stopping (${reason ?? "no reason"})`);
         if (this.client) {
           try {
-            this.client.destroy();
+            await this.client.destroy();
           } catch {
             /* best effort */
           }

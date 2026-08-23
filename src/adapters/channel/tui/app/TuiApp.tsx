@@ -645,7 +645,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
       <PromptInput
         value={state.input}
         onChange={handleInputChange}
-        onSubmit={handleSubmit}
+        onSubmit={value => void handleSubmit(value)}
         isRunning={state.isRunning}
         focus={!state.helpOpen && state.pendingPermissions.length === 0}
       />

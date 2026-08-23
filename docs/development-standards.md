@@ -15,7 +15,7 @@
 | 门禁 | 命令 | 机器上保证什么 | 现状 |
 |---|---|---|---|
 | typecheck | `pnpm typecheck` | `strict` + `noFallthroughCasesInSwitch` + ES2022 + NodeNext | ⚠️ 缺 `noUncheckedIndexedAccess` / `exactOptionalPropertyTypes` |
-| lint | `pnpm lint` | 未用 import、import 顺序、react 规则 + 领域门禁 | ⚠️ 非类型感知、`any`=warn |
+| lint | `pnpm lint` | 未用 import、import 顺序、react 规则 + 领域门禁 + 类型感知(`no-floating-promises`/`no-misused-promises`,仅 src)+ 危险 API 禁令(`no-restricted-imports` 禁 `exec`/`execSync`,仅 src) | ⚠️ 类型感知与危险 API 均仅 `src/`(tests/scripts/桌面壳豁免)、`any`=warn |
 | format | `pnpm format:check` | Biome 格式（2 空格、双引号、分号、120 列） | ✅ |
 | test | `pnpm test` + `cd ui && pnpm test` | 后端 node:test + UI vitest | ✅（无覆盖率） |
 
@@ -60,6 +60,7 @@
 |---|---|---|
 | 类型 | `tsconfig.json` | `strict`、ES2022、NodeNext、`skipLibCheck` |
 | Lint | 根 `eslint.config.mjs` + `ui/eslint.config.js` | 未用 import（unused-imports）、import 顺序（import-x/order）、react/hooks、`no-explicit-any`=warn |
+| 危险 API | eslint `no-restricted-imports` | 禁 `child_process.exec`/`execSync`（shell 注入面，**仅 src/**；桌面壳/release 脚本豁免），允许 `execFile`/`execFileSync`/`spawn` |
 | 格式 | `biome.json` | 2 空格、双引号、分号、trailing comma、120 列、LF |
 | 提交信息 | `scripts/check-commit-msg.mjs`（commit-msg hook） | Conventional Commits（含 `release` 类型） |
 | 提交前 | `scripts/lint-staged.mjs`（pre-commit hook） | staged 文件 biome format + eslint --fix，按 ui/root 分流 |
@@ -74,10 +75,10 @@
 | # | 缺口 | 模板对应 | 影响 |
 |---|---|---|---|
 | G1 | tsconfig 缺 `noUncheckedIndexedAccess` / `exactOptionalPropertyTypes`（`noFallthroughCasesInSwitch` 已于 2026-08-22 开启） | 门禁 1 | 类型系统第一道防线不全：数组越界 / 可选属性语义模糊两类缺陷不报 |
-| G2 | lint 非类型感知：无 `no-floating-promises`、`no-unsafe-*` | 门禁 2 | "丢失的 promise"是 harness 全仓最高价值 lint 缺陷类，Sati 现在抓不到 |
+| G2 | lint 非类型感知：无 `no-floating-promises`、`no-unsafe-*` | 门禁 2 | "丢失的 promise"是 harness 全仓最高价值 lint 缺陷类；2026-08-23 已开 `no-floating-promises`/`no-misused-promises`(仅 src,存量清零)，`no-unsafe-*` 仍待分批 |
 | G3 | `no-explicit-any` 是 `warn` 非 `error`（存量 ~170 处） | 门禁 2 | 新代码可无感引入 `any` |
 | G4 | 无覆盖率门禁（`test:coverage` / 阈值） | 门禁 3 | 没有"死代码探测器" |
-| G5 | 无负控制（门禁自测 / verify-config / lint-contract） | 负控制 | 门禁可能配置写错而悄悄失效，无人知晓 |
+| G5 | 无负控制（门禁自测 / verify-config / lint-contract） | 负控制 | 门禁可能配置写错而悄悄失效；verify-config 已落地，lint-contract 已于 2026-08-23 落地 |
 | G6 | 无 pre-push typecheck；无 `check` 聚合脚本 | hooks | 推送前不校验类型；门禁无单一入口 |
 | G7 | 无决策记录系统（`docs/notes/`） | 决策层 | 决策被反复争论，放弃过的备选无据可查 |
 | G8 | 无入库的根级 standing orders（只有不入库的 `CLAUDE.md`） | 陈述层 | 跨工具（Claude Code / Cursor / Codex）没有共同的每会话规则家 |
@@ -108,8 +109,8 @@
 **目标（分档）**：
 
 - **保持**：`no-explicit-any` 暂为 `warn`（存量 ~170 处，治理中）。治理纪律：PR 评审把关**新引入**的 any，按模块分批收敛（优先 context/agent/router）。**不设** `--max-warnings 0`（存量 warning 会立即全红、阻断一切合入，反而无人清理——这是已在 eslint.config.mjs 注释中记录的显式决策）。
-- **增开类型感知（G2，高价值）**：`no-floating-promises`（丢失的 promise 是最高价值缺陷类）、`no-unsafe-assignment/member-access/return`、`no-non-null-assertion`。需要为根 config 接入 `projectService`（type-aware），同样须分批：先开规则 → 收敛存量 → 再升 error。
-- **负控制**：新增 `scripts/lint-contract.spec.ts` + `scripts/lint-fixtures/`，对含 `any` / 含浮动 promise 的 fixture 跑 lint 断言 exit 非零。
+- **增开类型感知（G2，高价值）**：**已开（2026-08-23）**`no-floating-promises`（丢失的 promise 是最高价值缺陷类）+ `no-misused-promises`，对 `src/` 接入 `projectService`（type-aware），存量 10 处已清零并配负控制。仍待分批：`no-unsafe-assignment/member-access/return`、`no-non-null-assertion`，以及把 type-aware 扩到 tests/scripts。
+- **负控制（已落地 2026-08-23）**：`tests/development-standards/lint-contract.spec.ts` + `lint-contract.config.mjs`(test-only) + `lint-fixtures/{float-promise,danger-import,ok}.ts`，对违规 fixture 断言 exit 非零、对合规 fixture 断言零；fixtures 已入根 eslint ignore。
 
 **两条配套纪律**：
 
@@ -228,10 +229,10 @@
 
 - [ ] **G1-b（高）**：开 `noUncheckedIndexedAccess`——先评估存量错误量，分模块收敛后开；或先开 + 逐模块 `@ts-expect-error`/收窄再清零。
 - [ ] **G1-c（高）**：开 `exactOptionalPropertyTypes`，同上分批。
-- [ ] **G2（高）**：根 eslint 接 `projectService`，开 `no-floating-promises` + `no-unsafe-*`，分批收敛后升 error。
+- [x] **G2（部分，2026-08-23）**：根 eslint 接 `projectService`，开 `no-floating-promises` + `no-misused-promises`（仅 src，存量 10 处清零）。续：`no-unsafe-*`、type-aware 扩到 tests/scripts（另行分批）。
 - [ ] **G3（中）**：`any` 存量清完一批后，把 `no-explicit-any` 升 error（须先过 G2 类型感知，否则 error 会淹掉所有 PR）。
 - [ ] **G4（高，先选型）**：后端 node:test 覆盖接 `c8`，UI vitest 接 `@vitest/coverage-v8`，定阈值（每文件 100% 是 harness 目标，Sati 可先定 package 级 80% 起步）；信条写进规范。
-- [ ] **G5-b**：`scripts/lint-contract.spec.ts` + fixtures（随 G2 落地）。
+- [x] **G5-b（2026-08-23）**：`tests/development-standards/lint-contract.spec.ts` + `lint-contract.config.mjs` + `lint-fixtures/`（随 G2 落地）。
 
 ### 稳定后按需（不做，除非有需求）
 
