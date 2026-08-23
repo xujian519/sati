@@ -454,8 +454,9 @@
   - 位置：`src/always-on/web/DiscoveryPlanService.ts:626-635`、`:215-269`、`:639-663`
   - 影响：本地 `WorkCycleRecord` 类型 + 自建 readPlanStore/writePlanStore 读同一磁盘 JSON，与 `DiscoveryPlanStore`/`WorkCycleStore` 双轨解析契约可独立漂移。建议：web 层复用 `DiscoveryPlanStore`/`WorkCycleStore`。
 - **TD-ALWAYSON-N03** · `execution.*` 与 `workspace.gitLfs` 配置被解析/校验但从未接线
-  - 类别：F · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/always-on/config/parseAlwaysOnConfig.ts:30-32,375-385,343`
+  - 类别：F · 严重级：P2 · 工作量：S · 状态：**done（已修复 2026-08-23）**
+  - 修复：`drainTurn`（DiscoveryFire.ts）调用 `gateway.submitTurn` 时接线 `maxTurns: config.execution.maxTurns` 与 `timeoutMs: config.execution.timeoutMinutes*60*1000`（submitTurn 支持这两个限制，使常驻执行受步数/墙钟防护）。`maxToolCalls` 与 `workspace.gitLfs` 因 gateway/workspace 管线暂无对应消费点，改为解析时提交 `ALWAYS_ON_EXECUTION_MAX_TOOL_CALLS_IGNORED`/`ALWAYS_ON_WORKSPACE_GIT_LFS_IGNORED` 告警诊断，不再静默失效。新增 `tests/always-on/config/parseAlwaysOnConfig.spec.ts` 两用例。typecheck/lint/biome/always-on 测试 183 全绿。
+  - 位置：`src/always-on/config/parseAlwaysOnConfig.ts:30-32,375-385,343`；`src/always-on/runtime/DiscoveryFire.ts:1138`
   - 影响：`alwaysOn.execution.maxTurns/maxToolCalls/timeoutMinutes` 与 `alwaysOn.workspace.gitLfs` 全仓无任何消费点（`drainTurn` 调 `gateway.submitTurn` 时未传），用户配置这些字段实际不生效。建议：要么接线，要么删除并标记 deprecated。
   - 证据：跨仓 grep `maxTurns|maxToolCalls|timeoutMinutes|gitLfs` 仅命中 parse 文件，`always-on` 内无消费。
 - **TD-ALWAYSON-N04** · 事件落盘静默吞错，削弱可观测性
@@ -913,13 +914,16 @@
   - 位置：`stores/useSessionStore.ts:632`
   - 影响：`updateStreaming`/`updateStreamingThinking`/`updateSubagentDetailStreaming` 及各自 finalize 共 8 个近同函数；`fetchFromServer`/`fetchMore`/`refreshFromServer` 三处重复拼接 `URLSearchParams`。建议：抽 `streamingPatch`/`finalizeStream`/`buildSessionQuery`。
 - **TD-UI-APP-N03** · `AppShellV2` 删除确认弹窗整段硬编码英文，未走 i18n
-  - 类别：H · 严重级：P1 · 工作量：S · 状态：new
+  - 类别：H · 严重级：P1 · 工作量：S · 状态：**done（已修复 2026-08-23）**
+  - 修复：两个删除弹窗全部文案改为 `useTranslation("common")` 的 `t()`，新增 `deleteDialogs.*`（含复数 `_one/_other` 的 `projectSessionsRemovedCount` 与 `projectFilesOnDisk*` 三段拆分保留内联强调）。父组件错误文案（errorDeleteProject/errorDeleteSession）一并提取，`useCallback` 依赖补 `t`。新增 `app-shell/deleteDialogs.i18n.test.ts` 断言 en/zh-CN 的 key 解析与 `{{count}}`/`{{projectName}}` 插值。en/zh-CN common.json key 对齐（428/428）；ui typecheck/lint/biome/全量测试 578 通过。
   - 位置：`app-shell/AppShellV2.tsx:770-839`（DeleteProjectDialog）、`:848-908`（DeleteSessionDialog）
   - 影响：用户可见文案（"Delete project?"/"Cancel"等）全部硬编码，违反「UI 文案必须提取到 locales」铁律。建议：改用 `useTranslation()` 并补 common/settings key。
 - **TD-UI-APP-N04** · `LlmConfigurationStep.tsx` 全屏硬编码英文 + 多重 YAML cast 改写 + 重复模型拉取
-  - 类别：H · 严重级：P1 · 工作量：M · 状态：new
-  - 位置：`onboarding/view/subcomponents/LlmConfigurationStep.tsx:376-717`（硬编码）、`:290-346`（YAML cast）、`:122-196`（重复 fetch）
-  - 建议：改用 i18n、typed builder 组装 YAML、合并两效应。
+  - 类别：H · 严重级：P1 · 工作量：M · 状态：in_progress
+  - i18n 已修复（2026-08-23）：全屏硬编码文案改为 `useTranslation("settings")` 的 `t()`，新增 `settings.llmSetup.*`（含内联 `<span>` 的三段拆分保留 font-mono；协议/默认 URL 用 `protocolLabel`/`defaultUrlLabel` 标签+值拆分避免插值转义）。新增 `onboarding/view/subcomponents/llmSetup.i18n.test.ts` 断言 en/zh-CN key 解析与插值。en/zh-CN settings key 对齐（1043/1043）。ui typecheck/lint/biome/全量测试 582 通过。
+  - 剩余：`:290-346`（YAML cast → typed builder）、`:122-196`（重复 fetch → 合并两效应）——未处理。
+  - 位置：`onboarding/view/subcomponents/LlmConfigurationStep.tsx:376-717`（硬编码，已修）、`:290-346`（YAML cast）、`:122-196`（重复 fetch）
+  - 影响：用户可见文案（"LLM Provider Setup"/"Test Connection"等）全部硬编码，违反「UI 文案必须提取到 locales」铁律。建议：改用 i18n、typed builder 组装 YAML、合并两效应。
 - **TD-UI-APP-N05** · `useGitPanelController.ts` 各 git 操作近乎复制粘贴，错误上报不一致
   - 类别：F · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`git-panel/hooks/useGitPanelController.ts:309-465,565-630`
@@ -1106,7 +1110,7 @@
 
 **短期（P2，1-2 天/项）**
 4. 前端巨无霸：拆分 `useChatComposerState`(UI-CHAT-N01)、`MessagesPaneV2`(N03)、`SkillsV2/ImportFromFolder`(UI-APP-N01)、`PdfDocumentPreview`(N07)；删除 `useChatSessionState` 死状态 `isLoadingMoreMessages`(N02)。UI 改动须浏览器验证。
-5. i18n：AppShellV2 弹窗（UI-APP-N03）、LlmConfigurationStep（N04）提取到 locales。
+5. i18n：AppShellV2 弹窗（UI-APP-N03）、LlmConfigurationStep（N04）提取到 locales。✅ N03 完成；N04 的 i18n 已完成（YAML cast / 重复拉取保留为 in_progress）。
 6. 未接线实现：policy-bridge（RULE-N02）、workflow 引擎接线或降级（WORKFLOW-N01）、always-on execution.*（ALWAYSON-N03）。
 7. 可观测性：收束裸 console（TD-CONSOLE-001，先 `cli`）、静默吞错逐条补注释/结构化（TD-CATCH-001）。
 

@@ -50,3 +50,23 @@ test("disabled alwaysOn produces no trigger warning", () => {
     false,
   );
 });
+
+test("execution.maxToolCalls is parsed but flagged as not honored", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+  const config = parseAlwaysOnConfig({ execution: { maxToolCalls: 50 } }, diagnostics);
+  assert.ok(config);
+  assert.equal(config.execution.maxToolCalls, 50);
+  const warn = diagnostics.find(d => d.code === "ALWAYS_ON_EXECUTION_MAX_TOOL_CALLS_IGNORED");
+  assert.ok(warn, "expected ALWAYS_ON_EXECUTION_MAX_TOOL_CALLS_IGNORED diagnostic");
+  assert.equal(warn.severity, "warning");
+});
+
+test("workspace.gitLfs is parsed but flagged as not honored", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+  const config = parseAlwaysOnConfig({ workspace: { gitLfs: true } }, diagnostics);
+  assert.ok(config);
+  assert.equal(config.workspace.gitLfs, true);
+  const warn = diagnostics.find(d => d.code === "ALWAYS_ON_WORKSPACE_GIT_LFS_IGNORED");
+  assert.ok(warn, "expected ALWAYS_ON_WORKSPACE_GIT_LFS_IGNORED diagnostic");
+  assert.equal(warn.severity, "warning");
+});

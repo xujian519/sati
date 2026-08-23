@@ -530,5 +530,21 @@
     }
   },
   "newSessionInProject": "新建会话",
-  "deleteProject": "删除项目"
+  "deleteProject": "删除项目",
+  "deleteDialogs": {
+    "projectTitle": "删除项目？",
+    "projectDescription": "这将从 Sati 移除该项目并删除其会话元数据。",
+    "projectSessionsRemovedCount_one": "{{count}} 个会话",
+    "projectSessionsRemovedCount_other": "{{count}} 个会话",
+    "projectSessionsRemovedTail": "也将被移除。",
+    "projectFilesOnDiskBefore": "磁盘上的文件",
+    "projectFilesOnDiskNegation": "不会",
+    "projectFilesOnDiskAfter": "被删除——仅删除 Sati 对它们的引用。",
+    "sessionTitle": "删除会话？",
+    "sessionDescription": "这将从 {{projectName}} 中移除该会话。",
+    "deleting": "删除中…",
+    "deleteSession": "删除会话",
+    "errorDeleteProject": "删除项目失败",
+    "errorDeleteSession": "删除会话失败"
+  }
 }

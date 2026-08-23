@@ -89,7 +89,7 @@ export default function AppShellV2() {
   const matchLegacySession = useMatch("/session/:sessionId");
   const projectNameParam = matchProjectChat?.params.projectName ?? matchProject?.params.projectName ?? undefined;
   const sessionId = matchProjectChat?.params.sessionId ?? matchLegacySession?.params.sessionId ?? undefined;
-  useTranslation("common");
+  const { t } = useTranslation("common");
 
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
@@ -440,11 +440,11 @@ export default function AppShellV2() {
       await refreshProjectsSilently();
       setDeleteTarget(null);
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete project");
+      setDeleteError(err instanceof Error ? err.message : t("deleteDialogs.errorDeleteProject"));
     } finally {
       setIsDeletingProject(false);
     }
-  }, [deleteTarget, refreshProjectsSilently, sidebarSharedProps]);
+  }, [deleteTarget, refreshProjectsSilently, sidebarSharedProps, t]);
 
   const [deleteSessionTarget, setDeleteSessionTarget] = useState<DeleteSessionTarget | null>(null);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
@@ -486,11 +486,11 @@ export default function AppShellV2() {
       await refreshProjectsSilently();
       setDeleteSessionTarget(null);
     } catch (err) {
-      setDeleteSessionError(err instanceof Error ? err.message : "Failed to delete conversation");
+      setDeleteSessionError(err instanceof Error ? err.message : t("deleteDialogs.errorDeleteSession"));
     } finally {
       setIsDeletingSession(false);
     }
-  }, [deleteSessionTarget, refreshProjectsSilently, sidebarSharedProps]);
+  }, [deleteSessionTarget, refreshProjectsSilently, sidebarSharedProps, t]);
 
   const handleSelectProject = useCallback(
     (project: Project) => {
@@ -768,6 +768,7 @@ type DeleteProjectDialogProps = {
 };
 
 function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }: DeleteProjectDialogProps) {
+  const { t } = useTranslation("common");
   const sessionCount = project.sessions?.length ?? 0;
   const displayName = project.displayName || project.name;
 
@@ -779,7 +780,7 @@ function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }
             <Trash2 className="h-5 w-5" strokeWidth={1.75} />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-foreground">Delete project?</h3>
+            <h3 className="text-base font-semibold text-foreground">{t("deleteDialogs.projectTitle")}</h3>
             <p className="mt-1 text-sm break-all text-muted-foreground">
               <span className="font-mono text-xs">{displayName}</span>
             </p>
@@ -788,20 +789,21 @@ function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }
 
         <div className="space-y-3 p-5">
           <p className="text-sm text-foreground">
-            This removes the project from Sati and deletes its session metadata.
+            {t("deleteDialogs.projectDescription")}
             {sessionCount > 0 ? (
               <>
                 {" "}
                 <span className="font-medium">
-                  {sessionCount} session{sessionCount === 1 ? "" : "s"}
+                  {t("deleteDialogs.projectSessionsRemovedCount", { count: sessionCount })}
                 </span>{" "}
-                will also be removed.
+                {t("deleteDialogs.projectSessionsRemovedTail")}
               </>
             ) : null}
           </p>
           <p className="text-xs text-muted-foreground">
-            Files on disk are <span className="font-medium text-foreground">not</span> deleted — only Sati&apos;s
-            reference to them.
+            {t("deleteDialogs.projectFilesOnDiskBefore")}{" "}
+            <span className="font-medium text-foreground">{t("deleteDialogs.projectFilesOnDiskNegation")}</span>{" "}
+            {t("deleteDialogs.projectFilesOnDiskAfter")}
           </p>
           {error ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -817,7 +819,7 @@ function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }
             disabled={isDeleting}
             className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
           >
-            Cancel
+            {t("buttons.cancel")}
           </button>
           <button
             type="button"
@@ -830,7 +832,7 @@ function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }
             ) : (
               <Trash2 className="h-4 w-4" strokeWidth={1.75} />
             )}
-            {isDeleting ? "Deleting…" : "Delete project"}
+            {isDeleting ? t("deleteDialogs.deleting") : t("deleteProject")}
           </button>
         </div>
       </div>
@@ -847,6 +849,7 @@ type DeleteSessionDialogProps = {
 };
 
 function DeleteSessionDialog({ target, isDeleting, error, onCancel, onConfirm }: DeleteSessionDialogProps) {
+  const { t } = useTranslation("common");
   const projectName = target.project.displayName || target.project.name;
   const sessionTitle = sessionDisplayTitle(target.session);
 
@@ -858,15 +861,13 @@ function DeleteSessionDialog({ target, isDeleting, error, onCancel, onConfirm }:
             <Trash2 className="h-5 w-5" strokeWidth={1.75} />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-foreground">Delete conversation?</h3>
+            <h3 className="text-base font-semibold text-foreground">{t("deleteDialogs.sessionTitle")}</h3>
             <p className="mt-1 truncate text-sm text-muted-foreground">{sessionTitle}</p>
           </div>
         </div>
 
         <div className="space-y-3 p-5">
-          <p className="text-sm text-foreground">
-            This removes the conversation from <span className="font-medium">{projectName}</span>.
-          </p>
+          <p className="text-sm text-foreground">{t("deleteDialogs.sessionDescription", { projectName })}</p>
 
           {error ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -882,7 +883,7 @@ function DeleteSessionDialog({ target, isDeleting, error, onCancel, onConfirm }:
             disabled={isDeleting}
             className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
           >
-            Cancel
+            {t("buttons.cancel")}
           </button>
           <button
             type="button"
@@ -895,7 +896,7 @@ function DeleteSessionDialog({ target, isDeleting, error, onCancel, onConfirm }:
             ) : (
               <Trash2 className="h-4 w-4" strokeWidth={1.75} />
             )}
-            {isDeleting ? "Deleting…" : "Delete conversation"}
+            {isDeleting ? t("deleteDialogs.deleting") : t("deleteDialogs.deleteSession")}
           </button>
         </div>
       </div>
