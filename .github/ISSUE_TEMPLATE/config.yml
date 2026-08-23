@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 贡献指南
+    url: https://github.com/xujian519/sati/blob/main/CONTRIBUTING.md
+    about: 开发规范、提交流程、测试要求与视觉验证约定
+  - name: 开发标准
+    url: https://github.com/xujian519/sati/blob/main/docs/development-standards.md
+    about: 强制规则与完整门禁清单（附录 A）

@@ -43,6 +43,9 @@ export default [
       "scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
       "apps/desktop/scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
       "apps/desktop/src/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
+      // GitHub Actions 本地校验脚本（CI gate 等）与根 scripts/ 同类：Node 环境，
+      // 需注入 globals.node，避免 process/console 报 no-undef。
+      ".github/scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}",
     ],
     plugins: {
       react,
