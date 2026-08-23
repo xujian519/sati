@@ -112,6 +112,7 @@ export function platformCredibility(uri: string | undefined): CredibilityLevel {
   try {
     parsed = new URL(cleanEvidenceURI(uri));
   } catch {
+    // 非法 URI（解析失败）→ 回退 low 可信度
     return "low";
   }
   const hostname = parsed.hostname.toLowerCase();
@@ -144,6 +145,7 @@ export function platformCategory(uri: string | undefined): string {
   try {
     hostname = new URL(cleanEvidenceURI(uri)).hostname.toLowerCase();
   } catch {
+    // 非法 URI（解析失败）→ 回退 unknown 分类
     return "unknown";
   }
   if (isGovernmentDomain(hostname)) return "政府/法院/专利局官方";
@@ -162,6 +164,7 @@ export function evaluatePublicIntent(uri: string | undefined): "public" | "restr
   try {
     hostname = new URL(cleanEvidenceURI(uri)).hostname.toLowerCase();
   } catch {
+    // 非法 URI（解析失败）→ 推定对公众开放
     return "public";
   }
   const restrictedDomains = ["wsj.com", "ft.com", "nikkei.com", "springer.com", "elsevier.com"];

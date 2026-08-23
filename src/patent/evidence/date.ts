@@ -6,7 +6,7 @@
  * 纯函数，无外部依赖。
  */
 
-import type { DateDetermination, DateReliability, DateSourceType } from "./types.js";
+import type { DateDetermination, DateReliability } from "./types.js";
 
 /** 支持的日期格式（对齐 Go dateFormats）。
  * 英文月份名（Jan 2, 2023 / September 2, 2023）由 parseDateFlexible 的
@@ -184,6 +184,7 @@ export function extractWaybackMachineDate(rawURL: string): string {
   try {
     parsed = new URL(cleanEvidenceURI(rawURL));
   } catch {
+    // 非法 Wayback URL（解析失败）→ 视为无存档日期
     return "";
   }
   // 严格匹配 archive.org 域（web.archive.org / archive.org），
@@ -297,5 +298,3 @@ export function dateReliabilityLabel(reliability?: DateReliability): string {
       return "未知";
   }
 }
-
-export type { DateReliability, DateSourceType };
