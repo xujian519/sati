@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildModelRequest, parseModelConfig } from "../../src/model/index.js";
-import { probeOllamaModelsCached } from "../../src/model/ollama/probe.js";
+import { probeOllamaModelsCached, warmOllamaModels } from "../../src/model/ollama/probe.js";
 import type { CanonicalModelRequest } from "../../src/model/index.js";
 
 test("Ollama provider does not require apiKey and uses OpenAI protocol defaults", () => {
@@ -69,6 +69,27 @@ test("Ollama provider merges probed models with explicit config, config wins on 
   assert.equal(provider.models["qwen3:32b"].capabilities.supportsStreaming, true);
   // 配置显式声明的模型保留（未探测到也不被丢弃）
   assert.ok(provider.models["qwen3:0.6b"]);
+});
+
+test("warmOllamaModels swallows unreachable-ollama rejection (no unhandled reject)", async () => {
+  // 预热是 best-effort：ollama 不可达时不应产生 unhandledRejection（曾会崩溃/污染进程）。
+  let unhandled: unknown = undefined;
+  const onUnhandled = (reason: unknown) => {
+    unhandled = reason;
+  };
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    warmOllamaModels("http://ollama-down:11434/v1", {
+      fetchImpl: async () => {
+        throw new Error("connection refused");
+      },
+    });
+    // 等待 promise 链结算（reject → .catch 处理器运行）。
+    await new Promise(resolve => setTimeout(resolve, 0));
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+  assert.equal(unhandled, undefined, "warmOllamaModels must swallow unreachable-ollama rejections");
 });
 
 test("Ollama provider builds OpenAI-compatible chat completions body", () => {
