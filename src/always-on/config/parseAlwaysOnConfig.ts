@@ -341,6 +341,15 @@ function parseWorkspace(raw: unknown, target: AlwaysOnWorkspaceConfig, diagnosti
     diagnostics,
   );
   target.gitLfs = booleanField(raw, "gitLfs", target.gitLfs);
+  if (raw.gitLfs !== undefined) {
+    diagnostics.push({
+      code: "ALWAYS_ON_WORKSPACE_GIT_LFS_IGNORED",
+      severity: "warning",
+      message: "alwaysOn.workspace.gitLfs is parsed but not yet honored by the workspace provider; ignoring.",
+      path: "alwaysOn.workspace.gitLfs",
+      recoverable: true,
+    });
+  }
   target.maxPlansPerCycle = positiveInteger(
     raw.maxPlansPerCycle,
     target.maxPlansPerCycle,
@@ -379,6 +388,15 @@ function parseExecution(raw: unknown, target: AlwaysOnExecutionConfig, diagnosti
     "alwaysOn.execution.maxToolCalls",
     diagnostics,
   );
+  if (raw.maxToolCalls !== undefined) {
+    diagnostics.push({
+      code: "ALWAYS_ON_EXECUTION_MAX_TOOL_CALLS_IGNORED",
+      severity: "warning",
+      message: "alwaysOn.execution.maxToolCalls is parsed but not yet honored by the turn runner; ignoring.",
+      path: "alwaysOn.execution.maxToolCalls",
+      recoverable: true,
+    });
+  }
   target.timeoutMinutes = positiveInteger(
     raw.timeoutMinutes,
     target.timeoutMinutes,
