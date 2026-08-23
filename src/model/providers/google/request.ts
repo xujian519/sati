@@ -1,5 +1,6 @@
 import {
   FunctionCallingConfigMode,
+  ThinkingLevel,
   type Content,
   type FunctionDeclaration,
   type FunctionResponsePart,
@@ -87,6 +88,13 @@ function toGoogleToolConfig(toolChoice: CanonicalToolChoice | undefined): Genera
   };
 }
 
+/** 本地 ThinkingPlan.thinkingLevel（小写）→ Gemini SDK ThinkingLevel 枚举值（大写）。 */
+const GOOGLE_THINKING_LEVEL = {
+  low: ThinkingLevel.LOW,
+  medium: ThinkingLevel.MEDIUM,
+  high: ThinkingLevel.HIGH,
+} as const satisfies Record<"low" | "medium" | "high", ThinkingLevel>;
+
 function toGoogleThinkingConfig(
   request: CanonicalModelRequest,
   model: ModelDefinition,
@@ -103,8 +111,8 @@ function toGoogleThinkingConfig(
   if (thinkingPlan.useGeminiLevel && thinkingPlan.thinkingLevel) {
     return {
       includeThoughts: true,
-      thinkingLevel: thinkingPlan.thinkingLevel,
-    } as unknown as GenerateContentConfig["thinkingConfig"];
+      thinkingLevel: GOOGLE_THINKING_LEVEL[thinkingPlan.thinkingLevel],
+    };
   }
   const budget = thinkingPlan.budgetTokens;
   return {
