@@ -55,7 +55,7 @@
 - **TD-I18N-001** · `teamPanel` namespace 缺 2 个 zh key / 1 个 en key。工作量：S · 严重级：P3 · 状态：new
 - **TD-DOC-001** · 网关协议版本文档漂移：`version.ts`=**1.4**，但 `CLAUDE.md` 仍写「当前协议 **1.2**」
   - 位置：`src/gateway/protocol/version.ts:31` ↔ `CLAUDE.md`
-  - 建议：同步 `CLAUDE.md` 及变更表。工作量：S · 严重级：P2 · 状态：new
+  - 建议：同步 `CLAUDE.md` 及变更表。工作量：S · 严重级：P2 · 状态：done（2026-08-23：设计文档 `docs/design/gateway-protocol-versioning.md` 版本表/状态更新至 1.4；本地 `CLAUDE.md` 同步至 1.4（`CLAUDE.md` gitignored 不入库））
 
 > **自动化命中清单结束。** 以下为 Phase 2 逐模块人工审阅结果（B1–B6 全部完成）。
 
@@ -218,7 +218,7 @@
   - 位置：`src/gateway/protocol/types.ts:290`；`eventMapping.ts` 多处自由字符串
   - 建议：为高频子事件定义 `event` 字面量联合与 per-event detail 类型。
 - **TD-GATEWAY-008** · 网关协议版本文档漂移（1.2 vs 1.4）
-  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：done（2026-08-23，与 TD-DOC-001 同批处理）
   - 位置：`src/gateway/protocol/version.ts:31`（=1.4）↔ `CLAUDE.md`（写 1.2）
   - 建议：同步 `CLAUDE.md` 及变更表。
 
@@ -279,7 +279,7 @@
   - 位置：`src/context/DefaultContextRuntime.ts:199-201`（`await memoryPromise`）、`:95`（`DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS = 30_000`）
   - 建议：memory 注入改「到期即有则注入、超时降级为空」非阻塞回退或降为 background + 下轮注入。
 - **TD-CONTEXT-N04** · 性能文档与现状脱节
-  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：done（2026-08-23：`performance-review.md` 的「retrieve 无缓存」条目更正为已实现 TTL 缓存 + 并发去重，并注明 reasoning-loop ~828 行）
   - 位置：`src/context/memory/EdgeClawMemoryProvider.ts:80-138`；`src/context/projection/MessageProjector.ts:29`
   - 建议：更新 `performance-review.md` B 类条目与行数（retrieve 已有缓存；reasoning-loop 现 ~830 行）。
 - **TD-CONTEXT-N05** · `loadVectorRows` 读取/解析失败全部静默降级为空

@@ -99,7 +99,7 @@
 
 ### agent / 工具 / 会话
 - **`projectToolResults` 全量消息数组重建**：每轮工具结果落地 `[...input.messages, ...appendedMessages]` 全量复制，可改原地 push（loop 私有可变）。
-- **`EdgeClawMemoryProvider.retrieve` 无缓存**：每次模型调用同步记忆检索（默认超时 30s 阻塞模型调用）；建议按 session+query 哈希加 TTL 缓存或与模型请求并行。
+- **`EdgeClawMemoryProvider.retrieve` 缓存**（✅ 已实现）：进程内 `TtlCache`（默认 30s，上限 256）+ `inFlightRetrieves` 并发去重（`src/context/memory/EdgeClawMemoryProvider.ts`），与 memory-core 内部 recall cache（`retrieval/reasoning-loop.ts`，现 ~828 行）对齐；多轮工具循环 query 不变时命中缓存，省去每轮 memory-gate LLM 调用与语义检索。
 - **model/streaming `repairToolName`**：接收每次新建的 `Set`（`AgentLoop.repairTextExtractedToolNames` 每次 `new Set(list().map())`），无稳定引用可缓存；可改为在 AgentLoop 层缓存有效工具名集合。
 - **审计落盘**：`ToolRuntime` 对每次工具调用 `await auditRecorder.recordTool`，若实现为同步写盘会阻塞；建议 fire-and-forget 或批量冲刷。
 - **TokenAccounting 尾增量估算（次优后置）**：快速通道已消除每 turn 的 provider count 网络调用（见 §10）；若仍需进一步降低本地 tiktoken 全量 BPE 成本，可做“上轮 usage + 尾部增量估算”。
