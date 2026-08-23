@@ -919,9 +919,9 @@
   - 位置：`app-shell/AppShellV2.tsx:770-839`（DeleteProjectDialog）、`:848-908`（DeleteSessionDialog）
   - 影响：用户可见文案（"Delete project?"/"Cancel"等）全部硬编码，违反「UI 文案必须提取到 locales」铁律。建议：改用 `useTranslation()` 并补 common/settings key。
 - **TD-UI-APP-N04** · `LlmConfigurationStep.tsx` 全屏硬编码英文 + 多重 YAML cast 改写 + 重复模型拉取
-  - 类别：H · 严重级：P1 · 工作量：M · 状态：in_progress
+  - 类别：H · 严重级：P1 · 工作量：M · 状态：done
   - i18n 已修复（2026-08-23）：全屏硬编码文案改为 `useTranslation("settings")` 的 `t()`，新增 `settings.llmSetup.*`（含内联 `<span>` 的三段拆分保留 font-mono；协议/默认 URL 用 `protocolLabel`/`defaultUrlLabel` 标签+值拆分避免插值转义）。新增 `onboarding/view/subcomponents/llmSetup.i18n.test.ts` 断言 en/zh-CN key 解析与插值。en/zh-CN settings key 对齐（1043/1043）。ui typecheck/lint/biome/全量测试 582 通过。
-  - 剩余：`:290-346`（YAML cast → typed builder）、`:122-196`（重复 fetch → 合并两效应）——未处理。
+  - 结构修复（2026-08-23）：YAML 组装抽为纯函数 `llmConfigBuilder.ts`（`buildLlmConfig`，无 `as`；补默认值、按模型 id 合并、清理 legacy key）；三条模型拉取路径（两个自动 effect + 手动按钮）合并为单一 `loadModels`（`llmModelLoading.ts` 纯函数 `modelUsesRemoteDefault`/`resolveNextModels`/`resolveLoadErrorKind`），并移除按 `selectedModelId` 的重复 refetch。新增 `llmConfigBuilder.test.ts`、`llmModelLoading.test.ts`。ui typecheck/lint/biome/onboarding 测试通过。
   - 位置：`onboarding/view/subcomponents/LlmConfigurationStep.tsx:376-717`（硬编码，已修）、`:290-346`（YAML cast）、`:122-196`（重复 fetch）
   - 影响：用户可见文案（"LLM Provider Setup"/"Test Connection"等）全部硬编码，违反「UI 文案必须提取到 locales」铁律。建议：改用 i18n、typed builder 组装 YAML、合并两效应。
 - **TD-UI-APP-N05** · `useGitPanelController.ts` 各 git 操作近乎复制粘贴，错误上报不一致
