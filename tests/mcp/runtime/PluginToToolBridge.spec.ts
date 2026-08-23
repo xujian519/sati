@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -267,6 +267,30 @@ test("bridge reads markdown-linked image files from stdio cwd (M14)", async () =
     assert.deepEqual(Buffer.from(block.data, "base64"), png);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("bridge rejects markdown-linked image files outside cwd (path traversal)", async () => {
+  const base = mkdtempSync(join(tmpdir(), "sati-mcp-bridge-"));
+  try {
+    const cwd = join(base, "cwd");
+    mkdirSync(cwd, { recursive: true });
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    // 秘密文件放在 cwd 之外（父目录），链接用 `../secret.png` 试图穿越
+    writeFileSync(join(base, "secret.png"), png);
+    const client = {
+      spec: { ...STDIO_SPEC, cwd },
+      callTool: async () => ({
+        content: [{ type: "text", text: "![secret](../secret.png)" }],
+      }),
+    } as unknown as McpClient;
+    const def = await buildDef({ client });
+    const out = await def.execute({}, ctx);
+    // 不得读取 cwd 之外的文件：不产生 image 块，文本原样保留
+    assert.equal(out.content.filter(c => c.type === "image").length, 0);
+    assert.deepEqual(out.content, [{ type: "text", text: "![secret](../secret.png)" }]);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
   }
 });
 

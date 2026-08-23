@@ -357,13 +357,21 @@ async function processCommandLine(pid: number): Promise<string | null> {
 }
 
 /**
+ * 纯谓词：命令行是否属于 Sati 运行时进程（UI server / gateway / cron daemon）。
+ * 抽取成独立函数便于单测；供 isSatiRuntimeProcess 与（受控的）端口清理复用。
+ */
+export function isSatiRuntimeCommandLine(cmd: string): boolean {
+  return /satiui\/server|dist\/src\/cli\/sati|daemonMain|ui\/server\/index\.js/.test(cmd);
+}
+
+/**
  * 判断 PID 是否为 Sati 运行时进程（UI server / gateway / cron daemon）。
  * 仅凭 PID 或端口占用就杀会误伤 PID 复用或端口被无关进程占用的场景。
  */
 async function isSatiRuntimeProcess(pid: number): Promise<boolean> {
   const cmd = await processCommandLine(pid);
   if (!cmd) return false; // 读不到命令行时不杀，宁可放过不可误杀
-  return /satiui\/server|dist\/src\/cli\/sati|daemonMain|ui\/server\/index\.js/.test(cmd);
+  return isSatiRuntimeCommandLine(cmd);
 }
 
 async function cleanupStaleOrOrphanPid(): Promise<void> {
@@ -978,17 +986,23 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
    * 兜底：确保 gateway 端口可用。
    *
    * killOrphanGateway 只杀 Sati 运行时进程；若端口被非 Sati 进程占用（例如
-   * 残留的旧 gateway 未被识别、或用户手动启动了同端口服务），gateway spawn 会
-   * 抛 EADDRINUSE，sati-bridge 随即连接到该残留 listener 产生握手失败。
+   * 用户手动启动了同端口服务），gateway spawn 会抛 EADDRINUSE，sati-bridge
+   * 随即连接到该残留 listener 产生握手失败。
    *
-   * 本方法在 killOrphanGateway 之后调用：若端口仍被占，无论占用者身份，
-   * 统一尝试优雅终止，最多等待 ORPHAN_TERM_WAIT_MS 后强杀。
+   * 本方法在 killOrphanGateway 之后调用：仅当占用者被识别为 Sati 运行时进程时
+   * 才兜底终止；非 Sati 进程一律放行并告警，交给 spawn 报 EADDRINUSE，绝不误杀。
    */
   private async ensurePortFreeForGateway(port: number): Promise<void> {
     const pid = await this.listenerPidForPort(port);
     if (pid === null) return;
     if (pid === process.pid) return;
-    // 已经是 Sati 进程 — killOrphanGateway 应该已处理；若仍存活则兜底杀
+    // 只杀 Sati 运行时进程。若端口被非 Sati 进程占用，交给后续 gateway spawn
+    // 报 EADDRINUSE 并提示用户，绝不误杀用户相关的无关进程。
+    if (!(await isSatiRuntimeProcess(pid))) {
+      console.warn(`[desktop] port ${port} is held by non-Sati process ${pid}; refusing to kill it`);
+      return;
+    }
+    // 已是 Sati 进程 — killOrphanGateway 应该已处理；若仍存活则兜底杀
     await killPidGracefully(pid, ORPHAN_TERM_WAIT_MS);
   }
 

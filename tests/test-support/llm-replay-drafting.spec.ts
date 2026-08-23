@@ -89,9 +89,10 @@ function makeConfig(cwd: string): AgentRuntimeConfig {
   };
 }
 
-test("patent_drafting_v1 全链路 fixture 无 key 重放（录制后自动生效）", async () => {
+test("patent_drafting_v1 全链路 fixture 无 key 重放（录制后自动生效）", async t => {
   if (!existsSync(resolve(FIXTURE_DIR, "records.jsonl"))) {
-    // 未录制：跳过（录制流程见文件头注释）。CI 无 key 且无 fixture 时不应失败。
+    // 未录制：显式 skip（录制流程见文件头注释），避免以"通过"掩盖零断言。
+    t.skip("fixture 未录制（见文件头录制流程）；提交后自动生效");
     return;
   }
   const replay = createReplayModelRuntime(FIXTURE_DIR, new CapabilityOnlyRuntime());

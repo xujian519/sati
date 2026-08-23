@@ -145,14 +145,36 @@ export class CronTaskStore {
     try {
       const parsed = JSON.parse(raw) as Partial<CronTaskFile>;
       if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tasks)) {
-        return { schemaVersion: 1, tasks: [] };
+        throw new Error("unexpected tasks.json shape");
       }
       return {
         schemaVersion: 1,
         tasks: parsed.tasks.flatMap(task => (normalizeTask(task) ? [normalizeTask(task)!] : [])),
       };
-    } catch {
+    } catch (error) {
+      // 损坏的 tasks.json：静默返回空数组会让下一次 mutation 把空数组写回，
+      // 清空全部任务且无告警。改为把损坏文件备份为 .corrupt-<ts> 并告警，
+      // 保留可恢复数据（fail-closed，不假装正常继续）。
+      await this.backupCorruptTaskFile(error);
       return { schemaVersion: 1, tasks: [] };
+    }
+  }
+
+  /** 把损坏的 tasks.json 移出原位（.corrupt-<ts>），防止后续 mutation 覆盖丢数据。 */
+  private async backupCorruptTaskFile(reason: unknown): Promise<void> {
+    const reasonText = reason instanceof Error ? reason.message : String(reason);
+    const backupPath = `${this.paths.tasksFile}.corrupt-${Date.now()}`;
+    try {
+      await rename(this.paths.tasksFile, backupPath);
+      console.warn(
+        `[cron] tasks.json corrupt (${reasonText}); backed up to ${backupPath}; resetting to empty task list`,
+      );
+    } catch (backupError) {
+      console.warn(
+        `[cron] tasks.json corrupt (${reasonText}) and backup to ${backupPath} failed: ${
+          backupError instanceof Error ? backupError.message : String(backupError)
+        }`,
+      );
     }
   }
 

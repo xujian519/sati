@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
@@ -92,5 +92,38 @@ describe("CronTaskStore.appendRunEvent fd 复用", () => {
     const tasks = await store.listTasks();
     assert.equal(tasks.length, 1);
     assert.equal(tasks[0]?.taskId, "t1");
+  });
+
+  it("损坏的 tasks.json 备份为 .corrupt-<ts>，而非静默清空数据", async () => {
+    const { store, paths } = makeStore();
+    mkdirSync(paths.projectDir, { recursive: true });
+    const corrupt = "{ not valid json " + "x".repeat(50);
+    writeFileSync(paths.tasksFile, corrupt, "utf8");
+
+    const tasks = await store.listTasks();
+    assert.deepEqual(tasks, []);
+
+    // 损坏文件被移出原位备份，而非留在原位等下一次 mutation 覆盖。
+    const backups = readdirSync(paths.projectDir).filter(name => name.startsWith("tasks.json.corrupt-"));
+    assert.equal(backups.length, 1);
+    assert.equal(readFileSync(join(paths.projectDir, backups[0]!), "utf8"), corrupt);
+
+    // 后续写任务正常落盘，备份文件仍被保留。
+    await store.putTask({
+      schemaVersion: 1,
+      taskId: "t1",
+      message: "定时任务",
+      schedule: { type: "once", runAt: "2026-08-09T00:10:00.000Z" },
+      sessionKey: "cron/session",
+      channelKey: "feishu:cli",
+      projectKey: "/tmp/project",
+      createdAt: "2026-08-09T00:00:00.000Z",
+      updatedAt: "2026-08-09T00:00:00.000Z",
+      nextRunAt: "2026-08-09T00:10:00.000Z",
+      status: "scheduled",
+    });
+    assert.equal((await store.listTasks()).length, 1);
+    const backupsAfter = readdirSync(paths.projectDir).filter(name => name.startsWith("tasks.json.corrupt-"));
+    assert.equal(backupsAfter.length, 1);
   });
 });
