@@ -316,8 +316,7 @@ export function createPatentPdfDownloadTool(
       if (!Array.isArray(patents) || patents.length === 0) {
         return { ok: false, issues: [{ path: "patents", code: "required", message: "patents is required" }] };
       }
-      const normalized = patents.map(normalizePatentNumber).filter(n => n.length > 0);
-      const unique = [...new Set(normalized)];
+      const unique = normalizeUniquePatents(patents);
       if (unique.length === 0) {
         return {
           ok: false,
@@ -408,7 +407,7 @@ export function createPatentPdfDownloadTool(
         throw new SatiToolRuntimeError("setup_required", availability.reason, { tool: "patent_pdf_download" });
       }
 
-      const patents = [...new Set(input.patents.map(normalizePatentNumber).filter(n => n.length > 0))];
+      const patents = normalizeUniquePatents(input.patents);
       const outputDir = resolveOutputDir(input.outputDir, context.cwd, patentsConfigProvider?.());
       session.ensureDir(outputDir);
       const pageTimeoutSec = input.pageTimeoutSec ?? 20;
@@ -644,6 +643,11 @@ async function saveManifestEntry(outputDir: string, entry: PatentManifestEntry):
 async function sha1OfFile(path: string): Promise<string> {
   const data = await readFile(path);
   return createHash("sha1").update(data).digest("hex");
+}
+
+/** 归一化（去空格/分隔符）并按号去重：validateInput 与 execute 共用，保持两处契约一致。 */
+function normalizeUniquePatents(patents: string[]): string[] {
+  return [...new Set(patents.map(normalizePatentNumber).filter(n => n.length > 0))];
 }
 
 /** 当天日期子目录名（YYYY-MM-DD）：下载目录按日归档。 */

@@ -23,6 +23,7 @@ import type { SatiToolDefinition } from "../protocol/types.js";
 import {
   buildWorkflowProvider,
   buildWorkflowRunContext,
+  previewText,
   renderWorkflowResultText,
   resolveRunPersistTarget,
   resolveWorkflowRunsDir,
@@ -373,9 +374,7 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
             }
             const lines = result.stages.map(s => {
               const flag = s.degraded ? "⚠️ 降级" : "✅";
-              const preview =
-                s.output.length > 0 ? `${s.output.slice(0, 80)}${s.output.length > 80 ? "…" : ""}` : "(无输出)";
-              return `- ${flag} ${s.stageId}${s.atom !== undefined ? ` [atom:${s.atom}]` : ""}: ${preview}`;
+              return `- ${flag} ${s.stageId}${s.atom !== undefined ? ` [atom:${s.atom}]` : ""}: ${previewText(s.output)}`;
             });
             const persistNote =
               persistTarget !== undefined ? await writeRunArtifacts(persistTarget, manifest, result) : "持久化: 未启用";
