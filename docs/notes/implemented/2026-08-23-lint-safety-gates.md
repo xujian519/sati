@@ -14,7 +14,7 @@ Status: implemented
    - Telegram `bot.start()` 显式 `void`(长轮询挂起,不能 await);
    - `InProcessGateway.recordGatewayStatusMessage`、`GatewayElicitationChannel.dispatchHook`、`FileHistoryStore.cacheMtime` 显式 `void`;
    - TuiApp `onSubmit={handleSubmit}` 包装为 `() => void handleSubmit()`。
-2. **危险 API 禁令(disallowed-methods)**:`no-restricted-imports: error` 禁 `child_process.exec`/`execSync`(经 shell 解释,存在命令注入面),**仅对核心后端 `src/` 生效**;保留 `execFile`/`execFileSync`(数组参数,不经 shell)与 `spawn`(调用方负责 scrub 环境变量/管理生命周期)。`apps/desktop`(桌面壳 + release 脚本,刻意的同步 shell 构建/平台命令)与脚本层豁免——`server-manager.ts` 自身已在注释里声明要从 `execSync` 迁移到 `execFile`。
+2. **危险 API 禁令(disallowed-methods)**:`no-restricted-imports: error` 禁 `child_process.exec`/`execSync`(经 shell 解释,存在命令注入面),**仅对核心后端 `src/` 生效**;保留 `execFile`/`execFileSync`(数组参数,不经 shell)与 `spawn`(调用方负责 scrub 环境变量/管理生命周期)。`apps/desktop`(桌面壳 + release 脚本,刻意的同步 shell 构建/平台命令)与脚本层豁免——`server-manager.ts` 仅个别实例（端口探测、tar 解包）已迁移到 `execFile`；其余如 `taskkill`/`Remove-Item`/`rm -rf` 等为刻意的 Windows/构建命令，保留在桌面层。
 3. **负控制(G5-b)**:新增 `tests/development-standards/lint-fixtures/{float-promise,danger-import,ok}.ts` + `lint-contract.config.mjs`(test-only)+ `lint-contract.spec.ts`,用 node:test 对违规 fixture 跑 eslint 断言非零、对合规 fixture 断言零;fixtures 已加入根 eslint ignore 不污染常规 lint。
 4. 先只对 `src/` 开 type-aware;`tests/scripts` 暂不 type-aware(分批收敛)。
 

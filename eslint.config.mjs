@@ -55,10 +55,16 @@ export default [
     rules: {
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-misused-promises": "error",
-      // 危险 API 禁令(disallowed-methods)仅对核心后端 src/ 生效。child_process.exec/execSync
-      // 经 shell 解释命令存在注入面；Sati 已用 execFile/execFileSync(数组参数)替代。
-      // 豁免:apps/desktop(桌面壳 + release 脚本,刻意的同步 shell 构建/平台命令)与
-      // tests/scripts(构建/工具层)。核心运行时(src/)是注入风险的主轮廓。
+    },
+  },
+  {
+    // 危险 API 禁令(disallowed-methods)：独立于 type-aware block,避免被其运行时/析构牵连。
+    // 仅对核心后端 src/ 生效;child_process.exec/execSync 经 shell 解释命令存在注入面,
+    // Sati 已用 execFile/execFileSync(数组参数)替代。
+    // 豁免:apps/desktop(桌面壳 + release 脚本,刻意的同步 shell 构建/平台命令)与
+    // tests/scripts(构建/工具层)。核心运行时(src/)是注入风险的主轮廓。
+    files: ["src/**/*.{ts,tsx,mts,cts}"],
+    rules: {
       "no-restricted-imports": [
         "error",
         {
