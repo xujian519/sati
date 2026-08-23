@@ -65,8 +65,8 @@
 | C06 | src/context 非 memory | projection、budget、compression、vectors | ✅ 2026-08-21 |
 | C07 | src/context/memory 主包 | EdgeClawMemoryProvider 等（不含子包） | ✅ 2026-08-22 |
 | C08 | edgeclaw-memory-core 子包 | sqlite.ts 1716、llm-extraction.ts 1573、file-memory.ts 1147、llm-prompts.ts 997；独立 build 验证 | ✅ 2026-08-23 |
-| C09 | src/tool registry/execution/audit | createBuiltinRegistry、ToolRuntime | ⬜ |
-| C10 | src/tool/builtin 上半 | readFile.ts 988、filesystem 组 | ⬜ |
+| C09 | src/tool registry/execution/audit | createBuiltinRegistry、ToolRuntime | ✅ 2026-08-23 |
+| C10 | src/tool/builtin 上半 | readFile.ts 988、filesystem 组 | ✅ 2026-08-23 |
 | C11 | src/tool/builtin 下半 | patentPdfDownload.ts 945、patentWorkflow 等 | ⬜ |
 
 ### 阶段 2 — 业务域（W3–W5）
@@ -128,6 +128,8 @@
 | 2026-08-22 | C07 | src/context/memory 主包 | P2 EdgeClawMemoryProvider telemetry 块 ×5 重复（module/ownerModule/executionKind 恒 "memory"）→ 提取 trackMemoryStage 私有 helper；P3 setCachedRetrieve/trackRetrieveLoopEnd 单行转发内联、semantic-index isServiceClosedError 冗余条件（"this statement…" 被 "statement…" 子串覆盖）、MemoryAttachmentBuilder throwAbortError 单调用点内联、resolveMemoryLlm as 断言消除（memoryApiTypeForProtocol 返回类型收窄为 EdgeClawMemoryLlmOptions["apiType"]，两类型字面量集合相同）；P3 barrel 4 个零消费 type re-export 删除（EdgeClawCaptureTurnResult 等，测试走源文件导入）；P2 记录不处理：CanonicalMessagesToMemoryMessagesOptions 零消费但属公共函数 options 契约类型保留导出；P0/P1 无 | 1（refactor）+ docs | ✅ |
 
 | 2026-08-23 | C08 | edgeclaw-memory-core 子包 | P2 重复逻辑合并：sqlite normalizePreferredSessionKeys×3→helper、getPipelineState 委托 readPipelineState、countTableRows×2（clearAll/clearCurrent）；file-memory markEntriesDeprecated/restoreEntries 对称合并为 setEntriesDeprecated、listProjectIdentityHints 冗余别名删除、repairManifests memoryFileCount 提取；llm-prompts project/feedback 字段映射两处重复→mapDreamProjectFields/mapDreamFeedbackFields；P3 readWorkspaceDirFromDb 无参 catch 补意图注释；子包扫描无裸 console/无 any 类型逃逸/无 TODO；P0 无 | 1（refactor） | ✅ |
+| 2026-08-23 | C09 | src/tool registry/execution/audit | P2 barrel 死导出批量清理：src/tool/index.ts 163 导出中 ~110 零外部消费（builtin/web 组整块、各工具 Input/Output 类型与 creator、constraints 辅助等）→ 删除，净 -153 行；保留有消费者的核心面（ToolRuntime/ToolRegistry/schedulers/protocol types 等）；P3 ToolRuntime isPlanMarkdownPath 双重 resolve 简化、deliverAuditRecord catch 补意图注释；三目录扫描零 console/any/TODO/catch；P0/P1 无 | 1（refactor + event-matrix） | ✅ |
+| 2026-08-23 | C10 | src/tool/builtin 上半 | P2 重复收敛：readFile readState.set ×5 → markRead 闭包；read-more 双 notice 函数合并（reason 参数）；auto-page 双 while 循环合并为 shrinkToBudget helper；writeFile/editFile 的 freshness 错误字符串匹配块 ×2 → snapshotGuardIssueMessage（writeSnapshots 导出）；writeFile/editFile execute 写盘收尾序列 ×2 → finalizeWorkspaceFileWrite（新建 writeFinalize.ts）；readFile/sendAttachment workspace 外权限检查 ×2 → checkReadonlyPathPermission（新建 readPermissions.ts）；stat ENOENT catch ×3 → statIfExists；ensureWriteSnapshotFresh changed-throw ×2 局部去重；P3 pathSafety/readFile 双重 resolve 模式简化（同 C09 ToolRuntime）；P0/P1 无 | 1（refactor） | ✅ |
 
 ### 日卡记录
 
@@ -230,6 +232,35 @@
 - **精炼项**：重复提取（6 组）、冗余别名删除 ×1、catch 注释 ×1、类型导入补齐（`LlmDreamFileRecordInput`）
 - **验证**：`pnpm --filter edgeclaw-memory-core build` ✅；`pnpm --filter edgeclaw-memory-core typecheck`（tsc 两配置）✅；子包测试 233/233 ✅；`pnpm typecheck` 全量 ✅（主包 import 未破）；`biome check`/`eslint` 子包 ✅（format:write 修复 2 处行宽）
 - **提交**：`refactor(memory): dedupe edgeclaw-memory-core helpers and document fallback catch`
+
+#### C09 src/tool registry/execution/audit（2026-08-23）
+
+- **审阅发现**：
+  - P2 barrel 死导出批量清理：`src/tool/index.ts` 163 个导出符号中约 110 个全仓零外部消费（builtin/web 组整块——urlFetcher/urlContentCache/preapprovedHosts/secondaryPrompt/urlValidation 的常量/函数/类型、`__setWebFetchHookForTesting` 零测试使用；各工具 `XxxInput`/`XxxOutput` 类型与 creator 函数——消费者全部走源文件相对导入；constraints 的 build*/is* 辅助）→ 全部删除，净 -153 行。保留有消费者的核心面（ToolRuntime/ToolRegistry/ConcurrentToolScheduler/filterAvailableTools/protocol types/createBuiltinRegistry/createAgentTool/createReadFileTool 等 ~50 个）。⚠️ 消费者检测以 tsc 兜底验证（rg 管道扫描曾漏检 createReadMcpResourceTool，typecheck 报错后已恢复）
+  - P3 ToolRuntime.ts isPlanMarkdownPath：`resolve(isAbsolute(p) ? p : resolve(cwd, p))` 双重 resolve 冗余 → `resolve(cwd, filePath)`（数学等价）；deliverAuditRecord 的 `.catch(() => {})` 补 fire-and-forget 意图注释
+  - P3 记录不处理：repairToolName BUILTIN_ALIASES 表驱动设计良好不动；errorRecovery classifyWebFetchError/webFetchNextActions 结构相似但行为分支不同不合并
+  - P0/P1 无行为缺陷。三目录横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO、零无参 catch（除已注释的审计投递）
+- **精炼项**：barrel 死导出删除 ~110 处、双重 resolve 简化 ×1、catch 注释 ×1
+- **验证**：`pnpm typecheck` ✅；`pnpm lint` ✅（event-matrix 重生成，ToolRuntime 纯行号偏移）；`biome check src/tool` ✅；`pnpm test` 3728 pass / 0 fail ✅
+- **提交**：`refactor(tool): drop dead barrel re-exports, simplify plan-mode path resolution`
+
+#### C10 src/tool/builtin 上半 readFile + filesystem 组（2026-08-23）
+
+- **审阅发现**：
+  - P2 重复收敛（6 组）：
+    - readFile.ts `readState.set(dedupKey, {...})` ×5 逐字一致（仅 mtimeMs 来源不同）→ 提取 `markRead(mtimeMs)` 闭包（readFileInRange 返回值已 floor，统一 Math.floor 等价）
+    - readFile.ts renderReadMoreNotice/renderToolResultRefReadMoreNotice 仅中间句不同 → 合并为 reason 参数单函数
+    - readFile.ts auto-page 双 while 循环（autoPaged / tool-result ref 两路径循环体一致，互斥执行）→ 合并为 `shrinkToBudget(markRef)` async helper
+    - writeFile/editFile validateInput 的 freshness 错误字符串匹配块 ×2 → writeSnapshots 导出 `snapshotGuardIssueMessage(error)`
+    - writeFile/editFile execute 写盘收尾序列（writeTextFile→stat→invalidate→snapshot→didChange/didSave）×2 → 新建 `filesystem/writeFinalize.ts` finalizeWorkspaceFileWrite（独立文件避免 writeTextFile↔writeSnapshots 循环依赖）
+    - readFile/sendAttachment 的 workspace 外权限检查（passthrough→deny→ask+session rule 三段式）×2 → 新建 `filesystem/readPermissions.ts` checkReadonlyPathPermission(toolName, ...)
+  - P2 stat ENOENT catch 块 ×3（writeSnapshots ×2 + writeTextFile ×1）→ 提取 `statIfExists` 导出；ensureWriteSnapshotFresh 内 changed-throw ×2 局部去重为 throwChanged 闭包
+  - P3 路径解析 `resolve(isAbsolute? ... : join(cwd,p))` 模式简化 ×2（pathSafety.ts:28、readFile validateInput；与 C09 ToolRuntime 同款）
+  - P3 记录不处理：writeFile/editFile 用错误消息字符串匹配判定快照守卫错误（脆弱但改抛结构化标志属行为面改动）；glob/grep/editNotebook/sendAttachment 主体质量高未动
+  - P0/P1 无行为缺陷。横切扫描：零 console/any/TODO，catch 均带意图或语义清晰（mupdf 失败→undefined 等）
+- **精炼项**：重复提取 6 组 + helper 收敛 3 处 + resolve 简化 2 处（净 -约 90 行，新增 2 个小模块）
+- **验证**：`pnpm typecheck` ✅；`pnpm lint` ✅；`biome check src/tool` ✅（format --write 修复 1 处行宽）；`pnpm test` 3728 pass / 0 fail ✅（tool/filesystem 套件全绿）
+- **提交**：`refactor(tool): dedupe filesystem tool helpers and read_file budget paths`
 
 ## 六、基线（2026-08-18 实测）
 
