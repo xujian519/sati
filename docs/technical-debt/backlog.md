@@ -487,9 +487,9 @@
 **模块概况**：约 44 TS + 1500+ wiki md 卡；kg-store/legal-search 已拆纯件、38 测试覆盖深。债务在**检索编排重复**、**法规 LIKE 降级未对齐**、**DB 行强转与全局缓存**。`ipc-classifier.ts` 数据内联已由 TD-PATENT-N08 登记，不重复。
 
 - **TD-KNOWLEDGE-N01** · FTS5 探测+降级编排在 3 个检索引擎近乎逐字重复
-  - 类别：D · 严重级：P2 · 工作量：S · 状态：new
+  - 类别：D · 严重级：P2 · 工作量：S · 状态：done
   - 位置：`legal/legal-search.ts:119-150`、`legal/knowledge-law-search.ts:166-196`、`case-law/case-law-search.ts:351-384`
-  - 建议：抽共享 `runFtsThenLikeFallback` 编排原语，把 data-mapper/降级打点作策略参数传入。
+  - 建议：抽共享 `runFtsThenLikeFallback` 编排原语，把 data-mapper/降级打点作策略参数传入。✅（2026-08-23：`src/knowledge/shared/fts.ts` 新增 `runFtsThenLikeFallback<T>`，三引擎 `search` 主体改调之；降级打点经 `onDegrade`、data-mapper 由调用方闭包注入。新增 `tests/knowledge/shared/fts-then-like.spec.ts`，knowledge 248 测全绿。）
 - **TD-KNOWLEDGE-N02** · `KnowledgeLawSearch`(knowledge.db 法规) 的 LIKE 降级仍走「每行 UDF 解压」单阶段，未移植 case-law 两阶段/扫描上限
   - 类别：I · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`legal/knowledge-law-search.ts:98-107,303-317`
