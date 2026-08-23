@@ -18,7 +18,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { resolve as resolvePath } from "node:path";
+import { resolve as resolvePath, relative as relativePath, isAbsolute, sep } from "node:path";
 import { SatiToolRuntimeError } from "../../tool/protocol/errors.js";
 import type {
   SatiToolDefinition,
@@ -183,6 +183,10 @@ async function extractFileImages(text: string, cwd: string): Promise<SatiToolRes
     const relPath = match[1];
     try {
       const absPath = resolvePath(cwd, relPath);
+      // 防止路径穿越：MCP server 返回的 `../` 相对链接不得读取 cwd 之外的文件，
+      // 否则恶意/第三方 server 可把任意磁盘文件以 base64 注入模型上下文。
+      const rel = relativePath(cwd, absPath);
+      if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) continue;
       const data = await readFile(absPath);
       const ext = relPath.split(".").pop()?.toLowerCase() ?? "png";
       const mimeType =
