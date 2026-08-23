@@ -1142,6 +1142,10 @@ export class DiscoveryFire {
         mode: input.mode,
         runId: input.runId,
         projectKey: this.deps.projectKey,
+        // 接线 alwaysOn.execution：限制单次 Always-On turn 的步数与墙钟时长，
+        // 避免常驻后台执行失控（此前配置被解析但从未传递，属静默失效）。
+        maxTurns: this.deps.config.execution.maxTurns,
+        timeoutMs: this.deps.config.execution.timeoutMinutes * 60 * 1000,
         telemetry: {
           ownerModule: "always_on",
           executionKind: "always_on",
