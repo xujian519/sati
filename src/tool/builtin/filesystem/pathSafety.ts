@@ -29,7 +29,8 @@ export function resolveSatiWorkspacePath(
     };
   }
 
-  const absolutePath = path.resolve(path.isAbsolute(inputPath) ? inputPath : path.join(context.cwd, inputPath));
+  // resolve(cwd, p) 对绝对/相对输入统一产出规范化绝对路径。
+  const absolutePath = path.resolve(context.cwd, inputPath);
 
   if (context.permissionMode === "bypassPermissions") {
     const relativePath = path.relative(context.cwd, absolutePath) || ".";

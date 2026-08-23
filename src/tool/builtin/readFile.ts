@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import type { SatiToolDefinition } from "../protocol/types.js";
-import type { PermissionResult, PermissionRule } from "../../permission/index.js";
+import type { PermissionResult } from "../../permission/index.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import { applyResultSizeLimit } from "../protocol/result.js";
 import { countTokens } from "../../context/budget/tokenizer.js";
@@ -19,6 +19,7 @@ import {
 } from "./filesystem/fileTypeSafety.js";
 import { readNotebook } from "./filesystem/readNotebook.js";
 import { recordWriteSnapshot } from "./filesystem/writeSnapshots.js";
+import { checkReadonlyPathPermission } from "./filesystem/readPermissions.js";
 
 export type ReadFileInput = {
   file_path: string;
@@ -97,7 +98,7 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
     isReadOnly: () => true,
     isConcurrencySafe: () => false,
     checkPermissions: async (input, context): Promise<PermissionResult> =>
-      checkReadFilePermission(input.file_path, context),
+      checkReadonlyPathPermission("read_file", input.file_path, context),
     validateInput: async (input, context) => {
       if (input.offset !== undefined && input.offset < 1) {
         return {
@@ -137,9 +138,7 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
         }
       }
 
-      const absolutePath = path.resolve(
-        path.isAbsolute(input.file_path) ? input.file_path : path.join(context.cwd, input.file_path),
-      );
+      const absolutePath = path.resolve(context.cwd, input.file_path);
       if (isBlockedDevicePath(absolutePath)) {
         return {
           ok: false,
@@ -181,6 +180,15 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
       const kind = classifyReadKind(resolved.absolutePath);
       const readState = context.readFileState ?? (context.readFileState = new Map());
       const dedupKey = buildReadStateKey(resolved.absolutePath, kind, input.offset, input.limit, input.pages);
+      // 各读取分支共用的去重状态登记（mtimeMs 统一取整，与 snapshot 语义一致）。
+      const markRead = (mtimeMs: number) =>
+        readState.set(dedupKey, {
+          mtimeMs: Math.floor(mtimeMs),
+          kind,
+          offset: input.offset,
+          limit: input.limit,
+          pages: input.pages,
+        });
       const previous = readState.get(dedupKey);
       if (previous && previous.mtimeMs === Math.floor(fileStat.mtimeMs)) {
         return {
@@ -233,13 +241,7 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
           };
         }
         const compressed = preparedImage.image;
-        readState.set(dedupKey, {
-          mtimeMs: Math.floor(fileStat.mtimeMs),
-          kind,
-          offset: input.offset,
-          limit: input.limit,
-          pages: input.pages,
-        });
+        markRead(fileStat.mtimeMs);
         return {
           content: [
             {
@@ -310,13 +312,7 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
               data: { filePath: resolved.relativePath, kind, pageCount, renderError: rendered.error },
             };
           }
-          readState.set(dedupKey, {
-            mtimeMs: Math.floor(fileStat.mtimeMs),
-            kind,
-            offset: input.offset,
-            limit: input.limit,
-            pages: input.pages,
-          });
+          markRead(fileStat.mtimeMs);
           return {
             content: [
               {
@@ -382,13 +378,7 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
             context.modelMultimodal?.imageDetail,
           );
           if (rendered.ok) {
-            readState.set(dedupKey, {
-              mtimeMs: Math.floor(fileStat.mtimeMs),
-              kind,
-              offset: input.offset,
-              limit: input.limit,
-              pages: input.pages,
-            });
+            markRead(fileStat.mtimeMs);
             const degradeReason = !supportsPdf
               ? "model does not support PDF input"
               : `file exceeds ${PDF_EXTRACT_SIZE_THRESHOLD / 1024 / 1024}MB threshold`;
@@ -441,13 +431,7 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
         }
 
         // Model supports PDF and file is small enough: send as document block
-        readState.set(dedupKey, {
-          mtimeMs: Math.floor(fileStat.mtimeMs),
-          kind,
-          offset: input.offset,
-          limit: input.limit,
-          pages: input.pages,
-        });
+        markRead(fileStat.mtimeMs);
         return {
           content: [
             {
@@ -485,13 +469,7 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
         const ranged = sliceRenderedText(notebook.text, offset, input.limit);
         const numbered = renderNumberedLines(ranged.lines, ranged.startLine);
         ensureTokenBudget(numbered, resolved.relativePath);
-        readState.set(dedupKey, {
-          mtimeMs: Math.floor(fileStat.mtimeMs),
-          kind,
-          offset: input.offset,
-          limit: input.limit,
-          pages: input.pages,
-        });
+        markRead(fileStat.mtimeMs);
         recordWriteSnapshot(
           context,
           resolved.absolutePath,
@@ -520,20 +498,20 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
       let text = renderReadableRange(ranged.content, ranged.startLine, ranged.totalLines);
       let autoPaged = input.limit === undefined && effectiveLimit !== undefined;
       let toolResultRefAutoPaged = false;
+      // 超预算时二分收缩行数。autoPaged（大文件自动翻页）与 tool-result ref
+      // （托管结果文件）两条路径的循环体一致，仅标记位不同，合并为一个 helper。
+      const shrinkToBudget = async (markRef: boolean) => {
+        while (isOverTextBudgetMemo(text) && ranged.lineCount > 1) {
+          const nextLimit = Math.max(1, Math.floor(ranged.lineCount / 2));
+          ranged = await readFileInRange(resolved.absolutePath, offset, nextLimit, context.abortSignal);
+          text = renderReadableRange(ranged.content, ranged.startLine, ranged.totalLines);
+          if (markRef) toolResultRefAutoPaged = true;
+        }
+      };
       if (autoPaged) {
-        while (isOverTextBudgetMemo(text) && ranged.lineCount > 1) {
-          const nextLimit = Math.max(1, Math.floor(ranged.lineCount / 2));
-          ranged = await readFileInRange(resolved.absolutePath, offset, nextLimit, context.abortSignal);
-          text = renderReadableRange(ranged.content, ranged.startLine, ranged.totalLines);
-        }
-      }
-      if (!autoPaged && isManagedToolResultRefPath(resolved.relativePath)) {
-        while (isOverTextBudgetMemo(text) && ranged.lineCount > 1) {
-          const nextLimit = Math.max(1, Math.floor(ranged.lineCount / 2));
-          ranged = await readFileInRange(resolved.absolutePath, offset, nextLimit, context.abortSignal);
-          text = renderReadableRange(ranged.content, ranged.startLine, ranged.totalLines);
-          toolResultRefAutoPaged = true;
-        }
+        await shrinkToBudget(false);
+      } else if (isManagedToolResultRefPath(resolved.relativePath)) {
+        await shrinkToBudget(true);
       }
       if (isOverTextBudgetMemo(text) && input.limit === undefined) {
         autoPaged = true;
@@ -544,18 +522,12 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
       }
       ensureTokenBudget(text, resolved.relativePath, ranged.startLine);
       if (autoPaged && ranged.truncated) {
-        text += renderReadMoreNotice(resolved.relativePath, ranged.endLine + 1, ranged.lineCount);
+        text += renderReadMoreNotice(resolved.relativePath, ranged.endLine + 1, ranged.lineCount, "large_file");
       }
       if (toolResultRefAutoPaged && ranged.truncated) {
-        text += renderToolResultRefReadMoreNotice(resolved.relativePath, ranged.endLine + 1, ranged.lineCount);
+        text += renderReadMoreNotice(resolved.relativePath, ranged.endLine + 1, ranged.lineCount, "tool_result_ref");
       }
-      readState.set(dedupKey, {
-        mtimeMs: ranged.mtimeMs,
-        kind,
-        offset: input.offset,
-        limit: input.limit,
-        pages: input.pages,
-      });
+      markRead(ranged.mtimeMs);
       recordWriteSnapshot(context, resolved.absolutePath, ranged.fullContent ?? ranged.content, ranged.mtimeMs, {
         offset: input.offset,
         limit: input.limit ?? (ranged.fullContent === undefined ? ranged.lineCount : undefined),
@@ -614,19 +586,19 @@ function renderNumberedLines(lines: string[], startLine: number): string {
   return lines.map((line, index) => `${startLine + index}|${line}`).join("\n");
 }
 
-function renderReadMoreNotice(filePath: string, nextOffset: number, limit: number): string {
+function renderReadMoreNotice(
+  filePath: string,
+  nextOffset: number,
+  limit: number,
+  reason: "large_file" | "tool_result_ref",
+): string {
+  const cause =
+    reason === "large_file"
+      ? "The file is too large to read in one response, so read_file returned"
+      : "The persisted tool result was too large for the requested range, so read_file returned";
   return (
     "\n<system-reminder>" +
-    `The file is too large to read in one response, so read_file returned the first ${limit} lines. ` +
-    `Continue with read_file({ file_path: "${filePath}", offset: ${nextOffset}, limit: ${limit} }) if you need more.` +
-    "</system-reminder>"
-  );
-}
-
-function renderToolResultRefReadMoreNotice(filePath: string, nextOffset: number, limit: number): string {
-  return (
-    "\n<system-reminder>" +
-    `The persisted tool result was too large for the requested range, so read_file returned ${limit} lines. ` +
+    `${cause} the first ${limit} lines. ` +
     `Continue with read_file({ file_path: "${filePath}", offset: ${nextOffset}, limit: ${limit} }) if you need more.` +
     "</system-reminder>"
   );
@@ -916,73 +888,4 @@ async function compressImageForBudget(
     );
   }
   return { buffer: output, mimeType: outputMimeType };
-}
-
-function checkReadFilePermission(
-  inputPath: string,
-  context: Parameters<NonNullable<SatiToolDefinition<ReadFileInput>["checkPermissions"]>>[1],
-): PermissionResult {
-  const workspaceResolved = resolveSatiWorkspacePath(inputPath, context, {
-    mustExist: true,
-    allowRegisteredReadFiles: true,
-  });
-  if (workspaceResolved.ok) {
-    return { type: "passthrough" };
-  }
-  if (workspaceResolved.error.code !== "path_not_allowed") {
-    return {
-      type: "deny",
-      reason: { type: "safety", message: workspaceResolved.error.message },
-      message: workspaceResolved.error.message,
-    };
-  }
-
-  const outsideResolved = resolveSatiWorkspacePath(inputPath, context, {
-    mustExist: true,
-    allowOutsideWorkspace: true,
-  });
-  if (!outsideResolved.ok) {
-    return {
-      type: "deny",
-      reason: { type: "safety", message: outsideResolved.error.message },
-      message: outsideResolved.error.message,
-    };
-  }
-
-  const rule = buildRecursiveReadFileRule(outsideResolved.absolutePath);
-  const reason = {
-    type: "tool" as const,
-    toolName: "read_file",
-    message: "read_file targets a path outside the workspace.",
-  };
-  return {
-    type: "ask",
-    reason,
-    request: {
-      toolCallId: "",
-      toolName: "read_file",
-      inputSummary: JSON.stringify({ file_path: outsideResolved.absolutePath }),
-      reason,
-      options: [
-        { id: "allow_once", label: "Allow once" },
-        { id: "allow_session", label: "Allow this folder for this session", rules: [rule] },
-        { id: "deny", label: "Deny" },
-        { id: "cancel", label: "Cancel" },
-      ],
-      metadata: {
-        externalPath: outsideResolved.absolutePath,
-        allowedDirectory: path.dirname(outsideResolved.absolutePath),
-        pattern: rule.pattern,
-      },
-    },
-  };
-}
-
-function buildRecursiveReadFileRule(absolutePath: string): PermissionRule {
-  return {
-    source: "session",
-    behavior: "allow",
-    toolName: "read_file",
-    pattern: path.join(path.dirname(absolutePath), "*"),
-  };
 }
