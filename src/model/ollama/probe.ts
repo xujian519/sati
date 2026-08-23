@@ -149,15 +149,16 @@ export function getCachedOllamaModels(baseUrl: string): OllamaModelInfo[] | null
     // 否则 config reload 会在「有探测模型 / 无探测模型」之间摆动，
     // diffConfigSnapshots 每次判定 ollama.models 变化 → 每次 turn 前
     // invalidate 全部 runtime → 每次 turn 重建（含 embeddings 全表扫描）。
-    void probeOllamaModelsCached(baseUrl);
+    // 后台刷新是 best-effort：ollama 不可达时忽略，避免 unhandledRejection。
+    void probeOllamaModelsCached(baseUrl).catch(() => {});
     return entry.models;
   }
   return entry.models;
 }
 
 /** 触发异步探测（in-flight 去重），结果写入缓存。调用方无需等待。 */
-export function warmOllamaModels(baseUrl: string): void {
-  void probeOllamaModelsCached(baseUrl);
+export function warmOllamaModels(baseUrl: string, options?: { fetchImpl?: typeof fetch }): void {
+  void probeOllamaModelsCached(baseUrl, options).catch(() => {});
 }
 
 /** 探测并缓存，in-flight 去重；与 `warmOllamaModels` 的区别是返回 Promise。 */
