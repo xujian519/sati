@@ -78,14 +78,6 @@ export type WorkerExecutionRecord = {
   note?: string;
 };
 
-export const TIER_LABELS: Record<WorkerTier, string> = {
-  work: "工序",
-  provision: "条款",
-  reasoning: "推理",
-  domain: "领域",
-  checker: "复核",
-};
-
 export class WorkerRegistryError extends Error {
   constructor(message: string) {
     super(message);

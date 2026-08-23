@@ -145,7 +145,7 @@ export function formatTechnicalField(classification: IpcClassification): string 
   const sectionName = getIpcDomain(classification.section)?.name ?? classification.section;
   const detail = classification.detail;
   const code = detail ? `${classification.section} ${detail}` : classification.section;
-  const label = detail ? `${sectionName}-${classification.detail}` : sectionName;
+  const label = detail ? `${sectionName}-${detail}` : sectionName;
   return `${code}:${label}`;
 }
 
@@ -263,10 +263,8 @@ export function attachArticleJudgment(
 ): FlexiblePlanState {
   assertActive(state);
   const idx = findStageIndex(state, stageId);
-  const target = state.stages[idx];
-  if (target === undefined) {
-    throw new FlexiblePlanError(`阶段 "${stageId}" 不存在（计划 ${state.caseId}）`);
-  }
+  // findStageIndex 已保证 idx 有效（不存在即抛错），此处 target 必非空。
+  const target = state.stages[idx]!;
   // 黑板必须属于同一案件：不同 case 的法条事实混入会把判定写进错误的
   // 案件事实库，且本案件的执行永远看不到它（按 articleId 键控，零校验）。
   if (blackboard.caseId !== state.caseId || blackboard.caseType !== state.caseType) {

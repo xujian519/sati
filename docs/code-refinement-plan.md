@@ -73,7 +73,7 @@
 
 | 卡 | 模块 | 规模/热点 | 状态 |
 |---|---|---|---|
-| C12 | src/patent workflow+flexible-plan+plantask | 126 文件/20.5K 总分 3 卡 | ⬜ |
+| C12 | src/patent workflow+flexible-plan+plantask | 126 文件/20.5K 总分 3 卡 | ✅ 2026-08-23 |
 | C13 | src/patent evidence+problem+atoms | evidence/engine.ts 844 | ⬜ |
 | C14 | src/patent graph+claim-chart+document | | ⬜ |
 | C15 | src/patent data/nuo+figure+evaluate 其余 | | ⬜ |
@@ -131,6 +131,7 @@
 | 2026-08-23 | C09 | src/tool registry/execution/audit | P2 barrel 死导出批量清理：src/tool/index.ts 163 导出中 ~110 零外部消费（builtin/web 组整块、各工具 Input/Output 类型与 creator、constraints 辅助等）→ 删除，净 -153 行；保留有消费者的核心面（ToolRuntime/ToolRegistry/schedulers/protocol types 等）；P3 ToolRuntime isPlanMarkdownPath 双重 resolve 简化、deliverAuditRecord catch 补意图注释；三目录扫描零 console/any/TODO/catch；P0/P1 无 | 1（refactor + event-matrix） | ✅ |
 | 2026-08-23 | C10 | src/tool/builtin 上半 | P2 重复收敛：readFile readState.set ×5 → markRead 闭包；read-more 双 notice 函数合并（reason 参数）；auto-page 双 while 循环合并为 shrinkToBudget helper；writeFile/editFile 的 freshness 错误字符串匹配块 ×2 → snapshotGuardIssueMessage（writeSnapshots 导出）；writeFile/editFile execute 写盘收尾序列 ×2 → finalizeWorkspaceFileWrite（新建 writeFinalize.ts）；readFile/sendAttachment workspace 外权限检查 ×2 → checkReadonlyPathPermission（新建 readPermissions.ts）；stat ENOENT catch ×3 → statIfExists；ensureWriteSnapshotFresh changed-throw ×2 局部去重；P3 pathSafety/readFile 双重 resolve 模式简化（同 C09 ToolRuntime）；P0/P1 无 | 1（refactor） | ✅ |
 | 2026-08-23 | C11 | src/tool/builtin 下半（专利工具族） | P2 重复收敛：patentPdfDownload 专利号归一化+去重 ×2 → normalizeUniquePatents；patentWorkflowTool/patentWorkflowRunTool/patentFlexiblePlanTool 阶段/节点输出预览截断 ×4 → previewText helper；P2 assembleGraphJudges 冗余 spread（`...{modelHint}`）+ 双非空断言 → 局部变量 + 直接 modelHint；P3 summarizeCheck 嵌套三元 → CHECK_VERDICT_LABEL 查表；P0/P1 无；记录不处理（C10/C09 已述）：错误消息字符串匹配判定、inputSchema 契约、console 诊断日志归 C39 | 1（refactor） | ✅ |
+| 2026-08-23 | C12 | src/patent workflow+flexible-plan+plantask | P2 死代码删除：attachArticleJudgment `if (target === undefined)` 不可达（findStageIndex 已保证）→ 非空断言；worker-contract TIER_LABELS 全仓零消费死导出删除；P3 formatTechnicalField 命名一致（detail 提取后改用原字段）；index.ts barrel 删 ROLE_WORKER_TIERS 导出（零外部消费，定义保留）；四块扫描零 console/any/TODO/catch；P0/P1 无 | 1（refactor） | ✅ |
 
 ### 日卡记录
 
@@ -277,6 +278,20 @@
 - **精炼项**：重复提取 3 组 + 查表 1 处（净 -13 行，新增 1 个导出 helper）
 - **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅（含 event-matrix/patent-sop/skill 校验 fresh）；`biome check` 4 文件 ✅；`pnpm test` 3728 pass / 0 fail ✅（专利工具族套件 78/78 全绿）
 - **提交**：`refactor(tool): dedupe patent workflow helpers and pdf path normalization`
+
+#### C12 src/patent workflow+flexible-plan+plantask（2026-08-23）
+
+- **范围说明**：本卡聚焦四块——`src/patent/workflow/`（manifests/types/executor/checkpoint/signal/index，1005 行）、根级 `workflow.ts`/`workflow-dag.ts`/`workflow-store.ts`、`flexible-plan.ts`/`flexible-plan-store.ts`、`plantask.ts`、`worker-contract.ts`，合计约 2566 行。`approval.ts`/`output-gate.ts`/`quality-gate.ts`/`retry-hints.ts`/`slop-engine.ts` 等专利域其他功能不属本卡（后续卡）。
+- **审阅发现**：
+  - P2 死代码：flexible-plan.ts `attachArticleJudgment` 中 `if (target === undefined) throw ...` 不可达——`findStageIndex` 已保证阶段存在（不存在即抛错），删除冗余检查改非空断言
+  - P2 死导出：worker-contract.ts `TIER_LABELS`（`Record<WorkerTier, string>`）全仓（含 ui/scripts）零消费 → 删除
+  - P3 barrel 清理：src/patent/index.ts 删除 `ROLE_WORKER_TIERS` 导出（全仓零外部消费；定义保留，供内部 `workerAllowedForRole` 使用）
+  - P3 命名一致：flexible-plan.ts `formatTechnicalField` 局部 `detail` 已提取，后两处仍直接用 `classification.detail` → 统一用 `detail`
+  - P2 记录不处理：workflow.ts `runStageOnce`/`saveCheckpoint` 的副作用时序契约与并行组语义（注释明示勿改）；plantask.ts `syncPlanToTasks`/`replanTasks` 的 task 构建相似但 status 判据不同（合并有行为漂移风险）；flexible-plan.ts `createFlexiblePlan`/`fromJSON` 的 caseId 校验重复（错误消息差异，提取收益小）；workflow/types.ts `WorkflowStageResult`/`ManifestCheckpointStage` 的 workerValidation 内联类型重复（可提 `StageWorkerValidation`，但会新增导出面，收益有限）
+  - P0/P1 无行为缺陷。四块横切扫描：零裸 console、零 any/@ts-expect-error、零无参 catch、零 TODO/FIXME
+- **精炼项**：死代码删除 1 处（+非空断言）、死导出删除 1 处、barrel 导出清理 1 处、命名一致 1 处（净 -11 行）
+- **验证**：`pnpm typecheck` ✅ 0 错误（含 edgeclaw-memory-core）；`pnpm lint` 全量 ✅（event-matrix/patent-sop/skill 校验 fresh）；`biome check .`（2166 文件）✅；`pnpm test` 3746 pass / 0 fail / 4 skip ✅
+- **提交**：`refactor(patent): drop dead contract exports and redundant guard in flexible plan`
 
 ## 六、基线（2026-08-18 实测）
 
