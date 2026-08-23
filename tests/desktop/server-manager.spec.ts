@@ -2,7 +2,22 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as os from "node:os";
 import * as path from "node:path";
-import { getRuntimeBaseDir } from "../../apps/desktop/src/server-manager.js";
+import { getRuntimeBaseDir, isSatiRuntimeCommandLine } from "../../apps/desktop/src/server-manager.js";
+
+test("isSatiRuntimeCommandLine matches Sati runtime command lines", () => {
+  assert.equal(isSatiRuntimeCommandLine("node /app/.sati/sati-main/dist/src/cli/sati.js server"), true);
+  assert.equal(isSatiRuntimeCommandLine("node /app/.sati/sati-main/ui/server/index.js"), true);
+  assert.equal(isSatiRuntimeCommandLine("node /app/.sati/satiui/server"), true);
+  assert.equal(isSatiRuntimeCommandLine("node daemonMain.js serve"), true);
+});
+
+test("isSatiRuntimeCommandLine rejects non-Sati and unknown commands", () => {
+  assert.equal(isSatiRuntimeCommandLine("node /usr/bin/python3 server.py"), false);
+  assert.equal(isSatiRuntimeCommandLine("/usr/sbin/sshd -D"), false);
+  assert.equal(isSatiRuntimeCommandLine("/Applications/SomeApp/Contents/MacOS/foo"), false);
+  assert.equal(isSatiRuntimeCommandLine(""), false);
+  assert.equal(isSatiRuntimeCommandLine("node proxy.js gateway.js"), false);
+});
 
 /**
  * getRuntimeBaseDir 的平台分支：
