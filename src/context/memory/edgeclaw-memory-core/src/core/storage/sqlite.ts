@@ -371,8 +371,14 @@ export class MemoryRepository {
         db.close();
       }
     } catch {
+      // 读外部工作区 db 失败（损坏/不兼容）→ 当作不可发现，返回 null
       return null;
     }
+  }
+
+  private normalizePreferredSessionKeys(preferredSessionKeys?: string[]): string[] {
+    if (!Array.isArray(preferredSessionKeys)) return [];
+    return preferredSessionKeys.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
   }
 
   private getExternalWorkspaceSnapshots(): ExternalWorkspaceSnapshot[] {
@@ -665,9 +671,7 @@ export class MemoryRepository {
   }
 
   getPipelineState<T = unknown>(key: string): T | undefined {
-    const row = this.stmtGetPipelineState.get(key) as DbRow | undefined;
-    if (!row || typeof row.state_json !== "string") return undefined;
-    return parseJson<T | undefined>(row.state_json, undefined);
+    return this.readPipelineState<T>(key, undefined as T);
   }
 
   setPipelineState(key: string, value: unknown): void {
@@ -692,9 +696,7 @@ export class MemoryRepository {
   }
 
   listPendingSessionKeys(limit = 50, preferredSessionKeys?: string[]): string[] {
-    const normalizedPreferred = Array.isArray(preferredSessionKeys)
-      ? preferredSessionKeys.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      : [];
+    const normalizedPreferred = this.normalizePreferredSessionKeys(preferredSessionKeys);
     if (normalizedPreferred.length > 0) {
       const placeholders = normalizedPreferred.map(() => "?").join(", ");
       const rows = this.db
@@ -722,9 +724,7 @@ export class MemoryRepository {
   }
 
   countPendingDialogueTurns(preferredSessionKeys?: string[]): number {
-    const normalizedPreferred = Array.isArray(preferredSessionKeys)
-      ? preferredSessionKeys.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      : [];
+    const normalizedPreferred = this.normalizePreferredSessionKeys(preferredSessionKeys);
     if (normalizedPreferred.length > 0) {
       const placeholders = normalizedPreferred.map(() => "?").join(", ");
       return Number(
@@ -746,9 +746,7 @@ export class MemoryRepository {
   }
 
   getEarliestPendingTimestamp(preferredSessionKeys?: string[]): string | undefined {
-    const normalizedPreferred = Array.isArray(preferredSessionKeys)
-      ? preferredSessionKeys.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      : [];
+    const normalizedPreferred = this.normalizePreferredSessionKeys(preferredSessionKeys);
     if (normalizedPreferred.length > 0) {
       const placeholders = normalizedPreferred.map(() => "?").join(", ");
       const row = this.db
@@ -1650,13 +1648,13 @@ export class MemoryRepository {
     return hashText(payload);
   }
 
+  private countTableRows(table: string): number {
+    return Number((this.db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as DbRow | undefined)?.count ?? 0);
+  }
+
   clearAllMemoryData(): ClearMemoryResult {
-    const l0Sessions = Number(
-      (this.db.prepare("SELECT COUNT(*) AS count FROM l0_sessions").get() as DbRow | undefined)?.count ?? 0,
-    );
-    const pipelineState = Number(
-      (this.db.prepare("SELECT COUNT(*) AS count FROM pipeline_state").get() as DbRow | undefined)?.count ?? 0,
-    );
+    const l0Sessions = this.countTableRows("l0_sessions");
+    const pipelineState = this.countTableRows("pipeline_state");
     const beforeWorkspace = this.workspaceMemory.exportBundleRecords({ includeTmp: true });
     const beforeGlobal = this.globalUserMemory.exportBundleRecords({ includeTmp: true });
     this.db.exec(`
@@ -1679,12 +1677,8 @@ export class MemoryRepository {
   }
 
   clearCurrentWorkspaceMemoryData(): ClearMemoryResult {
-    const l0Sessions = Number(
-      (this.db.prepare("SELECT COUNT(*) AS count FROM l0_sessions").get() as DbRow | undefined)?.count ?? 0,
-    );
-    const pipelineState = Number(
-      (this.db.prepare("SELECT COUNT(*) AS count FROM pipeline_state").get() as DbRow | undefined)?.count ?? 0,
-    );
+    const l0Sessions = this.countTableRows("l0_sessions");
+    const pipelineState = this.countTableRows("pipeline_state");
     const beforeWorkspace = this.workspaceMemory.exportBundleRecords({ includeTmp: true });
     const preservedIndexingSettings = this.getPipelineState(INDEXING_SETTINGS_STATE_KEY);
     const preservedWorkspaceDir = this.getPipelineState("workspaceDir");

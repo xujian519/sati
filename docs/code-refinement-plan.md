@@ -64,7 +64,7 @@
 | C05 | src/gateway | 32/5.9K；InProcessGateway.ts 1057、protocol/server | ✅ 2026-08-21 |
 | C06 | src/context 非 memory | projection、budget、compression、vectors | ✅ 2026-08-21 |
 | C07 | src/context/memory 主包 | EdgeClawMemoryProvider 等（不含子包） | ✅ 2026-08-22 |
-| C08 | edgeclaw-memory-core 子包 | sqlite.ts 1716、llm-extraction.ts 1573、file-memory.ts 1147、llm-prompts.ts 997；独立 build 验证 | ⬜ |
+| C08 | edgeclaw-memory-core 子包 | sqlite.ts 1716、llm-extraction.ts 1573、file-memory.ts 1147、llm-prompts.ts 997；独立 build 验证 | ✅ 2026-08-23 |
 | C09 | src/tool registry/execution/audit | createBuiltinRegistry、ToolRuntime | ⬜ |
 | C10 | src/tool/builtin 上半 | readFile.ts 988、filesystem 组 | ⬜ |
 | C11 | src/tool/builtin 下半 | patentPdfDownload.ts 945、patentWorkflow 等 | ⬜ |
@@ -126,6 +126,8 @@
 | 2026-08-21 | C05 | src/gateway | **P0 帧解析异常冒泡**：websocket.ts handleData 中 readClientFrame 抛错 → uncaughtException → 进程退出（安全缺陷）→ 已修复（try/catch + destroy + return）；P2 死代码：InProcessGateway `now` 字段（零消费者）、AsyncQueue fail()/error 字段、buildAttachmentPathNote 死参数、5 处 readonly setter 的 as 断言（readonly 只禁重赋值）；P3 私有化收紧 ×7、嵌套三元 → if/else ×2、无参 catch 补注释 ×6、legacy 断言合并；P3 记录不处理：runMemberScan 转 async（TS 80006 建议，复杂闭包大 diff，保守档跳过） | 4（fix + refactor + docs×2） | ✅ |
 | 2026-08-21 | C06 | src/context 非 memory | P2 死代码批量删除：TokenBudgetManager estimate* 别名 ×2、TokenAccountingRuntime estimateResponseEvents、CachedMicroCompactionEngine validateCacheHit、SnipEngine ×2 + 私有化、MicroCompactionEngine 死常量 ×2、InstructionDiscovery scopeDescription、ToolResultBudget flattenToolResultText、cosineSimilarityInt8、MessageProjector hasToolCalls、AutoCompactionPolicy evaluate（连带 tokenBudget 字段/Options 删除，6 调用点简化）、DefaultContextRuntime truncateSecondKeepRatio 死配置；P3 barrel 7 个已删符号 export 清理、summaryInput 重复 JSDoc、CompactionEngine 嵌套三元、PluginRuntimeExtensionResolver 过时注释；P0/P1 无 | 3（refactor×2 + docs） | ✅ |
 | 2026-08-22 | C07 | src/context/memory 主包 | P2 EdgeClawMemoryProvider telemetry 块 ×5 重复（module/ownerModule/executionKind 恒 "memory"）→ 提取 trackMemoryStage 私有 helper；P3 setCachedRetrieve/trackRetrieveLoopEnd 单行转发内联、semantic-index isServiceClosedError 冗余条件（"this statement…" 被 "statement…" 子串覆盖）、MemoryAttachmentBuilder throwAbortError 单调用点内联、resolveMemoryLlm as 断言消除（memoryApiTypeForProtocol 返回类型收窄为 EdgeClawMemoryLlmOptions["apiType"]，两类型字面量集合相同）；P3 barrel 4 个零消费 type re-export 删除（EdgeClawCaptureTurnResult 等，测试走源文件导入）；P2 记录不处理：CanonicalMessagesToMemoryMessagesOptions 零消费但属公共函数 options 契约类型保留导出；P0/P1 无 | 1（refactor）+ docs | ✅ |
+
+| 2026-08-23 | C08 | edgeclaw-memory-core 子包 | P2 重复逻辑合并：sqlite normalizePreferredSessionKeys×3→helper、getPipelineState 委托 readPipelineState、countTableRows×2（clearAll/clearCurrent）；file-memory markEntriesDeprecated/restoreEntries 对称合并为 setEntriesDeprecated、listProjectIdentityHints 冗余别名删除、repairManifests memoryFileCount 提取；llm-prompts project/feedback 字段映射两处重复→mapDreamProjectFields/mapDreamFeedbackFields；P3 readWorkspaceDirFromDb 无参 catch 补意图注释；子包扫描无裸 console/无 any 类型逃逸/无 TODO；P0 无 | 1（refactor） | ✅ |
 
 ### 日卡记录
 
@@ -217,6 +219,17 @@
 - **精炼项**：telemetry helper 提取（5 处收敛）、冗余转发/包装内联 ×4、死条件删除 ×1、as 断言消除 ×1、barrel 死导出清理 ×4（净 -15 行）
 - **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` 全量 ✅；`biome format --write` 修复 1 处单行超宽后 `format:check` ✅（2142 文件）；`pnpm test` 3685 pass / 0 fail ✅（context/memory 套件 45/45、context 全套 136/136）
 - **提交**：`refactor(context): unify memory telemetry stage helper, drop redundant abstractions`
+
+#### C08 edgeclaw-memory-core 子包（2026-08-23）
+
+- **审阅发现**：
+  - P2 重复逻辑合并（子包 4 大文件，活代码无死导出）：sqlite.ts `normalizedPreferredSessionKeys` 过滤 3 处逐字一致 → 提取私有 helper；`getPipelineState` 与 `readPipelineState` 仅 fallback 差异 → 前者委托后者；`clearAllMemoryData`/`clearCurrentWorkspaceMemoryData` 的 `SELECT COUNT(*)` 两表查询各重复 → 提取 `countTableRows(table)`；file-memory.ts `markEntriesDeprecated`/`restoreEntries` 除 `deprecated` 布尔外逐字一致 → 合并为 `setEntriesDeprecated(relativePaths, deprecated)`；`listProjectIdentityHints` 冗余别名 `const projectMeta = meta` 删除；`repairManifests` 三处 `collectAllEntries().length` → 提取局部 `memoryFileCount`；llm-prompts.ts `buildDreamFileGlobalPlanPrompt`/`buildDreamFileProjectRewritePrompt` 的 project/feedback 字段映射块逐字一致 → 提取 `mapDreamProjectFields`/`mapDreamFeedbackFields`
+  - P3 `readWorkspaceDirFromDb` 无参 `catch {}` 补意图注释（读外部工作区 db 失败 → null，防御式）
+  - P3 机械扫描（全子包 src）：无裸 console、无 `any` 类型逃逸（6 处均为提示词文本）、无 TODO/FIXME；8 处无参 catch 仅 1 处缺注释（已补），其余均带意图注释
+  - P0：无行为缺陷。子包整体质量高（零 console/any/TODO，全部 catch 带注释，重复收敛后净 -约 70 行）
+- **精炼项**：重复提取（6 组）、冗余别名删除 ×1、catch 注释 ×1、类型导入补齐（`LlmDreamFileRecordInput`）
+- **验证**：`pnpm --filter edgeclaw-memory-core build` ✅；`pnpm --filter edgeclaw-memory-core typecheck`（tsc 两配置）✅；子包测试 233/233 ✅；`pnpm typecheck` 全量 ✅（主包 import 未破）；`biome check`/`eslint` 子包 ✅（format:write 修复 2 处行宽）
+- **提交**：`refactor(memory): dedupe edgeclaw-memory-core helpers and document fallback catch`
 
 ## 六、基线（2026-08-18 实测）
 

@@ -16,6 +16,7 @@ import type {
   LlmDreamClusterRefineInput,
   LlmDreamFileGlobalPlanInput,
   LlmDreamFileProjectRewriteInput,
+  LlmDreamFileRecordInput,
   LlmDreamProjectMetaReviewInput,
   LlmGeneralProjectMetaMergeInput,
 } from "./llm-extraction.js";
@@ -567,6 +568,27 @@ function buildIndexPromptWindow(input: {
   );
 }
 
+function mapDreamProjectFields(project: NonNullable<LlmDreamFileRecordInput["project"]>) {
+  return {
+    stage: truncateForPrompt(project.stage, 220),
+    decisions: project.decisions.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+    constraints: project.constraints.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+    next_steps: project.nextSteps.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+    blockers: project.blockers.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+    timeline: project.timeline.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+    notes: project.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+  };
+}
+
+function mapDreamFeedbackFields(feedback: NonNullable<LlmDreamFileRecordInput["feedback"]>) {
+  return {
+    rule: truncateForPrompt(feedback.rule, 220),
+    why: truncateForPrompt(feedback.why, 220),
+    how_to_apply: truncateForPrompt(feedback.howToApply, 220),
+    notes: feedback.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
+  };
+}
+
 function buildDreamFileGlobalPlanPrompt(input: LlmDreamFileGlobalPlanInput): string {
   const currentProjectNames = Array.from(
     new Set(input.currentProjects.map(project => normalizeWhitespace(project.projectName)).filter(Boolean)),
@@ -615,25 +637,8 @@ function buildDreamFileGlobalPlanPrompt(input: LlmDreamFileGlobalPlanInput): str
         captured_at: record.capturedAt ?? "",
         source_session_key: record.sourceSessionKey ?? "",
         content: truncateForPrompt(record.content, 1200),
-        project: record.project
-          ? {
-              stage: truncateForPrompt(record.project.stage, 220),
-              decisions: record.project.decisions.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              constraints: record.project.constraints.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              next_steps: record.project.nextSteps.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              blockers: record.project.blockers.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              timeline: record.project.timeline.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              notes: record.project.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-            }
-          : undefined,
-        feedback: record.feedback
-          ? {
-              rule: truncateForPrompt(record.feedback.rule, 220),
-              why: truncateForPrompt(record.feedback.why, 220),
-              how_to_apply: truncateForPrompt(record.feedback.howToApply, 220),
-              notes: record.feedback.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-            }
-          : undefined,
+        project: record.project ? mapDreamProjectFields(record.project) : undefined,
+        feedback: record.feedback ? mapDreamFeedbackFields(record.feedback) : undefined,
       })),
     },
     null,
@@ -677,25 +682,8 @@ function buildDreamFileProjectRewritePrompt(input: LlmDreamFileProjectRewriteInp
         name: record.name,
         description: truncateForPrompt(record.description, 220),
         content: truncateForPrompt(record.content, 1200),
-        project: record.project
-          ? {
-              stage: truncateForPrompt(record.project.stage, 220),
-              decisions: record.project.decisions.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              constraints: record.project.constraints.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              next_steps: record.project.nextSteps.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              blockers: record.project.blockers.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              timeline: record.project.timeline.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-              notes: record.project.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-            }
-          : undefined,
-        feedback: record.feedback
-          ? {
-              rule: truncateForPrompt(record.feedback.rule, 220),
-              why: truncateForPrompt(record.feedback.why, 220),
-              how_to_apply: truncateForPrompt(record.feedback.howToApply, 220),
-              notes: record.feedback.notes.map(item => truncateForPrompt(item, 140)).slice(0, 12),
-            }
-          : undefined,
+        project: record.project ? mapDreamProjectFields(record.project) : undefined,
+        feedback: record.feedback ? mapDreamFeedbackFields(record.feedback) : undefined,
       })),
     },
     null,

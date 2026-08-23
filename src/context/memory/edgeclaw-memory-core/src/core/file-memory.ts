@@ -505,11 +505,12 @@ export class FileMemoryStore {
 
   repairManifests(): { changed: number; summary: string; memoryFileCount: number } {
     this.ensureLayout();
+    const memoryFileCount = this.collectAllEntries().length;
     if (!this.enableManifest) {
       return {
         changed: 0,
         summary: "Manifest management is disabled for this store.",
-        memoryFileCount: this.collectAllEntries().length,
+        memoryFileCount,
       };
     }
     const manifestPath = this.resolveRelativePath(MANIFEST_FILE);
@@ -520,13 +521,13 @@ export class FileMemoryStore {
       return {
         changed: 1,
         summary: "Rebuilt workspace memory manifest.",
-        memoryFileCount: this.collectAllEntries().length,
+        memoryFileCount,
       };
     }
     return {
       changed: 0,
       summary: "Workspace memory manifest already up to date.",
-      memoryFileCount: this.collectAllEntries().length,
+      memoryFileCount,
     };
   }
 
@@ -789,7 +790,10 @@ export class FileMemoryStore {
     });
   }
 
-  markEntriesDeprecated(relativePaths: string[]): { mutatedIds: string[]; deletedProjectIds: string[] } {
+  private setEntriesDeprecated(
+    relativePaths: string[],
+    deprecated: boolean,
+  ): { mutatedIds: string[]; deletedProjectIds: string[] } {
     const mutatedIds: string[] = [];
     for (const relativePath of relativePaths) {
       const record = this.getMemoryRecordsByIds([relativePath], 5000)[0];
@@ -800,7 +804,7 @@ export class FileMemoryStore {
           ...record,
           ...(record.scope === "project" && record.projectId ? { projectId: record.projectId } : {}),
           updatedAt: nowIso(),
-          deprecated: true,
+          deprecated,
         },
         body: record.content,
       });
@@ -809,24 +813,12 @@ export class FileMemoryStore {
     return { mutatedIds, deletedProjectIds: [] };
   }
 
+  markEntriesDeprecated(relativePaths: string[]): { mutatedIds: string[]; deletedProjectIds: string[] } {
+    return this.setEntriesDeprecated(relativePaths, true);
+  }
+
   restoreEntries(relativePaths: string[]): { mutatedIds: string[]; deletedProjectIds: string[] } {
-    const mutatedIds: string[] = [];
-    for (const relativePath of relativePaths) {
-      const record = this.getMemoryRecordsByIds([relativePath], 5000)[0];
-      if (!record) continue;
-      this.writeRecord({
-        relativePath,
-        frontmatter: {
-          ...record,
-          ...(record.scope === "project" && record.projectId ? { projectId: record.projectId } : {}),
-          updatedAt: nowIso(),
-          deprecated: false,
-        },
-        body: record.content,
-      });
-      mutatedIds.push(relativePath);
-    }
-    return { mutatedIds, deletedProjectIds: [] };
+    return this.setEntriesDeprecated(relativePaths, false);
   }
 
   deleteEntries(relativePaths: string[]): { mutatedIds: string[]; deletedProjectIds: string[] } {
@@ -908,14 +900,13 @@ export class FileMemoryStore {
     }
     const meta = this.readProjectMetaFile();
     if (!meta) return [];
-    const projectMeta = meta;
     return [
       {
         identityKey: CURRENT_PROJECT_ID,
         projectId: CURRENT_PROJECT_ID,
-        projectName: projectMeta.projectName,
-        description: projectMeta.description,
-        updatedAt: projectMeta.updatedAt,
+        projectName: meta.projectName,
+        description: meta.description,
+        updatedAt: meta.updatedAt,
         scope: "formal",
       },
     ];
