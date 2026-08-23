@@ -38,12 +38,29 @@ export function getPermissionSettingsPath(env: NodeJS.ProcessEnv = process.env):
 }
 
 export function readPermissionSettings(env: NodeJS.ProcessEnv = process.env): PermissionSettings {
+  const filePath = getPermissionSettingsPath(env);
+  let raw: string;
   try {
-    const raw = readFileSync(getPermissionSettingsPath(env), "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    return normalizePermissionSettings(parsed);
-  } catch {
-    return { ...DEFAULT_PERMISSION_SETTINGS };
+    raw = readFileSync(filePath, "utf8");
+  } catch (err) {
+    // 文件不存在（首次运行）→ 合法默认；其他读取错误（EACCES 等）→ 保守处理，
+    // 不得静默放大为绕过权限。
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { ...DEFAULT_PERMISSION_SETTINGS };
+    }
+    console.warn(`[permission] failed to read ${filePath}; enforcing permissions (skipPermissions=false)`, err);
+    return { ...DEFAULT_PERMISSION_SETTINGS, skipPermissions: false };
+  }
+  try {
+    return normalizePermissionSettings(JSON.parse(raw) as unknown);
+  } catch (err) {
+    // JSON 损坏：守住权限。原实现静默回退到 DEFAULT（skipPermissions=true）
+    // 会把损坏文件放大为绕过全部权限，故此处改为关停绕过并出诊断。
+    console.warn(
+      `[permission] corrupt permissions.json at ${filePath}; enforcing permissions (skipPermissions=false)`,
+      err,
+    );
+    return { ...DEFAULT_PERMISSION_SETTINGS, skipPermissions: false };
   }
 }
 

@@ -92,14 +92,15 @@ test("normalizePermissionSettings normalizes entries and deduplicates", () => {
   assert.equal(settings.version, 1);
 });
 
-test("readPermissionSettings returns defaults when file is missing or corrupt", () => {
+test("readPermissionSettings: missing file defaults, corrupt file fails safe", () => {
   const dir = mkdtempSync(join(tmpdir(), "sati-perm-test-"));
   try {
     const env = { SATI_HOME: dir };
+    // 文件不存在（首次运行）→ 合法默认
     assert.deepEqual(readPermissionSettings(env), DEFAULT_PERMISSION_SETTINGS);
-    // 写一个损坏的文件 → 回退默认
+    // 写一个损坏的文件 → 保守处理：不容忍损坏放大为绕过权限（skipPermissions=false）
     writeFileSync(join(dir, "permissions.json"), "{invalid json", "utf8");
-    assert.deepEqual(readPermissionSettings(env), DEFAULT_PERMISSION_SETTINGS);
+    assert.deepEqual(readPermissionSettings(env), { ...DEFAULT_PERMISSION_SETTINGS, skipPermissions: false });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
