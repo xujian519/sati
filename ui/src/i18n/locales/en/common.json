@@ -154,6 +154,22 @@
   },
   "newSessionInProject": "New session",
   "deleteProject": "Delete project",
+  "deleteDialogs": {
+    "projectTitle": "Delete project?",
+    "projectDescription": "This removes the project from Sati and deletes its session metadata.",
+    "projectSessionsRemovedCount_one": "{{count}} session",
+    "projectSessionsRemovedCount_other": "{{count}} sessions",
+    "projectSessionsRemovedTail": "will also be removed.",
+    "projectFilesOnDiskBefore": "Files on disk are",
+    "projectFilesOnDiskNegation": "not",
+    "projectFilesOnDiskAfter": "deleted — only Sati's reference to them.",
+    "sessionTitle": "Delete conversation?",
+    "sessionDescription": "This removes the conversation from {{projectName}}.",
+    "deleting": "Deleting…",
+    "deleteSession": "Delete conversation",
+    "errorDeleteProject": "Failed to delete project",
+    "errorDeleteSession": "Failed to delete conversation"
+  },
   "status": {
     "loading": "Loading...",
     "success": "Success",
