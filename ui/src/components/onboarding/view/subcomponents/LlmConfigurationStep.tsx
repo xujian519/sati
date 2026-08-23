@@ -9,15 +9,22 @@ import {
   type CatalogProviderProtocol,
 } from "../../../../shared/catalogProviders";
 import { fetchProviderModels, fetchRemoteDefaultModels, type ApiModelListItem } from "../../../../shared/modelListApi";
+import { buildLlmConfig } from "./llmConfigBuilder";
+import {
+  hasUsableApiKey,
+  modelUsesRemoteDefault,
+  requiresApiKey,
+  resolveLoadErrorKind,
+  resolveNextModels,
+  type ModelLoadContext,
+  type ModelLoadMode,
+} from "./llmModelLoading";
 
 type LlmConfigurationStepProps = {
   onSaved: () => void | Promise<void>;
 };
 
 type TestStatus = "idle" | "testing" | "success" | "error";
-
-const PLACEHOLDER_API_KEY = "PLACEHOLDER_RUN_ONBOARDING_TO_REPLACE";
-const MASKED_SECRET = "********";
 
 // Sentinel id for the "+" tile. When selected, the form swaps in extra inputs
 // (provider id, protocol, base URL) so the user can describe a provider that
@@ -40,16 +47,6 @@ function defaultModelForProvider(provider: CatalogProvider | null) {
   if (!provider) return "";
   // DeepSeek provider 的模型 id 无 "deepseek/" 前缀（带前缀的是 OpenRouter 入口）。
   return provider.models.find(model => model.id === "deepseek-v4-flash")?.id ?? provider.models[0]?.id ?? "";
-}
-
-function hasUsableApiKey(value: unknown) {
-  if (typeof value !== "string") return false;
-  const key = value.trim();
-  return Boolean(key) && key !== PLACEHOLDER_API_KEY && key !== MASKED_SECRET && !key.startsWith("PLACEHOLDER_");
-}
-
-function requiresApiKey(provider: CatalogProvider | null) {
-  return provider?.requiresApiKey !== false;
 }
 
 export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepProps) {
@@ -123,88 +120,25 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
     setModelListMessage("");
   }, [effectiveProviderId, effectiveUrl, effectiveProtocol]);
 
-  useEffect(() => {
-    if (!selectedProvider || isCustomMode || apiKey.trim()) return;
-    if (!selectedProviderRequiresApiKey) return;
-    const catalogModels = selectedProvider.models;
-    const controller = new AbortController();
-    setModelListStatus("loading");
-    setModelListMessage("");
-    fetchRemoteDefaultModels(selectedProvider.id)
-      .then(models => {
-        if (controller.signal.aborted) return;
-        setApiModels(models.length > 0 ? models : catalogModels);
-        setModelListStatus("idle");
-        const nextModels = models.length > 0 ? models : catalogModels;
-        setSelectedModelId(current =>
-          nextModels.length > 0 && !nextModels.some(model => model.id === current) ? nextModels[0].id : current,
-        );
-      })
-      .catch(error => {
-        if (controller.signal.aborted) return;
-        setApiModels(catalogModels);
-        setModelListStatus("idle");
-        const message = error instanceof Error ? error.message : String(error);
-        setModelListMessage(t("llmSetup.remoteModelLoadFailed", { message }));
-      });
-    return () => controller.abort();
-  }, [apiKey, isCustomMode, selectedProvider, selectedProviderRequiresApiKey, t]);
-
-  useEffect(() => {
-    const key = apiKey.trim();
-    if (!selectedProvider || !effectiveProviderId || !effectiveUrl) return;
-    if (!hasUsableApiKey(key) && !isCustomMode && selectedProviderRequiresApiKey) return;
-    const controller = new AbortController();
-    setModelListStatus("loading");
-    setModelListMessage("");
-    fetchProviderModels({
-      protocol: effectiveProtocol,
-      baseUrl: effectiveUrl,
-      apiKey: hasUsableApiKey(key) ? key : "",
-      providerId: effectiveProviderId,
-    })
-      .then(models => {
-        if (controller.signal.aborted) return;
-        setApiModels(!hasUsableApiKey(key) && models.length === 0 ? selectedProvider.models : models);
-        setModelListStatus("idle");
-        const nextModels = !hasUsableApiKey(key) && models.length === 0 ? selectedProvider.models : models;
-        setSelectedModelId(current =>
-          nextModels.length > 0 && !nextModels.some(model => model.id === current) ? nextModels[0].id : current,
-        );
-      })
-      .catch(error => {
-        if (controller.signal.aborted) return;
-        if (!selectedProviderRequiresApiKey && selectedProvider.models.length > 0) {
-          setApiModels(selectedProvider.models);
-          setModelListStatus("idle");
-          const message = error instanceof Error ? error.message : String(error);
-          setModelListMessage(t("llmSetup.localModelLoadFailed", { message }));
-          return;
-        }
-        setModelListStatus("error");
-        setModelListMessage(error instanceof Error ? error.message : String(error));
-      });
-    return () => controller.abort();
-  }, [
-    apiKey,
-    effectiveProviderId,
-    effectiveProtocol,
-    effectiveUrl,
-    isCustomMode,
-    selectedModelId,
-    selectedProvider,
-    selectedProviderRequiresApiKey,
-    t,
-  ]);
-
-  const handleFetchModels = useCallback(async () => {
-    if (!canFetchModels) return;
-    setModelListStatus("loading");
-    setModelListMessage("");
-    try {
+  const loadModels = useCallback(
+    async (mode: ModelLoadMode, signal?: AbortSignal) => {
+      if (!selectedProvider || !effectiveProviderId) return;
       const key = apiKey.trim();
-      const models =
-        !isCustomMode && !hasUsableApiKey(key)
+      const ctx: ModelLoadContext = {
+        providerId: effectiveProviderId,
+        protocol: effectiveProtocol,
+        url: effectiveUrl,
+        apiKey: key,
+        isCustomMode,
+        requiresApiKey: selectedProviderRequiresApiKey,
+      };
+      const remoteDefault = modelUsesRemoteDefault(mode, ctx);
+      if (!remoteDefault && !effectiveUrl) return;
+
+      setModelListStatus("loading");
+      setModelListMessage("");
+      try {
+        const models = remoteDefault
           ? await fetchRemoteDefaultModels(effectiveProviderId)
           : await fetchProviderModels({
               protocol: effectiveProtocol,
@@ -212,22 +146,66 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
               apiKey: hasUsableApiKey(key) ? key : "",
               providerId: effectiveProviderId,
             });
-      const nextModels =
-        !hasUsableApiKey(key) && !isCustomMode && selectedProvider
-          ? models.length > 0
-            ? models
-            : selectedProvider.models
-          : models;
-      setApiModels(nextModels);
-      setModelListStatus("idle");
-      setSelectedModelId(current =>
-        nextModels.length > 0 && !nextModels.some(model => model.id === current) ? nextModels[0].id : current,
-      );
-    } catch (error) {
-      setModelListStatus("error");
-      setModelListMessage(error instanceof Error ? error.message : String(error));
-    }
-  }, [apiKey, canFetchModels, effectiveProviderId, effectiveProtocol, effectiveUrl, isCustomMode, selectedProvider]);
+        if (signal?.aborted) return;
+        const nextModels = resolveNextModels(mode, ctx, selectedProvider, models);
+        setApiModels(nextModels);
+        setModelListStatus("idle");
+        setSelectedModelId(current =>
+          nextModels.length > 0 && !nextModels.some(model => model.id === current) ? nextModels[0].id : current,
+        );
+      } catch (error) {
+        if (signal?.aborted) return;
+        const message = error instanceof Error ? error.message : String(error);
+        const kind = resolveLoadErrorKind(mode, ctx, selectedProvider);
+        if (kind === "remote-default") {
+          setApiModels(selectedProvider?.models ?? []);
+          setModelListStatus("idle");
+          setModelListMessage(t("llmSetup.remoteModelLoadFailed", { message }));
+        } else if (kind === "local-fallback") {
+          setApiModels(selectedProvider?.models ?? []);
+          setModelListStatus("idle");
+          setModelListMessage(t("llmSetup.localModelLoadFailed", { message }));
+        } else {
+          setModelListStatus("error");
+          setModelListMessage(message);
+        }
+      }
+    },
+    [
+      apiKey,
+      effectiveProviderId,
+      effectiveProtocol,
+      effectiveUrl,
+      isCustomMode,
+      selectedProvider,
+      selectedProviderRequiresApiKey,
+      t,
+    ],
+  );
+
+  useEffect(() => {
+    if (!selectedProvider) return;
+    const key = apiKey.trim();
+    const catalogNoKey = !isCustomMode && !key && selectedProviderRequiresApiKey;
+    const blockedNoKey = !hasUsableApiKey(key) && !isCustomMode && selectedProviderRequiresApiKey;
+    if (!catalogNoKey && !(effectiveProviderId && effectiveUrl && !blockedNoKey)) return;
+    const controller = new AbortController();
+    void loadModels("auto", controller.signal);
+    return () => controller.abort();
+  }, [
+    apiKey,
+    effectiveProviderId,
+    effectiveUrl,
+    isCustomMode,
+    loadModels,
+    selectedProvider,
+    selectedProviderRequiresApiKey,
+  ]);
+
+  const handleFetchModels = useCallback(async () => {
+    if (!canFetchModels) return;
+    await loadModels("manual");
+  }, [canFetchModels, loadModels]);
 
   const handleProviderSelect = useCallback((provider: CatalogProvider) => {
     setSelectedProvider(prev => {
@@ -286,7 +264,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
     try {
       const { stringify: stringifyYaml, parse: parseYaml } = await import("yaml");
 
-      let existingConfig: Record<string, unknown> = {};
+      let existingConfig: unknown = {};
       try {
         const res = await authenticatedFetch("/api/config");
         if (res.ok) {
@@ -301,55 +279,18 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       const modelId = effectiveModelId;
       if (!providerId) throw new Error(t("llmSetup.missingProviderId"));
 
-      if (!existingConfig.schemaVersion) {
-        (existingConfig as Record<string, unknown>).schemaVersion = 1;
-      }
-      if (!existingConfig.model || typeof existingConfig.model !== "object") {
-        (existingConfig as Record<string, unknown>).model = { providers: {} };
-      }
-      const modelSection = existingConfig.model as Record<string, unknown>;
-      if (!modelSection.providers || typeof modelSection.providers !== "object") {
-        modelSection.providers = {};
-      }
-
-      const yamlProviders = modelSection.providers as Record<string, Record<string, unknown>>;
-      const existingProvider = (yamlProviders[providerId] || {}) as Record<string, unknown>;
-      const existingModels = (
-        existingProvider.models && typeof existingProvider.models === "object" ? existingProvider.models : {}
-      ) as Record<string, unknown>;
-
-      // 模型列表来自 provider 实际可用的模型：探测到完整列表时整体写入
-      // 配置（运行时可自由切换），同时保留手动输入的模型 id。
-      const detectedModels =
-        apiModels && apiModels.length > 0
-          ? Object.fromEntries(apiModels.map(m => [m.id, existingModels[m.id] || {}]))
-          : {};
-
-      yamlProviders[providerId] = {
-        ...existingProvider,
+      const config = buildLlmConfig(existingConfig, {
+        providerId,
+        modelId,
         protocol: effectiveProtocol,
         url: effectiveUrl,
         apiKey: apiKey.trim(),
-        timeoutMs: typeof existingProvider.timeoutMs === "number" ? existingProvider.timeoutMs : 120000,
-        models: {
-          ...existingModels,
-          ...detectedModels,
-          [modelId]: existingModels[modelId] || {},
-        },
-      };
-
-      if (!existingConfig.agent || typeof existingConfig.agent !== "object") {
-        (existingConfig as Record<string, unknown>).agent = {};
-      }
-      (existingConfig.agent as Record<string, unknown>).model = `${providerId}/${modelId}`;
-
-      delete (existingConfig as Record<string, unknown>).models;
-      delete (existingConfig as Record<string, unknown>).agents;
-      delete (existingConfig as Record<string, unknown>).version;
+        apiModels,
+      });
 
       const saveRes = await authenticatedFetch("/api/config", {
         method: "PUT",
-        body: JSON.stringify({ raw: stringifyYaml(existingConfig, { indent: 2, lineWidth: 0 }) }),
+        body: JSON.stringify({ raw: stringifyYaml(config, { indent: 2, lineWidth: 0 }) }),
       });
 
       if (!saveRes.ok) {
