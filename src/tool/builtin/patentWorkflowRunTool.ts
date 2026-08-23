@@ -34,6 +34,7 @@ import type { SatiToolDefinition, SatiToolModelClient } from "../protocol/types.
 import {
   buildWorkflowProvider,
   buildWorkflowRunContext,
+  previewText,
   renderWorkflowResultText,
   resolveRunPersistTarget,
   runRuleGate,
@@ -390,8 +391,7 @@ export function createPatentWorkflowRunTool(
 
       const lines = result.stages.map(s => {
         const flag = s.degraded ? "⚠️ 降级" : "✅";
-        const preview = s.output.length > 0 ? `${s.output.slice(0, 80)}${s.output.length > 80 ? "…" : ""}` : "(无输出)";
-        return `- ${flag} ${s.stageId}${s.atom !== undefined ? ` [atom:${s.atom}]` : ""}: ${preview}`;
+        return `- ${flag} ${s.stageId}${s.atom !== undefined ? ` [atom:${s.atom}]` : ""}: ${previewText(s.output)}`;
       });
 
       const interruptNote = result.interrupted
@@ -470,7 +470,7 @@ function renderGraphResultText(opts: {
       if (typeof value === "string") text = value;
       else if (value === undefined) text = "";
       else text = JSON.stringify(value);
-      const preview = text.length > 0 ? `${text.slice(0, 80)}${text.length > 80 ? "…" : ""}` : "(空)";
+      const preview = previewText(text, 80, "(空)");
       return `- ${key}: ${preview}`;
     });
   const degraded = opts.result.degraded.map(d => `- ${d.severity} [${d.reason}] ${d.message}`);
@@ -684,12 +684,15 @@ function assembleGraphJudges(input: PatentWorkflowRunInput, deps: PatentWorkflow
   if (hints.length === 0) {
     return [{ judgeId: "default" }];
   }
-  return hints.map(hint => ({
-    judgeId: `judge:${hint}`,
-    ...(deps.modelHints?.[hint]?.provider !== undefined ? { provider: deps.modelHints![hint]!.provider } : {}),
-    ...(deps.modelHints?.[hint]?.model !== undefined ? { model: deps.modelHints![hint]!.model } : {}),
-    ...{ modelHint: hint },
-  }));
+  return hints.map(hint => {
+    const mapped = deps.modelHints?.[hint];
+    return {
+      judgeId: `judge:${hint}`,
+      ...(mapped?.provider !== undefined ? { provider: mapped.provider } : {}),
+      ...(mapped?.model !== undefined ? { model: mapped.model } : {}),
+      modelHint: hint,
+    };
+  });
 }
 
 /** judge 输入形状（callLLM 由 buildJudgeSection 依 provider + modelHint 注入）。 */

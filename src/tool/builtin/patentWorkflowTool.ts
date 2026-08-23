@@ -58,9 +58,16 @@ function resolveCheckDomains(manifest: WorkflowManifest, checkDomain?: string): 
   return builtinPatentManifests.find(e => e.manifest.id === manifest.id)?.checkDomains ?? [];
 }
 
+/** verdict → 中文标注表（summarizeCheck 的确定性门判定行）。 */
+const CHECK_VERDICT_LABEL: Record<Verdict, string> = {
+  pass: "✅ 通过",
+  needs_revision: "⚠️ 需修改",
+  blocked: "⛔ 阻断",
+};
+
 /** 规则检查结果摘要（一行）：verdict + 失败数。 */
 function summarizeCheck(verdict: Verdict, failures: readonly RuleCheckResult[]): string {
-  const label = verdict === "pass" ? "✅ 通过" : verdict === "needs_revision" ? "⚠️ 需修改" : "⛔ 阻断";
+  const label = CHECK_VERDICT_LABEL[verdict];
   return failures.length === 0 ? `确定性门: ${label}` : `确定性门: ${label}（${failures.length} 项规则失败）`;
 }
 
@@ -128,6 +135,15 @@ export async function writeRunArtifacts(
   } catch (err) {
     return `持久化失败: ${err instanceof Error ? err.message : String(err)}`;
   }
+}
+
+/**
+ * 截断输出预览：取前 max 字符（超长追加省略号），空文本返回 emptyLabel。
+ * workflow 系列工具（收口 / 原子 / 灵活计划）的阶段与节点输出行共用。
+ */
+export function previewText(text: string, max = 80, emptyLabel = "(无输出)"): string {
+  if (text.length === 0) return emptyLabel;
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 /** 工作流运行结果尾部文本拼装（阶段行/规则门/持久化提示已由调用方备好）。 */
@@ -268,7 +284,7 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
 
       const lines = result.stages.map(s => {
         const flag = s.degraded ? "⚠️ 降级" : "✅";
-        return `- ${flag} ${s.stageId} (${s.strategy}): ${s.output.length > 0 ? `${s.output.slice(0, 80)}${s.output.length > 80 ? "…" : ""}` : "(无输出)"}`;
+        return `- ${flag} ${s.stageId} (${s.strategy}): ${previewText(s.output)}`;
       });
 
       // 确定性规则门：对全部非降级阶段产出拼接文本评估（dual-track 的确定性轨）。

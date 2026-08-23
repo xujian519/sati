@@ -1,9 +1,10 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import type { PermissionResult, PermissionRule } from "../../permission/index.js";
-import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
+import type { PermissionResult } from "../../permission/index.js";
+import type { SatiToolDefinition } from "../protocol/types.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import { resolveSatiWorkspacePath } from "./filesystem/pathSafety.js";
+import { checkReadonlyPathPermission } from "./filesystem/readPermissions.js";
 
 export type SendAttachmentInput = {
   file_path: string;
@@ -62,7 +63,7 @@ export function createSendAttachmentTool(): SatiToolDefinition<SendAttachmentInp
     isReadOnly: () => true,
     isConcurrencySafe: () => false,
     checkPermissions: async (input, context): Promise<PermissionResult> =>
-      checkSendAttachmentPermission(input.file_path, context),
+      checkReadonlyPathPermission("send_attachment", input.file_path, context),
     execute: async (input, context) => {
       const resolved = resolveSatiWorkspacePath(input.file_path, context, {
         mustExist: true,
@@ -97,72 +98,6 @@ export function createSendAttachmentTool(): SatiToolDefinition<SendAttachmentInp
         metadata: { attachmentDelivery: true },
       };
     },
-  };
-}
-
-function checkSendAttachmentPermission(inputPath: string, context: SatiToolRuntimeContext): PermissionResult {
-  const workspaceResolved = resolveSatiWorkspacePath(inputPath, context, {
-    mustExist: true,
-    allowRegisteredReadFiles: true,
-  });
-  if (workspaceResolved.ok) {
-    return { type: "passthrough" };
-  }
-  if (workspaceResolved.error.code !== "path_not_allowed") {
-    return {
-      type: "deny",
-      reason: { type: "safety", message: workspaceResolved.error.message },
-      message: workspaceResolved.error.message,
-    };
-  }
-
-  const outsideResolved = resolveSatiWorkspacePath(inputPath, context, {
-    mustExist: true,
-    allowOutsideWorkspace: true,
-  });
-  if (!outsideResolved.ok) {
-    return {
-      type: "deny",
-      reason: { type: "safety", message: outsideResolved.error.message },
-      message: outsideResolved.error.message,
-    };
-  }
-
-  const rule = buildRecursiveSendAttachmentRule(outsideResolved.absolutePath);
-  const reason = {
-    type: "tool" as const,
-    toolName: "send_attachment",
-    message: "send_attachment targets a path outside the workspace.",
-  };
-  return {
-    type: "ask",
-    reason,
-    request: {
-      toolCallId: "",
-      toolName: "send_attachment",
-      inputSummary: JSON.stringify({ file_path: outsideResolved.absolutePath }),
-      reason,
-      options: [
-        { id: "allow_once", label: "Allow once" },
-        { id: "allow_session", label: "Allow this folder for this session", rules: [rule] },
-        { id: "deny", label: "Deny" },
-        { id: "cancel", label: "Cancel" },
-      ],
-      metadata: {
-        externalPath: outsideResolved.absolutePath,
-        allowedDirectory: path.dirname(outsideResolved.absolutePath),
-        pattern: rule.pattern,
-      },
-    },
-  };
-}
-
-function buildRecursiveSendAttachmentRule(absolutePath: string): PermissionRule {
-  return {
-    source: "session",
-    behavior: "allow",
-    toolName: "send_attachment",
-    pattern: path.join(path.dirname(absolutePath), "*"),
   };
 }
 

@@ -41,6 +41,7 @@ import { repairToolName } from "./repairToolName.js";
  */
 function deliverAuditRecord(record: void | Promise<void> | undefined): void {
   if (record instanceof Promise) {
+    // fire-and-forget：审计写入失败不得影响工具执行路径（见上方 JSDoc）。
     void record.catch(() => {});
   }
 }
@@ -640,7 +641,9 @@ function isPlanMarkdownPath(filePath: string | undefined, context: SatiToolRunti
   if (!filePath || !context.planDirectory?.path) {
     return false;
   }
-  const absolute = resolve(isAbsolute(filePath) ? filePath : resolve(context.cwd, filePath));
+  // resolve(cwd, filePath) 对绝对/相对输入统一产出规范化绝对路径，
+  // 无需先按 isAbsolute 分支再包一层 resolve。
+  const absolute = resolve(context.cwd, filePath);
   if (!absolute.toLowerCase().endsWith(".md")) {
     return false;
   }

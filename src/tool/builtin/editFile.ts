@@ -1,17 +1,15 @@
-import { stat } from "node:fs/promises";
-import type { SatiToolDefinition } from "../protocol/types.js";
+import { type SatiToolDefinition } from "../protocol/types.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import { isNotebookPath } from "./filesystem/fileTypeSafety.js";
 import { resolveSatiWorkspacePath } from "./filesystem/pathSafety.js";
 import { checkFilesystemWritePermission } from "./filesystem/writePermissions.js";
 import { readTextFile } from "./filesystem/readTextFile.js";
-import { writeTextFile } from "./filesystem/writeTextFile.js";
 import {
   ensureWriteSnapshotFresh,
-  invalidateReadFileState,
-  recordWriteSnapshot,
+  snapshotGuardIssueMessage,
   validateWriteSnapshotFresh,
 } from "./filesystem/writeSnapshots.js";
+import { finalizeWorkspaceFileWrite } from "./filesystem/writeFinalize.js";
 import { findActualString, normalizeEditInput } from "./filesystem/editNormalization.js";
 import { formatSyntaxDiagnostics } from "./filesystem/syntaxDiagnostics.js";
 
@@ -115,21 +113,9 @@ export function createEditFileTool(): SatiToolDefinition<EditFileInput> {
       try {
         freshness = await validateWriteSnapshotFresh(context, resolved.absolutePath);
       } catch (error) {
-        const normalized = error instanceof SatiToolRuntimeError ? error.message : String(error);
-        if (
-          normalized === "File has not been read yet. Read it first before writing to it." ||
-          normalized === "File has changed since the last read. Read it again before writing to it."
-        ) {
-          return {
-            ok: false,
-            issues: [
-              {
-                path: "file_path",
-                code: "invalid_schema",
-                message: normalized,
-              },
-            ],
-          };
+        const issue = snapshotGuardIssueMessage(error);
+        if (issue) {
+          return { ok: false, issues: [{ path: "file_path", code: "invalid_schema", message: issue }] };
         }
         throw error;
       }
@@ -221,20 +207,12 @@ export function createEditFileTool(): SatiToolDefinition<EditFileInput> {
           : content.replace(actualOldString, normalizedNew);
       }
 
-      const action = await writeTextFile(resolved.absolutePath, nextContent, { allowOverwrite: true });
-      const fileStat = await stat(resolved.absolutePath);
-      invalidateReadFileState(context, resolved.absolutePath);
-      recordWriteSnapshot(context, resolved.absolutePath, nextContent, Math.floor(fileStat.mtimeMs));
-
-      const update = {
-        absolutePath: resolved.absolutePath,
-        relativePath: resolved.relativePath,
-        root: resolved.root,
-        content: nextContent,
-        previousContent: freshness.previousContent,
-      };
-      await context.fileUpdateNotifier?.didChange?.(update);
-      await context.fileUpdateNotifier?.didSave?.(update);
+      const { action, mtimeMs } = await finalizeWorkspaceFileWrite(
+        context,
+        { absolutePath: resolved.absolutePath, relativePath: resolved.relativePath, root: resolved.root },
+        nextContent,
+        freshness.previousContent,
+      );
 
       const replacements = input.old_string === "" ? 0 : input.replace_all ? occurrences : 1;
       const successText = `${action === "created" ? "Created" : "Updated"} ${resolved.relativePath}${replacements > 0 ? ` (${replacements} replacement).` : "."}`;
@@ -253,7 +231,7 @@ export function createEditFileTool(): SatiToolDefinition<EditFileInput> {
         },
         metadata: {
           bytesWritten: Buffer.byteLength(nextContent, "utf8"),
-          mtimeMs: Math.floor(fileStat.mtimeMs),
+          mtimeMs,
         },
       };
     },
