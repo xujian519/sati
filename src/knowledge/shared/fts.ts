@@ -33,3 +33,55 @@ export function escapeFtsPhrase(phrase: string): string {
 export function joinFtsOrTerms(terms: string[]): string {
   return terms.map(escapeFtsPhrase).join(" OR ");
 }
+
+export type FtsThenLikeOptions<T> = {
+  /** 本次查询是否可尝试 FTS（已考虑 FTS 表存在性 + 运行时支持 + 未降级）。 */
+  useFts: boolean;
+  /** 小于该字符数的查询直接走 LIKE。 */
+  minRunes: number;
+  keyword: string;
+  limit: number;
+  searchFts: (keyword: string, limit: number) => T[];
+  searchFtsKeywords: (keywords: string[], limit: number) => T[];
+  searchLike: (keyword: string, limit: number) => T[];
+  extractKeywords: (keyword: string) => string[];
+  /** FTS 查询抛异常时回调（用于标记/记录降级），随后整体走 LIKE。 */
+  onDegrade?: (message: string) => void;
+};
+
+/**
+ * 统一的「FTS5 BM25 优先 → 切词 OR → LIKE 降级」编排。
+ * 抽取自 legal-search / knowledge-law-search / case-law-search 三个检索引擎
+ * 逐字重复的 search 主体，避免改一处漏另两处。策略以闭包传入（各引擎的
+ * searchFts/searchLike 与降级打点不同），返回中间行供调用方自行 map 成结果。
+ */
+export function runFtsThenLikeFallback<T>(opts: FtsThenLikeOptions<T>): T[] {
+  const trimmed = opts.keyword.trim();
+  if (!trimmed) return [];
+
+  const shortQuery = Array.from(trimmed).length < opts.minRunes;
+  if (!opts.useFts || shortQuery) {
+    return opts.searchLike(trimmed, opts.limit);
+  }
+
+  try {
+    let rows = opts.searchFts(trimmed, opts.limit);
+    // 整句无命中时切词 OR 查询（长句/自然语言查询）
+    if (rows.length === 0) {
+      const keywords = opts.extractKeywords(trimmed);
+      if (keywords.length > 0 && keywords[0] !== trimmed) {
+        rows = opts.searchFtsKeywords(keywords, opts.limit);
+      }
+    }
+    // FTS 仍无命中时降级 LIKE
+    if (rows.length === 0) {
+      rows = opts.searchLike(trimmed, opts.limit);
+    }
+    return rows;
+  } catch (error) {
+    // FTS5 模块缺失或查询异常（如运行时 SQLite 未编译 FTS5，MATCH 抛
+    // "no such module: fts5"）：整体降级 LIKE，避免工具执行崩溃。
+    opts.onDegrade?.(error instanceof Error ? error.message : String(error));
+    return opts.searchLike(trimmed, opts.limit);
+  }
+}

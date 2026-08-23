@@ -19,7 +19,13 @@ import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { openKnowledgeDb } from "../shared/db-version.js";
 import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
 import { prepareCached } from "../../shared/sqlite.js";
-import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms, sqliteHasFts5 } from "../shared/fts.js";
+import {
+  escapeFtsPhrase,
+  FTS_MIN_RUNES,
+  joinFtsOrTerms,
+  runFtsThenLikeFallback,
+  sqliteHasFts5,
+} from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
@@ -165,33 +171,17 @@ export class KnowledgeLawSearch implements LegalSearchSource {
   /** 法规全文搜索：FTS5 BM25 优先，短查询/无 FTS 时降级 LIKE；按文档去重。 */
   search(keyword: string, options: KnowledgeLawSearchOptions = {}): LawSearchResult[] {
     const limit = options.limit ?? 10;
-    const trimmed = keyword.trim();
-    if (!trimmed) return [];
-
-    const runes = Array.from(trimmed);
-    let rows: DocChunkRow[];
-    if (!this.hasFts || this.ftsDegraded || runes.length < FTS_MIN_RUNES) {
-      rows = this.searchLike(trimmed, options, limit);
-    } else {
-      try {
-        // 1. 整句 phrase（短查询命中率高）
-        rows = this.searchFts(trimmed, options, limit);
-        // 2. 整句无命中时切词 OR 查询（长句/自然语言查询）
-        if (rows.length === 0) {
-          const keywords = extractLawKeywords(trimmed);
-          if (keywords.length > 0 && keywords[0] !== trimmed) {
-            rows = this.searchFtsKeywords(keywords, options, limit);
-          }
-        }
-        // 3. FTS 仍无命中时降级 LIKE
-        if (rows.length === 0) {
-          rows = this.searchLike(trimmed, options, limit);
-        }
-      } catch (error) {
-        this.degradeFts(error instanceof Error ? error.message : String(error));
-        rows = this.searchLike(trimmed, options, limit);
-      }
-    }
+    const rows = runFtsThenLikeFallback<DocChunkRow>({
+      useFts: this.ftsAvailable,
+      minRunes: FTS_MIN_RUNES,
+      keyword,
+      limit,
+      searchFts: (k, l) => this.searchFts(k, options, l),
+      searchFtsKeywords: (kw, l) => this.searchFtsKeywords(kw, options, l),
+      searchLike: (k, l) => this.searchLike(k, options, l),
+      extractKeywords: extractLawKeywords,
+      onDegrade: msg => this.degradeFts(msg),
+    });
 
     return rows.map(row => this.toSearchResult(row));
   }

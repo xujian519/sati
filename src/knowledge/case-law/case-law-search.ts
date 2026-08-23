@@ -16,7 +16,13 @@
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { openKnowledgeDb } from "../shared/db-version.js";
 import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
-import { escapeFtsPhrase, FTS_MIN_RUNES, joinFtsOrTerms, sqliteHasFts5 } from "../shared/fts.js";
+import {
+  escapeFtsPhrase,
+  FTS_MIN_RUNES,
+  joinFtsOrTerms,
+  runFtsThenLikeFallback,
+  sqliteHasFts5,
+} from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import { prepareCached } from "../../shared/sqlite.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
@@ -353,36 +359,17 @@ export class CaseLawSearchEngine {
     // 旧值（likeScanCapped getter 语义 = 「本次 search 是否截断」）。
     this.likeScanTruncated = false;
     const limit = Math.min(Math.max(options.limit ?? 5, 1), MAX_LIMIT);
-    const trimmed = keyword.trim();
-    if (!trimmed) return [];
-
-    const runes = Array.from(trimmed);
-    let hits: CaseLawHit[];
-    if (!this.hasFts || this.ftsDegraded || runes.length < FTS_MIN_RUNES) {
-      hits = this.searchLike(trimmed, options, limit);
-    } else {
-      try {
-        // 1. 整句 phrase（短查询命中率高）
-        hits = this.searchFts(trimmed, options, limit);
-        // 2. 整句无命中时切词 OR 查询（长句/自然语言查询）
-        if (hits.length === 0) {
-          const keywords = extractLawKeywords(trimmed);
-          if (keywords.length > 0 && keywords[0] !== trimmed) {
-            hits = this.searchFtsKeywords(keywords, options, limit);
-          }
-        }
-        // 3. FTS 仍无命中时降级 LIKE
-        if (hits.length === 0) {
-          hits = this.searchLike(trimmed, options, limit);
-        }
-      } catch (error) {
-        // FTS5 模块缺失或查询异常（如运行时 SQLite 未编译 FTS5，MATCH 抛
-        // "no such module: fts5"）：整体降级 LIKE，避免工具执行崩溃。
-        this.degradeFts(error instanceof Error ? error.message : String(error));
-        hits = this.searchLike(trimmed, options, limit);
-      }
-    }
-    return hits;
+    return runFtsThenLikeFallback<CaseLawHit>({
+      useFts: this.ftsAvailable,
+      minRunes: FTS_MIN_RUNES,
+      keyword,
+      limit,
+      searchFts: (k, l) => this.searchFts(k, options, l),
+      searchFtsKeywords: (kw, l) => this.searchFtsKeywords(kw, options, l),
+      searchLike: (k, l) => this.searchLike(k, options, l),
+      extractKeywords: extractLawKeywords,
+      onDegrade: msg => this.degradeFts(msg),
+    });
   }
 
   /** 按 documents.id 取判例全文分块（供"查看全文"场景；不经过检索，无 via/ftsRank 语义）。 */
