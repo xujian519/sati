@@ -4,7 +4,7 @@ Status: implemented
 
 ## Problem
 
-The Google provider built `thinkingConfig` for Gemini 2.5 models by threading the local
+The Google provider built `thinkingConfig` for Gemini 3.x models by threading the local
 `ThinkingPlan.thinkingLevel` field straight into the SDK request object using a double cast:
 
 ```ts
@@ -17,6 +17,10 @@ thinkingLevel: thinkingPlan.thinkingLevel,
 runtime values are uppercase (`"LOW"`, `"MEDIUM"`, `"HIGH"`), so the request that actually went
 over the wire carried lowercase strings. The double cast silently suppressed the type mismatch
 instead of surfacing it, so the wrong casing shipped without a type error or a test failure.
+
+This path only affects gemini-3.x models (`registry.ts` `googlePlan` sets
+`thinkingLevel`/`useGeminiLevel` for `gemini-?3|gemini.*3\.`); gemini-2.5 models take the
+`thinkingBudget`/`useGeminiBudget` branch and do not emit `thinkingLevel`.
 
 ## Decision
 
@@ -51,9 +55,10 @@ uppercase form, and the type system enforces the contract instead of `unknown` s
 
 ## Consequences
 
-- Gemini 2.5 requests now send `thinkingLevel: "LOW"/"MEDIUM"/"HIGH"` instead of the previous
+- Gemini 3.x requests now send `thinkingLevel: "LOW"/"MEDIUM"/"HIGH"` instead of the previous
   lowercase values; the request shape is now the SDK's canonical enum form.
 - `GOOGLE_THINKING_LEVEL` is a module-local constant in `src/model/providers/google/request.ts`;
   the mapping is confined to the provider boundary rather than spread across model/streaming code.
-- No tool `inputSchema` changed, so llm-replay fixtures remain valid; the affected test
-  (`gemini-2.5-pro uses thinkingBudget`) still passes.
+- No tool `inputSchema` changed, so llm-replay fixtures remain valid; the existing
+  `tests/model/thinking/registry.spec.ts` "gemini-3.x uses thinkingLevel" cases cover the model
+  routing that feeds this path.
