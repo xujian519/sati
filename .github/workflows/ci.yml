@@ -9,6 +9,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  pr-traceability:
+    name: PR 关联 Issue 门禁
+    # 仅对 pull_request 事件生效：push 到 main 时没有 PR 上下文，无从校验 issue 引用
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Require linked issue for pull requests
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+        run: node .github/scripts/check-pr-issue.mjs
+
   quality:
     name: Typecheck, Lint & Test
     runs-on: ubuntu-latest
