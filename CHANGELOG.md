@@ -2,6 +2,30 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.6 - 2026-08-23
+
+> **版本目标（2026-08-23）**：工程化与质量基线固化——development standards 体系落库（#140/#142/#145/#146/#154：`check:skills` 接线进 lint、治理门禁硬化、PR-issue 串联 CI 门禁与 issue 模板），技术债清理批次（P0/P1 修复 #155、i18n 清点 #156、always-on 执行上限接线 #157、不可达 Ollama warm 探针静默 #158、UI LLM 配置类型化 #165、knowledge FTS→LIKE 兜底统一抽取 #167），以及文档同步（gateway 协议 1.2→1.4 + performance review 快照 #166、技术债排期文档 #168）。注：本版面向用户无新增 map / session-graph 功能（v0.1.5 后的 map 插件 #140 与 session-graph 随 #141 一并回滚移除）。
+
+### Feat
+- feat(ci): PR-issue 串联门禁与 issue 模板（#154）——PR body/title 需关联 issue 或携带豁免标记
+- feat(ui): Synapse-like map 插件（#140）——含 development standards 同步；随后 #141 回滚移除该 map 与 session-graph，故净效果为移除
+
+### Fix
+- fix(standards): `check:skills` 接线进 lint 并使其 green（#142）
+- fix(standards): 治理门禁硬化与评审修订（#145/#146）——`@ts-ignore` 禁用门禁 + `pnpm check` 配置钉
+- fix: 技术债台账 P0/P1 批次——安全与数据一致性修复 + 台账记账（#155）
+- fix(ui): 删除弹窗与 LLM 设置提取到 i18n（#156）
+- fix(always-on): 执行上限接线 + 未生效配置标记（#157）
+- fix(model): 不可达 Ollama warm 探针拒绝静默（#158）
+
+### Refactor
+- refactor(ui): onboarding LLM 配置构建器类型化 + 模型加载 A/B effect 统一（#165）
+- refactor(knowledge): 抽取共享 FTS→LIKE 兜底编排（FTS5 BM25 phrase → 分词 OR → LIKE 降级，统一 legal/case-law 检索）（#167）
+
+### Docs
+- docs(techdebt): 同步 gateway 协议版本（1.2→1.4）与 performance review 快照（#166）
+- docs(techdebt): 落技术债后续批次排期文档并接线进台账（#168）
+
 ## v0.1.5 - 2026-08-21
 
 > **版本目标（2026-08-21）**：v0.1.4 后的工程固化与能力增强——引入 J-Space workspace ledger 与元认知控制（metacognitive control）、团队成员角色提示注入（#135）、专利并行多源检索与图引擎耗时度量，并落实 C05/C06 代码精炼收口与 code-review 修复。
