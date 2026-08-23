@@ -281,11 +281,11 @@ export class WorkflowEngine {
       const results = await this.runReadySteps(ready, state);
 
       // 4. Handle failures — any rejected step fails the plan.
-      let failed = false;
+      const failedStepIds: string[] = [];
       for (let i = 0; i < results.length; i++) {
         const result = results[i]!;
         if (result.status === "rejected") {
-          failed = true;
+          failedStepIds.push(ready[i]!.id);
           this.emit({
             type: "step_failed",
             planId: plan.id,
@@ -294,10 +294,11 @@ export class WorkflowEngine {
           });
         }
       }
-      if (failed) {
+      if (failedStepIds.length > 0) {
         plan.status = "failed";
         plan.updatedAt = new Date();
-        this.emit({ type: "workflow_failed", planId: plan.id, error: ready[0]?.id });
+        // 上报实际失败步骤，而非波内首个就绪步骤（ready[0]）。
+        this.emit({ type: "workflow_failed", planId: plan.id, error: failedStepIds[0] });
         await this.persist?.savePlan(plan);
         return;
       }
