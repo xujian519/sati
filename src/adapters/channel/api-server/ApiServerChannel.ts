@@ -114,7 +114,7 @@ export class ApiServerChannel implements ChannelAdapter {
         const b = Buffer.from(this.apiKey);
         if (a.length === b.length && timingSafeEqual(a, b)) return { ok: true };
       } catch {
-        // timingSafeEqual 长度不等即抛错：按认证失败处理（保守，返回 401）。
+        // 防御性兜底：等长守卫已拦截长度不等路径，此处仅防 timingSafeEqual 意外抛错，按认证失败处理（保守）。
       }
     }
     return {

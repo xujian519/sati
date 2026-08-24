@@ -77,7 +77,7 @@ export class QQBotGateway extends EventEmitter {
         const msg = JSON.parse(data.toString()) as QQBotGatewayEvent;
         this.handleGatewayMessage(msg);
       } catch {
-        // 网关消息 JSON 解析失败：跳过该条消息，其余消息照常处理（fail-open）。
+        // 消息解析或处理器异常：丢弃该条消息，其余消息照常处理（fail-open）。
       }
     });
 

@@ -1389,7 +1389,7 @@ function tryDecryptWeixinMedia(buffer: Buffer, key: Buffer): Buffer[] {
     const padded = Buffer.concat([decipher.update(buffer), decipher.final()]);
     outputs.push(stripPkcs7Padding(padded) ?? padded);
   } catch {
-    // key 错误或密文损坏：该 key 解密失败，继续尝试下一个 key，全部失败返回空数组（fail-open）。
+    // 该 key 解密失败：返回空数组，由调用方继续尝试下一个 key（fail-open）。
   }
   return outputs;
 }
