@@ -142,6 +142,7 @@ export function extractTechnicalProblem(text: string): string | undefined {
     try {
       return JSON.parse(`"${json[1]}"`) as string;
     } catch {
+      // JSON.unparse 失败（转义异常）→ 手动去转义兜底还原原文字符串
       return json[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
     }
   }
