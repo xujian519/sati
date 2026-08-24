@@ -1,8 +1,11 @@
 import { jsonrepair } from "jsonrepair";
+import { createLogger } from "../../../telemetry/index.js";
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
 import { parseRetryAfterFromMessage } from "../../protocol/errors.js";
 import { normalizeAnthropicFinishReason } from "../../response/normalizeFinishReason.js";
 import { normalizeAnthropicUsage } from "../../response/normalizeUsage.js";
+
+const logger = createLogger("anthropic-stream");
 
 type FailedToolCall = {
   index: number;
@@ -173,9 +176,7 @@ function contentBlockStopEvents(
       const repaired = jsonrepair(rawInput);
       input = JSON.parse(repaired);
       wasRepaired = true;
-      console.warn(
-        `[anthropic-stream] repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawInput.length})`,
-      );
+      logger.warn(`repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawInput.length})`);
     } catch {
       // Defer the error — finishReason is not yet known (content_block_stop
       // arrives before message_delta). flushFailedToolCalls() will emit the
@@ -231,8 +232,8 @@ function flushFailedToolCalls(state: AnthropicStreamState, finishReason: string,
       entry.rawInput.length > 500
         ? entry.rawInput.slice(0, 250) + "\n…[truncated]…\n" + entry.rawInput.slice(-250)
         : entry.rawInput;
-    console.error(
-      `[anthropic-stream] ${code} for tool "${entry.name ?? "?"}" (index=${entry.index}, ` +
+    logger.error(
+      `${code} for tool "${entry.name ?? "?"}" (index=${entry.index}, ` +
         `buf_len=${entry.rawInput.length}):\n${preview}`,
     );
   }

@@ -15,7 +15,10 @@ import { readTranscript } from "../../../session/transcript/TranscriptReader.js"
 import { findOpenRequest } from "../../../session/transcript/interruptedTurn.js";
 import type { GatewayEvent } from "../../../gateway/protocol/types.js";
 import type { TeamDb, TeamMemberRow } from "../storage/team-db.js";
+import { createLogger } from "../../../telemetry/index.js";
 import { wakeMember, type MemberGateway } from "./member-waker.js";
+
+const logger = createLogger("sati");
 
 export const TEAM_MEMBER_RESUME_MARKER = "[team-resume]";
 
@@ -78,7 +81,7 @@ export async function scanTeamMembers(options: ScanTeamMembersOptions): Promise<
     } catch (error) {
       // 单个成员失败（转录缺失/损坏）不阻塞其余成员；无转录 = 从未唤醒，跳过。
       // I1（code review）：宿主 fire-and-forget 无日志兜底，此处显式记录，失败可观测。
-      console.error(`[sati] Team member resume failed: ${member.id}`, error);
+      logger.error(`Team member resume failed: ${member.id}`, error);
       continue;
     }
   }
@@ -135,7 +138,7 @@ export async function scanStrandedTasks(options: ScanStrandedTasksOptions): Prom
         stranded += 1;
       } catch (error) {
         // 单任务失败不阻塞团队扫描；I1（code review）：显式记录，失败可观测。
-        console.error(`[sati] Team stranded task reclaim failed: ${task.id}`, error);
+        logger.error(`Team stranded task reclaim failed: ${task.id}`, error);
       }
     }
   }

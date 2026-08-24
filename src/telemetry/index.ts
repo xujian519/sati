@@ -1,5 +1,6 @@
 export { createTelemetryCollector } from "./collector.js";
 export { hashTelemetryId, resolveTelemetryRuntimeContext } from "./context.js";
+export { createLogger, logger, type Logger, type LoggerLevel, type CreateLoggerOptions } from "./logger.js";
 export { TelemetrySender } from "./sender.js";
 export {
   ANALYTICS_SCHEMA_VERSION,

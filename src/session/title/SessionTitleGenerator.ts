@@ -1,5 +1,8 @@
 import type { CanonicalContentBlock, ModelRuntime } from "../../model/index.js";
+import { createLogger } from "../../telemetry/index.js";
 import type { PilotAgentModelSelection } from "../../pilot/config/types.js";
+
+const logger = createLogger("session-title");
 
 export const SESSION_TITLE_MAX_INPUT_CHARS = 1200;
 export const SESSION_TITLE_MAX_OUTPUT_CHARS = 80;
@@ -196,5 +199,5 @@ function sanitizeGeneratedTitle(title: string): string | null {
 function logSessionTitleFailure(reason: string, error?: unknown): void {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const suffix = message ? `: ${message.slice(0, 200)}` : "";
-  console.debug(`[session-title] generation skipped (${reason})${suffix}`);
+  logger.debug(`generation skipped (${reason})${suffix}`);
 }

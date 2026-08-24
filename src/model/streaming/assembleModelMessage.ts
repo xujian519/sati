@@ -9,8 +9,11 @@ import type {
   CanonicalUsage,
 } from "../protocol/canonical.js";
 import type { CanonicalModelError } from "../protocol/errors.js";
+import { createLogger } from "../../telemetry/index.js";
 import { extractTextToolCalls, hasTextToolCallSyntax, type PartialTextToolCallInfo } from "./parseTextToolCalls.js";
 import { nextUniqueToolCallId } from "./toolCallIds.js";
+
+const logger = createLogger("text-tool-call-fallback");
 
 export type ModelMessageAssemblerState = {
   content: CanonicalContentBlock[];
@@ -124,8 +127,8 @@ export function assembleAssistantMessage(state: ModelMessageAssemblerState): Ass
         state.hasUnparsedTextToolCall = true;
       }
       if (parseResult.toolCalls.length > 0) {
-        console.log(
-          `[text-tool-call-fallback] Extracted ${parseResult.toolCalls.length} tool call(s) from assistant text (format: ${detectedFormat ?? "unknown"})`,
+        logger.info(
+          `Extracted ${parseResult.toolCalls.length} tool call(s) from assistant text (format: ${detectedFormat ?? "unknown"})`,
         );
         state.hasTextFallbackToolCalls = true;
         if (parseResult.remainingText.length > 0) {

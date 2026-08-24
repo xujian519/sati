@@ -13,6 +13,7 @@ import {
   LITELLM_RETRY_JITTER,
 } from "../model/streaming/streamModel.js";
 import type { TelemetryClient } from "../telemetry/index.js";
+import { createLogger } from "../telemetry/index.js";
 import { computeBackoffDelay } from "../shared/retry/index.js";
 import { DEFAULT_SUBAGENT_POLICY, type RouterConfig, type RouterModelRef } from "./config/schema.js";
 import type { SatiCustomRouter, CustomRouterRegistry } from "./customRouter/customRouter.js";
@@ -39,6 +40,9 @@ import { countMessagesTokens, countResponseTokens, dispose as disposeTokenizer }
 import { calculateCacheReadCost, calculateInputCost } from "./utils/modelPricing.js";
 import { collectRequiredInputModalities, missingInputModalities } from "./utils/mediaRequirements.js";
 import { resolveMediaReroute, buildMediaRerouteCandidates } from "./utils/mediaReroute.js";
+
+const routerLogger = createLogger("router");
+const satiLogger = createLogger("sati");
 
 export type RouterRuntimeDeps = {
   modelRuntime: ModelRuntime;
@@ -418,8 +422,8 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
     const alreadyOrchestrating = sticky?.orchestrating === true;
     const tokenSaverActive = config.tokenSaver?.enabled === true && tokenSaverTier != null;
     const orchGate = tokenSaverActive || alreadyOrchestrating;
-    console.log(
-      `[router] decision: tier=${tokenSaverTier}, model=${selection.provider}/${selection.model}, orchGate=${orchGate}, alreadyOrch=${alreadyOrchestrating}, resolvedFrom=${resolvedFrom}`,
+    routerLogger.info(
+      `decision: tier=${tokenSaverTier}, model=${selection.provider}/${selection.model}, orchGate=${orchGate}, alreadyOrch=${alreadyOrchestrating}, resolvedFrom=${resolvedFrom}`,
     );
 
     let mutations: RouterMutationsLog = {};
@@ -724,8 +728,8 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
               },
               outcome.error.retryAfterMs ?? undefined,
             );
-            console.warn(
-              `[Sati] transientRetry: ${outcome.error.code} (attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(delay)}ms)`,
+            satiLogger.warn(
+              `transientRetry: ${outcome.error.code} (attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(delay)}ms)`,
             );
             events.emit({
               type: "sati_router_transient_retry",
@@ -780,8 +784,8 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
         }
 
         if (!hasYieldedContent && zeroUsageEnabled && outcome.shouldRetryZeroUsage && zeroUsageAttempt < zeroUsageMax) {
-          console.warn(
-            `[Sati] zeroUsageRetry: empty response from ${attempt.provider}/${attempt.model} ` +
+          satiLogger.warn(
+            `zeroUsageRetry: empty response from ${attempt.provider}/${attempt.model} ` +
               `(attempt ${zeroUsageAttempt}/${zeroUsageMax}, session=${ctx.sessionId})`,
           );
           events.emit({

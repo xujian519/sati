@@ -31,7 +31,10 @@ import {
   type ImLiveReplyTransport,
 } from "../protocol/ImLiveReplyController.js";
 import { createVisibleErrorStatusDetail } from "../../../status/agentStatus.js";
+import { createLogger } from "../../../telemetry/index.js";
 import { WeixinSessionMapper, type WeixinSessionMapperState } from "./WeixinSessionMapper.js";
+
+const logger = createLogger("weixin");
 
 const CREDENTIALS_PATH = join(homedir(), ".sati", "weixin-credentials.json");
 const POLL_RETRY_DELAY_MS = 3000;
@@ -315,7 +318,7 @@ export class WeixinChannel implements ChannelAdapter {
     console.log("\n╔══════════════════════════════════════════════╗");
     console.log("║  微信 iLink 登录 — 请用微信扫描二维码        ║");
     console.log("╚══════════════════════════════════════════════╝\n");
-    console.log("[weixin] 等待扫码登录；Sati Web UI 已可继续使用。\n");
+    logger.info("等待扫码登录；Sati Web UI 已可继续使用。\n");
 
     this.loginPromise = this.runQrLogin(generation).finally(() => {
       if (this.startGeneration === generation) {
@@ -331,7 +334,7 @@ export class WeixinChannel implements ChannelAdapter {
           if (this.isStaleGeneration(generation)) return;
           this.currentLoginQrUrl = url;
           this.reportStatus("waiting_for_login", "微信等待扫码登录", { qrUrl: url });
-          console.log(`[weixin] 扫码登录链接:\n${url}\n`);
+          logger.info(`扫码登录链接:\n${url}\n`);
         },
         onStatusChange: status => {
           if (this.isStaleGeneration(generation)) return;
@@ -341,7 +344,7 @@ export class WeixinChannel implements ChannelAdapter {
             expired: "二维码已过期，正在刷新...",
             refreshing: "刷新中...",
           };
-          console.log(`[weixin] ${labels[status] ?? status}`);
+          logger.info(`${labels[status] ?? status}`);
           if (status === "waiting" || status === "scanned" || status === "refreshing") {
             this.reportStatus("waiting_for_login", `weixin: ${labels[status] ?? status}`, {
               qrUrl: this.currentLoginQrUrl,
@@ -358,7 +361,7 @@ export class WeixinChannel implements ChannelAdapter {
       };
       this.saveCredentials(creds);
       this.currentLoginQrUrl = undefined;
-      console.log(`[weixin] 登录成功! accountId: ${result.accountId}\n`);
+      logger.info(`登录成功! accountId: ${result.accountId}\n`);
       this.logger?.info?.(`weixin: login successful, accountId=${result.accountId}`);
       this.startPollingWithCredentials(creds);
     } catch (e) {
@@ -366,7 +369,7 @@ export class WeixinChannel implements ChannelAdapter {
       const message = formatWeixinError(e);
       this.currentLoginQrUrl = undefined;
       this.logger?.error?.(`weixin: QR login failed: ${e}`);
-      console.error(`[weixin] 登录失败: ${e}`);
+      logger.error(`登录失败: ${e}`);
       this.reportStatus("failed", "weixin: QR login failed", { error: message });
       this.startLoginRecoveryWatcher();
     }
@@ -421,7 +424,7 @@ export class WeixinChannel implements ChannelAdapter {
         const resp = await client.poll();
         if (resp.errcode === -14) {
           this.logger?.error?.("weixin: session expired (errcode -14), clearing credentials and re-logging in via QR");
-          console.error("[weixin] Session 已过期，正在清除失效凭证并自动重新扫码登录...");
+          logger.error("Session 已过期，正在清除失效凭证并自动重新扫码登录...");
           // 1) 清除失效凭证：UI qr-poll 依赖该文件判断登录态，残留文件会导致
           //    界面误报"已登录"而不展示新二维码；
           // 2) 释放 client 与 pollPromise：解除 startPollingWithCredentials 的

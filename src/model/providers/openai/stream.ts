@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { jsonrepair } from "jsonrepair";
+import { createLogger } from "../../../telemetry/index.js";
 import type { CanonicalModelEvent, CanonicalToolCall } from "../../protocol/canonical.js";
 import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeOpenAIFinishReason } from "../../response/normalizeFinishReason.js";
 import { normalizeOpenAIUsage } from "../../response/normalizeUsage.js";
 import { nextUniqueToolCallId, safeToolCallIdPart } from "../../streaming/toolCallIds.js";
+
+const logger = createLogger("openai-stream");
 
 export type ThinkFsmMode = "NORMAL" | "THINKING";
 
@@ -280,18 +283,15 @@ function finishToolCalls(
         const repaired = jsonrepair(rawArguments);
         input = JSON.parse(repaired);
         wasRepaired = true;
-        console.warn(
-          `[openai-stream] repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawArguments.length})`,
-        );
+        logger.warn(`repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawArguments.length})`);
       } catch {
         const preview =
           rawArguments.length > 500
             ? rawArguments.slice(0, 250) + "\n…[truncated]…\n" + rawArguments.slice(-250)
             : rawArguments;
         const code = isTruncation ? "max_output_reached" : "invalid_tool_arguments";
-        console.error(
-          `[openai-stream] ${code} for tool "${toolCall.name ?? "?"}" (index=${key}, ` +
-            `buf_len=${rawArguments.length}):\n${preview}`,
+        logger.error(
+          `${code} for tool "${toolCall.name ?? "?"}" (index=${key}, ` + `buf_len=${rawArguments.length}):\n${preview}`,
         );
         throw new ModelProviderError({
           provider: "openai",
@@ -310,9 +310,7 @@ function finishToolCalls(
     // response was cut by max_tokens, treat repaired tool calls the same
     // as parse failures so the recovery loop retries with more tokens.
     if (wasRepaired && isTruncation) {
-      console.warn(
-        `[openai-stream] discarding repaired-but-truncated tool call "${toolCall.name ?? "?"}" (index=${key})`,
-      );
+      logger.warn(`discarding repaired-but-truncated tool call "${toolCall.name ?? "?"}" (index=${key})`);
       throw new ModelProviderError({
         provider: "openai",
         protocol: "openai",

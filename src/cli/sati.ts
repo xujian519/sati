@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { debugLog } from "../shared/debug.js";
+import { createLogger, logger } from "../telemetry/index.js";
 import { APP_VERSION } from "../version.js";
 import type { Gateway, GatewayEvent, GatewaySubmitTurnInput } from "../gateway/index.js";
 import type { InProcessGateway } from "../gateway/client/InProcessGateway.js";
@@ -186,19 +186,21 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     let deferredBroadcast: ((name: string, payload?: unknown) => void) | undefined;
     const sessionOverrides = new SessionConfigOverrides();
 
+    const alwaysOnLog = createLogger("always-on");
+    const cronLog = createLogger("cron");
     const alwaysOnLogger = {
       info: (message: string, data?: Record<string, unknown>) =>
-        console.log(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+        alwaysOnLog.info(`${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
       warn: (message: string, data?: Record<string, unknown>) =>
-        console.warn(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+        alwaysOnLog.warn(`${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
       debug: (message: string, data?: Record<string, unknown>) =>
-        debugLog(`[always-on] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+        alwaysOnLog.debug(`${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
     };
     const cronLogger = {
       info: (message: string, data?: Record<string, unknown>) =>
-        console.log(`[cron] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+        cronLog.info(`${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
       warn: (message: string, data?: Record<string, unknown>) =>
-        console.warn(`[cron] ${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
+        cronLog.warn(`${message}${data ? ` ${JSON.stringify(data)}` : ""}`),
     };
 
     function buildAlwaysOn(config: AlwaysOnConfig | undefined): AlwaysOnManager | undefined {
@@ -237,11 +239,11 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
             ?.deliverCronResult(delivery)
             .then(delivered => {
               if (!delivered) {
-                console.warn(`[cron] result delivery was not handled task=${delivery.taskId} run=${delivery.runId}`);
+                cronLog.warn(`result delivery was not handled task=${delivery.taskId} run=${delivery.runId}`);
               }
             })
             .catch((error: unknown) => {
-              console.warn(`[cron] result delivery failed ${error instanceof Error ? error.message : String(error)}`);
+              cronLog.warn(`result delivery failed ${error instanceof Error ? error.message : String(error)}`);
             });
         },
       });
@@ -335,18 +337,14 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       if (adapterChanged) {
         reloadChain = reloadChain
           .then(() => handleAdapterHotReload(event.nextSnapshot.config))
-          .catch(err =>
-            console.warn(`[sati] adapter hot-reload failed: ${err instanceof Error ? err.message : String(err)}`),
-          );
+          .catch(err => logger.warn(`adapter hot-reload failed: ${err instanceof Error ? err.message : String(err)}`));
       }
 
       if (!aoChanged && !cronChanged) return;
 
       reloadChain = reloadChain
         .then(() => handleSubsystemReload(aoChanged, cronChanged, event.nextSnapshot.config))
-        .catch(err =>
-          console.warn(`[sati] subsystem reload failed: ${err instanceof Error ? err.message : String(err)}`),
-        );
+        .catch(err => logger.warn(`subsystem reload failed: ${err instanceof Error ? err.message : String(err)}`));
     });
 
     async function handleSubsystemReload(
@@ -398,7 +396,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       const parts: string[] = [];
       if (aoChanged) parts.push(`always-on=${alwaysOn ? "started" : "stopped"}`);
       if (cronChanged) parts.push(`cron=${cron ? "started" : "stopped"}`);
-      console.log(`[sati] Subsystem hot-reload complete: ${parts.join(", ")}`);
+      logger.info(`Subsystem hot-reload complete: ${parts.join(", ")}`);
     }
 
     // --- Channel state persistence ---
@@ -452,7 +450,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       }
 
       if (parts.length) {
-        console.log(`[sati] Adapter hot-reload complete: ${parts.join(", ")}`);
+        logger.info(`Adapter hot-reload complete: ${parts.join(", ")}`);
       }
     }
 
@@ -486,8 +484,8 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       cronStartPromise,
     ]);
     if (cronResult.status === "rejected") {
-      console.warn(
-        `[cron] start failed: ${cronResult.reason instanceof Error ? cronResult.reason.message : String(cronResult.reason)}`,
+      cronLog.warn(
+        `start failed: ${cronResult.reason instanceof Error ? cronResult.reason.message : String(cronResult.reason)}`,
       );
     }
     if (serverResult.status === "rejected") {
@@ -526,13 +524,13 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     const stop = async () => {
       try {
         await channelStatePersistence.flush();
-        console.log(`[telemetry] shutdown snapshot ${JSON.stringify(telemetry.snapshot())}`);
+        createLogger("telemetry").info(`shutdown snapshot ${JSON.stringify(telemetry.snapshot())}`);
         disposeGateway();
         await alwaysOn?.stop();
         await cron?.stop();
         await telemetry.shutdown();
       } catch (error) {
-        console.warn(`[runtime] stop failed: ${error instanceof Error ? error.message : String(error)}`);
+        createLogger("runtime").warn(`stop failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
     const shutdownAndExit = createShutdownAndExit(stop, exitCode => process.exit(exitCode));
@@ -631,8 +629,8 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       const snapshot = loadPilotConfig({ projectRoot: process.cwd() });
       gatewayPort = snapshot.config.gateway?.port ?? 19789;
     } catch (error) {
-      console.warn(
-        `[sati] 读取 gateway 端口失败，回退默认 ${gatewayPort}: ${error instanceof Error ? error.message : String(error)}`,
+      logger.warn(
+        `读取 gateway 端口失败，回退默认 ${gatewayPort}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
     const probeUrl = `http://127.0.0.1:${gatewayPort}`;
@@ -650,8 +648,8 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         return;
       } catch (error) {
         // 远端启动失败（如握手后崩溃）：回退本地 gateway，恢复自动探测的兜底语义。
-        console.warn(
-          `[sati] 连接远端 server 失败，回退本地 gateway: ${error instanceof Error ? error.message : String(error)}`,
+        logger.warn(
+          `连接远端 server 失败，回退本地 gateway: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
@@ -1020,6 +1018,7 @@ function createFallbackGateway(sanitizeSessionIdForPath: (sessionId: string) => 
 }
 
 main().catch(error => {
-  console.error(error instanceof Error ? error.message : String(error));
+  // 顶层错误无前缀输出：CI/脚本按裸错误文本 grep，保持既有契约
+  createLogger("").error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

@@ -1,5 +1,8 @@
 import type { PilotAdaptersConfig, PilotPlatformAdapterConfig } from "../../pilot/config/types.js";
+import { createLogger } from "../../telemetry/index.js";
 import type { ChannelAdapter } from "./protocol/ChannelAdapter.js";
+
+const logger = createLogger("adapters");
 
 /**
  * Lazily import + instantiate every channel whose config has `enabled: true`.
@@ -121,7 +124,7 @@ export async function loadEnabledChannels(adapters: PilotAdaptersConfig | undefi
     try {
       channels.push(await loader(cfg));
     } catch (e) {
-      console.error(`[adapters] Failed to load channel "${key}": ${e}`);
+      logger.error(`Failed to load channel "${key}": ${e}`);
     }
   }
 

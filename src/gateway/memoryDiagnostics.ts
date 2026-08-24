@@ -1,5 +1,8 @@
 import type { CanonicalContentBlock, CanonicalMessage, CanonicalToolResultContentBlock } from "../model/index.js";
+import { createLogger } from "../telemetry/index.js";
 import { brandEnv, ENV_KEY } from "../env.js";
+
+const logger = createLogger("sati:memory");
 
 export type GatewayMemoryDiagnosticSession = {
   sessionKey: string;
@@ -70,7 +73,7 @@ export function logGatewayMemoryDiagnostic(input: GatewayMemoryDiagnosticInput):
     ...(input.session ? { session: input.session } : {}),
   };
   // Keep this parseable for log collectors while staying invisible unless enabled upstream.
-  console.log(`[sati:memory] ${JSON.stringify(payload)}`);
+  logger.info(`${JSON.stringify(payload)}`);
 }
 
 function summarizeBlock(block: CanonicalContentBlock | CanonicalToolResultContentBlock): {

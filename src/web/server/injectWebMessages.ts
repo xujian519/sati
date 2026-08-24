@@ -7,10 +7,13 @@
  */
 
 import type { CanonicalMessage } from "../../model/index.js";
+import { createLogger } from "../../telemetry/index.js";
 import { replayShadowedMessagesAt } from "../../session/transcript/TranscriptReplay.js";
 import { isCompactBoundaryEntry, type AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
 import type { WebMessage } from "../client/webMessage.js";
 import { flattenCanonicalMessage } from "./webMessageFlatten.js";
+
+const logger = createLogger("readSessionMessages");
 
 export type CompactBoundaryInfo = {
   insertAfterMessageIndex: number;
@@ -39,10 +42,7 @@ export function insertCompactBoundaryMessages(
   for (const boundary of boundaries) {
     const shadowed = replayShadowedMessagesAt(entries, boundary.boundaryIndex);
     if (shadowed.diagnostics.length > 0) {
-      console.warn(
-        `[readSessionMessages] 压缩边界 ${boundary.boundaryIndex} 被遮蔽历史还原对齐告警：`,
-        shadowed.diagnostics,
-      );
+      logger.warn(`压缩边界 ${boundary.boundaryIndex} 被遮蔽历史还原对齐告警：`, shadowed.diagnostics);
     }
     const shadowedMessages: WebMessage[] = [];
     for (let index = 0; index < shadowed.messages.length; index += 1) {

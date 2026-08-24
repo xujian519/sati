@@ -14,7 +14,10 @@
 import { join } from "node:path";
 import type { ApprovalRecord, ApprovalStore } from "../approval.js";
 import { provenanceAuditDir } from "../paths.js";
+import { createLogger } from "../../telemetry/index.js";
 import { ProvenanceStore } from "./provenance-store.js";
+
+const logger = createLogger("SqliteApprovalStore");
 
 /** 全局审批审计库文件名。 */
 export const APPROVAL_AUDIT_DB = "approval-audit.db";
@@ -61,7 +64,7 @@ export class SqliteApprovalStore implements ApprovalStore {
       });
     } catch (err) {
       // fail-open：审计写入失败不影响审批流程
-      console.error("[SqliteApprovalStore] 审批审计写入失败:", err);
+      logger.error("审批审计写入失败:", err);
     }
   }
 

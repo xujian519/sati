@@ -1,6 +1,9 @@
 import { debugLog } from "../../shared/debug.js";
 import type { RouterAutoOrchestrateConfig } from "../config/schema.js";
 import type { RouterMutationsLog } from "../protocol/decision.js";
+import { createLogger } from "../../telemetry/index.js";
+
+const logger = createLogger("autoOrch");
 
 export type OrchestrationInput = {
   config: RouterAutoOrchestrateConfig;
@@ -18,8 +21,8 @@ export type OrchestrationResult = {
 
 export function applyOrchestration(input: OrchestrationInput): OrchestrationResult {
   const { config } = input;
-  console.log(
-    `[autoOrch] input: tier=${input.tier}, isMain=${input.isMainAgent}, alreadyOrch=${input.alreadyOrchestrating}, triggerTiers=${config.triggerTiers}`,
+  logger.info(
+    `input: tier=${input.tier}, isMain=${input.isMainAgent}, alreadyOrch=${input.alreadyOrchestrating}, triggerTiers=${config.triggerTiers}`,
   );
   if (!config.enabled || !input.isMainAgent) {
     return { mutations: {}, applied: false };
@@ -39,7 +42,7 @@ export function applyOrchestration(input: OrchestrationInput): OrchestrationResu
       continued: input.alreadyOrchestrating === true,
     },
   };
-  console.log(`[autoOrch] orchestration active: continued=${input.alreadyOrchestrating === true}`);
+  logger.info(`orchestration active: continued=${input.alreadyOrchestrating === true}`);
   return {
     mutations,
     applied: true,
