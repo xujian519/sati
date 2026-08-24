@@ -52,6 +52,14 @@ error（`sati.ts` `main().catch`），防破坏 CI/脚本 grep。
   自动纳入 `SATI_DEBUG` 门控；model stream 系列 `[model-debug]` 等降噪。
 - `docs/event-producer-consumer.md` 随行号漂移重新生成（迁移改变事件 emit/消费
   点行号，`pnpm check:event-matrix` 门禁须同步）。
+- **循环依赖修复（CI 驱动）**：`PilotConfigStore` 顶层 `createLogger` 在
+  Vite（UI Vitest）下解析为 undefined——`telemetry/context` →
+  `gateway/authToken` → `pilot/index` → `PilotConfigStore` → `telemetry/index`
+  形成静态循环，Vite SSR 转译的 barrel 按声明顺序加载、`logger.js` 排在
+  `context.js` 之后导致绑定未就绪（Node 原生 ESM live binding 后端测试不受
+  影响）。修复：`authToken.ts` 的 `resolvePilotHome`/`DEFAULT_SATI_HOME`
+  本就定义于 `shared/paths/pilotPaths.ts`，改从 `shared/paths/index.js` 直接
+  引用消除循环（`ui` 侧 599/599 测试转绿）。
 - 剩余 ~150 处裸 console 为 A 类（CLI 面向用户输出）+ 注释 + satiServer.ts DI
   wrapper，保留待后续 issue。
 - 验证全绿：`pnpm typecheck`、`pnpm lint`（含 check:event-matrix /

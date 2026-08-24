@@ -2,7 +2,11 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { DEFAULT_SATI_HOME, resolvePilotHome } from "../../pilot/index.js";
+// 直接从 shared/paths 取 pilot 路径常量，避免经 pilot/index 间接引用——
+// pilot/index → PilotConfigStore → telemetry/index → telemetry/context →
+// gateway/authToken 会形成静态循环，Vite SSR 转译下 barrel 部分初始化导致
+// createLogger 绑定未就绪（UI 测试 createLogger is not a function）。
+import { DEFAULT_SATI_HOME, resolvePilotHome } from "../../shared/paths/index.js";
 
 export type GatewayAuthTokenOptions = {
   pilotHome?: string;
