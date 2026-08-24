@@ -33,7 +33,7 @@ export function resolveAppVersion(fromDir: string): string {
           return pkg.version;
         }
       } catch {
-        /* malformed package.json: skip it and keep walking up */
+        // package.json 损坏：跳过该目录继续向上查找，最终兜底 0.0.0（fail-open）。
       }
     }
     const parent = dirname(dir);

@@ -419,7 +419,7 @@ function lastAcceptedInputText(tail: string): string | undefined {
         last = text.trim();
       }
     } catch {
-      // partial line at tail boundary — skip
+      // 尾部残缺行 JSON 解析失败：跳过该行，继续取更早完整行（fail-open，仅影响 last 消息展示）。
     }
   }
   return last;

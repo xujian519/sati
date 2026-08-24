@@ -152,13 +152,13 @@ export class TelemetrySender {
             });
           }
         } catch {
-          // Ignore malformed lines.
+          // 队列单行 JSON 非法：跳过该条，其余事件照常恢复（fail-open，遥测非关键路径）。
         }
       }
       this.syncQueueDepth();
       // Keep the queue file on disk; it will be overwritten on clean shutdown.
     } catch {
-      // noop: file might not exist or malformed lines were ignored.
+      // 队列文件缺失/不可读：遥测为可选路径，空队列继续，不阻断启动（best-effort）。
     }
   }
 
@@ -168,7 +168,7 @@ export class TelemetrySender {
       const lines = this.queue.map(item => JSON.stringify(item));
       writeFileSync(this.config.queueFilePath, lines.length > 0 ? `${lines.join("\n")}\n` : "", "utf8");
     } catch {
-      // noop
+      // 队列落盘失败：遥测非关键路径，丢一次持久化不影响进程（best-effort）。
     }
   }
 

@@ -26,7 +26,7 @@ export class WorkspaceProviderRegistry {
           return provider;
         }
       } catch {
-        // ignore: try the next provider.
+        // 单个 provider 判定失败：跳过尝试下一个，全部不可用才抛错（fail-open）。
       }
     }
     throw new AlwaysOnError("workspace_unavailable", `no workspace provider applicable for ${projectRoot}.`);

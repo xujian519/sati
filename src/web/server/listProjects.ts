@@ -144,7 +144,7 @@ async function tryDecodeProjectId(id: string): Promise<string | null> {
           return candidate;
         }
       } catch {
-        // ignore — try next candidate
+        // 候选目录 stat 失败：跳过该候选尝试下一个，最终无则返回 null（fail-open）。
       }
     }
   }

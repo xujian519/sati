@@ -114,7 +114,7 @@ export class ApiServerChannel implements ChannelAdapter {
         const b = Buffer.from(this.apiKey);
         if (a.length === b.length && timingSafeEqual(a, b)) return { ok: true };
       } catch {
-        // fallthrough
+        // 防御性兜底：等长守卫已拦截长度不等路径，此处仅防 timingSafeEqual 意外抛错，按认证失败处理（保守）。
       }
     }
     return {
@@ -337,7 +337,7 @@ export class ApiServerChannel implements ChannelAdapter {
       try {
         res.end();
       } catch {
-        /* best effort */
+        // 流超时后结束响应失败：客户端已超时断开，无需重试（best-effort 收尾）。
       }
     }, REQUEST_TIMEOUT_MS);
 
@@ -378,14 +378,14 @@ export class ApiServerChannel implements ChannelAdapter {
           )}\n\n`,
         );
       } catch {
-        /* best effort */
+        // 错误响应写回失败：请求已失败，客户端只见断开，无需重试（best-effort）。
       }
     } finally {
       clearTimeout(timeout);
       try {
         res.end();
       } catch {
-        /* best effort */
+        // 连接可能已断开：end 失败无副作用，不阻断请求收尾（best-effort）。
       }
     }
   }

@@ -106,7 +106,7 @@ function resolveAppVersion(env: Record<string, string | undefined>): string {
       if (parsed.version) return parsed.version;
     }
   } catch {
-    // noop
+    // package.json 读取/解析失败：回退默认版本号 0.0.0（fail-safe，仅展示用）。
   }
   return "0.0.0";
 }

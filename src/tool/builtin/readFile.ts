@@ -775,7 +775,7 @@ async function validateAndRepairImage(buffer: Buffer, mimeType: string): Promise
       await sharp(buffer).metadata();
       return { buffer, mimeType };
     } catch {
-      // Fall through to repair attempt
+      // sharp 元数据读取失败：回退到后续修复流程，不改动原 buffer（fail-safe）。
     }
   }
 

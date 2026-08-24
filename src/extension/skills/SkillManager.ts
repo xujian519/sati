@@ -320,7 +320,7 @@ export class SkillManager {
       await fs.access(targetDir);
       exists = true;
     } catch {
-      /* not present, good */
+      // 目标路径不存在：视为无冲突，可安全创建（fail-open，access 失败即不存在）。
     }
     if (exists && !input.force) {
       throw new SkillManagerError(
@@ -607,7 +607,7 @@ async function readSkillMeta(skillDir: string, scope: SkillScope): Promise<Skill
     const stat = await fs.stat(skillFile);
     mtime = stat.mtimeMs;
   } catch {
-    /* ignore */
+    // 读不到 mtime：置 null，仅影响排序展示，不影响技能加载（best-effort）。
   }
   const isRole = isRoleFrontmatter(fm);
   return {
@@ -633,7 +633,7 @@ async function buildSkillScanFolder(skillDir: string, folderName: string): Promi
     hasSkillMd = true;
     meta = await readSkillMeta(skillDir, "user");
   } catch {
-    /* no SKILL.md */
+    // 目录缺 SKILL.md：该文件夹不作为技能扫描（保守视无技能）。
   }
 
   let fileCount = 0;
@@ -649,11 +649,11 @@ async function buildSkillScanFolder(skillDir: string, folderName: string): Promi
             totalSize += stats.size;
           }
         } catch {
-          /* skip */
+          // 单个文件 stat 失败：跳过该文件，fileCount/totalSize 少报仅影响展示（best-effort）。
         }
       }
     } catch {
-      /* skip */
+      // readdir 失败：文件计数留 0，技能本体已由 readSkillMeta 读到，不影响加载（best-effort）。
     }
   }
 
@@ -836,7 +836,7 @@ async function walkDir(
         pushIssue(warnings, "file_large", `Large file: ${rel} (${(fileStat.size / 1024 / 1024).toFixed(1)} MB)`);
       }
     } catch {
-      /* unreadable, skip */
+      // 单文件不可读：跳过其体积统计，仅影响 file_too_large/large 告警判定（best-effort）。
     }
     const ext = extOf(entry.name).toLowerCase();
     if (RISKY_EXTS.has(ext)) {

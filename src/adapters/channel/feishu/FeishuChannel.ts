@@ -241,7 +241,7 @@ export class FeishuChannel implements ChannelAdapter {
           try {
             await this.wsClient.stop();
           } catch {
-            /* best effort */
+            // 停止时连接清理失败：引用随即置空，残留由 GC/系统回收（fail-safe）。
           }
         }
         this.wsClient = null;

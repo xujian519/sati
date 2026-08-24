@@ -292,7 +292,7 @@ function collectSenderHints(text: string): string[] {
       add(object.sender_id);
       add(object.sender_label);
     } catch {
-      // Ignore malformed metadata blocks.
+      // metadata 块 JSON 解析失败：忽略该坏块，其余块照常提取（fail-open）。
     }
   };
 

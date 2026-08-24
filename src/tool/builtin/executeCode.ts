@@ -687,7 +687,7 @@ function killProcess(child: ChildProcessByStdio<null, Readable, Readable> | unde
           try {
             process.kill(-child.pid!, "SIGKILL");
           } catch {
-            /* noop */
+            // 强杀时进程组已退出：信号无意义（best-effort 兜底已完成）。
           }
         }, 500).unref();
     } else {

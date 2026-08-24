@@ -72,7 +72,7 @@ function parseStringArray(value: string | undefined): string[] {
         return uniqueStrings(parsed.filter((item): item is string => typeof item === "string"));
       }
     } catch {
-      // Fall through.
+      // JSON 数组解析失败：回退按分隔符解析原字符串（保守降级）。
     }
   }
   return uniqueStrings(raw.split("|"));

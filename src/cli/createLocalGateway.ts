@@ -985,7 +985,7 @@ class ProjectRuntimeRegistry {
     try {
       mkdirSyncFs(routerDir, { recursive: true });
     } catch {
-      /* exists */
+      // 目录已存在或创建失败：后续事件写盘会再试，此处失败不阻断（best-effort）。
     }
     const eventsPath = joinPath(routerDir, "events.jsonl");
     try {
@@ -994,7 +994,7 @@ class ProjectRuntimeRegistry {
         renameSync(oldPath, eventsPath);
       }
     } catch {
-      /* best-effort migration */
+      // 迁移失败：沿用旧文件，events.jsonl 仅审计用，失败不影响主流程（best-effort）。
     }
     // M4：逐事件 appendFileSync 改缓冲 + 250ms 批量 flush。events.jsonl 仅供
     // 人工审计（bootstrap-sati-config 注释），无程序化消费/重建路径——尾部
@@ -1011,7 +1011,7 @@ class ProjectRuntimeRegistry {
       try {
         appendFileSync(eventsPath, batch.map(event => JSON.stringify(event)).join("\n") + "\n");
       } catch {
-        /* best-effort, never crash the agent loop */
+        // 事件批量落盘失败：丢弃该批，不中断 agent turn，下批 flush 再试（best-effort）。
       }
     };
     const scheduleFlush = () => {
@@ -1030,7 +1030,7 @@ class ProjectRuntimeRegistry {
           try {
             this.gateway?.broadcastRetryProgress(event);
           } catch {
-            /* best-effort */
+            // 重试进度广播失败：事件仅审计展示，丢一条不影响重试链路（best-effort）。
           }
           // 跨进程重启续算 T-A：重试调度写入该会话 transcript 权威序列（log-only）。
           // 事件含 sessionId/turnId；无 turnId（子代理上下文）或会话未登记时跳过。
@@ -1052,7 +1052,7 @@ class ProjectRuntimeRegistry {
               }
             }
           } catch {
-            /* best-effort, never crash the agent loop */
+            // 重试调度落盘失败：不中断 agent turn，下轮或续算路径再补（best-effort）。
           }
         }
       },

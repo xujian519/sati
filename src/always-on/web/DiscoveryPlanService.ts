@@ -368,7 +368,7 @@ export class DiscoveryPlanService {
       try {
         await this.deps.workspace.disposeWorkspace(cycle.workspace.strategy, cycle.workspace.cwd, projectRoot);
       } catch {
-        // Best effort — workspace may already be gone.
+        // workspace 已不存在或清理失败：归档主流程不受影响，残留留待系统回收（best-effort）。
       }
     }
 
@@ -390,7 +390,7 @@ export class DiscoveryPlanService {
       try {
         await this.deps.state.clearActiveWorkCycleId(projectRoot);
       } catch {
-        // Best effort — state cleanup should not block archive.
+        // 状态清理失败：仅影响"活跃周期"标记，不阻断归档收尾（best-effort）。
       }
     }
 
@@ -525,7 +525,7 @@ export class DiscoveryPlanService {
         try {
           await this.deps.workspace.disposeWorkspace(cycle.workspace.strategy, cycle.workspace.cwd, projectRoot);
         } catch {
-          // Best effort cleanup.
+          // workspace 清理失败：应用状态已确定，残留 workspace 由系统回收（best-effort）。
         }
       }
 
@@ -547,7 +547,7 @@ export class DiscoveryPlanService {
           try {
             await this.deps.state.clearActiveWorkCycleId(projectRoot);
           } catch {
-            // Best effort — state cleanup should not block apply finalization.
+            // 状态清理失败：不阻断 apply 定稿，活跃周期标记留待下次扫描校正（best-effort）。
           }
         }
       }

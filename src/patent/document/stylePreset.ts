@@ -49,7 +49,7 @@ export function listStylePresets(presetDir: string): StylePreset[] {
         presets.push(parsed);
       }
     } catch {
-      // 忽略损坏的预设文件。
+      // 预设文件损坏：忽略该预设，其余预设照常加载（fail-open）。
     }
   }
   return presets.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));

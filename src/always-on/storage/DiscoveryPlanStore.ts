@@ -24,7 +24,7 @@ export class DiscoveryPlanStore {
         return parsed as DiscoveryPlanIndex;
       }
     } catch {
-      // fall through
+      // 计划索引 JSON 非法：整体回退到空默认索引（fail-safe），放弃已损坏的计划清单。
     }
     return cloneIndex(DEFAULT_INDEX);
   }

@@ -113,7 +113,7 @@ export class TelegramChannel implements ChannelAdapter {
           try {
             await this.bot.stop();
           } catch {
-            /* best effort */
+            // 停止 bot 失败：引用随即置空，残留由进程退出兜底（fail-safe 清理）。
           }
           this.bot = null;
         }
@@ -228,7 +228,7 @@ export class TelegramChannel implements ChannelAdapter {
     try {
       await bot.api.sendChatAction(chatId, "typing");
     } catch {
-      /* best effort */
+      // 发送输入中提示失败：仅影响打字指示，不影响后续消息投递（best-effort）。
     }
   }
 }

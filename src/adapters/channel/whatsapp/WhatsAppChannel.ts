@@ -142,7 +142,7 @@ export class WhatsAppChannel implements ChannelAdapter {
         });
         if (res.ok || res.status === 404) return true;
       } catch {
-        // bridge still starting
+        // bridge 尚在启动：本次探活失败，循环继续重试直到超时（best-effort）。
       }
       await new Promise(r => setTimeout(r, 400));
     }
@@ -310,7 +310,7 @@ export class WhatsAppChannel implements ChannelAdapter {
           try {
             proc.kill("SIGKILL");
           } catch {
-            // ignore
+            // SIGKILL 时进程已退出：强杀信号无意义（best-effort 兜底完成）。
           }
           resolve();
         }, 5000);
@@ -320,7 +320,7 @@ export class WhatsAppChannel implements ChannelAdapter {
         });
       });
     } catch {
-      // ignore
+      // 子进程退出/强杀整体失败：忽略等待结果，调用方已不依赖（fail-safe）。
     }
   }
 }

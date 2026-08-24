@@ -158,7 +158,7 @@ async function applyDirectDispatcher(logRemoval = false): Promise<string | undef
       console.log("[proxy] Global fetch proxy removed");
     }
   } catch {
-    // best effort
+    // 设置全局 dispatcher 失败：沿用现有代理状态，函数无副作用返回（best-effort）。
   }
   return undefined;
 }
