@@ -140,6 +140,7 @@ export class EgoBrowserSession {
       if (result.timedOut || result.exitCode !== 0) return false;
       return `${result.stdout}\n${result.stderr}`.includes("EGO_DOCTOR_OK");
     } catch {
+      // 探针启动异常：视为不可达，返回 false（fail-safe）。
       return false;
     }
   }
@@ -197,6 +198,7 @@ export class EgoBrowserSession {
       try {
         return JSON.parse(payload) as T;
       } catch {
+        // 单行 payload 非合法 JSON：标记缺失，返回 null 交由调用方降级。
         return null;
       }
     }
@@ -247,6 +249,7 @@ function isExecutableFile(path: string): boolean {
     accessSync(path, fsConstants.X_OK);
     return true;
   } catch {
+    // 文件不存在或无执行权限：保守视不可执行。
     return false;
   }
 }

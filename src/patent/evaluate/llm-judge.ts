@@ -89,6 +89,7 @@ async function judgeSample(
     const rationale = raw.match(/"rationale"\s*:\s*"([^"]{4,})"/)?.[1];
     return { score, ...(rationale !== undefined ? { rationale } : {}) };
   } catch {
+    // 单次采样调用/解析失败：返回 undefined 交由 collectJudgeVotes 跳过该票。
     return undefined;
   }
 }

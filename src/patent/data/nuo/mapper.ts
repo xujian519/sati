@@ -39,6 +39,7 @@ export function parseJsonArray<T>(raw: string): T[] {
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
+    // 非法 JSON 数组字符串：返回空数组，避免单条坏数据拖垮整条专利映射。
     return [];
   }
 }
