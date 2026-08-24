@@ -75,7 +75,7 @@
 |---|---|---|---|
 | C12 | src/patent workflow+flexible-plan+plantask | 126 文件/20.5K 总分 3 卡 | ✅ 2026-08-23 |
 | C13 | src/patent evidence+problem+atoms | 26 文件（evidence 10 / problem 2 / atoms 14） | ✅ 2026-08-24 |
-| C14 | src/patent graph+claim-chart+document | | ⬜ |
+| C14 | src/patent graph+claim-chart+document | ✅ 2026-08-24 |
 | C15 | src/patent data/nuo+figure+evaluate 其余 | | ⬜ |
 | C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ⬜ |
 | C17 | src/adapters 其余 18 渠道+protocol | ImLiveReplyController.ts 1016 | ⬜ |
@@ -134,6 +134,7 @@
 | 2026-08-23 | C12 | src/patent workflow+flexible-plan+plantask | P2 死代码删除：attachArticleJudgment `if (target === undefined)` 不可达（findStageIndex 已保证）→ 非空断言；worker-contract TIER_LABELS 全仓零消费死导出删除；P3 formatTechnicalField 命名一致（detail 提取后改用原字段）；index.ts barrel 删 ROLE_WORKER_TIERS 导出（零外部消费，定义保留）；四块扫描零 console/any/TODO/catch；P0/P1 无 | 1（refactor） | ✅ |
 
 | 2026-08-24 | C13 | src/patent evidence+problem+atoms | P3 删除 engine.ts/date.ts 零消费类型 re-export（CredibilityLevel/DateReliability/DateSourceType）+ 连带未用 import 清理；readPriorArt 私有化（仅 llm.ts 内部使用）；5 处防御式无参 catch 补意图注释；search.ts 提取 previewQuery 去重查询串截断；P0/P1/P2 无；P3 记录不处理：3 处裸 console（receipt.ts ×2 / mapper.ts ×1）归 C39 横切治理 | 1（refactor） | ✅ |
+| 2026-08-24 | C14 | src/patent graph+claim-chart+document | P3 无参 catch 补意图注释 ×4（enablement.ts:483 / inventiveness.ts:610 / claim-chart store.ts:38 / document brandInjector.ts:64；state.ts:15、stylePreset.ts:51 已注释）；嵌套三元改 if/else ×1（graph/adapter.ts:120 主输出键序列化）+ 查表 ×1（claim-chart gap-detector.ts reason 文案提取 GAP_REASON_LABELS，与原内联三元逐字一致）；P2 记录不处理：validatePinCiteFormat/stripWhitespace 为同包或 chart.ts 消费的公共 export 保留、splitClaimSegments 仅同文件内消费但作公共 API 一致保留；P0/P1/P2 无行为缺陷；三模块横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME | 1（refactor） | ✅ |
 
 ### 日卡记录
 
@@ -294,6 +295,17 @@
 - **精炼项**：死代码删除 1 处（+非空断言）、死导出删除 1 处、barrel 导出清理 1 处、命名一致 1 处（净 -11 行）
 - **验证**：`pnpm typecheck` ✅ 0 错误（含 edgeclaw-memory-core）；`pnpm lint` 全量 ✅（event-matrix/patent-sop/skill 校验 fresh）；`biome check .`（2166 文件）✅；`pnpm test` 3746 pass / 0 fail / 4 skip ✅
 - **提交**：`refactor(patent): drop dead contract exports and redundant guard in flexible plan`
+
+#### C14 src/patent graph+claim-chart+document（2026-08-24）
+
+- **审阅发现**：
+  - P3 无参 catch 缺意图注释 ×4：enablement.ts:483 / inventiveness.ts:610（结论 JSON.parse 失败→降级空）、claim-chart store.ts:38（损坏 JSON→无图表）、document brandInjector.ts:64（theme.json 解析失败→空品牌）；state.ts:15（structuredClone 兜底 JSON 往返）、stylePreset.ts:51（损坏预设文件忽略）已带注释
+  - P3 嵌套三元 ×2：graph/adapter.ts:120 主输出键序列化（`typeof raw === "string" ? raw : raw === undefined ? "" : JSON.stringify(...)`）→ if/else；claim-chart gap-detector.ts:26 reason 文案内联嵌套三元 → 提取 `GAP_REASON_LABELS` 查表（与既有 `SUGGESTIONS` 风格一致，文案逐字一致）
+  - P2 记录不处理：claim-chart `validatePinCiteFormat`（chart.ts 经非 barrel 路径消费）、`stripWhitespace`（pin-cite-validator 同包消费）为有意不暴露的公共 export 保留；`splitClaimSegments` 仅同文件内消费，但保留 export 维持公共 API 一致
+  - P0/P1/P2：无行为缺陷。三模块共 33 文件/4066 行，整体质量高——零裸 console、零 any/@ts-expect-error、零 TODO/FIXME、零死代码
+- **精炼项**：无参 catch 补注释 ×4、嵌套三元→if/else ×1、嵌套三元→查表 ×1
+- **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；`pnpm lint`（eslint src/patent）✅ 0 error；`biome check src/patent` ✅；`pnpm test` 3750 pass / 0 fail / 4 skip ✅
+- **提交**：`refactor(patent): document defensive catches and flatten nested ternaries in graph/claim-chart/document`
 
 ## 六、基线（2026-08-18 实测）
 

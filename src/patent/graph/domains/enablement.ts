@@ -481,6 +481,7 @@ export function extractEnablementResult(state: GraphState): {
       report: typeof parsed.report === "string" ? parsed.report : undefined,
     };
   } catch {
+    // 结论 JSON 解析失败 → 无结构化结论，降级为空（调用方自行处理缺失）。
     return {};
   }
 }

@@ -14,6 +14,13 @@ const SUGGESTIONS: Record<string, string> = {
   partial: "补充公开部分的精确定位（pin-cite）",
 };
 
+/** 缺口原因文案（与 SUGGESTIONS 并列：前者为建议动作，本表为存在缺口的原因）。 */
+const GAP_REASON_LABELS: Record<string, string> = {
+  "not-found": "未找到对应内容",
+  "needs-evidence": "证据不足",
+  partial: "仅部分公开",
+};
+
 export function detectGaps(rows: ChartRow[]): GapEntry[] {
   const gaps: GapEntry[] = [];
   for (const row of rows) {
@@ -23,7 +30,7 @@ export function detectGaps(rows: ChartRow[]): GapEntry[] {
       elementId: row.elementId,
       targetId: row.targetId,
       mapping,
-      reason: `要素 ${row.elementId} 在 ${row.targetId} 上${mapping === "not-found" ? "未找到对应内容" : mapping === "needs-evidence" ? "证据不足" : "仅部分公开"}`,
+      reason: `要素 ${row.elementId} 在 ${row.targetId} 上${GAP_REASON_LABELS[mapping] ?? ""}`,
       suggestion: SUGGESTIONS[mapping] ?? "",
     });
   }

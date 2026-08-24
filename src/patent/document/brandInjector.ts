@@ -62,6 +62,7 @@ export function loadBrandFromPath(path?: string): DocumentBrand {
     const parsed = JSON.parse(raw) as { documents?: { patent?: DocumentBrand } };
     return parsed.documents?.patent ?? {};
   } catch {
+    // theme.json 解析失败（格式错误/非 JSON）→ 回退空品牌覆盖。
     return {};
   }
 }
