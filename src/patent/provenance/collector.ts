@@ -9,10 +9,13 @@
  * （run-id.ts）天然区分，不覆盖前次审计历史。
  */
 
+import { createLogger } from "../../telemetry/index.js";
 import { DEGRADATION_SUFFIX } from "../graph/degradation.js";
 import type { DegradationMark, GraphNode, GraphNodeContext, StateDelta } from "../graph/types.js";
 import type { WorkerExecutionRecord } from "../worker-contract.js";
 import { ProvenanceStore } from "./provenance-store.js";
+
+const logger = createLogger("ProvenanceCollector");
 
 export type ProvenanceCollectorOptions = {
   store: ProvenanceStore;
@@ -54,7 +57,7 @@ export class ProvenanceCollector {
     try {
       fn();
     } catch (err) {
-      console.error(`[ProvenanceCollector] ${what}:`, err);
+      logger.error(`${what}:`, err);
     }
   }
 

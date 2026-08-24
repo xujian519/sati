@@ -1,6 +1,9 @@
 import { basename, dirname, join, relative } from "node:path";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
+import { createLogger } from "../../../telemetry/index.js";
+
+const logger = createLogger("plugin-loader");
 
 export type LoadedPluginCommand = {
   name: string;
@@ -114,7 +117,7 @@ function parseMarkdownFrontmatter(
   } catch (error) {
     // 非法 yaml：记录 warn 后降级为空对象（既有「解析失败不抛错」契约保持；
     // warn 风格对齐 src/cli/teamRoleAssembly.ts parseSkillFrontmatter）
-    console.warn(`[plugin-loader] frontmatter yaml 解析失败，降级为空对象: ${filePath}`, error);
+    logger.warn(`frontmatter yaml 解析失败，降级为空对象: ${filePath}`, error);
   }
   return { frontmatter, content: raw.slice(end + 5) };
 }

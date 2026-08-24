@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { jsonrepair } from "jsonrepair";
+import { createLogger } from "../../../telemetry/index.js";
 import type {
   CanonicalContentBlock,
   CanonicalModelResponse,
@@ -8,6 +9,8 @@ import type {
 import { ModelProviderError } from "../../protocol/errors.js";
 import { normalizeOpenAIUsage } from "../../response/normalizeUsage.js";
 import { nextUniqueToolCallId, safeToolCallIdPart } from "../../streaming/toolCallIds.js";
+
+const logger = createLogger("openai-responses");
 
 type ToolCallIdState = {
   baseId: string;
@@ -91,7 +94,7 @@ function toCanonicalToolCall(
   } catch {
     try {
       input = JSON.parse(jsonrepair(rawArguments));
-      console.warn(`[openai-responses] repaired invalid JSON for tool call (len=${rawArguments.length})`);
+      logger.warn(`repaired invalid JSON for tool call (len=${rawArguments.length})`);
     } catch {
       throw new ModelProviderError({
         provider,

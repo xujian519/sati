@@ -4,6 +4,9 @@ import {
   LITELLM_HTTP_CONNECTOR_LIMIT,
   LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS,
 } from "../model/streaming/constants.js";
+import { createLogger } from "../telemetry/index.js";
+
+const logger = createLogger("proxy");
 
 type EnvLike = Record<string, string | undefined>;
 
@@ -141,7 +144,7 @@ function installFetchProxyFallback(): void {
       return await nativeFetch(input, init);
     } catch (error) {
       if (!isProxyConnectionError(error)) throw error;
-      console.warn(`[proxy] Proxy unreachable, retrying direct (${describeFetchInput(input)})`);
+      logger.warn(`Proxy unreachable, retrying direct (${describeFetchInput(input)})`);
       const { Agent, fetch: undiciFetch } = await import("undici");
       directFallbackAgent ??= new Agent(createLongTimeoutOptions());
       return undiciFetch(input as never, { ...(init ?? {}), dispatcher: directFallbackAgent } as never);
@@ -155,7 +158,7 @@ async function applyDirectDispatcher(logRemoval = false): Promise<string | undef
     setGlobalDispatcher(new Agent(createLongTimeoutOptions()));
     dispatcherState = { mode: "direct" };
     if (logRemoval) {
-      console.log("[proxy] Global fetch proxy removed");
+      logger.info("Global fetch proxy removed");
     }
   } catch {
     // 设置全局 dispatcher 失败：沿用现有代理状态，函数无副作用返回（best-effort）。
@@ -180,11 +183,11 @@ async function applyGlobalProxy(
     setGlobalDispatcher(agent);
     dispatcherState = { mode: "proxy", source, proxyUrl, noProxy };
     installFetchProxyFallback();
-    console.log(`[proxy] Global fetch proxy → ${proxyUrl} (noProxy: ${noProxy})`);
+    logger.info(`Global fetch proxy → ${proxyUrl} (noProxy: ${noProxy})`);
     return proxyUrl;
   } catch (error) {
-    console.warn(
-      `[proxy] Failed to install global proxy (${proxyUrl}):`,
+    logger.warn(
+      `Failed to install global proxy (${proxyUrl}):`,
       error instanceof Error ? error.message : String(error),
     );
     return undefined;

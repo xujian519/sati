@@ -19,7 +19,10 @@
 
 import type { PluginSkillContribution } from "../../extension/plugins/runtime/PluginRuntime.js";
 import type { SkillRoleConfig, SkillSummary } from "../../extension/skills/types.js";
+import { createLogger } from "../../telemetry/index.js";
 import type { SubagentDefinition } from "./builtinSubagentTypes.js";
+
+const logger = createLogger("sati");
 
 /**
  * 带 domain 的工具要求对应 visibleDomains 域，否则子代理经
@@ -46,8 +49,8 @@ function warnDomainMismatch(definition: SubagentDefinition): void {
   for (const [tool, requiredDomain] of Object.entries(DOMAIN_REQUIRED_TOOLS)) {
     if (!wildcard && !tools.includes(tool)) continue;
     if (domainSet.has(requiredDomain)) continue;
-    console.warn(
-      `[sati] role ${definition.id}: tools 暴露 ${tool} 但 domains 缺 "${requiredDomain}"，` +
+    logger.warn(
+      `role ${definition.id}: tools 暴露 ${tool} 但 domains 缺 "${requiredDomain}"，` +
         `子代理将看不到该工具（请在 domains 中补充 "${requiredDomain}"）`,
     );
   }

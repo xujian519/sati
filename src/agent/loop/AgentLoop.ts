@@ -19,6 +19,7 @@ import {
 import type { SatiReadFileStateMap, SatiToolResult, SatiWriteSnapshotMap } from "../../tool/index.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
+import { createLogger, logger } from "../../telemetry/index.js";
 import type { AgentLoopTransitionReason } from "../protocol/state.js";
 import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
@@ -116,6 +117,8 @@ import { ToolContextFactory } from "./toolContext.js";
 import { SubagentExecutor } from "./subagentExecutor.js";
 
 const EMPTY_LENGTH_OUTPUT_RETRY_FLOOR = 4_096;
+const agentLogger = createLogger("agent");
+const autoCompactLogger = createLogger("agent:auto-compact");
 const CIRCUIT_BREAKER_GRACE_PROMPT = [
   "Your last several tool calls all failed input validation with the same error.",
   "This may indicate a tool-side issue rather than a problem with your approach.",
@@ -126,7 +129,7 @@ const CIRCUIT_BREAKER_GRACE_PROMPT = [
 
 function logAutoCompactFailure(stage: string, input: { sessionId: string; turnId: string }, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
-  console.warn(`[agent:auto-compact] ${stage} failed sessionId=${input.sessionId} turnId=${input.turnId}: ${message}`);
+  autoCompactLogger.warn(`${stage} failed sessionId=${input.sessionId} turnId=${input.turnId}: ${message}`);
 }
 
 export type { AgentLoopInput } from "../protocol/input.js";
@@ -375,7 +378,7 @@ export class AgentLoop {
     this.dispatchLifecycle(input, "PreModelRequest", {
       provider: request.provider,
       model: request.model,
-    }).catch(error => console.warn("[agent] PreModelRequest lifecycle dispatch failed:", error));
+    }).catch(error => agentLogger.warn("PreModelRequest lifecycle dispatch failed:", error));
     yield {
       type: "model_request_started",
       sessionId: input.sessionId,
@@ -625,8 +628,8 @@ export class AgentLoop {
         assembled.finishReason === "tool_call" ||
         assembled.finishReason === "stop")
     ) {
-      console.warn(
-        `[AgentLoop] Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
+      agentLogger.warn(
+        `Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
       );
 
       const largeFileDecision = state.largeFileRepair.recoverFromRepairedTruncation(toolCalls);
@@ -2006,7 +2009,7 @@ export class AgentLoop {
     if (options.emitInstructionEvents !== false) {
       this.dispatchLifecycle(input, "InstructionsLoaded", {
         hasSystemPrompt: !!prepared.systemPrompt,
-      }).catch(error => console.warn("[agent] InstructionsLoaded lifecycle dispatch failed:", error));
+      }).catch(error => agentLogger.warn("InstructionsLoaded lifecycle dispatch failed:", error));
       this.dependencies.eventEmitter?.({
         type: "instructions_loaded",
         sessionId: input.sessionId,
@@ -2017,7 +2020,7 @@ export class AgentLoop {
 
     const materialized = await materializeMediaReferences(prepared.messages);
     for (const diagnostic of materialized.diagnostics) {
-      console.warn(`[sati] ${diagnostic.code}: ${diagnostic.message} (${diagnostic.mediaType}, ${diagnostic.path})`);
+      logger.warn(`${diagnostic.code}: ${diagnostic.message} (${diagnostic.mediaType}, ${diagnostic.path})`);
     }
 
     // 单次计算方法论 addendum：既落库审计又拼 system prompt，避免同一 inject
@@ -2231,7 +2234,7 @@ export class AgentLoop {
         boundary,
         messages: markCompactReplacementMessages(compact.messages),
       }),
-    ).catch(error => console.warn("[agent] onCompactPersisted failed:", error));
+    ).catch(error => agentLogger.warn("onCompactPersisted failed:", error));
   }
 
   private repairTextExtractedToolNames(

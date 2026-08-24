@@ -23,6 +23,9 @@ import { registerRoleDefinition } from "../agent/sub/builtinSubagentTypes.js";
 import { roleFromContribution } from "../agent/sub/roleFromSkill.js";
 import { isRoleFrontmatter, parseRoleConfig } from "../extension/skills/roleConfig.js";
 import type { PluginSkillContribution } from "../extension/plugins/runtime/PluginRuntime.js";
+import { createLogger } from "../telemetry/index.js";
+
+const logger = createLogger("sati");
 
 /**
  * 注册 `builtinSkillsRoot/patent-teams` 下各子目录 SKILL.md 声明的全部团队角色。
@@ -40,7 +43,7 @@ export function registerNestedTeamRoleDefinitions(builtinSkillsRoot: string | un
   } catch (error) {
     // ENOENT = 本 build 未携带 patent-teams 资产（正常场景，静默）；其他异常暴露。
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.warn(`[sati] 读取团队角色目录失败，跳过: ${teamRolesRoot}`, error);
+      logger.warn(`读取团队角色目录失败，跳过: ${teamRolesRoot}`, error);
     }
     return 0;
   }
@@ -52,7 +55,7 @@ export function registerNestedTeamRoleDefinitions(builtinSkillsRoot: string | un
     try {
       skillFile = readdirSync(skillDir).find(name => /^skill\.md$/iu.test(name));
     } catch (error) {
-      console.warn(`[sati] 跳过非法团队角色资产（目录读取失败）: ${skillDir}`, error);
+      logger.warn(`跳过非法团队角色资产（目录读取失败）: ${skillDir}`, error);
       continue;
     }
     if (!skillFile) continue;
@@ -72,7 +75,7 @@ function loadNestedRoleContribution(slug: string, skillFilePath: string): Plugin
   try {
     raw = readFileSync(skillFilePath, "utf8");
   } catch (error) {
-    console.warn(`[sati] 跳过非法团队角色资产（文件读取失败）: ${skillFilePath}`, error);
+    logger.warn(`跳过非法团队角色资产（文件读取失败）: ${skillFilePath}`, error);
     return null;
   }
   const frontmatter = parseSkillFrontmatter(raw, skillFilePath);
@@ -102,7 +105,7 @@ function parseSkillFrontmatter(content: string, sourcePath: string): Record<stri
     const parsed = parseYaml(fmRaw);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch (error) {
-    console.warn(`[sati] 跳过非法团队角色资产（frontmatter yaml 解析失败）: ${sourcePath}`, error);
+    logger.warn(`跳过非法团队角色资产（frontmatter yaml 解析失败）: ${sourcePath}`, error);
     return {};
   }
 }

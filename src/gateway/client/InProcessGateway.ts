@@ -92,6 +92,7 @@ import type {
 } from "../../extension/skills/types.js";
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
+import { createLogger } from "../../telemetry/index.js";
 import {
   PLAN_COMMAND_USAGE,
   normalizeGatewayModeForLegacyInput,
@@ -101,6 +102,8 @@ import {
 import { cloneGatewayEvent, getGatewayEventRunId, mapAgentEvent } from "./eventMapping.js";
 import { buildAgentInputWithAttachments, collectRegisteredAttachmentReadFiles } from "./attachments.js";
 import { createGatewayFailureStatus, emitSessionTelemetry, resolveSubmitTurnTelemetry } from "./telemetry.js";
+
+const logger = createLogger("sati");
 
 // 门面再导出（定义见 ./normalizers.js + ./eventMapping.js，保持 "./client/InProcessGateway.js" 导出面不变）
 export { normalizeGatewayModeForLegacyInput, normalizeGatewayRunMode } from "./normalizers.js";
@@ -679,7 +682,7 @@ export class InProcessGateway implements Gateway {
       await this.options.recordAgentStatusMessage(input);
     } catch (error) {
       // 状态消息落盘失败不影响 turn 主流程，仅记录告警。
-      console.warn("[sati] failed to record gateway status message:", error);
+      logger.warn("failed to record gateway status message:", error);
     }
   }
 

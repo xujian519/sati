@@ -1,7 +1,10 @@
 import { createServer, type Server, type Socket } from "node:net";
 import type { SatiToolRuntimeContext } from "../protocol/types.js";
 import { contentToText, type SatiToolResult } from "../protocol/result.js";
+import { createLogger } from "../../telemetry/index.js";
 import type { ExecuteCodeToolCallLogEntry } from "./executeCode.js";
+
+const logger = createLogger("execute_code");
 
 /**
  * execute_code 允许的 Sati 工具白名单（工具主体与 RPC 层共用）。
@@ -93,7 +96,7 @@ export function createRpcServer(options: {
     let queue: Promise<void> = Promise.resolve();
     socket.setEncoding("utf8");
     socket.on("error", error => {
-      console.error(`[execute_code] RPC socket error: ${error.message}`);
+      logger.error(`RPC socket error: ${error.message}`);
     });
     const takeLines = (): string[] => {
       const lines: string[] = [];
@@ -112,9 +115,7 @@ export function createRpcServer(options: {
         .then(() => processBufferedRequests(socket, takeLines, options))
         .catch(error => {
           // 兜底：处理链异常不应成为 unhandled rejection，也不应中断后续请求
-          console.error(
-            `[execute_code] RPC processing failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
+          logger.error(`RPC processing failed: ${error instanceof Error ? error.message : String(error)}`);
         });
     });
   });

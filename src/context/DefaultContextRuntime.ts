@@ -1,5 +1,6 @@
 import { buildEdgeClawMemoryPromptSection } from "edgeclaw-memory-core";
 import type { CanonicalMessage, CanonicalUsage } from "../model/index.js";
+import { createLogger } from "../telemetry/index.js";
 import { debugLog } from "../shared/debug.js";
 import { ToolResultBudget } from "./budget/ToolResultBudget.js";
 import type { TokenBudgetManager, TokenBudgetSnapshot } from "./budget/TokenBudgetManager.js";
@@ -32,6 +33,8 @@ import type {
   ModelContext,
   InjectionRecord,
 } from "./protocol/types.js";
+
+const logger = createLogger("context:auto-compact");
 
 export type CompactionTier = "micro" | "snip" | "full";
 
@@ -686,12 +689,12 @@ function logAutoCompactEvent(
       debugLog(`[context:auto-compact] ${stage} ${JSON.stringify(payload)}`);
       return;
     }
-    console.warn(`[context:auto-compact] ${stage} ${JSON.stringify(payload)}`);
+    logger.warn(`${stage} ${JSON.stringify(payload)}`);
   } catch {
     if (level === "debug") {
       debugLog(`[context:auto-compact] ${stage}`);
       return;
     }
-    console.warn(`[context:auto-compact] ${stage}`);
+    logger.warn(`${stage}`);
   }
 }

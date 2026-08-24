@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 import type { Socket } from "node:net";
+import { createLogger } from "../../telemetry/index.js";
+
+const logger = createLogger("gateway");
 
 const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 /** 单帧 payload 上限（16MB）：防认证前恶意端声明超大 payload 撑爆接收缓冲（DoS）。 */
@@ -111,7 +114,7 @@ export class TextWebSocketConnection {
         } catch (error) {
           // 消息处理抛错（内部故障或恶意 payload 触发下游异常）：同样不得向
           // socket data 回调外冒泡（uncaughtException 致进程退出），断开连接。
-          console.warn(`[gateway] message handler threw: ${error instanceof Error ? error.message : String(error)}`);
+          logger.warn(`message handler threw: ${error instanceof Error ? error.message : String(error)}`);
           this.socket.destroy();
           return;
         }

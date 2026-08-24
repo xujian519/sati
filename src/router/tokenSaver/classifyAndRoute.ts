@@ -3,9 +3,12 @@ import type { CanonicalMessage, CanonicalModelRequest, ModelRuntime } from "../.
 import { ModelProviderError, ModelRequestError } from "../../model/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import type { RouterModelRef, RouterTokenSaverConfig, RouterTierConfig } from "../config/schema.js";
+import { createLogger } from "../../telemetry/index.js";
 import { extractLastUserMessage } from "./extractLastUserMessage.js";
 import { generateJudgePrompt } from "./generateJudgePrompt.js";
 import { parseTier } from "./parseTier.js";
+
+const logger = createLogger("token-saver");
 
 export type TokenSaverDecision = {
   tier: string;
@@ -179,7 +182,7 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
             model: config.judge.model,
           },
         });
-        console.warn("[token-saver] Judge returned empty after retries");
+        logger.warn("Judge returned empty after retries");
         return parseFailureDecision(config.defaultTier, defaultTier, attempt);
       }
 
@@ -206,7 +209,7 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
             model: config.judge.model,
           },
         });
-        console.warn("[token-saver] parseTier failed. Judge text:", JSON.stringify(text).slice(0, 300));
+        logger.warn("parseTier failed. Judge text:", JSON.stringify(text).slice(0, 300));
         return parseFailureDecision(config.defaultTier, defaultTier, attempt);
       }
       const selection = config.tiers[tier]?.model;

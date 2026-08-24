@@ -1,4 +1,5 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
+import { createLogger } from "../../telemetry/index.js";
 import { resolveKnowledgeDbPaths } from "../../knowledge/config.js";
 import {
   CaseLawSearchEngine,
@@ -7,6 +8,8 @@ import {
 } from "../../knowledge/case-law/case-law-search.js";
 import { fuseCaseLawHits } from "../../knowledge/case-law/rrf.js";
 import type { CaseLawDocType, CaseLawHit, CaseLawSearchOptions } from "../../knowledge/case-law/types.js";
+
+const logger = createLogger("patent_case_search");
 
 /**
  * patent_case_search — 专利判例全文检索。
@@ -235,9 +238,7 @@ export function createPatentCaseSearchTool(
           }
         } catch (error) {
           // 语义路失败降级为纯 FTS，不阻断工具执行（H3：不再静默吞错）。
-          console.warn(
-            `[patent_case_search] 判例语义召回失败，回退纯 FTS: ${error instanceof Error ? error.message : String(error)}`,
-          );
+          logger.warn(`判例语义召回失败，回退纯 FTS: ${error instanceof Error ? error.message : String(error)}`);
           hits = ftsHits;
         }
       }

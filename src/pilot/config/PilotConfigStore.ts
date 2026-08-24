@@ -1,5 +1,6 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { dirname } from "node:path";
+import { createLogger } from "../../telemetry/index.js";
 import { getPilotConfigFilePath, resolvePilotHome } from "../../shared/paths/index.js";
 import { classifyConfigChanges, diffConfigSnapshots } from "./classifyChanges.js";
 import { loadPilotConfig } from "./loadPilotConfig.js";
@@ -10,6 +11,8 @@ import {
   type PilotConfigReloadEvent,
   type PilotConfigSnapshot,
 } from "./types.js";
+
+const logger = createLogger("sati");
 
 export type PilotConfigListener = (event: PilotConfigReloadEvent) => void;
 
@@ -120,8 +123,8 @@ class DefaultPilotConfigStore implements PilotConfigStore {
           this.lastReloadDiagnostics = error.diagnostics;
         }
         // 周期告警：每次失败的 reload 都告警并点名沿用中的 last-good 代。
-        console.warn(
-          `[sati] config reload failed (${this.consecutiveFailures}x in a row); keeping last good config (version ${this.lastGoodFacts?.version ?? "none"} from ${this.lastGoodFacts?.loadedAt ?? "-"})`,
+        logger.warn(
+          `config reload failed (${this.consecutiveFailures}x in a row); keeping last good config (version ${this.lastGoodFacts?.version ?? "none"} from ${this.lastGoodFacts?.loadedAt ?? "-"})`,
         );
         throw error;
       })

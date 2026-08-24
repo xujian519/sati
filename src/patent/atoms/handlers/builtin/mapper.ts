@@ -20,9 +20,12 @@ import { type PipelineState, type StageExecuteInput, type StageHandler, getState
 import { checkClaimEmbodimentCoverage } from "../../../claim-coverage/coverage-check.js";
 import { extractEmbodimentIds } from "../../../claim-coverage/skeleton.js";
 import type { ClaimCoverageEntry, ClaimCoverageLevel, ClaimEmbodimentCoverage } from "../../../claim-coverage/types.js";
+import { createLogger } from "../../../../telemetry/index.js";
 import { atomicWriteJson } from "../../../persist-utils.js";
 import { caseOutputsDir } from "../../../paths.js";
 import { callLlm, degraded, parseLlmJson, requireLlm } from "./llm.js";
+
+const logger = createLogger("claim-embodiment-mapper");
 
 export const claimEmbodimentMapperAtom: Atom = {
   name: "claim-embodiment-mapper",
@@ -206,7 +209,7 @@ export class ClaimEmbodimentMapperHandler implements StageHandler {
         JSON.stringify(matrix, null, 2),
       );
     } catch (err) {
-      console.error("[claim-embodiment-mapper] 矩阵落盘失败:", err);
+      logger.error("矩阵落盘失败:", err);
     }
   }
 }

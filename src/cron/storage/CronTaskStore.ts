@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import { appendFile, copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { GatewayEvent } from "../../gateway/index.js";
+import { createLogger } from "../../telemetry/index.js";
 import { createJsonlRunWriter, type JsonlRunWriter } from "../../fs/jsonl-run-writer.js";
 import type { CronRunRecord, CronTask } from "../protocol/types.js";
 import { cronRunEventsPath, type CronPaths } from "./CronPaths.js";
+
+const logger = createLogger("cron");
 
 type CronTaskFile = {
   schemaVersion: 1;
@@ -166,12 +169,10 @@ export class CronTaskStore {
     const backupPath = `${this.paths.tasksFile}.corrupt-${Date.now()}`;
     try {
       await rename(this.paths.tasksFile, backupPath);
-      console.warn(
-        `[cron] tasks.json corrupt (${reasonText}); backed up to ${backupPath}; resetting to empty task list`,
-      );
+      logger.warn(`tasks.json corrupt (${reasonText}); backed up to ${backupPath}; resetting to empty task list`);
     } catch (backupError) {
-      console.warn(
-        `[cron] tasks.json corrupt (${reasonText}) and backup to ${backupPath} failed: ${
+      logger.warn(
+        `tasks.json corrupt (${reasonText}) and backup to ${backupPath} failed: ${
           backupError instanceof Error ? backupError.message : String(backupError)
         }`,
       );

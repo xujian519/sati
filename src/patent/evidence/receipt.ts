@@ -11,8 +11,11 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { createLogger } from "../../telemetry/index.js";
 import type { SatiEvidenceReceipt } from "../../tool/protocol/evidence.js";
 import type { EvidenceDirection } from "./span.js";
+
+const logger = createLogger("sati");
 
 export type Receipt = SatiEvidenceReceipt;
 
@@ -181,7 +184,7 @@ export class TeamLedger extends Ledger {
       mkdirSync(dirname(this.filePath), { recursive: true });
       appendFileSync(this.filePath, line + "\n", "utf8");
     } catch (err) {
-      console.warn(`[sati] ${label}落盘失败（仅内存可见）: ${this.filePath}`, err);
+      logger.warn(`${label}落盘失败（仅内存可见）: ${this.filePath}`, err);
     }
   }
 
@@ -213,7 +216,7 @@ export class TeamLedger extends Ledger {
       text = readFileSync(this.filePath, "utf8");
     } catch (err) {
       // 读取失败按空账本降级（不阻断成员会话启动；审计侧 warn）。
-      console.warn(`[sati] 团队证据账本读取失败（按空账本继续）: ${this.filePath}`, err);
+      logger.warn(`团队证据账本读取失败（按空账本继续）: ${this.filePath}`, err);
       return;
     }
     for (const line of text.split("\n")) {

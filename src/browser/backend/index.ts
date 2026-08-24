@@ -1,8 +1,11 @@
+import { createLogger } from "../../telemetry/index.js";
 import { BrowserOsNeoBackend } from "./browserosNeoBackend.js";
 import { BrowserUsePyBackend } from "./browserUsePyBackend.js";
 import { EgoBackend } from "./egoBackend.js";
 import { PlaywrightMcpBackend } from "./playwrightBackend.js";
 import type { BrowserBackend, BrowserBackendId, BrowserBackendProbe } from "./types.js";
+
+const logger = createLogger("sati");
 
 export * from "./types.js";
 export { BROWSEROS_NEO_DEFAULT_URL, probeBrowserOsNeo } from "./browserosNeoBackend.js";
@@ -45,9 +48,7 @@ export function buildBackendCandidates(options: BackendRouteOptions = {}): Brows
   const preferred = filtered.find(b => b.id === options.prefer);
   if (!preferred) {
     // prefer 目标被 exclude 排除：静默丢弃会让用户显式偏好失效，给出诊断
-    console.warn(
-      `sati: preferred browser backend "${options.prefer}" is excluded by the exclude list — ignoring prefer.`,
-    );
+    logger.warn(`preferred browser backend "${options.prefer}" is excluded by the exclude list — ignoring prefer.`);
     return filtered;
   }
   return [preferred, ...filtered.filter(b => b.id !== options.prefer)];

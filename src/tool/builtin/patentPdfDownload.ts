@@ -20,6 +20,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { createLogger } from "../../telemetry/index.js";
 import { brandEnv, ENV_KEY } from "../../env.js";
 import { APP_VERSION } from "../../version.js";
 import { networkFetch } from "../../network/index.js";
@@ -34,6 +35,8 @@ import type {
   SatiToolRuntimeContext,
 } from "../protocol/types.js";
 import { EgoBrowserSession, normalizePatentNumber } from "../../patent/data/nuo/egoSession.js";
+
+const logger = createLogger("patent_pdf_download");
 
 const MAX_PATENTS = 50;
 const MAX_OUTPUT_BYTES = 500_000;
@@ -87,7 +90,7 @@ async function loadPdfLinkExtractJs(): Promise<string> {
       if (/^\/\/ PDF_LINK_EXTRACT_VERSION=\d+\r?$/.test(js.split(/\r?\n/, 1)[0] ?? "")) {
         return js;
       }
-      console.warn(`[patent_pdf_download] ${candidate} 缺少 PDF_LINK_EXTRACT_VERSION 版本标记，回退内嵌备份`);
+      logger.warn(`${candidate} 缺少 PDF_LINK_EXTRACT_VERSION 版本标记，回退内嵌备份`);
     } catch {
       // 候选路径不可读：继续下一个候选，全部失败回退内嵌备份（fail-safe）。
     }

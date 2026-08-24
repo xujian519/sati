@@ -9,6 +9,7 @@ import type {
   AgentTranscriptWriterState,
 } from "../../session/transcript/TranscriptWriter.js";
 import type { CanonicalMessage, CanonicalUsage } from "../../model/index.js";
+import { createLogger } from "../../telemetry/index.js";
 import type { PatentOutputGate } from "../../patent/index.js";
 import type { LifecycleRuntime } from "../../lifecycle/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
@@ -18,6 +19,8 @@ import type { SessionTitleGenerator } from "../../session/title/SessionTitleGene
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import { FileArtifactCollector, type FileArtifact } from "../../session/artifacts/index.js";
 import { TurnInputProcessor } from "./TurnInputProcessor.js";
+
+const logger = createLogger("agent");
 
 export type TurnRunnerOptions = {
   sessionId: string;
@@ -166,7 +169,7 @@ export class TurnRunner {
       if (artifacts.length > 0) {
         await Promise.resolve(
           this.transcript.recordFileArtifacts?.(options.sessionId, options.turnId, artifacts),
-        ).catch(error => console.warn("[agent] recordFileArtifacts failed:", error));
+        ).catch(error => logger.warn("recordFileArtifacts failed:", error));
       }
       return artifacts;
     };
@@ -373,7 +376,7 @@ export class TurnRunner {
 
   private async recordErrorResult(_options: TurnRunnerOptions, result: AgentTurnResult): Promise<void> {
     await Promise.resolve(this.transcript.recordTurnResult(result.sessionId, result.turnId, result)).catch(error =>
-      console.warn("[agent] recordTurnResult failed:", error),
+      logger.warn("recordTurnResult failed:", error),
     );
   }
 
@@ -383,7 +386,7 @@ export class TurnRunner {
   ): Promise<AgentStatusMessageInput> {
     const status = this.createTurnFailureStatus(error);
     await Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status)).catch(
-      recordError => console.warn("[agent] recordAgentStatusMessage failed:", recordError),
+      recordError => logger.warn("recordAgentStatusMessage failed:", recordError),
     );
     return status;
   }
@@ -459,7 +462,7 @@ export class TurnRunner {
             }
           }
         })
-        .catch(error => console.warn("[agent] session title generation failed:", error))
+        .catch(error => logger.warn("session title generation failed:", error))
         .finally(() => {
           pending.completed = true;
           cleanup();

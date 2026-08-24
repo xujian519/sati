@@ -1,7 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { createLogger } from "../telemetry/index.js";
 import { resolvePilotHome } from "../shared/paths/index.js";
 import type { PermissionRule, PermissionRuleSet } from "./protocol/types.js";
+
+const logger = createLogger("permission");
 
 export type PermissionSettings = {
   version: 1;
@@ -48,7 +51,7 @@ export function readPermissionSettings(env: NodeJS.ProcessEnv = process.env): Pe
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return { ...DEFAULT_PERMISSION_SETTINGS };
     }
-    console.warn(`[permission] failed to read ${filePath}; enforcing permissions (skipPermissions=false)`, err);
+    logger.warn(`failed to read ${filePath}; enforcing permissions (skipPermissions=false)`, err);
     return { ...DEFAULT_PERMISSION_SETTINGS, skipPermissions: false };
   }
   try {
@@ -56,10 +59,7 @@ export function readPermissionSettings(env: NodeJS.ProcessEnv = process.env): Pe
   } catch (err) {
     // JSON 损坏：守住权限。原实现静默回退到 DEFAULT（skipPermissions=true）
     // 会把损坏文件放大为绕过全部权限，故此处改为关停绕过并出诊断。
-    console.warn(
-      `[permission] corrupt permissions.json at ${filePath}; enforcing permissions (skipPermissions=false)`,
-      err,
-    );
+    logger.warn(`corrupt permissions.json at ${filePath}; enforcing permissions (skipPermissions=false)`, err);
     return { ...DEFAULT_PERMISSION_SETTINGS, skipPermissions: false };
   }
 }

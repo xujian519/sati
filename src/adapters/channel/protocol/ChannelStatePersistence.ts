@@ -1,6 +1,9 @@
 import { readFile, writeFile, mkdir, rename, unlink } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
+import { createLogger } from "../../../telemetry/index.js";
+
+const logger = createLogger("channels");
 
 export type ChannelStatePersistenceOptions = {
   stateDir: string;
@@ -45,9 +48,7 @@ export class ChannelStatePersistence {
       setTimeout(() => {
         this.pending.delete(channelKey);
         void this.ensureWrite(channelKey).catch((err: unknown) => {
-          console.warn(
-            `[channels] failed to persist ${channelKey} state: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          logger.warn(`failed to persist ${channelKey} state: ${err instanceof Error ? err.message : String(err)}`);
         });
       }, this.debounceMs),
     );

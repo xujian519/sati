@@ -16,6 +16,9 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import type { JSMol, RDKitModule } from "@rdkit/rdkit";
+import { createLogger } from "../../telemetry/index.js";
+
+const logger = createLogger("chemistry");
 
 /** RDKit loader 形状（d.ts 仅在 Window 上声明，Node 侧自行定义）。 */
 type RDKitLoader = (options?: { wasmBinary?: Uint8Array; locateFile?: () => string }) => Promise<RDKitModule>;
@@ -54,8 +57,8 @@ export async function loadRdkitModule(): Promise<RDKitModule | undefined> {
         // 评审 L1：加载失败提示一次（降级为语法预检的根因可追溯），不重复刷屏
         if (!loadFailureLogged) {
           loadFailureLogged = true;
-          console.warn(
-            "[chemistry] RDKit WASM 加载失败，SMILES 校验降级为语法预检：",
+          logger.warn(
+            "RDKit WASM 加载失败，SMILES 校验降级为语法预检：",
             error instanceof Error ? error.message : String(error),
           );
         }

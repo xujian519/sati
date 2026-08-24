@@ -152,10 +152,14 @@ import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 import { SkillManager, migrateLegacyBundledSkillCopies } from "../extension/skills/index.js";
-import { createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
+import { createLogger, logger, createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
 import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
 import { registerNestedTeamRoleDefinitions } from "./teamRoleAssembly.js";
+
+const patentOutputGateLogger = createLogger("PatentOutputGate");
+const ruleOutputGateLogger = createLogger("RuleOutputGate");
+const sqliteApprovalStoreLogger = createLogger("SqliteApprovalStore");
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
@@ -307,14 +311,14 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const builtinSkillsRoot = resolveBuiltinSkillsRoot(options.builtinSkillsRoot, env);
   const legacySkillMigration = migrateLegacyBundledSkillCopies({ pilotHome, builtinSkillsRoot });
   if (legacySkillMigration.migrated.length > 0) {
-    console.log(
-      `[sati] Activated bundled skills directly; moved ${legacySkillMigration.migrated.length} ` +
+    logger.info(
+      `Activated bundled skills directly; moved ${legacySkillMigration.migrated.length} ` +
         `unchanged legacy ${legacySkillMigration.migrated.length === 1 ? "copy" : "copies"} to ` +
         `${joinPath(pilotHome, "skill-backups", "legacy-bundled-v1")}.`,
     );
   }
   for (const failure of legacySkillMigration.failures) {
-    console.warn(`[sati] Could not migrate legacy skill '${failure.slug}': ${failure.message}`);
+    logger.warn(`Could not migrate legacy skill '${failure.slug}': ${failure.message}`);
   }
   const now = () => new Date();
   const telemetry = options.telemetry ?? createTelemetryCollector({ env, pilotHome });
@@ -330,7 +334,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       handleExtensionWatchEvent(event, registry, router);
     },
     onError: (scope, error) => {
-      console.warn(`[sati] Extension watcher failed for ${describeExtensionScope(scope)}:`, error.message);
+      logger.warn(`Extension watcher failed for ${describeExtensionScope(scope)}:`, error.message);
     },
   });
   const fallbackProjectRoot = options.fallbackProjectRoot ?? projectRoot;
@@ -369,11 +373,11 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       return;
     }
     if (changeClasses.every(c => c === "restart-required")) {
-      console.warn("[sati] Config change requires process restart:", changedPaths.join(", "));
+      logger.warn("Config change requires process restart:", changedPaths.join(", "));
       return;
     }
 
-    console.log("[sati] Config reloaded, invalidating runtimes:", changedPaths.join(", "));
+    logger.info("Config reloaded, invalidating runtimes:", changedPaths.join(", "));
     registry.invalidate();
     if (memoryDiagnosticsEnabled) {
       logGatewayMemoryDiagnostic({
@@ -522,14 +526,14 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     async reloadExtensions(input) {
       const changedPaths = input?.changedPaths ?? [];
       if (input?.projectKey) {
-        console.log(
-          `[sati] Extensions reload requested for project ${input.projectKey}:`,
+        logger.info(
+          `Extensions reload requested for project ${input.projectKey}:`,
           changedPaths.join(", ") || "(manual)",
         );
         registry.invalidate(input.projectKey);
         router?.markProjectDirty(input.projectKey, "extension_changed");
       } else {
-        console.log("[sati] Extensions reload requested for all runtimes:", changedPaths.join(", ") || "(manual)");
+        logger.info("Extensions reload requested for all runtimes:", changedPaths.join(", ") || "(manual)");
         registry.invalidate();
         router?.markAllDirty("extension_changed");
       }
@@ -624,7 +628,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     })
       .then(result => {
         if (result.resumed > 0) {
-          console.log(`[sati] Team member resume: scanned=${result.scanned}, resumed=${result.resumed}`);
+          logger.info(`Team member resume: scanned=${result.scanned}, resumed=${result.resumed}`);
         }
         reclaimCompleted();
         return result;
@@ -730,8 +734,8 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   void cleanupOrphanToolResults({ projectRoot, pilotHome })
     .then(({ removed, removedIds }) => {
       if (removed > 0) {
-        console.log(
-          `[sati] Reclaimed ${removed} orphaned tool-results director${removed === 1 ? "y" : "ies"}: ${removedIds.join(", ")}`,
+        logger.info(
+          `Reclaimed ${removed} orphaned tool-results director${removed === 1 ? "y" : "ies"}: ${removedIds.join(", ")}`,
         );
       }
     })
@@ -761,7 +765,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     teamDb.resetMemberStatuses();
     await runMemberScan();
     await runStrandedScan();
-  })().catch(error => console.error("[sati] Team startup scan failed:", error));
+  })().catch(error => logger.error("Team startup scan failed:", error));
   return {
     gateway,
     configStore,
@@ -1219,7 +1223,7 @@ class ProjectRuntimeRegistry {
       embeddingDiagnostics,
     );
     for (const diagnostic of embeddingDiagnostics) {
-      console.warn(`[sati] ${diagnostic.path}: ${diagnostic.message}`);
+      logger.warn(`${diagnostic.path}: ${diagnostic.message}`);
     }
 
     // 知识库向量库目录（embedding 客户端解析见上，记忆/知识库/附图检索共用）。
@@ -1311,7 +1315,7 @@ class ProjectRuntimeRegistry {
         rerankTopN: snapshot.config.memory?.embedding?.rerank?.topN,
         indexWiki: snapshot.config.memory?.embedding?.indexWiki !== false,
         stats: knowledgeStats,
-        logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
+        logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
       }),
     );
 
@@ -1322,7 +1326,7 @@ class ProjectRuntimeRegistry {
         const caseEmbeddings = createKnowledgeEmbeddingSearch({
           dbPath: knowledgePaths.caseDb,
           docTypes: ["case", "judgment"],
-          logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
+          logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
         });
         setCaseLawSemanticSource(createCaseLawSemanticSource(texts => embeddingClient!.embed(texts), caseEmbeddings));
         // P4 向量预热：异步分页加载（每页 setImmediate 让出）不阻塞 gateway 启动，
@@ -1333,7 +1337,7 @@ class ProjectRuntimeRegistry {
           void caseEmbeddings.loadAsync();
         }, 0);
       } catch (error) {
-        console.warn("[sati] knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
+        logger.warn("knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
       }
     }
 
@@ -1347,17 +1351,17 @@ class ProjectRuntimeRegistry {
           dbPath: knowledgePaths.knowledgeDb,
           client: embeddingClient,
           storePath: joinPath(embeddingDir, "personal-note.jsonl"),
-          logger: { warn: (...args: unknown[]) => console.warn("[sati] knowledge:", ...args) },
+          logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
         });
         if (knowledgePaths.caseDb && knowledgePaths.caseDb !== knowledgePaths.knowledgeDb) {
-          console.warn(
-            "[sati] knowledge: personal_note 库与判例库分离（SATI_CASE_DB），笔记命中无法回源，工具侧笔记语义路关闭。",
+          logger.warn(
+            "knowledge: personal_note 库与判例库分离（SATI_CASE_DB），笔记命中无法回源，工具侧笔记语义路关闭。",
           );
         } else {
           setPersonalNoteSemanticSource(noteIndex);
         }
       } catch (error) {
-        console.warn("[sati] knowledge: personal_note 语义召回源注入失败，笔记语义路关闭:", error);
+        logger.warn("knowledge: personal_note 语义召回源注入失败，笔记语义路关闭:", error);
       }
     }
 
@@ -1458,8 +1462,8 @@ class ProjectRuntimeRegistry {
             code: error instanceof Error ? error.name : "UnknownError",
           });
 
-          console.warn(
-            `[sati] memory maintenance failed for project ${runtime.projectRoot}:`,
+          logger.warn(
+            `memory maintenance failed for project ${runtime.projectRoot}:`,
             error instanceof Error ? error.message : String(error),
           );
         }
@@ -1483,7 +1487,7 @@ class ProjectRuntimeRegistry {
       try {
         const configServers = loadMcpServerConfig(runtime.projectRoot, this.options.pilotHome);
         for (const diagnostic of configServers.diagnostics) {
-          console.warn(`[sati] Ignoring invalid MCP config ${diagnostic.path}: ${diagnostic.message}`);
+          logger.warn(`Ignoring invalid MCP config ${diagnostic.path}: ${diagnostic.message}`);
         }
         const rawServers = {
           ...runtime.pluginRuntime.mcpServers(),
@@ -1511,8 +1515,8 @@ class ProjectRuntimeRegistry {
           registerMcpAuxTools(runtime.tools, runtime.mcpRuntime);
         }
       } catch (error) {
-        console.warn(
-          `[sati] MCP runtime startup partial-failed for project ${runtime.projectRoot}:`,
+        logger.warn(
+          `MCP runtime startup partial-failed for project ${runtime.projectRoot}:`,
           error instanceof Error ? error.message : String(error),
         );
       }
@@ -1575,8 +1579,8 @@ class ProjectRuntimeRegistry {
         .scan()
         .then(result => {
           if (result.resumed > 0) {
-            console.log(
-              `[sati] Task resume: scanned=${result.scanned}, resumed=${result.resumed}, ` +
+            logger.info(
+              `Task resume: scanned=${result.scanned}, resumed=${result.resumed}, ` +
                 `skippedPartial=${result.skippedPartial}, skippedApprovals=${result.skippedApprovals}`,
             );
           }
@@ -1665,14 +1669,14 @@ class ProjectRuntimeRegistry {
           }
         }
       } catch (error) {
-        console.warn(
-          `[sati] Per-session MCP startup failed for ${context.sessionKey}:`,
+        logger.warn(
+          `Per-session MCP startup failed for ${context.sessionKey}:`,
           error instanceof Error ? error.message : String(error),
         );
       }
     } else if (perSpecs && perSpecs.length > 0) {
-      console.warn(
-        `[sati] Per-session MCP limit reached (${maxInstances}). ` +
+      logger.warn(
+        `Per-session MCP limit reached (${maxInstances}). ` +
           `Session ${context.sessionKey} will share the project-level browser instance.`,
       );
     }
@@ -1970,7 +1974,7 @@ class ProjectRuntimeRegistry {
     // 加载失败（含规则资产缺失/损坏）→ 空规则集降级放行 + 告警。
     const fullRuleSet = loadPatentFullRuleSet();
     if (fullRuleSet.warnings.length > 0) {
-      console.warn(`[RuleOutputGate] 专利规则集加载告警: ${fullRuleSet.warnings.join("; ")}`);
+      ruleOutputGateLogger.warn(`专利规则集加载告警: ${fullRuleSet.warnings.join("; ")}`);
     }
     const ruleGate = new RuleOutputGate(selectGateRules(fullRuleSet.ruleSet));
     // 决策溯源旁路（P6 双通道单点）：默认关 → approvalStore 不配置，output-gate 零开销。
@@ -2023,20 +2027,20 @@ class ProjectRuntimeRegistry {
           });
         }
         // 日志仅记录定位信息，不打消息内容（专利结论可能含敏感信息）
-        console.warn(
-          `[PatentOutputGate] 专利结论待人工审批: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
+        patentOutputGateLogger.warn(
+          `专利结论待人工审批: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
         );
       },
       onApproved: pending => {
         resolveApproval(pending, "adopted");
-        console.info(
-          `[PatentOutputGate] 审批通过: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
+        patentOutputGateLogger.info(
+          `审批通过: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
         );
       },
       onRejected: pending => {
         resolveApproval(pending, "rejected");
-        console.warn(
-          `[PatentOutputGate] 审批拒绝: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
+        patentOutputGateLogger.warn(
+          `审批拒绝: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
         );
       },
     });
@@ -2224,13 +2228,13 @@ function handleExtensionWatchEvent(
 ): void {
   const changed = event.changedPaths.join(", ");
   if (event.scope.kind === "global") {
-    console.log("[sati] Extensions changed, invalidating all runtimes:", changed);
+    logger.info("Extensions changed, invalidating all runtimes:", changed);
     registry.invalidate();
     router?.markAllDirty("extension_changed");
     return;
   }
 
-  console.log(`[sati] Extensions changed for project ${event.scope.projectRoot}, invalidating runtime:`, changed);
+  logger.info(`Extensions changed for project ${event.scope.projectRoot}, invalidating runtime:`, changed);
   registry.invalidate(event.scope.projectRoot);
   router?.markProjectDirty(event.scope.projectRoot, "extension_changed");
 }
@@ -2430,7 +2434,7 @@ function createApprovalStoreSafely(): SqliteApprovalStore | undefined {
   try {
     return new SqliteApprovalStore();
   } catch (err) {
-    console.error("[SqliteApprovalStore] 审批审计库打开失败，审批留痕降级为不落盘:", err);
+    sqliteApprovalStoreLogger.error("审批审计库打开失败，审批留痕降级为不落盘:", err);
     return undefined;
   }
 }

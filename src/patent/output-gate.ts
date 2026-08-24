@@ -1,7 +1,10 @@
 import type { CanonicalContentBlock, CanonicalMessage } from "../model/index.js";
 import type { RuleOutputGate, RuleViolation } from "../rule/index.js";
+import { createLogger } from "../telemetry/index.js";
 import { processPatentOutput, type QualityGateResult } from "./quality-gate.js";
 import { createApprovalRecord, type ApprovalRecord, type ApprovalStore } from "./approval.js";
+
+const logger = createLogger("PatentOutputGate");
 
 /**
  * PatentOutputGate — 把质量门禁接入 Agent 输出流。
@@ -145,7 +148,7 @@ export class PatentOutputGate {
         // 队列已满：放弃挂起、直接入库（fail-open，保证用户可见回复不丢失；
         // 风险内容仍带免责声明/存疑提示。security 权衡已记录：严格合规场景
         // 应提高 maxPending 并确保审批端及时消费，或改为 fail-closed 拒绝输出）。
-        console.warn(`[PatentOutputGate] 挂起队列已满（${maxPending}），审批词消息直接入库`);
+        logger.warn(`挂起队列已满（${maxPending}），审批词消息直接入库`);
         return { message: processed, needsApproval: false, info: mergedInfo };
       }
       const index = this.nextIndex;
@@ -204,7 +207,7 @@ export class PatentOutputGate {
     if (this.isExpired(pending)) {
       this.pending.delete(index);
       this.unflushed.delete(index);
-      console.warn(`[PatentOutputGate] 挂起消息 ${index} 超过 TTL 未审批，拒绝审批`);
+      logger.warn(`挂起消息 ${index} 超过 TTL 未审批，拒绝审批`);
       return undefined;
     }
     this.pending.delete(index);
@@ -231,7 +234,7 @@ export class PatentOutputGate {
     if (this.isExpired(pending)) {
       this.pending.delete(index);
       this.unflushed.delete(index);
-      console.warn(`[PatentOutputGate] 挂起消息 ${index} 超过 TTL 未审批，拒绝审批`);
+      logger.warn(`挂起消息 ${index} 超过 TTL 未审批，拒绝审批`);
       return false;
     }
     this.pending.delete(index);
@@ -260,7 +263,7 @@ export class PatentOutputGate {
     const store = this.options.approvalStore;
     if (store) {
       this.swallowRejection(store.saveRecord(record), err => {
-        console.error("[PatentOutputGate] 审批审计写入失败:", err);
+        logger.error("审批审计写入失败:", err);
       });
     }
     // 决策反馈回流（P2-4）：modified/rejected 时交给宿主接线（写 feedback 文件等），
@@ -270,10 +273,10 @@ export class PatentOutputGate {
       if (sink) {
         try {
           this.swallowRejection(sink(record), err => {
-            console.error("[PatentOutputGate] 决策反馈回调失败:", err);
+            logger.error("决策反馈回调失败:", err);
           });
         } catch (err) {
-          console.error("[PatentOutputGate] 决策反馈回调失败:", err);
+          logger.error("决策反馈回调失败:", err);
         }
       }
     }
@@ -307,7 +310,7 @@ export class PatentOutputGate {
       if (this.isExpired(pending)) {
         this.pending.delete(index);
         this.unflushed.delete(index);
-        console.warn(`[PatentOutputGate] 挂起消息 ${index} 超过 TTL（${ttl}ms）未审批，已清理`);
+        logger.warn(`挂起消息 ${index} 超过 TTL（${ttl}ms）未审批，已清理`);
       }
     }
   }
@@ -343,10 +346,10 @@ export class PatentOutputGate {
     if (!callback) return;
     try {
       this.swallowRejection(callback(pending), err => {
-        console.error("[PatentOutputGate] callback failed:", err);
+        logger.error("callback failed:", err);
       });
     } catch (err) {
-      console.error("[PatentOutputGate] callback failed:", err);
+      logger.error("callback failed:", err);
     }
   }
 }

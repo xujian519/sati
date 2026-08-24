@@ -21,6 +21,7 @@ import { normalizeProviderBaseUrl } from "../normalizeProviderBaseUrl.js";
 import { buildProviderChatEndpointCandidates, isExpectedProviderResponseShape } from "../providerEndpoint.js";
 import { NetworkFetchError, networkFetch } from "../../network/fetch.js";
 import { computeBackoffDelay } from "../../shared/retry/index.js";
+import { createLogger } from "../../telemetry/index.js";
 import { createRetryId } from "./retryState.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
 // 流式 HTTP 传输常量单一来源（proxy 的 Undici 池共享，避免双源漂移）。
@@ -31,6 +32,8 @@ import {
 } from "./constants.js";
 import { buildLiteLLMContinuationRequest } from "./continuationRequest.js";
 import { createStreamNormalizerState, normalizeStreamEvent } from "./normalizeStreamEvent.js";
+
+const logger = createLogger("sati");
 
 export type ModelTransport = typeof fetch;
 
@@ -337,12 +340,12 @@ async function dumpRequestForDebug(body: unknown, modelId: string): Promise<void
   const path = await import("node:path");
   const dumpPath = path.join(os.tmpdir(), `sati_request_${Date.now()}.json`);
   fs.writeFileSync(dumpPath, JSON.stringify(body, null, 2));
-  console.log(`[model-debug] Request dumped to ${dumpPath} (model=${modelId})`);
+  createLogger("model-debug").debug(`Request dumped to ${dumpPath} (model=${modelId})`);
 }
 
 function warnCompleteRetry(error: unknown, attempt: number, maxRetries: number, delayMs: number): void {
   const detail = error instanceof Error ? error.message : String(error);
-  console.warn(`[Sati] complete() retry: ${detail} (attempt ${attempt + 1}/${maxRetries}, delay=${delayMs}ms)`);
+  logger.warn(`complete() retry: ${detail} (attempt ${attempt + 1}/${maxRetries}, delay=${delayMs}ms)`);
 }
 
 async function sendGoogleCompleteRequest(
