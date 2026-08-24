@@ -117,7 +117,13 @@ function makeStageNode(
       const segment = await runStageHandler(handler, execState, deps.provider ?? provider);
       Object.assign(delta, segment);
       const raw = mainKey !== undefined ? segment[mainKey] : undefined;
-      output = typeof raw === "string" ? raw : raw === undefined ? "" : JSON.stringify(raw, null, 2);
+      if (typeof raw === "string") {
+        output = raw;
+      } else if (raw === undefined) {
+        output = "";
+      } else {
+        output = JSON.stringify(raw, null, 2);
+      }
       if (output.trim().length === 0) output = String(execState[stage.id] ?? "");
     } else if (deps.executor !== undefined) {
       output = (await deps.executor(stage, execState as WorkflowContext)) ?? "";

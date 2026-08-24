@@ -68,6 +68,7 @@ export function createMultiSourceSearchProvider(sources: readonly SearchSource[]
           try {
             return await source(query, { maxResults });
           } catch {
+            // 单源检索失败：fail-open 忽略该源，保留其他源结果。
             return [];
           }
         }),
@@ -139,6 +140,7 @@ export function createPaperSearchSource(registry: ConnectorRegistry): SearchSour
             url: h.url,
           }));
         } catch {
+          // 单 connector 检索失败（含超时）：fail-open 忽略，保留其他源结果。
           return [];
         }
       }),

@@ -31,6 +31,7 @@ async function detectMimeType(buffer: Buffer): Promise<string | null> {
     const mime = FIGURE_IMAGE_MIME_TYPES[format];
     return mime ?? null;
   } catch {
+    // sharp 不可用或元数据解析失败：格式未知，返回 null 交由上层判定不支持。
     return null;
   }
 }

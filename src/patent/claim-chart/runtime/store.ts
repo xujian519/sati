@@ -36,6 +36,7 @@ export function loadClaimChart(caseId: string, chartId: string): ClaimChart | nu
     if (!Array.isArray(parsed.rows) || !Array.isArray(parsed.elements)) return null;
     return parsed as ClaimChart;
   } catch {
+    // 损坏或人工编辑的 JSON 解析失败 → 视为无图表（chart.ts 的 verified 合并依赖 rows 数组）。
     return null;
   }
 }
