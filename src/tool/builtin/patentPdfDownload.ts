@@ -89,7 +89,7 @@ async function loadPdfLinkExtractJs(): Promise<string> {
       }
       console.warn(`[patent_pdf_download] ${candidate} 缺少 PDF_LINK_EXTRACT_VERSION 版本标记，回退内嵌备份`);
     } catch {
-      // 继续下一个候选路径
+      // 候选路径不可读：继续下一个候选，全部失败回退内嵌备份（fail-safe）。
     }
   }
   return PDF_LINK_EXTRACT_JS;

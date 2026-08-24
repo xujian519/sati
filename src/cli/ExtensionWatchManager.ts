@@ -56,7 +56,7 @@ export class ExtensionWatchManager {
         try {
           watcher.close();
         } catch {
-          // Best-effort shutdown.
+          // 关闭文件监听失败：watcher 引用随即清空，残留句柄由进程退出兜底（fail-safe 清理）。
         }
       }
       record.watchers = [];

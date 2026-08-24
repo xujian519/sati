@@ -105,7 +105,7 @@ export class SignalChannel implements ChannelAdapter {
           try {
             await this.receivePromise;
           } catch {
-            /* best effort */
+            // 停止时接收循环退出失败：引用随即置空，残留由进程退出兜底（fail-safe 清理）。
           }
           this.receivePromise = null;
         }

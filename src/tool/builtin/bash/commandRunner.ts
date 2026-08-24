@@ -59,19 +59,19 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
             killer.on("error", () => undefined);
             killer.unref();
           } catch {
-            /* best-effort */
+            // taskkill 启动失败：进程组可能已退出，放弃强杀（best-effort，超时已兜底）。
           }
         } else {
           try {
             process.kill(-pid, "SIGTERM");
           } catch {
-            /* already dead */
+            // 进程组已不存在：终止信号无意义，best-effort 清理已达目的。
           }
           setTimeout(() => {
             try {
               process.kill(-pid, "SIGKILL");
             } catch {
-              /* already dead */
+              // SIGTERM 后进程组已退出：SIGKILL 兜底无需再发（best-effort 已完成使命）。
             }
           }, 3000).unref();
         }

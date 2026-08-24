@@ -204,12 +204,12 @@ export class WeixinChannel implements ChannelAdapter {
         try {
           await this.pollPromise;
         } catch {
-          /* ignore */
+          // 停止时 poll 循环退出异常：引用随即置空，不阻断 stop（fail-safe）。
         }
         try {
           await this.loginRecoveryPromise;
         } catch {
-          /* ignore */
+          // 停止时登录恢复循环退出异常：引用随即置空，不阻断 stop（fail-safe）。
         }
         this.pollPromise = null;
         this.loginPromise = null;
@@ -1389,7 +1389,7 @@ function tryDecryptWeixinMedia(buffer: Buffer, key: Buffer): Buffer[] {
     const padded = Buffer.concat([decipher.update(buffer), decipher.final()]);
     outputs.push(stripPkcs7Padding(padded) ?? padded);
   } catch {
-    // Wrong key or malformed ciphertext.
+    // key 错误或密文损坏：该 key 解密失败，继续尝试下一个 key，全部失败返回空数组（fail-open）。
   }
   return outputs;
 }

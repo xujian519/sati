@@ -1116,7 +1116,7 @@ export class MemoryRepository {
           try {
             stageRepository?.close();
           } catch {
-            // ignore close failures during temp-stage cleanup
+            // 临时暂存库关闭失败：目录随后被 rmSync 强删，句柄残留不影响（fail-safe 清理）。
           }
           rmSync(stagedWorkspaceRoot, { recursive: true, force: true });
           rmSync(stagedGlobalRoot, { recursive: true, force: true });

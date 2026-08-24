@@ -360,7 +360,7 @@ export class WeComChannel implements ChannelAdapter {
       try {
         this.ws.close();
       } catch {
-        /* best effort */
+        // 停止时 ws 清理失败：引用随即置空，残留由系统回收（fail-safe）。
       }
       this.ws = null;
     }

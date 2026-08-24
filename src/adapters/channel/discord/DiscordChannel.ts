@@ -126,7 +126,7 @@ export class DiscordChannel implements ChannelAdapter {
           try {
             await this.client.destroy();
           } catch {
-            /* best effort */
+            // 停止时连接清理失败：引用随即置空，残留由 GC/系统回收（fail-safe）。
           }
           this.client = null;
         }
@@ -263,7 +263,7 @@ export class DiscordChannel implements ChannelAdapter {
         await channel.sendTyping();
       }
     } catch {
-      /* best effort */
+      // 发送输入中提示失败：仅影响打字指示，不影响后续消息投递（best-effort）。
     }
   }
 }

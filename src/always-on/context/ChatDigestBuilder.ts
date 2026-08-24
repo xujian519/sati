@@ -119,7 +119,7 @@ export function extractAllUserPrompts(source: string, maxPrompts: number, maxLen
         if (prompts.length >= maxPrompts) return prompts;
       }
     } catch {
-      // malformed line — skip
+      // 单行非法 JSON：跳过该行，其余行照常聚合进摘要（fail-open）。
     }
   }
 

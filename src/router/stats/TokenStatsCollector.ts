@@ -85,7 +85,7 @@ export class TokenStatsCollector {
       try {
         fs.mkdirSync(routerDir, { recursive: true });
       } catch {
-        /* ok */
+        // 目录已存在或创建失败：openSync 会随后再试，此处失败不阻断（best-effort）。
       }
 
       this.jsonlPath = path.join(routerDir, "stats.jsonl");
@@ -100,7 +100,7 @@ export class TokenStatsCollector {
       try {
         this.fd = fs.openSync(this.jsonlPath, "a");
       } catch {
-        /* will fall back to per-write open */
+        // 打开失败：fd 保持 undefined，writePayload 会回退到逐次 appendFile（保守）。
       }
       this.startFlushTimer();
     } else {
@@ -194,7 +194,7 @@ export class TokenStatsCollector {
       try {
         fs.writeFileSync(this.jsonlPath, "", "utf-8");
       } catch {
-        /* ok */
+        // 截断失败：清空统计为尽力而为，失败不影响内存态，下次启动仍会重建（best-effort）。
       }
     }
   }
@@ -207,7 +207,7 @@ export class TokenStatsCollector {
       try {
         fs.closeSync(this.fd);
       } catch {
-        /* ok */
+        // 句柄已损坏/重复关闭：忽略关闭失败，fd 随即置空（best-effort 清理）。
       }
       this.fd = undefined;
     }
@@ -246,7 +246,7 @@ export class TokenStatsCollector {
     this.flushChain = this.flushChain
       .then(() => this.writePayload(payload))
       .catch(() => {
-        /* best-effort */
+        // 异步落盘失败：静默降级，统计以内存聚合为准（best-effort 不中断 turn）。
       });
     return this.flushChain;
   }
@@ -278,7 +278,7 @@ export class TokenStatsCollector {
         fs.appendFileSync(this.jsonlPath, payload, "utf-8");
       }
     } catch {
-      /* best-effort */
+      // 冷路径兜底同步写失败：放弃剩余缓冲，避免拖慢退出（best-effort，数据已在内存）。
     }
   }
 
@@ -316,7 +316,7 @@ export class TokenStatsCollector {
         bumpAggregate(sess.aggregate, record);
         sess.requestLog.push(record);
       } catch {
-        /* skip malformed lines */
+        // 单行非法 JSON：跳过该条坏行，其余行照常回放（fail-open，避免单条数据拖垮重建）。
       }
     }
 
@@ -495,11 +495,11 @@ function migrateJsonToJsonl(routerDir: string, jsonlPath: string): void {
       try {
         fs.renameSync(jsonPath, jsonPath + ".bak");
       } catch {
-        /* ok */
+        // 旧文件改名失败：仅可能导致下次启动重复迁移（幂等），不影响本次迁移（best-effort）。
       }
       return;
     } catch {
-      /* skip this candidate */
+      // 该候选统计文件迁移失败：跳过此候选，其余候选照常处理（fail-open）。
     }
   }
 }

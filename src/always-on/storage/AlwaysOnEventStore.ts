@@ -26,7 +26,7 @@ export class AlwaysOnEventStore {
       try {
         events.push(JSON.parse(line) as AlwaysOnPhaseEvent);
       } catch {
-        // skip malformed lines
+        // 单行非法 JSON：跳过该条事件，其余行照常回放（fail-open）。
       }
     }
 

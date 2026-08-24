@@ -79,7 +79,7 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
             await mkdir(dir, { recursive: true });
             await writeFile(resultPath!, fullText, { mode: 0o600 });
           } catch {
-            /* best-effort persistence */
+            // 持久化失败：事件已通过其他通道投递，落盘仅审计用（best-effort）。
           }
         })();
       }

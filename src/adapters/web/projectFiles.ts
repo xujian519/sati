@@ -125,7 +125,7 @@ export class ProjectFileService {
         size = childStats.size;
         modifiedAt = childStats.mtime.toISOString();
       } catch {
-        // ignore
+        // 单文件 stat 失败：size/modifiedAt 留默认，仅影响列表展示（best-effort）。
       }
       entries.push({
         name: dirent.name,

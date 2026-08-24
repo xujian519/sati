@@ -33,7 +33,7 @@ export function loadBuiltinPlugins(): SatiLoadedPlugin[] {
       });
     }
   } catch {
-    /* builtin dir scan failed — fine, no builtins */
+    // builtin 目录扫描失败：视为无内置插件，不影响其他插件源加载（fail-open）。
   }
   return _cache;
 }

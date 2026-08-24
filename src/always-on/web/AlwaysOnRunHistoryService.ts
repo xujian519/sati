@@ -375,7 +375,7 @@ async function recoverFromTaskNotification(record: RunRecord, projectName: strin
     try {
       realOutputPath = await fs.realpath(outputPath);
     } catch {
-      // symlink target may be cleaned up
+      // symlink 目标已被清理：回退用原始路径，后续目录校验仍生效（fail-open）。
     }
     const transcriptPath = realOutputPath.endsWith(".output")
       ? realOutputPath.replace(/\.output$/i, ".jsonl")
@@ -570,7 +570,7 @@ export class AlwaysOnRunHistoryService {
         const existing = recordsById.get(event.runId);
         recordsById.set(event.runId, existing ? mergeRunEvent(existing, event) : createRecordFromEvent(event));
       } catch {
-        // corrupt line
+        // 单行 JSON 损坏：跳过该行，其余行照常生成运行记录（fail-open）。
       }
     }
     return Array.from(recordsById.values()).sort((a, b) => {

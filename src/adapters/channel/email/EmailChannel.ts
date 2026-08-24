@@ -188,7 +188,7 @@ export class EmailChannel implements ChannelAdapter {
       try {
         await this.imapClient.logout();
       } catch {
-        /* best effort */
+        // 停止时 IMAP 登出失败：引用随即置空，连接由服务端超时回收（fail-safe）。
       }
       this.imapClient = null;
     }
@@ -232,7 +232,7 @@ export class EmailChannel implements ChannelAdapter {
       try {
         lock?.release?.();
       } catch {
-        /* best effort */
+        // 释放锁失败：锁由进程退出兜底释放，不阻断 poll 收尾（best-effort）。
       }
     }
   }

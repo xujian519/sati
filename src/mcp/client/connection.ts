@@ -189,7 +189,7 @@ export class McpConnection {
       try {
         await oldClient?.close();
       } catch {
-        // best effort — the subprocess may already be wedged
+        // 子进程已僵死：close 失败可忽略，引用已同步置空，下轮调用重建连接（best-effort）。
       }
       if (oldDir) this.cleanupSessionDir(oldDir);
     })();
@@ -214,7 +214,7 @@ export class McpConnection {
     try {
       await oldClient?.close();
     } catch {
-      // ignore close errors during reconnect
+      // 重连时旧连接关闭失败：引用已置空，竞态调用者不会触碰旧 client，忽略是安全的（fail-safe）。
     }
     if (oldDir) this.cleanupSessionDir(oldDir);
     await this.start();
@@ -224,7 +224,7 @@ export class McpConnection {
     try {
       await this.client?.close();
     } catch {
-      // best effort
+      // 关闭失败：状态随即重置为 idle，引用置空，下次调用会新建连接（fail-safe）。
     }
     this.client = null;
     this.transport = null;
@@ -241,7 +241,7 @@ export class McpConnection {
     try {
       rmSync(dir, { recursive: true, force: true });
     } catch {
-      // best effort cleanup
+      // 会话目录清理失败：留待下次或系统回收，不影响连接生命周期（best-effort）。
     }
   }
 }

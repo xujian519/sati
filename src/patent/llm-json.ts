@@ -22,7 +22,7 @@ export function tryParseJson(raw: string): Record<string, unknown> | undefined {
         return value as Record<string, unknown>;
       }
     } catch {
-      // 尝试下一个候选
+      // 候选解析失败：尝试下一个候选，全部失败返回 undefined 交由调用方兜底（fail-open）。
     }
   }
   return undefined;

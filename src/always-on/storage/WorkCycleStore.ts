@@ -33,7 +33,7 @@ export class WorkCycleStore {
         return parsed as WorkCycleIndex;
       }
     } catch {
-      // fall through
+      // 索引 JSON 非法：整体回退到空默认索引（fail-safe），放弃已损坏/半损坏的 cycles。
     }
     return cloneIndex(DEFAULT_INDEX);
   }
@@ -118,7 +118,7 @@ export class WorkCycleStore {
       const planIndex = JSON.parse(planRaw) as DiscoveryPlanIndex;
       planIds = planIndex.plans.filter(p => p.workspace?.cwd === ws.cwd).map(p => p.id);
     } catch {
-      // no plans or unreadable — fine
+      // 计划索引缺失或不可读：planIds 留空，周期记录仍照常写入（fail-open，关联留待回填）。
     }
 
     const record: WorkCycleRecord = {
@@ -145,7 +145,7 @@ export class WorkCycleStore {
       delete stateObj.currentWorkspace;
       await writeFile(this.paths.stateFile, JSON.stringify(stateObj, null, 2), "utf-8");
     } catch {
-      // best effort
+      // state.json 伴生更新失败：cycle 记录已写入，活跃周期标记留待下次校正（best-effort）。
     }
 
     // Update plan records to set workCycleId
@@ -161,7 +161,7 @@ export class WorkCycleStore {
         }
         await writeFile(this.paths.planIndexFile, JSON.stringify(planIndex, null, 2), "utf-8");
       } catch {
-        // best effort
+        // 计划索引关联更新失败：cycle 记录已写入，workCycleId 关联留待下次回填（best-effort）。
       }
     }
 
