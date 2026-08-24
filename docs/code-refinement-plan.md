@@ -74,7 +74,7 @@
 | 卡 | 模块 | 规模/热点 | 状态 |
 |---|---|---|---|
 | C12 | src/patent workflow+flexible-plan+plantask | 126 文件/20.5K 总分 3 卡 | ✅ 2026-08-23 |
-| C13 | src/patent evidence+problem+atoms | evidence/engine.ts 844 | ⬜ |
+| C13 | src/patent evidence+problem+atoms | 26 文件（evidence 10 / problem 2 / atoms 14） | ✅ 2026-08-24 |
 | C14 | src/patent graph+claim-chart+document | | ⬜ |
 | C15 | src/patent data/nuo+figure+evaluate 其余 | | ⬜ |
 | C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ⬜ |
@@ -132,6 +132,8 @@
 | 2026-08-23 | C10 | src/tool/builtin 上半 | P2 重复收敛：readFile readState.set ×5 → markRead 闭包；read-more 双 notice 函数合并（reason 参数）；auto-page 双 while 循环合并为 shrinkToBudget helper；writeFile/editFile 的 freshness 错误字符串匹配块 ×2 → snapshotGuardIssueMessage（writeSnapshots 导出）；writeFile/editFile execute 写盘收尾序列 ×2 → finalizeWorkspaceFileWrite（新建 writeFinalize.ts）；readFile/sendAttachment workspace 外权限检查 ×2 → checkReadonlyPathPermission（新建 readPermissions.ts）；stat ENOENT catch ×3 → statIfExists；ensureWriteSnapshotFresh changed-throw ×2 局部去重；P3 pathSafety/readFile 双重 resolve 模式简化（同 C09 ToolRuntime）；P0/P1 无 | 1（refactor） | ✅ |
 | 2026-08-23 | C11 | src/tool/builtin 下半（专利工具族） | P2 重复收敛：patentPdfDownload 专利号归一化+去重 ×2 → normalizeUniquePatents；patentWorkflowTool/patentWorkflowRunTool/patentFlexiblePlanTool 阶段/节点输出预览截断 ×4 → previewText helper；P2 assembleGraphJudges 冗余 spread（`...{modelHint}`）+ 双非空断言 → 局部变量 + 直接 modelHint；P3 summarizeCheck 嵌套三元 → CHECK_VERDICT_LABEL 查表；P0/P1 无；记录不处理（C10/C09 已述）：错误消息字符串匹配判定、inputSchema 契约、console 诊断日志归 C39 | 1（refactor） | ✅ |
 | 2026-08-23 | C12 | src/patent workflow+flexible-plan+plantask | P2 死代码删除：attachArticleJudgment `if (target === undefined)` 不可达（findStageIndex 已保证）→ 非空断言；worker-contract TIER_LABELS 全仓零消费死导出删除；P3 formatTechnicalField 命名一致（detail 提取后改用原字段）；index.ts barrel 删 ROLE_WORKER_TIERS 导出（零外部消费，定义保留）；四块扫描零 console/any/TODO/catch；P0/P1 无 | 1（refactor） | ✅ |
+
+| 2026-08-24 | C13 | src/patent evidence+problem+atoms | P3 删除 engine.ts/date.ts 零消费类型 re-export（CredibilityLevel/DateReliability/DateSourceType）+ 连带未用 import 清理；readPriorArt 私有化（仅 llm.ts 内部使用）；5 处防御式无参 catch 补意图注释；search.ts 提取 previewQuery 去重查询串截断；P0/P1/P2 无；P3 记录不处理：3 处裸 console（receipt.ts ×2 / mapper.ts ×1）归 C39 横切治理 | 1（refactor） | ✅ |
 
 ### 日卡记录
 
