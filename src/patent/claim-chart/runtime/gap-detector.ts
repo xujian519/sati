@@ -14,7 +14,10 @@ const SUGGESTIONS: Record<string, string> = {
   partial: "补充公开部分的精确定位（pin-cite）",
 };
 
-/** 缺口原因文案（与 SUGGESTIONS 并列：前者为建议动作，本表为存在缺口的原因）。 */
+/** 缺口原因文案（与 SUGGESTIONS 并列：前者为建议动作，本表为存在缺口的原因）。
+ * 注意：本表键值须与上方 GAP_MAPPINGS 保持一致——若新增 mapping 而未同步扩容，
+ * 查表回退 `?? ""` 将输出空串，而非旧内联三元兜底的 "仅部分公开"。
+ */
 const GAP_REASON_LABELS: Record<string, string> = {
   "not-found": "未找到对应内容",
   "needs-evidence": "证据不足",
