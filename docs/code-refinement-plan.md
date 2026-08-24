@@ -76,7 +76,7 @@
 | C12 | src/patent workflow+flexible-plan+plantask | 126 文件/20.5K 总分 3 卡 | ✅ 2026-08-23 |
 | C13 | src/patent evidence+problem+atoms | 26 文件（evidence 10 / problem 2 / atoms 14） | ✅ 2026-08-24 |
 | C14 | src/patent graph+claim-chart+document | ✅ 2026-08-24 |
-| C15 | src/patent data/nuo+figure+evaluate 其余 | | ⬜ |
+| C15 | src/patent data/nuo+figure+evaluate 其余 | ✅ 2026-08-24 |
 | C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ⬜ |
 | C17 | src/adapters 其余 18 渠道+protocol | ImLiveReplyController.ts 1016 | ⬜ |
 | C18 | src/knowledge | 44/7.1K；case-law、legal、kg-store、wiki | ⬜ |
@@ -306,6 +306,16 @@
 - **精炼项**：无参 catch 补注释 ×4、嵌套三元→if/else ×1、嵌套三元→查表 ×1
 - **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；`pnpm lint`（eslint src/patent）✅ 0 error；`biome check src/patent` ✅；`pnpm test` 3750 pass / 0 fail / 4 skip ✅
 - **提交**：`refactor(patent): document defensive catches and flatten nested ternaries in graph/claim-chart/document`
+
+#### C15 src/patent data/nuo+figure+evaluate 其余（2026-08-24）
+
+- **审阅范围**：26 文件 / 4312 行（data/nuo 4：egoSession/mapper/patentCache/searchProvider；figure 16：analyze/types/validator/index/prompts/netlist-viz/retrieve/pdf-extract/multi-figure-consistency/analyze-electrical/index-store/preprocess/mime + symbols×3；evaluate 6：consensus/evaluator/index/llm-judge/metrics/runner）。
+- **审阅发现**：
+  - P3 无参 catch 缺意图注释 ×8（其余 4 处已带注释/warning 不重复处理）：egoSession.ts:142/199/249（探针失败→不可达、payload 非 JSON→null、权限不足→不可执行）、mapper.ts:41（非法 JSON 数组→空）、searchProvider.ts:70/141（单源/单 connector 失败 fail-open→空）、figure/preprocess.ts:33（sharp 不可用→格式未知 null）、evaluate/llm-judge.ts:91（单次采样失败→跳过该票）。注 retrieve.ts:196、index-store.ts:82/125 三处 catch 已带注释，确认不重复。
+  - P0/P1/P2：无行为缺陷。横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME、零死代码；无明显需拆嵌套三元（既有三元均为合理短表达式，保守档不动）。各模块质量高——符号库（symbols/electrical-symbols.yaml 驱动）知识库模式、索引原子写+并发串行化、评估三层 verdict envelope 设计清晰。
+- **精炼项**：无参 catch 补 fail-safe 意图注释 ×8（净 +8 行，行为零变化）
+- **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；`pnpm lint`（eslint src/patent/data src/patent/figure src/patent/evaluate）✅ 0 error；`biome check src/patent/data/nuo src/patent/figure src/patent/evaluate` ✅（26 文件）；`pnpm test` 3750 pass / 0 fail / 4 skip ✅。注：全仓 `pnpm check` 的 format:check 因 `.claude/settings.local.json`（未跟踪 / 非 C15 范围、pre-existing）报格式问题，非本卡引入，本卡文件不受影响。
+- **提交**：`refactor(patent): 为 nuo/figure/evaluate 无参 catch 补 fail-safe 意图注释（C15）`
 
 ## 六、基线（2026-08-18 实测）
 
