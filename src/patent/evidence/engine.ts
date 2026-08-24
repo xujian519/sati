@@ -26,7 +26,6 @@ import type {
   AssessmentType,
   BurdenDetermination,
   ContentIntegrityStatus,
-  CredibilityLevel,
   DateDetermination,
   DimensionJudgment,
   ElementResult,
@@ -840,5 +839,3 @@ export class EvidenceEngine implements EvidenceJudgmentEngine {
     return parts.length === 0 ? "未执行评估" : parts.join("; ");
   }
 }
-
-export type { CredibilityLevel };

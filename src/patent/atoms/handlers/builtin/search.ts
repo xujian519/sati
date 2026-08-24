@@ -12,6 +12,11 @@ import {
 } from "../../handler.js";
 import { callLlm, degraded, parseLlmJson, requireLlm, resolveInputText } from "./llm.js";
 
+/** 查询串预览：超 80 字符截断并加省略号（用于检索结果摘要）。 */
+function previewQuery(query: string): string {
+  return query.length > 80 ? `${query.slice(0, 80)}…` : query;
+}
+
 // ---------------------------------------------------------------------------
 // search —— 检索现有技术
 // ---------------------------------------------------------------------------
@@ -49,8 +54,8 @@ export class SearchHandler implements StageHandler {
       const docs = await provider.search(query, { maxResults });
       const summary =
         docs.length > 0
-          ? `检索到 ${docs.length} 篇相关文献（查询: ${query.slice(0, 80)}${query.length > 80 ? "…" : ""}）`
-          : `未检索到相关文献（查询: ${query.slice(0, 80)}${query.length > 80 ? "…" : ""}）`;
+          ? `检索到 ${docs.length} 篇相关文献（查询: ${previewQuery(query)}）`
+          : `未检索到相关文献（查询: ${previewQuery(query)}）`;
       return { prior_art: docs, search_summary: summary };
     } catch (err) {
       return degraded("search", `检索失败: ${err instanceof Error ? err.message : String(err)}`);
