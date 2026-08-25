@@ -77,7 +77,7 @@
 | C13 | src/patent evidence+problem+atoms | 26 文件（evidence 10 / problem 2 / atoms 14） | ✅ 2026-08-24 |
 | C14 | src/patent graph+claim-chart+document | ✅ 2026-08-24 |
 | C15 | src/patent data/nuo+figure+evaluate 其余 | ✅ 2026-08-24 |
-| C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ✅ 2026-08-25 |
+| C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ✅ 2026-08-25（关联 #190） |
 | C17 | src/adapters 其余 18 渠道+protocol | ImLiveReplyController.ts 1016 | ⬜ |
 | C18 | src/knowledge | 44/7.1K；case-law、legal、kg-store、wiki | ⬜ |
 | C19 | src/router | 26/4.3K；RouterRuntime.ts 1258 | ⬜ |
