@@ -78,7 +78,7 @@
 | C14 | src/patent graph+claim-chart+document | ✅ 2026-08-24 |
 | C15 | src/patent data/nuo+figure+evaluate 其余 | ✅ 2026-08-24 |
 | C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ✅ 2026-08-25（关联 #190） |
-| C17 | src/adapters 其余 18 渠道+protocol | ImLiveReplyController.ts 1016 | ⬜ |
+| C17 | src/adapters 其余 18 渠道+protocol | ImLiveReplyController.ts 1016 | ✅ 2026-08-25 |
 | C18 | src/knowledge | 44/7.1K；case-law、legal、kg-store、wiki | ⬜ |
 | C19 | src/router | 26/4.3K；RouterRuntime.ts 1258 | ⬜ |
 | C20 | src/always-on | 38/8K；DiscoveryFire.ts 1252 | ⬜ |
@@ -136,6 +136,7 @@
 | 2026-08-24 | C13 | src/patent evidence+problem+atoms | P3 删除 engine.ts/date.ts 零消费类型 re-export（CredibilityLevel/DateReliability/DateSourceType）+ 连带未用 import 清理；readPriorArt 私有化（仅 llm.ts 内部使用）；5 处防御式无参 catch 补意图注释；search.ts 提取 previewQuery 去重查询串截断；P0/P1/P2 无；P3 记录不处理：3 处裸 console（receipt.ts ×2 / mapper.ts ×1）归 C39 横切治理 | 1（refactor） | ✅ |
 | 2026-08-24 | C14 | src/patent graph+claim-chart+document | P3 无参 catch 补意图注释 ×4（enablement.ts:483 / inventiveness.ts:610 / claim-chart store.ts:38 / document brandInjector.ts:64；state.ts:15、stylePreset.ts:51 已注释）；嵌套三元改 if/else ×1（graph/adapter.ts:120 主输出键序列化）+ 查表 ×1（claim-chart gap-detector.ts reason 文案提取 GAP_REASON_LABELS，与原内联三元逐字一致）；P2 记录不处理：validatePinCiteFormat/stripWhitespace 为同包或 chart.ts 消费的公共 export 保留、splitClaimSegments 仅同文件内消费但作公共 API 一致保留；P0/P1/P2 无行为缺陷；三模块横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME | 1（refactor） | ✅ |
 | 2026-08-25 | C16 | src/adapters 大渠道（wecom/weixin/feishu） | P3 无参 catch 补 fail-safe 意图注释 ×9（wecom 583/1608/1700、weixin 1215/1348、feishu 57/1101/1230/1245）；P0/P1/P2 无；三渠道整体质量高：零裸 console（weixin 3 处登录二维码横幅属 CLI 交互提示、保留）、零 any/@ts-expect-error、零 TODO/FIXME、零死代码/未使用导出 | 1（refactor） | ✅ |
+| 2026-08-25 | C17 | src/adapters 其余渠道+protocol | P3 全 18 个无参 catch 补 fail-safe 意图注释（protocol 5 + 渠道 Channel 12 + web 1）；记录不处理：createWebStaticMount 恒等 stub、tui/app UI 层、SessionMapper/render 薄封装；P0/P1/P2 无；横切零 any/console/TODO | 2（refactor + docs） | ✅ |
 
 ### 日卡记录
 
@@ -317,6 +318,19 @@
 - **精炼项**：无参 catch 补 fail-safe 意图注释 ×8（净 +8 行，行为零变化）
 - **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；`pnpm lint`（eslint src/patent/data src/patent/figure src/patent/evaluate）✅ 0 error；`biome check src/patent/data/nuo src/patent/figure src/patent/evaluate` ✅（26 文件）；`pnpm test` 3750 pass / 0 fail / 4 skip ✅。注：全仓 `pnpm check` 的 format:check 因 `.claude/settings.local.json`（未跟踪 / 非 C15 范围、pre-existing）报格式问题，非本卡引入，本卡文件不受影响。
 - **提交**：`refactor(patent): 为 nuo/figure/evaluate 无参 catch 补 fail-safe 意图注释（C15）`
+
+#### C17 src/adapters 其余渠道 + protocol（2026-08-25）
+
+- **审阅范围**：`src/adapters` 去掉 C16 已覆盖的 wecom/weixin/feishu 三渠道后其余 18 渠道（api-server/bluebubbles/cli/dingtalk/discord/email/homeassistant/matrix/mattermost/qq/signal/slack/sms/telegram/tui/webhook/wecom-callback/whatsapp）的 Channel+SessionMapper+render，加 `protocol/`（15 文件，热点 ImLiveReplyController.ts 1016 行）与 `web/`（httpRouter/projectFiles/static-mount）及 `index.ts`/`loadEnabledChannels.ts`。
+- **审阅发现**：
+  - 横切扫描（全 adapters）：零裸 console、零 any/@ts-expect-error/any/@ts-ignore、零 TODO/FIXME/HACK；无参 catch {} 70 处（C16 已处理 wecom/weixin/feishu 上部，本卡处理其余）。
+  - P3 无参 catch 缺意图注释 ×18：protocol 5（ImPermissionHelper:74 JSON 序列化失败→String 兜底、ChannelStatePersistence:37 读文件/解析失败→无状态、:99 unlink 失败→忽略、resolveWebSocketImpl:33 ws 不可用→回退全局 WS、ChannelRuntimeStatus:48 损坏快照→空）、渠道 Channel 12（webhook:211 非 JSON 载荷→raw 保留 / :348 签名非 hex→拒签、dingtalk:128 非 JSON→跳、homeassistant:175 非 JSON→跳、mattermost:131/143 非 JSON→跳 / :281 非 JSON 响应→原文本、email:221 正文解码失败→占位文本、sms:158 非法 body→400 / :201 签名非 hex→拒签、signal:131/281 读错误响应体失败→空 / :171 SSE 行非 JSON→跳、whatsapp:127 bridge URL 非法→默认端口、matrix:101 getUserId 失败→回退 option、bluebubbles:234 错误响应非 JSON→空对象、qqbot-gateway:307 token 预刷新失败→下次重取、wecom-callback:204 写回错误响应失败→忽略 / :310 错误响应非 JSON→空对象）、web 1（httpRouter:142 请求体非 JSON→undefined）。均属防御式回退（解析失败→降级/跳过、签名非 hex→保守拒签、清理失败→忽略、可选依赖未装→告警），补 fail-safe 意图注释使可审计。
+  - P2 记录不处理：`createWebStaticMount`（web/static-mount.ts）零消费恒等函数 stub，属"待实现占位桩"，按 C07 先例保留；各渠道 SessionMapper/render 为三件套模式统一薄封装、无 dead code，提取收益小风险大。
+  - 记录不处理：`tui/app/*.tsx`（TUI React 组件）属 UI 层，含 TuiApp.tsx:168 一处无注释 catch（降级处理语义清晰），归 UI 阶段；`.claude/settings.local.json`（未跟踪）format:check 报错为 pre-existing（C15 已记录）。
+  - P0/P1/P2 无行为缺陷。热点 ImLiveReplyController.ts 质量高（全部 catch 带 error 参数经 reportTransportError）。
+- **精炼项**：无参 catch 补 fail-safe 意图注释 ×18（净 +26/−2，行为零变化）。
+- **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；`pnpm lint` 全量 ✅（event-matrix 重生成，纯行号偏移：ApiServer/Sms 等适配器行位移）；改动文件 `biome format --write` 无改动 ✅；`pnpm test` 3812 pass / 0 fail / 4 skip ✅。
+- **提交**：`refactor(adapters): 为其余渠道与 protocol 无参 catch 补 fail-safe 意图注释（C17）`、`docs: regenerate event matrix (adapters line shifts)`（PR #194）
 
 ## 六、基线（2026-08-18 实测）
 
