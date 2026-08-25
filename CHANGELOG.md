@@ -2,6 +2,37 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.7 - 2026-08-25
+
+> **版本目标（2026-08-25）**：知识库/法律域能力增强与工程质量提质——落地 A 档四项（LLM 抽取防注入护栏、法条/条款结构化解析、法律版本沿革建模、地方性法规标记不删除）并收口 code-review F1–F9；完成 C12/C14/C15/C16 代码精炼批次、lint 安全门禁（no-floating-promises + 禁 `child_process.exec`）与依赖升级。
+
+### Feat
+- feat(knowledge): 法条条款解析、版本沿革与地方性法规标记（#191）——article-parser 条款级确定性解析（第N条之M/归并/切款）+ version-meta 版本沿革（status/supersededBy 同名多版本标注、computeEffectiveStatus 活链路、documents.publish_date 映射）+ 地方性法规命中带 `localRegulation` 标记（不删除）+ 按层级派生 sourceConfidence
+- feat(patent): 结构化抽取输入卫生（#191）——`</`→`<\/` 转义保住 claim-chart 逐字引用契约（"厚度<5mm" 不再失真），`</data>` 伪闭合符仍被 `</` 转义无法逃逸数据段
+- feat(lint): 启用 type-aware no-floating-promises + 禁 `child_process.exec`（#173）
+
+### Fix
+- fix(patent): 收口 code-review F1–F9（#191）——law_search 同名多版本改「不同法律名」配额、LegalMemoryProvider 渲染补失效/地方性法规复核标注、computeEffectiveStatus/loadLawVersionMeta 检索侧真实接线、extract 死三元收敛（待核验）、cnToArabic 委托 parseCnNumber（万/亿 NaN fail-loud）、knowledge-law-search 8 处近似 SELECT 抽三列常量、零生产接线死导出删除
+- fix(knowledge): 补 law_search 版本合并逻辑（同名版本沿革保留但不挤占不同法律）（#191）
+- fix(lint): 负控锚定根配置 + ci: pull_request synchronize 刷新 PR 可追溯门禁（#173）
+
+### Refactor
+- refactor(patent): C14/C15 代码精炼落地——防御式 empty catch 注释 + 展平嵌套三元 + 查表（#184）
+- refactor(patent): 丢弃死契约导出与 flexible-plan 冗余守卫（#172）/ 死类型 re-export（#184）
+- refactor: 升级 86 处空泛 catch 注释为 C15 风格 fail-safe 意图注释（#162，#187）
+- refactor(telemetry): 收束 B/D 类裸 console 到 createLogger wrapper（#162，#188）
+- refactor(adapters): 为三渠道无参 catch 补 fail-safe 意图注释（C16，#189）
+- refactor: 消除可移除类型断言（gateway + model，#170/#171）
+
+### Chore
+- chore(deps): chokidar 4→5（#179）、@google/genai 2.18.0
+- chore(deps-dev): eslint-plugin-react-refresh、typescript-eslint、postcss
+
+### Docs
+- docs(techdebt): 记录 C12 workflow/flexible-plan/plantask refinement review（#172）
+- docs(standards): 记录 lint safety gates 到 dev-standards（#173）
+- docs(patent): 标注 GAP_REASON_LABELS 与 GAP_MAPPINGS 枚举同步约束（C14 审阅建议，#186）
+
 ## v0.1.6 - 2026-08-23
 
 > **版本目标（2026-08-23）**：工程化与质量基线固化——development standards 体系落库（#140/#142/#145/#146/#154：`check:skills` 接线进 lint、治理门禁硬化、PR-issue 串联 CI 门禁与 issue 模板），技术债清理批次（P0/P1 修复 #155、i18n 清点 #156、always-on 执行上限接线 #157、不可达 Ollama warm 探针静默 #158、UI LLM 配置类型化 #165、knowledge FTS→LIKE 兜底统一抽取 #167），以及文档同步（gateway 协议 1.2→1.4 + performance review 快照 #166、技术债排期文档 #168）。注：本版面向用户无新增 map / session-graph 功能（v0.1.5 后的 map 插件 #140 与 session-graph 随 #141 一并回滚移除）。
