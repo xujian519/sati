@@ -73,8 +73,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       FROM law l
       JOIN category c ON c.id = l.category_id
       WHERE (l.name LIKE ? ESCAPE '\\' OR l.content LIKE ? ESCAPE '\\')
-        AND (l.expired = 0 OR l.expired IS NULL)
-      ORDER BY l.publish DESC, l."order" LIMIT ?
+      ORDER BY l.expired ASC, l.publish DESC, l."order" LIMIT ?
     `);
     // law_fts 表可能存在但运行时 SQLite 未注册 FTS5（如捆绑旧版 Node 的 bm25/MATCH），
     // prepare 会抛错——此处捕获并直接降级 LIKE（等价于原实现查询时的 catch 降级，行为不变）。
@@ -88,8 +87,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       JOIN law l ON l.name = law_fts.name
       JOIN category c ON c.id = l.category_id
       WHERE law_fts MATCH ?
-        AND (l.expired = 0 OR l.expired IS NULL)
-      ORDER BY l.publish DESC, bm25(law_fts) LIMIT ?
+      ORDER BY l.expired ASC, l.publish DESC, bm25(law_fts) LIMIT ?
     `);
       } catch {
         this.ftsDegraded = true;

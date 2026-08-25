@@ -131,22 +131,42 @@ export function createLawSearchTool(
 
       // 优先精确名称匹配（结果中保持该法律在前）
       const byName = input.query.length >= 2 ? engine.findByName(input.query, 3) : [];
-      const nameIds = new Set(byName.map(r => r.id));
-      const results = engine.search(input.query, { ...options, limit: limit + nameIds.size });
+      const results = engine.search(input.query, { ...options, limit: limit + byName.length });
 
-      // 按 name 去重（同名多版本保留第一条），避免重复条目
-      const seen = new Set<string>();
+      // 精确名命中按 name 分组：同名多版本（如 laws-full 多版本库）标注
+      // status/supersededBy（A2 版本沿革——输出"当前版本/历史版本"）；单版本不标避免噪音。
+      const byNameGroups = new Map<string, Array<LawRecord & { snippet?: string }>>();
+      for (const r of byName) {
+        const key = r.name;
+        if (!byNameGroups.has(key)) byNameGroups.set(key, []);
+        byNameGroups.get(key)!.push({ ...r, content: r.content ? truncateContent(r.content) : undefined });
+      }
+
       const merged: Array<LawRecord & { snippet?: string }> = [];
-      for (const r of [
-        ...byName.map(r => ({ ...r, content: r.content ? truncateContent(r.content) : undefined })),
-        ...results
-          .filter(r => !nameIds.has(r.id))
-          .map(r => ({ ...r, content: r.content ? truncateContent(r.content) : undefined })),
-      ]) {
+      const seen = new Set<string>();
+      for (const [name, versions] of byNameGroups) {
+        if (seen.has(name) || merged.length >= limit) continue;
+        seen.add(name);
+        versions.sort((a, b) => (b.publish ?? "").localeCompare(a.publish ?? ""));
+        const latestLabel = versions[0]!.publish ? `${name}（${versions[0]!.publish} 版）` : name;
+        versions.forEach((r, i) => {
+          if (merged.length >= limit) return;
+          if (versions.length > 1 && i > 0) {
+            merged.push({ ...r, status: "已被修订", supersededBy: latestLabel });
+          } else if (versions.length > 1) {
+            merged.push({ ...r, status: "现行有效" });
+          } else {
+            merged.push(r);
+          }
+        });
+      }
+
+      // 全文检索命中：按 name 去重保留最新版（现状），跳过已由精确名引入的。
+      for (const r of results) {
+        if (merged.length >= limit) break;
         if (seen.has(r.name)) continue;
         seen.add(r.name);
-        merged.push(r);
-        if (merged.length >= limit) break;
+        merged.push({ ...r, content: r.content ? truncateContent(r.content) : undefined });
       }
 
       const output: LawSearchToolOutput = {

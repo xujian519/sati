@@ -30,6 +30,8 @@ import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compre
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
 import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
 import { extractLawKeywords } from "./keywords.js";
+import { headingToArticleRecord } from "./article-parser.js";
+import { lawSourceConfidence } from "./row-mapper.js";
 
 /** 引擎构造选项（全部可选；不传时行为与旧签名完全一致）。 */
 export type KnowledgeLawSearchOptions2 = {
@@ -55,6 +57,10 @@ type DocChunkRow = {
   source: string | null;
   /** 正文片段（LIKE/回源路径有值；FTS 主查询不取正文，经回源填充——延迟解压）。 */
   content: string | null;
+  /** chunk 标题（条款级 chunk 即条款起始行，如 "第一条 为了保护…"；A1 条款解析依据）。 */
+  heading: string | null;
+  /** 公布日期（documents.publish_date，YYYY-MM-DD；A2 双时间戳映射，可空）。 */
+  publish_date: string | null;
   chunk_index: number;
   char_count: number | null;
   /** FTS5 BM25 分数（负值，越大越相关；仅 FTS 路径有值）。 */
@@ -98,8 +104,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     // SC 魔数 gzip BLOB），JS 层 decompressChunk 解压——绕开 node:sqlite JS UDF
     // 的 ~4ms/次边界开销；WHERE 的 sati_uncompress 仅匹配语义（LIKE 降级路径低频）。
     this.stmtSearchLike = this.db.prepare(`
-      SELECT d.id AS document_id, d.title, d.level, d.source,
-             c.content AS content, c.char_count
+      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
+             c.content AS content, c.heading AS heading, c.char_count
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -115,8 +121,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     if (this.hasFts) {
       try {
         this.stmtSearchFts = this.db.prepare(`
-          SELECT d.id AS document_id, d.title, d.level, d.source,
-                 NULL AS content, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
+          SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
+                 NULL AS content, c.heading AS heading, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
           FROM docs_fts
           JOIN chunks c ON c.id = docs_fts.rowid
           JOIN documents d ON d.id = c.document_id
@@ -129,8 +135,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       }
     }
     this.stmtFindByName = this.db.prepare(`
-      SELECT d.id AS document_id, d.title, d.level, d.source,
-             c.content AS content, c.char_count
+      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
+             c.content AS content, c.heading AS heading, c.char_count
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -138,8 +144,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       LIMIT ?
     `);
     this.stmtGetById = this.db.prepare(`
-      SELECT d.id AS document_id, d.title, d.level, d.source,
-             c.content AS content, c.char_count
+      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
+             c.content AS content, c.heading AS heading, c.char_count
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -147,8 +153,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     `);
     // 按 (document_id, chunk_index) 取命中 chunk（FTS 延迟解压回源）。
     this.stmtGetChunkAt = this.db.prepare(`
-      SELECT d.id AS document_id, d.title, d.level, d.source,
-             c.content AS content, c.char_count
+      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
+             c.content AS content, c.heading AS heading, c.char_count
       FROM documents d
       JOIN chunks c ON c.document_id = d.id AND c.chunk_index = ?
       WHERE d.id = ?
@@ -210,8 +216,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     const placeholders = unique.map(() => "?").join(", ");
     const rows = this.db
       .prepare(`
-        SELECT d.id AS document_id, d.title, d.level, d.source,
-               c.content AS content, c.char_count
+        SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
+               c.content AS content, c.heading AS heading, c.char_count
         FROM documents d
         JOIN chunks c ON c.id = (
           SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -270,8 +276,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       return this.stmtSearchFts!.all(match, limit) as DocChunkRow[];
     }
     const sql = `
-      SELECT d.id AS document_id, d.title, d.level, d.source,
-             NULL AS content, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
+      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
+             NULL AS content, c.heading AS heading, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
@@ -289,8 +295,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       return this.stmtSearchLike.all(pattern, pattern, limit) as DocChunkRow[];
     }
     let sql = `
-      SELECT d.id AS document_id, d.title, d.level, d.source,
-             sati_uncompress(c.content) AS content, c.char_count
+      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
+             sati_uncompress(c.content) AS content, c.heading AS heading, c.char_count
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -322,14 +328,20 @@ export class KnowledgeLawSearch implements LegalSearchSource {
 
   private toRecord(row: DocChunkRow): LawRecord {
     const content = decompressChunk(row.content);
+    const level = row.level ?? "其他";
+    const localRegulation = level === "地方性法规";
     return {
       id: row.document_id,
-      level: row.level ?? "其他",
+      level,
       name: row.title,
       expired: 0,
       categoryId: 0,
       content: content.length > 0 ? content : undefined,
       categoryName: "法律法规",
+      publish: row.publish_date ?? undefined,
+      ...headingToArticleRecord(row.heading),
+      ...(localRegulation ? { localRegulation } : {}),
+      sourceConfidence: lawSourceConfidence(level),
     };
   }
 

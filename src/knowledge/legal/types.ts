@@ -6,6 +6,9 @@
 /** 法律层级（law.level 字段取值）。 */
 export type LawLevel = "法律" | "行政法规" | "司法解释" | "地方性法规" | "宪法" | "案例" | "部门规章" | "其他";
 
+/** 法律效力状态（版本沿革标注；无版本元数据时缺省）。 */
+export type LawStatus = "现行有效" | "已被修订" | "已废止" | "待核验";
+
 /** 法律记录（对应 laws-full.db law 表 + category 表联查结果）。 */
 export type LawRecord = {
   /** 主键，格式 "{名称}_{发布日期}" */
@@ -30,6 +33,20 @@ export type LawRecord = {
   content?: string;
   /** 分类名称（联查 category.name） */
   categoryName?: string;
+  /** 条款号（归一化，如 "第1条" / "第120条之一"；条款级命中且 chunk.heading 可解析时存在） */
+  article?: string;
+  /** 母条号（归一化，"第1条"；"第N条之M" 时子条号另存 subArticle） */
+  articleBase?: string;
+  /** 子条号（阿拉伯数字，"第120条之一" → "1"） */
+  subArticle?: string;
+  /** 效力状态（版本沿革标注，如 "现行有效"/"已被修订"/"已废止"/"待核验"；无版本元数据时缺省） */
+  status?: LawStatus;
+  /** 被哪一版取代（法律名 + 发布/施行日期，如 "中华人民共和国专利法（2020年修正）"；同名多版本命中时标注） */
+  supersededBy?: string;
+  /** 地方性法规标记（level==='地方性法规' 时 true；提示命中属地法规、需人工复核，不做硬删除） */
+  localRegulation?: boolean;
+  /** 来源置信度（0~1，按法律层级确定性派生：国家级上位法高、地方性法规低；为后续置信度标注打样） */
+  sourceConfidence?: number;
 };
 
 /** 法律搜索命中结果。 */
