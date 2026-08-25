@@ -42,13 +42,14 @@ function extractFromFile(filePath: string): LawVersionMeta | null {
 
   const infoEnd = content.indexOf("<!-- INFO END -->");
   const header = infoEnd >= 0 ? content.slice(0, infoEnd) : content;
-  const events = extractVersionEvents(header);
+  // 事件按日期升序，保证「最新事件」/「最近非废止事件」判定不依赖头部行序。
+  const events = extractVersionEvents(header).sort((a, b) => a.date.localeCompare(b.date));
 
   const fallbackDate = dateFromFilename(filePath);
   if (events.length === 0) {
     return {
       name,
-      status: fallbackDate ? "待核验" : "待核验",
+      status: "待核验",
       promulgatedDate: fallbackDate ?? "",
       events: [],
     };
@@ -56,7 +57,10 @@ function extractFromFile(filePath: string): LawVersionMeta | null {
 
   const latestEvent = events[events.length - 1]!;
   const status = latestEvent.kind === "废止" ? "已废止" : computeEffectiveStatus(events.map(e => e.date));
-  return { name, status, promulgatedDate: latestEvent.date, events };
+  // 废止事件是法律失效时间点，不应作为「最近一版公布日期」——取最近的非废止事件
+  //（公布/修正/修订）日期，供版本定位/取代引用。
+  const latestPromulgated = [...events].reverse().find(e => e.kind !== "废止")?.date ?? "";
+  return { name, status, promulgatedDate: latestPromulgated, events };
 }
 
 function main(): void {

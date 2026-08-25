@@ -2,7 +2,8 @@ import type { SatiToolDefinition } from "../../tool/protocol/types.js";
 import { resolveKnowledgeDbPaths } from "../config.js";
 import { LegalSearchEngine, type LegalSearchOptions } from "./legal-search.js";
 import { KnowledgeLawSearch } from "./knowledge-law-search.js";
-import type { LawRecord, LegalSearchSource } from "./types.js";
+import { computeEffectiveStatus, loadLawVersionMeta, type LawVersionMeta } from "./version-meta.js";
+import type { LawRecord, LawStatus, LegalSearchSource } from "./types.js";
 
 /**
  * law_search — 中国法律法规全文检索。
@@ -63,8 +64,34 @@ function truncateContent(content: string, maxChars = 4000): string {
   return `${content.slice(0, maxChars)}\n…（截断，共 ${content.length} 字）`;
 }
 
+/** 离线版本沿革 meta 缓存（构造期加载一次，不在请求路径读盘；缺失/损坏降级空 map）。 */
+let versionMetaCache: Map<string, LawVersionMeta> | null = null;
+
+function getVersionMeta(): Map<string, LawVersionMeta> {
+  if (versionMetaCache === null) versionMetaCache = loadLawVersionMeta();
+  return versionMetaCache;
+}
+
+/**
+ * 版本状态标注：按位置（computeEffectiveStatus）+ 失效标志 + 离线 meta 权威覆盖。
+ *
+ * 优先级：meta 文件判定（离线治理，权威） > expired 失效标志（laws-full 硬数据）
+ * > 版本位置（查询结果动态判定，仅同名多版本时有值）。单版本非过期且无 meta
+ * 时返回 undefined（不标，避免噪音）。
+ */
+function resolveVersionStatus(
+  position: LawStatus | undefined,
+  expired: number,
+  metaStatus: LawStatus | undefined,
+): LawStatus | undefined {
+  if (metaStatus === "已废止" || metaStatus === "待核验") return metaStatus;
+  if (expired === 1) return "已废止";
+  return position;
+}
+
 export function createLawSearchTool(
   getEngineFn: () => { engine: LegalSearchSource; dbPath: string } | null = getEngine,
+  getVersionMetaFn: () => Map<string, LawVersionMeta> = getVersionMeta,
 ): SatiToolDefinition<LawSearchToolInput, LawSearchToolOutput> {
   return {
     name: "law_search",
@@ -129,9 +156,10 @@ export function createLawSearchTool(
       const limit = Math.min(Math.max(input.limit ?? 5, 1), 20);
       const options: LegalSearchOptions = { limit, level: input.level, category: input.category };
 
-      // 优先精确名称匹配（结果中保持该法律在前）
+      // 优先精确名称匹配（结果中保持该法律在前）。
+      // 搜索结果按不同法律名配额取数（limit 即配额；多取的行经 seen 去重丢弃）。
       const byName = input.query.length >= 2 ? engine.findByName(input.query, 3) : [];
-      const results = engine.search(input.query, { ...options, limit: limit + byName.length });
+      const results = engine.search(input.query, options);
 
       // 精确名命中按 name 分组：同名多版本（如 laws-full 多版本库）标注
       // status/supersededBy（A2 版本沿革——输出"当前版本/历史版本"）；单版本不标避免噪音。
@@ -142,31 +170,41 @@ export function createLawSearchTool(
         byNameGroups.get(key)!.push({ ...r, content: r.content ? truncateContent(r.content) : undefined });
       }
 
+      const versionMeta = getVersionMetaFn();
       const merged: Array<LawRecord & { snippet?: string }> = [];
       const seen = new Set<string>();
+      // 「不同法律名」配额：同名多版本不挤占不同法律（同名全部版本都展示，
+      // 保留版本沿革价值，但每个 name 只占 1 席配额——不同法律数 ≤ limit）。
+      let nameCount = 0;
       for (const [name, versions] of byNameGroups) {
-        if (seen.has(name) || merged.length >= limit) continue;
+        if (seen.has(name) || nameCount >= limit) continue;
         seen.add(name);
+        nameCount += 1;
         versions.sort((a, b) => (b.publish ?? "").localeCompare(a.publish ?? ""));
+        const metaStatus = versionMeta.get(name)?.status;
+        const dates = versions.map(v => v.publish ?? "");
         const latestLabel = versions[0]!.publish ? `${name}（${versions[0]!.publish} 版）` : name;
-        versions.forEach((r, i) => {
-          if (merged.length >= limit) return;
-          if (versions.length > 1 && i > 0) {
-            merged.push({ ...r, status: "已被修订", supersededBy: latestLabel });
-          } else if (versions.length > 1) {
-            merged.push({ ...r, status: "现行有效" });
-          } else {
-            merged.push(r);
-          }
+        versions.forEach(r => {
+          // 位置状态经 computeEffectiveStatus 判定（生产接线，收口内联重复）；
+          // 单版本时 position 为 undefined（不标，避免噪音）。
+          const position = versions.length > 1 ? computeEffectiveStatus(dates, r.publish ?? "") : undefined;
+          const status = resolveVersionStatus(position, r.expired, metaStatus);
+          const base = status === undefined ? r : { ...r, status };
+          merged.push(status === "已被修订" ? { ...base, supersededBy: latestLabel } : base);
         });
       }
 
-      // 全文检索命中：按 name 去重保留最新版（现状），跳过已由精确名引入的。
+      // 全文检索命中：按 name 去重保留最新版（现状），跳过已由精确名引入的；
+      // 命中过期/已废止法律时补失效标注（不硬过滤，标给模型判断）。
       for (const r of results) {
-        if (merged.length >= limit) break;
+        if (nameCount >= limit) break;
         if (seen.has(r.name)) continue;
         seen.add(r.name);
-        merged.push({ ...r, content: r.content ? truncateContent(r.content) : undefined });
+        nameCount += 1;
+        const metaStatus = versionMeta.get(r.name)?.status;
+        const status = resolveVersionStatus(undefined, r.expired, metaStatus);
+        const base = status === undefined ? r : { ...r, status };
+        merged.push({ ...base, content: r.content ? truncateContent(r.content) : undefined });
       }
 
       const output: LawSearchToolOutput = {

@@ -80,6 +80,13 @@ test("parseCnNumber：千位组合", () => {
   assert.equal(parseCnNumber("一千零一"), 1001);
 });
 
+test("parseCnNumber：〇/两 归一（与 article-parser 委托对齐）", () => {
+  assert.equal(parseCnNumber("〇"), 0);
+  assert.equal(parseCnNumber("两"), 2);
+  assert.equal(parseCnNumber("两百"), 200);
+  assert.equal(parseCnNumber("两百零五"), 205);
+});
+
 test("parseCnNumber：非法输入返回 null", () => {
   assert.equal(parseCnNumber("abc"), null);
   assert.equal(parseCnNumber("十二abc"), null);

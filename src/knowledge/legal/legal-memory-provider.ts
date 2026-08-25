@@ -157,7 +157,16 @@ export class LegalMemoryProvider implements MemoryResolver {
 
     const lines = merged.map(result => {
       const content = result.content ? this.truncate(result.content) : "";
-      return `- [${result.level}] ${result.name}（${result.categoryName ?? "未分类"}）\n  ${content}`;
+      // 失效/地方性法规标注：已废止/已被修订 → 已失效（带取代版本）；
+      // expired=1（legacy 硬数据）无 status 时派生已废止；地方性法规 → 需人工复核。
+      const flags: string[] = [];
+      const status = result.status ?? (result.expired === 1 ? "已废止" : undefined);
+      if (status === "已废止" || status === "已被修订") {
+        flags.push(`已失效（${status}${result.supersededBy ? `，由 ${result.supersededBy}取代` : ""}）`);
+      }
+      if (result.localRegulation) flags.push("地方性法规，需人工复核");
+      const suffix = flags.length > 0 ? `【${flags.join("；")}】` : "";
+      return `- [${result.level}] ${result.name}（${result.categoryName ?? "未分类"}）${suffix}\n  ${content}`;
     });
     const blocks = [`<law-database>\n${lines.join("\n")}\n</law-database>`];
 

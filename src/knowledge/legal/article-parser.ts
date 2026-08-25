@@ -6,8 +6,11 @@
  * 本模块在 Sati 侧把合并块按「第N条」行首重新切成单条，并归一化条号
  * （阿拉伯/中文两套 id + 修复"第第一条"缺陷），供检索结果定位到条而非整篇。
  *
- * 纯函数、零依赖，可独立单测。
+ * 纯函数；中文数字解析委托 rule/runtime/text-utils 的 parseCnNumber（单向依赖，
+ * 无模块循环），消除重复实现。
  */
+
+import { parseCnNumber } from "../../rule/runtime/text-utils.js";
 
 /** 中文数字字符集（含 零/〇/两/两 与阿拉伯数字，用于条款号匹配）。 */
 const CN_DIGITS = "零〇一二两三四五六七八九十百千0-9";
@@ -18,47 +21,14 @@ const ARTICLE_HEADING_RE = new RegExp(`^第([${CN_DIGITS}]+)条(?:之([${CN_DIGI
 /** 归一化用：剥离"第"前缀后的条号（如 "一条" / "一百二十条之一"）。 */
 const ARTICLE_ID_RE = new RegExp(`^\\s*([${CN_DIGITS}]+)\\s*条(?:之\\s*([${CN_DIGITS}]+))?$`);
 
-const CN_CHAR_VALUES: Readonly<Record<string, number>> = {
-  零: 0,
-  〇: 0,
-  一: 1,
-  二: 2,
-  两: 2,
-  三: 3,
-  四: 4,
-  五: 5,
-  六: 6,
-  七: 7,
-  八: 8,
-  九: 9,
-};
-
-const CN_UNIT_VALUES: Readonly<Record<string, number>> = {
-  十: 10,
-  百: 100,
-  千: 1000,
-};
-
-/** 中文数字转阿拉伯（支持 零~九 + 十/百/千 组合；"十一"=11、"一百二十三"=123、"十"=10）。 */
+/**
+ * 中文数字转阿拉伯（支持 零~九 + 十/百/千 组合；"十一"=11、"一百二十三"=123、"十"=10）。
+ * 委托 rule/runtime/text-utils 的 parseCnNumber（同一套中文数字解析，消除重复实现）；
+ * 含无法识别字符（如 "万"）时 fail-loud 返回 NaN，不静默截断。
+ */
 export function cnToArabic(value: string): number {
-  if (/^\d+$/.test(value)) return Number(value);
-  let total = 0;
-  let current = 0;
-  let hasValue = false;
-  for (const ch of value) {
-    const digit = CN_CHAR_VALUES[ch];
-    const unit = CN_UNIT_VALUES[ch];
-    if (digit !== undefined) {
-      current = digit;
-      hasValue = true;
-    } else if (unit !== undefined) {
-      if (!hasValue) current = 1; // 十/百/千 前无数字时视为 1 个单位（如 "十一" 的 "十"）
-      total += current * unit;
-      current = 0;
-      hasValue = false;
-    }
-  }
-  return total + current;
+  const parsed = parseCnNumber(value);
+  return parsed === null ? NaN : parsed;
 }
 
 export type ArticleHeading = {

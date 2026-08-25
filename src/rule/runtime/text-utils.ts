@@ -79,8 +79,10 @@ export function hasNegationContext(text: string, matchStart: number, options?: N
 
 const CN_DIGITS: Record<string, number> = {
   零: 0,
+  〇: 0,
   一: 1,
   二: 2,
+  两: 2,
   三: 3,
   四: 4,
   五: 5,

@@ -9,9 +9,11 @@
  *   - computeEffectiveStatus：判定某版本在已知版本序列中的效力状态（纯函数）；
  *   - loadLawVersionMeta：运行时加载 meta 缓存文件（缺失/损坏优雅降级为空 map）。
  *
- * 检索侧"同名多版本命中"的 status/supersededBy 标注由调用方用
- * computeEffectiveStatus 完成（查询结果即版本列表，无需 meta 文件）；
- * 版本时间线（events）供模型判断法律修订历史。
+ * 检索侧（law-search-tool）同名多版本命中时调用 computeEffectiveStatus 判定
+ * 版本位置状态（现行有效/已被修订），并叠加 expired 失效标志与
+ * loadLawVersionMeta 的 meta 权威状态（已废止/待核验）完成 status 标注；
+ * meta 文件缺失时优雅降级为纯动态标注。版本时间线（events）供模型判断
+ * 法律修订历史。
  *
  * 纯函数、零依赖，可独立单测。
  */

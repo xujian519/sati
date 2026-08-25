@@ -22,10 +22,18 @@ test("cnToArabic: 单字数字与十/百/千组合", () => {
   assert.equal(cnToArabic("一千"), 1000);
 });
 
-test("cnToArabic: 阿拉伯数字原样转换、零/〇归一", () => {
+test("cnToArabic: 阿拉伯数字原样转换、零/〇/两归一", () => {
   assert.equal(cnToArabic("120"), 120);
   assert.equal(cnToArabic("零"), 0);
   assert.equal(cnToArabic("〇"), 0);
+  assert.equal(cnToArabic("两"), 2);
+});
+
+test("cnToArabic: 未知字符 fail-loud（NaN，不静默截断）", () => {
+  // 委托 parseCnNumber 后 "万/亿" 等未知字符不再被静默跳过（旧实现 "一万"→1）。
+  assert.ok(Number.isNaN(cnToArabic("一万")));
+  assert.ok(Number.isNaN(cnToArabic("三千万")));
+  assert.ok(Number.isNaN(cnToArabic("十亿")));
 });
 
 // ---------------------------------------------------------------------------

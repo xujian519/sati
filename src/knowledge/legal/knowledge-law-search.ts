@@ -67,6 +67,15 @@ type DocChunkRow = {
   fts_rank?: number | null;
 };
 
+/** 基础列（documents d + 最长 chunk c 联查；content 为原始存储，JS 层 decompressChunk 解压）。 */
+const DOC_COLUMNS = `d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date, c.content AS content, c.heading AS heading, c.char_count`;
+
+/** LIKE 降级路径列（content 经 sati_uncompress 解压匹配语义——LIKE 路径低频）。 */
+const LIKE_COLUMNS = `d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date, sati_uncompress(c.content) AS content, c.heading AS heading, c.char_count`;
+
+/** FTS 路径列（content 留空，命中 chunk 经 (document_id, chunk_index) 延迟回源解压；追加 bm25 分数）。 */
+const FTS_COLUMNS = `d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date, NULL AS content, c.heading AS heading, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank`;
+
 const FETCH_MULTIPLIER = 3;
 
 export class KnowledgeLawSearch implements LegalSearchSource {
@@ -104,8 +113,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     // SC 魔数 gzip BLOB），JS 层 decompressChunk 解压——绕开 node:sqlite JS UDF
     // 的 ~4ms/次边界开销；WHERE 的 sati_uncompress 仅匹配语义（LIKE 降级路径低频）。
     this.stmtSearchLike = this.db.prepare(`
-      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
-             c.content AS content, c.heading AS heading, c.char_count
+      SELECT ${DOC_COLUMNS}
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -121,8 +129,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     if (this.hasFts) {
       try {
         this.stmtSearchFts = this.db.prepare(`
-          SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
-                 NULL AS content, c.heading AS heading, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
+          SELECT ${FTS_COLUMNS}
           FROM docs_fts
           JOIN chunks c ON c.id = docs_fts.rowid
           JOIN documents d ON d.id = c.document_id
@@ -135,8 +142,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       }
     }
     this.stmtFindByName = this.db.prepare(`
-      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
-             c.content AS content, c.heading AS heading, c.char_count
+      SELECT ${DOC_COLUMNS}
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -144,8 +150,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       LIMIT ?
     `);
     this.stmtGetById = this.db.prepare(`
-      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
-             c.content AS content, c.heading AS heading, c.char_count
+      SELECT ${DOC_COLUMNS}
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -153,8 +158,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     `);
     // 按 (document_id, chunk_index) 取命中 chunk（FTS 延迟解压回源）。
     this.stmtGetChunkAt = this.db.prepare(`
-      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
-             c.content AS content, c.heading AS heading, c.char_count
+      SELECT ${DOC_COLUMNS}
       FROM documents d
       JOIN chunks c ON c.document_id = d.id AND c.chunk_index = ?
       WHERE d.id = ?
@@ -216,8 +220,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     const placeholders = unique.map(() => "?").join(", ");
     const rows = this.db
       .prepare(`
-        SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
-               c.content AS content, c.heading AS heading, c.char_count
+        SELECT ${DOC_COLUMNS}
         FROM documents d
         JOIN chunks c ON c.id = (
           SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
@@ -276,8 +279,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       return this.stmtSearchFts!.all(match, limit) as DocChunkRow[];
     }
     const sql = `
-      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
-             NULL AS content, c.heading AS heading, c.chunk_index, c.char_count, bm25(docs_fts) AS fts_rank
+      SELECT ${FTS_COLUMNS}
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
@@ -295,8 +297,7 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       return this.stmtSearchLike.all(pattern, pattern, limit) as DocChunkRow[];
     }
     let sql = `
-      SELECT d.id AS document_id, d.title, d.level, d.source, d.publish_date AS publish_date,
-             sati_uncompress(c.content) AS content, c.heading AS heading, c.char_count
+      SELECT ${LIKE_COLUMNS}
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
