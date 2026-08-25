@@ -231,6 +231,7 @@ export class BlueBubblesChannel implements ChannelAdapter {
         signal: AbortSignal.timeout(120_000),
       });
       if (!res.ok) {
+        // 错误响应体非 JSON：回退空对象，错误信息用 statusText（fail-safe）。
         const raw: unknown = await res.json().catch(() => ({}));
         const err =
           typeof raw === "object" && raw !== null

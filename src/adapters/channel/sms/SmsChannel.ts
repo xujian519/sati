@@ -156,6 +156,7 @@ export class SmsChannel implements ChannelAdapter {
         params = Object.fromEntries(new URLSearchParams(bodyText));
       }
     } catch {
+      // 请求体既非合法 JSON 也非表单编码：回 400，拒绝该请求（fail-closed）。
       res.statusCode = 400;
       res.end("Bad Request");
       return;
@@ -199,6 +200,7 @@ export class SmsChannel implements ChannelAdapter {
       const b = Buffer.from(signature);
       return a.length === b.length && timingSafeEqual(a, b);
     } catch {
+      // 签名非合法 base64 或长度不一时 timingSafeEqual 抛错：一律判定校验失败（保守拒绝）。
       return false;
     }
   }

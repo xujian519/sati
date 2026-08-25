@@ -128,7 +128,7 @@ export class SignalChannel implements ChannelAdapter {
           headers: { Accept: "text/event-stream, application/json, */*" },
         });
         if (!res.ok) {
-          this.logger?.error?.(`signal: receive HTTP ${res.status}: ${await res.text().catch(() => "")}`);
+          this.logger?.error?.(`signal: receive HTTP ${res.status}: ${await res.text().catch(() => "")}`); // 读取失败响应体失败→空串，仅影响日志
           await this.sleepBackoff(signal);
           continue;
         }
@@ -169,6 +169,7 @@ export class SignalChannel implements ChannelAdapter {
     try {
       data = JSON.parse(payload) as Record<string, unknown>;
     } catch {
+      // SSE 行非 JSON：跳过该行，其余行照常解析（fail-open）。
       return;
     }
 
@@ -278,6 +279,7 @@ export class SignalChannel implements ChannelAdapter {
           body: JSON.stringify(body),
         });
         if (!res.ok) {
+          // 读取错误响应体失败→空串，仅影响日志细节（fail-safe）。
           const raw = await res.text().catch(() => "");
           this.logger?.error?.(`signal: send HTTP ${res.status}: ${raw.slice(0, 500)}`);
           ok = false;

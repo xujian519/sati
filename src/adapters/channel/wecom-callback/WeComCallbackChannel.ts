@@ -201,7 +201,7 @@ export class WeComCallbackChannel implements ChannelAdapter {
       try {
         res.writeHead(500).end("error");
       } catch {
-        /* ignore */
+        // 写回错误响应失败：客户端已断开，无副作用（best-effort 收尾）。
       }
     }
   }
@@ -307,6 +307,7 @@ export class WeComCallbackChannel implements ChannelAdapter {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(60_000),
       });
+      // 错误响应体非 JSON：回退空对象，后续按 errcode 缺失走失败分支（fail-safe）。
       const raw = (await res.json().catch(() => ({}))) as { errcode?: number; errmsg?: string };
       const errcode = raw.errcode;
       if (!res.ok || (errcode != null && errcode !== 0)) {

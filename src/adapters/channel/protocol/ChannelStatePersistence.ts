@@ -35,6 +35,7 @@ export class ChannelStatePersistence {
       const raw = await readFile(filePath, "utf8");
       return JSON.parse(raw) as T;
     } catch {
+      // 读文件或 JSON 解析失败（首次启动/文件损坏）：视为无持久化状态，从头开始（fail-safe）。
       return undefined;
     }
   }
@@ -96,6 +97,7 @@ export class ChannelStatePersistence {
       await writeFile(tmpPath, JSON.stringify(state, null, 2), "utf8");
       await rename(tmpPath, filePath);
     } catch (err) {
+      // 临时文件已写入失败场景下的清理：unlink 失败无碍（临时文件由系统/下次写覆盖回收）。
       await unlink(tmpPath).catch(() => {});
       throw err;
     }
