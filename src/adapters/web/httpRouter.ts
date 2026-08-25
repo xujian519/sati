@@ -140,6 +140,7 @@ async function readJsonBody<T>(request: IncomingMessage): Promise<T | undefined>
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8")) as T;
   } catch {
+    // 请求体非 JSON：回 undefined，由调用方按非法 body 处理（fail-safe）。
     return undefined;
   }
 }

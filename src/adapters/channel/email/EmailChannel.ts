@@ -219,6 +219,7 @@ export class EmailChannel implements ChannelAdapter {
           const raw = msg.source instanceof Buffer ? msg.source.toString("utf8") : String(msg.source ?? "");
           text = this.extractPlainText(raw);
         } catch {
+          // 邮件正文解码失败：占位文本占位并向用户说明，不阻塞整轮 poll（fail-safe）。
           text = "[Could not decode message body]";
         }
 

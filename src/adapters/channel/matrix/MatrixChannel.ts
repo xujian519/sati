@@ -99,6 +99,7 @@ export class MatrixChannel implements ChannelAdapter {
       try {
         this.userId = (await this.client.getUserId()) ?? this.userIdOption ?? null;
       } catch {
+        // getUserId 失败：回退到 option 配置或 null，不阻塞启动（fail-safe）。
         this.userId = this.userIdOption ?? null;
       }
 

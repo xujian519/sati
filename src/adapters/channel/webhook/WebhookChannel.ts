@@ -209,6 +209,7 @@ export class WebhookChannel implements ChannelAdapter {
     try {
       body = JSON.parse(bodyText) as Record<string, unknown>;
     } catch {
+      // 非 JSON 载荷：保原始文本为 raw，后续 extractText 仍可尝试提取（fail-safe）。
       body = { raw: bodyText };
     }
 
@@ -346,6 +347,7 @@ export class WebhookChannel implements ChannelAdapter {
     try {
       return timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
     } catch {
+      // 签名非合法 hex 或长度不一时 timingSafeEqual 抛错：一律判定校验失败（保守拒绝）。
       return false;
     }
   }

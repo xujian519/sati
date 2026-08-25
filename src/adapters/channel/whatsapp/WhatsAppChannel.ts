@@ -125,6 +125,7 @@ export class WhatsAppChannel implements ChannelAdapter {
       const p = Number(u.port);
       return Number.isFinite(p) && p > 0 ? p : null;
     } catch {
+      // bridge URL 非法：取不到端口，交由默认端口处理（fail-safe）。
       return null;
     }
   }

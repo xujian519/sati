@@ -129,6 +129,7 @@ export class MattermostChannel implements ChannelAdapter {
     try {
       msg = JSON.parse(raw) as Record<string, unknown>;
     } catch {
+      // 非 JSON WebSocket 帧：跳过，等待下一条消息（fail-open）。
       return;
     }
 
@@ -141,6 +142,7 @@ export class MattermostChannel implements ChannelAdapter {
     try {
       post = JSON.parse(dataStr) as Record<string, unknown>;
     } catch {
+      // post 字段非 JSON：跳过该条 posted 事件（fail-open）。
       return;
     }
 
@@ -279,6 +281,7 @@ export class MattermostChannel implements ChannelAdapter {
     try {
       return JSON.parse(text) as unknown;
     } catch {
+      // 非 JSON 响应体：返回原始文本，调用方按字符串处理（fail-safe）。
       return text;
     }
   }

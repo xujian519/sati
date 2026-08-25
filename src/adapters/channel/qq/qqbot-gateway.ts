@@ -304,6 +304,7 @@ export class QQBotGateway extends EventEmitter {
     if (this.tokenRefreshTimer) clearTimeout(this.tokenRefreshTimer);
     const refreshIn = (Number(data.expires_in) - 300) * 1000;
     this.tokenRefreshTimer = setTimeout(() => {
+      // 预刷新失败：下次调用 ensureAccessToken 时按过期重取，无需在此抛错（fail-safe）。
       void this.ensureAccessToken().catch(() => {});
     }, refreshIn);
   }
