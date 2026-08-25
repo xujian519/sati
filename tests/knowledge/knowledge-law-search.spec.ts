@@ -19,37 +19,57 @@ function createStore(): { search: KnowledgeLawSearch; dir: string } {
   db.exec(`
     CREATE TABLE documents (
       id TEXT PRIMARY KEY, source TEXT NOT NULL, doc_type TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent',
-      title TEXT NOT NULL, indexed_at TEXT NOT NULL, level TEXT, char_count INTEGER DEFAULT 0, chunk_count INTEGER DEFAULT 0
+      title TEXT NOT NULL, indexed_at TEXT NOT NULL, level TEXT, char_count INTEGER DEFAULT 0, chunk_count INTEGER DEFAULT 0, publish_date TEXT
     );
     CREATE TABLE chunks (
       id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT NOT NULL REFERENCES documents(id),
-      chunk_index INTEGER NOT NULL, chunk_type TEXT NOT NULL, content TEXT NOT NULL, char_count INTEGER DEFAULT 0
+      chunk_index INTEGER NOT NULL, chunk_type TEXT NOT NULL, content TEXT NOT NULL, char_count INTEGER DEFAULT 0, heading TEXT
     );
     CREATE VIRTUAL TABLE docs_fts USING fts5(title, content, module, domain, tags, tokenize='trigram', content='', contentless_delete=1);
   `);
   const insDoc = db.prepare(
-    `INSERT INTO documents (id, source, doc_type, title, indexed_at, level) VALUES (?, 'raw', ?, ?, '2026-01-01', ?)`,
+    `INSERT INTO documents (id, source, doc_type, title, indexed_at, level, publish_date) VALUES (?, 'raw', ?, ?, '2026-01-01', ?, ?)`,
   );
-  insDoc.run("law:专利法", "law_article", "中华人民共和国专利法", "法律");
-  insDoc.run("law:实施细则", "law_article", "中华人民共和国专利法实施细则", "行政法规");
+  insDoc.run("law:专利法", "law_article", "中华人民共和国专利法", "法律", "2020-10-17");
+  insDoc.run("law:实施细则", "law_article", "中华人民共和国专利法实施细则", "行政法规", "2023-12-11");
+  // A4：地方性法规文档（level=地方性法规）——应命中且带 localRegulation 标记，不删除
+  insDoc.run("law:北京市优化营商环境条例", "law_article", "北京市优化营商环境条例", "地方性法规", null);
   // 非法规文档（doc_type=case）：不应被 law_article 检索命中
-  insDoc.run("raw:无效复审决定:xx", "case", "某无效决定", null);
+  insDoc.run("raw:无效复审决定:xx", "case", "某无效决定", null, null);
   const insChunk = db.prepare(
-    `INSERT INTO chunks (document_id, chunk_index, chunk_type, content, char_count) VALUES (?, ?, 'text', ?, ?)`,
+    `INSERT INTO chunks (document_id, chunk_index, chunk_type, content, char_count, heading) VALUES (?, ?, 'text', ?, ?, ?)`,
   );
-  const c1 = insChunk.run("law:专利法", 0, "第一条 为了保护专利权人的合法权益，鼓励发明创造。", 30)
+  const c1 = insChunk.run(
+    "law:专利法",
+    0,
+    "第一条 为了保护专利权人的合法权益，鼓励发明创造。",
+    30,
+    "第一条 为了保护专利权人的合法权益，鼓励发明创造。",
+  ).lastInsertRowid as number;
+  const c2 = insChunk.run(
+    "law:专利法",
+    1,
+    "第二十六条 说明书应当对发明作出清楚、完整的说明。",
+    26,
+    "第二十六条 说明书应当对发明作出清楚、完整的说明。",
+  ).lastInsertRowid as number;
+  const c3 = insChunk.run("law:实施细则", 0, "本细则依据专利法制订，对专利申请与审查程序作出具体规定。", 33, null)
     .lastInsertRowid as number;
-  const c2 = insChunk.run("law:专利法", 1, "第二十六条 说明书应当对发明作出清楚、完整的说明。", 26)
-    .lastInsertRowid as number;
-  const c3 = insChunk.run("law:实施细则", 0, "本细则依据专利法制订，对专利申请与审查程序作出具体规定。", 33)
-    .lastInsertRowid as number;
-  insChunk.run("raw:无效复审决定:xx", 0, "决定正文内容", 7);
+  const c4 = insChunk.run(
+    "law:北京市优化营商环境条例",
+    0,
+    "本市优化营商环境工作坚持市场化、法治化、国际化原则。",
+    26,
+    null,
+  ).lastInsertRowid as number;
+  insChunk.run("raw:无效复审决定:xx", 0, "决定正文内容", 7, null);
   const insFts = db.prepare(
     `INSERT INTO docs_fts (rowid, title, content, module, domain, tags) VALUES (?, ?, ?, 'module', 'patent', NULL)`,
   );
   insFts.run(c1, "中华人民共和国专利法", "第一条 为了保护专利权人的合法权益，鼓励发明创造。");
   insFts.run(c2, "中华人民共和国专利法", "第二十六条 说明书应当对发明作出清楚、完整的说明。");
   insFts.run(c3, "中华人民共和国专利法实施细则", "本细则依据专利法制订，对专利申请与审查程序作出具体规定。");
+  insFts.run(c4, "北京市优化营商环境条例", "本市优化营商环境工作坚持市场化、法治化、国际化原则。");
   db.close();
   return { search: new KnowledgeLawSearch(dbPath), dir };
 }
@@ -70,6 +90,9 @@ test("knowledge-law-search: FTS 命中并按文档去重", t => {
   assert.equal(hits[0]!.name, "中华人民共和国专利法");
   assert.equal(hits[0]!.level, "法律");
   assert.ok(hits[0]!.content!.includes("说明书应当"), "content 应为命中/最长 chunk");
+  // A1：条款级命中应带出 article 字段（chunk.heading → 条款解析）
+  assert.equal(hits[0]!.article, "第二十六条");
+  assert.equal(hits[0]!.articleBase, "第26条");
 });
 
 test("knowledge-law-search: LIKE 降级打在内容表——contentless 虚表 LIKE 零结果陷阱回归", t => {
@@ -125,6 +148,9 @@ test("knowledge-law-search: getById/getByIds 按 documents.id 回源", t => {
   const byId = s.getById("law:专利法");
   assert.equal(byId?.name, "中华人民共和国专利法");
   assert.equal(byId?.level, "法律");
+  // A2：documents.publish_date 映射到 LawRecord.publish（双时间戳不丢失）
+  assert.equal(byId?.publish, "2020-10-17");
+  assert.equal(s.getById("law:实施细则")?.publish, "2023-12-11");
   const byIds = s.getByIds(["law:实施细则", "law:专利法", "不存在"]);
   assert.deepEqual(
     byIds.map(r => r.name),
@@ -139,8 +165,21 @@ test("knowledge-law-search: findByName 模糊查找与 count", t => {
     found.map(r => r.name),
     ["中华人民共和国专利法实施细则"],
   );
-  assert.equal(s.count(), 2, "仅统计 law_article 文档");
+  assert.equal(s.count(), 3, "仅统计 law_article 文档");
   assert.deepEqual(s.getCategories(), []);
+});
+
+test("knowledge-law-search: A4 地方性法规命中带 localRegulation 标记（标记不删除）", t => {
+  const s = withStore(t);
+  const hits = s.search("营商环境");
+  const local = hits.find(h => h.name === "北京市优化营商环境条例");
+  assert.ok(local, "地方性法规应命中（不删除，仅标记）");
+  assert.equal(local?.localRegulation, true);
+  assert.equal(local?.sourceConfidence, 0.6);
+  // 国家级法规不派生 localRegulation，来源置信度高
+  const national = s.getById("law:专利法");
+  assert.equal(national?.localRegulation, undefined);
+  assert.equal(national?.sourceConfidence, 0.95);
 });
 
 test("knowledge-law-search: 无 law_article 时 count 为 0 且 search 安全", t => {
@@ -148,8 +187,8 @@ test("knowledge-law-search: 无 law_article 时 count 为 0 且 search 安全", 
   const dbPath = join(dir, "knowledge.db");
   const db = new DatabaseSync(dbPath);
   db.exec(`
-    CREATE TABLE documents (id TEXT PRIMARY KEY, source TEXT NOT NULL, doc_type TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent', title TEXT NOT NULL, indexed_at TEXT NOT NULL, level TEXT, char_count INTEGER DEFAULT 0, chunk_count INTEGER DEFAULT 0);
-    CREATE TABLE chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT NOT NULL REFERENCES documents(id), chunk_index INTEGER NOT NULL, chunk_type TEXT NOT NULL, content TEXT NOT NULL, char_count INTEGER DEFAULT 0);
+    CREATE TABLE documents (id TEXT PRIMARY KEY, source TEXT NOT NULL, doc_type TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent', title TEXT NOT NULL, indexed_at TEXT NOT NULL, level TEXT, char_count INTEGER DEFAULT 0, chunk_count INTEGER DEFAULT 0, publish_date TEXT);
+    CREATE TABLE chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, document_id TEXT NOT NULL REFERENCES documents(id), chunk_index INTEGER NOT NULL, chunk_type TEXT NOT NULL, content TEXT NOT NULL, char_count INTEGER DEFAULT 0, heading TEXT);
   `);
   db.close();
   const s = new KnowledgeLawSearch(dbPath);

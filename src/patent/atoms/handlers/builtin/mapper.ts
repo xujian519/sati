@@ -23,6 +23,7 @@ import type { ClaimCoverageEntry, ClaimCoverageLevel, ClaimEmbodimentCoverage } 
 import { createLogger } from "../../../../telemetry/index.js";
 import { atomicWriteJson } from "../../../persist-utils.js";
 import { caseOutputsDir } from "../../../paths.js";
+import { dataBlock } from "../../../prompt-hygiene.js";
 import { callLlm, degraded, parseLlmJson, requireLlm } from "./llm.js";
 
 const logger = createLogger("claim-embodiment-mapper");
@@ -96,13 +97,9 @@ export class ClaimEmbodimentMapperHandler implements StageHandler {
       "  某权项无任何实施例支撑时输出空数组",
       "",
       "【权利要求草稿】",
-      "```",
-      claimsDraft.slice(0, 4000),
-      "```",
+      dataBlock(claimsDraft.slice(0, 4000)),
       "【技术交底书】",
-      "```",
-      sourceText.slice(0, 8000),
-      "```",
+      dataBlock(sourceText.slice(0, 8000)),
       "",
       "请严格输出 JSON：{ claims: [{ claimId, features: string[], embodimentRefs: string[] }] }。",
     ].join("\n");

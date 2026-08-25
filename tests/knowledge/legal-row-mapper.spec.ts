@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toRecord, toSearchResult, type LawRow } from "../../src/knowledge/legal/row-mapper.js";
+import { lawSourceConfidence, toRecord, toSearchResult, type LawRow } from "../../src/knowledge/legal/row-mapper.js";
 
 const row: LawRow = {
   id: "专利法_20201017",
@@ -38,4 +38,26 @@ test("toSearchResult: score = fts_rank", () => {
 test("toSearchResult: 无 fts_rank 时 score 回退 0", () => {
   const r = toSearchResult({ ...row, fts_rank: undefined });
   assert.equal(r.score, 0);
+});
+
+test("A4: 地方性法规行派生 localRegulation 标记 + 低来源置信度", () => {
+  const r = toRecord({ ...row, level: "地方性法规" });
+  assert.equal(r.localRegulation, true);
+  assert.equal(r.sourceConfidence, 0.6);
+});
+
+test("A4: 国家级法律不派生 localRegulation，来源置信度高", () => {
+  const r = toRecord(row);
+  assert.equal(r.localRegulation, undefined);
+  assert.equal(r.sourceConfidence, 0.95);
+});
+
+test("lawSourceConfidence: 法律层级确定性映射", () => {
+  assert.equal(lawSourceConfidence("宪法"), 1);
+  assert.equal(lawSourceConfidence("法律"), 0.95);
+  assert.equal(lawSourceConfidence("行政法规"), 0.9);
+  assert.equal(lawSourceConfidence("部门规章"), 0.85);
+  assert.equal(lawSourceConfidence("司法解释"), 0.8);
+  assert.equal(lawSourceConfidence("地方性法规"), 0.6);
+  assert.equal(lawSourceConfidence("其他"), 0.7);
 });

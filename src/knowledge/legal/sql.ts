@@ -46,9 +46,8 @@ export function buildLawSearchSql(kind: "fts" | "like", filter: LawSearchFilter)
         JOIN law l ON l.name = law_fts.name
         JOIN category c ON c.id = l.category_id
         WHERE law_fts MATCH ?
-          AND (l.expired = 0 OR l.expired IS NULL)
           ${filterSql}
-        ORDER BY l.publish DESC, bm25(law_fts) LIMIT ?`,
+        ORDER BY l.expired ASC, l.publish DESC, bm25(law_fts) LIMIT ?`,
       params: filterParams,
     };
   }
@@ -57,9 +56,8 @@ export function buildLawSearchSql(kind: "fts" | "like", filter: LawSearchFilter)
       FROM law l
       JOIN category c ON c.id = l.category_id
       WHERE (l.name LIKE ? ESCAPE '\\' OR l.content LIKE ? ESCAPE '\\')
-        AND (l.expired = 0 OR l.expired IS NULL)
         ${filterSql}
-      ORDER BY l.publish DESC, l."order" LIMIT ?`,
+      ORDER BY l.expired ASC, l.publish DESC, l."order" LIMIT ?`,
     params: filterParams,
   };
 }

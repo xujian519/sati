@@ -13,6 +13,7 @@ import { GraphBuilder, type GraphNode } from "../index.js";
 import { markDegraded } from "../degradation.js";
 import { getStateArray, getStateString } from "../state.js";
 import { globalStageHandlerRegistry, type StageHandlerRegistry } from "../../atoms/index.js";
+import { dataBlock } from "../../prompt-hygiene.js";
 import { handlerNode, llmNode, resolveInput, ruleGateNode } from "./shared.js";
 
 export type BuildNoveltyGraphOptions = {
@@ -99,7 +100,7 @@ const numericRangeNode: GraphNode = async ({ state, provider }) => {
     ranges.map((r, i) => `[${i + 1}] ${r}`).join("\n"),
     "",
     "【现有技术证据】",
-    priorArtText.slice(0, 4000) || "（无证据，标注 confidence 低）",
+    priorArtText.length > 0 ? dataBlock(priorArtText.slice(0, 4000)) : "（无证据，标注 confidence 低）",
     "",
     "请严格输出 JSON：assessments 为每个数值范围的 { range, category, disclosed, reasoning }。",
   ].join("\n");
@@ -171,10 +172,10 @@ export function buildNoveltyGraph(options: BuildNoveltyGraphOptions = {}): Graph
           "- 结论附置信度，回避绝对化表述",
           "",
           "【逐特征对比】",
-          compareResult.slice(0, 6000) || "（无对比结果）",
+          compareResult.trim().length > 0 ? dataBlock(compareResult.slice(0, 6000)) : "（无对比结果）",
           "",
           "【数值范围专项判定】",
-          numeric.slice(0, 4000) || "（无）",
+          numeric.trim().length > 0 ? dataBlock(numeric.slice(0, 4000)) : "（无）",
           "",
           `【证据覆盖】${coverage || "unknown"}`,
           "",

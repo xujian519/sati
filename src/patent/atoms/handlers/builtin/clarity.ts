@@ -32,6 +32,7 @@ import {
   type ClaritySignal,
   type ClarityScore,
 } from "../../../clarity/index.js";
+import { dataBlock } from "../../../prompt-hygiene.js";
 import { APPROVAL_GRANTED_KEY } from "./gate.js";
 import { callLlm, degraded, parseLlmJson, requireLlm } from "./llm.js";
 
@@ -148,9 +149,7 @@ export class ClarityGateHandler implements StageHandler {
       formatSignalsForPrompt(signals),
       "",
       "【技术交底书】",
-      "```",
-      text.slice(0, 8000),
-      "```",
+      dataBlock(text.slice(0, 8000)),
       "",
       "请严格输出 JSON：problem/solution/effect/enablement 为 0-1 分数，reasons 为各维给分理由（引用交底书原文）。",
     ].join("\n");

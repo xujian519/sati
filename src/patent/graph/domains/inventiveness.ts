@@ -20,6 +20,7 @@ import type { EdgeRouter, GraphNode } from "../types.js";
 import { globalStageHandlerRegistry, type StageHandlerRegistry } from "../../atoms/index.js";
 import { tryParseJson } from "../../llm-json.js";
 import { classifyIpc, IPC_DOMAINS, MULTI_CLASSIFY_MIN_CONFIDENCE } from "../../../knowledge/patent/ipc-classifier.js";
+import { dataBlock } from "../../prompt-hygiene.js";
 import { handlerNode, llmNode, resolveInput, ruleGateNode } from "./shared.js";
 import { checkCitations } from "./citation-check.js";
 
@@ -260,9 +261,7 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
           "- 提取技术特征，构建所属领域技术人员画像",
           "- 确定申请日/优先权日时间基准（如提供）",
           "- 记录发明人声称的技术效果（不以声称的问题为准）",
-          "```",
-          input.slice(0, 8000),
-          "```",
+          dataBlock(input.slice(0, 8000)),
           "请严格输出 JSON：{ features, field, filing_date, inventor_claimed_effect }。",
         ].join("\n");
       },
@@ -286,9 +285,7 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
           "- 三层检索式：精确层 → 扩展层 → 语义层",
           "- 含布尔表达式与 IPC 限定（如可推断）",
           "- 检索以申请日/优先权日为时间基准：如可推断申请日/优先权日，在检索式中加入 after:YYYYMMDD 或等效日期限定（只检索该日期之前公开的文献）",
-          "```",
-          parse.slice(0, 4000),
-          "```",
+          dataBlock(parse.slice(0, 4000)),
           "输出检索策略文本（至少 3 组检索式）。",
         ].join("\n");
       },
@@ -324,9 +321,9 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
               "- covered_features：已被检索结果覆盖的技术特征",
               "- missing_features：未被覆盖的关键技术特征（补检依据）",
               "【待评技术特征】",
-              parse.slice(0, 3000),
+              dataBlock(parse.slice(0, 3000)),
               "【检索结果摘要（含公开日）】",
-              priorArtText.slice(0, 4000) || "（无检索结果）",
+              priorArtText.length > 0 ? dataBlock(priorArtText.slice(0, 4000)) : "（无检索结果）",
               "",
               "请严格输出 JSON：{ adequate, covered_features, missing_features }。",
             ].join("\n");
@@ -363,11 +360,9 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
           "不得脱离检索结果自行选择；候选多时逐个试判。",
           "逐篇标注候选公开日（publication_date），并说明其是否早于申请日/优先权日——仅早于的才构成现有技术，可用于创造性评价。",
           ...(domainFocus.length > 0 ? ["", domainFocus] : []),
-          "```",
-          parse.slice(0, 4000),
-          "```",
+          dataBlock(parse.slice(0, 4000)),
           "【现有技术候选】",
-          priorArtText.slice(0, 6000) || "（无检索结果，基于内置知识推断）",
+          priorArtText.length > 0 ? dataBlock(priorArtText.slice(0, 6000)) : "（无检索结果，基于内置知识推断）",
           "",
           "请严格输出 JSON：{ document, technical_field, disclosed_features, rationale }。",
         ].join("\n");
@@ -392,11 +387,9 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
           "- 基于区别特征的技术效果客观确定实际解决的技术问题（不得包含解决手段）",
           "- 检查技术问题是否包含对区别特征的指引（事后诸葛亮风险）",
           ...(domainFocus.length > 0 ? ["", domainFocus] : []),
-          "```",
-          parse.slice(0, 4000),
-          "```",
+          dataBlock(parse.slice(0, 4000)),
           "【D1 最接近现有技术】",
-          closest.slice(0, 3000),
+          dataBlock(closest.slice(0, 3000)),
           "",
           "请严格输出 JSON：{ distinguishing_features, actual_technical_problem, effect_of_diff }。",
         ].join("\n");
@@ -425,11 +418,11 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
             "- teaching_away：是否存在反向教导",
             "引用规范：文档号 + 段落/特征描述，引用必须真实存在于检索结果，不得凭空捏造。",
             "【D1 最接近现有技术】",
-            closest.slice(0, 2000),
+            dataBlock(closest.slice(0, 2000)),
             "【区别特征与实际解决的技术问题】",
-            diff.slice(0, 2000),
+            dataBlock(diff.slice(0, 2000)),
             "【其他现有技术候选（除 D1 外）】",
-            priorArtText.slice(0, 6000) || "（无）",
+            priorArtText.length > 0 ? dataBlock(priorArtText.slice(0, 6000)) : "（无）",
             "",
             "请严格输出 JSON：{ candidate_documents, combinable, motivation, obstacles, teaching_away }。",
           ].join("\n");
@@ -455,14 +448,12 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
           "技术启示来源：改进动机/结合启示（D1+D2 能否结合、有无技术障碍）/公知常识/逻辑推理与有限试验。",
           "发明类型差异化：组合/选择/转用/要素变更/开拓性/改进发明。",
           ...(domainFocus.length > 0 ? ["", domainFocus] : []),
-          "```",
-          parse.slice(0, 3000),
-          "```",
+          dataBlock(parse.slice(0, 3000)),
           "【区别特征与实际解决的技术问题】",
-          diff.slice(0, 3000),
+          dataBlock(diff.slice(0, 3000)),
           "",
           "【D2 组合评估】",
-          combination.slice(0, 3000) || "（无组合评估）",
+          combination.trim().length > 0 ? dataBlock(combination.slice(0, 3000)) : "（无组合评估）",
           "",
           "请严格输出 JSON：{ obvious, motivation, evidence, dissenting_factors }。",
         ].join("\n");
@@ -485,9 +476,7 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
           "- 解决了长期渴望解决的技术问题",
           "- 克服了技术偏见",
           "- 商业成功（如有，须证明与发明特征有因果关系）",
-          "```",
-          parse.slice(0, 3000),
-          "```",
+          dataBlock(parse.slice(0, 3000)),
           "请严格输出 JSON：{ unexpected_effect, long_felt_need, technical_prejudice, commercial_success }。",
         ].join("\n");
       },
@@ -525,7 +514,7 @@ export function buildInventivenessGraph(options: BuildInventivenessGraphOptions 
           "- 结论标注置信度（high/medium/low），回避绝对化表述",
           ...(feedbackHistory.length > 0 ? ["", feedbackHistory] : []),
           "",
-          parts.join("\n").slice(0, 8000),
+          dataBlock(parts.join("\n").slice(0, 8000)),
           "",
           "请严格输出 JSON：{ inventive, confidence, key_rationale, report }。",
         ].join("\n");

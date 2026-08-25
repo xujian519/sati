@@ -29,7 +29,8 @@ function buildDb(setup: FtsSetup): string {
     INSERT INTO category (id, name, "order") VALUES (1, '民法商法', 1);
     INSERT INTO law VALUES
       ('L1','法律','专利法',NULL,'2020-10-17',0,1,NULL,NULL,'同样的发明创造只能授予一项专利权。',1),
-      ('L2','法律','著作权法',NULL,'2020-11-11',0,1,NULL,NULL,'著作权人享有发表权。',2);
+      ('L2','法律','著作权法',NULL,'2020-11-11',0,1,NULL,NULL,'著作权人享有发表权。',2),
+      ('L3','法律','专利法（1992）',NULL,'1992-09-04',1,1,NULL,NULL,'1992 年旧版专利法的规定。',3);
   `);
   if (setup === "fake") {
     // 普通表冒充 law_fts：FTS5 编译可用时 MATCH 会抛异常（模拟模块缺失场景）
@@ -109,7 +110,23 @@ describe("LegalSearchEngine FTS5 能力探测与降级", () => {
       const engine = new LegalSearchEngine(dbPath);
       const byName = engine.findByName("专利法", 3);
       assert.ok(byName.some(r => r.name === "专利法"));
-      assert.equal(engine.count(), 2);
+      assert.equal(engine.count(), 3);
+      engine.close();
+    } finally {
+      rmSync(dirname(dbPath), { recursive: true, force: true });
+    }
+  });
+
+  it("A2：已失效法规不硬过滤，降权排序（现行有效在前）", () => {
+    const dbPath = buildDb("none");
+    try {
+      const engine = new LegalSearchEngine(dbPath);
+      // LIKE 路径（无 law_fts）：已失效的 专利法（1992） 应可见但排后
+      const rows = engine.search("专利法", { limit: 5 });
+      const expiredRow = rows.find(r => r.expired === 1);
+      assert.ok(expiredRow, "已失效法规不应被硬过滤（降权而非删除）");
+      assert.equal(expiredRow?.name, "专利法（1992）");
+      assert.equal(rows[0]!.name, "专利法", "现行有效法规应排最前");
       engine.close();
     } finally {
       rmSync(dirname(dbPath), { recursive: true, force: true });

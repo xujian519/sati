@@ -23,8 +23,32 @@ export type LawRow = {
   fts_rank?: number | null;
 };
 
-/** 行 → LawRecord（null 列映射为 undefined）。 */
+/**
+ * 按法律层级派生来源置信度（0~1，确定性映射；A4 地方法规标记打样——
+ * 国家级上位法高、属地法规低，为后续检索置信度标注打样）。
+ */
+export function lawSourceConfidence(level: string): number {
+  switch (level) {
+    case "宪法":
+      return 1;
+    case "法律":
+      return 0.95;
+    case "行政法规":
+      return 0.9;
+    case "部门规章":
+      return 0.85;
+    case "司法解释":
+      return 0.8;
+    case "地方性法规":
+      return 0.6;
+    default:
+      return 0.7;
+  }
+}
+
+/** 行 → LawRecord（null 列映射为 undefined；A4 派生 localRegulation/sourceConfidence）。 */
 export function toRecord(row: LawRow): LawRecord {
+  const localRegulation = row.level === "地方性法规";
   return {
     id: row.id,
     level: row.level,
@@ -37,6 +61,8 @@ export function toRecord(row: LawRow): LawRecord {
     validFrom: row.valid_from ?? undefined,
     content: row.content ?? undefined,
     categoryName: row.category_name ?? undefined,
+    ...(localRegulation ? { localRegulation } : {}),
+    sourceConfidence: lawSourceConfidence(row.level),
   };
 }
 

@@ -10,6 +10,7 @@ import {
   getStateArray,
   getStateString,
 } from "../../handler.js";
+import { dataBlock } from "../../../prompt-hygiene.js";
 import { callLlm, degraded, parseLlmJson, requireLlm, resolveInputText } from "./llm.js";
 
 /** 查询串预览：超 80 字符截断并加省略号（用于检索结果摘要）。 */
@@ -104,9 +105,7 @@ export class KeywordsHandler implements StageHandler {
       "- 避免过于宽泛的常规词汇",
       "",
       "【分析摘要】",
-      "```",
-      input.slice(0, 8000),
-      "```",
+      dataBlock(input.slice(0, 8000)),
       "",
       '请严格输出 JSON：{ "keywords": ["关键词1", "关键词2", ...] }',
     ].join("\n");

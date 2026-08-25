@@ -27,6 +27,7 @@ import {
   type PinCiteCheckResult,
 } from "../../../claim-chart/runtime/pin-cite-validator.js";
 import { loadClaimChart, saveClaimChart } from "../../../claim-chart/runtime/store.js";
+import { dataBlock } from "../../../prompt-hygiene.js";
 import { callLlm, degraded, parseLlmJson, requireLlm, resolveInputText } from "./llm.js";
 
 export const claimChartAtom: Atom = {
@@ -272,12 +273,10 @@ export class ClaimChartHandler implements StageHandler {
       "你是专利权利要求分析专家。把权利要求拆分为编号要素，并逐要素映射到目标对象。",
       "",
       "【权利要求】",
-      "```",
-      claim.slice(0, 8000),
-      "```",
+      dataBlock(claim.slice(0, 8000)),
       "",
       "【目标对象】",
-      targetLines,
+      dataBlock(targetLines),
       "",
       "要求：",
       "- 要素编号为 数字+小写字母（1a/1b/1c…），按顺序连续",
