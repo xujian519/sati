@@ -581,6 +581,7 @@ export class WeComChannel implements ChannelAdapter {
     try {
       payload = JSON.parse(raw) as Record<string, unknown>;
     } catch {
+      // 非 JSON 帧：丢弃，不阻断后续消息处理（fail-safe）。
       return;
     }
 
@@ -1606,6 +1607,7 @@ async function validateWeComDeliverablePath(
   try {
     info = await stat(resolvedPath);
   } catch {
+    // 文件不存在/不可访问：拒绝作为附件投递（fail-safe）。
     return { ok: false, reason: "附件文件不存在。" };
   }
   if (!info.isFile()) {
@@ -1698,6 +1700,7 @@ function tryParseUrl(value: string): URL | undefined {
   try {
     return new URL(value);
   } catch {
+    // 非法 URL：返回 undefined，交由调用方按本地路径处理（fail-safe）。
     return undefined;
   }
 }

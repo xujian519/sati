@@ -77,7 +77,7 @@
 | C13 | src/patent evidence+problem+atoms | 26 文件（evidence 10 / problem 2 / atoms 14） | ✅ 2026-08-24 |
 | C14 | src/patent graph+claim-chart+document | ✅ 2026-08-24 |
 | C15 | src/patent data/nuo+figure+evaluate 其余 | ✅ 2026-08-24 |
-| C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ⬜ |
+| C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ✅ 2026-08-25 |
 | C17 | src/adapters 其余 18 渠道+protocol | ImLiveReplyController.ts 1016 | ⬜ |
 | C18 | src/knowledge | 44/7.1K；case-law、legal、kg-store、wiki | ⬜ |
 | C19 | src/router | 26/4.3K；RouterRuntime.ts 1258 | ⬜ |
@@ -135,6 +135,7 @@
 
 | 2026-08-24 | C13 | src/patent evidence+problem+atoms | P3 删除 engine.ts/date.ts 零消费类型 re-export（CredibilityLevel/DateReliability/DateSourceType）+ 连带未用 import 清理；readPriorArt 私有化（仅 llm.ts 内部使用）；5 处防御式无参 catch 补意图注释；search.ts 提取 previewQuery 去重查询串截断；P0/P1/P2 无；P3 记录不处理：3 处裸 console（receipt.ts ×2 / mapper.ts ×1）归 C39 横切治理 | 1（refactor） | ✅ |
 | 2026-08-24 | C14 | src/patent graph+claim-chart+document | P3 无参 catch 补意图注释 ×4（enablement.ts:483 / inventiveness.ts:610 / claim-chart store.ts:38 / document brandInjector.ts:64；state.ts:15、stylePreset.ts:51 已注释）；嵌套三元改 if/else ×1（graph/adapter.ts:120 主输出键序列化）+ 查表 ×1（claim-chart gap-detector.ts reason 文案提取 GAP_REASON_LABELS，与原内联三元逐字一致）；P2 记录不处理：validatePinCiteFormat/stripWhitespace 为同包或 chart.ts 消费的公共 export 保留、splitClaimSegments 仅同文件内消费但作公共 API 一致保留；P0/P1/P2 无行为缺陷；三模块横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME | 1（refactor） | ✅ |
+| 2026-08-25 | C16 | src/adapters 大渠道（wecom/weixin/feishu） | P3 无参 catch 补 fail-safe 意图注释 ×9（wecom 583/1608/1700、weixin 1215/1348、feishu 57/1101/1230/1245）；P0/P1/P2 无；三渠道整体质量高：零裸 console（weixin 3 处登录二维码横幅属 CLI 交互提示、保留）、零 any/@ts-expect-error、零 TODO/FIXME、零死代码/未使用导出 | 1（refactor） | ✅ |
 
 ### 日卡记录
 
