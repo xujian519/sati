@@ -10,6 +10,7 @@ import {
   getStateArray,
   getStateString,
 } from "../../handler.js";
+import { dataBlock } from "../../../prompt-hygiene.js";
 import { callLlm, degraded, parseLlmJson, requireLlm, resolveInputText } from "./llm.js";
 
 // ---------------------------------------------------------------------------
@@ -53,9 +54,7 @@ export class ExtractHandler implements StageHandler {
     const prompt = [
       `你是 ${domain} 领域的技术分析助手。任务：${extractionType}。`,
       "请从以下文本中提取结构化结果，严格输出 JSON：",
-      "```",
-      text.slice(0, 8000),
-      "```",
+      dataBlock(text.slice(0, 8000)),
     ].join("\n");
     const res = await callLlm(provider, "extract", prompt, { schema: EXTRACT_SCHEMA, temperature: 0 });
     if (!res.ok) return res.error;

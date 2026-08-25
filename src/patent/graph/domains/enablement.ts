@@ -12,6 +12,7 @@ import { GraphBuilder, type GraphNode, type GraphState } from "../index.js";
 import { getStateObject, getStateString } from "../state.js";
 import { checkEffectQuantification, checkNumericRangeCoverage, formatRange } from "../../spec/index.js";
 import { globalStageHandlerRegistry, type StageHandlerRegistry } from "../../atoms/index.js";
+import { dataBlock } from "../../prompt-hygiene.js";
 import { handlerNode, llmNode, resolveInput, ruleGateNode } from "./shared.js";
 
 export type BuildEnablementGraphOptions = {
@@ -330,9 +331,7 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
           missing || "（无缺失）",
           "",
           "请基于说明书相关章节复核结构完整性，并评估各章节实质内容是否满足要求：",
-          "```",
-          context,
-          "```",
+          dataBlock(context),
           "请严格输出 JSON：{ missing_sections, completeness_ok, notes }。",
         ].join("\n");
       },
@@ -348,9 +347,7 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
         return [
           "专利法 A26.3 充分公开审查——第二步：清楚性。",
           "检查：主题是否明确、用词是否准确、描述是否前后矛盾、技术方案是否混乱。",
-          "```",
-          context,
-          "```",
+          dataBlock(context),
           "请严格输出 JSON：{ issues（problem/location/severity）, clarity_ok }。",
         ].join("\n");
       },
@@ -366,7 +363,7 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
         const claim = resolveInput(state, ["claim", "text", "source_text", "spec", "input"]);
         const claimBlock =
           claim.trim().length > 0
-            ? ["", "【权利要求保护的技术方案（判断对象）】", claim.slice(0, 2000)].join("\n")
+            ? ["", "【权利要求保护的技术方案（判断对象）】", dataBlock(claim.slice(0, 2000))].join("\n")
             : "";
         return [
           "专利法 A26.3 充分公开审查——第三步：能够实现性。",
@@ -386,9 +383,7 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
           "- 技术效果可预期时无需实验数据（公知原理可推知、已知类似结构）；",
           "- 效果夸大通常不构成公开不充分（除非以夸大效果作为公开基础）。",
           prechecksBlock(state),
-          "```",
-          context,
-          "```",
+          dataBlock(context),
           claimBlock,
           "请严格输出 JSON：{ gaps（每项标注对应情形编号，如 §2.1.3(3)）, enablement_ok, skilled_person_assessment }。",
         ].join("\n");
@@ -415,7 +410,9 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
           `${getStateString(state, "technical_domain_name")}: ${getStateString(state, "domain_requirements")}`,
         ];
         const claimBlock =
-          claim.trim().length > 0 && claim !== state.text ? ["【权利要求】", claim.slice(0, 1500)].join("\n") : "";
+          claim.trim().length > 0 && claim !== state.text
+            ? ["【权利要求】", dataBlock(claim.slice(0, 1500))].join("\n")
+            : "";
         return [
           "综合三步审查，生成专利法 A26.3 充分公开审查报告：",
           "- 逐类问题（清楚性/完整性/能够实现性）标注位置、严重程度与改进建议",
@@ -423,14 +420,12 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
           "- 领域特殊要求（化学需实验证据、计算机需算法流程等）逐一核对",
           "- 结论附置信度（high/medium/low），回避绝对化表述",
           "",
-          parts.join("\n").slice(0, 8000),
+          dataBlock(parts.join("\n").slice(0, 8000)),
           claimBlock,
           prechecksBlock(state),
           "",
           "（说明书关键章节供复核）",
-          "```",
-          context,
-          "```",
+          dataBlock(context),
           "请严格输出 JSON：{ sufficiently_disclosed, confidence, key_rationale, report }。",
         ].join("\n");
       },

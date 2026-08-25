@@ -8,6 +8,7 @@
  * 不确定时输出 null 并附理由，禁止编造；候选经 RDKit 校验后选优。
  */
 
+import { dataBlock } from "../prompt-hygiene.js";
 import type { ChemicalKind } from "./types.js";
 
 /** 化学结构规范要点（静态注入，来源：化学实务常识）。 */
@@ -47,7 +48,7 @@ export type TextReviewResult = {
 
 function formatContext(claimContext: string | undefined): string {
   return claimContext && claimContext.trim().length > 0
-    ? `\n【权利要求/技术方案上下文】\n${claimContext.trim().slice(0, 4000)}`
+    ? `\n【权利要求/技术方案上下文】\n${dataBlock(claimContext.trim().slice(0, 4000))}`
     : "\n【权利要求/技术方案上下文】\n（未提供）";
 }
 
@@ -87,7 +88,7 @@ export function buildStep2Prompt(step1Description: string, claimContext: string 
     "你是一位资深化合物化学专家。请根据图片中的化学结构，提取其结构信息。",
     "",
     "【图片内容概述（Step1 判定）】",
-    step1Description,
+    dataBlock(step1Description),
     "",
     "【化学结构规范要点】",
     CHEMISTRY_SPEC_GUIDE,
@@ -134,7 +135,7 @@ export function buildNameToSmilesPrompt(name: string): string {
     "你是一位资深化合物化学专家。请将下面的化合物名称转换为 SMILES 结构。",
     "",
     "【化合物名称】",
-    name,
+    dataBlock(name),
     "",
     "【化学结构规范要点】",
     CHEMISTRY_SPEC_GUIDE,
@@ -182,13 +183,13 @@ export function buildTextReviewPrompt(text: string, formulas: string[], smilesTo
     "2. 转换：从文档片段中识别化合物名称（中文/英文/商品名，最多 5 个），并为每个名称给出 SMILES 候选（不确定时输出 null 并说明理由，禁止编造）。",
     "",
     "【文档片段】",
-    excerpt || "（空）",
+    excerpt.length > 0 ? dataBlock(excerpt) : "（空）",
     "",
     "【自动提取的分子式候选】",
-    formulas.length > 0 ? formulas.join("、") : "（无）",
+    formulas.length > 0 ? dataBlock(formulas.join("、")) : "（无）",
     "",
     "【自动提取的类 SMILES 候选】",
-    smilesTokens.length > 0 ? smilesTokens.join("、") : "（无）",
+    smilesTokens.length > 0 ? dataBlock(smilesTokens.join("、")) : "（无）",
     "",
     "【化学结构规范要点】",
     CHEMISTRY_SPEC_GUIDE,

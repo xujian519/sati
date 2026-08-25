@@ -11,6 +11,7 @@
  * 采用两步法：Step1 分类+整体理解，Step2 结构化提取+附图说明生成。
  */
 
+import { dataBlock } from "../prompt-hygiene.js";
 import type { FigureType } from "./types.js";
 import { formatSymbolsAsContext } from "./symbols/loader.js";
 
@@ -203,7 +204,7 @@ export type Step3Result = {
 
 function formatContext(claimContext: string | undefined): string {
   return claimContext && claimContext.trim().length > 0
-    ? `\n【权利要求/技术方案上下文】\n${claimContext.trim().slice(0, 4000)}`
+    ? `\n【权利要求/技术方案上下文】\n${dataBlock(claimContext.trim().slice(0, 4000))}`
     : "\n【权利要求/技术方案上下文】\n（未提供）";
 }
 
@@ -236,7 +237,7 @@ export function buildStep2Prompt(
     "",
     `附图编号：图${figureNumber}`,
     `附图类型：${figureType}`,
-    `整体描述：${overallDescription || "（未提供）"}`,
+    `整体描述：${overallDescription ? dataBlock(overallDescription) : "（未提供）"}`,
     "",
     "【专利附图规范要点】",
     FIGURE_SPEC_GUIDE,
@@ -267,7 +268,7 @@ export function buildStep3Prompt(
     "3. 尽力组织 SPICE 风格网表（netlist）。",
     "",
     `附图编号：图${figureNumber}`,
-    `整体描述：${overallDescription || "（未提供）"}`,
+    `整体描述：${overallDescription ? dataBlock(overallDescription) : "（未提供）"}`,
     formatContext(claimContext),
     "",
     "【电学符号标准集（GB/T 4728 简化，依据标准符号画法）】",

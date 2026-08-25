@@ -10,6 +10,7 @@ import {
   getStateArray,
   getStateString,
 } from "../../handler.js";
+import { dataBlock } from "../../../prompt-hygiene.js";
 import { callLlm, degraded, parseLlmJson, requireLlm } from "./llm.js";
 
 // ---------------------------------------------------------------------------
@@ -35,12 +36,9 @@ export class ReasoningHandler implements StageHandler {
     const explicitInput = getStateString(state, "reasoning_input").trim();
     const defaultPrompt = "基于以下工作流上下文，给出专业分析结论（如涉及法律判断，请附置信度与依据）：";
     const input = explicitInput.length > 0 ? explicitInput : formatStateForReasoning(state);
-    const prompt = [
-      explicitPrompt.length > 0 ? explicitPrompt : defaultPrompt,
-      "```",
-      input.slice(0, 8000),
-      "```",
-    ].join("\n");
+    const prompt = [explicitPrompt.length > 0 ? explicitPrompt : defaultPrompt, dataBlock(input.slice(0, 8000))].join(
+      "\n",
+    );
     const res = await callLlm(provider, "reasoning", prompt, { temperature: 0.2 });
     if (!res.ok) return res.error;
     return { reasoning_output: res.raw, conclusion: res.raw };
@@ -136,9 +134,7 @@ export class GroundednessHandler implements StageHandler {
       "- <0.6：原文未记载或仅能推断，属于提取幻觉",
       "",
       "【原始交底书】",
-      "```",
-      source.slice(0, 8000),
-      "```",
+      dataBlock(source.slice(0, 8000)),
       "",
       "【待评估特征】",
       featureLines,

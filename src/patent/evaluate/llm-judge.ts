@@ -8,6 +8,8 @@
  *   失败票跳过（≥1 有效票即判，fail-open）。
  */
 
+import { dataBlock } from "../prompt-hygiene.js";
+
 export type LlmJudgeOptions = {
   /** 打分次数（缺省 3，取中位数）。 */
   samples?: number;
@@ -171,11 +173,11 @@ function buildJudgePrompt(question: string, answer: string, expected: string | u
     rubric,
     "",
     "【题目】",
-    question.slice(0, 4000),
+    dataBlock(question.slice(0, 4000)),
     "",
-    expected !== undefined ? `【参考答案要点】\n${expected.slice(0, 2000)}\n` : "",
+    expected !== undefined ? `【参考答案要点】\n${dataBlock(expected.slice(0, 2000))}\n` : "",
     "【AI 产出】",
-    answer.slice(0, 6000),
+    dataBlock(answer.slice(0, 6000)),
     "",
     "请严格输出 JSON：{ score（0-1）, rationale }。",
   ].join("\n");

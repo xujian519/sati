@@ -17,6 +17,7 @@ import {
   checkSectionCompleteness,
   formatRange,
 } from "../../../spec/checks.js";
+import { dataBlock } from "../../../prompt-hygiene.js";
 import { callLlm, degraded, parseLlmJson, requireLlm } from "./llm.js";
 
 export const draftClaimsAtom: Atom = {
@@ -61,10 +62,8 @@ export class DraftClaimsHandler implements StageHandler {
       "- 与新颖性分析结论一致：区别特征应体现在独立权利要求中",
       "",
       "【分析结果】",
-      "```",
-      input.slice(0, 8000),
-      "```",
-      novelty.trim().length > 0 ? `【新颖性结论】\n${novelty.slice(0, 2000)}` : "",
+      dataBlock(input.slice(0, 8000)),
+      novelty.trim().length > 0 ? `【新颖性结论】\n${dataBlock(novelty.slice(0, 2000))}` : "",
       "",
       "请严格输出 JSON：claims 为权利要求逐条文本数组（第 1 条为独立权利要求），notes 为撰写说明。",
     ].join("\n");
@@ -289,17 +288,13 @@ export class DraftSpecHandler implements StageHandler {
       "5. 发明名称不超过 25 字",
       "",
       "【权利要求草稿】",
-      "```",
-      claims.trim().length > 0 ? claims.slice(0, 4000) : "（无，将按技术方案撰写）",
-      "```",
-      novelty.trim().length > 0 ? `【新颖性结论/区别特征】\n${novelty.slice(0, 2000)}` : "",
+      dataBlock(claims.trim().length > 0 ? claims.slice(0, 4000) : "（无，将按技术方案撰写）"),
+      novelty.trim().length > 0 ? `【新颖性结论/区别特征】\n${dataBlock(novelty.slice(0, 2000))}` : "",
       "【技术交底书分析】",
-      "```",
-      input.slice(0, 6000),
-      "```",
+      dataBlock(input.slice(0, 6000)),
       // 断言安全的证据型修订提示（上一轮 slop-gate 的实际发现，不含分数/通过线；
       // 仅在自动回退重跑时存在——重试提示基于证据而非公开答案，见 retry-hints.ts）。
-      ...(hint.trim().length > 0 ? ["【上一轮评审意见（仅修订参考）】", "```", hint, "```", ""] : []),
+      ...(hint.trim().length > 0 ? ["【上一轮评审意见（仅修订参考）】", dataBlock(hint), ""] : []),
       "",
       '请严格输出 JSON：title 为发明名称，sections 为章节数组（name 取"技术领域/背景技术/发明内容/附图说明/具体实施方式/摘要"之一，content 为章节正文）。',
     ].join("\n");
