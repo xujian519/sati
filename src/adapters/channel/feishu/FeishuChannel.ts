@@ -55,6 +55,7 @@ async function loadLarkSdk(): Promise<LarkSdkLike | null> {
     const mod = await import("@larksuiteoapi/node-sdk");
     Lark = ((mod as { default?: unknown }).default ?? mod) as LarkSdkLike;
   } catch {
+    // 可选依赖加载失败：返回 null，触发 webhook 降级（fail-safe）。
     Lark = null;
   }
   return Lark;
@@ -1099,6 +1100,7 @@ export class FeishuChannel implements ChannelAdapter {
     try {
       raw = JSON.parse(body) as Record<string, unknown>;
     } catch {
+      // 请求体非合法 JSON：忽略事件（fail-safe）。
       return { kind: "ignore" };
     }
 
@@ -1228,6 +1230,7 @@ function extractFeishuMessageText(messageType: string | undefined, content: stri
     const parsed = JSON.parse(content) as { text?: string };
     return parsed.text ?? "";
   } catch {
+    // 消息内容非合法 JSON：原样返回文本（fail-safe）。
     return content;
   }
 }
@@ -1243,6 +1246,7 @@ function parseJsonObject(content: string | undefined): Record<string, unknown> {
     const parsed = JSON.parse(content) as unknown;
     return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
   } catch {
+    // 内容非合法 JSON：返回空对象（fail-safe）。
     return {};
   }
 }

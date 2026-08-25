@@ -1213,6 +1213,7 @@ function guessMimeTypeFromUrl(url: string, fallback?: string): string | undefine
   try {
     return guessMimeTypeFromName(new URL(url).pathname) ?? fallback;
   } catch {
+    // 非法 URL：回退 fallback，不阻断附件处理（fail-safe）。
     return fallback;
   }
 }
@@ -1346,6 +1347,7 @@ function safeBase64DecodedLength(value: string): number | undefined {
   try {
     return Buffer.from(value, "base64").length;
   } catch {
+    // base64 解析失败：返回 undefined，密钥长度诊断跳过（fail-safe）。
     return undefined;
   }
 }
