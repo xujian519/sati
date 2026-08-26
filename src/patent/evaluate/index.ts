@@ -55,3 +55,52 @@ export {
   evaluateSingleText,
   type GraphRunnerOptions,
 } from "./runner.js";
+export {
+  parseRubric,
+  aggregateRubricScore,
+  type Rubric,
+  type RubricItem,
+  type RubricBehavior,
+  type RubricParseResult,
+} from "./rubric.js";
+export {
+  readScoreboard,
+  appendScoreboard,
+  validateScoreboardRecord,
+  type ScoreboardRecord,
+  type ScoreboardCase,
+  type ScoreboardRun,
+  type ScoreboardReadResult,
+  type ScoreboardAppendResult,
+} from "./scoreboard.js";
+export {
+  parseBenchmarkConfig,
+  benchmarkPaths,
+  type BenchmarkConfig,
+  type BenchmarkEvalRuntime,
+  type BenchmarkParseResult,
+  type BenchmarkPaths,
+} from "./benchmark.js";
+export {
+  packSnapshot,
+  collectSnapshotFiles,
+  isExcludedSnapshotEntry,
+  type SnapshotFile,
+  type SnapshotResult,
+} from "./snapshot.js";
+export {
+  runBaseline,
+  listCaseDirs,
+  buildJudgePrompt,
+  parseVerdicts,
+  diffScoreboards,
+  shouldAcceptCandidate,
+  evaluateCandidate,
+  type BaselineGenerate,
+  type BaselineJudge,
+  type RunBaselineArgs,
+  type BaselineResult,
+  type CaseDiff,
+  type ScoreboardDiff,
+  type StrictAcceptDecision,
+} from "./evolve.js";
