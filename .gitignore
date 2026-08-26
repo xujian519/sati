@@ -165,6 +165,9 @@ third-party/
 # Project-local Sati overrides (per-project .sati/sati.yaml etc)
 .sati/
 
+# Sati 项目看板数据（每项目根的运行时状态，随使用频繁变化，不入库）
+/kanban-board.json
+
 # Cursor IDE local rules, skills, and workspace metadata
 .cursor/
 
