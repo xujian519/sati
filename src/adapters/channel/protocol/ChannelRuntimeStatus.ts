@@ -46,6 +46,7 @@ export function readChannelRuntimeStatusSnapshot(pilotHome: string): ChannelRunt
       channels: parsed.channels && typeof parsed.channels === "object" ? parsed.channels : {},
     };
   } catch {
+    // 快照文件损坏/JSON 解析失败：读取方降级为空快照上报，避免整条链路失败（fail-safe）。
     return { updatedAt: new Date(0).toISOString(), channels: {} };
   }
 }

@@ -201,6 +201,7 @@ export class ApiServerChannel implements ChannelAdapter {
     try {
       body = JSON.parse(bodyText) as Record<string, unknown>;
     } catch {
+      // 请求体非合法 JSON：回 400 invalid_json（fail-closed）。
       sendJson(
         res,
         400,

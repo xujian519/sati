@@ -126,6 +126,7 @@ export class DingTalkChannel implements ChannelAdapter {
     try {
       data = JSON.parse(msg.data) as Record<string, unknown>;
     } catch {
+      // 非 JSON 载荷：跳过该条下行消息，其余消息照常处理（fail-open）。
       return;
     }
 

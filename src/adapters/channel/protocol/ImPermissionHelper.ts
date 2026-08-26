@@ -72,6 +72,7 @@ function formatPayload(payload: unknown): string {
   try {
     text = JSON.stringify(payload, null, 2) ?? String(payload);
   } catch {
+    // 循环引用等不可序列化 payload：JSON.stringify 抛错，回退 String(payload) 展示（fail-safe）。
     text = String(payload);
   }
 

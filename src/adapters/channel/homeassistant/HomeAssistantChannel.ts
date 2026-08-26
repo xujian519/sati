@@ -173,6 +173,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
     try {
       msg = JSON.parse(raw) as Record<string, unknown>;
     } catch {
+      // 非 JSON WebSocket 帧：跳过该条消息，其余帧照常处理（fail-open）。
       return;
     }
 
