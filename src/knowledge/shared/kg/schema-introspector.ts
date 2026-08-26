@@ -83,6 +83,7 @@ export function introspectKgStore(db: DatabaseSync, dbPath: string): KgStoreIntr
           : `SELECT id, name, title FROM ${ftsTable} WHERE ${ftsTable} MATCH ? LIMIT ?`,
       );
     } catch {
+      // FTS 未可用（表存在但运行时未编译 FTS5/trigram）→ 降级 LIKE。
       stmtFtsSearch = null;
     }
   }

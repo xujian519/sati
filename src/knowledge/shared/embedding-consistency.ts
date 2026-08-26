@@ -57,6 +57,7 @@ export async function checkEmbeddingConsistency(
     const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
     db = opened.db;
   } catch {
+    // 库打开失败 → 返回 null（调用方按无法自检处理）。
     return null;
   }
   try {
