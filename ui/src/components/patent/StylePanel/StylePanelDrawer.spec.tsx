@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StylePanelProvider, useStylePanel } from "./StylePanelContext";
 import StylePanelDrawer from "./StylePanelDrawer";
@@ -110,7 +110,10 @@ describe("StylePanelDrawer", () => {
   it("导出 HTML 触发本地下载（Blob + click）", async () => {
     renderHarness();
     fireEvent.click(screen.getByText("open"));
-    const exportButton = await screen.findByText("导出 HTML");
+    // 文书 HTML 为异步读取，srcdoc 就绪前导出按钮处于 disabled；等待其可用后再点击，
+    // 避免 flaky 竞态（点击 disabled 按钮不会触发下载）。
+    const exportButton = await screen.findByRole("button", { name: "导出 HTML" });
+    await waitFor(() => expect((exportButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(exportButton);
     expect(URL.createObjectURL).toHaveBeenCalled();
   });
