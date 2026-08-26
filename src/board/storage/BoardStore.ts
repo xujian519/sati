@@ -105,6 +105,16 @@ function nowTimestamp(): string {
   return new Date().toISOString();
 }
 
+function nextColumnId(state: BoardState): string {
+  state.seq += 1;
+  return `c${state.seq}`;
+}
+
+function nextCardId(state: BoardState): string {
+  state.seq += 1;
+  return `k${state.seq}`;
+}
+
 export class BoardStore {
   constructor(private readonly projectRoot: string) {}
 
@@ -124,7 +134,7 @@ export class BoardStore {
     return next;
   }
 
-  /** 在持有项目锁的前提下执行「读 → transform → 写」。写失败则对象被丢弃。 */
+  /** 在持有项目锁的前提下执行「读 → transform → 写」；transform/save 抛错则本次变更不落盘。 */
   private async mutate<T>(transform: (state: BoardState) => T | Promise<T>): Promise<T> {
     return this.run(async () => {
       const state = await this.loadBoard();
@@ -175,16 +185,6 @@ export class BoardStore {
     }
   }
 
-  private nextColumnId(state: BoardState): string {
-    state.seq += 1;
-    return `c${state.seq}`;
-  }
-
-  private nextCardId(state: BoardState): string {
-    state.seq += 1;
-    return `k${state.seq}`;
-  }
-
   private findColumnIndex(state: BoardState, columnId: string): number {
     const index = state.columns.findIndex(column => column.id === columnId);
     if (index === -1) {
@@ -203,7 +203,7 @@ export class BoardStore {
 
   async addColumn(title: string, color = "#64748b"): Promise<BoardColumn> {
     return this.mutate(state => {
-      const column: BoardColumn = { id: this.nextColumnId(state), title, color };
+      const column: BoardColumn = { id: nextColumnId(state), title, color };
       state.columns.push(column);
       return column;
     });
@@ -251,7 +251,7 @@ export class BoardStore {
 
       const timestamp = nowTimestamp();
       const card: BoardCard = {
-        id: this.nextCardId(state),
+        id: nextCardId(state),
         columnId: fields.columnId,
         title: fields.title,
         note: fields.note ?? "",
@@ -331,7 +331,7 @@ export class BoardStore {
       const timestamp = nowTimestamp();
       const copy: BoardCard = {
         ...original,
-        id: this.nextCardId(state),
+        id: nextCardId(state),
         columnId,
         title: `${original.title} (副本)`,
         archived: false,
@@ -380,7 +380,7 @@ export class BoardStore {
    * 源板删除该卡，目标板按目标自己的 seq 重新生成 id 并插入第一列。
    *
    * 串行化：源板在 `this.mutex` 下、目标板在 `targetStore.mutex` 下各自执行，
-   * 避免与各自项目内的并发读改写竞争（锁定序固定为源→目标，无反向，幂等无死锁）。
+   * 避免与各自项目内的并发读改写竞争（锁定序固定为源→目标，无反向，故无死锁）。
    * 落盘顺序：先目标后源。目标写失败则源板不动，卡片留在源板（不丢卡）；
    * 「目标成功、源写失败」会两板都有该卡（重复而非丢失），v1 简化，非跨文件事务。
    */
@@ -394,13 +394,12 @@ export class BoardStore {
         const targetColumnId = targetState.columns[0]!.id;
         const moved: BoardCard = {
           ...card!,
-          id: `k${targetState.seq + 1}`,
+          id: nextCardId(targetState),
           columnId: targetColumnId,
           createdAt: nowTimestamp(),
           updatedAt: nowTimestamp(),
           source: undefined,
         };
-        targetState.seq += 1;
         targetState.cards.push(moved);
         await targetStore.saveBoard(targetState);
         return moved;
