@@ -82,7 +82,14 @@ export function resolveThinkingPlan(
     // temperature 的调用（如 session-title 的 temperature: 0）会报错。
     // 只按 modelId 白名单判断，避免误伤 provider 名含 "deepseek" 的非推理模型。
     const reasoningOnly = isReasoningOnlyModel(modelId);
-    return { mode, enabled: false, ...(reasoningOnly ? { omitTemperature: true } : {}) };
+    const omitTemperature = reasoningOnly ? { omitTemperature: true } : {};
+    // deepseek-v4 官方默认开启思考（thinking 默认 enabled）；default 若不显式传
+    // `thinking:{type:"disabled"}`，长输出会把最终 content 榨干为 0（reasoning_content
+    // 与 content 共享 max_tokens）。default（未显式请求思考）应显式关闭，而非交模型默认。
+    if (/deepseek-v4/.test(modelId)) {
+      return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true, ...omitTemperature };
+    }
+    return { mode, enabled: false, ...omitTemperature };
   }
 
   const budgetTokens =

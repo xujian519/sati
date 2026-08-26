@@ -129,6 +129,25 @@ test("minimax M2.x keeps splitReasoning for non-off modes", () => {
   assert.equal(high.splitReasoning, true);
 });
 
+test("default deepseek-v4 explicitly disables thinking via openai-compatible disabled", () => {
+  const plan = planFor("deepseek", "deepseek-v4-flash", undefined);
+  assert.equal(plan.enabled, false);
+  assert.equal(plan.thinkingType, "disabled");
+  assert.equal(plan.useOpenAICompatibleThinking, true);
+  assert.equal(plan.omitTemperature, true);
+  const pro = planFor("deepseek", "deepseek-v4-pro", undefined);
+  assert.equal(pro.thinkingType, "disabled");
+  assert.equal(pro.useOpenAICompatibleThinking, true);
+});
+
+test("default deepseek-reasoner keeps legacy behavior (no thinking field)", () => {
+  const plan = planFor("deepseek", "deepseek-reasoner", undefined);
+  assert.equal(plan.enabled, false);
+  assert.equal(plan.thinkingType, undefined);
+  assert.equal(plan.useOpenAICompatibleThinking, undefined);
+  assert.equal(plan.omitTemperature, true);
+});
+
 test("default thinking mode keeps thinking disabled but omits temperature for deepseek", () => {
   const plan = planFor("deepseek", "deepseek-v4-flash", undefined);
   assert.equal(plan.enabled, false);
