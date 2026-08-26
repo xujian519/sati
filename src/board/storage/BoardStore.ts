@@ -115,6 +115,11 @@ function nextCardId(state: BoardState): string {
   return `k${state.seq}`;
 }
 
+/** clamp 插入位到 [0, length]：越界取端点，未传 toIndex 表示追加到列尾（moveCard/duplicateCard 共用）。 */
+function clampInsertIndex(toIndex: number | undefined, length: number): number {
+  return toIndex !== undefined ? Math.max(0, Math.min(toIndex, length)) : length;
+}
+
 export class BoardStore {
   constructor(
     private readonly projectRoot: string,
@@ -344,8 +349,7 @@ export class BoardStore {
       card!.columnId = target.columnId;
       card!.updatedAt = nowTimestamp();
 
-      const targetIndex =
-        target.toIndex !== undefined ? Math.max(0, Math.min(target.toIndex, state.cards.length)) : state.cards.length;
+      const targetIndex = clampInsertIndex(target.toIndex, state.cards.length);
 
       state.cards.splice(targetIndex, 0, card!);
     });
@@ -386,8 +390,7 @@ export class BoardStore {
         source: undefined,
       };
 
-      const targetIndex =
-        target?.toIndex !== undefined ? Math.max(0, Math.min(target.toIndex, state.cards.length)) : state.cards.length;
+      const targetIndex = clampInsertIndex(target?.toIndex, state.cards.length);
 
       state.cards.splice(targetIndex, 0, copy);
       return copy;
