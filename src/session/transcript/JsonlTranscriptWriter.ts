@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, appendFile } from "node:fs/promises";
+import { mkdir, appendFile, open, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
@@ -59,8 +59,14 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   private readonly now: () => Date;
   private readonly flushThresholdBytes: number;
   private readonly flushIntervalMs: number;
+  /** 单条记录经单次 write(2) 落盘（避免 appendFile 的 512 KiB 自动分块撕裂大记录）。默认为开；`SATI_TRANSCRIPT_SINGLE_WRITE=0` 关闭回退批量 appendFile。 */
+  private readonly singleWrite: boolean;
   /** 目录是否已确认存在（mkdir recursive 每次 syscall，仅首次需要）。 */
   private dirReady = false;
+  /** 是否已探测过目标文件尾（进程首次写该文件时探测一次 torn-tail）。 */
+  private tailProbed = false;
+  /** 目标文件尾是否可能处于"记录半行"状态（崩溃/短写残留），下次写前需补 `\n`。 */
+  private tornTail = false;
 
   /** M3 写缓冲：已接受但未落盘的序列化行（顺序 = 入队顺序）。 */
   private pendingLines: string[] = [];
@@ -86,6 +92,8 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       options.flushThresholdBytes ?? (Number.isFinite(envThreshold) ? envThreshold : DEFAULT_FLUSH_THRESHOLD_BYTES);
     this.flushThresholdBytes = threshold >= 0 ? threshold : 0;
     this.flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS;
+    // 默认开：显式设 "0" 才关闭（回退 appendFile 批量路径，便于异常回滚/性能对照）。
+    this.singleWrite = process.env.SATI_TRANSCRIPT_SINGLE_WRITE !== "0";
   }
 
   /** 实际落盘的 transcript 文件路径（供投影器等读取方绑定真实 writer）。 */
@@ -305,7 +313,11 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
           this.dirReady = true;
         }
         try {
-          await appendFile(this.options.path, lines.join(""), { encoding: "utf8", mode: 0o600 });
+          if (this.singleWrite) {
+            await this.appendRecordsSingleWrite(this.options.path, lines);
+          } else {
+            await appendFile(this.options.path, lines.join(""), { encoding: "utf8", mode: 0o600 });
+          }
         } catch (error) {
           // 目录可能被外部删除/移动：重置 dirReady 以便下次写入自愈（重新 mkdir）
           this.dirReady = false;
@@ -324,6 +336,65 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
           for (const ack of acks) ack.reject(error);
         },
       );
+  }
+
+  /**
+   * 单次 write(2) 逐条落盘（避免 appendFile 的 512 KiB 自动分块撕裂单条大记录）。
+   * 首次写该文件时探测文件尾；若上次崩溃/短写留下未以 `\n` 结尾的半行，本条记录前补 `\n`
+   * 从新行开始（半行本身由读取端容错跳过）。并发串行由 writeChain 保证。
+   */
+  private async appendRecordsSingleWrite(path: string, lines: string[]): Promise<void> {
+    if (!this.tailProbed) {
+      this.tornTail = await this.probeTornTail(path);
+      this.tailProbed = true;
+    }
+    const fh = await open(path, "a", 0o600);
+    try {
+      for (const line of lines) {
+        // 崩溃残留半行：补换行让本条从新行开始，不粘连到半行上。
+        const data = this.tornTail ? `\n${line}` : line;
+        this.tornTail = false;
+        await this.writeChunk(fh, Buffer.from(data, "utf8"));
+      }
+    } finally {
+      await fh.close();
+    }
+  }
+
+  /** 单条记录经 write(2) 落盘；短写循环兜底；中途失败标记 tornTail（下次补 `\n`）。 */
+  private async writeChunk(fh: FileHandle, buf: Buffer): Promise<void> {
+    let written = 0;
+    while (written < buf.length) {
+      let bytesWritten: number;
+      try {
+        ({ bytesWritten } = await fh.write(buf, written, buf.length - written));
+      } catch (error) {
+        if (written > 0) this.tornTail = true;
+        throw error;
+      }
+      if (bytesWritten <= 0) {
+        if (written > 0) this.tornTail = true;
+        throw new Error(`Transcript write made no progress at byte ${written} of ${buf.length}`);
+      }
+      written += bytesWritten;
+    }
+  }
+
+  /** 探测目标文件尾是否以 `\n` 结尾；非空且尾部非换行 → 上次崩溃/短写留下半行（true）。 */
+  private async probeTornTail(path: string): Promise<boolean> {
+    const handle = await open(path, "r").catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    });
+    if (handle === undefined) return false;
+    try {
+      const { size } = await handle.stat();
+      if (size === 0) return false;
+      const { bytesRead, buffer } = await handle.read(Buffer.alloc(1), 0, 1, size - 1);
+      return bytesRead !== 1 || buffer[0] !== 0x0a;
+    } finally {
+      await handle.close();
+    }
   }
 
   private scheduleFlushTimer(): void {
