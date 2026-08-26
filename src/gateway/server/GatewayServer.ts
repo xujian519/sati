@@ -20,6 +20,8 @@ export type GatewayServerOptions = {
   serverVersion?: string;
   /** M3：连接活跃追踪实例（satiServer 透传 createLocalGateway 的 sessionPresence）。 */
   presence?: SessionPresence;
+  /** 项目看板订阅与广播管理器；未注入时 kanban 方法返回 not_configured。 */
+  kanban?: import("../kanban/KanbanBoardManager.js").KanbanBoardManager;
   feishuWebhook?: (request: IncomingMessage, response: ServerResponse, body: string) => Promise<boolean> | boolean;
   /**
    * Resolves a `projectKey` (as supplied by the Web UI) to an absolute
@@ -145,6 +147,7 @@ function handleUpgrade(
     token,
     serverVersion: options.serverVersion ?? APP_VERSION,
     presence: options.presence,
+    kanban: options.kanban,
   });
   connections.add(conn);
   conn.onClose(() => connections.delete(conn));

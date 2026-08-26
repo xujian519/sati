@@ -64,7 +64,24 @@ export type WsGatewayMethod =
   | "knowledge_capabilities"
   | "panel_heartbeat"
   | "team_panel_snapshot"
-  | "team_tool_call";
+  | "team_tool_call"
+  | "kanban_get"
+  | "kanban_add_card"
+  | "kanban_update_card"
+  | "kanban_move_card"
+  | "kanban_archive_card"
+  | "kanban_restore_card"
+  | "kanban_purge_card"
+  | "kanban_bulk_archive_cards"
+  | "kanban_bulk_move_cards"
+  | "kanban_duplicate_card"
+  | "kanban_move_card_to_project"
+  | "kanban_add_column"
+  | "kanban_rename_column"
+  | "kanban_delete_column"
+  | "kanban_undo"
+  | "kanban_subscribe"
+  | "kanban_unsubscribe";
 
 export type WsRequestFrame = {
   type: "request";

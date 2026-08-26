@@ -92,6 +92,7 @@ import {
   type GatewaySubmitTurnInput,
   type ListSessionsInput,
   type ListSessionsResult,
+  KanbanBoardManager,
 } from "../gateway/index.js";
 import {
   GATEWAY_PERMISSION_CALLBACK_NAME,
@@ -239,6 +240,8 @@ export type CreateLocalGatewayResult = {
   teamSubsystem: TeamSubsystemHandle;
   /** M3：captain 在线判定句柄（sati.ts 透传给 startGatewayServer 的 ws 连接层）。 */
   sessionPresence: SessionPresence;
+  /** 项目看板管理器（Phase 3）：sati.ts 透传给 startSatiServer / startGatewayServer。 */
+  kanbanBoardManager: KanbanBoardManager;
 };
 
 export type TeamSubsystemHandle = {
@@ -427,9 +430,12 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 声明置于 gateway 创建前：panelHeartbeat delegate（M4）闭包引用本实例，
   // 避免块级作用域"先使用后声明"编译错误。
   const sessionPresence = new SessionPresence();
+  // Phase 3：项目看板管理器。单实例缓存所有项目 BoardRuntime 并维护订阅表。
+  const kanbanBoardManager = new KanbanBoardManager();
   const gateway = new InProcessGateway(router, {
     serverInfo: { mode: "in_process", projectKey: projectRoot },
     telemetry,
+    kanban: kanbanBoardManager,
     cron: options.cron,
     skillManager,
     setSessionCwd: (sessionKey, cwd) => registry.setSessionCwd(sessionKey, cwd),
@@ -758,6 +764,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     emit: emitTeamEvent,
     workerRegistry,
   });
+  registry.setKanbanBoardManager(kanbanBoardManager);
   // T12 复审 M4：启动扫描完成信号（显式可 await——测试不再用 setTimeout 排干猜测时序）
   // Minor-1 兜底：存储层异常经 catch 记录（console.error 含扫描标识）且不 reject——
   // 信号语义 = 扫描已尝试完成，无论成败；与修复前 void IIFE 的吞错行为等价。
@@ -807,6 +814,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     },
     teamSubsystem: { db: teamDb, runMemberScan, scheduler: teamScheduler, runStrandedScan, startupScanDone },
     sessionPresence,
+    kanbanBoardManager,
   };
 }
 
@@ -941,6 +949,8 @@ class ProjectRuntimeRegistry {
   private _sessionOverrides: SessionConfigOverrides | undefined;
   /** team_* 工具装配（M3）：createLocalGateway 经 setTeamTools 注入，resolve 时透传 createBuiltinRegistry。 */
   private _teamTools?: TeamToolsOptions;
+  /** kanban_* 工具装配（Phase 4）：createLocalGateway 经 setKanbanBoardManager 注入，resolve 时透传 createBuiltinRegistry。 */
+  private _kanbanBoardManager?: KanbanBoardManager;
 
   constructor(private readonly options: ProjectRuntimeRegistryOptions) {
     this._extraTools = options.extraTools ? [...options.extraTools] : [];
@@ -1155,6 +1165,15 @@ class ProjectRuntimeRegistry {
   }
 
   /**
+   * 看板管理器注入（Phase 4）。必须在首次 resolve 前设置；设置后清空缓存，
+   * 使下一个会话创建时重建的 tool registry 包含 kanban_* 工具。
+   */
+  setKanbanBoardManager(manager: KanbanBoardManager): void {
+    this._kanbanBoardManager = manager;
+    this.invalidate();
+  }
+
+  /**
    * Set the working directory override for a specific session.
    * Used by the Web UI execution path to point an agent session at
    * an isolated workspace (git-worktree / snapshot-copy) without
@@ -1243,6 +1262,7 @@ class ProjectRuntimeRegistry {
 
     const tools = createBuiltinRegistry({
       ...(this._teamTools ? { team: this._teamTools } : {}),
+      ...(this._kanbanBoardManager ? { kanban: this._kanbanBoardManager } : {}),
       backgroundTasks: { runtime: backgroundTasks },
       searchPatentFigure: { embeddingClient },
       // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）

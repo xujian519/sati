@@ -3,6 +3,7 @@ import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
 import { SATI_GATEWAY_PROTOCOL_VERSION, isProtocolCompatible } from "../protocol/version.js";
 import { notConfigured } from "../protocol/notConfigured.js";
 import { SkillManagerError, SkillValidationError } from "../../extension/skills/index.js";
+import type { KanbanBoardManager, KanbanSubscriber } from "../kanban/KanbanBoardManager.js";
 import { TextWebSocketConnection } from "./websocket.js";
 import type { SessionPresence } from "./sessionPresence.js";
 
@@ -15,6 +16,8 @@ export type GatewayWsConnectionOptions = {
   serverVersion: string;
   /** M3：连接活跃追踪（可选——未注入时零开销，不破坏既有构造点/测试）。 */
   presence?: SessionPresence;
+  /** 项目看板订阅与广播管理器；未注入时 `kanban_subscribe` 等直接返回 not_configured。 */
+  kanban?: KanbanBoardManager;
 };
 
 export class GatewayWsConnection {
@@ -27,6 +30,7 @@ export class GatewayWsConnection {
    */
   private lastSessionKey: string | undefined;
   private readonly inFlightSessions = new Set<string>();
+  private readonly kanbanSubscriber: KanbanSubscriber;
   /** submit_turn 事件流发送缓冲：16ms 窗口合并，减少长轮次数千事件的 write/syscall。 */
   private readonly pendingTexts: string[] = [];
   private flushTimer: NodeJS.Timeout | undefined;
@@ -38,11 +42,22 @@ export class GatewayWsConnection {
   ) {
     this.presence = options.presence;
     ws.onMessage(message => void this.handleMessage(message));
+    const subscriberId = `conn-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+    this.kanbanSubscriber = {
+      id: subscriberId,
+      send: payload => {
+        this.sendNotification("kanban_updated", payload);
+      },
+    };
+
     ws.onClose(() => {
       // M3：连接关闭注销活跃（宽限窗内仍算在线，防瞬断误判）
       if (this.lastSessionKey !== undefined) {
         this.presence?.close(this.lastSessionKey);
       }
+    });
+    ws.onClose(() => {
+      this.options.kanban?.unsubscribeAll(this.kanbanSubscriber);
     });
     ws.onClose(() => this.abortInFlightTurns());
     // 连接关闭时清理发送缓冲与定时器（防悬空定时器/内存残留）
@@ -431,6 +446,111 @@ export class GatewayWsConnection {
             "Knowledge capabilities not available",
           ),
         );
+      case "kanban_get":
+        if (this.options.gateway.kanbanGet) {
+          return this.options.gateway.kanbanGet(frame.params as GatewayMethodParams<"kanbanGet">);
+        }
+        return Promise.resolve(notConfigured({}, "Kanban is not available"));
+      case "kanban_add_card":
+        if (this.options.gateway.kanbanAddCard) {
+          return this.options.gateway.kanbanAddCard(frame.params as GatewayMethodParams<"kanbanAddCard">);
+        }
+        return Promise.resolve(notConfigured({ card: null }, "Kanban is not available"));
+      case "kanban_update_card":
+        if (this.options.gateway.kanbanUpdateCard) {
+          return this.options.gateway.kanbanUpdateCard(frame.params as GatewayMethodParams<"kanbanUpdateCard">);
+        }
+        return Promise.resolve(notConfigured({ card: null }, "Kanban is not available"));
+      case "kanban_move_card":
+        if (this.options.gateway.kanbanMoveCard) {
+          return this.options.gateway.kanbanMoveCard(frame.params as GatewayMethodParams<"kanbanMoveCard">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_archive_card":
+        if (this.options.gateway.kanbanArchiveCard) {
+          return this.options.gateway.kanbanArchiveCard(frame.params as GatewayMethodParams<"kanbanArchiveCard">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_restore_card":
+        if (this.options.gateway.kanbanRestoreCard) {
+          return this.options.gateway.kanbanRestoreCard(frame.params as GatewayMethodParams<"kanbanRestoreCard">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_purge_card":
+        if (this.options.gateway.kanbanPurgeCard) {
+          return this.options.gateway.kanbanPurgeCard(frame.params as GatewayMethodParams<"kanbanPurgeCard">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_bulk_archive_cards":
+        if (this.options.gateway.kanbanBulkArchiveCards) {
+          return this.options.gateway.kanbanBulkArchiveCards(
+            frame.params as GatewayMethodParams<"kanbanBulkArchiveCards">,
+          );
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_bulk_move_cards":
+        if (this.options.gateway.kanbanBulkMoveCards) {
+          return this.options.gateway.kanbanBulkMoveCards(frame.params as GatewayMethodParams<"kanbanBulkMoveCards">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_duplicate_card":
+        if (this.options.gateway.kanbanDuplicateCard) {
+          return this.options.gateway.kanbanDuplicateCard(frame.params as GatewayMethodParams<"kanbanDuplicateCard">);
+        }
+        return Promise.resolve(notConfigured({ card: null }, "Kanban is not available"));
+      case "kanban_move_card_to_project":
+        if (this.options.gateway.kanbanMoveCardToProject) {
+          return this.options.gateway.kanbanMoveCardToProject(
+            frame.params as GatewayMethodParams<"kanbanMoveCardToProject">,
+          );
+        }
+        return Promise.resolve(notConfigured({ card: null }, "Kanban is not available"));
+      case "kanban_add_column":
+        if (this.options.gateway.kanbanAddColumn) {
+          return this.options.gateway.kanbanAddColumn(frame.params as GatewayMethodParams<"kanbanAddColumn">);
+        }
+        return Promise.resolve(notConfigured({ column: null }, "Kanban is not available"));
+      case "kanban_rename_column":
+        if (this.options.gateway.kanbanRenameColumn) {
+          return this.options.gateway.kanbanRenameColumn(frame.params as GatewayMethodParams<"kanbanRenameColumn">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_delete_column":
+        if (this.options.gateway.kanbanDeleteColumn) {
+          return this.options.gateway.kanbanDeleteColumn(frame.params as GatewayMethodParams<"kanbanDeleteColumn">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_undo":
+        if (this.options.gateway.kanbanUndo) {
+          return this.options.gateway.kanbanUndo(frame.params as GatewayMethodParams<"kanbanUndo">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_subscribe": {
+        const manager = this.options.kanban;
+        if (!manager) {
+          return Promise.resolve(notConfigured({ subscribed: false }, "Kanban is not available"));
+        }
+        const subParams = frame.params as { projectId?: string } | undefined;
+        const projectId = subParams?.projectId;
+        if (typeof projectId !== "string" || projectId === "") {
+          throw new Error("kanban_subscribe requires projectId");
+        }
+        manager.subscribe(projectId, this.kanbanSubscriber);
+        return Promise.resolve({ subscribed: true });
+      }
+      case "kanban_unsubscribe": {
+        const manager = this.options.kanban;
+        if (!manager) {
+          return Promise.resolve(notConfigured({ unsubscribed: false }, "Kanban is not available"));
+        }
+        const unsubParams = frame.params as { projectId?: string } | undefined;
+        const projectId = unsubParams?.projectId;
+        if (typeof projectId !== "string" || projectId === "") {
+          throw new Error("kanban_unsubscribe requires projectId");
+        }
+        manager.unsubscribe(projectId, this.kanbanSubscriber);
+        return Promise.resolve({ unsubscribed: true });
+      }
       default:
         throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }

@@ -1,6 +1,6 @@
 import { FeishuChannel, QQChannel, WeixinChannel, type ChannelAdapter, type ChannelHandle } from "../adapters/index.js";
 import type { CronResultDelivery } from "../cron/index.js";
-import { startGatewayServer, type Gateway, type GatewayServer } from "../gateway/index.js";
+import { startGatewayServer, type Gateway, type GatewayServer, type KanbanBoardManager } from "../gateway/index.js";
 import { resolvePilotHome, type PilotConfig } from "../pilot/index.js";
 import type { SessionPresence } from "../gateway/server/sessionPresence.js";
 import {
@@ -15,6 +15,8 @@ export type StartSatiServerOptions = {
   staticAssetsPath?: string;
   /** M3：createLocalGateway 的 sessionPresence 句柄（captain 在线判定数据源）。 */
   presence?: SessionPresence;
+  /** Phase 3：项目看板订阅/广播管理器；未注入时 kanban 方法返回 not_configured。 */
+  kanban?: KanbanBoardManager;
   feishu?: FeishuChannel;
   weixin?: WeixinChannel;
   qq?: QQChannel;
@@ -82,6 +84,7 @@ export async function startSatiServer(options: StartSatiServerOptions): Promise<
     host: options.host,
     staticAssetsPath: options.staticAssetsPath,
     presence: options.presence,
+    kanban: options.kanban,
     feishuWebhook: options.feishu
       ? (request, response, body) => options.feishu!.handleWebhook(request, response, body)
       : undefined,

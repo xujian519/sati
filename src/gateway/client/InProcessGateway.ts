@@ -6,6 +6,39 @@ import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
 import { GatewayPermissionBus } from "../permission/GatewayPermissionBus.js";
 import { GatewayApprovalBus } from "../approval/GatewayApprovalBus.js";
+import { KanbanBoardManager } from "../kanban/KanbanBoardManager.js";
+import type {
+  KanbanAddCardInput,
+  KanbanAddCardResult,
+  KanbanAddColumnInput,
+  KanbanAddColumnResult,
+  KanbanArchiveCardInput,
+  KanbanArchiveCardResult,
+  KanbanBulkArchiveCardsInput,
+  KanbanBulkArchiveCardsResult,
+  KanbanBulkMoveCardsInput,
+  KanbanBulkMoveCardsResult,
+  KanbanDeleteColumnInput,
+  KanbanDeleteColumnResult,
+  KanbanDuplicateCardInput,
+  KanbanDuplicateCardResult,
+  KanbanGetInput,
+  KanbanGetResult,
+  KanbanMoveCardInput,
+  KanbanMoveCardResult,
+  KanbanMoveCardToProjectInput,
+  KanbanMoveCardToProjectResult,
+  KanbanPurgeCardInput,
+  KanbanPurgeCardResult,
+  KanbanRenameColumnInput,
+  KanbanRenameColumnResult,
+  KanbanRestoreCardInput,
+  KanbanRestoreCardResult,
+  KanbanUndoInput,
+  KanbanUndoResult,
+  KanbanUpdateCardInput,
+  KanbanUpdateCardResult,
+} from "../kanban/types.js";
 import { AsyncQueue } from "../util/AsyncQueue.js";
 import type {
   GatewayCronController,
@@ -55,6 +88,7 @@ import type {
   KnowledgeCapabilitiesResult,
 } from "../protocol/types.js";
 import { notConfigured } from "../protocol/notConfigured.js";
+import type { BoardState } from "../../board/protocol/types.js";
 import type {
   CronCreateInput,
   CronCreateResult,
@@ -196,6 +230,11 @@ export type InProcessGatewayOptions = {
     input: Record<string, unknown>;
     sessionKey?: string;
   }) => Promise<{ ok: boolean; data?: unknown; error?: { code: string; message: string } }>;
+  /**
+   * 项目看板（Kanban）运行时管理器。提供 `kanban_*` 协议方法实现与
+   * `kanban_updated` 事件订阅/广播。
+   */
+  kanban?: KanbanBoardManager;
   /**
    * Optional non-blocking post-turn callback. Used by createLocalGateway to
    * coalesce project-level memory maintenance after a turn has fully ended.
@@ -1102,5 +1141,192 @@ export class InProcessGateway implements Gateway {
     const replay = this.activeTurnReplays.get(sessionKey);
     if (!replay) return event;
     return { ...event, runId: replay.runId };
+  }
+
+  // -------------------------------------------------------------------
+  // Project Kanban board protocol methods
+  // -------------------------------------------------------------------
+
+  private emptyBoard(): BoardState {
+    return { version: 1, columns: [], cards: [], seq: 0 };
+  }
+
+  private requireKanban(): KanbanBoardManager {
+    if (!this.options.kanban) {
+      throw new Error("Kanban board manager is not configured.");
+    }
+    return this.options.kanban;
+  }
+
+  private resolveKanbanProjectRoot(projectKey: string): string {
+    // v1：projectKey 直接作为项目根目录；后续可接入 workspace 解析。
+    return projectKey;
+  }
+
+  async kanbanGet(input: KanbanGetInput): Promise<KanbanGetResult> {
+    if (!this.options.kanban) {
+      return notConfigured(this.emptyBoard(), "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    return runtime.getBoard();
+  }
+
+  async kanbanAddCard(input: KanbanAddCardInput): Promise<KanbanAddCardResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ card: null }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    const card = await runtime.addCard({
+      columnId: input.columnId,
+      title: input.title,
+      note: input.note,
+      label: input.label,
+      priority: input.priority,
+      color: input.color,
+      dueDate: input.dueDate,
+    });
+    return { card };
+  }
+
+  async kanbanUpdateCard(input: KanbanUpdateCardInput): Promise<KanbanUpdateCardResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ card: null }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    const card = await runtime.updateCard(input.cardId, {
+      title: input.title,
+      note: input.note,
+      label: input.label,
+      priority: input.priority,
+      color: input.color,
+      dueDate: input.dueDate,
+    });
+    return { card };
+  }
+
+  async kanbanMoveCard(input: KanbanMoveCardInput): Promise<KanbanMoveCardResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.moveCard(input.cardId, { columnId: input.columnId, toIndex: input.toIndex });
+    return { ok: true };
+  }
+
+  async kanbanArchiveCard(input: KanbanArchiveCardInput): Promise<KanbanArchiveCardResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.archiveCard(input.cardId);
+    return { ok: true };
+  }
+
+  async kanbanRestoreCard(input: KanbanRestoreCardInput): Promise<KanbanRestoreCardResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.restoreCard(input.cardId);
+    return { ok: true };
+  }
+
+  async kanbanPurgeCard(input: KanbanPurgeCardInput): Promise<KanbanPurgeCardResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.purgeCard(input.cardId);
+    return { ok: true };
+  }
+
+  async kanbanBulkArchiveCards(input: KanbanBulkArchiveCardsInput): Promise<KanbanBulkArchiveCardsResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.bulkArchiveCards(input.ids);
+    return { ok: true };
+  }
+
+  async kanbanBulkMoveCards(input: KanbanBulkMoveCardsInput): Promise<KanbanBulkMoveCardsResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.bulkMoveCards(input.ids, input.columnId);
+    return { ok: true };
+  }
+
+  async kanbanDuplicateCard(input: KanbanDuplicateCardInput): Promise<KanbanDuplicateCardResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ card: null }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    const target = input.columnId === undefined ? undefined : { columnId: input.columnId, toIndex: input.toIndex };
+    const card = await runtime.duplicateCard(input.cardId, target);
+    return { card };
+  }
+
+  async kanbanMoveCardToProject(input: KanbanMoveCardToProjectInput): Promise<KanbanMoveCardToProjectResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ card: null }, "Kanban is not configured on this gateway.");
+    }
+    const sourceRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const targetRoot = this.resolveKanbanProjectRoot(input.toProjectKey);
+    const sourceRuntime = this.options.kanban.getRuntime(sourceRoot, input.projectKey);
+    const targetRuntime = this.options.kanban.getRuntime(targetRoot, input.toProjectKey);
+    const card = await sourceRuntime.moveCardToProject(input.cardId, targetRuntime);
+    return { card };
+  }
+
+  async kanbanAddColumn(input: KanbanAddColumnInput): Promise<KanbanAddColumnResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ column: null }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    const column = await runtime.addColumn(input.title, input.color);
+    return { column };
+  }
+
+  async kanbanRenameColumn(input: KanbanRenameColumnInput): Promise<KanbanRenameColumnResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.renameColumn(input.columnId, input.title);
+    return { ok: true };
+  }
+
+  async kanbanDeleteColumn(input: KanbanDeleteColumnInput): Promise<KanbanDeleteColumnResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.deleteColumn(input.columnId);
+    return { ok: true };
+  }
+
+  async kanbanUndo(input: KanbanUndoInput): Promise<KanbanUndoResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.undo();
+    return { ok: true };
   }
 }
