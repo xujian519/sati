@@ -1169,7 +1169,9 @@ export class InProcessGateway implements Gateway {
     }
     const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
     const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
-    return runtime.getBoard();
+    const board = await runtime.getBoard();
+    const includeArchived = input.includeArchived ?? false;
+    return { ...board, cards: includeArchived ? board.cards : board.cards.filter(card => !card.archived) };
   }
 
   async kanbanAddCard(input: KanbanAddCardInput): Promise<KanbanAddCardResult> {

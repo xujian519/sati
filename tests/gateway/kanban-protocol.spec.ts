@@ -64,6 +64,25 @@ test("InProcessGateway：kanban_get 返回默认三列", async () => {
   }
 });
 
+test("InProcessGateway：kanban_get 默认过滤回收站卡，includeArchived 则包含", async () => {
+  const { root, gateway } = await setup();
+  try {
+    const board = await gateway.kanbanGet({ projectKey: root });
+    const firstColId = board.columns[0]!.id;
+    const added = await gateway.kanbanAddCard({ projectKey: root, columnId: firstColId, title: "任务 A" });
+    await gateway.kanbanArchiveCard({ projectKey: root, cardId: added.card!.id });
+
+    const active = await gateway.kanbanGet({ projectKey: root });
+    assert.equal(active.cards.length, 0, "默认不含回收站卡片");
+
+    const withArchived = await gateway.kanbanGet({ projectKey: root, includeArchived: true });
+    assert.equal(withArchived.cards.length, 1, "includeArchived 时包含回收站卡片");
+    assert.equal(withArchived.cards[0]!.id, added.card!.id);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("InProcessGateway：kanban_add_column / kanban_add_card 持久化并可再读", async () => {
   const { root, gateway } = await setup();
   try {

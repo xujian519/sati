@@ -173,6 +173,17 @@ describe("BoardRuntime undo", () => {
     const board = await runtime.getBoard();
     assert.equal(board.columns.length, 3);
   });
+
+  it("undo 触发 board 类型事件，通知订阅者重建", async () => {
+    const { runtime, events } = makeRuntime();
+    const board = await runtime.getBoard();
+    await runtime.addCard({ columnId: board.columns[0]!.id, title: "要撤销" });
+
+    events.length = 0;
+    await runtime.undo();
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.kind, "board");
+  });
 });
 
 describe("BoardRuntime 跨项目移动", () => {

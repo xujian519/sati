@@ -609,7 +609,7 @@ export function createKanbanMoveCardToWorkspaceTool(
         id: { type: "string", description: "Card id to move." },
         toWorkspaceId: {
           type: "string",
-          description: "Target project root path or project identifier.",
+          description: "Target workspace root path. Relative paths are resolved against the current workspace root.",
         },
       },
     },
@@ -623,7 +623,8 @@ export function createKanbanMoveCardToWorkspaceTool(
     isConcurrencySafe: () => true,
     execute: async (input, context) => {
       const sourceRuntime = getRuntime(manager, context.cwd);
-      const targetProjectRoot = resolve(input.toWorkspaceId);
+      // 相对路径基于当前工作区根解析，避免以 gateway 进程 cwd 拼出任意路径。
+      const targetProjectRoot = resolve(context.cwd, input.toWorkspaceId);
       const targetRuntime = manager.getRuntime(targetProjectRoot, targetProjectRoot);
       const card = await wrapRuntimeError(() => sourceRuntime.moveCardToProject(input.id, targetRuntime));
       const output: KanbanMoveCardToWorkspaceOutput = { cardId: card.id };

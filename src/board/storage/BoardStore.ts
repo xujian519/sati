@@ -108,6 +108,32 @@ function nowTimestamp(): string {
 export class BoardStore {
   constructor(private readonly projectRoot: string) {}
 
+  /**
+   * Mutex tail；await `mutex` 后赋新 promise 串行化同一项目内的读改写。
+   * 与 `FileHistoryStore` 同款：比 AbortController 便宜，也避开 `Promise.race` 的坑。
+   * 每个项目一个 `BoardStore`（经 `KanbanBoardManager` 缓存），故 store 级锁即项目级串行化。
+   */
+  private mutex: Promise<void> = Promise.resolve();
+
+  private run<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.mutex.then(task, task);
+    this.mutex = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
+  /** 在持有项目锁的前提下执行「读 → transform → 写」。写失败则对象被丢弃。 */
+  private async mutate<T>(transform: (state: BoardState) => T | Promise<T>): Promise<T> {
+    return this.run(async () => {
+      const state = await this.loadBoard();
+      const result = await transform(state);
+      await this.saveBoard(state);
+      return result;
+    });
+  }
+
   private boardPath(): string {
     return resolve(this.projectRoot, BOARD_FILE_NAME);
   }
@@ -176,37 +202,36 @@ export class BoardStore {
   }
 
   async addColumn(title: string, color = "#64748b"): Promise<BoardColumn> {
-    const state = await this.loadBoard();
-    const column: BoardColumn = { id: this.nextColumnId(state), title, color };
-    state.columns.push(column);
-    await this.saveBoard(state);
-    return column;
+    return this.mutate(state => {
+      const column: BoardColumn = { id: this.nextColumnId(state), title, color };
+      state.columns.push(column);
+      return column;
+    });
   }
 
   async renameColumn(columnId: string, title: string): Promise<void> {
-    const state = await this.loadBoard();
-    const index = this.findColumnIndex(state, columnId);
-    state.columns[index] = { ...state.columns[index]!, title };
-    await this.saveBoard(state);
+    return this.mutate(state => {
+      const index = this.findColumnIndex(state, columnId);
+      state.columns[index] = { ...state.columns[index]!, title };
+    });
   }
 
   async deleteColumn(columnId: string): Promise<void> {
-    const state = await this.loadBoard();
-    if (state.columns.length <= 1) {
-      throw new BoardStoreError("Cannot delete the last column");
-    }
-
-    const index = this.findColumnIndex(state, columnId);
-    const [removed] = state.columns.splice(index, 1);
-    const fallbackColumnId = state.columns[0]!.id;
-
-    for (const card of state.cards) {
-      if (card.columnId === removed!.id) {
-        card.columnId = fallbackColumnId;
+    return this.mutate(state => {
+      if (state.columns.length <= 1) {
+        throw new BoardStoreError("Cannot delete the last column");
       }
-    }
 
-    await this.saveBoard(state);
+      const index = this.findColumnIndex(state, columnId);
+      const [removed] = state.columns.splice(index, 1);
+      const fallbackColumnId = state.columns[0]!.id;
+
+      for (const card of state.cards) {
+        if (card.columnId === removed!.id) {
+          card.columnId = fallbackColumnId;
+        }
+      }
+    });
   }
 
   async addCard(
@@ -221,63 +246,63 @@ export class BoardStore {
     },
     source?: BoardCardSource,
   ): Promise<BoardCard> {
-    const state = await this.loadBoard();
-    this.findColumnIndex(state, fields.columnId);
+    return this.mutate(state => {
+      this.findColumnIndex(state, fields.columnId);
 
-    const timestamp = nowTimestamp();
-    const card: BoardCard = {
-      id: this.nextCardId(state),
-      columnId: fields.columnId,
-      title: fields.title,
-      note: fields.note ?? "",
-      label: fields.label ?? "",
-      priority: fields.priority ?? "medium",
-      color: fields.color ?? "#0ea5e9",
-      dueDate: fields.dueDate,
-      archived: false,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      source,
-    };
+      const timestamp = nowTimestamp();
+      const card: BoardCard = {
+        id: this.nextCardId(state),
+        columnId: fields.columnId,
+        title: fields.title,
+        note: fields.note ?? "",
+        label: fields.label ?? "",
+        priority: fields.priority ?? "medium",
+        color: fields.color ?? "#0ea5e9",
+        dueDate: fields.dueDate,
+        archived: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        source,
+      };
 
-    state.cards.push(card);
-    await this.saveBoard(state);
-    return card;
+      state.cards.push(card);
+      return card;
+    });
   }
 
   async updateCard(cardId: string, update: BoardCardUpdate): Promise<BoardCard> {
-    const state = await this.loadBoard();
-    const index = this.findCardIndex(state, cardId);
-    const existing = state.cards[index]!;
+    return this.mutate(state => {
+      const index = this.findCardIndex(state, cardId);
+      const existing = state.cards[index]!;
 
-    const updated: BoardCard = {
-      ...existing,
-      ...Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined)),
-      id: existing.id,
-      columnId: existing.columnId,
-      createdAt: existing.createdAt,
-      updatedAt: nowTimestamp(),
-    };
+      const updated: BoardCard = {
+        ...existing,
+        ...Object.fromEntries(Object.entries(update).filter(([, value]) => value !== undefined)),
+        id: existing.id,
+        columnId: existing.columnId,
+        createdAt: existing.createdAt,
+        updatedAt: nowTimestamp(),
+      };
 
-    state.cards[index] = updated;
-    await this.saveBoard(state);
-    return updated;
+      state.cards[index] = updated;
+      return updated;
+    });
   }
 
   async moveCard(cardId: string, target: BoardMoveTarget): Promise<void> {
-    const state = await this.loadBoard();
-    const sourceIndex = this.findCardIndex(state, cardId);
-    this.findColumnIndex(state, target.columnId);
+    return this.mutate(state => {
+      const sourceIndex = this.findCardIndex(state, cardId);
+      this.findColumnIndex(state, target.columnId);
 
-    const [card] = state.cards.splice(sourceIndex, 1);
-    card!.columnId = target.columnId;
-    card!.updatedAt = nowTimestamp();
+      const [card] = state.cards.splice(sourceIndex, 1);
+      card!.columnId = target.columnId;
+      card!.updatedAt = nowTimestamp();
 
-    const targetIndex =
-      target.toIndex !== undefined ? Math.max(0, Math.min(target.toIndex, state.cards.length)) : state.cards.length;
+      const targetIndex =
+        target.toIndex !== undefined ? Math.max(0, Math.min(target.toIndex, state.cards.length)) : state.cards.length;
 
-    state.cards.splice(targetIndex, 0, card!);
-    await this.saveBoard(state);
+      state.cards.splice(targetIndex, 0, card!);
+    });
   }
 
   async archiveCard(cardId: string): Promise<void> {
@@ -289,90 +314,99 @@ export class BoardStore {
   }
 
   async purgeCard(cardId: string): Promise<void> {
-    const state = await this.loadBoard();
-    const index = this.findCardIndex(state, cardId);
-    state.cards.splice(index, 1);
-    await this.saveBoard(state);
+    return this.mutate(state => {
+      const index = this.findCardIndex(state, cardId);
+      state.cards.splice(index, 1);
+    });
   }
 
   async duplicateCard(cardId: string, target?: BoardMoveTarget): Promise<BoardCard> {
-    const state = await this.loadBoard();
-    const sourceIndex = this.findCardIndex(state, cardId);
-    const original = state.cards[sourceIndex]!;
+    return this.mutate(state => {
+      const sourceIndex = this.findCardIndex(state, cardId);
+      const original = state.cards[sourceIndex]!;
 
-    const columnId = target?.columnId ?? original.columnId;
-    this.findColumnIndex(state, columnId);
+      const columnId = target?.columnId ?? original.columnId;
+      this.findColumnIndex(state, columnId);
 
-    const timestamp = nowTimestamp();
-    const copy: BoardCard = {
-      ...original,
-      id: this.nextCardId(state),
-      columnId,
-      title: `${original.title} (副本)`,
-      archived: false,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      source: undefined,
-    };
+      const timestamp = nowTimestamp();
+      const copy: BoardCard = {
+        ...original,
+        id: this.nextCardId(state),
+        columnId,
+        title: `${original.title} (副本)`,
+        archived: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        source: undefined,
+      };
 
-    const targetIndex =
-      target?.toIndex !== undefined ? Math.max(0, Math.min(target.toIndex, state.cards.length)) : state.cards.length;
+      const targetIndex =
+        target?.toIndex !== undefined ? Math.max(0, Math.min(target.toIndex, state.cards.length)) : state.cards.length;
 
-    state.cards.splice(targetIndex, 0, copy);
-    await this.saveBoard(state);
-    return copy;
+      state.cards.splice(targetIndex, 0, copy);
+      return copy;
+    });
   }
 
   async bulkArchiveCards(ids: string[]): Promise<void> {
-    const state = await this.loadBoard();
-    for (const cardId of ids) {
-      const index = this.findCardIndex(state, cardId);
-      state.cards[index]!.archived = true;
-      state.cards[index]!.updatedAt = nowTimestamp();
-    }
-    await this.saveBoard(state);
+    return this.mutate(state => {
+      for (const cardId of ids) {
+        const index = this.findCardIndex(state, cardId);
+        state.cards[index]!.archived = true;
+        state.cards[index]!.updatedAt = nowTimestamp();
+      }
+    });
   }
 
   async bulkMoveCards(ids: string[], columnId: string): Promise<void> {
-    const state = await this.loadBoard();
-    this.findColumnIndex(state, columnId);
+    return this.mutate(state => {
+      this.findColumnIndex(state, columnId);
 
-    const movedCards: BoardCard[] = [];
-    for (const cardId of ids) {
-      const index = this.findCardIndex(state, cardId);
-      const [card] = state.cards.splice(index, 1);
-      card!.columnId = columnId;
-      card!.updatedAt = nowTimestamp();
-      movedCards.push(card!);
-    }
+      const movedCards: BoardCard[] = [];
+      for (const cardId of ids) {
+        const index = this.findCardIndex(state, cardId);
+        const [card] = state.cards.splice(index, 1);
+        card!.columnId = columnId;
+        card!.updatedAt = nowTimestamp();
+        movedCards.push(card!);
+      }
 
-    state.cards.push(...movedCards);
-    await this.saveBoard(state);
+      state.cards.push(...movedCards);
+    });
   }
 
   /**
    * 把卡片移到另一个 BoardStore（对应另一个项目）。
    * 源板删除该卡，目标板按目标自己的 seq 重新生成 id 并插入第一列。
+   *
+   * 串行化：源板在 `this.mutex` 下、目标板在 `targetStore.mutex` 下各自执行，
+   * 避免与各自项目内的并发读改写竞争（锁定序固定为源→目标，无反向，幂等无死锁）。
+   * 落盘顺序：先目标后源。目标写失败则源板不动，卡片留在源板（不丢卡）；
+   * 「目标成功、源写失败」会两板都有该卡（重复而非丢失），v1 简化，非跨文件事务。
    */
   async moveCardToStore(cardId: string, targetStore: BoardStore): Promise<BoardCard> {
-    const sourceState = await this.loadBoard();
-    const sourceIndex = this.findCardIndex(sourceState, cardId);
-    const [card] = sourceState.cards.splice(sourceIndex, 1);
+    return this.mutate(async sourceState => {
+      const sourceIndex = this.findCardIndex(sourceState, cardId);
+      const [card] = sourceState.cards.splice(sourceIndex, 1);
 
-    const targetState = await targetStore.loadBoard();
-    const targetColumnId = targetState.columns[0]!.id;
-    const movedCard: BoardCard = {
-      ...card!,
-      id: `k${targetState.seq + 1}`,
-      columnId: targetColumnId,
-      createdAt: nowTimestamp(),
-      updatedAt: nowTimestamp(),
-      source: undefined,
-    };
-    targetState.seq += 1;
-    targetState.cards.push(movedCard);
+      const movedCard = await targetStore.run(async () => {
+        const targetState = await targetStore.loadBoard();
+        const targetColumnId = targetState.columns[0]!.id;
+        const moved: BoardCard = {
+          ...card!,
+          id: `k${targetState.seq + 1}`,
+          columnId: targetColumnId,
+          createdAt: nowTimestamp(),
+          updatedAt: nowTimestamp(),
+          source: undefined,
+        };
+        targetState.seq += 1;
+        targetState.cards.push(moved);
+        await targetStore.saveBoard(targetState);
+        return moved;
+      });
 
-    await Promise.all([this.saveBoard(sourceState), targetStore.saveBoard(targetState)]);
-    return movedCard;
+      return movedCard;
+    });
   }
 }

@@ -76,6 +76,15 @@ Sati 缺少一个**按项目隔离、agent 可写、用户可持久化查看**�
 - 修复 `BoardStore.updateCard`：原先 `{ ...existing, ...update }` 会把 `update` 中显式为 `undefined` 的字段覆盖为 `undefined`，导致 `archived` 等必填字段失效、板文件被判定损坏。改为只合并 `!== undefined` 的字段。
 - 测试 `tests/tool/builtin/kanban.spec.ts` 覆盖：默认板、增删改卡、移动/复制、软删恢复彻底删、批量、列管理、undo、跨项目移动、`includeArchived`、溯源注入。
 
+## 评审修复（2026-08-26 code review，Merge 前）
+
+- **Critical — `BoardStore` 加进程内串行化**：原实现每个写操作 `load → mutate → save` 无锁，并发 `addCard` 会共享同一 `seq`、最后一次 `save` 覆盖其余（实测 20 并发仅落盘 1 张卡）。改为 `FileHistoryStore` 同款 **mutex-tail**（`private mutex: Promise<void>` + `run<T>()` + `mutate<T>()`），每项目一个 store 即项目级串行。同时顺带消除「读两次」；写失败则对象丢弃、不留半写。
+- **跨项目移动双锁 + 先落目标**：`moveCardToStore` 在源锁内再取目标锁（锁定序固定源→目标，无反向无死锁），目标先落盘、源后落盘——目标失败则源板不动（卡片不丢）；目标成功、源失败则两板重复（而非丢失），v1 简化、非跨文件事务。
+- **`kanban_undo` 触发 `kanban_updated`**：`KanbanUpdatedKind` 新增 `"board"`（整板快照回滚），undo 成功后 `emitChange("board")`，避免订阅端 UI 停留过期卡片。
+- **网关 `kanban_get` 尊重 `includeArchived`**：默认过滤回收站卡，`includeArchived=true` 才含；与 agent 工具语义对齐。
+- **`kanban_move_card_to_workspace` 相对路径基于当前工作区解析**：`toWorkspaceId` 改为 `resolve(context.cwd, toWorkspaceId)`，避免以 gateway 进程 cwd 拼出任意路径；绝对路径原样使用。
+- 测试补充：`tests/board/board-store.spec.ts` 并发写回归（20 并发全落盘、id 唯一）；`board-runtime.spec.ts` undo 触发 `board` 事件；`kanban-protocol.spec.ts` includeArchived；`kanban.spec.ts` 相对 `toWorkspaceId` 解析。
+
 ## Alternatives considered
 
 - **SQLite / boards.db（落选）** — 失去“人可读/可 git”特性，与“人机共同知道”目标冲突；JSON-per-project 与 dsh 参考实现对齐、实现最简。
@@ -97,3 +106,4 @@ Sati 缺少一个**按项目隔离、agent 可写、用户可持久化查看**�
 - Agent 工具与 UI/Gateway 共用同一份 `BoardRuntime`，agent 写卡后打开中的看板能收到 `kanban_updated`。
 - 看板工具为 opt-in 注册：默认 `createBuiltinRegistry()` 不包含它们，避免破坏既有 llm-replay fixture；只有真实 gateway 启动路径才会注入。
 - `BoardStore.updateCard` 修复后不再因未提供字段而损坏板文件。
+- `BoardStore` 以 mutex-tail 串行化同一项目内的并发写，agent 多会话/常驻后台并发写卡不再丢数据；跨项目移动先落目标、源板不动以保卡片不丢。

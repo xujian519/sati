@@ -306,6 +306,24 @@ describe("BoardStore 批量与跨项目", () => {
   });
 });
 
+describe("BoardStore 并发写串行化", () => {
+  it("并发 addCard 全部落盘且 id 唯一（进程内串行化）", async () => {
+    const { store } = makeStore();
+    const boardBefore = await store.loadBoard();
+    const columnId = boardBefore.columns[0]!.id;
+
+    const total = 20;
+    const cards = await Promise.all(
+      Array.from({ length: total }, (_unused, i) => store.addCard({ columnId, title: `并发-${i}` })),
+    );
+
+    const board = await store.loadBoard();
+    assert.equal(board.cards.length, total, "并发写不应丢失卡片");
+    assert.equal(new Set(cards.map(card => card.id)).size, total, "并发写应生成唯一 id");
+    assert.equal(new Set(board.cards.map(card => card.id)).size, total, "落盘后卡片 id 仍应唯一");
+  });
+});
+
 describe("BoardStore 项目隔离", () => {
   it("不同 BoardStore 实例对应不同项目根目录，互不干扰", async () => {
     const { store: storeA } = makeStore();

@@ -187,6 +187,7 @@ export class BoardRuntime {
       return;
     }
     await this.store.saveBoard(this.snapshot(previous));
-    // undo 本身不触发事件（避免事件风暴），UI 可通过重新 getBoard 刷新。
+    // undo 恢复整板快照，用 "board" 类型通知订阅者重建（避免 UI 停留在过期卡片）。
+    await this.emitChange("board");
   }
 }

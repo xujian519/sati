@@ -1,7 +1,8 @@
 # Sati 项目看板（Kanban）功能设计文档
 
 - 创建日期：2026-08-26
-- 状态：**定稿（已按 2026-08-26 评审补全高优 4 项）**（按用户拍板：① 每项目一个 JSON 文件；② 页签为**项目级**、看板不随会话变；③ 拖拽用 dnd-kit；④ 已补 subscribe/unsubscribe、项目上下文、跨项目 id 冲突、checklist 去留）
+- 状态：**定稿**（按用户拍板：① 每项目一个 JSON 文件；② 页签为**项目级**、看板不随会话变；③ 拖拽用 dnd-kit；④ 已补 subscribe/unsubscribe、项目上下文、跨项目 id 冲突、checklist 去留）
+- 2026-08-26 实现后评审修复：**`BoardStore` 加进程内串行化（mutex-tail）** 堵住并发写丢卡（Critical）；**`kanban_undo` 触发 `kanban_updated`（新增 `board` 类型）**；**网关 `kanban_get` 尊重 `includeArchived`**；**`kanban_move_card_to_workspace` 的 `toWorkspaceId` 相对路径基于当前工作区解析**；**跨项目移动先落目标再落源**
 - 前置调研：本次会话已完成 (a) 开源方案选型（dnd-kit / react-beautiful-dnd / @asseinfo/react-kanban 对比 + Focalboard/Kanboard/Vikunja/Plane 数据模型 + license 合规，npm registry / GitHub API / raw 源码一手核实）；(b) 用户 dsh 插件 `dsh-project-kanban` 实际实现逆向（见 §1.2），本设计与之对齐并明确 Sati 增强点
 - 关联决策记录：随实施 PR 提交 `docs/notes/implemented/` 一条 note（含 `## Alternatives considered`）
 
@@ -156,7 +157,7 @@ Sati 的核心工作单元是 WorkSpace（工作区），agent 在会话里执�
 ### 4.3 ID 策略与跨项目移动
 
 - 列 id `c<N>`、卡 id `k<N>` 均按**项目独立递增**（每个 `kanban-board.json` 自维护 `seq` 计数器），不全局共享，保持文件自包含与人可读。
-- **跨项目移动**（`kanban_move_card_to_workspace`）时，源文件删除该卡，目标文件按目标自己的 `seq` 重新生成卡 id 后插入第一列。这样既避免两项目 `k1` 冲突，也保证目标文件仍是连续的本地序列。
+- **跨项目移动**（`kanban_move_card_to_workspace`）时，源文件删除该卡，目标文件按目标自己的 `seq` 重新生成卡 id 后插入第一列。这样既避免两项目 `k1` 冲突，也保证目标文件仍是连续的本地序列。**落盘序**：先目标后源——目标写失败则源板不动，卡片留在源板（不丢卡）；目标成功、源写失败会两板各有一张（重复而非丢失），v1 简化，非跨文件事务。
 - 撤销栈只跟踪**同一项目内**的写操作；跨项目移动的撤销不在 v1 支持范围内（可在目标板手动删除/移回）。
 
 ---
@@ -169,11 +170,11 @@ Sati 的核心工作单元是 WorkSpace（工作区），agent 在会话里执�
 
 dsh 参考实现把浏览器与宿主的通信做成了一个扁平 RPC（`kanban.get` / `kanban.addCard` / …，经 `/api/kanban` 一次收发的整板请求/响应），**一个工作区一块看板**，没有独立的 board/list/card 创建粒度。Sati 沿用这一简化：网关方法即那组 `kanban_*` 操作（浏览器需要的能力与工具同构），但**改经 WebSocket 帧**而非浏览器直连 HTTP，以换取实时推送。
 
-**`projectRoot` 反查**：网关从**当前所选项目（工作区）上下文**解析看板文件路径（复用 `src/session/workspace`/项目解析逻辑），因此 UI 方法**无需传 workspace 参数**；只有跨项目移动要显式传 `toProjectId`。agent 工具侧则从 `exec.agent.session.header.cwd` 反查（与 dsh 一致）。
+**`projectRoot` 解析（v1 简化，2026-08-26 评审后对齐实现）**：为保持网关方法无状态、且 UI 尚可把当前项目作为 `projectKey` 显式传入，**除 `kanban_subscribe`/`kanban_unsubscribe`（只按 `projectId`）外，每个 `kanban_*` 方法都携带 `projectKey` 参数**；网关用 `resolveKanbanProjectRoot(projectKey)` 把 `projectKey` 直接作为项目根目录（v1，后续可接入 workspace 解析）。agent 工具侧从 `context.cwd` 反查（与 dsh 的 `exec.agent.session.header.cwd` 一致）。跨项目移动除 `projectKey` 外再显式传 `toProjectKey`。
 
 | 方法（method） | 入参 | 说明 |
 |---|---|---|
-| `kanban_get` | `{ includeArchived? }` | 整板读取（列+卡），UI 首屏渲染 |
+| `kanban_get` | `{ projectKey, includeArchived? }` | 读整板（列+卡），UI 首屏渲染；`includeArchived=false`（默认）过滤回收站卡 |
 | `kanban_add_card` | `{ columnId, title, note?, label?, priority?, color?, dueDate? }` | 加卡 |
 | `kanban_update_card` | `{ cardId, title?, note?, label?, priority?, color?, dueDate? }` | 更新卡 |
 | `kanban_delete_card` / `kanban_restore_card` / `kanban_purge_card` | `{ cardId }` | 软删 / 恢复 / 彻底删 |
@@ -188,13 +189,13 @@ dsh 参考实现把浏览器与宿主的通信做成了一个扁平 RPC（`kanba
 
 > 方法为**可选新增**，客户端经 `describe_server` / `not_configured` 探测，旧网关/客户端不假设对方实现。
 >
-> **项目上下文**：`kanban_*` 方法（除跨项目移动外）**不带 `projectId` 参数**——网关/工具从当前所选项目的上下文解析。UI 在项目级 tab 体系内打开"看板"时，应通过 `useAppTabs` / session/workspace 状态拿到当前激活项目的 `projectId`，并在调用 `kanban_get` 前先发 `kanban_subscribe { projectId }`；切换项目时先发旧 project 的 `kanban_unsubscribe`，再发新 project 的 `kanban_subscribe`。agent 工具侧从 `exec.agent.session.header.cwd` 反查工作区，复用 `src/session/workspace/` 的解析逻辑。
+> **项目上下文**：网关业务方法携带 `projectKey`（v1 直接作为项目根目录）；`kanban_subscribe`/`kanban_unsubscribe` 只按 `projectId` 登记订阅。UI 在项目级 tab 体系内打开"看板"时，应通过 `useAppTabs` / session/workspace 状态拿到当前激活项目的 `projectId` 作为 `projectKey` 传入，并在调用 `kanban_get` 前先发 `kanban_subscribe { projectId }`；切换项目时先发旧 project 的 `kanban_unsubscribe`，再发新 project 的 `kanban_subscribe`。agent 工具侧从 `context.cwd` 反查工作区（后续可复用 `src/session/workspace/` 的解析逻辑）。
 
 ### 5.2 新增事件（`GatewayEvent`，`src/gateway/protocol/types.ts`）
 
 | 事件 | 载荷 | 说明 |
 |---|---|---|
-| `kanban_updated` | `{ projectId, kind: "card"｜"column", cardId?, columnId?, at }` | 看板变更推送；agent 在某 turn 改卡后，打开中的看板**实时刷新** |
+| `kanban_updated` | `{ projectId, kind: "card"｜"column"｜"board", cardId?, columnId?, at }` | 看板变更推送；agent 在某 turn 改卡后，打开中的看板**实时刷新**。`board` 类型用于 `kanban_undo`（整板快照回滚） |
 
 > **增强点**：dsh 插件无事件推送——agent 写卡后已打开的看板不会自动更新（须手动操作/刷新）。Sati 以 `kanban_updated` 事件达成"agent 写→用户看板实时变"，这才是真正的"人机共同知道任务情况"。
 >
@@ -214,7 +215,7 @@ agent 通过工具写看板（与 UI 的 gateway 方法共用同一 `BoardRuntim
 
 | 工具 | 入参（inputSchema 要点） | outputSchema / 模型可见反馈 |
 |---|---|---|
-| `kanban_get` | `{ includeArchived? }` | 返回当前板摘要（列+卡），规划前先读 |
+| `kanban_get` | `{ includeArchived? }` | 返回当前板摘要（列+卡，默认不含回收站），规划前先读 |
 | `kanban_add_card` | `{ title, columnId?, note?, label?, priority?, color?, dueDate? }` | `{ cardId }`；自动带 `source` 溯源 |
 | `kanban_update_card` | `{ id, title?, note?, label?, priority?, color?, dueDate? }` | `{ cardId, updatedAt }` |
 | `kanban_delete_card` | `{ id }` | 软删（入回收站） |
@@ -228,6 +229,8 @@ agent 通过工具写看板（与 UI 的 gateway 方法共用同一 `BoardRuntim
 | `kanban_rename_column` | `{ id, title }` | 重命名列 |
 | `kanban_delete_column` | `{ id }` | 删列（卡片并入第一列，至少留一列） |
 | `kanban_undo` | `{}` | 撤销最近一次写操作（50 步栈） |
+
+**项目解析**：工具 `execute` 用 `context.cwd` 作为当前项目根，经 `manager.getRuntime(resolve(cwd), resolve(cwd))` 取 `BoardRuntime`；`kanban_move_card_to_workspace` 的 `toWorkspaceId` 相对路径基于当前工作区根解析（`resolve(context.cwd, toWorkspaceId)`），避免以 gateway 进程 cwd 拼出任意路径，绝对路径则原样使用。
 
 **domain 元数据**：为通用工作区能力，**不标注 domain**（对所有角色可见）；需裁剪的场景可在角色 `hiddenDomains` 隐藏。这是一个决策点，见 §9 备选 6。
 
@@ -287,7 +290,7 @@ kanban/
 | 变更 | 影响 | 处置 |
 |---|---|---|
 | 新增 GatewayEvent | 事件矩阵失配 | `pnpm gen:event-matrix` 重生成 + `pnpm check:event-matrix` green |
-| 新增工具 `inputSchema` | llm-replay fixture 失配 | 走 `scripts/record-llm-replay.ts` 重录（`pnpm record:replay`） |
+| 新增工具 `inputSchema` | llm-replay fixture 失配 | 看板工具**opt-in 注册**（仅 gateway 启动路径注入 manager），默认工具集不变，`toolSchemaDigest` 不漂移，**无需重录** fixture；若今后改为默认注册才需 `pnpm record:replay` |
 | 协议 1.4→1.5 | MINOR 向后兼容 | 变更表登记；`isProtocolCompatible` 按 MAJOR 判定，Web(1.0) 同 MAJOR 兼容 |
 | 移动代码/删 import 触发 eslint --fix | 事件矩阵 file:line 漂移 | 改动后重新 `pnpm gen:event-matrix` |
 
@@ -362,8 +365,8 @@ kanban/
 
 ### Phase 4 · Agent 工具
 - `src/tool/builtin/kanban*.ts` 工具（`outputSchema` + domain 决策，含 `kanban_add_card` 自动注入 `source`）+ 注册进 `createBuiltinRegistry`。
-- 重录 llm-replay fixture（`pnpm record:replay`）。
-- 测试：工具级测试（mock 外部网络，LLM 回路走重放 seam）。
+- 工具为 **opt-in 注册**（`createBuiltinRegistry({ kanban })`），默认工具集不变，llm-replay fixture `toolSchemaDigest` 不漂移，**无需重录** fixture。
+- 测试：工具级测试（`mock 外部网络，LLM 回路走重放 seam`）。
 
 ### Phase 5 · UI（`ui/src/components/kanban/`）
 - dnd-kit 拖拽看板 + shadcn 渲染 + 乐观更新 + WebSocket `kanban_updated` 重建 + 移动工作区选择器。
@@ -377,7 +380,7 @@ kanban/
 | 风险/决策 | 等级 | 说明与缓解 |
 |---|---|---|
 | **定位**：看板为**项目级**、内容不随会话变 | 高 | 已定（用户拍板）；确保工具/网关按当前项目解析看板文件，避免误混会话 |
-| 桌面/CLI 多进程对该 JSON 的并发写 | 中 | 单机单用户基本无并发；`BoardStore` 内存缓存 + 原子写，进程内串行；跨进程共享同一文件不在支持范围 |
+| 同一进程内并发写同一项目 JSON | 中 | `BoardStore` 以 mutex-tail（`run`/`mutate`）**串行化同一项目内的读改写**（每项目一个 store，经 `KanbanBoardManager` 缓存）；跨项目移动分别锁源/目标 store（锁定序固定源→目标，无死锁）；跨进程共享同一文件不在支持范围 |
 | UI 工作量最大 | 中 | Phase 5 独立成阶段；先落地数据+协议+工具（后端先行），UI 可后置 |
 | 事件面/重放失配 | 低 | §8 已列处置：重生成事件矩阵 + 重录 fixture |
 | 拖拽库选型 | 低 | 已定 dnd-kit；规避 react-beautiful-dnd |

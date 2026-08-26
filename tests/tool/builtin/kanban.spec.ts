@@ -237,3 +237,17 @@ test("kanban_move_card_to_workspace 跨项目移动", async () => {
   assert.equal(targetBoard.data!.cards[0]?.id, newId);
   assert.equal(targetBoard.data!.cards[0]?.title, "跨项目卡");
 });
+
+test("kanban_move_card_to_workspace 相对 toWorkspaceId 基于当前工作区解析", async () => {
+  const { root, tools } = setup();
+  const added = await tools.addCard.execute({ title: "跨项目卡" }, makeContext(root));
+  const id = (added.data as { cardId: string }).cardId;
+
+  // 相对路径应解析到 <current workspace>/target-sub，而非进程 cwd。
+  const out = await tools.moveCardToWorkspace.execute({ id, toWorkspaceId: "target-sub" }, makeContext(root));
+  const newId = (out.data as { cardId: string }).cardId;
+
+  const targetBoard = await tools.get.execute({}, makeContext(join(root, "target-sub")));
+  assert.equal(targetBoard.data!.cards.length, 1);
+  assert.equal(targetBoard.data!.cards[0]?.id, newId);
+});

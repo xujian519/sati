@@ -88,7 +88,7 @@ export interface BoardActor {
 }
 
 /** 看板变更事件推送的载荷。 */
-export type KanbanUpdatedKind = "card" | "column";
+export type KanbanUpdatedKind = "card" | "column" | "board";
 
 export interface KanbanUpdatedPayload {
   /** 项目标识（网关/工具负责把 projectRoot 映射为稳定 id）。 */
