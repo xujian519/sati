@@ -44,6 +44,22 @@ describe("BoardRuntime 业务规则", () => {
     assert.equal(board.cards.length, 0);
   });
 
+  it("reorderColumns 重排列并触发 column 事件", async () => {
+    const { runtime, events } = makeRuntime();
+    const board = await runtime.getBoard();
+    const ids = board.columns.map(c => c.id);
+
+    await runtime.reorderColumns([...ids].reverse());
+
+    const reloaded = await runtime.getBoard();
+    assert.deepEqual(
+      reloaded.columns.map(c => c.id),
+      [...ids].reverse(),
+    );
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.kind, "column");
+  });
+
   it("addCard 加卡并返回 cardId；未提供 actor 时不注入 source", async () => {
     const { runtime } = makeRuntime();
     const board = await runtime.getBoard();

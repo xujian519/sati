@@ -67,6 +67,8 @@ import type {
   KanbanPurgeCardResult,
   KanbanRenameColumnInput,
   KanbanRenameColumnResult,
+  KanbanReorderColumnsInput,
+  KanbanReorderColumnsResult,
   KanbanRestoreCardInput,
   KanbanRestoreCardResult,
   KanbanSubscribeInput,
@@ -762,6 +764,7 @@ export interface Gateway {
   kanbanAddColumn?(input: KanbanAddColumnInput): Promise<KanbanAddColumnResult>;
   kanbanRenameColumn?(input: KanbanRenameColumnInput): Promise<KanbanRenameColumnResult>;
   kanbanDeleteColumn?(input: KanbanDeleteColumnInput): Promise<KanbanDeleteColumnResult>;
+  kanbanReorderColumns?(input: KanbanReorderColumnsInput): Promise<KanbanReorderColumnsResult>;
   kanbanUndo?(input: KanbanUndoInput): Promise<KanbanUndoResult>;
   kanbanSubscribe?(input: KanbanSubscribeInput): Promise<KanbanSubscribeResult>;
   kanbanUnsubscribe?(input: KanbanUnsubscribeInput): Promise<KanbanUnsubscribeResult>;

@@ -98,6 +98,16 @@ Sati 缺少一个**按项目隔离、agent 可写、用户可持久化查看**�
 - **拖拽**：真实鼠标把“E2E 浏览器卡片”从待办拖到进行中，服务端 `columnId` 由 `c1` 变为 `c2`（dnd-kit `onDragEnd` → `moveCard` 乐观更新 + 落盘一致）。
 - i18n：头部/按钮为英文（默认 en），优先级徽章显示 “Medium”、标签显示译文（修复了误用 `t("kanban.x")` 点号前缀、应 `t("kanban:x")` 命名空间的问题）。
 
+### Phase 5.1 收尾（2026-08-26，补三项设计缺口）
+
+补齐设计文档明确但首轮未做的三项：
+
+- **卡片溯源回链**：卡片 `source` 存在时，卡片底部渲染「源会话」按钮（`kanban:card.source`/`kanban:card.openSource`），点击调用 `MainContent.handleOpenKanbanSourceSession`（在 SplitBody 内）——优先在已加载 `projects` 里找到源项目/会话并 `onSelectSession` 打开 + `setActiveTab("chat")`；找不到则按 `onNavigateToSession(sessionKey)` 回退。**注意**：卡片本体因 `useSortable` 自带 `role="button"`，交互测试须用精确 `aria-label`（`button[aria-label='Open source session']`）而非 `getByRole` 正则，避免误点卡片本体。
+- **列拖拽排序**：新增后端 `BoardStore.reorderColumns`（校验排列/重复/未知 id）+ `BoardRuntime.reorderColumns`（emit `column` 事件）+ gateway 方法 `kanban_reorder_columns`（`InProcessGateway`/`RemoteGateway`/`Gateway` 接口/`GatewayWsConnection` 分发/`WsGatewayMethod`）+ REST `#reorder-columns` + `api.kanban.reorderColumns` + `useBoardState.reorderColumns`（乐观重排 + 失败回滚）。UI 侧把列改为 `useSortable`（`data.type:"column"`，列头 GripVertical 拖拽把手），顶层 `SortableContext`（`horizontalListSortingStrategy`）包裹列，`useBoardDragDrop` 按 `data.type` 路由卡片/列拖拽（列拖拽经 `computeColumnOrder` 产出新顺序）。
+- **断线重连订阅**：`useBoardState` 订阅 `websocket-reconnected` 帧，重连后重新 `kanban-watch` 当前项目 + `refresh()`；ui/server 桥 `registerKanbanNotificationForwarding` 重构为模块级 handler + `ensureKanbanForwarding`（每次 `gwKanbanSubscribe` 时校验并重挂到当前 gateway 实例，gateway 重启/重连后实时推送恢复）。浏览器侧重连 → 重发 watch → 桥重挂 handler。
+
+**浏览器端到端验证（Phase 5.1）**：列拖拽把「进行中」拖到「待办」前，服务端列序变为 `进行中 / 待办 / 已完成`；卡片拖拽到进行中后 `columnId` 变为 `c2`；点击「Open source session」链接 URL 跳转 `/session/<源key>` 且 `sessionFound=true`；无控制台错误。断线重连路径经代码走查确认（未能端到端模拟网络中断）。
+
 **评审修复（2026-08-26 code review，Merge 前）**
 
 - **Critical — `BoardStore` 加进程内串行化**：原实现每个写操作 `load → mutate → save` 无锁，并发 `addCard` 会共享同一 `seq`、最后一次 `save` 覆盖其余（实测 20 并发仅落盘 1 张卡）。改为 `FileHistoryStore` 同款 **mutex-tail**（`private mutex: Promise<void>` + `run<T>()` + `mutate<T>()`），每项目一个 store 即项目级串行。同时顺带消除「读两次」；写失败则对象丢弃、不留半写。

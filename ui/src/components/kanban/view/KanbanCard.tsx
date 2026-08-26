@@ -1,7 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { Calendar } from "lucide-react";
+import { Calendar, Link2 } from "lucide-react";
 import { cn } from "../../../lib/utils.js";
 import { LABEL_META, LABEL_OPTIONS, PRIORITY_META } from "../constants/constants";
 import type { BoardCard } from "../types/types";
@@ -9,9 +9,10 @@ import type { BoardCard } from "../types/types";
 type KanbanCardProps = {
   card: BoardCard;
   onOpen: (card: BoardCard) => void;
+  onOpenSource?: (card: BoardCard) => void;
 };
 
-export function KanbanCard({ card, onOpen }: KanbanCardProps) {
+export function KanbanCard({ card, onOpen, onOpenSource }: KanbanCardProps) {
   const { t } = useTranslation();
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: card.id,
@@ -64,6 +65,21 @@ export function KanbanCard({ card, onOpen }: KanbanCardProps) {
             <Calendar className="h-3 w-3" strokeWidth={1.75} />
             {card.dueDate}
           </span>
+        ) : null}
+        {card.source?.sessionKey && onOpenSource ? (
+          <button
+            type="button"
+            onClick={event => {
+              event.stopPropagation();
+              onOpenSource(card);
+            }}
+            className="ml-auto inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] text-brand-600 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-900/30"
+            aria-label={t("kanban:card.openSource", { defaultValue: "打开源会话" })}
+            title={t("kanban:card.openSource", { defaultValue: "打开源会话" })}
+          >
+            <Link2 className="h-3 w-3" strokeWidth={1.75} />
+            {t("kanban:card.source", { defaultValue: "源会话" })}
+          </button>
         ) : null}
       </div>
     </div>

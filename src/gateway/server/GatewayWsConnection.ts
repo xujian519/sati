@@ -520,6 +520,11 @@ export class GatewayWsConnection {
           return this.options.gateway.kanbanDeleteColumn(frame.params as GatewayMethodParams<"kanbanDeleteColumn">);
         }
         return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
+      case "kanban_reorder_columns":
+        if (this.options.gateway.kanbanReorderColumns) {
+          return this.options.gateway.kanbanReorderColumns(frame.params as GatewayMethodParams<"kanbanReorderColumns">);
+        }
+        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
       case "kanban_undo":
         if (this.options.gateway.kanbanUndo) {
           return this.options.gateway.kanbanUndo(frame.params as GatewayMethodParams<"kanbanUndo">);

@@ -254,3 +254,29 @@ test("WebSocket：未注入 kanban 时 kanban 方法返回 not_configured", asyn
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("InProcessGateway：kanban_reorder_columns 重排列并持久化", async () => {
+  const { root, gateway } = await setup();
+  try {
+    const board = await gateway.kanbanGet({ projectKey: root });
+    const ids = board.columns.map(c => c.id);
+
+    const result = await gateway.kanbanReorderColumns({ projectKey: root, columnIds: [...ids].reverse() });
+    assert.equal(result.ok, true);
+
+    const reloaded = await gateway.kanbanGet({ projectKey: root });
+    assert.deepEqual(
+      reloaded.columns.map(c => c.id),
+      [...ids].reverse(),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("InProcessGateway：kanban_reorder_columns 未注入 kanban 时 not_configured", async () => {
+  const gateway = new InProcessGateway(makeFakeRouter(), {});
+  const result = await gateway.kanbanReorderColumns({ projectKey: "/proj", columnIds: ["c1"] });
+  assert.equal(result.error?.code, "not_configured");
+  assert.equal(result.ok, false);
+});

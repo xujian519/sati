@@ -86,6 +86,9 @@ export type KanbanRenameColumnResult = { ok: boolean; error?: KanbanError };
 export type KanbanDeleteColumnInput = { projectKey: string; columnId: string };
 export type KanbanDeleteColumnResult = { ok: boolean; error?: KanbanError };
 
+export type KanbanReorderColumnsInput = { projectKey: string; columnIds: string[] };
+export type KanbanReorderColumnsResult = { ok: boolean; error?: KanbanError };
+
 export type KanbanUndoInput = { projectKey: string };
 export type KanbanUndoResult = { ok: boolean; error?: KanbanError };
 

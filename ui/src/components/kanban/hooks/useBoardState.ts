@@ -65,15 +65,24 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   }, [projectKey, refresh]);
 
   // 订阅 kanban_updated：目标项目的事件触发重建（agent 写卡后 UI 实时变）。
+  // 断线重连（websocket-reconnected）时重新订阅当前项目并重拉一次板，避免实时推送中断。
   useEffect(() => {
     const unsubscribe = subscribe(message => {
+      if (message?.type === "websocket-reconnected") {
+        const current = projectKeyRef.current;
+        if (current) {
+          sendMessage({ type: "kanban-watch", projectId: current });
+          void refresh();
+        }
+        return;
+      }
       if (message?.type !== "kanban_updated") return;
       const payload = message.payload as { projectId?: string } | undefined;
       if (!payload || payload.projectId !== projectKeyRef.current) return;
       void refresh();
     });
     return unsubscribe;
-  }, [subscribe, refresh]);
+  }, [subscribe, refresh, sendMessage]);
 
   const guard = useCallback(async (fn: () => Promise<unknown>): Promise<KanbanMutationResult> => {
     try {
@@ -339,6 +348,33 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
     [guard, refresh],
   );
 
+  const reorderColumns = useCallback(
+    async (columnIds: string[]): Promise<KanbanMutationResult> => {
+      const currentProjectKey = projectKeyRef.current;
+      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      const previousColumns = board?.columns;
+      setBoard(prev => {
+        if (!prev) return prev;
+        const byId = new Map(prev.columns.map(column => [column.id, column]));
+        const next = columnIds
+          .map(id => byId.get(id))
+          .filter((column): column is NonNullable<typeof column> => Boolean(column));
+        return next.length === prev.columns.length ? { ...prev, columns: next } : prev;
+      });
+      const result = await guard(async () => {
+        const serverResult = await api.kanban.reorderColumns({ projectKey: currentProjectKey, columnIds });
+        if (serverResult?.error) throw new Error(serverResult.error.message);
+        setError(null);
+      });
+      if (!result.ok && previousColumns) {
+        setBoard(prev => (prev ? { ...prev, columns: previousColumns } : prev));
+        await refresh();
+      }
+      return result;
+    },
+    [board, guard, refresh],
+  );
+
   const undo = useCallback(async (): Promise<KanbanMutationResult> => {
     const currentProjectKey = projectKeyRef.current;
     if (!currentProjectKey) return { ok: false, error: "未选择项目" };
@@ -368,6 +404,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
     addColumn,
     renameColumn,
     deleteColumn,
+    reorderColumns,
     undo,
     getCard: (cardId: string) => (board ? getCard(board.cards, cardId) : undefined),
   };

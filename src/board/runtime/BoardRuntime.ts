@@ -97,6 +97,12 @@ export class BoardRuntime {
     await this.emitChange("column", { columnId });
   }
 
+  async reorderColumns(orderedIds: string[]): Promise<void> {
+    await this.beforeMutation();
+    await this.store.reorderColumns(orderedIds);
+    await this.emitChange("column");
+  }
+
   async addCard(
     fields: {
       columnId: string;

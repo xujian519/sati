@@ -79,6 +79,7 @@ export type WsGatewayMethod =
   | "kanban_add_column"
   | "kanban_rename_column"
   | "kanban_delete_column"
+  | "kanban_reorder_columns"
   | "kanban_undo"
   | "kanban_subscribe"
   | "kanban_unsubscribe";

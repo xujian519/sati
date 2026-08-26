@@ -342,3 +342,43 @@ describe("BoardStore 项目隔离", () => {
     assert.equal(reloadedA.cards[0]?.title, "仅A");
   });
 });
+
+describe("BoardStore 列重排", () => {
+  it("reorderColumns 按给定顺序重排列", async () => {
+    const { store } = makeStore();
+    const board = await store.loadBoard();
+    const ids = board.columns.map(c => c.id);
+
+    // 反转顺序
+    await store.reorderColumns([...ids].reverse());
+    const reloaded = await store.loadBoard();
+    assert.deepEqual(
+      reloaded.columns.map(c => c.id),
+      [...ids].reverse(),
+    );
+  });
+
+  it("reorderColumns 数量不匹配抛错", async () => {
+    const { store } = makeStore();
+    const board = await store.loadBoard();
+    const ids = board.columns.map(c => c.id);
+
+    await assert.rejects(() => store.reorderColumns(ids.slice(0, 2)), /Column count mismatch/);
+  });
+
+  it("reorderColumns 重复 id 抛错", async () => {
+    const { store } = makeStore();
+    const board = await store.loadBoard();
+    const ids = board.columns.map(c => c.id);
+
+    await assert.rejects(() => store.reorderColumns([ids[0]!, ids[0]!, ids[2]!]), /Duplicate column ids/);
+  });
+
+  it("reorderColumns 未知列 id 抛错", async () => {
+    const { store } = makeStore();
+    const board = await store.loadBoard();
+    const ids = board.columns.map(c => c.id);
+
+    await assert.rejects(() => store.reorderColumns([ids[0]!, ids[1]!, "c999"]), /Column not found/);
+  });
+});

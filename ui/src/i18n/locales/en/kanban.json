@@ -18,12 +18,17 @@
   "addCard": {
     "title": "Add card"
   },
+  "card": {
+    "source": "Source session",
+    "openSource": "Open source session"
+  },
   "addColumn": {
     "title": "New column",
     "placeholder": "Column title"
   },
   "columnMenu": {
-    "label": "Column actions"
+    "label": "Column actions",
+    "drag": "Drag to reorder"
   },
   "renameColumn": {
     "title": "Rename column"

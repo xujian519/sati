@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useTranslation } from "react-i18next";
-import { Check, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, GripVertical, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "../../../lib/utils.js";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -13,6 +13,7 @@ type KanbanColumnProps = {
   column: BoardColumn;
   cards: BoardCard[];
   onOpenCard: (card: BoardCard) => void;
+  onOpenSource?: (card: BoardCard) => void;
   onAddCard: (columnId: string) => void;
   onRenameColumn: (columnId: string, title: string) => void;
   onDeleteColumn: (columnId: string) => void;
@@ -22,12 +23,16 @@ export function KanbanColumn({
   column,
   cards,
   onOpenCard,
+  onOpenSource,
   onAddCard,
   onRenameColumn,
   onDeleteColumn,
 }: KanbanColumnProps) {
   const { t } = useTranslation();
-  const { setNodeRef, isOver } = useDroppable({ id: column.id, data: { type: "column", columnId: column.id } });
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging, isOver } = useSortable({
+    id: column.id,
+    data: { type: "column", columnId: column.id },
+  });
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [titleDraft, setTitleDraft] = useState(column.title);
@@ -63,13 +68,25 @@ export function KanbanColumn({
   return (
     <section
       ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "flex h-full min-w-[272px] max-w-[320px] flex-col rounded-xl border border-neutral-200 bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-900/40",
         isOver && "ring-2 ring-brand-500/50",
+        isDragging && "opacity-60",
       )}
     >
       {/* 列头 */}
-      <header className="flex items-center gap-2 px-3 py-2.5">
+      <header className="flex items-center gap-1.5 px-3 py-2.5">
+        <button
+          type="button"
+          className="shrink-0 cursor-grab text-neutral-300 hover:text-neutral-500 active:cursor-grabbing dark:text-neutral-600 dark:hover:text-neutral-400"
+          aria-label={t("kanban:columnMenu.drag", { defaultValue: "拖动排序列" })}
+          title={t("kanban:columnMenu.drag", { defaultValue: "拖动排序列" })}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" strokeWidth={1.75} />
+        </button>
         <span
           aria-hidden="true"
           className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -162,7 +179,7 @@ export function KanbanColumn({
               {t("kanban:emptyColumn", { defaultValue: "暂无可拖拽卡片" })}
             </p>
           ) : (
-            cards.map(card => <KanbanCard key={card.id} card={card} onOpen={onOpenCard} />)
+            cards.map(card => <KanbanCard key={card.id} card={card} onOpen={onOpenCard} onOpenSource={onOpenSource} />)
           )}
         </div>
       </SortableContext>

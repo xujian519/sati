@@ -234,6 +234,28 @@ export class BoardStore {
     });
   }
 
+  /** 按给定顺序重排列（列拖拽排序）；`orderedIds` 必须是现有列 id 的排列。 */
+  async reorderColumns(orderedIds: string[]): Promise<void> {
+    return this.mutate(state => {
+      if (orderedIds.length !== state.columns.length) {
+        throw new BoardStoreError("Column count mismatch");
+      }
+      if (new Set(orderedIds).size !== orderedIds.length) {
+        throw new BoardStoreError("Duplicate column ids");
+      }
+      const byId = new Map(state.columns.map(column => [column.id, column]));
+      const reordered: BoardColumn[] = [];
+      for (const columnId of orderedIds) {
+        const column = byId.get(columnId);
+        if (column === undefined) {
+          throw new BoardStoreError(`Column not found: ${columnId}`);
+        }
+        reordered.push(column);
+      }
+      state.columns = reordered;
+    });
+  }
+
   async addCard(
     fields: {
       columnId: string;

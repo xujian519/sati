@@ -95,6 +95,8 @@ import type {
   KanbanPurgeCardResult,
   KanbanRenameColumnInput,
   KanbanRenameColumnResult,
+  KanbanReorderColumnsInput,
+  KanbanReorderColumnsResult,
   KanbanRestoreCardInput,
   KanbanRestoreCardResult,
   KanbanSubscribeInput,
@@ -364,6 +366,10 @@ export class RemoteGateway implements Gateway {
 
   async kanbanDeleteColumn(input: KanbanDeleteColumnInput): Promise<KanbanDeleteColumnResult> {
     return this.client.request<KanbanDeleteColumnResult>("kanban_delete_column", input);
+  }
+
+  async kanbanReorderColumns(input: KanbanReorderColumnsInput): Promise<KanbanReorderColumnsResult> {
+    return this.client.request<KanbanReorderColumnsResult>("kanban_reorder_columns", input);
   }
 
   async kanbanUndo(input: KanbanUndoInput): Promise<KanbanUndoResult> {

@@ -751,6 +751,25 @@ function SplitBody(props: SplitBodyProps) {
     };
   }, [clampToolPanelWidth, toolPanelResizing]);
 
+  // 看板卡片溯源回链：打开产生该卡片的源会话（source.sessionKey）。
+  // 优先在已加载项目里定位并 onSelectSession（自动切到 chat），否则退化为按 key 导航。
+  const handleOpenKanbanSourceSession = useCallback(
+    (sessionKey: string) => {
+      const sourceProject = projects.find(project =>
+        (project.sessions ?? []).some(session => session.id === sessionKey),
+      );
+      const sourceSession = sourceProject?.sessions?.find(session => session.id === sessionKey);
+      if (sourceProject && sourceSession && onSelectSession) {
+        onSelectSession(sourceProject, sessionKey, { ...sourceSession, __projectName: sourceProject.name });
+      } else {
+        onNavigateToSession(sessionKey);
+      }
+      // 打开源会话后切到聊天窗（handleSessionSelect 默认只对 tasks/preview 切 chat）
+      setActiveTab("chat");
+    },
+    [onNavigateToSession, onSelectSession, projects, setActiveTab],
+  );
+
   const renderTool = () => {
     if (activeTab === "shell") {
       return <ShellV2 selectedProject={selectedProject} selectedSession={selectedSession} isActive />;
@@ -759,7 +778,13 @@ function SplitBody(props: SplitBodyProps) {
       return <GitV2 selectedProject={selectedProject} onFileOpen={handleFileOpen} />;
     }
     if (activeTab === "kanban") {
-      return <KanbanBoardView selectedProject={selectedProject} projects={projects} />;
+      return (
+        <KanbanBoardView
+          selectedProject={selectedProject}
+          projects={projects}
+          onOpenSession={handleOpenKanbanSourceSession}
+        />
+      );
     }
     if (activeTab === "always-on") {
       return (

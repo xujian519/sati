@@ -549,6 +549,7 @@ export const api = {
     addColumn: body => api.kanban._post("add-column", body),
     renameColumn: body => api.kanban._post("rename-column", body),
     deleteColumn: body => api.kanban._post("delete-column", body),
+    reorderColumns: body => api.kanban._post("reorder-columns", body),
     undo: body => api.kanban._post("undo", body),
   },
 

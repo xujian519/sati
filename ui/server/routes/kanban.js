@@ -292,6 +292,19 @@ router.post(
   ),
 );
 
+router.post(
+  "/reorder-columns",
+  proxy(
+    "kanbanReorderColumns",
+    body => ({ projectKey: body.projectKey, columnIds: body.columnIds }),
+    body => {
+      if (!requireProjectKey(body.projectKey)) return "projectKey 必填且非空";
+      if (!Array.isArray(body.columnIds) || body.columnIds.length === 0) return "columnIds 必填且非空";
+      return null;
+    },
+  ),
+);
+
 // ─── 撤销 ────────────────────────────────────────────────────────────────────
 
 router.post("/undo", proxy("kanbanUndo", pickProject, requireProject));

@@ -2039,43 +2039,61 @@ export function registerAlwaysOnNotificationForwarding(clients, forwardToSession
 /**
  * 项目看板（Kanban）实时推送接线（Phase 5）。
  *
- * 与 always-on 的 `registerAlwaysOnNotificationForwarding` 同构：这里只负责在
- * 共享 gateway 连接上注册 `kanban_updated` notification handler，并把事件转发给
- * callers（由 broadcast.js 提供"按 projectId 找浏览器 watchers"的 fanout 回调）。
+ * 与 always-on 的 `registerAlwaysOnNotificationForwarding` 类似，但**重连可用**：
+ * 看板 notification handler 不只在初次 gateway 连接时注册一次，而是在每次
+ * `gwKanbanSubscribe`（浏览器重新订阅看板）时调用 `ensureKanbanForwarding`，
+ * 检测到 gateway 实例已更换（重连/重启）就重新注册 handler。这样：
+ *   - 浏览器断线重连 → useBoardState 重新 `kanban-watch` → bridge `kanbanWatchProject`
+ *     → `gwKanbanSubscribe` → `ensureKanbanForwarding` 保证 handler 挂在**当前** gateway。
  *
  * gateway 侧只在有浏览器 watchers 订阅项目后才向本连接推送（见 gwKanbanSubscribe）。
- * 注意：与 always-on 一致，本函数在 gateway 初次连接时注册一次 handler；gateway
- * 重连后会创建新的 RemoteGateway 实例，notification 不自动重挂（既有已知限制，
- * 与本文件 always-on 转发同款，不在此扩展）。
  *
  * @param {Set<import('ws').WebSocket>} clients
  * @param {(projectId: string, payload: unknown) => void} forwardToProjectWatchers
  */
-export function registerKanbanNotificationForwarding(clients, forwardToProjectWatchers) {
-  ensureGateway()
-    .then(gw => {
-      gw.onNotification((name, payload) => {
-        if (name !== "kanban_updated") return;
-        const projectId = payload?.projectId;
-        if (!projectId) return;
-        if (typeof forwardToProjectWatchers === "function") {
-          forwardToProjectWatchers(projectId, payload);
-          return;
-        }
-        // Compatibility fallback for embedders without a watcher registry.
-        const msg = JSON.stringify({ type: "kanban_updated", payload });
-        for (const client of clients) {
-          if (client.readyState === 1) client.send(msg);
-        }
-      });
-    })
-    .catch(err => {
-      console.warn("[sati-bridge] failed to register kanban_updated notification forwarding:", err?.message || err);
-    });
+let kanbanForwardCallback = null;
+let kanbanRegisteredGateway = null;
+
+function handleKanbanNotification(name, payload) {
+  if (name !== "kanban_updated") return;
+  const projectId = payload?.projectId;
+  if (!projectId) return;
+  if (typeof kanbanForwardCallback === "function") {
+    kanbanForwardCallback(projectId, payload);
+  }
 }
 
-/** 让共享 gateway 连接订阅某项目的 kanban_updated 事件（gateway 侧仅最近一次订阅生效）。 */
+/** 确保 `kanban_updated` notification handler 挂在当前 gateway 实例上（重连/重启后重挂）。 */
+async function ensureKanbanForwarding() {
+  try {
+    const gw = await getSatiGateway();
+    if (gw && gw !== kanbanRegisteredGateway && typeof gw.onNotification === "function") {
+      gw.onNotification(handleKanbanNotification);
+      kanbanRegisteredGateway = gw;
+    }
+  } catch (err) {
+    console.warn("[sati-bridge] failed to re-register kanban_updated notification forwarding:", err?.message || err);
+  }
+}
+
+export function registerKanbanNotificationForwarding(clients, forwardToProjectWatchers) {
+  kanbanForwardCallback = (projectId, payload) => {
+    if (typeof forwardToProjectWatchers === "function") {
+      forwardToProjectWatchers(projectId, payload);
+      return;
+    }
+    // Compatibility fallback for embedders without a watcher registry.
+    const msg = JSON.stringify({ type: "kanban_updated", payload });
+    for (const client of clients) {
+      if (client.readyState === 1) client.send(msg);
+    }
+  };
+  ensureKanbanForwarding();
+}
+
+/** 让共享 gateway 连接订阅某项目的 kanban_updated 事件（先确保 handler 挂在当前实例）。 */
 export async function gwKanbanSubscribe(projectId) {
+  await ensureKanbanForwarding();
   const gw = await getSatiGatewayWithReset();
   if (typeof gw.kanbanSubscribe !== "function") {
     console.warn("[sati-bridge] gateway 不支持 kanban_subscribe，看板实时推送不可用");

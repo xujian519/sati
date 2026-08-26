@@ -396,7 +396,7 @@ kanban/
 - [x] agent 用 `kanban_add_card`/`kanban_move_card` 建卡/换列，落盘 `{projectRoot}/kanban-board.json` 可查；`outputSchema` 校验失败 fail-loud；llm-replay fixture 重录后 `pnpm test` 全绿。
 - [x] UI "看板"项目级 tab 拖拽换列/列内排序/乐观更新回滚/`kanban_updated` WS 重建一致；浏览器端到端通过（建卡→外部写入实时出现→拖拽换列落盘）。
 - [x] 不同项目看板互不可见（隔离测试）；换会话再打开看板内容不变（项目级）。
-- [ ] 卡片可溯源（点击卡片可回链源会话）——**Phase 5 未含**：`source.{sessionKey,turnId}` 已由后端持久化，但 UI 卡片/编辑器未渲染可点击回链；列为后续增强。
+- [x] 卡片可溯源（点击卡片可回链源会话）——卡片有 `source` 时渲染「源会话」链接，点击经 `handleOpenKanbanSourceSession` 打开源会话（优先 `onSelectSession` 定位并切 chat，否则按 sessionKey 导航）。
 
 ---
 

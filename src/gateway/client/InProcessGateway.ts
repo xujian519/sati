@@ -20,6 +20,8 @@ import type {
   KanbanBulkMoveCardsResult,
   KanbanDeleteColumnInput,
   KanbanDeleteColumnResult,
+  KanbanReorderColumnsInput,
+  KanbanReorderColumnsResult,
   KanbanDuplicateCardInput,
   KanbanDuplicateCardResult,
   KanbanGetInput,
@@ -1329,6 +1331,16 @@ export class InProcessGateway implements Gateway {
     const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
     const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
     await runtime.undo();
+    return { ok: true };
+  }
+
+  async kanbanReorderColumns(input: KanbanReorderColumnsInput): Promise<KanbanReorderColumnsResult> {
+    if (!this.options.kanban) {
+      return notConfigured({ ok: false }, "Kanban is not configured on this gateway.");
+    }
+    const projectRoot = this.resolveKanbanProjectRoot(input.projectKey);
+    const runtime = this.options.kanban.getRuntime(projectRoot, input.projectKey);
+    await runtime.reorderColumns(input.columnIds);
     return { ok: true };
   }
 }

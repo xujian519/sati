@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { ArrowLeft, Plus, Undo2 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -17,11 +18,12 @@ import { KanbanCardEditor, type KanbanCardDraft } from "./KanbanCardEditor";
 type KanbanBoardViewProps = {
   selectedProject: Project | null;
   projects: Project[];
+  onOpenSession?: (sessionKey: string) => void;
 };
 
 type EditorState = { card: BoardCard | null; columnId: string } | null;
 
-export function KanbanBoardView({ selectedProject, projects }: KanbanBoardViewProps) {
+export function KanbanBoardView({ selectedProject, projects, onOpenSession }: KanbanBoardViewProps) {
   const { t } = useTranslation();
   const projectKey = selectedProject?.path || selectedProject?.fullPath || null;
   const { board, loading, error, refresh, ...actions } = useBoardState({ projectKey });
@@ -37,8 +39,12 @@ export function KanbanBoardView({ selectedProject, projects }: KanbanBoardViewPr
 
   const { activeCard, dndContextProps } = useBoardDragDrop({
     cards: visibleCards,
+    columns: board?.columns ?? [],
     onDrop: (cardId, target) => {
       void actions.moveCard(cardId, target.columnId, target.toIndex);
+    },
+    onReorderColumns: columnIds => {
+      void actions.reorderColumns(columnIds);
     },
   });
 
@@ -136,17 +142,20 @@ export function KanbanBoardView({ selectedProject, projects }: KanbanBoardViewPr
       {/* 看板主体 */}
       <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-3">
         <DndContext {...dndContextProps}>
-          {board.columns.map(column => (
-            <KanbanColumn
-              key={column.id}
-              column={column}
-              cards={cardsByColumn(visibleCards, column.id)}
-              onOpenCard={card => setEditor({ card, columnId: card.columnId })}
-              onAddCard={columnId => setEditor({ card: null, columnId })}
-              onRenameColumn={(columnId, title) => void actions.renameColumn(columnId, title)}
-              onDeleteColumn={columnId => void actions.deleteColumn(columnId)}
-            />
-          ))}
+          <SortableContext items={board.columns.map(column => column.id)} strategy={horizontalListSortingStrategy}>
+            {board.columns.map(column => (
+              <KanbanColumn
+                key={column.id}
+                column={column}
+                cards={cardsByColumn(visibleCards, column.id)}
+                onOpenCard={card => setEditor({ card, columnId: card.columnId })}
+                onOpenSource={onOpenSession ? card => onOpenSession(card.source?.sessionKey ?? "") : undefined}
+                onAddCard={columnId => setEditor({ card: null, columnId })}
+                onRenameColumn={(columnId, title) => void actions.renameColumn(columnId, title)}
+                onDeleteColumn={columnId => void actions.deleteColumn(columnId)}
+              />
+            ))}
+          </SortableContext>
 
           {addingColumn ? (
             <div className="flex h-fit min-w-[272px] max-w-[320px] shrink-0 flex-col gap-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50/70 p-3 dark:border-neutral-700 dark:bg-neutral-900/40">

@@ -18,12 +18,17 @@
   "addCard": {
     "title": "添加卡片"
   },
+  "card": {
+    "source": "源会话",
+    "openSource": "打开源会话"
+  },
   "addColumn": {
     "title": "新建列",
     "placeholder": "列标题"
   },
   "columnMenu": {
-    "label": "列操作"
+    "label": "列操作",
+    "drag": "拖动排序列"
   },
   "renameColumn": {
     "title": "重命名列"
