@@ -519,6 +519,43 @@ export const api = {
       }),
   },
 
+  // 项目看板（Kanban）：全部经 ui/server /api/kanban/* 转发到 gateway kanban_* 方法。
+  // 各方法返回 gateway 原始结果（如 { columns, cards, ... } 或 { ok, error }）。
+  kanban: {
+    _post: async (endpoint, body) => {
+      const response = await authenticatedFetch(`/api/kanban/${endpoint}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        // 动态 import 避免静态依赖 i18n/config（后者又从本模块取 authenticatedFetch，
+        // 静态 import 会形成 api.js ↔ config.js 模块加载期循环）。
+        const { default: i18n } = await import("../i18n/config.js");
+        throw new Error(payload?.error?.message || i18n.t("kanban:errors.requestFailed", { status: response.status }));
+      }
+      return payload;
+    },
+    get: body => api.kanban._post("get", body),
+    subscribe: body => api.kanban._post("subscribe", body),
+    unsubscribe: body => api.kanban._post("unsubscribe", body),
+    addCard: body => api.kanban._post("add-card", body),
+    updateCard: body => api.kanban._post("update-card", body),
+    moveCard: body => api.kanban._post("move-card", body),
+    archiveCard: body => api.kanban._post("archive-card", body),
+    restoreCard: body => api.kanban._post("restore-card", body),
+    purgeCard: body => api.kanban._post("purge-card", body),
+    duplicateCard: body => api.kanban._post("duplicate-card", body),
+    bulkArchiveCards: body => api.kanban._post("bulk-archive-cards", body),
+    bulkMoveCards: body => api.kanban._post("bulk-move-cards", body),
+    moveToProject: body => api.kanban._post("move-to-project", body),
+    addColumn: body => api.kanban._post("add-column", body),
+    renameColumn: body => api.kanban._post("rename-column", body),
+    deleteColumn: body => api.kanban._post("delete-column", body),
+    reorderColumns: body => api.kanban._post("reorder-columns", body),
+    undo: body => api.kanban._post("undo", body),
+  },
+
   // Generic GET method for any endpoint
   get: endpoint => authenticatedFetch(`/api${endpoint}`),
 

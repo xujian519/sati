@@ -24,6 +24,7 @@
     "shell": "终端",
     "files": "文件",
     "git": "源代码管理",
+    "kanban": "看板",
     "tasks": "任务",
     "dashboard": "路由",
     "memory": "记忆",

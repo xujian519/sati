@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import {
   BarChart3,
   ClipboardCheck,
+  Columns3,
   Database,
   Folder,
   GitBranch,
@@ -38,6 +39,7 @@ export const BASE_APP_TABS: BuiltInAppTab[] = [
   { kind: "builtin", id: "shell", labelKey: "tabs.shell", icon: Terminal },
   { kind: "builtin", id: "files", labelKey: "tabs.files", icon: Folder },
   { kind: "builtin", id: "git", labelKey: "tabs.git", icon: GitBranch },
+  { kind: "builtin", id: "kanban", labelKey: "tabs.kanban", icon: Columns3 },
   { kind: "builtin", id: "dashboard", labelKey: "tabs.dashboard", icon: BarChart3 },
 ];
 

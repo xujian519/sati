@@ -27,8 +27,17 @@
  *           `panel_heartbeat` (browser activity heartbeat →
  *           SessionPresence.panelTouch, M4 Web 下线判定) /
  *           `team_panel_snapshot` / `team_tool_call` (MINOR，feature-detect)。
+ *   - 1.5 — 2026-08-26: added optional project kanban methods
+ *           `kanban_get` / `kanban_add_card` / `kanban_update_card` /
+ *           `kanban_move_card` / `kanban_archive_card` / `kanban_restore_card` /
+ *           `kanban_purge_card` / `kanban_bulk_archive_cards` /
+ *           `kanban_bulk_move_cards` / `kanban_duplicate_card` /
+ *           `kanban_move_card_to_project` / `kanban_add_column` /
+ *           `kanban_rename_column` / `kanban_delete_column` / `kanban_undo` /
+ *           `kanban_subscribe` / `kanban_unsubscribe` and `kanban_updated`
+ *           notification event (MINOR，feature-detect)。
  */
-export const SATI_GATEWAY_PROTOCOL_VERSION = "1.4";
+export const SATI_GATEWAY_PROTOCOL_VERSION = "1.5";
 
 /**
  * Handshake compatibility check: clients and servers with the same MAJOR

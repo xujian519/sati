@@ -70,6 +70,44 @@ import type {
   CronUpdateInput,
   CronUpdateResult,
 } from "../../cron/protocol/types.js";
+import type {
+  KanbanAddCardInput,
+  KanbanAddCardResult,
+  KanbanAddColumnInput,
+  KanbanAddColumnResult,
+  KanbanArchiveCardInput,
+  KanbanArchiveCardResult,
+  KanbanBulkArchiveCardsInput,
+  KanbanBulkArchiveCardsResult,
+  KanbanBulkMoveCardsInput,
+  KanbanBulkMoveCardsResult,
+  KanbanDeleteColumnInput,
+  KanbanDeleteColumnResult,
+  KanbanDuplicateCardInput,
+  KanbanDuplicateCardResult,
+  KanbanGetInput,
+  KanbanGetResult,
+  KanbanMoveCardInput,
+  KanbanMoveCardResult,
+  KanbanMoveCardToProjectInput,
+  KanbanMoveCardToProjectResult,
+  KanbanPurgeCardInput,
+  KanbanPurgeCardResult,
+  KanbanRenameColumnInput,
+  KanbanRenameColumnResult,
+  KanbanReorderColumnsInput,
+  KanbanReorderColumnsResult,
+  KanbanRestoreCardInput,
+  KanbanRestoreCardResult,
+  KanbanSubscribeInput,
+  KanbanSubscribeResult,
+  KanbanUndoInput,
+  KanbanUndoResult,
+  KanbanUnsubscribeInput,
+  KanbanUnsubscribeResult,
+  KanbanUpdateCardInput,
+  KanbanUpdateCardResult,
+} from "../kanban/types.js";
 import { parseReloadConfigResult } from "../protocol/reloadConfigResult.js";
 import { GatewayWsClient, type GatewayWsNotificationHandler } from "./GatewayWsClient.js";
 
@@ -272,6 +310,78 @@ export class RemoteGateway implements Gateway {
 
   async knowledgeCapabilities(input: KnowledgeCapabilitiesInput): Promise<KnowledgeCapabilitiesResult> {
     return this.client.request<KnowledgeCapabilitiesResult>("knowledge_capabilities", input);
+  }
+
+  async kanbanGet(input: KanbanGetInput): Promise<KanbanGetResult> {
+    return this.client.request<KanbanGetResult>("kanban_get", input);
+  }
+
+  async kanbanAddCard(input: KanbanAddCardInput): Promise<KanbanAddCardResult> {
+    return this.client.request<KanbanAddCardResult>("kanban_add_card", input);
+  }
+
+  async kanbanUpdateCard(input: KanbanUpdateCardInput): Promise<KanbanUpdateCardResult> {
+    return this.client.request<KanbanUpdateCardResult>("kanban_update_card", input);
+  }
+
+  async kanbanMoveCard(input: KanbanMoveCardInput): Promise<KanbanMoveCardResult> {
+    return this.client.request<KanbanMoveCardResult>("kanban_move_card", input);
+  }
+
+  async kanbanArchiveCard(input: KanbanArchiveCardInput): Promise<KanbanArchiveCardResult> {
+    return this.client.request<KanbanArchiveCardResult>("kanban_archive_card", input);
+  }
+
+  async kanbanRestoreCard(input: KanbanRestoreCardInput): Promise<KanbanRestoreCardResult> {
+    return this.client.request<KanbanRestoreCardResult>("kanban_restore_card", input);
+  }
+
+  async kanbanPurgeCard(input: KanbanPurgeCardInput): Promise<KanbanPurgeCardResult> {
+    return this.client.request<KanbanPurgeCardResult>("kanban_purge_card", input);
+  }
+
+  async kanbanBulkArchiveCards(input: KanbanBulkArchiveCardsInput): Promise<KanbanBulkArchiveCardsResult> {
+    return this.client.request<KanbanBulkArchiveCardsResult>("kanban_bulk_archive_cards", input);
+  }
+
+  async kanbanBulkMoveCards(input: KanbanBulkMoveCardsInput): Promise<KanbanBulkMoveCardsResult> {
+    return this.client.request<KanbanBulkMoveCardsResult>("kanban_bulk_move_cards", input);
+  }
+
+  async kanbanDuplicateCard(input: KanbanDuplicateCardInput): Promise<KanbanDuplicateCardResult> {
+    return this.client.request<KanbanDuplicateCardResult>("kanban_duplicate_card", input);
+  }
+
+  async kanbanMoveCardToProject(input: KanbanMoveCardToProjectInput): Promise<KanbanMoveCardToProjectResult> {
+    return this.client.request<KanbanMoveCardToProjectResult>("kanban_move_card_to_project", input);
+  }
+
+  async kanbanAddColumn(input: KanbanAddColumnInput): Promise<KanbanAddColumnResult> {
+    return this.client.request<KanbanAddColumnResult>("kanban_add_column", input);
+  }
+
+  async kanbanRenameColumn(input: KanbanRenameColumnInput): Promise<KanbanRenameColumnResult> {
+    return this.client.request<KanbanRenameColumnResult>("kanban_rename_column", input);
+  }
+
+  async kanbanDeleteColumn(input: KanbanDeleteColumnInput): Promise<KanbanDeleteColumnResult> {
+    return this.client.request<KanbanDeleteColumnResult>("kanban_delete_column", input);
+  }
+
+  async kanbanReorderColumns(input: KanbanReorderColumnsInput): Promise<KanbanReorderColumnsResult> {
+    return this.client.request<KanbanReorderColumnsResult>("kanban_reorder_columns", input);
+  }
+
+  async kanbanUndo(input: KanbanUndoInput): Promise<KanbanUndoResult> {
+    return this.client.request<KanbanUndoResult>("kanban_undo", input);
+  }
+
+  async kanbanSubscribe(input: KanbanSubscribeInput): Promise<KanbanSubscribeResult> {
+    return this.client.request<KanbanSubscribeResult>("kanban_subscribe", input);
+  }
+
+  async kanbanUnsubscribe(input: KanbanUnsubscribeInput): Promise<KanbanUnsubscribeResult> {
+    return this.client.request<KanbanUnsubscribeResult>("kanban_unsubscribe", input);
   }
 }
 

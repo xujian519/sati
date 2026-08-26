@@ -9,7 +9,12 @@
 
 import { WebSocket } from "ws";
 import { createSessionWatchRegistry } from "../session-watch-registry.js";
-import { registerAlwaysOnNotificationForwarding } from "../sati-bridge.js";
+import {
+  registerAlwaysOnNotificationForwarding,
+  registerKanbanNotificationForwarding,
+  gwKanbanSubscribe,
+  gwKanbanUnsubscribe,
+} from "../sati-bridge.js";
 
 /** 所有已连接的浏览器侧 WS 客户端（chat 连接层 add/delete）。 */
 const connectedClients = new Set();
@@ -22,6 +27,78 @@ registerAlwaysOnNotificationForwarding(connectedClients, (sessionId, frame) => {
   // (notably compaction progress) to race in the frontend. A tab explicitly
   // watches its displayed session, so that registry is the routing authority.
   broadcastToSessionWatchers(sessionId, frame, undefined);
+});
+
+/**
+ * 项目看板（Kanban）watcher 注册表（Phase 5）：projectId → 正在查看该项目看板的
+ * 浏览器 ws 连接。看板是项目级、不随会话变，因此 fanout 以 projectId 为键而非
+ * session watch 注册表。浏览器连接关闭时经 kanbanUnwatchAll 清理，避免内存泄漏与
+ * gateway 侧订阅残留。
+ *
+ * gateway 订阅（kanban_subscribe）在第 0 个 watcher 加入时发起、第 0 个离开时取消；
+ * 共享 gateway 连接只推送一次事件，再由本表 fanout 到所有 watchers。
+ */
+const kanbanProjectWatchers = new Map(); // projectId -> Set<ws>
+
+function kanbanWatchers(projectId) {
+  let set = kanbanProjectWatchers.get(projectId);
+  if (!set) {
+    set = new Set();
+    kanbanProjectWatchers.set(projectId, set);
+  }
+  return set;
+}
+
+/** 浏览器 ws 开始查看某项目的看板；首个 watcher 触发 gateway kanban_subscribe。 */
+function kanbanWatchProject(projectId, ws) {
+  const set = kanbanWatchers(projectId);
+  const wasFirst = set.size === 0;
+  set.add(ws);
+  if (wasFirst) {
+    gwKanbanSubscribe(projectId).catch(err => {
+      console.warn("[sati-bridge] kanban_subscribe 失败:", err?.message || err);
+    });
+  }
+}
+
+/** 浏览器 ws 离开某项目的看板；最后一个 watcher 离开触发 gateway kanban_unsubscribe。 */
+function kanbanUnwatchProject(projectId, ws) {
+  const set = kanbanProjectWatchers.get(projectId);
+  if (!set) return;
+  const wasLast = set.size === 1;
+  set.delete(ws);
+  if (set.size === 0) {
+    kanbanProjectWatchers.delete(projectId);
+  }
+  if (wasLast) {
+    gwKanbanUnsubscribe(projectId).catch(err => {
+      console.warn("[sati-bridge] kanban_unsubscribe 失败:", err?.message || err);
+    });
+  }
+}
+
+/** ws 连接关闭时清理其查看的所有看板项目（防泄漏/订阅残留）。 */
+function kanbanUnwatchAll(ws) {
+  for (const [projectId, set] of kanbanProjectWatchers) {
+    if (set.delete(ws) && set.size === 0) {
+      kanbanProjectWatchers.delete(projectId);
+      gwKanbanUnsubscribe(projectId).catch(err => {
+        console.warn("[sati-bridge] kanban_unsubscribe 失败:", err?.message || err);
+      });
+    }
+  }
+}
+
+registerKanbanNotificationForwarding(connectedClients, (projectId, payload) => {
+  const frame = { type: "kanban_updated", payload };
+  const set = kanbanProjectWatchers.get(projectId);
+  if (!set || set.size === 0) return;
+  const message = JSON.stringify(frame);
+  for (const client of set) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  }
 });
 
 function normalizeSessionId(value) {
@@ -109,4 +186,7 @@ export {
   broadcastToSessionWatchers,
   broadcastProgress,
   broadcastConfigReloaded,
+  kanbanWatchProject,
+  kanbanUnwatchProject,
+  kanbanUnwatchAll,
 };

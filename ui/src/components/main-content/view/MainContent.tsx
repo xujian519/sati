@@ -45,6 +45,9 @@ const CronV2 = React.lazy(() => import("../../main-content-v2/CronV2"));
 const FilesV2 = React.lazy(() => import("../../main-content-v2/FilesV2"));
 const ShellV2 = React.lazy(() => import("../../main-content-v2/ShellV2"));
 const GitV2 = React.lazy(() => import("../../main-content-v2/GitV2"));
+const KanbanBoardView = React.lazy(() =>
+  import("../../kanban/view/KanbanBoardView").then(module => ({ default: module.KanbanBoardView })),
+);
 const DashboardV2 = React.lazy(() => import("../../main-content-v2/DashboardV2"));
 const TasksV2 = React.lazy(() => import("../../main-content-v2/TasksV2"));
 const MemoryPanel = React.lazy(() => import("./memory/MemoryPanel"));
@@ -578,7 +581,7 @@ function SplitBody(props: SplitBodyProps) {
   // Skills, Routing, Memory, and Always-On are auxiliary dashboards paired
   // with chat. Files stays a separate explorer + artifact + assistant mode.
   const isPlugin = typeof activeTab === "string" && activeTab.startsWith("plugin:");
-  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks"]);
+  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks", "kanban"]);
   const isFullScreenTool = fullScreenToolTabs.has(activeTab) || isPlugin;
   const isDashboardPanel = DASHBOARD_PANEL_TABS.has(activeTab);
   const dashboardPanelTab = isDashboardPanel ? (activeTab as DashboardPanelTab) : null;
@@ -748,12 +751,40 @@ function SplitBody(props: SplitBodyProps) {
     };
   }, [clampToolPanelWidth, toolPanelResizing]);
 
+  // 看板卡片溯源回链：打开产生该卡片的源会话（source.sessionKey）。
+  // 优先在已加载项目里定位并 onSelectSession（自动切到 chat），否则退化为按 key 导航。
+  const handleOpenKanbanSourceSession = useCallback(
+    (sessionKey: string) => {
+      const sourceProject = projects.find(project =>
+        (project.sessions ?? []).some(session => session.id === sessionKey),
+      );
+      const sourceSession = sourceProject?.sessions?.find(session => session.id === sessionKey);
+      if (sourceProject && sourceSession && onSelectSession) {
+        onSelectSession(sourceProject, sessionKey, { ...sourceSession, __projectName: sourceProject.name });
+      } else {
+        onNavigateToSession(sessionKey);
+      }
+      // 打开源会话后切到聊天窗（handleSessionSelect 默认只对 tasks/preview 切 chat）
+      setActiveTab("chat");
+    },
+    [onNavigateToSession, onSelectSession, projects, setActiveTab],
+  );
+
   const renderTool = () => {
     if (activeTab === "shell") {
       return <ShellV2 selectedProject={selectedProject} selectedSession={selectedSession} isActive />;
     }
     if (activeTab === "git") {
       return <GitV2 selectedProject={selectedProject} onFileOpen={handleFileOpen} />;
+    }
+    if (activeTab === "kanban") {
+      return (
+        <KanbanBoardView
+          selectedProject={selectedProject}
+          projects={projects}
+          onOpenSession={handleOpenKanbanSourceSession}
+        />
+      );
     }
     if (activeTab === "always-on") {
       return (

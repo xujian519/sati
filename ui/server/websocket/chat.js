@@ -28,6 +28,9 @@ import {
   broadcastChatFrame,
   broadcastToSessionWatchers,
   connectedClients,
+  kanbanUnwatchAll,
+  kanbanUnwatchProject,
+  kanbanWatchProject,
   normalizeSessionId,
   sessionWatchRegistry,
 } from "./broadcast.js";
@@ -241,6 +244,20 @@ function handleChatConnection(ws, request) {
         return;
       }
 
+      if (data.type === "kanban-watch") {
+        if (typeof data.projectId === "string" && data.projectId.trim()) {
+          kanbanWatchProject(data.projectId, ws);
+        }
+        return;
+      }
+
+      if (data.type === "kanban-unwatch") {
+        if (typeof data.projectId === "string" && data.projectId.trim()) {
+          kanbanUnwatchProject(data.projectId, ws);
+        }
+        return;
+      }
+
       if (
         data.type === "sati-command" ||
         // Deprecated: legacy per-provider frame types kept for back-compat.
@@ -433,6 +450,8 @@ function handleChatConnection(ws, request) {
     // Remove from connected clients
     connectedClients.delete(ws);
     sessionWatchRegistry.removeClient(ws);
+    // 看板：连接关闭时清理其查看的项目（防 gateway 订阅残留）
+    kanbanUnwatchAll(ws);
     // M4：浏览器连接关闭 → 移除该连接跟踪的会话活跃（其他标签页的引用不受影响）
     untrackBrowserSessions(ws);
   };

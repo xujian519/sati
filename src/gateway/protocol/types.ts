@@ -21,6 +21,7 @@ import type { SessionInfo as ProjectSessionInfo } from "../../session/index.js";
 import type { KnowledgeCapability } from "../../knowledge/diagnostics.js";
 import type { KnowledgeRuntimeStatsSnapshot } from "../../knowledge/shared/knowledge-stats.js";
 import type { SatiElicitationAnswer, SatiElicitationQuestion } from "../../tool/elicitation/SatiElicitationChannel.js";
+import type { KanbanUpdatedPayload } from "../../board/protocol/types.js";
 import type {
   WebListProjectsResult as WebUiListProjectsResult,
   WebProjectSummary as WebUiProjectSummary,
@@ -41,6 +42,44 @@ import type {
   WebAlwaysOnApplyCycleInput as AlwaysOnApplyCycleInput,
   WebAlwaysOnApplyCycleResult as AlwaysOnApplyCycleResult,
 } from "../../web/client/protocol.js";
+import type {
+  KanbanAddCardInput,
+  KanbanAddCardResult,
+  KanbanAddColumnInput,
+  KanbanAddColumnResult,
+  KanbanArchiveCardInput,
+  KanbanArchiveCardResult,
+  KanbanBulkArchiveCardsInput,
+  KanbanBulkArchiveCardsResult,
+  KanbanBulkMoveCardsInput,
+  KanbanBulkMoveCardsResult,
+  KanbanDeleteColumnInput,
+  KanbanDeleteColumnResult,
+  KanbanDuplicateCardInput,
+  KanbanDuplicateCardResult,
+  KanbanGetInput,
+  KanbanGetResult,
+  KanbanMoveCardInput,
+  KanbanMoveCardResult,
+  KanbanMoveCardToProjectInput,
+  KanbanMoveCardToProjectResult,
+  KanbanPurgeCardInput,
+  KanbanPurgeCardResult,
+  KanbanRenameColumnInput,
+  KanbanRenameColumnResult,
+  KanbanReorderColumnsInput,
+  KanbanReorderColumnsResult,
+  KanbanRestoreCardInput,
+  KanbanRestoreCardResult,
+  KanbanSubscribeInput,
+  KanbanSubscribeResult,
+  KanbanUndoInput,
+  KanbanUndoResult,
+  KanbanUnsubscribeInput,
+  KanbanUnsubscribeResult,
+  KanbanUpdateCardInput,
+  KanbanUpdateCardResult,
+} from "../kanban/types.js";
 import type {
   SkillCreateInput,
   SkillCreateResult,
@@ -275,6 +314,11 @@ export type GatewayEvent = GatewayTurnScopedEventMetadata &
     | { type: "config_changed"; changedPaths: string[]; changeClasses: string[] }
     | { type: "worktree_created"; runId: string; cwd: string }
     | { type: "worktree_removed"; cwd: string }
+    /**
+     * 项目看板变更推送。agent/UI 写入看板后，gateway 向订阅该项目的
+     * 客户端风扇分发此事件，payload 结构见 `KanbanUpdatedPayload`。
+     */
+    | { type: "kanban_updated"; payload: KanbanUpdatedPayload }
     | {
         type: "context_budget";
         used: number;
@@ -701,4 +745,27 @@ export interface Gateway {
     data?: unknown;
     error?: { code: string; message: string };
   }>;
+
+  /**
+   * 项目看板（Kanban）方法族。全部为可选新增；旧 gateway/客户端经
+   * `describe_server` / `not_configured` feature-detect，不假设实现存在。
+   */
+  kanbanGet?(input: KanbanGetInput): Promise<KanbanGetResult>;
+  kanbanAddCard?(input: KanbanAddCardInput): Promise<KanbanAddCardResult>;
+  kanbanUpdateCard?(input: KanbanUpdateCardInput): Promise<KanbanUpdateCardResult>;
+  kanbanMoveCard?(input: KanbanMoveCardInput): Promise<KanbanMoveCardResult>;
+  kanbanArchiveCard?(input: KanbanArchiveCardInput): Promise<KanbanArchiveCardResult>;
+  kanbanRestoreCard?(input: KanbanRestoreCardInput): Promise<KanbanRestoreCardResult>;
+  kanbanPurgeCard?(input: KanbanPurgeCardInput): Promise<KanbanPurgeCardResult>;
+  kanbanBulkArchiveCards?(input: KanbanBulkArchiveCardsInput): Promise<KanbanBulkArchiveCardsResult>;
+  kanbanBulkMoveCards?(input: KanbanBulkMoveCardsInput): Promise<KanbanBulkMoveCardsResult>;
+  kanbanDuplicateCard?(input: KanbanDuplicateCardInput): Promise<KanbanDuplicateCardResult>;
+  kanbanMoveCardToProject?(input: KanbanMoveCardToProjectInput): Promise<KanbanMoveCardToProjectResult>;
+  kanbanAddColumn?(input: KanbanAddColumnInput): Promise<KanbanAddColumnResult>;
+  kanbanRenameColumn?(input: KanbanRenameColumnInput): Promise<KanbanRenameColumnResult>;
+  kanbanDeleteColumn?(input: KanbanDeleteColumnInput): Promise<KanbanDeleteColumnResult>;
+  kanbanReorderColumns?(input: KanbanReorderColumnsInput): Promise<KanbanReorderColumnsResult>;
+  kanbanUndo?(input: KanbanUndoInput): Promise<KanbanUndoResult>;
+  kanbanSubscribe?(input: KanbanSubscribeInput): Promise<KanbanSubscribeResult>;
+  kanbanUnsubscribe?(input: KanbanUnsubscribeInput): Promise<KanbanUnsubscribeResult>;
 }

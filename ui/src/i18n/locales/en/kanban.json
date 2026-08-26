@@ -1,0 +1,68 @@
+{
+  "boardTitle": "Project Board",
+  "requireProject": "Select a project to view its board",
+  "errors": {
+    "noProjectSelected": "No project selected",
+    "requestFailed": "Kanban request failed (HTTP {{status}})"
+  },
+  "undo": "Undo",
+  "recycleBin": "Recycle bin",
+  "emptyColumn": "Drop cards here",
+  "priority": {
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low"
+  },
+  "label": {
+    "feature": "Feature",
+    "bug": "Bug",
+    "docs": "Docs",
+    "optimization": "Optimization"
+  },
+  "addCard": {
+    "title": "Add card"
+  },
+  "card": {
+    "source": "Source session",
+    "openSource": "Open source session"
+  },
+  "addColumn": {
+    "title": "New column",
+    "placeholder": "Column title"
+  },
+  "columnMenu": {
+    "label": "Column actions",
+    "drag": "Drag to reorder"
+  },
+  "renameColumn": {
+    "title": "Rename column"
+  },
+  "deleteColumn": {
+    "title": "Delete column"
+  },
+  "editor": {
+    "createTitle": "New card",
+    "editTitle": "Edit card",
+    "title": "Title",
+    "titlePlaceholder": "Card title",
+    "titleRequired": "Title is required",
+    "note": "Note",
+    "notePlaceholder": "Context / acceptance criteria",
+    "label": "Label",
+    "priority": "Priority",
+    "color": "Color",
+    "dueDate": "Due date",
+    "saving": "Saving…",
+    "saveFailed": "Failed to save",
+    "actionFailed": "Action failed",
+    "duplicate": "Duplicate",
+    "archive": "Archive",
+    "restore": "Restore",
+    "purge": "Delete forever",
+    "move": "Move to…"
+  },
+  "moveToWorkspace": {
+    "title": "Move to another workspace",
+    "empty": "No other workspace to move to"
+  }
+}

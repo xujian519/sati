@@ -4,6 +4,7 @@ import {
   BarChart3,
   Box,
   Clock,
+  Columns3,
   Database,
   Folder,
   MoreHorizontal,
@@ -349,6 +350,25 @@ function MainAreaV2Content(props: MainAreaV2Props) {
           >
             <Folder className="h-3.5 w-3.5" strokeWidth={1.75} />
             <span>{t(FILES_TAB.labelKey)}</span>
+          </button>
+
+          <button
+            type="button"
+            aria-pressed={displayActiveTab === "kanban"}
+            onClick={() => {
+              setDashboardMenuOpen(false);
+              chatHistorySearch.closeSearch();
+              setActiveTab(displayActiveTab === "kanban" ? "chat" : "kanban");
+            }}
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[13px] transition-colors",
+              displayActiveTab === "kanban"
+                ? cn("font-medium", ACTIVE_TOOL_BUTTON_CLASS)
+                : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100",
+            )}
+          >
+            <Columns3 className="h-3.5 w-3.5" strokeWidth={1.75} />
+            <span>{t("tabs.kanban", { defaultValue: "看板" })}</span>
           </button>
 
           <div ref={dashboardMenuRef} className="relative">

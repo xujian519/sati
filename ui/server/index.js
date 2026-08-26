@@ -43,6 +43,7 @@ import tokenUsageRoutes from "./routes/token-usage.js";
 import projectFilesRoutes from "./routes/project-files.js";
 import projectSessionsRoutes from "./routes/project-sessions.js";
 import systemRoutes from "./routes/system.js";
+import kanbanRoutes from "./routes/kanban.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
@@ -176,6 +177,10 @@ app.use(projectFilesRoutes);
 app.use(projectPreviewRoutes);
 app.use(projectUploadsRoutes);
 app.use(tokenUsageRoutes);
+
+// Kanban API Routes (protected) — 全部经 gateway kanban_* 方法转发（Phase 5）
+app.use("/api/kanban", authenticateToken, kanbanRoutes);
+
 // Serve React app for all other routes (excluding static files)
 app.get("/{*splat}", (req, res) => {
   // Skip requests for actual static asset extensions only

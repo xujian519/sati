@@ -1,5 +1,6 @@
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import type { BackgroundTaskRuntime } from "../../task/runtime/BackgroundTaskRuntime.js";
+import { KanbanBoardManager } from "../../gateway/kanban/KanbanBoardManager.js";
 import { createAgentTool, type CreateAgentToolOptions } from "../builtin/agent.js";
 import { createAskUserQuestionTool } from "../builtin/askUserQuestion.js";
 import { createBashTool, type CreateBashToolOptions } from "../builtin/bash.js";
@@ -89,6 +90,23 @@ import {
   createTeamArchiveTool,
   type TeamToolsOptions,
 } from "../builtin/team/index.js";
+import {
+  createKanbanAddCardTool,
+  createKanbanAddColumnTool,
+  createKanbanBulkDeleteCardsTool,
+  createKanbanBulkMoveCardsTool,
+  createKanbanDeleteCardTool,
+  createKanbanDeleteColumnTool,
+  createKanbanDuplicateCardTool,
+  createKanbanGetTool,
+  createKanbanMoveCardToWorkspaceTool,
+  createKanbanMoveCardTool,
+  createKanbanPurgeCardTool,
+  createKanbanRenameColumnTool,
+  createKanbanRestoreCardTool,
+  createKanbanUndoTool,
+  createKanbanUpdateCardTool,
+} from "../builtin/kanban.js";
 import type { SatiToolDefinition, ToolDomain } from "../protocol/types.js";
 import { ToolRegistry } from "./ToolRegistry.js";
 
@@ -237,6 +255,11 @@ export type CreateBuiltinRegistryOptions = {
    * 管理面 6 工具 domain "team:manage"（仅 captain），作业面 3 工具 domain "team"（成员可见）。
    */
   team?: TeamToolsOptions;
+  /**
+   * `kanban_*` 项目看板工具（Phase 4）。注入 createLocalGateway 的 KanbanBoardManager；
+   * 未传则不注册，保持默认工具集不变（避免破坏 llm-replay fixture 的 toolSchemaDigest）。
+   */
+  kanban?: KanbanBoardManager;
 };
 
 export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): ToolRegistry {
@@ -389,6 +412,25 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createTeamUpdateTaskTool({ db, scheduler, emit }), "team"));
     registry.register(annotate(createTeamSendMessageTool({ db, scheduler, emit }), "team"));
     registry.register(annotate(createTeamStatusTool({ db, scheduler, emit }), "team"));
+  }
+  if (options?.kanban) {
+    const kanban = options.kanban;
+    // 看板工具不标注 domain（通用工作区能力，所有角色默认可见）。
+    registry.register(createKanbanGetTool(kanban));
+    registry.register(createKanbanAddCardTool(kanban));
+    registry.register(createKanbanUpdateCardTool(kanban));
+    registry.register(createKanbanDeleteCardTool(kanban));
+    registry.register(createKanbanRestoreCardTool(kanban));
+    registry.register(createKanbanPurgeCardTool(kanban));
+    registry.register(createKanbanBulkDeleteCardsTool(kanban));
+    registry.register(createKanbanBulkMoveCardsTool(kanban));
+    registry.register(createKanbanMoveCardTool(kanban));
+    registry.register(createKanbanDuplicateCardTool(kanban));
+    registry.register(createKanbanMoveCardToWorkspaceTool(kanban));
+    registry.register(createKanbanAddColumnTool(kanban));
+    registry.register(createKanbanRenameColumnTool(kanban));
+    registry.register(createKanbanDeleteColumnTool(kanban));
+    registry.register(createKanbanUndoTool(kanban));
   }
   return registry;
 }
