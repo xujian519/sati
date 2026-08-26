@@ -20,6 +20,7 @@ export function sqliteHasFts5(db: DatabaseSync): boolean {
     const row = db.prepare("SELECT sqlite_compileoption_used('ENABLE_FTS5') AS v").get() as { v: number };
     return row.v === 1;
   } catch {
+    // 编译选项探测失败 → 按未编译 FTS5 处理（后续降级 LIKE）。
     return false;
   }
 }

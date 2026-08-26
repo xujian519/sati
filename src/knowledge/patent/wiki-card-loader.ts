@@ -323,7 +323,7 @@ export class WikiCardLoader {
     try {
       cache = JSON.parse(readFileSync(cachePath, "utf8")) as ScanCache;
     } catch {
-      return null;
+      return null; // 缓存损坏 → 失效重扫（全量重建）。
     }
     if (cache.version !== SCAN_CACHE_VERSION || !Array.isArray(cache.files) || !Array.isArray(cache.dirs)) {
       return null;

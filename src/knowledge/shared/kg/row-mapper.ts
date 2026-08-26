@@ -56,6 +56,7 @@ export function parseLawRefsCount(lawRefs: string | null): number | undefined {
     const parsed: unknown = JSON.parse(lawRefs);
     return Array.isArray(parsed) ? parsed.length : undefined;
   } catch {
+    // law_refs 非合法 JSON 数组 → 返回 undefined（按无法解析处理）。
     return undefined;
   }
 }

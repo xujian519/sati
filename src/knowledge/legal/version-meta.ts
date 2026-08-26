@@ -118,6 +118,7 @@ export function loadLawVersionMeta(path?: string): Map<string, LawVersionMeta> {
     }
     return map;
   } catch {
+    // 版本元数据 JSON 解析失败 → 返回空映射（降级，调用方按无沿革处理）。
     return new Map();
   }
 }

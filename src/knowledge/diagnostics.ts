@@ -38,6 +38,7 @@ function probeKnowledgeDb(dbPath: string): KnowledgeDbProbe | null {
       db.close();
     }
   } catch {
+    // 库打开失败或探测查询异常 → 判为不可探测（调用方按能力缺失处理）。
     return null;
   }
 }

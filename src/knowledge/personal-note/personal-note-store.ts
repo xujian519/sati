@@ -132,6 +132,7 @@ export class PersonalNoteStore {
         .get() as { c: number; m: string };
       return `${row.c}:${row.m}`;
     } catch {
+      // 读取失败 → 空串哨兵（调用方跳过本次同步，不碰既有索引）。
       return "";
     }
   }

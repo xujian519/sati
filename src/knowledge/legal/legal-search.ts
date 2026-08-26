@@ -90,6 +90,7 @@ export class LegalSearchEngine implements LegalSearchSource {
       ORDER BY l.expired ASC, l.publish DESC, bm25(law_fts) LIMIT ?
     `);
       } catch {
+        // FTS5 不可用 → 降级 LIKE（与查询期 catch 等价语义）。
         this.ftsDegraded = true;
         this.stmtSearchFts = null;
       }
