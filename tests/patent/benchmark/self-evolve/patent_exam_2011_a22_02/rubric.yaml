@@ -1,0 +1,26 @@
+max_score: 100
+items:
+  - id: independent_claim_essential_features
+    weight: 0.3
+    criterion: >-
+      独立权利要求是否包含装置的必要技术特征（瓶盖本体 + 盖栓 + 限制盖栓受压时向
+      隔挡片方向运动的机构），而非只写某个具体实施例（如螺纹连接）的细节。
+    behavior: observable
+  - id: split_reason_explicit
+    weight: 0.3
+    criterion: >-
+      若认为应分案，是否明确指出第三实施方式与第一/二实施方式发明构思不同、
+      不能合案申请的理由（不能一句话带过）。
+    behavior: observable
+  - id: dependent_claims_hierarchy
+    weight: 0.2
+    criterion: >-
+      是否撰写了体现保护梯度的从属权利要求（螺纹 / 弹簧+卡环 / 拉环+环状凸缘等
+      各实施方式的对应限定）。
+    behavior: observable
+  - id: client_question_answered
+    weight: 0.2
+    criterion: >-
+      是否正面回答"隔挡片材料是否必须在说明书中记载"的问题并给出理由，
+      而非回避。
+    behavior: observable

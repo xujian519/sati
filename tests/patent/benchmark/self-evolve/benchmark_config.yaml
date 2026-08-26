@@ -1,0 +1,7 @@
+name: claims-drafting-quality
+description: 权利要求撰写质量基准（样例：从 business-drafting 手工抽取）
+target_role: drafting-analyst
+eval_runtime:
+  provider: deepseek
+  model_id: deepseek-v4-flash
+  thinking_level: medium

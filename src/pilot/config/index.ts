@@ -1,4 +1,4 @@
-export { loadPilotConfig } from "./loadPilotConfig.js";
+export { loadPilotConfig, parseAgentThinking } from "./loadPilotConfig.js";
 export {
   createPilotConfigStore,
   type PilotConfigListener,

@@ -2,6 +2,30 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.8 - 2026-08-26
+
+> **版本目标（2026-08-26）**：DeepSeek V4 思考模式默认接入 agent 主循环与自进化基准回路、会话 transcript 写入加固（单写 + 截尾恢复），并落地项目看板（Project Kanban Board，Phase 5）与 C17/C18 代码精炼批次。
+
+### Feat
+- feat(model): agent 主循环默认开启 deepseek-v4 thinking；默认模式显式关闭 thinking 以恢复正文内容（二者互补，附全局修复计划 note）
+- feat(patent): 新增自进化基准回路（self-evolution benchmark loop）并配 DeepSeek thinking-off workaround
+- feat(session): transcript writer 加固——单写（single-write）与截尾（torn-tail）恢复
+- feat(ui): 项目看板（Project Kanban Board）——数据层 + gateway 协议 + agent 工具 + UI（Phase 5），含溯源回链、列拖拽排序、断线重连订阅与并发写串行化、undo 事件、includeArchived、工作区相对解析等评审修复（Phase 5.1/5.2）
+- feat(ui): 看板运行时数据 `kanban-board.json` 纳入 .gitignore
+
+### Refactor
+- refactor(adapters): 为其余渠道与 protocol 无参 catch 补 fail-safe 意图注释（C17）
+- refactor(knowledge): 为 9 处无参 catch 补 fail-safe 意图注释，删除 assemble 冗余 re-export（C18，#195）
+- refactor(board): 看板代码精简——上提 id 助手为模块级函数、抽取 toIndex 夹取与未选项目错误帮助、去重 moveCardToStore 的 seq 手工计算（#195）
+
+### Test
+- test(ui): 修复文书排版导出 HTML 用例的异步竞态（等待导出按钮可用后再点击）
+- test(ui): 看板自查评审整改（undo 锁竞争/跨项目死锁/拖拽索引空间/路径规范化）
+
+### Docs
+- docs(model): DeepSeek V4 thinking-default 全局修复计划与 proposed note
+- docs: 记录 C17 代码精炼完成（adapters 其余渠道+protocol）；补充源码目录现状说明并清理 src 下 .DS_Store（#193）；事件矩阵再生（adapters 行偏移）
+
 ## v0.1.7 - 2026-08-25
 
 > **版本目标（2026-08-25）**：知识库/法律域能力增强与工程质量提质——落地 A 档四项（LLM 抽取防注入护栏、法条/条款结构化解析、法律版本沿革建模、地方性法规标记不删除）并收口 code-review F1–F9；完成 C12/C14/C15/C16 代码精炼批次、lint 安全门禁（no-floating-promises + 禁 `child_process.exec`）与依赖升级。

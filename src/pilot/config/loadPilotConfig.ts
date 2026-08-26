@@ -370,14 +370,21 @@ function parseAgent(
   };
 }
 
-function parseAgentThinking(value: unknown): PilotAgentConfig["thinking"] | undefined {
+export function parseAgentThinking(value: unknown): PilotAgentConfig["thinking"] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!isRecord(value)) return undefined;
-  if (value.enabled !== true) return undefined;
-  return {
-    enabled: true,
-    ...(typeof value.budgetTokens === "number" ? { budgetTokens: value.budgetTokens } : {}),
-  };
+  if (value.enabled === true) {
+    return {
+      enabled: true,
+      ...(typeof value.budgetTokens === "number" ? { budgetTokens: value.budgetTokens } : {}),
+    };
+  }
+  if (value.enabled === false) {
+    // 显式关闭思考：与"未配置"（undefined）区分，避免被主循环对推理模型的
+    // 默认开启策略（defaultAgentThinking）误覆盖。
+    return { enabled: false };
+  }
+  return undefined;
 }
 
 function parseAgentSubagents(

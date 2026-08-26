@@ -82,7 +82,14 @@ export function resolveThinkingPlan(
     // temperature 的调用（如 session-title 的 temperature: 0）会报错。
     // 只按 modelId 白名单判断，避免误伤 provider 名含 "deepseek" 的非推理模型。
     const reasoningOnly = isReasoningOnlyModel(modelId);
-    return { mode, enabled: false, ...(reasoningOnly ? { omitTemperature: true } : {}) };
+    const omitTemperature = reasoningOnly ? { omitTemperature: true } : {};
+    // deepseek-v4 官方默认开启思考（thinking 默认 enabled）；default 若不显式传
+    // `thinking:{type:"disabled"}`，长输出会把最终 content 榨干为 0（reasoning_content
+    // 与 content 共享 max_tokens）。default（未显式请求思考）应显式关闭，而非交模型默认。
+    if (/deepseek-v4/.test(modelId)) {
+      return { mode, enabled: false, thinkingType: "disabled", useOpenAICompatibleThinking: true, ...omitTemperature };
+    }
+    return { mode, enabled: false, ...omitTemperature };
   }
 
   const budgetTokens =
@@ -129,6 +136,22 @@ export function resolveThinkingPlan(
     return genericThinkingPlan(mode, budgetTokens);
   }
   return { mode, enabled: false };
+}
+
+/**
+ * 主循环（agent）对推理模型的默认思考策略。
+ *
+ * deepseek-v4 官方默认开启思考（thinking 与 content 共享 max_tokens 预算），
+ * 而 `resolveThinkingPlan` 的 `default` 分支为保护确定性/benchmark 调用方
+ * （长输出被 reasoning_content 榨干 content=0）显式关闭思考。主循环需要
+ * 推理，故在此显式请求 medium（对 v4 映射为 reasoning_effort=high）；未命中
+ * 返回 undefined，沿用 resolveThinkingPlan 的 default 分支（关闭）。
+ */
+export function defaultAgentThinking(modelId: string): CanonicalThinkingConfig | undefined {
+  if (/deepseek-v4/.test(modelId.toLowerCase())) {
+    return { mode: "medium", enabled: true };
+  }
+  return undefined;
 }
 
 export function throwIfUnsupportedThinkingPlan(plan: ThinkingPlan, request: CanonicalModelRequest): void {
