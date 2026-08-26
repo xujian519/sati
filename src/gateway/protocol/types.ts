@@ -69,8 +69,12 @@ import type {
   KanbanRenameColumnResult,
   KanbanRestoreCardInput,
   KanbanRestoreCardResult,
+  KanbanSubscribeInput,
+  KanbanSubscribeResult,
   KanbanUndoInput,
   KanbanUndoResult,
+  KanbanUnsubscribeInput,
+  KanbanUnsubscribeResult,
   KanbanUpdateCardInput,
   KanbanUpdateCardResult,
 } from "../kanban/types.js";
@@ -759,4 +763,6 @@ export interface Gateway {
   kanbanRenameColumn?(input: KanbanRenameColumnInput): Promise<KanbanRenameColumnResult>;
   kanbanDeleteColumn?(input: KanbanDeleteColumnInput): Promise<KanbanDeleteColumnResult>;
   kanbanUndo?(input: KanbanUndoInput): Promise<KanbanUndoResult>;
+  kanbanSubscribe?(input: KanbanSubscribeInput): Promise<KanbanSubscribeResult>;
+  kanbanUnsubscribe?(input: KanbanUnsubscribeInput): Promise<KanbanUnsubscribeResult>;
 }

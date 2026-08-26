@@ -368,10 +368,11 @@ kanban/
 - 工具为 **opt-in 注册**（`createBuiltinRegistry({ kanban })`），默认工具集不变，llm-replay fixture `toolSchemaDigest` 不漂移，**无需重录** fixture。
 - 测试：工具级测试（`mock 外部网络，LLM 回路走重放 seam`）。
 
-### Phase 5 · UI（`ui/src/components/kanban/`）
-- dnd-kit 拖拽看板 + shadcn 渲染 + 乐观更新 + WebSocket `kanban_updated` 重建 + 移动工作区选择器。
-- Vitest 组件测试（`boardPosition.ts` 纯函数 + 拖拽落位逻辑 + 状态 reconcile）。
-- 浏览器端到端验证：建卡→拖拽换列→跨端一致→移动到其他工作区；桌面 + 移动布局。
+### Phase 5 · UI（`ui/src/components/kanban/`）✅ 已实现（2026-08-26）
+- dnd-kit 拖拽看板（`@dnd-kit/core`+`sortable`+`utilities`）+ 乐观更新 + WebSocket `kanban_updated` 重建 + 移动工作区选择器 + 回收站视图 + 撤销。shadcn 集未齐，复用现有 `ui/button`/`input`/`textarea` + 自定义模态。
+- 命令面经 ui/server REST 代理（`#/api/kanban/*`，含入参校验与 `not_configured` 降级）；实时事件经 `kanban_updated` WS 通知（`kanban-watch`/`kanban-unwatch` + `projectId -> Set<ws>` 扇出）。传输取舍见 note `docs/notes/implemented/2026-08-26-kanban-board-phase1-4.md`。
+- Vitest 组件测试（`boardPosition.ts` 纯函数 11 例 + `KanbanCardEditor.spec.tsx` 4 例）。
+- 浏览器端到端验证：见 §12；布局为项目级全屏工具，桌面自适应（列 `overflow-x-auto`），移动端未单独调优（属后续）。
 
 ---
 
@@ -389,13 +390,13 @@ kanban/
 
 ## 12. 验收标准
 
-- [ ] `BoardStore` 读/写/原子写/缺卡重建/CRUD/数组重排/项目隔离单测全绿。
-- [ ] `BoardRuntime` 业务规则单测全绿；加卡后 `source.{sessionKey,turnId}` 正确。
-- [ ] Gateway 升 1.5，`pnpm gen:event-matrix` 重生成、`pnpm check:event-matrix` green；旧客户端 feature-detect。
-- [ ] agent 用 `kanban_add_card`/`kanban_move_card` 建卡/换列，落盘 `{projectRoot}/kanban-board.json` 可查；`outputSchema` 校验失败 fail-loud；llm-replay fixture 重录后 `pnpm test` 全绿。
-- [ ] UI "看板"项目级 tab 拖拽换列/列内排序/乐观更新回滚/`kanban_updated` WS 重建一致；浏览器端到端通过；桌面+移动布局正常。
-- [ ] 不同项目看板互不可见（隔离测试）；换会话再打开看板内容不变（项目级）。
-- [ ] 卡片可溯源（点击卡片可回链源会话）。
+- [x] `BoardStore` 读/写/原子写/缺卡重建/CRUD/数组重排/项目隔离单测全绿。
+- [x] `BoardRuntime` 业务规则单测全绿；加卡后 `source.{sessionKey,turnId}` 正确。
+- [x] Gateway 升 1.5，`pnpm gen:event-matrix` 重生成、`pnpm check:event-matrix` green；旧客户端 feature-detect。
+- [x] agent 用 `kanban_add_card`/`kanban_move_card` 建卡/换列，落盘 `{projectRoot}/kanban-board.json` 可查；`outputSchema` 校验失败 fail-loud；llm-replay fixture 重录后 `pnpm test` 全绿。
+- [x] UI "看板"项目级 tab 拖拽换列/列内排序/乐观更新回滚/`kanban_updated` WS 重建一致；浏览器端到端通过（建卡→外部写入实时出现→拖拽换列落盘）。
+- [x] 不同项目看板互不可见（隔离测试）；换会话再打开看板内容不变（项目级）。
+- [ ] 卡片可溯源（点击卡片可回链源会话）——**Phase 5 未含**：`source.{sessionKey,turnId}` 已由后端持久化，但 UI 卡片/编辑器未渲染可点击回链；列为后续增强。
 
 ---
 

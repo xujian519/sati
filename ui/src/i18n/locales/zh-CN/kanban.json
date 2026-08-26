@@ -1,0 +1,59 @@
+{
+  "boardTitle": "项目看板",
+  "requireProject": "请选择一个项目以查看其看板",
+  "undo": "撤销",
+  "recycleBin": "回收站",
+  "emptyColumn": "暂无可拖拽卡片",
+  "priority": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "label": {
+    "feature": "功能",
+    "bug": "缺陷",
+    "docs": "文档",
+    "optimization": "优化"
+  },
+  "addCard": {
+    "title": "添加卡片"
+  },
+  "addColumn": {
+    "title": "新建列",
+    "placeholder": "列标题"
+  },
+  "columnMenu": {
+    "label": "列操作"
+  },
+  "renameColumn": {
+    "title": "重命名列"
+  },
+  "deleteColumn": {
+    "title": "删除列"
+  },
+  "editor": {
+    "createTitle": "新建卡片",
+    "editTitle": "编辑卡片",
+    "title": "标题",
+    "titlePlaceholder": "卡片标题",
+    "titleRequired": "标题不能为空",
+    "note": "备注",
+    "notePlaceholder": "背景 / 验收标准",
+    "label": "标签",
+    "priority": "优先级",
+    "color": "颜色",
+    "dueDate": "截止日期",
+    "saving": "保存中…",
+    "saveFailed": "保存失败",
+    "actionFailed": "操作失败",
+    "duplicate": "复制",
+    "archive": "删除",
+    "restore": "恢复",
+    "purge": "彻底删除",
+    "move": "移动到…"
+  },
+  "moveToWorkspace": {
+    "title": "移动到其他工作区",
+    "empty": "没有可移动的其他工作区"
+  }
+}

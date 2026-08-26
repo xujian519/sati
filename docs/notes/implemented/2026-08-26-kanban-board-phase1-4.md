@@ -1,4 +1,4 @@
-# Agent Note: 项目看板（Kanban）Phase 1–4
+# Agent Note: 项目看板（Kanban）Phase 1–5
 
 Status: implemented
 
@@ -76,7 +76,29 @@ Sati 缺少一个**按项目隔离、agent 可写、用户可持久化查看**�
 - 修复 `BoardStore.updateCard`：原先 `{ ...existing, ...update }` 会把 `update` 中显式为 `undefined` 的字段覆盖为 `undefined`，导致 `archived` 等必填字段失效、板文件被判定损坏。改为只合并 `!== undefined` 的字段。
 - 测试 `tests/tool/builtin/kanban.spec.ts` 覆盖：默认板、增删改卡、移动/复制、软删恢复彻底删、批量、列管理、undo、跨项目移动、`includeArchived`、溯源注入。
 
-## 评审修复（2026-08-26 code review，Merge 前）
+### Phase 5 UI（`ui/src/components/kanban/` + `ui/server` 桥）
+
+实现项目级看板 UI，浏览器不直接碰 `src/`，全部经 gateway 协议方法读写；`kanban_updated` 实时事件经 ui/server 桥转发到浏览器。
+
+- **浏览器→gateway 命令面（REST 代理）**：`ui/src/utils/api.js` 新增 `api.kanban.*`（`get`/`subscribe`/`unsubscribe`/`addCard`/`updateCard`/`moveCard`/`archiveCard`/`restoreCard`/`purgeCard`/`duplicateCard`/`bulkArchiveCards`/`bulkMoveCards`/`moveToProject`/`addColumn`/`renameColumn`/`deleteColumn`/`undo`），经 `#POST /api/kanban/*`。`ui/server/routes/kanban.js` 为每个 gateway 方法建一条带入参校验的转发路由，统一走 `getSatiGatewayWithReset`（gateway 重启死连接自动复位），并在 `ui/server/index.js` 挂载 `/api/kanban`（`authenticateToken`）。未配置 gateway 看板时返回 `not_configured`（501）。
+- **`RemoteGateway` 增加看板方法**：`src/gateway/client/RemoteGateway.ts` 新增 17 个 `kanban_*` 方法 + `kanbanSubscribe`/`kanbanUnsubscribe`（此前 Phase 3 只实现 `InProcessGateway`，桥客户端侧缺失）。`Gateway` 接口（`protocol/types.ts`）同步声明可选的 `kanbanSubscribe`/`kanbanUnsubscribe`，便于 feature-detect。
+- **`kanban_updated` 实时推送（WS 通知）**：`sati-bridge.js` 新增 `registerKanbanNotificationForwarding`（注册 `onNotification` 处理 `kanban_updated`）+ `gwKanbanSubscribe`/`gwKanbanUnsubscribe` 原语（共享 gateway 连接订阅/退订项目）。`websocket/broadcast.js` 维护 `projectId -> Set<ws>` 的 `kanbanProjectWatchers`，第 0 个 watcher 加入时 `kanban_subscribe`、第 0 个离开时 `kanban_unsubscribe`，并对该项目 watchers 扇出 `kanban_updated` 帧。`websocket/chat.js` 浏览器帧处理 `kanban-watch` / `kanban-unwatch`，连接关闭时 `kanbanUnwatchAll` 清理，防订阅残留。
+- **UI feature-folder**：`types/`（对齐 gateway 契约 + `KanbanUpdatedPayload`）、`constants/`（默认列颜色、优先级/标签/色板）、`utils/boardPosition.ts`（复刻后端 `moveCard` 的**全局数组索引** `toIndex` 排序纯函数：`cardsByColumn`/`getCard`/`dropToGlobalIndex`/`applyMove`）、`hooks/useBoardState.ts`（加载 + 订阅 + 乐观更新与回滚 + 全部变更操作）、`hooks/useBoardDragDrop.ts`（dnd-kit 感知器 + 拖拽结束换算 `toIndex`）、`view/`（`KanbanBoardView` 容器 + `KanbanColumn` + `KanbanCard` + `KanbanCardEditor` 弹层 + `KanbanWorkspacePicker`）。
+- **挂载点**：`useAppTabs.ts` 在 `BASE_APP_TABS` 登记 `kanban`（图标 `Columns3`）；`MainAreaV2` 头部加“看板”按钮（与 Files 同构，项目级 tab）；`MainContent` 把 `kanban` 加入 full-screen 工具并按 `activeTab==="kanban"` 渲染 `KanbanBoardView`。项目上下文取 `selectedProject.path`（= 项目根目录，即 gateway 的 `projectKey`/订阅 `projectId`）。
+- **i18n**：新增 `ui/src/i18n/locales/{en,zh-CN}/kanban.json`，并在 `config.js` 注册 `kanban` namespace；`tabs.kanban` 加入 `common.json`。
+- **拖拽库**：按用户拍板用 **dnd-kit**，新增依赖 `@dnd-kit/core`（6.3.1）、`@dnd-kit/sortable`（10.0.0）、`@dnd-kit/utilities`；列内 `SortableContext`（`verticalListSortingStrategy`）+ `DragOverlay` 跟随拖拽卡。
+- **测试**：`ui/src/components/kanban/utils/boardPosition.spec.ts`（11 用例：按列过滤、查卡、`dropToGlobalIndex` 全局索引、`applyMove` 跨列/列内/clamp/不存在/updatedAt）、`KanbanCardEditor.spec.tsx`（新建保存带默认列、空标题校验、编辑模式预填+复制/删除、回收站模式恢复/彻底删除）。
+
+**传输实现取舍（vs 设计文档 §5.1 的“WebSocket 帧”）**：命令面采用 ui/server REST 代理而非浏览器直接发 `WsRequestFrame`——这与 `teams.js`（同为 gateway 协议方法转发的先例）一致、可单测、更贴近 `api.js` 现有调用习惯；实时性不依赖命令通道，靠 `kanban_updated` WS 通知达成（设计 §5.2 的核心增量仍满足）。浏览器↔ui/server 仍走既有 `/ws`（`kanban-watch`/`kanban-unwatch` + `kanban_updated` 帧）。
+
+**Phase 5 浏览器端到端验证（2026-08-26，Playwright + 从我源码起的干净 stack）**：
+- 选项目→点头部“Kanban”→默认三列（待办/进行中/已完成）渲染正常；无控制台错误。
+- “Add card”弹层填标题→保存→卡片出现在看板；服务端落盘可查。
+- **实时**：看板打开期间，外部 curl 经 REST 写卡（同项目），页面**无刷新**自动出现新卡（`kanban_updated` WS 通知链路打通）。
+- **拖拽**：真实鼠标把“E2E 浏览器卡片”从待办拖到进行中，服务端 `columnId` 由 `c1` 变为 `c2`（dnd-kit `onDragEnd` → `moveCard` 乐观更新 + 落盘一致）。
+- i18n：头部/按钮为英文（默认 en），优先级徽章显示 “Medium”、标签显示译文（修复了误用 `t("kanban.x")` 点号前缀、应 `t("kanban:x")` 命名空间的问题）。
+
+**评审修复（2026-08-26 code review，Merge 前）**
 
 - **Critical — `BoardStore` 加进程内串行化**：原实现每个写操作 `load → mutate → save` 无锁，并发 `addCard` 会共享同一 `seq`、最后一次 `save` 覆盖其余（实测 20 并发仅落盘 1 张卡）。改为 `FileHistoryStore` 同款 **mutex-tail**（`private mutex: Promise<void>` + `run<T>()` + `mutate<T>()`），每项目一个 store 即项目级串行。同时顺带消除「读两次」；写失败则对象丢弃、不留半写。
 - **跨项目移动双锁 + 先落目标**：`moveCardToStore` 在源锁内再取目标锁（锁定序固定源→目标，无反向无死锁），目标先落盘、源后落盘——目标失败则源板不动（卡片不丢）；目标成功、源失败则两板重复（而非丢失），v1 简化、非跨文件事务。

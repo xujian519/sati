@@ -45,6 +45,9 @@ const CronV2 = React.lazy(() => import("../../main-content-v2/CronV2"));
 const FilesV2 = React.lazy(() => import("../../main-content-v2/FilesV2"));
 const ShellV2 = React.lazy(() => import("../../main-content-v2/ShellV2"));
 const GitV2 = React.lazy(() => import("../../main-content-v2/GitV2"));
+const KanbanBoardView = React.lazy(() =>
+  import("../../kanban/view/KanbanBoardView").then(module => ({ default: module.KanbanBoardView })),
+);
 const DashboardV2 = React.lazy(() => import("../../main-content-v2/DashboardV2"));
 const TasksV2 = React.lazy(() => import("../../main-content-v2/TasksV2"));
 const MemoryPanel = React.lazy(() => import("./memory/MemoryPanel"));
@@ -578,7 +581,7 @@ function SplitBody(props: SplitBodyProps) {
   // Skills, Routing, Memory, and Always-On are auxiliary dashboards paired
   // with chat. Files stays a separate explorer + artifact + assistant mode.
   const isPlugin = typeof activeTab === "string" && activeTab.startsWith("plugin:");
-  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks"]);
+  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks", "kanban"]);
   const isFullScreenTool = fullScreenToolTabs.has(activeTab) || isPlugin;
   const isDashboardPanel = DASHBOARD_PANEL_TABS.has(activeTab);
   const dashboardPanelTab = isDashboardPanel ? (activeTab as DashboardPanelTab) : null;
@@ -754,6 +757,9 @@ function SplitBody(props: SplitBodyProps) {
     }
     if (activeTab === "git") {
       return <GitV2 selectedProject={selectedProject} onFileOpen={handleFileOpen} />;
+    }
+    if (activeTab === "kanban") {
+      return <KanbanBoardView selectedProject={selectedProject} projects={projects} />;
     }
     if (activeTab === "always-on") {
       return (

@@ -2036,6 +2036,61 @@ export function registerAlwaysOnNotificationForwarding(clients, forwardToSession
     });
 }
 
+/**
+ * 项目看板（Kanban）实时推送接线（Phase 5）。
+ *
+ * 与 always-on 的 `registerAlwaysOnNotificationForwarding` 同构：这里只负责在
+ * 共享 gateway 连接上注册 `kanban_updated` notification handler，并把事件转发给
+ * callers（由 broadcast.js 提供"按 projectId 找浏览器 watchers"的 fanout 回调）。
+ *
+ * gateway 侧只在有浏览器 watchers 订阅项目后才向本连接推送（见 gwKanbanSubscribe）。
+ * 注意：与 always-on 一致，本函数在 gateway 初次连接时注册一次 handler；gateway
+ * 重连后会创建新的 RemoteGateway 实例，notification 不自动重挂（既有已知限制，
+ * 与本文件 always-on 转发同款，不在此扩展）。
+ *
+ * @param {Set<import('ws').WebSocket>} clients
+ * @param {(projectId: string, payload: unknown) => void} forwardToProjectWatchers
+ */
+export function registerKanbanNotificationForwarding(clients, forwardToProjectWatchers) {
+  ensureGateway()
+    .then(gw => {
+      gw.onNotification((name, payload) => {
+        if (name !== "kanban_updated") return;
+        const projectId = payload?.projectId;
+        if (!projectId) return;
+        if (typeof forwardToProjectWatchers === "function") {
+          forwardToProjectWatchers(projectId, payload);
+          return;
+        }
+        // Compatibility fallback for embedders without a watcher registry.
+        const msg = JSON.stringify({ type: "kanban_updated", payload });
+        for (const client of clients) {
+          if (client.readyState === 1) client.send(msg);
+        }
+      });
+    })
+    .catch(err => {
+      console.warn("[sati-bridge] failed to register kanban_updated notification forwarding:", err?.message || err);
+    });
+}
+
+/** 让共享 gateway 连接订阅某项目的 kanban_updated 事件（gateway 侧仅最近一次订阅生效）。 */
+export async function gwKanbanSubscribe(projectId) {
+  const gw = await getSatiGatewayWithReset();
+  if (typeof gw.kanbanSubscribe !== "function") {
+    console.warn("[sati-bridge] gateway 不支持 kanban_subscribe，看板实时推送不可用");
+    return;
+  }
+  await gw.kanbanSubscribe({ projectId });
+}
+
+/** 取消共享 gateway 连接对该项目 kanban_updated 事件的订阅。 */
+export async function gwKanbanUnsubscribe(projectId) {
+  const gw = await getSatiGatewayWithReset();
+  if (typeof gw.kanbanUnsubscribe !== "function") return;
+  await gw.kanbanUnsubscribe({ projectId });
+}
+
 export async function elicitationRespondViaGateway(requestId, answer) {
   const gw = await ensureGateway();
   for (const state of sessionState.values()) {

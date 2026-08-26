@@ -519,6 +519,39 @@ export const api = {
       }),
   },
 
+  // 项目看板（Kanban）：全部经 ui/server /api/kanban/* 转发到 gateway kanban_* 方法。
+  // 各方法返回 gateway 原始结果（如 { columns, cards, ... } 或 { ok, error }）。
+  kanban: {
+    _post: async (endpoint, body) => {
+      const response = await authenticatedFetch(`/api/kanban/${endpoint}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.error?.message || `看板请求失败 (HTTP ${response.status})`);
+      }
+      return payload;
+    },
+    get: body => api.kanban._post("get", body),
+    subscribe: body => api.kanban._post("subscribe", body),
+    unsubscribe: body => api.kanban._post("unsubscribe", body),
+    addCard: body => api.kanban._post("add-card", body),
+    updateCard: body => api.kanban._post("update-card", body),
+    moveCard: body => api.kanban._post("move-card", body),
+    archiveCard: body => api.kanban._post("archive-card", body),
+    restoreCard: body => api.kanban._post("restore-card", body),
+    purgeCard: body => api.kanban._post("purge-card", body),
+    duplicateCard: body => api.kanban._post("duplicate-card", body),
+    bulkArchiveCards: body => api.kanban._post("bulk-archive-cards", body),
+    bulkMoveCards: body => api.kanban._post("bulk-move-cards", body),
+    moveToProject: body => api.kanban._post("move-to-project", body),
+    addColumn: body => api.kanban._post("add-column", body),
+    renameColumn: body => api.kanban._post("rename-column", body),
+    deleteColumn: body => api.kanban._post("delete-column", body),
+    undo: body => api.kanban._post("undo", body),
+  },
+
   // Generic GET method for any endpoint
   get: endpoint => authenticatedFetch(`/api${endpoint}`),
 

@@ -24,6 +24,7 @@
     "shell": "Shell",
     "files": "Files",
     "git": "Source Control",
+    "kanban": "Kanban",
     "tasks": "Tasks",
     "dashboard": "Routing",
     "memory": "Memory",
