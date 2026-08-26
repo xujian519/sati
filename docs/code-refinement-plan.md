@@ -79,7 +79,7 @@
 | C15 | src/patent data/nuo+figure+evaluate 其余 | ✅ 2026-08-24 |
 | C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ✅ 2026-08-25（关联 #190） |
 | C17 | src/adapters 其余 18 渠道+protocol | ImLiveReplyController.ts 1016 | ✅ 2026-08-25 |
-| C18 | src/knowledge | 44/7.1K；case-law、legal、kg-store、wiki | ⬜ |
+| C18 | src/knowledge | 44/7.1K；case-law、legal、kg-store、wiki | ✅ 2026-08-26 |
 | C19 | src/router | 26/4.3K；RouterRuntime.ts 1258 | ⬜ |
 | C20 | src/always-on | 38/8K；DiscoveryFire.ts 1252 | ⬜ |
 | C21 | src/session + task + status + pilot | 34/4.8K + 3 小模块 | ⬜ |
@@ -137,6 +137,7 @@
 | 2026-08-24 | C14 | src/patent graph+claim-chart+document | P3 无参 catch 补意图注释 ×4（enablement.ts:483 / inventiveness.ts:610 / claim-chart store.ts:38 / document brandInjector.ts:64；state.ts:15、stylePreset.ts:51 已注释）；嵌套三元改 if/else ×1（graph/adapter.ts:120 主输出键序列化）+ 查表 ×1（claim-chart gap-detector.ts reason 文案提取 GAP_REASON_LABELS，与原内联三元逐字一致）；P2 记录不处理：validatePinCiteFormat/stripWhitespace 为同包或 chart.ts 消费的公共 export 保留、splitClaimSegments 仅同文件内消费但作公共 API 一致保留；P0/P1/P2 无行为缺陷；三模块横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME | 1（refactor） | ✅ |
 | 2026-08-25 | C16 | src/adapters 大渠道（wecom/weixin/feishu） | P3 无参 catch 补 fail-safe 意图注释 ×9（wecom 583/1608/1700、weixin 1215/1348、feishu 57/1101/1230/1245）；P0/P1/P2 无；三渠道整体质量高：零裸 console（weixin 3 处登录二维码横幅属 CLI 交互提示、保留）、零 any/@ts-expect-error、零 TODO/FIXME、零死代码/未使用导出 | 1（refactor） | ✅ |
 | 2026-08-25 | C17 | src/adapters 其余渠道+protocol | P3 全 18 个无参 catch 补 fail-safe 意图注释（protocol 5 + 渠道 Channel 12 + web 1）；记录不处理：createWebStaticMount 恒等 stub、tui/app UI 层、SessionMapper/render 薄封装；P0/P1/P2 无；横切零 any/console/TODO | 2（refactor + docs） | ✅ |
+| 2026-08-26 | C18 | src/knowledge | P2 冗余：assemble.ts 末尾重复 re-export diagnostics.js 能力符号（resolveKnowledgeCapabilities/formatKnowledgeCapabilities/logKnowledgeCapabilities + 4 type），全仓（src+tests）零消费（index.ts 已从 diagnostics.js 直接导出同名）→ 删除；P3 注释：9 处无参 catch 补 fail-safe 意图注释（version-meta:120/diagnostics:40/legal-search:92/personal-note-store:134/fts:22/embedding-consistency:59/wiki-card-loader:325/kg row-mapper:58/schema-introspector:85）；P0/P1 无；横切零 console/any/TODO、无嵌套三元；记录不处理：KnowledgeLawSearchOptions2 命名瑕疵（改公共导出面风险大）、ipc-classifier.ts 779 与 case-law-search.ts 656 超 600 行（待拆建议） | 1（refactor） | ✅ |
 
 ### 日卡记录
 
@@ -331,6 +332,18 @@
 - **精炼项**：无参 catch 补 fail-safe 意图注释 ×18（净 +26/−2，行为零变化）。
 - **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；`pnpm lint` 全量 ✅（event-matrix 重生成，纯行号偏移：ApiServer/Sms 等适配器行位移）；改动文件 `biome format --write` 无改动 ✅；`pnpm test` 3812 pass / 0 fail / 4 skip ✅。
 - **提交**：`refactor(adapters): 为其余渠道与 protocol 无参 catch 补 fail-safe 意图注释（C17）`、`docs: regenerate event matrix (adapters line shifts)`（PR #194）
+
+#### C18 src/knowledge（2026-08-26）
+
+- **审阅范围**：44 文件 / 7866 行（不含 wiki 数据目录），含 case-law、legal、patent（ipc/standards/kg/wiki-card）、personal-note、shared（kg/vector/fts 等）。
+- **审阅发现**：
+  - P2 冗余：`assemble.ts` 末尾重复 re-export `diagnostics.js` 能力符号（resolveKnowledgeCapabilities/formatKnowledgeCapabilities/logKnowledgeCapabilities + 4 type），全仓（src+tests）零消费——index.ts 已从 diagnostics.js 直接导出同名符号 → 删除该重复导出。
+  - P3 无参 catch 缺意图注释 ×9（version-meta：120 JSON 解析失败→空映射、diagnostics：40 探测失败→不可探测、legal-search：92 FTS 降级 LIKE、personal-note-store：134 读失败→空串哨兵、shared/fts：22 编译探测失败→按未编译、embedding-consistency：59 库打开失败→null、wiki-card-loader：325 缓存损坏→失效重扫、shared/kg row-mapper：58 law_refs 非 JSON→undefined、schema-introspector：85 FTS 未可用→降级 LIKE）→ 均补 fail-safe 意图注释。其余 4 处 catch（law-search-tool:49、chunk-compression:49、wiki-card-loader:337/348）已带注释，未重复处理。
+  - P0/P1 无行为缺陷。横切扫描（全模块）：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME、零死代码/孤儿导出、无嵌套三元需展平（`??` 配单三元、SQL `?` 占位符系误报）。
+  - 记录不处理：`KnowledgeLawSearchOptions2` 构造 options 带怪异 `2` 后缀（改名属公共导出面变更，风险大）；`ipc-classifier.ts`（779）与 `case-law-search.ts`（656）超 600 行（保守档记录待拆建议）；跨文件 `errorMessage` 小函数重复（C04 先例：跨文件重构不处理）。
+- **精炼项**：无参 catch 补 fail-safe 意图注释 ×9、冗余 re-export 删除 ×1（净 +9/−11，-2 行，行为零变化）。
+- **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；`pnpm lint` 全量 ✅（event-matrix/patent-sop/workflow-docs/html-templates/skills 各子门禁 fresh，无事件面改动故无需重生成矩阵）；改动目录 `biome check src/knowledge` ✅（46 文件）；全仓 format:check 仅报 `.claude/settings.local.json`（未跟踪/pre-existing，C15/C17 已记录，非本次引入）；`pnpm test` 3812 pass / 0 fail / 4 skip ✅。
+- **提交**：`refactor(knowledge): 为 9 处无参 catch 补 fail-safe 意图注释，删除 assemble 冗余 re-export（C18）`
 
 ## 六、基线（2026-08-18 实测）
 
