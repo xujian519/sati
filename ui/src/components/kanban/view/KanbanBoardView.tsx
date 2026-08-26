@@ -38,7 +38,9 @@ export function KanbanBoardView({ selectedProject, projects, onOpenSession }: Ka
   }, [board, showArchived]);
 
   const { activeCard, dndContextProps } = useBoardDragDrop({
-    cards: visibleCards,
+    // 用全量 cards 计算 toIndex：拖拽 hook 的 dropToGlobalIndex 必须与服务端
+    // moveCard / 乐观更新 applyMove 处于同一索引空间（归档卡被过滤后索引会偏移）。
+    cards: board?.cards ?? [],
     columns: board?.columns ?? [],
     onDrop: (cardId, target) => {
       void actions.moveCard(cardId, target.columnId, target.toIndex);

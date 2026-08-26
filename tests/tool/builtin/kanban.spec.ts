@@ -251,3 +251,19 @@ test("kanban_move_card_to_workspace 相对 toWorkspaceId 基于当前工作区�
   assert.equal(targetBoard.data!.cards.length, 1);
   assert.equal(targetBoard.data!.cards[0]?.id, newId);
 });
+
+test("kanban_move_card_to_workspace 拒绝空 toWorkspaceId 与移到当前工作区", async () => {
+  const { root, tools } = setup();
+  const added = await tools.addCard.execute({ title: "卡" }, makeContext(root));
+  const id = (added.data as { cardId: string }).cardId;
+
+  await assert.rejects(
+    () => tools.moveCardToWorkspace.execute({ id, toWorkspaceId: "" }, makeContext(root)),
+    /toWorkspaceId must be a non-empty string/,
+  );
+  // "." 解析回当前工作区：源、目标为同一 store，会二次进入同一 mutex 自死锁，应拒绝。
+  await assert.rejects(
+    () => tools.moveCardToWorkspace.execute({ id, toWorkspaceId: "." }, makeContext(root)),
+    /Target workspace must differ from the current workspace/,
+  );
+});

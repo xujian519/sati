@@ -139,3 +139,23 @@ Sati 缺少一个**按项目隔离、agent 可写、用户可持久化查看**�
 - 看板工具为 opt-in 注册：默认 `createBuiltinRegistry()` 不包含它们，避免破坏既有 llm-replay fixture；只有真实 gateway 启动路径才会注入。
 - `BoardStore.updateCard` 修复后不再因未提供字段而损坏板文件。
 - `BoardStore` 以 mutex-tail 串行化同一项目内的并发写，agent 多会话/常驻后台并发写卡不再丢数据；跨项目移动先落目标、源板不动以保卡片不丢。
+
+## 评审修复（2026-08-26 自查 self-review）
+
+对 PR #197 做了一轮自查（code-reviewer 子代理 + 人工核对），逐条修复：
+
+- **拖拽 `toIndex` 索引空间错配（#4）**：`KanbanBoardView` 此前把过滤后的 `visibleCards` 传给拖拽 hook 的 `dropToGlobalIndex`，而服务端 `moveCard` 与乐观更新 `applyMove` 都用全量 `board.cards`。当某列混有归档卡时，过滤索引 ≠ 全量索引，落点偏移且刷新后仍不一致。改为传全量 `board.cards`，使三者同一索引空间。
+  - Alternatives：保留过滤索引仅在无归档卡时正确；传全量是唯一与服务端一致的做法。
+- **`undo()` 未走项目锁（#2）**：此前 undo 直接 `store.saveBoard`，绕过 `mutate`/`run` 的 mutex，与并发写竞争（lost-update）；且 `beforeMutation` 以**无锁** `loadBoard` 提前取快照，多次并发变更会重复/丢步快照。改为：`BoardStore` 注入 `onBeforeMutate` 回调，**在锁定 `mutate` 内、transform 前**抓取快照（原子绑定）；新增 `store.replaceBoard(state)` 走 `run` 供 undo 恢复；`BoardRuntime.undo` 改走 `replaceBoard`；跨项目移动 `mutate(..., { captureUndo:false })` 保持不入栈的 v1 行为。
+  - Alternatives：把 undo 栈放进 store 会增加耦合；在 store 内已持锁处取快照是最小侵入且正确的方案。
+- **跨项目对向移动 AB-BA 死锁（#3）**：`moveCardToStore` 的锁定序是「源→目标」且由数据决定，并发 A→B 撞 B→A 即循环等待。原注释「无反向无死锁」不成立。改为在模块级加 `acquireCrossProjectLock`（进程级 mutex-tail），把所有跨项目移动串行化，先于任意一对源/目标锁，杜绝循环等待；补充并发对向移动回归测试。
+  - Alternatives：对 projectRoot 排序后按全局序取锁可保并行，但需自建锁序且易错；全局串行化对低频跨项目移动足够且最简。
+- **projectKey/projectId 未规范化（#8）**：UI 传 `Project.path` 原文、工具传 `resolve(cwd)`，同一目录可能因路径形态不同产生两个 `BoardRuntime` 且订阅/广播错配。改为 `KanbanBoardManager` 统一用 `resolve()` 规范化订阅/广播/runtime 缓存键；`InProcessGateway.resolveKanbanProjectRoot` 也改返回 `resolve(projectKey)`。
+- **`kanban_move_card_to_workspace` 目标校验（#1 部分）**：`toWorkspaceId` 解析回当前工作区时，源/目标为同一 store，`moveCardToStore` 会二次进入同一 mutex 造成**自死锁**（且重复写卡）。`resolveWorkspaceTarget` 现拒绝空/空白 `toWorkspaceId`、拒绝解析回当前工作区。至于「任意绝对/相对路径可写到任意工作区」——这是跨项目移动的固有特性（现有测试即用无关绝对临时目录），几何级防护会破坏该特性；正确做法是按**已注册项目清单**校验，需把项目列表注入工具（结构性改动），列为后续项。
+  - Alternatives：按 `relative(cwd, target)` 拒绝越过上级的 `..` 会破坏「移到任意工作区」特性（与既有测试冲突）；放行绝对路径则无法在无注册清单时区分合法工作区与任意目录。
+- **agent 工具未标 `domain`（#5，不改）**：`scopeToolsForDefinition` 对 `domain === undefined` 的工具在 `visibleDomains` 过滤下**始终可见**；一旦标注 domain（如 `session`），真实角色（如 `visibleDomains:["patent"]`）会因白名单不含该域而**隐藏**看板工具，属回归。看板是跨域通用工作区能力，刻意不标注以保所有角色可见，维持现状。
+  - Alternatives：给看板工具新增专属 domain 并同步所有角色可见域，改动跨切面且收益低；保持未标注是既有设计声明的正确选择。
+- **硬编码文案（#6 部分）**：`useBoardState` 的「未选择项目」与 `api.js` 的「看板请求失败 (HTTP …)」抽到 `kanban.json`（`errors.noProjectSelected` / `errors.requestFailed`）。api.js 用**动态 import** 取 i18n，避免与 `i18n/config`（其从 api.js 取 `authenticatedFetch`）形成模块加载期静态循环。`BoardStore` 的「(副本)」是落盘数据、非渲染期文案，不改。
+- **事件矩阵 `kanban_updated` producer 缺失（#7）**：矩阵此前显示 producer 为 `-`（`sendNotification` 不被识别为生产者）。生成器生产者 callee 集加入 `"sendNotification"`，`kanban_updated` 的 producer 现为 `GatewayWsConnection.ts:49`。消费者列仍折叠为「submitTurn 流 ×N」——notification 事件本不走该流，属生成器启发式局限；将其区分需重做消费者分类，超本次范围。
+
+全部修复经 `pnpm typecheck`（根+UI）、`pnpm lint`（含 event-matrix）、`pnpm test`（3879 通过）、UI vitest（617 通过）、浏览器（渲染/无 console 错误）验证。

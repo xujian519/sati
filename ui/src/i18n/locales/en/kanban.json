@@ -1,6 +1,10 @@
 {
   "boardTitle": "Project Board",
   "requireProject": "Select a project to view its board",
+  "errors": {
+    "noProjectSelected": "No project selected",
+    "requestFailed": "Kanban request failed (HTTP {{status}})"
+  },
   "undo": "Undo",
   "recycleBin": "Recycle bin",
   "emptyColumn": "Drop cards here",

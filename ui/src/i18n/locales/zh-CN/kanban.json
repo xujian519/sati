@@ -1,6 +1,10 @@
 {
   "boardTitle": "项目看板",
   "requireProject": "请选择一个项目以查看其看板",
+  "errors": {
+    "noProjectSelected": "未选择项目",
+    "requestFailed": "看板请求失败 (HTTP {{status}})"
+  },
   "undo": "撤销",
   "recycleBin": "回收站",
   "emptyColumn": "暂无可拖拽卡片",

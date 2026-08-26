@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import type { DiscoveryPlanService } from "../../always-on/web/DiscoveryPlanService.js";
 import { type CanonicalMessage } from "../../model/index.js";
 import { sanitizeSessionIdForPath } from "../../session/index.js";
@@ -1162,7 +1163,9 @@ export class InProcessGateway implements Gateway {
 
   private resolveKanbanProjectRoot(projectKey: string): string {
     // v1：projectKey 直接作为项目根目录；后续可接入 workspace 解析。
-    return projectKey;
+    // resolve 规范化（绝对路径、去尾分隔符/`.`/`..`），与 KanbanBoardManager 的
+    // 规范化一致，避免同一目录因路径形态不同产生多个 runtime / 广播错配。
+    return resolve(projectKey);
   }
 
   async kanbanGet(input: KanbanGetInput): Promise<KanbanGetResult> {

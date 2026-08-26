@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import i18n from "../../../i18n/config";
 import { api } from "../../../utils/api";
 import { useWebSocket } from "../../../contexts/WebSocketContext";
 import { applyMove, getCard } from "../utils/boardPosition";
@@ -106,7 +107,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
       dueDate?: string;
     }): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       return guard(async () => {
         const result = await api.kanban.addCard({ projectKey: currentProjectKey, ...fields });
         if (result?.error) throw new Error(result.error.message);
@@ -128,7 +129,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
       fields: Partial<Pick<BoardCard, "title" | "note" | "label" | "priority" | "color" | "dueDate">>,
     ): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       return guard(async () => {
         const result = await api.kanban.updateCard({ projectKey: currentProjectKey, cardId, ...fields });
         if (result?.error) throw new Error(result.error.message);
@@ -149,7 +150,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const moveCard = useCallback(
     async (cardId: string, columnId: string, toIndex?: number): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       const previousCards = board?.cards;
       setBoard(prev => (prev ? { ...prev, cards: applyMove(prev.cards, cardId, columnId, toIndex) } : prev));
       const result = await guard(async () => {
@@ -169,7 +170,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const archiveCard = useCallback(
     async (cardId: string): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       const previousCards = board?.cards;
       setBoard(prev =>
         prev
@@ -193,7 +194,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const restoreCard = useCallback(
     async (cardId: string): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       const previousCards = board?.cards;
       setBoard(prev =>
         prev
@@ -217,7 +218,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const purgeCard = useCallback(
     async (cardId: string): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       const previousCards = board?.cards;
       setBoard(prev => (prev ? { ...prev, cards: prev.cards.filter(card => card.id !== cardId) } : prev));
       const result = await guard(async () => {
@@ -237,7 +238,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const duplicateCard = useCallback(
     async (cardId: string, columnId?: string, toIndex?: number): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       return guard(async () => {
         const result = await api.kanban.duplicateCard({ projectKey: currentProjectKey, cardId, columnId, toIndex });
         if (result?.error) throw new Error(result.error.message);
@@ -256,7 +257,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const bulkArchiveCards = useCallback(
     async (ids: string[]): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       return guard(async () => {
         const result = await api.kanban.bulkArchiveCards({ projectKey: currentProjectKey, ids });
         if (result?.error) throw new Error(result.error.message);
@@ -270,7 +271,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const bulkMoveCards = useCallback(
     async (ids: string[], columnId: string): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       return guard(async () => {
         const result = await api.kanban.bulkMoveCards({ projectKey: currentProjectKey, ids, columnId });
         if (result?.error) throw new Error(result.error.message);
@@ -284,7 +285,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const moveToProject = useCallback(
     async (cardId: string, toProjectKey: string): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       const previousCards = board?.cards;
       setBoard(prev => (prev ? { ...prev, cards: prev.cards.filter(card => card.id !== cardId) } : prev));
       const result = await guard(async () => {
@@ -304,7 +305,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const addColumn = useCallback(
     async (title: string, color?: string): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       return guard(async () => {
         const result = await api.kanban.addColumn({ projectKey: currentProjectKey, title, color });
         if (result?.error) throw new Error(result.error.message);
@@ -323,7 +324,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const renameColumn = useCallback(
     async (columnId: string, title: string): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       return guard(async () => {
         const result = await api.kanban.renameColumn({ projectKey: currentProjectKey, columnId, title });
         if (result?.error) throw new Error(result.error.message);
@@ -337,7 +338,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const deleteColumn = useCallback(
     async (columnId: string): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       return guard(async () => {
         const result = await api.kanban.deleteColumn({ projectKey: currentProjectKey, columnId });
         if (result?.error) throw new Error(result.error.message);
@@ -351,7 +352,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
   const reorderColumns = useCallback(
     async (columnIds: string[]): Promise<KanbanMutationResult> => {
       const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+      if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
       const previousColumns = board?.columns;
       setBoard(prev => {
         if (!prev) return prev;
@@ -377,7 +378,7 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
 
   const undo = useCallback(async (): Promise<KanbanMutationResult> => {
     const currentProjectKey = projectKeyRef.current;
-    if (!currentProjectKey) return { ok: false, error: "未选择项目" };
+    if (!currentProjectKey) return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
     return guard(async () => {
       const result = await api.kanban.undo({ projectKey: currentProjectKey });
       if (result?.error) throw new Error(result.error.message);

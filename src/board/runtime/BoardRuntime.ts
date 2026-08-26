@@ -36,7 +36,9 @@ export class BoardRuntime {
 
   constructor(options: BoardRuntimeOptions) {
     this.projectId = options.projectId;
-    this.store = new BoardStore(options.projectRoot);
+    // undo 快照在 store 的「锁定 mutate」内、transform 前抓取（onBeforeMutate），
+    // 与变更原子绑定，避免无锁读取导致的丢步/重复快照。
+    this.store = new BoardStore(options.projectRoot, state => this.pushUndo(state));
     this.emit = options.emit;
     this.now = options.now ?? (() => new Date());
     this.maxUndoSteps = options.maxUndoSteps ?? 50;
@@ -58,12 +60,6 @@ export class BoardRuntime {
     }
   }
 
-  private async beforeMutation(): Promise<BoardState> {
-    const state = await this.store.loadBoard();
-    this.pushUndo(state);
-    return state;
-  }
-
   private async emitChange(kind: KanbanUpdatedKind, id?: { cardId?: string; columnId?: string }): Promise<void> {
     const payload: KanbanUpdatedPayload = {
       projectId: this.projectId,
@@ -79,26 +75,22 @@ export class BoardRuntime {
   }
 
   async addColumn(title: string, color?: string): Promise<BoardColumn> {
-    await this.beforeMutation();
     const column = await this.store.addColumn(title, color);
     await this.emitChange("column", { columnId: column.id });
     return column;
   }
 
   async renameColumn(columnId: string, title: string): Promise<void> {
-    await this.beforeMutation();
     await this.store.renameColumn(columnId, title);
     await this.emitChange("column", { columnId });
   }
 
   async deleteColumn(columnId: string): Promise<void> {
-    await this.beforeMutation();
     await this.store.deleteColumn(columnId);
     await this.emitChange("column", { columnId });
   }
 
   async reorderColumns(orderedIds: string[]): Promise<void> {
-    await this.beforeMutation();
     await this.store.reorderColumns(orderedIds);
     await this.emitChange("column");
   }
@@ -115,7 +107,6 @@ export class BoardRuntime {
     },
     actor?: BoardActor,
   ): Promise<BoardCard> {
-    await this.beforeMutation();
     const source = this.makeSource(actor);
     const card = await this.store.addCard(fields, source);
     await this.emitChange("card", { cardId: card.id });
@@ -123,51 +114,43 @@ export class BoardRuntime {
   }
 
   async updateCard(cardId: string, update: BoardCardUpdate): Promise<BoardCard> {
-    await this.beforeMutation();
     const card = await this.store.updateCard(cardId, update);
     await this.emitChange("card", { cardId: card.id });
     return card;
   }
 
   async moveCard(cardId: string, target: BoardMoveTarget): Promise<void> {
-    await this.beforeMutation();
     await this.store.moveCard(cardId, target);
     await this.emitChange("card", { cardId });
   }
 
   async archiveCard(cardId: string): Promise<void> {
-    await this.beforeMutation();
     await this.store.archiveCard(cardId);
     await this.emitChange("card", { cardId });
   }
 
   async restoreCard(cardId: string): Promise<void> {
-    await this.beforeMutation();
     await this.store.restoreCard(cardId);
     await this.emitChange("card", { cardId });
   }
 
   async purgeCard(cardId: string): Promise<void> {
-    await this.beforeMutation();
     await this.store.purgeCard(cardId);
     await this.emitChange("card", { cardId });
   }
 
   async duplicateCard(cardId: string, target?: BoardMoveTarget): Promise<BoardCard> {
-    await this.beforeMutation();
     const card = await this.store.duplicateCard(cardId, target);
     await this.emitChange("card", { cardId: card.id });
     return card;
   }
 
   async bulkArchiveCards(ids: string[]): Promise<void> {
-    await this.beforeMutation();
     await this.store.bulkArchiveCards(ids);
     await this.emitChange("card");
   }
 
   async bulkMoveCards(ids: string[], columnId: string): Promise<void> {
-    await this.beforeMutation();
     await this.store.bulkMoveCards(ids, columnId);
     await this.emitChange("card");
   }
@@ -192,7 +175,8 @@ export class BoardRuntime {
     if (previous === undefined) {
       return;
     }
-    await this.store.saveBoard(this.snapshot(previous));
+    // 通过 replaceBoard 在项目锁下覆写，避免与并发写竞争（lost-update）。
+    await this.store.replaceBoard(this.snapshot(previous));
     // undo 恢复整板快照，用 "board" 类型通知订阅者重建（避免 UI 停留在过期卡片）。
     await this.emitChange("board");
   }

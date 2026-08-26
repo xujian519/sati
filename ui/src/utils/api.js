@@ -529,7 +529,10 @@ export const api = {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.error?.message || `看板请求失败 (HTTP ${response.status})`);
+        // 动态 import 避免静态依赖 i18n/config（后者又从本模块取 authenticatedFetch，
+        // 静态 import 会形成 api.js ↔ config.js 模块加载期循环）。
+        const { default: i18n } = await import("../i18n/config.js");
+        throw new Error(payload?.error?.message || i18n.t("kanban:errors.requestFailed", { status: response.status }));
       }
       return payload;
     },

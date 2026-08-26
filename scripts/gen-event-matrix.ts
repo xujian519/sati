@@ -295,7 +295,7 @@ function renderMatrix(): string {
   // 的 TeamEvent 广播（scheduler/网关链路）须入生产者矩阵。
   const producers = collectSites(
     join(REPO_ROOT, "src"),
-    ["emit", "dispatch", "emitAgentEvent", "emitEvent", "emitForSession"],
+    ["emit", "dispatch", "emitAgentEvent", "emitEvent", "emitForSession", "sendNotification"],
     "producer",
   );
   const consumers = collectSites(join(REPO_ROOT, "src"), ["on", "subscribe"], "consumer");

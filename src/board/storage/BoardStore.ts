@@ -116,7 +116,11 @@ function nextCardId(state: BoardState): string {
 }
 
 export class BoardStore {
-  constructor(private readonly projectRoot: string) {}
+  constructor(
+    private readonly projectRoot: string,
+    /** 在锁定 mutate 内、transform 前回调，供运行时抓取「变更前」快照做 undo。 */
+    private readonly onBeforeMutate?: (state: BoardState) => void,
+  ) {}
 
   /**
    * Mutex tail；await `mutex` 后赋新 promise 串行化同一项目内的读改写。
@@ -134,10 +138,20 @@ export class BoardStore {
     return next;
   }
 
-  /** 在持有项目锁的前提下执行「读 → transform → 写」；transform/save 抛错则本次变更不落盘。 */
-  private async mutate<T>(transform: (state: BoardState) => T | Promise<T>): Promise<T> {
+  /**
+   * 在持有项目锁的前提下执行「读 → transform → 写」；transform/save 抛错则本次变更不落盘。
+   * `captureUndo` 默认 true：在锁定态加载后、transform 前回调 `onBeforeMutate`，使 undo 快照
+   * 与本次变更原子绑定（跨项目移动传 false，保持跨项目不入 undo 栈的 v1 行为）。
+   */
+  private async mutate<T>(
+    transform: (state: BoardState) => T | Promise<T>,
+    options?: { captureUndo?: boolean },
+  ): Promise<T> {
     return this.run(async () => {
       const state = await this.loadBoard();
+      if (options?.captureUndo !== false) {
+        this.onBeforeMutate?.(state);
+      }
       const result = await transform(state);
       await this.saveBoard(state);
       return result;
@@ -151,6 +165,16 @@ export class BoardStore {
   async saveBoard(state: BoardState): Promise<void> {
     await mkdir(this.projectRoot, { recursive: true });
     await atomicWriteJson(this.boardPath(), JSON.stringify(state, null, 2));
+  }
+
+  /**
+   * 在项目锁下用给定状态整体覆写落盘（undo 恢复快照用）。
+   * 走 `run` 而非 `mutate`：不触发 onBeforeMutate，undo 本身不应再写 undo 栈。
+   */
+  async replaceBoard(state: BoardState): Promise<void> {
+    await this.run(async () => {
+      await this.saveBoard(state);
+    });
   }
 
   private async backupCorruptBoard(_reason: Error): Promise<void> {
@@ -401,33 +425,55 @@ export class BoardStore {
    * 把卡片移到另一个 BoardStore（对应另一个项目）。
    * 源板删除该卡，目标板按目标自己的 seq 重新生成 id 并插入第一列。
    *
-   * 串行化：源板在 `this.mutex` 下、目标板在 `targetStore.mutex` 下各自执行，
-   * 避免与各自项目内的并发读改写竞争（锁定序固定为源→目标，无反向，故无死锁）。
+   * 串行化：跨项目移动先取全局 crossProjectMoveLock（进程级，串行化所有跨项目移动），
+   * 再取源板 `this.mutex`、目标板 `targetStore.mutex`。因为全局锁先于任意一对源/目标锁，
+   * 并发对向移动（A→B 与 B→A）不会出现「各持一锁、互等对方锁」的 AB-BA 死锁。
+   * 源板 mutate 传 captureUndo:false——跨项目移动不入 undo 栈（v1 行为）。
    * 落盘顺序：先目标后源。目标写失败则源板不动，卡片留在源板（不丢卡）；
    * 「目标成功、源写失败」会两板都有该卡（重复而非丢失），v1 简化，非跨文件事务。
    */
   async moveCardToStore(cardId: string, targetStore: BoardStore): Promise<BoardCard> {
-    return this.mutate(async sourceState => {
-      const sourceIndex = this.findCardIndex(sourceState, cardId);
-      const [card] = sourceState.cards.splice(sourceIndex, 1);
+    return acquireCrossProjectLock(async () => {
+      return this.mutate(
+        async sourceState => {
+          const sourceIndex = this.findCardIndex(sourceState, cardId);
+          const [card] = sourceState.cards.splice(sourceIndex, 1);
 
-      const movedCard = await targetStore.run(async () => {
-        const targetState = await targetStore.loadBoard();
-        const targetColumnId = targetState.columns[0]!.id;
-        const moved: BoardCard = {
-          ...card!,
-          id: nextCardId(targetState),
-          columnId: targetColumnId,
-          createdAt: nowTimestamp(),
-          updatedAt: nowTimestamp(),
-          source: undefined,
-        };
-        targetState.cards.push(moved);
-        await targetStore.saveBoard(targetState);
-        return moved;
-      });
+          const movedCard = await targetStore.run(async () => {
+            const targetState = await targetStore.loadBoard();
+            const targetColumnId = targetState.columns[0]!.id;
+            const moved: BoardCard = {
+              ...card!,
+              id: nextCardId(targetState),
+              columnId: targetColumnId,
+              createdAt: nowTimestamp(),
+              updatedAt: nowTimestamp(),
+              source: undefined,
+            };
+            targetState.cards.push(moved);
+            await targetStore.saveBoard(targetState);
+            return moved;
+          });
 
-      return movedCard;
+          return movedCard;
+        },
+        { captureUndo: false },
+      );
     });
   }
+}
+
+/**
+ * 进程级跨项目移动锁（模块级 promise 链，同 BoardStore 的 run/mutate 同款 mutex-tail）。
+ * 所有 `moveCardToStore` 都经它串行化，使跨项目移动不与其他跨项目移动交错，
+ * 从根上消除「A→B 与 B→A 同时发生时的 AB-BA 循环等待」死锁。
+ */
+let crossProjectMoveLock: Promise<void> = Promise.resolve();
+function acquireCrossProjectLock<T>(task: () => Promise<T>): Promise<T> {
+  const next = crossProjectMoveLock.then(task, task);
+  crossProjectMoveLock = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
 }

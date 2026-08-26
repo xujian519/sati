@@ -109,6 +109,25 @@ function getRuntime(manager: KanbanBoardManager, cwd: string) {
   return manager.getRuntime(projectRoot, projectRoot);
 }
 
+/**
+ * 解析并校验跨项目移动的目标工作区根目录。
+ * - 拒绝空/空白 `toWorkspaceId`。
+ * - 拒绝把卡片移到当前工作区自身：源、目标同为该 store 时会二次进入同一 mutex，
+ *   `moveCardToStore` 内部锁定序「源→目标」落到同一把锁上造成自死锁（且会重复写卡）。
+ * 其余「任意绝对/相对路径」仍按设计允许（跨项目移动本就应能到达任意工作区）；
+ * 若要收紧为仅允许已注册工作区，需把项目清单注入工具（结构性改动，另见评审记录）。
+ */
+function resolveWorkspaceTarget(cwd: string, rawWorkspaceId: string): string {
+  if (typeof rawWorkspaceId !== "string" || rawWorkspaceId.trim() === "") {
+    throw new SatiToolRuntimeError("invalid_tool_input", "toWorkspaceId must be a non-empty string");
+  }
+  const target = resolve(cwd, rawWorkspaceId);
+  if (target === resolve(cwd)) {
+    throw new SatiToolRuntimeError("invalid_tool_input", "Target workspace must differ from the current workspace");
+  }
+  return target;
+}
+
 function actorFrom(context: { sessionId: string; turnId: string }) {
   return { sessionKey: context.sessionId, turnId: context.turnId };
 }
@@ -624,7 +643,8 @@ export function createKanbanMoveCardToWorkspaceTool(
     execute: async (input, context) => {
       const sourceRuntime = getRuntime(manager, context.cwd);
       // 相对路径基于当前工作区根解析，避免以 gateway 进程 cwd 拼出任意路径。
-      const targetProjectRoot = resolve(context.cwd, input.toWorkspaceId);
+      // resolveWorkspaceTarget 同时校验空值/移到当前工作区（自死锁）。
+      const targetProjectRoot = resolveWorkspaceTarget(context.cwd, input.toWorkspaceId);
       const targetRuntime = manager.getRuntime(targetProjectRoot, targetProjectRoot);
       const card = await wrapRuntimeError(() => sourceRuntime.moveCardToProject(input.id, targetRuntime));
       const output: KanbanMoveCardToWorkspaceOutput = { cardId: card.id };

@@ -322,6 +322,27 @@ describe("BoardStore 并发写串行化", () => {
     assert.equal(new Set(cards.map(card => card.id)).size, total, "并发写应生成唯一 id");
     assert.equal(new Set(board.cards.map(card => card.id)).size, total, "落盘后卡片 id 仍应唯一");
   });
+
+  it("并发对向跨项目移动不死锁（全局锁串行化）", async () => {
+    const { store: storeA } = makeStore();
+    const rootB = tempProjectRoot();
+    tempDirs.push(rootB);
+    const storeB = new BoardStore(rootB);
+
+    const boardA = await storeA.loadBoard();
+    const boardB = await storeB.loadBoard();
+    const cardA = await storeA.addCard({ columnId: boardA.columns[0]!.id, title: "A→B" });
+    const cardB = await storeB.addCard({ columnId: boardB.columns[0]!.id, title: "B→A" });
+
+    const moves = Promise.all([storeA.moveCardToStore(cardA.id, storeB), storeB.moveCardToStore(cardB.id, storeA)]);
+    const timer = new Promise((_resolve, reject) =>
+      setTimeout(() => reject(new Error("cross-project move deadlocked")), 3000),
+    );
+    await Promise.race([moves, timer]);
+
+    assert.equal((await storeA.loadBoard()).cards.length, 1);
+    assert.equal((await storeB.loadBoard()).cards.length, 1);
+  });
 });
 
 describe("BoardStore 项目隔离", () => {
