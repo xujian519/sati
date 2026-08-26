@@ -35,6 +35,7 @@ import { renderWorkspaceLedgerBlock, type WorkspaceLedgerBlock } from "../../ses
 import { requiresPromptCapability } from "../../tool/userInteractionConstraints.js";
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
 import { repairToolName } from "../../model/streaming/repairToolName.js";
+import { defaultAgentThinking } from "../../model/thinking/registry.js";
 import { applyMethodologyAddendum, computeMethodologyAddendum } from "./methodologyInjection.js";
 import { buildMetacognitivePrompt, buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
 import { buildRequestHeaderSnapshot, verifyRequestHeaderSnapshot } from "./requestInvariant.js";
@@ -2069,7 +2070,7 @@ export class AgentLoop {
       toolChoice: this.config.toolChoice,
       maxOutputTokens: this.config.maxOutputTokens,
       temperature: this.config.temperature,
-      thinking: this.config.thinking,
+      thinking: this.config.thinking ?? defaultAgentThinking(this.config.model),
       stream: true,
       // 阶段四 T4.2：请求级 retryScope——把 turnId 并入请求 metadata，使
       // streamModel 的 retryId 在同一 turn 的全部请求间稳定（跨路由 attempt

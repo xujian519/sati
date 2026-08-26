@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildModelRequest } from "../../../src/model/index.js";
 import type { ModelCapabilities, ModelConfig, ModelDefinition, ProviderConfig } from "../../../src/model/index.js";
+import { defaultAgentThinking } from "../../../src/model/thinking/registry.js";
 
 test("deepseek-v4 default request carries thinking.type=disabled", () => {
   const body = buildModelRequest(
@@ -30,6 +31,24 @@ test("deepseek-v4 off request also carries thinking.type=disabled", () => {
   ) as { thinking?: Record<string, unknown> };
 
   assert.deepEqual(body.thinking, { type: "disabled" });
+});
+
+test("agent-loop default (defaultAgentThinking) opts deepseek-v4 into enabled thinking + high effort", () => {
+  const thinking = defaultAgentThinking("deepseek-v4-flash");
+  assert.ok(thinking);
+  const body = buildModelRequest(
+    {
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      stream: false,
+      thinking,
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+    },
+    deepseekV4Config("deepseek-v4-flash"),
+  ) as { thinking?: Record<string, unknown>; reasoning_effort?: string };
+
+  assert.deepEqual(body.thinking, { type: "enabled" });
+  assert.equal(body.reasoning_effort, "high");
 });
 
 test("deepseek-chat default keeps no thinking field (legacy semantics)", () => {

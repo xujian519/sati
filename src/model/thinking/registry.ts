@@ -138,6 +138,22 @@ export function resolveThinkingPlan(
   return { mode, enabled: false };
 }
 
+/**
+ * 主循环（agent）对推理模型的默认思考策略。
+ *
+ * deepseek-v4 官方默认开启思考（thinking 与 content 共享 max_tokens 预算），
+ * 而 `resolveThinkingPlan` 的 `default` 分支为保护确定性/benchmark 调用方
+ * （长输出被 reasoning_content 榨干 content=0）显式关闭思考。主循环需要
+ * 推理，故在此显式请求 medium（对 v4 映射为 reasoning_effort=high）；未命中
+ * 返回 undefined，沿用 resolveThinkingPlan 的 default 分支（关闭）。
+ */
+export function defaultAgentThinking(modelId: string): CanonicalThinkingConfig | undefined {
+  if (/deepseek-v4/.test(modelId.toLowerCase())) {
+    return { mode: "medium", enabled: true };
+  }
+  return undefined;
+}
+
 export function throwIfUnsupportedThinkingPlan(plan: ThinkingPlan, request: CanonicalModelRequest): void {
   if (!plan.unsupportedReason) return;
   throw new ModelRequestError("unsupported_thinking", plan.unsupportedReason, {

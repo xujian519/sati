@@ -6,7 +6,7 @@ import type {
   ModelDefinition,
   ProviderConfig,
 } from "../../../src/model/index.js";
-import { resolveThinkingPlan } from "../../../src/model/thinking/registry.js";
+import { defaultAgentThinking, resolveThinkingPlan } from "../../../src/model/thinking/registry.js";
 
 // DeepSeek v4 与 Kimi K3/K2.7 的官方思考语义（对照 2026-08 官方文档）：
 // - deepseek-v4-flash / deepseek-v4-pro：reasoning_effort 均支持 low/high/max，
@@ -138,6 +138,21 @@ test("default deepseek-v4 explicitly disables thinking via openai-compatible dis
   const pro = planFor("deepseek", "deepseek-v4-pro", undefined);
   assert.equal(pro.thinkingType, "disabled");
   assert.equal(pro.useOpenAICompatibleThinking, true);
+});
+
+test("defaultAgentThinking opts deepseek-v4 into medium thinking for the agent loop", () => {
+  assert.deepEqual(defaultAgentThinking("deepseek-v4-flash"), { mode: "medium", enabled: true });
+  assert.deepEqual(defaultAgentThinking("deepseek-v4-pro"), { mode: "medium", enabled: true });
+  // 大小写不敏感。
+  assert.deepEqual(defaultAgentThinking("DeepSeek-V4-Flash"), { mode: "medium", enabled: true });
+});
+
+test("defaultAgentThinking returns undefined for non-deepseek-v4 models", () => {
+  assert.equal(defaultAgentThinking("deepseek-reasoner"), undefined);
+  assert.equal(defaultAgentThinking("deepseek-chat"), undefined);
+  assert.equal(defaultAgentThinking("kimi-k3"), undefined);
+  assert.equal(defaultAgentThinking("claude-opus-4.8"), undefined);
+  assert.equal(defaultAgentThinking("MiniMax-M3"), undefined);
 });
 
 test("default deepseek-reasoner keeps legacy behavior (no thinking field)", () => {
