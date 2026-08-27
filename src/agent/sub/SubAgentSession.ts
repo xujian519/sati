@@ -22,7 +22,7 @@ import { messageContent } from "../../model/protocol/clone.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import { ToolRegistry } from "../../tool/registry/ToolRegistry.js";
-import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/index.js";
+import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/protocol/types.js";
 import { ConcurrentToolScheduler } from "../../tool/scheduler/ConcurrentToolScheduler.js";
 import { ToolRuntime } from "../../tool/execution/ToolRuntime.js";
 import { PermissionRuntime } from "../../permission/index.js";
