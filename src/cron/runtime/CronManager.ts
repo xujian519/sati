@@ -197,12 +197,21 @@ export class CronManager {
     });
     if (this.gateway) runtime.bindGateway(this.gateway);
     this.runtimes.set(projectKey, runtime);
-    await writeProjectMarker(runtime.paths.projectDir, projectKey);
-
-    if (this.started) {
-      const pending = runtime.start().finally(() => this.starting.delete(projectKey));
-      this.starting.set(projectKey, pending);
-      await pending;
+    try {
+      await writeProjectMarker(runtime.paths.projectDir, projectKey);
+      if (this.started) {
+        const pending = runtime.start().finally(() => this.starting.delete(projectKey));
+        this.starting.set(projectKey, pending);
+        await pending;
+      }
+    } catch (error) {
+      // 启动失败必须回滚注册表：否则 runtime 留在 runtimes 里，后续 ensureRuntime
+      // 命中 existing 分支拿到一个从未启动的 runtime，定时任务静默不触发且无重试。
+      // 回滚后下次调用会重建并重试；stop() 兜底回收可能已部分启动的 scheduler。
+      this.runtimes.delete(projectKey);
+      this.starting.delete(projectKey);
+      await runtime.stop().catch(() => undefined);
+      throw error;
     }
     return runtime;
   }
