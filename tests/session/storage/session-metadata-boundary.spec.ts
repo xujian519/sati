@@ -301,3 +301,30 @@ describe("TurnRunner 列表 prompt 元数据", () => {
     assert.equal(last?.lastPrompt, "边界测试请求");
   });
 });
+
+describe("SessionMetadataStore.saveAiTitle 契约", () => {
+  it("无条件记录 aiTitle（覆盖保护由调用方负责，修复前死分支已移除）", async () => {
+    const recorded: SessionMetadataValue[] = [];
+    const transcript = {
+      recordSessionMetadata: async (_sessionId: string, _turnId: string, metadata: SessionMetadataValue) => {
+        recorded.push(metadata);
+      },
+    } as unknown as AgentTranscriptWriter;
+    const store = new SessionMetadataStore({
+      transcript,
+      sessionId: "s1",
+      now: () => new Date("2026-08-19T00:00:00Z"),
+    });
+
+    await store.saveAiTitle("第一个标题", "t1");
+    assert.equal(recorded.length, 1);
+    assert.equal(recorded[0]?.aiTitle, "第一个标题");
+
+    // 契约：store 不做覆盖判断（TurnRunner 调用侧已保证 first-write-wins），
+    // 重复调用按后写覆盖语义记录。
+    await store.saveAiTitle("第二个标题", "t2");
+    assert.equal(recorded.length, 2);
+    assert.equal(recorded[1]?.aiTitle, "第二个标题");
+    assert.equal(store.getSnapshot().aiTitle, "第二个标题");
+  });
+});
