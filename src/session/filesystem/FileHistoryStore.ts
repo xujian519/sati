@@ -252,9 +252,9 @@ export class FileHistoryStore {
 
     for (const [absPath, backup] of Object.entries(snapshot.trackedFileBackups)) {
       const before = backup.backupFileName
-        ? await safeReadText(path.join(this.options.backupDir, backup.backupFileName))
+        ? await safeReadText(path.join(this.options.backupDir, backup.backupFileName), this.options.warn)
         : null;
-      const after = await safeReadText(absPath);
+      const after = await safeReadText(absPath, this.options.warn);
       if (before === null && after === null) continue;
       if (before === null && after !== null) {
         // file did not exist at backup; rewind would delete it → its lines
@@ -412,11 +412,14 @@ function isNotFoundError(err: unknown): boolean {
   return Boolean(err && typeof err === "object" && (err as NodeJS.ErrnoException).code === "ENOENT");
 }
 
-async function safeReadText(p: string): Promise<string | null> {
+async function safeReadText(p: string, warn?: (message: string) => void): Promise<string | null> {
   try {
     return await fs.readFile(p, "utf-8");
   } catch (err) {
     if (isNotFoundError(err)) return null;
+    // 非 ENOENT（权限/IO 等）不能静默当"文件不存在"计入 diff——告警后按 null
+    // 继续（fail-safe），保持 diff 视图不因单个不可读文件而失败。
+    warn?.(`file-history: failed to read ${p}: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
