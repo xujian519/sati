@@ -387,7 +387,9 @@ export class CronRuntime {
 
     const created = await this.createTask({
       message: task.message,
-      schedule: { type: "once", runAt: new Date().toISOString() },
+      // 与本文件其余路径一致使用注入时钟；run-now 孵化独立的一次性任务，
+      // 触发后自删（原任务计划不受影响），多次点击即多次立即执行。
+      schedule: { type: "once", runAt: this.now().toISOString() },
       projectKey: task.projectKey,
       sessionKey: task.originSessionKey,
       channelKey: task.originChannelKey,

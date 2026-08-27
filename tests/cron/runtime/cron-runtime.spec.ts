@@ -203,3 +203,57 @@ describe("CronRuntime.updateTask", () => {
     assert.equal(ok.task.message, "v2");
   });
 });
+
+describe("CronRuntime.runTaskNow", () => {
+  it("run-now 孵化的一次性任务使用注入时钟的 runAt", async () => {
+    const { runtime, store } = makeRuntime();
+    const existing = makeTask({
+      taskId: "t1",
+      projectKey: PROJECT_KEY,
+      message: "周期任务",
+      schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+      timezone: "UTC",
+      nextRunAt: "2026-08-06T09:00:00.000Z",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+    });
+    await store.putTask(existing);
+
+    const result = await runtime.runTaskNow({ taskId: "t1" });
+    assert.equal(result.started, true);
+    assert.ok(result.taskId !== undefined && result.taskId !== "t1");
+
+    const spawned = (await store.listTasks()).find(task => task.taskId === result.taskId);
+    assert.ok(spawned);
+    assert.equal(spawned.schedule.type, "once");
+    // 修复前此处是真实墙上时钟（new Date()），fake-clock 下行为漂移。
+    assert.equal(spawned.schedule.type === "once" ? spawned.schedule.runAt : undefined, FIXED_NOW.toISOString());
+    assert.equal(spawned.message, "周期任务");
+
+    // 原任务保持不变（计划照旧）。
+    const original = (await store.listTasks()).find(task => task.taskId === "t1");
+    assert.ok(original);
+    assert.equal(original.schedule.type, "cron");
+  });
+
+  it("任务不存在与运行中分别返回 not_found / already_running", async () => {
+    const { runtime, store } = makeRuntime();
+    assert.deepEqual(await runtime.runTaskNow({ taskId: "missing" }), { started: false, reason: "not_found" });
+
+    const running = makeTask({
+      taskId: "t-run",
+      projectKey: PROJECT_KEY,
+      message: "跑着的任务",
+      schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+      timezone: "UTC",
+      nextRunAt: "2026-08-06T09:00:00.000Z",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      updatedAt: "2026-08-01T00:00:00.000Z",
+      status: "running",
+    });
+    await store.putTask(running);
+    const result = await runtime.runTaskNow({ taskId: "t-run" });
+    assert.equal(result.started, false);
+    assert.equal(result.reason, "already_running");
+  });
+});
