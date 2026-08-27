@@ -375,8 +375,8 @@
   - 位置：`src/patent/output-gate.ts:148,207,234,263,273,276,310,346,349`（12 处）；`provenance/collector.ts:57`、`approval-store.ts:64`、`evidence/receipt.ts:184,216`、`atoms/handlers/builtin/mapper.ts:209`、`chemistry/smiles.ts:57`
   - 建议：统一路由到 logger，携带 `sessionId/turnId/pendingIndex` 结构化字段。
 - **TD-PATENT-N06** · `data/nuo/mapper.ts` 静默吞掉专利元数据坏 JSON
-  - 类别：C · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/patent/data/nuo/mapper.ts:36`（`parseJsonArray`，`:41` `catch { return [] }`）
+  - 类别：C · 严重级：P2 · 工作量：S · 状态：done（2026-08-27：`parseJsonArray` 新增 `field`+可注入 `onError`，缺省走结构化 `createLogger("nuo-mapper").warn`（含字段名+压缩空白截断到 80 字符样本），坏 JSON 不再静默；新增回归测试（纯结构契约 + N06 告警）。边界确认：`src/patent/data/nuo/` 为纯结构适配层、无领域业务逻辑散落，见 `docs/notes/implemented/2026-08-27-nuo-mapper-adapter-boundary.md`）
+  - 位置：`src/patent/data/nuo/mapper.ts:36`（`parseJsonArray`，`:41` `catch { defaultWarn... }`）
   - 影响：inventor/assignee/classifications/引证 JSON 解析失败直接 `[]`，静默变空无告警，掩盖 vendor 字段漂移。建议：失败记录一次 warn（含字段名+样本截断）或结构化降级。
 - **TD-PATENT-N07** · `patent_workflow_run` 工具入口很长，manifest 与 graph 两路径重复装配 ctx/溯源
   - 类别：D · 严重级：P2 · 工作量：S · 状态：new
