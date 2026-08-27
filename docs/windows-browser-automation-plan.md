@@ -13,6 +13,35 @@
 
 ---
 
+## 0. 策略修正（2026-08-27 · supersedes 下文"收敛"方向）
+
+> ⚠️ **本节是对本文档整体方向的最新裁决，优先于 §5/§7/§8/§10 中的任何"统一收敛"表述。**
+> 决策记录见 [docs/notes/implemented/2026-08-27-browser-automation-macos-ego-primary.md](docs/notes/implemented/2026-08-27-browser-automation-macos-ego-primary.md)。
+
+**事实核查（2026-08-27）**：ego lite 的**桌面 App 仍仅支持 macOS**。上游仓库 README 明确
+"runs on macOS today. Windows and Linux are on the roadmap"；官方 roadmap 页把
+"Windows and Linux support" 标注为 **Planned**（未发布）；安装脚本 `install.sh` 与下载链接均为 macOS only。
+`ego-browser` CLI（`package/ego-browser`，MIT）虽是跨平台 Node 代码，但它依赖 **ego lite App 进程注入
+`globalThis.ego` 充当 CDP 运行时**，脱离 App 即 `browser runtime is not available`——所以"ego 跨平台"
+取决于 App，而非 CLI。
+
+**已定策略**：
+
+1. **macOS：以 ego lite 为首选浏览器后端**。`ego_browser` / `patent_pdf_download` 继续直连
+   `EgoBrowserSession`（darwin 门禁不变），`sati browsers` 级联里 ego 排第一。
+2. **其他平台（Windows / Linux）：维持现状不变**——继续用现有三后端（browseros-neo / browser-use /
+   @playwright/mcp）的 MCP 插件形态 + `sati browsers` 探测，不做任何"统一收敛"改动。
+3. **本轮不推进**（以下在本文档中被 **superseded / 暂缓**，仅作未来可选项保留，不作为当前实施承诺）：
+   - 执行层接入 `resolveBrowserBackend()` 的自动级联（§5.1 / §5.3 / §10.5 Track A/B）
+   - SKILL.md backend 无关意图层 / `ego_browser` 脚本透传复用（§7.2）
+   - `browser.preferredBackend` 配置项 + UI 设置（§7.3）
+   - 三平台 dry-run / CI matrix / 四后端录屏验证（§7.2 / §8）
+   - 自研或 fork ego-lite（见 note 的 Alternatives considered）
+
+**触发条件**：**待 ego lite 发布 Windows 版后**，再回到本文档重新评估"进一步收敛"（届时用新 note 记录，不改本决定）。
+
+---
+
 ## 1. 项目现状（基线）
 
 ### 1.1 当前浏览器自动化四层架构
@@ -620,10 +649,11 @@ BrowserOS neo / browser-use 侧把最终 return 值格式化成 `cliLog(...)` �
 - [x] 浏览器后端矩阵输出：**实现为 `sati browsers` 命令**（sati 无 status 子命令）——四层探测 + `--doctor`/`--json`，含 BrowserOS 端口归属 pid 探测（S4 缓解）
 - [x] 文档评审完成（第 10 章）；`install.sh`/`install.ps1` 引用属 Sprint 3 安装脚本统一增强
 
-### 7.2 Sprint 2（阶段二 · 体验对齐）
+### 7.2 Sprint 2（阶段二 · 体验对齐）— 🔴 **本轮暂缓（2026-08-27 策略修正 supersede）**
 
 > 实施状态（2026-08-12）：**BrowserBackend 抽象 + 路由器 + 能力位已合入**（代码部分完成，见 10.8）。
 > 剩余为依赖实机的验证项（Track B 兼容层、三平台 dry-run、CI matrix、SKILL 意图层）。
+> **2026-08-27**：以下 🔜 未完成项被 §0 策略修正暂缓 —— 保留作为未来可选项，**仅在 ego lite 发布 Windows 版后**再评估。
 
 - [x] `BrowserBackend` 抽象 + **四个 backend 探测实现**合入主分支（能力位对齐 POC §3）：
   - [x] [types.ts](file:///Users/xujian/projects/Sati/src/browser/backend/types.ts)：`BrowserBackendId` / `BrowserCapabilities`（6 项能力位）/ `BrowserBackendProbe` / `BrowserBackend`
@@ -638,7 +668,7 @@ BrowserOS neo / browser-use 侧把最终 return 值格式化成 `cliLog(...)` �
 - [ ] 🔜 技能层 20+ SKILL.md **backend 无关意图层**（Track A 指引，SKILL.md 零修改承诺已按评审 §S2 修正为「意图层」），未开始
 - [ ] 🔜 三平台 × 多 backend dry-run、CI matrix、四 backend 录屏验证：依赖实机，未开始
 
-### 7.3 Sprint 3（阶段三 · 高级能力补齐，可选）
+### 7.3 Sprint 3（阶段三 · 高级能力补齐，可选）— 🔴 **本轮暂缓（2026-08-27 策略修正 supersede）**
 - [ ] **三平台安装脚本统一增强**：
   - macOS `install.sh` 新增 `--install-browser-use`（brew install uv → uv tool install browser-use）
   - Windows `install.ps1` 新增 `-IncludeBrowserAutomation`（winget Python → uv）+ BrowserOS neo .exe 下载提示
@@ -650,7 +680,10 @@ BrowserOS neo / browser-use 侧把最终 return 值格式化成 `cliLog(...)` �
 
 ---
 
-## 8. 推进建议（下一步）
+## 8. 推进建议（下一步）— 🔴 **本轮暂缓（2026-08-27 策略修正 supersede）**
+
+> 本节进度安排（含"下 Sprint 动架构"、三平台 dry-run、CI matrix）被 §0 策略修正**暂缓**；仅保留
+> 与「macOS=ego 首选 + 其他平台维持现状」一致的项。待 ego lite 发布 Windows 版后再重启。
 
 1. **本周（先在一台 macOS + 一台 Windows 上跑基线 dry-run）**：
    - 法务确认 BrowserOS neo 作为外部 App 通过 MCP 调用的 AGPL 边界
@@ -775,7 +808,10 @@ BrowserOS neo / browser-use 侧把最终 return 值格式化成 `cliLog(...)` �
 | L-D | 4 章矩阵 Playwright 下载拦截标为「✅ browser_wait_for('download')」 | ✅ 已实测修正（2026-08-12）：@playwright/mcp 无独立下载工具；经 `browser_run_code_unsafe`（RCE 等价、需启用 unsafe caps）可拦截。矩阵已改标「⚠️」 |
 | L-E | 5.2.1 中 browseros-neo 插件示例用 `node -e` 做 stdio↔HTTP 代理，复杂度高于直接支持 HTTP transport | 阶段一优先实现 5.2.2（McpClient 原生 HTTP transport），去掉代理方案 |
 
-### 10.5 修订后的推进路径
+### 10.5 修订后的推进路径 — 🔴 **superseded（2026-08-27 策略修正）**
+
+> 本节的 Sprint 1.5/2/3 推进路径（Track A/B、SKILL 意图层、三平台 dry-run）被 §0 策略修正**暂缓**；
+> 作为未来可选项保留，仅在 ego lite 发布 Windows 版后评估。
 
 ```
 Sprint 1（P0，已完成 2026-08-12）   → McpClient HTTP transport（现状已支持）+ 两份新 MCP 插件
