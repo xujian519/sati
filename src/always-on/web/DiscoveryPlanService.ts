@@ -264,6 +264,7 @@ async function readRawPlanRecord(projectDir: string, planId: string): Promise<Re
     if (!parsed || !Array.isArray(parsed.plans)) return null;
     return (parsed.plans as Record<string, unknown>[]).find(p => p.id === planId) ?? null;
   } catch {
+    // 读索引/解析失败：按 plan 不存在处理（fail-open，调用方决定如何兜底）。
     return null;
   }
 }
