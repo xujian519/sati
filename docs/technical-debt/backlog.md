@@ -1131,3 +1131,33 @@
 **持续（跨 Sprint）**
 11. 每季度重跑 `node scripts/measure-techdebt.mjs --update` 刷新趋势；新功能引入新债顺手登记；修复项标注 `done` + commit/PR。
 12. 每个非平凡修复按 AGENTS.md 铁律 7 在 `docs/notes/` 记一条 note（含 `## Alternatives considered`）。
+
+---
+
+## 30. debt-batch2 落地（分支 `refactor/debt-batch2` · 2026-08-27）
+
+> 本节登记第二批修复的完成态；各条目的原始登记与复核见上文对应模块节，合并后以本节状态为准。
+
+- **TD-AGENT-101（扩围收敛 ✅ / 本体拆分 pending）**
+  - 新增共享生成器策略方法 `recoverFromMaxOutputBump(state,input,decision,routed,{stripTrailingErrorPairMessages})`
+    与 `recoverFromEmptyResponse(...)`（`src/agent/loop/AgentLoop.ts`）：max-output 双胞胎
+    （assembleAndRecover ↔ handleModelError）与连空双胞胎（assembleAndRecover ↔ handleNoToolCalls）收口；
+    第三级兜底因调用方语义不同保留在各方法内；terminal 场景透传 `terminateTurn` 的 TurnStepReturn。
+  - 行为等价验证：tests/agent 275 用例全绿。`handleModelError` 本体拆分的前置条件（先抽策略防孪生体）已满足，仍待排期。
+- **TD-GATEWAY-002 待做半（守卫表 ✅ / 深度逐字段开放）**
+  - 新增 `src/gateway/server/methodGuards.ts`：handleRequest 分发前收窄 params，全 66 方法穷尽表；
+    必填标量族（submit_turn/abort_turn/resume_session/new_session/close_session、kanban 全 18、
+    panel_heartbeat/team_*）精确校验，其余命名类型为 OBJECT_PARAMS 基线按域逐步收紧。
+    畸形入参回结构化 **invalid_params**（新错误码），不再深入实现层炸 TypeError。
+  - 新增回归：dispatch.spec「kanban_get 缺 projectKey」「submit_turn.sessionKey 类型错误且未触达 submitTurn」。
+- **TD-GATEWAY-006（守卫侧穷尽 ✅ / switch 本体开放）**
+  - `satisfies Record<WsGatewayMethod, ParamSpec>` 使新增 union 成员漏登守卫即 typecheck 失败；
+    但 dispatchRequest 的 switch 仍未 satisfies 化，彻底解法留给后续（守卫表反推分发或穷尽 switch）。
+- **TD-UI-CHAT-N14（✅ done）**
+  - `ui/src/components/kanban/hooks/useBoardState.ts`：统一 `mutate({slice?,optimistic?},run)` 执行体折叠
+    15 处变更脚手架（项目守卫/异常清错/成功清错/乐观切片失败整片回滚+refresh 结构性保证）；
+    移除 i18n/config 单例直连改 `useTranslation("kanban")`；新增 `parseBoardState` 在唯一 refresh()
+    入口校验 columns/cards 骨架。外部签名不变。
+- 同批附带：presence-wiring.spec 空 submit_turn 探活帧补齐合法最小载荷（守卫生效后的必要跟进）。
+
+**门禁证据**：root typecheck/lint/format ✅；agent 275、gateway 132（含 2 新增）、UI vitest 101 文件 617 用例 ✅。
