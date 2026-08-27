@@ -97,6 +97,7 @@ export class WorkCycleStore {
       const raw = await readFile(this.paths.stateFile, "utf-8");
       state = JSON.parse(raw) as AlwaysOnDiscoveryState;
     } catch {
+      // state.json 缺失或损坏：无 legacy 数据可迁移，跳过迁移（fail-open）。
       return undefined;
     }
 

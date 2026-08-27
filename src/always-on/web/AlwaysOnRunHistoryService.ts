@@ -130,6 +130,7 @@ async function readJsonlEntries(filePath: string): Promise<Array<Record<string, 
   try {
     raw = await fs.readFile(filePath, "utf8");
   } catch {
+    // 读运行历史文件失败：按无历史处理（fail-open，缺失/损坏不阻断）。
     return [];
   }
   return raw
@@ -139,6 +140,7 @@ async function readJsonlEntries(filePath: string): Promise<Array<Record<string, 
       try {
         return JSON.parse(line) as Record<string, unknown>;
       } catch {
+        // 单行 JSON 损坏：跳过该行，其余行照常解析（fail-open）。
         return null;
       }
     })
@@ -417,6 +419,7 @@ async function recoverFromSubagents(record: RunRecord, projectName: string) {
   try {
     entries = await fs.readdir(subagentsDir, { withFileTypes: true });
   } catch {
+    // subagents 目录不存在或不可读：无法恢复子代理会话信息（fail-open，返回 null）。
     return null;
   }
 
@@ -514,6 +517,7 @@ async function buildSessionOutputLog(
     const messages = Array.isArray(result?.messages) ? result.messages : [];
     return messages.map(formatMessageForLog).filter(Boolean).join("\n\n").slice(-OUTPUT_LOG_MAX_CHARS);
   } catch {
+    // 读 session 消息失败：输出日志按空处理（fail-open，不阻断历史查询）。
     return "";
   }
 }

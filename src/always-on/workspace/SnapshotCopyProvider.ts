@@ -28,6 +28,7 @@ export class SnapshotCopyProvider implements WorkspaceProvider {
       const info = await stat(projectRoot);
       return info.isDirectory();
     } catch {
+      // 项目根不可统计：snapshot-copy 不适用于该目录，交由其他 provider 尝试（fail-open）。
       return false;
     }
   }
