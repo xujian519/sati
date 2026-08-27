@@ -166,7 +166,7 @@ export class BackgroundTaskRuntime {
     const outcome = result === "timeout" ? "timeout" : result === "aborted" ? "aborted" : "completed";
     return {
       task: entry.task,
-      timedOut: outcome === "timeout" || outcome === "aborted",
+      timedOut: outcome !== "completed",
       outcome,
       waitedMs: Date.now() - startedAt,
     };
@@ -237,14 +237,12 @@ export class BackgroundTaskRuntime {
     task.status = "running";
     task.pid = typeof child.pid === "number" ? child.pid : undefined;
 
-    child.stdout?.on("data", (chunk: Buffer | string) => {
+    const onChunk = (chunk: Buffer | string) => {
       output.append(chunk);
       task.outputBytes = output.totalBytes();
-    });
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      output.append(chunk);
-      task.outputBytes = output.totalBytes();
-    });
+    };
+    child.stdout?.on("data", onChunk);
+    child.stderr?.on("data", onChunk);
     child.on("error", (err: Error) => {
       output.append(Buffer.from(`error: ${err.message}\n`));
       task.outputBytes = output.totalBytes();
