@@ -16,7 +16,8 @@ import {
   detectFormatByText,
   textFromMessage,
 } from "../../model/index.js";
-import type { SatiReadFileStateMap, SatiToolResult, SatiWriteSnapshotMap } from "../../tool/index.js";
+import type { SatiToolResult } from "../../tool/protocol/result.js";
+import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/protocol/types.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import { createLogger, logger } from "../../telemetry/index.js";

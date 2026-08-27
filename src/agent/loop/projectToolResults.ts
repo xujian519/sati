@@ -1,5 +1,6 @@
 import type { CanonicalContentBlock, CanonicalMessage, CanonicalToolResultContentBlock } from "../../model/index.js";
-import { toCanonicalToolResultBlock, type SatiToolResult, type SatiToolResultContent } from "../../tool/index.js";
+import { toCanonicalToolResultBlock, type SatiToolResult } from "../../tool/protocol/result.js";
+import type { SatiToolResultContent } from "../../tool/protocol/types.js";
 
 function toCanonicalSupplementalBlock(content: SatiToolResultContent): CanonicalToolResultContentBlock {
   if (content.type === "image") {

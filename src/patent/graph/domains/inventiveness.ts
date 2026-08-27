@@ -13,7 +13,8 @@
  * 输出（temperature 0.2），LLM 缺失/失败 → markDegraded（确定性骨架仍可跑）。
  */
 
-import { GraphBuilder, type GraphState } from "../index.js";
+import { GraphBuilder } from "../engine.js";
+import type { GraphState } from "../types.js";
 import { getStateArray, getStateString } from "../state.js";
 import { isDegraded } from "../degradation.js";
 import type { EdgeRouter, GraphNode } from "../types.js";

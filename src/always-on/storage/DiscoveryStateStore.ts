@@ -38,6 +38,7 @@ export class DiscoveryStateStore {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      // state.json 内容非法：按默认状态重建（fail-safe），放弃损坏的状态数据。
       return defaultDiscoveryState(now);
     }
     return resetDailyBudgetIfNeeded(normalizeState(parsed, now), now);

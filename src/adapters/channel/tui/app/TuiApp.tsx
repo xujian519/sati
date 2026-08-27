@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import type { Gateway, GatewayMode, GatewaySessionInfo } from "../../../../gateway/index.js";
 import { readPermissionSettings, writePermissionSettings } from "../../../../permission/settings.js";
-import { defaultTuiSessionKey } from "../TuiChannel.js";
+import { defaultTuiSessionKey } from "./sessionKey.js";
 import { ActivityLine } from "./ActivityLine.js";
 import { Header } from "./Header.js";
 import { HelpDialog } from "./HelpDialog.js";
