@@ -9,7 +9,8 @@
  * prior_art（可选，用户已提供的现有技术证据）。
  */
 
-import { GraphBuilder, type GraphNode } from "../index.js";
+import { GraphBuilder } from "../engine.js";
+import type { GraphNode } from "../types.js";
 import { markDegraded } from "../degradation.js";
 import { getStateArray, getStateString } from "../state.js";
 import { globalStageHandlerRegistry, type StageHandlerRegistry } from "../../atoms/index.js";

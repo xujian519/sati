@@ -1,7 +1,7 @@
 # Sati 技术债务活账本（backlog）
 
 > 唯一事实源。审计/修复时在此登记与更新条目。清分级、条目 Schema、保持新鲜规则见 `README.md`。
-> 快速状态：`metrics.md`（最新基线 2026-08-23）作为数字事实源；本账本按模块给带 `file:line` 证据的条目。
+> 快速状态：`metrics.md`（最新基线 **2026-08-27**）作为数字事实源；本账本按模块给带 `file:line` 证据的条目。
 > 标注「**自动化扫描命中**」的条目来自脚本 `node scripts/measure-techdebt.mjs --json`。
 
 ---
@@ -31,6 +31,7 @@
   - 位置：`src/cli/sati.ts`、`createLocalGateway.ts` 等；次热 `patent`(15) `agent`(13) `model`(11)
   - 建议：收束到 `src/telemetry/` wrapper；先 `sati.ts` → `createLocalGateway.ts`。
   - 工作量：L · 严重级：P2 · 状态：new
+  - **2026-08-27 复核**：总量已降至 **153**（logger 收敛生效，cli 191→137，`createLocalGateway.ts` 已清零）。剩余 cli 命中抽样 ~14/15 属 CLI 合法用户输出（向导 TUI、banner、用法报错），建议改判 mostly won't-fix；焦点转向 **ui/server 桥**：`routes/git.js` 等桥文件新增 `console.log("[sati-bridge] submitTurn runMode=...")`（`sati-bridge.js:713,731`，每条用户消息触发）应走 debugLog 门控或服务端 logger。次热现为 `telemetry`(8)。
 - **TD-CATCH-001** · 静默吞错 catch（体仅注释/空白）151 处，`adapters` 40 · `always-on` 15 · `tool` 14
   - 影响：异常被吞且无注释，属隐患。逐条补注释或改结构化错误。
   - 工作量：L · 严重级：P2 · 状态：new
@@ -43,6 +44,16 @@
 - **TD-BOUND-002** · `ui/server/routes/memory.js:14` 直连 `edgeclaw-memory-core/lib/index.js` 编译产物
   - 决策：既有注释说明为受支持路径（`technical-debt-report.md` 2026-08-17 复核维持）。状态：**wontfix**。
   - 证据：脚本命中 1 处。
+- **TD-BOUND-003** · src 运行时值循环依赖 3 组 SCC + ~54 个纯类型环（2026-08-27 类型感知复扫发现；修正 `next-batches-schedule.md` §7「模块级依赖环 0」的旧结论）
+  - 类别：D/R5 · 严重级：P2 · 工作量：M（前三刀均 S）· 状态：**in_progress（2026-08-27 切割①②③已落地：SCC 3→0，见分支 refactor/dep-cycles-wiki-dup）** · 意图：[accidental]
+  - Pain×Spread：2×3=6
+  - 证据（运行时值 SCC，类型纯导入已剔除）：
+    - **SCC-1（16 文件，横跨 tool↔patent↔workflow↔agent，barrel 介导宏环）**。唯一真运行时闭环边 E1：`src/agent/loop/projectToolResults.ts:2` 经 `tool/index.js` barrel 引 `toCanonicalToolResultBlock`（实际定义于 `src/tool/protocol/result.ts:57`）；静态闭环边 E5a：`AgentLoop.ts:19`（type-only）。其余闭环边：E2 `patent/workflow-dag.ts:15`→workflow barrel（值引 `FlowGraph`，即 PATENT-N01 双轨的具体化）；E3 `workflow/index.ts:56-58` re-export 无生产消费方的 `createSubagentWorkflowAgentFactory`（呼应 WORKFLOW-N01）；E4 `SubagentWorkflowAgentFactory.ts:8`→agent/sub/SubAgentSession.ts:18。madge 报 59 链多为 barrel/type-only 幻影，无文件级两两互环、无当日初始化序 bug，但 patent/workflow 任一侧引入副作用初始化即成地雷。
+    - **SCC-2（5 文件，patent/graph/domains 内部注册表-barrel 环）**：`domains/{inventiveness.ts:16,enablement.ts:11,novelty.ts:12}` 从 `../index.js` 反向值引 `GraphBuilder`（定义在 `graph/engine.js`，index 第 26 行才 re-export）。
+    - **SCC-3（2 文件）**：`TuiApp.tsx:6` 从 `../TuiChannel.js` 引常量 `defaultTuiSessionKey` 造成反向值边。
+  - 影响：改一处域函数可能牵动四个模块的编译面；阻塞未来把 TuiApp 复用为桌面宿主、把 workflow-dag 校验路径接线。
+  - 建议（最便宜切割优先）：① 移动 `defaultTuiSessionKey` 至叶子模块 → 消灭 SCC-3（S）；② domains 三文件 `../index.js` 改深引 `../engine.js`/`../types.js` → 消灭 SCC-2（S）；③ `projectToolResults.ts:2`+`AgentLoop.ts:19`+`SubAgentSession.ts:25` 由 barrel 改深引 `tool/protocol/*.js` → 移除 SCC-1 唯一运行时闭环（S）；④ 从 `workflow/index.ts` 删除 SubagentWorkflowAgentFactory re-export（与 WORKFLOW-N01 接线决策同批，M）；⑤ graph↔workflow 双轨归一后余下跨模块值边自然消失（归属 PATENT-N01/WF-N01，L）。
+  - 附注（高扇出复核）：`adapters/index.ts`(66)/`createLocalGateway.ts`(49) 为合法编排层豁免；`createBuiltinRegistry.ts`(58) 中 `:3` 横向构造 gateway 域的 `KanbanBoardManager` 属方向性异味，建议随 tool-pack SPI 化收敛（M/L，与 TD-SIZE/TD-GOD 族联动）。
 
 ### 体积/复杂度（God function & 大文件）
 - **TD-GOD-001**（P1）· UI 层巨无霸函数（贡献大于后端）
@@ -50,6 +61,8 @@
   - 建议：按 hook/组件拆分 + 子组件提取；涉及 UI 须浏览器验证。工作量：L（每组件）· 状态：new
 - **TD-GOD-002**（P2）· 后端巨无霸函数：`createRouterRuntime` 877（`router/`）· `main` 635（`cli/sati.ts`）· `createReadFileTool` 509（`tool/readFile.ts`）
   - 细分见各模块节。工作量：L · 状态：new
+  - **2026-08-27 复核补充（`createLocalGateway.ts` 结构债，jscpd 盲区——重复为小型接线模式而非文本克隆）**：(a) 模块为三件无关架构钉合：CLI 引导工厂 `:309-820` + 巨类 `ProjectRuntimeRegistry` `:904~2090`（`resolve`≈245 行、`prepareSessionRuntime`≈430 行，失败域横跨插件系统+MCP 生命周期+browser 工具）+ 无关自由工具函数 `:2215-2461`（browser proxy env 解析）；(b) 工厂内 team 成员回收闭包双实现——`runMemberScan :601-612` vs wakeMember 回调 `:682-688`，注释自承「与 scanner 冷恢复路径同款」；(c) browser-use 专属逻辑（mkdirSync 截图目录、逐 spec 参数改写 `:1663-1689`）泄漏进通用会话装配。建议拆出 `TeamReclaimCoordinator`、以 `SessionToolProvisioner` 承接 browser-use/MCP 装配、迁走 proxy env 工具函数。工作量：M×3 子项。
+  - **2026-08-27 新增上帝函数 2 个**：`GatewayWsConnection.dispatchRequest`（316 行 switch，见 TD-GATEWAY-002）、kanban `ui/src/components/kanban/hooks/useBoardState.ts::useBoardState`（398 行，见 TD-UI-CHAT-N14）。
 - **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `createLocalGateway.ts` 2437 · `AgentLoop.ts` 2305 · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
   - 工作量：L · 严重级：P2 · 状态：new
 
@@ -77,6 +90,7 @@
   - 影响：单函数承载流中断恢复/思维缺失重试/工具结果投影/json 自纠/reactive 恢复/输出上限调整等约 10 条互斥路径，分支深、易漏测。
   - 建议：按恢复路径拆成独立策略方法并统一调度口串联。
   - 证据：`handleModelError@795`→`handleNoToolCalls@1166`；`809/888/923` 多个独立分支并列。
+  - **2026-08-27 复核（范围扩大）**：债不止于单函数过长——**恢复策略被复制进姊妹函数**，拆分 `handleModelError` 单独完成会留下孪生体。Pair A（max-output 状态机）：`assembleAndRecover :659-694` ↔ `handleModelError :1097-1132`（`resolveOutputTokenRetryBump→setTransientTokenCap→yield token_cap_adjusted→yield turn_continued→continueWithTransientPrompt` 全同）；Pair B（连空响应状态机）：`assembleAndRecover :726-759` ↔ `handleNoToolCalls :1189-1225`（含 `hasAttemptedEmptyRetry` 首重分支与穷尽路径）。改重试上限/提示词/事件载荷须同步 2–3 处（R2/R3）。建议先抽 `recoverFromMaxOutputBump(...)` 与 `recoverFromEmptyResponse(...)` 策略方法供三处复用，再做既有拆分。类别：A/F · Pain×Spread：3×2=6 · 严重级维持 P1。
 - **TD-AGENT-102** · `TurnRunner.run()` ~197 行且失败路径重复
   - 类别：A · 严重级：P1 · 工作量：M · 状态：new
   - 位置：`src/agent/turn/TurnRunner.ts:149-345`
@@ -128,6 +142,7 @@
   - 类别：A · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`src/router/RouterRuntime.ts:255-466`
   - 建议：拆为组合式纯函数 + 谓词表驱动 `resolvedFrom` 溯源。
+  - 2026-08-27 复核：现 `:257-473`（≈217 行），与登记基本一致，未恶化未愈合，仅刷新位置。
 - **TD-ROUTER-004** · 生产路径残留裸 `console.log` 未走 `debugLog` 门控
   - 类别：C · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`RouterRuntime.ts:421`；`orchestrate/applyOrchestration.ts:21,42`
@@ -199,11 +214,13 @@
   - 类别：A · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/gateway/client/InProcessGateway.ts:1-1103`（复杂块 `:314-621`）
   - 建议：不再整体拆分；仅把 submitTurn 内 telemetry/timeout/permission 脚手架抽成辅助函数。
+  - **2026-08-27 复核**：文件增至 **1350 行**，增量 ~220 行全部为 kanban 可选域薄委托块（`:1149-1349` 共 17 个 `kanban*` 方法，同一「未配置守卫→resolveKanbanProjectRoot→getRuntime→转发」三步脚手架复制；`submitTurn` 核心实测稳定 ≈298 行），**本轮无认知深度恶化、不升级拆分**；但本类已吸收第 4 个可选域（cron/skills/always-on/team/kanban）——预授权在第 5 个域接入前抽取可选域 facade（`KanbanMethods`/`SkillMethods` mixin 对象挂接），工作量 M，维持 P3~P2 边界。
 - **TD-GATEWAY-002** · 分发器 `frame.params` 缺运行时校验（`as never` 已消除，2026-08-23）
   - 类别：B · 严重级：P2 · 工作量：M · 状态：**partial（2026-08-23）**
   - 位置：`src/gateway/server/GatewayWsConnection.ts:153,233-388`（43 处 `as never` → 已改 `as GatewayMethodParams<"...">`）；`client/RemoteGateway.ts:92-278`（~30 处 `as XResult`，已在 TD-TYPE-002 消除）
   - 已做：`as never` 底部类型滥用消除，改用具名断言（编译期类型正确、可读、随 `Gateway` 接口漂移）；补分发回归测试 `tests/gateway/server/dispatch.spec.ts`。
   - 待做：`frame.params` 来自 WS 线上 `JSON.parse`，仍是 `unknown` 未经运行时校验——按 method 建参数守卫（`isRecord`/typeof）在边界收窄并回结构化 `gateway_request_failed`，堵住"客户端畸形入参直通 gateway 方法内部"。属方案 B，另批排期。
+  - **2026-08-27 复核（紧迫度上升）**：缺失校验现在有了具体受害者路径——新 god method `dispatchRequest :247-562`（316 行 switch ~90 case）仅 `kanban_subscribe/unsubscribe :533-557` 两处做 `typeof projectId!=="string"` 边界校验；其余 case 的 `frame.params as GatewayMethodParams<"...">` 纯编译期。远端发 `{method:"kanban_get",params:{}}` 即穿透全部守卫，至 `InProcessGateway.resolveKanbanProjectRoot :1164-1169` 触发对客户端不可诊断的裸 TypeError。建议与 TD-GATEWAY-006 合并为一个 PR：建 `METHOD_GUARDS: Record<WsMethod, Guard>` 表同时获得穷尽性检查（一表解两债）。
 - **TD-GATEWAY-003** · 热路径重复序列化（active-turn 重放缓冲）
   - 类别：I · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`src/gateway/client/InProcessGateway.ts:1082-1095`
@@ -220,6 +237,7 @@
   - 类别：D · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`protocol/frames.ts:22-65` ↔ `GatewayWsConnection.ts:229-396` ↔ `Gateway.ts`
   - 影响：新增方法需同步改多处；`default: throw` 兜底下 union 增成员时 TS 无 `never` 穷尽检查，漏接即静默 `gateway_request_failed`。建议：`satisfies`/never 检查强制覆盖全部成员。
+  - **2026-08-27 复核（恶化实证）**：kanban 一个功能周期即新增 **18 个 `kanban_*` case**（`GatewayWsConnection.ts:449-557`）+17 个 InProcessGateway 方法 + frames/Gateway 两处清单，四文件手工同步的维护税已兑现；`default` 兜底不变。建议与 TD-GATEWAY-002 待做半合并为守卫表 PR（`satisfies Record<WsMethod, Guard>`）。
 - **TD-GATEWAY-007** · `agent_status` 自由字符串扁平化削弱事件面类型安全
   - 类别：B · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`src/gateway/protocol/types.ts:290`；`eventMapping.ts` 多处自由字符串
@@ -358,6 +376,7 @@
   - 位置：`src/patent/graph/adapter.ts:104`（`makeStageNode`/`makeRetryRouter`）
   - 影响：同一「运行一个阶段」语义在主输出键解析/retry 回退清 state+atom 键/降级文本在 graph 与 workflow 两条路径各实现一遍，改一处易漏另一处。建议：收敛到共用执行原语。
   - 证据：`graph/adapter.ts:110-121`↔`workflow/executor.ts:78-86`；`:172-183`↔`workflow.ts:313-328`；`:126`↔`workflow/executor.ts:102-109`。
+  - **2026-08-27 复核补充**：双轨在导入面上具体化为跨模块循环边——`patent/workflow-dag.ts:15` 值引 `../workflow/index.js` 的 `FlowGraph`（类定义在 `src/workflow/runtime/DagEngine.ts:23`）；且 `manifestToFlowGraph` 在 src 内除专利 barrel re-export 外零消费方（校验路径双重未接线）。若归一选择保留 workflow FlowGraph，则 patent 应深引 `../workflow/runtime/DagEngine.js` 以免传递性抱住含 agent 适配器的整个 workflow barrel。详见 TD-BOUND-003 SCC-1 边 E2。
 - **TD-PATENT-N02** · `evidence/engine.ts` 的 `parseRuleSet` ~87 行手写 YAML→类型解析器
   - 类别：B · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`src/patent/evidence/engine.ts:454-541`
@@ -521,6 +540,14 @@
   - 类别：C · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`shared/kg/row-mapper.ts:54-61`；`case-law-search.ts:516-519`；`assemble.ts:239-241`
   - 建议：降级路径统一记录一次结构化 warn；空 catch 收敛为带日志的降级。
+- **TD-KNOWLEDGE-N08** · wiki 知识卡「复审无效」主题下整棵嵌套重复目录树（2026-08-27 jscpd 发现）
+  - 类别：F · 严重级：P2 · 工作量：S · 状态：**done（2026-08-27：`git rm -r 'src/knowledge/patent/wiki/复审无效/复审无效'`，206 文件 / 2.11MB；card-index.json 零内层引用、`.wiki-meta.json` 由加载器失效机制自愈；守卫已加入 `scripts/measure-techdebt.mjs::knowledgeDupMd` 并写入 metrics.md 异味指标行）** · 意图：[accidental]（疑似导入/同步事故而非有意备份，无任何注释说明）
+  - 后续观察（不阻塞）：清树后守卫仍报 wiki 全库存在 **72 组 / 92 个冗余文件 / 546KB** 逐字节重复 md——是否属有意交叉引用待知识库 owner 评审后再处置。
+  - Pain×Spread：2×2=4
+  - 位置：`src/knowledge/patent/wiki/复审无效/复审无效/**`（内层整树）；外层 `src/knowledge/patent/wiki/复审无效/**`
+  - 证据：内层树 206 个 md / 2,112,485 字节；其中 **205 个与外层同相对路径文件逐字节相同**（仅 1 个不同）。占 wiki 全库 1549 卡的 ~13% 为纯重复。复现：`diff -r` 或 `find … -name '*.md' | xargs md5`。
+  - 影响：直接放大 `WikiCardLoader` 冷启动全量扫描（TD-KNOWLEDGE-N06 的 1548 张卡计数含此噪声），检索侧 card-index 若按内容入库则同一裁决规则出现双份，浪费向量行并可能双引同源引用。
+  - 建议：确认无消费方后删除嵌套树（git 历史可追回），并加一条 CI/脚本守卫防止再次整树复制（如检查同名相对路径 md 内容相同的对数 > 阈值即告警）。
 
 ---
 
@@ -906,6 +933,30 @@
   - 位置：`MessageComponent.tsx`（仅 2 测）、`MessagesPaneV2.tsx`（仅 render.test）、`PdfDocumentPreview.tsx`/`CodeEditorBinaryFile.tsx`（各 1 测）
   - 建议：补虚拟化窗口/审批/工具错误行为测试，引入结构化错误上报。
 
+> **2026-08-27 复扫新增（N11–N14）**：
+
+- **TD-UI-CHAT-N11** · `processGrouping.ts` 成为未登记的 1295 行聊天管线杂物抽屉
+  - 类别：A/D · 严重级：P2 · 工作量：M · 状态：new · 意图：[accidental]
+  - Pain×Spread：2×2=4
+  - 位置：`ui/src/components/chat-v2/processGrouping.ts:690-875`（`buildRenderableMessageItems` ~186 行：嵌套循环+单调游标+三路合并+"fuse"兜底分支）；`:1063-1149`（`formatCompletedProcessTitle`）；`:1009-1046`
+  - 影响：单文件混装 turn 分段算法、tool 判定、时长换算、i18n 标题格式化、web-fetch UI 策略、trace 映射共 26 个函数；web-fetch 特例烤进通用分组管线，迫使 MessagesPaneV2/MessageRowV2/SubagentDetailMessageFlow 全量引用。每新增消息形态/运行模式都改这一个文件。
+  - 建议：拆 `turnSegmentation.ts` / `toolPredicates.ts` / `processTitles.ts` / `webFetchPolicy.ts`，对外导出面不变。为 TD-UI-CHAT-N03 的姊妹条目。
+- **TD-UI-CHAT-N12** · `ComposerV2.tsx` 基线后无登记增长 782→1061 行（+36%）
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`ui/src/components/chat-v2/ComposerV2.tsx`
+  - 影响：聊天两大热入口之一在基线（807→未入账）后四天吸收新功能，下一次 #159 拆分排期时成本已复利。
+  - 建议：按 attachment/draft 镜像 TD-UI-CHAT-N01 的拆分计划提前落钩子；先加行数守卫防止继续膨胀。
+- **TD-UI-CHAT-N13** · `useChatRealtimeHandlers.ts` 基线后无登记增长 693→973 行（+40%）
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`ui/src/components/chat/hooks/useChatRealtimeHandlers.ts`（内含 598 行匿名回调上帝函数）
+  - 影响：同上，实时事件处理热路径持续增重，事件分支数量随 gateway 新帧类型线性生长。
+  - 建议：按事件族拆 per-event 模块（stream/subagent/fork/approval），入口只做路由表分发。
+- **TD-UI-CHAT-N14** · kanban 年轻模块卫生债三合一（乐观变更协议 ×15 复制 + 直连 i18n 单例 + 网关载荷裸 `as`）
+  - 类别：D/F/B · 严重级：P2 · 工作量：S·M · 状态：new · 意图：[accidental]（新功能窗口期便宜修）
+  - Pain×Spread：2×1=2（Spread 低但增长快，宜窗口期内收敛）
+  - 位置：`ui/src/components/kanban/hooks/useBoardState.ts:155-173,175-197,199-221,223-241,290-308,357-382`（六个 mutation 各自复制「快照→optimistic setBoard→guard→rollback+refresh」）；`:2,12`（hook 内直连 `i18n/config` 单例格式化错误串，绕过 React 语言响应式）；`:39,120,142,251,318`（API 结果裸 `result as BoardState` 强转，网关 schema 变更即渲染层 undefined bug）
+  - 建议：(a) 折叠为 `withOptimisticCards(mutate, apiCall)` + `requireProject()` 使回滚结构上必然；(b) mutation 结果返回稳定 i18n key 由视图层翻译；(c) 在唯一 `refresh()` 入口加一个廉价结构校验器（或 zod-lite）。
+
 ---
 
 ## 25. ui/src · app-shell/面板/stores（B5 ✅）
@@ -925,6 +976,7 @@
   - 修复：两个删除弹窗全部文案改为 `useTranslation("common")` 的 `t()`，新增 `deleteDialogs.*`（含复数 `_one/_other` 的 `projectSessionsRemovedCount` 与 `projectFilesOnDisk*` 三段拆分保留内联强调）。父组件错误文案（errorDeleteProject/errorDeleteSession）一并提取，`useCallback` 依赖补 `t`。新增 `app-shell/deleteDialogs.i18n.test.ts` 断言 en/zh-CN 的 key 解析与 `{{count}}`/`{{projectName}}` 插值。en/zh-CN common.json key 对齐（428/428）；ui typecheck/lint/biome/全量测试 578 通过。
   - 位置：`app-shell/AppShellV2.tsx:770-839`（DeleteProjectDialog）、`:848-908`（DeleteSessionDialog）
   - 影响：用户可见文案（"Delete project?"/"Cancel"等）全部硬编码，违反「UI 文案必须提取到 locales」铁律。建议：改用 `useTranslation()` 并补 common/settings key。
+  - 2026-08-27 复核补充：i18n 修复后两弹窗的「错误框+底栏+取消/危险确认按钮」JSX 脚手架仍逐字复制（`:808-837` ↔ `:872-900`），建议抽 `ConfirmDialogScaffold(title, body, {isDeleting,error,onCancel,onConfirm,label})`，防第三个确认对话框再次分叉。
 - **TD-UI-APP-N04** · `LlmConfigurationStep.tsx` 全屏硬编码英文 + 多重 YAML cast 改写 + 重复模型拉取
   - 类别：H · 严重级：P1 · 工作量：M · 状态：done
   - i18n 已修复（2026-08-23）：全屏硬编码文案改为 `useTranslation("settings")` 的 `t()`，新增 `settings.llmSetup.*`（含内联 `<span>` 的三段拆分保留 font-mono；协议/默认 URL 用 `protocolLabel`/`defaultUrlLabel` 标签+值拆分避免插值转义）。新增 `onboarding/view/subcomponents/llmSetup.i18n.test.ts` 断言 en/zh-CN key 解析与插值。en/zh-CN settings key 对齐（1043/1043）。ui typecheck/lint/biome/全量测试 582 通过。
@@ -955,6 +1007,22 @@
   - 类别：A · 严重级：P3 · 工作量：M · 状态：new
   - 位置：`main-content-v2/DashboardV2.tsx:328-333`、`:349-355`、`:112-116`
   - 建议：抽 `isProjectMatch(proj, filter, fullPath)` 单函数并类型化占位对象。
+  - 2026-08-27 复核补充：编排摘要头部 32 行「主代理/子代理」统计卡网格在分组/遗留两分支逐字复制（`:1186-1217` ↔ `:1242-1273`），拆分时一并折叠为 `renderRoleStats(mainRole, subRole)`。
+
+> **2026-08-27 复扫新增（N11–N12）**：
+
+- **TD-UI-APP-N11** · IM 渠道设置区 QR 登录轮询状态机三份手写复制
+  - 类别：F/R3 · 严重级：P2 · 工作量：S · 状态：new · 意图：[accidental]
+  - Pain×Spread：2×1=2
+  - 位置：`ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx:60-108` ↔ `WeComChannelSection.tsx:60-107` ↔ `WeixinChannelSection.tsx:92` 起（三文件共 ~1166 行，轮询体仅 URL 前缀不同，WeCom 多一个 `fallbackUrl`）
+  - 影响：同一 qr-begin→`setInterval(3000)` qr-poll→phase 机（idle/scanning/success/error）→cancelQR 生命周期实现了三遍；Weixin 在 `:155` 注释里踩过的过期-vs-待定边界，另两份并未同步该认知——修一处漂两处已可预期。
+  - 建议：抽 `useQrLoginPolling(channelPrefix)` 返回 `{qrUrl, phase, error, start, cancel}`。
+- **TD-UI-APP-N12** · 中粒度共享组件跨文件逐字复制（SelectControl 与 Markdown 链接渲染器）
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - Pain×Spread：1×1=1
+  - 位置：(a) `settings/view/general/CodeEditorSection.tsx:14-42` ↔ `GeneralSettingsSection.tsx:17-45`——28 行样式化 `<select>` 完全相同；(b) `chat/view/subcomponents/Markdown.tsx:22,30-63` ↔ `code-editor/view/subcomponents/markdown/MarkdownPreview.tsx:18,28-57`——同一 `linkClassName` 常量 + 相同锚点组件（内部文件拦截/外链 target:rel 三元）各实现一遍，katex 加载也各自为政
+  - 建议：(a) 提升为 `settings/shared/view/SelectControl`；(b) 抽 `createMarkdownLinkComponents({onFileOpen, baseFilePath})` 至共享 utils（两者本就同源引用 `resolveMarkdownFileHref`）。安全策略类改动（如外链 rel 属性）应只改一处。
+  - 附注（健康面）：两处 src↔ui 手镜像类型经核对今日仍逐字节一致、kanban/patent/stores 零 lint 逃逸，「不标记 DTO 镜像」规则成立，无需登记。
 
 ---
 
@@ -967,10 +1035,12 @@
   - 类别：A · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`ui/server/sati-bridge.js`（`runChatViaGateway :671-888`、`getRouterDashboardData :1706-1821`、`getRouterStatsSummary :1918-1956`）
   - 建议：拆 `gateway-client.js`/`event-mapper.js`/`router-stats.js`。
+  - 2026-08-27 复核：函数本体自审计以来原封未动（现 `:671-894`，+6 行漂移），文件 +73 行来自 kanban 溯源代码；债停滞未恶化。新增两条无条件日志 `:713,731`（每条用户消息触发，计入 TD-CONSOLE-001 的 ui/server 清单）。
 - **TD-UISERVER-N02** · bridge 内 4 个 per-session 内存缓存无 LRU/容量上限
   - 类别：I · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`sati-bridge.js:1237`（`_sessionTitleCache`）、`:1319`（`_userQueriesCache`）、`:1435`（`_toolSequenceCache`）、`:1529`（`_subagentPromptCache`）
   - 建议：为各缓存加 LRU/TTL 上限。
+  - 2026-08-27 复核：缓存本体债未变，行号漂移至 `:1221/:1307/:1423/:1518`；同时确认四个缓存的「候选路径枚举」填充前奏（safeId 变体→项目 chats 目录→通用 workspace→全 `projectsDir` 扫描）被逐字复制 4 份（`:1249-1279, :1356-1386, :1443-1470, :1533-1559`），属未登记子债。建议把 remedy 合并为一批：共享 `resolveTranscriptCandidates(sessionId, projectKey)` helper + LRU 包装（工作量维持 S/M）。
 - **TD-UISERVER-N03** · `routes/git.js` 错误响应状态码不一致（6 处返回 HTTP 200 + `{ error }`）
   - 类别：D · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`routes/git.js:439,512,678,802,831,1117`
@@ -1041,6 +1111,7 @@
   - 类别：E · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`tests/fs/`、`tests/lifecycle/`、`tests/network/`、`tests/status/`、`tests/browser/`（各 1 文件）
   - 建议：为浏览器后端/lifecycle runtime 等核心路径补行为单测后再收敛密度。
+  - **2026-08-27 复核扩充范围**（复核确认 board/task/methodology/adapters 已有对应直测，不属缺口；新增缺口如下）：`src/shared/paths/` 全目录（findGitRoot/resolveCanonicalRoot/findCanonicalProjectRoot/LRUMap，含两条防目录穿越安全校验却零回归）、`src/shared/sqlite.ts`、`src/shared/ttl-cache.ts`、`src/shared/debug.ts`、`src/telemetry/sender.ts`、`src/telemetry/context.ts` 均无直接 spec。注意与 TD-SHARED-N01 部分重叠（paths 安全逻辑），补测时合并处理。
 - **TD-TESTNSCRIPT-N08** · 附图 PDF 提取「单一事实源」一致性用例靠正则扫源码，跨构建跳过
   - 类别：E · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`tests/patent/tool/patentPdfDownload-extractjs.spec.ts:67-90`

@@ -5,6 +5,7 @@ import type { Gateway } from "../../../gateway/index.js";
 import { connectRemoteGatewayIfAvailable, type ProbeGatewayServerOptions } from "../../../gateway/client/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { applyTuiEvent, createTuiRenderState, type TuiRenderState } from "./tui-render.js";
+import { defaultTuiSessionKey } from "./app/sessionKey.js";
 import { TuiApp, type TuiAppProps } from "./app/TuiApp.js";
 
 export type TuiChannelOptions = {
@@ -102,6 +103,6 @@ export class TuiChannel implements ChannelAdapter {
   }
 }
 
-export function defaultTuiSessionKey(projectKey = process.cwd()): string {
-  return `tui:project=${projectKey}:default`;
-}
+// 缺省会话键实现移入叶子模块 app/sessionKey.js（打破 TuiChannel ↔ TuiApp 值循环），
+// 此处保持再导出以维持既有公共导入面（adapters/index.ts 等）。
+export { defaultTuiSessionKey } from "./app/sessionKey.js";

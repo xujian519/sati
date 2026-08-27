@@ -100,6 +100,7 @@
 ### 复评观察（增量扫描，台账未系统量化）
 
 - **R5 依赖混乱 · 模块级为正向**：模块级依赖环 **0**、import 扇出均 ≤5、`src→ui` 导入 **0**。R5 的实质债是**类型断言/契约侵蚀**（>90 处 `as`），而非模块环。
+  - ⚠️ **2026-08-27 勘误**：「模块级依赖环 0」系未做 type-only 区分下的结论。类型感知复扫发现 src 存在 **3 组运行时值循环 SCC**（最大 16 文件横跨 agent↔tool↔patent↔workflow；详见 `backlog.md` TD-BOUND-003 与 `audit-report-2026-08-27.md`）。修正后判断：环本身切割成本极低（3 处 import 行改写灭两个半环，S×2 + S），建议作为阶段一随手项执行；割刀 4/5 并入 #150 的决策而非独立排期。
 - **8 月新增模块（team M1 / patent graph / clarity / session workspace / patent evaluate）卫生面干净**：无空 `catch {}`、无 `TODO/FIXME`、无 `console.*`、无 `@ts-ignore`；唯一 God function 是 `buildInventivenessGraph`（~356 行）。
 - `patent/graph` 与 `patent/workflow` 的双轨重复（呼应 PATENT-N01）经代码核实：`src/workflow/runtime/` 的 DagEngine/WorkflowEngine/SafeEvaluator 等在全 `src/` 无生产消费方，仅 `patent/workflow-dag.ts` 与 `patent/graph/adapter.ts` 借用 `FlowGraph`/`FlowNodeType`。
 
