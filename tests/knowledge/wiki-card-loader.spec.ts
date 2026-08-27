@@ -42,3 +42,14 @@ describe("wiki-card-loader 目录过滤检索（searchIn/listDir）", () => {
     }
   });
 });
+
+describe("wiki-card-loader 卡片数量水位（TD-KNOWLEDGE-N08）", () => {
+  it("数量落在去重后健康区间，防重复树回灌", () => {
+    // 2026-08-27 删除「复审无效/复审无效」嵌套重复树（206 张逐字节相同副本）后，
+    // 全库从 1549 降至 ~1344；曾存在的幽灵断言「>1500」锁定的是被污染基线。
+    // 复发检测另见 scripts/measure-techdebt.mjs 的 knowledgeDupMd 指标。
+    const count = new WikiCardLoader(WIKI_PATH).count();
+    assert.ok(count > 1200, `期望 >1200 张，实际 ${count}`);
+    assert.ok(count < 1500, `期望 <1500 张（不应回灌重复树），实际 ${count}`);
+  });
+});

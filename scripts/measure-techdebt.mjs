@@ -16,6 +16,7 @@
  */
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
+import { createHash } from "node:crypto";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
@@ -255,6 +256,42 @@ function i18nDiff() {
   return { namespaces: out.map(x => x.namespace), namespacesDetails: out };
 }
 
+// 知识卡逐字节重复检测：按内容哈希分组 wiki 下全部 md。
+// 背景：TD-KNOWLEDGE-N08（2026-08-27）曾出现整棵嵌套重复目录树（205 个文件逐字节相同），
+// 该指标用于防止复发——组数/重复文件数/重复字节数任一非零即值得人工下钻。
+function knowledgeDupMd() {
+  const wikiRoot = join(ROOT, "src", "knowledge", "patent", "wiki");
+  if (!existsSync(wikiRoot)) return { groups: 0, files: 0, bytes: 0 };
+  const byHash = new Map();
+  const walk = dir => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (entry.name.endsWith(".md")) {
+        const buf = readFileSync(p);
+        const h = createHash("sha256").update(buf).digest("hex");
+        if (!byHash.has(h)) byHash.set(h, []);
+        byHash.get(h).push(p);
+      }
+    }
+  };
+  walk(wikiRoot);
+  let groups = 0;
+  let files = 0;
+  let bytes = 0;
+  for (const paths of byHash.values()) {
+    if (paths.length < 2) continue;
+    groups += 1;
+    // 记「冗余份数」：每组可删的最小副本数（n-1），体积同比例计
+    const sorted = paths.sort((a, b) => a.length - b.length || a.localeCompare(b));
+    for (const dup of sorted.slice(1)) {
+      files += 1;
+      bytes += readFileSync(dup).length;
+    }
+  }
+  return { groups, files, bytes };
+}
+
 async function measure() {
   const srcFiles = listFiles(join(ROOT, "src"), [".ts", ".tsx"]);
   const srcJsFiles = listFiles(join(ROOT, "src"), [".js", ".jsx", ".mjs", ".cjs"]);
@@ -291,6 +328,7 @@ async function measure() {
     boundaries: boundaryChecks(),
     tests: testCoverage(),
     i18n: i18nDiff(),
+    knowledgeDupMd: knowledgeDupMd(),
   };
 }
 
@@ -332,6 +370,9 @@ function renderMarkdown(m) {
   L.push(`| 分层违规 \`ui/server→src\` | ${m.boundaries.uiServerToSrcCount} | — |`);
   L.push(`| 分层违规 \`src→ui\` | ${m.boundaries.srcToUiCount} | — |`);
   L.push(`| edgeclaw \`lib\` 编译产物直连 | ${m.boundaries.edgeclawLibCount} | — |`);
+  L.push(
+    `| 知识卡逐字节重复（组 / 冗余文件 / 冗余字节） | ${m.knowledgeDupMd.groups} 组 · ${m.knowledgeDupMd.files} 文件 · ${m.knowledgeDupMd.bytes} B | — |`,
+  );
   L.push(``);
   L.push(`## God function（单函数 ≥ ${m.godFunctions.threshold} 行）`);
   L.push(``);
