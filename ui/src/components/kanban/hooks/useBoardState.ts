@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import i18n from "../../../i18n/config";
+import { useTranslation } from "react-i18next";
 import { api } from "../../../utils/api";
 import { useWebSocket } from "../../../contexts/WebSocketContext";
 import { applyMove, getCard } from "../utils/boardPosition";
@@ -7,9 +7,33 @@ import type { BoardCard, BoardColumn, BoardPriority, BoardState } from "../types
 
 export type KanbanMutationResult = { ok: boolean; error?: string };
 
-/** 未选项目时的统一错误结果（供各变更 hook 复用）。 */
-function missingProjectError(): KanbanMutationResult {
-  return { ok: false, error: i18n.t("kanban:errors.noProjectSelected") };
+/**
+ * 网关载荷的边界结构校验（TD-UI-CHAT-N14）：UI 类型是 src/ 协议的手工镜像，
+ * 编译期互不约束；此处在唯一入口 `refresh()` 收窄一次形状，契约漂移时以
+ * 可诊断的 error 呈现，而不是 undefined 字段渗入渲染层。只查关键字段骨架，
+ * 不做逐字段全量校验。
+ */
+function parseBoardState(value: unknown): { state?: BoardState; problem?: string } {
+  if (typeof value !== "object" || value === null) return { problem: "board payload is not an object" };
+  const v = value as Record<string, unknown>;
+  const columns = v.columns;
+  const cards = v.cards;
+  if (!Array.isArray(columns) || !Array.isArray(cards)) {
+    return { problem: "board payload missing columns/cards arrays" };
+  }
+  for (const c of columns) {
+    const col = c as Partial<BoardColumn>;
+    if (typeof col?.id !== "string" || typeof col?.title !== "string" || typeof col?.color !== "string") {
+      return { problem: "board column entry malformed" };
+    }
+  }
+  for (const c of cards) {
+    const card = c as Partial<BoardCard>;
+    if (typeof card?.id !== "string" || typeof card?.columnId !== "string" || typeof card?.title !== "string") {
+      return { problem: "board card entry malformed" };
+    }
+  }
+  return { state: value as BoardState };
 }
 
 type UseBoardStateArgs = {
@@ -17,7 +41,11 @@ type UseBoardStateArgs = {
   projectKey: string | null;
 };
 
+/** 乐观变更涉及的板切片：回滚按切片整体还原。 */
+type BoardSliceKey = "cards" | "columns";
+
 export function useBoardState({ projectKey }: UseBoardStateArgs) {
+  const { t } = useTranslation("kanban");
   const { subscribe, sendMessage } = useWebSocket();
   const [board, setBoard] = useState<BoardState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,7 +64,12 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
         setError(result.error.message);
         return;
       }
-      setBoard(result as BoardState);
+      const parsed = parseBoardState(result);
+      if (!parsed.state) {
+        setError(`Kanban board payload rejected: ${parsed.problem ?? "unknown"}`);
+        return;
+      }
+      setBoard(parsed.state);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -90,16 +123,49 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
     return unsubscribe;
   }, [subscribe, refresh, sendMessage]);
 
-  const guard = useCallback(async (fn: () => Promise<unknown>): Promise<KanbanMutationResult> => {
-    try {
-      await fn();
-      return { ok: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      return { ok: false, error: message };
-    }
-  }, []);
+  /**
+   * 全部看板变更的统一执行体（TD-UI-CHAT-N14 折叠）：
+   * - 项目守卫（未选项目时返回统一错误结果）；
+   * - 通过 guard 捕获 API 异常 → 写入 error 态并返回失败结果；
+   * - 成功路径统一清错；
+   * - 提供 `optimistic` 时先乐观改对应切片，失败则整片回滚并 refresh 兜底，
+     回滚不再依赖各调用点自行记得快照（结构性保证）。
+   */
+  const mutate = useCallback(
+    async (
+      options: {
+        slice?: BoardSliceKey;
+        optimistic?: (prev: BoardState) => BoardState;
+      },
+      run: (projectKey: string) => Promise<void>,
+    ): Promise<KanbanMutationResult> => {
+      const currentProjectKey = projectKeyRef.current;
+      if (!currentProjectKey) return { ok: false, error: t("errors.noProjectSelected") };
+      const { slice, optimistic } = options;
+      const previousSlice = slice && board ? board[slice] : undefined;
+      if (slice && optimistic) setBoard(prev => (prev ? optimistic(prev) : prev));
+      const result = await (async (): Promise<KanbanMutationResult> => {
+        try {
+          await run(currentProjectKey);
+          return { ok: true };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          setError(message);
+          return { ok: false, error: message };
+        }
+      })();
+      if (!result.ok) {
+        if (slice && previousSlice !== undefined) {
+          setBoard(prev => (prev ? { ...prev, [slice]: previousSlice } : prev));
+          await refresh();
+        }
+        return result;
+      }
+      setError(null);
+      return result;
+    },
+    [board, t, refresh],
+  );
 
   const addCard = useCallback(
     async (fields: {
@@ -110,11 +176,9 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
       priority?: BoardPriority;
       color?: string;
       dueDate?: string;
-    }): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      return guard(async () => {
-        const result = await api.kanban.addCard({ projectKey: currentProjectKey, ...fields });
+    }): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.addCard({ projectKey, ...fields });
         if (result?.error) throw new Error(result.error.message);
         if (result?.card) {
           const newCard = result.card as BoardCard;
@@ -122,21 +186,17 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
         } else {
           await refresh();
         }
-        setError(null);
-      });
-    },
-    [guard, refresh],
+      }),
+    [mutate, refresh],
   );
 
   const updateCard = useCallback(
     async (
       cardId: string,
       fields: Partial<Pick<BoardCard, "title" | "note" | "label" | "priority" | "color" | "dueDate">>,
-    ): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      return guard(async () => {
-        const result = await api.kanban.updateCard({ projectKey: currentProjectKey, cardId, ...fields });
+    ): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.updateCard({ projectKey, cardId, ...fields });
         if (result?.error) throw new Error(result.error.message);
         if (result?.card) {
           const updatedCard = result.card as BoardCard;
@@ -146,106 +206,77 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
         } else {
           await refresh();
         }
-        setError(null);
-      });
-    },
-    [guard, refresh],
+      }),
+    [mutate, refresh],
   );
 
   const moveCard = useCallback(
-    async (cardId: string, columnId: string, toIndex?: number): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      const previousCards = board?.cards;
-      setBoard(prev => (prev ? { ...prev, cards: applyMove(prev.cards, cardId, columnId, toIndex) } : prev));
-      const result = await guard(async () => {
-        const serverResult = await api.kanban.moveCard({ projectKey: currentProjectKey, cardId, columnId, toIndex });
-        if (serverResult?.error) throw new Error(serverResult.error.message);
-        setError(null);
-      });
-      if (!result.ok && previousCards) {
-        setBoard(prev => (prev ? { ...prev, cards: previousCards } : prev));
-        await refresh();
-      }
-      return result;
-    },
-    [board, guard, refresh],
+    async (cardId: string, columnId: string, toIndex?: number): Promise<KanbanMutationResult> =>
+      mutate(
+        { slice: "cards", optimistic: prev => ({ ...prev, cards: applyMove(prev.cards, cardId, columnId, toIndex) }) },
+        async projectKey => {
+          const serverResult = await api.kanban.moveCard({ projectKey, cardId, columnId, toIndex });
+          if (serverResult?.error) throw new Error(serverResult.error.message);
+        },
+      ),
+    [mutate],
   );
 
   const archiveCard = useCallback(
-    async (cardId: string): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      const previousCards = board?.cards;
-      setBoard(prev =>
-        prev
-          ? { ...prev, cards: prev.cards.map(card => (card.id === cardId ? { ...card, archived: true } : card)) }
-          : prev,
-      );
-      const result = await guard(async () => {
-        const serverResult = await api.kanban.archiveCard({ projectKey: currentProjectKey, cardId });
-        if (serverResult?.error) throw new Error(serverResult.error.message);
-        setError(null);
-      });
-      if (!result.ok && previousCards) {
-        setBoard(prev => (prev ? { ...prev, cards: previousCards } : prev));
-        await refresh();
-      }
-      return result;
-    },
-    [board, guard, refresh],
+    async (cardId: string): Promise<KanbanMutationResult> =>
+      mutate(
+        {
+          slice: "cards",
+          optimistic: prev => ({
+            ...prev,
+            cards: prev.cards.map(card => (card.id === cardId ? { ...card, archived: true } : card)),
+          }),
+        },
+        async projectKey => {
+          const serverResult = await api.kanban.archiveCard({ projectKey, cardId });
+          if (serverResult?.error) throw new Error(serverResult.error.message);
+        },
+      ),
+    [mutate],
   );
 
   const restoreCard = useCallback(
-    async (cardId: string): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      const previousCards = board?.cards;
-      setBoard(prev =>
-        prev
-          ? { ...prev, cards: prev.cards.map(card => (card.id === cardId ? { ...card, archived: false } : card)) }
-          : prev,
-      );
-      const result = await guard(async () => {
-        const serverResult = await api.kanban.restoreCard({ projectKey: currentProjectKey, cardId });
-        if (serverResult?.error) throw new Error(serverResult.error.message);
-        setError(null);
-      });
-      if (!result.ok && previousCards) {
-        setBoard(prev => (prev ? { ...prev, cards: previousCards } : prev));
-        await refresh();
-      }
-      return result;
-    },
-    [board, guard, refresh],
+    async (cardId: string): Promise<KanbanMutationResult> =>
+      mutate(
+        {
+          slice: "cards",
+          optimistic: prev => ({
+            ...prev,
+            cards: prev.cards.map(card => (card.id === cardId ? { ...card, archived: false } : card)),
+          }),
+        },
+        async projectKey => {
+          const serverResult = await api.kanban.restoreCard({ projectKey, cardId });
+          if (serverResult?.error) throw new Error(serverResult.error.message);
+        },
+      ),
+    [mutate],
   );
 
   const purgeCard = useCallback(
-    async (cardId: string): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      const previousCards = board?.cards;
-      setBoard(prev => (prev ? { ...prev, cards: prev.cards.filter(card => card.id !== cardId) } : prev));
-      const result = await guard(async () => {
-        const serverResult = await api.kanban.purgeCard({ projectKey: currentProjectKey, cardId });
-        if (serverResult?.error) throw new Error(serverResult.error.message);
-        setError(null);
-      });
-      if (!result.ok && previousCards) {
-        setBoard(prev => (prev ? { ...prev, cards: previousCards } : prev));
-        await refresh();
-      }
-      return result;
-    },
-    [board, guard, refresh],
+    async (cardId: string): Promise<KanbanMutationResult> =>
+      mutate(
+        {
+          slice: "cards",
+          optimistic: prev => ({ ...prev, cards: prev.cards.filter(card => card.id !== cardId) }),
+        },
+        async projectKey => {
+          const serverResult = await api.kanban.purgeCard({ projectKey, cardId });
+          if (serverResult?.error) throw new Error(serverResult.error.message);
+        },
+      ),
+    [mutate],
   );
 
   const duplicateCard = useCallback(
-    async (cardId: string, columnId?: string, toIndex?: number): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      return guard(async () => {
-        const result = await api.kanban.duplicateCard({ projectKey: currentProjectKey, cardId, columnId, toIndex });
+    async (cardId: string, columnId?: string, toIndex?: number): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.duplicateCard({ projectKey, cardId, columnId, toIndex });
         if (result?.error) throw new Error(result.error.message);
         if (result?.card) {
           const newCard = result.card as BoardCard;
@@ -253,66 +284,49 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
         } else {
           await refresh();
         }
-        setError(null);
-      });
-    },
-    [guard, refresh],
+      }),
+    [mutate, refresh],
   );
 
   const bulkArchiveCards = useCallback(
-    async (ids: string[]): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      return guard(async () => {
-        const result = await api.kanban.bulkArchiveCards({ projectKey: currentProjectKey, ids });
+    async (ids: string[]): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.bulkArchiveCards({ projectKey, ids });
         if (result?.error) throw new Error(result.error.message);
         await refresh();
-        setError(null);
-      });
-    },
-    [guard, refresh],
+      }),
+    [mutate, refresh],
   );
 
   const bulkMoveCards = useCallback(
-    async (ids: string[], columnId: string): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      return guard(async () => {
-        const result = await api.kanban.bulkMoveCards({ projectKey: currentProjectKey, ids, columnId });
+    async (ids: string[], columnId: string): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.bulkMoveCards({ projectKey, ids, columnId });
         if (result?.error) throw new Error(result.error.message);
         await refresh();
-        setError(null);
-      });
-    },
-    [guard, refresh],
+      }),
+    [mutate, refresh],
   );
 
   const moveToProject = useCallback(
-    async (cardId: string, toProjectKey: string): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      const previousCards = board?.cards;
-      setBoard(prev => (prev ? { ...prev, cards: prev.cards.filter(card => card.id !== cardId) } : prev));
-      const result = await guard(async () => {
-        const serverResult = await api.kanban.moveToProject({ projectKey: currentProjectKey, cardId, toProjectKey });
-        if (serverResult?.error) throw new Error(serverResult.error.message);
-        setError(null);
-      });
-      if (!result.ok && previousCards) {
-        setBoard(prev => (prev ? { ...prev, cards: previousCards } : prev));
-        await refresh();
-      }
-      return result;
-    },
-    [board, guard, refresh],
+    async (cardId: string, toProjectKey: string): Promise<KanbanMutationResult> =>
+      mutate(
+        {
+          slice: "cards",
+          optimistic: prev => ({ ...prev, cards: prev.cards.filter(card => card.id !== cardId) }),
+        },
+        async projectKey => {
+          const serverResult = await api.kanban.moveToProject({ projectKey, cardId, toProjectKey });
+          if (serverResult?.error) throw new Error(serverResult.error.message);
+        },
+      ),
+    [mutate],
   );
 
   const addColumn = useCallback(
-    async (title: string, color?: string): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      return guard(async () => {
-        const result = await api.kanban.addColumn({ projectKey: currentProjectKey, title, color });
+    async (title: string, color?: string): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.addColumn({ projectKey, title, color });
         if (result?.error) throw new Error(result.error.message);
         if (result?.column) {
           const newColumn = result.column as BoardColumn;
@@ -320,77 +334,60 @@ export function useBoardState({ projectKey }: UseBoardStateArgs) {
         } else {
           await refresh();
         }
-        setError(null);
-      });
-    },
-    [guard, refresh],
+      }),
+    [mutate, refresh],
   );
 
   const renameColumn = useCallback(
-    async (columnId: string, title: string): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      return guard(async () => {
-        const result = await api.kanban.renameColumn({ projectKey: currentProjectKey, columnId, title });
+    async (columnId: string, title: string): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.renameColumn({ projectKey, columnId, title });
         if (result?.error) throw new Error(result.error.message);
         await refresh();
-        setError(null);
-      });
-    },
-    [guard, refresh],
+      }),
+    [mutate, refresh],
   );
 
   const deleteColumn = useCallback(
-    async (columnId: string): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      return guard(async () => {
-        const result = await api.kanban.deleteColumn({ projectKey: currentProjectKey, columnId });
+    async (columnId: string): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.deleteColumn({ projectKey, columnId });
         if (result?.error) throw new Error(result.error.message);
         await refresh();
-        setError(null);
-      });
-    },
-    [guard, refresh],
+      }),
+    [mutate, refresh],
   );
 
   const reorderColumns = useCallback(
-    async (columnIds: string[]): Promise<KanbanMutationResult> => {
-      const currentProjectKey = projectKeyRef.current;
-      if (!currentProjectKey) return missingProjectError();
-      const previousColumns = board?.columns;
-      setBoard(prev => {
-        if (!prev) return prev;
-        const byId = new Map(prev.columns.map(column => [column.id, column]));
-        const next = columnIds
-          .map(id => byId.get(id))
-          .filter((column): column is NonNullable<typeof column> => Boolean(column));
-        return next.length === prev.columns.length ? { ...prev, columns: next } : prev;
-      });
-      const result = await guard(async () => {
-        const serverResult = await api.kanban.reorderColumns({ projectKey: currentProjectKey, columnIds });
-        if (serverResult?.error) throw new Error(serverResult.error.message);
-        setError(null);
-      });
-      if (!result.ok && previousColumns) {
-        setBoard(prev => (prev ? { ...prev, columns: previousColumns } : prev));
-        await refresh();
-      }
-      return result;
-    },
-    [board, guard, refresh],
+    async (columnIds: string[]): Promise<KanbanMutationResult> =>
+      mutate(
+        {
+          slice: "columns",
+          optimistic: prev => {
+            const byId = new Map(prev.columns.map(column => [column.id, column]));
+            const next = columnIds
+              .map(id => byId.get(id))
+              .filter((column): column is NonNullable<typeof column> => Boolean(column));
+            return next.length === prev.columns.length ? { ...prev, columns: next } : prev;
+          },
+        },
+        async projectKey => {
+          const serverResult = await api.kanban.reorderColumns({ projectKey, columnIds });
+          if (serverResult?.error) throw new Error(serverResult.error.message);
+        },
+      ),
+    [mutate],
   );
 
-  const undo = useCallback(async (): Promise<KanbanMutationResult> => {
-    const currentProjectKey = projectKeyRef.current;
-    if (!currentProjectKey) return missingProjectError();
-    return guard(async () => {
-      const result = await api.kanban.undo({ projectKey: currentProjectKey });
-      if (result?.error) throw new Error(result.error.message);
-      await refresh();
-      setError(null);
-    });
-  }, [guard, refresh]);
+  const undo = useCallback(
+    async (): Promise<KanbanMutationResult> =>
+      mutate({}, async projectKey => {
+        const result = await api.kanban.undo({ projectKey });
+        if (result?.error) throw new Error(result.error.message);
+        await refresh();
+      }),
+    [mutate, refresh],
+  );
 
   return {
     board,
