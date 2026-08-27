@@ -74,6 +74,12 @@ export class TaskOutputStore {
    * Read the slice at [offset, head). Bytes preceding `offset` that have
    * been dropped from memory are reflected via `truncated=true`. Pass
    * `maxBytes` to bound the return size.
+   *
+   * The byte range is aligned to UTF-8 codepoint boundaries before decoding:
+   * a trailing partial sequence is left for the next poll (nextOffset backs
+   * up so no bytes are lost), and an orphan continuation sequence at the
+   * start (mid-codepoint offset or ring-buffer drop boundary) is consumed
+   * without emitting a replacement character.
    */
   readSlice(offset: number, maxBytes?: number): SatiTaskOutputSlice {
     const head = this.totalSeenBytes;
@@ -102,10 +108,41 @@ export class TaskOutputStore {
       slices.push(buf.subarray(start, end));
       collected += end - start;
     }
-    const content = Buffer.concat(slices).toString("utf8");
+    const sliced = Buffer.concat(slices);
+
+    // Head: skip orphan continuation bytes (0b10xxxxxx) left by a mid-codepoint start.
+    let textStart = 0;
+    while (textStart < sliced.length && (sliced[textStart]! & 0xc0) === 0x80) textStart += 1;
+
+    // Tail: back up over an incomplete multi-byte sequence so the next poll
+    // re-reads it whole. Invalid lead bytes are left as-is (decode to U+FFFD).
+    let textEnd = sliced.length;
+    {
+      const probeFloor = Math.max(textStart, sliced.length - 4);
+      let probe = sliced.length - 1;
+      while (probe >= probeFloor && (sliced[probe]! & 0xc0) === 0x80) probe -= 1;
+      if (probe >= probeFloor) {
+        const lead = sliced[probe]!;
+        const seqLen =
+          (lead & 0x80) === 0x00
+            ? 1
+            : (lead & 0xe0) === 0xc0
+              ? 2
+              : (lead & 0xf0) === 0xe0
+                ? 3
+                : (lead & 0xf8) === 0xf0
+                  ? 4
+                  : 0;
+        if (seqLen > 0 && probe + seqLen > sliced.length) {
+          textEnd = probe;
+        }
+      }
+    }
+
+    const content = textStart < textEnd ? sliced.subarray(textStart, textEnd).toString("utf8") : "";
     return {
       content,
-      nextOffset: cursor + collected,
+      nextOffset: cursor + textEnd,
       totalBytes: head,
       truncated,
     };
