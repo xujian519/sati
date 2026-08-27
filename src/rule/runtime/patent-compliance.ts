@@ -59,13 +59,21 @@ function loadFirstExistingRuleSet(fileName: string): PatentComplianceLoadResult 
   return { ruleSet: { rules: [] }, source: null, warnings };
 }
 
+const COMPLIANCE_MISSING_WARNING =
+  "未找到专利合规规则资产（SATI_RULES_DIR 或 rules/patent/compliance.yaml），门禁降级为放行";
+
+/** 加载基础 compliance 规则集；资产缺失时附「门禁降级为放行」警告。 */
+function loadComplianceBase(): PatentComplianceLoadResult {
+  const base = loadFirstExistingRuleSet(COMPLIANCE_FILE);
+  if (base.source === null) {
+    base.warnings.push(COMPLIANCE_MISSING_WARNING);
+  }
+  return base;
+}
+
 /** 加载内置专利合规规则集；找不到资产时返回空规则集并附警告。 */
 export function loadPatentComplianceRuleSet(): PatentComplianceLoadResult {
-  const result = loadFirstExistingRuleSet(COMPLIANCE_FILE);
-  if (result.source === null) {
-    result.warnings.push("未找到专利合规规则资产（SATI_RULES_DIR 或 rules/patent/compliance.yaml），门禁降级为放行");
-  }
-  return result;
+  return loadComplianceBase();
 }
 
 /**
@@ -73,9 +81,8 @@ export function loadPatentComplianceRuleSet(): PatentComplianceLoadResult {
  * 用于 H 部电学案件的额外审查/撰写约束；找不到电学增强资产时回退到通用合规规则。
  */
 export function loadPatentElectricalRuleSet(): PatentComplianceLoadResult {
-  const base = loadFirstExistingRuleSet(COMPLIANCE_FILE);
+  const base = loadComplianceBase();
   if (base.source === null) {
-    base.warnings.push("未找到专利合规规则资产（SATI_RULES_DIR 或 rules/patent/compliance.yaml），门禁降级为放行");
     return base;
   }
   const extra = loadFirstExistingRuleSet(ELECTRICAL_FILE);
@@ -162,9 +169,8 @@ export function selectGateRules(ruleSet: RuleSet): RuleSet {
  * 沿用既有「门禁降级为放行」语义。
  */
 export function loadPatentFullRuleSet(): PatentComplianceLoadResult {
-  const base = loadFirstExistingRuleSet(COMPLIANCE_FILE);
+  const base = loadComplianceBase();
   if (base.source === null) {
-    base.warnings.push("未找到专利合规规则资产（SATI_RULES_DIR 或 rules/patent/compliance.yaml），门禁降级为放行");
     return base;
   }
   const nuoRuleSets: RuleSet[] = [];

@@ -95,6 +95,7 @@ function checkStructuralAnalysis(
       try {
         return new RegExp(pattern, "i").test(text);
       } catch {
+        // 非法正则已在加载期拦截；此处防御性视为不命中（fail-safe 偏向判缺失）。
         return false;
       }
     });
@@ -118,7 +119,8 @@ function checkCitationAnalysis(
   const evidence: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = CITATION_RE.exec(text)) !== null) {
-    const statuteName = match[1] === "专利法实施细则" ? "专利法实施细则" : "专利法";
+    // 捕获组只会是"专利法实施细则"或"专利法"之一，直接用作 statute 键。
+    const statuteName = match[1];
     const article = parseCnNumber(match[2]);
     if (article === null) continue;
     const statute = check.statutes[statuteName];

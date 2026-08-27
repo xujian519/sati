@@ -67,7 +67,6 @@ export {
   candidateRuleDirs,
   candidatePackDirs,
   findWorkspaceRoot,
-  resolveRuleAsset,
 } from "./runtime/asset-location.js";
 export {
   loadRulePack,
