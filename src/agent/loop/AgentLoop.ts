@@ -648,49 +648,10 @@ export class AgentLoop {
         return { kind: "continue" };
       }
 
-      // Phase A: token doubling (if not yet attempted)
-      if (!state.hasAttemptedOutputRetry) {
-        state.hasAttemptedOutputRetry = true;
-        const nextMaxOutputTokens = resolveOutputTokenRetryBump({
-          currentMaxOutputTokens: this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model),
-          modelMaxOutputTokens: routedMaxOutputTokens,
-        });
-        if (nextMaxOutputTokens !== undefined) {
-          const previousOutput = this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model);
-          this.tokenCaps.setTransientTokenCap(decision.provider, decision.model, {
-            requestedMaxOutputTokens: nextMaxOutputTokens,
-          });
-          yield {
-            type: "token_cap_adjusted",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            provider: decision.provider,
-            model: decision.model,
-            cap: "output",
-            previous: previousOutput,
-            next: nextMaxOutputTokens,
-            reason: "max-output-retry-bump",
-          };
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "model_error",
-          };
-          return { kind: "continue" };
-        }
-      }
-
-      // Phase B: continuation recovery
-      if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
-        state.maxOutputRecoveryCount++;
-        return yield* this.continueWithTransientPrompt(
-          state,
-          input,
-          "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
-            "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
-          "max_output_recovery",
-        );
+      // Phase A/B 由共享策略方法处理；Phase C 兜底保持在本方法内。
+      const recovery = yield* this.recoverFromMaxOutputBump(state, input, decision, routedMaxOutputTokens);
+      if (recovery !== "exhausted") {
+        return { kind: "continue" };
       }
 
       // Phase C: exhausted. Do not execute repaired/truncated calls; the
@@ -723,52 +684,19 @@ export class AgentLoop {
     }
 
     if (!assembled.error && toolCalls.length === 0 && textFromMessage(assistantMessage).length === 0) {
-      if (state.maxOutputRecoveryCount > 0) {
-        state.consecutiveEmptyCount++;
-        if (
-          state.consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY &&
-          state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT
-        ) {
-          state.maxOutputRecoveryCount++;
-          yield* this.emitEmptyOutputTokenBump(input, decision, assembled.finishReason, routedMaxOutputTokens);
-          return yield* this.continueWithTransientPrompt(
-            state,
-            input,
-            "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
-              "Pick up mid-sentence if that is where the cut happened.",
-            "max_output_recovery",
-          );
-        }
-        state.finalMessage = state.messages.filter(m => m.role === "assistant").at(-1);
-        const status = createEmptyResponseStatus({
-          provider: request.provider,
-          model: request.model,
-          attempts: state.consecutiveEmptyCount,
-        });
-        yield await this.emitStatus(input, status);
-        const result = this.createTurnResult(input, {
-          type: "success",
-          stopReason: "completed",
-          usage: state.usage,
-          permissionDenials: state.permissionDenials,
-          turns: state.turnCount,
-          startedAt: state.startedAt,
-          finalMessage: state.finalMessage,
-        });
-        return yield* this.terminateTurn(input, state, result, { errored: true });
+      const recovery = yield* this.recoverFromEmptyResponse(
+        state,
+        input,
+        decision,
+        request,
+        assembled.finishReason,
+        routedMaxOutputTokens,
+      );
+      if (recovery === "recovered-return") {
+        return { kind: "continue" };
       }
-
-      if (!state.hasAttemptedEmptyRetry) {
-        state.hasAttemptedEmptyRetry = true;
-        state.maxOutputRecoveryCount++;
-        yield* this.emitEmptyOutputTokenBump(input, decision, assembled.finishReason, routedMaxOutputTokens);
-        return yield* this.continueWithTransientPrompt(
-          state,
-          input,
-          "Your previous response was empty (thinking only, no visible text). " +
-            "Please provide your answer as visible text output.",
-          "empty_response_retry",
-        );
+      if (recovery !== "unhandled") {
+        return recovery;
       }
 
       const status = createEmptyResponseStatus({
@@ -1082,53 +1010,14 @@ export class AgentLoop {
       // Phase C — exhausted: fall through to error surfacing.
       if (assembled.error.code === "max_output_reached") {
         // 输出触顶的响应含截断内容（可能带半截工具调用语法）：Phase A/B 恢复
-        // 响应到达前被取消时，绝不能把 :540 的原始消息作为最终消息持久化
-        // （与 partial-text 恢复路径的清理一致）。
+        // 响应到达前被取消时，绝不能把原始消息作为最终消息持久化
+        // （与 partial-text 恢复路径的清理一致，经由 helper 的 strip 选项实现）。
         state.finalMessage = undefined;
-        // Phase A
-        if (!state.hasAttemptedOutputRetry) {
-          state.hasAttemptedOutputRetry = true;
-          const nextMaxOutputTokens = resolveOutputTokenRetryBump({
-            currentMaxOutputTokens: this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model),
-            modelMaxOutputTokens: routedMaxOutputTokens,
-          });
-          if (nextMaxOutputTokens !== undefined) {
-            state.messages = stripTrailingErrorPair(state.messages);
-            const previousOutput = this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model);
-            this.tokenCaps.setTransientTokenCap(decision.provider, decision.model, {
-              requestedMaxOutputTokens: nextMaxOutputTokens,
-            });
-            yield {
-              type: "token_cap_adjusted",
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              provider: decision.provider,
-              model: decision.model,
-              cap: "output",
-              previous: previousOutput,
-              next: nextMaxOutputTokens,
-              reason: "max-output-retry-bump",
-            };
-            yield {
-              type: "turn_continued",
-              sessionId: input.sessionId,
-              turnId: input.turnId,
-              reason: "model_error",
-            };
-            return { kind: "continue" };
-          }
-        }
-
-        // Phase B
-        if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
-          state.maxOutputRecoveryCount++;
-          return yield* this.continueWithTransientPrompt(
-            state,
-            input,
-            "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
-              "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
-            "max_output_recovery",
-          );
+        const recovery = yield* this.recoverFromMaxOutputBump(state, input, decision, routedMaxOutputTokens, {
+          stripTrailingErrorPairMessages: true,
+        });
+        if (recovery !== "exhausted") {
+          return { kind: "continue" };
         }
         // Phase C: fall through to error surfacing
       }
@@ -1186,62 +1075,28 @@ export class AgentLoop {
       if (assistantText.length === 0) {
         state.messages.pop();
 
-        if (state.maxOutputRecoveryCount > 0) {
-          state.consecutiveEmptyCount++;
-          if (
-            state.consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY &&
-            state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT
-          ) {
-            state.maxOutputRecoveryCount++;
-            yield* this.emitEmptyOutputTokenBump(input, decision, assembled.finishReason, routedMaxOutputTokens);
-            return yield* this.continueWithTransientPrompt(
-              state,
-              input,
-              "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
-                "Pick up mid-sentence if that is where the cut happened.",
-              "max_output_recovery",
-            );
-          }
-          // Exhausted consecutive empty retries — surface a UI-only status
-          // message instead of injecting diagnostic assistant text into the
-          // model transcript.
-          state.finalMessage = state.messages.filter(m => m.role === "assistant").at(-1);
-          const status = createEmptyResponseStatus({
-            provider: request.provider,
-            model: request.model,
-            attempts: state.consecutiveEmptyCount,
-          });
-          yield await this.emitStatus(input, status);
-          const result = this.createTurnResult(input, {
-            type: "success",
-            stopReason: "completed",
-            usage: state.usage,
-            permissionDenials: state.permissionDenials,
-            turns: state.turnCount,
-            startedAt: state.startedAt,
-            finalMessage: state.finalMessage,
-          });
-          return yield* this.terminateTurn(input, state, result, { errored: true });
-        } else if (!state.hasAttemptedEmptyRetry) {
-          // First occurrence: prompt the model to produce visible output.
-          state.hasAttemptedEmptyRetry = true;
-          state.maxOutputRecoveryCount++;
-          yield* this.emitEmptyOutputTokenBump(input, decision, assembled.finishReason, routedMaxOutputTokens);
-          return yield* this.continueWithTransientPrompt(
-            state,
-            input,
-            "Your previous response was empty (thinking only, no visible text). " +
-              "Please provide your answer as visible text output.",
-            "empty_response_retry",
-          );
-        } else {
-          const status = createEmptyResponseStatus({
-            provider: request.provider,
-            model: request.model,
-            attempts: 2,
-          });
-          yield await this.emitStatus(input, status);
+        const recovery = yield* this.recoverFromEmptyResponse(
+          state,
+          input,
+          decision,
+          request,
+          assembled.finishReason,
+          routedMaxOutputTokens,
+        );
+        if (recovery === "recovered-return") {
+          return { kind: "continue" };
         }
+        if (recovery !== "unhandled") {
+          return recovery;
+        }
+        // Exhausted without retry budget: surface a UI-only status message
+        // instead of injecting diagnostic assistant text into the transcript.
+        const status = createEmptyResponseStatus({
+          provider: request.provider,
+          model: request.model,
+          attempts: 2,
+        });
+        yield await this.emitStatus(input, status);
         // fall through to normal stop
       }
 
@@ -1746,6 +1601,154 @@ export class AgentLoop {
     state.pushTransientSyntheticPrompt(prompt, purpose);
     yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason };
     return { kind: "continue" };
+  }
+
+  /**
+   * 共享恢复策略：max-output 触顶的 Phase A（一次性 token 提升）与 Phase B
+   * （截断续跑，至多 MAX_OUTPUT_RECOVERY_LIMIT 次）。原先在 assembleAndRecover 与
+   * handleModelError 各复制一份（TD-AGENT-101）。
+   *
+   * 返回值约定：
+   * - `"bumped"` / `"continuing"`：已产出续跑事件，调用方应结束本步并返回 continue；
+   * - `"exhausted"`：A/B 均不可用，由调用方执行各自的 Phase C 兜底。
+   *
+   * `opts.stripTrailingErrorPairMessages` 仅 model-error 路径需要（错误对消息不得
+   * 进入续跑上下文）；计数器与 try-flag 的推进顺序保持与原实现逐位一致。
+   */
+  private async *recoverFromMaxOutputBump(
+    state: TurnRuntimeState,
+    input: AgentLoopInput,
+    decision: RouterDecision,
+    routedMaxOutputTokens: number | undefined,
+    opts: { stripTrailingErrorPairMessages?: boolean } = {},
+  ): AsyncGenerator<AgentEvent, "bumped" | "continuing" | "exhausted", unknown> {
+    // Phase A: token doubling (if not yet attempted)
+    if (!state.hasAttemptedOutputRetry) {
+      state.hasAttemptedOutputRetry = true;
+      const nextMaxOutputTokens = resolveOutputTokenRetryBump({
+        currentMaxOutputTokens: this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model),
+        modelMaxOutputTokens: routedMaxOutputTokens,
+      });
+      if (nextMaxOutputTokens !== undefined) {
+        if (opts.stripTrailingErrorPairMessages) {
+          state.messages = stripTrailingErrorPair(state.messages);
+        }
+        const previousOutput = this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model);
+        this.tokenCaps.setTransientTokenCap(decision.provider, decision.model, {
+          requestedMaxOutputTokens: nextMaxOutputTokens,
+        });
+        yield {
+          type: "token_cap_adjusted",
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          provider: decision.provider,
+          model: decision.model,
+          cap: "output",
+          previous: previousOutput,
+          next: nextMaxOutputTokens,
+          reason: "max-output-retry-bump",
+        };
+        yield {
+          type: "turn_continued",
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          reason: "model_error",
+        };
+        return "bumped";
+      }
+    }
+
+    // Phase B: continuation recovery
+    if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
+      state.maxOutputRecoveryCount++;
+      yield* this.continueWithTransientPrompt(
+        state,
+        input,
+        "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
+          "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
+        "max_output_recovery",
+      );
+      return "continuing";
+    }
+
+    return "exhausted";
+  }
+
+  /**
+   * 共享恢复策略：空响应（无错误、无工具调用、无可见文本）的前两级分支——
+   * 连空递增恢复与首次可见文本重试。原先在 assembleAndRecover 与
+   * handleNoToolCalls 各复制一份（TD-AGENT-101）。
+   *
+   * 返回值约定：
+   * - `"recovered-return"`：已产出重试事件，调用方应返回 continue；
+   * - `TurnStepReturn`：连空预算耗尽，本方法已完成终止仪式并透传其返回值，
+   *   调用方应原样作为本步返回值；
+   * - `"unhandled"`：首重预算也已耗尽，两个调用方的第三级兜底不同
+   *   （assemble 走固定 attempts=2 终止；handleNoToolCalls 仅发状态后顺落正常收尾），
+   *   故留在调用方。
+   */
+  private async *recoverFromEmptyResponse(
+    state: TurnRuntimeState,
+    input: AgentLoopInput,
+    decision: RouterDecision,
+    request: CanonicalModelRequest,
+    assembledFinishReason: string | undefined,
+    routedMaxOutputTokens: number | undefined,
+  ): AsyncGenerator<AgentEvent, "recovered-return" | "unhandled" | TurnStepReturn, unknown> {
+    if (state.maxOutputRecoveryCount > 0) {
+      state.consecutiveEmptyCount++;
+      if (
+        state.consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY &&
+        state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT
+      ) {
+        state.maxOutputRecoveryCount++;
+        yield* this.emitEmptyOutputTokenBump(input, decision, assembledFinishReason, routedMaxOutputTokens);
+        yield* this.continueWithTransientPrompt(
+          state,
+          input,
+          "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
+            "Pick up mid-sentence if that is where the cut happened.",
+          "max_output_recovery",
+        );
+        return "recovered-return";
+      }
+      // Exhausted consecutive empty retries — surface a UI-only status message
+      // instead of injecting diagnostic assistant text into the model transcript.
+      state.finalMessage = state.messages.filter(m => m.role === "assistant").at(-1);
+      const status = createEmptyResponseStatus({
+        provider: request.provider,
+        model: request.model,
+        attempts: state.consecutiveEmptyCount,
+      });
+      yield await this.emitStatus(input, status);
+      const result = this.createTurnResult(input, {
+        type: "success",
+        stopReason: "completed",
+        usage: state.usage,
+        permissionDenials: state.permissionDenials,
+        turns: state.turnCount,
+        startedAt: state.startedAt,
+        finalMessage: state.finalMessage,
+      });
+      return yield* this.terminateTurn(input, state, result, { errored: true });
+    }
+
+    if (!state.hasAttemptedEmptyRetry) {
+      // First occurrence: prompt the model to produce visible output.
+      state.hasAttemptedEmptyRetry = true;
+      state.maxOutputRecoveryCount++;
+      yield* this.emitEmptyOutputTokenBump(input, decision, assembledFinishReason, routedMaxOutputTokens);
+      yield* this.continueWithTransientPrompt(
+        state,
+        input,
+        "Your previous response was empty (thinking only, no visible text). " +
+          "Please provide your answer as visible text output.",
+        "empty_response_retry",
+      );
+      return "recovered-return";
+    }
+
+    return "unhandled";
   }
 
   /**
