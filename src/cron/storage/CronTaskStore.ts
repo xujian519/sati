@@ -27,10 +27,6 @@ export class CronTaskStore {
     return (await this.readTaskFile()).tasks;
   }
 
-  async getTask(taskId: string): Promise<CronTask | undefined> {
-    return (await this.listTasks()).find(task => task.taskId === taskId);
-  }
-
   async putTask(task: CronTask): Promise<void> {
     await this.mutateTaskFile(async file => {
       const index = file.tasks.findIndex(entry => entry.taskId === task.taskId);
@@ -41,19 +37,6 @@ export class CronTaskStore {
         nextTasks.push(task);
       }
       await this.writeTaskFile({ schemaVersion: 1, tasks: sortTasks(nextTasks) });
-    });
-  }
-
-  async replaceTask(task: CronTask): Promise<boolean> {
-    return this.mutateTaskFile(async file => {
-      const index = file.tasks.findIndex(entry => entry.taskId === task.taskId);
-      if (index < 0) {
-        return false;
-      }
-      const nextTasks = [...file.tasks];
-      nextTasks[index] = task;
-      await this.writeTaskFile({ schemaVersion: 1, tasks: sortTasks(nextTasks) });
-      return true;
     });
   }
 
@@ -112,8 +95,10 @@ export class CronTaskStore {
       .flatMap(line => {
         try {
           const parsed = JSON.parse(line);
-          return normalizeRun(parsed) ? [normalizeRun(parsed)!] : [];
+          const record = normalizeRun(parsed);
+          return record ? [record] : [];
         } catch {
+          // 坏行（残缺/非 JSON）→ 跳过该行；历史读取尽力而为，不阻塞 listing。
           return [];
         }
       });
@@ -152,7 +137,10 @@ export class CronTaskStore {
       }
       return {
         schemaVersion: 1,
-        tasks: parsed.tasks.flatMap(task => (normalizeTask(task) ? [normalizeTask(task)!] : [])),
+        tasks: parsed.tasks.flatMap(task => {
+          const normalized = normalizeTask(task);
+          return normalized ? [normalized] : [];
+        }),
       };
     } catch (error) {
       // 损坏的 tasks.json：静默返回空数组会让下一次 mutation 把空数组写回，
@@ -195,6 +183,7 @@ export class CronTaskStore {
         }
       }
     } finally {
+      // temp 大概率已被 rename 消费（ENOENT）；清理尽力而为，不覆盖主流程错误。
       await unlink(tempPath).catch(() => {});
     }
   }

@@ -98,7 +98,7 @@ export class CronScheduler {
         this.deps.logger?.warn("cron scheduler tick failed", {
           error: error instanceof Error ? error.message : String(error),
         });
-      }) as Promise<void>;
+      });
       void this.tickInProgress.then(() => {
         this.tickInProgress = undefined;
         this.scheduleNextTick();

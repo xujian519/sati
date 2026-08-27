@@ -56,8 +56,6 @@ function makeFakeGateway(events: GatewayEvent[] | (() => AsyncGenerator<GatewayE
 
 type FakeStoreState = {
   current: CronTask | undefined;
-  replaceCalls: CronTask[];
-  replaceResults: boolean[];
   eventCalls: Array<{ runId: string; event: GatewayEvent }>;
   closeCalls: string[];
   runRecords: CronRunRecord[];
@@ -68,12 +66,10 @@ type FakeStoreState = {
 
 function makeFakeStore(
   initial?: CronTask,
-  options: { replaceOk?: boolean; appendRunError?: Error } = {},
+  options: { appendRunError?: Error } = {},
 ): { store: CronTaskStore; state: FakeStoreState } {
   const state: FakeStoreState = {
     current: initial,
-    replaceCalls: [],
-    replaceResults: [],
     eventCalls: [],
     closeCalls: [],
     runRecords: [],
@@ -82,15 +78,6 @@ function makeFakeStore(
     updateResults: [],
   };
   const store = {
-    async replaceTask(task: CronTask): Promise<boolean> {
-      state.replaceCalls.push(task);
-      const ok = options.replaceOk ?? true;
-      state.replaceResults.push(ok);
-      if (ok) {
-        state.current = task;
-      }
-      return ok;
-    },
     async appendRunEvent(runId: string, event: GatewayEvent): Promise<void> {
       state.eventCalls.push({ runId, event });
     },

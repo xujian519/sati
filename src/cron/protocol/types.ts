@@ -172,5 +172,6 @@ export function mapCronRunOutcome(
   if (!outcome) return finishedAt ? "completed" : "running";
   if (outcome === "completed") return "completed";
   if (outcome === "failed" || outcome === "aborted" || outcome === "stopped") return "failed";
+  // CronRunOutcome 四值在上面的分支已穷尽；此行仅为持久化脏数据兜底。
   return "completed";
 }
