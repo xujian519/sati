@@ -12,13 +12,9 @@ export {
   type ToolResultsCleanupResult,
 } from "./storage/ToolResultsCleanup.js";
 export {
-  listAllSessions,
   listProjectSessions,
   parseSessionInfoFromLite,
-  searchSessionsByTitle,
-  type ListAllSessionsOptions,
   type ListProjectSessionsOptions,
-  type SearchSessionsByTitleOptions,
   type SessionInfo,
 } from "./storage/SessionList.js";
 export {
@@ -110,11 +106,6 @@ export {
   truncatePreview,
 } from "./transcript/TranscriptEntry.js";
 export type { AgentTranscriptWriter, AgentTranscriptWriterState } from "./transcript/TranscriptWriter.js";
-export {
-  findCanonicalProjectRoot,
-  findGitRoot,
-  resolveCanonicalRoot,
-} from "./worktree/index.js";
 export {
   applyWorkspaceNote,
   cloneWorkspaceLedgerState,

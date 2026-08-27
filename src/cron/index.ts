@@ -1,4 +1,4 @@
-export { defaultCronConfig, parseCronConfig, type CronConfig } from "./config/parseCronConfig.js";
+export { parseCronConfig, type CronConfig } from "./config/parseCronConfig.js";
 export {
   CronRuntime,
   createCronRuntime,

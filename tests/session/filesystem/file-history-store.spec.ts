@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
@@ -417,5 +427,39 @@ describe("FileHistoryStore 注入依赖", () => {
     const snapshot = store.getState().snapshots[0]!;
     assert.equal(snapshot.timestamp.toISOString(), "2026-08-09T00:00:00.000Z");
     assert.equal(snapshot.trackedFileBackups[file]!.backupTime.toISOString(), "2026-08-09T00:00:00.000Z");
+  });
+});
+
+describe("FileHistoryStore safeReadText 非 ENOENT 告警", () => {
+  it("当前文件不可读（EACCES）时告警而非静默按不存在处理", {
+    skip: typeof process.getuid === "function" && process.getuid() === 0,
+  }, async () => {
+    const warnings: string[] = [];
+    const { sourceDir, store } = makeFixture({ warn: m => warnings.push(m) });
+    const file = writeSource(sourceDir, "secret.ts", "one\ntwo");
+    await store.trackEdit(file, "m1");
+
+    chmodSync(file, 0o000);
+    try {
+      const stats = await store.getDiffStats("m1");
+      // fail-safe 语义不变：不可读仍按 null 处理（与"文件已删"同路径），
+      // 但必须留告警可审计，而不是静默误判。
+      assert.deepEqual(stats, { filesChanged: 1, insertions: 0, deletions: 2 });
+      assert.equal(warnings.filter(w => w.includes("failed to read")).length, 1);
+    } finally {
+      chmodSync(file, 0o644);
+    }
+  });
+
+  it("文件确实不存在（ENOENT）时不告警", async () => {
+    const warnings: string[] = [];
+    const { sourceDir, store } = makeFixture({ warn: m => warnings.push(m) });
+    const file = writeSource(sourceDir, "a.ts", "x\ny");
+    await store.trackEdit(file, "m1");
+    rmSync(file);
+
+    const stats = await store.getDiffStats("m1");
+    assert.deepEqual(stats, { filesChanged: 1, insertions: 0, deletions: 2 });
+    assert.equal(warnings.filter(w => w.includes("failed to read")).length, 0);
   });
 });

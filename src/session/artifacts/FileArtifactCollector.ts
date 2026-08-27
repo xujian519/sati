@@ -264,6 +264,7 @@ export class FileArtifactCollector {
       return undefined;
     }
     const operation: FileArtifactOperation = before ? "updated" : "created";
+    const mimeType = mimeTypeForPath(candidate.absolutePath);
 
     return {
       id: createHash("sha256").update(`${relativePath}\0${fingerprint.sha256}`).digest("hex").slice(0, 24),
@@ -274,7 +275,7 @@ export class FileArtifactCollector {
       status: statusValue,
       size: fingerprint.size,
       sha256: fingerprint.sha256,
-      ...(mimeTypeForPath(candidate.absolutePath) ? { mimeType: mimeTypeForPath(candidate.absolutePath) } : {}),
+      ...(mimeType ? { mimeType } : {}),
       createdAt: this.now().toISOString(),
     };
   }

@@ -79,6 +79,7 @@ export async function cleanupOrphanToolResults(options: ToolResultsCleanupOption
     try {
       entry = await stat(dir);
     } catch {
+      // stat 失败（多为并发清理竞态）→ 跳过该目录，不计 removed 也不计 retained。
       continue;
     }
     if (!entry.isDirectory()) {

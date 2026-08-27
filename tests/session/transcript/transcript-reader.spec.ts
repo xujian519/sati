@@ -342,4 +342,23 @@ describe("TranscriptReader tail-append 增量读取", () => {
       delete process.env.SATI_TRANSCRIPT_TAIL;
     }
   });
+
+  it("legacy 缓存命中返回拷贝的 diagnostics，调用方 mutate 不污染缓存", async () => {
+    process.env.SATI_TRANSCRIPT_TAIL = "0";
+    try {
+      const path = makeTranscriptPath();
+      writeTranscript(path, [entryLine("s1", 1, "一")]);
+      await readTranscript(path); // 建缓存（首次返回与缓存共享引用，属既有模式）
+      const hit = await readTranscript(path); // 缓存命中
+
+      // 模拟调用方修改"命中返回"的 diagnostics 数组。
+      hit.diagnostics.push({ code: "transcript_missing", severity: "warning", message: "pollution probe" });
+
+      // 再次命中：缓存内数组必须不受上一步 mutate 影响。
+      const second = await readTranscript(path);
+      assert.equal(second.diagnostics.length, 0);
+    } finally {
+      delete process.env.SATI_TRANSCRIPT_TAIL;
+    }
+  });
 });

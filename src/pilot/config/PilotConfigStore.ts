@@ -42,10 +42,6 @@ export type PilotConfigStore = {
   getConsecutiveFailures(): number;
 };
 
-export async function createPilotConfigStore(options: PilotConfigLoadOptions = {}): Promise<PilotConfigStore> {
-  return createPilotConfigStoreSync(options);
-}
-
 export function createPilotConfigStoreSync(options: PilotConfigLoadOptions = {}): PilotConfigStore {
   const initialSnapshot = loadPilotConfig(options);
   return new DefaultPilotConfigStore(initialSnapshot, options);

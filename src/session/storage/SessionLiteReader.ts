@@ -42,6 +42,7 @@ export async function readSessionLite(path: string): Promise<SessionLiteFile | n
       await handle.close();
     }
   } catch {
+    // unreadable/missing lite file → treat the session as non-listable.
     return null;
   }
 }

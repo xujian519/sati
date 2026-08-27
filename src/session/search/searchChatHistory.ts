@@ -238,6 +238,7 @@ async function collectSessionFiles(options: {
   try {
     projectIds = await readdir(projectsDir);
   } catch {
+    // unreadable projects dir → treat as no projects, empty result.
     return [];
   }
 
@@ -258,6 +259,7 @@ async function listJsonlFiles(
   try {
     names = await readdir(chatDir);
   } catch {
+    // unreadable chats dir → this project contributes no session files.
     return [];
   }
 
@@ -315,6 +317,7 @@ async function searchSessionFile(
     try {
       entry = JSON.parse(line) as Record<string, unknown>;
     } catch {
+      // torn/non-JSON line → skip and keep scanning.
       continue;
     }
 

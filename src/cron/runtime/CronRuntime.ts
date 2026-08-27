@@ -209,15 +209,7 @@ export class CronRuntime {
     const now = this.now();
     const taskId = this.uuid();
     const sessionKey = buildCronSessionKey(taskId);
-    const schedule = normalizeSchedule(input, this.config.timezone, now);
-    const timezone = schedule.type === "cron" ? schedule.timezone : (input.timezone ?? this.config.timezone);
-    const nextRunAt = computeNextRunAt(schedule, now, timezone);
-    if (!nextRunAt) {
-      throw new Error("Cron schedule does not produce a valid future run time.");
-    }
-    if (schedule.type === "once" && nextRunAt.getTime() < now.getTime()) {
-      throw new Error("One-time Cron tasks must be scheduled in the future.");
-    }
+    const { schedule, timezone, nextRunAt } = this.resolveScheduleAndNextRunAt(input, now);
     const task: CronTask = {
       schemaVersion: 1,
       taskId,
@@ -280,15 +272,7 @@ export class CronRuntime {
     }
 
     const now = this.now();
-    const schedule = normalizeSchedule(input, this.config.timezone, now);
-    const timezone = schedule.type === "cron" ? schedule.timezone : (input.timezone ?? this.config.timezone);
-    const nextRunAt = computeNextRunAt(schedule, now, timezone);
-    if (!nextRunAt) {
-      throw new Error("Cron schedule does not produce a valid future run time.");
-    }
-    if (schedule.type === "once" && nextRunAt.getTime() < now.getTime()) {
-      throw new Error("One-time Cron tasks must be scheduled in the future.");
-    }
+    const { schedule, timezone, nextRunAt } = this.resolveScheduleAndNextRunAt(input, now);
 
     let reason: Extract<CronUpdateResult, { updated: false }>["reason"] | undefined;
     const updated = await this.store.updateTask(input.taskId, current => {
@@ -324,6 +308,27 @@ export class CronRuntime {
     }
     this.scheduler?.poke();
     return { updated: true, task: updated };
+  }
+
+  /**
+   * Normalize the schedule, resolve the effective timezone, and compute the
+   * first run time. Shared by createTask/updateTask; throws when the schedule
+   * cannot produce a valid future run.
+   */
+  private resolveScheduleAndNextRunAt(
+    input: { schedule: CronCreateSchedule; timezone?: string },
+    now: Date,
+  ): { schedule: CronTask["schedule"]; timezone: string | undefined; nextRunAt: Date } {
+    const schedule = normalizeSchedule(input, this.config.timezone, now);
+    const timezone = schedule.type === "cron" ? schedule.timezone : (input.timezone ?? this.config.timezone);
+    const nextRunAt = computeNextRunAt(schedule, now, timezone);
+    if (!nextRunAt) {
+      throw new Error("Cron schedule does not produce a valid future run time.");
+    }
+    if (schedule.type === "once" && nextRunAt.getTime() < now.getTime()) {
+      throw new Error("One-time Cron tasks must be scheduled in the future.");
+    }
+    return { schedule, timezone, nextRunAt };
   }
 
   async listTasks(input: CronListInput = {}): Promise<CronListResult> {
@@ -382,7 +387,9 @@ export class CronRuntime {
 
     const created = await this.createTask({
       message: task.message,
-      schedule: { type: "once", runAt: new Date().toISOString() },
+      // 与本文件其余路径一致使用注入时钟；run-now 孵化独立的一次性任务，
+      // 触发后自删（原任务计划不受影响），多次点击即多次立即执行。
+      schedule: { type: "once", runAt: this.now().toISOString() },
       projectKey: task.projectKey,
       sessionKey: task.originSessionKey,
       channelKey: task.originChannelKey,

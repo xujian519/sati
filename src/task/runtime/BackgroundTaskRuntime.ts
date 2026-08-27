@@ -54,6 +54,12 @@ export type BackgroundTaskRuntimeOptions = {
   spawn?: typeof spawn;
   /** Hard cap on simultaneous tasks (default: 32). */
   maxTasks?: number;
+  /**
+   * Terminal (completed/failed/cancelled) entries are dropped from the
+   * registry once they are older than this TTL. 0 keeps them until the
+   * process exits (unbounded memory — not recommended). Default: 1 hour.
+   */
+  finishedTaskTtlMs?: number;
   /** Optional completion sink for hosts that want one-shot background task notifications. */
   onCompletion?: BackgroundTaskCompletionHandler;
   /** Maximum bytes included in completion output previews (default: 4000). */
@@ -95,11 +101,14 @@ type RuntimeEntry = {
 
 const DEFAULT_GRACE_MS = 5_000;
 const DEFAULT_MAX_TASKS = 32;
+const DEFAULT_FINISHED_TASK_TTL_MS = 3_600_000;
 const DEFAULT_COMPLETION_PREVIEW_BYTES = 4_000;
 
 export class BackgroundTaskRuntime {
   private readonly entries = new Map<string, RuntimeEntry>();
-  private readonly options: Required<Pick<BackgroundTaskRuntimeOptions, "now" | "spawn" | "maxTasks">> &
+  private readonly options: Required<
+    Pick<BackgroundTaskRuntimeOptions, "now" | "spawn" | "maxTasks" | "finishedTaskTtlMs">
+  > &
     Pick<BackgroundTaskRuntimeOptions, "diskSpillDir" | "onCompletion" | "completionPreviewBytes">;
 
   constructor(options: BackgroundTaskRuntimeOptions = {}) {
@@ -107,6 +116,7 @@ export class BackgroundTaskRuntime {
       now: options.now ?? (() => new Date()),
       spawn: options.spawn ?? spawn,
       maxTasks: options.maxTasks ?? DEFAULT_MAX_TASKS,
+      finishedTaskTtlMs: options.finishedTaskTtlMs ?? DEFAULT_FINISHED_TASK_TTL_MS,
       diskSpillDir: options.diskSpillDir,
       onCompletion: options.onCompletion,
       completionPreviewBytes: options.completionPreviewBytes ?? DEFAULT_COMPLETION_PREVIEW_BYTES,
@@ -114,6 +124,7 @@ export class BackgroundTaskRuntime {
   }
 
   list(filter: SatiBackgroundTaskListFilter = {}): SatiBackgroundBashTask[] {
+    this.sweepFinishedTasks();
     const result: SatiBackgroundBashTask[] = [];
     for (const entry of this.entries.values()) {
       if (filter.agentId && entry.task.agentId !== filter.agentId) continue;
@@ -166,7 +177,7 @@ export class BackgroundTaskRuntime {
     const outcome = result === "timeout" ? "timeout" : result === "aborted" ? "aborted" : "completed";
     return {
       task: entry.task,
-      timedOut: outcome === "timeout" || outcome === "aborted",
+      timedOut: outcome !== "completed",
       outcome,
       waitedMs: Date.now() - startedAt,
     };
@@ -178,8 +189,15 @@ export class BackgroundTaskRuntime {
    * and `completed` / `failed` / `cancelled` later via the `exit` listener.
    */
   async start(spec: StartTaskSpec): Promise<SatiBackgroundBashTask> {
-    if (this.entries.size >= this.options.maxTasks) {
-      throw new Error(`BackgroundTaskRuntime: max tasks (${this.options.maxTasks}) exceeded.`);
+    this.sweepFinishedTasks();
+    // maxTasks 只约束同时活跃（未退出）的任务；已结束的 entry 不占名额，
+    // 否则长生命周期进程累计启动 maxTasks 次后就会永久抛错。
+    let liveTasks = 0;
+    for (const entry of this.entries.values()) {
+      if (entry.task.endedAt === undefined) liveTasks += 1;
+    }
+    if (liveTasks >= this.options.maxTasks) {
+      throw new Error(`BackgroundTaskRuntime: max concurrent tasks (${this.options.maxTasks}) exceeded.`);
     }
 
     const taskId = randomUUID();
@@ -237,14 +255,12 @@ export class BackgroundTaskRuntime {
     task.status = "running";
     task.pid = typeof child.pid === "number" ? child.pid : undefined;
 
-    child.stdout?.on("data", (chunk: Buffer | string) => {
+    const onChunk = (chunk: Buffer | string) => {
       output.append(chunk);
       task.outputBytes = output.totalBytes();
-    });
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      output.append(chunk);
-      task.outputBytes = output.totalBytes();
-    });
+    };
+    child.stdout?.on("data", onChunk);
+    child.stderr?.on("data", onChunk);
     child.on("error", (err: Error) => {
       output.append(Buffer.from(`error: ${err.message}\n`));
       task.outputBytes = output.totalBytes();
@@ -328,6 +344,22 @@ export class BackgroundTaskRuntime {
     if (!entry) throw new Error(`Unknown taskId: ${taskId}`);
     await entry.done;
     return entry.task;
+  }
+
+  /**
+   * Drop terminal entries whose `endedAt` is older than the finished-task TTL.
+   * Lazy sweep (start/list) — bounded memory without owning a timer. Tasks
+   * with `endedAt === undefined` are still pending/running and never swept.
+   */
+  private sweepFinishedTasks(): void {
+    const ttl = this.options.finishedTaskTtlMs;
+    if (ttl <= 0) return;
+    const nowMs = this.options.now().getTime();
+    for (const [taskId, entry] of this.entries) {
+      if (entry.task.endedAt !== undefined && nowMs - entry.task.endedAt.getTime() > ttl) {
+        this.entries.delete(taskId);
+      }
+    }
   }
 
   private notifyCompletion(task: SatiBackgroundBashTask, output: TaskOutputStore): void {

@@ -128,3 +128,59 @@ test("disk spill appends overflow chunks to <dir>/<taskId>.log", async () => {
   const onDisk = await readFile(spillFile, "utf8");
   assert.equal(onDisk, "first chunksecond chunk");
 });
+
+test("readSlice caps at a UTF-8 codepoint boundary instead of emitting U+FFFD", () => {
+  const store = new TaskOutputStore({ taskId: "t-utf8-1" });
+  store.append("你好世界"); // 每个汉字 3 字节，共 12 字节
+
+  // maxBytes=4 落在"好"的中间：不产出 U+FFFD，尾部半个字符留给下一轮。
+  const first = store.readSlice(0, 4);
+  assert.equal(first.content, "你");
+  assert.equal(first.nextOffset, 3);
+  assert.ok(!first.content.includes("\uFFFD"));
+
+  // 从回退后的 offset 继续，能完整解出剩余内容且无丢失。
+  const second = store.readSlice(first.nextOffset);
+  assert.equal(second.content, "好世界");
+  assert.equal(second.nextOffset, 12);
+  assert.equal(`${first.content}${second.content}`, "你好世界");
+});
+
+test("readSlice from a mid-codepoint offset skips the orphan continuation bytes", () => {
+  const store = new TaskOutputStore({ taskId: "t-utf8-2" });
+  store.append("你好"); // 6 字节
+
+  // offset=1 从"你"的第二个字节开始：跳过孤立 continuation 字节，从"好"起可解码。
+  const slice = store.readSlice(1);
+  assert.ok(!slice.content.includes("\uFFFD"));
+  assert.equal(slice.content, "好");
+});
+
+test("readSlice keeps ASCII slicing semantics unchanged", () => {
+  const store = new TaskOutputStore({ taskId: "t-utf8-3" });
+  store.append("hello world");
+  const slice = store.readSlice(0, 5);
+  assert.equal(slice.content, "hello");
+  assert.equal(slice.nextOffset, 5);
+  assert.equal(store.readSlice(5).content, " world");
+});
+
+test("readSlice re-serves a char split across stream chunks once complete", () => {
+  const store = new TaskOutputStore({ taskId: "t-utf8-4" });
+  // 模拟 stdout 分块把"好"劈开（子进程数据事件可任意切字节）。
+  const full = Buffer.from("你好", "utf8");
+  store.append(full.subarray(0, 4));
+
+  // 先轮询：此时"好"只有前 2 字节在缓冲，序列不完整 → 本轮只解出"你"，
+  // 不产 U+FFFD，nextOffset 回退到"好"的起点。
+  const first = store.readSlice(0);
+  assert.equal(first.content, "你");
+  assert.equal(first.nextOffset, 3);
+
+  // 写入方补齐"好"后再追加"世界"，从回退点重读即完整解出，无丢失。
+  store.append(full.subarray(4));
+  store.append("世界");
+  const second = store.readSlice(first.nextOffset);
+  assert.equal(second.content, "好世界");
+  assert.equal(`${first.content}${second.content}`, "你好世界");
+});

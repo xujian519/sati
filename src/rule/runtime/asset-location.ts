@@ -62,12 +62,3 @@ export function candidatePackDirs(name: string): string[] {
   candidates.push(join(workspaceRoot, "rules", "domains", name));
   return candidates;
 }
-
-/** 在候选目录中定位指定资产文件；未找到返回 null。 */
-export function resolveRuleAsset(fileName: string): string | null {
-  for (const dir of candidateRuleDirs()) {
-    const path = join(dir, fileName);
-    if (existsSync(path)) return path;
-  }
-  return null;
-}

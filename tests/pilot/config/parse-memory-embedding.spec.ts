@@ -210,3 +210,38 @@ describe("parseMemoryConfig knowledgeProfile 段", () => {
     );
   });
 });
+
+describe("parseMemoryConfig schedule 平铺字段与 schedule 段冲突", () => {
+  it("schedule 段存在时平铺字段被忽略并产生 warning 诊断", () => {
+    const { config, diagnostics } = parse({
+      enabled: true,
+      provider: "edgeclaw",
+      schedule: { autoDreamIntervalMinutes: 60 },
+      reasoningMode: "accuracy_first",
+      autoIndexIntervalMinutes: 5,
+    });
+    const warning = diagnostics.find(d => d.code === "CONFIG_MEMORY_FLAT_SCHEDULE_FIELDS_IGNORED");
+    assert.ok(warning, "应产生 FLAT_SCHEDULE_FIELDS_IGNORED 警告");
+    assert.equal(warning.severity, "warning");
+    assert.match(warning.message, /reasoningMode, autoIndexIntervalMinutes/);
+    // schedule 段优先，平铺值不生效（与既有语义一致）。
+    assert.equal(config?.schedule?.autoDreamIntervalMinutes, 60);
+    assert.equal(config?.schedule?.autoIndexIntervalMinutes, undefined);
+    assert.equal(config?.schedule?.reasoningMode, undefined);
+  });
+
+  it("schedule 段缺席时平铺字段照常生效且无警告", () => {
+    const { config, diagnostics } = parse({
+      enabled: true,
+      provider: "edgeclaw",
+      reasoningMode: "accuracy_first",
+      autoIndexIntervalMinutes: 5,
+    });
+    assert.equal(
+      diagnostics.find(d => d.code === "CONFIG_MEMORY_FLAT_SCHEDULE_FIELDS_IGNORED"),
+      undefined,
+    );
+    assert.equal(config?.schedule?.reasoningMode, "accuracy_first");
+    assert.equal(config?.schedule?.autoIndexIntervalMinutes, 5);
+  });
+});

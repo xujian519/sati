@@ -131,7 +131,7 @@ test("maxTasks limit throws on overflow", async () => {
   await runtime.start(startSpec());
   await runtime.start(startSpec());
   await runtime.start(startSpec());
-  await assert.rejects(() => runtime.start(startSpec()), /max tasks \(3\) exceeded/);
+  await assert.rejects(() => runtime.start(startSpec()), /max concurrent tasks \(3\) exceeded/);
   // Cleanup: let children exit so nothing dangles.
   for (const child of children) {
     child.emit("exit", 0, null);
@@ -275,4 +275,56 @@ test("waitFor convenience resolves to final task", async () => {
   children[0]!.emit("exit", 0, null);
   const awaited = await runtime.waitFor(task.taskId);
   assert.equal(awaited.status, "completed");
+});
+
+test("terminal entries do not count toward the concurrent maxTasks cap", async () => {
+  const { runtime, children } = makeRuntime({ maxTasks: 1 });
+  const first = await runtime.start(startSpec());
+  children[0]!.emit("exit", 0, null);
+  await runtime.waitFor(first.taskId);
+  assert.equal(runtime.get(first.taskId)?.status, "completed");
+
+  // 已结束任务不占名额：第二个任务可正常启动（修复前会永久抛 max tasks exceeded）。
+  const second = await runtime.start(startSpec());
+  assert.equal(second.status, "running");
+});
+
+test("running tasks still count toward maxTasks", async () => {
+  const { runtime } = makeRuntime({ maxTasks: 1 });
+  await runtime.start(startSpec());
+  await assert.rejects(() => runtime.start(startSpec()), /max concurrent tasks/);
+});
+
+test("finished tasks are swept after finishedTaskTtlMs", async () => {
+  let current = new Date("2026-01-01T00:00:00Z");
+  const { runtime, children } = makeRuntime({
+    finishedTaskTtlMs: 1_000,
+    now: () => current,
+  });
+  const task = await runtime.start(startSpec());
+  children[0]!.emit("exit", 0, null);
+  await runtime.waitFor(task.taskId);
+
+  // TTL 内保留可查询。
+  assert.equal(runtime.list().length, 1);
+  assert.equal(runtime.get(task.taskId)?.status, "completed");
+
+  // 时钟越过 TTL 后 list() 触发清扫，entry（含输出缓冲）被释放。
+  current = new Date("2026-01-01T00:01:01Z");
+  assert.equal(runtime.list().length, 0);
+  assert.equal(runtime.get(task.taskId), undefined);
+});
+
+test("finishedTaskTtlMs=0 disables sweeping", async () => {
+  let current = new Date("2026-01-01T00:00:00Z");
+  const { runtime, children } = makeRuntime({
+    finishedTaskTtlMs: 0,
+    now: () => current,
+  });
+  const task = await runtime.start(startSpec());
+  children[0]!.emit("exit", 0, null);
+  await runtime.waitFor(task.taskId);
+
+  current = new Date("2027-01-01T00:00:00Z");
+  assert.equal(runtime.list().length, 1);
 });

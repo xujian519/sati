@@ -3,6 +3,7 @@ export function isValidCronTimezone(timezone: string): boolean {
     new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
     return true;
   } catch {
+    // Intl throws a RangeError for non-IANA timezone strings → invalid.
     return false;
   }
 }

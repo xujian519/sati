@@ -90,7 +90,7 @@ export class CronFire {
         taskId: task.taskId,
         projectKey: task.projectKey,
         timestamp: startedAt.toISOString(),
-        title: task.message.trimStart().split(/\r?\n/, 1)[0]?.trim().slice(0, 120),
+        title: firstLineTitle(task.message),
       });
       for await (const event of this.deps.gateway.submitTurn({
         sessionKey: task.sessionKey,
@@ -185,7 +185,7 @@ export class CronFire {
       taskId: task.taskId,
       projectKey: task.projectKey,
       timestamp: finishedAt.toISOString(),
-      title: task.message.trimStart().split(/\r?\n/, 1)[0]?.trim().slice(0, 120),
+      title: firstLineTitle(task.message),
       error,
     });
     await this.deliverResult(task, runId, outcome, assistantText, error).catch((deliveryError: unknown) => {
@@ -195,7 +195,7 @@ export class CronFire {
         error: deliveryError instanceof Error ? deliveryError.message : String(deliveryError),
       });
     });
-    await this.updateTaskAfterRun(task, runId, finishedAt, outcome).catch((updateError: unknown) => {
+    await this.updateTaskAfterRun(task, runId, finishedAt).catch((updateError: unknown) => {
       this.deps.logger?.warn("cron task post-run update failed", {
         taskId: task.taskId,
         runId,
@@ -239,12 +239,7 @@ export class CronFire {
     });
   }
 
-  private async updateTaskAfterRun(
-    task: CronTask,
-    runId: string,
-    finishedAt: Date,
-    outcome: CronRunOutcome,
-  ): Promise<void> {
+  private async updateTaskAfterRun(task: CronTask, runId: string, finishedAt: Date): Promise<void> {
     if (task.schedule.type === "once") {
       let deleted = false;
       await this.deps.store.updateTask(task.taskId, current => {
@@ -277,8 +272,11 @@ export class CronFire {
         updatedAt: finishedAt.toISOString(),
       };
     });
-    void outcome;
   }
+}
+
+function firstLineTitle(message: string): string | undefined {
+  return message.trimStart().split(/\r?\n/, 1)[0]?.trim().slice(0, 120);
 }
 
 function matchesScheduledSnapshot(current: CronTask, snapshot: CronTask): boolean {

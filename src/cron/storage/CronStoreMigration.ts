@@ -153,6 +153,7 @@ async function readRuns(path: string): Promise<Pick<StoreSnapshot, "runs" | "inv
         invalidRunLines.push(line);
       }
     } catch {
+      // 坏行原样存入 invalidRunLines 随迁移保留，不丢任何历史数据。
       invalidRunLines.push(line);
     }
   }
@@ -374,6 +375,7 @@ async function atomicWrite(path: string, content: string): Promise<void> {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "EPERM" || code === "EACCES") {
       await copyFile(tempPath, path);
+      // temp 已消费完，清理尽力而为（失败不影响已完成的写入）。
       await unlink(tempPath).catch(() => undefined);
       return;
     }

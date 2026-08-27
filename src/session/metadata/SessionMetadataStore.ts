@@ -23,11 +23,12 @@ export class SessionMetadataStore {
     await this.record(turnId, { title, updatedAt: this.now().toISOString() });
   }
 
+  /**
+   * Record an AI-generated title. Unconditional: overwrite protection
+   * (first writer wins while a custom title / aiTitle exists) is enforced by
+   * the callers, which check the snapshot before calling.
+   */
   async saveAiTitle(aiTitle: string, turnId = "metadata"): Promise<void> {
-    if (this.metadata.title) {
-      await this.record(turnId, { aiTitle, updatedAt: this.now().toISOString() });
-      return;
-    }
     await this.record(turnId, { aiTitle, updatedAt: this.now().toISOString() });
   }
 

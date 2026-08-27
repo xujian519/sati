@@ -481,7 +481,7 @@ async function readTranscriptLegacy(path: string, options: ReadTranscriptOptions
     const cached = transcriptCache.get(path);
     if (cached !== undefined && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
       // 返回浅拷贝数组（元素共享），防止调用方修改数组污染缓存。
-      return { entries: [...cached.entries], diagnostics: cached.diagnostics };
+      return { entries: [...cached.entries], diagnostics: [...cached.diagnostics] };
     }
     return await readAndCache(path, options, fileStat);
   } catch (error) {

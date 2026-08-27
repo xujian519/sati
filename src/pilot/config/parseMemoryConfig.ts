@@ -47,7 +47,11 @@ export function parseMemoryConfig(
   }
 
   const memoryModel = parseMemoryModelRef(rawMemory.model, diagnostics, modelConfig);
-  const schedule = parseMemorySchedule(rawMemory.schedule, diagnostics) ?? buildScheduleFromFlatFields(rawMemory);
+  const scheduleSection = parseMemorySchedule(rawMemory.schedule, diagnostics);
+  if (scheduleSection !== undefined) {
+    warnIgnoredFlatScheduleFields(rawMemory, diagnostics);
+  }
+  const schedule = scheduleSection ?? buildScheduleFromFlatFields(rawMemory);
   const embedding = parseMemoryEmbeddingConfig(rawMemory.embedding, diagnostics, modelConfig);
   const knowledgeProfile = parseKnowledgeProfile(rawMemory.knowledgeProfile, diagnostics);
 
@@ -356,6 +360,30 @@ function buildScheduleFromFlatFields(rawMemory: Record<string, unknown>): PilotM
     schedule.autoDreamIntervalMinutes = rawMemory.autoDreamIntervalMinutes;
   }
   return Object.keys(schedule).length > 0 ? schedule : undefined;
+}
+
+/**
+ * memory.schedule 段存在时，顶层平铺 schedule 字段不会生效（fallback 仅在
+ * schedule 段缺席时走）。逐条判定平铺值是否会被 buildScheduleFromFlatFields
+ * 消费，是则告警，让「写了但不生效」可审计而不是静默忽略。
+ */
+function warnIgnoredFlatScheduleFields(rawMemory: Record<string, unknown>, diagnostics: PilotConfigDiagnostic[]): void {
+  const ignored: string[] = [];
+  if (readOptionalMemoryReasoningMode(rawMemory.reasoningMode) !== undefined) ignored.push("reasoningMode");
+  if (typeof rawMemory.autoIndexIntervalMinutes === "number" && rawMemory.autoIndexIntervalMinutes >= 0) {
+    ignored.push("autoIndexIntervalMinutes");
+  }
+  if (typeof rawMemory.autoDreamIntervalMinutes === "number" && rawMemory.autoDreamIntervalMinutes >= 0) {
+    ignored.push("autoDreamIntervalMinutes");
+  }
+  if (ignored.length === 0) return;
+  diagnostics.push({
+    code: "CONFIG_MEMORY_FLAT_SCHEDULE_FIELDS_IGNORED",
+    severity: "warning",
+    message: `memory.${ignored.join(", ")} is ignored because memory.schedule is configured.`,
+    path: "memory.schedule",
+    recoverable: true,
+  });
 }
 
 function parseMemoryModelRef(

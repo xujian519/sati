@@ -127,7 +127,7 @@ export function nextOpenNumber(state: WorkspaceLedgerState): number {
  * because a sibling edit was rejected.
  */
 export function applyWorkspaceNote(state: WorkspaceLedgerState, note: WorkspaceNoteInput): WorkspaceNoteResult {
-  const next: WorkspaceLedgerState = cloneLedger(state);
+  const next: WorkspaceLedgerState = cloneWorkspaceLedgerState(state);
   const rejected: string[] = [];
   const hasGoal = note.goal !== undefined && note.goal.trim().length > 0;
   const hasNext = note.next !== undefined && note.next.trim().length > 0;
@@ -278,10 +278,6 @@ function cleanScalar(value: string | undefined): string | null {
 
 function maxNumber(numbers: number[]): number {
   return numbers.length === 0 ? 0 : Math.max(...numbers);
-}
-
-function cloneLedger(state: WorkspaceLedgerState): WorkspaceLedgerState {
-  return cloneWorkspaceLedgerState(state);
 }
 
 function deepEqualWorkspaceLedger(a: WorkspaceLedgerState, b: WorkspaceLedgerState): boolean {

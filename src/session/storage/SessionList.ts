@@ -1,5 +1,5 @@
 import { open, readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { TtlCache } from "../../shared/ttl-cache.js";
 import { mergeMetadata } from "../metadata/SessionMetadataStore.js";
@@ -92,6 +92,7 @@ async function scanChatDir(chatDir: string): Promise<SessionInfo[]> {
     try {
       names = (await readdir(chatDir)).filter(name => name.endsWith(".jsonl")).sort();
     } catch {
+      // 目录不可读即无会话；即便命中缓存也不回退缓存数据。
       return [];
     }
     if (arraysEqual(cached.names, names)) {
@@ -109,6 +110,7 @@ async function scanChatDirUncached(chatDir: string): Promise<{ sessions: Session
   try {
     names = await readdir(chatDir);
   } catch {
+    // 目录不存在/不可读 → 空列表；后续目录可读时文件名集合变化会触发重扫。
     return { sessions: [], names: [] };
   }
   const jsonlNames = names.filter(name => name.endsWith(".jsonl"));
@@ -302,6 +304,7 @@ async function readLastSessionMetadata(path: string): Promise<SessionMetadataVal
     if (lineBytes > 0 || lineChunks.length > 0) finishLine();
     return lastMetadata;
   } catch {
+    // transcript 打开/分块读取失败 → 放弃 metadata 兜底，调用方回落 fast path 结果。
     return undefined;
   } finally {
     await handle?.close().catch(() => {});
@@ -337,6 +340,7 @@ function parseSessionMetadataLine(line: string): SessionMetadataValue | undefine
     }
     return parsed;
   } catch {
+    // 残缺/非 JSON 行 → 忽略该条 metadata 记录。
     return undefined;
   }
 }
@@ -398,6 +402,7 @@ function firstAcceptedInputText(head: string): string | undefined {
         return text.trim();
       }
     } catch {
+      // 首个 accepted_input 行解析失败 → 放弃 firstPrompt 提取（不尝试后续行）。
       return undefined;
     }
   }
@@ -457,74 +462,4 @@ function unescapeJsonString(value: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[\\^$*+?.()|[\]{}]/g, "\\$&");
-}
-
-/** Options for listing sessions across all known projects. */
-export type ListAllSessionsOptions = {
-  pilotHome: string;
-  limit?: number;
-  offset?: number;
-  includeInternal?: boolean;
-};
-
-/**
- * List sessions across **all** projects under `{pilotHome}/projects/`. Each
- * project directory is scanned for `.jsonl` files in its `chats/` subfolder.
- * Results are sorted by lastModified descending (most-recent first), then
- * paginated via `limit` / `offset`.
- */
-export async function listAllSessions(options: ListAllSessionsOptions): Promise<SessionInfo[]> {
-  const projectsDir = resolve(options.pilotHome, "projects");
-  let projectIds: string[];
-  try {
-    projectIds = await readdir(projectsDir);
-  } catch {
-    return [];
-  }
-
-  const all: SessionInfo[] = [];
-  for (const projectId of projectIds) {
-    const chatDir = join(projectsDir, projectId, "chats");
-    const sessions = (await scanChatDir(chatDir)).filter(
-      session => options.includeInternal || !isInternalSession(session.sessionId),
-    );
-    for (const session of sessions) {
-      all.push({ ...session, cwd: projectId });
-    }
-  }
-
-  all.sort((left, right) => right.lastModified - left.lastModified);
-  return paginateSessions(all, options.limit, options.offset);
-}
-
-/** Options for title-based session search. */
-export type SearchSessionsByTitleOptions = {
-  projectRoot: string;
-  pilotHome: string;
-  query: string;
-  limit?: number;
-  includeInternal?: boolean;
-};
-
-/**
- * Search sessions within a project by matching `query` (case-insensitive
- * substring) against `customTitle`, `aiTitle`, and `firstPrompt`. Returns
- * results sorted by lastModified descending.
- */
-export async function searchSessionsByTitle(options: SearchSessionsByTitleOptions): Promise<SessionInfo[]> {
-  const chatDir = getPilotProjectChatDir(options.projectRoot, options.pilotHome);
-  const all = (await scanChatDir(chatDir)).filter(
-    session => options.includeInternal || !isInternalSession(session.sessionId),
-  );
-
-  const needle = options.query.toLowerCase();
-  const results: SessionInfo[] = [];
-  for (const info of all) {
-    const haystack = [info.customTitle, info.aiTitle, info.firstPrompt].filter(Boolean).join(" ").toLowerCase();
-    if (haystack.includes(needle)) {
-      results.push({ ...info, cwd: options.projectRoot });
-    }
-  }
-
-  return options.limit ? results.slice(0, options.limit) : results;
 }

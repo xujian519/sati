@@ -82,8 +82,8 @@
 | C18 | src/knowledge | 44/7.1K；case-law、legal、kg-store、wiki | ✅ 2026-08-26 |
 | C19 | src/router | 26/4.3K；RouterRuntime.ts 1258 | ✅ 2026-08-27 |
 | C20 | src/always-on | 38/8K；DiscoveryFire.ts 1252 | ✅ 2026-08-27 |
-| C21 | src/session + task + status + pilot | 34/4.8K + 3 小模块 | ⬜ |
-| C22 | src/cron + src/rule | 18/3K + 11/1.9K | ⬜ |
+| C21 | src/session + task + status + pilot | 34/4.8K + 3 小模块 | ✅ 2026-08-27 |
+| C22 | src/cron + src/rule | 18/3K + 11/1.9K | ✅ 2026-08-27 |
 | C23 | src/mcp + literature + methodology | 16/1.4K + 13/1.3K + 13/0.7K | ⬜ |
 | C24 | src/extension + permission + lifecycle | SkillManager.ts 904 | ⬜ |
 | C25 | src/web + workflow + telemetry | 12/3.5K + 11/1.8K + 5/0.8K | ⬜ |
@@ -140,6 +140,9 @@
 | 2026-08-26 | C18 | src/knowledge | P2 冗余：assemble.ts 末尾重复 re-export diagnostics.js 能力符号（resolveKnowledgeCapabilities/formatKnowledgeCapabilities/logKnowledgeCapabilities + 4 type），全仓（src+tests）零消费（index.ts 已从 diagnostics.js 直接导出同名）→ 删除；P3 注释：9 处无参 catch 补 fail-safe 意图注释（version-meta:120/diagnostics:40/legal-search:92/personal-note-store:134/fts:22/embedding-consistency:59/wiki-card-loader:325/kg row-mapper:58/schema-introspector:85）；P0/P1 无；横切零 console/any/TODO、无嵌套三元；记录不处理：KnowledgeLawSearchOptions2 命名瑕疵（改公共导出面风险大）、ipc-classifier.ts 779 与 case-law-search.ts 656 超 600 行（待拆建议） | 1（refactor） | ✅ |
 | 2026-08-27 | C19 | src/router | P3 注释：无参 catch 补 fail-safe 意图注释 ×2（RouterRuntime.ts:1132 protocolForProvider 未知 provider 回退默认 openai 协议、TokenStatsCollector.ts:291 rebuildFromJsonl 读 stats.jsonl 失败按空数据重建）；P0/P1/P2 无；横切零 console/any/@ts-expect-error/TODO/死代码、无嵌套三元；记录不处理：RouterRuntime.ts 1258 行（保守档待拆建议） | 1（refactor） | ✅ |
 | 2026-08-27 | C20 | src/always-on | P3 注释：无参 catch 补 fail-safe 意图注释 ×8（DiscoveryStateStore:40、WorkCycleStore:99、SnapshotCopyProvider:30、DiscoveryPlanService:266、AlwaysOnRunHistoryService:132/141/419/516）；P0/P1/P2 无；横切零 console/any/@ts-expect-error/TODO/死代码、无嵌套三元；记录不处理：DiscoveryFire.ts 1252 行（保守档待拆建议） | 2（refactor + docs） | ✅ |
+| 2026-08-27 | C21 | src/session + task + status + pilot | P2 死代码：session/worktree 孤儿 barrel、SessionList listAllSessions/searchSessionsByTitle（含 2 options 类型）、pilot createPilotConfigStore/PilotRouterConfig/redactedValue、task/status/pilot barrel 死 re-export ×11；P2 重复收敛：mergeMetadata ×2→import SessionMetadataStore、BackgroundTaskRuntime stdout/stderr handler→onChunk、parseToolsConfig enabled 块 ×2→parseEnabledFlag、FileArtifactCollector mimeType 双调用、WorkspaceLedger cloneLedger 单调用点内联；P3 无参 catch 补 fail-safe 意图注释 ×11 + timedOut 等价简化；P0 候选 ×6 只登记（saveAiTitle 死条件、safeReadText 恒等分支、legacy 缓存 diagnostics 未拷贝、BTR entries 永不清理+maxTasks 上限、memory 平铺 schedule 字段静默失效、TaskOutputStore.readSlice 字节切片切碎 UTF-8）；记录不处理：replaySubagentTranscript 零消费（C3.S5 预留 SDK 面，按 C07/C17 判例保留）、getDiagnostics 零消费、跨文件重复（isNotFoundError ×3、provider/model 拆分 ×3、readOptionalPositiveInteger ×2）、killForAgent/killAll 微重复、isRecord 数组语义差异；测试缺口登记：resumeAgentSession/formatChatHistorySearch 零直接测试 | 4（refactor×4） | ✅ |
+| 2026-08-27 | C22 | src/cron + src/rule | P2 死代码：CronTaskStore getTask/replaceTask（连带 cron-fire.spec mock 脚手架 replaceCalls/replaceResults/replaceOk）、resolveRuleAsset、barrel defaultCronConfig；P2 死参数 CronFire.updateTaskAfterRun outcome（连带 void outcome; 删除）、CronScheduler 冗余 `as Promise<void>`；P2 重复收敛：createTask/updateTask 归一化+校验块 ×2→resolveScheduleAndNextRunAt、标题截断 ×2→firstLineTitle、patent-compliance 降级告警序列 ×3→loadComplianceBase、CronTaskStore normalize 双调用+`!` 断言 ×2；P2 恒真三元 RuleEngine:121（CITATION_RE 捕获组恒等）→ `match[1]`；P3 无参 catch 补意图注释 ×6（CronTimezone:5、CronStoreMigration:155/377、CronTaskStore:116/198、RuleEngine:97）+ mapCronRunOutcome 防御分支注释；P0 候选 ×2 只登记（CronManager.ensureRuntime start 失败永不重试、runTaskNow 绕过注入时钟+一次性任务累积）；记录不处理：RuleLoader structural/synonym 要素循环相似提取（漂移风险，C12 判例）、CronManager ENOENT catch ×3（warn 文案/行为各异）、原子写跨文件重复；测试缺口登记：CronManager/parseCronConfig/asset-location 无直接测试 | 2（refactor×2） | ✅ |
+| 2026-08-28 | FIX | C21/C22 P0 候选批次修复 | 8 项按 ①②>③④>⑤⑥>⑦⑧ 排序逐项修复，每项独立提交 + 附测试（关键回归用例先验证旧代码红再恢复绿）：①BTR 注册表（maxTasks 只数活跃任务 + 终态 entry finishedTaskTtlMs 默认 1h 惰性清扫）②CronManager.ensureRuntime 失败回滚注册表 + stop 兜底，下次调用重建重试（新增 cron-manager.spec，CronManager 首次有测试）③memory 平铺 schedule 字段被 schedule 段遮蔽时发 CONFIG_MEMORY_FLAT_SCHEDULE_FIELDS_IGNORED 警告（语义不变）④TaskOutputStore.readSlice UTF-8 码点边界对齐（尾部不完整序列回退 nextOffset 零丢失，头部孤立 continuation 跳过）⑤FileHistoryStore.safeReadText 非 ENOENT 经 options.warn 告警（stats fail-safe 语义不变）⑥TranscriptReader legacy 缓存命中 diagnostics 拷贝（与 entries/tail 路径一致）⑦runTaskNow 改用注入时钟（run-now 孵化-自删语义保留）⑧saveAiTitle 死分支移除，JSDoc 写明覆盖保护由调用方负责（TurnRunner 已实现）；决策记录 docs/notes/implemented/2026-08-28-p0-fix-batch-c21-c22.md | 8（fix×7 + refactor×1） | ✅ |
 
 ### 日卡记录
 
@@ -346,6 +349,47 @@
 - **精炼项**：无参 catch 补 fail-safe 意图注释 ×9、冗余 re-export 删除 ×1（净 +9/−11，-2 行，行为零变化）。
 - **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；`pnpm lint` 全量 ✅（event-matrix/patent-sop/workflow-docs/html-templates/skills 各子门禁 fresh，无事件面改动故无需重生成矩阵）；改动目录 `biome check src/knowledge` ✅（46 文件）；全仓 format:check 仅报 `.claude/settings.local.json`（未跟踪/pre-existing，C15/C17 已记录，非本次引入）；`pnpm test` 3812 pass / 0 fail / 4 skip ✅。
 - **提交**：`refactor(knowledge): 为 9 处无参 catch 补 fail-safe 意图注释，删除 assemble 冗余 re-export（C18）`
+
+#### C21 src/session + task + status + pilot（2026-08-27）
+
+- **审阅范围**：54 文件 / ~9.5K 行（session 34 / 5971、task 4 / 587、status 2 / 179、pilot 14 / 2760）。
+- **审阅发现**：
+  - P0 候选 ×6（只登记，另开 fix 卡）：
+    1. `SessionMetadataStore.saveAiTitle` 两分支逐字相同死条件（疑"已有 title 不覆盖"逻辑未完成）；
+    2. `FileHistoryStore.safeReadText` if/return-null 与 fallthrough return-null 恒等——非 ENOENT 错误（如 EACCES）被静默当"文件不存在"计入 diff stats；
+    3. `TranscriptReader.ts:484` legacy 缓存路径只拷贝 entries 不拷贝 diagnostics（与 :173 tail 路径不一致），调用方 mutate 可污染进程级缓存；
+    4. `BackgroundTaskRuntime.entries` 永不清理 + `maxTasks`（32）硬上限——长生命周期 gateway 累计 32 次 start() 后永久抛错，已完成任务 entry + 1MB 环形缓冲常驻；
+    5. `parseMemoryConfig` 平铺 schedule 字段（reasoningMode/autoIndex…）在 `schedule:` 段存在时静默失效且零诊断；
+    6. `TaskOutputStore.readSlice` 按字节切片可切碎 UTF-8 多字节字符（预览层 U+FFFD，nextOffset 字节语义自洽）。
+  - P2 死代码删除：`src/session/worktree/index.ts` 孤儿 barrel（7 个 shared/paths re-export 全仓零消费）+ `session/index.ts` 对应转出；`SessionList.listAllSessions`/`searchSessionsByTitle` + `ListAllSessionsOptions`/`SearchSessionsByTitleOptions`（零消费零测试）；pilot `createPilotConfigStore`（async 转发 Sync 版，零消费）、`PilotRouterConfig` 别名、`PilotConfigDiagnostic.redactedValue` 死字段（零写零读）；barrel 死 re-export ×11（pilot config/index.ts ×4、task/index.ts ×3、status/index.ts ×3；类型本体保留，模块内部仍在用）。
+  - P2 重复收敛：`mergeMetadata` 在 TranscriptReplay.ts 与 SessionMetadataStore.ts 逐字重复 ×2 → TranscriptReplay 改 import（metadata→transcript 仅类型依赖，无环）；BackgroundTaskRuntime stdout/stderr data handler 同体 ×2 → `onChunk`；parseToolsConfig enabled 解析块 ×2（仅 code/path 前缀差异）→ `parseEnabledFlag` helper（诊断消息逐字保留）。
+  - P3：无参 catch 补 fail-safe 意图注释 ×11（FileHistoryStore:350、SessionLiteReader:44、SessionList:94/111/304/339/400、ToolResultsCleanup:81、searchChatHistory:240/260/317；原 19 处中 8 处已有注释、1 处随 listAllSessions 删除）；`wait().timedOut` 改 `outcome !== "completed"`（三分联合上数学等价）；FileArtifactCollector mimeTypeForPath 同参双调用提局部变量；WorkspaceLedger `cloneLedger` 单调用点单行转发内联。
+  - 记录不处理：`replaySubagentTranscript.ts` 零消费零测试，但系 C3.S5 规划的 SDK 预留入口（按 C07/C17 占位桩判例保留）；pilot `getDiagnostics()` 接口方法零调用（API 面收缩留决策）；跨文件重复：`isNotFoundError` filesystem 内 ×3、provider/model 拆分 ×3、`readOptionalPositiveInteger` ×2（C04 判例：跨文件重构不处理）；`killForAgent`/`killAll` 各 4 行微重复（提取加间接层）；status 本地 `isRecord` 不排数组与 schema.ts 规范版不一致（当前调用点无数组入参）；types.ts 死 union 成员（"project"/"bootstrap"/"error"/"invalid"）疑预留契约面。
+  - 测试缺口登记：`resumeAgentSession.ts`（138 行，仅集成间接触达）、`formatChatHistorySearch.ts` 零直接测试。
+  - P0（已证实行为缺陷）：无。横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME。
+- **精炼项**：死代码/死导出删除 15 组、重复提取 3 组、catch 注释 ×11、微清理 3 处（净 -约 330 行）
+- **验证**：`pnpm typecheck` ✅（含 edgeclaw-memory-core）；改动目录 `biome check` ✅（92 文件）、`eslint` ✅ 0 error/0 warning；`pnpm lint` 全量 ✅（event-matrix 重生成：session/cron 行号偏移）；`pnpm format:check` ✅；`pnpm test` 3924 pass / 0 fail / 4 skip ✅（session/task/status/pilot 套件全绿）
+- **提交**：`refactor(session): drop dead exports, merge duplicate mergeMetadata, document fallback catches`、`refactor(task): drop dead barrel re-exports, dedupe child process output handlers`、`refactor(status): drop dead type re-exports`、`refactor(pilot): drop dead config exports and dedupe enabled-flag parsing`
+- **fix 卡回执（2026-08-28）**：本卡登记的 6 个 P0 候选已按排序修复（①④⑤⑥ 直接修复，③ 改为告警可审计，⑧ 判定为调用方已实现保护后移除死分支），详见进度表 2026-08-28 FIX 行与 `docs/notes/implemented/2026-08-28-p0-fix-batch-c21-c22.md`。
+
+#### C22 src/cron + src/rule（2026-08-27）
+
+- **审阅范围**：29 文件 / ~4.9K 行（cron 18 / 3036、rule 11 / 1867）。
+- **审阅发现**：
+  - P0 候选 ×2（只登记，另开 fix 卡）：
+    1. `CronManager.ensureRuntime`：`runtime.start()` reject 后 runtime 已入 `this.runtimes` 而 starting 条目被 finally 清除，后续 ensureRuntime 命中 existing 分支直接返回未启动 runtime——定时任务静默不触发、无重试无告警；
+    2. `CronRuntime.runTaskNow` 裸 `new Date()` 绕过注入时钟（同文件其余路径均 `this.now()`，fake-clock 测试漂移），且多次 run-now 累积一次性任务、原任务 lastRunId 不更新。
+  - P2 死代码删除：`CronTaskStore.getTask`（全仓零消费）、`replaceTask`（生产零消费，连带 cron-fire.spec mock 的 replaceTask/replaceCalls/replaceResults/replaceOk 死脚手架）；`resolveRuleAsset`（孤儿导出，模块头注释描述的定位策略复用属实，仅该函数无消费者）；cron barrel `defaultCronConfig`（模块内 parseCronConfig 自用保留）。
+  - P2 重复收敛：CronRuntime createTask/updateTask「归一化+时区+nextRunAt 校验」块 ×2（8 行，错误文案逐字保留）→ 私有 `resolveScheduleAndNextRunAt`；CronFire 标题截断表达式 ×2 → `firstLineTitle`；patent-compliance「加载 compliance → 缺失即降级告警」序列 ×3 → `loadComplianceBase`；CronTaskStore listRuns/readTaskFile `normalizeRun(parsed) ? [normalizeRun(parsed)!] : []` 双调用 ×2 → 局部变量消除断言。
+  - P2 一致性：`CronFire.updateTaskAfterRun` 死参数 `outcome`（`void outcome;` 压 lint）→ 连带删除；`CronScheduler.scheduleNextTick` 冗余 `as Promise<void>`（catch 返回已是 Promise<void>）；`RuleEngine:121` 恒真三元（CITATION_RE 捕获组只会是两法条名之一）→ `const statuteName = match[1]`（C01 死三元判例）。
+  - P3：无参 catch 补意图注释 ×6（CronTimezone:5 Intl RangeError→无效时区、CronStoreMigration:155 坏行入 invalidRunLines 不丢数据、:377 copyFile 回退 temp 清理、CronTaskStore:116 坏行跳过、:198 temp unlink ENOENT best-effort、RuleEngine:97 非法正则防御性视为不命中）+ `mapCronRunOutcome` 末行补「四值已穷尽、防御脏数据」注释。
+  - 记录不处理：RuleLoader structural_analysis/synonym_match 要素循环近逐字（字段名/regex 校验/错误文案三处差异，参数化有漂移风险，C12 判例）；CronManager discoverCronProjectKeys ENOENT catch ×3（warn 文案与 rethrow 行为各异）；`CronTaskStore.writeTaskFile` 与 `CronStoreMigration.atomicWrite` 原子写跨文件重复（后续统一 util）；RuleLoader.parseCheck 116 行 / CronFire.runTask 158 行 5 层嵌套（拆分留专项）；`asset-location` findWorkspaceRoot barrel 导出零外部消费（API 面保留）。
+  - 测试缺口登记：`CronManager`（332 行，含 P0-1 场景）无任何测试、`parseCronConfig` diagnostics 无直接测试、`asset-location` 无直接 spec。
+  - P0（已证实行为缺陷）：无。横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO、零嵌套三元（修复前仅 1 处恒真）。`src/cron/tool/` inputSchema 契约一字未动。
+- **精炼项**：死代码/死导出删除 5 组、重复提取 4 组、死参数/断言清理 3 处、恒真三元 1 处、catch/防御注释 ×7
+- **验证**：`pnpm typecheck` ✅；改动目录 `biome check` ✅、`eslint` ✅ 0 error/0 warning；`pnpm lint` 全量 ✅；`pnpm format:check` ✅；`pnpm test` 3924 pass / 0 fail / 4 skip ✅（cron/rule 套件全绿，cron-fire spec mock 同步精简）
+- **提交**：`refactor(cron): drop dead store methods, extract schedule resolution, document fallback catches`、`refactor(rule): drop dead asset resolver, dedupe compliance base loading`
+- **fix 卡回执（2026-08-28）**：本卡登记的 2 个 P0 候选已修复（ensureRuntime 失败回滚重试；runTaskNow 对齐注入时钟，孵化-自删语义经决策保留），CronManager 测试缺口已随 fix 卡补齐（cron-manager.spec 3 用例），详见进度表 2026-08-28 FIX 行与 `docs/notes/implemented/2026-08-28-p0-fix-batch-c21-c22.md`。
 
 ## 六、基线（2026-08-18 实测）
 
