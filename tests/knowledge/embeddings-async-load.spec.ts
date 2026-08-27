@@ -38,10 +38,14 @@ function createVectorDb(chunkCount: number): string {
   );
   const buf = Buffer.alloc(4 * 4);
   [1, 0, 0, 0].forEach((v, j) => buf.writeFloatLE(v, j * 4));
+  // 单事务批量插入：逐条 autocommit 会各 fsync 一次（11000 条约 16s，
+  // CI 单文件 60s 超时上限下易被取消）。包一层事务降到毫秒级。
+  db.exec("BEGIN");
   for (let i = 0; i < chunkCount; i += 1) {
     const cid = insChunk.run(i).lastInsertRowid as number;
     insEmbedding.run(cid, buf);
   }
+  db.exec("COMMIT");
   db.close();
   return dbPath;
 }
