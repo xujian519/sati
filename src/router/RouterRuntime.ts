@@ -1130,6 +1130,7 @@ function protocolForProvider(modelRuntime: ModelRuntime, providerId: string): Mo
   try {
     return modelRuntime.getProviderProtocol(providerId) ?? "openai";
   } catch {
+    // 未知 provider：回退默认 openai 协议，后续由 validateModelRequest 兜底报错。
     return "openai";
   }
 }
