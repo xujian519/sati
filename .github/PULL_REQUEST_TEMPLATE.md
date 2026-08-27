@@ -4,6 +4,11 @@
 
 关联 Issue: #<!-- 填写 Issue 编号，无则删除此行 -->
 
+<!-- 可回溯来源（门禁会识别任一，见 check-pr-issue.mjs）：
+     - 关联 issue：`Closes #123` / `Fixes #123` / `关联 Issue: #123`
+     - 偿还技术债：写债编号 `TD-*-*`（见 docs/technical-debt/backlog.md）
+     - 确无来源：声明「无关联 issue」 -->
+
 ## 变更类型
 
 - [ ] 🆕 feat: 新功能
