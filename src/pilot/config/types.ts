@@ -24,7 +24,6 @@ export type PilotConfigDiagnostic = {
   path?: string;
   source?: Pick<PilotConfigSource, "kind" | "path" | "phase">;
   hint?: string;
-  redactedValue?: string;
   recoverable?: boolean;
 };
 
@@ -75,13 +74,6 @@ export type PilotAgentConfig = {
     timeoutMs?: number;
   };
 };
-
-/**
- * Re-export of the router's structured config so callers that already depend
- * on `PilotConfig` keep a single import path. The actual definition lives in
- * `src/router/config/schema.ts`.
- */
-export type PilotRouterConfig = RouterConfig;
 
 export type PilotMemoryApiType = "openai-responses" | "responses" | "openai-completions" | "anthropic" | "google";
 export type PilotMemoryReasoningMode = "answer_first" | "accuracy_first";

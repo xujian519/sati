@@ -62,6 +62,28 @@ export function parseToolsConfig(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
+/** Shared `enabled` boolean parser; emits a fatal diagnostic on non-boolean values. */
+function parseEnabledFlag(
+  raw: Record<string, unknown>,
+  code: string,
+  fieldPath: string,
+  diagnostics: PilotConfigDiagnostic[],
+): boolean | undefined {
+  const value = raw.enabled;
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    diagnostics.push({
+      code,
+      severity: "fatal",
+      message: `${fieldPath} must be a boolean.`,
+      path: fieldPath,
+      recoverable: false,
+    });
+    return undefined;
+  }
+  return value;
+}
+
 function parseWebSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): PilotWebSearchConfig | undefined {
   if (raw === undefined) {
     return undefined;
@@ -79,19 +101,8 @@ function parseWebSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): Pil
 
   const result: PilotWebSearchConfig = {};
 
-  if (raw.enabled !== undefined) {
-    if (typeof raw.enabled !== "boolean") {
-      diagnostics.push({
-        code: "TOOLS_WEB_SEARCH_ENABLED_INVALID",
-        severity: "fatal",
-        message: "tools.webSearch.enabled must be a boolean.",
-        path: "tools.webSearch.enabled",
-        recoverable: false,
-      });
-    } else {
-      result.enabled = raw.enabled;
-    }
-  }
+  const enabled = parseEnabledFlag(raw, "TOOLS_WEB_SEARCH_ENABLED_INVALID", "tools.webSearch.enabled", diagnostics);
+  if (enabled !== undefined) result.enabled = enabled;
 
   if (raw.provider !== undefined) {
     if (raw.provider !== "glm" && raw.provider !== "tavily" && raw.provider !== "custom") {
@@ -330,19 +341,8 @@ function parsePaperSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): P
 
   const result: PilotPaperSearchConfig = {};
 
-  if (raw.enabled !== undefined) {
-    if (typeof raw.enabled !== "boolean") {
-      diagnostics.push({
-        code: "TOOLS_PAPER_SEARCH_ENABLED_INVALID",
-        severity: "fatal",
-        message: "tools.paperSearch.enabled must be a boolean.",
-        path: "tools.paperSearch.enabled",
-        recoverable: false,
-      });
-    } else {
-      result.enabled = raw.enabled;
-    }
-  }
+  const enabled = parseEnabledFlag(raw, "TOOLS_PAPER_SEARCH_ENABLED_INVALID", "tools.paperSearch.enabled", diagnostics);
+  if (enabled !== undefined) result.enabled = enabled;
 
   for (const key of PAPER_SEARCH_BOOLEAN_FIELDS) {
     const value = raw[key];
