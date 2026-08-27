@@ -49,6 +49,9 @@ jobs:
           corepack prepare pnpm@10.32.1 --activate
           pnpm --version
 
+      - name: Self-test PR traceability gate
+        run: node --test .github/scripts/check-pr-issue.test.mjs
+
       - name: Install dependencies
         env:
           # node-gyp 编译原生模块（如 node-pty）时需下载 Node headers，

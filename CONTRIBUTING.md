@@ -68,6 +68,9 @@ docs(ui): update chat i18n keys
 2. 按 [PR 模板](./.github/PULL_REQUEST_TEMPLATE.md) 填写描述
 3. 保持 PR 小而聚焦（建议 ≤ 400 行变更）；大改动请拆分为多个 PR
 4. 至少 1 名维护者批准后合并；Review 评论请尽量在 24 小时内响应
+5. 每个 PR 须关联一个可回溯来源（CI 门禁 `pr-traceability` 强制，详见
+   [check-pr-issue.mjs](./.github/scripts/check-pr-issue.mjs)）：写 `Closes #123` /
+   `关联 Issue: #123` 等 `#编号`，或写明所偿技术债编号 `TD-*-*`，或声明「无关联 issue」
 
 ## 代码规范
 
