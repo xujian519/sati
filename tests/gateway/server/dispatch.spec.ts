@@ -76,6 +76,44 @@ describe("GatewayWsConnection dispatchRequest 分发路由", () => {
     return JSON.stringify({ type: "request", id, method, params });
   }
 
+  function invalidParamsErrorFrame(ws: MockWs): { code?: string; message?: string } {
+    const line = ws.sent.find(l => l.includes('"ok":false') && l.includes("invalid_params"));
+    return line ? (JSON.parse(line).error as { code?: string; message?: string }) : {};
+  }
+
+  it("守卫表：畸形入参（kanban_get 缺 projectKey）→ invalid_params，不深入实现层", async () => {
+    const ws = new MockWs();
+    // gateway 不实现任何 kanban 方法：若守卫失效，分发将走 not_configured，
+    // 该用例以「收到的是 invalid_params 而非 not_configured」锁死边界行为。
+    makeConnection(ws, baseGateway());
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "kanban_get", {}));
+    await settle();
+    const err = invalidParamsErrorFrame(ws);
+    assert.equal(err.code, "invalid_params");
+    assert.match(err.message ?? "", /projectKey/);
+  });
+
+  it("守卫表：字段类型错误（submit_turn.sessionKey 非字符串）→ invalid_params", async () => {
+    const ws = new MockWs();
+    let submitCalled = false;
+    const gateway = {
+      ...baseGateway(),
+      submitTurn: async function* () {
+        submitCalled = true;
+        yield { type: "turn_completed", usage: {}, finishReason: "completed" };
+      },
+    } as unknown as Gateway;
+    makeConnection(ws, gateway);
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "submit_turn", { sessionKey: 42, channelKey: "cli", message: "hi" }));
+    await settle();
+    assert.equal(invalidParamsErrorFrame(ws).code, "invalid_params");
+    assert.ok(!submitCalled, "守卫拒绝后不得进入 gateway.submitTurn");
+  });
+
   async function settle(): Promise<void> {
     // handleMessage 异步，mock 的 receive 无法等待它（同 presence-wiring.spec.ts）
     await new Promise(resolve => setTimeout(resolve, 10));

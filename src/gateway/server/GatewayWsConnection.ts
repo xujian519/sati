@@ -5,6 +5,7 @@ import { notConfigured } from "../protocol/notConfigured.js";
 import { SkillManagerError, SkillValidationError } from "../../extension/skills/index.js";
 import type { KanbanBoardManager, KanbanSubscriber } from "../kanban/KanbanBoardManager.js";
 import { TextWebSocketConnection } from "./websocket.js";
+import { validateMethodParams } from "./methodGuards.js";
 import type { SessionPresence } from "./sessionPresence.js";
 
 /** 从 `Gateway` 接口推导某方法的首个参数类型（兼容可选方法 `| undefined` 与内联对象类型）。 */
@@ -154,6 +155,20 @@ export class GatewayWsConnection {
 
   private async handleRequest(frame: WsRequestFrame): Promise<void> {
     try {
+      // TD-GATEWAY-002/006：线上 JSON.parse 出的 params 在分发前做一次
+      // 守卫表收窄，畸形入参回结构化 invalid_params 而非深入实现层炸 TypeError。
+      const paramError = validateMethodParams(frame.method, frame.params);
+      if (paramError) {
+        this.ws.sendText(
+          JSON.stringify({
+            type: "response",
+            id: frame.id,
+            ok: false,
+            error: { code: "invalid_params", message: paramError },
+          }),
+        );
+        return;
+      }
       // M3：任何请求帧都刷新连接活跃（submit_turn 分支继续使用本变量）
       const sessionKey = (frame.params as { sessionKey?: string } | undefined)?.sessionKey;
       if (sessionKey !== undefined && sessionKey !== "") {

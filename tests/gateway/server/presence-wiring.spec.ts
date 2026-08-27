@@ -87,7 +87,10 @@ describe("GatewayWsConnection presence 接线（M3）", () => {
       type: "request",
       id: "1",
       method: "submit_turn",
-      params: sessionKey === undefined ? {} : { sessionKey },
+      // 守卫层要求 submit_turn 至少携带三个必填标量；presence 用例关心的是
+      // 帧上的 sessionKey 有无，而非载荷内容。
+      params:
+        sessionKey === undefined ? { channelKey: "cli", message: "" } : { sessionKey, channelKey: "cli", message: "" },
     });
   }
 
