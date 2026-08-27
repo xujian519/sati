@@ -289,6 +289,7 @@ export class TokenStatsCollector {
     try {
       raw = fs.readFileSync(this.jsonlPath, "utf-8");
     } catch {
+      // 读 stats.jsonl 失败：按空数据重建，文件缺失/损坏不阻断启动（best-effort）。
       return data;
     }
     for (const line of raw.split("\n")) {

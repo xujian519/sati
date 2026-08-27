@@ -80,8 +80,8 @@
 | C16 | src/adapters 大渠道 | wecom 1760、weixin 1459、feishu 1332 | ✅ 2026-08-25（关联 #190） |
 | C17 | src/adapters 其余 18 渠道+protocol | ImLiveReplyController.ts 1016 | ✅ 2026-08-25 |
 | C18 | src/knowledge | 44/7.1K；case-law、legal、kg-store、wiki | ✅ 2026-08-26 |
-| C19 | src/router | 26/4.3K；RouterRuntime.ts 1258 | ⬜ |
-| C20 | src/always-on | 38/8K；DiscoveryFire.ts 1252 | ⬜ |
+| C19 | src/router | 26/4.3K；RouterRuntime.ts 1258 | ✅ 2026-08-27 |
+| C20 | src/always-on | 38/8K；DiscoveryFire.ts 1252 | ✅ 2026-08-27 |
 | C21 | src/session + task + status + pilot | 34/4.8K + 3 小模块 | ⬜ |
 | C22 | src/cron + src/rule | 18/3K + 11/1.9K | ⬜ |
 | C23 | src/mcp + literature + methodology | 16/1.4K + 13/1.3K + 13/0.7K | ⬜ |
@@ -138,6 +138,8 @@
 | 2026-08-25 | C16 | src/adapters 大渠道（wecom/weixin/feishu） | P3 无参 catch 补 fail-safe 意图注释 ×9（wecom 583/1608/1700、weixin 1215/1348、feishu 57/1101/1230/1245）；P0/P1/P2 无；三渠道整体质量高：零裸 console（weixin 3 处登录二维码横幅属 CLI 交互提示、保留）、零 any/@ts-expect-error、零 TODO/FIXME、零死代码/未使用导出 | 1（refactor） | ✅ |
 | 2026-08-25 | C17 | src/adapters 其余渠道+protocol | P3 全 18 个无参 catch 补 fail-safe 意图注释（protocol 5 + 渠道 Channel 12 + web 1）；记录不处理：createWebStaticMount 恒等 stub、tui/app UI 层、SessionMapper/render 薄封装；P0/P1/P2 无；横切零 any/console/TODO | 2（refactor + docs） | ✅ |
 | 2026-08-26 | C18 | src/knowledge | P2 冗余：assemble.ts 末尾重复 re-export diagnostics.js 能力符号（resolveKnowledgeCapabilities/formatKnowledgeCapabilities/logKnowledgeCapabilities + 4 type），全仓（src+tests）零消费（index.ts 已从 diagnostics.js 直接导出同名）→ 删除；P3 注释：9 处无参 catch 补 fail-safe 意图注释（version-meta:120/diagnostics:40/legal-search:92/personal-note-store:134/fts:22/embedding-consistency:59/wiki-card-loader:325/kg row-mapper:58/schema-introspector:85）；P0/P1 无；横切零 console/any/TODO、无嵌套三元；记录不处理：KnowledgeLawSearchOptions2 命名瑕疵（改公共导出面风险大）、ipc-classifier.ts 779 与 case-law-search.ts 656 超 600 行（待拆建议） | 1（refactor） | ✅ |
+| 2026-08-27 | C19 | src/router | P3 注释：无参 catch 补 fail-safe 意图注释 ×2（RouterRuntime.ts:1132 protocolForProvider 未知 provider 回退默认 openai 协议、TokenStatsCollector.ts:291 rebuildFromJsonl 读 stats.jsonl 失败按空数据重建）；P0/P1/P2 无；横切零 console/any/@ts-expect-error/TODO/死代码、无嵌套三元；记录不处理：RouterRuntime.ts 1258 行（保守档待拆建议） | 1（refactor） | ✅ |
+| 2026-08-27 | C20 | src/always-on | P3 注释：无参 catch 补 fail-safe 意图注释 ×8（DiscoveryStateStore:40、WorkCycleStore:99、SnapshotCopyProvider:30、DiscoveryPlanService:266、AlwaysOnRunHistoryService:132/141/419/516）；P0/P1/P2 无；横切零 console/any/@ts-expect-error/TODO/死代码、无嵌套三元；记录不处理：DiscoveryFire.ts 1252 行（保守档待拆建议） | 2（refactor + docs） | ✅ |
 
 ### 日卡记录
 
