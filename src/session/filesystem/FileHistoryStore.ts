@@ -348,6 +348,8 @@ export class FileHistoryStore {
       const stat = await fs.stat(filePath);
       this.mtimeCache.set(filePath, stat.mtimeMs);
     } catch {
+      // stat failure → unknown mtime: null makes the next snapshot treat the
+      // file as changed, so we over-back up rather than miss a change.
       this.mtimeCache.set(filePath, null);
     }
   }

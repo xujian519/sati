@@ -2,6 +2,7 @@ import { cloneMessage, cloneMessages, type CanonicalMessage, type CanonicalUsage
 import type { AgentEvent } from "../../agent/protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
+import { mergeMetadata } from "../metadata/SessionMetadataStore.js";
 import {
   isCompactBoundaryEntry,
   type AgentTranscriptDiagnostic,
@@ -491,13 +492,4 @@ function add(first: number | undefined, second: number | undefined): number | un
     return undefined;
   }
   return (first ?? 0) + (second ?? 0);
-}
-
-function mergeMetadata(first: SessionMetadataValue, second: SessionMetadataValue): SessionMetadataValue {
-  return {
-    ...first,
-    ...second,
-    title: second.title ?? first.title,
-    linkedPullRequest: second.linkedPullRequest ?? first.linkedPullRequest,
-  };
 }
