@@ -118,6 +118,7 @@ function makeFire(options: {
   store: CronTaskStore;
   now?: () => Date;
   defaultTimezone?: string;
+  offPeakHours?: CronFireDependencies["offPeakHours"];
   onResultDelivery?: CronResultDeliveryHandler;
   onPhaseEvent?: CronPhaseEventCallback;
   onTurnEvent?: CronFireDependencies["onTurnEvent"];
@@ -141,6 +142,7 @@ function makeFire(options: {
     getActiveRun: runId => activeRuns.get(runId),
     runTimeoutMs: 60_000,
     defaultTimezone: options.defaultTimezone ?? "UTC",
+    offPeakHours: options.offPeakHours,
     releaseTaskSession: async task => {
       releases.push(task);
     },
@@ -484,5 +486,228 @@ describe("CronFire.runTask", () => {
     assert.equal(deliveries.length, 1);
     assert.equal(state.updateCalls.length, 2);
     assert.equal(state.closeCalls.length, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 新增能力：modelRoute/mode/deliveryChannel/retry/maxRuns/offPeak/trigger
+// ---------------------------------------------------------------------------
+
+describe("CronFire 新字段透传与生命周期", () => {
+  it("modelRoute（provider+model）透传 submitTurn，mode 默认 bypassPermissions", async () => {
+    const task = makeTask({ modelRoute: { provider: "openai", model: "gpt-x" } });
+    const { gateway, calls } = makeFakeGateway([{ type: "turn_started", runId: "run-1" }]);
+    const { store } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store });
+    await fire.runTask(task, "run-1");
+    assert.deepEqual(calls.submits[0]!.modelRoute, { provider: "openai", model: "gpt-x" });
+    assert.equal(calls.submits[0]!.mode, "bypassPermissions");
+  });
+
+  it("modelRoute 缺 provider 时不传 submitTurn（交给 session 默认路由）", async () => {
+    const task = makeTask({ modelRoute: { model: "gpt-x" } });
+    const { gateway, calls } = makeFakeGateway([{ type: "turn_started", runId: "run-1" }]);
+    const { store } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store });
+    await fire.runTask(task, "run-1");
+    assert.equal(calls.submits[0]!.modelRoute, undefined);
+  });
+
+  it("deliveryChannel 覆盖结果投递渠道", async () => {
+    const task = makeTask({ deliveryChannel: "weixin:cli" });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "ok" },
+    ]);
+    const { store } = makeFakeStore(task);
+    const deliveries: CronResultDelivery[] = [];
+    const { fire } = makeFire({
+      task,
+      gateway,
+      store,
+      onResultDelivery: delivery => {
+        deliveries.push(delivery);
+      },
+    });
+    await fire.runTask(task, "run-1");
+    assert.equal(deliveries.length, 1);
+    assert.equal(deliveries[0]!.channelKey, "weixin:cli");
+    // 未覆盖时沿用 task.channelKey
+    const taskDefault = makeTask({ channelKey: "cron" });
+    const { gateway: gateway2 } = makeFakeGateway([{ type: "turn_started", runId: "run-2" }]);
+    const { store: store2 } = makeFakeStore(taskDefault);
+    const deliveries2: CronResultDelivery[] = [];
+    const { fire: fire2 } = makeFire({
+      task: taskDefault,
+      gateway: gateway2,
+      store: store2,
+      onResultDelivery: delivery => {
+        deliveries2.push(delivery);
+      },
+    });
+    await fire2.runTask(taskDefault, "run-2");
+    assert.equal(deliveries2[0]!.channelKey, "cron");
+  });
+
+  it("run record 携带 trigger/attempt/runNumber（自然调度：runNumber 递增）", async () => {
+    const task = makeTask({ runCount: 3 });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "ok" },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store });
+    await fire.runTask(task, "run-1");
+    assert.equal(state.runRecords[0]!.trigger, "scheduled");
+    assert.equal(state.runRecords[0]!.attempt, 0);
+    assert.equal(state.runRecords[0]!.runNumber, 4);
+    // 成功后 runCount 前进到 runNumber
+    assert.equal(state.updateResults[1]!.runCount, 4);
+  });
+
+  it("run-now 孵化任务：trigger=run-now、runNumber=1，成功走 once 删除", async () => {
+    const task = makeTask({
+      trigger: "run-now",
+      schedule: { type: "once", runAt: "2026-08-05T09:00:00.000Z" },
+    });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "ok" },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store });
+    await fire.runTask(task, "run-1");
+    assert.equal(state.runRecords[0]!.trigger, "run-now");
+    assert.equal(state.runRecords[0]!.runNumber, 1);
+  });
+
+  it("失败且配置重试 → 按退避重排 nextRunAt、推进 attempts、记录 lastError（不重算 cron）", async () => {
+    const task = makeTask({ retry: { maxAttempts: 2, attempts: 0 } });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "error", message: "tool exploded", code: "tool_failed", recoverable: true },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store, now: () => FIXED_NOW });
+    await fire.runTask(task, "run-1");
+
+    assert.equal(state.runRecords[0]!.outcome, "failed");
+    assert.equal(state.runRecords[0]!.attempt, 0);
+    const updated = state.updateResults[1]!;
+    assert.equal(updated.status, "scheduled");
+    // attempt=0 → 退避 1 分钟：10:00 → 10:01
+    assert.equal(updated.nextRunAt, "2026-08-05T10:01:00.000Z");
+    assert.deepEqual(updated.retry, { maxAttempts: 2, attempts: 1 });
+    assert.deepEqual(updated.lastError, { code: "tool_failed", message: "tool exploded" });
+  });
+
+  it("重试耗尽 → lastError 保留、runCount 不前进、cron 照常重算", async () => {
+    const task = makeTask({ retry: { maxAttempts: 1, attempts: 1 }, runCount: 0 });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "error", message: "still failing", code: "tool_failed", recoverable: true },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store, now: () => FIXED_NOW });
+    await fire.runTask(task, "run-1");
+
+    const updated = state.updateResults[1]!;
+    assert.equal(updated.status, "scheduled");
+    // 失败不推进 runCount，也不重置 retry.attempts
+    assert.equal(updated.runCount, 0);
+    assert.deepEqual(updated.retry, { maxAttempts: 1, attempts: 1 });
+    assert.deepEqual(updated.lastError, { code: "tool_failed", message: "still failing" });
+    // */5 * * * * 在 10:00 之后 → 10:05
+    assert.equal(updated.nextRunAt, "2026-08-05T10:05:00.000Z");
+  });
+
+  it("interaction_required 不可重试（配置重试也不重排，仅记录 lastError）", async () => {
+    const task = makeTask({ retry: { maxAttempts: 3, attempts: 0 } });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      {
+        type: "elicitation_request",
+        requestId: "q1",
+        toolCallId: "tc1",
+        toolName: "ask_user_question",
+        questions: [],
+      } as GatewayEvent,
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store, now: () => FIXED_NOW });
+    await fire.runTask(task, "run-1");
+
+    const updated = state.updateResults[1]!;
+    assert.equal(updated.status, "scheduled");
+    // 未推进 attempts（无重试），cron 照常重算到 10:05
+    assert.deepEqual(updated.retry, { maxAttempts: 3, attempts: 0 });
+    assert.equal(updated.lastError?.code, "cron_interaction_required");
+    assert.equal(updated.nextRunAt, "2026-08-05T10:05:00.000Z");
+  });
+
+  it("maxRuns 达上限 → disabled、清空 nextRunAt、runCount 定格", async () => {
+    const task = makeTask({ maxRuns: 1, runCount: 0 });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "ok" },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store, now: () => FIXED_NOW });
+    await fire.runTask(task, "run-1");
+
+    const updated = state.updateResults[1]!;
+    assert.equal(updated.status, "disabled");
+    assert.equal(updated.nextRunAt, undefined);
+    assert.equal(updated.runCount, 1);
+  });
+
+  it("maxRuns 未达上限 → 保持 scheduled 并推进 runCount", async () => {
+    const task = makeTask({ maxRuns: 3, runCount: 1 });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "ok" },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store, now: () => FIXED_NOW });
+    await fire.runTask(task, "run-1");
+
+    const updated = state.updateResults[1]!;
+    assert.equal(updated.status, "scheduled");
+    assert.equal(updated.runCount, 2);
+    assert.equal(updated.nextRunAt, "2026-08-05T10:05:00.000Z");
+  });
+
+  it("offPeak 任务成功 → 下一次触发推迟进低谷窗口", async () => {
+    const task = makeTask({ offPeak: true });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "ok" },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({
+      task,
+      gateway,
+      store,
+      now: () => FIXED_NOW,
+      offPeakHours: { startHour: 2, endHour: 6 },
+    });
+    await fire.runTask(task, "run-1");
+
+    // 原始 10:05 → 平移到次日 02:00
+    const updated = state.updateResults[1]!;
+    assert.equal(updated.nextRunAt, "2026-08-06T02:00:00.000Z");
+  });
+
+  it("offPeak 任务但未配置窗口 → nextRunAt 原样（窗口不生效）", async () => {
+    const task = makeTask({ offPeak: true });
+    const { gateway } = makeFakeGateway([
+      { type: "turn_started", runId: "run-1" },
+      { type: "assistant_text_delta", text: "ok" },
+    ]);
+    const { store, state } = makeFakeStore(task);
+    const { fire } = makeFire({ task, gateway, store, now: () => FIXED_NOW });
+    await fire.runTask(task, "run-1");
+
+    assert.equal(state.updateResults[1]!.nextRunAt, "2026-08-05T10:05:00.000Z");
   });
 });

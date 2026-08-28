@@ -33,7 +33,7 @@ import { createCronListTool } from "../tool/CronListTool.js";
 import { createCronStopTool } from "../tool/CronStopTool.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import { CronFire, type CronActiveRun, type CronTurnEventHandler } from "./CronFire.js";
-import { computeNextRunAt } from "./CronSchedule.js";
+import { applyOffPeakWindow, computeNextRunAt } from "./CronSchedule.js";
 import { CronScheduler } from "./CronScheduler.js";
 
 export type CronRuntimeLogger = {
@@ -120,6 +120,7 @@ export class CronRuntime {
       getActiveRun: runId => this.activeRuns.get(runId),
       runTimeoutMs: this.config.runTimeoutMinutes * 60_000,
       defaultTimezone: this.config.timezone,
+      offPeakHours: this.config.offPeakHours,
       releaseTaskSession: task => this.releaseTaskSession(task),
       onResultDelivery: this.onResultDelivery,
       onTurnEvent: this.onTurnEvent,
@@ -210,6 +211,9 @@ export class CronRuntime {
     const taskId = this.uuid();
     const sessionKey = buildCronSessionKey(taskId);
     const { schedule, timezone, nextRunAt } = this.resolveScheduleAndNextRunAt(input, now);
+    // offPeak 任务把首次触发推迟进低谷窗口（窗口未配置时 applyOffPeakWindow 原样返回）。
+    const effectiveNextRunAt =
+      input.offPeak && timezone ? applyOffPeakWindow(nextRunAt, this.config.offPeakHours, timezone) : nextRunAt;
     const task: CronTask = {
       schemaVersion: 1,
       taskId,
@@ -224,10 +228,16 @@ export class CronRuntime {
       // Keep the runtime root only as a compatibility fallback for direct callers.
       projectKey: input.projectKey ?? this.projectKey,
       mode: input.mode,
+      trigger: input.trigger ?? "scheduled",
+      modelRoute: input.modelRoute,
+      maxRuns: input.maxRuns,
+      retry: input.retry,
+      deliveryChannel: input.deliveryChannel,
+      offPeak: input.offPeak,
       timezone,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
-      nextRunAt: nextRunAt.toISOString(),
+      nextRunAt: effectiveNextRunAt.toISOString(),
       revision: 0,
       scheduleComputationVersion: schedule.type === "cron" ? 2 : undefined,
     };
@@ -394,6 +404,11 @@ export class CronRuntime {
       sessionKey: task.originSessionKey,
       channelKey: task.originChannelKey,
       mode: task.mode,
+      modelRoute: task.modelRoute,
+      retry: task.retry,
+      maxRuns: task.maxRuns,
+      deliveryChannel: task.deliveryChannel,
+      trigger: "run-now",
     });
     return { started: true, taskId: created.task.taskId };
   }
