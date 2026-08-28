@@ -31,6 +31,33 @@ export function delayToMilliseconds(amount: number, unit: "second" | "minute" | 
   return amount * DELAY_UNIT_MS[unit];
 }
 
+export type OffPeakWindow = {
+  startHour: number;
+  endHour: number;
+};
+
+/**
+ * 把触发时间推迟到低谷窗口内：若 date 落在窗口外，返回下一个窗口起点
+ * （同一日内晚于 startHour 则推当日，否则推次日 startHour:00）。
+ * 窗口未配置或退化（startHour >= endHour）时原样返回。
+ * 分钟粒度迭代，最多查 24h，窗口跨日（如 [22,2]）同样适用。
+ */
+export function applyOffPeakWindow(date: Date, window: OffPeakWindow | undefined, timezone: string): Date {
+  if (!window || window.startHour >= window.endHour) {
+    return date;
+  }
+  const formatter = createCronDateFormatter(timezone);
+  let candidate = new Date(Math.floor(date.getTime() / MINUTE_MS) * MINUTE_MS);
+  for (let index = 0; index < 24 * 60; index += 1) {
+    const parts = readCronDateParts(candidate, formatter);
+    if (parts && parts.hour >= window.startHour && parts.hour < window.endHour) {
+      return candidate;
+    }
+    candidate = new Date(candidate.getTime() + MINUTE_MS);
+  }
+  return date;
+}
+
 export function computeNextCronRunAt(expression: string, after: Date, timezone = "UTC"): Date | undefined {
   const parsed = parseCronExpression(expression);
   if (!parsed || !isValidCronTimezone(timezone)) return undefined;
