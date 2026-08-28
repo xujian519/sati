@@ -43,7 +43,7 @@ export function parsePluginMcpServers(raw: Record<string, unknown> | undefined):
         args: Array.isArray(v.args)
           ? v.args.filter((a): a is string => typeof a === "string").map(expandMcpString)
           : undefined,
-        env: isStringRecord(v.env) ? expandStringRecord(v.env as Record<string, string>) : undefined,
+        env: isStringRecord(v.env) ? expandStringRecord(v.env) : undefined,
         cwd: typeof v.cwd === "string" ? expandMcpString(v.cwd) : undefined,
         perSession: v.perSession === true ? true : undefined,
       });
@@ -59,8 +59,8 @@ export function parsePluginMcpServers(raw: Record<string, unknown> | undefined):
       servers.push({
         id,
         transport: "streamable_http",
-        url: expandMcpString(url),
-        headers: isStringRecord(v.headers) ? expandStringRecord(v.headers as Record<string, string>) : undefined,
+        url,
+        headers: isStringRecord(v.headers) ? expandStringRecord(v.headers) : undefined,
       });
       continue;
     }
@@ -69,7 +69,7 @@ export function parsePluginMcpServers(raw: Record<string, unknown> | undefined):
   return { servers, diagnostics };
 }
 
-function isStringRecord(v: unknown): boolean {
+function isStringRecord(v: unknown): v is Record<string, string> {
   if (!v || typeof v !== "object") return false;
   for (const value of Object.values(v as Record<string, unknown>)) {
     if (typeof value !== "string") return false;

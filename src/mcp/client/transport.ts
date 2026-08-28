@@ -78,10 +78,8 @@ export function buildTransport(
       perSessionDir: null,
     };
   }
-  const fallback = spec as SatiMcpServerSpec;
-  throw new McpClientError(
-    `Unsupported transport: ${(fallback as { transport: string }).transport}`,
-    "mcp_unsupported_transport",
-    fallback.id,
-  );
+  // 两个已知 transport 变体均已 return；走到这里说明 spec 携带了未知 transport 值，
+  // 此时 spec 已被收窄为 never，断言回原形仅为读出该值用于报错。
+  const fallback = spec as { id: string; transport: string };
+  throw new McpClientError(`Unsupported transport: ${fallback.transport}`, "mcp_unsupported_transport", fallback.id);
 }
