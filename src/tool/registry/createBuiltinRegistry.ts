@@ -50,6 +50,8 @@ import { createExportHtmlTool } from "../builtin/exportHtml.js";
 import { createRenderPatentDocumentTool } from "../builtin/renderPatentDocument.js";
 import { createDocumentStylePresetTool } from "../builtin/documentStylePreset.js";
 import { createDocumentStylePanelTool } from "../builtin/documentStylePanel.js";
+import { createPatentFigureCheckTool } from "../builtin/patentFigureCheck.js";
+import { createPatentFigureGenerateTool } from "../builtin/patentFigureGenerate.js";
 import { createFlexiblePlanTool } from "../builtin/patentFlexiblePlanTool.js";
 import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
 import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
@@ -206,6 +208,13 @@ export type CreateBuiltinRegistryOptions = {
    */
   documentStyle?: Record<string, never>;
   /**
+   * patent_figure_generate / patent_figure_check（附图生成与细则 21 条双向标记
+   * 核验）。Registered by default（patent_figure_generate 已入 patent_workflow_run
+   * 的 figure_generate 阶段指引，默认可用）。Pass `false` to skip——会改变 patent
+   * 会话工具集摘要，需重录 deepseek-v4-flash-basic fixture（scripts/record-real-fixture.ts）。
+   */
+  patentFigure?: false;
+  /**
    * `enter_plan_mode` / `exit_plan_mode` builtins. Registered by default —
    * these lightweight skeleton tools let the model request a permission-mode
    * switch to plan (read-only) and back. Pass `false` to skip.
@@ -345,6 +354,10 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
       // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
       registry.register(annotate(createDocumentStylePresetTool(), "patent"));
       registry.register(annotate(createDocumentStylePanelTool(), "patent"));
+    }
+    if (options?.patentFigure !== false) {
+      registry.register(annotate(createPatentFigureGenerateTool(), "patent"));
+      registry.register(annotate(createPatentFigureCheckTool(), "patent"));
     }
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
