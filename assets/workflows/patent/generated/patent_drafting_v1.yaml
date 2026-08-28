@@ -109,6 +109,9 @@ stages:
       rewindTo: draft_spec
       maxRetries: 1
     description: 反套话评分门（未通过自动带证据提示回退说明书修订）
+  - id: figure_generate
+    strategy: chain
+    description: 附图生成与核验（主代理经 patent_figure_generate/patent_figure_check 完成后透传；基于定稿说明书生成流程图/框图并做附图标记一致性核验）
   - id: final_approval
     strategy: chain
     atom: approval-gate
