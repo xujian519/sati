@@ -219,7 +219,8 @@ function findOrCreateIssue(branch, title, dryRun) {
     const bodyFile = join(tmp, "issue.md");
     writeFileSync(bodyFile, body, "utf8");
     const created = gh(["issue", "create", "--title", title, "--body-file", bodyFile]);
-    const match = created.match(/#([0-9]+)/);
+    // gh 输出为纯 URL（如 https://github.com/xujian519/sati/issues/216），不带 `#N` 形式。
+    const match = created.match(/(?:issues|pull)\/([0-9]+)/);
     const number = match ? Number(match[1]) : null;
     if (number == null) {
       console.error(`⚠ 无法从 gh issue create 输出解析 issue 编号：${created}`);
