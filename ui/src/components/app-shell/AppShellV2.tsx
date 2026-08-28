@@ -7,6 +7,7 @@ import { useWebSocket } from "../../contexts/WebSocketContext";
 import { useDeviceSettings } from "../../hooks/useDeviceSettings";
 import { useSessionProtection } from "../../hooks/useSessionProtection";
 import { useProjectsState } from "../../hooks/useProjectsState";
+import { useDesktopSidebarForFiles } from "../../hooks/useDesktopSidebarForFiles";
 import Settings from "../settings/Settings";
 import ProjectCreationWizard from "../project-creation-wizard";
 import { normalizeProjectForSettings, type SettingsProject } from "../../lib/projectSettings";
@@ -92,7 +93,6 @@ export default function AppShellV2() {
   const { t } = useTranslation("common");
 
   const { isMobile } = useDeviceSettings({ trackPWA: false });
-  const [desktopSidebarOpen, setDesktopSidebarOpen] = useState(true);
   // 团队活动浮层开关（侧边栏 Team 按钮切换；非 AppTab，无 URL 路由）
   const [teamPanelOpen, setTeamPanelOpen] = useState(false);
   const { ws, sendMessage, latestMessage, isConnected, subscribe } = useWebSocket();
@@ -144,6 +144,11 @@ export default function AppShellV2() {
     latestMessage,
     isMobile,
     activeSessions,
+  });
+
+  const { desktopSidebarOpen, collapseDesktopSidebar, openDesktopSidebar } = useDesktopSidebarForFiles({
+    activeTab,
+    isMobile,
   });
 
   const misroutedFileFromUrl = useMemo(() => {
@@ -369,18 +374,12 @@ export default function AppShellV2() {
     if (isMobile) {
       setSidebarOpen(false);
     } else {
-      setDesktopSidebarOpen(false);
+      collapseDesktopSidebar();
     }
-  }, [isMobile, setSidebarOpen]);
+  }, [collapseDesktopSidebar, isMobile, setSidebarOpen]);
   const onOpenDesktopSidebar = useCallback(() => {
-    setDesktopSidebarOpen(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isMobile && activeTab === "files") {
-      setDesktopSidebarOpen(true);
-    }
-  }, [activeTab, isMobile]);
+    openDesktopSidebar();
+  }, [openDesktopSidebar]);
 
   // Project creation wizard (local existing / new local / github clone). The
   // sidebar's Projects-section "+" opens this; row-level "+" is for new sessions.
