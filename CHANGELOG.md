@@ -2,6 +2,39 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.9 - 2026-08-28
+
+> **版本目标（2026-08-28）**：本版本开始具备专利制图能力——figuregen 三批落地（P0 工具与规则骨架、P1 全规则集与 A4 HTML/PDF 输出、P2 USPTO 辖区与默认注册），配套 drafting 工作流阶段与 patent-illustrator 技能；同步收口技术债批次（src 运行时值循环切割、gateway 参数守卫、C19–C24 死代码精炼）。
+
+### Feat
+- feat(patent): 专利制图 figuregen 三批落地——P0：`patent_figure_generate`/`patent_figure_check` 工具、FigureSpec 契约、确定性分层布局、黑白合规 SVG 渲染器（细则第一部分第一章 4.3/4.6 为构造期不变量）、Rule-21 检查器 V1–V4、附图说明草稿与 patent-illustrator 技能
+- feat(patent): figuregen P1——检查器全规则集（V5 注释式标注 / V7 画幅可辨 / V8 摘要附图指定 / V9 实用新型必须附图）、`svg_paths` 交付件回读、`format=html|both` 单文件 A4 打印 HTML（经 Chromium 打印管线出 PDF）、patent_drafting_v1 在 slop_clean 与 final_approval 间插入制图阶段
+- feat(patent): figuregen P2——`jurisdiction: 'us'`（FIG. N 图注、跳过 CN-only 规则、引据 37 CFR 1.84 / MPEP 608.02、英文 BRIEF DESCRIPTION 模板）；细则 Art. 21(3) 与指南两处官方文本经 CNIPA 公布文本核实；`patent_figure_generate/check` 改为默认注册（llm-replay fixture 已重录，replay 绿）
+- feat(gateway): 方法参数守卫表 + 编译期穷尽检查（TD-GATEWAY-002 待做半 · TD-GATEWAY-006）
+
+### Fix
+- fix(cron): run-now 任务调度改用注入时钟；启动失败回滚运行时注册以便后续重试
+- fix(task): 输出切片读取对齐 UTF-8 码点边界；后台任务注册表设上限且仅统计存活任务
+- fix(session): 遗留 transcript 缓存命中时拷贝 diagnostics 数组；文件历史 diff 统计对非 ENOENT 读取失败告警
+- fix(pilot): 平铺 memory schedule 字段被 schedule 段遮蔽时告警
+- fix(patent): 透出 nuo-patent 元数据 JSON 解析警告
+- fix(ci): PR issue-link 门禁识别 TD-* 债务编号
+
+### Refactor
+- refactor(deps): 打破 src 三组运行时值循环（TD-BOUND-003 切割①②③）
+- refactor(agent): 抽取 max-output 与空响应共享恢复策略（TD-AGENT-101 扩围收敛）
+- refactor(knowledge): 删除嵌套重复 wiki 卡片树并新增逐字节重复守卫（TD-KNOWLEDGE-N08）
+- refactor(ui): kanban useBoardState 卫生三合一（TD-UI-CHAT-N14）
+- refactor: C19–C24 死代码精炼批次——router/always-on/cron/task/session/pilot/status/rule/mcp/literature/methodology/extension/permission/lifecycle/skills 死导出删除、兜底 catch 注释化、重复逻辑去重
+
+### Test
+- test(knowledge): 单事务批量插入向量夹具，消除 11000 条 autocommit 的 60s 超时
+- test(patent): figuregen 新增 45 个测试（检查器表驱动、布局/渲染不变量、工具层、US 模式）
+
+### Docs
+- docs(technical-debt): debt-batch2 落地登记与 2026-08-27 复扫审计报告；C19–C24 日卡登记
+- docs(browser): 记录 macOS ego-primary 策略
+
 ## v0.1.8 - 2026-08-26
 
 > **版本目标（2026-08-26）**：DeepSeek V4 思考模式默认接入 agent 主循环与自进化基准回路、会话 transcript 写入加固（单写 + 截尾恢复），并落地项目看板（Project Kanban Board，Phase 5）与 C17/C18 代码精炼批次。
