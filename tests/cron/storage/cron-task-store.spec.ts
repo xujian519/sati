@@ -127,3 +127,165 @@ describe("CronTaskStore.appendRunEvent fd 复用", () => {
     assert.equal(backupsAfter.length, 1);
   });
 });
+
+describe("CronTaskStore 新字段读取（normalizeTask/normalizeRun）", () => {
+  it("读取含 modelRoute/maxRuns/retry/lastError/deliveryChannel/offPeak/trigger 的完整任务", async () => {
+    const { store, paths } = makeStore();
+    mkdirSync(paths.projectDir, { recursive: true });
+    writeFileSync(
+      paths.tasksFile,
+      JSON.stringify({
+        schemaVersion: 1,
+        tasks: [
+          {
+            schemaVersion: 1,
+            taskId: "t-rich",
+            message: "定时专利检索",
+            schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+            status: "scheduled",
+            sessionKey: "cron:t-rich",
+            channelKey: "cron",
+            projectKey: "/tmp/project",
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+            nextRunAt: "2026-08-05T09:00:00.000Z",
+            trigger: "run-now",
+            modelRoute: { provider: "openai", model: "gpt-x" },
+            maxRuns: 10,
+            runCount: 2,
+            retry: { maxAttempts: 3, attempts: 1 },
+            lastError: { code: "cron_run_timeout", message: "turn exceeded" },
+            deliveryChannel: "weixin:cli",
+            offPeak: true,
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const tasks = await store.listTasks();
+    assert.equal(tasks.length, 1);
+    const task = tasks[0]!;
+    assert.equal(task.trigger, "run-now");
+    assert.deepEqual(task.modelRoute, { provider: "openai", model: "gpt-x" });
+    assert.equal(task.maxRuns, 10);
+    assert.equal(task.runCount, 2);
+    assert.deepEqual(task.retry, { maxAttempts: 3, attempts: 1 });
+    assert.deepEqual(task.lastError, { code: "cron_run_timeout", message: "turn exceeded" });
+    assert.equal(task.deliveryChannel, "weixin:cli");
+    assert.equal(task.offPeak, true);
+  });
+
+  it("旧格式任务（无新字段）→ 各字段归一为 undefined/默认，不破坏读取", async () => {
+    const { store, paths } = makeStore();
+    mkdirSync(paths.projectDir, { recursive: true });
+    writeFileSync(
+      paths.tasksFile,
+      JSON.stringify({
+        schemaVersion: 1,
+        tasks: [
+          {
+            schemaVersion: 1,
+            taskId: "t-legacy",
+            message: "旧任务",
+            schedule: { type: "once", runAt: "2026-08-09T00:10:00.000Z" },
+            status: "scheduled",
+            sessionKey: "cron/t-legacy",
+            channelKey: "feishu:cli",
+            projectKey: "/tmp/project",
+            createdAt: "2026-08-09T00:00:00.000Z",
+            updatedAt: "2026-08-09T00:00:00.000Z",
+            nextRunAt: "2026-08-09T00:10:00.000Z",
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const task = (await store.listTasks())[0]!;
+    assert.equal(task.trigger, "scheduled");
+    assert.equal(task.modelRoute, undefined);
+    assert.equal(task.maxRuns, undefined);
+    assert.equal(task.runCount, undefined);
+    assert.equal(task.retry, undefined);
+    assert.equal(task.lastError, undefined);
+    assert.equal(task.deliveryChannel, undefined);
+    assert.equal(task.offPeak, undefined);
+  });
+
+  it("非法字段值被归一（modelRoute 缺 model / maxRuns 负数 / retry 缺 maxAttempts）", async () => {
+    const { store, paths } = makeStore();
+    mkdirSync(paths.projectDir, { recursive: true });
+    writeFileSync(
+      paths.tasksFile,
+      JSON.stringify({
+        schemaVersion: 1,
+        tasks: [
+          {
+            schemaVersion: 1,
+            taskId: "t-junk",
+            message: "脏数据",
+            schedule: { type: "cron", expression: "0 9 * * *", timezone: "UTC" },
+            status: "scheduled",
+            sessionKey: "cron/t-junk",
+            channelKey: "cron",
+            projectKey: "/tmp/project",
+            createdAt: "2026-08-01T00:00:00.000Z",
+            updatedAt: "2026-08-01T00:00:00.000Z",
+            nextRunAt: "2026-08-05T09:00:00.000Z",
+            modelRoute: { provider: "openai" },
+            maxRuns: -3,
+            retry: { attempts: 1 },
+            lastError: { code: "only-code" },
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const task = (await store.listTasks())[0]!;
+    assert.equal(task.modelRoute, undefined);
+    assert.equal(task.maxRuns, undefined);
+    assert.equal(task.retry, undefined);
+    assert.equal(task.lastError, undefined);
+  });
+
+  it("读取 run 记录中的 trigger/attempt/runNumber；缺失字段归一为 scheduled/undefined", async () => {
+    const { store, paths } = makeStore();
+    mkdirSync(paths.projectDir, { recursive: true });
+    writeFileSync(
+      paths.runHistoryFile,
+      [
+        JSON.stringify({
+          schemaVersion: 1,
+          runId: "r1",
+          taskId: "t1",
+          sessionKey: "cron:t1",
+          startedAt: "2026-08-05T10:00:00.000Z",
+          trigger: "run-now",
+          attempt: 2,
+          runNumber: 1,
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          runId: "r0",
+          taskId: "t1",
+          sessionKey: "cron:t1",
+          startedAt: "2026-08-05T09:00:00.000Z",
+        }),
+      ].join("\n") + "\n",
+      "utf8",
+    );
+
+    const runs = await store.listRuns(10);
+    assert.equal(runs.length, 2);
+    const rich = runs.find(run => run.runId === "r1")!;
+    assert.equal(rich.trigger, "run-now");
+    assert.equal(rich.attempt, 2);
+    assert.equal(rich.runNumber, 1);
+    const legacy = runs.find(run => run.runId === "r0")!;
+    assert.equal(legacy.trigger, "scheduled");
+    assert.equal(legacy.attempt, undefined);
+    assert.equal(legacy.runNumber, undefined);
+  });
+});

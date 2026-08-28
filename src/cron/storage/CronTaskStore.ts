@@ -237,7 +237,7 @@ function normalizeTask(value: unknown): CronTask | undefined {
     taskId: candidate.taskId,
     message: candidate.message,
     schedule: candidate.schedule,
-    status: candidate.status === "running" ? "running" : "scheduled",
+    status: normalizeTaskStatus(candidate.status),
     sessionKey: candidate.sessionKey,
     channelKey: candidate.channelKey,
     projectKey: typeof candidate.projectKey === "string" ? candidate.projectKey : undefined,
@@ -251,7 +251,54 @@ function normalizeTask(value: unknown): CronTask | undefined {
     scheduleComputationVersion: candidate.scheduleComputationVersion === 2 ? 2 : undefined,
     originSessionKey: typeof candidate.originSessionKey === "string" ? candidate.originSessionKey : undefined,
     originChannelKey: typeof candidate.originChannelKey === "string" ? candidate.originChannelKey : undefined,
+    trigger: candidate.trigger === "run-now" ? "run-now" : "scheduled",
+    modelRoute: normalizeModelRoute(candidate.modelRoute),
+    maxRuns: normalizeNonNegativeInt(candidate.maxRuns),
+    runCount: normalizeNonNegativeInt(candidate.runCount),
+    retry: normalizeRetry(candidate.retry),
+    lastError: normalizeError(candidate.lastError),
+    deliveryChannel: typeof candidate.deliveryChannel === "string" ? candidate.deliveryChannel : undefined,
+    offPeak: typeof candidate.offPeak === "boolean" ? candidate.offPeak : undefined,
   };
+}
+
+function normalizeTaskStatus(value: unknown): CronTask["status"] {
+  if (value === "running") return "running";
+  if (value === "disabled") return "disabled";
+  return "scheduled";
+}
+
+function normalizeModelRoute(value: unknown): CronTask["modelRoute"] | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { provider?: unknown; model?: unknown };
+  if (typeof candidate.model !== "string" || !candidate.model.trim()) return undefined;
+  return {
+    provider: typeof candidate.provider === "string" && candidate.provider.trim() ? candidate.provider : undefined,
+    model: candidate.model,
+  };
+}
+
+function normalizeNonNegativeInt(value: unknown): number | undefined {
+  if (Number.isSafeInteger(value) && (value as number) >= 0) return value as number;
+  return undefined;
+}
+
+function normalizeRetry(value: unknown): CronTask["retry"] | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { maxAttempts?: unknown; attempts?: unknown };
+  const maxAttempts = normalizeNonNegativeInt(candidate.maxAttempts);
+  if (maxAttempts === undefined) return undefined;
+  return {
+    maxAttempts,
+    attempts: normalizeNonNegativeInt(candidate.attempts),
+  };
+}
+
+function normalizeError(value: unknown): CronTask["lastError"] | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { code?: unknown; message?: unknown };
+  if (typeof candidate.code !== "string" || typeof candidate.message !== "string") return undefined;
+  return { code: candidate.code, message: candidate.message };
 }
 
 function normalizeRun(value: unknown): CronRunRecord | undefined {
@@ -276,5 +323,8 @@ function normalizeRun(value: unknown): CronRunRecord | undefined {
     finishedAt: typeof candidate.finishedAt === "string" ? candidate.finishedAt : undefined,
     outcome: candidate.outcome,
     error: candidate.error,
+    trigger: candidate.trigger === "run-now" ? "run-now" : "scheduled",
+    attempt: normalizeNonNegativeInt(candidate.attempt),
+    runNumber: normalizeNonNegativeInt(candidate.runNumber),
   };
 }

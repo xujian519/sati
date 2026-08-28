@@ -7,6 +7,11 @@ export type CronConfig = {
   timezone: string;
   maxConcurrentRuns: number;
   runTimeoutMinutes: number;
+  /** 低谷时段窗口（小时，[startHour, endHour)，如 [2,6] 表示 02:00-05:59）。未配置则 offPeak 任务不生效。 */
+  offPeakHours?: {
+    startHour: number;
+    endHour: number;
+  };
 };
 
 export function defaultCronConfig(): CronConfig {
@@ -18,7 +23,7 @@ export function defaultCronConfig(): CronConfig {
   };
 }
 
-const ALLOWED_KEYS = new Set(["enabled", "timezone", "maxConcurrentRuns", "runTimeoutMinutes"]);
+const ALLOWED_KEYS = new Set(["enabled", "timezone", "maxConcurrentRuns", "runTimeoutMinutes", "offPeakHours"]);
 
 export function parseCronConfig(raw: unknown, diagnostics: PilotConfigDiagnostic[]): CronConfig | undefined {
   if (raw === undefined) {
@@ -61,6 +66,7 @@ export function parseCronConfig(raw: unknown, diagnostics: PilotConfigDiagnostic
     "cron.runTimeoutMinutes",
     diagnostics,
   );
+  result.offPeakHours = offPeakHoursField(raw.offPeakHours, "cron.offPeakHours", diagnostics);
 
   for (const key of Object.keys(raw)) {
     if (!ALLOWED_KEYS.has(key)) {
@@ -95,6 +101,46 @@ function nonEmptyString(value: unknown, fallback: string, path: string, diagnost
     recoverable: true,
   });
   return fallback;
+}
+
+function offPeakHoursField(
+  value: unknown,
+  path: string,
+  diagnostics: PilotConfigDiagnostic[],
+): CronConfig["offPeakHours"] {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length !== 2) {
+    diagnostics.push({
+      code: "CRON_OFFPEAK_INVALID",
+      severity: "warning",
+      message: `${path} must be an array of two integers [startHour, endHour]; off-peak scheduling disabled.`,
+      path,
+      recoverable: true,
+    });
+    return undefined;
+  }
+  const [start, end] = value;
+  if (
+    typeof start !== "number" ||
+    typeof end !== "number" ||
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    end < 0 ||
+    start > 23 ||
+    end > 24 ||
+    start >= end
+  ) {
+    diagnostics.push({
+      code: "CRON_OFFPEAK_INVALID",
+      severity: "warning",
+      message: `${path} must satisfy 0 <= startHour < endHour <= 24 (e.g. [2,6]); off-peak scheduling disabled.`,
+      path,
+      recoverable: true,
+    });
+    return undefined;
+  }
+  return { startHour: start, endHour: end };
 }
 
 function positiveInteger(value: unknown, fallback: number, path: string, diagnostics: PilotConfigDiagnostic[]): number {

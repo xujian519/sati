@@ -31,6 +31,32 @@ export const CRON_TASK_SCHEMA = {
     scheduleComputationVersion: { type: "integer" },
     originSessionKey: { type: "string" },
     originChannelKey: { type: "string" },
+    trigger: { type: "string" },
+    modelRoute: {
+      type: "object",
+      properties: {
+        provider: { type: "string" },
+        model: { type: "string" },
+      },
+    },
+    maxRuns: { type: "integer" },
+    runCount: { type: "integer" },
+    retry: {
+      type: "object",
+      properties: {
+        maxAttempts: { type: "integer" },
+        attempts: { type: "integer" },
+      },
+    },
+    lastError: {
+      type: "object",
+      properties: {
+        code: { type: "string" },
+        message: { type: "string" },
+      },
+    },
+    deliveryChannel: { type: "string" },
+    offPeak: { type: "boolean" },
   },
 } as const;
 
@@ -54,6 +80,9 @@ export const CRON_RUN_RECORD_SCHEMA = {
         message: { type: "string" },
       },
     },
+    trigger: { type: "string" },
+    attempt: { type: "integer" },
+    runNumber: { type: "integer" },
   },
 } as const;
 
