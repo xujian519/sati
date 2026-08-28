@@ -80,6 +80,7 @@ function hostOf(url: string): string | undefined {
   try {
     return new URL(url).host;
   } catch {
+    // 非法 URL 无 host 可限速：按不限速处理，交由 networkFetch 上抛请求错误（fail-safe）。
     return undefined;
   }
 }

@@ -29,6 +29,7 @@ function safeCodePoint(code: number): string {
   try {
     return String.fromCodePoint(code);
   } catch {
+    // 孤立代理对等非法码位：解码失败按空串跳过，不因单个实体中断整个解码（fail-safe）。
     return "";
   }
 }
