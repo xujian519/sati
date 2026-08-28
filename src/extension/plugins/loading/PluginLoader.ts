@@ -53,6 +53,7 @@ async function loadHooksConfig(pluginPath: string, manifest: SatiPluginManifest)
     const raw = JSON.parse(await readFile(join(pluginPath, hookPath), "utf8")) as unknown;
     return parseHooksConfig(raw).settings;
   } catch {
+    // hooks 文件缺失/损坏：插件按无钩子加载，不阻断插件本体（fail-safe）。
     return undefined;
   }
 }

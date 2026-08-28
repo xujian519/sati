@@ -33,6 +33,7 @@ function parseFirstJsonLine(stdout: string): unknown | undefined {
     try {
       return JSON.parse(trimmed) as unknown;
     } catch {
+      // 首个 `{` 行不是合法 JSON：stdout 按纯文本处理（返回空 sync 输出）。
       return undefined;
     }
   }

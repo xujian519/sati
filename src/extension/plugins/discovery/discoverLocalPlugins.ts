@@ -16,6 +16,7 @@ export async function discoverPluginPaths(
     try {
       entries = await readdir(directory.path);
     } catch {
+      // 插件根目录不存在/不可读：跳过该发现根，不阻断其他根（fail-safe）。
       continue;
     }
 
@@ -26,6 +27,7 @@ export async function discoverPluginPaths(
           discovered.push({ path: pluginPath, source: directory.source });
         }
       } catch {
+        // 条目 stat 失败（竞态删除/权限）：跳过该条目（fail-safe）。
         continue;
       }
     }
@@ -46,6 +48,7 @@ export async function discoverSkillPaths(
     try {
       entries = await readdir(directory.path);
     } catch {
+      // 技能根目录不存在/不可读：跳过该发现根，不阻断其他根（fail-safe）。
       continue;
     }
     for (const entry of entries) {
@@ -57,6 +60,7 @@ export async function discoverSkillPaths(
           discovered.push({ path: skillDir, source: directory.source });
         }
       } catch {
+        // 目录/stat/readdir 失败（竞态删除/权限）：跳过该条目（fail-safe）。
         continue;
       }
     }

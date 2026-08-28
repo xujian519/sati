@@ -18,6 +18,7 @@ export function matchHookMatcher(matcher: string | undefined, query: string | un
     try {
       return new RegExp(matcher.slice(1, -1)).test(query);
     } catch {
+      // 非法正则 matcher：按不匹配处理（fail-closed，不因坏配置放行钩子）。
       return false;
     }
   }
