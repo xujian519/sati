@@ -9,4 +9,3 @@ export type { LifecycleDispatchInput, LifecycleDispatchResult } from "./protocol
 export { emptyLifecycleDispatchResult } from "./protocol/payloads.js";
 export { SatiLifecycleRuntimeError } from "./protocol/errors.js";
 export { LifecycleRuntime, NullLifecycleRuntime } from "./runtime/LifecycleRuntime.js";
-export type { LifecycleObserver } from "./runtime/LifecycleObserver.js";
