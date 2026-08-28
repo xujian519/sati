@@ -20,6 +20,7 @@ export function loadBuiltinPlugins(): SatiLoadedPlugin[] {
       try {
         statSync(manifestPath);
       } catch {
+        // 子目录无 plugin.json：不是内置插件，跳过（fail-safe）。
         continue;
       }
       const raw = JSON.parse(readFileSync(manifestPath, "utf8"));

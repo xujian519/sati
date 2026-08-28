@@ -138,12 +138,13 @@ function hasBundledSkills(root: string): boolean {
       entry => entry.isDirectory() && existsSync(join(root, entry.name, "SKILL.md")),
     );
   } catch {
+    // 内置技能根不可读：视为无内置技能，本次迁移不执行（调用方按 failures 处理）。
     return false;
   }
 }
 
 /** Deterministic hash over relative path, entry type, and file/link content. */
-export function hashDirectoryTree(root: string): string {
+function hashDirectoryTree(root: string): string {
   const resolvedRoot = resolve(root);
   const entries: Array<{ path: string; type: "file" | "link" }> = [];
   collectTreeEntries(resolvedRoot, resolvedRoot, entries);

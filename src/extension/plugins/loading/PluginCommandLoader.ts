@@ -75,6 +75,7 @@ async function collectMarkdownFiles(directory: string): Promise<string[]> {
   try {
     entries = await readdir(directory);
   } catch {
+    // 贡献目录（commands/skills/output-styles）不存在：按空集合处理（可省略目录）。
     return output;
   }
 
@@ -86,6 +87,7 @@ async function collectMarkdownFiles(directory: string): Promise<string[]> {
     try {
       entryStat = await stat(fullPath);
     } catch {
+      // 条目 stat 失败（竞态删除/权限）：跳过该条目（fail-safe）。
       continue;
     }
     if (entryStat.isDirectory()) {

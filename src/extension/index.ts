@@ -53,7 +53,6 @@ export { resolvePluginDirectories } from "./plugins/discovery/PluginDirectoryRes
 export { discoverPluginPaths, type DiscoveredPluginPath } from "./plugins/discovery/discoverLocalPlugins.js";
 export { discoverBuiltinPlugins } from "./plugins/discovery/discoverBuiltinPlugins.js";
 export { loadPluginFromPath } from "./plugins/loading/PluginLoader.js";
-export { loadPluginHooks } from "./plugins/loading/PluginHookLoader.js";
 export {
   getPluginCommandName,
   loadPluginCommands,
@@ -71,13 +70,6 @@ export {
   truncateMcpInstructionString,
 } from "./plugins/runtime/truncateMcpString.js";
 export { PluginRegistry } from "./plugins/runtime/PluginRegistry.js";
-export { defaultPluginReloadPolicy, type PluginReloadPolicy } from "./plugins/runtime/PluginReloadPolicy.js";
-
-export type { CommandContribution } from "./contributions/CommandContribution.js";
-export type { HookContribution } from "./contributions/HookContribution.js";
-export type { ToolContribution } from "./contributions/ToolContribution.js";
 export type { PromptContribution } from "./contributions/PromptContribution.js";
-export type { McpContribution } from "./contributions/McpContribution.js";
-export type { PermissionRuleContribution } from "./contributions/PermissionRuleContribution.js";
 export type { RouterContribution } from "./contributions/RouterContribution.js";
 export * from "./skills/index.js";

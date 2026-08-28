@@ -18,7 +18,7 @@ import { keywordScore } from "./keywordMatch.js";
 
 // 触发词仅保留 TRIZ 特有表述（矛盾/冲突/权衡/折中/规避设计）；"改进/优化/
 // 重构"与 pdca、first-principles 重叠且非 TRIZ 语义核心，剔除避免稀释命中。
-export const TRIGGERS = [
+const TRIGGERS = [
   "矛盾",
   "冲突",
   "权衡",
@@ -33,7 +33,7 @@ export const TRIGGERS = [
 /** 39×39 矛盾矩阵（[恶化参数][改善参数] = 推荐原理编号数组）。 */
 let matrixCache: number[][][] | null = null;
 
-export function loadMatrix(): number[][][] {
+function loadMatrix(): number[][][] {
   if (matrixCache) return matrixCache;
   const path = join(dirname(fileURLToPath(import.meta.url)), "data", "triz-matrix.json");
   matrixCache = JSON.parse(readFileSync(path, "utf8")) as number[][][];
@@ -105,7 +105,7 @@ const ENGINEERING_PARAMS: ReadonlyArray<{ no: number; match: string; label: stri
 ];
 
 /** 从 goal 文本中识别命中的工程参数编号（子串匹配，去重）。 */
-export function detectParamNumbers(goal: string): number[] {
+function detectParamNumbers(goal: string): number[] {
   const g = goal.toLowerCase();
   const found = new Set<number>();
   for (const p of ENGINEERING_PARAMS) {

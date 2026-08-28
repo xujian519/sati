@@ -84,8 +84,8 @@
 | C20 | src/always-on | 38/8K；DiscoveryFire.ts 1252 | ✅ 2026-08-27 |
 | C21 | src/session + task + status + pilot | 34/4.8K + 3 小模块 | ✅ 2026-08-27 |
 | C22 | src/cron + src/rule | 18/3K + 11/1.9K | ✅ 2026-08-27 |
-| C23 | src/mcp + literature + methodology | 16/1.4K + 13/1.3K + 13/0.7K | ⬜ |
-| C24 | src/extension + permission + lifecycle | SkillManager.ts 904 | ⬜ |
+| C23 | src/mcp + literature + methodology | 16/1.4K + 13/1.3K + 13/0.7K | ✅ 2026-08-28 |
+| C24 | src/extension + permission + lifecycle | SkillManager.ts 904 | ✅ 2026-08-28 |
 | C25 | src/web + workflow + telemetry | 12/3.5K + 11/1.8K + 5/0.8K | ⬜ |
 | C26 | 小模块合卡 | network/shared/fs/browser/test-support | ⬜ |
 
@@ -143,6 +143,8 @@
 | 2026-08-27 | C21 | src/session + task + status + pilot | P2 死代码：session/worktree 孤儿 barrel、SessionList listAllSessions/searchSessionsByTitle（含 2 options 类型）、pilot createPilotConfigStore/PilotRouterConfig/redactedValue、task/status/pilot barrel 死 re-export ×11；P2 重复收敛：mergeMetadata ×2→import SessionMetadataStore、BackgroundTaskRuntime stdout/stderr handler→onChunk、parseToolsConfig enabled 块 ×2→parseEnabledFlag、FileArtifactCollector mimeType 双调用、WorkspaceLedger cloneLedger 单调用点内联；P3 无参 catch 补 fail-safe 意图注释 ×11 + timedOut 等价简化；P0 候选 ×6 只登记（saveAiTitle 死条件、safeReadText 恒等分支、legacy 缓存 diagnostics 未拷贝、BTR entries 永不清理+maxTasks 上限、memory 平铺 schedule 字段静默失效、TaskOutputStore.readSlice 字节切片切碎 UTF-8）；记录不处理：replaySubagentTranscript 零消费（C3.S5 预留 SDK 面，按 C07/C17 判例保留）、getDiagnostics 零消费、跨文件重复（isNotFoundError ×3、provider/model 拆分 ×3、readOptionalPositiveInteger ×2）、killForAgent/killAll 微重复、isRecord 数组语义差异；测试缺口登记：resumeAgentSession/formatChatHistorySearch 零直接测试 | 4（refactor×4） | ✅ |
 | 2026-08-27 | C22 | src/cron + src/rule | P2 死代码：CronTaskStore getTask/replaceTask（连带 cron-fire.spec mock 脚手架 replaceCalls/replaceResults/replaceOk）、resolveRuleAsset、barrel defaultCronConfig；P2 死参数 CronFire.updateTaskAfterRun outcome（连带 void outcome; 删除）、CronScheduler 冗余 `as Promise<void>`；P2 重复收敛：createTask/updateTask 归一化+校验块 ×2→resolveScheduleAndNextRunAt、标题截断 ×2→firstLineTitle、patent-compliance 降级告警序列 ×3→loadComplianceBase、CronTaskStore normalize 双调用+`!` 断言 ×2；P2 恒真三元 RuleEngine:121（CITATION_RE 捕获组恒等）→ `match[1]`；P3 无参 catch 补意图注释 ×6（CronTimezone:5、CronStoreMigration:155/377、CronTaskStore:116/198、RuleEngine:97）+ mapCronRunOutcome 防御分支注释；P0 候选 ×2 只登记（CronManager.ensureRuntime start 失败永不重试、runTaskNow 绕过注入时钟+一次性任务累积）；记录不处理：RuleLoader structural/synonym 要素循环相似提取（漂移风险，C12 判例）、CronManager ENOENT catch ×3（warn 文案/行为各异）、原子写跨文件重复；测试缺口登记：CronManager/parseCronConfig/asset-location 无直接测试 | 2（refactor×2） | ✅ |
 | 2026-08-28 | FIX | C21/C22 P0 候选批次修复 | 8 项按 ①②>③④>⑤⑥>⑦⑧ 排序逐项修复，每项独立提交 + 附测试（关键回归用例先验证旧代码红再恢复绿）：①BTR 注册表（maxTasks 只数活跃任务 + 终态 entry finishedTaskTtlMs 默认 1h 惰性清扫）②CronManager.ensureRuntime 失败回滚注册表 + stop 兜底，下次调用重建重试（新增 cron-manager.spec，CronManager 首次有测试）③memory 平铺 schedule 字段被 schedule 段遮蔽时发 CONFIG_MEMORY_FLAT_SCHEDULE_FIELDS_IGNORED 警告（语义不变）④TaskOutputStore.readSlice UTF-8 码点边界对齐（尾部不完整序列回退 nextOffset 零丢失，头部孤立 continuation 跳过）⑤FileHistoryStore.safeReadText 非 ENOENT 经 options.warn 告警（stats fail-safe 语义不变）⑥TranscriptReader legacy 缓存命中 diagnostics 拷贝（与 entries/tail 路径一致）⑦runTaskNow 改用注入时钟（run-now 孵化-自删语义保留）⑧saveAiTitle 死分支移除，JSDoc 写明覆盖保护由调用方负责（TurnRunner 已实现）；决策记录 docs/notes/implemented/2026-08-28-p0-fix-batch-c21-c22.md | 8（fix×7 + refactor×1） | ✅ |
+| 2026-08-28 | C23 | src/mcp + literature + methodology | P2 死代码：methodology keywordMatch hasAnyKeyword 全仓零消费删除、triz TRIGGERS/loadMatrix/detectParamNumbers 死导出收窄为模块私有（测试仅消费 triz/lookupMatrixCell）；P2 重复收敛：parsePluginMcpServers streamable_http url 双重 expandMcpString（构造时已展开）→ 直用变量、isStringRecord 改类型守卫消 2 处 as；P3 PluginToToolBridge 图片扩展名嵌套三元 ×4 → IMAGE_MIME_BY_EXT 查表（文案逐字等价）；P3 无参 catch 补 fail-safe 意图注释 ×2（literature http hostOf 非法 URL、shared/text safeCodePoint 孤立代理码位）；P0/P1 无；记录不处理：4 connector 的 authors「前 4 + et al.」格式化跨文件 ×3（C04 判例）、ConnectorRegistry.all 零外部消费（注册表 API 面，C22 asset-location 判例）、8 个 methodology 组件结构同构但 prompt 主体全异（参数化加间接层无收益，C12 判例）、McpRuntime:65 `(err as Error).message` 强转（错误格式化行为面，保守档不动） | 3（refactor×3） | ✅ |
+| 2026-08-28 | C24 | src/extension + permission + lifecycle | P2 死代码删除 14 文件：extension/protocol 目录整体（SatiExtensionError/SatiExtensionSource/SatiExtensionContributionKind，被 plugins/protocol 取代的早期词汇层）、plugins/protocol/errors.ts SatiPluginError、PluginContributionLoader、PluginReloadPolicy/defaultPluginReloadPolicy、hooks/execution/aggregateHookResults.ts 孤儿单行 barrel、contributions 5 个死类型文件（Command/Hook/Tool/Mcp/PermissionRule；Prompt/Router 有 plugin.ts 消费保留）、lifecycle LifecycleDispatcher.ts 孤儿单行 barrel + LifecycleObserver.ts 零消费类型；P2 barrel 死 re-export 清理：extension/index.ts 删 loadPluginHooks/defaultPluginReloadPolicy 等 8 项、skills/index.ts 删 hashDirectoryTree（连带收窄 export，模块内自用）、lifecycle/index.ts 删 LifecycleObserver；P2 重复收敛：SkillManager isValidSlug 导出为单一事实源、migrateSkills 删内联副本（迁移须与导入同规则）、scan/listSkillsIn symlink→statIsDirectory、validateFromDisk/Manifest 规模硬限尾块→pushBundleLimitIssues、单文件体积检查→pushFileSizeIssues；P2 死方法 AsyncHookRegistry.list 恢复保留（parse-hook-output.spec 有消费，首查 grep 过滤器误报）；P3 无参 catch 补 fail-safe 意图注释 ×14（extension 12 + permission 1 + skills 2 组内含）；P0 候选 ×1 只登记（SkillManager walkDir readdir 失败静默 return，EACCES 目录被跳过 → fileCount/totalBytes 少报可让超限 bundle 过校验，import 时 fs.cp 才暴露）；记录不处理：toLegacyHookInput/SATI_NOT_APPLICABLE_LEGACY_HOOK_EVENTS（legacy 钩子契约预留面，C21 replaySubagentTranscript 判例）、isBlockingOutput 跨文件微重复 ×2、4 个 hook executor 结果包装结构相似（行为分支各异）、expandHome ×2 同目录重复（泛用 util，提取加导出面）、SatiLifecycleRuntimeError 零生产消费仅测试构造（疑预留错误契约面）；测试缺口登记：SkillManager scan/import 零直接 spec（skill-manager-builtin 只覆盖部分）；横切零 console/any/@ts-expect-error/TODO | 5（refactor×5） | ✅ |
 
 ### 日卡记录
 
@@ -390,6 +392,40 @@
 - **验证**：`pnpm typecheck` ✅；改动目录 `biome check` ✅、`eslint` ✅ 0 error/0 warning；`pnpm lint` 全量 ✅；`pnpm format:check` ✅；`pnpm test` 3924 pass / 0 fail / 4 skip ✅（cron/rule 套件全绿，cron-fire spec mock 同步精简）
 - **提交**：`refactor(cron): drop dead store methods, extract schedule resolution, document fallback catches`、`refactor(rule): drop dead asset resolver, dedupe compliance base loading`
 - **fix 卡回执（2026-08-28）**：本卡登记的 2 个 P0 候选已修复（ensureRuntime 失败回滚重试；runTaskNow 对齐注入时钟，孵化-自删语义经决策保留），CronManager 测试缺口已随 fix 卡补齐（cron-manager.spec 3 用例），详见进度表 2026-08-28 FIX 行与 `docs/notes/implemented/2026-08-28-p0-fix-batch-c21-c22.md`。
+
+#### C23 src/mcp + literature + methodology（2026-08-28）
+
+- **审阅范围**：43 文件 / ~3.4K 行（mcp 16 / 1377、literature 13 / 1284、methodology 14 / 789）。
+- **审阅发现**：
+  - P2 死代码：`keywordMatch.hasAnyKeyword` 全仓（src+tests）零消费 → 删除；triz.ts `TRIGGERS`/`loadMatrix`/`detectParamNumbers` 导出面零消费（内部自用，其余 8 个组件同名符号均模块私有）→ 收窄 export（triz.spec 仅消费 triz/lookupMatrixCell，核实无破坏）。
+  - P2 重复收敛：`parsePluginMcpServers` streamable_http 分支 `expandMcpString(url)` 双重展开——`url` 变量在三元构造时已展开 → 直用变量；`isStringRecord` boolean 改类型守卫（`v is Record<string, string>`），env/headers 两处 `as` 断言消除。
+  - P3：PluginToToolBridge 图片扩展名 mimeType 嵌套三元 ×4 层 → `IMAGE_MIME_BY_EXT` 查表（`?? "image/png"` 与原 fallback 逐字等价，C11 summarizeCheck 判例）；literature 无参 catch 补意图注释 ×2（http.ts hostOf 非法 URL→不限速放行交 networkFetch、text.ts safeCodePoint 孤立代理码位→空串跳过）。
+  - P0/P1 无行为缺陷。三模块横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME；mcp 40 处无参 catch 中其余 38 处均带注释（connection.ts 竞态语义注释尤其充分）。
+  - 记录不处理：4 个 connector 的 `authors()`「前 4 + et al.」格式化尾部逐字一致 ×3（跨文件，C04 判例）；`ConnectorRegistry.all()` 零外部消费（注册表 API 面，C22 asset-location 判例）；8 个 methodology 组件文件结构同构（TRIGGERS + identify/execute）但 prompt 主体全异，参数化工厂加间接层无收益（C12 判例）；`McpRuntime.ts:65` `(err as Error).message` 强转（错误消息格式化行为面，保守档不动）；mcp/literature/methodology 三个 index.ts barrel 的零消费类型导出（SatiMcpStatus/CatalogEntry/MethodologyCategory 等约 20 项）——均为域模块公共契约面/导出类型图的组成部分，按 C07 判例保留。
+- **精炼项**：死函数删除 1、死导出收窄 3、双重展开 1、类型守卫消断言 2、嵌套三元查表 1、catch 注释 2（净 -4 行，行为零变化）
+- **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm check` 全绿（lint/event-matrix/format/skills 门禁 fresh，无事件面改动）；`pnpm test` 3943 pass / 0 fail / 4 skip ✅
+- **提交**：`refactor(mcp): dedupe placeholder expansion, table-drive image mime, simplify transport fallback`、`refactor(literature): document defensive catches in http/text helpers`、`refactor(methodology): drop dead hasAnyKeyword, narrow triz module-internal exports`
+
+#### C24 src/extension + permission + lifecycle（2026-08-28）
+
+- **审阅范围**：53 文件 / ~5.1K 行（extension 41 / 4058、permission 7 / 915、lifecycle 8 / 150）。
+- **审阅发现**：
+  - P2 死代码删除 14 个文件（全部经全仓 src+tests+ui/server+scripts 消费扫描确认为零消费）：
+    - `src/extension/protocol/` 目录整体（errors/source/contribution 三文件：SatiExtensionError/SatiExtensionSource/SatiExtensionContributionKind——被 `plugins/protocol/` 取代的早期词汇层草稿）；
+    - `plugins/protocol/errors.ts`（SatiPluginError）、`plugins/loading/PluginContributionLoader.ts`、`plugins/runtime/PluginReloadPolicy.ts`（reload 策略词汇表，零消费零接线）；
+    - `hooks/execution/aggregateHookResults.ts`（单行孤儿 barrel）；
+    - `contributions/` 5 个死类型文件（Command/Hook/Tool/Mcp/PermissionRuleContribution——同一词汇族中仅 PromptContribution/RouterContribution 有 plugin.ts 消费，保留这 2 个）；
+    - `lifecycle/runtime/LifecycleDispatcher.ts`（单行孤儿 barrel；agent/loop 的同名 LifecycleDispatcher 是 misc.ts 本地定义的另一符号，无关）、`lifecycle/runtime/LifecycleObserver.ts`（零消费占位类型）。
+  - P2 barrel 清理：extension/index.ts 删 8 项死 re-export（含 loadPluginHooks、defaultPluginReloadPolicy、5 个死 contribution 类型）；skills/index.ts 删 hashDirectoryTree re-export（连带定义收窄 export，模块内自用）；lifecycle/index.ts 删 LifecycleObserver。
+  - P2 重复收敛：`SkillManager.isValidSlug` 导出为单一事实源（JSDoc 写明迁移必须与导入同规则），migrateSkills.ts 删除内联正则副本；SkillManager scan/listSkillsIn 的「symlink→stat 验目录」块 ×2 → `statIsDirectory` helper；validateFromDisk/validateFromManifest 的规模硬限尾块 ×2 → `pushBundleLimitIssues`、单文件体积检查 ×2 → `pushFileSizeIssues`（文案逐字保留）。
+  - P2 复核纠错：`AsyncHookRegistry.list()` 首查误判零消费（grep 过滤器把 `registry.list()` 误排除），typecheck 报错后核实 parse-hook-output.spec 3 处消费 → 恢复保留（同 C09 rg 漏检判例，tsc 兜底有效）。
+  - P3 无参 catch 补 fail-safe 意图注释 ×14（discoverLocalPlugins ×4、PluginLoader、PluginCommandLoader ×2、loadBuiltinPlugins、parseHookOutput、matchHook（fail-closed 语义注明）、migrateSkills、migrateLegacyBundledSkills、SkillManager ×2、PermissionRuntime summarizeInput；extension 原 40 处中其余均已带注释或为显式抛错转换）。
+  - P0 候选 ×1（只登记，另开 fix 卡）：`SkillManager.walkDir` 的 readdir catch 静默 return——不可读目录（EACCES）被整体跳过且不推任何 issue，fileCount/totalBytes 少报可让超限 bundle 通过 validate（import 落盘时 fs.cp 才暴露失败）。
+  - 记录不处理：`toLegacyHookInput` + `SATI_NOT_APPLICABLE_LEGACY_HOOK_EVENTS`（legacy 钩子 snake_case 契约预留面，C21 replaySubagentTranscript 判例）；`isBlockingOutput` HookRuntime/AsyncHookRegistry 跨文件微重复；4 个 hook executor（Callback/Http/Agent/Prompt）结果包装结构相似但行为分支各异（C22 RuleLoader 判例）；expandHome ×2 同目录重复（泛用 util，提取需新增导出面）；`SatiLifecycleRuntimeError` 零生产抛出点、仅测试构造（疑预留错误契约面，随其 spec 保留）；parseHooksConfig shell 白名单嵌套三元、SkillManager list() 条件 spread 嵌套三元（惯用法，展平反增行数）；SkillManager.ts 904 行（保守档待拆建议）；测试缺口登记：SkillManager.scan/import 零直接 spec。
+  - P0（已证实行为缺陷）：无。横切扫描：零裸 console、零 any/@ts-expect-error、零 TODO/FIXME。permission 模块质量样板（Guard 单调 deny 语义、settings 损坏 fail-closed 均有充分注释）。
+- **精炼项**：死文件删除 14、barrel 死 re-export 删除 10 项、重复提取 4 组、死导出收窄 2、catch 注释 ×14（净 -约 200 行，行为零变化）
+- **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm check` 全绿（event-matrix 无事件面改动，未触发生成）；`pnpm test` 3943 pass / 0 fail / 4 skip ✅（extension/permission/lifecycle 套件全绿）
+- **提交**：`refactor(extension): drop dead protocol stubs, contribution types and barrel re-exports`、`refactor(lifecycle): drop orphan dispatcher re-export and observer type`、`refactor(skills): share slug validation with migration, extract bundle limit checks`、`refactor(extension): document fallback catches in plugin/hook io paths`、`refactor(permission): document unserializable-input fallback`
 
 ## 六、基线（2026-08-18 实测）
 

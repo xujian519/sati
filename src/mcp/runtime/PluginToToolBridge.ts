@@ -173,6 +173,15 @@ async function marshalMcpContent(raw: unknown, cwd?: string): Promise<SatiToolRe
 
 const IMAGE_LINK_RE = /\[.*?\]\((\.[^)]*\.(?:png|jpe?g|gif|webp))\)/gi;
 
+/** 图片扩展名 → MIME（默认 png，与原内联三元逐字等价）。 */
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  png: "image/png",
+};
+
 /**
  * Extract image file references from Markdown text, read the files from disk,
  * and return them as base64 image blocks.
@@ -189,14 +198,7 @@ async function extractFileImages(text: string, cwd: string): Promise<SatiToolRes
       if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) continue;
       const data = await readFile(absPath);
       const ext = relPath.split(".").pop()?.toLowerCase() ?? "png";
-      const mimeType =
-        ext === "jpg" || ext === "jpeg"
-          ? "image/jpeg"
-          : ext === "gif"
-            ? "image/gif"
-            : ext === "webp"
-              ? "image/webp"
-              : "image/png";
+      const mimeType = IMAGE_MIME_BY_EXT[ext] ?? "image/png";
       results.push({ type: "image", mimeType, data: data.toString("base64") });
     } catch {
       // File not readable — skip silently; the text link remains as-is.
