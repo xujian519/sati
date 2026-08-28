@@ -45,3 +45,6 @@ export type FigureSpec = {
 };
 
 export type DocumentKind = "invention" | "utility";
+
+/** 辖区：cn=CNIPA（默认），us=USPTO（PCT/出海申请）。影响图号标注、规则适用与附图说明措辞。 */
+export type Jurisdiction = "cn" | "us";

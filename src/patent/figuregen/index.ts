@@ -13,6 +13,7 @@ export type {
   FigureNode,
   FigureNodeShape,
   FigureSpec,
+  Jurisdiction,
 } from "./types.js";
 
 export {
@@ -35,7 +36,7 @@ export {
   type Point,
   type RoutedEdge,
 } from "./layout.js";
-export { renderFigureSvg } from "./render-svg.js";
+export { figureCaption, renderFigureSvg } from "./render-svg.js";
 export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
 export { buildFigureBriefDraft, type FigureBriefOptions } from "./brief.js";

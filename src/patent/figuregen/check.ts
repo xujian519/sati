@@ -8,9 +8,9 @@
  *   文本侧数字未必是附图标记（如"步骤S20""三步法"），故仅提取括号形式标记
  *   且降级为 WARN，证据供人工确认，避免硬 FAIL 打断撰写流程。
  * - V4 表示同一组成部分的附图标记应当一致（细则第 21 条）
- * - V5 附图中除必需的词语外不应当含有其他注释（细则第 21 条尾款[待核对]）：
+ * - V5 附图中除必需的词语外不应当含有其他注释（细则第 21 条第 3 款，官方全文已核验）：
  *   label 疑似注释性长文（超长单行/多行段落）→ WARN
- * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南[待核对]）：画幅超限 → WARN
+ * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南一部一章 4.3，官方已核验）：画幅超限 → WARN
  * - V8 说明书有附图的应指定一幅摘要附图（指南一部一章 4.5.2）：多图未指定/
  *   指定多幅 → WARN
  * - V9 实用新型附图是说明书组成部分，应当有附图（指南一部二章 7.3 + 细则 20.5）
@@ -19,7 +19,7 @@
  */
 
 import { layoutFigure } from "./layout.js";
-import type { DocumentKind, FigureSpec } from "./types.js";
+import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 
 /** V5 阈值：单行 label 最大字符数 / 最大行数（超出视为疑似注释性文字）。 */
 export const COMMENT_LABEL_LINE_MAX = 40;
@@ -34,8 +34,10 @@ export type FigureCheckRuleId = "V1" | "V2" | "V3" | "V4" | "V5" | "V7" | "V8" |
 export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
   skipTextRules?: boolean;
-  /** 发明/实用新型（V9 仅对 utility 生效）。 */
+  /** 发明/实用新型（V9 仅对 utility 生效；US 辖区无此规则）。 */
   documentKind?: DocumentKind;
+  /** 辖区（默认 cn）：us 跳过 V8 摘要附图/V9 实用新型规则，违规信息引用 37 CFR 1.84。 */
+  jurisdiction?: Jurisdiction;
 };
 
 export type FigureCheckFinding = {
@@ -90,17 +92,21 @@ export function checkFigures(
   const sortedNos = [...figureNos].sort((a, b) => a - b);
   const expected = Array.from({ length: figures.length }, (_, i) => i + 1);
   const duplicated = sortedNos.filter((no, i) => i > 0 && no === sortedNos[i - 1]);
+  const us = options.jurisdiction === "us";
+  const v1Basis = us
+    ? "37 CFR 1.84: views should be numbered in consecutive sequence (FIG. 1, FIG. 2, ...)"
+    : "细则第 21 条：附图应按'图1，图2……'顺序编号";
   if (figures.length === 0) {
     findings.push({
       rule: "V1",
       severity: "fail",
-      message: "未提供任何附图（V1，细则第 21 条：附图应按'图1，图2……'顺序编号）",
+      message: `未提供任何附图（V1，${v1Basis}）`,
     });
   } else if (duplicated.length > 0 || sortedNos.some((no, i) => no !== expected[i])) {
     findings.push({
       rule: "V1",
       severity: "fail",
-      message: `附图编号应为 1..${figures.length} 连续排列，实际为 [${figureNos.join(", ")}]（V1，细则第 21 条）`,
+      message: `附图编号应为 1..${figures.length} 连续排列，实际为 [${figureNos.join(", ")}]（V1，${v1Basis}）`,
       figure_nos: figureNos,
     });
   }
@@ -129,7 +135,9 @@ export function checkFigures(
     findings.push({
       rule: "V2",
       severity: "fail",
-      message: "附图中出现的附图标记未在说明书文字部分中提及（V2，细则第 21 条）",
+      message: us
+        ? "Reference numeral shown in a figure but not described in the specification (V2, 37 CFR 1.84; MPEP 608.02)"
+        : "附图中出现的附图标记未在说明书文字部分中提及（V2，细则第 21 条）",
       evidence: missingEvidence,
     });
   }
@@ -140,7 +148,9 @@ export function checkFigures(
     findings.push({
       rule: "V3",
       severity: "warn",
-      message: "说明书文字部分出现的括号标记未出现于任何附图（V3，细则第 21 条；数字未必是附图标记，请人工确认）",
+      message: us
+        ? "Bracketed numeral in the specification not found in any figure (V3, 37 CFR 1.84; may not be a reference numeral — confirm manually)"
+        : "说明书文字部分出现的括号标记未出现于任何附图（V3，细则第 21 条；数字未必是附图标记，请人工确认）",
       evidence: orphanRefs.map(ref => `括号标记 ${ref} 未出现于任何附图`),
     });
   }
@@ -169,7 +179,7 @@ export function checkFigures(
         findings.push({
           rule: "V4",
           severity: "fail",
-          message: `同一附图标记应始终表示同一组成部分（V4，细则第 21 条）`,
+          message: `同一附图标记应始终表示同一组成部分（V4，${us ? "37 CFR 1.84" : "细则第 21 条"}）`,
           figure_nos: [figure.figure_no],
           evidence: [`图${figure.figure_no} 中标记 ${ref} 重复用于 ${ids.size} 个不同节点`],
         });
@@ -181,7 +191,9 @@ export function checkFigures(
       findings.push({
         rule: "V4",
         severity: "fail",
-        message: "同一附图标记跨图对应不同名称（V4，细则第 21 条：表示同一组成部分的附图标记应当一致）",
+        message: us
+          ? "Same reference numeral maps to different component names across figures (V4, 37 CFR 1.84)"
+          : "同一附图标记跨图对应不同名称（V4，细则第 21 条：表示同一组成部分的附图标记应当一致）",
         evidence: [`标记 ${ref} 对应多个名称：${[...names].join(" / ")}`],
       });
     }
@@ -191,7 +203,7 @@ export function checkFigures(
       findings.push({
         rule: "V4",
         severity: "fail",
-        message: "同一节点跨图使用了不同附图标记（V4，细则第 21 条）",
+        message: `同一节点跨图使用了不同附图标记（V4，${us ? "37 CFR 1.84" : "细则第 21 条"}）`,
         evidence: [`节点 id「${id}」跨图标记不一致：${[...refs].join(" / ")}`],
       });
     }
@@ -214,7 +226,7 @@ export function checkFigures(
     findings.push({
       rule: "V5",
       severity: "warn",
-      message: "附图节点文字疑似含注释性段落（V5，细则第 21 条尾款[待核对]：附图中除必需的词语外不应当含有其他注释）",
+      message: "附图节点文字疑似含注释性段落（V5，细则第 21 条第 3 款：附图中除必需的词语外不应当含有其他注释）",
       evidence: annotationEvidence,
     });
   }
@@ -228,14 +240,14 @@ export function checkFigures(
         severity: "warn",
         message:
           `图${figure.figure_no} 画幅 ${Math.round(width)}×${Math.round(height)}px 超过 ${FIGURE_CANVAS_MAX_PX}px` +
-          `（V7，指南[待核对]：缩小到三分之二时仍应能清晰分辨细节），建议拆分为多幅附图`,
+          `（V7，指南一部一章 4.3：缩小到三分之二时仍应能清晰分辨图中各个细节），建议拆分为多幅附图`,
         figure_nos: [figure.figure_no],
       });
     }
   }
 
-  // V8 摘要附图指定
-  if (figures.length > 1) {
+  // V8 摘要附图指定（CNIPA 特有：USPTO 无摘要附图制度）
+  if (figures.length > 1 && !us) {
     const abstractNos = figures.filter(f => f.abstract === true).map(f => f.figure_no);
     if (abstractNos.length === 0) {
       findings.push({
@@ -254,8 +266,8 @@ export function checkFigures(
     }
   }
 
-  // V9 实用新型必须有附图
-  if (options.documentKind === "utility" && figures.length === 0) {
+  // V9 实用新型必须有附图（CNIPA 特有：USPTO 无实用新型制度）
+  if (!us && options.documentKind === "utility" && figures.length === 0) {
     findings.push({
       rule: "V9",
       severity: "fail",

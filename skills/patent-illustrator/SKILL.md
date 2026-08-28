@@ -5,7 +5,8 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 
 # Patent Illustrator（专利附图专家）
 
-为发明/实用新型专利申请生成合规附图。**规则以中国专利（CNIPA）为准**；USPTO/PCT 出海模式为后续扩展。
+为发明/实用新型专利申请生成合规附图。**默认中国专利规则（CNIPA）**；PCT/出海申请传
+`jurisdiction: "us"` 切换 USPTO 模式（[references/uspto-drawing-rules.md](references/uspto-drawing-rules.md)）。
 
 ## 核心纪律
 
@@ -62,4 +63,7 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
   `svg_paths`）；A4 打印 HTML（generate 接 `format: html|both`）；
   `patent_drafting_v1` 已插 `figure_generate` 透传阶段（slop_clean 之后、
   final_approval 之前）。
-- P2：USPTO 37 CFR 1.84 出海模式（借鉴 Claude-Patent-Creator，MIT）。
+- P2：USPTO 出海模式已实现——两工具接 `jurisdiction: "us"`（FIG. N 图号、
+  跳过 V8/V9 CNIPA 特有规则、37 CFR 1.84 法条引用、英文 BRIEF DESCRIPTION
+  模板）。规则底座见 [references/uspto-drawing-rules.md](references/uspto-drawing-rules.md)。
+  未做：Graphviz 可选渲染器（复杂大图）、外观设计图片类附图。

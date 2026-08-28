@@ -8,7 +8,7 @@
  */
 
 import { layoutFigure, type FigureLayout } from "./layout.js";
-import type { FigureNode, FigureNodeShape, FigureSpec } from "./types.js";
+import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
 
 const FONT_SIZE = 14;
 const EDGE_FONT_SIZE = 12;
@@ -88,7 +88,16 @@ function renderNodeText(node: FigureNode, p: { x: number; y: number; width: numb
 }
 
 /** 渲染单幅附图为完整 SVG 文档。 */
-export function renderFigureSvg(spec: FigureSpec): { svg: string; width: number; height: number } {
+/** 图号标注：cn="图N"（细则第 21 条式样），us="FIG. N"（USPTO 惯例）。 */
+export function figureCaption(figureNo: number, jurisdiction: Jurisdiction = "cn"): string {
+  return jurisdiction === "us" ? `FIG. ${figureNo}` : `图${figureNo}`;
+}
+
+/** 渲染单幅附图为完整 SVG 文档。 */
+export function renderFigureSvg(
+  spec: FigureSpec,
+  options: { jurisdiction?: Jurisdiction } = {},
+): { svg: string; width: number; height: number } {
   const layout: FigureLayout = layoutFigure(spec);
   const { width, height } = layout;
 
@@ -125,7 +134,7 @@ export function renderFigureSvg(spec: FigureSpec): { svg: string; width: number;
     edges +
     nodes +
     `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${FONT_SIZE}" text-anchor="middle" fill="#000000">` +
-    `图${spec.figure_no}</text>\n` +
+    `${figureCaption(spec.figure_no, options.jurisdiction)}</text>\n` +
     `</svg>\n`;
 
   return { svg, width, height };

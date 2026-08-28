@@ -209,11 +209,11 @@ export type CreateBuiltinRegistryOptions = {
   documentStyle?: Record<string, never>;
   /**
    * patent_figure_generate / patent_figure_check（附图生成与细则 21 条双向标记
-   * 核验）。Opt-in：默认不注册——新增默认工具会改变 patent 会话工具集摘要，
-   * 打红全部 llm-replay fixture（documentStyle 同先例）；与 manifest 阶段挂接
-   * 同批默认注册并重录 fixture。
+   * 核验）。Registered by default（patent_figure_generate 已入 patent_workflow_run
+   * 的 figure_generate 阶段指引，默认可用）。Pass `false` to skip——会改变 patent
+   * 会话工具集摘要，需重录 deepseek-v4-flash-basic fixture（scripts/record-real-fixture.ts）。
    */
-  patentFigure?: Record<string, never>;
+  patentFigure?: false;
   /**
    * `enter_plan_mode` / `exit_plan_mode` builtins. Registered by default —
    * these lightweight skeleton tools let the model request a permission-mode
@@ -355,8 +355,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
       registry.register(annotate(createDocumentStylePresetTool(), "patent"));
       registry.register(annotate(createDocumentStylePanelTool(), "patent"));
     }
-    if (options?.patentFigure !== undefined) {
-      // 附图生成/核验工具（opt-in，理由见 options.patentFigure 注释）
+    if (options?.patentFigure !== false) {
       registry.register(annotate(createPatentFigureGenerateTool(), "patent"));
       registry.register(annotate(createPatentFigureCheckTool(), "patent"));
     }

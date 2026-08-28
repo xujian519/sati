@@ -7,11 +7,13 @@
  */
 
 import { renderFigureSvg } from "./render-svg.js";
-import type { FigureSpec } from "./types.js";
+import type { FigureSpec, Jurisdiction } from "./types.js";
 
 export type FiguresHtmlOptions = {
   /** 文档标题（<title> 与首页题头；通常为发明名称）。 */
   title?: string;
+  /** 辖区（默认 cn）：us 时内嵌 SVG 图号标注为 FIG. N。 */
+  jurisdiction?: Jurisdiction;
 };
 
 /** 渲染全部附图为可打印的单文件 HTML（A4 版式）。 */
@@ -20,7 +22,7 @@ export function renderFiguresHtml(specs: readonly FigureSpec[], options: Figures
   const sections = [...specs]
     .sort((a, b) => a.figure_no - b.figure_no)
     .map(spec => {
-      const { svg } = renderFigureSvg(spec);
+      const { svg } = renderFigureSvg(spec, { jurisdiction: options.jurisdiction });
       return `  <section class="figure-page">\n  ${svg.trim()}\n  </section>`;
     })
     .join("\n");

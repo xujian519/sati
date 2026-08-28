@@ -7,8 +7,8 @@
  * （不落盘阻断，由调用方决定修复重生成）。format=html/both 时另产 A4 打印版式
  * 单文件 HTML（PDF 经既有 Chromium 打印管线从该 HTML 产出）。
  *
- * opt-in 注册（createBuiltinRegistry patentFigure 选项）：默认注册会改变全部
- * patent 会话的工具集摘要，打红既有 llm-replay fixture。
+ * 默认注册（createBuiltinRegistry `patentFigure: false` 可排除；排除会改变工具集
+ * 摘要，需重录 deepseek-v4-flash-basic fixture）。
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -20,6 +20,7 @@ import {
   renderFiguresHtml,
   type DocumentKind,
   type FigureSpec,
+  type Jurisdiction,
 } from "../../patent/figuregen/index.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
@@ -35,6 +36,7 @@ export type PatentFigureGenerateInput = {
   invention_name?: string;
   brief?: boolean;
   format?: string;
+  jurisdiction?: string;
 };
 
 const FORMATS: readonly string[] = ["svg", "html", "both"];
@@ -51,7 +53,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
       "rules (Guidelines 2023 Part I Ch1 4.3/4.6): black lines on white, no gradients. Reference numerals " +
       "are structured fields embedded as data-ref attributes and validated against Rule 21 of the " +
       "Implementing Regulations (bidirectional figure/spec numeral consistency). Also returns a draft " +
-      "of the Brief Description of Drawings section. Opt-in tool.",
+      "of the Brief Description of Drawings section. Registered by default; pass `patentFigure: false` to skip.",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -73,7 +75,13 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         format: {
           type: "string",
           enum: ["svg", "html", "both"],
-          description: "输出格式：svg（默认）/ A4 打印版式单文件 HTML / 两者",
+          description: "Output format: svg (default) / A4 print single-file HTML / both",
+        },
+        jurisdiction: {
+          type: "string",
+          enum: ["cn", "us"],
+          description:
+            "Jurisdiction (default cn): us renders FIG. N captions, skips CN-only rules (abstract figure, utility-model), emits English brief description",
         },
       },
     },
@@ -102,6 +110,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
 
       const documentKind: DocumentKind | undefined =
         input.document_kind === "utility" ? "utility" : input.document_kind === "invention" ? "invention" : undefined;
+      const jurisdiction: Jurisdiction = input.jurisdiction === "us" ? "us" : "cn";
 
       const outputDir =
         input.output_dir !== undefined
@@ -115,10 +124,14 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
 
       try {
         // 生成期跑结构规则（V1/V4/V5/V7/V8/V9）；V2/V3 需说明书文本，属 patent_figure_check 职责。
-        const check = checkFigures(figures, "", { skipTextRules: true, documentKind: documentKind });
+        const check = checkFigures(figures, "", {
+          skipTextRules: true,
+          documentKind: documentKind,
+          jurisdiction: jurisdiction,
+        });
         const files: { path: string; figure_no: number }[] = [];
         for (const figure of figures) {
-          const { svg } = renderFigureSvg(figure);
+          const { svg } = renderFigureSvg(figure, { jurisdiction: jurisdiction });
           const path = resolve(outputDir, `${input.output_name}-fig${figure.figure_no}.svg`);
           await writeFile(path, svg, "utf8");
           files.push({ path, figure_no: figure.figure_no });
@@ -165,6 +178,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           const briefDraft = buildFigureBriefDraft(figures, {
             inventionName: input.invention_name,
             documentKind: documentKind,
+            jurisdiction: jurisdiction,
           });
           lines.push("", "--- 附图说明草稿（可直接并入说明书） ---", briefDraft);
         }

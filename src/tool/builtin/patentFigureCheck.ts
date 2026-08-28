@@ -11,7 +11,13 @@
 
 import { readFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
-import { checkFigures, parseFigureSvg, type DocumentKind, type FigureSpec } from "../../patent/figuregen/index.js";
+import {
+  checkFigures,
+  parseFigureSvg,
+  type DocumentKind,
+  type FigureSpec,
+  type Jurisdiction,
+} from "../../patent/figuregen/index.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import { FIGURE_INPUT_SCHEMA_REF } from "./patentFigureSchema.js";
@@ -21,6 +27,7 @@ export type PatentFigureCheckInput = {
   svg_paths?: string[];
   spec_text: string;
   document_kind?: string;
+  jurisdiction?: string;
 };
 
 export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCheckInput> {
@@ -37,7 +44,7 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
       "labels (V5), canvas legibility (V7), abstract-figure designation (V8) and utility-model drawings " +
       "requirement (V9). Input: structured `figures` and/or `svg_paths` (re-parses SVGs produced by " +
       "patent_figure_generate). Pass the full specification text (claims + description). Figures are not " +
-      "final until this check reports ok. Opt-in tool.",
+      "final until this check reports ok. Registered by default; pass `patentFigure: false` to skip.",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -64,7 +71,13 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         document_kind: {
           type: "string",
           enum: ["invention", "utility"],
-          description: "发明/实用新型（V9 实用新型必须有附图）",
+          description: "发明/实用新型（V9 实用新型必须有附图，US 辖区无此规则）",
+        },
+        jurisdiction: {
+          type: "string",
+          enum: ["cn", "us"],
+          description:
+            "Jurisdiction (default cn): us skips CN-only rules (V8 abstract figure, V9 utility model) and cites 37 CFR 1.84",
         },
       },
     },
@@ -73,6 +86,7 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
     async execute(input, context: SatiToolRuntimeContext) {
       const documentKind: DocumentKind | undefined =
         input.document_kind === "utility" ? "utility" : input.document_kind === "invention" ? "invention" : undefined;
+      const jurisdiction: Jurisdiction = input.jurisdiction === "us" ? "us" : "cn";
 
       const figures: FigureSpec[] = [...(input.figures ?? [])];
       for (const svgPath of input.svg_paths ?? []) {
@@ -106,7 +120,10 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
       }
 
       try {
-        const result = checkFigures(figures, input.spec_text, { documentKind: documentKind });
+        const result = checkFigures(figures, input.spec_text, {
+          documentKind: documentKind,
+          jurisdiction: jurisdiction,
+        });
         const lines: string[] = [
           `核验${result.ok ? "通过" : "未通过"}（fail=${result.findings.filter(f => f.severity === "fail").length}, ` +
             `warn=${result.findings.filter(f => f.severity === "warn").length}）：`,
@@ -124,7 +141,9 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         }
         lines.push(
           "",
-          "依据：专利法实施细则（2023）第 20/21 条、审查指南一部一章 4.3/4.5.2/4.6 与一部二章 7.3；无 fail 级发现方可定稿附图。",
+          jurisdiction === "us"
+            ? "Basis: 37 CFR 1.84 (drawings); MPEP 608.02 (reference characters). Figures are final only with no fail-level findings."
+            : "依据：专利法实施细则（2023）第 20/21 条、审查指南一部一章 4.3/4.5.2/4.6 与一部二章 7.3；无 fail 级发现方可定稿附图。",
         );
         return {
           content: [{ type: "text", text: lines.join("\n") }],
