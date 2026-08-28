@@ -18,9 +18,3 @@ export function keywordScore(context: MethodologyContext, triggers: readonly str
   }
   return matched / triggers.length;
 }
-
-/** True when any trigger token appears in the goal. */
-export function hasAnyKeyword(context: MethodologyContext, triggers: readonly string[]): boolean {
-  const haystack = context.goal.toLowerCase();
-  return triggers.some(trigger => haystack.includes(trigger.toLowerCase()));
-}
