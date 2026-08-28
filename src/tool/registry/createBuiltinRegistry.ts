@@ -50,6 +50,8 @@ import { createExportHtmlTool } from "../builtin/exportHtml.js";
 import { createRenderPatentDocumentTool } from "../builtin/renderPatentDocument.js";
 import { createDocumentStylePresetTool } from "../builtin/documentStylePreset.js";
 import { createDocumentStylePanelTool } from "../builtin/documentStylePanel.js";
+import { createPatentFigureCheckTool } from "../builtin/patentFigureCheck.js";
+import { createPatentFigureGenerateTool } from "../builtin/patentFigureGenerate.js";
 import { createFlexiblePlanTool } from "../builtin/patentFlexiblePlanTool.js";
 import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
 import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
@@ -206,6 +208,13 @@ export type CreateBuiltinRegistryOptions = {
    */
   documentStyle?: Record<string, never>;
   /**
+   * patent_figure_generate / patent_figure_check（附图生成与细则 21 条双向标记
+   * 核验）。Opt-in：默认不注册——新增默认工具会改变 patent 会话工具集摘要，
+   * 打红全部 llm-replay fixture（documentStyle 同先例）；与 manifest 阶段挂接
+   * 同批默认注册并重录 fixture。
+   */
+  patentFigure?: Record<string, never>;
+  /**
    * `enter_plan_mode` / `exit_plan_mode` builtins. Registered by default —
    * these lightweight skeleton tools let the model request a permission-mode
    * switch to plan (read-only) and back. Pass `false` to skip.
@@ -345,6 +354,11 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
       // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
       registry.register(annotate(createDocumentStylePresetTool(), "patent"));
       registry.register(annotate(createDocumentStylePanelTool(), "patent"));
+    }
+    if (options?.patentFigure !== undefined) {
+      // 附图生成/核验工具（opt-in，理由见 options.patentFigure 注释）
+      registry.register(annotate(createPatentFigureGenerateTool(), "patent"));
+      registry.register(annotate(createPatentFigureCheckTool(), "patent"));
     }
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
