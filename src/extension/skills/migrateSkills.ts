@@ -2,7 +2,7 @@ import { access, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { getPilotExtensionPaths } from "../../shared/paths/index.js";
-import { SkillManager, SkillManagerError, SkillValidationError } from "./SkillManager.js";
+import { isValidSlug, SkillManager, SkillManagerError, SkillValidationError } from "./SkillManager.js";
 import type { SkillImportResult, SkillScope, SkillValidationResult } from "./types.js";
 
 export type SkillMigrationSourceKind = "claude-code" | "openclaw" | "hermes" | "custom";
@@ -259,6 +259,7 @@ async function discoverSkillDirs(sourceRoot: string): Promise<string[] | null> {
       await access(join(skillDir, "SKILL.md"));
       dirs.push(skillDir);
     } catch {
+      // 子目录缺 SKILL.md：不作为技能迁移（与 SkillManager 的技能判定一致）。
       continue;
     }
   }
@@ -350,8 +351,4 @@ function expandHome(path: string): string {
   if (path === "~") return homedir();
   if (path.startsWith("~/")) return join(homedir(), path.slice(2));
   return path;
-}
-
-function isValidSlug(slug: string): boolean {
-  return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(slug) && !slug.includes("..");
 }

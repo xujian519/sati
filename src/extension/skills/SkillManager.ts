@@ -38,6 +38,14 @@ import {
  */
 const SLUG_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/;
 
+/**
+ * 单一事实源：迁移（migrateSkills）必须与导入（import/create）执行同一套
+ * slug 规则，否则迁移产物会被 manager 拒绝列出。
+ */
+export function isValidSlug(slug: unknown): slug is string {
+  return typeof slug === "string" && SLUG_RE.test(slug) && !slug.includes("..");
+}
+
 /** Caps mirror the legacy `ui/server/routes/skills.js` limits. */
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -388,14 +396,7 @@ export class SkillManager {
     for (const entry of entries) {
       if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
       let isDir = entry.isDirectory();
-      if (!isDir) {
-        try {
-          const target = await fs.stat(join(resolvedRoot, entry.name));
-          isDir = target.isDirectory();
-        } catch {
-          isDir = false;
-        }
-      }
+      if (!isDir) isDir = await statIsDirectory(join(resolvedRoot, entry.name));
       if (!isDir) continue;
 
       const subDir = join(resolvedRoot, entry.name);
@@ -447,14 +448,19 @@ export class SkillValidationError extends SkillManagerError {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function isValidSlug(slug: unknown): slug is string {
-  return typeof slug === "string" && SLUG_RE.test(slug) && !slug.includes("..");
-}
-
 function expandHome(p: string): string {
   if (p === "~") return homedir();
   if (p.startsWith("~/")) return join(homedir(), p.slice(2));
   return p;
+}
+
+/** stat 解析目录性：断链 / 不可读的 symlink 视为非目录（fail-safe 跳过）。 */
+async function statIsDirectory(path: string): Promise<boolean> {
+  try {
+    return (await fs.stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -599,6 +605,7 @@ async function readSkillMeta(skillDir: string, scope: SkillScope): Promise<Skill
   try {
     content = await fs.readFile(skillFile, "utf8");
   } catch {
+    // SKILL.md 不可读（已删/权限）：返回 null，调用方跳过该条目，列表不被单个坏项阻断（fail-safe）。
     return null;
   }
   const fm = parseSkillFrontmatter(content);
@@ -683,12 +690,7 @@ async function listSkillsIn(root: string, scope: SkillScope): Promise<SkillSumma
     if (!isSkillDir && entry.isSymbolicLink()) {
       // Accept symlinks-to-directories (the import-as-symlink path
       // creates these). Resolve and verify the target is a real dir.
-      try {
-        const target = await fs.stat(join(root, entry.name));
-        isSkillDir = target.isDirectory();
-      } catch {
-        isSkillDir = false;
-      }
+      isSkillDir = await statIsDirectory(join(root, entry.name));
     }
     if (!isSkillDir) continue;
     const meta = await readSkillMeta(join(root, entry.name), scope);
@@ -787,16 +789,7 @@ async function validateFromDisk(sourcePath: string): Promise<SkillValidationResu
 
   await walkDir(sourcePath, "", stats, hardFails, warnings);
 
-  if (stats.fileCount > MAX_FILE_COUNT) {
-    pushIssue(hardFails, "too_many_files", `Bundle has more than ${MAX_FILE_COUNT} files.`);
-  }
-  if (stats.totalBytes > MAX_TOTAL_BYTES) {
-    pushIssue(
-      hardFails,
-      "total_too_large",
-      `Bundle total size exceeds ${MAX_TOTAL_BYTES} bytes (${stats.totalBytes}).`,
-    );
-  }
+  pushBundleLimitIssues(stats, hardFails);
 
   return { ok: hardFails.length === 0, hardFails, warnings, stats, frontmatter };
 }
@@ -830,11 +823,7 @@ async function walkDir(
     try {
       const fileStat = await fs.stat(abs);
       stats.totalBytes += fileStat.size;
-      if (fileStat.size > MAX_FILE_BYTES) {
-        pushIssue(hardFails, "file_too_large", `File exceeds ${MAX_FILE_BYTES} bytes: ${rel} (${fileStat.size} bytes)`);
-      } else if (fileStat.size > 1024 * 1024) {
-        pushIssue(warnings, "file_large", `Large file: ${rel} (${(fileStat.size / 1024 / 1024).toFixed(1)} MB)`);
-      }
+      pushFileSizeIssues(fileStat.size, rel, hardFails, warnings);
     } catch {
       // 单文件不可读：跳过其体积统计，仅影响 file_too_large/large 告警判定（best-effort）。
     }
@@ -871,11 +860,7 @@ function validateFromManifest(
     const size = Number(f.size) || 0;
     stats.fileCount += 1;
     stats.totalBytes += size;
-    if (size > MAX_FILE_BYTES) {
-      pushIssue(hardFails, "file_too_large", `File exceeds ${MAX_FILE_BYTES} bytes: ${rel} (${size} bytes)`);
-    } else if (size > 1024 * 1024) {
-      pushIssue(warnings, "file_large", `Large file: ${rel} (${(size / 1024 / 1024).toFixed(1)} MB)`);
-    }
+    pushFileSizeIssues(size, rel, hardFails, warnings);
     const ext = extOf(rel).toLowerCase();
     if (RISKY_EXTS.has(ext)) {
       pushIssue(warnings, "risky_extension", `Executable-style file (${ext}): ${rel}`);
@@ -884,6 +869,21 @@ function validateFromManifest(
   if (!hasSkillMd) {
     pushIssue(hardFails, "no_skill_md", "No SKILL.md at the root of the picked folder.");
   }
+  pushBundleLimitIssues(stats, hardFails);
+
+  let frontmatter: Record<string, unknown> | null = null;
+  if (hasSkillMd) {
+    frontmatter = validateRequiredFrontmatter(skillMdContent, hardFails, warnings);
+  }
+
+  return { ok: hardFails.length === 0, hardFails, warnings, stats, frontmatter };
+}
+
+/** Bundle 规模硬限（文件数 / 总字节），磁盘与 manifest 两条校验路径共用。 */
+function pushBundleLimitIssues(
+  stats: { fileCount: number; totalBytes: number },
+  hardFails: SkillValidationIssue[],
+): void {
   if (stats.fileCount > MAX_FILE_COUNT) {
     pushIssue(hardFails, "too_many_files", `Bundle has more than ${MAX_FILE_COUNT} files.`);
   }
@@ -894,11 +894,18 @@ function validateFromManifest(
       `Bundle total size exceeds ${MAX_TOTAL_BYTES} bytes (${stats.totalBytes}).`,
     );
   }
+}
 
-  let frontmatter: Record<string, unknown> | null = null;
-  if (hasSkillMd) {
-    frontmatter = validateRequiredFrontmatter(skillMdContent, hardFails, warnings);
+/** 单文件体积硬限/告警，磁盘与 manifest 两条校验路径共用（文案逐字一致）。 */
+function pushFileSizeIssues(
+  size: number,
+  rel: string,
+  hardFails: SkillValidationIssue[],
+  warnings: SkillValidationIssue[],
+): void {
+  if (size > MAX_FILE_BYTES) {
+    pushIssue(hardFails, "file_too_large", `File exceeds ${MAX_FILE_BYTES} bytes: ${rel} (${size} bytes)`);
+  } else if (size > 1024 * 1024) {
+    pushIssue(warnings, "file_large", `Large file: ${rel} (${(size / 1024 / 1024).toFixed(1)} MB)`);
   }
-
-  return { ok: hardFails.length === 0, hardFails, warnings, stats, frontmatter };
 }
