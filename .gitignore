@@ -244,3 +244,7 @@ __pycache__/
 # Brooks-Lint 本地审计工具产物
 .brooks-lint.yaml
 .brooks-lint-history.json
+
+# 本地 ZCode / 参考视频 Agent 探查目录（含本机配置与参考素材，不入库）
+/.zcode/
+/.video_agent/
