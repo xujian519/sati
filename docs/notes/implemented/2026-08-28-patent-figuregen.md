@@ -1,6 +1,6 @@
 # Agent Note: 专利附图生成底座（figuregen 模块 + 两工具 opt-in + CNIPA 规则底座）
 
-Status: implemented
+Status: implemented（P0 + P1；P2 USPTO 模式未做）
 
 ## Problem
 
@@ -21,7 +21,14 @@ agent 提示词自律。
   warn）/ V4 一标记一组件（fail）；规则底座与 Semantica（8001 知识图谱）溯源锚固化于
   `skills/patent-illustrator/references/cn-drawing-rules.md`。
 - 新增 `patent_figure_generate` / `patent_figure_check` 两工具 + `skills/patent-illustrator`
-  技能。28 个新单测（校验器表驱动、布局/渲染不变式与确定性快照、工具层落盘/fail-closed）。
+  技能。41 个新单测（校验器表驱动、布局/渲染不变式与确定性快照、SVG 回读、A4 HTML、
+  工具层落盘/fail-closed）。
+- P1 追加：校验器全量规则 V5 禁注释 / V7 画幅可辨 / V8 摘要附图 / V9 实用新型必须有
+  附图；`patent_figure_check` 接 `svg_paths` 回读已交付 SVG（readback.ts，仅解析本模块
+  渲染器输出）；`patent_figure_generate` 接 `format: html|both` 产 A4 打印版式单文件
+  HTML（PDF 走既有 Chromium 打印管线）；`patent_drafting_v1` 在 slop_clean 与
+  final_approval 之间插入 `figure_generate` 无原子透传阶段；compliance.yaml 增
+  PAT-FIG-001 附图标记一致性自检规则（structural_analysis，rule_check A 链）。
 
 ## Alternatives considered
 
@@ -35,10 +42,19 @@ agent 提示词自律。
   全集与请求序列：默认注册/改 `patentDraftingManifest` 会打红全部 patent 回路 fixture，重录需
   API key。故两工具走 **opt-in**（`createBuiltinRegistry` 的 `patentFigure` 选项，documentStyle
   先例）；manifest 挂 `figure_generate` 阶段与 fixture 重录**同批**做（P0.5/P1），弃立即挂接。
+  （P1 修订：核实 drafting fixture 实际未录制、其测试 skip，basic fixture 是纯问答任务且
+  workflow 工具描述为硬编码字符串——manifest 插阶段不动请求键，遂落地；工具默认注册仍会改
+  变工具集摘要，opt-in 维持。）
+- **compliance.yaml 增 PAT-FIG-001 附图标记一致性 YAML 规则** — 规则引擎的 structural_analysis
+  是"缺失即违规"语义、无前置触发条件：入共享 patent scope 后 rule_check 对任意非附图文本都会
+  报违规（`rule-check.spec` 干净文本用例即红）。附图核验的确定性本体已在 `patent_figure_check`
+  工具内，YAML 规则只会重复且误报，弃（已回退）。若未来引擎支持 precondition/trigger 语义可
+  再评估。
 
 ## Consequences
 
 换来：撰写链路补上附图交付物；合规（黑白、双向标记一致）从"提示词自律"升级为"构造期不变式 +
 机器门禁"；规则每条带知识图谱溯源锚（念念有据）。付出：布局器 P0 只覆盖 ≤20 节点简单分层
-（复杂大图需 P2 Graphviz 增强）；两工具 opt-in 期间默认会话不可见；V5/V7/V8/V9 及 SVG 回读
-复核留 P1；`[待核对]` 条款（细则 21 尾款禁注释、缩小三分之二）待官方全文校对。
+（复杂大图需 P2 Graphviz 增强）；两工具 opt-in 期间默认会话不可见（工作流 figure_generate
+阶段在未启用时会说明跳过）；`[待核对]` 条款（细则 21 尾款禁注释、缩小三分之二、A4 边距）
+待官方全文校对。

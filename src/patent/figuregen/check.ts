@@ -1,5 +1,5 @@
 /**
- * src/patent/figuregen — 附图确定性校验器（P0：V1–V4）。
+ * src/patent/figuregen — 附图确定性校验器（V1–V5、V7–V9；V6 为渲染器不变式）。
  *
  * 规则依据（溯源锚见 skills/patent-illustrator/references/cn-drawing-rules.md）：
  * - V1 附图按"图1，图2……"顺序编号排列（细则 2023 第 21 条第 1 款）
@@ -8,15 +8,35 @@
  *   文本侧数字未必是附图标记（如"步骤S20""三步法"），故仅提取括号形式标记
  *   且降级为 WARN，证据供人工确认，避免硬 FAIL 打断撰写流程。
  * - V4 表示同一组成部分的附图标记应当一致（细则第 21 条）
+ * - V5 附图中除必需的词语外不应当含有其他注释（细则第 21 条尾款[待核对]）：
+ *   label 疑似注释性长文（超长单行/多行段落）→ WARN
+ * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南[待核对]）：画幅超限 → WARN
+ * - V8 说明书有附图的应指定一幅摘要附图（指南一部一章 4.5.2）：多图未指定/
+ *   指定多幅 → WARN
+ * - V9 实用新型附图是说明书组成部分，应当有附图（指南一部二章 7.3 + 细则 20.5）
  *
  * V6（黑白线条）为渲染器构造期不变式，由 render-svg 单测保证，不在此重复。
  */
 
-import type { FigureSpec } from "./types.js";
+import { layoutFigure } from "./layout.js";
+import type { DocumentKind, FigureSpec } from "./types.js";
+
+/** V5 阈值：单行 label 最大字符数 / 最大行数（超出视为疑似注释性文字）。 */
+export const COMMENT_LABEL_LINE_MAX = 40;
+export const COMMENT_LABEL_LINES_MAX = 3;
+/** V7 阈值：画幅最大边长（px）。超出则缩小到 2/3 后小于可辨字号。 */
+export const FIGURE_CANVAS_MAX_PX = 1600;
 
 export type FigureCheckSeverity = "fail" | "warn" | "info";
 
-export type FigureCheckRuleId = "V1" | "V2" | "V3" | "V4";
+export type FigureCheckRuleId = "V1" | "V2" | "V3" | "V4" | "V5" | "V7" | "V8" | "V9";
+
+export type FigureCheckOptions = {
+  /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
+  skipTextRules?: boolean;
+  /** 发明/实用新型（V9 仅对 utility 生效）。 */
+  documentKind?: DocumentKind;
+};
 
 export type FigureCheckFinding = {
   rule: FigureCheckRuleId;
@@ -61,7 +81,7 @@ function extractBracketRefs(specText: string): number[] {
 export function checkFigures(
   figures: readonly FigureSpec[],
   specText: string,
-  options: { skipTextRules?: boolean } = {},
+  options: FigureCheckOptions = {},
 ): FigureCheckResult {
   const findings: FigureCheckFinding[] = [];
 
@@ -175,6 +195,73 @@ export function checkFigures(
         evidence: [`节点 id「${id}」跨图标记不一致：${[...refs].join(" / ")}`],
       });
     }
+  }
+
+  // V5 禁注释（保守 WARN：疑似注释性长文）
+  const annotationEvidence: string[] = [];
+  for (const figure of figures) {
+    for (const node of figure.nodes) {
+      const lines = node.label.split("\n");
+      const longest = Math.max(...lines.map(line => line.length));
+      if (lines.length > COMMENT_LABEL_LINES_MAX || longest > COMMENT_LABEL_LINE_MAX) {
+        annotationEvidence.push(
+          `图${figure.figure_no} 节点「${node.id}」label 疑似注释性文字（${lines.length} 行，最长 ${longest} 字符）`,
+        );
+      }
+    }
+  }
+  if (annotationEvidence.length > 0) {
+    findings.push({
+      rule: "V5",
+      severity: "warn",
+      message: "附图节点文字疑似含注释性段落（V5，细则第 21 条尾款[待核对]：附图中除必需的词语外不应当含有其他注释）",
+      evidence: annotationEvidence,
+    });
+  }
+
+  // V7 缩小三分之二可辨（画幅代理检查）
+  for (const figure of figures) {
+    const { width, height } = layoutFigure(figure);
+    if (Math.max(width, height) > FIGURE_CANVAS_MAX_PX) {
+      findings.push({
+        rule: "V7",
+        severity: "warn",
+        message:
+          `图${figure.figure_no} 画幅 ${Math.round(width)}×${Math.round(height)}px 超过 ${FIGURE_CANVAS_MAX_PX}px` +
+          `（V7，指南[待核对]：缩小到三分之二时仍应能清晰分辨细节），建议拆分为多幅附图`,
+        figure_nos: [figure.figure_no],
+      });
+    }
+  }
+
+  // V8 摘要附图指定
+  if (figures.length > 1) {
+    const abstractNos = figures.filter(f => f.abstract === true).map(f => f.figure_no);
+    if (abstractNos.length === 0) {
+      findings.push({
+        rule: "V8",
+        severity: "warn",
+        message: "多幅附图未指定摘要附图（V8，指南一部一章 4.5.2：应指定一幅最能说明主要技术特征的附图作为摘要附图）",
+        evidence: [`在 FigureSpec 上设置 abstract: true（图号：${figureNos.join(", ")}）`],
+      });
+    } else if (abstractNos.length > 1) {
+      findings.push({
+        rule: "V8",
+        severity: "warn",
+        message: "摘要附图指定了多幅（V8，指南一部一章 4.5.2：应指定其中一幅）",
+        evidence: [`当前指定：图${abstractNos.join("、图")}`],
+      });
+    }
+  }
+
+  // V9 实用新型必须有附图
+  if (options.documentKind === "utility" && figures.length === 0) {
+    findings.push({
+      rule: "V9",
+      severity: "fail",
+      message:
+        "实用新型申请未提供任何附图（V9，指南一部二章 7.3 + 细则第 20 条第 5 款：附图是说明书组成部分，实用新型应当有附图）",
+    });
   }
 
   return {

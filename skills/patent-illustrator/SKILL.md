@@ -58,6 +58,8 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 
 - P0：figuregen 模块（src/patent/figuregen/）+ 两工具 opt-in 注册
   （createBuiltinRegistry `patentFigure` 选项）+ 校验器 V1–V4。
-- P1：V5 禁注释/V7 缩放可辨/V8 摘要附图门/V9 实用新型必须有附图；SVG 回读复核；
-  patent_drafting_v1 挂 figure_generate 阶段（与 llm-replay fixture 重录同批）。
+- P1：校验器全量规则 V5/V7/V8/V9；SVG 回读复核（patent_figure_check 接
+  `svg_paths`）；A4 打印 HTML（generate 接 `format: html|both`）；
+  `patent_drafting_v1` 已插 `figure_generate` 透传阶段（slop_clean 之后、
+  final_approval 之前）。
 - P2：USPTO 37 CFR 1.84 出海模式（借鉴 Claude-Patent-Creator，MIT）。

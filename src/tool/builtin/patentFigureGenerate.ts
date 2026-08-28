@@ -1,9 +1,11 @@
 /**
- * patent_figure_generate — 从结构化 FigureSpec 确定性渲染专利附图（SVG）。
+ * patent_figure_generate — 从结构化 FigureSpec 确定性渲染专利附图（SVG / A4 HTML）。
  *
  * LLM 只产结构化节点/边/附图标记，不产图形；黑白线条合规（审查指南 2023 一部
- * 一章 4.3/4.6）是渲染器构造期不变式。生成后自动运行 V1–V4 校验（细则第 21 条），
- * fail 级发现随结果返回（不落盘阻断，由调用方决定修复重生成）。
+ * 一章 4.3/4.6）是渲染器构造期不变式。生成后自动运行结构校验（V1/V4/V5/V7/V8/V9；
+ * V2/V3 需说明书文本，属 patent_figure_check 职责），fail 级发现随结果返回
+ * （不落盘阻断，由调用方决定修复重生成）。format=html/both 时另产 A4 打印版式
+ * 单文件 HTML（PDF 经既有 Chromium 打印管线从该 HTML 产出）。
  *
  * opt-in 注册（createBuiltinRegistry patentFigure 选项）：默认注册会改变全部
  * patent 会话的工具集摘要，打红既有 llm-replay fixture。
@@ -15,6 +17,7 @@ import {
   buildFigureBriefDraft,
   checkFigures,
   renderFigureSvg,
+  renderFiguresHtml,
   type DocumentKind,
   type FigureSpec,
 } from "../../patent/figuregen/index.js";
@@ -31,7 +34,10 @@ export type PatentFigureGenerateInput = {
   document_kind?: string;
   invention_name?: string;
   brief?: boolean;
+  format?: string;
 };
+
+const FORMATS: readonly string[] = ["svg", "html", "both"];
 
 export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigureGenerateInput> {
   return {
@@ -64,6 +70,11 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         },
         invention_name: { type: "string", description: "发明名称（附图说明草稿引用）" },
         brief: { type: "boolean", description: "是否生成附图说明草稿（默认 true）" },
+        format: {
+          type: "string",
+          enum: ["svg", "html", "both"],
+          description: "输出格式：svg（默认）/ A4 打印版式单文件 HTML / 两者",
+        },
       },
     },
     isReadOnly: () => false,
@@ -103,8 +114,8 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
       await mkdir(outputDir, { recursive: true });
 
       try {
-        // 生成期仅跑结构规则（V1/V4）；V2/V3 需说明书文本，属 patent_figure_check 职责。
-        const check = checkFigures(figures, "", { skipTextRules: true });
+        // 生成期跑结构规则（V1/V4/V5/V7/V8/V9）；V2/V3 需说明书文本，属 patent_figure_check 职责。
+        const check = checkFigures(figures, "", { skipTextRules: true, documentKind: documentKind });
         const files: { path: string; figure_no: number }[] = [];
         for (const figure of figures) {
           const { svg } = renderFigureSvg(figure);
@@ -113,15 +124,35 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           files.push({ path, figure_no: figure.figure_no });
         }
 
+        const format = input.format ?? "svg";
+        if (!FORMATS.includes(format)) {
+          throw new SatiToolRuntimeError(
+            "invalid_tool_input",
+            `非法 format "${format}"（可用: ${FORMATS.join(", ")}）`,
+            {
+              tool: "patent_figure_generate",
+              format,
+            },
+          );
+        }
+        let htmlPath: string | undefined;
+        if (format === "html" || format === "both") {
+          htmlPath = resolve(outputDir, `${input.output_name}-figures.html`);
+          await writeFile(htmlPath, renderFiguresHtml(figures, { title: input.invention_name }), "utf8");
+        }
+
         const lines: string[] = [
           `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规）：`,
           ...files.map(file => `- 图${file.figure_no}: ${file.path}`),
         ];
+        if (htmlPath !== undefined) {
+          lines.push(`A4 打印版式 HTML（PDF 可经 export_html 产出）: ${htmlPath}`);
+        }
 
         if (check.findings.length > 0) {
           lines.push(
             "",
-            "附图标记核验（细则第 21 条，生成期 spec_text 为空，V2/V3 结果以 patent_figure_check 提交说明书后为准）：",
+            "附图结构核验（生成期 spec_text 为空，V2/V3 结果以 patent_figure_check 提交说明书后为准）：",
             ...check.findings.map(
               finding =>
                 `- [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}` +
@@ -147,6 +178,16 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
               mimeType: "image/svg+xml",
               description: `Patent figure 图${file.figure_no}`,
             })),
+            ...(htmlPath !== undefined
+              ? [
+                  {
+                    type: "file" as const,
+                    path: htmlPath,
+                    mimeType: "text/html",
+                    description: "Patent figures A4 print HTML",
+                  },
+                ]
+              : []),
           ],
         };
       } catch (err) {

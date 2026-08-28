@@ -18,7 +18,11 @@ export type {
 export {
   checkFigures,
   stripRefMark,
+  COMMENT_LABEL_LINE_MAX,
+  COMMENT_LABEL_LINES_MAX,
+  FIGURE_CANVAS_MAX_PX,
   type FigureCheckFinding,
+  type FigureCheckOptions,
   type FigureCheckResult,
   type FigureCheckRuleId,
   type FigureCheckSeverity,
@@ -32,4 +36,6 @@ export {
   type RoutedEdge,
 } from "./layout.js";
 export { renderFigureSvg } from "./render-svg.js";
+export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
+export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
 export { buildFigureBriefDraft, type FigureBriefOptions } from "./brief.js";

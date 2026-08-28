@@ -78,7 +78,11 @@
 | V3 文内括号标记应见于图 | warn（保守） | 细则 21 条 | P0 已实现 |
 | V4 一标记一组件（ref↔name、id↔ref） | fail | 细则 21 条 | P0 已实现 |
 | V6 黑白线条/无渐变/白底 | 构造期不变式 | 指南 4.3/4.6 | P0 已实现（render-svg 单测） |
-| V5 禁注释（label 词数阈值） | warn | 细则 21 条尾款 `[待核对]` | P1 |
-| V7 缩小三分之二仍可辨（最小字号/盒尺寸） | warn | 指南（条文 `[待核对]`） | P1 |
-| V8 多图应指定摘要附图 | warn/info | 指南 4.5.2 | P1 |
-| V9 实用新型必须有附图 | fail | 指南一部二章 7.3 + 细则 20.5 | P1 |
+| V5 禁注释（label 词数/行数阈值） | warn | 细则 21 条尾款 `[待核对]` | P1 已实现 |
+| V7 缩小三分之二仍可辨（画幅 ≤1600px 代理检查） | warn | 指南（条文 `[待核对]`） | P1 已实现 |
+| V8 多图应指定摘要附图（恰好一幅） | warn | 指南 4.5.2 | P1 已实现 |
+| V9 实用新型必须有附图 | fail | 指南一部二章 7.3 + 细则 20.5 | P1 已实现 |
+
+已交付 SVG 复核：`patent_figure_check` 接受 `svg_paths`，经 `src/patent/figuregen/readback.ts`
+回读本模块渲染器产出的 data-ref 与"图N"标注。A4 打印版式：`patent_figure_generate`
+`format: html|both` 产出单文件 HTML（`renderFiguresHtml`），PDF 经既有 Chromium 打印管线。
