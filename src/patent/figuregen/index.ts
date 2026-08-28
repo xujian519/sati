@@ -37,6 +37,18 @@ export {
   type RoutedEdge,
 } from "./layout.js";
 export { figureCaption, renderFigureSvg } from "./render-svg.js";
+export {
+  buildFigureDot,
+  dotEscape,
+  dotNodeTitle,
+} from "./dot.js";
+export {
+  FIGURE_RENDERER_ENV,
+  GRAPHVIZ_DOT_ENV,
+  postProcessGraphvizSvg,
+  renderFigureSvgWithGraphviz,
+  resolveDotBinary,
+} from "./render-graphviz.js";
 export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
 export { buildFigureBriefDraft, type FigureBriefOptions } from "./brief.js";

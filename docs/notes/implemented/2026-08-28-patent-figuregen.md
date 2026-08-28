@@ -1,6 +1,6 @@
 # Agent Note: 专利附图生成底座（figuregen 模块 + 两工具 opt-in + CNIPA 规则底座）
 
-Status: implemented（P0 + P1 + P2 USPTO 模式；仅剩 Graphviz 可选渲染器未做）
+Status: implemented（P0 + P1 + P2 USPTO 模式 + P3 Graphviz 可选渲染器；仅剩外观设计图片类附图未做）
 
 ## Problem
 
@@ -25,15 +25,39 @@ agent 提示词自律。
   工具层落盘/fail-closed）。
 - P1 追加：校验器全量规则 V5 禁注释 / V7 画幅可辨 / V8 摘要附图 / V9 实用新型必须有
   附图；`patent_figure_check` 接 `svg_paths` 回读已交付 SVG（readback.ts，仅解析本模块
-  渲染器输出）；`patent_figure_generate` 接 `format: html|both` 产 A4 打印版式单文件
-  HTML（PDF 走既有 Chromium 打印管线）；`patent_drafting_v1` 在 slop_clean 与
+  渲染器输出）；`patent_figure_generate` 接 `format: html|both` 产 A4 打印版式
+  单文件 HTML（PDF 走既有 Chromium 打印管线）；`patent_drafting_v1` 在 slop_clean 与
   final_approval 之间插入 `figure_generate` 无原子透传阶段；compliance.yaml 增
   PAT-FIG-001 附图标记一致性自检规则（structural_analysis，rule_check A 链）。
+- P3 追加：**Graphviz 可选渲染器**（复杂大图增强）落地。`src/patent/figuregen/dot.ts`
+  FigureSpec → DOT（确定性纯函数，黑白十六进制在 DOT 层固化）+ `render-graphviz.ts`
+  本机 `dot -Tsvg`（spawn stdin/stdout，30s 超时）+ 交付前加工：剥离 XML 头与含版本号
+  的生成器注释、颜色关键字归一化并做黑白不变式扫描（fail-closed）、按节点 id 向
+  graphviz 分组注入 data-ref（title 定位 + 结构守卫，注入后 readback 回读自检 figure_no
+  与全部 ref）。dot 定位 `SATI_GRAPHVIZ_DOT` 优先、PATH 兜底；渲染选择走
+  `SATI_FIGURE_RENDERER=graphviz` 环境变量（工具层执行期读取），缺失 fail-closed
+  报错不静默回退。readback 扩展为双渲染器契约（class="node" 分组 + title 取回原 id +
+  图尾 "图N"/"FIG. N" 取最后标注——顺带修复 US 模式 SVG 此前无法回读的缺口），
+  深度追踪扫描防 graph0 嵌套误吞；html 接 renderedSvgs 预渲染注入。工具 schema 零变更，
+  llm-replay fixture 无需重录。
 
 ## Alternatives considered
 
 - **引入对方 Graphviz 代码/依赖** — Python 不可复用；Graphviz 系统依赖加重桌面分发（对方自带
   installer 恰证其为痛点），彩色样式默认不合规。留 renderer 策略接口，P2 可作可选增强，弃。
+  （P3 修订：策略接口兑现为可选渲染器——graphviz 仍不捆绑不分发，仅本机安装后经环境变量
+  启用；彩色样式问题以 DOT 层黑白十六进制 + 渲染后不变式扫描双重封死。）
+- **P3 渲染器选择的暴露面：inputSchema `renderer` 选项 vs 环境变量** — schema 选项对 LLM
+  可见、可逐次调用选择，但默认注册工具的 inputSchema 参与 llm-replay 请求键
+  （requestKey.ts：tools[].inputSchema 全量入键），任何 schema 文本变更都打红
+  deepseek-v4-flash-basic fixture 并须重录（一次真实 API 调用）。渲染器本质是
+  **机器能力**（本机装没装 graphviz）而非逐次调用意图，环境变量（`SATI_FIGURE_RENDERER`，
+  `SATI_TRANSCRIPT_SINGLE_WRITE` 先例）零 fixture 影响、零 API 依赖，且 fail-closed
+  语义（装了才开）与机器能力模型一致，取环境变量。若未来确需 LLM 逐次选择（如同机
+  混用两渲染器对比成图），走 schema 选项 + fixture 重录同批做。
+- **graphviz 缺失时静默回退内置渲染器** — 违背 fail-closed 哲学：用户显式指定渲染器
+  却被静默换掉，成图布局不可预期地变化（两渲染器分层结果不同）。缺失即报错并给出
+  安装指引/unset 提示，弃静默回退。
 - **Mermaid 文本渲染**（netlist-viz 先例）— 仓库无 mermaid 渲染依赖，HTML 单文件无外部资产
   约束下无法自渲染；电学网表继续走既有 Mermaid 通道，两轨并存，弃。
 - **LLM 手写 SVG**（diagram-maker 路线）— 不可机器校验、黑白合规无法构造期保证，与 Sati
@@ -55,8 +79,10 @@ agent 提示词自律。
 
 换来：撰写链路补上附图交付物；合规（黑白、双向标记一致）从"提示词自律"升级为"构造期不变式 +
 机器门禁"；规则每条带知识图谱溯源锚（念念有据）。付出：布局器 P0 只覆盖 ≤20 节点简单分层
-（复杂大图需 P2 Graphviz 增强）；两工具 opt-in 期间默认会话不可见（工作流 figure_generate
+（P3 起 graphviz 可选渲染器承接复杂大图，但需本机安装 graphviz、桌面分发不捆绑；内置渲染器
+仍是默认，未装 graphviz 的机器行为不变）；两工具 opt-in 期间默认会话不可见（工作流 figure_generate
 阶段在未启用时会说明跳过）；细则 21 条第 3 款禁注释与指南
 一部一章 4.3"缩小到三分之二"条款已经官方公布文本核验（2026-08-28，CNIPA 公布文本，见
 cn-drawing-rules.md）；A4 打印边距（25/15mm）为实践惯例标注，USPTO 边距（上/左 2.5cm、
-右/下 1.5cm）以 eCFR 现行文本为准。
+右/下 1.5cm）以 eCFR 现行文本为准。P3 的 graphviz 交付物在同一机器/同一 graphviz 版本下
+逐字节确定（版本号注释已剥离），跨 graphviz 版本布局可能有差异——正式提交前由代理师复核。
