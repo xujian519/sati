@@ -360,6 +360,7 @@ function summarizeInput(input: unknown): string {
     }
     return json.length > 500 ? `${json.slice(0, 500)}...` : json;
   } catch {
+    // 循环引用/BigInt 等不可序列化输入：展示占位符，不影响权限判定本身。
     return "[unserializable input]";
   }
 }
