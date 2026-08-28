@@ -14,6 +14,9 @@ export type FiguresHtmlOptions = {
   title?: string;
   /** 辖区（默认 cn）：us 时内嵌 SVG 图号标注为 FIG. N。 */
   jurisdiction?: Jurisdiction;
+  /** 预渲染 SVG（figure_no → svg 文本）：graphviz 等异步渲染器先出图再排版的注入点；
+   * 缺省图走内置 renderFigureSvg。 */
+  renderedSvgs?: ReadonlyMap<number, string>;
 };
 
 /** 渲染全部附图为可打印的单文件 HTML（A4 版式）。 */
@@ -22,7 +25,8 @@ export function renderFiguresHtml(specs: readonly FigureSpec[], options: Figures
   const sections = [...specs]
     .sort((a, b) => a.figure_no - b.figure_no)
     .map(spec => {
-      const { svg } = renderFigureSvg(spec, { jurisdiction: options.jurisdiction });
+      const preRendered = options.renderedSvgs?.get(spec.figure_no);
+      const svg = preRendered ?? renderFigureSvg(spec, { jurisdiction: options.jurisdiction }).svg;
       return `  <section class="figure-page">\n  ${svg.trim()}\n  </section>`;
     })
     .join("\n");

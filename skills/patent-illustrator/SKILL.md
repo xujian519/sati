@@ -38,6 +38,23 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 5. 未过 → 修 FigureSpec 或提示补说明书文字 → 重跑 3–4。
 6. 将返回的"附图说明草稿"并入说明书七部分之"附图说明"章节（细则第 20 条）。
 
+## 渲染器选择（Graphviz 可选增强）
+
+FigureSpec 契约对两个渲染器完全一致，切换渲染器不需要改 spec：
+
+| 渲染器 | 启用方式 | 适用 |
+|---|---|---|
+| builtin（默认） | 无需配置 | ≤ 20 节点的常规分层图，输出完全确定性 |
+| graphviz | 本机安装 graphviz 后设 `SATI_FIGURE_RENDERER=graphviz`（dot 路径可用 `SATI_GRAPHVIZ_DOT` 指定） | 复杂大图/多回边/宽分支，graphviz 的分层引擎布局质量更高 |
+
+- graphviz 渲染器与内置渲染器遵守同一合规不变式：黑白线条、无渐变（构造期扫描，非黑白
+  fail-closed）；附图标记同样以 data-ref 内嵌，`patent_figure_check` 的 `svg_paths` 回读
+  照常可用（图号标注"图N"/"FIG. N" 均可解析）。
+- 未安装 graphviz 时该开关**报错而非静默回退**——要么安装（`brew install graphviz`），
+  要么 unset `SATI_FIGURE_RENDERER` 用回内置渲染器。
+- 即使有 graphviz，超过 30 节点仍建议拆分为多幅附图（指南一部一章 4.3 缩小三分之二
+  仍可辨细节的画幅约束不变）。
+
 ## 法条溯源（知识系统接线）
 
 向用户引用任何规则（细则第 20/21 条、审查指南附图条款）时，用 `law_search` 拉取法条全文
@@ -66,4 +83,7 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 - P2：USPTO 出海模式已实现——两工具接 `jurisdiction: "us"`（FIG. N 图号、
   跳过 V8/V9 CNIPA 特有规则、37 CFR 1.84 法条引用、英文 BRIEF DESCRIPTION
   模板）。规则底座见 [references/uspto-drawing-rules.md](references/uspto-drawing-rules.md)。
-  未做：Graphviz 可选渲染器（复杂大图）、外观设计图片类附图。
+- P3：Graphviz 可选渲染器（复杂大图增强）——`SATI_FIGURE_RENDERER=graphviz`
+  走本机 dot（`SATI_GRAPHVIZ_DOT` 指定路径），DOT 层固化黑白合规，data-ref
+  注入 fail-closed 并经 readback 自检；同 SVG 回读契约双渲染器通用（含 FIG. N）。
+  未做：外观设计图片类附图。

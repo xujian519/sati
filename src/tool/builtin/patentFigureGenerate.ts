@@ -9,6 +9,9 @@
  *
  * 默认注册（createBuiltinRegistry `patentFigure: false` 可排除；排除会改变工具集
  * 摘要，需重录 deepseek-v4-flash-basic fixture）。
+ *
+ * 渲染器选择走 SATI_FIGURE_RENDERER 环境变量（builtin 默认 / graphviz 本机可选
+ * 增强，复杂大图用）：环境变量而非 inputSchema 选项，避免动 llm-replay 请求键。
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -22,6 +25,11 @@ import {
   type FigureSpec,
   type Jurisdiction,
 } from "../../patent/figuregen/index.js";
+import {
+  FIGURE_RENDERER_ENV,
+  renderFigureSvgWithGraphviz,
+  resolveDotBinary,
+} from "../../patent/figuregen/render-graphviz.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
@@ -40,6 +48,28 @@ export type PatentFigureGenerateInput = {
 };
 
 const FORMATS: readonly string[] = ["svg", "html", "both"];
+
+/**
+ * 渲染器选择：SATI_FIGURE_RENDERER=graphviz 时走本机 graphviz dot（复杂大图
+ * 可选增强）；缺省 builtin。不做成 inputSchema 选项是因为默认注册工具的 schema
+ * 参与 llm-replay 请求键，任何变更都须重录 fixture（见 figuregen 决策记录）。
+ */
+type FigureRenderer = "builtin" | "graphviz";
+
+function resolveFigureRenderer(env: NodeJS.ProcessEnv = process.env): FigureRenderer {
+  const value = (env[FIGURE_RENDERER_ENV] ?? "").trim();
+  if (value === "" || value === "builtin") {
+    return "builtin";
+  }
+  if (value === "graphviz") {
+    return "graphviz";
+  }
+  throw new SatiToolRuntimeError(
+    "invalid_tool_input",
+    `非法 ${FIGURE_RENDERER_ENV} "${value}"（可用: builtin, graphviz）`,
+    { tool: "patent_figure_generate" },
+  );
+}
 
 export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigureGenerateInput> {
   return {
@@ -129,12 +159,30 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           documentKind: documentKind,
           jurisdiction: jurisdiction,
         });
+        const renderer = resolveFigureRenderer();
+        let dotPath: string | null = null;
+        if (renderer === "graphviz") {
+          dotPath = resolveDotBinary();
+          if (dotPath === null) {
+            throw new SatiToolRuntimeError(
+              "tool_execution_failed",
+              `${FIGURE_RENDERER_ENV}=graphviz 但未找到 graphviz dot 可执行文件：请安装 graphviz（brew install graphviz），` +
+                `或用 SATI_GRAPHVIZ_DOT 指定 dot 路径；改回内置渲染器可 unset ${FIGURE_RENDERER_ENV}`,
+              { tool: "patent_figure_generate" },
+            );
+          }
+        }
         const files: { path: string; figure_no: number }[] = [];
+        const renderedSvgs = new Map<number, string>();
         for (const figure of figures) {
-          const { svg } = renderFigureSvg(figure, { jurisdiction: jurisdiction });
+          const { svg } =
+            renderer === "graphviz" && dotPath !== null
+              ? await renderFigureSvgWithGraphviz(figure, { dotPath, jurisdiction })
+              : renderFigureSvg(figure, { jurisdiction });
           const path = resolve(outputDir, `${input.output_name}-fig${figure.figure_no}.svg`);
           await writeFile(path, svg, "utf8");
           files.push({ path, figure_no: figure.figure_no });
+          renderedSvgs.set(figure.figure_no, svg);
         }
 
         const format = input.format ?? "svg";
@@ -151,11 +199,12 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         let htmlPath: string | undefined;
         if (format === "html" || format === "both") {
           htmlPath = resolve(outputDir, `${input.output_name}-figures.html`);
-          await writeFile(htmlPath, renderFiguresHtml(figures, { title: input.invention_name }), "utf8");
+          await writeFile(htmlPath, renderFiguresHtml(figures, { title: input.invention_name, renderedSvgs }), "utf8");
         }
 
         const lines: string[] = [
-          `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规）：`,
+          `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规` +
+            (renderer === "graphviz" ? "；渲染器: graphviz dot）：" : "）："),
           ...files.map(file => `- 图${file.figure_no}: ${file.path}`),
         ];
         if (htmlPath !== undefined) {
