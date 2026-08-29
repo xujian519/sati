@@ -57,6 +57,7 @@ function formatValue(value: unknown): string {
   try {
     return JSON.stringify(value);
   } catch {
+    // 循环引用等不可序列化值：降级 String()（模板占位仍可解析，fail-open）。
     return String(value);
   }
 }

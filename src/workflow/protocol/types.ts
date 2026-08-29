@@ -101,7 +101,7 @@ export type WorkflowWorkerDefinition = {
 
 /**
  * Factory contract the engine uses to run a single step. Sati implements this
- * by bridging to `SubAgentSession` (see `src/workflow/runtime/SubagentAgentFactory.ts`).
+ * by bridging to `SubAgentSession` (see `src/workflow/runtime/SubagentWorkflowAgentFactory.ts`).
  */
 export type WorkflowAgentFactory = (config: { systemPrompt: string; allowedTools?: string[]; model?: string }) => {
   prompt: (input: string, signal?: AbortSignal) => Promise<WorkflowStepOutput>;
