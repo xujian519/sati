@@ -81,6 +81,7 @@ function looksLikeSourceCheckout(): boolean {
     }).trim();
     return result === "true";
   } catch {
+    // git 不可用（非仓库/未安装）：按非源码检出降级（fail-safe，仅影响部署模式判定）。
     return false;
   }
 }
@@ -124,6 +125,7 @@ function resolveAppCommitHash(env: Record<string, string | undefined>): string {
     }).trim();
     return sha || "unknown";
   } catch {
+    // git 不可用：commitHash 记 unknown（遥测非关键路径，不阻断）。
     return "unknown";
   }
 }
