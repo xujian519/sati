@@ -34,7 +34,7 @@ export class LRUMap<K, V> {
     if (this.map.has(key)) {
       this.map.delete(key);
     } else if (this.map.size >= this.capacity) {
-      const oldest = this.map.keys().next().value as K | undefined;
+      const oldest = this.map.keys().next().value;
       if (oldest !== undefined) {
         this.map.delete(oldest);
       }

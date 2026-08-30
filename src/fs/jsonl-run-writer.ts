@@ -51,6 +51,7 @@ export function createJsonlRunWriter(
       for (const [runId, writer] of runWriters) {
         if (nowMs - writer.lastWriteAt > idleTtlMs) {
           runWriters.delete(runId);
+          // 回收失败静默放弃：fd 由进程退出兜底，不影响写路径
           void writer.tail.then(() => writer.handle.close()).catch(() => {});
         }
       }
@@ -87,6 +88,7 @@ export function createJsonlRunWriter(
       if (!writer) return;
       runWriters.delete(runId);
       await writer.tail;
+      // close 失败不阻断调用方收尾（fd 由进程退出兜底）
       await writer.handle.close().catch(() => {});
     },
   };

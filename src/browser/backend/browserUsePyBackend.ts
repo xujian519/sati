@@ -26,7 +26,7 @@ export class BrowserUsePyBackend implements BrowserBackend {
   }
 }
 
-export function probeBrowserUse(): BrowserBackendProbe {
+function probeBrowserUse(): BrowserBackendProbe {
   // browser-use --version 首次运行会创建用户配置目录（~/.config/browser-harness）。
   // 在只读 HOME / sandbox / CI 等受限环境下该写入会失败并导致误报 missing
   //（§10.9 新增发现 M-C 的实测场景）。注入临时 HOME 与 XDG 目录，剥离环境副作用，

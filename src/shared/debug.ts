@@ -4,7 +4,7 @@
  * 此 helper 输出，仅当 SATI_DEBUG=1|true 时打印；默认关闭以削减
  * desktop.server.log / CLI 的常规噪音。
  */
-export function isDebugLoggingEnabled(): boolean {
+function isDebugLoggingEnabled(): boolean {
   return process.env.SATI_DEBUG === "1" || process.env.SATI_DEBUG === "true";
 }
 

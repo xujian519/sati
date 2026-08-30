@@ -63,14 +63,7 @@ async function hasGit(dir: string): Promise<boolean> {
     const stats = await stat(join(dir, ".git"));
     return stats.isDirectory() || stats.isFile();
   } catch {
+    // 无 .git 或不可读（ENOENT/EACCES）：视为未命中，继续向上层目录找
     return false;
   }
-}
-
-/**
- * Test-only: clears the LRU cache. Call from worktree fixtures after each test
- * so cwd reuse across tests does not leak resolved paths.
- */
-export function __clearFindGitRootCacheForTesting(): void {
-  cache.clear();
 }

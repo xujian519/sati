@@ -178,6 +178,8 @@ export class DagExecutor {
             completed.push(nodeId);
             onNodeComplete?.(nodeId);
           } catch {
+            // 失败→计入 failed 列表继续后续层（fail-open 收集，不中断整体执行；
+            // 错误对象按本执行器契约不上抛，由调用方按 nodeId 维度处理）。
             failed.push(nodeId);
           }
         }

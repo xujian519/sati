@@ -361,6 +361,7 @@ async function retargetCopiedSubagentTranscripts(
           const parsed = JSON.parse(line) as AgentTranscriptEntry;
           return JSON.stringify(retargetTranscriptEntryAuxiliaryPaths(parsed, sourceSessionDir, targetSessionDir));
         } catch {
+          // 非 JSON 行（空行/损坏行）：原样保留，只重写可解析条目（fail-open）。
           return line;
         }
       })

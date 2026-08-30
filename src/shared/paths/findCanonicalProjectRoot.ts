@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
-import { __clearFindGitRootCacheForTesting, findGitRoot } from "./findGitRoot.js";
-import { __clearResolveCanonicalRootCacheForTesting, resolveCanonicalRoot } from "./resolveCanonicalRoot.js";
+import { findGitRoot } from "./findGitRoot.js";
+import { resolveCanonicalRoot } from "./resolveCanonicalRoot.js";
 
 /**
  * Compose `findGitRoot` + `resolveCanonicalRoot` so two worktrees of the same
@@ -20,10 +20,4 @@ export async function findCanonicalProjectRoot(cwd: string): Promise<string> {
     return resolve(cwd);
   }
   return resolveCanonicalRoot(root);
-}
-
-/** Test helper: clear both caches in one call. */
-export function __clearWorktreeCachesForTesting(): void {
-  __clearFindGitRootCacheForTesting();
-  __clearResolveCanonicalRootCacheForTesting();
 }
