@@ -113,6 +113,12 @@ import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
 import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { MethodologyRegistry, injectMethodology } from "../methodology/index.js";
 import { extractMessageText, PatentOutputGate, type PendingPatentMessage } from "../patent/index.js";
+import {
+  appendInventivenessFeedback,
+  caseInventivenessFeedbackPath,
+  findCaseIdBySession,
+  CASE_ROOT_REL,
+} from "../patent/index.js";
 import { WorkerRegistry, defaultPatentWorkers } from "../patent/index.js";
 import { isProvenanceEnabled } from "../patent/provenance/index.js";
 import { SqliteApprovalStore } from "../patent/provenance/approval-store.js";
@@ -1312,6 +1318,10 @@ class ProjectRuntimeRegistry {
       ...(snapshot.config.patents?.downloadDir
         ? { patentPdfDownload: { patentsConfigProvider: () => snapshot.config.patents } }
         : {}),
+      // Pass the YAML-configured patents.modelHints through to
+      // `patent_workflow_run` (judgeModels multi-judge consensus + per-node
+      // model tiering). Absent → hints ignored, everything uses the session model.
+      ...(snapshot.config.patents?.modelHints ? { patentModelHints: snapshot.config.patents.modelHints } : {}),
     });
     for (const tool of this._extraTools) {
       tools.register(tool);
@@ -2062,6 +2072,29 @@ class ProjectRuntimeRegistry {
         patentOutputGateLogger.warn(
           `审批拒绝: session=${pending.sessionId ?? "-"} turn=${pending.turnId ?? "-"} index=${pending.index}`,
         );
+      },
+      // 决策反馈回流（P2-4 写侧）：modified/rejected 时经 session→case 绑定（
+      // patent_workflow_run graph=inventiveness 运行时落盘）反查 caseId，追加进
+      // <caseDir>/inventiveness-feedback.jsonl——重跑同 case 时注入 conclude 提示。
+      // 绑定缺失/写入失败 fail-open（告警即止），不阻断审批闭环。
+      onDecisionFeedback: record => {
+        const sessionId = record.sessionId;
+        if (sessionId === undefined) return;
+        void (async () => {
+          const caseId = await findCaseIdBySession(joinPath(projectRoot, CASE_ROOT_REL), sessionId);
+          if (caseId === undefined) return;
+          await appendInventivenessFeedback(joinPath(projectRoot, caseInventivenessFeedbackPath(caseId)), {
+            caseId,
+            originalOutputPreview: record.originalOutputPreview,
+            verdict: record.verdict === "modified" ? "modified" : "rejected",
+            ...(record.feedback !== undefined ? { feedback: record.feedback } : {}),
+            ...(record.modifiedOutput !== undefined ? { modifiedOutput: record.modifiedOutput } : {}),
+            decidedAt: record.decidedAt,
+          });
+          patentOutputGateLogger.info(`创造性人工反馈已回流: case=${caseId} verdict=${record.verdict}`);
+        })().catch(err => {
+          patentOutputGateLogger.warn(`创造性人工反馈回流失败（fail-open）: ${(err as Error).message}`);
+        });
       },
     });
     return {

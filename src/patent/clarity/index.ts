@@ -8,7 +8,6 @@
 
 export {
   detectClaritySignals,
-  signalFor,
   type ClaritySignal,
   type ClaritySignalKey,
 } from "./signals.js";

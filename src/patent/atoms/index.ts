@@ -90,6 +90,8 @@ import * as builtin from "./handlers/builtin/index.js";
 export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.searchAtom);
   globalAtomRegistry.register(builtin.extractAtom);
+  // compare 原子不在内置 manifest 中（claim-chart 场景由 chart 原子覆盖），
+  // 保留给自定义 manifest 按 atom: "compare" 引用。
   globalAtomRegistry.register(builtin.compareAtom);
   globalAtomRegistry.register(builtin.reasoningAtom);
   globalAtomRegistry.register(builtin.groundednessAtom);

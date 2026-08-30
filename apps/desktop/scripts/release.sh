@@ -547,8 +547,11 @@ ok "satiui bundle: ${PDUI_MB}MB → $(basename "$PDUI_BUNDLE")"
 # dist/assets/ holds the bundled patent document templates (copied by the root
 # build); render_patent_document resolves them relative to the module location,
 # so they must ship inside the bundle.
+# rules/ holds the constitutional rule assets; asset-location resolves
+# <packageRoot>/rules/patent, without it the output-gate rule chain silently
+# degrades to keyword-only in the packaged runtime.
 rm -f "$PDM_BUNDLE"
-PDM_ITEMS=(src/ dist/src/ dist/assets/ scripts/ skills/ node_modules/ vendor/)
+PDM_ITEMS=(src/ dist/src/ dist/assets/ scripts/ skills/ rules/ node_modules/ vendor/)
 [[ -d "${SATI_MAIN_DIR}/gateway" ]] && PDM_ITEMS+=(gateway/)
 for f in package.json bunfig.toml preload.ts proxy.ts router.ts \
          sati-config.ts tsconfig.json; do

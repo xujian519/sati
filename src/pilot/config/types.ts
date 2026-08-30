@@ -305,6 +305,12 @@ export type PilotTelemetryConfig = {
 export type PilotPatentsConfig = {
   /** patent_pdf_download 未显式传 outputDir 时的全局下载目录。 */
   downloadDir?: string;
+  /**
+   * per-node 模型覆盖（P2-1 模型分层 / judgeModels 多模型共识）：modelHint 名 →
+   * provider/model。patent_workflow_run（图模式 judgeModels）与 patent_workflow
+   * （manifest 原子 modelHint）在会话模型之上按 hint 覆盖；缺省空 = 全部走会话模型。
+   */
+  modelHints?: Record<string, { provider?: string; model: string }>;
 };
 
 export type PilotConfig = {

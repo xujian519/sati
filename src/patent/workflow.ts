@@ -160,6 +160,13 @@ export async function runWorkflow(
   let startIndex = 0;
   let approvalGrants = options.approvalGrants;
   if (options.resumeFrom !== undefined) {
+    // manifestId 一致性防御：异构 manifest 的检查点续跑会按 stageIndex 恢复错配的
+    // stages/state（checkpoint id 虽含 manifestId 后缀，仍可被显式错传），fail-loud。
+    if (options.resumeFrom.manifestId !== manifest.id) {
+      throw new WorkflowError(
+        `检查点 manifestId 不匹配：检查点属于 "${options.resumeFrom.manifestId}"，当前 manifest 为 "${manifest.id}"，拒绝续跑`,
+      );
+    }
     const restored = restoreFromCheckpoint(options.resumeFrom);
     results.push(...restored.results);
     Object.assign(state, restored.state);

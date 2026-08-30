@@ -9,8 +9,10 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { dirname, join } from "node:path";
+import { CASE_WORKFLOW_RUNS_REL } from "../paths.js";
 import type { ApprovalVerdict } from "../approval.js";
 
 /** 反馈回流记录（ApprovalRecord 子集 + caseId 定位）。 */
@@ -59,4 +61,52 @@ export function summarizeInventivenessFeedback(records: readonly InventivenessFe
     return `${i + 1}. ${r.decidedAt} ${r.verdict} — ${feedback}`;
   });
   return `【历史人工反馈（仅供参考，不强制采纳）】\n${lines.join("\n")}`;
+}
+
+/**
+ * session→case 绑定（P2-4 写侧半桥）：gateway 审批上下文只有 sessionId 无 caseId，
+ * graph=inventiveness 运行时把绑定落盘到 `<caseDir>/workflow-runs/session-binding.json`，
+ * 审批驳回/修改回调按 sessionId 反查 caseId 后才能把反馈落到正确的 case 文件。
+ * 同 session 先后跑多个 case 时 last-write-wins（反馈归最新 case 的近似）。
+ */
+export const SESSION_BINDING_FILE = "session-binding.json";
+
+export type SessionCaseBinding = {
+  sessionId: string;
+  boundAt: string;
+};
+
+/** `<root>/data/cases/<caseId>/workflow-runs/session-binding.json`（与 caseWorkflowRunsDir 同约定）。 */
+export function caseSessionBindingPath(caseId: string): string {
+  return `data/cases/${caseId}/${CASE_WORKFLOW_RUNS_REL}/${SESSION_BINDING_FILE}`;
+}
+
+/** 写绑定（覆盖式；目录不存在时创建；失败由调用方 fail-open）。 */
+export async function saveSessionCaseBinding(filePath: string, binding: SessionCaseBinding): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify(binding), { encoding: "utf8" });
+}
+
+/**
+ * 反查绑定该 sessionId 的 caseId：扫描 `<casesRoot>/<caseId>/workflow-runs/session-binding.json`。
+ * cases 根不存在/目录不可读/绑定缺失或损坏 → 跳过（fail-open，返回 undefined）。
+ */
+export async function findCaseIdBySession(casesRoot: string, sessionId: string): Promise<string | undefined> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(casesRoot, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const raw = await readFile(join(casesRoot, entry.name, CASE_WORKFLOW_RUNS_REL, SESSION_BINDING_FILE), "utf8");
+      const parsed = JSON.parse(raw) as Partial<SessionCaseBinding>;
+      if (parsed.sessionId === sessionId) return entry.name;
+    } catch {
+      // 无绑定或坏 JSON：跳过。
+    }
+  }
+  return undefined;
 }
