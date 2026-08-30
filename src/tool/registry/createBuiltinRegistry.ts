@@ -241,6 +241,12 @@ export type CreateBuiltinRegistryOptions = {
    */
   searchPatentFigure?: { embeddingClient?: EmbeddingClient };
   /**
+   * `patent_workflow_run` / `patent_workflow` 的 per-node 模型覆盖（modelHint 名 →
+   * provider/model，来自 pilot config `patents.modelHints`）。未传时 modelHint
+   * 忽略、全部节点走会话模型（多 judge 共识退化为同模型采样）。
+   */
+  patentModelHints?: Record<string, { provider?: string; model: string }>;
+  /**
    * Legal-domain tools (`law_search` — 中国法律法规全文检索，宝宸知识库）。
    * Registered by default. 数据库缺失时工具返回 setup_required 状态。
    * Pass `false` to keep them out of the registry.
@@ -362,6 +368,13 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
     registry.register(annotate(createPatentWorkflowTool(), "patent"));
+    const patentModelHints = options?.patentModelHints;
+    registry.register(
+      annotate(
+        createFlexiblePlanTool(patentModelHints !== undefined ? { modelHints: patentModelHints } : {}),
+        "patent",
+      ),
+    );
     // 多源检索（阶段 1b）：nuo 专利 + paper 论文并行；paper 禁用时仅 nuo 单源。
     const searchSources: Array<NonNullable<StageProvider["search"]>> = [];
     const nuoSearch = createNuoSearchProvider().search;
@@ -370,9 +383,16 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
       searchSources.push(createPaperSearchSource(literatureRegistry));
     }
     const search = createMultiSourceSearchProvider(searchSources).search;
-    registry.register(annotate(createPatentWorkflowRunTool({ search }), "patent"));
+    registry.register(
+      annotate(
+        createPatentWorkflowRunTool({
+          search,
+          ...(options?.patentModelHints !== undefined ? { modelHints: options.patentModelHints } : {}),
+        }),
+        "patent",
+      ),
+    );
     registry.register(annotate(createPatentPlanTaskTool(), "patent"));
-    registry.register(annotate(createFlexiblePlanTool(), "patent"));
     registry.register(annotate(createPatentWorkerValidateTool(), "patent"));
     registry.register(annotate(createEvaluateEvidenceTool(), "patent"));
     registry.register(annotate(createPatentMetadataTool(), "patent"));

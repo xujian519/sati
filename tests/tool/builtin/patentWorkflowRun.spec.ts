@@ -831,6 +831,16 @@ test("graph=inventiveness 同 case 历史反馈注入 conclude 提示（P2-4 HIT
     assert.match(textOf(res), /完成状态: completed/);
     assert.ok(concludePrompt.includes("历史人工反馈"), "conclude prompt 应含历史反馈摘要");
     assert.ok(concludePrompt.includes("D1 已公开区别特征"), "应含反馈内容");
+    // 写侧半桥：运行时落 session→case 绑定（审批回调按 sessionId 反查 caseId）。
+    const bindingFile = join(dir, "data/cases/fb-case/workflow-runs/session-binding.json");
+    assert.ok(existsSync(bindingFile), "session 绑定文件应已落盘");
+    const binding = JSON.parse(readFileSync(bindingFile, "utf8")) as {
+      sessionId: string;
+      boundAt: string;
+      graph?: string;
+    };
+    assert.equal(binding.sessionId, "s1");
+    assert.equal(binding.graph, "inventiveness", "绑定应带链路标识供反馈溯源");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -13,6 +13,8 @@ import {
   DOMAIN_GRAPHS,
   caseInventivenessFeedbackPath,
   loadInventivenessFeedback,
+  saveSessionCaseBinding,
+  caseSessionBindingPath,
   summarizeInventivenessFeedback,
   llmJudge,
   type DomainGraphName,
@@ -451,6 +453,9 @@ export function openProvenanceCollector(options: {
 type GraphExecuteContext = {
   model?: SatiToolModelClient;
   cwd?: string;
+  /** 会话 id（session→case 绑定写侧半桥用；SatiToolRuntimeContext 必有）。 */
+  sessionId: string;
+  now?: () => Date;
 };
 
 /** 渲染图运行结果文本。 */
@@ -542,6 +547,14 @@ async function executeGraphRun(
     const history = await loadInventivenessFeedback(feedbackPath).catch(() => []);
     const summary = summarizeInventivenessFeedback(history);
     if (summary.length > 0) workflowCtx.inventiveness_feedback_history = summary;
+    // 写侧半桥：落 session→case 绑定，审批驳回/修改回调按 sessionId 反查 caseId 落反馈；
+    // 写失败不阻断 run（fail-open）。graph 标记绑定来源，供反馈记录溯源甄别。
+    const now = context.now ?? (() => new Date());
+    await saveSessionCaseBinding(join(context.cwd ?? process.cwd(), caseSessionBindingPath(input.caseId)), {
+      sessionId: context.sessionId,
+      boundAt: now().toISOString(),
+      graph: "inventiveness",
+    }).catch(() => undefined);
   }
 
   // 审批/续跑：approveCheckpointId 优先——批准审批门（写入放行标记）后从该检查点

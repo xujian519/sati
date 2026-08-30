@@ -143,8 +143,3 @@ export function detectClaritySignals(text: string): ClaritySignal[] {
   }
   return signals;
 }
-
-/** 便捷：按 key 取信号（score 层/报告渲染用）。 */
-export function signalFor(signals: readonly ClaritySignal[], key: ClaritySignalKey): ClaritySignal | undefined {
-  return signals.find(s => s.key === key);
-}

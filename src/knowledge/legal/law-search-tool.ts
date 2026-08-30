@@ -52,10 +52,15 @@ function getEngine(): { engine: LegalSearchSource; dbPath: string } | null {
   }
   if (!lawDb) return null;
   if (cachedEngine && cachedEngine.dbPath === lawDb) return cachedEngine;
-  cachedEngine?.engine.close();
-  const engine = new LegalSearchEngine(lawDb);
-  cachedEngine = { engine, dbPath: lawDb };
-  return cachedEngine;
+  try {
+    cachedEngine?.engine.close();
+    const engine = new LegalSearchEngine(lawDb);
+    cachedEngine = { engine, dbPath: lawDb };
+    return cachedEngine;
+  } catch {
+    // 旧引擎 close 或 legacy 库构造失败：与上方 knowledge.db 分支对称，回退 null（setup_required 提示）。
+    return null;
+  }
 }
 
 /** 截断过长的法条正文（避免超大输出撑爆上下文）。 */

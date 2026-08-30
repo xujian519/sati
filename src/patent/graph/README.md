@@ -98,11 +98,12 @@ secondary/conclude）外，新增：
   全部用默认模型（行为不变）；
 - **LLM Judge 双轨（P2-3）**：`patent_workflow_run({ judgeSamples: N })` 对结论报告打
   0-1 分附在结果尾部，仅参考不改变规则门判级；
-- **HITL 反馈回流（P2-4）**：读侧已接线——`patent_workflow_run`（graph=inventiveness + caseId）读取
+- **HITL 反馈回流（P2-4）**：读写双侧已接线——读侧 `patent_workflow_run`（graph=inventiveness + caseId）读取
   `data/cases/<caseId>/inventiveness-feedback.jsonl` 历史反馈注入 conclude 提示（仅提示，不强制）；
-  写侧为宿主接线点——`PatentOutputGate.onDecisionFeedback` 回调在审批 modified/rejected 时暴露
-  `ApprovalRecord`（含原文摘录与人工反馈），宿主可调用 `appendInventivenessFeedback` 落盘
-  （gateway 审批上下文暂无 caseId，生产接线待宿主侧落地，`feedback/inventiveness-feedback.ts` 已就绪）；
+  写侧 gateway `PatentOutputGate.onDecisionFeedback` 在审批 modified/rejected 时经
+  session→case 绑定（graph 运行时落盘 `workflow-runs/session-binding.json`）反查 caseId，
+  调用 `appendInventivenessFeedback` 落盘（归属按 session 近似：多 case 取 boundAt 最新，
+  反馈记录带 trigger 溯源；详见 `feedback/inventiveness-feedback.ts`）。
 - `build_query` 检索式带申请日/优先权日时间基准（`after:YYYYMMDD` 日期限定）；
 - 检索命中 `publication_date` 透传（`StageProvider.search` 返回字段），closest 提示逐篇标注公开日。
 

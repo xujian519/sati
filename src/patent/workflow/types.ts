@@ -183,7 +183,10 @@ export type ManifestCheckpoint = {
   /** 已完成阶段数（resume 从该索引继续；等价 completedStages.length）。 */
   stageIndex: number;
   completedStages: ManifestCheckpointStage[];
-  /** 阶段间 PipelineState（含各阶段产出键，不含 ctx 元数据）。 */
+  /**
+   * 阶段间 PipelineState：各阶段产出键 + ctx 元数据（input/text/source_text 等——
+   * state 以 `{ ...ctx }` 起步整体快照，resume 时恢复原输入，续跑调用的新 input 被忽略）。
+   */
   state: Record<string, unknown>;
   /** 已人工放行的审批门阶段 id（resume 时经 approvalGrants 语义跳过）。 */
   approvalGrants: string[];

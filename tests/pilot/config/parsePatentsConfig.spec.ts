@@ -70,3 +70,68 @@ test("未知字段 → warning 容忍，不影响已知字段", () => {
   assert.equal(diagnostics[0]?.code, "PATENTS_UNKNOWN_FIELD");
   assert.equal(diagnostics[0]?.severity, "warning");
 });
+
+test("modelHints：合法映射保留（trim；provider 可省略）", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  const config = parsePatentsConfig(
+    {
+      modelHints: {
+        strong: { provider: " anthropic ", model: " claude-sonnet " },
+        cheap: { model: "deepseek-v4-flash" },
+      },
+    },
+    diagnostics,
+  );
+
+  assert.deepEqual(config, {
+    modelHints: {
+      strong: { provider: "anthropic", model: "claude-sonnet" },
+      cheap: { model: "deepseek-v4-flash" },
+    },
+  });
+  assert.deepEqual(diagnostics, []);
+});
+
+test("modelHints：非对象 → fatal", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  const config = parsePatentsConfig({ modelHints: "strong" }, diagnostics);
+
+  assert.equal(config, undefined);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0]?.code, "PATENTS_MODEL_HINTS_INVALID");
+  assert.equal(diagnostics[0]?.severity, "fatal");
+});
+
+test("modelHints：条目缺非空 model → fatal 且整个 hints 不落快照", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  const config = parsePatentsConfig(
+    { modelHints: { strong: { model: "claude" }, bad: { provider: "openai" } } },
+    diagnostics,
+  );
+
+  assert.equal(config, undefined);
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0]?.code, "PATENTS_MODEL_HINTS_INVALID");
+  assert.equal(diagnostics[0]?.path, "patents.modelHints.bad");
+});
+
+test("modelHints：provider 非字符串 → fatal", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  const config = parsePatentsConfig({ modelHints: { strong: { provider: 3, model: "m" } } }, diagnostics);
+
+  assert.equal(config, undefined);
+  assert.equal(diagnostics[0]?.path, "patents.modelHints.strong.provider");
+});
+
+test("modelHints：空对象 → 不落快照（节整体仍可能因 downloadDir 存在）", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  const config = parsePatentsConfig({ modelHints: {} }, diagnostics);
+
+  assert.equal(config, undefined);
+  assert.deepEqual(diagnostics, []);
+});

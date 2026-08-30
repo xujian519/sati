@@ -105,6 +105,39 @@ test("T10: 中断后 checkpoint 保存，resume 跳过已完成阶段（LLM 不�
   }
 });
 
+test("T10: resume 检查点 manifestId 与当前 manifest 不一致 → fail-loud 拒绝续跑", async () => {
+  registerBuiltinAtoms();
+  const calls = { llm: 0 };
+  const dir = mkdtempSync(join(tmpdir(), "sati-ckpt-id-"));
+  try {
+    const store = new JsonFileManifestCheckpointStore(dir);
+    const first = await runWorkflow(resumeManifest, { text: "交底书" }, async () => "透传", {
+      provider: countingProvider(calls),
+      runId: "caseX__resume_test_v1",
+      checkpointStore: store,
+    });
+    assert.equal(first.completed, false);
+    const checkpoint = await store.load("caseX__resume_test_v1");
+    assert.ok(checkpoint, "检查点应已持久化");
+    // 异构 manifest（同形不同 id）拿同一检查点续跑：按 stageIndex 恢复会静默错配
+    // stages/state，必须显式抛错而非静默恢复。
+    const otherManifest: WorkflowManifest = { ...resumeManifest, id: "resume_test_v2" };
+    await assert.rejects(
+      () =>
+        runWorkflow(otherManifest, { text: "交底书" }, async () => "透传", {
+          provider: countingProvider(calls),
+          runId: "caseX__resume_test_v2",
+          checkpointStore: store,
+          resumeFrom: checkpoint,
+        }),
+      /manifestId 不匹配/,
+    );
+    assert.equal(calls.llm, 1, "拒绝续跑不应额外执行任何阶段（计数保持首次中断运行的 1 次）");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("T10: resume + approvalGrants 放行审批门后继续至完成", async () => {
   registerBuiltinAtoms();
   const calls = { llm: 0 };

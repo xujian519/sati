@@ -41,7 +41,11 @@ export {
   appendInventivenessFeedback,
   loadInventivenessFeedback,
   summarizeInventivenessFeedback,
+  caseSessionBindingPath,
+  saveSessionCaseBinding,
+  findCaseIdBySession,
   type InventivenessFeedbackRecord,
+  type SessionCaseBinding,
 } from "./feedback/inventiveness-feedback.js";
 
 export {
@@ -381,7 +385,6 @@ export {
   computeClarityScore,
   detectClaritySignals,
   formatSignalsForPrompt,
-  signalFor,
   type ClarityDimension,
   type ClarityDimensionKey,
   type ClarityScore,

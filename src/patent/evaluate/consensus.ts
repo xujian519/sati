@@ -151,7 +151,11 @@ export function buildVerdictEnvelope(input: {
   };
 }
 
-/** 校验 envelope 内容哈希与 overall 一致性（检出篡改/镜像化：任何字段/判级变化 → 失配 false）。 */
+/**
+ * 校验 envelope 内容哈希与 overall 一致性（检出篡改/镜像化：任何字段/判级变化 → 失配 false）。
+ * 预留离线审计 API：生产图模式只 build + 打印 hash（patentWorkflowRunTool），本函数当前
+ * 仅测试消费——宿主落盘审计页/复核工具接线前不参与运行时判定。
+ */
 export function verifyVerdictEnvelope(envelope: VerdictEnvelope): boolean {
   // 重推导 overall（保守序）并断言与存储值一致：仅篡改 overall 判级而不动 layers
   // 时，即使重算哈希也无法通过——overall 必须可被 layers 唯一推导（不可镜像化）。
