@@ -129,6 +129,7 @@ function findStoredProjectId(projectRoot: string, pilotHome: string): string | n
       try {
         marker = readFileSync(markerPath, "utf8").trim();
       } catch {
+        // 无 .cwd 标记（ENOENT）或不可读：跳过该候选目录
         continue;
       }
       if (!marker || normalizeProjectPathForMarkerComparison(marker) !== target) {
@@ -139,10 +140,12 @@ function findStoredProjectId(projectRoot: string, pilotHome: string): string | n
           return entry.name;
         }
       } catch {
+        // 标记指向的目录已消失：该注册项失效，跳过
         continue;
       }
     }
   } catch {
+    // projects 目录不可读：退回 legacy 项目 ID（fail-safe）
     return null;
   }
   return null;

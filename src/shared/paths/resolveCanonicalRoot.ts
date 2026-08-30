@@ -84,6 +84,7 @@ async function resolveImpl(gitRoot: string): Promise<string> {
   try {
     backlinkRaw = (await readFile(join(worktreeGitDir, "gitdir"), "utf-8")).trim();
   } catch {
+    // 读不到回链文件：非标准 worktree 布局，降级按普通仓库处理（fail-safe）
     return canonicalize(gitRoot);
   }
   let backlinkResolved: string;
@@ -92,6 +93,7 @@ async function resolveImpl(gitRoot: string): Promise<string> {
     backlinkResolved = await realpath(backlinkRaw);
     gitRootResolved = await realpath(gitRoot);
   } catch {
+    // realpath 失败（悬空符号链接/权限）：降级按普通仓库处理（fail-safe）
     return canonicalize(gitRoot);
   }
   if (backlinkResolved !== join(gitRootResolved, ".git")) {
@@ -100,7 +102,6 @@ async function resolveImpl(gitRoot: string): Promise<string> {
 
   // Bare-repo worktree: the common dir is not inside a working directory.
   // Use the common dir itself as the stable identity.
-  // Bare-repo worktree identity: use the common dir when it is not a `.git` directory.
   if (basename(commonDir) !== ".git") {
     return canonicalize(commonDir);
   }
@@ -124,12 +125,7 @@ async function canonicalize(p: string): Promise<string> {
     const real = await realpath(p);
     return real.normalize("NFC");
   } catch {
+    // realpath 失败（悬空符号链接/权限）：退回词法 NFC 归一化路径
     return p.normalize("NFC");
   }
-}
-
-/** Test-only: clear LRU. Match the helper in findGitRoot.ts so test fixtures
- * can reset both caches between cases. */
-export function __clearResolveCanonicalRootCacheForTesting(): void {
-  cache.clear();
 }
