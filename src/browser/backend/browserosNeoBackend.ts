@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import type { BrowserBackend, BrowserBackendProbe, BrowserCapabilities } from "./types.js";
 
-export const BROWSEROS_NEO_DEFAULT_URL = "http://127.0.0.1:9010/mcp";
+const BROWSEROS_NEO_DEFAULT_URL = "http://127.0.0.1:9010/mcp";
 
 /**
  * BrowserOS neo backend —— 全平台备选首选（Track B 脚本兼容后端）。
@@ -28,13 +28,14 @@ export class BrowserOsNeoBackend implements BrowserBackend {
 }
 
 /** MCP Streamable HTTP：无 session 的 GET /mcp 返回 4xx/405 —— 任意响应（非 fetch 抛错）即端口有服务。 */
-export async function probeBrowserOsNeo(url: string): Promise<BrowserBackendProbe> {
+async function probeBrowserOsNeo(url: string): Promise<BrowserBackendProbe> {
   let httpStatus: number | undefined;
   let reachable = true;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(2_000) });
     httpStatus = res.status;
   } catch {
+    // fetch 抛错（连接拒绝/超时）：按端口不可达处理（fail-safe）
     reachable = false;
   }
   if (!reachable) {
@@ -90,6 +91,7 @@ function probePortOwner(port: string): string | undefined {
     const name = nameIndex >= 0 ? parts[nameIndex] : undefined;
     return name ? `${name}(${pid})` : pid;
   } catch {
+    // 归属探测失败（命令缺失/超时）：跳过 pid 展示，不影响可用性判定
     return undefined;
   }
 }

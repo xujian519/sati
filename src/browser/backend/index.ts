@@ -8,8 +8,6 @@ import type { BrowserBackend, BrowserBackendId, BrowserBackendProbe } from "./ty
 const logger = createLogger("sati");
 
 export * from "./types.js";
-export { BROWSEROS_NEO_DEFAULT_URL, probeBrowserOsNeo } from "./browserosNeoBackend.js";
-export { probeBrowserUse } from "./browserUsePyBackend.js";
 export { EgoBackend } from "./egoBackend.js";
 export { BrowserOsNeoBackend } from "./browserosNeoBackend.js";
 export { BrowserUsePyBackend } from "./browserUsePyBackend.js";
