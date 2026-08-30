@@ -177,7 +177,11 @@ test("kg-store: nodeCache LRU 上限淘汰（防 116K 节点无界膨胀）", t 
   `);
   const insert = db.prepare(`INSERT INTO nodes (id, node_type, name) VALUES (?, 'Concept', ?)`);
   const N = 9000; // > NODE_CACHE_MAX(8192)
+  // 事务包裹：逐条 autocommit 每条触发一次 journal fsync（本地快盘 5s；CI 慢盘 +
+  // 高 IO 争抢下放大数十秒，实测打满 60s 文件级测试超时），包裹后 9000 条 ≈10ms。
+  db.exec("BEGIN");
   for (let i = 0; i < N; i++) insert.run(`n${i}`, `节点${i}`);
+  db.exec("COMMIT");
   db.close();
   const store = new KgStore(dbPath);
   t.after(() => {
