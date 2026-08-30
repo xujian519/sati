@@ -2081,14 +2081,20 @@ class ProjectRuntimeRegistry {
         const sessionId = record.sessionId;
         if (sessionId === undefined) return;
         void (async () => {
-          const caseId = await findCaseIdBySession(joinPath(projectRoot, CASE_ROOT_REL), sessionId);
+          // 反查根与工具写侧同源：会话级 cwd 覆盖时工具把绑定写到覆盖目录下，
+          // 这里必须走同一解析链（override.cwd ?? projectRoot），否则绑定永远找不到。
+          const casesRoot = joinPath(this._sessionOverrides?.get(sessionKey)?.cwd ?? projectRoot, CASE_ROOT_REL);
+          const caseId = await findCaseIdBySession(casesRoot, sessionId);
           if (caseId === undefined) return;
-          await appendInventivenessFeedback(joinPath(projectRoot, caseInventivenessFeedbackPath(caseId)), {
+          await appendInventivenessFeedback(joinPath(casesRoot, caseInventivenessFeedbackPath(caseId)), {
             caseId,
             originalOutputPreview: record.originalOutputPreview,
             verdict: record.verdict === "modified" ? "modified" : "rejected",
             ...(record.feedback !== undefined ? { feedback: record.feedback } : {}),
             ...(record.modifiedOutput !== undefined ? { modifiedOutput: record.modifiedOutput } : {}),
+            // 溯源：绑定按 session 近似归属，同 session 内非创造性链路的审批也会
+            // 命中绑定，triggerKeyword 供事后甄别/过滤。
+            ...(record.triggerKeyword !== undefined ? { trigger: record.triggerKeyword } : {}),
             decidedAt: record.decidedAt,
           });
           patentOutputGateLogger.info(`创造性人工反馈已回流: case=${caseId} verdict=${record.verdict}`);

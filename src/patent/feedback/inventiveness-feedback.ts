@@ -25,6 +25,9 @@ export type InventivenessFeedbackRecord = {
   feedback?: string;
   /** 修改后的输出（verdict=modified 时）。 */
   modifiedOutput?: string;
+  /** 审批触发词/规则 id（ApprovalRecord.triggerKeyword，溯源用）：绑定按 session 近似归属，
+   * 同 session 内非创造性链路的审批也会命中绑定，溯源字段供事后甄别/过滤。 */
+  trigger?: string;
   decidedAt: string;
 };
 
@@ -67,13 +70,17 @@ export function summarizeInventivenessFeedback(records: readonly InventivenessFe
  * session→case 绑定（P2-4 写侧半桥）：gateway 审批上下文只有 sessionId 无 caseId，
  * graph=inventiveness 运行时把绑定落盘到 `<caseDir>/workflow-runs/session-binding.json`，
  * 审批驳回/修改回调按 sessionId 反查 caseId 后才能把反馈落到正确的 case 文件。
- * 同 session 先后跑多个 case 时 last-write-wins（反馈归最新 case 的近似）。
+ * 归属是近似：同 session 先后跑多个 case 时取 boundAt 最新（last-write-wins）；
+ * 同 session 内其它链路的审批也会命中绑定——反馈记录带 trigger 溯源供事后甄别。
  */
 export const SESSION_BINDING_FILE = "session-binding.json";
 
 export type SessionCaseBinding = {
   sessionId: string;
   boundAt: string;
+  /** 写入绑定的链路标识（如 "inventiveness"）：反馈记录按 session 近似归属，
+   * 此字段标记绑定来源供事后甄别（审批回调无法验证产出与该链路相关）。 */
+  graph?: string;
 };
 
 /** `<root>/data/cases/<caseId>/workflow-runs/session-binding.json`（与 caseWorkflowRunsDir 同约定）。 */
@@ -89,6 +96,7 @@ export async function saveSessionCaseBinding(filePath: string, binding: SessionC
 
 /**
  * 反查绑定该 sessionId 的 caseId：扫描 `<casesRoot>/<caseId>/workflow-runs/session-binding.json`。
+ * 多个 case 绑定同一 sessionId 时取 boundAt 最新的（真 last-write-wins；缺失/坏 boundAt 视为最旧）。
  * cases 根不存在/目录不可读/绑定缺失或损坏 → 跳过（fail-open，返回 undefined）。
  */
 export async function findCaseIdBySession(casesRoot: string, sessionId: string): Promise<string | undefined> {
@@ -98,15 +106,18 @@ export async function findCaseIdBySession(casesRoot: string, sessionId: string):
   } catch {
     return undefined;
   }
+  let best: { caseId: string; boundAt: string } | undefined;
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     try {
       const raw = await readFile(join(casesRoot, entry.name, CASE_WORKFLOW_RUNS_REL, SESSION_BINDING_FILE), "utf8");
       const parsed = JSON.parse(raw) as Partial<SessionCaseBinding>;
-      if (parsed.sessionId === sessionId) return entry.name;
+      if (parsed.sessionId !== sessionId) continue;
+      const boundAt = typeof parsed.boundAt === "string" ? parsed.boundAt : "";
+      if (best === undefined || boundAt > best.boundAt) best = { caseId: entry.name, boundAt };
     } catch {
       // 无绑定或坏 JSON：跳过。
     }
   }
-  return undefined;
+  return best?.caseId;
 }

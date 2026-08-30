@@ -283,6 +283,9 @@ test("candidatePackDirs and resolvePackDir resolution semantics", () => {
       return candidatePackDirs("base");
     })();
     assert.ok(withoutEnv.every(c => !c.startsWith("/tmp/sati-rules-env")));
+    // 末两位为包根候选（打包形态 cwd 非包根时兜底，与 candidateRuleDirs 对称）
+    assert.equal(withoutEnv.at(-1), resolve(process.cwd(), "rules", "domains", "base"));
+    assert.equal(withoutEnv.at(-2), resolve(process.cwd(), "rules", "base"));
     // 绝对路径直通
     const fixture = mkdtempSync(join(tmpdir(), "sati-rule-pack-abs-"));
     assert.equal(resolvePackDir(fixture), fixture);

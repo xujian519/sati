@@ -93,7 +93,7 @@ test("session 绑定：save → find 反查命中（P2-4 写侧半桥）", async
   }
 });
 
-test("session 绑定：last-write-wins（同 session 换 case 后反查归新 case）", async () => {
+test("session 绑定：last-write-wins（多 case 绑定同 session 时取 boundAt 最新，与目录遍历序无关）", async () => {
   const dir = mkdtempSync(join(tmpdir(), "invent-binding-lww-"));
   try {
     const root = join(dir, "data", "cases");
@@ -105,11 +105,19 @@ test("session 绑定：last-write-wins（同 session 换 case 后反查归新 ca
       sessionId: "sess-1",
       boundAt: "2026-08-30T01:00:00.000Z",
     });
-    // case-a 与 case-b 都绑定 sess-1 时反查取先命中者——写侧 last-write-wins 语义由
-    // 工具层覆盖式写保证（同 case 路径覆盖；换 case 时旧绑定文件被新 case 覆盖同一
-    // session 视角下的"最新"由工具运行顺序决定，此处断言至少命中其一）。
-    const caseId = await findCaseIdBySession(root, "sess-1");
-    assert.ok(caseId === "case-a" || caseId === "case-b");
+    assert.equal(await findCaseIdBySession(root, "sess-1"), "case-b", "归 boundAt 最新的 case");
+    // 再绑第三个更晚的 case → 反查跟随最新。
+    await saveSessionCaseBinding(join(root, "case-c", "workflow-runs", "session-binding.json"), {
+      sessionId: "sess-1",
+      boundAt: "2026-08-30T02:00:00.000Z",
+    });
+    assert.equal(await findCaseIdBySession(root, "sess-1"), "case-c");
+    // 缺 boundAt 的旧式绑定视为最旧，不抢占。
+    await saveSessionCaseBinding(join(root, "case-d", "workflow-runs", "session-binding.json"), {
+      sessionId: "sess-1",
+      boundAt: "",
+    });
+    assert.equal(await findCaseIdBySession(root, "sess-1"), "case-c");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

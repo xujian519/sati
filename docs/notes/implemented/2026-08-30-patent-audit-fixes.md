@@ -29,6 +29,14 @@ Status: implemented
 ## Consequences
 
 - desktop 形态规则门禁恢复 block/review 能力；打包体积增加 rules/ 资产（纯 YAML，~数百 KB）。
-- 反馈回流端到端闭环成立：驳回 → 落盘 → 同 case 重跑 conclude 提示可见。约束：反馈归属 case 以"该 session 最近一次 graph=inventiveness 运行"为准（同 session 换 case 的近似），审批发生在绑定之前的旧 run 上时反查落空（fail-open）。
+- 反馈回流端到端闭环成立：驳回 → 落盘 → 同 case 重跑 conclude 提示可见。约束：反馈归属 case 以"该 session 最近一次 graph=inventiveness 运行"为准（同 session 换 case 的近似，反查取 boundAt 最新），审批发生在绑定之前的旧 run 上时反查落空（fail-open）；同 session 内其它链路（如 manifest 路径撰写门）的审批也会命中绑定，反馈记录携带 triggerKeyword 溯源供事后甄别。
 - 多 judge 共识需用户在 `sati.yaml` 显式配置 `patents.modelHints` 后生效；未配置时行为与改动前一致。
 - 工具 inputSchema 零变化（llm-replay fixture 不受影响）；`patent` 域行为变化均有测试锚定（workflow-resume / feedback / patentWorkflowRun / parsePatentsConfig 四 spec 扩展）。
+
+## Review follow-ups（2026-08-31 代码评审后补强）
+
+- **反查实现真 last-write-wins**：`findCaseIdBySession` 原返回首个目录命中（遍历序相关），与文档声称的 LWW 不符、可致反馈错归旧 case；改为收集全部命中取 boundAt 最大（缺失/坏 boundAt 视为最旧），LWW 测试改确定性断言。备选"按 sessionId 单指针文件（`<casesRoot>/.session-bindings/<id>`）"可同时获得 O(1) 反查，但引入 cases 根下的新隐藏目录，暂不采纳。
+- **跨路径错归可甄别**：绑定只写在 graph=inventiveness 路径，但 output-gate 审批对该 session 内所有专利输出触发——manifest 路径审批驳回会命中绑定落进创造性反馈文件。回调无法验证产出与链路相关，故绑定带 `graph` 标识、反馈记录带 `trigger`（triggerKeyword）溯源，静默错归降级为可审计。
+- **cwd 覆盖会话的读写根同源**：会话级 cwd 覆盖时工具把绑定写到覆盖目录、回调却扫项目根，绑定永远反查不到（fail-open 掩盖）；回调改为与 `createAgentConfig` 同一解析链（`override.cwd ?? projectRoot`）。
+- **分层规则包打包形态同类缺口**：`candidatePackDirs` 只有 env/cwd/workspace 候选，desktop 以用户项目目录为 cwd 时 `rules/base`+`rules/domains/*` 静默缺失；补包根候选（与 `candidateRuleDirs` 对称，排最后不改变既有优先级）。
+- **顺手对齐**：law-search legacy 分支旧引擎 close 移入 try（与 knowledge.db 分支对称）；graph/README 写侧状态从"待宿主落地"更新为已接线（含近似归属约束）。

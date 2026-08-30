@@ -50,7 +50,13 @@ export function candidateRuleDirs(): string[] {
   return candidates;
 }
 
-/** 内置规则包候选目录（从最具体到最通用）：$SATI_RULES_DIR/<name> → cwd/rules/<name> → cwd/rules/domains/<name> → WorkSpace 根同名目录。 */
+/**
+ * 内置规则包候选目录（从最具体到最通用）：
+ * $SATI_RULES_DIR/<name> → cwd/rules/<name> → cwd/rules/domains/<name>
+ * → WorkSpace 根同名目录 → 包根 rules/<name> → 包根 rules/domains/<name>。
+ * 包根候选与 candidateRuleDirs 对称：打包形态（desktop bundle）进程 cwd 是用户
+ * 项目目录而非 bundle 根，缺包根候选会使分层规则包静默缺失。
+ */
 export function candidatePackDirs(name: string): string[] {
   const candidates: string[] = [];
   const envDir = process.env.SATI_RULES_DIR;
@@ -60,5 +66,7 @@ export function candidatePackDirs(name: string): string[] {
   candidates.push(resolve(process.cwd(), "rules", "domains", name));
   candidates.push(join(workspaceRoot, "rules", name));
   candidates.push(join(workspaceRoot, "rules", "domains", name));
+  candidates.push(join(packageRoot(), "rules", name));
+  candidates.push(join(packageRoot(), "rules", "domains", name));
   return candidates;
 }

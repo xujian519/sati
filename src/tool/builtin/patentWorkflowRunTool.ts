@@ -548,11 +548,12 @@ async function executeGraphRun(
     const summary = summarizeInventivenessFeedback(history);
     if (summary.length > 0) workflowCtx.inventiveness_feedback_history = summary;
     // 写侧半桥：落 session→case 绑定，审批驳回/修改回调按 sessionId 反查 caseId 落反馈；
-    // 写失败不阻断 run（fail-open）。
+    // 写失败不阻断 run（fail-open）。graph 标记绑定来源，供反馈记录溯源甄别。
     const now = context.now ?? (() => new Date());
     await saveSessionCaseBinding(join(context.cwd ?? process.cwd(), caseSessionBindingPath(input.caseId)), {
       sessionId: context.sessionId,
       boundAt: now().toISOString(),
+      graph: "inventiveness",
     }).catch(() => undefined);
   }
 
