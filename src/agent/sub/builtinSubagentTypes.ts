@@ -56,6 +56,14 @@ export type SubagentDefinition = {
   systemPromptSuffix: string;
   /** Optional reasoning-effort override (S12). `undefined` keeps parent setting. */
   effort?: "low" | "medium" | "high";
+  /**
+   * 输出契约（P0-2）：成员结论的结构化 Schema（JSON Schema 子集，可经
+   * `validateCanonicalOutput` 校验，"缺字段即提示"）。声明后 `buildRoleSystemPrompt`
+   * 把"本角色输出格式"编译进系统提示；`team_update_task` completed 时据此做轻量校验。
+   */
+  outputSchema?: unknown;
+  /** 宽松 Markdown 输出模板（纯文本产出时的段落骨架提示）。 */
+  outputTemplate?: string;
 };
 
 const SHARED_PREFIX = `You are a subagent of Sati — a focused agent dispatched by the parent agent to handle a bounded research, planning, or verification task.

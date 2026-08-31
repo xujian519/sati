@@ -56,8 +56,9 @@ export async function wakeMember(
         ? { provider: route.provider, model: route.model }
         : undefined;
     // M5：角色系统提示注入——roleSlug 已注册时取其 systemPromptSuffix（角色 prompt
-    // 本体，非子代理共享前缀）作为本回合系统提示追加段；成员仍保有队长全部工具
-    //（不应用 allowedTools/domains/omitTools/isReadOnly 裁剪）。未注册/空提示降级
+    // 本体，非子代理共享前缀）作为本回合系统提示追加段。成员工具集由 P0-1 在会话
+    // 创建时按角色裁剪（allowedTools/visibleDomains/omitTools），此处补充角色指令，
+    // 二者共同构成「成员只见角色专业工具 + 角色 prompt」的隔离。未注册/空提示降级
     // 不注入（不阻塞唤醒，与 modelRoute 脏数据降级同构）。
     const rolePrompt = getSubagentDefinition(member.roleSlug)?.systemPromptSuffix?.trim();
     const input: GatewaySubmitTurnInput = {

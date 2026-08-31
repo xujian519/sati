@@ -8,9 +8,13 @@ import type { TeamMessageRow } from "../storage/team-db.js";
 
 export const MAILBOX_LEASE_MS = 60_000;
 
-/** 未读判定：未投递且（未认领 或 认领租约已过期）。 */
-export function unreadMessages(rows: readonly TeamMessageRow[], now: number): TeamMessageRow[] {
-  const leaseStart = now - MAILBOX_LEASE_MS;
+/** 未读判定：未投递且（未认领 或 认领租约已过期）。leaseMs 可配置（P1-5），默认 60s。 */
+export function unreadMessages(
+  rows: readonly TeamMessageRow[],
+  now: number,
+  leaseMs: number = MAILBOX_LEASE_MS,
+): TeamMessageRow[] {
+  const leaseStart = now - leaseMs;
   return rows.filter(row => {
     if (row.deliveredAt !== undefined) return false;
     if (row.deliveryClaimedAt === undefined) return true;

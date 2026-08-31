@@ -15,6 +15,7 @@ import { readTranscript } from "../../../session/transcript/TranscriptReader.js"
 import { findOpenRequest } from "../../../session/transcript/interruptedTurn.js";
 import type { GatewayEvent } from "../../../gateway/protocol/types.js";
 import type { TeamDb, TeamMemberRow } from "../storage/team-db.js";
+import type { TeamEventEmitter } from "../protocol/events.js";
 import { createLogger } from "../../../telemetry/index.js";
 import { wakeMember, type MemberGateway } from "./member-waker.js";
 
@@ -32,6 +33,8 @@ export type ScanTeamMembersOptions = {
   resumeMessage?: string;
   /** 成员会话是否有挂起审批（输出门禁态在 gateway 内存，崩溃即失，须跳过）。 */
   hasPendingApprovals?: (sessionKey: string) => boolean;
+  /** P0-3：挂起审批成员的 TeamEvent 冒泡出口（接到 createLocalGateway 的 emitTeamEvent）。 */
+  emitTeamEvent?: TeamEventEmitter;
   /** 成员回合事件透传（M2 最终审查 I1 接线点）：冷恢复 turn 的 approval_pending 冒泡
    *  到队长 watcher——宿主把回调接到 TeamApprovalForwarder.handleMemberEvent。 */
   onEvent?: (member: TeamMemberRow, event: GatewayEvent) => void;
@@ -54,6 +57,24 @@ export async function scanTeamMembers(options: ScanTeamMembersOptions): Promise<
     if (member.status !== "idle") {
       continue;
     }
+    // P0-3：挂起审批判定前移（早于转录读取/形态判定）。挂起成员几乎必为 form "b"
+    //（审批消息已持久化入库），若在 form 检查处跳过则永不到达 hasPendingApprovals，
+    // 尾部审批会"石沉大海"（M1 已知限制）。此处显式冒泡队长后跳过：
+    // member_stalled_approval 让队长知晓该成员卡在人工审批门；挂起态已持久化
+    //（teams.db pending_approvals，bus 为内存态），供冷恢复重建与 decide 收敛。
+    if (options.hasPendingApprovals?.(member.sessionKey)) {
+      const team = options.db.getTeam(member.teamId);
+      if (team) {
+        options.emitTeamEvent?.(team.captainSessionKey, {
+          type: "member_stalled_approval",
+          teamId: member.teamId,
+          memberId: member.id,
+          roleSlug: member.roleSlug,
+          sessionKey: member.sessionKey,
+        });
+      }
+      continue;
+    }
     try {
       const path = join(chatDir, `${sanitizeSessionIdForPath(member.sessionKey)}.jsonl`);
       const { entries } = await readTranscript(path);
@@ -62,9 +83,6 @@ export async function scanTeamMembers(options: ScanTeamMembersOptions): Promise<
         continue;
       }
       if (open.form !== "a") {
-        continue;
-      }
-      if (options.hasPendingApprovals?.(member.sessionKey)) {
         continue;
       }
       // 读转录是异步间隙：与 stranded 扫描交错时成员可能已被唤醒/退休，收敛 TOCTOU

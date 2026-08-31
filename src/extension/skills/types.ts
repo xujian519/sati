@@ -46,6 +46,17 @@ export type SkillRoleConfig = {
     /** 是否需要核验法条原文（law_search）。 */
     requireLawSearch?: boolean;
   };
+  /**
+   * 输出契约（可选）：声明角色应产出的结论结构。`schema` 为 JSON Schema 子集
+   *（校验/程序化消费，"缺字段即提示"）；`template` 为宽松 Markdown 骨架
+   *（纯文本产出时给出段落提示）。二者可同时声明，schema 优先用于校验。
+   */
+  output?: {
+    /** JSON Schema 子集，描述角色结论的结构化字段与 required。 */
+    schema?: unknown;
+    /** 宽松 Markdown 模板，描述结论段落骨架。 */
+    template?: string;
+  };
 };
 
 /** HTML 模板 mode 的合法取值。 */

@@ -65,6 +65,20 @@ export type TeamMessageRow = {
   readAt?: string;
 };
 
+/** 成员挂起审批持久化行（P0-3）。GatewayApprovalBus 为进程内存态，崩溃即失；
+ * 挂起态落表，供冷恢复重建 bus / 冒泡队长（member_stalled_approval）/ decide 收敛。 */
+export type TeamPendingApprovalRow = {
+  teamId: string;
+  memberId: string;
+  sessionKey: string;
+  pendingIndex: number;
+  triggerKeyword: string;
+  textPreview: string;
+  sessionId?: string;
+  turnId?: string;
+  createdAt: string;
+};
+
 type TeamDbRow = {
   id: string;
   name: string;
@@ -110,6 +124,18 @@ type MessageDbRow = {
   delivery_claimed_at: string | null;
   delivered_at: string | null;
   read_at: string | null;
+};
+type PendingApprovalDbRow = {
+  team_id: string;
+  member_id: string;
+  session_key: string;
+  pending_index: number;
+  trigger_keyword: string;
+  text_preview: string;
+  session_id: string | null;
+  turn_id: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 const MIGRATIONS: string[] = [
@@ -171,6 +197,21 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE teams ADD COLUMN archived_at TEXT;`,
   // v4：任务 worker 契约声明（阶段 3）——worker_name 供分派时角色 tier 校验
   `ALTER TABLE tasks ADD COLUMN worker_name TEXT;`,
+  // v5：成员挂起审批持久化（P0-3）——崩溃后 GatewayApprovalBus 内存态丢失，
+  // 挂起态落表供冷恢复重建 bus、冒泡队长（member_stalled_approval）与 decide 收敛
+  `CREATE TABLE IF NOT EXISTS pending_approvals (
+    team_id TEXT NOT NULL,
+    member_id TEXT NOT NULL,
+    session_key TEXT NOT NULL,
+    pending_index INTEGER NOT NULL,
+    trigger_keyword TEXT NOT NULL,
+    text_preview TEXT NOT NULL DEFAULT '',
+    session_id TEXT,
+    turn_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (session_key, pending_index)
+  );`,
 ];
 
 function toTeamRow(row: TeamDbRow): TeamRow {
@@ -228,6 +269,20 @@ function toMessageRow(row: MessageDbRow): TeamMessageRow {
     deliveryClaimedAt: row.delivery_claimed_at ?? undefined,
     deliveredAt: row.delivered_at ?? undefined,
     readAt: row.read_at ?? undefined,
+  };
+}
+
+function toPendingApprovalRow(row: PendingApprovalDbRow): TeamPendingApprovalRow {
+  return {
+    teamId: row.team_id,
+    memberId: row.member_id,
+    sessionKey: row.session_key,
+    pendingIndex: row.pending_index,
+    triggerKeyword: row.trigger_keyword,
+    textPreview: row.text_preview,
+    sessionId: row.session_id ?? undefined,
+    turnId: row.turn_id ?? undefined,
+    createdAt: row.created_at,
   };
 }
 
@@ -480,5 +535,79 @@ export class TeamDb {
     this.closed = true;
     this.preparedCache.clear();
     this.db.close();
+  }
+
+  // ── 成员挂起审批持久化（P0-3）────────────────────────────────────────────
+  /** 挂起时 upsert（幂等：同 (session_key, pending_index) 复写摘要）。 */
+  upsertPendingApproval(row: TeamPendingApprovalRow): void {
+    prepareCached(
+      this.preparedCache,
+      this.db,
+      `INSERT INTO pending_approvals (team_id, member_id, session_key, pending_index, trigger_keyword,
+          text_preview, session_id, turn_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(session_key, pending_index) DO UPDATE SET
+           trigger_keyword = excluded.trigger_keyword,
+           text_preview = excluded.text_preview,
+           session_id = excluded.session_id,
+           turn_id = excluded.turn_id,
+           updated_at = excluded.updated_at`,
+    ).run(
+      row.teamId,
+      row.memberId,
+      row.sessionKey,
+      row.pendingIndex,
+      row.triggerKeyword,
+      row.textPreview,
+      row.sessionId ?? null,
+      row.turnId ?? null,
+      row.createdAt,
+      row.createdAt,
+    );
+  }
+
+  /** 审批已决（onApproved/onRejected）或 decide 回落时删除；幂等返回是否实际删除。 */
+  deletePendingApproval(sessionKey: string, pendingIndex: number): boolean {
+    const result = prepareCached(
+      this.preparedCache,
+      this.db,
+      "DELETE FROM pending_approvals WHERE session_key = ? AND pending_index = ?",
+    ).run(sessionKey, pendingIndex);
+    return result.changes > 0;
+  }
+
+  /** 该会话是否有未决挂起审批（冷恢复 hasPendingApprovals 依据，判"跳过 + 冒泡"）。 */
+  hasPendingApproval(sessionKey: string): boolean {
+    const row = prepareCached(
+      this.preparedCache,
+      this.db,
+      "SELECT 1 FROM pending_approvals WHERE session_key = ? LIMIT 1",
+    ).get(sessionKey);
+    return row !== undefined;
+  }
+
+  /** 列出挂起审批（sessionKey 缺省列出全部；供冷恢复重建 bus / 审批列表）。 */
+  listPendingApprovals(sessionKey?: string): TeamPendingApprovalRow[] {
+    const rows = sessionKey
+      ? (prepareCached(
+          this.preparedCache,
+          this.db,
+          "SELECT * FROM pending_approvals WHERE session_key = ? ORDER BY created_at ASC",
+        ).all(sessionKey) as PendingApprovalDbRow[])
+      : (prepareCached(
+          this.preparedCache,
+          this.db,
+          "SELECT * FROM pending_approvals ORDER BY created_at ASC",
+        ).all() as PendingApprovalDbRow[]);
+    return rows.map(toPendingApprovalRow);
+  }
+
+  getPendingApproval(sessionKey: string, pendingIndex: number): TeamPendingApprovalRow | undefined {
+    const row = prepareCached(
+      this.preparedCache,
+      this.db,
+      "SELECT * FROM pending_approvals WHERE session_key = ? AND pending_index = ?",
+    ).get(sessionKey, pendingIndex) as PendingApprovalDbRow | undefined;
+    return row ? toPendingApprovalRow(row) : undefined;
   }
 }

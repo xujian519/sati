@@ -90,6 +90,8 @@ import {
   createTeamSendMessageTool,
   createTeamStatusTool,
   createTeamArchiveTool,
+  createTeamShareWriteTool,
+  createTeamShareReadTool,
   type TeamToolsOptions,
 } from "../builtin/team/index.js";
 import {
@@ -445,6 +447,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createTeamUpdateTaskTool({ db, scheduler, emit }), "team"));
     registry.register(annotate(createTeamSendMessageTool({ db, scheduler, emit }), "team"));
     registry.register(annotate(createTeamStatusTool({ db, scheduler, emit }), "team"));
+    // P1-4：团队共享黑板写/读（作业面，成员可见；黑板不驱动调度，只供成员主动读写）
+    registry.register(annotate(createTeamShareWriteTool({ db, emit }), "team"));
+    registry.register(annotate(createTeamShareReadTool({ db, emit }), "team"));
   }
   if (options?.kanban) {
     const kanban = options.kanban;

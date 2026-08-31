@@ -7,6 +7,7 @@ export { createTeamCreateTaskTool, createTeamUpdateTaskTool, createTeamReassignT
 export { createTeamSendMessageTool } from "./teamMailbox.js";
 export { createTeamStatusTool } from "./teamStatus.js";
 export { createTeamArchiveTool } from "./teamArchive.js";
+export { createTeamShareWriteTool, createTeamShareReadTool } from "./teamShare.js";
 export type { TeamToolsOptions } from "./teamUtils.js";
 export {
   parseTeamSessionKey,

@@ -14,6 +14,7 @@ async function setup(
     maxConcurrentMembers?: number;
     isCaptainOnline?: () => boolean;
     wake?: (memberId: string, message: string) => Promise<boolean>;
+    readSharedBoardSummary?: (teamId: string) => string | undefined;
   } = {},
 ): Promise<{ db: TeamDb; scheduler: TeamScheduler; wakes: WakeRecord[]; emits: EmitRecord[]; root: string }> {
   const root = await mkdtemp(join(tmpdir(), "sati-team-sched-"));
@@ -45,6 +46,7 @@ async function setup(
     },
     maxConcurrentMembers: overrides.maxConcurrentMembers ?? 4,
     isCaptainOnline: overrides.isCaptainOnline ?? (() => true),
+    readSharedBoardSummary: overrides.readSharedBoardSummary,
   });
   return { db, scheduler, wakes, emits, root };
 }
@@ -76,6 +78,65 @@ test("kickTeam：依赖满足的 pending 任务派给未指派成员（邮箱优
     assert.equal(task.attempt, 1);
     assert.ok(task.attemptId);
     assert.ok(emits.some(e => e.event.type === "task_claimed"));
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("P1-4：readSharedBoardSummary 注入时成员任务唤醒 prompt 含共享黑板注记；空黑板不注入", async () => {
+  const summary = "- 检索范围（m1）: CPC: A61K\n- 结论:t3-新颖性（captain）: D2 单独对比不覆盖区别特征";
+  const { db, scheduler, wakes, root } = await setup({
+    readSharedBoardSummary: teamId => (teamId === "t1" ? summary : undefined),
+  });
+  try {
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "检索",
+      description: "",
+      status: "pending",
+      dependencies: [],
+      attempt: 0,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    await scheduler.kickTeam("t1");
+    assert.equal(wakes.length, 1);
+    const msg = wakes[0]?.message ?? "";
+    assert.ok(msg.includes("共享黑板（团队已发布的上下文）"), "p1-4 注入共享黑板注记段");
+    assert.ok(msg.includes("检索范围"), "注记含黑板键");
+    assert.ok(msg.includes("D2 单独对比不覆盖区别特征"), "注记含黑板值");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("P1-4：readSharedBoardSummary 返回空串/undefined 时不注入共享注记（assignmentPrompt 保持原样）", async () => {
+  const { db, scheduler, wakes, root } = await setup({ readSharedBoardSummary: () => "" });
+  try {
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "检索",
+      description: "",
+      status: "pending",
+      dependencies: [],
+      attempt: 0,
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    await scheduler.kickTeam("t1");
+    const msg = wakes[0]?.message ?? "";
+    assert.ok(!msg.includes("共享黑板（团队已发布的上下文）"), "空黑板不注入共享注记");
+    assert.match(msg, /Attempt id:/, "任务分派主体仍完整");
   } finally {
     db.close();
     await rm(root, { recursive: true, force: true });

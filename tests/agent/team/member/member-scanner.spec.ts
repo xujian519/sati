@@ -10,6 +10,7 @@ import test from "node:test";
 import { getPilotProjectChatDir } from "../../../../src/pilot/index.js";
 import { sanitizeSessionIdForPath } from "../../../../src/session/storage/ProjectSessionStorage.js";
 import type { GatewayEvent, GatewaySubmitTurnInput } from "../../../../src/gateway/protocol/types.js";
+import type { TeamEvent } from "../../../../src/agent/team/protocol/events.js";
 import { TeamDb, createTeamMember, scanTeamMembers } from "../../../../src/agent/team/index.js";
 
 type JsonEntry = Record<string, unknown>;
@@ -290,6 +291,57 @@ test("冷恢复：(b) 形态断点成员（流式残片）跳过，不自动续�
     assert.equal(result.scanned, 1);
     assert.equal(result.resumed, 0);
     assert.deepEqual(recorded.messages, []);
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("冷恢复：挂起审批成员（含 (b) 形态）emit member_stalled_approval 冒泡队长并跳过（P0-3）", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-team-scan-"));
+  const db = new TeamDb(join(root, "teams.db"));
+  const recorded = { messages: [] as string[] };
+  const stalled: Array<{ captain: string; event: TeamEvent }> = [];
+  try {
+    db.upsertTeam({ id: "t1", name: "专利团队", captainSessionKey: "cap-1", createdAt: "2026-08-19T00:00:00.000Z" });
+    createTeamMember(db, {
+      teamId: "t1",
+      memberId: "m-wait",
+      roleSlug: "searcher",
+      modelRoute: { provider: "p", model: "m" },
+    });
+    // 挂起审批成员几乎总是 (b) 形态（审批消息已持久化入库）——P0-3 前移审批判定前它会在
+    // form 检查处被静默 continue。此处断言 emit member_stalled_approval 而非静默跳过。
+    await writeMemberTranscript(root, "team:t1:m-wait", [
+      acceptedInput("team:t1:m-wait", "t1", 1, "开始撰写"),
+      requestHeader("team:t1:m-wait", "t1", 2),
+      baseEntry("team:t1:m-wait", "t1", 3, "durable_message", {
+        message: { role: "assistant", content: [{ type: "text", text: "部分响应" }] },
+      }),
+    ]);
+    const result = await scanTeamMembers({
+      db,
+      gateway: makeGateway(recorded),
+      projectRoot: root,
+      pilotHome: root,
+      hasPendingApprovals: sessionKey => sessionKey === "team:t1:m-wait",
+      emitTeamEvent: (captainSessionKey, event) => {
+        stalled.push({ captain: captainSessionKey, event });
+        return true;
+      },
+    });
+    assert.equal(result.scanned, 1);
+    assert.equal(result.resumed, 0);
+    assert.deepEqual(recorded.messages, []);
+    // 冒泡到队长会话（cap-1），成员来源 + 角色定位透传
+    assert.equal(stalled.length, 1);
+    assert.equal(stalled[0]?.captain, "cap-1");
+    assert.equal(stalled[0]?.event.type, "member_stalled_approval");
+    const stalledEvent = stalled[0]?.event as Extract<TeamEvent, { type: "member_stalled_approval" }>;
+    assert.equal(stalledEvent.teamId, "t1");
+    assert.equal(stalledEvent.memberId, "m-wait");
+    assert.equal(stalledEvent.roleSlug, "searcher");
+    assert.equal(stalledEvent.sessionKey, "team:t1:m-wait");
   } finally {
     db.close();
     await rm(root, { recursive: true, force: true });

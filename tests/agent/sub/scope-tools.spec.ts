@@ -79,6 +79,18 @@ test("scopeToolsForDefinition hidden wins over visible", () => {
   assert.deepEqual(names, ["bash", "unclassified"]);
 });
 
+test("scopeToolsForDefinition omitTools excludes by name even for unclassified tools", () => {
+  const result = scopeToolsForDefinition(TOOLS, {
+    allowedTools: ["*"],
+    visibleDomains: ["filesystem", "session", "shell"],
+    omitTools: ["unclassified", "write_file"],
+  });
+  const names = result.map(t => t.name).sort();
+  // bash/read_file 命中可见域保留；unclassified 本应因"无 domain 始终可见"保留，
+  // omitTools 按其名剔除；write_file 同时命中 domain 白名单，双因子剔除取并集。
+  assert.deepEqual(names, ["bash", "read_file"]);
+});
+
 test("scopeToolsForDefinition absent domain options behave like legacy whitelist", () => {
   const result = scopeToolsForDefinition(TOOLS, { allowedTools: ["read_file", "agent", "bash"] });
   const names = result.map(t => t.name).sort();

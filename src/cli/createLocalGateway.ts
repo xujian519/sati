@@ -17,14 +17,18 @@ import {
 } from "../agent/index.js";
 import { resolveRoutedModelMaxContextTokens } from "../agent/runtime/modelContextWindow.js";
 import type { TeamToolsOptions } from "../tool/builtin/team/index.js";
+import { getSubagentDefinition } from "../agent/sub/builtinSubagentTypes.js";
+import { scopeToolsForDefinition, type ScopeToolsOptions } from "../agent/sub/scopeTools.js";
 import {
   TeamApprovalForwarder,
   TeamDb,
   TeamScheduler,
+  TeamShare,
   defaultTeamDbPath,
   attemptsExhausted,
   invalidateTaskAttempt,
   ownedOpenTask,
+  parseMemberSessionKey,
   scanStrandedTasks,
   scanTeamMembers,
   toGatewayEvent,
@@ -213,6 +217,16 @@ export type CreateLocalGatewayOptions = {
    * 可经环境变量 `SATI_PROVENANCE=1` 开启（双通道，方案 P6）。
    */
   enableProvenance?: boolean;
+  /**
+   * P1-5：成员邮箱投递租约宽限（ms）。调度器邮箱未读判定/租约过期复用此值；
+   * 默认 MAILBOX_LEASE_MS 60s。生产/测试可调小以加速租约重投。
+   */
+  mailboxLeaseMs?: number;
+  /**
+   * P1-5：护航队长在线判定宽限窗（ms）。SessionPresence 直连关闭/面板心跳停更
+   * 超过此值判离线（暂停团队认领）；默认 SESSION_PRESENCE_GRACE_MS 60s。
+   */
+  captainGraceMs?: number;
 };
 
 export type SubsystemUpdate = {
@@ -435,7 +449,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // 协议不升版）。sati.ts 透传本实例给 startGatewayServer 后即真实生效。
   // 声明置于 gateway 创建前：panelHeartbeat delegate（M4）闭包引用本实例，
   // 避免块级作用域"先使用后声明"编译错误。
-  const sessionPresence = new SessionPresence();
+  const sessionPresence = new SessionPresence(options.captainGraceMs);
   // Phase 3：项目看板管理器。单实例缓存所有项目 BoardRuntime 并维护订阅表。
   const kanbanBoardManager = new KanbanBoardManager();
   const gateway = new InProcessGateway(router, {
@@ -620,7 +634,12 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       gateway,
       projectRoot: fallbackProjectRoot,
       pilotHome,
-      hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
+      // P0-3：挂起审批判定 = 内存 bus 或持久化表（bus 为内存态崩溃即失，冷恢复后该成员
+      // 依据持久化表被判"挂起"并冒泡/跳过）。
+      hasPendingApprovals: sessionKey =>
+        gateway.getApprovalBus().list(sessionKey).length > 0 || teamDb.hasPendingApproval(sessionKey),
+      // P0-3：挂起审批成员冒泡 member_stalled_approval 给队长（emitTeamEvent 闭包 597 行）。
+      emitTeamEvent,
       // I1（code review）：冷恢复 turn 的 approval_pending 冒泡到队长 watcher——
       // scanner 直调 wakeMember 现传 onEvent（M1 已知限制在此闭环，计划 1349 行承诺兑现）。
       onEvent: (member, event) => {
@@ -677,6 +696,21 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     emit: emitTeamEvent,
     isCaptainOnline: captainSessionKey => sessionPresence.isActive(captainSessionKey),
     workerRegistry,
+    // P1-5：邮箱投递租约宽限参数化（默认 60s，调度器邮箱未读判定/租约过期复用）。
+    mailboxLeaseMs: options.mailboxLeaseMs,
+    // P1-4：成员任务唤醒 turn 0 注入共享黑板摘要（订阅方读 {projectRoot}/.sati/team-workspace/{teamId}/share.jsonl；
+    // 空黑板返回 undefined 不注入注记——与 assignmentPrompt 的 sharedContext 空串跳过一致）。
+    readSharedBoardSummary: teamId => {
+      try {
+        const summary = new TeamShare(
+          joinPath(fallbackProjectRoot, ".sati", "team-workspace", teamId, "share.jsonl"),
+        ).summary();
+        return summary.length > 0 ? summary : undefined;
+      } catch {
+        // 黑板不存在/读失败：容错视作无共享上下文，不阻塞成员唤醒。
+        return undefined;
+      }
+    },
     wake: async (memberId, message) => {
       try {
         // 成员快照一次读取（onEvent 内每事件复用；handleMemberEvent 需要 teamId/sessionKey）。
@@ -770,12 +804,44 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     emit: emitTeamEvent,
     workerRegistry,
   });
+  // P0-1：成员工具作用域解析器注入——成员会话创建时按角色裁剪工具集。resolver 延迟
+  // 求值（每次会话创建时经 getSubagentDefinition 取角色定义，角色由 syncRoleDefinitions
+  // 在 createSession 前注册），故注入时点无需保证角色已注册；parseMemberSessionKey
+  // 命中的 memberId 即 teams.db 成员主键 id，getMember(id) 可反查 roleSlug。
+  registry.setMemberToolScopeResolver(memberId => {
+    const member = teamDb.getMember(memberId);
+    if (!member) return undefined;
+    const definition = getSubagentDefinition(member.roleSlug);
+    if (!definition) return undefined;
+    return {
+      allowedTools: definition.allowedTools,
+      visibleDomains: definition.visibleDomains,
+      hiddenDomains: definition.hiddenDomains,
+      omitTools: definition.omitTools,
+    };
+  });
+  // P0-3：注入团队库供输出门禁持久化成员挂起审批（onPending upsert / resolveApproval delete）。
+  registry.setTeamDb(teamDb);
   registry.setKanbanBoardManager(kanbanBoardManager);
   // T12 复审 M4：启动扫描完成信号（显式可 await——测试不再用 setTimeout 排干猜测时序）
   // Minor-1 兜底：存储层异常经 catch 记录（console.error 含扫描标识）且不 reject——
   // 信号语义 = 扫描已尝试完成，无论成败；与修复前 void IIFE 的吞错行为等价。
   const startupScanDone = (async () => {
     teamDb.resetMemberStatuses();
+    // P0-3：从 teams.db 挂起审批表重建内存审批总线——bus 为进程内存态，崩溃即失；
+    // 冷启动恢复后成员挂起审批仍对队长可见（approval_list_pending/UI 卡片），
+    // 且 decide 有 pendingIndex 依据（会话未被重建时 delivered:false → 收敛删除）。
+    for (const row of teamDb.listPendingApprovals()) {
+      gateway.getApprovalBus().register({
+        sessionKey: row.sessionKey,
+        pendingIndex: row.pendingIndex,
+        textPreview: row.textPreview,
+        triggerKeyword: row.triggerKeyword,
+        sessionId: row.sessionId,
+        turnId: row.turnId,
+        createdAt: Date.parse(row.createdAt),
+      });
+    }
     await runMemberScan();
     await runStrandedScan();
   })().catch(error => logger.error("Team startup scan failed:", error));
@@ -957,6 +1023,10 @@ class ProjectRuntimeRegistry {
   private _teamTools?: TeamToolsOptions;
   /** kanban_* 工具装配（Phase 4）：createLocalGateway 经 setKanbanBoardManager 注入，resolve 时透传 createBuiltinRegistry。 */
   private _kanbanBoardManager?: KanbanBoardManager;
+  /** 成员工具作用域裁剪（P0-1）：createLocalGateway 经 setMemberToolScopeResolver 注入，成员会话创建时按角色裁剪工具集。 */
+  private _memberToolScopeResolver?: (memberId: string) => ScopeToolsOptions | undefined;
+  /** 成员挂起审批持久化（P0-3）：createLocalGateway 经 setTeamDb 注入，输出门禁挂起/决时写 teams.db——审批总线为内存态，崩溃即失。 */
+  private _teamDb?: TeamDb;
 
   constructor(private readonly options: ProjectRuntimeRegistryOptions) {
     this._extraTools = options.extraTools ? [...options.extraTools] : [];
@@ -1177,6 +1247,25 @@ class ProjectRuntimeRegistry {
   setKanbanBoardManager(manager: KanbanBoardManager): void {
     this._kanbanBoardManager = manager;
     this.invalidate();
+  }
+
+  /**
+   * 成员工具作用域解析器注入（P0-1）：成员会话（`team:` 前缀）创建时按成员角色
+   * 裁剪工具集——只暴露角色 allowedTools/visibleDomains 白名单、剔除 omitTools，
+   * 免除成员保有队长全工具的越权（对齐 Anthropic「subagent 只暴露极少专业工具」）。
+   *
+   * resolver(memberId) 返回 ScopeToolsOptions 或 undefined：未命中成员/角色未注册
+   * 时降级不裁剪（与 member-waker 的 rolePrompt 降级语义一致）。
+   * 裁剪仅在会话创建时烘焙一次（成员角色不可变 + 会话按需创建），无每回合开销；
+   * 本 setter 不 invalidate——裁剪不入 runtime 缓存，仅作用于 prepareSessionRuntime。
+   */
+  setMemberToolScopeResolver(resolver: (memberId: string) => ScopeToolsOptions | undefined): void {
+    this._memberToolScopeResolver = resolver;
+  }
+
+  /** P0-3：注入团队库（成员挂起审批持久化；输出门禁 onPending/onApproved/onRejected 接线）。 */
+  setTeamDb(db: TeamDb): void {
+    this._teamDb = db;
   }
 
   /**
@@ -1745,6 +1834,35 @@ class ProjectRuntimeRegistry {
     sessionTools = availability.registry;
     runtime.unavailableTools = availability.unavailable;
 
+    // P0-1：成员会话工具隔离——按成员角色裁剪工具集（allowedTools/visibleDomains/
+    // omitTools），使自动唤醒成员只暴露角色专业工具，而非保有队长全工具，
+    // 同时剥离 never-expose 的 HARD_BLOCKED/open_ai/always_on_* 等工具
+    //（scopeToolsForDefinition 已内置该剔除）。未注册角色/未命中成员降级不裁。
+    const parsedMember = parseMemberSessionKey(context.sessionKey);
+    if (parsedMember) {
+      const scope = this._memberToolScopeResolver?.(parsedMember.memberId);
+      if (scope) {
+        const scopedDefs = scopeToolsForDefinition(sessionTools.list(), scope);
+        const keep = new Set(scopedDefs.map(tool => tool.name));
+        // 成员作业面保留：domain === "team"（job-surface：team_update_task/team_status/
+        // team_send_message/team_share_write/team_share_read）是成员完成任务所必需的运行面，
+        // 不受角色 subject domains 裁剪——角色 domains 描述专业主题域（patent/search/legal…），
+        // 不覆盖团队作业面；management 面（team:manage，captain-only）仍被裁剪隐藏。
+        for (const tool of sessionTools.list()) {
+          if (tool.domain === "team") {
+            keep.add(tool.name);
+          }
+        }
+        const scoped = sessionTools.clone();
+        for (const tool of sessionTools.list()) {
+          if (!keep.has(tool.name)) {
+            scoped.unregister(tool.name);
+          }
+        }
+        sessionTools = scoped;
+      }
+    }
+
     // Inject the gateway's interactive permission hook so the agent's
     // PermissionRequest lifecycle is round-tripped through whichever
     // client is streaming this session (Web UI, TUI, etc.) instead of
@@ -1990,8 +2108,11 @@ class ProjectRuntimeRegistry {
      */
     const sessionKey = context.sessionKey;
     // 审批完成收口：从总线移除 + 广播 approval_resolved（onApproved/onRejected 共用）。
+    // P0-3：同步删除持久化挂起项（成员会话）——bus/表双态收敛，冷恢复 hasPendingApproval
+    // 据此不再判定该成员挂起。
     const resolveApproval = (pending: PendingPatentMessage, verdict: "adopted" | "rejected") => {
       this.gateway?.getApprovalBus().remove(sessionKey, pending.index);
+      this._teamDb?.deletePendingApproval(sessionKey, pending.index);
       this.gateway?.emitForSession(sessionKey, {
         type: "approval_resolved",
         sessionKey,
@@ -2054,6 +2175,23 @@ class ProjectRuntimeRegistry {
             sessionId: pending.sessionId,
             turnId: pending.turnId,
             createdAt: pending.createdAt,
+          });
+        }
+        // P0-3：成员会话挂起审批落 teams.db——审批总线是进程内存态，崩溃即失；
+        // 落表后冷恢复重建 bus、hasPendingApprovals 判定、decide 收敛有据可依。
+        // createdAt 落 ISO 字符串（与 teams/members/tasks 列一致），重建 bus 时转回时间戳。
+        const memberKey = parseMemberSessionKey(sessionKey);
+        if (memberKey !== null && this._teamDb) {
+          this._teamDb.upsertPendingApproval({
+            teamId: memberKey.teamId,
+            memberId: memberKey.memberId,
+            sessionKey,
+            pendingIndex: pending.index,
+            triggerKeyword,
+            textPreview,
+            sessionId: pending.sessionId,
+            turnId: pending.turnId,
+            createdAt: new Date(pending.createdAt).toISOString(),
           });
         }
         // 日志仅记录定位信息，不打消息内容（专利结论可能含敏感信息）
