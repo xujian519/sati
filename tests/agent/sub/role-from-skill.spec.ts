@@ -387,3 +387,79 @@ test("roleFromContribution compiles knowledge declaration", () => {
   assert.ok(suffix.includes("law_search"));
   assert.ok(!suffix.includes("patent_case_search"));
 });
+
+test("roleFromSkill maps output schema/template and compiles 输出格式", () => {
+  const schema = { type: "object", required: ["新颖性结论", "证据段", "风险"], properties: {} };
+  const definition = roleFromSkill(
+    roleSkillSummary({
+      role: {
+        domains: ["patent"],
+        systemPrompt: "你是检索专家。",
+        output: {
+          schema,
+          template: "## 结论\n\n## 证据\n\n## 风险",
+        },
+      },
+    }),
+  );
+  assert.ok(definition !== null);
+  assert.equal(definition?.outputSchema, schema, "outputSchema 应透传");
+  assert.equal(definition?.outputTemplate, "## 结论\n\n## 证据\n\n## 风险", "outputTemplate 应透传");
+  const suffix = definition?.systemPromptSuffix ?? "";
+  assert.ok(suffix.startsWith("你是检索专家。"), "基础 systemPrompt 应保留");
+  assert.ok(suffix.includes("【输出格式】"), "应编译输出格式段");
+  assert.ok(suffix.includes("新颖性结论"), "应包含 schema.required 字段");
+  assert.ok(suffix.includes("风险"), "应包含多个 required 字段");
+  assert.ok(suffix.includes("缺任一字段即视为结构化不足"), "应说明缺字段即结构化不足");
+  assert.ok(suffix.includes("## 证据"), "应包含输出骨架模板");
+});
+
+test("roleFromSkill output without template only emits required fields", () => {
+  const definition = roleFromSkill(
+    roleSkillSummary({
+      role: {
+        domains: ["patent"],
+        systemPrompt: "你是检索专家。",
+        output: { schema: { type: "object", required: ["新颖性结论"] } },
+      },
+    }),
+  );
+  const suffix = definition?.systemPromptSuffix ?? "";
+  assert.ok(suffix.includes("【输出格式】"));
+  assert.ok(suffix.includes("新颖性结论"));
+  assert.ok(!suffix.includes("【骨架】"), "未声明 template 不应输出骨架");
+});
+
+test("roleFromSkill without output keeps systemPrompt unchanged", () => {
+  const definition = roleFromSkill(roleSkillSummary());
+  assert.equal(definition?.systemPromptSuffix, "你是专利撰写专家。");
+  assert.ok(!definition?.systemPromptSuffix.includes("【输出格式】"));
+  assert.equal(definition?.outputSchema, undefined);
+  assert.equal(definition?.outputTemplate, undefined);
+});
+
+test("roleFromContribution maps output schema/template", () => {
+  const contribution: PluginSkillContribution = {
+    name: "oa-writer",
+    description: "OA 答复",
+    path: "/tmp/oa-writer/SKILL.md",
+    role: {
+      domains: ["patent"],
+      systemPrompt: "你是 OA 答复专家。",
+      output: { schema: { type: "object", required: ["答复理由"] } },
+    },
+  };
+  const definition = roleFromContribution(contribution);
+  const suffix = definition?.systemPromptSuffix ?? "";
+  assert.ok(suffix.includes("【输出格式】"));
+  assert.ok(suffix.includes("答复理由"));
+  assert.ok(definition?.outputSchema !== undefined, "outputSchema 应填充");
+});
+
+test("rolesFromSkills collects role definitions with output contract", () => {
+  const roles = rolesFromSkills([
+    roleSkillSummary({ role: { tools: ["*"], domains: ["patent"], output: { schema: { required: ["结论"] } } } }),
+  ]);
+  assert.equal(roles.length, 1);
+  assert.deepEqual(roles[0]?.outputSchema, { required: ["结论"] });
+});

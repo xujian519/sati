@@ -33,6 +33,8 @@ import {
   type TeamTaskRow,
 } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
+import { getSubagentDefinition } from "../../../agent/sub/builtinSubagentTypes.js";
+import { validateCanonicalOutput } from "../../execution/outputSchemaValidation.js";
 import {
   assertTeamActive,
   requireTeamCaptain,
@@ -50,6 +52,45 @@ function recomputeBlockedByCount(db: TeamDb, teamId: string): void {
       db.updateTask({ ...t, blockedByCount: count, updatedAt: t.updatedAt });
     }
   }
+}
+
+/**
+ * 成员结论 vs 角色 outputSchema 的轻量校验（P0-2）。
+ *
+ * 输出为可解析 JSON 对象/数组时走正式校验器（validateCanonicalOutput）；自由文本
+ * （Markdown）时按必填字段名做子串检查（缺即提示）。仅作为"结构化程度不足"的降级
+ * 提示返回给调用方（不硬失败、不改写 task.output），契合"output 是建议性产物"的现状。
+ *
+ * 子串检查防误报：纯 ASCII 且长度 < 4 的字段名（如 "id"、"ok"）在自由文本里极易被
+ * 无关子串伪装命中/缺失，子串匹配歧义大，跳过不检查（漏报比误报更安全——这是建议性
+ * 提示）；中文短字段名（如"证据"）语义明确，仍参与检查。
+ */
+function validateOutputAgainstSchema(output: string, schema: unknown): string[] {
+  if (schema === null || typeof schema !== "object" || Array.isArray(schema)) return [];
+  const required = Array.isArray((schema as Record<string, unknown>).required)
+    ? ((schema as Record<string, unknown>).required as unknown[])
+    : [];
+  if (required.length === 0) return [];
+  const trimmed = output.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (parsed !== null && typeof parsed === "object") {
+        return validateCanonicalOutput(parsed, schema as Record<string, unknown>);
+      }
+    } catch {
+      // JSON 解析失败 → 落入文本子串检查
+    }
+  }
+  return required
+    .map(String)
+    .filter(name => !isAmbiguousAsciiShortToken(name) && !output.includes(name))
+    .map(name => `缺关键字段：${name}`);
+}
+
+/** 纯 ASCII 且长度 < 4 → 视为易误报的短 token，跳过子串检查。 */
+function isAmbiguousAsciiShortToken(name: string): boolean {
+  return name.length < 4 && /^[\x00-\x7F]+$/.test(name);
 }
 
 export type TeamCreateTaskInput = {
@@ -266,6 +307,7 @@ export function createTeamUpdateTaskTool(
       // requireTeamCaptain → team_actor_unknown（fail-closed，绝不放行）。
       const actor = resolveActor(context.sessionId);
       let next: TeamTaskRow | undefined;
+      let outputWarnings: string[] = [];
       await withTeamLock(input.teamId, async () => {
         let memberId: string | undefined;
         let captainKey: string;
@@ -313,6 +355,15 @@ export function createTeamUpdateTaskTool(
         recomputeBlockedByCount(db, input.teamId); // 本任务终态可能解锁下游
         // 事件锁内发出（M2 review：与 create/reassign 及 T5 惯例统一；emit 为同步入队）
         if (input.status === "completed") {
+          // P0-2：成员完成时按角色 outputSchema 做轻量校验（缺关键字段 → 降级提示，
+          // 不硬失败、不改写 task.output）。队长路径无角色不校验。
+          if (memberId !== undefined) {
+            const member = db.getMember(memberId);
+            const def = member ? getSubagentDefinition(member.roleSlug) : undefined;
+            if (def?.outputSchema !== undefined) {
+              outputWarnings = validateOutputAgainstSchema(input.output ?? "", def.outputSchema);
+            }
+          }
           emit(captainKey, {
             type: "task_completed",
             teamId: input.teamId,
@@ -348,7 +399,9 @@ export function createTeamUpdateTaskTool(
         content: [
           {
             type: "text",
-            text: `team_update_task taskId=${input.taskId} status=${input.status} attempt=${next?.attempt ?? 0}`,
+            text:
+              `team_update_task taskId=${input.taskId} status=${input.status} attempt=${next?.attempt ?? 0}` +
+              (outputWarnings.length > 0 ? `\n[输出契约] ${outputWarnings.join("；")}` : ""),
           },
         ],
         data: {

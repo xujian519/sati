@@ -12,6 +12,7 @@ import {
   type TeamTaskRow,
 } from "../../../../src/agent/team/index.js";
 import { SatiToolRuntimeError } from "../../../../src/tool/protocol/errors.js";
+import { registerRoleDefinition, unregisterRoleDefinition } from "../../../../src/agent/sub/builtinSubagentTypes.js";
 import {
   createTeamCreateTaskTool,
   createTeamUpdateTaskTool,
@@ -546,4 +547,144 @@ test("team_create_task：subject 空白 / maxAttempts 非法拒绝（M5）", asy
     () => tools.createTask.execute({ teamId: "t1", subject: "X", maxAttempts: 2.5 }, { sessionId: "cap-1" } as never),
     (e: unknown) => e instanceof SatiToolRuntimeError && e.code === "invalid_tool_input",
   );
+});
+
+test("team_update_task：成员完成按角色 outputSchema 校验——缺字段降级提示、不硬失败（P0-2）", async () => {
+  const { db, events, tools, insertTask } = setup();
+  registerRoleDefinition({
+    id: "researcher",
+    description: "检索",
+    allowedTools: ["*"],
+    omitProjectInstructions: false,
+    omitGitStatus: false,
+    isReadOnly: false,
+    systemPromptSuffix: "",
+    outputSchema: { type: "object", properties: {}, required: ["新颖性结论", "证据"] },
+  });
+  try {
+    // 缺字段：output 未含必要字段 → text 附 [输出契约]
+    insertTask({
+      id: "a",
+      teamId: "t1",
+      subject: "A",
+      description: "",
+      status: "in_progress",
+      assigneeId: "m1",
+      dependencies: [],
+      attempt: 1,
+      attemptId: "attempt-1",
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+    });
+    const out = await tools.updateTask.execute(
+      { teamId: "t1", taskId: "a", status: "completed", attemptId: "attempt-1", output: "结论未结构化" },
+      { sessionId: "team:t1:m1" } as never,
+    );
+    // 不硬失败：任务已终态、output 原样保留、task_completed 事件照发
+    const a = db.getTask("t1", "a")!;
+    assert.equal(a.status, "completed");
+    assert.equal(a.output, "结论未结构化");
+    assert.ok(events.some(e => e.type === "task_completed" && e.taskId === "a"));
+    const text = out.content.map(c => (c.type === "text" ? c.text : "")).join("");
+    assert.ok(text.includes("[输出契约]"), "缺字段应附输出契约提示");
+    assert.ok(text.includes("新颖性结论"), "应提示缺新颖性结论");
+    assert.ok(text.includes("证据"), "应提示缺证据");
+
+    // 字段齐全：子串命中全部 required → 不附 [输出契约]
+    insertTask({
+      id: "b",
+      teamId: "t1",
+      subject: "B",
+      description: "",
+      status: "in_progress",
+      assigneeId: "m1",
+      dependencies: [],
+      attempt: 1,
+      attemptId: "attempt-2",
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+    });
+    const out2 = await tools.updateTask.execute(
+      {
+        teamId: "t1",
+        taskId: "b",
+        status: "completed",
+        attemptId: "attempt-2",
+        output: "新颖性结论：有新颖性，证据：对比文件1",
+      },
+      { sessionId: "team:t1:m1" } as never,
+    );
+    const text2 = out2.content.map(c => (c.type === "text" ? c.text : "")).join("");
+    assert.ok(!text2.includes("[输出契约]"), "字段齐全不应附输出契约提示");
+  } finally {
+    unregisterRoleDefinition("researcher");
+  }
+});
+
+test("team_update_task：队长代操作无角色 outputSchema —— 不触发输出契约校验（P0-2 成员专属）", async () => {
+  const { db, tools, insertTask } = setup();
+  insertTask({
+    id: "a",
+    teamId: "t1",
+    subject: "A",
+    description: "",
+    status: "claimed",
+    assigneeId: "m1",
+    dependencies: [],
+    attempt: 1,
+    attemptId: "attempt-1",
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+  });
+  // 队长路径 memberId === undefined → 跳过 schema 校验，缺字段也不报
+  const out = await tools.updateTask.execute(
+    { teamId: "t1", taskId: "a", status: "completed", attemptId: "attempt-1", output: "无结构" },
+    { sessionId: "cap-1" } as never,
+  );
+  const text = out.content.map(c => (c.type === "text" ? c.text : "")).join("");
+  assert.ok(!text.includes("[输出契约]"), "队长路径不校验角色输出契约");
+  assert.equal(db.getTask("t1", "a")!.status, "completed");
+});
+
+test("team_update_task：outputSchema 纯 ASCII 短字段名跳过子串检查（防 id 误报，P0-2）", async () => {
+  const { tools, insertTask } = setup();
+  registerRoleDefinition({
+    id: "researcher",
+    description: "检索",
+    allowedTools: ["*"],
+    omitProjectInstructions: false,
+    omitGitStatus: false,
+    isReadOnly: false,
+    systemPromptSuffix: "",
+    outputSchema: { type: "object", properties: {}, required: ["id", "conclusion"] },
+  });
+  try {
+    insertTask({
+      id: "a",
+      teamId: "t1",
+      subject: "A",
+      description: "",
+      status: "in_progress",
+      assigneeId: "m1",
+      dependencies: [],
+      attempt: 1,
+      attemptId: "attempt-1",
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+    });
+    // output 为自由文本："id" 是纯 ASCII 短 token（子串歧义大）→ 跳过不报缺；"conclusion" 仍检查
+    const out = await tools.updateTask.execute(
+      { teamId: "t1", taskId: "a", status: "completed", attemptId: "attempt-1", output: "no structured result here" },
+      { sessionId: "team:t1:m1" } as never,
+    );
+    const text = out.content.map(c => (c.type === "text" ? c.text : "")).join("");
+    assert.ok(text.includes("conclusion"), "应提示缺 conclusion");
+    assert.ok(!text.includes("缺关键字段：id"), "纯 ASCII 短 token（id）跳过子串检查，不误报缺 id");
+  } finally {
+    unregisterRoleDefinition("researcher");
+  }
 });

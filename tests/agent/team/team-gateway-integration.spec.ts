@@ -319,3 +319,80 @@ test("集成：stranded 任务（claimed + 成员 idle）→ runStrandedScan inv
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("集成：成员唤醒按角色裁剪工具集（P0-1 接线生效）", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sati-team-toolscope-"));
+  await writeFile(
+    join(root, "sati.yaml"),
+    [
+      "schemaVersion: 1",
+      "agent:",
+      "  model: deepseek/deepseek-v4-flash",
+      "model:",
+      "  providers:",
+      "    deepseek:",
+      "      apiKey: test-key",
+      "      models:",
+      "        deepseek-v4-flash: {}",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  // 角色为仓库真实技能 drafter（domains 含 filesystem+team，omitTools 含 web_fetch），
+  // 经 getSubagentDefinition → resolver → scopeToolsForDefinition 裁剪成员会话工具集。
+  // 选用真实角色而非测试自建：走默认 builtinSkillsRoot 与 M2/M3 集成测试同环境，排除
+  // 自定义 skills 根目录对 ExtensionWatchManager/插件加载的路径差（自建根会挂死测试进程）。
+  const capturedToolNames: string[] = [];
+  const result = createLocalGateway({
+    projectRoot: root,
+    pilotHome: root,
+    env: {},
+    __testModelFactory: (): ModelRuntime => ({
+      stream: async function* (request) {
+        capturedToolNames.push(...(request.tools ?? []).map(tool => tool.name));
+        yield { type: "text_delta", text: "已完成检索。" };
+      },
+      complete: async () => {
+        throw new Error("unused");
+      },
+      getCapabilities: () => DEFAULT_MODEL_CAPABILITIES,
+      getMultimodal: () => ({ input: ["text"] }),
+      getProviderProtocol: () => undefined,
+      getProviderBaseUrl: () => undefined,
+    }),
+  });
+  try {
+    const team = result.teamSubsystem;
+    team.db.upsertTeam({
+      id: "t1",
+      name: "专利团队",
+      captainSessionKey: "cap-1",
+      createdAt: "2026-08-21T00:00:00.000Z",
+    });
+    createTeamMember(team.db, {
+      teamId: "t1",
+      memberId: "m1",
+      roleSlug: "drafter",
+      modelRoute: { provider: "fake", model: "fake-model" },
+    });
+
+    await wakeMember(team.db, result.gateway, "m1", "撰写任务 T-1");
+
+    assert.ok(capturedToolNames.length > 0, "成员回合模型请求应携带工具 schema（P0-1 裁剪结果）");
+    // 管理面 team:manage 域工具被裁剪（drafter domains 含 "team" 不含 "team:manage"）
+    assert.ok(!capturedToolNames.includes("team_create_task"), "成员不应可见管理面 team_create_task");
+    // 作业面 team 域工具保留
+    assert.ok(capturedToolNames.includes("team_update_task"), "成员应可见作业面 team_update_task");
+    // filesystem 域工具保留（drafter domains 含 "filesystem"）
+    assert.ok(capturedToolNames.includes("read_file"), "filesystem 域工具 read_file 应保留");
+    // HARD_BLOCKED 硬剔除
+    assert.ok(!capturedToolNames.includes("enter_plan_mode"), "enter_plan_mode 应被硬剔除");
+    assert.ok(!capturedToolNames.includes("agent"), "agent（嵌套 fork）应被硬剔除");
+    // omitTools 剔除
+    assert.ok(!capturedToolNames.includes("web_fetch"), "omitTools 应剔除 web_fetch");
+    assert.ok(!capturedToolNames.includes("web_search"), "omitTools 应剔除 web_search");
+  } finally {
+    result.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});

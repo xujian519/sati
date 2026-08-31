@@ -19,7 +19,7 @@ test("迁移：首次打开建表，user_version 升到 4", () => {
   try {
     // userVersion() 已移除（生产零引用）——外部连接直查 PRAGMA 钉住迁移版本
     const raw = new DatabaseSync(join(root, "teams.db"));
-    assert.equal((raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
+    assert.equal((raw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 5);
     raw.close();
     assert.deepEqual(db.listMembers(), []);
   } finally {
@@ -214,9 +214,9 @@ test("迁移：真实 v2 旧库（user_version=2 + 旧数据）升级到 v3，�
     // 以 TeamDb 重开：v2 → v4 迁移补 archived_at + worker_name 列，旧行该字段保持 NULL（= undefined）
     const db = new TeamDb(dbPath);
     try {
-      // userVersion() 已移除——外部连接直查 PRAGMA 钉住 v2→v4 迁移落点
+      // userVersion() 已移除——外部连接直查 PRAGMA 钉住 v2→v5 迁移落点
       const verifyRaw = new DatabaseSync(dbPath);
-      assert.equal((verifyRaw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 4);
+      assert.equal((verifyRaw.prepare("PRAGMA user_version").get() as { user_version: number }).user_version, 5);
       verifyRaw.close();
       assert.deepEqual(db.getTeam("t-old"), {
         id: "t-old",
@@ -286,6 +286,46 @@ test("tasks v4：worker_name 列存取往返（阶段 3）", () => {
       updatedAt: "2026-08-19T00:00:00.000Z",
     });
     assert.equal(db.getTask("t1", "t-2")?.workerName, undefined);
+  } finally {
+    db.close();
+  }
+});
+
+test("pending_approvals v5：挂起审批持久化 CRUD + 冷恢复重建依据（P0-3）", () => {
+  const db = openDb();
+  try {
+    const row = {
+      teamId: "t1",
+      memberId: "m1",
+      sessionKey: "team:t1:m1",
+      pendingIndex: 1,
+      triggerKeyword: "可专利性",
+      textPreview: "本方案具有可专利性",
+      sessionId: "team:t1:m1",
+      turnId: "turn-9",
+      createdAt: "2026-08-19T00:00:00.000Z",
+    };
+    db.upsertPendingApproval(row);
+    assert.equal(db.hasPendingApproval("team:t1:m1"), true);
+    assert.equal(db.hasPendingApproval("team:t1:m-other"), false);
+    assert.deepEqual(db.getPendingApproval("team:t1:m1", 1), row);
+    // 列表：全量 + 按会话过滤
+    assert.equal(db.listPendingApprovals().length, 1);
+    assert.equal(db.listPendingApprovals("team:t1:m1").length, 1);
+    assert.equal(db.listPendingApprovals("team:t1:m-none").length, 0);
+    // upsert 幂等复写（同 (session_key, pending_index) 覆盖摘要，不重复插行）
+    db.upsertPendingApproval({ ...row, textPreview: "更新摘要" });
+    assert.equal(db.getPendingApproval("team:t1:m1", 1)?.textPreview, "更新摘要");
+    assert.equal(db.listPendingApprovals("team:t1:m1").length, 1);
+    // 不同 pendingIndex 是独立条目
+    db.upsertPendingApproval({ ...row, pendingIndex: 2, triggerKeyword: "侵权判断" });
+    assert.equal(db.listPendingApprovals("team:t1:m1").length, 2);
+    // 删除：命中返回 true，幂等重复删除返回 false
+    assert.equal(db.deletePendingApproval("team:t1:m1", 1), true);
+    assert.equal(db.deletePendingApproval("team:t1:m1", 1), false);
+    assert.equal(db.hasPendingApproval("team:t1:m1"), true); // 仍剩 index 2
+    db.deletePendingApproval("team:t1:m1", 2);
+    assert.equal(db.hasPendingApproval("team:t1:m1"), false);
   } finally {
     db.close();
   }

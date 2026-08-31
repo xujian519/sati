@@ -71,6 +71,8 @@ export function roleFromSkill(skill: SkillSummary): SubagentDefinition | null {
     omitGitStatus: false,
     isReadOnly: role.readOnly ?? false,
     systemPromptSuffix: buildRoleSystemPrompt(role),
+    outputSchema: role.output?.schema,
+    outputTemplate: role.output?.template,
   };
   warnDomainMismatch(definition);
   return definition;
@@ -94,6 +96,8 @@ export function roleFromContribution(skill: PluginSkillContribution): SubagentDe
     omitGitStatus: false,
     isReadOnly: role.readOnly ?? false,
     systemPromptSuffix: buildRoleSystemPrompt(role),
+    outputSchema: role.output?.schema,
+    outputTemplate: role.output?.template,
   };
   warnDomainMismatch(definition);
   return definition;
@@ -108,19 +112,41 @@ export function roleFromContribution(skill: PluginSkillContribution): SubagentDe
  */
 function buildRoleSystemPrompt(role: SkillRoleConfig): string {
   const base = role.systemPrompt ?? "";
-  const knowledge = role.knowledge;
-  if (!knowledge) return base;
   const parts: string[] = [];
-  if (knowledge.cards && knowledge.cards.length > 0) {
-    parts.push(`必查 wiki 卡片（经 \`patent_wiki_search\` 检索）：${knowledge.cards.join("、")}`);
+  const knowledge = role.knowledge;
+  if (knowledge) {
+    const segs: string[] = [];
+    if (knowledge.cards && knowledge.cards.length > 0) {
+      segs.push(`必查 wiki 卡片（经 \`patent_wiki_search\` 检索）：${knowledge.cards.join("、")}`);
+    }
+    if (knowledge.requireCaseSearch) {
+      segs.push("相似在先决定的论证细节用 `patent_case_search` 检索");
+    }
+    if (knowledge.requireLawSearch) {
+      segs.push("法条原文用 `law_search` 核验");
+    }
+    if (segs.length > 0) {
+      parts.push(`【知识接线】${segs.join("；")}。`);
+    }
   }
-  if (knowledge.requireCaseSearch) {
-    parts.push("相似在先决定的论证细节用 `patent_case_search` 检索");
+  const output = role.output;
+  if (output) {
+    const segs: string[] = [];
+    const schema = output.schema;
+    if (schema !== null && typeof schema === "object" && !Array.isArray(schema)) {
+      const required = (schema as Record<string, unknown>).required;
+      if (Array.isArray(required) && required.length > 0) {
+        segs.push(`必填字段：${required.map(String).join("、")}（缺任一字段即视为结构化不足）`);
+      }
+    }
+    if (output.template) {
+      segs.push(`骨架：\n${output.template}`);
+    }
+    if (segs.length > 0) {
+      parts.push(`【输出格式】${segs.join("；")}`);
+    }
   }
-  if (knowledge.requireLawSearch) {
-    parts.push("法条原文用 `law_search` 核验");
-  }
-  return parts.length > 0 ? `${base}\n\n【知识接线】${parts.join("；")}。` : base;
+  return parts.length > 0 ? `${base}\n\n${parts.join("\n")}` : base;
 }
 
 /** 与 SkillManager 的 slug 规则保持一致（安全目录名/标识符）。 */

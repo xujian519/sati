@@ -9,9 +9,9 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 
 | 事件 | 生产者 | 消费者 |
 | --- | --- | --- |
-| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:635, src/adapters/channel/weixin/WeixinChannel.ts:836, src/cli/createLocalGateway.ts:987, src/gateway/client/InProcessGateway.ts:403 | src/gateway/client/InProcessGateway.ts:541, submitTurn 流 ×28 |
-| approval_pending | src/cli/createLocalGateway.ts:2048 | submitTurn 流 ×28 |
-| approval_resolved | src/cli/createLocalGateway.ts:1995 | submitTurn 流 ×28 |
+| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:635, src/adapters/channel/weixin/WeixinChannel.ts:836, src/cli/createLocalGateway.ts:1057, src/gateway/client/InProcessGateway.ts:403 | src/gateway/client/InProcessGateway.ts:541, submitTurn 流 ×28 |
+| approval_pending | src/cli/createLocalGateway.ts:2169 | submitTurn 流 ×28 |
+| approval_resolved | src/cli/createLocalGateway.ts:2116 | submitTurn 流 ×28 |
 | assistant_attachment | src/gateway/client/eventMapping.ts:247 | submitTurn 流 ×28 |
 | assistant_message | src/agent/loop/AgentLoop.ts:722, src/agent/loop/AgentLoop.ts:757, src/agent/loop/AgentLoop.ts:795, src/agent/loop/AgentLoop.ts:1795 | src/gateway/client/InProcessGateway.ts:541 |
 | assistant_text_delta | src/gateway/client/InProcessGateway.ts:374 | submitTurn 流 ×28 |
@@ -23,7 +23,7 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | doomloop_signal | - | src/gateway/client/InProcessGateway.ts:541 |
 | elicitation_cancelled | src/gateway/elicitation/GatewayElicitationChannel.ts:108, src/gateway/elicitation/GatewayElicitationChannel.ts:114 | submitTurn 流 ×28 |
 | elicitation_request | src/gateway/elicitation/GatewayElicitationChannel.ts:87 | submitTurn 流 ×28 |
-| elicitation_requested | src/cli/createLocalGateway.ts:1924, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | src/gateway/client/InProcessGateway.ts:541 |
+| elicitation_requested | src/cli/createLocalGateway.ts:2042, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | src/gateway/client/InProcessGateway.ts:541 |
 | elicitation_resolved | - | src/gateway/client/InProcessGateway.ts:541 |
 | empty_output_recovery | src/agent/loop/AgentLoop.ts:1578 | src/gateway/client/InProcessGateway.ts:541 |
 | error | src/adapters/channel/qq/qqbot-gateway.ts:93, src/adapters/channel/qq/qqbot-gateway.ts:279, src/cli/sati.ts:963, src/gateway/client/InProcessGateway.ts:414, src/model/providers/openai-responses/stream.ts:131, src/model/streaming/streamModel.ts:181, src/model/streaming/streamModel.ts:230, src/model/streaming/streamModel.ts:236, src/model/streaming/streamModel.ts:241, src/model/streaming/streamModel.ts:318, src/model/streaming/streamModel.ts:487, src/router/RouterRuntime.ts:519, src/router/RouterRuntime.ts:581, src/router/RouterRuntime.ts:615, src/router/RouterRuntime.ts:900 | src/adapters/channel/api-server/ApiServerChannel.ts:473, src/adapters/channel/discord/DiscordChannel.ts:112, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:139, src/adapters/channel/mattermost/MattermostChannel.ts:119, src/adapters/channel/qq/QQChannel.ts:87, src/adapters/channel/qq/qqbot-gateway.ts:92, src/adapters/channel/sms/SmsChannel.ts:314, src/adapters/channel/webhook/WebhookChannel.ts:464, src/adapters/channel/wecom/WeComChannel.ts:330, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:65, src/adapters/channel/whatsapp/WhatsAppChannel.ts:82, src/always-on/runtime/SignalWatcher.ts:50, src/always-on/workspace/GitWorktreeProvider.ts:149, src/always-on/workspace/SnapshotCopyProvider.ts:167, src/always-on/workspace/WorkspaceApply.ts:32, src/always-on/workspace/WorkspaceApply.ts:153, src/cli/ExtensionWatchManager.ts:139, src/extension/hooks/execution/CommandHookExecutor.ts:80, src/gateway/server/websocket.ts:26, src/patent/figuregen/render-graphviz.ts:70, src/patent/figuregen/render-graphviz.ts:71, src/session/artifacts/FileArtifactCollector.ts:339, src/task/runtime/BackgroundTaskRuntime.ts:264, src/tool/builtin/bash/commandRunner.ts:59, src/tool/builtin/bash/commandRunner.ts:158, src/tool/builtin/executeCode.ts:573, src/tool/builtin/executeCode.ts:616, src/tool/builtin/executeCode.ts:667, src/tool/builtin/executeCode.ts:675, src/tool/builtin/executeCodeRpc.ts:98, src/tool/builtin/filesystem/ripgrep.ts:65, src/tool/builtin/filesystem/syntaxDiagnostics.ts:392, submitTurn 流 ×28 |
@@ -32,10 +32,11 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | instructions_loaded | src/agent/loop/AgentLoop.ts:2018 | src/gateway/client/InProcessGateway.ts:541 |
 | kanban_updated | src/gateway/server/GatewayWsConnection.ts:50 | submitTurn 流 ×28 |
 | member_added | src/tool/builtin/team/teamManagement.ts:104, src/tool/builtin/team/teamManagement.ts:161 | - |
-| member_idle | src/agent/team/scheduler/scheduler.ts:295 | - |
+| member_idle | src/agent/team/scheduler/scheduler.ts:314 | - |
 | member_removed | src/tool/builtin/team/teamManagement.ts:223 | - |
+| member_stalled_approval | - | - |
 | member_status | - | - |
-| message_delivered | src/agent/team/scheduler/scheduler.ts:227 | - |
+| message_delivered | src/agent/team/scheduler/scheduler.ts:241 | - |
 | mode_change_requested | src/agent/loop/AgentLoop.ts:1322 | src/gateway/client/InProcessGateway.ts:541 |
 | model_event | src/agent/loop/AgentLoop.ts:479 | src/gateway/client/InProcessGateway.ts:541 |
 | model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:541 |
@@ -60,16 +61,17 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:541 |
 | subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:541 |
 | subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:541 |
-| task_claimed | src/agent/team/scheduler/scheduler.ts:251 | - |
-| task_completed | src/tool/builtin/team/teamTasks.ts:316 | - |
-| task_created | src/tool/builtin/team/teamTasks.ts:178 | - |
-| task_failed | src/tool/builtin/team/teamTasks.ts:325 | - |
-| task_reassigned | src/tool/builtin/team/teamTasks.ts:434 | - |
-| task_retried | src/agent/team/scheduler/scheduler.ts:181 | - |
-| task_updated | src/tool/builtin/team/teamTasks.ts:334 | - |
+| task_claimed | src/agent/team/scheduler/scheduler.ts:270 | - |
+| task_completed | src/tool/builtin/team/teamTasks.ts:367 | - |
+| task_created | src/tool/builtin/team/teamTasks.ts:219 | - |
+| task_failed | src/tool/builtin/team/teamTasks.ts:376 | - |
+| task_reassigned | src/tool/builtin/team/teamTasks.ts:487 | - |
+| task_retried | src/agent/team/scheduler/scheduler.ts:195 | - |
+| task_updated | src/tool/builtin/team/teamTasks.ts:385 | - |
 | team_archived | src/tool/builtin/team/teamArchive.ts:67 | - |
 | team_created | src/tool/builtin/team/teamManagement.ts:94 | - |
 | team_event | - | submitTurn 流 ×28 |
+| team_share_updated | src/tool/builtin/team/teamShare.ts:114 | - |
 | token_cap_adjusted | src/agent/loop/AgentLoop.ts:893, src/agent/loop/AgentLoop.ts:920, src/agent/loop/AgentLoop.ts:942, src/agent/loop/AgentLoop.ts:1641 | src/gateway/client/InProcessGateway.ts:541 |
 | tool_call_finished | - | submitTurn 流 ×28 |
 | tool_call_started | - | submitTurn 流 ×28 |
@@ -94,4 +96,4 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | 流入口 | 语汇 | 消费站点 |
 | --- | --- | --- |
 | submit | AgentEvent | src/gateway/client/InProcessGateway.ts:541 |
-| submitTurn | GatewayEvent | src/adapters/channel/api-server/ApiServerChannel.ts:347, src/adapters/channel/api-server/ApiServerChannel.ts:419, src/adapters/channel/bluebubbles/BlueBubblesChannel.ts:181, src/adapters/channel/cli/CliChannel.ts:77, src/adapters/channel/dingtalk/DingTalkChannel.ts:225, src/adapters/channel/discord/DiscordChannel.ts:198, src/adapters/channel/email/EmailChannel.ts:303, src/adapters/channel/feishu/FeishuChannel.ts:588, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:276, src/adapters/channel/matrix/MatrixChannel.ts:208, src/adapters/channel/mattermost/MattermostChannel.ts:217, src/adapters/channel/qq/QQChannel.ts:242, src/adapters/channel/qq/QQChannel.ts:314, src/adapters/channel/signal/SignalChannel.ts:228, src/adapters/channel/slack/SlackChannel.ts:211, src/adapters/channel/sms/SmsChannel.ts:252, src/adapters/channel/telegram/TelegramChannel.ts:178, src/adapters/channel/tui/TuiChannel.ts:76, src/adapters/channel/webhook/WebhookChannel.ts:282, src/adapters/channel/wecom/WeComChannel.ts:938, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:262, src/adapters/channel/weixin/WeixinChannel.ts:789, src/adapters/channel/whatsapp/WhatsAppChannel.ts:247, src/agent/team/member/member-waker.ts:72, src/always-on/runtime/DiscoveryFire.ts:1138, src/cli/createLocalGateway.ts:1601, src/cron/runtime/CronFire.ts:101, src/gateway/server/GatewayWsConnection.ts:183 |
+| submitTurn | GatewayEvent | src/adapters/channel/api-server/ApiServerChannel.ts:347, src/adapters/channel/api-server/ApiServerChannel.ts:419, src/adapters/channel/bluebubbles/BlueBubblesChannel.ts:181, src/adapters/channel/cli/CliChannel.ts:77, src/adapters/channel/dingtalk/DingTalkChannel.ts:225, src/adapters/channel/discord/DiscordChannel.ts:198, src/adapters/channel/email/EmailChannel.ts:303, src/adapters/channel/feishu/FeishuChannel.ts:588, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:276, src/adapters/channel/matrix/MatrixChannel.ts:208, src/adapters/channel/mattermost/MattermostChannel.ts:217, src/adapters/channel/qq/QQChannel.ts:242, src/adapters/channel/qq/QQChannel.ts:314, src/adapters/channel/signal/SignalChannel.ts:228, src/adapters/channel/slack/SlackChannel.ts:211, src/adapters/channel/sms/SmsChannel.ts:252, src/adapters/channel/telegram/TelegramChannel.ts:178, src/adapters/channel/tui/TuiChannel.ts:76, src/adapters/channel/webhook/WebhookChannel.ts:282, src/adapters/channel/wecom/WeComChannel.ts:938, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:262, src/adapters/channel/weixin/WeixinChannel.ts:789, src/adapters/channel/whatsapp/WhatsAppChannel.ts:247, src/agent/team/member/member-waker.ts:73, src/always-on/runtime/DiscoveryFire.ts:1138, src/cli/createLocalGateway.ts:1690, src/cron/runtime/CronFire.ts:101, src/gateway/server/GatewayWsConnection.ts:183 |

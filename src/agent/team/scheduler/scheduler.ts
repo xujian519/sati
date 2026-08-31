@@ -15,7 +15,7 @@ import type { TeamDb, TeamMemberRow, TeamMessageRow, TeamTaskRow, TeamRow } from
 import { TERMINAL_TASK_STATUSES, unsatisfiedDependencies } from "../taskpool/task-status.js";
 import { beginTaskAttempt, invalidateTaskAttempt, attemptsExhausted } from "../taskpool/attempt.js";
 import { retryFailedTask } from "../taskpool/retry.js";
-import { claimDelivery, unreadMessages } from "../mailbox/mailbox.js";
+import { claimDelivery, unreadMessages, MAILBOX_LEASE_MS } from "../mailbox/mailbox.js";
 import type { TeamEventEmitter } from "../protocol/events.js";
 import { workerAllowedForRole, type WorkerRegistry } from "../../../patent/worker-contract.js";
 import { withTeamLock } from "./lock.js";
@@ -32,6 +32,11 @@ export type TeamSchedulerOptions = {
   isCaptainOnline?: (captainSessionKey: string) => boolean;
   /** 阶段 3：专利 worker 注册表（可选；提供时新任务分派按成员角色 tier 校验）。 */
   workerRegistry?: WorkerRegistry;
+  /** P1-4：读团队共享黑板摘要（可选；提供时成员任务唤醒 prompt 注入"共享上下文"注记，让成员
+   *  turn 0 开局读到黑板已有条目。宿主读 {projectRoot}/.sati/team-workspace/{teamId}/share.jsonl）。 */
+  readSharedBoardSummary?: (teamId: string) => string | undefined;
+  /** P1-5：邮箱投递租约宽限（度 ms，默认 MAILBOX_LEASE_MS 60s）——自定义使租约过期判定（unreadMessages）可配置。 */
+  mailboxLeaseMs?: number;
 };
 
 export type DispatchTicket = {
@@ -57,7 +62,12 @@ export function nextReadyTask(tasks: readonly TeamTaskRow[], memberId: string): 
   return ready.find(task => task.assigneeId === memberId) ?? ready.find(task => task.assigneeId === undefined);
 }
 
-export function assignmentPrompt(ticket: DispatchTicket): string {
+export function assignmentPrompt(ticket: DispatchTicket, opts?: { sharedContext?: string }): string {
+  const shared = opts?.sharedContext;
+  const sharedSection =
+    shared !== undefined && shared.trim().length > 0
+      ? `\n\n共享黑板（团队已发布的上下文）:\n${shared}\n开局请先读取相关条目再执行任务。`
+      : "";
   return `Sati 团队调度器自动分派（共享任务池）。
 
 任务: ${ticket.taskId} — ${ticket.subject}${ticket.description ? `\n\n${ticket.description}` : ""}
@@ -65,7 +75,7 @@ Attempt: ${ticket.attempt}
 Attempt id: ${ticket.attemptId}
 
 本回合只执行此任务；完成后汇报队长。若后续更新被拒绝为 stale-attempt，说明任务已被转派，立即停止。
-团队状态以 team 工具/队长会话为准，不要臆测任务状态。`;
+团队状态以 team 工具/队长会话为准，不要臆测任务状态。${sharedSection}`;
 }
 
 export function fallbackMailboxPrompt(messages: Array<{ sender: string; content: string }>): string {
@@ -83,6 +93,8 @@ export class TeamScheduler {
   private readonly maxConcurrentMembers: number;
   private readonly isCaptainOnline: (captainSessionKey: string) => boolean;
   private readonly workerRegistry?: WorkerRegistry;
+  private readonly readSharedBoardSummary?: (teamId: string) => string | undefined;
+  private readonly mailboxLeaseMs: number;
 
   constructor(options: TeamSchedulerOptions) {
     this.db = options.db;
@@ -91,6 +103,8 @@ export class TeamScheduler {
     this.maxConcurrentMembers = options.maxConcurrentMembers ?? 4;
     this.isCaptainOnline = options.isCaptainOnline ?? (() => true);
     this.workerRegistry = options.workerRegistry;
+    this.readSharedBoardSummary = options.readSharedBoardSummary;
+    this.mailboxLeaseMs = options.mailboxLeaseMs ?? MAILBOX_LEASE_MS;
   }
 
   /**
@@ -160,7 +174,7 @@ export class TeamScheduler {
         return undefined;
 
       // 1) 邮箱优先
-      const unread = unreadMessages(this.db.listMessages(teamId, memberId), Date.now());
+      const unread = unreadMessages(this.db.listMessages(teamId, memberId), Date.now(), this.mailboxLeaseMs);
       if (unread.length > 0) {
         const claimedAt = new Date().toISOString();
         for (const message of claimDelivery(unread, claimedAt)) {
@@ -235,16 +249,21 @@ export class TeamScheduler {
     }
 
     // 任务路径：锁外唤醒（回合全程不持团队锁——成员回合内团队工具需取锁，防重入死锁）
+    // P1-4：成员 turn 0 注入共享黑板摘要（订阅方读黑板书生成；空黑板则无注记）。
+    const sharedContext = this.readSharedBoardSummary?.(teamId);
     const accepted = await this.wake(
       memberId,
-      assignmentPrompt({
-        taskId: plan.task.id,
-        memberId,
-        attempt: plan.next.attempt,
-        attemptId: plan.attemptId,
-        subject: plan.task.subject,
-        ...(plan.task.description ? { description: plan.task.description } : {}),
-      }),
+      assignmentPrompt(
+        {
+          taskId: plan.task.id,
+          memberId,
+          attempt: plan.next.attempt,
+          attemptId: plan.attemptId,
+          subject: plan.task.subject,
+          ...(plan.task.description ? { description: plan.task.description } : {}),
+        },
+        sharedContext !== undefined ? { sharedContext } : undefined,
+      ),
     );
     if (accepted) {
       // 认领事件在 wake 接受后发出：失败回滚时不广播"已认领"（对比邮箱路径的 ack 语义）

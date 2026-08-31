@@ -106,6 +106,22 @@ test("panelTouch：面板停更超窗后 CLI 帧 touch 到达 → 恢复在线�
   assert.equal(p.isActive("k", t0 + 200 + SESSION_PRESENCE_GRACE_MS - 1), true, "直连活动复活面板判定 → 在线");
 });
 
+test("P1-5：自定义宽限窗生效——断开超自定义窗离线、默认 60s 上仍在线", () => {
+  const custom = new SessionPresence(5_000);
+  const now = 1_000_000;
+  custom.touch("cap-1", now);
+  assert.equal(custom.isActive("cap-1", now), true);
+  custom.close("cap-1", now);
+  // 自定义窗 5s：4s 内在线、6s 离线（默认 60s 下两处都在线，证明窗已替换）
+  assert.equal(custom.isActive("cap-1", now + 4_000), true, "自定义宽限窗内仍在线");
+  assert.equal(custom.isActive("cap-1", now + 6_000), false, "超自定义宽限窗离线");
+  // 默认 60s 构造在 +6s 处仍在宽限窗内（对照，证明自定义窗未被默认覆盖）
+  const def = new SessionPresence();
+  def.touch("cap-1", now);
+  def.close("cap-1", now);
+  assert.equal(def.isActive("cap-1", now + 6_000), true, "默认 60s 宽限窗在 +6s 仍在线（对照）");
+});
+
 test("panelTouch：面板信号对 web 会话是权威下线信号（直连宽限窗不掩盖面板停更）", () => {
   const p = new SessionPresence();
   const t0 = 1_000_000;

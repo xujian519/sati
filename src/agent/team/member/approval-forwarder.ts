@@ -59,7 +59,20 @@ export class TeamApprovalForwarder {
     if (!team || team.captainSessionKey !== captainSessionKey) {
       return { delivered: false };
     }
-    return this.options.approvalDecide({ sessionKey: memberSessionKey, pendingIndex, verdict, feedback });
+    const result = await this.options.approvalDecide({
+      sessionKey: memberSessionKey,
+      pendingIndex,
+      verdict,
+      feedback,
+    });
+    if (!result.delivered) {
+      // P0-3 收敛：决策未送达（成员会话不在路由/审批已决/崩溃后未重建）——清理持久化
+      // 挂起项，避免 hasPendingApproval 无限跳过该成员（否则会持续冒泡 member_stalled_approval
+      // 且永不 self-heal）。决策已由队长显式做出，残留态即孤儿；正常送达路径（delivered:true）
+      // 由 resolveApproval 删除，此处只兜底送达失败分支。
+      this.options.db.deletePendingApproval(memberSessionKey, pendingIndex);
+    }
+    return result;
   }
 
   private findMemberBySessionKey(sessionKey: string): TeamMemberRow | undefined {

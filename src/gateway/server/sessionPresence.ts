@@ -28,6 +28,12 @@ type PresenceEntry = {
 
 export class SessionPresence {
   private readonly entries = new Map<string, PresenceEntry>();
+  /** 宽限窗（P1-5 参数化）：可配置，默认 60s（沿用 SESSION_PRESENCE_GRACE_MS 常量）。 */
+  private readonly graceMs: number;
+
+  constructor(graceMs: number = SESSION_PRESENCE_GRACE_MS) {
+    this.graceMs = graceMs;
+  }
 
   /** 连接收到任一帧：注册/刷新活跃。直连帧即活跃信号（S1 评审），同步刷新面板时间线。 */
   touch(sessionKey: string, now: number = Date.now()): void {
@@ -84,22 +90,22 @@ export class SessionPresence {
   isActive(sessionKey: string, now: number = Date.now()): boolean {
     const entry = this.entries.get(sessionKey);
     if (entry === undefined) return true;
-    const directActive = entry.closedAt === undefined || now - entry.closedAt < SESSION_PRESENCE_GRACE_MS;
+    const directActive = entry.closedAt === undefined || now - entry.closedAt < this.graceMs;
     if (directActive) {
       // 无面板信号 = 仅 close 登记的 key（未见任何帧/心跳），直连即在线；
       // 有面板信号 = 活跃语义统一（S1：touch/panelTouch 都刷新面板时间线），
       // 停更超宽限窗 → 离线（Web 经 relay 会话 closedAt 恒 undefined，以此判 Web 下线）。
       if (entry.panelSeenAt === undefined) return true;
-      return now - entry.panelSeenAt < SESSION_PRESENCE_GRACE_MS;
+      return now - entry.panelSeenAt < this.graceMs;
     }
     // 直连已离线：面板心跳独立宽限窗仍可维持在线（浏览器打开中）
-    return entry.panelSeenAt !== undefined && now - entry.panelSeenAt < SESSION_PRESENCE_GRACE_MS;
+    return entry.panelSeenAt !== undefined && now - entry.panelSeenAt < this.graceMs;
   }
 
   /** 当前活跃连接快照：含宽限窗内关闭会话（与 isActive 语义对齐，M4 面板预留）。 */
   activeSessions(now: number = Date.now()): string[] {
     return [...this.entries.entries()]
-      .filter(([, e]) => e.closedAt === undefined || now - e.closedAt < SESSION_PRESENCE_GRACE_MS)
+      .filter(([, e]) => e.closedAt === undefined || now - e.closedAt < this.graceMs)
       .map(([k]) => k);
   }
 
