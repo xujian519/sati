@@ -93,7 +93,7 @@
 
 | 卡 | 模块 | 规模/热点 | 状态 |
 |---|---|---|---|
-| C27 | main-content-v2 组 | SkillsV2.tsx 2502、DashboardV2.tsx 1351 | ⬜ |
+| C27 | main-content-v2 组 | SkillsV2.tsx 2502、DashboardV2.tsx 1351 | ✅ 2026-08-31 |
 | C28 | chat-v2 组 | MessagesPaneV2.tsx 1375、ComposerV2.tsx 1061、processGrouping.ts 1231 | ⬜ |
 | C29 | chat/hooks | useChatComposerState.ts 1596、useChatSessionState.ts 1168、useChatRealtimeHandlers.ts 973 | ⬜ |
 | C30 | chat/view + stores | MessageComponent.tsx 969、useSessionStore.ts 1435 | ⬜ |
@@ -148,6 +148,7 @@
 
 | 2026-08-29 | C25 | src/web + workflow + telemetry | P3 无参 catch 补 fail-safe 意图注释 ×6（workflow DagEngine 节点失败收集 / InputResolver 不可序列化降级、web forkSession 转写重写跳过非 JSON 行、telemetry context git 探测 ×2 处降级注释）+ types.ts 过时 JSDoc 文件引用修正（SubagentAgentFactory→SubagentWorkflowAgentFactory）；P0/P1/P2 无行为缺陷；记录不处理：workflow 引擎整体「已移植未接线」（引擎/存储/检查点仅测试消费，模块头注明的预留面，C21/C22 判例保留）、limitToolResultPreview ×2 与 isSearchToolName ×2 跨文件重复（签名/语义差异：unknown→"" vs string→undefined，合并需改契约）、webMessage.ts agent_status payload 双写 contentI18n/userHintI18n（wire 契约面，UI 消费）、DEFAULT_HISTORY_CONTEXT_TOKENS 零外部消费（定义处文档化默认值常量，保留）；三模块零 any/零 TODO/零裸 console（telemetry logger 为统一入口属合法）| 3（refactor×3：workflow/web/telemetry） | ✅ |
 | 2026-08-30 | C26 | 小模块合卡（network/shared/fs/browser/test-support） | P2 死代码链删除：network networkPostJson→networkFetchJson→withJsonContentType/NetworkJsonOptions 全链零消费（-68 行）、shared/paths __clear*ForTesting 测试 helper ×3 及其 barrel 转出删除、私有化 ×5（isDebugLoggingEnabled/isRetryableNetworkCode/BROWSEROS_NEO_DEFAULT_URL/probeBrowserOsNeo/probeBrowserUse，均模块内自用）、paths/network/browser 三 barrel 死 re-export 清理（findGitRoot/resolveCanonicalRoot/findCanonicalProjectRoot/LRUMap 等仅目录内相对导入消费）；P3 无参 catch 补 fail-safe 意图注释 ×10（browserosNeo ×2、fetch 旧响应体丢弃 ×1、pilotPaths ×3、findGitRoot ×1、resolveCanonicalRoot ×3）+ jsonl-run-writer best-effort close 注释 ×2 + LRUMap 冗余 `as K|undefined` 断言 ×1 + resolveCanonicalRoot 重复注释行 ×1；P0/P1 无行为缺陷；记录不处理：isReplayError/ReplayOverrideFile 零消费（test-support replay seam 契约词汇面，C07/C23 判例保留）、createProjectIdAsync/createCollisionResistantProjectId/getPilotProjectConfigFilePath/getPilotProjectChatDirAsync/PilotPathEnv 五符号 paths→pilot 二级 barrel 转出链零消费尾端（C21 已决策保留 pilot API 面）、fetch.ts 状态→错误码两级嵌套三元（紧凑可读，展平反增行）；横切零 any/零 @ts-expect-error/零 TODO，console 仅 debugLog 统一 SATI_DEBUG 门控入口（合法）；test-support/llm-replay 质量高（fail-loud 设计、全 catch 带语义）| 4（refactor×4：shared/network/browser/fs） | ✅ |
+| 2026-08-31 | C27 | main-content-v2 组（DashboardV2 + SkillsV2） | P2 DashboardV2 collectRecentRoutes 参数类型收窄，移除 `as unknown as DashboardProject` 占位强转；P2 SkillsV2 提取 `stripRootPrefix` helper 消除 `webkitRelativePath` 归一化重复 ×4；P3 DashboardV2 RequestLogRow 嵌套三元改 `REQUEST_VARIANT_STYLES` 查表；P3 DashboardV2 SessionRow 重复 orchestration summary JSX 提取 `OrchestrationSummary` 组件；P3 SkillsV2 SkillDetail scope badge 嵌套三元/类名提取 `ScopeBadge` + `SCOPE_STYLES` 查表；P3 SkillsV2 `generalChat` defaultValue 与 `common.json` 对齐；P0/P1 无行为缺陷；横切零 any/零 @ts-expect-error/零无参 catch/零裸 console/零 TODO | 1（refactor） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -428,6 +429,21 @@
 - **精炼项**：死文件删除 14、barrel 死 re-export 删除 10 项、重复提取 4 组、死导出收窄 2、catch 注释 ×14（净 -约 200 行，行为零变化）
 - **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm check` 全绿（event-matrix 无事件面改动，未触发生成）；`pnpm test` 3943 pass / 0 fail / 4 skip ✅（extension/permission/lifecycle 套件全绿）
 - **提交**：`refactor(extension): drop dead protocol stubs, contribution types and barrel re-exports`、`refactor(lifecycle): drop orphan dispatcher re-export and observer type`、`refactor(skills): share slug validation with migration, extract bundle limit checks`、`refactor(extension): document fallback catches in plugin/hook io paths`、`refactor(permission): document unserializable-input fallback`
+
+#### C27 main-content-v2 组（2026-08-31）
+
+- **审阅发现**：
+  - P2 DashboardV2 `collectRecentRoutes` 用 `as unknown as DashboardProject` 构造 unmatched placeholder（类型谎言）→ 新增 `RecentRouteProject` 轻量类型，参数签名收窄，移除强转
+  - P2 SkillsV2 `ImportFromFolder` 中 `webkitRelativePath` 去根前缀逻辑重复 4 处 → 提取 `stripRootPrefix` helper
+  - P3 DashboardV2 `RequestLogRow` 4 组嵌套三元（bg/tier/badge/label）→ 改用 `REQUEST_VARIANT_STYLES` 查表
+  - P3 DashboardV2 `SessionRow` 中 orchestration summary JSX 在 `hasLog` 与 legacy fallback 分支重复 → 提取 `OrchestrationSummary` 组件
+  - P3 SkillsV2 `SkillDetail` scope badge 类名与标签各 3 分支嵌套三元 → 提取 `ScopeBadge` + `SCOPE_STYLES` 查表
+  - P3 SkillsV2 `generalChat` 的 `defaultValue` 与 `ui/src/i18n/locales/{en,zh-CN}/common.json` 不一致 → 对齐为 locale 实际文案
+  - P0/P1 无行为缺陷；横切零 any（仅 SkillsV2 `@ts-expect-error webkitdirectory` 合法非标准属性）、零无参 catch、零裸 console、零 TODO/FIXME
+  - 记录不处理：两个 >600 行组件（SkillsV2 2502 行、DashboardV2 主组件约 330 行）属保守档待拆建议；`useTheme() as { isDarkMode: boolean }` 因 ThemeContext.jsx 无类型而保留；`(e as Error).message` 在 UI 错误提示中普遍使用，归后续横切治理
+- **精炼项**：类型收紧 1 处、重复 helper 提取 1 处、嵌套三元改查表 3 处、重复 JSX 提取 1 处、i18n defaultValue 对齐 1 处
+- **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` ✅ 0 warning；`pnpm test` 102 文件 / 623 用例全绿 ✅；`pnpm check` 全绿（format:check / lint / skills-valid / 等）✅
+- **提交**：`refactor(ui): C27 main-content-v2 cleanup`
 
 ## 六、基线（2026-08-18 实测）
 

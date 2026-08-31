@@ -99,6 +99,10 @@ function isGeneralProject(p: Project | null): boolean {
   return p.name === "general" || p.displayName === "general";
 }
 
+function stripRootPrefix(relPath: string, rootName: string): string {
+  return rootName && relPath.startsWith(rootName + "/") ? relPath.slice(rootName.length + 1) : relPath;
+}
+
 async function api<T>(url: string, body: unknown): Promise<T> {
   const r = await authenticatedFetch(url, {
     method: "POST",
@@ -445,7 +449,7 @@ function Header({
       <div className="flex min-w-0 items-center gap-2 truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">
         <Sparkles className="h-3.5 w-3.5 text-amber-500" strokeWidth={1.75} />
         {generalCwd ? (
-          <span>{t("skillsTab.generalChat", { defaultValue: "General chat — user-scope skills only" })}</span>
+          <span>{t("skillsTab.generalChat", { defaultValue: "General chat — built-in and user skills" })}</span>
         ) : (
           <span className="truncate">{cwd}</span>
         )}
@@ -883,6 +887,41 @@ function EmptyState({ t }: { t: ReturnType<typeof useTranslation>["t"] }) {
   );
 }
 
+const SCOPE_STYLES: Record<
+  SkillScope,
+  { labelKey: string; labelDefault: string; className: string; darkClassName: string }
+> = {
+  builtin: {
+    labelKey: "skillsTab.scopeBuiltin",
+    labelDefault: "Built-in",
+    className: "bg-neutral-200 text-neutral-700",
+    darkClassName: "dark:bg-neutral-800 dark:text-neutral-300",
+  },
+  project: {
+    labelKey: "skillsTab.scopeProject",
+    labelDefault: "Project",
+    className: "bg-brand-100 text-brand-700",
+    darkClassName: "dark:bg-brand-950/60 dark:text-brand-300",
+  },
+  user: {
+    labelKey: "skillsTab.scopeUser",
+    labelDefault: "User",
+    className: "bg-amber-100 text-amber-800",
+    darkClassName: "dark:bg-amber-950/60 dark:text-amber-300",
+  },
+};
+
+function ScopeBadge({ scope, t }: { scope: SkillScope; t: ReturnType<typeof useTranslation>["t"] }) {
+  const style = SCOPE_STYLES[scope];
+  return (
+    <span
+      className={cn("rounded px-1.5 py-0.5 text-[10px] tracking-wider uppercase", style.className, style.darkClassName)}
+    >
+      {t(style.labelKey, { defaultValue: style.labelDefault })}
+    </span>
+  );
+}
+
 function SkillDetail({
   skill,
   content,
@@ -917,22 +956,7 @@ function SkillDetail({
       >
         <div className="flex items-baseline gap-2">
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">{skill.name}</h2>
-          <span
-            className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] tracking-wider uppercase",
-              skill.scope === "project"
-                ? "dark:bg-brand-950/60 bg-brand-100 text-brand-700 dark:text-brand-300"
-                : skill.scope === "builtin"
-                  ? "bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
-                  : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
-            )}
-          >
-            {skill.scope === "builtin"
-              ? t("skillsTab.scopeBuiltin", { defaultValue: "Built-in" })
-              : skill.scope === "project"
-                ? t("skillsTab.scopeProject", { defaultValue: "Project" })
-                : t("skillsTab.scopeUser", { defaultValue: "User" })}
-          </span>
+          <ScopeBadge scope={skill.scope} t={t} />
           {skill.version ? (
             <span className="text-xxs text-neutral-500 dark:text-neutral-400">v{skill.version}</span>
           ) : null}
@@ -1524,16 +1548,14 @@ function ImportFromFolder({
     // Check if root directory directly has SKILL.md (single skill import)
     const rootSkillFile = files.find(f => {
       const rel = f.webkitRelativePath || f.name;
-      const stripped = rootName && rel.startsWith(rootName + "/") ? rel.slice(rootName.length + 1) : rel;
-      return stripped === "SKILL.md";
+      return stripRootPrefix(rel, rootName) === "SKILL.md";
     });
 
     if (rootSkillFile) {
       // Single skill — existing flow
       const manifest: { relativePath: string; size: number }[] = files.map(f => {
         const rel = f.webkitRelativePath || f.name;
-        const stripped = rootName && rel.startsWith(rootName + "/") ? rel.slice(rootName.length + 1) : rel;
-        return { relativePath: stripped, size: f.size };
+        return { relativePath: stripRootPrefix(rel, rootName), size: f.size };
       });
       const skillMd = await rootSkillFile.text();
       setPicked({ rootName, files, manifest, skillMd });
@@ -1547,7 +1569,7 @@ function ImportFromFolder({
     const subDirMap = new Map<string, File[]>();
     for (const f of files) {
       const rel = f.webkitRelativePath || f.name;
-      const stripped = rootName && rel.startsWith(rootName + "/") ? rel.slice(rootName.length + 1) : rel;
+      const stripped = stripRootPrefix(rel, rootName);
       const firstSeg = stripped.split("/")[0];
       if (!firstSeg || !stripped.includes("/")) continue;
       if (!subDirMap.has(firstSeg)) subDirMap.set(firstSeg, []);
@@ -1558,9 +1580,8 @@ function ImportFromFolder({
     for (const [folderName, folderFiles] of subDirMap) {
       const skillFile = folderFiles.find(f => {
         const rel = f.webkitRelativePath || f.name;
-        const prefix = rootName ? rootName + "/" + folderName + "/" : folderName + "/";
-        const stripped = rel.startsWith(prefix) ? rel.slice(prefix.length) : rel;
-        return stripped === "SKILL.md";
+        const prefix = rootName ? rootName + "/" + folderName : folderName;
+        return stripRootPrefix(rel, prefix) === "SKILL.md";
       });
 
       let name: string | null = null;
@@ -1704,12 +1725,11 @@ function ImportFromFolder({
           const rootName = batchParentName;
           const formData = new FormData();
           const paths: string[] = [];
+          const prefix = rootName + "/" + candidate.folderName;
           for (const file of candidate.files) {
             formData.append("files", file);
             const rel = file.webkitRelativePath || file.name;
-            const prefix = rootName + "/" + candidate.folderName + "/";
-            const stripped = rel.startsWith(prefix) ? rel.slice(prefix.length) : rel;
-            paths.push(stripped);
+            paths.push(stripRootPrefix(rel, prefix));
           }
           formData.append("paths", JSON.stringify(paths));
           formData.append("slug", candidate.folderName);
