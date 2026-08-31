@@ -47,7 +47,7 @@ systemPrompt: |-
 |---|---|
 | `analysis` | 侵权比对分析（全面覆盖/等同逐项） |
 | `patent` | 专利域工具可见性 |
-| `legal` | 抗辩法条核验（A62 现有技术抗辩、禁反言规则） |
+| `legal` | 抗辩法条核验（`law_search`：A62 现有技术抗辩、禁反言规则） |
 | `search` | 现有技术抗辩证据检索 |
 | `literature` | 学术文献检索（`paper_search`，现有技术抗辩证据补充） |
 | `session` | 团队会话读写 |

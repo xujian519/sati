@@ -43,7 +43,7 @@ systemPrompt: |-
 |---|---|
 | `quality` | 质量/格式审查类工具（如 `validate_specification`） |
 | `patent` | 专利域工具可见性 |
-| `legal` | 形式条款法条核验（A26.2/A26.5） |
+| `legal` | 形式条款法条核验（`law_search`：A26.2/A26.5） |
 | `literature` | 学术文献证据（`paper_search` 需 `literature` 域） |
 | `filesystem` | 读取待审申请文件 |
 | `session` | 团队会话读写 |

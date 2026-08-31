@@ -205,25 +205,62 @@ async function validateSkill(skillDir) {
   return { slug, issues, lineCount };
 }
 
+/**
+ * 递归发现 root 下所有含 SKILL.md 的目录（skill 根），返回相对路径列表
+ * （如 `patent-teams/case-manager`）。覆盖嵌套团队角色——顶层 skill 之下
+ * 还可嵌套子 skill（`skills/patent-teams/<岗>/SKILL.md`），旧逻辑只扫一层
+ * 会漏掉这些角色。资源/脚本子目录（references/scripts/assets/__pycache__ 等）
+ * 不含 SKILL.md 时自动排除。root 不可读时抛出（由 main 捕获报错）；子目录
+ * 读取失败静默跳过，不中断整体校验。
+ */
+async function collectSkillDirs(root) {
+  const dirs = [];
+  async function scan(prefix) {
+    let entries;
+    try {
+      entries = await fs.readdir(join(root, prefix), { withFileTypes: true });
+    } catch (err) {
+      if (prefix === "") throw err; // root 不可读 → 抛出暴露给 main
+      return; // 子目录不可读 → 静默跳过
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const hasSkill = await fs
+        .access(join(root, rel, "SKILL.md"))
+        .then(() => true)
+        .catch(() => false);
+      if (hasSkill) dirs.push(rel);
+      await scan(rel);
+    }
+  }
+  await scan("");
+  return dirs;
+}
+
 async function main() {
   const root = resolve(process.argv[2] ?? "skills");
-  let entries;
+  let skillDirs;
   try {
-    entries = await fs.readdir(root, { withFileTypes: true });
+    skillDirs = await collectSkillDirs(root);
   } catch (err) {
     console.error(`Cannot read skills root: ${root} (${err.code})`);
     process.exit(1);
   }
-  const results = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    results.push(await validateSkill(join(root, entry.name)));
+  if (skillDirs.length === 0) {
+    console.error(`No skills found under ${root}`);
+    process.exit(1);
   }
-  const allIssues = results.flatMap(r => r.issues.map(i => `${r.slug}: ${i}`));
+  const results = [];
+  for (const rel of skillDirs) {
+    // slug 用 basename（SLUG_RE 不匹配 "/"），rel 用于展示/issue 定位（可区分嵌套同名）。
+    results.push(Object.assign(await validateSkill(join(root, rel)), { rel }));
+  }
+  const allIssues = results.flatMap(r => r.issues.map(i => `${r.rel}: ${i}`));
   const hards = allIssues.filter(i => i.includes("hard:"));
   const warns = allIssues.filter(i => i.includes("warn:"));
   console.log(`Checked ${results.length} skills under ${root}`);
-  for (const r of results) console.log(`  ${r.slug} (${r.lineCount} lines)`);
+  for (const r of results) console.log(`  ${r.rel} (${r.lineCount} lines)`);
   if (warns.length) {
     console.log(`\nWarnings (${warns.length}):`);
     for (const w of warns) console.log(`  ${w}`);
