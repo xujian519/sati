@@ -45,7 +45,7 @@ systemPrompt: |-
 | 域 | 用途 |
 |---|---|
 | `drafting` | 争辩稿/修改方案起草（如 `draft_claims`） |
-| `legal` | 法条核验（A33 修改超范围、A26.4 清楚性依据） |
+| `legal` | 法条核验（`law_search`：A33 修改超范围、A26.4 清楚性依据） |
 | `literature` | 学术文献证据（`paper_search` 需 `literature` 域） |
 | `patent` | 专利域工具可见性 |
 | `analysis` | 区别特征/审查意见分析 |

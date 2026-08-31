@@ -44,7 +44,7 @@ systemPrompt: |-
 | 域 | 用途 |
 |---|---|
 | `analysis` | 技术比对分析 |
-| `patent` | 专利域工具可见性（如 `patent_kg_query`） |
+| `patent` | 专利域工具可见性（如 `patent_kg_query`、`patent_case_search` 相似技术方案判例） |
 | `figure` | 附图分析（如 `analyze_patent_figure`） |
 | `session` | 团队会话读写 |
 | `team` | 成员作业面：`team_update_task`/`team_send_message`/`team_status` 按域裁剪可见（管理面 `team:manage` 仅队长可见） |
