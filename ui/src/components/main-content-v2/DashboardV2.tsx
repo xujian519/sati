@@ -17,7 +17,6 @@ import { useRoutingDashboard } from "../../hooks/useRoutingDashboard";
 import type { TokenBucket } from "../../hooks/useRouterSettings";
 import type {
   DashboardData,
-  DashboardProject,
   DashboardSession,
   ProjectAggregated,
   RequestLogEntry,
@@ -95,11 +94,18 @@ type RecentRoute = {
   projectName?: string;
 };
 
+type RecentRouteProject = {
+  name: string;
+  displayName: string;
+  fullPath: string;
+  sessions: DashboardSession[];
+};
+
 function collectRecentRoutes(
-  projects: DashboardProject[],
+  projects: RecentRouteProject[],
   unmatchedSessions?: DashboardData["unmatchedSessions"],
 ): RecentRoute[] {
-  const sessions: Array<{ project: DashboardProject; session: DashboardSession }> = [];
+  const sessions: Array<{ project: RecentRouteProject; session: DashboardSession }> = [];
   for (const project of projects) {
     for (const session of project.sessions) {
       if (!session.routing) continue;
@@ -108,13 +114,12 @@ function collectRecentRoutes(
   }
 
   if (unmatchedSessions) {
-    const placeholder = {
+    const placeholder: RecentRouteProject = {
       name: "unmatched",
       displayName: "General",
       fullPath: "",
       sessions: [],
-      aggregated: {},
-    } as unknown as DashboardProject;
+    };
     for (const u of unmatchedSessions) {
       sessions.push({
         project: placeholder,
@@ -1007,38 +1012,45 @@ function filterUserQueries(queries: string[]): string[] {
   });
 }
 
+const REQUEST_VARIANT_STYLES: Record<
+  "main" | "sub" | "tool",
+  { bgClass: string; tierClass: string; badgeClass: string; badgeKey: string; badgeDefault: string }
+> = {
+  main: {
+    bgClass: "bg-neutral-50 dark:bg-neutral-900/30",
+    tierClass: "bg-neutral-200/70 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-400",
+    badgeClass: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500",
+    badgeKey: "dashboard.session.mainShort",
+    badgeDefault: "main",
+  },
+  sub: {
+    bgClass: "bg-violet-50/40 dark:bg-violet-900/10",
+    tierClass: "bg-violet-100 text-violet-600 dark:bg-violet-800/40 dark:text-violet-400",
+    badgeClass: "bg-violet-50 text-violet-500 dark:bg-violet-900/20 dark:text-violet-400",
+    badgeKey: "dashboard.session.subShort",
+    badgeDefault: "sub",
+  },
+  tool: {
+    bgClass: "bg-amber-50/40 dark:bg-amber-900/10",
+    tierClass: "bg-amber-100 text-amber-600 dark:bg-amber-800/40 dark:text-amber-400",
+    badgeClass: "bg-amber-50 text-amber-500 dark:bg-amber-900/20 dark:text-amber-400",
+    badgeKey: "dashboard.session.toolShort",
+    badgeDefault: "tool",
+  },
+};
+
 function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: "main" | "sub" | "tool" }) {
   const { t } = useTranslation("routing");
-  const isSub = variant === "sub";
-  const isTool = variant === "tool";
   const saved = entry.savedCost ?? 0;
-  const bgClass = isTool
-    ? "bg-amber-50/40 dark:bg-amber-900/10"
-    : isSub
-      ? "bg-violet-50/40 dark:bg-violet-900/10"
-      : "bg-neutral-50 dark:bg-neutral-900/30";
-  const tierClass = isTool
-    ? "bg-amber-100 text-amber-600 dark:bg-amber-800/40 dark:text-amber-400"
-    : isSub
-      ? "bg-violet-100 text-violet-600 dark:bg-violet-800/40 dark:text-violet-400"
-      : "bg-neutral-200/70 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-400";
-  const badgeClass = isTool
-    ? "bg-amber-50 text-amber-500 dark:bg-amber-900/20 dark:text-amber-400"
-    : isSub
-      ? "bg-violet-50 text-violet-500 dark:bg-violet-900/20 dark:text-violet-400"
-      : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500";
-  const badgeLabel = isTool
-    ? t("dashboard.session.toolShort", { defaultValue: "tool" })
-    : isSub
-      ? t("dashboard.session.subShort", { defaultValue: "sub" })
-      : t("dashboard.session.mainShort", { defaultValue: "main" });
+  const style = REQUEST_VARIANT_STYLES[variant];
+  const badgeLabel = t(style.badgeKey, { defaultValue: style.badgeDefault });
 
   return (
-    <div className={cn("flex items-start gap-2 rounded-md px-2.5 py-1.5 text-[12px]", bgClass)}>
-      <span className={cn("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xxs font-medium", tierClass)}>
+    <div className={cn("flex items-start gap-2 rounded-md px-2.5 py-1.5 text-[12px]", style.bgClass)}>
+      <span className={cn("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xxs font-medium", style.tierClass)}>
         {entry.tier || "—"}
       </span>
-      <span className={cn("mt-0.5 shrink-0 rounded px-1 py-0.5 text-xxs", badgeClass)}>{badgeLabel}</span>
+      <span className={cn("mt-0.5 shrink-0 rounded px-1 py-0.5 text-xxs", style.badgeClass)}>{badgeLabel}</span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-neutral-700 dark:text-neutral-300">
           {entry.query || (
@@ -1066,6 +1078,49 @@ function RequestLogRow({ entry, variant }: { entry: RequestLogEntry; variant: "m
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function OrchestrationSummary({
+  mainRole,
+  subRole,
+  t,
+}: {
+  mainRole?: TokenBucket;
+  subRole?: TokenBucket;
+  t: ReturnType<typeof useTranslation>["t"];
+}) {
+  return (
+    <div className="mb-2.5 grid grid-cols-2 gap-2">
+      {mainRole && (
+        <div className="rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-700/60">
+          <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">
+            {t("dashboard.session.mainAgent", { defaultValue: "Main Agent" })}
+          </div>
+          <div className="mt-0.5 text-xxs text-neutral-500 tabular-nums dark:text-neutral-400">
+            {t("dashboard.units.requestsShort", {
+              count: mainRole.requestCount,
+              defaultValue: `${mainRole.requestCount} req`,
+            })}{" "}
+            · {formatTokens(mainRole.totalTokens || 0)} · {formatCost(mainRole.estimatedCost || 0)}
+          </div>
+        </div>
+      )}
+      {subRole && (
+        <div className="rounded-lg border border-violet-200/60 bg-violet-50/30 px-3 py-2 dark:border-violet-700/30 dark:bg-violet-900/10">
+          <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">
+            {t("dashboard.session.subagents", { defaultValue: "Sub-agents" })}
+          </div>
+          <div className="mt-0.5 text-xxs text-violet-600 tabular-nums dark:text-neutral-400">
+            {t("dashboard.units.requestsShort", {
+              count: subRole.requestCount,
+              defaultValue: `${subRole.requestCount} req`,
+            })}{" "}
+            · {formatTokens(subRole.totalTokens || 0)} · {formatCost(subRole.estimatedCost || 0)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1183,38 +1238,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
           {hasLog ? (
             <>
               {/* Orchestration summary header */}
-              {isOrchestrated && (
-                <div className="mb-2.5 grid grid-cols-2 gap-2">
-                  {mainRole && (
-                    <div className="rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-700/60">
-                      <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">
-                        {t("dashboard.session.mainAgent", { defaultValue: "Main Agent" })}
-                      </div>
-                      <div className="mt-0.5 text-xxs text-neutral-500 tabular-nums dark:text-neutral-400">
-                        {t("dashboard.units.requestsShort", {
-                          count: mainRole.requestCount,
-                          defaultValue: `${mainRole.requestCount} req`,
-                        })}{" "}
-                        · {formatTokens(mainRole.totalTokens || 0)} · {formatCost(mainRole.estimatedCost || 0)}
-                      </div>
-                    </div>
-                  )}
-                  {subRole && (
-                    <div className="rounded-lg border border-violet-200/60 bg-violet-50/30 px-3 py-2 dark:border-violet-700/30 dark:bg-violet-900/10">
-                      <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">
-                        {t("dashboard.session.subagents", { defaultValue: "Sub-agents" })}
-                      </div>
-                      <div className="mt-0.5 text-xxs text-violet-600 tabular-nums dark:text-violet-400">
-                        {t("dashboard.units.requestsShort", {
-                          count: subRole.requestCount,
-                          defaultValue: `${subRole.requestCount} req`,
-                        })}{" "}
-                        · {formatTokens(subRole.totalTokens || 0)} · {formatCost(subRole.estimatedCost || 0)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+              {isOrchestrated && <OrchestrationSummary mainRole={mainRole} subRole={subRole} t={t} />}
 
               {/* Grouped: main request → its tool continuations / sub-agent requests */}
               <div className="space-y-2">
@@ -1239,38 +1263,7 @@ function SessionRow({ session }: { session: DashboardSession }) {
           ) : (
             <>
               {/* Orchestration summary for legacy sessions */}
-              {isOrchestrated && routing && (
-                <div className="mb-2.5 grid grid-cols-2 gap-2">
-                  {mainRole && (
-                    <div className="rounded-lg border border-neutral-200 px-3 py-2 dark:border-neutral-700/60">
-                      <div className="text-xxs font-medium text-neutral-700 dark:text-neutral-300">
-                        {t("dashboard.session.mainAgent", { defaultValue: "Main Agent" })}
-                      </div>
-                      <div className="mt-0.5 text-xxs text-neutral-500 tabular-nums dark:text-neutral-400">
-                        {t("dashboard.units.requestsShort", {
-                          count: mainRole.requestCount,
-                          defaultValue: `${mainRole.requestCount} req`,
-                        })}{" "}
-                        · {formatTokens(mainRole.totalTokens || 0)} · {formatCost(mainRole.estimatedCost || 0)}
-                      </div>
-                    </div>
-                  )}
-                  {subRole && (
-                    <div className="rounded-lg border border-violet-200/60 bg-violet-50/30 px-3 py-2 dark:border-violet-700/30 dark:bg-violet-900/10">
-                      <div className="text-xxs font-medium text-violet-700 dark:text-violet-300">
-                        {t("dashboard.session.subagents", { defaultValue: "Sub-agents" })}
-                      </div>
-                      <div className="mt-0.5 text-xxs text-violet-600 tabular-nums dark:text-violet-400">
-                        {t("dashboard.units.requestsShort", {
-                          count: subRole.requestCount,
-                          defaultValue: `${subRole.requestCount} req`,
-                        })}{" "}
-                        · {formatTokens(subRole.totalTokens || 0)} · {formatCost(subRole.estimatedCost || 0)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
+              {isOrchestrated && routing && <OrchestrationSummary mainRole={mainRole} subRole={subRole} t={t} />}
               {/* Fallback: show userQueries with inferred tiers */}
               {queries.length > 0 ? (
                 <div className="space-y-1.5">
