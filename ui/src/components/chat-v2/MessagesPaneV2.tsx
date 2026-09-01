@@ -156,8 +156,7 @@ function getMessageTextLength(message: ChatMessage): number {
   return contentLength + Math.min(toolInputLength + outputLength, 2400);
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function estimateMessageItemHeight(item: RenderableMessageItem): number {
+function estimateMessageItemHeight(item: RenderableMessageItem): number {
   const textLength = getMessageTextLength(item.message);
   const roughLines = Math.ceil(textLength / 92);
   const baseHeight = item.message.type === "user" ? 64 : 92;
@@ -490,7 +489,7 @@ function MessagesPaneV2({
         !message.isAgentActivity &&
         !isSubagentThinkingPlaceholder(message) &&
         !(isAssistantWorking && message.isThinking && !message.isStreaming && index < lastUserIndex) &&
-        (!inlineThinking && isStreamingThinkingMessage(message) ? false : true) &&
+        !(!inlineThinking && isStreamingThinkingMessage(message)) &&
         !(message.isThinking && !showThinking),
     );
     return filtered;

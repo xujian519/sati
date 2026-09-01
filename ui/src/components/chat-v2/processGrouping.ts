@@ -252,6 +252,7 @@ function parseToolInput(value: unknown): Record<string, unknown> {
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
+    // 非 JSON 工具输入 → 按空输入处理，仅影响展示统计。
     return {};
   }
 }
@@ -261,7 +262,7 @@ function getToolInputString(message: ChatMessage, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
-export function getToolTarget(message: ChatMessage): string {
+function getToolTarget(message: ChatMessage): string {
   return (
     getToolInputString(message, "file_path") ||
     getToolInputString(message, "path") ||
@@ -1006,7 +1007,7 @@ export function shouldRenderLiveProcessGroup(group: LiveProcessGroup, runMode: C
 
 const WEB_FETCH_TOOL_NAMES = new Set(["web_fetch", "webfetch"]);
 
-export function isWebFetchToolMessage(message: ChatMessage): boolean {
+function isWebFetchToolMessage(message: ChatMessage): boolean {
   const normalized = String(message.toolName || "")
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
@@ -1017,7 +1018,7 @@ function getLatestToolMessage(group: LiveProcessGroup): ChatMessage | undefined 
   return [...group.messages].reverse().find(message => message.isToolUse || message.type === "tool");
 }
 
-export function isPendingToolUseMessage(message: ChatMessage): boolean {
+function isPendingToolUseMessage(message: ChatMessage): boolean {
   if (!message.isToolUse && message.type !== "tool") {
     return false;
   }
@@ -1060,10 +1061,7 @@ function numberField(message: ChatMessage, key: string): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
-export function formatCompletedProcessTitle(
-  messageOrMessages: ChatMessage | ChatMessage[],
-  t: TFunction<"chat">,
-): string {
+function formatCompletedProcessTitle(messageOrMessages: ChatMessage | ChatMessage[], t: TFunction<"chat">): string {
   const counts = Array.isArray(messageOrMessages)
     ? collectProcessCounts(messageOrMessages)
     : {
@@ -1148,7 +1146,7 @@ export function formatCompletedProcessTitle(
   return labels.join(" ");
 }
 
-export function getRunningProcessTitle(group: LiveProcessGroup, t: TFunction<"chat">): string {
+function getRunningProcessTitle(group: LiveProcessGroup, t: TFunction<"chat">): string {
   const latestMessage = [...group.messages].reverse().find(message => isProcessMessage(message));
   if (!latestMessage) {
     return t("working.processing", { defaultValue: "Processing" });
