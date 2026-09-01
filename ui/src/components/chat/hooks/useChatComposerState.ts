@@ -158,6 +158,28 @@ function buildAttachmentPathNote(files: UploadedAttachmentFile[]): string {
   return `\n\n[Files attached by user and available for reading in the project:]\n${lines.join("\n")}`;
 }
 
+/**
+ * 读取工具授权设置（`sati-settings`）；损坏时告警并回退全保守默认值。
+ * 注意 fallback 有意不含 `projectSortOrder`（存量行为，消费方按缺省容错），
+ * 故不标注 `SatiSettings` 返回类型。
+ */
+function readToolsSettings() {
+  try {
+    const savedSettings = safeLocalStorage.getItem("sati-settings");
+    if (savedSettings) {
+      return JSON.parse(savedSettings);
+    }
+  } catch (error) {
+    console.error("Error loading tools settings:", error);
+  }
+
+  return {
+    allowedTools: [],
+    disallowedTools: [],
+    skipPermissions: false,
+  };
+}
+
 export type AttachmentAddResult = {
   files: File[];
   droppedCount: number;
@@ -253,6 +275,32 @@ export function useChatComposerState({
     setIsBusySendQueued(false);
     setIsBusySendConfirmed(false);
   }, []);
+
+  // input state 与 inputValueRef 必须成对同步——所有直接写输入框的路径统一走此入口。
+  const applyInputValue = useCallback((value: string) => {
+    setInput(value);
+    inputValueRef.current = value;
+  }, []);
+
+  // 附件/引用状态清理四件套（提交、slash 命令、清空输入共用）。
+  const resetAttachmentState = useCallback(() => {
+    setAttachedImages([]);
+    setDocumentReferences([]);
+    setUploadingImages(new Map());
+    setImageErrors(new Map());
+  }, []);
+
+  // 从四个候选来源解析首个「真实」（非临时）会话 id；无则返回 null。
+  const resolveConcreteSessionId = useCallback((): string | null => {
+    const pendingSessionId = typeof window !== "undefined" ? sessionStorage.getItem("pendingSessionId") : null;
+    const candidateSessionIds = [
+      currentSessionId,
+      pendingViewSessionRef.current?.sessionId || null,
+      pendingSessionId,
+      selectedSession?.id || null,
+    ];
+    return candidateSessionIds.find(sessionId => Boolean(sessionId) && !isTemporarySessionId(sessionId)) ?? null;
+  }, [currentSessionId, pendingViewSessionRef, selectedSession?.id]);
 
   const syncQueuedBusySendSnapshot = useCallback(
     (updates: Partial<QueuedBusySendSnapshot> = {}) => {
@@ -570,8 +618,7 @@ export function useChatComposerState({
       }
 
       const commandContent = content || "";
-      setInput(commandContent);
-      inputValueRef.current = commandContent;
+      applyInputValue(commandContent);
 
       // Passthrough commands (bundled-skill stubs, on-disk skills) return their
       // own slash text as `content`. Suppress the next handleSubmit's slash
@@ -588,7 +635,7 @@ export function useChatComposerState({
         }
       }, 0);
     },
-    [addMessage],
+    [addMessage, applyInputValue],
   );
 
   const executeCommand = useCallback(
@@ -641,8 +688,7 @@ export function useChatComposerState({
         const result = (await response.json()) as CommandExecutionResult;
         if (result.type === "builtin") {
           await handleBuiltInCommand(result);
-          setInput("");
-          inputValueRef.current = "";
+          applyInputValue("");
         } else if (result.type === "custom") {
           await handleCustomCommand(result);
         }
@@ -657,6 +703,7 @@ export function useChatComposerState({
       }
     },
     [
+      applyInputValue,
       model,
       currentSessionId,
       handleBuiltInCommand,
@@ -840,13 +887,7 @@ export function useChatComposerState({
           documentReferences: submitDocumentReferences,
         };
 
-        const pendingSessionId = typeof window !== "undefined" ? sessionStorage.getItem("pendingSessionId") : null;
-        const targetSessionId = [
-          currentSessionId,
-          pendingViewSessionRef.current?.sessionId || null,
-          pendingSessionId,
-          selectedSession?.id || null,
-        ].find(sessionId => Boolean(sessionId) && !isTemporarySessionId(sessionId));
+        const targetSessionId = resolveConcreteSessionId();
 
         if (!canAbortSession || !targetSessionId) {
           return;
@@ -886,12 +927,8 @@ export function useChatComposerState({
         const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
         if (matchedCommand) {
           executeCommand(matchedCommand, trimmedInput);
-          setInput("");
-          inputValueRef.current = "";
-          setAttachedImages([]);
-          setDocumentReferences([]);
-          setUploadingImages(new Map());
-          setImageErrors(new Map());
+          applyInputValue("");
+          resetAttachmentState();
           resetCommandMenuState();
           setIsTextareaExpanded(false);
           if (textareaRef.current) {
@@ -1014,24 +1051,7 @@ export function useChatComposerState({
       // tracks tool consent + skip-permissions for every chat. The legacy
       // per-provider keys (`cursor-tools-settings`, `codex-settings`,
       // `gemini-settings`) are no longer read or written.
-      const getToolsSettings = () => {
-        try {
-          const savedSettings = safeLocalStorage.getItem("sati-settings");
-          if (savedSettings) {
-            return JSON.parse(savedSettings);
-          }
-        } catch (error) {
-          console.error("Error loading tools settings:", error);
-        }
-
-        return {
-          allowedTools: [],
-          disallowedTools: [],
-          skipPermissions: false,
-        };
-      };
-
-      const toolsSettings = getToolsSettings();
+      const toolsSettings = readToolsSettings();
       const sessionSummary = getNotificationSessionSummary(submitSelectedSession, userVisibleInput);
       const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
 
@@ -1054,13 +1074,9 @@ export function useChatComposerState({
         forceStart: queuedSnapshot?.forceStart === true,
       });
 
-      setInput("");
-      inputValueRef.current = "";
+      applyInputValue("");
       resetCommandMenuState();
-      setAttachedImages([]);
-      setDocumentReferences([]);
-      setUploadingImages(new Map());
-      setImageErrors(new Map());
+      resetAttachmentState();
       setIsTextareaExpanded(false);
 
       if (textareaRef.current) {
@@ -1072,6 +1088,9 @@ export function useChatComposerState({
       }
     },
     [
+      applyInputValue,
+      resetAttachmentState,
+      resolveConcreteSessionId,
       selectedSession,
       attachedImages,
       documentReferences,
@@ -1214,8 +1233,7 @@ export function useChatComposerState({
       const newValue = event.target.value;
       const cursorPos = event.target.selectionStart;
 
-      setInput(newValue);
-      inputValueRef.current = newValue;
+      applyInputValue(newValue);
       syncQueuedBusySendSnapshot({ input: newValue });
       setCursorPosition(cursorPos);
 
@@ -1228,7 +1246,7 @@ export function useChatComposerState({
 
       handleCommandInputChange(newValue, cursorPos);
     },
-    [handleCommandInputChange, resetCommandMenuState, setCursorPosition, syncQueuedBusySendSnapshot],
+    [applyInputValue, handleCommandInputChange, resetCommandMenuState, setCursorPosition, syncQueuedBusySendSnapshot],
   );
 
   const insertAtCursor = useCallback(
@@ -1240,8 +1258,7 @@ export function useChatComposerState({
       const nextValue = `${current.slice(0, selectionStart)}${char}${current.slice(selectionEnd)}`;
       const nextCursor = selectionStart + char.length;
 
-      setInput(nextValue);
-      inputValueRef.current = nextValue;
+      applyInputValue(nextValue);
       syncQueuedBusySendSnapshot({ input: nextValue });
       setCursorPosition(nextCursor);
 
@@ -1262,7 +1279,7 @@ export function useChatComposerState({
         }
       });
     },
-    [handleCommandInputChange, input, setCursorPosition, setInput, syncQueuedBusySendSnapshot, textareaRef],
+    [applyInputValue, handleCommandInputChange, input, setCursorPosition, syncQueuedBusySendSnapshot, textareaRef],
   );
 
   const handleKeyDown = useCallback(
@@ -1328,8 +1345,7 @@ export function useChatComposerState({
   );
 
   const handleClearInput = useCallback(() => {
-    setInput("");
-    inputValueRef.current = "";
+    applyInputValue("");
     setDocumentReferences([]);
     cancelBusySendQueue();
     resetCommandMenuState();
@@ -1338,7 +1354,7 @@ export function useChatComposerState({
       textareaRef.current.focus();
     }
     setIsTextareaExpanded(false);
-  }, [cancelBusySendQueue, resetCommandMenuState]);
+  }, [applyInputValue, cancelBusySendQueue, resetCommandMenuState]);
 
   const handleAbortSession = useCallback(() => {
     if (!canAbortSession) {

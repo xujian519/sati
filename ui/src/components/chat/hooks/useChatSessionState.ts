@@ -358,6 +358,17 @@ export function useChatSessionState({
   const activeScrollKey = selectedProject && activeSessionId ? `${selectedProject.name}:${activeSessionId}` : null;
   const sessionIsReadOnly = isReadOnlySession(selectedSession);
   const sessionRequestParams = useMemo(() => getSessionRequestParams(selectedSession), [selectedSession]);
+
+  // store 拉取参数的公共前缀（5 处调用点逐字一致）——单一事实源防漂移。
+  const buildFetchParams = useCallback(
+    (project: Project) => ({
+      provider: "sati" as SessionProvider,
+      projectName: project.name,
+      projectPath: project.fullPath || project.path || "",
+      ...sessionRequestParams,
+    }),
+    [sessionRequestParams],
+  );
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
 
   // Tell the store which session we're viewing so it only re-renders for this one
@@ -380,7 +391,7 @@ export function useChatSessionState({
   if (activeSessionId && activeSessionId !== prevActiveSessionRef.current && pendingUserMessage) {
     const expectedSessionId = pendingViewSessionRef.current?.sessionId ?? null;
     if (expectedSessionId && activeSessionId === expectedSessionId) {
-      const normalized = chatMessageToNormalized(pendingUserMessage, activeSessionId, "sati" as SessionProvider);
+      const normalized = chatMessageToNormalized(pendingUserMessage, activeSessionId, "sati");
       if (normalized) {
         sessionStore.appendRealtime(activeSessionId, normalized);
       }
@@ -453,7 +464,7 @@ export function useChatSessionState({
         setPendingUserMessage(msg);
         return;
       }
-      const normalized = chatMessageToNormalized(msg, sessionId, "sati" as SessionProvider);
+      const normalized = chatMessageToNormalized(msg, sessionId, "sati");
       if (normalized) {
         sessionStore.appendRealtime(sessionId, normalized);
       }
@@ -512,10 +523,7 @@ export function useChatSessionState({
 
       try {
         const slot = await sessionStore.fetchMore(selectedSession.id, {
-          provider: "sati",
-          projectName: selectedProject.name,
-          projectPath: selectedProject.fullPath || selectedProject.path || "",
-          ...sessionRequestParams,
+          ...buildFetchParams(selectedProject),
           limit: MESSAGES_PER_PAGE,
         });
         if (!slot || slot.serverMessages.length === 0) return false;
@@ -529,7 +537,7 @@ export function useChatSessionState({
         isLoadingMoreRef.current = false;
       }
     },
-    [hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionRequestParams, sessionStore],
+    [buildFetchParams, hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
   const handleScroll = useCallback(async () => {
@@ -743,10 +751,7 @@ export function useChatSessionState({
     // messages, so fetching everything is fine.
     sessionStore
       .fetchFromServer(selectedSession.id, {
-        provider: "sati",
-        projectName: selectedProject.name,
-        projectPath: selectedProject.fullPath || selectedProject.path || "",
-        ...sessionRequestParams,
+        ...buildFetchParams(selectedProject),
         limit: null,
         offset: 0,
       })
@@ -766,6 +771,7 @@ export function useChatSessionState({
         setIsLoadingSessionMessages(false);
       });
   }, [
+    buildFetchParams,
     currentSessionId,
     pendingViewSessionRef,
     resetStreamingState,
@@ -786,12 +792,7 @@ export function useChatSessionState({
       try {
         // Skip store refresh during active streaming
         if (!isLoading) {
-          await sessionStore.refreshFromServer(selectedSession.id, {
-            provider: "sati",
-            projectName: selectedProject.name,
-            projectPath: selectedProject.fullPath || selectedProject.path || "",
-            ...sessionRequestParams,
-          });
+          await sessionStore.refreshFromServer(selectedSession.id, buildFetchParams(selectedProject));
 
           if (Boolean(autoScrollToBottom) && isNearBottom()) {
             setTimeout(() => scrollToBottom(), 200);
@@ -805,12 +806,12 @@ export function useChatSessionState({
     reloadExternalMessages();
   }, [
     autoScrollToBottom,
+    buildFetchParams,
     externalMessageUpdate,
     isNearBottom,
     scrollToBottom,
     selectedProject,
     selectedSession,
-    sessionRequestParams,
     sessionStore,
     isLoading,
   ]);
@@ -842,28 +843,23 @@ export function useChatSessionState({
 
     const scrollToTarget = async () => {
       if (!allMessagesLoadedRef.current && selectedSession && selectedProject) {
-        {
-          try {
-            const slot = await sessionStore.fetchFromServer(selectedSession.id, {
-              provider: "sati",
-              projectName: selectedProject.name,
-              projectPath: selectedProject.fullPath || selectedProject.path || "",
-              ...sessionRequestParams,
-              limit: null,
-              offset: 0,
-            });
-            if (slot) {
-              setHasMoreMessages(false);
-              setTotalMessages(slot.total);
-              messagesOffsetRef.current = slot.total;
-              setVisibleMessageCount(Infinity);
-              setAllMessagesLoaded(true);
-              allMessagesLoadedRef.current = true;
-              await new Promise(resolve => setTimeout(resolve, 300));
-            }
-          } catch {
-            // Fall through and scroll in current messages
+        try {
+          const slot = await sessionStore.fetchFromServer(selectedSession.id, {
+            ...buildFetchParams(selectedProject),
+            limit: null,
+            offset: 0,
+          });
+          if (slot) {
+            setHasMoreMessages(false);
+            setTotalMessages(slot.total);
+            messagesOffsetRef.current = slot.total;
+            setVisibleMessageCount(Infinity);
+            setAllMessagesLoaded(true);
+            allMessagesLoadedRef.current = true;
+            await new Promise(resolve => setTimeout(resolve, 300));
           }
+        } catch {
+          // Fall through and scroll in current messages
         }
       }
       setVisibleMessageCount(Infinity);
@@ -924,12 +920,12 @@ export function useChatSessionState({
 
     scrollToTarget();
   }, [
+    buildFetchParams,
     chatMessages.length,
     isLoadingSessionMessages,
     searchTarget,
     selectedProject,
     selectedSession,
-    sessionRequestParams,
     sessionStore,
   ]);
 
@@ -1086,10 +1082,7 @@ export function useChatSessionState({
 
     try {
       const slot = await sessionStore.fetchFromServer(requestSessionId, {
-        provider: "sati",
-        projectName: selectedProject.name,
-        projectPath: selectedProject.fullPath || selectedProject.path || "",
-        ...sessionRequestParams,
+        ...buildFetchParams(selectedProject),
         limit: null,
         offset: 0,
       });
@@ -1125,7 +1118,7 @@ export function useChatSessionState({
       isLoadingMoreRef.current = false;
       setIsLoadingAllMessages(false);
     }
-  }, [selectedSession, selectedProject, isLoadingAllMessages, currentSessionId, sessionRequestParams, sessionStore]);
+  }, [buildFetchParams, selectedSession, selectedProject, isLoadingAllMessages, currentSessionId, sessionStore]);
 
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount(prev => prev + 100);
