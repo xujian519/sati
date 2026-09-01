@@ -94,7 +94,7 @@
 | 卡 | 模块 | 规模/热点 | 状态 |
 |---|---|---|---|
 | C27 | main-content-v2 组 | SkillsV2.tsx 2502、DashboardV2.tsx 1351 | ✅ 2026-08-31 |
-| C28 | chat-v2 组 | MessagesPaneV2.tsx 1375、ComposerV2.tsx 1061、processGrouping.ts 1231 | ⬜ |
+| C28 | chat-v2 组 | MessagesPaneV2.tsx 1375、ComposerV2.tsx 1061、processGrouping.ts 1231 | ✅ 2026-09-01 |
 | C29 | chat/hooks | useChatComposerState.ts 1596、useChatSessionState.ts 1168、useChatRealtimeHandlers.ts 973 | ⬜ |
 | C30 | chat/view + stores | MessageComponent.tsx 969、useSessionStore.ts 1435 | ⬜ |
 | C31 | code-editor/view | PdfDocumentPreview.tsx 1860、CodeEditorBinaryFile.tsx 1522 | ⬜ |
@@ -149,6 +149,7 @@
 | 2026-08-29 | C25 | src/web + workflow + telemetry | P3 无参 catch 补 fail-safe 意图注释 ×6（workflow DagEngine 节点失败收集 / InputResolver 不可序列化降级、web forkSession 转写重写跳过非 JSON 行、telemetry context git 探测 ×2 处降级注释）+ types.ts 过时 JSDoc 文件引用修正（SubagentAgentFactory→SubagentWorkflowAgentFactory）；P0/P1/P2 无行为缺陷；记录不处理：workflow 引擎整体「已移植未接线」（引擎/存储/检查点仅测试消费，模块头注明的预留面，C21/C22 判例保留）、limitToolResultPreview ×2 与 isSearchToolName ×2 跨文件重复（签名/语义差异：unknown→"" vs string→undefined，合并需改契约）、webMessage.ts agent_status payload 双写 contentI18n/userHintI18n（wire 契约面，UI 消费）、DEFAULT_HISTORY_CONTEXT_TOKENS 零外部消费（定义处文档化默认值常量，保留）；三模块零 any/零 TODO/零裸 console（telemetry logger 为统一入口属合法）| 3（refactor×3：workflow/web/telemetry） | ✅ |
 | 2026-08-30 | C26 | 小模块合卡（network/shared/fs/browser/test-support） | P2 死代码链删除：network networkPostJson→networkFetchJson→withJsonContentType/NetworkJsonOptions 全链零消费（-68 行）、shared/paths __clear*ForTesting 测试 helper ×3 及其 barrel 转出删除、私有化 ×5（isDebugLoggingEnabled/isRetryableNetworkCode/BROWSEROS_NEO_DEFAULT_URL/probeBrowserOsNeo/probeBrowserUse，均模块内自用）、paths/network/browser 三 barrel 死 re-export 清理（findGitRoot/resolveCanonicalRoot/findCanonicalProjectRoot/LRUMap 等仅目录内相对导入消费）；P3 无参 catch 补 fail-safe 意图注释 ×10（browserosNeo ×2、fetch 旧响应体丢弃 ×1、pilotPaths ×3、findGitRoot ×1、resolveCanonicalRoot ×3）+ jsonl-run-writer best-effort close 注释 ×2 + LRUMap 冗余 `as K|undefined` 断言 ×1 + resolveCanonicalRoot 重复注释行 ×1；P0/P1 无行为缺陷；记录不处理：isReplayError/ReplayOverrideFile 零消费（test-support replay seam 契约词汇面，C07/C23 判例保留）、createProjectIdAsync/createCollisionResistantProjectId/getPilotProjectConfigFilePath/getPilotProjectChatDirAsync/PilotPathEnv 五符号 paths→pilot 二级 barrel 转出链零消费尾端（C21 已决策保留 pilot API 面）、fetch.ts 状态→错误码两级嵌套三元（紧凑可读，展平反增行）；横切零 any/零 @ts-expect-error/零 TODO，console 仅 debugLog 统一 SATI_DEBUG 门控入口（合法）；test-support/llm-replay 质量高（fail-loud 设计、全 catch 带语义）| 4（refactor×4：shared/network/browser/fs） | ✅ |
 | 2026-08-31 | C27 | main-content-v2 组（DashboardV2 + SkillsV2） | P2 DashboardV2 collectRecentRoutes 参数类型收窄，移除 `as unknown as DashboardProject` 占位强转；P2 SkillsV2 提取 `stripRootPrefix` helper 消除 `webkitRelativePath` 归一化重复 ×4；P3 DashboardV2 RequestLogRow 嵌套三元改 `REQUEST_VARIANT_STYLES` 查表；P3 DashboardV2 SessionRow 重复 orchestration summary JSX 提取 `OrchestrationSummary` 组件；P3 SkillsV2 SkillDetail scope badge 嵌套三元/类名提取 `ScopeBadge` + `SCOPE_STYLES` 查表；P3 SkillsV2 `generalChat` defaultValue 与 `common.json` 对齐；P0/P1 无行为缺陷；横切零 any/零 @ts-expect-error/零无参 catch/零裸 console/零 TODO | 1（refactor） | ✅ |
+| 2026-09-01 | C28 | chat-v2 组（MessagesPaneV2 + ComposerV2 + processGrouping） | P2 死导出收窄 ×6（processGrouping getToolTarget/formatCompletedProcessTitle/getRunningProcessTitle/isPendingToolUseMessage/isWebFetchToolMessage + MessagesPaneV2 estimateMessageItemHeight，均模块内自用零外部消费）；P2 ComposerV2 sendTitle 5 层三元→resolveSendTitle、context tone 4 层三元→resolveContextTone、触发器/徽章类名三元链 ×2→CONTEXT_TONE_TRIGGER_STYLES/CONTEXT_TONE_BADGE_STYLES 查表（tone 联合四值完备）；P3 无参 catch 补 fail-safe 意图注释 ×5（processGrouping parseToolInput / chatHistorySearchUtils ×2 / ChatInterfaceV2 response.json / SubagentCard parseToolInput）+ MessagesPaneV2 `cond ? false : true` 冗余三元取反 + ComposerV2 发送按钮重复 Loader2 分支合并；P0/P1 无行为缺陷；横切零 any/零 @ts-expect-error/零 TODO（reconnectRecovery console.error 为 UI 层错误上报通道，合法）；记录不处理：splitLiveProcessGroupDetailMessages 恒空 beforeStatusMessages（预留分层 API，2 消费点+测试）、hasPendingWebFetchInRunningGroup 仅测试消费（C24 判例）、isCollapsibleCompletedProcessMessage 单调用点策略别名、parseToolInput 跨文件 ×3 语义各异（C04 判例）、UI 层 `t() as string`/`(e as Error).message` 归横切 | 3（refactor×3） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -444,6 +445,20 @@
 - **精炼项**：类型收紧 1 处、重复 helper 提取 1 处、嵌套三元改查表 3 处、重复 JSX 提取 1 处、i18n defaultValue 对齐 1 处
 - **验证**：`pnpm typecheck` ✅ 0 错误；`pnpm lint` ✅ 0 warning；`pnpm test` 102 文件 / 623 用例全绿 ✅；`pnpm check` 全绿（format:check / lint / skills-valid / 等）✅
 - **提交**：`refactor(ui): C27 main-content-v2 cleanup`
+
+#### C28 chat-v2 组（2026-09-01）
+
+- **审阅范围**：chat-v2 组 24 文件 / ~10.2K 行，点名三大文件 MessagesPaneV2.tsx（1446）、processGrouping.ts（1295）、ComposerV2.tsx（1061）全文通读；其余文件（MessageRowV2/SubagentDetailMessageFlow/ProcessTrace/chatHistorySearchUtils 等）横切扫描。
+- **审阅发现**：
+  - P2 死导出收窄 ×6：processGrouping `getToolTarget`/`formatCompletedProcessTitle`/`getRunningProcessTitle`/`isPendingToolUseMessage`/`isWebFetchToolMessage` 与 MessagesPaneV2 `estimateMessageItemHeight` 均模块内自用、全仓零外部消费（tsc 兜底验证）→ 去 export（`mergeRenderableItemSequences`/`buildPrefixOffsets`/`getVirtualMessageWindow`/`getContextStatus` 有测试消费，保留导出）。
+  - P2 ComposerV2 嵌套三元收敛：sendTitle 5 分支三元链 → `resolveSendTitle` helper（if 链，i18n 文案逐字保留）；getContextStatus 的 tone 4 分支三元链 → `resolveContextTone` helper（判定顺序 blocking→warning→percent 逐支等价）；上下文触发器/徽章类名三元链 ×2 → `CONTEXT_TONE_TRIGGER_STYLES`/`CONTEXT_TONE_BADGE_STYLES` 查表（tone 联合 "normal"|"amber"|"red"|"unknown" 完备，C27 SCOPE_STYLES 判例）。
+  - P3 无参 catch 补 fail-safe 意图注释 ×5（processGrouping parseToolInput 非 JSON→空对象、chatHistorySearchUtils parseToolPayload 非 JSON→原值 / safeGetter 畸形消息→undefined、ChatInterfaceV2 response.json 非 JSON→空结果、SubagentCard parseToolInput→空对象）。
+  - P3 MessagesPaneV2 renderableMessages 过滤条件 `(!inlineThinking && isStreamingThinkingMessage(msg) ? false : true)` → 单一取反；ComposerV2 发送按钮 `isSubmitPending||hasUploadingImages` 与 `isBusySendConfirmed` 两分支渲染同一 Loader2 → 条件合并。
+  - P0/P1：无行为缺陷。三文件质量高——虚拟滚动前缀和缓存、增量构建缓存、K 路归并均有推导注释；横切零 any/@ts-expect-error/TODO，console 仅 reconnectRecovery 错误上报（合法通道）。
+  - 记录不处理：`splitLiveProcessGroupDetailMessages` 返回的 `beforeStatusMessages` 恒空数组（MessagesPaneV2/SubagentDetailMessageFlow 两处消费 + 测试，疑似预留分层 API，收缩契约面留决策）；`hasPendingWebFetchInRunningGroup` 生产零消费仅测试消费（C24 AsyncHookRegistry.list 判例保留）；`isCollapsibleCompletedProcessMessage` 单调用点语义别名（策略点标记）；`parseToolInput` 跨文件三处（processGrouping/SubagentCard/chatHistorySearchUtils）返回类型与 fallback 语义各异，合并有漂移风险（C04 判例）；UI 层 `t() as string`、`(e as Error).message` 普遍模式归后续横切治理；>1000 行三大文件属保守档待拆建议。
+- **精炼项**：死导出收窄 6 处、嵌套三元收敛 4 处（helper ×2 + 查表 ×2）、catch 注释 ×5、冗余三元/重复分支合并 ×2（净 +75/−61，行为零变化）
+- **验证**：`pnpm vitest run`（ui）102 文件 / 623 用例全绿 ✅；`pnpm --filter sati-ui typecheck` ✅；ui `eslint --max-warnings 0` + server boundary ✅；biome 改动目录 28 文件 ✅；根 `pnpm check` 中 check:config/typecheck（根+ui）/lint（含 event-matrix）✅，format:check 红系未跟踪 `apps/desktop/electron-dist/` 构建产物（会话开始前已存在，pre-existing，非本卡引入；建议后续将该目录加入 .gitignore）
+- **提交**：`refactor(ui): document fallback catches in chat-v2 helpers`、`refactor(ui): narrow chat-v2 module-internal exports, drop redundant ternary`、`refactor(ui): flatten ComposerV2 nested ternaries with helpers and tone lookup tables`
 
 ## 六、基线（2026-08-18 实测）
 

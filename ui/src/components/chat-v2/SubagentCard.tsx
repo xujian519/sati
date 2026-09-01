@@ -8,6 +8,7 @@ function parseToolInput(toolInput: unknown): Record<string, unknown> {
     try {
       return JSON.parse(toolInput);
     } catch {
+      // 非 JSON 工具输入 → 空对象，卡片仅少展示参数。
       return {};
     }
   }

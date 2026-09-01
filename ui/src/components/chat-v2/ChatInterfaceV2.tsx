@@ -379,6 +379,7 @@ function ChatInterfaceV2({
         try {
           result = await response.json();
         } catch {
+          // 非 JSON 响应 → 按空结果处理，下方分支已兜底。
           result = {};
         }
         if (!response.ok) {

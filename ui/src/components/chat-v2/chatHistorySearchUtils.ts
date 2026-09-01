@@ -43,6 +43,7 @@ function parseToolPayload(value: unknown): unknown {
   try {
     return JSON.parse(trimmed);
   } catch {
+    // 非 JSON 载荷 → 原样返回，交由调用方按原始字符串展示。
     return value;
   }
 }
@@ -56,6 +57,7 @@ function callToolDisplayGetter<T>(
   try {
     return getter(value, helpers);
   } catch {
+    // 提取器对畸形消息抛错 → 该字段视为不存在。
     return undefined;
   }
 }
