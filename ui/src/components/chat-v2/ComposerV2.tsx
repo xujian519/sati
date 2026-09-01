@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- 组件与工具函数（getContextStatus 等）按设计同文件导出 */
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, MouseEvent, ReactNode, RefObject } from "react";
 import {
@@ -197,6 +198,21 @@ const RUN_MODE_OPTIONS: RunModeOption[] = [
 
 const BLOCKING_PERMISSION_TOOLS = new Set(["AskUserQuestion", "ExitPlanMode", "ExitPlanModeV2", "exit_plan_mode"]);
 
+/** 上下文用量按钮/徽章按 tone 查表取样式（tone 四值完备）。 */
+const CONTEXT_TONE_TRIGGER_STYLES: Record<ContextStatus["tone"], string> = {
+  red: "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30",
+  amber: "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30",
+  normal: "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
+  unknown: "text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-neutral-800",
+};
+
+const CONTEXT_TONE_BADGE_STYLES: Record<ContextStatus["tone"], string> = {
+  red: "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+  amber: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
+  normal: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300",
+  unknown: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
+};
+
 function readNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -226,6 +242,41 @@ function formatContextPercentLabel(percent: number): string {
   return `${percent}%`;
 }
 
+/** 服务器下发的 snapshot 状态优先于本地百分比阈值（blocking→red、warning→amber）。 */
+function resolveContextTone(snapshotState: string | null, percent: number): ContextStatus["tone"] {
+  if (snapshotState === "blocking") return "red";
+  if (snapshotState === "warning") return "amber";
+  if (percent >= 95) return "red";
+  if (percent >= 80) return "amber";
+  return "normal";
+}
+
+function resolveSendTitle(args: {
+  isSubmitPending: boolean;
+  hasUploadingImages: boolean;
+  isBusySendConfirmed: boolean;
+  isBusySendQueued: boolean;
+  isLoading: boolean;
+  t: TFunction<"chat">;
+}): string {
+  const { t } = args;
+  if (args.isSubmitPending || args.hasUploadingImages) {
+    return t("input.sending", { defaultValue: "Sending..." }) as string;
+  }
+  if (args.isBusySendConfirmed) {
+    return t("input.queuedSendConfirmed", { defaultValue: "Stopping current turn — sending next message" }) as string;
+  }
+  if (args.isBusySendQueued) {
+    return t("input.queuedSendConfirm", {
+      defaultValue: "Queued — click send again to stop this turn and send now",
+    }) as string;
+  }
+  if (args.isLoading) {
+    return t("input.queueSend", { defaultValue: "Queue message" }) as string;
+  }
+  return t("input.send", { defaultValue: "Send" }) as string;
+}
+
 export function getContextStatus(tokenBudget?: Record<string, unknown> | null): ContextStatus {
   const used = readNumber(tokenBudget?.displayUsed) ?? readNumber(tokenBudget?.used) ?? 0;
   const total = readNumber(tokenBudget?.total) ?? 0;
@@ -253,16 +304,7 @@ export function getContextStatus(tokenBudget?: Record<string, unknown> | null): 
   // uses the padded budget and can correctly remain blocking.
   const percent = Math.max(0, Math.round((used / displayTotal) * 100));
   const snapshotState = typeof tokenBudget?.state === "string" ? tokenBudget.state : null;
-  const tone =
-    snapshotState === "blocking"
-      ? "red"
-      : snapshotState === "warning"
-        ? "amber"
-        : percent >= 95
-          ? "red"
-          : percent >= 80
-            ? "amber"
-            : "normal";
+  const tone = resolveContextTone(snapshotState, percent);
   return {
     known: true,
     used,
@@ -361,18 +403,14 @@ export default function ComposerV2({
   const attachmentLimitError = imageErrors.get(MAX_ATTACHMENTS_ERROR_KEY);
   const disabled = !hasDraftContent || isSubmitPending || hasUploadingImages;
   const showAbortButton = isLoading && canAbortSession && !hasDraftContent;
-  const sendTitle =
-    isSubmitPending || hasUploadingImages
-      ? (t("input.sending", { defaultValue: "Sending..." }) as string)
-      : isBusySendConfirmed
-        ? (t("input.queuedSendConfirmed", { defaultValue: "Stopping current turn — sending next message" }) as string)
-        : isBusySendQueued
-          ? (t("input.queuedSendConfirm", {
-              defaultValue: "Queued — click send again to stop this turn and send now",
-            }) as string)
-          : isLoading
-            ? (t("input.queueSend", { defaultValue: "Queue message" }) as string)
-            : (t("input.send", { defaultValue: "Send" }) as string);
+  const sendTitle = resolveSendTitle({
+    isSubmitPending,
+    hasUploadingImages,
+    isBusySendConfirmed,
+    isBusySendQueued,
+    isLoading,
+    t,
+  });
   const contextStatus = getContextStatus(tokenBudget);
   const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
   const selectedThinkingMode = thinkingModes.find(option => option.id === effectiveThinkingMode) || thinkingModes[0];
@@ -859,13 +897,7 @@ export default function ComposerV2({
                       onClick={() => setIsContextPopoverOpen(open => !open)}
                       className={cn(
                         "pd-composer-icon-button inline-flex h-7 min-w-[44px] items-center justify-center gap-1 rounded-md px-1.5 text-[11px] tabular-nums transition",
-                        contextStatus.tone === "red"
-                          ? "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
-                          : contextStatus.tone === "amber"
-                            ? "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                            : contextStatus.tone === "normal"
-                              ? "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                              : "text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-neutral-800",
+                        CONTEXT_TONE_TRIGGER_STYLES[contextStatus.tone],
                       )}
                       title={contextStatusTitle}
                       aria-label={contextStatusTitle}
@@ -888,13 +920,7 @@ export default function ComposerV2({
                           <span
                             className={cn(
                               "rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums",
-                              contextStatus.tone === "red"
-                                ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
-                                : contextStatus.tone === "amber"
-                                  ? "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-                                  : contextStatus.tone === "normal"
-                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
-                                    : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
+                              CONTEXT_TONE_BADGE_STYLES[contextStatus.tone],
                             )}
                           >
                             {contextStatus.known ? contextStatus.percentLabel : "--"}
@@ -1040,9 +1066,7 @@ export default function ComposerV2({
                     )}
                     title={sendTitle}
                   >
-                    {isSubmitPending || hasUploadingImages ? (
-                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />
-                    ) : isBusySendConfirmed ? (
+                    {isSubmitPending || hasUploadingImages || isBusySendConfirmed ? (
                       <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />
                     ) : isBusySendQueued ? (
                       <Check className="h-4 w-4" strokeWidth={2.25} />
