@@ -358,6 +358,21 @@ export function useChatRealtimeHandlers({
       const clearAccumulators = () => {
         thinkingBySessionRef.current.clear();
       };
+      // complete/error 收尾时清空当前视图的 turn 状态（两分支逐字一致）。
+      const clearActiveTurnUiState = () => {
+        setIsLoading(false);
+        setCanAbortSession(false);
+        setIsAborting(false);
+        setClaudeStatus(null);
+        setSatiStatus(null);
+      };
+      const refreshSessionFromServer = (sessionId: string) => {
+        return sessionStore.refreshFromServer(sessionId, {
+          provider,
+          projectName: selectedProject?.name,
+          projectPath: selectedProject?.fullPath || selectedProject?.path || "",
+        });
+      };
 
       if (!msg.kind) {
         const messageType = String(msg.type || "");
@@ -723,11 +738,7 @@ export function useChatRealtimeHandlers({
           }
 
           if (isForActiveView) {
-            setIsLoading(false);
-            setCanAbortSession(false);
-            setIsAborting(false);
-            setClaudeStatus(null);
-            setSatiStatus(null);
+            clearActiveTurnUiState();
           }
           if (sid) {
             setPendingPermissionRequests(prev => prev.filter(r => r.sessionId !== sid));
@@ -748,18 +759,12 @@ export function useChatRealtimeHandlers({
             // stream created before tool_use). The server has the authoritative
             // copy with correct ordering. Retry if server hasn't committed yet.
             const doRefresh = (attempt: number) => {
-              sessionStore
-                .refreshFromServer(sid, {
-                  provider,
-                  projectName: selectedProject?.name,
-                  projectPath: selectedProject?.fullPath || selectedProject?.path || "",
-                })
-                .then(() => {
-                  const slot = sessionStore.getSessionSlot?.(sid);
-                  if (slot && slot.serverMessages.length === 0 && attempt < 5) {
-                    setTimeout(() => doRefresh(attempt + 1), 1500 * attempt);
-                  }
-                });
+              refreshSessionFromServer(sid).then(() => {
+                const slot = sessionStore.getSessionSlot?.(sid);
+                if (slot && slot.serverMessages.length === 0 && attempt < 5) {
+                  setTimeout(() => doRefresh(attempt + 1), 1500 * attempt);
+                }
+              });
             };
             doRefresh(1);
           }
@@ -792,22 +797,14 @@ export function useChatRealtimeHandlers({
 
         case "error": {
           if (isForActiveView) {
-            setIsLoading(false);
-            setCanAbortSession(false);
-            setIsAborting(false);
-            setClaudeStatus(null);
-            setSatiStatus(null);
+            clearActiveTurnUiState();
           }
           if (sid) {
             clearSessionStatusRetry(sid);
             activeTurnReplaySignatureRef.current.delete(sid);
             onSessionInactive?.(sid);
             onSessionNotProcessing?.(sid);
-            sessionStore.refreshFromServer(sid, {
-              provider,
-              projectName: selectedProject?.name,
-              projectPath: selectedProject?.fullPath || selectedProject?.path || "",
-            });
+            refreshSessionFromServer(sid);
           }
           break;
         }
