@@ -71,6 +71,7 @@ const stringifyMessageContent = (content: unknown): string => {
   try {
     return typeof content === "object" ? JSON.stringify(content, null, 2) : String(content);
   } catch {
+    // Circular or otherwise unserializable content — degrade to String().
     return String(content);
   }
 };
@@ -111,12 +112,29 @@ function isWebSearchError(toolName: string | undefined): boolean {
   return name === "web_search" || name === "websearch";
 }
 
+function resolveHeaderTypeLabel(
+  t: ReturnType<typeof useTranslation>["t"],
+  messageType: string,
+  provider: Provider | string,
+): string {
+  if (messageType === "error") return t("messageTypes.error");
+  if (messageType === "tool") return t("messageTypes.tool");
+  if (provider === "cursor") return t("messageTypes.cursor");
+  if (provider === "codex") return t("messageTypes.codex");
+  if (provider === "gemini") return t("messageTypes.gemini");
+  return t("messageTypes.sati");
+}
+
+const TASK_STATUS_DOT_STYLES: Record<string, string> = {
+  completed: "bg-green-500",
+  failed: "bg-red-500",
+  error: "bg-red-500",
+};
+
 function getAttachmentTypeLabel(name?: string, mimeType?: string): string {
-  const ext = String(name || "")
-    .split(".")
-    .pop()
-    ?.toUpperCase();
-  if (ext && ext !== String(name || "").toUpperCase()) return ext;
+  const rawName = String(name || "");
+  const ext = rawName.split(".").pop()?.toUpperCase();
+  if (ext && ext !== rawName.toUpperCase()) return ext;
   if (mimeType?.includes("/")) return mimeType.split("/").pop()?.toUpperCase() || "FILE";
   return "FILE";
 }
@@ -358,11 +376,7 @@ const MessageComponent = memo(
               <div className="flex items-start gap-2">
                 <span
                   className={`mt-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                    message.taskStatus === "completed"
-                      ? "bg-green-500"
-                      : message.taskStatus === "failed" || message.taskStatus === "error"
-                        ? "bg-red-500"
-                        : "bg-amber-500"
+                    TASK_STATUS_DOT_STYLES[message.taskStatus ?? ""] ?? "bg-amber-500"
                   }`}
                 />
                 <div className="min-w-0 flex-1">
@@ -400,17 +414,7 @@ const MessageComponent = memo(
                   </div>
                 )}
                 <div className="text-sm font-medium text-gray-900 dark:text-white">
-                  {message.type === "error"
-                    ? t("messageTypes.error")
-                    : message.type === "tool"
-                      ? t("messageTypes.tool")
-                      : provider === "cursor"
-                        ? t("messageTypes.cursor")
-                        : provider === "codex"
-                          ? t("messageTypes.codex")
-                          : provider === "gemini"
-                            ? t("messageTypes.gemini")
-                            : t("messageTypes.sati")}
+                  {resolveHeaderTypeLabel(t, message.type, provider)}
                 </div>
               </div>
             )}
