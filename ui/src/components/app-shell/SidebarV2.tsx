@@ -46,6 +46,11 @@ const asTimestamp = (value: unknown): number => {
   return 0;
 };
 
+const latestTimestamp = (...values: unknown[]): number => Math.max(...values.map(asTimestamp));
+
+const sessionLastActivity = (session: ProjectSession): number =>
+  latestTimestamp(session.lastActivity, session.updated_at, session.createdAt, session.created_at);
+
 type ProjectSortOrder = "name" | "date";
 
 // The Settings dialog persists `projectSortOrder` into the same
@@ -86,23 +91,11 @@ const useProjectSortOrder = (): ProjectSortOrder => {
 // available, or the newest timestamp across previewed sessions. The summary
 // matters because the sidebar only keeps a capped session preview.
 const projectLastActivity = (project: Project): number => {
-  let latest = Math.max(
-    asTimestamp(project.lastActivity),
-    asTimestamp(project.updated_at),
-    asTimestamp(project.createdAt),
-    asTimestamp(project.created_at),
-  );
-  const buckets: ProjectSession[][] = [Array.isArray(project.sessions) ? project.sessions : []];
-  for (const list of buckets) {
-    for (const session of list) {
-      const ts = Math.max(
-        asTimestamp(session.lastActivity),
-        asTimestamp(session.updated_at),
-        asTimestamp(session.createdAt),
-        asTimestamp(session.created_at),
-      );
-      if (ts > latest) latest = ts;
-    }
+  let latest = latestTimestamp(project.lastActivity, project.updated_at, project.createdAt, project.created_at);
+  const sessions = Array.isArray(project.sessions) ? project.sessions : [];
+  for (const session of sessions) {
+    const ts = sessionLastActivity(session);
+    if (ts > latest) latest = ts;
   }
   return latest;
 };
@@ -167,12 +160,7 @@ const collectSessionsForProject = (project: Project): FlatSession[] => {
     .map(session => ({
       session,
       sessionId: session.id,
-      lastActivity: Math.max(
-        asTimestamp(session.lastActivity),
-        asTimestamp(session.updated_at),
-        asTimestamp(session.createdAt),
-        asTimestamp(session.created_at),
-      ),
+      lastActivity: sessionLastActivity(session),
     }))
     .sort((a, b) => b.lastActivity - a.lastActivity);
 };
@@ -197,6 +185,23 @@ const formatRelative = (ts: number, t: TFunction): string => {
 };
 
 type SessionIndicatorStatus = "processing" | "unread" | "idle";
+
+const resolveIndicatorStatus = (
+  sessionId: string,
+  isOptimisticRow: boolean,
+  processingSessions: Set<string> | undefined,
+  unreadSessionIds: Set<string> | undefined,
+): SessionIndicatorStatus => {
+  if (isOptimisticRow || processingSessions?.has(sessionId)) return "processing";
+  if (unreadSessionIds?.has(sessionId)) return "unread";
+  return "idle";
+};
+
+const indicatorStatusLabel = (status: SessionIndicatorStatus, t: TFunction): string => {
+  if (status === "processing") return t("sidebar:sessions.processing", { defaultValue: "Agent is running" });
+  if (status === "unread") return t("sidebar:sessions.unread", { defaultValue: "Unread messages" });
+  return t("sidebar:sessions.idle", { defaultValue: "No unread messages" });
+};
 
 const SPINNER_DOTS = Array.from({ length: 8 }, (_, index) => index);
 
@@ -276,6 +281,13 @@ const CONTEXT_MENU_WIDTH = 176;
 const CONTEXT_MENU_HEIGHT = 88;
 const CONTEXT_MENU_MARGIN = 8;
 
+// Resizable sidebar width — clamped to a sensible range and persisted across
+// reloads. Drag-handle on the right edge mutates this on the fly.
+const SIDEBAR_MIN_WIDTH = 200;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 248;
+const SIDEBAR_WIDTH_STORAGE_KEY = "sidebar-v2-width";
+
 const contextMenuPosition = (event: MouseEvent) => {
   const maxX = window.innerWidth - CONTEXT_MENU_WIDTH - CONTEXT_MENU_MARGIN;
   const maxY = window.innerHeight - CONTEXT_MENU_HEIGHT - CONTEXT_MENU_MARGIN;
@@ -348,10 +360,6 @@ export default function SidebarV2({
 
   // Resizable sidebar width — clamped to a sensible range and persisted across
   // reloads. Drag-handle on the right edge mutates this on the fly.
-  const SIDEBAR_MIN_WIDTH = 200;
-  const SIDEBAR_MAX_WIDTH = 480;
-  const SIDEBAR_DEFAULT_WIDTH = 248;
-  const SIDEBAR_WIDTH_STORAGE_KEY = "sidebar-v2-width";
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH;
     const stored = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY);
@@ -377,12 +385,11 @@ export default function SidebarV2({
         setIsResizing(false);
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
-        // Persist the latest width by reading back from state — wrapped in a
-        // microtask so the latest setState has settled before we serialize.
+        // Persist the latest width. Read directly off the DOM element rather
+        // than chasing closure state to avoid serializing a stale value; the
+        // microtask lets the final setState settle before we measure.
         queueMicrotask(() => {
           try {
-            // Read directly off the DOM element rather than chasing closure state
-            // to avoid serializing a stale value.
             const aside = document.querySelector<HTMLElement>("aside[data-sidebar-v2-root]");
             const width = aside?.offsetWidth;
             if (width && Number.isFinite(width)) {
@@ -718,6 +725,7 @@ export default function SidebarV2({
     const isLoadingMore = Boolean(loadingMoreProjectIds?.has(project.name));
     const totalSessions = typeof project.sessionMeta?.total === "number" ? project.sessionMeta.total : null;
     const remaining = totalSessions !== null ? Math.max(0, totalSessions - allSessions.length) : null;
+    const totalMore = hiddenLoadedCount + (remaining !== null && remaining > 0 ? remaining : 0);
 
     // `flat` mode is used by the General tab where sessions are rendered as a
     // top-level list (no folder ancestor), so the usual ml-6 indent would
@@ -738,19 +746,8 @@ export default function SidebarV2({
         selectedProject?.name === project.name && selectedSession?.id === sessionId && activeTab === "chat";
       const isSessionRenaming = renamingSession === sessionId;
       const isOptimisticRow = typeof sessionId === "string" && sessionId.startsWith("new-session-");
-      const indicatorStatus: SessionIndicatorStatus = isOptimisticRow
-        ? "processing"
-        : processingSessions?.has(sessionId)
-          ? "processing"
-          : unreadSessionIds?.has(sessionId)
-            ? "unread"
-            : "idle";
-      const indicatorLabel =
-        indicatorStatus === "processing"
-          ? t("sidebar:sessions.processing", { defaultValue: "Agent is running" })
-          : indicatorStatus === "unread"
-            ? t("sidebar:sessions.unread", { defaultValue: "Unread messages" })
-            : t("sidebar:sessions.idle", { defaultValue: "No unread messages" });
+      const indicatorStatus = resolveIndicatorStatus(sessionId, isOptimisticRow, processingSessions, unreadSessionIds);
+      const indicatorLabel = indicatorStatusLabel(indicatorStatus, t);
       const parentTitle = session.parentSessionId ? sessionTitleById.get(session.parentSessionId) : undefined;
 
       return (
@@ -876,15 +873,12 @@ export default function SidebarV2({
           >
             {isLoadingMore
               ? t("sidebar:sessions.loadingMore", { defaultValue: "Loading more…" })
-              : (() => {
-                  const totalMore = hiddenLoadedCount + (remaining !== null && remaining > 0 ? remaining : 0);
-                  return totalMore > 0
-                    ? t("sidebar:sessions.showMoreCount", {
-                        count: totalMore,
-                        defaultValue: `Show more (${totalMore})`,
-                      })
-                    : t("sidebar:sessions.showMore", { defaultValue: "Show more sessions" });
-                })()}
+              : totalMore > 0
+                ? t("sidebar:sessions.showMoreCount", {
+                    count: totalMore,
+                    defaultValue: `Show more (${totalMore})`,
+                  })
+                : t("sidebar:sessions.showMore", { defaultValue: "Show more sessions" })}
           </button>
         ) : null}
 
@@ -1202,18 +1196,20 @@ export default function SidebarV2({
             aria-pressed={isTeamPanelOpen}
             aria-label={t("tabs.team", { defaultValue: "Team" }) as string}
             title={t("tabs.team", { defaultValue: "Team" }) as string}
-            className={`group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-all duration-200 ${
+            className={cn(
+              "group flex h-9 w-full items-center justify-start gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-all duration-200",
               isTeamPanelOpen
                 ? "bg-brand-50 text-brand-600 dark:bg-brand-900/30 dark:text-brand-300"
-                : "text-neutral-600 hover:bg-white hover:text-brand-600 hover:shadow-xs dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300"
-            }`}
+                : "text-neutral-600 hover:bg-white hover:text-brand-600 hover:shadow-xs dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-brand-300",
+            )}
           >
             <span
-              className={`flex h-6 w-6 items-center justify-center rounded-md transition ${
+              className={cn(
+                "flex h-6 w-6 items-center justify-center rounded-md transition",
                 isTeamPanelOpen
                   ? "bg-brand-100 text-brand-600 dark:bg-brand-900/50 dark:text-brand-300"
-                  : "bg-neutral-200/60 group-hover:bg-brand-50 group-hover:text-brand-600 dark:bg-neutral-800/60 dark:group-hover:bg-brand-900/30 dark:group-hover:text-brand-300"
-              }`}
+                  : "bg-neutral-200/60 group-hover:bg-brand-50 group-hover:text-brand-600 dark:bg-neutral-800/60 dark:group-hover:bg-brand-900/30 dark:group-hover:text-brand-300",
+              )}
             >
               <Users className="h-3.5 w-3.5" strokeWidth={1.75} />
             </span>

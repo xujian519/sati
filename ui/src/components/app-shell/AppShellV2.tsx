@@ -78,6 +78,40 @@ const isUnreadWorthyMessage = (message: unknown): boolean => {
   return false;
 };
 
+// Register a window global used by the chat surface (slash commands, debug
+// console). Clears it on unmount only when nobody else has overwritten it.
+function useWindowGlobal<T>(name: string, value: T) {
+  useEffect(() => {
+    const holder = window as unknown as Record<string, T | undefined>;
+    holder[name] = value;
+    return () => {
+      if (holder[name] === value) {
+        delete holder[name];
+      }
+    };
+  }, [name, value]);
+}
+
+// Immutable add/remove updaters for the unread-session set: return the
+// previous reference when nothing changes so React can skip the re-render.
+const addUnreadSession =
+  (sessionId: string) =>
+  (previous: Set<string>): Set<string> => {
+    if (previous.has(sessionId)) return previous;
+    const next = new Set(previous);
+    next.add(sessionId);
+    return next;
+  };
+
+const removeUnreadSession =
+  (sessionId: string) =>
+  (previous: Set<string>): Set<string> => {
+    if (!previous.has(sessionId)) return previous;
+    const next = new Set(previous);
+    next.delete(sessionId);
+    return next;
+  };
+
 // V2 shell. Reuses the same data hooks as legacy AppContent so chat, discovery,
 // auth, and project plumbing keep working unchanged — V2 just reorganizes the
 // outer chrome (sidebar + breadcrumb header per prototype/shadcn.html).
@@ -231,23 +265,8 @@ export default function AppShellV2() {
     navigate,
   ]);
 
-  useEffect(() => {
-    window.refreshProjects = refreshProjectsSilently;
-    return () => {
-      if (window.refreshProjects === refreshProjectsSilently) {
-        delete window.refreshProjects;
-      }
-    };
-  }, [refreshProjectsSilently]);
-
-  useEffect(() => {
-    window.openSettings = openSettings;
-    return () => {
-      if (window.openSettings === openSettings) {
-        delete window.openSettings;
-      }
-    };
-  }, [openSettings]);
+  useWindowGlobal("refreshProjects", refreshProjectsSilently);
+  useWindowGlobal("openSettings", openSettings);
 
   // Resolve a project by name (exact match first, then case-insensitive on
   // both the directory name and the user-facing displayName, then a relaxed
@@ -268,14 +287,13 @@ export default function AppShellV2() {
             p.name.toLowerCase() === trimmed.toLowerCase() ||
             (p.displayName ?? "").toLowerCase() === trimmed.toLowerCase(),
         );
-      const fuzzy =
+      const target =
         ciExact ??
         list.find(
           p =>
             p.name.toLowerCase().includes(trimmed.toLowerCase()) ||
             (p.displayName ?? "").toLowerCase().includes(trimmed.toLowerCase()),
         );
-      const target = fuzzy;
       if (!target) return false;
 
       handleProjectSelect(target);
@@ -285,25 +303,13 @@ export default function AppShellV2() {
     [handleProjectSelect, navigate, sidebarSharedProps.projects],
   );
 
-  useEffect(() => {
-    window.switchProject = switchProject;
-    return () => {
-      if (window.switchProject === switchProject) {
-        delete window.switchProject;
-      }
-    };
-  }, [switchProject]);
+  useWindowGlobal("switchProject", switchProject);
 
   useEffect(() => {
     const selectedSessionId = selectedSession?.id;
     if (!selectedSessionId) return;
 
-    setUnreadSessionIds(previous => {
-      if (!previous.has(selectedSessionId)) return previous;
-      const next = new Set(previous);
-      next.delete(selectedSessionId);
-      return next;
-    });
+    setUnreadSessionIds(removeUnreadSession(selectedSessionId));
   }, [selectedSession?.id]);
 
   useEffect(() => {
@@ -313,12 +319,7 @@ export default function AppShellV2() {
       const messageSessionId = getSessionIdFromMessage(message);
       if (!messageSessionId || messageSessionId === selectedSession?.id) return;
 
-      setUnreadSessionIds(previous => {
-        if (previous.has(messageSessionId)) return previous;
-        const next = new Set(previous);
-        next.add(messageSessionId);
-        return next;
-      });
+      setUnreadSessionIds(addUnreadSession(messageSessionId));
     });
   }, [selectedSession?.id, subscribe]);
 
@@ -377,9 +378,6 @@ export default function AppShellV2() {
       collapseDesktopSidebar();
     }
   }, [collapseDesktopSidebar, isMobile, setSidebarOpen]);
-  const onOpenDesktopSidebar = useCallback(() => {
-    openDesktopSidebar();
-  }, [openDesktopSidebar]);
 
   // Project creation wizard (local existing / new local / github clone). The
   // sidebar's Projects-section "+" opens this; row-level "+" is for new sessions.
@@ -475,12 +473,7 @@ export default function AppShellV2() {
       }
 
       sidebarSharedProps.onSessionDelete?.(session.id);
-      setUnreadSessionIds(previous => {
-        if (!previous.has(session.id)) return previous;
-        const next = new Set(previous);
-        next.delete(session.id);
-        return next;
-      });
+      setUnreadSessionIds(removeUnreadSession(session.id));
       setSessionCustomTitle(session.id, null);
       await refreshProjectsSilently();
       setDeleteSessionTarget(null);
@@ -505,12 +498,7 @@ export default function AppShellV2() {
 
   const handleSelectSession = useCallback(
     (project: Project, sessId: string, fallbackSession?: ProjectSession, options?: SessionNavigationOptions) => {
-      setUnreadSessionIds(previous => {
-        if (!previous.has(sessId)) return previous;
-        const next = new Set(previous);
-        next.delete(sessId);
-        return next;
-      });
+      setUnreadSessionIds(removeUnreadSession(sessId));
       if (project.name !== selectedProject?.name) {
         userSelectedProjectRef.current = project.name;
         handleProjectSelect(project);
@@ -689,7 +677,7 @@ export default function AppShellV2() {
                 }
               }}
               isSidebarCollapsed={!isMobile && !desktopSidebarOpen}
-              onOpenSidebar={onOpenDesktopSidebar}
+              onOpenSidebar={openDesktopSidebar}
               externalMessageUpdate={externalMessageUpdate}
               misroutedFileFromUrl={misroutedFileFromUrl}
               onMisroutedFileUrlHandled={handleMisroutedFileUrlHandled}
