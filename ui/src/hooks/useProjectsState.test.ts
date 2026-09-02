@@ -77,14 +77,14 @@ describe("projectsHaveChanges", () => {
   it("detects no changes for structurally equal projects", () => {
     const a = [makeProject("alpha")];
     const b = [makeProject("alpha")];
-    expect(projectsHaveChanges(a, b, true)).toBe(false);
+    expect(projectsHaveChanges(a, b)).toBe(false);
   });
 
   it("ignores unsupported project metadata", () => {
     const previous = [makeProject("alpha", { obsoleteMetadata: { enabled: false } })];
     const next = [makeProject("alpha", { obsoleteMetadata: { enabled: true } })];
 
-    expect(projectsHaveChanges(previous, next, true)).toBe(false);
+    expect(projectsHaveChanges(previous, next)).toBe(false);
   });
 });
 

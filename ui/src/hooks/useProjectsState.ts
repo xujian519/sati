@@ -54,11 +54,7 @@ function preserveSelectedSessionViewState(
   return Object.keys(viewState).length > 0 ? { ...updatedSession, ...viewState } : updatedSession;
 }
 
-export const projectsHaveChanges = (
-  prevProjects: Project[],
-  nextProjects: Project[],
-  includeExternalSessions: boolean,
-): boolean => {
+export const projectsHaveChanges = (prevProjects: Project[], nextProjects: Project[]): boolean => {
   if (prevProjects.length !== nextProjects.length) {
     return true;
   }
@@ -69,24 +65,15 @@ export const projectsHaveChanges = (
       return true;
     }
 
-    const baseChanged =
+    return (
       nextProject.name !== prevProject.name ||
       nextProject.displayName !== prevProject.displayName ||
       nextProject.fullPath !== prevProject.fullPath ||
       nextProject.lastActivity !== prevProject.lastActivity ||
       serialize(nextProject.sessionMeta) !== serialize(prevProject.sessionMeta) ||
       serialize(nextProject.sessions) !== serialize(prevProject.sessions) ||
-      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster);
-
-    if (baseChanged) {
-      return true;
-    }
-
-    if (!includeExternalSessions) {
-      return false;
-    }
-
-    return false;
+      serialize(nextProject.taskmaster) !== serialize(prevProject.taskmaster)
+    );
   });
 };
 
@@ -159,11 +146,20 @@ export function applyProjectsSocketUpdate(prevProjects: Project[], updatedProjec
     return updatedProjects;
   }
   const merged = preserveLoadedSessions(prevProjects, updatedProjects);
-  if (!projectsHaveChanges(prevProjects, merged, true)) {
+  if (!projectsHaveChanges(prevProjects, merged)) {
     return prevProjects;
   }
   return merged;
 }
+
+// Shared shape for explicit fetches (initial load / manual refresh): skip the
+// update when the raw payload matches current state so references stay stable.
+// (Unlike applyProjectsSocketUpdate this checks the raw payload first — keep
+// the two orders distinct.)
+const mergeFetchedProjects = (prevProjects: Project[], freshProjects: Project[]): Project[] => {
+  if (!projectsHaveChanges(prevProjects, freshProjects)) return prevProjects;
+  return preserveLoadedSessions(prevProjects, freshProjects);
+};
 
 const resetProjectSessionPreview = (project: Project): Project => {
   const sessions = project.sessions ?? [];
@@ -309,17 +305,7 @@ export function useProjectsState({
         return;
       }
 
-      setProjects(prevProjects => {
-        if (prevProjects.length === 0) {
-          return projectData;
-        }
-
-        if (!projectsHaveChanges(prevProjects, projectData, true)) {
-          return prevProjects;
-        }
-
-        return preserveLoadedSessions(prevProjects, projectData);
-      });
+      setProjects(prevProjects => mergeFetchedProjects(prevProjects, projectData));
     } catch (error) {
       console.error("Error fetching projects:", error);
     } finally {
@@ -572,16 +558,14 @@ export function useProjectsState({
 
       setProjects(prevProjects =>
         prevProjects.map(project => {
-          const hadSession = (project.sessions ?? []).some(session => session.id === sessionIdToDelete);
+          const hadSession = getProjectSessions(project).some(session => session.id === sessionIdToDelete);
 
           return {
             ...project,
-            sessions: project.sessions?.filter(session => session.id !== sessionIdToDelete) ?? [],
+            sessions: getProjectSessions(project).filter(session => session.id !== sessionIdToDelete),
             sessionMeta: {
               ...project.sessionMeta,
-              total: hadSession
-                ? Math.max(0, ((project.sessionMeta?.total as number | undefined) ?? 0) - 1)
-                : project.sessionMeta?.total,
+              total: hadSession ? Math.max(0, (project.sessionMeta?.total ?? 0) - 1) : project.sessionMeta?.total,
             },
           };
         }),
@@ -612,7 +596,7 @@ export function useProjectsState({
       if (!project) return;
       if (project.sessionMeta?.hasMore === false) return;
 
-      const offset = (project.sessions ?? []).length;
+      const offset = getProjectSessions(project).length;
       setProjectLoading(projectName, true);
 
       try {
@@ -665,10 +649,7 @@ export function useProjectsState({
       const response = await api.projects();
       const freshProjects = (await response.json()) as Project[];
 
-      setProjects(prevProjects => {
-        if (!projectsHaveChanges(prevProjects, freshProjects, true)) return prevProjects;
-        return preserveLoadedSessions(prevProjects, freshProjects);
-      });
+      setProjects(prevProjects => mergeFetchedProjects(prevProjects, freshProjects));
 
       if (!selectedProject) {
         return;
@@ -719,6 +700,15 @@ export function useProjectsState({
     navigate("/");
   }, [navigate]);
 
+  // Shared idiom for the optimistic sidebar transforms below: apply the same
+  // per-project map to the project list and to the selected project. `apply`
+  // must be idempotent per project and return the same reference when the
+  // project is untouched so unchanged state doesn't re-render.
+  const applyProjectTransform = useCallback((apply: (project: Project) => Project) => {
+    setProjects(prev => prev.map(apply));
+    setSelectedProject(prev => (prev ? apply(prev) : prev));
+  }, []);
+
   // Optimistic sidebar update for the moment a user submits a message.
   // We do NOT wait for the server's chokidar-debounced `projects_updated`
   // round-trip — instead we either bump the existing session's lastActivity
@@ -726,101 +716,111 @@ export function useProjectsState({
   // entry for a brand-new session. The placeholder uses a `new-session-*`
   // id and is filtered out automatically the next time `preserveLoadedSessions`
   // runs against a server payload.
-  const bumpSessionActivity = useCallback((projectName: string, sessionId: string, optimisticTitle?: string) => {
-    if (!projectName || !sessionId) return;
-    const now = new Date().toISOString();
+  const bumpSessionActivity = useCallback(
+    (projectName: string, sessionId: string, optimisticTitle?: string) => {
+      if (!projectName || !sessionId) return;
+      const now = new Date().toISOString();
 
-    const apply = (project: Project): Project => {
-      if (project.name !== projectName) return project;
-      const sessions = project.sessions ?? [];
-      const idx = sessions.findIndex(s => s.id === sessionId);
+      const apply = (project: Project): Project => {
+        if (project.name !== projectName) return project;
+        const sessions = project.sessions ?? [];
+        const idx = sessions.findIndex(s => s.id === sessionId);
 
-      if (idx >= 0) {
-        const bumped: ProjectSession = {
-          ...sessions[idx],
+        if (idx >= 0) {
+          const bumped: ProjectSession = {
+            ...sessions[idx],
+            updated_at: now,
+            lastActivity: now,
+          };
+          const reordered = [bumped, ...sessions.slice(0, idx), ...sessions.slice(idx + 1)];
+          return { ...project, lastActivity: now, sessions: reordered };
+        }
+
+        const trimmedTitle = (optimisticTitle ?? "").replace(/\s+/g, " ").trim();
+        const placeholder: ProjectSession = {
+          id: sessionId,
+          title: trimmedTitle ? trimmedTitle.slice(0, 80) : "New session",
+          created_at: now,
           updated_at: now,
           lastActivity: now,
+          messageCount: 0,
+          __projectName: projectName,
         };
-        const reordered = [bumped, ...sessions.slice(0, idx), ...sessions.slice(idx + 1)];
-        return { ...project, lastActivity: now, sessions: reordered };
-      }
-
-      const trimmedTitle = (optimisticTitle ?? "").replace(/\s+/g, " ").trim();
-      const placeholder: ProjectSession = {
-        id: sessionId,
-        title: trimmedTitle ? trimmedTitle.slice(0, 80) : "New session",
-        created_at: now,
-        updated_at: now,
-        lastActivity: now,
-        messageCount: 0,
-        __projectName: projectName,
+        return {
+          ...project,
+          lastActivity: now,
+          sessions: [placeholder, ...sessions],
+          sessionMeta: {
+            ...(project.sessionMeta ?? {}),
+            total:
+              typeof project.sessionMeta?.total === "number"
+                ? project.sessionMeta.total + 1
+                : project.sessionMeta?.total,
+          },
+        };
       };
-      return {
-        ...project,
-        lastActivity: now,
-        sessions: [placeholder, ...sessions],
-        sessionMeta: {
-          ...(project.sessionMeta ?? {}),
-          total:
-            typeof project.sessionMeta?.total === "number" ? project.sessionMeta.total + 1 : project.sessionMeta?.total,
-        },
-      };
-    };
 
-    setProjects(prev => prev.map(apply));
-    setSelectedProject(prev => (prev && prev.name === projectName ? apply(prev) : prev));
-  }, []);
+      applyProjectTransform(apply);
+    },
+    [applyProjectTransform],
+  );
 
   // Swap a `new-session-*` placeholder for the real id the server just
   // assigned (fired on `session_created`). We replace in-place so the row
   // doesn't flicker, and dedupe if `projects_updated` already brought the
   // real session in.
-  const replaceOptimisticInProjects = useCallback((realSessionId: string) => {
-    if (!realSessionId || isTemporarySessionId(realSessionId)) return;
-    const apply = (project: Project): Project => {
-      const sessions = project.sessions ?? [];
-      const tempIdx = sessions.findIndex(s => isTemporarySessionId(s.id));
-      if (tempIdx < 0) return project;
-      const realExists = sessions.some(s => s.id === realSessionId);
-      if (realExists) {
+  const replaceOptimisticInProjects = useCallback(
+    (realSessionId: string) => {
+      if (!realSessionId || isTemporarySessionId(realSessionId)) return;
+      const apply = (project: Project): Project => {
+        const sessions = project.sessions ?? [];
+        const tempIdx = sessions.findIndex(s => isTemporarySessionId(s.id));
+        if (tempIdx < 0) return project;
+        const realExists = sessions.some(s => s.id === realSessionId);
+        if (realExists) {
+          return {
+            ...project,
+            sessions: sessions.filter(s => !isTemporarySessionId(s.id)),
+          };
+        }
+        const replaced: ProjectSession = { ...sessions[tempIdx], id: realSessionId };
         return {
           ...project,
-          sessions: sessions.filter(s => !isTemporarySessionId(s.id)),
+          sessions: sessions.map((s, i) => (i === tempIdx ? replaced : s)),
         };
-      }
-      const replaced: ProjectSession = { ...sessions[tempIdx], id: realSessionId };
-      return {
-        ...project,
-        sessions: sessions.map((s, i) => (i === tempIdx ? replaced : s)),
       };
-    };
-    setProjects(prev => prev.map(apply));
-    setSelectedProject(prev => (prev ? apply(prev) : prev));
-  }, []);
+      applyProjectTransform(apply);
+    },
+    [applyProjectTransform],
+  );
 
   // Drop any optimistic placeholders for a given session id. Used when a
   // session goes inactive without ever receiving a real id (errors, aborts
   // before the agent emitted `session_created`).
-  const dropOptimisticInProjects = useCallback((sessionId: string) => {
-    if (!sessionId || !isTemporarySessionId(sessionId)) return;
-    const apply = (project: Project): Project => {
-      const sessions = project.sessions ?? [];
-      if (!sessions.some(s => s.id === sessionId)) return project;
-      return {
-        ...project,
-        sessions: sessions.filter(s => s.id !== sessionId),
+  const dropOptimisticInProjects = useCallback(
+    (sessionId: string) => {
+      if (!sessionId || !isTemporarySessionId(sessionId)) return;
+      const apply = (project: Project): Project => {
+        const sessions = project.sessions ?? [];
+        if (!sessions.some(s => s.id === sessionId)) return project;
+        return {
+          ...project,
+          sessions: sessions.filter(s => s.id !== sessionId),
+        };
       };
-    };
-    setProjects(prev => prev.map(apply));
-    setSelectedProject(prev => (prev ? apply(prev) : prev));
-  }, []);
+      applyProjectTransform(apply);
+    },
+    [applyProjectTransform],
+  );
 
-  const handleResetProjectSessionPreview = useCallback((projectName: string) => {
-    setProjects(prevProjects =>
-      prevProjects.map(project => (project.name === projectName ? resetProjectSessionPreview(project) : project)),
-    );
-    setSelectedProject(prev => (prev?.name === projectName ? resetProjectSessionPreview(prev) : prev));
-  }, []);
+  const handleResetProjectSessionPreview = useCallback(
+    (projectName: string) => {
+      const apply = (project: Project): Project =>
+        project.name === projectName ? resetProjectSessionPreview(project) : project;
+      applyProjectTransform(apply);
+    },
+    [applyProjectTransform],
+  );
 
   const sidebarSharedProps = useMemo(
     () => ({
