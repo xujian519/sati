@@ -363,7 +363,7 @@ function hasSameTurnServerFinalMessage(
   });
 }
 
-export function shouldKeepRealtimeAfterServerRefresh(
+function shouldKeepRealtimeAfterServerRefresh(
   realtimeMessage: NormalizedMessage,
   serverMessages: NormalizedMessage[],
 ): boolean {
@@ -547,6 +547,43 @@ function streamingKey(sessionId: string, runId?: string): string {
   return runId ? `${sessionId}_${runId}` : sessionId;
 }
 
+type SessionMessagesQuery = {
+  provider?: SessionProvider;
+  projectName?: string;
+  projectPath?: string;
+  sessionKind?: string;
+  parentSessionId?: string;
+  relativeTranscriptPath?: string;
+};
+
+function appendSessionQueryParams(params: URLSearchParams, opts: SessionMessagesQuery): void {
+  if (opts.provider) params.append("provider", opts.provider);
+  if (opts.projectName) params.append("projectName", opts.projectName);
+  if (opts.projectPath) params.append("projectPath", opts.projectPath);
+  if (opts.sessionKind) params.append("sessionKind", opts.sessionKind);
+  if (opts.parentSessionId) params.append("parentSessionId", opts.parentSessionId);
+  if (opts.relativeTranscriptPath) {
+    params.append("relativeTranscriptPath", opts.relativeTranscriptPath);
+  }
+}
+
+function buildMessagesUrl(sessionId: string, params: URLSearchParams): string {
+  const qs = params.toString();
+  return `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ""}`;
+}
+
+/** Throw a normalized session-load error when the response is not ok (shared by fetch/fetchMore/refresh). */
+async function ensureMessagesResponseOk(response: Response, action: "load" | "refresh"): Promise<void> {
+  if (response.ok) return;
+  const statusError = await readAgentStatusErrorFromResponse(response, {
+    event: "web_http_request_failed",
+    code: "session_messages_load_failed",
+    message: `Unable to ${action} conversation messages (HTTP ${response.status}).`,
+    scope: "session",
+  });
+  throw new Error(statusError.message);
+}
+
 export function getFinalizedSubagentThinkingId(sessionId: string, subagentId: string, timestamp?: string): string {
   const timestampSuffix = Date.parse(String(timestamp || "")) || Date.now();
   return `subagent_thinking_${sessionId}_${subagentId}_${timestampSuffix}`;
@@ -627,6 +664,11 @@ const STALE_THRESHOLD_MS = 30_000;
 
 const MAX_REALTIME_MESSAGES = 500;
 
+// Message kinds invisible in the UI (they convert to null) — skip merged
+// recomputation and React re-render when appending them; the next visible
+// message triggers the recompute anyway.
+const INVISIBLE_REALTIME_KINDS = new Set(["status", "session_created", "permission_cancelled", "compact_boundary"]);
+
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useSessionStore() {
@@ -691,32 +733,16 @@ export function useSessionStore() {
 
       try {
         const params = new URLSearchParams();
-        if (opts.provider) params.append("provider", opts.provider);
-        if (opts.projectName) params.append("projectName", opts.projectName);
-        if (opts.projectPath) params.append("projectPath", opts.projectPath);
-        if (opts.sessionKind) params.append("sessionKind", opts.sessionKind);
-        if (opts.parentSessionId) params.append("parentSessionId", opts.parentSessionId);
-        if (opts.relativeTranscriptPath) {
-          params.append("relativeTranscriptPath", opts.relativeTranscriptPath);
-        }
+        appendSessionQueryParams(params, opts);
         if (opts.limit !== null && opts.limit !== undefined) {
           params.append("limit", String(opts.limit));
           params.append("offset", String(opts.offset ?? 0));
         }
 
-        const qs = params.toString();
-        const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ""}`;
+        const url = buildMessagesUrl(sessionId, params);
         const response = await authenticatedFetch(url, { suppressServerErrorToast: true });
 
-        if (!response.ok) {
-          const statusError = await readAgentStatusErrorFromResponse(response, {
-            event: "web_http_request_failed",
-            code: "session_messages_load_failed",
-            message: `Unable to load conversation messages (HTTP ${response.status}).`,
-            scope: "session",
-          });
-          throw new Error(statusError.message);
-        }
+        await ensureMessagesResponseOk(response, "load");
 
         const data = await response.json();
         const messages: NormalizedMessage[] = data.messages || [];
@@ -784,32 +810,16 @@ export function useSessionStore() {
       if (!slot.hasMore) return slot;
 
       const params = new URLSearchParams();
-      if (opts.provider) params.append("provider", opts.provider);
-      if (opts.projectName) params.append("projectName", opts.projectName);
-      if (opts.projectPath) params.append("projectPath", opts.projectPath);
-      if (opts.sessionKind) params.append("sessionKind", opts.sessionKind);
-      if (opts.parentSessionId) params.append("parentSessionId", opts.parentSessionId);
-      if (opts.relativeTranscriptPath) {
-        params.append("relativeTranscriptPath", opts.relativeTranscriptPath);
-      }
+      appendSessionQueryParams(params, opts);
       const limit = opts.limit ?? 20;
       params.append("limit", String(limit));
       params.append("offset", String(slot.offset));
 
-      const qs = params.toString();
-      const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ""}`;
+      const url = buildMessagesUrl(sessionId, params);
 
       try {
         const response = await authenticatedFetch(url, { suppressServerErrorToast: true });
-        if (!response.ok) {
-          const statusError = await readAgentStatusErrorFromResponse(response, {
-            event: "web_http_request_failed",
-            code: "session_messages_load_failed",
-            message: `Unable to load conversation messages (HTTP ${response.status}).`,
-            scope: "session",
-          });
-          throw new Error(statusError.message);
-        }
+        await ensureMessagesResponseOk(response, "load");
         const data = await response.json();
         const olderMessages: NormalizedMessage[] = data.messages || [];
 
@@ -840,11 +850,7 @@ export function useSessionStore() {
         updated = updated.slice(-MAX_REALTIME_MESSAGES);
       }
       slot.realtimeMessages = updated;
-      // Skip expensive merged recomputation and React re-render for message
-      // kinds that are invisible in the UI (they return null from conversion).
-      // The next visible message will trigger the recompute anyway.
-      const INVISIBLE_KINDS = new Set(["status", "session_created", "permission_cancelled", "compact_boundary"]);
-      if (!INVISIBLE_KINDS.has(msg.kind)) {
+      if (!INVISIBLE_REALTIME_KINDS.has(msg.kind)) {
         recomputeMergedIfNeeded(slot);
         notify(sessionId);
       }
@@ -914,11 +920,20 @@ export function useSessionStore() {
     [getSlot, notify],
   );
 
-  const updateSubagentDetailStreaming = useCallback(
-    (sessionId: string, subagentId: string, delta: string, msgProvider: SessionProvider) => {
+  // Shared body for updateSubagentDetailStreaming/Thinking — identical except
+  // for the streaming-id prefix and the message kind.
+  const updateSubagentDetailStreamSlot = useCallback(
+    (
+      sessionId: string,
+      subagentId: string,
+      delta: string,
+      msgProvider: SessionProvider,
+      streamIdPrefix: string,
+      kind: "stream_delta" | "thinking",
+    ) => {
       if (!delta) return;
       const slot = getSlot(sessionId);
-      const streamId = `__subagent_streaming_${sessionId}_${subagentId}`;
+      const streamId = `${streamIdPrefix}${sessionId}_${subagentId}`;
       const current = slot.subagentDetailMessages.get(subagentId) ?? [];
       const existingIndex = current.findIndex(message => message.id === streamId);
       let updated: NormalizedMessage[];
@@ -938,7 +953,7 @@ export function useSessionStore() {
             sessionId,
             timestamp: new Date().toISOString(),
             provider: msgProvider,
-            kind: "stream_delta",
+            kind,
             role: "assistant",
             content: delta,
             subagentId,
@@ -954,90 +969,73 @@ export function useSessionStore() {
     [getSlot, notify],
   );
 
-  const finalizeSubagentDetailStreaming = useCallback(
-    (sessionId: string, subagentId: string) => {
-      const slot = storeRef.current.get(sessionId);
-      if (!slot) return;
-      const streamId = `__subagent_streaming_${sessionId}_${subagentId}`;
-      const current = slot.subagentDetailMessages.get(subagentId) ?? [];
-      const existingIndex = current.findIndex(message => message.id === streamId);
-      if (existingIndex < 0) return;
-      const stream = current[existingIndex];
-      const updated = [...current];
-      updated[existingIndex] = {
-        ...stream,
-        id: `subagent_text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        kind: "text",
-        role: "assistant",
-      };
-      const nextMap = new Map(slot.subagentDetailMessages);
-      nextMap.set(subagentId, updated);
-      slot.subagentDetailMessages = nextMap;
-      notify(sessionId);
+  const updateSubagentDetailStreaming = useCallback(
+    (sessionId: string, subagentId: string, delta: string, msgProvider: SessionProvider) => {
+      updateSubagentDetailStreamSlot(
+        sessionId,
+        subagentId,
+        delta,
+        msgProvider,
+        "__subagent_streaming_",
+        "stream_delta",
+      );
     },
-    [notify],
+    [updateSubagentDetailStreamSlot],
   );
 
   const updateSubagentDetailThinking = useCallback(
     (sessionId: string, subagentId: string, delta: string, msgProvider: SessionProvider) => {
-      if (!delta) return;
-      const slot = getSlot(sessionId);
-      const streamId = `__subagent_thinking_${sessionId}_${subagentId}`;
-      const current = slot.subagentDetailMessages.get(subagentId) ?? [];
-      const existingIndex = current.findIndex(message => message.id === streamId);
-      let updated: NormalizedMessage[];
-      if (existingIndex >= 0) {
-        updated = [...current];
-        const existing = updated[existingIndex];
-        updated[existingIndex] = {
-          ...existing,
-          content: `${existing.content || ""}${delta}`,
-          provider: msgProvider,
-        };
-      } else {
-        updated = [
-          ...current,
-          {
-            id: streamId,
-            sessionId,
-            timestamp: new Date().toISOString(),
-            provider: msgProvider,
-            kind: "thinking",
-            role: "assistant",
-            content: delta,
-            subagentId,
-            isSubagentDetail: true,
-          },
-        ];
-      }
-      const nextMap = new Map(slot.subagentDetailMessages);
-      nextMap.set(subagentId, updated);
-      slot.subagentDetailMessages = nextMap;
-      notify(sessionId);
+      updateSubagentDetailStreamSlot(sessionId, subagentId, delta, msgProvider, "__subagent_thinking_", "thinking");
     },
-    [getSlot, notify],
+    [updateSubagentDetailStreamSlot],
   );
 
-  const finalizeSubagentDetailThinking = useCallback(
-    (sessionId: string, subagentId: string) => {
+  // Shared body for finalizeSubagentDetailStreaming/Thinking — identical except
+  // for the streaming-id prefix and the finalized row shape.
+  const finalizeSubagentDetailStreamSlot = useCallback(
+    (
+      sessionId: string,
+      subagentId: string,
+      streamIdPrefix: string,
+      toFinal: (stream: NormalizedMessage) => NormalizedMessage,
+    ) => {
       const slot = storeRef.current.get(sessionId);
       if (!slot) return;
-      const streamId = `__subagent_thinking_${sessionId}_${subagentId}`;
+      const streamId = `${streamIdPrefix}${sessionId}_${subagentId}`;
       const current = slot.subagentDetailMessages.get(subagentId) ?? [];
       const existingIndex = current.findIndex(message => message.id === streamId);
       if (existingIndex < 0) return;
       const stream = current[existingIndex];
       const updated = [...current];
-      updated[existingIndex] = {
-        ...stream,
-        id: getFinalizedSubagentThinkingId(sessionId, subagentId, stream.timestamp),
-      };
+      updated[existingIndex] = toFinal(stream);
       const nextMap = new Map(slot.subagentDetailMessages);
       nextMap.set(subagentId, updated);
       slot.subagentDetailMessages = nextMap;
       notify(sessionId);
     },
     [notify],
+  );
+
+  const finalizeSubagentDetailStreaming = useCallback(
+    (sessionId: string, subagentId: string) => {
+      finalizeSubagentDetailStreamSlot(sessionId, subagentId, "__subagent_streaming_", stream => ({
+        ...stream,
+        id: `subagent_text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        kind: "text",
+        role: "assistant",
+      }));
+    },
+    [finalizeSubagentDetailStreamSlot],
+  );
+
+  const finalizeSubagentDetailThinking = useCallback(
+    (sessionId: string, subagentId: string) => {
+      finalizeSubagentDetailStreamSlot(sessionId, subagentId, "__subagent_thinking_", stream => ({
+        ...stream,
+        id: getFinalizedSubagentThinkingId(sessionId, subagentId, stream.timestamp),
+      }));
+    },
+    [finalizeSubagentDetailStreamSlot],
   );
 
   const getSubagentDetailMessages = useCallback((sessionId: string, subagentId: string): NormalizedMessage[] => {
@@ -1096,28 +1094,11 @@ export function useSessionStore() {
       const slot = getSlot(sessionId);
       try {
         const params = new URLSearchParams();
-        if (opts.provider) params.append("provider", opts.provider);
-        if (opts.projectName) params.append("projectName", opts.projectName);
-        if (opts.projectPath) params.append("projectPath", opts.projectPath);
-        if (opts.sessionKind) params.append("sessionKind", opts.sessionKind);
-        if (opts.parentSessionId) params.append("parentSessionId", opts.parentSessionId);
-        if (opts.relativeTranscriptPath) {
-          params.append("relativeTranscriptPath", opts.relativeTranscriptPath);
-        }
-
-        const qs = params.toString();
-        const url = `/api/sessions/${encodeURIComponent(sessionId)}/messages${qs ? `?${qs}` : ""}`;
+        appendSessionQueryParams(params, opts);
+        const url = buildMessagesUrl(sessionId, params);
         const response = await authenticatedFetch(url, { suppressServerErrorToast: true });
 
-        if (!response.ok) {
-          const statusError = await readAgentStatusErrorFromResponse(response, {
-            event: "web_http_request_failed",
-            code: "session_messages_load_failed",
-            message: `Unable to refresh conversation messages (HTTP ${response.status}).`,
-            scope: "session",
-          });
-          throw new Error(statusError.message);
-        }
+        await ensureMessagesResponseOk(response, "refresh");
         const data = await response.json();
 
         const incomingMessages = data.messages || [];
@@ -1169,14 +1150,19 @@ export function useSessionStore() {
     return Date.now() - slot.fetchedAt > STALE_THRESHOLD_MS;
   }, []);
 
-  /**
-   * Update or create a streaming message (accumulated text so far).
-   * Uses a well-known ID so subsequent calls replace the same message.
-   */
-  const updateStreaming = useCallback(
-    (sessionId: string, accumulatedText: string, msgProvider: SessionProvider, runId?: string) => {
+  // Shared body for updateStreaming/Thinking — identical except for the
+  // streaming-id prefix and the message kind.
+  const updateStreamSlot = useCallback(
+    (
+      sessionId: string,
+      accumulatedText: string,
+      msgProvider: SessionProvider,
+      runId: string | undefined,
+      streamIdPrefix: string,
+      kind: "stream_delta" | "thinking",
+    ) => {
       const slot = getSlot(sessionId);
-      const streamId = `__streaming_${streamingKey(sessionId, runId)}`;
+      const streamId = `${streamIdPrefix}${streamingKey(sessionId, runId)}`;
       const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
       if (idx >= 0) {
         // Subsequent delta — preserve the original turn-start timestamp so
@@ -1185,6 +1171,8 @@ export function useSessionStore() {
         if (existing.content === accumulatedText && existing.provider === msgProvider) {
           return;
         }
+        // Patch merged BEFORE mutating existing so patchMergedStreamingMessage
+        // still sees the old content when it decides to copy the row.
         if (!patchMergedStreamingMessage(slot, streamId, accumulatedText, msgProvider)) {
           existing.content = accumulatedText;
           existing.provider = msgProvider;
@@ -1195,31 +1183,72 @@ export function useSessionStore() {
         }
         notify(sessionId);
         return;
-      } else {
-        // Record the id of server's tail message at the moment this turn
-        // started streaming. computeMerged uses this for an id-based
-        // dedup check that's immune to NTP drift / burst-turn time
-        // windows: only delete the server tail if it's a NEW message
-        // (a real mid-stream snapshot) rather than the previous turn's
-        // legitimate trailing assistant message.
-        const serverTailId =
-          slot.serverMessages.length > 0 ? slot.serverMessages[slot.serverMessages.length - 1].id : null;
-        const msg: NormalizedMessage = {
-          id: streamId,
-          sessionId,
-          timestamp: new Date().toISOString(),
-          provider: msgProvider,
-          kind: "stream_delta",
-          content: accumulatedText,
-          runId,
-          serverTailIdAtStart: serverTailId ?? undefined,
-        };
-        slot.realtimeMessages = [...slot.realtimeMessages, msg];
       }
+      // Record the id of server's tail message at the moment this turn
+      // started streaming. computeMerged uses this for an id-based
+      // dedup check that's immune to NTP drift / burst-turn time
+      // windows: only delete the server tail if it's a NEW message
+      // (a real mid-stream snapshot) rather than the previous turn's
+      // legitimate trailing assistant message.
+      const serverTailId =
+        slot.serverMessages.length > 0 ? slot.serverMessages[slot.serverMessages.length - 1].id : null;
+      const msg: NormalizedMessage = {
+        id: streamId,
+        sessionId,
+        timestamp: new Date().toISOString(),
+        provider: msgProvider,
+        kind,
+        content: accumulatedText,
+        runId,
+        serverTailIdAtStart: serverTailId ?? undefined,
+      };
+      slot.realtimeMessages = [...slot.realtimeMessages, msg];
       recomputeMergedIfNeeded(slot);
       notify(sessionId);
     },
     [getSlot, notify],
+  );
+
+  /**
+   * Update or create a streaming message (accumulated text so far).
+   * Uses a well-known ID so subsequent calls replace the same message.
+   */
+  const updateStreaming = useCallback(
+    (sessionId: string, accumulatedText: string, msgProvider: SessionProvider, runId?: string) => {
+      updateStreamSlot(sessionId, accumulatedText, msgProvider, runId, "__streaming_", "stream_delta");
+    },
+    [updateStreamSlot],
+  );
+
+  // Shared body for finalizeStreaming/Thinking — identical except for the
+  // streaming-id prefix, the new-id prefix, and the finalized row fields.
+  const finalizeStreamSlot = useCallback(
+    (
+      sessionId: string,
+      runId: string | undefined,
+      streamIdPrefix: string,
+      newIdPrefix: string,
+      finalFields: Partial<Pick<NormalizedMessage, "kind" | "role">>,
+    ) => {
+      const slot = storeRef.current.get(sessionId);
+      if (!slot) return;
+      const streamId = `${streamIdPrefix}${streamingKey(sessionId, runId)}`;
+      const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
+      if (idx >= 0) {
+        const stream = slot.realtimeMessages[idx];
+        const newId = `${newIdPrefix}${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        slot.realtimeMessages = [...slot.realtimeMessages];
+        slot.realtimeMessages[idx] = {
+          ...stream,
+          id: newId,
+          ...finalFields,
+          isFinal: true,
+        };
+        recomputeMergedIfNeeded(slot);
+        notify(sessionId);
+      }
+    },
+    [notify],
   );
 
   /**
@@ -1228,26 +1257,9 @@ export function useSessionStore() {
    */
   const finalizeStreaming = useCallback(
     (sessionId: string, runId?: string) => {
-      const slot = storeRef.current.get(sessionId);
-      if (!slot) return;
-      const streamId = `__streaming_${streamingKey(sessionId, runId)}`;
-      const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
-      if (idx >= 0) {
-        const stream = slot.realtimeMessages[idx];
-        const newId = `text_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        slot.realtimeMessages = [...slot.realtimeMessages];
-        slot.realtimeMessages[idx] = {
-          ...stream,
-          id: newId,
-          kind: "text",
-          role: "assistant",
-          isFinal: true,
-        };
-        recomputeMergedIfNeeded(slot);
-        notify(sessionId);
-      }
+      finalizeStreamSlot(sessionId, runId, "__streaming_", "text_", { kind: "text", role: "assistant" });
     },
-    [notify],
+    [finalizeStreamSlot],
   );
 
   /**
@@ -1256,44 +1268,9 @@ export function useSessionStore() {
    */
   const updateStreamingThinking = useCallback(
     (sessionId: string, accumulatedText: string, msgProvider: SessionProvider, runId?: string) => {
-      const slot = getSlot(sessionId);
-      const streamId = `__streaming_thinking_${streamingKey(sessionId, runId)}`;
-      const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
-      if (idx >= 0) {
-        const existing = slot.realtimeMessages[idx];
-        if (existing.content === accumulatedText && existing.provider === msgProvider) {
-          return;
-        }
-        // FIX: patch merged BEFORE mutating existing (same fix as updateStreaming)
-        if (!patchMergedStreamingMessage(slot, streamId, accumulatedText, msgProvider)) {
-          existing.content = accumulatedText;
-          existing.provider = msgProvider;
-          forceRecomputeMerged(slot);
-        } else {
-          existing.content = accumulatedText;
-          existing.provider = msgProvider;
-        }
-        notify(sessionId);
-        return;
-      } else {
-        const serverTailId =
-          slot.serverMessages.length > 0 ? slot.serverMessages[slot.serverMessages.length - 1].id : null;
-        const msg: NormalizedMessage = {
-          id: streamId,
-          sessionId,
-          timestamp: new Date().toISOString(),
-          provider: msgProvider,
-          kind: "thinking",
-          content: accumulatedText,
-          runId,
-          serverTailIdAtStart: serverTailId ?? undefined,
-        };
-        slot.realtimeMessages = [...slot.realtimeMessages, msg];
-      }
-      recomputeMergedIfNeeded(slot);
-      notify(sessionId);
+      updateStreamSlot(sessionId, accumulatedText, msgProvider, runId, "__streaming_thinking_", "thinking");
     },
-    [getSlot, notify],
+    [updateStreamSlot],
   );
 
   /**
@@ -1302,24 +1279,9 @@ export function useSessionStore() {
    */
   const finalizeStreamingThinking = useCallback(
     (sessionId: string, runId?: string) => {
-      const slot = storeRef.current.get(sessionId);
-      if (!slot) return;
-      const streamId = `__streaming_thinking_${streamingKey(sessionId, runId)}`;
-      const idx = slot.realtimeMessages.findIndex(m => m.id === streamId);
-      if (idx >= 0) {
-        const stream = slot.realtimeMessages[idx];
-        const newId = `thinking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        slot.realtimeMessages = [...slot.realtimeMessages];
-        slot.realtimeMessages[idx] = {
-          ...stream,
-          id: newId,
-          isFinal: true,
-        };
-        recomputeMergedIfNeeded(slot);
-        notify(sessionId);
-      }
+      finalizeStreamSlot(sessionId, runId, "__streaming_thinking_", "thinking_", {});
     },
-    [notify],
+    [finalizeStreamSlot],
   );
 
   /**
