@@ -106,6 +106,18 @@ function findTextMatches(root: HTMLElement, query: string): SearchMatch[] {
   return matches;
 }
 
+type CssHighlightApi = {
+  highlights?: Map<string, unknown>;
+  Highlight?: new (...ranges: Range[]) => unknown;
+};
+
+/** CSS Custom Highlight API, feature-detected — unavailable in older Chromium/Electron runtimes. */
+function getCssHighlightApi(): CssHighlightApi {
+  const css = globalThis.CSS as unknown as { highlights?: Map<string, unknown> } | undefined;
+  const Highlight = (globalThis as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
+  return { highlights: css?.highlights, Highlight };
+}
+
 export default function DocxBuiltinPreview({
   blob,
   projectName,
@@ -213,16 +225,7 @@ export default function DocxBuiltinPreview({
 
   useEffect(() => {
     const root = viewerRef.current;
-    const cssHighlights = (
-      globalThis.CSS as unknown as {
-        highlights?: Map<string, unknown>;
-      }
-    )?.highlights;
-    const HighlightConstructor = (
-      globalThis as unknown as {
-        Highlight?: new (...ranges: Range[]) => unknown;
-      }
-    ).Highlight;
+    const { highlights: cssHighlights, Highlight: HighlightConstructor } = getCssHighlightApi();
     cssHighlights?.delete(allHighlightName);
     cssHighlights?.delete(activeHighlightName);
     searchMatchesRef.current = [];
@@ -247,16 +250,7 @@ export default function DocxBuiltinPreview({
 
   useEffect(() => {
     const matches = searchMatchesRef.current;
-    const cssHighlights = (
-      globalThis.CSS as unknown as {
-        highlights?: Map<string, unknown>;
-      }
-    )?.highlights;
-    const HighlightConstructor = (
-      globalThis as unknown as {
-        Highlight?: new (...ranges: Range[]) => unknown;
-      }
-    ).Highlight;
+    const { highlights: cssHighlights, Highlight: HighlightConstructor } = getCssHighlightApi();
     cssHighlights?.delete(activeHighlightName);
     if (matches.length === 0) return;
     const match = matches[Math.min(searchMatchIndex, matches.length - 1)];

@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
+import type { PageViewport } from "pdfjs-dist";
 import type { DocumentSelectionSource } from "../../../../types/documentSelection";
 import {
   createImageRegionContentReference,
@@ -169,6 +170,29 @@ function ignorePdfCleanupError(callback: () => unknown): void {
   }
 }
 
+type PdfPageProxy = Awaited<ReturnType<pdfjs.PDFDocumentProxy["getPage"]>>;
+
+/**
+ * Size a canvas for devicePixelRatio-sharp rendering and start the page render task.
+ * Shared by the main page renderer and the thumbnail renderer.
+ */
+function setupPageCanvasRender(
+  page: PdfPageProxy,
+  canvas: HTMLCanvasElement,
+  viewport: PageViewport,
+): pdfjs.RenderTask {
+  const outputScale = Math.max(window.devicePixelRatio || 1, 1);
+  canvas.width = Math.floor(viewport.width * outputScale);
+  canvas.height = Math.floor(viewport.height * outputScale);
+  canvas.style.width = `${viewport.width}px`;
+  canvas.style.height = `${viewport.height}px`;
+  return page.render({
+    canvas,
+    viewport,
+    transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
+  });
+}
+
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -179,6 +203,30 @@ function clamp(value: number, min: number, max: number): number {
 
 function isQuarterTurn(rotation: Rotation): boolean {
   return rotation === 90 || rotation === 270;
+}
+
+function resolveActiveScale(
+  zoomMode: ZoomMode,
+  fitScales: { fitWidth: number; fitPage: number },
+  customScale: number,
+): number {
+  if (zoomMode === "fitWidth") return fitScales.fitWidth;
+  if (zoomMode === "fitPage") return fitScales.fitPage;
+  return customScale;
+}
+
+function resolveSearchStatus(
+  t: ReturnType<typeof useTranslation>["t"],
+  searching: boolean,
+  searchCompleted: boolean,
+  results: PdfSearchMatch[],
+  resultIndex: number,
+): string {
+  if (searching) return t("pdfToolbar.searching");
+  if (!searchCompleted) return "";
+  return results.length > 0
+    ? t("pdfToolbar.resultOf", { current: resultIndex + 1, total: results.length })
+    : t("pdfToolbar.noResults");
 }
 
 function getRotatedPageSize(size: PageSize, rotation: Rotation): PageSize {
@@ -226,6 +274,7 @@ function getSelectedPageNumbers(root: HTMLElement, range: Range): number[] {
       try {
         return range.intersectsNode(page);
       } catch {
+        // intersectsNode can throw on detached/odd nodes — treat the page as not selected.
         return false;
       }
     })
@@ -369,16 +418,8 @@ function PdfThumbnail({
         const scale = Math.min(THUMBNAIL_MAX_WIDTH / baseViewport.width, THUMBNAIL_MAX_HEIGHT / baseViewport.height);
         const viewport = page.getViewport({ scale, rotation });
         const canvas = canvasRef.current;
-        const outputScale = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = Math.floor(viewport.width * outputScale);
-        canvas.height = Math.floor(viewport.height * outputScale);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
-        renderTask = page.render({
-          canvas,
-          viewport,
-          transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
-        });
+        if (!canvas) return;
+        renderTask = setupPageCanvasRender(page, canvas, viewport);
         await renderTask.promise;
         if (!cancelled) setRenderError(false);
       } catch (error) {
@@ -611,18 +652,9 @@ function PdfPage({
         const textLayerContainer = textLayerRef.current;
         if (!canvas || !textLayerContainer) return;
 
-        const outputScale = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = Math.floor(viewport.width * outputScale);
-        canvas.height = Math.floor(viewport.height * outputScale);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
         setPageSize({ width: viewport.width, height: viewport.height, scale });
 
-        renderTask = page.render({
-          canvas,
-          viewport,
-          transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
-        });
+        renderTask = setupPageCanvasRender(page, canvas, viewport);
         await renderTask.promise;
         if (cancelled) return;
 
@@ -897,6 +929,7 @@ export default function PdfDocumentPreview({
               setNavigationView("outline");
             }
           } catch {
+            // Outline parse failures degrade to an empty outline — thumbnails stay usable.
             if (!cancelled) {
               setOutlineItems([]);
             }
@@ -931,8 +964,7 @@ export default function PdfDocumentPreview({
     };
   }, [firstPageSize, rotation, viewerSize.height, viewerSize.width]);
 
-  const activeScale =
-    zoomMode === "fitWidth" ? fitScales.fitWidth : zoomMode === "fitPage" ? fitScales.fitPage : customScale;
+  const activeScale = resolveActiveScale(zoomMode, fitScales, customScale);
 
   const zoomPercent = Math.round(activeScale * 100);
 
@@ -1134,6 +1166,7 @@ export default function PdfDocumentPreview({
         nextResults.push(...findPdfSearchMatches(textItems, query, pageNumber));
       }
     } catch {
+      // A failed page-text fetch drops partial results; the finally block still finalizes the search state.
       nextResults.length = 0;
     } finally {
       if (searchRequestIdRef.current === requestId) {
@@ -1459,16 +1492,7 @@ export default function PdfDocumentPreview({
     navigationMode === "slides"
       ? t("pdfToolbar.slideOf", { total: totalPages || "-" })
       : t("pdfToolbar.pageOf", { total: totalPages || "-" });
-  const searchStatus = searching
-    ? t("pdfToolbar.searching")
-    : searchCompleted
-      ? searchResults.length > 0
-        ? t("pdfToolbar.resultOf", {
-            current: searchResultIndex + 1,
-            total: searchResults.length,
-          })
-        : t("pdfToolbar.noResults")
-      : "";
+  const searchStatus = resolveSearchStatus(t, searching, searchCompleted, searchResults, searchResultIndex);
   return (
     <div className="flex h-full w-full flex-col bg-neutral-100 dark:bg-neutral-900">
       <div className="scrollbar-hide flex min-h-11 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-neutral-200 bg-white px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-950">

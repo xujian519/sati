@@ -140,6 +140,7 @@ async function readPreviewErrorResponse(res: Response) {
     detail = body?.error || body?.code || "";
     code = body?.code || "";
   } catch {
+    // Error body was not JSON — fall back to the raw response text ("" if unreadable).
     detail = await res.text().catch(() => "");
   }
   const error = new Error(detail || `HTTP ${res.status}`) as Error & { code?: string };
@@ -147,20 +148,25 @@ async function readPreviewErrorResponse(res: Response) {
   return error;
 }
 
-function useFileBlob(projectName: string | undefined, filePath: string, enabled: boolean, source: BlobSource = "raw") {
-  const [blob, setBlob] = useState<Blob | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [loading, setLoading] = useState(enabled);
+/** Shared force-reload request state (monotonic cache-busting key) for the preview data hooks below. */
+function usePreviewReloadRequest() {
   const [reloadRequest, setReloadRequest] = useState({ key: 0, force: false });
-  const lastRequestKeyRef = useRef("");
-
   const reload = useCallback((options: ReloadOptions = {}) => {
     setReloadRequest(value => ({
       key: value.key + 1,
       force: Boolean(options.force),
     }));
   }, []);
+  return { reloadRequest, reload };
+}
+
+function useFileBlob(projectName: string | undefined, filePath: string, enabled: boolean, source: BlobSource = "raw") {
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [loading, setLoading] = useState(enabled);
+  const { reloadRequest, reload } = usePreviewReloadRequest();
+  const lastRequestKeyRef = useRef("");
 
   useEffect(() => {
     if (!enabled || !projectName) {
@@ -226,15 +232,8 @@ function useOfficePdfPreviewUrl(projectName: string | undefined, filePath: strin
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled);
-  const [reloadRequest, setReloadRequest] = useState({ key: 0, force: false });
+  const { reloadRequest, reload } = usePreviewReloadRequest();
   const lastRequestKeyRef = useRef("");
-
-  const reload = useCallback((options: ReloadOptions = {}) => {
-    setReloadRequest(value => ({
-      key: value.key + 1,
-      force: Boolean(options.force),
-    }));
-  }, []);
 
   useEffect(() => {
     if (!enabled || !projectName) {
@@ -270,6 +269,7 @@ function useOfficePdfPreviewUrl(projectName: string | undefined, filePath: strin
         if (!res.ok) {
           throw await readPreviewErrorResponse(res);
         }
+        // Drain the preflight body to release the connection; the content is unused.
         await res.arrayBuffer().catch(() => null);
         if (!controller.signal.aborted) {
           setPreviewUrl(nextPreviewUrl);
@@ -302,15 +302,8 @@ function useSpreadsheetPreviewManifest(projectName: string | undefined, filePath
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled);
-  const [reloadRequest, setReloadRequest] = useState({ key: 0, force: false });
+  const { reloadRequest, reload } = usePreviewReloadRequest();
   const lastRequestKeyRef = useRef("");
-
-  const reload = useCallback((options: ReloadOptions = {}) => {
-    setReloadRequest(value => ({
-      key: value.key + 1,
-      force: Boolean(options.force),
-    }));
-  }, []);
 
   useEffect(() => {
     if (!enabled || !projectName) {
@@ -376,15 +369,8 @@ function useSpreadsheetInteractivePreview(projectName: string | undefined, fileP
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled);
-  const [reloadRequest, setReloadRequest] = useState({ key: 0, force: false });
+  const { reloadRequest, reload } = usePreviewReloadRequest();
   const lastRequestKeyRef = useRef("");
-
-  const reload = useCallback((options: ReloadOptions = {}) => {
-    setReloadRequest(value => ({
-      key: value.key + 1,
-      force: Boolean(options.force),
-    }));
-  }, []);
 
   useEffect(() => {
     if (!enabled || !projectName) {
@@ -489,6 +475,7 @@ function useSpreadsheetSheetPreviewUrl({
       })
       .then(async (res: Response) => {
         if (!res.ok) throw await readPreviewErrorResponse(res);
+        // Drain the preflight body to release the connection; the content is unused.
         await res.arrayBuffer().catch(() => null);
         if (!controller.signal.aborted) setPreviewUrl(nextPreviewUrl);
       })
@@ -585,6 +572,7 @@ function useOfficePreviewService() {
         setStatus(nextStatus);
       })
       .catch(() => {
+        // Probe failure — treat the service as unavailable.
         setStatus(null);
       })
       .finally(() => {

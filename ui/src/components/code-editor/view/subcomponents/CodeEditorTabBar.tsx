@@ -147,14 +147,16 @@ export default function CodeEditorTabBar({
     const targetIndex = tabs.findIndex(tab => tab.id === menu.tabId);
     if (targetIndex === -1) return;
 
-    const tabIds =
-      action === "current"
-        ? [menu.tabId]
-        : action === "others"
-          ? tabs.filter(tab => tab.id !== menu.tabId).map(tab => tab.id)
-          : action === "right"
-            ? tabs.slice(targetIndex + 1).map(tab => tab.id)
-            : tabs.map(tab => tab.id);
+    let tabIds: string[];
+    if (action === "current") {
+      tabIds = [menu.tabId];
+    } else if (action === "others") {
+      tabIds = tabs.filter(tab => tab.id !== menu.tabId).map(tab => tab.id);
+    } else if (action === "right") {
+      tabIds = tabs.slice(targetIndex + 1).map(tab => tab.id);
+    } else {
+      tabIds = tabs.map(tab => tab.id);
+    }
 
     setMenu(null);
     if (tabIds.length === 1) onClose(tabIds[0]);
