@@ -99,7 +99,7 @@
 | C30 | chat/view + stores | MessageComponent.tsx 969、useSessionStore.ts 1435 | ✅ 2026-09-02 |
 | C31 | code-editor/view | PdfDocumentPreview.tsx 1860、CodeEditorBinaryFile.tsx 1522 | ✅ 2026-09-02 |
 | C32 | app-shell + hooks | SidebarV2.tsx 1273、AppShellV2.tsx 887、useProjectsState.ts 898 | ✅ 2026-09-02 |
-| C33 | main-content 其余 | MainContent.tsx 1051、CronV2.tsx 1097、FilesV2.tsx 960 | ⬜ |
+| C33 | main-content 其余 | MainContent.tsx 1051、CronV2.tsx 1097、FilesV2.tsx 960 | ✅ 2026-09-03 |
 | C34 | ui/server | 98 JS/29.7K 行；只做行为不变清理（死代码、重复、命名），深层 import 仅记录 | ⬜ |
 | C35 | ui i18n + e2e | en/zh-CN key 对齐、Playwright 用例审阅 | ⬜ |
 
@@ -154,6 +154,7 @@
 | 2026-09-02 | C30 | chat/view + stores（MessageComponent + useSessionStore） | P2 重复收敛：useSessionStore fetchFromServer/fetchMore/refreshFromServer 六字段查询参数+messages URL 构造+!ok→readAgentStatusErrorFromResponse 抛错块 ×3→appendSessionQueryParams/buildMessagesUrl/ensureMessagesResponseOk（load/refresh 动词参数化，错误文案逐字保留）；四对 (streaming, thinking) 孪生函数（updateStreaming/Thinking、finalizeStreaming/Thinking、updateSubagentDetailStreaming/Thinking、finalizeSubagentDetailStreaming/Thinking）→ updateStreamSlot/finalizeStreamSlot/updateSubagentDetailStreamSlot/finalizeSubagentDetailStreamSlot 共享实现（streamId 前缀/kind/终态字段参数化，"patch merged BEFORE mutating" 注释随迁共享体）；P2 死导出收窄：shouldKeepRealtimeAfterServerRefresh 全仓（src+tests+e2e）零消费→模块私有；P3 MessageComponent 头部标签 6 分支嵌套三元→resolveHeaderTypeLabel（i18n key 不变）、taskStatus 圆点 3 分支三元→TASK_STATUS_DOT_STYLES 查表、stringifyMessageContent 无参 catch 补意图注释、getAttachmentTypeLabel 重复 `String(name || "")` 提局部、appendRealtime INVISIBLE_KINDS 每次调用重建 Set→模块级 INVISIBLE_REALTIME_KINDS（WS 消息热路径）；P0/P1 无行为缺陷；横切零 any/零 @ts-expect-error/零 TODO（store console.error ×3 为 fetch 失败上报通道，归 C39 横切治理）；记录不处理：appendRealtime 与 appendRealtimeBatch 行为不同（INVISIBLE 跳过 recompute 仅前者）不合并、getAttachmentAccent 4 分支 if 链短直保持、其余 view 小文件（CopyControl/CommandMenu/Banner 族/Lightbox/Markdown/ImageAttachment）零发现 | 2（refactor×2） | ✅ |
 | 2026-09-02 | C31 | code-editor/view（PdfDocumentPreview + CodeEditorBinaryFile 等 18 文件） | P2 重复收敛：PdfDocumentPreview canvas 渲染装配块 ×2（outputScale+尺寸/样式+render transform，PdfPage 与 PdfThumbnail 逐字）→ setupPageCanvasRender 共享 helper；DocxBuiltinPreview CSS Highlights API 特征检测块 ×2 逐字（globalThis.CSS.highlights+Highlight 构造器）→ getCssHighlightApi()；CodeEditorBinaryFile 四个 preview 数据 hooks 的 reload 回调+reloadRequest 状态 ×4 逐字 → usePreviewReloadRequest()（对外返回形状不变）；P2 嵌套三元收敛：PdfDocumentPreview activeScale 3 分支→resolveActiveScale、searchStatus 3 层→resolveSearchStatus（i18n key 与判定顺序不变）、CodeEditorTabBar closeTabs 4 分支→if/else 链；P3 无参 catch 补 fail-safe 意图注释 ×8（PdfDocumentPreview intersectsNode 分离节点可抛/outline 解析失败降级空/搜索页文本失败丢弃部分结果；CodeEditorBinaryFile 非 JSON 错误体→原文兜底/预检响应体排空释放连接 ×2/服务探测失败→不可用）；P0/P1 无行为缺陷；横切零 console/零 any/零 @ts-expect-error/零 TODO；记录不处理：CodeEditorBinaryFile 4 hooks 的状态五件套+disabled 重置块+catch 错误形状结构相似（guard 细节各异：cancelled flag vs AbortController+AbortError、返回形状含 refreshKey，参数化有漂移风险，C12/C22 判例）、CodeEditor.tsx isMarkdown/isHtml 扩展名提取 ×2 与 BinaryFile getExtension 跨文件微重复（C04 判例）、Pdf header slides/page 二元标签三元 ×4（二元直白，提取反增行数，C29 判例）、Pptx 高亮样式两字面量各单使用点；待拆建议：PdfDocumentPreview 1860（PdfToolbar/PdfNavigationRail 可拆）、CodeEditorBinaryFile 1522（preview hooks 族可独立文件） | 1（refactor） | ✅ |
 | 2026-09-02 | C32 | app-shell + hooks（SidebarV2 + AppShellV2 + useProjectsState） | P2 重复收敛 ×5：SidebarV2 4 字段时间戳 Math.max ×2（projectLastActivity/collectSessionsForProject）→latestTimestamp/sessionLastActivity（连带单元素 buckets 二重循环展平）；AppShellV2 window 全局注册 effect ×3→useWindowGlobal；unread Set 复制-变更样板 ×4→addUnreadSession/removeUnreadSession updater 工厂；useProjectsState map+selected 双写惯用式 ×4（bump/replace/drop/reset）→applyProjectTransform（guard 并入 apply，语义等价）；fetchProjects/handleSidebarRefresh 合并更新器 ×2→mergeFetchedProjects（fetchProjects 的 prev.length===0 早退与通用路径等价）；P2 死逻辑：projectsHaveChanges includeExternalSessions 尾部双 return false（参数无效，全调用点恒传 true）→尾块+参数删除（测试 2 处同步）；P3 嵌套三元收敛：指示器状态/标签→resolveIndicatorStatus/indicatorStatusLabel（i18n key 不变）；P3 卫生 9 处：SIDEBAR_* 常量提升模块级、showMore JSX 内 IIFE 提前为 totalMore、resize 提交注释自相矛盾修正、Team 按钮模板字符串→cn()、switchProject 死别名 target=fuzzy、透传 onOpenDesktopSidebar 包装删除、sessionMeta.total 冗余 cast 删除、(project.sessions ?? []) ×3→getProjectSessions；P0/P1 无行为缺陷；横切零 any/零 @ts-expect-error/零 TODO；记录不处理：DeleteProject/DeleteSession 对话框骨架相似（描述块与文案 key 各异，C12 判例）、projects_updated effect 与 handleSidebarRefresh 选中项同步块（前者 preserveSelectedSessionViewState+view-state 保护，语义不同）、fetchProjects 与 applyProjectsSocketUpdate 合并次序有意不同（先查后并 vs 先并后查，注释标明）、移动端遮罩模板字符串 ×2（文件未引入 cn，2 处收益低）、VALID_TABS "home" 旧持久态文档性保留；待拆建议：无强制项（最大 SidebarV2 1304，会话树/重命名/菜单内聚） | 2（refactor + docs） | ✅ |
+| 2026-09-03 | C33 | main-content 其余（MainContent + CronV2 + FilesV2） | P2 重复收敛 ×4：MainContent SplitBody fullScreenToolTabs Set 每次渲染重建→模块级 FULL_SCREEN_TOOL_TABS；CronV2 handleSubmit schedule 构造三层嵌套三元→buildCronSchedule helper；CronV2 defaultRunAt 计算在 useMemo/resetForm 重复→createDefaultRunAt()；FilesV2 工具栏 8 按钮重复结构→ToolbarButton 组件（保留 disabledOpacity 40/50 差异与 loading 状态），handleNewFile/handleNewFolder 父目录展开逻辑重复→ensureExpanded helper；P3 冗余：MainContent isPlugin 中 typeof activeTab==="string" 删除（AppTab 模板字面量仍属 string）；P0/P1 无；FilesV2 5 处 console.error 归 C39 横切治理；记录不处理：context menu 项结构相似但分支各异（C12 判例）、MainContent as TaskMasterContextValue/TasksSettingsContextValue 为本地类型收窄、FilesV2 t(...) as string 用于 title/aria-label；门禁前置修复：apps/desktop/electron-dist 构建产物导致根 pnpm check 失败→.gitignore 与 biome.json 同时排除 | 4（refactor×3 + chore） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -526,6 +527,23 @@
 - **精炼项**：重复提取 5 组、死逻辑删除 1 处（含签名收窄+测试同步）、嵌套三元收敛 1 组 2 函数、一致性/卫生 9 处（净 -16 行；行为零变化，公共 API 仅 `projectsHaveChanges` 收窄——文件内+测试消费）
 - **验证**：`cd ui && pnpm typecheck` ✅；`pnpm vitest run`（ui）102 文件 / 623 用例全绿 ✅；ui `eslint --max-warnings 0` + server boundary ✅；biome 改动 4 文件 ✅（format --write 修复 2 处缩进）
 - **提交**：`refactor(ui): C32 app-shell + hooks cleanup`
+
+#### C33 main-content 其余（2026-09-03）
+
+- **审阅范围**：`ui/src/components/main-content/view/MainContent.tsx`（1105）、`ui/src/components/main-content-v2/CronV2.tsx`（1097）、`ui/src/components/main-content-v2/FilesV2.tsx`（960），合计 ~3.2K 行源码；三文件全文通读。
+- **审阅发现**：
+  - P2 重复收敛 ×4：
+    - MainContent `SplitBody` 中 `fullScreenToolTabs` Set 每次渲染重建 → 提升模块级 `FULL_SCREEN_TOOL_TABS`；
+    - CronV2 `handleSubmit` 中 schedule 构造三层嵌套三元 → 提取模块级 `buildCronSchedule`（返回类型 `CronSchedule` 显式化）；
+    - CronV2 `defaultRunAt` 默认时间计算在 `useMemo` 与 `resetForm` 中重复 → 提取 `createDefaultRunAt()` 复用；
+    - FilesV2 工具栏 8 个按钮结构重复（className/title/aria-label/disabled 样式）→ 提取 `ToolbarButton` 组件，保留 `disabledOpacity` 差异（40/50）与 upload/download loading 状态；`handleNewFile`/`handleNewFolder` 的展开父目录逻辑重复 → 提取 `ensureExpanded` helper。
+  - P3 冗余检查：MainContent `isPlugin` 中 `typeof activeTab === "string"` 冗余（`AppTab` 含模板字面量仍属 string）→ 删除。
+  - P0/P1：无行为缺陷。三文件卫生良好——零 any/@ts-expect-error、零 TODO；FilesV2 5 处 `console.error` 均为文件操作失败通道，属 UI 层合法错误上报，归 C39 横切治理。
+  - 记录不处理：FilesV2 context menu 项结构相似但图标/文案/行为分支各异，参数化收益低（C12 判例）；MainContent `as TaskMasterContextValue` / `as TasksSettingsContextValue` 为 hook 返回类型本地收窄，非 any 逃逸；FilesV2 多处 `t(...) as string` 用于 title/aria-label 强类型，归 i18n 类型基础设施。
+  - 门禁前置修复：`apps/desktop/electron-dist/` 构建产物导致根 `pnpm check` format:check 失败（C30 已登记的 pre-existing）→ `.gitignore` 与 `biome.json` 同时排除，行为零变化。
+- **精炼项**：模块级常量提升 1、嵌套三元收敛 1（helper 提取）、重复逻辑提取 4 组（ToolbarButton/ensureExpanded/buildCronSchedule/createDefaultRunAt）、冗余检查删除 1（净 +约 40 行——新增 helper 签名/注释增量，行为零变化）
+- **验证**：`pnpm --filter sati-ui typecheck` ✅；`pnpm vitest run`（ui）102 文件 / 623 用例全绿 ✅；ui `eslint --max-warnings 0` + server boundary ✅；根 `pnpm check` 全绿（含 format:check / lint / skills-valid / event-matrix）
+- **提交**：`refactor(ui): extract FULL_SCREEN_TOOL_TABS in MainContent`、`refactor(ui): extract buildCronSchedule and createDefaultRunAt in CronV2`、`refactor(ui): extract ToolbarButton and ensureExpanded in FilesV2`、`chore: ignore apps/desktop/electron-dist build artifacts`
 
 ## 六、基线（2026-08-18 实测）
 
