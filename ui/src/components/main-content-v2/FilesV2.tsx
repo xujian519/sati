@@ -57,6 +57,32 @@ type InlineEdit =
   | { kind: "rename"; path: string; currentName: string; depth: number }
   | { kind: "create"; parentPath: string; type: "file" | "directory"; depth: number };
 
+type ToolbarButtonProps = {
+  onClick: (event?: ReactMouseEvent<HTMLButtonElement>) => void;
+  label: string;
+  disabled?: boolean;
+  disabledOpacity?: "40" | "50";
+  children: React.ReactNode;
+};
+
+function ToolbarButton({ onClick, label, disabled, disabledOpacity = "50", children }: ToolbarButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900",
+        disabledOpacity === "40" ? "disabled:opacity-40" : "disabled:opacity-50",
+      )}
+      title={label}
+      aria-label={label}
+    >
+      {children}
+    </button>
+  );
+}
+
 const CONTEXT_MENU_WIDTH = 180;
 const CONTEXT_MENU_HEIGHT = 240;
 const CONTEXT_MENU_MARGIN = 8;
@@ -290,34 +316,32 @@ export default function FilesV2({
 
   // --- Menu actions ---
 
+  const ensureExpanded = useCallback((path: string) => {
+    if (!path) return;
+    setExpanded(prev => {
+      if (prev.has(path)) return prev;
+      const next = new Set(prev);
+      next.add(path);
+      return next;
+    });
+  }, []);
+
   const handleNewFile = useCallback(
     (parentPath: string, depth: number) => {
       closeContextMenu();
-      if (parentPath) {
-        setExpanded(prev => {
-          const next = new Set(prev);
-          next.add(parentPath);
-          return next;
-        });
-      }
+      ensureExpanded(parentPath);
       setInlineEdit({ kind: "create", parentPath, type: "file", depth });
     },
-    [closeContextMenu],
+    [closeContextMenu, ensureExpanded],
   );
 
   const handleNewFolder = useCallback(
     (parentPath: string, depth: number) => {
       closeContextMenu();
-      if (parentPath) {
-        setExpanded(prev => {
-          const next = new Set(prev);
-          next.add(parentPath);
-          return next;
-        });
-      }
+      ensureExpanded(parentPath);
       setInlineEdit({ kind: "create", parentPath, type: "directory", depth });
     },
-    [closeContextMenu],
+    [closeContextMenu, ensureExpanded],
   );
 
   const handleRename = useCallback(
@@ -562,42 +586,33 @@ export default function FilesV2({
           <span className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">{cwd}</span>
         </div>
         <div className="flex items-center gap-1 px-3 pb-1">
-          <button
-            type="button"
+          <ToolbarButton
             onClick={() => handleNewFile("", 0)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            title={t("fileTree.context.newFile", { defaultValue: "New File" }) as string}
-            aria-label={t("fileTree.context.newFile", { defaultValue: "New File" }) as string}
+            label={t("fileTree.context.newFile", { defaultValue: "New File" }) as string}
           >
             <FilePlus className="h-3.5 w-3.5" strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
+          </ToolbarButton>
+          <ToolbarButton
             onClick={() => handleNewFolder("", 0)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            title={t("fileTree.context.newFolder", { defaultValue: "New Folder" }) as string}
-            aria-label={t("fileTree.context.newFolder", { defaultValue: "New Folder" }) as string}
+            label={t("fileTree.context.newFolder", { defaultValue: "New Folder" }) as string}
           >
             <FolderPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
-          </button>
+          </ToolbarButton>
           <div className="relative">
-            <button
-              type="button"
-              onClick={e => {
-                e.stopPropagation();
+            <ToolbarButton
+              onClick={event => {
+                event?.stopPropagation();
                 setUploadMenuOpen(open => !open);
               }}
               disabled={uploadingProject}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              title={t("fileTree.upload", { defaultValue: "Upload files or folder" }) as string}
-              aria-label={t("fileTree.upload", { defaultValue: "Upload files or folder" }) as string}
+              label={t("fileTree.upload", { defaultValue: "Upload files or folder" }) as string}
             >
               {uploadingProject ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
               ) : (
                 <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
               )}
-            </button>
+            </ToolbarButton>
             {uploadMenuOpen ? (
               <div className="absolute top-8 left-0 z-20 w-36 rounded-md border border-neutral-200 bg-white py-1 text-[12px] shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
                 <button
@@ -645,60 +660,47 @@ export default function FilesV2({
               }}
             />
           </div>
-          <button
-            type="button"
+          <ToolbarButton
             onClick={handleDownloadProject}
             disabled={downloadingProject}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            title={t("fileTree.downloadProject", { defaultValue: "Download project as zip" }) as string}
-            aria-label={t("fileTree.downloadProject", { defaultValue: "Download project as zip" }) as string}
+            label={t("fileTree.downloadProject", { defaultValue: "Download project as zip" }) as string}
           >
             {downloadingProject ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
             ) : (
               <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
             )}
-          </button>
-          <button
-            type="button"
+          </ToolbarButton>
+          <ToolbarButton
             onClick={handleDeleteActive}
             disabled={!activePath}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            title={t("fileTree.deleteSelected", { defaultValue: "Delete selected" }) as string}
-            aria-label={t("fileTree.deleteSelected", { defaultValue: "Delete selected" }) as string}
+            disabledOpacity="40"
+            label={t("fileTree.deleteSelected", { defaultValue: "Delete selected" }) as string}
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
+          </ToolbarButton>
+          <ToolbarButton
             onClick={refreshFiles}
             disabled={loading}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            title={t("fileTree.refresh", { defaultValue: "Refresh" }) as string}
-            aria-label={t("fileTree.refresh", { defaultValue: "Refresh" }) as string}
+            label={t("fileTree.refresh", { defaultValue: "Refresh" }) as string}
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
+          </ToolbarButton>
+          <ToolbarButton
             onClick={collapseAll}
             disabled={!hasExpanded}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-900"
-            title={t("fileTree.collapseAll", { defaultValue: "Collapse all" }) as string}
-            aria-label={t("fileTree.collapseAll", { defaultValue: "Collapse all" }) as string}
+            disabledOpacity="40"
+            label={t("fileTree.collapseAll", { defaultValue: "Collapse all" }) as string}
           >
             <ChevronsDownUp className="h-3.5 w-3.5" strokeWidth={1.75} />
-          </button>
+          </ToolbarButton>
           {onClose ? (
-            <button
-              type="button"
+            <ToolbarButton
               onClick={onClose}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              title={t("fileTree.collapsePanel", { defaultValue: "Collapse file explorer" }) as string}
-              aria-label={t("fileTree.collapsePanel", { defaultValue: "Collapse file explorer" }) as string}
+              label={t("fileTree.collapsePanel", { defaultValue: "Collapse file explorer" }) as string}
             >
               <PanelLeftClose className="h-4 w-4" strokeWidth={1.8} />
-            </button>
+            </ToolbarButton>
           ) : null}
         </div>
       </div>
