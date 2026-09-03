@@ -12,6 +12,7 @@
       "!.qoder/**",
       "!apps/desktop/dist-electron/**",
       "!**/test-results/**",
+      "!apps/desktop/electron-dist/**",
       "!.codegraph/**",
       "!ui/public/**",
       "!ui/src/index.css",

@@ -87,6 +87,9 @@ dist
 !vendor/**/dist/
 .output
 
+# Desktop app build output
+apps/desktop/electron-dist/
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js
