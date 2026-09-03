@@ -103,6 +103,10 @@ function formatTimeLocal(date: Date): string {
   return formatDateTimeLocal(date).slice(11, 16);
 }
 
+function createDefaultRunAt(): Date {
+  return new Date(Date.now() + 60 * 60 * 1000);
+}
+
 function buildCronExpression(
   frequency: CronFrequency,
   time: string,
@@ -141,6 +145,32 @@ type ParsedCronExpression = {
   monthDay: number;
   month: number;
 };
+
+type CronSchedule = { type: "once"; runAt: string } | { type: "cron"; expression: string; timezone: string };
+
+function buildCronSchedule(
+  scheduleKind: ScheduleKind,
+  frequency: CronFrequency,
+  scheduleDate: string,
+  scheduleTime: string,
+  expression: string,
+  weekdays: number[],
+  monthDay: number,
+  month: number,
+  timezone: string,
+): CronSchedule {
+  if (scheduleKind === "once") {
+    return { type: "once", runAt: new Date(`${scheduleDate}T${scheduleTime}`).toISOString() };
+  }
+  if (frequency === "custom") {
+    return { type: "cron", expression: expression.trim(), timezone: timezone.trim() };
+  }
+  return {
+    type: "cron",
+    expression: buildCronExpression(frequency, scheduleTime, weekdays, monthDay, month),
+    timezone: timezone.trim(),
+  };
+}
 
 function parseCronExpression(expression: string): ParsedCronExpression | null {
   const parts = expression.trim().split(/\s+/);
@@ -459,7 +489,7 @@ function CronFormView({
   onDone: () => Promise<void>;
   onCancelEdit: () => void;
 }) {
-  const defaultRunAt = useMemo(() => new Date(Date.now() + 60 * 60 * 1000), []);
+  const defaultRunAt = useMemo(() => createDefaultRunAt(), []);
   const parsed = useMemo(() => (editingJob?.recurring ? parseCronExpression(editingJob.cron) : null), [editingJob]);
   const [message, setMessage] = useState(editingJob?.prompt ?? "");
   const [projectKey, setProjectKey] = useState(editingJob?.projectKey ?? "");
@@ -496,7 +526,7 @@ function CronFormView({
     setMonthDay(1);
     setMonth(1);
     setExpression("");
-    const nextDefault = new Date(Date.now() + 60 * 60 * 1000);
+    const nextDefault = createDefaultRunAt();
     setScheduleDate(formatDateLocal(nextDefault));
     setScheduleTime(formatTimeLocal(nextDefault));
     setTimezone(getBrowserTimezone());
@@ -558,16 +588,17 @@ function CronFormView({
     setSubmitting(true);
     setFormError(null);
     try {
-      const schedule =
-        scheduleKind === "once"
-          ? { type: "once", runAt: new Date(`${scheduleDate}T${scheduleTime}`).toISOString() }
-          : frequency === "custom"
-            ? { type: "cron", expression: expression.trim(), timezone: timezone.trim() }
-            : {
-                type: "cron",
-                expression: buildCronExpression(frequency, scheduleTime, weekdays, monthDay, month),
-                timezone: timezone.trim(),
-              };
+      const schedule = buildCronSchedule(
+        scheduleKind,
+        frequency,
+        scheduleDate,
+        scheduleTime,
+        expression,
+        weekdays,
+        monthDay,
+        month,
+        timezone,
+      );
       const payload = {
         message: message.trim(),
         schedule,
