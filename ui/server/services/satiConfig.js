@@ -2,6 +2,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import os from "os";
 import path from "path";
+import { createHash } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { parseGatewayConfig } from "../../../src/pilot/index.js";
 
@@ -695,45 +696,104 @@ function purgeBootstrapPlaceholder(config) {
   return config;
 }
 
+/** 配置内容 revision（sha256 of raw YAML）；乐观锁与变更检测共用。 */
+export function configRevision(raw) {
+  return createHash("sha256")
+    .update(String(raw ?? ""))
+    .digest("hex");
+}
+
+/** 乐观锁冲突：磁盘 revision 已不同于调用方读到的版本（409 语义）。 */
+export class ConfigConflictError extends Error {
+  constructor(message, currentRevision) {
+    super(message);
+    this.name = "ConfigConflictError";
+    this.code = "CONFIG_CONFLICT";
+    this.currentRevision = currentRevision;
+  }
+}
+
+// 进程内写互斥：所有落盘入口（writeSatiConfig/writeRawSatiYaml）串行化，
+// 防止并发写交错（config.js 路由层的队列只覆盖自己的调用方，service 层
+// 兜住 memory.js 等其余入口）。
+let configWriteChain = Promise.resolve();
+
+async function withConfigWriteLock(job) {
+  const run = configWriteChain.then(job, job);
+  // 链尾吞错：失败的 job 不阻塞后续写。
+  configWriteChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 // Lossless writer — config object is the V2 disk shape, written verbatim
 // after running through validation. UI-internal === disk schema, so
 // there's no read-modify-write needed anymore (the previous translation
 // layer existed only to bridge an older internal schema).
-export async function writeSatiConfig(config) {
-  const sanitized = purgeBootstrapPlaceholder(
-    syncAgentModelWithRouter(sanitizeProviderCredentials(isRecord(config) ? deepMerge({}, config) : config)),
-  );
-  if (isRecord(sanitized.memory)) {
-    const memModel = sanitized.memory.model;
-    if (typeof memModel === "string" && !memModel.trim()) {
-      delete sanitized.memory.model;
+//
+// 事务性（temp + rename 原子写 + 进程内串行 + 可选乐观锁）：
+// - 崩溃时磁盘要么是旧配置要么是新配置，不会出现半截 YAML；
+// - previousRevision 提供时，落盘前校验磁盘 revision，防止读改写丢更新。
+export async function writeSatiConfig(config, { previousRevision } = {}) {
+  return withConfigWriteLock(async () => {
+    if (typeof previousRevision === "string" && previousRevision) {
+      const disk = readSatiConfigFile();
+      const currentRevision = configRevision(disk.raw ?? "");
+      if (previousRevision !== currentRevision) {
+        throw new ConfigConflictError(
+          "Config changed since this settings draft was loaded. Refresh and apply the change again.",
+          currentRevision,
+        );
+      }
     }
-  }
-  const validation = validateSatiConfig(sanitized);
-  if (!validation.valid) {
-    const error = new Error("Invalid Sati config");
-    error.validation = validation;
-    throw error;
-  }
-  const configPath = getSatiConfigPath();
-  await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
-  const yamlObj = validation.config;
-  if (isRecord(yamlObj.memory)) {
-    const memModel = yamlObj.memory.model;
-    if (typeof memModel === "string" && !memModel.trim()) {
-      delete yamlObj.memory.model;
+    const sanitized = purgeBootstrapPlaceholder(
+      syncAgentModelWithRouter(sanitizeProviderCredentials(isRecord(config) ? deepMerge({}, config) : config)),
+    );
+    if (isRecord(sanitized.memory)) {
+      const memModel = sanitized.memory.model;
+      if (typeof memModel === "string" && !memModel.trim()) {
+        delete sanitized.memory.model;
+      }
     }
-  }
-  const raw = stringifyYaml(yamlObj, { lineWidth: 0 });
-  await fsPromises.writeFile(configPath, raw, "utf8");
-  return { configPath, raw, validation, config: yamlObj };
+    const validation = validateSatiConfig(sanitized);
+    if (!validation.valid) {
+      const error = new Error("Invalid Sati config");
+      error.validation = validation;
+      throw error;
+    }
+    const configPath = getSatiConfigPath();
+    await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
+    const yamlObj = validation.config;
+    if (isRecord(yamlObj.memory)) {
+      const memModel = yamlObj.memory.model;
+      if (typeof memModel === "string" && !memModel.trim()) {
+        delete yamlObj.memory.model;
+      }
+    }
+    const raw = stringifyYaml(yamlObj, { lineWidth: 0 });
+    // 同目录 temp + rename：rename(2) 在同一文件系统上是原子的；失败时
+    // best-effort 清理 temp，磁盘保持旧配置。temp 文件名以 .sati- 开头
+    // 且不带 .yaml 后缀，satiConfigWatcher 的目录事件按配置文件名过滤，
+    // 不会误触发 reload。
+    const tmpPath = `${configPath}.sati-tmp`;
+    try {
+      await fsPromises.writeFile(tmpPath, raw, "utf8");
+      await fsPromises.rename(tmpPath, configPath);
+    } catch (error) {
+      await fsPromises.unlink(tmpPath).catch(() => undefined);
+      throw error;
+    }
+    return { configPath, raw, validation, config: yamlObj };
+  });
 }
 
 // Kept as a thin alias for callers that supply an already-parsed YAML
 // object (Raw YAML editor path). Behaviour is identical to
 // writeSatiConfig now that internal === disk.
-export async function writeRawSatiYaml(yamlObj) {
-  return writeSatiConfig(yamlObj);
+export async function writeRawSatiYaml(yamlObj, options = {}) {
+  return writeSatiConfig(yamlObj, options);
 }
 
 export function expandTilde(value) {
