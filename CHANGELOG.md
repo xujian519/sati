@@ -2,6 +2,30 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.11 - 2026-09-04
+
+> **版本说明**：自 v0.1.9 以来的主仓库增量（含此前已 bump 为 0.1.10 但未发版的内容）。本版本不含未合并进 main 的在途功能分支（mid-turn steering / edit-last-turn 等）。
+> **版本目标（2026-09-04）**：专利制图 figuregen 补图（P3 Graphviz 可选渲染器）、cron agentic 自动化、PR one-command 工具链、团队编排 P0/P1 优化，以及 C25–C33 日常卡批量清理与依赖升级。
+
+### Feat
+- feat(patent): figuregen P3 —— Graphviz 可选渲染器，支持复杂附图的确定性转换
+- feat(cron): agentic automation —— modelRoute / retry / maxRuns / off-peak 调度
+- feat(pr): one-command open-PR 脚本（gh URL / issue 号解析 + 溯源）
+- feat(team): 团队编排 P0/P1 优化 —— 成员工具隔离 / 输出契约 / 审批冒泡 / 共享黑板 / 宽限窗参数化
+- feat(ui): files tab 收起桌面侧栏并在退出时还原状态
+
+### Fix
+- fix(patent): feedback binding 加固、规则包解析、领域审计暴露的接线缺口
+- fix(knowledge): kg-store LRU 批量插入包进事务
+
+### Refactor
+- refactor(ui): C25–C33 日常卡批量清理 —— main-content v2 / chat-v2 / chat hooks / stores / app-shell / code-editor 等
+- refactor(web/workflow/telemetry/fs/network/shared/browser): 死代码精炼与 fallback catch 文档化
+
+### Chore
+- chore(release): v0.1.10 release commit（此前已 bump 未打 tag，并入本版）
+- chore(deps): electron 39→44、vite、react-i18next、typescript-eslint、globals 升级
+
 ## v0.1.9 - 2026-08-28
 
 > **版本目标（2026-08-28）**：本版本开始具备专利制图能力——figuregen 三批落地（P0 工具与规则骨架、P1 全规则集与 A4 HTML/PDF 输出、P2 USPTO 辖区与默认注册），配套 drafting 工作流阶段与 patent-illustrator 技能；同步收口技术债批次（src 运行时值循环切割、gateway 参数守卫、C19–C24 死代码精炼）。
