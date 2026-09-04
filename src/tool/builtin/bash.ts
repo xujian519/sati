@@ -40,7 +40,7 @@ export type BashOutput = {
 const BASH_TOOL_DESCRIPTION = `Run a shell command in the Sati workspace.
 
 Usage:
-- The \`command\` parameter is passed to the system shell (\`cmd.exe\` on Windows, \`/bin/sh\` on macOS/Linux).
+- The \`command\` parameter is passed to the resolved shell (bash when available, including Git Bash on Windows; otherwise \`/bin/sh\` on macOS/Linux or \`cmd.exe\`/PowerShell on Windows). Assume bash semantics.
 - The shell runs in the current workspace directory and inherits the tool runtime environment.
 - Use \`timeout\` to override the command timeout in milliseconds. When omitted, the default is 30000ms. Values above 600000ms are rejected; lower the foreground timeout to 600000 or less, or use task_create followed by task_wait for background work that should finish.
 - Use \`description\` to provide a short, clear label for logs and audits. Prefer 3-10 words that say what the command does.

@@ -2,11 +2,11 @@ import express from "express";
 import fsPromises from "fs/promises";
 import path from "path";
 import { spawn } from "child_process";
-import { createHash } from "crypto";
 import { prepareBackgroundSpawnOptions } from "../utils/processSpawn.js";
 import { parse as parseYaml } from "yaml";
 import {
   buildDefaultSatiConfig,
+  configRevision,
   configToYaml,
   getSatiConfigPath,
   hasUnresolvedMaskedSecrets,
@@ -185,12 +185,6 @@ function restoreRenamedProviderSecrets(nextConfig, previousConfig, rawRenames) {
   }
 
   return { config: nextConfig };
-}
-
-function configRevision(raw) {
-  return createHash("sha256")
-    .update(String(raw ?? ""))
-    .digest("hex");
 }
 
 function serializeConfigResponse(record, reloadResult = null) {
