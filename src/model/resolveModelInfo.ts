@@ -9,11 +9,12 @@
  * 显式省略即负能力：未知模型按 DEFAULT（input: [text]）处理，绝不猜测端点
  * 接受何种输入。与 dsh 的 resolveModelInfo 语义对应。
  */
-import type { ModelCapabilities } from "./protocol/capabilities.js";
+import type { ModelCapabilities, ModelSpeed } from "./protocol/capabilities.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "./protocol/capabilities.js";
 import type { MultimodalConstraints } from "./protocol/multimodal.js";
 import { DEFAULT_MULTIMODAL_CONSTRAINTS } from "./protocol/multimodal.js";
 import { lookupCatalogModel } from "./catalog/lookup.js";
+import { inferModelSpeed } from "./catalog/speedMapping.js";
 import { ANTHROPIC_DEFAULT_MULTIMODAL } from "./providers/anthropic/defaults.js";
 import { GOOGLE_DEFAULT_MULTIMODAL } from "./providers/google/defaults.js";
 import { OPENAI_DEFAULT_MULTIMODAL } from "./providers/openai/defaults.js";
@@ -26,6 +27,8 @@ export type ModelInfoSource = "config" | "catalog" | "default";
 export type ResolvedModelInfo = {
   capabilities: ModelCapabilities;
   multimodal: MultimodalConstraints;
+  /** 速度档（catalog 显式覆盖 > 命名规则推断；模型固有属性，与配置无关）。 */
+  speed: ModelSpeed;
   /** 命中哪一层（诊断与审计用）。 */
   source: ModelInfoSource;
 };
@@ -49,6 +52,7 @@ export function resolveModelInfo(
     return {
       capabilities: runtime.getCapabilities(providerId, modelId),
       multimodal: runtime.getMultimodal(providerId, modelId),
+      speed: catalogModelSpeed(providerId, modelId),
       source: "config",
     };
   } catch {
@@ -59,6 +63,7 @@ export function resolveModelInfo(
     return {
       capabilities: catalog.model.capabilities,
       multimodal: catalog.model.multimodal,
+      speed: catalogModelSpeed(providerId, modelId),
       source: "catalog",
     };
   }
@@ -67,8 +72,15 @@ export function resolveModelInfo(
   return {
     capabilities: DEFAULT_MODEL_CAPABILITIES,
     multimodal,
+    speed: inferModelSpeed(modelId),
     source: "default",
   };
+}
+
+/** catalog 条目显式 speed 优先，否则按命名规则推断。 */
+function catalogModelSpeed(providerId: string, modelId: string): ModelSpeed {
+  const catalog = lookupCatalogModel(providerId, modelId);
+  return inferModelSpeed(modelId, catalog.model?.speed);
 }
 
 /** provider 协议 → 该协议默认多模态约束（未知协议回退 text-only）。 */
