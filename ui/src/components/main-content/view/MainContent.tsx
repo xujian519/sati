@@ -102,6 +102,9 @@ const DASHBOARD_PANEL_META: Record<DashboardPanelTab, { labelKey: string; icon: 
   "always-on": { labelKey: "tabs.alwaysOn", icon: Radio },
 };
 
+// Tabs that take over the full main content surface instead of sharing it with chat.
+const FULL_SCREEN_TOOL_TABS = new Set<AppTab>(["shell", "git", "cron", "tasks", "kanban"]);
+
 function readStoredFilesAssistantWidth(): number {
   try {
     const stored = Number(localStorage.getItem(FILES_ASSISTANT_STORAGE_KEY));
@@ -580,9 +583,8 @@ function SplitBody(props: SplitBodyProps) {
   // Shell, Git, Tasks, and plugin tabs retain their legacy full-screen mode.
   // Skills, Routing, Memory, and Always-On are auxiliary dashboards paired
   // with chat. Files stays a separate explorer + artifact + assistant mode.
-  const isPlugin = typeof activeTab === "string" && activeTab.startsWith("plugin:");
-  const fullScreenToolTabs = new Set(["shell", "git", "cron", "tasks", "kanban"]);
-  const isFullScreenTool = fullScreenToolTabs.has(activeTab) || isPlugin;
+  const isPlugin = activeTab.startsWith("plugin:");
+  const isFullScreenTool = FULL_SCREEN_TOOL_TABS.has(activeTab) || isPlugin;
   const isDashboardPanel = DASHBOARD_PANEL_TABS.has(activeTab);
   const dashboardPanelTab = isDashboardPanel ? (activeTab as DashboardPanelTab) : null;
   // Tasks tab is conditional — fall back to chat if the project hasn't
