@@ -14,6 +14,7 @@ import { ModelConfigError } from "../protocol/errors.js";
 import { DEFAULT_MULTIMODAL_CONSTRAINTS, isInputModality, type MultimodalConstraints } from "../protocol/multimodal.js";
 import { lookupCatalogModel, lookupCatalogProvider } from "../catalog/index.js";
 import { getCachedOllamaModels } from "../ollama/probe.js";
+import { canUseCatalogCredential, resolveDefaultProviderUrl } from "./providerCredentialScope.js";
 import { isEnvReference, resolveApiKey, type CredentialEnv } from "./resolveCredentials.js";
 import {
   isModelProtocol,
@@ -120,7 +121,34 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
     models[modelId] = parseModelDefinition(modelId, protocol, rawModel, providerId);
   }
 
-  const apiKeyRef = resolveProviderApiKeyRef(providerId, provider.apiKey, env, catalogProvider?.apiKeyEnvVar);
+  // Catalog 凭证作用域：自定义 url/协议下不再自动读取 catalog 环境变量，
+  // 否则密钥会被发往第三方端点（凭证泄漏面）。显式 apiKey 不受影响。
+  const catalogCredentialUsable = canUseCatalogCredential({
+    providerId,
+    protocol,
+    url: rawUrl,
+    catalog: catalogProvider
+      ? { protocol: catalogProvider.protocol, defaultUrl: catalogProvider.defaultUrl }
+      : undefined,
+  });
+  if (catalogProvider?.apiKeyEnvVar && !catalogCredentialUsable) {
+    const hasExplicitApiKey = typeof provider.apiKey === "string" && provider.apiKey.trim().length > 0;
+    if (!hasExplicitApiKey) {
+      throw new ModelConfigError(
+        "missing_credential",
+        `Provider ${providerId} uses a custom url/protocol, so catalog env ` +
+          `${catalogProvider.apiKeyEnvVar} is not applied automatically. ` +
+          `Set apiKey explicitly (literal or \`\${${catalogProvider.apiKeyEnvVar}}\`).`,
+        { providerId, envName: catalogProvider.apiKeyEnvVar },
+      );
+    }
+  }
+  const apiKeyRef = resolveProviderApiKeyRef(
+    providerId,
+    provider.apiKey,
+    env,
+    catalogCredentialUsable ? catalogProvider?.apiKeyEnvVar : undefined,
+  );
   return {
     id: providerId,
     protocol,
@@ -186,17 +214,6 @@ function resolveOllamaModelsFromCache(rawUrl: string): Record<string, unknown> {
       model.contextLength && model.contextLength > 0 ? { capabilities: { maxContextTokens: model.contextLength } } : {},
     ]),
   );
-}
-
-function resolveDefaultProviderUrl(
-  providerId: string,
-  protocol: ModelProtocol,
-  catalogDefaultUrl: string | undefined,
-): string | undefined {
-  if (providerId === "google" && protocol === "openai") {
-    return "https://generativelanguage.googleapis.com/v1beta/openai";
-  }
-  return catalogDefaultUrl;
 }
 
 function parseRetryConfig(raw: unknown): ProviderRetryConfig | undefined {
