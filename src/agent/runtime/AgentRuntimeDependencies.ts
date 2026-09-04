@@ -1,4 +1,4 @@
-import type { CanonicalMessage, CanonicalModelEvent, CanonicalModelRequest } from "../../model/index.js";
+import type { CanonicalMessage, CanonicalModelEvent, CanonicalModelRequest, ModelProtocol } from "../../model/index.js";
 import type {
   SatiElicitationChannel,
   SatiToolAuditRecorder,
@@ -105,6 +105,13 @@ export type AgentRuntimeDependencies = {
    * unknown models so the caller can skip re-compaction gracefully.
    */
   getModelMaxContextTokens?: (provider: string, model: string) => number | undefined;
+
+  /**
+   * Look up a provider's protocol (e.g. "anthropic"). Used by the loop to
+   * decide provider-specific request shaping such as the prompt-cache plan.
+   * Returns `undefined` for unknown providers.
+   */
+  getProviderProtocol?: (provider: string) => ModelProtocol | undefined;
   /**
    * Look up a model's maximum output-token cap by provider/model id. Used by
    * max-output recovery to avoid retrying with a lower synthetic default than
