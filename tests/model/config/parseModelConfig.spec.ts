@@ -72,3 +72,75 @@ test("still fails when a url-less provider declares models (real misconfig, not 
     (error: unknown) => error instanceof ModelConfigError && error.message.includes("requires a url"),
   );
 });
+
+test("custom url without explicit apiKey no longer auto-adopts the catalog env var", () => {
+  assert.throws(
+    () =>
+      parseModelConfig(
+        {
+          providers: {
+            anthropic: {
+              url: "https://my-proxy.example.com",
+              models: { "claude-sonnet-4-5-20250929": {} },
+            },
+          },
+        },
+        { env: { ANTHROPIC_API_KEY: "sk-leak" } },
+      ),
+    (error: unknown) =>
+      error instanceof ModelConfigError &&
+      error.code === "missing_credential" &&
+      error.message.includes("ANTHROPIC_API_KEY"),
+  );
+});
+
+test("custom url with an explicit literal apiKey still parses", () => {
+  const config = parseModelConfig(
+    {
+      providers: {
+        anthropic: {
+          url: "https://my-proxy.example.com",
+          apiKey: "sk-explicit",
+          models: { "claude-sonnet-4-5-20250929": {} },
+        },
+      },
+    },
+    { env: {} },
+  );
+
+  assert.equal(config.providers.anthropic.apiKey, "sk-explicit");
+});
+
+test("custom url with an explicit ${VAR} apiKey still parses", () => {
+  const config = parseModelConfig(
+    {
+      providers: {
+        anthropic: {
+          url: "https://my-proxy.example.com",
+          apiKey: "${MY_PROXY_KEY}",
+          models: { "claude-sonnet-4-5-20250929": {} },
+        },
+      },
+    },
+    { env: { MY_PROXY_KEY: "sk-proxy" } },
+  );
+
+  assert.equal(config.providers.anthropic.apiKey, "sk-proxy");
+  assert.equal(config.providers.anthropic.apiKeySource, "env");
+});
+
+test("catalog env var still applies when the custom url equals the catalog endpoint", () => {
+  const config = parseModelConfig(
+    {
+      providers: {
+        openai: {
+          url: "https://api.openai.com/v1/",
+          models: { "gpt-4o-mini": {} },
+        },
+      },
+    },
+    { env: { OPENAI_API_KEY: "sk-env" } },
+  );
+
+  assert.equal(config.providers.openai.apiKey, "sk-env");
+});

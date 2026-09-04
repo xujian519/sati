@@ -23,6 +23,7 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { getSatiCommandShell } from "../../runtime/index.js";
 import { TaskOutputStore } from "../storage/TaskOutputStore.js";
 import type {
   SatiBackgroundBashTask,
@@ -231,12 +232,13 @@ export class BackgroundTaskRuntime {
 
     let child: ChildProcess;
     try {
-      child = this.options.spawn(spec.command, {
+      const commandShell = getSatiCommandShell();
+      child = this.options.spawn(commandShell.shell, commandShell.args(spec.command), {
         cwd: spec.cwd,
         env: spec.env,
-        shell: true,
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
+        windowsVerbatimArguments: process.platform === "win32" && commandShell.windowsVerbatimArguments,
       });
       child.unref();
     } catch (err) {
