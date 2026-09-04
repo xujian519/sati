@@ -36,8 +36,12 @@
  *           `kanban_rename_column` / `kanban_delete_column` / `kanban_undo` /
  *           `kanban_subscribe` / `kanban_unsubscribe` and `kanban_updated`
  *           notification event (MINOR，feature-detect)。
+ *   - 1.6 — 2026-09-04: added optional mid-turn steering methods
+ *           `steer_turn` / `cancel_steer` + `steer_applied` / `steer_unapplied`
+ *           event types; `active_turn_snapshot` response gained optional
+ *           `steerItems` (MINOR，feature-detect)。
  */
-export const SATI_GATEWAY_PROTOCOL_VERSION = "1.5";
+export const SATI_GATEWAY_PROTOCOL_VERSION = "1.6";
 
 /**
  * Handshake compatibility check: clients and servers with the same MAJOR

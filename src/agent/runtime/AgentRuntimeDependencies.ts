@@ -13,6 +13,7 @@ import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { TokenAccountingRuntime } from "../../context/index.js";
 import type { RouterRuntime } from "../../router/index.js";
 import type { SatiWorkspaceLedgerProvider } from "../../session/workspace/WorkspaceLedgerStore.js";
+import type { SteerSource } from "../session/SteerMailbox.js";
 import type { AgentEvent, AgentEventEmitter } from "../protocol/events.js";
 import type { DoomLoop } from "../loop/doomLoop.js";
 import type { PlanTodoStateManager } from "./PlanTodoState.js";
@@ -166,6 +167,14 @@ export type AgentRuntimeDependencies = {
    * 跨压缩存续。未注入时零开销（不注入、不写 seam）。
    */
   workspaceLedger?: SatiWorkspaceLedgerProvider;
+  /**
+   * Mid-turn steering 源（协议 1.6，可选）。注入后 agent 循环在每次模型
+   * 调用边界 drain 排队插话，构造用户消息（`metadata.purpose: "steer"` +
+   * steerId，非 synthetic——Web 投影须可见）追加到消息序列尾部（满足
+   * prompt-cache 前缀约束）并经 onDurableMessage 落库。子代理不接线
+   * （SubAgentSession 显式列举依赖，天然隔离）。
+   */
+  steerSource?: SteerSource;
   eventEmitter?: AgentEventEmitter;
   drainEvents?: () => AgentEvent[];
 };

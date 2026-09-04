@@ -23,6 +23,7 @@ import { JsonlTranscriptWriter } from "../../session/transcript/JsonlTranscriptW
 import { WorkspaceLedgerStore } from "../../session/workspace/WorkspaceLedgerStore.js";
 import { createDefaultToolGuardRegistry } from "./defaultToolGuards.js";
 import { AgentSession } from "./AgentSession.js";
+import { SteerMailbox } from "./SteerMailbox.js";
 
 export type CreateAgentSessionOptions = {
   sessionId: string;
@@ -82,6 +83,9 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
     options.config.workspaceLedger === true && transcriptPath.length > 0
       ? new WorkspaceLedgerStore(transcript, options.sessionId, transcriptPath)
       : undefined;
+  // Mid-turn steering（协议 1.6）：mailbox 同时挂到 loop 依赖（drain 注入）
+  // 与 AgentSession（生命周期 + gateway enqueue 入口），保证同一实例。
+  const steerMailbox = new SteerMailbox();
   const dependencies: AgentRuntimeDependencies = {
     ...options.dependencies,
     tools: {
@@ -90,6 +94,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
     },
     eventEmitter: emitter,
     drainEvents: options.dependencies.drainEvents ?? eventBuf?.drain,
+    steerSource: steerMailbox,
     ...(workspaceLedger ? { workspaceLedger } : {}),
   };
   const loop = new AgentLoop(options.config, dependencies, options.seedState);
@@ -144,6 +149,7 @@ export function createAgentSessionWithStorage(options: CreateAgentSessionOptions
       replayEvents: options.replayEvents,
       lifecycle: dependencies.lifecycle,
       projectMessages,
+      steerMailbox,
     }),
     storage,
   };

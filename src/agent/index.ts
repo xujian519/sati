@@ -3,6 +3,7 @@ export { collectToolCalls } from "./loop/collectToolCalls.js";
 export { createMissingToolResult, ensureToolResultPairing } from "./loop/ensureToolResultPairing.js";
 export { projectToolResults } from "./loop/projectToolResults.js";
 export { AgentSession, type AgentSessionOptions } from "./session/AgentSession.js";
+export { SteerMailbox, type SteerItem, type SteerSource } from "./session/SteerMailbox.js";
 export {
   appendPermissionDenials,
   createInitialAgentSessionState,

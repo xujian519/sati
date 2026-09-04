@@ -233,6 +233,8 @@ function ChatInterfaceV2({
     isBusySendQueued,
     isBusySendConfirmed,
     cancelBusySendQueue,
+    steerBusySendQueue,
+    canSteerBusySend,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -553,6 +555,8 @@ function ChatInterfaceV2({
       isBusySendQueued={isBusySendQueued}
       isBusySendConfirmed={isBusySendConfirmed}
       onCancelBusySendQueue={cancelBusySendQueue}
+      canSteerBusySend={canSteerBusySend}
+      onSteerBusySendQueue={steerBusySendQueue}
       tokenBudget={tokenBudget}
       thinkingMode={thinkingMode}
       thinkingModeAvailability={thinkingModeAvailability}

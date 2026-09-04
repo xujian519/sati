@@ -59,6 +59,7 @@ import {
   RepeatTracker,
   toolCallKey,
 } from "./repeatToolReminder.js";
+import { buildSteerMessage, steerPreview } from "./steer.js";
 import { collectToolCalls } from "./collectToolCalls.js";
 import { recordModelCall, recordToolResults } from "./doomLoopIntegration.js";
 import {
@@ -240,6 +241,8 @@ export class AgentLoop {
       const guards = yield* this.runTurnGuards(state, input);
       if (guards.kind === "return") return { result: guards.result, messages: guards.messages };
 
+      yield* this.applySteeredMessages(state, input);
+
       const prepared = yield* this.prepareModelCall(state, input);
       if (prepared.kind === "return") return { result: prepared.result, messages: prepared.messages };
 
@@ -353,6 +356,33 @@ export class AgentLoop {
     }
 
     return { kind: "continue" };
+  }
+
+  /**
+   * Mid-turn steering（协议 1.6）：模型调用边界 drain 插话邮箱。每个排队项
+   * 构造为用户消息先落库（onDurableMessage，fail 即不注入——持久边界优先）
+   * 再追加到消息序列尾部，并广播 steer_applied。未接线或空队列时零开销。
+   */
+  private async *applySteeredMessages(
+    state: TurnRuntimeState,
+    input: AgentLoopInput,
+  ): AsyncGenerator<AgentEvent, void, unknown> {
+    const source = this.dependencies.steerSource;
+    if (!source) return;
+    const items = source.drain();
+    if (items.length === 0) return;
+    for (const item of items) {
+      const message = buildSteerMessage(item);
+      await input.onDurableMessage?.(message);
+      state.messages = [...state.messages, message];
+      yield {
+        type: "steer_applied",
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        steerId: item.steerId,
+        preview: steerPreview(item.text),
+      };
+    }
   }
 
   private async *prepareModelCall(

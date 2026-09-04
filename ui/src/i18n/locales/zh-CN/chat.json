@@ -289,7 +289,9 @@
       "agentDescription": "直接处理并执行任务",
       "planDescription": "先产出计划，确认后再执行",
       "askDescription": "仅回答问题，不修改文件"
-    }
+    },
+    "steerQueuedSend": "改为插话——不打断当前 turn，注入到运行中的会话",
+    "steerQueuedSendShort": "插话"
   },
   "documentReferences": {
     "defaultPrompt": "请根据我引用的文档内容回答。",
