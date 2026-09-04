@@ -54,6 +54,10 @@ import type {
   GatewayApprovalListPendingResult,
   GatewayElicitationResponseInput,
   GatewayEvent,
+  GatewayCancelSteerInput,
+  GatewayCancelSteerResult,
+  GatewaySteerTurnInput,
+  GatewaySteerTurnResult,
   GatewayPermissionDecisionInput,
   GatewayRecordAgentStatusMessageInput,
   GatewaySessionPermissionGrantInput,
@@ -681,6 +685,32 @@ export class InProcessGateway implements Gateway {
     await pending;
   }
 
+  /**
+   * Mid-turn steering（协议 1.6）：向进行中的 turn 投递插话。只对已有
+   * in-flight turn 的缓存会话生效（getActiveSession 只查不建）；投递即
+   * 入列——实际注入发生在下一次模型调用边界（steer_applied 事件）。
+   */
+  async steerTurn(input: GatewaySteerTurnInput): Promise<GatewaySteerTurnResult> {
+    const session = this.router.getActiveSession(input.sessionKey);
+    if (!session) {
+      return { delivered: false, reason: "no_active_turn" };
+    }
+    const item = session.steer(input.text);
+    if (!item) {
+      return { delivered: false, reason: "busy" };
+    }
+    return { delivered: true, steerId: item.steerId };
+  }
+
+  /** Mid-turn steering：撤回一条尚未注入的插话（已注入项不可撤回）。 */
+  async cancelSteer(input: GatewayCancelSteerInput): Promise<GatewayCancelSteerResult> {
+    const session = this.router.getActiveSession(input.sessionKey);
+    if (!session) {
+      return { cancelled: false };
+    }
+    return { cancelled: session.cancelSteer(input.steerId) };
+  }
+
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
     return this.router.list(input);
   }
@@ -743,6 +773,7 @@ export class InProcessGateway implements Gateway {
         active: false,
         sessionKey: input.sessionKey,
         events: [],
+        steerItems: [],
       };
     }
     return {
@@ -753,6 +784,7 @@ export class InProcessGateway implements Gateway {
         .filter(event => this.shouldReplayActiveTurnEvent(input.sessionKey, event))
         .map(event => cloneGatewayEvent(event)),
       ...(replay.truncated ? { truncated: true } : {}),
+      steerItems: this.router.getActiveSession(input.sessionKey)?.pendingSteerItems() ?? [],
     };
   }
 

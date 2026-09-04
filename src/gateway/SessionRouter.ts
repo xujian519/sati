@@ -100,6 +100,16 @@ export class SessionRouter {
     return true;
   }
 
+  /**
+   * Mid-turn steering：取当前有 in-flight turn 的已缓存会话。只查不建——
+   * beginTurn 后、submitTurn pump 完成 getOrCreate 前的极小窗口内返回
+   * undefined（调用方按 no_active_turn 拒绝，客户端重试即可）。
+   */
+  getActiveSession(sessionKey: string): AgentSession | undefined {
+    if (!this.inFlightTurns.has(sessionKey)) return undefined;
+    return this.sessions.get(sessionKey)?.session;
+  }
+
   endTurn(sessionKey: string, runId?: string): void {
     const record = this.sessions.get(sessionKey);
     const inFlightRunId = this.inFlightTurns.get(sessionKey);

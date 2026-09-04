@@ -96,6 +96,8 @@ export type ComposerV2Props = {
   isBusySendQueued?: boolean;
   isBusySendConfirmed?: boolean;
   onCancelBusySendQueue?: () => void;
+  canSteerBusySend?: boolean;
+  onSteerBusySendQueue?: () => void;
   isSubmitPending?: boolean;
   tokenBudget?: Record<string, unknown> | null;
   thinkingMode: ThinkingModeId;
@@ -363,6 +365,8 @@ export default function ComposerV2({
   isBusySendQueued = false,
   isBusySendConfirmed = false,
   onCancelBusySendQueue,
+  canSteerBusySend = false,
+  onSteerBusySendQueue,
   isSubmitPending = false,
   tokenBudget,
   thinkingMode,
@@ -871,6 +875,20 @@ export default function ComposerV2({
                             defaultValue: "Queued; click again to stop this turn and send now",
                           })}
                     </span>
+                    {canSteerBusySend && onSteerBusySendQueue ? (
+                      <button
+                        type="button"
+                        onClick={onSteerBusySendQueue}
+                        className="rounded-full px-2 py-1 text-amber-700 transition hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                        title={
+                          t("input.steerQueuedSend", {
+                            defaultValue: "Steer instead — inject into the running turn without stopping it",
+                          }) as string
+                        }
+                      >
+                        {t("input.steerQueuedSendShort", { defaultValue: "Steer" })}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={onCancelBusySendQueue}

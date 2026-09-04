@@ -925,6 +925,24 @@ export async function abortViaGateway(sessionId, _provider = "sati") {
   }
 }
 
+/**
+ * Mid-turn steering（协议 1.6）：向进行中的 turn 投递一条插话。插话在下一次
+ * 模型调用边界注入消息序列尾部，不中断当前 turn。旧 gateway 无 steerTurn
+ * 时 feature-detect 返回 not_configured。
+ */
+export async function steerViaGateway(sessionId, text) {
+  const gw = await ensureGateway();
+  if (!isSatiSessionKey(sessionId) || typeof gw.steerTurn !== "function") {
+    return { delivered: false, reason: "not_configured" };
+  }
+  try {
+    return await gw.steerTurn({ sessionKey: sessionId, text });
+  } catch (error) {
+    console.warn("[sati-bridge] steerTurn failed:", error);
+    return { delivered: false, reason: "error" };
+  }
+}
+
 export async function decidePermissionViaGateway(requestId, decision, options = {}) {
   const gw = await ensureGateway();
   // PermissionBus is keyed by sessionKey + requestId. We don't know

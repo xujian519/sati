@@ -228,6 +228,17 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
           recoverable: true,
         },
       ];
+    case "steer_applied":
+      return [{ type: "steer_applied", steerId: event.steerId, preview: event.preview }];
+    case "steer_unapplied":
+      return [
+        {
+          type: "steer_unapplied",
+          steerId: event.steerId,
+          preview: event.preview,
+          reason: event.reason,
+        },
+      ];
     case "tool_results_projected": {
       const events: GatewayEvent[] = [];
       for (const block of event.message.content) {

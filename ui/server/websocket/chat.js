@@ -22,6 +22,7 @@ import {
   getSessionTokenBudget,
   grantSessionPermissionViaGateway,
   runChatViaGateway,
+  steerViaGateway,
 } from "../sati-bridge.js";
 import { handleShellConnection } from "./shell.js";
 import {
@@ -320,6 +321,20 @@ function handleChatConnection(ws, request) {
             success,
             sessionId: data.sessionId,
             provider,
+          }),
+        );
+      } else if (data.type === "steer-session") {
+        // Mid-turn steering（协议 1.6）：向进行中的 turn 投递插话
+        // （下一次模型调用边界注入，不中断当前 turn）。
+        const result = await steerViaGateway(data.sessionId, data.text);
+        writer.send(
+          createNormalizedMessage({
+            kind: "complete",
+            exitCode: result.delivered ? 0 : 1,
+            steered: result.delivered,
+            steerId: result.steerId,
+            reason: result.reason,
+            sessionId: data.sessionId,
           }),
         );
       } else if (data.type === "permission-response") {

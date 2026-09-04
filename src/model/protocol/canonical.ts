@@ -142,6 +142,8 @@ export type CanonicalMessageMetadata = {
   purpose?: string;
   /** Originating tool call for projected supplemental result messages. */
   toolCallId?: string;
+  /** Mid-turn steering（协议 1.6）：purpose="steer" 消息的插话 id（审计/撤回对账）。 */
+  steerId?: string;
   forkCarryover?: {
     sourceSessionId: string;
     sourceTurnId?: string;

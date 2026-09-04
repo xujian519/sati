@@ -289,7 +289,9 @@
       "agentDescription": "Directly process and execute the task",
       "planDescription": "Generate a plan first, then execute after confirmation",
       "askDescription": "Only answers questions without modifying files"
-    }
+    },
+    "steerQueuedSend": "Steer instead — inject into the running turn without stopping it",
+    "steerQueuedSendShort": "Steer"
   },
   "documentReferences": {
     "defaultPrompt": "Please answer based on the document selection I quoted.",

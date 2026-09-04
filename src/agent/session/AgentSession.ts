@@ -9,6 +9,8 @@ import type { SessionMetadataValue } from "../../session/transcript/TranscriptEn
 import type { TurnRunner } from "../turn/TurnRunner.js";
 import type { AgentTranscriptWriterState } from "../../session/transcript/TranscriptWriter.js";
 import type { AgentLoopSeedState } from "../loop/AgentLoop.js";
+import { steerPreview } from "../loop/steer.js";
+import { SteerMailbox, type SteerItem } from "./SteerMailbox.js";
 import {
   appendPermissionDenials,
   cloneSessionStateForRuntimeReload,
@@ -33,6 +35,11 @@ export type AgentSessionOptions = {
    * 测试）时回退到 `state.messages`（无持久层，无漂移可言）。
    */
   projectMessages?: () => Promise<CanonicalMessage[]>;
+  /**
+   * Mid-turn steering 邮箱（协议 1.6）。默认自建；与 AgentLoop 的
+   * steerSource 必须是同一实例（createAgentSession 负责接线）。
+   */
+  steerMailbox?: SteerMailbox;
 };
 
 export type AgentSessionRuntimeReloadSnapshot = {
@@ -46,9 +53,26 @@ export type AgentSessionRuntimeReloadSnapshot = {
 
 export class AgentSession {
   private state: AgentSessionStateShape;
+  private readonly steerMailbox: SteerMailbox;
 
   constructor(private readonly options: AgentSessionOptions) {
     this.state = options.initialState ?? createInitialAgentSessionState(options.sessionId);
+    this.steerMailbox = options.steerMailbox ?? new SteerMailbox();
+  }
+
+  /** Mid-turn steering：投递一条插话（仅 turn 进行中成功，见 SteerMailbox.enqueue）。 */
+  steer(text: string): SteerItem | undefined {
+    return this.steerMailbox.enqueue(text);
+  }
+
+  /** Mid-turn steering：撤回一条未消费插话。 */
+  cancelSteer(steerId: string): boolean {
+    return this.steerMailbox.cancel(steerId);
+  }
+
+  /** Mid-turn steering：当前排队项快照（active_turn_snapshot 展示用）。 */
+  pendingSteerItems(): SteerItem[] {
+    return this.steerMailbox.pending();
   }
 
   /** 审批通过挂起的门禁消息（输出级 HITL）：消息已在挂起时入库，此处仅完成审批流程控制。sessionId 自动绑定本会话，防跨会话越权。 */
@@ -66,6 +90,7 @@ export class AgentSession {
     this.state.status = "running";
     this.state.currentTurnId = turnId;
     this.state.abortController = new AbortController();
+    this.steerMailbox.start(turnId);
     yield { type: "session_started", sessionId: this.state.sessionId };
     await this.options.lifecycle?.dispatch({
       event: "SessionStart",
@@ -122,6 +147,24 @@ export class AgentSession {
     this.state.status =
       runResult.result.type === "aborted" ? "aborted" : runResult.result.type === "error" ? "failed" : "idle";
     this.state.currentTurnId = undefined;
+    // Mid-turn steering：收尾同步关闭邮箱（此后 enqueue 失败，防消息被静默
+    // 吞进已结束的 turn）。滞留项广播 steer_unapplied——消息本体未落库，
+    // 宿主据此提示用户重发。
+    const unappliedReason =
+      runResult.result.type === "aborted"
+        ? "turn_aborted"
+        : runResult.result.type === "error"
+          ? "turn_failed"
+          : "turn_ended";
+    for (const item of this.steerMailbox.drainOrClose()) {
+      yield {
+        type: "steer_unapplied",
+        sessionId: this.state.sessionId,
+        steerId: item.steerId,
+        preview: steerPreview(item.text),
+        reason: unappliedReason,
+      };
+    }
     const sessionEndReason = this.state.status === "aborted" ? "other" : "prompt_input_exit";
     await this.options.lifecycle?.dispatch({
       event: "SessionEnd",

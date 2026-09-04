@@ -302,6 +302,33 @@ export function useChatComposerState({
     return candidateSessionIds.find(sessionId => Boolean(sessionId) && !isTemporarySessionId(sessionId)) ?? null;
   }, [currentSessionId, pendingViewSessionRef, selectedSession?.id]);
 
+  // Mid-turn steering（协议 1.6）：把排队中的纯文本改为插话投递——不中断
+  // 当前 turn，引擎在下一次模型调用边界注入。带附件/引用时不提供该动作。
+  const steerBusySendQueue = useCallback(() => {
+    const snapshot = queuedBusySendSnapshotRef.current;
+    const text = snapshot?.input?.trim() ?? "";
+    const hasAttachments =
+      (snapshot?.attachedImages?.length ?? 0) > 0 || (snapshot?.documentReferences?.length ?? 0) > 0;
+    if (!text || hasAttachments) return;
+    const targetSessionId = resolveConcreteSessionId();
+    if (!targetSessionId) return;
+    sendMessage({
+      type: "steer-session",
+      sessionId: targetSessionId,
+      text,
+    });
+    cancelBusySendQueue();
+    applyInputValue("");
+    resetAttachmentState();
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  }, [applyInputValue, cancelBusySendQueue, resetAttachmentState, resolveConcreteSessionId, sendMessage]);
+
+  // 插话仅支持纯文本：排队快照带附件/引用或输入为空时不显示插话按钮。
+  const canSteerBusySend =
+    isBusySendQueued && input.trim().length > 0 && attachedImages.length === 0 && documentReferences.length === 0;
+
   const syncQueuedBusySendSnapshot = useCallback(
     (updates: Partial<QueuedBusySendSnapshot> = {}) => {
       if (!queuedBusySendRef.current) return;
@@ -1623,6 +1650,8 @@ export function useChatComposerState({
     isBusySendQueued,
     isBusySendConfirmed,
     cancelBusySendQueue,
+    steerBusySendQueue,
+    canSteerBusySend,
   };
 }
 

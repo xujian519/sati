@@ -265,6 +265,16 @@ export class GatewayWsConnection {
         return this.options.gateway
           .abortTurn(frame.params as GatewayMethodParams<"abortTurn">)
           .then(() => ({ ok: true }));
+      case "steer_turn":
+        if (this.options.gateway.steerTurn) {
+          return this.options.gateway.steerTurn(frame.params as GatewayMethodParams<"steerTurn">);
+        }
+        return Promise.resolve(notConfigured({ delivered: false }, "Mid-turn steering not available"));
+      case "cancel_steer":
+        if (this.options.gateway.cancelSteer) {
+          return this.options.gateway.cancelSteer(frame.params as GatewayMethodParams<"cancelSteer">);
+        }
+        return Promise.resolve(notConfigured({ cancelled: false }, "Mid-turn steering not available"));
       case "list_sessions":
         return this.options.gateway.listSessions(frame.params as GatewayMethodParams<"listSessions">);
       case "resume_session":

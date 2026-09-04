@@ -90,6 +90,8 @@ export function validateMethodParamValue(method: WsGatewayMethod, spec: ParamSpe
 export const METHOD_PARAM_GUARDS = {
   submit_turn: fields({ sessionKey: "string", channelKey: "string", message: "string" }),
   abort_turn: fields({ sessionKey: "string" }),
+  steer_turn: fields({ sessionKey: "string", text: "string" }),
+  cancel_steer: fields({ sessionKey: "string", steerId: "string" }),
   list_sessions: fields({ projectKey: "string?", limit: "number?", cursor: "string?" }),
   resume_session: fields({ sessionKey: "string" }),
   new_session: fields({ channelKey: "string" }),
