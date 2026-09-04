@@ -275,6 +275,16 @@ export class GatewayWsConnection {
           return this.options.gateway.cancelSteer(frame.params as GatewayMethodParams<"cancelSteer">);
         }
         return Promise.resolve(notConfigured({ cancelled: false }, "Mid-turn steering not available"));
+      case "edit_last_turn":
+        if (this.options.gateway.editLastTurn) {
+          return this.options.gateway.editLastTurn(frame.params as GatewayMethodParams<"editLastTurn">);
+        }
+        return Promise.resolve(notConfigured({ rewritten: false }, "Edit last turn not available"));
+      case "regenerate_last_turn":
+        if (this.options.gateway.regenerateLastTurn) {
+          return this.options.gateway.regenerateLastTurn(frame.params as GatewayMethodParams<"regenerateLastTurn">);
+        }
+        return Promise.resolve(notConfigured({ rewritten: false }, "Regenerate last turn not available"));
       case "list_sessions":
         return this.options.gateway.listSessions(frame.params as GatewayMethodParams<"listSessions">);
       case "resume_session":

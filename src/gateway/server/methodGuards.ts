@@ -92,6 +92,8 @@ export const METHOD_PARAM_GUARDS = {
   abort_turn: fields({ sessionKey: "string" }),
   steer_turn: fields({ sessionKey: "string", text: "string" }),
   cancel_steer: fields({ sessionKey: "string", steerId: "string" }),
+  edit_last_turn: fields({ sessionKey: "string", text: "string" }),
+  regenerate_last_turn: fields({ sessionKey: "string" }),
   list_sessions: fields({ projectKey: "string?", limit: "number?", cursor: "string?" }),
   resume_session: fields({ sessionKey: "string" }),
   new_session: fields({ channelKey: "string" }),

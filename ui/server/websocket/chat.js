@@ -23,6 +23,8 @@ import {
   grantSessionPermissionViaGateway,
   runChatViaGateway,
   steerViaGateway,
+  editLastTurnViaGateway,
+  regenerateLastTurnViaGateway,
 } from "../sati-bridge.js";
 import { handleShellConnection } from "./shell.js";
 import {
@@ -59,6 +61,43 @@ function untrackBrowserSessions(ws) {
       browserSessionActivity.delete(sessionKey);
     }
   }
+}
+
+// 协议 1.7：rewrite 帧（edit-last-turn / regenerate-last-turn）成功后，把乐观
+// user 行 + Processing 状态帧广播给兄弟 watcher——提交标签页已自行渲染乐观行，
+// 只需让其他打开同一会话的标签页即时镜像（与 sati-command 分支同模式）。
+function broadcastRewriteOptimisticFrames(sessionId, userContent, userId, ws) {
+  touchBrowserSession(sessionId, ws);
+  sessionWatchRegistry.watch(sessionId, ws);
+  const nowIso = new Date().toISOString();
+  broadcastToSessionWatchers(
+    sessionId,
+    createNormalizedMessage({
+      id: `local_ws_user_${crypto.randomUUID()}`,
+      sessionId,
+      provider: "sati",
+      kind: "text",
+      role: "user",
+      content: userContent,
+      timestamp: nowIso,
+    }),
+    userId,
+    ws,
+  );
+  broadcastToSessionWatchers(
+    sessionId,
+    createNormalizedMessage({
+      id: `local_ws_status_${crypto.randomUUID()}`,
+      sessionId,
+      provider: "sati",
+      kind: "status",
+      text: "Processing",
+      canInterrupt: true,
+      timestamp: nowIso,
+    }),
+    userId,
+    ws,
+  );
 }
 
 /** M4：当前活跃浏览器会话 key 快照（team-presence 心跳聚合用；浏览器全关即空表）。 */
@@ -336,6 +375,49 @@ function handleChatConnection(ws, request) {
             reason: result.reason,
             sessionId: data.sessionId,
           }),
+        );
+      } else if (data.type === "edit-last-turn") {
+        // 协议 1.7：遮蔽旧 turn 后立即在同一 handler 内重发新文本——顺序
+        // 保证 shadow 先于 submitTurn 的历史投影读取落盘（异步 handler 帧间
+        // 不互斥，拆两帧会竞态）。
+        const result = await editLastTurnViaGateway(data.sessionId, data.text);
+        if (!result.rewritten) {
+          writer.send(
+            createNormalizedMessage({
+              kind: "complete",
+              exitCode: 1,
+              rewriteError: result.reason ?? "unknown",
+              sessionId: data.sessionId,
+            }),
+          );
+          return;
+        }
+        broadcastRewriteOptimisticFrames(data.sessionId, data.text, userId, ws);
+        await runChatViaGateway(
+          data.text,
+          { ...data.options, sessionId: data.sessionId, userVisibleInput: data.text },
+          writer,
+          "edit-last-turn",
+        );
+      } else if (data.type === "regenerate-last-turn") {
+        const result = await regenerateLastTurnViaGateway(data.sessionId);
+        if (!result.rewritten || typeof result.originalText !== "string" || !result.originalText) {
+          writer.send(
+            createNormalizedMessage({
+              kind: "complete",
+              exitCode: 1,
+              rewriteError: result.reason ?? "unknown",
+              sessionId: data.sessionId,
+            }),
+          );
+          return;
+        }
+        broadcastRewriteOptimisticFrames(data.sessionId, result.originalText, userId, ws);
+        await runChatViaGateway(
+          result.originalText,
+          { ...data.options, sessionId: data.sessionId, userVisibleInput: result.originalText },
+          writer,
+          "regenerate-last-turn",
         );
       } else if (data.type === "permission-response") {
         if (data.requestId) {

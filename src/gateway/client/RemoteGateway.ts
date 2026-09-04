@@ -138,6 +138,21 @@ export class RemoteGateway implements Gateway {
     return this.client.request<import("../protocol/types.js").GatewayCancelSteerResult>("cancel_steer", input);
   }
 
+  async editLastTurn(
+    input: import("../protocol/types.js").GatewayEditLastTurnInput,
+  ): Promise<import("../protocol/types.js").GatewayRewriteLastTurnResult> {
+    return this.client.request<import("../protocol/types.js").GatewayRewriteLastTurnResult>("edit_last_turn", input);
+  }
+
+  async regenerateLastTurn(
+    input: import("../protocol/types.js").GatewayRegenerateLastTurnInput,
+  ): Promise<import("../protocol/types.js").GatewayRewriteLastTurnResult> {
+    return this.client.request<import("../protocol/types.js").GatewayRewriteLastTurnResult>(
+      "regenerate_last_turn",
+      input,
+    );
+  }
+
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
     return this.client.request<ListSessionsResult>("list_sessions", input);
   }
