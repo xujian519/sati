@@ -26,6 +26,7 @@ import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
+import { promptCacheEnabled, resolveRequestCachePlan } from "../../context/cache/CachePlan.js";
 import { compressIndexRanges } from "../../context/compaction/CompactionEngine.js";
 import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
 import type { AutoCompactResult, ContextRecoveryDecision, TokenBudgetSnapshot } from "../../context/index.js";
@@ -121,6 +122,8 @@ import { SubagentExecutor } from "./subagentExecutor.js";
 const EMPTY_LENGTH_OUTPUT_RETRY_FLOOR = 4_096;
 const agentLogger = createLogger("agent");
 const autoCompactLogger = createLogger("agent:auto-compact");
+/** A5: prompt cache plan 的进程级单调代数（诊断用，随每次规划递增）。 */
+let promptCacheGeneration = 0;
 const CIRCUIT_BREAKER_GRACE_PROMPT = [
   "Your last several tool calls all failed input validation with the same error.",
   "This may indicate a tool-side issue rather than a problem with your approach.",
@@ -2082,6 +2085,22 @@ export class AgentLoop {
       // metadata 透传（可用于仪表盘请求关联）。
       metadata: { ...this.config.metadata, turnId: input.turnId },
       cacheBreakpoints: prepared.cacheBreakpoints,
+      // A5：Anthropic per-request 稳定缓存布局（system + recent3）。仅在
+      // anthropic 协议、无显式微压缩断点、环境开关开启时规划；逐调用可变
+      // 注入（账本/提醒）位于消息尾部，不破坏断点前缀。
+      cachePlan: resolveRequestCachePlan(
+        {
+          provider: this.config.provider,
+          model: this.config.model,
+          systemPrompt: prepared.systemPrompt ?? this.config.systemPrompt,
+          tools: prepared.tools,
+          messages: materialized.messages,
+          enabled:
+            promptCacheEnabled() && this.dependencies.getProviderProtocol?.(this.config.provider) === "anthropic",
+          explicitBreakpoints: prepared.cacheBreakpoints,
+        },
+        ++promptCacheGeneration,
+      ),
     };
   }
 

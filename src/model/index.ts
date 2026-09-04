@@ -72,6 +72,7 @@ export type {
   CanonicalMessageMetadata,
   CanonicalModelEvent,
   CanonicalModelRequest,
+  PromptCachePlan,
   CanonicalModelResponse,
   CanonicalOutputSchema,
   CanonicalPdfBlock,

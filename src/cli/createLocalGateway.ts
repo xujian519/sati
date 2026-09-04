@@ -1926,6 +1926,13 @@ class ProjectRuntimeRegistry {
           provider,
           model,
         }),
+      getProviderProtocol: providerId => {
+        try {
+          return runtime.model.getProviderProtocol(providerId);
+        } catch {
+          return undefined;
+        }
+      },
       getModelMaxOutputTokens: (provider, model) => {
         try {
           return runtime.model.getCapabilities(provider, model).maxOutputTokens;
