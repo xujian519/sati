@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildDefaultSatiConfig,
+  configRevision,
   readSatiConfigFile,
   resolveModel,
   sanitizeProviderCredentials,
@@ -421,5 +422,81 @@ describe("validateSatiConfig gateway validation", () => {
     expect(result.config.agent.subagents.default).toBe("inherit");
     expect(result.config.model.providers).not.toHaveProperty("_placeholder");
     expect(result.configPath).toBe(configPath);
+  });
+});
+
+describe("writeSatiConfig transactional save", () => {
+  function validConfig(tag) {
+    return {
+      agent: { model: "openai/gpt-4o-mini" },
+      model: {
+        providers: {
+          openai: {
+            protocol: "openai",
+            url: "https://api.openai.com/v1",
+            apiKey: `sk-test-${tag}`,
+            models: { "gpt-4o-mini": {} },
+          },
+        },
+      },
+    };
+  }
+
+  it("writes atomically and leaves no temp file behind", () => {
+    const configPath = useTempConfig(null);
+
+    return writeSatiConfig(validConfig("a")).then(() => {
+      const record = readSatiConfigFile();
+      expect(record.parseError).toBeNull();
+      expect(existsSync(`${configPath}.sati-tmp`)).toBe(false);
+      expect(readFileSync(configPath, "utf8")).toBe(record.raw);
+    });
+  });
+
+  it("serializes concurrent writes: the file is always one writer's complete output", async () => {
+    useTempConfig(null);
+    const tags = ["one", "two", "three"];
+    await Promise.all(tags.map(tag => writeSatiConfig(validConfig(tag))));
+
+    const record = readSatiConfigFile();
+    expect(record.parseError).toBeNull();
+    const apiKey = record.config.model.providers.openai.apiKey;
+    expect(tags).toContain(apiKey.replace("sk-test-", ""));
+  });
+
+  it("keeps the previous config intact when the temp write fails", async () => {
+    const configPath = useTempConfig(null);
+    await writeSatiConfig(validConfig("keep"));
+    const before = readFileSync(configPath, "utf8");
+
+    await chmodSync(join(configPath, ".."), 0o555);
+    try {
+      await expect(writeSatiConfig(validConfig("blocked"))).rejects.toThrow();
+    } finally {
+      await chmodSync(join(configPath, ".."), 0o755);
+    }
+
+    // 原子写失败后磁盘仍是完整的旧配置，且无 temp 残留。
+    expect(readFileSync(configPath, "utf8")).toBe(before);
+    expect(existsSync(`${configPath}.sati-tmp`)).toBe(false);
+  });
+
+  it("enforces the optimistic lock via previousRevision", async () => {
+    useTempConfig(null);
+    await writeSatiConfig(validConfig("v1"));
+    const revision = configRevision(readSatiConfigFile().raw);
+
+    const outcome = await writeSatiConfig(validConfig("stale"), { previousRevision: "deadbeef" }).then(
+      () => "resolved",
+      error => error,
+    );
+    expect(outcome).toBeInstanceOf(Error);
+    expect(outcome.code).toBe("CONFIG_CONFLICT");
+    expect(outcome.currentRevision).toHaveLength(64);
+    // 冲突写被拒绝后磁盘仍是 v1。
+    expect(readSatiConfigFile().config.model.providers.openai.apiKey).toBe("sk-test-v1");
+
+    await expect(writeSatiConfig(validConfig("v2"), { previousRevision: revision })).resolves.toBeTruthy();
+    expect(readSatiConfigFile().config.model.providers.openai.apiKey).toBe("sk-test-v2");
   });
 });

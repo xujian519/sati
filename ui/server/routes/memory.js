@@ -12,7 +12,7 @@ import { fileURLToPath } from "url";
 // lib/ 漂移窗口已被根 package.json 的 prebuild/predev/preserver 钩子消除
 // （`pnpm --filter edgeclaw-memory-core build` 在每次 dev/build/server 启动时重建）。
 import { MemoryBundleValidationError } from "../../../src/context/memory/edgeclaw-memory-core/lib/index.js";
-import { readSatiConfigFile, writeSatiConfig } from "../services/satiConfig.js";
+import { configRevision, readSatiConfigFile, writeSatiConfig } from "../services/satiConfig.js";
 import { reloadSatiConfig } from "../services/satiConfigReloader.js";
 import { suppressNextWatchEvent } from "../services/satiConfigWatcher.js";
 import {
@@ -79,7 +79,7 @@ function getGlobalMemorySettings() {
   return getGlobalMemorySettingsFromConfig(readSatiConfigFile().config);
 }
 
-async function saveGlobalMemorySettings(partial = {}) {
+async function saveGlobalMemorySettings(partial = {}, { baseRevision } = {}) {
   const record = readSatiConfigFile();
   if (record.parseError) {
     const error = new Error("Invalid config YAML; repair raw YAML before updating memory settings");
@@ -112,7 +112,7 @@ async function saveGlobalMemorySettings(partial = {}) {
     },
   };
   suppressNextWatchEvent();
-  const saved = await writeSatiConfig(nextConfig);
+  const saved = await writeSatiConfig(nextConfig, { previousRevision: baseRevision });
   await reloadSatiConfig(saved.config);
   return getGlobalMemorySettingsFromConfig(saved.config);
 }
@@ -345,12 +345,28 @@ router
   .route("/settings")
   .get(async (req, res) =>
     withMemoryService(req, res, async () => {
-      res.json(getGlobalMemorySettings());
+      const record = readSatiConfigFile();
+      res.json({
+        ...getGlobalMemorySettingsFromConfig(record.config),
+        revision: configRevision(record.raw ?? ""),
+      });
     }),
   )
   .post(async (req, res) =>
     withMemoryService(req, res, async () => {
-      res.json(await saveGlobalMemorySettings(req.body ?? {}));
+      try {
+        const baseRevision = typeof req.body?.baseRevision === "string" ? req.body.baseRevision.trim() : undefined;
+        res.json(await saveGlobalMemorySettings(req.body ?? {}, { baseRevision }));
+      } catch (error) {
+        if (error && typeof error === "object" && error.code === "CONFIG_CONFLICT") {
+          return res.status(409).json({
+            error: error instanceof Error ? error.message : "Config conflict",
+            code: "CONFIG_CONFLICT",
+            currentRevision: error.currentRevision,
+          });
+        }
+        throw error;
+      }
     }),
   );
 

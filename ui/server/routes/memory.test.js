@@ -88,6 +88,7 @@ describe("memory settings route", () => {
       expect.objectContaining({
         memory: expect.objectContaining({ reasoningMode: "answer_first" }),
       }),
+      expect.objectContaining({ previousRevision: undefined }),
     );
   });
 
@@ -111,6 +112,32 @@ describe("memory settings route", () => {
       expect.objectContaining({
         memory: expect.objectContaining({ reasoningMode: "accuracy_first" }),
       }),
+      expect.objectContaining({ previousRevision: undefined }),
+    );
+  });
+
+  it("maps config conflicts to 409 when baseRevision is stale", async () => {
+    const conflict = new Error("Config changed since this settings draft was loaded.");
+    conflict.code = "CONFIG_CONFLICT";
+    conflict.currentRevision = "rev-current";
+    const { request, writeSatiConfig } = await createMemorySettingsApp({
+      memory: { reasoningMode: "answer_first", autoIndexIntervalMinutes: 30, autoDreamIntervalMinutes: 60 },
+    });
+    writeSatiConfig.mockRejectedValueOnce(conflict);
+
+    const result = await request("/api/memory/settings?projectPath=/tmp/sati-project", {
+      method: "POST",
+      body: JSON.stringify({ reasoningMode: "accuracy_first", baseRevision: "rev-stale" }),
+    });
+
+    expect(result.status).toBe(409);
+    expect(result.body).toMatchObject({
+      code: "CONFIG_CONFLICT",
+      currentRevision: "rev-current",
+    });
+    expect(writeSatiConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ previousRevision: "rev-stale" }),
     );
   });
 
@@ -234,6 +261,7 @@ async function createMemorySettingsApp(initialConfig) {
     runManualMemoryFlush: vi.fn(),
   }));
   vi.doMock("../services/satiConfig.js", () => ({
+    configRevision: vi.fn(() => "rev-mock"),
     readSatiConfigFile: vi.fn(() => ({ config })),
     writeSatiConfig,
   }));
