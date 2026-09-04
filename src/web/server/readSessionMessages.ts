@@ -25,6 +25,7 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { type CanonicalMessage } from "../../model/index.js";
 import { listProjectSessions, readTranscript, type SessionInfo } from "../../session/index.js";
 import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
+import { collectShadowedEntryIds } from "../../session/transcript/TranscriptReplay.js";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";
 import type { WebReadSessionMessagesInput, WebReadSessionMessagesResult } from "../client/protocol.js";
@@ -374,12 +375,18 @@ function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
   const entryIds: Array<string | undefined> = [];
   const forkUnsupportedContents: boolean[] = [];
   const compactBoundaries: CompactBoundaryInfo[] = [];
+  // turn_rewrite 遮蔽：被声明的条目（编辑/重新生成前的旧消息）不出现在 Web 投影。
+  const shadowedEntryIds = collectShadowedEntryIds(entries);
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
+    const isShadowed = entry.entryId !== undefined && shadowedEntryIds.has(entry.entryId);
 
     switch (entry.type) {
       case "accepted_input":
+        if (isShadowed) {
+          break;
+        }
         {
           const entryForkUnsupported = entry.messages.some(message =>
             message.content.some(block => block.type !== "text"),
@@ -401,6 +408,9 @@ function extractWebVisibleMessages(entries: AgentTranscriptEntry[]): {
       case "assistant_message":
       case "tool_result_message":
       case "durable_message":
+        if (isShadowed) {
+          break;
+        }
         if (entry.message.metadata?.synthetic) {
           break;
         }

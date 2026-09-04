@@ -58,6 +58,9 @@ import type {
   GatewayCancelSteerResult,
   GatewaySteerTurnInput,
   GatewaySteerTurnResult,
+  GatewayEditLastTurnInput,
+  GatewayRegenerateLastTurnInput,
+  GatewayRewriteLastTurnResult,
   GatewayPermissionDecisionInput,
   GatewayRecordAgentStatusMessageInput,
   GatewaySessionPermissionGrantInput,
@@ -162,6 +165,9 @@ export type InProcessGatewayOptions = {
   readSessionMessages?: (input: WebReadSessionMessagesInput) => Promise<WebReadSessionMessagesResult>;
   readSubagentMessages?: (input: WebReadSubagentMessagesInput) => Promise<WebReadSubagentMessagesResult>;
   forkSession?: (input: WebForkSessionInput) => Promise<WebForkSessionResult>;
+  /** 编辑/重新生成最后一条用户消息（协议 1.7）— host 注入实现（createLocalGateway）。 */
+  editLastTurn?: (input: GatewayEditLastTurnInput) => Promise<GatewayRewriteLastTurnResult>;
+  regenerateLastTurn?: (input: GatewayRegenerateLastTurnInput) => Promise<GatewayRewriteLastTurnResult>;
   recordAgentStatusMessage?: (input: GatewayRecordAgentStatusMessageInput) => Promise<{ recorded: boolean }>;
   /**
    * Web Phase 3 — pluggable project enumerator + describer.
@@ -932,6 +938,22 @@ export class InProcessGateway implements Gateway {
       throw new Error("fork_session is not configured. Wire `forkSession` via createLocalGateway.");
     }
     return this.options.forkSession(input);
+  }
+
+  /** 编辑最后一条用户消息（协议 1.7）：遮蔽旧 turn；新输入由调用方走 submit_turn。 */
+  async editLastTurn(input: GatewayEditLastTurnInput): Promise<GatewayRewriteLastTurnResult> {
+    if (!this.options.editLastTurn) {
+      throw new Error("edit_last_turn is not configured. Wire `editLastTurn` via createLocalGateway.");
+    }
+    return this.options.editLastTurn(input);
+  }
+
+  /** 重新生成最后一条用户消息（协议 1.7）：遮蔽旧 turn 并返回原文供重发。 */
+  async regenerateLastTurn(input: GatewayRegenerateLastTurnInput): Promise<GatewayRewriteLastTurnResult> {
+    if (!this.options.regenerateLastTurn) {
+      throw new Error("regenerate_last_turn is not configured. Wire `regenerateLastTurn` via createLocalGateway.");
+    }
+    return this.options.regenerateLastTurn(input);
   }
 
   async listProjects(): Promise<WebListProjectsResult> {

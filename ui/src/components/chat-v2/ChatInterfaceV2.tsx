@@ -39,6 +39,18 @@ type PendingViewSession = {
 //   · MessagesPaneV2 — markdown row layout, GPT-like reading width
 //   · ComposerV2     — card textarea + paperclip/at + arrow-up send
 //   · NO provider picker empty state, NO pill bar, NO gradient bubbles
+
+// 协议 1.7：edit-last-turn / regenerate-last-turn 服务端失败原因白名单
+//（未命中按 unknown 兜底提示）。
+const REWRITE_ERROR_REASONS = new Set([
+  "no_last_turn",
+  "active_turn",
+  "pending_approval",
+  "unsupported_content",
+  "compact_tail",
+  "not_configured",
+]);
+
 function ChatInterfaceV2({
   selectedProject,
   selectedSession,
@@ -84,6 +96,15 @@ function ChatInterfaceV2({
   const [runMode, setRunMode] = useState<ChatRunMode>("agent");
   const [isForkPending, setIsForkPending] = useState(false);
   const { addToast } = useToast();
+
+  // 协议 1.7：改写失败的 complete 帧带 rewriteError，映射为 i18n toast。
+  const handleRewriteError = useCallback(
+    (reason: string) => {
+      const known = REWRITE_ERROR_REASONS.has(reason) ? reason : "unknown";
+      addToast("error", t(`input.rewriteError.${known}`));
+    },
+    [addToast, t],
+  );
 
   const resetStreamingState = useCallback(() => {
     if (streamTimerRef.current) {
@@ -235,6 +256,8 @@ function ChatInterfaceV2({
     cancelBusySendQueue,
     steerBusySendQueue,
     canSteerBusySend,
+    beginEditLastTurn,
+    regenerateLastTurn,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -342,6 +365,7 @@ function ChatInterfaceV2({
     onReplaceTemporarySession,
     onNavigateToSession,
     onWebSocketReconnect: handleWebSocketReconnect,
+    onRewriteError: handleRewriteError,
     sessionStore,
     sendMessage,
   });
@@ -452,6 +476,33 @@ function ChatInterfaceV2({
       t,
       textareaRef,
     ],
+  );
+
+  // 协议 1.7：编辑最后一条 user 消息——预填 composer，提交时改发 edit-last-turn。
+  const handleEditLastUserMessage = useCallback(
+    (message: ChatMessage) => {
+      if (isLoading || sessionIsReadOnly || !message.entryId) return;
+      const sessionId = currentSessionId || selectedSession?.id;
+      if (!sessionId) return;
+      beginEditLastTurn(sessionId, String(message.content ?? ""));
+    },
+    [beginEditLastTurn, currentSessionId, isLoading, selectedSession?.id, sessionIsReadOnly],
+  );
+
+  // 协议 1.7：重新生成最后一轮——取最后一条 user 消息原文做乐观气泡，
+  // 服务端以最后一条 accepted_input 为准（含其改写文本）。
+  const handleRegenerateLastTurn = useCallback(
+    (message: ChatMessage) => {
+      if (isLoading || sessionIsReadOnly || !message.entryId) return;
+      const sessionId = currentSessionId || selectedSession?.id;
+      if (!sessionId) return;
+      const lastUserMessage = [...chatMessages]
+        .reverse()
+        .find(m => m.type === "user" && String(m.content ?? "").trim());
+      if (!lastUserMessage) return;
+      regenerateLastTurn(sessionId, String(lastUserMessage.content ?? ""));
+    },
+    [chatMessages, currentSessionId, isLoading, regenerateLastTurn, selectedSession?.id, sessionIsReadOnly],
   );
 
   useEffect(() => {
@@ -665,6 +716,8 @@ function ChatInterfaceV2({
         sessionStore={sessionStore}
         onFork={sessionIsReadOnly ? undefined : handleFork}
         forkDisabled={isForkPending}
+        onEditLastUserMessage={sessionIsReadOnly ? undefined : handleEditLastUserMessage}
+        onRegenerateLastTurn={sessionIsReadOnly ? undefined : handleRegenerateLastTurn}
       />
       {composerSlot}
     </div>

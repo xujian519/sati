@@ -149,6 +149,7 @@ import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStora
 import { createSessionTitleGenerator } from "../session/title/SessionTitleGenerator.js";
 import { readWebSessionMessages, readSubagentWebMessages } from "../web/server/readSessionMessages.js";
 import { forkWebSession } from "../web/server/forkSession.js";
+import { rewriteLastTurn } from "../web/server/editLastTurn.js";
 import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
 import { BackgroundTaskRuntime, type BackgroundTaskCompletionEvent } from "../task/runtime/BackgroundTaskRuntime.js";
 import {
@@ -479,6 +480,33 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         pilotHome,
         now,
       }),
+    // 编辑/重新生成最后一条用户消息（协议 1.7）：预检 in-flight turn 与挂起审批
+    // （内存 bus + 团队持久化表），通过后经 rewriteLastTurn 追加 turn_rewrite 遮蔽
+    // 条目；新输入由调用方随后走标准 submit_turn。
+    editLastTurn: async input => {
+      if (router.hasInFlightTurn(input.sessionKey)) {
+        return { rewritten: false, reason: "active_turn" };
+      }
+      if (gateway.getApprovalBus().list(input.sessionKey).length > 0 || teamDb.hasPendingApproval(input.sessionKey)) {
+        return { rewritten: false, reason: "pending_approval" };
+      }
+      return rewriteLastTurn(
+        { sessionKey: input.sessionKey, reason: "edit_last_turn", newText: input.text },
+        { projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot, pilotHome, now },
+      );
+    },
+    regenerateLastTurn: async input => {
+      if (router.hasInFlightTurn(input.sessionKey)) {
+        return { rewritten: false, reason: "active_turn" };
+      }
+      if (gateway.getApprovalBus().list(input.sessionKey).length > 0 || teamDb.hasPendingApproval(input.sessionKey)) {
+        return { rewritten: false, reason: "pending_approval" };
+      }
+      return rewriteLastTurn(
+        { sessionKey: input.sessionKey, reason: "regenerate_last_turn" },
+        { projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot, pilotHome, now },
+      );
+    },
     async recordAgentStatusMessage(input) {
       const storage = createAgentProjectSessionStorage({
         projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,

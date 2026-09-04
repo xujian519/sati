@@ -943,6 +943,36 @@ export async function steerViaGateway(sessionId, text) {
   }
 }
 
+/**
+ * 编辑/重新生成最后一条用户消息（协议 1.7）：遮蔽旧 turn 后经标准 submit_turn
+ * 重发。旧 gateway 无 editLastTurn 时 feature-detect 返回 not_configured。
+ */
+export async function editLastTurnViaGateway(sessionId, text) {
+  const gw = await ensureGateway();
+  if (!isSatiSessionKey(sessionId) || typeof gw.editLastTurn !== "function") {
+    return { rewritten: false, reason: "not_configured" };
+  }
+  try {
+    return await gw.editLastTurn({ sessionKey: sessionId, text });
+  } catch (error) {
+    console.warn("[sati-bridge] editLastTurn failed:", error);
+    return { rewritten: false, reason: "error" };
+  }
+}
+
+export async function regenerateLastTurnViaGateway(sessionId) {
+  const gw = await ensureGateway();
+  if (!isSatiSessionKey(sessionId) || typeof gw.regenerateLastTurn !== "function") {
+    return { rewritten: false, reason: "not_configured" };
+  }
+  try {
+    return await gw.regenerateLastTurn({ sessionKey: sessionId });
+  } catch (error) {
+    console.warn("[sati-bridge] regenerateLastTurn failed:", error);
+    return { rewritten: false, reason: "error" };
+  }
+}
+
 export async function decidePermissionViaGateway(requestId, decision, options = {}) {
   const gw = await ensureGateway();
   // PermissionBus is keyed by sessionKey + requestId. We don't know

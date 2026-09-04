@@ -47,12 +47,13 @@ test("mapAgentEvent：steer_applied/steer_unapplied 透传并附 runId", () => {
   }
 });
 
-test("协议版本 1.6：同 MAJOR 兼容，低 MINOR 客户端可连接", () => {
-  assert.equal(SATI_GATEWAY_PROTOCOL_VERSION, "1.6");
-  assert.ok(isProtocolCompatible("1.6", "1.6"));
-  assert.ok(isProtocolCompatible("1.5", "1.6"));
-  assert.ok(isProtocolCompatible("1.0", "1.6"));
-  assert.ok(!isProtocolCompatible("2.0", "1.6"));
+test("协议版本 1.6+：同 MAJOR 兼容，低 MINOR 客户端可连接", () => {
+  // 协议已升至 1.7（edit-last-turn），此处只锁 MAJOR=1 与 1.6 引入的兼容语义。
+  assert.ok(SATI_GATEWAY_PROTOCOL_VERSION.startsWith("1."));
+  assert.ok(isProtocolCompatible(SATI_GATEWAY_PROTOCOL_VERSION, SATI_GATEWAY_PROTOCOL_VERSION));
+  assert.ok(isProtocolCompatible("1.6", SATI_GATEWAY_PROTOCOL_VERSION));
+  assert.ok(isProtocolCompatible("1.0", SATI_GATEWAY_PROTOCOL_VERSION));
+  assert.ok(!isProtocolCompatible("2.0", SATI_GATEWAY_PROTOCOL_VERSION));
 });
 
 test("方法守卫：steer_turn 要求 sessionKey+text，cancel_steer 要求 sessionKey+steerId", () => {

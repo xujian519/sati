@@ -419,6 +419,42 @@ export type GatewayCancelSteerResult = {
 };
 
 /**
+ * 编辑/重新生成最后一条用户消息（1.7，遮蔽式 append-only）：追加 turn_rewrite
+ * 转录条目遮蔽旧 accepted_input + 同 turn 消息条目；成功后调用方持返回的
+ * originalText（regenerate）或新文本（edit）走标准 submit_turn 重发——
+ * 投影自然派生「遮蔽后的历史 + 新输入」。仅无进行中 turn、无挂起审批、
+ * 最后输入未被压缩摘要替代且为纯文本时 rewritten=true。
+ */
+export type GatewayRewriteLastTurnReason =
+  | "no_last_turn"
+  | "active_turn"
+  | "pending_approval"
+  | "unsupported_content"
+  | "compact_tail";
+
+export type GatewayEditLastTurnInput = {
+  sessionKey: string;
+  /** 编辑后的新文本（纯文本，无附件）。 */
+  text: string;
+  projectKey?: string;
+};
+
+export type GatewayRegenerateLastTurnInput = {
+  sessionKey: string;
+  projectKey?: string;
+};
+
+export type GatewayRewriteLastTurnResult = {
+  rewritten: boolean;
+  reason?: GatewayRewriteLastTurnReason;
+  /** 被遮蔽条目数（rewritten=true 时）。 */
+  shadowedEntryCount?: number;
+  /** 原用户文本（regenerate 的调用方据此重发）。 */
+  originalText?: string;
+  turnId?: string;
+};
+
+/**
  * Web-facing permission decision input. Mirrors the elicitation
  * round-trip pattern: the agent (via `GatewayPermissionBus`) emits a
  * `permission_request` event during a turn; the host UI eventually calls
@@ -661,6 +697,14 @@ export interface Gateway {
    * 已广播）的项不可撤回，返回 `{ cancelled: false }`。
    */
   cancelSteer?(input: GatewayCancelSteerInput): Promise<GatewayCancelSteerResult>;
+  /**
+   * 编辑最后一条用户消息（1.7）— 遮蔽旧 turn 后经标准 submit_turn 重发。
+   * Optional — 旧实现无此能力时 hosts 应 feature-detect（`not_configured`
+   * 兜底）。实现由 host 注入（见 forkSession 模式）。
+   */
+  editLastTurn?(input: GatewayEditLastTurnInput): Promise<GatewayRewriteLastTurnResult>;
+  /** 重新生成最后一条用户消息（1.7）— 遮蔽旧 turn 后按原文重发。 */
+  regenerateLastTurn?(input: GatewayRegenerateLastTurnInput): Promise<GatewayRewriteLastTurnResult>;
   /**
    * Web Phase 2 — host responds to a `permission_request` event surfaced
    * through `submitTurn`. Resolves the agent-side permission promise so the

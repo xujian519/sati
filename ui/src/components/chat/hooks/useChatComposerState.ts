@@ -266,6 +266,9 @@ export function useChatComposerState({
   const queuedBusySendRef = useRef(false);
   const queuedBusySendConfirmedRef = useRef(false);
   const queuedBusySendSnapshotRef = useRef<QueuedBusySendSnapshot | null>(null);
+  // 协议 1.7：编辑最后一条 user 消息模式——armed 后下一次 submit 改发
+  // edit-last-turn 帧（服务端遮蔽旧 turn 后重发新文本），一次性消费。
+  const editLastTurnTargetRef = useRef<{ sessionId: string } | null>(null);
   const pendingSessionGrantResolversRef = useRef(new Map<string, (result: PermissionGrantResult) => void>());
 
   const cancelBusySendQueue = useCallback(() => {
@@ -328,6 +331,87 @@ export function useChatComposerState({
   // 插话仅支持纯文本：排队快照带附件/引用或输入为空时不显示插话按钮。
   const canSteerBusySend =
     isBusySendQueued && input.trim().length > 0 && attachedImages.length === 0 && documentReferences.length === 0;
+
+  // 协议 1.7：进入「编辑最后一条消息」模式——预填 composer，下一次 submit
+  // 由 handleSubmit 拦截改发 edit-last-turn 帧。会话切换时丢弃未提交的编辑模式。
+  const beginEditLastTurn = useCallback(
+    (sessionId: string, content: string) => {
+      if (!sessionId) return;
+      editLastTurnTargetRef.current = { sessionId };
+      applyInputValue(content);
+      setIsUserScrolledUp(false);
+      setTimeout(() => scrollToBottom(), 100);
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    },
+    [applyInputValue, scrollToBottom, setIsUserScrolledUp, textareaRef],
+  );
+
+  useEffect(() => {
+    editLastTurnTargetRef.current = null;
+  }, [currentSessionId, selectedSession?.id]);
+
+  // 协议 1.7：重新生成最后一轮——服务端取最后一条 accepted_input 原文，
+  // 遮蔽旧 turn 后续跑新 turn。乐观插入 user 气泡（原文）+ Processing 状态，
+  // 与正常提交的即时反馈保持一致。
+  const regenerateLastTurn = useCallback(
+    (sessionId: string, originalText: string) => {
+      if (!selectedProject || isLoading || !sessionId || !originalText.trim()) return;
+      const projectPath = selectedProject.fullPath || selectedProject.path || "";
+      const toolsSettings = readToolsSettings();
+      const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
+      sendMessage({
+        type: "regenerate-last-turn",
+        sessionId,
+        options: {
+          sessionId,
+          projectPath,
+          cwd: projectPath,
+          toolsSettings,
+          runMode,
+          permissionMode,
+          ...(basePermissionMode ? { basePermissionMode } : {}),
+          ...(model ? { model } : {}),
+          thinking: thinkingModeToConfig(effectiveThinkingMode),
+        },
+      });
+      addMessage(
+        {
+          type: "user",
+          content: originalText,
+          timestamp: new Date(),
+        },
+        sessionId,
+      );
+      setIsLoading(true);
+      setCanAbortSession(true);
+      setClaudeStatus({ text: "Processing", tokens: 0, can_interrupt: true });
+      setIsUserScrolledUp(false);
+      setTimeout(() => scrollToBottom(), 100);
+      onSessionActive?.(sessionId);
+      onSessionProcessing?.(sessionId);
+    },
+    [
+      addMessage,
+      basePermissionMode,
+      isLoading,
+      model,
+      onSessionActive,
+      onSessionProcessing,
+      permissionMode,
+      runMode,
+      scrollToBottom,
+      selectedProject,
+      sendMessage,
+      setCanAbortSession,
+      setClaudeStatus,
+      setIsLoading,
+      setIsUserScrolledUp,
+      thinkingMode,
+      thinkingModeAvailability,
+    ],
+  );
 
   const syncQueuedBusySendSnapshot = useCallback(
     (updates: Partial<QueuedBusySendSnapshot> = {}) => {
@@ -941,6 +1025,60 @@ export function useChatComposerState({
       queuedBusySendSnapshotRef.current = null;
       setIsBusySendQueued(false);
       setIsBusySendConfirmed(false);
+
+      // 协议 1.7：编辑模式拦截——改发 edit-last-turn 帧（服务端遮蔽旧 turn
+      // 后同帧续跑新文本），不做 slash 拦截（编辑文本允许以 / 开头按原文发送）。
+      const editLastTurnTarget = editLastTurnTargetRef.current;
+      if (editLastTurnTarget) {
+        const editText = currentInput.trim();
+        if (!editText || !selectedProject) {
+          editLastTurnTargetRef.current = null;
+          return;
+        }
+        const projectPath = selectedProject.fullPath || selectedProject.path || "";
+        const toolsSettings = readToolsSettings();
+        const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
+        sendMessage({
+          type: "edit-last-turn",
+          sessionId: editLastTurnTarget.sessionId,
+          text: editText,
+          options: {
+            sessionId: editLastTurnTarget.sessionId,
+            projectPath,
+            cwd: projectPath,
+            toolsSettings,
+            runMode,
+            permissionMode,
+            ...(basePermissionMode ? { basePermissionMode } : {}),
+            ...(model ? { model } : {}),
+            thinking: thinkingModeToConfig(effectiveThinkingMode),
+          },
+        });
+        editLastTurnTargetRef.current = null;
+        addMessage(
+          {
+            type: "user",
+            content: editText,
+            timestamp: new Date(),
+          },
+          editLastTurnTarget.sessionId,
+        );
+        setIsLoading(true);
+        setCanAbortSession(true);
+        setClaudeStatus({ text: "Processing", tokens: 0, can_interrupt: true });
+        setIsUserScrolledUp(false);
+        setTimeout(() => scrollToBottom(), 100);
+        onSessionActive?.(editLastTurnTarget.sessionId);
+        onSessionProcessing?.(editLastTurnTarget.sessionId);
+        applyInputValue("");
+        resetAttachmentState();
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+        }
+        return;
+      }
 
       // Intercept slash commands: if input starts with /commandName, execute as command with args.
       // Skip when handleCustomCommand just pushed a passthrough back into the
@@ -1652,6 +1790,8 @@ export function useChatComposerState({
     cancelBusySendQueue,
     steerBusySendQueue,
     canSteerBusySend,
+    beginEditLastTurn,
+    regenerateLastTurn,
   };
 }
 

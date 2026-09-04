@@ -86,6 +86,9 @@ type MessagesPaneV2Props = {
   onFork?: (message: ChatMessage, carriedMessageCount: number) => void;
   forkDisabled?: boolean;
   forkParentSessionTitle?: string | null;
+  // 协议 1.7：最后一条 user/assistant 消息的编辑/重新生成动作。
+  onEditLastUserMessage?: (message: ChatMessage) => void;
+  onRegenerateLastTurn?: (message: ChatMessage) => void;
 };
 
 type KeyedRenderableMessageItem = RenderableMessageItem & {
@@ -348,6 +351,8 @@ function MessagesPaneV2({
   onFork,
   forkDisabled = false,
   forkParentSessionTitle = null,
+  onEditLastUserMessage,
+  onRegenerateLastTurn,
 }: MessagesPaneV2Props) {
   const resolvedPlanModeActive = planModeActive || runMode === "plan";
   const { t } = useTranslation("chat");
@@ -494,6 +499,18 @@ function MessagesPaneV2({
     );
     return filtered;
   }, [visibleMessages, showThinking, inlineThinking, isAssistantWorking]);
+  // 协议 1.7：定位最后一条可编辑 user 消息与最后一条可重新生成 assistant 消息
+  // （流式中的候选不稳定，排除；entryId 缺失的历史行也不提供动作）。
+  const lastTurnActionIndices = useMemo(() => {
+    let userIndex = -1;
+    let assistantIndex = -1;
+    renderableMessages.forEach((message, index) => {
+      if (message.isStreaming || !message.entryId) return;
+      if (message.type === "user" && String(message.content ?? "").trim()) userIndex = index;
+      if (message.type === "assistant" && String(message.content ?? "").trim()) assistantIndex = index;
+    });
+    return { userIndex, assistantIndex };
+  }, [renderableMessages]);
   const liveProcessDetailMessages = useMemo(
     () => (isAssistantWorking ? getLiveProcessDetailMessages(renderableMessages) : []),
     [isAssistantWorking, renderableMessages],
@@ -963,6 +980,10 @@ function MessagesPaneV2({
               forkCarriedMessageCount={forkCarriedMessageCount}
               forkDisabled={forkDisabled}
               showAssistantActions={showAssistantActions}
+              onEditLastUserMessage={onEditLastUserMessage}
+              onRegenerateLastTurn={onRegenerateLastTurn}
+              isLastUserMessage={item.renderIndex === lastTurnActionIndices.userIndex}
+              isLastAssistantMessage={item.renderIndex === lastTurnActionIndices.assistantIndex}
             />
             {rendersLiveHeaderAfterItem ? (
               <LiveProcessHeader activities={nonSubagentLiveActivities} startedAtMs={liveProcessStartedAtMs} t={t} />
@@ -995,6 +1016,9 @@ function MessagesPaneV2({
       onFileOpen,
       onFork,
       forkDisabled,
+      onEditLastUserMessage,
+      onRegenerateLastTurn,
+      lastTurnActionIndices,
       onGrantSessionToolPermission,
       onShowSettings,
       provider,

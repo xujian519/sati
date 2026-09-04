@@ -291,7 +291,18 @@
       "askDescription": "仅回答问题，不修改文件"
     },
     "steerQueuedSend": "改为插话——不打断当前 turn，注入到运行中的会话",
-    "steerQueuedSendShort": "插话"
+    "steerQueuedSendShort": "插话",
+    "editLastTurn": "编辑消息",
+    "regenerateLastTurn": "重新生成",
+    "rewriteError": {
+      "no_last_turn": "没有可改写的已完成对话轮次。",
+      "active_turn": "请等待当前对话轮次结束后再试。",
+      "pending_approval": "请先处理挂起的审批。",
+      "unsupported_content": "仅纯文本消息可以编辑。",
+      "compact_tail": "最后一轮已被压缩，请开启新会话。",
+      "not_configured": "当前网关不支持改写对话轮次。",
+      "unknown": "无法改写最后一轮。"
+    }
   },
   "documentReferences": {
     "defaultPrompt": "请根据我引用的文档内容回答。",
