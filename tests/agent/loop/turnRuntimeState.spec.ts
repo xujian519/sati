@@ -19,13 +19,14 @@ const baseInput = (): AgentLoopInput => ({
 });
 
 test("TurnRuntimeState 构造：复制消息、初始化计数与时间戳", () => {
-  const state = new TurnRuntimeState(baseInput(), {}, "2026-08-14T00:00:00.000Z");
+  const input = baseInput();
+  const state = new TurnRuntimeState(input, {}, "2026-08-14T00:00:00.000Z");
   assert.equal(state.messages.length, 2);
   assert.equal(state.messages[0]!.role, "user");
-  // 复制而非共享引用
-  const original = baseInput();
-  state.messages.push({ role: "user", content: [{ type: "text", text: "extra" }] });
-  assert.equal(original.messages.length, 2);
+  // 复制而非共享引用：构造后改写入参不得影响已构造状态
+  input.messages.push({ role: "user", content: [{ type: "text", text: "extra" }] });
+  assert.equal(input.messages.length, 3);
+  assert.equal(state.messages.length, 2);
   assert.equal(state.turnCount, 1);
   assert.deepEqual(state.usage, {});
   assert.deepEqual(state.permissionDenials, []);

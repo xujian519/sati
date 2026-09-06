@@ -203,7 +203,7 @@ test("buildSubagentForkApi：depth/maxSubagentDepth/定义列表", () => {
   assert.equal(api.isAllowedDefinition("explore"), true, "内置 explore 定义可识别");
   assert.equal(api.isAllowedDefinition("no-such-type"), false);
   const defs = api.listDefinitions();
-  assert.equal(defs.length > 0, true);
+  assert.ok(defs.length > 0);
   assert.ok(defs.every(d => typeof d.id === "string" && typeof d.description === "string"));
 });
 
