@@ -147,7 +147,10 @@ function installFetchProxyFallback(): void {
       logger.warn(`Proxy unreachable, retrying direct (${describeFetchInput(input)})`);
       const { Agent, fetch: undiciFetch } = await import("undici");
       directFallbackAgent ??= new Agent(createLongTimeoutOptions());
-      return undiciFetch(input as never, { ...(init ?? {}), dispatcher: directFallbackAgent } as never);
+      return undiciFetch(
+        input as Parameters<typeof undiciFetch>[0],
+        { ...(init ?? {}), dispatcher: directFallbackAgent } as Parameters<typeof undiciFetch>[1],
+      );
     }
   }) as typeof nativeFetch;
 }

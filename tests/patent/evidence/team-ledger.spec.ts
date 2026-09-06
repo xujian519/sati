@@ -88,6 +88,36 @@ test("TeamLedger: 文件不存在时正常创建；坏行跳过", () => {
   }
 });
 
+test("TeamLedger: 结构坏行（合法 JSON 但缺必需字段）跳过，不让 undefined 入账", () => {
+  const { dir, filePath } = tempLedgerPath();
+  try {
+    const ledger = new TeamLedger(filePath);
+    ledger.record(receipt({ toolCallId: "ok" }));
+
+    // Receipt 行缺 turnId/toolName/success/write/startedAt 任一必需字段 → 跳过。
+    appendFileSync(filePath, `${JSON.stringify({ toolCallId: "missing-turn" })}\n`, "utf8");
+    appendFileSync(
+      filePath,
+      `${JSON.stringify({ ...receipt({ toolCallId: "no-write" }), write: undefined })}\n`,
+      "utf8",
+    );
+    // 声明行缺 direction/declaredAt → 跳过。
+    appendFileSync(filePath, `${JSON.stringify({ kind: "declaration", memberId: "m1", claimId: "c1" })}\n`, "utf8");
+    appendFileSync(
+      filePath,
+      `${JSON.stringify({ kind: "declaration", memberId: "m1", claimId: "c1", direction: "bogus", declaredAt: "x" })}\n`,
+      "utf8",
+    );
+
+    const reloaded = new TeamLedger(filePath);
+    assert.equal(reloaded.size(), 1, "仅合法 receipt 入账");
+    assert.equal(reloaded.list()[0]!.toolCallId, "ok");
+    assert.equal(reloaded.listDeclarations().length, 0, "缺字段/非法 direction 的声明行不入账");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 function declaration(
   memberId: string,
   claimId: string,

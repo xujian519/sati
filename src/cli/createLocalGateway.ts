@@ -157,6 +157,7 @@ import {
   createPlanFileManager,
   filterAvailableTools,
   type SatiToolDefinition,
+  type SatiToolRuntimeContext,
   type ToolRegistry,
 } from "../tool/index.js";
 import type { SatiElicitationChannel, SatiUnavailableToolDiagnostic } from "../tool/index.js";
@@ -557,7 +558,23 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         return { ok: false, error: { code: "team_unknown_tool", message: `工具 ${input.tool} 不存在` } };
       }
       try {
-        const out = await tool.execute(input.input as never, { sessionId: input.sessionKey ?? "" } as never);
+        // 特权直调不经 ToolRuntime 的权限/校验/审计链，context 仅需满足
+        // SatiToolRuntimeContext 形状（team_* 工具实际消费 sessionId/cwd/turnId）。
+        const context: SatiToolRuntimeContext = {
+          sessionId: input.sessionKey ?? "",
+          turnId: `team-panel-${crypto.randomUUID()}`,
+          cwd: fallbackProjectRoot,
+          permissionMode: "default",
+          permissionContext: {
+            mode: "default",
+            rules: { allow: [], deny: [], ask: [] },
+            cwd: fallbackProjectRoot,
+            additionalWorkingDirectories: [],
+            canPrompt: false,
+            bypassAvailable: false,
+          },
+        };
+        const out = await tool.execute(input.input, context);
         return { ok: true, data: out.data };
       } catch (error) {
         const code = error instanceof SatiToolRuntimeError ? error.code : "tool_execution_failed";

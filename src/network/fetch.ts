@@ -182,7 +182,7 @@ async function performFetch(
   return undiciFetch(
     input as Parameters<typeof undiciFetch>[0],
     init as Parameters<typeof undiciFetch>[1],
-  ) as unknown as Promise<Response>;
+  ) as Promise<Response>;
 }
 
 function shouldRetryStatus(status: number, configured?: readonly number[]): boolean {

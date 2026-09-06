@@ -36,7 +36,7 @@ const ASK_MODE_VIOLATION_HEADER = "[ASK_MODE_VIOLATION]";
 
 export function isAskModeAllowedTool(tool: SatiToolDefinition): boolean {
   if (tool.kind === "mcp") {
-    return tool.isReadOnly({} as never);
+    return tool.isReadOnly({});
   }
   return ASK_MODE_ALLOWED_TOOLS.has(tool.name);
 }

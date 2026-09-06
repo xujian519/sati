@@ -247,7 +247,7 @@ export class ProvenanceStore {
   /** 列出执行者。 */
   listAgents(): ProvenanceAgent[] {
     this.assertOpen();
-    const rows = this.stmtListAgents.all() as unknown as AgentRow[];
+    const rows = this.stmtListAgents.all() as AgentRow[];
     return rows.map(row => ({
       id: row.id,
       kind: row.kind as ProvenanceAgent["kind"],

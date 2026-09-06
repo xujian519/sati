@@ -1157,9 +1157,8 @@ export class DiscoveryFire {
         events.push(event);
         this.deps.onTurnEvent?.(input.sessionKey, input.channelKey, event);
         if (input.persistEvents) {
-          await this.deps.reportStore
-            .appendRunEvent(input.runId, event as unknown as Record<string, unknown>)
-            .catch(() => undefined);
+          // 浅拷贝为普通记录（store 接口按 Record 解耦，不依赖 agent 事件类型）。
+          await this.deps.reportStore.appendRunEvent(input.runId, { ...event }).catch(() => undefined);
         }
       }
     } finally {

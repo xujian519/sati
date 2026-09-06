@@ -21,6 +21,32 @@ export type Receipt = SatiEvidenceReceipt;
 
 export { receiptFromToolExecution } from "../../tool/protocol/evidence.js";
 
+/** 账本行守卫：覆盖必需标量字段，坏行（缺字段/类型错位）在加载期跳过，不让 undefined 入账。 */
+function isTeamEvidenceDeclaration(value: unknown): value is TeamEvidenceDeclaration {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    v.kind === "declaration" &&
+    typeof v.memberId === "string" &&
+    typeof v.claimId === "string" &&
+    (v.direction === "supporting" || v.direction === "contradicting" || v.direction === "neutral") &&
+    typeof v.declaredAt === "string"
+  );
+}
+
+function isReceipt(value: unknown): value is Receipt {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.toolCallId === "string" &&
+    typeof v.turnId === "string" &&
+    typeof v.toolName === "string" &&
+    typeof v.success === "boolean" &&
+    typeof v.startedAt === "string" &&
+    typeof v.write === "boolean"
+  );
+}
+
 /** 内容哈希（FNV-1a 32 位，十六进制）——用于证据原文完整性校验。 */
 export function contentHash(text: string): string {
   let hash = 0x811c9dc5;
@@ -222,22 +248,16 @@ export class TeamLedger extends Ledger {
     for (const line of text.split("\n")) {
       if (line.trim().length === 0) continue;
       try {
-        const parsed = JSON.parse(line) as Record<string, unknown>;
-        if (parsed.kind === "declaration") {
-          const decl = parsed as unknown as TeamEvidenceDeclaration;
-          // 缺关键字段的坏行跳过（防 undefined 入账）。
-          if (typeof decl.memberId !== "string" || typeof decl.claimId !== "string") continue;
-          const key = declarationKey(decl);
+        const parsed: unknown = JSON.parse(line);
+        if (isTeamEvidenceDeclaration(parsed)) {
+          const key = declarationKey(parsed);
           if (this.seenDeclarations.has(key)) continue;
           this.seenDeclarations.add(key);
-          this.declarations.push(decl);
-        } else {
-          const receipt = parsed as unknown as Receipt;
-          // 缺 toolCallId 的坏行跳过（防 undefined 入 seenIds/账本）。
-          if (typeof receipt.toolCallId !== "string") continue;
-          if (this.seenIds.has(receipt.toolCallId)) continue;
-          this.seenIds.add(receipt.toolCallId);
-          this.receipts.push(receipt);
+          this.declarations.push(parsed);
+        } else if (isReceipt(parsed)) {
+          if (this.seenIds.has(parsed.toolCallId)) continue;
+          this.seenIds.add(parsed.toolCallId);
+          this.receipts.push(parsed);
         }
       } catch {
         // 坏行跳过（追加写并发时可能读到半行）。
