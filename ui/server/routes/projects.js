@@ -25,7 +25,7 @@ function sanitizeGitError(message, token) {
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
 // System-critical paths that should never be used as workspace directories
-export const FORBIDDEN_PATHS = [
+const FORBIDDEN_PATHS = [
   // Unix
   "/",
   "/etc",
@@ -192,7 +192,7 @@ function getDiscoveryPlanErrorStatus(error) {
   return 500;
 }
 
-export async function handleGetProjectDiscoveryPlans(req, res) {
+async function handleGetProjectDiscoveryPlans(req, res) {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
     if (!projectName) {
@@ -206,7 +206,7 @@ export async function handleGetProjectDiscoveryPlans(req, res) {
   }
 }
 
-export async function handleExecuteProjectDiscoveryPlan(req, res) {
+async function handleExecuteProjectDiscoveryPlan(req, res) {
   try {
     const projectName = getTrimmedParam(req.params?.projectName);
     const planId = getTrimmedParam(req.params?.planId);

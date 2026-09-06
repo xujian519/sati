@@ -14,7 +14,7 @@
 
 import crypto from "node:crypto";
 
-export function generateMessageId(prefix = "msg") {
+function generateMessageId(prefix = "msg") {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 

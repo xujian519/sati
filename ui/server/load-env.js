@@ -45,7 +45,7 @@ function applyDerivedRuntimeEnv() {
   applyConfigToProcessEnv(config, rawYaml);
 }
 
-export function hasSatiConfigFile() {
+function hasSatiConfigFile() {
   return fs.existsSync(getSatiConfigPath());
 }
 
@@ -57,7 +57,7 @@ export function assertRequiredSatiEnv() {
   return [];
 }
 
-export function loadRootSatiEnv() {
+function loadRootSatiEnv() {
   applyLegacyEnvCompat();
   applyDerivedRuntimeEnv();
 

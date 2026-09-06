@@ -35,7 +35,7 @@ export function compareVersions(current, latest) {
   return 0;
 }
 
-export function parseVersionParts(value) {
+function parseVersionParts(value) {
   const normalized = String(value || "")
     .trim()
     .replace(/^sati[-_ ]?/i, "")
@@ -68,7 +68,7 @@ export function normalizeRepository(value) {
   return match ? `${match[1]}/${match[2]}` : DEFAULT_REPOSITORY;
 }
 
-export function mapGitHubRelease(release) {
+function mapGitHubRelease(release) {
   const tagName = String(release?.tag_name || "").trim();
   const version = tagName.replace(/^v/i, "") || String(release?.name || "").trim();
   const assets = Array.isArray(release?.assets)
@@ -97,7 +97,7 @@ export function mapGitHubRelease(release) {
   };
 }
 
-export function selectDesktopAsset(release, options = {}) {
+function selectDesktopAsset(release, options = {}) {
   const platform = options.platform || process.platform;
   const arch = options.arch || process.arch;
   const assets = Array.isArray(release?.assets) ? release.assets : [];
@@ -112,7 +112,7 @@ export function selectDesktopAsset(release, options = {}) {
   return scored[0]?.asset ?? null;
 }
 
-export async function getCurrentDesktopVersion(options = {}) {
+async function getCurrentDesktopVersion(options = {}) {
   const env = options.env || process.env;
   const projectRoot = options.projectRoot || PROJECT_ROOT;
   const packageVersion = readPackageVersion(projectRoot);

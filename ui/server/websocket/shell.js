@@ -467,4 +467,4 @@ function handleShellConnection(ws) {
   });
 }
 
-export { handleShellConnection, ptySessionsMap };
+export { handleShellConnection };

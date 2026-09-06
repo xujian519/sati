@@ -104,7 +104,7 @@ export function buildDefaultSatiConfig() {
 
 // Fill in missing sections and migrate legacy Office preview settings into the
 // current schema. The migration is idempotent.
-export function normalizeSatiConfig(input) {
+function normalizeSatiConfig(input) {
   const source = isRecord(input) ? input : {};
   const normalized = deepMerge(buildDefaultSatiConfig(), source);
   const sourceOfficePreview = isRecord(source.webui?.officePreview) ? source.webui.officePreview : {};
@@ -405,7 +405,7 @@ function providerProtocolToMemoryApi(protocol) {
   return "openai-completions";
 }
 
-export function buildRuntimeEnv(config, sourceConfig = null) {
+function buildRuntimeEnv(config, sourceConfig = null) {
   const normalized = normalizeSatiConfig(config);
   const main = resolveModel(normalized, normalized.agent.model, { allowMissing: true });
   const runtime = normalized.webui?.runtime ?? {};
@@ -493,7 +493,7 @@ export function applyConfigToProcessEnv(config, sourceConfig = null) {
 
 // ─── Memory service options ──────────────────────────────────────────────────
 
-export function buildMemoryLlmOptions(config) {
+function buildMemoryLlmOptions(config) {
   const normalized = normalizeSatiConfig(config);
   const ref = normalizeString(normalized.memory?.model) || normalized.agent.model;
   const memory = resolveModel(normalized, ref, { allowMissing: true });
@@ -592,7 +592,7 @@ export function readSatiConfigFile() {
 //     fallback chains, or other scenario keys — those are user-curated)
 //   • no-ops when agent.model is empty or unparseable
 //   • no-ops when router block doesn't exist (won't create one)
-export function syncAgentModelWithRouter(config) {
+function syncAgentModelWithRouter(config) {
   if (!isRecord(config)) return config;
   const agentRef = normalizeString(config.agent?.model);
   if (!agentRef) return config;
@@ -704,7 +704,7 @@ export function configRevision(raw) {
 }
 
 /** 乐观锁冲突：磁盘 revision 已不同于调用方读到的版本（409 语义）。 */
-export class ConfigConflictError extends Error {
+class ConfigConflictError extends Error {
   constructor(message, currentRevision) {
     super(message);
     this.name = "ConfigConflictError";
@@ -796,7 +796,7 @@ export async function writeRawSatiYaml(yamlObj, options = {}) {
   return writeSatiConfig(yamlObj, options);
 }
 
-export function expandTilde(value) {
+function expandTilde(value) {
   const text = normalizeString(value);
   if (text === "~") return os.homedir();
   if (text.startsWith("~/")) return path.join(os.homedir(), text.slice(2));
