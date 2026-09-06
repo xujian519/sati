@@ -101,7 +101,7 @@
 | C32 | app-shell + hooks | SidebarV2.tsx 1273、AppShellV2.tsx 887、useProjectsState.ts 898 | ✅ 2026-09-02 |
 | C33 | main-content 其余 | MainContent.tsx 1051、CronV2.tsx 1097、FilesV2.tsx 960 | ✅ 2026-09-03 |
 | C34 | ui/server | 98 JS/29.7K 行；只做行为不变清理（死代码、重复、命名），深层 import 仅记录 | ✅ 2026-09-06 |
-| C35 | ui i18n + e2e | en/zh-CN key 对齐、Playwright 用例审阅 | ⬜ |
+| C35 | ui i18n + e2e | en/zh-CN key 对齐、Playwright 用例审阅 | ✅ 2026-09-06 |
 
 ### 阶段 4 — 横切与收尾（W8–W9）
 
@@ -156,6 +156,7 @@
 | 2026-09-02 | C32 | app-shell + hooks（SidebarV2 + AppShellV2 + useProjectsState） | P2 重复收敛 ×5：SidebarV2 4 字段时间戳 Math.max ×2（projectLastActivity/collectSessionsForProject）→latestTimestamp/sessionLastActivity（连带单元素 buckets 二重循环展平）；AppShellV2 window 全局注册 effect ×3→useWindowGlobal；unread Set 复制-变更样板 ×4→addUnreadSession/removeUnreadSession updater 工厂；useProjectsState map+selected 双写惯用式 ×4（bump/replace/drop/reset）→applyProjectTransform（guard 并入 apply，语义等价）；fetchProjects/handleSidebarRefresh 合并更新器 ×2→mergeFetchedProjects（fetchProjects 的 prev.length===0 早退与通用路径等价）；P2 死逻辑：projectsHaveChanges includeExternalSessions 尾部双 return false（参数无效，全调用点恒传 true）→尾块+参数删除（测试 2 处同步）；P3 嵌套三元收敛：指示器状态/标签→resolveIndicatorStatus/indicatorStatusLabel（i18n key 不变）；P3 卫生 9 处：SIDEBAR_* 常量提升模块级、showMore JSX 内 IIFE 提前为 totalMore、resize 提交注释自相矛盾修正、Team 按钮模板字符串→cn()、switchProject 死别名 target=fuzzy、透传 onOpenDesktopSidebar 包装删除、sessionMeta.total 冗余 cast 删除、(project.sessions ?? []) ×3→getProjectSessions；P0/P1 无行为缺陷；横切零 any/零 @ts-expect-error/零 TODO；记录不处理：DeleteProject/DeleteSession 对话框骨架相似（描述块与文案 key 各异，C12 判例）、projects_updated effect 与 handleSidebarRefresh 选中项同步块（前者 preserveSelectedSessionViewState+view-state 保护，语义不同）、fetchProjects 与 applyProjectsSocketUpdate 合并次序有意不同（先查后并 vs 先并后查，注释标明）、移动端遮罩模板字符串 ×2（文件未引入 cn，2 处收益低）、VALID_TABS "home" 旧持久态文档性保留；待拆建议：无强制项（最大 SidebarV2 1304，会话树/重命名/菜单内聚） | 2（refactor + docs） | ✅ |
 | 2026-09-03 | C33 | main-content 其余（MainContent + CronV2 + FilesV2） | P2 重复收敛 ×4：MainContent SplitBody fullScreenToolTabs Set 每次渲染重建→模块级 FULL_SCREEN_TOOL_TABS；CronV2 handleSubmit schedule 构造三层嵌套三元→buildCronSchedule helper；CronV2 defaultRunAt 计算在 useMemo/resetForm 重复→createDefaultRunAt()；FilesV2 工具栏 8 按钮重复结构→ToolbarButton 组件（保留 disabledOpacity 40/50 差异与 loading 状态），handleNewFile/handleNewFolder 父目录展开逻辑重复→ensureExpanded helper；P3 冗余：MainContent isPlugin 中 typeof activeTab==="string" 删除（AppTab 模板字面量仍属 string）；P0/P1 无；FilesV2 5 处 console.error 归 C39 横切治理；记录不处理：context menu 项结构相似但分支各异（C12 判例）、MainContent as TaskMasterContextValue/TasksSettingsContextValue 为本地类型收窄、FilesV2 t(...) as string 用于 title/aria-label；门禁前置修复：apps/desktop/electron-dist 构建产物导致根 pnpm check 失败→.gitignore 与 biome.json 同时排除 | 4（refactor×3 + chore） | ✅ |
 | 2026-09-06 | C34 | ui/server 全域（102 JS 文件/31K 行，含 20 测试文件） | P1 死代码批量清理：孤儿模块整删 ×3（cron-daemon-startup/cron-daemon-owner/commandParser，-646 行）、零消费导出删除 ×15（含 sati-bridge approvalListPendingViaGateway 等、desktopUpdateService 测试钩子、sessionManager ready、agent.js isSSEStreamWriter/getMessages、taskmaster.js __dirname 死变量）、24 个仅文件内消费导出私有化；P2 收敛 ×3：satiConfig 冗余空 memory.model 剔除块删除、config MASKED_SECRET 字面量统一 ×4、taskmaster-websocket tasksData 恒未传参删除（wire 零变化）；P3：悬空 JSDoc 归位 ×2、无参 catch 补意图注释 ×7、commands.js 断头注释修复 ×2；P0 候选 ×9 只登记（chat.js edit/regen 流不广播、shell.js PTY 重连竞态 ×2、sati-bridge Map 慢泄漏、MCP 状态死链路、/load 路径校验弱于 /execute、git /status 丢 R/C、agent.js clone 双层吞错+非流式 messages 恒空、/test-connection 不识别掩码键）；退役建议 ×2 只登记（globalChrome.js 除关机钩子外全零消费、always-on-paths.js 仅剩 parity 测试消费）；死路由 ×9 只登记（taskmaster 8 条 + /api/commands/load，协议面）；P2 大合并记录不处理 ×10（sati-bridge transcript 候选 ×5 等，理由见日卡记录） | 6（refactor×4 + docs×2） | ✅ |
+| 2026-09-06 | C35 | ui i18n + e2e | P2 结构不对齐 ×1 已修：zh-CN teamPanel `pill.teamCount` → `pill.teamCount_other`（i18next zh 复数类别仅 other，无后缀 key 被 t(count) miss 后回落英文）+ 新增 teamPanel.i18n.test.ts 复数回归 ×2；P2 死 key ×1 已删：chat toolUseError.description（双语空值零消费）；值级判定：~120 处 en=zh 相同值全为合理（占位符模板/单位/专名/命令）；登记不处理：en/stylePanel.json 整文件为 zh 拷贝（en 侧整面板缺英译，涉字号/字体产品术语，另卡）、settings.json ~30 处同类、377 个强信号未使用 key 候选（动态 t(\`…\${var}\`) 构造普遍，文本检索不可靠，需 i18next-parser 类工具另卡）、thinkingMode.* 疑似零消费成片 key；e2e 审阅：单 spec（history-fork 34 行）为环境变量门控 fork API 契约测试，断言合理零改动；无 playwright.config（`npx playwright test` 裸跑会误捕 src 下 vitest 文件，登记如需启用补 config+script+CI job） | 2（fix + docs） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -573,6 +574,19 @@
 - **精炼项**：净 -约 830 行（孤儿模块 -646、死导出 -131、私有化净 -1、其余微调）；inputSchema/事件面/协议面零触碰（`pnpm check:event-matrix` 不涉及——ui/server 不产 AgentEvent）。
 - **验证**：ui `eslint src/ server/ --max-warnings 0` + check-ui-server-boundary ✅；ui `tsc --noEmit` ✅；ui vitest 全量 102 文件 / 628 用例 ✅；biome check 23 个改动文件 ✅；每提交过 lint-staged（biome→eslint）；改动文件逐个 `node --check` ✅。根 `pnpm check`/`pnpm test` 未跑（本卡零 src/ 改动，ui/server 不在根门禁范围）。
 - **提交**：`1aca7f9d` refactor(ui-server): remove orphan cron-daemon and commandParser modules；`b935c263` refactor(ui-server): delete zero-consumer dead exports and dead locals；`8880f501` refactor(ui-server): un-export 24 module-private symbols；`6bb6a2ab` refactor(ui-server): drop redundant empty memory.model purge, unify MASKED_SECRET, fix dangling JSDoc；`f31ca2e8` docs(ui-server): annotate 6 fail-safe catches with intent comments；+ 本 docs 提交。
+
+#### C35 ui i18n + e2e（2026-09-06）
+
+- **审阅范围**：`ui/src/i18n/`（12 namespace × en/zh-CN，en 侧 2,529 leaf keys）+ `ui/e2e/`（单 spec）。方法：node 脚本展平双语 key 集合做差集 + 占位符/空值/en=zh 值比对 + 全路径/叶子名双检索的未使用 key 粗扫。
+- **审阅发现与处置**：
+  - **结构不对齐 ×1（已修，缺陷级）**：zh-CN `teamPanel.json` 用无后缀 `pill.teamCount`，而代码 `floating-team-panel.tsx:254` 以 `t("pill.teamCount", { count })` 消费——i18next 对 zh-CN 只解析 `other` 复数类别，无后缀 key 永远 miss，中文界面回落英文 "N teams"。→ 重命名为 `teamCount_other`（en 的 `_one`/`_other` 不动；zh 侧无 `_one` 属正确复数结构，非缺失）。新增 `teamPanel.i18n.test.ts`（仿 deleteDialogs.i18n.test.ts 模式）锁定 en 单/复数与 zh 复数插值。注意：根 .gitignore 有意忽略 `*.test.ts`（本地草稿政策），正式测试按注释指引 `git add -f`。
+  - **死 key ×1（已删）**：`chat.json` 的 `toolUseError.description` 双语皆空且全仓零消费，双侧删除。对照保留：`thinkingMode.modes.none.prefix: ""` 空串为功能性取值（none 模式无前缀），保留。
+  - **值级判定（零改动）**：~120 处 en=zh 相同值逐组判定，全部合理——插值占位符模板（`"{{before}} → {{after}} tokens"`）、时间/数量单位（`"{{count}}s"`）、专名与命令（tokens、Escape、`npm` 命令、GLM/Tavily、`{{message}}` 透传）。
+  - **登记不处理（翻译内容缺口，需产品术语决策，另卡）**：`en/stylePanel.json` 整文件为 zh 文案拷贝（英文界面下整个文书排版面板显示中文；`小五/五号/仿宋/黑体` 等字号字体术语英译需产品判断）；`settings.json` ~30 处同类（多为 placeholder/命令示例，真正缺译少）。
+  - **登记不处理（工具性治理，另卡）**：未使用 key 粗扫 377 个强信号候选——动态 key 构造（`` t(`process.live.${kind}_one`) `` 等）在代码中普遍存在，文本检索不可靠；如需治理应引入 i18next-parser 类使用分析。`thinkingMode.*` 全块无静态消费疑点一并列待查。
+  - **e2e 审阅（零改动）**：`ui/e2e/history-fork.spec.mjs`（34 行）为 SATI_API_URL/SATI_E2E_PROJECT_PATH/SATI_E2E_PARENT_SESSION 三环境变量门控的 fork API 契约测试（entryId 存在性、`/^web[:-]s_/` 会话号格式、carriedMessageCount>0），断言合理。`@playwright/test@1.62.1` 在 devDependencies，但全仓无 `playwright.config.*`、CI 无 e2e job——`npx playwright test` 裸跑默认匹配会把 `src/**/*.test.tsx` 一并当作 PW 用例，因此该 spec 实为休眠的手动回归 harness。建议（只登记）：启用需补 config（testDir: e2e）+ npm script + CI job。
+- **验证**：ui vitest 全量 102 文件 / 630 用例 ✅（较 C34 后 +2，即新增复数回归）；`tsc --noEmit` ✅；ui eslint（src+server，--max-warnings 0）+ boundary ✅；biome check ✅。
+- **提交**：`f6a532ce` fix(i18n): align teamPanel plural key and drop dead chat key；+ 本 docs 提交。
 
 ## 六、基线（2026-08-18 实测）
 
