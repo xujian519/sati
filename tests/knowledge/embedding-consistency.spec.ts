@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { EmbeddingClient } from "../../src/model/embedding/types.js";
 import { checkEmbeddingConsistency } from "../../src/knowledge/shared/embedding-consistency.js";
@@ -81,7 +81,7 @@ test("embedding-consistency: 同源模型通过（均值 ≥ 阈值）", async (
   assert.equal(result.ok, true);
   assert.ok(result.meanCosine > 0.9, `均值应 >0.9，实际 ${result.meanCosine}`);
   assert.equal(result.sampleCount, 4);
-  rmSync(dbPath, { recursive: false, force: true });
+  rmSync(dirname(dbPath), { recursive: true, force: true });
 });
 
 test("embedding-consistency: 异源模型不通过（均值 < 阈值）", async () => {
@@ -93,7 +93,7 @@ test("embedding-consistency: 异源模型不通过（均值 < 阈值）", async 
   assert.ok(result, "应返回自检结果");
   assert.equal(result.ok, false);
   assert.ok(result.meanCosine < 0.5, `异源模型余弦应低，实际 ${result.meanCosine}`);
-  rmSync(dbPath, { recursive: false, force: true });
+  rmSync(dirname(dbPath), { recursive: true, force: true });
 });
 
 test("embedding-consistency: knowledge.db 不可用返回 null（不视为失败）", async () => {
@@ -114,14 +114,14 @@ test("embedding-consistency: rowid 采样（替代 ORDER BY RANDOM）在较大�
   const texts = result!.samples.map(s => s.text);
   assert.equal(new Set(texts).size, 8, "采样文本不应重复");
   assert.equal(result!.ok, true);
-  rmSync(dbPath, { recursive: false, force: true });
+  rmSync(dirname(dbPath), { recursive: true, force: true });
 });
 
 test("embedding-consistency: 空 embeddings 库返回 null", async () => {
   const dbPath = createKnowledgeDb([]);
   const result = await checkEmbeddingConsistency(dbPath, makeConsistentClient());
   assert.equal(result, null);
-  rmSync(dbPath, { recursive: false, force: true });
+  rmSync(dirname(dbPath), { recursive: true, force: true });
 });
 
 test("embedding-consistency: embedding 请求抛错时返回 null 并降级（不抛给上层）", async () => {
@@ -137,7 +137,7 @@ test("embedding-consistency: embedding 请求抛错时返回 null 并降级（�
   };
   const result = await checkEmbeddingConsistency(dbPath, failing, { logger: { warn: () => {} } });
   assert.equal(result, null);
-  rmSync(dbPath, { recursive: false, force: true });
+  rmSync(dirname(dbPath), { recursive: true, force: true });
 });
 
 test("embedding-consistency: 截断/损坏向量行被跳过，不废掉整个自检", async () => {

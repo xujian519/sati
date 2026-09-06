@@ -107,17 +107,14 @@ test("parseHookOutput parses allow decision with updatedInput", () => {
 
 test("parseHookOutput drops malformed specific output", () => {
   const first = parseHookOutput(JSON.stringify({ hookSpecificOutput: "x" }));
-  if (first.type === "sync") {
-    assert.equal(first.specific, undefined);
-  }
+  if (first.type !== "sync") throw new Error("expected sync output");
+  assert.equal(first.specific, undefined);
   const second = parseHookOutput(JSON.stringify({ hookSpecificOutput: {} }));
-  if (second.type === "sync") {
-    assert.equal(second.specific, undefined);
-  }
+  if (second.type !== "sync") throw new Error("expected sync output");
+  assert.equal(second.specific, undefined);
   const third = parseHookOutput(JSON.stringify({ hookSpecificOutput: { decision: { behavior: "maybe" } } }));
-  if (third.type === "sync") {
-    assert.equal(third.specific?.decision, undefined);
-  }
+  if (third.type !== "sync") throw new Error("expected sync output");
+  assert.equal(third.specific?.decision, undefined);
 });
 
 function pendingHook(overrides: Partial<PendingAsyncHook> = {}): PendingAsyncHook {
