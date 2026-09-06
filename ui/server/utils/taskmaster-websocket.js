@@ -41,9 +41,8 @@ export function broadcastTaskMasterProjectUpdate(wss, projectName, taskMasterDat
  * Broadcast TaskMaster tasks update for a specific project
  * @param {WebSocket.Server} wss - WebSocket server instance
  * @param {string} projectName - Name of the project with updated tasks
- * @param {Object} tasksData - Updated tasks data
  */
-export function broadcastTaskMasterTasksUpdate(wss, projectName, tasksData) {
+export function broadcastTaskMasterTasksUpdate(wss, projectName) {
   if (!wss || !projectName) {
     console.warn("TaskMaster WebSocket broadcast: Missing wss or projectName");
     return;
@@ -52,7 +51,6 @@ export function broadcastTaskMasterTasksUpdate(wss, projectName, tasksData) {
   const message = {
     type: "taskmaster-tasks-updated",
     projectName,
-    tasksData,
     timestamp: new Date().toISOString(),
   };
 

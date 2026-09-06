@@ -1069,18 +1069,6 @@ export function getActiveSessionIdsViaGateway() {
 }
 
 /**
- * Read persisted router stats from `~/.sati/router/stats.json`.
- * Falls back to the legacy `~/.sati/router-stats.json` path.
- *
- * Both the gateway server and this bridge run in different processes;
- * we no longer have an in-memory accessor (`getLocalGatewayRouterStats`
- * was tied to the bridge owning the gateway). The gateway server's
- * `TokenStatsCollector` periodically flushes to disk — this function
- * is the bridge's read-only window into that file.
- *
- * @returns {Map<string, {aggregate: object, records: object[]}>}
- */
-/**
  * Build a sessionId->projectPath lookup from the filesystem.
  * Scans project chat directories under ~/.sati/projects/ and maps
  * each session filename back to the actual project path (resolved via
@@ -1127,6 +1115,18 @@ function _buildSessionProjectIndex() {
 let routerStatsCache = { at: 0, data: undefined };
 const ROUTER_STATS_CACHE_TTL_MS = 5000;
 
+/**
+ * Read persisted router stats from `~/.sati/router/stats.json`.
+ * Falls back to the legacy `~/.sati/router-stats.json` path.
+ *
+ * Both the gateway server and this bridge run in different processes;
+ * we no longer have an in-memory accessor (`getLocalGatewayRouterStats`
+ * was tied to the bridge owning the gateway). The gateway server's
+ * `TokenStatsCollector` periodically flushes to disk — this function
+ * is the bridge's read-only window into that file.
+ *
+ * @returns {Map<string, {aggregate: object, records: object[]}>}
+ */
 /**
  * 带 TTL 的结果缓存：前端每 30s/15s 轮询 dashboard，避免每次请求都
  * readdirSync 全盘扫描 ~/.sati/projects 并逐行 parse stats.jsonl。
@@ -1526,17 +1526,6 @@ function _readToolSequenceFromTranscript(sessionId, projectKey) {
 }
 
 /**
- * Assign user queries and tool names to requestLog entries.
- *
- * Primary method: group by `turnId` from router stats (each user turn
- * shares one turnId; all continuations within that turn have the same
- * turnId). The first request per turnId gets the user query; subsequent
- * requests become tool continuations with tool names from the transcript.
- *
- * Fallback: when turnId is absent (older stats without the field), uses
- * transcript model-call counts to partition entries.
- */
-/**
  * Extract subagent prompts from a session transcript.
  * Returns a Map<turnId, promptPreview[]> for assigning prompts to subagent entries.
  */
@@ -1610,6 +1599,17 @@ function _readSubagentPromptsFromTranscript(sessionId, projectKey) {
   return promptsByTurn;
 }
 
+/**
+ * Assign user queries and tool names to requestLog entries.
+ *
+ * Primary method: group by `turnId` from router stats (each user turn
+ * shares one turnId; all continuations within that turn have the same
+ * turnId). The first request per turnId gets the user query; subsequent
+ * requests become tool continuations with tool names from the transcript.
+ *
+ * Fallback: when turnId is absent (older stats without the field), uses
+ * transcript model-call counts to partition entries.
+ */
 function _assignQueriesToRequestLog(sessionEntry) {
   const log = sessionEntry.routing?.requestLog;
   const queries = sessionEntry.userQueries;

@@ -527,6 +527,7 @@ class ResponseCollector {
         try {
           data = JSON.parse(msg);
         } catch {
+          // 非 JSON 字符串帧不计入 token 统计，跳过该条
           continue;
         }
       }

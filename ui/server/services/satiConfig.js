@@ -751,12 +751,9 @@ export async function writeSatiConfig(config, { previousRevision } = {}) {
     const sanitized = purgeBootstrapPlaceholder(
       syncAgentModelWithRouter(sanitizeProviderCredentials(isRecord(config) ? deepMerge({}, config) : config)),
     );
-    if (isRecord(sanitized.memory)) {
-      const memModel = sanitized.memory.model;
-      if (typeof memModel === "string" && !memModel.trim()) {
-        delete sanitized.memory.model;
-      }
-    }
+    // 空 memory.model 的剔除统一在验证后的 yamlObj 上做一次即可：
+    // validateSatiConfig 内部对空串与缺失同判（normalizeString），删除
+    // 时机不影响校验结果与落盘内容。
     const validation = validateSatiConfig(sanitized);
     if (!validation.valid) {
       const error = new Error("Invalid Sati config");

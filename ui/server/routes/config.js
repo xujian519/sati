@@ -624,7 +624,7 @@ router.get("/provider", (_req, res) => {
 router.post("/models", async (req, res) => {
   const { providerId, providerType, baseUrl, apiKey } = req.body || {};
   let effectiveApiKey = typeof apiKey === "string" ? apiKey : "";
-  if ((!effectiveApiKey || effectiveApiKey === "********") && typeof providerId === "string" && providerId.trim()) {
+  if ((!effectiveApiKey || effectiveApiKey === MASKED_SECRET) && typeof providerId === "string" && providerId.trim()) {
     try {
       const record = readSatiConfigFile();
       const provider = record.config?.model?.providers?.[providerId.trim()];
@@ -660,15 +660,15 @@ router.post("/models", async (req, res) => {
       urls.unshift(`${ollamaOrigin(normalizedBaseUrl)}/api/tags`);
     }
     const headers = isGoogle
-      ? effectiveApiKey && effectiveApiKey !== "********"
+      ? effectiveApiKey && effectiveApiKey !== MASKED_SECRET
         ? { "x-goog-api-key": effectiveApiKey }
         : {}
       : isAnthropic
         ? {
-            ...(effectiveApiKey && effectiveApiKey !== "********" ? { "x-api-key": effectiveApiKey } : {}),
+            ...(effectiveApiKey && effectiveApiKey !== MASKED_SECRET ? { "x-api-key": effectiveApiKey } : {}),
             "anthropic-version": "2023-06-01",
           }
-        : effectiveApiKey && effectiveApiKey !== "********"
+        : effectiveApiKey && effectiveApiKey !== MASKED_SECRET
           ? { Authorization: `Bearer ${effectiveApiKey}` }
           : {};
     const { url, response, responseText } = await fetchWithEndpointFallback(
