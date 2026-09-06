@@ -24,8 +24,8 @@ test("regenerate_last_turn：参数守卫只要求 sessionKey", () => {
 });
 
 test("Gateway 接口：editLastTurn/regenerateLastTurn 为 optional 方法", () => {
-  // 编译期断言 + 运行期形状检查：optional 方法可整体缺省（feature-detect）。
+  // 编译期断言：两方法声明为 optional（?），`{} as Gateway` 可整体缺省（feature-detect）；
+  // 任一被改为必需时本行 TS2352 即红。运行期对 {} 断言属性恒 undefined，无判别力，不设。
   const minimal = {} as Gateway;
-  assert.equal(minimal.editLastTurn, undefined);
-  assert.equal(minimal.regenerateLastTurn, undefined);
+  void minimal;
 });

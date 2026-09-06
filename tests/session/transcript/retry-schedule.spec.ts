@@ -108,7 +108,7 @@ test("JsonlTranscriptWriter.recordRetrySchedule：落盘可读回 + 重放 log-o
       assert.equal(retry.schedule.retryId, "r1");
     }
     const replay = replayTranscriptEntries(entries);
-    assert.ok(replay.messages.length >= 0);
+    assert.equal(replay.messages.length, 0, "log-only 条目不应投影为可见消息");
     assert.equal(replay.events.filter(e => e.type === "input_accepted").length, 1, "retry_schedule 不应产生投影事件");
   } finally {
     await rm(dir, { recursive: true, force: true });
