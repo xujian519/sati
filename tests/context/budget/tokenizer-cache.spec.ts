@@ -100,9 +100,8 @@ test("自然语言长文本走全量编码路径（mode=full）", () => {
   assert.ok(text.length > 1024);
   const guarded = countTokensGuarded(text);
   assert.equal(guarded.mode, "full", "自然语言样本编码快，应走全量");
-  // 与逐段求和一致（无 padding，纯编码一致性）
-  const direct = countTokensGuarded(text).tokens;
-  assert.equal(direct, guarded.tokens);
+  // 全量路径应与 tokenizer 直编码一致（无 padding、无抽样外推）
+  assert.equal(guarded.tokens, getTokenizer().encode(text).length);
 });
 
 test("缓存 LRU 上限生效：超出上限后最早条目被淘汰（内存有界）", () => {

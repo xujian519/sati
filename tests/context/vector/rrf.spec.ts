@@ -31,7 +31,7 @@ describe("reciprocalRankFusion", () => {
     assert.ok(ids.includes("x"));
   });
 
-  it("自定义 k 影响分值但不影响相对排序（同路内）", () => {
+  it("自定义 k 不影响相对排序（同路内）", () => {
     const k5 = reciprocalRankFusion([[{ id: "a" }, { id: "b" }]], 5);
     const k60 = reciprocalRankFusion([[{ id: "a" }, { id: "b" }]], 60);
     assert.deepEqual(
