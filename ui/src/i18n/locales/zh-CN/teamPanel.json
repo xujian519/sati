@@ -54,7 +54,7 @@
     "confirmBody": "归档团队 {{name}}？此操作不可逆。"
   },
   "pill": {
-    "teamCount": "{{count}} 个团队",
+    "teamCount_other": "{{count}} 个团队",
     "newActivity": "有新动态"
   },
   "events": {
