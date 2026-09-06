@@ -28,7 +28,7 @@ export class AsyncQueue<T> {
     this.closed = true;
     let waiter = this.waiters.shift();
     while (waiter) {
-      waiter.resolve({ value: undefined as unknown as T, done: true });
+      waiter.resolve({ value: undefined as T, done: true });
       waiter = this.waiters.shift();
     }
   }
@@ -41,7 +41,7 @@ export class AsyncQueue<T> {
           return Promise.resolve({ value: item, done: false });
         }
         if (this.closed) {
-          return Promise.resolve({ value: undefined as unknown as T, done: true });
+          return Promise.resolve({ value: undefined as T, done: true });
         }
         return new Promise<IteratorResult<T>>(resolve => {
           this.waiters.push({ resolve });

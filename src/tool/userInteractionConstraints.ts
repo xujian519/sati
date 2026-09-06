@@ -7,7 +7,7 @@ export function requiresPromptCapability(tool: SatiToolDefinition, input: unknow
     return true;
   }
   try {
-    return tool.requiresUserInteraction?.(input as never) === true;
+    return tool.requiresUserInteraction?.(input) === true;
   } catch {
     return false;
   }

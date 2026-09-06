@@ -519,7 +519,7 @@ export class WorkflowEngine {
     return {
       context: state.plan.context ?? {},
       ...state.stepOutputs,
-    } as unknown as Record<string, unknown>;
+    } as Record<string, unknown>;
   }
 
   private getReadySteps(plan: WorkflowPlan): WorkflowStep[] {
