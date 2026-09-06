@@ -118,7 +118,7 @@ function createLineReader(socket: Socket): () => Promise<string> {
     });
 }
 
-test("execute_code read-only probe handles missing input", () => {
+test("execute_code isReadOnly returns false for empty input", () => {
   const tool = createExecuteCodeTool();
 
   assert.equal(tool.isReadOnly({} as unknown as Parameters<typeof tool.isReadOnly>[0]), false);

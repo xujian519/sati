@@ -124,7 +124,7 @@ test("builtin registry can skip rule_check", () => {
   assert.equal(registry.has("rule_check"), false);
 });
 
-test("rule_check with patent asset flags risk keywords", async () => {
+test("patent compliance rule set asset loads rules", async () => {
   const { ruleSet } = loadPatentComplianceRuleSet();
   assert.ok(ruleSet.rules.length >= 4);
 });

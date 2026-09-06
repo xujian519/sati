@@ -79,7 +79,7 @@ test("cycle：A→B→A→B 周期命中", () => {
   // 第 4 次调用后出现 search→read 周期（重复 2 次）→ 命中
   const signals = d.recordToolResult({ name: "read", args: {}, result: "r" });
   const cycleSignals = signals.filter(s => s.detector === "cycle");
-  assert.equal(cycleSignals.length >= 1, true);
+  assert.ok(cycleSignals.length >= 1);
   assert.match(cycleSignals[0]?.reason ?? "", /周期模式/);
 });
 
@@ -190,9 +190,7 @@ test("默认 6 检测器就绪且 reset 幂等", () => {
 
 test("toolCallKey 对 args 序列化稳定", () => {
   assert.equal(toolCallKey({ name: "read", args: { path: "/a" } }), 'read:{"path":"/a"}');
-  // 相同对象不同顺序序列化一致（JSON 键序稳定）
-  assert.equal(
-    toolCallKey({ name: "read", args: { path: "/a" } }),
-    toolCallKey({ name: "read", args: { path: "/a" } }),
-  );
+  // 多键 args 按插入序序列化（JSON.stringify 不做键排序，键序不同即不同指纹）。
+  // 指纹只需同一调用方连续重复时一致，故这是钉定格式而非键序稳定性承诺。
+  assert.equal(toolCallKey({ name: "read", args: { path: "/a", line: 2 } }), 'read:{"path":"/a","line":2}');
 });

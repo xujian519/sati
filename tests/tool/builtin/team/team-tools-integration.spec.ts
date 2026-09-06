@@ -607,8 +607,6 @@ test("失败任务自动转派：成员回合置 failed（未耗尽）→ 调度
     // m2 收到的 assignmentPrompt 经 submitTurn input.message 透传进成员回合：
     // 转录 accepted_input 应含 "Attempt: 2" 与新 attemptId
     const { readTranscript } = await import("../../../../src/session/transcript/TranscriptReader.js");
-    const { getPilotProjectChatDir } = await import("../../../../src/pilot/index.js");
-    const { sanitizeSessionIdForPath } = await import("../../../../src/session/storage/ProjectSessionStorage.js");
     const chatDir = getPilotProjectChatDir(root, root);
     const m2Path = join(chatDir, `${sanitizeSessionIdForPath(memberSessionKey(teamId, m2))}.jsonl`);
     let acceptedInput: unknown;

@@ -51,7 +51,7 @@ describe("jsonl-store", () => {
     }
   });
 
-  it("空数组写入后文件为空字符串", () => {
+  it("空数组写入后 load 返回空数组", () => {
     const dir = makeTempDir();
     try {
       const path = join(dir, "v.jsonl");

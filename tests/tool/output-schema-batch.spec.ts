@@ -82,7 +82,7 @@ test("典型成功 data 对各自 schema 零违约（契约有效）", () => {
   for (const name of BATCH_TOOL_NAMES) {
     const tool = registry.get(name)!;
     const violations = validateCanonicalOutput(SAMPLE_DATA[name], tool.outputSchema!);
-    assert.deepEqual(violations, [], `${name} 典型 data 应通过自身 schema（违约: ${violations.join("; ")}`);
+    assert.deepEqual(violations, [], `${name} 典型 data 应通过自身 schema（违约: ${violations.join("; ")}）`);
   }
 });
 
