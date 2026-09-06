@@ -197,7 +197,7 @@ describe("legal-memory-provider 法条语义召回", () => {
     assert.ok(result.systemContext?.includes("专利法"), "legacy 语义路不受 knowledge ready 门影响");
   });
 
-  it("FTS 命中与知识库语义命中 RRF 融合", async () => {
+  it("FTS 无命中时知识库语义命中仍注入（单路语义）", async () => {
     const engine = makeStubEngine();
     const provider = new LegalMemoryProvider(engine, {
       embedding: makeStubEmbedding(),

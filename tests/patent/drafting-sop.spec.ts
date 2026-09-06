@@ -227,7 +227,7 @@ test("slop-gate 原子声明契约", () => {
   assert.deepEqual(slopGateAtom.outputSchema, ["slop_report", "slop_score"]);
 });
 
-test("SlopGateHandler：含套话文本输出评分报告（需修订）", async () => {
+test("SlopGateHandler：含套话文本输出评分报告", async () => {
   registerBuiltinAtoms();
   const h = LookupStageHandler("slop-gate")!;
   const out = await h.execute({

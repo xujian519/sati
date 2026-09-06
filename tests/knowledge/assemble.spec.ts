@@ -13,7 +13,7 @@ describe("buildKnowledgeResolvers", () => {
     assert.equal(resolvers.length, 1);
   });
 
-  it("KG 打开失败时降级为无图谱专利 provider（wiki/IPC 保留，不整体丢失）", () => {
+  it("KG 打开失败时降级为无图谱专利 provider（不抛错）", () => {
     const resolvers = buildKnowledgeResolvers({
       ...baseOptions,
       patentKgDb: "/nonexistent/patent_kg.db",
