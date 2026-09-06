@@ -397,7 +397,6 @@ class SSEStreamWriter {
     this.res = res;
     this.sessionId = null;
     this.userId = userId;
-    this.isSSEStreamWriter = true; // Marker for transport detection
   }
 
   send(data) {
@@ -465,10 +464,6 @@ class ResponseCollector {
 
   getSessionId() {
     return this.sessionId;
-  }
-
-  getMessages() {
-    return this.messages;
   }
 
   /**

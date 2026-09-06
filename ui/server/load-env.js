@@ -1,13 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { fileURLToPath } from "url";
 import { applyConfigToProcessEnv, getSatiConfigPath, readSatiConfigFile } from "./services/satiConfig.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const REPO_ROOT = path.resolve(__dirname, "../..");
 
 // EDGECLAW_API_BASE_URL / EDGECLAW_API_KEY / EDGECLAW_MODEL used to be
 // required here, but no code in ui/ actually consumes those variables —
@@ -49,14 +43,6 @@ function applyDerivedRuntimeEnv() {
   // apply to values the config explicitly declares (e.g. DATABASE_PATH),
   // leaving CLI/env-provided values untouched.
   applyConfigToProcessEnv(config, rawYaml);
-}
-
-export function getRepoRootDir() {
-  return REPO_ROOT;
-}
-
-export function getSatiConfigFilePath() {
-  return getSatiConfigPath();
 }
 
 export function hasSatiConfigFile() {

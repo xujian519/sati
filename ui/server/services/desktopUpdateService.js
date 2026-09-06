@@ -327,12 +327,6 @@ export function launchDownloadedDesktopUpdate(options = {}) {
   };
 }
 
-export function resetDesktopUpdateStateForTesting() {
-  cachedStatus = null;
-  downloadJob = createIdleDownloadJob();
-  downloadAbortController = null;
-}
-
 async function fetchLatestRelease(options) {
   if (options.includePrerelease) {
     const releases = await fetchReleases({ ...options, limit: 10 });

@@ -221,10 +221,6 @@ export async function getSatiGatewayWithReset() {
   });
 }
 
-export function getSatiRepoRoot() {
-  return REPO_ROOT;
-}
-
 /**
  * Per-session bookkeeping kept locally so abort + permission flows can
  * find their target without round-tripping to the gateway just to
@@ -1011,20 +1007,6 @@ export async function approvalDecideViaGateway(sessionId, pendingIndex, verdict,
   }
 }
 
-/** 列出某会话的挂起审批（供审批列表/恢复查询）。 */
-export async function approvalListPendingViaGateway(sessionId) {
-  const gw = await ensureGateway();
-  if (!gw.approvalListPending) {
-    return { pending: [] };
-  }
-  try {
-    return await gw.approvalListPending({ sessionKey: sessionId });
-  } catch (error) {
-    console.warn("[sati-bridge] approvalListPending failed:", error);
-    return { pending: [] };
-  }
-}
-
 export async function grantSessionPermissionViaGateway(sessionId, entry) {
   const gw = await ensureGateway();
   if (!isSatiSessionKey(sessionId) || typeof entry !== "string" || !entry.trim()) {
@@ -1040,11 +1022,6 @@ export async function grantSessionPermissionViaGateway(sessionId, entry) {
     console.warn("[sati-bridge] grantSessionPermission failed:", error);
     return false;
   }
-}
-
-export function isSessionActiveViaGateway(sessionId) {
-  if (!isSatiSessionKey(sessionId)) return false;
-  return Boolean(sessionState.get(sessionId)?.active);
 }
 
 export function getFallbackSessionActivity(localState) {
