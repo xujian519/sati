@@ -35,6 +35,7 @@ function normalizeDetectedUrl(url) {
     }
     return parsed.toString();
   } catch {
+    // 非 URL 输入解析失败 → 视为无有效地址，调用方回落默认 shell 路径
     return null;
   }
 }
@@ -467,4 +468,4 @@ function handleShellConnection(ws) {
   });
 }
 
-export { handleShellConnection, ptySessionsMap };
+export { handleShellConnection };

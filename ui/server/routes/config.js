@@ -75,6 +75,7 @@ function normalizeWebSearchEndpoint(provider, endpoint) {
   try {
     return new URL(effective).toString();
   } catch {
+    // 非 URL 文本（含相对地址）原样返回，由调用方按原始串处理
     return effective;
   }
 }
@@ -355,6 +356,7 @@ function isExpectedJsonBody(protocol, responseText) {
   try {
     return isExpectedProviderResponseShape(protocol, responseText ? JSON.parse(responseText) : {});
   } catch {
+    // 解析失败 = 响应形状不符预期，按 false 处理（fail-closed 探测语义）
     return false;
   }
 }
@@ -363,6 +365,7 @@ function isExpectedModelsJsonBody(protocol, responseText) {
   try {
     return isExpectedProviderModelsResponseShape(protocol, responseText ? JSON.parse(responseText) : {});
   } catch {
+    // 同上：解析失败按形状不符处理
     return false;
   }
 }
@@ -624,7 +627,7 @@ router.get("/provider", (_req, res) => {
 router.post("/models", async (req, res) => {
   const { providerId, providerType, baseUrl, apiKey } = req.body || {};
   let effectiveApiKey = typeof apiKey === "string" ? apiKey : "";
-  if ((!effectiveApiKey || effectiveApiKey === "********") && typeof providerId === "string" && providerId.trim()) {
+  if ((!effectiveApiKey || effectiveApiKey === MASKED_SECRET) && typeof providerId === "string" && providerId.trim()) {
     try {
       const record = readSatiConfigFile();
       const provider = record.config?.model?.providers?.[providerId.trim()];
@@ -660,15 +663,15 @@ router.post("/models", async (req, res) => {
       urls.unshift(`${ollamaOrigin(normalizedBaseUrl)}/api/tags`);
     }
     const headers = isGoogle
-      ? effectiveApiKey && effectiveApiKey !== "********"
+      ? effectiveApiKey && effectiveApiKey !== MASKED_SECRET
         ? { "x-goog-api-key": effectiveApiKey }
         : {}
       : isAnthropic
         ? {
-            ...(effectiveApiKey && effectiveApiKey !== "********" ? { "x-api-key": effectiveApiKey } : {}),
+            ...(effectiveApiKey && effectiveApiKey !== MASKED_SECRET ? { "x-api-key": effectiveApiKey } : {}),
             "anthropic-version": "2023-06-01",
           }
-        : effectiveApiKey && effectiveApiKey !== "********"
+        : effectiveApiKey && effectiveApiKey !== MASKED_SECRET
           ? { Authorization: `Bearer ${effectiveApiKey}` }
           : {};
     const { url, response, responseText } = await fetchWithEndpointFallback(

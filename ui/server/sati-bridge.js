@@ -105,12 +105,13 @@ const WEB_DEFAULT_PERMISSION_MODE = process.env.SATI_WEB_PERMISSION_MODE || "def
 /** @type {ReturnType<typeof createRemoteGateway> | null} */
 let gatewayPromise = null;
 
-export async function readGatewayToken() {
+async function readGatewayToken() {
   try {
     const raw = await fsPromises.readFile(GATEWAY_TOKEN_PATH, "utf8");
     const trimmed = raw.trim();
     return trimmed || null;
   } catch {
+    // token 文件缺失/不可读是常态（网关未启动或未登录），返回 null 走无 token 流程
     return null;
   }
 }
@@ -219,10 +220,6 @@ export async function getSatiGatewayWithReset() {
       };
     },
   });
-}
-
-export function getSatiRepoRoot() {
-  return REPO_ROOT;
 }
 
 /**
@@ -1011,20 +1008,6 @@ export async function approvalDecideViaGateway(sessionId, pendingIndex, verdict,
   }
 }
 
-/** 列出某会话的挂起审批（供审批列表/恢复查询）。 */
-export async function approvalListPendingViaGateway(sessionId) {
-  const gw = await ensureGateway();
-  if (!gw.approvalListPending) {
-    return { pending: [] };
-  }
-  try {
-    return await gw.approvalListPending({ sessionKey: sessionId });
-  } catch (error) {
-    console.warn("[sati-bridge] approvalListPending failed:", error);
-    return { pending: [] };
-  }
-}
-
 export async function grantSessionPermissionViaGateway(sessionId, entry) {
   const gw = await ensureGateway();
   if (!isSatiSessionKey(sessionId) || typeof entry !== "string" || !entry.trim()) {
@@ -1040,11 +1023,6 @@ export async function grantSessionPermissionViaGateway(sessionId, entry) {
     console.warn("[sati-bridge] grantSessionPermission failed:", error);
     return false;
   }
-}
-
-export function isSessionActiveViaGateway(sessionId) {
-  if (!isSatiSessionKey(sessionId)) return false;
-  return Boolean(sessionState.get(sessionId)?.active);
 }
 
 export function getFallbackSessionActivity(localState) {
@@ -1092,18 +1070,6 @@ export function getActiveSessionIdsViaGateway() {
 }
 
 /**
- * Read persisted router stats from `~/.sati/router/stats.json`.
- * Falls back to the legacy `~/.sati/router-stats.json` path.
- *
- * Both the gateway server and this bridge run in different processes;
- * we no longer have an in-memory accessor (`getLocalGatewayRouterStats`
- * was tied to the bridge owning the gateway). The gateway server's
- * `TokenStatsCollector` periodically flushes to disk — this function
- * is the bridge's read-only window into that file.
- *
- * @returns {Map<string, {aggregate: object, records: object[]}>}
- */
-/**
  * Build a sessionId->projectPath lookup from the filesystem.
  * Scans project chat directories under ~/.sati/projects/ and maps
  * each session filename back to the actual project path (resolved via
@@ -1150,6 +1116,18 @@ function _buildSessionProjectIndex() {
 let routerStatsCache = { at: 0, data: undefined };
 const ROUTER_STATS_CACHE_TTL_MS = 5000;
 
+/**
+ * Read persisted router stats from `~/.sati/router/stats.json`.
+ * Falls back to the legacy `~/.sati/router-stats.json` path.
+ *
+ * Both the gateway server and this bridge run in different processes;
+ * we no longer have an in-memory accessor (`getLocalGatewayRouterStats`
+ * was tied to the bridge owning the gateway). The gateway server's
+ * `TokenStatsCollector` periodically flushes to disk — this function
+ * is the bridge's read-only window into that file.
+ *
+ * @returns {Map<string, {aggregate: object, records: object[]}>}
+ */
 /**
  * 带 TTL 的结果缓存：前端每 30s/15s 轮询 dashboard，避免每次请求都
  * readdirSync 全盘扫描 ~/.sati/projects 并逐行 parse stats.jsonl。
@@ -1549,17 +1527,6 @@ function _readToolSequenceFromTranscript(sessionId, projectKey) {
 }
 
 /**
- * Assign user queries and tool names to requestLog entries.
- *
- * Primary method: group by `turnId` from router stats (each user turn
- * shares one turnId; all continuations within that turn have the same
- * turnId). The first request per turnId gets the user query; subsequent
- * requests become tool continuations with tool names from the transcript.
- *
- * Fallback: when turnId is absent (older stats without the field), uses
- * transcript model-call counts to partition entries.
- */
-/**
  * Extract subagent prompts from a session transcript.
  * Returns a Map<turnId, promptPreview[]> for assigning prompts to subagent entries.
  */
@@ -1633,6 +1600,17 @@ function _readSubagentPromptsFromTranscript(sessionId, projectKey) {
   return promptsByTurn;
 }
 
+/**
+ * Assign user queries and tool names to requestLog entries.
+ *
+ * Primary method: group by `turnId` from router stats (each user turn
+ * shares one turnId; all continuations within that turn have the same
+ * turnId). The first request per turnId gets the user query; subsequent
+ * requests become tool continuations with tool names from the transcript.
+ *
+ * Fallback: when turnId is absent (older stats without the field), uses
+ * transcript model-call counts to partition entries.
+ */
 function _assignQueriesToRequestLog(sessionEntry) {
   const log = sessionEntry.routing?.requestLog;
   const queries = sessionEntry.userQueries;

@@ -13,15 +13,10 @@ import fs from "fs";
 import path from "path";
 import { promises as fsPromises } from "fs";
 import { spawn } from "child_process";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
 import { extractProjectDirectory } from "../projects.js";
 import { detectTaskMasterMCPServer } from "../utils/mcp-detector.js";
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from "../utils/taskmaster-websocket.js";
 import { prepareCliSpawn } from "../utils/processSpawn.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const router = express.Router();
 

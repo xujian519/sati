@@ -22,7 +22,7 @@ function buildWindowsCmdLine(command, args) {
   return [command, ...args].map(quoteWindowsCmdArg).join(" ");
 }
 
-export function resolveWindowsCliCommand(command, platform = process.platform) {
+function resolveWindowsCliCommand(command, platform = process.platform) {
   if (!isWindows(platform)) return command;
 
   const normalized = String(command).toLowerCase();

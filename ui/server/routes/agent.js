@@ -397,7 +397,6 @@ class SSEStreamWriter {
     this.res = res;
     this.sessionId = null;
     this.userId = userId;
-    this.isSSEStreamWriter = true; // Marker for transport detection
   }
 
   send(data) {
@@ -467,10 +466,6 @@ class ResponseCollector {
     return this.sessionId;
   }
 
-  getMessages() {
-    return this.messages;
-  }
-
   /**
    * Get filtered assistant messages only.
    *
@@ -532,6 +527,7 @@ class ResponseCollector {
         try {
           data = JSON.parse(msg);
         } catch {
+          // 非 JSON 字符串帧不计入 token 统计，跳过该条
           continue;
         }
       }

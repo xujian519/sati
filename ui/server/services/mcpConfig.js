@@ -10,11 +10,11 @@ function pilotHome() {
   return process.env.SATI_HOME || path.join(os.homedir(), ".sati");
 }
 
-export function getGlobalMcpConfigPath() {
+function getGlobalMcpConfigPath() {
   return path.join(pilotHome(), "mcp.json");
 }
 
-export function getProjectMcpConfigPath(projectPath) {
+function getProjectMcpConfigPath(projectPath) {
   return path.join(projectPath || process.cwd(), ".sati", "mcp.json");
 }
 

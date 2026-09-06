@@ -185,7 +185,6 @@ export {
   broadcastChatFrame,
   broadcastToSessionWatchers,
   broadcastProgress,
-  broadcastConfigReloaded,
   kanbanWatchProject,
   kanbanUnwatchProject,
   kanbanUnwatchAll,
