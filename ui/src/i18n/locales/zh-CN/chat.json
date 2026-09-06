@@ -27,7 +27,6 @@
   },
   "toolUseError": {
     "title": "工具错误",
-    "description": "",
     "webSearchNotConfigured": {
       "title": "网页搜索未就绪",
       "description": "搜索 API Key 缺失或无效。请前往设置 -> 配置 -> 搜索检查搜索服务和 API Key。",
