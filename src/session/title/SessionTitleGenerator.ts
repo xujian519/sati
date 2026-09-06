@@ -8,48 +8,45 @@ export const SESSION_TITLE_MAX_INPUT_CHARS = 1200;
 export const SESSION_TITLE_MAX_OUTPUT_CHARS = 80;
 export const SESSION_TITLE_TIMEOUT_MS = 30_000;
 
-const SESSION_TITLE_SYSTEM_PROMPT_EN = `Generate a concise, sentence-case title (3-7 words) that captures the main topic or goal of this coding session. The title should be clear enough that the user recognizes the session in a list. Use sentence case: capitalize only the first word and proper nouns.
+const SESSION_TITLE_SYSTEM_PROMPT_BASE = `Generate a concise title (3-7 words for Latin-script languages, 3-10 characters for CJK) that captures the main topic or goal of this session. The title should be clear enough that the user recognizes the session in a list. For Latin-script languages, use sentence case: capitalize only the first word and proper nouns.
+
+Language requirement (highest priority): write the title in the same natural language as the user's input. Do not translate the input into a different language. If the input mixes languages, use the language of the user's main request, keeping product names and code identifiers unchanged. If the user's language cannot be determined, use the fallback language specified below.
 
 Return JSON with a single "title" field.
 
-Good examples:
+Good examples (each title follows its input's language):
 {"title": "Fix login button on mobile"}
 {"title": "Add OAuth authentication"}
-{"title": "Debug failing CI tests"}
-{"title": "Refactor API client error handling"}
+{"title": "修复移动端登录按钮"}
+{"title": "添加 OAuth 认证"}
 
 Bad (too vague): {"title": "Code changes"}
 Bad (too long): {"title": "Investigate and fix the issue where the login button does not respond on mobile devices"}
 Bad (wrong case): {"title": "Fix Login Button On Mobile"}
+Bad (wrong language): {"title": "Fix mobile login button"} for the French input "Réparer le bouton de connexion mobile"
 
 Do not output Markdown, code fences, explanations, analysis, thinking text, <think> tags, or extra fields.`;
 
-const SESSION_TITLE_SYSTEM_PROMPT_ZH = `为本次会话生成一个简洁的标题（3-10 个字），概括会话的主要话题或目标。标题应足够清晰，让用户能在会话列表中一眼认出。
-
-以 JSON 格式返回，只有一个 "title" 字段。
-
-好例子：
-{"title": "修复移动端登录按钮"}
-{"title": "添加 OAuth 认证"}
-{"title": "排查 CI 测试失败"}
-{"title": "重构 API 客户端错误处理"}
-
-太宽泛（不好）：{"title": "代码修改"}
-太长（不好）：{"title": "调查并修复移动端登录按钮在手机上无法响应的问题"}
-只描述动作而非主题（不好）：{"title": "帮我看看"}
-
-不要输出 Markdown、代码块、解释、分析、思考文本、<think> 标签或多余字段。`;
-
-/** CJK 统一表意文字（含中文/日文/韩文汉字），用于识别用户消息语言。 */
+/** CJK 统一表意文字（含中文/日文/韩文汉字），用于推断兜底语言（非 prompt 选择）。 */
 const CJK_CHAR_RE = /[\u3400-\u4DBF\u4E00-\u9FFF]/;
 
 export function hasCjk(text: string): boolean {
   return CJK_CHAR_RE.test(text);
 }
 
-/** 按输入文本语言选择标题生成提示词：包含中文字符时用中文，否则用英文。 */
-export function buildTitleSystemPrompt(text: string): string {
-  return hasCjk(text) ? SESSION_TITLE_SYSTEM_PROMPT_ZH : SESSION_TITLE_SYSTEM_PROMPT_EN;
+/** 兜底语言（无法判断用户语言时使用）解析为 prompt 可读的说明行。 */
+function resolveFallbackLanguageLine(systemLanguage: string | undefined, text: string): string {
+  const effective = systemLanguage?.trim().toLowerCase();
+  const useChinese = effective ? effective.startsWith("zh") || effective === "chinese" : hasCjk(text);
+  return `Fallback language: ${useChinese ? "Chinese (中文)" : "English"}`;
+}
+
+/**
+ * 构建标题生成提示词：单一 prompt 要求标题跟随用户输入语言（最高优先级），
+ * 无法判断时使用兜底语言（显式 systemLanguage 优先，否则按输入是否含 CJK 推断）。
+ */
+export function buildTitleSystemPrompt(text: string, systemLanguage?: string): string {
+  return `${SESSION_TITLE_SYSTEM_PROMPT_BASE}\n\n${resolveFallbackLanguageLine(systemLanguage, text)}`;
 }
 
 export type SessionTitleGeneratorInput = {
@@ -65,6 +62,8 @@ export type CreateSessionTitleGeneratorOptions = {
   modelRuntime: Pick<ModelRuntime, "complete">;
   agentModel: PilotAgentModelSelection;
   timeoutMs?: number;
+  /** 无法判断用户输入语言时的兜底语言（BCP-47 或英文名，如 "zh-CN"/"en"）。 */
+  systemLanguage?: string;
 };
 
 export function createSessionTitleGenerator(options: CreateSessionTitleGeneratorOptions): SessionTitleGenerator {
@@ -83,7 +82,7 @@ export function createSessionTitleGenerator(options: CreateSessionTitleGenerator
         {
           provider: options.agentModel.provider,
           model: options.agentModel.model,
-          systemPrompt: buildTitleSystemPrompt(prompt),
+          systemPrompt: buildTitleSystemPrompt(prompt, options.systemLanguage),
           messages: [
             {
               role: "user",

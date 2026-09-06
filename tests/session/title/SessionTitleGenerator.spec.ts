@@ -21,16 +21,34 @@ test("hasCjk detects Chinese characters", () => {
   assert.equal(hasCjk("just code: const x = 1;"), false);
 });
 
-test("buildTitleSystemPrompt picks the Chinese prompt when input contains CJK", () => {
+test("buildTitleSystemPrompt requires the title to follow the user's language and infers a Chinese fallback for CJK input", () => {
   const zh = buildTitleSystemPrompt("帮我配置 Alacritty 终端");
-  assert.match(zh, /为本次会话生成一个简洁的标题/);
-  assert.doesNotMatch(zh, /Generate a concise/);
+  assert.match(zh, /same natural language as the user's input/);
+  assert.match(zh, /Fallback language: Chinese/);
 });
 
-test("buildTitleSystemPrompt picks the English prompt for non-CJK input", () => {
+test("buildTitleSystemPrompt infers an English fallback for non-CJK input", () => {
   const en = buildTitleSystemPrompt("Explain Alacritty and create config");
-  assert.match(en, /Generate a concise/);
-  assert.doesNotMatch(en, /为本次会话生成一个简洁的标题/);
+  assert.match(en, /Fallback language: English/);
+});
+
+test("buildTitleSystemPrompt honors an explicit systemLanguage over input heuristics", () => {
+  const forced = buildTitleSystemPrompt("Explain Alacritty and create config", "zh-CN");
+  assert.match(forced, /Fallback language: Chinese/);
+  const forcedEn = buildTitleSystemPrompt("帮我配置终端", "en");
+  assert.match(forcedEn, /Fallback language: English/);
+});
+
+test("buildTitleSystemPrompt keeps bilingual few-shot examples for non-Chinese input too", () => {
+  // 语言跟随指令与双语正例对所有输入生效——标题语言由指令驱动，不再由
+  // prompt 二选一决定。注意：日文文本常含汉字（如"修正"），hasCjk 会判
+  // true 而给中文兜底；兜底仅用于无法判断语言时，不影响主判定。
+  const ja = buildTitleSystemPrompt("ログインボタンを修正する");
+  assert.match(ja, /same natural language as the user's input/);
+  assert.match(ja, /修复移动端登录按钮/);
+  const fr = buildTitleSystemPrompt("Réparer le bouton de connexion mobile");
+  assert.match(fr, /same natural language as the user's input/);
+  assert.match(fr, /Fallback language: English/);
 });
 
 // ---------------------------------------------------------------------------
@@ -122,7 +140,7 @@ function createGeneratorWithMock(respond: (systemPrompt: string | undefined) => 
   return { generator, captured };
 }
 
-test("createSessionTitleGenerator uses the Chinese prompt and returns a Chinese title", async () => {
+test("createSessionTitleGenerator sends the language-following prompt with a Chinese fallback for Chinese input", async () => {
   const { generator, captured } = createGeneratorWithMock(() => ({
     role: "assistant",
     content: [{ type: "text", text: '{"title": "修复移动端登录按钮"}' }],
@@ -137,10 +155,11 @@ test("createSessionTitleGenerator uses the Chinese prompt and returns a Chinese 
   });
 
   assert.equal(title, "修复移动端登录按钮");
-  assert.match(captured.systemPrompt ?? "", /为本次会话生成一个简洁的标题/);
+  assert.match(captured.systemPrompt ?? "", /same natural language as the user's input/);
+  assert.match(captured.systemPrompt ?? "", /Fallback language: Chinese/);
 });
 
-test("createSessionTitleGenerator uses the English prompt for English input", async () => {
+test("createSessionTitleGenerator sends an English fallback for English input", async () => {
   const { generator, captured } = createGeneratorWithMock(() => ({
     role: "assistant",
     content: [{ type: "text", text: '{"title": "Fix login button on mobile"}' }],
@@ -155,7 +174,7 @@ test("createSessionTitleGenerator uses the English prompt for English input", as
   });
 
   assert.equal(title, "Fix login button on mobile");
-  assert.match(captured.systemPrompt ?? "", /Generate a concise/);
+  assert.match(captured.systemPrompt ?? "", /Fallback language: English/);
 });
 
 test("createSessionTitleGenerator keeps the title when the model returns plain text", async () => {

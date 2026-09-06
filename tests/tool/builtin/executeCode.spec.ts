@@ -124,14 +124,41 @@ test("execute_code read-only probe handles missing input", () => {
   assert.equal(tool.isReadOnly({} as unknown as Parameters<typeof tool.isReadOnly>[0]), false);
 });
 
-test("disabling web search removes it from the registry but keeps web fetch", () => {
+test("disabling web search removes it from the registry and from execute_code helpers (web_fetch gated too)", () => {
   const registry = createBuiltinRegistry({ webSearch: false });
 
   assert.equal(registry.has("web_search"), false);
   assert.equal(registry.has("WebSearch"), false);
+  // 顶层 web_fetch 工具本身不受 webSearch 开关影响（独立注册）……
   assert.equal(registry.has("web_fetch"), true);
+  // ……但 execute_code 的 helper 列表不再暴露 web_fetch：禁用 web 后
+  // execute_code 不得绕过全局禁令联网。
   assert.doesNotMatch(registry.get("execute_code")?.description ?? "", /\bweb_search\b/);
-  assert.match(registry.get("execute_code")?.description ?? "", /\bweb_fetch\b/);
+  assert.doesNotMatch(registry.get("execute_code")?.description ?? "", /\bweb_fetch\b/);
+});
+
+test("execute_code rejects nested web fetch calls when web search is disabled", async () => {
+  let executed = false;
+  const response = await handleExecuteCodeRpcLineForTests(
+    JSON.stringify({ tool: "web_fetch", args: { url: "https://example.com" } }),
+    {
+      webSearch: false,
+      executeTool: async () => {
+        executed = true;
+        throw new Error("web_fetch should not be invoked");
+      },
+    },
+  );
+
+  assert.equal(response.code, "tool_not_allowed");
+  assert.equal(executed, false);
+});
+
+test("execute_code keeps web_fetch helper when web search is enabled (default)", () => {
+  const registry = createBuiltinRegistry({});
+  const description = registry.get("execute_code")?.description ?? "";
+  assert.match(description, /\bweb_fetch\b/);
+  assert.match(description, /\bweb_search\b/);
 });
 
 test("execute_code rejects nested web search calls when web search is disabled", async () => {

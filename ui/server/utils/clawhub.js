@@ -193,4 +193,3 @@ const clawhubPathCache = createClawhubPathCache(resolveClawhubPath);
  * picked up without a restart. Passing options skips the cache entirely.
  */
 export const getClawhubPath = clawhubPathCache.get;
-export const resetClawhubPathCache = clawhubPathCache.reset;

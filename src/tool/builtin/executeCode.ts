@@ -36,7 +36,7 @@ export type ExecuteCodeOutput = {
 };
 
 export type CreateExecuteCodeToolOptions = {
-  /** Defaults to true. False removes the web_search Python helper and RPC capability. */
+  /** Defaults to true. False removes the web_search and web_fetch Python helpers and RPC capabilities. */
   webSearch?: boolean;
 };
 
@@ -62,7 +62,10 @@ export function createExecuteCodeTool(
 ): SatiToolDefinition<ExecuteCodeInput, ExecuteCodeOutput> {
   const webSearchEnabled = options.webSearch !== false;
   const allowedTools = resolveExecuteCodeAllowedTools(options);
-  const availableHelpers = [...(webSearchEnabled ? ["web_search"] : []), ...EXECUTE_CODE_BASE_ALLOWED_TOOLS];
+  const availableHelpers = [
+    ...(webSearchEnabled ? ["web_search", "web_fetch"] : []),
+    ...EXECUTE_CODE_BASE_ALLOWED_TOOLS,
+  ];
   return {
     name: "execute_code",
     description:
@@ -423,7 +426,7 @@ async function runExecuteCode(
 
 function generateSatiToolsModule(kind: RpcTransport["kind"], webSearchEnabled: boolean): string {
   const transportHeader = kind === "tcp" ? TCP_PYTHON_TRANSPORT_HEADER : UDS_PYTHON_TRANSPORT_HEADER;
-  const webSearchHelper = webSearchEnabled
+  const webHelpers = webSearchEnabled
     ? `
 def web_search(query, country=None):
     args = {"query": query}
@@ -431,10 +434,6 @@ def web_search(query, country=None):
         args["gl"] = country
     return _call("web_search", args)
 
-`
-    : "";
-  return `${transportHeader}
-${webSearchHelper}
 
 def web_fetch(url, mode=None, prompt=None):
     args = {"url": url}
@@ -444,6 +443,10 @@ def web_fetch(url, mode=None, prompt=None):
         args["prompt"] = prompt
     return _call("web_fetch", args)
 
+`
+    : "";
+  return `${transportHeader}
+${webHelpers}
 
 def read_file(file_path, offset=0, limit=None):
     args = {"file_path": file_path}

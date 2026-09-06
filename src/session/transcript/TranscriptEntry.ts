@@ -20,7 +20,8 @@ export type AgentTranscriptEntryType =
   | "injected_context"
   | "request_header"
   | "retry_schedule"
-  | "workspace_state";
+  | "workspace_state"
+  | "turn_rewrite";
 
 export type AgentTranscriptEntryBase = {
   type: AgentTranscriptEntryType;
@@ -254,6 +255,23 @@ export type AgentWorkspaceStateTranscriptEntry = AgentTranscriptEntryBase & {
   state: WorkspaceLedgerState;
 };
 
+/**
+ * 编辑/重新生成最后一条用户消息（遮蔽式 append-only，协议 1.7）：不修改
+ * 历史条目，追加本条目宣告 shadowFromEntryIds 所列条目的投影被遮蔽——
+ * 重放与 Web 投影跳过这些条目；新输入由随后的 accepted_input 接替。
+ * 遮蔽可叠加、可审计，原始 JSONL 行永久保留。
+ */
+export type AgentTurnRewriteTranscriptEntry = AgentTranscriptEntryBase & {
+  type: "turn_rewrite";
+  rewrite: {
+    /** 被遮蔽条目的 entryId（最后一个 accepted_input + 同 turn 的消息条目）。 */
+    shadowFromEntryIds: string[];
+    reason: "edit_last_turn" | "regenerate_last_turn";
+    /** 编辑后的新文本（regenerate 无此字段）。 */
+    newText?: string;
+  };
+};
+
 export type AgentTranscriptEntry =
   | AgentAcceptedInputTranscriptEntry
   | AgentMessageTranscriptEntry
@@ -267,7 +285,8 @@ export type AgentTranscriptEntry =
   | AgentInjectedContextTranscriptEntry
   | AgentRequestHeaderTranscriptEntry
   | AgentRetryScheduleTranscriptEntry
-  | AgentWorkspaceStateTranscriptEntry;
+  | AgentWorkspaceStateTranscriptEntry
+  | AgentTurnRewriteTranscriptEntry;
 
 export function truncatePreview(input: string, byteCap: number): { preview: string; truncated: boolean } {
   const total = Buffer.byteLength(input, "utf8");

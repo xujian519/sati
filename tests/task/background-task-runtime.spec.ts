@@ -34,9 +34,18 @@ function makeFakeChild(pid = 1234): FakeChild {
 
 function makeRuntime(overrides: Partial<BackgroundTaskRuntimeOptions> = {}) {
   const children: FakeChild[] = [];
-  const spawnCalls: Array<{ command: string; options: Record<string, unknown> }> = [];
-  const spawnFn = ((command: string, options: Record<string, unknown>) => {
-    spawnCalls.push({ command, options });
+  const spawnCalls: Array<{ command: string; args?: string[]; options: Record<string, unknown> }> = [];
+  const spawnFn = ((
+    command: string,
+    argsOrOptions: string[] | Record<string, unknown>,
+    maybeOptions?: Record<string, unknown>,
+  ) => {
+    const usesExplicitArgs = Array.isArray(argsOrOptions);
+    spawnCalls.push({
+      command,
+      args: usesExplicitArgs ? argsOrOptions : undefined,
+      options: (usesExplicitArgs ? maybeOptions : argsOrOptions) as Record<string, unknown>,
+    });
     const child = makeFakeChild();
     children.push(child);
     return child as unknown as ChildProcess;
@@ -72,8 +81,10 @@ test("start spawns detached shell command and marks task running", async () => {
   assert.equal(task.cwd, "/tmp");
   assert.equal(task.isBackgrounded, true);
   assert.equal(spawnCalls.length, 1);
-  assert.equal(spawnCalls[0]!.command, "ls -la");
-  assert.equal(spawnCalls[0]!.options.shell, true);
+  // 显式 shell 形式：spawn(<shell>, ["-c", command], options)（bash 优先解析）。
+  assert.notEqual(spawnCalls[0]!.command, "ls -la");
+  assert.deepEqual(spawnCalls[0]!.args, ["-c", "ls -la"]);
+  assert.equal(spawnCalls[0]!.options.shell, undefined);
   assert.equal(spawnCalls[0]!.options.detached, true);
   assert.equal(children[0]!.pid, task.pid);
 });

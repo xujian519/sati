@@ -1,3 +1,9 @@
+/**
+ * 模型速度档（静态 catalog 维度，非实测吞吐）：fast = 交互延迟敏感场景，
+ * balanced = 均衡，deep = 推理增强/吞吐与质量优先。供路由与 UI 选择参考。
+ */
+export type ModelSpeed = "fast" | "balanced" | "deep";
+
 export type ModelCapabilities = {
   supportsToolUse: boolean;
   supportsStreaming: boolean;

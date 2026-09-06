@@ -36,8 +36,16 @@
  *           `kanban_rename_column` / `kanban_delete_column` / `kanban_undo` /
  *           `kanban_subscribe` / `kanban_unsubscribe` and `kanban_updated`
  *           notification event (MINOR，feature-detect)。
+ *   - 1.6 — 2026-09-04: added optional mid-turn steering methods
+ *           `steer_turn` / `cancel_steer` + `steer_applied` / `steer_unapplied`
+ *           event types; `active_turn_snapshot` response gained optional
+ *           `steerItems` (MINOR，feature-detect)。
+ *   - 1.7 — 2026-09-04: added optional last-turn rewrite methods
+ *           `edit_last_turn` / `regenerate_last_turn`（遮蔽式 append-only：
+ *           追加 turn_rewrite 转录条目，投影层跳过被遮蔽条目；成功后由
+ *           调用方走标准 submit_turn 重发）(MINOR，feature-detect)。
  */
-export const SATI_GATEWAY_PROTOCOL_VERSION = "1.5";
+export const SATI_GATEWAY_PROTOCOL_VERSION = "1.7";
 
 /**
  * Handshake compatibility check: clients and servers with the same MAJOR

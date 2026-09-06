@@ -50,7 +50,7 @@ export function savePluginsConfig(config) {
   fs.writeFileSync(PLUGINS_CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
-export function validateManifest(manifest) {
+function validateManifest(manifest) {
   if (!manifest || typeof manifest !== "object") {
     return { valid: false, error: "Manifest must be a JSON object" };
   }

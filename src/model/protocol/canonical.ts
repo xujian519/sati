@@ -142,6 +142,8 @@ export type CanonicalMessageMetadata = {
   purpose?: string;
   /** Originating tool call for projected supplemental result messages. */
   toolCallId?: string;
+  /** Mid-turn steering（协议 1.6）：purpose="steer" 消息的插话 id（审计/撤回对账）。 */
+  steerId?: string;
   forkCarryover?: {
     sourceSessionId: string;
     sourceTurnId?: string;
@@ -225,6 +227,31 @@ export type CanonicalModelRequest = {
    * providers ignore this. Set by `CachedMicroCompactionEngine`.
    */
   cacheBreakpoints?: number[];
+  /**
+   * A5: per-request prompt cache layout (system + recent messages) with a
+   * stable fingerprint. Takes precedence over `cacheBreakpoints` when both
+   * are present. Built by `buildPromptCachePlan`; cleared on stream
+   * continuation requests because the message sequence changes.
+   */
+  cachePlan?: PromptCachePlan;
+};
+
+/**
+ * Prompt cache layout for providers with explicit cache breakpoints
+ * (Anthropic `cache_control`). The fingerprint identifies the cached
+ * prefix for observability; `generation` increments per plan rebuild.
+ */
+export type PromptCachePlan = {
+  provider?: string;
+  model?: string;
+  /** Mark the system prompt's final block as a cache breakpoint. */
+  system: boolean;
+  /** Message indices to mark (recent non-system messages). */
+  messages: number[];
+  /** Stable serialization hash of the cached prefix identity. */
+  fingerprint: string;
+  /** Monotonic rebuild counter (diagnostics). */
+  generation: number;
 };
 
 export type CanonicalUsage = {

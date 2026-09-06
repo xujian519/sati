@@ -332,6 +332,16 @@ export type GatewayEvent = GatewayTurnScopedEventMetadata &
       }
     | { type: "turn_completed"; usage: TurnUsage; finishReason: AgentTurnResult["stopReason"] | string }
     | { type: "agent_status"; event: string; detail?: Record<string, unknown> }
+    /**
+     * Mid-turn steering（1.6）：用户插话在模型调用边界被注入当前 turn。
+     * preview 为截断后的插话原文。
+     */
+    | { type: "steer_applied"; steerId: string; preview: string }
+    /**
+     * Mid-turn steering：插话未被注入（turn 收尾时仍滞留邮箱）。消息本体
+     * 未落库，宿主应提示用户重发。reason ∈ turn_ended | turn_aborted | turn_failed。
+     */
+    | { type: "steer_unapplied"; steerId: string; preview: string; reason: string }
     | {
         type: "error";
         message: string;
@@ -353,6 +363,13 @@ export type GatewayActiveTurnSnapshotInput = {
   sessionKey: string;
 };
 
+/** Mid-turn steering 排队项快照（active_turn_snapshot 附带展示）。 */
+export type GatewaySteerItemSnapshot = {
+  steerId: string;
+  text: string;
+  enqueuedAt: number;
+};
+
 export type GatewayActiveTurnSnapshot = {
   active: boolean;
   sessionKey: string;
@@ -363,12 +380,78 @@ export type GatewayActiveTurnSnapshot = {
    */
   events: GatewayEvent[];
   truncated?: boolean;
+  /** 当前排队未注入的插话（turn 不活跃时为空数组）。 */
+  steerItems?: GatewaySteerItemSnapshot[];
 };
 
 export type GatewayElicitationResponseInput = {
   sessionKey: string;
   requestId: string;
   answer: SatiElicitationAnswer;
+};
+
+/**
+ * Mid-turn steering（1.6）：向进行中的 turn 投递一条插话。插话在下一次
+ * 模型调用边界注入消息序列尾部（不中断当前工具执行），消息落库且 UI
+ * 可见。仅在 turn 进行中可投递。
+ */
+export type GatewaySteerTurnInput = {
+  sessionKey: string;
+  text: string;
+};
+
+export type GatewaySteerTurnResult = {
+  /** true = 已入列（将在下一次模型调用边界注入）。 */
+  delivered: boolean;
+  steerId?: string;
+  /** delivered=false 时的原因：no_active_turn（无进行中 turn）/ busy（队列满）。 */
+  reason?: "no_active_turn" | "busy";
+};
+
+/** Mid-turn steering：撤回一条尚未注入的插话。 */
+export type GatewayCancelSteerInput = {
+  sessionKey: string;
+  steerId: string;
+};
+
+export type GatewayCancelSteerResult = {
+  cancelled: boolean;
+};
+
+/**
+ * 编辑/重新生成最后一条用户消息（1.7，遮蔽式 append-only）：追加 turn_rewrite
+ * 转录条目遮蔽旧 accepted_input + 同 turn 消息条目；成功后调用方持返回的
+ * originalText（regenerate）或新文本（edit）走标准 submit_turn 重发——
+ * 投影自然派生「遮蔽后的历史 + 新输入」。仅无进行中 turn、无挂起审批、
+ * 最后输入未被压缩摘要替代且为纯文本时 rewritten=true。
+ */
+export type GatewayRewriteLastTurnReason =
+  | "no_last_turn"
+  | "active_turn"
+  | "pending_approval"
+  | "unsupported_content"
+  | "compact_tail";
+
+export type GatewayEditLastTurnInput = {
+  sessionKey: string;
+  /** 编辑后的新文本（纯文本，无附件）。 */
+  text: string;
+  projectKey?: string;
+};
+
+export type GatewayRegenerateLastTurnInput = {
+  sessionKey: string;
+  projectKey?: string;
+};
+
+export type GatewayRewriteLastTurnResult = {
+  rewritten: boolean;
+  reason?: GatewayRewriteLastTurnReason;
+  /** 被遮蔽条目数（rewritten=true 时）。 */
+  shadowedEntryCount?: number;
+  /** 原用户文本（regenerate 的调用方据此重发）。 */
+  originalText?: string;
+  turnId?: string;
 };
 
 /**
@@ -603,6 +686,25 @@ export interface Gateway {
    * or the session has ended).
    */
   respondElicitation(input: GatewayElicitationResponseInput): Promise<{ delivered: boolean }>;
+  /**
+   * Mid-turn steering（1.6）— 向进行中的 turn 投递插话，下一次模型调用
+   * 边界注入。Optional — 旧实现无此能力时 hosts 应 feature-detect
+   * （`not_configured` 兜底）。
+   */
+  steerTurn?(input: GatewaySteerTurnInput): Promise<GatewaySteerTurnResult>;
+  /**
+   * Mid-turn steering — 撤回一条尚未注入的插话。已注入（steer_applied
+   * 已广播）的项不可撤回，返回 `{ cancelled: false }`。
+   */
+  cancelSteer?(input: GatewayCancelSteerInput): Promise<GatewayCancelSteerResult>;
+  /**
+   * 编辑最后一条用户消息（1.7）— 遮蔽旧 turn 后经标准 submit_turn 重发。
+   * Optional — 旧实现无此能力时 hosts 应 feature-detect（`not_configured`
+   * 兜底）。实现由 host 注入（见 forkSession 模式）。
+   */
+  editLastTurn?(input: GatewayEditLastTurnInput): Promise<GatewayRewriteLastTurnResult>;
+  /** 重新生成最后一条用户消息（1.7）— 遮蔽旧 turn 后按原文重发。 */
+  regenerateLastTurn?(input: GatewayRegenerateLastTurnInput): Promise<GatewayRewriteLastTurnResult>;
   /**
    * Web Phase 2 — host responds to a `permission_request` event surfaced
    * through `submitTurn`. Resolves the agent-side permission promise so the

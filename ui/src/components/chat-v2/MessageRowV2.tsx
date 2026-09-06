@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { AlertTriangle, Check, ChevronRight, Copy, GitBranch, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, Copy, GitBranch, Loader2, Pencil, RotateCcw } from "lucide-react";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { cn } from "../../lib/utils.js";
 import type { Project, SessionProvider } from "../../types/app";
@@ -80,6 +80,12 @@ type MessageRowV2Props = {
   forkCarriedMessageCount?: number;
   forkDisabled?: boolean;
   showAssistantActions?: boolean;
+  // 协议 1.7：最后一条 user 消息可编辑（预填 composer 后改发 edit-last-turn），
+  // 最后一条 assistant 消息可重新生成（regenerate-last-turn）。
+  onEditLastUserMessage?: (message: ChatMessage) => void;
+  onRegenerateLastTurn?: (message: ChatMessage) => void;
+  isLastUserMessage?: boolean;
+  isLastAssistantMessage?: boolean;
 };
 
 // Fall back to the heavy legacy renderer for anything that isn't a vanilla
@@ -121,6 +127,10 @@ function MessageRowV2({
   forkCarriedMessageCount = 0,
   forkDisabled = false,
   showAssistantActions,
+  onEditLastUserMessage,
+  onRegenerateLastTurn,
+  isLastUserMessage = false,
+  isLastAssistantMessage = false,
 }: MessageRowV2Props) {
   const { t } = useTranslation("chat");
   const delegate = useMemo(() => shouldDelegate(message), [message]);
@@ -301,6 +311,15 @@ function MessageRowV2({
             t={t}
           />
         ) : null}
+        {onEditLastUserMessage && isLastUserMessage && !hasForkUnsupportedContent ? (
+          <HoverActionButton
+            icon={<Pencil className="h-3.5 w-3.5" strokeWidth={2} />}
+            label={t("input.editLastTurn", { defaultValue: "Edit message" })}
+            disabled={Boolean(isSessionRunning || !message.entryId)}
+            onClick={() => onEditLastUserMessage(message)}
+            variant="user-hover"
+          />
+        ) : null}
         <div className="max-w-[78%] min-w-0 overflow-hidden rounded-[20px] bg-gradient-to-br from-neutral-100 to-neutral-100/70 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:from-neutral-800 dark:to-neutral-800/70 dark:text-neutral-100 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
           {message.isStreaming && !formattedContent ? (
             <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
@@ -454,7 +473,11 @@ function MessageRowV2({
   const resolvedShowAssistantActions = showAssistantActions ?? true;
   const showAssistantCopyButton = resolvedShowAssistantActions && hasAssistantProse;
   const canRenderAssistantForkButton = Boolean(resolvedShowAssistantActions && onFork && hasAssistantProse);
-  const shouldRenderAssistantActions = showAssistantCopyButton || canRenderAssistantForkButton;
+  const canRenderAssistantRegenerateButton = Boolean(
+    resolvedShowAssistantActions && onRegenerateLastTurn && isLastAssistantMessage && hasAssistantProse,
+  );
+  const shouldRenderAssistantActions =
+    showAssistantCopyButton || canRenderAssistantForkButton || canRenderAssistantRegenerateButton;
   const assistantForkDisabled = Boolean(forkDisabled || isSessionRunning || message.isStreaming || !message.entryId);
   const assistantBody =
     hasAssistantProse || showStreamingCursor || assistantArtifacts.length > 0 ? (
@@ -476,6 +499,15 @@ function MessageRowV2({
         ) : null}
         {shouldRenderAssistantActions ? (
           <div className="mt-1.5 flex justify-end gap-1">
+            {canRenderAssistantRegenerateButton ? (
+              <HoverActionButton
+                icon={<RotateCcw className="h-3.5 w-3.5" strokeWidth={2} />}
+                label={t("input.regenerateLastTurn", { defaultValue: "Regenerate" })}
+                disabled={Boolean(isSessionRunning || message.isStreaming || !message.entryId)}
+                onClick={() => onRegenerateLastTurn?.(message)}
+                variant="action-row"
+              />
+            ) : null}
             {canRenderAssistantForkButton ? (
               <ForkMessageButton
                 carriedMessageCount={forkCarriedMessageCount}
@@ -521,6 +553,42 @@ function CopyMarkdownButton({ content }: { content: string }) {
       title={copied ? "Copied" : "Copy"}
     >
       {copied ? <Check className="h-3.5 w-3.5" strokeWidth={2} /> : <Copy className="h-3.5 w-3.5" strokeWidth={2} />}
+    </button>
+  );
+}
+
+function HoverActionButton({
+  icon,
+  label,
+  disabled = false,
+  onClick,
+  variant = "action-row",
+}: {
+  icon: ReactNode;
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+  variant?: "user-hover" | "action-row";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        variant === "user-hover"
+          ? "mb-1 rounded-md p-1.5 text-neutral-400 opacity-0 transition-all group-hover/user-msg:opacity-100 focus-visible:opacity-100"
+          : "rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300",
+        disabled
+          ? "cursor-not-allowed opacity-30"
+          : variant === "user-hover"
+            ? "hover:bg-neutral-200/80 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+            : undefined,
+      )}
+      aria-label={label}
+      title={label}
+    >
+      {icon}
     </button>
   );
 }

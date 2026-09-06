@@ -167,7 +167,17 @@ export type AgentEvent =
       fatal: boolean;
     }
   | { type: "retry_progress"; sessionId: string; turnId: string; detail: RouterRetryProgressEvent }
-  | { type: "session_aborted"; sessionId: string; reason?: string };
+  | { type: "session_aborted"; sessionId: string; reason?: string }
+  /**
+   * Mid-turn steering（协议 1.6）：用户插话在下一次模型调用边界被注入
+   * 消息序列。preview 为截断后的插话原文（审计/UI 提示用）。
+   */
+  | { type: "steer_applied"; sessionId: string; turnId: string; steerId: string; preview: string }
+  /**
+   * 插话未被注入：turn 收尾（完成/中止/超时）时仍滞留邮箱。宿主应提示
+   * 用户重发，消息本体未落库。
+   */
+  | { type: "steer_unapplied"; sessionId: string; steerId: string; preview: string; reason: string };
 
 export type AgentEventEmitter = (event: AgentEvent) => void;
 

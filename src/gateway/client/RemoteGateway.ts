@@ -126,6 +126,33 @@ export class RemoteGateway implements Gateway {
     await this.client.request("abort_turn", input);
   }
 
+  async steerTurn(
+    input: import("../protocol/types.js").GatewaySteerTurnInput,
+  ): Promise<import("../protocol/types.js").GatewaySteerTurnResult> {
+    return this.client.request<import("../protocol/types.js").GatewaySteerTurnResult>("steer_turn", input);
+  }
+
+  async cancelSteer(
+    input: import("../protocol/types.js").GatewayCancelSteerInput,
+  ): Promise<import("../protocol/types.js").GatewayCancelSteerResult> {
+    return this.client.request<import("../protocol/types.js").GatewayCancelSteerResult>("cancel_steer", input);
+  }
+
+  async editLastTurn(
+    input: import("../protocol/types.js").GatewayEditLastTurnInput,
+  ): Promise<import("../protocol/types.js").GatewayRewriteLastTurnResult> {
+    return this.client.request<import("../protocol/types.js").GatewayRewriteLastTurnResult>("edit_last_turn", input);
+  }
+
+  async regenerateLastTurn(
+    input: import("../protocol/types.js").GatewayRegenerateLastTurnInput,
+  ): Promise<import("../protocol/types.js").GatewayRewriteLastTurnResult> {
+    return this.client.request<import("../protocol/types.js").GatewayRewriteLastTurnResult>(
+      "regenerate_last_turn",
+      input,
+    );
+  }
+
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
     return this.client.request<ListSessionsResult>("list_sessions", input);
   }

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { TextDecoder } from "node:util";
+import { getSatiCommandShell, type CommandShell } from "../../../runtime/index.js";
 
 export type SatiCommandOptions = {
   cwd: string;
@@ -27,18 +28,22 @@ export type SatiCommandRunner = {
 type SpawnShell = typeof spawn;
 
 export class NodeShellCommandRunner implements SatiCommandRunner {
-  constructor(private readonly spawnShell: SpawnShell = spawn) {}
+  constructor(
+    private readonly spawnShell: SpawnShell = spawn,
+    private readonly resolveShell: () => CommandShell = getSatiCommandShell,
+  ) {}
 
   run(command: string, options: SatiCommandOptions): Promise<SatiCommandResult> {
     const startedAt = Date.now();
     return new Promise((resolve, reject) => {
       const isWindows = process.platform === "win32";
-      const child = this.spawnShell(command, {
+      const commandShell = this.resolveShell();
+      const child = this.spawnShell(commandShell.shell, commandShell.args(command), {
         cwd: options.cwd,
         env: options.env,
-        shell: true,
         detached: !isWindows,
         windowsHide: isWindows,
+        windowsVerbatimArguments: isWindows && commandShell.windowsVerbatimArguments,
         stdio: ["ignore", "pipe", "pipe"],
       });
 

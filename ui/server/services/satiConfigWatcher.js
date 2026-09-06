@@ -27,6 +27,7 @@ function signatureForFile(filePath) {
     const stat = fs.statSync(filePath);
     return `${stat.size}:${stat.mtimeMs}`;
   } catch {
+    // 文件尚不存在是常态（首次写盘前），签名记为 missing
     return "missing";
   }
 }

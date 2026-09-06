@@ -289,6 +289,19 @@
       "agentDescription": "Directly process and execute the task",
       "planDescription": "Generate a plan first, then execute after confirmation",
       "askDescription": "Only answers questions without modifying files"
+    },
+    "steerQueuedSend": "Steer instead — inject into the running turn without stopping it",
+    "steerQueuedSendShort": "Steer",
+    "editLastTurn": "Edit message",
+    "regenerateLastTurn": "Regenerate",
+    "rewriteError": {
+      "no_last_turn": "There's no completed turn to rewrite.",
+      "active_turn": "Wait for the current turn to finish first.",
+      "pending_approval": "Resolve the pending approval before rewriting.",
+      "unsupported_content": "Only plain-text messages can be edited.",
+      "compact_tail": "The last turn was compacted away; start a new chat instead.",
+      "not_configured": "This gateway doesn't support rewriting turns.",
+      "unknown": "Couldn't rewrite the last turn."
     }
   },
   "documentReferences": {

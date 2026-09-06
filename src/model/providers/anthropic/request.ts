@@ -72,13 +72,21 @@ export function buildAnthropicRequest(request: CanonicalModelRequest, model: Mod
 
   // Anthropic allows at most 4 cache_control blocks per request.
   // Reserve 1 for the system prompt; keep the 3 most recent message breakpoints.
+  // A5: a per-request cachePlan (system + recent3) takes precedence over the
+  // intermittent micro-compaction breakpoints.
   const MAX_MESSAGE_BREAKPOINTS = 3;
-  const trimmedBreakpoints = request.cacheBreakpoints
-    ? request.cacheBreakpoints.length > MAX_MESSAGE_BREAKPOINTS
-      ? request.cacheBreakpoints.slice(-MAX_MESSAGE_BREAKPOINTS)
-      : request.cacheBreakpoints
-    : null;
+  const plannedBreakpoints = request.cachePlan?.messages;
+  const trimmedBreakpoints = plannedBreakpoints
+    ? plannedBreakpoints.length > MAX_MESSAGE_BREAKPOINTS
+      ? plannedBreakpoints.slice(-MAX_MESSAGE_BREAKPOINTS)
+      : plannedBreakpoints
+    : request.cacheBreakpoints
+      ? request.cacheBreakpoints.length > MAX_MESSAGE_BREAKPOINTS
+        ? request.cacheBreakpoints.slice(-MAX_MESSAGE_BREAKPOINTS)
+        : request.cacheBreakpoints
+      : null;
   const cacheBreakpoints = trimmedBreakpoints ? new Set(trimmedBreakpoints) : null;
+  const systemCacheMarked = request.cachePlan ? request.cachePlan.system : cacheBreakpoints !== null;
 
   return {
     model: request.model,
@@ -87,7 +95,7 @@ export function buildAnthropicRequest(request: CanonicalModelRequest, model: Mod
       toAnthropicMessage(message, cacheBreakpoints?.has(index) ?? false),
     ),
     system: request.systemPrompt
-      ? cacheBreakpoints
+      ? systemCacheMarked
         ? [{ type: "text", text: request.systemPrompt, cache_control: { type: "ephemeral" } }]
         : request.systemPrompt
       : undefined,

@@ -361,7 +361,7 @@ async function executeScheduledMaintenanceForDataDir(dataDir) {
   return enqueueMaintenanceTask(dataDir, async () => service.runDueScheduledMaintenance("scheduled:server_scheduler"));
 }
 
-export async function resolveProjectPathFromRequest(req) {
+async function resolveProjectPathFromRequest(req) {
   const queryProjectPath = normalizePath(req.query?.projectPath);
   if (queryProjectPath) {
     return queryProjectPath;
@@ -409,7 +409,7 @@ export async function rollbackLastMemoryDream(service, dataDir) {
   return enqueueMaintenanceTask(dataDir, async () => service.rollbackLastDream());
 }
 
-export async function runMemorySchedulerCycle() {
+async function runMemorySchedulerCycle() {
   try {
     if (!readSatiConfigFile().config.memory?.enabled) {
       return null;

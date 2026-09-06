@@ -1001,7 +1001,7 @@ router.post("/load", async (req, res) => {
  * POST /api/commands/execute
  * Execute a command with argument replacement
  * This endpoint prepares the command content but doesn't execute bash commands yet
- * (that will be handled in the command parser utility)
+ * (argument replacement is done inline below)
  */
 router.post("/execute", async (req, res) => {
   try {
@@ -1107,7 +1107,7 @@ router.post("/execute", async (req, res) => {
     }
     const content = await fs.readFile(commandPath, "utf8");
     const { data: metadata, content: commandContent } = parseFrontmatter(content);
-    // Basic argument replacement (will be enhanced in command parser utility)
+    // Basic argument replacement ($ARGUMENTS and $1..$N below)
     let processedContent = commandContent;
 
     // Replace $ARGUMENTS with all arguments joined

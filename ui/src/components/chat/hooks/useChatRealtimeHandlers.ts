@@ -270,6 +270,9 @@ interface UseChatRealtimeHandlersArgs {
   onReplaceTemporarySession?: (sessionId?: string | null) => void;
   onNavigateToSession?: (sessionId: string) => void;
   onWebSocketReconnect?: () => void;
+  // 协议 1.7：edit-last-turn / regenerate-last-turn 失败时 complete 帧携带
+  // rewriteError（complete 帧本身不可渲染，由宿主转为 toast/错误提示）。
+  onRewriteError?: (reason: string) => void;
   sessionStore: SessionStore;
   sendMessage?: (message: Record<string, unknown>) => void;
 }
@@ -299,6 +302,7 @@ export function useChatRealtimeHandlers({
   onReplaceTemporarySession,
   onNavigateToSession,
   onWebSocketReconnect,
+  onRewriteError,
   sessionStore,
   sendMessage,
 }: UseChatRealtimeHandlersArgs) {
@@ -726,6 +730,11 @@ export function useChatRealtimeHandlers({
         }
 
         case "complete": {
+          // 协议 1.7：turn 改写失败（complete 帧不可渲染，回调宿主提示）。
+          const rewriteError = typeof msg.rewriteError === "string" ? msg.rewriteError : "";
+          if (rewriteError) {
+            onRewriteError?.(rewriteError);
+          }
           if (sid) {
             clearSessionStatusRetry(sid);
             activeTurnReplaySignatureRef.current.delete(sid);
@@ -958,6 +967,7 @@ export function useChatRealtimeHandlers({
       onReplaceTemporarySession,
       onNavigateToSession,
       onWebSocketReconnect,
+      onRewriteError,
       selectedProject,
       sessionStore,
     ],

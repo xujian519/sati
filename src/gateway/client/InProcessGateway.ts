@@ -54,6 +54,13 @@ import type {
   GatewayApprovalListPendingResult,
   GatewayElicitationResponseInput,
   GatewayEvent,
+  GatewayCancelSteerInput,
+  GatewayCancelSteerResult,
+  GatewaySteerTurnInput,
+  GatewaySteerTurnResult,
+  GatewayEditLastTurnInput,
+  GatewayRegenerateLastTurnInput,
+  GatewayRewriteLastTurnResult,
   GatewayPermissionDecisionInput,
   GatewayRecordAgentStatusMessageInput,
   GatewaySessionPermissionGrantInput,
@@ -158,6 +165,9 @@ export type InProcessGatewayOptions = {
   readSessionMessages?: (input: WebReadSessionMessagesInput) => Promise<WebReadSessionMessagesResult>;
   readSubagentMessages?: (input: WebReadSubagentMessagesInput) => Promise<WebReadSubagentMessagesResult>;
   forkSession?: (input: WebForkSessionInput) => Promise<WebForkSessionResult>;
+  /** 编辑/重新生成最后一条用户消息（协议 1.7）— host 注入实现（createLocalGateway）。 */
+  editLastTurn?: (input: GatewayEditLastTurnInput) => Promise<GatewayRewriteLastTurnResult>;
+  regenerateLastTurn?: (input: GatewayRegenerateLastTurnInput) => Promise<GatewayRewriteLastTurnResult>;
   recordAgentStatusMessage?: (input: GatewayRecordAgentStatusMessageInput) => Promise<{ recorded: boolean }>;
   /**
    * Web Phase 3 — pluggable project enumerator + describer.
@@ -681,6 +691,32 @@ export class InProcessGateway implements Gateway {
     await pending;
   }
 
+  /**
+   * Mid-turn steering（协议 1.6）：向进行中的 turn 投递插话。只对已有
+   * in-flight turn 的缓存会话生效（getActiveSession 只查不建）；投递即
+   * 入列——实际注入发生在下一次模型调用边界（steer_applied 事件）。
+   */
+  async steerTurn(input: GatewaySteerTurnInput): Promise<GatewaySteerTurnResult> {
+    const session = this.router.getActiveSession(input.sessionKey);
+    if (!session) {
+      return { delivered: false, reason: "no_active_turn" };
+    }
+    const item = session.steer(input.text);
+    if (!item) {
+      return { delivered: false, reason: "busy" };
+    }
+    return { delivered: true, steerId: item.steerId };
+  }
+
+  /** Mid-turn steering：撤回一条尚未注入的插话（已注入项不可撤回）。 */
+  async cancelSteer(input: GatewayCancelSteerInput): Promise<GatewayCancelSteerResult> {
+    const session = this.router.getActiveSession(input.sessionKey);
+    if (!session) {
+      return { cancelled: false };
+    }
+    return { cancelled: session.cancelSteer(input.steerId) };
+  }
+
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
     return this.router.list(input);
   }
@@ -743,6 +779,7 @@ export class InProcessGateway implements Gateway {
         active: false,
         sessionKey: input.sessionKey,
         events: [],
+        steerItems: [],
       };
     }
     return {
@@ -753,6 +790,7 @@ export class InProcessGateway implements Gateway {
         .filter(event => this.shouldReplayActiveTurnEvent(input.sessionKey, event))
         .map(event => cloneGatewayEvent(event)),
       ...(replay.truncated ? { truncated: true } : {}),
+      steerItems: this.router.getActiveSession(input.sessionKey)?.pendingSteerItems() ?? [],
     };
   }
 
@@ -900,6 +938,22 @@ export class InProcessGateway implements Gateway {
       throw new Error("fork_session is not configured. Wire `forkSession` via createLocalGateway.");
     }
     return this.options.forkSession(input);
+  }
+
+  /** 编辑最后一条用户消息（协议 1.7）：遮蔽旧 turn；新输入由调用方走 submit_turn。 */
+  async editLastTurn(input: GatewayEditLastTurnInput): Promise<GatewayRewriteLastTurnResult> {
+    if (!this.options.editLastTurn) {
+      throw new Error("edit_last_turn is not configured. Wire `editLastTurn` via createLocalGateway.");
+    }
+    return this.options.editLastTurn(input);
+  }
+
+  /** 重新生成最后一条用户消息（协议 1.7）：遮蔽旧 turn 并返回原文供重发。 */
+  async regenerateLastTurn(input: GatewayRegenerateLastTurnInput): Promise<GatewayRewriteLastTurnResult> {
+    if (!this.options.regenerateLastTurn) {
+      throw new Error("regenerate_last_turn is not configured. Wire `regenerateLastTurn` via createLocalGateway.");
+    }
+    return this.options.regenerateLastTurn(input);
   }
 
   async listProjects(): Promise<WebListProjectsResult> {

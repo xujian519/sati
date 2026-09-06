@@ -40,6 +40,24 @@ export function findLastCompactBoundaryIndex(entries: AgentTranscriptEntry[]): n
 }
 
 /**
+ * turn_rewrite 遮蔽集：所有 turn_rewrite 条目声明的 shadowFromEntryIds 并集。
+ * 重放投影（replayFull）与 Web 投影（extractWebVisibleMessages）据此跳过被
+ * 遮蔽条目——编辑/重新生成最后一条消息后，旧 accepted_input 与同 turn 的
+ * 消息条目从模型可见序列与 UI 消失，新输入经随后的 accepted_input 接替。
+ */
+export function collectShadowedEntryIds(entries: AgentTranscriptEntry[]): Set<string> {
+  const shadowed = new Set<string>();
+  for (const entry of entries) {
+    if (entry.type === "turn_rewrite") {
+      for (const entryId of entry.rewrite.shadowFromEntryIds) {
+        shadowed.add(entryId);
+      }
+    }
+  }
+  return shadowed;
+}
+
+/**
  * 提交输入的历史消息投影（运行期 messages 投影化的读取面）：transcript 是
  * 唯一真源，返回「最后一次压缩边界之后的模型可见消息」（压缩产物 + 之后
  * 新增的 durable 消息）——与 run() 内存视图一致。供 AgentSession 在每次
@@ -133,8 +151,11 @@ export function replayTranscriptEntries(entries: AgentTranscriptEntry[]): AgentT
     tailMatches(entries, cached.entriesLength, cached.lastEntryId)
   ) {
     const slice = entries.slice(cached.entriesLength);
+    // turn_rewrite 是中段插入的遮蔽指令（与 boundary 同级），增量投影无法
+    // 从缓存结果中移除已投影条目——强制全量重投影。
     const needsFullReplay =
       slice.some(isCompactBoundaryEntry) ||
+      slice.some(entry => entry.type === "turn_rewrite") ||
       slice.some(entry => entry.type === "turn_result" && cached.warningTurnIds.has(entry.turnId));
     if (!needsFullReplay) {
       appendProjection(slice, cached);
@@ -231,15 +252,21 @@ function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResul
   let lastCompactBoundary: (AgentTranscriptEntry & { type: "control_boundary" }) | undefined;
 
   const completedTurnIds = new Set(entries.filter(entry => entry.type === "turn_result").map(entry => entry.turnId));
+  // turn_rewrite 遮蔽：被声明的条目（旧 accepted_input + 同 turn 消息）从投影消失。
+  const shadowedEntryIds = collectShadowedEntryIds(entries);
 
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
     // Past compact boundary: usage / metadata still merge; messages produced
     // before the boundary are dropped (legacy getMessagesAfterCompactBoundary).
     const beforeBoundary = lastBoundaryIndex !== -1 && index < lastBoundaryIndex;
+    const isShadowed = entry.entryId !== undefined && shadowedEntryIds.has(entry.entryId);
 
     switch (entry.type) {
       case "accepted_input":
+        if (isShadowed) {
+          break;
+        }
         if (!beforeBoundary) {
           messages.push(...cloneMessages(entry.messages));
           events.push({
@@ -253,6 +280,9 @@ function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResul
       case "assistant_message":
       case "tool_result_message":
       case "durable_message":
+        if (isShadowed) {
+          break;
+        }
         if (!completedTurnIds.has(entry.turnId)) {
           diagnostics.push({
             code: "transcript_entry_invalid",
@@ -331,6 +361,13 @@ function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResul
  * 过滤。遮蔽重建是纯展示用途，压缩发生时已落库的消息就应纳入还原序列——
  * turn 完成状态与「压缩输入当时的 messages」无关；过滤会引入索引错位（mid-turn
  * 压缩场景下活动 turn 的消息已被压缩遮蔽，却因 turn 未完成被丢弃）。
+ *
+ * 同样刻意不做 turn_rewrite 遮蔽：shadowedRanges 索引记录于压缩当时，本
+ * 序列须保持「压缩输入当时的原貌」——turn_rewrite 只遮蔽最后 turn（位于
+ * 最后边界之后），对边界之前的还原序列无影响，过滤反而会使先压缩后编辑
+ * 的既有索引错位。本函数仅供压缩「还原原貌」展示用（replayShadowedMessages
+ * / injectWebMessages），不是模型请求重建路径——模型历史经 replayTranscriptEntries
+ * 的 replayFull，那里 turn_rewrite 的遮蔽是生效的。
  */
 function projectFullMessageSequence(entries: AgentTranscriptEntry[]): CanonicalMessage[] {
   const messages: CanonicalMessage[] = [];

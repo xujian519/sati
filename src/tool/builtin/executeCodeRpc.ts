@@ -9,9 +9,10 @@ const logger = createLogger("execute_code");
 /**
  * execute_code 允许的 Sati 工具白名单（工具主体与 RPC 层共用）。
  * 解析逻辑收敛于此，避免"允许列表"与"可用 helper 列表"漂移。
+ * web_fetch 与 web_search 同受 webSearch 开关控制（禁用时 execute_code
+ * 不得绕过全局 web 禁令联网）。
  */
 export const EXECUTE_CODE_BASE_ALLOWED_TOOLS = [
-  "web_fetch",
   "read_file",
   "write_file",
   "edit_file",
@@ -24,6 +25,7 @@ export function resolveExecuteCodeAllowedTools(options: { webSearch?: boolean })
   const allowed = new Set<string>(EXECUTE_CODE_BASE_ALLOWED_TOOLS);
   if (options.webSearch !== false) {
     allowed.add("web_search");
+    allowed.add("web_fetch");
   }
   return allowed;
 }

@@ -41,7 +41,7 @@ function buildHelpResponse(content) {
   };
 }
 
-export function parseTurnkeySlashArgs(args = []) {
+function parseTurnkeySlashArgs(args = []) {
   const [subcommandRaw, ...rest] = Array.isArray(args) ? args : [];
   const subcommand = String(subcommandRaw || "")
     .trim()
