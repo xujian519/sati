@@ -35,7 +35,7 @@ describe("resolveEmbeddingClient", () => {
     assert.equal(resolveEmbeddingClient(makeCfg({ enabled: false }), modelConfig), undefined);
   });
 
-  it("provider 形态复用 model.providers 的 url/apiKey", () => {
+  it("provider 形态构造客户端", () => {
     const client = resolveEmbeddingClient(makeCfg({ provider: "ollama" }), modelConfig);
     assert.ok(client);
     assert.equal(client.dimensions, 0); // 未确认维度

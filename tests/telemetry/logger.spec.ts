@@ -127,7 +127,7 @@ test("output never contains ANSI escape sequences", () => {
   const warn = capture("warn");
   try {
     createLogger("sati", { levelTag: true, timestamp: true }).warn("m");
-    assert.equal(String(warn.calls[0]![0]).includes("["), false);
+    assert.equal(String(warn.calls[0]![0]).includes("\x1b["), false);
   } finally {
     warn.restore();
   }

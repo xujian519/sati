@@ -44,7 +44,7 @@ test("extractPdfPages: 渲染所有页面并提取文本", () => {
   assert.equal(pages[0].pageNumber, 1);
   assert.equal(pages[1].pageNumber, 2);
   assert.ok(pages[0].imageBase64.length > 0);
-  assert.ok(pages[0].textBlocks.length > 0 || pages[0].textBlocks.length === 0, "文本提取可空但不应抛错");
+  assert.ok(Array.isArray(pages[0].textBlocks), "文本块应为数组（可空但不应抛错）");
 });
 
 test("extractPdfFigureCandidates: 第 2 页得分高于第 1 页", () => {

@@ -90,7 +90,8 @@ test("dedupeByFamily：源 warnings 保留，合并统计追加在其后", () =>
   );
 
   assert.equal(hits.length, 1);
-  assert.deepEqual(warnings, [sourceWarning, warnings[1]]);
+  assert.equal(warnings.length, 2);
+  assert.equal(warnings[0], sourceWarning);
   assert.match(warnings[1] ?? "", /family 去重/);
 });
 

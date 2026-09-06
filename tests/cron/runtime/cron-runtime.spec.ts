@@ -61,7 +61,6 @@ describe("CronRuntime.updateTask", () => {
     });
 
     assert.equal(result.updated, true);
-    assert.ok(result.updated);
     assert.equal(result.task.taskId, "t1");
     assert.equal(result.task.message, "新任务");
     assert.deepEqual(result.task.schedule, { type: "cron", expression: "30 8 * * 1-5", timezone: "UTC" });
@@ -99,7 +98,6 @@ describe("CronRuntime.updateTask", () => {
     });
 
     assert.equal(result.updated, true);
-    assert.ok(result.updated);
     assert.equal(result.task.schedule.type, "once");
     assert.equal(result.task.nextRunAt, "2026-08-07T10:00:00.000Z");
   });

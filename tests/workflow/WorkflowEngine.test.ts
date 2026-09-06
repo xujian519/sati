@@ -110,7 +110,7 @@ test("executes a linear plan and resolves downstream inputs", async () => {
   assert.equal(result.steps[1]!.output?.summary, "echo: upstream said: echo: original task");
 });
 
-test("runs independent steps in parallel", async () => {
+test("runs independent steps to completion", async () => {
   const order: string[] = [];
   const agentFactory: WorkflowAgentFactory = () => ({
     prompt: async (input: string) => {
