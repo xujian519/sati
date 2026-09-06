@@ -107,7 +107,7 @@
 
 | 卡 | 内容 | 状态 |
 |---|---|---|
-| C36 | tests/ 审阅 A：agent/tool/context（伪测试治理、断言质量） | ⬜ |
+| C36 | tests/ 审阅 A：agent/tool/context（伪测试治理、断言质量） | ✅ 2026-09-06 |
 | C37 | tests/ 审阅 B：patent/knowledge/gateway/session 等其余 | ⬜ |
 | C38 | scripts/ 32 文件审阅精炼 | ⬜ |
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ⬜ |
@@ -157,6 +157,7 @@
 | 2026-09-03 | C33 | main-content 其余（MainContent + CronV2 + FilesV2） | P2 重复收敛 ×4：MainContent SplitBody fullScreenToolTabs Set 每次渲染重建→模块级 FULL_SCREEN_TOOL_TABS；CronV2 handleSubmit schedule 构造三层嵌套三元→buildCronSchedule helper；CronV2 defaultRunAt 计算在 useMemo/resetForm 重复→createDefaultRunAt()；FilesV2 工具栏 8 按钮重复结构→ToolbarButton 组件（保留 disabledOpacity 40/50 差异与 loading 状态），handleNewFile/handleNewFolder 父目录展开逻辑重复→ensureExpanded helper；P3 冗余：MainContent isPlugin 中 typeof activeTab==="string" 删除（AppTab 模板字面量仍属 string）；P0/P1 无；FilesV2 5 处 console.error 归 C39 横切治理；记录不处理：context menu 项结构相似但分支各异（C12 判例）、MainContent as TaskMasterContextValue/TasksSettingsContextValue 为本地类型收窄、FilesV2 t(...) as string 用于 title/aria-label；门禁前置修复：apps/desktop/electron-dist 构建产物导致根 pnpm check 失败→.gitignore 与 biome.json 同时排除 | 4（refactor×3 + chore） | ✅ |
 | 2026-09-06 | C34 | ui/server 全域（102 JS 文件/31K 行，含 20 测试文件） | P1 死代码批量清理：孤儿模块整删 ×3（cron-daemon-startup/cron-daemon-owner/commandParser，-646 行）、零消费导出删除 ×15（含 sati-bridge approvalListPendingViaGateway 等、desktopUpdateService 测试钩子、sessionManager ready、agent.js isSSEStreamWriter/getMessages、taskmaster.js __dirname 死变量）、24 个仅文件内消费导出私有化；P2 收敛 ×3：satiConfig 冗余空 memory.model 剔除块删除、config MASKED_SECRET 字面量统一 ×4、taskmaster-websocket tasksData 恒未传参删除（wire 零变化）；P3：悬空 JSDoc 归位 ×2、无参 catch 补意图注释 ×7、commands.js 断头注释修复 ×2；P0 候选 ×9 只登记（chat.js edit/regen 流不广播、shell.js PTY 重连竞态 ×2、sati-bridge Map 慢泄漏、MCP 状态死链路、/load 路径校验弱于 /execute、git /status 丢 R/C、agent.js clone 双层吞错+非流式 messages 恒空、/test-connection 不识别掩码键）；退役建议 ×2 只登记（globalChrome.js 除关机钩子外全零消费、always-on-paths.js 仅剩 parity 测试消费）；死路由 ×9 只登记（taskmaster 8 条 + /api/commands/load，协议面）；P2 大合并记录不处理 ×10（sati-bridge transcript 候选 ×5 等，理由见日卡记录） | 6（refactor×4 + docs×2） | ✅ |
 | 2026-09-06 | C35 | ui i18n + e2e | P2 结构不对齐 ×1 已修：zh-CN teamPanel `pill.teamCount` → `pill.teamCount_other`（i18next zh 复数类别仅 other，无后缀 key 被 t(count) miss 后回落英文）+ 新增 teamPanel.i18n.test.ts 复数回归 ×2；P2 死 key ×1 已删：chat toolUseError.description（双语空值零消费）；值级判定：~120 处 en=zh 相同值全为合理（占位符模板/单位/专名/命令）；登记不处理：en/stylePanel.json 整文件为 zh 拷贝（en 侧整面板缺英译，涉字号/字体产品术语，另卡）、settings.json ~30 处同类、377 个强信号未使用 key 候选（动态 t(\`…\${var}\`) 构造普遍，文本检索不可靠，需 i18next-parser 类工具另卡）、thinkingMode.* 疑似零消费成片 key；e2e 审阅：单 spec（history-fork 34 行）为环境变量门控 fork API 契约测试，断言合理零改动；无 playwright.config（`npx playwright test` 裸跑会误捕 src 下 vitest 文件，登记如需启用补 config+script+CI job） | 2（fix + docs） | ✅ |
+| 2026-09-06 | C36 | tests/ 审阅 A：agent/tool/context（131 spec 文件） | P0 恒绿断言 ×1 已修（turnRuntimeState「复制语义」断言与被测对象无引用关联→改写为真实守护拷贝）；P1 恒真 ×2 已修（doomLoop toolCallKey 表达式自比较→多键插入序格式钉定；tokenizer-cache 二次调用命中缓存恒真→独立对照直编码）；名实不符改名 ×4 已修（jsonl-store/rrf/executeCode/rule-check）；P3 卫生 ×4（assert.equal(bool,true)→assert.ok ×2、诊断消息缺括号、冗余动态导入 ×2）；P2 析取弱断言 ×3 只登记（ruleCheck.spec.ts，强化需人工核对规则命中预期）；登记不处理：context-fixture 未采纳残留 12+ 文件（另卡）、镜像公式断言、trace 透传零断言、双文件并存等 ×7；机械扫描全净（零零断言/skip·only/恒真字面量/空体/TODO）；横切零 as any·零 @ts-expect-error，console 15 处全为 warn 拦截技巧（合法） | 4（test×3 + docs） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -587,6 +588,20 @@
   - **e2e 审阅（零改动）**：`ui/e2e/history-fork.spec.mjs`（34 行）为 SATI_API_URL/SATI_E2E_PROJECT_PATH/SATI_E2E_PARENT_SESSION 三环境变量门控的 fork API 契约测试（entryId 存在性、`/^web[:-]s_/` 会话号格式、carriedMessageCount>0），断言合理。`@playwright/test@1.62.1` 在 devDependencies，但全仓无 `playwright.config.*`、CI 无 e2e job——`npx playwright test` 裸跑默认匹配会把 `src/**/*.test.tsx` 一并当作 PW 用例，因此该 spec 实为休眠的手动回归 harness。建议（只登记）：启用需补 config（testDir: e2e）+ npm script + CI job。
 - **验证**：ui vitest 全量 102 文件 / 630 用例 ✅（较 C34 后 +2，即新增复数回归）；`tsc --noEmit` ✅；ui eslint（src+server，--max-warnings 0）+ boundary ✅；biome check ✅。
 - **提交**：`f6a532ce` fix(i18n): align teamPanel plural key and drop dead chat key；+ 本 docs 提交。
+
+#### C36 tests/ 审阅 A：agent/tool/context（2026-09-06）
+
+- **范围**：tests/agent（44）+ tests/tool（60，含 builtin/team 7、workspace 2、execution 3、registry 3）+ tests/context（27），共 131 个 spec 文件。三个 explore 子代理并行语义审阅 + 主代理逐条复核（零误报采纳）。
+- **机械扫描（全净）**：零断言文件 0、`.skip`/`.only` 0、恒真字面量断言 0、空测试体 0、吞错 catch 0、TODO/FIXME 0；横切 `as any`/`@ts-expect-error` 0；console 15 处全为 role-from-skill.spec.ts 的 console.warn 拦截（测试技巧，合法，不归 C39）。
+- **审阅发现**：
+  - **P0 恒绿断言 ×1（已修）**：`turnRuntimeState.spec.ts` 「复制而非共享引用」断言用的 `original` 是第二次 `baseInput()` 的全新对象，与 `state` 无引用关联——构造器退化为共享引用测试照样绿；改写为构造后改写同一入参并断言已构造状态不变（含 `input.messages.length===3` 变更自检），真正守护 `[...input.messages]` 拷贝语义。
+  - **P1 恒真断言 ×2（已修）**：`doomLoop.spec.ts` toolCallKey 测试为表达式与自身比较，且原注释宣称的「JSON 键序稳定」在实现（裸 JSON.stringify，按插入序）中不成立——删恒真块，改为多键 args 插入序格式钉定（键序不同即不同指纹属已知性质：指纹只需同一调用方连续重复时一致；若要求键序无关需改稳定序列化=行为变更，另议）；`tokenizer-cache.spec.ts` 「自然语言长文本」断言第二次 `countTokensGuarded` 与首次一致（进程内内容缓存使恒真，注释宣称的「逐段求和对照」不存在）——改为与 `getTokenizer().encode(text).length` 独立对照，验证全量路径无抽样外推。
+  - **名实不符改名 ×4（已修）**：jsonl-store「空数组写入后文件为空字符串」→「load 返回空数组」（断言走 loader 回环，且 rewrite 不写文件该测试也绿，字节级断言属加强仅登记）；rrf「自定义 k 影响分值」→「自定义 k 不影响相对排序」（score 从未断言，补 score 断言属加强仅登记）；executeCode「read-only probe handles missing input」→「isReadOnly returns false for empty input」；rule-check「patent asset flags risk keywords」→「rule set asset loads rules」（实仅断言条数 ≥4）。
+  - **P3 卫生 ×4（已修）**：`assert.equal(布尔表达式, true)` → `assert.ok` ×2（doomLoop:82、toolContext:206）；output-schema-batch 违约诊断消息补缺失右括号（失败时信息截断）；team-tools-integration 删两行与顶部静态导入重复的动态 re-import（readTranscript 动态导入保留）。
+  - **P2 只登记（强化断言=行为变更，需人工核对预期）**：`ruleCheck.spec.ts` 析取弱断言 ×3——`PAT-APPROVAL-001 || 无违规`（两分支皆可过）、`H- || PAT-`（H 部规则整体失效仍绿）、unknown-scope 弱回显断言（同行为在 rule-check.spec.ts 有强版本防「静默零违规误判合规」）；该文件为目录中断言质量最薄者，强化前须先人工确认各输入的规则命中预期。
+  - **登记不处理 ×7**：doomLoopIntegration 尾长断言镜像实现公式（注释自认「与实现同式计算」，前序 3 条有效断言仍在钉行为，固化字面值交 owner）；context-fixture `makeToolContext` 已建但 12+ 文件仍用 `{} as never`/`as unknown as SatiToolRuntimeContext` 局部 context（采纳需逐文件核对工具对 context 字段的真实消费面，误映射会制造新假绿，建议另卡一次 PR 机械采纳）；edgeclaw-memory-provider trace 透传零断言（补断言固化 `metadata.trace` 契约）；SEMANTIC_SEARCH_LIMIT 存在性测试（低价值无害）；token-count tools 仅 `Array.isArray` 无内容校验；`void events` 显式丢弃；describe/it 与 test() 目录级混用（node:test 等价纯一致性）；rule-check.spec.ts 与 ruleCheck.spec.ts 双文件并存测同一 `createRuleCheckTool`（合并涉用例归并）。
+- **验证**：`pnpm typecheck` ✅；`pnpm lint`（eslint + event-matrix + skills 校验）✅；`pnpm format:check` ✅；`pnpm test` 全量（build + node --test --test-force-exit）✅；改动 spec 先行 tsx 直跑：agent 33/33、context 16/16、tool 22/22、team 集成 7/7（注：team 集成 spec 全过后进程不退出系遗留句柄，官方 test 脚本以 `--test-force-exit` 收尾，属已知形态）。
+- **提交**：`d9a95a2b` test(agent) / `4854ed4c` test(context) / `d0c01bce` test(tool) + 本 docs 提交。
 
 ## 六、基线（2026-08-18 实测）
 
