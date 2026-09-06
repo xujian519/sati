@@ -75,6 +75,7 @@ function normalizeWebSearchEndpoint(provider, endpoint) {
   try {
     return new URL(effective).toString();
   } catch {
+    // 非 URL 文本（含相对地址）原样返回，由调用方按原始串处理
     return effective;
   }
 }
@@ -355,6 +356,7 @@ function isExpectedJsonBody(protocol, responseText) {
   try {
     return isExpectedProviderResponseShape(protocol, responseText ? JSON.parse(responseText) : {});
   } catch {
+    // 解析失败 = 响应形状不符预期，按 false 处理（fail-closed 探测语义）
     return false;
   }
 }
@@ -363,6 +365,7 @@ function isExpectedModelsJsonBody(protocol, responseText) {
   try {
     return isExpectedProviderModelsResponseShape(protocol, responseText ? JSON.parse(responseText) : {});
   } catch {
+    // 同上：解析失败按形状不符处理
     return false;
   }
 }

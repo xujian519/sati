@@ -111,6 +111,7 @@ async function readGatewayToken() {
     const trimmed = raw.trim();
     return trimmed || null;
   } catch {
+    // token 文件缺失/不可读是常态（网关未启动或未登录），返回 null 走无 token 流程
     return null;
   }
 }
