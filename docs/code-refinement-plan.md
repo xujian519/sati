@@ -108,7 +108,7 @@
 | 卡 | 内容 | 状态 |
 |---|---|---|
 | C36 | tests/ 审阅 A：agent/tool/context（伪测试治理、断言质量） | ✅ 2026-09-06 |
-| C37 | tests/ 审阅 B：patent/knowledge/gateway/session 等其余 | ⬜ |
+| C37 | tests/ 审阅 B：patent/knowledge/gateway/session 等其余 | ✅ 2026-09-06 |
 | C38 | scripts/ 32 文件审阅精炼 | ⬜ |
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ⬜ |
 | C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ⬜ |
@@ -158,6 +158,7 @@
 | 2026-09-06 | C34 | ui/server 全域（102 JS 文件/31K 行，含 20 测试文件） | P1 死代码批量清理：孤儿模块整删 ×3（cron-daemon-startup/cron-daemon-owner/commandParser，-646 行）、零消费导出删除 ×15（含 sati-bridge approvalListPendingViaGateway 等、desktopUpdateService 测试钩子、sessionManager ready、agent.js isSSEStreamWriter/getMessages、taskmaster.js __dirname 死变量）、24 个仅文件内消费导出私有化；P2 收敛 ×3：satiConfig 冗余空 memory.model 剔除块删除、config MASKED_SECRET 字面量统一 ×4、taskmaster-websocket tasksData 恒未传参删除（wire 零变化）；P3：悬空 JSDoc 归位 ×2、无参 catch 补意图注释 ×7、commands.js 断头注释修复 ×2；P0 候选 ×9 只登记（chat.js edit/regen 流不广播、shell.js PTY 重连竞态 ×2、sati-bridge Map 慢泄漏、MCP 状态死链路、/load 路径校验弱于 /execute、git /status 丢 R/C、agent.js clone 双层吞错+非流式 messages 恒空、/test-connection 不识别掩码键）；退役建议 ×2 只登记（globalChrome.js 除关机钩子外全零消费、always-on-paths.js 仅剩 parity 测试消费）；死路由 ×9 只登记（taskmaster 8 条 + /api/commands/load，协议面）；P2 大合并记录不处理 ×10（sati-bridge transcript 候选 ×5 等，理由见日卡记录） | 6（refactor×4 + docs×2） | ✅ |
 | 2026-09-06 | C35 | ui i18n + e2e | P2 结构不对齐 ×1 已修：zh-CN teamPanel `pill.teamCount` → `pill.teamCount_other`（i18next zh 复数类别仅 other，无后缀 key 被 t(count) miss 后回落英文）+ 新增 teamPanel.i18n.test.ts 复数回归 ×2；P2 死 key ×1 已删：chat toolUseError.description（双语空值零消费）；值级判定：~120 处 en=zh 相同值全为合理（占位符模板/单位/专名/命令）；登记不处理：en/stylePanel.json 整文件为 zh 拷贝（en 侧整面板缺英译，涉字号/字体产品术语，另卡）、settings.json ~30 处同类、377 个强信号未使用 key 候选（动态 t(\`…\${var}\`) 构造普遍，文本检索不可靠，需 i18next-parser 类工具另卡）、thinkingMode.* 疑似零消费成片 key；e2e 审阅：单 spec（history-fork 34 行）为环境变量门控 fork API 契约测试，断言合理零改动；无 playwright.config（`npx playwright test` 裸跑会误捕 src 下 vitest 文件，登记如需启用补 config+script+CI job） | 2（fix + docs） | ✅ |
 | 2026-09-06 | C36 | tests/ 审阅 A：agent/tool/context（131 spec 文件） | P0 恒绿断言 ×1 已修（turnRuntimeState「复制语义」断言与被测对象无引用关联→改写为真实守护拷贝）；P1 恒真 ×2 已修（doomLoop toolCallKey 表达式自比较→多键插入序格式钉定；tokenizer-cache 二次调用命中缓存恒真→独立对照直编码）；名实不符改名 ×4 已修（jsonl-store/rrf/executeCode/rule-check）；P3 卫生 ×4（assert.equal(bool,true)→assert.ok ×2、诊断消息缺括号、冗余动态导入 ×2）；P2 析取弱断言 ×3 只登记（ruleCheck.spec.ts，强化需人工核对规则命中预期）；登记不处理：context-fixture 未采纳残留 12+ 文件（另卡）、镜像公式断言、trace 透传零断言、双文件并存等 ×7；机械扫描全净（零零断言/skip·only/恒真字面量/空体/TODO）；横切零 as any·零 @ts-expect-error，console 15 处全为 warn 拦截技巧（合法） | 4（test×3 + docs） | ✅ |
+| 2026-09-06 | C37 | tests/ 审阅 B：其余 375 spec 文件（patent 111/knowledge 42/gateway 29/model 27/session 24 等） | P1 恒真/死断言 ×4 已修（rewrite-last-turn `{} as Gateway` 属性断言、pdf-extract 恒真析取、patentSearch-dedupe 自引用 deepEqual、retry-schedule length>=0 经实证改 equal(0)）；名实不符改名 ×5（semantic 融合/assemble wiki 保留/resolve url 复用/drafting-sop 需修订/WorkflowEngine parallel）；P3 卫生 ×4（embedding-consistency tmp 目录泄漏、cron-runtime 冗余断言对 ×2、parse-hook-output 静默 if→响亮 ×3、logger 裸 ESC 字节）；登记不处理：本机 gitignored harness ×7（不进 CI，case-law-search.test.ts 断言/跳过矛盾仅本机）、workflow 真并行证据、休眠 patent-drafting fixture（T12 零执行）、析取断言 ×2、硬编码计数等 ×8；机械扫描全净，t.skip ×3 均条件门控（合法），真 TODO ×1 仍成立；横切零 as any/零 @ts-expect-error | 4（test×3 + docs） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -602,6 +603,19 @@
   - **登记不处理 ×7**：doomLoopIntegration 尾长断言镜像实现公式（注释自认「与实现同式计算」，前序 3 条有效断言仍在钉行为，固化字面值交 owner）；context-fixture `makeToolContext` 已建但 12+ 文件仍用 `{} as never`/`as unknown as SatiToolRuntimeContext` 局部 context（采纳需逐文件核对工具对 context 字段的真实消费面，误映射会制造新假绿，建议另卡一次 PR 机械采纳）；edgeclaw-memory-provider trace 透传零断言（补断言固化 `metadata.trace` 契约）；SEMANTIC_SEARCH_LIMIT 存在性测试（低价值无害）；token-count tools 仅 `Array.isArray` 无内容校验；`void events` 显式丢弃；describe/it 与 test() 目录级混用（node:test 等价纯一致性）；rule-check.spec.ts 与 ruleCheck.spec.ts 双文件并存测同一 `createRuleCheckTool`（合并涉用例归并）。
 - **验证**：`pnpm typecheck` ✅；`pnpm lint`（eslint + event-matrix + skills 校验）✅；`pnpm format:check` ✅；`pnpm test` 全量（build + node --test --test-force-exit）✅；改动 spec 先行 tsx 直跑：agent 33/33、context 16/16、tool 22/22、team 集成 7/7（注：team 集成 spec 全过后进程不退出系遗留句柄，官方 test 脚本以 `--test-force-exit` 收尾，属已知形态）。
 - **提交**：`d9a95a2b` test(agent) / `4854ed4c` test(context) / `d0c01bce` test(tool) + 本 docs 提交。
+
+#### C37 tests/ 审阅 B：patent/knowledge/gateway/session 等其余（2026-09-06）
+
+- **范围**：tests/ 除 C36（agent/tool/context）外全部 375 个 spec 文件——patent 111、knowledge 42、gateway 29、model 27、session 24、router 13、mcp 13、always-on 13、cron 11、extension 10、长尾 20+ 目录与根级 version.spec.ts。4 个 explore 子代理并行审阅 + 主代理逐条复核。
+- **范围澄清（重要）**：tests/ 下有 7 个被 .gitignore（`*.test.ts`）忽略的**本机私有 harness**（MethodologyRegistry、ipc-standards-loader、case-law-search、composite-memory-resolver、legal-search、DagEngine、SafeEvaluator），从未进仓库/CI；被跟踪的 `*.test.ts` 仅 3 个（ipc-classifier、memory-providers、WorkflowEngine，均已 force-add）。子代理对本机文件的发现不产生仓库改动，仅登记——如 case-law-search.test.ts 文件头称「缺失时跳过」、实现却是 assert 硬失败 + 早退零断言，该矛盾只存在于本机（CI 无此文件，不存在误报红），改为 `{ skip }` 门控属本机自行治理。
+- **机械扫描（全净）**：零断言文件 0、恒真字面量 0、空测试体 0、吞错 catch 0、onlyLog 0；`t.skip` ×3 全为条件门控（pdfDownload-extractjs ×2 防打包分发形态跳过逐字符一致性断言，仓库内源码态/dist 态均可达、skip 实际不可达；llm-replay-drafting fixture 未录制时显式 t.skip 避免以「通过」掩盖零断言——设计正确但 fixture 自合入未录制，属休眠点）；真 TODO ×1（verify-config 的 noUncheckedIndexedAccess/exactOptionalPropertyTypes 待启用备忘，仍成立）；横切零 as any/零 @ts-expect-error，console 命中均为测试夹具字符串。
+- **审阅发现**：
+  - **P1 恒真/死断言 ×4（已修）**：rewrite-last-turn-protocol 对 `{} as Gateway` 断言属性恒 undefined（真正守门在编译期：方法改必需即 TS2352，删两行死断言、注释如实）；pdf-extract `length>0 || length===0` 恒真 → `Array.isArray`（保留「可空但不抛错」意图）；patentSearch-dedupe expected 第二元素取自 actual 的自引用 deepEqual → 等价 length+warnings[0] 精确断言；retry-schedule `messages.length >= 0` 恒真 → 一次性探针实证该 fixture 重放投影为 0 后改 `equal(0)`（真实守护 log-only 条目不泄漏为可见消息）。
+  - **名实不符改名 ×5（已修）**：legal-memory-provider-semantic「FTS+语义 RRF 融合」实为 FTS stub 恒空的单路语义注入；assemble「KG 降级（wiki/IPC 保留）」断言仅证 resolver 数与不抛错，去掉超能力主张；model/embedding/resolve「复用 url/apiKey」实仅构造客户端（对齐同目录 rerank 命名）；drafting-sop SlopGate「（需修订）」括注与断言无关（未通过路径由 retry-hints 等覆盖）；WorkflowEngine「in parallel」断言与串行拓扑执行相容，去掉 parallel 主张。
+  - **P3 卫生 ×4（已修）**：embedding-consistency 清理删 mkdtemp 整目录（原只删 db 文件，每次运行泄漏一个 tmp 目录）；cron-runtime 与 `assert.equal(…, true)` 成对冗余的 assert.ok ×2；parse-hook-output 3 处静默 if 收窄（断言路径可被无声跳过）→ 同文件既有响亮变体 `throw new Error("expected sync output")`；logger 字符串字面量内嵌裸 ESC(0x1B) 字节 → 显式 `\x1b` 转义（防编辑器/格式化破坏，语义不变）。
+  - **登记不处理 ×8**：workflow 真并行证据（WorkflowEngine/DagEngine 断言仅覆盖串行相容顺序，补时间窗重叠证明需设计；DagEngine 本机文件的 "slow" 死分支已顺手删但该文件不入库）；休眠的 patent_drafting_v1 全链路 fixture（T12 端到端验收自合入零执行，录制激活或显式挂起需人工）；析取断言 ×2（patent-kg-adapter「n4||n1」召回退化不可判、flexible-plan「pfe_triples||merge_result」收敛需先确认实际输出键）；case-law-search.spec.ts 同函数双调用自比（意图=预编译语句复用不崩，真实信号仅 length>=1）；memory-providers.test.ts 逐字重复 provider 构造；check-html-templates 硬编码「Checked 7」（加注或改 ≥ 断言二选一）；approval.spec.ts `export type _ApprovalCompat` 刻意编译期接口漂移断言（带意图注释，保留）；legal-memory-provider-semantic 融合路径真覆盖（fixture 让 engine.search 返回命中）。
+- **验证**：`pnpm typecheck` ✅；`pnpm lint` ✅（含 event-matrix + skills）；`pnpm format:check` ✅；`pnpm test` 全量 **4145 用例：4141 通过 / 0 失败 / 4 跳过（既有）** ✅；改动 spec 先行 tsx 直跑：恒真批 22/22、改名+卫生批 103/103。
+- **提交**：`89fd54b2` test(de-tautologize) / `2894e357` test(改名) / `d1d7a484` test(卫生) + 本 docs 提交。
 
 ## 六、基线（2026-08-18 实测）
 
