@@ -17,9 +17,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { BrowserWindow, ipcMain } from "electron";
-import { resolveAppIconPath } from "./icon-path";
+import { resolveAppIconPath } from "./icon-path.js";
 import { buildConfigYaml, type OnboardingPayload } from "./onboarding-config.js";
-import { testProviderOnboarding } from "./provider-tester";
+import { testProviderOnboarding } from "./provider-tester.js";
 
 export type OnboardingResult = "saved" | "cancelled";
 

@@ -1,11 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    // TS 6 起废弃 node10 解析（TS 7 移除）。本 PR 仅升 TS 6，先用官方开关压制
-    // TS5107；迁移到 node16 + 显式扩展名由 TS 7 升级 PR 一并处理。
-    "ignoreDeprecations": "6.0",
+    "module": "node16",
+    "moduleResolution": "node16",
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,

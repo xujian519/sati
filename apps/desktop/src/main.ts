@@ -25,11 +25,11 @@ import {
   shell,
   type MenuItemConstructorOptions,
 } from "electron";
-import { validateSatiConfigFile } from "./config-validator";
-import { showOnboardingWindow } from "./onboarding-window";
-import { ServerManager } from "./server-manager";
-import { resolveSplashHtmlPath, showSplashWindow } from "./splash-window";
-import { resolveAppIconPath } from "./icon-path";
+import { validateSatiConfigFile } from "./config-validator.js";
+import { showOnboardingWindow } from "./onboarding-window.js";
+import { ServerManager } from "./server-manager.js";
+import { resolveSplashHtmlPath, showSplashWindow } from "./splash-window.js";
+import { resolveAppIconPath } from "./icon-path.js";
 
 app.setName("Sati");
 
@@ -556,11 +556,11 @@ if (!gotLock) {
     // "error" events is to throw — which Electron then surfaces as a
     // confusing "A JavaScript error occurred in the main process" dialog
     // that hides the actual root cause.
-    serverManager.on("error", err => {
+    serverManager.on("error", (err: Error) => {
       console.error("[Sati] server error:", err);
     });
 
-    serverManager.on("ready", p => {
+    serverManager.on("ready", (p: number) => {
       currentServerPort = p;
       // Rebuild so the Help menu's URL-dependent items flip from
       // disabled → enabled (or update if the port changed across a
