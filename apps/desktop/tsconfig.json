@@ -1,11 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    // TS 6 起废弃 node10 解析（TS 7 移除）。本 PR 仅升 TS 6，先用官方开关压制
-    // TS5107；迁移到 node16 + 显式扩展名由 TS 7 升级 PR 一并处理。
-    "ignoreDeprecations": "6.0",
+    // TS 7 移除 node10 解析，故用 node16：相对导入须带 .js 扩展名；
+    // src/ 下 package.json 显式 type:commonjs，产物保持 CJS 语义
+    // （Electron main/preload 加载方式不变），根 dist 跨树编译同此判型。
+    "module": "node16",
+    "moduleResolution": "node16",
     "outDir": "dist",
     "rootDir": "src",
     "strict": true,
