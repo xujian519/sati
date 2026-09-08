@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { logError } from "../utils/logging";
 import { api } from "../utils/api";
 
 const TasksSettingsContext = createContext({
@@ -55,12 +56,12 @@ export const TasksSettingsProvider = ({ children }) => {
             setTasksEnabled(false);
           }
         } else {
-          console.error("Failed to check TaskMaster installation status");
+          logError("Failed to check TaskMaster installation status");
           setIsTaskMasterInstalled(false);
           setIsTaskMasterReady(false);
         }
       } catch (error) {
-        console.error("Error checking TaskMaster installation:", error);
+        logError("Error checking TaskMaster installation:", error);
         setIsTaskMasterInstalled(false);
         setIsTaskMasterReady(false);
       } finally {

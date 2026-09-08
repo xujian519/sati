@@ -16,6 +16,7 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { logError } from "../utils/logging";
 import { authenticatedFetch } from "../utils/api";
 import enCommon from "./locales/en/common.json";
 import enSettings from "./locales/en/settings.json";
@@ -131,7 +132,7 @@ i18n.on("languageChanged", lng => {
   try {
     localStorage.setItem("userLanguage", lng);
   } catch (error) {
-    console.error("Failed to save language preference:", error);
+    logError("Failed to save language preference:", error);
   }
   syncAlwaysOnLanguage(lng);
 });
