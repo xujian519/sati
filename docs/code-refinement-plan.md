@@ -109,7 +109,7 @@
 |---|---|---|
 | C36 | tests/ 审阅 A：agent/tool/context（伪测试治理、断言质量） | ✅ 2026-09-06 |
 | C37 | tests/ 审阅 B：patent/knowledge/gateway/session 等其余 | ✅ 2026-09-06 |
-| C38 | scripts/ 32 文件审阅精炼 | ⬜ |
+| C38 | scripts/ 32 文件审阅精炼 | ✅ 2026-09-08 |
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ⬜ |
 | C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ⬜ |
 | C41 | 无参 catch 治理 + TODO/FIXME 核实 | ⬜ |
@@ -159,6 +159,7 @@
 | 2026-09-06 | C35 | ui i18n + e2e | P2 结构不对齐 ×1 已修：zh-CN teamPanel `pill.teamCount` → `pill.teamCount_other`（i18next zh 复数类别仅 other，无后缀 key 被 t(count) miss 后回落英文）+ 新增 teamPanel.i18n.test.ts 复数回归 ×2；P2 死 key ×1 已删：chat toolUseError.description（双语空值零消费）；值级判定：~120 处 en=zh 相同值全为合理（占位符模板/单位/专名/命令）；登记不处理：en/stylePanel.json 整文件为 zh 拷贝（en 侧整面板缺英译，涉字号/字体产品术语，另卡）、settings.json ~30 处同类、377 个强信号未使用 key 候选（动态 t(\`…\${var}\`) 构造普遍，文本检索不可靠，需 i18next-parser 类工具另卡）、thinkingMode.* 疑似零消费成片 key；e2e 审阅：单 spec（history-fork 34 行）为环境变量门控 fork API 契约测试，断言合理零改动；无 playwright.config（`npx playwright test` 裸跑会误捕 src 下 vitest 文件，登记如需启用补 config+script+CI job） | 2（fix + docs） | ✅ |
 | 2026-09-06 | C36 | tests/ 审阅 A：agent/tool/context（131 spec 文件） | P0 恒绿断言 ×1 已修（turnRuntimeState「复制语义」断言与被测对象无引用关联→改写为真实守护拷贝）；P1 恒真 ×2 已修（doomLoop toolCallKey 表达式自比较→多键插入序格式钉定；tokenizer-cache 二次调用命中缓存恒真→独立对照直编码）；名实不符改名 ×4 已修（jsonl-store/rrf/executeCode/rule-check）；P3 卫生 ×4（assert.equal(bool,true)→assert.ok ×2、诊断消息缺括号、冗余动态导入 ×2）；P2 析取弱断言 ×3 只登记（ruleCheck.spec.ts，强化需人工核对规则命中预期）；登记不处理：context-fixture 未采纳残留 12+ 文件（另卡）、镜像公式断言、trace 透传零断言、双文件并存等 ×7；机械扫描全净（零零断言/skip·only/恒真字面量/空体/TODO）；横切零 as any·零 @ts-expect-error，console 15 处全为 warn 拦截技巧（合法） | 4（test×3 + docs） | ✅ |
 | 2026-09-06 | C37 | tests/ 审阅 B：其余 375 spec 文件（patent 111/knowledge 42/gateway 29/model 27/session 24 等） | P1 恒真/死断言 ×4 已修（rewrite-last-turn `{} as Gateway` 属性断言、pdf-extract 恒真析取、patentSearch-dedupe 自引用 deepEqual、retry-schedule length>=0 经实证改 equal(0)）；名实不符改名 ×5（semantic 融合/assemble wiki 保留/resolve url 复用/drafting-sop 需修订/WorkflowEngine parallel）；P3 卫生 ×4（embedding-consistency tmp 目录泄漏、cron-runtime 冗余断言对 ×2、parse-hook-output 静默 if→响亮 ×3、logger 裸 ESC 字节）；登记不处理：本机 gitignored harness ×7（不进 CI，case-law-search.test.ts 断言/跳过矛盾仅本机）、workflow 真并行证据、休眠 patent-drafting fixture（T12 零执行）、析取断言 ×2、硬编码计数等 ×8；机械扫描全净，t.skip ×3 均条件门控（合法），真 TODO ×1 仍成立；横切零 as any/零 @ts-expect-error | 4（test×3 + docs） | ✅ |
+| 2026-09-08 | C38 | scripts/ 32 文件（审阅后精炼 11 文件） | 死代码/占位删除：gen-patent-workflow-docs 恒空 orphans 检查、patent-benchmark-business DESIGN-INV- 分支与默认逐字节一致、token-estimate-audit toolSchemas 常量+toolsNote 死字段（输出少一条样本，行为面已明示）、measure-techdebt godFunctions 占位（main 无条件覆写）、mock-slow-provider 死 body 变量→req.resume()；重复收敛：repair-invalidation-decisions REASON_RE 提取共用；命名/遮蔽修复：patent-eval 图模式 provider→stageProvider；边界守卫收紧（行为面已明示）：check-ui-server-boundary N3 正则失配改 fail-loud、bump-version --root 空值 arg 守卫；注释修正：check-node-runtime/check-ui-server-boundary；测试补充：open-pr.test 长词截断用例；P0/P1 无；记录不处理：update.sh 63 行 stash pop / 41-45 行 detached HEAD（git/重启行为决策，另卡）、patent-eval L121 不可达 break（触发 no-fallthrough，不动） | 1（refactor） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -616,6 +617,21 @@
   - **登记不处理 ×8**：workflow 真并行证据（WorkflowEngine/DagEngine 断言仅覆盖串行相容顺序，补时间窗重叠证明需设计；DagEngine 本机文件的 "slow" 死分支已顺手删但该文件不入库）；休眠的 patent_drafting_v1 全链路 fixture（T12 端到端验收自合入零执行，录制激活或显式挂起需人工）；析取断言 ×2（patent-kg-adapter「n4||n1」召回退化不可判、flexible-plan「pfe_triples||merge_result」收敛需先确认实际输出键）；case-law-search.spec.ts 同函数双调用自比（意图=预编译语句复用不崩，真实信号仅 length>=1）；memory-providers.test.ts 逐字重复 provider 构造；check-html-templates 硬编码「Checked 7」（加注或改 ≥ 断言二选一）；approval.spec.ts `export type _ApprovalCompat` 刻意编译期接口漂移断言（带意图注释，保留）；legal-memory-provider-semantic 融合路径真覆盖（fixture 让 engine.search 返回命中）。
 - **验证**：`pnpm typecheck` ✅；`pnpm lint` ✅（含 event-matrix + skills）；`pnpm format:check` ✅；`pnpm test` 全量 **4145 用例：4141 通过 / 0 失败 / 4 跳过（既有）** ✅；改动 spec 先行 tsx 直跑：恒真批 22/22、改名+卫生批 103/103。
 - **提交**：`89fd54b2` test(de-tautologize) / `2894e357` test(改名) / `d1d7a484` test(卫生) + 本 docs 提交。
+
+#### C38 scripts/ 审阅精炼（2026-09-08）
+
+- **范围**：`scripts/` 32 个文件（.mjs/.ts）逐一过审，11 个产生精炼改动（其余零发现或仅归属既有登记项）。
+- **精炼原则（从严）**：本轮只删**行为等价**的死代码/占位；真行为缺陷（P0/边界收紧）仅登记或明示行为面，不混入精炼提交。
+- **审阅发现（11 文件）**：
+  - **死代码/占位删除**：gen-patent-workflow-docs.ts 恒空 `orphans` 检查（`[...generated.keys()]` 全命中 `generated.has` → 恒空 → `|| size>0` 恒 false）；patent-benchmark-business.ts `DESIGN-INV-` 分支与默认返回**逐字节一致** → 删分支；token-estimate-audit.ts `toolSchemas` 常量 + `toolsNote` 死字段 +「全量工具目录（70 工具）」样本（仅 2 schema 却署名 70，且 toolsNote 不参与估算）→ 删（**审计输出少一条样本，行为面已明示**）；measure-techdebt.mjs `godFunctions` 占位 `{threshold,count:0,items:[]}`（main 无条件覆写）→ 删；mock-slow-provider.mjs 死 `body` 变量（data 监听仅驱动 `end`）→ `req.resume()`。
+  - **重复收敛**：repair-invalidation-decisions.ts 提取 `REASON_RE` 共用（原两处逐字一致 regex）。
+  - **命名/遮蔽修复**：patent-eval.mjs 图模式分支 `provider` 对象遮蔽外层模型标识字符串 → 改 `stageProvider`（外层 `provider` 在 base L173/244 恢复引用）。
+  - **边界守卫收紧（行为面已明示）**：check-ui-server-boundary.mjs N3 自检正则失配（`readEslintExceptList` 返回 null）时由静默通过改为 push violation fail-loud；bump-version.mjs `--root` 无值守卫（原先 `resolve(undefined)` 抛裸 TypeError → 现显式报错并 `exit(2)`）。
+  - **注释修正**：check-node-runtime.mjs 合并交叠中英 PilotDeck 测试钩子注释；check-ui-server-boundary.mjs 修正行号反推注释（字符串/模板字面量索引对齐填充、注释不填充）。
+  - **测试补充**：open-pr.test.mjs 新增 >3 长词截断到 3 的门禁用例。
+- **记录不处理**：update.sh L63 stash pop / L41-45 detached HEAD（git 重启行为决策，属另卡）；patent-eval.mjs L121 `break;` 紧跟 `process.exit(0)` 不可达（预存在，删触发 no-fallthrough，不动）；P0 无。
+- **验证**：`node --check` 全部改动 .mjs ✅；`pnpm test:pr-tooling` 25/25 ✅；`pnpm check:patent-workflow-docs` fresh（8 快照）✅；`node scripts/check-ui-server-boundary.mjs` fresh ✅；`node scripts/measure-techdebt.mjs --json` ✅（godFunctions 注入正确）；项目 `pnpm typecheck` ✅。
+- **提交**：`ffd53f36` refactor(scripts): C38 审阅精炼 — 删除死代码/占位,修正注释与边界守卫（11 文件，36+/55-）。
 
 ## 六、基线（2026-08-18 实测）
 
