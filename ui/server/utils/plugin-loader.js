@@ -1,3 +1,4 @@
+import { logger } from "./consoleLogger.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -179,13 +180,13 @@ export function scanPlugins() {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
       const validation = validateManifest(manifest);
       if (!validation.valid) {
-        console.warn(`[Plugins] Skipping ${entry.name}: ${validation.error}`);
+        logger.warn(`[Plugins] Skipping ${entry.name}: ${validation.error}`);
         continue;
       }
 
       // Skip duplicate manifest names
       if (seenNames.has(manifest.name)) {
-        console.warn(`[Plugins] Skipping ${entry.name}: duplicate plugin name "${manifest.name}"`);
+        logger.warn(`[Plugins] Skipping ${entry.name}: duplicate plugin name "${manifest.name}"`);
         continue;
       }
       seenNames.add(manifest.name);
@@ -228,7 +229,7 @@ export function scanPlugins() {
         repoUrl,
       });
     } catch (err) {
-      console.warn(`[Plugins] Failed to read manifest for ${entry.name}:`, err.message);
+      logger.warn(`[Plugins] Failed to read manifest for ${entry.name}:`, err.message);
     }
   }
 

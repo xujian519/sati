@@ -6,6 +6,7 @@
  * Used across TaskMaster integration and other MCP-dependent features.
  */
 
+import { logger } from "./consoleLogger.js";
 import { promises as fsPromises } from "fs";
 import path from "path";
 import os from "os";
@@ -145,7 +146,7 @@ export async function detectTaskMasterMCPServer() {
       };
     }
   } catch (error) {
-    console.error("Error detecting MCP server config:", error);
+    logger.error("Error detecting MCP server config:", error);
     return {
       hasMCPServer: false,
       reason: `Error checking MCP config: ${error.message}`,
@@ -192,7 +193,7 @@ export async function getAllMCPServers() {
       projectServers: configData.projects || {},
     };
   } catch (error) {
-    console.error("Error getting all MCP servers:", error);
+    logger.error("Error getting all MCP servers:", error);
     return {
       hasConfig: false,
       error: error.message,

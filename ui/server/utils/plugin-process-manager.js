@@ -1,3 +1,4 @@
+import { logger } from "./consoleLogger.js";
 import { spawn } from "child_process";
 import path from "path";
 import { scanPlugins, getPluginsConfig, getPluginDir } from "./plugin-loader.js";
@@ -67,7 +68,7 @@ export function startPluginServer(name, pluginDir, serverEntry) {
               runningPlugins.delete(name);
             });
 
-            console.log(`[Plugins] Server started for "${name}" on port ${msg.port}`);
+            logger.info(`[Plugins] Server started for "${name}" on port ${msg.port}`);
             resolve(msg.port);
           }
         } catch {
@@ -77,7 +78,7 @@ export function startPluginServer(name, pluginDir, serverEntry) {
     });
 
     pluginProcess.stderr.on("data", data => {
-      console.warn(`[Plugin:${name}] ${data.toString().trim()}`);
+      logger.warn(`[Plugin:${name}] ${data.toString().trim()}`);
     });
 
     pluginProcess.on("error", err => {
@@ -131,7 +132,7 @@ export function stopPluginServer(name) {
       }
     }, 5000);
 
-    console.log(`[Plugins] Server stopped for "${name}"`);
+    logger.info(`[Plugins] Server stopped for "${name}"`);
   });
 }
 
@@ -178,7 +179,7 @@ export async function startEnabledPluginServers() {
     try {
       await startPluginServer(plugin.name, pluginDir, plugin.server);
     } catch (err) {
-      console.error(`[Plugins] Failed to start server for "${plugin.name}":`, err.message);
+      logger.error(`[Plugins] Failed to start server for "${plugin.name}":`, err.message);
     }
   }
 }
