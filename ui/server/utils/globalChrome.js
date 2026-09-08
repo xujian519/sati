@@ -1,3 +1,4 @@
+import { logger } from "./consoleLogger.js";
 import { join } from "path";
 import { homedir } from "os";
 import { createConnection } from "net";
@@ -198,9 +199,7 @@ async function killCDPPort() {
     return;
   }
 
-  console.warn(
-    `[BROWSER ${_ts()}] killCDPPort: sending SIGTERM to pids=${JSON.stringify(pidList)} | caller: ${caller}`,
-  );
+  logger.warn(`[BROWSER ${_ts()}] killCDPPort: sending SIGTERM to pids=${JSON.stringify(pidList)} | caller: ${caller}`);
 
   if (process.platform === "win32") {
     for (const pid of pidList) {
@@ -230,7 +229,7 @@ async function killCDPPort() {
   }
 
   if (process.platform !== "win32") {
-    console.warn(`[BROWSER ${_ts()}] killCDPPort: SIGTERM timeout, sending SIGKILL to pids=${JSON.stringify(pidList)}`);
+    logger.warn(`[BROWSER ${_ts()}] killCDPPort: SIGTERM timeout, sending SIGKILL to pids=${JSON.stringify(pidList)}`);
     for (const pid of pidList) {
       try {
         process.kill(pid, "SIGKILL");
@@ -249,7 +248,7 @@ export async function ensureGlobalChrome() {
   }
 
   if (await isCDPPortOpen()) {
-    console.warn(`[BROWSER ${_ts()}] ensureGlobalChrome: port open but unhealthy, killing stale Chrome`);
+    logger.warn(`[BROWSER ${_ts()}] ensureGlobalChrome: port open but unhealthy, killing stale Chrome`);
     await killCDPPort();
   }
 
@@ -260,7 +259,7 @@ export async function ensureGlobalChrome() {
   fs.mkdirSync(userDataDir, { recursive: true });
 
   chromeProcess = launchChrome(executablePath, userDataDir);
-  console.log(`[BROWSER ${_ts()}] ensureGlobalChrome: launched Chrome pid=${chromeProcess.pid}`);
+  logger.info(`[BROWSER ${_ts()}] ensureGlobalChrome: launched Chrome pid=${chromeProcess.pid}`);
   writeLock();
 
   if (await waitForCDP()) {
@@ -271,7 +270,7 @@ export async function ensureGlobalChrome() {
 }
 
 export async function restartGlobalChrome() {
-  console.warn(`[BROWSER ${_ts()}] restartGlobalChrome: killing and relaunching | caller: ${_caller()}`);
+  logger.warn(`[BROWSER ${_ts()}] restartGlobalChrome: killing and relaunching | caller: ${_caller()}`);
   await killCDPPort();
 
   const executablePath = findChromePath();
@@ -281,7 +280,7 @@ export async function restartGlobalChrome() {
   fs.mkdirSync(userDataDir, { recursive: true });
 
   chromeProcess = launchChrome(executablePath, userDataDir);
-  console.log(`[BROWSER ${_ts()}] restartGlobalChrome: launched Chrome pid=${chromeProcess.pid}`);
+  logger.info(`[BROWSER ${_ts()}] restartGlobalChrome: launched Chrome pid=${chromeProcess.pid}`);
   writeLock();
 
   if (await waitForCDP()) {
@@ -299,23 +298,23 @@ export function startChromeHealthCheck(intervalMs = HEALTH_CHECK_INTERVAL_MS) {
   healthCheckTimer = setInterval(async () => {
     if (!(await isCDPHealthy())) {
       _consecutiveHealthFailures++;
-      console.warn(
+      logger.warn(
         `[BROWSER ${_ts()}] Health check failed (${_consecutiveHealthFailures}/${HEALTH_CHECK_FAIL_THRESHOLD})`,
       );
       if (_consecutiveHealthFailures >= HEALTH_CHECK_FAIL_THRESHOLD) {
-        console.warn(`[BROWSER ${_ts()}] ${HEALTH_CHECK_FAIL_THRESHOLD} consecutive failures, restarting Chrome...`);
+        logger.warn(`[BROWSER ${_ts()}] ${HEALTH_CHECK_FAIL_THRESHOLD} consecutive failures, restarting Chrome...`);
         _consecutiveHealthFailures = 0;
         const url = await restartGlobalChrome();
         if (url) {
           process.env.CDP_URL = url;
-          console.log(`[BROWSER ${_ts()}] Chrome restarted at ${url}`);
+          logger.info(`[BROWSER ${_ts()}] Chrome restarted at ${url}`);
         } else {
-          console.error(`[BROWSER ${_ts()}] Chrome restart failed`);
+          logger.error(`[BROWSER ${_ts()}] Chrome restart failed`);
         }
       }
     } else {
       if (_consecutiveHealthFailures > 0) {
-        console.log(`[BROWSER ${_ts()}] Health check recovered after ${_consecutiveHealthFailures} failures`);
+        logger.info(`[BROWSER ${_ts()}] Health check recovered after ${_consecutiveHealthFailures} failures`);
       }
       _consecutiveHealthFailures = 0;
     }
@@ -331,10 +330,10 @@ export function stopChromeHealthCheck() {
 }
 
 export function shutdownGlobalChrome() {
-  console.warn(`[BROWSER ${_ts()}] shutdownGlobalChrome called | caller: ${_caller()}`);
+  logger.warn(`[BROWSER ${_ts()}] shutdownGlobalChrome called | caller: ${_caller()}`);
   stopChromeHealthCheck();
   if (chromeProcess) {
-    console.warn(`[BROWSER ${_ts()}] shutdownGlobalChrome: sending SIGTERM to pid=${chromeProcess.pid}`);
+    logger.warn(`[BROWSER ${_ts()}] shutdownGlobalChrome: sending SIGTERM to pid=${chromeProcess.pid}`);
     try {
       chromeProcess.kill("SIGTERM");
     } catch {
@@ -394,7 +393,7 @@ export async function ensureCDPUrl() {
 
       const major = await getChromeMajorFromCDP();
       if (major >= CDP_INCOMPATIBLE_CHROME_MAJOR) {
-        console.log(
+        logger.info(
           `[BROWSER ${_ts()}] Chrome ${major} detected — skipping CDP_URL ` +
             `(connectOverCDP incompatible). Agent will use Playwright-managed launch.`,
         );
@@ -403,7 +402,7 @@ export async function ensureCDPUrl() {
 
       process.env.CDP_URL = cdpUrl;
       startChromeHealthCheck(HEALTH_CHECK_INTERVAL_MS);
-      console.log(`[BROWSER ${_ts()}] Global Chrome ready (lazy) at ${cdpUrl}`);
+      logger.info(`[BROWSER ${_ts()}] Global Chrome ready (lazy) at ${cdpUrl}`);
       return cdpUrl;
     } finally {
       _cdpInitPromise = null;

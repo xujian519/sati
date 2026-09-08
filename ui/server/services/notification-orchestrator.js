@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import webPush from "web-push";
 import { notificationPreferencesDb, pushSubscriptionsDb, sessionNamesDb } from "../database/db.js";
 
@@ -186,7 +187,7 @@ function notifyUserIfEnabled({ userId, event }) {
   }
 
   sendWebPush(userId, event).catch(err => {
-    console.error("Web push send error:", err);
+    logger.error("Web push send error:", err);
   });
 }
 

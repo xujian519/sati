@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
@@ -428,7 +429,7 @@ async function runMemorySchedulerCycle() {
       try {
         await executeScheduledMaintenanceForDataDir(dataDir);
       } catch (error) {
-        console.error(`[memory-scheduler] scheduled maintenance failed for ${dataDir}:`, error);
+        logger.error(`[memory-scheduler] scheduled maintenance failed for ${dataDir}:`, error);
       }
     }
   })().finally(() => {

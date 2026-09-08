@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { logWarn } from "../../../utils/logging";
 import type {
   ClaudeWorkStatus,
   CompactProgress,
@@ -235,14 +236,14 @@ function resolveSessionId(msg: LatestChatMessage, fallbackSessionId?: string | n
 }
 
 function warnDroppedFrame(msg: LatestChatMessage): void {
-  console.warn("[chat] Dropped WS frame without sessionId", {
+  logWarn("[chat] Dropped WS frame without sessionId", {
     kind: msg.kind,
     type: msg.type,
   });
 }
 
 function warnResolvedSessionId(msg: LatestChatMessage, fallbackSessionId: string): void {
-  console.warn("[chat] Resolved missing sessionId from parent context", {
+  logWarn("[chat] Resolved missing sessionId from parent context", {
     kind: msg.kind,
     type: msg.type,
     fallbackSessionId,

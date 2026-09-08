@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
+import { logWarn } from "../../../utils/logging";
 import type { Project } from "../../../types/app";
 import {
   CODEX_DEVICE_AUTH_URL,
@@ -99,7 +100,7 @@ export function useShellTerminal({
     try {
       nextTerminal.loadAddon(new WebglAddon());
     } catch {
-      console.warn("[Shell] WebGL renderer unavailable, using Canvas fallback");
+      logWarn("[Shell] WebGL renderer unavailable, using Canvas fallback");
     }
 
     nextTerminal.open(terminalContainerRef.current);

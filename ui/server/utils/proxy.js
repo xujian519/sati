@@ -13,6 +13,7 @@
  * Living in `ui/server/utils/` lets the express bridge run from
  * source without depending on `dist/src/cli/proxy.js`.
  */
+import { logger } from "./consoleLogger.js";
 import { Agent, EnvHttpProxyAgent, fetch as undiciFetch, setGlobalDispatcher } from "undici";
 
 export const UNDICI_TRANSPORT_TIMEOUT_MS = 600_000;
@@ -97,7 +98,7 @@ function installFetchProxyFallback() {
       return await nativeFetch(input, init);
     } catch (error) {
       if (!isProxyConnectionError(error)) throw error;
-      console.warn(`[proxy] Proxy unreachable, retrying direct (${describeFetchInput(input)})`);
+      logger.warn(`[proxy] Proxy unreachable, retrying direct (${describeFetchInput(input)})`);
       directFallbackAgent ??= new Agent(createLongTimeoutOptions());
       return undiciFetch(input, { ...(init ?? {}), dispatcher: directFallbackAgent });
     }
@@ -117,7 +118,7 @@ function applyDirectDispatcher(logRemoval = false) {
     setGlobalDispatcher(new Agent(createLongTimeoutOptions()));
     dispatcherState = { mode: "direct" };
     if (logRemoval) {
-      console.log("[proxy] Global fetch proxy removed");
+      logger.info("[proxy] Global fetch proxy removed");
     }
   } catch {
     // best effort
@@ -136,10 +137,10 @@ function applyGlobalProxy(proxyUrl, source, extraNoProxy) {
     setGlobalDispatcher(agent);
     dispatcherState = { mode: "proxy", source, proxyUrl, noProxy };
     installFetchProxyFallback();
-    console.log(`[proxy] Global fetch proxy → ${proxyUrl} (noProxy: ${noProxy})`);
+    logger.info(`[proxy] Global fetch proxy → ${proxyUrl} (noProxy: ${noProxy})`);
     return proxyUrl;
   } catch (error) {
-    console.warn(
+    logger.warn(
       `[proxy] Failed to install global proxy (${proxyUrl}):`,
       error instanceof Error ? error.message : String(error),
     );

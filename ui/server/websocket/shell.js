@@ -5,6 +5,7 @@
  * ANSI/URL 解析 + handleShellConnection。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import fs from "fs";
 import path from "path";
 import { WebSocket } from "ws";
@@ -80,7 +81,7 @@ function shouldAutoOpenUrlFromOutput(value = "") {
 }
 
 function handleShellConnection(ws) {
-  console.log("🐚 Shell client connected");
+  logger.info("🐚 Shell client connected");
   let shellProcess = null;
   let ptySessionKey = null;
   let urlDetectionBuffer = "";
@@ -89,7 +90,7 @@ function handleShellConnection(ws) {
   ws.on("message", async message => {
     try {
       const data = JSON.parse(message);
-      console.log("📨 Shell message received:", data.type);
+      logger.info("📨 Shell message received:", data.type);
 
       if (data.type === "init") {
         const projectPath = data.projectPath || process.cwd();
@@ -116,7 +117,7 @@ function handleShellConnection(ws) {
         if (isLoginCommand) {
           const oldSession = ptySessionsMap.get(ptySessionKey);
           if (oldSession) {
-            console.log("🧹 Cleaning up existing login session:", ptySessionKey);
+            logger.info("🧹 Cleaning up existing login session:", ptySessionKey);
             if (oldSession.timeoutId) clearTimeout(oldSession.timeoutId);
             if (oldSession.pty && oldSession.pty.kill) oldSession.pty.kill();
             ptySessionsMap.delete(ptySessionKey);
@@ -125,7 +126,7 @@ function handleShellConnection(ws) {
 
         const existingSession = isLoginCommand ? null : ptySessionsMap.get(ptySessionKey);
         if (existingSession) {
-          console.log("♻️  Reconnecting to existing PTY session:", ptySessionKey);
+          logger.info("♻️  Reconnecting to existing PTY session:", ptySessionKey);
           shellProcess = existingSession.pty;
 
           clearTimeout(existingSession.timeoutId);
@@ -138,7 +139,7 @@ function handleShellConnection(ws) {
           );
 
           if (existingSession.buffer && existingSession.buffer.length > 0) {
-            console.log(`📜 Sending ${existingSession.buffer.length} buffered messages`);
+            logger.info(`📜 Sending ${existingSession.buffer.length} buffered messages`);
             existingSession.buffer.forEach(bufferedData => {
               ws.send(
                 JSON.stringify({
@@ -154,14 +155,14 @@ function handleShellConnection(ws) {
           return;
         }
 
-        console.log("[INFO] Starting shell in:", projectPath);
-        console.log(
+        logger.info("[INFO] Starting shell in:", projectPath);
+        logger.info(
           "📋 Session info:",
           hasSession ? `Resume session ${sessionId}` : isPlainShell ? "Plain shell mode" : "New session",
         );
-        console.log("🤖 Provider:", isPlainShell ? "plain-shell" : provider);
+        logger.info("🤖 Provider:", isPlainShell ? "plain-shell" : provider);
         if (initialCommand) {
-          console.log("⚡ Initial command:", initialCommand);
+          logger.info("⚡ Initial command:", initialCommand);
         }
 
         // First send a welcome message
@@ -252,7 +253,7 @@ function handleShellConnection(ws) {
                   }
                 }
               } catch (err) {
-                console.error("Failed to get Gemini CLI session ID:", err);
+                logger.error("Failed to get Gemini CLI session ID:", err);
               }
             }
 
@@ -283,7 +284,7 @@ function handleShellConnection(ws) {
             }
           }
 
-          console.log("🔧 Executing shell command:", shellCommand);
+          logger.info("🔧 Executing shell command:", shellCommand);
 
           const shell = shellConfig.shell;
           const shellArgs = shellConfig.args(shellCommand);
@@ -291,7 +292,7 @@ function handleShellConnection(ws) {
           // Use terminal dimensions from client if provided, otherwise use defaults
           const termCols = data.cols || 80;
           const termRows = data.rows || 24;
-          console.log("📐 Using terminal dimensions:", termCols, "x", termRows);
+          logger.info("📐 Using terminal dimensions:", termCols, "x", termRows);
 
           shellProcess = pty.spawn(shell, shellArgs, {
             name: "xterm-256color",
@@ -306,7 +307,7 @@ function handleShellConnection(ws) {
             },
           });
 
-          console.log("🟢 Shell process started with PTY, PID:", shellProcess.pid);
+          logger.info("🟢 Shell process started with PTY, PID:", shellProcess.pid);
 
           ptySessionsMap.set(ptySessionKey, {
             pty: shellProcess,
@@ -387,7 +388,7 @@ function handleShellConnection(ws) {
 
           // Handle process exit
           shellProcess.onExit(exitCode => {
-            console.log("🔚 Shell process exited with code:", exitCode.exitCode, "signal:", exitCode.signal);
+            logger.info("🔚 Shell process exited with code:", exitCode.exitCode, "signal:", exitCode.signal);
             const session = ptySessionsMap.get(ptySessionKey);
             if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
               session.ws.send(
@@ -404,7 +405,7 @@ function handleShellConnection(ws) {
             shellProcess = null;
           });
         } catch (spawnError) {
-          console.error("[ERROR] Error spawning process:", spawnError);
+          logger.error("[ERROR] Error spawning process:", spawnError);
           ws.send(
             JSON.stringify({
               type: "output",
@@ -418,20 +419,20 @@ function handleShellConnection(ws) {
           try {
             shellProcess.write(data.data);
           } catch (error) {
-            console.error("Error writing to shell:", error);
+            logger.error("Error writing to shell:", error);
           }
         } else {
-          console.warn("No active shell process to send input to");
+          logger.warn("No active shell process to send input to");
         }
       } else if (data.type === "resize") {
         // Handle terminal resize
         if (shellProcess && shellProcess.resize) {
-          console.log("Terminal resize requested:", data.cols, "x", data.rows);
+          logger.info("Terminal resize requested:", data.cols, "x", data.rows);
           shellProcess.resize(data.cols, data.rows);
         }
       }
     } catch (error) {
-      console.error("[ERROR] Shell WebSocket error:", error.message);
+      logger.error("[ERROR] Shell WebSocket error:", error.message);
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(
           JSON.stringify({
@@ -444,16 +445,16 @@ function handleShellConnection(ws) {
   });
 
   ws.on("close", () => {
-    console.log("🔌 Shell client disconnected");
+    logger.info("🔌 Shell client disconnected");
 
     if (ptySessionKey) {
       const session = ptySessionsMap.get(ptySessionKey);
       if (session) {
-        console.log("⏳ PTY session kept alive, will timeout in 30 minutes:", ptySessionKey);
+        logger.info("⏳ PTY session kept alive, will timeout in 30 minutes:", ptySessionKey);
         session.ws = null;
 
         session.timeoutId = setTimeout(() => {
-          console.log("⏰ PTY session timeout, killing process:", ptySessionKey);
+          logger.info("⏰ PTY session timeout, killing process:", ptySessionKey);
           if (session.pty && session.pty.kill) {
             session.pty.kill();
           }
@@ -464,7 +465,7 @@ function handleShellConnection(ws) {
   });
 
   ws.on("error", error => {
-    console.error("[ERROR] Shell WebSocket error:", error);
+    logger.error("[ERROR] Shell WebSocket error:", error);
   });
 }
 

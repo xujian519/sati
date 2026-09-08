@@ -38,6 +38,7 @@
  * `GATEWAY_CONNECT_TIMEOUT_MS` so race conditions resolve themselves.
  */
 
+import { logger } from "./utils/consoleLogger.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
@@ -128,7 +129,7 @@ async function connectWithRetry() {
           token,
           clientName: "web",
         });
-        console.log(`[sati-bridge] connected → ${GATEWAY_URL}`);
+        logger.info(`[sati-bridge] connected → ${GATEWAY_URL}`);
         return gateway;
       } catch (error) {
         lastError = error;
@@ -700,7 +701,7 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
   const resolvedMode = resolvePermissionMode(options);
   const basePermissionMode = normalizePermissionMode(options?.basePermissionMode);
   const runMode = normalizeRunMode(options?.runMode) || (resolvedMode === "plan" ? "plan" : "agent");
-  console.log(
+  logger.info(
     `[sati-bridge] submitTurn runMode=${runMode} mode=${resolvedMode} (options.permissionMode=${options?.permissionMode}, options.mode=${options?.mode})`,
   );
 
@@ -711,14 +712,14 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
     if (staleRunId) {
       const abortReason = options?.forceStart === true ? "user:force_start_next_turn" : "system:stale_turn";
       const abortAction = options?.forceStart === true ? "force-start aborting" : "aborting stale";
-      console.log(`[sati-bridge] ${abortAction} turn ${staleRunId} for ${sessionKey} before submit`);
+      logger.info(`[sati-bridge] ${abortAction} turn ${staleRunId} for ${sessionKey} before submit`);
       try {
         await gw.abortTurn({ sessionKey, runId: staleRunId, reason: abortReason });
       } catch (err) {
         if (options?.forceStart === true) {
           const message =
             "Could not stop the current turn before sending the queued message. Please wait for the current turn to finish or try stopping it again.";
-          console.warn("[sati-bridge] force-start abort failed:", err?.message || err);
+          logger.warn("[sati-bridge] force-start abort failed:", err?.message || err);
           writer.send(
             createNormalizedMessage({
               provider,
@@ -732,7 +733,7 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
           clearActiveRunIfCurrent(state, staleRunId);
           return;
         }
-        console.warn("[sati-bridge] stale abort failed (continuing):", err?.message || err);
+        logger.warn("[sati-bridge] stale abort failed (continuing):", err?.message || err);
       }
     }
 
@@ -758,7 +759,7 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
       }
       if (event && event.type === "error") {
         sawGatewayError = true;
-        console.error(
+        logger.error(
           "[sati-bridge] gateway error event:",
           JSON.stringify(
             {
@@ -827,7 +828,7 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
         message,
         userHint,
       });
-      console.warn(`[sati-bridge] ${message}`, { sessionKey, projectKey, runId });
+      logger.warn(`[sati-bridge] ${message}`, { sessionKey, projectKey, runId });
       await recordGatewayStatusMessage(gw, {
         sessionKey,
         turnId: runId,
@@ -863,7 +864,7 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
             "The Web bridge failed while streaming this turn. Retry this message; if it repeats, check the UI server and gateway logs.",
         });
 
-    console.error(
+    logger.error(
       "[sati-bridge] runChatViaGateway threw:",
       error instanceof Error ? error.stack || error.message : error,
     );
@@ -899,7 +900,7 @@ async function recordGatewayStatusMessage(gateway, { sessionKey, turnId, project
       },
     });
   } catch (error) {
-    console.warn("[sati-bridge] failed to record gateway status message:", error?.message || error);
+    logger.warn("[sati-bridge] failed to record gateway status message:", error?.message || error);
   }
 }
 
@@ -917,7 +918,7 @@ export async function abortViaGateway(sessionId, _provider = "sati") {
     }
     return true;
   } catch (error) {
-    console.warn("[sati-bridge] abortTurn failed:", error);
+    logger.warn("[sati-bridge] abortTurn failed:", error);
     return false;
   }
 }
@@ -935,7 +936,7 @@ export async function steerViaGateway(sessionId, text) {
   try {
     return await gw.steerTurn({ sessionKey: sessionId, text });
   } catch (error) {
-    console.warn("[sati-bridge] steerTurn failed:", error);
+    logger.warn("[sati-bridge] steerTurn failed:", error);
     return { delivered: false, reason: "error" };
   }
 }
@@ -952,7 +953,7 @@ export async function editLastTurnViaGateway(sessionId, text) {
   try {
     return await gw.editLastTurn({ sessionKey: sessionId, text });
   } catch (error) {
-    console.warn("[sati-bridge] editLastTurn failed:", error);
+    logger.warn("[sati-bridge] editLastTurn failed:", error);
     return { rewritten: false, reason: "error" };
   }
 }
@@ -965,7 +966,7 @@ export async function regenerateLastTurnViaGateway(sessionId) {
   try {
     return await gw.regenerateLastTurn({ sessionKey: sessionId });
   } catch (error) {
-    console.warn("[sati-bridge] regenerateLastTurn failed:", error);
+    logger.warn("[sati-bridge] regenerateLastTurn failed:", error);
     return { rewritten: false, reason: "error" };
   }
 }
@@ -985,7 +986,7 @@ export async function decidePermissionViaGateway(requestId, decision, options = 
       });
       if (result?.delivered) return true;
     } catch (error) {
-      console.warn("[sati-bridge] permissionDecide failed:", error);
+      logger.warn("[sati-bridge] permissionDecide failed:", error);
     }
   }
   return false;
@@ -1003,7 +1004,7 @@ export async function approvalDecideViaGateway(sessionId, pendingIndex, verdict,
   try {
     return await gw.approvalDecide({ sessionKey: sessionId, pendingIndex, verdict, feedback });
   } catch (error) {
-    console.warn("[sati-bridge] approvalDecide failed:", error);
+    logger.warn("[sati-bridge] approvalDecide failed:", error);
     return { delivered: false };
   }
 }
@@ -1020,7 +1021,7 @@ export async function grantSessionPermissionViaGateway(sessionId, entry) {
     });
     return Boolean(result?.granted);
   } catch (error) {
-    console.warn("[sati-bridge] grantSessionPermission failed:", error);
+    logger.warn("[sati-bridge] grantSessionPermission failed:", error);
     return false;
   }
 }
@@ -1057,7 +1058,7 @@ export async function getSessionActivityViaGateway(sessionId, provider = "sati",
           : [],
     };
   } catch (error) {
-    console.warn("[sati-bridge] failed to read active turn snapshot:", error?.message || error);
+    logger.warn("[sati-bridge] failed to read active turn snapshot:", error?.message || error);
     if (gw && isGatewayUnavailableError(error)) {
       resetGatewayConnection(gw);
     }
@@ -1204,7 +1205,7 @@ function loadPersistedStatsFromDiskUncached() {
     }
   } catch (err) {
     if (err?.code !== "ENOENT") {
-      console.warn("[router-dashboard] failed to load router stats:", err?.message || err);
+      logger.warn("[router-dashboard] failed to load router stats:", err?.message || err);
     }
   }
   return result;
@@ -2058,7 +2059,7 @@ export function registerAlwaysOnNotificationForwarding(clients, forwardToSession
       });
     })
     .catch(err => {
-      console.warn("[sati-bridge] failed to register turn-event notification forwarding:", err?.message || err);
+      logger.warn("[sati-bridge] failed to register turn-event notification forwarding:", err?.message || err);
     });
 }
 
@@ -2098,7 +2099,7 @@ async function ensureKanbanForwarding() {
       kanbanRegisteredGateway = gw;
     }
   } catch (err) {
-    console.warn("[sati-bridge] failed to re-register kanban_updated notification forwarding:", err?.message || err);
+    logger.warn("[sati-bridge] failed to re-register kanban_updated notification forwarding:", err?.message || err);
   }
 }
 
@@ -2122,7 +2123,7 @@ export async function gwKanbanSubscribe(projectId) {
   await ensureKanbanForwarding();
   const gw = await getSatiGatewayWithReset();
   if (typeof gw.kanbanSubscribe !== "function") {
-    console.warn("[sati-bridge] gateway 不支持 kanban_subscribe，看板实时推送不可用");
+    logger.warn("[sati-bridge] gateway 不支持 kanban_subscribe，看板实时推送不可用");
     return;
   }
   await gw.kanbanSubscribe({ projectId });
@@ -2146,7 +2147,7 @@ export async function elicitationRespondViaGateway(requestId, answer) {
       });
       if (result?.delivered) return true;
     } catch (error) {
-      console.warn("[sati-bridge] respondElicitation failed:", error);
+      logger.warn("[sati-bridge] respondElicitation failed:", error);
     }
   }
   return false;

@@ -5,6 +5,7 @@
  * + 附件文件名清洗/规范化/移动。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { promises as fsPromises } from "fs";
 import os from "os";
 import path from "path";
@@ -96,7 +97,7 @@ const uploadFilesHandler = async (req, res) => {
   // Use multer middleware
   uploadMiddleware.array("files", 20)(req, res, async err => {
     if (err) {
-      console.error("Multer error:", err);
+      logger.error("Multer error:", err);
       if (err.code === "LIMIT_FILE_SIZE") {
         return res.status(400).json({ error: "File too large. Maximum size is 50MB." });
       }
@@ -116,11 +117,11 @@ const uploadFilesHandler = async (req, res) => {
         try {
           filePaths = JSON.parse(relativePaths);
         } catch {
-          console.log("[DEBUG] Failed to parse relativePaths:", relativePaths);
+          logger.info("[DEBUG] Failed to parse relativePaths:", relativePaths);
         }
       }
 
-      console.log("[DEBUG] File upload request:", {
+      logger.info("[DEBUG] File upload request:", {
         projectName,
         targetPath: JSON.stringify(targetPath),
         targetPathType: typeof targetPath,
@@ -138,27 +139,27 @@ const uploadFilesHandler = async (req, res) => {
         return res.status(404).json({ error: "Project not found" });
       }
 
-      console.log("[DEBUG] Project root:", projectRoot);
+      logger.info("[DEBUG] Project root:", projectRoot);
 
       // Validate and resolve target path
       // If targetPath is empty or '.', use project root directly
       const targetDir = targetPath || "";
       let resolvedTargetDir;
 
-      console.log("[DEBUG] Target dir:", JSON.stringify(targetDir));
+      logger.info("[DEBUG] Target dir:", JSON.stringify(targetDir));
 
       if (!targetDir || targetDir === "." || targetDir === "./") {
         // Empty path means upload to project root
         resolvedTargetDir = path.resolve(projectRoot);
-        console.log("[DEBUG] Using project root as target:", resolvedTargetDir);
+        logger.info("[DEBUG] Using project root as target:", resolvedTargetDir);
       } else {
         const validation = validatePathInProject(projectRoot, targetDir);
         if (!validation.valid) {
-          console.log("[DEBUG] Path validation failed:", validation.error);
+          logger.info("[DEBUG] Path validation failed:", validation.error);
           return res.status(403).json({ error: validation.error });
         }
         resolvedTargetDir = validation.resolved;
-        console.log("[DEBUG] Resolved target dir:", resolvedTargetDir);
+        logger.info("[DEBUG] Resolved target dir:", resolvedTargetDir);
       }
 
       // Ensure target directory exists
@@ -170,7 +171,7 @@ const uploadFilesHandler = async (req, res) => {
 
       // Move uploaded files from temp to target directory
       const uploadedFiles = [];
-      console.log(
+      logger.info(
         "[DEBUG] Processing files:",
         req.files.map(f => ({ originalname: f.originalname, path: f.path })),
       );
@@ -178,13 +179,13 @@ const uploadFilesHandler = async (req, res) => {
         const file = req.files[i];
         // Use relative path if provided (for folder uploads), otherwise use originalname
         const fileName = filePaths && filePaths[i] ? filePaths[i] : file.originalname;
-        console.log("[DEBUG] Processing file:", fileName, "(originalname:", file.originalname + ")");
+        logger.info("[DEBUG] Processing file:", fileName, "(originalname:", file.originalname + ")");
         const destPath = path.join(resolvedTargetDir, fileName);
 
         // Validate destination path
         const destValidation = validatePathInProject(projectRoot, destPath);
         if (!destValidation.valid) {
-          console.log("[DEBUG] Destination validation failed for:", destPath);
+          logger.info("[DEBUG] Destination validation failed for:", destPath);
           // Clean up temp file
           await fsPromises.unlink(file.path).catch(() => {});
           continue;
@@ -217,7 +218,7 @@ const uploadFilesHandler = async (req, res) => {
         message: `Uploaded ${uploadedFiles.length} file(s) successfully`,
       });
     } catch (error) {
-      console.error("Error uploading files:", error);
+      logger.error("Error uploading files:", error);
       // Clean up any remaining temp files
       if (req.files) {
         for (const file of req.files) {

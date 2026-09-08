@@ -7,6 +7,7 @@
  * （广播状态单一来源，禁止反向 import）。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { promises as fsPromises } from "fs";
 import path from "path";
 import os from "os";
@@ -50,7 +51,7 @@ async function setupProjectsWatcher() {
       try {
         await watcher.close();
       } catch (error) {
-        console.error("[WARN] Failed to close watcher:", error);
+        logger.error("[WARN] Failed to close watcher:", error);
       }
     }),
   );
@@ -92,7 +93,7 @@ async function setupProjectsWatcher() {
           }
         });
       } catch (error) {
-        console.error("[ERROR] Error handling project changes:", error);
+        logger.error("[ERROR] Error handling project changes:", error);
       } finally {
         isGetProjectsRunning = false;
       }
@@ -126,18 +127,18 @@ async function setupProjectsWatcher() {
         .on("addDir", dirPath => debouncedUpdate("addDir", dirPath, provider, rootPath))
         .on("unlinkDir", dirPath => debouncedUpdate("unlinkDir", dirPath, provider, rootPath))
         .on("error", error => {
-          console.error(`[ERROR] ${provider} watcher error:`, error);
+          logger.error(`[ERROR] ${provider} watcher error:`, error);
         })
         .on("ready", () => {});
 
       projectsWatchers.push(watcher);
     } catch (error) {
-      console.error(`[ERROR] Failed to setup ${provider} watcher for ${rootPath}:`, error);
+      logger.error(`[ERROR] Failed to setup ${provider} watcher for ${rootPath}:`, error);
     }
   }
 
   if (projectsWatchers.length === 0) {
-    console.error("[ERROR] Failed to setup any provider watchers");
+    logger.error("[ERROR] Failed to setup any provider watchers");
   }
 }
 

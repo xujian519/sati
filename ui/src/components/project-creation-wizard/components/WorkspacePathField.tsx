@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FolderOpen } from "lucide-react";
+import { logError } from "../../../utils/logging";
 import { Button, Input } from "../../../shared/view/ui";
 import { browseFilesystemFolders } from "../data/workspaceApi";
 import { getSuggestionRootPath } from "../utils/pathUtils";
@@ -51,7 +52,7 @@ export default function WorkspacePathField({
         setPathSuggestions(matchingSuggestions);
         setShowPathDropdown(matchingSuggestions.length > 0);
       } catch (error) {
-        console.error("Failed to load path suggestions:", error);
+        logError("Failed to load path suggestions:", error);
       }
     }, 200);
 

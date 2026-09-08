@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
+import { logError } from "../utils/logging";
 import { api } from "../utils/api";
 import type {
   AppSocketMessage,
@@ -301,13 +302,13 @@ export function useProjectsState({
       const projectData = (await response.json()) as Project[];
 
       if (!Array.isArray(projectData)) {
-        console.error("Error fetching projects: expected array, got", projectData);
+        logError("Error fetching projects: expected array, got", projectData);
         return;
       }
 
       setProjects(prevProjects => mergeFetchedProjects(prevProjects, projectData));
     } catch (error) {
-      console.error("Error fetching projects:", error);
+      logError("Error fetching projects:", error);
     } finally {
       if (showLoadingState) {
         setIsLoadingProjects(false);
@@ -636,7 +637,7 @@ export function useProjectsState({
 
         setSelectedProject(prev => (prev && prev.name === projectName ? applyToProject(prev) : prev));
       } catch (error) {
-        console.error("loadMoreSessions failed for project", projectName, error);
+        logError("loadMoreSessions failed for project", projectName, error);
       } finally {
         setProjectLoading(projectName, false);
       }
@@ -676,7 +677,7 @@ export function useProjectsState({
         }
       }
     } catch (error) {
-      console.error("Error refreshing sidebar:", error);
+      logError("Error refreshing sidebar:", error);
     }
   }, [selectedProject, selectedSession]);
 

@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import bcrypt from "bcrypt";
 import { userDb, db } from "../database/db.js";
@@ -22,7 +23,7 @@ router.get("/status", async (req, res) => {
       isAuthenticated: false, // Will be overridden by frontend if token exists
     });
   } catch (error) {
-    console.error("Auth status error:", error);
+    logger.error("Auth status error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -83,7 +84,7 @@ router.post("/register", async (req, res) => {
       throw error;
     }
   } catch (error) {
-    console.error("Registration error:", error);
+    logger.error("Registration error:", error);
     if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
       res.status(409).json({ error: "Username already exists" });
     } else {
@@ -129,7 +130,7 @@ router.post("/login", async (req, res) => {
       token,
     });
   } catch (error) {
-    console.error("Login error:", error);
+    logger.error("Login error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });

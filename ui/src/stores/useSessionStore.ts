@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { logError } from "../utils/logging";
 import type { SessionProvider } from "../types/app";
 import { authenticatedFetch, readAgentStatusErrorFromResponse } from "../utils/api";
 
@@ -780,7 +781,7 @@ export function useSessionStore() {
         notify(sessionId);
         return slot;
       } catch (error) {
-        console.error(`[SessionStore] fetch failed for ${sessionId}:`, error);
+        logError(`[SessionStore] fetch failed for ${sessionId}:`, error);
         slot.status = "error";
         slot.lastError = error instanceof Error ? error.message : "Unknown error";
         notify(sessionId);
@@ -831,7 +832,7 @@ export function useSessionStore() {
         notify(sessionId);
         return slot;
       } catch (error) {
-        console.error(`[SessionStore] fetchMore failed for ${sessionId}:`, error);
+        logError(`[SessionStore] fetchMore failed for ${sessionId}:`, error);
         return slot;
       }
     },
@@ -1123,7 +1124,7 @@ export function useSessionStore() {
         recomputeMergedIfNeeded(slot);
         notify(sessionId);
       } catch (error) {
-        console.error(`[SessionStore] refresh failed for ${sessionId}:`, error);
+        logError(`[SessionStore] refresh failed for ${sessionId}:`, error);
       }
     },
     [getSlot, notify],

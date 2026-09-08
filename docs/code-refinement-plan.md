@@ -110,7 +110,7 @@
 | C36 | tests/ 审阅 A：agent/tool/context（伪测试治理、断言质量） | ✅ 2026-09-06 |
 | C37 | tests/ 审阅 B：patent/knowledge/gateway/session 等其余 | ✅ 2026-09-06 |
 | C38 | scripts/ 32 文件审阅精炼 | ✅ 2026-09-08 |
-| C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ⬜ |
+| C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ✅ 2026-09-08 |
 | C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ⬜ |
 | C41 | 无参 catch 治理 + TODO/FIXME 核实 | ⬜ |
 | C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 7/42，C07-C41 共 35 卡遗留） |
@@ -633,11 +633,33 @@
 - **验证**：`node --check` 全部改动 .mjs ✅；`pnpm test:pr-tooling` 25/25 ✅；`pnpm check:patent-workflow-docs` fresh（8 快照）✅；`node scripts/check-ui-server-boundary.mjs` fresh ✅；`node scripts/measure-techdebt.mjs --json` ✅（godFunctions 注入正确）；项目 `pnpm typecheck` ✅。
 - **提交**：`ffd53f36` refactor(scripts): C38 审阅精炼 — 删除死代码/占位,修正注释与边界守卫（11 文件，36+/55-）。
 
+#### C39 裸 console 收束（2026-09-08）
+
+- **范围**：`ui/server` + `ui/src` 裸 console 收束到本地纯转发 wrapper。基线（含注释口径）667 处，目标 <300。
+- **方案**：ui/server 建 `ui/server/utils/consoleLogger.js`（info→console.log / warn→console.warn / error→console.error，纯转发**不加前缀**、不落盘、不引第三方库）；ui/src 建 `ui/src/utils/logging.ts`（logInfo→console.log / logWarn→console.warn / logError→console.error）。`ui/server` 不导入 `src/telemetry`（check-ui-server-boundary 白名单无此路径），故各自建本地入口；输出逐字节不变。
+- **量化（667 → 154）**：
+  - `ui/server`：408 → 0（wrapper 本体 3 处豁免；sessionManager.js 剩 5 处为注释掉的调试 console，非调用，保留）
+  - `ui/src`：110（.ts/.tsx）+ 6（.jsx/.js 补收束）→ 0（wrapper 本体 3 处豁免）
+  - `src/`：143 全部豁免（cli 交互横幅/菜单/usage 输出、weixin 二维码横幅、debug.ts 本体、telemetry/logger.ts 既有收束入口）
+- **豁免（登记不处理）**：`src/cli/**` 交互输出；`src/adapters/channel/weixin/WeixinChannel.ts` 登录二维码；`src/shared/debug.ts`（debugLog 本体）；`src/telemetry/logger.ts`（既有 TD-CONSOLE-001 入口，带 `[sati] ` 前缀是既定约定）；sessionManager.js 注释残留；各测试文件（ui/server 测试 console=0）。
+- **关键发现**：ui/server 的 uploads.js / shell.js 含正则字符类内引号（`/[<>:"/\\|?*\x00-\x1f]/g`），naive 文本替换会误开字符串态——改用小型状态机（跳过行/块注释、单双引号、模板、`[bracket]`）仅替换真实调用。ui/src 的 chatPermissions.ts 含正则 `[\\/]` 化 bracket 未覆盖的引号形态，脚本漏 1 处，手动补。另：补收束时发现 ui/src 的 .jsx / .js（main.jsx/TasksSettingsContext.jsx/useLocalStorage.jsx/i18n/config.js）未被 .ts/.tsx 扫描覆盖，属首轮遗漏，第 2 批补收束（见提交 b8dae53d），后续日卡计数须含 .jsx/.js。
+- **验证**：
+  - `cd ui && pnpm exec eslint src server --max-warnings 0` ✅（import-x/order 由其 `--fix` 归位）
+  - `cd ui && pnpm typecheck` ✅；`cd ui && pnpm test`（103 文件 / 630 测试）✅
+  - `node scripts/check-ui-server-boundary.mjs` fresh ✅；改动文件 `node --check` 全过 ✅
+  - **行为不变对比法**：把 HEAD 版 `console.X(` 与新版 `logger.Y(`/`logX(` 归一化为占位符后逐字节 diff——ui/server 48 文件、ui/src 44 文件均 problem:0（调用点以外消息/参数文本逐字节保留）
+  - **达标计数**：`grep "console\.(log|warn|error)("` 全仓 154（含注释+wrapper 本体，口径含 .jsx），真实裸调用 143 < 300 ✅
+- **提交**：
+  - `6af8f95e8` refactor(ui-server): 收束裸 console 至 consoleLogger wrapper（C39）— 43 文件（42 产品 + consoleLogger.js）
+  - `f2fe5fd3` refactor(ui-server): 收束遗漏的裸 console 至 consoleLogger wrapper（C39）— 6 文件（globalChrome/mcp-detector/plugin-loader/plugin-process-manager/proxy/taskmaster-websocket）
+  - `922226328` refactor(ui): 收束裸 console 至 logging helper（C39）— 44 文件 + logging.ts
+  - `b8dae53d` refactor(ui): 收束遗漏的 .jsx/.js 裸 console 至 logging helper（C39）— 5 文件（main.jsx/TasksSettingsContext.jsx/useLocalStorage.jsx/i18n/config.js + logging.ts 补 logInfo）
+
 ## 六、基线（2026-08-18 实测）
 
 | 指标 | 基线值 | 目标 | 备注 |
 |---|---|---|---|
-| 裸 console（src + ui/server，含 .ts/.tsx/.js） | 657 处 / 83 文件 | <300 | 含 ui/server 手写 JS 大量输出 |
+| 裸 console（src + ui/server，含 .ts/.tsx/.js） | 657 处 / 83 文件 | <300 | 含 ui/server 手写 JS 大量输出；C39 后（2026-09-08）实测 154（真实裸调用 144，其余为 CLI/横幅豁免与注释残留） |
 | `any`/`@ts-expect-error`（src + ui/src） | 20 处 | ≤10 | 主链路清零，外围加 SAFETY 注释 |
 | 无参 `catch {`（src + ui/src） | 485 处 | 显著下降 | 含防御式（有注释）与隐患（无注释）两类 |
 | TODO/FIXME/HACK（src + ui + ui/server + tests） | 24 处 | ≤5 | 需逐条核实业务语义 |

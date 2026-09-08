@@ -1,3 +1,4 @@
+import { logError } from "../../../utils/logging";
 import { api } from "../../../utils/api";
 import type {
   BrowseFilesystemResponse,
@@ -137,7 +138,7 @@ export const cloneWorkspaceWithProgress = (params: CloneWorkspaceParams, handler
           settle(() => reject(new Error(payload.message || "Failed to clone repository")));
         }
       } catch (error) {
-        console.error("Error parsing clone progress event:", error);
+        logError("Error parsing clone progress event:", error);
       }
     };
 

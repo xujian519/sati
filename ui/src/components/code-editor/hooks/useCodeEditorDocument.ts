@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { logError } from "../../../utils/logging";
 import { api } from "../../../utils/api";
 import type { CodeEditorFile } from "../types/types";
 import { isBinaryFile } from "../utils/binaryFile";
@@ -87,7 +88,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       } catch (error) {
         if (cancelled) return;
         const message = getErrorMessage(error);
-        console.error("Error loading file:", error);
+        logError("Error loading file:", error);
         // IMPORTANT: do not pour the error message into `content`. A previous
         // version of this code did `setContent('// Error loading file: ...')`
         // which silently became user-editable buffer content and got persisted
@@ -151,7 +152,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         }
 
         const textError = await response.text();
-        console.error("Non-JSON error response:", textError);
+        logError("Non-JSON error response:", textError);
         throw new Error(`Save failed: ${response.status} ${response.statusText}`);
       }
 
@@ -162,7 +163,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (error) {
       const message = getErrorMessage(error);
-      console.error("Error saving file:", error);
+      logError("Error saving file:", error);
       setSaveError(message);
     } finally {
       setSaving(false);

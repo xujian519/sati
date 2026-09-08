@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { logError, logWarn } from "../utils/logging";
 import { useAuth } from "../components/auth/context/AuthContext";
 import { IS_PLATFORM } from "../constants/config";
 
@@ -160,7 +161,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       setReconnectInfo(prev => ({ ...prev, status: "reconnecting" }));
       try {
         const wsUrl = buildWebSocketUrl(token);
-        if (!wsUrl) return console.warn("No authentication token found for WebSocket connection");
+        if (!wsUrl) return logWarn("No authentication token found for WebSocket connection");
 
         const websocket = new WebSocket(wsUrl);
 
@@ -214,7 +215,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
                 try {
                   sub(data);
                 } catch (err) {
-                  console.error("WebSocket subscriber error:", err);
+                  logError("WebSocket subscriber error:", err);
                 }
               });
             }
@@ -227,7 +228,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
               setLatestMessage(data);
             }
           } catch (error) {
-            console.error("Error parsing WebSocket message:", error);
+            logError("Error parsing WebSocket message:", error);
           }
         };
 
@@ -246,10 +247,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         };
 
         websocket.onerror = error => {
-          console.error("WebSocket error:", error);
+          logError("WebSocket error:", error);
         };
       } catch (error) {
-        console.error("Error creating WebSocket connection:", error);
+        logError("Error creating WebSocket connection:", error);
       }
     };
 
@@ -287,9 +288,9 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       socket.send(JSON.stringify(message));
     } else if (isQueueableDisconnectedMessage(message)) {
       enqueueDisconnectedMessage(queuedMessagesRef.current, message);
-      console.warn("WebSocket not connected");
+      logWarn("WebSocket not connected");
     } else {
-      console.warn("WebSocket not connected");
+      logWarn("WebSocket not connected");
     }
   }, []);
 

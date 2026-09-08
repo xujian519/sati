@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- AuthProvider + useAuth 按设计捆绑导出，拆分会破坏全部调用方 import */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { logError } from "../../../utils/logging";
 import { IS_PLATFORM, DISABLE_LOCAL_AUTH } from "../../../constants/config";
 import { api } from "../../../utils/api";
 import { AUTH_ERROR_MESSAGES, AUTH_TOKEN_STORAGE_KEY } from "../constants";
@@ -65,7 +66,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const payload = await parseJsonSafely<OnboardingStatusPayload>(response);
       setHasCompletedOnboarding(Boolean(payload?.hasCompletedOnboarding));
     } catch (caughtError) {
-      console.error("Error checking onboarding status:", caughtError);
+      logError("Error checking onboarding status:", caughtError);
       // Fail open to avoid blocking access on transient onboarding status errors.
       setHasCompletedOnboarding(true);
     }
@@ -116,7 +117,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(userPayload.user);
       await checkOnboardingStatus();
     } catch (caughtError) {
-      console.error("[Auth] Auth status check failed:", caughtError);
+      logError("[Auth] Auth status check failed:", caughtError);
       setError(AUTH_ERROR_MESSAGES.authStatusCheckFailed);
     } finally {
       setIsLoading(false);
@@ -153,7 +154,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await checkOnboardingStatus();
         return { success: true };
       } catch (caughtError) {
-        console.error("Login error:", caughtError);
+        logError("Login error:", caughtError);
         setError(AUTH_ERROR_MESSAGES.networkError);
         return { success: false, error: AUTH_ERROR_MESSAGES.networkError };
       }
@@ -179,7 +180,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await checkOnboardingStatus();
         return { success: true };
       } catch (caughtError) {
-        console.error("Registration error:", caughtError);
+        logError("Registration error:", caughtError);
         setError(AUTH_ERROR_MESSAGES.networkError);
         return { success: false, error: AUTH_ERROR_MESSAGES.networkError };
       }
@@ -193,7 +194,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     if (tokenToInvalidate) {
       void api.auth.logout().catch((caughtError: unknown) => {
-        console.error("Logout endpoint error:", caughtError);
+        logError("Logout endpoint error:", caughtError);
       });
     }
   }, [clearSession, token]);

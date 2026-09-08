@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { logError } from "../../../../utils/logging";
 import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
 import type { SatiConfig } from "../modelPool/types";
@@ -20,7 +21,7 @@ export default function AgentRouteSections({ title }: AgentRouteSectionsProps) {
       setRaw(configToYamlString(next));
       void save();
     } catch (caught) {
-      console.error("Failed to serialise agent route config patch", caught);
+      logError("Failed to serialise agent route config patch", caught);
     }
   };
 

@@ -5,6 +5,7 @@
  * 本地用户引导/startServer 编排/优雅关闭。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -76,7 +77,7 @@ function listenWithPortFallback(srv, preferredPort, host) {
             return;
           }
           const nextPort = pickRandomHighPort();
-          console.log(
+          logger.info(
             `${c.warn("[WARN]")} Port ${port} is in use; retrying on random port ${nextPort} (attempt ${attempt}/${PORT_FALLBACK_ATTEMPTS})...`,
           );
           port = nextPort;
@@ -103,7 +104,7 @@ async function ensureLocalUserWhenAuthDisabled() {
   }
   const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12);
   userDb.createUser("local", passwordHash);
-  console.log(
+  logger.info(
     `${c.info("[INFO]")} Web UI login is disabled (default). Using built-in user. Set SATI_DISABLE_LOCAL_AUTH=0 to require username/password.`,
   );
 }
@@ -125,20 +126,20 @@ async function startServer(server) {
         const distIndexPath = path.join(__dirname, "..", "..", "dist", "index.html");
         const isProduction = fs.existsSync(distIndexPath);
 
-        console.log(`${c.info("[INFO]")} Chat execution routed through Sati gateway (src/gateway).`);
-        console.log("");
+        logger.info(`${c.info("[INFO]")} Chat execution routed through Sati gateway (src/gateway).`);
+        logger.info("");
 
         if (isProduction) {
-          console.log(`${c.info("[INFO]")} Starting in production mode...`);
+          logger.info(`${c.info("[INFO]")} Starting in production mode...`);
         } else {
-          console.log(
+          logger.info(
             `${c.info("[INFO]")} No production frontend build found; development mode expects Vite at http://${DISPLAY_HOST}:${VITE_PORT}`,
           );
         }
 
         const boundPort = await listenWithPortFallback(server, Number(SERVER_PORT), HOST);
         if (boundPort === null) {
-          console.error(
+          logger.error(
             `${c.warn("[ERROR]")} Could not bind a port after ${PORT_FALLBACK_ATTEMPTS} attempts (preferred ${SERVER_PORT}). All tried ports were in use. Set SERVER_PORT to a free port and retry.`,
           );
           process.exit(1);
@@ -150,15 +151,15 @@ async function startServer(server) {
         {
           const appInstallPath = path.join(__dirname, "..");
 
-          console.log("");
-          console.log(c.dim("═".repeat(63)));
-          console.log(`  ${c.bright("Sati Server - Ready")}`);
-          console.log(c.dim("═".repeat(63)));
-          console.log("");
-          console.log(`${c.info("[INFO]")} Server URL:  ${c.bright("http://" + DISPLAY_HOST + ":" + boundPort)}`);
-          console.log(`${c.info("[INFO]")} Installed at: ${c.dim(appInstallPath)}`);
-          console.log(`${c.tip("[TIP]")}  Run "sati status" for full configuration details`);
-          console.log("");
+          logger.info("");
+          logger.info(c.dim("═".repeat(63)));
+          logger.info(`  ${c.bright("Sati Server - Ready")}`);
+          logger.info(c.dim("═".repeat(63)));
+          logger.info("");
+          logger.info(`${c.info("[INFO]")} Server URL:  ${c.bright("http://" + DISPLAY_HOST + ":" + boundPort)}`);
+          logger.info(`${c.info("[INFO]")} Installed at: ${c.dim(appInstallPath)}`);
+          logger.info(`${c.tip("[TIP]")}  Run "sati status" for full configuration details`);
+          logger.info("");
 
           // Desktop shell loads the UI inside Electron; CLI/dev can opt in to
           // auto-open. SATI_DESKTOP=1 is set by apps/desktop server-manager.
@@ -183,7 +184,7 @@ async function startServer(server) {
 
           // Start server-side plugin processes for enabled plugins
           startEnabledPluginServers().catch(err => {
-            console.error("[Plugins] Error during startup:", err.message);
+            logger.error("[Plugins] Error during startup:", err.message);
           });
 
           // Hot-reload watcher: external edits to ~/.sati/sati.yaml
@@ -230,7 +231,7 @@ async function startServer(server) {
     process.on("SIGTERM", () => void gracefulShutdown());
     process.on("SIGINT", () => void gracefulShutdown());
   } catch (error) {
-    console.error("[ERROR] Failed to start server:", error);
+    logger.error("[ERROR] Failed to start server:", error);
     process.exit(1);
   }
 }

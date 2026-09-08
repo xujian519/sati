@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { logError } from "../../../../utils/logging";
 import { useSatiConfig, type ConfigSaveOptions, type ConfigSaveResult } from "../../../../hooks/useSatiConfig";
 import { FieldSaveModeProvider } from "../../shared/components/Inputs";
 import { ConfigSaveError } from "../../shared/view";
@@ -28,7 +29,7 @@ export default function ModelPoolSections({ title }: ModelPoolSectionsProps) {
       return result;
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Failed to serialise model pool config patch";
-      console.error("Failed to serialise model pool config patch", caught);
+      logError("Failed to serialise model pool config patch", caught);
       return { ok: false, error: message };
     }
   };

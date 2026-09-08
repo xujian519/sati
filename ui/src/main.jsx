@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { logWarn } from "./utils/logging";
 import App from "./App.tsx";
 import "@fontsource-variable/inter";
 import "./index.css";
@@ -14,7 +15,7 @@ registerDynamicImportReloadHandler();
 // Register service worker for PWA + Web Push support
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(err => {
-    console.warn("Service worker registration failed:", err);
+    logWarn("Service worker registration failed:", err);
   });
 }
 

@@ -5,6 +5,7 @@
  * codex/通用 JSONL 五种会话的 token 用量统计。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { Router } from "express";
 import { promises as fsPromises } from "fs";
 import os from "os";
@@ -131,7 +132,7 @@ router.get("/api/projects/:projectName/sessions/:sessionId/token-usage", authent
     try {
       projectPath = await extractProjectDirectory(projectName);
     } catch (error) {
-      console.error("Error extracting project directory:", error);
+      logger.error("Error extracting project directory:", error);
       return res.status(500).json({ error: "Failed to determine project path" });
     }
 
@@ -199,7 +200,7 @@ router.get("/api/projects/:projectName/sessions/:sessionId/token-usage", authent
       },
     });
   } catch (error) {
-    console.error("Error reading session token usage:", error);
+    logger.error("Error reading session token usage:", error);
     res.status(500).json({ error: "Failed to read session token usage" });
   }
 });

@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import webPush from "web-push";
 import { db } from "../database/db.js";
 
@@ -25,7 +26,7 @@ function getPublicKey() {
 function configureWebPush() {
   const keys = ensureVapidKeys();
   webPush.setVapidDetails("mailto:noreply@sati.local", keys.publicKey, keys.privateKey);
-  console.log("Web Push notifications configured");
+  logger.info("Web Push notifications configured");
 }
 
 export { ensureVapidKeys, getPublicKey, configureWebPush };

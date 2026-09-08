@@ -1,3 +1,4 @@
+import { logger } from "./consoleLogger.js";
 /**
  * TASKMASTER WEBSOCKET UTILITIES
  * ==============================
@@ -14,7 +15,7 @@
  */
 export function broadcastTaskMasterProjectUpdate(wss, projectName, taskMasterData) {
   if (!wss || !projectName) {
-    console.warn("TaskMaster WebSocket broadcast: Missing wss or projectName");
+    logger.warn("TaskMaster WebSocket broadcast: Missing wss or projectName");
     return;
   }
 
@@ -31,7 +32,7 @@ export function broadcastTaskMasterProjectUpdate(wss, projectName, taskMasterDat
       try {
         client.send(JSON.stringify(message));
       } catch (error) {
-        console.error("Error sending TaskMaster project update:", error);
+        logger.error("Error sending TaskMaster project update:", error);
       }
     }
   });
@@ -44,7 +45,7 @@ export function broadcastTaskMasterProjectUpdate(wss, projectName, taskMasterDat
  */
 export function broadcastTaskMasterTasksUpdate(wss, projectName) {
   if (!wss || !projectName) {
-    console.warn("TaskMaster WebSocket broadcast: Missing wss or projectName");
+    logger.warn("TaskMaster WebSocket broadcast: Missing wss or projectName");
     return;
   }
 
@@ -60,7 +61,7 @@ export function broadcastTaskMasterTasksUpdate(wss, projectName) {
       try {
         client.send(JSON.stringify(message));
       } catch (error) {
-        console.error("Error sending TaskMaster tasks update:", error);
+        logger.error("Error sending TaskMaster tasks update:", error);
       }
     }
   });

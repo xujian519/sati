@@ -1,3 +1,4 @@
+import { logger } from "./utils/consoleLogger.js";
 /**
  * 团队面板心跳（M4 Web 下线判定）：每 30s 把当前活跃浏览器会话 key 汇总上报
  * gateway panel_heartbeat（gateway SessionPresence.panelTouch）。浏览器全关 →
@@ -19,7 +20,7 @@ export function startTeamPresenceHeartbeat({ getBrowserActiveKeys, heartbeat }) 
       const keys = getBrowserActiveKeys();
       if (keys.length > 0) await heartbeat(keys);
     } catch (error) {
-      console.warn("[sati] panel heartbeat failed", error);
+      logger.warn("[sati] panel heartbeat failed", error);
     }
   }, HEARTBEAT_INTERVAL_MS);
   timer.unref?.();

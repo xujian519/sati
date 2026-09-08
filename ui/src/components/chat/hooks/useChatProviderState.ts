@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { logError } from "../../../utils/logging";
 import { authenticatedFetch } from "../../../utils/api";
 import { useWebSocket } from "../../../contexts/WebSocketContext";
 import { buildModelOptionsFromConfig } from "../../../shared/modelOptions";
@@ -177,7 +178,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
         }
       })
       .catch(error => {
-        console.error("Error loading runtime config:", error);
+        logError("Error loading runtime config:", error);
       });
 
     authenticatedFetch("/api/config")
@@ -190,7 +191,7 @@ export function useChatProviderState({ selectedSession }: UseChatProviderStateAr
         applyConfigModelState(data?.config, setModelOptions, setModel);
       })
       .catch(error => {
-        console.error("Error loading Sati config:", error);
+        logError("Error loading Sati config:", error);
       });
 
     return () => {

@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import { promises as fs } from "fs";
 import path from "path";
@@ -443,7 +444,7 @@ router.post("/create-workspace", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Error creating workspace:", error);
+    logger.error("Error creating workspace:", error);
     res.status(500).json({
       error: error.message || "Failed to create workspace",
       details: process.env.NODE_ENV === "development" ? error.stack : undefined,
@@ -599,7 +600,7 @@ router.get("/clone-progress", async (req, res) => {
         try {
           await fs.rm(clonePath, { recursive: true, force: true });
         } catch (cleanupError) {
-          console.error("Failed to clean up after clone failure:", sanitizeGitError(cleanupError.message, githubToken));
+          logger.error("Failed to clean up after clone failure:", sanitizeGitError(cleanupError.message, githubToken));
         }
         sendEvent("error", { message: errorMessage });
       }

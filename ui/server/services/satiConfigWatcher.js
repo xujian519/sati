@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
@@ -141,7 +142,7 @@ export async function startSatiConfigWatcher({ onEvent } = {}) {
   try {
     await fsPromises.mkdir(configDir, { recursive: true });
   } catch (error) {
-    console.warn("[sati-config-watcher] failed to ensure config dir:", error?.message || error);
+    logger.warn("[sati-config-watcher] failed to ensure config dir:", error?.message || error);
     return;
   }
 
@@ -157,11 +158,11 @@ export async function startSatiConfigWatcher({ onEvent } = {}) {
       }, 250);
     });
     watcher.on("error", error => {
-      console.warn("[sati-config-watcher] watch error:", error?.message || error);
+      logger.warn("[sati-config-watcher] watch error:", error?.message || error);
     });
-    console.log(`[sati-config-watcher] watching ${configPath}`);
+    logger.info(`[sati-config-watcher] watching ${configPath}`);
   } catch (error) {
-    console.warn("[sati-config-watcher] failed to start:", error?.message || error);
+    logger.warn("[sati-config-watcher] failed to start:", error?.message || error);
   }
 }
 

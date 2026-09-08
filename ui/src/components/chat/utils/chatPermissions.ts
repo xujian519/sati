@@ -1,4 +1,5 @@
 import { safeJsonParse } from "../../../lib/utils.js";
+import { logError } from "../../../utils/logging";
 import type { ChatMessage, SatiPermissionSuggestion, PermissionGrantResult } from "../types/types.js";
 import { SATI_SETTINGS_KEY, getSatiSettings, safeLocalStorage, saveSatiPermissionSettings } from "./chatStorage";
 
@@ -143,7 +144,7 @@ export function grantSatiToolPermission(entry: string | null): PermissionGrantRe
     allowedTools: nextAllowed,
     disallowedTools: nextDisallowed,
   }).catch(error => {
-    console.error("Failed to persist granted permission to backend:", error);
+    logError("Failed to persist granted permission to backend:", error);
   });
   return { success: true, alreadyAllowed, updatedSettings };
 }

@@ -1,3 +1,4 @@
+import { logError, logWarn } from "../../../utils/logging";
 import type { SatiSettings } from "../types/types";
 import { authenticatedFetch } from "../../../utils/api.js";
 
@@ -12,7 +13,7 @@ export const safeLocalStorage = {
       localStorage.setItem(key, value);
     } catch (error) {
       if (error instanceof Error && error.name === "QuotaExceededError") {
-        console.warn("localStorage quota exceeded, clearing old data");
+        logWarn("localStorage quota exceeded, clearing old data");
 
         const keys = Object.keys(localStorage);
         const draftKeys = keys.filter(k => k.startsWith("draft_input_"));
@@ -23,10 +24,10 @@ export const safeLocalStorage = {
         try {
           localStorage.setItem(key, value);
         } catch (retryError) {
-          console.error("Failed to save to localStorage even after cleanup:", retryError);
+          logError("Failed to save to localStorage even after cleanup:", retryError);
         }
       } else {
-        console.error("localStorage error:", error);
+        logError("localStorage error:", error);
       }
     }
   },
@@ -34,7 +35,7 @@ export const safeLocalStorage = {
     try {
       return localStorage.getItem(key);
     } catch (error) {
-      console.error("localStorage getItem error:", error);
+      logError("localStorage getItem error:", error);
       return null;
     }
   },
@@ -42,7 +43,7 @@ export const safeLocalStorage = {
     try {
       localStorage.removeItem(key);
     } catch (error) {
-      console.error("localStorage removeItem error:", error);
+      logError("localStorage removeItem error:", error);
     }
   },
 };

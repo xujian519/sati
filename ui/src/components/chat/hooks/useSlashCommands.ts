@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from "react";
 import Fuse from "fuse.js";
+import { logError } from "../../../utils/logging";
 import { authenticatedFetch } from "../../../utils/api";
 import { isImeEnterEvent } from "../../../utils/ime";
 import { safeLocalStorage } from "../utils/chatStorage";
@@ -37,7 +38,7 @@ const readCommandHistory = (projectName: string): Record<string, number> => {
   try {
     return JSON.parse(history);
   } catch (error) {
-    console.error("Error parsing command history:", error);
+    logError("Error parsing command history:", error);
     return {};
   }
 };
@@ -187,7 +188,7 @@ export function useSlashCommands({
 
         setSlashCommands(sortedCommands);
       } catch (error) {
-        console.error("Error fetching slash commands:", error);
+        logError("Error fetching slash commands:", error);
         setSlashCommands([]);
       }
     };

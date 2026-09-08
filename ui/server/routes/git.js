@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import { spawn } from "child_process";
 import path from "path";
@@ -107,7 +108,7 @@ async function getActualProjectPath(projectName) {
   try {
     projectPath = await extractProjectDirectory(projectName);
   } catch (error) {
-    console.error(`Error extracting project directory for ${projectName}:`, error);
+    logger.error(`Error extracting project directory for ${projectName}:`, error);
     throw new Error(`Unable to resolve project path for "${projectName}"`);
   }
   return validateProjectPath(projectPath);
@@ -348,7 +349,7 @@ router.get("/status", async (req, res) => {
       untracked,
     });
   } catch (error) {
-    console.error("Git status error:", error);
+    logger.error("Git status error:", error);
     res.json({
       error:
         error.message.includes("not a git repository") ||
@@ -435,7 +436,7 @@ router.get("/diff", async (req, res) => {
 
     res.json({ diff });
   } catch (error) {
-    console.error("Git diff error:", error);
+    logger.error("Git diff error:", error);
     res.json({ error: error.message });
   }
 });
@@ -508,7 +509,7 @@ router.get("/file-with-diff", async (req, res) => {
       isUntracked,
     });
   } catch (error) {
-    console.error("Git file-with-diff error:", error);
+    logger.error("Git file-with-diff error:", error);
     res.json({ error: error.message });
   }
 });
@@ -543,7 +544,7 @@ router.post("/initial-commit", async (req, res) => {
 
     res.json({ success: true, output: stdout, message: "Initial commit created successfully" });
   } catch (error) {
-    console.error("Git initial commit error:", error);
+    logger.error("Git initial commit error:", error);
 
     // Handle the case where there's nothing to commit
     if (error.message.includes("nothing to commit")) {
@@ -583,7 +584,7 @@ router.post("/commit", async (req, res) => {
 
     res.json({ success: true, output: stdout });
   } catch (error) {
-    console.error("Git commit error:", error);
+    logger.error("Git commit error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -631,7 +632,7 @@ router.post("/revert-local-commit", async (req, res) => {
       output: "Latest local commit reverted successfully. Changes were kept staged.",
     });
   } catch (error) {
-    console.error("Git revert local commit error:", error);
+    logger.error("Git revert local commit error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -674,7 +675,7 @@ router.get("/branches", async (req, res) => {
 
     res.json({ branches, localBranches, remoteBranches });
   } catch (error) {
-    console.error("Git branches error:", error);
+    logger.error("Git branches error:", error);
     res.json({ error: error.message });
   }
 });
@@ -696,7 +697,7 @@ router.post("/checkout", async (req, res) => {
 
     res.json({ success: true, output: stdout });
   } catch (error) {
-    console.error("Git checkout error:", error);
+    logger.error("Git checkout error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -718,7 +719,7 @@ router.post("/create-branch", async (req, res) => {
 
     res.json({ success: true, output: stdout });
   } catch (error) {
-    console.error("Git create branch error:", error);
+    logger.error("Git create branch error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -744,7 +745,7 @@ router.post("/delete-branch", async (req, res) => {
     const { stdout } = await spawnAsync("git", ["branch", "-d", branch], { cwd: projectPath });
     res.json({ success: true, output: stdout });
   } catch (error) {
-    console.error("Git delete branch error:", error);
+    logger.error("Git delete branch error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -798,7 +799,7 @@ router.get("/commits", async (req, res) => {
 
     res.json({ commits });
   } catch (error) {
-    console.error("Git commits error:", error);
+    logger.error("Git commits error:", error);
     res.json({ error: error.message });
   }
 });
@@ -827,7 +828,7 @@ router.get("/commit-diff", async (req, res) => {
 
     res.json({ diff, isTruncated });
   } catch (error) {
-    console.error("Git commit diff error:", error);
+    logger.error("Git commit diff error:", error);
     res.json({ error: error.message });
   }
 });
@@ -862,7 +863,7 @@ router.post("/generate-commit-message", async (req, res) => {
           diffContext += `\n--- ${repositoryRelativeFilePath} ---\n${stdout}`;
         }
       } catch (error) {
-        console.error(`Error getting diff for ${file}:`, error);
+        logger.error(`Error getting diff for ${file}:`, error);
       }
     }
 
@@ -882,7 +883,7 @@ router.post("/generate-commit-message", async (req, res) => {
             diffContext += `\n--- ${repositoryRelativeFilePath} (new directory) ---\n`;
           }
         } catch (error) {
-          console.error(`Error reading file ${file}:`, error);
+          logger.error(`Error reading file ${file}:`, error);
         }
       }
     }
@@ -892,7 +893,7 @@ router.post("/generate-commit-message", async (req, res) => {
 
     res.json({ message });
   } catch (error) {
-    console.error("Generate commit message error:", error);
+    logger.error("Generate commit message error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -960,14 +961,14 @@ Generate the commit message:`;
           }
         } catch (e) {
           // Ignore parse errors
-          console.error("Error parsing writer data:", e);
+          logger.error("Error parsing writer data:", e);
         }
       },
       setSessionId: () => {}, // No-op for this use case
     };
 
-    console.log("🚀 Calling AI agent with provider:", provider);
-    console.log("📝 Prompt length:", prompt.length);
+    logger.info("🚀 Calling AI agent with provider:", provider);
+    logger.info("📝 Prompt length:", prompt.length);
 
     // All providers route through the Sati gateway. The `provider`
     // value is kept only as a label in the resulting message frames.
@@ -983,16 +984,16 @@ Generate the commit message:`;
       provider || "sati",
     );
 
-    console.log("📊 Total response text collected:", responseText.length, "characters");
-    console.log("📄 Response preview:", responseText.substring(0, 200));
+    logger.info("📊 Total response text collected:", responseText.length, "characters");
+    logger.info("📄 Response preview:", responseText.substring(0, 200));
 
     // Clean up the response
     const cleanedMessage = cleanCommitMessage(responseText);
-    console.log("🧹 Cleaned message:", cleanedMessage.substring(0, 200));
+    logger.info("🧹 Cleaned message:", cleanedMessage.substring(0, 200));
 
     return cleanedMessage || "chore: update files";
   } catch (error) {
-    console.error("Error generating commit message with AI:", error);
+    logger.error("Error generating commit message with AI:", error);
     // Fallback to simple message
     return `chore: update ${files.length} file${files.length !== 1 ? "s" : ""}`;
   }
@@ -1113,7 +1114,7 @@ router.get("/remote-status", async (req, res) => {
       isUpToDate: ahead === 0 && behind === 0,
     });
   } catch (error) {
-    console.error("Git remote status error:", error);
+    logger.error("Git remote status error:", error);
     res.json({ error: error.message });
   }
 });
@@ -1141,7 +1142,7 @@ router.post("/fetch", async (req, res) => {
       remoteName = stdout.trim().split("/")[0]; // Extract remote name
     } catch {
       // No upstream, try to fetch from origin anyway
-      console.log("No upstream configured, using origin as fallback");
+      logger.info("No upstream configured, using origin as fallback");
     }
 
     validateRemoteName(remoteName);
@@ -1149,7 +1150,7 @@ router.post("/fetch", async (req, res) => {
 
     res.json({ success: true, output: stdout || "Fetch completed successfully", remoteName });
   } catch (error) {
-    console.error("Git fetch error:", error);
+    logger.error("Git fetch error:", error);
     res.status(500).json({
       error: "Fetch failed",
       details: error.message.includes("Could not resolve hostname")
@@ -1187,7 +1188,7 @@ router.post("/pull", async (req, res) => {
       remoteBranch = tracking.split("/").slice(1).join("/"); // Extract branch name
     } catch {
       // No upstream, use fallback
-      console.log("No upstream configured, using origin/branch as fallback");
+      logger.info("No upstream configured, using origin/branch as fallback");
     }
 
     validateRemoteName(remoteName);
@@ -1201,7 +1202,7 @@ router.post("/pull", async (req, res) => {
       remoteBranch,
     });
   } catch (error) {
-    console.error("Git pull error:", error);
+    logger.error("Git pull error:", error);
 
     // Enhanced error handling for common pull scenarios
     let errorMessage = "Pull failed";
@@ -1258,7 +1259,7 @@ router.post("/push", async (req, res) => {
       remoteBranch = tracking.split("/").slice(1).join("/"); // Extract branch name
     } catch {
       // No upstream, use fallback
-      console.log("No upstream configured, using origin/branch as fallback");
+      logger.info("No upstream configured, using origin/branch as fallback");
     }
 
     validateRemoteName(remoteName);
@@ -1272,7 +1273,7 @@ router.post("/push", async (req, res) => {
       remoteBranch,
     });
   } catch (error) {
-    console.error("Git push error:", error);
+    logger.error("Git push error:", error);
 
     // Enhanced error handling for common push scenarios
     let errorMessage = "Push failed";
@@ -1360,7 +1361,7 @@ router.post("/publish", async (req, res) => {
       branch,
     });
   } catch (error) {
-    console.error("Git publish error:", error);
+    logger.error("Git publish error:", error);
 
     // Enhanced error handling for common publish scenarios
     let errorMessage = "Publish failed";
@@ -1433,7 +1434,7 @@ router.post("/discard", async (req, res) => {
 
     res.json({ success: true, message: `Changes discarded for ${repositoryRelativeFilePath}` });
   } catch (error) {
-    console.error("Git discard error:", error);
+    logger.error("Git discard error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1481,7 +1482,7 @@ router.post("/delete-untracked", async (req, res) => {
       res.json({ success: true, message: `Untracked file ${repositoryRelativeFilePath} deleted successfully` });
     }
   } catch (error) {
-    console.error("Git delete untracked error:", error);
+    logger.error("Git delete untracked error:", error);
     res.status(500).json({ error: error.message });
   }
 });

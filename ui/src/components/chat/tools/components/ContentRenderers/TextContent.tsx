@@ -1,4 +1,5 @@
 import React from "react";
+import { logWarn } from "../../../../../utils/logging";
 
 interface TextContentProps {
   content: unknown;
@@ -30,7 +31,7 @@ export const TextContent: React.FC<TextContentProps> = ({ content, format = "pla
       formattedJson = JSON.stringify(parsed, null, 2);
     } catch (e) {
       // If parsing fails, use original content
-      console.warn("Failed to parse JSON content:", e);
+      logWarn("Failed to parse JSON content:", e);
     }
 
     return (

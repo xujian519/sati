@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { logError } from "../../../utils/logging";
 import { useTheme } from "../../../contexts/ThemeContext";
 import { authenticatedFetch } from "../../../utils/api";
 import { usePlugins } from "../../../contexts/PluginsContext";
@@ -128,7 +129,7 @@ export default function PluginTabContent({ pluginName, selectedProject, selected
         }
       } catch (err) {
         if (!active) return;
-        console.error(`[Plugin:${pluginName}] Failed to load:`, err);
+        logError(`[Plugin:${pluginName}] Failed to load:`, err);
         if (containerRef.current) {
           const errDiv = document.createElement("div");
           errDiv.style.cssText = "padding:16px;font-size:13px;color:#dc2626";

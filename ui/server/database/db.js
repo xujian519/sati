@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import Database from "better-sqlite3";
 import path from "path";
 import os from "os";
@@ -33,10 +34,10 @@ if (process.env.DATABASE_PATH) {
   try {
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
-      console.log(`Created database directory: ${dbDir}`);
+      logger.info(`Created database directory: ${dbDir}`);
     }
   } catch (error) {
-    console.error(`Failed to create database directory ${dbDir}:`, error.message);
+    logger.error(`Failed to create database directory ${dbDir}:`, error.message);
     throw error;
   }
 }
@@ -46,14 +47,14 @@ const LEGACY_DB_PATH = path.join(__dirname, "auth.db");
 if (DB_PATH !== LEGACY_DB_PATH && !fs.existsSync(DB_PATH) && fs.existsSync(LEGACY_DB_PATH)) {
   try {
     fs.copyFileSync(LEGACY_DB_PATH, DB_PATH);
-    console.log(`[MIGRATION] Copied database from ${LEGACY_DB_PATH} to ${DB_PATH}`);
+    logger.info(`[MIGRATION] Copied database from ${LEGACY_DB_PATH} to ${DB_PATH}`);
     for (const suffix of ["-wal", "-shm"]) {
       if (fs.existsSync(LEGACY_DB_PATH + suffix)) {
         fs.copyFileSync(LEGACY_DB_PATH + suffix, DB_PATH + suffix);
       }
     }
   } catch (err) {
-    console.warn(`[MIGRATION] Could not copy legacy database: ${err.message}`);
+    logger.warn(`[MIGRATION] Could not copy legacy database: ${err.message}`);
   }
 }
 
@@ -65,14 +66,14 @@ const LEGACY_HOME_DB_PATH = path.join(os.homedir(), ".pilotdeck", "auth.db");
 if (DB_PATH !== LEGACY_HOME_DB_PATH && !fs.existsSync(DB_PATH) && fs.existsSync(LEGACY_HOME_DB_PATH)) {
   try {
     fs.copyFileSync(LEGACY_HOME_DB_PATH, DB_PATH);
-    console.log(`[MIGRATION] Copied pre-rebrand home database from ${LEGACY_HOME_DB_PATH} to ${DB_PATH}`);
+    logger.info(`[MIGRATION] Copied pre-rebrand home database from ${LEGACY_HOME_DB_PATH} to ${DB_PATH}`);
     for (const suffix of ["-wal", "-shm"]) {
       if (fs.existsSync(LEGACY_HOME_DB_PATH + suffix)) {
         fs.copyFileSync(LEGACY_HOME_DB_PATH + suffix, DB_PATH + suffix);
       }
     }
   } catch (err) {
-    console.warn(`[MIGRATION] Could not copy pre-rebrand home database: ${err.message}`);
+    logger.warn(`[MIGRATION] Could not copy pre-rebrand home database: ${err.message}`);
   }
 }
 
@@ -90,15 +91,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS app_config (
 
 // Show app installation path prominently
 const appInstallPath = path.join(__dirname, "../..");
-console.log("");
-console.log(c.dim("═".repeat(60)));
-console.log(`${c.info("[INFO]")} App Installation: ${c.bright(appInstallPath)}`);
-console.log(`${c.info("[INFO]")} Database: ${c.dim(path.relative(appInstallPath, DB_PATH))}`);
+logger.info("");
+logger.info(c.dim("═".repeat(60)));
+logger.info(`${c.info("[INFO]")} App Installation: ${c.bright(appInstallPath)}`);
+logger.info(`${c.info("[INFO]")} Database: ${c.dim(path.relative(appInstallPath, DB_PATH))}`);
 if (process.env.DATABASE_PATH) {
-  console.log(`       ${c.dim("(Using custom DATABASE_PATH from environment)")}`);
+  logger.info(`       ${c.dim("(Using custom DATABASE_PATH from environment)")}`);
 }
-console.log(c.dim("═".repeat(60)));
-console.log("");
+logger.info(c.dim("═".repeat(60)));
+logger.info("");
 
 const runMigrations = () => {
   try {
@@ -106,17 +107,17 @@ const runMigrations = () => {
     const columnNames = tableInfo.map(col => col.name);
 
     if (!columnNames.includes("git_name")) {
-      console.log("Running migration: Adding git_name column");
+      logger.info("Running migration: Adding git_name column");
       db.exec("ALTER TABLE users ADD COLUMN git_name TEXT");
     }
 
     if (!columnNames.includes("git_email")) {
-      console.log("Running migration: Adding git_email column");
+      logger.info("Running migration: Adding git_email column");
       db.exec("ALTER TABLE users ADD COLUMN git_email TEXT");
     }
 
     if (!columnNames.includes("has_completed_onboarding")) {
-      console.log("Running migration: Adding has_completed_onboarding column");
+      logger.info("Running migration: Adding has_completed_onboarding column");
       db.exec("ALTER TABLE users ADD COLUMN has_completed_onboarding BOOLEAN DEFAULT 0");
     }
 
@@ -168,9 +169,9 @@ const runMigrations = () => {
     )`);
     db.exec("CREATE INDEX IF NOT EXISTS idx_session_names_lookup ON session_names(session_id, provider)");
 
-    console.log("Database migrations completed successfully");
+    logger.info("Database migrations completed successfully");
   } catch (error) {
-    console.error("Error running migrations:", error.message);
+    logger.error("Error running migrations:", error.message);
     throw error;
   }
 };
@@ -180,10 +181,10 @@ const initializeDatabase = async () => {
   try {
     const initSQL = fs.readFileSync(INIT_SQL_PATH, "utf8");
     db.exec(initSQL);
-    console.log("Database initialized successfully");
+    logger.info("Database initialized successfully");
     runMigrations();
   } catch (error) {
-    console.error("Error initializing database:", error.message);
+    logger.error("Error initializing database:", error.message);
     throw error;
   }
 };
@@ -226,7 +227,7 @@ const userDb = {
     try {
       db.prepare("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?").run(userId);
     } catch (err) {
-      console.warn("Failed to update last login:", err.message);
+      logger.warn("Failed to update last login:", err.message);
     }
   },
 
@@ -608,7 +609,7 @@ function applyCustomSessionNames(sessions, provider) {
       if (custom) session.summary = custom;
     }
   } catch (error) {
-    console.warn(`[DB] Failed to apply custom session names for ${provider}:`, error.message);
+    logger.warn(`[DB] Failed to apply custom session names for ${provider}:`, error.message);
   }
 }
 
