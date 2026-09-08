@@ -4,8 +4,7 @@ const DELAY_SECONDS = parseInt(process.env.MOCK_DELAY ?? "8", 10);
 const PORT = parseInt(process.env.MOCK_PORT ?? "9999", 10);
 
 const server = http.createServer((req, res) => {
-  let body = "";
-  req.on("data", chunk => (body += chunk));
+  req.resume();
   req.on("end", () => {
     const url = req.url;
     console.log(`[mock] ${req.method} ${url} — will respond in ${DELAY_SECONDS}s`);

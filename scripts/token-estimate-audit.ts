@@ -53,19 +53,6 @@ function buildSyntheticSamples(): Array<{ name: string; messages: CanonicalMessa
 
   const systemPrompt = `你是 Sati 专利智能体。请基于专利法、审查指南进行专业分析。回答须引用具体法条，结论须给出依据。`;
 
-  const toolSchemas = [
-    {
-      name: "patent_search",
-      description: "检索专利文献。支持按关键词、IPC 分类号、申请人与日期范围过滤。",
-      inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "integer" } } },
-    },
-    {
-      name: "patent_case_search",
-      description: "检索专利无效复审决定与专利判决全文。",
-      inputSchema: { type: "object", properties: { keywords: { type: "string" }, court: { type: "string" } } },
-    },
-  ];
-
   const text = (text: string) => ({ type: "text" as const, text });
   return [
     {
@@ -116,15 +103,7 @@ function buildSyntheticSamples(): Array<{ name: string; messages: CanonicalMessa
         },
       ],
     },
-    {
-      name: "全量工具目录（70 工具）",
-      messages: [
-        { role: "system" as const, content: [text(systemPrompt)] },
-        { role: "user" as const, content: [text("对权利要求 1 进行创造性分析。")] },
-      ],
-      toolsNote: toolSchemas,
-    },
-  ] as Array<{ name: string; messages: CanonicalMessage[]; toolsNote?: unknown[] }>;
+  ] as Array<{ name: string; messages: CanonicalMessage[] }>;
 }
 
 /** 从真实转录提取各轮文本 token 估算。 */

@@ -23,7 +23,17 @@ import { fileURLToPath } from "node:url";
 const args = process.argv.slice(2);
 const kind = args[0];
 const rootFlag = args.indexOf("--root");
-const repoRoot = rootFlag !== -1 ? resolve(args[rootFlag + 1]) : dirname(dirname(fileURLToPath(import.meta.url)));
+let repoRoot;
+if (rootFlag !== -1) {
+  const rootVal = args[rootFlag + 1];
+  if (!rootVal || rootVal.startsWith("--")) {
+    console.error("--root 需要目录参数，例如: node scripts/bump-version.mjs patch --root ./");
+    process.exit(2);
+  }
+  repoRoot = resolve(rootVal);
+} else {
+  repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+}
 
 const TARGETS = [
   ["repo root", join(repoRoot, "package.json")],

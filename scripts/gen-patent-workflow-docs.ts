@@ -78,16 +78,9 @@ function main(): void {
       }
       if (existing !== content) stale.push(file);
     }
-    // 反向检查：generated/ 下不应存在已删除 manifest 的孤儿文件。
-    const orphans = new Set<string>();
-    for (const file of [...generated.keys()]) {
-      if (generated.has(file)) continue;
-      orphans.add(file);
-    }
-    if (stale.length > 0 || orphans.size > 0) {
+    if (stale.length > 0) {
       console.error("check:patent-workflow-docs: 生成快照与 manifests.ts 不一致：");
       for (const f of stale) console.error(`  - 过期/缺失: ${f}（运行 pnpm gen:patent-workflow-docs）`);
-      for (const f of orphans) console.error(`  - 孤儿文件: ${f}（删除或同步 manifest）`);
       process.exit(1);
     }
     console.log(`gen-patent-workflow-docs: fresh（${generated.size} 个 manifest 快照）`);

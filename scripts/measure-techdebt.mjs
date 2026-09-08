@@ -314,11 +314,6 @@ async function measure() {
       uiServerLines: countLines(uiServerFiles),
     },
     topFiles: topFiles([...srcFiles, ...uiSrcFiles, ...uiServerFiles], TOP_FILES_LIMIT),
-    godFunctions: {
-      threshold: GOD_FN_THRESHOLD,
-      count: 0,
-      items: [],
-    },
     unsafe: grepCountByModule(allSrcForScan, UNSAFE_PATTERN),
     console: grepCountByModule(allSrcForScan, CONSOLE_PATTERN),
     catchEmpty: grepCountByModule(allSrcForScan, EMPTY_CATCH_PATTERN),

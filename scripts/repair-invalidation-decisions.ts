@@ -42,6 +42,9 @@ const DATA_DIR = arg("--data-dir") ?? DEFAULT_DATA_DIR;
 const FIXTURES_PATH =
   arg("--fixtures") ?? resolve(repoRoot(), "tests/patent/benchmark/fixtures/business/business-invalidation.json");
 
+/** 提取/替换「核心理由」段的通用正则（截至「主要法条」标题）。 */
+const REASON_RE = /核心理由[:：][\s\S]*?(?=\n?\s*主要法条)/;
+
 /** 判断 expected 的核心理由是否残缺。 */
 function reasonIsDefective(expected: string): boolean {
   const m = expected.match(/核心理由[:：]\s*(.{0,30})/);
@@ -146,7 +149,7 @@ function main(): void {
       failed += 1;
       continue;
     }
-    c.expected = c.expected.replace(/核心理由[:：][\s\S]*?(?=\n?\s*主要法条)/, `核心理由：${reason}`);
+    c.expected = c.expected.replace(REASON_RE, `核心理由：${reason}`);
     repaired += 1;
   }
   // 无法定位/提取的用例：将误导性占位改为明确降级标注（结论与法条仍可评测）
@@ -154,7 +157,7 @@ function main(): void {
     if (!c.id.startsWith("invalidation_decision_")) continue;
     if (!reasonIsDefective(c.expected)) continue;
     const degraded = c.expected.replace(
-      /核心理由[:：][\s\S]*?(?=\n?\s*主要法条)/,
+      REASON_RE,
       "核心理由：（原始决定书未收录于数据源，无法提取理由摘要；仅结论与法条可评测）",
     );
     if (degraded !== c.expected) {

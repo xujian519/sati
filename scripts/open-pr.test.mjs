@@ -66,7 +66,11 @@ describe("issueSearchKeywordsFromBranch", () => {
     assert.deepEqual(issueSearchKeywordsFromBranch("feat/cron-agentic-automation"), ["cron", "agentic", "automation"]);
   });
 
-  it("过滤 <3 字符短词，最多 3 个", () => {
+  it("过滤 <3 字符短词", () => {
     assert.deepEqual(issueSearchKeywordsFromBranch("feat/ui-tab-fix"), ["tab", "fix"]);
+  });
+
+  it("超过 3 个长词时截断到 3 个", () => {
+    assert.deepEqual(issueSearchKeywordsFromBranch("feat/alpha-beta-gamma-delta"), ["alpha", "beta", "gamma"]);
   });
 });
