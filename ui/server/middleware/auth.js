@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import jwt from "jsonwebtoken";
 import { userDb, appConfigDb } from "../database/db.js";
 import { IS_PLATFORM, DISABLE_LOCAL_AUTH } from "../constants/config.js";
@@ -48,7 +49,7 @@ const authenticateToken = async (req, res, next) => {
       req.user = user;
       return next();
     } catch (error) {
-      console.error("Auth bypass mode error:", error);
+      logger.error("Auth bypass mode error:", error);
       return res.status(500).json({ error: "Failed to fetch user" });
     }
   }
@@ -93,7 +94,7 @@ const authenticateToken = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    console.error("Token verification error:", error);
+    logger.error("Token verification error:", error);
     return res.status(403).json({ error: "Invalid token" });
   }
 };
@@ -121,7 +122,7 @@ const authenticateWebSocket = token => {
       }
       return null;
     } catch (error) {
-      console.error("Platform mode WebSocket error:", error);
+      logger.error("Platform mode WebSocket error:", error);
       return null;
     }
   }
@@ -140,7 +141,7 @@ const authenticateWebSocket = token => {
     }
     return { userId: user.id, username: user.username };
   } catch (error) {
-    console.error("WebSocket token verification error:", error);
+    logger.error("WebSocket token verification error:", error);
     return null;
   }
 };

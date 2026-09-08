@@ -8,6 +8,7 @@
  * 死连接自动复位，避免面板永久 500；catch 仍记录日志并转发错误给 express 错误
  * 处理链。
  */
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import { getSatiGatewayWithReset } from "../sati-bridge.js";
 
@@ -27,7 +28,7 @@ router.post("/panel", async (req, res, next) => {
     const snapshot = await gw.teamPanelSnapshot({ sessionKey });
     res.json(snapshot);
   } catch (error) {
-    console.error("[teams:/panel] gateway 调用失败:", error);
+    logger.error("[teams:/panel] gateway 调用失败:", error);
     next(error);
   }
 });
@@ -57,7 +58,7 @@ router.post("/action", async (req, res, next) => {
     const result = await gw.teamToolCall({ tool, input, sessionKey });
     res.json(result);
   } catch (error) {
-    console.error("[teams:/action] gateway 调用失败:", error);
+    logger.error("[teams:/action] gateway 调用失败:", error);
     next(error);
   }
 });
@@ -79,7 +80,7 @@ router.post("/heartbeat", async (req, res, next) => {
     const result = await gw.panelHeartbeat({ sessionKeys });
     res.json(result);
   } catch (error) {
-    console.error("[teams:/heartbeat] gateway 调用失败:", error);
+    logger.error("[teams:/heartbeat] gateway 调用失败:", error);
     next(error);
   }
 });

@@ -5,6 +5,7 @@
  * 聊天附件上传（图片 data URL + 路径暂存）/ 图片上传。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { Router } from "express";
 import { promises as fsPromises } from "fs";
 import os from "os";
@@ -54,7 +55,7 @@ router.post("/api/projects/:projectName/upload-attachments", authenticateToken, 
       },
     }).array("attachments", 10);
   } catch (error) {
-    console.error("Error configuring attachment upload:", error);
+    logger.error("Error configuring attachment upload:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 
@@ -109,7 +110,7 @@ router.post("/api/projects/:projectName/upload-attachments", authenticateToken, 
 
       res.json({ images, files });
     } catch (error) {
-      console.error("Error processing attachments:", error);
+      logger.error("Error processing attachments:", error);
       await Promise.all((req.files || []).map(file => fsPromises.unlink(file.path).catch(() => {})));
       if (attachmentDir) {
         await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => {});
@@ -192,14 +193,14 @@ router.post("/api/projects/:projectName/upload-images", authenticateToken, async
 
         res.json({ images: processedImages });
       } catch (error) {
-        console.error("Error processing images:", error);
+        logger.error("Error processing images:", error);
         // Clean up any remaining files
         await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => {})));
         res.status(500).json({ error: "Failed to process images" });
       }
     });
   } catch (error) {
-    console.error("Error in image upload endpoint:", error);
+    logger.error("Error in image upload endpoint:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });

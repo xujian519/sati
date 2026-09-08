@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import path from "path";
 import http from "http";
@@ -123,7 +124,7 @@ router.put("/:name/enable", async (req, res) => {
           try {
             await startPluginServer(plugin.name, pluginDir, plugin.server);
           } catch (err) {
-            console.error(`[Plugins] Failed to start server for "${plugin.name}":`, err.message);
+            logger.error(`[Plugins] Failed to start server for "${plugin.name}":`, err.message);
           }
         }
       } else if (!enabled && isPluginRunning(plugin.name)) {
@@ -159,7 +160,7 @@ router.post("/install", async (req, res) => {
         try {
           await startPluginServer(manifest.name, pluginDir, manifest.server);
         } catch (err) {
-          console.error(`[Plugins] Failed to start server for "${manifest.name}":`, err.message);
+          logger.error(`[Plugins] Failed to start server for "${manifest.name}":`, err.message);
         }
       }
     }
@@ -193,7 +194,7 @@ router.post("/:name/update", async (req, res) => {
         try {
           await startPluginServer(pluginName, pluginDir, manifest.server);
         } catch (err) {
-          console.error(`[Plugins] Failed to restart server for "${pluginName}":`, err.message);
+          logger.error(`[Plugins] Failed to restart server for "${pluginName}":`, err.message);
         }
       }
     }

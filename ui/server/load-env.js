@@ -1,3 +1,4 @@
+import { logger } from "./utils/consoleLogger.js";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -32,7 +33,7 @@ function applyLegacyEnvCompat() {
   for (const [legacy, modern] of Object.entries(legacyToModern)) {
     if (process.env[legacy] && process.env[modern] === undefined) {
       process.env[modern] = process.env[legacy];
-      console.warn(`[COMPAT] Legacy env var ${legacy} mapped to ${modern}`);
+      logger.warn(`[COMPAT] Legacy env var ${legacy} mapped to ${modern}`);
     }
   }
 }

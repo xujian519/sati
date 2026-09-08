@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Load environment variables before other imports execute
+import { logger } from "./utils/consoleLogger.js";
 import { assertRequiredSatiEnv } from "./load-env.js";
 // Install global fetch proxy (SATI_PROXY / HTTPS_PROXY) before any network calls
 import { installGlobalProxy } from "./utils/proxy.js";
@@ -13,7 +14,7 @@ const __dirname = import.meta.dirname;
 const VITE_PORT = process.env.VITE_PORT || 5173;
 
 assertRequiredSatiEnv();
-console.log("SERVER_PORT from runtime config:", process.env.SERVER_PORT);
+logger.info("SERVER_PORT from runtime config:", process.env.SERVER_PORT);
 
 import express from "express";
 import http from "http";

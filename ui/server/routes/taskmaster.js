@@ -8,6 +8,7 @@
  * - TaskMaster state and metadata management
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import fs from "fs";
 import path from "path";
@@ -247,7 +248,7 @@ async function detectTaskMasterFolder(projectPath) {
           lastModified: (await fsPromises.stat(tasksPath)).mtime.toISOString(),
         };
       } catch (parseError) {
-        console.warn("Failed to parse tasks.json:", parseError.message);
+        logger.warn("Failed to parse tasks.json:", parseError.message);
         taskMetadata = { error: "Failed to parse tasks.json" };
       }
     }
@@ -260,7 +261,7 @@ async function detectTaskMasterFolder(projectPath) {
       path: taskMasterPath,
     };
   } catch (error) {
-    console.error("Error detecting TaskMaster folder:", error);
+    logger.error("Error detecting TaskMaster folder:", error);
     return {
       hasTaskmaster: false,
       reason: `Error checking directory: ${error.message}`,
@@ -309,7 +310,7 @@ router.get("/installation-status", async (req, res) => {
       isReady: installationStatus.isInstalled && mcpStatus.hasMCPServer,
     });
   } catch (error) {
-    console.error("Error checking TaskMaster installation:", error);
+    logger.error("Error checking TaskMaster installation:", error);
     res.status(500).json({
       success: false,
       error: "Failed to check TaskMaster installation status",
@@ -339,7 +340,7 @@ router.get("/detect/:projectName", async (req, res) => {
     try {
       projectPath = await extractProjectDirectory(projectName);
     } catch (error) {
-      console.error("Error extracting project directory:", error);
+      logger.error("Error extracting project directory:", error);
       return res.status(404).json({
         error: "Project path not found",
         projectName,
@@ -379,7 +380,7 @@ router.get("/detect/:projectName", async (req, res) => {
 
     res.json(responseData);
   } catch (error) {
-    console.error("TaskMaster detection error:", error);
+    logger.error("TaskMaster detection error:", error);
     res.status(500).json({
       error: "Failed to detect TaskMaster configuration",
       message: error.message,
@@ -454,7 +455,7 @@ router.get("/detect-all", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Bulk TaskMaster detection error:", error);
+    logger.error("Bulk TaskMaster detection error:", error);
     res.status(500).json({
       error: "Failed to detect TaskMaster configuration for projects",
       message: error.message,
@@ -479,7 +480,7 @@ router.post("/initialize/:projectName", async (req, res) => {
       rules,
     });
   } catch (error) {
-    console.error("TaskMaster initialization error:", error);
+    logger.error("TaskMaster initialization error:", error);
     res.status(500).json({
       error: "Failed to initialize TaskMaster",
       message: error.message,
@@ -535,7 +536,7 @@ router.get("/next/:projectName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } catch (cliError) {
-      console.warn("Failed to execute task-master CLI:", cliError.message);
+      logger.warn("Failed to execute task-master CLI:", cliError.message);
 
       // Fallback to loading tasks and finding next one locally
       // Use localhost to bypass proxy for internal server-to-server calls
@@ -566,7 +567,7 @@ router.get("/next/:projectName", async (req, res) => {
       }
     }
   } catch (error) {
-    console.error("TaskMaster next task error:", error);
+    logger.error("TaskMaster next task error:", error);
     res.status(500).json({
       error: "Failed to get next task",
       message: error.message,
@@ -672,14 +673,14 @@ router.get("/tasks/:projectName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } catch (parseError) {
-      console.error("Failed to parse tasks.json:", parseError);
+      logger.error("Failed to parse tasks.json:", parseError);
       return res.status(500).json({
         error: "Failed to parse tasks file",
         message: parseError.message,
       });
     }
   } catch (error) {
-    console.error("TaskMaster tasks loading error:", error);
+    logger.error("TaskMaster tasks loading error:", error);
     res.status(500).json({
       error: "Failed to load TaskMaster tasks",
       message: error.message,
@@ -746,14 +747,14 @@ router.get("/prd/:projectName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } catch (readError) {
-      console.error("Error reading docs directory:", readError);
+      logger.error("Error reading docs directory:", readError);
       return res.status(500).json({
         error: "Failed to read PRD files",
         message: readError.message,
       });
     }
   } catch (error) {
-    console.error("PRD list error:", error);
+    logger.error("PRD list error:", error);
     res.status(500).json({
       error: "Failed to list PRD files",
       message: error.message,
@@ -804,7 +805,7 @@ router.post("/prd/:projectName", async (req, res) => {
     try {
       await fsPromises.mkdir(docsPath, { recursive: true });
     } catch (error) {
-      console.error("Failed to create docs directory:", error);
+      logger.error("Failed to create docs directory:", error);
       return res.status(500).json({
         error: "Failed to create directory",
         message: error.message,
@@ -830,14 +831,14 @@ router.post("/prd/:projectName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } catch (writeError) {
-      console.error("Failed to write PRD file:", writeError);
+      logger.error("Failed to write PRD file:", writeError);
       return res.status(500).json({
         error: "Failed to write PRD file",
         message: writeError.message,
       });
     }
   } catch (error) {
-    console.error("PRD create/update error:", error);
+    logger.error("PRD create/update error:", error);
     res.status(500).json({
       error: "Failed to create/update PRD file",
       message: error.message,
@@ -893,14 +894,14 @@ router.get("/prd/:projectName/:fileName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } catch (readError) {
-      console.error("Failed to read PRD file:", readError);
+      logger.error("Failed to read PRD file:", readError);
       return res.status(500).json({
         error: "Failed to read PRD file",
         message: readError.message,
       });
     }
   } catch (error) {
-    console.error("PRD read error:", error);
+    logger.error("PRD read error:", error);
     res.status(500).json({
       error: "Failed to read PRD file",
       message: error.message,
@@ -951,14 +952,14 @@ router.delete("/prd/:projectName/:fileName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } catch (deleteError) {
-      console.error("Failed to delete PRD file:", deleteError);
+      logger.error("Failed to delete PRD file:", deleteError);
       return res.status(500).json({
         error: "Failed to delete PRD file",
         message: deleteError.message,
       });
     }
   } catch (error) {
-    console.error("PRD delete error:", error);
+    logger.error("PRD delete error:", error);
     res.status(500).json({
       error: "Failed to delete PRD file",
       message: error.message,
@@ -1021,7 +1022,7 @@ router.post("/init/:projectName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } else {
-      console.error("TaskMaster init failed:", stderr);
+      logger.error("TaskMaster init failed:", stderr);
       res.status(500).json({
         error: "Failed to initialize TaskMaster",
         message: stderr || stdout,
@@ -1029,7 +1030,7 @@ router.post("/init/:projectName", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("TaskMaster init error:", error);
+    logger.error("TaskMaster init error:", error);
     res.status(500).json({
       error: "Failed to initialize TaskMaster",
       message: error.message,
@@ -1088,9 +1089,9 @@ router.post("/add-task/:projectName", async (req, res) => {
       shell: true,
     });
 
-    console.log("Add task process completed with code:", code);
-    console.log("Stdout:", stdout);
-    console.log("Stderr:", stderr);
+    logger.info("Add task process completed with code:", code);
+    logger.info("Stdout:", stdout);
+    logger.info("Stderr:", stderr);
 
     if (code === 0) {
       // Broadcast task update via WebSocket
@@ -1106,7 +1107,7 @@ router.post("/add-task/:projectName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } else {
-      console.error("Add task failed:", stderr);
+      logger.error("Add task failed:", stderr);
       res.status(500).json({
         error: "Failed to add task",
         message: stderr || stdout,
@@ -1114,7 +1115,7 @@ router.post("/add-task/:projectName", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Add task error:", error);
+    logger.error("Add task error:", error);
     res.status(500).json({
       error: "Failed to add task",
       message: error.message,
@@ -1168,7 +1169,7 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
           timestamp: new Date().toISOString(),
         });
       } else {
-        console.error("Set task status failed:", stderr);
+        logger.error("Set task status failed:", stderr);
         res.status(500).json({
           error: "Failed to update task status",
           message: stderr || stdout,
@@ -1209,7 +1210,7 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
           timestamp: new Date().toISOString(),
         });
       } else {
-        console.error("Update task failed:", stderr);
+        logger.error("Update task failed:", stderr);
         res.status(500).json({
           error: "Failed to update task",
           message: stderr || stdout,
@@ -1218,7 +1219,7 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
       }
     }
   } catch (error) {
-    console.error("Update task error:", error);
+    logger.error("Update task error:", error);
     res.status(500).json({
       error: "Failed to update task",
       message: error.message,
@@ -1292,7 +1293,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } else {
-      console.error("Parse PRD failed:", stderr);
+      logger.error("Parse PRD failed:", stderr);
       res.status(500).json({
         error: "Failed to parse PRD",
         message: stderr || stdout,
@@ -1300,7 +1301,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Parse PRD error:", error);
+    logger.error("Parse PRD error:", error);
     res.status(500).json({
       error: "Failed to parse PRD",
       message: error.message,
@@ -1322,7 +1323,7 @@ router.get("/prd-templates", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("PRD templates error:", error);
+    logger.error("PRD templates error:", error);
     res.status(500).json({
       error: "Failed to get PRD templates",
       message: error.message,
@@ -1382,7 +1383,7 @@ router.post("/apply-template/:projectName", async (req, res) => {
     try {
       await fsPromises.mkdir(docsDir, { recursive: true });
     } catch (error) {
-      console.error("Failed to create docs directory:", error);
+      logger.error("Failed to create docs directory:", error);
     }
 
     const filePath = path.join(docsDir, fileName);
@@ -1402,14 +1403,14 @@ router.post("/apply-template/:projectName", async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } catch (writeError) {
-      console.error("Failed to write PRD template:", writeError);
+      logger.error("Failed to write PRD template:", writeError);
       return res.status(500).json({
         error: "Failed to write PRD template",
         message: writeError.message,
       });
     }
   } catch (error) {
-    console.error("Apply template error:", error);
+    logger.error("Apply template error:", error);
     res.status(500).json({
       error: "Failed to apply PRD template",
       message: error.message,

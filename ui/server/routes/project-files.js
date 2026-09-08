@@ -5,6 +5,7 @@
  * 读写文件/原始字节/下载/文件树列表。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { Router } from "express";
 import { promises as fsPromises } from "fs";
 import path from "path";
@@ -33,8 +34,8 @@ router.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
   try {
     const { path: dirPath } = req.query;
 
-    console.log("[API] Browse filesystem request for path:", dirPath);
-    console.log("[API] WORKSPACES_ROOT is:", WORKSPACES_ROOT);
+    logger.info("[API] Browse filesystem request for path:", dirPath);
+    logger.info("[API] WORKSPACES_ROOT is:", WORKSPACES_ROOT);
     // Default to home directory if no path provided
     const defaultRoot = WORKSPACES_ROOT;
 
@@ -112,7 +113,7 @@ router.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
       suggestions: suggestions,
     });
   } catch (error) {
-    console.error("Error browsing filesystem:", error);
+    logger.error("Error browsing filesystem:", error);
     res.status(500).json({ error: "Failed to browse filesystem" });
   }
 });
@@ -152,7 +153,7 @@ router.post("/api/create-folder", authenticateToken, async (req, res) => {
       throw mkdirError;
     }
   } catch (error) {
-    console.error("Error creating folder:", error);
+    logger.error("Error creating folder:", error);
     res.status(500).json({ error: "Failed to create folder" });
   }
 });
@@ -205,7 +206,7 @@ router.get("/api/projects/:projectName/file", authenticateToken, async (req, res
     }
     res.json({ content, path: readPath });
   } catch (error) {
-    console.error("Error reading file:", error);
+    logger.error("Error reading file:", error);
     if (error.code === "ENOENT") {
       res.status(404).json({ error: "File not found" });
     } else if (error.code === "EACCES") {
@@ -252,7 +253,7 @@ router.get("/api/projects/:projectName/files/content", authenticateToken, async 
       downloadFilename: req.query.download ? path.basename(resolved) : null,
     });
   } catch (error) {
-    console.error("Error serving binary file:", error);
+    logger.error("Error serving binary file:", error);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
@@ -285,7 +286,7 @@ router.get("/api/projects/:projectName/download", authenticateToken, async (req,
       compressionOptions: { level: 6 },
     });
     zipStream.on("error", error => {
-      console.error("Error streaming project zip:", error);
+      logger.error("Error streaming project zip:", error);
       if (!res.headersSent) {
         res.status(500).json({ error: "Failed to generate project archive" });
       } else {
@@ -294,7 +295,7 @@ router.get("/api/projects/:projectName/download", authenticateToken, async (req,
     });
     zipStream.pipe(res);
   } catch (error) {
-    console.error("Error downloading project archive:", error);
+    logger.error("Error downloading project archive:", error);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
@@ -343,7 +344,7 @@ router.put("/api/projects/:projectName/file", authenticateToken, async (req, res
       message: "File saved successfully",
     });
   } catch (error) {
-    console.error("Error saving file:", error);
+    logger.error("Error saving file:", error);
     if (error.code === "ENOENT") {
       res.status(404).json({ error: "File or directory not found" });
     } else if (error.code === "EACCES") {
@@ -363,7 +364,7 @@ router.get("/api/projects/:projectName/files", authenticateToken, async (req, re
     try {
       actualPath = await extractProjectDirectory(req.params.projectName);
     } catch (error) {
-      console.error("Error extracting project directory:", error);
+      logger.error("Error extracting project directory:", error);
       // Fallback to simple dash replacement
       actualPath = req.params.projectName.replace(/-/g, "/");
     }
@@ -378,7 +379,7 @@ router.get("/api/projects/:projectName/files", authenticateToken, async (req, re
     const files = await getFileTree(actualPath, 10, 0, true);
     res.json(files);
   } catch (error) {
-    console.error("[ERROR] File tree error:", error.message);
+    logger.error("[ERROR] File tree error:", error.message);
     res.status(500).json({ error: error.message });
   }
 });

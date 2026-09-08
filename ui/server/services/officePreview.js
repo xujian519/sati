@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import crypto from "crypto";
 import { execFile } from "child_process";
 import fs from "fs";
@@ -29,7 +30,7 @@ export function getConfiguredOfficePreviewService() {
       ? OFFICE_PREVIEW_SERVICE_LIBREOFFICE
       : OFFICE_PREVIEW_SERVICE_BUILTIN;
   } catch (error) {
-    console.warn("Failed to read Office preview service config; defaulting to built-in:", error.message);
+    logger.warn("Failed to read Office preview service config; defaulting to built-in:", error.message);
     return OFFICE_PREVIEW_SERVICE_BUILTIN;
   }
 }
@@ -39,7 +40,7 @@ function getConfiguredLibreOfficeBinaryPath() {
     const record = readSatiConfigFile();
     return String(record?.config?.webui?.officePreview?.binaryPath || "").trim();
   } catch (error) {
-    console.warn("Failed to read LibreOffice binary path config; falling back to auto-detect:", error.message);
+    logger.warn("Failed to read LibreOffice binary path config; falling back to auto-detect:", error.message);
     return "";
   }
 }

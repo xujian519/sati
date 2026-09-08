@@ -26,6 +26,7 @@
  * HTTP status; everything else falls through as 500.
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import { promises as fs } from "fs";
 import path from "path";
@@ -187,7 +188,7 @@ function sendGatewayError(res, err) {
     case "validation_failed":
       return res.status(422).json({ error: message, code, validation: err.validation });
     default:
-      console.error("[skills-bridge]", err);
+      logger.error("[skills-bridge]", err);
       return res.status(500).json({ error: message, code: code || "gateway_request_failed" });
   }
 }
@@ -522,7 +523,7 @@ router.post("/clawhub/search", async (req, res) => {
     }
     res.json({ results });
   } catch (e) {
-    console.error("[skills/clawhub/search]", e);
+    logger.error("[skills/clawhub/search]", e);
     res.status(500).json({ error: "Search failed", message: e.message });
   }
 });
@@ -605,7 +606,7 @@ router.post("/clawhub/install", async (req, res) => {
       needsForce,
     });
   } catch (e) {
-    console.error("[skills/clawhub/install]", e);
+    logger.error("[skills/clawhub/install]", e);
     res.status(500).json({ error: "Install failed", message: e.message });
   }
 });

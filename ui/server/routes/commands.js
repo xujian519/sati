@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import { promises as fs } from "fs";
 import path from "path";
@@ -98,14 +99,14 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
             metadata: frontmatter,
           });
         } catch (err) {
-          console.error(`Error parsing command file ${fullPath}:`, err.message);
+          logger.error(`Error parsing command file ${fullPath}:`, err.message);
         }
       }
     }
   } catch (err) {
     // Directory doesn't exist or can't be accessed - this is okay
     if (err.code !== "ENOENT" && err.code !== "EACCES") {
-      console.error(`Error scanning directory ${dir}:`, err.message);
+      logger.error(`Error scanning directory ${dir}:`, err.message);
     }
   }
 
@@ -141,7 +142,7 @@ async function scanSkillsDirectory(dir, namespace) {
         content = await fs.readFile(skillFile, "utf8");
       } catch (err) {
         if (err.code !== "ENOENT") {
-          console.error(`Error reading SKILL.md at ${skillFile}:`, err.message);
+          logger.error(`Error reading SKILL.md at ${skillFile}:`, err.message);
         }
         continue;
       }
@@ -165,12 +166,12 @@ async function scanSkillsDirectory(dir, namespace) {
           metadata: { ...frontmatter, type: "skill" },
         });
       } catch (err) {
-        console.error(`Error parsing skill ${skillFile}:`, err.message);
+        logger.error(`Error parsing skill ${skillFile}:`, err.message);
       }
     }
   } catch (err) {
     if (err.code !== "ENOENT" && err.code !== "EACCES") {
-      console.error(`Error scanning skills directory ${dir}:`, err.message);
+      logger.error(`Error scanning skills directory ${dir}:`, err.message);
     }
   }
 
@@ -461,7 +462,7 @@ Custom commands can be created in:
       version = packageJson.version;
       packageName = packageJson.name;
     } catch (err) {
-      console.error("Error reading package.json:", err);
+      logger.error("Error reading package.json:", err);
     }
 
     const { config } = readSatiConfigFile();
@@ -939,7 +940,7 @@ router.post("/list", async (req, res) => {
       count: builtIn.length + custom.length,
     });
   } catch (error) {
-    console.error("Error listing commands:", error);
+    logger.error("Error listing commands:", error);
     res.status(500).json({
       error: "Failed to list commands",
       message: error.message,
@@ -989,7 +990,7 @@ router.post("/load", async (req, res) => {
       });
     }
 
-    console.error("Error loading command:", error);
+    logger.error("Error loading command:", error);
     res.status(500).json({
       error: "Failed to load command",
       message: error.message,
@@ -1023,7 +1024,7 @@ router.post("/execute", async (req, res) => {
           command: commandName,
         });
       } catch (error) {
-        console.error(`Error executing built-in command ${commandName}:`, error);
+        logger.error(`Error executing built-in command ${commandName}:`, error);
         return res.status(500).json({
           error: "Command execution failed",
           message: error.message,
@@ -1136,7 +1137,7 @@ router.post("/execute", async (req, res) => {
       });
     }
 
-    console.error("Error executing command:", error);
+    logger.error("Error executing command:", error);
     res.status(500).json({
       error: "Failed to execute command",
       message: error.message,

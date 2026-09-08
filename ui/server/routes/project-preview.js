@@ -5,6 +5,7 @@
  * 电子表格 manifest/交互预览/单 sheet PDF / 项目根预览静态服务。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { Router } from "express";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
@@ -54,7 +55,7 @@ router.get("/api/office-preview/status", authenticateToken, officePreviewStatusR
       supportedServices: [OFFICE_PREVIEW_SERVICE_BUILTIN, OFFICE_PREVIEW_SERVICE_LIBREOFFICE],
     });
   } catch (error) {
-    console.error("Error reading Office preview status:", error);
+    logger.error("Error reading Office preview status:", error);
     res.status(500).json({
       error: "Failed to read Office preview status",
       code: "OFFICE_PREVIEW_STATUS_FAILED",
@@ -115,7 +116,7 @@ router.get(
         pragma: "no-cache",
       });
     } catch (error) {
-      console.error("Error generating Office PDF preview:", error);
+      logger.error("Error generating Office PDF preview:", error);
       if (!res.headersSent) {
         res.status(error.statusCode || 500).json({
           error:
@@ -170,7 +171,7 @@ router.get(
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       return res.json(manifest);
     } catch (error) {
-      console.error("Error reading spreadsheet preview manifest:", error);
+      logger.error("Error reading spreadsheet preview manifest:", error);
       return res.status(error.statusCode || 500).json({
         error: error.message || "Failed to read spreadsheet preview manifest",
         code: error.code || "SPREADSHEET_PREVIEW_MANIFEST_FAILED",
@@ -216,7 +217,7 @@ router.get(
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       return res.json(preview);
     } catch (error) {
-      console.error("Error generating interactive spreadsheet preview:", error);
+      logger.error("Error generating interactive spreadsheet preview:", error);
       return res.status(error.statusCode || 500).json({
         error: error.message || "Failed to generate interactive spreadsheet preview",
         code: error.code || "SPREADSHEET_INTERACTIVE_PREVIEW_FAILED",
@@ -266,7 +267,7 @@ router.get(
         pragma: "no-cache",
       });
     } catch (error) {
-      console.error("Error generating worksheet PDF preview:", error);
+      logger.error("Error generating worksheet PDF preview:", error);
       if (!res.headersSent) {
         res.status(error.statusCode || 500).json({
           error: error.message || "Failed to generate worksheet preview",
@@ -309,7 +310,7 @@ router.get("/api/projects/:projectName/preview/{*splat}", authenticateToken, asy
     setPreviewContentType(res, resolved);
     fs.createReadStream(resolved).pipe(res);
   } catch (error) {
-    console.error("Error serving project preview:", error);
+    logger.error("Error serving project preview:", error);
     res.status(500).json({ error: error.message });
   }
 });

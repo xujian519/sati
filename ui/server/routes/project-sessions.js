@@ -5,6 +5,7 @@
  * 重命名/删除/创建 + SSE 会话搜索。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { Router } from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import {
@@ -58,17 +59,17 @@ router.put("/api/projects/:projectName/rename", authenticateToken, async (req, r
 router.delete("/api/projects/:projectName/sessions/:sessionId", authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
-    console.log(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
+    logger.info(`[API] Deleting session: ${sessionId} from project: ${projectName}`);
     await deleteSession(projectName, sessionId, {
       sessionKind: req.query.sessionKind || null,
       parentSessionId: req.query.parentSessionId || null,
       relativeTranscriptPath: req.query.relativeTranscriptPath || null,
     });
     sessionNamesDb.deleteName(sessionId, "sati");
-    console.log(`[API] Session ${sessionId} deleted successfully`);
+    logger.info(`[API] Session ${sessionId} deleted successfully`);
     res.json({ success: true });
   } catch (error) {
-    console.error(`[API] Error deleting session ${req.params.sessionId}:`, error);
+    logger.error(`[API] Error deleting session ${req.params.sessionId}:`, error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -94,7 +95,7 @@ router.put("/api/sessions/:sessionId/rename", authenticateToken, async (req, res
     sessionNamesDb.setName(safeSessionId, provider, summary.trim());
     res.json({ success: true });
   } catch (error) {
-    console.error(`[API] Error renaming session ${req.params.sessionId}:`, error);
+    logger.error(`[API] Error renaming session ${req.params.sessionId}:`, error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -123,7 +124,7 @@ router.post("/api/projects/create", authenticateToken, async (req, res) => {
     const project = await addProjectManually(projectPath.trim());
     res.json({ success: true, project });
   } catch (error) {
-    console.error("Error creating project:", error);
+    logger.error("Error creating project:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -172,7 +173,7 @@ router.get("/api/search/conversations", authenticateToken, async (req, res) => {
       res.write(`event: done\ndata: {}\n\n`);
     }
   } catch (error) {
-    console.error("Error searching conversations:", error);
+    logger.error("Error searching conversations:", error);
     if (!closed) {
       res.write(`event: error\ndata: ${JSON.stringify({ error: "Search failed" })}\n\n`);
     }

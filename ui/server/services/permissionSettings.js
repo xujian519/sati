@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import fs from "fs";
 import path from "path";
 import { resolvePilotHome } from "../utils/pilotPaths.js";
@@ -70,7 +71,7 @@ export function writePermissionSettings(updates, env = process.env) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
   } catch (err) {
-    console.error(`[permissionSettings] Failed to write ${filePath}:`, err);
+    logger.error(`[permissionSettings] Failed to write ${filePath}:`, err);
     throw err;
   }
   return next;

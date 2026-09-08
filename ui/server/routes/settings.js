@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import { apiKeysDb, credentialsDb, notificationPreferencesDb, pushSubscriptionsDb } from "../database/db.js";
 import { getPublicKey } from "../services/vapid-keys.js";
@@ -14,7 +15,7 @@ router.get("/permissions", async (_req, res) => {
   try {
     res.json({ success: true, permissions: readPermissionSettings() });
   } catch (error) {
-    console.error("Error fetching permission settings:", error);
+    logger.error("Error fetching permission settings:", error);
     res.status(500).json({ error: "Failed to fetch permission settings" });
   }
 });
@@ -24,7 +25,7 @@ router.put("/permissions", async (req, res) => {
     const permissions = writePermissionSettings(req.body || {});
     res.json({ success: true, permissions });
   } catch (error) {
-    console.error("Error saving permission settings:", error);
+    logger.error("Error saving permission settings:", error);
     res.status(500).json({ error: "Failed to save permission settings" });
   }
 });
@@ -44,7 +45,7 @@ router.get("/api-keys", async (req, res) => {
     }));
     res.json({ apiKeys: sanitizedKeys });
   } catch (error) {
-    console.error("Error fetching API keys:", error);
+    logger.error("Error fetching API keys:", error);
     res.status(500).json({ error: "Failed to fetch API keys" });
   }
 });
@@ -64,7 +65,7 @@ router.post("/api-keys", async (req, res) => {
       apiKey: result,
     });
   } catch (error) {
-    console.error("Error creating API key:", error);
+    logger.error("Error creating API key:", error);
     res.status(500).json({ error: "Failed to create API key" });
   }
 });
@@ -81,7 +82,7 @@ router.delete("/api-keys/:keyId", async (req, res) => {
       res.status(404).json({ error: "API key not found" });
     }
   } catch (error) {
-    console.error("Error deleting API key:", error);
+    logger.error("Error deleting API key:", error);
     res.status(500).json({ error: "Failed to delete API key" });
   }
 });
@@ -104,7 +105,7 @@ router.patch("/api-keys/:keyId/toggle", async (req, res) => {
       res.status(404).json({ error: "API key not found" });
     }
   } catch (error) {
-    console.error("Error toggling API key:", error);
+    logger.error("Error toggling API key:", error);
     res.status(500).json({ error: "Failed to toggle API key" });
   }
 });
@@ -121,7 +122,7 @@ router.get("/credentials", async (req, res) => {
     // Don't send the actual credential values for security
     res.json({ credentials });
   } catch (error) {
-    console.error("Error fetching credentials:", error);
+    logger.error("Error fetching credentials:", error);
     res.status(500).json({ error: "Failed to fetch credentials" });
   }
 });
@@ -156,7 +157,7 @@ router.post("/credentials", async (req, res) => {
       credential: result,
     });
   } catch (error) {
-    console.error("Error creating credential:", error);
+    logger.error("Error creating credential:", error);
     res.status(500).json({ error: "Failed to create credential" });
   }
 });
@@ -173,7 +174,7 @@ router.delete("/credentials/:credentialId", async (req, res) => {
       res.status(404).json({ error: "Credential not found" });
     }
   } catch (error) {
-    console.error("Error deleting credential:", error);
+    logger.error("Error deleting credential:", error);
     res.status(500).json({ error: "Failed to delete credential" });
   }
 });
@@ -196,7 +197,7 @@ router.patch("/credentials/:credentialId/toggle", async (req, res) => {
       res.status(404).json({ error: "Credential not found" });
     }
   } catch (error) {
-    console.error("Error toggling credential:", error);
+    logger.error("Error toggling credential:", error);
     res.status(500).json({ error: "Failed to toggle credential" });
   }
 });
@@ -210,7 +211,7 @@ router.get("/notification-preferences", async (req, res) => {
     const preferences = notificationPreferencesDb.getPreferences(req.user.id);
     res.json({ success: true, preferences });
   } catch (error) {
-    console.error("Error fetching notification preferences:", error);
+    logger.error("Error fetching notification preferences:", error);
     res.status(500).json({ error: "Failed to fetch notification preferences" });
   }
 });
@@ -220,7 +221,7 @@ router.put("/notification-preferences", async (req, res) => {
     const preferences = notificationPreferencesDb.updatePreferences(req.user.id, req.body || {});
     res.json({ success: true, preferences });
   } catch (error) {
-    console.error("Error saving notification preferences:", error);
+    logger.error("Error saving notification preferences:", error);
     res.status(500).json({ error: "Failed to save notification preferences" });
   }
 });
@@ -234,7 +235,7 @@ router.get("/push/vapid-public-key", async (req, res) => {
     const publicKey = getPublicKey();
     res.json({ publicKey });
   } catch (error) {
-    console.error("Error fetching VAPID public key:", error);
+    logger.error("Error fetching VAPID public key:", error);
     res.status(500).json({ error: "Failed to fetch VAPID public key" });
   }
 });
@@ -268,7 +269,7 @@ router.post("/push/subscribe", async (req, res) => {
     });
     notifyUserIfEnabled({ userId: req.user.id, event });
   } catch (error) {
-    console.error("Error saving push subscription:", error);
+    logger.error("Error saving push subscription:", error);
     res.status(500).json({ error: "Failed to save push subscription" });
   }
 });
@@ -292,7 +293,7 @@ router.post("/push/unsubscribe", async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Error removing push subscription:", error);
+    logger.error("Error removing push subscription:", error);
     res.status(500).json({ error: "Failed to remove push subscription" });
   }
 });

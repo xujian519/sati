@@ -6,6 +6,7 @@
  * WebSocketWriter + handleChatConnection。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { WebSocketServer, WebSocket } from "ws";
 import crypto from "crypto";
 import { authenticateWebSocket } from "../middleware/auth.js";
@@ -109,7 +110,7 @@ export function createChatWebSocketServer(server) {
   const wss = new WebSocketServer({
     server,
     verifyClient: info => {
-      console.log("WebSocket connection attempt to:", info.req.url);
+      logger.info("WebSocket connection attempt to:", info.req.url);
 
       // Platform / no-login mode skips token validation; otherwise extract the
       // token from the query string or Authorization header.
@@ -121,12 +122,12 @@ export function createChatWebSocketServer(server) {
 
       const user = authenticateWebSocket(token);
       if (!user) {
-        console.log(`[WARN] WebSocket authentication failed${bypass ? " (bypass)" : ""}`);
+        logger.info(`[WARN] WebSocket authentication failed${bypass ? " (bypass)" : ""}`);
         return false;
       }
 
       info.req.user = user;
-      console.log(`[OK] WebSocket authenticated for user: ${user.username}`);
+      logger.info(`[OK] WebSocket authenticated for user: ${user.username}`);
       return true;
     },
   });
@@ -134,7 +135,7 @@ export function createChatWebSocketServer(server) {
   // WebSocket connection handler that routes based on URL path
   wss.on("connection", (ws, request) => {
     const pathname = new URL(request.url, "http://localhost").pathname;
-    console.log("[INFO] Client connected to:", pathname);
+    logger.info("[INFO] Client connected to:", pathname);
 
     if (pathname === "/shell") {
       handleShellConnection(ws);
@@ -143,7 +144,7 @@ export function createChatWebSocketServer(server) {
     } else if (pathname.startsWith("/plugin-ws/")) {
       handlePluginWsProxy(ws, pathname);
     } else {
-      console.log("[WARN] Unknown WebSocket path:", pathname);
+      logger.info("[WARN] Unknown WebSocket path:", pathname);
       ws.close();
     }
   });
@@ -167,7 +168,7 @@ function handlePluginWsProxy(clientWs, pathname) {
   const upstream = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 
   upstream.on("open", () => {
-    console.log(`[Plugins] WS proxy connected to "${pluginName}" on port ${port}`);
+    logger.info(`[Plugins] WS proxy connected to "${pluginName}" on port ${port}`);
   });
 
   // Relay messages bidirectionally
@@ -187,7 +188,7 @@ function handlePluginWsProxy(clientWs, pathname) {
   });
 
   upstream.on("error", err => {
-    console.error(`[Plugins] WS proxy error for "${pluginName}":`, err.message);
+    logger.error(`[Plugins] WS proxy error for "${pluginName}":`, err.message);
     if (clientWs.readyState === WebSocket.OPEN) clientWs.close(4502, "Upstream error");
   });
   clientWs.on("error", () => {
@@ -243,7 +244,7 @@ class WebSocketWriter {
 
 // Handle chat WebSocket connections
 function handleChatConnection(ws, request) {
-  console.log("[INFO] Chat WebSocket connected");
+  logger.info("[INFO] Chat WebSocket connected");
 
   // Add to connected clients for project updates
   const userId = request?.user?.id ?? request?.user?.userId ?? null;
@@ -306,9 +307,9 @@ function handleChatConnection(ws, request) {
         data.type === "codex-command" ||
         data.type === "gemini-command"
       ) {
-        console.log("[DEBUG] User message:", data.command || "[Continue/Resume]");
-        console.log("📁 Project:", data.options?.projectPath || data.options?.cwd || "Unknown");
-        console.log("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
+        logger.info("[DEBUG] User message:", data.command || "[Continue/Resume]");
+        logger.info("📁 Project:", data.options?.projectPath || data.options?.cwd || "Unknown");
+        logger.info("🔄 Session:", data.options?.sessionId ? "Resume" : "New");
         const commandSessionId = normalizeSessionId(data.options?.sessionId || data.options?.sessionKey);
         // M4：sati-command 的会话 key 在 options 内（data.sessionId 可能缺省），单独刷新活跃
         if (commandSessionId) {
@@ -349,7 +350,7 @@ function handleChatConnection(ws, request) {
         const providerHint = data.options?.providerHint || data.type.replace("-command", "");
         await runChatViaGateway(data.command, data.options, streamWriter, providerHint);
       } else if (data.type === "abort-session") {
-        console.log("[DEBUG] Abort session request:", data.sessionId);
+        logger.info("[DEBUG] Abort session request:", data.sessionId);
         const provider = data.provider || "sati";
         const success = await abortViaGateway(data.sessionId, provider);
         writer.send(
@@ -533,7 +534,7 @@ function handleChatConnection(ws, request) {
         });
       }
     } catch (error) {
-      console.error("[ERROR] Chat WebSocket error:", error.message);
+      logger.error("[ERROR] Chat WebSocket error:", error.message);
       writer.send({
         type: "error",
         error: error.message,
@@ -555,7 +556,7 @@ function handleChatConnection(ws, request) {
 
   ws.on("close", (code, reason) => {
     const reasonText = reason?.toString?.() || "";
-    console.log(`🔌 Chat client disconnected code=${code}${reasonText ? ` reason=${reasonText}` : ""}`);
+    logger.info(`🔌 Chat client disconnected code=${code}${reasonText ? ` reason=${reasonText}` : ""}`);
     cleanup();
   });
   ws.on("error", () => {

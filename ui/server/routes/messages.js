@@ -14,6 +14,7 @@
  * @module routes/messages
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import { getSatiGateway } from "../sati-bridge.js";
 import { createNormalizedMessage } from "../sati-message.js";
@@ -65,7 +66,7 @@ router.get("/:sessionId/messages", async (req, res) => {
       ...(result.tokenUsage ? { tokenUsage: result.tokenUsage } : {}),
     });
   } catch (error) {
-    console.error("[messages] read_session_messages failed:", error);
+    logger.error("[messages] read_session_messages failed:", error);
     return res.json({ messages: [], total: 0, hasMore: false, offset: 0, limit: null });
   }
 });
@@ -93,7 +94,7 @@ router.post("/:sessionId/fork", async (req, res) => {
       ...(result.mode ? { mode: result.mode } : {}),
     });
   } catch (error) {
-    console.error("[messages] fork_session failed:", error);
+    logger.error("[messages] fork_session failed:", error);
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
     if (code.startsWith("fork_")) {
       return res.status(400).json({
@@ -138,7 +139,7 @@ router.get("/:sessionId/subagent/:subagentId/messages", async (req, res) => {
       hasMore: false,
     });
   } catch (error) {
-    console.error("[messages] read_subagent_messages failed:", error);
+    logger.error("[messages] read_subagent_messages failed:", error);
     return res.json({ messages: [], total: 0, hasMore: false });
   }
 });

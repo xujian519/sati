@@ -5,6 +5,7 @@
  * 流式读取、zip 打包、文件树等纯函数与常量。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
 import path from "path";
@@ -181,7 +182,7 @@ async function streamFileWithRange(req, res, filePath, options = {}) {
   const fileStream = fs.createReadStream(filePath, streamOptions);
   fileStream.pipe(res);
   fileStream.on("error", error => {
-    console.error("Error streaming file:", error);
+    logger.error("Error streaming file:", error);
     if (!res.headersSent) {
       res.status(500).json({ error: "Error reading file" });
     } else {
@@ -358,7 +359,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
   } catch (error) {
     // Only log non-permission errors to avoid spam
     if (error.code !== "EACCES" && error.code !== "EPERM") {
-      console.error("Error reading directory:", error);
+      logger.error("Error reading directory:", error);
     }
   }
 

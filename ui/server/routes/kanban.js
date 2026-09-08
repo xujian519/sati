@@ -9,6 +9,7 @@
  * gateway 访问统一走 getSatiGatewayWithReset：gateway 重启后缓存死连接自动复位，
  * 失败仍记录日志并转发错误给 express 错误处理链。
  */
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import { getSatiGatewayWithReset } from "../sati-bridge.js";
 
@@ -44,7 +45,7 @@ function proxy(method, pickParams, validate) {
       const result = await gw[method](params);
       res.json(result);
     } catch (error) {
-      console.error(`[kanban:${method}] gateway 调用失败:`, error);
+      logger.error(`[kanban:${method}] gateway 调用失败:`, error);
       next(error);
     }
   };

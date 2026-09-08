@@ -7,6 +7,7 @@
  * 否则出现两份状态导致广播丢失/重复）。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import { WebSocket } from "ws";
 import { createSessionWatchRegistry } from "../session-watch-registry.js";
 import {
@@ -56,7 +57,7 @@ function kanbanWatchProject(projectId, ws) {
   set.add(ws);
   if (wasFirst) {
     gwKanbanSubscribe(projectId).catch(err => {
-      console.warn("[sati-bridge] kanban_subscribe 失败:", err?.message || err);
+      logger.warn("[sati-bridge] kanban_subscribe 失败:", err?.message || err);
     });
   }
 }
@@ -72,7 +73,7 @@ function kanbanUnwatchProject(projectId, ws) {
   }
   if (wasLast) {
     gwKanbanUnsubscribe(projectId).catch(err => {
-      console.warn("[sati-bridge] kanban_unsubscribe 失败:", err?.message || err);
+      logger.warn("[sati-bridge] kanban_unsubscribe 失败:", err?.message || err);
     });
   }
 }
@@ -83,7 +84,7 @@ function kanbanUnwatchAll(ws) {
     if (set.delete(ws) && set.size === 0) {
       kanbanProjectWatchers.delete(projectId);
       gwKanbanUnsubscribe(projectId).catch(err => {
-        console.warn("[sati-bridge] kanban_unsubscribe 失败:", err?.message || err);
+        logger.warn("[sati-bridge] kanban_unsubscribe 失败:", err?.message || err);
       });
     }
   }

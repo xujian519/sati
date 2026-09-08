@@ -5,6 +5,7 @@
  * 从 ui/server/index.js 拆出（机械搬移，不改逻辑）。
  */
 
+import { logger } from "../utils/consoleLogger.js";
 import fs from "fs";
 import path from "path";
 import express, { Router } from "express";
@@ -62,7 +63,7 @@ router.get("/api/agents/runtime-config", authenticateToken, (_req, res) => {
     }
     defaultModel = typeof record.config?.agent?.model === "string" ? record.config.agent.model.trim() : "";
   } catch (error) {
-    console.error("[runtime-config] failed to read sati.yaml:", error instanceof Error ? error.message : error);
+    logger.error("[runtime-config] failed to read sati.yaml:", error instanceof Error ? error.message : error);
   }
   res.json({
     sati: {
@@ -91,7 +92,7 @@ router.get("/api/ccr/dashboard", authenticateToken, (_req, res) => {
   try {
     res.json(getRouterDashboardData());
   } catch (error) {
-    console.error("[router-dashboard] failed:", error);
+    logger.error("[router-dashboard] failed:", error);
     res.status(500).json({ error: error?.message || "router-dashboard failed" });
   }
 });
@@ -106,7 +107,7 @@ router.get("/api/always-on/events", authenticateToken, async (req, res) => {
     });
     res.json(result);
   } catch (error) {
-    console.error("[always-on-events] failed:", error);
+    logger.error("[always-on-events] failed:", error);
     res.status(500).json({ error: error?.message || "always-on-events failed" });
   }
 });
@@ -116,7 +117,7 @@ router.get("/api/always-on/cron-jobs", authenticateToken, async (_req, res) => {
     const result = await getProjectCronJobsOverview();
     res.json(result);
   } catch (error) {
-    console.error("[always-on-cron-jobs] failed:", error);
+    logger.error("[always-on-cron-jobs] failed:", error);
     res.status(500).json({ error: error?.message || "always-on-cron-jobs failed" });
   }
 });
@@ -152,7 +153,7 @@ router.post("/api/always-on/cron-jobs", authenticateToken, async (req, res) => {
     });
     res.json(result);
   } catch (error) {
-    console.error("[always-on-cron-create] failed:", error);
+    logger.error("[always-on-cron-create] failed:", error);
     res.status(500).json({ error: error?.message || "cron create failed" });
   }
 });
@@ -188,7 +189,7 @@ router.put("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req, re
     }
     res.json(result);
   } catch (error) {
-    console.error("[always-on-cron-update] failed:", error);
+    logger.error("[always-on-cron-update] failed:", error);
     res.status(500).json({ error: error?.message || "cron update failed" });
   }
 });
@@ -202,7 +203,7 @@ router.post("/api/always-on/cron-jobs/:taskId/run-now", authenticateToken, async
     });
     res.json(result);
   } catch (error) {
-    console.error("[always-on-cron-run-now] failed:", error);
+    logger.error("[always-on-cron-run-now] failed:", error);
     res.status(500).json({ error: error?.message || "cron run-now failed" });
   }
 });
@@ -216,7 +217,7 @@ router.post("/api/always-on/cron-jobs/:taskId/stop", authenticateToken, async (r
     });
     res.json(result);
   } catch (error) {
-    console.error("[always-on-cron-stop] failed:", error);
+    logger.error("[always-on-cron-stop] failed:", error);
     res.status(500).json({ error: error?.message || "cron stop failed" });
   }
 });
@@ -231,7 +232,7 @@ router.delete("/api/always-on/cron-jobs/:taskId", authenticateToken, async (req,
     });
     res.json(result);
   } catch (error) {
-    console.error("[always-on-cron-delete] failed:", error);
+    logger.error("[always-on-cron-delete] failed:", error);
     res.status(500).json({ error: error?.message || "cron delete failed" });
   }
 });

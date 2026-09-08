@@ -18,6 +18,7 @@
  *     searchConversations
  */
 
+import { logger } from "./utils/consoleLogger.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -140,7 +141,7 @@ async function getProjects(progressCallback = null) {
     const listed = await gateway.listProjects();
     webProjects = listed.projects || [];
   } catch (err) {
-    console.error("[projects] gateway unavailable, returning general-only list:", err?.message ?? err);
+    logger.error("[projects] gateway unavailable, returning general-only list:", err?.message ?? err);
   }
   const markedProjects = await readMarkedProjectPaths();
   const markedProjectIdsByPath = new Map([...markedProjects.entries()].map(([id, cwd]) => [path.resolve(cwd), id]));
@@ -368,7 +369,7 @@ async function addProjectManually(projectPath, _displayName = null) {
     await fs.mkdir(projectDir, { recursive: true });
     await fs.writeFile(path.join(projectDir, ".cwd"), absolute, "utf8");
   } catch (error) {
-    console.warn(`[projects] failed to materialize Sati project dir for ${name}:`, error?.message || error);
+    logger.warn(`[projects] failed to materialize Sati project dir for ${name}:`, error?.message || error);
   }
 
   return {
@@ -515,7 +516,7 @@ async function getProjectCronJobsOverview(projectName) {
     });
     return { jobs };
   } catch (error) {
-    console.warn("[projects] cronList via gateway failed, returning empty:", error?.message);
+    logger.warn("[projects] cronList via gateway failed, returning empty:", error?.message);
     return { jobs: [] };
   }
 }

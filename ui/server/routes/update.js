@@ -1,3 +1,4 @@
+import { logger } from "../utils/consoleLogger.js";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -347,7 +348,7 @@ router.post("/restart", async (req, res) => {
 
   setTimeout(async () => {
     try {
-      console.log("[update] Spawning replacement process and exiting...");
+      logger.info("[update] Spawning replacement process and exiting...");
 
       // NOTE: the old DOCKER=1 / container==="docker" fast-path was removed —
       // Sati no longer ships any container entrypoint or restart policy, so
@@ -369,7 +370,7 @@ router.post("/restart", async (req, res) => {
       // Exit after giving the response time to flush
       setTimeout(() => process.exit(0), 500);
     } catch (error) {
-      console.error(`[update] Restart failed: ${normalizeUpdateRuntimeError(error)}`);
+      logger.error(`[update] Restart failed: ${normalizeUpdateRuntimeError(error)}`);
     }
   }, 1000);
 });
