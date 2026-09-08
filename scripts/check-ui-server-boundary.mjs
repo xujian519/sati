@@ -130,7 +130,9 @@ function main() {
 
   // N3：eslint except 与白名单一致性自检（防漂移）。
   const eslintExcept = readEslintExceptList();
-  if (eslintExcept !== null) {
+  if (eslintExcept === null) {
+    violations.push("无法解析 ui/eslint.config.js 的 except 列表（正则失配，防漂移自检被禁用）");
+  } else {
     const missing = [...ALLOWED_SRC_PATHS].filter(p => !eslintExcept.includes(p));
     const extra = eslintExcept.filter(p => !ALLOWED_SRC_PATHS.has(p));
     if (missing.length > 0 || extra.length > 0) {
@@ -141,7 +143,8 @@ function main() {
 
   for (const file of collectFiles(UI_SERVER_ROOT)) {
     const source = readFileSync(file, "utf8");
-    // 剥离注释/字符串后匹配：等长空格替换保持索引对齐，行号仍可用原文计算。
+    // 剥离注释/字符串后匹配：字符串/模板字面量等长空格填充（索引对齐），仅注释整体
+    // 跳过不填充、块注释内换行被删，故行号用原文（stripped 前的 source）反推，跨注释时偏小。
     const stripped = stripCommentsAndStrings(source);
     for (const match of stripped.matchAll(SPECIFIER_RE)) {
       const specifier = match.slice(1).find(Boolean);

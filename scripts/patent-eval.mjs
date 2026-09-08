@@ -165,12 +165,11 @@ async function main() {
 
   // 图模式：领域子图自动执行（三性）→ 规则门 + expected 指标（Evaluator 汇总）。
   if (opts.mode === "graph") {
-    // 捕获外层 provider 字符串（本分支 const provider 为 StageProvider 对象，遮蔽外层）。
-    const providerId = opts.model.slice(0, slash);
-    const provider = {
+    // 图模式：为 runner 注入模型提供方（RuntimeProvider 对象），外层 provider 为模型标识字符串。
+    const stageProvider = {
       callLLM: async (prompt, callOpts) => {
         const base = {
-          provider: providerId,
+          provider,
           model,
           messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
           maxOutputTokens: 4096,
@@ -199,7 +198,7 @@ async function main() {
       },
       search: createNuoSearchProvider().search,
     };
-    const runner = createGraphRunner({ provider });
+    const runner = createGraphRunner({ provider: stageProvider });
     const evaluator = new Evaluator(runner, { passLine: 0.5 });
     const evalCases = targets.map(c => ({
       id: c.id,

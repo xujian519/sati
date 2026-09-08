@@ -293,13 +293,10 @@ const TASK_MAP: Record<string, TaskAndRole> = {
   patent_exam_2008_r42_01: { task: "oa_response", role: MOCK_ROLE },
 };
 
-/** 默认归类：无效决定书 → 决定分析；外观设计 → 无效请求评估。 */
+/** 默认归类：无效决定书 → 决定分析；其余 → 无效请求人客户。 */
 function defaultMeta(id: string): TaskAndRole {
   if (id.startsWith("invalidation_decision_")) {
     return { task: "invalidation", role: "企业客户（决定分析）" };
-  }
-  if (id.startsWith("DESIGN-INV-")) {
-    return { task: "invalidation", role: "无效请求人客户" };
   }
   return { task: "invalidation", role: "无效请求人客户" };
 }
