@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Check, RefreshCw } from "lucide-react";
+import { logError } from "../../../../utils/logging";
 import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import { cn } from "../../../../lib/utils";
 import {
@@ -282,7 +283,7 @@ export default function OfficePreviewSections({ title }: OfficePreviewSectionsPr
       setRaw(configToYamlString(next));
       await save();
     } catch (caught) {
-      console.error("Failed to serialise Office preview config patch", caught);
+      logError("Failed to serialise Office preview config patch", caught);
     }
   };
 

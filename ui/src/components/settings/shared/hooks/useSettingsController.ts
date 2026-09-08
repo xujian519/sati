@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { logError } from "../../../../utils/logging";
 import { DEFAULT_CODE_EDITOR_SETTINGS } from "../constants";
 import type { CodeEditorSettingsState, ProjectSortOrder, SettingsMainTab } from "../types";
 
@@ -72,7 +73,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
       window.dispatchEvent(new Event("sati-settings-changed"));
       setSaveStatus(null);
     } catch (err) {
-      console.error("Failed to persist Appearance settings:", err);
+      logError("Failed to persist Appearance settings:", err);
       setSaveStatus("error");
     }
   }, []);

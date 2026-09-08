@@ -3,6 +3,7 @@
  * 各不相同，静态建模收益低且会波及所有 config 实现处。文件内已有 SearchToolResultData
  * 等 unknown 先例做局部收窄，存量 any 待工具协议收敛后分批处理。
  */
+import { logWarn } from "../../../../utils/logging";
 import { parseStructuredTodos, parseTodoMarkdown } from "./todoParsing";
 
 /**
@@ -376,7 +377,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
           }
           return { todos, isResult: true };
         } catch (e) {
-          console.warn("Failed to parse todo list content:", e);
+          logWarn("Failed to parse todo list content:", e);
           return { todos: [], isResult: true };
         }
       },

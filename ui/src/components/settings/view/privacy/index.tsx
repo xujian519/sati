@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Shield } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { logError } from "../../../../utils/logging";
 import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import {
   SATI_SETTINGS_KEY,
@@ -59,7 +60,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
         setSkipPermissions(settings.skipPermissions);
       })
       .catch(error => {
-        console.error("Failed to load permission settings from backend:", error);
+        logError("Failed to load permission settings from backend:", error);
       });
 
     const onStorage = (event: StorageEvent) => {
@@ -137,7 +138,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
         }),
       });
     } catch (error) {
-      console.error("Failed to export permissions:", error);
+      logError("Failed to export permissions:", error);
       setBanner({
         kind: "error",
         message: t("permissions.exportError", {
@@ -160,7 +161,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
     try {
       fileRaw = await file.text();
     } catch (error) {
-      console.error("Failed to read import file:", error);
+      logError("Failed to read import file:", error);
       setBanner({
         kind: "error",
         message: t("permissions.importReadError", {

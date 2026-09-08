@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
+import { logError } from "../../../utils/logging";
 import { authenticatedFetch } from "../../../utils/api";
 import type { WsMessage } from "../../../contexts/WebSocketContext";
 import type { ChatMessage, ClaudeWorkStatus, SatiWorkStatus } from "../types/types";
@@ -799,7 +800,7 @@ export function useChatSessionState({
           }
         }
       } catch (error) {
-        console.error("Error reloading messages from external update:", error);
+        logError("Error reloading messages from external update:", error);
       }
     };
 
@@ -949,7 +950,7 @@ export function useChatSessionState({
           setTokenBudget(null);
         }
       } catch (error) {
-        console.error("Failed to fetch initial token usage:", error);
+        logError("Failed to fetch initial token usage:", error);
       }
     };
     fetchInitialTokenUsage();
@@ -1111,7 +1112,7 @@ export function useChatSessionState({
         setShowLoadAllOverlay(false);
       }
     } catch (error) {
-      console.error("Error loading all messages:", error);
+      logError("Error loading all messages:", error);
       allMessagesLoadedRef.current = false;
       setShowLoadAllOverlay(false);
     } finally {

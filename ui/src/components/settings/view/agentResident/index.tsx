@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { logError } from "../../../../utils/logging";
 import type { SettingsProject } from "../../shared/types";
 import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import { configToYamlString, safeParseYaml } from "../modelPool/utils/configYaml";
@@ -22,7 +23,7 @@ export default function AgentResidentSections({ title, projects }: AgentResident
       setRaw(configToYamlString(next));
       void save();
     } catch (caught) {
-      console.error("Failed to serialise agent resident config patch", caught);
+      logError("Failed to serialise agent resident config patch", caught);
     }
   };
 

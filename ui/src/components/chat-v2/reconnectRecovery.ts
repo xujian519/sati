@@ -1,3 +1,4 @@
+import { logError } from "../../utils/logging";
 export function shouldRefreshSessionOnReconnect({
   isLoading,
   processingSessions,
@@ -23,6 +24,6 @@ export async function refreshSessionAfterReconnect(refresh: () => Promise<unknow
   try {
     await refresh();
   } catch (error) {
-    console.error("Error refreshing session after WebSocket reconnect:", error);
+    logError("Error refreshing session after WebSocket reconnect:", error);
   }
 }

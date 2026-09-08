@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ChevronDown, FolderOpen, RefreshCw, Save } from "lucide-react";
+import { logError } from "../../../../utils/logging";
 import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import { Button } from "../../../../shared/view/ui";
 import { cn } from "../../../../lib/utils";
@@ -41,7 +42,7 @@ export default function AdvancedSections({ title }: AdvancedSectionsProps) {
       setRaw(configToYamlString(next));
       void save();
     } catch (caught) {
-      console.error("Failed to serialise advanced config patch", caught);
+      logError("Failed to serialise advanced config patch", caught);
     }
   };
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { logError } from "../utils/logging";
 import { authenticatedFetch } from "../utils/api";
 
 type WebPushState = {
@@ -74,7 +75,7 @@ export function useWebPush(): WebPushState {
 
       setIsSubscribed(true);
     } catch (err) {
-      console.error("Push subscribe failed:", err);
+      logError("Push subscribe failed:", err);
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +96,7 @@ export function useWebPush(): WebPushState {
       }
       setIsSubscribed(false);
     } catch (err) {
-      console.error("Push unsubscribe failed:", err);
+      logError("Push unsubscribe failed:", err);
     } finally {
       setIsLoading(false);
     }

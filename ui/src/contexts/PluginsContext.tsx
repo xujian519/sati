@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { logError } from "../utils/logging";
 import { authenticatedFetch } from "../utils/api";
 
 export type Plugin = {
@@ -67,7 +68,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch plugins";
       setPluginsError(message);
-      console.error("[Plugins] Failed to fetch plugins:", err);
+      logError("[Plugins] Failed to fetch plugins:", err);
     } finally {
       setLoading(false);
     }

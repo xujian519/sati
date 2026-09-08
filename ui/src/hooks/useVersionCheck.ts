@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { logError } from "../utils/logging";
 import { version } from "../../package.json";
 import { ReleaseInfo } from "../types/sharedTypes";
 
@@ -71,7 +72,7 @@ export const useVersionCheck = (owner: string, repo: string) => {
           setReleaseInfo(null);
         }
       } catch (error) {
-        console.error("Version check failed:", error);
+        logError("Version check failed:", error);
         // On error, don't show update notification
         setUpdateAvailable(false);
         setLatestVersion(null);

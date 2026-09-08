@@ -21,6 +21,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { logError } from "../../utils/logging";
 import type { Project } from "../../types/app";
 import { useFileTreeData } from "../file-tree/hooks/useFileTreeData";
 import type { FileTreeNode } from "../file-tree/types/types";
@@ -278,7 +279,7 @@ export default function FilesV2({
         }
         await refreshFiles();
       } catch (error) {
-        console.error("File operation failed:", error);
+        logError("File operation failed:", error);
       }
       setInlineEdit(null);
     },
@@ -369,7 +370,7 @@ export default function FilesV2({
         setActivePath(previous => (previous === node.path || previous?.startsWith(`${node.path}/`) ? null : previous));
         await refreshFiles();
       } catch (error) {
-        console.error("Delete failed:", error);
+        logError("Delete failed:", error);
       }
     },
     [closeContextMenu, onFileDelete, projectName, refreshFiles, selectedProject],
@@ -403,7 +404,7 @@ export default function FilesV2({
 
       const relativePath = getWorkspaceRelativePath(node.path, projectRoot);
       if (!relativePath) {
-        console.error("Cannot add file mention outside the current workspace:", node.path);
+        logError("Cannot add file mention outside the current workspace:", node.path);
         return;
       }
 
@@ -446,7 +447,7 @@ export default function FilesV2({
         }
         await refreshFiles();
       } catch (error) {
-        console.error("Failed to upload files:", error);
+        logError("Failed to upload files:", error);
       } finally {
         setUploadingProject(false);
       }
@@ -474,7 +475,7 @@ export default function FilesV2({
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error("Failed to download project archive:", error);
+      logError("Failed to download project archive:", error);
     } finally {
       setDownloadingProject(false);
     }

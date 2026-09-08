@@ -1,3 +1,4 @@
+import { logError } from "../../../../../utils/logging";
 import {
   SATI_SETTINGS_KEY,
   getSatiSettings,
@@ -37,7 +38,7 @@ export function persistPermissionSettings(updates: Partial<SatiSettings>) {
   safeLocalStorage.setItem(SATI_SETTINGS_KEY, JSON.stringify(next));
   window.dispatchEvent(new Event("sati-settings-changed"));
   saveSatiPermissionSettings(updates).catch(error => {
-    console.error("Failed to persist permission settings to backend:", error);
+    logError("Failed to persist permission settings to backend:", error);
   });
   return next;
 }

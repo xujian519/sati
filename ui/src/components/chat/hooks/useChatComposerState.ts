@@ -10,6 +10,7 @@ import type {
   TouchEvent,
 } from "react";
 import { useDropzone } from "react-dropzone";
+import { logError, logWarn } from "../../../utils/logging";
 import { authenticatedFetch } from "../../../utils/api";
 import { isThinkingModeId, thinkingModeToConfig, type ThinkingModeId } from "../constants/thinkingModes";
 import { getEffectiveThinkingMode, type ThinkingModeAvailability } from "../constants/thinkingModeAvailability";
@@ -170,7 +171,7 @@ function readToolsSettings() {
       return JSON.parse(savedSettings);
     }
   } catch (error) {
-    console.error("Error loading tools settings:", error);
+    logError("Error loading tools settings:", error);
   }
 
   return {
@@ -704,7 +705,7 @@ export function useChatComposerState({
         }
 
         default:
-          console.warn("Unknown built-in command action:", action);
+          logWarn("Unknown built-in command action:", action);
       }
     },
     [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages],
@@ -805,7 +806,7 @@ export function useChatComposerState({
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
-        console.error("Error executing command:", error);
+        logError("Error executing command:", error);
         addMessage({
           type: "assistant",
           content: `Error executing command: ${message}`,
@@ -877,7 +878,7 @@ export function useChatComposerState({
       const validFiles = files.filter(file => {
         try {
           if (!file || typeof file !== "object") {
-            console.warn("Invalid file object:", file);
+            logWarn("Invalid file object:", file);
             return false;
           }
 
@@ -893,7 +894,7 @@ export function useChatComposerState({
 
           return true;
         } catch (error) {
-          console.error("Error validating file:", error, file);
+          logError("Error validating file:", error, file);
           return false;
         }
       });
@@ -1157,7 +1158,7 @@ export function useChatComposerState({
           uploadedFiles = Array.isArray(result.files) ? result.files : [];
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";
-          console.error("Attachment upload failed:", error);
+          logError("Attachment upload failed:", error);
           addMessage(
             {
               type: "error",
@@ -1539,7 +1540,7 @@ export function useChatComposerState({
       candidateSessionIds.find(sessionId => Boolean(sessionId) && !isTemporarySessionId(sessionId)) || null;
 
     if (!targetSessionId) {
-      console.warn("Abort requested but no concrete session ID is available yet.");
+      logWarn("Abort requested but no concrete session ID is available yet.");
       return;
     }
 

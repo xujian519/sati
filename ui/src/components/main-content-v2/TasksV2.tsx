@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, Plus } from "lucide-react";
+import { logError } from "../../utils/logging";
 import { useTaskMaster } from "../../contexts/TaskMasterContext";
 import type { TaskMasterTask, TaskStatus } from "../task-master/types";
 import { authenticatedFetch } from "../../utils/api";
@@ -73,7 +74,7 @@ export default function TasksV2({ isVisible }: TasksV2Props) {
           void refreshTasks();
         }
       } catch (error) {
-        console.error("Failed to update task status", error);
+        logError("Failed to update task status", error);
       } finally {
         setUpdating(null);
       }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from "react";
+import { logError } from "../../../utils/logging";
 import { api } from "../../../utils/api";
 import { isImeEnterEvent } from "../../../utils/ime";
 import {
@@ -107,7 +108,7 @@ export function useFileMentions({
       if ((error as { name?: string })?.name === "AbortError") {
         return;
       }
-      console.error("Error fetching files:", error);
+      logError("Error fetching files:", error);
     } finally {
       if (inFlightFetchRef.current === abortController) {
         inFlightFetchRef.current = null;

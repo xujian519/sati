@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- context + hook 捆绑导出 */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { logError } from "../../../utils/logging";
 import { api } from "../../../utils/api";
 import { useAuth } from "../../auth/context/AuthContext";
 import { useWebSocket } from "../../../contexts/WebSocketContext";
@@ -85,7 +86,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const handleError = useCallback((context: string, caughtError: unknown) => {
-    console.error(`TaskMaster ${context} error:`, caughtError);
+    logError(`TaskMaster ${context} error:`, caughtError);
     setError(createTaskMasterError(context, caughtError));
   }, []);
 

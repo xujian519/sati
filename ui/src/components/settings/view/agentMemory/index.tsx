@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { logError } from "../../../../utils/logging";
 import { useSatiConfig } from "../../../../hooks/useSatiConfig";
 import { ConfigSaveError, PageSectionHeader, SettingsCard, SettingsRow, SettingsToggle } from "../../shared/view";
 import { FormRow, Select } from "../../shared/components/Inputs";
@@ -312,7 +313,7 @@ export default function AgentMemorySections({ title, projects }: AgentMemorySect
       setRaw(configToYamlString(next));
       void save();
     } catch (caught) {
-      console.error("Failed to serialise agent memory config patch", caught);
+      logError("Failed to serialise agent memory config patch", caught);
     }
   };
 

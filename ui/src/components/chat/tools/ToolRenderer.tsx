@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useCallback } from "react";
+import { logWarn } from "../../../utils/logging";
 import type { Project } from "../../../types/app";
 import type { SubagentChildTool, ToolResult } from "../types/types";
 import { asRecord } from "../../../utils/unknown";
@@ -58,7 +59,7 @@ class ToolRendererErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.warn("[ToolRenderer] Failed to render tool block:", {
+    logWarn("[ToolRenderer] Failed to render tool block:", {
       toolName: this.props.toolName,
       toolId: this.props.toolId,
       error,
@@ -90,7 +91,7 @@ function safeCall<T>(label: string, toolName: string, callback: () => T, fallbac
   try {
     return callback();
   } catch (error) {
-    console.warn(`[ToolRenderer] ${label} failed for ${toolName}:`, error);
+    logWarn(`[ToolRenderer] ${label} failed for ${toolName}:`, error);
     return fallback;
   }
 }
