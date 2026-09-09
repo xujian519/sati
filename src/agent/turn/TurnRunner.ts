@@ -18,6 +18,7 @@ import type { SessionMetadataValue } from "../../session/transcript/TranscriptEn
 import type { SessionTitleGenerator } from "../../session/title/SessionTitleGenerator.js";
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import { FileArtifactCollector, type FileArtifact } from "../../session/artifacts/index.js";
+import { sanitizeAgentInput } from "./sanitizeAgentInput.js";
 import { TurnInputProcessor } from "./TurnInputProcessor.js";
 
 const logger = createLogger("agent");
@@ -173,7 +174,9 @@ export class TurnRunner {
       }
       return artifacts;
     };
-    const accepted = this.inputProcessor.accept(options.input);
+    // 外发脱敏：凭证类内容在进入 transcript / 模型可见消息之前替换（W1）。
+    const sanitized = sanitizeAgentInput(options.input);
+    const accepted = this.inputProcessor.accept(sanitized.input);
     const allAcceptedMessages = [...accepted.messages, ...(options.syntheticMessages ?? [])];
     const messages = [...options.messages, ...allAcceptedMessages];
 
@@ -197,7 +200,7 @@ export class TurnRunner {
     await this.persistListingPromptMetadata(options, accepted.messages);
     yield { type: "input_accepted", sessionId: options.sessionId, turnId: options.turnId, messages: accepted.messages };
 
-    const prompt = inputToPromptText(options.input);
+    const prompt = inputToPromptText(sanitized.input);
     const userPromptHooks = await this.lifecycle?.dispatch({
       event: "UserPromptSubmit",
       baseInput: {
@@ -210,6 +213,16 @@ export class TurnRunner {
       signal: options.abortSignal,
     });
     yield { type: "user_prompt_submitted", sessionId: options.sessionId, turnId: options.turnId, prompt };
+    if (sanitized.redacted) {
+      yield {
+        type: "warning",
+        sessionId: options.sessionId,
+        turnId: options.turnId,
+        code: "payload_redacted",
+        message:
+          "Credentials detected in the input (API key / URL credentials / secret assignment) were redacted before sending to the model.",
+      };
+    }
     if (userPromptHooks?.effects.some(effect => effect.type === "block")) {
       const error = agentError("agent_unsupported_feature", "UserPromptSubmit hook blocked model execution.");
       const result = this.createErrorResult(options, error);
