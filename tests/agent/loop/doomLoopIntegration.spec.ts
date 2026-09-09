@@ -176,7 +176,7 @@ test("recordToolResults：同参重复 fatal 命中返回 reason", () => {
   recordToolResults(d, [call], [result], { sessionId: "s1", turnId: "t1" });
   recordToolResults(d, [call], [result], { sessionId: "s1", turnId: "t1" });
   const reason = recordToolResults(d, [call], [result], { sessionId: "s1", turnId: "t1" });
-  assert.equal(reason, "连续 3 次完全相同的工具调用: read_file");
+  assert.equal(reason, "连续 3 次完全相同的工具调用（参数与结果均相同）: read_file");
 });
 
 test("recordToolResults：未配置 DoomLoop 时返回 undefined", () => {

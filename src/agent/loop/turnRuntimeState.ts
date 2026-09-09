@@ -43,6 +43,12 @@ export class TurnRuntimeState {
   hasAttemptedToolCallRetry = false;
   hasAttemptedReasoningContentRetry = false;
   hasAttemptedMetacognitiveRetry = false;
+  /** 声称-行动守卫（claim guard）单次纠正开关：每 run 至多一次。 */
+  hasAttemptedClaimGuardRetry = false;
+  /** 输出上限自愈（W4）单次重试开关：每 run 至多学一次并重试。 */
+  hasAttemptedOutputCapRetry = false;
+  /** 声称-行动守卫：本 run 内成功执行（非 error 结果）的工具名累积。 */
+  readonly succeededToolNames: string[] = [];
   // 恢复计数
   maxOutputRecoveryCount = 0;
   consecutiveEmptyCount = 0;

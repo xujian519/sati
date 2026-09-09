@@ -3,7 +3,7 @@
  *
  * 六个正交无锁检测器 + 一个串行化协调器，从六个维度覆盖 Agent 主循环的
  * 死循环形态：
- *   - toolCallLoop     窗口内同参工具调用完全重复（文本响应时清空窗口）
+ *   - toolCallLoop     窗口内同参同输出工具调用完全重复（输出变化断链；文本响应时清空窗口）
  *   - textRepetition   最近 N 轮输出末尾逐字复读
  *   - cycle            工具名历史中的周期模式（A→B→A→B）
  *   - emptyResult      连续 N 次工具结果全空
@@ -74,12 +74,22 @@ export function doomLoopSignal(
 }
 
 // ---------------------------------------------------------------------------
-// 检测器 1/6：toolCallLoop —— 同参工具调用完全重复
+// 检测器 1/6：toolCallLoop —— 同参同输出工具调用完全重复
 // ---------------------------------------------------------------------------
+
+/** 结果摘要：全量 FNV-1a 哈希。观测文本上游已截断至 2048 字符，整串哈希开销可忽略。 */
+function resultDigest(result: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < result.length; i++) {
+    hash ^= result.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `${hash}`;
+}
 
 export class ToolCallLoopDetector implements DoomLoopDetector {
   readonly id = "toolCallLoop" as const;
-  private window: Array<{ key: string; turn: number }> = [];
+  private window: Array<{ key: string; digest: string }> = [];
 
   constructor(private readonly maxRepeats = 3) {}
 
@@ -93,16 +103,19 @@ export class ToolCallLoopDetector implements DoomLoopDetector {
 
   recordToolResult(_ctx: DetectorContext, obs: ToolCallObservation): DoomLoopSignal | undefined {
     const key = toolCallKey(obs);
-    this.window.push({ key, turn: _ctx.totalToolCalls });
+    const digest = resultDigest(obs.result);
+    this.window.push({ key, digest });
     // 保留最近 maxRepeats 次用于连续判定
     if (this.window.length > this.maxRepeats) {
       this.window.shift();
     }
-    if (this.window.length === this.maxRepeats && this.window.every(w => w.key === key)) {
+    // 输出变化 = 合法进展（poll 型工具同参数轮询会得到不同结果），断链重置；
+    // 同参数且同输出连续重复才是空转。
+    if (this.window.length === this.maxRepeats && this.window.every(w => w.key === key && w.digest === digest)) {
       this.window = [];
       return doomLoopSignal(
         this.id,
-        `连续 ${this.maxRepeats} 次完全相同的工具调用: ${obs.name}`,
+        `连续 ${this.maxRepeats} 次完全相同的工具调用（参数与结果均相同）: ${obs.name}`,
         _ctx.totalToolCalls,
         false,
       );

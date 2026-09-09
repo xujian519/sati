@@ -81,4 +81,10 @@ export type AgentRuntimeConfig = {
   metacognitiveControl?: boolean;
   /** Optional metacognitive prompt override; falls back to `buildMetacognitivePrompt()`. */
   metacognitivePrompt?: string;
+  /**
+   * Enable the claim-action guard. Defaults to off. When on, a finishing text
+   * that claims verification ("verified"/「已验证」…) without any supporting
+   * tool having succeeded in the run triggers one corrective retry.
+   */
+  claimGuard?: boolean;
 };
