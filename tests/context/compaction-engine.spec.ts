@@ -61,6 +61,7 @@ test("full compaction can disable protected turn preservation", async () => {
     /Only attribute an instruction, decision, cancellation, stop request, or handoff request/,
   );
   assert.match(summaryRequests[0]!.systemPrompt ?? "", /`handoff` describes the checkpoint summary format only/);
+  assert.match(summaryRequests[0]!.systemPrompt ?? "", /\(unverified\)/);
   assert.deepEqual(summaryRequests[0]!.messages.at(-1)?.metadata, {
     synthetic: true,
     purpose: "context-summary-control",

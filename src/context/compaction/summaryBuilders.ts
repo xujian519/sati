@@ -49,6 +49,7 @@ export function buildMarkdownSummarySystemPrompt(basePrompt: string): string {
     COMPACT_SUMMARY_SYNTHETIC_DECLARATION,
     COMPACT_SUMMARY_INTENT_ATTRIBUTION_RULE,
     COMPACT_SUMMARY_HANDOFF_SEMANTICS,
+    "For specific figures and statistics: keep their provenance — figures that originated from user messages or tool results must note their source, and figures the assistant produced without a source must be marked `(unverified)` so later turns do not treat them as established facts.",
     "If the user message contains a `<compact-summary-anchors>` block, it contains bounded high-priority facts from protected tool turns that are being summarized instead of preserved verbatim. Absorb any task prompts, read skill paths, result paths, result previews, current state, and next actions from those anchors into the Markdown handoff.",
     "Prefer this section structure, using the headings exactly when they apply:",
     headings,
