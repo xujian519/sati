@@ -144,14 +144,13 @@ function looksLikeCeiling(n: number): boolean {
  */
 export function parseOutputCapRejection(error: CanonicalModelError, requested: number | undefined): number | null {
   if (!(error.status === 400 || error.status === 422 || error.code === "invalid_request")) return null;
+  const hasRequested = typeof requested === "number" && Number.isFinite(requested) && requested > 0;
   if (
     typeof error.maxOutputTokens === "number" &&
     Number.isFinite(error.maxOutputTokens) &&
     error.maxOutputTokens > 0
   ) {
-    if (typeof requested !== "number" || !Number.isFinite(requested) || requested <= 0) {
-      return Math.floor(error.maxOutputTokens);
-    }
+    if (!hasRequested) return Math.floor(error.maxOutputTokens);
     return error.maxOutputTokens < requested ? Math.floor(error.maxOutputTokens) : null;
   }
   if (!OUTPUT_CAP_KEYWORD_RE.test(error.message)) return null;
@@ -163,7 +162,7 @@ export function parseOutputCapRejection(error: CanonicalModelError, requested: n
     }
   }
   ceilings.sort((a, b) => a - b);
-  if (typeof requested === "number" && Number.isFinite(requested) && requested > 0) {
+  if (hasRequested) {
     const below = ceilings.filter(n => n < requested);
     return below.length > 0 ? below[below.length - 1]! : null;
   }

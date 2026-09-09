@@ -60,11 +60,6 @@ test("evaluateClaimGuard：fenced code 内声称不触发", () => {
 // AgentLoop 集成
 // ---------------------------------------------------------------------------
 
-type Script = (
-  requestIndex: number,
-  request: CanonicalModelRequest,
-) => CanonicalModelEvent[] | AsyncGenerator<CanonicalModelEvent>;
-
 function createLoop(
   execute: AgentRouterRuntime["execute"],
   toolResults: SatiToolResult[],
@@ -173,16 +168,16 @@ test("claim guard：无支撑声称触发一轮纠正后收尾", async () => {
 
 test("claim guard：纠正轮注入 transient 提示且只触发一次", async () => {
   const requests: CanonicalModelRequest[] = [];
-  const script: Script = index => {
-    if (index === 0) return textResponse("该方案已验证通过，可以交付。") as AsyncGenerator<CanonicalModelEvent>;
-    if (index === 1) return textResponse("再次声称已验证。") as AsyncGenerator<CanonicalModelEvent>;
-    return textResponse("最终答案。") as AsyncGenerator<CanonicalModelEvent>;
-  };
   const loop = createLoop(
     async function* (_decision, request) {
+      const index = requests.length;
       requests.push(request);
-      const index = requests.length - 1;
-      yield* script(index, request) as AsyncGenerator<CanonicalModelEvent>;
+      if (index === 0) {
+        yield* textResponse("该方案已验证通过，可以交付。");
+      } else {
+        // 第二次仍含声称，但每 run 只纠正一次
+        yield* textResponse("再次声称已验证。");
+      }
     },
     [],
     { claimGuard: true },
@@ -200,9 +195,9 @@ test("claim guard：纠正轮注入 transient 提示且只触发一次", async (
 test("claim guard：支撑工具成功后放行", async () => {
   const requests: CanonicalModelRequest[] = [];
   const loop = createLoop(
-    async function* () {
+    async function* (_decision, request) {
       const index = requests.length;
-      requests.push({} as CanonicalModelRequest);
+      requests.push(request);
       if (index === 0) {
         yield { type: "message_start", role: "assistant" };
         yield { type: "tool_call_start", id: "call-1", name: "rule_check" };
@@ -236,8 +231,8 @@ test("claim guard：支撑工具成功后放行", async () => {
 
 test("claim guard：默认关闭时声称文本直接收尾", async () => {
   const requests: CanonicalModelRequest[] = [];
-  const loop = createLoop(async function* () {
-    requests.push({} as CanonicalModelRequest);
+  const loop = createLoop(async function* (_decision, request) {
+    requests.push(request);
     yield* textResponse("该方案已验证通过。");
   }, []);
   const events = await collectEvents(loop);

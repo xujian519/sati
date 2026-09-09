@@ -90,7 +90,7 @@ function resultDigest(result: string): string {
 
 export class ToolCallLoopDetector implements DoomLoopDetector {
   readonly id = "toolCallLoop" as const;
-  private window: Array<{ key: string; digest: string; turn: number }> = [];
+  private window: Array<{ key: string; digest: string }> = [];
 
   constructor(private readonly maxRepeats = 3) {}
 
@@ -105,7 +105,7 @@ export class ToolCallLoopDetector implements DoomLoopDetector {
   recordToolResult(_ctx: DetectorContext, obs: ToolCallObservation): DoomLoopSignal | undefined {
     const key = toolCallKey(obs);
     const digest = resultDigest(obs.result);
-    this.window.push({ key, digest, turn: _ctx.totalToolCalls });
+    this.window.push({ key, digest });
     // 保留最近 maxRepeats 次用于连续判定
     if (this.window.length > this.maxRepeats) {
       this.window.shift();

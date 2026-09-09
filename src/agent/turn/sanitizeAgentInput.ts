@@ -26,22 +26,13 @@ export type SanitizeResult = {
   redacted: boolean;
 };
 
-/** 对单段文本执行三类凭证替换。 */
+/** 对单段文本执行三类凭证替换；redacted = 文本是否发生变化。 */
 export function sanitizeOutgoingText(text: string): { text: string; redacted: boolean } {
-  let redacted = false;
-  let out = text.replace(API_KEY_RE, () => {
-    redacted = true;
-    return REDACTED_API_KEY;
-  });
-  out = out.replace(URL_CREDENTIALS_RE, (_match, scheme: string) => {
-    redacted = true;
-    return `${scheme}:${REDACTED_CREDENTIALS}@`;
-  });
-  out = out.replace(SECRET_ASSIGNMENT_RE, (_match, key: string, sep: string) => {
-    redacted = true;
-    return `${key}${sep}"${REDACTED_SECURE_TOKEN}"`;
-  });
-  return { text: out, redacted };
+  const out = text
+    .replace(API_KEY_RE, REDACTED_API_KEY)
+    .replace(URL_CREDENTIALS_RE, `$1:${REDACTED_CREDENTIALS}@`)
+    .replace(SECRET_ASSIGNMENT_RE, `$1$2"${REDACTED_SECURE_TOKEN}"`);
+  return { text: out, redacted: out !== text };
 }
 
 /**
