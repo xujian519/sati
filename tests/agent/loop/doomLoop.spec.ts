@@ -44,6 +44,38 @@ test("toolCallLoop：文本响应清空同参窗口（换话题）", () => {
   assert.equal(d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "ok" }).length, 0);
 });
 
+test("toolCallLoop：同参但输出变化（poll 型）不命中", () => {
+  const d = new DoomLoop([new ToolCallLoopDetector(3)]);
+  d.reset(1);
+  d.recordToolResult({ name: "patent_legal_status", args: { docNumber: "CN123" }, result: "pending" });
+  d.recordToolResult({ name: "patent_legal_status", args: { docNumber: "CN123" }, result: "granted" });
+  assert.equal(
+    d.recordToolResult({ name: "patent_legal_status", args: { docNumber: "CN123" }, result: "granted (final)" }).length,
+    0,
+  );
+});
+
+test("toolCallLoop：输出变化断链后再次连续同输出命中", () => {
+  const d = new DoomLoop([new ToolCallLoopDetector(3)]);
+  d.reset(1);
+  d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "v1" });
+  d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "v2 变化" });
+  // 断链后重置，连续 3 次同输出再次命中
+  assert.equal(d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "same" }).length, 0);
+  assert.equal(d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "same" }).length, 0);
+  const signals = d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "same" });
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0]?.detector, "toolCallLoop");
+});
+
+test("toolCallLoop：空结果连续重复仍命中（空输出由 EmptyResultDetector 分工覆盖）", () => {
+  const d = new DoomLoop([new ToolCallLoopDetector(3)]);
+  d.reset(1);
+  d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "" });
+  d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "" });
+  assert.equal(d.recordToolResult({ name: "read_file", args: { path: "/a" }, result: "" }).length, 1);
+});
+
 // ---------------------------------------------------------------------------
 // textRepetition —— 输出末尾逐字复读
 // ---------------------------------------------------------------------------
