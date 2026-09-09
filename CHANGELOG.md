@@ -2,6 +2,29 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.1.12 - 2026-09-09
+
+> **版本目标（2026-09-09）**：修复桌面端打开文件（含 md）时编辑器崩溃的关键回归（CodeMirror 双实例），外链协议白名单门控，agent 工具循环守卫 / 输出上限自愈 / 凭据脱敏加固，genoffice P0 采用，以及 TypeScript 7 / jsdom 30 / react-i18next 17 等依赖升级。
+
+### Fix
+- fix(ui): pnpm overrides 钉住 @codemirror 核心包单版本 —— 修复 lockfile 重建后 `codemirror@6.0.2` 子树解析到 state@6.7.2/view@6.43.11 与直接依赖 6.7.1/6.43.8 并存导致 bundle 双实例、打开文件即崩溃（"Unrecognized extension value in extension set"）的回归
+- fix(desktop): 外链统一经协议白名单门控（file:// 与自定义 scheme 不交给操作系统）
+- fix(desktop): TS 7 迁移修复 —— 跨树 dist 输出标记 commonjs 以兼容根 ESM 测试
+- fix(agent): 代码评审意见收口 + 近期守卫代码简化（无行为变化）
+
+### Feat
+- feat(agent): claim guard 重试与输出上限自愈
+- feat(agent): 工具循环检测器感知输出
+- feat(agent): 出站用户输入凭据脱敏
+- feat(context): 压缩摘要中标记未验证附图
+
+### Refactor
+- refactor: 裸 console 收束至本地 wrapper（C38/C39 日常卡）
+
+### Chore
+- chore(deps): TypeScript 7.0.2（desktop / edgeclaw-memory-core / 根）、jsdom 30.0.1、react-i18next 17.0.13 升级
+- chore: 重建 pnpm-lock.yaml 修复重复 undici snapshot key
+
 ## v0.1.11 - 2026-09-04
 
 > **版本说明**：自 v0.1.9 以来的主仓库增量（含此前已 bump 为 0.1.10 但未发版的内容）。本版本不含未合并进 main 的在途功能分支（mid-turn steering / edit-last-turn 等）。
