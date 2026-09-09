@@ -13,7 +13,7 @@ import type { CanonicalContentBlock } from "../../model/index.js";
 
 const API_KEY_RE = /\b(?:sk-|sk-ant-|xai-|AIza|ghp_|gho_|glpat_)[A-Za-z0-9_-]{16,}\b/g;
 const URL_CREDENTIALS_RE = /([a-z][a-z0-9+.-]*:\/\/[^\s:@/]+):[^\s@/]+@/gi;
-const SECRET_ASSIGNMENT_RE = /(password|passwd|secret_key|private_key)(\s*[:=]\s*)["'][^"']+["']/gi;
+const SECRET_ASSIGNMENT_RE = /(password|passwd|secret_key|private_key)(\s*[:=]\s*)(["'])[^"']+\3/gi;
 
 export const REDACTED_API_KEY = "[REDACTED_API_KEY]";
 export const REDACTED_CREDENTIALS = "[REDACTED_CREDENTIALS]";
@@ -31,7 +31,7 @@ export function sanitizeOutgoingText(text: string): { text: string; redacted: bo
   const out = text
     .replace(API_KEY_RE, REDACTED_API_KEY)
     .replace(URL_CREDENTIALS_RE, `$1:${REDACTED_CREDENTIALS}@`)
-    .replace(SECRET_ASSIGNMENT_RE, `$1$2"${REDACTED_SECURE_TOKEN}"`);
+    .replace(SECRET_ASSIGNMENT_RE, `$1$2$3${REDACTED_SECURE_TOKEN}$3`);
   return { text: out, redacted: out !== text };
 }
 

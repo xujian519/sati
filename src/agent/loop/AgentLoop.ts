@@ -777,7 +777,9 @@ export class AgentLoop {
       // TokenCapManager 跨 turn 保留），隐形重试一次（400 发生在任何流内容
       // 之前，重发幂等）。
       if (!state.hasAttemptedOutputCapRetry) {
-        const requestedOutput = routedMaxOutputTokens ?? request.maxOutputTokens;
+        // 实际发送值（applyTokenCapsToRequest 之后）优先于 catalog 路由值：
+        // config 钳得比 catalog 低时，报错文案回显的请求值才是对拍基准。
+        const requestedOutput = request.maxOutputTokens ?? routedMaxOutputTokens;
         const learnedCap = parseOutputCapRejection(assembled.error, requestedOutput);
         if (learnedCap !== null) {
           state.hasAttemptedOutputCapRetry = true;
@@ -790,8 +792,14 @@ export class AgentLoop {
             sessionId: input.sessionId,
             turnId: input.turnId,
             code: "output_cap_learned",
-            message: `Provider rejected max_output_tokens ${routedMaxOutputTokens}; learned cap ${learnedCap} and retrying.`,
+            message: `Provider rejected max_output_tokens ${requestedOutput ?? "(default)"}; learned cap ${learnedCap} and retrying.`,
             metadata: { provider: target.provider, model: target.model, learnedCap },
+          };
+          yield {
+            type: "turn_continued",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            reason: "model_error",
           };
           return { kind: "continue" };
         }
@@ -1254,8 +1262,13 @@ export class AgentLoop {
       }
       // 声称-行动守卫（W3）：收尾文本含验证类声称但本 run 无支撑工具成功执行
       // 时，强制一轮纠正（模型补做动作或改口）；每 run 至多一次，误报代价仅
-      // 一轮。默认关闭，SATI_CLAIM_GUARD=1 开启。
-      if (this.config.claimGuard === true && !state.hasAttemptedClaimGuardRetry) {
+      // 一轮。仅在 agent 模式启用——plan/ask 模式工具受限，模型只能改口，
+      // 纠正提示要求补做动作无意义。默认关闭，SATI_CLAIM_GUARD=1 开启。
+      if (
+        this.config.claimGuard === true &&
+        (input.runMode === undefined || input.runMode === "agent") &&
+        !state.hasAttemptedClaimGuardRetry
+      ) {
         const verdict = evaluateClaimGuard(assistantText, state.succeededToolNames);
         if (verdict.kind === "correction") {
           state.hasAttemptedClaimGuardRetry = true;

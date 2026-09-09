@@ -33,3 +33,9 @@ Status: implemented
 - 换来：隐私面（密钥不出本机）、弱模型误报减少、声称-收尾一致性有前置校验、自定义 endpoint 的 400 自愈、压缩摘要数字可追溯、桌面壳 scheme 攻击面关闭。
 - 付出：脱敏不可逆（transcript 不再保留原文密钥）；声称守卫接受少量误报（引述用户原话「已验证」也会触发，代价仅一轮，默认关）；上限解析依赖报错文案启发式（有界一次 + ≥1024 门槛兜底）。
 - 事件矩阵新增两个 emit 边（TurnRunner `payload_redacted`、AgentLoop `output_cap_learned`），`docs/event-producer-consumer.md` 已随本分支重新生成。
+
+### 已知限制（code review 后记录）
+
+- **声称守卫对子代理盲视**：`succeededToolNames` 只累积主循环工具结果，子代理（`agent` 工具）内部成功执行的 `rule_check` 不构成支撑 → 误报一轮（有界一次，默认关）。若开启后误报集中于此，考虑经 subagent 事件流回传成功工具名。
+- **否定式排除为启发式**：英文已排除 un-前缀/not /yet 短语（\b 词边界 + lookbehind），中文已排除「未经X」；「yet to be verified」等罕见句式仍会命中。开启 `SATI_CLAIM_GUARD` 前建议在真实语料上观察误报率。
+- **`sk-` 前缀 kebab-case 标识符误脱敏**（如 `sk-learn-model-registry-v2`，≥16 字符即命中）：收窄设计的已知残留，与 GenOffice 上游一致；如实际命中可再加排除词表。

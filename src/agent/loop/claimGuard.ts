@@ -11,9 +11,16 @@
  * 对齐但自包含，保持 loop 模块零 context 依赖可独立测试。
  */
 
-/** 声称短语模式（中英双语，语义对齐 registerLeak CLAIM_RE）。 */
+/**
+ * 声称短语模式（中英双语，语义对齐 registerLeak CLAIM_RE）。
+ *
+ * 否定式排除：\b 词边界排除 unverified/uncontested 等形态包含（contested
+ * 含 tested 子串）；(?<!not )/(?<!yet ) 排除英文短语否定；(?<!未) 排除
+ * 「未经验证/未经测试/未经证明」类诚实披露（尚无/待验证类短语本身不含
+ * 已列短语，天然不命中）。残留风险：yet to be verified 等罕见句式仍命中。
+ */
 const CLAIM_RE =
-  /(?:verified|confirmed|validated|tested|proven|already (?:verified|confirmed|tested)|已验证|已经验证|经验证|验证通过|已确认|确认无误|已经测试|经测试|测试通过|已经证明|经证明)/i;
+  /(?<!not )(?<!yet )\b(?:verified|confirmed|validated|tested|proven)\b|(?<!未)(?:经验证|经测试|经证明)|已验证|已经验证|验证通过|已确认|确认无误|已经测试|测试通过|已经证明/i;
 
 /** fenced code block 行（声称在代码块内不视为对用户的声称）。 */
 const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})/;

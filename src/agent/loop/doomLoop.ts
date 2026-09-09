@@ -77,15 +77,14 @@ export function doomLoopSignal(
 // 检测器 1/6：toolCallLoop —— 同参同输出工具调用完全重复
 // ---------------------------------------------------------------------------
 
-/** 结果摘要：长度 + 首段 FNV-1a 哈希，纯函数可测、不引入 crypto 依赖。 */
+/** 结果摘要：全量 FNV-1a 哈希。观测文本上游已截断至 2048 字符，整串哈希开销可忽略。 */
 function resultDigest(result: string): string {
   let hash = 0x811c9dc5;
-  const bounded = result.slice(0, 256);
-  for (let i = 0; i < bounded.length; i++) {
-    hash ^= bounded.charCodeAt(i);
+  for (let i = 0; i < result.length; i++) {
+    hash ^= result.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return `${result.length}#${hash}`;
+  return `${hash}`;
 }
 
 export class ToolCallLoopDetector implements DoomLoopDetector {

@@ -56,6 +56,26 @@ test("evaluateClaimGuard：fenced code 内声称不触发", () => {
   assert.equal(evaluateClaimGuard(text, []).kind, "pass");
 });
 
+test("evaluateClaimGuard：否定式披露不触发（review Important #1）", () => {
+  for (const text of [
+    "此数据 unverified，需人工复核。",
+    "The claim is not verified yet.",
+    "The claim is not yet verified.",
+    "方案未经测试，存在风险。",
+    "未经验证的数据不作为依据。",
+    "该指标 (unverified) 仅供参考。",
+    "contested findings",
+  ]) {
+    assert.equal(evaluateClaimGuard(text, []).kind, "pass", text);
+  }
+});
+
+test("evaluateClaimGuard：肯定式声称仍命中", () => {
+  for (const text of ["I have verified the claims.", "已验证通过。", "测试通过。", "经验证无误。"]) {
+    assert.equal(evaluateClaimGuard(text, []).kind, "correction", text);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // AgentLoop 集成
 // ---------------------------------------------------------------------------
